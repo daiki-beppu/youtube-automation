@@ -251,6 +251,7 @@ def test_cmd_sync_warns_on_numbered_duplicates_in_target(
     assert "番号付き重複ファイルを検出" in err
     assert "channel-research 2" in err
     assert "numbered-duplicate-files-cleanup" in err
+    assert "https://github.com/daiki-beppu/youtube-automation/blob/main/" in err
     # 検知のみで自動削除はしない
     assert bounced_dir.exists()
 
@@ -272,6 +273,44 @@ def test_cmd_sync_without_force_warns_on_bounced_file_inside_skill(
     err = capsys.readouterr().err
     assert "番号付き重複ファイルを検出" in err
     assert "SKILL 2.md" in err
+
+
+def test_cmd_sync_force_warns_before_overwriting_bounced_file_inside_skill(
+    fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--force で skill dir を削除する前に bounce ファイルを警告する。"""
+    target = tmp_path / "out" / ".claude" / "skills"
+    existing = target / "channel-research"
+    existing.mkdir(parents=True)
+    (existing / "SKILL.md").write_text("OLD\n", encoding="utf-8")
+    bounced_file = existing / "SKILL 2.md"
+    bounced_file.write_text("OLD duplicate\n", encoding="utf-8")
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "番号付き重複ファイルを検出" in err
+    assert "SKILL 2.md" in err
+    assert not bounced_file.exists()
+
+
+def test_cmd_sync_rejects_symlink_target(fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    target = tmp_path / "out" / ".claude" / "skills"
+    target.parent.mkdir(parents=True)
+    target.symlink_to(outside, target_is_directory=True)
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "symlink" in err
+    assert "中止" in err
 
 
 def test_cmd_sync_no_duplicate_warning_when_clean(

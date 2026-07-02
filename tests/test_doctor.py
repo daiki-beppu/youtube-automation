@@ -2742,6 +2742,7 @@ class TestCheckNumberedDuplicates:
         assert "yt-analytics 2" in r.message
         assert r.next_action is not None
         assert "numbered-duplicate-files-cleanup" in r.next_action["instructions"]
+        assert "https://github.com/daiki-beppu/youtube-automation/blob/main/" in r.next_action["instructions"]
 
     def test_warns_on_skills_duplicates_recursively(self, tmp_path):
         skill = tmp_path / ".claude" / "skills" / "channel-new"
@@ -2751,6 +2752,32 @@ class TestCheckNumberedDuplicates:
         r = doctor.check_numbered_duplicates(tmp_path)
         assert r.status == "warn"
         assert "SKILL 2.md" in r.message
+
+    def test_warns_on_skills_symlink_root_without_scanning_outside(self, tmp_path):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "secret").write_text("do not expose\n", encoding="utf-8")
+        skills_parent = tmp_path / ".claude"
+        skills_parent.mkdir()
+        (skills_parent / "skills").symlink_to(outside, target_is_directory=True)
+
+        r = doctor.check_numbered_duplicates(tmp_path)
+
+        assert r.status == "warn"
+        assert "走査できません" in r.message
+        assert "secret" not in r.message
+
+    def test_escapes_control_characters_in_duplicate_names(self, tmp_path):
+        bin_dir = tmp_path / ".venv" / "bin"
+        bin_dir.mkdir(parents=True)
+        (bin_dir / "yt-\x1b[31m").write_text("#!/bin/sh\n", encoding="utf-8")
+        (bin_dir / "yt-\x1b[31m 2").write_text("#!/bin/sh\n", encoding="utf-8")
+
+        r = doctor.check_numbered_duplicates(tmp_path)
+
+        assert r.status == "warn"
+        assert "\x1b" not in r.message
+        assert "\\x1b" in r.message
 
     def test_ignores_bounce_pattern_without_base(self, tmp_path):
         bin_dir = tmp_path / ".venv" / "bin"

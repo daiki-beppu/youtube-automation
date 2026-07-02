@@ -10,6 +10,7 @@ macOS の iCloud Drive は同期コンフリクト時に `abc.txt` → `abc 2.tx
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 # `yt-analytics 2` / `SKILL 2.md` / `abc.tar 2.gz` にマッチする。
@@ -17,6 +18,26 @@ from pathlib import Path
 # 正当なファイル名を誤検知しないため)。suffix は最終拡張子のみ (bounce は
 # 最終拡張子の直前に連番を挿入する)。
 _NUMBERED_NAME_RE = re.compile(r"^(?P<stem>.*\S) (?P<number>[2-9]|[1-9]\d+)(?P<suffix>\.[^ .]+)?$")
+_MAX_DISPLAY_NAME_LEN = 120
+CLEANUP_GUIDE_URL = (
+    "https://github.com/daiki-beppu/youtube-automation/blob/main/docs/migration/numbered-duplicate-files-cleanup.md"
+)
+
+
+@dataclass(frozen=True)
+class NumberedDuplicateScanError:
+    """番号付き重複検知で走査できなかった場所。"""
+
+    path: Path
+    reason: str
+
+
+@dataclass(frozen=True)
+class NumberedDuplicateScan:
+    """番号付き重複検知の結果。"""
+
+    duplicates: tuple[Path, ...]
+    errors: tuple[NumberedDuplicateScanError, ...]
 
 
 def numbered_duplicate_base_name(name: str) -> str | None:
@@ -34,17 +55,63 @@ def find_numbered_duplicates(root: Path, *, recursive: bool = False) -> list[Pat
     重複と判定し、命名がたまたま似ている正当なファイルの誤検知を防ぐ。
     bounce されたディレクトリは 1 エントリとして数え、その配下には降りない。
     """
-    if not root.is_dir():
-        return []
+    return list(scan_numbered_duplicates(root, recursive=recursive).duplicates)
+
+
+def scan_numbered_duplicates(
+    root: Path,
+    *,
+    recursive: bool = False,
+    root_boundary: Path | None = None,
+) -> NumberedDuplicateScan:
+    """番号付き重複を列挙し、走査失敗を `errors` として返す。
+
+    root が存在しない場合は「対象なし」として clean 扱いにする。root 自体が
+    symlink の場合は、チャンネルリポジトリ外の巨大ディレクトリ走査やファイル名
+    露出を防ぐため走査しない。
+    """
+    errors: list[NumberedDuplicateScanError] = []
     found: list[Path] = []
-    _scan(root, recursive=recursive, found=found)
-    return found
+
+    if not root.is_dir():
+        return NumberedDuplicateScan(duplicates=(), errors=())
+    if root.is_symlink():
+        return NumberedDuplicateScan(
+            duplicates=(),
+            errors=(NumberedDuplicateScanError(root, "scan root is a symlink"),),
+        )
+    if root_boundary is not None:
+        try:
+            root.resolve(strict=True).relative_to(root_boundary.resolve(strict=True))
+        except (OSError, ValueError) as exc:
+            return NumberedDuplicateScan(
+                duplicates=(),
+                errors=(NumberedDuplicateScanError(root, f"scan root is outside channel_dir: {exc}"),),
+            )
+
+    _scan(root, recursive=recursive, found=found, errors=errors)
+    return NumberedDuplicateScan(duplicates=tuple(found), errors=tuple(errors))
 
 
-def _scan(directory: Path, *, recursive: bool, found: list[Path]) -> None:
+def format_duplicate_name(path: Path) -> str:
+    """CLI 出力用に制御文字を escape した短いファイル名を返す。"""
+    name = ascii(path.name)[1:-1]
+    if len(name) <= _MAX_DISPLAY_NAME_LEN:
+        return name
+    return name[: _MAX_DISPLAY_NAME_LEN - 3] + "..."
+
+
+def _scan(
+    directory: Path,
+    *,
+    recursive: bool,
+    found: list[Path],
+    errors: list[NumberedDuplicateScanError],
+) -> None:
     try:
         entries = sorted(directory.iterdir())
-    except OSError:
+    except OSError as exc:
+        errors.append(NumberedDuplicateScanError(directory, str(exc)))
         return
     names = {entry.name for entry in entries}
     for entry in entries:
@@ -52,5 +119,13 @@ def _scan(directory: Path, *, recursive: bool, found: list[Path]) -> None:
         if base_name is not None and base_name in names:
             found.append(entry)
             continue
-        if recursive and entry.is_dir() and not entry.is_symlink():
-            _scan(entry, recursive=recursive, found=found)
+        if recursive and _should_descend(entry, errors):
+            _scan(entry, recursive=recursive, found=found, errors=errors)
+
+
+def _should_descend(entry: Path, errors: list[NumberedDuplicateScanError]) -> bool:
+    try:
+        return entry.is_dir() and not entry.is_symlink()
+    except OSError as exc:
+        errors.append(NumberedDuplicateScanError(entry, str(exc)))
+        return False

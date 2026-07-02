@@ -22,7 +22,11 @@ from youtube_automation.auth.oauth_handler import resolve_client_secrets_locatio
 from youtube_automation.cli.skills_sync import bundled_skill_names
 from youtube_automation.scripts.benchmark_collector import load_benchmark_videos
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.numbered_duplicates import find_numbered_duplicates
+from youtube_automation.utils.numbered_duplicates import (
+    CLEANUP_GUIDE_URL,
+    format_duplicate_name,
+    scan_numbered_duplicates,
+)
 from youtube_automation.utils.preflight_checks import (
     check_descriptions_md_parseability,
     check_suno_genre_line_char_limit,
@@ -393,10 +397,12 @@ def check_numbered_duplicates(channel_dir: Path) -> CheckResult:
         (str(CLAUDE_SKILLS_DIR), channel_dir / CLAUDE_SKILLS_DIR, True),
     )
     for label, directory, recursive in scan_targets:
-        duplicates = find_numbered_duplicates(directory, recursive=recursive)
-        if duplicates:
-            sample = ", ".join(path.name for path in duplicates[:3])
-            findings.append(f"{label} に {len(duplicates)} 件 (例: {sample})")
+        result = scan_numbered_duplicates(directory, recursive=recursive, root_boundary=channel_dir)
+        if result.duplicates:
+            sample = ", ".join(format_duplicate_name(path) for path in result.duplicates[:3])
+            findings.append(f"{label} に {len(result.duplicates)} 件 (例: {sample})")
+        for error in result.errors:
+            findings.append(f"{label} を走査できません ({format_duplicate_name(error.path)}: {error.reason})")
     if not findings:
         return CheckResult(
             id="numbered_duplicates",
@@ -416,7 +422,7 @@ def check_numbered_duplicates(channel_dir: Path) -> CheckResult:
                 "リポジトリが同期対象パス (~/Desktop, ~/Documents, iCloud Drive) に"
                 "ないか確認する。`.venv` は `rm -rf .venv && uv sync` で再作成、"
                 f"{CLAUDE_SKILLS_DIR} は重複を削除して `{SKILLS_SYNC_CMD}` で再展開する。"
-                "詳細手順: docs/migration/numbered-duplicate-files-cleanup.md"
+                f"詳細手順: {CLEANUP_GUIDE_URL}"
             ),
         },
     )

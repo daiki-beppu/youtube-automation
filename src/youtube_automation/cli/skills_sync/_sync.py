@@ -19,25 +19,37 @@ from youtube_automation.cli.skills_sync._ops import (
     _prune_orphans,
     _symlink_entry,
 )
-from youtube_automation.utils.numbered_duplicates import find_numbered_duplicates
+from youtube_automation.utils.numbered_duplicates import (
+    CLEANUP_GUIDE_URL,
+    format_duplicate_name,
+    scan_numbered_duplicates,
+)
 
 
-def _warn_numbered_duplicates(target_dir: Path) -> None:
+def _warn_numbered_duplicates(target_dir: Path) -> bool:
     """sync 先に混入した番号付き重複 (iCloud bounce) を警告する。削除はしない。
 
     sync は既存 entry を skip / --force で上書きするだけで重複を生成も除去も
     しないため、混入に気づく機会をここで提供する (#1409 / #1410)。
     """
-    duplicates = find_numbered_duplicates(target_dir, recursive=True)
-    if not duplicates:
-        return
-    sample = ", ".join(path.name for path in duplicates[:5])
-    print(
-        f"  [warn] sync 先に番号付き重複ファイルを検出: {len(duplicates)} 件 (例: {sample})\n"
-        "         iCloud Drive 等のクラウド同期コンフリクトで生成された可能性があります。\n"
-        "         対処手順: docs/migration/numbered-duplicate-files-cleanup.md (yt-doctor でも検知できます)",
-        file=sys.stderr,
-    )
+    result = scan_numbered_duplicates(target_dir, recursive=True)
+    warned = False
+    if result.duplicates:
+        sample = ", ".join(format_duplicate_name(path) for path in result.duplicates[:5])
+        print(
+            f"  [warn] sync 先に番号付き重複ファイルを検出: {len(result.duplicates)} 件 (例: {sample})\n"
+            "         iCloud Drive 等のクラウド同期コンフリクトで生成された可能性があります。\n"
+            f"         対処手順: {CLEANUP_GUIDE_URL} (yt-doctor でも検知できます)",
+            file=sys.stderr,
+        )
+        warned = True
+    for error in result.errors:
+        print(
+            f"  [warn] sync 先の番号付き重複ファイル検査に失敗: {format_duplicate_name(error.path)} ({error.reason})",
+            file=sys.stderr,
+        )
+        warned = True
+    return warned
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
@@ -50,7 +62,11 @@ def cmd_sync(args: argparse.Namespace) -> int:
         return _sync_all(args)
     spec = _ASSET_SPECS[args.asset]
     root = _asset_root(args.asset)
-    target = Path(args.target).resolve()
+    target = Path(args.target)
+    if spec["kind"] == "dir" and target.is_symlink():
+        target = target.absolute()
+    else:
+        target = target.resolve()
 
     if spec["kind"] == "file":
         return _sync_file_asset(spec, root, target, args)
@@ -131,7 +147,16 @@ def _sync_dir_asset(
     args: argparse.Namespace,
 ) -> int:
     """ディレクトリ asset の sync。target は **ディレクトリパス** として扱う。"""
+    if target_dir.is_symlink():
+        _warn_numbered_duplicates(target_dir)
+        print(
+            f"  [error] sync target が symlink のため中止します: {target_dir}",
+            file=sys.stderr,
+        )
+        return 1
+
     target_dir.mkdir(parents=True, exist_ok=True)
+    warned_numbered_duplicates = _warn_numbered_duplicates(target_dir)
 
     all_entries = _list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename"))
     entries = list(all_entries)
@@ -194,7 +219,8 @@ def _sync_dir_asset(
             print(f"  {prefix}{mirror:>8}: .agents/skills -> ../.claude/skills")
             counts[mirror] = counts.get(mirror, 0) + 1
 
-    _warn_numbered_duplicates(target_dir)
+    if not warned_numbered_duplicates:
+        _warn_numbered_duplicates(target_dir)
 
     print()
     print(f"完了: {sum(counts.values())} 件処理 — {counts}")

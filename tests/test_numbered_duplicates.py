@@ -6,7 +6,9 @@ from pathlib import Path
 
 from youtube_automation.utils.numbered_duplicates import (
     find_numbered_duplicates,
+    format_duplicate_name,
     numbered_duplicate_base_name,
+    scan_numbered_duplicates,
 )
 
 
@@ -73,3 +75,41 @@ class TestFindNumberedDuplicates:
 
     def test_missing_directory_returns_empty(self, tmp_path: Path):
         assert find_numbered_duplicates(tmp_path / "no-such-dir") == []
+
+    def test_scan_reports_iterdir_errors(self, tmp_path: Path, monkeypatch):
+        original_iterdir = Path.iterdir
+
+        def fail_for_root(path: Path):
+            if path == tmp_path:
+                raise OSError("permission denied")
+            return original_iterdir(path)
+
+        monkeypatch.setattr(Path, "iterdir", fail_for_root)
+
+        result = scan_numbered_duplicates(tmp_path)
+
+        assert result.duplicates == ()
+        assert len(result.errors) == 1
+        assert result.errors[0].path == tmp_path
+        assert "permission denied" in result.errors[0].reason
+
+    def test_scan_rejects_symlink_root(self, tmp_path: Path):
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        root = tmp_path / "skills"
+        root.symlink_to(outside, target_is_directory=True)
+
+        result = scan_numbered_duplicates(root, recursive=True)
+
+        assert result.duplicates == ()
+        assert len(result.errors) == 1
+        assert result.errors[0].path == root
+        assert "symlink" in result.errors[0].reason
+
+    def test_format_duplicate_name_escapes_control_characters(self, tmp_path: Path):
+        path = tmp_path / "yt-\x1b[31m 2"
+
+        rendered = format_duplicate_name(path)
+
+        assert "\x1b" not in rendered
+        assert "\\x1b" in rendered

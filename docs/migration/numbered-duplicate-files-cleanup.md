@@ -51,11 +51,28 @@ uv sync
 ### 2. `.claude/skills/` — 重複を削除して再展開する
 
 ```bash
-# 削除対象の確認 (git 管理下なので必ず目視してから)
-find .claude/skills -name '* [0-9]*'
+# 削除対象の確認
+uv run python - <<'PY'
+from pathlib import Path
+from youtube_automation.utils.numbered_duplicates import find_numbered_duplicates
 
-# 問題なければ削除
-find .claude/skills -name '* [0-9]*' -exec rm -rf {} +
+for path in find_numbered_duplicates(Path(".claude/skills"), recursive=True):
+    print(path)
+PY
+
+# 問題なければ、上と同じ検知条件に一致したものだけ削除
+uv run python - <<'PY'
+import shutil
+from pathlib import Path
+from youtube_automation.utils.numbered_duplicates import find_numbered_duplicates
+
+for path in find_numbered_duplicates(Path(".claude/skills"), recursive=True):
+    if path.is_dir() and not path.is_symlink():
+        shutil.rmtree(path)
+    else:
+        path.unlink()
+    print(f"removed: {path}")
+PY
 
 # 正規ファイルを同梱版で上書きして整合を取る
 uv run yt-skills sync --asset skills --force
