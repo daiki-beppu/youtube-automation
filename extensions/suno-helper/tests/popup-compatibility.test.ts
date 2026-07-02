@@ -755,8 +755,9 @@ describe("Suno popup compatibility check", () => {
     });
 
     await waitFor(() => {
-      expect(container.textContent).toContain("全 entry 投入済みです。playlist 追加から再開しますか？");
+      expect(container.textContent).not.toContain("全 entry 投入済みです。playlist 追加から再開しますか？");
       expect(container.textContent).toContain("Playlist: clm | theme-a");
+      expect(container.textContent).toContain("Playlist から再開");
     });
 
     messagingMocks.sendMessage.mockClear();
