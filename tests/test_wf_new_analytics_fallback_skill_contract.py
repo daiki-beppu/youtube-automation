@@ -99,6 +99,8 @@ def test_wf_new_phase_1_declares_analytics_absent_input_modes() -> None:
 
     assert "/collection-ideate" in phase_1
     assert "stale の場合は fallback せず" in phase_1
+    assert "config/skills/collection-ideate.yaml" in phase_1
+    assert "deep-merge した解決済み `freshness_days`" in phase_1
 
 
 def test_collection_ideate_preflight_declares_same_input_modes() -> None:
@@ -270,10 +272,6 @@ def test_workflow_cheatsheet_documents_fallback_and_minimal_pause() -> None:
     assert _BENCHMARK_FALLBACK_MODE in phase_flow
     assert "analytics やベンチマークが無いと `/collection-ideate` は止まる？" in faq
     assert "minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認" in faq
-    assert (
-        "`reports/analysis_*.md` が stale（最新 `data/analytics_data_*.json` より古い、"
-        "または収集データ自体が実行日から `freshness_days`・既定 7 日を超えて経過）の場合だけ fallback せず" in faq
-    )
 
 
 def test_collection_lifecycle_documents_three_input_modes() -> None:
