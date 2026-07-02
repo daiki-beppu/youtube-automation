@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `docs(migration)`: TS 移行告知 + 移行ガイド `docs/migration/python-to-tayk.md` を公開し、README / ONBOARDING 冒頭に告知バナーを追加。Python 版は 2026-08 中に提供終了し `tayk`（npm）へ切り替わる（ADR-0015 の 2026-07 頭告知義務、#1416）
+
 ### Changed
 
 - `feat(setup)`: `/setup` から `yt-setup-dirs` を実行して `auth/` などの最小ディレクトリを config 生成前に用意し、`/channel-new` は既存ディレクトリを再利用して `config/channel/*.json` 生成に集中する責務へ整理（#1396）
