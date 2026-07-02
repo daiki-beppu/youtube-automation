@@ -72,6 +72,21 @@ jobs:
           fi
           echo "CHANGELOG.md updated"
 
+  adr-numbering:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check ADR number uniqueness
+        run: |
+          set -eu
+          dups=$(ls docs/adr | cut -d- -f1 | sort | uniq -d)
+          if [ -n "$dups" ]; then
+            echo "::error::Duplicate ADR numbers found: $dups"
+            ls docs/adr | sort
+            exit 1
+          fi
+          echo "ADR numbers are unique"
+
   ts-lint:
     runs-on: ubuntu-latest
     steps:
