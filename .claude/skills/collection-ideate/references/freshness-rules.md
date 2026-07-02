@@ -90,7 +90,16 @@ if [ "$INPUT_MODE" = "analytics mode" ] && [ -n "$LATEST_DATA" ]; then
   # 設定読み込みゲートで load_skill_config("collection-ideate") 相当の
   # default + config/skills/collection-ideate.yaml deep-merge を先に行い、
   # 解決済み freshness_days をこの擬似コードへ渡す。
-  COLLECTION_IDEATE_FRESHNESS_DAYS=${COLLECTION_IDEATE_FRESHNESS_DAYS:-7}
+  if [ -z "${COLLECTION_IDEATE_FRESHNESS_DAYS:-}" ]; then
+    echo "collection-ideate freshness_days が未解決です。設定読み込みゲートを実行してください" >&2
+    exit 1
+  fi
+  case "$COLLECTION_IDEATE_FRESHNESS_DAYS" in
+    *[!0-9]*)
+      echo "collection-ideate freshness_days は整数である必要があります: ${COLLECTION_IDEATE_FRESHNESS_DAYS}" >&2
+      exit 1
+      ;;
+  esac
   FRESHNESS_DAYS="$COLLECTION_IDEATE_FRESHNESS_DAYS"
   to_epoch() {
     # YYYYMMDD → epoch 秒（BSD date / GNU date 両対応）

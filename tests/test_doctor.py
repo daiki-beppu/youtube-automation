@@ -1179,8 +1179,9 @@ class TestCheckAnalyticsReport:
         assert r.next_action is not None
         assert "/analytics-analyze" in r.next_action["instructions"]
 
-    def test_analysis_file_same_date_as_latest_data_is_ok(self, tmp_path):
+    def test_analysis_file_same_date_as_latest_data_is_ok(self, tmp_path, monkeypatch):
         """analysis report が latest data と同日なら stale ではない."""
+        monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20240202")
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
         (reports_dir / "analysis_20240201.md").write_text("# Analysis", encoding="utf-8")
@@ -1193,8 +1194,47 @@ class TestCheckAnalyticsReport:
         assert r.status == "ok"
         assert "analytics mode" in r.message
 
-    def test_latest_analysis_file_controls_staleness(self, tmp_path):
+    def test_analysis_file_same_date_but_absolute_stale_is_fail(self, tmp_path, monkeypatch):
+        """data/report が同日でも収集日が freshness_days 超過なら stale."""
+        monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20260702")
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20260622.md").write_text("# Analysis", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20260622_120000.json").write_text("{}", encoding="utf-8")
+
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "fail"
+        assert "freshness_days" in r.message
+        assert r.next_action is not None
+        assert "/analytics-collect" in r.next_action["instructions"]
+        assert "/analytics-analyze" in r.next_action["instructions"]
+
+    def test_analysis_file_absolute_stale_respects_collection_ideate_override(self, tmp_path, monkeypatch):
+        """collection-ideate freshness_days override は doctor の絶対鮮度判定にも効く."""
+        monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20260702")
+        (tmp_path / "config" / "skills").mkdir(parents=True)
+        (tmp_path / "config" / "skills" / "collection-ideate.yaml").write_text(
+            "freshness_days: 14\n",
+            encoding="utf-8",
+        )
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20260622.md").write_text("# Analysis", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20260622_120000.json").write_text("{}", encoding="utf-8")
+
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+        assert "analytics mode" in r.message
+
+    def test_latest_analysis_file_controls_staleness(self, tmp_path, monkeypatch):
         """複数 report がある場合は最新 report 日付で stale を判定する."""
+        monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20240203")
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
         (reports_dir / "analysis_20240101.md").write_text("# Old", encoding="utf-8")
@@ -1551,8 +1591,9 @@ class TestDataReadinessSummary:
         assert summary["fail"] == 1
         assert summary["next_check_id"] == "analytics_report"
 
-    def test_fresh_analytics_without_benchmark_has_single_input_mode(self, tmp_path):
+    def test_fresh_analytics_without_benchmark_has_single_input_mode(self, tmp_path, monkeypatch):
         """analytics_report と benchmark_data が同じ入力モード契約を参照する."""
+        monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20240202")
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
         (reports_dir / "analysis_20240201.md").write_text("# Analysis", encoding="utf-8")

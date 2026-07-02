@@ -13,6 +13,7 @@ import tomllib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
@@ -91,6 +92,7 @@ class _WfNewInputMode:
     report_count: int
     benchmark_count: int
     stale_report: bool
+    stale_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -911,16 +913,25 @@ def _temporary_channel_dir(channel_dir: Path) -> Iterator[None]:
 def check_analytics_report(channel_dir: Path) -> CheckResult:
     input_mode = _resolve_wf_new_input_mode(channel_dir)
     if input_mode.stale_report:
+        if input_mode.stale_reason == "absolute":
+            message = (
+                "最新 data/analytics_data_*.json が実行日から freshness_days を超えて古い。"
+                "/wf-new は stale report では開始不可"
+            )
+            instructions = "/analytics-collect → /analytics-analyze の順で再実行してください"
+        else:
+            message = (
+                "reports/analysis_*.md が最新 data/analytics_data_*.json より古い。/wf-new は stale report では開始不可"
+            )
+            instructions = "/analytics-analyze を再実行してください（必要なら先に /analytics-collect）"
         return CheckResult(
             id="analytics_report",
             status="fail",
             category=DATA_CATEGORY,
-            message=(
-                "reports/analysis_*.md が最新 data/analytics_data_*.json より古い。/wf-new は stale report では開始不可"
-            ),
+            message=message,
             next_action={
                 "kind": "human",
-                "instructions": "/analytics-analyze を再実行してください（必要なら先に /analytics-collect）",
+                "instructions": instructions,
             },
         )
 
@@ -950,12 +961,17 @@ def _resolve_wf_new_input_mode(channel_dir: Path) -> _WfNewInputMode:
     if reports:
         latest_report = _latest_filename_date(reports)
         latest_data = _latest_filename_date(data_files)
-        stale_report = latest_data is not None and (latest_report is None or latest_report[0] < latest_data[0])
+        stale_reason: str | None = None
+        if latest_data is not None and (latest_report is None or latest_report[0] < latest_data[0]):
+            stale_reason = "relative"
+        elif latest_data is not None and _analytics_data_exceeds_freshness_days(latest_data[0], channel_dir):
+            stale_reason = "absolute"
         return _WfNewInputMode(
             mode="analytics mode",
             report_count=len(reports),
             benchmark_count=len(benchmarks),
-            stale_report=stale_report,
+            stale_report=stale_reason is not None,
+            stale_reason=stale_reason,
         )
     if benchmarks:
         return _WfNewInputMode(
@@ -987,6 +1003,31 @@ def _latest_filename_date(paths: list[Path]) -> Optional[tuple[str, Path]]:
     if not dated_paths:
         return None
     return max(dated_paths, key=lambda item: item[0])
+
+
+def _analytics_data_exceeds_freshness_days(data_date: str, channel_dir: Path) -> bool:
+    cfg = load_skill_config("collection-ideate", use_cache=False, channel_dir=channel_dir)
+    freshness_days = _parse_positive_int(cfg.get("freshness_days", 7), "collection-ideate.freshness_days")
+    elapsed_days = (_yyyymmdd_to_date(_today_yyyymmdd()) - _yyyymmdd_to_date(data_date)).days
+    return elapsed_days > freshness_days
+
+
+def _parse_positive_int(value: object, label: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(f"{label} は整数である必要があります: {value!r}") from exc
+    if parsed < 0:
+        raise ConfigError(f"{label} は 0 以上である必要があります: {value!r}")
+    return parsed
+
+
+def _yyyymmdd_to_date(value: str) -> date:
+    return datetime.strptime(value, "%Y%m%d").date()
+
+
+def _today_yyyymmdd() -> str:
+    return date.today().strftime("%Y%m%d")
 
 
 def check_benchmark_data(channel_dir: Path) -> CheckResult:

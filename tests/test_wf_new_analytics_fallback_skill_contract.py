@@ -58,7 +58,7 @@ def _run_freshness_pseudo_code(
     data_date: str,
     report_date: str,
     today: str,
-    freshness_days: int,
+    freshness_days: int | None,
 ) -> subprocess.CompletedProcess[str]:
     _write_fixture(tmp_path / f"data/analytics_data_{data_date}.json")
     _write_fixture(tmp_path / f"reports/analysis_{report_date}.md", "# analysis\n")
@@ -69,14 +69,17 @@ def _run_freshness_pseudo_code(
     script.write_text(_freshness_pseudo_code(), encoding="utf-8")
     script.chmod(0o755)
 
+    env = {
+        **os.environ,
+        "TODAY": today,
+    }
+    if freshness_days is not None:
+        env["COLLECTION_IDEATE_FRESHNESS_DAYS"] = str(freshness_days)
+
     return subprocess.run(
         ["bash", str(script)],
         cwd=tmp_path,
-        env={
-            **os.environ,
-            "TODAY": today,
-            "COLLECTION_IDEATE_FRESHNESS_DAYS": str(freshness_days),
-        },
+        env=env,
         capture_output=True,
         text=True,
         check=False,
@@ -365,8 +368,20 @@ def test_freshness_rules_absolute_check_uses_resolved_config_value(tmp_path: Pat
     pseudo_code = _freshness_pseudo_code()
 
     assert "FRESHNESS_DAYS=7" not in pseudo_code
+    assert "COLLECTION_IDEATE_FRESHNESS_DAYS=${COLLECTION_IDEATE_FRESHNESS_DAYS:-7}" not in pseudo_code
+    assert "freshness_days が未解決" in pseudo_code
     assert 'FRESHNESS_DAYS="$COLLECTION_IDEATE_FRESHNESS_DAYS"' in pseudo_code
     assert "TODAY=${TODAY:-$(date +%Y%m%d)}" in pseudo_code
+
+    relative_stale = _run_freshness_pseudo_code(
+        tmp_path / "relative-stale",
+        data_date="20260702",
+        report_date="20260622",
+        today="20260702",
+        freshness_days=7,
+    )
+    assert relative_stale.returncode == 1
+    assert "/analytics-analyze" in relative_stale.stdout
 
     stale = _run_freshness_pseudo_code(
         tmp_path / "stale",
@@ -396,6 +411,16 @@ def test_freshness_rules_absolute_check_uses_resolved_config_value(tmp_path: Pat
         freshness_days=7,
     )
     assert boundary_fresh.returncode == 0, boundary_fresh.stderr
+
+    missing_resolved_config = _run_freshness_pseudo_code(
+        tmp_path / "missing-config",
+        data_date="20260625",
+        report_date="20260625",
+        today="20260702",
+        freshness_days=None,
+    )
+    assert missing_resolved_config.returncode == 1
+    assert "freshness_days" in missing_resolved_config.stderr
 
 
 def test_freshness_workflow_state_table_is_mode_aware() -> None:
