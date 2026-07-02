@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(collection-ideate)`: 分析レポートの鮮度判定に実行日基準の絶対鮮度チェック（`freshness_days` 既定 7 日、`config/skills/collection-ideate.yaml` で上書き可）を追加し、レポートと収集データが同日付でも収集自体が古い場合は stale として `/analytics-collect` → `/analytics-analyze` の再実行を案内するようにした（#1427）
 - `fix(channel-new)`: `yt-doctor` に `ttp_wf_new_readiness` を追加し、`/channel-new` が TTP 対象承認・relationship・branding snapshot・thumbnail reference・Suno readiness の不足を残したまま完了扱いにならないようにした（#1397）
 - `fix(skills)`: `/video-upload` と `/wf-next` の公開承認前に `yt-upload-collection --plan` で即時公開/予約公開を確定し、予約時は実際の公開予定時刻を案内するよう明記（#1395）
 - `fix(doctor)`: `yt-doctor` に `ttp_wf_new_readiness` を追加し、`/channel-setup` の benchmark 反映未完了による TTP 参照データ欠落を検知・案内できるようにした（#1400）

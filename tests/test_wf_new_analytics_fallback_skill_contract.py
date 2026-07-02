@@ -224,7 +224,10 @@ def test_workflow_cheatsheet_documents_fallback_and_minimal_pause() -> None:
     assert _BENCHMARK_FALLBACK_MODE in phase_flow
     assert "analytics やベンチマークが無いと `/collection-ideate` は止まる？" in faq
     assert "minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認" in faq
-    assert "`reports/analysis_*.md` が最新 `data/analytics_data_*.json` より古い場合だけ fallback せず" in faq
+    assert (
+        "`reports/analysis_*.md` が stale（最新 `data/analytics_data_*.json` より古い、"
+        "または収集データ自体が実行日から `freshness_days`・既定 7 日を超えて経過）の場合だけ fallback せず" in faq
+    )
 
 
 def test_collection_lifecycle_documents_three_input_modes() -> None:
@@ -280,10 +283,22 @@ def test_freshness_rules_follow_analytics_absent_fallback_contract() -> None:
     assert f"| `{_ANALYTICS_REPORT_GLOB}` が存在しない | `/collection-ideate` を中断" not in triggers
     assert f"| `{_BENCHMARK_DATA_GLOB}` が `config/skills/benchmark.yaml`" not in triggers
 
-    benchmark_trigger = next(line for line in triggers.splitlines() if "freshness_days" in line)
+    benchmark_trigger = next(
+        line for line in triggers.splitlines() if "freshness_days" in line and "config/skills/benchmark.yaml" in line
+    )
     assert benchmark_trigger.startswith(f"| {_ANALYTICS_MODE} で `{_BENCHMARK_DATA_GLOB}`")
     assert _BENCHMARK_FALLBACK_MODE not in benchmark_trigger
     assert _MINIMAL_MODE not in benchmark_trigger
+
+    # 絶対鮮度チェック (#1427): 収集データ自体が実行日から freshness_days を超えたら stale
+    absolute_trigger = next(
+        line
+        for line in triggers.splitlines()
+        if "freshness_days" in line and "config/skills/collection-ideate.yaml" in line
+    )
+    assert absolute_trigger.startswith("| analytics mode で最新 `data/analytics_data_*.json`")
+    assert "実行日 (today)" in absolute_trigger
+    assert "`/analytics-collect` → `/analytics-analyze`" in absolute_trigger
 
 
 def test_freshness_rules_select_latest_by_filename_date_not_mtime() -> None:
