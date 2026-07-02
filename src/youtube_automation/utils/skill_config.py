@@ -78,9 +78,11 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 def _load_yaml(path: Path) -> dict[str, Any]:
     try:
         with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
+            data = yaml.safe_load(f)
     except (OSError, yaml.YAMLError) as exc:
         raise ConfigError(f"skill-config 読み込み失敗: {path}: {exc}") from exc
+    if data is None:
+        return {}
     if not isinstance(data, dict):
         raise ConfigError(f"skill-config の root は dict である必要があります: {path}")
     return data

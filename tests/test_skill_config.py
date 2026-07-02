@@ -89,6 +89,17 @@ def test_explicit_channel_dir_override_does_not_use_env(tmp_path, monkeypatch):
     assert cfg.get("marker") == "explicit"
 
 
+def test_channel_override_root_must_be_mapping(tmp_path, monkeypatch):
+    """override の root が dict 以外なら ConfigError にする."""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text("[]\n", encoding="utf-8")
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="root は dict"):
+        skill_config.load_skill_config("thumbnail", use_cache=False)
+
+
 def test_cache_reset(tmp_path, monkeypatch):
     """reset でキャッシュがクリアされ、再度ロードされること"""
     channel_dir = tmp_path / "ch"

@@ -13,6 +13,7 @@ import type { ReleasePayload } from "../lib/types";
 function makePayload(trackCount: number, withCover: boolean): ReleasePayload {
   return {
     profile: {
+      artist: "Test Artist",
       language: "ja",
       main_genre: "Electronic",
       sub_genre: null,

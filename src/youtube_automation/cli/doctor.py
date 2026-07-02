@@ -14,8 +14,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
 
+import yaml
+
+from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
 from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.image_provider.composition import normalize_reference_default
 from youtube_automation.utils.skill_config import load_skill_config
 
 PYPROJECT_FILENAME = "pyproject.toml"
@@ -50,12 +54,7 @@ UPLOAD_REQUIRED_SCOPES = [
     "https://www.googleapis.com/auth/youtube.force-ssl",
 ]
 
-UNSUPPORTED_VIDEO_ANALYZE_MODELS = {
-    "gemini-3.5-flash",
-}
-
 TTP_VIDEO_ANALYZE_TOP_N = 5
-TTP_THUMBNAIL_REFERENCE_DIR = Path("data") / "thumbnail_compare" / "benchmark"
 
 
 @dataclass
@@ -73,6 +72,18 @@ class _WfNewInputMode:
     report_count: int
     benchmark_count: int
     stale_report: bool
+
+
+@dataclass(frozen=True)
+class _MappingRead:
+    data: dict[str, object]
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class _BenchmarkChannelsRead:
+    channels: list[dict[str, object]]
+    errors: list[str]
 
 
 def _run(cmd: list[str], timeout: int = 30) -> tuple[int, str, str]:
@@ -654,9 +665,45 @@ def check_env_file(channel_dir: Path) -> CheckResult:
     )
 
 
+def _load_client_secrets_data(channel_dir: Path) -> tuple[Path | str, object | None, str | None, str | None]:
+    """client_secrets を副作用なしで読み込む。
+
+    実行時 OAuth は 1Password fallback を一時ファイル化して
+    InstalledAppFlow に渡すが、yt-doctor は read-only 診断なので
+    `CLIENT_SECRETS_JSON` をメモリ上で構造検査する。
+    """
+    kind, path = resolve_client_secrets_location(channel_dir)
+    if kind == "file":
+        try:
+            return path, json.loads(path.read_text(encoding="utf-8")), None, None
+        except (json.JSONDecodeError, OSError) as e:
+            return path, None, f"client_secrets.json 読み込み失敗: {e}", None
+    if kind == "invalid-file":
+        return path, None, f"client_secrets.json は通常ファイルである必要があります: {path}", None
+
+    if kind == "secret-fallback":
+        try:
+            from youtube_automation.utils.exceptions import ConfigError
+            from youtube_automation.utils.secrets import get_secret
+
+            return "CLIENT_SECRETS_JSON", json.loads(get_secret("CLIENT_SECRETS_JSON")), None, None
+        except ConfigError as e:
+            return path, None, None, f"1Password / CLIENT_SECRETS_JSON fallback 取得失敗: {e}"
+        except json.JSONDecodeError as e:
+            return "CLIENT_SECRETS_JSON", None, f"CLIENT_SECRETS_JSON 読み込み失敗: {e}", None
+
+    return path, None, None, None
+
+
 def check_client_secrets(channel_dir: Path) -> CheckResult:
-    path = channel_dir / "auth" / "client_secrets.json"
-    if not path.exists():
+    path, data, error, fallback_error = _load_client_secrets_data(channel_dir)
+    if error:
+        return CheckResult(
+            id="client_secrets",
+            status="fail",
+            message=error,
+        )
+    if data is None:
         project_id = _project_id_for(channel_dir) or ""
         return CheckResult(
             id="client_secrets",
@@ -670,21 +717,31 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
                     else "https://console.cloud.google.com/apis/credentials"
                 ),
                 "instructions": (
-                    "Console で「認証情報を作成 → OAuth クライアント ID → "
-                    "アプリの種類: デスクトップ」を選び、ダウンロードした JSON を "
-                    f"`{path}` に配置してください。"
+                    "Console の Google Auth Platform で Branding を保存し、"
+                    "Audience > Test users に OAuth 認証でログインする Google アカウントを追加してください "
+                    "(未追加だと初回認証が 403 access_denied で止まります)。"
+                    "その後 Clients > Create client で Application type Desktop app を選び、"
+                    "Clients > 対象 client > Client secrets > Add secret で secret を発行してください。"
+                    "発行した `client_id` / `project_id` / `client_secret` を "
+                    "`auth/client_secrets.template.json` へ転記し、"
+                    f"`{path}` に配置してください。" + (f" fallback 状態: {fallback_error}" if fallback_error else "")
                 ),
             },
         )
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as e:
+    assert data is not None
+    if not isinstance(data, dict):
         return CheckResult(
             id="client_secrets",
             status="fail",
-            message=f"client_secrets.json 読み込み失敗: {e}",
+            message="client_secrets.json は JSON object である必要があります",
         )
-    installed = data.get("installed") or data.get("web") or {}
+    installed = data.get("installed")
+    if not isinstance(installed, dict):
+        return CheckResult(
+            id="client_secrets",
+            status="fail",
+            message="Desktop app の client_secrets.json が必要です: installed セクションがありません",
+        )
     required_keys = ("client_id", "client_secret", "redirect_uris")
     missing = [k for k in required_keys if k not in installed]
     if missing:
@@ -732,10 +789,13 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
             id="channel_config",
             status="fail",
             category=CHANNEL_CATEGORY,
-            message="config/channel/ ディレクトリが存在しない (新規チャンネル)",
+            message="config/channel/ ディレクトリが存在しない (新規チャンネル、setup 用ディレクトリのみでは未生成)",
             next_action={
                 "kind": "human",
-                "instructions": "/channel-new を実行して新規チャンネル設定を作成してください",
+                "instructions": (
+                    "setup 用ディレクトリ生成は完了していても config は未作成です。"
+                    "/channel-new を実行して新規チャンネル設定を作成してください"
+                ),
             },
         )
 
@@ -886,319 +946,658 @@ def check_benchmark_data(channel_dir: Path) -> CheckResult:
 
 
 def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
-    channels, channel_error = _approved_benchmark_channels(channel_dir)
-    if channel_error:
+    analytics_path = channel_dir / "config" / "channel" / "analytics.json"
+    if not analytics_path.is_file():
         return CheckResult(
             id="ttp_wf_new_readiness",
             status="warn",
             category=DATA_CATEGORY,
-            message=channel_error,
-            next_action={"kind": "human", "instructions": "config/channel/analytics.json を確認してください"},
-        )
-    if not channels:
-        return CheckResult(
-            id="ttp_wf_new_readiness",
-            status="ok",
-            category=DATA_CATEGORY,
-            message="承認済み TTP benchmark.channels 未設定。追加競合発掘は標準 readiness の対象外",
-        )
-
-    issues: list[str] = []
-    notes: list[str] = []
-    benchmark_by_slug = _latest_benchmark_videos_by_slug(channel_dir, issues)
-    _check_thumbnail_readiness(channel_dir, issues)
-    _check_video_analyze_readiness(channel_dir, channels, benchmark_by_slug, issues)
-    _check_suno_readiness(channel_dir, issues)
-    if _loop_video_disabled(channel_dir):
-        notes.append("loop-video.enabled=false: 初回 handoff に textless main.png 静止背景運用を明記")
-
-    if issues:
-        detail = "; ".join(issues[:6])
-        if len(issues) > 6:
-            detail += f"; ...ほか {len(issues) - 6} 件"
-        return CheckResult(
-            id="ttp_wf_new_readiness",
-            status="warn",
-            category=DATA_CATEGORY,
-            message=detail,
+            message="config/channel/analytics.json 未生成。/wf-new 接続前に承認済み TTP 対象の保存が必要",
             next_action={
                 "kind": "human",
                 "instructions": (
-                    "承認済み TTP 対象だけを準備してください。"
-                    "`uv run yt-benchmark-collect --force -y --channel <slug>`、"
-                    "`uv run yt-video-analyze --source benchmark --channel <slug> --top 5`、"
-                    "config/skills/{thumbnail,suno,video-analyze}.yaml を確認します。"
+                    "/channel-new Step 4 で config を生成し、Step 5 以降で承認済み TTP 対象を "
+                    "config/channel/analytics.json::benchmark.channels に保存してください"
                 ),
             },
         )
 
-    suffix = f" ({'; '.join(notes)})" if notes else ""
+    analytics_read = _read_json_mapping(analytics_path)
+    if analytics_read.error:
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="warn",
+            category=DATA_CATEGORY,
+            message="TTP 完了条件が未充足: " + analytics_read.error,
+            next_action={
+                "kind": "human",
+                "instructions": "config/channel/analytics.json を修正してから yt-doctor を再実行してください",
+            },
+        )
+
+    analytics = analytics_read.data
+    channels_read = _benchmark_channels(analytics)
+    channels = channels_read.channels
+    if not channels:
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="warn",
+            category=DATA_CATEGORY,
+            message="承認済み TTP 対象が 0 件。/channel-new は /wf-new 接続前に TTP 対象承認が必要",
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "/channel-new Step 1/5 に戻り、TTP 対象を確認して "
+                    "config/channel/analytics.json::benchmark.channels に承認済み対象を保存してください"
+                ),
+            },
+        )
+
+    missing, approved_exceptions = _missing_ttp_readiness_items(channel_dir, channels)
+    missing.extend(channels_read.errors)
+    missing.extend(_missing_channel_setup_benchmark_items(channel_dir, approved_exceptions))
+    if missing:
+        return CheckResult(
+            id="ttp_wf_new_readiness",
+            status="warn",
+            category=DATA_CATEGORY,
+            message="/channel-setup benchmark 反映未完了の可能性 / TTP 完了条件が未充足: " + "; ".join(missing),
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "/channel-new Step 5-9 と /channel-setup Step 3.5 の不足項目を解消してください。"
+                    "意図的にスキップする場合は docs/channel/ttp-seed-confirmation.md に "
+                    "ユーザー承認済み例外として未反映項目を明記し、最後に `uv run yt-doctor --json` で "
+                    "`ttp_wf_new_readiness` が ok になることを確認してください"
+                ),
+            },
+        )
+
     return CheckResult(
         id="ttp_wf_new_readiness",
         status="ok",
         category=DATA_CATEGORY,
-        message=f"承認済み TTP {len(channels)} 件の初回 /wf-new readiness OK{suffix}",
+        message=(
+            "TTP 対象承認・branding snapshot・benchmark docs・thumbnail / music readiness が "
+            "/wf-new 接続可能（/channel-setup 完了相当）"
+        ),
     )
 
 
-def _read_json_mapping(path: Path) -> tuple[dict, Optional[str]]:
-    if not path.is_file():
-        return {}, None
+def _read_json_mapping(path: Path) -> _MappingRead:
+    if not path.exists():
+        return _MappingRead({})
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as e:
-        return {}, f"{path} 読み込み失敗: {e}"
+    except json.JSONDecodeError as e:
+        return _MappingRead({}, f"{_diagnostic_path(path)} が JSON として不正 ({e.msg})")
+    except OSError as e:
+        return _MappingRead({}, f"{_diagnostic_path(path)} を読み込めません ({e})")
     if not isinstance(data, dict):
-        return {}, f"{path} の root は object である必要があります"
-    return data, None
+        return _MappingRead({}, f"{_diagnostic_path(path)} のトップレベルが object ではありません")
+    return _MappingRead(data)
 
 
-def _skill_config_for_target(channel_dir: Path, skill: str, issues: list[str] | None = None) -> dict:
+def _read_yaml_mapping(path: Path) -> _MappingRead:
+    if not path.exists():
+        return _MappingRead({})
     try:
-        return load_skill_config(skill, use_cache=False, channel_dir=channel_dir)
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as e:
+        return _MappingRead({}, f"{_diagnostic_path(path)} が YAML として不正 ({e})")
+    except OSError as e:
+        return _MappingRead({}, f"{_diagnostic_path(path)} を読み込めません ({e})")
+    if not isinstance(data, dict):
+        return _MappingRead({}, f"{_diagnostic_path(path)} のトップレベルが object ではありません")
+    return _MappingRead(data)
+
+
+def _skill_config_mapping(channel_dir: Path, skill: str) -> _MappingRead:
+    try:
+        return _MappingRead(load_skill_config(skill, use_cache=False, channel_dir=channel_dir))
     except ConfigError as exc:
-        if issues is not None:
-            issues.append(str(exc))
-        return {}
+        return _MappingRead({}, str(exc))
 
 
-def _approved_benchmark_channels(channel_dir: Path) -> tuple[list[dict], Optional[str]]:
-    data, error = _read_json_mapping(channel_dir / "config" / "channel" / "analytics.json")
-    if error:
-        return [], error
-    benchmark = data.get("benchmark")
+def _diagnostic_path(path: Path) -> str:
+    return path.as_posix()
+
+
+def _benchmark_channels(analytics: dict[str, object]) -> _BenchmarkChannelsRead:
+    benchmark = analytics.get("benchmark")
     if not isinstance(benchmark, dict):
-        return [], None
+        return _BenchmarkChannelsRead([], [])
     channels = benchmark.get("channels")
-    if channels is None:
-        return [], None
     if not isinstance(channels, list):
-        return [], "config/channel/analytics.json::benchmark.channels は list である必要があります"
-    valid = [ch for ch in channels if isinstance(ch, dict)]
-    invalid_count = len(channels) - len(valid)
-    if invalid_count:
-        return valid, f"benchmark.channels に object でない entry が {invalid_count} 件あります"
-    return valid, None
+        return _BenchmarkChannelsRead([], [])
+    valid_channels: list[dict[str, object]] = []
+    errors: list[str] = []
+    for index, channel in enumerate(channels):
+        if isinstance(channel, dict):
+            valid_channels.append(channel)
+        else:
+            errors.append(f"benchmark.channels entry #{index + 1} が object ではありません")
+    return _BenchmarkChannelsRead(valid_channels, errors)
 
 
-def _safe_single_path_segment(value: object) -> str:
-    if not isinstance(value, str):
-        return ""
-    slug = value.strip()
-    if not slug or slug in {".", ".."}:
-        return ""
-    if "/" in slug or "\\" in slug:
-        return ""
-    if Path(slug).is_absolute():
-        return ""
-    return slug
+def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, object]]) -> tuple[list[str], set[str]]:
+    missing: list[str] = []
+    approved_exceptions: set[str] = set()
+
+    channels_without_relationship = [
+        _channel_diagnostic_label(index, channel)
+        for index, channel in enumerate(channels)
+        if _is_placeholder_relationship(str(channel.get("relationship") or ""))
+    ]
+    if channels_without_relationship:
+        missing.append(
+            "benchmark.channels の relationship 未設定または placeholder ("
+            + ", ".join(channels_without_relationship)
+            + ")"
+        )
+
+    seed_confirmation = channel_dir / "docs" / "channel" / "ttp-seed-confirmation.md"
+    if not seed_confirmation.is_file():
+        missing.append("docs/channel/ttp-seed-confirmation.md 未作成")
+    else:
+        seed_text = seed_confirmation.read_text(encoding="utf-8", errors="replace")
+        seed_missing, approved_exceptions = _validate_ttp_seed_confirmation(seed_text, channels)
+        missing.extend(seed_missing)
+
+    missing.extend(_missing_branding_snapshot_items(channel_dir, channels))
+
+    thumbnail_read = _skill_config_mapping(channel_dir, "thumbnail")
+    if thumbnail_read.error:
+        missing.append(thumbnail_read.error)
+    if "thumbnail" not in approved_exceptions:
+        thumbnail_missing = _thumbnail_ttp_reference_missing_reason(channel_dir, thumbnail_read.data)
+        if thumbnail_missing:
+            missing.append(thumbnail_missing)
+
+    youtube_read = _read_json_mapping(channel_dir / "config" / "channel" / "youtube.json")
+    if youtube_read.error:
+        missing.append(youtube_read.error)
+    youtube = youtube_read.data
+    if youtube.get("music_engine", "suno") == "suno" and "music" not in approved_exceptions:
+        music_readiness = _suno_music_readiness(channel_dir, channels)
+        missing.extend(music_readiness.errors)
+        if not music_readiness.ready:
+            missing.append("Suno genre_line または data/video_analysis の suno_preset 未設定")
+
+    return missing, approved_exceptions
 
 
-def _channel_slug(channel: dict, issues: list[str]) -> str:
-    slug = _safe_single_path_segment(channel.get("slug"))
-    if slug:
-        return slug
-    issues.append("benchmark.channels に安全な slug が無い entry があります")
-    return ""
+def _missing_channel_setup_benchmark_items(channel_dir: Path, approved_exceptions: set[str]) -> list[str]:
+    missing: list[str] = []
+    if not _matching_files(channel_dir / "data", "benchmark_*.json"):
+        missing.append("data/benchmark_*.json が無い")
+    missing.extend(_missing_video_analysis_items(channel_dir))
+    if not _benchmark_report_files(channel_dir):
+        missing.append("docs/benchmarks/*.md が無い")
+    if "thumbnail" not in approved_exceptions and not _benchmark_thumbnail_files(channel_dir):
+        missing.append("data/thumbnail_compare/benchmark/ に TTP 参照画像が無い")
+    return missing
 
 
-def _latest_benchmark_videos_by_slug(channel_dir: Path, issues: list[str]) -> dict[str, list[dict]]:
+def _missing_video_analysis_items(channel_dir: Path) -> list[str]:
+    benchmark_by_slug, errors = _latest_benchmark_videos_by_slug(channel_dir)
+    missing = list(errors)
+    video_analysis_dir = channel_dir / "data" / "video_analysis"
+    for slug, videos in benchmark_by_slug.items():
+        slug_dir, slug_error = _video_analysis_slug_dir(video_analysis_dir, slug)
+        if slug_error:
+            missing.append(slug_error)
+            continue
+        top_videos = videos[:TTP_VIDEO_ANALYZE_TOP_N]
+        if len(top_videos) < TTP_VIDEO_ANALYZE_TOP_N:
+            missing.append(
+                f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} が不足 ({len(top_videos)}/{TTP_VIDEO_ANALYZE_TOP_N})"
+            )
+        expected_ids = {str(video.get("video_id")) for video in top_videos if video.get("video_id")}
+        if len(expected_ids) < len(top_videos):
+            missing.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id 欠落があります")
+        if not expected_ids:
+            missing.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id がありません")
+            continue
+        existing_ids = {path.stem for path in _matching_files(slug_dir or video_analysis_dir / slug, "*.json")}
+        done = len(expected_ids & existing_ids)
+        if done == 0:
+            missing.append(f"{slug}: video_analysis 未実行 (0/{TTP_VIDEO_ANALYZE_TOP_N})")
+        elif done < TTP_VIDEO_ANALYZE_TOP_N:
+            missing.append(f"{slug}: video_analysis が一部のみ ({done}/{TTP_VIDEO_ANALYZE_TOP_N})")
+    return missing
+
+
+def _latest_benchmark_videos_by_slug(channel_dir: Path) -> tuple[dict[str, list[dict[str, object]]], list[str]]:
     benchmark_files = _matching_files(channel_dir / "data", "benchmark_*.json")
     if not benchmark_files:
-        return {}
-    path = benchmark_files[-1]
-    data, error = _read_json_mapping(path)
-    if error:
-        issues.append(error)
-        return {}
+        return {}, []
+    data_read = _read_json_mapping(benchmark_files[-1])
+    if data_read.error:
+        return {}, [data_read.error]
 
-    result: dict[str, list[dict]] = {}
-    channels = data.get("channels")
+    result: dict[str, list[dict[str, object]]] = {}
+    channels = data_read.data.get("channels")
     if isinstance(channels, list):
         for channel in channels:
             if not isinstance(channel, dict):
                 continue
-            slug = str(channel.get("slug") or "")
+            slug = str(channel.get("slug") or "").strip()
             videos = channel.get("videos")
             if slug and isinstance(videos, list):
-                result[slug] = [v for v in videos if isinstance(v, dict)]
-        return result
+                result[slug] = [video for video in videos if isinstance(video, dict)]
+        return result, []
 
-    videos = data.get("videos")
+    videos = data_read.data.get("videos")
     if isinstance(videos, list):
         for video in videos:
             if not isinstance(video, dict):
                 continue
-            slug = str(video.get("channel_slug") or video.get("slug") or "")
+            slug = str(video.get("channel_slug") or video.get("slug") or "").strip()
             if slug:
                 result.setdefault(slug, []).append(video)
-    return result
+    return result, []
 
 
-def _normalize_reference_images(value: object) -> list[str]:
-    if isinstance(value, str):
-        stripped = value.strip()
-        return [stripped] if stripped else []
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    return []
+_SEED_CONFIRMATION_MARKERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("source", ("source", "ソース", "url", "handle", "channel id", "チャンネルid")),
+    ("seed fetch 要約", ("seed fetch", "fetch", "取得要約", "収集要約")),
+    ("承認 / 不採用判断", ("承認 / 不採用判断", "承認判断", "不採用判断", "判断:", "approved:", "rejected:")),
+    ("転写したい要素", ("転写したい要素", "転写", "要素:")),
+    ("relationship", ("relationship", "関係性")),
+    ("未反映項目", ("未反映", "未適用", "none", "なし")),
+)
 
 
-def _safe_thumbnail_reference_paths(channel_dir: Path, refs: list[str], issues: list[str]) -> list[Path]:
-    root = channel_dir.resolve(strict=False)
-    allowed_root = (channel_dir / TTP_THUMBNAIL_REFERENCE_DIR).resolve(strict=False)
-    paths: list[Path] = []
-    for ref in sorted(set(refs)):
-        raw_path = Path(ref)
-        candidate = raw_path if raw_path.is_absolute() else channel_dir / raw_path
-        resolved = candidate.resolve(strict=False)
-        try:
-            resolved.relative_to(root)
-            resolved.relative_to(allowed_root)
-        except ValueError:
-            issues.append(
-                f"thumbnail reference は {TTP_THUMBNAIL_REFERENCE_DIR.as_posix()} 配下のみ指定できます: {ref}"
-            )
+_PLACEHOLDER_RELATIONSHIPS = {"", "seed", "default", "unknown", "none", "n/a", "未設定", "なし"}
+
+
+def _validate_ttp_seed_confirmation(seed_text: str, channels: list[dict[str, object]]) -> tuple[list[str], set[str]]:
+    missing: list[str] = []
+    sections = _seed_confirmation_sections(seed_text)
+
+    for index, channel in enumerate(channels):
+        label = _channel_diagnostic_label(index, channel)
+        identifiers = _channel_seed_identifiers(channel)
+        if not identifiers:
+            missing.append(f"ttp-seed-confirmation.md 照合用の id / slug が benchmark.channels に未設定 ({label})")
             continue
-        paths.append(resolved)
-    return paths
+
+        candidate_sections = _sections_for_identifiers(sections, identifiers)
+        if not candidate_sections:
+            missing.append(f"ttp-seed-confirmation.md に承認済み TTP 対象の識別子が未記録 ({label})")
+            continue
+
+        candidate_text = "\n".join(candidate_sections)
+        for marker_label, markers in _SEED_CONFIRMATION_MARKERS:
+            if not _contains_any_marker(candidate_text, markers):
+                missing.append(f"ttp-seed-confirmation.md に {marker_label} が未記録 ({label})")
+        if not _has_branding_transfer_policy(candidate_text):
+            missing.append(f"ttp-seed-confirmation.md に branding snapshot 参照または転写方針が未記録 ({label})")
+
+        relationship = str(channel.get("relationship") or "").strip()
+        if (
+            relationship
+            and not _is_placeholder_relationship(relationship)
+            and relationship.lower() not in candidate_text.lower()
+        ):
+            missing.append(f"ttp-seed-confirmation.md に承認済み TTP 対象の relationship が未記録 ({label})")
+
+    unapproved_skip_lines = [
+        line.strip()
+        for line in seed_text.splitlines()
+        if _line_mentions_ttp_skip(line) and not _line_mentions_approved_exception(line)
+    ]
+    if unapproved_skip_lines:
+        missing.append("ttp-seed-confirmation.md に未承認の TTP 未反映 / スキップ項目あり")
+
+    approved_exceptions, exception_missing = _approved_ttp_exceptions(seed_text)
+    missing.extend(exception_missing)
+    return missing, approved_exceptions
 
 
-def _check_thumbnail_readiness(channel_dir: Path, issues: list[str]) -> None:
-    cfg = _skill_config_for_target(channel_dir, "thumbnail", issues)
-    image_generation = cfg.get("image_generation")
-    if not isinstance(image_generation, dict):
-        issues.append("config/skills/thumbnail.yaml::image_generation が未設定")
-        return
+def _seed_confirmation_sections(seed_text: str) -> list[str]:
+    sections: list[str] = []
+    current: list[str] = []
+    for line in seed_text.splitlines():
+        stripped = line.strip()
+        starts_new_heading = stripped.startswith("#") and current
+        starts_new_list_channel = bool(
+            current and re.match(r"^[-*]\s+(?:channel|チャンネル|候補)\b", stripped, re.IGNORECASE)
+        )
+        if not stripped or starts_new_heading or starts_new_list_channel:
+            if current:
+                sections.append("\n".join(current))
+                current = []
+            if not stripped:
+                continue
+        current.append(line)
+    if current:
+        sections.append("\n".join(current))
+    return sections or [seed_text]
 
-    provider = image_generation.get("provider", "gemini")
-    gemini = image_generation.get("gemini")
-    if isinstance(gemini, dict) and gemini.get("generation_mode", "single_step") == "single_step":
-        refs_cfg = gemini.get("reference_images")
-        refs_default = refs_cfg.get("default") if isinstance(refs_cfg, dict) else None
-        refs = _normalize_reference_images(refs_default)
-        candidate_count = _preview_candidate_count(channel_dir, issues)
-        safe_refs = _safe_thumbnail_reference_paths(channel_dir, refs, issues)
-        if len(safe_refs) < candidate_count:
-            issues.append(
-                "thumbnail reference が不足 "
-                f"({len(safe_refs)}/{candidate_count}) "
-                "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default"
+
+def _sections_for_identifiers(sections: list[str], identifiers: list[str]) -> list[str]:
+    return [
+        section
+        for section in sections
+        if any(_section_mentions_identifier(section, identifier) for identifier in identifiers)
+    ]
+
+
+def _section_mentions_identifier(section: str, identifier: str) -> bool:
+    pattern = re.compile(rf"(?<![A-Za-z0-9_-]){re.escape(identifier)}(?![A-Za-z0-9_-])", re.IGNORECASE)
+    identifier_line_markers = ("source", "ソース", "url", "handle", "channel", "チャンネル", "id", "slug")
+    return any(
+        any(marker in line.lower() for marker in identifier_line_markers) and pattern.search(line)
+        for line in section.splitlines()
+    )
+
+
+def _is_placeholder_relationship(relationship: str) -> bool:
+    return relationship.strip().lower() in _PLACEHOLDER_RELATIONSHIPS
+
+
+def _channel_seed_identifiers(channel: dict[str, object]) -> list[str]:
+    return [value for value in (str(channel.get("id") or "").strip(), str(channel.get("slug") or "").strip()) if value]
+
+
+def _contains_any_marker(text: str, markers: tuple[str, ...]) -> bool:
+    lower_text = text.lower()
+    return any(marker.lower() in lower_text for marker in markers)
+
+
+def _has_branding_transfer_policy(text: str) -> bool:
+    lower_text = text.lower()
+    if "competitor-branding-snapshot.json" in lower_text or "branding snapshot" in lower_text:
+        return True
+    policy_markers = ("description", "keywords", "localizations")
+    transfer_markers = ("転写", "方針", "参照", "構造", "抽出")
+    return any(
+        any(policy_marker in line.lower() for policy_marker in policy_markers)
+        and any(transfer_marker in line for transfer_marker in transfer_markers)
+        for line in text.splitlines()
+    )
+
+
+def _line_mentions_ttp_skip(line: str) -> bool:
+    lower_line = line.lower()
+    if "スキップ" in line or "skip" in lower_line:
+        return True
+    if "未反映" not in line and "未適用" not in line:
+        return False
+    return not _line_declares_no_unapplied_items(line)
+
+
+def _line_declares_no_unapplied_items(line: str) -> bool:
+    lower_line = line.lower()
+    return ("なし" in line or "none" in lower_line) and "ただし" not in line and "but" not in lower_line
+
+
+def _line_mentions_approved_exception(line: str) -> bool:
+    lower_line = line.lower()
+    return "ユーザー承認済み例外" in line or "approved exception" in lower_line
+
+
+def _approved_ttp_exceptions(seed_text: str) -> tuple[set[str], list[str]]:
+    exceptions: set[str] = set()
+    missing: list[str] = []
+    for line in seed_text.splitlines():
+        if not _line_mentions_approved_exception(line):
+            continue
+        lower_line = line.lower()
+        categories: set[str] = set()
+        if "thumbnail" in lower_line or "サムネ" in line:
+            categories.add("thumbnail")
+        if "music" in lower_line or "suno" in lower_line or "曲構造" in line or "音楽" in line:
+            categories.add("music")
+
+        if not categories:
+            missing.append("ユーザー承認済み例外に対象 category が未記録")
+            continue
+        if not _line_mentions_ttp_skip(line):
+            missing.append("ユーザー承認済み例外に具体的な未反映 / スキップ内容が未記録")
+            continue
+        if not _approved_exception_has_reason(line):
+            missing.append("ユーザー承認済み例外に進める理由が未記録")
+            continue
+        if "thumbnail" in categories and "/thumbnail" not in lower_line:
+            missing.append("thumbnail のユーザー承認済み例外に後続 /thumbnail が未記録")
+            continue
+        if "music" in categories and "/suno" not in lower_line:
+            missing.append("music のユーザー承認済み例外に後続 /suno が未記録")
+            continue
+
+        exceptions.update(categories)
+    return exceptions, missing
+
+
+def _approved_exception_has_reason(line: str) -> bool:
+    lower_line = line.lower()
+    return "ため" in line or "理由" in line or "because" in lower_line or "進める" in line
+
+
+def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str, object]]) -> list[str]:
+    branding_read = _read_json_mapping(channel_dir / "docs" / "channel" / "competitor-branding-snapshot.json")
+    if branding_read.error:
+        return [branding_read.error]
+
+    branding_snapshot = branding_read.data
+    snapshot_items = branding_snapshot.get("items")
+    if branding_snapshot.get("untrusted_data") is not True:
+        return ["docs/channel/competitor-branding-snapshot.json 未作成または空"]
+    if not isinstance(snapshot_items, list):
+        return ["docs/channel/competitor-branding-snapshot.json の items が list ではありません"]
+    if not snapshot_items:
+        return ["docs/channel/competitor-branding-snapshot.json 未作成または空"]
+
+    missing: list[str] = []
+    if any(not isinstance(item, dict) for item in snapshot_items):
+        missing.append("competitor-branding-snapshot.json の items に object ではない要素があります")
+    approved_ids = _approved_ttp_channel_ids(channels)
+    snapshot_by_id = {
+        str(item.get("id")): item
+        for item in snapshot_items
+        if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+
+    channels_without_id = [
+        _channel_diagnostic_label(index, channel)
+        for index, channel in enumerate(channels)
+        if not str(channel.get("id") or "").strip()
+    ]
+    if channels_without_id:
+        missing.append(f"benchmark.channels の id 未設定 ({', '.join(channels_without_id)})")
+
+    missing_ids = [channel_id for channel_id in approved_ids if channel_id not in snapshot_by_id]
+    if missing_ids:
+        missing.append(
+            "competitor-branding-snapshot.json に承認済み TTP 対象の snapshot 不足 (" + ", ".join(missing_ids) + ")"
+        )
+
+    for channel_id in approved_ids:
+        item = snapshot_by_id.get(channel_id)
+        if item is None:
+            continue
+        missing_fields = [
+            field for field in ("snippet", "brandingSettings", "localizations") if not isinstance(item.get(field), dict)
+        ]
+        if missing_fields:
+            missing.append(
+                f"competitor-branding-snapshot.json の {channel_id} に必須 field 不足 ({', '.join(missing_fields)})"
             )
-        missing = [str(path.relative_to(channel_dir)) for path in safe_refs if not path.is_file()]
-        if missing:
-            sample = ", ".join(missing[:3])
-            issues.append(f"thumbnail reference file missing: {sample}")
 
-    if provider == "codex":
-        codex = image_generation.get("codex")
-        template = codex.get("default_prompt_template") if isinstance(codex, dict) else ""
-        template_text = template if isinstance(template, str) else ""
-        lowered = template_text.lower()
-        if "{title}" not in template_text or ("reference" not in lowered and "ttp" not in lowered):
-            issues.append(
-                "codex.default_prompt_template が TTP reference 前提ではない "
-                "(config/skills/thumbnail.yaml::image_generation.codex.default_prompt_template)"
-            )
+    return missing
 
 
-def _preview_candidate_count(channel_dir: Path, issues: list[str]) -> int:
-    cfg = _skill_config_for_target(channel_dir, "collection-ideate", issues)
-    preview = cfg.get("preview")
-    candidate_count = preview.get("candidate_count") if isinstance(preview, dict) else None
+def _approved_ttp_channel_ids(channels: list[dict[str, object]]) -> list[str]:
+    return [channel_id for channel in channels if (channel_id := str(channel.get("id") or "").strip())]
+
+
+def _approved_ttp_channel_slugs(channels: list[dict[str, object]]) -> list[str]:
+    return [slug for channel in channels if (slug := str(channel.get("slug") or "").strip())]
+
+
+def _video_analysis_slug_dir(video_analysis_dir: Path, slug: str) -> tuple[Path | None, str | None]:
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", slug):
+        return None, f"benchmark.channels の slug が不正 ({_safe_diagnostic_value(slug)})"
+    root = video_analysis_dir.resolve(strict=False)
+    candidate = (video_analysis_dir / slug).resolve(strict=False)
     try:
-        return max(1, int(candidate_count or 3))
-    except (TypeError, ValueError):
-        issues.append("collection-ideate.preview.candidate_count が数値ではありません")
-        return 3
+        candidate.relative_to(root)
+    except ValueError:
+        return None, f"data/video_analysis の channel_dir 外参照を拒否 ({_safe_diagnostic_value(slug)})"
+    return candidate, None
 
 
-def _check_video_analyze_readiness(
+def _channel_diagnostic_label(index: int, channel: dict[str, object]) -> str:
+    parts = [f"entry #{index + 1}"]
+    if channel_id := _safe_diagnostic_value(channel.get("id")):
+        parts.append(f"id={channel_id}")
+    if slug := _safe_diagnostic_value(channel.get("slug")):
+        parts.append(f"slug={slug}")
+    return " ".join(parts)
+
+
+def _safe_diagnostic_value(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return re.sub(r"[^A-Za-z0-9_.:@/-]", "_", text)[:80]
+
+
+def _thumbnail_ttp_reference_missing_reason(channel_dir: Path, thumbnail: dict[str, object]) -> str | None:
+    refs, invalid_refs = _thumbnail_reference_images(channel_dir, thumbnail)
+    if invalid_refs:
+        sample = ", ".join(invalid_refs[:3])
+        return f"reference_images.default の参照パスが不正: {sample}"
+    if not refs:
+        return "thumbnail reference_images.default 未設定 / reference_images.default が空または未転記"
+
+    missing_refs = [str(path) for path in refs if not path.is_file()]
+    if missing_refs:
+        sample = ", ".join(missing_refs[:3])
+        return f"reference_images.default の参照先が見つからない / 参照画像が存在しない: {sample}"
+    return None
+
+
+def _benchmark_report_files(channel_dir: Path) -> list[Path]:
+    return _matching_files(channel_dir / "docs" / "benchmarks", "*.md")
+
+
+def _benchmark_thumbnail_files(channel_dir: Path) -> list[Path]:
+    root = channel_dir / "data" / "thumbnail_compare" / "benchmark"
+    if not root.is_dir():
+        return []
+    patterns = ("*.jpg", "*.jpeg", "*.png", "*.webp")
+    files: list[Path] = []
+    for pattern in patterns:
+        files.extend(path for path in root.rglob(pattern) if path.is_file())
+    return sorted(files)
+
+
+def _is_unresolved_placeholder(value: str) -> bool:
+    stripped = value.strip()
+    return stripped.startswith("{{") and stripped.endswith("}}")
+
+
+def _thumbnail_reference_images(
     channel_dir: Path,
-    channels: list[dict],
-    benchmark_by_slug: dict[str, list[dict]],
-    issues: list[str],
-) -> None:
-    cfg = _skill_config_for_target(channel_dir, "video-analyze", issues)
-    model = cfg.get("model")
-    if isinstance(model, str) and model in UNSUPPORTED_VIDEO_ANALYZE_MODELS:
-        issues.append(f"video-analyze model が旧/非対応: {model}")
+    thumbnail: dict[str, object] | None = None,
+) -> tuple[list[Path], list[str]]:
+    if thumbnail is None:
+        thumbnail_read = _skill_config_mapping(channel_dir, "thumbnail")
+        if thumbnail_read.error:
+            return [], [thumbnail_read.error]
+        thumbnail = thumbnail_read.data
 
-    for channel in channels:
-        slug = _channel_slug(channel, issues)
-        if not slug:
+    image_generation = thumbnail.get("image_generation")
+    if not isinstance(image_generation, dict):
+        return [], []
+    gemini = image_generation.get("gemini")
+    if not isinstance(gemini, dict):
+        return [], []
+    reference_images = gemini.get("reference_images")
+    if not isinstance(reference_images, dict):
+        return [], []
+
+    refs: list[Path] = []
+    invalid_refs: list[str] = []
+    benchmark_root = (channel_dir / "data" / "thumbnail_compare" / "benchmark").resolve(strict=False)
+    channel_root = channel_dir.resolve(strict=False)
+    for value in normalize_reference_default(reference_images.get("default")):
+        stripped = value.strip()
+        if not stripped:
             continue
-        videos = benchmark_by_slug.get(slug, [])
-        if not videos:
-            issues.append(f"{slug}: benchmark data 不足")
+        if _is_unresolved_placeholder(stripped):
+            invalid_refs.append(f"未解決 placeholder が残っている: {stripped}")
             continue
-        top_videos = videos[:TTP_VIDEO_ANALYZE_TOP_N]
-        if len(top_videos) < TTP_VIDEO_ANALYZE_TOP_N:
-            issues.append(
-                f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} が不足 ({len(top_videos)}/{TTP_VIDEO_ANALYZE_TOP_N})"
-            )
-        expected_ids = {str(v.get("video_id")) for v in top_videos if v.get("video_id")}
-        if len(expected_ids) < len(top_videos):
-            issues.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id 欠落があります")
-        if not expected_ids:
-            issues.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id がありません")
+        ref_path = Path(stripped)
+        if ref_path.is_absolute():
+            invalid_refs.append(f"絶対パスは指定できない: {stripped}")
             continue
-        analysis_dir = channel_dir / "data" / "video_analysis" / slug
-        existing_ids = {path.stem for path in _matching_files(analysis_dir, "*.json")}
-        done = len(expected_ids & existing_ids)
-        if done == 0:
-            issues.append(
-                f"{slug}: video_analysis 未実行 (0/{TTP_VIDEO_ANALYZE_TOP_N})。"
-                "実行前に対象本数・合計尺・概算コスト・動画長制限リスクを確認"
-            )
-        elif done < TTP_VIDEO_ANALYZE_TOP_N:
-            issues.append(f"{slug}: video_analysis が一部のみ ({done}/{TTP_VIDEO_ANALYZE_TOP_N})")
+        resolved = (channel_dir / ref_path).resolve(strict=False)
+        try:
+            resolved.relative_to(channel_root)
+        except ValueError:
+            invalid_refs.append(f"channel_dir 外は指定できない: {stripped}")
+            continue
+        try:
+            resolved.relative_to(benchmark_root)
+        except ValueError:
+            invalid_refs.append(f"data/thumbnail_compare/benchmark/ 配下ではない: {stripped}")
+            continue
+        refs.append(resolved)
+    return refs, invalid_refs
 
 
-def _check_suno_readiness(channel_dir: Path, issues: list[str]) -> None:
-    if _music_engine(channel_dir) != "suno":
-        return
-    cfg = _skill_config_for_target(channel_dir, "suno", issues)
-    genre_line = cfg.get("genre_line")
-    genre_text = genre_line if isinstance(genre_line, str) else ""
-    style_char_limit = cfg.get("style_char_limit", 120)
+@dataclass(frozen=True)
+class _MusicReadiness:
+    ready: bool
+    errors: list[str]
+
+
+def _suno_music_readiness(channel_dir: Path, channels: list[dict[str, object]]) -> _MusicReadiness:
+    errors: list[str] = []
+    suno_read = _skill_config_mapping(channel_dir, "suno")
+    if suno_read.error:
+        errors.append(suno_read.error)
+    suno = suno_read.data
+    genre_line = str(suno.get("genre_line") or "")
+    style_char_limit = suno.get("style_char_limit", 120)
     try:
         limit = int(style_char_limit)
     except (TypeError, ValueError):
         limit = 120
-        issues.append("suno.style_char_limit が数値ではありません")
+        errors.append("suno.style_char_limit が数値ではありません")
+    if genre_line.strip():
+        if len(genre_line) <= limit:
+            return _MusicReadiness(True, errors)
+        errors.append(f"Suno genre_line が style_char_limit 超過 ({len(genre_line)}/{limit})")
 
-    variants = cfg.get("style_variants")
-    valid_variant_count = 0
-    if isinstance(variants, dict):
-        for variant in variants.values():
-            if isinstance(variant, dict):
-                value = variant.get("genre_line")
-                if isinstance(value, str) and value.strip() and len(value) <= limit:
-                    valid_variant_count += 1
-
-    if not genre_text.strip() and not _has_any_video_analysis(channel_dir):
-        issues.append("Suno genre_line 空、かつ data/video_analysis が未生成")
-    if len(genre_text) > limit:
-        issues.append(f"Suno genre_line が style_char_limit 超過 ({len(genre_text)}/{limit})")
-    if valid_variant_count == 0:
-        issues.append("Suno の短い style_variants が未設定")
-
-
-def _music_engine(channel_dir: Path) -> str:
-    data, _ = _read_json_mapping(channel_dir / "config" / "channel" / "youtube.json")
-    value = data.get("music_engine", "suno")
-    return value if isinstance(value, str) else "suno"
-
-
-def _has_any_video_analysis(channel_dir: Path) -> bool:
-    root = channel_dir / "data" / "video_analysis"
-    return root.is_dir() and any(path.is_file() for path in root.glob("*/*.json"))
-
-
-def _loop_video_disabled(channel_dir: Path) -> bool:
-    cfg = _skill_config_for_target(channel_dir, "loop-video")
-    return cfg.get("enabled") is False
+    video_analysis_dir = channel_dir / "data" / "video_analysis"
+    slug_dirs: list[Path] = []
+    for slug in _approved_ttp_channel_slugs(channels):
+        slug_dir, slug_error = _video_analysis_slug_dir(video_analysis_dir, slug)
+        if slug_error:
+            errors.append(slug_error)
+            continue
+        if slug_dir is None:
+            continue
+        slug_dirs.append(slug_dir)
+    if not video_analysis_dir.is_dir():
+        return _MusicReadiness(False, errors)
+    for slug_dir in slug_dirs:
+        for path in slug_dir.glob("*.json"):
+            payload_read = _read_json_mapping(path)
+            if payload_read.error:
+                errors.append(payload_read.error)
+                continue
+            payload = payload_read.data
+            preset = payload.get("suno_preset")
+            if isinstance(preset, dict) and str(preset.get("genre_line") or "").strip():
+                return _MusicReadiness(True, errors)
+    return _MusicReadiness(False, errors)
 
 
 def check_upload_ready(channel_dir: Path) -> CheckResult:
@@ -1383,24 +1782,37 @@ def render_table(results: list[CheckResult], summary: dict, channel_dir: Path) -
     return "\n".join(lines)
 
 
+def _client_secrets_file_for_accounts(channel_dir: Path) -> Path | None:
+    """accounts 表示で使う client_secrets.json を通常ファイル候補から選ぶ。"""
+    for candidate in (
+        channel_dir / "auth" / "client_secrets.json",
+        channel_dir / "automation" / "auth" / "client_secrets.json",
+    ):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def _find_channel_dirs(search_root: Path) -> list[Path]:
-    """search_root 直下のディレクトリで auth/client_secrets.json を持つものを返す。"""
+    """search_root 直下のディレクトリで client_secrets.json 候補を持つものを返す。"""
     dirs: list[Path] = []
     if not search_root.is_dir():
         return dirs
     for child in sorted(search_root.iterdir()):
-        if child.is_dir() and (child / "auth" / "client_secrets.json").exists():
+        if child.is_dir() and _client_secrets_file_for_accounts(child) is not None:
             dirs.append(child)
     return dirs
 
 
 def _extract_oauth_info(channel_dir: Path) -> dict:
     """client_secrets.json から GCP プロジェクト・クライアント ID を抽出する。"""
-    cs_path = channel_dir / "auth" / "client_secrets.json"
+    cs_path = _client_secrets_file_for_accounts(channel_dir)
     info: dict = {"channel": channel_dir.name, "path": str(channel_dir)}
     try:
+        if cs_path is None:
+            raise FileNotFoundError("client_secrets.json not found")
         data = json.loads(cs_path.read_text(encoding="utf-8"))
-        installed = data.get("installed") or data.get("web") or {}
+        installed = data.get("installed") or {}
         info["project_id"] = installed.get("project_id", "?")
         info["client_id"] = installed.get("client_id", "?")
     except (json.JSONDecodeError, OSError):
