@@ -30,7 +30,13 @@ test("popup を閉じて再 open すると content の snapshot から itemState
       type ItemState = "idle" | "active" | "done";
       type ProgressPayload = { phase: Phase; total: number; index?: number; message?: string };
       type Entry = { name: string; style: string; lyrics: string };
-      type Snapshot = { entries: Entry[]; itemStates: ItemState[]; isRunning: boolean; progress: ProgressPayload };
+      type Snapshot = {
+        collectionId: string;
+        entries: Entry[];
+        itemStates: ItemState[];
+        isRunning: boolean;
+        progress: ProgressPayload;
+      };
 
       // --- 本番 lib/snapshot.ts と同手法を inline 再現 ---
       const nextItemStates = (prev: ItemState[], phase: Phase, index?: number): ItemState[] => {
@@ -42,7 +48,8 @@ test("popup を閉じて再 open すると content の snapshot から itemState
         }
         return prev;
       };
-      const initSnapshot = (entries: Entry[]): Snapshot => ({
+      const initSnapshot = (entries: Entry[], collectionId: string): Snapshot => ({
+        collectionId,
         entries,
         itemStates: entries.map(() => "idle"),
         isRunning: true,
@@ -81,6 +88,7 @@ test("popup を閉じて再 open すると content の snapshot から itemState
         if (!snap) return null;
         const { text, error } = phaseToStatus(snap);
         return {
+          collectionId: snap.collectionId,
           entries: snap.entries,
           itemStates: snap.itemStates,
           isRunning: snap.isRunning,
@@ -95,7 +103,7 @@ test("popup を閉じて再 open すると content の snapshot から itemState
         { name: "pattern-2", style: "s2", lyrics: "l2" },
         { name: "pattern-3", style: "s3", lyrics: "l3" },
       ];
-      let contentSnapshot: Snapshot | null = initSnapshot(entries);
+      let contentSnapshot: Snapshot | null = initSnapshot(entries, "20260601-clm-popup-reopen-collection");
       contentSnapshot = applyProgress(contentSnapshot, { phase: PHASE.DONE, index: 0, total: 3 });
       contentSnapshot = applyProgress(contentSnapshot, { phase: PHASE.DONE, index: 1, total: 3 });
       contentSnapshot = applyProgress(contentSnapshot, { phase: PHASE.INJECTING, index: 2, total: 3 });

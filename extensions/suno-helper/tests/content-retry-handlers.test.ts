@@ -99,7 +99,9 @@ async function loadContentScript(overrides?: {
   }));
 
   vi.doMock("../lib/snapshot", () => ({
-    initSnapshot: vi.fn(() => ({
+    initSnapshot: vi.fn((_entries: unknown[], options: { collectionId: string; playlistName?: string }) => ({
+      collectionId: options.collectionId,
+      playlistName: options.playlistName,
       entries: [],
       itemStates: [],
       isRunning: true,

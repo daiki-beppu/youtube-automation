@@ -388,6 +388,78 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
+  it("snapshot 復元後にデータ再取得すると restored collection ではなく取得した collectionId で run する", async () => {
+    const restoredEntries = [{ name: "old", style: "lofi", lyrics: "" }];
+    const fetchedEntries = [{ name: "fresh", style: "ambient", lyrics: "" }];
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    fetchMock.mockReset();
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "queryProgress") {
+        return Promise.resolve({
+          collectionId: "20260602-clm-restored-collection",
+          entries: restoredEntries,
+          itemStates: ["idle"],
+          isRunning: false,
+          progress: { phase: "stopped", total: 1 },
+          playlistName: "clm | restored",
+        });
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await act(async () => {
+      root.render(createElement(App));
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("停止しました。手動で続行できます。");
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260603-clm-fresh-collection",
+            name: "fresh-collection",
+            channel: "clm",
+            theme: "fresh",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, fetchedEntries));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "全パターンを連続実行").click();
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("run", {
+      entries: fetchedEntries,
+      playlistName: "clm | fresh",
+      range: undefined,
+      collectionId: "20260603-clm-fresh-collection",
+      indices: undefined,
+      submittedClipIds: undefined,
+      playlistExpectedClipCount: undefined,
+    });
+  });
+
   it("dir mode の channel/theme から multi-word channel の playlist 名を導出する", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     fetchMock

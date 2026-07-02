@@ -10,11 +10,11 @@ import { PHASE } from "../../shared/constants";
 import type { ProgressPayload } from "../../shared/constants";
 import { phaseToStatus } from "../components/runner-errors";
 import { applyProgress, initSnapshot } from "../lib/snapshot";
-import { makePromptEntries } from "./_helpers";
+import { makePromptEntries, snapshotOptions } from "./_helpers";
 
 /** 指定 progress を適用した snapshot を作る（phaseToStatus は progress / entries を読む）。 */
 function snapWith(payload: ProgressPayload) {
-  return applyProgress(initSnapshot(makePromptEntries(3)), payload);
+  return applyProgress(initSnapshot(makePromptEntries(3), snapshotOptions()), payload);
 }
 
 /** snapshot を phaseToStatus の (progress, entries) 引数へ展開して呼ぶ。 */

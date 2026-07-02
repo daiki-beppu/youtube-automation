@@ -20,7 +20,7 @@ import { FINISHED_SNAPSHOT_KEY, type SnapshotPayload } from "../../shared/consta
 export interface FinishedSnapshotState {
   /** FINISHED 適用済みの snapshot（isRunning=false、itemStates は done/failed 確定済み）。 */
   snapshot: SnapshotPayload;
-  /** 完了した run の collection 識別子。単一ファイル mode / retryDownload は undefined。 */
+  /** 完了した run の collection 識別子。retryDownload の退避では undefined。 */
   collectionId?: string;
   /** 退避時刻 (epoch ms)。stale 判定に使う。 */
   timestamp: number;

@@ -648,7 +648,7 @@ export default defineContentScript({
       // 維持し（void 時代からの不変条件: 終端 phase を必ず出す）、誤判定を避けるため
       // リロードのみ見送る。残る stale selection は次 run の Cmd+P 前ガードが検知する。
       let resumeStateCleared = true;
-      if (collectionId && !keepResumeStateForDownloadRetry) {
+      if (!keepResumeStateForDownloadRetry) {
         try {
           await clearResumeStateForCollection(collectionId);
         } catch (err) {
@@ -659,7 +659,7 @@ export default defineContentScript({
       emitProgress({ phase: PHASE.FINISHED, total });
       // run 一式完了時リロード (#1411 要件2)。playlist 追加で作った multi-select 状態は
       // Suno 内部 state に残り、同一タブの次 run の Cmd+P に混入するためページごと破棄する。
-      // playlist phase を実行していない run（単一ファイル mode）は選択を作らないため対象外。
+      // collection mode の run は playlist phase を実行するため対象。
       // リロード前に FINISHED snapshot を退避し、popup 再 open 時の完了結果表示を引き継ぐ。
       if (playlistName && resumeStateCleared && (await persistFinishedSnapshotForReload(collectionId))) {
         scheduleRunCompleteReload();
@@ -762,13 +762,11 @@ export default defineContentScript({
           // catch へ流すと再試行を誘い、同名 playlist の重複作成につながるため、
           // FINISHED を維持してリロードのみ見送る。
           let resumeStateCleared = true;
-          if (collectionId) {
-            try {
-              await clearResumeStateForCollection(collectionId);
-            } catch (err) {
-              resumeStateCleared = false;
-              console.warn("[suno-helper] resume state の消去に失敗しました。完了時リロードを見送ります:", err);
-            }
+          try {
+            await clearResumeStateForCollection(collectionId);
+          } catch (err) {
+            resumeStateCleared = false;
+            console.warn("[suno-helper] resume state の消去に失敗しました。完了時リロードを見送ります:", err);
           }
           emitProgress({ phase: PHASE.FINISHED, total: 0 });
           // retryPlaylist も playlist 追加で multi-select 状態を作るため完了時にページごと破棄する (#1411)。

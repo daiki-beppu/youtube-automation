@@ -13,10 +13,13 @@ import {
   isFinishedSnapshotFresh,
 } from "../lib/finished-snapshot";
 import { applyProgress, initSnapshot } from "../lib/snapshot";
-import { makePromptEntries } from "./_helpers";
+import { makePromptEntries, snapshotOptions } from "./_helpers";
 
 function makeFinishedState(timestamp: number): FinishedSnapshotState {
-  const snapshot = applyProgress(initSnapshot(makePromptEntries(2), "pl"), { phase: PHASE.FINISHED, total: 2 });
+  const snapshot = applyProgress(initSnapshot(makePromptEntries(2), snapshotOptions("pl")), {
+    phase: PHASE.FINISHED,
+    total: 2,
+  });
   return { snapshot, collectionId: "coll-1", timestamp };
 }
 

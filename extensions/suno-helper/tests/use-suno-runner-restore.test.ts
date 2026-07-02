@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import { PHASE } from "../../shared/constants";
 import { buildRestoreState } from "../components/runner-errors";
 import { applyProgress, initSnapshot } from "../lib/snapshot";
-import { makePromptEntries } from "./_helpers";
+import { makePromptEntries, snapshotOptions, TEST_COLLECTION_ID } from "./_helpers";
 
 describe("buildRestoreState: snapshot 無し (silent fallback)", () => {
   it("Given null When buildRestoreState Then null を返す（復元せず従来表示へフォールバック）", () => {
@@ -22,12 +22,16 @@ describe("buildRestoreState: snapshot 無し (silent fallback)", () => {
 describe("buildRestoreState: 実行中 snapshot の復元", () => {
   it("Given 注入中 snapshot When buildRestoreState Then entries / itemStates / isRunning / status を復元する", () => {
     const entries = makePromptEntries(3);
-    const snap = applyProgress(initSnapshot(entries), { phase: PHASE.INJECTING, index: 0, total: 3 });
+    const snap = applyProgress(initSnapshot(entries, snapshotOptions()), {
+      phase: PHASE.INJECTING,
+      index: 0,
+      total: 3,
+    });
 
     const restored = buildRestoreState(snap);
 
     expect(restored).toEqual({
-      collectionId: "__legacy_snapshot_collection__",
+      collectionId: TEST_COLLECTION_ID,
       entries,
       itemStates: ["active", "idle", "idle"],
       isRunning: true,
@@ -38,7 +42,7 @@ describe("buildRestoreState: 実行中 snapshot の復元", () => {
 
   it("Given 一部 done + 注入中 snapshot When buildRestoreState Then 進行済みの itemStates を維持して復元する", () => {
     const entries = makePromptEntries(3);
-    let snap = applyProgress(initSnapshot(entries), { phase: PHASE.DONE, index: 0, total: 3 });
+    let snap = applyProgress(initSnapshot(entries, snapshotOptions()), { phase: PHASE.DONE, index: 0, total: 3 });
     snap = applyProgress(snap, { phase: PHASE.DONE, index: 1, total: 3 });
     snap = applyProgress(snap, { phase: PHASE.INJECTING, index: 2, total: 3 });
 
@@ -53,7 +57,7 @@ describe("buildRestoreState: 実行中 snapshot の復元", () => {
 describe("buildRestoreState: 終了済み snapshot の復元", () => {
   it("Given FINISHED snapshot When buildRestoreState Then isRunning=false + 完了文言を復元する", () => {
     const entries = makePromptEntries(3);
-    const snap = applyProgress(initSnapshot(entries), { phase: PHASE.FINISHED, total: 3 });
+    const snap = applyProgress(initSnapshot(entries, snapshotOptions()), { phase: PHASE.FINISHED, total: 3 });
 
     const restored = buildRestoreState(snap);
 
@@ -64,7 +68,11 @@ describe("buildRestoreState: 終了済み snapshot の復元", () => {
   });
 
   it("Given STOPPED snapshot When buildRestoreState Then isRunning=false + 停止文言 + isError=true を復元する", () => {
-    const snap = applyProgress(initSnapshot(makePromptEntries(2)), { phase: PHASE.STOPPED, index: 0, total: 2 });
+    const snap = applyProgress(initSnapshot(makePromptEntries(2), snapshotOptions()), {
+      phase: PHASE.STOPPED,
+      index: 0,
+      total: 2,
+    });
 
     const restored = buildRestoreState(snap);
 
@@ -74,7 +82,7 @@ describe("buildRestoreState: 終了済み snapshot の復元", () => {
   });
 
   it("Given ERROR snapshot When buildRestoreState Then isRunning=false + 中断文言 + isError=true を復元する", () => {
-    const snap = applyProgress(initSnapshot(makePromptEntries(2)), {
+    const snap = applyProgress(initSnapshot(makePromptEntries(2), snapshotOptions()), {
       phase: PHASE.ERROR,
       index: 1,
       total: 2,
@@ -94,7 +102,7 @@ describe("buildRestoreState: 終了済み snapshot の復元", () => {
 // （write-only な dead field への退行防止）。
 describe("buildRestoreState: failedIndex の surface (#872 要件3 二重化)", () => {
   it("Given ERROR snapshot (index=1) When buildRestoreState Then failedIndex=1 を surface する", () => {
-    const snap = applyProgress(initSnapshot(makePromptEntries(3)), {
+    const snap = applyProgress(initSnapshot(makePromptEntries(3), snapshotOptions()), {
       phase: PHASE.ERROR,
       index: 1,
       total: 3,
@@ -105,7 +113,11 @@ describe("buildRestoreState: failedIndex の surface (#872 要件3 二重化)", 
   });
 
   it("Given 非 ERROR snapshot When buildRestoreState Then failedIndex は undefined（確定前は surface しない）", () => {
-    const snap = applyProgress(initSnapshot(makePromptEntries(3)), { phase: PHASE.INJECTING, index: 0, total: 3 });
+    const snap = applyProgress(initSnapshot(makePromptEntries(3), snapshotOptions()), {
+      phase: PHASE.INJECTING,
+      index: 0,
+      total: 3,
+    });
 
     expect(buildRestoreState(snap)?.failedIndex).toBeUndefined();
   });

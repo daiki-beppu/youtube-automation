@@ -112,9 +112,10 @@ async function loadContentScriptWithPlaylistRows(
   }));
 
   vi.doMock("../lib/snapshot", () => ({
-    initSnapshot: vi.fn((entries: PromptEntry[], playlistName?: string) => ({
+    initSnapshot: vi.fn((entries: PromptEntry[], options: { collectionId: string; playlistName?: string }) => ({
+      collectionId: options.collectionId,
       entries,
-      playlistName,
+      playlistName: options.playlistName,
       itemStates: entries.map(() => "pending"),
       isRunning: true,
       submittedClipIds: [],

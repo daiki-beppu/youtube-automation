@@ -413,6 +413,7 @@ export function useSunoRunner(): RunnerState {
     }
     await serverUrlItem.setValue(trimmed);
     report("取得中…");
+    clearLoadedRunState();
     const extensionVersion = browser.runtime.getManifest().version;
     const warning = await sendMessage("fetchCompatibilityWarning", { baseUrl: trimmed, extensionVersion });
     setCompatibilityWarning(typeof warning === "string" ? warning : "");
@@ -428,7 +429,7 @@ export function useSunoRunner(): RunnerState {
       setItemStates([]);
       report(`取得失敗: ${message}\nyt-collection-serve が起動しているか確認してください。`, true);
     }
-  }, [url, selectedCollectionId, syncCollections, report]);
+  }, [url, selectedCollectionId, syncCollections, clearLoadedRunState, report]);
 
   const run = useCallback(
     async (overrides?: RunOverrides) => {
