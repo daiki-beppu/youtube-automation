@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `feat(doctor)`: `yt-doctor` に `numbered_duplicates` チェックを追加し、`.venv/bin/` と `.claude/skills/` の番号付き重複ファイル（iCloud Drive 同期コンフリクトの bounced file name、原因調査 #1409）を検知・警告できるようにした。`yt-skills sync` も sync 先の重複を warning で報告する。クリーンアップ手順は `docs/migration/numbered-duplicate-files-cleanup.md` を新設し、`/automation-update` に検知確認と再発防止ガイダンス（同期対象外への移設が根本対策、`--frozen` は効果なし）を追記（#1410）
+- `feat(channel-new)`: 承認済み TTP 対象だけを使う初回 `/wf-new` readiness を追加し、`yt-doctor` で thumbnail reference / video-analysis partial / Suno style variants / 旧 video-analyze model を検出できるようにした（#1357）
 
 ### Changed
 
 - `feat(setup)`: `/setup` から `yt-setup-dirs` を実行して `auth/` などの最小ディレクトリを config 生成前に用意し、`/channel-new` は既存ディレクトリを再利用して `config/channel/*.json` 生成に集中する責務へ整理（#1396）
+- `feat(doctor)`: `yt-doctor` に `initial_setup_readiness` を追加し、thumbnail 参照画像・composition rules・Suno `genre_line` 文字数・planning 中 `descriptions.md` の parser 不一致を事前検知できるようにした（#1403）
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
 - `docs(channel-new)`: `/channel-new` 完了時に `git status --porcelain` で未コミット変更を確認し、初回 commit 作成または明確な保存手順を案内する完了ゲートを追加。`/automation-update` の dirty worktree 停止時にも `/channel-new` 直後の初回保存未完了を案内するよう更新（#1329）
 

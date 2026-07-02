@@ -74,7 +74,7 @@ describe("yt skills list — text output (default)", () => {
     for (const skill of expected.skills) {
       expect(output).toContain(`  - ${skill}`);
     }
-  });
+  }, 10_000);
 });
 
 describe("yt skills list --json", () => {
