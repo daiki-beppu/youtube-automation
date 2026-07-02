@@ -15,6 +15,11 @@ export const RESUME_STATE_KEY = "sunoResumeState";
  * Suno は 1 タブ運用前提のため global 単一 key とする。lib/overlay-state.ts が SSOT として参照する。 */
 export const OVERLAY_STATE_KEY = "sunoOverlayState";
 
+/** run 一式完了時リロード (#1411) で失われる直近完了 run の snapshot を退避する chrome.storage.local の key。
+ * content が FINISHED 到達時（リロード予約の直前）に書き、リロード後の queryProgress が復元ソースとして読む。
+ * lib/finished-snapshot.ts が SSOT として参照する。 */
+export const FINISHED_SNAPSHOT_KEY = "sunoFinishedSnapshot";
+
 /** yt-collection-serve の download 完了通知サブパス (#1215、POST)。
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py collection_downloaded_route。 */
 export const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;

@@ -820,6 +820,15 @@ export interface ReadSelectedClipIdsOptions {
   isAborted: () => boolean;
   expectedClipCount?: number;
   renderWaitMs?: number;
+  /** 走査 pass 数の上限（既定: VIRTUAL_SCROLL_RETRY_PASSES + 1 = 3）。
+   * 余剰選択ガードのような best-effort 用途では 1 に絞り、毎 run の全 3 pass コストを避ける (#1411)。 */
+  maxScanPasses?: number;
+  /** 選択数がこの値を「超えた」時点で走査を打ち切る (#1411)。
+   * 余剰検知が目的の場合、超過確定後に残りを全走査する価値が無いため。 */
+  stopAboveCount?: number;
+  /** ID を解決できない選択 row を throw せず skip する (#1411)。
+   * 件数の下限比較のみが目的のガード用途向け（採用用途では従来どおり fail-loud）。 */
+  skipUnresolvedIds?: boolean;
 }
 
 /**
@@ -837,6 +846,9 @@ export async function readSelectedClipIds(
     isAborted,
     expectedClipCount,
     renderWaitMs = VIRTUAL_SCROLL_RENDER_WAIT_MS,
+    maxScanPasses = VIRTUAL_SCROLL_RETRY_PASSES + 1,
+    stopAboveCount,
+    skipUnresolvedIds = false,
   } = options;
 
   const scroller = document.querySelector<HTMLElement>(
@@ -860,6 +872,12 @@ export async function readSelectedClipIds(
       const rowIds = collectClipRowIds(row);
       const firstId = rowIds.values().next().value as string | undefined;
       if (!firstId) {
+        if (skipUnresolvedIds) {
+          // 件数の下限比較のみが目的の呼び出し（余剰選択ガード）では、ID 劣化 row を
+          // 数え漏らしても under-detection に留まる。placeholder で数えると仮想スクロールの
+          // 再マウントで同一 row を重複カウントし false-positive になるため skip する。
+          continue;
+        }
         throw new Error(
           "選択中 clip の ID を解決できません。Suno の UI 変更の可能性があります。",
         );
@@ -870,26 +888,29 @@ export async function readSelectedClipIds(
 
   const enoughSelected = () =>
     expectedClipCount !== undefined && selectedIds.size >= expectedClipCount;
+  const exceededStopCount = () =>
+    stopAboveCount !== undefined && selectedIds.size > stopAboveCount;
+  const scanDone = () => isAborted() || enoughSelected() || exceededStopCount();
 
-  for (let pass = 0; pass <= VIRTUAL_SCROLL_RETRY_PASSES; pass++) {
+  for (let pass = 0; pass < maxScanPasses; pass++) {
     scroller.scrollTop = 0;
     scroller.dispatchEvent(new Event("scroll"));
     await sleep(renderWaitMs);
     collectVisibleSelectedRows();
-    if (isAborted() || enoughSelected()) break;
+    if (scanDone()) break;
 
     const step = Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
     const maxScroll = scroller.scrollHeight - scroller.clientHeight;
 
     for (let pos = 0; pos <= maxScroll; pos += step) {
-      if (isAborted() || enoughSelected()) break;
+      if (scanDone()) break;
       scroller.scrollTop = Math.min(pos, maxScroll);
       scroller.dispatchEvent(new Event("scroll"));
       await sleep(renderWaitMs);
       collectVisibleSelectedRows();
     }
 
-    if (isAborted() || enoughSelected()) break;
+    if (scanDone()) break;
   }
 
   restoreClipListHead(scroller);

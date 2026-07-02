@@ -1,5 +1,11 @@
 # Remotion ベース動画レンダリング
 
+## Status
+
+accepted (2026-06-16)。renderer 切替の実装は cutover (#790) 後の別 epic — 本文 Decision 参照。
+
+2026-07-02 の ADR 監査で 0010 から番号振り直し（並行 PR による番号レースの解消、先着優先ルール）。旧文書中の「ADR-0010」は文脈により本 ADR を指す。
+
 ## Context
 
 動画生成パイプラインは `generate_videos.sh`（854行の bash）が ffmpeg を直接叩く構成で、5 つのレンダリング経路（静止画 / ループ動画 / エフェクトベイク / オーバーレイ / stream copy）と 4 種のエフェクト（particles / bokeh / gradient / audio_visualizer）を条件分岐で処理している。

@@ -55,6 +55,8 @@ import {
 } from "../../shared/playlist-dom";
 import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
 import { onMessage, sendMessage } from "../lib/messaging";
+import { clearFinishedSnapshot, readFreshFinishedSnapshot, writeFinishedSnapshot } from "../lib/finished-snapshot";
+import { cancelScheduledRunCompleteReload, scheduleRunCompleteReload } from "../lib/page-reload";
 import { readDownloadFormat, serverUrlItem } from "../lib/storage";
 import type { DownloadContext } from "../lib/download-flow";
 
@@ -133,6 +135,28 @@ export default defineContentScript({
       }
       currentSnapshot = applyProgress(currentSnapshot, payload);
       void sendMessage("progress", payload);
+    }
+
+    /**
+     * 完了時リロード (#1411) の直前に FINISHED snapshot を chrome.storage.local へ退避する。
+     * リロードは in-memory の currentSnapshot（queryProgress の復元 SSOT, #852）を破棄するため、
+     * run 中に popup を閉じていた運用者が再 open しても完了結果を確認できるよう引き継ぐ。
+     * 退避に失敗したら false を返し、呼び出し側はリロードを見送る（in-memory snapshot が
+     * 生き残るため復元性は保たれる。残る stale selection は次 run の Cmd+P 前ガードが検知する —
+     * resume state 消去失敗時と同じ扱い）。
+     */
+    async function persistFinishedSnapshotForReload(collectionId: string | undefined): Promise<boolean> {
+      if (!currentSnapshot) {
+        // FINISHED emit 済みの経路からのみ呼ばれるため到達しない（emitProgress と同じ不変条件）。
+        return false;
+      }
+      try {
+        await writeFinishedSnapshot({ snapshot: currentSnapshot, collectionId, timestamp: Date.now() });
+        return true;
+      } catch (err) {
+        console.warn("[suno-helper] 完了 snapshot の退避に失敗しました。完了時リロードを見送ります:", err);
+        return false;
+      }
     }
 
     const downloadFlow = createDownloadFlow({
@@ -262,6 +286,44 @@ export default defineContentScript({
         );
       }
       await abortableSleep(SETTLE_MS, () => aborted);
+      if (aborted) {
+        return selectedCount;
+      }
+
+      // Cmd+P 直前の保険ガード (#1411 要件4)。完了時リロードが走らなかった経路（クラッシュ等）で
+      // 前回 run の stale selection が残っていると、Cmd+P は選択中 clip 全件を playlist 追加対象に
+      // するため累積汚染される。実際の選択中 clip を読み取り、target 件数を超えていたら fail-loud で
+      // 中断する。判定は件数比較にする: scrollAndMultiSelectByIds の title fallback で選択した row は
+      // DOM 上の ID が target 集合に含まれないため、ID 集合差だと誤検知する。
+      // 走査は 1 pass + 超過検知での即打ち切りに絞る（クリーンな happy path で毎 run 全 3 pass の
+      // コストを払わない）。ガード自身の走査失敗（scroller 不在・render flake での 0 件等）は、
+      // 生成完了済みの run を巻き添えにしないため fail-open（警告して続行）とする。
+      let actualSelectedIds: string[] | null = null;
+      try {
+        actualSelectedIds = await readSelectedClipIds({
+          isAborted: () => aborted,
+          maxScanPasses: 1,
+          stopAboveCount: expectedClipCount,
+          skipUnresolvedIds: true,
+        });
+      } catch (err) {
+        if (!aborted) {
+          console.warn("[suno-helper] stale selection ガードの走査に失敗したためスキップして続行します:", err);
+        }
+      }
+      if (aborted) {
+        return selectedCount;
+      }
+      if (actualSelectedIds !== null && actualSelectedIds.length > expectedClipCount) {
+        const targetIdSet = new Set(submittedIds);
+        const extraIds = actualSelectedIds.filter((id) => !targetIdSet.has(id));
+        throw new Error(
+          `選択中 clip が playlist 対象より多く、前回実行の選択が残っている可能性があります` +
+            `（expected ${expectedClipCount}, selected ${actualSelectedIds.length}）。` +
+            `ページをリロードして選択状態を解除してから再実行してください。` +
+            `参考: target 集合外の選択中 ID（title fallback で選択した正当な clip を含む場合があります）: ${extraIds.join(", ")}`,
+        );
+      }
 
       const isMac = navigator.platform.toLowerCase().includes("mac");
       const dialog = await openAddToPlaylistDialogViaCmdP(async () => {
@@ -581,10 +643,27 @@ export default defineContentScript({
         return;
       }
       // 全 entry 完了。この collection の resume state を消去する (#872 要件5)。
-      if (!keepResumeStateForDownloadRetry) {
-        void clearResumeStateForCollection(collectionId);
+      // リロード前に消去完了を await する (#1411 要件3): 逆順だとリロード後の
+      // ResumeBanner が「中断からの再開」と誤判定する。消去に失敗しても FINISHED は
+      // 維持し（void 時代からの不変条件: 終端 phase を必ず出す）、誤判定を避けるため
+      // リロードのみ見送る。残る stale selection は次 run の Cmd+P 前ガードが検知する。
+      let resumeStateCleared = true;
+      if (collectionId && !keepResumeStateForDownloadRetry) {
+        try {
+          await clearResumeStateForCollection(collectionId);
+        } catch (err) {
+          resumeStateCleared = false;
+          console.warn("[suno-helper] resume state の消去に失敗しました。完了時リロードを見送ります:", err);
+        }
       }
       emitProgress({ phase: PHASE.FINISHED, total });
+      // run 一式完了時リロード (#1411 要件2)。playlist 追加で作った multi-select 状態は
+      // Suno 内部 state に残り、同一タブの次 run の Cmd+P に混入するためページごと破棄する。
+      // playlist phase を実行していない run（単一ファイル mode）は選択を作らないため対象外。
+      // リロード前に FINISHED snapshot を退避し、popup 再 open 時の完了結果表示を引き継ぐ。
+      if (playlistName && resumeStateCleared && (await persistFinishedSnapshotForReload(collectionId))) {
+        scheduleRunCompleteReload();
+      }
     }
 
     onMessage("run", ({ data }) => {
@@ -592,8 +671,15 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
+      // 直前 run の完了時リロードが保留中なら取り消す (#1411)。猶予中に受理した新 run を
+      // リロードが巻き添えに殺すと STOPPED/ERROR も resume state も残らない。取り消しで
+      // 残る stale selection は Cmd+P 前ガードが検知する。
+      cancelScheduledRunCompleteReload();
       const { entries, playlistName, range, collectionId, indices, submittedClipIds, playlistExpectedClipCount } = data;
       currentSnapshot = initSnapshot(entries, { collectionId, playlistName });
+      // 新 run 開始で直近完了 run の退避 snapshot を消去する（前 run の完了表示が復元されるのを防ぐ）。
+      // in-memory の currentSnapshot が queryProgress で優先されるため fire-and-forget でよい。
+      void clearFinishedSnapshot();
       if (detectSunoViewMode() === "unknown") {
         emitProgress({
           phase: PHASE.ERROR,
@@ -635,6 +721,10 @@ export default defineContentScript({
       }
       const { playlistName, submittedClipIds, expectedClipCount, collectionId, shouldDownload } = data;
       currentSnapshot = initSnapshot([], { collectionId, playlistName });
+      // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
+      void clearFinishedSnapshot();
+      // 直前 run の完了時リロードが保留中なら取り消す (#1411)。理由は run handler と同じ。
+      cancelScheduledRunCompleteReload();
       running = true;
       aborted = false;
       void (async () => {
@@ -667,8 +757,25 @@ export default defineContentScript({
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
           }
-          void clearResumeStateForCollection(collectionId);
+          // 消去 → FINISHED → リロードの順序保証は runAll の完了経路と同じ (#1411 要件3)。
+          // 消去失敗はここまでの成功（playlist 追加 + download）を ERROR に変えない:
+          // catch へ流すと再試行を誘い、同名 playlist の重複作成につながるため、
+          // FINISHED を維持してリロードのみ見送る。
+          let resumeStateCleared = true;
+          if (collectionId) {
+            try {
+              await clearResumeStateForCollection(collectionId);
+            } catch (err) {
+              resumeStateCleared = false;
+              console.warn("[suno-helper] resume state の消去に失敗しました。完了時リロードを見送ります:", err);
+            }
+          }
           emitProgress({ phase: PHASE.FINISHED, total: 0 });
+          // retryPlaylist も playlist 追加で multi-select 状態を作るため完了時にページごと破棄する (#1411)。
+          // リロード前に FINISHED snapshot を退避する（runAll の完了経路と同じ）。
+          if (resumeStateCleared && (await persistFinishedSnapshotForReload(collectionId))) {
+            scheduleRunCompleteReload();
+          }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           emitProgress({ phase: PHASE.ERROR, total: 0, message });
@@ -685,12 +792,16 @@ export default defineContentScript({
       }
       const { collectionId, playlistName, submittedClipIds, expectedClipCount, sunoPlaylistUrl } = data;
       currentSnapshot = initSnapshot([], { collectionId });
+      // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
+      void clearFinishedSnapshot();
+      // 直前 run の完了時リロードが保留中なら取り消す (#1411)。理由は run handler と同じ。
+      cancelScheduledRunCompleteReload();
       running = true;
       aborted = false;
       void (async () => {
         try {
           const downloadContext = await resolveDownloadContext();
-          await downloadFlow.retryDownload({
+          const result = await downloadFlow.retryDownload({
             context: downloadContext,
             collectionId,
             playlistName,
@@ -703,6 +814,13 @@ export default defineContentScript({
             },
             clearResumeState: clearResumeStateForCollection,
           });
+          // retryDownload も selectClipIds で multi-select 状態を作るため、完了時に
+          // ページごと破棄する (#1411)。この経路だけリロードが無いと、次 run が
+          // 確実に Cmd+P 前ガードで止まり手動リロードを強いられる。
+          // リロード前に FINISHED snapshot を退避する（runAll の完了経路と同じ）。
+          if (result.completedAndCleared && (await persistFinishedSnapshotForReload(collectionId))) {
+            scheduleRunCompleteReload();
+          }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           emitProgress({ phase: PHASE.ERROR, total: 0, message });
@@ -723,8 +841,10 @@ export default defineContentScript({
       }).then((clipIds) => ({ ok: true as const, clipIds }));
     });
 
-    // popup 再 open 時の進捗復元 (#852)。run 未実行は null（buildRestoreState が従来表示へフォールバック）。
-    onMessage("queryProgress", () => currentSnapshot);
+    // popup 再 open 時の進捗復元 (#852)。in-memory snapshot が SSOT。完了時リロード (#1411) で
+    // in-memory が破棄された後は、リロード直前に退避した直近完了 run の snapshot を fallback で返す
+    // （stale 判定込み、次 run 開始で消去）。どちらも無ければ null（buildRestoreState が従来表示へ）。
+    onMessage("queryProgress", async () => currentSnapshot ?? (await readFreshFinishedSnapshot(Date.now())));
 
     // 自身の document（Suno `/me`）から playlist 一覧を scrape して返す (#893)。
     // overlay の手動 Capture（background 経由）と background の bg tab 自動 capture が共用する。

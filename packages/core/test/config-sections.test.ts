@@ -475,13 +475,25 @@ describe("pinnedComment", () => {
 
 // --- distrokid (#698) ------------------------------------------------------
 
-const fullDistrokidProfile = (): Record<string, string> => ({
-  apple_music_credit: "Jane Doe",
-  artist_name: "City Nights",
+const fullDistrokidProfile = (): Record<string, unknown> => ({
+  ai_disclosure: {
+    apply_to_all: true,
+    artist_persona: true,
+    enabled: true,
+    lyrics: true,
+    music: true,
+    partial_audio_type: null,
+    recording_scope: "full",
+  },
+  artist: "City Nights",
+  credits: {
+    performer_role: "Synthesizer",
+    producer_role: "Producer",
+  },
   language: "English",
   main_genre: "Electronic",
-  songwriter: "Jane Doe",
-  track_type: "Instrumental",
+  songwriter: { first: "Jane", last: "Doe" },
+  sub_genre: "Ambient",
 });
 
 describe("distrokid", () => {
@@ -491,8 +503,14 @@ describe("distrokid", () => {
 
     // Then the opt-in section is disabled with blank profile fields
     expect(config.integrations.distrokid.enabled).toBe(false);
-    expect(config.integrations.distrokid.profile.artistName).toBe("");
-    expect(config.integrations.distrokid.profile.trackType).toBe("");
+    expect(config.integrations.distrokid.profile.artist).toBe("");
+    expect(config.integrations.distrokid.profile.songwriter).toBeNull();
+    expect(config.integrations.distrokid.profile.aiDisclosure.enabled).toBe(
+      true
+    );
+    expect(config.integrations.distrokid.profile.credits.performerRole).toBe(
+      "Synthesizer"
+    );
   });
 
   test("loads an enabled profile through to camelCase fields", () => {
@@ -505,37 +523,156 @@ describe("distrokid", () => {
     // Then all six profile fields are mapped
     const dk = load(sections).integrations.distrokid;
     expect(dk.enabled).toBe(true);
-    expect(dk.profile.artistName).toBe("City Nights");
+    expect(dk.profile.artist).toBe("City Nights");
     expect(dk.profile.language).toBe("English");
     expect(dk.profile.mainGenre).toBe("Electronic");
-    expect(dk.profile.songwriter).toBe("Jane Doe");
-    expect(dk.profile.appleMusicCredit).toBe("Jane Doe");
-    expect(dk.profile.trackType).toBe("Instrumental");
+    expect(dk.profile.subGenre).toBe("Ambient");
+    expect(dk.profile.songwriter).toEqual({
+      first: "Jane",
+      last: "Doe",
+      middle: null,
+    });
+    expect(dk.profile.aiDisclosure.recordingScope).toBe("full");
+    expect(dk.profile.aiDisclosure.partialAudioType).toBeNull();
+    expect(dk.profile.credits.producerRole).toBe("Producer");
   });
 
   test("rejects enabled=true with a missing profile field", () => {
-    // Given enabled distrokid missing songwriter (conditional-required)
+    // Given enabled distrokid missing main_genre (conditional-required)
     const sections = minimalSections();
     const profile = fullDistrokidProfile();
-    Reflect.deleteProperty(profile, "songwriter");
+    Reflect.deleteProperty(profile, "main_genre");
     sections["distrokid.json"] = { distrokid: { enabled: true, profile } };
 
     // When/Then the conditional validation names the missing field
-    expect(() => load(sections)).toThrow(/songwriter/u);
+    expect(() => load(sections)).toThrow(/main_genre/u);
   });
 
-  test("skips profile validation when disabled", () => {
-    // Given disabled distrokid with an incomplete profile
+  test("enabled=true accepts minimal required profile fields", () => {
+    // Given enabled distrokid with only the Python-side required fields
     const sections = minimalSections();
     sections["distrokid.json"] = {
-      distrokid: { enabled: false, profile: { artist_name: "x" } },
+      distrokid: {
+        enabled: true,
+        profile: { language: "ja", main_genre: "Electronic" },
+      },
     };
 
-    // Then it loads without validating the profile
+    // Then optional fields fall back to documented defaults
+    const dk = load(sections).integrations.distrokid;
+    expect(dk.enabled).toBe(true);
+    expect(dk.profile.artist).toBe("");
+    expect(dk.profile.songwriter).toBeNull();
+    expect(dk.profile.subGenre).toBeNull();
+    expect(dk.profile.aiDisclosure.applyToAll).toBe(true);
+    expect(dk.profile.credits.performerRole).toBe("Synthesizer");
+  });
+
+  test("rejects partial audio type unless recording scope is partial", () => {
+    // Given enabled distrokid with Python-incompatible AI disclosure settings
+    const sections = minimalSections();
+    const profile = fullDistrokidProfile();
+    const aiDisclosure = profile.ai_disclosure as Record<string, unknown>;
+    sections["distrokid.json"] = {
+      distrokid: {
+        enabled: true,
+        profile: {
+          ...profile,
+          ai_disclosure: {
+            ...aiDisclosure,
+            partial_audio_type: "vocals",
+            recording_scope: "full",
+          },
+        },
+      },
+    };
+
+    // When/Then core rejects the same invalid cross-field combination as Python
+    expect(() => load(sections)).toThrow(/partial_audio_type/u);
+  });
+
+  test("accepts partial audio type when recording scope is partial", () => {
+    // Given enabled distrokid with a valid partial recording disclosure
+    const sections = minimalSections();
+    const profile = fullDistrokidProfile();
+    const aiDisclosure = profile.ai_disclosure as Record<string, unknown>;
+    sections["distrokid.json"] = {
+      distrokid: {
+        enabled: true,
+        profile: {
+          ...profile,
+          ai_disclosure: {
+            ...aiDisclosure,
+            partial_audio_type: "vocals",
+            recording_scope: "partial",
+          },
+        },
+      },
+    };
+
+    // Then core maps the valid partial configuration to camelCase
+    const ai = load(sections).integrations.distrokid.profile.aiDisclosure;
+    expect(ai.recordingScope).toBe("partial");
+    expect(ai.partialAudioType).toBe("vocals");
+  });
+
+  test.each([[null], [{ name: "City Nights" }], [["City Nights"]]])(
+    "rejects enabled=true with non-string artist %p",
+    (artist) => {
+      // Given enabled distrokid with invalid artist shape
+      const sections = minimalSections();
+      sections["distrokid.json"] = {
+        distrokid: {
+          enabled: true,
+          profile: { ...fullDistrokidProfile(), artist },
+        },
+      };
+
+      // When/Then the profile schema rejects it before it can flow into payloads
+      expect(() => load(sections)).toThrow(/artist/u);
+    }
+  );
+
+  test("skips profile validation when disabled", () => {
+    // Given disabled distrokid with an incomplete legacy profile
+    const sections = minimalSections();
+    sections["distrokid.json"] = {
+      distrokid: {
+        enabled: false,
+        profile: {
+          apple_music_credit: "Jane Doe",
+          artist_name: "x",
+          language: "ja",
+          main_genre: "Electronic",
+          songwriter: "Jane Doe",
+          track_type: "Instrumental",
+        },
+      },
+    };
+
+    // Then it loads without validating the profile and ignores unknown legacy keys
     const dk = load(sections).integrations.distrokid;
     expect(dk.enabled).toBe(false);
-    expect(dk.profile.artistName).toBe("x");
+    expect(dk.profile.artist).toBe("");
+    expect(dk.profile.language).toBe("ja");
   });
+
+  test.each([[null], [{ name: "City Nights" }], [["City Nights"]]])(
+    "rejects enabled=false with non-string artist %p",
+    (artist) => {
+      // Given disabled distrokid still declares an invalid current-schema artist key
+      const sections = minimalSections();
+      sections["distrokid.json"] = {
+        distrokid: {
+          enabled: false,
+          profile: { artist },
+        },
+      };
+
+      // When/Then artist keeps the same string-only contract even when the integration is disabled
+      expect(() => load(sections)).toThrow(/artist/u);
+    }
+  );
 
   test("rejects a non-object distrokid section", () => {
     // Given distrokid declared as an array

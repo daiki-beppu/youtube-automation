@@ -82,7 +82,12 @@ def _fetch_channel(youtube, channel_id: str) -> dict:
             f"YouTube channel id mismatch for approved TTP channel id {channel_id}: response id={returned_id!r}"
         )
 
-    return item
+    return {
+        **item,
+        "snippet": item.get("snippet") if isinstance(item.get("snippet"), dict) else {},
+        "brandingSettings": item.get("brandingSettings") if isinstance(item.get("brandingSettings"), dict) else {},
+        "localizations": item.get("localizations") if isinstance(item.get("localizations"), dict) else {},
+    }
 
 
 if __name__ == "__main__":
