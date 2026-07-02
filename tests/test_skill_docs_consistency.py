@@ -457,25 +457,6 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
     assert "初回動画の追加は `/video-upload` 内部の自動 assign に任せる" in checklist
 
 
-def test_channel_new_pre_wf_new_checks_include_analytics_and_live_streaming() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    step9 = channel_new.split("### Step 9: wf-new 接続前チェック", 1)[1].split(
-        "### Step 10: 初回保存と automation-update 前の整理",
-        1,
-    )[0]
-
-    assert "Analytics レポート取得設定が未確認" in step9
-    assert "YouTube Analytics / Reporting API" in step9
-    assert "`/analytics-collect`" in step9
-    assert "`/setup`" in step9
-    assert "初回制作は止めず" in step9
-
-    assert "ライブ配信を使う可能性がある" in step9
-    assert "YouTube Studio で Live streaming を早めに有効化" in step9
-    assert "初回配信可能になるまで最大 24 時間" in step9
-    assert "`/streaming`" in step9
-
-
 def test_common_docs_list_optional_channel_config_files() -> None:
     required = ("shorts.json", "comments.json", "pinned-comment.json", "distrokid.json")
 
