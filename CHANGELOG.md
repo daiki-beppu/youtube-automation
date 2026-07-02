@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `fix(suno-lyric)`: `/suno-lyric` がマルチ曲 collection で `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` を全曲一言一句同一のまま出力するのを防ぐため、Workflow に「これらの section も曲ごとの scene / persona で書き分ける」指示を明記し、Validation に曲間セクション重複のセルフチェックと書き分け直し手順を追加。`suno-lyrics.json` の曲間重複を機械検出する `references/check_lyric_duplication.py` を新設（重複検出時は exit 1、#1445）
+
 ## [5.5.15] - 2026-07-02
 
 ### Added
