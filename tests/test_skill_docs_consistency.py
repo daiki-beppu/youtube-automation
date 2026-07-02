@@ -180,6 +180,13 @@ def test_channel_new_import_mode_contract_is_separate_from_ttp_completion() -> N
     assert "責務別 5 ファイル" in channel_new
     assert (ROOT / ".claude/skills/channel-setup/references/config-template/audio.json").is_file()
     assert (
+        "`config/channel/meta.json::channel.channel_id` が未設定の場合は、認証済みチャンネル ID を必ず取得"
+        in channel_new
+    )
+    assert "`channel_id` の `config/channel/meta.json::channel.channel_id` 保存" in channel_new
+    assert "channel_id` 取得またはユーザー承認済み" not in channel_new
+    assert "ユーザー承認済みの未完了項目明記" not in channel_new
+    assert (
         "benchmark.channels`、`ttp-seed-confirmation.md`、branding snapshot、"
         "`ttp_wf_new_readiness` は取り込みモードの必須完了条件ではない"
     ) in channel_new
