@@ -880,6 +880,16 @@ class TestCheckInitialSetupReadiness:
         assert "channel_dir 外" in r.message
         assert "SECRET_HEADING" not in r.message
 
+    def test_descriptions_md_invalid_utf8_warns_without_exception(self, tmp_path):
+        desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.md"
+        desc.parent.mkdir(parents=True)
+        desc.write_bytes(b"\xff\xfe\xfa")
+
+        r = doctor.check_initial_setup_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "descriptions.md を読み取れません" in r.message
+
 
 # ---------------------------------------------------------------------------
 # bootstrap checks

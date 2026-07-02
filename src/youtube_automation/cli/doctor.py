@@ -10,6 +10,8 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Optional
@@ -800,34 +802,41 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
             },
         )
 
-    # config/channel/ 存在 → load_config() でロード可能か検証。
-    # CHANNEL_DIR を一時的に上書きしてシングルトンを差し替え、終了後に必ず復元する。
     from youtube_automation.utils.config import load_config
-    from youtube_automation.utils.config import reset as reset_config
     from youtube_automation.utils.exceptions import ConfigError
+
+    with _temporary_channel_dir(channel_dir):
+        try:
+            load_config()
+            return CheckResult(
+                id="channel_config",
+                status="ok",
+                category=CHANNEL_CATEGORY,
+                message="config/channel/ ロード成功",
+            )
+        except ConfigError as e:
+            return CheckResult(
+                id="channel_config",
+                status="fail",
+                category=CHANNEL_CATEGORY,
+                message=f"config/channel/ ロード失敗: {e}",
+                next_action={
+                    "kind": "human",
+                    "instructions": "/channel-import を実行して設定を修復してください",
+                },
+            )
+
+
+@contextmanager
+def _temporary_channel_dir(channel_dir: Path) -> Iterator[None]:
+    """Temporarily point config singleton consumers at ``channel_dir``."""
+    from youtube_automation.utils.config import reset as reset_config
 
     old_env = os.environ.get("CHANNEL_DIR")
     os.environ["CHANNEL_DIR"] = str(channel_dir)
     try:
         reset_config()
-        load_config()
-        return CheckResult(
-            id="channel_config",
-            status="ok",
-            category=CHANNEL_CATEGORY,
-            message="config/channel/ ロード成功",
-        )
-    except ConfigError as e:
-        return CheckResult(
-            id="channel_config",
-            status="fail",
-            category=CHANNEL_CATEGORY,
-            message=f"config/channel/ ロード失敗: {e}",
-            next_action={
-                "kind": "human",
-                "instructions": "/channel-import を実行して設定を修復してください",
-            },
-        )
+        yield
     finally:
         reset_config()
         if old_env is None:
@@ -1543,23 +1552,14 @@ def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
 
 
 def _load_skill_config_for_channel(skill: str, target_channel_dir: Path) -> tuple[dict, str | None]:
-    from youtube_automation.utils.config import reset as reset_config
     from youtube_automation.utils.exceptions import ConfigError
     from youtube_automation.utils.skill_config import load_skill_config
 
-    old_env = os.environ.get("CHANNEL_DIR")
-    os.environ["CHANNEL_DIR"] = str(target_channel_dir)
     try:
-        reset_config()
-        return load_skill_config(skill, use_cache=False), None
+        with _temporary_channel_dir(target_channel_dir):
+            return load_skill_config(skill, use_cache=False), None
     except (ConfigError, OSError, yaml.YAMLError) as exc:
         return {}, f"config/skills/{skill}.yaml 読み込み失敗: {exc}"
-    finally:
-        reset_config()
-        if old_env is None:
-            os.environ.pop("CHANNEL_DIR", None)
-        else:
-            os.environ["CHANNEL_DIR"] = old_env
 
 
 def _planning_descriptions_md_paths(channel_dir: Path) -> list[Path]:

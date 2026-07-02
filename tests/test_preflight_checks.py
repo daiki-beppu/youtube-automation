@@ -510,6 +510,15 @@ class TestInitialSetupChecks:
         assert msg is not None
         assert "symlink が壊れています" in msg
 
+    def test_descriptions_md_parseability_warns_for_invalid_utf8(self, tmp_path: Path) -> None:
+        p = tmp_path / "descriptions.md"
+        p.write_bytes(b"\xff\xfe\xfa")
+
+        msg = check_descriptions_md_parseability(p)
+
+        assert msg is not None
+        assert "読み取れません" in msg
+
     def test_descriptions_md_parseability_rejects_path_outside_allowed_root(self, tmp_path: Path) -> None:
         outside = tmp_path / "outside.md"
         outside.write_text("## SECRET_HEADING\n", encoding="utf-8")

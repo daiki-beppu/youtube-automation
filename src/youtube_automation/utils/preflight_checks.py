@@ -83,7 +83,7 @@ def check_descriptions_md_parseability(desc_md: Path, *, allowed_root: Path | No
         return f"{desc_md}: descriptions.md が通常ファイルではありません。/video-description で再生成してください"
     try:
         text = desc_md.read_text(encoding="utf-8")
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         return f"{desc_md}: descriptions.md を読み取れません: {exc}"
     missing = missing_descriptions_md_headings(text)
     if not missing:
