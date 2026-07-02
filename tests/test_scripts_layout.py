@@ -58,6 +58,23 @@ _OLD_GCP_TERRAFORM_APPLY = _SCRIPTS_DIR / "gcp-terraform-apply.sh"
 
 # 移動後パスを参照すべきプロダクションコード
 _AUDIO_FORMATS_PY = _REPO_ROOT / "src" / "youtube_automation" / "utils" / "audio_formats.py"
+_LEGACY_CHANNEL_SETUP_REFERENCES = (
+    "channel-setup" + "/references",
+    ".claude/skills/" + "channel-setup",
+)
+_STALE_REFERENCE_EXCLUDED_DIRS = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".takt",
+    ".venv",
+    ".worktrees",
+    "__pycache__",
+    "node_modules",
+}
+_STALE_REFERENCE_EXCLUDED_TOP_LEVEL_DIRS = {"docs"}
+_STALE_REFERENCE_EXCLUDED_FILES = {"CHANGELOG.md"}
 
 
 # ---------- 共通ヘルパー ----------
@@ -69,6 +86,15 @@ def _read(path: Path) -> str:
 
 def _bash_available() -> bool:
     return shutil.which("bash") is not None
+
+
+def _is_stale_reference_scan_target(path: Path) -> bool:
+    relative = path.relative_to(_REPO_ROOT)
+    if relative.name in _STALE_REFERENCE_EXCLUDED_FILES:
+        return False
+    if relative.parts[0] in _STALE_REFERENCE_EXCLUDED_TOP_LEVEL_DIRS:
+        return False
+    return not any(part in _STALE_REFERENCE_EXCLUDED_DIRS for part in relative.parts)
 
 
 # ---------- ルート scripts/ から skill 固有ファイルが消えているか ----------
@@ -167,6 +193,31 @@ def test_channel_new_reference_gcp_script_exists(path: Path) -> None:
     scripts/ 側を削除した後も canonical path 側が存在することを保証する。
     """
     assert path.exists(), f"{path.relative_to(_REPO_ROOT)} が存在しない (Issue #388)"
+
+
+def test_no_legacy_channel_setup_reference_paths_in_operational_files() -> None:
+    """Given channel-new への GCP references 統合後の repository
+    When 履歴 docs / CHANGELOG と生成キャッシュを除く現行ファイルを走査する
+    Then 削除済み channel-setup references の案内が残っていない。
+
+    hidden file の ``.env.example`` は利用者向け契約なので、明示的に走査対象に含める。
+    """
+    offenders: list[str] = []
+    for path in sorted(_REPO_ROOT.rglob("*")):
+        if not path.is_file() or not _is_stale_reference_scan_target(path):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if any(legacy in line for legacy in _LEGACY_CHANNEL_SETUP_REFERENCES):
+                offenders.append(f"{path.relative_to(_REPO_ROOT)}:{lineno}: {line.strip()}")
+
+    assert offenders == [], (
+        "削除済み channel-setup references の現行ファイル参照が残っています。"
+        " .claude/skills/channel-new/references/ に更新してください:\n  " + "\n  ".join(offenders)
+    )
 
 
 @pytest.mark.parametrize(

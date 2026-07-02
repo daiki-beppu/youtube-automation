@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ _PR_TEMPLATE_PATH = _REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"
 _CI_WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
 _CHANGELOG_GATE_PATH = _REPO_ROOT / ".lefthook" / "pre-push" / "changelog-gate.sh"
 _LEFTHOOK_CONFIG_PATH = _REPO_ROOT / "lefthook.yml"
+_OXFMT_CONFIG_PATH = _REPO_ROOT / "oxfmt.config.ts"
 
 _CHANGELOG_LABEL = "skip-changelog"
 _PATH_FILTER_PATTERN = (
@@ -61,6 +63,13 @@ def _read_text(path: Path) -> str:
 
 def _load_ci_workflow() -> dict[str, object]:
     return yaml.safe_load(_read_text(_CI_WORKFLOW_PATH))
+
+
+def _oxfmt_ignore_patterns() -> set[str]:
+    text = _read_text(_OXFMT_CONFIG_PATH)
+    match = re.search(r"ignorePatterns:\s*\[(?P<body>.*?)\],", text, flags=re.DOTALL)
+    assert match is not None, "oxfmt.config.ts の ignorePatterns が見つからない"
+    return set(re.findall(r'"([^"]+)"', match.group("body")))
 
 
 def test_pull_request_template_matches_issue_485_contract() -> None:
@@ -176,4 +185,21 @@ def test_lefthook_changelog_gate_skips_branch_deletion_push() -> None:
     gate_command = lefthook_config["pre-push"]["commands"]["changelog-gate"]
     assert gate_command.get("use_stdin") is True, (
         "lefthook.yml の changelog-gate に use_stdin: true が無いと削除 push スキップが黙って無効化される"
+    )
+
+
+def test_lefthook_oxfmt_exclude_matches_formatter_ignore_contract() -> None:
+    """#1428 同型: oxfmt ignore 対象だけの staged commit で hook が失敗しない契約を固定する。"""
+    lefthook_config = yaml.safe_load(_read_text(_LEFTHOOK_CONFIG_PATH))
+    oxfmt_command = lefthook_config["pre-commit"]["commands"]["oxfmt"]
+    lefthook_excludes = set(oxfmt_command.get("exclude", []))
+    ignore_patterns = _oxfmt_ignore_patterns()
+
+    required_excludes = {"extensions/**", ".claude/**"}
+    assert required_excludes <= lefthook_excludes, (
+        "lefthook.yml の pre-commit.commands.oxfmt.exclude は extensions/** と .claude/** を含めること"
+    )
+    assert lefthook_excludes <= ignore_patterns, (
+        "lefthook.yml の oxfmt.exclude は oxfmt.config.ts の ignorePatterns と同期してください: "
+        f"{sorted(lefthook_excludes - ignore_patterns)}"
     )
