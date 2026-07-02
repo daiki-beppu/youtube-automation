@@ -4,6 +4,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PHASE } from "../../shared/constants";
+import type { RetryPlaylistPayload } from "../lib/messaging";
 
 interface ProgressMessage {
   phase: string;
@@ -12,11 +13,23 @@ interface ProgressMessage {
   message?: string;
 }
 
-type Handler = (message: { data: Record<string, unknown> }) => unknown;
+type Handler = (message: { data: unknown }) => unknown;
 
 const clearResumeStateMock = vi.fn(() => Promise.resolve());
 const scheduleRunCompleteReloadMock = vi.fn();
 const cancelScheduledRunCompleteReloadMock = vi.fn();
+
+function retryPlaylistMessage(overrides: Partial<RetryPlaylistPayload> = {}): { data: RetryPlaylistPayload } {
+  return {
+    data: {
+      playlistName: "test-playlist",
+      submittedClipIds: [],
+      expectedClipCount: 0,
+      collectionId: "coll-1",
+      ...overrides,
+    },
+  };
+}
 
 async function loadContentScript(overrides?: {
   addClipsToPlaylistError?: Error;
@@ -86,7 +99,9 @@ async function loadContentScript(overrides?: {
   }));
 
   vi.doMock("../lib/snapshot", () => ({
-    initSnapshot: vi.fn(() => ({
+    initSnapshot: vi.fn((_entries: unknown[], options: { collectionId: string; playlistName?: string }) => ({
+      collectionId: options.collectionId,
+      playlistName: options.playlistName,
       entries: [],
       itemStates: [],
       isRunning: true,
@@ -216,16 +231,42 @@ describe('content onMessage("retryPlaylist"): running ガード', () => {
 
     // 最初の retryPlaylist を投入（async で走り始める → running=true）
     const retryHandler = handlers.get("retryPlaylist")!;
-    retryHandler({
-      data: { playlistName: "test", submittedClipIds: [], expectedClipCount: 0 },
-    });
+    retryHandler(retryPlaylistMessage({ playlistName: "test" }));
 
     // running=true の間に再度呼ぶ → running ガードで即 ok
-    const result = retryHandler({
-      data: { playlistName: "test2", submittedClipIds: [], expectedClipCount: 0 },
-    });
+    const result = retryHandler(retryPlaylistMessage({ playlistName: "test2" }));
     expect(result).toEqual({ ok: true });
   });
+});
+
+describe('content onMessage("retryPlaylist"): payload contract', () => {
+  beforeEach(() => {
+    clearResumeStateMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["collectionId 欠落", { collectionId: undefined }, /retryPlaylist\.collectionId/],
+    ["playlistName 欠落", { playlistName: undefined }, /retryPlaylist\.playlistName/],
+  ] as const)(
+    "Given %s payload When retryPlaylist Then fail-loud し副作用を起こさない",
+    async (_label, override, message) => {
+      const { handlers, progressMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
+      const retryHandler = handlers.get("retryPlaylist")!;
+
+      expect(() =>
+        retryHandler({
+          data: { ...retryPlaylistMessage({ submittedClipIds: ["clip-1"], expectedClipCount: 1 }).data, ...override },
+        }),
+      ).toThrow(message);
+      expect(progressMessages).toHaveLength(0);
+      expect(clearResumeStateMock).not.toHaveBeenCalled();
+      expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('content onMessage("retryPlaylist"): 正常完了', () => {
@@ -340,13 +381,7 @@ describe('content onMessage("retryPlaylist"): throw→ERROR', () => {
     // resolvePlaylistClipIds が「clip ID が 0 件」で throw する（自然なエラー経路）。
     const { handlers, progressMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
 
-    handlers.get("retryPlaylist")!({
-      data: {
-        playlistName: "test-playlist",
-        submittedClipIds: [],
-        expectedClipCount: 0,
-      },
-    });
+    handlers.get("retryPlaylist")!(retryPlaylistMessage());
 
     await vi.waitFor(() =>
       expect(progressMessages).toContainEqual(
@@ -455,6 +490,41 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
     const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
     expect(downloadedPosts[0].payload).toMatchObject({ body: { format: "mp3" } });
   });
+});
+
+describe('content onMessage("retryDownload"): payload contract', () => {
+  beforeEach(() => {
+    clearResumeStateMock.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["collectionId 欠落", { collectionId: undefined }, /retryDownload\.collectionId/],
+    ["playlistName 欠落", { playlistName: undefined }, /retryDownload\.playlistName/],
+  ] as const)(
+    "Given %s payload When retryDownload Then fail-loud し副作用を起こさない",
+    async (_label, override, message) => {
+      const { handlers, progressMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
+      const retryHandler = handlers.get("retryDownload")!;
+
+      expect(() =>
+        retryHandler({
+          data: {
+            collectionId: "coll-1",
+            playlistName: "test-playlist",
+            submittedClipIds: ["clip-1"],
+            ...override,
+          },
+        }),
+      ).toThrow(message);
+      expect(progressMessages).toHaveLength(0);
+      expect(clearResumeStateMock).not.toHaveBeenCalled();
+      expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('content onMessage("retryDownload"): running ガード', () => {

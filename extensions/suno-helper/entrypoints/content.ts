@@ -55,10 +55,90 @@ import {
 } from "../../shared/playlist-dom";
 import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
 import { onMessage, sendMessage } from "../lib/messaging";
+import type { RetryDownloadPayload, RetryPlaylistPayload, RunPayload } from "../lib/messaging";
 import { clearFinishedSnapshot, readFreshFinishedSnapshot, writeFinishedSnapshot } from "../lib/finished-snapshot";
 import { cancelScheduledRunCompleteReload, scheduleRunCompleteReload } from "../lib/page-reload";
 import { readDownloadFormat, serverUrlItem } from "../lib/storage";
 import type { DownloadContext } from "../lib/download-flow";
+
+function assertNonEmptyString(value: unknown, field: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${field} must be non-empty string`);
+  }
+  return value;
+}
+
+function assertRecord(value: unknown, field: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${field} must be object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function assertStringArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error(`${field} must be string array`);
+  }
+  return value;
+}
+
+function assertOptionalFiniteNumber(value: unknown, field: string): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${field} must be finite number`);
+  }
+  return value;
+}
+
+function assertOptionalBoolean(value: unknown, field: string): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "boolean") {
+    throw new Error(`${field} must be boolean`);
+  }
+  return value;
+}
+
+function assertRunPayload(value: unknown): RunPayload {
+  const record = assertRecord(value, "run payload");
+  if (!Array.isArray(record.entries)) {
+    throw new Error("run.entries must be array");
+  }
+  return {
+    ...(record as unknown as RunPayload),
+    entries: record.entries as PromptEntry[],
+    playlistName: assertNonEmptyString(record.playlistName, "run.playlistName"),
+    collectionId: assertNonEmptyString(record.collectionId, "run.collectionId"),
+  };
+}
+
+function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload {
+  const record = assertRecord(value, "retryPlaylist payload");
+  return {
+    playlistName: assertNonEmptyString(record.playlistName, "retryPlaylist.playlistName"),
+    submittedClipIds: assertStringArray(record.submittedClipIds, "retryPlaylist.submittedClipIds"),
+    expectedClipCount: assertOptionalFiniteNumber(record.expectedClipCount, "retryPlaylist.expectedClipCount") ?? 0,
+    collectionId: assertNonEmptyString(record.collectionId, "retryPlaylist.collectionId"),
+    shouldDownload: assertOptionalBoolean(record.shouldDownload, "retryPlaylist.shouldDownload"),
+  };
+}
+
+function assertRetryDownloadPayload(value: unknown): RetryDownloadPayload {
+  const record = assertRecord(value, "retryDownload payload");
+  return {
+    collectionId: assertNonEmptyString(record.collectionId, "retryDownload.collectionId"),
+    playlistName: assertNonEmptyString(record.playlistName, "retryDownload.playlistName"),
+    submittedClipIds: assertStringArray(record.submittedClipIds, "retryDownload.submittedClipIds"),
+    expectedClipCount: assertOptionalFiniteNumber(record.expectedClipCount, "retryDownload.expectedClipCount"),
+    sunoPlaylistUrl:
+      record.sunoPlaylistUrl === undefined
+        ? undefined
+        : assertNonEmptyString(record.sunoPlaylistUrl, "retryDownload.sunoPlaylistUrl"),
+  };
+}
 
 function buildTitleFallbackMap(entries: PromptEntry[], order: number[], submittedIds: string[]): Map<string, string> {
   const map = new Map<string, string>();
@@ -145,13 +225,13 @@ export default defineContentScript({
      * 生き残るため復元性は保たれる。残る stale selection は次 run の Cmd+P 前ガードが検知する —
      * resume state 消去失敗時と同じ扱い）。
      */
-    async function persistFinishedSnapshotForReload(collectionId: string | undefined): Promise<boolean> {
+    async function persistFinishedSnapshotForReload(): Promise<boolean> {
       if (!currentSnapshot) {
         // FINISHED emit 済みの経路からのみ呼ばれるため到達しない（emitProgress と同じ不変条件）。
         return false;
       }
       try {
-        await writeFinishedSnapshot({ snapshot: currentSnapshot, collectionId, timestamp: Date.now() });
+        await writeFinishedSnapshot({ snapshot: currentSnapshot, timestamp: Date.now() });
         return true;
       } catch (err) {
         console.warn("[suno-helper] 完了 snapshot の退避に失敗しました。完了時リロードを見送ります:", err);
@@ -387,10 +467,10 @@ export default defineContentScript({
       // 0-based inclusive な実行範囲 (#872)。未指定は全 entry。判断A: range 指定でも entries 全体と
       // 絶対 index を保ち、range 内の entry だけを処理する（slice 再採番による index ズレを起こさない）。
       range?: RunRange;
-      // ERROR 停止時に resume state を紐付ける collection 識別子 (#872)。単一ファイル mode は undefined。
-      collectionId?: string;
+      // ERROR 停止時に resume state を紐付ける collection 識別子 (#872)。
+      collectionId: string;
       // collection mode のときの playlist 名 (#854)。全 entry 完了後の clip 一括追加に使う。
-      playlistName?: string;
+      playlistName: string;
       // 実行対象の 0-based index 列 (#948)。「失敗分のみ再実行」で使う。指定時は range より優先。
       indices?: number[];
       // 再開前の run で観測済みの playlist 対象 clip ID。
@@ -408,6 +488,10 @@ export default defineContentScript({
       // Suno 同時生成キューに積める clip 数の上限（preset の並列リクエスト数 × 2 clip）。
       const maxGeneratingClips = preset.maxInflightRequests * CLIPS_PER_REQUEST;
       const total = entries.length;
+      if (total === 0) {
+        emitProgress({ phase: PHASE.FINISHED, total });
+        return;
+      }
       const startIndex = range ? range.start : 0;
       const endIndex = range ? range.end : total - 1;
       // 実行対象の 0-based index 列 (#948)。indices（失敗分のみ再実行）が最優先、無ければ range 由来。
@@ -423,33 +507,30 @@ export default defineContentScript({
       let keepResumeStateForDownloadRetry = false;
       // 中断 entry を永続化し、reload 後の ResumeBanner で続きから再開できるようにする。
       // ERROR phase (#872 要件3) と STOPPED phase (#898 要件1/2/3) の共通処理。failedIndex 名は
-      // そのまま流用し (要件3)、中断 index を載せる。collectionId が無い単一ファイル mode は
-      // 再開対象を特定できないため永続化しない（両 phase 共通の guard、要件4 と一貫）。
+      // そのまま流用し (要件3)、中断 index を載せる。
       // スキップ済み failedIndices があれば一緒に永続化する (#948)。
       function persistInterruptState(interruptedIndex: number): void {
-        if (collectionId) {
-          const persistedSubmittedClipIds = Array.from(
-            new Set([...previousSubmittedClipIds, ...tracker.getSubmittedIds()]),
-          );
-          currentSnapshot =
-            currentSnapshot === null
-              ? currentSnapshot
-              : {
-                  ...currentSnapshot,
-                  failedIndex: interruptedIndex,
-                  submittedClipIds: persistedSubmittedClipIds,
-                  playlistExpectedClipCount: expectedPlaylistClipCount,
-                };
-          void writeResumeState({
-            collectionId,
-            failedIndex: interruptedIndex,
-            total,
-            timestamp: Date.now(),
-            failedIndices: failedIndices.length > 0 ? [...failedIndices] : undefined,
-            submittedClipIds: persistedSubmittedClipIds,
-            playlistExpectedClipCount: expectedPlaylistClipCount,
-          });
-        }
+        const persistedSubmittedClipIds = Array.from(
+          new Set([...previousSubmittedClipIds, ...tracker.getSubmittedIds()]),
+        );
+        currentSnapshot =
+          currentSnapshot === null
+            ? currentSnapshot
+            : {
+                ...currentSnapshot,
+                failedIndex: interruptedIndex,
+                submittedClipIds: persistedSubmittedClipIds,
+                playlistExpectedClipCount: expectedPlaylistClipCount,
+              };
+        void writeResumeState({
+          collectionId,
+          failedIndex: interruptedIndex,
+          total,
+          timestamp: Date.now(),
+          failedIndices: failedIndices.length > 0 ? [...failedIndices] : undefined,
+          submittedClipIds: persistedSubmittedClipIds,
+          playlistExpectedClipCount: expectedPlaylistClipCount,
+        });
       }
       for (const i of order) {
         if (aborted) {
@@ -569,82 +650,77 @@ export default defineContentScript({
         });
         return;
       }
-      // collection mode のみ: 全 entry 生成後、FINISHED 直前に clip 一括 playlist 追加を実行する (#854)。
-      if (playlistName) {
-        let verifiedPlaylistClipCount = expectedPlaylistClipCount;
-        if (aborted) {
-          persistInterruptState(total);
-          emitProgress({ phase: PHASE.STOPPED, total });
-          return;
-        }
-        try {
-          await waitForSubmittedClipsComplete(expectedPlaylistClipCount, previousSubmittedClipIds, () => aborted);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          persistInterruptState(total);
-          emitProgress({ phase: PHASE.ERROR, index: total, total, message });
-          return;
-        }
-        if (aborted) {
-          persistInterruptState(total);
-          emitProgress({ phase: PHASE.STOPPED, total });
-          return;
-        }
-        try {
-          verifiedPlaylistClipCount = await addClipsToPlaylist(
-            total,
-            playlistName,
-            previousSubmittedClipIds,
-            expectedPlaylistClipCount,
-            entries,
-            order,
-          );
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          persistInterruptState(total);
-          emitProgress({ phase: PHASE.ERROR, index: total, total, message });
-          return;
-        }
-        if (aborted) {
-          persistInterruptState(total);
-          emitProgress({ phase: PHASE.STOPPED, total });
-          return;
-        }
+      let verifiedPlaylistClipCount = expectedPlaylistClipCount;
+      if (aborted) {
+        persistInterruptState(total);
+        emitProgress({ phase: PHASE.STOPPED, total });
+        return;
+      }
+      try {
+        await waitForSubmittedClipsComplete(expectedPlaylistClipCount, previousSubmittedClipIds, () => aborted);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        persistInterruptState(total);
+        emitProgress({ phase: PHASE.ERROR, index: total, total, message });
+        return;
+      }
+      if (aborted) {
+        persistInterruptState(total);
+        emitProgress({ phase: PHASE.STOPPED, total });
+        return;
+      }
+      try {
+        verifiedPlaylistClipCount = await addClipsToPlaylist(
+          total,
+          playlistName,
+          previousSubmittedClipIds,
+          expectedPlaylistClipCount,
+          entries,
+          order,
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        persistInterruptState(total);
+        emitProgress({ phase: PHASE.ERROR, index: total, total, message });
+        return;
+      }
+      if (aborted) {
+        persistInterruptState(total);
+        emitProgress({ phase: PHASE.STOPPED, total });
+        return;
+      }
 
-        // --- DOWNLOADING phase (#1146) ---
-        if (collectionId && !aborted) {
-          const fullCollectionClipCount = total * CLIPS_PER_REQUEST;
-          if (expectedPlaylistClipCount >= fullCollectionClipCount) {
-            persistInterruptState(total);
-            try {
-              const downloadContext = await resolveDownloadContext();
-              const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
-              await downloadFlow.recordPlaylistUrl(downloadContext, collectionId, sunoPlaylistUrl);
-              const downloadError = await downloadFlow.downloadBestEffort(
-                downloadContext,
-                collectionId,
-                total,
-                verifiedPlaylistClipCount,
-                sunoPlaylistUrl,
-              );
-              keepResumeStateForDownloadRetry = downloadError !== null;
-              if (downloadError !== null) {
-                emitProgress({ phase: PHASE.ERROR, index: total, total, message: downloadError });
-                return;
-              }
-            } catch (err) {
-              const message = err instanceof Error ? err.message : String(err);
-              keepResumeStateForDownloadRetry = true;
-              emitProgress({ phase: PHASE.ERROR, index: total, total, message });
-              return;
-            }
-          }
-          if (aborted) {
-            persistInterruptState(total);
-            emitProgress({ phase: PHASE.STOPPED, total });
+      // --- DOWNLOADING phase (#1146) ---
+      const fullCollectionClipCount = total * CLIPS_PER_REQUEST;
+      if (expectedPlaylistClipCount >= fullCollectionClipCount) {
+        persistInterruptState(total);
+        try {
+          const downloadContext = await resolveDownloadContext();
+          const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
+          await downloadFlow.recordPlaylistUrl(downloadContext, collectionId, sunoPlaylistUrl);
+          const downloadError = await downloadFlow.downloadBestEffort(
+            downloadContext,
+            collectionId,
+            total,
+            verifiedPlaylistClipCount,
+            sunoPlaylistUrl,
+          );
+          keepResumeStateForDownloadRetry = downloadError !== null;
+          if (downloadError !== null) {
+            emitProgress({ phase: PHASE.ERROR, index: total, total, message: downloadError });
             return;
           }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          keepResumeStateForDownloadRetry = true;
+          emitProgress({ phase: PHASE.ERROR, index: total, total, message });
+          return;
         }
+      }
+      if (aborted) {
+        persistInterruptState(total);
+        emitProgress({ phase: PHASE.STOPPED, total });
+        return;
       }
       // 全 entry 完了。この collection の resume state を消去する (#872 要件5)。
       // リロード前に消去完了を await する (#1411 要件3): 逆順だとリロード後の
@@ -652,7 +728,7 @@ export default defineContentScript({
       // 維持し（void 時代からの不変条件: 終端 phase を必ず出す）、誤判定を避けるため
       // リロードのみ見送る。残る stale selection は次 run の Cmd+P 前ガードが検知する。
       let resumeStateCleared = true;
-      if (collectionId && !keepResumeStateForDownloadRetry) {
+      if (!keepResumeStateForDownloadRetry) {
         try {
           await clearResumeStateForCollection(collectionId);
         } catch (err) {
@@ -663,9 +739,9 @@ export default defineContentScript({
       emitProgress({ phase: PHASE.FINISHED, total });
       // run 一式完了時リロード (#1411 要件2)。playlist 追加で作った multi-select 状態は
       // Suno 内部 state に残り、同一タブの次 run の Cmd+P に混入するためページごと破棄する。
-      // playlist phase を実行していない run（単一ファイル mode）は選択を作らないため対象外。
+      // collection mode の run は playlist phase を実行するため対象。
       // リロード前に FINISHED snapshot を退避し、popup 再 open 時の完了結果表示を引き継ぐ。
-      if (playlistName && resumeStateCleared && (await persistFinishedSnapshotForReload(collectionId))) {
+      if (playlistName && resumeStateCleared && (await persistFinishedSnapshotForReload())) {
         scheduleRunCompleteReload();
       }
     }
@@ -675,24 +751,13 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
+      const { entries, playlistName, range, collectionId, indices, submittedClipIds, playlistExpectedClipCount } =
+        assertRunPayload(data);
       // 直前 run の完了時リロードが保留中なら取り消す (#1411)。猶予中に受理した新 run を
       // リロードが巻き添えに殺すと STOPPED/ERROR も resume state も残らない。取り消しで
       // 残る stale selection は Cmd+P 前ガードが検知する。
       cancelScheduledRunCompleteReload();
-      // 後方互換: 旧形式の配列 payload は { entries } に wrap する (#854)。range / collectionId は無し。
-      const { entries, playlistName, range, collectionId, indices, submittedClipIds, playlistExpectedClipCount } =
-        Array.isArray(data)
-          ? {
-              entries: data,
-              playlistName: undefined,
-              range: undefined,
-              collectionId: undefined,
-              indices: undefined,
-              submittedClipIds: undefined,
-              playlistExpectedClipCount: undefined,
-            }
-          : data;
-      currentSnapshot = initSnapshot(entries, playlistName);
+      currentSnapshot = initSnapshot(entries, { collectionId, playlistName });
       // 新 run 開始で直近完了 run の退避 snapshot を消去する（前 run の完了表示が復元されるのを防ぐ）。
       // in-memory の currentSnapshot が queryProgress で優先されるため fire-and-forget でよい。
       void clearFinishedSnapshot();
@@ -735,8 +800,9 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
-      const { playlistName, submittedClipIds, expectedClipCount, collectionId, shouldDownload } = data;
-      currentSnapshot = initSnapshot([], playlistName);
+      const { playlistName, submittedClipIds, expectedClipCount, collectionId, shouldDownload } =
+        assertRetryPlaylistPayload(data);
+      currentSnapshot = initSnapshot([], { collectionId, playlistName });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
       // 直前 run の完了時リロードが保留中なら取り消す (#1411)。理由は run handler と同じ。
@@ -757,7 +823,7 @@ export default defineContentScript({
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
           }
-          if (collectionId && shouldDownload) {
+          if (shouldDownload) {
             const downloadContext = await resolveDownloadContext();
             const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
             await downloadFlow.recordPlaylistUrl(downloadContext, collectionId, sunoPlaylistUrl);
@@ -778,18 +844,16 @@ export default defineContentScript({
           // catch へ流すと再試行を誘い、同名 playlist の重複作成につながるため、
           // FINISHED を維持してリロードのみ見送る。
           let resumeStateCleared = true;
-          if (collectionId) {
-            try {
-              await clearResumeStateForCollection(collectionId);
-            } catch (err) {
-              resumeStateCleared = false;
-              console.warn("[suno-helper] resume state の消去に失敗しました。完了時リロードを見送ります:", err);
-            }
+          try {
+            await clearResumeStateForCollection(collectionId);
+          } catch (err) {
+            resumeStateCleared = false;
+            console.warn("[suno-helper] resume state の消去に失敗しました。完了時リロードを見送ります:", err);
           }
           emitProgress({ phase: PHASE.FINISHED, total: 0 });
           // retryPlaylist も playlist 追加で multi-select 状態を作るため完了時にページごと破棄する (#1411)。
           // リロード前に FINISHED snapshot を退避する（runAll の完了経路と同じ）。
-          if (resumeStateCleared && (await persistFinishedSnapshotForReload(collectionId))) {
+          if (resumeStateCleared && (await persistFinishedSnapshotForReload())) {
             scheduleRunCompleteReload();
           }
         } catch (err) {
@@ -806,8 +870,9 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
-      const { collectionId, playlistName, submittedClipIds, expectedClipCount, sunoPlaylistUrl } = data;
-      currentSnapshot = initSnapshot([], undefined);
+      const { collectionId, playlistName, submittedClipIds, expectedClipCount, sunoPlaylistUrl } =
+        assertRetryDownloadPayload(data);
+      currentSnapshot = initSnapshot([], { collectionId });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
       // 直前 run の完了時リロードが保留中なら取り消す (#1411)。理由は run handler と同じ。
@@ -834,7 +899,7 @@ export default defineContentScript({
           // ページごと破棄する (#1411)。この経路だけリロードが無いと、次 run が
           // 確実に Cmd+P 前ガードで止まり手動リロードを強いられる。
           // リロード前に FINISHED snapshot を退避する（runAll の完了経路と同じ）。
-          if (result.completedAndCleared && (await persistFinishedSnapshotForReload(collectionId))) {
+          if (result.completedAndCleared && (await persistFinishedSnapshotForReload())) {
             scheduleRunCompleteReload();
           }
         } catch (err) {

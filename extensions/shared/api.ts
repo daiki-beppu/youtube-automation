@@ -1,15 +1,11 @@
-// yt-collection-serve の `/suno/prompts.json` クライアント。
-// 旧 `popup.js` の fetch ロジックを保持する:
-//   - fetch 先は `${baseUrl}${PROMPTS_ROUTE}`
-//   - HTTP 非 2xx で throw
-//   - 配列でない / 空配列の JSON で throw (fail-loud、silent 続行しない)
+// yt-collection-serve の collection prompts クライアント。
+// HTTP 非 2xx / 配列でない JSON / 空配列は fail-loud で throw する。
 import {
   collectionDownloadedRoute,
   collectionPromptsRoute,
   COLLECTIONS_ROUTE,
   DISTROKID_COLLECTIONS_ROUTE,
   DISTROKID_RELEASES_ROUTE,
-  PROMPTS_ROUTE,
   VERSION_ROUTE,
 } from "./constants";
 
@@ -153,6 +149,10 @@ function assertString(value: unknown, field: string): string {
   return value;
 }
 
+function assertCollectionId(value: unknown, field = "collectionId"): string {
+  return assertString(value, field);
+}
+
 function assertOptionalString(
   value: unknown,
   field: string,
@@ -209,11 +209,6 @@ async function fetchPromptArray(url: string): Promise<PromptEntry[]> {
   return data as PromptEntry[];
 }
 
-/** prompts.json を取得して PromptEntry[] を返す。不正な応答は fail-loud で throw。 */
-export async function fetchPrompts(baseUrl: string): Promise<PromptEntry[]> {
-  return fetchPromptArray(`${baseUrl}${PROMPTS_ROUTE}`);
-}
-
 /** サーバー version envelope を取得する（#1023）。404 は caller が旧サーバー判定に使う。 */
 export async function fetchServerVersion(
   baseUrl: string,
@@ -264,8 +259,8 @@ export async function checkServerCompatibility(
 
 /**
  * dir mode サーバーの collection 一覧を取得する (#816)。
- * 非 2xx は fail-loud で throw（単一 mode サーバーの 404 は popup の fallback トリガー）。
- * 空配列は throw せず返す（fallback 判断は呼び出し側）。
+ * 非 2xx は fail-loud で throw し、popup は取得失敗として表示する。
+ * 空配列は throw せず返し、caller が「選択可能な collection なし」として扱う。
  */
 export async function fetchCollections(
   baseUrl: string,
@@ -336,13 +331,15 @@ function normalizeCollectionSummary(
 
 /**
  * 指定 collection の prompts.json を取得する (#816)。
- * fetchPrompts と同じ fail-loud 契約（非 2xx / 空配列 / 非配列で throw）。
+ * 非 2xx / 空配列 / 非配列は fail-loud で throw する。
  */
 export async function fetchCollectionPrompts(
   baseUrl: string,
   id: string,
 ): Promise<PromptEntry[]> {
-  return fetchPromptArray(`${baseUrl}${collectionPromptsRoute(id)}`);
+  return fetchPromptArray(
+    `${baseUrl}${collectionPromptsRoute(assertCollectionId(id))}`,
+  );
 }
 
 /** popup の実行対象一覧に出す collection。完了済みは次の作業対象ではないため非表示にする。 */

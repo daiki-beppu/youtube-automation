@@ -5,7 +5,6 @@
 import {
   fetchCollectionPrompts,
   fetchCollections,
-  fetchPrompts,
   postDownloaded,
   resolveCompatibilityWarning,
 } from "../../shared/api";
@@ -96,13 +95,11 @@ export default defineBackground(() => {
     return fetchCollections(data.baseUrl);
   });
 
-  onMessage("fetchPrompts", ({ data, sender }) => {
-    requireRelayTab(sender, "fetchPrompts");
-    return fetchPrompts(data.baseUrl);
-  });
-
   onMessage("fetchCollectionPrompts", ({ data, sender }) => {
     requireRelayTab(sender, "fetchCollectionPrompts");
+    if (typeof data.collectionId !== "string" || data.collectionId.length === 0) {
+      throw new Error("fetchCollectionPrompts.collectionId must be non-empty string");
+    }
     return fetchCollectionPrompts(data.baseUrl, data.collectionId);
   });
 

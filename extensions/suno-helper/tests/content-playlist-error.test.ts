@@ -7,9 +7,9 @@ import { makePromptEntries } from "./_helpers";
 
 interface RunPayload {
   entries: PromptEntry[];
-  playlistName?: string;
+  playlistName: string;
   range?: RunRange;
-  collectionId?: string;
+  collectionId: string;
   indices?: number[];
   submittedClipIds?: string[];
   playlistExpectedClipCount?: number;
@@ -112,9 +112,10 @@ async function loadContentScriptWithPlaylistRows(
   }));
 
   vi.doMock("../lib/snapshot", () => ({
-    initSnapshot: vi.fn((entries: PromptEntry[], playlistName?: string) => ({
+    initSnapshot: vi.fn((entries: PromptEntry[], options: { collectionId: string; playlistName?: string }) => ({
+      collectionId: options.collectionId,
       entries,
-      playlistName,
+      playlistName: options.playlistName,
       itemStates: entries.map(() => "pending"),
       isRunning: true,
       submittedClipIds: [],
@@ -732,19 +733,6 @@ describe("content.ts run 一式完了時のページリロード (#1411)", () =>
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
 
     expect(scheduleRunCompleteReloadMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("Given playlist 無しの run（単一ファイル mode）が完走 When FINISHED Then リロードは走らない", async () => {
-    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
-    const { progressMessages, runHandler, scheduleRunCompleteReloadMock, scrollAndMultiSelectByIdsMock } =
-      await loadContentScriptWithPlaylistRows([], []);
-
-    runHandler({ data: { entries } });
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
-
-    // multi-select 自体が走らない = 選択状態を作らないためリロード不要
-    expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
-    expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
   });
 
   it("Given resume state 消去が失敗 When run 完走 Then FINISHED は維持しリロードのみ見送る", async () => {
