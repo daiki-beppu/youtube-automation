@@ -7,6 +7,7 @@ from pathlib import Path
 from youtube_automation.utils.numbered_duplicates import (
     find_numbered_duplicates,
     format_duplicate_name,
+    format_scan_error_reason,
     numbered_duplicate_base_name,
     scan_numbered_duplicates,
 )
@@ -76,6 +77,15 @@ class TestFindNumberedDuplicates:
     def test_missing_directory_returns_empty(self, tmp_path: Path):
         assert find_numbered_duplicates(tmp_path / "no-such-dir") == []
 
+    def test_regular_file_root_returns_empty_without_error(self, tmp_path: Path):
+        root = tmp_path / "SKILL.md"
+        root.write_text("# skill\n", encoding="utf-8")
+
+        result = scan_numbered_duplicates(root)
+
+        assert result.duplicates == ()
+        assert result.errors == ()
+
     def test_scan_reports_iterdir_errors(self, tmp_path: Path, monkeypatch):
         original_iterdir = Path.iterdir
 
@@ -106,10 +116,53 @@ class TestFindNumberedDuplicates:
         assert result.errors[0].path == root
         assert "symlink" in result.errors[0].reason
 
+    def test_scan_rejects_file_symlink_root(self, tmp_path: Path):
+        outside = tmp_path / "outside"
+        outside.write_text("outside\n", encoding="utf-8")
+        root = tmp_path / "skills"
+        root.symlink_to(outside)
+
+        result = scan_numbered_duplicates(root, recursive=True)
+
+        assert result.duplicates == ()
+        assert len(result.errors) == 1
+        assert result.errors[0].path == root
+        assert "symlink" in result.errors[0].reason
+
+    def test_scan_rejects_broken_symlink_root(self, tmp_path: Path):
+        root = tmp_path / "skills"
+        root.symlink_to(tmp_path / "missing")
+
+        result = scan_numbered_duplicates(root, recursive=True)
+
+        assert result.duplicates == ()
+        assert len(result.errors) == 1
+        assert result.errors[0].path == root
+        assert "symlink" in result.errors[0].reason
+
+    def test_scan_rejects_root_boundary_escape(self, tmp_path: Path):
+        channel_dir = tmp_path / "channel"
+        channel_dir.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+
+        result = scan_numbered_duplicates(outside, root_boundary=channel_dir)
+
+        assert result.duplicates == ()
+        assert len(result.errors) == 1
+        assert result.errors[0].path == outside
+        assert "outside channel_dir" in result.errors[0].reason
+
     def test_format_duplicate_name_escapes_control_characters(self, tmp_path: Path):
         path = tmp_path / "yt-\x1b[31m 2"
 
         rendered = format_duplicate_name(path)
+
+        assert "\x1b" not in rendered
+        assert "\\x1b" in rendered
+
+    def test_format_scan_error_reason_escapes_control_characters(self):
+        rendered = format_scan_error_reason("cannot read yt-\x1b[31m")
 
         assert "\x1b" not in rendered
         assert "\\x1b" in rendered

@@ -2767,6 +2767,30 @@ class TestCheckNumberedDuplicates:
         assert "走査できません" in r.message
         assert "secret" not in r.message
 
+    def test_warns_on_skills_file_symlink_root(self, tmp_path):
+        outside = tmp_path / "outside"
+        outside.write_text("outside\n", encoding="utf-8")
+        skills_parent = tmp_path / ".claude"
+        skills_parent.mkdir()
+        (skills_parent / "skills").symlink_to(outside)
+
+        r = doctor.check_numbered_duplicates(tmp_path)
+
+        assert r.status == "warn"
+        assert "走査できません" in r.message
+        assert "symlink" in r.message
+
+    def test_warns_on_skills_broken_symlink_root(self, tmp_path):
+        skills_parent = tmp_path / ".claude"
+        skills_parent.mkdir()
+        (skills_parent / "skills").symlink_to(tmp_path / "missing")
+
+        r = doctor.check_numbered_duplicates(tmp_path)
+
+        assert r.status == "warn"
+        assert "走査できません" in r.message
+        assert "symlink" in r.message
+
     def test_escapes_control_characters_in_duplicate_names(self, tmp_path):
         bin_dir = tmp_path / ".venv" / "bin"
         bin_dir.mkdir(parents=True)

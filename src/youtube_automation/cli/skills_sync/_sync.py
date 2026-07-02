@@ -22,6 +22,7 @@ from youtube_automation.cli.skills_sync._ops import (
 from youtube_automation.utils.numbered_duplicates import (
     CLEANUP_GUIDE_URL,
     format_duplicate_name,
+    format_scan_error_reason,
     scan_numbered_duplicates,
 )
 
@@ -45,7 +46,8 @@ def _warn_numbered_duplicates(target_dir: Path) -> bool:
         warned = True
     for error in result.errors:
         print(
-            f"  [warn] sync 先の番号付き重複ファイル検査に失敗: {format_duplicate_name(error.path)} ({error.reason})",
+            "  [warn] sync 先の番号付き重複ファイル検査に失敗: "
+            f"{format_duplicate_name(error.path)} ({format_scan_error_reason(error.reason)})",
             file=sys.stderr,
         )
         warned = True

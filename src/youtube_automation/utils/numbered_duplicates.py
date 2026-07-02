@@ -73,13 +73,13 @@ def scan_numbered_duplicates(
     errors: list[NumberedDuplicateScanError] = []
     found: list[Path] = []
 
-    if not root.is_dir():
-        return NumberedDuplicateScan(duplicates=(), errors=())
     if root.is_symlink():
         return NumberedDuplicateScan(
             duplicates=(),
             errors=(NumberedDuplicateScanError(root, "scan root is a symlink"),),
         )
+    if not root.is_dir():
+        return NumberedDuplicateScan(duplicates=(), errors=())
     if root_boundary is not None:
         try:
             root.resolve(strict=True).relative_to(root_boundary.resolve(strict=True))
@@ -96,9 +96,18 @@ def scan_numbered_duplicates(
 def format_duplicate_name(path: Path) -> str:
     """CLI 出力用に制御文字を escape した短いファイル名を返す。"""
     name = ascii(path.name)[1:-1]
-    if len(name) <= _MAX_DISPLAY_NAME_LEN:
-        return name
-    return name[: _MAX_DISPLAY_NAME_LEN - 3] + "..."
+    return _truncate_display_text(name)
+
+
+def format_scan_error_reason(reason: str) -> str:
+    """CLI 出力用に scan error reason の制御文字を escape する。"""
+    return _truncate_display_text(ascii(reason)[1:-1])
+
+
+def _truncate_display_text(text: str) -> str:
+    if len(text) <= _MAX_DISPLAY_NAME_LEN:
+        return text
+    return text[: _MAX_DISPLAY_NAME_LEN - 3] + "..."
 
 
 def _scan(

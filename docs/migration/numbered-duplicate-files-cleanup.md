@@ -53,20 +53,40 @@ uv sync
 ```bash
 # 削除対象の確認
 uv run python - <<'PY'
+import sys
 from pathlib import Path
-from youtube_automation.utils.numbered_duplicates import find_numbered_duplicates
+from youtube_automation.utils.numbered_duplicates import (
+    format_duplicate_name,
+    format_scan_error_reason,
+    scan_numbered_duplicates,
+)
 
-for path in find_numbered_duplicates(Path(".claude/skills"), recursive=True):
+result = scan_numbered_duplicates(Path(".claude/skills"), recursive=True)
+for error in result.errors:
+    print(f"scan error: {format_duplicate_name(error.path)}: {format_scan_error_reason(error.reason)}", file=sys.stderr)
+if result.errors:
+    raise SystemExit(1)
+for path in result.duplicates:
     print(path)
 PY
 
 # 問題なければ、上と同じ検知条件に一致したものだけ削除
 uv run python - <<'PY'
 import shutil
+import sys
 from pathlib import Path
-from youtube_automation.utils.numbered_duplicates import find_numbered_duplicates
+from youtube_automation.utils.numbered_duplicates import (
+    format_duplicate_name,
+    format_scan_error_reason,
+    scan_numbered_duplicates,
+)
 
-for path in find_numbered_duplicates(Path(".claude/skills"), recursive=True):
+result = scan_numbered_duplicates(Path(".claude/skills"), recursive=True)
+for error in result.errors:
+    print(f"scan error: {format_duplicate_name(error.path)}: {format_scan_error_reason(error.reason)}", file=sys.stderr)
+if result.errors:
+    raise SystemExit(1)
+for path in result.duplicates:
     if path.is_dir() and not path.is_symlink():
         shutil.rmtree(path)
     else:

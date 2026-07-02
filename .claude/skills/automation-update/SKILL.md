@@ -573,7 +573,7 @@ upstream #1409）。放置すると Phase 4 の `git add .claude/skills/` で重
 紛れ込むため、**Phase 4 に進む前に必ず対処する**:
 
 1. `find .claude/skills .venv/bin -name '* [0-9]*'` で分布を確認
-2. upstream の `docs/migration/numbered-duplicate-files-cleanup.md` の手順でクリーンアップ
+2. upstream の [番号付き重複ファイル cleanup guide](https://github.com/daiki-beppu/youtube-automation/blob/main/docs/migration/numbered-duplicate-files-cleanup.md) の手順でクリーンアップ
    （`.venv` は `rm -rf .venv && uv sync` で再作成、`.claude/skills/` は重複削除 →
    `uv run yt-skills sync --asset skills --force`）
 3. 再発防止を `[HUMAN STEP]` で案内: リポジトリが iCloud Drive 同期対象
@@ -654,7 +654,7 @@ git commit -m "chore: youtube-automation v<target> への追従 (#N)"
 - **同一 tag の再発行**: 稀に upstream が同 tag を force push し直す。`publishedAt` の差分や `gh release view v<target>` で差分有無を確認して人間に判断を仰ぐ
 - **自スキルの self-overwrite**: 本スキル自身が `yt-skills diff` の差分対象に含まれる場合がある（v5.5.x → v5.5.y で本スキルが更新された等）。`yt-skills sync` は file 単位の順次上書き（atomicity なし、`--force` で削除→再作成）だが、Claude Code は SKILL.md をセッション開始時にメモリへロードするため、**同セッションでは旧版の手順で完走**し、**次回 /automation-update 起動以降で新版が適用**される。Step 3-3 の特例 prompt で利用者に明示すること。手書き改造（local fix）を残したい場合は `"manual"` 応答で自スキルだけ sync から除外し手動マージへ
 - **sync 中の部分破損**: `yt-skills sync` のループに atomicity はない。途中失敗すると部分的に壊れた `.claude/skills/` が残る。Step 3-5 で自スキル frontmatter 健全性チェックを必ず実行し、壊れていれば `git checkout` でロールバック
-- **番号付き重複ファイルの commit 混入**: sync 先に `<名前> <数字>` 形式の重複（iCloud bounce）があると Step 4-1 の `git add .claude/skills/` で commit に紛れ込む。Step 3-5 の検知（`yt-doctor` の `numbered_duplicates` / `yt-skills sync` の warning）で見つけたら、Phase 4 前に upstream の `docs/migration/numbered-duplicate-files-cleanup.md` の手順で除去する
+- **番号付き重複ファイルの commit 混入**: sync 先に `<名前> <数字>` 形式の重複（iCloud bounce）があると Step 4-1 の `git add .claude/skills/` で commit に紛れ込む。Step 3-5 の検知（`yt-doctor` の `numbered_duplicates` / `yt-skills sync` の warning）で見つけたら、Phase 4 前に upstream の [番号付き重複ファイル cleanup guide](https://github.com/daiki-beppu/youtube-automation/blob/main/docs/migration/numbered-duplicate-files-cleanup.md) の手順で除去する
 - **sync が触る範囲**: `yt-skills sync` の default (`--asset all`) は `.claude/skills/`、`.claude/CLAUDE.md`、`docs/{workflow-cheatsheet,features}.md`、`auth/client_secrets.template.json` を同期する。`auth/client_secrets.template.json` はテンプレートだけで、実 secret の `auth/client_secrets.json` / `auth/token*.json`、`config/channel/*.json`、`.env`、`collections/` は **絶対に上書きされない**。`pyproject.toml` と `uv.lock` は Phase 3-1 / 3-2 で本スキルが明示的に書き換える
 - **skill 配下の `config.default.yaml` は上書き対象**: 各スキル (`lyria` / `suno` / `masterup` 等) の `.claude/skills/<skill>/config.default.yaml` は upstream 管理のデフォルト設定なので `yt-skills sync` で確実に上書きされる。運営者のカスタム値は別ファイル `config/skills/<skill>.yaml`（チャンネルリポジトリ直下）に置く運用で、こちらは sync 対象外。`config.default.yaml` を直接編集している場合は `yt-skills diff` に local fix として現れるので Step 3-3 で検出される
 

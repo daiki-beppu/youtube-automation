@@ -25,6 +25,7 @@ from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.numbered_duplicates import (
     CLEANUP_GUIDE_URL,
     format_duplicate_name,
+    format_scan_error_reason,
     scan_numbered_duplicates,
 )
 from youtube_automation.utils.preflight_checks import (
@@ -402,7 +403,10 @@ def check_numbered_duplicates(channel_dir: Path) -> CheckResult:
             sample = ", ".join(format_duplicate_name(path) for path in result.duplicates[:3])
             findings.append(f"{label} に {len(result.duplicates)} 件 (例: {sample})")
         for error in result.errors:
-            findings.append(f"{label} を走査できません ({format_duplicate_name(error.path)}: {error.reason})")
+            findings.append(
+                f"{label} を走査できません "
+                f"({format_duplicate_name(error.path)}: {format_scan_error_reason(error.reason)})"
+            )
     if not findings:
         return CheckResult(
             id="numbered_duplicates",
