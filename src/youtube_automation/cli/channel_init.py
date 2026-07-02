@@ -124,6 +124,7 @@ def _resolve_target_duration_bounds(
 
 def _resolve_distrokid_profile(args: argparse.Namespace) -> dict | None:
     profile_values = (
+        args.distrokid_artist,
         args.distrokid_language,
         args.distrokid_main_genre,
         args.distrokid_sub_genre,
@@ -135,9 +136,10 @@ def _resolve_distrokid_profile(args: argparse.Namespace) -> dict | None:
             raise argparse.ArgumentTypeError("DistroKid profile 引数を使う場合は --distrokid-enabled が必要です")
         return None
 
-    if args.distrokid_language is None or args.distrokid_main_genre is None:
+    if args.distrokid_artist is None or args.distrokid_language is None or args.distrokid_main_genre is None:
         raise argparse.ArgumentTypeError(
-            "--distrokid-enabled を使う場合は --distrokid-language と --distrokid-main-genre が必要です"
+            "--distrokid-enabled を使う場合は --distrokid-artist, --distrokid-language, "
+            "--distrokid-main-genre が必要です"
         )
 
     if bool(args.distrokid_songwriter_first) != bool(args.distrokid_songwriter_last):
@@ -146,6 +148,7 @@ def _resolve_distrokid_profile(args: argparse.Namespace) -> dict | None:
         )
 
     profile: dict[str, object] = {
+        "artist": args.distrokid_artist,
         "language": args.distrokid_language,
         "main_genre": args.distrokid_main_genre,
     }
@@ -326,6 +329,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--distrokid-enabled",
         action="store_true",
         help="DistroKid 配信設定 config/channel/distrokid.json を生成し、distrokid.enabled=true にする",
+    )
+    parser.add_argument(
+        "--distrokid-artist",
+        type=_parse_non_empty,
+        default=None,
+        help="DistroKid リリースアーティスト名 (--distrokid-enabled 指定時は必須)",
     )
     parser.add_argument(
         "--distrokid-language",
