@@ -1,5 +1,9 @@
 # Metadata 層は config boundary 通過後の純演算: zod 化・Result 化を強いる parse surface を持たない
 
+## Status
+
+accepted (2026-06-12)。実装は `feat/ts-rewrite` 上で進行中（cutover #790 で main へ反映予定）。
+
 ## Context
 
 #825 (config 15 file の zod 化) のオリジナル scope には `packages/core/src/metadata/*.ts` (5 file = `collection.ts` / `format.ts` / `tracks.ts` / `shorts.ts` / `loc-data.ts`) の zod 化が含まれていたが、takt run の検証で「これら 5 file は JSON parse surface を持たない純関数 / 検証済み accessor であり、規定パターン (`z.object().strict().transform(snakeToCamel)` + `z.infer`) は適用不可能」と判明し、#825 は config 側に scope を絞って merge された。残された「metadata 5 file をどう扱うか」が #921 として宙に浮いていた。

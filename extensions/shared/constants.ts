@@ -15,6 +15,11 @@ export const RESUME_STATE_KEY = "sunoResumeState";
  * Suno は 1 タブ運用前提のため global 単一 key とする。lib/overlay-state.ts が SSOT として参照する。 */
 export const OVERLAY_STATE_KEY = "sunoOverlayState";
 
+/** run 一式完了時リロード (#1411) で失われる直近完了 run の snapshot を退避する chrome.storage.local の key。
+ * content が FINISHED 到達時（リロード予約の直前）に書き、リロード後の queryProgress が復元ソースとして読む。
+ * lib/finished-snapshot.ts が SSOT として参照する。 */
+export const FINISHED_SNAPSHOT_KEY = "sunoFinishedSnapshot";
+
 /** yt-collection-serve の download 完了通知サブパス (#1215、POST)。
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py collection_downloaded_route。 */
 export const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
@@ -39,6 +44,9 @@ export const VERSION_ROUTE = "/version";
 
 /** 個別 collection の prompts 配信サブパス `/collections/<id>/suno/prompts.json` を組み立てる (#816)。 */
 export function collectionPromptsRoute(id: string): string {
+  if (id.length === 0) {
+    throw new Error("collectionId must be non-empty string");
+  }
   return `${COLLECTIONS_ROUTE}/${encodeURIComponent(id)}${PROMPTS_ROUTE}`;
 }
 
@@ -284,12 +292,13 @@ export type ItemState = "idle" | "active" | "done" | "failed";
 /** content script が SSOT として保持する進捗スナップショット (#852)。
  * overlay を閉じても content が保持し、再 open 時に `queryProgress` で返す。 */
 export interface SnapshotPayload {
+  // 実行元 collection。popup 再 open 復元時に別 collection の entries を現在選択へ誤適用しないため保持する。
+  collectionId: string;
   entries: PromptEntry[];
   itemStates: ItemState[];
   isRunning: boolean;
   progress: ProgressPayload;
-  // collection mode のときの playlist 名 (#854)。再 open 復元時の display 用。
-  // 単一ファイル mode（collection 未選択）は playlist phase を実行しないため undefined。
+  // playlist 名 (#854)。再 open 復元時の display 用。download-only snapshot では undefined。
   playlistName?: string;
   // ERROR 停止した entry の index (#872)。chrome.storage の resume state と二重化し、
   // popup の進捗復元でも参照する。ERROR phase 到達時のみ確定し、それ以外は undefined。

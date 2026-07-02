@@ -17,7 +17,8 @@ source:
   cache_ttl_sec: 900
 
 # 歌詞のターゲットペルソナ
-# `docs/audience-persona.md` が無い場合のフォールバック
+# `docs/channel/personas/persona-definition.md` が無い場合の fallback。
+# 旧 `docs/audience-persona.md` は legacy fallback としてのみ参照する。
 persona:
   primary: "Carla"
   secondary: "Marcus"

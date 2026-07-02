@@ -3,9 +3,9 @@
 // overlay (content script) は `browser.tabs.*` を呼べないため、overlay の no-tabId メッセージを受けて
 // 送信元と同一タブの runner content へ tabs.sendMessage で転送する（#892, 詳細は lib/overlay-relay.ts）。
 import {
+  fetchCollectionPromptResponse,
   fetchCollectionPrompts,
   fetchCollections,
-  fetchPrompts,
   postDownloaded,
   resolveCompatibilityWarning,
 } from "../../shared/api";
@@ -96,14 +96,20 @@ export default defineBackground(() => {
     return fetchCollections(data.baseUrl);
   });
 
-  onMessage("fetchPrompts", ({ data, sender }) => {
-    requireRelayTab(sender, "fetchPrompts");
-    return fetchPrompts(data.baseUrl);
-  });
-
   onMessage("fetchCollectionPrompts", ({ data, sender }) => {
     requireRelayTab(sender, "fetchCollectionPrompts");
+    if (typeof data.collectionId !== "string" || data.collectionId.length === 0) {
+      throw new Error("fetchCollectionPrompts.collectionId must be non-empty string");
+    }
     return fetchCollectionPrompts(data.baseUrl, data.collectionId);
+  });
+
+  onMessage("fetchCollectionPromptResponse", ({ data, sender }) => {
+    requireRelayTab(sender, "fetchCollectionPromptResponse");
+    if (typeof data.collectionId !== "string" || data.collectionId.length === 0) {
+      throw new Error("fetchCollectionPromptResponse.collectionId must be non-empty string");
+    }
+    return fetchCollectionPromptResponse(data.baseUrl, data.collectionId);
   });
 
   // runner → background: content script から localhost server へ直接 token 取得しないよう、

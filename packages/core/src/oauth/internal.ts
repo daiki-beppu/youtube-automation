@@ -1,21 +1,20 @@
 // client_secrets.json から OAuth クライアント資格情報を抽出する内部ヘルパ。
 //
-// Google が配布する client_secrets.json は installed（デスクトップアプリ）か web の
-// いずれかのブロックに client_id / client_secret を持つ。ADR-0003 §8 に従い手書きの
-// isRecord / parseX ではなく zod で構造検証する。ブロックには auth_uri / token_uri /
-// redirect_uris 等 Google 固有キーが同居するため `.strict()` は付けず、必要 2 キーのみ
-// 取り出す。
+// Google Auth Platform の Desktop app client_secrets.json から client_id /
+// client_secret を取り出す。ADR-0003 §8 に従い手書きの isRecord / parseX ではなく
+// zod で構造検証する。installed ブロックには auth_uri / token_uri / redirect_uris 等
+// Google 固有キーが同居するため `.strict()` は付けず、Desktop app 契約上の必須キーのみ見る。
 
 import { z } from "zod";
 
 const ClientSecretsBlock = z.object({
   client_id: z.string(),
   client_secret: z.string(),
+  redirect_uris: z.array(z.string()).nonempty(),
 });
 
 const ClientSecretsSchema = z.object({
   installed: ClientSecretsBlock.optional(),
-  web: ClientSecretsBlock.optional(),
 });
 
 // 抽出後（camelCase）の戻り値シェイプ。schema 並書ではなく helper の返り値型。
@@ -27,8 +26,8 @@ interface ClientCredentials {
 /**
  * client_secrets.json 文字列から clientId / clientSecret を取り出す。
  *
- * @throws {Error} `config:` prefix — JSON 不正、または installed / web ブロック欠落
- * @throws {z.ZodError} ブロックに client_id / client_secret 文字列が無い場合
+ * @throws {Error} `config:` prefix — JSON 不正、または installed ブロック欠落
+ * @throws {z.ZodError} ブロックに client_id / client_secret / redirect_uris が無い場合
  *   （境界の `toServiceError` が validation ドメインへ変換する）
  */
 export const parseClientSecrets = (
@@ -41,11 +40,9 @@ export const parseClientSecrets = (
     throw new Error("config: client_secrets.json が JSON として不正です");
   }
   const parsed = ClientSecretsSchema.parse(raw);
-  const block = parsed.installed ?? parsed.web;
+  const block = parsed.installed;
   if (!block) {
-    throw new Error(
-      "config: client_secrets.json に installed / web ブロックがありません"
-    );
+    throw new Error("config: Desktop app の installed ブロックが必要です");
   }
   return {
     clientId: block.client_id,

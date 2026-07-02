@@ -49,10 +49,13 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
   let feedAt = 0;
   let changeAt = 0;
 
-  function upsert(clip: ObservedClip): void {
+  function recordDuration(clip: ObservedClip): void {
     if (typeof clip.duration === "number") {
       durationById.set(clip.id, clip.duration);
     }
+  }
+
+  function upsert(clip: ObservedClip): void {
     const prev = statusById.get(clip.id);
     if (prev !== clip.status) {
       statusById.set(clip.id, clip.status);
@@ -66,6 +69,7 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
       submissions += 1;
       for (const clip of clips) {
         submittedById.set(clip.id, true);
+        recordDuration(clip);
         upsert(clip);
       }
     },
@@ -73,6 +77,7 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
       observedFeed = true;
       feedAt = now();
       for (const clip of clips) {
+        recordDuration(clip);
         // 既知 clip は status 更新。未知 clip は未終端のみ passive 合流する
         // （終端済みの未知 clip は slot を占有しないため、集計を無駄に膨らませない）。
         if (statusById.has(clip.id) || !TERMINAL.has(clip.status)) {

@@ -1,5 +1,9 @@
 # Python → TypeScript(bun) 全面移行 (AI-first standardization, big-bang branch)
 
+## Status
+
+accepted (2026-06-02)。§Identity（package 同名維持）は ADR-0007 (2026-06-14) が supersede — 本文冒頭の注記参照。その他の決定（big-bang branch / v0.1.0 reset）は有効。実装は `feat/ts-rewrite` 上で進行中（cutover #790 で main へ反映予定）。
+
 ## Context
 
 `src/youtube_automation/` (Python 28K 行) は歴史的経緯で Python だが、周辺環境 (Chrome 拡張 / Claude Code skills / MCP SDK / 自動化 tooling) は TS/bun スタックに収斂しており、Python は lone island になっている。コードを書くのも消費するのも LLM agent が主体になりつつあり、TS の方が LLM コード生成精度・MCP tool exposing の両面で適合する。現バージョン `5.5.7` は AI 駆動 release skill が積み重ねた人工的な数字で、実際の API 安定性を反映していない。

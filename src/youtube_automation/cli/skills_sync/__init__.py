@@ -16,6 +16,7 @@ Asset 種別 (`--asset`):
     claude-md           : BGM チャンネル運営方針テンプレ (`.claude/CLAUDE.md`、単一ファイル)
     workflow-cheatsheet : workflow 使い分けチートシート (`docs/workflow-cheatsheet.md`、単一ファイル)
     features            : 全 skill カタログ (`docs/features.md`、単一ファイル)
+    auth-template       : OAuth client secrets テンプレート (`auth/client_secrets.template.json`、単一ファイル)
 
 `yt-skills sync` (asset 未指定) は `--asset all` と同等で、配布物が `docs/`
 にリンクを張る前提で動くため、デフォルトで全 asset を sync する設計に
@@ -70,6 +71,14 @@ _ASSET_SPECS: dict[str, dict[str, str]] = {
         "source_filename": "features.md",
         "default_target": "docs/features.md",
         "label": "skill カタログ",
+    },
+    "auth-template": {
+        "kind": "file",
+        "resource_name": "_auth",
+        "source_subdir": "auth",
+        "source_filename": "client_secrets.template.json",
+        "default_target": "auth/client_secrets.template.json",
+        "label": "OAuth client_secrets テンプレ",
     },
 }
 

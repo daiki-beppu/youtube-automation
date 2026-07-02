@@ -9,15 +9,15 @@
 //
 // 契約 (draft が実装すべき public API):
 //   - PHASE.ADDING_TO_PLAYLIST: "adding-to-playlist" (shared/constants.ts)
-//   - SnapshotPayload.playlistName?: string (shared/constants.ts、後方互換 optional)
-//   - initSnapshot(entries, playlistName?): SnapshotPayload (lib/snapshot.ts、playlistName を格納)
+//   - SnapshotPayload.playlistName?: string (shared/constants.ts)
+//   - initSnapshot(entries, { collectionId, playlistName? }): SnapshotPayload (lib/snapshot.ts、playlistName を格納)
 //   - RestoreState.playlistName?: string + buildRestoreState が surface する (components/runner-errors.ts)
 import { describe, expect, it } from "vitest";
 
 import { PHASE } from "../../shared/constants";
 import { buildRestoreState } from "../components/runner-errors";
 import { applyProgress, initSnapshot, isTerminalPhase, nextItemStates } from "../lib/snapshot";
-import { makePromptEntries } from "./_helpers";
+import { makePromptEntries, snapshotOptions } from "./_helpers";
 
 describe("PHASE.ADDING_TO_PLAYLIST: 列挙値", () => {
   it("Given PHASE When ADDING_TO_PLAYLIST を読む Then 文字列 adding-to-playlist である", () => {
@@ -41,7 +41,7 @@ describe("nextItemStates: ADDING_TO_PLAYLIST では itemStates 不変", () => {
 
 describe("applyProgress: ADDING_TO_PLAYLIST は実行中を維持する", () => {
   it("Given 実行中 snap When ADDING_TO_PLAYLIST を適用 Then isRunning=true を維持する（非終了）", () => {
-    const snap = initSnapshot(makePromptEntries(2));
+    const snap = initSnapshot(makePromptEntries(2), snapshotOptions());
 
     const next = applyProgress(snap, { phase: PHASE.ADDING_TO_PLAYLIST, total: 2, message: "rjn-dawn-cloud-fold" });
 
@@ -49,7 +49,7 @@ describe("applyProgress: ADDING_TO_PLAYLIST は実行中を維持する", () => 
   });
 
   it("Given done 済み snap When ADDING_TO_PLAYLIST を適用 Then itemStates は不変（全 done のまま）", () => {
-    let snap = initSnapshot(makePromptEntries(2));
+    let snap = initSnapshot(makePromptEntries(2), snapshotOptions());
     snap = applyProgress(snap, { phase: PHASE.DONE, index: 0, total: 2 });
     snap = applyProgress(snap, { phase: PHASE.DONE, index: 1, total: 2 });
 
@@ -59,16 +59,15 @@ describe("applyProgress: ADDING_TO_PLAYLIST は実行中を維持する", () => 
   });
 });
 
-describe("initSnapshot: playlistName の格納（後方互換 optional）", () => {
+describe("initSnapshot: playlistName の格納", () => {
   it("Given playlistName 付き When initSnapshot Then snapshot に playlistName を保持する", () => {
-    const snap = initSnapshot(makePromptEntries(2), "rjn-dawn-cloud-fold");
+    const snap = initSnapshot(makePromptEntries(2), snapshotOptions("rjn-dawn-cloud-fold"));
 
     expect(snap.playlistName).toBe("rjn-dawn-cloud-fold");
   });
 
-  it("Given playlistName 無し（単一ファイル mode）When initSnapshot Then playlistName は undefined", () => {
-    // 単一ファイル mode（collection 未選択）は playlist phase を実行しないため playlistName を持たない。
-    const snap = initSnapshot(makePromptEntries(2));
+  it("Given playlistName 無し When initSnapshot Then playlistName は undefined", () => {
+    const snap = initSnapshot(makePromptEntries(2), snapshotOptions());
 
     expect(snap.playlistName).toBeUndefined();
   });
@@ -76,7 +75,7 @@ describe("initSnapshot: playlistName の格納（後方互換 optional）", () =
 
 describe("applyProgress: playlistName を progress 更新間で保持する", () => {
   it("Given playlistName 付き snap When progress を適用 Then playlistName を破棄せず維持する", () => {
-    const snap = initSnapshot(makePromptEntries(2), "rjn-dawn-cloud-fold");
+    const snap = initSnapshot(makePromptEntries(2), snapshotOptions("rjn-dawn-cloud-fold"));
 
     const next = applyProgress(snap, { phase: PHASE.ADDING_TO_PLAYLIST, total: 2, message: "rjn-dawn-cloud-fold" });
 
@@ -86,7 +85,7 @@ describe("applyProgress: playlistName を progress 更新間で保持する", ()
 
 describe("buildRestoreState: playlistName を復元 state へ surface する", () => {
   it("Given playlistName 付き snapshot When buildRestoreState Then playlistName を復元する（再 open 時の display 用）", () => {
-    const snap = applyProgress(initSnapshot(makePromptEntries(2), "rjn-dawn-cloud-fold"), {
+    const snap = applyProgress(initSnapshot(makePromptEntries(2), snapshotOptions("rjn-dawn-cloud-fold")), {
       phase: PHASE.ADDING_TO_PLAYLIST,
       total: 2,
       message: "rjn-dawn-cloud-fold",
@@ -98,7 +97,10 @@ describe("buildRestoreState: playlistName を復元 state へ surface する", (
   });
 
   it("Given playlistName 無し snapshot When buildRestoreState Then playlistName は undefined", () => {
-    const snap = applyProgress(initSnapshot(makePromptEntries(2)), { phase: PHASE.FINISHED, total: 2 });
+    const snap = applyProgress(initSnapshot(makePromptEntries(2), snapshotOptions()), {
+      phase: PHASE.FINISHED,
+      total: 2,
+    });
 
     const restored = buildRestoreState(snap);
 

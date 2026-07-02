@@ -67,6 +67,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-generate-shorts-loop": "youtube_automation.scripts.generate_short_loop",
     "yt-shorts-bulk-update-loc": "youtube_automation.scripts.bulk_update_short_localizations",
     "yt-skills": "youtube_automation.cli.skills_sync",
+    "yt-setup-dirs": "youtube_automation.cli.setup_dirs",
 }
 
 

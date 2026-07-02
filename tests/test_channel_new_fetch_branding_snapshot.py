@@ -65,8 +65,35 @@ def test_fetch_branding_snapshot_writes_untrusted_json_for_multiple_ids(
     module = _load_module()
     youtube = FakeYouTube(
         {
-            "UC_A": {"items": [{"id": "UC_A", "snippet": {"description": "A"}}]},
-            "UC_B": {"items": [{"id": "UC_B", "brandingSettings": {"channel": {"keywords": "b"}}}]},
+            "UC_A": {
+                "items": [
+                    {
+                        "id": "UC_A",
+                        "snippet": {
+                            "title": "Alpha",
+                            "description": "A",
+                            "thumbnails": {
+                                "default": {"url": "https://example.com/a-default.jpg", "width": 88, "height": 88},
+                                "high": {"url": "https://example.com/a-high.jpg", "width": 800, "height": 800},
+                            },
+                        },
+                    }
+                ]
+            },
+            "UC_B": {
+                "items": [
+                    {
+                        "id": "UC_B",
+                        "brandingSettings": {
+                            "channel": {"keywords": "b"},
+                            "image": {
+                                "bannerExternalUrl": "https://example.com/b-banner.jpg",
+                                "bannerMobileImageUrl": "https://example.com/b-mobile.jpg",
+                            },
+                        },
+                    }
+                ]
+            },
         }
     )
     _patch_youtube_handler(monkeypatch, module, youtube)
@@ -94,12 +121,112 @@ def test_fetch_branding_snapshot_writes_untrusted_json_for_multiple_ids(
     ]
     assert json.loads(output.read_text(encoding="utf-8")) == {
         "untrusted_data": True,
+        "reference_only": True,
         "source": "youtube.channels.list(part=snippet,brandingSettings,localizations)",
         "items": [
-            {"id": "UC_A", "snippet": {"description": "A"}},
-            {"id": "UC_B", "brandingSettings": {"channel": {"keywords": "b"}}},
+            {
+                "id": "UC_A",
+                "snippet": {
+                    "title": "Alpha",
+                    "description": "A",
+                    "thumbnails": {
+                        "default": {"url": "https://example.com/a-default.jpg", "width": 88, "height": 88},
+                        "high": {"url": "https://example.com/a-high.jpg", "width": 800, "height": 800},
+                    },
+                },
+                "brandingSettings": {},
+                "localizations": {},
+            },
+            {
+                "id": "UC_B",
+                "snippet": {},
+                "brandingSettings": {
+                    "channel": {"keywords": "b"},
+                    "image": {
+                        "bannerExternalUrl": "https://example.com/b-banner.jpg",
+                        "bannerMobileImageUrl": "https://example.com/b-mobile.jpg",
+                    },
+                },
+                "localizations": {},
+            },
+        ],
+        "channel_image_references": [
+            {
+                "channel_id": "UC_A",
+                "title": "Alpha",
+                "untrusted_data": True,
+                "reference_only": True,
+                "icon": {
+                    "source": "snippet.thumbnails.high",
+                    "url": "https://example.com/a-high.jpg",
+                    "width": 800,
+                    "height": 800,
+                },
+                "banner": [],
+            },
+            {
+                "channel_id": "UC_B",
+                "title": "",
+                "untrusted_data": True,
+                "reference_only": True,
+                "icon": {},
+                "banner": [
+                    {"source": "brandingSettings.image.bannerExternalUrl", "url": "https://example.com/b-banner.jpg"},
+                    {
+                        "source": "brandingSettings.image.bannerMobileImageUrl",
+                        "url": "https://example.com/b-mobile.jpg",
+                    },
+                ],
+            },
         ],
     }
+
+
+def test_fetch_branding_snapshot_normalizes_invalid_nested_image_shapes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_module()
+    youtube = FakeYouTube(
+        {
+            "UC_A": {
+                "items": [
+                    {
+                        "id": "UC_A",
+                        "snippet": {"title": "Alpha", "thumbnails": ["not", "a", "mapping"]},
+                        "brandingSettings": {"image": "not-a-mapping"},
+                    }
+                ]
+            }
+        }
+    )
+    _patch_youtube_handler(monkeypatch, module, youtube)
+    output = tmp_path / "competitor-branding-snapshot.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "fetch_branding_snapshot.py",
+            "--channel-id",
+            "UC_A",
+            "--output",
+            str(output),
+        ],
+    )
+
+    module.main()
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["channel_image_references"] == [
+        {
+            "channel_id": "UC_A",
+            "title": "Alpha",
+            "untrusted_data": True,
+            "reference_only": True,
+            "icon": {},
+            "banner": [],
+        }
+    ]
 
 
 def test_fetch_branding_snapshot_empty_items_fails_without_writing_output(

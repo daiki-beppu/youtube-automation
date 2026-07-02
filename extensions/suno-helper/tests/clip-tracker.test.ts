@@ -69,10 +69,11 @@ describe("createClipTracker: status ベースの in-flight 集計", () => {
     const tracker = createClipTracker();
     tracker.applyFeedStatuses([
       { id: "leftover", status: "streaming" }, // 前 run / 手動投入の残留 in-flight
-      { id: "done", status: "complete" }, // 終端済みの未知 clip は合流させない
+      { id: "done", status: "complete", duration: 180 }, // 終端済みの未知 clip は合流させない
     ]);
     expect(tracker.getInFlightCount()).toBe(1);
     expect(tracker.getPendingIds()).toEqual(["leftover"]);
+    expect(tracker.getDuration("done")).toBe(180);
     expect(tracker.hasObservedAnyTraffic()).toBe(true);
   });
 
