@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +39,53 @@ def _section(text: str, heading: str) -> str:
     return match.group("body")
 
 
+def _freshness_pseudo_code() -> str:
+    pseudo_code = _section(_read(_FRESHNESS_RULES_MD), "## 判定擬似コード")
+    match = re.search(r"```bash\n(?P<body>.*?)\n```", pseudo_code, flags=re.DOTALL)
+    if not match:
+        raise AssertionError("freshness-rules の bash 擬似コードが見つかりません")
+    return match.group("body")
+
+
+def _write_fixture(path: Path, content: str = "{}") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _run_freshness_pseudo_code(
+    tmp_path: Path,
+    *,
+    data_date: str,
+    report_date: str,
+    today: str,
+    freshness_days: int | None,
+) -> subprocess.CompletedProcess[str]:
+    _write_fixture(tmp_path / f"data/analytics_data_{data_date}.json")
+    _write_fixture(tmp_path / f"reports/analysis_{report_date}.md", "# analysis\n")
+    _write_fixture(tmp_path / "docs/channel/personas/persona-definition.md", "# persona\n")
+    _write_fixture(tmp_path / "docs/plans/viewing-scene-matrix.md", "# scene\n")
+
+    script = tmp_path / "freshness-check.sh"
+    script.write_text(_freshness_pseudo_code(), encoding="utf-8")
+    script.chmod(0o755)
+
+    env = {
+        **os.environ,
+        "TODAY": today,
+    }
+    if freshness_days is not None:
+        env["COLLECTION_IDEATE_FRESHNESS_DAYS"] = str(freshness_days)
+
+    return subprocess.run(
+        ["bash", str(script)],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def test_wf_new_phase_1_declares_analytics_absent_input_modes() -> None:
     text = _read(_WF_NEW_SKILL_MD)
     phase_1 = _section(text, "### Phase 1: 企画（自動実行 + 入力モードに応じた一時停止）")
@@ -53,6 +102,8 @@ def test_wf_new_phase_1_declares_analytics_absent_input_modes() -> None:
 
     assert "/collection-ideate" in phase_1
     assert "stale の場合は fallback せず" in phase_1
+    assert "config/skills/collection-ideate.yaml" in phase_1
+    assert "deep-merge した解決済み `freshness_days`" in phase_1
 
 
 def test_collection_ideate_preflight_declares_same_input_modes() -> None:
@@ -224,7 +275,6 @@ def test_workflow_cheatsheet_documents_fallback_and_minimal_pause() -> None:
     assert _BENCHMARK_FALLBACK_MODE in phase_flow
     assert "analytics やベンチマークが無いと `/collection-ideate` は止まる？" in faq
     assert "minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認" in faq
-    assert "`reports/analysis_*.md` が最新 `data/analytics_data_*.json` より古い場合だけ fallback せず" in faq
 
 
 def test_collection_lifecycle_documents_three_input_modes() -> None:
@@ -236,7 +286,9 @@ def test_collection_lifecycle_documents_three_input_modes() -> None:
     assert _MINIMAL_MODE in planning
     assert "テーマ / ジャンル / 雰囲気を直接確認" in planning
     assert "fallback せず、`/analytics-analyze` 再実行を案内して停止" in planning
-    assert "/analytics-collect` → `/analytics-analyze`" not in planning
+    assert "最新 `data/analytics_data_*.json` より古い" in planning
+    assert "実行日から `freshness_days`" in planning
+    assert "/analytics-collect` → `/analytics-analyze`" in planning
 
 
 def test_setup_benchmark_data_respects_analytics_mode_priority() -> None:
@@ -280,10 +332,22 @@ def test_freshness_rules_follow_analytics_absent_fallback_contract() -> None:
     assert f"| `{_ANALYTICS_REPORT_GLOB}` が存在しない | `/collection-ideate` を中断" not in triggers
     assert f"| `{_BENCHMARK_DATA_GLOB}` が `config/skills/benchmark.yaml`" not in triggers
 
-    benchmark_trigger = next(line for line in triggers.splitlines() if "freshness_days" in line)
+    benchmark_trigger = next(
+        line for line in triggers.splitlines() if "freshness_days" in line and "config/skills/benchmark.yaml" in line
+    )
     assert benchmark_trigger.startswith(f"| {_ANALYTICS_MODE} で `{_BENCHMARK_DATA_GLOB}`")
     assert _BENCHMARK_FALLBACK_MODE not in benchmark_trigger
     assert _MINIMAL_MODE not in benchmark_trigger
+
+    # 絶対鮮度チェック (#1427): 収集データ自体が実行日から freshness_days を超えたら stale
+    absolute_trigger = next(
+        line
+        for line in triggers.splitlines()
+        if "freshness_days" in line and "config/skills/collection-ideate.yaml" in line
+    )
+    assert absolute_trigger.startswith("| analytics mode で最新 `data/analytics_data_*.json`")
+    assert "実行日 (today)" in absolute_trigger
+    assert "`/analytics-collect` → `/analytics-analyze`" in absolute_trigger
 
 
 def test_freshness_rules_select_latest_by_filename_date_not_mtime() -> None:
@@ -291,12 +355,72 @@ def test_freshness_rules_select_latest_by_filename_date_not_mtime() -> None:
     pseudo_code = _section(text, "## 判定擬似コード")
 
     assert "ls -t" not in pseudo_code
+    assert "compgen" not in pseudo_code
     assert "latest_by_filename_date" in pseudo_code
     assert "grep -oE '[0-9]{8}'" in pseudo_code
     assert '[ ! -f "$file" ]' in pseudo_code
     assert 'LATEST_DATA=$(latest_by_filename_date "data/analytics_data_*.json")' in pseudo_code
     assert 'LATEST_REPORT=$(latest_by_filename_date "reports/analysis_*.md")' in pseudo_code
     assert 'LATEST_BENCHMARK=$(latest_by_filename_date "data/benchmark_*.json")' in pseudo_code
+
+
+def test_freshness_rules_absolute_check_uses_resolved_config_value(tmp_path: Path) -> None:
+    pseudo_code = _freshness_pseudo_code()
+
+    assert "FRESHNESS_DAYS=7" not in pseudo_code
+    assert "COLLECTION_IDEATE_FRESHNESS_DAYS=${COLLECTION_IDEATE_FRESHNESS_DAYS:-7}" not in pseudo_code
+    assert "freshness_days が未解決" in pseudo_code
+    assert 'FRESHNESS_DAYS="$COLLECTION_IDEATE_FRESHNESS_DAYS"' in pseudo_code
+    assert "TODAY=${TODAY:-$(date +%Y%m%d)}" in pseudo_code
+
+    relative_stale = _run_freshness_pseudo_code(
+        tmp_path / "relative-stale",
+        data_date="20260702",
+        report_date="20260622",
+        today="20260702",
+        freshness_days=7,
+    )
+    assert relative_stale.returncode == 1
+    assert "/analytics-analyze" in relative_stale.stdout
+
+    stale = _run_freshness_pseudo_code(
+        tmp_path / "stale",
+        data_date="20260622",
+        report_date="20260622",
+        today="20260702",
+        freshness_days=7,
+    )
+    assert stale.returncode == 1
+    assert "/analytics-collect" in stale.stdout
+    assert "/analytics-analyze" in stale.stdout
+
+    override_fresh = _run_freshness_pseudo_code(
+        tmp_path / "override-fresh",
+        data_date="20260622",
+        report_date="20260622",
+        today="20260702",
+        freshness_days=14,
+    )
+    assert override_fresh.returncode == 0, override_fresh.stderr
+
+    boundary_fresh = _run_freshness_pseudo_code(
+        tmp_path / "boundary-fresh",
+        data_date="20260625",
+        report_date="20260625",
+        today="20260702",
+        freshness_days=7,
+    )
+    assert boundary_fresh.returncode == 0, boundary_fresh.stderr
+
+    missing_resolved_config = _run_freshness_pseudo_code(
+        tmp_path / "missing-config",
+        data_date="20260625",
+        report_date="20260625",
+        today="20260702",
+        freshness_days=None,
+    )
+    assert missing_resolved_config.returncode == 1
+    assert "freshness_days" in missing_resolved_config.stderr
 
 
 def test_freshness_workflow_state_table_is_mode_aware() -> None:

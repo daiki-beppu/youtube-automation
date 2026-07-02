@@ -68,6 +68,29 @@ def test_channel_override_merged(tmp_path, monkeypatch):
     assert "model" in gemini_block
 
 
+def test_collection_ideate_freshness_days_default_comes_from_skill_config(tmp_path):
+    """collection-ideate の絶対鮮度 default は実 loader で読める."""
+    channel_dir = tmp_path / "ch"
+    channel_dir.mkdir()
+
+    cfg = skill_config.load_skill_config("collection-ideate", use_cache=False, channel_dir=channel_dir)
+
+    assert cfg.get("freshness_days") == 7
+
+
+def test_collection_ideate_freshness_days_channel_override(tmp_path):
+    """channel override の freshness_days が default より優先される."""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    override = channel_dir / "config" / "skills" / "collection-ideate.yaml"
+    override.write_text(yaml.safe_dump({"freshness_days": 14}), encoding="utf-8")
+
+    cfg = skill_config.load_skill_config("collection-ideate", use_cache=False, channel_dir=channel_dir)
+
+    assert cfg.get("freshness_days") == 14
+    assert cfg.get("preview", {}).get("thumbnail_mode") == "parallel"
+
+
 def test_explicit_channel_dir_override_does_not_use_env(tmp_path, monkeypatch):
     """明示 channel_dir 指定時は CHANNEL_DIR ではなく指定先の override を読む."""
     env_channel = tmp_path / "env-ch"
