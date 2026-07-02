@@ -150,6 +150,37 @@ describe("createDocumentInjector", () => {
     expect(document.querySelector<HTMLInputElement>("#track-1-producer-1-name")!.value).toBe("ABYSS MI");
   });
 
+  it("injectStaticFields が main_genre change 後の非同期 sub_genre populate を待ってから後続注入する", async () => {
+    // Given
+    mountStaticForm(1, "Soulful Grooves");
+    const genre = document.querySelector<HTMLSelectElement>("#genrePrimary")!;
+    const subGenre = document.querySelector<HTMLSelectElement>("#genreSecondary")!;
+    subGenre.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "サブジャンルを選択";
+    subGenre.appendChild(placeholder);
+    genre.addEventListener("change", () => {
+      setTimeout(() => {
+        const option = document.createElement("option");
+        option.value = "Ambient";
+        option.textContent = "Ambient";
+        subGenre.appendChild(option);
+      }, 0);
+    });
+    let subGenreAtAlbumTitleInjection: string | null = null;
+    document.querySelector<HTMLInputElement>("#albumTitleInput")!.addEventListener("input", () => {
+      subGenreAtAlbumTitleInjection = subGenre.value;
+    });
+
+    // When
+    await createDocumentInjector(document).injectStaticFields(payload(BASE_PROFILE));
+
+    // Then: await が外れると album title 注入時点ではまだ placeholder のままになる。
+    expect(subGenre.value).toBe("Ambient");
+    expect(subGenreAtAlbumTitleInjection).toBe("Ambient");
+  });
+
   it("profile.artist が空なら content 実配線でも #artistName fallback を使う", async () => {
     // Given
     mountStaticForm(1, "Soulful Grooves");

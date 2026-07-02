@@ -41,7 +41,7 @@ export const PROFILE_SELECTORS = {
 } as const;
 
 // main genre 変更後、DistroKid が secondary genre の option を再生成するまでの待ち上限（ms）（#1407）。
-export const GENRE_SECONDARY_OPTION_WAIT_TIMEOUT_MS = 10_000;
+const GENRE_SECONDARY_OPTION_WAIT_TIMEOUT_MS = 10_000;
 
 // アルバム名（アルバム時のみ存在。シングルモードでは要素不在 → skip）。
 export const ALBUM_SELECTORS = {
@@ -283,10 +283,7 @@ function selectOptionLabels(el: HTMLSelectElement): string[] {
 function findSelectOptionIndex(el: HTMLSelectElement, payloadValue: string): number {
   const target = normalizeOptionText(payloadValue);
   const opts = Array.from(el.options);
-  let idx = opts.findIndex((o) => o.value === payloadValue);
-  if (idx === -1) {
-    idx = opts.findIndex((o) => normalizeOptionText(o.text) === target);
-  }
+  let idx = findExactSelectOptionIndex(el, payloadValue);
   if (idx === -1) {
     idx = opts.findIndex((o) => {
       if (o.value === "") return false;
