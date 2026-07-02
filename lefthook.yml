@@ -37,8 +37,12 @@ pre-commit:
       run: bunx oxlint {staged_files}
     oxfmt:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc}"
+      # .claude/**（skill references の JSON 等）は oxfmt.config.ts の ignorePatterns で
+      # 除外済みのため、staged files が .claude のみでも #1428 と同型の「対象ファイルなし」
+      # で commit が落ちる。exclude を config 側の除外と揃える
       exclude:
         - "extensions/**"
+        - ".claude/**"
       run: bunx oxfmt --check {staged_files}
     typecheck:
       # root の tsc -b は extensions を含まないため、extensions のみの変更では起動しない

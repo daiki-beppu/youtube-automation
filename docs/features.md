@@ -1,6 +1,6 @@
 # 全 skill カタログ
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **48 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **47 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
@@ -22,11 +22,10 @@
 | Skill | なにができるか |
 |---|---|
 | /setup | ツール導入と GCP / OAuth 設定を wizard 形式で診断・セットアップ |
-| /channel-new | TTP 対象確認、seed confirmation artifacts、config、簡易ペルソナ、初回 branding まで進める |
+| /channel-new | TTP 対象確認、seed confirmation artifacts、config、簡易ペルソナ、初回 branding まで進める。再生成モード（config 再生成）と設定 push モード（branding / status / localizations の push/pull）も担当 |
 | /discover-competitors | 任意: ニッチキーワードから追加競合候補を YouTube Data API で自動発掘 |
 | /channel-research | 任意: benchmark / viewer-voice 済みデータを徹底分析 |
 | /channel-direction | 任意: TTP seed confirmation または分析結果から方向性・ポジショニングを対話で再検討 |
-| /channel-setup | 任意: config 再生成と YouTube 側設定（branding / status / localizations）の push |
 | /channel-import | 既存 YouTube チャンネルを自動化システムに取り込み |
 | /channel-status | 登録者数・総再生回数・動画別パフォーマンスを YouTube API から取得 |
 

@@ -94,7 +94,7 @@ pip install "git+https://github.com/daiki-beppu/youtube-automation@v1.1.0"
 
 インストールすると `yt-*` という CLI コマンド群と `yt-skills` 同期ツールが PATH に入ります。
 
-> **submodule 形式 (legacy)**: `auth/` shim のみ後方互換を維持します。GCP セットアップスクリプト（`.claude/skills/channel-setup/references/`）は、submodule 利用者は `automation/.claude/skills/channel-setup/references/gcp-bootstrap.sh` のように submodule パス経由で参照するか、`yt-skills sync` を先に実行してください（pip install 環境のみ）。新規チャンネルは pip install を推奨。移行手順: [`docs/migration-submodule-to-uv.md`](docs/migration-submodule-to-uv.md)
+> **submodule 形式 (legacy)**: `auth/` shim のみ後方互換を維持します。GCP セットアップスクリプト（`.claude/skills/channel-new/references/`）は、submodule 利用者は `automation/.claude/skills/channel-new/references/gcp-bootstrap.sh` のように submodule パス経由で参照するか、`yt-skills sync` を先に実行してください（pip install 環境のみ）。新規チャンネルは pip install を推奨。移行手順: [`docs/migration-submodule-to-uv.md`](docs/migration-submodule-to-uv.md)
 
 ### 2. Claude Code 配布物を同期
 
@@ -150,7 +150,7 @@ cp .env.example .env
 $EDITOR .env  # Vertex AI 用変数 (`GOOGLE_CLOUD_LOCATION` 等) を書く。project_id は ADC quota project から自動解決される
 ```
 
-`.claude/skills/channel-setup/references/gcp-bootstrap.sh` または `infra/terraform/gcp/` を実行すれば `.env` に自動書き出しされます。`load_dotenv()` で `os.environ` に読み込まれ、上記 (1) の経路で利用されます。
+`.claude/skills/channel-new/references/gcp-bootstrap.sh` または `infra/terraform/gcp/` を実行すれば `.env` に自動書き出しされます。`load_dotenv()` で `os.environ` に読み込まれ、上記 (1) の経路で利用されます。
 
 #### B. 1Password CLI 方式（秘密をディスクに書かない）
 

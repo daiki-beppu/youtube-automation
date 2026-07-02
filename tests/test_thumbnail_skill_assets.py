@@ -32,7 +32,7 @@ def _read_channel_setup_thumbnail_template() -> str:
         _repo_root()
         / ".claude"
         / "skills"
-        / "channel-setup"
+        / "channel-new"
         / "references"
         / "config-template"
         / "skills"
@@ -359,7 +359,7 @@ def test_thumbnail_default_config_provides_codex_ttp_upgrade_prompt() -> None:
 
 
 def test_channel_setup_thumbnail_template_includes_codex_ttp_upgrade_prompt() -> None:
-    """#1300: channel-setup で生成される thumbnail config も同じ Codex 既定文言を持つ。"""
+    """#1300: channel-new（再生成モード）で生成される thumbnail config も同じ Codex 既定文言を持つ。"""
     default_template = _codex_prompt_template(_load_thumbnail_default_config())
     channel_setup_template = _codex_prompt_template(_load_channel_setup_thumbnail_template())
 

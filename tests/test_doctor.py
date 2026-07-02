@@ -843,7 +843,7 @@ class TestCheckInitialSetupReadiness:
         assert "genre_line" in r.message
         assert "descriptions.md parse failed" in r.message
         assert r.next_action is not None
-        assert "/channel-setup" in r.next_action["instructions"]
+        assert "/channel-new" in r.next_action["instructions"]
         assert "/video-description" in r.next_action["instructions"]
 
     def test_valid_initial_setup_is_ok(self, tmp_path):
@@ -1415,21 +1415,21 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         assert r.status == "warn"
         assert "承認済み TTP 対象が 0 件" in r.message
 
-    def test_benchmark_channels_without_artifacts_warns_channel_setup_incomplete(self, tmp_path):
-        """承認済み TTP 対象があるのに成果物が無ければ /channel-setup 未完了へ誘導する."""
+    def test_benchmark_channels_without_artifacts_warns_channel_new_incomplete(self, tmp_path):
+        """承認済み TTP 対象があるのに成果物が無ければ /channel-new 再生成モード未完了へ誘導する."""
         _write_benchmark_channels(tmp_path)
 
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "warn"
-        assert "/channel-setup benchmark 反映未完了" in r.message
+        assert "/channel-new benchmark 反映未完了" in r.message
         assert "data/benchmark_*.json が無い" in r.message
         assert "docs/benchmarks/*.md が無い" in r.message
         assert "data/thumbnail_compare/benchmark/" in r.message
         assert "reference_images.default" in r.message
         assert r.next_action is not None
         payload = json.dumps(r.next_action, ensure_ascii=False)
-        assert "/channel-setup" in payload
+        assert "/channel-new" in payload
         assert "yt-doctor" in payload
         assert "channel-new Step 9" not in payload
 
@@ -1479,7 +1479,7 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "ok"
-        assert "/channel-setup 完了相当" in r.message
+        assert "/channel-new 再生成モード完了相当" in r.message
         assert r.next_action is None
 
     def test_scalar_thumbnail_ref_is_ok(self, tmp_path):
@@ -1490,7 +1490,7 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "ok"
-        assert "/channel-setup 完了相当" in r.message
+        assert "/channel-new 再生成モード完了相当" in r.message
 
     def test_mixed_real_thumbnail_ref_and_placeholder_warns(self, tmp_path):
         """実パスと未解決 placeholder が混在していたら未転記として warn する."""
@@ -1558,7 +1558,7 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         assert "data/thumbnail_compare/benchmark/ 配下ではない" in r.message
 
     def test_missing_benchmark_docs_are_checked(self, tmp_path):
-        """docs/benchmarks/*.md も /channel-setup benchmark 反映の完了条件に含める."""
+        """docs/benchmarks/*.md も /channel-new benchmark 反映の完了条件に含める."""
         _write_benchmark_channels(tmp_path)
         data_dir = tmp_path / "data"
         data_dir.mkdir(parents=True)

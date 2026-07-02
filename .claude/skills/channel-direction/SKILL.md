@@ -96,9 +96,9 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 | 音楽エンジン（デフォルト） | suno / lyria のどちらか | ジャンル適性・API 可用性 |
 | サムネイル方針 | | 競合サムネイル分析 |
 
-#### `/channel-setup` への引き継ぎ項目（必須・issue #567）
+#### `/channel-new`（再生成モード）への引き継ぎ項目（必須・issue #567）
 
-下記は `/channel-setup` 側で `config/skills/*.yaml` / `config/channel/*.json` に
+下記は `/channel-new`（再生成モード）側で `config/skills/*.yaml` / `config/channel/*.json` に
 転記される項目。**ここで決め切らない項目があると下流 skill がチャンネル
 方向性を AI に手書きさせる素地になる**。必ず table と同じ厳密さで合意する。
 
@@ -161,7 +161,7 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 
 ### Step 5: 次フェーズへの案内
 
-「方向性が更新されました。config を再生成・再反映する場合は `/channel-setup`、制作に進む場合は `/wf-new` を実行してください。」
+「方向性が更新されました。config を再生成・再反映する場合は `/channel-new`（再生成モード）、制作に進む場合は `/wf-new` を実行してください。」
 
 リポジトリ名が変更された場合、ユーザーにリポジトリのリネームを案内する。
 
@@ -193,5 +193,5 @@ uv sync
 - `/channel-research` → 任意: ベンチマーク詳細分析
 - `/benchmark` → 任意: 承認済み TTP 対象の動画データ収集
 - `/viewer-voice` → 任意: コメント収集と視聴者インサイト分析
-- `/channel-setup` → 任意: config 再生成 / branding 再反映
+- `/channel-new`（再生成モード） → 任意: config 再生成 / branding 再反映
 - `/wf-new` → 初回コレクション制作

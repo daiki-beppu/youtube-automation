@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING** `refactor(skills)`: `/channel-setup` スキルを削除し、`/channel-new` に統合した。詳細セットアップ/再生成（旧 Step 1〜8）は再生成モード（Step R1〜R8）、設定 push（旧 Step 9: `yt-channel-settings` diff / push / pull）は設定 push モードとして `/channel-new` が文脈から自動判別して受ける。共通テンプレート・スクリプト置き場は `.claude/skills/channel-setup/references/` から `.claude/skills/channel-new/references/` へ移設し、競合 branding snapshot 取得はインライン Python を廃止して `references/fetch_branding_snapshot.py` に一本化。`yt-doctor` / preflight の `/channel-setup` 案内文言と CLAUDE.md / AGENTS.md のスクリプト配置規約も `/channel-new` 系へ更新した。下流リポジトリは `yt-skills sync` の prune で追従する（#1461）
+
 ## [5.5.15] - 2026-07-02
 
 ### Added

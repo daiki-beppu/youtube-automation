@@ -65,29 +65,29 @@ AskUserQuestion で以下を確認:
 
 ### Step 4: config 生成
 
-`channel-setup/references/config-template/*.json` をベースに、ヒアリング結果で各ファイルの全フィールドを埋めて `config/channel/*.json` を生成（meta / content / youtube / analytics）。
+`channel-new/references/config-template/*.json` をベースに、ヒアリング結果で各ファイルの全フィールドを埋めて `config/channel/*.json` を生成（meta / content / youtube / analytics）。
 
-含めるべきセクション（必須・skill-config 管理・オプション）は **`channel-setup/references/config-generation-rules.md`** を参照。
+含めるべきセクション（必須・skill-config 管理・オプション）は **`channel-new/references/config-generation-rules.md`** を参照。
 
 ### Step 5: ディレクトリ構造の確認・補完
 
-正準ディレクトリ構造は **`channel-setup/references/directory-structure.md`** を参照。
+正準ディレクトリ構造は **`channel-new/references/directory-structure.md`** を参照。
 既存リポジトリに不足しているディレクトリがあれば作成する。
 
 ### Step 6: 検証
 
-JSON 構文検証・config ロードテスト（`uv run yt-config-migrate verify`）は **`channel-setup/references/verification.md`** を参照。
+JSON 構文検証・config ロードテスト（`uv run yt-config-migrate verify`）は **`channel-new/references/verification.md`** を参照。
 
 ### Step 7: OAuth 認証と channel_id 取得
 
 `auth/token.json` がない場合、OAuth 認証と channel_id 自動取得を実行。
-手順は **`channel-setup/references/verification.md`**（「OAuth 認証」「channel_id の自動取得」）を参照。
+手順は **`channel-new/references/verification.md`**（「OAuth 認証」「channel_id の自動取得」）を参照。
 
 ### Step 8: 次ステップ案内
 
 config 生成・認証完了後、以下を案内:
 
-1. **ブランディング素材**: 未作成の場合は `channel-setup/references/verification.md`（「ブランディング素材生成」）を参照
+1. **ブランディング素材**: 未作成の場合は `channel-new/references/verification.md`（「ブランディング素材生成」）を参照
 2. **ベンチマーク設定**: 競合チャンネルを追加したい場合は `config/channel/analytics.json` の `benchmark.channels` を追加し `/benchmark` で収集
 3. **ペルソナ定義**: `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` の順で実行
 4. **データ収集・分析**: `/analytics-collect` → `/analytics-analyze` で現状のパフォーマンスを把握
@@ -105,6 +105,6 @@ config 生成・認証完了後、以下を案内:
 ## Cross References
 
 - `/channel-new` → 新規チャンネル開設はこちら
-- `/channel-setup` → 新規チャンネルのテクニカルセットアップ（/channel-direction 後）
-- `channel-setup/references/config-template/*.json` → config テンプレート（責務別 4 ファイル）
+- `/channel-new`（再生成モード） → チャンネルのテクニカルセットアップ（/channel-direction 後）
+- `channel-new/references/config-template/*.json` → config テンプレート（責務別 4 ファイル）
 - `/wf-new` → config 完成後の最初のアクション

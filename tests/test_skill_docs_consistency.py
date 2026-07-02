@@ -90,16 +90,15 @@ def test_localizations_docs_use_root_localizations_file() -> None:
 
 def test_upload_settings_contract_is_nested_in_schedule_config() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    channel_setup = _read(".claude/skills/channel-setup/SKILL.md")
     channel_init = _read("src/youtube_automation/cli/channel_init_templates.py")
     channel_init_test = _read("tests/test_channel_init.py")
-    schedule_template = _read(".claude/skills/channel-setup/references/schedule-template.json")
+    schedule_template = _read(".claude/skills/channel-new/references/schedule-template.json")
 
-    for text in (channel_new, channel_setup, channel_init, channel_init_test):
+    for text in (channel_new, channel_init, channel_init_test):
         assert "config/upload_settings.json" not in text
 
     assert "`config/schedule_config.json`（`upload_settings` を含む）" in channel_new
-    assert "投稿頻度と `upload_settings`" in channel_setup
+    assert "投稿頻度と `upload_settings`" in channel_new
     assert '"upload_settings": {' in schedule_template
 
 
@@ -357,7 +356,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     research = _read(".claude/skills/channel-research/SKILL.md")
     viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
     setup = _read(".claude/skills/setup/SKILL.md")
-    channel_setup = _read(".claude/skills/channel-setup/SKILL.md")
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
     channel_direction = _read(".claude/skills/channel-direction/SKILL.md")
     onboarding = _read("ONBOARDING.md")
     features = _read("docs/features.md")
@@ -378,12 +377,12 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "`/channel-new` の標準フローでは実行せず" in viewer_voice
     assert "任意後続スキル" in viewer_voice
 
-    for path_text in (setup, channel_setup, channel_direction, onboarding):
+    for path_text in (setup, channel_new, channel_direction, onboarding):
         assert "TTP benchmark" not in path_text
         assert "TTP ベンチマーク収集" not in path_text
 
     assert "TTP 対象確認、config 生成、ペルソナ、branding" in setup
-    assert "TTP 対象確認 / seed fetch / 承認済み benchmark.channels 反映" in channel_setup
+    assert "TTP 対象確認 / seed fetch / 承認済み benchmark.channels 反映" in channel_new
     assert "docs/channel/ttp-seed-confirmation.md" in channel_direction
     assert "docs/channel/competitor-branding-snapshot.json" in channel_direction
     assert "untrusted data" in channel_direction
@@ -604,14 +603,14 @@ def test_collection_lifecycle_uses_mp3_as_public_audio_contract() -> None:
 def test_collection_localization_docs_use_root_localizations_contract() -> None:
     for path in (
         ".claude/skills/video-upload/SKILL.md",
-        ".claude/skills/channel-setup/SKILL.md",
-        ".claude/skills/channel-setup/references/config-generation-rules.md",
+        ".claude/skills/channel-new/SKILL.md",
+        ".claude/skills/channel-new/references/config-generation-rules.md",
     ):
         text = _read(path)
         assert "localization.supported_languages" not in text
         assert "config/localizations.json" in text
 
-    rules = _read(".claude/skills/channel-setup/references/config-generation-rules.md")
+    rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
     required_sections = rules.split("以下は **すべて `config/channel/*.json` に含める**:", 1)[1].split(
         "## ルート設定ファイル",
         1,
@@ -620,14 +619,14 @@ def test_collection_localization_docs_use_root_localizations_contract() -> None:
     assert "`config/localizations.json`" in rules
 
 
-def test_channel_setup_documents_ttp_wf_new_readiness_gate() -> None:
-    channel_setup = _read(".claude/skills/channel-setup/SKILL.md")
-    rules = _read(".claude/skills/channel-setup/references/config-generation-rules.md")
+def test_channel_new_regeneration_documents_ttp_wf_new_readiness_gate() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
 
-    for text in (channel_setup, rules):
+    for text in (channel_new, rules):
         assert "uv run yt-doctor --json" in text
         assert "ttp_wf_new_readiness" in text
-        assert "/channel-setup benchmark 反映未完了" in text
+        assert "/channel-new benchmark 反映未完了" in text
         assert "data/benchmark_*.json" in text
         assert "docs/benchmarks/*.md" in text
         assert "data/thumbnail_compare/benchmark/" in text
@@ -635,13 +634,13 @@ def test_channel_setup_documents_ttp_wf_new_readiness_gate() -> None:
         assert "config/skills/thumbnail.yaml::reference_images.channel_branding" in text
 
 
-def test_channel_setup_does_not_recopy_youtube_json_after_config_completion() -> None:
-    channel_setup = _read(".claude/skills/channel-setup/SKILL.md")
+def test_channel_new_regeneration_does_not_recopy_youtube_json_after_config_completion() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
 
-    assert "`config/channel/youtube.json::youtube.{category_id,privacy_status}`" in channel_setup
+    assert "`config/channel/youtube.json::youtube.{category_id,privacy_status}`" in channel_new
 
-    step5 = channel_setup.split("### Step 5: 残りファイル生成", 1)[1].split("### Step 6:", 1)[0]
-    assert "`config/channel/youtube.json`" not in step5
+    step_r5 = channel_new.split("### Step R5: 残りファイル生成", 1)[1].split("### Step R6:", 1)[0]
+    assert "`config/channel/youtube.json`" not in step_r5
 
 
 def test_theme_compare_missing_themes_error_uses_current_config_path(monkeypatch, caplog) -> None:

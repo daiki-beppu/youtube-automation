@@ -22,7 +22,7 @@ _CONFIG_RULES_MD = (
     Path(__file__).resolve().parents[1]
     / ".claude"
     / "skills"
-    / "channel-setup"
+    / "channel-new"
     / "references"
     / "config-generation-rules.md"
 )

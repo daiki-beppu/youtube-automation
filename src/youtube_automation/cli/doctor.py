@@ -716,7 +716,7 @@ def check_env_file(channel_dir: Path) -> CheckResult:
             next_action={
                 "kind": "ai-exec",
                 "cmd": (
-                    ".claude/skills/channel-setup/references/gcp-bootstrap.sh <project-id> を実行して .env を書き出す"
+                    ".claude/skills/channel-new/references/gcp-bootstrap.sh <project-id> を実行して .env を書き出す"
                 ),
             },
         )
@@ -1117,11 +1117,11 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
             id="ttp_wf_new_readiness",
             status="warn",
             category=DATA_CATEGORY,
-            message="/channel-setup benchmark 反映未完了の可能性 / TTP 完了条件が未充足: " + "; ".join(missing),
+            message="/channel-new benchmark 反映未完了の可能性 / TTP 完了条件が未充足: " + "; ".join(missing),
             next_action={
                 "kind": "human",
                 "instructions": (
-                    "/channel-new Step 5-9 と /channel-setup Step 3.5 の不足項目を解消してください。"
+                    "/channel-new 初回モード Step 5-9 と再生成モード Step R3.5 の不足項目を解消してください。"
                     "意図的にスキップする場合は docs/channel/ttp-seed-confirmation.md に "
                     "ユーザー承認済み例外として未反映項目を明記し、最後に `uv run yt-doctor --json` で "
                     "`ttp_wf_new_readiness` が ok になることを確認してください"
@@ -1135,7 +1135,7 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
         category=DATA_CATEGORY,
         message=(
             "TTP 対象承認・branding snapshot・benchmark docs・thumbnail / music readiness が "
-            "/wf-new 接続可能（/channel-setup 完了相当）"
+            "/wf-new 接続可能（/channel-new 再生成モード完了相当）"
         ),
     )
 
@@ -2048,7 +2048,7 @@ def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
         next_action={
             "kind": "human",
             "instructions": (
-                "/channel-setup で config/skills/thumbnail.yaml と config/skills/suno.yaml を再確認し、"
+                "/channel-new（再生成モード）で config/skills/thumbnail.yaml と config/skills/suno.yaml を再確認し、"
                 "descriptions.md の parse 失敗は /video-description で再生成してください"
             ),
         },

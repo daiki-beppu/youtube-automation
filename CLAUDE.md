@@ -118,7 +118,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 ### スクリプト配置
 
 - **skill 固有のスクリプト**は `.claude/skills/<skill>/references/` に配置する（例: `.claude/skills/videoup/references/generate_videos.sh`）
-- 共通スクリプト（例: `gcp-bootstrap.sh` / `gcp-terraform-apply.sh`）も該当 skill の `references/` 配下に置く（現状は `.claude/skills/channel-setup/references/`）。ルート直下に `scripts/` ディレクトリは設けない
+- 共通スクリプト（例: `gcp-bootstrap.sh` / `gcp-terraform-apply.sh`）も該当 skill の `references/` 配下に置く（現状は `.claude/skills/channel-new/references/`）。ルート直下に `scripts/` ディレクトリは設けない
 
 ### テスト
 
