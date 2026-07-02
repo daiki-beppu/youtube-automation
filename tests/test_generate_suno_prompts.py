@@ -11,6 +11,7 @@ import yaml
 
 from youtube_automation.scripts.generate_suno_prompts import build_prompt_entries, generate, main
 from youtube_automation.utils import skill_config
+from youtube_automation.utils.exceptions import ConfigError
 
 # `_skills/<skill>/config.default.yaml` の解決元になる editable install のソースツリー
 _DEFAULT_YAML = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "config.default.yaml"
@@ -1401,6 +1402,25 @@ def test_default_yaml_enables_style_variation_with_pools():
     assert all(isinstance(pool, list) and pool for pool in pools.values())
 
 
+@pytest.mark.parametrize(
+    ("style_variation", "error_pattern"),
+    [
+        ([], r"suno\.style_variation は mapping"),
+        ({"enabled": "yes"}, r"enabled は bool"),
+        ({"enabled": True, "pools": []}, r"pools は mapping"),
+        ({"enabled": True, "pools": {"texture": "warm texture"}}, r"texture は list\[str\]"),
+        ({"enabled": True, "pools": {"texture": [3]}}, r"descriptor は非空文字列"),
+        ({"enabled": True, "pools": {"texture": [""]}}, r"descriptor は非空文字列"),
+    ],
+)
+def test_style_variation_rejects_invalid_config_shapes(channel_dir, tmp_path, style_variation, error_pattern):
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", style_variation=style_variation)
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=_four_distinct_entries(), tracks_top=8)
+
+    with pytest.raises(ConfigError, match=error_pattern):
+        build_prompt_entries(patterns_path)
+
+
 def test_style_variation_makes_entry_style_first_lines_distinct(channel_dir, tmp_path):
     """要件1: Given 複数 entry のインスト yaml (default で variation 有効)
     When build_prompt_entries を呼ぶ
@@ -1468,6 +1488,10 @@ def test_style_variation_skips_explicit_style_variant_entries(channel_dir, tmp_p
         channel_dir,
         genre_line="lo-fi jazz, soft piano",
         style_variants={"ambient": {"name": "ambient pad", "genre_line": variant_genre}},
+        style_variation={
+            "enabled": True,
+            "pools": {"texture": ["alpha texture", "beta texture", "gamma texture"], "rhythm": []},
+        },
     )
     entries_def = _four_distinct_entries()
     entries_def[2]["style"] = "ambient"  # 3 番目 (通し番号 2) だけ明示 variant
@@ -1478,8 +1502,8 @@ def test_style_variation_skips_explicit_style_variant_entries(channel_dir, tmp_p
     first_lines = _style_first_lines(entries)
     # variant entry は variant genre_line そのまま (descriptor なし)
     assert first_lines[2] == f"slow, {variant_genre},"
-    # variant 以外の 2 entry 目以降には descriptor が付き互いに異なる
-    assert first_lines[1] != first_lines[3]
+    assert first_lines[1] == "slow, lo-fi jazz, soft piano, alpha texture,"
+    assert first_lines[3] == "slow, lo-fi jazz, soft piano, gamma texture,"
     assert len(set(first_lines)) == 4
 
 

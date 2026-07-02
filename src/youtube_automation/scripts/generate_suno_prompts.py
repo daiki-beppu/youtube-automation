@@ -7,6 +7,7 @@ import math
 import re
 import sys
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -169,12 +170,8 @@ def _collect_video_analysis_presets() -> tuple[str, str]:
     return top_genre, ", ".join(exclude_seen)
 
 
-def _style_line(tempo: str | None, effective_style: str, variation_descriptor: str = "") -> str:
-    """Styles 欄の 1 行目（`<tempo>, <style>[, <variation>],`）を組み立てる共有部品.
-
-    md 出力と JSON 出力で同一の文字列を使うことでドリフトを防ぐ。
-    variation_descriptor は #1456 の自動バリエーション句（空なら従来形式のまま）。
-    """
+def _style_line(tempo: str | None, effective_style: str, variation_descriptor: str) -> str:
+    """Styles 欄の 1 行目を組み立てる共有部品."""
     parts = [tempo] if tempo else []
     parts.append(effective_style)
     if variation_descriptor:
@@ -182,21 +179,9 @@ def _style_line(tempo: str | None, effective_style: str, variation_descriptor: s
     return ", ".join(parts) + ","
 
 
-# ---------------------------------------------------------------------------
-# Style 自動バリエーション (#1456): entry ごとに texture / rhythm feel の
-# descriptor を決定的に割り当て、Style 第 1 行の同質化を防ぐ。
-# コアジャンル (genre_line) は変えず、形容詞句の付与のみに限定する。
-# ---------------------------------------------------------------------------
-
-
-def _build_variation_sequence(pools: dict) -> list[str]:
-    """`style_variation.pools` から descriptor の割り当て列を構築する.
-
-    axis 名の辞書順で round-robin に interleave する（例: rhythm[0], texture[0],
-    rhythm[1], texture[1], ...）。YAML の記述順や deep-merge の結果順に依存させず、
-    同じ pools からは常に同じ列が得られる（決定性）。
-    """
-    axes = [pools[name] for name in sorted(pools) if isinstance(pools[name], list) and pools[name]]
+def _build_variation_sequence(pools: Mapping[str, list[str]]) -> list[str]:
+    """`style_variation.pools` から descriptor の割り当て列を構築する."""
+    axes = [pools[name] for name in sorted(pools) if pools[name]]
     if not axes:
         return []
     sequence: list[str] = []
@@ -208,16 +193,52 @@ def _build_variation_sequence(pools: dict) -> list[str]:
 
 
 def _variation_descriptor(entry_index: int, sequence: list[str]) -> str:
-    """コレクション内の entry 通し番号 (0-based) に対する descriptor を返す.
-
-    先頭 entry (index 0) はコレクションの基準スタイルとして base style を維持する
-    （descriptor なし）。これにより単一 entry の既存コレクションは出力が変わらず、
-    複数 entry のときだけ 2 entry 目以降に微差が付く（後方互換）。
-    2 entry 目以降は sequence を循環割り当てする。
-    """
+    """コレクション内の entry 通し番号に対する descriptor を返す."""
     if entry_index == 0 or not sequence:
         return ""
     return sequence[(entry_index - 1) % len(sequence)]
+
+
+@dataclass(frozen=True)
+class _ResolvedStyleVariation:
+    enabled: bool
+    sequence: list[str]
+
+
+def _resolve_style_variation(raw: object) -> _ResolvedStyleVariation:
+    if raw is None:
+        return _ResolvedStyleVariation(enabled=False, sequence=[])
+    if not isinstance(raw, Mapping):
+        raise ConfigError(f"suno.style_variation は mapping である必要があります: {raw!r}")
+
+    enabled = raw.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ConfigError(f"suno.style_variation.enabled は bool である必要があります: {enabled!r}")
+
+    pools_raw = raw.get("pools", {})
+    if pools_raw is None:
+        pools_raw = {}
+    if not isinstance(pools_raw, Mapping):
+        raise ConfigError(f"suno.style_variation.pools は mapping である必要があります: {pools_raw!r}")
+
+    pools: dict[str, list[str]] = {}
+    for axis, descriptors_raw in pools_raw.items():
+        if not isinstance(axis, str) or not axis.strip():
+            raise ConfigError(f"suno.style_variation.pools の axis 名は非空文字列である必要があります: {axis!r}")
+        if not isinstance(descriptors_raw, list):
+            raise ConfigError(
+                f"suno.style_variation.pools.{axis} は list[str] である必要があります: {descriptors_raw!r}"
+            )
+        descriptors: list[str] = []
+        for descriptor in descriptors_raw:
+            if not isinstance(descriptor, str) or not descriptor.strip():
+                raise ConfigError(
+                    f"suno.style_variation.pools.{axis} の descriptor は非空文字列である必要があります: {descriptor!r}"
+                )
+            descriptors.append(descriptor)
+        pools[axis] = descriptors
+
+    return _ResolvedStyleVariation(enabled=enabled, sequence=_build_variation_sequence(pools) if enabled else [])
 
 
 @dataclass
@@ -410,10 +431,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     style_influence = suno.get("style_influence", 50)
     weirdness = suno.get("weirdness", 50)
 
-    # Style 自動バリエーション (#1456): enabled のとき entry 通し番号で descriptor を循環割り当てる
-    style_variation = suno.get("style_variation") or {}
-    variation_enabled = bool(style_variation.get("enabled", False))
-    variation_sequence = _build_variation_sequence(style_variation.get("pools") or {}) if variation_enabled else []
+    style_variation = _resolve_style_variation(suno.get("style_variation"))
 
     base_parts = [genre_line]
     if mood_descriptors:
@@ -441,7 +459,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
 
     resolved: list[_ResolvedPattern] = []
     expected_external_lyrics_names: set[str] = set()
-    entry_index = 0  # コレクション内の entry (= scene) 通し番号。バリエーション割り当ての基準 (#1456)
+    entry_index = 0
     for pattern in patterns:
         tempo = pattern.get("tempo")
         style_key = pattern.get("style")
@@ -471,13 +489,11 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
             else:
                 lyrics_by_scene.append(fallback_lyrics)
 
-            # 明示 variant がある entry は override を最優先し自動バリエーションを付けない (#1456)。
-            # entry_index は明示 variant の entry でも消費し、後続 entry の割り当てを YAML 上の
-            # 位置だけで決まる決定的なものに保つ。
             descriptor = ""
-            if variation_enabled and not has_explicit_variant:
-                descriptor = _variation_descriptor(entry_index, variation_sequence)
+            if style_variation.enabled and not has_explicit_variant:
+                descriptor = _variation_descriptor(entry_index, style_variation.sequence)
             style_lines.append(_style_line(tempo, effective_style, descriptor))
+            # Explicit variants keep their override style but still reserve the YAML entry position.
             entry_index += 1
 
         resolved.append(
@@ -594,8 +610,7 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
     - 禁止アーティスト名チェック (エラー)
     - auto_lyrics_structure による歌詞構造の自動補強
 
-    Style 重複検証 (#1456):
-    - 全 entry の Style 文 (第 1 行 + scene 行) が完全一致する組があれば警告する
+    Style 重複検証 (#1456): 全 entry の Style 文が完全一致する組があれば警告する
     """
     resolved = _resolve_prompts(patterns_path)
     suno = load_skill_config("suno")
@@ -643,9 +658,6 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
             entry.update(resolved.advanced_json_fields)
             entries.append(entry)
 
-    # Style 重複検証 (#1456): 完全一致する Style 文は Suno 上で同質の曲を量産するため警告する。
-    # バリエーション無効の legacy 運用でも scene 差分があれば full_style はユニークになるので、
-    # ここで検知されるのは scene まで同一という設計ミスか pool 枯渇の異常ケースのみ。
     style_counts = Counter(entry["style"] for entry in entries)
     for style_text, count in style_counts.items():
         if count > 1:
