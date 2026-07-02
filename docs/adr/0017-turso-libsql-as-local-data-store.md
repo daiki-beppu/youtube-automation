@@ -2,7 +2,9 @@
 
 ## Status
 
-accepted (2026-06-15)
+accepted (2026-06-15)。実装は未着手（`feat/ts-rewrite` に libsql 依存・schema なし）。
+
+2026-07-02 の ADR 監査で 0009 から番号振り直し（並行 PR による番号レースの解消、先着優先ルール）。旧文書中の「ADR-0009」は文脈により本 ADR を指す。
 
 ## Context
 
