@@ -24,11 +24,12 @@ import google.auth.exceptions
 import pytest
 from googleapiclient.errors import HttpError
 
-from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler, _redact
+from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler, _redact, resolve_client_secrets_location
 from youtube_automation.utils.exceptions import (
     AuthError,
     AutomationError,
     ConfigError,
+    ValidationError,
     YouTubeAPIError,
 )
 
@@ -294,6 +295,116 @@ class TestClientSecretsFallback:
         handler = YouTubeOAuthHandler()
 
         assert handler.client_secrets_file == tmp_path / "auth" / "client_secrets.json"
+
+    def test_should_use_submodule_candidate_before_one_password_fallback(self, tmp_path: Path, monkeypatch):
+        """Given submodule 互換 path に client_secrets.json がある
+        When ``YouTubeOAuthHandler()``
+        Then 1Password fallback を呼ばずにその path を使う。
+        """
+        self._force_fallback_path(monkeypatch, tmp_path)
+        submodule_path = tmp_path / "automation" / "auth" / "client_secrets.json"
+        submodule_path.parent.mkdir(parents=True)
+        submodule_path.write_text('{"installed": {}}\n', encoding="utf-8")
+        get_client_secrets_path = MagicMock(side_effect=ConfigError("should not be called"))
+        monkeypatch.setattr(
+            "youtube_automation.utils.secrets.get_client_secrets_path",
+            get_client_secrets_path,
+        )
+
+        handler = YouTubeOAuthHandler()
+
+        assert handler.client_secrets_file == submodule_path
+        get_client_secrets_path.assert_not_called()
+
+    def test_should_report_invalid_location_for_client_secrets_directory(self, tmp_path: Path, monkeypatch):
+        """Given client_secrets.json がディレクトリ
+        When location を解決
+        Then secret fallback ではなく invalid-file として扱う。
+        """
+        self._force_fallback_path(monkeypatch, tmp_path)
+        invalid_path = tmp_path / "auth" / "client_secrets.json"
+        invalid_path.mkdir(parents=True)
+
+        assert resolve_client_secrets_location(tmp_path) == ("invalid-file", invalid_path)
+
+    def test_validate_client_secrets_rejects_directory(self, tmp_path: Path, monkeypatch):
+        """Given client_secrets.json が通常ファイルではない
+        When OAuth handler が検証
+        Then missing ではなく validation error として fail する。
+        """
+        self._force_fallback_path(monkeypatch, tmp_path)
+        invalid_path = tmp_path / "auth" / "client_secrets.json"
+        invalid_path.mkdir(parents=True)
+        handler = YouTubeOAuthHandler()
+
+        with pytest.raises(ValidationError) as exc_info:
+            handler._validate_client_secrets()
+
+        assert "通常ファイル" in str(exc_info.value)
+
+    def test_validate_client_secrets_rejects_web_only_file(self, tmp_path: Path, monkeypatch):
+        """Given Web application の client_secrets.json
+        When OAuth handler が検証
+        Then Desktop app の installed 必須契約で fail する。
+        """
+        self._force_fallback_path(monkeypatch, tmp_path)
+        client_secrets = tmp_path / "auth" / "client_secrets.json"
+        client_secrets.parent.mkdir(parents=True)
+        client_secrets.write_text(
+            '{"web":{"client_id":"x","client_secret":"y","redirect_uris":["http://localhost"]}}',
+            encoding="utf-8",
+        )
+        handler = YouTubeOAuthHandler()
+
+        with pytest.raises(ValidationError) as exc_info:
+            handler._validate_client_secrets()
+
+        assert "Desktop app" in str(exc_info.value)
+        assert "installed" in str(exc_info.value)
+
+    def test_validate_client_secrets_rejects_missing_installed_keys(self, tmp_path: Path, monkeypatch):
+        """Given installed block の必須キーが不足
+        When OAuth handler が検証
+        Then OAuth flow 実行前に validation error で止まる。
+        """
+        self._force_fallback_path(monkeypatch, tmp_path)
+        client_secrets = tmp_path / "auth" / "client_secrets.json"
+        client_secrets.parent.mkdir(parents=True)
+        client_secrets.write_text('{"installed":{"client_id":"x"}}', encoding="utf-8")
+        handler = YouTubeOAuthHandler()
+
+        with pytest.raises(ValidationError) as exc_info:
+            handler._validate_client_secrets()
+
+        assert "必須キー不足" in str(exc_info.value)
+        assert "client_secret" in str(exc_info.value)
+
+    def test_missing_client_secrets_error_follows_google_auth_platform_contract(self, tmp_path: Path, monkeypatch):
+        """Missing secrets must point every direct OAuth entrypoint at the new Console UI."""
+        self._force_fallback_path(monkeypatch, tmp_path)
+        monkeypatch.setattr(
+            "youtube_automation.utils.secrets.get_client_secrets_path",
+            MagicMock(side_effect=ConfigError("op read failed")),
+        )
+        handler = YouTubeOAuthHandler()
+
+        with pytest.raises(FileNotFoundError) as exc_info:
+            handler._validate_client_secrets()
+
+        message = str(exc_info.value)
+        for expected in (
+            "Google Auth Platform",
+            "Audience > Test users",
+            "403 access_denied",
+            "Clients > Create client",
+            "Desktop app",
+            "Add secret",
+            "auth/client_secrets.template.json",
+        ):
+            assert expected in message
+        assert "OAuth 2.0 認証情報を作成" not in message
+        assert "作成直後" not in message
+        assert "JSON をダウンロード" not in message
 
     def test_should_not_swallow_non_config_error(self, tmp_path: Path, monkeypatch):
         """Given 1Password 取得が ``RuntimeError`` を raise（想定外）

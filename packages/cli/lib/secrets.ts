@@ -16,7 +16,7 @@
 // Python 版の lru_cache メモ化は移植しない: テスト契約が同一プロセスで env を
 // 差し替えながら resolveSecret を繰り返し呼ぶため、都度解決する必要がある。
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { channelDir } from "@youtube-automation/core/config";
@@ -85,31 +85,56 @@ export const resolveSecret = async (name: string): Promise<string> => {
   );
 };
 
-// チャンネルディレクトリ配下の OAuth client_secrets ファイルパス。
-const CLIENT_SECRETS_RELATIVE_PATH = join("auth", "client_secrets.json");
+const CLIENT_SECRETS_FILENAME = "client_secrets.json";
+
+const readClientSecretsFile = (filePath: string): string | null => {
+  if (!existsSync(filePath)) {
+    return null;
+  }
+  if (!statSync(filePath).isFile()) {
+    throw new Error(
+      `config: client_secrets.json は通常ファイルである必要があります: ${filePath}`
+    );
+  }
+  return readFileSync(filePath, "utf-8");
+};
 
 /**
  * OAuth client_secrets.json の **中身** (JSON 文字列) を解決する。
  *
  * Python `auth/oauth_handler` の探索順を踏襲した fallback chain:
- *   1. `CLIENT_SECRETS_JSON` 環境変数 (JSON content を直接保持)
+ *   1. `CLIENT_SECRETS_DIR/client_secrets.json` 明示 override
  *   2. `<channel>/auth/client_secrets.json` ファイル
- *   3. `op read SECRET_REFS.CLIENT_SECRETS_JSON`
+ *   3. `<channel>/automation/auth/client_secrets.json` ファイル
+ *   4. `CLIENT_SECRETS_JSON` env / `op read SECRET_REFS.CLIENT_SECRETS_JSON`
  *
  * @returns client_secrets.json の内容文字列 (パスではなく content)
  * @throws {Error} `config:` prefix — 全ての取得経路で失敗した場合
  */
 export const resolveClientSecretsJson = async (): Promise<string> => {
-  const envValue = process.env.CLIENT_SECRETS_JSON;
-  if (envValue) {
-    return envValue;
+  const clientSecretsDir = process.env.CLIENT_SECRETS_DIR;
+  if (clientSecretsDir) {
+    const overridePath = join(clientSecretsDir, CLIENT_SECRETS_FILENAME);
+    const content = readClientSecretsFile(overridePath);
+    if (content !== null) {
+      return content;
+    }
+    throw new Error(
+      `config: CLIENT_SECRETS_DIR に client_secrets.json が見つかりません: ${overridePath}`
+    );
   }
 
-  const filePath = join(channelDir(), CLIENT_SECRETS_RELATIVE_PATH);
-  if (existsSync(filePath)) {
-    return readFileSync(filePath, "utf-8");
+  const dir = channelDir();
+  for (const filePath of [
+    join(dir, "auth", CLIENT_SECRETS_FILENAME),
+    join(dir, "automation", "auth", CLIENT_SECRETS_FILENAME),
+  ]) {
+    const content = readClientSecretsFile(filePath);
+    if (content !== null) {
+      return content;
+    }
   }
 
-  // env も file も無ければ op 経路 (+ 最終 throw) を resolveSecret に委ねる。
+  // file が無ければ env / op 経路 (+ 最終 throw) を resolveSecret に委ねる。
   return await resolveSecret("CLIENT_SECRETS_JSON");
 };

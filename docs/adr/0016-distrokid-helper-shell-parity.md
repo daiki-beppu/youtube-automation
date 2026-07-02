@@ -1,5 +1,9 @@
 # distrokid-helper は suno-helper から helper extension shell だけを取り込む
 
+## Status
+
+accepted (2026-07-01)。
+
 distrokid-helper は、先行している suno-helper の機能一式ではなく helper extension shell を取り込む。開発ゲート、manifest 管理、server 連携、popup/background/content の責務境界、エラー表示の考え方は揃えるが、DistroKid 固有の安全境界である「フォーム注入後にユーザーが目視確認して手動で続行する」運用を守るため popup UI は維持し、overlay / MAIN world bridge / download watcher / resume state は移植しない。
 
 ## Consequences

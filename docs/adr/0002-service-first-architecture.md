@@ -1,5 +1,9 @@
 # Service-first architecture: zod schema as source of truth, MCP/CLI as thin clients
 
+## Status
+
+accepted (2026-06-02)。実装は `feat/ts-rewrite` 上で進行中（cutover #790 で main へ反映予定）。
+
 ## Context
 
 ADR 0001 で確定した「Python → TS(bun) big-bang 移行」は `packages/core` (純ロジック) + `packages/cli` (yt-* 群) + 将来の `packages/mcp` (MCP server) の 3 workspace 構造で進む。60+ 子 issue を AFK agent (takt) が並列に書き、最終的に MCP server から CLI と同じ機能を expose する設計。

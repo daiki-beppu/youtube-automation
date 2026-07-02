@@ -258,18 +258,26 @@ describe("resolveSecret failures", () => {
 
 // --- resolveClientSecretsJson (#822 new helper) --------------------------
 
-// Mirrors the ADR-0003 §4 fallback chain:
-//   1. CLIENT_SECRETS_JSON env  →  2. <channel>/auth/client_secrets.json
-//   →  3. op read SECRET_REFS.CLIENT_SECRETS_JSON
+// Mirrors the Python auth/oauth_handler fallback chain:
+//   1. CLIENT_SECRETS_DIR/client_secrets.json explicit override
+//   2. <channel>/auth/client_secrets.json
+//   3. <channel>/automation/auth/client_secrets.json
+//   4. CLIENT_SECRETS_JSON env / op read SECRET_REFS.CLIENT_SECRETS_JSON
 // The return value is the JSON *content* string (not a path), per the
 // `clientSecretsJson: string` contract.
 describe("resolveClientSecretsJson", () => {
   let savedChannelDir: string | undefined;
+  let savedClientSecretsDir: string | undefined;
+  let savedClientSecretsJson: string | undefined;
   const tmpDirs: string[] = [];
 
   beforeEach(() => {
     savedChannelDir = process.env.CHANNEL_DIR;
+    savedClientSecretsDir = process.env.CLIENT_SECRETS_DIR;
+    savedClientSecretsJson = process.env.CLIENT_SECRETS_JSON;
     Reflect.deleteProperty(process.env, "CHANNEL_DIR");
+    Reflect.deleteProperty(process.env, "CLIENT_SECRETS_DIR");
+    Reflect.deleteProperty(process.env, "CLIENT_SECRETS_JSON");
     reset();
   });
 
@@ -278,6 +286,16 @@ describe("resolveClientSecretsJson", () => {
       Reflect.deleteProperty(process.env, "CHANNEL_DIR");
     } else {
       process.env.CHANNEL_DIR = savedChannelDir;
+    }
+    if (savedClientSecretsDir === undefined) {
+      Reflect.deleteProperty(process.env, "CLIENT_SECRETS_DIR");
+    } else {
+      process.env.CLIENT_SECRETS_DIR = savedClientSecretsDir;
+    }
+    if (savedClientSecretsJson === undefined) {
+      Reflect.deleteProperty(process.env, "CLIENT_SECRETS_JSON");
+    } else {
+      process.env.CLIENT_SECRETS_JSON = savedClientSecretsJson;
     }
     reset();
     while (tmpDirs.length > 0) {
@@ -295,10 +313,12 @@ describe("resolveClientSecretsJson", () => {
     return dir;
   };
 
-  test("returns the CLIENT_SECRETS_JSON env content without reading file or op", async () => {
-    // Given the JSON content supplied directly via env (step 1)
-    const json = '{"installed":{"client_id":"from-env"}}';
-    process.env.CLIENT_SECRETS_JSON = json;
+  test("reads CLIENT_SECRETS_DIR/client_secrets.json when override is set", async () => {
+    // Given an explicit directory override (step 1)
+    const dir = makeChannelDir();
+    const json = '{"installed":{"client_id":"from-dir"}}';
+    writeFileSync(join(dir, "client_secrets.json"), json, "utf-8");
+    process.env.CLIENT_SECRETS_DIR = dir;
     const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
     const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
       fakeProc("op-json\n", 0)
@@ -307,8 +327,46 @@ describe("resolveClientSecretsJson", () => {
     // When resolving the client secrets
     const result = await resolveClientSecretsJson();
 
-    // Then the env content wins and op is never spawned
+    // Then the override content wins and op is never spawned
     expect(result).toBe(json);
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    whichSpy.mockRestore();
+    spawnSpy.mockRestore();
+  });
+
+  test("does not fall back when CLIENT_SECRETS_DIR is set but missing the file", async () => {
+    // Given an explicit override dir without client_secrets.json
+    const dir = makeChannelDir();
+    process.env.CLIENT_SECRETS_DIR = dir;
+    process.env.CLIENT_SECRETS_JSON = '{"installed":{"client_id":"from-env"}}';
+    const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
+    const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
+      fakeProc("op-json\n", 0)
+    );
+
+    // Then the override is authoritative and env/op are not consulted
+    await expect(resolveClientSecretsJson()).rejects.toThrow(/^config:/u);
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    whichSpy.mockRestore();
+    spawnSpy.mockRestore();
+  });
+
+  test("does not fall back when CLIENT_SECRETS_DIR/client_secrets.json is a directory", async () => {
+    // Given an explicit override whose client_secrets.json path exists but is
+    // not a regular file
+    const dir = makeChannelDir();
+    mkdirSync(join(dir, "client_secrets.json"));
+    process.env.CLIENT_SECRETS_DIR = dir;
+    process.env.CLIENT_SECRETS_JSON = '{"installed":{"client_id":"from-env"}}';
+    const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
+    const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
+      fakeProc("op-json\n", 0)
+    );
+
+    // Then the invalid override is authoritative and env/op are not consulted
+    await expect(resolveClientSecretsJson()).rejects.toThrow(/^config:/u);
     expect(spawnSpy).not.toHaveBeenCalled();
 
     whichSpy.mockRestore();
@@ -339,8 +397,80 @@ describe("resolveClientSecretsJson", () => {
     spawnSpy.mockRestore();
   });
 
-  test("falls back to op read when env and the channel file are absent", async () => {
-    // Given a channel dir without an auth/client_secrets.json file (step 3)
+  test("does not fall back when <channel>/auth/client_secrets.json is a directory", async () => {
+    // Given the primary channel auth candidate exists but is not a regular file
+    const dir = makeChannelDir();
+    mkdirSync(join(dir, "auth", "client_secrets.json"), { recursive: true });
+    process.env.CHANNEL_DIR = dir;
+    process.env.CLIENT_SECRETS_JSON = '{"installed":{"client_id":"from-env"}}';
+    reset();
+    const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
+    const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
+      fakeProc("op-json\n", 0)
+    );
+
+    // Then the invalid file candidate fails as config error without fallback
+    await expect(resolveClientSecretsJson()).rejects.toThrow(/^config:/u);
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    whichSpy.mockRestore();
+    spawnSpy.mockRestore();
+  });
+
+  test("reads <channel>/automation/auth/client_secrets.json before env fallback", async () => {
+    // Given only the submodule-compatible auth file (step 3)
+    const dir = makeChannelDir();
+    const json = '{"installed":{"client_id":"from-submodule"}}';
+    mkdirSync(join(dir, "automation", "auth"), { recursive: true });
+    writeFileSync(
+      join(dir, "automation", "auth", "client_secrets.json"),
+      json,
+      "utf-8"
+    );
+    process.env.CHANNEL_DIR = dir;
+    process.env.CLIENT_SECRETS_JSON = '{"installed":{"client_id":"from-env"}}';
+    reset();
+    const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
+    const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
+      fakeProc("op-json\n", 0)
+    );
+
+    // When resolving with no primary auth file
+    const result = await resolveClientSecretsJson();
+
+    // Then the submodule file is returned before env/op fallback
+    expect(result).toBe(json);
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    whichSpy.mockRestore();
+    spawnSpy.mockRestore();
+  });
+
+  test("returns CLIENT_SECRETS_JSON env only after file candidates are absent", async () => {
+    // Given the JSON content supplied directly via fallback env (step 4)
+    const dir = makeChannelDir();
+    const json = '{"installed":{"client_id":"from-env"}}';
+    process.env.CHANNEL_DIR = dir;
+    process.env.CLIENT_SECRETS_JSON = json;
+    reset();
+    const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
+    const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
+      fakeProc("op-json\n", 0)
+    );
+
+    // When resolving the client secrets
+    const result = await resolveClientSecretsJson();
+
+    // Then the env content wins at fallback and op is never spawned
+    expect(result).toBe(json);
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    whichSpy.mockRestore();
+    spawnSpy.mockRestore();
+  });
+
+  test("falls back to op read when env and the channel files are absent", async () => {
+    // Given a channel dir without any client_secrets.json file (step 4 op path)
     const dir = makeChannelDir();
     process.env.CHANNEL_DIR = dir;
     reset();

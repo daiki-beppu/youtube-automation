@@ -1,5 +1,9 @@
 # 開発ロードマップ: cutover 中心の 4 フェーズ計画
 
+## Status
+
+accepted (2026-06-25)。実装は `feat/ts-rewrite` 上で進行中（cutover #790 で main へ反映予定）。
+
 ## Context
 
 Python v5.5.11 が main で運用中、`feat/ts-rewrite` で MCP tool 中心の 0 ベース TS 再設計が並走している (ADR-0001, 0002, 0007)。外部ユーザー（数十人規模のコミュニティ）が `uv add git+https://` で Python 版を導入し、Claude Code の skills 経由で運用している。cutover のタイミング、移行戦略、並走レーンの優先順位を決める必要がある。

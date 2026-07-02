@@ -134,9 +134,12 @@ def test_fetch_branding_snapshot_writes_untrusted_json_for_multiple_ids(
                         "high": {"url": "https://example.com/a-high.jpg", "width": 800, "height": 800},
                     },
                 },
+                "brandingSettings": {},
+                "localizations": {},
             },
             {
                 "id": "UC_B",
+                "snippet": {},
                 "brandingSettings": {
                     "channel": {"keywords": "b"},
                     "image": {
@@ -144,6 +147,7 @@ def test_fetch_branding_snapshot_writes_untrusted_json_for_multiple_ids(
                         "bannerMobileImageUrl": "https://example.com/b-mobile.jpg",
                     },
                 },
+                "localizations": {},
             },
         ],
         "channel_image_references": [

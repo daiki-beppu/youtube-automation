@@ -1,5 +1,9 @@
 # Chrome 拡張の配布形態: GitHub Release zip + バージョン互換チェック
 
+## Status
+
+accepted (2026-06-16)。
+
 ## Context
 
 Chrome 拡張 (suno-helper / distrokid-helper) を当初は運営者 1 人で使っていたが、tayk ユーザー 10 人程度への限定配布に拡大する。配布形態・バージョニング・互換性担保の方針を決める必要があった。
