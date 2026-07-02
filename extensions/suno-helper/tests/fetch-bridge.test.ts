@@ -69,16 +69,16 @@ describe("extractAuthHeader: Authorization の抽出", () => {
 });
 
 describe("parseClipsFromGenerateResponse: 生成投入レスポンスの解析 (fail-soft)", () => {
-  it("Given 実機形 {id, clips: [{id, status}]} When 解析する Then ObservedClip[] を返す", () => {
+  it("Given 実機形 {id, clips: [{id, status, duration?}]} When 解析する Then ObservedClip[] を返す", () => {
     const json = {
       id: "batch-1",
       clips: [
-        { id: "c1", status: "submitted", title: "t1", extra: 1 },
+        { id: "c1", status: "submitted", title: "t1", duration: 241.2, extra: 1 },
         { id: "c2", status: "submitted" },
       ],
     };
     expect(parseClipsFromGenerateResponse(json)).toEqual([
-      { id: "c1", status: "submitted" },
+      { id: "c1", status: "submitted", duration: 241.2 },
       { id: "c2", status: "submitted" },
     ]);
   });
@@ -95,13 +95,15 @@ describe("parseClipsFromGenerateResponse: 生成投入レスポンスの解析 (
 
 describe("parseClipsFromFeedResponse: feed レスポンスの解析 (両形対応・fail-soft)", () => {
   it("Given {clips: [...]} 形 When 解析する Then ObservedClip[] を返す", () => {
-    expect(parseClipsFromFeedResponse({ clips: [{ id: "c1", status: "streaming" }] })).toEqual([
-      { id: "c1", status: "streaming" },
+    expect(parseClipsFromFeedResponse({ clips: [{ id: "c1", status: "streaming", duration: 182.4 }] })).toEqual([
+      { id: "c1", status: "streaming", duration: 182.4 },
     ]);
   });
 
   it("Given 素の配列形 When 解析する Then ObservedClip[] を返す", () => {
-    expect(parseClipsFromFeedResponse([{ id: "c1", status: "complete" }])).toEqual([{ id: "c1", status: "complete" }]);
+    expect(parseClipsFromFeedResponse([{ id: "c1", status: "complete", duration: 0 }])).toEqual([
+      { id: "c1", status: "complete", duration: 0 },
+    ]);
   });
 
   it("Given 形が崩れた JSON When 解析する Then null（throw しない）", () => {

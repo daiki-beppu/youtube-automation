@@ -25,7 +25,7 @@ export interface ClipTracker {
   getPendingSubmittedIds(): string[];
   /** この run の generate レスポンスで観測した clip id 一覧。playlist 対象の SSOT。 */
   getSubmittedIds(): string[];
-  /** 観測済み clip の duration (sec)。未観測または feed に duration が無い場合は undefined。 */
+  /** 観測済み clip の duration (sec)。未観測または generate/feed に duration が無い場合は undefined。 */
   getDuration(clipId: string): number | undefined;
   /** run 開始時に playlist 対象 ID だけを初期化する。status 集計は残す。 */
   clearSubmittedIds(): void;

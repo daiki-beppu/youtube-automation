@@ -32,6 +32,7 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
     expect(tracker.submissionCount()).toBe(1);
     expect(tracker.getInFlightCount()).toBe(2);
     expect(tracker.getSubmittedIds()).toEqual(["c1", "c2"]);
+    expect(tracker.getDuration("c1")).toBe(241.2);
     detach();
   });
 

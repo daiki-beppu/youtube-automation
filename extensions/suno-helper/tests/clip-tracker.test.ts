@@ -16,10 +16,10 @@ describe("createClipTracker: status ベースの in-flight 集計", () => {
     expect(tracker.getSubmittedIds()).toEqual([]);
   });
 
-  it("Given generate 観測（2 clip submitted） When 読む Then in-flight 2 / submission 1", () => {
+  it("Given generate 観測（2 clip submitted） When 読む Then in-flight 2 / submission 1 / duration を記録する", () => {
     const tracker = createClipTracker();
     tracker.registerSubmitted([
-      { id: "c1", status: "submitted" },
+      { id: "c1", status: "submitted", duration: 241.2 },
       { id: "c2", status: "submitted" },
     ]);
     expect(tracker.getInFlightCount()).toBe(2);
@@ -27,6 +27,8 @@ describe("createClipTracker: status ベースの in-flight 集計", () => {
     expect(tracker.hasObservedAnyTraffic()).toBe(true);
     expect(tracker.getPendingIds()).toEqual(["c1", "c2"]);
     expect(tracker.getPendingSubmittedIds()).toEqual(["c1", "c2"]);
+    expect(tracker.getDuration("c1")).toBe(241.2);
+    expect(tracker.getDuration("c2")).toBeUndefined();
   });
 
   it("Given feed 観測で complete へ遷移 When 読む Then in-flight から外れる（バグ本体の修正点）", () => {

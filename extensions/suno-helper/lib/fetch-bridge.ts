@@ -68,23 +68,25 @@ export function extractAuthHeader(input: RequestInfo | URL, init?: RequestInit):
   return null;
 }
 
-/** unknown JSON から `{id, status}` を持つ clip 配列を fail-soft で取り出す共通処理。 */
+/** unknown JSON から `{id, status, duration?}` を持つ clip 配列を fail-soft で取り出す共通処理。 */
 function parseClipArray(value: unknown): ObservedClip[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
   const clips: ObservedClip[] = [];
   for (const item of value) {
+    const clip = item as { duration?: unknown; id?: unknown; status?: unknown };
     if (
       typeof item === "object" &&
       item !== null &&
-      typeof (item as { id?: unknown }).id === "string" &&
-      typeof (item as { status?: unknown }).status === "string"
+      typeof clip.id === "string" &&
+      typeof clip.status === "string"
     ) {
-      clips.push({
-        id: (item as { id: string }).id,
-        status: (item as { status: string }).status,
-      });
+      const observed: ObservedClip = { id: clip.id, status: clip.status };
+      if (typeof clip.duration === "number") {
+        observed.duration = clip.duration;
+      }
+      clips.push(observed);
     }
   }
   return clips.length > 0 ? clips : null;
