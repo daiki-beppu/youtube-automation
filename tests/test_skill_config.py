@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 import yaml
 
@@ -66,6 +68,104 @@ def test_channel_override_merged(tmp_path, monkeypatch):
     assert gemini_block.get("brand_background") == "custom-color"
     # default.yaml の他のキーが残っていること (モデル名など)
     assert "model" in gemini_block
+
+
+def test_load_skill_config_json_override_wins_over_yaml(tmp_path, monkeypatch):
+    """JSON override が YAML override より優先されること."""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text(
+        yaml.safe_dump({"marker": "yaml"}),
+        encoding="utf-8",
+    )
+    (channel_dir / "config" / "skills" / "thumbnail.json").write_text(
+        json.dumps({"marker": "json"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
+
+    assert cfg.get("marker") == "json"
+
+
+def test_load_skill_config_falls_back_to_yaml_when_json_absent(tmp_path, monkeypatch):
+    """JSON が無い場合は既存 YAML override を読むこと."""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text(
+        yaml.safe_dump({"marker": "yaml"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
+
+    assert cfg.get("marker") == "yaml"
+
+
+def test_load_skill_config_json_root_must_be_mapping(tmp_path, monkeypatch):
+    """JSON override の root が dict 以外なら YAML fallback せず ConfigError."""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    (channel_dir / "config" / "skills" / "thumbnail.json").write_text("[]\n", encoding="utf-8")
+    (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text(
+        yaml.safe_dump({"marker": "yaml"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="root は dict"):
+        skill_config.load_skill_config("thumbnail", use_cache=False)
+
+
+def test_load_skill_config_broken_json_raises_without_yaml_fallback(tmp_path, monkeypatch):
+    """壊れた JSON override がある場合は YAML fallback せず ConfigError."""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    (channel_dir / "config" / "skills" / "thumbnail.json").write_text("{", encoding="utf-8")
+    (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text(
+        yaml.safe_dump({"marker": "yaml"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="skill-config 読み込み失敗"):
+        skill_config.load_skill_config("thumbnail", use_cache=False)
+
+
+def test_load_channel_override_json_wins_over_yaml(tmp_path, monkeypatch):
+    """load_channel_override() でも JSON override が YAML より優先されること."""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text(
+        yaml.safe_dump({"marker": "yaml"}),
+        encoding="utf-8",
+    )
+    (channel_dir / "config" / "skills" / "thumbnail.json").write_text(
+        json.dumps({"marker": "json"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_channel_override("thumbnail")
+
+    assert cfg == {"marker": "json"}
+
+
+def test_load_channel_override_falls_back_to_yaml_when_json_absent(tmp_path, monkeypatch):
+    """load_channel_override() でも JSON 不在時は YAML fallback すること."""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text(
+        yaml.safe_dump({"marker": "yaml"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_channel_override("thumbnail")
+
+    assert cfg == {"marker": "yaml"}
 
 
 def test_collection_ideate_freshness_days_default_comes_from_skill_config(tmp_path):

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, lstatSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { copyFile, lstat, mkdir, rename, rm } from "node:fs/promises";
-import { dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { extname, isAbsolute, join, resolve } from "node:path";
 import process from "node:process";
 
 import { toServiceError } from "../errors.ts";
@@ -19,6 +19,10 @@ import { readMasterupAudioConfig } from "./config.ts";
 import { MASTER_DIRNAME, MASTER_FILENAME } from "./constants.ts";
 import { buildFfmpegArgs, runFfmpeg } from "./ffmpeg.ts";
 import {
+  findChannelRootForCollection,
+  resolveCollectionPathForChannel,
+} from "./paths.ts";
+import {
   GenerateMasterOutputSchema,
   ParseableGenerateMasterInputSchema,
 } from "./schema.ts";
@@ -31,30 +35,6 @@ interface GenerateMasterDeps {
 const parseGenerateMasterInput = (input: unknown): GenerateMasterInput =>
   ParseableGenerateMasterInputSchema.parse(input);
 
-const isDirectory = (path: string): boolean => {
-  try {
-    return existsSync(path) && lstatSync(path).isDirectory();
-  } catch {
-    return false;
-  }
-};
-
-const findChannelRootForCollection = (
-  collection: string
-): string | undefined => {
-  let current = resolve(collection);
-  for (;;) {
-    if (isDirectory(join(current, "config", "channel"))) {
-      return current;
-    }
-    const parent = dirname(current);
-    if (parent === current) {
-      return undefined;
-    }
-    current = parent;
-  }
-};
-
 const resolveCollectionPath = (
   input: GenerateMasterInput,
   deps: Partial<GenerateMasterDeps> | undefined
@@ -62,16 +42,18 @@ const resolveCollectionPath = (
   if (input.collection === undefined) {
     return resolveCollectionDir(null);
   }
-  if (isAbsolute(input.collection)) {
-    return resolve(input.collection);
-  }
   const channelDir = input.channelDir ?? deps?.channelDir;
+  if (isAbsolute(input.collection)) {
+    return channelDir === undefined || channelDir.length === 0
+      ? resolve(input.collection)
+      : resolveCollectionPathForChannel(channelDir, input.collection);
+  }
   if (channelDir === undefined || channelDir.length === 0) {
     throw new Error(
       "validation: relative collection requires channel_dir or CHANNEL_DIR"
     );
   }
-  return resolve(channelDir, input.collection);
+  return resolveCollectionPathForChannel(channelDir, input.collection);
 };
 
 const resolveConfigChannelDir = (

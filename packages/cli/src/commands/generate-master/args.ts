@@ -1,9 +1,10 @@
-import { statSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
-
 import { err, ok, toServiceError } from "@youtube-automation/core";
 import { GenerateMasterInputSchema } from "@youtube-automation/core/generate-master";
-import type { GenerateMasterOutput } from "@youtube-automation/core/generate-master";
+
+import {
+  isCollectionCandidate,
+  isPathLikeCollectionToken,
+} from "./collection-candidate.ts";
 
 interface GenerateMasterRawInput {
   bitrate?: string;
@@ -145,46 +146,6 @@ const applyBooleanFlag = (
   return arg === "--json";
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const isNodeErrorCode = (error: unknown, code: string): boolean =>
-  isRecord(error) && error.code === code;
-
-const isDirectory = (path: string): boolean => {
-  try {
-    return statSync(path).isDirectory();
-  } catch (error) {
-    if (isNodeErrorCode(error, "ENOENT")) {
-      return false;
-    }
-    throw error;
-  }
-};
-
-const resolveCollectionCandidate = (
-  input: GenerateMasterRawInput,
-  value: string,
-  options: ParseOptions
-): string | undefined => {
-  if (isAbsolute(value)) {
-    return resolve(value);
-  }
-  const channelDir = input.channel_dir ?? options.channelDir;
-  return channelDir === undefined || channelDir.length === 0
-    ? undefined
-    : resolve(channelDir, value);
-};
-
-const isCollectionCandidate = (
-  input: GenerateMasterRawInput,
-  value: string,
-  options: ParseOptions
-): boolean => {
-  const candidate = resolveCollectionCandidate(input, value, options);
-  return candidate !== undefined && isDirectory(candidate);
-};
-
 const collectPinFirstValues = (
   rawArgs: string[],
   startIndex: number,
@@ -238,7 +199,8 @@ const applyCollectionAndPinFirst = (
     const trailingPinFirst = pendingPinFirst.at(-1);
     if (
       trailingPinFirst !== undefined &&
-      isCollectionCandidate(input, trailingPinFirst, options)
+      (isCollectionCandidate(input, trailingPinFirst, options) ||
+        isPathLikeCollectionToken(trailingPinFirst))
     ) {
       input.collection = trailingPinFirst;
       pendingPinFirst.pop();
@@ -314,45 +276,3 @@ export const parseGenerateMasterInput = (
     return err(toServiceError(error));
   }
 };
-
-const formatDuration = (seconds: number): string => {
-  const rounded = Math.round(seconds);
-  const hours = Math.floor(rounded / 3600);
-  const minutes = Math.floor((rounded % 3600) / 60);
-  const rest = rounded % 60;
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
-  }
-  return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
-};
-
-export const renderGenerateMasterText = (
-  output: GenerateMasterOutput
-): string => {
-  const lines = [
-    `Output: ${output.outputPath}`,
-    `Input files: ${output.inputCount}`,
-    `Segments: ${output.segmentCount}`,
-    `Loop count: ${output.loopCount}`,
-    `Crossfade: ${output.crossfadeDuration}`,
-    `Bitrate: ${output.bitrate}`,
-  ];
-  const preview =
-    output.durationPreview === undefined
-      ? []
-      : [
-          "Duration preview",
-          `  Track total : ${formatDuration(output.durationPreview.trackTotalSeconds)}`,
-          `  Target      : ${
-            output.durationPreview.targetSeconds === undefined
-              ? "disabled"
-              : formatDuration(output.durationPreview.targetSeconds)
-          }`,
-          `  Estimated   : ${formatDuration(output.durationPreview.estimatedSeconds)}`,
-        ];
-  return [...output.messages, ...preview, ...lines].join("\n");
-};
-
-export const renderGenerateMasterQuietText = (
-  output: GenerateMasterOutput
-): string => output.messages.join("\n");

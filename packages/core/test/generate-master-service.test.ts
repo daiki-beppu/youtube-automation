@@ -320,6 +320,31 @@ describe("generateMasterService — target duration probing", () => {
 });
 
 describe("generateMasterService — filesystem safety and output errors", () => {
+  test("rejects channel-dir-relative collection paths that escape the channel root", async () => {
+    const parent = makeTempRoot("generate-master-parent-");
+    const channelRoot = join(parent, "channel");
+    mkdirSync(channelRoot, { recursive: true });
+    const outsideCollection = setupCollection(parent, "victim", [
+      "01-outside.mp3",
+    ]);
+    const ffmpegLog = installFakeFfmpeg();
+
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "../victim",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("validation");
+      expect(result.error.message).toContain("collection escapes channel_dir");
+    }
+    expect(readFfmpegCalls(ffmpegLog)).toEqual([]);
+    expect(existsSync(join(outsideCollection, "01-master", "master.mp3"))).toBe(
+      false
+    );
+  });
+
   test("rejects parsed-like invalid input at the service boundary", async () => {
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3"]);

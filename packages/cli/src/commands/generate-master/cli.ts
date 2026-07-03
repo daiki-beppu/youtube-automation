@@ -1,8 +1,8 @@
-import { statSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { isAbsolute } from "node:path";
 import process from "node:process";
 
 import { err, toServiceError } from "@youtube-automation/core";
+import { findChannelRootForCollection } from "@youtube-automation/core/generate-master";
 import type { GenerateMasterInput } from "@youtube-automation/core/generate-master";
 import type { DepsMap } from "@youtube-automation/core/registry";
 import { REGISTRY } from "@youtube-automation/core/registry";
@@ -10,11 +10,11 @@ import { defineCommand } from "citty";
 
 import { resolveDeps } from "../../../lib/resolve-deps.ts";
 import { emitResult } from "../../../lib/run-command.ts";
+import { parseGenerateMasterInput } from "./args.ts";
 import {
-  parseGenerateMasterInput,
   renderGenerateMasterQuietText,
   renderGenerateMasterText,
-} from "./args.ts";
+} from "./render.ts";
 
 const generateMasterEntry = REGISTRY["masterup.generate-master"];
 
@@ -27,34 +27,10 @@ const isMissingChannelDirError = (error: unknown): boolean =>
   error instanceof Error &&
   error.message.startsWith("config: CHANNEL_DIR 環境変数を設定するか");
 
-const isDirectory = (path: string): boolean => {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
-  }
-};
-
-const findChannelRootForCollection = (
-  collection: string
-): string | undefined => {
-  let current = resolve(collection);
-  for (;;) {
-    if (isDirectory(join(current, "config", "channel"))) {
-      return current;
-    }
-    const parent = dirname(current);
-    if (parent === current) {
-      return undefined;
-    }
-    current = parent;
-  }
-};
-
 const resolveGenerateMasterDeps = (
   input: GenerateMasterInput,
   channelDir: string | undefined
-): Partial<GenerateMasterDeps> => {
+): GenerateMasterDeps => {
   if (input.channelDir !== undefined) {
     return { channelDir: input.channelDir };
   }
@@ -63,9 +39,12 @@ const resolveGenerateMasterDeps = (
   }
   if (input.collection !== undefined && isAbsolute(input.collection)) {
     const collectionChannelDir = findChannelRootForCollection(input.collection);
-    return collectionChannelDir === undefined
-      ? {}
-      : { channelDir: collectionChannelDir };
+    if (collectionChannelDir !== undefined) {
+      return { channelDir: collectionChannelDir };
+    }
+    throw new Error(
+      "validation: absolute collection requires --channel-dir, CHANNEL_DIR, or config/channel ancestor"
+    );
   }
   throw new Error(
     "validation: relative collection requires channel_dir or CHANNEL_DIR"
@@ -113,11 +92,6 @@ const resolveContextChannelDir = async (
     throw error;
   }
 };
-
-const runGenerateMasterEntry = (
-  input: GenerateMasterInput,
-  deps: Partial<GenerateMasterDeps>
-) => generateMasterEntry.run(input, deps as GenerateMasterDeps);
 
 export const generateMasterCommand = defineCommand({
   args: {
@@ -194,7 +168,7 @@ export const generateMasterCommand = defineCommand({
         const { quiet: inputQuiet } = input;
         quiet = inputQuiet;
         const deps = resolveGenerateMasterDeps(input, channelDir);
-        return await runGenerateMasterEntry(input, deps);
+        return await generateMasterEntry.run(input, deps);
       } catch (error) {
         return err(toServiceError(error));
       }
