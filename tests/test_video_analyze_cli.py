@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -28,8 +28,10 @@ from youtube_automation.scripts.video_analyze import (
     _resolve_benchmark_targets,
     _resolve_own_targets,
     _resolve_url_target,
+    main,
 )
 from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.video_analyzer import VideoTarget
 
 # ----------------------------------------------------------------------------
@@ -408,6 +410,56 @@ class TestResolveBenchmarkTargets:
                     channel_slug="celtic-music",
                     top=0,
                 )
+
+
+# ----------------------------------------------------------------------------
+# main: cfg → VideoAnalyzer への analysis_window_sec 受け渡し (#1495)
+# ----------------------------------------------------------------------------
+
+
+class TestMainPassesAnalysisWindow:
+    def test_analysis_window_sec_flows_from_cfg_to_analyzer(self, tmp_path):
+        # Given: skill-config が窓幅 600 を返す (境界で 1 度だけ解決する既存方針)
+        cfg = {
+            "model": "gemini-2.5-flash",
+            "prompt": "analyze",
+            "delay_sec": 0,
+            "analysis_window_sec": 600,
+        }
+        with (
+            patch("youtube_automation.scripts.video_analyze.load_skill_config", return_value=cfg),
+            patch("youtube_automation.scripts.video_analyze._channel_dir", return_value=tmp_path),
+            patch("youtube_automation.scripts.video_analyze.create_genai_client", return_value=MagicMock()),
+            patch("youtube_automation.scripts.video_analyze.VideoAnalyzer") as analyzer_cls,
+            patch("youtube_automation.scripts.video_analyze._run_analysis", return_value=([], [])),
+            patch("sys.argv", ["yt-video-analyze", "--url", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"]),
+        ):
+            # When: main を実行
+            main()
+
+        # Then: cfg の窓幅がそのまま VideoAnalyzer に渡る
+        assert analyzer_cls.call_args.kwargs["analysis_window_sec"] == 600
+
+
+class TestAnalysisWindowSkillConfig:
+    def test_default_window_is_900(self, tmp_path):
+        # Given: チャンネル側 override なし
+        cfg = load_skill_config("video-analyze", use_cache=False, channel_dir=tmp_path)
+
+        # Then: 配布 default の 900 秒
+        assert cfg["analysis_window_sec"] == 900
+
+    def test_channel_override_changes_window(self, tmp_path):
+        # Given: config/skills/video-analyze.yaml で窓幅を上書き
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "video-analyze.yaml").write_text("analysis_window_sec: 300\n", encoding="utf-8")
+
+        # When: deep-merge ロード
+        cfg = load_skill_config("video-analyze", use_cache=False, channel_dir=tmp_path)
+
+        # Then: override が有効に効く
+        assert cfg["analysis_window_sec"] == 300
 
 
 # ----------------------------------------------------------------------------

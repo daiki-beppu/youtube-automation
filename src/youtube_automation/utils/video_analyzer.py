@@ -57,8 +57,9 @@ class VideoTarget:
 class VideoAnalyzer:
     """Gemini に YouTube URL を直接渡して構造化 JSON を得る。
 
-    `client` / `model` / `prompt` / `delay_sec` / `data_dir` は CLI 層 (境界)
-    で 1 度だけ解決して渡す。analyze_url ループ内で再解決しない。
+    `client` / `model` / `prompt` / `delay_sec` / `data_dir` /
+    `analysis_window_sec` は CLI 層 (境界) で 1 度だけ解決して渡す。
+    analyze_url ループ内で再解決しない。
     """
 
     def __init__(
@@ -69,24 +70,40 @@ class VideoAnalyzer:
         prompt: str,
         delay_sec: int,
         data_dir: Path,
+        analysis_window_sec: int,
     ) -> None:
         self.client = client
         self.model = model
         self.prompt = prompt
         self.delay_sec = delay_sec
         self.data_dir = data_dir
+        self.analysis_window_sec = analysis_window_sec
 
     def analyze_url(self, target: VideoTarget) -> dict[str, Any]:
-        """target.url を Gemini に渡し、JSON をパースしてメタデータと併せて返す。
+        """target.url の冒頭 `analysis_window_sec` 秒を Gemini に渡し、JSON をパースして返す。
+
+        `types.Part.from_uri()` は `video_metadata` を受け取れないため、
+        `types.Part(file_data=..., video_metadata=...)` で offset 付き Part を組み立てる。
 
         Raises:
             ValidationError: Gemini レスポンスが JSON にパースできない場合
         """
-        logger.info("Gemini 動画解析: %s (%s)", target.title[:40], target.video_id)
+        logger.info(
+            "Gemini 動画解析 (冒頭 %d 秒): %s (%s)",
+            self.analysis_window_sec,
+            target.title[:40],
+            target.video_id,
+        )
         response = self.client.models.generate_content(
             model=self.model,
             contents=[
-                types.Part.from_uri(file_uri=target.url, mime_type=_VIDEO_MIME_TYPE),
+                types.Part(
+                    file_data=types.FileData(file_uri=target.url, mime_type=_VIDEO_MIME_TYPE),
+                    video_metadata=types.VideoMetadata(
+                        start_offset="0s",
+                        end_offset=f"{self.analysis_window_sec}s",
+                    ),
+                ),
                 self.prompt,
             ],
         )

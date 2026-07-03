@@ -90,6 +90,7 @@ class TestVideoAnalyzerAnalyzeUrl:
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
+            analysis_window_sec=900,
         )
         target = _make_target()
 
@@ -125,6 +126,7 @@ class TestVideoAnalyzerAnalyzeUrl:
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
+            analysis_window_sec=900,
         )
 
         # When: analyze_url を呼ぶ
@@ -143,6 +145,7 @@ class TestVideoAnalyzerAnalyzeUrl:
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
+            analysis_window_sec=900,
         )
 
         # When/Then: タグ無しでもパースできる
@@ -158,6 +161,7 @@ class TestVideoAnalyzerAnalyzeUrl:
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
+            analysis_window_sec=900,
         )
 
         # When/Then: 握りつぶさず ValidationError を投げる
@@ -173,6 +177,7 @@ class TestVideoAnalyzerAnalyzeUrl:
             prompt="analyze the video",
             delay_sec=0,
             data_dir=tmp_path,
+            analysis_window_sec=900,
         )
         target = _make_target(url="https://youtu.be/SHORTID0001")
 
@@ -185,6 +190,48 @@ class TestVideoAnalyzerAnalyzeUrl:
         assert "https://youtu.be/SHORTID0001" in rendered
         assert "analyze the video" in rendered
 
+    def test_passes_clip_window_video_metadata(self, tmp_path):
+        # Given: 既定 900 秒のクリップ窓 (#1495: 全尺ではなく冒頭のみ解析)
+        client = _make_client(json.dumps(_VALID_PAYLOAD))
+        analyzer = VideoAnalyzer(
+            client=client,
+            model="gemini-3.5-flash",
+            prompt="analyze",
+            delay_sec=0,
+            data_dir=tmp_path,
+            analysis_window_sec=900,
+        )
+        target = _make_target()
+
+        # When: analyze_url
+        analyzer.analyze_url(target)
+
+        # Then: offset 付き video_metadata の Part が Gemini に渡る
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        part = contents[0]
+        assert part.file_data.file_uri == target.url
+        assert part.video_metadata.start_offset == "0s"
+        assert part.video_metadata.end_offset == "900s"
+
+    def test_custom_window_is_reflected_in_end_offset(self, tmp_path):
+        # Given: チャンネル側上書き相当のカスタム窓幅
+        client = _make_client(json.dumps(_VALID_PAYLOAD))
+        analyzer = VideoAnalyzer(
+            client=client,
+            model="gemini-3.5-flash",
+            prompt="analyze",
+            delay_sec=0,
+            data_dir=tmp_path,
+            analysis_window_sec=600,
+        )
+
+        # When: analyze_url
+        analyzer.analyze_url(_make_target())
+
+        # Then: end_offset に窓幅が反映される
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        assert contents[0].video_metadata.end_offset == "600s"
+
     def test_sleeps_delay_sec_between_calls(self, tmp_path):
         # Given: delay_sec を指定
         client = _make_client(json.dumps(_VALID_PAYLOAD))
@@ -194,6 +241,7 @@ class TestVideoAnalyzerAnalyzeUrl:
             prompt="analyze",
             delay_sec=7,
             data_dir=tmp_path,
+            analysis_window_sec=900,
         )
 
         # When: analyze_url を呼ぶ
@@ -213,6 +261,7 @@ class TestVideoAnalyzerSaveJson:
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
+            analysis_window_sec=900,
         )
         target = _make_target(video_id="VID42", slug="celtic-forest")
         payload = {"video_id": "VID42", **_VALID_PAYLOAD}
@@ -238,6 +287,7 @@ class TestVideoAnalyzerSaveJson:
             prompt="analyze",
             delay_sec=0,
             data_dir=nested,
+            analysis_window_sec=900,
         )
         target = _make_target(video_id="V1", slug="ambient")
 

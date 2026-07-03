@@ -298,6 +298,7 @@ def main():
         prompt=cfg["prompt"],
         delay_sec=cfg["delay_sec"],
         data_dir=data_dir,
+        analysis_window_sec=cfg["analysis_window_sec"],
     )
 
     results, failures = _run_analysis(analyzer=analyzer, targets=targets)
