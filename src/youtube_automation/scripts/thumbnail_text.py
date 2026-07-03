@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 from youtube_automation.utils.config import channel_dir
@@ -38,6 +39,7 @@ from youtube_automation.utils.thumbnail_text import (
 
 SKILL_NAME = "thumbnail"
 _FINAL_THUMBNAIL_NAMES = frozenset({"thumbnail.jpg", "thumbnail.jpeg", "thumbnail.png"})
+_ALLOWED_OUTPUT_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -74,20 +76,24 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def _is_input_config_error(exc: ConfigError) -> bool:
     message = str(exc)
-    return message.startswith("背景画像が見つかりません") or message.startswith("背景画像を読み込めません")
+    return (
+        message.startswith("背景画像が見つかりません")
+        or message.startswith("背景画像を読み込めません")
+        or message.startswith("出力画像を保存できません")
+    )
 
 
-def _mapping_at(parent: dict, name: str, *, key: str) -> dict:
+def _mapping_at(parent: Mapping[str, object], name: str, *, key: str) -> Mapping[str, object]:
     if name not in parent:
         return {}
     value = parent[name]
-    if not isinstance(value, dict):
+    if not isinstance(value, Mapping):
         raise ConfigError(f"{key} はマッピングで指定してください (config/skills/thumbnail.yaml)")
     return value
 
 
-def _overlay_config_from_skill_config(skill_config: dict) -> dict:
-    if not isinstance(skill_config, dict):
+def _overlay_config_from_skill_config(skill_config: object) -> Mapping[str, object]:
+    if not isinstance(skill_config, Mapping):
         raise ConfigError("thumbnail skill-config はマッピングで指定してください (config/skills/thumbnail.yaml)")
     image_generation = _mapping_at(skill_config, "image_generation", key="image_generation")
     gemini = _mapping_at(image_generation, "gemini", key="image_generation.gemini")
@@ -103,15 +109,47 @@ def _overlay_config_from_skill_config(skill_config: dict) -> dict:
     )
 
 
-def _validate_output_path(output: Path) -> None:
+def _absolute_path(path: Path) -> Path:
+    expanded = path.expanduser()
+    if expanded.is_absolute():
+        return expanded
+    return Path.cwd() / expanded
+
+
+def _has_symlink_parent(path: Path) -> bool:
+    current = path.parent
+    while current != current.parent:
+        if current.is_symlink():
+            return True
+        current = current.parent
+    return False
+
+
+def _validate_output_path(output: Path, *, channel_root: Path) -> None:
     final_names = ", ".join(sorted(_FINAL_THUMBNAIL_NAMES))
     if output.name.lower() in _FINAL_THUMBNAIL_NAMES:
         raise ConfigError(
             f"最終サムネイル名への直接出力はできません: {output} "
             f"(候補名 thumbnail-v1.jpg などへ出力し、承認後に {final_names} へコピーしてください)"
         )
+    if output.is_symlink():
+        raise ConfigError(f"出力先にシンボリックリンクは指定できません: {output}")
     if output.exists():
         raise ConfigError(f"出力先ファイルは既に存在します: {output} (候補名を変えるか、不要な候補を削除してください)")
+    if output.suffix.lower() not in _ALLOWED_OUTPUT_SUFFIXES:
+        allowed = ", ".join(sorted(_ALLOWED_OUTPUT_SUFFIXES))
+        raise ConfigError(f"出力先の拡張子は {allowed} のいずれかを指定してください: {output}")
+
+    output_abs = _absolute_path(output)
+    if _has_symlink_parent(output_abs):
+        raise ConfigError(f"出力先の親ディレクトリにシンボリックリンクは指定できません: {output}")
+
+    channel_root_resolved = channel_root.resolve()
+    output_resolved = output_abs.resolve(strict=False)
+    if not output_resolved.is_relative_to(channel_root_resolved):
+        raise ConfigError(
+            f"出力先は channel_dir 配下に指定してください: {output} (channel_dir: {channel_root_resolved})"
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -120,20 +158,21 @@ def main(argv: list[str] | None = None) -> int:
     if not args.background.is_file():
         print(f"[ERROR] 背景画像が見つかりません: {args.background}", file=sys.stderr)
         return 2
-    try:
-        _validate_output_path(args.output)
-    except ConfigError as exc:
-        print(f"[ERROR] {exc}", file=sys.stderr)
-        return 2
     title_lines = [line for line in (s.strip() for s in args.title) if line]
     if not title_lines:
         print("[ERROR] --title に空でないタイトル行を 1 行以上指定してください", file=sys.stderr)
+        return 2
+    channel_root = channel_dir()
+    try:
+        _validate_output_path(args.output, channel_root=channel_root)
+    except ConfigError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
         return 2
 
     try:
         spec = overlay_spec_from_overlay_config(
             _overlay_config_from_skill_config(load_skill_config(SKILL_NAME)),
-            channel_root=channel_dir(),
+            channel_root=channel_root,
             with_channel_name=bool(args.channel_name),
         )
         output = compose_thumbnail_text(
@@ -151,7 +190,8 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"[OK] テキスト付きサムネ候補を出力しました: {output}")
     print(
-        "[INFO] 同一の背景・テキスト・設定なら常に同一の出力になります (フォントは thumbnail_text.overlay.font で固定)"
+        "[INFO] 同一の背景・テキスト・設定なら常に同一の出力になります "
+        "(フォントは image_generation.gemini.thumbnail_text.overlay.font で固定)"
     )
     return 0
 

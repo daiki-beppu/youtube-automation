@@ -57,11 +57,16 @@ class TestResolveFontPath:
     def test_missing_raises_with_guidance(self, tmp_path: Path):
         """未設定なら理由と代替手順つきの ConfigError (#1332 受け入れ条件)"""
         with pytest.raises(ConfigError) as exc_info:
-            resolve_font_path("", channel_root=tmp_path, key="thumbnail_text.overlay.font.title")
+            resolve_font_path(
+                "",
+                channel_root=tmp_path,
+                key="image_generation.gemini.thumbnail_text.overlay.font.title",
+            )
         message = str(exc_info.value)
         assert "フォント指定が未設定です" in message
         assert "対処:" in message
         assert "config/skills/thumbnail.yaml" in message
+        assert "image_generation.gemini.thumbnail_text.overlay.font.title" in message
 
     def test_nonexistent_raises_with_guidance(self, tmp_path: Path):
         with pytest.raises(ConfigError) as exc_info:
@@ -106,6 +111,25 @@ class TestOverlaySpecFromOverlayConfig:
         assert spec.channel_name_style is not None
         assert spec.channel_name_style.font_path == test_font
         assert spec.channel_name_style.size == 36
+
+    @pytest.mark.parametrize(
+        ("font_cfg_factory", "with_channel_name", "message"),
+        [
+            (lambda _test_font: {"title": True}, False, "font.title"),
+            (lambda test_font: {"title": str(test_font), "channel_name": ["bad"]}, True, "font.channel_name"),
+        ],
+    )
+    def test_font_paths_must_be_strings(
+        self,
+        tmp_path: Path,
+        test_font: Path,
+        font_cfg_factory,
+        with_channel_name: bool,
+        message: str,
+    ):
+        cfg = {"font": font_cfg_factory(test_font)}
+        with pytest.raises(ConfigError, match=message):
+            overlay_spec_from_overlay_config(cfg, channel_root=tmp_path, with_channel_name=with_channel_name)
 
     def test_invalid_anchor_raises(self, tmp_path: Path, test_font: Path):
         cfg = _overlay_config_dict(test_font, layout={"anchor": "middle"})
@@ -265,6 +289,27 @@ class TestComposeThumbnailText:
             )
         assert out1.read_bytes() == out2.read_bytes()
 
+    def test_channel_name_changes_rendered_output(self, tmp_path: Path, background: Path, test_font: Path):
+        spec = self._spec(test_font, with_channel=True)
+        out_without_channel = tmp_path / "without-channel.jpg"
+        out_with_channel = tmp_path / "with-channel.jpg"
+
+        compose_thumbnail_text(
+            background=background,
+            output=out_without_channel,
+            spec=spec,
+            title_lines=["Same Title"],
+        )
+        compose_thumbnail_text(
+            background=background,
+            output=out_with_channel,
+            spec=spec,
+            title_lines=["Same Title"],
+            channel_name="My Channel",
+        )
+
+        assert out_without_channel.read_bytes() != out_with_channel.read_bytes()
+
     def test_empty_title_raises(self, tmp_path: Path, background: Path, test_font: Path):
         with pytest.raises(ConfigError, match="タイトル行が空"):
             compose_thumbnail_text(
@@ -325,6 +370,16 @@ class TestCli:
 
         monkeypatch.setattr(cli, "channel_dir", lambda: channel_root)
         monkeypatch.setattr(cli, "load_skill_config", lambda _skill: cfg)
+
+    def _patch_input_only(self, monkeypatch: pytest.MonkeyPatch, *, channel_root: Path) -> None:
+        from youtube_automation.scripts import thumbnail_text as cli
+
+        monkeypatch.setattr(cli, "channel_dir", lambda: channel_root)
+        monkeypatch.setattr(
+            cli,
+            "load_skill_config",
+            lambda _skill: pytest.fail("input validation should stop before skill-config loading"),
+        )
 
     def test_success_creates_output_and_prints_ok(
         self,
@@ -446,10 +501,157 @@ class TestCli:
         assert output.read_bytes() == b"keep me"
         assert "出力先ファイルは既に存在します" in capsys.readouterr().err
 
-    def test_font_unconfigured_exits_1_with_guidance(self, tmp_path: Path, background: Path, capsys):
+    @pytest.mark.parametrize("output_name", ["thumbnail-v1", "thumbnail-v1.bad"])
+    def test_invalid_output_extension_exits_2_before_config(
+        self,
+        tmp_path: Path,
+        background: Path,
+        output_name: str,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+    ):
+        from youtube_automation.scripts.thumbnail_text import main
+
+        self._patch_input_only(monkeypatch, channel_root=tmp_path)
+
+        code = main(
+            [
+                "--background",
+                str(background),
+                "--title",
+                "Test",
+                "--output",
+                str(tmp_path / output_name),
+            ]
+        )
+
+        assert code == 2
+        assert "出力先の拡張子" in capsys.readouterr().err
+
+    def test_broken_symlink_output_exits_2_before_config(
+        self,
+        tmp_path: Path,
+        background: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+    ):
+        from youtube_automation.scripts.thumbnail_text import main
+
+        self._patch_input_only(monkeypatch, channel_root=tmp_path)
+        output = tmp_path / "thumbnail-v1.jpg"
+        output.symlink_to(tmp_path / "missing-target.jpg")
+
+        code = main(
+            [
+                "--background",
+                str(background),
+                "--title",
+                "Test",
+                "--output",
+                str(output),
+            ]
+        )
+
+        assert code == 2
+        assert "シンボリックリンク" in capsys.readouterr().err
+
+    def test_parent_symlink_output_exits_2_before_config(
+        self,
+        tmp_path: Path,
+        background: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+    ):
+        from youtube_automation.scripts.thumbnail_text import main
+
+        self._patch_input_only(monkeypatch, channel_root=tmp_path)
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        link_dir = tmp_path / "linked"
+        link_dir.symlink_to(outside, target_is_directory=True)
+
+        code = main(
+            [
+                "--background",
+                str(background),
+                "--title",
+                "Test",
+                "--output",
+                str(link_dir / "thumbnail-v1.jpg"),
+            ]
+        )
+
+        assert code == 2
+        assert "親ディレクトリにシンボリックリンク" in capsys.readouterr().err
+
+    def test_output_outside_channel_dir_exits_2_before_config(
+        self,
+        tmp_path: Path,
+        background: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+    ):
+        from youtube_automation.scripts.thumbnail_text import main
+
+        channel_root = tmp_path / "channel"
+        channel_root.mkdir()
+        self._patch_input_only(monkeypatch, channel_root=channel_root)
+
+        code = main(
+            [
+                "--background",
+                str(background),
+                "--title",
+                "Test",
+                "--output",
+                str(tmp_path / "thumbnail-v1.jpg"),
+            ]
+        )
+
+        assert code == 2
+        assert "channel_dir 配下" in capsys.readouterr().err
+
+    def test_whitespace_only_title_exits_2_before_config(
+        self,
+        tmp_path: Path,
+        background: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+    ):
+        from youtube_automation.scripts import thumbnail_text as cli
+
+        monkeypatch.setattr(cli, "channel_dir", lambda: pytest.fail("title validation should stop before channel_dir"))
+        monkeypatch.setattr(
+            cli,
+            "load_skill_config",
+            lambda _skill: pytest.fail("title validation should stop before skill-config loading"),
+        )
+
+        code = cli.main(
+            [
+                "--background",
+                str(background),
+                "--title",
+                "  ",
+                "--output",
+                str(tmp_path / "thumbnail-v1.jpg"),
+            ]
+        )
+
+        assert code == 2
+        assert "--title に空でないタイトル行" in capsys.readouterr().err
+
+    def test_font_unconfigured_exits_1_with_guidance(
+        self,
+        tmp_path: Path,
+        background: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+    ):
         """default 設定 (overlay.font.title 未設定) では理由 + 代替手順を出して exit 1"""
         from youtube_automation.scripts.thumbnail_text import main
 
+        self._patch_config(monkeypatch, channel_root=tmp_path, cfg={})
         code = main(
             [
                 "--background",

@@ -439,7 +439,7 @@ uv run yt-thumbnail-text \
 
 `yt-thumbnail-text` は失敗理由と代替手順を明示して終了コード 1 で停止する:
 
-- **`overlay.font.title` 未設定** → `config/skills/thumbnail.yaml` に .ttf/.otf/.ttc のパスを設定する
+- **`image_generation.gemini.thumbnail_text.overlay.font.title` 未設定** → `config/skills/thumbnail.yaml` に .ttf/.otf/.ttc のパスを設定する
 - **フォントファイルが存在しない** → パスを確認（相対パスは channel_dir 起点）。フォントを `<channel_dir>/assets/fonts/` に配置し直す
 - **ファイルが壊れている・フォントとして読めない** → 別のフォントファイルを用意する
 

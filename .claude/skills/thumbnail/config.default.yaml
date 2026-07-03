@@ -80,7 +80,8 @@ image_generation:
       # diff_prompt_template に ${typography_clause} として展開する。
       # {font_description} は thumbnail_text.font.copy の値で置換して使う。
       # 注意: AI 画像生成はフォント名の厳密な再現を保証しない。書体をピクセル単位で
-      # 固定したい場合は thumbnail_text.overlay (yt-thumbnail-text) を使うこと。
+      # 固定したい場合は image_generation.gemini.thumbnail_text.overlay
+      # (yt-thumbnail-text) を使うこと。
       typography_clause: |
         Render the title text in a consistent {font_description} typeface.
         Keep the same letterforms, weight, and style across the whole title.
@@ -175,9 +176,10 @@ image_generation:
       # Phase 2 のオーバーレイプロンプト (プレースホルダ: {title_line1}, {title_line2}, {channel_name})
       text_overlay_prompt: ""
 
-      # 決定的フォント合成 (#1332): textless 背景に実フォントファイルを
-      # Pillow で描画する yt-thumbnail-text の設定。AI 生成と違い、同一の
-      # 背景・テキスト・設定なら常に同一の出力になる (フォントが安定再現される)。
+      # 決定的フォント合成 (#1332):
+      # image_generation.gemini.thumbnail_text.overlay に置く yt-thumbnail-text の設定。
+      # textless 背景に実フォントファイルを Pillow で描画する。AI 生成と違い、
+      # 同一の背景・テキスト・設定なら常に同一の出力になる (フォントが安定再現される)。
       # フォント未設定・ファイル不在時は理由と代替手順つきの ConfigError になる。
       overlay:
         font:
