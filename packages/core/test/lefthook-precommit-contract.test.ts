@@ -1,9 +1,3 @@
-// Regression guard for #1452: lefthook pre-commit passes staged files through
-// oxlint / oxfmt. When the staged set is entirely ignored by each tool's
-// ignorePatterns, the tool exits non-zero unless --no-error-on-unmatched-pattern
-// is present. The hook must treat that "zero matching target files" case as a
-// successful no-op without hiding real lint / format failures.
-
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
