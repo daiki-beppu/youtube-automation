@@ -621,7 +621,7 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
     report = QualityReport()
 
     # 5 要素順序チェックは genre_line（ユーザーが config に書く部分）を 1 回だけ検証する。
-    # pattern.style_line の先頭は `_style_line` が tempo を置くため full_style では false positive になる。
+    # Styles 第 1 行の先頭は `_style_line` が tempo を置くため full_style では false positive になる。
     genre_line = suno.get("genre_line", "")
     if genre_line:
         report.warnings.extend(validate_5_element_order(genre_line))
@@ -637,7 +637,7 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
             # Quality rules: Style テキストの検証 (#904)
             # style_char_limit と banned_artists は完成形の full_style を検証する。
             # 5 要素順序チェックは genre_line（ユーザーが config に書く部分）を検証する。
-            # pattern.style_line の先頭は `_style_line` が tempo を置くため、
+            # Styles 第 1 行の先頭は `_style_line` が tempo を置くため、
             # full_style での先頭テンポ検知は false positive になる。
             report.warnings.extend(validate_style_char_limit(full_style, limit=style_char_limit))
             report.errors.extend(validate_banned_artists(full_style, banned_artists))
