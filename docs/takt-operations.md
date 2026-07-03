@@ -35,7 +35,42 @@ observability:
 
 ## takt 設定の継承構造
 
-リポジトリ固有 `.takt/config.yaml` は `draft_pr: false` / `base_branch: main` / observability のみ上書きし、provider・model・language・persona はグローバル `~/.takt/config.yaml` を継承する。グローバルは Codex + Opus ハイブリッド（default `provider: claude` / `model: opus 4.6`、doer/planner 系のみ `codex` に override、レビュー系・supervisor は opus、`language: ja`）。
+リポジトリ固有 `.takt/config.yaml` は `draft_pr: false` / `base_branch: main` / `provider: codex` / `persona_providers`（coder / planner → codex）/ observability を上書きし、model・language はグローバル `~/.takt/config.yaml` を継承する。**takt は全 persona codex で運用する**（レビュー系も codex。lite workflow は各 step の `provider:` 直指定でも codex を明示しており、step 直指定は persona_providers / global より優先されるため確実）。全 codex 運用では **Claude 側の 5h レートリミットを takt は消費しない**（消費は codex 側クォータ）。
+
+## トークン消費の内部構造と削減指針
+
+takt（v0.49 時点）の 1 step は最大 3 phase の LLM 呼び出しで構成される。workflow を書く・直すときは以下のコストモデルを前提にすること。
+
+### phase コストモデル
+
+| phase | 発生条件 | コスト特性 |
+|---|---|---|
+| Phase 1（本体実行） | 必ず 1 回 | previous_response / knowledge / policy はインライン注入 2,000 字で truncate され、全文はファイル参照に誘導される |
+| Phase 2（レポート生成） | `output_contracts` があるファイル数分 | Phase 1 のセッションを resume するため追加送信は小さい。**契約が無ければ 0 回** |
+| Phase 3（状態判定） | **自然言語 condition の rules があると起動** | **新規セッションに Phase 1 応答の全文を再送**して判定。structured → tag → ai_judge の最大 3 回。**rules が 1 個だけなら auto_select で LLM 0 回** |
+
+### rules 設計指針（判定コストの回避）
+
+1. **分岐が 1 つの step は自然言語 condition で OK**（judge は auto_select になり LLM を呼ばない）
+2. **複数分岐の step は `structured_output`（schema は `.takt/schemas/*.json`）+ deterministic `when:` 式で書く**。`when: structured.<step名>.<field> == "値"` の形式なら判定が in-code で完結し Phase 3 が丸ごとスキップされる（lite の review step が実例）。最後に `when: "true"` → ABORT の安全網を置く
+3. **`output_contracts` は本当にレポートが要る step だけに付ける**（Phase 2 の呼び出しがファイル数分増える）
+4. codex step の推論量は `provider_options.codex.reasoning_effort`（minimal / low / medium / high / xhigh）で調整できる
+
+### 制約事項（設定では変えられないもの）
+
+- Claude provider の `settingSources: ['project']` はハードコード。CLAUDE.md / `.claude/skills` の description は Claude step の全 phase で毎回注入されるため、**注入量を減らす唯一の手段はリポジトリ側ドキュメント・description を薄く保つこと**
+- 状態判定（Phase 3）だけを別モデルにする設定は無い（判定は step と同じ provider/model。唯一の例外は `loop_monitors[].judge` の provider/model 指定）
+- 組み込み default は全 step にレポート契約 + 自然言語 rules を持つため Phase 2 / Phase 3 のコストが構造的に乗る。大型 issue で default を選ぶのは品質優先の判断として妥当
+
+### session resume と worktree
+
+takt の自動 worktree（task の `worktree: true`）では **step 間のセッション resume が無効化される**（実行 cwd がプロジェクト cwd と異なるため。ディレクトリ間汚染の防止ガード）。この場合、同一 persona の step 再訪（review⇄implement ループの implement 再訪など）でも毎回新規セッションになり、リポジトリ再探索コストがかかる。
+
+回避策: **手動で worktree を作り、その中で `takt add` → `takt run`（task の `worktree` 指定を省略 = カレントディレクトリ実行）** にすると `cwd === projectCwd` となり resume が有効化される。リポジトリの worktree ポリシーも手動 worktree で満たせる。ただし auto-commit / push / auto_pr は worktree 実行時のフローなので、カレント実行では commit・PR 作成を手動（`commit-convention` / `pr` スキル）で行うこと。
+
+### 計測との突き合わせ
+
+改善の効果は usage JSONL（下記）の `phase3_*` イベントの有無と step × provider 別トークンで確認する。lite の想定は「全 step codex・`phase3_*` イベントなし・Phase 2 なし」。
 
 ## skill 編集と takt の関係
 

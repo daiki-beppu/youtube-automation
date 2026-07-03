@@ -1,7 +1,11 @@
 # 小〜中規模 issue 用の軽量 workflow（トークン消費削減）。
 # 使い分け基準は docs/takt-operations.md 参照。セキュリティ・認証・アップロード系や
 # スキル横断の変更は組み込み default を使うこと。
-# persona_providers (coder/planner → codex) と整合: 実装系は codex、レビューは claude。
+#
+# トークン設計メモ（docs/takt-operations.md の「トークン消費の内部構造」参照）:
+# - plan / implement は rules が 1 個のため状態判定 (Phase 3) の LLM 呼び出しが発生しない
+# - review は structured_output + deterministic `when:` により Phase 3 を完全にスキップする
+# - 分岐を増やすときは自然言語 condition ではなく `when:` 式（structured.* 参照）を使うこと
 name: lite
 max_steps: 8
 steps:
@@ -22,11 +26,15 @@ steps:
         next: review
   - name: review
     persona: architecture-reviewer
-    provider: claude
+    provider: codex
     edit: false
     pass_previous_response: true
+    structured_output:
+      schema_ref: review-verdict
     rules:
-      - condition: "承認（修正不要）"
+      - when: structured.review.verdict == "approved"
         next: COMPLETE
-      - condition: "修正が必要"
+      - when: structured.review.verdict == "needs_fix"
         next: implement
+      - when: "true"
+        next: ABORT

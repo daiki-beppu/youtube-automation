@@ -10,3 +10,7 @@
 # Custom workflows (tracked)
 !workflows/
 !workflows/*.yaml
+
+# Structured output schemas (tracked)
+!schemas/
+!schemas/*.json
