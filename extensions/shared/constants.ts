@@ -281,13 +281,59 @@ export const PHASE = {
 
 export type Phase = (typeof PHASE)[keyof typeof PHASE];
 
-/** runner content → overlay の進捗ペイロード。 */
-export interface ProgressPayload {
+/** runner content が overlay / popup に表示させる構造化ログ (#1270)。 */
+export type ProgressLog =
+  | {
+      kind: "duration-check";
+      entryName: string;
+      durationSec: number;
+      ok: boolean;
+      minSec?: number;
+      maxSec?: number;
+    }
+  | {
+      kind: "retry";
+      entryName: string;
+      attempt: number;
+      max: number;
+    }
+  | {
+      kind: "skip";
+      entryName: string;
+    };
+
+type ProgressPayloadBase = {
   phase: Phase;
   total: number;
   index?: number;
   message?: string;
-}
+};
+
+type ProgressPayloadWithoutLog = ProgressPayloadBase & {
+  log?: undefined;
+};
+
+type DurationCheckProgressPayload = ProgressPayloadBase & {
+  phase: typeof PHASE.DONE;
+  log: Extract<ProgressLog, { kind: "duration-check" }>;
+};
+
+type RetryProgressPayload = ProgressPayloadBase & {
+  phase: typeof PHASE.WAITING_SLOT;
+  log: Extract<ProgressLog, { kind: "retry" }>;
+};
+
+type SkipProgressPayload = ProgressPayloadBase & {
+  phase: typeof PHASE.ENTRY_FAILED;
+  log: Extract<ProgressLog, { kind: "skip" }>;
+};
+
+/** runner content → overlay の進捗ペイロード。log は phase/kind の許可組み合わせだけに載せる。 */
+export type ProgressPayload =
+  | ProgressPayloadWithoutLog
+  | DurationCheckProgressPayload
+  | RetryProgressPayload
+  | SkipProgressPayload;
 
 /** overlay の各パターン行の表示状態。failed はリトライ上限まで失敗しスキップされた entry (#948)。 */
 export type ItemState = "idle" | "active" | "done" | "failed";

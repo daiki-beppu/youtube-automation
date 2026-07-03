@@ -36,7 +36,7 @@ function isObservedClipArray(value: unknown): value is ObservedClip[] {
       return (
         typeof clip.id === "string" &&
         typeof clip.status === "string" &&
-        (clip.duration === undefined || typeof clip.duration === "number")
+        (clip.duration === undefined || (typeof clip.duration === "number" && Number.isFinite(clip.duration)))
       );
     })
   );

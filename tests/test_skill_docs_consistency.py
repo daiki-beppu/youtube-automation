@@ -739,6 +739,15 @@ def test_channel_new_regeneration_snapshot_collects_all_benchmark_channels() -> 
     assert "先頭 1 件だけで済ませない" in step
 
 
+def test_channel_new_regeneration_config_templates_include_audio_json() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    step = channel_new.split("#### Step R2.2:", 1)[1].split("#### Step R2.3:", 1)[0]
+
+    assert "責務別 5 ファイル" in step
+    assert "meta / content / youtube / analytics / audio" in step
+    assert "責務別 4 ファイル" not in step
+
+
 def test_config_generation_rules_reference_existing_templates_and_step_ids() -> None:
     rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
 
@@ -754,6 +763,7 @@ def test_config_generation_rules_reference_existing_templates_and_step_ids() -> 
         ".claude/skills/channel-new/references/config-template/content.json",
         ".claude/skills/channel-new/references/config-template/youtube.json",
         ".claude/skills/channel-new/references/config-template/analytics.json",
+        ".claude/skills/channel-new/references/config-template/audio.json",
         ".claude/skills/channel-new/references/config-template/skills/suno.yaml",
         ".claude/skills/channel-new/references/config-template/skills/thumbnail.yaml",
     ):

@@ -491,7 +491,7 @@ uv run python .claude/skills/channel-new/references/fetch_branding_snapshot.py \
 
 `channel-research.md` の分析データと **Step R2.1 で取得した競合スナップショット** を参照しながら、方向性に基づいて config 内容を Claude が生成し提案する。
 生成ルールは **`references/config-generation-rules.md`** を参照（tags / descriptions / title / suno の書き方、および TTP 路線時の競合転写ルール）。
-雛形は `references/config-template/*.json`（責務別 4 ファイル: meta / content / youtube / analytics）。
+雛形は `references/config-template/*.json`（責務別 5 ファイル: meta / content / youtube / analytics / audio）。
 
 #### Step R2.3: TTP self-check（ユーザー承認前）
 
