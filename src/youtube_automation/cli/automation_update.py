@@ -194,6 +194,8 @@ def _detect_pin(pyproject: dict) -> Pin:
                 return Pin("url", "branch", "main", base_url)
             if _SHA_RE.fullmatch(ref):
                 return Pin("url", "sha", ref, base_url)
+            if ref == "main":
+                return Pin("url", "branch", ref, base_url)
             return Pin("url", "tag", ref, base_url)
     raise ConfigError(f"pyproject.toml から {PACKAGE_NAME} の pin を特定できません")
 
@@ -321,6 +323,31 @@ def _run_command(cmd: list[str], cwd: Path) -> int:
         raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}")
 
 
+def _skills_diff_has_changes(root: Path) -> bool:
+    cmd = ["uv", "run", "yt-skills", "diff"]
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as e:
+        raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}")
+    output = "\n".join(part for part in [proc.stdout, proc.stderr] if part)
+    if proc.returncode != 0:
+        raise _StepFailed(f"exit code {proc.returncode}: {' '.join(cmd)}\n{output.strip()}")
+    diff_markers = (
+        "内容が異なる",
+        "同梱版にのみ存在",
+        "target にのみ存在",
+        "target が存在しません",
+        "target がファイルではありません",
+    )
+    return any(marker in output for marker in diff_markers)
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     try:
         root = _resolve_repo_root(args.target)
@@ -412,6 +439,16 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 f"stash / commit で clean にしてから再実行してください:\n{status}"
             )
 
+    def step_local_fix_guard() -> None:
+        if args.force_sync or args.sync_only:
+            return
+        if _skills_diff_has_changes(root):
+            raise _StepFailed(
+                "yt-skills diff で local fix 差分を検出しました。"
+                "--force-sync で upstream 版へ上書きするか、"
+                "--sync-only <skill...> で安全に同期する skill だけを指定してください"
+            )
+
     def step_rewrite() -> None:
         if pin.kind == "branch":
             print(f"  main 追従 (branch={pin.value}) のため pin 書き換えは不要です")
@@ -437,6 +474,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
     steps: list[tuple[str, Callable[[], None]]] = []
     if not args.allow_dirty:
         steps.append(("git 作業ツリー確認", step_worktree))
+    steps.append(("yt-skills diff による local fix 確認", step_local_fix_guard))
     steps.append(("pyproject.toml の pin 書き換え", step_rewrite))
     steps.append(("uv lock", run(["uv", "lock", "--upgrade-package", PACKAGE_NAME])))
     if args.sync_only:

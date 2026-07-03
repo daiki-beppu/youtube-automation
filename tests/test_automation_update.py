@@ -111,6 +111,7 @@ def recorded_commands(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
 
     monkeypatch.setattr(automation_update, "_run_command", _record)
     monkeypatch.setattr(automation_update, "_git_status_porcelain", lambda root: "")
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
     return commands
 
 
@@ -196,6 +197,16 @@ def test_detect_pin_url_without_ref_is_branch_follow() -> None:
     pyproject = tomllib.loads(
         '[project]\nname = "x"\ndependencies = '
         '["youtube-channels-automation @ git+https://github.com/daiki-beppu/youtube-automation.git"]\n'
+    )
+    assert _detect_pin(pyproject) == Pin("url", "branch", "main")
+
+
+def test_detect_pin_url_main_ref_is_branch_follow() -> None:
+    import tomllib
+
+    pyproject = tomllib.loads(
+        '[project]\nname = "x"\ndependencies = '
+        '["youtube-channels-automation @ git+https://github.com/daiki-beppu/youtube-automation@main"]\n'
     )
     assert _detect_pin(pyproject) == Pin("url", "branch", "main")
 
@@ -373,6 +384,7 @@ def test_apply_stops_at_failed_step(
 
     monkeypatch.setattr(automation_update, "_run_command", _fail_on_lock)
     monkeypatch.setattr(automation_update, "_git_status_porcelain", lambda root: "")
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
 
     assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 1
 
@@ -400,6 +412,24 @@ def test_apply_dirty_worktree_fails_before_any_command(
     assert 'tag = "v5.5.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
 
 
+def test_apply_local_fix_diff_requires_explicit_sync_decision(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    commands: list[list[str]] = []
+    monkeypatch.setattr(automation_update, "_run_command", lambda cmd, cwd: commands.append(cmd) or 0)
+    monkeypatch.setattr(automation_update, "_git_status_porcelain", lambda root: "")
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: True)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 1
+
+    err = capsys.readouterr().err
+    assert "yt-skills diff" in err
+    assert "--force-sync" in err
+    assert commands == []
+    assert 'tag = "v5.5.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
+
+
 def test_apply_allow_dirty_skips_worktree_check(
     tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, recorded_commands: list[list[str]]
 ) -> None:
@@ -417,6 +447,17 @@ def test_apply_force_sync_passes_force_flag(tmp_path: Path, no_network, recorded
     repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
 
     assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--force-sync"]) == 0
+    assert ["uv", "run", "yt-skills", "sync", "--force"] in recorded_commands
+
+
+def test_apply_force_sync_bypasses_local_fix_diff_guard(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, recorded_commands: list[list[str]]
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: True)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--force-sync"]) == 0
+
     assert ["uv", "run", "yt-skills", "sync", "--force"] in recorded_commands
 
 
@@ -509,6 +550,7 @@ def test_apply_external_command_start_failure_is_step_failure(
 ) -> None:
     repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
     monkeypatch.setattr(automation_update, "_git_status_porcelain", lambda root: "")
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
 
     def _fail_to_start(*args, **kwargs):
         raise FileNotFoundError("missing executable")
@@ -531,3 +573,6 @@ def test_skill_md_delegates_mechanical_steps_to_cli() -> None:
     assert "yt-automation-update check" in text
     assert "yt-automation-update apply" in text
     assert "指定した安全な skill だけ同期" in text
+    assert "yt-skills export" not in text
+    assert '_asset_root("skills")' in text
+    assert "main 追従は upstream HEAD sha" in text
