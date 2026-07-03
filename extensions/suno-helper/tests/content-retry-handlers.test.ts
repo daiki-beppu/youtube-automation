@@ -19,6 +19,12 @@ const clearResumeStateMock = vi.fn(() => Promise.resolve());
 const scheduleRunCompleteReloadMock = vi.fn();
 const cancelScheduledRunCompleteReloadMock = vi.fn();
 
+function expectPostDownloadedBody(payload: unknown, expectedBody: Record<string, unknown>): void {
+  expect(payload).toMatchObject({ body: expectedBody });
+  const body = (payload as { body?: Record<string, unknown> }).body;
+  expect(body).not.toHaveProperty("suno_playlist_url");
+}
+
 function retryPlaylistMessage(overrides: Partial<RetryPlaylistPayload> = {}): { data: RetryPlaylistPayload } {
   return {
     data: {
@@ -300,12 +306,10 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
     );
     const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
     expect(downloadedPosts).toHaveLength(1);
-    expect(downloadedPosts[0].payload).toMatchObject({
-      body: {
-        file_count: clipIds.length,
-        expected_file_count: clipIds.length,
-        download_path: "/Users/test/Downloads/test-playlist.zip",
-      },
+    expectPostDownloadedBody(downloadedPosts[0].payload, {
+      file_count: clipIds.length,
+      expected_file_count: clipIds.length,
+      download_path: "/Users/test/Downloads/test-playlist.zip",
     });
   });
 
@@ -417,12 +421,10 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
     );
     const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
     expect(downloadedPosts).toHaveLength(1);
-    expect(downloadedPosts[0].payload).toMatchObject({
-      body: {
-        file_count: 4,
-        expected_file_count: 4,
-        download_path: "/Users/test/Downloads/test-playlist.zip",
-      },
+    expectPostDownloadedBody(downloadedPosts[0].payload, {
+      file_count: 4,
+      expected_file_count: 4,
+      download_path: "/Users/test/Downloads/test-playlist.zip",
     });
   });
 
@@ -445,7 +447,7 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
     expect(sentMessages.find((m) => m.type === "startDownload")?.payload).toMatchObject({ format: "mp3" });
     await vi.waitFor(() => expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(1));
     const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
-    expect(downloadedPosts[0].payload).toMatchObject({ body: { format: "mp3" } });
+    expectPostDownloadedBody(downloadedPosts[0].payload, { format: "mp3" });
   });
 });
 

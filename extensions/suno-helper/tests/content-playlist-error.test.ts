@@ -27,6 +27,12 @@ interface ProgressMessage {
   message?: string;
 }
 
+function expectPostDownloadedBody(payload: unknown, expectedBody: Record<string, unknown>): void {
+  expect(payload).toMatchObject({ body: expectedBody });
+  const body = (payload as { body?: Record<string, unknown> }).body;
+  expect(body).not.toHaveProperty("suno_playlist_url");
+}
+
 async function loadContentScriptWithPlaylistRows(
   submittedIdsFromTracker: string[],
   playlistRowsResult: HTMLElement[] | Error,
@@ -483,13 +489,11 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
 
     const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
     expect(downloadedPosts).toHaveLength(1);
-    expect(downloadedPosts[0].payload).toMatchObject({
-      body: {
-        file_count: 2,
-        expected_file_count: 2,
-        format: "mp3",
-        download_path: "/Users/test/Downloads/regression.zip",
-      },
+    expectPostDownloadedBody(downloadedPosts[0].payload, {
+      file_count: 2,
+      expected_file_count: 2,
+      format: "mp3",
+      download_path: "/Users/test/Downloads/regression.zip",
     });
   });
 
@@ -524,7 +528,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       expect(sentMessages.find((m) => m.type === "startDownload")?.payload).toMatchObject({ format });
       const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
       expect(downloadedPosts).toHaveLength(1);
-      expect(downloadedPosts[0].payload).toMatchObject({ body: { format } });
+      expectPostDownloadedBody(downloadedPosts[0].payload, { format });
     },
   );
 
