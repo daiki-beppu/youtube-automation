@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, symlinkSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
 import { basename, join } from "node:path";
 
 import { generateMasterService } from "@youtube-automation/core/generate-master";
@@ -146,6 +153,12 @@ describe("generateMasterService — pin, shuffle, and loop ordering", () => {
       "04-d.mp3",
     ]);
     const logPath = installFakeFfmpeg();
+    installFakeFfprobe({
+      "01-a.mp3": 30,
+      "02-b.mp3": 30,
+      "03-c.mp3": 30,
+      "04-d.mp3": 30,
+    });
 
     // When mastering runs twice with the same seed
     const output = await runOk({
@@ -211,6 +224,34 @@ describe("generateMasterService — target duration probing", () => {
     }
   });
 
+  test("accounts for every segment crossfade when calculating target loops", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", [
+      "01-a.mp3",
+      "02-b.mp3",
+      "03-c.mp3",
+      "04-d.mp3",
+    ]);
+    installFakeFfmpeg();
+    installFakeFfprobe({
+      "01-a.mp3": 45,
+      "02-b.mp3": 45,
+      "03-c.mp3": 45,
+      "04-d.mp3": 45,
+    });
+
+    const output = await runOk({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+      crossfade_duration: 30,
+      target_duration_min: 5,
+    });
+
+    expect(output.loopCount).toBe(5);
+    expect(output.segmentCount).toBe(20);
+    expect(output.durationPreview?.estimatedSeconds).toBe(330);
+  });
+
   test("uses config target_duration_min when loop and no_loop are absent", async () => {
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
@@ -254,7 +295,7 @@ describe("generateMasterService — target duration probing", () => {
     });
 
     expect(output.loopCount).toBe(2);
-    expect(readFfprobeCalls(ffprobeLog)).toEqual([]);
+    expect(readFfprobeCalls(ffprobeLog)).toHaveLength(2);
   });
 
   test("returns validation error and does not run ffmpeg when ffprobe fails", async () => {
@@ -279,6 +320,38 @@ describe("generateMasterService — target duration probing", () => {
 });
 
 describe("generateMasterService — filesystem safety and output errors", () => {
+  test("rejects parsed-like invalid input at the service boundary", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3"]);
+    const ffmpegLog = installFakeFfmpeg();
+
+    const result = await generateMasterService({
+      bitrate: "192k",
+      channelDir: channelRoot,
+      collection: "collections/demo",
+      crossfadeDuration: -1,
+      loop: 1,
+      noLoop: false,
+      pinFirst: [],
+      quiet: false,
+      shuffle: false,
+      specified: {
+        bitrate: false,
+        crossfadeDuration: true,
+        pinFirstCount: false,
+        shuffle: false,
+        shuffleSeed: false,
+        targetDurationMin: false,
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("validation");
+    }
+    expect(readFfmpegCalls(ffmpegLog)).toEqual([]);
+  });
+
   test("rejects symlink audio inputs before ffmpeg", async () => {
     const channelRoot = makeTempRoot("generate-master-channel-");
     const collection = setupCollection(channelRoot, "collections/demo", [
@@ -301,6 +374,34 @@ describe("generateMasterService — filesystem safety and output errors", () => 
     if (!result.ok) {
       expect(result.error.domain).toBe("validation");
       expect(result.error.message).toContain("unsafe audio input");
+    }
+    expect(readFfmpegCalls(ffmpegLog)).toEqual([]);
+  });
+
+  test("rejects symlink audio directory before scanning entries", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    const collection = setupCollection(channelRoot, "collections/demo", [
+      "01-a.mp3",
+    ]);
+    const outside = join(channelRoot, "outside-music");
+    mkdirSync(outside, { recursive: true });
+    writeText(join(outside, "01-outside.mp3"), "outside");
+    rmSync(join(collection, "02-Individual-music"), {
+      force: true,
+      recursive: true,
+    });
+    symlinkSync(outside, join(collection, "02-Individual-music"), "dir");
+    const ffmpegLog = installFakeFfmpeg();
+
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("validation");
+      expect(result.error.message).toContain("unsafe audio directory");
     }
     expect(readFfmpegCalls(ffmpegLog)).toEqual([]);
   });
@@ -344,5 +445,26 @@ describe("generateMasterService — filesystem safety and output errors", () => 
       expect(result.error.domain).toBe("io");
       expect(result.error.message).toContain("master output was not created");
     }
+  });
+
+  test("removes temp master output when ffmpeg fails after writing it", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    const collection = setupCollection(channelRoot, "collections/demo", [
+      "01-a.mp3",
+      "02-b.mp3",
+    ]);
+    installFakeFfmpeg({ exitCode: 42, writeOutput: true });
+
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
+
+    expect(result.ok).toBe(false);
+    const masterDir = join(collection, "01-master");
+    expect(existsSync(join(masterDir, "master.mp3"))).toBe(false);
+    expect(
+      readdirSync(masterDir).filter((name) => name.includes(".tmp-"))
+    ).toEqual([]);
   });
 });

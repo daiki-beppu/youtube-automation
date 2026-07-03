@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -203,6 +204,58 @@ describe("generateMasterService — skill config override", () => {
     if (!result.ok) {
       expect(result.error.domain).toBe("validation");
       expect(result.error.message).toContain("must contain an object");
+    }
+    expect(readFfmpegCalls(logPath)).toEqual([]);
+  });
+
+  test("does not fall back to YAML when masterup.json is a directory", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    mkdirSync(join(channelRoot, "config", "skills", "masterup.json"), {
+      recursive: true,
+    });
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.yaml"),
+      "audio:\n  bitrate: 64k\n"
+    );
+    const logPath = installFakeFfmpeg();
+
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("config");
+      expect(result.error.message).toContain("must be a regular file");
+    }
+    expect(readFfmpegCalls(logPath)).toEqual([]);
+  });
+
+  test("does not fall back to YAML when masterup.json is a broken symlink", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    mkdirSync(join(channelRoot, "config", "skills"), { recursive: true });
+    symlinkSync(
+      join(channelRoot, "missing-masterup.json"),
+      join(channelRoot, "config", "skills", "masterup.json")
+    );
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.yaml"),
+      "audio:\n  bitrate: 64k\n"
+    );
+    const logPath = installFakeFfmpeg();
+
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("config");
+      expect(result.error.message).toContain("must be a regular file");
     }
     expect(readFfmpegCalls(logPath)).toEqual([]);
   });

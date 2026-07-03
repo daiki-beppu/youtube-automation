@@ -1,4 +1,4 @@
-import { stat, readFile } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { z } from "zod";
@@ -37,10 +37,13 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isNodeErrorCode = (error: unknown, code: string): boolean =>
   isRecord(error) && error.code === code;
 
-const isFile = async (path: string): Promise<boolean> => {
+const configFileExists = async (path: string): Promise<boolean> => {
   try {
-    const stats = await stat(path);
-    return stats.isFile();
+    const stats = await lstat(path);
+    if (!stats.isFile() || stats.isSymbolicLink()) {
+      throw new Error(`config: ${path} must be a regular file`);
+    }
+    return true;
   } catch (error) {
     if (isNodeErrorCode(error, "ENOENT")) {
       return false;
@@ -56,11 +59,22 @@ const existingConfigPath = async (
   channelDir: string
 ): Promise<string | null> => {
   const json = configPath(channelDir, MASTERUP_JSON_FILENAME);
-  if (await isFile(json)) {
+  if (await configFileExists(json)) {
     return json;
   }
   const yaml = configPath(channelDir, MASTERUP_YAML_FILENAME);
-  return (await isFile(yaml)) ? yaml : null;
+  return (await configFileExists(yaml)) ? yaml : null;
+};
+
+const readConfigText = async (path: string): Promise<string> => {
+  try {
+    return await readFile(path, "utf-8");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`config: failed to read ${path}: ${message}`, {
+      cause: error,
+    });
+  }
 };
 
 const parseConfigJson = (path: string, text: string): unknown => {
@@ -181,7 +195,7 @@ export const readMasterupAudioConfig = async (
   if (path === null) {
     return {};
   }
-  const parsed = parseMasterupConfig(path, await readFile(path, "utf-8"));
+  const parsed = parseMasterupConfig(path, await readConfigText(path));
   if (!isRecord(parsed)) {
     throw new Error(`validation: ${path} must contain an object`);
   }

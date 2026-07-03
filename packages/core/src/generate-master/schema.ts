@@ -86,6 +86,56 @@ const GenerateMasterRawInputSchema = z.preprocess(
     })
 );
 
+const GenerateMasterInternalInputSchema = z
+  .object({
+    bitrate: z.string(),
+    channelDir: z.string().optional(),
+    collection: z.string().min(1).optional(),
+    crossfadeDuration: z.number().positive(),
+    loop: z.number().int().positive().optional(),
+    noLoop: z.boolean(),
+    pinFirst: z.array(z.string().min(1)),
+    pinFirstCount: z.number().int().nonnegative().optional(),
+    quiet: z.boolean(),
+    shuffle: z.boolean(),
+    shuffleSeed: z.number().int().optional(),
+    specified: z
+      .object({
+        bitrate: z.boolean(),
+        crossfadeDuration: z.boolean(),
+        pinFirstCount: z.boolean(),
+        shuffle: z.boolean(),
+        shuffleSeed: z.boolean(),
+        targetDurationMin: z.boolean(),
+      })
+      .strict(),
+    targetDurationMin: z.number().int().positive().optional(),
+  })
+  .strict()
+  .superRefine((input, ctx) => {
+    if (input.loop !== undefined && input.targetDurationMin !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "loop and targetDurationMin are mutually exclusive",
+        path: ["targetDurationMin"],
+      });
+    }
+    if (input.noLoop && input.targetDurationMin !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "noLoop and targetDurationMin are mutually exclusive",
+        path: ["targetDurationMin"],
+      });
+    }
+    if (input.pinFirst.length > 0 && input.pinFirstCount !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "pinFirst and pinFirstCount are mutually exclusive",
+        path: ["pinFirstCount"],
+      });
+    }
+  });
+
 export const GenerateMasterInputSchema = GenerateMasterRawInputSchema.transform(
   (input) => {
     const { __specified, ...externalInput } = input;
@@ -96,10 +146,23 @@ export const GenerateMasterInputSchema = GenerateMasterRawInputSchema.transform(
   }
 );
 
+export const ParseableGenerateMasterInputSchema = z.union([
+  GenerateMasterInternalInputSchema,
+  GenerateMasterInputSchema,
+]);
+
 export const GenerateMasterOutputSchema = z
   .object({
     bitrate: z.string(),
     crossfadeDuration: z.number().positive(),
+    durationPreview: z
+      .object({
+        estimatedSeconds: z.number().nonnegative(),
+        targetSeconds: z.number().positive().optional(),
+        trackTotalSeconds: z.number().nonnegative(),
+      })
+      .strict()
+      .optional(),
     inputCount: z.number().int().nonnegative(),
     loopCount: z.number().int().positive(),
     messages: z.array(z.string()),

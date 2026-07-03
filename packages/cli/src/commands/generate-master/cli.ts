@@ -1,4 +1,5 @@
-import { isAbsolute } from "node:path";
+import { statSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import process from "node:process";
 
 import { err, toServiceError } from "@youtube-automation/core";
@@ -22,10 +23,38 @@ type GenerateMasterDeps = Pick<
   (typeof generateMasterEntry.deps)[number]
 >;
 
+const isMissingChannelDirError = (error: unknown): boolean =>
+  error instanceof Error &&
+  error.message.startsWith("config: CHANNEL_DIR 環境変数を設定するか");
+
+const isDirectory = (path: string): boolean => {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
+const findChannelRootForCollection = (
+  collection: string
+): string | undefined => {
+  let current = resolve(collection);
+  for (;;) {
+    if (isDirectory(join(current, "config", "channel"))) {
+      return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) {
+      return undefined;
+    }
+    current = parent;
+  }
+};
+
 const resolveGenerateMasterDeps = (
   input: GenerateMasterInput,
   channelDir: string | undefined
-): GenerateMasterDeps => {
+): Partial<GenerateMasterDeps> => {
   if (input.channelDir !== undefined) {
     return { channelDir: input.channelDir };
   }
@@ -33,7 +62,10 @@ const resolveGenerateMasterDeps = (
     return { channelDir };
   }
   if (input.collection !== undefined && isAbsolute(input.collection)) {
-    return { channelDir: process.cwd() };
+    const collectionChannelDir = findChannelRootForCollection(input.collection);
+    return collectionChannelDir === undefined
+      ? {}
+      : { channelDir: collectionChannelDir };
   }
   throw new Error(
     "validation: relative collection requires channel_dir or CHANNEL_DIR"
@@ -74,10 +106,18 @@ const resolveContextChannelDir = async (
   try {
     const deps = await resolveDeps(generateMasterEntry.deps);
     return deps.channelDir;
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (isMissingChannelDirError(error)) {
+      return undefined;
+    }
+    throw error;
   }
 };
+
+const runGenerateMasterEntry = (
+  input: GenerateMasterInput,
+  deps: Partial<GenerateMasterDeps>
+) => generateMasterEntry.run(input, deps as GenerateMasterDeps);
 
 export const generateMasterCommand = defineCommand({
   args: {
@@ -154,7 +194,7 @@ export const generateMasterCommand = defineCommand({
         const { quiet: inputQuiet } = input;
         quiet = inputQuiet;
         const deps = resolveGenerateMasterDeps(input, channelDir);
-        return await generateMasterEntry.run(input, deps);
+        return await runGenerateMasterEntry(input, deps);
       } catch (error) {
         return err(toServiceError(error));
       }

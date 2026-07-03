@@ -14,6 +14,7 @@ const repoRoot = resolve(import.meta.dir, "..", "..", "..");
 const taykScript = join(repoRoot, "packages", "cli", "bin", "tayk.ts");
 const cliPackageJsonPath = join(repoRoot, "packages", "cli", "package.json");
 const tempRoots: string[] = [];
+const CLI_SMOKE_TIMEOUT_MS = 15_000;
 
 const makeTempRoot = (prefix: string): string => {
   const dir = mkdtempSync(join(tmpdir(), prefix));
@@ -122,6 +123,7 @@ const runTayk = (
   return Bun.spawnSync(["bun", taykScript, ...argv], {
     cwd: repoRoot,
     env: commandEnv,
+    timeout: CLI_SMOKE_TIMEOUT_MS,
   });
 };
 
@@ -137,6 +139,7 @@ const runTaykFrom = (
   return Bun.spawnSync(["bun", taykScript, ...argv], {
     cwd,
     env: commandEnv,
+    timeout: CLI_SMOKE_TIMEOUT_MS,
   });
 };
 
@@ -189,14 +192,18 @@ describe("tayk dispatcher — generate-master", () => {
     expect(packageJson.bin.yt).toBe("./bin/tayk.ts");
   });
 
-  test("help lists the generate-master subcommand", () => {
-    // Given the dispatcher invoked with --help
-    const proc = runTayk({}, "--help");
+  test(
+    "help lists the generate-master subcommand",
+    () => {
+      // Given the dispatcher invoked with --help
+      const proc = runTayk({}, "--help");
 
-    // Then the new command is reachable from the single dispatcher.
-    expect(proc.exitCode).toBe(0);
-    expect(proc.stdout?.toString()).toContain("generate-master");
-  });
+      // Then the new command is reachable from the single dispatcher.
+      expect(proc.exitCode).toBe(0);
+      expect(proc.stdout?.toString()).toContain("generate-master");
+    },
+    CLI_SMOKE_TIMEOUT_MS
+  );
 
   test("runs generate-master through registry and prints JSON output", () => {
     // Given a channel-root-relative collection and fake ffmpeg on PATH
@@ -279,6 +286,41 @@ describe("tayk dispatcher — generate-master", () => {
     expect(readFfprobeCalls(fakeFfprobe.logPath)).toHaveLength(2);
   });
 
+  test("prints duration preview for text target-duration output", () => {
+    const channelRoot = makeTempRoot("yt-generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    const fakeFfmpeg = installFakeFfmpeg();
+    const fakeFfprobe = installFakeFfprobe({
+      "01-a.mp3": 30,
+      "02-b.mp3": 30,
+    });
+
+    const proc = runTayk(
+      {
+        ...fakeFfmpeg.env,
+        ...fakeFfprobe.env,
+        PATH: [
+          dirname(fakeFfprobe.logPath),
+          dirname(fakeFfmpeg.logPath),
+          process.env.PATH ?? "",
+        ].join(delimiter),
+      },
+      "generate-master",
+      "--channel-dir",
+      channelRoot,
+      "--target-duration",
+      "3",
+      "collections/demo"
+    );
+
+    expect(proc.exitCode).toBe(0);
+    const stdout = proc.stdout?.toString() ?? "";
+    expect(stdout).toContain("Duration preview");
+    expect(stdout).toContain("Track total : 01:00");
+    expect(stdout).toContain("Target      : 03:00");
+    expect(stdout).toContain("Estimated   : 03:53");
+  });
+
   test("quiet suppresses the human summary output", () => {
     const channelRoot = makeTempRoot("yt-generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
@@ -302,11 +344,23 @@ describe("tayk dispatcher — generate-master", () => {
     // Given a channel-root-relative collection and fake ffmpeg on PATH
     const channelRoot = makeTempRoot("yt-generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
-    const fake = installFakeFfmpeg();
+    const fakeFfmpeg = installFakeFfmpeg();
+    const fakeFfprobe = installFakeFfprobe({
+      "01-a.mp3": 30,
+      "02-b.mp3": 30,
+    });
 
     // When citty help-advertised --flag=value syntax and a negative seed are used
     const proc = runTayk(
-      fake.env,
+      {
+        ...fakeFfmpeg.env,
+        ...fakeFfprobe.env,
+        PATH: [
+          dirname(fakeFfprobe.logPath),
+          dirname(fakeFfmpeg.logPath),
+          process.env.PATH ?? "",
+        ].join(delimiter),
+      },
       "generate-master",
       "--json",
       "--channel-dir",
@@ -494,5 +548,28 @@ describe("tayk dispatcher — generate-master", () => {
         basename(path)
       )
     ).toEqual(["02-hook.mp3", "03-intro.mp3", "01-a.mp3"]);
+  });
+
+  test("derives channel config from an absolute collection path", () => {
+    const channelRoot = makeTempRoot("yt-generate-master-channel-");
+    const collection = join(channelRoot, "collections", "demo");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    mkdirSync(join(channelRoot, "config", "channel"), { recursive: true });
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify({ audio: { bitrate: "320k", crossfade_duration: 2 } })
+    );
+    const fake = installFakeFfmpeg();
+
+    const proc = runTayk(fake.env, "generate-master", "--json", collection);
+
+    expect(proc.exitCode).toBe(0);
+    expect(proc.stderr?.toString()).toBe("");
+    const parsed = JSON.parse(proc.stdout?.toString() ?? "") as {
+      bitrate: string;
+      crossfadeDuration: number;
+    };
+    expect(parsed.bitrate).toBe("320k");
+    expect(parsed.crossfadeDuration).toBe(2);
   });
 });

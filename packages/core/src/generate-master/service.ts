@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, lstatSync } from "node:fs";
 import { copyFile, lstat, mkdir, rename, rm } from "node:fs/promises";
-import { extname, isAbsolute, join, resolve } from "node:path";
+import { dirname, extname, isAbsolute, join, resolve } from "node:path";
 import process from "node:process";
 
 import { toServiceError } from "../errors.ts";
@@ -12,15 +12,15 @@ import type { Result } from "../result.ts";
 import {
   collectAudioInputs,
   orderInputs,
-  resolveLoopCount,
+  resolveLoopPlan,
   withConfigOverrides,
 } from "./audio.ts";
 import { readMasterupAudioConfig } from "./config.ts";
 import { MASTER_DIRNAME, MASTER_FILENAME } from "./constants.ts";
 import { buildFfmpegArgs, runFfmpeg } from "./ffmpeg.ts";
 import {
-  GenerateMasterInputSchema,
   GenerateMasterOutputSchema,
+  ParseableGenerateMasterInputSchema,
 } from "./schema.ts";
 import type { GenerateMasterInput, GenerateMasterOutput } from "./schema.ts";
 
@@ -28,21 +28,32 @@ interface GenerateMasterDeps {
   channelDir: string;
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const isParsedGenerateMasterInput = (
-  value: unknown
-): value is GenerateMasterInput =>
-  isRecord(value) &&
-  isRecord(value.specified) &&
-  typeof value.crossfadeDuration === "number" &&
-  Array.isArray(value.pinFirst);
-
 const parseGenerateMasterInput = (input: unknown): GenerateMasterInput =>
-  isParsedGenerateMasterInput(input)
-    ? input
-    : GenerateMasterInputSchema.parse(input);
+  ParseableGenerateMasterInputSchema.parse(input);
+
+const isDirectory = (path: string): boolean => {
+  try {
+    return existsSync(path) && lstatSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
+const findChannelRootForCollection = (
+  collection: string
+): string | undefined => {
+  let current = resolve(collection);
+  for (;;) {
+    if (isDirectory(join(current, "config", "channel"))) {
+      return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) {
+      return undefined;
+    }
+    current = parent;
+  }
+};
 
 const resolveCollectionPath = (
   input: GenerateMasterInput,
@@ -68,9 +79,12 @@ const resolveConfigChannelDir = (
   deps: Partial<GenerateMasterDeps> | undefined
 ): string | undefined => {
   const channelDir = input.channelDir ?? deps?.channelDir;
-  return channelDir === undefined || channelDir.length === 0
-    ? undefined
-    : channelDir;
+  if (channelDir !== undefined && channelDir.length > 0) {
+    return channelDir;
+  }
+  return input.collection !== undefined && isAbsolute(input.collection)
+    ? findChannelRootForCollection(input.collection)
+    : undefined;
 };
 
 const assertMasterOutputPathSafe = async (
@@ -114,7 +128,10 @@ const runGenerateMaster = async (
   const paths = new CollectionPaths(collectionDir);
   const files = await collectAudioInputs(paths.musicDir);
   const ordered = orderInputs(files, effectiveInput);
-  const loopCount = await resolveLoopCount(ordered.ordered, effectiveInput);
+  const { durationPreview, loopCount } = await resolveLoopPlan(
+    ordered.ordered,
+    effectiveInput
+  );
   const segments = Array.from(
     { length: loopCount },
     () => ordered.ordered
@@ -145,6 +162,7 @@ const runGenerateMaster = async (
   return GenerateMasterOutputSchema.parse({
     bitrate: effectiveInput.bitrate,
     crossfadeDuration: effectiveInput.crossfadeDuration,
+    durationPreview,
     inputCount: files.length,
     loopCount,
     messages: ordered.messages,

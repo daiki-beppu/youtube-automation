@@ -315,6 +315,17 @@ export const parseGenerateMasterInput = (
   }
 };
 
+const formatDuration = (seconds: number): string => {
+  const rounded = Math.round(seconds);
+  const hours = Math.floor(rounded / 3600);
+  const minutes = Math.floor((rounded % 3600) / 60);
+  const rest = rounded % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+  }
+  return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+};
+
 export const renderGenerateMasterText = (
   output: GenerateMasterOutput
 ): string => {
@@ -326,7 +337,20 @@ export const renderGenerateMasterText = (
     `Crossfade: ${output.crossfadeDuration}`,
     `Bitrate: ${output.bitrate}`,
   ];
-  return [...output.messages, ...lines].join("\n");
+  const preview =
+    output.durationPreview === undefined
+      ? []
+      : [
+          "Duration preview",
+          `  Track total : ${formatDuration(output.durationPreview.trackTotalSeconds)}`,
+          `  Target      : ${
+            output.durationPreview.targetSeconds === undefined
+              ? "disabled"
+              : formatDuration(output.durationPreview.targetSeconds)
+          }`,
+          `  Estimated   : ${formatDuration(output.durationPreview.estimatedSeconds)}`,
+        ];
+  return [...output.messages, ...preview, ...lines].join("\n");
 };
 
 export const renderGenerateMasterQuietText = (

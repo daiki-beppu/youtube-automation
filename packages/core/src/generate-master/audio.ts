@@ -1,4 +1,4 @@
-import { lstat, readdir, realpath, stat } from "node:fs/promises";
+import { lstat, readdir, realpath } from "node:fs/promises";
 import { basename, extname, isAbsolute, join, relative } from "node:path";
 
 import type { MasterupAudioConfig } from "./config.ts";
@@ -19,13 +19,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isNodeErrorCode = (error: unknown, code: string): boolean =>
   isRecord(error) && error.code === code;
 
-const isDirectory = async (path: string): Promise<boolean> => {
+const assertSafeAudioDirectory = async (path: string): Promise<void> => {
   try {
-    const stats = await stat(path);
-    return stats.isDirectory();
+    const stats = await lstat(path);
+    if (!stats.isDirectory() || stats.isSymbolicLink()) {
+      throw new Error(`validation: unsafe audio directory: ${path}`);
+    }
   } catch (error) {
     if (isNodeErrorCode(error, "ENOENT")) {
-      return false;
+      throw new Error(`validation: directory not found: ${path}`, {
+        cause: error,
+      });
     }
     throw error;
   }
@@ -96,9 +100,7 @@ export const withConfigOverrides = (
 export const collectAudioInputs = async (
   musicDir: string
 ): Promise<string[]> => {
-  if (!(await isDirectory(musicDir))) {
-    throw new Error(`validation: directory not found: ${musicDir}`);
-  }
+  await assertSafeAudioDirectory(musicDir);
   const names = await readdir(musicDir);
   const musicDirRealPath = await realpath(musicDir);
   const candidates = names
@@ -214,28 +216,113 @@ export const orderInputs = (
   };
 };
 
-export const resolveLoopCount = async (
-  files: string[],
-  input: EffectiveGenerateMasterInput
-): Promise<number> => {
-  if (input.noLoop) {
-    return 1;
-  }
-  if (input.loop !== undefined) {
-    return input.loop;
-  }
-  if (input.targetDurationMin === undefined) {
-    return 1;
-  }
-  const durations = await Promise.all(files.map((file) => probeDuration(file)));
-  const singleLoopSeconds = durations.reduce(
-    (total, value) => total + value,
-    0
+interface DurationPreview {
+  estimatedSeconds: number;
+  targetSeconds?: number;
+  trackTotalSeconds: number;
+}
+
+export interface LoopPlan {
+  durationPreview?: DurationPreview;
+  loopCount: number;
+}
+
+const estimateLoopedDuration = (
+  trackTotalSeconds: number,
+  fileCount: number,
+  loopCount: number,
+  crossfadeDuration: number
+): number => {
+  const segmentCount = loopCount * fileCount;
+  const crossfadeCount = Math.max(0, segmentCount - 1);
+  return Math.max(
+    0,
+    trackTotalSeconds * loopCount - crossfadeCount * crossfadeDuration
   );
-  const targetSeconds = input.targetDurationMin * 60;
-  const span = Math.max(singleLoopSeconds - input.crossfadeDuration, 0.000_001);
+};
+
+const resolveTargetLoopCount = (
+  trackTotalSeconds: number,
+  fileCount: number,
+  targetSeconds: number,
+  crossfadeDuration: number
+): number => {
+  const perLoopNetSeconds = trackTotalSeconds - fileCount * crossfadeDuration;
+  if (perLoopNetSeconds <= 0) {
+    return 1;
+  }
   return Math.max(
     1,
-    Math.ceil((targetSeconds - input.crossfadeDuration) / span)
+    Math.ceil((targetSeconds - crossfadeDuration) / perLoopNetSeconds)
   );
+};
+
+const sumDurations = async (files: string[]): Promise<number> => {
+  const durations = await Promise.all(files.map((file) => probeDuration(file)));
+  return durations.reduce((total, value) => total + value, 0);
+};
+
+export const resolveLoopPlan = async (
+  files: string[],
+  input: EffectiveGenerateMasterInput
+): Promise<LoopPlan> => {
+  if (input.noLoop) {
+    const trackTotalSeconds = await sumDurations(files);
+    const targetSeconds =
+      input.targetDurationMin === undefined
+        ? undefined
+        : input.targetDurationMin * 60;
+    return {
+      durationPreview: {
+        estimatedSeconds: estimateLoopedDuration(
+          trackTotalSeconds,
+          files.length,
+          1,
+          input.crossfadeDuration
+        ),
+        targetSeconds,
+        trackTotalSeconds,
+      },
+      loopCount: 1,
+    };
+  }
+  if (input.loop !== undefined) {
+    const trackTotalSeconds = await sumDurations(files);
+    return {
+      durationPreview: {
+        estimatedSeconds: estimateLoopedDuration(
+          trackTotalSeconds,
+          files.length,
+          input.loop,
+          input.crossfadeDuration
+        ),
+        trackTotalSeconds,
+      },
+      loopCount: input.loop,
+    };
+  }
+  if (input.targetDurationMin === undefined) {
+    return { loopCount: 1 };
+  }
+  const trackTotalSeconds = await sumDurations(files);
+  const targetSeconds = input.targetDurationMin * 60;
+  const loopCount = resolveTargetLoopCount(
+    trackTotalSeconds,
+    files.length,
+    targetSeconds,
+    input.crossfadeDuration
+  );
+  return {
+    durationPreview: {
+      estimatedSeconds: estimateLoopedDuration(
+        trackTotalSeconds,
+        files.length,
+        loopCount,
+        input.crossfadeDuration
+      ),
+      targetSeconds,
+      trackTotalSeconds,
+    },
+    loopCount,
+  };
 };
