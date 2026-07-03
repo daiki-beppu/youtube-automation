@@ -21,6 +21,7 @@ from googleapiclient.errors import HttpError
 
 from youtube_automation.scripts.benchmark_collector import (
     BenchmarkCollector,
+    is_live_benchmark_video,
     load_benchmark_videos,
 )
 from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
@@ -95,6 +96,33 @@ class TestLoadBenchmarkVideos:
         result = load_benchmark_videos(tmp_path, min_views=10000)
 
         assert [v["video_id"] for v in result] == ["v1", "v2"]
+
+    def test_passes_through_duration_iso_for_live_detection(self, tmp_path):
+        # Given: live 配信 (P0D) と VOD が混在。duration_iso 無しの旧形式は "" になる
+        _write_benchmark_json(
+            tmp_path,
+            [
+                {
+                    "name": "ch",
+                    "slug": "ch",
+                    "videos": [
+                        {"video_id": "live1", "views": 50000, "duration_iso": "P0D"},
+                        {"video_id": "vod1", "views": 40000, "duration_iso": "PT1H"},
+                        {"video_id": "old1", "views": 30000},
+                    ],
+                }
+            ],
+        )
+
+        result = load_benchmark_videos(tmp_path, min_views=10000)
+
+        by_id = {v["video_id"]: v for v in result}
+        assert by_id["live1"]["duration_iso"] == "P0D"
+        assert by_id["vod1"]["duration_iso"] == "PT1H"
+        assert by_id["old1"]["duration_iso"] == ""
+        assert is_live_benchmark_video(by_id["live1"])
+        assert not is_live_benchmark_video(by_id["vod1"])
+        assert not is_live_benchmark_video(by_id["old1"])
 
 
 class TestCollectChannelFailures:

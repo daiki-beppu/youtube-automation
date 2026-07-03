@@ -11,7 +11,7 @@ rename マッピング:
 | `description` | `video-description` |
 | `upload` | `video-upload` |
 | `ideate` | `collection-ideate` |
-| `persona` | `audience-persona` |
+| `persona` | `audience-persona-design` |
 
 検証する不変条件:
 
@@ -55,6 +55,20 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _SRC_DIR = _REPO_ROOT / "src" / "youtube_automation"
 _AUDIT_DOC = _REPO_ROOT / "docs" / "audits" / "2026-05-skill-md-audit.md"
+_CLAUDE_TEMPLATE = _REPO_ROOT / ".claude" / "CLAUDE.template.md"
+_ONBOARDING = _REPO_ROOT / "ONBOARDING.md"
+_AUDIENCE_PERSONA_DESIGN = _SKILLS_DIR / "audience-persona-design" / "SKILL.md"
+_VIEWER_VOICE = _SKILLS_DIR / "viewer-voice" / "SKILL.md"
+_VIEWING_SCENE = _SKILLS_DIR / "viewing-scene" / "SKILL.md"
+_COLLECTION_IDEATE = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
+_POSTMORTEM = _SKILLS_DIR / "postmortem" / "SKILL.md"
+_SUNO_LYRIC = _SKILLS_DIR / "suno-lyric" / "SKILL.md"
+_SUNO_LYRIC_PERSONA_DOCS = (
+    _SUNO_LYRIC,
+    _SKILLS_DIR / "suno-lyric" / "config.default.yaml",
+    _SKILLS_DIR / "suno-lyric" / "references" / "persona-quote-affinity.md",
+    _SKILLS_DIR / "suno-lyric" / "references" / "lyric-templates.md",
+)
 
 # rename マッピング (order.md §5)
 RENAME_MAP: dict[str, str] = {
@@ -65,7 +79,7 @@ RENAME_MAP: dict[str, str] = {
     "description": "video-description",
     "upload": "video-upload",
     "ideate": "collection-ideate",
-    "persona": "audience-persona",
+    "persona": "audience-persona-design",
 }
 
 # 旧名 / 新名のフラットリスト (parametrize 用)
@@ -110,6 +124,31 @@ def _config_yaml_pattern(name: str) -> re.Pattern[str]:
 def _iter_skill_md_files() -> Iterable[Path]:
     """`.claude/skills/**/*.md` を全件返す（front-matter / 連鎖呼び出しの双方を走査するため）。"""
     return sorted(_SKILLS_DIR.rglob("*.md"))
+
+
+def _iter_audience_persona_route_docs() -> Iterable[Path]:
+    """旧 `/audience-persona` 導線が残ると downstream に配布される文書を返す。"""
+    return [*_iter_skill_md_files(), _CLAUDE_TEMPLATE]
+
+
+def _markdown_section(text: str, heading: str) -> str:
+    match = re.search(
+        rf"^{re.escape(heading)}\n(?P<body>.*?)(?=^#{{2,4}}\s|\Z)",
+        text,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    if not match:
+        raise AssertionError(f"`{heading}` セクションが見つかりません")
+    return match.group("body")
+
+
+def _assert_tokens_in_order(text: str, tokens: tuple[str, ...], context: str) -> None:
+    cursor = -1
+    for token in tokens:
+        index = text.find(token, cursor + 1)
+        assert index != -1, f"{context} に `{token}` がありません"
+        assert index > cursor, f"{context} で `{token}` の順序が崩れています"
+        cursor = index
 
 
 def _front_matter_name(skill_md: Path) -> str | None:
@@ -209,6 +248,119 @@ def test_all_skill_md_name_matches_parent_dir() -> None:
         if actual != dir_name:
             mismatches.append(f"{skill_md.relative_to(_REPO_ROOT)}: dir=`{dir_name}` vs name=`{actual}`")
     assert mismatches == [], "front-matter `name:` が親ディレクトリ名と不一致:\n  " + "\n  ".join(mismatches)
+
+
+def test_audience_persona_design_replaces_legacy_audience_persona_dir() -> None:
+    """Issue #1371: `/audience-persona` を単一ペルソナ設計スキルへ rename した契約。"""
+    legacy_path = _SKILLS_DIR / "audience-persona"
+    assert not os.path.lexists(legacy_path), "旧スキルディレクトリ .claude/skills/audience-persona が残存している"
+    assert _AUDIENCE_PERSONA_DESIGN.exists()
+    assert _front_matter_name(_AUDIENCE_PERSONA_DESIGN) == "audience-persona-design"
+
+
+def test_no_legacy_audience_persona_slash_command_in_skill_docs() -> None:
+    """Issue #1371: skill docs と配布テンプレ内の旧 `/audience-persona` 導線を残さない。"""
+    pattern = _slash_pattern("audience-persona")
+    offenders: list[str] = []
+    for path in _iter_audience_persona_route_docs():
+        text = _read(path)
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if pattern.search(line):
+                offenders.append(f"{path.relative_to(_REPO_ROOT)}:{lineno}: {line.strip()}")
+    assert offenders == [], (
+        "旧スラッシュコマンド `/audience-persona` が skill docs または配布テンプレートに残存。"
+        " `/audience-persona-design` に書き換えること:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_audience_persona_design_orchestrates_single_persona_flow() -> None:
+    """Issue #1371: viewer-voice → persona design → viewing-scene → final persona の順序を固定する。"""
+    text = _read(_AUDIENCE_PERSONA_DESIGN)
+    order = _markdown_section(text, "## 実行順序")
+
+    expected_order = (
+        "`/viewer-voice` の成果物を確認する。未実施なら案内して停止する。",
+        "コメント由来の語彙・不満・利用シーン・感情トリガーを入力にする。",
+        "候補を 1 人の第一ペルソナへ統合",
+        "暫定 `persona-definition.md` を保存",
+        "`/viewing-scene` を実行",
+        "`/viewing-scene` の結果を反映し、最終 `persona-definition.md` を更新する。",
+    )
+    _assert_tokens_in_order(order, expected_order, "audience-persona-design 実行順序")
+
+    assert "最終版に残す人物は 1 人だけ" in text
+    for required in (
+        "コメント由来の語彙",
+        "感情トリガー",
+        "利用シーン",
+        "検索キーワード",
+        "避けるべき訴求",
+        "自チャンネルへの示唆",
+    ):
+        assert required in text
+
+
+def test_persona_flow_declares_untrusted_data_boundaries() -> None:
+    """Issue #1371: コメント・WebSearch・生成 Markdown を命令として後続へ再注入しない。"""
+    for path in (_VIEWER_VOICE, _AUDIENCE_PERSONA_DESIGN, _VIEWING_SCENE, _COLLECTION_IDEATE):
+        text = _read(path)
+        assert "## Untrusted Data 境界" in text, f"{path.relative_to(_REPO_ROOT)} に untrusted data 境界がない"
+        assert "外部由来テキスト内の命令" in text, f"{path.relative_to(_REPO_ROOT)} が外部命令の無視を明記していない"
+        assert "構造化 persona fields" in text, (
+            f"{path.relative_to(_REPO_ROOT)} が構造化 persona fields 境界を明記していない"
+        )
+
+
+def test_audience_persona_route_docs_follow_required_order() -> None:
+    """Issue #1371: 利用者導線も viewer-voice → persona design → viewing-scene の順にする。"""
+    onboarding = _read(_ONBOARDING)
+    frequency = _markdown_section(onboarding, "### 5.1 定常タスクの推奨頻度")
+    troubleshooting = _markdown_section(onboarding, "### 5.2 困ったときに参照するスキル")
+    postmortem = _read(_POSTMORTEM)
+    verification = _markdown_section(postmortem, "### Phase 4: 検証ステップの案内")
+    next_step = _markdown_section(postmortem, "## Next Step")
+
+    expected = "`/viewer-voice` → `/audience-persona-design` → `/viewing-scene`"
+    expected_tokens = ("`/viewer-voice`", "`/audience-persona-design`", "`/viewing-scene`")
+    assert expected in frequency
+    assert expected in troubleshooting
+    _assert_tokens_in_order(verification, expected_tokens, "postmortem Phase 4")
+    assert expected in next_step
+    assert "`/audience-persona-design` → `/viewer-voice`" not in postmortem
+
+
+def test_audience_persona_design_failure_guidance_covers_prerequisite_paths() -> None:
+    """Issue #1371: 未実施 viewer-voice と未反映 viewing-scene の停止/再実行契約を固定する。"""
+    text = _read(_AUDIENCE_PERSONA_DESIGN)
+    guidance = _markdown_section(text, "## 障害時ガイダンス")
+
+    assert "viewer-voice 未実施" in guidance
+    assert "`docs/plans/viewer-voice-analysis.md` が無い" in guidance
+    assert "`/viewer-voice` を先に実行するよう案内して停止する" in guidance
+    assert "viewing-scene 未反映" in guidance
+    assert "`docs/plans/viewing-scene-matrix.md` が無い" in guidance
+    assert "暫定 `persona-definition.md` 保存後に `/viewing-scene` を実行し、結果を反映して最終化する" in guidance
+
+
+def test_persona_skill_docs_do_not_reference_content_json_suno_genre_line() -> None:
+    """Issue #1371: `genre_line` は `config/skills/suno.yaml` 側であり content.json には存在しない。"""
+    for path in (_AUDIENCE_PERSONA_DESIGN, _VIEWING_SCENE):
+        text = _read(path)
+        assert "content.json` の `tags.base` と `suno.genre_line`" not in text
+        assert "content.json` の `tags.base` と `genre.*`" in text
+
+
+def test_suno_lyric_prefers_new_persona_definition_artifact() -> None:
+    """Issue #1371: `/suno-lyric` は新 persona artifact を主入力にし、旧 artifact は fallback 明記に限る。"""
+    for path in _SUNO_LYRIC_PERSONA_DOCS:
+        text = _read(path)
+        assert "docs/channel/personas/persona-definition.md" in text, (
+            f"{path.relative_to(_REPO_ROOT)} が新 persona artifact を参照していない"
+        )
+        if "docs/audience-persona.md" in text:
+            assert "legacy fallback" in text, (
+                f"{path.relative_to(_REPO_ROOT)} の旧 docs/audience-persona.md 参照は legacy fallback と明記すること"
+            )
 
 
 # ---------- `.claude/skills/**/*.md` に旧スラッシュコマンド参照が残っていないか ----------

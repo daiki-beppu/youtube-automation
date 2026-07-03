@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { DEFAULT_URL, DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
 import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../lib/storage";
-import { PatternList } from "./PatternList";
+import { buildInitialPatternSelection, PatternList, reconcilePatternSelection } from "./PatternList";
 import { useSunoRunner } from "./useSunoRunner";
 
 // 実行モード selector の表示順 (#875)。Fast → Balanced → Safe で速度順に並べる。
@@ -11,6 +11,7 @@ const DOWNLOAD_FORMAT_OPTIONS: DownloadFormat[] = ["mp3", "m4a", "wav"];
 
 export function App() {
   const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>(DOWNLOAD_FORMAT_DEFAULT);
+  const [selectedEntries, setSelectedEntries] = useState<boolean[]>([]);
   const {
     url,
     setUrl,
@@ -45,6 +46,8 @@ export function App() {
     run,
     stop,
   } = useSunoRunner();
+  const previousEntriesRef = useRef(entries);
+  const previousItemStatesRef = useRef(itemStates);
 
   useEffect(() => {
     let mounted = true;
@@ -63,6 +66,37 @@ export function App() {
     void downloadFormatItem.setValue(value);
   };
 
+  useEffect(() => {
+    const previousEntries = previousEntriesRef.current;
+    const previousItemStates = previousItemStatesRef.current;
+    setSelectedEntries((selection) =>
+      reconcilePatternSelection({
+        selection,
+        previousEntries,
+        previousItemStates,
+        entries,
+        itemStates,
+      }),
+    );
+    previousEntriesRef.current = entries;
+    previousItemStatesRef.current = itemStates;
+  }, [entries, itemStates]);
+
+  const toggleEntrySelection = (index: number, checked: boolean): void => {
+    setSelectedEntries((selection) =>
+      reconcilePatternSelection({
+        selection,
+        previousEntries: previousEntriesRef.current,
+        previousItemStates: previousItemStatesRef.current,
+        entries,
+        itemStates,
+      }).map((selected, i) => (i === index ? checked : selected)),
+    );
+  };
+
+  const resolvedSelectedEntries =
+    selectedEntries.length === entries.length ? selectedEntries : buildInitialPatternSelection(entries, itemStates);
+
   return (
     <div className="flex flex-col gap-3 p-3 text-gray-900">
       <h1 className="text-base font-semibold">Suno Helper</h1>
@@ -78,22 +112,25 @@ export function App() {
         />
       </label>
 
-      {collections.length > 0 && (
-        <label className="flex flex-col gap-1 text-sm">
-          コレクション
-          <select
-            value={selectedCollectionId}
-            onChange={(e) => selectCollection(e.target.value)}
-            className="rounded border border-gray-300 px-2 py-1"
-          >
-            {collections.map((c) => (
-              <option key={c.id} value={c.id} disabled={c.status === "needs_prompts"}>
-                {c.status !== "needs_prompts" ? `${c.name} (${c.pattern_count})` : `${c.name}（prompts なし）`}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      <label className="flex flex-col gap-1 text-sm">
+        コレクション
+        <select
+          value={selectedCollectionId}
+          onChange={(e) => selectCollection(e.target.value)}
+          className="rounded border border-gray-300 px-2 py-1"
+        >
+          {collections.length === 0 && (
+            <option value="" disabled>
+              コレクションなし
+            </option>
+          )}
+          {collections.map((c) => (
+            <option key={c.id} value={c.id} disabled={c.status === "needs_prompts"}>
+              {c.status !== "needs_prompts" ? `${c.name} (${c.pattern_count})` : `${c.name}（prompts なし）`}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {playlistName && (
         <p className="text-xs text-gray-600">
@@ -258,7 +295,7 @@ export function App() {
         </button>
       </div>
 
-      {!isRunning && playlistName && selectedCollectionId && (
+      {!isRunning && selectedCollectionId && (
         <div className="flex flex-col gap-2">
           <button
             type="button"
@@ -268,13 +305,15 @@ export function App() {
             選択中の曲を採用
           </button>
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => void retryPlaylist()}
-              className="flex-1 rounded border border-amber-500 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
-            >
-              Playlist から再開
-            </button>
+            {playlistName && (
+              <button
+                type="button"
+                onClick={() => void retryPlaylist()}
+                className="flex-1 rounded border border-amber-500 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
+              >
+                Playlist から再開
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void retryDownload()}
@@ -287,7 +326,12 @@ export function App() {
         </div>
       )}
 
-      <PatternList entries={entries} itemStates={itemStates} />
+      <PatternList
+        entries={entries}
+        itemStates={itemStates}
+        selectedEntries={resolvedSelectedEntries}
+        onToggleEntry={toggleEntrySelection}
+      />
 
       {status && (
         <p className={`whitespace-pre-wrap text-xs ${isError ? "text-red-600" : "text-gray-600"}`}>{status}</p>
