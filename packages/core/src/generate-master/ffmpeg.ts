@@ -118,6 +118,7 @@ export const probeDuration = async (file: string): Promise<number> => {
     "format=duration",
     "-of",
     "default=noprint_wrappers=1:nokey=1",
+    "--",
     file,
   ]);
   if (exitCode !== 0) {

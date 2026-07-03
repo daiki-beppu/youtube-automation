@@ -44,7 +44,13 @@ export const setupCollection = (
   return collection;
 };
 
-export const installFakeFfmpeg = (exitCode = 0): string => {
+export const installFakeFfmpeg = (
+  options: number | { exitCode?: number; writeOutput?: boolean } = 0
+): string => {
+  const exitCode =
+    typeof options === "number" ? options : (options.exitCode ?? 0);
+  const writeOutput =
+    typeof options === "number" ? true : (options.writeOutput ?? true);
   const binDir = makeTempRoot("generate-master-bin-");
   const logPath = join(binDir, "ffmpeg.log");
   const script = `#!/usr/bin/env bun
@@ -53,8 +59,8 @@ import { dirname } from "node:path";
 
 const args = Bun.argv.slice(2);
 appendFileSync(process.env.YT_TEST_FFMPEG_LOG!, JSON.stringify(args) + "\\n");
-const output = args.find((arg) => arg.endsWith("/01-master/master.mp3"));
-if (output !== undefined) {
+const output = args.find((arg) => arg.includes("/01-master/master.mp3"));
+if (${writeOutput} && output !== undefined) {
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(output, "fake-master", "utf-8");
 }

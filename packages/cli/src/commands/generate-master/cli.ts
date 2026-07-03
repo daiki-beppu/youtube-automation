@@ -1,5 +1,7 @@
+import { isAbsolute } from "node:path";
 import process from "node:process";
 
+import { err, toServiceError } from "@youtube-automation/core";
 import type { GenerateMasterInput } from "@youtube-automation/core/generate-master";
 import type { DepsMap } from "@youtube-automation/core/registry";
 import { REGISTRY } from "@youtube-automation/core/registry";
@@ -20,19 +22,60 @@ type GenerateMasterDeps = Pick<
   (typeof generateMasterEntry.deps)[number]
 >;
 
-const resolveGenerateMasterDeps = async (
-  input: GenerateMasterInput
-): Promise<GenerateMasterDeps> => {
+const resolveGenerateMasterDeps = (
+  input: GenerateMasterInput,
+  channelDir: string | undefined
+): GenerateMasterDeps => {
   if (input.channelDir !== undefined) {
     return { channelDir: input.channelDir };
   }
-  try {
-    return await resolveDeps(generateMasterEntry.deps);
-  } catch (error) {
-    if (input.collection !== undefined) {
-      return { channelDir: process.cwd() };
+  if (channelDir !== undefined) {
+    return { channelDir };
+  }
+  if (input.collection !== undefined && isAbsolute(input.collection)) {
+    return { channelDir: process.cwd() };
+  }
+  throw new Error(
+    "validation: relative collection requires channel_dir or CHANNEL_DIR"
+  );
+};
+
+const parseExplicitChannelDir = (rawArgs: string[]): string | undefined => {
+  for (let index = 0; index < rawArgs.length; index += 1) {
+    const arg = rawArgs[index];
+    if (arg === undefined) {
+      continue;
     }
-    throw error;
+    if (arg.startsWith("--channel-dir=")) {
+      const value = arg.slice("--channel-dir=".length);
+      if (value.length === 0) {
+        throw new Error("validation: --channel-dir requires a value");
+      }
+      return value;
+    }
+    if (arg === "--channel-dir") {
+      const value = rawArgs[index + 1];
+      if (value === undefined || value.startsWith("-")) {
+        throw new Error("validation: --channel-dir requires a value");
+      }
+      return value;
+    }
+  }
+  return undefined;
+};
+
+const resolveContextChannelDir = async (
+  rawArgs: string[]
+): Promise<string | undefined> => {
+  const explicit = parseExplicitChannelDir(rawArgs);
+  if (explicit !== undefined) {
+    return explicit;
+  }
+  try {
+    const deps = await resolveDeps(generateMasterEntry.deps);
+    return deps.channelDir;
+  } catch {
+    return undefined;
   }
 };
 
@@ -96,22 +139,29 @@ export const generateMasterCommand = defineCommand({
     name: "generate-master",
   },
   async run({ args, rawArgs }) {
-    const parsedInput = parseGenerateMasterInput(rawArgs, {
-      defaultCollection: process.cwd(),
-    });
-    if (!parsedInput.ok) {
-      emitResult<GenerateMasterInput>(parsedInput, {
-        json: args.json === true,
-        renderText: () => "",
-      });
-      return;
-    }
-    const input = parsedInput.value;
-    const deps = await resolveGenerateMasterDeps(input);
-    const result = await generateMasterEntry.run(input, deps);
+    let quiet = false;
+    const result = await (async () => {
+      try {
+        const channelDir = await resolveContextChannelDir(rawArgs);
+        const parsedInput = parseGenerateMasterInput(rawArgs, {
+          channelDir,
+          defaultCollection: process.cwd(),
+        });
+        if (!parsedInput.ok) {
+          return err(parsedInput.error);
+        }
+        const input = parsedInput.value;
+        const { quiet: inputQuiet } = input;
+        quiet = inputQuiet;
+        const deps = resolveGenerateMasterDeps(input, channelDir);
+        return await generateMasterEntry.run(input, deps);
+      } catch (error) {
+        return err(toServiceError(error));
+      }
+    })();
     emitResult(result, {
       json: args.json === true,
-      renderText: input.quiet
+      renderText: quiet
         ? renderGenerateMasterQuietText
         : renderGenerateMasterText,
     });

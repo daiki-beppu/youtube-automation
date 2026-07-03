@@ -4,7 +4,8 @@
   "private": true,
   "description": "tayk command line entry point for the youtube-channels-automation TS rewrite (ADR-0004 citty dispatcher).",
   "bin": {
-    "tayk": "./bin/tayk.ts"
+    "tayk": "./bin/tayk.ts",
+    "yt": "./bin/tayk.ts"
   },
   "files": [
     "bin",

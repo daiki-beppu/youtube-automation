@@ -53,7 +53,7 @@ import { dirname } from "node:path";
 
 const args = Bun.argv.slice(2);
 appendFileSync(process.env.YT_TEST_FFMPEG_LOG!, JSON.stringify(args) + "\\n");
-const output = args.find((arg) => arg.endsWith("/01-master/master.mp3"));
+const output = args.find((arg) => arg.includes("/01-master/master.mp3"));
 if (output !== undefined) {
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(output, "fake-master", "utf-8");
@@ -114,21 +114,31 @@ process.stdout.write(String(duration));
 const runTayk = (
   env: Record<string, string>,
   ...argv: string[]
-): ReturnType<typeof Bun.spawnSync> =>
-  Bun.spawnSync(["bun", taykScript, ...argv], {
+): ReturnType<typeof Bun.spawnSync> => {
+  const commandEnv = { ...process.env, ...env };
+  if (!Object.hasOwn(env, "CHANNEL_DIR")) {
+    Reflect.deleteProperty(commandEnv, "CHANNEL_DIR");
+  }
+  return Bun.spawnSync(["bun", taykScript, ...argv], {
     cwd: repoRoot,
-    env: { ...process.env, ...env },
+    env: commandEnv,
   });
+};
 
 const runTaykFrom = (
   cwd: string,
   env: Record<string, string>,
   ...argv: string[]
-): ReturnType<typeof Bun.spawnSync> =>
-  Bun.spawnSync(["bun", taykScript, ...argv], {
+): ReturnType<typeof Bun.spawnSync> => {
+  const commandEnv = { ...process.env, ...env };
+  if (!Object.hasOwn(env, "CHANNEL_DIR")) {
+    Reflect.deleteProperty(commandEnv, "CHANNEL_DIR");
+  }
+  return Bun.spawnSync(["bun", taykScript, ...argv], {
     cwd,
-    env: { ...process.env, ...env },
+    env: commandEnv,
   });
+};
 
 const readFfmpegCall = (logPath: string): string[] => {
   const [line] = readFileSync(logPath, "utf-8").trim().split("\n");
@@ -176,7 +186,7 @@ describe("tayk dispatcher — generate-master", () => {
     };
 
     expect(packageJson.bin.tayk).toBe("./bin/tayk.ts");
-    expect(packageJson.bin.yt).toBeUndefined();
+    expect(packageJson.bin.yt).toBe("./bin/tayk.ts");
   });
 
   test("help lists the generate-master subcommand", () => {
@@ -363,6 +373,40 @@ describe("tayk dispatcher — generate-master", () => {
       "02-hook.mp3",
       "03-c.mp3",
     ]);
+  });
+
+  test("uses CHANNEL_DIR for relative trailing collection after pin-first", () => {
+    const channelRoot = makeTempRoot("yt-generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", [
+      "01-a.mp3",
+      "02-hook.mp3",
+      "03-c.mp3",
+    ]);
+    const fake = installFakeFfmpeg();
+
+    const proc = runTayk(
+      { ...fake.env, CHANNEL_DIR: channelRoot },
+      "generate-master",
+      "--json",
+      "--pin-first",
+      "02-hook.mp3",
+      "collections/demo",
+      "--shuffle"
+    );
+
+    expect(proc.exitCode).toBe(0);
+    expect(proc.stderr?.toString()).toBe("");
+    const parsed = JSON.parse(proc.stdout?.toString() ?? "") as {
+      outputPath: string;
+    };
+    expect(parsed.outputPath).toBe(
+      join(channelRoot, "collections/demo", "01-master", "master.mp3")
+    );
+    expect(
+      inputFilesInCommand(readFfmpegCall(fake.logPath)).map((path) =>
+        basename(path)
+      )
+    ).toContain("02-hook.mp3");
   });
 
   test("service errors flow through run-command stderr and exit code", () => {

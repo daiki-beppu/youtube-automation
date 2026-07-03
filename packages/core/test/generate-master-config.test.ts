@@ -118,6 +118,28 @@ describe("generateMasterService — skill config override", () => {
     expect(output.crossfadeDuration).toBe(2);
   });
 
+  test("returns config error for unsupported audio YAML lines before ffmpeg", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.yaml"),
+      ["audio:", "  bitrate:"].join("\n")
+    );
+    const logPath = installFakeFfmpeg();
+
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("config");
+      expect(result.error.message).toContain("unsupported masterup audio YAML");
+    }
+    expect(readFfmpegCalls(logPath)).toEqual([]);
+  });
+
   test("treats missing audio section as an empty compatibility override", async () => {
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);

@@ -1,5 +1,5 @@
-import { readdir, stat } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
+import { lstat, readdir, realpath, stat } from "node:fs/promises";
+import { basename, extname, isAbsolute, join, relative } from "node:path";
 
 import type { MasterupAudioConfig } from "./config.ts";
 import { MUSIC_DIRNAME, SUPPORTED_AUDIO_EXTENSIONS } from "./constants.ts";
@@ -29,6 +29,28 @@ const isDirectory = async (path: string): Promise<boolean> => {
     }
     throw error;
   }
+};
+
+const isInside = (root: string, path: string): boolean => {
+  const rel = relative(root, path);
+  return rel.length > 0 && !rel.startsWith("..") && !isAbsolute(rel);
+};
+
+const assertSafeAudioFile = async (
+  musicDirRealPath: string,
+  path: string
+): Promise<string> => {
+  const stats = await lstat(path);
+  if (!stats.isFile() || stats.isSymbolicLink()) {
+    throw new Error(`validation: unsafe audio input: ${path}`);
+  }
+  const real = await realpath(path);
+  if (!isInside(musicDirRealPath, real)) {
+    throw new Error(
+      `validation: audio input escapes ${MUSIC_DIRNAME}: ${path}`
+    );
+  }
+  return path;
 };
 
 export const withConfigOverrides = (
@@ -78,7 +100,8 @@ export const collectAudioInputs = async (
     throw new Error(`validation: directory not found: ${musicDir}`);
   }
   const names = await readdir(musicDir);
-  const files = names
+  const musicDirRealPath = await realpath(musicDir);
+  const candidates = names
     .filter((name) =>
       SUPPORTED_AUDIO_EXTENSIONS.includes(
         extname(
@@ -88,6 +111,9 @@ export const collectAudioInputs = async (
     )
     .toSorted()
     .map((name) => join(musicDir, name));
+  const files = await Promise.all(
+    candidates.map((path) => assertSafeAudioFile(musicDirRealPath, path))
+  );
   if (files.length === 0) {
     throw new Error(
       `validation: audio files not found in ${MUSIC_DIRNAME}: ${musicDir}`
@@ -113,7 +139,11 @@ const applyPinFirst = (
     const pinnedNames = new Set(pinFirst);
     const remaining = files.filter((file) => !pinnedNames.has(basename(file)));
     return {
-      messages: [`[Pin] first ${pinned.length} track(s) fixed`],
+      messages: [
+        `[Pin] first ${pinned.length} track(s) fixed: ${JSON.stringify(
+          pinned.map((file) => basename(file))
+        )}`,
+      ],
       ordered: [...pinned, ...remaining],
     };
   }
@@ -123,8 +153,13 @@ const applyPinFirst = (
         `validation: pin_first_count=${pinFirstCount} exceeds track count ${files.length}`
       );
     }
+    const pinned = files.slice(0, pinFirstCount);
     return {
-      messages: [`[Pin] first ${pinFirstCount} track(s) fixed`],
+      messages: [
+        `[Pin] first ${pinFirstCount} track(s) fixed: ${JSON.stringify(
+          pinned.map((file) => basename(file))
+        )}`,
+      ],
       ordered: files,
     };
   }

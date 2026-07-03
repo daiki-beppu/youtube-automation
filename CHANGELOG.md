@@ -42,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Migration
 
 - `#775`: Python `yt-generate-suno` 相当の導線は TS dispatcher の `tayk generate-suno <collection-dir> [--json]` に移行する。per-CLI bin は追加せず、core registry entry `suno.generate` 経由で `suno-prompts.md` / `suno-prompts.json` を生成する。
-- `#772`: Python `yt-generate-master` 相当の導線は TS dispatcher の `tayk generate-master <collection-dir> [--json]` に移行する。per-CLI bin は追加せず、core registry entry `masterup.generate-master` 経由で Suno ダウンロード済み音声を `master.mp3` へクロスフェード結合する。
+- `#772`: Python `yt-generate-master` 相当の導線は TS dispatcher の `tayk generate-master <collection-dir> [--json]` に移行する。互換 alias として `yt` bin も同じ dispatcher を指す。core registry entry `masterup.generate-master` 経由で Suno ダウンロード済み音声を `master.mp3` へクロスフェード結合する。skill-config は `config/skills/masterup.json` を優先し、存在しない場合のみ既存 `config/skills/masterup.yaml` を fallback として読む。`audio` section は optional で、存在する場合は object のみ有効。未対応 YAML 行や空 scalar は config error として停止する。
 
 ## [5.5.15] - 2026-07-02
 

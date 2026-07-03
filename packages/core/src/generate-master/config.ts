@@ -146,8 +146,10 @@ const parseMasterupYaml = (text: string): unknown => {
         const [, key, value] = match;
         if (key !== undefined && value !== undefined) {
           audio[key] = parseScalar(value.trim());
+          continue;
         }
       }
+      throw new Error(`config: unsupported masterup audio YAML line: ${line}`);
     }
   }
   return { [AUDIO_SECTION_KEY]: audio };

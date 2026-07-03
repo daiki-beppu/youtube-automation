@@ -1,6 +1,5 @@
 import { statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import process from "node:process";
 
 import { err, ok, toServiceError } from "@youtube-automation/core";
 import { GenerateMasterInputSchema } from "@youtube-automation/core/generate-master";
@@ -33,6 +32,7 @@ interface ValueFlagSpec {
 }
 
 interface ParseOptions {
+  channelDir?: string;
   defaultCollection?: string;
 }
 
@@ -164,15 +164,13 @@ const isDirectory = (path: string): boolean => {
 
 const resolveCollectionCandidate = (
   input: GenerateMasterRawInput,
-  value: string
+  value: string,
+  options: ParseOptions
 ): string | undefined => {
   if (isAbsolute(value)) {
     return resolve(value);
   }
-  if (input.channel_dir !== undefined) {
-    return resolve(input.channel_dir, value);
-  }
-  const channelDir = process.env.CHANNEL_DIR;
+  const channelDir = input.channel_dir ?? options.channelDir;
   return channelDir === undefined || channelDir.length === 0
     ? undefined
     : resolve(channelDir, value);
@@ -180,9 +178,10 @@ const resolveCollectionCandidate = (
 
 const isCollectionCandidate = (
   input: GenerateMasterRawInput,
-  value: string
+  value: string,
+  options: ParseOptions
 ): boolean => {
-  const candidate = resolveCollectionCandidate(input, value);
+  const candidate = resolveCollectionCandidate(input, value, options);
   return candidate !== undefined && isDirectory(candidate);
 };
 
@@ -239,7 +238,7 @@ const applyCollectionAndPinFirst = (
     const trailingPinFirst = pendingPinFirst.at(-1);
     if (
       trailingPinFirst !== undefined &&
-      isCollectionCandidate(input, trailingPinFirst)
+      isCollectionCandidate(input, trailingPinFirst, options)
     ) {
       input.collection = trailingPinFirst;
       pendingPinFirst.pop();
