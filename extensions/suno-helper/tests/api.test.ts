@@ -6,10 +6,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  DEFAULT_DURATION_FILTER,
   type CollectionSummary,
+  type DurationFilter,
   type PromptEntry,
   checkServerCompatibility,
   collectionHasPrompts,
+  fetchCollectionPromptResponse,
   fetchCollections,
   fetchCollectionPrompts,
   fetchServerVersion,
@@ -67,6 +70,19 @@ describe("shared/api fetchCollectionPrompts: 正常系", () => {
       style: expect.any(String),
       lyrics: expect.any(String),
     });
+  });
+
+  it("Given envelope JSON When fetch する Then entries だけを返す（既存 API 互換）", async () => {
+    const entries: PromptEntry[] = [{ name: "p1", style: "lofi", lyrics: "" }];
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ entries, duration_filter: { min_sec: 75, max_sec: 240 } }),
+    }));
+
+    const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
+
+    expect(result).toEqual(entries);
   });
 });
 
@@ -163,6 +179,66 @@ describe("shared/api PromptEntry: More Options 3 フィールドの optional 契
     expect(result[0].style_influence).toBe(0);
     expect(result[0].weirdness).toBe(0);
   });
+});
+
+describe("shared/api PromptResponse.duration_filter: collection 単位 duration guard 契約 (#1259)", () => {
+  it("Given envelope JSON When fetchCollectionPromptResponse する Then entries と duration_filter を返す", async () => {
+    const entries: PromptEntry[] = [{ name: "p1", style: "lofi", lyrics: "" }];
+    const durationFilter: DurationFilter = { min_sec: 75, max_sec: 240 };
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ entries, duration_filter: durationFilter }),
+    }));
+
+    const result = await fetchCollectionPromptResponse(BASE_URL, COLLECTION_ID);
+
+    expect(result.entries).toEqual(entries);
+    expect(result.duration_filter).toEqual(durationFilter);
+  });
+
+  it("Given duration_filter 省略 When fetchCollectionPromptResponse する Then 既定値を補う", async () => {
+    const entries: PromptEntry[] = [{ name: "p1", style: "lofi", lyrics: "" }];
+    mockFetch(() => ({ ok: true, status: 200, json: async () => ({ entries }) }));
+
+    const result = await fetchCollectionPromptResponse(BASE_URL, COLLECTION_ID);
+
+    expect(result.duration_filter).toEqual(DEFAULT_DURATION_FILTER);
+  });
+
+  it("Given legacy 配列 JSON When fetchCollectionPromptResponse する Then entries に正規化して既定値を補う", async () => {
+    const entries: PromptEntry[] = [{ name: "p1", style: "lofi", lyrics: "" }];
+    mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
+
+    const result = await fetchCollectionPromptResponse(BASE_URL, COLLECTION_ID);
+
+    expect(result).toEqual({ entries, duration_filter: DEFAULT_DURATION_FILTER });
+  });
+
+  it.each([
+    ["null", null],
+    ["空 object", {}],
+    ["min_sec 欠落", { max_sec: 300 }],
+    ["max_sec 欠落", { min_sec: 60 }],
+    ["min_sec 非数値", { min_sec: "60", max_sec: 300 }],
+    ["max_sec 非数値", { min_sec: 60, max_sec: "300" }],
+    ["min_sec 負数", { min_sec: -1, max_sec: 300 }],
+    ["min_sec > max_sec", { min_sec: 300, max_sec: 60 }],
+  ])(
+    "Given invalid duration_filter (%s) When fetchCollectionPromptResponse する Then fail-loud で throw する",
+    async (_label, durationFilter) => {
+      mockFetch(() => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          entries: [{ name: "p1", style: "lofi", lyrics: "" }],
+          duration_filter: durationFilter,
+        }),
+      }));
+
+      await expect(fetchCollectionPromptResponse(BASE_URL, COLLECTION_ID)).rejects.toThrow();
+    },
+  );
 });
 
 describe("shared/api fetchCollectionPrompts: 異常系 (fail-loud)", () => {
@@ -352,6 +428,18 @@ describe("shared/api fetchCollectionPrompts: 配信元 URL の組み立て", () 
 
     expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/collections/20260526-rainy%20jazz-collection/suno/prompts.json`);
   });
+
+  it("Given スペース入り id When fetchCollectionPromptResponse する Then id を path segment encode して要求する", async () => {
+    const fetchFn = mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => [{ name: "p1", style: "lofi", lyrics: "" }],
+    }));
+
+    await fetchCollectionPromptResponse(BASE_URL, "20260526-rainy jazz-collection");
+
+    expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/collections/20260526-rainy%20jazz-collection/suno/prompts.json`);
+  });
 });
 
 describe("shared/api fetchCollectionPrompts: 正常系", () => {
@@ -362,6 +450,33 @@ describe("shared/api fetchCollectionPrompts: 正常系", () => {
     const result = await fetchCollectionPrompts(BASE_URL, "20260601-clm-aaa-collection");
 
     expect(result).toEqual(entries);
+  });
+
+  it("Given envelope JSON When fetchCollectionPrompts する Then entries だけを返す（既存 API 互換）", async () => {
+    const entries: PromptEntry[] = [{ name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" }];
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ entries, duration_filter: { min_sec: 90, max_sec: 260 } }),
+    }));
+
+    const result = await fetchCollectionPrompts(BASE_URL, "20260601-clm-aaa-collection");
+
+    expect(result).toEqual(entries);
+  });
+
+  it("Given envelope JSON When fetchCollectionPromptResponse する Then duration_filter を保持する", async () => {
+    const entries: PromptEntry[] = [{ name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" }];
+    const durationFilter: DurationFilter = { min_sec: 90, max_sec: 260 };
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ entries, duration_filter: durationFilter }),
+    }));
+
+    const result = await fetchCollectionPromptResponse(BASE_URL, "20260601-clm-aaa-collection");
+
+    expect(result).toEqual({ entries, duration_filter: durationFilter });
   });
 });
 
@@ -750,19 +865,22 @@ describe("shared/api postDownloaded: 正常系", () => {
     expect(body.suno_playlist_url).toBe("https://suno.com/playlist/test");
   });
 
-  it("Given download_path 付きで playlist URL が無い payload When postDownloaded Then fetch 前に throw する", async () => {
+  it("Given download_path 付きで playlist URL が無い payload When postDownloaded Then request body に playlist URL を含めず送る", async () => {
     const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
 
-    await expect(
-      postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
-        file_count: 5,
-        expected_file_count: 5,
-        format: "mp3",
-        download_path: "/Users/test/Downloads/test.zip",
-      }),
-    ).rejects.toThrow(/suno_playlist_url/);
+    await postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+      file_count: 5,
+      expected_file_count: 5,
+      format: "mp3",
+      download_path: "/Users/test/Downloads/test.zip",
+    });
 
-    expect(fetchFn).not.toHaveBeenCalled();
+    const postCall = fetchFn.mock.calls.find(
+      (c) => typeof c[0] === "string" && c[0].includes("/downloaded"),
+    ) as unknown as [string, RequestInit];
+    const body = JSON.parse(postCall[1].body as string);
+    expect(body.download_path).toBe("/Users/test/Downloads/test.zip");
+    expect(body.suno_playlist_url).toBeUndefined();
   });
 
   it("Given file_count 正数で download_path が無い payload When postDownloaded Then fetch 前に throw する", async () => {

@@ -1,4 +1,4 @@
-import type { PromptEntry } from "../../shared/api";
+import type { DurationFilter, PromptEntry } from "../../shared/api";
 import type { RunPayload } from "./messaging";
 import { resumeRunRange, type ResumeBanner, type RunRange } from "./resume-state";
 
@@ -17,6 +17,7 @@ export interface PlaylistResumePayload {
 export interface RunPayloadInput {
   entries: PromptEntry[];
   playlistName: string;
+  durationFilter?: DurationFilter;
   range: RunRange | undefined;
   collectionId: string;
   overrides: RunOverrides | undefined;
@@ -26,6 +27,7 @@ export function buildRunPayload(input: RunPayloadInput): RunPayload {
   return {
     entries: input.entries,
     playlistName: input.playlistName,
+    ...(input.durationFilter ? { durationFilter: input.durationFilter } : {}),
     range: input.range,
     collectionId: input.collectionId,
     indices: input.overrides?.indices,

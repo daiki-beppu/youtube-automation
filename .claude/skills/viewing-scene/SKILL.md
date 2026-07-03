@@ -24,7 +24,7 @@ YouTube 検索需要調査で、注力すべきシーンと最適な動画尺を
 ## 前提
 
 - `config/channel/` が存在すること（`load_config()` でロード可能）。
-  存在しない場合 → 新規チャンネルなら `/channel-new`、既存チャンネルなら `/channel-import` を案内。
+  存在しない場合 → 新規チャンネルなら `/channel-new`、既存チャンネルなら `/channel-new`（既存チャンネル取り込みモード）を案内。
 - `docs/channel/personas/persona-definition.md` が存在すること（未実施なら `/audience-persona-design` を案内）
 - `reports/` に最新の分析レポートがあること（なければ `/analytics-collect` → `/analytics-analyze` を案内）
 

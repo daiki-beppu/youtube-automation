@@ -260,6 +260,26 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
     });
   });
 
+  it("Given durationFilter When run 送信用 payload を構築する Then payload に保持する", () => {
+    const entries = [{ name: "pattern-1", style: "ambient", lyrics: "[Instrumental]" }];
+
+    const payload = buildRunPayload({
+      entries,
+      playlistName: "target-playlist",
+      durationFilter: { min_sec: 75, max_sec: 240 },
+      range: undefined,
+      collectionId: "collection-a",
+      overrides: undefined,
+    });
+
+    expect(payload).toMatchObject({
+      entries,
+      playlistName: "target-playlist",
+      durationFilter: { min_sec: 75, max_sec: 240 },
+      collectionId: "collection-a",
+    });
+  });
+
   it("Given 旧 ResumeState に期待件数が無い When useSunoRunner を読む Then total から期待件数を復元して渡す", () => {
     expect(runnerSource).toMatch(
       /resolvePlaylistExpectedClipCountForResume\(\s*persistedResume\.playlistExpectedClipCount,\s*persistedResume\.total,\s*\)/,
@@ -268,7 +288,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
 
   it("Given content run start When data payload を読む Then playlist resume 情報を runAll に渡す", () => {
     expect(contentSource).toMatch(
-      /const \{ entries, playlistName, range, collectionId, indices, submittedClipIds, playlistExpectedClipCount \} =\s*assertRunPayload\(data\);[\s\S]*?void runAll\(entries, \{[\s\S]*?submittedClipIds,[\s\S]*?playlistExpectedClipCount,[\s\S]*?\}\)/,
+      /const \{[\s\S]*?entries,[\s\S]*?playlistName,[\s\S]*?durationFilter,[\s\S]*?range,[\s\S]*?collectionId,[\s\S]*?indices,[\s\S]*?submittedClipIds,[\s\S]*?playlistExpectedClipCount,[\s\S]*?\} = assertRunPayload\(data\);[\s\S]*?void runAll\(entries, \{[\s\S]*?durationFilter,[\s\S]*?submittedClipIds,[\s\S]*?playlistExpectedClipCount,[\s\S]*?\}\)/,
     );
   });
 

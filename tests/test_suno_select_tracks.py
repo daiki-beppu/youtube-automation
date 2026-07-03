@@ -12,7 +12,7 @@ from youtube_automation.utils import suno_track_selection
 from youtube_automation.utils.exceptions import ValidationError
 
 
-def _make_collection(tmp_path: Path, prompts: list[dict]) -> Path:
+def _make_collection(tmp_path: Path, prompts: object) -> Path:
     collection = tmp_path / "collections" / "planning" / "20260629-test-collection"
     (collection / "20-documentation").mkdir(parents=True)
     (collection / "02-Individual-music").mkdir()
@@ -86,6 +86,26 @@ def test_instrumental_prompt_keeps_both_clips_after_duration_filter(tmp_path, mo
     assert result.winners == []
     assert result.stocked == []
     assert result.mode_counts == {"vocal": 0, "instrumental": 1}
+
+
+def test_prompt_response_envelope_keeps_track_selection_compatible(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        {
+            "entries": [{"name": "夜明け — Dawn Song", "lyrics": "[Verse]\nhello dawn"}],
+            "duration_filter": {"min_sec": 60, "max_sec": 300},
+        },
+    )
+    _write_audio(collection, "01a-Dawn Song.mp3")
+    _write_audio(collection, "01b-Dawn Song.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+
+    result = suno_track_selection.select_suno_tracks(collection, _cfg())
+
+    music_files = sorted(p.name for p in (collection / "02-Individual-music").iterdir() if p.is_file())
+    assert music_files == ["01-Dawn Song.mp3"]
+    assert len(result.winners) == 1
+    assert len(result.stocked) == 1
 
 
 def test_duration_filter_stocks_too_short_and_keeps_survivor(tmp_path, monkeypatch):
