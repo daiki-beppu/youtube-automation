@@ -14,7 +14,7 @@ import {
   resolvePromptCollectionId,
   visiblePromptCollections,
 } from "../../shared/api";
-import { CLIPS_PER_REQUEST, type ItemState, PHASE, type SpeedPresetId } from "../../shared/constants";
+import { CLIPS_PER_REQUEST, type ItemState, type SpeedPresetId } from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { DEFAULT_SPEED_PRESET_ID, readSpeedPresetId, writeSpeedPresetId } from "../lib/preset-state";
 import {
@@ -35,6 +35,7 @@ import {
 } from "../lib/run-overrides";
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
 import { serverUrlItem } from "../lib/storage";
+import { shouldReportLiveProgressStatus } from "./live-progress-status";
 import { buildRestoreState, formatRunError, formatStopError, phaseToStatus } from "./runner-errors";
 
 /** 実行範囲モード (#872)。all=全パターン / range=範囲指定。 */
@@ -377,10 +378,11 @@ export function useSunoRunner(): RunnerState {
 
   useEffect(() => {
     const unwatch = onMessage("progress", ({ data }) => {
-      setItemStates((prev) => nextItemStates(prev, data.phase, data.index));
+      setItemStates((prev) => nextItemStates(prev, data));
       // DONE は当該 item を done 化するだけで status 文字列は更新しない（旧 popup.js の live 挙動を維持）。
+      // ただし #1270 の duration check OK は DONE に log として載るため、その場合だけ表示更新する。
       // restore 経路は phaseToStatus(DONE) で「完了」を表示するため SSOT 側に DONE case は残す。
-      if (data.phase !== PHASE.DONE) {
+      if (shouldReportLiveProgressStatus(data)) {
         const { text, error } = phaseToStatus(data, entries);
         report(text, Boolean(error));
       }
