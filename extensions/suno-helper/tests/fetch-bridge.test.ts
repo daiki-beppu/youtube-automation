@@ -4,7 +4,7 @@
 // throw しない）が契約 — 観測の失敗で生成フローを止めないため。
 import { describe, expect, it } from "vitest";
 
-import { GENERATE_ENDPOINT_PATH, SUNO_API_ORIGIN } from "../../shared/constants";
+import { FEED_V3_METHOD, FEED_V3_PATH, GENERATE_ENDPOINT_PATH, SUNO_API_ORIGIN } from "../../shared/constants";
 import {
   extractAuthHeader,
   isFeedRequest,
@@ -12,29 +12,57 @@ import {
   isSunoApiUrl,
   parseClipsFromFeedResponse,
   parseClipsFromGenerateResponse,
+  resolveRequestMethod,
   resolveRequestUrl,
 } from "../lib/fetch-bridge";
 
 const GENERATE_URL = `${SUNO_API_ORIGIN}${GENERATE_ENDPOINT_PATH}`;
 const FEED_URL = `${SUNO_API_ORIGIN}/api/feed/v2?ids=aaa,bbb`;
+const FEED_V3_URL = `${SUNO_API_ORIGIN}${FEED_V3_PATH}`;
 
 describe("URL 判定: 観測対象 endpoint の識別", () => {
   it("Given generate endpoint の URL When 判定する Then isGenerateRequest が true", () => {
     expect(isGenerateRequest(GENERATE_URL)).toBe(true);
-    expect(isFeedRequest(GENERATE_URL)).toBe(false);
+    expect(isFeedRequest(GENERATE_URL, "GET")).toBe(false);
   });
 
-  it("Given feed/v2 の URL When 判定する Then isFeedRequest が true（version 違いも prefix で拾う）", () => {
-    expect(isFeedRequest(FEED_URL)).toBe(true);
-    expect(isFeedRequest(`${SUNO_API_ORIGIN}/api/feed/v3?ids=x`)).toBe(true);
+  it("Given feed/v3 POST の URL When 判定する Then isFeedRequest が true", () => {
+    expect(isFeedRequest(FEED_V3_URL, FEED_V3_METHOD)).toBe(true);
     expect(isGenerateRequest(FEED_URL)).toBe(false);
+  });
+
+  it("Given feed/v2 GET / feed/v3 GET の URL When 判定する Then isFeedRequest が false", () => {
+    expect(isFeedRequest(FEED_URL, "GET")).toBe(false);
+    expect(isFeedRequest(FEED_V3_URL, "GET")).toBe(false);
   });
 
   it("Given 別オリジンの同パス URL When 判定する Then すべて false（オリジン縛り）", () => {
     const phishing = `https://evil.example.com${GENERATE_ENDPOINT_PATH}`;
     expect(isSunoApiUrl(phishing)).toBe(false);
     expect(isGenerateRequest(phishing)).toBe(false);
-    expect(isFeedRequest(`https://evil.example.com/api/feed/v2`)).toBe(false);
+    expect(isFeedRequest(`https://evil.example.com/api/feed/v3`, FEED_V3_METHOD)).toBe(false);
+  });
+
+  it("Given Suno origin に似た別 origin When 判定する Then すべて false", () => {
+    const phishing = `https://studio-api-prod.suno.com.evil.example${GENERATE_ENDPOINT_PATH}`;
+    expect(isSunoApiUrl(phishing)).toBe(false);
+    expect(isGenerateRequest(phishing)).toBe(false);
+    expect(isFeedRequest(`https://studio-api-prod.suno.com.evil.example${FEED_V3_PATH}`, FEED_V3_METHOD)).toBe(false);
+  });
+
+  it("Given feed/v3 に似た path や query 内一致 When 判定する Then isFeedRequest は false", () => {
+    expect(isFeedRequest(`${SUNO_API_ORIGIN}/api/feed/v30`, FEED_V3_METHOD)).toBe(false);
+    expect(isFeedRequest(`${SUNO_API_ORIGIN}/api/feed/v3extra`, FEED_V3_METHOD)).toBe(false);
+    expect(
+      isFeedRequest(`${SUNO_API_ORIGIN}/api/not-feed?next=${encodeURIComponent(FEED_V3_PATH)}`, FEED_V3_METHOD),
+    ).toBe(false);
+  });
+
+  it("Given generate endpoint に似た path や query 内一致 When 判定する Then isGenerateRequest は false", () => {
+    expect(isGenerateRequest(`${SUNO_API_ORIGIN}${GENERATE_ENDPOINT_PATH}extra`)).toBe(false);
+    expect(
+      isGenerateRequest(`${SUNO_API_ORIGIN}/api/not-generate?next=${encodeURIComponent(GENERATE_ENDPOINT_PATH)}`),
+    ).toBe(false);
   });
 });
 
@@ -43,6 +71,20 @@ describe("resolveRequestUrl: fetch 第 1 引数からの URL 解決", () => {
     expect(resolveRequestUrl(GENERATE_URL)).toBe(GENERATE_URL);
     expect(resolveRequestUrl(new URL(GENERATE_URL))).toBe(GENERATE_URL);
     expect(resolveRequestUrl(new Request(GENERATE_URL))).toBe(GENERATE_URL);
+  });
+});
+
+describe("resolveRequestMethod: fetch の実効 method 解決", () => {
+  it("Given init.method When 解決する Then 大文字化して返す", () => {
+    expect(resolveRequestMethod(FEED_V3_URL, { method: "post" })).toBe("POST");
+  });
+
+  it("Given Request.method When init.method 不在 Then Request 側の method を返す", () => {
+    expect(resolveRequestMethod(new Request(FEED_V3_URL, { method: "POST" }))).toBe("POST");
+  });
+
+  it("Given method 不在 When 解決する Then GET を返す", () => {
+    expect(resolveRequestMethod(FEED_V3_URL)).toBe("GET");
   });
 });
 
