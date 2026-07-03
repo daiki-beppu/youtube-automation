@@ -166,9 +166,6 @@ export const SUNO_API_ORIGIN = "https://studio-api-prod.suno.com";
 /** 生成投入 endpoint のパス（#948）。レスポンス JSON の `clips[].id` / `clips[].status` を観測する。 */
 export const GENERATE_ENDPOINT_PATH = "/api/generate/v2-web/";
 
-/** clip status 照会 endpoint のパス prefix（#948）。version 個別判定は FEED_V*_PATH を使う。 */
-export const FEED_ENDPOINT_PATH = "/api/feed/";
-
 /** active feed poll に使う具体 endpoint（#948）。 */
 export const FEED_V2_PATH = "/api/feed/v2";
 

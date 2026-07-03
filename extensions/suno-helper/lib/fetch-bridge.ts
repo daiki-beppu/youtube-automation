@@ -41,17 +41,30 @@ export function resolveRequestMethod(input: RequestInfo | URL, init?: RequestIni
 
 /** Suno studio API へのリクエストか。Authorization 捕捉の対象判定に使う。 */
 export function isSunoApiUrl(url: string): boolean {
-  return url.startsWith(SUNO_API_ORIGIN);
+  try {
+    return new URL(url).origin === SUNO_API_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
+function isSunoApiPath(url: string, pathname: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.origin === SUNO_API_ORIGIN && parsed.pathname === pathname;
+  } catch {
+    return false;
+  }
 }
 
 /** 生成投入 endpoint へのリクエストか。 */
 export function isGenerateRequest(url: string): boolean {
-  return isSunoApiUrl(url) && url.includes(GENERATE_ENDPOINT_PATH);
+  return isSunoApiPath(url, GENERATE_ENDPOINT_PATH);
 }
 
 /** clip status 照会（feed）endpoint へのリクエストか。Suno 現行の `POST /api/feed/v3` のみ観測する。 */
-export function isFeedRequest(url: string, method = "GET"): boolean {
-  return isSunoApiUrl(url) && url.includes(FEED_V3_PATH) && method.toUpperCase() === FEED_V3_METHOD;
+export function isFeedRequest(url: string, method: string): boolean {
+  return isSunoApiPath(url, FEED_V3_PATH) && method.toUpperCase() === FEED_V3_METHOD;
 }
 
 /**

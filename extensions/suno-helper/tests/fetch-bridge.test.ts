@@ -23,7 +23,7 @@ const FEED_V3_URL = `${SUNO_API_ORIGIN}${FEED_V3_PATH}`;
 describe("URL 判定: 観測対象 endpoint の識別", () => {
   it("Given generate endpoint の URL When 判定する Then isGenerateRequest が true", () => {
     expect(isGenerateRequest(GENERATE_URL)).toBe(true);
-    expect(isFeedRequest(GENERATE_URL)).toBe(false);
+    expect(isFeedRequest(GENERATE_URL, "GET")).toBe(false);
   });
 
   it("Given feed/v3 POST の URL When 判定する Then isFeedRequest が true", () => {
@@ -41,6 +41,28 @@ describe("URL 判定: 観測対象 endpoint の識別", () => {
     expect(isSunoApiUrl(phishing)).toBe(false);
     expect(isGenerateRequest(phishing)).toBe(false);
     expect(isFeedRequest(`https://evil.example.com/api/feed/v3`, FEED_V3_METHOD)).toBe(false);
+  });
+
+  it("Given Suno origin に似た別 origin When 判定する Then すべて false", () => {
+    const phishing = `https://studio-api-prod.suno.com.evil.example${GENERATE_ENDPOINT_PATH}`;
+    expect(isSunoApiUrl(phishing)).toBe(false);
+    expect(isGenerateRequest(phishing)).toBe(false);
+    expect(isFeedRequest(`https://studio-api-prod.suno.com.evil.example${FEED_V3_PATH}`, FEED_V3_METHOD)).toBe(false);
+  });
+
+  it("Given feed/v3 に似た path や query 内一致 When 判定する Then isFeedRequest は false", () => {
+    expect(isFeedRequest(`${SUNO_API_ORIGIN}/api/feed/v30`, FEED_V3_METHOD)).toBe(false);
+    expect(isFeedRequest(`${SUNO_API_ORIGIN}/api/feed/v3extra`, FEED_V3_METHOD)).toBe(false);
+    expect(
+      isFeedRequest(`${SUNO_API_ORIGIN}/api/not-feed?next=${encodeURIComponent(FEED_V3_PATH)}`, FEED_V3_METHOD),
+    ).toBe(false);
+  });
+
+  it("Given generate endpoint に似た path や query 内一致 When 判定する Then isGenerateRequest は false", () => {
+    expect(isGenerateRequest(`${SUNO_API_ORIGIN}${GENERATE_ENDPOINT_PATH}extra`)).toBe(false);
+    expect(
+      isGenerateRequest(`${SUNO_API_ORIGIN}/api/not-generate?next=${encodeURIComponent(GENERATE_ENDPOINT_PATH)}`),
+    ).toBe(false);
   });
 });
 
