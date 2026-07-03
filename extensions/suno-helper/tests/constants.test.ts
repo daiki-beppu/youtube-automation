@@ -17,6 +17,7 @@ import {
   INTER_CREATE_DELAY_MS,
   MAX_INFLIGHT_REQUESTS,
   MAX_INJECT_RETRY,
+  MAX_YIELD_RETRY,
   OVERLAY_STATE_KEY,
   PHASE,
   PROMPTS_ROUTE,
@@ -160,6 +161,10 @@ describe("shared/constants: inject 検証 + queue 待機 timeout 独立化 (#864
   it("Given MAX_INJECT_RETRY When 読む Then silent drop 時の最大 retry 回数 2 である", () => {
     // #864 root cause 3: ack されなければ同じ entry を最大 2 回 retry、それでも増えなければ fail-loud。
     expect(MAX_INJECT_RETRY).toBe(2);
+  });
+
+  it("Given MAX_YIELD_RETRY When 読む Then duration NG 時の最大 retry 回数 2 である", () => {
+    expect(MAX_YIELD_RETRY).toBe(2);
   });
 });
 
