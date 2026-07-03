@@ -28,7 +28,7 @@ from urllib.parse import parse_qs, urlparse
 
 from google.genai import errors as genai_errors
 
-from youtube_automation.scripts.benchmark_collector import load_benchmark_videos
+from youtube_automation.scripts.benchmark_collector import load_benchmark_videos, select_top_vod_benchmark_videos
 from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.genai_client import create_genai_client
@@ -164,7 +164,19 @@ def _resolve_benchmark_targets(*, data_dir: Path, channel_slug: str, top: int) -
     if not matched:
         raise ValidationError(f"benchmark JSON に slug='{channel_slug}' の動画がありません")
 
-    selected = matched[:top]
+    # live 配信（duration_iso == "P0D"）は Gemini が URL を取り込めず 403 になるため
+    # スキップして次点の VOD を繰り上げる (#1462)。yt-doctor の readiness 判定と同じ選定。
+    selected, skipped_live = select_top_vod_benchmark_videos(matched, top)
+    if skipped_live:
+        logger.info(
+            "live 配信 %d 本を解析対象から除外し次点 VOD を繰り上げます"
+            "（Gemini はライブ配信 URL を取り込めないため）: %s",
+            len(skipped_live),
+            ", ".join(str(v.get("video_id")) for v in skipped_live),
+        )
+    if not selected:
+        raise ValidationError(f"slug='{channel_slug}' の benchmark 動画は live 配信のみで、解析可能な VOD がありません")
+
     return [
         VideoTarget(
             video_id=v["video_id"],
