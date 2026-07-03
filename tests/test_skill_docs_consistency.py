@@ -682,8 +682,8 @@ def test_channel_new_regeneration_documents_ttp_wf_new_readiness_gate() -> None:
         assert "data/benchmark_*.json" in text
         assert "docs/benchmarks/*.md" in text
         assert "data/thumbnail_compare/benchmark/" in text
-        assert "config/skills/thumbnail.yaml::reference_images.default" in text
-        assert "config/skills/thumbnail.yaml::reference_images.channel_branding" in text
+        assert "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default" in text
+        assert "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.channel_branding" in text
 
 
 def test_channel_new_setting_push_mode_contract_is_documented() -> None:

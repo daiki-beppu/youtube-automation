@@ -183,6 +183,6 @@ def test_setup_skill_handles_ttp_wf_new_readiness_next_check() -> None:
     )
     assert "#### `ttp_wf_new_readiness` — 承認済み TTP の `/channel-new` benchmark 反映状態" in text
     assert "/channel-new benchmark 反映未完了" in text
-    assert "`config/skills/thumbnail.yaml::reference_images.default`" in text
+    assert "`config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default`" in text
     assert "`data/thumbnail_compare/benchmark/`" in text
     assert "uv run yt-doctor --json" in text

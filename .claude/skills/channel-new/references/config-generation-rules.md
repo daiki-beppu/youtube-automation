@@ -129,8 +129,8 @@
 `benchmark.channels` が設定済みのチャンネルでは、`uv run yt-doctor --json` の
 `ttp_wf_new_readiness` で `/channel-new benchmark 反映未完了` が出ないことを完了条件にする。
 この check は `data/benchmark_*.json`、`docs/benchmarks/*.md`、
-`data/thumbnail_compare/benchmark/`、`config/skills/thumbnail.yaml::reference_images.default`、
-`config/skills/thumbnail.yaml::reference_images.channel_branding`
+`data/thumbnail_compare/benchmark/`、`config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default`、
+`config/skills/thumbnail.yaml::image_generation.gemini.reference_images.channel_branding`
 の欠落を読むだけで検出する。
 
 設定生成後は `uv run yt-doctor` を実行し、`initial_setup_readiness` が OK であることを確認する。

@@ -527,6 +527,26 @@ class TestCLIDiff:
         assert "description" in out
         assert "Test channel description for sync." in out
 
+    def test_no_localizations_hides_remote_localization_diff(self, capsys):
+        youtube = MagicMock()
+        remote = _mock_remote_response(description="Test channel description for sync.")
+        remote["brandingSettings"]["channel"]["keywords"] = "chiptune 8-bit 'rpg music'"
+        remote["brandingSettings"]["channel"]["defaultLanguage"] = "ja"
+        remote["brandingSettings"]["channel"]["unsubscribedTrailer"] = "dQw4w9WgXcQ"
+        remote["localizations"] = {"ja_JP": {"title": "Remote title", "description": "Remote desc"}}
+        youtube.channels().list().execute.return_value = {"items": [remote]}
+
+        with patch(
+            "youtube_automation.scripts.channel_settings_cli.get_youtube",
+            return_value=youtube,
+        ):
+            rc = channel_settings_cli.main(["diff", "--no-localizations"])
+
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "no diff" in out
+        assert "localizations." not in out
+
 
 class TestCLIPushDryRun:
     def test_dry_run_does_not_call_update(self, capsys):
@@ -594,6 +614,27 @@ class TestCLIPushDryRun:
         status_call = next(call for call in update_calls if call.kwargs["part"] == "status")
         assert status_call.kwargs["body"]["status"]["selfDeclaredMadeForKids"] is False
         assert "brandingSettings" not in status_call.kwargs["body"]
+
+    def test_apply_no_localizations_ignores_remote_localization_diff_and_skips_update(self, capsys):
+        youtube = MagicMock()
+        remote = _mock_remote_response(description="Test channel description for sync.")
+        remote["brandingSettings"]["channel"]["keywords"] = "chiptune 8-bit 'rpg music'"
+        remote["brandingSettings"]["channel"]["defaultLanguage"] = "ja"
+        remote["brandingSettings"]["channel"]["unsubscribedTrailer"] = "dQw4w9WgXcQ"
+        remote["localizations"] = {"ja_JP": {"title": "Remote title", "description": "Remote desc"}}
+        youtube.channels().list().execute.return_value = {"items": [remote]}
+
+        with patch(
+            "youtube_automation.scripts.channel_settings_cli.get_youtube",
+            return_value=youtube,
+        ):
+            rc = channel_settings_cli.main(["push", "--apply", "--no-localizations"])
+
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "no diff" in out
+        assert "localizations." not in out
+        youtube.channels().update.assert_not_called()
 
     def test_no_diff_skips_update(self, capsys):
         youtube = MagicMock()
