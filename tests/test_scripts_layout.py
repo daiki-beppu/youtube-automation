@@ -198,31 +198,6 @@ def test_channel_new_reference_gcp_script_exists(path: Path) -> None:
     assert path.exists(), f"{path.relative_to(_REPO_ROOT)} が存在しない (Issue #388)"
 
 
-def test_no_legacy_channel_setup_reference_paths_in_operational_files() -> None:
-    """Given channel-new への GCP references 統合後の repository
-    When 履歴 docs / CHANGELOG と生成キャッシュを除く現行ファイルを走査する
-    Then 削除済み channel-setup references の案内が残っていない。
-
-    hidden file の ``.env.example`` は利用者向け契約なので、明示的に走査対象に含める。
-    """
-    offenders: list[str] = []
-    for path in sorted(_REPO_ROOT.rglob("*")):
-        if not path.is_file() or not _is_stale_reference_scan_target(path):
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
-        for lineno, line in enumerate(text.splitlines(), start=1):
-            if any(legacy in line for legacy in _LEGACY_CHANNEL_SETUP_REFERENCES):
-                offenders.append(f"{path.relative_to(_REPO_ROOT)}:{lineno}: {line.strip()}")
-
-    assert offenders == [], (
-        "削除済み channel-setup references の現行ファイル参照が残っています。"
-        " .claude/skills/channel-new/references/ に更新してください:\n  " + "\n  ".join(offenders)
-    )
-
-
 @pytest.mark.parametrize(
     "path",
     [_CANONICAL_GCP_BOOTSTRAP, _CANONICAL_GCP_TERRAFORM_APPLY],

@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(suno-helper)`: サーバー側の旧 `POST /suno/playlists` エンドポイントと `suno-playlists.json` 向け URL マッピング関数を撤去し、playlist URL 記録を `POST /collections/<id>/downloaded` に一本化（#1261）
 - `feat(suno-helper)`: `suno-prompts.json` の `duration_filter` envelope を shared API で型付けし、省略時は 60〜300 秒の既定値へ正規化するようにした（#1259）
 - `docs(skills)`: `/audience-persona` を `/audience-persona-design` に改名し、`/viewer-voice` と `/viewing-scene` を束ねて第一ペルソナ 1 人へ収束させる設計フローに更新（#1371）
 - `feat(channel-init)`: `yt-channel-init` に DistroKid opt-in 初期化を追加し、`--distrokid-enabled` 指定時のみ `config/channel/distrokid.json` を生成するようにした。`/channel-new` のヒアリング手順にも DistroKid 配信設定を追加（#1366）
@@ -42,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `fix(collection-ideate)`: 分析レポートの鮮度判定に実行日基準の絶対鮮度チェック（`freshness_days` 既定 7 日、`config/skills/collection-ideate.yaml` で上書き可）を追加し、レポートと収集データが同日付でも収集自体が古い場合は stale として `/analytics-collect` → `/analytics-analyze` の再実行を案内するようにした（#1427）
+- `fix(suno-helper)`: Download all ZIP 完了 POST を playlist URL なしで受理し、既存 `suno_playlist_url` を保持したまま `assets.music_downloaded` を更新できるようにした。Download 再開 payload から未使用の `playlistName` 必須契約も削除（#1260）
 - `fix(suno-helper)`: run 一式完了時リロード（#1411）が content script の in-memory snapshot（popup 進捗復元の SSOT）を破棄し、run 中に popup を閉じていた運用者が完了後に再 open しても完走結果や per-entry の done/failed を確認できない問題を修正。FINISHED 到達時（リロード予約の直前）に snapshot を timestamp + collectionId 付きで `chrome.storage.local` へ退避し、リロード後の `queryProgress` が in-memory 不在時の fallback として返すようにした（24h stale 判定付き、次の実行開始で消去、退避失敗時はリロードを見送り in-memory 復元を維持）
 - `fix(suno-helper)`: dir mode の同一タブ連続実行で前回 run の stale selection が次 run の playlist 追加（Cmd+P）に混入し曲数が累積汚染される問題を修正。run 一式完了時（resume state 消去後）にタブをリロードして Suno 内部の multi-select 状態を破棄し（runAll / retryPlaylist / retryDownload の全選択作成経路が対象）、保険として Cmd+P 直前に選択中 clip 数が対象件数を超えていたら fail-loud で中断してリロード後の再実行を促すようにした。ガード走査は 1 pass + 超過即打ち切りの軽量モードで行い、走査自体の失敗は fail-open（警告して続行）。リロード猶予中に次 run が受理された場合はリロードを取り消して新 run を保護し、resume state 消去失敗時は FINISHED を維持してリロードのみ見送る（#1411）
 - `fix(hooks)`: extensions/ 配下のみを変更した commit で lefthook pre-commit の oxlint / oxfmt が「対象ファイルなし」を exit 1 で返し必ず失敗する問題を修正。extensions は自前の ESLint / Prettier / tsc 管理（CI: extensions.yml）のため、`lefthook.yml` の oxlint / oxfmt / typecheck に `exclude: extensions/**` を追加して root ツールチェーンの対象のみに絞った（exclude の glob 配列サポートのため `min_version` を 1.5.0 へ引き上げ、#1428）

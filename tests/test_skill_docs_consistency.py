@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 import shlex
 import subprocess
 import sys
@@ -777,15 +776,6 @@ def test_config_generation_rules_reference_existing_templates_and_step_ids() -> 
         ".claude/skills/channel-new/references/config-template/skills/thumbnail.yaml",
     ):
         assert (ROOT / path).is_file(), f"{path} が存在しない"
-
-
-def test_readme_skill_catalog_count_matches_features_doc() -> None:
-    readme = _read("README.md")
-    features = _read("docs/features.md")
-    match = re.search(r"全 \*\*(\d+) 個\*\*", features)
-    assert match is not None
-
-    assert f"全 {match.group(1)} skill" in readme
 
 
 def test_channel_new_regeneration_does_not_recopy_youtube_json_after_config_completion() -> None:

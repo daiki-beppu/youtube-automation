@@ -680,7 +680,7 @@ config 生成・認証完了後、以下を案内:
 **運用フロー（push 方向: local → YouTube）**:
 
 1. `uv run yt-channel-settings diff` で意図しないずれがないか確認（読み取り専用）
-2. `uv run yt-channel-settings push` の dry-run 出力をレビュー（API 呼び出しなし）
+2. `uv run yt-channel-settings push` の dry-run 出力をレビュー（`channels().update()` 呼び出しなし）
 3. 問題なければ `uv run yt-channel-settings push --apply` で実反映
 
 **逆方向（pull: YouTube → local）が必要な場合**:
