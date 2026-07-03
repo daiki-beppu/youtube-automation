@@ -46,7 +46,7 @@ SKILL_FILENAME = "SKILL.md"
 AUTOMATION_PACKAGE_NAME = "youtube-channels-automation"
 SKILLS_SYNC_CMD = "uv run yt-skills sync --asset skills --force"
 SKILLS_SYNC_PRUNE_CMD = "uv run yt-skills sync --asset skills --force --prune --yes"
-LEGACY_BUNDLED_SKILLS = ("onboard", "distrokid-prep")
+LEGACY_BUNDLED_SKILLS = ("onboard", "distrokid-prep", "channel-import", "channel-setup")
 
 BOOTSTRAP_CATEGORY = "bootstrap"
 API_CATEGORY = "api"
@@ -889,7 +889,7 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
                 message=f"config/channel/ ロード失敗: {e}",
                 next_action={
                     "kind": "human",
-                    "instructions": "/channel-import を実行して設定を修復してください",
+                    "instructions": ("/channel-new（既存チャンネル取り込みモード）を実行して設定を修復してください"),
                 },
             )
 
@@ -1111,7 +1111,7 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
 
     missing, approved_exceptions = _missing_ttp_readiness_items(channel_dir, channels)
     missing.extend(channels_read.errors)
-    missing.extend(_missing_channel_setup_benchmark_items(channel_dir, approved_exceptions, channels))
+    missing.extend(_missing_channel_new_benchmark_items(channel_dir, approved_exceptions, channels))
     if missing:
         return CheckResult(
             id="ttp_wf_new_readiness",
@@ -1251,7 +1251,7 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
     return missing, approved_exceptions
 
 
-def _missing_channel_setup_benchmark_items(
+def _missing_channel_new_benchmark_items(
     channel_dir: Path,
     approved_exceptions: set[str],
     channels: list[dict[str, object]],

@@ -42,6 +42,11 @@ pre-commit:
       # で commit が落ちる。exclude を config 側の除外と揃える
       exclude:
         - "extensions/**"
+        - "src/youtube_automation/**"
+        - "tests/**"
+        - "examples/**"
+        - "auth/**"
+        - "poc/**"
         - ".claude/**"
       run: bunx oxfmt --check {staged_files}
     typecheck:

@@ -1,6 +1,6 @@
 # config/channel/*.json 生成ルール
 
-`/channel-new`（再生成モード）と `/channel-import` から共通参照するルール集。
+`/channel-new`（再生成モード / 既存チャンネル取り込みモード）から共通参照するルール集。
 テンプレートは同ディレクトリの `config-template/` 配下（`config-template/*.json` と `config-template/skills/*.yaml`）。
 
 ## TTP（徹底的にパクる）路線時の優先順位
@@ -150,4 +150,4 @@ Style 欄 120 文字超過、planning 中 `descriptions.md` の parser 不一致
 - `config-template/*.json` — `config/channel/*.json` の責務別雛形
 - `config-template/skills/*.yaml` — `config/skills/*.yaml` のチャンネル固有上書き雛形
 - `/channel-new`（再生成モード） — 方向性ドキュメントから config 完成までの手順
-- `/channel-import` — 既存チャンネル取り込みの手順
+- `/channel-new`（既存チャンネル取り込みモード） — 既存チャンネル取り込みの手順

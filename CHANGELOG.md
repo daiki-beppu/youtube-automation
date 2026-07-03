@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **BREAKING** `refactor(skills)`: `/channel-setup` スキルを削除し、`/channel-new` に統合した。詳細セットアップ/再生成（旧 Step 1〜8）は再生成モード（Step R1〜R8）、設定 push（旧 Step 9: `yt-channel-settings` diff / push / pull）は設定 push モードとして `/channel-new` が文脈から自動判別して受ける。共通テンプレート・スクリプト置き場は `.claude/skills/channel-setup/references/` から `.claude/skills/channel-new/references/` へ移設し、競合 branding snapshot 取得はインライン Python を廃止して `references/fetch_branding_snapshot.py` に一本化。`yt-doctor` / preflight の `/channel-setup` 案内文言と CLAUDE.md / AGENTS.md のスクリプト配置規約も `/channel-new` 系へ更新した。下流リポジトリは `yt-skills sync` の prune で追従する（#1461）
 
+### Removed
+
+- **BREAKING** `refactor(skills)`: `/channel-import` スキルを削除し、`/channel-new` の「既存チャンネル取り込みモード」として統合した（#1460、epic #1459 の 1/2）。取り込みモードは呼び出し文脈（「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」）から自動判別し、ヒアリング → config 生成 → 検証 → OAuth / channel_id 取得 → 次ステップ案内を担う。旧 Step 0 のテンプレートリポジトリ clone 手順は廃止し、`/channel-new` の方式（現在のディレクトリ + `/setup` 前提）に整合させた。`yt-doctor` の `channel_config` ロード失敗時の案内と他スキル SKILL.md / `docs/features.md` の `/channel-import` 言及も `/channel-new`（取り込みモード）へ更新。下流リポジトリは `yt-skills sync` の prune で削除に追従する
+
 ## [5.5.15] - 2026-07-02
 
 ### Added

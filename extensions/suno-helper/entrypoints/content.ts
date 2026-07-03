@@ -53,7 +53,6 @@ import {
   scrollAndMultiSelectByIds,
   waitForPlaylistDialogClose,
 } from "../../shared/playlist-dom";
-import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
 import { onMessage, sendMessage } from "../lib/messaging";
 import type { RetryDownloadPayload, RetryPlaylistPayload, RunPayload } from "../lib/messaging";
 import { clearFinishedSnapshot, readFreshFinishedSnapshot, writeFinishedSnapshot } from "../lib/finished-snapshot";
@@ -150,13 +149,8 @@ function assertRetryDownloadPayload(value: unknown): RetryDownloadPayload {
   const record = assertRecord(value, "retryDownload payload");
   return {
     collectionId: assertNonEmptyString(record.collectionId, "retryDownload.collectionId"),
-    playlistName: assertNonEmptyString(record.playlistName, "retryDownload.playlistName"),
     submittedClipIds: assertStringArray(record.submittedClipIds, "retryDownload.submittedClipIds"),
     expectedClipCount: assertOptionalFiniteNumber(record.expectedClipCount, "retryDownload.expectedClipCount"),
-    sunoPlaylistUrl:
-      record.sunoPlaylistUrl === undefined
-        ? undefined
-        : assertNonEmptyString(record.sunoPlaylistUrl, "retryDownload.sunoPlaylistUrl"),
   };
 }
 
@@ -264,17 +258,6 @@ export default defineContentScript({
       isAborted: () => aborted,
     });
     downloadFlow.installMessageHandlers();
-
-    async function resolvePlaylistUrl(playlistName: string): Promise<string> {
-      const item = scrapePlaylistsFromMe(globalThis.document as Document).find(
-        (playlist) => playlist.title === playlistName,
-      );
-      if (item) {
-        return item.url;
-      }
-      const resolved = await sendMessage("resolvePlaylistUrl", { playlistName });
-      return resolved.url;
-    }
 
     async function injectAndGenerate(entry: PromptEntry, index: number, total: number): Promise<void> {
       // attempt ごとに lastSubmittedEntryIndex を -1 にリセットする。
@@ -718,14 +701,11 @@ export default defineContentScript({
         persistInterruptState(total);
         try {
           const downloadContext = await resolveDownloadContext();
-          const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
-          await downloadFlow.recordPlaylistUrl(downloadContext, collectionId, sunoPlaylistUrl);
           const downloadError = await downloadFlow.downloadBestEffort(
             downloadContext,
             collectionId,
             total,
             verifiedPlaylistClipCount,
-            sunoPlaylistUrl,
           );
           keepResumeStateForDownloadRetry = downloadError !== null;
           if (downloadError !== null) {
@@ -856,15 +836,7 @@ export default defineContentScript({
           }
           if (shouldDownload) {
             const downloadContext = await resolveDownloadContext();
-            const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
-            await downloadFlow.recordPlaylistUrl(downloadContext, collectionId, sunoPlaylistUrl);
-            await downloadFlow.performDownload(
-              downloadContext,
-              collectionId,
-              verifiedClipCount,
-              verifiedClipCount,
-              sunoPlaylistUrl,
-            );
+            await downloadFlow.performDownload(downloadContext, collectionId, verifiedClipCount, verifiedClipCount);
           }
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
@@ -901,8 +873,7 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
-      const { collectionId, playlistName, submittedClipIds, expectedClipCount, sunoPlaylistUrl } =
-        assertRetryDownloadPayload(data);
+      const { collectionId, submittedClipIds, expectedClipCount } = assertRetryDownloadPayload(data);
       currentSnapshot = initSnapshot([], { collectionId });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
@@ -916,11 +887,8 @@ export default defineContentScript({
           const result = await downloadFlow.retryDownload({
             context: downloadContext,
             collectionId,
-            playlistName,
-            savedSunoPlaylistUrl: sunoPlaylistUrl,
             submittedClipIds,
             expectedClipCount,
-            resolvePlaylistUrl,
             selectClipIds: async (clipIds) => {
               await scrollAndMultiSelectByIds(clipIds, { isAborted: () => aborted });
             },
@@ -957,9 +925,5 @@ export default defineContentScript({
     // in-memory が破棄された後は、リロード直前に退避した直近完了 run の snapshot を fallback で返す
     // （stale 判定込み、次 run 開始で消去）。どちらも無ければ null（buildRestoreState が従来表示へ）。
     onMessage("queryProgress", async () => currentSnapshot ?? (await readFreshFinishedSnapshot(Date.now())));
-
-    // 自身の document（Suno `/me`）から playlist 一覧を scrape して返す (#893)。
-    // overlay の手動 Capture（background 経由）と background の bg tab 自動 capture が共用する。
-    onMessage("capturePlaylists", () => scrapePlaylistsFromMe(document));
   },
 });

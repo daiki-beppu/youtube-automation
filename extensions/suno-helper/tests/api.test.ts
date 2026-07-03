@@ -865,19 +865,22 @@ describe("shared/api postDownloaded: 正常系", () => {
     expect(body.suno_playlist_url).toBe("https://suno.com/playlist/test");
   });
 
-  it("Given download_path 付きで playlist URL が無い payload When postDownloaded Then fetch 前に throw する", async () => {
+  it("Given download_path 付きで playlist URL が無い payload When postDownloaded Then request body に playlist URL を含めず送る", async () => {
     const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
 
-    await expect(
-      postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
-        file_count: 5,
-        expected_file_count: 5,
-        format: "mp3",
-        download_path: "/Users/test/Downloads/test.zip",
-      }),
-    ).rejects.toThrow(/suno_playlist_url/);
+    await postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+      file_count: 5,
+      expected_file_count: 5,
+      format: "mp3",
+      download_path: "/Users/test/Downloads/test.zip",
+    });
 
-    expect(fetchFn).not.toHaveBeenCalled();
+    const postCall = fetchFn.mock.calls.find(
+      (c) => typeof c[0] === "string" && c[0].includes("/downloaded"),
+    ) as unknown as [string, RequestInit];
+    const body = JSON.parse(postCall[1].body as string);
+    expect(body.download_path).toBe("/Users/test/Downloads/test.zip");
+    expect(body.suno_playlist_url).toBeUndefined();
   });
 
   it("Given file_count 正数で download_path が無い payload When postDownloaded Then fetch 前に throw する", async () => {

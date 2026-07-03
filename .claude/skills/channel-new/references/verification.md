@@ -1,6 +1,6 @@
 # 検証・認証ユーティリティ
 
-`/channel-new`（再生成モード） `/channel-import` から共通参照する検証コマンド集。
+`/channel-new`（再生成モード / 既存チャンネル取り込みモード）から共通参照する検証コマンド集。
 すべて **fully-qualified import**（`from youtube_automation...`）を使用する（CLAUDE.md 規約）。
 
 ## JSON 構文検証

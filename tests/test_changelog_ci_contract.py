@@ -25,6 +25,7 @@ _PUSH_TRIGGER_BRANCHES = ["main", "feat/ts-rewrite", "feat/1143-suno-bulk-downlo
 _CHANGELOG_FILE_PATTERN = "^CHANGELOG\\.md$"
 _LABELS_JOIN_EXPRESSION = "${{ join(github.event.pull_request.labels.*.name, ',') }}"
 _PR_EVENT_GUARD = "github.event_name == 'pull_request'"
+_OXFMT_STAGED_SUFFIXES = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".jsonc"}
 _PR_TEMPLATE_TEXT = """## 概要
 
 <!-- 何を、なぜ変更したか。issue があれば `Closes #N` -->
@@ -70,6 +71,15 @@ def _oxfmt_ignore_patterns() -> set[str]:
     match = re.search(r"ignorePatterns:\s*\[(?P<body>.*?)\],", text, flags=re.DOTALL)
     assert match is not None, "oxfmt.config.ts の ignorePatterns が見つからない"
     return set(re.findall(r'"([^"]+)"', match.group("body")))
+
+
+def _ignore_pattern_has_oxfmt_staged_files(pattern: str) -> bool:
+    if not pattern.endswith("/**"):
+        return False
+    root = _REPO_ROOT / pattern.removesuffix("/**")
+    if not root.exists() or not root.is_dir():
+        return False
+    return any(path.is_file() and path.suffix in _OXFMT_STAGED_SUFFIXES for path in root.rglob("*"))
 
 
 def test_pull_request_template_matches_issue_485_contract() -> None:
@@ -194,10 +204,11 @@ def test_lefthook_oxfmt_exclude_matches_formatter_ignore_contract() -> None:
     oxfmt_command = lefthook_config["pre-commit"]["commands"]["oxfmt"]
     lefthook_excludes = set(oxfmt_command.get("exclude", []))
     ignore_patterns = _oxfmt_ignore_patterns()
+    required_excludes = {pattern for pattern in ignore_patterns if _ignore_pattern_has_oxfmt_staged_files(pattern)}
 
-    required_excludes = {"extensions/**", ".claude/**"}
     assert required_excludes <= lefthook_excludes, (
-        "lefthook.yml の pre-commit.commands.oxfmt.exclude は extensions/** と .claude/** を含めること"
+        "lefthook.yml の pre-commit.commands.oxfmt.exclude は、oxfmt.config.ts の ignorePatterns のうち "
+        f"対象拡張子の実ファイルがある path を含めること: {sorted(required_excludes - lefthook_excludes)}"
     )
     assert lefthook_excludes <= ignore_patterns, (
         "lefthook.yml の oxfmt.exclude は oxfmt.config.ts の ignorePatterns と同期してください: "

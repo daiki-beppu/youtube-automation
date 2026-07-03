@@ -28,7 +28,7 @@ description: "Use when コレクションのサムネイル画像が必要で、
 
 `config/channel/` が存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## When to Use
 
