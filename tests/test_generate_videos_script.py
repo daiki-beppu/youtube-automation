@@ -415,6 +415,17 @@ def test_videoup_skill_documents_current_overlay_support() -> None:
     assert "#511 の実装を待つ" not in skill
 
 
+def test_videoup_skill_documents_workflow_state_master_audio_priority() -> None:
+    """#1449: videoup 文書と generate_videos.sh の音源探索契約を揃える."""
+    skill = _VIDEOUP_SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "workflow-state.json::assets.master_audio" in skill
+    assert "最優先" in skill
+    assert "未設定の場合のみ `master-mix" in skill
+    assert "fail-closed" in skill
+    assert "固定名探索へ fallback せず" in skill
+
+
 def test_24fps_loop_skips_normalization(tmp_path: Path) -> None:
     result, ffmpeg_log = _run_generate_videos(
         tmp_path,

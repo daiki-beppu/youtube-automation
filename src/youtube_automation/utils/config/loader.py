@@ -397,20 +397,23 @@ def _build_workflow(merged: dict) -> Workflow:
     # 旧 top-level `post_upload` / `short` キーが残っていても silently ignore する
     # （`_REQUIRED_KEYS_BY_SECTION` に workflow.json キーを登録していないため）。
     # Shorts スケジュール公開時刻は `shorts.publish_time` に移動。
-    wf = merged.get("workflow")
-    if wf is None:
+    if "workflow" in merged:
+        wf = merged["workflow"]
+    else:
         wf = {}
     if not isinstance(wf, dict):
         raise ConfigError(f"workflow セクションは object でなければなりません（got {type(wf).__name__}）")
 
-    wf_next_raw = wf.get("wf_next")
-    if wf_next_raw is None:
+    if "wf_next" in wf:
+        wf_next_raw = wf["wf_next"]
+    else:
         wf_next_raw = {}
     if not isinstance(wf_next_raw, dict):
         raise ConfigError(f"workflow.wf_next は object でなければなりません（got {type(wf_next_raw).__name__}）")
 
-    gates_raw = wf_next_raw.get("approval_gates")
-    if gates_raw is None:
+    if "approval_gates" in wf_next_raw:
+        gates_raw = wf_next_raw["approval_gates"]
+    else:
         gates_raw = {}
     if not isinstance(gates_raw, dict):
         raise ConfigError(

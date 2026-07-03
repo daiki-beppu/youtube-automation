@@ -800,6 +800,7 @@ def test_workflow_wf_next_approval_gates_must_be_boolean(tmp_path, monkeypatch):
         ([], "workflow セクションは object"),
         ("", "workflow セクションは object"),
         (False, "workflow セクションは object"),
+        (None, "workflow セクションは object"),
     ],
 )
 def test_workflow_section_falsy_non_objects_are_rejected(tmp_path, monkeypatch, workflow_value, message):
@@ -819,6 +820,7 @@ def test_workflow_section_falsy_non_objects_are_rejected(tmp_path, monkeypatch, 
         ([], "workflow.wf_next は object"),
         ("", "workflow.wf_next は object"),
         (False, "workflow.wf_next は object"),
+        (None, "workflow.wf_next は object"),
     ],
 )
 def test_workflow_wf_next_falsy_non_objects_are_rejected(tmp_path, monkeypatch, wf_next_value, message):
@@ -838,6 +840,7 @@ def test_workflow_wf_next_falsy_non_objects_are_rejected(tmp_path, monkeypatch, 
         ([], "workflow.wf_next.approval_gates は object"),
         ("", "workflow.wf_next.approval_gates は object"),
         (False, "workflow.wf_next.approval_gates は object"),
+        (None, "workflow.wf_next.approval_gates は object"),
     ],
 )
 def test_workflow_approval_gates_falsy_non_objects_are_rejected(tmp_path, monkeypatch, gates_value, message):
