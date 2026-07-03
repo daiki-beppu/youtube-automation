@@ -207,7 +207,7 @@ class _ResolvedStyleVariation:
 
 def _resolve_style_variation(raw: object) -> _ResolvedStyleVariation:
     if raw is None:
-        return _ResolvedStyleVariation(enabled=False, sequence=[])
+        raise ConfigError("suno.style_variation は mapping である必要があります: None")
     if not isinstance(raw, Mapping):
         raise ConfigError(f"suno.style_variation は mapping である必要があります: {raw!r}")
 
@@ -217,7 +217,7 @@ def _resolve_style_variation(raw: object) -> _ResolvedStyleVariation:
 
     pools_raw = raw.get("pools", {})
     if pools_raw is None:
-        pools_raw = {}
+        raise ConfigError("suno.style_variation.pools は mapping である必要があります: None")
     if not isinstance(pools_raw, Mapping):
         raise ConfigError(f"suno.style_variation.pools は mapping である必要があります: {pools_raw!r}")
 

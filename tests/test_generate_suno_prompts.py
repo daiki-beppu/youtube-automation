@@ -1405,8 +1405,10 @@ def test_default_yaml_enables_style_variation_with_pools():
 @pytest.mark.parametrize(
     ("style_variation", "error_pattern"),
     [
+        (None, r"suno\.style_variation は mapping"),
         ([], r"suno\.style_variation は mapping"),
         ({"enabled": "yes"}, r"enabled は bool"),
+        ({"enabled": True, "pools": None}, r"pools は mapping"),
         ({"enabled": True, "pools": []}, r"pools は mapping"),
         ({"enabled": True, "pools": {"texture": "warm texture"}}, r"texture は list\[str\]"),
         ({"enabled": True, "pools": {"texture": [3]}}, r"descriptor は非空文字列"),
@@ -1468,6 +1470,28 @@ def test_style_variation_is_deterministic_across_runs(channel_dir, tmp_path):
     second = build_prompt_entries(patterns_path)
 
     assert first == second
+
+
+def test_style_variation_interleaves_pools_by_sorted_axis_name(channel_dir, tmp_path):
+    """複数 axis は axis 名の辞書順で round-robin に interleave する."""
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        style_variation={
+            "enabled": True,
+            "pools": {"texture": [], "rhythm": [], "z": ["z1", "z2"], "a": ["a1"]},
+        },
+    )
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=_four_distinct_entries(), tracks_top=8)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert _style_first_lines(entries) == [
+        "slow, lo-fi jazz,",
+        "slow, lo-fi jazz, a1,",
+        "slow, lo-fi jazz, z1,",
+        "slow, lo-fi jazz, z2,",
+    ]
 
 
 def test_style_variation_disabled_restores_legacy_identical_first_lines(channel_dir, tmp_path):
