@@ -48,6 +48,7 @@ pre-commit:
         - "auth/**"
         - "poc/**"
         - ".claude/**"
+        - ".takt/**"
       run: bunx oxfmt --check {staged_files}
     typecheck:
       # root の tsc -b は extensions を含まないため、extensions のみの変更では起動しない
