@@ -217,8 +217,7 @@ def test_detect_pin_rejects_unofficial_direct_git_url() -> None:
     import tomllib
 
     pyproject = tomllib.loads(
-        '[project]\nname = "x"\ndependencies = '
-        '["youtube-channels-automation @ git+https://evil.example/repo@v1"]\n'
+        '[project]\nname = "x"\ndependencies = ["youtube-channels-automation @ git+https://evil.example/repo@v1"]\n'
     )
 
     with pytest.raises(automation_update.ConfigError, match="official upstream"):
