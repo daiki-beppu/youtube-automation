@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `fix(doctor)`: `ttp_wf_new_readiness` の video_analysis 要件が benchmark top 5 のライブ配信（`duration_iso == "P0D"`、Gemini 取り込み不可で解析不能）により恒久的に充足不能になる問題を修正。live は期待集合から除外して次点 VOD を繰り上げ、VOD が不足する場合は母数を縮小し、除外時は message に「live 配信 N 本を除外」を明示する。`yt-video-analyze --source benchmark` も同じ選定で live をスキップして次点 VOD を解析する（#1462）
+- `fix(hooks)`: oxlint.config.ts / oxfmt.config.ts の `ignorePatterns` 対象パス（`examples/**` `docs/**` `config/**` など）のみを変更した commit で lefthook pre-commit の oxlint / oxfmt が「対象ファイルなし」を non-zero exit で返し必ず失敗する問題（#1428 の同型）を修正。`lefthook.yml` の両コマンドに `--no-error-on-unmatched-pattern` を追加し、対象 0 件を成功として扱うようにした（ignorePatterns のパスを exclude へ列挙する二重管理は回避、#1452）
 
 ## [5.5.15] - 2026-07-02
 
