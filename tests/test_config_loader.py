@@ -759,6 +759,41 @@ def test_workflow_wf_next_skip_manual_mastering_explicit(tmp_path, monkeypatch):
     assert config.workflow.wf_next.approval_gates.upload is False
 
 
+@pytest.mark.parametrize("invalid", ["false", "true", 1, 0, None, {}, []])
+def test_workflow_wf_next_skip_manual_mastering_must_be_boolean(tmp_path, monkeypatch, invalid):
+    """#1449: string/int/null/object は raw=final を誤作動させず ConfigError."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {
+                "skip_manual_mastering": invalid,
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="workflow.wf_next.skip_manual_mastering は boolean"):
+        load_config()
+
+
+def test_workflow_wf_next_approval_gates_must_be_boolean(tmp_path, monkeypatch):
+    """#508/#1449: wf_next の boolean 契約を Python/TS で揃える."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {
+                "approval_gates": {"audio": "false"},
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="workflow.wf_next.approval_gates.audio は boolean"):
+        load_config()
+
+
 def test_workflow_section_must_be_object(tmp_path, monkeypatch):
     """#508: `workflow` セクションが object でないと ConfigError."""
     sections = _minimal_sections()

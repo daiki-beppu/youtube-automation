@@ -445,6 +445,17 @@ describe("workflow.wfNext.skipManualMastering (#1449)", () => {
     expect(wfNext.approvalGates.audio).toBe(false);
     expect(wfNext.approvalGates.upload).toBe(false);
   });
+
+  test("rejects non-boolean raw=final declarations", () => {
+    // Given a string that Python used to coerce to true before #1449's fix
+    const sections = minimalSections();
+    sections["workflow.json"] = {
+      workflow: { wf_next: { skip_manual_mastering: "false" } },
+    };
+
+    // Then all config entry points keep the same boolean contract
+    expect(() => load(sections)).toThrow(/skip_manual_mastering/u);
+  });
 });
 
 // --- pinned comment --------------------------------------------------------

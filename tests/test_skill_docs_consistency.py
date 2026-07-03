@@ -496,6 +496,38 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
     assert "初回動画の追加は `/video-upload` 内部の自動 assign に任せる" in checklist
 
 
+def test_wf_next_raw_final_transition_contract_is_documented() -> None:
+    wf_next = _read(".claude/skills/wf-next/SKILL.md")
+    wf_status = _read(".claude/skills/wf-status/SKILL.md")
+
+    master_detection = wf_next[wf_next.index("**マスター音源検出") :]
+    for expected in (
+        "`assets.raw_master != null` + `assets.master_audio = null`",
+        "候補抽出",
+        "検出できない場合",
+        "`workflow.wf_next.skip_manual_mastering = true`",
+        "`assets.master_audio` に `assets.raw_master` と同じファイル名を記録",
+        '`phase: "mastered"`',
+        "`approval_gates.audio = true`",
+        "AskUserQuestion",
+        "`skip_manual_mastering = false`（未設定含む、デフォルト）",
+        "停止（従来動作）",
+    ):
+        assert expected in master_detection
+
+    _assert_appears_before(
+        master_detection,
+        "`workflow.wf_next.skip_manual_mastering = true`",
+        "`skip_manual_mastering = false`（未設定含む、デフォルト）",
+    )
+    _assert_appears_before(master_detection, "AskUserQuestion", "`assets.master_audio` に `assets.raw_master`")
+
+    assert "`load_config().workflow.wf_next.skip_manual_mastering = true`" in wf_status
+    assert "raw master 直採用待ち（/wf-next で mastered へ進行）" in wf_status
+    assert "`load_config().workflow.wf_next.skip_manual_mastering = false`" in wf_status
+    assert "ミキシング+マスタリング待ち" in wf_status
+
+
 def test_common_docs_list_optional_channel_config_files() -> None:
     required = ("shorts.json", "comments.json", "pinned-comment.json", "distrokid.json")
 

@@ -414,12 +414,23 @@ def _build_workflow(merged: dict) -> Workflow:
     return Workflow(
         wf_next=WfNext(
             approval_gates=ApprovalGates(
-                audio=bool(gates_raw.get("audio", False)),
-                upload=bool(gates_raw.get("upload", False)),
+                audio=_workflow_bool(gates_raw, "audio", "workflow.wf_next.approval_gates.audio"),
+                upload=_workflow_bool(gates_raw, "upload", "workflow.wf_next.approval_gates.upload"),
             ),
-            skip_manual_mastering=bool(wf_next_raw.get("skip_manual_mastering", False)),
+            skip_manual_mastering=_workflow_bool(
+                wf_next_raw,
+                "skip_manual_mastering",
+                "workflow.wf_next.skip_manual_mastering",
+            ),
         ),
     )
+
+
+def _workflow_bool(raw: dict, key: str, path: str) -> bool:
+    value = raw.get(key, False)
+    if not isinstance(value, bool):
+        raise ConfigError(f"{path} は boolean でなければなりません（got {type(value).__name__}）")
+    return value
 
 
 def _build_shorts(merged: dict) -> Shorts:
