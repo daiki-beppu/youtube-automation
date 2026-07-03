@@ -27,6 +27,12 @@ interface ProgressMessage {
   message?: string;
 }
 
+function expectPostDownloadedBody(payload: unknown, expectedBody: Record<string, unknown>): void {
+  expect(payload).toMatchObject({ body: expectedBody });
+  const body = (payload as { body?: Record<string, unknown> }).body;
+  expect(body).not.toHaveProperty("suno_playlist_url");
+}
+
 async function loadContentScriptWithPlaylistRows(
   submittedIdsFromTracker: string[],
   playlistRowsResult: HTMLElement[] | Error,
@@ -182,13 +188,6 @@ async function loadContentScriptWithPlaylistRows(
     writeFinishedSnapshot: vi.fn(() => Promise.resolve()),
     readFreshFinishedSnapshot: vi.fn(() => Promise.resolve(null)),
     clearFinishedSnapshot: vi.fn(() => Promise.resolve()),
-  }));
-
-  vi.doMock("../../shared/playlist-scrape", () => ({
-    scrapePlaylistsFromMe: vi.fn(() => [
-      { title: "vj | regression", url: "https://suno.com/playlist/regression" },
-      { title: "vj | manual range", url: "https://suno.com/playlist/manual-range" },
-    ]),
   }));
 
   vi.doMock("../lib/ack-probe", () => ({
@@ -489,22 +488,12 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expect(clearResumeStateForCollectionMock).toHaveBeenCalledWith("collection-a");
 
     const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
-    expect(downloadedPosts).toHaveLength(2);
-    expect(downloadedPosts[0].payload).toMatchObject({
-      body: {
-        file_count: 0,
-        format: "mp3",
-        suno_playlist_url: "https://suno.com/playlist/regression",
-      },
-    });
-    expect(downloadedPosts[1].payload).toMatchObject({
-      body: {
-        file_count: 2,
-        expected_file_count: 2,
-        format: "mp3",
-        suno_playlist_url: "https://suno.com/playlist/regression",
-        download_path: "/Users/test/Downloads/regression.zip",
-      },
+    expect(downloadedPosts).toHaveLength(1);
+    expectPostDownloadedBody(downloadedPosts[0].payload, {
+      file_count: 2,
+      expected_file_count: 2,
+      format: "mp3",
+      download_path: "/Users/test/Downloads/regression.zip",
     });
   });
 
@@ -538,9 +527,8 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       );
       expect(sentMessages.find((m) => m.type === "startDownload")?.payload).toMatchObject({ format });
       const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
-      expect(downloadedPosts).toHaveLength(2);
-      expect(downloadedPosts[0].payload).toMatchObject({ body: { format } });
-      expect(downloadedPosts[1].payload).toMatchObject({ body: { format } });
+      expect(downloadedPosts).toHaveLength(1);
+      expectPostDownloadedBody(downloadedPosts[0].payload, { format });
     },
   );
 
@@ -553,7 +541,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       rows,
       {
         postDownloadedError: new Error("POST downloaded failed: 500 Internal Server Error"),
-        postDownloadedRejectOnCall: 2,
+        postDownloadedRejectOnCall: 1,
       },
     );
 
@@ -579,7 +567,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         }),
       ),
     );
-    expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(2);
+    expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(1);
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         collectionId: "collection-a",

@@ -52,6 +52,49 @@ describe("buildRestoreState: 実行中 snapshot の復元", () => {
     expect(restored?.status).toBe("[3/3] 注入中: pattern-3");
     expect(restored?.isRunning).toBe(true);
   });
+
+  it("Given duration-check log 付き snapshot When buildRestoreState Then duration log 文言を復元する", () => {
+    const snap = applyProgress(initSnapshot(makePromptEntries(3), snapshotOptions()), {
+      phase: PHASE.DONE,
+      index: 1,
+      total: 3,
+      log: { kind: "duration-check", entryName: "pattern-2", durationSec: 259, ok: true, maxSec: 300 },
+    });
+
+    const restored = buildRestoreState(snap);
+
+    expect(restored?.status).toBe('"pattern-2": 259s ✓');
+    expect(restored?.isError).toBe(false);
+  });
+
+  it("Given retry log 付き snapshot When buildRestoreState Then retry 文言を復元する", () => {
+    const snap = applyProgress(initSnapshot(makePromptEntries(3), snapshotOptions()), {
+      phase: PHASE.WAITING_SLOT,
+      index: 1,
+      total: 3,
+      log: { kind: "retry", entryName: "pattern-2", attempt: 1, max: 2 },
+    });
+
+    const restored = buildRestoreState(snap);
+
+    expect(restored?.status).toBe('"pattern-2": リトライ 1/2');
+    expect(restored?.isError).toBe(false);
+  });
+
+  it("Given skip log 付き snapshot When buildRestoreState Then skip 文言と失敗理由を復元する", () => {
+    const snap = applyProgress(initSnapshot(makePromptEntries(3), snapshotOptions()), {
+      phase: PHASE.ENTRY_FAILED,
+      index: 1,
+      total: 3,
+      message: "queue timeout",
+      log: { kind: "skip", entryName: "pattern-2" },
+    });
+
+    const restored = buildRestoreState(snap);
+
+    expect(restored?.status).toBe('"pattern-2": 全滅 — スキップ: queue timeout');
+    expect(restored?.isError).toBe(false);
+  });
 });
 
 describe("buildRestoreState: 終了済み snapshot の復元", () => {

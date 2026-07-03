@@ -2,12 +2,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PHASE } from "../../shared/constants";
+import type { EntryRunResult, RunEntryWithRetryOptions } from "../lib/entry-retry";
 import { makePromptEntries, markBbox } from "./_helpers";
 
 const harness = vi.hoisted(() => {
   const handlers = new Map<string, (message: { data: unknown }) => unknown>();
   const feedPollerStart = vi.fn();
   const feedPollerStop = vi.fn();
+  const runEntryWithRetry = vi.fn(
+    async (options: Pick<RunEntryWithRetryOptions, "attempt">): Promise<EntryRunResult> => {
+      await options.attempt();
+      return { outcome: "ok" };
+    },
+  );
 
   return {
     handlers,
@@ -23,6 +30,7 @@ const harness = vi.hoisted(() => {
     })),
     feedPollerStart,
     feedPollerStop,
+    runEntryWithRetry,
     requestSliderSet: vi.fn(),
   };
 });
@@ -67,6 +75,10 @@ vi.mock("../lib/bridge-listener", () => ({
   createFeedPoller: harness.createFeedPoller,
   requestFeedPoll: vi.fn(() => Promise.resolve([])),
   requestSliderSet: harness.requestSliderSet,
+}));
+
+vi.mock("../lib/entry-retry", () => ({
+  runEntryWithRetry: harness.runEntryWithRetry,
 }));
 
 vi.mock("../lib/storage", () => ({
@@ -222,6 +234,10 @@ function makeRunPayload(entries = makePromptEntries(0)): {
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
+  harness.runEntryWithRetry.mockImplementation(async (options: Pick<RunEntryWithRetryOptions, "attempt">) => {
+    await options.attempt();
+    return { outcome: "ok" };
+  });
   harness.handlers.clear();
   document.body.innerHTML = "";
 });
@@ -437,4 +453,57 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       );
     },
   );
+
+  it("Given entry retry が発生する When run を受ける Then retry progress log を content 経由で emit する", async () => {
+    makeRunnableSunoDom("List ▼");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(1);
+    harness.runEntryWithRetry.mockImplementationOnce(
+      async (options: Pick<RunEntryWithRetryOptions, "attempt" | "onRetry">) => {
+        await options.attempt();
+        options.onRetry?.(1, 2, new Error("temporary"));
+        return { outcome: "ok" };
+      },
+    );
+
+    const result = runHandler({ data: makeRunPayload(entries) });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.WAITING_SLOT,
+          index: 0,
+          total: entries.length,
+          log: { kind: "retry", entryName: "pattern-1", attempt: 1, max: 2 },
+        }),
+      ]),
+    );
+  });
+
+  it("Given entry が retry 上限後に failed outcome になる When run を受ける Then skip progress log を content 経由で emit する", async () => {
+    makeRunnableSunoDom("List ▼");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(1);
+    harness.runEntryWithRetry.mockResolvedValueOnce({ outcome: "failed" as const, error: new Error("queue timeout") });
+
+    const result = runHandler({ data: makeRunPayload(entries) });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.ENTRY_FAILED,
+          index: 0,
+          total: entries.length,
+          message: "queue timeout",
+          log: { kind: "skip", entryName: "pattern-1" },
+        }),
+      ]),
+    );
+  });
 });
