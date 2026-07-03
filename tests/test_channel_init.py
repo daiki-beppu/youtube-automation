@@ -22,7 +22,10 @@ from youtube_automation.cli.channel_init import (
 from youtube_automation.utils.channel_settings import build_update_body
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.metadata_generator import validate_scene_phrases
+from youtube_automation.utils.metadata_generator import (
+    validate_localizations_title_templates,
+    validate_scene_phrases,
+)
 
 # ----------------------- Fixtures / constants -----------------------
 
@@ -597,6 +600,10 @@ def test_localizations_and_skill_configs_reflect_channel_init_args(tmp_path):
     suno = yaml.safe_load((tmp_path / "config" / "skills" / "suno.yaml").read_text(encoding="utf-8"))
     assert suno["workspace_name"] == "Focus Atlas"
     assert suno["genre_line"] == "warm lo-fi ambient music for late-night study"
+
+    # Issue #1471: 生成された localizations.json がアップローダー許可プレースホルダ検証を通る
+    errors = validate_localizations_title_templates(localizations)
+    assert errors == [], "\n".join(errors)
 
     thumbnail = yaml.safe_load((tmp_path / "config" / "skills" / "thumbnail.yaml").read_text(encoding="utf-8"))
     reference_images = thumbnail["image_generation"]["gemini"]["reference_images"]

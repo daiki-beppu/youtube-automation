@@ -3,16 +3,16 @@
   "default_language": "en",
   "languages": {
     "ja": {
-      "title_template": "{style} {theme} - {activity}用BGM [{duration_display}]",
-      "description_opening": "{style}の{primary}音楽。"
+      "title_template": "{scene_phrase} | ジャズBGM ({activities})",
+      "description_opening": "落ち着いたジャズ音楽。"
     },
     "en": {
-      "title_template": "{style} {theme} Music - {activity} BGM [{duration_display}]",
-      "description_opening": "{style} {primary} music."
+      "title_template": "{scene_phrase} | Jazz BGM ({activities})",
+      "description_opening": "Relaxing jazz music."
     },
     "de": {
-      "title_template": "{style} {theme} Musik - BGM für {activity} [{duration_display}]",
-      "description_opening": "{style} {primary} Musik."
+      "title_template": "{scene_phrase} | Jazz BGM ({activities})",
+      "description_opening": "Entspannende Jazzmusik."
     }
   }
 }

@@ -89,6 +89,56 @@ def format_title_template(template: str, values: Dict[str, str], *, context: str
     return template.format(**values)
 
 
+# localizations.json の languages.<lang>.title_template で使用できるプレースホルダ。
+# 多言語タイトル生成が format_title_template に渡す values のキー集合
+# （_localized_title_values）と、config 生成時検証（yt-config-migrate verify）の
+# 両方がこの集合を参照する（#1471）。
+LOCALIZED_TITLE_PLACEHOLDERS = frozenset({"scene_phrase", "activities", "scene_emoji"})
+
+
+def _localized_title_values(*, scene_phrase: str, activities: str, scene_emoji: str) -> Dict[str, str]:
+    """localizations の title_template に渡す values を組み立てる.
+
+    キー集合は `LOCALIZED_TITLE_PLACEHOLDERS` と一致させること
+    （tests/test_metadata_generator.py で機械担保）。
+    """
+    return {"scene_phrase": scene_phrase, "activities": activities, "scene_emoji": scene_emoji}
+
+
+def validate_localizations_title_templates(loc_data: Dict) -> List[str]:
+    """localizations.json の title_template 群を許可プレースホルダで検証する.
+
+    channel-new / channel-import が生成した `config/localizations.json` が
+    アップロード時まで気づけない不正プレースホルダ（例: `{axis_label}`）を
+    含んでいないか、生成直後の `yt-config-migrate verify` で検出するための
+    ヘルパー（#1471）。
+
+    Args:
+        loc_data: localizations.json の全量 dict（`config.localizations.data`）
+
+    Returns:
+        違反メッセージのリスト。空なら全言語合格。
+    """
+    errors: List[str] = []
+    languages = loc_data.get("languages")
+    if not isinstance(languages, dict):
+        return errors
+    for lang, lang_data in languages.items():
+        if not isinstance(lang_data, dict):
+            continue
+        template = lang_data.get("title_template")
+        if not isinstance(template, str):
+            continue
+        unknown = _referenced_placeholders(template) - LOCALIZED_TITLE_PLACEHOLDERS
+        if unknown:
+            errors.append(
+                f"languages.{lang}.title_template: 使用できないプレースホルダ {sorted(unknown)} が含まれています。\n"
+                f"  → 使用可能なキー: {sorted(LOCALIZED_TITLE_PLACEHOLDERS)}\n"
+                f"  → テンプレート: {template}"
+            )
+    return errors
+
+
 @dataclass(frozen=True)
 class SceneTitleViolation:
     """多言語タイトルの codepoint 超過違反（100 codepoint 上限）."""
@@ -249,7 +299,7 @@ def validate_scene_phrases(
         scene = scene_phrases[lang]
         title = format_title_template(
             title_tpl,
-            {"scene_phrase": scene, "activities": activities, "scene_emoji": scene_emoji},
+            _localized_title_values(scene_phrase=scene, activities=activities, scene_emoji=scene_emoji),
             context=f"localizations.json: language '{lang}' の title_template",
         )
         if len(title) > 100:
@@ -891,7 +941,7 @@ class BAHMetadataGenerator:
             activities = lang_data.get("activities", best_for_line)
             loc_title = format_title_template(
                 title_tpl,
-                {"scene_phrase": scene, "activities": activities, "scene_emoji": scene_emoji},
+                _localized_title_values(scene_phrase=scene, activities=activities, scene_emoji=scene_emoji),
                 context=f"localizations.json: language '{lang}' の title_template",
             )
 
