@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """suno-lyrics.json の曲間セクション重複を検出する（/suno-lyric の Validation 用）。
 
-複数曲の vocal collection で `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]`
+複数曲の vocal collection で `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` `[Outro]`
 などのセクション本文が曲間で一言一句同一になっていないかを機械的に確認する。
 同一曲内での `[Chorus]` / `[Final Chorus]` の反復は正常な曲構成として扱い、検出しない。
 
@@ -27,7 +27,7 @@ from collections import defaultdict
 from pathlib import Path
 
 SECTION_TAG_RE = re.compile(r"^\[([^\]]+)\]\s*$")
-DEFAULT_TARGET_SECTIONS = ("Intro", "Pre-Chorus", "Bridge", "Extended Outro")
+DEFAULT_TARGET_SECTIONS = ("Intro", "Pre-Chorus", "Bridge", "Extended Outro", "Outro")
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,7 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sections",
         default=None,
-        help=("検査対象セクション名のカンマ区切り（default: 'Intro,Pre-Chorus,Bridge,Extended Outro'）"),
+        help=("検査対象セクション名のカンマ区切り（default: 'Intro,Pre-Chorus,Bridge,Extended Outro,Outro'）"),
     )
     return parser.parse_args()
 
@@ -93,8 +93,11 @@ def validate_entries(raw: object, path: Path) -> list[dict[str, str]]:
 
 
 def parse_target_sections(raw_sections: str | None) -> set[str]:
-    sections = raw_sections.split(",") if raw_sections else DEFAULT_TARGET_SECTIONS
-    return {section.strip().lower() for section in sections if section.strip()}
+    sections = raw_sections.split(",") if raw_sections is not None else DEFAULT_TARGET_SECTIONS
+    target_sections = {section.strip().lower() for section in sections if section.strip()}
+    if not target_sections:
+        raise ValueError("--sections には 1 件以上の section 名を指定してください")
+    return target_sections
 
 
 def find_cross_song_duplicates(entries: list[dict[str, str]], target_sections: set[str]) -> list[dict]:
@@ -140,7 +143,11 @@ def main() -> int:
         print(f"NG: {error}", file=sys.stderr)
         return 2
 
-    target_sections = parse_target_sections(args.sections)
+    try:
+        target_sections = parse_target_sections(args.sections)
+    except ValueError as error:
+        print(f"NG: {error}", file=sys.stderr)
+        return 2
     duplicates = find_cross_song_duplicates(entries, target_sections)
     if not duplicates:
         print(f"OK: 曲間のセクション重複なし（{len(entries)} 曲、対象セクション {sorted(target_sections)}）")

@@ -40,6 +40,21 @@ def test_check_lyric_duplication_rejects_cross_song_target_section_duplicate(tmp
     assert "Song A, Song B" in result.stdout
 
 
+def test_check_lyric_duplication_rejects_extended_outro_and_outro_duplicate(tmp_path: Path) -> None:
+    path = _write_lyrics(
+        tmp_path / "suno-lyrics.json",
+        [
+            {"name": "Song A", "lyrics": "[Extended Outro]\nSame farewell line", "style": None},
+            {"name": "Song B", "lyrics": "[Outro]\nSame farewell line", "style": None},
+        ],
+    )
+
+    result = _run(path)
+
+    assert result.returncode == 1
+    assert "[Extended Outro], [Outro]" in result.stdout
+
+
 def test_check_lyric_duplication_accepts_unique_target_sections(tmp_path: Path) -> None:
     path = _write_lyrics(
         tmp_path / "suno-lyrics.json",
@@ -84,6 +99,22 @@ def test_check_lyric_duplication_sections_filter_limits_scope(tmp_path: Path) ->
     result = _run(path, "--sections", "Bridge")
 
     assert result.returncode == 0
+
+
+def test_check_lyric_duplication_empty_sections_filter_is_format_error(tmp_path: Path) -> None:
+    path = _write_lyrics(
+        tmp_path / "suno-lyrics.json",
+        [
+            {"name": "Song A", "lyrics": "[Intro]\nSame line", "style": None},
+            {"name": "Song B", "lyrics": "[Intro]\nSame line", "style": None},
+        ],
+    )
+
+    for sections in ("", ",", "   "):
+        result = _run(path, "--sections", sections)
+
+        assert result.returncode == 2
+        assert "1 件以上の section 名" in result.stderr
 
 
 def test_check_lyric_duplication_default_scope_ignores_non_target_sections(tmp_path: Path) -> None:
