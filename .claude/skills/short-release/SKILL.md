@@ -1,29 +1,38 @@
 ---
 name: short-release
-description: "Use when release 型チャンネル（話す系・楽曲リリース）でショート動画を生成・投稿したいとき。`${motif}-{jp,en}.mp4` から JP+EN 各 1 本ずつ 9:16 縦型クリップを生成・投稿。「リリースショート」「楽曲ショート」「JP/EN クリップショート」「サビ抽出」「short-release」など、release 型チャンネルのショート制作に関わる場面で必ず使用すること。BGM テイスター（collection 型）チャンネルは `/short` を使う"
+description: "Use when release 型チャンネル（話す系・楽曲リリース）でショート動画を生成したいとき。`${motif}-{jp,en}.mp4` から JP+EN 各 1 本ずつ 9:16 縦型クリップを生成する。「リリースショート」「楽曲ショート」「JP/EN クリップショート」「サビ抽出」「short-release」など、release 型チャンネルのショート制作に関わる場面で必ず使用すること。BGM テイスター（collection 型）チャンネルは `/short` を使う"
 ---
 
 ## Overview
 
 `config.youtube.content_model.type == "release"` のチャンネル向けに、本編リリース動画
-（`${motif}-{jp,en}.mp4`）から JP・EN の 2 言語ぶん 9:16 縦型ショートを生成・投稿する。
-楽曲のサビ部分を抜き出して縦型クロップ + スケール変換し、`#Shorts` タグ付きで投稿する。
+（`${motif}-{jp,en}.mp4`）から JP・EN の 2 言語ぶん 9:16 縦型ショートを生成する。
+楽曲のサビ部分を抜き出して縦型クロップ + スケール変換する。
+
+現行の `yt-upload-shorts` は collection ディレクトリ向けの uploader であり、release ディレクトリや
+言語指定つきアップロードには未対応。release 型ショートのアップロード自動化が必要な場合は、
+別実装タスクとして扱う。
+
+## 設定読み込みゲート
+
+前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+
+1. `.claude/skills/short-release/config.default.yaml`
+2. `config/skills/short-release.yaml`（存在する場合）
+
+読み込み後は `youtube_automation.utils.skill_config.load_skill_config("short-release")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 
 - `config/channel/` がロード可能（`load_config()`）
 - `config.shorts.enabled == true`（`config/channel/shorts.json`）
 - `config.youtube.content_model.type == "release"`
-- 本編動画が YouTube にアップ済みで `upload_tracking.json` に JP / EN それぞれの `video_url` が記録されている
 - リリースディレクトリに `video/${motif}-jp.mp4` と `video/${motif}-en.mp4` が存在する（`motif` は release ディレクトリ名から先頭の `<番号>-` を除去したもの）
 
 ## Quick Reference
 
 | コマンド | 説明 |
 |---------|------|
-| `uv run yt-upload-shorts <release-path>` | JP / EN 両方をまとめてアップロード |
-| `uv run yt-upload-shorts <release-path> --lang jp` | JP のみアップロード |
-| `uv run yt-upload-shorts <release-path> --dry-run` | メタデータプレビュー |
 | `bash .claude/skills/short-release/references/generate-shorts.sh <release-path>` | デフォルト位置で JP/EN 縦型変換 |
 | `bash .claude/skills/short-release/references/generate-shorts.sh <release-path> -s 30 -t 40` | 開始秒・尺を指定 |
 
@@ -62,35 +71,38 @@ bash .claude/skills/short-release/references/generate-shorts.sh <release-path> -
 
 出力: `<release-path>/video/short-{jp,en}.mp4`。中央クロップ（`crop=ih*9/16:ih`）→ 1080x1920 へスケール → `fps=30`。
 
-### Step 5: プレビュー → アップロード
+### Step 5: プレビュー
 
 ```bash
 open <release-path>/video/short-{jp,en}.mp4
-uv run yt-upload-shorts <release-path> --dry-run    # メタデータ確認
-uv run yt-upload-shorts <release-path>              # 実投稿
 ```
 
-`ShortUploader` が自動で行うこと:
-- 本編 JP / EN それぞれの `publish_at` 基準で `cfg.shorts.publish_time` 翌日公開時刻を計算
-- 各言語のメタデータ生成（タイトル / 説明欄 / `#Shorts` タグ）
-- `workflow-state.json::post_upload.short.{jp,en}` に記録
+この skill は生成物の確認までを扱う。release 型ショートのアップロード実行と、
+workflow-state へのアップロード結果記録は未実装。
 
-### Step 6: workflow-state.json 更新
+`workflow-state.json::post_upload.shorts` の実装済み schema は collection 型 `yt-upload-shorts` 向けの list 形式:
 
 ```json
 "post_upload": {
-  "short": {
-    "jp": { "generated": true, "uploaded": true, "video_id": "xxx", "publish_at": "..." },
-    "en": { "generated": true, "uploaded": true, "video_id": "yyy", "publish_at": "..." }
-  }
+  "shorts": [
+    {
+      "short_num": 1,
+      "video_id": "xxx",
+      "publish_at": "2026-03-12T08:00:00+09:00",
+      "uploaded_at": "2026-03-11T09:12:00+09:00"
+    }
+  ]
 }
 ```
+
+上記は collection 型 `yt-upload-shorts` の実装済み schema。release 型の JP/EN 別 upload schema は
+未実装のため、単一 object に言語別キーを持たせる形式は使わない。
 
 ## 設定
 
 | 配置 | ファイル | 責務 |
 |------|---------|------|
-| チャンネル運用 | `config/channel/shorts.json` | enabled / publish_time / `shorts.release.languages` / `shorts.release.start_sec` / `shorts.release.duration_sec` / 投稿間隔 |
+| チャンネル運用 | `config/channel/shorts.json` | enabled / `shorts.release.languages` / `shorts.release.start_sec` / `shorts.release.duration_sec` |
 | skill 動作 | `.claude/skills/short-release/config.default.yaml` | クロップ / スケール / コーデック設定 |
 | チャンネル上書き | `config/skills/short-release.yaml` | skill-config の差し替え |
 
@@ -102,7 +114,7 @@ uv run yt-upload-shorts <release-path>              # 実投稿
 | 推奨長 | 30-45 秒（`shorts.release.duration_sec`） |
 | 最大長 | 60 秒 |
 | フレームレート | 30fps 必須 |
-| 構成 | JP / EN それぞれ 1 本（`shorts.release.languages` で選択可） |
+| 構成 | JP / EN それぞれ 1 本（`shorts.release.languages` で生成対象を選択可） |
 
 ## Gotchas
 

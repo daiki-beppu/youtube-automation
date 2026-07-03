@@ -11,14 +11,15 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _PR_TEMPLATE_PATH = _REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"
 _CI_WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
 _CHANGELOG_GATE_PATH = _REPO_ROOT / ".lefthook" / "pre-push" / "changelog-gate.sh"
+_LEFTHOOK_CONFIG_PATH = _REPO_ROOT / "lefthook.yml"
 
 _CHANGELOG_LABEL = "skip-changelog"
 _PATH_FILTER_PATTERN = (
     "^(src/youtube_automation/|\\.claude/skills/|\\.claude/CLAUDE\\.template\\.md$"
     "|pyproject\\.toml$|packages/|package\\.json$)"
 )
-# CI トリガーで CI を回す対象 branch。#790 cutover で feat/ts-rewrite を外す。
-_TRIGGER_BRANCHES = ["main", "feat/ts-rewrite"]
+# push で CI を回す対象 branch。PR は stacked PR base でも発火するよう branch 制限しない。
+_PUSH_TRIGGER_BRANCHES = ["main", "feat/ts-rewrite", "feat/1143-suno-bulk-download"]
 _CHANGELOG_FILE_PATTERN = "^CHANGELOG\\.md$"
 _LABELS_JOIN_EXPRESSION = "${{ join(github.event.pull_request.labels.*.name, ',') }}"
 _PR_EVENT_GUARD = "github.event_name == 'pull_request'"
@@ -116,8 +117,8 @@ def test_ci_workflow_changelog_job_checks_expected_paths_and_messages() -> None:
     )
 
 
-def test_ci_workflow_triggers_run_on_feat_ts_rewrite_branch() -> None:
-    """#964: feat/ts-rewrite base の子 PR / push でも CI が走る必要がある。
+def test_ci_workflow_keeps_push_branch_allowlist() -> None:
+    """#964: feat/ts-rewrite branch への push でも CI が走る必要がある。
 
     #790 cutover で feat/ts-rewrite を branches から外したら本テストも更新する。
     """
@@ -126,9 +127,20 @@ def test_ci_workflow_triggers_run_on_feat_ts_rewrite_branch() -> None:
     triggers = workflow.get("on", workflow.get(True))
     assert isinstance(triggers, dict), "on トリガーが存在しない"
 
-    for event in ("push", "pull_request"):
-        branches = triggers.get(event, {}).get("branches")
-        assert branches == _TRIGGER_BRANCHES, f"{event} の branches が契約と不一致: {branches}"
+    push = triggers.get("push")
+    assert isinstance(push, dict), "push トリガーが存在しない"
+    assert push.get("branches") == _PUSH_TRIGGER_BRANCHES
+
+
+def test_ci_workflow_pull_requests_allow_stacked_pr_base_branches() -> None:
+    """stacked PR の base branch を allowlist で遮断しない。"""
+    workflow = _load_ci_workflow()
+    triggers = workflow.get("on", workflow.get(True))
+    assert isinstance(triggers, dict), "on トリガーが存在しない"
+
+    pull_request = triggers.get("pull_request")
+    assert isinstance(pull_request, dict), "pull_request トリガーが存在しない"
+    assert "branches" not in pull_request
 
 
 def test_ci_changelog_gate_covers_ts_packages() -> None:
@@ -143,3 +155,25 @@ def test_ci_changelog_gate_covers_ts_packages() -> None:
     # lefthook 側 GATED_PATHS は CI と同じ範囲を担保する。
     for token in ('"packages/"', '"package.json"'):
         assert token in gate_script, f"changelog-gate.sh に {token} が無い"
+
+
+def test_lefthook_changelog_gate_skips_branch_deletion_push() -> None:
+    """#1420: ブランチ削除 push（local sha 全ゼロ）は changelog ゲート対象外。
+
+    削除 push スキップは 2 ファイルで 1 つの不変条件:
+    changelog-gate.sh の stdin 判定と lefthook.yml の use_stdin: true。
+    use_stdin が落ちるとスクリプトの空 stdin フォールバックが回帰を隠して
+    削除 push が再びブロックされるため、両側をここで固定する。
+    """
+    gate_script = _read_text(_CHANGELOG_GATE_PATH)
+    for token in (
+        'ZERO_SHA="0000000000000000000000000000000000000000"',
+        "ブランチ削除 push のためスキップします",
+    ):
+        assert token in gate_script, f"changelog-gate.sh に {token} が無い"
+
+    lefthook_config = yaml.safe_load(_read_text(_LEFTHOOK_CONFIG_PATH))
+    gate_command = lefthook_config["pre-push"]["commands"]["changelog-gate"]
+    assert gate_command.get("use_stdin") is True, (
+        "lefthook.yml の changelog-gate に use_stdin: true が無いと削除 push スキップが黙って無効化される"
+    )

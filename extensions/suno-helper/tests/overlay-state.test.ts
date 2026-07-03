@@ -15,7 +15,7 @@
 //     size: { width: number; height: number },
 //   ): { x: number; y: number }
 // clamp 規約: x ∈ [0, max(0, viewport.width - size.width)] / y ∈ [0, max(0, viewport.height - size.height)]。
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { clampPosition } from "../lib/overlay-state";
 import type { OverlayState } from "../lib/overlay-state";
@@ -100,5 +100,37 @@ describe("OverlayState: 永続化する状態の形 (要件2)", () => {
     // minimized / hidden は clamp 対象外（位置のみ補正される）。
     expect(state.minimized).toBe(true);
     expect(state.hidden).toBe(false);
+  });
+});
+
+// --- writeOverlayState: storage 書き込み失敗時の握りつぶし回帰テスト (#1217) ---
+// overlay-state.ts は拡張更新後の invalidated context で storage アクセスが失敗するケースを
+// try-catch で握りつぶし console.warn のみで続行する。この挙動が維持されることを検証する。
+// 上記の純関数テスト群とは異なり storage I/O を mock するため vi.doMock + 動的 import で隔離する。
+describe("writeOverlayState: storage 書き込み失敗は throw せず console.warn する", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+  });
+
+  it("Given setValue が reject When writeOverlayState Then throw しない + console.warn が呼ばれる", async () => {
+    vi.resetModules();
+    vi.doMock("wxt/utils/storage", () => ({
+      storage: {
+        defineItem: () => ({
+          getValue: vi.fn(() => Promise.resolve(null)),
+          setValue: vi.fn(() => Promise.reject(new Error("Extension context invalidated"))),
+        }),
+      },
+    }));
+
+    const { writeOverlayState } = await import("../lib/overlay-state");
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const state: OverlayState = { position: { x: 100, y: 200 }, minimized: false, hidden: false };
+
+    // throw しないことを検証
+    await expect(writeOverlayState(state)).resolves.toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("overlay state 書き込み失敗"), expect.any(Error));
   });
 });

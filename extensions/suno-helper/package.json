@@ -1,8 +1,9 @@
 {
   "name": "suno-helper",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@9.15.9",
   "description": "/suno が生成した Style/Lyrics を Suno Custom Mode に順次注入し Generate を連続実行する補助拡張 (WXT + React + TS)。",
   "scripts": {
     "postinstall": "wxt prepare",

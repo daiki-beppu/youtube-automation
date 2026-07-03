@@ -16,6 +16,7 @@ Asset 種別 (`--asset`):
     claude-md           : BGM チャンネル運営方針テンプレ (`.claude/CLAUDE.md`、単一ファイル)
     workflow-cheatsheet : workflow 使い分けチートシート (`docs/workflow-cheatsheet.md`、単一ファイル)
     features            : 全 skill カタログ (`docs/features.md`、単一ファイル)
+    auth-template       : OAuth client secrets テンプレート (`auth/client_secrets.template.json`、単一ファイル)
 
 `yt-skills sync` (asset 未指定) は `--asset all` と同等で、配布物が `docs/`
 にリンクを張る前提で動くため、デフォルトで全 asset を sync する設計に
@@ -70,6 +71,14 @@ _ASSET_SPECS: dict[str, dict[str, str]] = {
         "source_filename": "features.md",
         "default_target": "docs/features.md",
         "label": "skill カタログ",
+    },
+    "auth-template": {
+        "kind": "file",
+        "resource_name": "_auth",
+        "source_subdir": "auth",
+        "source_filename": "client_secrets.template.json",
+        "default_target": "auth/client_secrets.template.json",
+        "label": "OAuth client_secrets テンプレ",
     },
 }
 
@@ -146,6 +155,13 @@ def _list_entries(root: Path, kind: str = "dir", source_filename: str | None = N
     return sorted(p.name for p in root.iterdir())
 
 
+def bundled_skill_names() -> list[str]:
+    """`yt-skills sync --asset skills` が配布する skill 名一覧を返す。"""
+    spec = _ASSET_SPECS["skills"]
+    root = _asset_root("skills")
+    return _list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename"))
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     if args.asset == "all":
         # 全 asset を巡回。dir asset → file asset の順で人間が読みやすい並び。
@@ -185,7 +201,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     return args.func(args)
 
 
-__all__ = ["build_parser", "main"]
+__all__ = ["build_parser", "bundled_skill_names", "main"]
 
 
 if __name__ == "__main__":

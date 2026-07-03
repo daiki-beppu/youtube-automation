@@ -68,6 +68,9 @@ from youtube_automation.agents._uploader_constants import (  # noqa: E402
 from youtube_automation.utils.channel_settings import build_upload_status_flags  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator  # noqa: E402
+from youtube_automation.utils.publish_schedule import (  # noqa: E402
+    resolve_default_publish_at as _resolve_default_publish_at,
+)
 from youtube_automation.utils.upload_core import YouTubeUploadCore  # noqa: E402
 
 # 後方互換 / 公開 API: 定数は従来どおり本モジュールから import できるよう再エクスポートする。
@@ -223,8 +226,14 @@ class YouTubeAutoUploader(
         if not collection_dir.exists():
             raise FileNotFoundError(f"コレクションディレクトリが見つかりません: {collection_path}")
 
+        self._log_active_channel()
         logger.info(f"🎵 コレクションアップロード開始: {collection_dir.name}")
         logger.info(f"📁 パス: {collection_dir}")
+
+        if publish_at is None:
+            publish_at = _resolve_default_publish_at(load_config())
+            if publish_at:
+                logger.info(f"チャンネル既定の予約投稿時刻を適用: publish_at={publish_at}")
 
         # アップロード前メタデータ検証
         self._preflight_check(collection_dir)
@@ -259,6 +268,16 @@ class YouTubeAutoUploader(
 
         return results
 
+    def _log_active_channel(self) -> None:
+        """誤投稿防止のため、現在操作対象のチャンネルを明示表示する。"""
+        config = load_config()
+        parts = [config.meta.channel_name]
+        if config.meta.youtube_handle:
+            parts.append(config.meta.youtube_handle)
+        if config.meta.channel_id:
+            parts.append(config.meta.channel_id)
+        logger.info(f"🎯 操作中チャンネル: {' / '.join(parts)}")
+
     def _print_upload_report(self, results: Dict):
         """アップロード結果レポート表示"""
         logger.info("📊 YouTube アップロード結果レポート")
@@ -274,8 +293,16 @@ class YouTubeAutoUploader(
                     logger.info(f"⏭️  Complete Collection: 既存動画を流用 {results['complete_video']['video_url']}")
                 else:
                     logger.info(f"✅ Complete Collection: {results['complete_video']['video_url']}")
+                    self._print_post_upload_manual_checklist(results["complete_video"]["video_url"])
             else:
                 logger.error(f"❌ Complete Collection: {results['complete_video']['error']}")
+
+    def _print_post_upload_manual_checklist(self, video_url: str) -> None:
+        """YouTube Studio で手動確認が必要な項目をアップロード直後に表示する。"""
+        logger.info("📝 アップロード後の手動チェックリスト")
+        logger.info("  [ ] YouTube Studio で AI コンテンツの開示設定を確認")
+        logger.info("  [ ] YouTube Studio で収益化が ON になっているか確認")
+        logger.info(f"  Studio: https://studio.youtube.com/video/{video_url.rsplit('=', 1)[-1]}/edit")
 
     def process_collections_directory(self, status_filter: List[str] = None) -> Dict:
         """

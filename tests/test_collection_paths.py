@@ -157,8 +157,8 @@ class TestFindMasterAudio:
 
 
 # ---------------------------------------------------------------------------
-# find_thumbnail: thumbnail.jpg > thumbnail.png > main.jpg > main.png
-# （アップロード経路 _upload_complete_collection と候補順を統一 / Issue #535）
+# find_thumbnail: thumbnail.jpg > thumbnail.png
+# main.jpg / main.png は textless 動画背景なので upload thumbnail には使わない
 # ---------------------------------------------------------------------------
 
 
@@ -180,19 +180,12 @@ class TestFindThumbnail:
         (paths.assets_dir / "main.jpg").touch()
         assert paths.find_thumbnail().name == "thumbnail.png"
 
-    def test_prefers_main_jpg_over_main_png(self, tmp_path):
-        # 統一後は main.jpg が main.png より優先（旧 find_thumbnail とは逆）
+    def test_ignores_main_images(self, tmp_path):
         paths = CollectionPaths(tmp_path)
         paths.assets_dir.mkdir()
         (paths.assets_dir / "main.png").touch()
         (paths.assets_dir / "main.jpg").touch()
-        assert paths.find_thumbnail().name == "main.jpg"
-
-    def test_falls_back_to_main_png(self, tmp_path):
-        paths = CollectionPaths(tmp_path)
-        paths.assets_dir.mkdir()
-        (paths.assets_dir / "main.png").touch()
-        assert paths.find_thumbnail().name == "main.png"
+        assert paths.find_thumbnail() is None
 
     def test_returns_none_when_no_image(self, tmp_path):
         paths = CollectionPaths(tmp_path)
@@ -205,17 +198,16 @@ class TestFindThumbnail:
 
 
 # ---------------------------------------------------------------------------
-# 回帰: find_thumbnail が統一前の _upload_complete_collection と同じファイルを指す
-# （Issue #535 — 呼び出し経路によらず同一コレクションで同一サムネが選ばれること）
+# 回帰: upload thumbnail resolver は main.* に fallback しない
+# （Issue #1310 — main.* は textless 動画背景で、thumbnail.* 欠落を隠さない）
 # ---------------------------------------------------------------------------
 
 
-class TestFindThumbnailMatchesUploaderOrder:
-    # 統一前に _upload_complete_collection が使っていた候補順（live behavior）。
-    _LEGACY_UPLOADER_ORDER = ["thumbnail.jpg", "thumbnail.png", "main.jpg", "main.png"]
+class TestFindThumbnailUploadContract:
+    _UPLOAD_THUMBNAIL_ORDER = ["thumbnail.jpg", "thumbnail.png"]
 
     @staticmethod
-    def _legacy_uploader_pick(assets_dir, order):
+    def _pick_first_existing(assets_dir, order):
         for tn in order:
             candidate = assets_dir / tn
             if candidate.exists():
@@ -223,30 +215,31 @@ class TestFindThumbnailMatchesUploaderOrder:
         return None
 
     @pytest.mark.parametrize(
-        "present",
+        ("present", "expected"),
         [
-            [],
-            ["thumbnail.jpg"],
-            ["thumbnail.png"],
-            ["main.jpg"],
-            ["main.png"],
-            ["thumbnail.jpg", "thumbnail.png"],
-            ["thumbnail.png", "main.jpg"],
-            ["thumbnail.png", "main.png"],
-            ["main.jpg", "main.png"],
-            ["thumbnail.jpg", "thumbnail.png", "main.jpg", "main.png"],
+            ([], None),
+            (["thumbnail.jpg"], "thumbnail.jpg"),
+            (["thumbnail.png"], "thumbnail.png"),
+            (["main.jpg"], None),
+            (["main.png"], None),
+            (["thumbnail.jpg", "thumbnail.png"], "thumbnail.jpg"),
+            (["thumbnail.png", "main.jpg"], "thumbnail.png"),
+            (["thumbnail.png", "main.png"], "thumbnail.png"),
+            (["main.jpg", "main.png"], None),
+            (["thumbnail.jpg", "thumbnail.png", "main.jpg", "main.png"], "thumbnail.jpg"),
         ],
     )
-    def test_matches_legacy_uploader_for_all_combinations(self, tmp_path, present):
+    def test_upload_thumbnail_order_for_all_combinations(self, tmp_path, present, expected):
         paths = CollectionPaths(tmp_path)
         paths.assets_dir.mkdir()
         for name in present:
             (paths.assets_dir / name).touch()
 
-        expected = self._legacy_uploader_pick(paths.assets_dir, self._LEGACY_UPLOADER_ORDER)
+        expected_path = self._pick_first_existing(paths.assets_dir, self._UPLOAD_THUMBNAIL_ORDER)
         result = paths.find_thumbnail()
 
-        assert result == expected
+        assert result == expected_path
+        assert (result.name if result else None) == expected
 
 
 # ---------------------------------------------------------------------------
@@ -551,6 +544,7 @@ class TestLiteralCollectionSubpathRegression:
         "src/youtube_automation/agents/_complete_collection_executor.py",
         "src/youtube_automation/scripts/generate_short_loop.py",
         "src/youtube_automation/scripts/bulk_update_short_localizations.py",
+        "src/youtube_automation/utils/suno_track_selection.py",
     ]
 
     # CollectionPaths が唯一の参照元であるべきコレクションサブパス文字列

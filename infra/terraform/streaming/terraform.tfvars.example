@@ -27,3 +27,9 @@ allowed_ssh_cidr = ["203.0.113.5/32"]
 # region           = "nrt"
 # plan             = "vc2-1c-2gb"
 # os_id            = 2284
+
+# 配信サイクル:
+#   0 / 0 は 24/7 連続配信（RuntimeMaxSec なし、クラッシュ時は 10 秒後に再起動）。
+#   従来の 11 時間配信 + 1 時間休止に戻す場合は 11 / 1 を指定する。
+# stream_hours = 0
+# break_hours  = 0

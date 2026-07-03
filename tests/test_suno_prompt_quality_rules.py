@@ -318,8 +318,9 @@ def test_default_yaml_has_quality_rule_keys():
     """config.default.yaml に #904 で追加した品質ルール関連キーが存在すること."""
     data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))
 
-    assert data["style_influence"] == 95, "style_influence は 85 → 95 に変更されるべき"
-    assert data["weirdness"] == 10, "weirdness: 10 が追加されるべき"
+    assert data["style_influence"] == 50, "style_influence の既定値は 50"
+    assert data["weirdness"] == 50, "weirdness の既定値は 50"
+    assert data["model"] == "V5.5", "model の既定値は V5.5"
     assert data["auto_lyrics_structure"] is True, "auto_lyrics_structure: true が追加されるべき"
     assert data["style_char_limit"] == 120, "style_char_limit: 120 が追加されるべき"
     assert isinstance(data["banned_artists"], list), "banned_artists はリスト型であるべき"
@@ -331,6 +332,7 @@ def test_default_yaml_has_quality_rule_keys():
 # ---------------------------------------------------------------------------
 
 _SKILL_MD = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "SKILL.md"
+_SUNO_LYRIC_SKILL_MD = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno-lyric" / "SKILL.md"
 
 
 def test_skill_md_has_quality_rules_section():
@@ -364,9 +366,17 @@ def test_skill_md_has_instrument_adjectives():
 
 
 def test_skill_md_has_hiragana_guide():
-    """SKILL.md にひらがな歌詞ガイドの記述があること."""
-    text = _SKILL_MD.read_text(encoding="utf-8")
+    """/suno-lyric の SKILL.md にひらがな歌詞ガイドの記述があること."""
+    text = _SUNO_LYRIC_SKILL_MD.read_text(encoding="utf-8")
     assert "hiragana" in text.lower() or "ひらがな" in text
+
+
+def test_suno_lyric_output_contract_uses_config_language():
+    """/suno-lyric の出力契約は English 固定ではなく config の lyric.language に従う."""
+    text = _SUNO_LYRIC_SKILL_MD.read_text(encoding="utf-8")
+    assert "config/skills/suno-lyric.yaml::lyric.language" in text
+    assert "Lyrics (English)" not in text
+    assert "英語歌詞" not in text
 
 
 def test_skill_md_has_auto_lyrics_structure():

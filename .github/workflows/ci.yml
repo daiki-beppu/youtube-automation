@@ -2,9 +2,8 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/ts-rewrite]
-  pull_request:
-    branches: [main, feat/ts-rewrite]
+    branches: [main, feat/ts-rewrite, feat/1143-suno-bulk-download]
+  pull_request: {}
 
 jobs:
   lint:
@@ -13,8 +12,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v30
       - run: nix develop --command uv sync --extra dev
-      - run: nix develop --command uv run ruff check .
-      - run: nix develop --command uv run ruff format --check .
+      - parallel:
+          - name: Ruff check
+            run: nix develop --command uv run ruff check .
+          - name: Ruff format check
+            run: nix develop --command uv run ruff format --check .
 
   test:
     runs-on: ubuntu-latest
@@ -25,6 +27,19 @@ jobs:
         run: nix develop --command uv sync --extra dev
       - name: Test
         run: nix develop --command uv run pytest
+
+  windows-cost-tracker:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v6
+      - name: Install dependencies
+        run: uv sync --extra dev
+      - name: Test cost tracker on Windows
+        run: uv run pytest tests/test_cost_tracker.py -q
 
   changelog:
     runs-on: ubuntu-latest
@@ -56,6 +71,21 @@ jobs:
             exit 1
           fi
           echo "CHANGELOG.md updated"
+
+  adr-numbering:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check ADR number uniqueness
+        run: |
+          set -eu
+          dups=$(ls docs/adr | cut -d- -f1 | sort | uniq -d)
+          if [ -n "$dups" ]; then
+            echo "::error::Duplicate ADR numbers found: $dups"
+            ls docs/adr | sort
+            exit 1
+          fi
+          echo "ADR numbers are unique"
 
   ts-lint:
     runs-on: ubuntu-latest

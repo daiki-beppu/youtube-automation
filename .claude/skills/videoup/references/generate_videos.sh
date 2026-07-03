@@ -80,6 +80,19 @@ resolve_videoup_yaml() {
 }
 VIDEOUP_YAML="$(resolve_videoup_yaml)"
 
+resolve_loop_video_yaml() {
+    local dir="$COLLECTION_DIR"
+    for _ in 1 2 3 4 5 6; do
+        if [[ -f "$dir/config/skills/loop-video.yaml" ]]; then
+            echo "$dir/config/skills/loop-video.yaml"; return
+        fi
+        local parent; parent="$(dirname "$dir")"
+        [[ "$parent" == "$dir" ]] && break
+        dir="$parent"
+    done
+}
+LOOP_VIDEO_YAML="$(resolve_loop_video_yaml)"
+
 yaml_get() {
     # $1=section $2=key $3=fallback  （`section:` 配下の `  key: value` を拾う）
     local section="$1" key="$2" fallback="$3" val
@@ -98,6 +111,27 @@ yaml_get() {
         }
     ' "$VIDEOUP_YAML")"
     # 周囲のクォートを除去
+    val="${val%\"}"; val="${val#\"}"
+    val="${val%\'}"; val="${val#\'}"
+    if [[ -z "$val" ]]; then echo "$fallback"; else echo "$val"; fi
+}
+
+yaml_top_get() {
+    # $1=file $2=key $3=fallback  （top-level の `key: value` を拾う）
+    local file="$1" key="$2" fallback="$3" val
+    if [[ -z "$file" || ! -f "$file" ]]; then
+        echo "$fallback"; return
+    fi
+    val="$(awk -v key="$key" '
+        $0 ~ ("^" key ":[[:space:]]*") {
+            line = $0
+            sub(/^[^:]+:[[:space:]]*/, "", line)
+            sub(/[[:space:]]*#.*$/, "", line)
+            sub(/[[:space:]]+$/, "", line)
+            print line
+            exit
+        }
+    ' "$file")"
     val="${val%\"}"; val="${val#\"}"
     val="${val%\'}"; val="${val#\'}"
     if [[ -z "$val" ]]; then echo "$fallback"; else echo "$val"; fi
@@ -127,15 +161,29 @@ COLLECTION_NAME="$(echo "$dir_basename" \
     | awk -F'-' '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2); print}' OFS='-')"
 
 # ─── Auto-detect Assets ─────────────────────────────────
+LOOP_VIDEO_ENABLED="$(yaml_top_get "$LOOP_VIDEO_YAML" enabled true)"
 LOOP_VIDEO=""
-if [[ -f "${ASSETS_DIR}/loop.mp4" ]]; then
+if [[ "$LOOP_VIDEO_ENABLED" == "false" ]]; then
+    echo "  Loop     : disabled by config/skills/loop-video.yaml — 静止画モードで出力します"
+elif [[ -f "${ASSETS_DIR}/loop.mp4" ]]; then
     LOOP_VIDEO="${ASSETS_DIR}/loop.mp4"
+    echo "  Loop     : $(basename "${LOOP_VIDEO}") (detected)"
+else
+    echo "  Loop     : not found — 静止画モードで出力します"
+    loop_artifacts=()
+    for f in "${ASSETS_DIR}"/loop_raw.mp4 "${ASSETS_DIR}"/loop-v*.mp4; do
+        [[ -f "$f" ]] && loop_artifacts+=("$f")
+    done
+    if [[ ${#loop_artifacts[@]} -gt 0 ]]; then
+        echo "  ⚠️  生成途中の痕跡が存在します: ${loop_artifacts[*]##*/}"
+        echo "     → yt-generate-loop-video で再生成するか、手動で loop.mp4 を配置してください"
+    fi
 fi
 
-THUMBNAIL=""
-for candidate in "${ASSETS_DIR}/main.jpg" "${ASSETS_DIR}/main.png" "${ASSETS_DIR}/thumbnail.jpg" "${ASSETS_DIR}/thumbnail.png"; do
+VIDEO_BACKGROUND=""
+for candidate in "${ASSETS_DIR}/main.png" "${ASSETS_DIR}/main.jpg"; do
     if [[ -f "$candidate" ]]; then
-        THUMBNAIL="$candidate"
+        VIDEO_BACKGROUND="$candidate"
         break
     fi
 done
@@ -328,8 +376,8 @@ ov_get() {
 if ! command -v ffmpeg &>/dev/null; then
     echo "ERROR: ffmpeg not found"; exit 1
 fi
-if [[ -z "$THUMBNAIL" ]]; then
-    echo "ERROR: No thumbnail found in ${ASSETS_DIR}/ (main.jpg/png or thumbnail.jpg/png)"; exit 1
+if [[ -z "$VIDEO_BACKGROUND" && -z "$LOOP_VIDEO" ]]; then
+    echo "ERROR: No video background found in ${ASSETS_DIR}/ (main.png or main.jpg required; thumbnail.jpg/png is upload-only)"; exit 1
 fi
 if [[ -z "$MASTER_AUDIO" ]]; then
     echo "ERROR: master-mix.{wav,m4a,aac,mp3,flac} または master.{wav,m4a,aac,mp3,flac} not found in ${MASTER_DIR}/"; exit 1
@@ -408,7 +456,7 @@ echo ""
 if [[ -n "$LOOP_VIDEO" ]]; then
     echo "  Video BG : $(basename "$LOOP_VIDEO") (loop)"
 else
-    echo "  Thumbnail: $(basename "$THUMBNAIL")"
+    echo "  Video BG : $(basename "$VIDEO_BACKGROUND") (still)"
 fi
 echo "  Audio    : $(basename "$MASTER_AUDIO")"
 echo "  Output   : $(basename "$MASTER_OUTPUT")"
@@ -433,18 +481,36 @@ if [[ -z "$TARGET_VIDEO_DURATION_MIN" ]]; then
 fi
 
 AUDIO_INPUT_OPTS=()
+AUDIO_LOOP_ACTIVE=0
+AUDIO_LOUDNORM=""
 video_duration="$duration"
 if [[ -n "$TARGET_VIDEO_DURATION_MIN" ]]; then
-    target_video_duration_sec="$(awk "BEGIN{printf \"%.2f\", $TARGET_VIDEO_DURATION_MIN * 60}")"
+    # 数値バリデーション: 整数 or 小数のみ許容
+    if ! [[ "$TARGET_VIDEO_DURATION_MIN" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+        echo "ERROR: invalid target_video_duration_min value: '${TARGET_VIDEO_DURATION_MIN}' (must be numeric)"
+        exit 1
+    fi
+    target_video_duration_sec="$(awk -v target="$TARGET_VIDEO_DURATION_MIN" 'BEGIN{printf "%.2f", target * 60}')"
     # duration が取得できない (空 / 数値でない) ケースは fail-safe で従来動作にフォールバック
     master_duration_for_compare="${duration:-0}"
-    if awk "BEGIN{exit !($target_video_duration_sec > $master_duration_for_compare)}"; then
+    if awk -v target="$target_video_duration_sec" -v master="$master_duration_for_compare" 'BEGIN{exit !(target > master)}'; then
         AUDIO_INPUT_OPTS=(-stream_loop -1)
+        AUDIO_LOOP_ACTIVE=1
         video_duration="$target_video_duration_sec"
         echo "  Target   : ${TARGET_VIDEO_DURATION_MIN} min ($(format_duration "$video_duration")) — audio loop enabled"
     else
         echo "  Target   : ${TARGET_VIDEO_DURATION_MIN} min ignored (master ≥ target; master 尺が支配)"
     fi
+fi
+
+# 音声ループ時は再エンコード必須 + loudnorm で音割れ防止 (#1057)
+# loudnorm は AUDIO_OUT_OPTS ではなく別変数に保持する。
+# overlay 経路では filter_complex に統合し、非 overlay 経路では -af で適用する。
+# (-af と filter_complex は同一ストリームに併用不可)
+if [[ "$AUDIO_LOOP_ACTIVE" -eq 1 ]]; then
+    AUDIO_OUT_OPTS=(-c:a "$AUDIO_ENCODER" -b:a 384k -ar 48000)
+    AUDIO_LOUDNORM="loudnorm=I=-14:TP=-1:LRA=11"
+    echo "  Audio    : re-encode + loudnorm (loop boundary clipping prevention)"
 fi
 
 echo "  Duration : $(format_duration "$video_duration")"
@@ -499,14 +565,14 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     enc_profile="$(ov_get '.overlays.encoder.profile' 'high')"
     enc_framerate="$(ov_get '.overlays.encoder.framerate' '24')"
 
-    # 入力配列: [0]=背景 (loop or thumbnail), [1]=master audio, [2]=popup PNG (任意)
+    # 入力配列: [0]=背景 (loop or textless main image), [1]=master audio, [2]=popup PNG (任意)
     INPUTS=()
     if [[ -n "$LOOP_VIDEO" ]]; then
         INPUTS+=(-stream_loop -1 -i "$LOOP_VIDEO")
     else
-        INPUTS+=(-framerate "$enc_framerate" -loop 1 -i "$THUMBNAIL")
+        INPUTS+=(-framerate "$enc_framerate" -loop 1 -i "$VIDEO_BACKGROUND")
     fi
-    INPUTS+=(-i "$MASTER_AUDIO")
+    INPUTS+=("${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO")
 
     sp_input_idx=""
     if [[ "$sp_enabled" == "true" ]]; then
@@ -558,6 +624,12 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
         CURRENT_LABEL="vout"
     fi
 
+    # loudnorm を filter_complex に統合 (overlay 経路では -af 併用不可)
+    if [[ -n "$AUDIO_LOUDNORM" ]]; then
+        FILTER+="[${AUDIO_LABEL}]${AUDIO_LOUDNORM}[a_norm];"
+        AUDIO_LABEL="a_norm"
+    fi
+
     # 末尾ラベル統一: 最終 video ラベルが CURRENT_LABEL
     ffmpeg -y "${INPUTS[@]}" \
         -filter_complex "$FILTER" \
@@ -567,7 +639,7 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
         -profile:v "$enc_profile" -pix_fmt "$enc_pix_fmt" \
         -r "$enc_framerate" \
         "${AUDIO_OUT_OPTS[@]}" \
-        -t "$duration" \
+        -t "$video_duration" \
         -movflags +faststart \
         -shortest \
         -loglevel error \
@@ -643,9 +715,9 @@ else
         else
             bake_len="$period"
             bake_filter="$EFFECT_FILTER_STATIC"
-            bake_input=(-framerate "$STILL_EFFECT_FPS" -loop 1 -i "$THUMBNAIL")
+            bake_input=(-framerate "$STILL_EFFECT_FPS" -loop 1 -i "$VIDEO_BACKGROUND")
             bake_crf="$STILL_EFFECT_CRF"
-            bake_src_file="$THUMBNAIL"
+            bake_src_file="$VIDEO_BACKGROUND"
         fi
         if [[ "${bake_len:-0}" -le 0 ]] || awk "BEGIN{exit !(${bake_len:-0} >= ${video_duration:-0})}" || [[ "${bake_len:-0}" -gt "$BAKE_MAX_LEN" ]]; then
             echo "  Effect bake skip (bake_len=${bake_len}s, video=${video_duration%.*}s) — 全尺再エンコードにフォールバック"
@@ -685,11 +757,13 @@ else
         # Stream copy 経路（effect ベイク / loop 背景 共通）: ビデオは完全無損失（ビット単位コピー）。
         # AUDIO_INPUT_OPTS は target_video_duration_min 設定時のみ -stream_loop -1 を持つ (#545)
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (stream copy)"
+        AUDIO_AF_ARGS=()
+        [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
         ffmpeg -y -stream_loop -1 -i "$STREAM_SOURCE" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
             -map 0:v:0 -map 1:a:0 \
             -c:v copy \
-            "${AUDIO_OUT_OPTS[@]}" \
+            "${AUDIO_OUT_OPTS[@]}" "${AUDIO_AF_ARGS[@]}" \
             -t "$video_duration" \
             -movflags +faststart \
             -shortest \
@@ -699,13 +773,15 @@ else
     elif [[ "$EFFECT" != "none" && -n "$LOOP_SOURCE" ]]; then
         # フォールバック: loop + effect を全尺再エンコード（従来 mode C）
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (loop + ${EFFECT} effect, full encode fallback)"
+        AUDIO_AF_ARGS=()
+        [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
         ffmpeg -y -stream_loop -1 -i "$LOOP_SOURCE" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
             -filter_complex "$EFFECT_FILTER_LOOP" \
             -map "[vout]" -map 1:a:0 \
             -c:v libx264 -preset medium -crf 22 -maxrate "$LOOP_MAX_BITRATE" -bufsize "$LOOP_BUFSIZE" -pix_fmt yuv420p \
             -r "$LOOP_OUTPUT_FRAME_RATE" \
-            "${AUDIO_OUT_OPTS[@]}" \
+            "${AUDIO_OUT_OPTS[@]}" "${AUDIO_AF_ARGS[@]}" \
             -t "$video_duration" \
             -movflags +faststart \
             -shortest \
@@ -714,14 +790,17 @@ else
             "$MASTER_OUTPUT" &
     elif [[ "$EFFECT" != "none" ]]; then
         # フォールバック: 静止画 + effect を全尺再エンコード（従来 mode D）
+        echo "  ℹ️  ループ動画なし → 静止画 + ${EFFECT} effect で出力 (loop.mp4 を配置すればループ動画になります)"
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (still image + ${EFFECT} effect, full encode fallback)"
-        ffmpeg -y -framerate "$STILL_EFFECT_FPS" -loop 1 -i "$THUMBNAIL" \
+        AUDIO_AF_ARGS=()
+        [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
+        ffmpeg -y -framerate "$STILL_EFFECT_FPS" -loop 1 -i "$VIDEO_BACKGROUND" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
             -filter_complex "$EFFECT_FILTER_STATIC" \
             -map "[vout]" -map 1:a:0 \
             -c:v libx264 -preset medium -crf "$STILL_EFFECT_CRF" -pix_fmt yuv420p \
             -r "$STILL_EFFECT_FPS" \
-            "${AUDIO_OUT_OPTS[@]}" \
+            "${AUDIO_OUT_OPTS[@]}" "${AUDIO_AF_ARGS[@]}" \
             -t "$video_duration" \
             -movflags +faststart \
             -shortest \
@@ -732,13 +811,16 @@ else
         # 静止画背景モード（従来 mode A）。エンコード値は config 駆動（fallback=現行値）。
         # I-frame を STILL_GOP フレーム間隔に間引き、変化のないフレームを P-frame で圧縮して小型化（#579）。
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (still image)"
-        ffmpeg -y -framerate "$STILL_FPS" -loop 1 -i "$THUMBNAIL" \
+        AUDIO_AF_ARGS=()
+        [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
+        echo "  ℹ️  ループ動画なし → 静止画背景で出力 (loop.mp4 を配置すればループ動画になります)"
+        ffmpeg -y -framerate "$STILL_FPS" -loop 1 -i "$VIDEO_BACKGROUND" \
             "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
             -c:v libx264 -tune stillimage -preset medium -crf "$STILL_CRF" -pix_fmt yuv420p \
             -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
             -g "$STILL_GOP" \
             -r "$STILL_FPS" \
-            "${AUDIO_OUT_OPTS[@]}" \
+            "${AUDIO_OUT_OPTS[@]}" "${AUDIO_AF_ARGS[@]}" \
             -t "$video_duration" \
             -movflags +faststart \
             -shortest \

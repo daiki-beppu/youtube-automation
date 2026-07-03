@@ -27,12 +27,24 @@
 from __future__ import annotations
 
 import contextlib
-import fcntl
+import errno
 import json
+import threading
+import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import BinaryIO, Literal
+
+try:
+    import fcntl as _fcntl
+except ImportError:
+    _fcntl = None
+
+try:
+    import msvcrt as _msvcrt
+except ImportError:
+    _msvcrt = None
 
 from youtube_automation.utils.profile import section
 
@@ -62,6 +74,21 @@ _LEGACY_UNIT_BY_CATEGORY: dict[Category, str] = {
     "analysis": "call",
 }
 
+_LOCK_FILE_SUFFIX = ".lock"
+_LOCK_REGION_BYTES = 1
+_MSVCRT_LOCK_RETRY_DELAY_SECONDS = 0.05
+_MSVCRT_LOCK_MAX_ATTEMPTS = 20
+_MSVCRT_LOCK_RETRY_ERRNOS = {
+    errno.EACCES,
+    errno.EAGAIN,
+    getattr(errno, "EDEADLK", errno.EACCES),
+}
+_MSVCRT_LOCK_RETRY_WINERRORS = {
+    32,  # ERROR_SHARING_VIOLATION
+    33,  # ERROR_LOCK_VIOLATION
+}
+_IN_PROCESS_LOCK = threading.Lock()
+
 
 def _channel_dir() -> Path:
     """チャンネルディレクトリを ChannelConfig 経由で解決。"""
@@ -77,22 +104,80 @@ def _log_path(category: Category) -> Path:
 def relative_to_channel_dir(path: Path) -> str:
     """チャンネルディレクトリ相対のパス文字列に正規化。範囲外なら絶対パス文字列。"""
     try:
-        return str(path.relative_to(_channel_dir()))
+        return path.relative_to(_channel_dir()).as_posix()
     except ValueError:
         return str(path)
 
 
 @contextlib.contextmanager
 def _file_lock(path: Path):
-    """fcntl.flock による排他ロック。並列書き込み時の読み書き競合を防ぐ。"""
-    lock_path = path.with_suffix(path.suffix + ".lock")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("w") as lock_f:
-        fcntl.flock(lock_f.fileno(), fcntl.LOCK_EX)
-        try:
+    """生成履歴ファイルの読み書き競合を防ぐ排他ロック。"""
+    if _fcntl is None and _msvcrt is None:
+        with _IN_PROCESS_LOCK:
             yield
-        finally:
-            fcntl.flock(lock_f.fileno(), fcntl.LOCK_UN)
+        return
+
+    lock_path = path.with_suffix(path.suffix + _LOCK_FILE_SUFFIX)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with _IN_PROCESS_LOCK:
+        with lock_path.open("a+b") as lock_f:
+            _prepare_lock_file(lock_f)
+            _acquire_lock(lock_f)
+            try:
+                yield
+            finally:
+                _release_lock(lock_f)
+
+
+def _prepare_lock_file(lock_f: BinaryIO) -> None:
+    lock_f.seek(0, 2)
+    size = lock_f.tell()
+    if size < _LOCK_REGION_BYTES:
+        lock_f.write(b"\0" * (_LOCK_REGION_BYTES - size))
+        lock_f.flush()
+    lock_f.seek(0)
+
+
+def _acquire_lock(lock_f: BinaryIO) -> None:
+    if _fcntl is not None:
+        _fcntl.flock(lock_f.fileno(), _fcntl.LOCK_EX)
+        return
+    if _msvcrt is not None:
+        _acquire_msvcrt_lock(lock_f)
+        return
+    raise RuntimeError("platform file locks are unavailable")
+
+
+def _acquire_msvcrt_lock(lock_f: BinaryIO) -> None:
+    last_error: OSError | None = None
+    for attempt in range(_MSVCRT_LOCK_MAX_ATTEMPTS):
+        lock_f.seek(0)
+        try:
+            _msvcrt.locking(lock_f.fileno(), _msvcrt.LK_NBLCK, _LOCK_REGION_BYTES)
+            return
+        except OSError as e:
+            if not _is_msvcrt_lock_contention(e):
+                raise
+            last_error = e
+            if attempt == _MSVCRT_LOCK_MAX_ATTEMPTS - 1:
+                break
+            time.sleep(_MSVCRT_LOCK_RETRY_DELAY_SECONDS)
+    raise TimeoutError(f"msvcrt lock acquisition timed out after {_MSVCRT_LOCK_MAX_ATTEMPTS} attempts") from last_error
+
+
+def _is_msvcrt_lock_contention(error: OSError) -> bool:
+    return error.errno in _MSVCRT_LOCK_RETRY_ERRNOS or getattr(error, "winerror", None) in _MSVCRT_LOCK_RETRY_WINERRORS
+
+
+def _release_lock(lock_f: BinaryIO) -> None:
+    if _fcntl is not None:
+        _fcntl.flock(lock_f.fileno(), _fcntl.LOCK_UN)
+        return
+    if _msvcrt is not None:
+        lock_f.seek(0)
+        _msvcrt.locking(lock_f.fileno(), _msvcrt.LK_UNLCK, _LOCK_REGION_BYTES)
+        return
+    raise RuntimeError("platform file locks are unavailable")
 
 
 def log_generation(

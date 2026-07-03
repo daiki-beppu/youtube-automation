@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import tomllib
 from importlib.metadata import entry_points
 from pathlib import Path
 
@@ -35,6 +36,37 @@ def test_asset_specs_resolves_via_package_import() -> None:
     assert isinstance(_ASSET_SPECS, dict)
     assert "skills" in _ASSET_SPECS
     assert "claude-md" in _ASSET_SPECS
+    assert "auth-template" in _ASSET_SPECS
+
+
+def test_auth_template_asset_spec_points_to_client_secrets_template() -> None:
+    from youtube_automation.cli.skills_sync import _ASSET_SPECS, _asset_root
+
+    spec = _ASSET_SPECS["auth-template"]
+    assert spec["kind"] == "file"
+    assert spec["source_filename"] == "client_secrets.template.json"
+    assert spec["default_target"] == "auth/client_secrets.template.json"
+    assert (_asset_root("auth-template") / "client_secrets.template.json").exists()
+
+
+def test_default_all_assets_include_auth_template_target() -> None:
+    from youtube_automation.cli.skills_sync import _ASSET_SPECS
+
+    all_targets = {spec["default_target"] for spec in _ASSET_SPECS.values()}
+    assert "auth/client_secrets.template.json" in all_targets
+
+
+def test_auth_template_is_included_in_wheel_and_sdist_manifests() -> None:
+    pyproject = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8"))
+
+    hatch = pyproject["tool"]["hatch"]["build"]["targets"]
+    force_include = hatch["wheel"]["force-include"]
+    sdist_include = hatch["sdist"]["include"]
+
+    assert force_include["auth/client_secrets.template.json"] == (
+        "youtube_automation/_auth/client_secrets.template.json"
+    )
+    assert "auth/client_secrets.template.json" in sdist_include
 
 
 def test_asset_root_resolves_via_package_import() -> None:
@@ -235,8 +267,8 @@ def test_yt_skills_console_script_resolves_after_package_split() -> None:
     yt_skills = next(ep for ep in eps if ep.name == "yt-skills")
     fn = yt_skills.load()
 
-    # Then: callable が package の `main` シンボルそのもの
+    # Then: callable が package の CLI wrapper シンボルそのもの
     assert callable(fn)
-    from youtube_automation.cli.skills_sync import main
+    from youtube_automation.cli_entrypoints import yt_skills
 
-    assert fn is main
+    assert fn is yt_skills

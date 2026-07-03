@@ -17,6 +17,7 @@ from youtube_automation.agents._uploader_constants import (
     UPLOAD_SOURCE_NEW,
 )
 from youtube_automation.utils.collection_paths import CollectionPaths
+from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
 
 logger = logging.getLogger(__name__)
@@ -82,9 +83,15 @@ class CompleteCollectionMixin:
         if publish_at:
             metadata["publish_at"] = publish_at
 
-        # サムネイル検索（候補順は CollectionPaths.find_thumbnail に集約・統一）
+        # アップロード用サムネイル検索。main.png/jpg は textless 動画背景なので使わない。
         thumbnail = paths.find_thumbnail()
-        thumbnail_path = str(thumbnail) if thumbnail is not None else None
+        if thumbnail is None:
+            raise ValidationError(
+                "アップロード用サムネイルが見つかりません: "
+                "10-assets/thumbnail.jpg または thumbnail.png を作成してください。"
+                "main.png/main.jpg は textless 動画背景なので YouTube サムネイルには使いません。"
+            )
+        thumbnail_path = str(thumbnail)
 
         # publish 直前の dedup 安全網: 同タイトル動画が own channel に既に存在すれば
         # `videos().insert()` を呼ばず既存 video_id を採用する

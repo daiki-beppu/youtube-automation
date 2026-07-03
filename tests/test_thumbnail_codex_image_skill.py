@@ -55,6 +55,12 @@ def _run_script(
     )
 
 
+def _write_reference_file(tmp_path: Path, name: str = "ref.png") -> Path:
+    ref_path = tmp_path / name
+    ref_path.write_bytes(b"reference image bytes")
+    return ref_path
+
+
 def _write_fake_codex(bin_dir: Path) -> Path:
     """Fake codex CLI を tmp PATH に配置する。
 
@@ -330,8 +336,9 @@ def test_codex_image_script_appends_cp_instructions_to_prompt(tmp_path: Path) ->
 
     env, log_file = _prepare_fake_codex_env(tmp_path)
     output_path = tmp_path / "output.png"
+    ref_path = _write_reference_file(tmp_path)
 
-    result = _run_script(_CODEX_IMAGE_SH, "tiny prompt", str(output_path), env=env)
+    result = _run_script(_CODEX_IMAGE_SH, "tiny prompt", str(output_path), str(ref_path), env=env)
 
     assert result.returncode == 0, result.stderr
     invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
@@ -365,8 +372,9 @@ def test_codex_image_script_appends_generate_new_image_directive(tmp_path: Path)
 
     env, log_file = _prepare_fake_codex_env(tmp_path)
     output_path = tmp_path / "output.png"
+    ref_path = _write_reference_file(tmp_path)
 
-    result = _run_script(_CODEX_IMAGE_SH, "tiny prompt", str(output_path), env=env)
+    result = _run_script(_CODEX_IMAGE_SH, "tiny prompt", str(output_path), str(ref_path), env=env)
     assert result.returncode == 0, result.stderr
 
     invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
@@ -429,10 +437,29 @@ def test_codex_image_script_passes_reference_images_as_repeated_image_flags(tmp_
     assert image_values == [str(ref_a), str(ref_b)], f"`--image <path>` の順序・値が想定外: {image_values!r}"
 
 
-def test_codex_image_script_succeeds_with_zero_reference_images(tmp_path: Path) -> None:
-    """Given 参照画像なしの codex-image.sh 実行
-    When 偽 codex で引数列を記録する
-    Then 成功し、`codex exec` に `--image` を混ぜず、新フラグセットだけが付く。
+def test_codex_image_script_requires_reference_only_when_flagged(tmp_path: Path) -> None:
+    """Given --require-reference 付きの codex-image.sh 実行
+    When wrapper を起動する
+    Then 非 0 で停止し、`codex login` / `codex exec` を呼ばない。
+    """
+    if not _CODEX_IMAGE_SH.exists():
+        pytest.fail(f"{_CODEX_IMAGE_SH.relative_to(_REPO_ROOT)} が存在しない")
+
+    env, log_file = _prepare_fake_codex_env(tmp_path)
+    output_path = tmp_path / "output.png"
+
+    result = _run_script(_CODEX_IMAGE_SH, "--require-reference", "prompt", str(output_path), env=env)
+
+    assert result.returncode != 0
+    assert "reference image" in result.stderr
+    assert not log_file.exists()
+    assert not output_path.exists()
+
+
+def test_codex_image_script_allows_zero_reference_images_for_generic_generation(tmp_path: Path) -> None:
+    """Given 参照画像なしの汎用 codex-image.sh 実行
+    When wrapper を起動する
+    Then codex exec まで進み、`--image` は渡さない。
     """
     if not _CODEX_IMAGE_SH.exists():
         pytest.fail(f"{_CODEX_IMAGE_SH.relative_to(_REPO_ROOT)} が存在しない")
@@ -444,19 +471,41 @@ def test_codex_image_script_succeeds_with_zero_reference_images(tmp_path: Path) 
 
     assert result.returncode == 0, result.stderr
     invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
-    assert any(args == ["login", "status"] for args in invocations), (
-        f"`codex login status` が先に呼ばれていない: {invocations!r}"
+    exec_invocations = [args for args in invocations if args and args[0] == "exec"]
+    assert exec_invocations
+    assert "--image" not in exec_invocations[-1]
+    assert output_path.exists()
+
+
+def test_codex_image_script_require_reference_rejects_multiple_reference_images(tmp_path: Path) -> None:
+    """Given --require-reference 付きで複数参照を渡す
+    When wrapper を起動する
+    Then TTP 候補 1 件につき参照 1 枚の契約で生成前に停止する。
+    """
+    if not _CODEX_IMAGE_SH.exists():
+        pytest.fail(f"{_CODEX_IMAGE_SH.relative_to(_REPO_ROOT)} が存在しない")
+
+    env, log_file = _prepare_fake_codex_env(tmp_path)
+    output_path = tmp_path / "output.png"
+    ref_a = tmp_path / "a.png"
+    ref_b = tmp_path / "b.png"
+    ref_a.write_text("a", encoding="utf-8")
+    ref_b.write_text("b", encoding="utf-8")
+
+    result = _run_script(
+        _CODEX_IMAGE_SH,
+        "--require-reference",
+        "prompt",
+        str(output_path),
+        str(ref_a),
+        str(ref_b),
+        env=env,
     )
 
-    exec_invocations = [args for args in invocations if args and args[0] == "exec"]
-    assert exec_invocations, f"`codex exec` の呼び出しが無い: {invocations!r}"
-    exec_args = exec_invocations[-1]
-
-    assert "--json" in exec_args
-    assert "--sandbox" in exec_args and "workspace-write" in exec_args
-    assert "--add-dir" in exec_args
-    assert "--skip-git-repo-check" in exec_args
-    assert "--image" not in exec_args, f"参照画像なしのとき `--image` が混入している: {exec_args!r}"
+    assert result.returncode != 0
+    assert "exactly one reference image" in result.stderr
+    assert not log_file.exists()
+    assert not output_path.exists()
 
 
 def test_codex_image_script_checks_login_output_and_png_validity() -> None:
@@ -481,8 +530,9 @@ def test_codex_image_script_stops_when_codex_is_not_logged_in(tmp_path: Path) ->
 
     env, log_file = _prepare_fake_codex_env(tmp_path, login_status="Not signed in")
     output_path = tmp_path / "output.png"
+    ref_path = _write_reference_file(tmp_path)
 
-    result = _run_script(_CODEX_IMAGE_SH, "prompt", str(output_path), env=env)
+    result = _run_script(_CODEX_IMAGE_SH, "prompt", str(output_path), str(ref_path), env=env)
 
     assert result.returncode != 0, "未ログイン時は失敗終了する必要がある"
     assert ("login" in result.stderr.lower()) or ("logged in" in result.stderr.lower()), (
@@ -507,8 +557,9 @@ def test_codex_image_script_rejects_not_logged_in_substring_false_positive(tmp_p
 
     env, log_file = _prepare_fake_codex_env(tmp_path, login_status="Not Logged in")
     output_path = tmp_path / "output.png"
+    ref_path = _write_reference_file(tmp_path)
 
-    result = _run_script(_CODEX_IMAGE_SH, "prompt", str(output_path), env=env)
+    result = _run_script(_CODEX_IMAGE_SH, "prompt", str(output_path), str(ref_path), env=env)
 
     assert result.returncode != 0, "`Not Logged in` でも `Logged in` の部分一致が通って未ログインで進んでしまっている"
     invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
@@ -554,8 +605,9 @@ def test_codex_image_script_surfaces_codex_login_status_nonzero_exit(tmp_path: P
         login_status_rc=42,
     )
     output_path = tmp_path / "output.png"
+    ref_path = _write_reference_file(tmp_path)
 
-    result = _run_script(_CODEX_IMAGE_SH, "prompt", str(output_path), env=env)
+    result = _run_script(_CODEX_IMAGE_SH, "prompt", str(output_path), str(ref_path), env=env)
 
     assert result.returncode != 0, (
         "`codex login status` が非 0 で終了したのに wrapper が 0 で終わっている (silent abort 再発)"
@@ -589,8 +641,9 @@ def test_codex_image_script_surfaces_codex_exec_failure_diagnostics(tmp_path: Pa
 
     env, _ = _prepare_fake_codex_env(tmp_path, exec_fail_rc=42)
     output_path = tmp_path / "output.png"
+    ref_path = _write_reference_file(tmp_path)
 
-    result = _run_script(_CODEX_IMAGE_SH, "tiny prompt", str(output_path), env=env)
+    result = _run_script(_CODEX_IMAGE_SH, "tiny prompt", str(output_path), str(ref_path), env=env)
 
     assert result.returncode != 0, "codex exec 非0終了時は wrapper も非0終了する必要がある"
     assert "ERROR" in result.stderr, f"診断ブロックの ERROR 行が stderr に届いていない: {result.stderr!r}"
@@ -620,11 +673,12 @@ def test_codex_image_script_rejects_stale_artifact_when_agent_skips_cp(tmp_path:
 
     env, _ = _prepare_fake_codex_env(tmp_path, skip_cp=True)
     output_path = tmp_path / "output.png"
+    ref_path = _write_reference_file(tmp_path)
     # 事前に有効な PNG ヘッダで「stale artifact」を仕込む
     output_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"IEND\xae\x42\x60\x82")
     assert output_path.exists() and output_path.stat().st_size > 0
 
-    result = _run_script(_CODEX_IMAGE_SH, "tiny prompt", str(output_path), env=env)
+    result = _run_script(_CODEX_IMAGE_SH, "tiny prompt", str(output_path), str(ref_path), env=env)
 
     assert result.returncode != 0, (
         "agent が cp していないのに wrapper が 0 で終わっている "
@@ -652,8 +706,9 @@ def test_codex_image_script_rejects_when_agent_message_does_not_match_out(tmp_pa
         tmp_path,
         agent_message_override=str(tmp_path / "elsewhere.png"),
     )
+    ref_path = _write_reference_file(tmp_path)
 
-    result = _run_script(_CODEX_IMAGE_SH, "tiny prompt", str(output_path), env=env)
+    result = _run_script(_CODEX_IMAGE_SH, "tiny prompt", str(output_path), str(ref_path), env=env)
 
     assert result.returncode != 0, (
         "agent_message が $out と一致しないのに wrapper が 0 で終わっている "
@@ -858,7 +913,22 @@ def test_thumbnail_skill_codex_section_documents_login_and_direct_command() -> N
     section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
     assert "codex login status" in section
     assert ".claude/skills/thumbnail/references/codex-image.sh" in section
-    assert "main-codex.png" in section
+    assert "thumbnail-codex-v1.png" in section
+
+
+def test_thumbnail_skill_codex_section_follows_thumbnail_then_textless_main_contract() -> None:
+    """#1310: codex 経路も文字入り thumbnail と textless main を別成果物にする。"""
+    section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
+
+    for required in (
+        "codex 経路でも標準ファイル契約は同じ",
+        "10-assets/thumbnail-codex-v1.png",
+        "10-assets/thumbnail.jpg",
+        "10-assets/main-v1.png",
+        "10-assets/main.png",
+        "動画背景には使わない",
+    ):
+        assert required in section
 
 
 def test_thumbnail_skill_codex_section_documents_api_route_boundary() -> None:

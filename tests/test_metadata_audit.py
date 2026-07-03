@@ -6,8 +6,10 @@ issue #82 の再発防止として、旧コード (`zh-Hans` / `zh-Hant`) を期
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 # metadata_audit.py は module-level で channel_dir() を呼ぶため、import 前に
@@ -18,7 +20,7 @@ os.environ.setdefault("CHANNEL_DIR", str(_FIXTURE))
 
 import pytest  # noqa: E402
 
-from youtube_automation.scripts.metadata_audit import audit_remote  # noqa: E402
+from youtube_automation.scripts.metadata_audit import audit_local, audit_remote  # noqa: E402
 
 _ZH_ISSUE_TOKEN = "zh codes"  # `metadata_audit.py` のエラー文言 "YT zh codes are ..." に対応
 
@@ -40,6 +42,112 @@ def _patched_yt(response: dict) -> MagicMock:
     yt = MagicMock()
     yt.videos.return_value.list.return_value.execute.return_value = response
     return yt
+
+
+def _audit_config(supported_languages: list[str]) -> SimpleNamespace:
+    return SimpleNamespace(
+        audio=SimpleNamespace(
+            chapter_max=12,
+            target_duration_min=None,
+            target_duration_max=None,
+        ),
+        content=SimpleNamespace(
+            tags=SimpleNamespace(
+                min_count=None,
+                for_collection=lambda _name: ["fallback"],
+            )
+        ),
+        localizations=SimpleNamespace(supported_languages=supported_languages),
+    )
+
+
+def _write_local_collection(
+    tmp_path: Path,
+    *,
+    scene_phrases: dict[str, str],
+    description: str,
+    title_heading: str = "タイトル案",
+    write_workflow_state: bool = True,
+) -> Path:
+    collection_dir = tmp_path / "20260622-test-collection"
+    docs_dir = collection_dir / "20-documentation"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "descriptions.md").write_text(
+        f"""## {title_heading}
+```
+Continuous Focus Mix
+```
+
+## Complete Collection 概要欄
+```
+{description}
+```
+""",
+        encoding="utf-8",
+    )
+    if write_workflow_state:
+        (collection_dir / "workflow-state.json").write_text(
+            json.dumps({"scene_phrases": scene_phrases}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    return collection_dir
+
+
+class TestAuditLocalPreflightContract:
+    def test_en_only_channel_without_timestamps_passes(self, tmp_path: Path) -> None:
+        collection_dir = _write_local_collection(
+            tmp_path,
+            scene_phrases={"en": "continuous focus mix"},
+            description="A continuous BGM mix without chapter markers.",
+        )
+
+        assert audit_local(collection_dir, _audit_config(["en"])) == []
+
+    def test_scene_phrases_require_only_supported_languages(self, tmp_path: Path) -> None:
+        collection_dir = _write_local_collection(
+            tmp_path,
+            scene_phrases={"ja": "連続作業用ミックス"},
+            description="A continuous BGM mix without chapter markers.",
+        )
+
+        assert audit_local(collection_dir, _audit_config(["ja"])) == []
+
+    def test_heading_mismatch_reports_descriptions_md_diagnostics(self, tmp_path: Path) -> None:
+        collection_dir = _write_local_collection(
+            tmp_path,
+            scene_phrases={"en": "continuous focus mix"},
+            description="A continuous BGM mix without chapter markers.",
+            title_heading="タイトル",
+        )
+
+        issues = audit_local(collection_dir, _audit_config(["en"]))
+
+        assert len(issues) == 1
+        message = issues[0]
+        assert "descriptions.md parse failed" in message
+        assert "期待する見出し（完全一致）" in message
+        assert ("不足/不一致の見出し:\n  - ## タイトル案\n  - ## タグ（YouTube タグ欄）") in message
+        assert "検出した ## 見出し" in message
+        assert "## タイトル" in message
+        assert "修正例" in message
+        assert "/video-description を再実行" in message
+
+    def test_parse_failure_keeps_independent_local_audits(self, tmp_path: Path) -> None:
+        collection_dir = _write_local_collection(
+            tmp_path,
+            scene_phrases={},
+            description="A continuous BGM mix without chapter markers.",
+            title_heading="タイトル",
+            write_workflow_state=False,
+        )
+        cfg = _audit_config(["en"])
+        cfg.content.tags.min_count = 2
+
+        issues = audit_local(collection_dir, cfg)
+
+        assert any("descriptions.md parse failed" in issue for issue in issues)
+        assert any("workflow-state.json missing" in issue for issue in issues)
+        assert any("tags count: 1 (min 2)" in issue for issue in issues)
 
 
 class TestAuditRemoteZhCodes:

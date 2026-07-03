@@ -1,7 +1,7 @@
 # config/channel/*.json 生成ルール
 
-`/channel-setup` と `/channel-import` から共通参照するルール集。
-テンプレートは同ディレクトリの `config-template.json`。
+`/channel-setup` と `/channel-new`（既存チャンネル取り込みモード）から共通参照するルール集。
+テンプレートは同ディレクトリの `config-template/*.json`。
 
 ## TTP（徹底的にパクる）路線時の優先順位
 
@@ -10,7 +10,7 @@
 1. **`/channel-setup` Step 2.1 で取得した競合の `channels().list(part='snippet,brandingSettings,localizations')` レスポンス**を Claude のコンテキストに必ず載せる
 2. 競合の構造（章立て・段落順・箇条書きの数・絵文字の有無）をそのままコピーし、`competitor → my-channel` の固有名詞置換だけを行う
 3. `brandingSettings.channel.keywords` は数・順序・スペース入りクォート形式（`"chill beats"` 等）まで踏襲する
-4. `localizations` で多言語化されている言語セットを `localization.supported_languages` の決定に反映する（独自に絞る場合は理由を明文化）
+4. `localizations` で多言語化されている言語セットを `config/localizations.json::supported_languages` の決定に反映する（独自に絞る場合は理由を明文化）
 5. TTP self-check（SKILL.md Step 2.3）に通してから提案する
 
 「独自路線」「ハイブリッド路線」を選んでいる場合は競合スナップショットを必ず参照しつつも、転写率と差別化の比率を方向性ドキュメントに合わせる。
@@ -21,15 +21,18 @@
 
 - `channel` — name, short, core_message, channel_id, youtube_handle, url
 - `content_model` — collection / release など
-- `localization` — `default_language` + `supported_languages`。`localizations.json.supported_languages` と一致させること（scene_phrases / 概要欄多言語版の対象言語、単一ソース宣言）。`supported_languages` は広告単価が高い 3 言語（`ja` / `en` / `de`）を必ず含め、低 CPM 言語（`ko` / `es` / `pt` / `zh-CN` など）は原則追加しない（issue #272）。**TTP 路線時**は競合の `localizations` エントリ言語を最優先で踏襲する。競合が多言語化していないチャンネル（en 一択など）を TTP 対象にしている場合、自分も同様に絞る選択肢を必ずユーザーに提示する
 - `music_engine` — `"suno"` または `"lyria"`（チャンネルのデフォルト音楽エンジン）
 - `genre` — primary, style, context
-- `youtube` — デフォルトのアップロード設定
+- `youtube` — デフォルトのアップロード設定。アップロード metadata に使う `youtube.category_id` / `youtube.privacy_status` もここで決める
 - `tags` — base, themes
 - `descriptions` — opening, sub_opening, perfect_for, hashtags
 - `analytics` — 計測対象の設定
 - `title` — template, theme_activities
 - `workflow` — フェーズ定義
+
+## ルート設定ファイル
+
+- `config/localizations.json` — `default_language` + `supported_languages`。scene_phrases / 概要欄多言語版の対象言語の単一ソース。`supported_languages` は多言語チャンネルなら高 CPM 言語（`ja` / `en` / `de`）を推奨、低 CPM 言語（`ko` / `es` / `pt` / `zh-CN` など）は原則追加しない（issue #272）。en-only 運用も可（preflight は `supported_languages` を尊重し、ハードコード必須言語は無い）。**TTP 路線時**は競合の `localizations` エントリ言語を最優先で踏襲する。競合が多言語化していないチャンネル（en 一択など）を TTP 対象にしている場合、自分も同様に絞る選択肢を必ずユーザーに提示する
 
 ## 各フィールドの生成ルール
 
@@ -85,6 +88,7 @@
 |---|---|
 | thumbnail / Gemini 画像生成 | `config/skills/thumbnail.yaml` |
 | suno | `config/skills/suno.yaml` |
+| suno-lyric | `config/skills/suno-lyric.yaml` |
 | lyria | `config/skills/lyria.yaml` |
 | collection-ideate | `config/skills/collection-ideate.yaml` |
 | benchmark | `config/skills/benchmark.yaml` |
@@ -106,7 +110,7 @@
 | `genre_line` | 「ジャンル & スタイル」決定の直訳（Suno Styles 欄にそのまま入る） |
 | `exclude_styles` | 「ジャンル & スタイル」で排除すると決めた要素（白音 / 雨音 / EDM 等） |
 
-`lyrics_guidelines.style_reference` / `lyrics_generation.provider` は任意上書き。
+ボーカル歌詞本文の persona / quote / lyric structure は `/suno-lyric` 側の `config/skills/suno-lyric.yaml` で任意上書き。
 
 **Thumbnail**:
 
@@ -114,12 +118,24 @@
 |---|---|
 | `image_generation.gemini.brand_background` | 「ビジュアルアイデンティティ」の背景色 |
 | `image_generation.gemini.reference_images.default` | TTP 対象の代表サムネ（`data/thumbnail_compare/benchmark/<channel>-<vid>.jpg`、`/benchmark` で download される） |
+| `image_generation.gemini.reference_images.channel_branding` | `docs/channel/competitor-branding-snapshot.json` 由来の icon / banner reference と `branding/icon.png` / `branding/banner.png` の出力先 |
 | `image_generation.gemini.composition_rules.*` | 「ビジュアルアイデンティティ」「サムネイル方針」 |
 | `image_generation.gemini.diff_prompt_template` | コレクション側 `prompts/<theme>.md` への差分指示テンプレ |
 
-`reference_images.default` の TTP サムネは `/benchmark`（`yt-benchmark`）が
+`reference_images.default` の TTP サムネは `/benchmark` skill（CLI は `yt-benchmark-collect`）が
 `docs/benchmarks/*.md` 取得時に `data/thumbnail_compare/benchmark/` に自動 download する。
 **手動 download はしない**（issue #567）。
+
+`benchmark.channels` が設定済みのチャンネルでは、`uv run yt-doctor --json` の
+`ttp_wf_new_readiness` で `/channel-setup benchmark 反映未完了` が出ないことを完了条件にする。
+この check は `data/benchmark_*.json`、`docs/benchmarks/*.md`、
+`data/thumbnail_compare/benchmark/`、`config/skills/thumbnail.yaml::reference_images.default`、
+`config/skills/thumbnail.yaml::reference_images.channel_branding`
+の欠落を読むだけで検出する。
+
+設定生成後は `uv run yt-doctor` を実行し、`initial_setup_readiness` が OK であることを確認する。
+ここで `reference_images.default` / `composition_rules` の空欄・TBD、Suno `genre_line` の
+Style 欄 120 文字超過、planning 中 `descriptions.md` の parser 不一致を公開前に検出できる。
 
 ## オプションセクション
 
@@ -131,6 +147,6 @@
 
 ## 参考
 
-- `config-template.json` — 全フィールドの雛形
+- `config-template/*.json` — 責務別 config の雛形
 - `/channel-setup` — 方向性ドキュメントから config 完成までの手順
-- `/channel-import` — 既存チャンネル取り込みの手順
+- `/channel-new`（既存チャンネル取り込みモード） — 既存チャンネル取り込みの手順

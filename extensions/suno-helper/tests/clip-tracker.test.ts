@@ -13,18 +13,22 @@ describe("createClipTracker: status ベースの in-flight 集計", () => {
     expect(tracker.hasObservedAnyTraffic()).toBe(false);
     expect(tracker.submissionCount()).toBe(0);
     expect(tracker.getPendingIds()).toEqual([]);
+    expect(tracker.getSubmittedIds()).toEqual([]);
   });
 
-  it("Given generate 観測（2 clip submitted） When 読む Then in-flight 2 / submission 1", () => {
+  it("Given generate 観測（2 clip submitted） When 読む Then in-flight 2 / submission 1 / duration を記録する", () => {
     const tracker = createClipTracker();
     tracker.registerSubmitted([
-      { id: "c1", status: "submitted" },
+      { id: "c1", status: "submitted", duration: 241.2 },
       { id: "c2", status: "submitted" },
     ]);
     expect(tracker.getInFlightCount()).toBe(2);
     expect(tracker.submissionCount()).toBe(1);
     expect(tracker.hasObservedAnyTraffic()).toBe(true);
     expect(tracker.getPendingIds()).toEqual(["c1", "c2"]);
+    expect(tracker.getPendingSubmittedIds()).toEqual(["c1", "c2"]);
+    expect(tracker.getDuration("c1")).toBe(241.2);
+    expect(tracker.getDuration("c2")).toBeUndefined();
   });
 
   it("Given feed 観測で complete へ遷移 When 読む Then in-flight から外れる（バグ本体の修正点）", () => {
@@ -46,14 +50,32 @@ describe("createClipTracker: status ベースの in-flight 集計", () => {
     expect(tracker.getInFlightCount()).toBe(0);
   });
 
+  it("Given feed 観測に duration がある When 読む Then clip ID ごとに記録して取得できる", () => {
+    const tracker = createClipTracker();
+    tracker.registerSubmitted([
+      { id: "c1", status: "submitted" },
+      { id: "c2", status: "submitted" },
+    ]);
+
+    tracker.applyFeedStatuses([
+      { id: "c1", status: "complete", duration: 182.4 },
+      { id: "c2", status: "streaming", duration: 0 },
+    ]);
+
+    expect(tracker.getDuration("c1")).toBe(182.4);
+    expect(tracker.getDuration("c2")).toBe(0);
+    expect(tracker.getDuration("missing")).toBeUndefined();
+  });
+
   it("Given feed 観測に未知の未終端 clip When 読む Then passive 合流で数える（前 run の残留分）", () => {
     const tracker = createClipTracker();
     tracker.applyFeedStatuses([
       { id: "leftover", status: "streaming" }, // 前 run / 手動投入の残留 in-flight
-      { id: "done", status: "complete" }, // 終端済みの未知 clip は合流させない
+      { id: "done", status: "complete", duration: 180 }, // 終端済みの未知 clip は合流させない
     ]);
     expect(tracker.getInFlightCount()).toBe(1);
     expect(tracker.getPendingIds()).toEqual(["leftover"]);
+    expect(tracker.getDuration("done")).toBe(180);
     expect(tracker.hasObservedAnyTraffic()).toBe(true);
   });
 
@@ -93,5 +115,56 @@ describe("createClipTracker: status ベースの in-flight 集計", () => {
     tracker.applyFeedStatuses([{ id: "c1", status: "streaming" }]); // status 変化なし
     expect(tracker.lastFeedAt()).toBe(3000); // feed 観測時刻は進む
     expect(tracker.lastChangeAt()).toBe(2000); // 集合は不変なので change は進まない（stall 判定用）
+  });
+});
+
+describe("createClipTracker: playlist 対象 submitted ID 管理", () => {
+  it("Given generate 観測が複数回ある When 読む Then submitted ID を初回観測順で重複なく返す", () => {
+    const tracker = createClipTracker();
+
+    tracker.registerSubmitted([
+      { id: "fresh-a", status: "submitted" },
+      { id: "fresh-b", status: "submitted" },
+    ]);
+    tracker.registerSubmitted([
+      { id: "fresh-b", status: "queued" },
+      { id: "fresh-c", status: "submitted" },
+    ]);
+
+    expect(tracker.getSubmittedIds()).toEqual(["fresh-a", "fresh-b", "fresh-c"]);
+  });
+
+  it("Given feed の passive unknown clip When 読む Then submitted ID には含めない", () => {
+    const tracker = createClipTracker();
+
+    tracker.registerSubmitted([{ id: "fresh-a", status: "submitted" }]);
+    tracker.applyFeedStatuses([{ id: "leftover", status: "streaming" }]);
+
+    expect(tracker.getPendingIds()).toEqual(["fresh-a", "leftover"]);
+    expect(tracker.getSubmittedIds()).toEqual(["fresh-a"]);
+  });
+
+  it("Given submitted clip が terminal status へ遷移 When 読む Then playlist 対象 ID として保持する", () => {
+    const tracker = createClipTracker();
+
+    tracker.registerSubmitted([{ id: "fresh-a", status: "submitted" }]);
+    tracker.applyFeedStatuses([{ id: "fresh-a", status: "complete" }]);
+
+    expect(tracker.getInFlightCount()).toBe(0);
+    expect(tracker.getSubmittedIds()).toEqual(["fresh-a"]);
+    expect(tracker.getPendingSubmittedIds()).toEqual([]);
+  });
+
+  it("Given clearSubmittedIds When 実行 Then playlist 対象だけを消し in-flight status は保持する", () => {
+    const tracker = createClipTracker();
+
+    tracker.registerSubmitted([{ id: "fresh-a", status: "submitted" }]);
+    tracker.clearSubmittedIds();
+
+    expect(tracker.getSubmittedIds()).toEqual([]);
+    expect(tracker.getPendingIds()).toEqual(["fresh-a"]);
+    expect(tracker.getInFlightCount()).toBe(1);
+    expect(tracker.submissionCount()).toBe(1);
+    expect(tracker.hasObservedAnyTraffic()).toBe(true);
   });
 });

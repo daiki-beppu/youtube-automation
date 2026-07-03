@@ -26,7 +26,7 @@ _LIFECYCLE_SKILL_NAMES: Final[tuple[str, ...]] = (
     "video-description",
     "analytics-collect",
     "playlist",
-    "distrokid-prep",
+    "distrokid-helper",
 )
 
 _FORBIDDEN_COMMAND_FRAGMENTS: Final[tuple[str, ...]] = (

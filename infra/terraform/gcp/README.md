@@ -8,7 +8,7 @@
 
 | シナリオ | 推奨 |
 | --- | --- |
-| **初回 1 チャンネルだけ立ち上げ** | bootstrap.sh (or `/onboard` skill) — 手数最少 |
+| **初回 1 チャンネルだけ立ち上げ** | bootstrap.sh (or `/setup` skill) — 手数最少 |
 | **2 つ目以降のチャンネル開設** | **terraform** — workspace で並列管理可能 |
 | **別 PC への引っ越し / 再構築** | **terraform** — tfstate + tfvars を持ち運べば replay 可能 |
 | **GCP 側のドリフト検出** | **terraform** — `terraform plan` で差分が出る |
@@ -16,7 +16,7 @@
 
 初回 1 チャンネル限定なら bootstrap.sh の方が tfvars 編集の手間が無い分シンプル。複数管理・継続運用を見据えるなら terraform に切り替える価値がある。
 
-`/onboard` skill (AI 主導の wizard) は内部で bootstrap.sh を呼ぶ前提だが、AI に tfvars 編集 + `gcp-terraform-apply.sh` を Bash で叩かせれば terraform ルートも自動化可能。
+`/setup` skill (AI 主導の wizard) は内部で bootstrap.sh を呼ぶ前提だが、AI に tfvars 編集 + `gcp-terraform-apply.sh` を Bash で叩かせれば terraform ルートも自動化可能。
 
 ## 管理するリソース
 
@@ -29,7 +29,9 @@
   - `storage.googleapis.com`
 - `google_project_iam_member` = `roles/aiplatform.user` → `var.adc_email`
 
-**OAuth 2.0 クライアント ID は google provider で未サポート** のため、別途 Console から作成する（この 1 ステップだけ手動）。
+**Google Auth Platform の Branding / Audience / Clients 設定は google provider で未サポート** のため、別途 Console から設定し、`client_secrets.json` を配置する。
+
+Terraform apply 後に表示される Console URL を開き、**Branding** を保存し、**Audience > Test users** に OAuth 認証でログインする Google アカウントを追加してから、**Clients > Create client** で Application type **Desktop app** を作成する。作成した client の **Client secrets > Add secret** で新しい secret を発行し、チャンネル repo の `auth/client_secrets.template.json` をコピーして `client_id` / `project_id` / `client_secret` を転記する。
 
 ## 前提
 
@@ -76,7 +78,7 @@ adc_email      = "you@example.com"
 | `project_id` | 確定した project ID |
 | `location` | Vertex AI リージョン |
 | `env_vars` | `.env` 用 key/value map (`GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`)。`GOOGLE_CLOUD_PROJECT` は任意の override で、未設定なら ADC quota project から自動解決される |
-| `oauth_console_url` | OAuth クライアント ID 作成用 Console URL |
+| `oauth_console_url` | Google Auth Platform 手動設定用 Console URL |
 | `enabled_apis` | 有効化した API 一覧 |
 
 ## トラブルシューティング

@@ -1,5 +1,9 @@
 # Service-boundary contracts: Result + zod ServiceError + auth seam
 
+## Status
+
+accepted (2026-06-04)。実装は `feat/ts-rewrite` 上で進行中（cutover #790 で main へ反映予定）。
+
 ## Context
 
 ADR 0002 で `packages/core` の domain feature を schema-first / service-only / thin CLI の三層で書く方針を確定したが、**「service が失敗を caller にどう伝えるか」「重い外部依存 (OAuth / 1Password) との seam をどこに引くか」「schema を 16 個の手書き interface に分解して書くか zod に集約するか」**の 3 点は ADR 0002 では言及していなかった。

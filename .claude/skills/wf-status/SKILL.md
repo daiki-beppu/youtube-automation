@@ -26,7 +26,7 @@ description: "Use when コレクション制作の進捗を読むだけで確認
 
 存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## Instructions
 
@@ -83,7 +83,7 @@ phase 値と日本語ラベル:
 ### 補足
 
 - `workflow-state.json` が存在しないコレクションは「未トラッキング」として表示する
-- スキーマ詳細は `.claude/references/workflow/schema.md` を参照
+- スキーマ詳細は `.claude/skills/wf-new/references/schema.md` を参照
 
 ## 障害時ガイダンス
 

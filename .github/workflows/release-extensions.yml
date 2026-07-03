@@ -25,16 +25,17 @@ jobs:
           cache-dependency-path: |
             extensions/suno-helper/pnpm-lock.yaml
             extensions/distrokid-helper/pnpm-lock.yaml
-      - name: Build and zip suno-helper
-        working-directory: extensions/suno-helper
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm zip
-      - name: Build and zip distrokid-helper
-        working-directory: extensions/distrokid-helper
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm zip
+      - parallel:
+          - name: Build and zip suno-helper
+            working-directory: extensions/suno-helper
+            run: |
+              pnpm install --frozen-lockfile --ignore-workspace
+              pnpm zip
+          - name: Build and zip distrokid-helper
+            working-directory: extensions/distrokid-helper
+            run: |
+              pnpm install --frozen-lockfile --ignore-workspace
+              pnpm zip
       - name: Attach zips to Release
         uses: softprops/action-gh-release@v2
         with:

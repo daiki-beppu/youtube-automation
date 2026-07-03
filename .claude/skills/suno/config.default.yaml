@@ -1,6 +1,6 @@
 # suno skill default config
 #
-# SunoAI v5 用プロンプト生成の設定。チャンネル側で config/skills/suno.yaml に上書き。
+# SunoAI V5.5 用プロンプト生成の設定。チャンネル側で config/skills/suno.yaml に上書き。
 
 # Suno ワークスペース名 (UI 表示用)
 workspace_name: ""
@@ -13,10 +13,10 @@ genre_line: ""
 exclude_styles: "heavy metal, aggressive, EDM, dubstep, techno, industrial, white noise, orchestral, rain sounds, vinyl crackle, ambient noise"
 
 # Style Influence (0-100、高いほどジャンル指定が強く反映される)
-style_influence: 95
+style_influence: 50
 
 # Weirdness (0-100、高いほど予測不能な展開が増える)
-weirdness: 10
+weirdness: 50
 
 # 歌詞構造の自動タグ付け ([Verse], [Chorus] 等を AI が自動挿入)
 auto_lyrics_structure: true
@@ -58,8 +58,8 @@ banned_artists:
   - Nujabes
   - J Dilla
 
-# Model (V5 推奨)
-model: V5
+# Model (V5.5 推奨)
+model: V5.5
 
 # スタイルバリアント (A/B テスト用、省略可)
 # 各パターンで style: <key> を指定すると variant 固有の genre_line が使われる
@@ -99,33 +99,5 @@ pattern_strategy: mixed
 tracks_per_pattern: 3
 pattern_strategy_note: ""
 
-# ボーカルモード時の歌詞ガイドライン
-# music_engine: suno かつ genre_line にボーカル要素が含まれる場合に適用
-lyrics_guidelines:
-  # 声のトーン (conversational / narrative / poetic など)
-  tone: ""
-  # 視点 (first-person / second-person / third-person)
-  perspective: ""
-  # 歌詞の語り手 gender。サムネのキャラ性別・genre_line のボーカル性別と一致させる。
-  # male / female / neutral / auto (auto はサムネ main.png のキャラ性別から判定)
-  vocal_gender: ""
-  # 韻スタイル (loose / strict / natural)
-  rhyme_style: "natural"
-  # 言語 (youtube.language と揃える)
-  language: en
-  # チャンネル固有のキャッチフレーズ (歌詞に織り込む)
-  catchphrase: ""
-  # 扱わないトピック
-  forbidden_topics:
-    - politics
-    - religion
-    - explicit
-  # references/lyrics-examples.md 内のどのテンプレを参考にするか (jazzhop / folk / piano など)
-  template_reference: ""
-  # 英語歌詞の文体参照。歌詞本文の意味や固有表現はコピーせず、語り口・行長・韻の緩さだけを抽出する
-  style_reference: []
-
-# ボーカルモード時の歌詞初稿生成 provider
-# claude: skill 実行中の通常生成 / codex: references/codex-lyrics.sh で Codex CLI に委譲
-lyrics_generation:
-  provider: claude
+# ボーカル歌詞本文の生成設定は `/suno-lyric` 側の config.default.yaml が所有する。
+# `/suno` は Style / scene / title と `suno-lyrics.json` の merge のみを担当する。

@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+DEFAULT_FFPROBE_TIMEOUT_SECONDS = 30
+
 
 def probe_duration(path: Path) -> float | None:
     """ffprobe で動画/音声ファイルの再生秒数を取得する。失敗時は None."""
@@ -24,9 +26,10 @@ def probe_duration(path: Path) -> float | None:
             capture_output=True,
             text=True,
             check=True,
+            timeout=DEFAULT_FFPROBE_TIMEOUT_SECONDS,
         )
         return float(result.stdout.strip())
-    except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, FileNotFoundError):
         return None
 
 
@@ -52,7 +55,8 @@ def probe_bitrate(path: Path) -> float | None:
             capture_output=True,
             text=True,
             check=True,
+            timeout=DEFAULT_FFPROBE_TIMEOUT_SECONDS,
         )
         return float(result.stdout.strip())
-    except (subprocess.CalledProcessError, ValueError, FileNotFoundError):
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, FileNotFoundError):
         return None

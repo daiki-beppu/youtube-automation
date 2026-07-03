@@ -11,6 +11,15 @@ description: "Use when コレクションのサムネイル画像が必要で、
 
 > imagegen taxonomy 対応: `Use case: product-mockup (YouTube thumbnail variant)`（imagegen の 19 スラグでは product-mockup に相当）。
 
+## 設定読み込みゲート
+
+前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+
+1. `.claude/skills/thumbnail/config.default.yaml`
+2. `config/skills/thumbnail.yaml`（存在する場合）
+
+読み込み後は `youtube_automation.utils.skill_config.load_skill_config("thumbnail")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
+
 ## 前提
 
 `config/channel/` が存在すること（`load_config()` でロード可能）。
@@ -19,7 +28,7 @@ description: "Use when コレクションのサムネイル画像が必要で、
 
 `config/channel/` が存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## When to Use
 
@@ -47,6 +56,38 @@ OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"`
 
 `config/skills/thumbnail.yaml` の `image_generation.provider` が未設定の場合、デフォルトは `gemini`。channel-config 側で `image_generation.provider` が明示されている場合はそちらが優先される（既存の切り替え挙動は変更しない）。
 
+## 障害時の provider fallback
+
+Gemini API 障害、GCP 課金切れ、ADC 認証不備、quota 超過が疑われる場合は、自動切替せずに provider を明示変更して再実行する。
+
+GCP 課金なしで進める場合:
+
+```yaml
+# config/skills/thumbnail.yaml
+image_generation:
+  provider: codex
+```
+
+その後、`bunx tayk generate-image` ではなく codex wrapper を使う:
+
+```bash
+bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
+  "<thumbnail prompt>" \
+  <collection-path>/10-assets/thumbnail-codex-v1.png \
+  <reference-image-1>
+```
+
+OpenAI API に切り替える場合:
+
+```yaml
+image_generation:
+  provider: openai
+  openai:
+    aspect_ratio: "16:9"
+```
+
+Gemini / OpenAI の CLI 経路で全 attempt が失敗した場合、`bunx tayk generate-image` はこの fallback 章を案内する。生成物の品質差が出るため、自動で provider を切り替えて上書きすることはしない。
+
 ## codex 経由の生成
 
 `image_generation.provider: codex` のチャンネルでは、`bunx tayk generate-image` ではなく `codex-image.sh` を正規の生成経路として使う。`ImageProvider` API 実装は持たないため、`bunx tayk generate-image` に誤配線した場合は明示エラーでこの shell 経路へ誘導される。
@@ -55,17 +96,41 @@ OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"`
 - codex CLI 0.131 系以降（旧 stdout プロトコル `generated image <id> <base64>` は 0.131 で削除済み）
 - `codex login status` が `Logged in using ChatGPT` を返す
 - `jq` が PATH 上にある（`--json` の JSONL 解析に使う）
+- TTP 生成のため、3 引数目以降に参照画像を 1 件以上渡す
 - ChatGPT サブスクの fair-use 上限は明文化されていないため、大量生成には使わない
 
 直接実行例:
 
 ```bash
-bash .claude/skills/thumbnail/references/codex-image.sh \
+bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
   "a cozy cafe table with steaming coffee, soft morning light" \
-  collections/planning/sample/main-codex.png
+  collections/planning/sample/10-assets/thumbnail-codex-v1.png \
+  data/thumbnail_compare/benchmark/<channel>/<reference>.jpg
 ```
 
-参照画像つきで雰囲気を寄せたい場合は、3 引数目以降に画像パスを追加する。
+複数候補を作る場合でも、1 回の `codex-image.sh --require-reference` 呼び出しには候補に対応する参照画像 1 枚だけを渡す。TTP 生成では参照画像 0 件で停止する。DistroKid cover などの汎用 codex 生成は `--require-reference` を付けない。
+
+TTP 参照画像から上位互換サムネを作る場合は、長い個別指定ではなく
+`image_generation.codex.default_prompt_template` を使う。参照画像は mood reference
+ではなく winning template として扱い、変える要素は `{title}` と品質改善
+（mobile readability / face impact / no logos / no watermarks / no broken hands）に限定する。
+日本語方針は「TTPを徹底して上位互換の生成」。
+
+codex 経路でも標準ファイル契約は同じ:
+
+1. ベンチマーク参照画像から、テキスト付き候補を `10-assets/thumbnail-codex-v1.png` に生成する。
+2. 承認後、PNG 候補を JPEG に変換して `10-assets/thumbnail.jpg` として確定する（例: `sips -s format jpeg 10-assets/thumbnail-codex-v1.png --out 10-assets/thumbnail.jpg`）。`thumbnail.png` のまま確定する場合も、YouTube アップロード用の文字入りサムネであり、動画背景には使わない。
+3. 確定した `thumbnail.jpg`（または `thumbnail.png`）を参照画像にして、テキストなし背景候補を `10-assets/main-v1.png` に AI 再生成する。
+4. 承認後、`cp 10-assets/main-v1.png 10-assets/main.png` で textless 動画背景として確定する。
+
+既定テンプレート:
+
+```text
+TTP this reference thumbnail, then improve it into a stronger original thumbnail.
+Keep the winning layout, typography feel, character scale, color mood, texture, and energy.
+Make it cleaner, more readable on mobile, stronger face impact, no logos, no watermarks, no broken hands.
+Use the title {title}.
+```
 
 内部実装の要約:
 
@@ -79,7 +144,7 @@ bash .claude/skills/thumbnail/references/codex-image.sh \
 
 運用上の注意:
 
-- **prompt は短く保つ**: 長すぎる prompt は agent が `image_generation` tool 呼び出しを skip して path だけ echo する failure mode に陥る。`/tmp/rjn-codex-prompt-short.txt` のように参照画像つきでも 14 行・600〜800 字に収めるとほぼ通る。失敗したら短縮を最優先で試す
+- **prompt は短く保つ**: 長すぎる prompt は agent が `image_generation` tool 呼び出しを skip して path だけ echo する failure mode に陥る。TTP 参照画像つきでは `image_generation.codex.default_prompt_template` を使い、`{title}` だけを差し替える。失敗したら短縮を最優先で試す
 - **reference 画像つきは prompt で「変更点」を明示する**: 「reference を参考に」程度の弱い指示だと agent が `image_generation` tool を skip して reference を `<out>` に cp するだけで終わる failure mode がある。wrapper の自動付与文 + MD5 一致検証で抑止しているが、prompt 側でも reference からの差分（色味の参考 / 構図だけ流用 / 主役を差し替え 等）を明示しておくと安定する
 - 失敗時 wrapper は `agent_message (最終)` と codex stderr の末尾 30 行を診断 dump するので、これを見て prompt 短縮 or 参照画像見直しに切り替える
 
@@ -93,16 +158,17 @@ bash .claude/skills/thumbnail/references/codex-image.sh \
 ## Channel Adaptation
 
 **すべての設定は `config/skills/thumbnail.yaml` から読み取る。**
-スキル内にチャンネル固有のハードコードはしない。作業前に Read tool で
-`config/skills/thumbnail.yaml` を開き、チャンネル側の上書き設定を確認する。
+スキル内にチャンネル固有のハードコードはしない。作業前に Read tool（Codex では同等のファイル閲覧）で
+`.claude/skills/thumbnail/config.default.yaml` とチャンネル側上書きの `config/skills/thumbnail.yaml`
+を開き、deep-merge 後の実効値を確認する。
 
 実行前に以下を確認:
 
 1. `image_generation.provider` → 使用するプロバイダー（`gemini` / `openai` / `codex`）
 2. `image_generation.gemini.model` → 使用する Gemini モデル
-3. `image_generation.gemini.style` → スタイル説明（参照画像ベース or プロンプトベース）
+3. `image_generation.gemini.style` → スタイル説明（参照画像ベース）
 4. `image_generation.gemini.prompt_prefix` → プロンプト冒頭の固定文（キャラ描写等）
-5. `image_generation.gemini.reference_images` → 参照画像の定義（あれば参照画像モード）
+5. `image_generation.gemini.reference_images.default` → 同じベンチマークチャンネル内の参照画像リスト（single_step では必須）
 6. `image_generation.gemini.fixed_character` → 固定キャラの設定（あればキャラ固定モード）
 7. `image_generation.gemini.composition_rules` → 構図・環境のルール
 8. `image_generation.gemini.thumbnail_text` → テキストオーバーレイの設定
@@ -116,49 +182,52 @@ bash .claude/skills/thumbnail/references/codex-image.sh \
 
 | モード | 説明 |
 |---|---|
-| `single_step`（**デフォルト**・TTP 推奨）| テキスト付き参照画像から差分のみ指示、1 ステップで完成。ベンチマーク模倣（TTP）の標準実装 |
+| `single_step`（**デフォルト**・TTP 推奨）| テキスト付き参照画像から差分のみ指示し、YouTube 用のテキスト付きサムネ候補を 1 ステップで生成。ベンチマーク模倣（TTP）の標準実装 |
 | `diff_from_reference` | 既存キャラ画像を参照に差分指示 |
 | `two_phase` | 従来の 2 フェーズ（背景 → テキストオーバーレイ）|
 
-### 参照画像モード（`reference_images` が定義されている場合）
+### 参照画像モード（必須）
 
-参照画像を渡してスタイルを維持する方式。
+参照画像を渡して TTP の勝ちパターンを踏襲する方式。`single_step` では参照画像なしの生成は行わない。
 
 ```bash
 bunx tayk generate-image \
+  --ttp-strict-references \
   --prompt "<prompt_prefix を含むプロンプト>" \
   --reference <channel_dir>/<reference_images.default> \
-  --output <collection-path>/10-assets/main-v1.jpg -y
+  --output <collection-path>/10-assets/thumbnail-v1.jpg -y
 ```
 
 **参照画像の選択ロジック**:
-- `reference_images` のキーからシーンに最適なものを選択
+- `reference_images.default` には同じベンチマークチャンネル内の別サムネイル画像を並べる
+- `--max-attempts N` のときは N 枚以上のユニーク参照画像が必要。不足・重複・同一参照の再利用はエラー
+- `--reference-index N` を指定した場合のみ単一参照固定になり、attempt 数は 1 に固定される
 - `path_base: "channel_dir"` の場合、パスはチャンネルディレクトリからの相対パス
 - `--reference` 使用時は `composition_prefix` が自動スキップされる（generate_image.py 修正済み）
 
-### プロンプトベースモード（`reference_images` が未定義の場合）
-
-参照画像なしでプロンプトのみで生成する方式（フォールバック）。
-
-```bash
-bunx tayk generate-image \
-  --prompt "<完全なプロンプト>" \
-  --output <collection-path>/10-assets/main-v1.jpg -y
-```
-
-`composition_prefix` が自動付加される。
-
 ## プロンプト構築
 
-プロンプト構築の原則（prompt_prefix / fixed_character / composition_rules の組み立て）は `references/prompting.md`、参照画像モード・プロンプトベースモードの具体的なプロンプトテンプレート例は `references/sample-prompts.md` を参照する。
+プロンプト構築の原則（prompt_prefix / fixed_character / composition_rules の組み立て）は `references/prompting.md`、TTP の短い差分プロンプト例は `references/sample-prompts.md` を参照する。
 
 > 将来検討（issue #654）: imagegen の 14 項目 Shared prompt schema 形式と既存 skill-config の bridge ヘルパが `references/prompt-schema.md` および `youtube_automation.utils.image_provider.prompt_schema` に試験導入されている。実本番フローからは未接続。設計判断は `docs/skill-design/ADR-001-thumbnail-prompt-schema.md`。
 
 ## ワークフロー
 
+### 標準生成順序とファイル契約
+
+`/thumbnail` の標準手順は、**テキスト付き YouTube サムネ → テキストなし動画背景**の順に進める。
+
+1. ベンチマーク先サムネを参照画像にして、YouTube 用のテキスト付きサムネ候補を生成する。
+2. 承認したテキスト付き画像を参照画像にして、文字・ロゴ・タイポグラフィを除去したテキストなし版を AI で再生成する。
+3. テキスト付き最終サムネは `10-assets/thumbnail.jpg`、テキストなし動画背景は `10-assets/main.png` または `10-assets/main.jpg` として確定する。
+4. `config/skills/loop-video.yaml::enabled: true` のチャンネルでは、テキストなし `main.png/jpg` を `/loop-video` に渡して `loop.mp4` を生成する。
+5. `config/skills/loop-video.yaml::enabled: false` のチャンネルでは Veo を実行せず、テキストなし `main.png/jpg` を静止画背景として `/videoup` に渡す。
+
+`thumbnail.jpg` はアップロード用の文字入りサムネイル、`main.png/jpg` は動画背景・loop-video 入力用の文字なし素材として扱う。両者を同一画像で代用しない。
+
 ### Single-Step / TTP モード（`generation_mode: "single_step"`、デフォルト・推奨）
 
-ベンチマーク模倣（**TTP**: trace / imitate）の標準実装。テキスト付き参照画像（テキストレイアウト・背景テクスチャ・オブジェクト配置を含む）を参照にして、**変更点だけ**をプロンプトで指示する。背景生成とテキストオーバーレイが 1 回の生成で完了する。
+ベンチマーク模倣（**TTP**: trace / imitate）の標準実装。テキスト付きベンチマーク参照画像（テキストレイアウト・背景テクスチャ・オブジェクト配置を含む）を参照にして、**変更点だけ**をプロンプトで指示する。1 回目の生成では、YouTube 用のテキスト付きサムネ候補を作る。
 
 **重要**: 参照画像と同じ要素（レイアウト、固定オブジェクト、テキスト配置）はプロンプトに含めない。差分のみを指示することで、参照画像のクオリティを維持しつつ変更が正しく反映される。コピーではなくバリエーションを作るのがゴール。
 
@@ -170,15 +239,18 @@ bunx tayk generate-image \
 
 1. **skill-config に `reference_images.default` が未設定** → `config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.default` にベンチマークサムネのパス（文字列 1 件 or list 複数件）を設定
 2. **設定はあるが CLI 引数に展開していない** → `--reference <path>` で渡す。list なら `--reference A --reference B --reference C` のように複数指定
+3. **`--max-attempts N` に参照画像が足りない** → 同じベンチマークチャンネル内の別サムネイル画像を N 枚以上に増やす。ローテーションで同じ参照へ戻す運用はしない
 
 #### 参照画像（複数 + ローテーション）
 
-`reference_images.default` は文字列 1 件 / list 複数件の両方を受け付ける。list 指定時は同一ベンチマークチャンネル内の複数サムネ候補を並べておくことで、attempt 毎にローテーションして雰囲気が出る組合せを探れる。
+`reference_images.default` は同じベンチマークチャンネル内の複数サムネ候補を list で指定する。`--max-attempts N` で N 候補を出す場合、各 attempt は別参照画像 1 枚を使う。参照画像が N 枚未満、同じ画像の重複、`--no-rotate` による先頭固定はいずれもエラーになる。
+
+別チャンネル由来の参照画像や stock 画像を混ぜる場合は、TTP 参照プールとは別スコープとして扱う。混在させるなら `config/skills/thumbnail.yaml` 側で明示し、生成ログの `benchmark_channel=` と `thumbnail-prompts.md` の attempt 別参照欄で追跡できるようにする。
 
 | CLI 引数 | 用途 |
 |---|---|
-| `--max-attempts N` | 試行回数。各 attempt で参照を切替、出力は `-vN` で別保存 |
-| `--no-rotate` | 切替を無効化（先頭固定） |
+| `--max-attempts N` | 試行回数。各 attempt で別参照を 1 枚ずつ割当、出力は `-vN` で別保存 |
+| `--no-rotate` | single_step の複数候補では使用不可（同一参照再利用になるためエラー） |
 | `--reference-index N` | 特定の参照のみ使用（ローテーション無効、attempt=1） |
 
 config 側のデフォルトは `image_generation.gemini.single_step.{max_attempts, rotate}` で設定可能。
@@ -194,32 +266,48 @@ config 側のデフォルトは `image_generation.gemini.single_step.{max_attemp
 
 #### 生成コマンド
 
-`config/skills/thumbnail.yaml` を Read tool で開き、`reference_images.default` と stock (#364 PR-B) を確認して `--reference` 引数を組み立てる。stock 採用ログは stderr の `[INFO] stock 採用: ...` で確認できる。
+`reference_images.default` から `--reference` 引数を組み立てる。default では同じベンチマークチャンネル内の別サムネイル画像のみを使う。
+`config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.default` を Read tool で確認し、
+各パス（`CHANNEL_DIR` 相対）を絶対パスに解決して `--reference` を列挙する:
 
 ```bash
-THEME="<theme-slug>"   # 例: tavern / library / jazz-bar
-
-REF_ARGS=()
-# Read した reference_images.default の各パスを追加する。
-REF_ARGS+=(--reference "<path-from-reference_images.default>")
-# reference_images.stock.enabled が true の場合は assets/stock/$THEME/ から採用する画像も追加する。
-REF_ARGS+=(--reference "assets/stock/$THEME/<stock-image>")
-
-bunx tayk generate-image "${REF_ARGS[@]}" \
+bunx tayk generate-image \
+  --reference <CHANNEL_DIR>/<default[0]> \
+  --reference <CHANNEL_DIR>/<default[1]> \
+  --ttp-strict-references \
   --max-attempts 3 \
   --prompt "<diff_prompt_template を置換したプロンプト>" \
   --output <collection-path>/10-assets/thumbnail-v1.jpg -y
 ```
 
-stock 合成を一時的に止めたいときは `config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.stock.enabled: false` を上書きする（default のみで生成される）。
+stock 画像を別スコープとして混ぜたい場合だけ、`config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.stock.enabled: true` を明示し、採用ログ stderr の `[INFO] stock 採用: ...` を保存する。stock を混ぜると「同じベンチマークチャンネルの別サムネ」ではなくなるため、生成後の `thumbnail-prompts.md` に attempt ごとの参照元を必ず記録する。
 
-4. `open` でプレビュー → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
-5. 背景画像（テキストなし）も必要な場合は、テキストなしの参照画像で別途生成
+4. `open` でプレビュー → `/thumbnail-compare` で 320px 視認性検証 → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
+5. 承認済み `thumbnail.jpg` を参照画像にして、テキストなし動画背景を AI 再生成:
+
+```bash
+COLLECTION_PATH="<collection-path>"
+TEXTLESS_PROMPT="$(cat <<'PROMPT'
+<textless background regeneration prompt>
+PROMPT
+)"
+
+bunx tayk generate-image \
+  --reference "${COLLECTION_PATH}/10-assets/thumbnail.jpg" \
+  --prompt "$TEXTLESS_PROMPT" \
+  --output "${COLLECTION_PATH}/10-assets/main-v1.png" -y
+```
+
+テキストなし再生成プロンプトでは、参照画像の構図・主役スケール・光・色温度・背景テクスチャは維持し、タイトル文字、字幕、ロゴ、透かし、タイポグラフィ、チャンネル名だけを除去する。新しいテキストを追加しないことを明示する。
+
+6. `open` でプレビュー → ユーザー承認 → `cp main-v1.png main.png`（JPEG で確定する運用では `main-v1.jpg` → `main.jpg` に揃える。拡張子を偽装しない）
+7. `20-documentation/thumbnail-prompts.md` に、テキスト付き生成プロンプトとテキストなし再生成プロンプトの両方を保存する
 
 #### 運用上の注意
 
 - **リトライ前提**: 画像生成プロバイダーは同一プロンプトでも瞬発的にエラーを返す。各 attempt 内で内蔵リトライ最大 2 回が走る
 - **テキスト継承**: 参照画像内のキャッチコピー・ジャンルタグ・フォントはデフォルトで継承される。変えたい部分だけ明示指示
+- **テキストなし版の作成**: `main.png/jpg` は `thumbnail.jpg` から文字だけを取り除いた動画背景素材として再生成する。文字入り `thumbnail.jpg` をそのまま動画背景や `/loop-video` 入力にしない
 - **コスト**: 事前見積もりは `config/skills/thumbnail.yaml` の `image_generation.<provider>.cost_per_image_usd` を指定したときのみ CLI 表示に出る。未指定なら「不明」と表示され、実コストは GCP Cloud Console > Billing で確認する（`max_attempts × 1 リクエスト` ＋ 各 attempt で内蔵リトライ最大 2 回）
 
 #### 失敗時の対処
@@ -236,27 +324,31 @@ stock 合成を一時的に止めたいときは `config/skills/thumbnail.yaml` 
 
 コレクション着手時は、本章上部のプロンプト構築や生成コマンドへ進む**前**に必ずここを通す。1 項目でも欠けると TTP モードの再現性が落ちる。
 
-- [ ] Read tool で `config/skills/thumbnail.yaml` を開き、`image_generation.gemini.reference_images.default` が設定済みで、直近の高再生ベンチマークサムネを指している
+- [ ] `reference_images.default` が設定済みで、同じベンチマークチャンネル内の別サムネイル画像を `--max-attempts` 以上の枚数だけ指している（`config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.default` を Read tool で確認する）
 - [ ] `image_generation.gemini.generation_mode` が `generation_mode: "single_step"` になっている。`two_phase` / `diff_from_reference` を使うなら理由を明示する
+- [ ] 同じ参照画像の重複、参照不足、`--no-rotate` による複数候補生成になっていない
 - [ ] `diff_prompt_template` に参照と重複する要素（レイアウト・固定オブジェクト・テキスト配置・既知の色味）を書いていない。差分のみを記述する
 - [ ] `diff_prompt_template` に `${ip_safety_clause}` 相当の除外句（`no signature, no autograph, no watermark, no logo, no brand mark, clean corners`）を含めている (#569)。参照元ベンチマークサムネに署名・サイン・透かし・チャンネルロゴ等の識別マークがある場合は特に必須
 - [ ] stock 合成（#364）の扱いを確認し、`image_generation.gemini.reference_images.stock.enabled` が意図どおりになっている
 - [ ] サムネ承認**前**に `/thumbnail-compare` を実行し、320px 縮小時の文字可読性・コントラスト・主役認識を検証する段取りになっている
+- [ ] 承認済み `thumbnail.jpg` からテキストなし `main.png/jpg` を AI 再生成する段取りになっている
+- [ ] `20-documentation/thumbnail-prompts.md` にテキスト付き生成プロンプトとテキストなし再生成プロンプトの両方を保存する段取りになっている
 
 チェック通過後に本章上部の手順へ戻って `/thumbnail` を進める。CLI エラーで止まったときは、このチェックリストではなく本章上部の `#### プリフライト` を参照する。
 
 ### Two-Phase モード（従来方式・フォールバック）
 
-#### Phase 1: 背景候補生成（main.png）
+Two-Phase は旧チャンネル向けのフォールバック。使う場合も、最終契約は `thumbnail.jpg`（テキスト付き YouTube サムネ）と `main.png/jpg`（テキストなし動画背景）を別成果物として確定する。
 
-**main.png が既に存在する場合は Phase 1 をスキップして Phase 2 へ進む。**
-（`/collection-ideate` で本番品質のプレビューが生成され、選択後にコピーされている）
+#### Phase 1: 背景候補生成（draft main）
 
-main.png が存在しない場合のみ:
+既存 `main.png/jpg` は企画参照または過去背景として扱い、`thumbnail.jpg` と同一画像で代用しない。Two-Phase で背景を先に生成した場合も、Phase 2 後に承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成して最終背景を更新する。
+
+背景候補を新規に作る場合:
 1. テーマに合わせてプロンプトを構築（`references/prompting.md` の原則と `references/sample-prompts.md` のテンプレートを参照）
 2. 参照画像モードなら `reference_images` から適切な画像を選択
-3. 生成: `bunx tayk generate-image --reference <参照画像> --prompt <プロンプト> --output 10-assets/main-v1.jpg -y`
-4. `open` でプレビュー → ユーザー承認 → `cp main-v1.jpg main.png`
+3. 生成: `bunx tayk generate-image --reference <参照画像> --prompt <プロンプト> --output 10-assets/main-v1.png -y`
+4. `open` でプレビュー → ユーザー承認 → `cp main-v1.png main.png`
 
 #### Phase 2: テキストオーバーレイ（thumbnail.jpg）
 
@@ -270,35 +362,41 @@ main.png が存在しない場合のみ:
 
 3. 生成: `bunx tayk generate-image --reference 10-assets/main.png --prompt <テキスト指示> --output 10-assets/thumbnail-v1.jpg -y`
 4. `open` でプレビュー → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
+5. 承認済み `thumbnail.jpg` を参照して textless `main-v1.png` を AI 再生成し、承認後 `cp main-v1.png main.png` で動画背景を確定する
 
 ## 品質チェック
 
-生成直後の自動セルフチェック（#489）:
+textless 背景候補の自動セルフチェック（#489）:
 
 ```bash
-bunx tayk thumbnail-check <collection-path>/10-assets/main-v1.jpg --json
+bunx tayk thumbnail-check <collection-path>/10-assets/main-v1.png --json
 ```
 
-`bunx tayk thumbnail-check` は Gemini Vision で `collection-ideate.yaml` の `objects.fixed` と
+`bunx tayk thumbnail-check` は `main-v1.png` / `main-v1.jpg` のような **テキストなし背景候補**を対象にする。Gemini Vision で `collection-ideate.yaml` の `objects.fixed` と
 `self_check.no_logo_guard` から YES/NO チェックリストを組み立て、画像に対する合否を
 JSON で返す（終了コード 0=合格 / 1=不合格）。手作業チェックの前段スクリーニングとして、
 TTP 構図逸脱（wet_runway 不在・矩形ロゴ混入・テキスト burned-in 等）を機械的に検出する。
 
-Phase 1 生成後:
+テキスト付き thumbnail 候補生成後（`thumbnail-v1.jpg` / `thumbnail-codex-v1.png`）:
+- [ ] `/thumbnail-compare` で 320px 縮小時のタイトル可読性・コントラスト・主役認識を確認したか
+- [ ] タイトルテキストが `composition_rules.text_lines` の制約内か
+- [ ] `thumbnail_text.channel_name` が表示されているか
+- [ ] 参照元の署名・サイン・透かし・ロゴ・ブランドマークが焼き込まれていないか
 - [ ] `image_generation.gemini.style` に記載されたスタイルが維持されているか
 - [ ] `composition_rules.environment` の制約を満たしているか
 - [ ] `fixed_character` の外見が維持されているか（ある場合）
 - [ ] キャラの顔が見えているか（`fixed_character.face` の指示通り）
 - [ ] キャラサイズが `composition_rules.character_size` を満たしているか
-- [ ] テキストが入っていないか
 - [ ] **解剖学チェック（手・指）**: キャラが写っている場合、手・指が解剖学的に正しいか（各手 5 本指・指の分離が明瞭・指の融合や本数異常・溶融が無い・プロポーションが破綻していない）。**特に楽器持ちキャラ・指を伸ばす/握るポーズでは Gemini が破綻しやすい**ため必ず Read ツールで等倍プレビューを開いて目視確認する。NG なら `anatomy_clause` を強調 / 再生成 / プロバイダー切り替え（codex は人体破綻に強い傾向）で対応する（#570）
 
-Phase 2 生成後:
-- [ ] 背景が変わっていないか
-- [ ] タイトルテキストが `composition_rules.text_lines` の制約内か
-- [ ] `thumbnail_text.channel_name` が表示されているか
+textless main 候補生成後（`main-v1.png` / `main-v1.jpg`）:
+- [ ] 承認済み `thumbnail.jpg` / `thumbnail.png` の構図・主役スケール・光・色温度・背景テクスチャが維持されているか
+- [ ] タイトル文字、字幕、ロゴ、透かし、タイポグラフィ、チャンネル名が残っていないか
+- [ ] 新しい文字や記号が追加されていないか
+- [ ] `bunx tayk thumbnail-check <collection-path>/10-assets/main-v1.png --json` を通したか（JPEG 候補なら `main-v1.jpg` を指定）
+- [ ] `/loop-video` 入力や `/videoup` 静止背景として使える textless 背景になっているか
 
-> **Note (#570)**: キャラ + 手が写る構図では、`image_generation.gemini.single_step.anatomy_clause` をプロンプト末尾に `${anatomy_clause}` として展開しておくと、Gemini の手・指破綻（指の融合・本数異常・溶融）の発生率を下げられる。`/collection-ideate` の single_step プレビューを最終 thumbnail に流用する場合（`/wf-new` Phase 2c）も、承認前に最低限の QA（手・指 / 文字 / 署名）を必ず通すこと。
+> **Note (#570)**: キャラ + 手が写る構図では、`image_generation.gemini.single_step.anatomy_clause` をプロンプト末尾に `${anatomy_clause}` として展開しておくと、Gemini の手・指破綻（指の融合・本数異常・溶融）の発生率を下げられる。`/collection-ideate` の single_step プレビューは企画参照素材であり最終 thumbnail には流用しないが、参照素材として採用する前にも最低限の QA（手・指 / 署名 / ロゴ）を通すこと。
 
 ## 視認性検証と整合性監査の役割分担
 
@@ -323,18 +421,25 @@ Phase 2 生成後:
 *プロバイダー: {image_generation.provider}*
 *スタイル: {image_generation.gemini.style}*
 *モデル: {image_generation.gemini.model}*
-*参照画像: <使用した参照画像>*
 
-## Video Background Prompt (main.png)
+## Reference Assignments
+
+| attempt | output | reference_image | benchmark_channel |
+|---:|---|---|---|
+| 1 | `10-assets/thumbnail-v1.jpg` | `<参照画像 1>` | `<benchmark_channel>` |
+| 2 | `10-assets/thumbnail-v2.jpg` | `<参照画像 2>` | `<benchmark_channel>` |
+| 3 | `10-assets/thumbnail-v3.jpg` | `<参照画像 3>` | `<benchmark_channel>` |
+
+## Text-Included Thumbnail Prompt (thumbnail.jpg)
 
 \```
-<生成に使用したプロンプト>
+<ベンチマーク参照画像からテキスト付きサムネを生成したプロンプト>
 \```
 
-## Text Overlay Prompt (thumbnail.jpg)
+## Textless Background Regeneration Prompt (main.png/main.jpg)
 
 \```
-<テキストオーバーレイ指示>
+<承認済み thumbnail.jpg からテキストなし背景を再生成したプロンプト>
 \```
 ```
 
@@ -342,10 +447,11 @@ Phase 2 生成後:
 
 | ファイル | 用途 |
 |---------|------|
-| `main.png` | 動画背景（テキストなし） |
-| `main-v{N}.jpg` | 背景候補 |
-| `thumbnail-v{N}.jpg` | テキスト付き候補 |
-| `thumbnail.jpg` | **最終承認後にベスト版をコピー** |
+| `thumbnail.jpg` | YouTube アップロード用のテキスト付き最終サムネ |
+| `thumbnail-v{N}.jpg` / `thumbnail-v{N}.png` / `thumbnail-codex-v{N}.png` | テキスト付き候補 |
+| `main.png` / `main.jpg` | 動画背景・`/loop-video` 入力用のテキストなし最終画像 |
+| `main-v{N}.png` / `main-v{N}.jpg` | テキストなし背景候補 |
+| `loop.mp4` | `loop-video` 有効チャンネルだけで生成する動画背景。無効チャンネルでは作らない |
 
 ### クリーンアップ（承認後に必ず実行・stock 退避）
 
@@ -354,7 +460,8 @@ Phase 2 生成後:
 ```bash
 THEME="<theme-slug>"   # 例: tavern / library / jazz-bar
 bunx tayk stock-archive \
-  10-assets/main-v*.jpg 10-assets/thumbnail-v*.jpg \
+  10-assets/main-v*.png 10-assets/main-v*.jpg \
+  10-assets/thumbnail-v*.jpg 10-assets/thumbnail-v*.png 10-assets/thumbnail-codex-v*.png \
   --theme "$THEME" \
   --source-collection "$(pwd)" \
   --source-role thumbnail_candidate \
@@ -393,17 +500,17 @@ stock の操作 CLI:
 image_generation:
   stock:
     enabled: true          # false で退避を無効化（unlink のみ）
-    retention_days: 90     # stock-prune の保持日数
-    max_per_theme: 50      # stock-prune の上限
+    retention_days: 90     # bunx tayk stock-prune の保持日数
+    max_per_theme: 50      # bunx tayk stock-prune の上限
 ```
 
 ### stock 再利用（参照画像プールへの自動合成）
 
-PR-B (#364): 上記「生成コマンド」の Python ワンライナーで `resolve_stock_refs()` を呼び、stock 画像を `reference_images.default` の末尾に合成して `--reference` に展開する。`composition.select_reference` の attempt ローテーション対象になるため、`--max-attempts N` を増やすほど stock 由来のバリエーションが反映される。
+PR-B (#364): stock 画像は `reference_images.default` とは別スコープの参照プールとして扱う。TTP single_step の標準フローでは同じベンチマークチャンネル内の別サムネだけを使い、`--ttp-strict-references` では stock 混在を拒否するため、stock 合成は default OFF。必要なチャンネルだけ `enabled: true` を明示し、TTP strict ではない汎用参照生成に限って `resolve_stock_refs()` の結果を `--reference` に追加する。
 
-- **デフォルト動作**: `enabled: true` (opt-out) で `source_role="thumbnail_candidate"` のみ採用、`theme_match="exact"` で同テーマのみ。stock が 0 件なら default のみで生成（`fallback_when_empty: true`）。
+- **デフォルト動作**: `enabled: false` で stock は混ぜない。
+- **有効化**: `config/skills/thumbnail.yaml` で `image_generation.gemini.reference_images.stock.enabled: true` を明示する。TTP strict 候補生成では使わない。
 - **採用ログ**: 1 枚採用ごとに stderr へ `[INFO] stock 採用: <path> (theme=<t>, role=thumbnail_candidate)` を出力。監査時は stderr を grep。
-- **無効化**: `config/skills/thumbnail.yaml` で `image_generation.gemini.reference_images.stock.enabled: false` を上書き。
 - **チューニング**: `max_count` / `shuffle` / `theme_match: "any"` / `source_role: null` (role フィルタなし) などをチャンネル側で調整。
 
 ```yaml
@@ -411,7 +518,7 @@ image_generation:
   gemini:
     reference_images:
       stock:
-        enabled: true
+        enabled: false
         max_count: 3
         theme_match: "exact"     # "any" で全テーマ横断
         source_role: "thumbnail_candidate"
@@ -428,6 +535,7 @@ spawn 例:
 
 ```bash
 bunx tayk generate-image \
+  --ttp-strict-references \
   --reference <ref> --prompt "<prompt>" \
   --output <collection-path>/10-assets/thumbnail-v1.jpg -y \
   > /tmp/thumbnail-$(date +%s).log 2>&1

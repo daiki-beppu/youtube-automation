@@ -97,7 +97,11 @@ const seedValidToken = (dir: string): void => {
 };
 
 const fakeClientSecretsJson = JSON.stringify({
-  installed: { client_id: "cid", client_secret: "cs" },
+  installed: {
+    client_id: "cid",
+    client_secret: "cs",
+    redirect_uris: ["http://localhost"],
+  },
 });
 
 // --- empty deps (lazy) ---------------------------------------------------

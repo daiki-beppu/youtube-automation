@@ -1,6 +1,6 @@
 # 全 skill カタログ
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **46 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **47 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
@@ -17,18 +17,17 @@
 
 ## チャンネル立ち上げ
 
-新規チャンネル開設 → 競合発掘 → 方向性決定 → セットアップの一連の工程。
+標準フローは `/setup` → `/channel-new` → `/wf-new`。追加競合発掘、benchmark、viewer voice、方向性再検討、branding 再反映は必要なときだけ任意後続として実行する。
 
 | Skill | なにができるか |
 |---|---|
-| /channel-new | 新規チャンネル用リポジトリの作成・全工程のエントリポイント |
-| /channel-research | ベンチマーク済み競合データを徹底分析 |
-| /channel-direction | 競合分析から方向性・ポジショニングを対話で決定 |
-| /channel-setup | config 生成と YouTube 側設定（branding / status / localizations）の push |
-| /channel-import | 既存 YouTube チャンネルを自動化システムに取り込み |
+| /setup | ツール導入と GCP / OAuth 設定を wizard 形式で診断・セットアップ |
+| /channel-new | TTP 対象確認、seed confirmation artifacts、config、簡易ペルソナ、初回 branding まで進める。既存チャンネルの取り込み（config 生成 → 検証 → OAuth / channel_id 取得）も取り込みモードで担当 |
+| /discover-competitors | 任意: ニッチキーワードから追加競合候補を YouTube Data API で自動発掘 |
+| /channel-research | 任意: benchmark / viewer-voice 済みデータを徹底分析 |
+| /channel-direction | 任意: TTP seed confirmation または分析結果から方向性・ポジショニングを対話で再検討 |
+| /channel-setup | 任意: config 再生成と YouTube 側設定（branding / status / localizations）の push |
 | /channel-status | 登録者数・総再生回数・動画別パフォーマンスを YouTube API から取得 |
-| /discover-competitors | ニッチキーワードから競合候補を YouTube Data API で自動発掘 |
-| /onboard | GCP / OAuth 設定を wizard 形式で診断・セットアップ |
 
 ## オーディエンス・ポジショニング検証
 
@@ -37,7 +36,7 @@
 | Skill | なにができるか |
 |---|---|
 | /viewer-voice | 競合コメント収集で視聴者インサイトを抽出 |
-| /audience-persona | ターゲット視聴者のペルソナを定義 |
+| /audience-persona-design | ターゲット視聴者のペルソナを定義 |
 | /viewing-scene | 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義 |
 | /alignment-check | 音楽ムード × サムネ × タイトル訴求の整合性を監査 |
 | /thumbnail-compare | サムネをベンチマーク競合と並べてモバイル視認性（320px）を検証 |
@@ -51,6 +50,7 @@
 | /thumbnail | CTR 最適化プロンプトでサムネイル画像を生成（Gemini / OpenAI） |
 | /lyria | Vertex AI Lyria 3 で長尺マスター音源を自動生成（API 完結） |
 | /suno | Suno UI 用プロンプト（Style + Lyrics）を生成 |
+| /suno-lyric | Suno のボーカル曲向けに歌詞と構成メモを生成 |
 | /suno-helper | suno-helper Chrome 拡張で Suno UI への連続生成 + playlist 一括追加を運用 |
 | /masterup | Suno で生成した楽曲を DL + クロスフェードマスター化 |
 | /loop-video | 静止画から 8 秒シームレスループ動画を生成（Veo 3.1） |
@@ -74,7 +74,7 @@ YouTube への公開、視聴者対応、容量整理、コミュニティ投稿
 | /community-post | 動画公開と連動した固定テンプレ投稿（Studio 起動まで） |
 | /short | BGM テイスター（collection 型）チャンネル用 9:16 ショートを生成・投稿 |
 | /short-release | 楽曲リリース（release 型）チャンネル用 JP+EN クリップショート生成 |
-| /distrokid-prep | コレクション楽曲を DistroKid 配信用に整備（disc 分割 / metadata.md / 3000×3000 ジャケット生成） |
+| /distrokid-helper | コレクション楽曲を DistroKid 配信用に整備し、Chrome 拡張向けサーバー起動まで実行 |
 
 ## 分析・振り返り
 

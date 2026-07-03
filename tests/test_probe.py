@@ -10,11 +10,15 @@ from youtube_automation.utils import probe
 
 
 def test_returns_float_on_success(monkeypatch) -> None:
+    captured: dict = {}
+
     def fake_run(cmd, **kwargs):
+        captured["kwargs"] = kwargs
         return SimpleNamespace(stdout="123.45\n")
 
     monkeypatch.setattr(probe.subprocess, "run", fake_run)
     assert probe.probe_duration(Path("/fake.mp3")) == 123.45
+    assert captured["kwargs"]["timeout"] == probe.DEFAULT_FFPROBE_TIMEOUT_SECONDS
 
 
 def test_returns_none_when_ffprobe_missing(monkeypatch) -> None:
@@ -28,6 +32,14 @@ def test_returns_none_when_ffprobe_missing(monkeypatch) -> None:
 def test_returns_none_on_subprocess_error(monkeypatch) -> None:
     def fake_run(cmd, **kwargs):
         raise subprocess.CalledProcessError(1, cmd)
+
+    monkeypatch.setattr(probe.subprocess, "run", fake_run)
+    assert probe.probe_duration(Path("/fake.mp3")) is None
+
+
+def test_returns_none_on_timeout(monkeypatch) -> None:
+    def fake_run(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, timeout=kwargs.get("timeout"))
 
     monkeypatch.setattr(probe.subprocess, "run", fake_run)
     assert probe.probe_duration(Path("/fake.mp3")) is None
@@ -53,6 +65,7 @@ def test_probe_bitrate_returns_bps_on_success(monkeypatch) -> None:
 
     def fake_run(cmd, **kwargs):
         captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
         return SimpleNamespace(stdout="4000000\n")
 
     monkeypatch.setattr(probe.subprocess, "run", fake_run)
@@ -60,6 +73,7 @@ def test_probe_bitrate_returns_bps_on_success(monkeypatch) -> None:
     assert got == 4_000_000.0
     # 正しい ffprobe entry を要求していること
     assert "format=bit_rate" in " ".join(captured["cmd"])
+    assert captured["kwargs"]["timeout"] == probe.DEFAULT_FFPROBE_TIMEOUT_SECONDS
 
 
 def test_probe_bitrate_returns_none_when_ffprobe_missing(monkeypatch) -> None:
@@ -83,6 +97,14 @@ def test_probe_bitrate_returns_none_on_subprocess_error(monkeypatch) -> None:
 
     def fake_run(cmd, **kwargs):
         raise subprocess.CalledProcessError(1, cmd)
+
+    monkeypatch.setattr(probe.subprocess, "run", fake_run)
+    assert probe.probe_bitrate(Path("/fake.mp4")) is None
+
+
+def test_probe_bitrate_returns_none_on_timeout(monkeypatch) -> None:
+    def fake_run(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, timeout=kwargs.get("timeout"))
 
     monkeypatch.setattr(probe.subprocess, "run", fake_run)
     assert probe.probe_bitrate(Path("/fake.mp4")) is None

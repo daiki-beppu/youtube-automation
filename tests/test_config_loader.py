@@ -154,6 +154,30 @@ def test_synthetic_media_flags_override(tmp_path, monkeypatch):
     assert config.youtube.api.self_declared_made_for_kids is True
 
 
+def test_default_publish_time_defaults_to_none(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.youtube.api.default_publish_time is None
+    assert config.youtube.api.default_publish_timezone == "Asia/Tokyo"
+
+
+def test_default_publish_time_override(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["youtube.json"]["youtube"]["default_publish_time"] = "20:30"
+    sections["youtube.json"]["youtube"]["default_publish_timezone"] = "Asia/Tokyo"
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.youtube.api.default_publish_time == "20:30"
+    assert config.youtube.api.default_publish_timezone == "Asia/Tokyo"
+
+
 def test_load_pinned_comment_section(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["pinned-comment.json"] = {
@@ -195,6 +219,7 @@ def _full_distrokid_profile() -> dict:
     必須は language / main_genre のみ。sub_genre / songwriter / ai_disclosure は任意。
     """
     return {
+        "artist": "ABYSS MI",
         "language": "ja",
         "main_genre": "Electronic",
         "sub_genre": "House",
@@ -219,6 +244,7 @@ def test_distrokid_section_missing_defaults_to_disabled(tmp_path, monkeypatch):
     config = load_config()
 
     assert config.distrokid.enabled is False
+    assert config.distrokid.profile.artist == ""
     assert config.distrokid.profile.language == ""
     assert config.distrokid.profile.main_genre == ""
     assert config.distrokid.profile.sub_genre is None
@@ -284,6 +310,7 @@ def test_load_distrokid_section_enabled(tmp_path, monkeypatch):
 
     assert isinstance(config.distrokid, Distrokid)
     assert config.distrokid.enabled is True
+    assert profile.artist == "ABYSS MI"
     assert profile.language == "ja"
     assert profile.main_genre == "Electronic"
     assert profile.sub_genre == "House"
@@ -328,8 +355,35 @@ def test_distrokid_enabled_minimal_required_only(tmp_path, monkeypatch):
 
     assert profile.language == "ja"
     assert profile.main_genre == "Electronic"
+    assert profile.artist == ""
     assert profile.songwriter is None
     assert profile.sub_genre is None
+
+
+@pytest.mark.parametrize("artist", [None, {"name": "ABYSS MI"}, ["ABYSS MI"]])
+def test_distrokid_artist_non_string_raises(tmp_path, monkeypatch, artist):
+    """distrokid.profile.artist は存在するなら string 必須。"""
+    sections = _minimal_sections()
+    profile = _full_distrokid_profile()
+    profile["artist"] = artist
+    sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": profile}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="artist"):
+        load_config()
+
+
+@pytest.mark.parametrize("artist", [None, {"name": "ABYSS MI"}, ["ABYSS MI"]])
+def test_distrokid_disabled_artist_non_string_raises(tmp_path, monkeypatch, artist):
+    """enabled=false でも現行 artist キーが存在するなら string 必須。"""
+    sections = _minimal_sections()
+    sections["distrokid.json"] = {"distrokid": {"enabled": False, "profile": {"artist": artist}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="artist"):
+        load_config()
 
 
 def test_distrokid_enabled_without_profile_raises(tmp_path, monkeypatch):
@@ -379,7 +433,36 @@ def test_distrokid_disabled_with_incomplete_profile_loads(tmp_path, monkeypatch)
     config = load_config()
 
     assert config.distrokid.enabled is False
+    assert config.distrokid.profile.artist == ""
     assert config.distrokid.profile.language == "ja"
+
+
+def test_distrokid_disabled_with_legacy_flat_profile_loads(tmp_path, monkeypatch):
+    """enabled=false なら旧 flat profile の不要キーは無視して load できる。"""
+    sections = _minimal_sections()
+    sections["distrokid.json"] = {
+        "distrokid": {
+            "enabled": False,
+            "profile": {
+                "artist_name": "Legacy Artist",
+                "language": "ja",
+                "main_genre": "Electronic",
+                "songwriter": "Jane Doe",
+                "apple_music_credit": "Jane Doe",
+                "track_type": "Instrumental",
+            },
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.distrokid.enabled is False
+    assert config.distrokid.profile.artist == ""
+    assert config.distrokid.profile.language == "ja"
+    assert config.distrokid.profile.main_genre == "Electronic"
+    assert config.distrokid.profile.songwriter is None
 
 
 def test_distrokid_ai_disclosure_partial_recording_scope(tmp_path, monkeypatch):
@@ -489,7 +572,7 @@ def test_load_all_sections(tmp_path, monkeypatch):
             ],
             "generator": {
                 "provider": "gemini",
-                "model": "gemini-2.5-pro",
+                "model": "gemini-3.5-flash",
                 "fallback_on_error": "retry",
             },
             "ng_words": ["spam"],
@@ -528,10 +611,7 @@ def test_load_all_sections(tmp_path, monkeypatch):
     assert config.comments.enabled is True
     assert config.comments.max_replies_per_run == 5
     assert config.comments.delay_between_replies_sec == 1.0
-    assert len(config.comments.rules) == 1
-    assert config.comments.rules[0].name == "greet_ja"
-    assert config.comments.rules[0].keywords == ["こんにちは"]
-    assert config.comments.rules[0].provider == "gemini"
+    assert config.comments.rules == []
     assert config.comments.generator.provider == "gemini"
     assert config.comments.generator.fallback_on_error == "retry"
     assert config.comments.ng_words == ["spam"]
@@ -683,7 +763,7 @@ def test_workflow_approval_gates_must_be_object(tmp_path, monkeypatch):
         load_config()
 
 
-def test_comments_rule_name_required(tmp_path, monkeypatch):
+def test_comments_rule_without_name_is_ignored_by_loader(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -694,8 +774,9 @@ def test_comments_rule_name_required(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="comments.rules\\[0\\].name"):
-        load_config()
+    config = load_config()
+
+    assert config.comments.rules == []
 
 
 def test_comments_templates_must_be_object(tmp_path, monkeypatch):
@@ -956,6 +1037,22 @@ def test_tags_for_collection_matches_theme(tmp_path, monkeypatch):
     assert len(tags) <= 50
 
 
+def test_tags_for_collection_strips_quotes(tmp_path, monkeypatch):
+    """#1096: content.json にクォート付きタグがあっても除去されること."""
+    sections = _minimal_sections()
+    sections["content.json"]["tags"]["base"] = ['"Paris Café Jazz"', "clean tag", '"French Café"']
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+    tags = config.content.tags.for_collection("test-collection")
+
+    assert "Paris Café Jazz" in tags
+    assert "clean tag" in tags
+    assert "French Café" in tags
+    assert not any('"' in t for t in tags)
+
+
 def test_title_activity_for_theme_fallback(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["content.json"]["title"]["default_activity"] = "Chill"
@@ -1112,7 +1209,7 @@ def test_comments_generator_gemini_loads_correctly(tmp_path, monkeypatch):
     sections["comments.json"] = _comments_with_generator(
         {
             "provider": "gemini",
-            "model": "gemini-2.5-pro",
+            "model": "gemini-3.5-flash",
             "channel_persona": "Warm lo-fi jazz host",
             "max_length": 300,
             "fallback_on_error": "skip",
@@ -1127,7 +1224,7 @@ def test_comments_generator_gemini_loads_correctly(tmp_path, monkeypatch):
     gen = config.comments.generator
     assert gen is not None
     assert gen.provider == "gemini"
-    assert gen.model == "gemini-2.5-pro"
+    assert gen.model == "gemini-3.5-flash"
     assert gen.channel_persona == "Warm lo-fi jazz host"
     assert gen.max_length == 300
     assert gen.fallback_on_error == "skip"
@@ -1223,7 +1320,7 @@ def test_comments_generator_invalid_fallback_raises(tmp_path, monkeypatch):
     sections["comments.json"] = _comments_with_generator(
         {
             "provider": "gemini",
-            "model": "gemini-2.5-pro",
+            "model": "gemini-3.5-flash",
             "fallback_on_error": "template",
         }
     )
@@ -1245,8 +1342,20 @@ def test_comments_generator_not_object_raises(tmp_path, monkeypatch):
         load_config()
 
 
-def test_comments_rule_invalid_provider_raises(tmp_path, monkeypatch):
-    """comments.rules[i].provider が無効な値のとき ConfigError を送出する."""
+@pytest.mark.parametrize("comments_raw", [None, [], "", False, "legacy"])
+def test_comments_section_non_object_raises(tmp_path, monkeypatch, comments_raw):
+    """comments セクション自体は falsy 値でも object 以外を未設定扱いしない."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {"comments": comments_raw}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="comments セクションは object"):
+        load_config()
+
+
+def test_comments_rule_invalid_provider_is_ignored_by_loader(tmp_path, monkeypatch):
+    """comments.rules[] は legacy 互換で受けるが処理では無視する."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1263,12 +1372,13 @@ def test_comments_rule_invalid_provider_raises(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="comments.rules\\[0\\].provider"):
-        load_config()
+    config = load_config()
+
+    assert config.comments.rules == []
 
 
 def test_comments_rule_gemini_without_generator_section_loads(tmp_path, monkeypatch):
-    """rule provider='gemini' は rule 単位の override として有効."""
+    """rule provider='gemini' は互換入力として受けるが generator は global を使う."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1289,11 +1399,11 @@ def test_comments_rule_gemini_without_generator_section_loads(tmp_path, monkeypa
     config = load_config()
 
     assert config.comments.generator.provider == "codex"
-    assert config.comments.rules[0].provider == "gemini"
+    assert config.comments.rules == []
 
 
 def test_comments_rule_scope_defaults_to_any(tmp_path, monkeypatch):
-    """#524: scope 未指定の rule は 'any' でロードされる（後方互換）."""
+    """#524: scope 未指定の legacy rule も無視してロードされる."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1306,11 +1416,11 @@ def test_comments_rule_scope_defaults_to_any(tmp_path, monkeypatch):
 
     config = load_config()
 
-    assert config.comments.rules[0].scope == "any"
+    assert config.comments.rules == []
 
 
 def test_comments_rule_scope_override_loads(tmp_path, monkeypatch):
-    """#524: scope を指定すると rule に反映される."""
+    """#524: scope を指定した legacy rule も無視してロードされる."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1326,12 +1436,45 @@ def test_comments_rule_scope_override_loads(tmp_path, monkeypatch):
 
     config = load_config()
 
-    assert config.comments.rules[0].scope == "top_level"
-    assert config.comments.rules[1].scope == "reply"
+    assert config.comments.rules == []
 
 
-def test_comments_rule_invalid_scope_raises(tmp_path, monkeypatch):
-    """#524: comments.rules[i].scope が無効な値のとき ConfigError を送出する."""
+def test_comments_rule_non_object_is_ignored_by_loader(tmp_path, monkeypatch):
+    """comments.rules[] の要素 shape は処理で使わないため検証しない."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {
+        "comments": {
+            "enabled": True,
+            "rules": ["legacy-string"],
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.comments.rules == []
+
+
+@pytest.mark.parametrize("rules_raw", ["", {}, False])
+def test_comments_rules_falsy_non_list_raises(tmp_path, monkeypatch, rules_raw):
+    """comments.rules は falsy 値でも list 以外を暗黙に [] 扱いしない."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {
+        "comments": {
+            "enabled": True,
+            "rules": rules_raw,
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=r"comments\.rules は list"):
+        load_config()
+
+
+def test_comments_rule_invalid_scope_is_ignored_by_loader(tmp_path, monkeypatch):
+    """comments.rules[i].scope は legacy 入力として受けるが処理では無視する."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1342,43 +1485,53 @@ def test_comments_rule_invalid_scope_raises(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="comments.rules\\[0\\].scope"):
+    config = load_config()
+
+    assert config.comments.rules == []
+
+
+def test_comments_language_loads(tmp_path, monkeypatch):
+    """comments.language は返信言語ヒントとしてロードされる."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {"comments": {"enabled": True, "language": "ja"}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.comments.language == "ja"
+
+
+def test_comments_language_empty_raises(tmp_path, monkeypatch):
+    """comments.language の空文字は ConfigError."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {"comments": {"enabled": True, "language": ""}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="comments.language"):
         load_config()
 
 
-def test_comments_dataclass_rejects_invalid_rule_scope():
-    """#524: Comments dataclass を直接構築した場合も rule scope を検証する."""
-    from youtube_automation.utils.config.comments import CommentRule, Comments
+def test_comments_language_non_string_raises(tmp_path, monkeypatch):
+    """comments.language が文字列でない場合は ConfigError."""
+    sections = _minimal_sections()
+    sections["comments.json"] = {"comments": {"enabled": True, "language": ["ja"]}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="scope"):
-        Comments(
-            enabled=True,
-            rules=[CommentRule(name="bad", keywords=["hi"], scope="thread")],
-        )
+    with pytest.raises(ConfigError, match="comments.language"):
+        load_config()
 
 
 def test_comments_dataclass_defaults_to_codex_without_loader():
     """Comments dataclass を直接構築した場合でも codex 既定になる."""
-    from youtube_automation.utils.config.comments import CommentRule, Comments
+    from youtube_automation.utils.config.comments import Comments
 
-    comments = Comments(enabled=True, rules=[CommentRule(name="ok", keywords=["hi"], provider="gemini")])
+    comments = Comments(enabled=True)
 
     assert comments.generator.provider == "codex"
-    assert comments.rules[0].provider == "gemini"
-
-
-def test_comments_dataclass_rejects_invalid_rule_provider():
-    """Comments dataclass を直接構築した場合も rule provider を検証する."""
-    from youtube_automation.utils.config.comments import (
-        CommentRule,
-        Comments,
-    )
-
-    with pytest.raises(ConfigError, match="provider"):
-        Comments(
-            enabled=True,
-            rules=[CommentRule(name="bad", keywords=["hi"], provider="openai")],
-        )
+    assert comments.rules == []
 
 
 def test_comments_legacy_type_key_raises(tmp_path, monkeypatch):
@@ -1407,8 +1560,8 @@ def test_comments_legacy_templates_key_raises(tmp_path, monkeypatch):
         load_config()
 
 
-def test_comments_legacy_template_key_raises(tmp_path, monkeypatch):
-    """旧 comments.rules[].template_key は互換変換せず ConfigError にする."""
+def test_comments_legacy_template_key_is_ignored(tmp_path, monkeypatch):
+    """旧 comments.rules[].template_key は後方互換で読み捨てる."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1418,12 +1571,12 @@ def test_comments_legacy_template_key_raises(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="comments.rules\\[0\\].template_key"):
-        load_config()
+    config = load_config()
+    assert config.comments.rules == []
 
 
-def test_comments_legacy_rule_generator_key_raises(tmp_path, monkeypatch):
-    """旧 comments.rules[].generator は互換変換せず ConfigError にする."""
+def test_comments_legacy_rule_generator_key_is_ignored(tmp_path, monkeypatch):
+    """旧 comments.rules[].generator は後方互換で読み捨てる."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -1433,8 +1586,8 @@ def test_comments_legacy_rule_generator_key_raises(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="comments.rules\\[0\\].generator"):
-        load_config()
+    config = load_config()
+    assert config.comments.rules == []
 
 
 # ----- overlays (#511) -----------------------------------------------------

@@ -2,12 +2,11 @@ name: Extensions
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/1143-suno-bulk-download]
     paths:
       - "extensions/**"
       - ".github/workflows/extensions.yml"
   pull_request:
-    branches: [main]
     paths:
       - "extensions/**"
       - ".github/workflows/extensions.yml"
@@ -29,17 +28,21 @@ jobs:
           cache: pnpm
           cache-dependency-path: extensions/suno-helper/pnpm-lock.yaml
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Lint
-        run: pnpm lint
-      - name: Format check
-        run: pnpm format:check
-      - name: Type check
-        run: pnpm compile
-      - name: Unit tests (Vitest)
-        run: pnpm test
-      - name: Build
-        run: pnpm build
+        run: pnpm install --frozen-lockfile --ignore-workspace
+      - parallel:
+          - name: Lint
+            run: pnpm lint
+          - name: Format check
+            run: pnpm format:check
+          - name: Type check
+            run: pnpm compile
+          - name: Unit tests (Vitest)
+            run: pnpm test
+      - parallel:
+          - name: Build
+            run: pnpm build
+          - name: Install Playwright browser
+            run: pnpm exec playwright install --with-deps chromium
       - name: Verify generated manifest permissions (least-privilege)
         run: |
           node --input-type=module -e '
@@ -47,7 +50,7 @@ jobs:
             const manifest = JSON.parse(
               readFileSync(".output/chrome-mv3/manifest.json", "utf8"),
             );
-            const expected = ["storage", "activeTab", "tabs"];
+            const expected = ["storage", "activeTab", "downloads", "debugger"];
             const actual = manifest.permissions ?? [];
             const same =
               actual.length === expected.length &&
@@ -57,8 +60,6 @@ jobs:
               process.exit(1);
             }
           '
-      - name: Install Playwright browser
-        run: pnpm exec playwright install --with-deps chromium
       - name: E2E tests (Playwright)
         run: pnpm test:e2e
 
@@ -78,18 +79,20 @@ jobs:
           cache: pnpm
           cache-dependency-path: extensions/distrokid-helper/pnpm-lock.yaml
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Lint
-        run: pnpm lint
-      - name: Format check
-        run: pnpm format:check
-      - name: Typecheck
-        run: pnpm compile
-      - name: Build
-        run: pnpm build
-      - name: Unit tests (Vitest)
-        run: pnpm test
-      - name: Install Playwright browser
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm install --frozen-lockfile --ignore-workspace
+      - parallel:
+          - name: Lint
+            run: pnpm lint
+          - name: Format check
+            run: pnpm format:check
+          - name: Typecheck
+            run: pnpm compile
+          - name: Unit tests (Vitest)
+            run: pnpm test
+      - parallel:
+          - name: Build
+            run: pnpm build
+          - name: Install Playwright browser
+            run: pnpm exec playwright install --with-deps chromium
       - name: E2E (Playwright)
         run: pnpm test:e2e

@@ -1208,7 +1208,7 @@ class TestStreamingArchiveCount:
         When count_archives_for_date を呼ぶ
         Then 2 を返す。
 
-        order.md「1 日 2 本のアーカイブ」要件の通常系。
+        アーカイブ生成モードで 1 日 2 本を期待する通常系。
         """
         from youtube_automation.utils.streaming.daily_archive import count_archives_for_date
 
@@ -1455,6 +1455,45 @@ class TestStreamingArchiveCheckCli:
                 rc = e.code
         assert rc not in (0, None), f"件数不足で exit 非 0 にならない: {rc}"
 
+    def test_expected_is_required(self):
+        """Given --expected なし
+        When --expected なしで main を呼ぶ
+        Then 暗黙の 2 本判定を走らせず argparse error で停止する。
+        """
+        from youtube_automation.scripts import streaming_archive_check
+
+        with patch.object(sys, "argv", ["yt-stream-archive-check", "--date", "2026-05-01"]):
+            with pytest.raises(SystemExit) as e:
+                streaming_archive_check.main()
+
+        assert e.value.code == 2
+
+    def test_expected_zero_is_rejected(self):
+        """Given --expected 0
+        When main を呼ぶ
+        Then argparse error (exit 2) で停止する（期待件数 0 は無意味）。
+        """
+        from youtube_automation.scripts import streaming_archive_check
+
+        with patch.object(sys, "argv", ["yt-stream-archive-check", "--date", "2026-05-01", "--expected", "0"]):
+            with pytest.raises(SystemExit) as e:
+                streaming_archive_check.main()
+
+        assert e.value.code == 2, f"--expected 0 が argparse error で拒否されていない: exit code={e.value.code}"
+
+    def test_expected_negative_is_rejected(self):
+        """Given --expected -1
+        When main を呼ぶ
+        Then argparse error (exit 2) で停止する（負の期待件数は無意味）。
+        """
+        from youtube_automation.scripts import streaming_archive_check
+
+        with patch.object(sys, "argv", ["yt-stream-archive-check", "--date", "2026-05-01", "--expected", "-1"]):
+            with pytest.raises(SystemExit) as e:
+                streaming_archive_check.main()
+
+        assert e.value.code == 2, f"--expected -1 が argparse error で拒否されていない: exit code={e.value.code}"
+
     def test_notify_on_shortage_posts_to_discord(self):
         """Given count_archives_for_date が不足を返す + --notify-on-shortage
         When main を呼ぶ
@@ -1573,12 +1612,12 @@ class TestPyprojectEntryPoint:
         text = read_file(_PYPROJECT)
         # `yt-stream-archive-check = "..."` 行が [project.scripts] にあること
         assert re.search(
-            r'^yt-stream-archive-check\s*=\s*"youtube_automation\.scripts\.streaming_archive_check:main"',
+            r'^yt-stream-archive-check\s*=\s*"youtube_automation\.cli_entrypoints:yt_stream_archive_check"',
             text,
             flags=re.MULTILINE,
         ), (
             "yt-stream-archive-check entry point が pyproject.toml に登録されていない "
-            '（"youtube_automation.scripts.streaming_archive_check:main" を指すこと）'
+            '（"youtube_automation.cli_entrypoints:yt_stream_archive_check" を指すこと）'
         )
 
 
@@ -1624,3 +1663,13 @@ class TestHealthcheckDoc:
         assert "再開" in text or "RestartSec" in text or "auto-restart" in text, (
             "運用手順書に自動再開シナリオの記載が無い"
         )
+
+    def test_documents_archive_check_as_archive_mode_only(self):
+        """Given streaming-healthcheck.md
+        When アーカイブ件数チェックの説明を読む
+        Then 24/7 では shortage 判定対象外で、11/1 運用時だけ --expected 2 を案内する。
+        """
+        text = read_file(_HEALTHCHECK_DOC)
+        assert "24/7 連続配信では日次アーカイブを期待しない" in text
+        assert "uv run yt-stream-archive-check --date" in text
+        assert "--expected 2 --notify-on-shortage" in text

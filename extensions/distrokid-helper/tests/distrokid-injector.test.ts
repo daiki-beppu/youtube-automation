@@ -326,6 +326,7 @@ const SAMPLE_AI: AiDisclosure = {
   apply_to_all: true,
 };
 const SAMPLE_PROFILE: DistrokidProfile = {
+  artist: "ABYSS MI",
   language: "ja",
   main_genre: "Electronic",
   sub_genre: "House",
@@ -337,6 +338,7 @@ const SAMPLE_PROFILE: DistrokidProfile = {
 describe("新 schema 型契約（lib/types）", () => {
   it("DistrokidProfile は nested songwriter + modal 対応 ai_disclosure を持つ", () => {
     // Then: 旧フラットフィールドは型から撤廃され、nested 構造になっている
+    expect(SAMPLE_PROFILE.artist).toBe("ABYSS MI");
     expect(SAMPLE_PROFILE.songwriter?.first).toBe("Jane");
     expect(SAMPLE_PROFILE.songwriter?.middle).toBeNull();
     expect(SAMPLE_PROFILE.ai_disclosure.partial_audio_type).toBeNull();
@@ -351,7 +353,8 @@ describe("新 schema 型契約（lib/types）", () => {
 });
 
 describe("PROFILE_SELECTORS（id ベース・実 DOM 検証）", () => {
-  it("language / main_genre / sub_genre が実 DOM の id を指す", () => {
+  it("artist / language / main_genre / sub_genre が実 DOM の selector を指す", () => {
+    expect(PROFILE_SELECTORS.artist).toBe('input[name="bandname"]');
     expect(PROFILE_SELECTORS.language).toBe("#language");
     expect(PROFILE_SELECTORS.main_genre).toBe("#genrePrimary");
     expect(PROFILE_SELECTORS.sub_genre).toBe("#genreSecondary");
@@ -398,7 +401,7 @@ describe("TRACK_COUNT_SELECTOR / APPLE_CREDIT_SELECTORS（#888 実 DOM 準拠）
     expect(TRACK_COUNT_SELECTOR).toBe("#howManySongsOnThisAlbum");
   });
 
-  it("artist 名は #artistName（アカウント登録の hidden）", () => {
+  it("fallback artist 名は #artistName（アカウント登録の hidden）", () => {
     expect(ARTIST_NAME_SELECTOR).toBe("#artistName");
   });
 
@@ -452,23 +455,37 @@ describe("setNativeValue", () => {
 });
 
 describe("injectProfile（language/main_genre 必須・sub_genre 任意・isVisible 排除）", () => {
-  it("language/main_genre/sub_genre を可視 SELECT に注入する", () => {
+  it("artist/language/main_genre/sub_genre を可視フィールドに注入する", async () => {
     // Given
+    const artist = mountInput({ name: "bandname" });
     const language = mountSelect("language", ["ja", "en"]);
     const genre = mountSelect("genrePrimary", ["Electronic", "Pop"]);
     const sub = mountSelect("genreSecondary", ["House", "Techno"]);
+    genre.addEventListener("change", () => {
+      setTimeout(() => {
+        sub.innerHTML = "";
+        for (const value of ["House", "Techno"]) {
+          const opt = document.createElement("option");
+          opt.value = value;
+          opt.textContent = value;
+          sub.appendChild(opt);
+        }
+      }, 0);
+    });
 
     // When
-    injectProfile(document, SAMPLE_PROFILE);
+    await injectProfile(document, SAMPLE_PROFILE);
 
     // Then
+    expect(artist.value).toBe("ABYSS MI");
     expect(language.value).toBe("ja");
     expect(genre.value).toBe("Electronic");
     expect(sub.value).toBe("House");
   });
 
-  it("sub_genre が null なら genreSecondary を触らない（skip）", () => {
+  it("sub_genre が null なら genreSecondary を触らない（skip）", async () => {
     // Given
+    mountInput({ name: "bandname" });
     mountSelect("language", ["ja"]);
     mountSelect("genrePrimary", ["Electronic"]);
     const sub = mountSelect("genreSecondary", ["House", "Techno"]);
@@ -478,28 +495,175 @@ describe("injectProfile（language/main_genre 必須・sub_genre 任意・isVisi
     });
 
     // When
-    injectProfile(document, { ...SAMPLE_PROFILE, sub_genre: null });
+    await injectProfile(document, { ...SAMPLE_PROFILE, sub_genre: null });
 
     // Then: skip されるため change は一切発火しない
     expect(subChanges).toBe(0);
   });
 
-  it("language が hidden（bbox 0）なら FieldNotFoundError で fail-loud", () => {
+  it("artist が空なら bandname を触らない（後方互換）", async () => {
+    // Given
+    const artist = mountInput({ name: "bandname", value: "Soulful Grooves" });
+    mountSelect("language", ["ja"]);
+    mountSelect("genrePrimary", ["Electronic"]);
+
+    // When
+    await injectProfile(document, { ...SAMPLE_PROFILE, artist: "", sub_genre: null });
+
+    // Then
+    expect(artist.value).toBe("Soulful Grooves");
+  });
+
+  it("artist が非空で bandname 欄が無ければ FieldNotFoundError", async () => {
+    // Given: bandname 以外は存在
+    mountSelect("language", ["ja"]);
+    mountSelect("genrePrimary", ["Electronic"]);
+
+    // Then
+    await expect(injectProfile(document, { ...SAMPLE_PROFILE, sub_genre: null })).rejects.toThrow(FieldNotFoundError);
+  });
+
+  it("language が hidden（bbox 0）なら FieldNotFoundError で fail-loud", async () => {
     // Given: language は存在するが type=hidden 相当（bbox 0）
+    mountInput({ name: "bandname" });
     const language = mountSelect("language", ["ja"]);
     language.getBoundingClientRect = () => ZERO_RECT;
     mountSelect("genrePrimary", ["Electronic"]);
 
     // Then
-    expect(() => injectProfile(document, { ...SAMPLE_PROFILE, sub_genre: null })).toThrow(FieldNotFoundError);
+    await expect(injectProfile(document, { ...SAMPLE_PROFILE, sub_genre: null })).rejects.toThrow(FieldNotFoundError);
   });
 
-  it("language 欄が存在しなければ FieldNotFoundError", () => {
+  it("language 欄が存在しなければ FieldNotFoundError", async () => {
     // Given: main_genre だけ存在
+    mountInput({ name: "bandname" });
     mountSelect("genrePrimary", ["Electronic"]);
 
     // Then
-    expect(() => injectProfile(document, { ...SAMPLE_PROFILE, sub_genre: null })).toThrow(FieldNotFoundError);
+    await expect(injectProfile(document, { ...SAMPLE_PROFILE, sub_genre: null })).rejects.toThrow(FieldNotFoundError);
+  });
+
+  it("main_genre の change 後に非同期 populate された sub_genre option を待って選択する（#1407）", async () => {
+    // Given: primary change 直後の secondary は placeholder のみ。
+    mountInput({ name: "bandname" });
+    mountSelect("language", ["ja"]);
+    const genre = mountSelect("genrePrimary", ["エレクトロニック", "ポップ"]);
+    const sub = mountSelectWithOptions("genreSecondary", [{ value: "", text: "サブジャンルを選択" }]);
+    genre.addEventListener("change", () => {
+      setTimeout(() => {
+        for (const text of ["ハウス", "テクノ", "トランス"]) {
+          const opt = document.createElement("option");
+          opt.value = text;
+          opt.textContent = text;
+          sub.appendChild(opt);
+        }
+      }, 0);
+    });
+
+    // When
+    await injectProfile(document, {
+      ...SAMPLE_PROFILE,
+      language: "ja",
+      main_genre: "エレクトロニック",
+      sub_genre: "テクノ",
+    });
+
+    // Then
+    expect(sub.value).toBe("テクノ");
+  });
+
+  it("sub_genre option 待機は部分一致では resolve せず完全一致の option を待つ（#1407）", async () => {
+    // Given
+    mountInput({ name: "bandname" });
+    mountSelect("language", ["ja"]);
+    const genre = mountSelect("genrePrimary", ["エレクトロニック"]);
+    const sub = mountSelectWithOptions("genreSecondary", [
+      { value: "", text: "サブジャンルを選択" },
+      { value: "hardcore-techno", text: "ハードコア／ハードテクノ" },
+    ]);
+    genre.addEventListener("change", () => {
+      setTimeout(() => {
+        const opt = document.createElement("option");
+        opt.value = "techno";
+        opt.textContent = "テクノ";
+        sub.appendChild(opt);
+      }, 0);
+    });
+
+    // When
+    await injectProfile(document, {
+      ...SAMPLE_PROFILE,
+      language: "ja",
+      main_genre: "エレクトロニック",
+      sub_genre: "テクノ",
+    });
+
+    // Then: 部分一致の "ハードコア／ハードテクノ" ではなく、後から出た完全一致を選ぶ。
+    expect(sub.value).toBe("techno");
+  });
+
+  it("sub_genre option 待機は既存の完全一致 stale option では resolve しない（#1407）", async () => {
+    // Given
+    mountInput({ name: "bandname" });
+    mountSelect("language", ["ja"]);
+    const genre = mountSelect("genrePrimary", ["エレクトロニック"]);
+    const sub = mountSelectWithOptions("genreSecondary", [
+      { value: "", text: "サブジャンルを選択" },
+      { value: "old-techno", text: "テクノ" },
+    ]);
+    genre.addEventListener("change", () => {
+      setTimeout(() => {
+        sub.innerHTML = "";
+        for (const option of [
+          { value: "", text: "サブジャンルを選択" },
+          { value: "new-techno", text: "テクノ" },
+        ]) {
+          const opt = document.createElement("option");
+          opt.value = option.value;
+          opt.textContent = option.text;
+          sub.appendChild(opt);
+        }
+      }, 0);
+    });
+
+    // When
+    await injectProfile(document, {
+      ...SAMPLE_PROFILE,
+      language: "ja",
+      main_genre: "エレクトロニック",
+      sub_genre: "テクノ",
+    });
+
+    // Then: primary change 前から存在した stale option ではなく、再生成後の option を選ぶ。
+    expect(sub.value).toBe("new-techno");
+  });
+
+  it("sub_genre option 待機の no-match error には候補一覧を含める（#1407）", async () => {
+    // Given
+    vi.useFakeTimers();
+    mountInput({ name: "bandname" });
+    mountSelect("language", ["ja"]);
+    mountSelect("genrePrimary", ["エレクトロニック"]);
+    const sub = mountSelectWithOptions("genreSecondary", [
+      { value: "", text: "サブジャンルを選択" },
+      { value: "house", text: "ハウス" },
+    ]);
+
+    // Then
+    const promise = injectProfile(document, {
+      ...SAMPLE_PROFILE,
+      language: "ja",
+      main_genre: "エレクトロニック",
+      sub_genre: "テクノ",
+    });
+    try {
+      const rejection = expect(promise).rejects.toThrow(/options=\[サブジャンルを選択 \/ ハウス\]/);
+      await vi.advanceTimersByTimeAsync(10_000);
+      await rejection;
+      expect(sub.value).toBe("");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -572,7 +736,14 @@ describe("setNativeValue（<select>）— option の value / text 一致 + norma
       { value: "25", text: "R&B／ソウル" },
     ]);
 
-    expect(() => setNativeValue(sel, "存在しないジャンル名")).toThrow(OptionNotFoundError);
+    let thrown: unknown;
+    try {
+      setNativeValue(sel, "存在しないジャンル名");
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(OptionNotFoundError);
+    expect((thrown as Error).message).toMatch(/options=\[Electronic \/ R&B／ソウル\]/);
     // 一致が無いので selectedIndex も初期のまま
     expect(sel.selectedIndex).toBe(0);
   });
@@ -966,21 +1137,33 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     return { getTriggerClicks: () => triggerClicks };
   }
 
-  it("trigger を 1 回 click し、全 track の name / role を注入する", async () => {
+  it("trigger を 1 回 click し、全 track の name / role を profile.artist で注入する", async () => {
     // Given
     const { getTriggerClicks } = mountCreditDom(3, { artist: "Soulful Grooves" });
 
     // When
-    await injectAppleMusicCredits(document, 3, SAMPLE_CREDITS);
+    await injectAppleMusicCredits(document, 3, "ABYSS MI", SAMPLE_CREDITS);
 
     // Then: トリガーは 1 回だけ click され、全 track の name + role が注入される
     expect(getTriggerClicks()).toBe(1);
     for (let n = 1; n <= 3; n += 1) {
-      expect(document.querySelector<HTMLInputElement>(`#track-${n}-performer-1-name`)!.value).toBe("Soulful Grooves");
+      expect(document.querySelector<HTMLInputElement>(`#track-${n}-performer-1-name`)!.value).toBe("ABYSS MI");
       expect(document.querySelector<HTMLSelectElement>(`#track-${n}-performer-1-role`)!.value).toBe("Audio");
-      expect(document.querySelector<HTMLInputElement>(`#track-${n}-producer-1-name`)!.value).toBe("Soulful Grooves");
+      expect(document.querySelector<HTMLInputElement>(`#track-${n}-producer-1-name`)!.value).toBe("ABYSS MI");
       expect(document.querySelector<HTMLSelectElement>(`#track-${n}-producer-1-role`)!.value).toBe("Producer");
     }
+  });
+
+  it("profile.artist が空なら #artistName fallback を使う", async () => {
+    // Given
+    mountCreditDom(1, { artist: "Soulful Grooves" });
+
+    // When
+    await injectAppleMusicCredits(document, 1, "", SAMPLE_CREDITS);
+
+    // Then
+    expect(document.querySelector<HTMLInputElement>("#track-1-performer-1-name")!.value).toBe("Soulful Grooves");
+    expect(document.querySelector<HTMLInputElement>("#track-1-producer-1-name")!.value).toBe("Soulful Grooves");
   });
 
   it("role select の change event が dispatch される（独自 UI 同期のため）", async () => {
@@ -998,7 +1181,7 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     });
 
     // When
-    await injectAppleMusicCredits(document, 1, SAMPLE_CREDITS);
+    await injectAppleMusicCredits(document, 1, "X", SAMPLE_CREDITS);
 
     // Then: setSelectValue は input + change を bubbles:true で 1 回ずつ dispatch する。
     // 実機 DistroKid の `dk-searchable-select` 独自 UI は change を listen して表示テキストを同期する。
@@ -1019,14 +1202,14 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     const { getTriggerClicks } = mountCreditDom(1, { artist: "X" });
 
     // When
-    await injectAppleMusicCredits(document, 1, SAMPLE_CREDITS);
+    await injectAppleMusicCredits(document, 1, "X", SAMPLE_CREDITS);
 
     // Then: 「クレジットを追加」のみ click され、decoy は触らない
     expect(getTriggerClicks()).toBe(1);
     expect(decoyClicks).toBe(0);
   });
 
-  it("#artistName が無ければ FieldNotFoundError", async () => {
+  it("profile.artist が空で #artistName が無ければ FieldNotFoundError", async () => {
     // Given: trigger と入力欄はあるが #artistName が無い
     const trigger = document.createElement("div");
     trigger.className = "requirements-item-title";
@@ -1036,17 +1219,17 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     mountInput({ id: "track-1-producer-1-name", name: "producer-name" });
 
     // Then: async function → rejected promise
-    await expect(injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).rejects.toBeInstanceOf(FieldNotFoundError);
+    await expect(injectAppleMusicCredits(document, 1, "", SAMPLE_CREDITS)).rejects.toBeInstanceOf(FieldNotFoundError);
   });
 
-  it("#artistName が空なら fail-loud（FieldNotFoundError ではない）", async () => {
+  it("profile.artist が空で #artistName も空なら fail-loud（FieldNotFoundError ではない）", async () => {
     // Given: #artistName はあるが値が空
     mountCreditDom(1, { artist: "" });
 
     // Then: 未検出ではないため FieldNotFoundError とは区別される
     let caught: unknown;
     try {
-      await injectAppleMusicCredits(document, 1, SAMPLE_CREDITS);
+      await injectAppleMusicCredits(document, 1, "", SAMPLE_CREDITS);
     } catch (e) {
       caught = e;
     }
@@ -1065,7 +1248,7 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     mountInput({ id: "track-1-producer-1-name", name: "producer-name" });
 
     // Then: async function → rejected promise
-    await expect(injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).rejects.toBeInstanceOf(FieldNotFoundError);
+    await expect(injectAppleMusicCredits(document, 1, "X", SAMPLE_CREDITS)).rejects.toBeInstanceOf(FieldNotFoundError);
   });
 
   it("performer name 欄が無ければ FieldNotFoundError", async () => {
@@ -1084,7 +1267,7 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     mountSelectWithOptions("track-1-producer-1-role", [{ value: "Producer", text: "プロデューサー" }]);
 
     // Then
-    await expect(injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).rejects.toBeInstanceOf(FieldNotFoundError);
+    await expect(injectAppleMusicCredits(document, 1, "X", SAMPLE_CREDITS)).rejects.toBeInstanceOf(FieldNotFoundError);
   });
 
   it("performer role select が無ければ FieldNotFoundError", async () => {
@@ -1092,7 +1275,7 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
     mountCreditDom(1, { artist: "X", mountRole: false });
 
     // Then
-    await expect(injectAppleMusicCredits(document, 1, SAMPLE_CREDITS)).rejects.toBeInstanceOf(FieldNotFoundError);
+    await expect(injectAppleMusicCredits(document, 1, "X", SAMPLE_CREDITS)).rejects.toBeInstanceOf(FieldNotFoundError);
   });
 
   it("role が option に無ければ OptionNotFoundError", async () => {
@@ -1101,7 +1284,7 @@ describe("injectAppleMusicCredits（#888 / #919 Apple Music クレジット・ro
 
     // Then: setSelectValue が fail-loud
     await expect(
-      injectAppleMusicCredits(document, 1, { performer_role: "NonExistent", producer_role: "Producer" }),
+      injectAppleMusicCredits(document, 1, "X", { performer_role: "NonExistent", producer_role: "Producer" }),
     ).rejects.toBeInstanceOf(OptionNotFoundError);
   });
 

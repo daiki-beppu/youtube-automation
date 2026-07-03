@@ -61,6 +61,10 @@ config/channel/         # 責務別分割設定（v2.0.0 以降）
   playlists.json        # playlists
   workflow.json         # (v4.0.0 で short / community 撤去、後方互換で素通し)
   audio.json            # audio
+  shorts.json           # shorts (optional)
+  comments.json         # comments (optional)
+  pinned-comment.json   # pinned_comment (optional)
+  distrokid.json        # distrokid (optional)
 config/localizations.json
 auth/{client_secrets,token}.json
 .claude/skills/         # yt-skills sync で展開（Codex 利用時は .agents/skills の symlink も併設可）
@@ -72,7 +76,7 @@ collections/            # コンテンツ成果物
 | モジュール | 責務 |
 |---|---|
 | `utils.config` | `config/channel/*.json` の glob ロード／バリデーション。`load_config()` / `channel_dir()` / `reset()` / `ChannelConfig` を export |
-| `utils.config.{meta,content,youtube,analytics,playlists,workflow,audio,localizations}` | 責務別 dataclass |
+| `utils.config.{meta,content,youtube,analytics,playlists,workflow,shorts,audio,localizations,comments,pinned_comment,distrokid}` | 責務別 dataclass |
 | `cli.config_migrate` | `yt-config-migrate` 本体（v1 → v2 変換） |
 | `utils.youtube_service` | YouTube API サービスファクトリ（ServiceRegistry） |
 | `utils.upload_core` | 再開可能アップロード・サムネイル圧縮の共通コア |
@@ -99,7 +103,7 @@ collections/            # コンテンツ成果物
   2. `utils/config/loader.py::_build_*` で JSON からの組み立てを追加
   3. 必須キーであれば `_REQUIRED_KEYS_BY_SECTION` にも登録
 - Path のみ必要な場合（loader を起動したくない）は `channel_dir()` を使う
-- サンプルは `examples/channel_config.example/`（7 ファイル）と `examples/localizations.example.json`
+- サンプルは `examples/channel_config.example/`（必須 + optional ファイル、`community.example.json` は skill-local raw JSON 例外）と `examples/localizations.example.json`
 
 ### エラーハンドリング
 
@@ -161,3 +165,4 @@ collections/            # コンテンツ成果物
 - AGENTS.md は Codex CLI が起動時に読み込むプロジェクトドキュメント。Codex 側で本ファイルを参照する前提で記述している
 - skill 機能（`.agents/skills/` 配下の SKILL.md）も Codex CLI 標準仕様に沿って読み込まれる
 - ただし、本リポジトリのスキル群は Claude Code 文脈で設計された記述が多い（例: `claude-code-setup` プラグイン前提、TodoWrite ツール前提）。Codex 経由で個別スキルを起動する際は記述差異を考慮すること
+- skill 内の Claude Code 固有表現は、Codex 実行時に次のように読み替える: `AskUserQuestion` は通常のユーザー確認、`Read ツール` は画像/ファイル閲覧手段、`Bash ツール run_in_background=true` は長時間コマンドを非同期 session で起動して進捗を poll、`TodoWrite` は Codex の plan/checklist 更新。これらの表記が残っていても実装不整合とは扱わず、同等の Codex 機能で実行する。

@@ -40,11 +40,11 @@ def _fake_urlopen_for_vultr(payload: dict):
     return _Resp(json.dumps(payload).encode("utf-8"))
 
 
-def test_report_flow_posts_combined_report(monkeypatch):
-    """Given Vultr API が 2026-04 の合計 1188 GB を返す + アーカイブ 58 本
+def test_report_flow_posts_combined_report_without_youtube_archive_count():
+    """Given Vultr API が 2026-04 の合計 1188 GB を返す
     When CLI --report --month 2026-04 を実行
     Then notification.notify が webhook URL 付きで呼ばれ、
-         content に 2026-04 / 1188 / 58 / 60 が全て含まれる。
+         content に 2026-04 / 1188 / アーカイブ数ベース判定なし が含まれる。
     """
     bandwidth_payload = {
         "bandwidth": {
@@ -71,18 +71,10 @@ def test_report_flow_posts_combined_report(monkeypatch):
             "STREAM_WEBHOOK_URL": "https://discord.com/api/webhooks/123/abc",
         }[name]
 
-    # アーカイブ計数を直接モック (YouTube API は複雑な mock になるため境界で切る)
-    def fake_count_archives(service, *, channel_id, year, month):
-        return 58
-
-    # YouTube サービスはダミー (count_archives モックが service を見ないので無害)
-    def fake_get_youtube():
-        return object()
-
     with (
         patch("youtube_automation.cli.stream_bandwidth.get_secret", side_effect=fake_get_secret),
-        patch("youtube_automation.cli.stream_bandwidth.count_archives", side_effect=fake_count_archives),
-        patch("youtube_automation.cli.stream_bandwidth.get_youtube", side_effect=fake_get_youtube),
+        patch("youtube_automation.cli.stream_bandwidth.count_archives") as count_archives_mock,
+        patch("youtube_automation.cli.stream_bandwidth.get_youtube") as get_youtube_mock,
         patch(
             "youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen",
             side_effect=fake_urlopen,
@@ -101,8 +93,10 @@ def test_report_flow_posts_combined_report(monkeypatch):
     # レポートに必須の値が全て乗っていること
     assert "2026-04" in content
     assert "1188" in content
-    assert "58" in content
-    assert "60" in content
+    assert "アーカイブ数ベース判定なし" in content
+    assert "アーカイブ件数: 実測" not in content
+    count_archives_mock.assert_not_called()
+    get_youtube_mock.assert_not_called()
 
 
 def test_check_threshold_flow_silent_under_limit():

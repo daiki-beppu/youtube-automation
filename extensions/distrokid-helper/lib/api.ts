@@ -28,6 +28,30 @@ function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
 }
 
+function normalizeReleasePayload(raw: unknown): ReleasePayload {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("release.json payload must be an object");
+  }
+  const payload = raw as { profile?: unknown; release?: unknown };
+  if (payload.profile === null || typeof payload.profile !== "object" || Array.isArray(payload.profile)) {
+    throw new Error("release.json profile must be an object");
+  }
+  if (payload.release === null || typeof payload.release !== "object" || Array.isArray(payload.release)) {
+    throw new Error("release.json release must be an object");
+  }
+  const profile = payload.profile as Record<string, unknown>;
+  if ("artist" in profile && typeof profile.artist !== "string") {
+    throw new Error("release.json profile.artist must be a string");
+  }
+  return {
+    ...payload,
+    profile: {
+      ...profile,
+      artist: profile.artist ?? "",
+    },
+  } as ReleasePayload;
+}
+
 // release.json を取得する。404 は ReleaseUnavailableError、その他の非 OK は汎用 Error。
 export async function fetchRelease(baseUrl: string): Promise<ReleasePayload> {
   const url = `${normalizeBaseUrl(baseUrl)}${RELEASE_ROUTE}`;
@@ -40,7 +64,7 @@ export async function fetchRelease(baseUrl: string): Promise<ReleasePayload> {
     throw new Error(`release.json fetch failed: HTTP ${response.status}`);
   }
 
-  return (await response.json()) as ReleasePayload;
+  return normalizeReleasePayload(await response.json());
 }
 
 // dir mode の collection-scoped release.json を取得する (#934)。
@@ -62,7 +86,7 @@ export async function fetchCollectionRelease(
     throw new Error(`release.json fetch failed: HTTP ${response.status}`);
   }
 
-  return (await response.json()) as ReleasePayload;
+  return normalizeReleasePayload(await response.json());
 }
 
 // asset（曲 / ジャケット）を取得し、content へ転送するため直列化して返す。

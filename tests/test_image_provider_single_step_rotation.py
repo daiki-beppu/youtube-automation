@@ -19,6 +19,7 @@ from youtube_automation.utils.image_provider.composition import (
     select_reference,
     validate_single_step_references,
 )
+from youtube_automation.utils.thumbnail_references import format_reference_assignment, infer_benchmark_channel
 
 # ---- select_reference ------------------------------------------------------
 
@@ -45,6 +46,32 @@ class TestSelectReference:
     def test_empty_list_raises(self) -> None:
         with pytest.raises(ValueError):
             select_reference([], attempt=0, rotate=True)
+
+
+# ---- benchmark channel trace ----------------------------------------------
+
+
+class TestBenchmarkChannelTrace:
+    def test_infers_channel_from_benchmark_subdirectory(self) -> None:
+        assert infer_benchmark_channel(Path("/data/thumbnail_compare/benchmark/jazzgak/a.jpg")) == "jazzgak"
+
+    def test_infers_channel_from_benchmark_filename_hyphen_videoid_suffix(self) -> None:
+        assert infer_benchmark_channel(Path("/data/thumbnail_compare/benchmark/jazzgak-abc123.jpg")) == "jazzgak"
+
+    def test_infers_channel_from_benchmark_filename_views_suffix(self) -> None:
+        path = Path("/data/thumbnail_compare/benchmark/jazzgak_120k_abc123xyz.jpg")
+        assert infer_benchmark_channel(path) == "jazzgak"
+
+    def test_infers_hyphenated_channel_from_benchmark_filename_videoid_suffix(self) -> None:
+        assert infer_benchmark_channel(Path("/data/thumbnail_compare/benchmark/jazz-gak_abc123xyz.jpg")) == "jazz-gak"
+
+    def test_unknown_when_path_does_not_follow_benchmark_convention(self) -> None:
+        assert infer_benchmark_channel(Path("/refs/a.jpg")) == "unknown"
+
+    def test_format_reference_assignment_includes_channel_for_logs(self) -> None:
+        formatted = format_reference_assignment(Path("/data/thumbnail_compare/benchmark/jazzgak/a.jpg"))
+        assert "jazzgak" in formatted
+        assert "benchmark_channel=" in formatted
 
 
 # ---- validate_single_step_references --------------------------------------

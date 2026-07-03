@@ -13,18 +13,19 @@ from pathlib import Path
 
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import load_config
+from youtube_automation.utils.descriptions_md import (
+    build_descriptions_md_parse_diagnostics,
+    extract_descriptions_md_section,
+)
 from youtube_automation.utils.preflight_checks import (
     check_chapter_count,
     check_chapter_variation_suffix,
-    check_duration,
     check_low_cpm_localization_languages,
-    check_required_localization_languages,
     check_tags_count,
     check_tags_yt_chars,
     check_title_template_compliance,
     extract_descriptions_md_tags,
 )
-from youtube_automation.utils.probe import probe_duration
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,7 @@ class PreflightMixin:
 
         過去事例の再発防止:
         1. descriptions.md が存在すること（Track 01 仮名フォールバックを防ぐ）
-        2. workflow-state.json.scene_phrases に EN + 全 supported_languages が
+        2. workflow-state.json.scene_phrases に supported_languages が
            揃っていること（多言語タイトルが EN ベタコピーになる事故を防ぐ）
         3. タイムスタンプ件数が `audio.chapter_max` 以内かつ chapter 名に
            パターン展開接尾辞（v1〜v6 / ロマン数字 I〜VIII）を含まないこと
@@ -70,8 +71,7 @@ class PreflightMixin:
         4. タイトルが 100 codepoint 以内（YouTube 制限）
         5. タグ件数が `tags.min_count` を満たすこと（戦略書違反防止）
         6. タグの quotation 込み文字数が YouTube の 500 制限内
-        7. master 動画尺が `audio.target_duration_min/max` 範囲内
-        8. supported_languages が高 CPM 必須言語 ja/en/de を含むこと
+        7. supported_languages に低 CPM 警告対象言語が含まれる場合は warning を出すこと
         """
         paths = CollectionPaths(collection_dir)
         desc_path = paths.descriptions_md_path
@@ -79,9 +79,16 @@ class PreflightMixin:
             raise RuntimeError(f"❌ {desc_path} が存在しません。/video-description を実行してください。")
 
         text = desc_path.read_text(encoding="utf-8")
-        title = (self._extract_md_section(text, "タイトル案") or "").strip()
-        description = (self._extract_md_section(text, "Complete Collection 概要欄") or "").strip()
+        title_raw = extract_descriptions_md_section(text, "タイトル案")
+        description_raw = extract_descriptions_md_section(text, "Complete Collection 概要欄")
 
+        if title_raw is None or description_raw is None:
+            raise RuntimeError(
+                f"❌ {desc_path}: descriptions.md のパースに失敗\n{build_descriptions_md_parse_diagnostics(text)}"
+            )
+
+        title = title_raw.strip()
+        description = description_raw.strip()
         if not title or not description:
             raise RuntimeError(f"❌ {desc_path}: タイトル案 / Complete Collection 概要欄 が空")
 
@@ -103,17 +110,11 @@ class PreflightMixin:
                 f"  → コレクション名の流用ではなく鋳型に沿った公開タイトルを /video-description で再生成してください。"
             )
 
-        msg = check_required_localization_languages(config.localizations.supported_languages)
-        if msg:
-            raise RuntimeError(f"❌ {msg}。config/localizations.json を見直してください。")
         msg = check_low_cpm_localization_languages(config.localizations.supported_languages)
         if msg:
             logger.warning(f"⚠️  {msg}。意図的な例外でなければ config/localizations.json を見直してください。")
 
-        # タイムスタンプ粒度検証
         ts_lines = [line for line in description.split("\n") if re.match(r"^\d{1,2}:\d{2}", line.strip())]
-        if len(ts_lines) < 3:
-            raise RuntimeError(f"❌ タイムスタンプ {len(ts_lines)} 個 (最低 3 必要)")
         msg = check_chapter_count(len(ts_lines), config.audio.chapter_max)
         if msg:
             raise RuntimeError(f"❌ {msg}。config.audio.chapter_max を見直してください。")
@@ -126,7 +127,7 @@ class PreflightMixin:
         state = json.loads(ws_path.read_text(encoding="utf-8")) if ws_path.exists() else {}
         scene_phrases = state.get("scene_phrases") or {}
 
-        required_langs = ["en"] + list(config.localizations.supported_languages)
+        required_langs = list(dict.fromkeys(config.localizations.supported_languages))
         missing = [lang for lang in required_langs if not scene_phrases.get(lang)]
         if missing:
             raise RuntimeError(
@@ -148,21 +149,8 @@ class PreflightMixin:
             if msg:
                 issues.append(msg)
 
-        # 動画尺チェック（target_duration が設定済みかつ master mp4 が存在する場合のみ）
-        if config.audio.target_duration_min is not None or config.audio.target_duration_max is not None:
-            master_video = paths.find_master_video()
-            if master_video:
-                dur = probe_duration(master_video)
-                if dur is None:
-                    issues.append(f"duration probe failed for {master_video.name}")
-                else:
-                    msg = check_duration(
-                        dur,
-                        config.audio.target_duration_min,
-                        config.audio.target_duration_max,
-                    )
-                    if msg:
-                        issues.append(msg)
+        # `audio.target_duration_min/max` は master 生成側では分単位として扱うため、
+        # 秒単位の preflight duration gate には使わない (#1313)。
 
         if issues:
             raise RuntimeError("❌ preflight failed:\n  - " + "\n  - ".join(issues))

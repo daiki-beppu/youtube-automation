@@ -11,7 +11,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
+import yaml
 
+from youtube_automation.utils import metadata_generator as metadata_generator_module
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.metadata_generator import (
@@ -745,7 +747,12 @@ class TestExtractPatternKey:
     def test_pattern_b_with_variation_suffix(self):
         from youtube_automation.utils.metadata_generator import _extract_pattern_key
 
-        assert _extract_pattern_key("05-pattern-b1-quiet-hours.mp3") == "b"
+        assert _extract_pattern_key("05-pattern-b1-quiet-hours.mp3") == "b1"
+
+    def test_pattern_d_with_variation_suffix(self):
+        from youtube_automation.utils.metadata_generator import _extract_pattern_key
+
+        assert _extract_pattern_key("05-pattern-d2-quiet-hours.mp3") == "d2"
 
     def test_pattern_c_uppercase(self):
         from youtube_automation.utils.metadata_generator import _extract_pattern_key
@@ -1019,6 +1026,107 @@ class TestLoadThemeDisplayNames:
 
 
 # ===========================================================================
+# 18. suno-patterns.yaml 由来のトラック表示名
+# ===========================================================================
+
+
+def _write_suno_patterns(collection: Path, patterns: list[dict]) -> None:
+    docs_dir = collection / "20-documentation"
+    docs_dir.mkdir(parents=True)
+    (docs_dir / "suno-patterns.yaml").write_text(
+        yaml.safe_dump({"patterns": patterns}, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
+class TestSunoPatternTrackNames:
+    """suno-patterns.yaml の name_en を metadata の track title に反映する。"""
+
+    def test_loads_name_en_for_pattern_variations(self, tmp_path):
+        gen = _make_generator()
+        gen.collection_path = tmp_path
+        _write_suno_patterns(
+            tmp_path,
+            [
+                {"name_jp": "石畳", "name_en": "Cobblestone Lane", "scenes": ["scene"]},
+                {"name_jp": "窓辺", "name_en": "Rain Window", "scenes": ["scene 1", "scene 2"]},
+            ],
+        )
+
+        assert gen._load_suno_pattern_name_en() == {
+            "a": "Cobblestone Lane",
+            "a1": "Cobblestone Lane",
+            "b": "Rain Window",
+            "b1": "Rain Window",
+            "b2": "Rain Window",
+        }
+
+    def test_analyze_applies_name_en_prefix(self, tmp_path, monkeypatch):
+        collection = tmp_path / "20260601-live-rainy-city-collection"
+        music_dir = collection / "02-Individual-music"
+        music_dir.mkdir(parents=True)
+        (music_dir / "01-pattern-a-quiet-corner.mp3").write_bytes(b"audio")
+        (music_dir / "02-pattern-b2-v1.mp3").write_bytes(b"audio")
+        _write_suno_patterns(
+            collection,
+            [
+                {"name_jp": "石畳", "name_en": "Cobblestone Lane", "scenes": ["scene"]},
+                {"name_jp": "窓辺", "name_en": "Rain Window", "scenes": ["scene 1", "scene 2"]},
+            ],
+        )
+
+        gen = _make_generator("20260601-live-rainy-city-collection")
+        gen.collection_path = collection
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda _f: 60)
+
+        tracks = gen.analyze_audio_files()
+
+        assert tracks[0]["pattern_key"] == "a"
+        assert tracks[0]["title"] == "Cobblestone Lane - Quiet Corner"
+        assert tracks[1]["pattern_key"] == "b2"
+        assert tracks[1]["title"] == "Rain Window - V1"
+
+    def test_extra_variation_uses_theme_default_title(self, tmp_path, monkeypatch):
+        collection = tmp_path / "20260601-live-rainy-city-collection"
+        music_dir = collection / "02-Individual-music"
+        music_dir.mkdir(parents=True)
+        (music_dir / "01-extra-v1.mp3").write_bytes(b"audio")
+
+        gen = _make_generator("20260601-live-rainy-city-collection")
+        gen.collection_path = collection
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda _f: 60)
+
+        tracks = gen.analyze_audio_files()
+
+        assert tracks[0]["pattern_key"] is None
+        assert tracks[0]["title"] == "Rainy City Extra V1"
+
+    def test_persisted_display_name_overrides_suno_prefix(self, tmp_path, monkeypatch):
+        import json as _json
+
+        collection = tmp_path / "20260601-live-rainy-city-collection"
+        music_dir = collection / "02-Individual-music"
+        music_dir.mkdir(parents=True)
+        (music_dir / "01-pattern-a-quiet-corner.mp3").write_bytes(b"audio")
+        _write_suno_patterns(
+            collection,
+            [{"name_jp": "石畳", "name_en": "Cobblestone Lane", "scenes": ["scene"]}],
+        )
+        (collection / "workflow-state.json").write_text(
+            _json.dumps({"track_display_names": {"01-pattern-a-quiet-corner.mp3": "Manual Title"}}),
+            encoding="utf-8",
+        )
+
+        gen = _make_generator("20260601-live-rainy-city-collection")
+        gen.collection_path = collection
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda _f: 60)
+
+        tracks = gen.analyze_audio_files()
+
+        assert tracks[0]["title"] == "Manual Title"
+
+
+# ===========================================================================
 # 7. title.template / localizations title_template の未知プレースホルダ耐性 (#574)
 # ===========================================================================
 
@@ -1133,3 +1241,234 @@ class TestTitleTemplateUnknownPlaceholder:
         msg = str(exc.value)
         assert "adjective" in msg
         assert lang in msg
+
+
+# ===========================================================================
+# analyze_audio_files スキップ検出テスト (#1093)
+# ===========================================================================
+
+
+class TestAnalyzeAudioFilesSkipDetection:
+    """トラックがスキップされた場合に警告ログが出力されることを検証する。"""
+
+    @pytest.fixture
+    def gen_with_audio_dir(self, tmp_path):
+        gen = _make_generator()
+        collection = tmp_path / "collection"
+        audio_dir = collection / "02-Individual-music"
+        audio_dir.mkdir(parents=True)
+        gen.collection_path = collection
+        return gen, audio_dir
+
+    def test_zero_duration_track_is_skipped_with_warning(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        (audio_dir / "01-track-a.wav").write_bytes(b"\x00" * 100)
+        (audio_dir / "02-track-b.wav").write_bytes(b"\x00" * 100)
+
+        durations = {"01-track-a.wav": 120, "02-track-b.wav": 0}
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda f: durations[f.name])
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 1
+        assert tracks[0]["filename"] == "01-track-a.wav"
+        assert "トラックをスキップ" in caplog.text
+        assert "02-track-b.wav" in caplog.text
+        assert "再生時間が 0 秒" in caplog.text
+        assert "ファイル破損または afinfo 解析失敗" in caplog.text
+
+    def test_exception_during_analysis_is_skipped_with_warning(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        (audio_dir / "01-good.wav").write_bytes(b"\x00" * 100)
+        (audio_dir / "02-broken.wav").write_bytes(b"\x00" * 100)
+
+        import subprocess as _subprocess
+
+        _original_run = _subprocess.run
+
+        def mock_subprocess_run(cmd, **kwargs):
+            # afinfo 呼び出しのみインターセプトする
+            if cmd and cmd[0] == "afinfo":
+                filepath = cmd[1] if len(cmd) > 1 else ""
+                if "02-broken.wav" in filepath:
+                    raise _subprocess.CalledProcessError(1, "afinfo", "corrupt file")
+                # 正常なファイルには afinfo 成功を模擬
+                result = _subprocess.CompletedProcess(cmd, 0, stdout="estimated duration: 180.0 seconds\n", stderr="")
+                return result
+            return _original_run(cmd, **kwargs)
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", lambda path: None)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 1
+        assert "トラックをスキップ" in caplog.text
+        assert "02-broken.wav" in caplog.text
+        assert "ファイル解析エラー" in caplog.text
+
+    def test_m4a_uses_probe_duration_when_afinfo_fails(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        (audio_dir / "01-circuit-door.m4a").write_bytes(b"\x00" * 100)
+
+        import subprocess as _subprocess
+
+        def mock_subprocess_run(cmd, **kwargs):
+            if cmd and cmd[0] == "afinfo":
+                raise _subprocess.CalledProcessError(1, "afinfo", "unsupported file")
+            raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", lambda path: 121.9)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 1
+        assert tracks[0]["filename"] == "01-circuit-door.m4a"
+        assert tracks[0]["duration"] == 121
+        assert "再生時間が 0 秒" not in caplog.text
+        assert "入力 1 ファイル → 出力 0 タイムスタンプ" not in caplog.text
+
+    def test_m4a_probe_duration_subsecond_is_kept_as_one_second(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        (audio_dir / "01-circuit-door.m4a").write_bytes(b"\x00" * 100)
+
+        import subprocess as _subprocess
+
+        def mock_subprocess_run(cmd, **kwargs):
+            if cmd and cmd[0] == "afinfo":
+                raise _subprocess.CalledProcessError(1, "afinfo", "unsupported file")
+            raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", lambda path: 0.9)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 1
+        assert tracks[0]["filename"] == "01-circuit-door.m4a"
+        assert tracks[0]["duration"] == 1
+        assert "再生時間が 0 秒" not in caplog.text
+        assert "入力 1 ファイル → 出力 0 タイムスタンプ" not in caplog.text
+
+    def test_m4a_uses_probe_duration_when_afinfo_has_no_estimated_duration(
+        self, gen_with_audio_dir, caplog, monkeypatch
+    ):
+        gen, audio_dir = gen_with_audio_dir
+        (audio_dir / "01-circuit-door.m4a").write_bytes(b"\x00" * 100)
+
+        import subprocess as _subprocess
+
+        def mock_subprocess_run(cmd, **kwargs):
+            if cmd and cmd[0] == "afinfo":
+                return _subprocess.CompletedProcess(cmd, 0, stdout="no estimated duration\n", stderr="")
+            raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", lambda path: 121.9)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 1
+        assert tracks[0]["filename"] == "01-circuit-door.m4a"
+        assert tracks[0]["duration"] == 121
+        assert "再生時間が 0 秒" not in caplog.text
+        assert "入力 1 ファイル → 出力 0 タイムスタンプ" not in caplog.text
+
+    def test_m4a_uses_probe_duration_when_afinfo_duration_is_malformed(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        (audio_dir / "01-circuit-door.m4a").write_bytes(b"\x00" * 100)
+
+        import subprocess as _subprocess
+
+        def mock_subprocess_run(cmd, **kwargs):
+            if cmd and cmd[0] == "afinfo":
+                return _subprocess.CompletedProcess(cmd, 0, stdout="estimated duration: unknown seconds\n", stderr="")
+            raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", lambda path: 121.9)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 1
+        assert tracks[0]["filename"] == "01-circuit-door.m4a"
+        assert tracks[0]["duration"] == 121
+        assert "再生時間が 0 秒" not in caplog.text
+        assert "入力 1 ファイル → 出力 0 タイムスタンプ" not in caplog.text
+
+    def test_m4a_uses_probe_duration_when_afinfo_reports_zero(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        (audio_dir / "01-circuit-door.m4a").write_bytes(b"\x00" * 100)
+
+        import subprocess as _subprocess
+
+        def mock_subprocess_run(cmd, **kwargs):
+            if cmd and cmd[0] == "afinfo":
+                return _subprocess.CompletedProcess(cmd, 0, stdout="estimated duration: 0.0 seconds\n", stderr="")
+            raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", lambda path: 121.9)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 1
+        assert tracks[0]["filename"] == "01-circuit-door.m4a"
+        assert tracks[0]["duration"] == 121
+        assert "再生時間が 0 秒" not in caplog.text
+        assert "入力 1 ファイル → 出力 0 タイムスタンプ" not in caplog.text
+
+    def test_count_mismatch_warning(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        for i in range(5):
+            (audio_dir / f"{i:02d}-track.wav").write_bytes(b"\x00" * 100)
+
+        durations = {f"{i:02d}-track.wav": (120 if i != 2 else 0) for i in range(5)}
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda f: durations[f.name])
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            gen.analyze_audio_files()
+
+        assert "入力 5 ファイル" in caplog.text
+        assert "4 タイムスタンプ" in caplog.text
+        assert "1 件欠落" in caplog.text
+
+    def test_all_tracks_ok_no_warning(self, gen_with_audio_dir, caplog, monkeypatch):
+        gen, audio_dir = gen_with_audio_dir
+        for i in range(3):
+            (audio_dir / f"{i:02d}-track.wav").write_bytes(b"\x00" * 100)
+
+        monkeypatch.setattr(gen, "_get_audio_duration", lambda f: 120)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            tracks = gen.analyze_audio_files()
+
+        assert len(tracks) == 3
+        assert "スキップ" not in caplog.text
+        assert "欠落" not in caplog.text

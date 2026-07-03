@@ -6,8 +6,11 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SCRIPT_PATH = _REPO_ROOT / ".claude" / "skills" / "videoup" / "references" / "generate_videos.sh"
+_VIDEOUP_SKILL_PATH = _REPO_ROOT / ".claude" / "skills" / "videoup" / "SKILL.md"
 
 
 def _write_executable(path: Path, content: str) -> None:
@@ -101,6 +104,36 @@ mkdir -p "$(dirname "$output_path")"
 printf 'stub-output' > "$output_path"
 """,
     )
+    _write_executable(
+        bin_dir / "jq",
+        """#!/bin/bash
+set -eu
+expr=""
+file=""
+for arg in "$@"; do
+    if [[ "$arg" != "-r" ]]; then
+        expr="$arg"
+        break
+    fi
+done
+for arg in "$@"; do
+    file="$arg"
+done
+
+case "$expr" in
+    *".overlays.enabled // false"*)
+        if [[ -f "$file" ]] && grep -Eq '"enabled"[[:space:]]*:[[:space:]]*true' "$file"; then
+            printf 'true\\n'
+        else
+            printf 'false\\n'
+        fi
+        ;;
+    *".overlays.audio_visualizer.enabled"*) printf 'false\\n' ;;
+    *".overlays.subscribe_popup.enabled"*) printf 'false\\n' ;;
+    *) printf '\\n' ;;
+esac
+""",
+    )
     return bin_dir
 
 
@@ -135,6 +168,130 @@ def _run_generate_videos(
         cwd=_REPO_ROOT,
     )
     return result, ffmpeg_log
+
+
+@pytest.mark.parametrize("thumbnail_name", ["thumbnail.jpg", "thumbnail.png"])
+def test_static_background_rejects_thumbnail_only_assets(tmp_path: Path, thumbnail_name: str) -> None:
+    """#1310: thumbnail.* は upload 用なので静止動画背景には使わない。"""
+    collection = _create_collection(tmp_path)
+    assets_dir = collection / "10-assets"
+    (assets_dir / "main.jpg").unlink()
+    (assets_dir / thumbnail_name).write_bytes(b"text-included-thumbnail")
+
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        collection=collection,
+        with_loop=False,
+    )
+
+    assert result.returncode != 0
+    assert "No video background found" in result.stdout + result.stderr
+    assert "thumbnail.jpg/png is upload-only" in result.stdout + result.stderr
+
+
+def test_loop_video_background_does_not_require_main_image(tmp_path: Path) -> None:
+    """#1310: loop.mp4 があれば main.* 不在でも動画背景として使える。"""
+    collection = _create_collection(tmp_path)
+    assets_dir = collection / "10-assets"
+    (assets_dir / "main.jpg").unlink()
+    (assets_dir / "thumbnail.jpg").write_bytes(b"text-included-thumbnail")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Video BG : loop.mp4 (loop)" in result.stdout
+    assert "Thumbnail:" not in result.stdout
+    master_cmd = _master_ffmpeg_command(ffmpeg_log)
+    assert "10-assets/loop.mp4" in master_cmd
+    assert "10-assets/thumbnail.jpg" not in master_cmd
+
+
+def test_loop_video_disabled_uses_textless_main_even_when_loop_exists(tmp_path: Path) -> None:
+    """#1310: loop-video.enabled=false では既存 loop.mp4 を無視して textless main.* を背景にする。"""
+    collection = _create_collection(tmp_path)
+    assets_dir = collection / "10-assets"
+    (assets_dir / "main.png").write_bytes(b"fake-png-background")
+    config_dir = tmp_path / "config" / "skills"
+    config_dir.mkdir(parents=True)
+    (config_dir / "loop-video.yaml").write_text("enabled: false\n", encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Loop     : disabled by config/skills/loop-video.yaml" in result.stdout
+    assert "Video BG : main.png (still)" in result.stdout
+    master_cmd = _master_ffmpeg_command(ffmpeg_log)
+    assert "10-assets/main.png" in master_cmd
+    assert "10-assets/loop.mp4" not in master_cmd
+
+
+def test_static_background_prefers_textless_main_png(tmp_path: Path) -> None:
+    """#1310: 静止背景は textless main.png を main.jpg より優先する。"""
+    collection = _create_collection(tmp_path)
+    (collection / "10-assets" / "main.png").write_bytes(b"fake-png-background")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+        with_loop=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Video BG : main.png (still)" in result.stdout
+    assert "Thumbnail:" not in result.stdout
+    master_cmd = _master_ffmpeg_command(ffmpeg_log)
+    assert "10-assets/main.png" in master_cmd
+    assert "10-assets/main.jpg" not in master_cmd
+
+
+def test_overlay_static_background_uses_textless_main_png(tmp_path: Path) -> None:
+    """#1310: overlay 経路でも thumbnail.* ではなく textless main.png を背景入力にする。"""
+    collection = _create_collection(tmp_path)
+    assets_dir = collection / "10-assets"
+    (assets_dir / "loop.mp4").unlink()
+    (assets_dir / "main.png").write_bytes(b"fake-png-background")
+    (assets_dir / "thumbnail.jpg").write_bytes(b"text-included-thumbnail")
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays": {"enabled": true}}', encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+        extra_env={"OVERLAYS_CONFIG": str(overlays_config)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Overlays : enabled" in result.stdout
+    master_cmd = _master_ffmpeg_command(ffmpeg_log)
+    assert "10-assets/main.png" in master_cmd
+    assert "10-assets/thumbnail.jpg" not in master_cmd
+
+
+def test_videoup_skill_documents_current_overlay_support() -> None:
+    """#1310: videoup 文書は overlay 未実装時代の説明を残さない。"""
+    skill = _VIDEOUP_SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "`generate_videos.sh` は `config/channel/youtube.json::overlays.enabled: true`" in skill
+    assert "filter_complex" in skill
+    assert "Suno 側ではなく `/videoup` の overlays 設定で反映する" in skill
+    assert "未実装" not in skill
+    assert "v12.x にはこの filter 経路が無い" not in skill
+    assert "#511 の実装を待つ" not in skill
 
 
 def test_24fps_loop_skips_normalization(tmp_path: Path) -> None:
@@ -458,6 +615,121 @@ def test_static_image_with_effect_uses_filter_complex(tmp_path: Path) -> None:
     assert "[vout]" in final_cmd
     # 静止画モード固有の scale+pad 前処理が含まれる
     assert "scale=1920:1080:force_original_aspect_ratio=decrease" in final_cmd
+
+
+def test_static_image_with_effect_uses_textless_main_not_thumbnail(tmp_path: Path) -> None:
+    """#1310: effect あり静止画経路でも thumbnail.* ではなく textless main.* を背景にする。"""
+    collection = _create_collection(tmp_path)
+    assets_dir = collection / "10-assets"
+    (assets_dir / "main.png").write_bytes(b"fake-png-background")
+    (assets_dir / "thumbnail.jpg").write_bytes(b"text-included-thumbnail")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"VIDEOUP_EFFECT": "particles"},
+        collection=collection,
+        with_loop=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    final_cmd = ffmpeg_log.read_text(encoding="utf-8").splitlines()[-1]
+    assert "10-assets/main.png" in final_cmd
+    assert "10-assets/thumbnail.jpg" not in final_cmd
+
+
+# ─── Loop artifact warning (#868) ────────────────────────
+
+
+def test_loop_absent_with_loop_raw_shows_warning(tmp_path: Path) -> None:
+    """loop.mp4 が無いが loop_raw.mp4 が残っていれば警告を出力する."""
+    collection = _create_collection(tmp_path)
+    (collection / "10-assets" / "loop.mp4").unlink()
+    (collection / "10-assets" / "loop_raw.mp4").write_bytes(b"fake-raw")
+
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "生成途中の痕跡が存在します" in result.stdout
+    assert "loop_raw.mp4" in result.stdout
+
+
+def test_loop_absent_with_loop_version_shows_warning(tmp_path: Path) -> None:
+    """loop.mp4 が無いが loop-v*.mp4 が残っていれば警告を出力する."""
+    collection = _create_collection(tmp_path)
+    (collection / "10-assets" / "loop.mp4").unlink()
+    (collection / "10-assets" / "loop-v1.mp4").write_bytes(b"fake-v1")
+    (collection / "10-assets" / "loop-v2.mp4").write_bytes(b"fake-v2")
+
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "生成途中の痕跡が存在します" in result.stdout
+    assert "loop-v1.mp4" in result.stdout
+    assert "loop-v2.mp4" in result.stdout
+
+
+def test_loop_absent_no_artifacts_no_warning(tmp_path: Path) -> None:
+    """loop.mp4 も痕跡ファイルも無い場合は警告を出さない."""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        with_loop=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "生成途中の痕跡が存在します" not in result.stdout
+    assert "loop_raw.mp4" not in result.stdout
+
+
+def test_loop_detected_log_shows_basename(tmp_path: Path) -> None:
+    """loop.mp4 検出時のログに basename のみ表示される (フルパスではない)."""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Loop     : loop.mp4 (detected)" in result.stdout
+    assert "10-assets/loop.mp4 (detected)" not in result.stdout
+
+
+def test_loop_not_found_log(tmp_path: Path) -> None:
+    """loop.mp4 が存在しない場合は not found ログを出力する."""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        with_loop=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Loop     : not found" in result.stdout
+
+
+def test_static_image_effect_fallback_shows_no_loop_log(tmp_path: Path) -> None:
+    """静止画 + effect fallback 時に not found ログが出力される."""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"VIDEOUP_EFFECT": "particles"},
+        with_loop=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Loop     : not found" in result.stdout
 
 
 def test_invalid_effect_name_fails_loud(tmp_path: Path) -> None:

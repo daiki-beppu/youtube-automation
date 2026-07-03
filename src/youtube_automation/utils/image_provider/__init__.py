@@ -19,10 +19,7 @@ from youtube_automation.utils.image_provider.base import (
     ImageGenerationResult,
     ImageProvider,
 )
-from youtube_automation.utils.image_provider.config import (
-    ImageGenerationConfig,
-    parse_image_generation_config,
-)
+from youtube_automation.utils.image_provider.config import ImageGenerationConfig, parse_image_generation_config
 from youtube_automation.utils.image_provider.prompt_schema import PromptSchema
 
 __all__ = [

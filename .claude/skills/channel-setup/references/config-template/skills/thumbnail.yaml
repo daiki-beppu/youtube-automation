@@ -6,6 +6,7 @@
 #
 # 必須項目（空のまま channel-setup を抜けないこと）:
 #   - image_generation.gemini.reference_images.default
+#   - image_generation.gemini.reference_images.channel_branding
 #   - image_generation.gemini.brand_background
 #   - image_generation.gemini.composition_rules.* （channel-direction で確定したもの）
 #
@@ -15,6 +16,19 @@
 # 自動 download される想定（手動 download を回避する導線、issue #567）。
 
 image_generation:
+  # GCP 課金なしで始める場合は codex を推奨。Gemini を使う場合は gemini に変更し、
+  # ADC / GCP 課金が有効なことを確認する。
+  # provider: codex
+
+  codex:
+    # 参照サムネを winning template として扱い、{title} だけを差し替える
+    # 「TTPを徹底して上位互換の生成」用の短い既定プロンプト。
+    default_prompt_template: |
+      TTP this reference thumbnail, then improve it into a stronger original thumbnail.
+      Keep the winning layout, typography feel, character scale, color mood, texture, and energy.
+      Make it cleaner, more readable on mobile, stronger face impact, no logos, no watermarks, no broken hands.
+      Use the title {title}.
+
   gemini:
     # チャンネル統一の背景色（channel-direction の「ビジュアルアイデンティティ」
     # から転写）
@@ -27,6 +41,14 @@ image_generation:
         - "{{REFERENCE_IMAGE_1}}"
         - "{{REFERENCE_IMAGE_2}}"
         - "{{REFERENCE_IMAGE_3}}"
+      channel_branding:
+        snapshot: docs/channel/competitor-branding-snapshot.json
+        icon_references:
+          - "{{CHANNEL_BRANDING_ICON_REFERENCE}}"
+        banner_references:
+          - "{{CHANNEL_BRANDING_BANNER_REFERENCE}}"
+        output_icon: branding/icon.png
+        output_banner: branding/banner.png
       path_base: channel_dir
       notes: "{{TTP_NOTES}}"
 

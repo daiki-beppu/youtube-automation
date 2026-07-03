@@ -15,11 +15,8 @@ from youtube_automation.utils.config.comments import (
     PROVIDER_CODEX,
     PROVIDER_GEMINI,
     REQUESTS_PER_MINUTE_DEFAULT,
-    SCOPE_ANY,
     VALID_FALLBACK_VALUES,
     VALID_PROVIDERS,
-    VALID_SCOPES,
-    CommentRule,
     Comments,
     GeneratorConfig,
 )
@@ -276,6 +273,8 @@ def _build_youtube(merged: dict) -> YoutubeSection:
         language=yt["language"],
         contains_synthetic_media=bool(yt.get("contains_synthetic_media", True)),
         self_declared_made_for_kids=bool(yt.get("self_declared_made_for_kids", False)),
+        default_publish_time=yt.get("default_publish_time"),
+        default_publish_timezone=yt.get("default_publish_timezone", "Asia/Tokyo"),
     )
 
     cm_data = merged.get("content_model") or {}
@@ -486,42 +485,16 @@ def _build_generator_config(raw: dict) -> GeneratorConfig:
 
 
 def _build_comments(merged: dict) -> Comments:
-    cm = merged.get("comments") or {}
+    cm = merged.get("comments", {})
+    if not isinstance(cm, dict):
+        raise ConfigError("comments セクションは object でなければなりません")
     if "templates" in cm:
         raise ConfigError("comments.templates は廃止されました。LLM provider で返信を生成してください")
-    rules_raw = cm.get("rules") or []
-    rules: list[CommentRule] = []
-    for i, raw in enumerate(rules_raw):
-        if not isinstance(raw, dict):
-            raise ConfigError(f"comments.rules[{i}] は object でなければなりません")
-        name = raw.get("name")
-        if not name:
-            raise ConfigError(f"comments.rules[{i}].name が必須です")
-        if "template_key" in raw:
-            raise ConfigError(f"comments.rules[{i}].template_key は廃止されました")
-        if "generator" in raw:
-            raise ConfigError(f"comments.rules[{i}].generator は廃止されました。provider を使用してください")
-        rule_provider = raw.get("provider")
-        if rule_provider is not None and rule_provider not in VALID_PROVIDERS:
-            raise ConfigError(
-                f"comments.rules[{i}].provider は {VALID_PROVIDERS} のいずれかでなければなりません: {rule_provider!r}"
-            )
-        rule_scope = raw.get("scope", SCOPE_ANY)
-        if rule_scope not in VALID_SCOPES:
-            raise ConfigError(
-                f"comments.rules[{i}].scope は {VALID_SCOPES} のいずれかでなければなりません: {rule_scope!r}"
-            )
-        rules.append(
-            CommentRule(
-                name=name,
-                keywords=list(raw.get("keywords", [])),
-                pattern=raw.get("pattern"),
-                language=raw.get("language"),
-                priority=int(raw.get("priority", 0)),
-                provider=rule_provider,
-                scope=rule_scope,
-            )
-        )
+    rules_raw = cm.get("rules", [])
+    if rules_raw is None:
+        rules_raw = []
+    if not isinstance(rules_raw, list):
+        raise ConfigError("comments.rules は list でなければなりません")
 
     gen_raw = cm.get("generator")
     generator = GeneratorConfig()
@@ -530,9 +503,14 @@ def _build_comments(merged: dict) -> Comments:
             raise ConfigError("comments.generator は object でなければなりません")
         generator = _build_generator_config(gen_raw)
 
+    language = cm.get("language")
+    if language is not None and not isinstance(language, str):
+        raise ConfigError("comments.language は文字列でなければなりません")
+
     return Comments(
         enabled=bool(cm.get("enabled", False)),
-        rules=rules,
+        rules=[],
+        language=language,
         ng_words=list(cm.get("ng_words", [])),
         max_replies_per_run=int(cm.get("max_replies_per_run", 20)),
         delay_between_replies_sec=float(cm.get("delay_between_replies_sec", 2.0)),
@@ -585,13 +563,35 @@ def _build_distrokid(merged: dict) -> Distrokid:
                 f"distrokid.enabled=true のとき distrokid.profile に必須フィールドがありません: {', '.join(missing)}"
             )
 
+    if not enabled:
+        profile_raw = _disabled_distrokid_profile_raw(profile_raw)
+
     profile = _build_distrokid_profile(profile_raw)
     return Distrokid(enabled=enabled, profile=profile)
+
+
+def _disabled_distrokid_profile_raw(profile_raw: dict) -> dict:
+    sanitized: dict = {}
+    if "artist" in profile_raw:
+        sanitized["artist"] = _optional_string(profile_raw, "artist", "distrokid.profile.artist")
+    for key in ("language", "main_genre"):
+        value = profile_raw.get(key)
+        if isinstance(value, str):
+            sanitized[key] = value
+    sub_genre = profile_raw.get("sub_genre")
+    if isinstance(sub_genre, str) or sub_genre is None:
+        sanitized["sub_genre"] = sub_genre
+    for key in ("songwriter", "ai_disclosure", "credits"):
+        value = profile_raw.get(key)
+        if isinstance(value, dict) or value is None:
+            sanitized[key] = value
+    return sanitized
 
 
 def _build_distrokid_profile(profile_raw: dict) -> DistrokidProfile:
     sub_genre = profile_raw.get("sub_genre")
     return DistrokidProfile(
+        artist=_optional_string(profile_raw, "artist", "distrokid.profile.artist"),
         language=str(profile_raw.get("language", "")),
         main_genre=str(profile_raw.get("main_genre", "")),
         sub_genre=str(sub_genre) if sub_genre is not None else None,
@@ -599,6 +599,13 @@ def _build_distrokid_profile(profile_raw: dict) -> DistrokidProfile:
         ai_disclosure=_build_ai_disclosure(profile_raw.get("ai_disclosure")),
         credits=_build_credits(profile_raw.get("credits")),
     )
+
+
+def _optional_string(raw: dict, key: str, label: str) -> str:
+    value = raw.get(key, "")
+    if value is None or not isinstance(value, str):
+        raise ConfigError(f"{label} は string でなければなりません（got {type(value).__name__}）")
+    return value
 
 
 def _build_credits(raw: object) -> DistrokidProfileCredits:

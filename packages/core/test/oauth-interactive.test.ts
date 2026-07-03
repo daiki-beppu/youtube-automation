@@ -166,6 +166,7 @@ const clientSecretsJson = JSON.stringify({
   installed: {
     client_id: "cid.apps.googleusercontent.com",
     client_secret: "the-client-secret",
+    redirect_uris: ["http://localhost"],
   },
 });
 

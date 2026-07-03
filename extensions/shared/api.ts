@@ -1,15 +1,11 @@
-// yt-collection-serve の `/suno/prompts.json` クライアント。
-// 旧 `popup.js` の fetch ロジックを保持する:
-//   - fetch 先は `${baseUrl}${PROMPTS_ROUTE}`
-//   - HTTP 非 2xx で throw
-//   - 配列でない / 空配列の JSON で throw (fail-loud、silent 続行しない)
+// yt-collection-serve の collection prompts クライアント。
+// HTTP 非 2xx / 配列でない JSON / 空配列は fail-loud で throw する。
 import {
+  collectionDownloadedRoute,
   collectionPromptsRoute,
   COLLECTIONS_ROUTE,
   DISTROKID_COLLECTIONS_ROUTE,
   DISTROKID_RELEASES_ROUTE,
-  PLAYLISTS_CAPTURE_ROUTE,
-  PROMPTS_ROUTE,
   VERSION_ROUTE,
 } from "./constants";
 
@@ -37,30 +33,42 @@ export interface PromptEntry {
   vocal_gender?: "male" | "female" | "neutral" | "auto";
 }
 
-/** `/collections` が返す 1 collection のスキーマ (#816 dir mode サーバー契約)。 */
+/** collection 単位の Suno duration guard 閾値 (#1259)。秒単位。 */
+export interface DurationFilter {
+  min_sec: number;
+  max_sec: number;
+}
+
+/** duration_filter 未指定時の既定値 (#1259 / ADR-0012)。 */
+export const DEFAULT_DURATION_FILTER: DurationFilter = {
+  min_sec: 60,
+  max_sec: 300,
+};
+
+/** `/suno/prompts.json` の envelope 形式。legacy 配列 JSON も normalize してこの形で扱う。 */
+export interface PromptResponse {
+  entries: PromptEntry[];
+  duration_filter?: DurationFilter;
+}
+
+/** collection の状態 (#1216)。サーバーがファイルシステムから動的に判定する。
+ * - `needs_prompts`: suno-prompts.json が未作成
+ * - `ready`: prompts 存在・ダウンロード未完了
+ * - `downloaded`: 02-Individual-music/ に期待数以上の音声ファイルがある */
+export type CollectionStatus = "needs_prompts" | "ready" | "downloaded";
+
+/** `/collections` が返す 1 collection のスキーマ (#816 dir mode サーバー契約)。
+ * #1216 BREAKING: has_prompts / mapped を廃止し status / downloaded_count に置換。 */
 export interface CollectionSummary {
   id: string;
   name: string;
-  has_prompts: boolean;
+  status: CollectionStatus;
   pattern_count: number | null;
-  // 既に config/suno-playlists.json にマッピング済みか (#893 追加要件 B)。
-  // optional・後方互換: prefix 未設定の旧サーバーは返さず undefined（全件表示の従来挙動）。
-  mapped?: boolean;
-  // サーバーが prefix を使って導出した Suno playlist 名 `<prefix> | <theme>`。
-  // マルチワード prefix でも正しい境界分割を保証する。未設定時は extractPlaylistName fallback。
-  playlist_name?: string;
-}
-
-/** Suno `/me` から捕捉した 1 playlist (#893)。POST /suno/playlists の body 要素。 */
-export interface CapturedPlaylist {
-  title: string;
-  url: string;
-}
-
-/** POST /suno/playlists の 200 レスポンス (#893)。書き込み件数と出力先パス。 */
-export interface CapturedPlaylistsResult {
-  written: number;
-  path: string;
+  downloaded_count: number;
+  channel?: string;
+  theme?: string;
+  expected_file_count?: number | null;
+  suno_playlist_url?: string;
 }
 
 /** GET /version の wire スキーマ（#1023）。 */
@@ -106,6 +114,11 @@ export async function resolveCompatibilityWarning(
 }
 
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
+const COLLECTION_STATUSES: CollectionStatus[] = [
+  "needs_prompts",
+  "ready",
+  "downloaded",
+];
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
@@ -134,25 +147,128 @@ function messageFromError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function assertObject(value: unknown, label: string): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(`${label} must be object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function assertString(value: unknown, field: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${field} must be non-empty string`);
+  }
+  return value;
+}
+
+function assertCollectionId(value: unknown, field = "collectionId"): string {
+  return assertString(value, field);
+}
+
+function assertOptionalString(
+  value: unknown,
+  field: string,
+): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  return assertString(value, field);
+}
+
+function assertNonNegativeInteger(value: unknown, field: string): number {
+  if (!Number.isInteger(value) || (value as number) < 0) {
+    throw new Error(`${field} must be non-negative integer`);
+  }
+  return value as number;
+}
+
+function assertNonNegativeNumber(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error(`${field} must be non-negative number`);
+  }
+  return value;
+}
+
+function assertOptionalNonNegativeInteger(
+  value: unknown,
+  field: string,
+): number | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  return assertNonNegativeInteger(value, field);
+}
+
+function assertCollectionStatus(
+  value: unknown,
+  field: string,
+): CollectionStatus {
+  if (
+    typeof value !== "string" ||
+    !COLLECTION_STATUSES.includes(value as CollectionStatus)
+  ) {
+    throw new Error(`${field} must be valid collection status`);
+  }
+  return value as CollectionStatus;
+}
+
+function assertDurationFilter(value: unknown, field: string): DurationFilter {
+  const record = assertObject(value, field);
+  const minSec = assertNonNegativeNumber(record.min_sec, `${field}.min_sec`);
+  const maxSec = assertNonNegativeNumber(record.max_sec, `${field}.max_sec`);
+  if (minSec > maxSec) {
+    throw new Error(`${field}.min_sec must be less than or equal to max_sec`);
+  }
+  return { min_sec: minSec, max_sec: maxSec };
+}
+
+function durationFilterOrDefault(
+  durationFilter?: DurationFilter,
+): DurationFilter {
+  return durationFilter ?? { ...DEFAULT_DURATION_FILTER };
+}
+
+function normalizePromptResponse(data: unknown): PromptResponse {
+  if (Array.isArray(data)) {
+    if (data.length === 0) {
+      throw new Error("空、または配列ではない JSON が返りました。");
+    }
+    return {
+      entries: data as PromptEntry[],
+      duration_filter: durationFilterOrDefault(),
+    };
+  }
+
+  const record = assertObject(data, "prompts response");
+  const entries = record.entries;
+  if (!Array.isArray(entries) || entries.length === 0) {
+    throw new Error("空、または配列ではない JSON が返りました。");
+  }
+  const durationFilter =
+    record.duration_filter === undefined
+      ? undefined
+      : assertDurationFilter(record.duration_filter, "duration_filter");
+  return {
+    entries: entries as PromptEntry[],
+    duration_filter: durationFilterOrDefault(durationFilter),
+  };
+}
+
 /**
  * prompts.json 系エンドポイントの共通 fetch 本体 (#816)。
  * 非 2xx / 空配列 / 非配列で throw する fail-loud 契約。
  */
-async function fetchPromptArray(url: string): Promise<PromptEntry[]> {
+async function fetchPromptResponseBody(url: string): Promise<PromptResponse> {
   const resp = await fetch(url);
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
   }
   const data: unknown = await resp.json();
-  if (!Array.isArray(data) || data.length === 0) {
-    throw new Error("空、または配列ではない JSON が返りました。");
-  }
-  return data as PromptEntry[];
+  return normalizePromptResponse(data);
 }
 
-/** prompts.json を取得して PromptEntry[] を返す。不正な応答は fail-loud で throw。 */
-export async function fetchPrompts(baseUrl: string): Promise<PromptEntry[]> {
-  return fetchPromptArray(`${baseUrl}${PROMPTS_ROUTE}`);
+async function fetchPromptArray(url: string): Promise<PromptEntry[]> {
+  return (await fetchPromptResponseBody(url)).entries;
 }
 
 /** サーバー version envelope を取得する（#1023）。404 は caller が旧サーバー判定に使う。 */
@@ -205,8 +321,8 @@ export async function checkServerCompatibility(
 
 /**
  * dir mode サーバーの collection 一覧を取得する (#816)。
- * 非 2xx は fail-loud で throw（単一 mode サーバーの 404 は popup の fallback トリガー）。
- * 空配列は throw せず返す（fallback 判断は呼び出し側）。
+ * 非 2xx は fail-loud で throw し、popup は取得失敗として表示する。
+ * 空配列は throw せず返し、caller が「選択可能な collection なし」として扱う。
  */
 export async function fetchCollections(
   baseUrl: string,
@@ -219,28 +335,129 @@ export async function fetchCollections(
   if (!Array.isArray(data)) {
     throw new Error("配列ではない JSON が返りました。");
   }
-  return data as CollectionSummary[];
+  return data.map((item, index) => normalizeCollectionSummary(item, index));
+}
+
+function normalizeCollectionSummary(
+  item: unknown,
+  index: number,
+): CollectionSummary {
+  const record = assertObject(item, `collections[${index}]`);
+  const summary: CollectionSummary = {
+    id: assertString(record.id, `collections[${index}].id`),
+    name: assertString(record.name, `collections[${index}].name`),
+    status: assertCollectionStatus(
+      record.status,
+      `collections[${index}].status`,
+    ),
+    pattern_count:
+      assertOptionalNonNegativeInteger(
+        record.pattern_count,
+        `collections[${index}].pattern_count`,
+      ) ?? null,
+    downloaded_count: assertNonNegativeInteger(
+      record.downloaded_count,
+      `collections[${index}].downloaded_count`,
+    ),
+  };
+  const channel = assertOptionalString(
+    record.channel,
+    `collections[${index}].channel`,
+  );
+  if (channel !== undefined) {
+    summary.channel = channel;
+  }
+  const theme = assertOptionalString(
+    record.theme,
+    `collections[${index}].theme`,
+  );
+  if (theme !== undefined) {
+    summary.theme = theme;
+  }
+  const expectedFileCount = assertOptionalNonNegativeInteger(
+    record.expected_file_count,
+    `collections[${index}].expected_file_count`,
+  );
+  if (expectedFileCount !== undefined) {
+    summary.expected_file_count = expectedFileCount;
+  }
+  const sunoPlaylistUrl = assertOptionalString(
+    record.suno_playlist_url,
+    `collections[${index}].suno_playlist_url`,
+  );
+  if (sunoPlaylistUrl !== undefined) {
+    summary.suno_playlist_url = sunoPlaylistUrl;
+  }
+  return summary;
 }
 
 /**
  * 指定 collection の prompts.json を取得する (#816)。
- * fetchPrompts と同じ fail-loud 契約（非 2xx / 空配列 / 非配列で throw）。
+ * 非 2xx / 空配列 / 非配列は fail-loud で throw する。
  */
 export async function fetchCollectionPrompts(
   baseUrl: string,
   id: string,
 ): Promise<PromptEntry[]> {
-  return fetchPromptArray(`${baseUrl}${collectionPromptsRoute(id)}`);
+  return fetchPromptArray(
+    `${baseUrl}${collectionPromptsRoute(assertCollectionId(id))}`,
+  );
+}
+
+/** 指定 collection の prompts.json を PromptResponse として取得する (#1259)。 */
+export async function fetchCollectionPromptResponse(
+  baseUrl: string,
+  id: string,
+): Promise<PromptResponse> {
+  return fetchPromptResponseBody(
+    `${baseUrl}${collectionPromptsRoute(assertCollectionId(id))}`,
+  );
+}
+
+/** popup の実行対象一覧に出す collection。完了済みは次の作業対象ではないため非表示にする。 */
+export function visiblePromptCollections(
+  collections: CollectionSummary[],
+  includeDownloadedIds: string[] = [],
+): CollectionSummary[] {
+  const include = new Set(includeDownloadedIds);
+  return collections.filter(
+    (c) => c.status !== "downloaded" || include.has(c.id),
+  );
+}
+
+/** `status` ベースで prompts 取得可能な collection を判定する。 */
+export function collectionHasPrompts(collection: CollectionSummary): boolean {
+  return collection.status === "ready" || collection.status === "downloaded";
 }
 
 /**
  * ドロップダウンの初期選択 id を決める (#816)。
- * 最初の `has_prompts===true` な entry の id。実行可能な選択肢が無ければ null。
+ * 最初の `ready` な entry の id。実行可能な選択肢が無ければ null。
+ * #1216: has_prompts → status ベースに移行。
  */
 export function pickInitialCollectionId(
   collections: CollectionSummary[],
 ): string | null {
-  return collections.find((c) => c.has_prompts)?.id ?? null;
+  return (
+    collections.find((c) => collectionHasPrompts(c) && c.status === "ready")
+      ?.id ?? null
+  );
+}
+
+export function resolvePromptCollectionId(
+  collections: CollectionSummary[],
+  selectedId: string,
+  allowDownloadedSelected = false,
+): string | null {
+  const selected = collections.find((c) => c.id === selectedId);
+  if (
+    selected &&
+    collectionHasPrompts(selected) &&
+    (selected.status === "ready" || allowDownloadedSelected)
+  ) {
+    return selected.id;
+  }
+  return pickInitialCollectionId(collections);
 }
 
 /** collection id 末尾の接尾辞。剥がしてから日付・channel・theme を解釈する。 */
@@ -287,36 +504,6 @@ export function extractPlaylistName(
     throw new Error(`channel 部分が空: id=${collectionId}`);
   }
   return `${channel} | ${theme}`;
-}
-
-/**
- * 捕捉した playlist 一覧を POST /suno/playlists へ送る (#893)。
- * body は配列のまま（envelope 包みしない）。非 2xx はステータスを含めて throw する fail-loud 契約。
- * prefix によるフィルタはサーバー側 normalize_suno_title に閉じるため、ここでは全件そのまま送る。
- */
-export async function postCapturedPlaylists(
-  baseUrl: string,
-  items: CapturedPlaylist[],
-): Promise<CapturedPlaylistsResult> {
-  const resp = await fetch(`${baseUrl}${PLAYLISTS_CAPTURE_ROUTE}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(items),
-  });
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status}`);
-  }
-  return (await resp.json()) as CapturedPlaylistsResult;
-}
-
-/**
- * 既にマッピング済み (mapped===true) の collection を除外する純関数 (#893 追加要件 B)。
- * mapped 未設定（prefix 未指定の旧運用）は除外対象にしないため全件残す（後方互換）。
- */
-export function excludeMappedCollections(
-  collections: CollectionSummary[],
-): CollectionSummary[] {
-  return collections.filter((c) => c.mapped !== true);
 }
 
 /** DistroKid `/distrokid/collections` が返す 1 disc のスキーマ (#934 dir mode サーバー契約)。 */
@@ -381,5 +568,68 @@ export async function recordDistrokidRelease(
   });
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
+  }
+}
+
+/** POST /collections/:id/downloaded の body (#1215)。ダウンロード完了通知ペイロード。 */
+export interface DownloadedPayload {
+  file_count: number;
+  expected_file_count?: number;
+  format: "mp3" | "m4a" | "wav";
+  suno_playlist_url?: string;
+  download_path?: string;
+}
+
+/**
+ * ダウンロード完了をサーバーに通知する (#1215)。POST /collections/:id/downloaded。
+ * 非 2xx は fail-loud で throw する。
+ */
+async function fetchServeToken(baseUrl: string): Promise<string> {
+  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/auth/token`);
+  if (!res.ok) throw new Error(`GET /auth/token failed: ${res.status}`);
+  const data: unknown = await res.json();
+  if (
+    !data ||
+    typeof data !== "object" ||
+    !("token" in data) ||
+    typeof (data as Record<string, unknown>).token !== "string" ||
+    !(data as Record<string, unknown>).token
+  ) {
+    throw new Error("/auth/token returned invalid response");
+  }
+  const token = (data as Record<string, string>).token;
+  return token;
+}
+
+export async function postDownloaded(
+  baseUrl: string,
+  collectionId: string,
+  payload: DownloadedPayload,
+): Promise<void> {
+  if (payload.file_count > 0 && !payload.download_path) {
+    throw new Error("file_count が正数の場合は download_path が必要です");
+  }
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
+  const token = await fetchServeToken(normalizedBaseUrl);
+  const url = `${normalizedBaseUrl}${collectionDownloadedRoute(collectionId)}`;
+  let res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Serve-Token": token },
+    body: JSON.stringify(payload),
+  });
+  // 403 retry: token may be stale after server restart
+  if (res.status === 403) {
+    const freshToken = await fetchServeToken(baseUrl);
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Serve-Token": freshToken,
+      },
+      body: JSON.stringify(payload),
+    });
+  }
+  if (!res.ok) {
+    throw new Error(`POST downloaded failed: ${res.status} ${res.statusText}`);
   }
 }

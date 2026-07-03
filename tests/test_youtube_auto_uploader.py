@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -117,7 +118,7 @@ def _write_preflight_collection(tmp_path: Path, scene_languages: list[str]) -> P
 
 
 class TestPreflightLocalizationLanguages:
-    def test_should_fail_when_required_high_cpm_language_is_missing(self, tmp_path):
+    def test_should_pass_when_supported_scene_languages_are_present(self, tmp_path):
         from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
 
         col_dir = _write_preflight_collection(tmp_path, ["en", "ja"])
@@ -127,8 +128,7 @@ class TestPreflightLocalizationLanguages:
             "youtube_automation.agents._preflight.load_config",
             return_value=_make_preflight_config(["ja", "en"]),
         ):
-            with pytest.raises(RuntimeError, match="de"):
-                uploader._preflight_check(col_dir)
+            uploader._preflight_check(col_dir)
 
     def test_should_pass_when_required_high_cpm_languages_are_present(self, tmp_path):
         from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
@@ -459,6 +459,9 @@ class TestUploadCollectionForwarding:
         master_dir = col_dir / "01-master"
         master_dir.mkdir(parents=True)
         (master_dir / "video.mp4").write_bytes(b"\x00")
+        assets_dir = col_dir / "10-assets"
+        assets_dir.mkdir()
+        (assets_dir / "thumbnail.jpg").write_bytes(b"\x00")
 
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
         on_session = MagicMock()
@@ -687,6 +690,9 @@ class TestUploadCompleteCollectionDedup:
         master_dir = col_dir / "01-master"
         master_dir.mkdir(parents=True)
         (master_dir / "video.mp4").write_bytes(b"\x00")
+        assets_dir = col_dir / "10-assets"
+        assets_dir.mkdir()
+        (assets_dir / "thumbnail.jpg").write_bytes(b"\x00")
 
         uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
         mock_gen = MagicMock()
@@ -731,6 +737,120 @@ class TestUploadCompleteCollectionDedup:
         assert result["video_id"] == "VID_NEW"
         assert result["upload_source"] == "new_upload"
 
+    def test_prebuilt_upload_keeps_localization_timestamps_when_m4a_needs_probe_fallback(self, tmp_path, monkeypatch):
+        """#1323: prebuilt upload 経路でも `.m4a` fallback 後の timestamp を localizations に渡す."""
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+        from youtube_automation.utils import metadata_generator as metadata_generator_module
+        from youtube_automation.utils.config import load_config
+        from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
+
+        col_dir = tmp_path / "20990101-live-circuit-collection"
+        (col_dir / "01-master").mkdir(parents=True)
+        (col_dir / "01-master" / "video-master.mp4").write_bytes(b"\x00")
+        (col_dir / "02-Individual-music").mkdir()
+        (col_dir / "02-Individual-music" / "01-circuit-door.m4a").write_bytes(b"\x00")
+        (col_dir / "10-assets").mkdir()
+        (col_dir / "10-assets" / "thumbnail.jpg").write_bytes(b"\x00")
+        (col_dir / "20-documentation").mkdir()
+        (col_dir / "20-documentation" / "descriptions.md").write_text(
+            "\n".join(
+                [
+                    "## タイトル案",
+                    "```",
+                    "Circuit Collection",
+                    "```",
+                    "",
+                    "## Complete Collection 概要欄",
+                    "```",
+                    "00:00 Curated Circuit Door",
+                    "```",
+                    "",
+                    "## タグ（YouTube タグ欄）",
+                    "```",
+                    "circuit music, focus music",
+                    "```",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        config = load_config()
+        scene_phrases = {lang: f"quiet circuit room {lang}" for lang in config.localizations.supported_languages}
+        (col_dir / "workflow-state.json").write_text(
+            json.dumps({"scene_phrases": scene_phrases}),
+            encoding="utf-8",
+        )
+
+        import subprocess as _subprocess
+
+        def mock_subprocess_run(cmd, **kwargs):
+            if cmd and cmd[0] == "afinfo":
+                raise _subprocess.CalledProcessError(1, "afinfo", "unsupported file")
+            raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+        probe_calls: list[Path] = []
+
+        def fake_probe_duration(path: Path) -> float:
+            probe_calls.append(path)
+            return 121.9
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", fake_probe_duration)
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        metadata_gen = BAHMetadataGenerator(str(col_dir))
+        with (
+            patch.object(uploader, "_find_existing_video_by_title", return_value=None),
+            patch.object(uploader, "upload_video", return_value="VID_NEW") as mock_upload_video,
+        ):
+            result = uploader._upload_complete_collection(col_dir, metadata_gen, publish_at=None)
+
+        assert result["video_id"] == "VID_NEW"
+        assert probe_calls == [col_dir / "02-Individual-music" / "01-circuit-door.m4a"]
+        metadata = mock_upload_video.call_args.args[1]
+        assert metadata["description"] == "00:00 Curated Circuit Door"
+        assert "localizations" in metadata
+        assert metadata["localizations"]
+        for loc in metadata["localizations"].values():
+            assert "00:00 Curated Circuit Door" in loc["description"]
+
+    def test_should_fail_loud_when_upload_thumbnail_missing(self, tmp_path):
+        """#1310: main.* は動画背景なので upload thumbnail 欠落を隠さない。"""
+        from youtube_automation.utils.exceptions import ValidationError
+
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+        (col_dir / "10-assets" / "thumbnail.jpg").unlink()
+        (col_dir / "10-assets" / "main.png").write_bytes(b"textless-background")
+
+        with (
+            patch.object(uploader, "_load_descriptions_md", return_value=None),
+            patch.object(uploader, "_find_existing_video_by_title", return_value=None),
+            patch.object(uploader, "upload_video", return_value="SHOULD_NOT_BE_CALLED") as mock_upload_video,
+            pytest.raises(ValidationError, match="アップロード用サムネイルが見つかりません"),
+        ):
+            uploader._upload_complete_collection(col_dir, mock_gen, publish_at=None)
+
+        mock_upload_video.assert_not_called()
+
+    def test_should_fail_loud_when_upload_thumbnail_missing_even_if_dedup_hits(self, tmp_path):
+        """#1310: dedup existing-video 経路でも upload thumbnail 欠落を隠さない。"""
+        from youtube_automation.utils.exceptions import ValidationError
+
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+        (col_dir / "10-assets" / "thumbnail.jpg").unlink()
+        (col_dir / "10-assets" / "main.png").write_bytes(b"textless-background")
+        existing = {"video_id": "v9", "video_url": "https://www.youtube.com/watch?v=v9"}
+
+        with (
+            patch.object(uploader, "_load_descriptions_md", return_value=None),
+            patch.object(uploader, "_find_existing_video_by_title", return_value=existing) as mock_find_existing,
+            patch.object(uploader, "upload_video", return_value="SHOULD_NOT_BE_CALLED") as mock_upload_video,
+            pytest.raises(ValidationError, match="アップロード用サムネイルが見つかりません"),
+        ):
+            uploader._upload_complete_collection(col_dir, mock_gen, publish_at=None)
+
+        mock_find_existing.assert_not_called()
+        mock_upload_video.assert_not_called()
+
     def test_should_proceed_with_upload_when_search_api_raises_http_error(self, tmp_path, caplog):
         """plan 要件 #10: search API 自体が HttpError を投げたケースで fail-open で upload 続行."""
         # Given
@@ -755,6 +875,95 @@ class TestUploadCompleteCollectionDedup:
         mock_upload_video.assert_called_once()
         assert result["video_id"] == "VID_AFTER_FAILOPEN"
         assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Issue #1052: post-upload manual checklist
+# ---------------------------------------------------------------------------
+
+
+class TestPostUploadManualChecklist:
+    """アップロード完了後に Studio 手動確認 checklist を表示する."""
+
+    def test_should_print_manual_checklist_for_new_upload(self, tmp_path, caplog):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        results = {
+            "collection_name": "foo",
+            "collection_path": str(tmp_path / "foo"),
+            "duration": "0:01:00",
+            "start_time": datetime(2099, 1, 1, 9, 0, 0),
+            "complete_video": {
+                "video_id": "VID_NEW",
+                "video_url": "https://www.youtube.com/watch?v=VID_NEW",
+                "upload_source": "new_upload",
+            },
+        }
+
+        with caplog.at_level(logging.INFO):
+            uploader._print_upload_report(results)
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "アップロード後の手動チェックリスト" in messages
+        assert "AI コンテンツの開示設定" in messages
+        assert "収益化が ON" in messages
+        assert "https://studio.youtube.com/video/VID_NEW/edit" in messages
+
+    def test_should_not_print_manual_checklist_for_existing_video_reuse(self, tmp_path, caplog):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        results = {
+            "collection_name": "foo",
+            "collection_path": str(tmp_path / "foo"),
+            "duration": "0:01:00",
+            "start_time": datetime(2099, 1, 1, 9, 0, 0),
+            "complete_video": {
+                "video_id": "VID_EXISTING",
+                "video_url": "https://www.youtube.com/watch?v=VID_EXISTING",
+                "upload_source": "existing_video",
+            },
+        }
+
+        with caplog.at_level(logging.INFO):
+            uploader._print_upload_report(results)
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "アップロード後の手動チェックリスト" not in messages
+
+
+# ---------------------------------------------------------------------------
+# Issue #1053: active channel visibility
+# ---------------------------------------------------------------------------
+
+
+class TestActiveChannelVisibility:
+    """誤投稿防止のため操作中チャンネルをログ表示する."""
+
+    def test_should_log_active_channel_identity(self, tmp_path, caplog):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        cfg = SimpleNamespace(
+            meta=SimpleNamespace(
+                channel_name="Rainy Jazz Night",
+                youtube_handle="@rainyjazz",
+                channel_id="UC123",
+            )
+        )
+
+        with (
+            patch("youtube_automation.agents.youtube_auto_uploader.load_config", return_value=cfg),
+            caplog.at_level(logging.INFO),
+        ):
+            uploader._log_active_channel()
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "操作中チャンネル" in messages
+        assert "Rainy Jazz Night" in messages
+        assert "@rainyjazz" in messages
+        assert "UC123" in messages
 
 
 # ---------------------------------------------------------------------------
@@ -848,6 +1057,93 @@ class TestUploadVideoScheduledPublish:
 
         body = mock_core_upload.call_args.args[1]
         assert "publishAt" not in body["status"]
+
+
+class TestDefaultPublishAt:
+    """#1054: チャンネル既定の予約投稿時刻。"""
+
+    @staticmethod
+    def _config(time_text: str | None = "20:00", tz: str = "Asia/Tokyo") -> SimpleNamespace:
+        return SimpleNamespace(
+            meta=SimpleNamespace(
+                channel_name="Rainy Jazz Night",
+                youtube_handle="@rainyjazz",
+                channel_id="UC123",
+            ),
+            youtube=SimpleNamespace(
+                api=SimpleNamespace(
+                    default_publish_time=time_text,
+                    default_publish_timezone=tz,
+                )
+            ),
+        )
+
+    def test_resolves_today_when_default_time_is_still_future(self):
+        from youtube_automation.agents.youtube_auto_uploader import _resolve_default_publish_at
+
+        now = datetime.fromisoformat("2099-01-01T19:00:00+09:00")
+        assert _resolve_default_publish_at(self._config(), now=now) == "2099-01-01T20:00:00+09:00"
+
+    def test_resolves_tomorrow_when_default_time_has_passed(self):
+        from youtube_automation.agents.youtube_auto_uploader import _resolve_default_publish_at
+
+        now = datetime.fromisoformat("2099-01-01T21:00:00+09:00")
+        assert _resolve_default_publish_at(self._config(), now=now) == "2099-01-02T20:00:00+09:00"
+
+    def test_returns_none_when_not_configured(self):
+        from youtube_automation.agents.youtube_auto_uploader import _resolve_default_publish_at
+
+        assert _resolve_default_publish_at(self._config(time_text=None)) is None
+
+    def test_upload_collection_applies_default_when_publish_at_omitted(self, tmp_path):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        col_dir = tmp_path / "20990101-foo-collection"
+        col_dir.mkdir()
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with (
+            patch.object(uploader, "_preflight_check"),
+            patch.object(
+                uploader,
+                "_upload_complete_collection",
+                return_value={"video_id": "V", "video_url": "u", "title": "t", "file_path": "p"},
+            ) as mock_inner,
+            patch("youtube_automation.agents.youtube_auto_uploader.BAHMetadataGenerator") as mock_gen_cls,
+            patch(
+                "youtube_automation.agents.youtube_auto_uploader._resolve_default_publish_at",
+                return_value="2099-01-01T20:00:00+09:00",
+            ) as mock_default,
+            patch("youtube_automation.agents.youtube_auto_uploader.load_config", return_value=self._config()),
+        ):
+            mock_gen_cls.return_value.collection_name = col_dir.name
+            uploader.upload_collection(str(col_dir), publish_at=None)
+
+        assert mock_default.called
+        assert mock_inner.call_args.kwargs["publish_at"] == "2099-01-01T20:00:00+09:00"
+
+    def test_upload_collection_keeps_explicit_publish_at(self, tmp_path):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        col_dir = tmp_path / "20990101-foo-collection"
+        col_dir.mkdir()
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with (
+            patch.object(uploader, "_preflight_check"),
+            patch.object(
+                uploader,
+                "_upload_complete_collection",
+                return_value={"video_id": "V", "video_url": "u", "title": "t", "file_path": "p"},
+            ) as mock_inner,
+            patch("youtube_automation.agents.youtube_auto_uploader.BAHMetadataGenerator") as mock_gen_cls,
+            patch("youtube_automation.agents.youtube_auto_uploader._resolve_default_publish_at") as mock_default,
+        ):
+            mock_gen_cls.return_value.collection_name = col_dir.name
+            uploader.upload_collection(str(col_dir), publish_at="2099-01-05T20:00:00+09:00")
+
+        assert not mock_default.called
+        assert mock_inner.call_args.kwargs["publish_at"] == "2099-01-05T20:00:00+09:00"
 
 
 class TestNormalizePublishAt:

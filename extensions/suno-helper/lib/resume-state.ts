@@ -8,7 +8,7 @@
 // 起こさないよう遅延生成する（純関数テスト resume-state.test.ts を壊さないため）。
 import { storage } from "wxt/utils/storage";
 
-import { RESUME_STATE_KEY } from "../../shared/constants";
+import { CLIPS_PER_REQUEST, RESUME_STATE_KEY } from "../../shared/constants";
 
 /** ERROR 停止時に永続化する再開メタ情報 (#872)。 */
 export interface ResumeState {
@@ -29,6 +29,10 @@ export interface ResumeState {
   /** リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
    * 「失敗分のみ再実行」導線が run({indices}) へ渡す。旧 state には無い optional（後方互換）。 */
   failedIndices?: number[];
+  /** playlist 追加対象として generate response から観測済みの clip ID 一覧。 */
+  submittedClipIds?: string[];
+  /** playlist 追加時に揃っているべき clip ID 件数。 */
+  playlistExpectedClipCount?: number;
 }
 
 /** content へ渡す 0-based inclusive な実行範囲。 */
@@ -53,16 +57,12 @@ export const RESUME_STALE_MS = 24 * 60 * 60 * 1000;
 /**
  * 起動時に再開バナーを表示すべきか判定する (要件4)。
  *   - state 無し → 表示しない
- *   - 選択中 collection が空（単一ファイル mode）→ 表示しない
  *   - collectionId が選択中と不一致 → 表示しない（別 collection 選択中）
  *   - timestamp が RESUME_STALE_MS より古い → 表示しない（stale）。境界はちょうど閾値まで inclusive
  * now を注入可能にし、純関数として時刻依存を排してテストする。
  */
 export function shouldShowResumeBanner(state: ResumeState | null, selectedCollectionId: string, now: number): boolean {
   if (!state) {
-    return false;
-  }
-  if (!selectedCollectionId) {
     return false;
   }
   if (state.collectionId !== selectedCollectionId) {
@@ -116,6 +116,30 @@ export function resumeRunRange(banner: ResumeBanner): RunRange {
  */
 export function resolveInterruptIndex(currentIndex: number, submitted: boolean, isNotAcknowledged: boolean): number {
   return submitted && !isNotAcknowledged ? currentIndex + 1 : currentIndex;
+}
+
+/** 再開前の観測 ID と今回 run の観測 ID を合成する。件数不一致は部分 playlist を防ぐため fail-loud にする。 */
+export function resolvePlaylistClipIds(
+  previousSubmittedClipIds: string[],
+  currentSubmittedClipIds: string[],
+  expectedClipCount: number,
+): string[] {
+  const clipIds = Array.from(new Set([...previousSubmittedClipIds, ...currentSubmittedClipIds]));
+  if (clipIds.length === 0) {
+    throw new Error("playlist 対象の clip ID が 0 件です。bridge が clip を観測できなかった可能性があります。");
+  }
+  if (clipIds.length !== expectedClipCount) {
+    throw new Error(`playlist 対象の clip ID 数が不足しています: expected ${expectedClipCount}, got ${clipIds.length}`);
+  }
+  return clipIds;
+}
+
+/** 旧 ResumeState には期待件数が無いため、collection 全体の entry 数から復元して部分 playlist を防ぐ。 */
+export function resolvePlaylistExpectedClipCountForResume(
+  savedExpectedClipCount: number | undefined,
+  totalEntries: number,
+): number {
+  return savedExpectedClipCount ?? totalEntries * CLIPS_PER_REQUEST;
 }
 
 // --- chrome.storage.local I/O（storage item は遅延生成。理由はファイル冒頭コメント参照） ---

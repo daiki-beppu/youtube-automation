@@ -6,7 +6,7 @@
 #   bash <repo-root>/.claude/skills/lyria/references/worktree_sync.sh [--dry-run]
 #
 # コピー対象:
-#   01-master/master.wav       → main の 01-master/
+#   01-master/master.mp3       → main の 01-master/
 #   01-master/*.wav (master除く) → main の 02-Individual-music/
 #   01-master/*.mp4             → main の 01-master/
 #   10-assets/main.png         → main の 10-assets/
@@ -69,8 +69,8 @@ sync_files() {
 }
 
 # --- コピー実行 ---
-sync_files "01-master/master.wav" "$MAIN_COLLECTION/01-master" "master.wav"
-# master.wav 以外の WAV を個別楽曲としてコピー（seg_*.wav またはリネーム後の NN_Name.wav）
+sync_files "01-master/master.mp3" "$MAIN_COLLECTION/01-master" "master.mp3"
+# master mp3 以外の WAV を個別楽曲としてコピー（seg_*.wav またはリネーム後の NN_Name.wav）
 sync_files_exclude() {
     local src_dir="$1"
     local exclude="$2"
@@ -100,7 +100,7 @@ sync_files_exclude() {
         done
     fi
 }
-sync_files_exclude "01-master" "master.wav" "$MAIN_COLLECTION/02-Individual-music" "individual tracks"
+sync_files_exclude "01-master" "master.mp3" "$MAIN_COLLECTION/02-Individual-music" "individual tracks"
 sync_files "01-master/*.mp4" "$MAIN_COLLECTION/01-master" "master video"
 if [[ -f "10-assets/main.png" ]]; then
     sync_files "10-assets/main.png" "$MAIN_COLLECTION/10-assets" "main.png"

@@ -10,13 +10,22 @@ import re
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 
-from youtube_automation.utils.youtube_tag import youtube_tag_chars
+from youtube_automation.utils.descriptions_md import (
+    build_descriptions_md_parse_diagnostics,
+    extract_descriptions_md_section,
+    missing_descriptions_md_headings,
+)
+from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.placeholders import is_placeholder_value
+from youtube_automation.utils.thumbnail_references import (
+    plan_ttp_reference_assignments,
+    resolve_configured_benchmark_references,
+)
+from youtube_automation.utils.youtube_tag import parse_youtube_tags, youtube_tag_chars
 
 YT_TAG_CHAR_LIMIT = 500
 REQUIRED_LOCALIZATION_LANGUAGES = ("ja", "en", "de")
 LOW_CPM_LOCALIZATION_LANGUAGES = ("ko", "es", "pt", "zh-CN")
-
-_DESC_TAGS_RE = re.compile(r"## タグ（YouTube タグ欄）\s*\n+```\n(.*?)```", re.DOTALL)
 
 # v1〜v9 もしくは末尾のロマン数字 (I/II/III/IV/V/VI/VII/VIII) を検出する。
 # chapter 名末尾にこれが現れる場合、1 パターンを複数バリエーションに展開した事故とみなす。
@@ -36,16 +45,138 @@ DEFAULT_TITLE_VOLUME_PATTERNS = (
     r"\bVol\.?\s*[IVXLCDM]+\b",  # Vol. II
     r"\b(?:I{2,3}|IV|VI{0,3}|IX|X)\b\s*$",  # 末尾ローマ数字 (II〜X)
 )
+SUNO_DEFAULT_STYLE_CHAR_LIMIT = 120
+THUMBNAIL_COMPOSITION_REQUIRED_KEYS = (
+    "environment",
+    "character_size",
+    "character_pose",
+    "allowed_actions",
+    "ng_actions",
+    "background",
+)
 
 
 def check_chapter_count(ts_count: int, chapter_max: int) -> str | None:
-    """chapter 件数が上限超過なら issue 文字列、範囲内なら None.
-
-    下限 (< 3) は別途呼び出し側でチェックする。
-    """
+    """chapter 件数が上限超過なら issue 文字列、範囲内なら None."""
     if ts_count > chapter_max:
         return f"too many timestamps: {ts_count} (> chapter_max={chapter_max})"
     return None
+
+
+def check_descriptions_md_parseability(desc_md: Path, *, allowed_root: Path | None = None) -> str | None:
+    """既存 ``descriptions.md`` が共通 parser で読めない場合に診断文字列を返す."""
+    if allowed_root is not None:
+        root = allowed_root.resolve(strict=False)
+        resolved = desc_md.resolve(strict=False)
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            return (
+                f"{desc_md}: descriptions.md が channel_dir 外を指しています。"
+                "リンク先を channel_dir 配下に直してください"
+            )
+    if desc_md.is_symlink() and not desc_md.exists():
+        return f"{desc_md}: descriptions.md の symlink が壊れています。リンク先を修正してください"
+    if not desc_md.exists():
+        return None
+    if not desc_md.is_file():
+        return f"{desc_md}: descriptions.md が通常ファイルではありません。/video-description で再生成してください"
+    try:
+        text = desc_md.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        return f"{desc_md}: descriptions.md を読み取れません: {exc}"
+    missing = missing_descriptions_md_headings(text)
+    if not missing:
+        return None
+    return f"{desc_md}: descriptions.md parse failed\n{build_descriptions_md_parse_diagnostics(text, missing)}"
+
+
+def check_suno_genre_line_char_limit(suno_cfg: Mapping[str, object]) -> str | None:
+    """``config/skills/suno.yaml::genre_line`` が Suno Style 欄制限内か検証する."""
+    genre_line = str(suno_cfg.get("genre_line") or "").strip()
+    if not genre_line:
+        return None
+    limit = SUNO_DEFAULT_STYLE_CHAR_LIMIT
+    if len(genre_line) <= limit:
+        return None
+    return (
+        "config/skills/suno.yaml::genre_line が Suno Style 欄の文字数上限を超過: "
+        f"{len(genre_line)} / {limit}。5-Element Order に沿って要素を絞ってください"
+    )
+
+
+def check_thumbnail_skill_config(channel_dir: Path, thumbnail_cfg: Mapping[str, object]) -> list[str]:
+    """thumbnail skill-config の初期セットアップ漏れを検出する."""
+    image_generation = _as_mapping(thumbnail_cfg.get("image_generation"))
+    gemini = _as_mapping(image_generation.get("gemini"))
+    generation_mode = str(gemini.get("generation_mode") or "single_step").strip()
+
+    issues: list[str] = []
+    if generation_mode == "single_step":
+        single_step = _as_mapping(gemini.get("single_step"))
+        max_attempts = _positive_int(single_step.get("max_attempts"), default=1)
+        rotate = _bool(single_step.get("rotate"), default=True)
+        reference_images = _as_mapping(gemini.get("reference_images"))
+        resolved_refs = resolve_configured_benchmark_references(channel_dir, reference_images.get("default"))
+        has_reference_count_issue = False
+        missing_refs: list[str] = []
+        if resolved_refs.placeholders or (not resolved_refs.references and not resolved_refs.invalid_reasons):
+            issues.append(
+                "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+                "が未設定/空/TBD です。/channel-setup で benchmark サムネ参照を設定してください"
+            )
+        elif resolved_refs.references:
+            unique_refs = list(dict.fromkeys(resolved_refs.references))
+            if len(unique_refs) < max_attempts:
+                has_reference_count_issue = True
+                issues.append(
+                    "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+                    f"が必要枚数未満です (max_attempts={max_attempts}, unique_references={len(unique_refs)})"
+                )
+            missing_refs = [str(ref) for ref in unique_refs if not ref.exists()]
+            if missing_refs:
+                sample = ", ".join(missing_refs[:3])
+                suffix = f" ほか {len(missing_refs) - 3} 件" if len(missing_refs) > 3 else ""
+                issues.append(
+                    "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+                    f"に存在しない参照画像があります: {sample}{suffix}"
+                )
+        if resolved_refs.invalid_reasons:
+            sample = ", ".join(resolved_refs.invalid_reasons[:3])
+            suffix = (
+                f" ほか {len(resolved_refs.invalid_reasons) - 3} 件" if len(resolved_refs.invalid_reasons) > 3 else ""
+            )
+            issues.append(
+                "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+                f"の参照パスが不正です: {sample}{suffix}"
+            )
+        if resolved_refs.references and not (
+            missing_refs or resolved_refs.invalid_reasons or has_reference_count_issue
+        ):
+            benchmark_root = channel_dir / "data" / "thumbnail_compare" / "benchmark"
+            try:
+                plan_ttp_reference_assignments(
+                    resolved_refs.references,
+                    max_attempts,
+                    rotate,
+                    benchmark_root=benchmark_root,
+                )
+            except ConfigError as exc:
+                issues.append(
+                    "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+                    f"が single_step TTP 生成契約を満たしていません: {exc}"
+                )
+
+    composition_rules = _as_mapping(gemini.get("composition_rules"))
+    missing_composition = [
+        key for key in THUMBNAIL_COMPOSITION_REQUIRED_KEYS if _is_placeholder(composition_rules.get(key))
+    ]
+    if missing_composition:
+        issues.append(
+            "config/skills/thumbnail.yaml::image_generation.gemini.composition_rules "
+            "に未設定/TBD の主要項目があります: " + ", ".join(missing_composition)
+        )
+    return issues
 
 
 def check_chapter_variation_suffix(ts_lines: list[str]) -> str | None:
@@ -115,6 +246,55 @@ def check_title_template_compliance(
     return "; ".join(issues) if issues else None
 
 
+def check_title_duplicate_warnings(
+    title: str,
+    existing_titles: Collection[str] = (),
+    title_template_cfg: Mapping[str, object] | None = None,
+    *,
+    min_suffix_chars: int = 16,
+) -> list[str]:
+    """企画/タイトル決定段階で使う重複 warning を返す.
+
+    upload preflight の fail-loud 判定とは分離し、早い段階で「過去タイトルと似すぎる」
+    候補を人間が見直せるようにする。検出対象:
+
+    - タイトル全体の完全一致
+    - `separator` 以降（RHS / タイトル後半）の完全一致
+    - separator を持たないタイトル同士の長い末尾一致
+    """
+    normalized = _normalize_title_for_compare(title)
+    if not normalized:
+        return []
+
+    cfg: Mapping[str, object] = title_template_cfg or {}
+    separator = str(cfg.get("separator") or DEFAULT_TITLE_SEPARATOR)
+    rhs = _title_rhs(normalized, separator)
+
+    warnings: list[str] = []
+    seen: set[str] = set()
+    for existing in existing_titles:
+        existing_norm = _normalize_title_for_compare(str(existing))
+        if not existing_norm:
+            continue
+
+        msg: str | None = None
+        if normalized.casefold() == existing_norm.casefold():
+            msg = f"タイトル全体が既存タイトルと完全一致: {existing_norm!r}"
+        else:
+            existing_rhs = _title_rhs(existing_norm, separator)
+            if rhs and existing_rhs and rhs.casefold() == existing_rhs.casefold():
+                msg = f"タイトル後半が既存タイトルと一致: {rhs!r} (既存: {existing_norm!r})"
+            else:
+                suffix = _matching_suffix(normalized, existing_norm, min_chars=min_suffix_chars)
+                if suffix:
+                    msg = f"タイトル末尾が既存タイトルと一致: {suffix!r} (既存: {existing_norm!r})"
+
+        if msg and msg not in seen:
+            warnings.append(msg)
+            seen.add(msg)
+    return warnings
+
+
 def _first_pattern_hit(text: str, patterns: Sequence[str] | Collection[str]) -> str | None:
     for pattern in patterns:
         m = re.search(str(pattern), text)
@@ -127,6 +307,32 @@ def _has_duplicate_full_title(title: str, existing_titles: Collection[str]) -> b
     if not title:
         return False
     return any(title == str(other).strip() for other in existing_titles)
+
+
+def _normalize_title_for_compare(title: str) -> str:
+    return " ".join(title.strip().split())
+
+
+def _title_rhs(title: str, separator: str) -> str:
+    if not separator or separator not in title:
+        return ""
+    parts = title.split(separator, 1)
+    return parts[1].strip() if len(parts) == 2 else ""
+
+
+def _matching_suffix(a: str, b: str, *, min_chars: int) -> str:
+    a_fold = a.casefold()
+    b_fold = b.casefold()
+    max_len = min(len(a_fold), len(b_fold))
+    match_len = 0
+    for i in range(1, max_len + 1):
+        if a_fold[-i] != b_fold[-i]:
+            break
+        match_len = i
+    if match_len < min_chars:
+        return ""
+    suffix = a[-match_len:].strip()
+    return suffix if len(suffix) >= min_chars else ""
 
 
 def _contains_any_vocab(text: str, vocabulary: Collection[str]) -> bool:
@@ -159,6 +365,24 @@ def _ordered_intersection(order: Collection[str], values: set[str]) -> list[str]
     return [lang for lang in order if lang in values]
 
 
+def _as_mapping(value: object) -> Mapping[str, object]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _positive_int(value: object, *, default: int) -> int:
+    if isinstance(value, int) and value > 0:
+        return value
+    return default
+
+
+def _bool(value: object, *, default: bool) -> bool:
+    return value if isinstance(value, bool) else default
+
+
+def _is_placeholder(value: object) -> bool:
+    return is_placeholder_value(value)
+
+
 def extract_descriptions_md_tags(desc_md: Path) -> list[str] | None:
     """`descriptions.md` の「タグ（YouTube タグ欄）」セクションからタグリストを抽出.
 
@@ -167,11 +391,10 @@ def extract_descriptions_md_tags(desc_md: Path) -> list[str] | None:
     """
     if not desc_md.exists():
         return None
-    m = _DESC_TAGS_RE.search(desc_md.read_text(encoding="utf-8"))
-    if not m:
+    raw = extract_descriptions_md_section(desc_md.read_text(encoding="utf-8"), "タグ（YouTube タグ欄）")
+    if raw is None:
         return None
-    raw = m.group(1).strip()
-    tags = [t.strip() for t in raw.replace("\n", ",").split(",") if t.strip()]
+    tags = parse_youtube_tags(raw)
     return tags or None
 
 

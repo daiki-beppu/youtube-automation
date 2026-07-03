@@ -3,8 +3,23 @@
 ## 必須ファイル確認
 
 - [ ] マスター動画（`01-master/00-master.mp4` または `03-Individual-movie/*master*.mp4`）
-- [ ] サムネイル（`10-assets/thumbnail.jpg`）
+- [ ] サムネイル（候補順: `10-assets/thumbnail.jpg` → `10-assets/thumbnail.png`。`main.png/jpg` は textless 動画背景なので使わない）
 - [ ] 概要欄（`20-documentation/descriptions.md` — `/video-description` スキルで生成済み）
+
+## 初投稿プレイリスト確認
+
+`config/channel/playlists.json` が存在するチャンネルでは、初投稿前に未作成プレイリストを初期化する。
+
+```bash
+bunx tayk playlist-status
+bunx tayk playlist-manager --init --dry-run
+bunx tayk playlist-manager --init
+```
+
+- [ ] `bunx tayk playlist-status` で `(未作成)` の有無を確認した
+- [ ] `(未作成)` がある場合、`bunx tayk playlist-manager --init --dry-run` の内容を確認した
+- [ ] ユーザー確認後に `bunx tayk playlist-manager --init` を実行し、`playlist_id` が `config/channel/playlists.json` に書き戻された
+- [ ] 初回動画の追加は `/video-upload` 内部の自動 assign に任せる。手動 `--assign` は実行しない
 
 ## コンテンツ品質確認
 
@@ -15,9 +30,17 @@
 
 ## アップロード実行
 
+collection 型では、アップロード実行前にユーザーに公開方法を提示するための公開タイミングを必ず確定する。single_release 型では `bunx tayk upload-collection --plan` を使わず、`bunx tayk upload-auto` の公開時刻決定に従う。
+
 ```bash
-# ドライラン（スケジュール確認）
+# スケジュール計算（アップロード API は叩かない。予約日時計算で YouTube read API を呼ぶ場合がある）
 bunx tayk upload-collection --plan [-c NAME]
+```
+
+- [ ] plan 結果が `📅 公開設定: 即時公開 (public)` の場合だけ「即時公開」と表現する
+- [ ] plan 結果が `📅 公開予定: <日時>` の場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の公開予定時刻を明示した
+
+```bash
 
 # Complete Collection アップロード（デフォルト動作）
 bunx tayk upload-collection [-c NAME]

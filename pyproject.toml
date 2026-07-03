@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "youtube-channels-automation"
-version = "5.5.7"
+version = "5.5.15"
 description = "YouTube channel automation toolkit - analytics, AI content generation, and auto-upload"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
@@ -36,64 +36,68 @@ veo = []  # google-genai, Pillow moved to main dependencies
 
 [project.scripts]
 # CLI script entry points (yt-* prefix)
-yt-analytics = "youtube_automation.scripts.analytics_system:main"
-yt-apply-rain-layers = "youtube_automation.scripts.apply_rain_layers:main"
-yt-benchmark-collect = "youtube_automation.scripts.benchmark_collector:main"
-yt-benchmark-comments = "youtube_automation.scripts.fetch_benchmark_comments:main"
-yt-bulk-update-desc = "youtube_automation.scripts.bulk_update_descriptions_from_md:main"
-yt-bulk-update-synthetic-media = "youtube_automation.scripts.bulk_update_synthetic_media:main"
-yt-channel-init = "youtube_automation.cli.channel_init:main"
-yt-channel-seed = "youtube_automation.scripts.channel_seed:main"
-yt-channel-settings = "youtube_automation.scripts.channel_settings_cli:main"
-yt-channel-status = "youtube_automation.scripts.get_channel_status:main"
-yt-channel-trend = "youtube_automation.scripts.channel_trend:main"
-yt-collection-serve = "youtube_automation.scripts.collection_serve:main"
-yt-comments-reply = "youtube_automation.scripts.comment_reply:main"
-yt-config-migrate = "youtube_automation.cli.config_migrate:main"
-yt-cost-report = "youtube_automation.cli.cost_report:main"
-yt-discover-competitors = "youtube_automation.scripts.discover_competitors:main"
-yt-distrokid-migrate = "youtube_automation.cli.distrokid_migrate:main"
-yt-distrokid-prepare = "youtube_automation.scripts.distrokid_prepare:main"
-yt-doctor = "youtube_automation.cli.doctor:main"
-yt-fetch-stream-key = "youtube_automation.scripts.fetch_stream_key:main"
-yt-finalize-master = "youtube_automation.scripts.finalize_master:main"
-yt-fix-timestamps = "youtube_automation.scripts.fix_per_theme_timestamps:main"
-yt-generate-image = "youtube_automation.scripts.generate_image:main"
-yt-generate-loop-video = "youtube_automation.scripts.generate_loop_video:main"
-yt-generate-lyria-master = "youtube_automation.scripts.generate_lyria_master:main"
-yt-generate-master = "youtube_automation.scripts.generate_master:main"
-yt-generate-suno = "youtube_automation.scripts.generate_suno_prompts:main"
-yt-init-collection = "youtube_automation.scripts.init_collection:main"
-yt-launch-curve = "youtube_automation.scripts.launch_curve:main"
-yt-metadata-audit = "youtube_automation.scripts.metadata_audit:main"
-yt-pinned-comment = "youtube_automation.scripts.pinned_comment:main"
-yt-playlist-manager = "youtube_automation.scripts.playlist_manager:main"
-yt-playlist-status = "youtube_automation.scripts.playlist_status:main"
-yt-populate-scene-phrases = "youtube_automation.scripts.populate_scene_phrases:main"
-yt-stock-archive = "youtube_automation.scripts.stock_archive:main"
-yt-stock-list = "youtube_automation.scripts.stock_list:main"
-yt-stock-preview = "youtube_automation.scripts.stock_preview:main"
-yt-stock-prune = "youtube_automation.scripts.stock_prune:main"
-yt-stream-archive-check = "youtube_automation.scripts.streaming_archive_check:main"
-yt-stream-bandwidth = "youtube_automation.cli.stream_bandwidth:main"
-yt-theme-compare = "youtube_automation.scripts.theme_compare:main"
-yt-thumbnail-check = "youtube_automation.scripts.thumbnail_check:main"
-yt-thumbnail-compare = "youtube_automation.scripts.compare_thumbnails:main"
-yt-thumbnail-correlate = "youtube_automation.scripts.thumbnail_correlate:main"
-yt-video-analyze = "youtube_automation.scripts.video_analyze:main"
-yt-vote-log = "youtube_automation.scripts.vote_log:main"
+yt-analytics = "youtube_automation.cli_entrypoints:yt_analytics"
+yt-apply-rain-layers = "youtube_automation.cli_entrypoints:yt_apply_rain_layers"
+yt-benchmark-collect = "youtube_automation.cli_entrypoints:yt_benchmark_collect"
+yt-benchmark-comments = "youtube_automation.cli_entrypoints:yt_benchmark_comments"
+yt-bulk-update-desc = "youtube_automation.cli_entrypoints:yt_bulk_update_desc"
+yt-bulk-update-synthetic-media = "youtube_automation.cli_entrypoints:yt_bulk_update_synthetic_media"
+yt-channel-init = "youtube_automation.cli_entrypoints:yt_channel_init"
+yt-channel-seed = "youtube_automation.cli_entrypoints:yt_channel_seed"
+yt-channel-settings = "youtube_automation.cli_entrypoints:yt_channel_settings"
+yt-channel-status = "youtube_automation.cli_entrypoints:yt_channel_status"
+yt-channel-trend = "youtube_automation.cli_entrypoints:yt_channel_trend"
+yt-collection-serve = "youtube_automation.cli_entrypoints:yt_collection_serve"
+yt-comments-reply = "youtube_automation.cli_entrypoints:yt_comments_reply"
+yt-config-migrate = "youtube_automation.cli_entrypoints:yt_config_migrate"
+yt-cost-report = "youtube_automation.cli_entrypoints:yt_cost_report"
+yt-discover-competitors = "youtube_automation.cli_entrypoints:yt_discover_competitors"
+yt-distrokid-migrate = "youtube_automation.cli_entrypoints:yt_distrokid_migrate"
+yt-distrokid-prepare = "youtube_automation.cli_entrypoints:yt_distrokid_prepare"
+yt-doctor = "youtube_automation.cli_entrypoints:yt_doctor"
+yt-fetch-stream-key = "youtube_automation.cli_entrypoints:yt_fetch_stream_key"
+yt-finalize-master = "youtube_automation.cli_entrypoints:yt_finalize_master"
+yt-fix-timestamps = "youtube_automation.cli_entrypoints:yt_fix_timestamps"
+yt-generate-image = "youtube_automation.cli_entrypoints:yt_generate_image"
+yt-generate-loop-video = "youtube_automation.cli_entrypoints:yt_generate_loop_video"
+yt-generate-lyria-master = "youtube_automation.cli_entrypoints:yt_generate_lyria_master"
+yt-generate-master = "youtube_automation.cli_entrypoints:yt_generate_master"
+yt-generate-suno = "youtube_automation.cli_entrypoints:yt_generate_suno"
+yt-init-collection = "youtube_automation.cli_entrypoints:yt_init_collection"
+yt-launch-curve = "youtube_automation.cli_entrypoints:yt_launch_curve"
+yt-metadata-audit = "youtube_automation.cli_entrypoints:yt_metadata_audit"
+yt-pinned-comment = "youtube_automation.cli_entrypoints:yt_pinned_comment"
+yt-playlist-manager = "youtube_automation.cli_entrypoints:yt_playlist_manager"
+yt-playlist-status = "youtube_automation.cli_entrypoints:yt_playlist_status"
+yt-populate-scene-phrases = "youtube_automation.cli_entrypoints:yt_populate_scene_phrases"
+yt-stock-archive = "youtube_automation.cli_entrypoints:yt_stock_archive"
+yt-stock-list = "youtube_automation.cli_entrypoints:yt_stock_list"
+yt-stock-preview = "youtube_automation.cli_entrypoints:yt_stock_preview"
+yt-stock-prune = "youtube_automation.cli_entrypoints:yt_stock_prune"
+yt-suno-audio-cleanup = "youtube_automation.cli_entrypoints:yt_suno_audio_cleanup"
+yt-suno-select-tracks = "youtube_automation.cli_entrypoints:yt_suno_select_tracks"
+yt-stream-archive-check = "youtube_automation.cli_entrypoints:yt_stream_archive_check"
+yt-stream-bandwidth = "youtube_automation.cli_entrypoints:yt_stream_bandwidth"
+yt-theme-compare = "youtube_automation.cli_entrypoints:yt_theme_compare"
+yt-thumbnail-check = "youtube_automation.cli_entrypoints:yt_thumbnail_check"
+yt-thumbnail-compare = "youtube_automation.cli_entrypoints:yt_thumbnail_compare"
+yt-thumbnail-correlate = "youtube_automation.cli_entrypoints:yt_thumbnail_correlate"
+yt-title-duplicate-check = "youtube_automation.cli_entrypoints:yt_title_duplicate_check"
+yt-video-analyze = "youtube_automation.cli_entrypoints:yt_video_analyze"
+yt-vote-log = "youtube_automation.cli_entrypoints:yt_vote_log"
 
 # Agent entry points
-yt-upload-auto = "youtube_automation.agents.youtube_auto_uploader:main"
-yt-upload-collection = "youtube_automation.agents.collection_uploader:main"
-yt-upload-shorts = "youtube_automation.agents.short_uploader:main"
+yt-upload-auto = "youtube_automation.cli_entrypoints:yt_upload_auto"
+yt-upload-collection = "youtube_automation.cli_entrypoints:yt_upload_collection"
+yt-upload-shorts = "youtube_automation.cli_entrypoints:yt_upload_shorts"
 
 # Shorts script entry points
-yt-generate-shorts-loop = "youtube_automation.scripts.generate_short_loop:main"
-yt-shorts-bulk-update-loc = "youtube_automation.scripts.bulk_update_short_localizations:main"
+yt-generate-shorts-loop = "youtube_automation.cli_entrypoints:yt_generate_shorts_loop"
+yt-shorts-bulk-update-loc = "youtube_automation.cli_entrypoints:yt_shorts_bulk_update_loc"
 
 # Skill management
-yt-skills = "youtube_automation.cli.skills_sync:main"
+yt-skills = "youtube_automation.cli_entrypoints:yt_skills"
+yt-setup-dirs = "youtube_automation.cli_entrypoints:yt_setup_dirs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/youtube_automation"]
@@ -110,6 +114,7 @@ packages = ["src/youtube_automation"]
 # 配布された SKILL.md / CLAUDE.md の相対 link が install 版と同 version の docs/ を指せる
 "docs/workflow-cheatsheet.md" = "youtube_automation/_docs/workflow-cheatsheet.md"
 "docs/features.md" = "youtube_automation/_docs/features.md"
+"auth/client_secrets.template.json" = "youtube_automation/_auth/client_secrets.template.json"
 
 # templates/*.md はパッケージディレクトリ内なので packages 設定で同梱される
 
@@ -122,7 +127,7 @@ include = [
     "docs/workflow-cheatsheet.md",
     "docs/features.md",
     "auth/SETUP.md",
-    "auth/client_secrets_template.json",
+    "auth/client_secrets.template.json",
     "README.md",
     "LICENSE",
     "pyproject.toml",

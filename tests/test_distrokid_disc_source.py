@@ -80,6 +80,7 @@ _DISC1_TRACKS = [
 def _profile() -> DistrokidProfile:
     """profile.language は `ja`（metadata.md override 前の元値）。"""
     return DistrokidProfile(
+        artist="ABYSS MI",
         language="ja",
         main_genre="Electronic",
         sub_genre="House",
@@ -242,6 +243,18 @@ def test_disc_source_cover_falls_back_to_thumbnail_when_absent(tmp_path):
     cover = build_release_payload(collection, distrokid, distrokid_source=_DISC_SOURCE)["release"]["cover"]
 
     assert cover["filename"] == "thumbnail.png"
+
+
+def test_disc_source_cover_does_not_fallback_to_textless_main(tmp_path):
+    """#1310: cover_art_3000.jpg と thumbnail.* が無い場合、main.png は cover に使わない。"""
+    collection = _make_collection(tmp_path, with_thumbnail=False)
+    (collection / "10-assets" / "main.png").write_bytes(_COVER_BYTES)
+    _make_disc_source(collection, with_cover=False)
+    distrokid = Distrokid(enabled=True, profile=_profile())
+
+    cover = build_release_payload(collection, distrokid, distrokid_source=_DISC_SOURCE)["release"]["cover"]
+
+    assert cover is None
 
 
 def test_disc_source_language_uses_profile_ignoring_metadata(tmp_path):
