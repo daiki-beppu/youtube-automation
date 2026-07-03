@@ -1,7 +1,6 @@
 import { existsSync } from "node:fs";
 import { copyFile, mkdir } from "node:fs/promises";
 import { extname, isAbsolute, join, resolve } from "node:path";
-import process from "node:process";
 
 import { toServiceError } from "../errors.ts";
 import type { ServiceError } from "../errors.ts";
@@ -15,26 +14,26 @@ import {
   withConfigOverrides,
 } from "./audio.ts";
 import { readMasterupAudioConfig } from "./config.ts";
-import {
-  GENERATE_MASTER_REGISTRY_KEY,
-  MASTER_DIRNAME,
-  MASTER_FILENAME,
-} from "./constants.ts";
+import { MASTER_DIRNAME, MASTER_FILENAME } from "./constants.ts";
 import { buildFfmpegArgs, runFfmpeg } from "./ffmpeg.ts";
 import { GenerateMasterOutputSchema } from "./schema.ts";
 import type { GenerateMasterInput, GenerateMasterOutput } from "./schema.ts";
 
-const resolveCollectionPath = (input: GenerateMasterInput): string => {
+interface GenerateMasterDeps {
+  channelDir: string;
+}
+
+const resolveCollectionPath = (
+  input: GenerateMasterInput,
+  deps: Partial<GenerateMasterDeps> | undefined
+): string => {
   if (input.collection === undefined) {
     return resolveCollectionDir(null);
   }
   if (isAbsolute(input.collection)) {
     return resolve(input.collection);
   }
-  if (input.channelDir !== undefined) {
-    return resolve(input.channelDir, input.collection);
-  }
-  const channelDir = process.env.CHANNEL_DIR;
+  const channelDir = input.channelDir ?? deps?.channelDir;
   if (channelDir === undefined || channelDir.length === 0) {
     throw new Error(
       "validation: relative collection requires channel_dir or CHANNEL_DIR"
@@ -44,35 +43,23 @@ const resolveCollectionPath = (input: GenerateMasterInput): string => {
 };
 
 const resolveConfigChannelDir = (
-  input: GenerateMasterInput
+  input: GenerateMasterInput,
+  deps: Partial<GenerateMasterDeps> | undefined
 ): string | undefined => {
-  if (input.channelDir !== undefined) {
-    return input.channelDir;
-  }
-  if (input.collection === undefined) {
-    const channelDir = process.env.CHANNEL_DIR;
-    return channelDir === undefined || channelDir.length === 0
-      ? undefined
-      : channelDir;
-  }
-  if (isAbsolute(input.collection)) {
-    return undefined;
-  }
-  const channelDir = process.env.CHANNEL_DIR;
+  const channelDir = input.channelDir ?? deps?.channelDir;
   return channelDir === undefined || channelDir.length === 0
     ? undefined
     : channelDir;
 };
 
-export { GENERATE_MASTER_REGISTRY_KEY };
-
 export const generateMasterService = async (
-  input: GenerateMasterInput
+  input: GenerateMasterInput,
+  deps?: Partial<GenerateMasterDeps>
 ): Promise<Result<GenerateMasterOutput, ServiceError>> => {
   try {
-    const collectionDir = resolveCollectionPath(input);
+    const collectionDir = resolveCollectionPath(input, deps);
     const config = await readMasterupAudioConfig(
-      resolveConfigChannelDir(input)
+      resolveConfigChannelDir(input, deps)
     );
     const effectiveInput = withConfigOverrides(input, config);
     const paths = new CollectionPaths(collectionDir);

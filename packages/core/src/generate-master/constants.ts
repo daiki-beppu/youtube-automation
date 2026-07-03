@@ -1,5 +1,3 @@
-export const GENERATE_MASTER_REGISTRY_KEY = "masterup.generate-master";
-
 export const MASTERUP_CONFIG_DIR = "config/skills";
 export const MASTERUP_JSON_FILENAME = "masterup.json";
 export const MASTERUP_YAML_FILENAME = "masterup.yaml";

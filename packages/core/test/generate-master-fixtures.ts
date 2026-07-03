@@ -68,7 +68,50 @@ process.exit(${exitCode});
   return logPath;
 };
 
+export const installFakeFfprobe = (
+  durationsByName: Record<string, number>,
+  exitCode = 0
+): string => {
+  const binDir = makeTempRoot("generate-master-probe-bin-");
+  const logPath = join(binDir, "ffprobe.log");
+  const script = `#!/usr/bin/env bun
+import { appendFileSync } from "node:fs";
+import { basename } from "node:path";
+
+const args = Bun.argv.slice(2);
+appendFileSync(process.env.YT_TEST_FFPROBE_LOG!, JSON.stringify(args) + "\\n");
+const file = args.at(-1);
+const durations = JSON.parse(process.env.YT_TEST_FFPROBE_DURATIONS ?? "{}");
+if (${exitCode} !== 0 || file === undefined) {
+  process.exit(${exitCode === 0 ? 1 : exitCode});
+}
+const duration = durations[basename(file)];
+if (duration === undefined) {
+  process.exit(1);
+}
+process.stdout.write(String(duration));
+`;
+  const executable = join(binDir, "ffprobe");
+  writeText(executable, script);
+  chmodSync(executable, 0o755);
+  process.env.PATH = `${binDir}${delimiter}${process.env.PATH ?? ""}`;
+  process.env.YT_TEST_FFPROBE_LOG = logPath;
+  process.env.YT_TEST_FFPROBE_DURATIONS = JSON.stringify(durationsByName);
+  return logPath;
+};
+
 export const readFfmpegCalls = (logPath: string): string[][] => {
+  if (!existsSync(logPath)) {
+    return [];
+  }
+  return readFileSync(logPath, "utf-8")
+    .trim()
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as string[]);
+};
+
+export const readFfprobeCalls = (logPath: string): string[][] => {
   if (!existsSync(logPath)) {
     return [];
   }
@@ -97,9 +140,13 @@ export const saveGenerateMasterEnv = (): void => {
     CHANNEL_DIR: process.env.CHANNEL_DIR,
     PATH: process.env.PATH,
     YT_TEST_FFMPEG_LOG: process.env.YT_TEST_FFMPEG_LOG,
+    YT_TEST_FFPROBE_DURATIONS: process.env.YT_TEST_FFPROBE_DURATIONS,
+    YT_TEST_FFPROBE_LOG: process.env.YT_TEST_FFPROBE_LOG,
   };
   Reflect.deleteProperty(process.env, "CHANNEL_DIR");
   Reflect.deleteProperty(process.env, "YT_TEST_FFMPEG_LOG");
+  Reflect.deleteProperty(process.env, "YT_TEST_FFPROBE_DURATIONS");
+  Reflect.deleteProperty(process.env, "YT_TEST_FFPROBE_LOG");
 };
 
 export const restoreGenerateMasterFixtures = (): void => {

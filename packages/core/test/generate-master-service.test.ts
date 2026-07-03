@@ -10,11 +10,14 @@ import {
 import {
   inputFilesInCommand,
   installFakeFfmpeg,
+  installFakeFfprobe,
   makeTempRoot,
   readFfmpegCalls,
+  readFfprobeCalls,
   restoreGenerateMasterFixtures,
   saveGenerateMasterEnv,
   setupCollection,
+  writeText,
 } from "./generate-master-fixtures.ts";
 
 const runOk = async (rawInput: unknown) => {
@@ -160,5 +163,97 @@ describe("generateMasterService — pin, shuffle, and loop ordering", () => {
     expect(output.segmentCount).toBe(8);
     expect(output.messages).toContain("[Shuffle] seed=42");
     expect(output.messages.some((line) => line.includes("[Pin]"))).toBe(true);
+  });
+});
+
+describe("generateMasterService — target duration probing", () => {
+  test("calculates loop count from ffprobe durations for target_duration_min", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    const ffmpegLog = installFakeFfmpeg();
+    const ffprobeLog = installFakeFfprobe({
+      "01-a.mp3": 30,
+      "02-b.mp3": 30,
+    });
+
+    const output = await runOk({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+      target_duration_min: 3,
+    });
+
+    const [args] = readFfmpegCalls(ffmpegLog);
+    expect(output.loopCount).toBe(4);
+    expect(output.segmentCount).toBe(8);
+    expect(inputFilesInCommand(args ?? [])).toHaveLength(8);
+    expect(readFfprobeCalls(ffprobeLog)).toHaveLength(2);
+  });
+
+  test("uses config target_duration_min when loop and no_loop are absent", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify({ audio: { target_duration_min: 3 } })
+    );
+    const ffmpegLog = installFakeFfmpeg();
+    const ffprobeLog = installFakeFfprobe({
+      "01-a.mp3": 30,
+      "02-b.mp3": 30,
+    });
+
+    const output = await runOk({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
+
+    expect(output.loopCount).toBe(4);
+    expect(readFfmpegCalls(ffmpegLog)).toHaveLength(1);
+    expect(readFfprobeCalls(ffprobeLog)).toHaveLength(2);
+  });
+
+  test("does not probe config target_duration_min when explicit loop wins", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify({ audio: { target_duration_min: 3 } })
+    );
+    installFakeFfmpeg();
+    const ffprobeLog = installFakeFfprobe({
+      "01-a.mp3": 30,
+      "02-b.mp3": 30,
+    });
+
+    const output = await runOk({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+      loop: 2,
+    });
+
+    expect(output.loopCount).toBe(2);
+    expect(readFfprobeCalls(ffprobeLog)).toEqual([]);
+  });
+
+  test("returns validation error and does not run ffmpeg when ffprobe fails", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    const ffmpegLog = installFakeFfmpeg();
+    installFakeFfprobe({}, 42);
+
+    const result = await generateMasterService(
+      GenerateMasterInputSchema.parse({
+        channel_dir: channelRoot,
+        collection: "collections/demo",
+        target_duration_min: 3,
+      })
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("validation");
+      expect(result.error.message).toContain("failed to probe");
+    }
+    expect(readFfmpegCalls(ffmpegLog)).toEqual([]);
   });
 });

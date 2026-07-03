@@ -180,11 +180,17 @@ export const readMasterupAudioConfig = async (
     return {};
   }
   const parsed = parseMasterupConfig(path, await readFile(path, "utf-8"));
-  if (!isRecord(parsed) || !isRecord(parsed[AUDIO_SECTION_KEY])) {
-    throw new Error(`validation: ${path} must contain an audio object`);
+  if (!isRecord(parsed)) {
+    throw new Error(`validation: ${path} must contain an object`);
+  }
+  const audioSection = Object.hasOwn(parsed, AUDIO_SECTION_KEY)
+    ? parsed[AUDIO_SECTION_KEY]
+    : {};
+  if (!isRecord(audioSection)) {
+    throw new Error(`validation: ${path} audio must be an object`);
   }
   const result = MasterupAudioConfigSchema.safeParse(
-    snakeToCamel(parsed[AUDIO_SECTION_KEY])
+    snakeToCamel(audioSection)
   );
   if (!result.success) {
     throw new Error(`config: invalid masterup audio config at ${path}`);

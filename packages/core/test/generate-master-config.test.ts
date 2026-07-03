@@ -118,6 +118,73 @@ describe("generateMasterService — skill config override", () => {
     expect(output.crossfadeDuration).toBe(2);
   });
 
+  test("treats missing audio section as an empty compatibility override", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify({ post_processing: { enabled: true } })
+    );
+    const logPath = installFakeFfmpeg();
+
+    const output = await runOk({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
+
+    const [args] = readFfmpegCalls(logPath);
+    expect(args).toContain("192k");
+    expect(output.crossfadeDuration).toBe(1);
+  });
+
+  test("returns config error before ffmpeg when audio section is not an object", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify({ audio: null })
+    );
+    const logPath = installFakeFfmpeg();
+
+    const result = await generateMasterService(
+      GenerateMasterInputSchema.parse({
+        channel_dir: channelRoot,
+        collection: "collections/demo",
+      })
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("validation");
+      expect(result.error.message).toContain("audio must be an object");
+    }
+    expect(readFfmpegCalls(logPath)).toEqual([]);
+  });
+
+  test("returns config error before ffmpeg when root config is not an object", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify([])
+    );
+    const logPath = installFakeFfmpeg();
+
+    const result = await generateMasterService(
+      GenerateMasterInputSchema.parse({
+        channel_dir: channelRoot,
+        collection: "collections/demo",
+      })
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("validation");
+      expect(result.error.message).toContain("must contain an object");
+    }
+    expect(readFfmpegCalls(logPath)).toEqual([]);
+  });
+
   test("keeps explicit CLI default values above config overrides", async () => {
     // Given config overrides differ from the schema defaults
     const channelRoot = makeTempRoot("generate-master-channel-");

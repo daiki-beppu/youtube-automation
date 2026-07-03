@@ -110,4 +110,17 @@ describe("emitResult — CLI terminal contract", () => {
     expect(stderr).toEqual([]);
     expect(stdout).toEqual(["Synced 3 files to /tmp/result\n"]);
   });
+
+  test("does not write a blank line for empty successful text output", () => {
+    const { emitResult, exitCodes, stderr, stdout } = makeEmitHarness();
+
+    emitResult(ok({ quiet: true }), {
+      json: false,
+      renderText: () => "",
+    });
+
+    expect(exitCodes).toEqual([]);
+    expect(stderr).toEqual([]);
+    expect(stdout).toEqual([]);
+  });
 });

@@ -78,7 +78,7 @@ const defineRegistryEntry = <
 
 export const REGISTRY = {
   "masterup.generate-master": defineRegistryEntry({
-    deps: [],
+    deps: ["channelDir"],
     description:
       "Suno ダウンロード済み音声をクロスフェード結合して master.mp3 を生成する",
     inputSchema: GenerateMasterInputSchema,

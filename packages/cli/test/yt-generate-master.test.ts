@@ -70,6 +70,47 @@ if (output !== undefined) {
   };
 };
 
+const installFakeFfprobe = (
+  durationsByName: Record<string, number>,
+  exitCode = 0
+): {
+  env: Record<string, string>;
+  logPath: string;
+} => {
+  const binDir = makeTempRoot("yt-generate-master-probe-bin-");
+  const logPath = join(binDir, "ffprobe.log");
+  const executable = join(binDir, "ffprobe");
+  writeText(
+    executable,
+    `#!/usr/bin/env bun
+import { appendFileSync } from "node:fs";
+import { basename } from "node:path";
+
+const args = Bun.argv.slice(2);
+appendFileSync(process.env.YT_TEST_FFPROBE_LOG!, JSON.stringify(args) + "\\n");
+const file = args.at(-1);
+const durations = JSON.parse(process.env.YT_TEST_FFPROBE_DURATIONS ?? "{}");
+if (${exitCode} !== 0 || file === undefined) {
+  process.exit(${exitCode === 0 ? 1 : exitCode});
+}
+const duration = durations[basename(file)];
+if (duration === undefined) {
+  process.exit(1);
+}
+process.stdout.write(String(duration));
+`
+  );
+  chmodSync(executable, 0o755);
+  return {
+    env: {
+      PATH: `${binDir}${delimiter}${process.env.PATH ?? ""}`,
+      YT_TEST_FFPROBE_DURATIONS: JSON.stringify(durationsByName),
+      YT_TEST_FFPROBE_LOG: logPath,
+    },
+    logPath,
+  };
+};
+
 const runTayk = (
   env: Record<string, string>,
   ...argv: string[]
@@ -95,6 +136,13 @@ const readFfmpegCall = (logPath: string): string[] => {
     throw new Error("expected fake ffmpeg to be called");
   }
   return JSON.parse(line) as string[];
+};
+
+const readFfprobeCalls = (logPath: string): string[][] => {
+  const text = readFileSync(logPath, "utf-8").trim();
+  return text.length === 0
+    ? []
+    : text.split("\n").map((line) => JSON.parse(line) as string[]);
 };
 
 const inputFilesInCommand = (args: string[]): string[] => {
@@ -180,6 +228,64 @@ describe("tayk dispatcher — generate-master", () => {
         basename(path)
       )
     ).toEqual(["03-c.mp3", "01-a.mp3", "02-b.mp3"]);
+  });
+
+  test("runs target-duration through ffprobe and prints JSON output", () => {
+    const channelRoot = makeTempRoot("yt-generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    const fakeFfmpeg = installFakeFfmpeg();
+    const fakeFfprobe = installFakeFfprobe({
+      "01-a.mp3": 30,
+      "02-b.mp3": 30,
+    });
+
+    const proc = runTayk(
+      {
+        ...fakeFfmpeg.env,
+        ...fakeFfprobe.env,
+        PATH: [
+          dirname(fakeFfprobe.logPath),
+          dirname(fakeFfmpeg.logPath),
+          process.env.PATH ?? "",
+        ].join(delimiter),
+      },
+      "generate-master",
+      "--json",
+      "--channel-dir",
+      channelRoot,
+      "--target-duration",
+      "3",
+      "collections/demo"
+    );
+
+    expect(proc.exitCode).toBe(0);
+    expect(proc.stderr?.toString()).toBe("");
+    const parsed = JSON.parse(proc.stdout?.toString() ?? "") as {
+      loopCount: number;
+      segmentCount: number;
+    };
+    expect(parsed.loopCount).toBe(4);
+    expect(parsed.segmentCount).toBe(8);
+    expect(readFfprobeCalls(fakeFfprobe.logPath)).toHaveLength(2);
+  });
+
+  test("quiet suppresses the human summary output", () => {
+    const channelRoot = makeTempRoot("yt-generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    const fake = installFakeFfmpeg();
+
+    const proc = runTayk(
+      fake.env,
+      "generate-master",
+      "--quiet",
+      "--channel-dir",
+      channelRoot,
+      "collections/demo"
+    );
+
+    expect(proc.exitCode).toBe(0);
+    expect(proc.stderr?.toString()).toBe("");
+    expect(proc.stdout?.toString()).toBe("");
   });
 
   test("accepts equals value flags and negative numeric flag values", () => {
@@ -289,6 +395,29 @@ describe("tayk dispatcher — generate-master", () => {
     expect(proc.stderr?.toString()).toContain("[validation]");
     expect(proc.stderr?.toString()).toContain("unknown option");
     expect(proc.stderr?.toString()).not.toContain("ZodError");
+  });
+
+  test("rejects multiple collection positionals before service execution", () => {
+    const proc = runTayk(
+      {},
+      "generate-master",
+      "collections/one",
+      "collections/two"
+    );
+
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stdout?.toString()).toBe("");
+    expect(proc.stderr?.toString()).toContain("[validation]");
+    expect(proc.stderr?.toString()).toContain("at most one collection");
+  });
+
+  test("rejects pin-first with no following values before service execution", () => {
+    const proc = runTayk({}, "generate-master", "--pin-first", "--shuffle");
+
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stdout?.toString()).toBe("");
+    expect(proc.stderr?.toString()).toContain("[validation]");
+    expect(proc.stderr?.toString()).toContain("--pin-first requires a value");
   });
 
   test("uses cwd collection with multiple pin-first files when collection positional is omitted", () => {
