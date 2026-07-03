@@ -39,8 +39,8 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 ### collection 型
 - 下記フローのとおり Complete Collection を1本アップロード
 - `collection_uploader.py` を使用
-- 多言語ローカライゼーションは `config/localizations.json` の `supported_languages` + `default_language` が対象（scene_phrases / 概要欄多言語版 / YouTube localization メタデータ）
-- `load_config().localizations.supported_languages` は `config/localizations.json` の `supported_languages` が Canonical ソース（v2.0.0 以降は単一ソース化）
+- 多言語ローカライゼーションは `config/localizations.json` の `supported_languages` が Canonical ソース（v2.0.0 以降は単一ソース化）
+- `supported_languages` が 2 言語以上の場合のみ `scene_phrases` / 概要欄多言語版 / YouTube localization メタデータを生成・検証する。単一言語チャンネルでは `scene_phrases` は不要
 
 ### single_release + languages: ["jp","en"]（COT）
 - **同日2本アップロード**: JP + EN を同日投稿（API クォータ: 2 × 1,600 = 3,200 ユニット）

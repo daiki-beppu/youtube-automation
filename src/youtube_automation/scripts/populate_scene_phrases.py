@@ -37,6 +37,13 @@ SOURCE_LANG = "en"
 
 
 def _resolve_collection_path(name: str) -> Path:
+    path_name = Path(name)
+    if path_name.is_absolute() or name in {"", ".", ".."} or "/" in name or "\\" in name:
+        raise ConfigError(
+            f"コレクション名が不正です: {name!r}. "
+            "collections/planning または collections/live 直下のディレクトリ名だけを指定してください"
+        )
+
     root = channel_dir() / "collections"
     for sub in ("planning", "live"):
         candidate = root / sub / name

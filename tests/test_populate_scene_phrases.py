@@ -11,7 +11,7 @@ import pytest
 from youtube_automation.agents._preflight import PreflightMixin
 from youtube_automation.scripts import populate_scene_phrases
 from youtube_automation.utils.config import load_config, reset
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
 
 
@@ -213,6 +213,18 @@ class TestMainCLI:
         assert rc == 0
         out = capsys.readouterr().out
         assert "1 言語以下" in out
+
+    @pytest.mark.parametrize("bad_name", ["/tmp/outside", "../outside", "planning/20260322-tc-city-collection"])
+    def test_rejects_collection_path_escape(self, tmp_path, monkeypatch, bad_name):
+        ch = _setup_channel(
+            tmp_path,
+            supported_languages=["en"],
+            workflow_state={"theme": "city"},
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        with pytest.raises(ConfigError, match="コレクション名が不正"):
+            populate_scene_phrases._resolve_collection_path(bad_name)
 
     def test_single_language_populate_to_upload_metadata_path_passes(self, tmp_path, monkeypatch, capsys):
         """単一言語では populate no-op 後の upload 側経路も scene_phrases 無しで通る (#1470)."""
