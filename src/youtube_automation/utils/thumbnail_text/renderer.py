@@ -10,6 +10,9 @@ from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.thumbnail_text.config import _font_fallback_guidance
 from youtube_automation.utils.thumbnail_text.models import OverlaySpec, TextStyle
 
+_FINAL_THUMBNAIL_NAMES = frozenset({"thumbnail.jpg", "thumbnail.jpeg", "thumbnail.png"})
+_ALLOWED_OUTPUT_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
+
 
 def load_font(style: TextStyle) -> ImageFont.FreeTypeFont:
     """TextStyle からフォントをロードする。ロード不能なら ConfigError。"""
@@ -31,10 +34,55 @@ def _text_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFo
     return right - left
 
 
+def _absolute_path(path: Path) -> Path:
+    expanded = path.expanduser()
+    if expanded.is_absolute():
+        return expanded
+    return Path.cwd() / expanded
+
+
+def _has_symlink_parent(path: Path) -> bool:
+    current = path.parent
+    while current != current.parent:
+        if current.is_symlink():
+            return True
+        current = current.parent
+    return False
+
+
+def validate_thumbnail_output_path(output: Path, *, channel_root: Path) -> None:
+    """候補サムネ出力先の安全契約を検証する。"""
+    final_names = ", ".join(sorted(_FINAL_THUMBNAIL_NAMES))
+    if output.name.lower() in _FINAL_THUMBNAIL_NAMES:
+        raise ConfigError(
+            f"最終サムネイル名への直接出力はできません: {output} "
+            f"(候補名 thumbnail-v1.jpg などへ出力し、承認後に {final_names} へコピーしてください)"
+        )
+    if output.is_symlink():
+        raise ConfigError(f"出力先にシンボリックリンクは指定できません: {output}")
+    if output.exists():
+        raise ConfigError(f"出力先ファイルは既に存在します: {output} (候補名を変えるか、不要な候補を削除してください)")
+    if output.suffix.lower() not in _ALLOWED_OUTPUT_SUFFIXES:
+        allowed = ", ".join(sorted(_ALLOWED_OUTPUT_SUFFIXES))
+        raise ConfigError(f"出力先の拡張子は {allowed} のいずれかを指定してください: {output}")
+
+    output_abs = _absolute_path(output)
+    if _has_symlink_parent(output_abs):
+        raise ConfigError(f"出力先の親ディレクトリにシンボリックリンクは指定できません: {output}")
+
+    channel_root_resolved = channel_root.resolve()
+    output_resolved = output_abs.resolve(strict=False)
+    if not output_resolved.is_relative_to(channel_root_resolved):
+        raise ConfigError(
+            f"出力先は channel_dir 配下に指定してください: {output} (channel_dir: {channel_root_resolved})"
+        )
+
+
 def compose_thumbnail_text(
     *,
     background: Path,
     output: Path,
+    channel_root: Path,
     spec: OverlaySpec,
     title_lines: list[str],
     channel_name: str | None = None,
@@ -50,6 +98,7 @@ def compose_thumbnail_text(
         raise ConfigError("タイトル行が空です。--title で 1 行以上指定してください")
     if channel_name and spec.channel_name_style is None:
         raise ConfigError("channel_name 指定時は OverlaySpec.channel_name_style が必要です")
+    validate_thumbnail_output_path(output, channel_root=channel_root)
 
     title_font = load_font(spec.title_style)
     channel_font = load_font(spec.channel_name_style) if channel_name and spec.channel_name_style else None

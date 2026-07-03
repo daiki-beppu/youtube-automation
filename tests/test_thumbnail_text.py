@@ -11,10 +11,8 @@ from PIL import Image
 from youtube_automation.utils import config as config_mod
 from youtube_automation.utils import skill_config
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.thumbnail_text import (
-    OverlaySpec,
-    TextStyle,
-    compose_thumbnail_text,
+from youtube_automation.utils.thumbnail_text import OverlaySpec, TextStyle, compose_thumbnail_text
+from youtube_automation.utils.thumbnail_text.config import (
     overlay_spec_from_overlay_config,
     resolve_font_path,
 )
@@ -51,6 +49,15 @@ def _overlay_config_dict(font_path: Path, **overlay_extra) -> dict:
 def _skill_config_dict(font_path: Path, **overlay_extra) -> dict:
     overlay = _overlay_config_dict(font_path, **overlay_extra)
     return {"image_generation": {"gemini": {"thumbnail_text": {"overlay": overlay}}}}
+
+
+def test_package_root_exports_only_domain_api():
+    from youtube_automation.utils import thumbnail_text
+
+    assert set(thumbnail_text.__all__) == {"OverlaySpec", "TextStyle", "compose_thumbnail_text"}
+    assert not hasattr(thumbnail_text, "load_font")
+    assert not hasattr(thumbnail_text, "overlay_spec_from_overlay_config")
+    assert not hasattr(thumbnail_text, "resolve_font_path")
 
 
 class TestResolveFontPath:
@@ -264,6 +271,7 @@ class TestComposeThumbnailText:
         result = compose_thumbnail_text(
             background=background,
             output=output,
+            channel_root=tmp_path,
             spec=self._spec(test_font),
             title_lines=["Relaxing Jazz", "Night Lounge"],
         )
@@ -283,6 +291,7 @@ class TestComposeThumbnailText:
             compose_thumbnail_text(
                 background=background,
                 output=out,
+                channel_root=tmp_path,
                 spec=spec,
                 title_lines=["Same Title"],
                 channel_name="My Channel",
@@ -297,12 +306,14 @@ class TestComposeThumbnailText:
         compose_thumbnail_text(
             background=background,
             output=out_without_channel,
+            channel_root=tmp_path,
             spec=spec,
             title_lines=["Same Title"],
         )
         compose_thumbnail_text(
             background=background,
             output=out_with_channel,
+            channel_root=tmp_path,
             spec=spec,
             title_lines=["Same Title"],
             channel_name="My Channel",
@@ -315,8 +326,51 @@ class TestComposeThumbnailText:
             compose_thumbnail_text(
                 background=background,
                 output=tmp_path / "out.jpg",
+                channel_root=tmp_path,
                 spec=self._spec(test_font),
                 title_lines=["  ", ""],
+            )
+
+    @pytest.mark.parametrize(
+        ("output_name", "message"),
+        [
+            ("thumbnail.jpg", "最終サムネイル名への直接出力"),
+            ("thumbnail-v1.bad", "出力先の拡張子"),
+        ],
+    )
+    def test_public_compose_rejects_unsafe_output_contract(
+        self,
+        tmp_path: Path,
+        background: Path,
+        test_font: Path,
+        output_name: str,
+        message: str,
+    ):
+        with pytest.raises(ConfigError, match=message):
+            compose_thumbnail_text(
+                background=background,
+                output=tmp_path / output_name,
+                channel_root=tmp_path,
+                spec=self._spec(test_font),
+                title_lines=["Title"],
+            )
+
+    def test_public_compose_rejects_output_outside_channel_root(
+        self,
+        tmp_path: Path,
+        background: Path,
+        test_font: Path,
+    ):
+        channel_root = tmp_path / "channel"
+        channel_root.mkdir()
+
+        with pytest.raises(ConfigError, match="channel_dir 配下"):
+            compose_thumbnail_text(
+                background=background,
+                output=tmp_path / "thumbnail-v1.jpg",
+                channel_root=channel_root,
+                spec=self._spec(test_font),
+                title_lines=["Title"],
             )
 
     def test_missing_background_raises(self, tmp_path: Path, test_font: Path):
@@ -324,6 +378,7 @@ class TestComposeThumbnailText:
             compose_thumbnail_text(
                 background=tmp_path / "missing.png",
                 output=tmp_path / "out.jpg",
+                channel_root=tmp_path,
                 spec=self._spec(test_font),
                 title_lines=["Title"],
             )
@@ -335,6 +390,7 @@ class TestComposeThumbnailText:
             compose_thumbnail_text(
                 background=broken,
                 output=tmp_path / "out.jpg",
+                channel_root=tmp_path,
                 spec=self._spec(test_font),
                 title_lines=["Title"],
             )
@@ -356,6 +412,7 @@ class TestComposeThumbnailText:
             compose_thumbnail_text(
                 background=background,
                 output=tmp_path / "out.jpg",
+                channel_root=tmp_path,
                 spec=spec,
                 title_lines=["Title"],
             )
@@ -371,6 +428,7 @@ class TestComposeThumbnailText:
             compose_thumbnail_text(
                 background=background,
                 output=parent_file / "out.jpg",
+                channel_root=tmp_path,
                 spec=self._spec(test_font),
                 title_lines=["Title"],
             )
@@ -514,6 +572,36 @@ class TestCli:
         assert code == 2
         assert output.read_bytes() == b"keep me"
         assert "出力先ファイルは既に存在します" in capsys.readouterr().err
+
+    def test_channel_dir_config_error_exits_1(
+        self,
+        tmp_path: Path,
+        background: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+    ):
+        from youtube_automation.scripts import thumbnail_text as cli
+
+        monkeypatch.setattr(cli, "channel_dir", lambda: (_ for _ in ()).throw(ConfigError("CHANNEL_DIR missing")))
+        monkeypatch.setattr(
+            cli,
+            "load_skill_config",
+            lambda _skill: pytest.fail("channel_dir failure should stop before skill-config loading"),
+        )
+
+        code = cli.main(
+            [
+                "--background",
+                str(background),
+                "--title",
+                "Test",
+                "--output",
+                str(tmp_path / "thumbnail-v1.jpg"),
+            ]
+        )
+
+        assert code == 1
+        assert "[ERROR] CHANNEL_DIR missing" in capsys.readouterr().err
 
     @pytest.mark.parametrize("output_name", ["thumbnail-v1", "thumbnail-v1.bad"])
     def test_invalid_output_extension_exits_2_before_config(
