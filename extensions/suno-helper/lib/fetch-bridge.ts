@@ -68,6 +68,21 @@ export function extractAuthHeader(input: RequestInfo | URL, init?: RequestInit):
   return null;
 }
 
+function parseObservedClip(item: unknown): Pick<ObservedClip, "id" | "status"> | null {
+  if (
+    typeof item === "object" &&
+    item !== null &&
+    typeof (item as { id?: unknown }).id === "string" &&
+    typeof (item as { status?: unknown }).status === "string"
+  ) {
+    return {
+      id: (item as { id: string }).id,
+      status: (item as { status: string }).status,
+    };
+  }
+  return null;
+}
+
 /** unknown JSON から `{id, status}` を持つ clip 配列を fail-soft で取り出す共通処理。 */
 function parseClipArray(value: unknown): ObservedClip[] | null {
   if (!Array.isArray(value)) {
@@ -75,15 +90,27 @@ function parseClipArray(value: unknown): ObservedClip[] | null {
   }
   const clips: ObservedClip[] = [];
   for (const item of value) {
-    if (
-      typeof item === "object" &&
-      item !== null &&
-      typeof (item as { id?: unknown }).id === "string" &&
-      typeof (item as { status?: unknown }).status === "string"
-    ) {
+    const clip = parseObservedClip(item);
+    if (clip) {
+      clips.push(clip);
+    }
+  }
+  return clips.length > 0 ? clips : null;
+}
+
+/** feed レスポンス専用: metadata.duration が finite number の場合だけ ObservedClip に含める。 */
+function parseFeedClipArray(value: unknown): ObservedClip[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const clips: ObservedClip[] = [];
+  for (const item of value) {
+    const clip = parseObservedClip(item);
+    if (clip) {
+      const duration = (item as { metadata?: { duration?: unknown } }).metadata?.duration;
       clips.push({
-        id: (item as { id: string }).id,
-        status: (item as { status: string }).status,
+        ...clip,
+        ...(typeof duration === "number" && Number.isFinite(duration) ? { duration } : {}),
       });
     }
   }
@@ -103,16 +130,16 @@ export function parseClipsFromGenerateResponse(json: unknown): ObservedClip[] | 
 }
 
 /**
- * feed レスポンス（GET /api/feed/v2?ids=...）から clip status を取り出す。
+ * feed レスポンス（GET /api/feed/v2?ids=... / POST /api/feed/v3）から clip status を取り出す。
  * 形は `{ clips: [...] }` と素の配列の両方を観測しているため両対応する。
  * 形が崩れていたら null（fail-soft）。
  */
 export function parseClipsFromFeedResponse(json: unknown): ObservedClip[] | null {
   if (Array.isArray(json)) {
-    return parseClipArray(json);
+    return parseFeedClipArray(json);
   }
   if (typeof json !== "object" || json === null) {
     return null;
   }
-  return parseClipArray((json as { clips?: unknown }).clips);
+  return parseFeedClipArray((json as { clips?: unknown }).clips);
 }
