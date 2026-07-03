@@ -68,53 +68,52 @@ export function extractAuthHeader(input: RequestInfo | URL, init?: RequestInit):
   return null;
 }
 
-function parseObservedClip(item: unknown): Pick<ObservedClip, "id" | "status"> | null {
-  if (
-    typeof item === "object" &&
-    item !== null &&
-    typeof (item as { id?: unknown }).id === "string" &&
-    typeof (item as { status?: unknown }).status === "string"
-  ) {
-    return {
-      id: (item as { id: string }).id,
-      status: (item as { status: string }).status,
-    };
+type RawObservedClip = {
+  duration?: unknown;
+  id?: unknown;
+  metadata?: { duration?: unknown };
+  status?: unknown;
+};
+
+function toRawObservedClip(item: unknown): RawObservedClip | null {
+  if (typeof item !== "object" || item === null) {
+    return null;
   }
-  return null;
+  const clip = item as RawObservedClip;
+  return typeof clip.id === "string" && typeof clip.status === "string" ? clip : null;
 }
 
-/** unknown JSON から `{id, status}` を持つ clip 配列を fail-soft で取り出す共通処理。 */
+function withDuration(clip: RawObservedClip, duration: number | undefined): ObservedClip {
+  return duration === undefined
+    ? { id: clip.id as string, status: clip.status as string }
+    : { id: clip.id as string, status: clip.status as string, duration };
+}
+
+function parseDuration(clip: RawObservedClip): number | null | undefined {
+  if (clip.duration !== undefined) {
+    return typeof clip.duration === "number" && Number.isFinite(clip.duration) ? clip.duration : null;
+  }
+  const metadataDuration = clip.metadata?.duration;
+  return typeof metadataDuration === "number" && Number.isFinite(metadataDuration) ? metadataDuration : undefined;
+}
+
+/** unknown JSON から `{id, status, duration?}` を持つ clip 配列を fail-soft で取り出す共通処理。 */
 function parseClipArray(value: unknown): ObservedClip[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
-  const clips: ObservedClip[] = [];
-  for (const item of value) {
-    const clip = parseObservedClip(item);
-    if (clip) {
-      clips.push(clip);
+  const clips = value.map((item): ObservedClip | null => {
+    const clip = toRawObservedClip(item);
+    if (!clip) {
+      return null;
     }
-  }
-  return clips.length > 0 ? clips : null;
-}
-
-/** feed レスポンス専用: metadata.duration が finite number の場合だけ ObservedClip に含める。 */
-function parseFeedClipArray(value: unknown): ObservedClip[] | null {
-  if (!Array.isArray(value)) {
-    return null;
-  }
-  const clips: ObservedClip[] = [];
-  for (const item of value) {
-    const clip = parseObservedClip(item);
-    if (clip) {
-      const duration = (item as { metadata?: { duration?: unknown } }).metadata?.duration;
-      clips.push({
-        ...clip,
-        ...(typeof duration === "number" && Number.isFinite(duration) ? { duration } : {}),
-      });
+    const duration = parseDuration(clip);
+    if (duration === null) {
+      return null;
     }
-  }
-  return clips.length > 0 ? clips : null;
+    return withDuration(clip, duration);
+  });
+  return clips.length > 0 && clips.every((clip): clip is ObservedClip => clip !== null) ? clips : null;
 }
 
 /**
@@ -136,10 +135,10 @@ export function parseClipsFromGenerateResponse(json: unknown): ObservedClip[] | 
  */
 export function parseClipsFromFeedResponse(json: unknown): ObservedClip[] | null {
   if (Array.isArray(json)) {
-    return parseFeedClipArray(json);
+    return parseClipArray(json);
   }
   if (typeof json !== "object" || json === null) {
     return null;
   }
-  return parseFeedClipArray((json as { clips?: unknown }).clips);
+  return parseClipArray((json as { clips?: unknown }).clips);
 }
