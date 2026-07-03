@@ -141,10 +141,6 @@ async function loadContentScript(
     waitForPlaylistDialogClose: vi.fn(() => Promise.resolve()),
   }));
 
-  vi.doMock("../../shared/playlist-scrape", () => ({
-    scrapePlaylistsFromMe: vi.fn(() => []),
-  }));
-
   vi.doMock("../lib/ack-probe", () => ({
     createAckWaiter: vi.fn(() => vi.fn(() => Promise.resolve())),
     markAck: vi.fn(() => Promise.resolve({ submissions: 0, domInFlight: 0 })),
