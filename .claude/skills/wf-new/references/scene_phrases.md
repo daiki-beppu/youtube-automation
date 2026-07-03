@@ -69,6 +69,6 @@ $ uv run yt-populate-scene-phrases 20260322-rjn-city-collection \
 
 ## 関連
 
-- 検証: `yt-metadata-audit` が `scene_phrases` の `en` + `supported_languages` 完全性を検証する
+- 検証: `yt-metadata-audit` は `workflow-state.json` 自体を常に検証し、`supported_languages` が 2 言語以上のチャンネルでのみ `scene_phrases` の `supported_languages` 完全性を検証する
 - メタデータ生成: `metadata_generator.py::_load_scene_phrases` が `workflow-state.json` から読み込んでタイトル・localizations を生成する
-- アップロード時 preflight: `youtube_auto_uploader.py` が `scene_phrases` の `supported_languages` 分の言語欠落を検出すると upload が中断する（en-only チャンネルなら en のみで通る）
+- アップロード時 preflight: `youtube_auto_uploader.py` が多言語チャンネルで `scene_phrases` の `supported_languages` 分の言語欠落を検出すると upload が中断する。単一言語チャンネルでは populate と同じ判定で `scene_phrases` を要求しない

@@ -212,6 +212,8 @@ def validate_scene_phrases(
 
     `/video-description` など `workflow-state.json` への書き込み前に呼ぶことで、
     アップロード時 preflight まで超過発覚を遅らせず、全言語分をまとめて検査できる.
+    単一言語チャンネルでは localizations 用の scene_phrases を生成しないため、
+    空の scene_phrases を許容して空リストを返す.
 
     Args:
         scene_phrases: {"en": ..., "ja": ..., ...} コレクション別の感情フレーズ翻訳
@@ -221,8 +223,8 @@ def validate_scene_phrases(
         違反のリスト。空なら全言語 100 codepoint 以内.
 
     Raises:
-        ValueError: scene_phrases が一部言語で欠落している場合、または
-            `localizations.json` に `title_template` が無い言語がある場合.
+        ValueError: 多言語チャンネルで scene_phrases が一部言語で欠落している場合、
+            または `localizations.json` に `title_template` が無い言語がある場合.
     """
     loc_config = config.localizations.data
     supported = loc_config.get("supported_languages", [])
@@ -849,6 +851,9 @@ class BAHMetadataGenerator:
         scene_emoji: str = "",
     ) -> Dict:
         """各言語のローカライズされたタイトル・説明文を生成（jazzgak. TTP ハイブリッド方式）
+
+        単一言語チャンネルでは YouTube snippet 側がデフォルト言語のタイトル・概要欄を
+        持つため、localizations は生成せず空 dict を返す.
 
         Args:
             english_title: 英語デフォルトタイトル（フォールバック用）

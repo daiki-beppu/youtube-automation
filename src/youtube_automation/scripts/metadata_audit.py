@@ -95,11 +95,12 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
             if msg:
                 issues.append(msg)
 
-    # workflow-state.json scene_phrases（単一言語チャンネルは不要 #1470）
+    # workflow-state.json は upload preflight と同じく常に parse する。
+    # 単一言語チャンネルでは scene_phrases の完全性チェックだけを不要扱いにする (#1470)。
     ws = paths.workflow_state_path
     if ws.exists():
+        state = json.loads(ws.read_text(encoding="utf-8"))
         if requires_scene_phrases(supported_langs):
-            state = json.loads(ws.read_text(encoding="utf-8"))
             sp = state.get("scene_phrases") or {}
             required = list(dict.fromkeys(supported_langs))
             missing = [lang for lang in required if not sp.get(lang)]

@@ -64,8 +64,10 @@ class PreflightMixin:
 
         過去事例の再発防止:
         1. descriptions.md が存在すること（Track 01 仮名フォールバックを防ぐ）
-        2. workflow-state.json.scene_phrases に supported_languages が
-           揃っていること（多言語タイトルが EN ベタコピーになる事故を防ぐ）
+        2. 多言語チャンネルでは workflow-state.json.scene_phrases に
+           supported_languages が揃っていること。単一言語チャンネルでは
+           populate が no-op のため scene_phrases は要求しない
+           （多言語タイトルが EN ベタコピーになる事故を防ぐ）
         3. タイムスタンプ件数が `audio.chapter_max` 以内かつ chapter 名に
            パターン展開接尾辞（v1〜v6 / ロマン数字 I〜VIII）を含まないこと
            （個別トラック = 1 chapter の per-track 命名はデフォルトで許容）
