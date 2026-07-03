@@ -794,6 +794,63 @@ def test_workflow_wf_next_approval_gates_must_be_boolean(tmp_path, monkeypatch):
         load_config()
 
 
+@pytest.mark.parametrize(
+    ("workflow_value", "message"),
+    [
+        ([], "workflow セクションは object"),
+        ("", "workflow セクションは object"),
+        (False, "workflow セクションは object"),
+    ],
+)
+def test_workflow_section_falsy_non_objects_are_rejected(tmp_path, monkeypatch, workflow_value, message):
+    """#1449: falsy な非 object を未設定扱いせず、TS schema と同じ契約で弾く."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": workflow_value}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=message):
+        load_config()
+
+
+@pytest.mark.parametrize(
+    ("wf_next_value", "message"),
+    [
+        ([], "workflow.wf_next は object"),
+        ("", "workflow.wf_next は object"),
+        (False, "workflow.wf_next は object"),
+    ],
+)
+def test_workflow_wf_next_falsy_non_objects_are_rejected(tmp_path, monkeypatch, wf_next_value, message):
+    """#1449: wf_next の falsy 非 object も default に潰さない."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"wf_next": wf_next_value}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=message):
+        load_config()
+
+
+@pytest.mark.parametrize(
+    ("gates_value", "message"),
+    [
+        ([], "workflow.wf_next.approval_gates は object"),
+        ("", "workflow.wf_next.approval_gates は object"),
+        (False, "workflow.wf_next.approval_gates は object"),
+    ],
+)
+def test_workflow_approval_gates_falsy_non_objects_are_rejected(tmp_path, monkeypatch, gates_value, message):
+    """#1449: approval_gates の falsy 非 object も default に潰さない."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"wf_next": {"approval_gates": gates_value}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=message):
+        load_config()
+
+
 def test_workflow_section_must_be_object(tmp_path, monkeypatch):
     """#508: `workflow` セクションが object でないと ConfigError."""
     sections = _minimal_sections()

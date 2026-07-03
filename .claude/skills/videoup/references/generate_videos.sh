@@ -191,17 +191,46 @@ done
 
 workflow_state_master_audio() {
     local state_path="${COLLECTION_DIR}/workflow-state.json"
-    [[ -f "$state_path" ]] || return 0
-    command -v python3 &>/dev/null || return 0
+    [[ -e "$state_path" ]] || return 1
+    if [[ ! -f "$state_path" ]]; then
+        echo "ERROR: workflow-state.json must be a file: ${state_path}" >&2
+        return 2
+    fi
+    if ! command -v python3 &>/dev/null; then
+        echo "ERROR: python3 is required to read workflow-state.json::assets.master_audio" >&2
+        return 2
+    fi
     python3 - "$state_path" <<'PY'
 import json
 import sys
 
-with open(sys.argv[1], encoding="utf-8") as f:
-    data = json.load(f)
-value = data.get("assets", {}).get("master_audio") if isinstance(data, dict) else None
-if isinstance(value, str) and value:
-    print(value)
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+except json.JSONDecodeError as exc:
+    print(f"ERROR: workflow-state.json is invalid JSON: {exc}", file=sys.stderr)
+    sys.exit(2)
+except OSError as exc:
+    print(f"ERROR: workflow-state.json could not be read: {exc}", file=sys.stderr)
+    sys.exit(2)
+
+if not isinstance(data, dict):
+    print("ERROR: workflow-state.json root must be an object", file=sys.stderr)
+    sys.exit(2)
+
+assets = data.get("assets", {}) if "assets" not in data else data["assets"]
+if not isinstance(assets, dict):
+    print("ERROR: workflow-state.json::assets must be an object", file=sys.stderr)
+    sys.exit(2)
+
+value = assets.get("master_audio")
+if value is None or value == "":
+    sys.exit(1)
+if not isinstance(value, str):
+    print("ERROR: workflow-state.json::assets.master_audio must be a string", file=sys.stderr)
+    sys.exit(2)
+print(value)
 PY
 }
 
@@ -211,7 +240,12 @@ PY
 #   3. `master.{wav,m4a,aac,mp3,flac}` — `/lyria` / `/masterup` (`yt-generate-master`) の自動生成出力 (#507)
 # 拡張子は wav 優先、なければ m4a / aac / mp3 / flac の順
 MASTER_AUDIO=""
-STATE_MASTER_AUDIO="$(workflow_state_master_audio || true)"
+STATE_MASTER_AUDIO=""
+workflow_state_status=0
+STATE_MASTER_AUDIO="$(workflow_state_master_audio)" || workflow_state_status=$?
+if [[ "$workflow_state_status" -eq 2 ]]; then
+    exit 1
+fi
 if [[ -n "$STATE_MASTER_AUDIO" ]]; then
     if [[ "$STATE_MASTER_AUDIO" == */* || "$STATE_MASTER_AUDIO" == *..* ]]; then
         echo "ERROR: workflow-state.json::assets.master_audio must be a filename: ${STATE_MASTER_AUDIO}"
