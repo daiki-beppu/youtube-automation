@@ -25,17 +25,14 @@ export function initSnapshot(entries: PromptEntry[], options: InitSnapshotOption
 }
 
 /** itemStates を phase に応じて遷移させる（INJECTING / DONE / ENTRY_FAILED のみ、他 phase は不変）。非破壊で新配列を返す。 */
-export function nextItemStates(
-  prev: ItemState[],
-  phase: Phase,
-  index?: number,
-  progress?: ProgressPayload,
-): ItemState[] {
+export function nextItemStates(prev: ItemState[], payload: ProgressPayload): ItemState[] {
+  const { phase, index } = payload;
+
   if (phase === PHASE.INJECTING) {
     return prev.map((s, i) => (i === index ? "active" : s === "active" ? "idle" : s));
   }
   if (phase === PHASE.DONE) {
-    if (progress?.log?.kind === "duration-check" && !progress.log.ok) {
+    if (payload.log?.kind === "duration-check" && !payload.log.ok) {
       return [...prev];
     }
     return prev.map((s, i) => (i === index ? "done" : s));
@@ -58,7 +55,7 @@ export function isTerminalPhase(phase: Phase): boolean {
 export function applyProgress(snap: SnapshotPayload, payload: ProgressPayload): SnapshotPayload {
   return {
     ...snap,
-    itemStates: nextItemStates(snap.itemStates, payload.phase, payload.index, payload),
+    itemStates: nextItemStates(snap.itemStates, payload),
     progress: payload,
     isRunning: isTerminalPhase(payload.phase) ? false : snap.isRunning,
     // ERROR phase でのみ failedIndex を確定する（chrome.storage の resume state と二重化, #872）。

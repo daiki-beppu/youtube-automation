@@ -4,7 +4,7 @@
 // `SnapshotPayload` として保持し、popup の再 open 時に `queryProgress` で返す。
 // その snapshot を組み立てる純関数 (`lib/snapshot.ts`) の契約を担保する:
 //   - initSnapshot(entries, options): collectionId / 全 idle / isRunning=true / entries 保持で初期化
-//   - nextItemStates(prev, phase, index): INJECTING / DONE のみ遷移、他 phase は prev 不変
+//   - nextItemStates(prev, payload): INJECTING / DONE のみ遷移、他 phase は prev 不変
 //   - applyProgress(snap, payload): itemStates 遷移 + progress 更新。終了 phase で isRunning=false（snapshot は保持）
 //
 // itemStates の遷移ロジックは useSunoRunner.ts の live handler と同一であり、
@@ -53,36 +53,36 @@ describe("nextItemStates: itemStates の遷移ロジック (useSunoRunner live h
   const base = initSnapshot(makePromptEntries(3), snapshotOptions()).itemStates; // ["idle","idle","idle"]
 
   it("Given 全 idle When INJECTING index=0 Then index を active にする", () => {
-    expect(nextItemStates(base, PHASE.INJECTING, 0)).toEqual(["active", "idle", "idle"]);
+    expect(nextItemStates(base, { phase: PHASE.INJECTING, index: 0, total: 3 })).toEqual(["active", "idle", "idle"]);
   });
 
   it("Given 直前 active が残る When 別 index を INJECTING Then 旧 active は idle へ戻す", () => {
-    const prev = nextItemStates(base, PHASE.INJECTING, 0); // ["active","idle","idle"]
+    const prev = nextItemStates(base, { phase: PHASE.INJECTING, index: 0, total: 3 }); // ["active","idle","idle"]
 
-    expect(nextItemStates(prev, PHASE.INJECTING, 1)).toEqual(["idle", "active", "idle"]);
+    expect(nextItemStates(prev, { phase: PHASE.INJECTING, index: 1, total: 3 })).toEqual(["idle", "active", "idle"]);
   });
 
   it("Given done を含む When 別 index を INJECTING Then done は維持し active のみ移す", () => {
-    const done0 = nextItemStates(base, PHASE.DONE, 0); // ["done","idle","idle"]
+    const done0 = nextItemStates(base, { phase: PHASE.DONE, index: 0, total: 3 }); // ["done","idle","idle"]
 
-    expect(nextItemStates(done0, PHASE.INJECTING, 1)).toEqual(["done", "active", "idle"]);
+    expect(nextItemStates(done0, { phase: PHASE.INJECTING, index: 1, total: 3 })).toEqual(["done", "active", "idle"]);
   });
 
   it("Given 全 idle When DONE index=0 Then index を done にする", () => {
-    expect(nextItemStates(base, PHASE.DONE, 0)).toEqual(["done", "idle", "idle"]);
+    expect(nextItemStates(base, { phase: PHASE.DONE, index: 0, total: 3 })).toEqual(["done", "idle", "idle"]);
   });
 
   it.each([PHASE.WAITING_SLOT, PHASE.GENERATING, PHASE.ADDING_TO_PLAYLIST, PHASE.FINISHED, PHASE.STOPPED, PHASE.ERROR])(
     "Given prev When phase=%s Then itemStates は遷移させない（prev と等価）",
     (phase) => {
-      const prev = nextItemStates(base, PHASE.INJECTING, 0); // ["active","idle","idle"]
+      const prev = nextItemStates(base, { phase: PHASE.INJECTING, index: 0, total: 3 }); // ["active","idle","idle"]
 
-      expect(nextItemStates(prev, phase, 0)).toEqual(prev);
+      expect(nextItemStates(prev, { phase, index: 0, total: 3 })).toEqual(prev);
     },
   );
 
   it("Given prev When nextItemStates Then 新しい配列を返す（React state 更新のため非破壊）", () => {
-    const result = nextItemStates(base, PHASE.INJECTING, 0);
+    const result = nextItemStates(base, { phase: PHASE.INJECTING, index: 0, total: 3 });
 
     expect(result).not.toBe(base);
     expect(base).toEqual(["idle", "idle", "idle"]); // 入力は不変
