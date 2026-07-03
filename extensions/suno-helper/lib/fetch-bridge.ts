@@ -73,18 +73,22 @@ function parseClipArray(value: unknown): ObservedClip[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
-  const clips: ObservedClip[] = [];
-  for (const item of value) {
+  const clips = value.map((item): ObservedClip | null => {
     const clip = item as { duration?: unknown; id?: unknown; status?: unknown };
-    if (typeof item === "object" && item !== null && typeof clip.id === "string" && typeof clip.status === "string") {
-      const observed: ObservedClip = { id: clip.id, status: clip.status };
-      if (typeof clip.duration === "number") {
-        observed.duration = clip.duration;
-      }
-      clips.push(observed);
+    if (
+      typeof item !== "object" ||
+      item === null ||
+      typeof clip.id !== "string" ||
+      typeof clip.status !== "string" ||
+      (clip.duration !== undefined && typeof clip.duration !== "number")
+    ) {
+      return null;
     }
-  }
-  return clips.length > 0 ? clips : null;
+    return typeof clip.duration === "number"
+      ? { id: clip.id, status: clip.status, duration: clip.duration }
+      : { id: clip.id, status: clip.status };
+  });
+  return clips.length > 0 && clips.every((clip): clip is ObservedClip => clip !== null) ? clips : null;
 }
 
 /**
