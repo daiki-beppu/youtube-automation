@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
@@ -76,6 +77,49 @@ def validate_thumbnail_output_path(output: Path, *, channel_root: Path) -> None:
         raise ConfigError(
             f"出力先は channel_dir 配下に指定してください: {output} (channel_dir: {channel_root_resolved})"
         )
+
+
+def _image_format_for_suffix(output: Path) -> str:
+    if output.suffix.lower() in {".jpg", ".jpeg"}:
+        return "JPEG"
+    return "PNG"
+
+
+def _open_output_file_no_follow(output: Path, *, channel_root: Path):
+    output.parent.mkdir(parents=True, exist_ok=True)
+    validate_thumbnail_output_path(output, channel_root=channel_root)
+
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+
+    dir_flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        dir_flags |= os.O_DIRECTORY
+    if hasattr(os, "O_NOFOLLOW"):
+        dir_flags |= os.O_NOFOLLOW
+
+    if os.open in os.supports_dir_fd:
+        dir_fd = os.open(output.parent, dir_flags)
+        try:
+            file_fd = os.open(output.name, flags, 0o666, dir_fd=dir_fd)
+        finally:
+            os.close(dir_fd)
+    else:
+        file_fd = os.open(output, flags, 0o666)
+    return os.fdopen(file_fd, "wb")
+
+
+def _save_image_safely(image: Image.Image, output: Path, *, channel_root: Path) -> None:
+    image_format = _image_format_for_suffix(output)
+    try:
+        with _open_output_file_no_follow(output, channel_root=channel_root) as fh:
+            if image_format == "JPEG":
+                image.save(fh, format=image_format, quality=95)
+            else:
+                image.save(fh, format=image_format)
+    except (OSError, ValueError) as exc:
+        raise ConfigError(f"出力画像を保存できません: {output} ({exc})") from exc
 
 
 def compose_thumbnail_text(
@@ -156,12 +200,5 @@ def compose_thumbnail_text(
             stroke_fill=spec.channel_name_style.stroke_color,
         )
 
-    try:
-        output.parent.mkdir(parents=True, exist_ok=True)
-        if output.suffix.lower() in {".jpg", ".jpeg"}:
-            image.save(output, format="JPEG", quality=95)
-        else:
-            image.save(output)
-    except (OSError, ValueError) as exc:
-        raise ConfigError(f"出力画像を保存できません: {output} ({exc})") from exc
+    _save_image_safely(image, output, channel_root=channel_root)
     return output

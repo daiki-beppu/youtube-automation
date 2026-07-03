@@ -23,6 +23,7 @@ import pytest
 import youtube_automation.scripts.generate_image as generate_image_module
 from youtube_automation.scripts.generate_image import (
     build_requests,
+    expand_thumbnail_prompt_clauses,
     plan_output_paths,
     plan_reference_assignments,
     run_requests_parallel,
@@ -62,6 +63,27 @@ class _FakeProvider:
 
 
 # ---- plan_output_paths -----------------------------------------------------
+
+
+class TestExpandThumbnailPromptClauses:
+    def test_replaces_typography_clause_with_configured_font_description(self) -> None:
+        skill_cfg = {
+            "image_generation": {
+                "gemini": {
+                    "single_step": {
+                        "typography_clause": "Render title in a consistent {font_description} typeface.",
+                    },
+                    "thumbnail_text": {"font": {"copy": "classic serif"}},
+                }
+            }
+        }
+
+        prompt = expand_thumbnail_prompt_clauses("TTP reference. ${typography_clause}", skill_cfg)
+
+        assert prompt == "TTP reference. Render title in a consistent classic serif typeface."
+
+    def test_leaves_prompt_without_placeholder_unchanged(self) -> None:
+        assert expand_thumbnail_prompt_clauses("No typography placeholder.", {}) == "No typography placeholder."
 
 
 class TestPlanOutputPaths:
@@ -351,7 +373,12 @@ def _patch_generate_image_cli(
         "image_generation": {
             "gemini": {
                 "generation_mode": "single_step",
-                "single_step": {"max_attempts": 3, "rotate": True},
+                "single_step": {
+                    "max_attempts": 3,
+                    "rotate": True,
+                    "typography_clause": "Render title in a consistent {font_description} typeface.",
+                },
+                "thumbnail_text": {"font": {"copy": "classic serif"}},
                 "reference_images": {
                     "default": [
                         "data/thumbnail_compare/benchmark/jazzgak/a.jpg",
@@ -423,6 +450,31 @@ class TestGenerateImageCLIReferenceContract:
         ]
         captured = capsys.readouterr()
         assert "benchmark_channel=jazzgak" in captured.out
+
+    def test_cli_expands_typography_clause_before_provider_request(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        provider = _FakeProvider()
+        argv = [
+            "--prompt",
+            "TTP reference. ${typography_clause}",
+            "--output",
+            str(tmp_path / "thumbnail-v1.jpg"),
+            "--max-attempts",
+            "1",
+            "-y",
+        ]
+
+        _patch_generate_image_cli(monkeypatch, argv, provider=provider)
+
+        with pytest.raises(SystemExit) as exc_info:
+            generate_image_main()
+        assert exc_info.value.code == 0
+
+        assert len(provider.requests) == 1
+        assert provider.requests[0].prompt == "TTP reference. Render title in a consistent classic serif typeface."
 
     def test_single_step_cli_rejects_reference_shortage(
         self,

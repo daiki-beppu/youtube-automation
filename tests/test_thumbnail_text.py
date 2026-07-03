@@ -119,6 +119,34 @@ class TestOverlaySpecFromOverlayConfig:
         assert spec.channel_name_style.font_path == test_font
         assert spec.channel_name_style.size == 36
 
+    def test_channel_name_explicit_font_and_style_overrides_apply(self, tmp_path: Path, test_font: Path):
+        fonts_dir = tmp_path / "assets" / "fonts"
+        fonts_dir.mkdir(parents=True)
+        channel_font = fonts_dir / "channel.ttf"
+        channel_font.write_bytes(test_font.read_bytes())
+
+        spec = overlay_spec_from_overlay_config(
+            _overlay_config_dict(
+                test_font,
+                font={"title": str(test_font), "channel_name": "assets/fonts/channel.ttf"},
+                channel_name={
+                    "size": 44,
+                    "color": "#FFEEAA",
+                    "stroke_width": 2,
+                    "stroke_color": "#111111",
+                },
+            ),
+            channel_root=tmp_path,
+            with_channel_name=True,
+        )
+
+        assert spec.channel_name_style is not None
+        assert spec.channel_name_style.font_path == channel_font
+        assert spec.channel_name_style.size == 44
+        assert spec.channel_name_style.color == "#FFEEAA"
+        assert spec.channel_name_style.stroke_width == 2
+        assert spec.channel_name_style.stroke_color == "#111111"
+
     @pytest.mark.parametrize(
         ("font_cfg_factory", "with_channel_name", "message"),
         [
@@ -372,6 +400,44 @@ class TestComposeThumbnailText:
                 spec=self._spec(test_font),
                 title_lines=["Title"],
             )
+
+    def test_public_compose_rejects_parent_symlink_race_after_validation(
+        self,
+        tmp_path: Path,
+        background: Path,
+        test_font: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        from youtube_automation.utils.thumbnail_text import renderer
+
+        channel_root = tmp_path / "channel"
+        outside = tmp_path / "outside"
+        output = channel_root / "new-parent" / "thumbnail-v1.jpg"
+        channel_root.mkdir()
+        outside.mkdir()
+        original_validate = renderer.validate_thumbnail_output_path
+        calls = 0
+
+        def racing_validate(path: Path, *, channel_root: Path) -> None:
+            nonlocal calls
+            calls += 1
+            original_validate(path, channel_root=channel_root)
+            if calls == 2:
+                path.parent.rmdir()
+                path.parent.symlink_to(outside, target_is_directory=True)
+
+        monkeypatch.setattr(renderer, "validate_thumbnail_output_path", racing_validate)
+
+        with pytest.raises(ConfigError, match="出力画像を保存できません"):
+            compose_thumbnail_text(
+                background=background,
+                output=output,
+                channel_root=channel_root,
+                spec=self._spec(test_font),
+                title_lines=["Title"],
+            )
+
+        assert not (outside / "thumbnail-v1.jpg").exists()
 
     def test_missing_background_raises(self, tmp_path: Path, test_font: Path):
         with pytest.raises(ConfigError, match="背景画像が見つかりません"):

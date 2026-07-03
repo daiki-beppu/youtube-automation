@@ -61,6 +61,33 @@ def _channel_root() -> Path:
     return channel_dir()
 
 
+def _dict_or_empty(value: object) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def expand_thumbnail_prompt_clauses(prompt: str, skill_cfg: dict) -> str:
+    """thumbnail skill-config の prompt clause placeholder を展開する。"""
+    if "${typography_clause}" not in prompt:
+        return prompt
+
+    image_generation = _dict_or_empty(skill_cfg.get("image_generation"))
+    gemini = _dict_or_empty(image_generation.get("gemini"))
+    single_step = _dict_or_empty(gemini.get("single_step"))
+    thumbnail_text = _dict_or_empty(gemini.get("thumbnail_text"))
+    font = _dict_or_empty(thumbnail_text.get("font"))
+
+    typography_clause = single_step.get("typography_clause", "")
+    if not isinstance(typography_clause, str):
+        raise ConfigError("image_generation.gemini.single_step.typography_clause は文字列で指定してください")
+
+    font_description = font.get("copy", "")
+    if not isinstance(font_description, str):
+        raise ConfigError("image_generation.gemini.thumbnail_text.font.copy は文字列で指定してください")
+
+    rendered_clause = typography_clause.replace("{font_description}", font_description or "consistent")
+    return prompt.replace("${typography_clause}", rendered_clause.strip())
+
+
 def _next_planned_path(output_path: Path, taken: set[Path]) -> Path:
     """``resolve_unique_path`` と同一の -vN 採番規則で次の一意パスを返す。
 
@@ -321,6 +348,7 @@ def main():
         prompt = args.prompt
     else:
         prompt = apply_composition_rules(args.prompt, composition_source)
+    prompt = expand_thumbnail_prompt_clauses(prompt, skill_cfg)
 
     output_path = Path(args.output)
     if not output_path.is_absolute():
