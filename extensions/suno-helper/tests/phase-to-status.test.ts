@@ -117,3 +117,91 @@ describe("phaseToStatus: ENTRY_FAILED / 失敗付き FINISHED (#948)", () => {
     expect(error).toBeFalsy();
   });
 });
+
+describe("phaseToStatus: duration guard ログ (#1270)", () => {
+  it("Given duration check OK log When 変換する Then 曲名・秒数・OK 記号を表示する", () => {
+    const { text, error } = statusOf({
+      phase: PHASE.DONE,
+      index: 0,
+      total: 3,
+      log: { kind: "duration-check", entryName: "Night Groove", durationSec: 259, ok: true, maxSec: 300 },
+    });
+
+    expect(text).toBe('"Night Groove": 259s ✓');
+    expect(error).toBeFalsy();
+  });
+
+  it("Given duration check NG log When max 超過 Then max 上限を表示する", () => {
+    const { text, error } = statusOf({
+      phase: PHASE.DONE,
+      index: 0,
+      total: 3,
+      log: { kind: "duration-check", entryName: "Night Groove", durationSec: 312, ok: false, maxSec: 300 },
+    });
+
+    expect(text).toBe('"Night Groove": 312s ✗ (max 300s)');
+    expect(error).toBeFalsy();
+  });
+
+  it("Given duration check NG log When min 未満 Then min 下限を表示する", () => {
+    const { text, error } = statusOf({
+      phase: PHASE.DONE,
+      index: 0,
+      total: 3,
+      log: { kind: "duration-check", entryName: "Night Groove", durationSec: 58, ok: false, minSec: 60 },
+    });
+
+    expect(text).toBe('"Night Groove": 58s ✗ (min 60s)');
+    expect(error).toBeFalsy();
+  });
+
+  it("Given ERROR phase に不正な log が混入 When 変換する Then error phase の文言と error flag を優先する", () => {
+    const { text, error } = statusOf({
+      phase: PHASE.ERROR,
+      index: 0,
+      total: 3,
+      message: "停止理由",
+      log: { kind: "retry", entryName: "Night Groove", attempt: 1, max: 2 },
+    } as unknown as ProgressPayload);
+
+    expect(text).toBe("中断: 停止理由");
+    expect(error).toBe(true);
+  });
+
+  it("Given retry log When 変換する Then リトライ回数を表示する", () => {
+    const { text, error } = statusOf({
+      phase: PHASE.WAITING_SLOT,
+      index: 0,
+      total: 3,
+      log: { kind: "retry", entryName: "Night Groove", attempt: 1, max: 2 },
+    });
+
+    expect(text).toBe('"Night Groove": リトライ 1/2');
+    expect(error).toBeFalsy();
+  });
+
+  it("Given skip log When 変換する Then 全滅スキップを表示する", () => {
+    const { text, error } = statusOf({
+      phase: PHASE.ENTRY_FAILED,
+      index: 0,
+      total: 3,
+      log: { kind: "skip", entryName: "Night Groove" },
+    });
+
+    expect(text).toBe('"Night Groove": 全滅 — スキップ');
+    expect(error).toBeFalsy();
+  });
+
+  it("Given skip log with message When 変換する Then 全滅スキップと失敗理由を表示する", () => {
+    const { text, error } = statusOf({
+      phase: PHASE.ENTRY_FAILED,
+      index: 0,
+      total: 3,
+      message: "生成キューの空き待ちが失敗",
+      log: { kind: "skip", entryName: "Night Groove" },
+    });
+
+    expect(text).toBe('"Night Groove": 全滅 — スキップ: 生成キューの空き待ちが失敗');
+    expect(error).toBeFalsy();
+  });
+});

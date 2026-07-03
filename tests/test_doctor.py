@@ -694,27 +694,29 @@ class TestCheckChannelConfig:
         assert "/channel-new" in instructions
         assert "setup 用ディレクトリ生成は完了していても config は未作成" in instructions
 
-    def test_config_dir_exists_but_invalid_json_is_fail_with_channel_import(self, tmp_path):
-        """config/channel/ 存在・JSON 破損: fail + /channel-import 案内 (既存チャンネル)."""
+    def test_config_dir_exists_but_invalid_json_is_fail_with_channel_new_import_mode(self, tmp_path):
+        """config/channel/ 存在・JSON 破損: fail + /channel-new 取り込みモード案内 (既存チャンネル)."""
         config_dir = tmp_path / "config" / "channel"
         config_dir.mkdir(parents=True)
         (config_dir / "meta.json").write_text("{broken json", encoding="utf-8")
         r = doctor.check_channel_config(tmp_path)
         assert r.status == "fail"
         assert r.next_action is not None
-        action_str = json.dumps(r.next_action)
-        assert "/channel-import" in action_str
+        action_str = json.dumps(r.next_action, ensure_ascii=False)
+        assert "/channel-new" in action_str
+        assert "既存チャンネル取り込みモード" in action_str
 
-    def test_config_dir_exists_but_missing_required_keys_is_fail_with_channel_import(self, tmp_path):
-        """config/channel/ 存在・必須キー不足: fail + /channel-import 案内."""
+    def test_config_dir_exists_but_missing_required_keys_is_fail_with_channel_new_import_mode(self, tmp_path):
+        """config/channel/ 存在・必須キー不足: fail + /channel-new 取り込みモード案内."""
         config_dir = tmp_path / "config" / "channel"
         config_dir.mkdir(parents=True)
         # meta.json のみ（必須キーも不足）
         (config_dir / "meta.json").write_text(json.dumps({"channel": {}}), encoding="utf-8")
         r = doctor.check_channel_config(tmp_path)
         assert r.status == "fail"
-        action_str = json.dumps(r.next_action)
-        assert "/channel-import" in action_str
+        action_str = json.dumps(r.next_action, ensure_ascii=False)
+        assert "/channel-new" in action_str
+        assert "既存チャンネル取り込みモード" in action_str
 
     def test_valid_config_is_ok(self, tmp_path):
         """load_config() が成功する設定: ok."""
@@ -1070,6 +1072,22 @@ class TestBootstrapChecks:
         assert r.status == "fail"
         assert r.category == "bootstrap"
         assert "旧 distrokid-prep skill が残存" in r.message
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
+
+    def test_skills_synced_legacy_channel_import_orphan_is_fail_with_prune(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-new", "setup"])
+        for skill_name in ["channel-new", "setup", "channel-import"]:
+            skill_dir = tmp_path / ".claude" / "skills" / skill_name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(f"# {skill_name}", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "旧 channel-import skill が残存" in r.message
         assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
 
     def test_skills_synced_legacy_distrokid_prep_only_is_fail_with_prune(self, tmp_path, monkeypatch):
@@ -2783,6 +2801,112 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "rival: VID1.json のトップレベルが object ではありません" in r.message
         assert "rival: video_analysis が一部のみ (4/5)" in r.message
+
+    def _write_rival_benchmark(self, tmp_path, videos: list[dict]) -> None:
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps({"channels": [{"slug": "rival", "videos": videos}]}),
+            encoding="utf-8",
+        )
+
+    def _write_rival_analyses(self, tmp_path, video_ids: list[str]) -> None:
+        analysis_dir = tmp_path / "data" / "video_analysis" / "rival"
+        for path in analysis_dir.glob("*.json"):
+            path.unlink()
+        for video_id in video_ids:
+            (analysis_dir / f"{video_id}.json").write_text(json.dumps({"video_id": video_id}), encoding="utf-8")
+
+    def test_live_video_is_excluded_and_next_vod_promoted(self, tmp_path):
+        # Given: top 5 の 2 位が live 配信 (duration_iso == "P0D")、次点 VOD 込みで 5 本の解析済み
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        videos = [
+            {"video_id": "VID1", "views": 50000, "duration_iso": "PT1H"},
+            {"video_id": "LIVE1", "views": 49000, "duration_iso": "P0D"},
+            {"video_id": "VID2", "views": 48000, "duration_iso": "PT1H"},
+            {"video_id": "VID3", "views": 47000, "duration_iso": "PT1H"},
+            {"video_id": "VID4", "views": 46000, "duration_iso": "PT1H"},
+            {"video_id": "VID5", "views": 45000, "duration_iso": "PT1H"},
+        ]
+        self._write_rival_benchmark(tmp_path, videos)
+        self._write_rival_analyses(tmp_path, ["VID1", "VID2", "VID3", "VID4", "VID5"])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+        assert "live 配信 1 本" in r.message
+
+    def test_live_exclusion_shrinks_denominator_when_vods_run_short(self, tmp_path):
+        # Given: benchmark が 5 本ちょうどで 1 本が live → VOD 4 本の解析で充足する
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        videos = [
+            {"video_id": "VID1", "views": 50000, "duration_iso": "PT1H"},
+            {"video_id": "LIVE1", "views": 49000, "duration_iso": "P0D"},
+            {"video_id": "VID2", "views": 48000, "duration_iso": "PT1H"},
+            {"video_id": "VID3", "views": 47000, "duration_iso": "PT1H"},
+            {"video_id": "VID4", "views": 46000, "duration_iso": "PT1H"},
+        ]
+        self._write_rival_benchmark(tmp_path, videos)
+        self._write_rival_analyses(tmp_path, ["VID1", "VID2", "VID3", "VID4"])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+        assert "live 配信 1 本" in r.message
+
+    def test_live_exclusion_shrinks_underfilled_benchmark_denominator(self, tmp_path):
+        # Given: benchmark 総数が 5 本未満でも live 混在なら解析可能 VOD を母数にする
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        videos = [
+            {"video_id": "VID1", "views": 50000, "duration_iso": "PT1H"},
+            {"video_id": "LIVE1", "views": 49000, "duration_iso": "P0D"},
+            {"video_id": "VID2", "views": 48000, "duration_iso": "PT1H"},
+            {"video_id": "VID3", "views": 47000, "duration_iso": "PT1H"},
+        ]
+        self._write_rival_benchmark(tmp_path, videos)
+        self._write_rival_analyses(tmp_path, ["VID1", "VID2", "VID3"])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+        assert "live 配信 1 本" in r.message
+        assert "benchmark top 5 が不足" not in r.message
+
+    def test_promoted_vod_without_analysis_still_warns_with_live_note(self, tmp_path):
+        # Given: live 除外で 6 位 VOD が繰り上がるが、その解析がまだ無い
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        videos = [
+            {"video_id": "VID1", "views": 50000, "duration_iso": "PT1H"},
+            {"video_id": "LIVE1", "views": 49000, "duration_iso": "P0D"},
+            {"video_id": "VID2", "views": 48000, "duration_iso": "PT1H"},
+            {"video_id": "VID3", "views": 47000, "duration_iso": "PT1H"},
+            {"video_id": "VID4", "views": 46000, "duration_iso": "PT1H"},
+            {"video_id": "VID5", "views": 45000, "duration_iso": "PT1H"},
+        ]
+        self._write_rival_benchmark(tmp_path, videos)
+        self._write_rival_analyses(tmp_path, ["VID1", "VID2", "VID3", "VID4"])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "rival: video_analysis が一部のみ (4/5)" in r.message
+        assert "live 配信 1 本" in r.message
+
+    def test_all_live_benchmark_warns_no_analyzable_vod(self, tmp_path):
+        # Given: 該当 slug の benchmark が live 配信のみ
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        videos = [{"video_id": f"LIVE{i}", "views": 50000 - i, "duration_iso": "P0D"} for i in range(1, 6)]
+        self._write_rival_benchmark(tmp_path, videos)
+        self._write_rival_analyses(tmp_path, [])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "rival: benchmark 上位が live 配信のみで解析可能な VOD がありません" in r.message
+        assert "live 配信 5 本" in r.message
 
     def test_video_analysis_symlink_outside_channel_is_rejected(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
