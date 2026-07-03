@@ -748,6 +748,15 @@ def test_channel_new_regeneration_config_templates_include_audio_json() -> None:
     assert "責務別 4 ファイル" not in step
 
 
+def test_channel_new_regeneration_uses_real_channel_research_output_path() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    mode = channel_new.split("## 再生成モード", 1)[1].split("## 設定 push モード", 1)[0]
+
+    assert "docs/channel-research.md" in mode
+    assert "docs/channel/channel-research.md" not in mode
+    assert "`channel-research.md`" not in mode
+
+
 def test_config_generation_rules_reference_existing_templates_and_step_ids() -> None:
     rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
 

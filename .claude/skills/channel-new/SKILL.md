@@ -475,7 +475,7 @@ uv run python .claude/skills/channel-new/references/fetch_branding_snapshot.py \
 - [ ] `brandingSettings.channel.country` / `snippet.country`
 - [ ] `brandingSettings.channel.defaultLanguage` / `snippet.defaultLanguage`
 - [ ] `localizations` 全エントリ（言語別 title / description）
-- [ ] 投稿時刻・投稿頻度（`/channel-research` で既に取得済みなら `docs/channel/channel-research.md` を参照）
+- [ ] 投稿時刻・投稿頻度（`/channel-research` で既に取得済みなら `docs/channel-research.md` を参照）
 - [ ] サムネテンプレ・タイトルテンプレ（既存の `/channel-research` 成果物 + 競合 uploads playlist のサンプル）
 
 **「TTP 完全コピー路線」をユーザーが選択している場合の運用ルール**:
@@ -489,7 +489,7 @@ uv run python .claude/skills/channel-new/references/fetch_branding_snapshot.py \
 
 #### Step R2.2: config 案の生成と承認
 
-`channel-research.md` の分析データと **Step R2.1 で取得した競合スナップショット** を参照しながら、方向性に基づいて config 内容を Claude が生成し提案する。
+`docs/channel-research.md` の分析データと **Step R2.1 で取得した競合スナップショット** を参照しながら、方向性に基づいて config 内容を Claude が生成し提案する。
 生成ルールは **`references/config-generation-rules.md`** を参照（tags / descriptions / title / suno の書き方、および TTP 路線時の競合転写ルール）。
 雛形は `references/config-template/*.json`（責務別 5 ファイル: meta / content / youtube / analytics / audio）。
 
