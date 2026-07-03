@@ -109,6 +109,75 @@ class TestOverlaySpecFromSkillConfig:
         with pytest.raises(ConfigError, match="色指定が不正"):
             overlay_spec_from_skill_config(cfg, channel_root=tmp_path, with_channel_name=False)
 
+    @pytest.mark.parametrize(
+        ("cfg", "key"),
+        [
+            ([], "thumbnail skill-config"),
+            ({"image_generation": []}, "image_generation"),
+            ({"image_generation": {"gemini": []}}, "image_generation.gemini"),
+            (
+                {"image_generation": {"gemini": {"thumbnail_text": []}}},
+                "image_generation.gemini.thumbnail_text",
+            ),
+            (
+                {"image_generation": {"gemini": {"thumbnail_text": {"overlay": []}}}},
+                "image_generation.gemini.thumbnail_text.overlay",
+            ),
+            (
+                {"image_generation": {"gemini": {"thumbnail_text": {"overlay": None}}}},
+                "image_generation.gemini.thumbnail_text.overlay",
+            ),
+        ],
+    )
+    def test_non_mapping_skill_config_sections_raise_config_error(self, tmp_path: Path, cfg, key: str):
+        with pytest.raises(ConfigError, match=key):
+            overlay_spec_from_skill_config(cfg, channel_root=tmp_path, with_channel_name=False)
+
+    @pytest.mark.parametrize("section", ["font", "title", "layout"])
+    @pytest.mark.parametrize("bad_value", [None, [], "bad"])
+    def test_non_mapping_overlay_sections_raise_config_error(
+        self,
+        tmp_path: Path,
+        test_font: Path,
+        section: str,
+        bad_value,
+    ):
+        cfg = _skill_config_dict(test_font, **{section: bad_value})
+        with pytest.raises(ConfigError, match=rf"thumbnail_text\.overlay\.{section}"):
+            overlay_spec_from_skill_config(cfg, channel_root=tmp_path, with_channel_name=False)
+
+    @pytest.mark.parametrize("bad_value", [None, [], "bad"])
+    def test_non_mapping_channel_name_section_raises_when_used(self, tmp_path: Path, test_font: Path, bad_value):
+        cfg = _skill_config_dict(test_font, channel_name=bad_value)
+        with pytest.raises(ConfigError, match=r"thumbnail_text\.overlay\.channel_name"):
+            overlay_spec_from_skill_config(cfg, channel_root=tmp_path, with_channel_name=True)
+
+    @pytest.mark.parametrize(
+        ("field", "value", "message"),
+        [
+            ("size", True, "整数を指定してください"),
+            ("size", 0, "1 以上"),
+            ("stroke_width", -1, "0 以上"),
+            ("line_spacing", False, "数値を指定してください"),
+            ("line_spacing", 0, "正の数"),
+            ("line_spacing", "nan", "有限の数値"),
+        ],
+    )
+    def test_invalid_numeric_values_raise_config_error(
+        self,
+        tmp_path: Path,
+        test_font: Path,
+        field: str,
+        value,
+        message: str,
+    ):
+        if field == "line_spacing":
+            cfg = _skill_config_dict(test_font, layout={field: value})
+        else:
+            cfg = _skill_config_dict(test_font, title={field: value})
+        with pytest.raises(ConfigError, match=message):
+            overlay_spec_from_skill_config(cfg, channel_root=tmp_path, with_channel_name=False)
+
 
 class TestComposeThumbnailText:
     def _spec(self, test_font: Path, *, with_channel: bool = False) -> OverlaySpec:
@@ -188,6 +257,17 @@ class TestComposeThumbnailText:
                 title_lines=["Title"],
             )
 
+    def test_broken_background_raises_config_error(self, tmp_path: Path, test_font: Path):
+        broken = tmp_path / "broken.png"
+        broken.write_bytes(b"not a real image")
+        with pytest.raises(ConfigError, match="背景画像を読み込めません"):
+            compose_thumbnail_text(
+                background=broken,
+                output=tmp_path / "out.jpg",
+                spec=self._spec(test_font),
+                title_lines=["Title"],
+            )
+
     def test_broken_font_raises_with_guidance(self, tmp_path: Path, background: Path):
         broken = tmp_path / "broken.ttf"
         broken.write_bytes(b"not a real font")
@@ -214,6 +294,44 @@ class TestComposeThumbnailText:
 
 
 class TestCli:
+    def _patch_config(self, monkeypatch: pytest.MonkeyPatch, *, channel_root: Path, cfg: dict) -> None:
+        from youtube_automation.scripts import thumbnail_text as cli
+
+        monkeypatch.setattr(cli, "channel_dir", lambda: channel_root)
+        monkeypatch.setattr(cli, "load_skill_config", lambda _skill: cfg)
+
+    def test_success_creates_output_and_prints_ok(
+        self,
+        tmp_path: Path,
+        background: Path,
+        test_font: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+    ):
+        from youtube_automation.scripts.thumbnail_text import main
+
+        self._patch_config(monkeypatch, channel_root=tmp_path, cfg=_skill_config_dict(test_font))
+        output = tmp_path / "thumbnail-v1.jpg"
+
+        code = main(
+            [
+                "--background",
+                str(background),
+                "--title",
+                "Test Title",
+                "--channel-name",
+                "Test Channel",
+                "--output",
+                str(output),
+            ]
+        )
+
+        assert code == 0
+        assert output.is_file()
+        stdout = capsys.readouterr().out
+        assert "[OK]" in stdout
+        assert str(output) in stdout
+
     def test_font_unconfigured_exits_1_with_guidance(self, tmp_path: Path, background: Path, capsys):
         """default 設定 (overlay.font.title 未設定) では理由 + 代替手順を出して exit 1"""
         from youtube_automation.scripts.thumbnail_text import main
@@ -248,3 +366,30 @@ class TestCli:
         )
         assert code == 2
         assert "背景画像が見つかりません" in capsys.readouterr().err
+
+    def test_broken_background_exits_2(
+        self,
+        tmp_path: Path,
+        test_font: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+    ):
+        from youtube_automation.scripts.thumbnail_text import main
+
+        broken = tmp_path / "broken.png"
+        broken.write_bytes(b"not a real image")
+        self._patch_config(monkeypatch, channel_root=tmp_path, cfg=_skill_config_dict(test_font))
+
+        code = main(
+            [
+                "--background",
+                str(broken),
+                "--title",
+                "Test",
+                "--output",
+                str(tmp_path / "out.jpg"),
+            ]
+        )
+
+        assert code == 2
+        assert "背景画像を読み込めません" in capsys.readouterr().err

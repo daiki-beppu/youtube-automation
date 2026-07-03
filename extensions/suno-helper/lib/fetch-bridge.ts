@@ -68,26 +68,52 @@ export function extractAuthHeader(input: RequestInfo | URL, init?: RequestInit):
   return null;
 }
 
-/** unknown JSON から `{id, status}` を持つ clip 配列を fail-soft で取り出す共通処理。 */
+type RawObservedClip = {
+  duration?: unknown;
+  id?: unknown;
+  metadata?: { duration?: unknown };
+  status?: unknown;
+};
+
+function toRawObservedClip(item: unknown): RawObservedClip | null {
+  if (typeof item !== "object" || item === null) {
+    return null;
+  }
+  const clip = item as RawObservedClip;
+  return typeof clip.id === "string" && typeof clip.status === "string" ? clip : null;
+}
+
+function withDuration(clip: RawObservedClip, duration: number | undefined): ObservedClip {
+  return duration === undefined
+    ? { id: clip.id as string, status: clip.status as string }
+    : { id: clip.id as string, status: clip.status as string, duration };
+}
+
+function parseDuration(clip: RawObservedClip): number | null | undefined {
+  if (clip.duration !== undefined) {
+    return typeof clip.duration === "number" && Number.isFinite(clip.duration) ? clip.duration : null;
+  }
+  const metadataDuration = clip.metadata?.duration;
+  return typeof metadataDuration === "number" && Number.isFinite(metadataDuration) ? metadataDuration : undefined;
+}
+
+/** unknown JSON から `{id, status, duration?}` を持つ clip 配列を fail-soft で取り出す共通処理。 */
 function parseClipArray(value: unknown): ObservedClip[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
-  const clips: ObservedClip[] = [];
-  for (const item of value) {
-    if (
-      typeof item === "object" &&
-      item !== null &&
-      typeof (item as { id?: unknown }).id === "string" &&
-      typeof (item as { status?: unknown }).status === "string"
-    ) {
-      clips.push({
-        id: (item as { id: string }).id,
-        status: (item as { status: string }).status,
-      });
+  const clips = value.map((item): ObservedClip | null => {
+    const clip = toRawObservedClip(item);
+    if (!clip) {
+      return null;
     }
-  }
-  return clips.length > 0 ? clips : null;
+    const duration = parseDuration(clip);
+    if (duration === null) {
+      return null;
+    }
+    return withDuration(clip, duration);
+  });
+  return clips.length > 0 && clips.every((clip): clip is ObservedClip => clip !== null) ? clips : null;
 }
 
 /**
@@ -103,7 +129,7 @@ export function parseClipsFromGenerateResponse(json: unknown): ObservedClip[] | 
 }
 
 /**
- * feed レスポンス（GET /api/feed/v2?ids=...）から clip status を取り出す。
+ * feed レスポンス（GET /api/feed/v2?ids=... / POST /api/feed/v3）から clip status を取り出す。
  * 形は `{ clips: [...] }` と素の配列の両方を観測しているため両対応する。
  * 形が崩れていたら null（fail-soft）。
  */

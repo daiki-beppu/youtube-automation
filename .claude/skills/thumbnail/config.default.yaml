@@ -180,9 +180,6 @@ image_generation:
       # 背景・テキスト・設定なら常に同一の出力になる (フォントが安定再現される)。
       # フォント未設定・ファイル不在時は理由と代替手順つきの ConfigError になる。
       overlay:
-        # true にするとチャンネルの標準フローとして overlay 経路を使う宣言になる
-        # (SKILL.md「フォント安定化」参照)。false でも CLI の明示実行は可能。
-        enabled: false
         font:
           # タイトル行のフォントファイル (.ttf / .otf / .ttc)。
           # 絶対パス、または channel_dir からの相対パスで指定 (必須)。

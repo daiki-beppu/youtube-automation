@@ -71,6 +71,11 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _is_input_config_error(exc: ConfigError) -> bool:
+    message = str(exc)
+    return message.startswith("背景画像が見つかりません") or message.startswith("背景画像を読み込めません")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
@@ -97,6 +102,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     except ConfigError as exc:
         print(f"[ERROR] {exc}", file=sys.stderr)
+        if _is_input_config_error(exc):
+            return 2
         return 1
 
     print(f"[OK] テキスト付きサムネ候補を出力しました: {output}")

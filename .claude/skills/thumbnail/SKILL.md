@@ -28,7 +28,7 @@ description: "Use when コレクションのサムネイル画像が必要で、
 
 `config/channel/` が存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## When to Use
 
@@ -410,14 +410,15 @@ image_generation:
   gemini:
     thumbnail_text:
       overlay:
-        enabled: true
         font:
           title: "assets/fonts/NotoSansJP-Bold.ttf"   # channel_dir 相対 or 絶対パス
 ```
 
 フォントファイルは Google Fonts 等から入手し `<channel_dir>/assets/fonts/` に置く運用を推奨（フォントのライセンス条項を確認すること）。サイズ・色・縁取り・配置は `overlay.title` / `overlay.channel_name` / `overlay.layout` で調整する（デフォルト値は `config.default.yaml` 参照）。
 
-生成手順（single_step の代替として）:
+`yt-thumbnail-text` は標準 `/thumbnail` フローから自動分岐しない。フォントの完全固定が必要なコレクションで、運用者がこの経路を明示的に選んだときだけ実行する。
+
+生成手順（single_step の代替として明示実行）:
 
 1. textless 背景候補を生成する（既存手順どおり `main-v1.png` を作る、または承認済み `main.png` を使う）
 2. 実フォントでテキストを合成する:
