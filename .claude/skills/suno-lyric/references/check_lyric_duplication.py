@@ -20,14 +20,36 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from youtube_automation.utils.suno_lyrics import SunoLyricsEntry
 
 SECTION_TAG_RE = re.compile(r"^\[([^\]]+)\]\s*$")
 DEFAULT_TARGET_SECTIONS = ("Intro", "Pre-Chorus", "Bridge", "Extended Outro", "Outro")
+
+
+def ensure_repo_src_on_path() -> None:
+    for parent in Path(__file__).resolve().parents:
+        src_dir = parent / "src"
+        if (src_dir / "youtube_automation").is_dir():
+            sys.path.insert(0, str(src_dir))
+            return
+
+
+def load_entries(path: Path) -> list[SunoLyricsEntry]:
+    ensure_repo_src_on_path()
+    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.utils.suno_lyrics import load_suno_lyrics_entries
+
+    try:
+        return load_suno_lyrics_entries(path)
+    except ConfigError as error:
+        raise ValueError(str(error)) from error
 
 
 def parse_args() -> argparse.Namespace:
@@ -73,34 +95,6 @@ def split_sections(lyrics: str) -> list[tuple[str, str]]:
     return sections
 
 
-def validate_entries(raw: object, path: Path) -> list[dict[str, str]]:
-    """suno-lyrics.json の公開 shape を検証し、形式エラーは exit 2 相当で返す。"""
-    if not isinstance(raw, list):
-        raise ValueError(f"{path} の root は配列である必要があります")
-
-    entries: list[dict[str, str]] = []
-    seen_names: set[str] = set()
-    duplicate_names: list[str] = []
-    for index, entry in enumerate(raw, start=1):
-        if not isinstance(entry, dict):
-            raise ValueError(f"{path}: entry {index} は object である必要があります")
-        name = entry.get("name")
-        lyrics = entry.get("lyrics")
-        if not isinstance(name, str) or not name.strip():
-            raise ValueError(f"{path}: entry {index}.name は non-empty string である必要があります")
-        if not isinstance(lyrics, str):
-            raise ValueError(f"{path}: entry {index}.lyrics は string である必要があります")
-        clean_name = name.strip()
-        if clean_name in seen_names:
-            duplicate_names.append(clean_name)
-        seen_names.add(clean_name)
-        entries.append({"name": clean_name, "lyrics": lyrics.rstrip()})
-    if duplicate_names:
-        joined_names = ", ".join(sorted(set(duplicate_names)))
-        raise ValueError(f"{path}: duplicated entry names: {joined_names}")
-    return entries
-
-
 def parse_target_sections(raw_sections: str | None) -> set[str]:
     sections = raw_sections.split(",") if raw_sections is not None else DEFAULT_TARGET_SECTIONS
     target_sections = {section.strip().lower() for section in sections if section.strip()}
@@ -109,7 +103,7 @@ def parse_target_sections(raw_sections: str | None) -> set[str]:
     return target_sections
 
 
-def find_cross_song_duplicates(entries: list[dict[str, str]], target_sections: set[str]) -> list[dict]:
+def find_cross_song_duplicates(entries: list[SunoLyricsEntry], target_sections: set[str]) -> list[dict]:
     """正規化本文が複数の曲に現れるグループを列挙する。
 
     グルーピングはセクション名ではなく本文で行う。これにより、ある曲の
@@ -118,14 +112,12 @@ def find_cross_song_duplicates(entries: list[dict[str, str]], target_sections: s
     """
     body_to_occurrences: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for entry in entries:
-        name = entry["name"]
-        lyrics = entry["lyrics"]
-        for tag, body in split_sections(lyrics):
+        for tag, body in split_sections(entry.lyrics):
             if not body:
                 continue
             if tag.lower() not in target_sections:
                 continue
-            body_to_occurrences[body].append((name, tag))
+            body_to_occurrences[body].append((entry.name, tag))
 
     duplicates = []
     for body, occurrences in body_to_occurrences.items():
@@ -142,12 +134,10 @@ def main() -> int:
     args = parse_args()
     path = Path(args.lyrics_json)
     try:
-        raw_entries = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+        entries = load_entries(path)
+    except OSError as error:
         print(f"NG: {path} を読み込めません: {error}", file=sys.stderr)
         return 2
-    try:
-        entries = validate_entries(raw_entries, path)
     except ValueError as error:
         print(f"NG: {error}", file=sys.stderr)
         return 2

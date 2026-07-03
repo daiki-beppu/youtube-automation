@@ -178,7 +178,7 @@ def test_check_lyric_duplication_invalid_json_is_format_error(tmp_path: Path) ->
     result = _run(path)
 
     assert result.returncode == 2
-    assert "読み込めません" in result.stderr
+    assert "invalid JSON" in result.stderr
 
 
 def test_check_lyric_duplication_root_must_be_list(tmp_path: Path) -> None:
@@ -187,7 +187,7 @@ def test_check_lyric_duplication_root_must_be_list(tmp_path: Path) -> None:
     result = _run(path)
 
     assert result.returncode == 2
-    assert "root は配列" in result.stderr
+    assert "root must be a list" in result.stderr
 
 
 def test_check_lyric_duplication_entry_must_be_object(tmp_path: Path) -> None:
@@ -196,7 +196,7 @@ def test_check_lyric_duplication_entry_must_be_object(tmp_path: Path) -> None:
     result = _run(path)
 
     assert result.returncode == 2
-    assert "entry 1 は object" in result.stderr
+    assert "entry 1 must be an object" in result.stderr
 
 
 def test_check_lyric_duplication_name_must_be_non_empty_string(tmp_path: Path) -> None:
@@ -205,7 +205,7 @@ def test_check_lyric_duplication_name_must_be_non_empty_string(tmp_path: Path) -
     result = _run(path)
 
     assert result.returncode == 2
-    assert "entry 1.name は non-empty string" in result.stderr
+    assert "entry 1.name must be a non-empty string" in result.stderr
 
 
 def test_check_lyric_duplication_duplicate_name_is_format_error(tmp_path: Path) -> None:
@@ -220,16 +220,16 @@ def test_check_lyric_duplication_duplicate_name_is_format_error(tmp_path: Path) 
     result = _run(path)
 
     assert result.returncode == 2
-    assert "duplicated entry names: Song A" in result.stderr
+    assert "duplicated lyrics entry names: Song A" in result.stderr
 
 
 @pytest.mark.parametrize(
     ("entry", "expected_message"),
     [
-        ({"lyrics": "[Intro]\nA"}, "entry 1.name は non-empty string"),
-        ({"name": None, "lyrics": "[Intro]\nA"}, "entry 1.name は non-empty string"),
-        ({"name": "Song A"}, "entry 1.lyrics は string"),
-        ({"name": "Song A", "lyrics": None}, "entry 1.lyrics は string"),
+        ({"lyrics": "[Intro]\nA"}, "entry 1.name must be a non-empty string"),
+        ({"name": None, "lyrics": "[Intro]\nA"}, "entry 1.name must be a non-empty string"),
+        ({"name": "Song A"}, "entry 1.lyrics must be a string"),
+        ({"name": "Song A", "lyrics": None}, "entry 1.lyrics must be a string"),
     ],
 )
 def test_check_lyric_duplication_required_fields_must_be_present_and_non_null(
@@ -249,4 +249,4 @@ def test_check_lyric_duplication_lyrics_must_be_string(tmp_path: Path) -> None:
     result = _run(path)
 
     assert result.returncode == 2
-    assert "entry 1.lyrics は string" in result.stderr
+    assert "entry 1.lyrics must be a string" in result.stderr
