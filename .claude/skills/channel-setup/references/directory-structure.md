@@ -1,6 +1,6 @@
 # チャンネルリポジトリのディレクトリ構造
 
-`/channel-new` `/channel-setup` `/channel-import` から共通参照する正準ディレクトリ構造。
+`/channel-new`（既存チャンネル取り込みモード含む） `/channel-setup` から共通参照する正準ディレクトリ構造。
 
 ## 正準構造
 

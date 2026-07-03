@@ -295,7 +295,7 @@ export function App() {
         </button>
       </div>
 
-      {!isRunning && playlistName && selectedCollectionId && (
+      {!isRunning && selectedCollectionId && (
         <div className="flex flex-col gap-2">
           <button
             type="button"
@@ -305,13 +305,15 @@ export function App() {
             選択中の曲を採用
           </button>
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => void retryPlaylist()}
-              className="flex-1 rounded border border-amber-500 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
-            >
-              Playlist から再開
-            </button>
+            {playlistName && (
+              <button
+                type="button"
+                onClick={() => void retryPlaylist()}
+                className="flex-1 rounded border border-amber-500 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
+              >
+                Playlist から再開
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void retryDownload()}

@@ -594,8 +594,8 @@ export function useSunoRunner(): RunnerState {
     if (isRunning) {
       return;
     }
-    if (!selectedCollectionId || !playlistName) {
-      report("コレクションまたは playlist 名を解決できないため、ダウンロードを再開できません。", true);
+    if (!selectedCollectionId) {
+      report("コレクションを選択してから、ダウンロードを再開してください。", true);
       return;
     }
     if (submittedClipIdsForResume.length === 0) {
@@ -609,10 +609,8 @@ export function useSunoRunner(): RunnerState {
     try {
       const payload = {
         collectionId: selectedCollectionId,
-        playlistName,
         submittedClipIds: submittedClipIdsForResume,
         expectedClipCount: expectedClipCountForManualAdoption,
-        ...(selectedCollection?.suno_playlist_url ? { sunoPlaylistUrl: selectedCollection.suno_playlist_url } : {}),
       };
       await sendMessage("retryDownload", payload);
       report("ダウンロードを再実行しています…");
@@ -621,15 +619,7 @@ export function useSunoRunner(): RunnerState {
       const message = err instanceof Error ? err.message : String(err);
       report(formatRunError(message), true);
     }
-  }, [
-    isRunning,
-    selectedCollectionId,
-    selectedCollection,
-    playlistName,
-    submittedClipIdsForResume,
-    expectedClipCountForManualAdoption,
-    report,
-  ]);
+  }, [isRunning, selectedCollectionId, submittedClipIdsForResume, expectedClipCountForManualAdoption, report]);
 
   const adoptSelectedClips = useCallback(async () => {
     if (isRunning) {
