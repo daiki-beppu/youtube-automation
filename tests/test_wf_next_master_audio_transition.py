@@ -247,6 +247,22 @@ def test_selected_final_candidate_still_uses_audio_gate(tmp_path: Path) -> None:
     assert state["phase"] == "prepared"
 
 
+def test_selected_raw_master_is_rejected_when_skip_manual_mastering_is_false(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    before = _state_text(collection)
+
+    result = _run(
+        collection,
+        skip_manual_mastering=False,
+        approval_gate_audio=False,
+        selected_master_audio="raw-master.wav",
+    )
+
+    assert result.returncode == 1
+    assert "selected-master-audio is not a final candidate: raw-master.wav" in result.stderr
+    assert _state_text(collection) == before
+
+
 def test_non_prepared_phase_is_noop_without_state_update(tmp_path: Path) -> None:
     collection = _collection(tmp_path)
     state = _state(collection)

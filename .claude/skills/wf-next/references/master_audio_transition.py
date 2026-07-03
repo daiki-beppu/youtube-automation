@@ -103,10 +103,7 @@ def main(argv: list[str] | None = None) -> int:
 
     candidates = _final_candidates(master_dir, raw_master)
     if selected_arg is not None:
-        if selected_arg == raw_master:
-            if candidates:
-                raise ValueError("selected-master-audio must be one of the final candidates")
-        elif selected_arg not in candidates:
+        if selected_arg not in candidates:
             raise ValueError(f"selected-master-audio is not a final candidate: {selected_arg}")
     elif len(candidates) > 1:
         _emit("needs_selection", candidates=candidates, reason="multiple final candidates")
