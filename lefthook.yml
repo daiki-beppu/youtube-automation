@@ -30,6 +30,9 @@ pre-commit:
     # extensions のみだと oxlint / oxfmt が「対象ファイルなし」を exit 1 で返し commit が
     # 必ず落ちる (#1428)。exclude で staged files から外せば、対象 0 件のとき lefthook が
     # コマンドごと skip する。
+    # oxfmt の exclude は oxfmt.config.ts の ignorePatterns と同期させること。
+    # 同期漏れがあると、その配下の JSON だけを staged した commit が #1428 と同じ
+    # 「対象ファイルなし」で必ず落ちる（例: .claude/skills/**/*.json、#1471 対応中に発覚）。
     oxlint:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs}"
       exclude:
@@ -39,6 +42,20 @@ pre-commit:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc}"
       exclude:
         - "extensions/**"
+        - ".claude/**"
+        - ".agents/**"
+        - ".takt/**"
+        - ".worktrees/**"
+        - "docs/**"
+        - "examples/**"
+        - "config/**"
+        - "infra/**"
+        - "bench/**"
+        - "auth/**"
+        - "launchd/**"
+        - "poc/**"
+        - "_skills/**"
+        - "_claude_md/**"
       run: bunx oxfmt --check {staged_files}
     typecheck:
       # root の tsc -b は extensions を含まないため、extensions のみの変更では起動しない
