@@ -558,7 +558,13 @@ def test_wf_next_raw_final_transition_contract_is_documented() -> None:
         "`workflow.wf_next.skip_manual_mastering = true`",
         "`skip_manual_mastering = false`（未設定含む、デフォルト）",
     )
-    _assert_appears_before(master_detection, "AskUserQuestion", "`assets.master_audio` に `assets.raw_master`")
+    raw_final_branch = master_detection[
+        master_detection.index("`workflow.wf_next.skip_manual_mastering = true`") : master_detection.index(
+            "`skip_manual_mastering = false`（未設定含む、デフォルト）"
+        )
+    ]
+    _assert_appears_before(raw_final_branch, "`approval_gates.audio = true`", "AskUserQuestion")
+    _assert_appears_before(raw_final_branch, "AskUserQuestion", "`assets.master_audio` に `assets.raw_master`")
 
     assert "`load_config().workflow.wf_next.skip_manual_mastering = true`" in wf_status
     assert "raw master 直採用待ち（/wf-next で mastered へ進行）" in wf_status

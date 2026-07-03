@@ -22,7 +22,6 @@ export const Workflow = z
               })
               .strict()
               .prefault({}),
-            // #1449: raw=final 運用。true なら 2-B で raw_master をそのまま master_audio に採用する
             skip_manual_mastering: z.boolean().default(false),
           })
           .strict()

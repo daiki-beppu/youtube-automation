@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -210,6 +211,29 @@ def test_loop_video_background_does_not_require_main_image(tmp_path: Path) -> No
     master_cmd = _master_ffmpeg_command(ffmpeg_log)
     assert "10-assets/loop.mp4" in master_cmd
     assert "10-assets/thumbnail.jpg" not in master_cmd
+
+
+def test_workflow_state_master_audio_takes_priority_over_fixed_names(tmp_path: Path) -> None:
+    """#1449: raw=final の任意ファイル名を `/videoup` でも使える."""
+    collection = _create_collection(tmp_path, master_filename="master-mix.wav")
+    (collection / "01-master" / "master-rain.wav").write_bytes(b"fake-raw-final-audio")
+    (collection / "workflow-state.json").write_text(
+        json.dumps({"assets": {"master_audio": "master-rain.wav"}}),
+        encoding="utf-8",
+    )
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Audio    : master-rain.wav" in result.stdout
+    master_cmd = _master_ffmpeg_command(ffmpeg_log)
+    assert "01-master/master-rain.wav" in master_cmd
+    assert "01-master/master-mix.wav" not in master_cmd
 
 
 def test_loop_video_disabled_uses_textless_main_even_when_loop_exists(tmp_path: Path) -> None:
