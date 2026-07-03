@@ -86,6 +86,9 @@ export const INJECT_ACK_TIMEOUT_MS = 30000;
  * これを超えても in-flight が増えなければ fail-loud で ERROR phase に落とす。 */
 export const MAX_INJECT_RETRY = 2;
 
+/** duration 歩留まり NG 時に同じ entry を再生成する最大 retry 回数 (#1266)。 */
+export const MAX_YIELD_RETRY = 2;
+
 /** 速度プリセットの選択値を保存する chrome.storage.local の key (#875)。
  * popup（書込）と content（読込）が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
 export const SPEED_PRESET_STORAGE_KEY = "sunoSpeedPreset";
@@ -278,13 +281,59 @@ export const PHASE = {
 
 export type Phase = (typeof PHASE)[keyof typeof PHASE];
 
-/** runner content → overlay の進捗ペイロード。 */
-export interface ProgressPayload {
+/** runner content が overlay / popup に表示させる構造化ログ (#1270)。 */
+export type ProgressLog =
+  | {
+      kind: "duration-check";
+      entryName: string;
+      durationSec: number;
+      ok: boolean;
+      minSec?: number;
+      maxSec?: number;
+    }
+  | {
+      kind: "retry";
+      entryName: string;
+      attempt: number;
+      max: number;
+    }
+  | {
+      kind: "skip";
+      entryName: string;
+    };
+
+type ProgressPayloadBase = {
   phase: Phase;
   total: number;
   index?: number;
   message?: string;
-}
+};
+
+type ProgressPayloadWithoutLog = ProgressPayloadBase & {
+  log?: undefined;
+};
+
+type DurationCheckProgressPayload = ProgressPayloadBase & {
+  phase: typeof PHASE.DONE;
+  log: Extract<ProgressLog, { kind: "duration-check" }>;
+};
+
+type RetryProgressPayload = ProgressPayloadBase & {
+  phase: typeof PHASE.WAITING_SLOT;
+  log: Extract<ProgressLog, { kind: "retry" }>;
+};
+
+type SkipProgressPayload = ProgressPayloadBase & {
+  phase: typeof PHASE.ENTRY_FAILED;
+  log: Extract<ProgressLog, { kind: "skip" }>;
+};
+
+/** runner content → overlay の進捗ペイロード。log は phase/kind の許可組み合わせだけに載せる。 */
+export type ProgressPayload =
+  | ProgressPayloadWithoutLog
+  | DurationCheckProgressPayload
+  | RetryProgressPayload
+  | SkipProgressPayload;
 
 /** overlay の各パターン行の表示状態。failed はリトライ上限まで失敗しスキップされた entry (#948)。 */
 export type ItemState = "idle" | "active" | "done" | "failed";

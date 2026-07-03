@@ -28,7 +28,13 @@ test("popup を閉じて再 open すると content の snapshot から itemState
     ({ PHASE }) => {
       type Phase = (typeof PHASE)[keyof typeof PHASE];
       type ItemState = "idle" | "active" | "done";
-      type ProgressPayload = { phase: Phase; total: number; index?: number; message?: string };
+      type ProgressPayload = {
+        phase: Phase;
+        total: number;
+        index?: number;
+        message?: string;
+        log?: { kind: "duration-check"; ok: boolean };
+      };
       type Entry = { name: string; style: string; lyrics: string };
       type Snapshot = {
         collectionId: string;
@@ -39,11 +45,16 @@ test("popup を閉じて再 open すると content の snapshot から itemState
       };
 
       // --- 本番 lib/snapshot.ts と同手法を inline 再現 ---
-      const nextItemStates = (prev: ItemState[], phase: Phase, index?: number): ItemState[] => {
+      const nextItemStates = (prev: ItemState[], payload: ProgressPayload): ItemState[] => {
+        const { phase, index } = payload;
+
         if (phase === PHASE.INJECTING) {
           return prev.map((s, i) => (i === index ? "active" : s === "active" ? "idle" : s));
         }
         if (phase === PHASE.DONE) {
+          if (payload.log?.kind === "duration-check" && !payload.log.ok) {
+            return [...prev];
+          }
           return prev.map((s, i) => (i === index ? "done" : s));
         }
         return prev;
@@ -58,7 +69,7 @@ test("popup を閉じて再 open すると content の snapshot から itemState
       const isTerminal = (p: Phase) => p === PHASE.FINISHED || p === PHASE.STOPPED || p === PHASE.ERROR;
       const applyProgress = (snap: Snapshot, payload: ProgressPayload): Snapshot => ({
         ...snap,
-        itemStates: nextItemStates(snap.itemStates, payload.phase, payload.index),
+        itemStates: nextItemStates(snap.itemStates, payload),
         progress: payload,
         isRunning: isTerminal(payload.phase) ? false : snap.isRunning,
       });

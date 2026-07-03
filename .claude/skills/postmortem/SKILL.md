@@ -17,7 +17,7 @@ description: "Use when 公開済み動画が「思ったより伸びなかった
 
 存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 加えて、対象動画について以下が揃っていること:
 - `data/analytics_data_*.json` の `video_analytics[<video_id>]` に当該動画が含まれている（含まれていない場合は `/analytics-collect` を先に案内）

@@ -23,7 +23,7 @@ from PIL import UnidentifiedImageError
 
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
-from youtube_automation.scripts.benchmark_collector import is_live_benchmark_video, load_benchmark_videos
+from youtube_automation.scripts.benchmark_collector import load_benchmark_videos, select_top_vod_benchmark_videos
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.numbered_duplicates import (
     CLEANUP_GUIDE_URL,
@@ -46,7 +46,7 @@ SKILL_FILENAME = "SKILL.md"
 AUTOMATION_PACKAGE_NAME = "youtube-channels-automation"
 SKILLS_SYNC_CMD = "uv run yt-skills sync --asset skills --force"
 SKILLS_SYNC_PRUNE_CMD = "uv run yt-skills sync --asset skills --force --prune --yes"
-LEGACY_BUNDLED_SKILLS = ("onboard", "distrokid-prep")
+LEGACY_BUNDLED_SKILLS = ("onboard", "distrokid-prep", "channel-import")
 
 BOOTSTRAP_CATEGORY = "bootstrap"
 API_CATEGORY = "api"
@@ -889,7 +889,7 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
                 message=f"config/channel/ ロード失敗: {e}",
                 next_action={
                     "kind": "human",
-                    "instructions": "/channel-import を実行して設定を修復してください",
+                    "instructions": ("/channel-new（既存チャンネル取り込みモード）を実行して設定を修復してください"),
                 },
             )
 
@@ -1275,32 +1275,6 @@ def _missing_channel_setup_benchmark_items(
     return missing, notes
 
 
-def _select_top_vod_benchmark_videos(
-    videos: list[dict[str, object]],
-) -> tuple[list[dict[str, object]], int]:
-    """視聴数降順の benchmark 動画リストから live 配信を除外しつつ top N の VOD を選定する。
-
-    Gemini がライブ配信 URL を取り込めず yt-video-analyze が恒久的に 403 で失敗するため
-    (#1462)、live（duration_iso == "P0D"）は期待集合に数えず次点の VOD を繰り上げる。
-    繰り上げの根拠: yt-video-analyze 側も同じ選定で live をスキップして次点を解析するため、
-    doctor の期待集合と実際に解析可能な集合が一致し、warn が下流で解消可能になる。
-    繰り上げても N 本に満たない場合は呼び出し側で母数を縮小する（恒久 warn の再発防止）。
-
-    Returns:
-        (top N として選定した VOD リスト, 選定中にスキップした live 配信の本数)
-    """
-    top_videos: list[dict[str, object]] = []
-    excluded_live = 0
-    for video in videos:
-        if len(top_videos) >= TTP_VIDEO_ANALYZE_TOP_N:
-            break
-        if is_live_benchmark_video(video):
-            excluded_live += 1
-            continue
-        top_videos.append(video)
-    return top_videos, excluded_live
-
-
 def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) -> tuple[list[str], list[str]]:
     approved_slug_set = set(approved_slugs)
     if not approved_slug_set:
@@ -1315,13 +1289,14 @@ def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) 
             missing.append(slug_error)
             continue
         videos = benchmark_by_slug.get(slug, [])
-        top_videos, excluded_live = _select_top_vod_benchmark_videos(videos)
+        top_videos, skipped_live = select_top_vod_benchmark_videos(videos, TTP_VIDEO_ANALYZE_TOP_N)
+        excluded_live = len(skipped_live)
         if excluded_live:
             notes.append(
                 f"{slug}: live 配信 {excluded_live} 本は Gemini で解析不能のため "
                 f"benchmark top {TTP_VIDEO_ANALYZE_TOP_N} の判定から除外（次点 VOD を繰り上げ）"
             )
-        if len(videos) < TTP_VIDEO_ANALYZE_TOP_N:
+        if len(videos) < TTP_VIDEO_ANALYZE_TOP_N and not excluded_live:
             missing.append(
                 f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} が不足 ({len(top_videos)}/{TTP_VIDEO_ANALYZE_TOP_N})"
             )

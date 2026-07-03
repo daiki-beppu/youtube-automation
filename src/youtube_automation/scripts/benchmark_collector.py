@@ -1179,6 +1179,25 @@ def is_live_benchmark_video(video: dict) -> bool:
     return str(video.get("duration_iso") or "") == LIVE_DURATION_ISO
 
 
+def select_top_vod_benchmark_videos(videos: list[dict], top: int) -> tuple[list[dict], list[dict]]:
+    """benchmark 動画から live を除外しつつ top 件の解析可能 VOD を選ぶ。
+
+    live は「top 件の VOD が埋まる前に遭遇したもの」だけを skip として返す。
+    これにより、doctor の期待集合と yt-video-analyze の実解析集合、およびユーザー向け
+    note/log の対象が同じになる。
+    """
+    selected: list[dict] = []
+    skipped_live: list[dict] = []
+    for video in videos:
+        if len(selected) >= top:
+            break
+        if is_live_benchmark_video(video):
+            skipped_live.append(video)
+            continue
+        selected.append(video)
+    return selected, skipped_live
+
+
 def load_benchmark_videos(data_dir: Path, min_views: int = 10000, require_thumbnail: bool = False) -> list[dict]:
     """最新ベンチマーク JSON から min_views 以上の動画を抽出する。
 
