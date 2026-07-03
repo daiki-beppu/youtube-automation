@@ -27,6 +27,7 @@ from collections import defaultdict
 from pathlib import Path
 
 SECTION_TAG_RE = re.compile(r"^\[([^\]]+)\]\s*$")
+DEFAULT_TARGET_SECTIONS = ("Intro", "Pre-Chorus", "Bridge", "Extended Outro")
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,7 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sections",
         default=None,
-        help="検査対象セクション名のカンマ区切り（例: 'Intro,Pre-Chorus,Bridge,Extended Outro'）。省略時は全セクション",
+        help=("検査対象セクション名のカンマ区切り（default: 'Intro,Pre-Chorus,Bridge,Extended Outro'）"),
     )
     return parser.parse_args()
 
@@ -72,7 +73,31 @@ def split_sections(lyrics: str) -> list[tuple[str, str]]:
     return sections
 
 
-def find_cross_song_duplicates(entries: list[dict], target_sections: set[str] | None) -> list[dict]:
+def validate_entries(raw: object, path: Path) -> list[dict[str, str]]:
+    """suno-lyrics.json の公開 shape を検証し、形式エラーは exit 2 相当で返す。"""
+    if not isinstance(raw, list):
+        raise ValueError(f"{path} の root は配列である必要があります")
+
+    entries: list[dict[str, str]] = []
+    for index, entry in enumerate(raw, start=1):
+        if not isinstance(entry, dict):
+            raise ValueError(f"{path}: entry {index} は object である必要があります")
+        name = entry.get("name")
+        lyrics = entry.get("lyrics")
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"{path}: entry {index}.name は non-empty string である必要があります")
+        if not isinstance(lyrics, str):
+            raise ValueError(f"{path}: entry {index}.lyrics は string である必要があります")
+        entries.append({"name": name.strip(), "lyrics": lyrics.rstrip()})
+    return entries
+
+
+def parse_target_sections(raw_sections: str | None) -> set[str]:
+    sections = raw_sections.split(",") if raw_sections else DEFAULT_TARGET_SECTIONS
+    return {section.strip().lower() for section in sections if section.strip()}
+
+
+def find_cross_song_duplicates(entries: list[dict[str, str]], target_sections: set[str]) -> list[dict]:
     """正規化本文が複数の曲に現れるグループを列挙する。
 
     グルーピングはセクション名ではなく本文で行う。これにより、ある曲の
@@ -81,12 +106,12 @@ def find_cross_song_duplicates(entries: list[dict], target_sections: set[str] | 
     """
     body_to_occurrences: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for entry in entries:
-        name = entry.get("name", "(name 不明)")
-        lyrics = entry.get("lyrics") or ""
+        name = entry["name"]
+        lyrics = entry["lyrics"]
         for tag, body in split_sections(lyrics):
             if not body:
                 continue
-            if target_sections is not None and tag.lower() not in target_sections:
+            if tag.lower() not in target_sections:
                 continue
             body_to_occurrences[body].append((name, tag))
 
@@ -105,22 +130,20 @@ def main() -> int:
     args = parse_args()
     path = Path(args.lyrics_json)
     try:
-        entries = json.loads(path.read_text(encoding="utf-8"))
+        raw_entries = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         print(f"NG: {path} を読み込めません: {error}", file=sys.stderr)
         return 2
-    if not isinstance(entries, list):
-        print(f"NG: {path} の root は配列である必要があります", file=sys.stderr)
+    try:
+        entries = validate_entries(raw_entries, path)
+    except ValueError as error:
+        print(f"NG: {error}", file=sys.stderr)
         return 2
 
-    target_sections: set[str] | None = None
-    if args.sections:
-        target_sections = {s.strip().lower() for s in args.sections.split(",") if s.strip()}
-
+    target_sections = parse_target_sections(args.sections)
     duplicates = find_cross_song_duplicates(entries, target_sections)
     if not duplicates:
-        scope = "全セクション" if target_sections is None else f"対象セクション {sorted(target_sections)}"
-        print(f"OK: 曲間のセクション重複なし（{len(entries)} 曲、{scope}）")
+        print(f"OK: 曲間のセクション重複なし（{len(entries)} 曲、対象セクション {sorted(target_sections)}）")
         return 0
 
     print(f"NG: 曲間でセクション本文が完全一致するグループを {len(duplicates)} 件検出しました")
