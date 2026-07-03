@@ -548,6 +548,10 @@ export function useSunoRunner(): RunnerState {
       void retryPlaylist();
       return;
     }
+    if (entries.length === 0) {
+      report("再開に必要なパターンが未取得です。データ取得後に再試行してください。", true);
+      return;
+    }
     setResumeDismissed(true);
     void run(
       buildResumeRunOverrides(resumeBanner, {
@@ -555,7 +559,15 @@ export function useSunoRunner(): RunnerState {
         playlistExpectedClipCount: playlistExpectedClipCountForResume,
       }),
     );
-  }, [resumeBanner, retryPlaylist, run, submittedClipIdsForResume, playlistExpectedClipCountForResume]);
+  }, [
+    resumeBanner,
+    retryPlaylist,
+    entries.length,
+    report,
+    run,
+    submittedClipIdsForResume,
+    playlistExpectedClipCountForResume,
+  ]);
 
   // ダウンロードのみ再実行 (#1251)。clip を再選択 → Download all を実行する。
   const retryDownload = useCallback(async () => {

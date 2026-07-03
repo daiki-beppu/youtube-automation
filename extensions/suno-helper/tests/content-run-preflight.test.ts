@@ -271,6 +271,27 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     },
   );
 
+  it.each([
+    ["文字列", "0", /run\.indices/],
+    ["null", null, /run\.indices/],
+    ["空配列", [], /run\.indices/],
+    ["非整数", [1.5], /run\.indices/],
+    ["負数", [-1], /run\.indices/],
+    ["範囲外", [2], /run\.indices/],
+    ["重複", [0, 0], /run\.indices/],
+  ] as const)(
+    "Given indices が%s When run を受ける Then fail-loud し副作用を起こさない",
+    async (_label, indices, message) => {
+      await loadContentScript();
+      const runHandler = getRunHandler();
+      const entries = makePromptEntries(2);
+
+      expect(() => runHandler({ data: { ...makeRunPayload(entries), indices } })).toThrow(message);
+      expect(harness.sendMessage).not.toHaveBeenCalled();
+      expect(harness.feedPollerStart).not.toHaveBeenCalled();
+    },
+  );
+
   it("Given view dropdown が検出不能 When run を受ける Then ERROR progress を emit し feed poller を開始しない", async () => {
     await loadContentScript();
     const runHandler = getRunHandler();

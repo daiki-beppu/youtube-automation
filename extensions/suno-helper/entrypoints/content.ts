@@ -120,6 +120,32 @@ function assertOptionalDurationFilter(value: unknown, field: string): DurationFi
   return { min_sec: minSec, max_sec: maxSec };
 }
 
+function assertOptionalIndices(value: unknown, field: string, entryCount: number): number[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`${field} must be number array`);
+  }
+  if (value.length === 0) {
+    throw new Error(`${field} must not be empty`);
+  }
+  const seen = new Set<number>();
+  return value.map((item, index) => {
+    if (typeof item !== "number" || !Number.isInteger(item)) {
+      throw new Error(`${field}[${index}] must be integer`);
+    }
+    if (item < 0 || item >= entryCount) {
+      throw new Error(`${field}[${index}] must be within entries range`);
+    }
+    if (seen.has(item)) {
+      throw new Error(`${field}[${index}] must be unique`);
+    }
+    seen.add(item);
+    return item;
+  });
+}
+
 function assertRunPayload(value: unknown): RunPayload {
   const record = assertRecord(value, "run payload");
   if (!Array.isArray(record.entries)) {
@@ -131,6 +157,7 @@ function assertRunPayload(value: unknown): RunPayload {
     playlistName: assertNonEmptyString(record.playlistName, "run.playlistName"),
     collectionId: assertNonEmptyString(record.collectionId, "run.collectionId"),
     durationFilter: assertOptionalDurationFilter(record.durationFilter, "run.durationFilter"),
+    indices: assertOptionalIndices(record.indices, "run.indices", record.entries.length),
   };
 }
 

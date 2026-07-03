@@ -1164,6 +1164,60 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
+  it("persisted resume が entries 未取得の途中再開ならバナーを残して run を送らない", async () => {
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    resumeStateMocks.readResumeState.mockResolvedValue({
+      collectionId: "20260601-clm-theme-a-collection",
+      failedIndex: 0,
+      total: 1,
+      timestamp: Date.now(),
+      submittedClipIds: [],
+    } as never);
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(500, {}));
+    messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
+
+    await act(async () => {
+      root.render(createElement(App));
+    });
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("前回の実行が中断されました。");
+      expect(container.textContent).toContain("取得失敗:");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "再開").click();
+    });
+
+    expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("run", expect.anything());
+    expect(container.textContent).toContain("再開に必要なパターンが未取得です。");
+    expect(container.textContent).toContain("前回の実行が中断されました。");
+  });
+
   it("clip ID が無い状態で Playlist から再開しても retryPlaylist を送らずエラー表示する", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))

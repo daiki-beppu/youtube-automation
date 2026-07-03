@@ -480,16 +480,9 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
     Array.from({ length: 20 }, () => addClipCard({ generating: true }));
 
     const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
-    const outcome = pending.then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-    const elapsedMs = FAST_OPTIONS.timeoutMs + FAST_OPTIONS.pollIntervalMs + 50;
-    for (let elapsed = 0; elapsed < elapsedMs; elapsed += FAST_OPTIONS.pollIntervalMs) {
-      vi.advanceTimersByTime(FAST_OPTIONS.pollIntervalMs);
-      await Promise.resolve();
-    }
-    await expect(outcome).resolves.toBeInstanceOf(Error);
+    const expectation = expect(pending).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.timeoutMs + FAST_OPTIONS.pollIntervalMs + 50);
+    await expectation;
   }, 15_000);
 });
 

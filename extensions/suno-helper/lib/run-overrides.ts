@@ -24,8 +24,6 @@ export interface RunPayloadInput {
   overrides: RunOverrides | undefined;
 }
 
-export type SelectedEntriesRunOverridesInput = PatternSelectionInput;
-
 export function buildRunPayload(input: RunPayloadInput): RunPayload {
   return {
     entries: input.entries,
@@ -65,7 +63,7 @@ export function buildSelectedEntriesRunOverrides({
   selectedEntries,
   itemStates,
   entryCount,
-}: SelectedEntriesRunOverridesInput): RunOverrides | undefined {
+}: PatternSelectionInput): RunOverrides | undefined {
   const indices = selectedEntryIndices({
     selectedEntries,
     itemStates,
