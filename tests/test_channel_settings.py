@@ -729,6 +729,54 @@ class TestCLIPushChannelIdSafety:
 
 
 class TestCLIPull:
+    def test_no_localizations_hides_remote_localization_diff(self, tmp_path, monkeypatch, capsys):
+        _prepare_channel_dir(tmp_path, monkeypatch)
+        youtube = MagicMock()
+        remote = _mock_remote_response(description="Test channel description for sync.")
+        remote["brandingSettings"]["channel"]["keywords"] = "chiptune 8-bit 'rpg music'"
+        remote["brandingSettings"]["channel"]["defaultLanguage"] = "ja"
+        remote["brandingSettings"]["channel"]["unsubscribedTrailer"] = "dQw4w9WgXcQ"
+        remote["localizations"] = {"ja_JP": {"title": "Remote title", "description": "Remote desc"}}
+        youtube.channels().list().execute.return_value = {"items": [remote]}
+
+        with patch(
+            "youtube_automation.scripts.channel_settings_cli.get_youtube",
+            return_value=youtube,
+        ):
+            rc = channel_settings_cli.main(["pull", "--no-localizations"])
+
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "no diff" in out
+        assert "localizations." not in out
+
+    def test_apply_no_localizations_skips_file_writes_for_localization_only_diff(self, tmp_path, monkeypatch, capsys):
+        _prepare_channel_dir(tmp_path, monkeypatch)
+        youtube = MagicMock()
+        remote = _mock_remote_response(description="Test channel description for sync.")
+        remote["brandingSettings"]["channel"]["keywords"] = "chiptune 8-bit 'rpg music'"
+        remote["brandingSettings"]["channel"]["defaultLanguage"] = "ja"
+        remote["brandingSettings"]["channel"]["unsubscribedTrailer"] = "dQw4w9WgXcQ"
+        remote["localizations"] = {"ja_JP": {"title": "Remote title", "description": "Remote desc"}}
+        youtube.channels().list().execute.return_value = {"items": [remote]}
+        config_path = tmp_path / "config" / "channel" / "meta.json"
+        loc_path = tmp_path / "config" / "localizations.json"
+        before_config = config_path.read_text(encoding="utf-8")
+        before_loc = loc_path.read_text(encoding="utf-8")
+
+        with patch(
+            "youtube_automation.scripts.channel_settings_cli.get_youtube",
+            return_value=youtube,
+        ):
+            rc = channel_settings_cli.main(["pull", "--apply", "--no-localizations"])
+
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "no diff" in out
+        assert "localizations." not in out
+        assert config_path.read_text(encoding="utf-8") == before_config
+        assert loc_path.read_text(encoding="utf-8") == before_loc
+
     def test_dry_run_does_not_write(self, tmp_path, monkeypatch, capsys):
         _prepare_channel_dir(tmp_path, monkeypatch)
         youtube = MagicMock()
