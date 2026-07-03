@@ -1,17 +1,22 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   existsSync,
-  mkdirSync,
+  mkdtempSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
 const repoRoot = resolve(import.meta.dir, "..", "..", "..");
 const lefthookConfig = join(repoRoot, "lefthook.yml");
-const fixtureDirRel = "packages/cli/__lefthook_contract__";
-const fixtureDir = join(repoRoot, fixtureDirRel);
+const fixtureDirPrefix = join(
+  repoRoot,
+  "packages",
+  "cli",
+  "__lefthook_contract__-"
+);
+const fixtureDirs: string[] = [];
 
 const runTool = (args: string[]) =>
   Bun.spawnSync(["bun", "x", ...args], { cwd: repoRoot });
@@ -19,8 +24,16 @@ const runTool = (args: string[]) =>
 const combinedOutput = (proc: Bun.SyncSubprocess<"pipe", "pipe">): string =>
   `${proc.stdout.toString()}${proc.stderr.toString()}`;
 
+const createFixtureDir = (): string => {
+  const fixtureDir = mkdtempSync(fixtureDirPrefix);
+  fixtureDirs.push(fixtureDir);
+  return fixtureDir;
+};
+
 afterEach(() => {
-  rmSync(fixtureDir, { force: true, recursive: true });
+  for (const fixtureDir of fixtureDirs.splice(0)) {
+    rmSync(fixtureDir, { force: true, recursive: true });
+  }
 });
 
 describe("lefthook pre-commit oxlint / oxfmt contract", () => {
@@ -61,10 +74,11 @@ describe("lefthook pre-commit oxlint / oxfmt contract", () => {
   });
 
   test("real oxlint violations still fail with the unmatched-pattern flag", () => {
-    mkdirSync(fixtureDir, { recursive: true });
-    const fixtureRel = `${fixtureDirRel}/banned-mcp-import.ts`;
+    const fixtureDir = createFixtureDir();
+    const fixtureFile = join(fixtureDir, "banned-mcp-import.ts");
+    const fixtureRel = relative(repoRoot, fixtureFile);
     writeFileSync(
-      join(repoRoot, fixtureRel),
+      fixtureFile,
       [
         'import { something } from "@youtube-automation/mcp";',
         "",
@@ -86,9 +100,10 @@ describe("lefthook pre-commit oxlint / oxfmt contract", () => {
   });
 
   test("real oxfmt violations still fail with the unmatched-pattern flag", () => {
-    mkdirSync(fixtureDir, { recursive: true });
-    const fixtureRel = `${fixtureDirRel}/bad-format.json`;
-    writeFileSync(join(repoRoot, fixtureRel), '{"alpha":1}\n', "utf-8");
+    const fixtureDir = createFixtureDir();
+    const fixtureFile = join(fixtureDir, "bad-format.json");
+    const fixtureRel = relative(repoRoot, fixtureFile);
+    writeFileSync(fixtureFile, '{"alpha":1}\n', "utf-8");
 
     const proc = runTool([
       "oxfmt",
