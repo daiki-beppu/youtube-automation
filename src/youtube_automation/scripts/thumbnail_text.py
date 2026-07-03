@@ -38,6 +38,7 @@ from youtube_automation.utils.thumbnail_text import (
 )
 
 SKILL_NAME = "thumbnail"
+_OVERLAY_CONFIG_PATH = "image_generation.gemini.thumbnail_text.overlay"
 _FINAL_THUMBNAIL_NAMES = frozenset({"thumbnail.jpg", "thumbnail.jpeg", "thumbnail.png"})
 _ALLOWED_OUTPUT_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
 
@@ -105,7 +106,7 @@ def _overlay_config_from_skill_config(skill_config: object) -> Mapping[str, obje
     return _mapping_at(
         thumbnail_text,
         "overlay",
-        key="image_generation.gemini.thumbnail_text.overlay",
+        key=_OVERLAY_CONFIG_PATH,
     )
 
 
@@ -174,6 +175,7 @@ def main(argv: list[str] | None = None) -> int:
             _overlay_config_from_skill_config(load_skill_config(SKILL_NAME)),
             channel_root=channel_root,
             with_channel_name=bool(args.channel_name),
+            key_prefix=_OVERLAY_CONFIG_PATH,
         )
         output = compose_thumbnail_text(
             background=args.background,

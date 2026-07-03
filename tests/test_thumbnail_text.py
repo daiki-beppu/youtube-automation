@@ -363,6 +363,20 @@ class TestComposeThumbnailText:
         assert "フォントファイルを読み込めません" in message
         assert "対処:" in message
 
+    def test_output_save_failure_raises_config_error(self, tmp_path: Path, background: Path, test_font: Path):
+        parent_file = tmp_path / "parent-file"
+        parent_file.write_text("not a directory", encoding="utf-8")
+
+        with pytest.raises(ConfigError) as exc_info:
+            compose_thumbnail_text(
+                background=background,
+                output=parent_file / "out.jpg",
+                spec=self._spec(test_font),
+                title_lines=["Title"],
+            )
+
+        assert "出力画像を保存できません" in str(exc_info.value)
+
 
 class TestCli:
     def _patch_config(self, monkeypatch: pytest.MonkeyPatch, *, channel_root: Path, cfg: dict) -> None:
@@ -666,6 +680,91 @@ class TestCli:
         stderr = capsys.readouterr().err
         assert "フォント指定が未設定です" in stderr
         assert "対処:" in stderr
+
+    def test_missing_font_file_exits_1_with_guidance(
+        self,
+        tmp_path: Path,
+        background: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+    ):
+        from youtube_automation.scripts.thumbnail_text import main
+
+        missing_font_cfg = _skill_config_dict(tmp_path / "assets" / "fonts" / "missing.ttf")
+        self._patch_config(monkeypatch, channel_root=tmp_path, cfg=missing_font_cfg)
+
+        code = main(
+            [
+                "--background",
+                str(background),
+                "--title",
+                "Test Title",
+                "--output",
+                str(tmp_path / "out.jpg"),
+            ]
+        )
+
+        assert code == 1
+        stderr = capsys.readouterr().err
+        assert "フォントファイルが見つかりません" in stderr
+        assert "対処:" in stderr
+
+    def test_broken_font_file_exits_1_with_guidance(
+        self,
+        tmp_path: Path,
+        background: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+    ):
+        from youtube_automation.scripts.thumbnail_text import main
+
+        broken_font = tmp_path / "broken.ttf"
+        broken_font.write_bytes(b"not a real font")
+        self._patch_config(monkeypatch, channel_root=tmp_path, cfg=_skill_config_dict(broken_font))
+
+        code = main(
+            [
+                "--background",
+                str(background),
+                "--title",
+                "Test Title",
+                "--output",
+                str(tmp_path / "out.jpg"),
+            ]
+        )
+
+        assert code == 1
+        stderr = capsys.readouterr().err
+        assert "フォントファイルを読み込めません" in stderr
+        assert "対処:" in stderr
+
+    def test_output_save_failure_exits_2(
+        self,
+        tmp_path: Path,
+        background: Path,
+        test_font: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+    ):
+        from youtube_automation.scripts.thumbnail_text import main
+
+        parent_file = tmp_path / "parent-file"
+        parent_file.write_text("not a directory", encoding="utf-8")
+        self._patch_config(monkeypatch, channel_root=tmp_path, cfg=_skill_config_dict(test_font))
+
+        code = main(
+            [
+                "--background",
+                str(background),
+                "--title",
+                "Test Title",
+                "--output",
+                str(parent_file / "out.jpg"),
+            ]
+        )
+
+        assert code == 2
+        assert "出力画像を保存できません" in capsys.readouterr().err
 
     def test_missing_background_exits_2(self, tmp_path: Path, capsys):
         from youtube_automation.scripts.thumbnail_text import main
