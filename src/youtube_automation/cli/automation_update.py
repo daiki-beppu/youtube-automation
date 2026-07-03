@@ -24,9 +24,10 @@ import subprocess
 import sys
 import tomllib
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from youtube_automation.utils.exceptions import ConfigError
@@ -54,6 +55,7 @@ class Pin:
     style: str  # "inline-table" ([tool.uv.sources]) | "url" (PEP 508 direct reference)
     kind: str  # "tag" | "branch" | "sha" | "registry"
     value: str  # tag 名 / branch 名 / sha / requirement 文字列
+    git_url: str | None = field(default=None, compare=False)
 
 
 def _canonicalize_name(name: str) -> str:
@@ -125,6 +127,30 @@ def _split_git_ref(url: str) -> tuple[str, str | None]:
     return url, None
 
 
+def _github_repo_slug(git_url: str) -> str | None:
+    url = git_url.removeprefix("git+")
+    if url.startswith("git@github.com:"):
+        path = url.removeprefix("git@github.com:")
+    else:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.hostname != "github.com":
+            return None
+        path = parsed.path.lstrip("/")
+    path = path.removesuffix(".git").strip("/")
+    parts = path.split("/")
+    if len(parts) < 2:
+        return None
+    return f"{parts[0]}/{parts[1]}"
+
+
+def _require_official_upstream(git_url: str) -> None:
+    slug = _github_repo_slug(git_url)
+    if slug != UPSTREAM_REPO:
+        raise ConfigError(
+            f"{PACKAGE_NAME} の Git URL は official upstream ({UPSTREAM_REPO}) を参照してください: {git_url}"
+        )
+
+
 def _detect_pin(pyproject: dict) -> Pin:
     tool = pyproject.get("tool")
     sources = None
@@ -136,16 +162,18 @@ def _detect_pin(pyproject: dict) -> Pin:
         for key, spec in sources.items():
             if _canonicalize_name(key) != PACKAGE_NAME or not isinstance(spec, dict):
                 continue
-            if "git" not in spec:
+            git_url = spec.get("git")
+            if not isinstance(git_url, str):
                 continue
+            _require_official_upstream(git_url)
             tag = spec.get("tag")
             if isinstance(tag, str):
-                return Pin("inline-table", "tag", tag)
+                return Pin("inline-table", "tag", tag, git_url)
             rev = spec.get("rev")
             if isinstance(rev, str):
-                return Pin("inline-table", "sha", rev)
+                return Pin("inline-table", "sha", rev, git_url)
             branch = spec.get("branch")
-            return Pin("inline-table", "branch", branch if isinstance(branch, str) else "main")
+            return Pin("inline-table", "branch", branch if isinstance(branch, str) else "main", git_url)
 
     project = pyproject.get("project")
     dependencies = project.get("dependencies") if isinstance(project, dict) else None
@@ -160,12 +188,13 @@ def _detect_pin(pyproject: dict) -> Pin:
             if not git_match:
                 return Pin("url", "registry", dependency.strip())
             url = git_match.group("url").split("#", 1)[0]
-            _, ref = _split_git_ref(url)
+            base_url, ref = _split_git_ref(url)
+            _require_official_upstream(base_url)
             if ref is None:
-                return Pin("url", "branch", "main")
+                return Pin("url", "branch", "main", base_url)
             if _SHA_RE.fullmatch(ref):
-                return Pin("url", "sha", ref)
-            return Pin("url", "tag", ref)
+                return Pin("url", "sha", ref, base_url)
+            return Pin("url", "tag", ref, base_url)
     raise ConfigError(f"pyproject.toml から {PACKAGE_NAME} の pin を特定できません")
 
 
@@ -242,13 +271,25 @@ def _rewrite_pin(text: str, pin: Pin, new_ref: str) -> str:
     if pin.style == "inline-table":
         key = "tag" if pin.kind == "tag" else "rev"
         pattern = re.compile(
-            r"(" + package_pattern + r"\s*=\s*\{[^}]*?" + key + r'\s*=\s*")([^"]+)(")',
+            r"(" + package_pattern + r"\s*=\s*\{[^}]*?" + key + r"\s*=\s*)([\"'])([^\"']+)(\2)",
             re.DOTALL,
         )
-        new_text, count = pattern.subn(lambda m: f"{m.group(1)}{new_ref}{m.group(3)}", text, count=1)
+        new_text, count = pattern.subn(lambda m: f"{m.group(1)}{m.group(2)}{new_ref}{m.group(4)}", text, count=1)
     else:
-        pattern = re.compile(r"(" + package_pattern + r"\s*@\s*git\+[^\s\"';]+?@)([^@#\s/\"']+)")
-        new_text, count = pattern.subn(lambda m: f"{m.group(1)}{new_ref}", text, count=1)
+        pattern = re.compile(r"(" + package_pattern + r"\s*@\s*git\+)([^\s\"';]+)")
+
+        def _replace_url_ref(match: re.Match[str]) -> str:
+            url, sep, fragment = match.group(2).partition("#")
+            base_url, ref = _split_git_ref(url)
+            if ref is None:
+                raise ConfigError(
+                    "pyproject.toml の URL 直接参照に ref が無いため自動書き換えできません。"
+                    "該当行を手動で更新してから再実行してください"
+                )
+            suffix = f"{sep}{fragment}" if sep else ""
+            return f"{match.group(1)}{base_url}@{new_ref}{suffix}"
+
+        new_text, count = pattern.subn(_replace_url_ref, text, count=1)
     if count != 1:
         raise ConfigError(
             "pyproject.toml の pin 記法が想定と異なり自動書き換えできません。"
@@ -258,20 +299,26 @@ def _rewrite_pin(text: str, pin: Pin, new_ref: str) -> str:
 
 
 def _git_status_porcelain(root: Path) -> str:
-    proc = subprocess.run(
-        ["git", "status", "--porcelain"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as e:
+        raise _StepFailed(f"git status を起動できません: {e}")
     if proc.returncode != 0:
         raise _StepFailed(f"git status に失敗しました: {proc.stderr.strip()}")
     return proc.stdout.strip()
 
 
 def _run_command(cmd: list[str], cwd: Path) -> int:
-    return subprocess.run(cmd, cwd=cwd, check=False).returncode
+    try:
+        return subprocess.run(cmd, cwd=cwd, check=False).returncode
+    except OSError as e:
+        raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}")
 
 
 def cmd_check(args: argparse.Namespace) -> int:
@@ -312,9 +359,8 @@ def cmd_check(args: argparse.Namespace) -> int:
             print("→ 差分あり: uv.lock が upstream HEAD より古い状態です（yt-automation-update apply で追従できます）")
             return EXIT_DIFF
 
-        # sha pin: bump 先の決定は人間判断（スキル側の [HUMAN STEP]）
-        latest = args.tag or _fetch_latest_release_tag()
-        print(f"upstream 最新リリース: {latest}")
+        # sha pin: bump 先の決定は人間判断（スキル側の [HUMAN STEP]）。
+        # network freshness does not help because the desired sha may not be the latest release tag.
         print(
             "→ sha pin は差分を自動判定できません。"
             "bump 先 sha を決めて yt-automation-update apply --rev <sha> を実行してください"
@@ -342,6 +388,8 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 "sha pin は bump 先の判断が必要です。--rev <sha> で明示してください"
                 "（bump 先の決定はスキル側の [HUMAN STEP]）"
             )
+        if args.rev is not None and not _SHA_RE.fullmatch(args.rev):
+            raise ConfigError("--rev には 40 桁の hex sha を指定してください")
         new_ref: str | None = None
         if pin.kind == "tag":
             new_ref = args.tag or _fetch_latest_release_tag()
@@ -385,7 +433,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
         return _invoke
 
-    force = ["--force"] if args.force_sync else []
+    force = ["--force"]
     steps: list[tuple[str, Callable[[], None]]] = []
     if not args.allow_dirty:
         steps.append(("git 作業ツリー確認", step_worktree))
@@ -394,18 +442,18 @@ def cmd_apply(args: argparse.Namespace) -> int:
     if args.sync_only:
         steps.append(
             (
-                "yt-skills sync (--asset skills --only)",
+                "yt-skills sync (--asset skills --only --force)",
                 run(["uv", "run", "yt-skills", "sync", "--asset", "skills", "--only", *args.sync_only, *force]),
             )
         )
         steps.append(
             (
-                "yt-skills sync (--asset claude-md)",
+                "yt-skills sync (--asset claude-md --force)",
                 run(["uv", "run", "yt-skills", "sync", "--asset", "claude-md", *force]),
             )
         )
     else:
-        steps.append(("yt-skills sync (--asset all)", run(["uv", "run", "yt-skills", "sync", *force])))
+        steps.append(("yt-skills sync (--asset all --force)", run(["uv", "run", "yt-skills", "sync", *force])))
     steps.append(("smoke check: yt-skills list", run(["uv", "run", "yt-skills", "list"])))
     steps.append(("smoke check: yt-config-migrate verify", run(["uv", "run", "yt-config-migrate", "verify"])))
 
@@ -445,7 +493,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_apply.add_argument(
         "--force-sync",
         action="store_true",
-        help="yt-skills sync に --force を付ける（local fix を破棄。判断はスキル側の [HUMAN STEP]）",
+        help="互換用。apply は human step 後の機械実行として常に yt-skills sync --force を使う",
     )
     p_apply.add_argument(
         "--sync-only",
