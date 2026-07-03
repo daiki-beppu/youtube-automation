@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
 import { DEFAULT_URL, DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
+import { reconcilePatternSelection, selectedEntryCount as countSelectedEntries } from "../lib/pattern-selection";
 import { buildSelectedEntriesRunOverrides } from "../lib/run-overrides";
 import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../lib/storage";
-import { PatternList, reconcilePatternSelection } from "./PatternList";
+import { PatternList } from "./PatternList";
 import { useSunoRunner } from "./useSunoRunner";
 
 // 実行モード selector の表示順 (#875)。Fast → Balanced → Safe で速度順に並べる。
@@ -79,9 +80,11 @@ export function App() {
     setSelectedEntries((selection) => selection.map((selected, i) => (i === index ? checked : selected)));
   };
 
-  const selectedEntryCount = entries.reduce((count, _, index) => {
-    return count + ((selectedEntries[index] ?? (itemStates[index] ?? "idle") !== "done") ? 1 : 0);
-  }, 0);
+  const selectedEntryCount = countSelectedEntries({
+    selectedEntries,
+    itemStates,
+    entryCount: entries.length,
+  });
   const canRunSelectedEntries = canRun && selectedEntryCount > 0;
   const runButtonLabel =
     entries.length > 0 && selectedEntryCount === 0
@@ -91,6 +94,9 @@ export function App() {
         : "全パターンを連続実行";
 
   const runSelectedEntries = (): void => {
+    if (selectedEntryCount === 0) {
+      return;
+    }
     void run(
       buildSelectedEntriesRunOverrides({
         selectedEntries,

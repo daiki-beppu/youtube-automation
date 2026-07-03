@@ -65,7 +65,7 @@ interface RunnerState {
   adoptSelectedClips: () => Promise<void>;
   fetchData: () => Promise<void>;
   // overrides.range があればそれを使う (#892 要件6)。
-  // overrides.indices は失敗分のみ再実行 (#948)。指定時は range より優先される。
+  // overrides.indices はチェック選択や失敗分再実行の部分実行対象。指定時は range より優先される。
   run: (overrides?: RunOverrides) => Promise<void>;
   stop: () => Promise<void>;
 }

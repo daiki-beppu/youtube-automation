@@ -1,5 +1,6 @@
 import type { PromptEntry } from "../../shared/api";
 import type { ItemState } from "../../shared/constants";
+import { isEntrySelected } from "../lib/pattern-selection";
 
 interface PatternListProps {
   entries: PromptEntry[];
@@ -16,37 +17,6 @@ const STATE_CLASS: Record<ItemState, string> = {
   failed: "bg-red-50 font-medium text-red-700",
 };
 
-export function buildInitialPatternSelection(entries: PromptEntry[], itemStates: ItemState[]): boolean[] {
-  return entries.map((_, index) => (itemStates[index] ?? "idle") !== "done");
-}
-
-export function reconcilePatternSelection({
-  selection,
-  previousEntries,
-  previousItemStates,
-  entries,
-  itemStates,
-}: {
-  selection: boolean[];
-  previousEntries: PromptEntry[];
-  previousItemStates: ItemState[];
-  entries: PromptEntry[];
-  itemStates: ItemState[];
-}): boolean[] {
-  if (previousEntries !== entries || selection.length !== entries.length) {
-    return buildInitialPatternSelection(entries, itemStates);
-  }
-
-  return entries.map((_, index) => {
-    const previousState = previousItemStates[index] ?? "idle";
-    const nextState = itemStates[index] ?? "idle";
-    if (previousState !== "done" && nextState === "done") {
-      return false;
-    }
-    return selection[index] ?? nextState !== "done";
-  });
-}
-
 export function PatternList({ entries, itemStates, selectedEntries, onToggleEntry }: PatternListProps) {
   if (entries.length === 0) {
     return null;
@@ -60,7 +30,7 @@ export function PatternList({ entries, itemStates, selectedEntries, onToggleEntr
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
-                checked={selectedEntries[index] ?? itemState !== "done"}
+                checked={isEntrySelected(selectedEntries, itemStates, index)}
                 onChange={(event) => onToggleEntry(index, event.currentTarget.checked)}
                 aria-label={`entry ${index + 1}: ${entry.name}`}
                 className="h-4 w-4 shrink-0"

@@ -363,6 +363,61 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
+  it("dir mode で全チェックを外すと run payload を送らず実行対象選択を促す", async () => {
+    const entries = [
+      { name: "p1", style: "lofi", lyrics: "" },
+      { name: "p2", style: "lofi", lyrics: "" },
+      { name: "p3", style: "lofi", lyrics: "" },
+    ];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a",
+            channel: "clm",
+            theme: "theme-a",
+            status: "ready",
+            pattern_count: 3,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+
+    await act(async () => {
+      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("3 パターンを取得しました。");
+    });
+
+    const checkboxes = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+    expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([true, true, true]);
+
+    for (const checkbox of checkboxes) {
+      await act(async () => {
+        checkbox.click();
+      });
+    }
+
+    await waitFor(() => {
+      const button = buttonByText(container, "実行対象を選択");
+      expect(button.disabled).toBe(true);
+    });
+
+    await act(async () => {
+      buttonByText(container, "実行対象を選択").click();
+    });
+
+    expect(messagingMocks.sendMessage.mock.calls.filter(([message]) => message === "run")).toHaveLength(0);
+  });
+
   it("dir mode の channel/theme から multi-word channel の playlist 名を導出する", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     fetchMock

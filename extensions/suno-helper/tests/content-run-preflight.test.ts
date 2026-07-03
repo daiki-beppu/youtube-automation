@@ -384,6 +384,34 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     );
   });
 
+  it("Given indices 指定で supported view かつ entries がある When run を受ける Then 指定 index だけを絶対 index で処理する", async () => {
+    makeRunnableSunoDom("Grid");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(3);
+
+    const result = runHandler({ data: { entries, indices: [0, 2] } });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: PHASE.WAITING_SLOT, index: 0, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.INJECTING, index: 0, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.GENERATING, index: 0, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.DONE, index: 0, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.WAITING_SLOT, index: 2, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.INJECTING, index: 2, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.GENERATING, index: 2, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.DONE, index: 2, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.FINISHED, total: entries.length }),
+      ]),
+    );
+    expect(progressPayloads()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ index: 1 }), expect.objectContaining({ phase: PHASE.ERROR })]),
+    );
+  });
+
   it.each(["Waveform", "Grid"] as const)(
     "Given %s view で Remix 0 かつ空 queue When run を受ける Then 初回 WAITING_SLOT で失敗せず FINISHED まで進む",
     async (viewLabel) => {

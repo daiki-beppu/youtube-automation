@@ -329,7 +329,7 @@ export default defineContentScript({
       collectionId?: string;
       // collection mode のときの playlist 名 (#854)。全 entry 完了後の clip 一括追加に使う。
       playlistName?: string;
-      // 実行対象の 0-based index 列 (#948)。「失敗分のみ再実行」で使う。指定時は range より優先。
+      // 任意の部分実行対象の 0-based index 列。チェック選択や失敗分再実行で使う。指定時は range より優先。
       indices?: number[];
       // 再開前の run で観測済みの playlist 対象 clip ID。
       submittedClipIds?: string[];
@@ -348,7 +348,7 @@ export default defineContentScript({
       const total = entries.length;
       const startIndex = range ? range.start : 0;
       const endIndex = range ? range.end : total - 1;
-      // 実行対象の 0-based index 列 (#948)。indices（失敗分のみ再実行）が最優先、無ければ range 由来。
+      // 実行対象の 0-based index 列。indices（チェック選択/失敗分再実行）が最優先、無ければ range 由来。
       const order = options.indices ?? Array.from({ length: endIndex - startIndex + 1 }, (_, k) => startIndex + k);
       const expectedPlaylistClipCount =
         playlistExpectedClipCount ??

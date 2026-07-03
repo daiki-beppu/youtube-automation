@@ -1,6 +1,6 @@
 import type { PromptEntry } from "../../shared/api";
-import type { ItemState } from "../../shared/constants";
 import type { RunPayload } from "./messaging";
+import { selectedEntryIndices, type PatternSelectionInput } from "./pattern-selection";
 import { resumeRunRange, type ResumeBanner, type RunRange } from "./resume-state";
 
 export type RunPayloadObject = Exclude<RunPayload, PromptEntry[]>;
@@ -25,11 +25,7 @@ export interface RunPayloadInput {
   overrides: RunOverrides | undefined;
 }
 
-export interface SelectedEntriesRunOverridesInput {
-  selectedEntries: boolean[];
-  itemStates: ItemState[];
-  entryCount: number;
-}
+export type SelectedEntriesRunOverridesInput = PatternSelectionInput;
 
 export function buildRunPayload(input: RunPayloadInput): RunPayloadObject {
   return {
@@ -70,10 +66,15 @@ export function buildSelectedEntriesRunOverrides({
   itemStates,
   entryCount,
 }: SelectedEntriesRunOverridesInput): RunOverrides | undefined {
-  const indices = Array.from({ length: entryCount }, (_, index) => index).filter((index) => {
-    return selectedEntries[index] ?? (itemStates[index] ?? "idle") !== "done";
+  const indices = selectedEntryIndices({
+    selectedEntries,
+    itemStates,
+    entryCount,
   });
 
+  if (indices.length === 0) {
+    throw new Error("実行対象が選択されていません。");
+  }
   if (indices.length === entryCount) {
     return undefined;
   }
