@@ -50,8 +50,6 @@ def parse_downloaded_payload(payload: object) -> DownloadedPayload:
     if download_path is not None:
         if not isinstance(download_path, str):
             raise DownloadedPayloadError("download_path must be a string")
-        if not suno_playlist_url:
-            raise DownloadedPayloadError("suno_playlist_url is required when download_path is present")
         if not Path(download_path).is_absolute():
             raise DownloadedPayloadError("download_path must be absolute")
     if suno_playlist_url is not None and not isinstance(suno_playlist_url, str):

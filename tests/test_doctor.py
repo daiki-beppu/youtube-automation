@@ -694,27 +694,29 @@ class TestCheckChannelConfig:
         assert "/channel-new" in instructions
         assert "setup 用ディレクトリ生成は完了していても config は未作成" in instructions
 
-    def test_config_dir_exists_but_invalid_json_is_fail_with_channel_import(self, tmp_path):
-        """config/channel/ 存在・JSON 破損: fail + /channel-import 案内 (既存チャンネル)."""
+    def test_config_dir_exists_but_invalid_json_is_fail_with_channel_new_import_mode(self, tmp_path):
+        """config/channel/ 存在・JSON 破損: fail + /channel-new 取り込みモード案内 (既存チャンネル)."""
         config_dir = tmp_path / "config" / "channel"
         config_dir.mkdir(parents=True)
         (config_dir / "meta.json").write_text("{broken json", encoding="utf-8")
         r = doctor.check_channel_config(tmp_path)
         assert r.status == "fail"
         assert r.next_action is not None
-        action_str = json.dumps(r.next_action)
-        assert "/channel-import" in action_str
+        action_str = json.dumps(r.next_action, ensure_ascii=False)
+        assert "/channel-new" in action_str
+        assert "既存チャンネル取り込みモード" in action_str
 
-    def test_config_dir_exists_but_missing_required_keys_is_fail_with_channel_import(self, tmp_path):
-        """config/channel/ 存在・必須キー不足: fail + /channel-import 案内."""
+    def test_config_dir_exists_but_missing_required_keys_is_fail_with_channel_new_import_mode(self, tmp_path):
+        """config/channel/ 存在・必須キー不足: fail + /channel-new 取り込みモード案内."""
         config_dir = tmp_path / "config" / "channel"
         config_dir.mkdir(parents=True)
         # meta.json のみ（必須キーも不足）
         (config_dir / "meta.json").write_text(json.dumps({"channel": {}}), encoding="utf-8")
         r = doctor.check_channel_config(tmp_path)
         assert r.status == "fail"
-        action_str = json.dumps(r.next_action)
-        assert "/channel-import" in action_str
+        action_str = json.dumps(r.next_action, ensure_ascii=False)
+        assert "/channel-new" in action_str
+        assert "既存チャンネル取り込みモード" in action_str
 
     def test_valid_config_is_ok(self, tmp_path):
         """load_config() が成功する設定: ok."""
@@ -1070,6 +1072,22 @@ class TestBootstrapChecks:
         assert r.status == "fail"
         assert r.category == "bootstrap"
         assert "旧 distrokid-prep skill が残存" in r.message
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
+
+    def test_skills_synced_legacy_channel_import_orphan_is_fail_with_prune(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-new", "setup"])
+        for skill_name in ["channel-new", "setup", "channel-import"]:
+            skill_dir = tmp_path / ".claude" / "skills" / skill_name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(f"# {skill_name}", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "旧 channel-import skill が残存" in r.message
         assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
 
     def test_skills_synced_legacy_distrokid_prep_only_is_fail_with_prune(self, tmp_path, monkeypatch):

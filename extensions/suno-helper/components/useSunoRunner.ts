@@ -7,12 +7,14 @@ import { browser } from "wxt/browser";
 
 import {
   type CollectionSummary,
+  type DurationFilter,
   extractPlaylistName,
   type PromptEntry,
+  type PromptResponse,
   resolvePromptCollectionId,
   visiblePromptCollections,
 } from "../../shared/api";
-import { CLIPS_PER_REQUEST, type ItemState, PHASE, type SpeedPresetId } from "../../shared/constants";
+import { CLIPS_PER_REQUEST, type ItemState, type SpeedPresetId } from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { DEFAULT_SPEED_PRESET_ID, readSpeedPresetId, writeSpeedPresetId } from "../lib/preset-state";
 import {
@@ -33,6 +35,7 @@ import {
 } from "../lib/run-overrides";
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
 import { serverUrlItem } from "../lib/storage";
+import { shouldReportLiveProgressStatus } from "./live-progress-status";
 import { buildRestoreState, formatRunError, formatStopError, phaseToStatus } from "./runner-errors";
 
 /** 実行範囲モード (#872)。all=全パターン / range=範囲指定。 */
@@ -82,8 +85,19 @@ interface RunnerState {
   stop: () => Promise<void>;
 }
 
-async function fetchCollectionEntries(baseUrl: string, collectionId: string): Promise<PromptEntry[]> {
-  return sendMessage("fetchCollectionPrompts", { baseUrl, collectionId });
+function normalizePromptResponseMessage(response: PromptResponse | PromptEntry[]): PromptResponse {
+  if (Array.isArray(response)) {
+    return { entries: response };
+  }
+  return response;
+}
+
+async function fetchCollectionPromptResponse(baseUrl: string, collectionId: string): Promise<PromptResponse> {
+  const response = (await sendMessage("fetchCollectionPromptResponse", {
+    baseUrl,
+    collectionId,
+  })) as PromptResponse | PromptEntry[];
+  return normalizePromptResponseMessage(response);
 }
 
 function maxDefined(...values: Array<number | null | undefined>): number | undefined {
@@ -96,6 +110,7 @@ export function useSunoRunner(): RunnerState {
   const [allCollections, setAllCollections] = useState<CollectionSummary[]>([]);
   const [selectedCollectionIdState, setSelectedCollectionId] = useState("");
   const [entries, setEntries] = useState<PromptEntry[]>([]);
+  const [durationFilter, setDurationFilter] = useState<DurationFilter | undefined>(undefined);
   const [itemStates, setItemStates] = useState<ItemState[]>([]);
   const [status, setStatus] = useState("");
   const [isError, setIsError] = useState(false);
@@ -299,6 +314,7 @@ export function useSunoRunner(): RunnerState {
 
   const clearLoadedRunState = useCallback(() => {
     setEntries([]);
+    setDurationFilter(undefined);
     setItemStates([]);
     setRestoredCollectionId(undefined);
     setRestoredPlaylistName(undefined);
@@ -362,10 +378,11 @@ export function useSunoRunner(): RunnerState {
 
   useEffect(() => {
     const unwatch = onMessage("progress", ({ data }) => {
-      setItemStates((prev) => nextItemStates(prev, data.phase, data.index));
+      setItemStates((prev) => nextItemStates(prev, data));
       // DONE は当該 item を done 化するだけで status 文字列は更新しない（旧 popup.js の live 挙動を維持）。
+      // ただし #1270 の duration check OK は DONE に log として載るため、その場合だけ表示更新する。
       // restore 経路は phaseToStatus(DONE) で「完了」を表示するため SSOT 側に DONE case は残す。
-      if (data.phase !== PHASE.DONE) {
+      if (shouldReportLiveProgressStatus(data)) {
         const { text, error } = phaseToStatus(data, entries);
         report(text, Boolean(error));
       }
@@ -419,10 +436,11 @@ export function useSunoRunner(): RunnerState {
     setCompatibilityWarning(typeof warning === "string" ? warning : "");
     try {
       const collectionId = await syncCollections(trimmed, selectedCollectionId);
-      const data = await fetchCollectionEntries(trimmed, collectionId);
-      setEntries(data);
-      setItemStates(data.map(() => "idle"));
-      report(`${data.length} パターンを取得しました。`);
+      const data = await fetchCollectionPromptResponse(trimmed, collectionId);
+      setEntries(data.entries);
+      setDurationFilter(data.duration_filter);
+      setItemStates(data.entries.map(() => "idle"));
+      report(`${data.entries.length} パターンを取得しました。`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setEntries([]);
@@ -473,6 +491,7 @@ export function useSunoRunner(): RunnerState {
           buildRunPayload({
             entries,
             playlistName,
+            durationFilter,
             range,
             collectionId: selectedCollectionId,
             overrides,
@@ -486,7 +505,7 @@ export function useSunoRunner(): RunnerState {
         report(formatRunError(message), true);
       }
     },
-    [isRunning, entries, rangeMode, rangeStart, rangeEnd, playlistName, selectedCollectionId, report],
+    [isRunning, entries, durationFilter, rangeMode, rangeStart, rangeEnd, playlistName, selectedCollectionId, report],
   );
 
   // playlist 追加のみ再実行。entries 不要のため retryPlaylist 専用メッセージを送る。
@@ -577,8 +596,8 @@ export function useSunoRunner(): RunnerState {
     if (isRunning) {
       return;
     }
-    if (!selectedCollectionId || !playlistName) {
-      report("コレクションまたは playlist 名を解決できないため、ダウンロードを再開できません。", true);
+    if (!selectedCollectionId) {
+      report("コレクションを選択してから、ダウンロードを再開してください。", true);
       return;
     }
     if (submittedClipIdsForResume.length === 0) {
@@ -592,10 +611,8 @@ export function useSunoRunner(): RunnerState {
     try {
       const payload = {
         collectionId: selectedCollectionId,
-        playlistName,
         submittedClipIds: submittedClipIdsForResume,
         expectedClipCount: expectedClipCountForManualAdoption,
-        ...(selectedCollection?.suno_playlist_url ? { sunoPlaylistUrl: selectedCollection.suno_playlist_url } : {}),
       };
       await sendMessage("retryDownload", payload);
       report("ダウンロードを再実行しています…");
@@ -604,15 +621,7 @@ export function useSunoRunner(): RunnerState {
       const message = err instanceof Error ? err.message : String(err);
       report(formatRunError(message), true);
     }
-  }, [
-    isRunning,
-    selectedCollectionId,
-    selectedCollection,
-    playlistName,
-    submittedClipIdsForResume,
-    expectedClipCountForManualAdoption,
-    report,
-  ]);
+  }, [isRunning, selectedCollectionId, submittedClipIdsForResume, expectedClipCountForManualAdoption, report]);
 
   const adoptSelectedClips = useCallback(async () => {
     if (isRunning) {

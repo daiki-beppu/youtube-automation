@@ -16,10 +16,10 @@ describe("createClipTracker: status ベースの in-flight 集計", () => {
     expect(tracker.getSubmittedIds()).toEqual([]);
   });
 
-  it("Given generate 観測（2 clip submitted） When 読む Then in-flight 2 / submission 1", () => {
+  it("Given generate 観測（2 clip submitted） When 読む Then in-flight 2 / submission 1 / duration を記録する", () => {
     const tracker = createClipTracker();
     tracker.registerSubmitted([
-      { id: "c1", status: "submitted" },
+      { id: "c1", status: "submitted", duration: 241.2 },
       { id: "c2", status: "submitted" },
     ]);
     expect(tracker.getInFlightCount()).toBe(2);
@@ -27,6 +27,8 @@ describe("createClipTracker: status ベースの in-flight 集計", () => {
     expect(tracker.hasObservedAnyTraffic()).toBe(true);
     expect(tracker.getPendingIds()).toEqual(["c1", "c2"]);
     expect(tracker.getPendingSubmittedIds()).toEqual(["c1", "c2"]);
+    expect(tracker.getDuration("c1")).toBe(241.2);
+    expect(tracker.getDuration("c2")).toBeUndefined();
   });
 
   it("Given feed 観測で complete へ遷移 When 読む Then in-flight から外れる（バグ本体の修正点）", () => {
@@ -48,14 +50,32 @@ describe("createClipTracker: status ベースの in-flight 集計", () => {
     expect(tracker.getInFlightCount()).toBe(0);
   });
 
+  it("Given feed 観測に duration がある When 読む Then clip ID ごとに記録して取得できる", () => {
+    const tracker = createClipTracker();
+    tracker.registerSubmitted([
+      { id: "c1", status: "submitted" },
+      { id: "c2", status: "submitted" },
+    ]);
+
+    tracker.applyFeedStatuses([
+      { id: "c1", status: "complete", duration: 182.4 },
+      { id: "c2", status: "streaming", duration: 0 },
+    ]);
+
+    expect(tracker.getDuration("c1")).toBe(182.4);
+    expect(tracker.getDuration("c2")).toBe(0);
+    expect(tracker.getDuration("missing")).toBeUndefined();
+  });
+
   it("Given feed 観測に未知の未終端 clip When 読む Then passive 合流で数える（前 run の残留分）", () => {
     const tracker = createClipTracker();
     tracker.applyFeedStatuses([
       { id: "leftover", status: "streaming" }, // 前 run / 手動投入の残留 in-flight
-      { id: "done", status: "complete" }, // 終端済みの未知 clip は合流させない
+      { id: "done", status: "complete", duration: 180 }, // 終端済みの未知 clip は合流させない
     ]);
     expect(tracker.getInFlightCount()).toBe(1);
     expect(tracker.getPendingIds()).toEqual(["leftover"]);
+    expect(tracker.getDuration("done")).toBe(180);
     expect(tracker.hasObservedAnyTraffic()).toBe(true);
   });
 

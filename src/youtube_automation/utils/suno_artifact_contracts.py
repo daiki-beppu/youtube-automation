@@ -13,7 +13,6 @@ SUNO_PROMPTS_JSON_FILENAME = "suno-prompts.json"
 SUNO_PROMPTS_ROUTE = "/suno/prompts.json"
 COLLECTIONS_ROUTE = "/collections"
 DOWNLOADED_ROUTE_SUFFIX = "/downloaded"
-SUNO_PLAYLISTS_ROUTE = "/suno/playlists"
 
 
 def collection_downloaded_route(collection_id: str) -> str:

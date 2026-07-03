@@ -5,15 +5,25 @@ import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PHASE, type ProgressPayload } from "../../shared/constants";
 import { App } from "../components/App";
 
 const BASE_URL = "http://localhost:7873";
 const MANIFEST_VERSION = "0.1.9";
 
-const messagingMocks = vi.hoisted(() => ({
-  onMessage: vi.fn(() => () => undefined),
-  sendMessage: vi.fn(),
-}));
+const messagingMocks = vi.hoisted(() => {
+  const mocks = {
+    progressHandler: undefined as ((message: { data: ProgressPayload }) => void) | undefined,
+    onMessage: vi.fn((type: string, handler: (message: { data: ProgressPayload }) => void) => {
+      if (type === "progress") {
+        mocks.progressHandler = handler;
+      }
+      return () => undefined;
+    }),
+    sendMessage: vi.fn(),
+  };
+  return mocks;
+});
 
 const storageMocks = vi.hoisted(() => ({
   getValue: vi.fn(async () => ""),
@@ -75,6 +85,11 @@ function defaultSendMessage(message: string, payload?: Record<string, string>): 
     return readJson(`${payload?.baseUrl}/collections`);
   }
   if (message === "fetchCollectionPrompts") {
+    return readJson(
+      `${payload?.baseUrl}/collections/${encodeURIComponent(payload?.collectionId ?? "")}/suno/prompts.json`,
+    );
+  }
+  if (message === "fetchCollectionPromptResponse") {
     return readJson(
       `${payload?.baseUrl}/collections/${encodeURIComponent(payload?.collectionId ?? "")}/suno/prompts.json`,
     );
@@ -167,6 +182,15 @@ describe("Suno popup compatibility check", () => {
     downloadFormatMocks.getValue.mockResolvedValue("mp3");
     downloadFormatMocks.setValue.mockResolvedValue(undefined);
     messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
+    messagingMocks.progressHandler = undefined;
+    messagingMocks.onMessage.mockImplementation(
+      (type: string, handler: (message: { data: ProgressPayload }) => void) => {
+        if (type === "progress") {
+          messagingMocks.progressHandler = handler;
+        }
+        return () => undefined;
+      },
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     await act(async () => {
@@ -197,6 +221,28 @@ describe("Suno popup compatibility check", () => {
     storageMocks.setValue.mockResolvedValue(undefined);
     resumeStateMocks.readResumeState.mockResolvedValue(null);
     resumeStateMocks.writeResumeState.mockResolvedValue(undefined);
+  });
+
+  it("progress handler が DONE + duration-check log を受けると live status を更新する", async () => {
+    expect(messagingMocks.progressHandler).toBeDefined();
+
+    await act(async () => {
+      messagingMocks.progressHandler?.({ data: { phase: PHASE.DONE, index: 1, total: 3 } });
+    });
+    expect(container.textContent).not.toContain('"p2": 259s ✓');
+
+    await act(async () => {
+      messagingMocks.progressHandler?.({
+        data: {
+          phase: PHASE.DONE,
+          index: 1,
+          total: 3,
+          log: { kind: "duration-check", entryName: "p2", durationSec: 259, ok: true, maxSec: 300 },
+        },
+      });
+    });
+
+    expect(container.textContent).toContain('"p2": 259s ✓');
   });
 
   it("データ取得時に manifest version で /version を先に呼び、非互換警告を表示して prompts 取得を継続する", async () => {
@@ -658,13 +704,12 @@ describe("Suno popup compatibility check", () => {
 
     expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryDownload", {
       collectionId: "20260601-clm-theme-a-collection",
-      playlistName: "clm | theme-a",
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
     });
   });
 
-  it("collection に保存済み playlist URL がある場合は Download 再開 payload に含める", async () => {
+  it("collection に保存済み playlist URL がある場合も Download 再開 payload に含めない", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
@@ -716,8 +761,6 @@ describe("Suno popup compatibility check", () => {
 
     expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryDownload", {
       collectionId: "20260601-clm-theme-a-collection",
-      playlistName: "clm | theme-a",
-      sunoPlaylistUrl: "https://suno.com/playlist/saved",
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
     });
@@ -776,7 +819,6 @@ describe("Suno popup compatibility check", () => {
 
     expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryDownload", {
       collectionId: "20260601-clm-theme-a-collection",
-      playlistName: "clm | theme-a",
       submittedClipIds: ["clip-a", "clip-b", "clip-c", "clip-d"],
       expectedClipCount: 4,
     });
@@ -810,6 +852,77 @@ describe("Suno popup compatibility check", () => {
     if (!select) throw new Error("download format select not found");
     await waitFor(() => {
       expect(select.value).toBe("mp3");
+    });
+  });
+
+  it("App 配線で done entry の自動 OFF と手動再チェック保持を反映する", async () => {
+    const entries = [
+      { name: "p1", style: "lofi", lyrics: "" },
+      { name: "p2", style: "jazz", lyrics: "" },
+      { name: "p3", style: "ambient", lyrics: "" },
+    ];
+    const snapshot = {
+      entries,
+      itemStates: entries.map(() => "idle"),
+      isRunning: true,
+      progress: { phase: PHASE.INJECTING, total: entries.length },
+      collectionId: null,
+    };
+    let progressHandler: ((event: { data: ProgressPayload }) => void) | undefined;
+
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "queryProgress") {
+        return Promise.resolve(snapshot);
+      }
+      return defaultSendMessage(message, payload);
+    });
+    messagingMocks.onMessage.mockImplementation((message?: unknown, handler?: unknown) => {
+      if (message === "progress" && typeof handler === "function") {
+        progressHandler = handler as (event: { data: ProgressPayload }) => void;
+      }
+      return () => undefined;
+    });
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.innerHTML = "";
+    root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(App));
+    });
+
+    const checkboxStates = (): boolean[] =>
+      Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).map(
+        (checkbox) => checkbox.checked,
+      );
+
+    await waitFor(() => {
+      expect(checkboxStates()).toEqual([true, true, true]);
+    });
+
+    await act(async () => {
+      progressHandler?.({ data: { phase: PHASE.DONE, index: 1, total: entries.length } });
+    });
+    await waitFor(() => {
+      expect(checkboxStates()).toEqual([true, false, true]);
+    });
+    expect(
+      Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))[1]?.closest("li")?.className,
+    ).toContain("line-through");
+
+    await act(async () => {
+      Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))[1]?.click();
+    });
+    await waitFor(() => {
+      expect(checkboxStates()).toEqual([true, true, true]);
+    });
+
+    await act(async () => {
+      progressHandler?.({ data: { phase: PHASE.DONE, index: 0, total: entries.length } });
+    });
+    await waitFor(() => {
+      expect(checkboxStates()).toEqual([false, true, true]);
     });
   });
 

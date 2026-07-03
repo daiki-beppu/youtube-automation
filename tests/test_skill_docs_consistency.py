@@ -156,6 +156,44 @@ def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     assert '"untrusted_data": True' in branding_snapshot_script
 
 
+def test_channel_new_frontmatter_keeps_import_dispatch_keywords() -> None:
+    frontmatter = _frontmatter(".claude/skills/channel-new/SKILL.md")
+    assert frontmatter["name"] == "channel-new"
+    description = frontmatter["description"]
+    for keyword in ("既存チャンネル", "チャンネル取り込み", "config 生成", "channel-import"):
+        assert keyword in description
+
+
+def test_channel_new_import_mode_contract_is_separate_from_ttp_completion() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    config_rules = _read(".claude/skills/channel-setup/references/config-generation-rules.md")
+
+    assert "TTP 完了条件（新規開設モード）" in channel_new
+    assert "既存チャンネル取り込みモードにはこの TTP 完了条件を適用しない" in channel_new
+    assert "取り込み Step 8: 次ステップ案内" in channel_new
+    assert "`music_engine` に入れる値は `suno` / `lyria` のどちらか" in channel_new
+    assert "both` は config 契約外" in channel_new
+    assert "audio.target_duration_min" in channel_new
+    assert "audio.target_duration_max" in channel_new
+    assert "meta / content / youtube / analytics / audio" in channel_new
+    assert "channel-setup/references/config-template/audio.json" in channel_new
+    assert "責務別 5 ファイル" in channel_new
+    assert (ROOT / ".claude/skills/channel-setup/references/config-template/audio.json").is_file()
+    assert (
+        "`config/channel/meta.json::channel.channel_id` が未設定の場合は、認証済みチャンネル ID を必ず取得"
+        in channel_new
+    )
+    assert "`channel_id` の `config/channel/meta.json::channel.channel_id` 保存" in channel_new
+    assert "channel_id` 取得またはユーザー承認済み" not in channel_new
+    assert "ユーザー承認済みの未完了項目明記" not in channel_new
+    assert (
+        "benchmark.channels`、`ttp-seed-confirmation.md`、branding snapshot、"
+        "`ttp_wf_new_readiness` は取り込みモードの必須完了条件ではない"
+    ) in channel_new
+    assert "config-template.json" not in config_rules
+    assert "config-template/*.json" in config_rules
+
+
 def test_channel_new_requires_initial_save_before_followup_update() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     automation_update = _read(".claude/skills/automation-update/SKILL.md")
