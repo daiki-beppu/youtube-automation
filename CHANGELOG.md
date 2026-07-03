@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(cli)`: 下流リポの automation 追従を機械実行する `yt-automation-update` CLI を追加（#1473）。`check` が実行場所・pin 形式（inline table / URL 直接参照の tag pin、main 追従、sha pin）・upstream 最新リリースとの差分を判定し exit code（0=最新 / 1=差分あり / 2=エラー）で返す。`apply` が pin 書き換え → `uv lock` → `yt-skills sync`（skills / claude-md 両 asset）→ smoke check（`yt-skills list` / `yt-config-migrate verify`）を順に実行し、失敗ステップを明示して非 0 終了する。commit / push は責務外（スキル・人間側に残置）
+
+### Changed
+
+- `refactor(automation-update)`: `/automation-update` スキルの機械的ステップ（実行場所判定 / pin 形式判定 / 差分判定 / pin 書き換え / `uv lock` / sync / smoke check）を `yt-automation-update` CLI 呼び出しに置き換え、スキルは判断ポイント（リリース要約 / local fix 衝突 / 同意取得 / コミット）専任に薄型化（#1473）
+
 ### Removed
 
 - **BREAKING** `refactor(skills)`: `/channel-import` スキルを削除し、`/channel-new` の「既存チャンネル取り込みモード」として統合した（#1460、epic #1459 の 1/2）。取り込みモードは呼び出し文脈（「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」）から自動判別し、ヒアリング → config 生成 → 検証 → OAuth / channel_id 取得 → 次ステップ案内を担う。旧 Step 0 のテンプレートリポジトリ clone 手順は廃止し、`/channel-new` の方式（現在のディレクトリ + `/setup` 前提）に整合させた。`yt-doctor` の `channel_config` ロード失敗時の案内と他スキル SKILL.md / `docs/features.md` の `/channel-import` 言及も `/channel-new`（取り込みモード）へ更新。下流リポジトリは `yt-skills sync` の prune で削除に追従する

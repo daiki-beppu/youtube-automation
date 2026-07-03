@@ -28,6 +28,7 @@ def _make_entrypoint(module_path: str, function_name: str = "main") -> Callable[
 
 yt_analytics = _make_entrypoint("youtube_automation.scripts.analytics_system")
 yt_apply_rain_layers = _make_entrypoint("youtube_automation.scripts.apply_rain_layers")
+yt_automation_update = _make_entrypoint("youtube_automation.cli.automation_update")
 yt_benchmark_collect = _make_entrypoint("youtube_automation.scripts.benchmark_collector")
 yt_benchmark_comments = _make_entrypoint("youtube_automation.scripts.fetch_benchmark_comments")
 yt_bulk_update_desc = _make_entrypoint("youtube_automation.scripts.bulk_update_descriptions_from_md")

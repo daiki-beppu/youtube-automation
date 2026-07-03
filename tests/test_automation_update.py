@@ -1,0 +1,409 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from youtube_automation.cli import automation_update
+from youtube_automation.cli.automation_update import (
+    EXIT_DIFF,
+    EXIT_ERROR,
+    EXIT_UP_TO_DATE,
+    Pin,
+    _detect_pin,
+    main,
+)
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "automation-update" / "SKILL.md"
+
+INLINE_TABLE_PYPROJECT = """\
+[project]
+name = "deepfocus365"
+dependencies = ["youtube-channels-automation"]
+
+[tool.uv.sources]
+youtube-channels-automation = { git = "https://github.com/daiki-beppu/youtube-automation", tag = "v5.5.0" }
+"""
+
+URL_PIN_PYPROJECT = """\
+[project]
+name = "deepfocus365"
+dependencies = [
+    "youtube-channels-automation @ git+https://github.com/daiki-beppu/youtube-automation@v5.5.0",
+]
+"""
+
+BRANCH_FOLLOW_PYPROJECT = """\
+[project]
+name = "deepfocus365"
+dependencies = ["youtube-channels-automation"]
+
+[tool.uv.sources]
+youtube-channels-automation = { git = "https://github.com/daiki-beppu/youtube-automation", branch = "main" }
+"""
+
+SHA_PIN_PYPROJECT = """\
+[project]
+name = "deepfocus365"
+dependencies = ["youtube-channels-automation"]
+
+[tool.uv.sources]
+youtube-channels-automation = {{ git = "https://github.com/daiki-beppu/youtube-automation", rev = "{sha}" }}
+"""
+
+_SHA_OLD = "a" * 40
+_SHA_NEW = "b" * 40
+
+
+def _write_repo(tmp_path: Path, pyproject_body: str) -> Path:
+    repo = tmp_path / "channel"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(pyproject_body, encoding="utf-8")
+    return repo
+
+
+def _write_uv_lock(repo: Path, sha: str) -> None:
+    (repo / "uv.lock").write_text(
+        "[[package]]\n"
+        'name = "youtube-channels-automation"\n'
+        'version = "5.5.15"\n'
+        f'source = {{ git = "https://github.com/daiki-beppu/youtube-automation?branch=main#{sha}" }}\n',
+        encoding="utf-8",
+    )
+
+
+@pytest.fixture
+def no_network(monkeypatch: pytest.MonkeyPatch):
+    """テストから GitHub API へ到達しないことを保証する."""
+
+    def _fail(*args, **kwargs):
+        raise AssertionError("テスト中に GitHub API へアクセスしてはならない")
+
+    monkeypatch.setattr(automation_update, "_github_api_get", _fail)
+
+
+@pytest.fixture
+def recorded_commands(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
+    """apply のサブプロセス実行を記録に置き換える."""
+    commands: list[list[str]] = []
+
+    def _record(cmd: list[str], cwd: Path) -> int:
+        commands.append(cmd)
+        return 0
+
+    monkeypatch.setattr(automation_update, "_run_command", _record)
+    monkeypatch.setattr(automation_update, "_git_status_porcelain", lambda root: "")
+    return commands
+
+
+# ---------------------------------------------------------------------------
+# 実行場所判定 (要件 3)
+# ---------------------------------------------------------------------------
+
+
+def test_check_rejects_upstream_repo(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
+    repo = _write_repo(tmp_path, '[project]\nname = "youtube-channels-automation"\n')
+
+    assert main(["check", "--target", str(repo)]) == EXIT_ERROR
+    err = capsys.readouterr().err
+    assert "upstream リポ" in err
+    assert "下流チャンネルリポジトリ専用" in err
+
+
+def test_check_rejects_normalized_upstream_name(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
+    repo = _write_repo(tmp_path, '[project]\nname = "youtube_channels.automation"\n')
+
+    assert main(["check", "--target", str(repo)]) == EXIT_ERROR
+    assert "upstream リポ" in capsys.readouterr().err
+
+
+def test_check_rejects_repo_without_dependency(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
+    repo = _write_repo(tmp_path, '[project]\nname = "not-a-channel"\ndependencies = []\n')
+
+    assert main(["check", "--target", str(repo)]) == EXIT_ERROR
+    err = capsys.readouterr().err
+    assert "依存として参照するチャンネルリポジトリではありません" in err
+    assert "移動先候補の探し方" in err
+
+
+def test_check_rejects_similar_dependency_name(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
+    repo = _write_repo(
+        tmp_path,
+        '[project]\nname = "not-a-channel"\ndependencies = ["youtube-channels-automation-extra>=1"]\n',
+    )
+
+    assert main(["check", "--target", str(repo)]) == EXIT_ERROR
+    assert "依存として参照するチャンネルリポジトリではありません" in capsys.readouterr().err
+
+
+def test_check_rejects_registry_reference(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
+    repo = _write_repo(
+        tmp_path,
+        '[project]\nname = "deepfocus365"\ndependencies = ["youtube-channels-automation>=5"]\n',
+    )
+
+    assert main(["check", "--target", str(repo)]) == EXIT_ERROR
+    assert "registry 参照" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# pin 形式判定 (要件 1: tag pin / inline table 両対応)
+# ---------------------------------------------------------------------------
+
+
+def test_detect_pin_inline_table_tag() -> None:
+    import tomllib
+
+    pin = _detect_pin(tomllib.loads(INLINE_TABLE_PYPROJECT))
+    assert pin == Pin("inline-table", "tag", "v5.5.0")
+
+
+def test_detect_pin_url_tag() -> None:
+    import tomllib
+
+    pin = _detect_pin(tomllib.loads(URL_PIN_PYPROJECT))
+    assert pin == Pin("url", "tag", "v5.5.0")
+
+
+def test_detect_pin_branch_follow() -> None:
+    import tomllib
+
+    pin = _detect_pin(tomllib.loads(BRANCH_FOLLOW_PYPROJECT))
+    assert pin == Pin("inline-table", "branch", "main")
+
+
+def test_detect_pin_url_without_ref_is_branch_follow() -> None:
+    import tomllib
+
+    pyproject = tomllib.loads(
+        '[project]\nname = "x"\ndependencies = '
+        '["youtube-channels-automation @ git+https://github.com/daiki-beppu/youtube-automation.git"]\n'
+    )
+    assert _detect_pin(pyproject) == Pin("url", "branch", "main")
+
+
+# ---------------------------------------------------------------------------
+# check: 差分判定 (要件 1)
+# ---------------------------------------------------------------------------
+
+
+def test_check_inline_tag_pin_up_to_date(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+
+    assert main(["check", "--target", str(repo), "--tag", "v5.5.0"]) == EXIT_UP_TO_DATE
+    assert "✓ 既に最新です" in capsys.readouterr().out
+
+
+def test_check_inline_tag_pin_diff(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+
+    assert main(["check", "--target", str(repo), "--tag", "v5.6.0"]) == EXIT_DIFF
+    out = capsys.readouterr().out
+    assert "tag pin (v5.5.0" in out
+    assert "差分あり: v5.5.0 → v5.6.0" in out
+
+
+def test_check_url_tag_pin_diff(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
+    repo = _write_repo(tmp_path, URL_PIN_PYPROJECT)
+
+    assert main(["check", "--target", str(repo), "--tag", "v5.6.0"]) == EXIT_DIFF
+    assert "URL 直接参照" in capsys.readouterr().out
+
+
+def test_check_fetches_latest_release_when_tag_omitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    monkeypatch.setattr(automation_update, "_fetch_latest_release_tag", lambda: "v9.9.9")
+
+    assert main(["check", "--target", str(repo)]) == EXIT_DIFF
+    assert "v9.9.9" in capsys.readouterr().out
+
+
+def test_check_branch_follow_up_to_date(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, BRANCH_FOLLOW_PYPROJECT)
+    _write_uv_lock(repo, _SHA_OLD)
+    monkeypatch.setattr(automation_update, "_fetch_branch_head_sha", lambda branch: _SHA_OLD)
+
+    assert main(["check", "--target", str(repo)]) == EXIT_UP_TO_DATE
+    assert "uv.lock が upstream HEAD と一致" in capsys.readouterr().out
+
+
+def test_check_branch_follow_diff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, BRANCH_FOLLOW_PYPROJECT)
+    _write_uv_lock(repo, _SHA_OLD)
+    monkeypatch.setattr(automation_update, "_fetch_branch_head_sha", lambda branch: _SHA_NEW)
+
+    assert main(["check", "--target", str(repo)]) == EXIT_DIFF
+
+
+def test_check_sha_pin_requires_human_decision(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
+    repo = _write_repo(tmp_path, SHA_PIN_PYPROJECT.format(sha=_SHA_OLD))
+
+    assert main(["check", "--target", str(repo), "--tag", "v5.6.0"]) == EXIT_DIFF
+    out = capsys.readouterr().out
+    assert "sha pin" in out
+    assert "--rev" in out
+
+
+# ---------------------------------------------------------------------------
+# apply: pin 書き換えとステップ実行 (要件 2)
+# ---------------------------------------------------------------------------
+
+
+def test_apply_inline_tag_pin_rewrites_and_runs_steps(
+    tmp_path: Path, no_network, recorded_commands: list[list[str]], capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 0
+
+    text = (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'tag = "v5.6.0"' in text
+    assert 'tag = "v5.5.0"' not in text
+    assert recorded_commands == [
+        ["uv", "lock", "--upgrade-package", "youtube-channels-automation"],
+        ["uv", "run", "yt-skills", "sync"],
+        ["uv", "run", "yt-skills", "list"],
+        ["uv", "run", "yt-config-migrate", "verify"],
+    ]
+    assert "✓ 追従が完了しました" in capsys.readouterr().out
+
+
+def test_apply_url_tag_pin_rewrites(tmp_path: Path, no_network, recorded_commands: list[list[str]]) -> None:
+    repo = _write_repo(tmp_path, URL_PIN_PYPROJECT)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 0
+
+    text = (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert "youtube-automation@v5.6.0" in text
+    assert "@v5.5.0" not in text
+
+
+def test_apply_same_tag_is_idempotent(
+    tmp_path: Path, no_network, recorded_commands: list[list[str]], capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.5.0"]) == 0
+    assert 'tag = "v5.5.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert "書き換えなし" in capsys.readouterr().out
+    assert len(recorded_commands) == 4  # lock / sync / smoke x2 は実行される
+
+
+def test_apply_branch_follow_skips_rewrite(
+    tmp_path: Path, no_network, recorded_commands: list[list[str]], capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, BRANCH_FOLLOW_PYPROJECT)
+    before = (repo / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert main(["apply", "--target", str(repo)]) == 0
+    assert (repo / "pyproject.toml").read_text(encoding="utf-8") == before
+    assert "pin 書き換えは不要" in capsys.readouterr().out
+
+
+def test_apply_stops_at_failed_step(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    commands: list[list[str]] = []
+
+    def _fail_on_lock(cmd: list[str], cwd: Path) -> int:
+        commands.append(cmd)
+        return 1 if cmd[:2] == ["uv", "lock"] else 0
+
+    monkeypatch.setattr(automation_update, "_run_command", _fail_on_lock)
+    monkeypatch.setattr(automation_update, "_git_status_porcelain", lambda root: "")
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 1
+
+    err = capsys.readouterr().err
+    assert "'uv lock' で失敗しました" in err
+    assert "--allow-dirty" in err
+    # 失敗ステップ以降 (sync / smoke check) は実行されない
+    assert commands == [["uv", "lock", "--upgrade-package", "youtube-channels-automation"]]
+
+
+def test_apply_dirty_worktree_fails_before_any_command(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    commands: list[list[str]] = []
+    monkeypatch.setattr(automation_update, "_run_command", lambda cmd, cwd: commands.append(cmd) or 0)
+    monkeypatch.setattr(automation_update, "_git_status_porcelain", lambda root: " M pyproject.toml")
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 1
+
+    assert "'git 作業ツリー確認' で失敗しました" in capsys.readouterr().err
+    assert commands == []
+    # pin も書き換えられていない
+    assert 'tag = "v5.5.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
+
+
+def test_apply_allow_dirty_skips_worktree_check(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, recorded_commands: list[list[str]]
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    monkeypatch.setattr(
+        automation_update,
+        "_git_status_porcelain",
+        lambda root: (_ for _ in ()).throw(AssertionError("--allow-dirty では呼ばれない")),
+    )
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--allow-dirty"]) == 0
+
+
+def test_apply_force_sync_passes_force_flag(tmp_path: Path, no_network, recorded_commands: list[list[str]]) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--force-sync"]) == 0
+    assert ["uv", "run", "yt-skills", "sync", "--force"] in recorded_commands
+
+
+def test_apply_sync_only_splits_skills_and_claude_md(
+    tmp_path: Path, no_network, recorded_commands: list[list[str]]
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--sync-only", "lyria", "suno"]) == 0
+    assert ["uv", "run", "yt-skills", "sync", "--asset", "skills", "--only", "lyria", "suno"] in recorded_commands
+    assert ["uv", "run", "yt-skills", "sync", "--asset", "claude-md"] in recorded_commands
+
+
+def test_apply_sha_pin_requires_rev(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
+    repo = _write_repo(tmp_path, SHA_PIN_PYPROJECT.format(sha=_SHA_OLD))
+
+    assert main(["apply", "--target", str(repo)]) == EXIT_ERROR
+    assert "--rev" in capsys.readouterr().err
+
+
+def test_apply_sha_pin_with_rev_rewrites(tmp_path: Path, no_network, recorded_commands: list[list[str]]) -> None:
+    repo = _write_repo(tmp_path, SHA_PIN_PYPROJECT.format(sha=_SHA_OLD))
+
+    assert main(["apply", "--target", str(repo), "--rev", _SHA_NEW]) == 0
+    text = (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert _SHA_NEW in text
+    assert _SHA_OLD not in text
+
+
+def test_apply_rejects_upstream_repo(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
+    repo = _write_repo(tmp_path, '[project]\nname = "youtube-channels-automation"\n')
+
+    assert main(["apply", "--target", str(repo)]) == EXIT_ERROR
+    assert "upstream リポ" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# スキルとの契約 (要件 6)
+# ---------------------------------------------------------------------------
+
+
+def test_skill_md_delegates_mechanical_steps_to_cli() -> None:
+    text = _SKILL_MD.read_text(encoding="utf-8")
+    assert "yt-automation-update check" in text
+    assert "yt-automation-update apply" in text
