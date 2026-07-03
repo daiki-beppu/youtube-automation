@@ -7,12 +7,14 @@ import { browser } from "wxt/browser";
 
 import {
   type CollectionSummary,
+  type DurationFilter,
   extractPlaylistName,
   type PromptEntry,
+  type PromptResponse,
   resolvePromptCollectionId,
   visiblePromptCollections,
 } from "../../shared/api";
-import { CLIPS_PER_REQUEST, type ItemState, PHASE, type SpeedPresetId } from "../../shared/constants";
+import { CLIPS_PER_REQUEST, type ItemState, type SpeedPresetId } from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { DEFAULT_SPEED_PRESET_ID, readSpeedPresetId, writeSpeedPresetId } from "../lib/preset-state";
 import {
@@ -31,6 +33,7 @@ import {
 } from "../lib/run-overrides";
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
 import { serverUrlItem } from "../lib/storage";
+import { shouldReportLiveProgressStatus } from "./live-progress-status";
 import { buildRestoreState, formatRunError, formatStopError, phaseToStatus } from "./runner-errors";
 
 interface RunnerState {
@@ -46,7 +49,7 @@ interface RunnerState {
   compatibilityWarning: string;
   canRun: boolean;
   isRunning: boolean;
-  // collection 選択時の playlist 名 (#854)。display only（単一ファイル mode は undefined）。
+  // collection 選択時の playlist 名 (#854)。display only。
   playlistName: string | undefined;
   // 速度プリセット (#875)。実行モード selector の選択値。永続化は setSpeedPreset 内で行う。
   speedPresetId: SpeedPresetId;
@@ -70,13 +73,19 @@ interface RunnerState {
   stop: () => Promise<void>;
 }
 
-type PromptSource = { kind: "collection"; collectionId: string | null } | { kind: "single-file" };
-
-async function fetchCollectionEntries(baseUrl: string, collectionId: string | null): Promise<PromptEntry[]> {
-  if (collectionId === null) {
-    throw new Error("prompts を取得できる collection がありません。");
+function normalizePromptResponseMessage(response: PromptResponse | PromptEntry[]): PromptResponse {
+  if (Array.isArray(response)) {
+    return { entries: response };
   }
-  return sendMessage("fetchCollectionPrompts", { baseUrl, collectionId });
+  return response;
+}
+
+async function fetchCollectionPromptResponse(baseUrl: string, collectionId: string): Promise<PromptResponse> {
+  const response = (await sendMessage("fetchCollectionPromptResponse", {
+    baseUrl,
+    collectionId,
+  })) as PromptResponse | PromptEntry[];
+  return normalizePromptResponseMessage(response);
 }
 
 function maxDefined(...values: Array<number | null | undefined>): number | undefined {
@@ -89,6 +98,7 @@ export function useSunoRunner(): RunnerState {
   const [allCollections, setAllCollections] = useState<CollectionSummary[]>([]);
   const [selectedCollectionIdState, setSelectedCollectionId] = useState("");
   const [entries, setEntries] = useState<PromptEntry[]>([]);
+  const [durationFilter, setDurationFilter] = useState<DurationFilter | undefined>(undefined);
   const [itemStates, setItemStates] = useState<ItemState[]>([]);
   const [status, setStatus] = useState("");
   const [isError, setIsError] = useState(false);
@@ -97,6 +107,7 @@ export function useSunoRunner(): RunnerState {
   // popup 再 open 時に content snapshot から復元する playlist 名 (#854)。
   // 選択由来 (derivedPlaylistName) が無い実行中復元ケースで display only に使う。
   const [restoredPlaylistName, setRestoredPlaylistName] = useState<string | undefined>(undefined);
+  const [restoredCollectionId, setRestoredCollectionId] = useState<string | undefined>(undefined);
   // content snapshot 由来の失敗 index (#872 要件3)。chrome.storage の resume state が失われても、
   // 現在タブの live snapshot が ERROR phase で保持する failedIndex を再開バナーの冗長ソースにする。
   const [restoredFailedIndex, setRestoredFailedIndex] = useState<number | undefined>(undefined);
@@ -145,9 +156,9 @@ export function useSunoRunner(): RunnerState {
     () => resolveVisibleCollections(allCollections, selectedCollectionIdState),
     [allCollections, resolveVisibleCollections, selectedCollectionIdState],
   );
-  const selectedCollectionId = nextSelectedId ?? "";
+  const selectedCollectionId = restoredCollectionId ?? nextSelectedId ?? "";
 
-  // collection 選択から導出する playlist 名 (#854)。未選択（単一ファイル mode）は undefined。
+  // collection 選択から導出する playlist 名 (#854)。
   const selectedCollection = useMemo(
     () => collections.find((c) => c.id === selectedCollectionId),
     [collections, selectedCollectionId],
@@ -182,13 +193,21 @@ export function useSunoRunner(): RunnerState {
       return { failedIndex: persistedResume.failedIndex, total: persistedResume.total };
     }
     // 2) content snapshot 由来 (要件3 二重化)。chrome.storage 書込が失われても、現在タブの
-    //    実行セッションが ERROR phase で保持する failedIndex から同じ再開導線を出す。snapshot は
-    //    当該タブのセッションそのものなので collection 一致 / stale 判定は不要。
-    if (restoredFailedIndex !== undefined && entries.length > 0) {
+    //    実行セッションが ERROR phase で保持する failedIndex から同じ再開導線を出す。
+    //    snapshot の collectionId が現在選択と一致するときだけ消費する。
+    if (restoredCollectionId === selectedCollectionId && restoredFailedIndex !== undefined && entries.length > 0) {
       return { failedIndex: restoredFailedIndex, total: entries.length };
     }
     return null;
-  }, [persistedResume, selectedCollectionId, resumeDismissed, resumeCheckedAt, restoredFailedIndex, entries.length]);
+  }, [
+    persistedResume,
+    selectedCollectionId,
+    resumeDismissed,
+    resumeCheckedAt,
+    restoredCollectionId,
+    restoredFailedIndex,
+    entries.length,
+  ]);
 
   // 失敗スキップされた entry の一覧 (#948)。resumeBanner と同じ二重ソース
   // （chrome.storage 優先、無ければ content snapshot）から解決する。
@@ -200,8 +219,8 @@ export function useSunoRunner(): RunnerState {
     ) {
       return persistedResume.failedIndices;
     }
-    return restoredFailedIndices ?? [];
-  }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredFailedIndices]);
+    return restoredCollectionId === selectedCollectionId ? (restoredFailedIndices ?? []) : [];
+  }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredCollectionId, restoredFailedIndices]);
 
   const submittedClipIdsForResume = useMemo<string[]>(() => {
     if (
@@ -211,8 +230,8 @@ export function useSunoRunner(): RunnerState {
     ) {
       return persistedResume.submittedClipIds ?? [];
     }
-    return restoredSubmittedClipIds ?? [];
-  }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredSubmittedClipIds]);
+    return restoredCollectionId === selectedCollectionId ? (restoredSubmittedClipIds ?? []) : [];
+  }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredCollectionId, restoredSubmittedClipIds]);
 
   const playlistExpectedClipCountForResume = useMemo<number | undefined>(() => {
     if (
@@ -225,7 +244,7 @@ export function useSunoRunner(): RunnerState {
         persistedResume.total,
       );
     }
-    if (restoredFailedIndex !== undefined && entries.length > 0) {
+    if (restoredCollectionId === selectedCollectionId && restoredFailedIndex !== undefined && entries.length > 0) {
       return resolvePlaylistExpectedClipCountForResume(restoredPlaylistExpectedClipCount, entries.length);
     }
     return undefined;
@@ -233,6 +252,7 @@ export function useSunoRunner(): RunnerState {
     persistedResume,
     selectedCollectionId,
     resumeCheckedAt,
+    restoredCollectionId,
     restoredFailedIndex,
     restoredPlaylistExpectedClipCount,
     entries.length,
@@ -278,7 +298,9 @@ export function useSunoRunner(): RunnerState {
 
   const clearLoadedRunState = useCallback(() => {
     setEntries([]);
+    setDurationFilter(undefined);
     setItemStates([]);
+    setRestoredCollectionId(undefined);
     setRestoredPlaylistName(undefined);
     setRestoredFailedIndex(undefined);
     setRestoredFailedIndices(undefined);
@@ -302,31 +324,18 @@ export function useSunoRunner(): RunnerState {
     [clearLoadedRunState],
   );
 
-  const applySingleFileMode = useCallback(() => {
-    setAllCollections([]);
-    setSelectedCollectionId("");
-  }, []);
-
   const syncCollections = useCallback(
-    async (baseUrl: string, currentSelectedId: string): Promise<PromptSource> => {
-      try {
-        const fetched = await sendMessage("fetchCollections", { baseUrl });
-        setAllCollections(fetched);
-        const { nextSelectedId } = resolveVisibleCollections(fetched, currentSelectedId);
-        setSelectedCollectionId(nextSelectedId ?? "");
-        return { kind: "collection", collectionId: nextSelectedId };
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (message === "HTTP 404" || err instanceof TypeError) {
-          // 単一ファイル mode サーバーは `/collections` が 404。CORS ヘッダーなしの 404 は
-          // ブラウザが TypeError (Failed to fetch) として reject するため両方を捕捉する。
-          applySingleFileMode();
-          return { kind: "single-file" };
-        }
-        throw err;
+    async (baseUrl: string, currentSelectedId: string): Promise<string> => {
+      const fetched = await sendMessage("fetchCollections", { baseUrl });
+      setAllCollections(fetched);
+      const { nextSelectedId } = resolveVisibleCollections(fetched, currentSelectedId);
+      setSelectedCollectionId(nextSelectedId ?? "");
+      if (nextSelectedId === null) {
+        throw new Error("prompts を取得できる collection がありません。");
       }
+      return nextSelectedId;
     },
-    [applySingleFileMode, resolveVisibleCollections],
+    [resolveVisibleCollections],
   );
 
   const loadCollections = useCallback(
@@ -353,10 +362,11 @@ export function useSunoRunner(): RunnerState {
 
   useEffect(() => {
     const unwatch = onMessage("progress", ({ data }) => {
-      setItemStates((prev) => nextItemStates(prev, data.phase, data.index));
+      setItemStates((prev) => nextItemStates(prev, data));
       // DONE は当該 item を done 化するだけで status 文字列は更新しない（旧 popup.js の live 挙動を維持）。
+      // ただし #1270 の duration check OK は DONE に log として載るため、その場合だけ表示更新する。
       // restore 経路は phaseToStatus(DONE) で「完了」を表示するため SSOT 側に DONE case は残す。
-      if (data.phase !== PHASE.DONE) {
+      if (shouldReportLiveProgressStatus(data)) {
         const { text, error } = phaseToStatus(data, entries);
         report(text, Boolean(error));
       }
@@ -381,6 +391,8 @@ export function useSunoRunner(): RunnerState {
         setEntries(restored.entries);
         setItemStates(restored.itemStates);
         setIsRunning(restored.isRunning);
+        setRestoredCollectionId(restored.collectionId);
+        setSelectedCollectionId(restored.collectionId);
         setRestoredPlaylistName(restored.playlistName);
         // ERROR 停止の snapshot なら failedIndex を再開バナーの冗長ソースへ流す (#872 要件3)。
         setRestoredFailedIndex(restored.failedIndex);
@@ -402,25 +414,24 @@ export function useSunoRunner(): RunnerState {
     }
     await serverUrlItem.setValue(trimmed);
     report("取得中…");
+    clearLoadedRunState();
     const extensionVersion = browser.runtime.getManifest().version;
     const warning = await sendMessage("fetchCompatibilityWarning", { baseUrl: trimmed, extensionVersion });
     setCompatibilityWarning(typeof warning === "string" ? warning : "");
     try {
-      const promptSource = await syncCollections(trimmed, selectedCollectionId);
-      const data =
-        promptSource.kind === "single-file"
-          ? await sendMessage("fetchPrompts", { baseUrl: trimmed })
-          : await fetchCollectionEntries(trimmed, promptSource.collectionId);
-      setEntries(data);
-      setItemStates(data.map(() => "idle"));
-      report(`${data.length} パターンを取得しました。`);
+      const collectionId = await syncCollections(trimmed, selectedCollectionId);
+      const data = await fetchCollectionPromptResponse(trimmed, collectionId);
+      setEntries(data.entries);
+      setDurationFilter(data.duration_filter);
+      setItemStates(data.entries.map(() => "idle"));
+      report(`${data.entries.length} パターンを取得しました。`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setEntries([]);
       setItemStates([]);
       report(`取得失敗: ${message}\nyt-collection-serve が起動しているか確認してください。`, true);
     }
-  }, [url, selectedCollectionId, syncCollections, report]);
+  }, [url, selectedCollectionId, syncCollections, clearLoadedRunState, report]);
 
   const run = useCallback(
     async (overrides?: RunOverrides) => {
@@ -431,18 +442,27 @@ export function useSunoRunner(): RunnerState {
       if (entries.length === 0) {
         return;
       }
+      if (!selectedCollectionId) {
+        report("コレクションを選択してください。", true);
+        return;
+      }
+      if (!playlistName) {
+        report("playlist 名を解決できません。コレクションを選択し直してください。", true);
+        return;
+      }
+      const range = overrides?.range;
       // 二重実行ガード成立後、送信前に実行中フラグを立てる (#892 要件7: setIsRunning を sendMessage の前へ)。
       setIsRunning(true);
       try {
-        // collection mode は playlistName を伴って送る。単一ファイル mode は undefined で playlist phase を skip (#854)。
-        // collectionId は ERROR 停止時の resume 紐付けに使う。単一ファイル mode（空文字）は undefined で送る (#872)。
+        // collection mode の payload だけを送る。collectionId は resume 紐付けと download 記録に必須。
         // tabId は指定せず background 宛に送り、同一タブの runner content へ中継させる (#892)。
         await sendMessage(
           "run",
           buildRunPayload({
             entries,
-            playlistName: derivedPlaylistName,
-            range: overrides?.range,
+            playlistName,
+            durationFilter,
+            range,
             collectionId: selectedCollectionId,
             overrides,
           }),
@@ -455,12 +475,16 @@ export function useSunoRunner(): RunnerState {
         report(formatRunError(message), true);
       }
     },
-    [isRunning, entries, derivedPlaylistName, selectedCollectionId, report],
+    [isRunning, entries, durationFilter, playlistName, selectedCollectionId, report],
   );
 
   // playlist 追加のみ再実行。entries 不要のため retryPlaylist 専用メッセージを送る。
   const retryPlaylist = useCallback(async () => {
     if (isRunning) {
+      return;
+    }
+    if (!selectedCollectionId) {
+      report("コレクションを選択してから、playlist 追加を再開してください。", true);
       return;
     }
     if (!playlistName) {
@@ -491,7 +515,7 @@ export function useSunoRunner(): RunnerState {
         playlistName,
         submittedClipIds: submittedClipIdsForResume,
         expectedClipCount,
-        collectionId: selectedCollectionId || undefined,
+        collectionId: selectedCollectionId,
         shouldDownload,
       });
       setResumeDismissed(true);
@@ -538,8 +562,8 @@ export function useSunoRunner(): RunnerState {
     if (isRunning) {
       return;
     }
-    if (!selectedCollectionId || !playlistName) {
-      report("コレクションまたは playlist 名を解決できないため、ダウンロードを再開できません。", true);
+    if (!selectedCollectionId) {
+      report("コレクションを選択してから、ダウンロードを再開してください。", true);
       return;
     }
     if (submittedClipIdsForResume.length === 0) {
@@ -553,10 +577,8 @@ export function useSunoRunner(): RunnerState {
     try {
       const payload = {
         collectionId: selectedCollectionId,
-        playlistName,
         submittedClipIds: submittedClipIdsForResume,
         expectedClipCount: expectedClipCountForManualAdoption,
-        ...(selectedCollection?.suno_playlist_url ? { sunoPlaylistUrl: selectedCollection.suno_playlist_url } : {}),
       };
       await sendMessage("retryDownload", payload);
       report("ダウンロードを再実行しています…");
@@ -565,15 +587,7 @@ export function useSunoRunner(): RunnerState {
       const message = err instanceof Error ? err.message : String(err);
       report(formatRunError(message), true);
     }
-  }, [
-    isRunning,
-    selectedCollectionId,
-    selectedCollection,
-    playlistName,
-    submittedClipIdsForResume,
-    expectedClipCountForManualAdoption,
-    report,
-  ]);
+  }, [isRunning, selectedCollectionId, submittedClipIdsForResume, expectedClipCountForManualAdoption, report]);
 
   const adoptSelectedClips = useCallback(async () => {
     if (isRunning) {

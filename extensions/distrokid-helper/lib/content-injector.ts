@@ -35,7 +35,7 @@ export function createDocumentInjector(doc: Document): Injector {
 
       // 新規リリース前提を assert（過去公開対応はスコープ外）。
       assertNewRelease(doc);
-      injectProfile(doc, profile);
+      await injectProfile(doc, profile);
       injectAlbumTitle(doc, release.album_title);
       injectReleaseDate(doc, release.release_date);
 

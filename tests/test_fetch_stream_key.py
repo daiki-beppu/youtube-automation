@@ -32,6 +32,8 @@ import pytest
 from youtube_automation.utils.exceptions import ConfigError, ValidationError, YouTubeAPIError
 from youtube_automation.utils.secrets import _SECRET_REFS
 
+_VALID_CLIENT_SECRETS_JSON = '{"installed":{"client_id":"x","client_secret":"y","redirect_uris":["http://localhost"]}}'
+
 # ---------------------------------------------------------------------------
 # テストデータ
 # ---------------------------------------------------------------------------
@@ -518,7 +520,7 @@ class TestOAuthHandlerExtension:
         token_file = tmp_path / "token_streaming.json"
         token_file.write_text("{}")
         client_secrets = tmp_path / "client_secrets.json"
-        client_secrets.write_text("{}")
+        client_secrets.write_text(_VALID_CLIENT_SECRETS_JSON)
 
         with (
             patch.dict(os.environ, {"CLIENT_SECRETS_DIR": str(tmp_path)}),
@@ -544,7 +546,7 @@ class TestOAuthHandlerExtension:
         custom_scopes = ["https://www.googleapis.com/auth/youtube"]
         token_file = tmp_path / "token_streaming.json"  # 存在させない
         client_secrets = tmp_path / "client_secrets.json"
-        client_secrets.write_text("{}")
+        client_secrets.write_text(_VALID_CLIENT_SECRETS_JSON)
 
         with (
             patch.dict(os.environ, {"CLIENT_SECRETS_DIR": str(tmp_path)}),

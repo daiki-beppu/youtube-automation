@@ -9,7 +9,13 @@
 //
 // レスポンス解析は fail-soft（形が崩れていたら null）。観測の失敗で生成フローを
 // 止めないため、throw しない。
-import { FEED_ENDPOINT_PATH, GENERATE_ENDPOINT_PATH, type ObservedClip, SUNO_API_ORIGIN } from "../../shared/constants";
+import {
+  FEED_V3_METHOD,
+  FEED_V3_PATH,
+  GENERATE_ENDPOINT_PATH,
+  type ObservedClip,
+  SUNO_API_ORIGIN,
+} from "../../shared/constants";
 
 /** fetch の第 1 引数から URL 文字列を解決する。Request / URL / string を受ける。 */
 export function resolveRequestUrl(input: RequestInfo | URL): string {
@@ -22,19 +28,43 @@ export function resolveRequestUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
+/** fetch の実効 method を解決する。init.method > Request.method > GET の順で扱う。 */
+export function resolveRequestMethod(input: RequestInfo | URL, init?: RequestInit): string {
+  if (typeof init?.method === "string" && init.method.length > 0) {
+    return init.method.toUpperCase();
+  }
+  if (typeof Request !== "undefined" && input instanceof Request) {
+    return input.method.toUpperCase();
+  }
+  return "GET";
+}
+
 /** Suno studio API へのリクエストか。Authorization 捕捉の対象判定に使う。 */
 export function isSunoApiUrl(url: string): boolean {
-  return url.startsWith(SUNO_API_ORIGIN);
+  try {
+    return new URL(url).origin === SUNO_API_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
+function isSunoApiPath(url: string, pathname: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.origin === SUNO_API_ORIGIN && parsed.pathname === pathname;
+  } catch {
+    return false;
+  }
 }
 
 /** 生成投入 endpoint へのリクエストか。 */
 export function isGenerateRequest(url: string): boolean {
-  return isSunoApiUrl(url) && url.includes(GENERATE_ENDPOINT_PATH);
+  return isSunoApiPath(url, GENERATE_ENDPOINT_PATH);
 }
 
-/** clip status 照会（feed）endpoint へのリクエストか。`/api/feed/v2` 等の version 違いも prefix で拾う。 */
-export function isFeedRequest(url: string): boolean {
-  return isSunoApiUrl(url) && url.includes(FEED_ENDPOINT_PATH);
+/** clip status 照会（feed）endpoint へのリクエストか。Suno 現行の `POST /api/feed/v3` のみ観測する。 */
+export function isFeedRequest(url: string, method: string): boolean {
+  return isSunoApiPath(url, FEED_V3_PATH) && method.toUpperCase() === FEED_V3_METHOD;
 }
 
 /**
@@ -68,26 +98,52 @@ export function extractAuthHeader(input: RequestInfo | URL, init?: RequestInit):
   return null;
 }
 
-/** unknown JSON から `{id, status}` を持つ clip 配列を fail-soft で取り出す共通処理。 */
+type RawObservedClip = {
+  duration?: unknown;
+  id?: unknown;
+  metadata?: { duration?: unknown };
+  status?: unknown;
+};
+
+function toRawObservedClip(item: unknown): RawObservedClip | null {
+  if (typeof item !== "object" || item === null) {
+    return null;
+  }
+  const clip = item as RawObservedClip;
+  return typeof clip.id === "string" && typeof clip.status === "string" ? clip : null;
+}
+
+function withDuration(clip: RawObservedClip, duration: number | undefined): ObservedClip {
+  return duration === undefined
+    ? { id: clip.id as string, status: clip.status as string }
+    : { id: clip.id as string, status: clip.status as string, duration };
+}
+
+function parseDuration(clip: RawObservedClip): number | null | undefined {
+  if (clip.duration !== undefined) {
+    return typeof clip.duration === "number" && Number.isFinite(clip.duration) ? clip.duration : null;
+  }
+  const metadataDuration = clip.metadata?.duration;
+  return typeof metadataDuration === "number" && Number.isFinite(metadataDuration) ? metadataDuration : undefined;
+}
+
+/** unknown JSON から `{id, status, duration?}` を持つ clip 配列を fail-soft で取り出す共通処理。 */
 function parseClipArray(value: unknown): ObservedClip[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
-  const clips: ObservedClip[] = [];
-  for (const item of value) {
-    if (
-      typeof item === "object" &&
-      item !== null &&
-      typeof (item as { id?: unknown }).id === "string" &&
-      typeof (item as { status?: unknown }).status === "string"
-    ) {
-      clips.push({
-        id: (item as { id: string }).id,
-        status: (item as { status: string }).status,
-      });
+  const clips = value.map((item): ObservedClip | null => {
+    const clip = toRawObservedClip(item);
+    if (!clip) {
+      return null;
     }
-  }
-  return clips.length > 0 ? clips : null;
+    const duration = parseDuration(clip);
+    if (duration === null) {
+      return null;
+    }
+    return withDuration(clip, duration);
+  });
+  return clips.length > 0 && clips.every((clip): clip is ObservedClip => clip !== null) ? clips : null;
 }
 
 /**
@@ -103,7 +159,7 @@ export function parseClipsFromGenerateResponse(json: unknown): ObservedClip[] | 
 }
 
 /**
- * feed レスポンス（GET /api/feed/v2?ids=...）から clip status を取り出す。
+ * feed レスポンス（POST /api/feed/v3）から clip status / duration を取り出す。
  * 形は `{ clips: [...] }` と素の配列の両方を観測しているため両対応する。
  * 形が崩れていたら null（fail-soft）。
  */

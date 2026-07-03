@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 
 import { DEFAULT_URL, DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
-import { reconcilePatternSelection, selectedEntryCount as countSelectedEntries } from "../lib/pattern-selection";
+import {
+  buildInitialPatternSelection,
+  reconcilePatternSelection,
+  selectedEntryCount as countSelectedEntries,
+} from "../lib/pattern-selection";
 import { buildSelectedEntriesRunOverrides } from "../lib/run-overrides";
 import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../lib/storage";
 import { PatternList } from "./PatternList";
@@ -63,11 +67,13 @@ export function App() {
   };
 
   useEffect(() => {
+    const previousEntries = previousEntriesRef.current;
+    const previousItemStates = previousItemStatesRef.current;
     setSelectedEntries((selection) =>
       reconcilePatternSelection({
         selection,
-        previousEntries: previousEntriesRef.current,
-        previousItemStates: previousItemStatesRef.current,
+        previousEntries,
+        previousItemStates,
         entries,
         itemStates,
       }),
@@ -77,11 +83,21 @@ export function App() {
   }, [entries, itemStates]);
 
   const toggleEntrySelection = (index: number, checked: boolean): void => {
-    setSelectedEntries((selection) => selection.map((selected, i) => (i === index ? checked : selected)));
+    setSelectedEntries((selection) =>
+      reconcilePatternSelection({
+        selection,
+        previousEntries: previousEntriesRef.current,
+        previousItemStates: previousItemStatesRef.current,
+        entries,
+        itemStates,
+      }).map((selected, i) => (i === index ? checked : selected)),
+    );
   };
 
+  const resolvedSelectedEntries =
+    selectedEntries.length === entries.length ? selectedEntries : buildInitialPatternSelection(entries, itemStates);
   const selectedEntryCount = countSelectedEntries({
-    selectedEntries,
+    selectedEntries: resolvedSelectedEntries,
     itemStates,
     entryCount: entries.length,
   });
@@ -99,13 +115,12 @@ export function App() {
     }
     void run(
       buildSelectedEntriesRunOverrides({
-        selectedEntries,
+        selectedEntries: resolvedSelectedEntries,
         itemStates,
         entryCount: entries.length,
       }),
     );
   };
-
   return (
     <div className="flex flex-col gap-3 p-3 text-gray-900">
       <h1 className="text-base font-semibold">Suno Helper</h1>
@@ -121,22 +136,25 @@ export function App() {
         />
       </label>
 
-      {collections.length > 0 && (
-        <label className="flex flex-col gap-1 text-sm">
-          コレクション
-          <select
-            value={selectedCollectionId}
-            onChange={(e) => selectCollection(e.target.value)}
-            className="rounded border border-gray-300 px-2 py-1"
-          >
-            {collections.map((c) => (
-              <option key={c.id} value={c.id} disabled={c.status === "needs_prompts"}>
-                {c.status !== "needs_prompts" ? `${c.name} (${c.pattern_count})` : `${c.name}（prompts なし）`}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      <label className="flex flex-col gap-1 text-sm">
+        コレクション
+        <select
+          value={selectedCollectionId}
+          onChange={(e) => selectCollection(e.target.value)}
+          className="rounded border border-gray-300 px-2 py-1"
+        >
+          {collections.length === 0 && (
+            <option value="" disabled>
+              コレクションなし
+            </option>
+          )}
+          {collections.map((c) => (
+            <option key={c.id} value={c.id} disabled={c.status === "needs_prompts"}>
+              {c.status !== "needs_prompts" ? `${c.name} (${c.pattern_count})` : `${c.name}（prompts なし）`}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {playlistName && (
         <p className="text-xs text-gray-600">
@@ -261,7 +279,7 @@ export function App() {
         </button>
       </div>
 
-      {!isRunning && playlistName && selectedCollectionId && (
+      {!isRunning && selectedCollectionId && (
         <div className="flex flex-col gap-2">
           <button
             type="button"
@@ -271,13 +289,15 @@ export function App() {
             選択中の曲を採用
           </button>
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => void retryPlaylist()}
-              className="flex-1 rounded border border-amber-500 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
-            >
-              Playlist から再開
-            </button>
+            {playlistName && (
+              <button
+                type="button"
+                onClick={() => void retryPlaylist()}
+                className="flex-1 rounded border border-amber-500 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
+              >
+                Playlist から再開
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void retryDownload()}
@@ -293,7 +313,7 @@ export function App() {
       <PatternList
         entries={entries}
         itemStates={itemStates}
-        selectedEntries={selectedEntries}
+        selectedEntries={resolvedSelectedEntries}
         onToggleEntry={toggleEntrySelection}
       />
 
