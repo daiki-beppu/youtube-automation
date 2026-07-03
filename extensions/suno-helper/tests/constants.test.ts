@@ -100,6 +100,13 @@ describe("shared/constants: collection 列挙ルート (#816 dir mode)", () => {
   });
 });
 
+describe("shared/constants: Suno feed v3 endpoint (#1265)", () => {
+  it("Given FEED_V3_PATH / FEED_V3_METHOD When 読む Then passive 観測対象の endpoint 契約である", () => {
+    expect(FEED_V3_PATH).toBe("/api/feed/v3");
+    expect(FEED_V3_METHOD).toBe("POST");
+  });
+});
+
 describe("shared/constants: Suno queue 上限 (#816)", () => {
   it("Given 実 DOM 検証値 When 上限定数を読む Then 同時 10 リクエスト / 1 リクエスト=2 clip", () => {
     // order.md 実 DOM 検証: 同時 10 リクエスト = 20 clip、1 Create クリック = 2 clip。
