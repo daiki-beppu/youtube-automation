@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / ".claude/skills/suno-lyric/references/check_lyric_duplication.py"
 
@@ -219,6 +221,26 @@ def test_check_lyric_duplication_duplicate_name_is_format_error(tmp_path: Path) 
 
     assert result.returncode == 2
     assert "duplicated entry names: Song A" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("entry", "expected_message"),
+    [
+        ({"lyrics": "[Intro]\nA"}, "entry 1.name は non-empty string"),
+        ({"name": None, "lyrics": "[Intro]\nA"}, "entry 1.name は non-empty string"),
+        ({"name": "Song A"}, "entry 1.lyrics は string"),
+        ({"name": "Song A", "lyrics": None}, "entry 1.lyrics は string"),
+    ],
+)
+def test_check_lyric_duplication_required_fields_must_be_present_and_non_null(
+    tmp_path: Path, entry: dict[str, object], expected_message: str
+) -> None:
+    path = _write_lyrics(tmp_path / "suno-lyrics.json", [entry])
+
+    result = _run(path)
+
+    assert result.returncode == 2
+    assert expected_message in result.stderr
 
 
 def test_check_lyric_duplication_lyrics_must_be_string(tmp_path: Path) -> None:
