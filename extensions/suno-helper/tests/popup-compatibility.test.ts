@@ -151,6 +151,14 @@ function buttonByText(container: HTMLElement, text: string): HTMLButtonElement {
   return button;
 }
 
+function expectRangeUiAbsent(container: HTMLElement): void {
+  expect(container.textContent).not.toContain("実行範囲");
+  expect(container.textContent).not.toContain("範囲指定");
+  expect(container.querySelector('input[name="range-mode"]')).toBeNull();
+  expect(container.querySelector('[aria-label="開始 entry"]')).toBeNull();
+  expect(container.querySelector('[aria-label="終了 entry"]')).toBeNull();
+}
+
 async function waitFor(assertion: () => void): Promise<void> {
   for (let i = 0; i < 20; i += 1) {
     try {
@@ -344,6 +352,7 @@ describe("Suno popup compatibility check", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
+    expectRangeUiAbsent(container);
 
     await act(async () => {
       buttonByText(container, "全パターンを連続実行").click();
