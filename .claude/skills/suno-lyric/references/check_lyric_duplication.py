@@ -79,6 +79,8 @@ def validate_entries(raw: object, path: Path) -> list[dict[str, str]]:
         raise ValueError(f"{path} の root は配列である必要があります")
 
     entries: list[dict[str, str]] = []
+    seen_names: set[str] = set()
+    duplicate_names: list[str] = []
     for index, entry in enumerate(raw, start=1):
         if not isinstance(entry, dict):
             raise ValueError(f"{path}: entry {index} は object である必要があります")
@@ -88,7 +90,14 @@ def validate_entries(raw: object, path: Path) -> list[dict[str, str]]:
             raise ValueError(f"{path}: entry {index}.name は non-empty string である必要があります")
         if not isinstance(lyrics, str):
             raise ValueError(f"{path}: entry {index}.lyrics は string である必要があります")
-        entries.append({"name": name.strip(), "lyrics": lyrics.rstrip()})
+        clean_name = name.strip()
+        if clean_name in seen_names:
+            duplicate_names.append(clean_name)
+        seen_names.add(clean_name)
+        entries.append({"name": clean_name, "lyrics": lyrics.rstrip()})
+    if duplicate_names:
+        joined_names = ", ".join(sorted(set(duplicate_names)))
+        raise ValueError(f"{path}: duplicated entry names: {joined_names}")
     return entries
 
 

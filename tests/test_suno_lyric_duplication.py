@@ -28,8 +28,16 @@ def test_check_lyric_duplication_rejects_cross_song_target_section_duplicate(tmp
     path = _write_lyrics(
         tmp_path / "suno-lyrics.json",
         [
-            {"name": "Song A", "lyrics": "[Intro]\nSame dawn line\n\n[Verse 1]\nA", "style": None},
-            {"name": "Song B", "lyrics": "[Bridge]\n same   dawn line \n\n[Verse 1]\nB", "style": None},
+            {
+                "name": "Song A",
+                "lyrics": "[Intro]\nSame dawn line\n\n[Pre-Chorus]\nShared lift line\n\n[Verse 1]\nA",
+                "style": None,
+            },
+            {
+                "name": "Song B",
+                "lyrics": "[Bridge]\n same   dawn line \n\n[Outro]\nShared lift line\n\n[Verse 1]\nB",
+                "style": None,
+            },
         ],
     )
 
@@ -37,6 +45,11 @@ def test_check_lyric_duplication_rejects_cross_song_target_section_duplicate(tmp
 
     assert result.returncode == 1
     assert "NG: 曲間でセクション本文が完全一致" in result.stdout
+    assert "2 件" in result.stdout
+    assert "[Bridge], [Intro]" in result.stdout
+    assert "[Outro], [Pre-Chorus]" in result.stdout
+    assert "text: same dawn line ..." in result.stdout
+    assert "text: shared lift line ..." in result.stdout
     assert "Song A, Song B" in result.stdout
 
 
@@ -99,6 +112,24 @@ def test_check_lyric_duplication_sections_filter_limits_scope(tmp_path: Path) ->
     result = _run(path, "--sections", "Bridge")
 
     assert result.returncode == 0
+
+
+def test_check_lyric_duplication_sections_filter_detects_selected_scope(tmp_path: Path) -> None:
+    path = _write_lyrics(
+        tmp_path / "suno-lyrics.json",
+        [
+            {"name": "Song A", "lyrics": "[Instrumental]\nSame riff\n\n[Bridge]\nShared bridge", "style": None},
+            {"name": "Song B", "lyrics": "[Instrumental]\nSame riff\n\n[Bridge]\nShared bridge", "style": None},
+        ],
+    )
+
+    result = _run(path, "--sections", "Bridge")
+
+    assert result.returncode == 1
+    assert "[Bridge]" in result.stdout
+    assert "text: shared bridge ..." in result.stdout
+    assert "[Instrumental]" not in result.stdout
+    assert "same riff" not in result.stdout
 
 
 def test_check_lyric_duplication_empty_sections_filter_is_format_error(tmp_path: Path) -> None:
@@ -173,6 +204,21 @@ def test_check_lyric_duplication_name_must_be_non_empty_string(tmp_path: Path) -
 
     assert result.returncode == 2
     assert "entry 1.name は non-empty string" in result.stderr
+
+
+def test_check_lyric_duplication_duplicate_name_is_format_error(tmp_path: Path) -> None:
+    path = _write_lyrics(
+        tmp_path / "suno-lyrics.json",
+        [
+            {"name": "Song A", "lyrics": "[Intro]\nSame line"},
+            {"name": "Song A", "lyrics": "[Intro]\nSame line"},
+        ],
+    )
+
+    result = _run(path)
+
+    assert result.returncode == 2
+    assert "duplicated entry names: Song A" in result.stderr
 
 
 def test_check_lyric_duplication_lyrics_must_be_string(tmp_path: Path) -> None:
