@@ -1,6 +1,6 @@
 ---
 name: suno-lyric
-description: "Use when Suno のボーカル曲向けに歌詞を生成したいとき。`/suno` の前工程として、コレクション内の曲ごとに名言やテーマのエッセンスをもとに Suno V5.5 用 Lyrics を作成し、`20-documentation/suno-lyrics.md` と `20-documentation/suno-lyrics.json` を出力する。歌詞あり、vocal、singing、rap、male/female vocals、suno-lyric、歌詞生成、名言ベース歌詞、曲ごとの歌詞作成に関わる場面で使用すること。Style / genre_line / Suno UI 投入は `/suno` と `/suno-helper` の責務"
+description: "Use when Suno ボーカル曲の歌詞を生成するとき。「歌詞生成」「vocal」「rap」「suno-lyric」で発動。/suno の前工程。Style / UI 投入は /suno と /suno-helper の責務"
 ---
 
 ## Overview

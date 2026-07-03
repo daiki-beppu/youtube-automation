@@ -1,6 +1,6 @@
 ---
 name: loop-video
-description: "Use when コレクションのテキストなし main.png/jpg からループ動画背景を生成したいとき。Veo 3.1 API で main.png/jpg を元に微細アニメーション付きの 8秒シームレスループ動画を生成。ループ動画、背景動画、loop.mp4、アニメーション背景、動画背景など、静止画を動画化する場面で必ず使用すること"
+description: "Use when テキストなし main.png/jpg から Veo でループ動画背景を生成するとき。「ループ動画」「背景動画」「loop.mp4」で発動"
 ---
 
 ## Overview

@@ -1,6 +1,6 @@
 ---
 name: analytics-analyze
-description: "Use when 収集済みのAnalyticsデータを詳細分析し、戦略的改善提案が必要なとき。/analytics-collect でデータ収集後に実行。CTR改善、パフォーマンス分析、戦略検討、データ分析、コレクション比較、投稿の振り返りなど、データに基づく判断が求められる場面で必ず使用すること"
+description: "Use when 収集済み Analytics データの分析と戦略提案が必要なとき。「パフォーマンス分析」「戦略検討」「振り返り」で発動。/analytics-collect の後工程"
 ---
 
 ## Overview

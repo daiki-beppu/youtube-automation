@@ -1,0 +1,32 @@
+# 小〜中規模 issue 用の軽量 workflow（トークン消費削減）。
+# 使い分け基準は docs/takt-operations.md 参照。セキュリティ・認証・アップロード系や
+# スキル横断の変更は組み込み default を使うこと。
+# persona_providers (coder/planner → codex) と整合: 実装系は codex、レビューは claude。
+name: lite
+max_steps: 8
+steps:
+  - name: plan
+    persona: planner
+    provider: codex
+    edit: false
+    rules:
+      - condition: "実装計画が確定した"
+        next: implement
+  - name: implement
+    persona: coder
+    provider: codex
+    edit: true
+    pass_previous_response: true
+    rules:
+      - condition: "実装とテスト追加・実行が完了した"
+        next: review
+  - name: review
+    persona: architecture-reviewer
+    provider: claude
+    edit: false
+    pass_previous_response: true
+    rules:
+      - condition: "承認（修正不要）"
+        next: COMPLETE
+      - condition: "修正が必要"
+        next: implement

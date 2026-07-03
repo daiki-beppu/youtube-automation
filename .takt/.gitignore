@@ -6,3 +6,7 @@
 
 # Project configuration
 !config.yaml
+
+# Custom workflows (tracked)
+!workflows/
+!workflows/*.yaml

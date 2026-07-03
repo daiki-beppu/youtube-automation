@@ -1,6 +1,6 @@
 ---
 name: ext-install
-description: "Use when Chrome 拡張（suno-helper / distrokid-helper）の初回インストールまたは更新を行いたいとき。GitHub Release から zip をダウンロードし、Chrome に Load unpacked で読み込む手順をガイドする。「拡張入れて」「extension インストール」「suno-helper 更新」「distrokid-helper アップデート」などで発動する"
+description: "Use when Chrome 拡張（suno-helper / distrokid-helper）のインストール・更新をするとき。「拡張入れて」「extension インストール」で発動"
 ---
 
 ## Overview
