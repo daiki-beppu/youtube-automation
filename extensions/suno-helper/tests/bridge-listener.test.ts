@@ -57,6 +57,7 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
 
   it("Given FEED_CLIPS / FEED_POLL_RESPONSE message When 受信する Then applyFeedStatuses される", () => {
     const tracker = createClipTracker();
+    const applyFeedStatuses = vi.spyOn(tracker, "applyFeedStatuses");
     const detach = attachBridgeListener(tracker);
     dispatchBridgeMessage({
       source: BRIDGE_SOURCE,
@@ -69,14 +70,16 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
       type: BRIDGE_MSG.FEED_CLIPS,
       clips: [{ id: "c1", status: "streaming", duration: 187.25 }],
     });
+    expect(applyFeedStatuses).toHaveBeenLastCalledWith([{ id: "c1", status: "streaming", duration: 187.25 }]);
     expect(tracker.getInFlightCount()).toBe(1);
 
     dispatchBridgeMessage({
       source: BRIDGE_SOURCE,
       type: BRIDGE_MSG.FEED_POLL_RESPONSE,
       requestId: 1,
-      clips: [{ id: "c1", status: "complete" }],
+      clips: [{ id: "c1", status: "complete", duration: 187.25 }],
     });
+    expect(applyFeedStatuses).toHaveBeenLastCalledWith([{ id: "c1", status: "complete", duration: 187.25 }]);
     expect(tracker.getInFlightCount()).toBe(0); // active poll の応答も観測として合流する
     detach();
   });
