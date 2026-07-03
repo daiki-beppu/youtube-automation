@@ -23,6 +23,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-channel-settings": "youtube_automation.scripts.channel_settings_cli",
     "yt-channel-status": "youtube_automation.scripts.get_channel_status",
     "yt-channel-trend": "youtube_automation.scripts.channel_trend",
+    "yt-collection-preflight": "youtube_automation.scripts.collection_preflight",
     "yt-collection-serve": "youtube_automation.scripts.collection_serve",
     "yt-comments-reply": "youtube_automation.scripts.comment_reply",
     "yt-config-migrate": "youtube_automation.cli.config_migrate",

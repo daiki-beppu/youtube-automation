@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(collection)`: コレクション標準骨格の検証・補完 CLI `yt-collection-preflight` を追加（#1494）。`01-master/` 等の必須サブディレクトリ欠落を fail-loud で検知し、`--fix` で冪等・非破壊に補完する。骨格定義は `CollectionPaths.REQUIRED_SUBDIRS` に一本化し、`yt-init-collection` の scaffold も同定義を共有。`/wf-new`（init 直後の検証）/ `/wf-next`（フェーズ処理前のプリフライト）/ `/suno-helper`（サーバー起動前のプリフライト）/ `/wf-status`（詳細表示に骨格行）へ導線を追加し、`/wf-new` SKILL.md の scaffold 説明から漏れていた `01-master` / `02-Individual-music` の記載も修正
+
 ### Removed
 
 - **BREAKING** `refactor(skills)`: `/channel-import` スキルを削除し、`/channel-new` の「既存チャンネル取り込みモード」として統合した（#1460、epic #1459 の 1/2）。取り込みモードは呼び出し文脈（「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」）から自動判別し、ヒアリング → config 生成 → 検証 → OAuth / channel_id 取得 → 次ステップ案内を担う。旧 Step 0 のテンプレートリポジトリ clone 手順は廃止し、`/channel-new` の方式（現在のディレクトリ + `/setup` 前提）に整合させた。`yt-doctor` の `channel_config` ロード失敗時の案内と他スキル SKILL.md / `docs/features.md` の `/channel-import` 言及も `/channel-new`（取り込みモード）へ更新。下流リポジトリは `yt-skills sync` の prune で削除に追従する

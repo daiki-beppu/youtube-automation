@@ -110,8 +110,17 @@ uv run yt-init-collection "<Collection Name>" "<theme-slug>" --track-count <N> -
 
 スクリプトが以下を自動実行:
 - `collections/planning/YYYYMMDD-<short>-<theme>-collection/` ディレクトリ作成
-- サブディレクトリ（10-assets, 20-documentation）作成
-- `workflow-state.json` 初期化（stage=planning, phase=planning-approved）
+- 標準骨格サブディレクトリ（`01-master`, `02-Individual-music`, `10-assets`, `20-documentation`）作成
+- `workflow-state.json` 初期化（stage=planning, phase=planning）
+
+実行後、骨格が作り切れていることをプリフライトで検証する（fail-loud、#1494）:
+
+```bash
+uv run yt-collection-preflight <collection-dir-name>
+```
+
+- `[NG]` が出たら `uv run yt-collection-preflight <collection-dir-name> --fix` で欠落を補完してから先へ進む
+- `yt-init-collection` が「ディレクトリが既に存在します」で止まった場合も、**手動 mkdir で復旧しない**。`yt-collection-preflight <collection-dir-name> --fix` で骨格を補完する（`workflow-state.json` が無ければ改めて `yt-init-collection` の失敗原因を解消する）
 
 出力されたパスを後続ステップで使用する。フルスキーマは `references/schema.md` を参照。
 

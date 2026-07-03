@@ -21,15 +21,10 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from youtube_automation.utils.collection_paths import CollectionPaths
+
 # --- パス解決 ---
 SCRIPT_DIR = Path(__file__).resolve().parent
-
-SUBDIRS = [
-    "01-master",
-    "02-Individual-music",
-    "10-assets",
-    "20-documentation",
-]
 
 
 def build_state(collection_name: str, theme: str, track_count: int, selected_plan: str, music_engine: str) -> dict:
@@ -91,11 +86,16 @@ def main():
 
     if base_path.exists():
         print(f"[ERROR] ディレクトリが既に存在します: {base_path}", file=sys.stderr)
+        print(
+            "        骨格の欠落を補完する場合は手動 mkdir ではなく "
+            f"`uv run yt-collection-preflight {dir_name} --fix` を使ってください",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
-    # ディレクトリ作成
-    for sub in SUBDIRS:
-        (base_path / sub).mkdir(parents=True, exist_ok=True)
+    # ディレクトリ作成（REQUIRED_SUBDIRS を CollectionPaths と共有、#1494）
+    base_path.mkdir(parents=True, exist_ok=True)
+    CollectionPaths(base_path).ensure_required_dirs()
 
     # workflow-state.json 生成
     state = build_state(args.collection_name, args.theme, args.track_count, args.selected_plan, music_engine)

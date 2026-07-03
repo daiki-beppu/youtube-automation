@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 
 from youtube_automation.utils.collection_paths import (
+    REQUIRED_SUBDIRS,
     CollectionPaths,
     resolve_collection_dir,
 )
@@ -596,3 +597,60 @@ class TestLiteralCollectionSubpathRegression:
             "以下のファイルにコレクションサブパスのリテラル Path 演算があります。"
             "CollectionPaths を使用してください:\n" + "\n".join(violations)
         )
+
+
+# ---------------------------------------------------------------------------
+# 必須骨格の検証・補完（issue #1494）
+# ---------------------------------------------------------------------------
+
+
+class TestRequiredSkeleton:
+    def test_required_subdirs_contract(self):
+        """必須骨格の定義が標準レイアウト 4 ディレクトリと一致すること。"""
+        assert REQUIRED_SUBDIRS == (
+            "01-master",
+            "02-Individual-music",
+            "10-assets",
+            "20-documentation",
+        )
+
+    def test_missing_required_dirs_all_missing(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        assert paths.missing_required_dirs() == list(REQUIRED_SUBDIRS)
+
+    def test_missing_required_dirs_partial(self, tmp_path):
+        """issue #1494 の実事例: 01-master だけが欠落しているケース。"""
+        for sub in REQUIRED_SUBDIRS:
+            if sub != "01-master":
+                (tmp_path / sub).mkdir()
+        paths = CollectionPaths(tmp_path)
+        assert paths.missing_required_dirs() == ["01-master"]
+
+    def test_missing_required_dirs_treats_file_as_missing(self, tmp_path):
+        """同名ファイルが存在してもディレクトリではないので欠落扱い。"""
+        (tmp_path / "01-master").touch()
+        paths = CollectionPaths(tmp_path)
+        assert "01-master" in paths.missing_required_dirs()
+
+    def test_ensure_required_dirs_creates_missing(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        created = paths.ensure_required_dirs()
+        assert created == list(REQUIRED_SUBDIRS)
+        for sub in REQUIRED_SUBDIRS:
+            assert (tmp_path / sub).is_dir()
+
+    def test_ensure_required_dirs_idempotent(self, tmp_path):
+        paths = CollectionPaths(tmp_path)
+        paths.ensure_required_dirs()
+        assert paths.ensure_required_dirs() == []
+
+    def test_ensure_required_dirs_preserves_existing_content(self, tmp_path):
+        """既存ファイルに触れない（非破壊）こと。"""
+        music = tmp_path / "02-Individual-music"
+        music.mkdir()
+        track = music / "track-01.mp3"
+        track.write_bytes(b"audio")
+        paths = CollectionPaths(tmp_path)
+        created = paths.ensure_required_dirs()
+        assert "02-Individual-music" not in created
+        assert track.read_bytes() == b"audio"

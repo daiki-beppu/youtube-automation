@@ -41,6 +41,14 @@ description: "Use when Suno UI に投入する曲をブラウザで連続生成 
 
 ### Step 1. サーバーを起動または再利用する
 
+起動（または再利用確認）の前に、対象コレクションの骨格プリフライトを実行する（fail-loud、#1494）:
+
+```bash
+uv run yt-collection-preflight <collection-dir-name>
+```
+
+`[NG]`（`01-master/` 等の欠落）が報告されたら `--fix` で補完してから進む。DL 完走後に初期化漏れへ気づく事故を防ぐため、このステップは省略しない。
+
 **必ず dir mode + 拡張 origin lock 付き**で起動する。
 
 ```bash
