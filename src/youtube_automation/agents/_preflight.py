@@ -25,6 +25,7 @@ from youtube_automation.utils.preflight_checks import (
     check_tags_yt_chars,
     check_title_template_compliance,
     extract_descriptions_md_tags,
+    requires_scene_phrases,
 )
 
 logger = logging.getLogger(__name__)
@@ -122,19 +123,21 @@ class PreflightMixin:
         if msg:
             raise RuntimeError(f"❌ {msg}: 1 パターン = 1 chapter で再生成してください。")
 
-        # scene_phrases 完全性検証
+        # scene_phrases 完全性検証（単一言語チャンネルは populate が no-op のため
+        # 要求しない — populate 側と同じ requires_scene_phrases 判定を共有 #1470）
         ws_path = paths.workflow_state_path
         state = json.loads(ws_path.read_text(encoding="utf-8")) if ws_path.exists() else {}
         scene_phrases = state.get("scene_phrases") or {}
 
-        required_langs = list(dict.fromkeys(config.localizations.supported_languages))
-        missing = [lang for lang in required_langs if not scene_phrases.get(lang)]
-        if missing:
-            raise RuntimeError(
-                f"❌ workflow-state.json.scene_phrases に翻訳が不足: {missing}\n"
-                f"→ /video-description で多言語翻訳を含めて再生成してください。\n"
-                f"→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
-            )
+        if requires_scene_phrases(config.localizations.supported_languages):
+            required_langs = list(dict.fromkeys(config.localizations.supported_languages))
+            missing = [lang for lang in required_langs if not scene_phrases.get(lang)]
+            if missing:
+                raise RuntimeError(
+                    f"❌ workflow-state.json.scene_phrases に翻訳が不足: {missing}\n"
+                    f"→ /video-description で多言語翻訳を含めて再生成してください。\n"
+                    f"→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
+                )
 
         # タグ件数 / quotation 文字数チェック
         # descriptions.md の「タグ（YouTube タグ欄）」が _upload_complete_collection で

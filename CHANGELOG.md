@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(upload)`: 単一言語チャンネル（`supported_languages` が 1 言語以下）で `yt-populate-scene-phrases` は no-op なのに upload preflight / metadata audit / localizations 生成が `scene_phrases` を必須要求してエラー停止する矛盾を解消。「scene_phrases が必要か」の判定を `preflight_checks.requires_scene_phrases()` に一本化し、単一言語では preflight・audit のチェックをスキップ、`generate_localizations()` は空 dict を返す（デフォルト言語のタイトル・概要欄は snippet 側で供給済みのため情報損失なし）。これにより populate → upload の通し実行が手動修正なしで成功する（#1470）
 - `fix(doctor)`: `ttp_wf_new_readiness` の video_analysis 要件が benchmark top 5 のライブ配信（`duration_iso == "P0D"`、Gemini 取り込み不可で解析不能）により恒久的に充足不能になる問題を修正。live は期待集合から除外して次点 VOD を繰り上げ、VOD が不足する場合は母数を縮小し、除外時は message に「live 配信 N 本を除外」を明示する。`yt-video-analyze --source benchmark` も同じ選定で live をスキップして次点 VOD を解析する（#1462）
 
 ## [5.5.15] - 2026-07-02

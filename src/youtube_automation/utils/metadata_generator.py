@@ -25,6 +25,7 @@ from youtube_automation.utils.audio_formats import AUDIO_EXTS
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.utils.preflight_checks import requires_scene_phrases
 from youtube_automation.utils.probe import probe_duration
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.time_utils import format_duration_display, format_duration_short, format_timestamp
@@ -225,6 +226,10 @@ def validate_scene_phrases(
     """
     loc_config = config.localizations.data
     supported = loc_config.get("supported_languages", [])
+
+    # 単一言語チャンネルは scene_phrases 不要（populate も no-op）#1470
+    if not requires_scene_phrases(supported):
+        return []
 
     missing_langs = [lang for lang in supported if not scene_phrases.get(lang)]
     if missing_langs:
@@ -856,6 +861,12 @@ class BAHMetadataGenerator:
         localizations = {}
         loc_config = self.config.localizations.data
         scene_phrases = scene_phrases or {}
+
+        # 単一言語チャンネルは scene_phrases が populate されない（no-op）ため
+        # localizations 自体を生成しない。デフォルト言語のタイトル・概要欄は
+        # snippet 側で供給済みなので localizations 欠落による情報損失はない (#1470)
+        if not requires_scene_phrases(loc_config.get("supported_languages", [])):
+            return {}
 
         # 英語固定パーツ（config/channel/content.json の descriptions.metadata から取得）
         desc_metadata = self.config.content.descriptions.metadata

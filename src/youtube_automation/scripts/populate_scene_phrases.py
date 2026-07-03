@@ -29,6 +29,7 @@ from pathlib import Path
 
 from youtube_automation.utils.config import channel_dir, load_config
 from youtube_automation.utils.exceptions import AutomationError, ConfigError, ValidationError
+from youtube_automation.utils.preflight_checks import requires_scene_phrases
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
         state = json.loads(ws_path.read_text(encoding="utf-8"))
 
         supported = list(config.localizations.supported_languages)
-        if len(supported) <= 1:
+        if not requires_scene_phrases(supported):
             print(
                 f"⏭️  {args.collection}: localizations.supported_languages が 1 言語以下 → "
                 "scene_phrases は不要、スキップ"
