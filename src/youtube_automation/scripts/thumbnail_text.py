@@ -33,10 +33,11 @@ from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.thumbnail_text import (
     compose_thumbnail_text,
-    overlay_spec_from_skill_config,
+    overlay_spec_from_overlay_config,
 )
 
 SKILL_NAME = "thumbnail"
+_FINAL_THUMBNAIL_NAMES = frozenset({"thumbnail.jpg", "thumbnail.jpeg", "thumbnail.png"})
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -76,11 +77,53 @@ def _is_input_config_error(exc: ConfigError) -> bool:
     return message.startswith("背景画像が見つかりません") or message.startswith("背景画像を読み込めません")
 
 
+def _mapping_at(parent: dict, name: str, *, key: str) -> dict:
+    if name not in parent:
+        return {}
+    value = parent[name]
+    if not isinstance(value, dict):
+        raise ConfigError(f"{key} はマッピングで指定してください (config/skills/thumbnail.yaml)")
+    return value
+
+
+def _overlay_config_from_skill_config(skill_config: dict) -> dict:
+    if not isinstance(skill_config, dict):
+        raise ConfigError("thumbnail skill-config はマッピングで指定してください (config/skills/thumbnail.yaml)")
+    image_generation = _mapping_at(skill_config, "image_generation", key="image_generation")
+    gemini = _mapping_at(image_generation, "gemini", key="image_generation.gemini")
+    thumbnail_text = _mapping_at(
+        gemini,
+        "thumbnail_text",
+        key="image_generation.gemini.thumbnail_text",
+    )
+    return _mapping_at(
+        thumbnail_text,
+        "overlay",
+        key="image_generation.gemini.thumbnail_text.overlay",
+    )
+
+
+def _validate_output_path(output: Path) -> None:
+    final_names = ", ".join(sorted(_FINAL_THUMBNAIL_NAMES))
+    if output.name.lower() in _FINAL_THUMBNAIL_NAMES:
+        raise ConfigError(
+            f"最終サムネイル名への直接出力はできません: {output} "
+            f"(候補名 thumbnail-v1.jpg などへ出力し、承認後に {final_names} へコピーしてください)"
+        )
+    if output.exists():
+        raise ConfigError(f"出力先ファイルは既に存在します: {output} (候補名を変えるか、不要な候補を削除してください)")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
 
     if not args.background.is_file():
         print(f"[ERROR] 背景画像が見つかりません: {args.background}", file=sys.stderr)
+        return 2
+    try:
+        _validate_output_path(args.output)
+    except ConfigError as exc:
+        print(f"[ERROR] {exc}", file=sys.stderr)
         return 2
     title_lines = [line for line in (s.strip() for s in args.title) if line]
     if not title_lines:
@@ -88,8 +131,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        spec = overlay_spec_from_skill_config(
-            load_skill_config(SKILL_NAME),
+        spec = overlay_spec_from_overlay_config(
+            _overlay_config_from_skill_config(load_skill_config(SKILL_NAME)),
             channel_root=channel_dir(),
             with_channel_name=bool(args.channel_name),
         )

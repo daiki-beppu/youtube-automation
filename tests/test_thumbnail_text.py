@@ -8,21 +8,24 @@ import pytest
 from matplotlib import font_manager
 from PIL import Image
 
+from youtube_automation.utils import config as config_mod
 from youtube_automation.utils import skill_config
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.thumbnail_text import (
     OverlaySpec,
     TextStyle,
     compose_thumbnail_text,
-    overlay_spec_from_skill_config,
+    overlay_spec_from_overlay_config,
     resolve_font_path,
 )
 
 
 @pytest.fixture(autouse=True)
 def reset_skill_config_cache():
+    config_mod.reset()
     skill_config.reset()
     yield
+    config_mod.reset()
     skill_config.reset()
 
 
@@ -39,9 +42,14 @@ def background(tmp_path: Path) -> Path:
     return path
 
 
-def _skill_config_dict(font_path: Path, **overlay_extra) -> dict:
+def _overlay_config_dict(font_path: Path, **overlay_extra) -> dict:
     overlay = {"font": {"title": str(font_path)}}
     overlay.update(overlay_extra)
+    return overlay
+
+
+def _skill_config_dict(font_path: Path, **overlay_extra) -> dict:
+    overlay = _overlay_config_dict(font_path, **overlay_extra)
     return {"image_generation": {"gemini": {"thumbnail_text": {"overlay": overlay}}}}
 
 
@@ -76,10 +84,10 @@ class TestResolveFontPath:
         assert resolved == test_font
 
 
-class TestOverlaySpecFromSkillConfig:
+class TestOverlaySpecFromOverlayConfig:
     def test_defaults_applied(self, tmp_path: Path, test_font: Path):
-        spec = overlay_spec_from_skill_config(
-            _skill_config_dict(test_font),
+        spec = overlay_spec_from_overlay_config(
+            _overlay_config_dict(test_font),
             channel_root=tmp_path,
             with_channel_name=False,
         )
@@ -90,8 +98,8 @@ class TestOverlaySpecFromSkillConfig:
         assert spec.anchor == "bottom-center"
 
     def test_channel_name_font_inherits_title(self, tmp_path: Path, test_font: Path):
-        spec = overlay_spec_from_skill_config(
-            _skill_config_dict(test_font),
+        spec = overlay_spec_from_overlay_config(
+            _overlay_config_dict(test_font),
             channel_root=tmp_path,
             with_channel_name=True,
         )
@@ -100,15 +108,76 @@ class TestOverlaySpecFromSkillConfig:
         assert spec.channel_name_style.size == 36
 
     def test_invalid_anchor_raises(self, tmp_path: Path, test_font: Path):
-        cfg = _skill_config_dict(test_font, layout={"anchor": "middle"})
+        cfg = _overlay_config_dict(test_font, layout={"anchor": "middle"})
         with pytest.raises(ConfigError, match="anchor"):
-            overlay_spec_from_skill_config(cfg, channel_root=tmp_path, with_channel_name=False)
+            overlay_spec_from_overlay_config(cfg, channel_root=tmp_path, with_channel_name=False)
 
     def test_invalid_color_raises(self, tmp_path: Path, test_font: Path):
-        cfg = _skill_config_dict(test_font, title={"color": "not-a-color"})
+        cfg = _overlay_config_dict(test_font, title={"color": "not-a-color"})
         with pytest.raises(ConfigError, match="色指定が不正"):
-            overlay_spec_from_skill_config(cfg, channel_root=tmp_path, with_channel_name=False)
+            overlay_spec_from_overlay_config(cfg, channel_root=tmp_path, with_channel_name=False)
 
+    @pytest.mark.parametrize(
+        ("cfg", "message"),
+        [
+            ([], "thumbnail_text.overlay"),
+            (None, "thumbnail_text.overlay"),
+        ],
+    )
+    def test_non_mapping_overlay_root_raises_config_error(self, tmp_path: Path, cfg, message: str):
+        with pytest.raises(ConfigError, match=message):
+            overlay_spec_from_overlay_config(cfg, channel_root=tmp_path, with_channel_name=False)
+
+    @pytest.mark.parametrize("section", ["font", "title", "layout"])
+    @pytest.mark.parametrize("bad_value", [None, [], "bad"])
+    def test_non_mapping_overlay_sections_raise_config_error(
+        self,
+        tmp_path: Path,
+        test_font: Path,
+        section: str,
+        bad_value,
+    ):
+        cfg = _overlay_config_dict(test_font, **{section: bad_value})
+        with pytest.raises(ConfigError, match=rf"thumbnail_text\.overlay\.{section}"):
+            overlay_spec_from_overlay_config(cfg, channel_root=tmp_path, with_channel_name=False)
+
+    @pytest.mark.parametrize("bad_value", [None, [], "bad"])
+    def test_non_mapping_channel_name_section_always_raises(self, tmp_path: Path, test_font: Path, bad_value):
+        cfg = _overlay_config_dict(test_font, channel_name=bad_value)
+        with pytest.raises(ConfigError, match=r"thumbnail_text\.overlay\.channel_name"):
+            overlay_spec_from_overlay_config(cfg, channel_root=tmp_path, with_channel_name=False)
+
+    @pytest.mark.parametrize(
+        ("field", "value", "message"),
+        [
+            ("size", True, "整数を指定してください"),
+            ("size", 0, "1 以上"),
+            ("size", 1.5, "整数を指定してください"),
+            ("size", float("inf"), "有限の整数"),
+            ("size", float("nan"), "有限の整数"),
+            ("stroke_width", -1, "0 以上"),
+            ("line_spacing", False, "数値を指定してください"),
+            ("line_spacing", 0, "正の数"),
+            ("line_spacing", "nan", "有限の数値"),
+        ],
+    )
+    def test_invalid_numeric_values_raise_config_error(
+        self,
+        tmp_path: Path,
+        test_font: Path,
+        field: str,
+        value,
+        message: str,
+    ):
+        if field == "line_spacing":
+            cfg = _overlay_config_dict(test_font, layout={field: value})
+        else:
+            cfg = _overlay_config_dict(test_font, title={field: value})
+        with pytest.raises(ConfigError, match=message):
+            overlay_spec_from_overlay_config(cfg, channel_root=tmp_path, with_channel_name=False)
+
+
+class TestThumbnailTextConfigAdapter:
     @pytest.mark.parametrize(
         ("cfg", "key"),
         [
@@ -129,54 +198,11 @@ class TestOverlaySpecFromSkillConfig:
             ),
         ],
     )
-    def test_non_mapping_skill_config_sections_raise_config_error(self, tmp_path: Path, cfg, key: str):
+    def test_non_mapping_skill_config_sections_raise_config_error(self, cfg, key: str):
+        from youtube_automation.scripts.thumbnail_text import _overlay_config_from_skill_config
+
         with pytest.raises(ConfigError, match=key):
-            overlay_spec_from_skill_config(cfg, channel_root=tmp_path, with_channel_name=False)
-
-    @pytest.mark.parametrize("section", ["font", "title", "layout"])
-    @pytest.mark.parametrize("bad_value", [None, [], "bad"])
-    def test_non_mapping_overlay_sections_raise_config_error(
-        self,
-        tmp_path: Path,
-        test_font: Path,
-        section: str,
-        bad_value,
-    ):
-        cfg = _skill_config_dict(test_font, **{section: bad_value})
-        with pytest.raises(ConfigError, match=rf"thumbnail_text\.overlay\.{section}"):
-            overlay_spec_from_skill_config(cfg, channel_root=tmp_path, with_channel_name=False)
-
-    @pytest.mark.parametrize("bad_value", [None, [], "bad"])
-    def test_non_mapping_channel_name_section_raises_when_used(self, tmp_path: Path, test_font: Path, bad_value):
-        cfg = _skill_config_dict(test_font, channel_name=bad_value)
-        with pytest.raises(ConfigError, match=r"thumbnail_text\.overlay\.channel_name"):
-            overlay_spec_from_skill_config(cfg, channel_root=tmp_path, with_channel_name=True)
-
-    @pytest.mark.parametrize(
-        ("field", "value", "message"),
-        [
-            ("size", True, "整数を指定してください"),
-            ("size", 0, "1 以上"),
-            ("stroke_width", -1, "0 以上"),
-            ("line_spacing", False, "数値を指定してください"),
-            ("line_spacing", 0, "正の数"),
-            ("line_spacing", "nan", "有限の数値"),
-        ],
-    )
-    def test_invalid_numeric_values_raise_config_error(
-        self,
-        tmp_path: Path,
-        test_font: Path,
-        field: str,
-        value,
-        message: str,
-    ):
-        if field == "line_spacing":
-            cfg = _skill_config_dict(test_font, layout={field: value})
-        else:
-            cfg = _skill_config_dict(test_font, title={field: value})
-        with pytest.raises(ConfigError, match=message):
-            overlay_spec_from_skill_config(cfg, channel_root=tmp_path, with_channel_name=False)
+            _overlay_config_from_skill_config(cfg)
 
 
 class TestComposeThumbnailText:
@@ -331,6 +357,94 @@ class TestCli:
         stdout = capsys.readouterr().out
         assert "[OK]" in stdout
         assert str(output) in stdout
+
+    def test_success_uses_real_channel_skill_config(
+        self,
+        tmp_path: Path,
+        background: Path,
+        test_font: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys,
+    ):
+        from youtube_automation.scripts.thumbnail_text import main
+
+        fonts_dir = tmp_path / "assets" / "fonts"
+        fonts_dir.mkdir(parents=True)
+        font = fonts_dir / "font.ttf"
+        font.write_bytes(test_font.read_bytes())
+        skill_dir = tmp_path / "config" / "skills"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    thumbnail_text:",
+                    "      overlay:",
+                    "        font:",
+                    "          title: assets/fonts/font.ttf",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
+        config_mod.reset()
+        skill_config.reset()
+        output = tmp_path / "thumbnail-v1.jpg"
+
+        code = main(
+            [
+                "--background",
+                str(background),
+                "--title",
+                "Real Config",
+                "--output",
+                str(output),
+            ]
+        )
+
+        assert code == 0
+        assert output.is_file()
+        assert "[OK]" in capsys.readouterr().out
+
+    @pytest.mark.parametrize("name", ["thumbnail.jpg", "thumbnail.jpeg", "thumbnail.png"])
+    def test_final_thumbnail_output_name_exits_2(self, tmp_path: Path, background: Path, name: str, capsys):
+        from youtube_automation.scripts.thumbnail_text import main
+
+        code = main(
+            [
+                "--background",
+                str(background),
+                "--title",
+                "Test",
+                "--output",
+                str(tmp_path / name),
+            ]
+        )
+
+        assert code == 2
+        assert "最終サムネイル名への直接出力はできません" in capsys.readouterr().err
+
+    def test_existing_output_file_exits_2_without_overwrite(self, tmp_path: Path, background: Path, capsys):
+        from youtube_automation.scripts.thumbnail_text import main
+
+        output = tmp_path / "thumbnail-v1.jpg"
+        output.write_bytes(b"keep me")
+
+        code = main(
+            [
+                "--background",
+                str(background),
+                "--title",
+                "Test",
+                "--output",
+                str(output),
+            ]
+        )
+
+        assert code == 2
+        assert output.read_bytes() == b"keep me"
+        assert "出力先ファイルは既に存在します" in capsys.readouterr().err
 
     def test_font_unconfigured_exits_1_with_guidance(self, tmp_path: Path, background: Path, capsys):
         """default 設定 (overlay.font.title 未設定) では理由 + 代替手順を出して exit 1"""
