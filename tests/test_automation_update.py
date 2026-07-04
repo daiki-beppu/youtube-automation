@@ -224,6 +224,49 @@ def test_detect_pin_rejects_unofficial_inline_git_url() -> None:
         _detect_pin(pyproject)
 
 
+@pytest.mark.parametrize(
+    "git_url",
+    [
+        "https://github.com/daiki-beppu/youtube-automation/../../openai/openai-python",
+        "https://github.com/daiki-beppu/youtube-automation/tree/main",
+        "https://github.com/daiki-beppu/youtube-automation.git/extra",
+        "https://evil.example/daiki-beppu/youtube-automation",
+    ],
+)
+def test_detect_pin_rejects_git_url_with_extra_path_or_host(git_url: str) -> None:
+    import tomllib
+
+    pyproject = tomllib.loads(
+        '[project]\nname = "x"\ndependencies = ["youtube-channels-automation"]\n'
+        "[tool.uv.sources]\n"
+        f'youtube-channels-automation = {{ git = "{git_url}", tag = "v1" }}\n'
+    )
+
+    with pytest.raises(automation_update.ConfigError, match="official upstream"):
+        _detect_pin(pyproject)
+
+
+@pytest.mark.parametrize(
+    "git_url",
+    [
+        "https://github.com/daiki-beppu/youtube-automation",
+        "https://github.com/daiki-beppu/youtube-automation.git",
+        "ssh://git@github.com/daiki-beppu/youtube-automation.git",
+        "git@github.com:daiki-beppu/youtube-automation.git",
+    ],
+)
+def test_detect_pin_accepts_canonical_official_git_urls(git_url: str) -> None:
+    import tomllib
+
+    pyproject = tomllib.loads(
+        '[project]\nname = "x"\ndependencies = ["youtube-channels-automation"]\n'
+        "[tool.uv.sources]\n"
+        f'youtube-channels-automation = {{ git = "{git_url}", tag = "v1" }}\n'
+    )
+
+    assert _detect_pin(pyproject).value == "v1"
+
+
 def test_detect_pin_rejects_unofficial_direct_git_url() -> None:
     import tomllib
 
@@ -372,6 +415,41 @@ def test_apply_branch_follow_skips_rewrite(
     assert "pin 書き換えは不要" in capsys.readouterr().out
 
 
+def test_apply_tag_pin_rejects_rev_option(
+    tmp_path: Path, no_network, recorded_commands: list[list[str]], capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+
+    assert main(["apply", "--target", str(repo), "--rev", _SHA_NEW]) == EXIT_ERROR
+
+    assert "--rev は sha pin" in capsys.readouterr().err
+    assert 'tag = "v5.5.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert recorded_commands == []
+
+
+def test_apply_branch_follow_rejects_tag_option(
+    tmp_path: Path, no_network, recorded_commands: list[list[str]], capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, BRANCH_FOLLOW_PYPROJECT)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == EXIT_ERROR
+
+    assert "--tag は tag pin" in capsys.readouterr().err
+    assert recorded_commands == []
+
+
+def test_apply_sha_pin_rejects_tag_option(
+    tmp_path: Path, no_network, recorded_commands: list[list[str]], capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, SHA_PIN_PYPROJECT.format(sha=_SHA_OLD))
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == EXIT_ERROR
+
+    assert "--tag は tag pin" in capsys.readouterr().err
+    assert _SHA_OLD in (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert recorded_commands == []
+
+
 def test_apply_stops_at_failed_step(
     tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
@@ -428,6 +506,34 @@ def test_apply_local_fix_diff_requires_explicit_sync_decision(
     assert "--force-sync" in err
     assert commands == []
     assert 'tag = "v5.5.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
+
+
+def test_skills_diff_missing_target_is_not_local_fix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _diff_missing(*args, **kwargs):
+        return automation_update.subprocess.CompletedProcess(
+            args=args[0],
+            returncode=1,
+            stdout=".claude/skills/suno/SKILL.md: target が存在しません\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(automation_update.subprocess, "run", _diff_missing)
+
+    assert automation_update._skills_diff_has_changes(tmp_path) is False
+
+
+def test_skills_diff_content_change_is_local_fix(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _diff_changed(*args, **kwargs):
+        return automation_update.subprocess.CompletedProcess(
+            args=args[0],
+            returncode=1,
+            stdout=".claude/skills/suno/SKILL.md: 内容が異なる\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(automation_update.subprocess, "run", _diff_changed)
+
+    assert automation_update._skills_diff_has_changes(tmp_path) is True
 
 
 def test_apply_allow_dirty_skips_worktree_check(

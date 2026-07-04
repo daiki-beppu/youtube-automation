@@ -127,16 +127,47 @@ def _split_git_ref(url: str) -> tuple[str, str | None]:
     return url, None
 
 
-def _github_repo_slug(git_url: str) -> str | None:
+def _normalized_github_path(path: str) -> str:
+    return urllib.parse.unquote(path).strip("/").removesuffix(".git")
+
+
+def _is_official_upstream_url(git_url: str) -> bool:
     url = git_url.removeprefix("git+")
     if url.startswith("git@github.com:"):
-        path = url.removeprefix("git@github.com:")
+        path = _normalized_github_path(url.removeprefix("git@github.com:"))
+        return path == UPSTREAM_REPO
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme == "https":
+        if parsed.hostname != "github.com":
+            return False
+        if parsed.params or parsed.query or parsed.fragment:
+            return False
+        path = _normalized_github_path(parsed.path)
+        return path == UPSTREAM_REPO
+    if parsed.scheme == "ssh":
+        if parsed.hostname != "github.com" or parsed.username != "git":
+            return False
+        if parsed.params or parsed.query or parsed.fragment:
+            return False
+        path = _normalized_github_path(parsed.path)
+        return path == UPSTREAM_REPO
+    return False
+
+
+def _github_repo_slug(git_url: str) -> str | None:
+    """GitHub URL から owner/repo を返す（表示・後方互換用）。
+
+    security boundary では使わない。official upstream 判定は path traversal や余剰 path を
+    拒否するため `_is_official_upstream_url()` の厳格一致を使う。
+    """
+    url = git_url.removeprefix("git+")
+    if url.startswith("git@github.com:"):
+        path = _normalized_github_path(url.removeprefix("git@github.com:"))
     else:
         parsed = urllib.parse.urlparse(url)
         if parsed.hostname != "github.com":
             return None
-        path = parsed.path.lstrip("/")
-    path = path.removesuffix(".git").strip("/")
+        path = _normalized_github_path(parsed.path)
     parts = path.split("/")
     if len(parts) < 2:
         return None
@@ -144,8 +175,7 @@ def _github_repo_slug(git_url: str) -> str | None:
 
 
 def _require_official_upstream(git_url: str) -> None:
-    slug = _github_repo_slug(git_url)
-    if slug != UPSTREAM_REPO:
+    if not _is_official_upstream_url(git_url):
         raise ConfigError(
             f"{PACKAGE_NAME} の Git URL は official upstream ({UPSTREAM_REPO}) を参照してください: {git_url}"
         )
@@ -336,16 +366,19 @@ def _skills_diff_has_changes(root: Path) -> bool:
     except OSError as e:
         raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}")
     output = "\n".join(part for part in [proc.stdout, proc.stderr] if part)
-    if proc.returncode != 0:
-        raise _StepFailed(f"exit code {proc.returncode}: {' '.join(cmd)}\n{output.strip()}")
-    diff_markers = (
+    local_fix_markers = (
         "内容が異なる",
-        "同梱版にのみ存在",
         "target にのみ存在",
-        "target が存在しません",
         "target がファイルではありません",
     )
-    return any(marker in output for marker in diff_markers)
+    safe_missing_markers = (
+        "同梱版にのみ存在",
+        "target が存在しません",
+    )
+    known_markers = local_fix_markers + safe_missing_markers
+    if proc.returncode != 0 and not any(marker in output for marker in known_markers):
+        raise _StepFailed(f"exit code {proc.returncode}: {' '.join(cmd)}\n{output.strip()}")
+    return any(marker in output for marker in local_fix_markers)
 
 
 def cmd_check(args: argparse.Namespace) -> int:
@@ -410,6 +443,10 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 "registry 参照 (git 参照ではない) のため自動追従できません。"
                 "pyproject.toml を git 参照 (tag pin / main 追従) へ切り替えてください"
             )
+        if args.rev is not None and pin.kind != "sha":
+            raise ConfigError("--rev は sha pin の apply でのみ指定できます")
+        if args.tag is not None and pin.kind != "tag":
+            raise ConfigError("--tag は tag pin の apply でのみ指定できます")
         if pin.kind == "sha" and not args.rev:
             raise ConfigError(
                 "sha pin は bump 先の判断が必要です。--rev <sha> で明示してください"
