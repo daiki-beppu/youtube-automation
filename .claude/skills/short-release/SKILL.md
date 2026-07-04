@@ -1,6 +1,6 @@
 ---
 name: short-release
-description: "Use when release 型チャンネル（話す系・楽曲リリース）でショート動画を生成したいとき。`${motif}-{jp,en}.mp4` から JP+EN 各 1 本ずつ 9:16 縦型クリップを生成する。「リリースショート」「楽曲ショート」「JP/EN クリップショート」「サビ抽出」「short-release」など、release 型チャンネルのショート制作に関わる場面で必ず使用すること。BGM テイスター（collection 型）チャンネルは `/short` を使う"
+description: "Use when release 型（楽曲リリース）チャンネルで JP+EN の 9:16 クリップを生成するとき。「リリースショート」「サビ抽出」で発動。collection 型は /short"
 ---
 
 ## Overview

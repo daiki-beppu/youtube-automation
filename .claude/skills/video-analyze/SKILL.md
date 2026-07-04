@@ -1,6 +1,6 @@
 ---
 name: video-analyze
-description: "Use when 動画コンテンツ分析・映像解析が必要なとき。Gemini に YouTube URL を直接渡してフック構造・BGM 展開・シーンタイムライン・サムネ整合性・編集指標を抽出する。「signature 要素抽出」「retention drop の構造的原因」「競合動画の冒頭 30 秒解析」「BGM のピーク位置」など、メタデータ・コメント・静止画では届かない動画本体の中身に切り込みたい場面で使用すること"
+description: "Use when 動画本体の中身（フック構造・シーン・BGM 展開）を Gemini で解析するとき。「冒頭 30 秒解析」「retention drop」「BGM のピーク位置」で発動"
 ---
 
 ## Overview
