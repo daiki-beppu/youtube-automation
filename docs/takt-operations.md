@@ -22,7 +22,9 @@ observability:
 ```
 
 - 記録先: `.takt/runs/<run>/logs/<session>-usage-events.phase.jsonl`（step × phase × provider × model 粒度）
-- 集計: takt リポジトリ同梱の `npm run analyze:usage -- .takt/runs/<run>`（`--format csv` 可）
+- **worktree 実行時の注意**: takt 自動 worktree（task の `worktree: true`）では、この `.takt/runs/` は**メインリポジトリではなく worktree 側**（`<repo-parent>/takt-worktrees/<timestamp>-<slug>/.takt/runs/`）に作られる。worktree を削除するとログも消えるため、計測を残したい run はログを先に回収すること
+- 集計: takt リポジトリ同梱の `npm run analyze:usage -- <run ディレクトリ>`（`--format csv` 可）。複数 run の横断比較は同梱の `tools/token-usage.sh <takt-worktrees のパス>` が run × step 粒度で整形表示してくれる
+- codex step の input tokens は agentic ループの各ターンで会話履歴全体が再送されるため累積計上され、見かけが大きくなる。実効コストは `cached_input_tokens` を差し引いた非キャッシュ input で見ること
 - 消費が異常に見えたときは、まず phase JSONL で「どの step のどの phase が食っているか」を特定してから対策する
 
 ## worktree の置き場
