@@ -1,6 +1,6 @@
 ---
 name: setup
-description: "Use when YouTube automation のツール導入と GCP / OAuth まわりの API 設定を新規にセットアップしたい、または既存セットアップを再診断したいとき。「セットアップして」「ツール入れて」「環境構築」「API 設定して」「gcloud 設定」「OAuth 設定」「`/setup`」「旧 `/onboard`」など。AI が `yt-doctor` で状態を診断し、次に必要な 1 アクションだけを案内する wizard。"
+description: "Use when ツール導入と GCP / OAuth の API 設定をセットアップ・再診断するとき。「セットアップして」「環境構築」「/setup」「旧 /onboard」で発動。yt-doctor 診断 wizard"
 ---
 
 ## Overview

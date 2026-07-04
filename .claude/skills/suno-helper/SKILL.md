@@ -1,6 +1,6 @@
 ---
 name: suno-helper
-description: "Use when Suno UI に投入する曲をブラウザで連続生成 + playlist 追加 + 一括ダウンロードしたいとき。yt-collection-serve で suno-prompts.json を配信し、suno-helper Chrome 拡張で 1 タブ完結の自動実行（pattern 注入 → Generate → 完了待機 → 次へ → 全件完了で playlist 一括追加 → ZIP 一括 DL）を回す operator 手順。`/suno` でプロンプトが揃った後、または既存 collection の途中再開で使用する"
+description: "Use when Suno UI の連続生成 + playlist 追加 + 一括 DL をブラウザ自動実行するとき。「suno-helper」「Suno 自動生成」で発動。/suno でプロンプトが揃った後に使う"
 ---
 
 ## Overview

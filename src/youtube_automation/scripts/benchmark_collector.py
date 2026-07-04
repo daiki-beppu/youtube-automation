@@ -1164,6 +1164,40 @@ def find_latest_benchmark_json(data_dir: Path) -> Path | None:
     return files[0] if files else None
 
 
+# YouTube Data API は配信中・配信予定のライブ配信に contentDetails.duration = "P0D" を返す
+# （配信終了後のアーカイブは実尺になるため対象外）
+LIVE_DURATION_ISO = "P0D"
+
+
+def is_live_benchmark_video(video: dict) -> bool:
+    """benchmark 動画エントリがライブ配信（duration_iso == "P0D"）かどうかを判定する。
+
+    Gemini はライブ配信 URL を取り込めず yt-video-analyze が 403 で恒久的に失敗するため、
+    video_analysis 系の消費側（yt-doctor / yt-video-analyze）は本判定で除外する (#1462)。
+    duration_iso を持たない旧形式エントリは VOD 扱い。
+    """
+    return str(video.get("duration_iso") or "") == LIVE_DURATION_ISO
+
+
+def select_top_vod_benchmark_videos(videos: list[dict], top: int) -> tuple[list[dict], list[dict]]:
+    """benchmark 動画から live を除外しつつ top 件の解析可能 VOD を選ぶ。
+
+    live は「top 件の VOD が埋まる前に遭遇したもの」だけを skip として返す。
+    これにより、doctor の期待集合と yt-video-analyze の実解析集合、およびユーザー向け
+    note/log の対象が同じになる。
+    """
+    selected: list[dict] = []
+    skipped_live: list[dict] = []
+    for video in videos:
+        if len(selected) >= top:
+            break
+        if is_live_benchmark_video(video):
+            skipped_live.append(video)
+            continue
+        selected.append(video)
+    return selected, skipped_live
+
+
 def load_benchmark_videos(data_dir: Path, min_views: int = 10000, require_thumbnail: bool = False) -> list[dict]:
     """最新ベンチマーク JSON から min_views 以上の動画を抽出する。
 
@@ -1209,6 +1243,7 @@ def load_benchmark_videos(data_dir: Path, min_views: int = 10000, require_thumbn
                     "channel_name": channel_name,
                     "channel_slug": channel_slug,
                     "published_at": v.get("published_at", ""),
+                    "duration_iso": v.get("duration_iso", ""),
                     "thumbnail_url": thumb_url,
                 }
             )
