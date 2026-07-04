@@ -85,6 +85,45 @@ class TestExpandThumbnailPromptClauses:
     def test_leaves_prompt_without_placeholder_unchanged(self) -> None:
         assert expand_thumbnail_prompt_clauses("No typography placeholder.", {}) == "No typography placeholder."
 
+    @pytest.mark.parametrize(
+        "skill_cfg, message",
+        [
+            ({"image_generation": []}, "image_generation"),
+            ({"image_generation": {"gemini": []}}, "image_generation.gemini"),
+            ({"image_generation": {"gemini": {"single_step": []}}}, "single_step"),
+            ({"image_generation": {"gemini": {"single_step": {}, "thumbnail_text": []}}}, "thumbnail_text"),
+            (
+                {"image_generation": {"gemini": {"single_step": {}, "thumbnail_text": {"font": []}}}},
+                "thumbnail_text.font",
+            ),
+            (
+                {
+                    "image_generation": {
+                        "gemini": {
+                            "single_step": {"typography_clause": 123},
+                            "thumbnail_text": {"font": {"copy": "classic serif"}},
+                        }
+                    }
+                },
+                "typography_clause",
+            ),
+            (
+                {
+                    "image_generation": {
+                        "gemini": {
+                            "single_step": {"typography_clause": "Use {font_description}."},
+                            "thumbnail_text": {"font": {"copy": ""}},
+                        }
+                    }
+                },
+                "font.copy",
+            ),
+        ],
+    )
+    def test_rejects_malformed_typography_config(self, skill_cfg: dict, message: str) -> None:
+        with pytest.raises(ConfigError, match=message):
+            expand_thumbnail_prompt_clauses("TTP reference. ${typography_clause}", skill_cfg)
+
 
 class TestPlanOutputPaths:
     def test_single_attempt_returns_first_only(self, tmp_path: Path) -> None:
@@ -363,6 +402,7 @@ def _patch_generate_image_cli(
     *,
     provider: _FakeProvider,
     channel_root: Path | None = None,
+    skill_cfg_override: dict | None = None,
 ) -> None:
     cfg = SimpleNamespace(
         provider="gemini",
@@ -398,7 +438,7 @@ def _patch_generate_image_cli(
 
     import youtube_automation.utils.skill_config as skill_config_module
 
-    monkeypatch.setattr(skill_config_module, "load_skill_config", lambda _name: skill_cfg)
+    monkeypatch.setattr(skill_config_module, "load_skill_config", lambda _name: skill_cfg_override or skill_cfg)
 
 
 def _benchmark_refs(tmp_path: Path, count: int) -> list[Path]:
@@ -475,6 +515,67 @@ class TestGenerateImageCLIReferenceContract:
 
         assert len(provider.requests) == 1
         assert provider.requests[0].prompt == "TTP reference. Render title in a consistent classic serif typeface."
+
+    @pytest.mark.parametrize(
+        "skill_cfg, message",
+        [
+            (
+                {"image_generation": {"gemini": {"single_step": [], "thumbnail_text": {"font": {"copy": "serif"}}}}},
+                "single_step",
+            ),
+            (
+                {
+                    "image_generation": {
+                        "gemini": {
+                            "single_step": {"typography_clause": []},
+                            "thumbnail_text": {"font": {"copy": "serif"}},
+                        }
+                    }
+                },
+                "typography_clause",
+            ),
+            (
+                {
+                    "image_generation": {
+                        "gemini": {
+                            "single_step": {"typography_clause": "Use {font_description}."},
+                            "thumbnail_text": {"font": {"copy": []}},
+                        }
+                    }
+                },
+                "font.copy",
+            ),
+        ],
+    )
+    def test_cli_reports_malformed_typography_config_as_error(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        skill_cfg: dict,
+        message: str,
+    ) -> None:
+        provider = _FakeProvider()
+        argv = [
+            "--prompt",
+            "TTP reference. ${typography_clause}",
+            "--output",
+            str(tmp_path / "thumbnail-v1.jpg"),
+            "--max-attempts",
+            "1",
+            "-y",
+        ]
+
+        _patch_generate_image_cli(monkeypatch, argv, provider=provider, skill_cfg_override=skill_cfg)
+
+        with pytest.raises(SystemExit) as exc_info:
+            generate_image_main()
+
+        assert exc_info.value.code == 1
+        assert provider.requests == []
+        captured = capsys.readouterr()
+        assert "[ERROR]" in captured.out
+        assert message in captured.out
 
     def test_single_step_cli_rejects_reference_shortage(
         self,

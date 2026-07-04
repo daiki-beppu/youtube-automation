@@ -61,8 +61,16 @@ def _channel_root() -> Path:
     return channel_dir()
 
 
-def _dict_or_empty(value: object) -> dict:
-    return value if isinstance(value, dict) else {}
+def _required_mapping(value: object, key: str) -> dict:
+    if not isinstance(value, dict):
+        raise ConfigError(f"{key} は object で指定してください")
+    return value
+
+
+def _required_non_empty_string(value: object, key: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"{key} は空でない文字列で指定してください")
+    return value
 
 
 def expand_thumbnail_prompt_clauses(prompt: str, skill_cfg: dict) -> str:
@@ -70,21 +78,22 @@ def expand_thumbnail_prompt_clauses(prompt: str, skill_cfg: dict) -> str:
     if "${typography_clause}" not in prompt:
         return prompt
 
-    image_generation = _dict_or_empty(skill_cfg.get("image_generation"))
-    gemini = _dict_or_empty(image_generation.get("gemini"))
-    single_step = _dict_or_empty(gemini.get("single_step"))
-    thumbnail_text = _dict_or_empty(gemini.get("thumbnail_text"))
-    font = _dict_or_empty(thumbnail_text.get("font"))
+    image_generation = _required_mapping(skill_cfg.get("image_generation"), "image_generation")
+    gemini = _required_mapping(image_generation.get("gemini"), "image_generation.gemini")
+    single_step = _required_mapping(gemini.get("single_step"), "image_generation.gemini.single_step")
+    thumbnail_text = _required_mapping(gemini.get("thumbnail_text"), "image_generation.gemini.thumbnail_text")
+    font = _required_mapping(thumbnail_text.get("font"), "image_generation.gemini.thumbnail_text.font")
 
-    typography_clause = single_step.get("typography_clause", "")
-    if not isinstance(typography_clause, str):
-        raise ConfigError("image_generation.gemini.single_step.typography_clause は文字列で指定してください")
+    typography_clause = _required_non_empty_string(
+        single_step.get("typography_clause"),
+        "image_generation.gemini.single_step.typography_clause",
+    )
+    font_description = _required_non_empty_string(
+        font.get("copy"),
+        "image_generation.gemini.thumbnail_text.font.copy",
+    )
 
-    font_description = font.get("copy", "")
-    if not isinstance(font_description, str):
-        raise ConfigError("image_generation.gemini.thumbnail_text.font.copy は文字列で指定してください")
-
-    rendered_clause = typography_clause.replace("{font_description}", font_description or "consistent")
+    rendered_clause = typography_clause.replace("{font_description}", font_description)
     return prompt.replace("${typography_clause}", rendered_clause.strip())
 
 
@@ -337,8 +346,12 @@ def main():
     # composition_prefix を提供している場合のみ適用される。
     from youtube_automation.utils.skill_config import load_skill_config
 
-    skill_cfg = load_skill_config("thumbnail")
-    composition_source = resolve_composition_source(skill_cfg, cfg.provider)
+    try:
+        skill_cfg = load_skill_config("thumbnail")
+        composition_source = resolve_composition_source(skill_cfg, cfg.provider)
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
 
     # single_step モード情報は TTP strict の事前検証と attempt 解決に使う。
     gemini_section = skill_cfg.get("image_generation", {}).get("gemini", {})
@@ -348,7 +361,11 @@ def main():
         prompt = args.prompt
     else:
         prompt = apply_composition_rules(args.prompt, composition_source)
-    prompt = expand_thumbnail_prompt_clauses(prompt, skill_cfg)
+    try:
+        prompt = expand_thumbnail_prompt_clauses(prompt, skill_cfg)
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
 
     output_path = Path(args.output)
     if not output_path.is_absolute():
