@@ -306,7 +306,7 @@ def test_suno_lyric_default_yaml_defines_cta_and_safe_quote_source_contract():
     assert data["source"]["index_path"].startswith("/meigen/")
 
 
-def test_channel_setup_rules_list_suno_lyrics_override_keys():
+def test_channel_new_rules_list_suno_lyrics_override_keys():
     text = _CONFIG_RULES_MD.read_text(encoding="utf-8")
 
     assert "config/skills/suno-lyric.yaml" in text
