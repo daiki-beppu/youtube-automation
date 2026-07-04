@@ -197,6 +197,20 @@ def test_single_language_channel_without_scene_phrases_passes(tmp_path: Path, mo
     _run_preflight(channel_dir, collection_dir, monkeypatch)
 
 
+def test_single_language_channel_missing_workflow_state_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """単一言語でも workflow-state.json の存在は preflight で必須 (#1470)."""
+    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en"])
+    collection_dir = _write_collection(
+        channel_dir,
+        scene_phrases={},
+        description="A continuous BGM mix without chapter markers.",
+    )
+    (collection_dir / "workflow-state.json").unlink()
+
+    with pytest.raises(RuntimeError, match="workflow-state.json .*存在しません"):
+        _run_preflight(channel_dir, collection_dir, monkeypatch)
+
+
 def test_single_language_channel_malformed_workflow_state_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
