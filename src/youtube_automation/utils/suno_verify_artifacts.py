@@ -27,7 +27,6 @@ from youtube_automation.utils.suno_verify_readers import (
     load_lyric_entries,
     load_pattern_contract,
     load_prompt_entries,
-    resolve_tracks_per_pattern,
 )
 
 SUNO_VERIFY_SKILL_NAME = "suno"
@@ -58,7 +57,7 @@ def verify_suno_collection(collection_dir: Path) -> tuple[list[str], str]:
     prompts, prompt_issues = _validate_prompts(prompts_path, contract)
     issues = [*issues, *prompt_issues]
     if contract.mode == "vocal":
-        vocal_issues, summary = _verify_vocal_artifacts(lyrics_path, suno_cfg, prompts)
+        vocal_issues, summary = _verify_vocal_artifacts(lyrics_path, contract, prompts)
         return [*issues, *vocal_issues], summary
     return issues, _instrumental_summary(contract, prompts)
 
@@ -95,7 +94,7 @@ def _style_variant_genre_line_issues(suno_cfg: ResolvedSunoConfig, contract: Pat
 def _validate_prompts(prompts_path: Path, contract: PatternContract) -> tuple[ArtifactEntries, list[str]]:
     prompts_exist = prompts_path.exists()
     if not prompts_exist and contract.mode == "vocal":
-        return ArtifactEntries(names=contract.expected_names, lyrics_by_name={}), []
+        return ArtifactEntries(names=contract.expected_names, lyrics_by_name={}, lyrics_entries=[]), []
 
     prompts, prompt_issues = load_prompt_entries(prompts_path)
     issues = [
@@ -112,25 +111,21 @@ def _validate_prompts(prompts_path: Path, contract: PatternContract) -> tuple[Ar
 
 def _verify_vocal_artifacts(
     lyrics_path: Path,
-    suno_cfg: ResolvedSunoConfig,
+    contract: PatternContract,
     prompts: ArtifactEntries,
 ) -> tuple[list[str], str]:
-    tracks_per_pattern, tracks_per_pattern_issues = resolve_tracks_per_pattern(suno_cfg.raw)
     lyrics, lyric_issues = load_lyric_entries(lyrics_path)
     issues = [
-        *tracks_per_pattern_issues,
         *lyric_issues,
         *_vocal_artifact_issues(prompts, lyrics),
     ]
 
     tracks_per_pattern_text = "unknown"
-    expected_clips_text = "unknown"
-    if tracks_per_pattern is not None:
-        tracks_per_pattern_text = str(tracks_per_pattern)
-        expected_clips_text = str(len(prompts.names) * tracks_per_pattern)
+    if contract.tracks_per_pattern is not None:
+        tracks_per_pattern_text = str(contract.tracks_per_pattern)
     summary = (
         f"mode=vocal prompt_entries={len(prompts.names)} "
-        f"tracks_per_pattern={tracks_per_pattern_text} expected_clips={expected_clips_text}"
+        f"tracks_per_pattern={tracks_per_pattern_text} expected_entries={len(contract.expected_names)}"
     )
     return issues, summary
 
@@ -177,12 +172,12 @@ def _vocal_artifact_issues(prompts: ArtifactEntries, lyrics: ArtifactEntries) ->
 
 def _lyrics_structure_issues(source_name: str, entries: ArtifactEntries) -> list[str]:
     issues: list[str] = []
-    for name, lyric_text in entries.lyrics_by_name.items():
+    for entry in entries.lyrics_entries:
         issues.extend(
             vocal_lyrics_structure_issues(
                 source_name=source_name,
-                name=name,
-                lyrics=lyric_text,
+                name=entry.name,
+                lyrics=entry.lyrics,
             )
         )
     return issues

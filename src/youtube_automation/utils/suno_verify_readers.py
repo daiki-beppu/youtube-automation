@@ -6,6 +6,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 import yaml
 
@@ -16,6 +17,7 @@ from youtube_automation.utils.suno_artifact_contracts import (
 )
 from youtube_automation.utils.suno_artifact_validation import (
     duplicated_names,
+    positive_integer_issue,
     suno_prompt_entry_names,
     surrounding_whitespace_issue,
     unique_entry_names_issue,
@@ -31,12 +33,20 @@ class PatternContract:
     expected_names: list[str]
     style_keys: frozenset[str]
     tracks_per_collection: int | None
+    tracks_per_pattern: int | None
+
+
+@dataclass(frozen=True)
+class ArtifactLyrics:
+    name: str
+    lyrics: str
 
 
 @dataclass(frozen=True)
 class ArtifactEntries:
     names: list[str]
     lyrics_by_name: dict[str, str]
+    lyrics_entries: list[ArtifactLyrics]
 
 
 def load_pattern_contract(
@@ -48,9 +58,14 @@ def load_pattern_contract(
         return None, issues
 
     mode, mode_issues = _resolve_mode(raw, suno_cfg)
-    expected_names, style_keys, pattern_issues = _pattern_contract_data_from_patterns(raw.get("patterns"))
+    tracks_per_pattern, tracks_per_pattern_issues = _resolve_vocal_tracks_per_pattern(mode, suno_cfg)
+    expected_names, style_keys, pattern_issues = _pattern_contract_data_from_patterns(
+        raw.get("patterns"),
+        tracks_per_pattern if mode == "vocal" and tracks_per_pattern is not None else 1,
+    )
     tracks_per_collection, tracks_issues = _resolve_tracks_per_collection(raw, suno_cfg)
     issues.extend(mode_issues)
+    issues.extend(tracks_per_pattern_issues)
     issues.extend(pattern_issues)
     issues.extend(tracks_issues)
     if mode is None:
@@ -60,6 +75,7 @@ def load_pattern_contract(
         expected_names=expected_names,
         style_keys=style_keys,
         tracks_per_collection=tracks_per_collection,
+        tracks_per_pattern=tracks_per_pattern,
     )
     return contract, issues
 
@@ -67,10 +83,10 @@ def load_pattern_contract(
 def load_prompt_entries(prompts_path: Path) -> tuple[ArtifactEntries, list[str]]:
     raw, issues = _load_json(prompts_path, SUNO_PROMPTS_JSON_FILENAME)
     if raw is None:
-        return ArtifactEntries(names=[], lyrics_by_name={}), issues
+        return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), issues
     if not isinstance(raw, list):
         issues.append(f"{SUNO_PROMPTS_JSON_FILENAME} root must be a list of entries")
-        return ArtifactEntries(names=[], lyrics_by_name={}), issues
+        return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), issues
     entries, entry_issues = _prompt_entries_from_json_list(raw)
     issues.extend(entry_issues)
     return entries, issues
@@ -79,10 +95,10 @@ def load_prompt_entries(prompts_path: Path) -> tuple[ArtifactEntries, list[str]]
 def load_lyric_entries(lyrics_path: Path) -> tuple[ArtifactEntries, list[str]]:
     raw, issues = _load_json(lyrics_path, SUNO_LYRICS_JSON_FILENAME)
     if raw is None:
-        return ArtifactEntries(names=[], lyrics_by_name={}), issues
+        return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), issues
     if not isinstance(raw, list):
         issues.append(f"{SUNO_LYRICS_JSON_FILENAME} root must be a list of entries")
-        return ArtifactEntries(names=[], lyrics_by_name={}), issues
+        return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), issues
     entries, entry_issues = _lyric_entries_from_json_list(raw)
     issues.extend(entry_issues)
     return entries, issues
@@ -127,12 +143,25 @@ def _resolve_mode(raw: Mapping[str, object], suno_cfg: ResolvedSunoConfig) -> tu
 
 
 def _positive_int(value: object, context: str) -> tuple[int | None, list[str]]:
-    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        return None, [f"{context} must be a positive integer: {value!r}"]
-    return value, []
+    issue = positive_integer_issue(value, context)
+    if issue is not None:
+        return None, [issue]
+    return cast(int, value), []
 
 
-def _pattern_contract_data_from_patterns(raw_patterns: object) -> tuple[list[str], frozenset[str], list[str]]:
+def _resolve_vocal_tracks_per_pattern(
+    mode: str | None,
+    suno_cfg: ResolvedSunoConfig,
+) -> tuple[int | None, list[str]]:
+    if mode != "vocal":
+        return None, []
+    return resolve_tracks_per_pattern(suno_cfg.raw)
+
+
+def _pattern_contract_data_from_patterns(
+    raw_patterns: object,
+    tracks_per_pattern: int,
+) -> tuple[list[str], frozenset[str], list[str]]:
     if not isinstance(raw_patterns, list):
         return [], frozenset(), [f"{SUNO_PATTERNS_FILENAME} patterns must be a list"]
 
@@ -140,7 +169,7 @@ def _pattern_contract_data_from_patterns(raw_patterns: object) -> tuple[list[str
     style_keys: set[str] = set()
     issues: list[str] = []
     for index, pattern in enumerate(raw_patterns, 1):
-        pattern_names, pattern_issues = _entry_names_from_pattern(pattern, index)
+        pattern_names, pattern_issues = _entry_names_from_pattern(pattern, index, tracks_per_pattern)
         names.extend(pattern_names)
         issues.extend(pattern_issues)
         style_key = _style_key_from_pattern(pattern)
@@ -149,7 +178,11 @@ def _pattern_contract_data_from_patterns(raw_patterns: object) -> tuple[list[str
     return names, frozenset(style_keys), issues
 
 
-def _entry_names_from_pattern(pattern: object, index: int) -> tuple[list[str], list[str]]:
+def _entry_names_from_pattern(
+    pattern: object,
+    index: int,
+    tracks_per_pattern: int,
+) -> tuple[list[str], list[str]]:
     issues: list[str] = []
     if not isinstance(pattern, Mapping):
         return [], [f"{SUNO_PATTERNS_FILENAME} patterns[{index}] must be a mapping"]
@@ -179,7 +212,7 @@ def _entry_names_from_pattern(pattern: object, index: int) -> tuple[list[str], l
         issues.append(f"{SUNO_PATTERNS_FILENAME} patterns[{index}].scenes has invalid entries: {joined}")
         return [], issues
 
-    return suno_prompt_entry_names(name_jp, name_en, len(scenes)), issues
+    return suno_prompt_entry_names(name_jp, name_en, len(scenes), tracks_per_pattern=tracks_per_pattern), issues
 
 
 def _style_key_from_pattern(pattern: object) -> str | None:
@@ -206,6 +239,7 @@ def _resolve_tracks_per_collection(
 def _prompt_entries_from_json_list(raw: list[object]) -> tuple[ArtifactEntries, list[str]]:
     names: list[str] = []
     lyrics_by_name: dict[str, str] = {}
+    lyrics_entries: list[ArtifactLyrics] = []
     issues: list[str] = []
     for index, item in enumerate(raw, 1):
         if not isinstance(item, Mapping):
@@ -214,6 +248,7 @@ def _prompt_entries_from_json_list(raw: list[object]) -> tuple[ArtifactEntries, 
         entry, entry_issues = _prompt_entry_from_mapping(item, index)
         names.extend(entry.names)
         lyrics_by_name.update(entry.lyrics_by_name)
+        lyrics_entries.extend(entry.lyrics_entries)
         issues.extend(entry_issues)
 
     duplicate_issue = unique_entry_names_issue(
@@ -223,7 +258,7 @@ def _prompt_entries_from_json_list(raw: list[object]) -> tuple[ArtifactEntries, 
     )
     if duplicate_issue is not None:
         issues.append(duplicate_issue)
-    return ArtifactEntries(names=names, lyrics_by_name=lyrics_by_name), issues
+    return ArtifactEntries(names=names, lyrics_by_name=lyrics_by_name, lyrics_entries=lyrics_entries), issues
 
 
 def _prompt_entry_from_mapping(
@@ -235,7 +270,7 @@ def _prompt_entry_from_mapping(
     style = item.get("style")
     lyrics = item.get("lyrics")
     if not isinstance(name, str) or not name.strip():
-        return ArtifactEntries(names=[], lyrics_by_name={}), [
+        return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), [
             f"{SUNO_PROMPTS_JSON_FILENAME} entry {index}.name must be a non-empty string"
         ]
     issue = surrounding_whitespace_issue(
@@ -248,16 +283,21 @@ def _prompt_entry_from_mapping(
     if not isinstance(style, str) or not style.strip():
         issues.append(f"{SUNO_PROMPTS_JSON_FILENAME} entry '{name}' style must be a non-empty string")
     if isinstance(lyrics, str):
-        entry = ArtifactEntries(names=[name], lyrics_by_name={name: lyrics})
+        entry = ArtifactEntries(
+            names=[name],
+            lyrics_by_name={name: lyrics},
+            lyrics_entries=[ArtifactLyrics(name=name, lyrics=lyrics)],
+        )
     else:
         issues.append(f"{SUNO_PROMPTS_JSON_FILENAME} entry '{name}' lyrics must be a string")
-        entry = ArtifactEntries(names=[name], lyrics_by_name={})
+        entry = ArtifactEntries(names=[name], lyrics_by_name={}, lyrics_entries=[])
     return entry, issues
 
 
 def _lyric_entries_from_json_list(raw: list[object]) -> tuple[ArtifactEntries, list[str]]:
     names: list[str] = []
     lyrics_by_name: dict[str, str] = {}
+    lyrics_entries: list[ArtifactLyrics] = []
     issues: list[str] = []
     for index, item in enumerate(raw, 1):
         if not isinstance(item, Mapping):
@@ -266,12 +306,13 @@ def _lyric_entries_from_json_list(raw: list[object]) -> tuple[ArtifactEntries, l
         entry, entry_issues = _lyric_entry_from_mapping(item, index)
         names.extend(entry.names)
         lyrics_by_name.update(entry.lyrics_by_name)
+        lyrics_entries.extend(entry.lyrics_entries)
         issues.extend(entry_issues)
 
     duplicates = duplicated_names(names)
     if duplicates:
         issues.append(f"{SUNO_LYRICS_JSON_FILENAME} duplicated lyrics entry names: {', '.join(duplicates)}")
-    return ArtifactEntries(names=names, lyrics_by_name=lyrics_by_name), issues
+    return ArtifactEntries(names=names, lyrics_by_name=lyrics_by_name, lyrics_entries=lyrics_entries), issues
 
 
 def _lyric_entry_from_mapping(
@@ -282,7 +323,7 @@ def _lyric_entry_from_mapping(
     name = item.get("name")
     lyrics = item.get("lyrics")
     if not isinstance(name, str) or not name.strip():
-        return ArtifactEntries(names=[], lyrics_by_name={}), [
+        return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), [
             f"{SUNO_LYRICS_JSON_FILENAME} entry {index}.name must be a non-empty string"
         ]
     issue = surrounding_whitespace_issue(
@@ -294,5 +335,13 @@ def _lyric_entry_from_mapping(
         issues.append(issue)
     if not isinstance(lyrics, str):
         issues.append(f"{SUNO_LYRICS_JSON_FILENAME} entry '{name}' lyrics must be a string")
-        return ArtifactEntries(names=[name], lyrics_by_name={}), issues
-    return ArtifactEntries(names=[name], lyrics_by_name={name: lyrics.rstrip()}), issues
+        return ArtifactEntries(names=[name], lyrics_by_name={}, lyrics_entries=[]), issues
+    normalized_lyrics = lyrics.rstrip()
+    return (
+        ArtifactEntries(
+            names=[name],
+            lyrics_by_name={name: normalized_lyrics},
+            lyrics_entries=[ArtifactLyrics(name=name, lyrics=normalized_lyrics)],
+        ),
+        issues,
+    )

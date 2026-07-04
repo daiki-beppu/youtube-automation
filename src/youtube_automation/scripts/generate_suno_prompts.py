@@ -7,6 +7,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 import yaml
 
@@ -20,10 +21,10 @@ from youtube_automation.scripts.suno_artifacts import (
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.skill_config import load_channel_override, load_skill_config
 from youtube_automation.utils.suno_artifact_validation import (
+    positive_integer_issue,
     require_instrumental_track_count,
     require_matching_suno_lyrics_names,
     require_unique_entry_names,
-    suno_prompt_entry_name,
     suno_prompt_entry_names,
     surrounding_whitespace_issue,
 )
@@ -153,6 +154,7 @@ class _ResolvedPattern:
     name_en: str
     style_label: str
     style_line: str
+    entry_names: list[str]
     scenes: list[str]
     lyrics_by_scene: list[str]  # scenes と同じ長さ。各値は rstrip 済み。歌詞が無ければ ""
 
@@ -204,11 +206,12 @@ def _entry_names_from_resolved(resolved: list[_ResolvedPattern]) -> list[str]:
     """`build_prompt_entries` と同一ロジックで最終的な entry.name のみを構築する.
 
     Suno UI Song Title 欄へ注入される値 (suno-helper 拡張は `entry.title ?? entry.name` を読む)
-    の SSOT。複数 scene を持つ pattern は `(Variation N)` 付与でユニーク化される (#854 由来)。
+    の SSOT。`_resolve_prompts()` が scene variation と tracks_per_pattern を反映した
+    展開済み entry_names を作る。
     """
     names: list[str] = []
     for p in resolved:
-        names.extend(suno_prompt_entry_names(p.name_jp, p.name_en, len(p.scenes)))
+        names.extend(p.entry_names)
     return names
 
 
@@ -234,6 +237,20 @@ def _require_pattern_name_without_padding(
     )
     if issue is not None:
         raise ConfigError(f"{patterns_path}: {issue}")
+
+
+def _resolve_vocal_tracks_per_pattern(suno: dict) -> int:
+    value = suno.get("tracks_per_pattern")
+    issue = positive_integer_issue(value, "config/skills/suno.yaml::tracks_per_pattern")
+    if issue is not None:
+        raise ConfigError(issue)
+    return cast(int, value)
+
+
+def _expand_scenes_for_entries(scenes: list[str], tracks_per_pattern: int) -> list[str]:
+    if tracks_per_pattern == 1:
+        return scenes
+    return [scene for scene in scenes for _ in range(tracks_per_pattern)]
 
 
 def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
@@ -265,6 +282,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
 
     mode = data.get("mode", infer_suno_mode(genre_line))
     is_vocal = mode == "vocal"
+    tracks_per_pattern = _resolve_vocal_tracks_per_pattern(suno) if is_vocal else 1
     external_lyrics_path = patterns_path.parent / SUNO_LYRICS_JSON_FILENAME
     has_external_lyrics = is_vocal and external_lyrics_path.exists()
     if is_vocal and not has_external_lyrics:
@@ -294,12 +312,17 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
             style_label = ""
 
         scenes = pattern["scenes"]
+        entry_names = suno_prompt_entry_names(
+            name_jp,
+            name_en,
+            len(scenes),
+            tracks_per_pattern=tracks_per_pattern,
+        )
+        entry_scenes = _expand_scenes_for_entries(scenes, tracks_per_pattern)
         raw_lyrics = pattern.get("lyrics")
         fallback_lyrics = raw_lyrics.rstrip() if raw_lyrics else ""
-        multi = len(scenes) > 1
         lyrics_by_scene = []
-        for j in range(1, len(scenes) + 1):
-            entry_name = suno_prompt_entry_name(name_jp, name_en, j if multi else None)
+        for entry_name in entry_names:
             if has_external_lyrics:
                 expected_external_lyrics_names.add(entry_name)
                 lyrics_by_scene.append(external_lyrics.get(entry_name, ""))
@@ -312,7 +335,8 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
                 name_en=name_en,
                 style_label=style_label,
                 style_line=_style_line(tempo, effective_style),
-                scenes=scenes,
+                entry_names=entry_names,
+                scenes=entry_scenes,
                 lyrics_by_scene=lyrics_by_scene,
             )
         )
@@ -377,9 +401,14 @@ def generate(patterns_path: Path) -> str:
         lines.append("")
         lines.append(f"## Pattern {label}: {pattern.name_jp} — {pattern.name_en}{pattern.style_label}")
 
-        for j, scene in enumerate(pattern.scenes, 1):
+        for entry_name, scene, lyrics in zip(
+            pattern.entry_names,
+            pattern.scenes,
+            pattern.lyrics_by_scene,
+            strict=True,
+        ):
             lines.append("")
-            lines.append(f"### Variation {j}")
+            lines.append(f"### {entry_name}")
             lines.append("**Styles:**")
             lines.append("```")
             lines.append(pattern.style_line)
@@ -393,7 +422,6 @@ def generate(patterns_path: Path) -> str:
                 lines.append(resolved.exclude_styles)
                 lines.append("```")
 
-            lyrics = pattern.lyrics_by_scene[j - 1]
             if resolved.is_vocal and lyrics:
                 lines.append("")
                 lines.append("**Lyrics:**")
@@ -410,9 +438,10 @@ def generate(patterns_path: Path) -> str:
 def build_prompt_entries(patterns_path: Path) -> list[dict]:
     """拡張へ配信する `[{name, style, lyrics}]` を md と同じ部品から派生させる.
 
-    scene 単位で 1 entry に分割し、複数 scene を持つ pattern には
-    name に ` (Variation N)` を付与する。style は md の Styles ブロック
-    （`<tempo>, <style>,` 行 + scene 行）と同一文字列を改行で結合する。
+    `_resolve_prompts()` が作る展開済み entry_names 単位で出力する。
+    複数 scene は `(Variation N)`、tracks_per_pattern > 1 は `(Take N)` を含む
+    name になり、style は md の Styles ブロック（`<tempo>, <style>,` 行 + scene 行）
+    と同一文字列を改行で結合する。
 
     品質ルール (#904):
     - 5 要素順序の簡易検証 (警告)
@@ -436,9 +465,12 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
 
     entries: list[dict] = []
     for pattern in resolved.patterns:
-        entry_names = suno_prompt_entry_names(pattern.name_jp, pattern.name_en, len(pattern.scenes))
-        for j, scene in enumerate(pattern.scenes, 1):
-            name = entry_names[j - 1]
+        for name, scene, lyrics_source in zip(
+            pattern.entry_names,
+            pattern.scenes,
+            pattern.lyrics_by_scene,
+            strict=True,
+        ):
             full_style = f"{pattern.style_line}\n{scene}"
 
             # Quality rules: Style テキストの検証 (#904)
@@ -450,7 +482,7 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
             report.errors.extend(validate_banned_artists(full_style, banned_artists))
 
             # auto_lyrics_structure: 歌詞構造の自動補強 (#904)
-            lyrics = pattern.lyrics_by_scene[j - 1] if resolved.is_vocal else ""
+            lyrics = lyrics_source if resolved.is_vocal else ""
             if auto_lyrics:
                 lyrics = apply_auto_lyrics_structure(lyrics, is_vocal=resolved.is_vocal)
 

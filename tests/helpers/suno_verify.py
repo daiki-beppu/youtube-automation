@@ -9,6 +9,8 @@ from pathlib import Path
 
 import yaml
 
+from youtube_automation.utils.suno_artifact_validation import suno_prompt_entry_names
+
 
 def write_suno_override(channel: Path, **overrides) -> None:
     (channel / "config" / "skills" / "suno.yaml").write_text(
@@ -51,11 +53,10 @@ def write_patterns(
     (docs / "suno-patterns.yaml").write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
 
 
-def prompt_names(*, mode: str, scenes_count: int) -> list[str]:
-    base = "歌もの — Vocal" if mode == "vocal" else "静かな雨 — Quiet Rain"
-    if scenes_count == 1:
-        return [base]
-    return [f"{base} (Variation {index})" for index in range(1, scenes_count + 1)]
+def prompt_names(*, mode: str, scenes_count: int, tracks_per_pattern: int = 1) -> list[str]:
+    name_jp = "歌もの" if mode == "vocal" else "静かな雨"
+    name_en = "Vocal" if mode == "vocal" else "Quiet Rain"
+    return suno_prompt_entry_names(name_jp, name_en, scenes_count, tracks_per_pattern=tracks_per_pattern)
 
 
 def write_prompts(docs: Path, names: list[str], *, lyrics: str = "[Instrumental]\n") -> None:

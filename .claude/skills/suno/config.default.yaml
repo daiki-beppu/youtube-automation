@@ -93,7 +93,7 @@ tracks_per_collection: 20
 
 # ボーカルモード専用: パターン運用方針 (インストモードでは無視される)
 # - pattern_strategy: パターン運用の戦略名 (`mixed` = N パターンで起伏を作る / `single` = 1 パターン統合)。
-# - tracks_per_pattern: 1 パターンあたりの再生成回数 (Suno は 1 リクエスト = 2 曲生成)。
+# - tracks_per_pattern: 1 パターンあたりの prompt entry 数。`(Take N)` 付き entry name に展開する。
 # - pattern_strategy_note: AI への運用補足 (任意の自由記述)。
 pattern_strategy: mixed
 tracks_per_pattern: 3
