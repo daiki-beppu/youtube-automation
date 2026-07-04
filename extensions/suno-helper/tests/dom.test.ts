@@ -24,6 +24,7 @@ import {
   resolveAdvancedFields,
   resolveFields,
   resolveGenerateButton,
+  setLyricsValue,
   setNativeValue,
   setSliderValue,
 } from "../../shared/dom";
@@ -86,6 +87,16 @@ function addInput(opts: { placeholder?: string; visible?: boolean } = {}): HTMLI
   document.body.appendChild(input);
   setRect(input, opts.visible === false ? ZERO_RECT : VISIBLE_RECT);
   return input;
+}
+
+// 2026-07 UI 改装後の Lyrics 欄（Lexical contenteditable div）。resolveFields は bbox 幅非ゼロで拾う。
+function addLexicalLyrics(opts: { visible?: boolean; contenteditable?: string } = {}): HTMLElement {
+  const div = document.createElement("div");
+  div.className = "lyrics-editor-content";
+  div.setAttribute("contenteditable", opts.contenteditable ?? "true");
+  document.body.appendChild(div);
+  setRect(div, opts.visible === false ? ZERO_RECT : VISIBLE_RECT);
+  return div;
 }
 
 beforeEach(() => {
@@ -236,6 +247,192 @@ describe("resolveFields: data-testid ベースの Style / Lyrics 解決 (#807)",
 
     expect(fields.style).toBe(style);
     expect(fields.lyrics).toBeNull();
+  });
+});
+
+describe("resolveFields: Lexical Lyrics fallback (2026-07 UI 改装)", () => {
+  it("Given testid textarea 無し + Lexical div When 解決する Then lyrics は Lexical div、style は残りの可視 textarea", () => {
+    const style = addTextarea({ placeholder: "Style description" });
+    const lexical = addLexicalLyrics();
+
+    const fields = resolveFields();
+
+    expect(fields.lyrics).toBe(lexical);
+    expect(fields.style).toBe(style);
+  });
+
+  it("Given testid textarea と Lexical div が併存 When 解決する Then 旧 UI の testid textarea を優先する", () => {
+    const lyrics = addTextarea({ testId: "lyrics-textarea" });
+    addTextarea({ placeholder: "Style description" });
+    addLexicalLyrics();
+
+    const fields = resolveFields();
+
+    expect(fields.lyrics).toBe(lyrics);
+  });
+
+  it('Given contenteditable="" (boolean 属性形式) の Lexical div When 解決する Then lyrics に解決する', () => {
+    addTextarea({ placeholder: "Style description" });
+    const lexical = addLexicalLyrics({ contenteditable: "" });
+
+    const fields = resolveFields();
+
+    expect(fields.lyrics).toBe(lexical);
+  });
+
+  it("Given bbox 幅 0 の Lexical div When 解決する Then 非マウント要素として拾わず lyrics は null", () => {
+    addTextarea({ placeholder: "Style description" });
+    addLexicalLyrics({ visible: false });
+
+    const fields = resolveFields();
+
+    expect(fields.lyrics).toBeNull();
+  });
+
+  it('Given contenteditable="false" の div When 解決する Then selector 不一致で lyrics は null', () => {
+    addTextarea({ placeholder: "Style description" });
+    addLexicalLyrics({ contenteditable: "false" });
+
+    const fields = resolveFields();
+
+    expect(fields.lyrics).toBeNull();
+  });
+});
+
+describe("resolveFields: styles-wrapper による Style の構造的識別 (2026-07 UI 改装)", () => {
+  function addWrappedStyleTextarea(): HTMLTextAreaElement {
+    const wrapper = document.createElement("div");
+    wrapper.setAttribute("data-testid", "create-form-styles-wrapper");
+    document.body.appendChild(wrapper);
+    const ta = document.createElement("textarea");
+    wrapper.appendChild(ta);
+    setRect(ta, VISIBLE_RECT);
+    return ta;
+  }
+
+  it("Given wrapper 内 textarea と DOM 先行の無関係 textarea When 解決する Then wrapper 内を style とする", () => {
+    // 旧述語（lyrics 以外の最初の可視 textarea）だと DOM 先行の無関係 textarea を誤って掴む配置。
+    const unrelated = addTextarea({ placeholder: "Some other field" });
+    const style = addWrappedStyleTextarea();
+    addLexicalLyrics();
+
+    const fields = resolveFields();
+
+    expect(fields.style).toBe(style);
+    expect(fields.style).not.toBe(unrelated);
+  });
+
+  it("Given wrapper 不在の旧 UI When 解決する Then 従来どおり lyrics 以外の可視 textarea を style とする", () => {
+    const lyrics = addTextarea({ testId: "lyrics-textarea" });
+    const style = addTextarea({ placeholder: "Style description" });
+
+    const fields = resolveFields();
+
+    expect(fields.style).toBe(style);
+    expect(fields.lyrics).toBe(lyrics);
+  });
+});
+
+describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics 注入 (2026-07 UI 改装)", () => {
+  // jsdom は document.execCommand / DataTransfer / ClipboardEvent(clipboardData) を実装しないため
+  // 最小 stub を立てる。実ブラウザでの成立は e2e (suno-inject.spec.ts) が実 Chromium で担保する。
+  class DataTransferStub {
+    private store = new Map<string, string>();
+    setData(type: string, value: string): void {
+      this.store.set(type, value);
+    }
+    getData(type: string): string {
+      return this.store.get(type) ?? "";
+    }
+  }
+  class ClipboardEventStub extends Event {
+    readonly clipboardData: DataTransferStub | null;
+    constructor(type: string, init: EventInit & { clipboardData?: DataTransferStub } = {}) {
+      super(type, init);
+      this.clipboardData = init.clipboardData ?? null;
+    }
+  }
+  const execCommand = vi.fn();
+
+  interface CapturedPaste {
+    text: string;
+    bubbles: boolean;
+    cancelable: boolean;
+  }
+
+  // dispatchEvent は listener 内の throw を握りつぶすため、assert はイベント外で行う。
+  function capturePastes(el: HTMLElement): CapturedPaste[] {
+    const pastes: CapturedPaste[] = [];
+    el.addEventListener("paste", (e) => {
+      const ev = e as unknown as ClipboardEventStub;
+      pastes.push({
+        text: ev.clipboardData?.getData("text/plain") ?? "-",
+        bubbles: e.bubbles,
+        cancelable: e.cancelable,
+      });
+    });
+    return pastes;
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal("DataTransfer", DataTransferStub);
+    vi.stubGlobal("ClipboardEvent", ClipboardEventStub);
+    (document as unknown as { execCommand: typeof execCommand }).execCommand = execCommand;
+    execCommand.mockClear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("Given textarea When 注入する Then setNativeValue 経路 (value 反映 + input/change) で paste は使わない", async () => {
+    const ta = document.createElement("textarea");
+    document.body.appendChild(ta);
+    const pastes = capturePastes(ta);
+    const onInput = vi.fn();
+    ta.addEventListener("input", onInput);
+
+    await setLyricsValue(ta, "la la la");
+
+    expect(ta.value).toBe("la la la");
+    expect(onInput).toHaveBeenCalledTimes(1);
+    expect(pastes).toEqual([]);
+    expect(execCommand).not.toHaveBeenCalled();
+  });
+
+  it("Given contenteditable div When 注入する Then focus → selectAll → (selection 同期待ち) → paste の順で dispatch する", async () => {
+    vi.useFakeTimers();
+    const div = addLexicalLyrics();
+    const focusSpy = vi.spyOn(div, "focus");
+    const pastes = capturePastes(div);
+
+    const injected = setLyricsValue(div, "verse one");
+
+    // focus / selectAll は同期で走るが、paste は selection 同期待ちの後にしか飛ばない。
+    // 同期実行だと Lexical 側の selection が未同期のまま paste され全置換に失敗する実機挙動を pin する。
+    expect(focusSpy).toHaveBeenCalledTimes(1);
+    expect(execCommand).toHaveBeenCalledWith("selectAll", false);
+    expect(pastes).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(pastes).toEqual([{ text: "verse one", bubbles: true, cancelable: true }]);
+
+    // paste 後の安定化待ちを消化して resolve する。
+    await vi.advanceTimersByTimeAsync(200);
+    await injected;
+  });
+
+  it("Given contenteditable div + 空文字 (instrumental) When 注入する Then 空の text/plain を paste する", async () => {
+    vi.useFakeTimers();
+    const div = addLexicalLyrics();
+    const pastes = capturePastes(div);
+
+    const injected = setLyricsValue(div, "");
+    await vi.advanceTimersByTimeAsync(400);
+    await injected;
+
+    expect(pastes).toEqual([{ text: "", bubbles: true, cancelable: true }]);
   });
 });
 

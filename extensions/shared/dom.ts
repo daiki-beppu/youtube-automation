@@ -9,6 +9,15 @@ import { isVisible } from "./visibility";
 const SELECTORS = {
   textareas: "textarea",
   lyrics: '[data-testid="lyrics-textarea"]',
+  // 2026-07 の Suno UI 改装で Lyrics 欄が textarea から Lexical エディタ
+  // (div.lyrics-editor-content[contenteditable][data-lexical-editor]) へ変わった。
+  // 旧 UI との併存を考慮し testid textarea を最優先、この selector は fallback。
+  // contenteditable="" も有効値（属性値なしの boolean 形式）なので両方拾う。
+  lyricsLexical:
+    'div.lyrics-editor-content[contenteditable="true"], div.lyrics-editor-content[contenteditable=""]',
+  // Style 欄の wrapper（新 UI 実 DOM で確認）。Lyrics が textarea でなくなり
+  // 「Lyrics 以外の可視 textarea」述語だけでは Style の特定根拠が弱くなったため一次識別にする。
+  stylesWrapper: '[data-testid="create-form-styles-wrapper"]',
   // Song Title 欄は testid/aria/label を持たず placeholder のみ安定 (#844 実 DOM 検証)。
   // 表記変更 ((Optional) の有無等) に耐えるよう "Song Title" の弱い case-insensitive substring match。
   title: 'input[placeholder*="Song Title" i]',
@@ -94,7 +103,8 @@ export class FatalRunError extends Error {
 
 export interface ResolvedFields {
   style: HTMLTextAreaElement;
-  lyrics: HTMLTextAreaElement | null;
+  /** 旧 UI は textarea、新 UI (2026-07) は Lexical contenteditable div。注入は setLyricsValue が分岐する。 */
+  lyrics: HTMLTextAreaElement | HTMLElement | null;
   // Song Title 欄 (#844)。不在は throw せず undefined（fail-soft: style/lyrics の fail-loud とは非対称）。
   title?: HTMLInputElement;
 }
@@ -161,6 +171,46 @@ export function setNativeValue(
   setter.call(el, value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+/**
+ * Lexical エディタの selection 同期待ち (ms)。execCommand("selectAll") の選択は Lexical が
+ * selectionchange 経由で内部 state に取り込むため反映が非同期になる。paste dispatch 前に
+ * 待たないと全選択が内部 state に乗らず「置換」でなく「先頭挿入」に化ける（実機検証）。
+ * paste 後の待ちは Lexical の DOM 反映（reconcile）完了を待つ安定化マージン。
+ */
+const LEXICAL_SELECTION_SYNC_MS = 200;
+
+/**
+ * Lyrics 欄への値注入。旧 UI の textarea / input は setNativeValue へ委譲し、
+ * 新 UI (2026-07) の Lexical contenteditable div は selectAll → paste 合成イベントで全置換する。
+ *
+ * Lexical は value setter を持たず、innerText 直接代入は内部 EditorState と乖離して
+ * 次の再レンダーで巻き戻る。Lexical 自身が購読する paste イベント（DataTransfer の
+ * text/plain）に載せるのが React 互換で最も壊れにくい経路（実ページで動作検証済み）。
+ * 同期実行では selection が Lexical に同期されず置換に失敗するため async 必須。
+ */
+export async function setLyricsValue(
+  el: HTMLTextAreaElement | HTMLElement,
+  value: string,
+): Promise<void> {
+  if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
+    setNativeValue(el, value);
+    return;
+  }
+  el.focus();
+  document.execCommand("selectAll", false);
+  await sleep(LEXICAL_SELECTION_SYNC_MS);
+  const data = new DataTransfer();
+  data.setData("text/plain", value);
+  el.dispatchEvent(
+    new ClipboardEvent("paste", {
+      clipboardData: data,
+      bubbles: true,
+      cancelable: true,
+    }),
+  );
+  await sleep(LEXICAL_SELECTION_SYNC_MS);
 }
 
 /**
@@ -491,9 +541,17 @@ export function isQueueLimitErrorVisible(): boolean {
 }
 
 /**
- * Style / Lyrics の textarea を解決する（#807）。
- *   - Lyrics: `data-testid="lyrics-textarea"` を最優先で識別（UI 言語非依存）。無ければ null。
- *   - Style:  Lyrics 以外の strict visible textarea（この述語が Style==Lyrics の silent 上書きを構造的に禁ずる）。
+ * Style / Lyrics の入力欄を解決する（#807、2026-07 Lexical 改装対応）。
+ *   - Lyrics: `data-testid="lyrics-textarea"` を最優先で識別（UI 言語非依存、旧 UI）。無ければ
+ *             Lexical contenteditable（`div.lyrics-editor-content`、新 UI）を bbox 幅非ゼロで拾う。
+ *             どちらも無ければ null。Lexical 側の可視判定を strict isVisible でなく幅判定にするのは
+ *             実ページで動作検証した条件をそのまま保持するため（wrapper の opacity 等の transition
+ *             で誤除外しない安全側）。
+ *   - Style:  styles-wrapper (`create-form-styles-wrapper`) 内の可視 textarea を一次識別とする。
+ *             Lyrics が textarea でなくなった新 UI では「Lyrics 以外」述語だけだと無関係な
+ *             textarea を誤って掴みうるため、wrapper の構造根拠を優先する。wrapper 不在の
+ *             旧 UI は従来の「Lyrics 以外の可視 textarea」へ fallback（この述語が
+ *             Style==Lyrics の silent 上書きを構造的に禁ずる）。
  *   - Style が解決できない場合は throw（silent スキップを禁ずる）。
  *   - Title:  placeholder substring match の strict visible input（#844）。不在は undefined（fail-soft）。
  */
@@ -507,9 +565,16 @@ export function resolveFields(): ResolvedFields {
     );
   }
 
-  const lyrics = areas.find((el) => el.matches(SELECTORS.lyrics)) ?? null;
-  // Style は「Lyrics でない可視 textarea」。この述語が silent な上書き（Style==Lyrics）を構造的に禁ずる。
-  const style = areas.find((el) => el !== lyrics);
+  const lyrics: HTMLTextAreaElement | HTMLElement | null =
+    areas.find((el) => el.matches(SELECTORS.lyrics)) ??
+    Array.from(
+      document.querySelectorAll<HTMLElement>(SELECTORS.lyricsLexical),
+    ).find((el) => el.getBoundingClientRect().width > 0) ??
+    null;
+  // Style は wrapper 構造を一次識別、無ければ「Lyrics でない可視 textarea」。
+  const style =
+    areas.find((el) => el.closest(SELECTORS.stylesWrapper) !== null) ??
+    areas.find((el) => el !== lyrics);
   if (!style) {
     throw new FatalRunError(
       "Style 欄が見つかりません。Lyrics 以外の可視 textarea を検出できませんでした。",

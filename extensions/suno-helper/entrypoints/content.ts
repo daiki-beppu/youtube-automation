@@ -39,6 +39,7 @@ import {
   resolveAdvancedFields,
   resolveFields,
   resolveGenerateButton,
+  setLyricsValue,
   setNativeValue,
   sleep,
   waitForCaptchaClear,
@@ -273,7 +274,9 @@ export default defineContentScript({
       setNativeValue(style, entry.style);
       if (lyrics) {
         // 空文字でも上書きする。instrumental パターン (entry.lyrics === "") のとき前パターンの歌詞を残さない。
-        setNativeValue(lyrics, entry.lyrics);
+        // 旧 UI の textarea は同期の setNativeValue、新 UI の Lexical contenteditable は
+        // selectAll → paste の非同期経路に setLyricsValue が分岐する（2026-07 UI 改装対応）。
+        await setLyricsValue(lyrics, entry.lyrics);
       } else if (entry.lyrics) {
         // 歌詞があるのに Lyrics 欄が見つからないのは設定不整合。silent に飛ばさず停止する。
         // 設定不整合は全 entry で再発するため fatal（entry retry の対象外）。
