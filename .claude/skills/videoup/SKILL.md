@@ -1,6 +1,6 @@
 ---
 name: videoup
-description: "Use when コレクションの音声ファイルが揃い、動画生成が必要なとき。マスター音源生成（yt-generate-master）とマスター動画生成（generate_videos.sh）の実行案内。動画変換、音声から動画への変換、generate_videos、MP3→MP4、videoup など、動画ファイル生成に関わる場面で必ず使用すること"
+description: "Use when 音声ファイルが揃い動画生成が必要なとき。「動画変換」「MP3→MP4」「generate_videos」「videoup」で発動。マスター音源・マスター動画生成を案内"
 ---
 
 ## Overview

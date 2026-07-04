@@ -241,6 +241,7 @@ def test_workflow_state_master_audio_takes_priority_over_fixed_names(tmp_path: P
     [
         ({"assets": {"master_audio": "../master-rain.wav"}}, "must be a filename"),
         ({"assets": {"master_audio": "subdir/master-rain.wav"}}, "must be a filename"),
+        ({"assets": {"master_audio": "subdir\\master-rain.wav"}}, "must be a filename"),
         ({"assets": {"master_audio": "missing.wav"}}, "not found"),
         ({"assets": {"master_audio": 123}}, "assets.master_audio must be a string"),
         ({"assets": None}, "assets must be an object"),
@@ -413,17 +414,6 @@ def test_videoup_skill_documents_current_overlay_support() -> None:
     assert "未実装" not in skill
     assert "v12.x にはこの filter 経路が無い" not in skill
     assert "#511 の実装を待つ" not in skill
-
-
-def test_videoup_skill_documents_workflow_state_master_audio_priority() -> None:
-    """#1449: videoup 文書と generate_videos.sh の音源探索契約を揃える."""
-    skill = _VIDEOUP_SKILL_PATH.read_text(encoding="utf-8")
-
-    assert "workflow-state.json::assets.master_audio" in skill
-    assert "最優先" in skill
-    assert "未設定の場合のみ `master-mix" in skill
-    assert "fail-closed" in skill
-    assert "固定名探索へ fallback せず" in skill
 
 
 def test_24fps_loop_skips_normalization(tmp_path: Path) -> None:

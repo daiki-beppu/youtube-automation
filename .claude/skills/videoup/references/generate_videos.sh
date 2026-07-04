@@ -247,7 +247,7 @@ if [[ "$workflow_state_status" -eq 2 ]]; then
     exit 1
 fi
 if [[ -n "$STATE_MASTER_AUDIO" ]]; then
-    if [[ "$STATE_MASTER_AUDIO" == */* || "$STATE_MASTER_AUDIO" == *..* ]]; then
+    if [[ "$STATE_MASTER_AUDIO" == */* || "$STATE_MASTER_AUDIO" == *\\* || "$STATE_MASTER_AUDIO" == *..* ]]; then
         echo "ERROR: workflow-state.json::assets.master_audio must be a filename: ${STATE_MASTER_AUDIO}"
         exit 1
     fi

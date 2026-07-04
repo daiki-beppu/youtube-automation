@@ -1,6 +1,6 @@
 // MAIN world fetch bridge (#948)。Suno ページ自身の fetch をラップし、
 //   - 生成投入（POST /api/generate/v2-web/）のレスポンス → 投入 clip の観測イベント
-//   - feed（/api/feed/*）のレスポンス → clip status の観測イベント
+//   - feed（POST /api/feed/v3）のレスポンス → clip status の観測イベント
 // を window.postMessage で ISOLATED content script（lib/bridge-listener.ts）へ転送する。
 //
 // MAIN world で動かす理由: content script（ISOLATED）からはページの fetch を観測できず、
@@ -27,6 +27,7 @@ import {
   isSunoApiUrl,
   parseClipsFromFeedResponse,
   parseClipsFromGenerateResponse,
+  resolveRequestMethod,
   resolveRequestUrl,
 } from "../lib/fetch-bridge";
 import { findSliderElement, setSliderValueViaReact } from "../lib/slider-bridge";
@@ -51,14 +52,14 @@ export default defineContentScript({
     }
 
     /** レスポンス clone を非同期で観測する。fetch の戻りを遅延させない・失敗を漏らさない。 */
-    async function observe(url: string, res: Response): Promise<void> {
+    async function observe(url: string, method: string, res: Response): Promise<void> {
       try {
         if (!res.ok) {
           return;
         }
         if (isGenerateRequest(url)) {
           postClips(BRIDGE_MSG.GENERATE_CLIPS, parseClipsFromGenerateResponse(await res.json()));
-        } else if (isFeedRequest(url)) {
+        } else if (isFeedRequest(url, method)) {
           postClips(BRIDGE_MSG.FEED_CLIPS, parseClipsFromFeedResponse(await res.json()));
         }
       } catch {
@@ -68,8 +69,10 @@ export default defineContentScript({
 
     const observedFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       let url = "";
+      let method = "GET";
       try {
         url = resolveRequestUrl(input);
+        method = resolveRequestMethod(input, init);
         if (isSunoApiUrl(url)) {
           const auth = extractAuthHeader(input, init);
           if (auth) {
@@ -81,7 +84,7 @@ export default defineContentScript({
       }
       const res = await originalFetch(input, init);
       if (url) {
-        void observe(url, res.clone());
+        void observe(url, method, res.clone());
       }
       return res;
     };
