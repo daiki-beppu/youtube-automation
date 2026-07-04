@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(suno)`: `/suno` / `/suno-lyric` の成果物を検証する `yt-suno-verify` CLI を追加。`suno-patterns.yaml` / `suno-prompts.json` / `suno-lyrics.json` の曲数、entry name 整合、歌詞構造、`genre_line` 文字数を Suno UI 投入前に fail-loud で確認できるようにした（#1484）
+
 ### Changed
 
 - `docs(skills)`: takt 各 step の固定コンテキスト削減のため全スキルの frontmatter description を短縮（合計 22.4KB → 10.1KB。同義トリガー語の羅列と処理手順の重複を削り、スキル間 dispatch の境界語と機械検証キーワードは維持）。あわせて CLAUDE.md（18.9KB → 7.4KB）/ AGENTS.md（14.6KB → 2.2KB、CLAUDE.md への一元化）をスリム化し、詳細を `docs/architecture.md` / `docs/development.md` / `docs/takt-operations.md` へ移設。`.takt/config.yaml` に observability（usage_events_phase）を有効化し、小〜中規模 issue 用の軽量 3-step workflow `.takt/workflows/lite.yaml` を追加（使い分け基準は `docs/takt-operations.md`）。さらに takt 内部実装（phase 分割実行）の調査に基づき、lite の review step を全 step codex 方針に合わせて codex 化し、`structured_output`（`.takt/schemas/review-verdict.json`）+ deterministic `when:` ルールで状態判定 phase の LLM 呼び出しを排除。phase コストモデルと workflow 設計指針を `docs/takt-operations.md` に文書化
@@ -17,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(suno)`: `yt-suno-verify` と `/suno` の final entry name 生成を共有化し、`suno-patterns.yaml` / `suno-prompts.json` / `suno-lyrics.json` の `name` に外側 whitespace がある場合は暗黙正規化せず fail-loud するよう修正（#1484）
 - `fix(suno-lyric)`: `/suno-lyric` がマルチ曲 collection で `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` を全曲一言一句同一のまま出力するのを防ぐため、Workflow に「これらの section も曲ごとの scene / persona で書き分ける」指示を明記し、Validation に曲間セクション重複のセルフチェックと書き分け直し手順を追加。`suno-lyrics.json` の曲間重複を機械検出する `references/check_lyric_duplication.py` を新設（重複検出時は exit 1、#1445）
 - `fix(doctor)`: `ttp_wf_new_readiness` の video_analysis 要件が benchmark top 5 のライブ配信（`duration_iso == "P0D"`、Gemini 取り込み不可で解析不能）により恒久的に充足不能になる問題を修正。live は期待集合から除外して次点 VOD を繰り上げ、VOD が不足する場合は母数を縮小し、除外時は message に「live 配信 N 本を除外」を明示する。`yt-video-analyze --source benchmark` も同じ選定で live をスキップして次点 VOD を解析する（#1462）
 - `fix(hooks)`: oxlint.config.ts / oxfmt.config.ts の `ignorePatterns` 対象パス（`examples/**` `docs/**` `config/**` など）のみを変更した commit で lefthook pre-commit の oxlint / oxfmt が「対象ファイルなし」を non-zero exit で返し必ず失敗する問題（#1428 の同型）を修正。`lefthook.yml` の両コマンドに `--no-error-on-unmatched-pattern` を追加し、対象 0 件を成功として扱うようにした（ignorePatterns のパスを exclude へ列挙する二重管理は回避、#1452）

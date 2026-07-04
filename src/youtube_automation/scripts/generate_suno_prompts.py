@@ -3,10 +3,8 @@
 
 import argparse
 import json
-import math
 import re
 import sys
-from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -19,13 +17,18 @@ from youtube_automation.scripts.suno_artifacts import (
     SUNO_PROMPTS_JSON_FILENAME,
     SUNO_PROMPTS_MD_FILENAME,
 )
-from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.skill_config import load_channel_override, load_skill_config
+from youtube_automation.utils.suno_artifact_validation import (
+    require_instrumental_track_count,
+    require_matching_suno_lyrics_names,
+    require_unique_entry_names,
+    suno_prompt_entry_name,
+    suno_prompt_entry_names,
+    surrounding_whitespace_issue,
+)
+from youtube_automation.utils.suno_effective_config import infer_suno_mode, resolve_suno_config
 from youtube_automation.utils.suno_lyrics import load_suno_lyrics_by_name
-from youtube_automation.utils.video_analyzer import VIDEO_ANALYSIS_DIRNAME
-
-_TOP_GENRE_PHRASES = 8
 
 # ---------------------------------------------------------------------------
 # Quality rules (#904): suno-bgm ベースの品質ガード
@@ -134,42 +137,6 @@ class QualityReport:
         return len(self.warnings) > 0
 
 
-def _split_csv(value: str) -> list[str]:
-    return [p.strip() for p in str(value).split(",") if p.strip()]
-
-
-def _collect_video_analysis_presets() -> tuple[str, str]:
-    """全 slug の video_analysis JSON から `suno_preset` を集約して fallback 値を返す。"""
-    try:
-        base = channel_dir() / "data" / VIDEO_ANALYSIS_DIRNAME
-    except ConfigError:
-        return "", ""
-    if not base.exists():
-        return "", ""
-
-    genre_counter: Counter[str] = Counter()
-    exclude_seen: dict[str, None] = {}
-
-    for slug_dir in sorted(base.iterdir()):
-        if not slug_dir.is_dir():
-            continue
-        for f in sorted(slug_dir.glob("*.json")):
-            try:
-                data = json.loads(f.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            preset = data.get("suno_preset")
-            if not isinstance(preset, dict):
-                continue
-            for phrase in _split_csv(preset.get("genre_line", "")):
-                genre_counter[phrase] += 1
-            for phrase in _split_csv(preset.get("exclude_styles", "")):
-                exclude_seen.setdefault(phrase, None)
-
-    top_genre = ", ".join(p for p, _ in genre_counter.most_common(_TOP_GENRE_PHRASES))
-    return top_genre, ", ".join(exclude_seen)
-
-
 def _style_line(tempo: str | None, effective_style: str) -> str:
     """Styles 欄の 1 行目（`<tempo>, <style>,`）を組み立てる共有部品.
 
@@ -233,29 +200,6 @@ class _ResolvedPrompts:
     patterns: list[_ResolvedPattern]
 
 
-def _validate_instrumental_track_count(
-    yaml_path: Path,
-    entries_count: int,
-    tracks_per_collection: int,
-) -> None:
-    """インストモードで yaml の entry 数が ceil(tracks_per_collection / 2) と一致するか fail-loud で検証する.
-
-    Suno は 1 リクエスト = 2 clip 生成するため、最終 clip 数 `tracks_per_collection` を満たすには
-    yaml `patterns:` 配列の `scenes` 行数の合計 (= 連続生成の entry 数) が `ceil(N/2)` と
-    一致する必要がある。ズレを silent に通すと運用上「曲数不足」「曲数過剰」に気付けないため、
-    新運用 (tracks_per_collection を明示指定) では fail-loud にして AI / operator に修正を促す。
-    """
-    expected = math.ceil(tracks_per_collection / 2)
-    if entries_count == expected:
-        return
-    raise ConfigError(
-        f"インストモード: tracks_per_collection={tracks_per_collection} から "
-        f"ceil({tracks_per_collection}/2)={expected} 個の entry が必要ですが、"
-        f"{yaml_path.name} には {entries_count} 個あります "
-        f"(`patterns:` 配列の `scenes` 行数の合計)。"
-    )
-
-
 def _entry_names_from_resolved(resolved: list[_ResolvedPattern]) -> list[str]:
     """`build_prompt_entries` と同一ロジックで最終的な entry.name のみを構築する.
 
@@ -264,34 +208,8 @@ def _entry_names_from_resolved(resolved: list[_ResolvedPattern]) -> list[str]:
     """
     names: list[str] = []
     for p in resolved:
-        base_name = f"{p.name_jp} — {p.name_en}"
-        multi = len(p.scenes) > 1
-        for j in range(1, len(p.scenes) + 1):
-            names.append(f"{base_name} (Variation {j})" if multi else base_name)
+        names.extend(suno_prompt_entry_names(p.name_jp, p.name_en, len(p.scenes)))
     return names
-
-
-def _validate_unique_titles(yaml_path: Path, entry_names: list[str]) -> None:
-    """全 entry の最終 name (Suno UI Song Title 欄に注入される値) が重複していないか fail-loud で検証する.
-
-    重複は (1) Suno Library で同名 clip が並んで識別不能になる、(2) `/suno-helper` の進捗 phase で
-    どの entry の clip か追跡しにくくなる、(3) `/masterup` のリネーム時に衝突する、といった運用問題を
-    起こすため yaml レベルで弾く。インストモードは entry が独立した世界観を持つ前提で AI が固有の
-    `name_jp` / `name_en` を毎回設計する必要があり、ボーカルモードは pattern 間で重複しないことが
-    自明設計なので両モードで一律検証する (Variation 付与済みの後の name が比較対象)。
-    """
-    seen: set[str] = set()
-    duplicates: set[str] = set()
-    for name in entry_names:
-        if name in seen:
-            duplicates.add(name)
-        seen.add(name)
-    if not duplicates:
-        return
-    raise ConfigError(
-        f"全曲のタイトル (entry name) はユニークでなければなりません。"
-        f"{yaml_path.name} で以下が重複しています: {', '.join(sorted(duplicates))}"
-    )
 
 
 def _load_external_lyrics(lyrics_path: Path) -> dict[str, str]:
@@ -303,27 +221,19 @@ def _load_external_lyrics(lyrics_path: Path) -> dict[str, str]:
     return load_suno_lyrics_by_name(lyrics_path)
 
 
-def _validate_external_lyrics_names(
-    *,
-    lyrics_path: Path,
-    expected_names: set[str],
-    actual_names: set[str],
+def _require_pattern_name_without_padding(
+    patterns_path: Path,
+    pattern_index: int,
+    field_name: str,
+    value: str,
 ) -> None:
-    """`suno-lyrics.json` と最終 prompt entry name の完全一致を検証する."""
-    missing = sorted(expected_names - actual_names)
-    extra = sorted(actual_names - expected_names)
-    if not missing and not extra:
-        return
-
-    details = []
-    if missing:
-        details.append("missing: " + ", ".join(missing))
-    if extra:
-        details.append("extra: " + ", ".join(extra))
-    joined_details = "; ".join(details)
-    raise ConfigError(
-        f"{SUNO_LYRICS_JSON_FILENAME} names must match prompt entry names: {lyrics_path} ({joined_details})"
+    issue = surrounding_whitespace_issue(
+        source_name=SUNO_PATTERNS_FILENAME,
+        field_path=f"patterns[{pattern_index}].{field_name}",
+        value=value,
     )
+    if issue is not None:
+        raise ConfigError(f"{patterns_path}: {issue}")
 
 
 def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
@@ -333,11 +243,11 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     # default.yaml の既定値と区別できないため、override 単体を別途読む。
     override = load_channel_override("suno")
     advanced_json_fields = _build_advanced_json_fields(override)
-    fb_genre, fb_exclude = _collect_video_analysis_presets()
+    resolved_suno = resolve_suno_config(suno)
 
-    genre_line = suno.get("genre_line", "") or fb_genre
+    genre_line = resolved_suno.genre_line
     mood_descriptors = suno.get("mood_descriptors", "")
-    exclude_styles = suno.get("exclude_styles", "") or fb_exclude
+    exclude_styles = resolved_suno.exclude_styles
     style_variants = suno.get("style_variants", {})
     style_influence = suno.get("style_influence", 50)
     weirdness = suno.get("weirdness", 50)
@@ -353,9 +263,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     title = data.get("title", "Suno Prompts")
     patterns = data.get("patterns", [])
 
-    vocal_keywords = ("vocals", "vocal", "singing", "rap", "sings", "sung")
-    auto_vocal = any(kw in genre_line.lower() for kw in vocal_keywords)
-    mode = data.get("mode", "vocal" if auto_vocal else "instrumental")
+    mode = data.get("mode", infer_suno_mode(genre_line))
     is_vocal = mode == "vocal"
     external_lyrics_path = patterns_path.parent / SUNO_LYRICS_JSON_FILENAME
     has_external_lyrics = is_vocal and external_lyrics_path.exists()
@@ -368,9 +276,13 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
 
     resolved: list[_ResolvedPattern] = []
     expected_external_lyrics_names: set[str] = set()
-    for pattern in patterns:
+    for pattern_index, pattern in enumerate(patterns, 1):
         tempo = pattern.get("tempo")
         style_key = pattern.get("style")
+        name_jp = pattern["name_jp"]
+        name_en = pattern["name_en"]
+        _require_pattern_name_without_padding(patterns_path, pattern_index, "name_jp", name_jp)
+        _require_pattern_name_without_padding(patterns_path, pattern_index, "name_en", name_en)
 
         # Per-pattern style variant override
         if style_key and style_key in style_variants:
@@ -384,11 +296,10 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
         scenes = pattern["scenes"]
         raw_lyrics = pattern.get("lyrics")
         fallback_lyrics = raw_lyrics.rstrip() if raw_lyrics else ""
-        base_name = f"{pattern['name_jp']} — {pattern['name_en']}"
         multi = len(scenes) > 1
         lyrics_by_scene = []
         for j in range(1, len(scenes) + 1):
-            entry_name = f"{base_name} (Variation {j})" if multi else base_name
+            entry_name = suno_prompt_entry_name(name_jp, name_en, j if multi else None)
             if has_external_lyrics:
                 expected_external_lyrics_names.add(entry_name)
                 lyrics_by_scene.append(external_lyrics.get(entry_name, ""))
@@ -397,8 +308,8 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
 
         resolved.append(
             _ResolvedPattern(
-                name_jp=pattern["name_jp"],
-                name_en=pattern["name_en"],
+                name_jp=name_jp,
+                name_en=name_en,
                 style_label=style_label,
                 style_line=_style_line(tempo, effective_style),
                 scenes=scenes,
@@ -407,7 +318,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
         )
 
     if has_external_lyrics:
-        _validate_external_lyrics_names(
+        require_matching_suno_lyrics_names(
             lyrics_path=external_lyrics_path,
             expected_names=expected_external_lyrics_names,
             actual_names=set(external_lyrics),
@@ -422,11 +333,11 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
         tracks_per_collection = tracks_override if tracks_override is not None else suno.get("tracks_per_collection")
         if tracks_per_collection is not None:
             entries_count = sum(len(p.scenes) for p in resolved)
-            _validate_instrumental_track_count(patterns_path, entries_count, tracks_per_collection)
+            require_instrumental_track_count(patterns_path, entries_count, tracks_per_collection)
 
     # 全曲ユニーク title: Suno UI Song Title 欄に注入される最終 name の重複を fail-loud で弾く。
-    # インスト・ボーカル両モード一律 (詳細は `_validate_unique_titles` の docstring 参照)。
-    _validate_unique_titles(patterns_path, _entry_names_from_resolved(resolved))
+    # インスト・ボーカル両モード一律で、後工程の同名 clip 追跡不能を生成時に弾く。
+    require_unique_entry_names(patterns_path, _entry_names_from_resolved(resolved))
 
     return _ResolvedPrompts(
         title=title,
@@ -525,10 +436,9 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
 
     entries: list[dict] = []
     for pattern in resolved.patterns:
-        base_name = f"{pattern.name_jp} — {pattern.name_en}"
-        multi = len(pattern.scenes) > 1
+        entry_names = suno_prompt_entry_names(pattern.name_jp, pattern.name_en, len(pattern.scenes))
         for j, scene in enumerate(pattern.scenes, 1):
-            name = f"{base_name} (Variation {j})" if multi else base_name
+            name = entry_names[j - 1]
             full_style = f"{pattern.style_line}\n{scene}"
 
             # Quality rules: Style テキストの検証 (#904)

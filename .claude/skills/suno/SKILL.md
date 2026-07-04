@@ -370,6 +370,14 @@ uv run yt-generate-suno <collection-path>
 
 `config/skills/suno.yaml` の `genre_line` + `exclude_styles` + `style_influence` をパターンに自動付加して `suno-prompts.md` と `suno-prompts.json` を生成する。ボーカルモードでは同階層の `suno-lyrics.json` を優先して読み、entry `name` が一致する lyrics を Style とマージする。保存後、`workflow-state.json` の `music.generated = true` に更新する。
 
+生成後に成果物を検証する:
+
+```bash
+uv run yt-suno-verify <collection-path>
+```
+
+`suno-prompts.json` / `suno-lyrics.json` の曲数、entry name、歌詞構造、`genre_line` 文字数を検証し、exit 0 を確認してから Suno UI へ投入する。
+
 ### Step 3: `/suno-helper` で自動投入（推奨）
 
 `suno-prompts.json` を Chrome 拡張（`extensions/suno-helper/`）が読み取り、連続実行する。

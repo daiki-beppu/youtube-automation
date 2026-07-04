@@ -540,6 +540,26 @@ def test_build_prompt_entries_name_combines_jp_and_en(channel_dir, tmp_path):
     assert entries[0]["name"] == "テスト — Test"
 
 
+def test_build_prompt_entries_rejects_padded_pattern_name_part(channel_dir, tmp_path):
+    """Given suno-patterns.yaml の name_jp に外側 whitespace がある
+    When build_prompt_entries を呼ぶ
+    Then final entry name を暗黙正規化せず fail-loud する。
+    """
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    patterns_path = _write_minimal_patterns(tmp_path)
+    payload = yaml.safe_load(patterns_path.read_text(encoding="utf-8"))
+    payload["patterns"][0]["name_jp"] = " テスト "
+    patterns_path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    message = str(exc_info.value)
+    assert "suno-patterns.yaml patterns[1].name_jp must not have leading or trailing whitespace" in message
+
+
 def test_build_prompt_entries_instrumental_has_empty_lyrics(channel_dir, tmp_path):
     """Given instrumental モード + auto_lyrics_structure: false
     When lyrics を読む
@@ -730,6 +750,23 @@ def test_build_prompt_entries_vocal_fails_when_multi_scene_suno_lyrics_json_is_i
         build_prompt_entries(patterns_path)
 
     assert "missing: 歌もの — Vocal (Variation 2)" in str(exc_info.value)
+
+
+def test_build_prompt_entries_vocal_rejects_padded_suno_lyrics_name(channel_dir, tmp_path):
+    """Given suno-lyrics.json の name に外側 whitespace がある
+    When build_prompt_entries を呼ぶ
+    Then prompt entry name との完全一致契約として fail-loud する。
+    """
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
+    _write_suno_lyrics_json(tmp_path, [" 歌もの — Vocal "], lyrics="[Verse]\nexternal lyric")
+
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    assert "suno-lyrics.json entry 1.name must not have leading or trailing whitespace" in str(exc_info.value)
 
 
 def test_build_prompt_entries_vocal_rejects_suno_lyrics_json_title_alias(channel_dir, tmp_path):
