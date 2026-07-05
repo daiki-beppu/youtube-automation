@@ -414,7 +414,8 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
 
     assert "チャンネル立ち上げ・方向性見直し時に必ず使用" not in viewer_voice
     assert "`/channel-new` の標準フローでは実行せず" in viewer_voice
-    assert "任意後続スキル" in viewer_voice
+    assert "任意後続スキル" not in viewer_voice
+    assert "/audience-persona-design の必須入力（viewer-voice-analysis.md）" in viewer_voice
 
     for path_text in (setup, channel_setup, channel_direction, onboarding):
         assert "TTP benchmark" not in path_text
