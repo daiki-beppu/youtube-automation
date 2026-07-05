@@ -170,6 +170,16 @@ def _run_generate_videos(
     return result, ffmpeg_log
 
 
+def _assert_effect_alpha_plane_and_neutral_chroma(
+    final_cmd: str,
+    *,
+    noise_filter: str,
+    lum_threshold: int,
+) -> None:
+    effect_layer = f"{noise_filter},format=yuva420p,geq=lum='if(gt(lum(X,Y),{lum_threshold}),255,0)':cb=128:cr=128:a="
+    assert effect_layer in final_cmd
+
+
 @pytest.mark.parametrize("thumbnail_name", ["thumbnail.jpg", "thumbnail.png"])
 def test_static_background_rejects_thumbnail_only_assets(tmp_path: Path, thumbnail_name: str) -> None:
     """#1310: thumbnail.* は upload 用なので静止動画背景には使わない。"""
@@ -567,6 +577,11 @@ def test_particles_effect_switches_to_libx264_with_filter_complex(tmp_path: Path
     assert "[vout]" in final_cmd
     assert "-c:v libx264" in final_cmd
     assert "-c:v copy" not in final_cmd
+    _assert_effect_alpha_plane_and_neutral_chroma(
+        final_cmd,
+        noise_filter="noise=alls=80:allf=t+u",
+        lum_threshold=230,
+    )
     # subtle (default) は alpha=0.10
     assert "0.10*255" in final_cmd
 
@@ -582,6 +597,11 @@ def test_bokeh_effect_uses_gblur(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     final_cmd = ffmpeg_log.read_text(encoding="utf-8").splitlines()[-1]
     assert "gblur" in final_cmd
+    _assert_effect_alpha_plane_and_neutral_chroma(
+        final_cmd,
+        noise_filter="noise=alls=100:allf=t+u",
+        lum_threshold=240,
+    )
     # medium は alpha=0.20
     assert "0.20*255" in final_cmd
 

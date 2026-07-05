@@ -120,6 +120,32 @@ function assertOptionalDurationFilter(value: unknown, field: string): DurationFi
   return { min_sec: minSec, max_sec: maxSec };
 }
 
+function assertOptionalIndices(value: unknown, field: string, entryCount: number): number[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`${field} must be number array`);
+  }
+  if (value.length === 0) {
+    throw new Error(`${field} must not be empty`);
+  }
+  const seen = new Set<number>();
+  return value.map((item, index) => {
+    if (typeof item !== "number" || !Number.isInteger(item)) {
+      throw new Error(`${field}[${index}] must be integer`);
+    }
+    if (item < 0 || item >= entryCount) {
+      throw new Error(`${field}[${index}] must be within entries range`);
+    }
+    if (seen.has(item)) {
+      throw new Error(`${field}[${index}] must be unique`);
+    }
+    seen.add(item);
+    return item;
+  });
+}
+
 function assertRunPayload(value: unknown): RunPayload {
   const record = assertRecord(value, "run payload");
   if (!Array.isArray(record.entries)) {
@@ -131,6 +157,7 @@ function assertRunPayload(value: unknown): RunPayload {
     playlistName: assertNonEmptyString(record.playlistName, "run.playlistName"),
     collectionId: assertNonEmptyString(record.collectionId, "run.collectionId"),
     durationFilter: assertOptionalDurationFilter(record.durationFilter, "run.durationFilter"),
+    indices: assertOptionalIndices(record.indices, "run.indices", record.entries.length),
   };
 }
 
@@ -480,7 +507,7 @@ export default defineContentScript({
       collectionId: string;
       // collection mode のときの playlist 名 (#854)。全 entry 完了後の clip 一括追加に使う。
       playlistName: string;
-      // 実行対象の 0-based index 列 (#948)。「失敗分のみ再実行」で使う。指定時は range より優先。
+      // 任意の部分実行対象の 0-based index 列。チェック選択や失敗分再実行で使う。指定時は range より優先。
       indices?: number[];
       // 再開前の run で観測済みの playlist 対象 clip ID。
       submittedClipIds?: string[];
@@ -503,8 +530,9 @@ export default defineContentScript({
       }
       const startIndex = range ? range.start : 0;
       const endIndex = range ? range.end : total - 1;
-      // 実行対象の 0-based index 列 (#948)。indices（失敗分のみ再実行）が最優先、無ければ range 由来。
+      // 実行対象の 0-based index 列。indices（チェック選択/失敗分再実行）が最優先、無ければ range 由来。
       const order = options.indices ?? Array.from({ length: endIndex - startIndex + 1 }, (_, k) => startIndex + k);
+      const hasExplicitIndices = options.indices !== undefined;
       const expectedPlaylistClipCount =
         playlistExpectedClipCount ??
         (order.length === 0
@@ -518,7 +546,11 @@ export default defineContentScript({
       // ERROR phase (#872 要件3) と STOPPED phase (#898 要件1/2/3) の共通処理。failedIndex 名は
       // そのまま流用し (要件3)、中断 index を載せる。
       // スキップ済み failedIndices があれば一緒に永続化する (#948)。
-      function persistInterruptState(interruptedIndex: number): void {
+      function persistInterruptState(interruptedIndex: number, orderPosition?: number): void {
+        const remainingIndices =
+          hasExplicitIndices && orderPosition !== undefined
+            ? order.slice(interruptedIndex === order[orderPosition] ? orderPosition : orderPosition + 1)
+            : undefined;
         const persistedSubmittedClipIds = Array.from(
           new Set([...previousSubmittedClipIds, ...tracker.getSubmittedIds()]),
         );
@@ -528,6 +560,7 @@ export default defineContentScript({
             : {
                 ...currentSnapshot,
                 failedIndex: interruptedIndex,
+                remainingIndices,
                 submittedClipIds: persistedSubmittedClipIds,
                 playlistExpectedClipCount: expectedPlaylistClipCount,
               };
@@ -537,14 +570,15 @@ export default defineContentScript({
           total,
           timestamp: Date.now(),
           failedIndices: failedIndices.length > 0 ? [...failedIndices] : undefined,
+          remainingIndices,
           submittedClipIds: persistedSubmittedClipIds,
           playlistExpectedClipCount: expectedPlaylistClipCount,
         });
       }
-      for (const i of order) {
+      for (const [orderPosition, i] of order.entries()) {
         if (aborted) {
           // ループ先頭の中断: この時点でまだ Generate を click していないため i をそのまま使う (#924)。
-          persistInterruptState(i);
+          persistInterruptState(i, orderPosition);
           emitProgress({ phase: PHASE.STOPPED, index: i, total });
           return;
         }
@@ -626,14 +660,14 @@ export default defineContentScript({
             result.error instanceof InjectNotAcknowledgedError,
           );
           emitProgress({ phase: PHASE.ERROR, index: interruptIndex, total, message });
-          persistInterruptState(interruptIndex);
+          persistInterruptState(interruptIndex, orderPosition);
           return;
         }
         if (result.outcome === "aborted" || aborted) {
           // attempt 中の中断（waitForQueueSlot / injectAndGenerate 内の silent return 含む）。
           // Generate click 済みなら i+1 を persist し再開時の重複生成を防ぐ (#924)。
           const interruptIndex = resolveInterruptIndex(i, lastSubmittedEntryIndex === i, false);
-          persistInterruptState(interruptIndex);
+          persistInterruptState(interruptIndex, orderPosition);
           emitProgress({ phase: PHASE.STOPPED, index: interruptIndex, total });
           return;
         }

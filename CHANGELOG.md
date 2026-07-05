@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(channel-new)`: `/channel-new`（新規開設モード）の Step 7「簡易ペルソナ導出」冒頭に入口ゲートを追加し、承認済み TTP 対象（`config/channel/analytics.json::benchmark.channels`）が 0 件のままペルソナ生成へ進めないようにした。従来は 0 件検出が Step 9 の最終ゲートに集中しており、空のまま生成 → 差し戻しの手戻り（AI 生成コストの無駄）が発生し得た。判定基準は冒頭「TTP 完了条件（新規開設モード）」を単一ソースとして参照し、完了条件本体はコピーしない（#1517）
+- `feat(skills)`: comments-reply / pinned-comment に apply 実行前の承認ゲートを追加した（#1513）。両スキルの dry-run 確認ポイントを「全項目 PASS の場合のみ次フェーズへ進む」形式に統一し、1 項目でも FAIL なら dry-run を修正・再実行するまで apply へ進んではならない旨を明記した。comments-reply は Phase 4→5、pinned-comment は Phase 1→2 の間に承認ゲートを新設し、Claude Code では AskUserQuestion で dry-run 結果の要約を提示したうえで「投稿する」「キャンセル」の明示 2 択、AskUserQuestion 非対応環境（Codex 等）ではテキスト提示 + 明示的な承認発言待ちに統一した
+- `feat(takt)`: lite workflow に提出前セルフ監査を組み込んだ（#1508）。過去の review-takt-default 指摘 371 件（183 レビュー）の全件分類から頻出 8 パターンを抽出した `.takt/facets/policies/pre-review-checklist.md` を新設し、`implement` step（自己監査 + 受入条件充足表の出力）と `review` step（独立照合、スコープ外の改善提案は verdict に影響させない）に注入。あわせて lite の `plan` step に `instruction: plan` を追加し、リポジトリ強化版 plan instruction（`.takt/facets/instructions/plan.md`）が lite でも注入されるようにした。運用・更新手順は `docs/takt-operations.md` の「提出前セルフ監査」節を参照
 - `docs(skills)`: takt 各 step の固定コンテキスト削減のため全スキルの frontmatter description を短縮（合計 22.4KB → 10.1KB。同義トリガー語の羅列と処理手順の重複を削り、スキル間 dispatch の境界語と機械検証キーワードは維持）。あわせて CLAUDE.md（18.9KB → 7.4KB）/ AGENTS.md（14.6KB → 2.2KB、CLAUDE.md への一元化）をスリム化し、詳細を `docs/architecture.md` / `docs/development.md` / `docs/takt-operations.md` へ移設。`.takt/config.yaml` に observability（usage_events_phase）を有効化し、小〜中規模 issue 用の軽量 3-step workflow `.takt/workflows/lite.yaml` を追加（使い分け基準は `docs/takt-operations.md`）。さらに takt 内部実装（phase 分割実行）の調査に基づき、lite の review step を全 step codex 方針に合わせて codex 化し、`structured_output`（`.takt/schemas/review-verdict.json`）+ deterministic `when:` ルールで状態判定 phase の LLM 呼び出しを排除。phase コストモデルと workflow 設計指針を `docs/takt-operations.md` に文書化
 
 ### Removed
@@ -17,10 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(suno-helper)`: popup のチェック選択実行を旧 range 指定から `indices` payload に切り替え、done/failed 状態を含む選択復元・再実行で絶対 index がずれないようにした。旧 range UI 文言と helper を撤去し、content runner 側は `indices` を `range` より優先して部分実行する（#1267）
 - `fix(suno-lyric)`: `/suno-lyric` がマルチ曲 collection で `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` を全曲一言一句同一のまま出力するのを防ぐため、Workflow に「これらの section も曲ごとの scene / persona で書き分ける」指示を明記し、Validation に曲間セクション重複のセルフチェックと書き分け直し手順を追加。`suno-lyrics.json` の曲間重複を機械検出する `references/check_lyric_duplication.py` を新設（重複検出時は exit 1、#1445）
 - `fix(doctor)`: `ttp_wf_new_readiness` の video_analysis 要件が benchmark top 5 のライブ配信（`duration_iso == "P0D"`、Gemini 取り込み不可で解析不能）により恒久的に充足不能になる問題を修正。live は期待集合から除外して次点 VOD を繰り上げ、VOD が不足する場合は母数を縮小し、除外時は message に「live 配信 N 本を除外」を明示する。`yt-video-analyze --source benchmark` も同じ選定で live をスキップして次点 VOD を解析する（#1462）
 - `fix(hooks)`: oxlint.config.ts / oxfmt.config.ts の `ignorePatterns` 対象パス（`examples/**` `docs/**` `config/**` など）のみを変更した commit で lefthook pre-commit の oxlint / oxfmt が「対象ファイルなし」を non-zero exit で返し必ず失敗する問題（#1428 の同型）を修正。`lefthook.yml` の両コマンドに `--no-error-on-unmatched-pattern` を追加し、対象 0 件を成功として扱うようにした（ignorePatterns のパスを exclude へ列挙する二重管理は回避、#1452）
 - `fix(videoup)`: `generate_videos.sh` の `build_effect_filter()` で `VIDEOUP_EFFECT=particles` / `bokeh` を指定すると出力が緑一色または黒一色になる問題を修正。原因は 2 点あり、(1) `geq=lum='...'` で `cb`/`cr`（色差）を省略すると環境によってデフォルト値が中央値 128 ではなく 0 になり YUV→RGB 変換で緑被りが発生する、(2) `geq` の直前が `format=yuv420p`（アルファプレーン無し）のままだと `a=` の不透明度式が無視され常時アルファ=255（完全不透明）になり、エフェクトレイヤーが背景を完全に覆い隠して黒一色化する。`gradient` エフェクトは元々 `geq` 直前に `format=yuva420p` を明示していたためこの問題を踏んでいなかった。`particles` / `bokeh` の両方で `geq=` に `cb=128:cr=128` を追加し、`noise=...` の後・`geq=...` の前に `format=yuva420p` を挿入して修正した
+- `fix(analytics-report)`: `analytics-report/SKILL.md` の「CTR 値の解釈」が「整数値 2606」から意味不明な式の否定を経て「そのまま使用」に至る自己矛盾した記述になっており、コード実態（`reporting_api.py` の `total_weighted / total_impressions` が返す百分率 float。例 `4.2` = 4.2%、`tests/test_ctr_resolver.py` のフィクスチャも 4.2）と食い違っていた。百分率 float である旨・表示フォーマット（小数 1〜2 桁 + `%`）・100 で割る/掛ける/整数再解釈の禁止・`None` 時の表示を一義的な規則として書き直した（#1514）
 
 ### Migration
 
