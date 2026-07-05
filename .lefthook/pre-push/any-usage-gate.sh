@@ -29,12 +29,14 @@ current_line=0
 # " 3 7 12 " のようにスペース区切りで保持し、ケース文で部分一致検索する。
 current_file_any_lines=" "
 violations=()
-# TypeScript の any は型位置（: any, ジェネリック引数 <any>, union/intersection,
-# tuple 要素, 型エイリアス代入 = any, 型アサーション as any）に限定して検出する。
-# 素の単語境界だけだと "any" を含む英語のコメントや文字列を誤検知するため、
-# 型を導入する記号（: < , | & ( [ =）の直後、または `as` キーワードの後という
-# 条件を必須にする。文字列・コメント自体の誤検知は後段の clean_ts_line で除去する。
-typescript_any_pattern='(:|<|,|\||&|\(|\[|=)[[:space:]]*any([^A-Za-z0-9_$]|$)|(^|[^A-Za-z0-9_$])as[[:space:]]+any([^A-Za-z0-9_$]|$)'
+# tuple 要素, アロー関数戻り値 => any, 型エイリアス代入 = any, 型アサーション
+# as any）に限定して検出する。素の単語境界だけだと "any" を含む英語のコメントや
+# 文字列を誤検知するため、型を導入する記号（: < , | & [ = =>）の直後、または
+# 単語境界つきの `as` キーワードの後という条件を必須にする。`(` は関数呼び出し
+# の引数（例: console.log(any) の変数参照）と区別できないため anchor に含めない
+# （コロン等の他 anchor で型シグネチャは別途捕捉できる）。文字列・コメント自体の
+# 誤検知は後段の clean_ts_line で除去する。
+typescript_any_pattern='(:|<|,|\||&|\[|=>|=)[[:space:]]*any([^A-Za-z0-9_$]|$)|(^|[^A-Za-z0-9_$])as[[:space:]]+any([^A-Za-z0-9_$]|$)'
 diff_output=$(git diff --unified=0 --no-color "${diff_base}" HEAD -- 2>/dev/null || true)
 
 [ -z "${diff_output}" ] && exit 0
@@ -104,6 +106,7 @@ while IFS= read -r line; do
   esac
 
   added="${line#+}"
+  scan_lang=""
   is_violation=0
   case "${current_file}" in
     *.py)

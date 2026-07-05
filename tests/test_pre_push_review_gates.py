@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -15,6 +16,7 @@ _CHANGELOG_GATE_PATH = _REPO_ROOT / ".lefthook" / "pre-push" / "changelog-gate.s
 _TEST_DIFF_GATE_PATH = _REPO_ROOT / ".lefthook" / "pre-push" / "test-diff-gate.sh"
 _ANY_USAGE_GATE_PATH = _REPO_ROOT / ".lefthook" / "pre-push" / "any-usage-gate.sh"
 _ZERO_SHA = "0" * 40
+_GATE_CONTROL_ENV_KEYS = ("SKIP_CHANGELOG", "SKIP_TEST_DIFF")
 
 
 def _run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -31,6 +33,8 @@ def _run_gate(
     repo: Path, script_path: Path, *, extra_env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
+    for key in _GATE_CONTROL_ENV_KEYS:
+        env.pop(key, None)
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
@@ -47,6 +51,8 @@ def _run_gate_with_stdin(
     repo: Path, script_path: Path, stdin_text: str, *, extra_env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
+    for key in _GATE_CONTROL_ENV_KEYS:
+        env.pop(key, None)
     if extra_env:
         env.update(extra_env)
     return subprocess.run(
@@ -172,6 +178,19 @@ def test_test_diff_gate_warns_for_python_code_without_test_diff(tmp_path: Path) 
     assert result.returncode == 0
     assert "WARNING: src/youtube_automation/ に差分がありますが tests/ の差分がありません。" in result.stderr
     assert "SKIP_TEST_DIFF=1 git push" in result.stderr
+
+
+def test_gate_helpers_do_not_inherit_skip_env_from_parent(tmp_path: Path, monkeypatch) -> None:
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(repo, "src/youtube_automation/new_feature.py", "def main() -> str:\n    return 'ok'\n")
+    _commit_all(repo, "change python code")
+    monkeypatch.setenv("SKIP_TEST_DIFF", "1")
+
+    result = _run_gate(repo, _TEST_DIFF_GATE_PATH)
+
+    assert result.returncode == 0
+    assert "test-diff-gate: WARNING" in result.stderr
+    assert "SKIP_TEST_DIFF=1 のためスキップします" not in result.stderr
 
 
 def test_test_diff_gate_warns_for_extension_lib_without_test_diff(tmp_path: Path) -> None:
@@ -375,20 +394,31 @@ def test_any_usage_gate_fails_for_aliased_direct_import(tmp_path: Path) -> None:
 
 
 def test_any_usage_gate_fails_for_typescript_generic_any(tmp_path: Path) -> None:
-    """コロン直後の型注釈以外の型位置（ジェネリック引数・union）の any も検出する。"""
+    """コロン直後の型注釈以外の型位置の any も検出する。"""
     repo = _init_repo_with_origin_main(tmp_path)
     _write(
         repo,
         "extensions/demo/lib/types.ts",
-        "export const values: Array<" + "any> = [];\n",
+        "\n".join(
+            [
+                "export const values: Array<" + "any> = [];",
+                "export const config: string | " + "any = 'x';",
+                "export type Pair = [string, " + "any];",
+                "export type Alias = " + "any;",
+                "export type Callback = () => " + "any;",
+                "export const coerced = value as " + "any;",
+                "",
+            ]
+        ),
     )
-    _commit_all(repo, "add generic any")
+    _commit_all(repo, "add ts any type positions")
 
     result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
 
     assert result.returncode == 1
     assert "any-usage-gate: ERROR" in result.stderr
     assert "extensions/demo/lib/types.ts:1" in result.stderr
+    assert "extensions/demo/lib/types.ts:6" in result.stderr
 
 
 def test_any_usage_gate_fails_for_typescript_record_value_any(tmp_path: Path) -> None:
@@ -408,12 +438,22 @@ def test_any_usage_gate_fails_for_typescript_record_value_any(tmp_path: Path) ->
 
 
 def test_any_usage_gate_ignores_prose_any_in_comments_and_strings(tmp_path: Path) -> None:
-    """型位置以外（コメント文・文字列リテラル内の英語 "any"）は誤検知しない。"""
+    """型位置以外（コメント文・文字列リテラル内の any 風文字列）は誤検知しない。"""
     repo = _init_repo_with_origin_main(tmp_path)
     _write(
         repo,
         "extensions/demo/lib/helper.ts",
-        "// Check if any element matches\nexport const msg = 'works for " + "any input';\n",
+        "\n".join(
+            [
+                "// Check if any element matches",
+                "// Accepts (any) matching value.",
+                "// <any> in docs is not a type annotation.",
+                "export const msg = 'works for " + "any input';",
+                'export const text = "(any value)";',
+                "console.log(any);",
+                "",
+            ]
+        ),
     )
     _commit_all(repo, "add prose mentioning any")
 
@@ -428,6 +468,19 @@ def test_any_usage_gate_fails_for_typescript_type_alias_assignment(tmp_path: Pat
     repo = _init_repo_with_origin_main(tmp_path)
     _write(repo, "extensions/demo/lib/types.ts", "type Payload = " + "any;\n")
     _commit_all(repo, "add type alias any")
+
+    result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
+
+    assert result.returncode == 1
+    assert "any-usage-gate: ERROR" in result.stderr
+    assert "extensions/demo/lib/types.ts:1" in result.stderr
+
+
+def test_any_usage_gate_fails_for_typescript_arrow_function_return_any(tmp_path: Path) -> None:
+    """`() => any` のようなアロー関数の戻り値型も検出する。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(repo, "extensions/demo/lib/types.ts", "export type Callback = () => " + "any;\n")
+    _commit_all(repo, "add arrow function return any")
 
     result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
 
@@ -545,6 +598,27 @@ def test_any_usage_gate_respects_pre_push_diff_base_override(tmp_path: Path) -> 
     # 自前解決（origin/main との merge-base）より優先されたことが分かる。
     assert result.returncode == 0
     assert result.stderr == ""
+
+
+def test_any_usage_gate_warns_and_skips_direct_import_detection_without_python3(tmp_path: Path) -> None:
+    """python3 が PATH に無い環境では警告を出して Any 検出のみ省略し、push は止めない。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(repo, "src/youtube_automation/broad_type.py", "from typing import Any\n\nvalue: Any = None\n")
+    _commit_all(repo, "add direct Any import")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    # python3 だけを意図的に欠落させる。dirname は any-usage-gate.sh 自身が
+    # スクリプトの配置ディレクトリを解決するのに使う POSIX 標準コマンドで、
+    # python3 と異なり通常の環境で欠けることは想定しないため PATH に含める。
+    for command in ("bash", "git", "dirname"):
+        target = shutil.which(command)
+        assert target is not None
+        (bin_dir / command).symlink_to(target)
+
+    result = _run_gate(repo, _ANY_USAGE_GATE_PATH, extra_env={"PATH": str(bin_dir)})
+
+    assert result.returncode == 0
+    assert "python3 が見つからないため" in result.stderr
 
 
 def test_development_docs_describe_review_gates_and_skip_contract() -> None:
