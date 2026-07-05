@@ -1535,6 +1535,61 @@ class TestGenerateTimestampsLoops:
         assert len(headers) == 4  # a/b × 2 周
         assert [h["loop"] for h in headers] == [1, 1, 2, 2]
 
+    def test_loops_2_reemits_theme_header_when_loop_boundary_keeps_same_pattern(self):
+        """Given 同一 pattern の複数トラック
+        When loops=2 で生成する
+        Then 周回境界で pattern が同じでも各周回の theme_header が再挿入される。
+        """
+        gen = _make_generator()
+        gen._crossfade_sec = 1.0
+        gen.tracks = [
+            _track("01-pattern-a-alpha.mp3", "Alpha", "00:00", "a", duration=120),
+            _track("02-pattern-a-beta.mp3", "Beta", "01:59", "a", duration=90),
+        ]
+        out = gen.generate_timestamps(loops=2)
+        headers = [t for t in out if t["type"] == "theme_header"]
+
+        assert [(h["timestamp"], h["title"], h["loop"]) for h in headers] == [
+            ("00:00", "Pattern A", 1),
+            ("03:28", "Pattern A", 2),
+        ]
+
+    def test_format_timestamps_text_reemits_theme_header_per_loop(self):
+        """Given 同一 pattern の複数トラック
+        When format_timestamps_text(loops=2) する
+        Then 2 周目の先頭にも theme_header が出力される。
+        """
+        gen = _make_generator()
+        gen._crossfade_sec = 1.0
+        gen.tracks = [
+            _track("01-pattern-a-alpha.mp3", "Alpha", "00:00", "a", duration=120),
+            _track("02-pattern-a-beta.mp3", "Beta", "01:59", "a", duration=90),
+        ]
+
+        assert gen.format_timestamps_text(loops=2).splitlines() == [
+            "── Pattern A ──",
+            "00:00 Alpha",
+            "01:59 Beta",
+            "── Pattern A ──",
+            "03:28 Alpha",
+            "05:27 Beta",
+        ]
+
+    def test_generate_complete_collection_metadata_passes_loops_to_timestamps(self, monkeypatch):
+        """Given loops=2 の Complete Collection メタデータ生成
+        When description を組み立てる
+        Then 全ループ分のチャプターが概要欄に含まれる。
+        """
+        gen = self._gen_with_tracks()
+        monkeypatch.setattr(gen, "generate_localizations", lambda *args, **kwargs: {})
+
+        meta = gen.generate_complete_collection_metadata(title_override="Looped Mix", loops=2)
+
+        assert "00:00 Alpha" in meta["description"]
+        assert "01:59 Beta" in meta["description"]
+        assert "03:28 Alpha" in meta["description"]
+        assert "05:27 Beta" in meta["description"]
+
     def test_loops_zero_raises(self):
         """Given loops=0
         When 生成する

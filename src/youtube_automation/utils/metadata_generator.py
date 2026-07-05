@@ -505,9 +505,9 @@ class BAHMetadataGenerator:
         theme_names = self._load_theme_display_names()
         crossfade = self._crossfade_sec
         out: list[dict] = []
-        last_pattern: str | None = None
         current_time = 0
         for loop_index in range(1, loops + 1):
+            last_pattern: str | None = None
             for track in self.tracks:
                 # 1 周目は analyze_audio_files() が保存した timestamp をそのまま使い
                 # 従来挙動と完全一致させる。2 周目以降は同じ算術で連続計算する。
@@ -962,7 +962,7 @@ class BAHMetadataGenerator:
 
         return localizations
 
-    def generate_complete_collection_metadata(self, title_override: str | None = None) -> Dict:
+    def generate_complete_collection_metadata(self, title_override: str | None = None, loops: int = 1) -> Dict:
         """
         Complete Collection 用メタデータ生成
 
@@ -972,6 +972,8 @@ class BAHMetadataGenerator:
                 生成（`_generate_title` = `title.template.format(...)`）をスキップする。
                 これにより `title.template` が未知プレースホルダを含んでいても upload 全体が
                 `KeyError`/`ValidationError` で巻き込まれない（#574）。
+            loops: master のループ回数。`format_timestamps_text(loops=loops)` に渡し、
+                全ループ分のチャプターを展開する。既定 1（従来挙動）。
 
         Returns:
             Dict: YouTube アップロード用メタデータ
@@ -995,7 +997,7 @@ class BAHMetadataGenerator:
         description_parts.append(header)
         description_parts.append("")
 
-        timestamp_body = self.format_timestamps_text()
+        timestamp_body = self.format_timestamps_text(loops=loops)
         if timestamp_body:
             description_parts.append(timestamp_body)
 
