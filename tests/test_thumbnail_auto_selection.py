@@ -10,8 +10,10 @@ import pytest
 import yaml
 from PIL import Image
 
+import youtube_automation.scripts.auto_select_thumbnail as auto_select_thumbnail
 from youtube_automation.scripts.auto_select_thumbnail import main
 from youtube_automation.utils import skill_config
+from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.thumbnail_features import feature_centroid, feature_distance
 
 # テスト用の最小解像度 (フル HD だと純 Python の特徴量抽出が遅いため縮小)
@@ -167,6 +169,48 @@ def test_disabled_channel_errors_with_exit_2(tmp_path, monkeypatch, capsys):
     assert not (collection / "10-assets" / "thumbnail.jpg").exists()
 
 
+def test_missing_enabled_defaults_to_disabled_exit_2(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch)
+    channel_dir = tmp_path / "channel"
+    cfg_path = channel_dir / "config" / "skills" / "thumbnail.yaml"
+    cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
+    del cfg["image_generation"]["auto_selection"]["enabled"]
+    cfg_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    skill_config.reset()
+    collection = _setup_collection(tmp_path)
+    _solid_image(collection / "10-assets" / "thumbnail-v1.jpg", _NEAR_COLOR)
+
+    code, captured = _run_json([str(collection), "--apply"], capsys)
+
+    assert code == 2
+    assert "auto_selection.enabled" in captured.err
+    assert not (collection / "10-assets" / "thumbnail.jpg").exists()
+
+
+def test_non_bool_enabled_errors_without_bool_coercion(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch, enabled="false")
+    collection = _setup_collection(tmp_path)
+    _solid_image(collection / "10-assets" / "thumbnail-v1.jpg", _NEAR_COLOR)
+
+    code, captured = _run_json([str(collection), "--dry-run"], capsys)
+
+    assert code == 1
+    assert "auto_selection.enabled は boolean" in captured.err
+    assert not (collection / "10-assets" / "thumbnail.jpg").exists()
+
+
+def test_force_without_apply_is_input_error(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch)
+    collection = _setup_collection(tmp_path)
+    _solid_image(collection / "10-assets" / "thumbnail-v1.jpg", _NEAR_COLOR)
+
+    code, captured = _run_json([str(collection), "--dry-run", "--force"], capsys)
+
+    assert code == 2
+    assert "--force" in captured.err
+    assert not (collection / "10-assets" / "thumbnail.jpg").exists()
+
+
 def test_missing_collection_dir_errors_with_exit_2(tmp_path, monkeypatch, capsys):
     _setup_channel(tmp_path, monkeypatch)
 
@@ -197,6 +241,33 @@ def test_no_reference_images_errors(tmp_path, monkeypatch, capsys):
     assert "参照画像" in captured.err
 
 
+def test_broken_reference_image_errors_without_traceback(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch)
+    collection = _setup_collection(tmp_path)
+    _solid_image(collection / "10-assets" / "thumbnail-v1.jpg", _NEAR_COLOR)
+    (tmp_path / "channel" / _REF_RELPATHS[0]).write_bytes(b"not an image")
+
+    code, captured = _run_json([str(collection), "--dry-run"], capsys)
+
+    assert code == 1
+    output = captured.out + captured.err
+    assert "参照画像を読み込めません" in output
+    assert "Traceback" not in output
+
+
+def test_broken_candidate_image_errors_without_traceback(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch)
+    collection = _setup_collection(tmp_path)
+    (collection / "10-assets" / "thumbnail-v1.jpg").write_bytes(b"not an image")
+
+    code, captured = _run_json([str(collection), "--dry-run"], capsys)
+
+    assert code == 1
+    output = captured.out + captured.err
+    assert "thumbnail 候補画像を読み込めません" in output
+    assert "Traceback" not in output
+
+
 def test_existing_thumbnail_requires_force(tmp_path, monkeypatch, capsys):
     _setup_channel(tmp_path, monkeypatch)
     collection = _setup_collection(tmp_path)
@@ -214,6 +285,44 @@ def test_existing_thumbnail_requires_force(tmp_path, monkeypatch, capsys):
     with Image.open(assets / "thumbnail.jpg") as img:
         # 上書き後は選択候補 (NEAR_COLOR) の内容になっている
         assert img.getpixel((0, 0))[2] > 50
+
+
+def test_existing_thumbnail_symlink_is_rejected(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch)
+    collection = _setup_collection(tmp_path)
+    assets = collection / "10-assets"
+    _solid_image(assets / "thumbnail-v1.jpg", _NEAR_COLOR)
+    outside = tmp_path / "outside-thumbnail.jpg"
+    outside.write_bytes(b"outside")
+    try:
+        (assets / "thumbnail.jpg").symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    code, captured = _run_json([str(collection), "--apply", "--force"], capsys)
+
+    assert code == 1
+    assert "シンボリックリンク" in captured.err
+    assert outside.read_bytes() == b"outside"
+
+
+def test_workflow_state_symlink_is_rejected_before_copy(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch)
+    collection = _setup_collection(tmp_path)
+    _solid_image(collection / "10-assets" / "thumbnail-v1.jpg", _NEAR_COLOR)
+    outside = tmp_path / "outside-state.json"
+    outside.write_text("{}", encoding="utf-8")
+    try:
+        (collection / "workflow-state.json").symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    code, captured = _run_json([str(collection), "--apply"], capsys)
+
+    assert code == 1
+    assert "workflow-state.json" in captured.err
+    assert "シンボリックリンク" in captured.err
+    assert not (collection / "10-assets" / "thumbnail.jpg").exists()
 
 
 def test_ineligible_candidates_are_excluded(tmp_path, monkeypatch, capsys):
@@ -259,6 +368,38 @@ def test_broken_workflow_state_fails_before_copy(tmp_path, monkeypatch, capsys):
     assert "workflow-state.json" in captured.err
     # 副作用前に検出するので thumbnail.jpg は作られない
     assert not (collection / "10-assets" / "thumbnail.jpg").exists()
+
+
+def test_non_object_workflow_state_fails_before_copy(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch)
+    collection = _setup_collection(tmp_path)
+    _solid_image(collection / "10-assets" / "thumbnail-v1.jpg", _NEAR_COLOR)
+    (collection / "workflow-state.json").write_text("[]", encoding="utf-8")
+
+    code, captured = _run_json([str(collection), "--apply"], capsys)
+
+    assert code == 1
+    assert "root は object" in captured.err
+    assert not (collection / "10-assets" / "thumbnail.jpg").exists()
+
+
+def test_state_record_failure_rolls_back_thumbnail(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch)
+    collection = _setup_collection(tmp_path)
+    assets = collection / "10-assets"
+    _solid_image(assets / "thumbnail-v1.jpg", _NEAR_COLOR)
+    (collection / "workflow-state.json").write_text(json.dumps({"stage": "planning"}), encoding="utf-8")
+
+    def fail_record(*args, **kwargs):  # noqa: ANN001, ANN002, ANN003 - test double
+        raise ValidationError("forced state write failure")
+
+    monkeypatch.setattr(auto_select_thumbnail, "record_workflow_state", fail_record)
+
+    code, captured = _run_json([str(collection), "--apply"], capsys)
+
+    assert code == 1
+    assert "forced state write failure" in captured.err
+    assert not (assets / "thumbnail.jpg").exists()
 
 
 def test_feature_centroid_handles_circular_hue():

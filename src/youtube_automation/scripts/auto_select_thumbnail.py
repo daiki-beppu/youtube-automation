@@ -26,14 +26,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
@@ -110,8 +112,12 @@ def resolve_auto_selection_settings(cfg: dict[str, Any]) -> AutoSelectionSetting
     if isinstance(tolerance, bool) or not isinstance(tolerance, (int, float)) or tolerance < 0:
         raise ConfigError(f"auto_selection.aspect_tolerance は 0 以上の数値である必要があります: {tolerance!r}")
 
+    enabled = raw.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ConfigError(f"auto_selection.enabled は boolean である必要があります: {enabled!r}")
+
     return AutoSelectionSettings(
-        enabled=bool(raw.get("enabled", False)),
+        enabled=enabled,
         min_width=_positive_int("min_width", _DEFAULT_MIN_WIDTH),
         min_height=_positive_int("min_height", _DEFAULT_MIN_HEIGHT),
         aspect_tolerance=float(tolerance),
@@ -176,9 +182,12 @@ def score_candidates(
     """候補を採点し distance 昇順 (同点は名前順) で返す。"""
     scores: list[CandidateScore] = []
     for path in candidates:
-        with Image.open(path) as img:
-            width, height = img.size
-        distance = feature_distance(extract_features_from_path(path), centroid)
+        try:
+            with Image.open(path) as img:
+                width, height = img.size
+            distance = feature_distance(extract_features_from_path(path), centroid)
+        except (OSError, UnidentifiedImageError) as exc:
+            raise ValidationError(f"thumbnail 候補画像を読み込めません: {path}: {exc}") from exc
         reasons = _eligibility_reasons(width, height, settings)
         scores.append(
             CandidateScore(
@@ -209,17 +218,33 @@ def select_best(scores: list[CandidateScore]) -> CandidateScore:
 
 def apply_selection(best: CandidateScore, paths: CollectionPaths, *, force: bool) -> Path:
     """選択候補を `10-assets/thumbnail.jpg` として確定する。"""
+    if paths.assets_dir.is_symlink():
+        raise ValidationError(f"10-assets にシンボリックリンクは指定できません: {paths.assets_dir}")
+    if best.path.is_symlink():
+        raise ValidationError(f"thumbnail 候補にシンボリックリンクは指定できません: {best.path}")
     existing = paths.find_thumbnail()
+    if existing is not None and existing.is_symlink():
+        raise ValidationError(f"確定済みサムネイルにシンボリックリンクは指定できません: {existing}")
     if existing is not None and not force:
         raise ValidationError(
             f"確定済みサムネイルが既に存在します: {existing} (上書きするには --force を明示してください)"
         )
     target = paths.assets_dir / _TARGET_FILENAME
+    if target.is_symlink():
+        raise ValidationError(f"thumbnail.jpg にシンボリックリンクは指定できません: {target}")
+    fd, tmp_name = tempfile.mkstemp(prefix=".thumbnail-auto-select-", suffix=".jpg", dir=paths.assets_dir)
+    tmp_path = Path(tmp_name)
+    os.close(fd)
     if best.path.suffix.lower() in (".jpg", ".jpeg"):
-        shutil.copyfile(best.path, target)
+        shutil.copyfile(best.path, tmp_path)
     else:
-        with Image.open(best.path) as img:
-            img.convert("RGB").save(target, "JPEG", quality=_JPEG_QUALITY)
+        try:
+            with Image.open(best.path) as img:
+                img.convert("RGB").save(tmp_path, "JPEG", quality=_JPEG_QUALITY)
+        except (OSError, UnidentifiedImageError) as exc:
+            tmp_path.unlink(missing_ok=True)
+            raise ValidationError(f"thumbnail 候補画像を読み込めません: {best.path}: {exc}") from exc
+    os.replace(tmp_path, target)
     return target
 
 
@@ -229,6 +254,8 @@ def load_workflow_state(ws_path: Path) -> dict[str, Any] | None:
     ファイルが無い場合は None (コレクション初期化前の運用を許容)。
     壊れた JSON は明示エラー。apply の副作用前に呼び、部分適用状態を防ぐ。
     """
+    if ws_path.is_symlink():
+        raise ValidationError(f"workflow-state.json にシンボリックリンクは指定できません: {ws_path}")
     if not ws_path.exists():
         return None
     try:
@@ -259,7 +286,16 @@ def record_workflow_state(
         "reference_images": [_relative_to_channel(path, channel_root) for path in reference_images],
         "executed_at": executed_at,
     }
-    ws_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+    fd, tmp_name = tempfile.mkstemp(prefix=".workflow-state-", suffix=".json", dir=ws_path.parent)
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(state, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        os.replace(tmp_path, ws_path)
+    except OSError as exc:
+        tmp_path.unlink(missing_ok=True)
+        raise ValidationError(f"workflow-state.json を更新できません: {ws_path}: {exc}") from exc
 
 
 def _relative_to_channel(path: Path, channel_root: Path) -> str:
@@ -374,6 +410,9 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.force and not args.apply:
+        print("error: --force は --apply と一緒に指定してください", file=sys.stderr)
+        return 2
 
     collection = args.collection.resolve()
     paths = CollectionPaths(collection)
@@ -396,7 +435,10 @@ def main(argv: list[str] | None = None) -> int:
 
         channel_root = channel_dir()
         reference_images = resolve_reference_images(cfg, channel_root)
-        centroid = feature_centroid([extract_features_from_path(path) for path in reference_images])
+        try:
+            centroid = feature_centroid([extract_features_from_path(path) for path in reference_images])
+        except (OSError, UnidentifiedImageError) as exc:
+            raise ValidationError(f"参照画像を読み込めません: {exc}") from exc
 
         candidates = discover_candidates(paths.assets_dir)
         if not candidates:
@@ -411,17 +453,27 @@ def main(argv: list[str] | None = None) -> int:
         if args.apply:
             # 壊れた workflow-state はコピー前に検出し、部分適用状態を残さない
             state = load_workflow_state(paths.workflow_state_path)
-            target = apply_selection(best, paths, force=args.force)
-            if state is not None:
-                record_workflow_state(
-                    paths.workflow_state_path,
-                    state,
-                    best=best,
-                    scores=scores,
-                    reference_images=reference_images,
-                    channel_root=channel_root,
-                    executed_at=datetime.now(timezone.utc).isoformat(),
-                )
+            target_existed = target.exists()
+            target_backup = target.read_bytes() if target_existed else None
+            try:
+                target = apply_selection(best, paths, force=args.force)
+                if state is not None:
+                    record_workflow_state(
+                        paths.workflow_state_path,
+                        state,
+                        best=best,
+                        scores=scores,
+                        reference_images=reference_images,
+                        channel_root=channel_root,
+                        executed_at=datetime.now(timezone.utc).isoformat(),
+                    )
+            except (ConfigError, ValidationError):
+                if target.exists():
+                    if target_existed and target_backup is not None:
+                        target.write_bytes(target_backup)
+                    else:
+                        target.unlink()
+                raise
             workflow_state_updated = state is not None
     except (ConfigError, ValidationError) as exc:
         print(f"error: {exc}", file=sys.stderr)
