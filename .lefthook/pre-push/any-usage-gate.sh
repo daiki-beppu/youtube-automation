@@ -23,9 +23,9 @@ violations=()
 python_any_pattern='typing[.]Any'
 # TypeScript の any は型位置（: any, ジェネリック引数 <any>, union/intersection,
 # tuple 要素）に限定して検出する。素の単語境界だけだと "any" を含む英語の
-# コメントや文字列（"works for any input" 等）を誤検知するため、型を導入する
-# 記号（: < , | & ( [）の直後という条件を必須にする。
-typescript_any_pattern='(:|<|,|\||&|\(|\[)[[:space:]]*any([^A-Za-z0-9_$]|$)'
+# コメントや文字列（"works for any input" 等）を誤検知するため、コメント・
+# 文字列を除外した上で型を導入する記号/キーワードの直後という条件を必須にする。
+typescript_any_pattern='(:|<|,|\||&|\[|=>|=|as)[[:space:]]*any([^A-Za-z0-9_$]|$)'
 diff_output=$(git diff --unified=0 --no-color "${diff_base}" HEAD -- 2>/dev/null || true)
 
 [ -z "${diff_output}" ] && exit 0
@@ -69,6 +69,34 @@ resolve_python_any_aliases() {
   git show "HEAD:${file}" 2>/dev/null | "${PYTHON3_BIN}" -c "${_PYTHON_ANY_ALIAS_RESOLVER}"
 }
 
+strip_added_for_any_scan() {
+  local lang="$1"
+  local source="$2"
+  if [ -z "${PYTHON3_BIN}" ]; then
+    printf '%s' "${source}"
+    return 0
+  fi
+  SOURCE_LINE="${source}" "${PYTHON3_BIN}" - "${lang}" <<'PY'
+import os
+import re
+import sys
+
+lang = sys.argv[1]
+line = os.environ["SOURCE_LINE"]
+
+line = re.sub(r"`(?:\\.|[^`\\])*`", "``", line)
+line = re.sub(r'"(?:\\.|[^"\\])*"', '""', line)
+line = re.sub(r"'(?:\\.|[^'\\])*'", "''", line)
+
+if lang in {"ts", "tsx"}:
+    line = re.sub(r"//.*$", "", line)
+elif lang == "py":
+    line = re.sub(r"#.*$", "", line)
+
+print(line, end="")
+PY
+}
+
 while IFS= read -r line; do
   case "${line}" in
     "+++ b/"*)
@@ -107,19 +135,26 @@ while IFS= read -r line; do
   esac
 
   added="${line#+}"
+  scan_lang=""
+  case "${current_file}" in
+    *.py) scan_lang="py" ;;
+    *.ts) scan_lang="ts" ;;
+    *.tsx) scan_lang="tsx" ;;
+  esac
+  scan_added="$(strip_added_for_any_scan "${scan_lang}" "${added}")"
   is_violation=0
-  if [[ "${added}" =~ ${python_any_pattern} ]]; then
+  if [[ "${scan_added}" =~ ${python_any_pattern} ]]; then
     is_violation=1
   elif [[ "${current_file}" == *.py ]] && [ "${#current_file_any_aliases[@]}" -gt 0 ]; then
     for alias_name in "${current_file_any_aliases[@]}"; do
       bare_alias_pattern="(^|[^A-Za-z0-9_.])${alias_name}([^A-Za-z0-9_]|\$)"
-      if [[ "${added}" =~ ${bare_alias_pattern} ]]; then
+      if [[ "${scan_added}" =~ ${bare_alias_pattern} ]]; then
         is_violation=1
         break
       fi
     done
   fi
-  if [ "${is_violation}" -eq 0 ] && [[ "${added}" =~ ${typescript_any_pattern} ]]; then
+  if [ "${is_violation}" -eq 0 ] && [[ "${scan_added}" =~ ${typescript_any_pattern} ]]; then
     is_violation=1
   fi
   if [ "${is_violation}" -eq 1 ]; then
