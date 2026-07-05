@@ -22,8 +22,6 @@ import {
   resolvePlaylistExpectedClipCountForResume,
   type ResumeBanner,
   type ResumeState,
-  resolveRunRange,
-  resumeBannerRange,
   shouldShowResumeBanner,
   writeResumeState,
 } from "../lib/resume-state";
@@ -37,9 +35,6 @@ import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
 import { serverUrlItem } from "../lib/storage";
 import { shouldReportLiveProgressStatus } from "./live-progress-status";
 import { buildRestoreState, formatRunError, formatStopError, phaseToStatus } from "./runner-errors";
-
-/** 実行範囲モード (#872)。all=全パターン / range=範囲指定。 */
-export type RangeMode = "all" | "range";
 
 interface RunnerState {
   url: string;
@@ -56,13 +51,6 @@ interface RunnerState {
   isRunning: boolean;
   // collection 選択時の playlist 名 (#854)。display only。
   playlistName: string | undefined;
-  // 実行範囲 UI の状態 (#872)。range モード時のみ start/end を使う。
-  rangeMode: RangeMode;
-  setRangeMode: (mode: RangeMode) => void;
-  rangeStart: string;
-  setRangeStart: (value: string) => void;
-  rangeEnd: string;
-  setRangeEnd: (value: string) => void;
   // 速度プリセット (#875)。実行モード selector の選択値。永続化は setSpeedPreset 内で行う。
   speedPresetId: SpeedPresetId;
   setSpeedPreset: (id: SpeedPresetId) => void;
@@ -79,8 +67,8 @@ interface RunnerState {
   retryDownload: () => Promise<void>;
   adoptSelectedClips: () => Promise<void>;
   fetchData: () => Promise<void>;
-  // overrides.range があればそれを使う (#892 要件6)。未指定時は range UI の状態から解決する（従来挙動）。
-  // overrides.indices は失敗分のみ再実行 (#948)。指定時は range より優先される。
+  // overrides.range があればそれを使う (#892 要件6)。
+  // overrides.indices はチェック選択や失敗分再実行の部分実行対象。指定時は range より優先される。
   run: (overrides?: RunOverrides) => Promise<void>;
   stop: () => Promise<void>;
 }
@@ -125,14 +113,11 @@ export function useSunoRunner(): RunnerState {
   const [restoredFailedIndex, setRestoredFailedIndex] = useState<number | undefined>(undefined);
   // content snapshot 由来のスキップ済み失敗 index 一覧 (#948)。chrome.storage と二重化する。
   const [restoredFailedIndices, setRestoredFailedIndices] = useState<number[] | undefined>(undefined);
+  const [restoredRemainingIndices, setRestoredRemainingIndices] = useState<number[] | undefined>(undefined);
   const [restoredSubmittedClipIds, setRestoredSubmittedClipIds] = useState<string[] | undefined>(undefined);
   const [restoredPlaylistExpectedClipCount, setRestoredPlaylistExpectedClipCount] = useState<number | undefined>(
     undefined,
   );
-  // 実行範囲 UI の状態 (#872)。rangeStart/rangeEnd は入力欄の生文字列（1-based 表示）。
-  const [rangeMode, setRangeMode] = useState<RangeMode>("all");
-  const [rangeStart, setRangeStart] = useState("");
-  const [rangeEnd, setRangeEnd] = useState("");
   // 速度プリセット (#875)。マウント時に storage から復元し、選択時に永続化する。初期値は既定 (Balanced)。
   const [speedPresetId, setSpeedPresetId] = useState<SpeedPresetId>(DEFAULT_SPEED_PRESET_ID);
   // chrome.storage から読んだ前回の ERROR 停止 state (#872)。表示可否は selectedCollectionId と時刻で判定する。
@@ -206,13 +191,17 @@ export function useSunoRunner(): RunnerState {
       persistedResume &&
       shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
     ) {
-      return { failedIndex: persistedResume.failedIndex, total: persistedResume.total };
+      return {
+        failedIndex: persistedResume.failedIndex,
+        total: persistedResume.total,
+        remainingIndices: persistedResume.remainingIndices,
+      };
     }
     // 2) content snapshot 由来 (要件3 二重化)。chrome.storage 書込が失われても、現在タブの
     //    実行セッションが ERROR phase で保持する failedIndex から同じ再開導線を出す。
     //    snapshot の collectionId が現在選択と一致するときだけ消費する。
     if (restoredCollectionId === selectedCollectionId && restoredFailedIndex !== undefined && entries.length > 0) {
-      return { failedIndex: restoredFailedIndex, total: entries.length };
+      return { failedIndex: restoredFailedIndex, total: entries.length, remainingIndices: restoredRemainingIndices };
     }
     return null;
   }, [
@@ -222,6 +211,7 @@ export function useSunoRunner(): RunnerState {
     resumeCheckedAt,
     restoredCollectionId,
     restoredFailedIndex,
+    restoredRemainingIndices,
     entries.length,
   ]);
 
@@ -320,6 +310,7 @@ export function useSunoRunner(): RunnerState {
     setRestoredPlaylistName(undefined);
     setRestoredFailedIndex(undefined);
     setRestoredFailedIndices(undefined);
+    setRestoredRemainingIndices(undefined);
     setRestoredSubmittedClipIds(undefined);
     setRestoredPlaylistExpectedClipCount(undefined);
   }, []);
@@ -413,6 +404,7 @@ export function useSunoRunner(): RunnerState {
         // ERROR 停止の snapshot なら failedIndex を再開バナーの冗長ソースへ流す (#872 要件3)。
         setRestoredFailedIndex(restored.failedIndex);
         setRestoredFailedIndices(restored.failedIndices);
+        setRestoredRemainingIndices(restored.remainingIndices);
         setRestoredSubmittedClipIds(restored.submittedClipIds);
         setRestoredPlaylistExpectedClipCount(restored.playlistExpectedClipCount);
         report(restored.status, restored.isError);
@@ -466,21 +458,7 @@ export function useSunoRunner(): RunnerState {
         report("playlist 名を解決できません。コレクションを選択し直してください。", true);
         return;
       }
-      // overrides.range（1-click 自動再開）があればそれを優先する (#892 要件6)。
-      // 無ければ range UI の状態から解決する（従来挙動）。range モードの 1-based 入力は
-      // 0-based inclusive へ変換し、不正入力は resolveRunRange が throw → fail-loud で UI に出す。
-      let range = overrides?.range;
-      if (range === undefined && overrides?.indices === undefined && rangeMode === "range") {
-        try {
-          const start = Number(rangeStart);
-          const end = rangeEnd.trim() === "" ? undefined : Number(rangeEnd);
-          range = resolveRunRange(start, end, entries.length);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          report(message, true);
-          return;
-        }
-      }
+      const range = overrides?.range;
       // 二重実行ガード成立後、送信前に実行中フラグを立てる (#892 要件7: setIsRunning を sendMessage の前へ)。
       setIsRunning(true);
       try {
@@ -505,7 +483,7 @@ export function useSunoRunner(): RunnerState {
         report(formatRunError(message), true);
       }
     },
-    [isRunning, entries, durationFilter, rangeMode, rangeStart, rangeEnd, playlistName, selectedCollectionId, report],
+    [isRunning, entries, durationFilter, playlistName, selectedCollectionId, report],
   );
 
   // playlist 追加のみ再実行。entries 不要のため retryPlaylist 専用メッセージを送る。
@@ -574,14 +552,14 @@ export function useSunoRunner(): RunnerState {
     if (!resumeBanner) {
       return;
     }
-    if (resumeBanner.failedIndex >= resumeBanner.total) {
+    if (resumeBanner.failedIndex >= resumeBanner.total && !resumeBanner.remainingIndices?.length) {
       void retryPlaylist();
       return;
     }
-    const prefilled = resumeBannerRange(resumeBanner);
-    setRangeMode("range");
-    setRangeStart(String(prefilled.start));
-    setRangeEnd(String(prefilled.end));
+    if (entries.length === 0) {
+      report("再開に必要なパターンが未取得です。データ取得後に再試行してください。", true);
+      return;
+    }
     setResumeDismissed(true);
     void run(
       buildResumeRunOverrides(resumeBanner, {
@@ -589,7 +567,15 @@ export function useSunoRunner(): RunnerState {
         playlistExpectedClipCount: playlistExpectedClipCountForResume,
       }),
     );
-  }, [resumeBanner, retryPlaylist, run, submittedClipIdsForResume, playlistExpectedClipCountForResume]);
+  }, [
+    resumeBanner,
+    retryPlaylist,
+    entries.length,
+    report,
+    run,
+    submittedClipIdsForResume,
+    playlistExpectedClipCountForResume,
+  ]);
 
   // ダウンロードのみ再実行 (#1251)。clip を再選択 → Download all を実行する。
   const retryDownload = useCallback(async () => {
@@ -655,6 +641,10 @@ export function useSunoRunner(): RunnerState {
           persistedResume?.collectionId === selectedCollectionId
             ? persistedResume.failedIndices
             : restoredFailedIndices,
+        remainingIndices:
+          persistedResume?.collectionId === selectedCollectionId
+            ? persistedResume.remainingIndices
+            : restoredRemainingIndices,
         submittedClipIds: result.clipIds,
         playlistExpectedClipCount: expectedClipCountForManualAdoption,
       };
@@ -679,6 +669,7 @@ export function useSunoRunner(): RunnerState {
     entries.length,
     selectedCollection,
     restoredFailedIndices,
+    restoredRemainingIndices,
     report,
   ]);
 
@@ -722,12 +713,6 @@ export function useSunoRunner(): RunnerState {
     canRun: entries.length > 0 && !isRunning,
     isRunning,
     playlistName,
-    rangeMode,
-    setRangeMode,
-    rangeStart,
-    setRangeStart,
-    rangeEnd,
-    setRangeEnd,
     speedPresetId,
     setSpeedPreset,
     resumeBanner,

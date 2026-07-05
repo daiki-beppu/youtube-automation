@@ -9,7 +9,13 @@
 //
 // レスポンス解析は fail-soft（形が崩れていたら null）。観測の失敗で生成フローを
 // 止めないため、throw しない。
-import { FEED_ENDPOINT_PATH, GENERATE_ENDPOINT_PATH, type ObservedClip, SUNO_API_ORIGIN } from "../../shared/constants";
+import {
+  FEED_V3_METHOD,
+  FEED_V3_PATH,
+  GENERATE_ENDPOINT_PATH,
+  type ObservedClip,
+  SUNO_API_ORIGIN,
+} from "../../shared/constants";
 
 /** fetch の第 1 引数から URL 文字列を解決する。Request / URL / string を受ける。 */
 export function resolveRequestUrl(input: RequestInfo | URL): string {
@@ -22,19 +28,43 @@ export function resolveRequestUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
+/** fetch の実効 method を解決する。init.method > Request.method > GET の順で扱う。 */
+export function resolveRequestMethod(input: RequestInfo | URL, init?: RequestInit): string {
+  if (typeof init?.method === "string" && init.method.length > 0) {
+    return init.method.toUpperCase();
+  }
+  if (typeof Request !== "undefined" && input instanceof Request) {
+    return input.method.toUpperCase();
+  }
+  return "GET";
+}
+
 /** Suno studio API へのリクエストか。Authorization 捕捉の対象判定に使う。 */
 export function isSunoApiUrl(url: string): boolean {
-  return url.startsWith(SUNO_API_ORIGIN);
+  try {
+    return new URL(url).origin === SUNO_API_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
+function isSunoApiPath(url: string, pathname: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.origin === SUNO_API_ORIGIN && parsed.pathname === pathname;
+  } catch {
+    return false;
+  }
 }
 
 /** 生成投入 endpoint へのリクエストか。 */
 export function isGenerateRequest(url: string): boolean {
-  return isSunoApiUrl(url) && url.includes(GENERATE_ENDPOINT_PATH);
+  return isSunoApiPath(url, GENERATE_ENDPOINT_PATH);
 }
 
-/** clip status 照会（feed）endpoint へのリクエストか。`/api/feed/v2` 等の version 違いも prefix で拾う。 */
-export function isFeedRequest(url: string): boolean {
-  return isSunoApiUrl(url) && url.includes(FEED_ENDPOINT_PATH);
+/** clip status 照会（feed）endpoint へのリクエストか。Suno 現行の `POST /api/feed/v3` のみ観測する。 */
+export function isFeedRequest(url: string, method: string): boolean {
+  return isSunoApiPath(url, FEED_V3_PATH) && method.toUpperCase() === FEED_V3_METHOD;
 }
 
 /**
@@ -129,7 +159,7 @@ export function parseClipsFromGenerateResponse(json: unknown): ObservedClip[] | 
 }
 
 /**
- * feed レスポンス（GET /api/feed/v2?ids=... / POST /api/feed/v3）から clip status を取り出す。
+ * feed レスポンス（POST /api/feed/v3）から clip status / duration を取り出す。
  * 形は `{ clips: [...] }` と素の配列の両方を観測しているため両対応する。
  * 形が崩れていたら null（fail-soft）。
  */

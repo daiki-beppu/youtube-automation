@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `docs(channel-new)`: `/channel-new`（新規開設モード）の Step 7「簡易ペルソナ導出」冒頭に入口ゲートを追加し、承認済み TTP 対象（`config/channel/analytics.json::benchmark.channels`）が 0 件のままペルソナ生成へ進めないようにした。従来は 0 件検出が Step 9 の最終ゲートに集中しており、空のまま生成 → 差し戻しの手戻り（AI 生成コストの無駄）が発生し得た。判定基準は冒頭「TTP 完了条件（新規開設モード）」を単一ソースとして参照し、完了条件本体はコピーしない（#1517）
+- `feat(skills)`: comments-reply / pinned-comment に apply 実行前の承認ゲートを追加した（#1513）。両スキルの dry-run 確認ポイントを「全項目 PASS の場合のみ次フェーズへ進む」形式に統一し、1 項目でも FAIL なら dry-run を修正・再実行するまで apply へ進んではならない旨を明記した。comments-reply は Phase 4→5、pinned-comment は Phase 1→2 の間に承認ゲートを新設し、Claude Code では AskUserQuestion で dry-run 結果の要約を提示したうえで「投稿する」「キャンセル」の明示 2 択、AskUserQuestion 非対応環境（Codex 等）ではテキスト提示 + 明示的な承認発言待ちに統一した
+- `feat(takt)`: lite workflow に提出前セルフ監査を組み込んだ（#1508）。過去の review-takt-default 指摘 371 件（183 レビュー）の全件分類から頻出 8 パターンを抽出した `.takt/facets/policies/pre-review-checklist.md` を新設し、`implement` step（自己監査 + 受入条件充足表の出力）と `review` step（独立照合、スコープ外の改善提案は verdict に影響させない）に注入。あわせて lite の `plan` step に `instruction: plan` を追加し、リポジトリ強化版 plan instruction（`.takt/facets/instructions/plan.md`）が lite でも注入されるようにした。運用・更新手順は `docs/takt-operations.md` の「提出前セルフ監査」節を参照
+- `docs(skills)`: takt 各 step の固定コンテキスト削減のため全スキルの frontmatter description を短縮（合計 22.4KB → 10.1KB。同義トリガー語の羅列と処理手順の重複を削り、スキル間 dispatch の境界語と機械検証キーワードは維持）。あわせて CLAUDE.md（18.9KB → 7.4KB）/ AGENTS.md（14.6KB → 2.2KB、CLAUDE.md への一元化）をスリム化し、詳細を `docs/architecture.md` / `docs/development.md` / `docs/takt-operations.md` へ移設。`.takt/config.yaml` に observability（usage_events_phase）を有効化し、小〜中規模 issue 用の軽量 3-step workflow `.takt/workflows/lite.yaml` を追加（使い分け基準は `docs/takt-operations.md`）。さらに takt 内部実装（phase 分割実行）の調査に基づき、lite の review step を全 step codex 方針に合わせて codex 化し、`structured_output`（`.takt/schemas/review-verdict.json`）+ deterministic `when:` ルールで状態判定 phase の LLM 呼び出しを排除。phase コストモデルと workflow 設計指針を `docs/takt-operations.md` に文書化
+
 ### Removed
 
 - **BREAKING** `refactor(skills)`: `/channel-import` スキルを削除し、`/channel-new` の「既存チャンネル取り込みモード」として統合した（#1460、epic #1459 の 1/2）。取り込みモードは呼び出し文脈（「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」）から自動判別し、ヒアリング → config 生成 → 検証 → OAuth / channel_id 取得 → 次ステップ案内を担う。旧 Step 0 のテンプレートリポジトリ clone 手順は廃止し、`/channel-new` の方式（現在のディレクトリ + `/setup` 前提）に整合させた。`yt-doctor` の `channel_config` ロード失敗時の案内と他スキル SKILL.md / `docs/features.md` の `/channel-import` 言及も `/channel-new`（取り込みモード）へ更新。下流リポジトリは `yt-skills sync` の prune で削除に追従する
@@ -14,7 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `fix(upload)`: `yt-upload-collection --plan` の公開設定表示が schedule 無効時に固定「即時公開 (public)」となり実効 privacy_status と乖離する問題を修正。実効値（`config/channel/youtube.json::privacy_status`）を反映して public / unlisted / private を正しく表示する。あわせて、どこからも参照されていなかった `schedule_config.json::upload_settings.privacy_status` をデフォルト設定・`yt-channel-init` テンプレート・`schedule-template.json` から撤去して設定箇所を `youtube.json::privacy_status` に一本化し、既存の schedule_config.json に残存する場合は警告ログで案内する（#1472）
+- `fix(suno-helper)`: popup のチェック選択実行を旧 range 指定から `indices` payload に切り替え、done/failed 状態を含む選択復元・再実行で絶対 index がずれないようにした。旧 range UI 文言と helper を撤去し、content runner 側は `indices` を `range` より優先して部分実行する（#1267）
+- `fix(suno-lyric)`: `/suno-lyric` がマルチ曲 collection で `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` を全曲一言一句同一のまま出力するのを防ぐため、Workflow に「これらの section も曲ごとの scene / persona で書き分ける」指示を明記し、Validation に曲間セクション重複のセルフチェックと書き分け直し手順を追加。`suno-lyrics.json` の曲間重複を機械検出する `references/check_lyric_duplication.py` を新設（重複検出時は exit 1、#1445）
 - `fix(doctor)`: `ttp_wf_new_readiness` の video_analysis 要件が benchmark top 5 のライブ配信（`duration_iso == "P0D"`、Gemini 取り込み不可で解析不能）により恒久的に充足不能になる問題を修正。live は期待集合から除外して次点 VOD を繰り上げ、VOD が不足する場合は母数を縮小し、除外時は message に「live 配信 N 本を除外」を明示する。`yt-video-analyze --source benchmark` も同じ選定で live をスキップして次点 VOD を解析する（#1462）
+- `fix(hooks)`: oxlint.config.ts / oxfmt.config.ts の `ignorePatterns` 対象パス（`examples/**` `docs/**` `config/**` など）のみを変更した commit で lefthook pre-commit の oxlint / oxfmt が「対象ファイルなし」を non-zero exit で返し必ず失敗する問題（#1428 の同型）を修正。`lefthook.yml` の両コマンドに `--no-error-on-unmatched-pattern` を追加し、対象 0 件を成功として扱うようにした（ignorePatterns のパスを exclude へ列挙する二重管理は回避、#1452）
+- `fix(analytics-report)`: `analytics-report/SKILL.md` の「CTR 値の解釈」が「整数値 2606」から意味不明な式の否定を経て「そのまま使用」に至る自己矛盾した記述になっており、コード実態（`reporting_api.py` の `total_weighted / total_impressions` が返す百分率 float。例 `4.2` = 4.2%、`tests/test_ctr_resolver.py` のフィクスチャも 4.2）と食い違っていた。百分率 float である旨・表示フォーマット（小数 1〜2 桁 + `%`）・100 で割る/掛ける/整数再解釈の禁止・`None` 時の表示を一義的な規則として書き直した（#1514）
 
 ## [5.5.15] - 2026-07-02
 
