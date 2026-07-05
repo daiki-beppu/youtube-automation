@@ -133,7 +133,10 @@ def test_thumbnail_skill_isolates_private_repo_reference_as_operator_note() -> N
 
     assert "実装事例として" not in skill
     assert rjn_lines == [
-        "> **参考（オペレーター向け・実行時は無視してよい）**: `daiki-beppu/rjn` の `config/skills/thumbnail.yaml` が参考になる（jazzgak チャンネルの 5 サムネを `color_themes.<theme>.reference_image` で多軸切替）。private リポジトリのため下流リポジトリの実行者はアクセスできない。取得を試みないこと。"
+        "> **参考（オペレーター向け・実行時は無視してよい）**: `daiki-beppu/rjn` の "
+        "`config/skills/thumbnail.yaml` が参考になる"
+        "（jazzgak チャンネルの 5 サムネを `color_themes.<theme>.reference_image` で多軸切替）。"
+        "private リポジトリのため下流リポジトリの実行者はアクセスできない。取得を試みないこと。"
     ]
     note = rjn_lines[0]
     assert note.startswith("> ")
