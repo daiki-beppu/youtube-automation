@@ -819,29 +819,39 @@ class BAHMetadataGenerator:
 
     def _load_scene_phrases(self) -> Dict[str, str]:
         """workflow-state.json から scene_phrases を読み込み"""
+        state = self._load_workflow_state()
+        scene_phrases = state.get("scene_phrases", {})
+        if not isinstance(scene_phrases, dict):
+            raise ValidationError("workflow-state.json::scene_phrases は object である必要があります")
+        return scene_phrases
+
+    def _load_workflow_state(self) -> dict:
+        """workflow-state.json を読み込む。存在しない場合は空 dict を返す。"""
         paths = CollectionPaths(self.collection_path)
         ws_path = paths.workflow_state_path
-        if ws_path.exists():
-            try:
-                with open(ws_path, "r", encoding="utf-8") as f:
-                    state = json.load(f)
-                return state.get("scene_phrases", {})
-            except (json.JSONDecodeError, KeyError):
-                pass
-        return {}
+        if not ws_path.exists():
+            return {}
+        try:
+            with open(ws_path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+        except json.JSONDecodeError as exc:
+            raise ValidationError(f"workflow-state.json の JSON パースに失敗: {ws_path}: {exc}") from exc
+        except OSError as exc:
+            raise ValidationError(f"workflow-state.json を読み込めません: {ws_path}: {exc}") from exc
+        if not isinstance(state, dict):
+            raise ValidationError(f"workflow-state.json の root は object である必要があります: {ws_path}")
+        return state
 
     def _load_scene_emoji(self) -> str:
         """workflow-state.json から planning.scene_emoji を読み込み"""
-        paths = CollectionPaths(self.collection_path)
-        ws_path = paths.workflow_state_path
-        if ws_path.exists():
-            try:
-                with open(ws_path, "r", encoding="utf-8") as f:
-                    state = json.load(f)
-                return state.get("planning", {}).get("scene_emoji", "")
-            except (json.JSONDecodeError, KeyError):
-                pass
-        return ""
+        state = self._load_workflow_state()
+        planning = state.get("planning", {})
+        if not isinstance(planning, dict):
+            raise ValidationError("workflow-state.json::planning は object である必要があります")
+        scene_emoji = planning.get("scene_emoji", "")
+        if not isinstance(scene_emoji, str):
+            raise ValidationError("workflow-state.json::planning.scene_emoji は string である必要があります")
+        return scene_emoji
 
     def generate_localizations(
         self,

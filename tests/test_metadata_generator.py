@@ -730,6 +730,19 @@ class TestGenerateLocalizationsSingleLanguage:
         )
         assert gen.generate_localizations("Continuous Focus Mix", "00:00 Intro", {}) == {}
 
+    def test_malformed_workflow_state_fails_before_scene_phrases_fallback(self, tmp_path):
+        from types import SimpleNamespace
+
+        gen = _make_generator()
+        gen.collection_path = tmp_path
+        gen.config = SimpleNamespace(
+            localizations=SimpleNamespace(data={"supported_languages": ["en"], "languages": {}})
+        )
+        (tmp_path / "workflow-state.json").write_text("{not json", encoding="utf-8")
+
+        with pytest.raises(ValidationError, match="workflow-state.json"):
+            gen._load_scene_phrases()
+
 
 class TestGenerateLocalizationsBulkReport:
     """generate_localizations でも全言語の違反がまとめて報告されることの確認."""

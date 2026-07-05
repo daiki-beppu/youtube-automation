@@ -63,8 +63,9 @@ $ uv run yt-populate-scene-phrases 20260322-rjn-city-collection \
 | 状況 | 終了コード | 対応 |
 |---|---|---|
 | `<collection-dir-name>` が存在しない | 1 | コレクション名を確認 |
+| `supported_languages` が 1 言語以下 | 0 | `scene_phrases` 不要のため no-op |
 | `theme_scenes[<theme>]` 未定義 + `--en` 未指定 | 1 | `--en` で明示指定、または `content.json::title.theme_scenes` に該当 theme を追加 |
-| `--translations-json` / `--translations-file` 未指定 | 1 | Agent ツールで翻訳 JSON を生成して渡す |
+| 多言語チャンネルで `--translations-json` / `--translations-file` 未指定 | 1 | Agent ツールで翻訳 JSON を生成して渡す |
 | 翻訳 JSON 不正 / 言語欠落 | 1 | エラーに表示されるプロンプトで Agent に JSON を再生成させる |
 
 ## 関連

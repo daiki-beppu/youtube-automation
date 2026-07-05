@@ -5,7 +5,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ItemState } from "../../shared/constants";
-import { buildInitialPatternSelection, PatternList, reconcilePatternSelection } from "../components/PatternList";
+import { PatternList } from "../components/PatternList";
+import { buildInitialPatternSelection, reconcilePatternSelection } from "../lib/pattern-selection";
 import { makePromptEntries } from "./_helpers";
 
 describe("PatternList selection helpers", () => {

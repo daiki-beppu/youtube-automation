@@ -214,7 +214,18 @@ class TestMainCLI:
         out = capsys.readouterr().out
         assert "1 言語以下" in out
 
-    @pytest.mark.parametrize("bad_name", ["/tmp/outside", "../outside", "planning/20260322-tc-city-collection"])
+    @pytest.mark.parametrize(
+        "bad_name",
+        [
+            "",
+            ".",
+            "..",
+            "/tmp/outside",
+            "../outside",
+            "planning/20260322-tc-city-collection",
+            r"planning\20260322-tc-city-collection",
+        ],
+    )
     def test_rejects_collection_path_escape(self, tmp_path, monkeypatch, bad_name):
         ch = _setup_channel(
             tmp_path,
