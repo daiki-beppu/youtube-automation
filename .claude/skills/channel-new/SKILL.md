@@ -1,6 +1,6 @@
 ---
 name: channel-new
-description: "Use when 新しい YouTube チャンネル用の独立リポジトリを現在のディレクトリで初期化したいとき、または既存の YouTube チャンネルを自動化システムに取り込みたいとき。「チャンネル追加」「新チャンネル」「チャンネル開設」「チャンネルセットアップ」「新しいチャンネル作りたい」「TTP 対象を集める」「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」など、新規チャンネルの TTP 対象確認、config 生成、簡易ペルソナ、branding 初回反映、および運営中チャンネルの設定取り込みに関わる場面で必ず使用すること。"
+description: "Use when 新チャンネル用リポジトリの初期化、または既存チャンネルの取り込みをするとき。「チャンネル追加」「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」で発動"
 ---
 
 ## Overview
@@ -287,6 +287,8 @@ image_generation:
 - 収集済みデータから方向性を深掘りしたい → `/channel-research`
 
 ### Step 7: 簡易ペルソナ導出
+
+**入口ゲート**: 開始前に `config/channel/analytics.json::benchmark.channels` に承認済み TTP 対象が 1 件以上あることを確認する。0 件なら本 Step 以降に進まず Step 5 に戻って候補を再確認するか、ユーザーに停止を確認して終了する（判定基準は冒頭「TTP 完了条件（新規開設モード）」を参照）。
 
 新チャンネルには `/viewer-voice` や `/benchmark` の結果がまだない場合があるため、ここでは軽量版だけ作る。
 

@@ -61,3 +61,19 @@ class TestScaffold:
             import shutil
 
             shutil.rmtree(collection)
+
+    def test_existing_dir_preflight_hint_quotes_collection_dir(self, monkeypatch, capsys):
+        """復旧コマンドは shell に貼れるよう collection dir を quote する。"""
+        _run(monkeypatch, ["Quote Scaffold", "quote scaffold"])
+        planning = Path(channel_dir()) / "collections" / "planning"
+        collection = sorted(planning.glob("*-quote scaffold-collection"))[-1]
+        try:
+            with pytest.raises(SystemExit):
+                _run(monkeypatch, ["Quote Scaffold", "quote scaffold"])
+            err = capsys.readouterr().err
+            assert "yt-collection-preflight" in err
+            assert "quote scaffold-collection'" in err
+        finally:
+            import shutil
+
+            shutil.rmtree(collection)

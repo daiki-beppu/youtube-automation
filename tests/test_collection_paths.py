@@ -631,6 +631,7 @@ class TestRequiredSkeleton:
         (tmp_path / "01-master").touch()
         paths = CollectionPaths(tmp_path)
         assert "01-master" in paths.missing_required_dirs()
+        assert paths.invalid_required_dirs() == ["01-master"]
 
     def test_ensure_required_dirs_creates_missing(self, tmp_path):
         paths = CollectionPaths(tmp_path)
@@ -654,3 +655,14 @@ class TestRequiredSkeleton:
         created = paths.ensure_required_dirs()
         assert "02-Individual-music" not in created
         assert track.read_bytes() == b"audio"
+
+    def test_ensure_required_dirs_rejects_same_name_file_without_destroying(self, tmp_path):
+        collision = tmp_path / "01-master"
+        collision.write_text("keep me", encoding="utf-8")
+        paths = CollectionPaths(tmp_path)
+
+        with pytest.raises(ValidationError, match="同名のファイル"):
+            paths.ensure_required_dirs()
+
+        assert collision.is_file()
+        assert collision.read_text(encoding="utf-8") == "keep me"

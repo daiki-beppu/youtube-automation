@@ -35,6 +35,30 @@ def test_collection_uploader_imports_playlist_manager():
     assert collection_uploader.PlaylistManager.__module__ == "youtube_automation.scripts.playlist_manager"
 
 
+@pytest.mark.parametrize(("argv", "method_name"), [(["--plan"], "show_plan"), ([], "execute_next_step")])
+def test_main_runs_collection_preflight_before_plan_or_execute(monkeypatch, tmp_path, argv, method_name):
+    """yt-upload-collection の --plan / 通常実行入口でも骨格 preflight を必ず通す。"""
+    from youtube_automation.agents import collection_uploader
+
+    target = tmp_path / "collections" / "planning" / "20990101-test-collection"
+    target.mkdir(parents=True)
+    mock_config = MagicMock()
+    mock_config.meta.channel_short = "test"
+    mock_uploader = MagicMock()
+    mock_uploader._find_collection.return_value = target
+
+    monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
+    with (
+        patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
+        patch("youtube_automation.agents.collection_uploader.CollectionUploader", return_value=mock_uploader),
+        patch("youtube_automation.agents.collection_uploader.ensure_collection_preflight") as mock_preflight,
+    ):
+        collection_uploader.main()
+
+    mock_preflight.assert_called_once_with(target)
+    getattr(mock_uploader, method_name).assert_called_once_with(target)
+
+
 # ---------------------------------------------------------------------------
 # _assign_to_playlists
 # ---------------------------------------------------------------------------

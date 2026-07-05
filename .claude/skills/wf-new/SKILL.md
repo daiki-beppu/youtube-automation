@@ -1,6 +1,6 @@
 ---
 name: wf-new
-description: "Use when まだコレクションディレクトリが存在せず、新規コレクション制作を立ち上げたいとき。「新しいコレクション始めたい」「制作開始」「新規ワークフロー」など、企画選択からディレクトリ作成・素材準備までを行う初期化フェーズで使用する。既存コレクションの進行は /wf-next"
+description: "Use when 新規コレクション制作を立ち上げるとき（ディレクトリ未作成）。「新しいコレクション始めたい」「制作開始」で発動。既存の進行は /wf-next"
 ---
 
 ## Overview
@@ -128,10 +128,15 @@ uv run yt-collection-preflight <collection-dir-name>
 
 次に、多言語タイトル生成で必須となる `workflow-state.json.scene_phrases` を投入する:
 
-まず Agent ツールでサブエージェントを起動し、`en` 以外の `supported_languages` 全件に対する翻訳 JSON object だけを生成させる。CLI 内部から Gemini / Claude CLI を呼ばない。
+まず Agent ツールでサブエージェントを起動し、`en` 以外の `supported_languages` 全件に対する翻訳 JSON object だけを生成させる。CLI 内部から Gemini / Claude CLI を呼ばない。`config/channel/content.json` の `title.theme_scenes[<theme>]` が未定義の場合は、Agent が企画内容から英語 scene phrase も生成し、`--en` で明示指定する。
 
 ```bash
 uv run yt-populate-scene-phrases <collection-dir-name> \
+  --translations-file /tmp/scene-phrases.json
+
+# theme_scenes[<theme>] が未定義の場合
+uv run yt-populate-scene-phrases <collection-dir-name> \
+  --en "<Agent-generated English scene phrase>" \
   --translations-file /tmp/scene-phrases.json
 ```
 
@@ -139,7 +144,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 - 英語フレーズは `config/channel/content.json` の `title.theme_scenes[<theme>].scene` から自動解決される。翻訳文は Agent ツールで生成し、`--translations-json` または `--translations-file` で渡す
 - **`supported_languages` が 1 言語以下のチャンネルでは CLI 側で自動スキップ**されるため、条件分岐は不要（そのまま呼んで構わない）
 - 既に `scene_phrases` が存在する場合もスキップ（`--overwrite` で上書き可能）
-- `theme_scenes[<theme>]` が未定義の場合は `--en "<custom phrase>"` で英語フレーズを明示指定する。詳細は `references/scene_phrases.md` 参照
+- `theme_scenes[<theme>]` が未定義の場合は停止せず、企画内容から Agent が英語 scene phrase と翻訳 JSON を生成し、`--en "<Agent-generated English scene phrase>" --translations-file ...` で投入する。詳細は `references/scene_phrases.md` 参照
 
 **エラーハンドリング:**
 - `theme_scenes` 未定義 + `--en` 未指定 → エラー終了。`config/channel/content.json` の `title.theme_scenes` に該当 theme を追加するか、`--en` を渡して再実行

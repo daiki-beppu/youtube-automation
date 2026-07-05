@@ -113,11 +113,22 @@ class CollectionPaths:
         """必須骨格（``REQUIRED_SUBDIRS``）のうち欠落しているサブディレクトリ名を返す。"""
         return [sub for sub in REQUIRED_SUBDIRS if not (self.root / sub).is_dir()]
 
+    def invalid_required_dirs(self) -> list[str]:
+        """必須骨格名と同名だがディレクトリではない既存パスを返す。"""
+        return [sub for sub in REQUIRED_SUBDIRS if (self.root / sub).exists() and not (self.root / sub).is_dir()]
+
     def ensure_required_dirs(self) -> list[str]:
         """欠落している必須サブディレクトリを冪等に作成し、作成した名前を返す。
 
         既存のディレクトリ・ファイルには一切触れない（非破壊）。
         """
+        invalid = self.invalid_required_dirs()
+        if invalid:
+            raise ValidationError(
+                "必須サブディレクトリ名と同名のファイルがあります: "
+                + ", ".join(invalid)
+                + "。ファイルを退避してから再実行してください。"
+            )
         missing = self.missing_required_dirs()
         for sub in missing:
             (self.root / sub).mkdir(parents=True, exist_ok=True)

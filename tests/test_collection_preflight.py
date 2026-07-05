@@ -4,6 +4,7 @@
 標準骨格の検証・補完・exit code 契約を tmp_path フィクスチャで検証する。
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -25,7 +26,10 @@ def _make_collection(root: Path, name: str, *, subdirs=REQUIRED_SUBDIRS, with_st
     for sub in subdirs:
         (collection / sub).mkdir()
     if with_state:
-        (collection / "workflow-state.json").write_text("{}\n")
+        (collection / "workflow-state.json").write_text(
+            json.dumps({"scene_phrases": {"en": "quiet late night focus"}}, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
     return collection
 
 
@@ -109,6 +113,35 @@ class TestCheckCollection:
         assert not ok
         assert not (collection / "workflow-state.json").exists()
 
+    def test_same_name_file_is_ng_and_fix_does_not_destroy_it(self, tmp_path):
+        collection = _make_collection(tmp_path, "20260702-tc-file-collection")
+        for child in collection.iterdir():
+            if child.name == "01-master":
+                child.rmdir()
+        collision = collection / "01-master"
+        collision.write_text("do not overwrite", encoding="utf-8")
+
+        ok, line = check_collection(collection, fix=True)
+
+        assert not ok
+        assert "同名" in line or "同名のファイル" in line
+        assert collision.is_file()
+        assert collision.read_text(encoding="utf-8") == "do not overwrite"
+
+    def test_scene_phrases_must_cover_supported_languages(self, tmp_path):
+        collection = _make_collection(tmp_path, "20260702-tc-langs-collection")
+        (collection / "workflow-state.json").write_text(
+            json.dumps({"scene_phrases": {"en": "quiet late night focus"}}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        ok, line = check_collection(collection, fix=False, supported_languages=["en", "ja", "ko"])
+
+        assert not ok
+        assert "scene_phrases" in line
+        assert "ja" in line
+        assert "ko" in line
+
 
 # ---------------------------------------------------------------------------
 # main の exit code 契約
@@ -118,6 +151,7 @@ class TestCheckCollection:
 class TestMainExitCodes:
     def _run(self, monkeypatch, argv: list[str]):
         monkeypatch.setattr(sys, "argv", ["yt-collection-preflight", *argv])
+        monkeypatch.setattr("youtube_automation.scripts.collection_preflight._supported_languages", lambda: ["en"])
         return main()
 
     def test_all_ok_exits_zero(self, tmp_path, monkeypatch, capsys):

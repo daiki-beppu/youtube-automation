@@ -1,6 +1,6 @@
 ---
 name: channel-setup
-description: "Use when /channel-new 後に詳細セットアップをやり直したいとき、または運用中チャンネルの YouTube 側設定（branding / status / localizations）をローカル config と同期したいとき。「設定反映」「チャンネル設定更新」「branding push」「ローカライゼーション同期」「meta.json を YouTube に反映」など既存チャンネルの設定 push/pull、および /channel-direction で方向性を再決定した後の config 再生成に関わる場面で使用すること。初回 branding は /channel-new で開始する"
+description: "Use when YouTube 側設定（branding / status / localizations）とローカル config を同期するとき。「設定反映」「branding push」「ローカライゼーション同期」で発動。初回は /channel-new"
 ---
 
 ## Overview
