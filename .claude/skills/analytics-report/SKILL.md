@@ -1,6 +1,6 @@
 ---
 name: analytics-report
-description: "Use when Analytics分析レポートの表示・閲覧が必要なとき。過去レポートの比較やパフォーマンスレビュー時に使用。「レポート見せて」「過去データ確認」「パフォーマンスレビュー」「前回の分析結果」など、既存レポートの参照・比較が必要な場面で必ず使用すること"
+description: "Use when 既存の Analytics レポートを表示・比較したいとき。「レポート見せて」「過去データ確認」「前回の分析結果」で発動"
 ---
 
 ## Overview
@@ -13,7 +13,7 @@ description: "Use when Analytics分析レポートの表示・閲覧が必要な
 
 存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## When to Use
 

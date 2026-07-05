@@ -1,6 +1,6 @@
 ---
 name: collection-ideate
-description: "Use when 新コレクションの企画が必要なとき、データドリブンな意思決定をしたいとき。「次何作る？」「テーマ選び」「コレクション候補」「企画提案」「アイデア」など、新規コンテンツの方向性を決める場面で必ず使用すること"
+description: "Use when 新コレクションの企画・テーマ選定をデータドリブンに行うとき。「次何作る？」「テーマ選び」「企画提案」で発動"
 ---
 
 ## Overview
@@ -33,7 +33,7 @@ description: "Use when 新コレクションの企画が必要なとき、デー
 
 `config/channel/` が存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## When to Use
 

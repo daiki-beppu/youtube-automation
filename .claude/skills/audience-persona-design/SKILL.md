@@ -1,6 +1,6 @@
 ---
 name: audience-persona-design
-description: "Use when ターゲット視聴者を 1 人の第一ペルソナとして本格設計・見直ししたいとき。「誰が聴くか」「ペルソナ設定」「ターゲット」「視聴者像」「ターゲット層」「リスナー像」「TTP の人物像版」など。/viewer-voice のコメント分析を必須入力にし、/viewing-scene の視聴シーン検証を反映して最終 persona-definition.md を確定する"
+description: "Use when ターゲット視聴者を第一ペルソナとして設計・見直しするとき。「ペルソナ設定」「視聴者像」「ターゲット層」で発動。/viewer-voice を必須入力に persona-definition.md を確定"
 ---
 
 ## Overview
@@ -37,7 +37,7 @@ description: "Use when ターゲット視聴者を 1 人の第一ペルソナと
 ## 前提
 
 - `config/channel/` が存在すること（`load_config()` でロード可能）。
-  存在しない場合 → 新規チャンネルなら `/channel-new`、既存チャンネルなら `/channel-import` を案内。
+  存在しない場合 → 新規チャンネルなら `/channel-new`、既存チャンネルなら `/channel-new`（既存チャンネル取り込みモード）を案内。
 - `docs/plans/viewer-voice-analysis.md` が存在すること。
   未実施の場合は先に `/viewer-voice` を実行するよう案内し、本スキルは停止する。
 - `docs/channel/personas/channel-new-persona.md` が存在する場合は初期仮説として読み込み、公開後データで更新する。

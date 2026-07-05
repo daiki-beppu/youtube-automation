@@ -1,6 +1,6 @@
 ---
 name: wf-status
-description: "Use when コレクション制作の進捗を読むだけで確認したいとき（実行はしない）。「どこまで進んだ？」「workflow-state 見せて」「制作中コレクション一覧」など、collections/planning/ 配下の現在地を一覧・詳細表示するときに使用する。チャンネル登録者数など YouTube 側の統計は /channel-status"
+description: "Use when コレクション制作の進捗を読むだけで確認するとき（実行しない）。「どこまで進んだ？」「制作中コレクション一覧」で発動。YouTube 統計は /channel-status"
 ---
 
 ## Overview
@@ -26,7 +26,7 @@ description: "Use when コレクション制作の進捗を読むだけで確認
 
 存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## Instructions
 

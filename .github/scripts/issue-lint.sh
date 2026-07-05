@@ -5,13 +5,8 @@
 # 警告メッセージとして stdout に出力する。警告が無ければ何も出力しない（exit 0）。
 set -eu
 
-# wc -m がマルチバイト文字を正しく 1 文字としてカウントするよう UTF-8 ロケールを強制する
-# （呼び出し元シェルのロケールが C の場合、wc -m がバイト数を返してしまうため）
-export LC_ALL=C.UTF-8
-
 payload="$1"
 
-title=$(jq -r '.issue.title // ""' "$payload")
 body=$(jq -r '.issue.body // ""' "$payload")
 labels=$(jq -r '[.issue.labels[].name] | join(",")' "$payload")
 
@@ -57,11 +52,6 @@ fi
 req_count=$(printf '%s\n' "$body" | awk '/^## 要件/{f=1;next} /^## /{f=0} f && /^[0-9]+\./{c++} END{print c+0}')
 if [ "$req_count" -ge 8 ]; then
   add_warning "**要件が ${req_count} 件あります**（上限目安 7 件。sub-issue への分割を推奨）"
-fi
-
-title_len=$(printf '%s' "$title" | wc -m | tr -d ' ')
-if [ "$title_len" -gt 50 ]; then
-  add_warning "**タイトルが ${title_len} 文字です**（50 文字以内推奨。takt-issue が PR タイトルに転用します）"
 fi
 
 if [ -n "$warnings" ]; then

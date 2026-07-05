@@ -1,6 +1,6 @@
 ---
 name: postmortem
-description: "Use when 公開済み動画が「思ったより伸びなかった」原因を仮説 → 検証で切り分けたいとき。「伸びなかった」「振り返り」「postmortem」「why flopped」「原因分析」「仮説検証」「flop 分析」「伸び悩み」など、単一動画の事後原因切り分けに関わる場面で使用すること。`/analytics-analyze`（チャンネル横断の戦略）や `/alignment-check`（事前整合性監査）とは責務が異なる。実際の検証は `/thumbnail-compare` `/alignment-check` `/viewer-voice` `/video-analyze` 等の既存スキルへバトンする"
+description: "Use when 公開済み動画が伸びなかった原因を切り分けるとき。「伸びなかった」「postmortem」「flop 分析」で発動。横断戦略は /analytics-analyze、事前監査は /alignment-check"
 ---
 
 ## Overview
@@ -17,7 +17,7 @@ description: "Use when 公開済み動画が「思ったより伸びなかった
 
 存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 加えて、対象動画について以下が揃っていること:
 - `data/analytics_data_*.json` の `video_analytics[<video_id>]` に当該動画が含まれている（含まれていない場合は `/analytics-collect` を先に案内）

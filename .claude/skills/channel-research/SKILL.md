@@ -1,6 +1,6 @@
 ---
 name: channel-research
-description: "Use when /benchmark と /viewer-voice で収集した TTP ベンチマークデータを徹底分析したいとき。「競合分析」「ベンチマーク分析」「チャンネルリサーチ」「競合を調べて」「TTP 対象抽出」など、channel-new 後に詳細な競合分析や方向性の再検討材料が必要な場面で使用すること。初回セットアップは /channel-new だけで完結する"
+description: "Use when /benchmark と /viewer-voice の TTP ベンチマークデータを徹底分析するとき。「競合分析」「チャンネルリサーチ」「TTP 対象抽出」で発動"
 ---
 
 ## Overview

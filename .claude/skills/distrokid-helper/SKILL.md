@@ -1,6 +1,6 @@
 ---
 name: distrokid-helper
-description: "Use when コレクションの楽曲を DistroKid 配信用に準備し、distrokid-helper Chrome 拡張へ渡すローカルサーバーを起動したいとき（30-distrokid 生成 / disc 分割 / metadata.md / ジャケット 3000×3000 新規生成 / yt-collection-serve 起動）。『DistroKid 準備』『配信準備』『アルバム化』『distrokid-helper』で発動。DistroKid Web への転記・アップロード操作そのものは Chrome 拡張側の責務"
+description: "Use when 楽曲の DistroKid 配信準備と Chrome 拡張向けローカルサーバー起動をするとき。「DistroKid 準備」「配信準備」「アルバム化」で発動。Web への転記は拡張側の責務"
 ---
 
 ## Overview
@@ -248,7 +248,7 @@ curl -s http://localhost:7874/distrokid/collections | python3 -m json.tool | hea
 3. サーバー出力に `distrokid dir mode enabled` が表示されること
 4. サーバー出力に `distrokid releases enabled` が表示されること
 
-`--playlist-capture-root` は distrokid-helper の配信済み記録 `POST /distrokid/releases` にも必要。DistroKid dir mode では必ずチャンネルルートを指定する。`--playlist-capture-prefix` は Suno playlist capture 用なので、DistroKid サーバー起動では指定しない。`--allow-origin` は実際の distrokid-helper 拡張 ID に置き換え、DistroKid page origin からの write POST を許可しない。
+`--playlist-capture-root` は distrokid-helper の配信済み記録 `POST /distrokid/releases` に必要。DistroKid dir mode では必ずチャンネルルートを指定する。`--allow-origin` は実際の distrokid-helper 拡張 ID に置き換え、DistroKid page origin からの write POST を許可しない。
 
 ユーザーには `http://localhost:7874` を distrokid-helper popup のサーバー URL として案内する。Chrome 拡張 **distrokid-helper** を使った DistroKid Web フォームへの転記・アップロード操作そのものは本スキルの範囲外。
 

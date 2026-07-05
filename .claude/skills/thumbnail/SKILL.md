@@ -1,6 +1,6 @@
 ---
 name: thumbnail
-description: "Use when コレクションのサムネイル画像が必要で、CTR最適化されたプロンプト生成 + 画像生成プロバイダー（Gemini / OpenAI / codex）での画像生成を行いたいとき。サムネイル、画像生成、CTR改善、ビジュアル制作、アイキャッチ、main.pngなど、視覚コンテンツの作成に関わる場面で必ず使用すること。Do not use when: SVG・ベクター画像の生成/編集、コード生成、YouTube サムネイル以外の汎用画像生成（これらは本スキルの対象外）"
+description: "Use when コレクションのサムネイル（main.png）を CTR 最適化して生成するとき。「サムネイル」「画像生成」「アイキャッチ」で発動。SVG・汎用画像生成には使わない"
 ---
 
 ## Overview
@@ -28,7 +28,7 @@ description: "Use when コレクションのサムネイル画像が必要で、
 
 `config/channel/` が存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## When to Use
 
