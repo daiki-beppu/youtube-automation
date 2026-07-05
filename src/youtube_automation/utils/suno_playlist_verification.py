@@ -21,16 +21,12 @@ from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.suno_prompts_json import read_suno_prompt_entries
 
 _WS_RE = re.compile(r"\s+")
-
-# Suno UI 側で付きうる装飾 suffix（例: " (Remastered)" は付かないが
-# extend 由来の " [Extended]" 等に備え、既知の安全な suffix だけ剥がす）
-_KNOWN_SUFFIX_RE = re.compile(r"\s*\[(extended|ext)\]\s*$", re.IGNORECASE)
+_MAX_DISPLAY_TEXT_LEN = 200
 
 
 def normalize_title(value: str) -> str:
     """タイトル照合キーを正規化する（NFKC + 空白圧縮 + casefold）."""
     text = unicodedata.normalize("NFKC", value)
-    text = _KNOWN_SUFFIX_RE.sub("", text)
     text = _WS_RE.sub(" ", text).strip()
     return text.casefold()
 
@@ -94,7 +90,7 @@ def verify_playlist_titles(
     lookup: dict[str, str] = {}
     for name in originals:
         key = normalize_title(name)
-        if key in lookup and lookup[key] != name:
+        if key in lookup:
             raise ValidationError(f"entry name が正規化後に衝突しています: {lookup[key]!r} / {name!r}")
         lookup[key] = name
 
@@ -126,21 +122,29 @@ def format_verification_report(result: PlaylistVerificationResult) -> str:
     lines.append("[yt-suno-verify-playlist] playlist × suno-prompts.json 突合結果")
     for name, count in result.matched.items():
         if count > 0:
-            lines.append(f"  ✓ {name}: {count} clip(s)")
+            lines.append(f"  ✓ {format_display_text(name)}: {count} clip(s)")
     if result.unknown_titles:
         lines.append("  ❌ 混入疑い（どの entry にも一致しない曲）:")
         for title in result.unknown_titles:
-            lines.append(f"     - {title}")
+            lines.append(f"     - {format_display_text(title)}")
     if result.missing_entries:
         lines.append("  ❌ 未生成疑い（playlist に存在しない entry）:")
         for name in result.missing_entries:
-            lines.append(f"     - {name}")
+            lines.append(f"     - {format_display_text(name)}")
     if result.underfilled_entries:
         lines.append("  ⚠️ clip 不足（期待数未満の entry）:")
         for name in result.underfilled_entries:
-            lines.append(f"     - {name}")
+            lines.append(f"     - {format_display_text(name)}")
     if result.ok:
         lines.append("  → OK")
     else:
         lines.append("  → NG: playlist を修正（混入除外 / 追補生成）してから /masterup を再実行してください")
     return "\n".join(lines)
+
+
+def format_display_text(value: str) -> str:
+    """外部由来 title/name を stdout 用に制御文字 escape する."""
+    text = ascii(value)[1:-1]
+    if len(text) <= _MAX_DISPLAY_TEXT_LEN:
+        return text
+    return text[: _MAX_DISPLAY_TEXT_LEN - 3] + "..."

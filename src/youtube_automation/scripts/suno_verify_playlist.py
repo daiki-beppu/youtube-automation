@@ -18,8 +18,15 @@ from youtube_automation.utils.suno_playlist_verification import (
 
 
 def _read_titles(args: argparse.Namespace) -> list[str]:
-    if args.titles:
-        return [t for t in args.titles if t.strip()]
+    explicit_sources = [name for name in ("titles", "titles_file") if getattr(args, name)]
+    if len(explicit_sources) > 1:
+        raise ValidationError("playlist 曲名の入力元は --titles / --titles-file / stdin のいずれか 1 つにしてください")
+
+    if args.titles is not None:
+        titles = [t for t in args.titles if t.strip()]
+        if not titles:
+            raise ValidationError("--titles には 1 件以上の曲名を指定してください")
+        return titles
     if args.titles_file:
         path = Path(args.titles_file)
         if not path.is_file():
@@ -32,7 +39,9 @@ def _read_titles(args: argparse.Namespace) -> list[str]:
             return [t for t in data if t.strip()]
         return [line for line in raw.splitlines() if line.strip()]
     if not sys.stdin.isatty():
-        return [line for line in sys.stdin.read().splitlines() if line.strip()]
+        titles = [line for line in sys.stdin.read().splitlines() if line.strip()]
+        if titles:
+            return titles
     raise ValidationError("playlist 曲名を --titles / --titles-file / stdin のいずれかで渡してください")
 
 
@@ -56,6 +65,8 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        if args.expected_clips_per_entry < 0:
+            raise ValidationError("--expected-clips-per-entry は 0 以上にしてください")
         collection_dir = resolve_collection_dir(args.collection)
         entry_names = load_entry_names(collection_dir)
         titles = _read_titles(args)

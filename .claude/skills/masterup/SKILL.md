@@ -178,13 +178,36 @@ print(f'pattern_count={pattern_count} expected={expected} actual={actual}')
 判定:
 - **`actual == 0`**: `/suno-helper` 未実行として「`/suno-helper` を実行してダウンロードを完了してください」を案内して停止
 - **`0 < actual < expected`**: 部分ダウンロードとして扱う。`assets.music_downloaded` が `true` であっても揃っているとはみなさない。不足曲数（`expected - actual`）を提示し、「`/suno-helper` を再実行して不足分を DL するか、Suno UI から手動で不足曲をダウンロードして `02-Individual-music/` に配置してください」を案内して停止
-- **`actual >= expected`**: チェック OK として Step 2 へ進む
+- **`actual >= expected`**: チェック OK として Step 1.5 へ進む
 
 `pattern_count` が `None`（`suno-prompts.json` が存在しない）の場合は期待曲数が算出不能なため本チェックをスキップし、以降の既存フローに委ねる。
 
+### Step 1.5: playlist × suno-prompts.json 突合ゲート（必須・混入検出）
+
+> **Step 5 前の共通ゲート**: この突合は Step 2 fallback 専用ではない。`02-Individual-music/` に音源があり Step 2-3 をスキップする primary path でも、Step 5 に進む前に必ず完了させる。
+
+playlist 曲タイトル一覧を `yt-suno-verify-playlist` に渡し、`20-documentation/suno-prompts.json` の entry name と突合する。
+
+```bash
+# titles.txt: Suno playlist / suno-helper / WebFetch から取得した曲タイトルを 1 行 1 曲で保存
+uv run yt-suno-verify-playlist <collection-path> --titles-file titles.txt
+```
+
+title list の取得元:
+- primary path（suno-helper DL 済み）: suno-helper の取得済み playlist title / manifest / 実行ログから title list を取得する。取得できない場合は playlist URL を WebFetch して title list を作る。どちらも不可能な場合は検証不能として停止し、ユーザーに title list の提示を求める
+- fallback path: Step 2 の WebFetch 結果から title list を作る
+
+判定:
+- **unknown（どの entry にも一致しない曲）**: 別コレクション由来の混入。playlist から除外するまで Step 5 に進まない
+- **missing（playlist に存在しない entry）**: 生成漏れ。`/suno-helper` で追補生成するまで Step 5 に進まない
+- **underfilled（clip 数が期待未満の entry）**: 生成が途中で止まった疑い。既定は 2 clip/entry（`--expected-clips-per-entry` で調整、`0` で無効化）
+- 非 0 終了時はレポートをそのままユーザーへ提示して停止する。**ユーザーが混入込みでの続行を明示指示した場合のみ**、混入内容と影響（世界観不整合・メタデータずれ）を報告した上で続行できる
+
+> **背景**: playlist には「最新セットの生成が未完のまま、前後コレクションの曲が混入する」事故が繰り返し起きている（実例: 深夜コレクションに昼テーマ 2 ペアが混入 + 深夜 2 entry 未生成のまま master 化）。曲名は `/suno` が Song Title 欄へ注入する `{name_jp} — {name_en}` で一意なため、機械突合で確実に検出できる。silent な続行は禁止。
+
 ### Step 2: WebFetch でプレイリスト情報を取得 (DEPRECATED -- fallback only)
 
-> **suno-helper DL 済みの場合はスキップ**: `02-Individual-music/` ディレクトリにオーディオファイル（mp3 / m4a / wav）が既に存在する場合、suno-helper が一括ダウンロード済みと判断し、**Step 2-3 をスキップして Step 5 へ直行する**。この経路が primary path であり、以下の WebFetch + CDN curl は suno-helper のダウンロードが使えない場合のフォールバックとしてのみ使用する。
+> **suno-helper DL 済みの場合はスキップ**: `02-Individual-music/` ディレクトリにオーディオファイル（mp3 / m4a / wav）が既に存在する場合、suno-helper が一括ダウンロード済みと判断し、**Step 1.5 の突合ゲート完了後に Step 2-3 をスキップして Step 5 へ進む**。この経路が primary path であり、以下の WebFetch + CDN curl は suno-helper のダウンロードが使えない場合のフォールバックとしてのみ使用する。
 
 1. 引数のプレイリストURLを WebFetch で取得
 2. prompt で全曲の情報を抽出するよう指示。**プレイリスト全体の総曲数（メタ表記）も同時に取得する**:
@@ -200,20 +223,7 @@ print(f'pattern_count={pattern_count} expected={expected} actual={actual}')
    - 総曲数のメタ表記が WebFetch から取得できなかった場合も同様に中断し、ユーザーへ「件数突合不能のため処理を停止」と報告する（silent な続行を禁止）
    - **総曲数 ≤ 50 で件数が一致した場合のみ Step 3 へ進む**
 4. WebFetch の結果から曲リストをパースして Step 3 に渡す
-5. **playlist × suno-prompts.json 突合ゲート（必須・混入検出）**:
-   - 取得した曲タイトル一覧を `yt-suno-verify-playlist` に渡し、`suno-prompts.json` の entry name と突合する
-
-   ```bash
-   # titles.txt: Step 2 で取得した曲タイトルを 1 行 1 曲で保存
-   uv run yt-suno-verify-playlist <collection-path> --titles-file titles.txt
-   ```
-
-   - **unknown（どの entry にも一致しない曲）**: 別コレクション由来の混入。playlist から除外するまで Step 3 に進まない
-   - **missing（playlist に存在しない entry）**: 生成漏れ。`/suno-helper` で追補生成するまで Step 3 に進まない
-   - **underfilled（clip 数が期待未満の entry）**: 生成が途中で止まった疑い。既定は 2 clip/entry（`--expected-clips-per-entry` で調整、`0` で無効化）
-   - 非 0 終了時はレポートをそのままユーザーへ提示して停止する。**ユーザーが混入込みでの続行を明示指示した場合のみ**、混入内容と影響（世界観不整合・メタデータずれ）を報告した上で続行できる
-
-   > **背景**: playlist には「最新セットの生成が未完のまま、前後コレクションの曲が混入する」事故が繰り返し起きている（実例: 深夜コレクションに昼テーマ 2 ペアが混入 + 深夜 2 entry 未生成のまま master 化）。曲名は `/suno` が Song Title 欄へ注入する `{name_jp} — {name_en}` で一意なため、機械突合で確実に検出できる。silent な続行は禁止。
+5. Step 1.5 の突合ゲートが未実行なら、この曲リストで `yt-suno-verify-playlist` を実行してから Step 3 に進む
 
 **取得手段のフォールバック方針**: WebFetch は suno.com のサーバー描画分（上限 50 件）しか拾えないため、本 skill は「50 曲以下のプレイリスト」を前提運用とする。50 曲超のプレイリストは現状 50 曲単位に分割して個別実行するか、手動で `02-Individual-music/` に MP3 を揃えてから `yt-generate-master` を直接実行するワークフローへ切り替える（内部 API / 公式 API への移行は別 issue）。
 
@@ -414,7 +424,7 @@ yt-suno-select-tracks <collection-path> --dry-run
 - Step 3 の検証で `failed` 配列が空でない（サイズ異常・再生時間異常・Content-Type 不正）
 - 期待ファイル突合チェックで `missing` 配列が空でない
 - Step 2 の件数突合で不一致が検出されている
-- Step 2 の `yt-suno-verify-playlist` が非 0 終了している（混入 / 生成漏れ / clip 不足。ユーザーが混入込み続行を明示指示した場合を除く）
+- Step 1.5 の `yt-suno-verify-playlist` が未実行、検証不能、または非 0 終了している（混入 / 生成漏れ / clip 不足。ユーザーが混入込み続行を明示指示した場合を除く）
 - Step 4.5 の `yt-suno-select-tracks` が非 0 終了している（尺フィルタ後の採用候補 0 件、stock 移動失敗など）
 
 検証失敗時は Step 4 / 4.5 のレポートを提示し、ユーザーに手動修正（再ダウンロード / Suno UI からの手動取得 / `/suno-helper` 追補生成）を促してから再実行する。
