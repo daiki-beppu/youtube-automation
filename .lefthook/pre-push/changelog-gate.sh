@@ -24,7 +24,9 @@
 # lefthook は同一 hook 内で use_stdin を持てるコマンドを 1 つに制限するため、
 # ブランチ削除 push の判定はこのスクリプトが stdin から一度だけ読み取り、
 # test-diff-gate.sh / any-usage-gate.sh を末尾で呼び出すことで同じ判定を共有する
-# （削除 push はこの 3 ゲートすべてを対象外にする）。
+# （削除 push はこの 3 ゲートすべてを対象外にする）。diff の基準点（merge-base）も
+# ここで一度だけ解決し PRE_PUSH_DIFF_BASE として子ゲートへ export することで、
+# 3 スクリプトが個別に origin/main / merge-base を再計算する重複を避ける。
 
 set -euo pipefail
 
@@ -55,20 +57,24 @@ if [ ! -t 0 ]; then
   fi
 fi
 
+# origin/main からの分岐点を全ゲート共通の基準点として一度だけ解決する。
+BASE_REF="origin/main"
+diff_base=""
+if git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null; then
+  if ! diff_base=$(git merge-base "${BASE_REF}" HEAD 2>/dev/null); then
+    diff_base="${BASE_REF}"
+  fi
+fi
+export PRE_PUSH_DIFF_BASE="${diff_base}"
+
 exit_code=0
 
 if [ "${SKIP_CHANGELOG:-}" = "1" ]; then
   echo "changelog-gate: SKIP_CHANGELOG=1 のためスキップします。" >&2
 else
-  BASE_REF="origin/main"
-  if ! git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null; then
+  if [ -z "${diff_base}" ]; then
     echo "changelog-gate: ${BASE_REF} が無いためスキップします（CI で判定されます）。" >&2
   else
-    # origin/main からの分岐点を基準に、現在の HEAD までの変更を見る。
-    if ! diff_base=$(git merge-base "${BASE_REF}" HEAD 2>/dev/null); then
-      diff_base="${BASE_REF}"
-    fi
-
     changed_files=$(git diff --name-only "${diff_base}" HEAD 2>/dev/null || true)
 
     if [ -n "${changed_files}" ]; then

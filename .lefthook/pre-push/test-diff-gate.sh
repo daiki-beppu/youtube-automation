@@ -3,6 +3,8 @@
 # src / extension lib 変更に対応するテスト差分の有無を通知する。
 #
 # 判定基準: origin/main からの分岐点（merge-base）と現在の HEAD の差分。
+# diff の基準点（PRE_PUSH_DIFF_BASE）は changelog-gate.sh から呼ばれた場合は
+# そちらで解決済みの値を再利用し、単体実行時のみ自前で解決する。
 # このゲートは警告のみで push は止めない。意図的に省く場合は
 # SKIP_TEST_DIFF=1 を指定すると skip した事実を出力に残す。
 
@@ -13,14 +15,17 @@ if [ "${SKIP_TEST_DIFF:-}" = "1" ]; then
   exit 0
 fi
 
-BASE_REF="origin/main"
-if ! git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null; then
-  echo "test-diff-gate: ${BASE_REF} が無いためスキップします（CI / review で確認してください）。" >&2
-  exit 0
-fi
-
-if ! diff_base=$(git merge-base "${BASE_REF}" HEAD 2>/dev/null); then
-  diff_base="${BASE_REF}"
+if [ -n "${PRE_PUSH_DIFF_BASE:-}" ]; then
+  diff_base="${PRE_PUSH_DIFF_BASE}"
+else
+  BASE_REF="origin/main"
+  if ! git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null; then
+    echo "test-diff-gate: ${BASE_REF} が無いためスキップします（CI / review で確認してください）。" >&2
+    exit 0
+  fi
+  if ! diff_base=$(git merge-base "${BASE_REF}" HEAD 2>/dev/null); then
+    diff_base="${BASE_REF}"
+  fi
 fi
 
 changed_files=$(git diff --name-only "${diff_base}" HEAD 2>/dev/null || true)

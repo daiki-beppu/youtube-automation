@@ -3,29 +3,38 @@
 # 新規追加行の広すぎる Any / any 型注釈を検出する。
 #
 # 判定基準: origin/main からの分岐点（merge-base）と現在の HEAD の差分。
+# diff の基準点（PRE_PUSH_DIFF_BASE）は changelog-gate.sh から呼ばれた場合は
+# そちらで解決済みの値を再利用し、単体実行時のみ自前で解決する。
 
 set -euo pipefail
 
-BASE_REF="origin/main"
-if ! git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null; then
-  echo "any-usage-gate: ${BASE_REF} が無いためスキップします（CI / review で確認してください）。" >&2
-  exit 0
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if ! diff_base=$(git merge-base "${BASE_REF}" HEAD 2>/dev/null); then
-  diff_base="${BASE_REF}"
+if [ -n "${PRE_PUSH_DIFF_BASE:-}" ]; then
+  diff_base="${PRE_PUSH_DIFF_BASE}"
+else
+  BASE_REF="origin/main"
+  if ! git rev-parse --verify --quiet "${BASE_REF}^{commit}" >/dev/null; then
+    echo "any-usage-gate: ${BASE_REF} が無いためスキップします（CI / review で確認してください）。" >&2
+    exit 0
+  fi
+  if ! diff_base=$(git merge-base "${BASE_REF}" HEAD 2>/dev/null); then
+    diff_base="${BASE_REF}"
+  fi
 fi
 
 current_file=""
 current_line=0
-current_file_any_aliases=()
+# 現在のファイルで Any が実際に参照されている（コメント・文字列を除く）行番号の集合。
+# " 3 7 12 " のようにスペース区切りで保持し、ケース文で部分一致検索する。
+current_file_any_lines=" "
 violations=()
-python_any_pattern='typing[.]Any'
 # TypeScript の any は型位置（: any, ジェネリック引数 <any>, union/intersection,
-# tuple 要素）に限定して検出する。素の単語境界だけだと "any" を含む英語の
-# コメントや文字列（"works for any input" 等）を誤検知するため、型を導入する
-# 記号（: < , | & ( [）の直後という条件を必須にする。
-typescript_any_pattern='(:|<|,|\||&|\(|\[)[[:space:]]*any([^A-Za-z0-9_$]|$)'
+# tuple 要素, 型エイリアス代入 = any, 型アサーション as any）に限定して検出する。
+# 素の単語境界だけだと "any" を含む英語のコメントや文字列を誤検知するため、
+# 型を導入する記号（: < , | & ( [ =）の直後、または `as` キーワードの後という
+# 条件を必須にする。文字列・コメント自体の誤検知は後段の clean_ts_line で除去する。
+typescript_any_pattern='(:|<|,|\||&|\(|\[|=)[[:space:]]*any([^A-Za-z0-9_$]|$)|(^|[^A-Za-z0-9_$])as[[:space:]]+any([^A-Za-z0-9_$]|$)'
 diff_output=$(git diff --unified=0 --no-color "${diff_base}" HEAD -- 2>/dev/null || true)
 
 [ -z "${diff_output}" ] && exit 0
@@ -34,39 +43,27 @@ PYTHON3_BIN=""
 if command -v python3 >/dev/null 2>&1; then
   PYTHON3_BIN="python3"
 else
-  echo "any-usage-gate: WARNING: python3 が見つからないため typing.Any の直接 import 検出（複数行 import / alias 対応）を省略します。" >&2
+  echo "any-usage-gate: WARNING: python3 が見つからないため Python 側の Any 検出（typing.Any 修飾形・直接 import 経由の裸の Any）を省略します。" >&2
 fi
 
-# 対象ファイルが HEAD 時点で `from typing import ...` により Any をどの
-# ローカル名（alias 含む）に束縛しているかを AST で解決する。単一行の正規表現
-# ではなく AST を使うのは、複数行の括弧 import
-# (`from typing import (\n    Any,\n)`) を正しく扱うため。
-_PYTHON_ANY_ALIAS_RESOLVER='
-import ast
-import sys
-
-try:
-    tree = ast.parse(sys.stdin.read())
-except SyntaxError:
-    sys.exit(0)
-
-names = set()
-for node in ast.walk(tree):
-    if isinstance(node, ast.ImportFrom) and node.module == "typing":
-        for alias in node.names:
-            if alias.name == "Any":
-                names.add(alias.asname or alias.name)
-
-for name in sorted(names):
-    print(name)
-'
-
-resolve_python_any_aliases() {
+# 対象ファイルが HEAD 時点でどの行に「実際に参照される」Any を持つかを AST で
+# 解決する（.lefthook/pre-push/any_usage_python_resolver.py）。テキスト正規表現
+# ではなく AST を使うのは、コメント・docstring・文字列リテラル中の "Any"
+# （型使用ではない）を構造的に除外するため。
+resolve_python_any_usage_lines() {
   local file="$1"
   [ -z "${PYTHON3_BIN}" ] && return 0
-  # `-c` でプログラムを渡す（`- <<EOF` だと heredoc が stdin を占有し、
-  # git show の内容を sys.stdin.read() に渡せなくなるため使わない）。
-  git show "HEAD:${file}" 2>/dev/null | "${PYTHON3_BIN}" -c "${_PYTHON_ANY_ALIAS_RESOLVER}"
+  git show "HEAD:${file}" 2>/dev/null | "${PYTHON3_BIN}" "${SCRIPT_DIR}/any_usage_python_resolver.py"
+}
+
+# TypeScript の追加行からコメント（// ...）と文字列・テンプレートリテラルの
+# 中身を取り除いたものを返す（.lefthook/pre-push/any_usage_ts_line_cleaner.py）。
+# コメント・文字列内の "any" を型使用として誤検知しないための事前クリーニング
+# （正規表現マッチが疑わしい場合のみ呼ぶ）。
+clean_ts_line() {
+  local text="$1"
+  [ -z "${PYTHON3_BIN}" ] && { printf '%s' "${text}"; return 0; }
+  printf '%s' "${text}" | "${PYTHON3_BIN}" "${SCRIPT_DIR}/any_usage_ts_line_cleaner.py"
 }
 
 while IFS= read -r line; do
@@ -74,12 +71,12 @@ while IFS= read -r line; do
     "+++ b/"*)
       current_file="${line#+++ b/}"
       current_line=0
-      current_file_any_aliases=()
+      current_file_any_lines=" "
       case "${current_file}" in
         *.py)
-          while IFS= read -r alias_name; do
-            [ -n "${alias_name}" ] && current_file_any_aliases+=("${alias_name}")
-          done < <(resolve_python_any_aliases "${current_file}")
+          while IFS= read -r usage_line; do
+            [ -n "${usage_line}" ] && current_file_any_lines="${current_file_any_lines}${usage_line} "
+          done < <(resolve_python_any_usage_lines "${current_file}")
           ;;
       esac
       continue
@@ -108,20 +105,25 @@ while IFS= read -r line; do
 
   added="${line#+}"
   is_violation=0
-  if [[ "${added}" =~ ${python_any_pattern} ]]; then
-    is_violation=1
-  elif [[ "${current_file}" == *.py ]] && [ "${#current_file_any_aliases[@]}" -gt 0 ]; then
-    for alias_name in "${current_file_any_aliases[@]}"; do
-      bare_alias_pattern="(^|[^A-Za-z0-9_.])${alias_name}([^A-Za-z0-9_]|\$)"
-      if [[ "${added}" =~ ${bare_alias_pattern} ]]; then
-        is_violation=1
-        break
+  case "${current_file}" in
+    *.py)
+      case "${current_file_any_lines}" in
+        *" ${current_line} "*)
+          is_violation=1
+          ;;
+      esac
+      ;;
+    *.ts|*.tsx)
+      if [[ "${added}" =~ ${typescript_any_pattern} ]]; then
+        # コメント・文字列内の any / typing.Any 的な言及を除外するため、
+        # クリーニング後に再判定してから確定する。
+        cleaned_added=$(clean_ts_line "${added}")
+        if [[ "${cleaned_added}" =~ ${typescript_any_pattern} ]]; then
+          is_violation=1
+        fi
       fi
-    done
-  fi
-  if [ "${is_violation}" -eq 0 ] && [[ "${added}" =~ ${typescript_any_pattern} ]]; then
-    is_violation=1
-  fi
+      ;;
+  esac
   if [ "${is_violation}" -eq 1 ]; then
     violations+=("${current_file}:${current_line}: ${added}")
   fi

@@ -423,6 +423,130 @@ def test_any_usage_gate_ignores_prose_any_in_comments_and_strings(tmp_path: Path
     assert result.stderr == ""
 
 
+def test_any_usage_gate_fails_for_typescript_type_alias_assignment(tmp_path: Path) -> None:
+    """`type X = any;` のような型エイリアス代入も検出する。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(repo, "extensions/demo/lib/types.ts", "type Payload = " + "any;\n")
+    _commit_all(repo, "add type alias any")
+
+    result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
+
+    assert result.returncode == 1
+    assert "any-usage-gate: ERROR" in result.stderr
+    assert "extensions/demo/lib/types.ts:1" in result.stderr
+
+
+def test_any_usage_gate_fails_for_typescript_as_any_assertion(tmp_path: Path) -> None:
+    """`value as any` のような型アサーションも検出する。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(
+        repo,
+        "extensions/demo/lib/helper.ts",
+        "export const cast = (value: unknown) => value " + "as any;\n",
+    )
+    _commit_all(repo, "add as any assertion")
+
+    result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
+
+    assert result.returncode == 1
+    assert "any-usage-gate: ERROR" in result.stderr
+    assert "extensions/demo/lib/helper.ts:1" in result.stderr
+
+
+def test_any_usage_gate_ignores_typescript_comment_shaped_like_type_annotation(tmp_path: Path) -> None:
+    """コメント内に型注釈っぽい表記（コロン + any）があっても実コードでなければ無視する。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(
+        repo,
+        "extensions/demo/lib/helper.ts",
+        "// Type" + ": any means the field accepts everything\nexport const mode = 'demo';\n",
+    )
+    _commit_all(repo, "add comment shaped like type annotation")
+
+    result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+
+
+def test_any_usage_gate_ignores_typescript_string_shaped_like_type_annotation(tmp_path: Path) -> None:
+    """文字列リテラル内に型注釈っぽい表記（コロン + any）があっても実コードでなければ無視する。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(
+        repo,
+        "extensions/demo/lib/helper.ts",
+        "export const description = 'this field" + ": any value is accepted';\n",
+    )
+    _commit_all(repo, "add string literal shaped like type annotation")
+
+    result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+
+
+def test_any_usage_gate_ignores_python_comment_mentioning_any_when_file_has_direct_import(
+    tmp_path: Path,
+) -> None:
+    """direct import 済みファイルでも、コメント中の Any 言及（実使用ではない）は無視する。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(
+        repo,
+        "src/youtube_automation/broad_type.py",
+        "from typing import "
+        + "Any\n\n# this module intentionally avoids using "
+        + "Any anywhere\ndef f() -> str:\n    return 'ok'\n",
+    )
+    _commit_all(repo, "add comment mentioning any without real usage")
+
+    result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+
+
+def test_any_usage_gate_ignores_python_docstring_mentioning_any_when_file_has_direct_import(
+    tmp_path: Path,
+) -> None:
+    """direct import 済みファイルでも、docstring 中の Any 言及（実使用ではない）は無視する。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(
+        repo,
+        "src/youtube_automation/broad_type.py",
+        "from typing import "
+        + 'Any\n\n\ndef f() -> str:\n    """Docstring that mentions '
+        + 'Any as a concept, not as a real annotation."""\n    return \'ok\'\n',
+    )
+    _commit_all(repo, "add docstring mentioning any without real usage")
+
+    result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+
+
+def test_any_usage_gate_respects_pre_push_diff_base_override(tmp_path: Path) -> None:
+    """PRE_PUSH_DIFF_BASE が設定済みなら、子ゲートは自前で merge-base を再解決しない。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(
+        repo,
+        "extensions/demo/lib/types.ts",
+        "export const passthrough = (value: " + "any) => value;\n",
+    )
+    _commit_all(repo, "add broad ts type")
+
+    result = _run_gate(
+        repo,
+        _ANY_USAGE_GATE_PATH,
+        extra_env={"PRE_PUSH_DIFF_BASE": "HEAD"},
+    )
+
+    # PRE_PUSH_DIFF_BASE=HEAD を渡すと diff 対象が空になり、
+    # 自前解決（origin/main との merge-base）より優先されたことが分かる。
+    assert result.returncode == 0
+    assert result.stderr == ""
+
+
 def test_development_docs_describe_review_gates_and_skip_contract() -> None:
     text = _DEVELOPMENT_DOC_PATH.read_text(encoding="utf-8")
 
