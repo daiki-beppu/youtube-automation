@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(suno-lyric)`: `/suno-lyric` がマルチ曲 collection で `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` を全曲一言一句同一のまま出力するのを防ぐため、Workflow に「これらの section も曲ごとの scene / persona で書き分ける」指示を明記し、Validation に曲間セクション重複のセルフチェックと書き分け直し手順を追加。`suno-lyrics.json` の曲間重複を機械検出する `references/check_lyric_duplication.py` を新設（重複検出時は exit 1、#1445）
 - `fix(doctor)`: `ttp_wf_new_readiness` の video_analysis 要件が benchmark top 5 のライブ配信（`duration_iso == "P0D"`、Gemini 取り込み不可で解析不能）により恒久的に充足不能になる問題を修正。live は期待集合から除外して次点 VOD を繰り上げ、VOD が不足する場合は母数を縮小し、除外時は message に「live 配信 N 本を除外」を明示する。`yt-video-analyze --source benchmark` も同じ選定で live をスキップして次点 VOD を解析する（#1462）
 - `fix(hooks)`: oxlint.config.ts / oxfmt.config.ts の `ignorePatterns` 対象パス（`examples/**` `docs/**` `config/**` など）のみを変更した commit で lefthook pre-commit の oxlint / oxfmt が「対象ファイルなし」を non-zero exit で返し必ず失敗する問題（#1428 の同型）を修正。`lefthook.yml` の両コマンドに `--no-error-on-unmatched-pattern` を追加し、対象 0 件を成功として扱うようにした（ignorePatterns のパスを exclude へ列挙する二重管理は回避、#1452）
+- `fix(videoup)`: `generate_videos.sh` の `build_effect_filter()` で `VIDEOUP_EFFECT=particles` / `bokeh` を指定すると出力が緑一色または黒一色になる問題を修正。原因は 2 点あり、(1) `geq=lum='...'` で `cb`/`cr`（色差）を省略すると環境によってデフォルト値が中央値 128 ではなく 0 になり YUV→RGB 変換で緑被りが発生する、(2) `geq` の直前が `format=yuv420p`（アルファプレーン無し）のままだと `a=` の不透明度式が無視され常時アルファ=255（完全不透明）になり、エフェクトレイヤーが背景を完全に覆い隠して黒一色化する。`gradient` エフェクトは元々 `geq` 直前に `format=yuva420p` を明示していたためこの問題を踏んでいなかった。`particles` / `bokeh` の両方で `geq=` に `cb=128:cr=128` を追加し、`noise=...` の後・`geq=...` の前に `format=yuva420p` を挿入して修正した
+
+### Migration
+
+所要時間の目安: 0〜2 分
+
+local fix 衝突注意:
+- videoup: `generate_videos.sh` の `build_effect_filter()`（`particles` / `bokeh`）をこのバグの回避のためローカルパッチ済みの下流リポジトリは、`yt-skills sync` 取り込み後にローカルパッチを外すこと（残したままだと二重適用にはならないが、次回 upstream 側の当該箇所の変更が sync で上書きされずローカル差分として残り続ける）。取り込み後は `VIDEOUP_EFFECT=particles` / `bokeh` で一度動画を生成し、緑/黒一色になっていないか確認する。
+
+サマリ:
+
+- `particles` / `bokeh` エフェクトが緑一色・黒一色になる重大バグを修正した。エラーなく「生成完了」と表示されるため気づきにくく、該当エフェクトを使っている下流チャンネルは取り込み後に出力確認を推奨する。
 
 ## [5.5.15] - 2026-07-02
 

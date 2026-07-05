@@ -265,7 +265,8 @@ build_effect_filter() {
             echo "[${input_label}]format=yuv420p,setsar=1[bg];\
 color=c=black:s=1920x2160:r=24:d=1,format=yuv420p,\
 noise=alls=80:allf=t+u,\
-geq=lum='if(gt(lum(X,Y),230),255,0)':a='if(gt(lum(X,Y),230),${EFFECT_ALPHA}*255,0)',\
+format=yuva420p,\
+geq=lum='if(gt(lum(X,Y),230),255,0)':cb=128:cr=128:a='if(gt(lum(X,Y),230),${EFFECT_ALPHA}*255,0)',\
 loop=loop=-1:size=1:start=0,\
 crop=1920:1080:0:'mod(t*30,1080)'[fx];\
 [bg][fx]overlay=0:0:format=auto,format=yuv420p[vout]"
@@ -277,7 +278,8 @@ crop=1920:1080:0:'mod(t*30,1080)'[fx];\
             echo "[${input_label}]format=yuv420p,setsar=1[bg];\
 color=c=0xffe8b0:s=240x135:r=24:d=1,format=yuv420p,\
 noise=alls=100:allf=t+u,\
-geq=lum='if(gt(lum(X,Y),240),255,0)':a='if(gt(lum(X,Y),240),${EFFECT_ALPHA}*255,0)',\
+format=yuva420p,\
+geq=lum='if(gt(lum(X,Y),240),255,0)':cb=128:cr=128:a='if(gt(lum(X,Y),240),${EFFECT_ALPHA}*255,0)',\
 loop=loop=-1:size=1:start=0,\
 scale=1920:1080:flags=lanczos,\
 gblur=sigma=18[fx];\
