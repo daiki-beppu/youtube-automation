@@ -16,6 +16,9 @@ from youtube_automation.utils.descriptions_md import (
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.preflight_checks import check_title_duplicate_warnings
 
+# YouTube タイトル上限（codepoint）。agents/_preflight.py の upload 直前チェックと同値。
+YOUTUBE_TITLE_MAX_CODEPOINTS = 100
+
 
 def extract_section(text: str, header: str) -> str | None:
     return extract_descriptions_md_section(text, header)
@@ -82,6 +85,13 @@ def main(argv: list[str] | None = None) -> int:
         title = read_descriptions_title(collection_dir)
     else:
         raise SystemExit("collection or --title is required")
+
+    # YouTube のタイトル上限（100 codepoint）は upload preflight で必ず fail するため、
+    # duplicate warning より前に検出して --strict に関係なくエラー終了する。
+    if len(title) > YOUTUBE_TITLE_MAX_CODEPOINTS:
+        print(f"❌ タイトルが {len(title)} codepoint。YouTube 制限 {YOUTUBE_TITLE_MAX_CODEPOINTS} を超過。\n  {title}")
+        print("→ RHS の修飾語を削って短縮してください（用途語・尺表記・テーマ語は残す）。")
+        return 1
 
     try:
         config = load_config()

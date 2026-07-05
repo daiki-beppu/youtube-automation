@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(video-description)`: `yt-title-duplicate-check` に YouTube タイトル上限（100 codepoint）の前倒しチェックを追加した。超過時は `--strict` に関係なく exit 1 で報告し、`/video-description` の品質チェックにも「100 codepoint 以内」を明記。upload preflight（`agents/_preflight.py`）まで持ち越すと quota と時間を浪費するため、タイトル案の保存前に検出する（下流チャンネル実例: 104 codepoint でアップロード時に fail、2026-07-05）
+
 ### Changed
 
 - `feat(takt)`: lite workflow に提出前セルフ監査を組み込んだ（#1508）。過去の review-takt-default 指摘 371 件（183 レビュー）の全件分類から頻出 8 パターンを抽出した `.takt/facets/policies/pre-review-checklist.md` を新設し、`implement` step（自己監査 + 受入条件充足表の出力）と `review` step（独立照合、スコープ外の改善提案は verdict に影響させない）に注入。あわせて lite の `plan` step に `instruction: plan` を追加し、リポジトリ強化版 plan instruction（`.takt/facets/instructions/plan.md`）が lite でも注入されるようにした。運用・更新手順は `docs/takt-operations.md` の「提出前セルフ監査」節を参照
