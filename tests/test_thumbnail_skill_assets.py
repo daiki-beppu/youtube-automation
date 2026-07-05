@@ -127,6 +127,21 @@ def test_ttp_preflight_checklist_covers_required_operational_checks() -> None:
     assert "承認**前**" in checklist_block
 
 
+def test_thumbnail_skill_isolates_private_repo_reference_as_operator_note() -> None:
+    skill = _read_thumbnail_skill()
+    rjn_lines = [line for line in skill.splitlines() if "daiki-beppu/rjn" in line]
+
+    assert "実装事例として" not in skill
+    assert rjn_lines == [
+        "> **参考（オペレーター向け・実行時は無視してよい）**: `daiki-beppu/rjn` の `config/skills/thumbnail.yaml` が参考になる（jazzgak チャンネルの 5 サムネを `color_themes.<theme>.reference_image` で多軸切替）。private リポジトリのため下流リポジトリの実行者はアクセスできない。取得を試みないこと。"
+    ]
+    note = rjn_lines[0]
+    assert note.startswith("> ")
+    assert "実行時は無視" in note
+    assert "取得を試みないこと" in note
+    assert "color_themes.<theme>.reference_image" in note
+
+
 def test_thumbnail_skill_documents_thumbnail_compare_and_alignment_check_roles() -> None:
     skill = _read_thumbnail_skill()
     quality_idx = skill.find("## 品質チェック")
