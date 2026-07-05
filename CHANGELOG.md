@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `docs(skills)`: takt 各 step の固定コンテキスト削減のため全スキルの frontmatter description を短縮（合計 22.4KB → 10.1KB。同義トリガー語の羅列と処理手順の重複を削り、スキル間 dispatch の境界語と機械検証キーワードは維持）。あわせて CLAUDE.md（18.9KB → 7.4KB）/ AGENTS.md（14.6KB → 2.2KB、CLAUDE.md への一元化）をスリム化し、詳細を `docs/architecture.md` / `docs/development.md` / `docs/takt-operations.md` へ移設。`.takt/config.yaml` に observability（usage_events_phase）を有効化し、小〜中規模 issue 用の軽量 3-step workflow `.takt/workflows/lite.yaml` を追加（使い分け基準は `docs/takt-operations.md`）。さらに takt 内部実装（phase 分割実行）の調査に基づき、lite の review step を全 step codex 方針に合わせて codex 化し、`structured_output`（`.takt/schemas/review-verdict.json`）+ deterministic `when:` ルールで状態判定 phase の LLM 呼び出しを排除。phase コストモデルと workflow 設計指針を `docs/takt-operations.md` に文書化
+- `chore(distrokid-helper)`: manifest / package の shell を suno-helper 基準に揃えた（ADR-0016、#1359）。manifest 権限を `lib/manifest.ts` の `MANIFEST_PERMISSIONS` / `MANIFEST_HOST_PERMISSIONS` に SSOT 化して `wxt.config.ts` から参照し、`tests/manifest.test.ts` と CI（extensions.yml）の生成 manifest 検査で drift（広域権限や suno-helper 専用権限の混入、distrokid.com 以外の host 追加）を機械検知するようにした。あわせて dependencies の caret 指定を既存解決値へ exact pin（`@webext-core/messaging` 2.3.0 / `@wxt-dev/storage` 1.2.8 / `react` `react-dom` 19.2.7）し、`pnpm.onlyBuiltDependencies: ["esbuild"]` を追加
 
 ### Removed
 
@@ -32,7 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `chore(distrokid-helper)`: manifest / package の shell を suno-helper 基準に揃えた（ADR-0016、#1359）。manifest 権限を `lib/manifest.ts` の `MANIFEST_PERMISSIONS` / `MANIFEST_HOST_PERMISSIONS` に SSOT 化して `wxt.config.ts` から参照し、`tests/manifest.test.ts` と CI（extensions.yml）の生成 manifest 検査で drift（広域権限や suno-helper 専用権限の混入、distrokid.com 以外の host 追加）を機械検知するようにした。あわせて dependencies の caret 指定を既存解決値へ exact pin（`@webext-core/messaging` 2.3.0 / `@wxt-dev/storage` 1.2.8 / `react` `react-dom` 19.2.7）し、`pnpm.onlyBuiltDependencies: ["esbuild"]` を追加
 - `refactor(suno-helper)`: サーバー側の旧 `POST /suno/playlists` エンドポイントと `suno-playlists.json` 向け URL マッピング関数を撤去し、playlist URL 記録を `POST /collections/<id>/downloaded` に一本化（#1261）
 - `feat(suno-helper)`: `suno-prompts.json` の `duration_filter` envelope を shared API で型付けし、省略時は 60〜300 秒の既定値へ正規化するようにした（#1259）
 - `docs(skills)`: `/audience-persona` を `/audience-persona-design` に改名し、`/viewer-voice` と `/viewing-scene` を束ねて第一ペルソナ 1 人へ収束させる設計フローに更新（#1371）
