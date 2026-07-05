@@ -279,7 +279,7 @@ crop=1920:1080:0:'mod(t*30,1080)'[fx];\
 color=c=0xffe8b0:s=240x135:r=24:d=1,format=yuv420p,\
 noise=alls=100:allf=t+u,\
 format=yuva420p,\
-geq=lum='if(gt(lum(X,Y),240),255,0)':cb=128:cr=128:a='if(gt(lum(X,Y),240),${EFFECT_ALPHA}*255,0)',\
+geq=lum='if(gt(lum(X,Y),240),255,0)':cb='cb(X,Y)':cr='cr(X,Y)':a='if(gt(lum(X,Y),240),${EFFECT_ALPHA}*255,0)',\
 loop=loop=-1:size=1:start=0,\
 scale=1920:1080:flags=lanczos,\
 gblur=sigma=18[fx];\
@@ -726,7 +726,8 @@ else
         else
             FX_BAKED="${ASSETS_DIR}/fx_baked.mp4"
             FX_STAMP="${ASSETS_DIR}/fx_baked.params"
-            want_stamp="${EFFECT}|${EFFECT_INTENSITY}|${bake_len}|$(stat_mtime "$bake_src_file")|${LOOP_MAX_BITRATE}"
+            bake_filter_stamp="$(printf '%s' "$bake_filter" | cksum | awk '{print $1 ":" $2}')"
+            want_stamp="${EFFECT}|${EFFECT_INTENSITY}|${bake_len}|$(stat_mtime "$bake_src_file")|${LOOP_MAX_BITRATE}|filter:${bake_filter_stamp}"
             have_stamp=""
             [[ -f "$FX_STAMP" ]] && have_stamp="$(cat "$FX_STAMP" 2>/dev/null)"
             if [[ -f "$FX_BAKED" && "$have_stamp" == "$want_stamp" ]]; then
