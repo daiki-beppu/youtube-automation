@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import shutil
 import tempfile
@@ -12,6 +11,7 @@ from pathlib import Path, PurePosixPath
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.suno_artifact_contracts import DOCUMENTATION_DIRNAME, SUNO_PROMPTS_JSON_FILENAME
 from youtube_automation.utils.suno_downloaded_payload import DownloadedArtifactError
+from youtube_automation.utils.suno_prompts_json import read_suno_prompt_entries
 
 _AUDIO_EXTENSIONS = frozenset({".mp3", ".m4a", ".wav"})
 _ZIP_MAX_TOTAL_SIZE = 2 * 1024 * 1024 * 1024
@@ -130,12 +130,10 @@ def _build_name_to_index(coll_dir: Path) -> dict[str, int]:
     if not prompts_path.is_file():
         return name_to_index
     try:
-        prompts = json.loads(prompts_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
+        prompts = read_suno_prompt_entries(coll_dir)
+    except ValueError as exc:
         print(f"[yt-collection-serve] invalid {SUNO_PROMPTS_JSON_FILENAME}: {prompts_path}: {exc}")
         raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}") from exc
-    if not isinstance(prompts, list):
-        raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: root must be a list")
     for i, entry in enumerate(prompts, 1):
         if not isinstance(entry, dict):
             raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: entry {i} must be an object")

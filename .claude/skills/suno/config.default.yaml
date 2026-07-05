@@ -91,6 +91,12 @@ style_strategy: single
 # - pattern 概念は廃止: 各 entry は独立した情景フレーズで設計する (旧 4 パターン × 3 回生成は使わない)。
 tracks_per_collection: 20
 
+# Suno helper の playlist 採用判定に使う collection 単位 duration guard（秒）。
+# 生成された clip がこの範囲外なら playlist 追加対象から除外される。
+duration_filter:
+  min_sec: 60
+  max_sec: 300
+
 # ボーカルモード専用: パターン運用方針 (インストモードでは無視される)
 # - pattern_strategy: パターン運用の戦略名 (`mixed` = N パターンで起伏を作る / `single` = 1 パターン統合)。
 # - tracks_per_pattern: 1 パターンあたりの再生成回数 (Suno は 1 リクエスト = 2 曲生成)。

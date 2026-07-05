@@ -1975,4 +1975,113 @@ describe("readSelectedClipIds: 手動選択済み clip ID の採用", () => {
     await vi.runAllTimersAsync();
     await expectation;
   });
+
+  it("Given ID 解決不能な選択済み row When skipUnresolvedIds なし Then throw / あり Then skip して解決分のみ返す (#1411)", async () => {
+    const idA = "dddddddd-1111-2222-3333-444444444444";
+    addClipRow({ songId: idA, idSource: "image", selectLabel: "Deselect clip" });
+    // songId 省略 = data 属性 / song href / UUID img のいずれも持たない ID 劣化 row
+    addClipRow({ selectLabel: "Deselect clip" });
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
+
+    const failing = readSelectedClipIds({ isAborted: () => false, renderWaitMs: 10 });
+    const failExpectation = expect(failing).rejects.toThrow("選択中 clip の ID を解決できません");
+    await vi.runAllTimersAsync();
+    await failExpectation;
+
+    const pending = readSelectedClipIds({
+      isAborted: () => false,
+      renderWaitMs: 10,
+      skipUnresolvedIds: true,
+    });
+    await vi.runAllTimersAsync();
+    await expect(pending).resolves.toEqual([idA]);
+  });
+
+  it("Given maxScanPasses=1 When readSelectedClipIds Then 全 3 pass ではなく 1 pass で走査を終える (#1411)", async () => {
+    const idA = "eeeeeeee-1111-2222-3333-444444444444";
+    addClipRow({ songId: idA, idSource: "image", selectLabel: "Deselect clip" });
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
+    let scrollEvents = 0;
+    scroller.addEventListener("scroll", () => {
+      scrollEvents += 1;
+    });
+
+    // expectedClipCount 無し（ガード用途）: 既定は 3 pass × (top reset + step) = 6 dispatch
+    // + 走査後の restoreClipListHead で 1 dispatch = 計 7
+    const defaultRun = readSelectedClipIds({ isAborted: () => false, renderWaitMs: 10 });
+    await vi.runAllTimersAsync();
+    await expect(defaultRun).resolves.toEqual([idA]);
+    const defaultEvents = scrollEvents;
+
+    scrollEvents = 0;
+    const limitedRun = readSelectedClipIds({
+      isAborted: () => false,
+      renderWaitMs: 10,
+      maxScanPasses: 1,
+    });
+    await vi.runAllTimersAsync();
+    await expect(limitedRun).resolves.toEqual([idA]);
+
+    expect(defaultEvents).toBe(7);
+    expect(scrollEvents).toBe(3); // 1 pass × 2 + restore 1
+  });
+
+  it("Given stopAboveCount 超過 When readSelectedClipIds Then 走査を即打ち切って超過分を返す (#1411)", async () => {
+    const ids = [
+      "f1f1f1f1-1111-2222-3333-444444444444",
+      "f2f2f2f2-1111-2222-3333-444444444444",
+      "f3f3f3f3-1111-2222-3333-444444444444",
+    ];
+    for (const id of ids) {
+      addClipRow({ songId: id, idSource: "image", selectLabel: "Deselect clip" });
+    }
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
+    let scrollEvents = 0;
+    scroller.addEventListener("scroll", () => {
+      scrollEvents += 1;
+    });
+
+    const pending = readSelectedClipIds({
+      isAborted: () => false,
+      renderWaitMs: 10,
+      stopAboveCount: 1,
+    });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    // 最初の viewport 走査（top reset の 1 dispatch）で 3 件収集 → stopAboveCount=1 を超過
+    // → 追加スクロールせず打ち切り（+ restoreClipListHead の 1 dispatch のみ）
+    expect(result).toEqual(ids);
+    expect(scrollEvents).toBe(2);
+  });
 });

@@ -6,6 +6,7 @@
 #
 # 必須項目（空のまま channel-setup を抜けないこと）:
 #   - image_generation.gemini.reference_images.default
+#   - image_generation.gemini.reference_images.channel_branding
 #   - image_generation.gemini.brand_background
 #   - image_generation.gemini.composition_rules.* （channel-direction で確定したもの）
 #
@@ -40,6 +41,14 @@ image_generation:
         - "{{REFERENCE_IMAGE_1}}"
         - "{{REFERENCE_IMAGE_2}}"
         - "{{REFERENCE_IMAGE_3}}"
+      channel_branding:
+        snapshot: docs/channel/competitor-branding-snapshot.json
+        icon_references:
+          - "{{CHANNEL_BRANDING_ICON_REFERENCE}}"
+        banner_references:
+          - "{{CHANNEL_BRANDING_BANNER_REFERENCE}}"
+        output_icon: branding/icon.png
+        output_banner: branding/banner.png
       path_base: channel_dir
       notes: "{{TTP_NOTES}}"
 

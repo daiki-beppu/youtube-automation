@@ -28,13 +28,18 @@ interface BridgeMessage {
 function isObservedClipArray(value: unknown): value is ObservedClip[] {
   return (
     Array.isArray(value) &&
-    value.every(
-      (item) =>
-        typeof item === "object" &&
-        item !== null &&
-        typeof (item as { id?: unknown }).id === "string" &&
-        typeof (item as { status?: unknown }).status === "string",
-    )
+    value.every((item) => {
+      if (typeof item !== "object" || item === null) {
+        return false;
+      }
+      const clip = item as { duration?: unknown; id?: unknown; status?: unknown };
+      return (
+        typeof clip.id === "string" &&
+        typeof clip.status === "string" &&
+        (clip.duration === undefined ||
+          (typeof clip.duration === "number" && Number.isFinite(clip.duration) && clip.duration >= 0))
+      );
+    })
   );
 }
 
@@ -53,7 +58,11 @@ export function attachBridgeListener(tracker: ClipTracker): () => void {
     }
     if (data.type === BRIDGE_MSG.GENERATE_CLIPS) {
       tracker.registerSubmitted(data.clips);
-    } else if (data.type === BRIDGE_MSG.FEED_CLIPS || data.type === BRIDGE_MSG.FEED_POLL_RESPONSE) {
+    } else if (
+      data.type === BRIDGE_MSG.FEED_CLIPS ||
+      data.type === BRIDGE_MSG.FEED_V3_POLL_RESPONSE ||
+      data.type === BRIDGE_MSG.FEED_POLL_RESPONSE
+    ) {
       // active poll の応答も観測の一種として tracker に合流させる（requestId の突合は poller 側）。
       tracker.applyFeedStatuses(data.clips);
     }
@@ -88,7 +97,7 @@ export function requestFeedPoll(
       if (
         !data ||
         data.source !== BRIDGE_SOURCE ||
-        data.type !== BRIDGE_MSG.FEED_POLL_RESPONSE ||
+        data.type !== BRIDGE_MSG.FEED_V3_POLL_RESPONSE ||
         data.requestId !== requestId
       ) {
         return;
@@ -98,7 +107,7 @@ export function requestFeedPoll(
     const timer = setTimeout(() => cleanup(null), timeoutMs);
     window.addEventListener("message", handler);
     window.postMessage(
-      { source: BRIDGE_SOURCE, type: BRIDGE_MSG.FEED_POLL_REQUEST, requestId, ids },
+      { source: BRIDGE_SOURCE, type: BRIDGE_MSG.FEED_V3_POLL_REQUEST, requestId, ids },
       window.location.origin,
     );
   });

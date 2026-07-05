@@ -21,6 +21,7 @@ const fixtureRel = "packages/mcp/__fixtures__/imports-interactive.ts";
 const mcpDir = join(repoRoot, "packages", "mcp");
 const fixtureDir = join(mcpDir, "__fixtures__");
 const fixtureFile = join(repoRoot, fixtureRel);
+const oxlintBin = join(repoRoot, "node_modules", ".bin", "oxlint");
 
 // Snapshot whether a real packages/mcp already exists BEFORE the test runs. The
 // cleanup must only remove what the test materialized: if the package is absent
@@ -52,7 +53,7 @@ test("oxlint errors when a packages/mcp file imports the interactive OAuth servi
 
   // When linting just that file with the repo oxlint config (auto-discovered
   // from the repo root cwd)
-  const proc = Bun.spawnSync(["bun", "x", "oxlint", fixtureRel], {
+  const proc = Bun.spawnSync([oxlintBin, fixtureRel], {
     cwd: repoRoot,
   });
 

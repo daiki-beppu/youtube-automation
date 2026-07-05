@@ -18,7 +18,7 @@ output "env_vars" {
 }
 
 output "oauth_console_url" {
-  description = "OAuth クライアント ID を作成する Console URL (手動操作が必要な唯一のステップ)"
+  description = "Google Auth Platform の Branding / Audience / Clients 手動設定用 Console URL"
   value       = "https://console.cloud.google.com/apis/credentials?project=${local.project_id}"
 }
 

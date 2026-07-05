@@ -1,6 +1,6 @@
 ---
 name: masterup
-description: "Use when /suno で生成したプロンプトを Suno UI で曲にしたあと、そのプレイリストを DL + クロスフェードマスター化したいとき。前工程: /suno（プロンプト生成 → Suno UI で人手楽曲生成）。プレイリスト URL を指定して MP3 一括 DL + マスター音源を自動生成（次工程: /videoup）。Lyria チャンネルでは /lyria が自動で音源を出力するため本スキルは不要"
+description: "Use when Suno UI で生成した曲のプレイリストを一括 DL + マスター化するとき（前工程 /suno、次工程 /videoup）。Lyria チャンネルでは不要"
 ---
 
 ## Overview
@@ -322,8 +322,9 @@ yt-suno-select-tracks <collection-path>
    - `pair_selection.min_song_sec` 未満の極端に短い曲を除外
    - `pair_selection.max_song_sec` 超過の極端に長い曲を除外
    - 既定は `45 <= duration <= 300` 秒
+   - `max_song_sec: 300` は 5 分超の崩れた Suno 生成を混ぜないための既定値。チャンネル側の `config/skills/masterup.yaml` で `pair_selection.max_song_sec` を明示的に上書きできる
    - 除外曲は `pair_selection.out_of_range_action` に従い、既定では `assets/stock/music/b-side/` へ退避する
-   - 除外後にある prompt の採用候補が 0 件になった場合は fail-loud。`/suno-helper` で追補生成してから再実行する
+   - 除外後にある prompt の採用候補が 0 件になった場合は fail-loud。基本は `/suno-helper` で追補生成してから再実行する
 2. **歌詞あり（vocal / lyrics あり）**:
    - `suno-prompts.json` の `lyrics` に実歌詞がある entry は、同じ prompt から生成された clip 群のうち 1 曲だけを winner として採用
    - winner は `02-Individual-music/<NN>-<title>.<ext>` に rename
@@ -334,6 +335,14 @@ yt-suno-select-tracks <collection-path>
    - 尺フィルタで落ちた clip だけ除外し、残った clip は `01a-...` / `01b-...` のまま `yt-generate-master` に渡す
 
 `lyrics` が `[Instrumental]` / `[Extended Outro]` などタグだけの場合は歌詞なしとして扱う。選別ログは `pair_selection.selection_log_path`（既定 `01-master/.selection.log`）に残す。
+
+**max_song_sec 超過だけで全落ちした場合の復旧**:
+
+```bash
+yt-suno-select-tracks <collection-path> --allow-best-effort-over-max
+```
+
+このフラグは、ある prompt の全候補が `pair_selection.max_song_sec` 超過だけで落ちた場合に限り、最短の候補を 1 曲だけ警告付きで例外採用する。短すぎる音源（`min_song_sec` 未満）や probe 失敗は壊れた生成として引き続き fail-loud。例外採用した候補は `01-master/.selection.log` の `[exceptions_over_limit]` と `workflow-state.json::music_pair_selection.exceptions_over_limit` に、対象ファイル・duration・理由付きで記録される。
 
 安全契約:
 

@@ -1,5 +1,9 @@
 # 開発ロードマップ: cutover 中心の 4 フェーズ計画
 
+## Status
+
+accepted (2026-06-25)。実装は `feat/ts-rewrite` 上で進行中（cutover #790 で main へ反映予定）。
+
 ## Context
 
 Python v5.5.11 が main で運用中、`feat/ts-rewrite` で MCP tool 中心の 0 ベース TS 再設計が並走している (ADR-0001, 0002, 0007)。外部ユーザー（数十人規模のコミュニティ）が `uv add git+https://` で Python 版を導入し、Claude Code の skills 経由で運用している。cutover のタイミング、移行戦略、並走レーンの優先順位を決める必要がある。
@@ -49,6 +53,14 @@ cutover 後:
 
 - コード実装は AI agent（takt + Claude/Codex）が行う
 - 人間の役割はレビュー + GO/NO-GO 判断 + 外部ユーザーへの周知
+
+## Amendment: フルスコープ確定 + cutover を 2026-09 へ変更 (2026-07-03 追記)
+
+cutover スコープと epic #727 の乖離（MCP server #843 が「後続 epic へ deferred」、knowledge codec / Remotion / libSQL がマイルストーンゲート外）がグリルセッションで判明し、再決定した:
+
+1. **cutover スコープは本 ADR の記載どおりフルスコープで確定** — core / cli / MCP server / knowledge codec 5 本 / Remotion renderer / libSQL local store / 移行ガイドのすべてを `tayk@0.1.0` に含む。乖離の訂正は epic #727 側で行う（#843 の deferral 解除、codec / Remotion / libSQL のゲート組み込み）
+2. **cutover は 2026-09 に変更**（フルスコープの残作業量を反映）。Considered Options の「2026-09（却下）」は本追記が上書きする。新タイムライン: **07** = M1 完了（7/24 再交渉トリガー維持）+ codec / MCP tool surface 設計、**08** = dogfood + M2 消化 + MCP / codec / Remotion / libSQL 実装、**09** = dogfood 完走判定 + cutover + `tayk@0.1.0` publish、**10** = 外部ユーザー移行サポート
+3. Python 版の最終 bug fix 期間は 2026-08 末まで延長（B レーンのコスト継続を受容）。移行告知 `docs/migration/python-to-tayk.md` のタイムラインも同日付で更新済み
 
 ## Considered Options
 

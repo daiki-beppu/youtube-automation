@@ -1,0 +1,61 @@
+# 小〜中規模 issue 用の軽量 workflow（トークン消費削減）。
+# 使い分け基準は docs/takt-operations.md 参照。セキュリティ・認証・アップロード系や
+# スキル横断の変更は組み込み default を使うこと。
+#
+# トークン設計メモ（docs/takt-operations.md の「トークン消費の内部構造」参照）:
+# - plan / implement は rules が 1 個のため状態判定 (Phase 3) の LLM 呼び出しが発生しない
+# - review は structured_output + deterministic `when:` により Phase 3 を完全にスキップする
+# - 分岐を増やすときは自然言語 condition ではなく `when:` 式（structured.* 参照）を使うこと
+# - implement / review の policy: pre-review-checklist（約 5KB）は、レビュー指摘 371 件の
+#   頻出パターン監査で post-hoc レビューの REJECT 再走（1 回 ~15M tokens）を減らすための
+#   意図的なコスト。経緯は issue #1508
+name: lite
+max_steps: 8
+steps:
+  - name: plan
+    persona: planner
+    provider: codex
+    edit: false
+    instruction: plan
+    rules:
+      - condition: "実装計画が確定した"
+        next: implement
+  - name: implement
+    persona: coder
+    provider: codex
+    edit: true
+    pass_previous_response: true
+    policy: pre-review-checklist
+    instruction: |
+      計画に従って実装・テスト追加・テスト実行を完了させたあと、ポリシー
+      「提出前セルフ監査チェックリスト」の 8 項目を根拠（ファイル:行）付きで自己監査すること。
+
+      - 項目 1 の受入条件充足表（要件の引用 / 対応する実装行 / 対応するテスト）を応答の末尾に必ず含める
+      - 未充足・未照合の項目が残る場合は完了を宣言せず、解消してから完了すること
+    rules:
+      - condition: "実装・テスト・セルフ監査 8 項目の照合がすべて完了した"
+        next: review
+  - name: review
+    persona: architecture-reviewer
+    provider: codex
+    edit: false
+    pass_previous_response: true
+    policy: pre-review-checklist
+    instruction: |
+      実装者の自己監査を鵜呑みにせず、ポリシー「提出前セルフ監査チェックリスト」の
+      8 項目を diff と実コードに対して独立に照合すること。
+
+      - 各項目の判定に根拠（ファイル:行）を付ける
+      - 8 項目すべて pass の場合のみ verdict を approved にする
+      - 1 項目でも fail があれば needs_fix とし、feedback に「違反項目番号 / 該当箇所 / 必要な修正」を列挙する
+      - チェックリスト外の指摘は、issue スコープ内の欠陥に限り needs_fix の理由にできる。
+        スコープ外の改善提案は feedback 末尾に follow-up 候補として記載し、verdict の判定材料にしない
+    structured_output:
+      schema_ref: review-verdict
+    rules:
+      - when: structured.review.verdict == "approved"
+        next: COMPLETE
+      - when: structured.review.verdict == "needs_fix"
+        next: implement
+      - when: "true"
+        next: ABORT

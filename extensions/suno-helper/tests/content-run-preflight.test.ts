@@ -2,12 +2,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PHASE } from "../../shared/constants";
+import type { EntryRunResult, RunEntryWithRetryOptions } from "../lib/entry-retry";
+import { writeResumeState } from "../lib/resume-state";
 import { makePromptEntries, markBbox } from "./_helpers";
 
 const harness = vi.hoisted(() => {
   const handlers = new Map<string, (message: { data: unknown }) => unknown>();
   const feedPollerStart = vi.fn();
   const feedPollerStop = vi.fn();
+  const runEntryWithRetry = vi.fn(
+    async (options: Pick<RunEntryWithRetryOptions, "attempt">): Promise<EntryRunResult> => {
+      await options.attempt();
+      return { outcome: "ok" };
+    },
+  );
 
   return {
     handlers,
@@ -23,6 +31,7 @@ const harness = vi.hoisted(() => {
     })),
     feedPollerStart,
     feedPollerStop,
+    runEntryWithRetry,
     requestSliderSet: vi.fn(),
   };
 });
@@ -69,18 +78,48 @@ vi.mock("../lib/bridge-listener", () => ({
   requestSliderSet: harness.requestSliderSet,
 }));
 
+vi.mock("../lib/entry-retry", () => ({
+  runEntryWithRetry: harness.runEntryWithRetry,
+}));
+
 vi.mock("../lib/storage", () => ({
   serverUrlItem: { getValue: vi.fn(() => Promise.resolve("http://localhost:8787")) },
   downloadFormatItem: { getValue: vi.fn(() => Promise.resolve("mp3")) },
   readDownloadFormat: vi.fn(() => Promise.resolve("mp3")),
 }));
 
+vi.mock("../lib/resume-state", async () => {
+  const actual = await vi.importActual<typeof import("../lib/resume-state")>("../lib/resume-state");
+  return {
+    ...actual,
+    clearResumeStateForCollection: vi.fn(() => Promise.resolve()),
+    writeResumeState: vi.fn(() => Promise.resolve()),
+  };
+});
+
 vi.mock("../lib/download", () => ({
   triggerDownloadAll: vi.fn(() => Promise.resolve()),
 }));
 
+// 完了時リロード前の snapshot 退避。実物は chrome.storage へアクセスするため node/jsdom 環境では mock 必須。
+// 退避契約そのものの検証は content-finished-snapshot.test.ts が担う。
+vi.mock("../lib/finished-snapshot", () => ({
+  writeFinishedSnapshot: vi.fn(() => Promise.resolve()),
+  readFreshFinishedSnapshot: vi.fn(() => Promise.resolve(null)),
+  clearFinishedSnapshot: vi.fn(() => Promise.resolve()),
+}));
+
 vi.mock("../../shared/api", () => ({
   postDownloaded: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock("../../shared/playlist-dom", () => ({
+  clickPlaylistRowByName: vi.fn(() => Promise.resolve()),
+  fillPlaylistNameAndCreate: vi.fn(() => Promise.resolve()),
+  openAddToPlaylistDialogViaCmdP: vi.fn(() => Promise.resolve(document.createElement("div"))),
+  readSelectedClipIds: vi.fn(() => Promise.resolve([])),
+  scrollAndMultiSelectByIds: vi.fn((clipIds: string[]) => Promise.resolve(clipIds.length)),
+  waitForPlaylistDialogClose: vi.fn(() => Promise.resolve()),
 }));
 
 async function loadContentScript(): Promise<void> {
@@ -177,9 +216,29 @@ function progressPayloads(): unknown[] {
   return harness.sendMessage.mock.calls.filter(([type]) => type === "progress").map(([, payload]) => payload);
 }
 
+function makeRunPayload(entries = makePromptEntries(0)): {
+  entries: ReturnType<typeof makePromptEntries>;
+  playlistName: string;
+  collectionId: string;
+  submittedClipIds: string[];
+  playlistExpectedClipCount: number;
+} {
+  return {
+    entries,
+    playlistName: "clm | preflight",
+    collectionId: "20260601-clm-preflight-collection",
+    submittedClipIds: ["clip-a"],
+    playlistExpectedClipCount: 1,
+  };
+}
+
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
+  harness.runEntryWithRetry.mockImplementation(async (options: Pick<RunEntryWithRetryOptions, "attempt">) => {
+    await options.attempt();
+    return { outcome: "ok" };
+  });
   harness.handlers.clear();
   document.body.innerHTML = "";
 });
@@ -189,33 +248,57 @@ afterEach(() => {
 });
 
 describe('content onMessage("run"): Run 開始前の Suno view preflight', () => {
+  it("Given 旧 array payload When run を受ける Then fail-loud し副作用を起こさない", async () => {
+    await loadContentScript();
+    const runHandler = getRunHandler();
+
+    expect(() => runHandler({ data: makePromptEntries(1) })).toThrow(/run payload/);
+    expect(harness.sendMessage).not.toHaveBeenCalled();
+    expect(harness.feedPollerStart).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["collectionId 欠落", { collectionId: undefined }, /run\.collectionId/],
+    ["playlistName 欠落", { playlistName: undefined }, /run\.playlistName/],
+  ] as const)(
+    "Given %s payload When run を受ける Then fail-loud し副作用を起こさない",
+    async (_label, override, message) => {
+      await loadContentScript();
+      const runHandler = getRunHandler();
+
+      expect(() => runHandler({ data: { ...makeRunPayload(makePromptEntries(1)), ...override } })).toThrow(message);
+      expect(harness.sendMessage).not.toHaveBeenCalled();
+      expect(harness.feedPollerStart).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["文字列", "0", /run\.indices/],
+    ["null", null, /run\.indices/],
+    ["空配列", [], /run\.indices/],
+    ["非整数", [1.5], /run\.indices/],
+    ["負数", [-1], /run\.indices/],
+    ["範囲外", [2], /run\.indices/],
+    ["重複", [0, 0], /run\.indices/],
+  ] as const)(
+    "Given indices が%s When run を受ける Then fail-loud し副作用を起こさない",
+    async (_label, indices, message) => {
+      await loadContentScript();
+      const runHandler = getRunHandler();
+      const entries = makePromptEntries(2);
+
+      expect(() => runHandler({ data: { ...makeRunPayload(entries), indices } })).toThrow(message);
+      expect(harness.sendMessage).not.toHaveBeenCalled();
+      expect(harness.feedPollerStart).not.toHaveBeenCalled();
+    },
+  );
+
   it("Given view dropdown が検出不能 When run を受ける Then ERROR progress を emit し feed poller を開始しない", async () => {
     await loadContentScript();
     const runHandler = getRunHandler();
     const entries = makePromptEntries(2);
 
-    const result = runHandler({ data: { entries } });
-
-    expect(result).toEqual({ ok: true });
-    expect(harness.sendMessage).toHaveBeenCalledOnce();
-    expect(harness.sendMessage).toHaveBeenCalledWith(
-      "progress",
-      expect.objectContaining({
-        phase: PHASE.ERROR,
-        total: entries.length,
-        message: expect.stringContaining("表示ビューを検出できません"),
-      }),
-    );
-    expect(harness.feedPollerStart).not.toHaveBeenCalled();
-    expect(harness.feedPollerStop).not.toHaveBeenCalled();
-  });
-
-  it("Given legacy array payload で view dropdown が検出不能 When run を受ける Then ERROR progress を emit し feed poller を開始しない", async () => {
-    await loadContentScript();
-    const runHandler = getRunHandler();
-    const entries = makePromptEntries(2);
-
-    const result = runHandler({ data: entries });
+    const result = runHandler({ data: makeRunPayload(entries) });
 
     expect(result).toEqual({ ok: true });
     expect(harness.sendMessage).toHaveBeenCalledOnce();
@@ -237,7 +320,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     const runHandler = getRunHandler();
     const entries = makePromptEntries(1);
 
-    const result = runHandler({ data: { entries } });
+    const result = runHandler({ data: makeRunPayload(entries) });
 
     expect(result).toEqual({ ok: true });
     expect(harness.sendMessage).toHaveBeenCalledWith(
@@ -258,7 +341,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       await loadContentScript();
       const runHandler = getRunHandler();
 
-      const result = runHandler({ data: { entries: [] } });
+      const result = runHandler({ data: makeRunPayload() });
 
       expect(result).toEqual({ ok: true });
       expect(harness.feedPollerStart).toHaveBeenCalledOnce();
@@ -286,7 +369,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     await loadContentScript();
     const runHandler = getRunHandler();
 
-    const result = runHandler({ data: { entries: [] } });
+    const result = runHandler({ data: makeRunPayload() });
 
     expect(result).toEqual({ ok: true });
     expect(harness.feedPollerStart).toHaveBeenCalledOnce();
@@ -308,7 +391,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       await loadContentScript();
       const runHandler = getRunHandler();
 
-      const result = runHandler({ data: { entries: [] } });
+      const result = runHandler({ data: makeRunPayload() });
 
       expect(result).toEqual({ ok: true });
       expect(harness.feedPollerStart).toHaveBeenCalledOnce();
@@ -331,7 +414,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       const runHandler = getRunHandler();
       const entries = makePromptEntries(2);
 
-      const result = runHandler({ data: { entries } });
+      const result = runHandler({ data: makeRunPayload(entries) });
 
       expect(result).toEqual({ ok: true });
       await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
@@ -358,29 +441,57 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     },
   );
 
-  it("Given legacy array payload で supported view かつ entries がある When run を受ける Then FINISHED まで進む", async () => {
+  it("Given indices 指定で supported view かつ entries がある When run を受ける Then 指定 index だけを絶対 index で処理する", async () => {
     makeRunnableSunoDom("Grid");
     await loadContentScript();
     const runHandler = getRunHandler();
-    const entries = makePromptEntries(2);
+    const entries = makePromptEntries(3);
 
-    const result = runHandler({ data: entries });
+    const result = runHandler({ data: { ...makeRunPayload(entries), indices: [0, 2] } });
 
     expect(result).toEqual({ ok: true });
     await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
     expect(progressPayloads()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ phase: PHASE.WAITING_SLOT, index: 0, total: entries.length }),
-        expect.objectContaining({ phase: PHASE.DONE, index: 1, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.INJECTING, index: 0, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.GENERATING, index: 0, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.DONE, index: 0, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.WAITING_SLOT, index: 2, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.INJECTING, index: 2, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.GENERATING, index: 2, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.DONE, index: 2, total: entries.length }),
         expect.objectContaining({ phase: PHASE.FINISHED, total: entries.length }),
       ]),
     );
     expect(progressPayloads()).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          phase: PHASE.ERROR,
-        }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ index: 1 }), expect.objectContaining({ phase: PHASE.ERROR })]),
+    );
+  });
+
+  it("Given indices 部分実行の途中で停止 When resume state を保存する Then 未選択 index を含まない残り indices を保持する", async () => {
+    makeRunnableSunoDom("Grid");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(5);
+    harness.runEntryWithRetry
+      .mockImplementationOnce(async (options: Pick<RunEntryWithRetryOptions, "attempt">) => {
+        await options.attempt();
+        return { outcome: "ok" };
+      })
+      .mockResolvedValueOnce({ outcome: "aborted" as const });
+
+    const result = runHandler({ data: { ...makeRunPayload(entries), indices: [0, 2, 4] } });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(writeResumeState).toHaveBeenCalledOnce());
+    expect(writeResumeState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionId: "20260601-clm-preflight-collection",
+        failedIndex: 2,
+        total: entries.length,
+        remainingIndices: [2, 4],
+      }),
     );
   });
 
@@ -392,7 +503,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       const runHandler = getRunHandler();
       const entries = makePromptEntries(2);
 
-      const result = runHandler({ data: { entries } });
+      const result = runHandler({ data: makeRunPayload(entries) });
 
       expect(result).toEqual({ ok: true });
       await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
@@ -418,4 +529,57 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       );
     },
   );
+
+  it("Given entry retry が発生する When run を受ける Then retry progress log を content 経由で emit する", async () => {
+    makeRunnableSunoDom("List ▼");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(1);
+    harness.runEntryWithRetry.mockImplementationOnce(
+      async (options: Pick<RunEntryWithRetryOptions, "attempt" | "onRetry">) => {
+        await options.attempt();
+        options.onRetry?.(1, 2, new Error("temporary"));
+        return { outcome: "ok" };
+      },
+    );
+
+    const result = runHandler({ data: makeRunPayload(entries) });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.WAITING_SLOT,
+          index: 0,
+          total: entries.length,
+          log: { kind: "retry", entryName: "pattern-1", attempt: 1, max: 2 },
+        }),
+      ]),
+    );
+  });
+
+  it("Given entry が retry 上限後に failed outcome になる When run を受ける Then skip progress log を content 経由で emit する", async () => {
+    makeRunnableSunoDom("List ▼");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(1);
+    harness.runEntryWithRetry.mockResolvedValueOnce({ outcome: "failed" as const, error: new Error("queue timeout") });
+
+    const result = runHandler({ data: makeRunPayload(entries) });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.ENTRY_FAILED,
+          index: 0,
+          total: entries.length,
+          message: "queue timeout",
+          log: { kind: "skip", entryName: "pattern-1" },
+        }),
+      ]),
+    );
+  });
 });

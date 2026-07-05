@@ -22,6 +22,7 @@ from youtube_automation.scripts.suno_artifacts import (
 from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.skill_config import load_channel_override, load_skill_config
+from youtube_automation.utils.suno_lyrics import load_suno_lyrics_by_name
 from youtube_automation.utils.video_analyzer import VIDEO_ANALYSIS_DIRNAME
 
 _TOP_GENRE_PHRASES = 8
@@ -200,6 +201,19 @@ class _ResolvedPattern:
 _ADVANCED_JSON_KEYS = ("style_influence", "weirdness", "exclude_styles", "vocal_gender")
 
 
+def _duration_filter_from_config(suno: dict) -> dict:
+    raw = suno.get("duration_filter") or {}
+    if not isinstance(raw, dict):
+        raise ConfigError("config/skills/suno.yaml::duration_filter must be a mapping")
+    min_sec = raw.get("min_sec", 60)
+    max_sec = raw.get("max_sec", 300)
+    if not isinstance(min_sec, (int, float)) or not isinstance(max_sec, (int, float)):
+        raise ConfigError("config/skills/suno.yaml::duration_filter min_sec/max_sec must be numeric")
+    if min_sec < 0 or max_sec < 0 or min_sec > max_sec:
+        raise ConfigError("config/skills/suno.yaml::duration_filter must satisfy 0 <= min_sec <= max_sec")
+    return {"min_sec": min_sec, "max_sec": max_sec}
+
+
 def _build_advanced_json_fields(override: dict) -> dict:
     """channel override から JSON 反映用 advanced フィールド dict を構築する (#900)。
 
@@ -299,35 +313,7 @@ def _load_external_lyrics(lyrics_path: Path) -> dict[str, str]:
     `/suno-lyric` は lyrics 専任で、`/suno` がここで Style と結合する。
     vocal mode のファイル必須チェックは呼び出し元で行う。
     """
-    try:
-        raw = json.loads(lyrics_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME} is invalid JSON: {lyrics_path}") from exc
-
-    if not isinstance(raw, list):
-        raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME} root must be a list: {lyrics_path}")
-
-    lyrics_by_name: dict[str, str] = {}
-    duplicates: set[str] = set()
-    for i, item in enumerate(raw, 1):
-        if not isinstance(item, dict):
-            raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: entry {i} must be an object")
-        name = item.get("name")
-        lyrics = item.get("lyrics")
-        if not isinstance(name, str) or not name.strip():
-            raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: entry {i}.name must be a non-empty string")
-        if not isinstance(lyrics, str):
-            raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: entry {i}.lyrics must be a string")
-        clean_name = name.strip()
-        if clean_name in lyrics_by_name:
-            duplicates.add(clean_name)
-        lyrics_by_name[clean_name] = lyrics.rstrip()
-
-    if duplicates:
-        duplicate_names = ", ".join(sorted(duplicates))
-        raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: duplicated lyrics entry names: {duplicate_names}")
-
-    return lyrics_by_name
+    return load_suno_lyrics_by_name(lyrics_path)
 
 
 def _validate_external_lyrics_names(
@@ -616,7 +602,11 @@ def main():
 
     json_path = patterns_path.parent / SUNO_PROMPTS_JSON_FILENAME
     entries = build_prompt_entries(patterns_path)
-    json_path.write_text(json.dumps(entries, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    payload = {
+        "entries": entries,
+        "duration_filter": _duration_filter_from_config(load_skill_config("suno")),
+    }
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Generated: {json_path}")
 
 

@@ -1,7 +1,7 @@
 // ERROR 停止からの途中再開 (#872) を支える純ロジックと chrome.storage I/O を 1 箇所に集約する。
 //
-// 純関数 (resolveRunRange / shouldShowResumeBanner / resumeBannerRange) は content / popup の
-// 双方が import し、range の解決とバナー表示条件を二重定義しないための SSOT とする。
+// 純関数 (shouldShowResumeBanner / resumeRunRange) は content / popup の双方が import し、
+// バナー表示条件と再開 range の解決を二重定義しないための SSOT とする。
 // I/O (readResumeState / writeResumeState / clearResumeStateForCollection) は @wxt-dev/storage の
 // 型付き wrapper で chrome.storage.local を読み書きする。storage.defineItem は呼ぶと内部で
 // chrome.runtime へアクセスするため、node 環境 (vitest) で純関数だけを import したときに副作用を
@@ -29,6 +29,8 @@ export interface ResumeState {
   /** リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
    * 「失敗分のみ再実行」導線が run({indices}) へ渡す。旧 state には無い optional（後方互換）。 */
   failedIndices?: number[];
+  /** 明示 indices 実行が途中中断したとき、再開で実行すべき残りの 0-based index 列。 */
+  remainingIndices?: number[];
   /** playlist 追加対象として generate response から観測済みの clip ID 一覧。 */
   submittedClipIds?: string[];
   /** playlist 追加時に揃っているべき clip ID 件数。 */
@@ -42,13 +44,14 @@ export interface RunRange {
 }
 
 /**
- * 再開バナーの表示・prefill に必要な最小情報 (#872 要件3)。
+ * 再開バナーの表示・direct resume に必要な最小情報 (#872 要件3)。
  * chrome.storage 由来の {@link ResumeState} と content snapshot 由来 (failedIndex/total) の
  * 2 系統の復元ソースを同一形へ正規化し、二重化した復元経路を 1 つの UI 入力に集約する。
  */
 export interface ResumeBanner {
   failedIndex: number;
   total: number;
+  remainingIndices?: number[];
 }
 
 /** 再開バナーの stale 判定閾値（24 時間, ms）。要件4。 */
@@ -57,16 +60,12 @@ export const RESUME_STALE_MS = 24 * 60 * 60 * 1000;
 /**
  * 起動時に再開バナーを表示すべきか判定する (要件4)。
  *   - state 無し → 表示しない
- *   - 選択中 collection が空（単一ファイル mode）→ 表示しない
  *   - collectionId が選択中と不一致 → 表示しない（別 collection 選択中）
  *   - timestamp が RESUME_STALE_MS より古い → 表示しない（stale）。境界はちょうど閾値まで inclusive
  * now を注入可能にし、純関数として時刻依存を排してテストする。
  */
 export function shouldShowResumeBanner(state: ResumeState | null, selectedCollectionId: string, now: number): boolean {
   if (!state) {
-    return false;
-  }
-  if (!selectedCollectionId) {
     return false;
   }
   if (state.collectionId !== selectedCollectionId) {
@@ -76,36 +75,9 @@ export function shouldShowResumeBanner(state: ResumeState | null, selectedCollec
 }
 
 /**
- * range UI の 1-based 入力を content へ渡す 0-based inclusive range へ変換する (要件1/2)。
- * end 省略時は total（末尾）まで。下限/上限/逆転/非整数はすべて throw して silent 通過を防ぐ（fail-loud）。
- */
-export function resolveRunRange(rawStart1: number, rawEnd1: number | undefined, total: number): RunRange {
-  if (!Number.isInteger(rawStart1) || rawStart1 < 1 || rawStart1 > total) {
-    throw new Error(`不正な開始 entry: ${rawStart1}（1〜${total} で指定してください）`);
-  }
-  let end1 = rawEnd1;
-  if (end1 === undefined) {
-    end1 = total;
-  } else if (!Number.isInteger(end1) || end1 < rawStart1 || end1 > total) {
-    throw new Error(`不正な終了 entry: ${end1}（${rawStart1}〜${total} で指定してください）`);
-  }
-  return { start: rawStart1 - 1, end: end1 - 1 };
-}
-
-/**
- * バナー承認時に range UI へ prefill する 1-based 値を算出する (要件4)。
- * 失敗した entry (failedIndex) から末尾 (total) まで再実行する形に prefill する。
- * resolveRunRange(start, end, total) を通すと 0-based {failedIndex, total-1} に戻る（round-trip 一致）。
- */
-export function resumeBannerRange(banner: ResumeBanner): { start: number; end: number } {
-  return { start: banner.failedIndex + 1, end: banner.total };
-}
-
-/**
  * バナー承認 → 1-click 自動再開で run() へ直接渡す 0-based inclusive range を構築する (#892 要件6)。
  * 失敗 entry (0-based failedIndex) から末尾 (total-1) まで。React state は次レンダ反映で closure から
  * 読めないため、acceptResume はこの純関数でローカルに range を組み立てて run({ range }) へ引数で渡す。
- * 旧経路 resumeBannerRange(1-based prefill) → resolveRunRange と同一の絶対 index を返す（round-trip 一致）。
  */
 export function resumeRunRange(banner: ResumeBanner): RunRange {
   return { start: banner.failedIndex, end: banner.total - 1 };

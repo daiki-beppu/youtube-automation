@@ -24,7 +24,7 @@ from typing import Any
 
 import yaml
 
-from youtube_automation.utils.config import channel_dir
+from youtube_automation.utils.config import channel_dir as configured_channel_dir
 from youtube_automation.utils.exceptions import ConfigError
 
 _cache: dict[str, dict[str, Any]] = {}
@@ -55,9 +55,10 @@ def _default_path(skill: str) -> Path:
     )
 
 
-def _channel_override_path(skill: str) -> Path:
+def _channel_override_path(skill: str, target_channel_dir: Path | None = None) -> Path:
     """チャンネルリポジトリ側の上書き config パスを返す (存在チェックは呼び出し側)。"""
-    return channel_dir() / "config" / "skills" / f"{skill}.yaml"
+    root = target_channel_dir if target_channel_dir is not None else configured_channel_dir()
+    return root / "config" / "skills" / f"{skill}.yaml"
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -75,19 +76,31 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except (OSError, yaml.YAMLError) as exc:
+        raise ConfigError(f"skill-config 読み込み失敗: {path}: {exc}") from exc
+    if data is None:
+        return {}
     if not isinstance(data, dict):
         raise ConfigError(f"skill-config の root は dict である必要があります: {path}")
     return data
 
 
-def load_skill_config(skill: str, *, use_cache: bool = True) -> dict[str, Any]:
+def load_skill_config(
+    skill: str,
+    *,
+    use_cache: bool = True,
+    channel_dir: Path | None = None,
+) -> dict[str, Any]:
     """skill-config を読み込んで返す (default + channel override のマージ結果)。
 
     Args:
         skill: スキル名 (例: "thumbnail", "suno")
         use_cache: プロセス内キャッシュを使うか (テスト時は False 推奨)
+        channel_dir: 明示したチャンネルリポジトリから override を読む。
+            省略時は CHANNEL_DIR / カレントディレクトリ設定を使う。
 
     Returns:
         マージ済み設定 dict
@@ -95,19 +108,20 @@ def load_skill_config(skill: str, *, use_cache: bool = True) -> dict[str, Any]:
     Raises:
         ConfigError: default.yaml が見つからない、YAML パース失敗など
     """
-    if use_cache and skill in _cache:
+    use_shared_cache = use_cache and channel_dir is None
+    if use_shared_cache and skill in _cache:
         return _cache[skill]
 
     defaults = _load_yaml(_default_path(skill))
 
-    override_path = _channel_override_path(skill)
+    override_path = _channel_override_path(skill, channel_dir)
     if override_path.exists():
         override = _load_yaml(override_path)
         merged = _deep_merge(defaults, override)
     else:
         merged = defaults
 
-    if use_cache:
+    if use_shared_cache:
         _cache[skill] = merged
     return merged
 
