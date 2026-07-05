@@ -1,6 +1,6 @@
 ---
 name: audience-persona-design
-description: "Use when ターゲット視聴者を 1 人の第一ペルソナとして本格設計・見直ししたいとき。「誰が聴くか」「ペルソナ設定」「ターゲット」「視聴者像」「ターゲット層」「リスナー像」「TTP の人物像版」など。/viewer-voice のコメント分析を必須入力にし、/viewing-scene の視聴シーン検証を反映して最終 persona-definition.md を確定する"
+description: "Use when ターゲット視聴者を第一ペルソナとして設計・見直しするとき。「ペルソナ設定」「視聴者像」「ターゲット層」で発動。/viewer-voice を必須入力に persona-definition.md を確定"
 ---
 
 ## Overview
