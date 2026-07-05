@@ -1,6 +1,6 @@
 ---
 name: videoup
-description: "Use when 音声ファイルが揃い動画生成が必要なとき。「動画変換」「MP3→MP4」「generate_videos」「videoup」で発動。マスター音源・マスター動画生成を案内"
+description: "Use when 音声ファイルが揃い動画生成が必要なとき。「動画変換」「MP3→MP4」「generate_videos」「videoup」で発動。マスター音源・マスター動画生成を案内。YouTube への投稿は /video-upload"
 ---
 
 ## Overview
