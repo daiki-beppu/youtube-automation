@@ -114,15 +114,24 @@ const MOCK_SUNO_HTML_LEXICAL = `<!doctype html>
       document.getElementById('style').addEventListener('input', (e) => {
         document.getElementById('captured-style').textContent = e.target.value;
       });
-      // Lexical を模す: paste を preventDefault で横取りし、text/plain で選択範囲 (selectAll 済み前提) を
-      // 全置換して内部 state (sink) を更新する。実 Lexical も paste を自前ハンドリングして
-      // EditorState を更新し DOM へ reconcile する。
+      // Lexical を模す: paste を preventDefault で横取りし、text/plain で選択範囲を置換する。
+      // selectAll が成立していない場合は insertion になり、前回歌詞が残るため回帰を検出できる。
       const lyrics = document.getElementById('lyrics');
       lyrics.addEventListener('paste', (e) => {
         e.preventDefault();
         const text = e.clipboardData.getData('text/plain');
-        lyrics.textContent = text;
-        document.getElementById('captured-lyrics').textContent = text;
+        const selection = window.getSelection();
+        const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+        if (range && range.intersectsNode(lyrics) && range.toString() === lyrics.textContent) {
+          range.deleteContents();
+          if (text !== '') {
+            range.insertNode(document.createTextNode(text));
+          }
+          selection.removeAllRanges();
+        } else {
+          lyrics.insertAdjacentText('afterbegin', text);
+        }
+        document.getElementById('captured-lyrics').textContent = lyrics.textContent;
       });
     </script>
   </body>
@@ -303,7 +312,7 @@ test("Lexical Lyrics mock (2026-07 UI) へ selectAll → paste で歌詞を全�
     // resolveFields の新 UI 識別: Lyrics は Lexical fallback、Style は styles-wrapper 一次識別。
     const lyrics = Array.from(
       document.querySelectorAll<HTMLElement>(
-        'div.lyrics-editor-content[contenteditable="true"], div.lyrics-editor-content[contenteditable=""]',
+        'div.lyrics-editor-content[data-lexical-editor][contenteditable="true"], div.lyrics-editor-content[data-lexical-editor][contenteditable=""]',
       ),
     ).find((el) => el.getBoundingClientRect().width > 0)!;
     const style = Array.from(document.querySelectorAll("textarea")).find(
@@ -329,6 +338,28 @@ test("Lexical Lyrics mock (2026-07 UI) へ selectAll → paste で歌詞を全�
   // 前 entry の歌詞 ("previous lyrics") が残らず全置換される。
   await expect(page.locator("#captured-lyrics")).toHaveText("new verse from entry two");
   await expect(page.locator("#lyrics")).toHaveText("new verse from entry two");
+});
+
+test("Lexical Lyrics mock (2026-07 UI) で instrumental 空文字が前回歌詞をクリアする", async ({ page }) => {
+  await page.setContent(MOCK_SUNO_HTML_LEXICAL);
+
+  await page.evaluate(async () => {
+    const lyrics = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        'div.lyrics-editor-content[data-lexical-editor][contenteditable="true"], div.lyrics-editor-content[data-lexical-editor][contenteditable=""]',
+      ),
+    ).find((el) => el.getBoundingClientRect().width > 0)!;
+    lyrics.focus();
+    document.execCommand("selectAll", false);
+    await new Promise((r) => setTimeout(r, 200));
+    const data = new DataTransfer();
+    data.setData("text/plain", "");
+    lyrics.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    await new Promise((r) => setTimeout(r, 200));
+  });
+
+  await expect(page.locator("#captured-lyrics")).toHaveText("");
+  await expect(page.locator("#lyrics")).toHaveText("");
 });
 
 test("instrumental パターン (lyrics='') で前パターンの歌詞をクリアする", async ({ page }) => {

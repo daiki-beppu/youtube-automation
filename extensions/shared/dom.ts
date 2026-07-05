@@ -12,9 +12,10 @@ const SELECTORS = {
   // 2026-07 の Suno UI 改装で Lyrics 欄が textarea から Lexical エディタ
   // (div.lyrics-editor-content[contenteditable][data-lexical-editor]) へ変わった。
   // 旧 UI との併存を考慮し testid textarea を最優先、この selector は fallback。
+  // data-lexical-editor は通常の contenteditable と区別する構造根拠。
   // contenteditable="" も有効値（属性値なしの boolean 形式）なので両方拾う。
   lyricsLexical:
-    'div.lyrics-editor-content[contenteditable="true"], div.lyrics-editor-content[contenteditable=""]',
+    'div.lyrics-editor-content[data-lexical-editor][contenteditable="true"], div.lyrics-editor-content[data-lexical-editor][contenteditable=""]',
   // Style 欄の wrapper（新 UI 実 DOM で確認）。Lyrics が textarea でなくなり
   // 「Lyrics 以外の可視 textarea」述語だけでは Style の特定根拠が弱くなったため一次識別にする。
   stylesWrapper: '[data-testid="create-form-styles-wrapper"]',
@@ -543,7 +544,8 @@ export function isQueueLimitErrorVisible(): boolean {
 /**
  * Style / Lyrics の入力欄を解決する（#807、2026-07 Lexical 改装対応）。
  *   - Lyrics: `data-testid="lyrics-textarea"` を最優先で識別（UI 言語非依存、旧 UI）。無ければ
- *             Lexical contenteditable（`div.lyrics-editor-content`、新 UI）を bbox 幅非ゼロで拾う。
+ *             Lexical contenteditable（`div.lyrics-editor-content[data-lexical-editor]`、新 UI）を
+ *             bbox 幅非ゼロで拾う。
  *             どちらも無ければ null。Lexical 側の可視判定を strict isVisible でなく幅判定にするのは
  *             実ページで動作検証した条件をそのまま保持するため（wrapper の opacity 等の transition
  *             で誤除外しない安全側）。

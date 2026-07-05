@@ -90,10 +90,15 @@ function addInput(opts: { placeholder?: string; visible?: boolean } = {}): HTMLI
 }
 
 // 2026-07 UI 改装後の Lyrics 欄（Lexical contenteditable div）。resolveFields は bbox 幅非ゼロで拾う。
-function addLexicalLyrics(opts: { visible?: boolean; contenteditable?: string } = {}): HTMLElement {
+function addLexicalLyrics(
+  opts: { visible?: boolean; contenteditable?: string; lexicalEditor?: boolean } = {},
+): HTMLElement {
   const div = document.createElement("div");
   div.className = "lyrics-editor-content";
   div.setAttribute("contenteditable", opts.contenteditable ?? "true");
+  if (opts.lexicalEditor !== false) {
+    div.setAttribute("data-lexical-editor", "true");
+  }
   document.body.appendChild(div);
   setRect(div, opts.visible === false ? ZERO_RECT : VISIBLE_RECT);
   return div;
@@ -292,6 +297,15 @@ describe("resolveFields: Lexical Lyrics fallback (2026-07 UI 改装)", () => {
   it('Given contenteditable="false" の div When 解決する Then selector 不一致で lyrics は null', () => {
     addTextarea({ placeholder: "Style description" });
     addLexicalLyrics({ contenteditable: "false" });
+
+    const fields = resolveFields();
+
+    expect(fields.lyrics).toBeNull();
+  });
+
+  it("Given data-lexical-editor の無い contenteditable div When 解決する Then 通常の編集領域として lyrics にしない", () => {
+    addTextarea({ placeholder: "Style description" });
+    addLexicalLyrics({ lexicalEditor: false });
 
     const fields = resolveFields();
 
