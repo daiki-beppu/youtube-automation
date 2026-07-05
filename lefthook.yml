@@ -6,10 +6,12 @@
 # - pre-commit:
 #   - Python: ruff の lint / format チェック
 #   - TypeScript: oxlint / oxfmt --check / tsc -b --noEmit (ADR 0001)
-# - pre-push:   CHANGELOG ゲート（CI の changelog ジョブをローカル再現）
+# - pre-push:   CHANGELOG ゲート（CI の changelog ジョブをローカル再現）、
+#               テスト差分警告、新規 Any / any 型注釈ゲート
 #
 # 個別スキップ: `LEFTHOOK=0 git push` で全 hook を無効化。
 # CHANGELOG ゲートのみ省く: `SKIP_CHANGELOG=1 git push`
+# テスト差分警告のみ省く: `SKIP_TEST_DIFF=1 git push`
 
 # use_stdin は lefthook 1.4.11、exclude の glob 配列は 1.5.0 で追加。古い lefthook は
 # 未知 key / 未対応の値形式を黙って無視し判定が no-op になるため、最低バージョンを明示する
@@ -59,3 +61,7 @@ pre-push:
       # 追加するときはこのゲートの削除 push スキップが壊れないか確認すること
       use_stdin: true
       run: bash .lefthook/pre-push/changelog-gate.sh
+    test-diff-gate:
+      run: bash .lefthook/pre-push/test-diff-gate.sh
+    any-usage-gate:
+      run: bash .lefthook/pre-push/any-usage-gate.sh
