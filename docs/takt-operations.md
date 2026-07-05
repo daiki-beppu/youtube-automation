@@ -11,6 +11,15 @@ CLAUDE.md の「開発ワークフロー」節の詳細版。要点は CLAUDE.md
   - テスト戦略の設計が必要な新機能
 - 導入後に新しい takt バージョンへ上げた場合は `takt workflow doctor lite` で静的検証すること（step スキーマのキー名が変わる可能性がある）
 
+## 提出前セルフ監査（pre-review-checklist）
+
+`.takt/facets/policies/pre-review-checklist.md` は、過去の review-takt-default 指摘 371 件（183 レビュー）を全件分類して抽出した頻出 8 パターンの監査基準（issue #1508）。lite の `implement` / `review` step に `policy:` で注入され、実装者が提出前に自己監査 → reviewer が独立照合する二段構えで、post-hoc レビュー（1 回 ~15M tokens）の REJECT 再走を減らす。
+
+- **implement step**: 8 項目を根拠（ファイル:行）付きで照合し、受入条件充足表を出力してから完了する
+- **review step**: 実装者の自己監査を鵜呑みにせず独立照合。8 項目 pass + issue スコープ内欠陥なしのときのみ approved。スコープ外の改善提案は follow-up 候補として記録し verdict に影響させない（moving goalposts の防止）
+- **更新手順**: レビュー REJECT の傾向が変わったら `.takt/runs/*/reports/review-summary.md` の指摘を再分類し、checklist の項目・頻出度を更新する。policy のインライン注入は 2,000 字で truncate されるため、冒頭のサマリー表に要点を収める構成を維持すること
+- 機械検出可能なパターン（lint / 未使用コード / `typing.Any` grep / テスト差分ゼロ検知）は checklist ではなく lefthook / CI ゲートに委譲する方針
+
 ## トークン消費の計測（observability）
 
 `.takt/config.yaml` で有効化済み:
