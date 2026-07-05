@@ -67,11 +67,21 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 **Suno パス:**
 1. `assets.music_prompts = true` + `assets.raw_master = null`:
-   - ユーザーにプレイリスト URL を AskUserQuestion で取得
-   - Skill ツールで `/masterup <URL>` 自動実行 → DL + raw master 生成
-   - `assets.raw_master` にファイル名を記録
-   - ガイダンス: 「raw master をミキシング+マスタリングし、最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
-   - **ここでフロー停止**
+   - `workflow-state.json::planning.music.suno_playlist_url` の記録有無と `02-Individual-music/` の音声ファイル（mp3 / m4a / wav）実在を確認する
+   - **URL 記録済み + `02-Individual-music/` に音声ファイルが 1 件以上存在**:
+     - AskUserQuestion による URL 入力はスキップし、記録済み URL で Skill ツール `/masterup <URL>` を自動実行 → raw master 生成
+     - `assets.raw_master` にファイル名を記録
+     - ガイダンス: 「raw master をミキシング+マスタリングし、最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
+     - **ここでフロー停止**
+   - **URL 記録済みだが `02-Individual-music/` に音声ファイルが無い**:
+     - URL 再入力は要求せず、「ダウンロードが完了していない可能性があります。`/suno-helper` を再開するか手動でダウンロードしてから `/wf-next` を再実行してください」を表示
+     - **ここでフロー停止**（`/masterup` は自動実行しない）
+   - **URL 未記録（キー自体が無い、または `null`）**:
+     - 従来通りユーザーにプレイリスト URL を AskUserQuestion で取得
+     - Skill ツールで `/masterup <URL>` 自動実行 → DL + raw master 生成
+     - `assets.raw_master` にファイル名を記録
+     - ガイダンス: 「raw master をミキシング+マスタリングし、最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
+     - **ここでフロー停止**
 
 **Lyria パス:**
 1. `assets.music_prompts = true` + `assets.raw_master = null`:
