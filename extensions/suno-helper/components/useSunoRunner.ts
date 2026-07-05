@@ -113,6 +113,7 @@ export function useSunoRunner(): RunnerState {
   const [restoredFailedIndex, setRestoredFailedIndex] = useState<number | undefined>(undefined);
   // content snapshot 由来のスキップ済み失敗 index 一覧 (#948)。chrome.storage と二重化する。
   const [restoredFailedIndices, setRestoredFailedIndices] = useState<number[] | undefined>(undefined);
+  const [restoredRemainingIndices, setRestoredRemainingIndices] = useState<number[] | undefined>(undefined);
   const [restoredSubmittedClipIds, setRestoredSubmittedClipIds] = useState<string[] | undefined>(undefined);
   const [restoredPlaylistExpectedClipCount, setRestoredPlaylistExpectedClipCount] = useState<number | undefined>(
     undefined,
@@ -190,13 +191,17 @@ export function useSunoRunner(): RunnerState {
       persistedResume &&
       shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
     ) {
-      return { failedIndex: persistedResume.failedIndex, total: persistedResume.total };
+      return {
+        failedIndex: persistedResume.failedIndex,
+        total: persistedResume.total,
+        remainingIndices: persistedResume.remainingIndices,
+      };
     }
     // 2) content snapshot 由来 (要件3 二重化)。chrome.storage 書込が失われても、現在タブの
     //    実行セッションが ERROR phase で保持する failedIndex から同じ再開導線を出す。
     //    snapshot の collectionId が現在選択と一致するときだけ消費する。
     if (restoredCollectionId === selectedCollectionId && restoredFailedIndex !== undefined && entries.length > 0) {
-      return { failedIndex: restoredFailedIndex, total: entries.length };
+      return { failedIndex: restoredFailedIndex, total: entries.length, remainingIndices: restoredRemainingIndices };
     }
     return null;
   }, [
@@ -206,6 +211,7 @@ export function useSunoRunner(): RunnerState {
     resumeCheckedAt,
     restoredCollectionId,
     restoredFailedIndex,
+    restoredRemainingIndices,
     entries.length,
   ]);
 
@@ -304,6 +310,7 @@ export function useSunoRunner(): RunnerState {
     setRestoredPlaylistName(undefined);
     setRestoredFailedIndex(undefined);
     setRestoredFailedIndices(undefined);
+    setRestoredRemainingIndices(undefined);
     setRestoredSubmittedClipIds(undefined);
     setRestoredPlaylistExpectedClipCount(undefined);
   }, []);
@@ -397,6 +404,7 @@ export function useSunoRunner(): RunnerState {
         // ERROR 停止の snapshot なら failedIndex を再開バナーの冗長ソースへ流す (#872 要件3)。
         setRestoredFailedIndex(restored.failedIndex);
         setRestoredFailedIndices(restored.failedIndices);
+        setRestoredRemainingIndices(restored.remainingIndices);
         setRestoredSubmittedClipIds(restored.submittedClipIds);
         setRestoredPlaylistExpectedClipCount(restored.playlistExpectedClipCount);
         report(restored.status, restored.isError);
@@ -544,7 +552,7 @@ export function useSunoRunner(): RunnerState {
     if (!resumeBanner) {
       return;
     }
-    if (resumeBanner.failedIndex >= resumeBanner.total) {
+    if (resumeBanner.failedIndex >= resumeBanner.total && !resumeBanner.remainingIndices?.length) {
       void retryPlaylist();
       return;
     }
@@ -633,6 +641,10 @@ export function useSunoRunner(): RunnerState {
           persistedResume?.collectionId === selectedCollectionId
             ? persistedResume.failedIndices
             : restoredFailedIndices,
+        remainingIndices:
+          persistedResume?.collectionId === selectedCollectionId
+            ? persistedResume.remainingIndices
+            : restoredRemainingIndices,
         submittedClipIds: result.clipIds,
         playlistExpectedClipCount: expectedClipCountForManualAdoption,
       };
@@ -657,6 +669,7 @@ export function useSunoRunner(): RunnerState {
     entries.length,
     selectedCollection,
     restoredFailedIndices,
+    restoredRemainingIndices,
     report,
   ]);
 

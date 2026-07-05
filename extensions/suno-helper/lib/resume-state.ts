@@ -29,6 +29,8 @@ export interface ResumeState {
   /** リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
    * 「失敗分のみ再実行」導線が run({indices}) へ渡す。旧 state には無い optional（後方互換）。 */
   failedIndices?: number[];
+  /** 明示 indices 実行が途中中断したとき、再開で実行すべき残りの 0-based index 列。 */
+  remainingIndices?: number[];
   /** playlist 追加対象として generate response から観測済みの clip ID 一覧。 */
   submittedClipIds?: string[];
   /** playlist 追加時に揃っているべき clip ID 件数。 */
@@ -49,6 +51,7 @@ export interface RunRange {
 export interface ResumeBanner {
   failedIndex: number;
   total: number;
+  remainingIndices?: number[];
 }
 
 /** 再開バナーの stale 判定閾値（24 時間, ms）。要件4。 */

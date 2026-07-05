@@ -41,6 +41,13 @@ export function buildResumeRunOverrides(
   resumeBanner: ResumeBanner,
   playlistResume: PlaylistResumePayload,
 ): RunOverrides {
+  if (resumeBanner.remainingIndices && resumeBanner.remainingIndices.length > 0) {
+    return {
+      indices: [...resumeBanner.remainingIndices],
+      submittedClipIds: [...playlistResume.submittedClipIds],
+      playlistExpectedClipCount: playlistResume.playlistExpectedClipCount,
+    };
+  }
   return {
     range: resumeRunRange(resumeBanner),
     submittedClipIds: [...playlistResume.submittedClipIds],

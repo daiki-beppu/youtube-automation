@@ -87,7 +87,7 @@ describe("content.ts: STOPPED phase は resume state を保存する (#898 要�
     // 一元処理され、resolveInterruptIndex で補正した interruptIndex を使う（未 click なら i と等価）。
     const loopStops =
       contentSource.match(
-        /persistInterruptState\(i\);\s*emitProgress\(\{ phase: PHASE\.STOPPED, index: i, total \}\)/g,
+        /persistInterruptState\(i, orderPosition\);\s*emitProgress\(\{ phase: PHASE\.STOPPED, index: i, total \}\)/g,
       ) ?? [];
 
     expect(loopStops).toHaveLength(1);
@@ -97,7 +97,7 @@ describe("content.ts: STOPPED phase は resume state を保存する (#898 要�
     // Generate click 済みの場合は重複を防ぐため interruptIndex = i+1 に補正して persist / emit する。
     const postInjectStops =
       contentSource.match(
-        /persistInterruptState\(interruptIndex\);\s*emitProgress\(\{ phase: PHASE\.STOPPED, index: interruptIndex, total \}\)/g,
+        /persistInterruptState\(interruptIndex, orderPosition\);\s*emitProgress\(\{ phase: PHASE\.STOPPED, index: interruptIndex, total \}\)/g,
       ) ?? [];
 
     expect(postInjectStops).toHaveLength(1);
@@ -115,7 +115,7 @@ describe("content.ts: STOPPED phase は resume state を保存する (#898 要�
     // failedIndex 名を rename せず流用すること（要件3）。引数 interruptedIndex を failedIndex に載せる。
     // ERROR / STOPPED 両 phase 共通ヘルパー（dry-duplication 解消, AI-898-001）。
     expect(contentSource).toMatch(
-      /function persistInterruptState\(interruptedIndex: number\): void \{[\s\S]*?void writeResumeState\(\{\s*collectionId,\s*failedIndex: interruptedIndex,\s*total,\s*timestamp: Date\.now\(\),/,
+      /function persistInterruptState\(interruptedIndex: number, orderPosition\?: number\): void \{[\s\S]*?void writeResumeState\(\{\s*collectionId,\s*failedIndex: interruptedIndex,\s*total,\s*timestamp: Date\.now\(\),/,
     );
   });
 });
@@ -129,7 +129,7 @@ describe("content.ts: 既存 ERROR / FINISHED の resume 挙動は回帰しな�
     // #924 修正: ERROR catch は resolveInterruptIndex(i, submitted, isNotAcknowledged) で interruptIndex を決め、
     // emitProgress・persistInterruptState の両方に interruptIndex を渡す（両系統の failedIndex を一致させる）。
     expect(contentSource).toMatch(
-      /emitProgress\(\{ phase: PHASE\.ERROR, index: interruptIndex, total, message \}\);[\s\S]*?persistInterruptState\(interruptIndex\);/,
+      /emitProgress\(\{ phase: PHASE\.ERROR, index: interruptIndex, total, message \}\);[\s\S]*?persistInterruptState\(interruptIndex, orderPosition\);/,
     );
   });
 
@@ -196,6 +196,19 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       indices: undefined,
       submittedClipIds: ["clip-a", "clip-b"],
       playlistExpectedClipCount: 2,
+    });
+  });
+
+  it("Given indices 部分実行の resume state When payload を構築する Then range ではなく残り indices を渡す", () => {
+    const overrides = buildResumeRunOverrides(makeBanner({ failedIndex: 2, total: 5, remainingIndices: [2, 4] }), {
+      submittedClipIds: ["clip-a", "clip-b"],
+      playlistExpectedClipCount: 6,
+    });
+
+    expect(overrides).toEqual({
+      indices: [2, 4],
+      submittedClipIds: ["clip-a", "clip-b"],
+      playlistExpectedClipCount: 6,
     });
   });
 
@@ -311,7 +324,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
 
   it("Given playlist error persist When content.ts を読む Then snapshot に failedIndex も保持する", () => {
     expect(contentSource).toMatch(
-      /currentSnapshot =[\s\S]*?\{\s*\.\.\.currentSnapshot,\s*failedIndex: interruptedIndex,\s*submittedClipIds: persistedSubmittedClipIds,\s*playlistExpectedClipCount: expectedPlaylistClipCount,/,
+      /currentSnapshot =[\s\S]*?\{\s*\.\.\.currentSnapshot,\s*failedIndex: interruptedIndex,[\s\S]*?submittedClipIds: persistedSubmittedClipIds,\s*playlistExpectedClipCount: expectedPlaylistClipCount,/,
     );
   });
 

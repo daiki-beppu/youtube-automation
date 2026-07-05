@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PHASE } from "../../shared/constants";
 import type { EntryRunResult, RunEntryWithRetryOptions } from "../lib/entry-retry";
+import { writeResumeState } from "../lib/resume-state";
 import { makePromptEntries, markBbox } from "./_helpers";
 
 const harness = vi.hoisted(() => {
@@ -465,6 +466,32 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     );
     expect(progressPayloads()).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ index: 1 }), expect.objectContaining({ phase: PHASE.ERROR })]),
+    );
+  });
+
+  it("Given indices 部分実行の途中で停止 When resume state を保存する Then 未選択 index を含まない残り indices を保持する", async () => {
+    makeRunnableSunoDom("Grid");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(5);
+    harness.runEntryWithRetry
+      .mockImplementationOnce(async (options: Pick<RunEntryWithRetryOptions, "attempt">) => {
+        await options.attempt();
+        return { outcome: "ok" };
+      })
+      .mockResolvedValueOnce({ outcome: "aborted" as const });
+
+    const result = runHandler({ data: { ...makeRunPayload(entries), indices: [0, 2, 4] } });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(writeResumeState).toHaveBeenCalledOnce());
+    expect(writeResumeState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionId: "20260601-clm-preflight-collection",
+        failedIndex: 2,
+        total: entries.length,
+        remainingIndices: [2, 4],
+      }),
     );
   });
 
