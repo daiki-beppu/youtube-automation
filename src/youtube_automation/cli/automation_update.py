@@ -40,6 +40,7 @@ EXIT_DIFF = 1
 EXIT_ERROR = 2
 
 _SHA_RE = re.compile(r"[0-9a-f]{40}")
+_RELEASE_TAG_RE = re.compile(r"v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?")
 _DEPENDENCY_NAME_RE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
 _GIT_REFERENCE_RE = re.compile(r"@\s*git\+(?P<url>[^\s;]+)")
 
@@ -226,6 +227,11 @@ def _detect_pin(pyproject: dict) -> Pin:
                 return Pin("url", "sha", ref, base_url)
             if ref == "main":
                 return Pin("url", "branch", ref, base_url)
+            if not _RELEASE_TAG_RE.fullmatch(ref):
+                raise ConfigError(
+                    "pyproject.toml の URL 直接参照で、main / 40 桁 sha / vX.Y.Z tag 以外の ref は"
+                    f"自動追従できません: {ref}"
+                )
             return Pin("url", "tag", ref, base_url)
     raise ConfigError(f"pyproject.toml から {PACKAGE_NAME} の pin を特定できません")
 
@@ -494,8 +500,11 @@ def cmd_apply(args: argparse.Namespace) -> int:
         if pin.value == new_ref:
             print(f"  pin は既に {new_ref} です（書き換えなし）")
             return
-        text = pyproject_path.read_text(encoding="utf-8")
-        pyproject_path.write_text(_rewrite_pin(text, pin, new_ref), encoding="utf-8")
+        try:
+            text = pyproject_path.read_text(encoding="utf-8")
+            pyproject_path.write_text(_rewrite_pin(text, pin, new_ref), encoding="utf-8")
+        except OSError as e:
+            raise _StepFailed(f"pyproject.toml を書き換えられません: {e}") from e
         print(f"  {pin.value} → {new_ref}")
 
     def run(cmd: list[str]) -> Callable[[], None]:
@@ -521,16 +530,15 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 run(["uv", "run", "yt-skills", "sync", "--asset", "skills", "--only", *args.sync_only, *force]),
             )
         )
-        steps.append(
-            (
-                "yt-skills sync (--asset claude-md --force)",
-                run(["uv", "run", "yt-skills", "sync", "--asset", "claude-md", *force]),
-            )
-        )
     else:
         steps.append(("yt-skills sync (--asset all --force)", run(["uv", "run", "yt-skills", "sync", *force])))
     steps.append(("smoke check: yt-skills list", run(["uv", "run", "yt-skills", "list"])))
-    steps.append(("smoke check: yt-config-migrate verify", run(["uv", "run", "yt-config-migrate", "verify"])))
+    steps.append(
+        (
+            "smoke check: yt-config-migrate verify",
+            run(["uv", "run", "yt-config-migrate", "verify", "--target", str(root)]),
+        )
+    )
 
     total = len(steps)
     for index, (name, action) in enumerate(steps, start=1):
@@ -575,7 +583,7 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         default=None,
         metavar="SKILL",
-        help="skills asset を指定スキルのみ同期する（claude-md asset は別途同期される）",
+        help="skills asset を指定スキルのみ同期する（claude-md asset は同期しない）",
     )
     p_apply.add_argument(
         "--allow-dirty",

@@ -211,6 +211,18 @@ def test_detect_pin_url_main_ref_is_branch_follow() -> None:
     assert _detect_pin(pyproject) == Pin("url", "branch", "main")
 
 
+def test_detect_pin_url_unknown_ref_is_rejected() -> None:
+    import tomllib
+
+    pyproject = tomllib.loads(
+        '[project]\nname = "x"\ndependencies = '
+        '["youtube-channels-automation @ git+https://github.com/daiki-beppu/youtube-automation@develop"]\n'
+    )
+
+    with pytest.raises(automation_update.ConfigError, match="main / 40 桁 sha / vX.Y.Z tag"):
+        _detect_pin(pyproject)
+
+
 def test_detect_pin_rejects_unofficial_inline_git_url() -> None:
     import tomllib
 
@@ -316,6 +328,16 @@ def test_check_fetches_latest_release_when_tag_omitted(
     assert "v9.9.9" in capsys.readouterr().out
 
 
+def test_check_uses_cwd_when_target_omitted(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    monkeypatch.chdir(repo)
+
+    assert main(["check", "--tag", "v5.6.0"]) == EXIT_DIFF
+    assert f"実行場所: {repo}" in capsys.readouterr().out
+
+
 def test_check_branch_follow_up_to_date(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
@@ -365,9 +387,34 @@ def test_apply_inline_tag_pin_rewrites_and_runs_steps(
         ["uv", "lock", "--upgrade-package", "youtube-channels-automation"],
         ["uv", "run", "yt-skills", "sync", "--force"],
         ["uv", "run", "yt-skills", "list"],
-        ["uv", "run", "yt-config-migrate", "verify"],
+        ["uv", "run", "yt-config-migrate", "verify", "--target", str(repo)],
     ]
     assert "✓ 追従が完了しました" in capsys.readouterr().out
+
+
+def test_apply_fetches_latest_release_when_tag_omitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recorded_commands: list[list[str]]
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    monkeypatch.setattr(automation_update, "_fetch_latest_release_tag", lambda: "v9.9.9")
+
+    assert main(["apply", "--target", str(repo)]) == 0
+
+    text = (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'tag = "v9.9.9"' in text
+    assert ["uv", "run", "yt-config-migrate", "verify", "--target", str(repo)] in recorded_commands
+
+
+def test_apply_uses_cwd_when_target_omitted(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, recorded_commands: list[list[str]]
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    monkeypatch.chdir(repo)
+
+    assert main(["apply", "--tag", "v5.6.0"]) == 0
+
+    assert 'tag = "v5.6.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert ["uv", "run", "yt-config-migrate", "verify", "--target", str(repo)] in recorded_commands
 
 
 def test_apply_url_tag_pin_rewrites(tmp_path: Path, no_network, recorded_commands: list[list[str]]) -> None:
@@ -585,7 +632,44 @@ def test_apply_sync_only_is_allowlist_and_forces_selected_assets(
         "suno",
         "--force",
     ] in recorded_commands
-    assert ["uv", "run", "yt-skills", "sync", "--asset", "claude-md", "--force"] in recorded_commands
+    assert ["uv", "run", "yt-skills", "sync", "--asset", "claude-md", "--force"] not in recorded_commands
+
+
+def test_apply_sync_only_bypasses_local_fix_guard_for_selected_skills(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, recorded_commands: list[list[str]]
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: True)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--sync-only", "suno"]) == 0
+
+    assert [
+        "uv",
+        "run",
+        "yt-skills",
+        "sync",
+        "--asset",
+        "skills",
+        "--only",
+        "suno",
+        "--force",
+    ] in recorded_commands
+    assert ["uv", "run", "yt-skills", "sync", "--asset", "claude-md", "--force"] not in recorded_commands
+
+
+def test_apply_config_migrate_verify_uses_target_even_when_channel_dir_differs(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, recorded_commands: list[list[str]]
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    other_base = tmp_path / "other"
+    other_base.mkdir()
+    other_repo = _write_repo(other_base, INLINE_TABLE_PYPROJECT)
+    monkeypatch.setenv("CHANNEL_DIR", str(other_repo))
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 0
+
+    assert ["uv", "run", "yt-config-migrate", "verify", "--target", str(repo)] in recorded_commands
+    assert ["uv", "run", "yt-config-migrate", "verify", "--target", str(other_repo)] not in recorded_commands
 
 
 def test_apply_sha_pin_requires_rev(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
@@ -667,6 +751,29 @@ def test_apply_external_command_start_failure_is_step_failure(
     err = capsys.readouterr().err
     assert "'uv lock' で失敗しました" in err
     assert "missing executable" in err
+
+
+def test_apply_pyproject_write_failure_is_step_failure(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    monkeypatch.setattr(automation_update, "_git_status_porcelain", lambda root: "")
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
+
+    original_write_text = Path.write_text
+
+    def _write_text(self: Path, *args, **kwargs):
+        if self == repo / "pyproject.toml":
+            raise OSError("disk full")
+        return original_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", _write_text)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 1
+
+    err = capsys.readouterr().err
+    assert "'pyproject.toml の pin 書き換え' で失敗しました" in err
+    assert "disk full" in err
 
 
 # ---------------------------------------------------------------------------
