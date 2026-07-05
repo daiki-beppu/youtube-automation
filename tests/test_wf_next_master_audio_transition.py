@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from pathlib import Path
 
@@ -54,11 +53,9 @@ def _run(
         args.extend(["--approved-master-audio", approved_master_audio])
     if selected_master_audio is not None:
         args.extend(["--selected-master-audio", selected_master_audio])
-    env = None
     if main_repo_root is not None:
-        env = os.environ.copy()
-        env["WF_NEXT_MAIN_REPO_ROOT"] = str(main_repo_root)
-    return subprocess.run(args, capture_output=True, text=True, check=False, env=env)
+        args.extend(["--main-repo-root", str(main_repo_root)])
+    return subprocess.run(args, capture_output=True, text=True, check=False)
 
 
 def _state(collection: Path) -> dict:
@@ -357,8 +354,8 @@ def test_worktree_and_main_repo_candidates_need_selection(tmp_path: Path) -> Non
     assert output["action"] == "needs_selection"
     assert output["candidates"] == ["worktree-final.wav", "main-final.wav"]
     assert output["candidate_sources"] == [
-        {"name": "worktree-final.wav", "source": "worktree"},
-        {"name": "main-final.wav", "source": "main"},
+        {"name": "worktree-final.wav", "source": "worktree", "id": "worktree:worktree-final.wav"},
+        {"name": "main-final.wav", "source": "main", "id": "main:main-final.wav"},
     ]
     assert _state_text(collection) == before
 
@@ -384,6 +381,78 @@ def test_selected_main_repo_candidate_is_copied_to_worktree(tmp_path: Path) -> N
     assert (collection / "01-master" / "main-final.wav").read_bytes() == b"main-final"
     state = _state(collection)
     assert state["assets"]["master_audio"] == "main-final.wav"
+
+
+def test_same_name_worktree_and_main_repo_candidates_require_source_qualified_selection(tmp_path: Path) -> None:
+    collection = _collection(tmp_path / "worktree")
+    _add_final_candidate(collection, "final.wav")
+    main_repo_root = tmp_path / "main"
+    main_master_dir = main_repo_root / "collections" / "planning" / collection.name / "01-master"
+    main_master_dir.mkdir(parents=True)
+    (main_master_dir / "final.wav").write_bytes(b"main-final")
+    before = _state_text(collection)
+
+    result = _run(
+        collection,
+        skip_manual_mastering=False,
+        approval_gate_audio=False,
+        main_repo_root=main_repo_root,
+    )
+
+    assert result.returncode == 0, result.stderr
+    output = json.loads(result.stdout)
+    assert output["action"] == "needs_selection"
+    assert output["candidates"] == ["final.wav", "final.wav"]
+    assert output["candidate_sources"] == [
+        {"name": "final.wav", "source": "worktree", "id": "worktree:final.wav"},
+        {"name": "final.wav", "source": "main", "id": "main:final.wav"},
+    ]
+    assert _state_text(collection) == before
+
+
+def test_same_name_main_repo_candidate_can_be_selected_by_identity(tmp_path: Path) -> None:
+    collection = _collection(tmp_path / "worktree")
+    _add_final_candidate(collection, "final.wav")
+    main_repo_root = tmp_path / "main"
+    main_master_dir = main_repo_root / "collections" / "planning" / collection.name / "01-master"
+    main_master_dir.mkdir(parents=True)
+    (main_master_dir / "final.wav").write_bytes(b"main-final")
+
+    result = _run(
+        collection,
+        skip_manual_mastering=False,
+        approval_gate_audio=False,
+        selected_master_audio="main:final.wav",
+        main_repo_root=main_repo_root,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["action"] == "adopted"
+    assert (collection / "01-master" / "final.wav").read_bytes() == b"main-final"
+    state = _state(collection)
+    assert state["assets"]["master_audio"] == "final.wav"
+
+
+def test_same_name_filename_only_selection_is_rejected_as_ambiguous(tmp_path: Path) -> None:
+    collection = _collection(tmp_path / "worktree")
+    _add_final_candidate(collection, "final.wav")
+    main_repo_root = tmp_path / "main"
+    main_master_dir = main_repo_root / "collections" / "planning" / collection.name / "01-master"
+    main_master_dir.mkdir(parents=True)
+    (main_master_dir / "final.wav").write_bytes(b"main-final")
+    before = _state_text(collection)
+
+    result = _run(
+        collection,
+        skip_manual_mastering=False,
+        approval_gate_audio=False,
+        selected_master_audio="final.wav",
+        main_repo_root=main_repo_root,
+    )
+
+    assert result.returncode == 1
+    assert "selected-master-audio is ambiguous; use one of: worktree:final.wav, main:final.wav" in result.stderr
+    assert _state_text(collection) == before
 
 
 def test_selected_raw_master_is_rejected_when_skip_manual_mastering_is_false(tmp_path: Path) -> None:

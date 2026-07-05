@@ -191,7 +191,13 @@ done
 
 workflow_state_master_audio() {
     local state_path="${COLLECTION_DIR}/workflow-state.json"
-    [[ -e "$state_path" ]] || return 1
+    if [[ ! -e "$state_path" ]]; then
+        if [[ -L "$state_path" ]]; then
+            echo "ERROR: workflow-state.json is a broken symlink: ${state_path}" >&2
+            return 2
+        fi
+        return 1
+    fi
     if [[ ! -f "$state_path" ]]; then
         echo "ERROR: workflow-state.json must be a file: ${state_path}" >&2
         return 2

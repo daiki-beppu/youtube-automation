@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -24,6 +23,10 @@ class MasterCandidate:
     name: str
     path: Path
     source: str
+
+    @property
+    def identity(self) -> str:
+        return f"{self.source}:{self.name}"
 
 
 def _bool_arg(value: str) -> bool:
@@ -89,18 +92,13 @@ def _git_common_dir(repo_root: Path) -> Path | None:
     return Path(value) if value else None
 
 
-def _main_repo_master_dir(collection: Path, local_master_dir: Path) -> Path | None:
-    override = os.environ.get("WF_NEXT_MAIN_REPO_ROOT")
-    if override:
-        candidate = Path(override) / "collections" / "planning" / collection.name / "01-master"
-        if candidate != local_master_dir:
-            return candidate
-
-    repo_root = _repo_root()
-    common_dir = _git_common_dir(repo_root)
-    if common_dir is None or common_dir == repo_root / ".git":
-        return None
-    main_repo_root = common_dir.parent
+def _main_repo_master_dir(collection: Path, local_master_dir: Path, main_repo_root: Path | None = None) -> Path | None:
+    if main_repo_root is None:
+        repo_root = _repo_root()
+        common_dir = _git_common_dir(repo_root)
+        if common_dir is None or common_dir == repo_root / ".git":
+            return None
+        main_repo_root = common_dir.parent
     candidate = main_repo_root / "collections" / "planning" / collection.name / "01-master"
     if candidate == local_master_dir:
         return None
@@ -130,10 +128,16 @@ def _candidate_names(candidates: list[MasterCandidate]) -> list[str]:
     return [candidate.name for candidate in candidates]
 
 
-def _find_selected_candidate(candidates: list[MasterCandidate], name: str) -> MasterCandidate | None:
+def _find_selected_candidate(candidates: list[MasterCandidate], selection: str) -> MasterCandidate | None:
     for candidate in candidates:
-        if candidate.name == name:
+        if candidate.identity == selection:
             return candidate
+    filename_matches = [candidate for candidate in candidates if candidate.name == selection]
+    if len(filename_matches) > 1:
+        identities = ", ".join(candidate.identity for candidate in filename_matches)
+        raise ValueError(f"selected-master-audio is ambiguous; use one of: {identities}")
+    if len(filename_matches) == 1:
+        return filename_matches[0]
     return None
 
 
@@ -192,6 +196,7 @@ def _candidate_sources(candidates: list[MasterCandidate]) -> list[JsonObject]:
         {
             "name": candidate.name,
             "source": candidate.source,
+            "id": candidate.identity,
         }
         for candidate in candidates
     ]
@@ -232,9 +237,9 @@ def _prepare_selected_file(candidate: MasterCandidate | None, master_dir: Path, 
         raise ValueError(f"master audio file does not exist: 01-master/{selected}")
 
 
-def _master_dirs(collection: Path, master_dir: Path) -> list[tuple[str, Path]]:
+def _master_dirs(collection: Path, master_dir: Path, main_repo_root: Path | None = None) -> list[tuple[str, Path]]:
     dirs = [("worktree", master_dir)]
-    main_master_dir = _main_repo_master_dir(collection, master_dir)
+    main_master_dir = _main_repo_master_dir(collection, master_dir, main_repo_root)
     if main_master_dir is not None:
         dirs.append(("main", main_master_dir))
     return dirs
@@ -286,7 +291,7 @@ def _resolve_transition(
 
     raw_master = _raw_master(assets)
     selected_arg = _selected_arg(args)
-    candidates = _final_candidates(_master_dirs(collection, master_dir), raw_master)
+    candidates = _final_candidates(_master_dirs(collection, master_dir, args.main_repo_root), raw_master)
     selected_candidate = _select_candidate_or_emit(candidates, selected_arg)
     if len(candidates) > 1 and selected_candidate is None:
         return 0
@@ -316,6 +321,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--approved", type=_approval_arg)
     parser.add_argument("--approved-master-audio")
     parser.add_argument("--selected-master-audio")
+    parser.add_argument("--main-repo-root", type=Path)
     args = parser.parse_args(argv)
 
     collection = args.collection
