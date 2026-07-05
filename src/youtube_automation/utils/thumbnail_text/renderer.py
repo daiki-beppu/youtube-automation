@@ -99,14 +99,13 @@ def _open_output_file_no_follow(output: Path, *, channel_root: Path):
     if hasattr(os, "O_NOFOLLOW"):
         dir_flags |= os.O_NOFOLLOW
 
-    if os.open in os.supports_dir_fd:
-        dir_fd = os.open(output.parent, dir_flags)
-        try:
-            file_fd = os.open(output.name, flags, 0o666, dir_fd=dir_fd)
-        finally:
-            os.close(dir_fd)
-    else:
-        file_fd = os.open(output, flags, 0o666)
+    if os.open not in os.supports_dir_fd:
+        raise ConfigError("出力画像を保存できません: fd-based の安全なファイル作成を利用できません")
+    dir_fd = os.open(output.parent, dir_flags)
+    try:
+        file_fd = os.open(output.name, flags, 0o666, dir_fd=dir_fd)
+    finally:
+        os.close(dir_fd)
     return os.fdopen(file_fd, "wb")
 
 
@@ -119,6 +118,8 @@ def _save_image_safely(image: Image.Image, output: Path, *, channel_root: Path) 
             else:
                 image.save(fh, format=image_format)
     except (OSError, ValueError) as exc:
+        if output.exists() and not output.is_symlink():
+            output.unlink()
         raise ConfigError(f"出力画像を保存できません: {output} ({exc})") from exc
 
 

@@ -92,6 +92,10 @@ def expand_thumbnail_prompt_clauses(prompt: str, skill_cfg: dict) -> str:
         font.get("copy"),
         "image_generation.gemini.thumbnail_text.font.copy",
     )
+    if "{font_description}" not in typography_clause:
+        raise ConfigError(
+            "image_generation.gemini.single_step.typography_clause は {font_description} を含めてください"
+        )
 
     rendered_clause = typography_clause.replace("{font_description}", font_description)
     return prompt.replace("${typography_clause}", rendered_clause.strip())

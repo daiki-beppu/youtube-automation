@@ -17,6 +17,7 @@ _DEFAULT_CHANNEL_NAME_SIZE = 36
 _DEFAULT_COLOR = "#FFFFFF"
 _DEFAULT_STROKE_COLOR = "#000000"
 _DEFAULT_OVERLAY_KEY_PREFIX = "thumbnail_text.overlay"
+_SKILL_OVERLAY_CONFIG_PATH = "image_generation.gemini.thumbnail_text.overlay"
 _SKILL_CONFIG_PATH_HINT = "config/skills/thumbnail.yaml"
 
 _VALID_ANCHORS = frozenset(
@@ -129,6 +130,24 @@ def _font_path_value(font_cfg: Mapping[str, object], name: str, *, key: str) -> 
     if not isinstance(raw, str):
         raise ConfigError(f"フォントパスは文字列で指定してください: {key} = {raw!r}")
     return raw
+
+
+def overlay_config_from_skill_config(skill_config: object) -> Mapping[str, object]:
+    """thumbnail skill-config から deterministic overlay 設定を取り出す。"""
+    if not isinstance(skill_config, Mapping):
+        raise ConfigError(f"thumbnail skill-config はマッピングで指定してください ({_SKILL_CONFIG_PATH_HINT})")
+    image_generation = _mapping_at(skill_config, "image_generation", key="image_generation")
+    gemini = _mapping_at(image_generation, "gemini", key="image_generation.gemini")
+    thumbnail_text = _mapping_at(
+        gemini,
+        "thumbnail_text",
+        key="image_generation.gemini.thumbnail_text",
+    )
+    return _mapping_at(
+        thumbnail_text,
+        "overlay",
+        key=_SKILL_OVERLAY_CONFIG_PATH,
+    )
 
 
 def _build_text_style(

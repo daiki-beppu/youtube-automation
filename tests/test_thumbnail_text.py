@@ -13,6 +13,7 @@ from youtube_automation.utils import skill_config
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.thumbnail_text import OverlaySpec, TextStyle, compose_thumbnail_text
 from youtube_automation.utils.thumbnail_text.config import (
+    overlay_config_from_skill_config,
     overlay_spec_from_overlay_config,
     resolve_font_path,
 )
@@ -258,10 +259,8 @@ class TestThumbnailTextConfigAdapter:
         ],
     )
     def test_non_mapping_skill_config_sections_raise_config_error(self, cfg, key: str):
-        from youtube_automation.scripts.thumbnail_text import _overlay_config_from_skill_config
-
         with pytest.raises(ConfigError, match=key):
-            _overlay_config_from_skill_config(cfg)
+            overlay_config_from_skill_config(cfg)
 
 
 class TestComposeThumbnailText:
@@ -500,6 +499,55 @@ class TestComposeThumbnailText:
             )
 
         assert "出力画像を保存できません" in str(exc_info.value)
+
+    def test_fd_based_output_creation_unavailable_fails_closed(
+        self,
+        tmp_path: Path,
+        background: Path,
+        test_font: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        from youtube_automation.utils.thumbnail_text import renderer
+
+        output = tmp_path / "out.jpg"
+        monkeypatch.setattr(renderer.os, "supports_dir_fd", set())
+
+        with pytest.raises(ConfigError, match="fd-based"):
+            compose_thumbnail_text(
+                background=background,
+                output=output,
+                channel_root=tmp_path,
+                spec=self._spec(test_font),
+                title_lines=["Title"],
+            )
+
+        assert not output.exists()
+
+    def test_output_save_failure_removes_partial_file(
+        self,
+        tmp_path: Path,
+        background: Path,
+        test_font: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        output = tmp_path / "out.jpg"
+
+        def fail_save(self, fp, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003 - test double
+            fp.write(b"partial")
+            raise OSError("forced save failure")
+
+        monkeypatch.setattr(Image.Image, "save", fail_save)
+
+        with pytest.raises(ConfigError, match="出力画像を保存できません"):
+            compose_thumbnail_text(
+                background=background,
+                output=output,
+                channel_root=tmp_path,
+                spec=self._spec(test_font),
+                title_lines=["Title"],
+            )
+
+        assert not output.exists()
 
 
 class TestCli:

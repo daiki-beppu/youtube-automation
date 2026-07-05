@@ -118,6 +118,17 @@ class TestExpandThumbnailPromptClauses:
                 },
                 "font.copy",
             ),
+            (
+                {
+                    "image_generation": {
+                        "gemini": {
+                            "single_step": {"typography_clause": "Use consistent lettering."},
+                            "thumbnail_text": {"font": {"copy": "classic serif"}},
+                        }
+                    }
+                },
+                "font_description",
+            ),
         ],
     )
     def test_rejects_malformed_typography_config(self, skill_cfg: dict, message: str) -> None:
