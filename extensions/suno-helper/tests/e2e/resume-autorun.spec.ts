@@ -9,7 +9,7 @@
 // range 構築の純ロジック回帰は unit (use-suno-runner-resume.test.ts) が担う。
 import { expect, test } from "@playwright/test";
 
-test("「再開」1 クリックで run({range}) が自動実行される（prefill だけで止まらない, 要件6）", async ({ page }) => {
+test("「再開」1 クリックで run({range}) が自動実行される（手動 run 再押下を不要にする, 要件6）", async ({ page }) => {
   await page.setContent('<!doctype html><html><body><button id="resume">再開</button></body></html>');
 
   const result = await page.evaluate(() => {
@@ -29,7 +29,7 @@ test("「再開」1 クリックで run({range}) が自動実行される（pref
     };
 
     const banner: Banner = { failedIndex: 19, total: 24 };
-    // 本番 acceptResume: prefill に加えローカル構築した range を引数で run へ渡す（closure stale を避ける）。
+    // 本番 acceptResume: ローカル構築した range を引数で run へ渡す（closure stale を避ける）。
     const acceptResume = () => run({ range: resumeRunRange(banner) });
 
     document.getElementById("resume")!.addEventListener("click", acceptResume);
