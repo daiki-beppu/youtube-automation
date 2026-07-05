@@ -405,12 +405,15 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
     document.body.appendChild(ta);
     const pastes = capturePastes(ta);
     const onInput = vi.fn();
+    const onChange = vi.fn();
     ta.addEventListener("input", onInput);
+    ta.addEventListener("change", onChange);
 
     await setLyricsValue(ta, "la la la");
 
     expect(ta.value).toBe("la la la");
     expect(onInput).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledTimes(1);
     expect(pastes).toEqual([]);
     expect(execCommand).not.toHaveBeenCalled();
   });

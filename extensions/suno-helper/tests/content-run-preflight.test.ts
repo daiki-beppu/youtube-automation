@@ -173,6 +173,53 @@ function makeGenerateButton(): HTMLButtonElement {
   return button;
 }
 
+function makeGenerateButtonWithClickObserver(onClick: () => void): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.textContent = "Create";
+  button.addEventListener("click", () => {
+    onClick();
+    addStatusOnlyCard();
+    addStatusOnlyCard();
+  });
+  markBbox(button, 120, 40);
+  document.body.appendChild(button);
+  return button;
+}
+
+class DataTransferStub {
+  private store = new Map<string, string>();
+  setData(type: string, value: string): void {
+    this.store.set(type, value);
+  }
+  getData(type: string): string {
+    return this.store.get(type) ?? "";
+  }
+}
+
+class ClipboardEventStub extends Event {
+  readonly clipboardData: DataTransferStub | null;
+  constructor(type: string, init: EventInit & { clipboardData?: DataTransferStub } = {}) {
+    super(type, init);
+    this.clipboardData = init.clipboardData ?? null;
+  }
+}
+
+function makeLexicalLyrics(initialText: string): HTMLElement {
+  const lexical = document.createElement("div");
+  lexical.className = "lyrics-editor-content";
+  lexical.setAttribute("data-lexical-editor", "true");
+  lexical.setAttribute("contenteditable", "true");
+  lexical.textContent = initialText;
+  lexical.addEventListener("paste", (e) => {
+    const ev = e as unknown as ClipboardEventStub;
+    lexical.textContent = ev.clipboardData?.getData("text/plain") ?? "";
+    e.preventDefault();
+  });
+  markBbox(lexical, 320, 96);
+  document.body.appendChild(lexical);
+  return lexical;
+}
+
 function addCompletedRemixCard(): void {
   const card = document.createElement("div");
   for (const label of ["Select clip", "Remix clip", "Edit title"]) {
@@ -235,6 +282,9 @@ function makeRunPayload(entries = makePromptEntries(0)): {
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
+  vi.stubGlobal("DataTransfer", DataTransferStub);
+  vi.stubGlobal("ClipboardEvent", ClipboardEventStub);
+  (document as unknown as { execCommand: ReturnType<typeof vi.fn> }).execCommand = vi.fn();
   harness.runEntryWithRetry.mockImplementation(async (options: Pick<RunEntryWithRetryOptions, "attempt">) => {
     await options.attempt();
     return { outcome: "ok" };
@@ -440,6 +490,28 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       );
     },
   );
+
+  it("Given Lexical lyrics editor When run を受ける Then actual run handler が paste 完了後に Generate する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    const lyrics = makeLexicalLyrics("old lyrics");
+    let lyricsAtGenerate = "";
+    makeGenerateButtonWithClickObserver(() => {
+      lyricsAtGenerate = lyrics.textContent ?? "";
+    });
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = [{ name: "lexical", style: "neo soul", lyrics: "new lexical lyrics" }];
+
+    const result = runHandler({ data: makeRunPayload(entries) });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(lyrics.textContent).toBe("new lexical lyrics");
+    expect(lyricsAtGenerate).toBe("new lexical lyrics");
+  });
 
   it("Given indices 指定で supported view かつ entries がある When run を受ける Then 指定 index だけを絶対 index で処理する", async () => {
     makeRunnableSunoDom("Grid");
