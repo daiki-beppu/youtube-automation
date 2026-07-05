@@ -264,9 +264,7 @@ def _contains_token_or_phrase(text: str, phrase: str) -> bool:
 def _validate_style_variation_descriptor(axis: str, descriptor: str, banned_artists: list[str]) -> None:
     normalized = " ".join(descriptor.lower().split())
     if normalized in _STYLE_VARIATION_BARE_INSTRUMENTS:
-        raise ConfigError(
-            f"suno.style_variation.pools.{axis} の descriptor は裸楽器名を使用できません: {descriptor!r}"
-        )
+        raise ConfigError(f"suno.style_variation.pools.{axis} の descriptor は裸楽器名を使用できません: {descriptor!r}")
     for word in sorted(_STYLE_VARIATION_BANNED_ADJECTIVES):
         if _contains_token_or_phrase(normalized, word):
             raise ConfigError(
