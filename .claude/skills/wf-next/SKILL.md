@@ -1,6 +1,6 @@
 ---
 name: wf-next
-description: "Use when 既存コレクション（collections/planning/ 配下）の次の工程を実行したいとき。「次どうする？」「次のステップやって」「続き進めて」など、制作中コレクションを一段進めるときに使用する。読むだけで進捗を見たい場合は /wf-status、新規コレクション開始は /wf-new"
+description: "Use when 既存コレクション（collections/planning/）を一段進めるとき。「次どうする？」「続き進めて」で発動。進捗閲覧のみは /wf-status、新規は /wf-new"
 ---
 
 ## Overview

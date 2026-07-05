@@ -23,6 +23,7 @@ from youtube_automation.scripts.suno_artifacts import (
 from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.skill_config import load_channel_override, load_skill_config
+from youtube_automation.utils.suno_lyrics import load_suno_lyrics_by_name
 from youtube_automation.utils.video_analyzer import VIDEO_ANALYSIS_DIRNAME
 
 _TOP_GENRE_PHRASES = 8
@@ -361,35 +362,7 @@ def _load_external_lyrics(lyrics_path: Path) -> dict[str, str]:
     `/suno-lyric` は lyrics 専任で、`/suno` がここで Style と結合する。
     vocal mode のファイル必須チェックは呼び出し元で行う。
     """
-    try:
-        raw = json.loads(lyrics_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME} is invalid JSON: {lyrics_path}") from exc
-
-    if not isinstance(raw, list):
-        raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME} root must be a list: {lyrics_path}")
-
-    lyrics_by_name: dict[str, str] = {}
-    duplicates: set[str] = set()
-    for i, item in enumerate(raw, 1):
-        if not isinstance(item, dict):
-            raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: entry {i} must be an object")
-        name = item.get("name")
-        lyrics = item.get("lyrics")
-        if not isinstance(name, str) or not name.strip():
-            raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: entry {i}.name must be a non-empty string")
-        if not isinstance(lyrics, str):
-            raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: entry {i}.lyrics must be a string")
-        clean_name = name.strip()
-        if clean_name in lyrics_by_name:
-            duplicates.add(clean_name)
-        lyrics_by_name[clean_name] = lyrics.rstrip()
-
-    if duplicates:
-        duplicate_names = ", ".join(sorted(duplicates))
-        raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: duplicated lyrics entry names: {duplicate_names}")
-
-    return lyrics_by_name
+    return load_suno_lyrics_by_name(lyrics_path)
 
 
 def _validate_external_lyrics_names(
