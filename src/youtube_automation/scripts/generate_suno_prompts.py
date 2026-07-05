@@ -27,6 +27,57 @@ from youtube_automation.utils.suno_lyrics import load_suno_lyrics_by_name
 from youtube_automation.utils.video_analyzer import VIDEO_ANALYSIS_DIRNAME
 
 _TOP_GENRE_PHRASES = 8
+_STYLE_VARIATION_BANNED_ADJECTIVES = frozenset(
+    {
+        "thundering",
+        "blazing",
+        "crushing",
+        "soaring",
+        "screaming",
+        "devastating",
+        "explosive",
+        "ferocious",
+        "towering",
+        "surging",
+        "crystalline",
+        "shimmering",
+        "lush",
+        "sweeping",
+        "majestic",
+        "glorious",
+        "echoing",
+    }
+)
+_STYLE_VARIATION_ENVIRONMENT_NG_WORDS = frozenset(
+    {
+        "ambient noise",
+        "dripping",
+        "drops",
+        "puddles",
+        "pouring",
+        "rain",
+        "rain sounds",
+        "splashing",
+        "streaming water",
+        "trickling",
+        "vinyl crackle",
+        "white noise",
+    }
+)
+_STYLE_VARIATION_BARE_INSTRUMENTS = frozenset(
+    {
+        "bass",
+        "cello",
+        "drums",
+        "flute",
+        "guitar",
+        "organ",
+        "piano",
+        "strings",
+        "synth",
+        "trumpet",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Quality rules (#904): suno-bgm ベースの品質ガード
@@ -172,7 +223,6 @@ def _collect_video_analysis_presets() -> tuple[str, str]:
 
 
 def _style_line(tempo: str | None, effective_style: str, variation_descriptor: str) -> str:
-    """Styles 欄の 1 行目を組み立てる共有部品."""
     parts = [tempo] if tempo else []
     parts.append(effective_style)
     if variation_descriptor:
@@ -181,7 +231,7 @@ def _style_line(tempo: str | None, effective_style: str, variation_descriptor: s
 
 
 def _build_variation_sequence(pools: Mapping[str, list[str]]) -> list[str]:
-    """`style_variation.pools` から descriptor の割り当て列を構築する."""
+    # Sort axes so channel config key order cannot change generated prompts.
     axes = [pools[name] for name in sorted(pools) if pools[name]]
     if not axes:
         return []
@@ -189,12 +239,11 @@ def _build_variation_sequence(pools: Mapping[str, list[str]]) -> list[str]:
     for i in range(max(len(axis) for axis in axes)):
         for axis in axes:
             if i < len(axis):
-                sequence.append(str(axis[i]))
+                sequence.append(axis[i])
     return sequence
 
 
 def _variation_descriptor(entry_index: int, sequence: list[str]) -> str:
-    """コレクション内の entry 通し番号に対する descriptor を返す."""
     if entry_index == 0 or not sequence:
         return ""
     return sequence[(entry_index - 1) % len(sequence)]
@@ -206,7 +255,38 @@ class _ResolvedStyleVariation:
     sequence: list[str]
 
 
-def _resolve_style_variation(raw: object) -> _ResolvedStyleVariation:
+def _contains_token_or_phrase(text: str, phrase: str) -> bool:
+    if " " in phrase:
+        return phrase in text
+    return re.search(rf"\b{re.escape(phrase)}\b", text) is not None
+
+
+def _validate_style_variation_descriptor(axis: str, descriptor: str, banned_artists: list[str]) -> None:
+    normalized = " ".join(descriptor.lower().split())
+    if normalized in _STYLE_VARIATION_BARE_INSTRUMENTS:
+        raise ConfigError(
+            f"suno.style_variation.pools.{axis} の descriptor は裸楽器名を使用できません: {descriptor!r}"
+        )
+    for word in sorted(_STYLE_VARIATION_BANNED_ADJECTIVES):
+        if _contains_token_or_phrase(normalized, word):
+            raise ConfigError(
+                f"suno.style_variation.pools.{axis} の descriptor に禁止形容詞を含めることはできません: {descriptor!r}"
+            )
+    for word in sorted(_STYLE_VARIATION_ENVIRONMENT_NG_WORDS):
+        if _contains_token_or_phrase(normalized, word):
+            raise ConfigError(
+                f"suno.style_variation.pools.{axis} の descriptor に"
+                f"雨音・環境音 NG ワードを含めることはできません: {descriptor!r}"
+            )
+    for artist in banned_artists:
+        if isinstance(artist, str) and artist.strip() and artist.lower() in normalized:
+            raise ConfigError(
+                f"suno.style_variation.pools.{axis} の descriptor に"
+                f"アーティスト名を含めることはできません: {descriptor!r}"
+            )
+
+
+def _resolve_style_variation(raw: object, *, banned_artists: list[str] | None = None) -> _ResolvedStyleVariation:
     if raw is None:
         raise ConfigError("suno.style_variation は mapping である必要があります: None")
     if not isinstance(raw, Mapping):
@@ -236,6 +316,7 @@ def _resolve_style_variation(raw: object) -> _ResolvedStyleVariation:
                 raise ConfigError(
                     f"suno.style_variation.pools.{axis} の descriptor は非空文字列である必要があります: {descriptor!r}"
                 )
+            _validate_style_variation_descriptor(axis, descriptor, banned_artists or [])
             descriptors.append(descriptor)
         pools[axis] = descriptors
 
@@ -404,7 +485,10 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     style_influence = suno.get("style_influence", 50)
     weirdness = suno.get("weirdness", 50)
 
-    style_variation = _resolve_style_variation(suno.get("style_variation"))
+    style_variation = _resolve_style_variation(
+        suno.get("style_variation"),
+        banned_artists=suno.get("banned_artists", []),
+    )
 
     base_parts = [genre_line]
     if mood_descriptors:

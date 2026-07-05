@@ -1413,6 +1413,10 @@ def test_default_yaml_enables_style_variation_with_pools():
         ({"enabled": True, "pools": {"texture": "warm texture"}}, r"texture は list\[str\]"),
         ({"enabled": True, "pools": {"texture": [3]}}, r"descriptor は非空文字列"),
         ({"enabled": True, "pools": {"texture": [""]}}, r"descriptor は非空文字列"),
+        ({"enabled": True, "pools": {"texture": ["thundering warmth"]}}, r"禁止形容詞"),
+        ({"enabled": True, "pools": {"texture": ["rain texture"]}}, r"雨音・環境音 NG ワード"),
+        ({"enabled": True, "pools": {"texture": ["piano"]}}, r"裸楽器名"),
+        ({"enabled": True, "pools": {"texture": ["Drake texture"]}}, r"アーティスト名"),
     ],
 )
 def test_style_variation_rejects_invalid_config_shapes(channel_dir, tmp_path, style_variation, error_pattern):
