@@ -594,6 +594,29 @@ class TestShowPlanPrivacyDisplay:
         assert "📅 公開設定: 即時公開 (public)" in out
 
 
+def test_execute_collection_suppresses_lower_default_publish_fallback_when_schedule_disabled(tmp_path):
+    col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+    uploader, mock_inner = _make_uploader_with_schedule_config(
+        tmp_path,
+        {"schedule": {"auto_schedule_enabled": False, "timezone": "Asia/Tokyo"}},
+    )
+    mock_inner.upload_collection.return_value = {
+        "complete_video": {
+            "video_id": "V_NO_FALLBACK",
+            "video_url": "https://www.youtube.com/watch?v=V_NO_FALLBACK",
+            "title": "t",
+            "file_path": "p",
+        }
+    }
+
+    tracking = uploader._load_tracking(col)
+    uploader._execute_complete_collection(col, tracking, publish_at=None)
+
+    call_kwargs = mock_inner.upload_collection.call_args.kwargs
+    assert call_kwargs["publish_at"] is None
+    assert call_kwargs["apply_default_publish_at"] is False
+
+
 class TestScheduleConfigPrivacyStatusDeprecation:
     """#1472: schedule_config.json::upload_settings.privacy_status は未参照。
 

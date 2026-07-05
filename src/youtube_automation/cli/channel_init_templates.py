@@ -183,7 +183,6 @@ def _render_schedule(_ctx: ChannelInitContext) -> dict:
             "publish_time": "20:00",
             "cadence": ["tue", "thu", "sat"],
         },
-        # #1472: privacy_status は未参照のため配らない（実効値は youtube.json::privacy_status）
         "upload_settings": {
             "category_id": "10",
             "auto_create_playlist": True,

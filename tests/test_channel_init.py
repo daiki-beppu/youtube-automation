@@ -252,7 +252,6 @@ def test_main_creates_full_package_files_when_target_is_empty(tmp_path):
 
     schedule = _read_json(tmp_path / "config" / "schedule_config.json")
     assert schedule["upload_settings"]["category_id"] == "10"
-    # #1472: privacy_status は未参照のため配らない（実効値は youtube.json::privacy_status）
     assert "privacy_status" not in schedule["upload_settings"]
 
 
