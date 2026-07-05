@@ -269,9 +269,14 @@ export const parseGenerateMasterInput = (
   options: ParseOptions = {}
 ) => {
   try {
-    return ok(
-      GenerateMasterInputSchema.parse(parseGenerateMasterArgs(rawArgs, options))
+    const { quiet = false, ...serviceInput } = parseGenerateMasterArgs(
+      rawArgs,
+      options
     );
+    return ok({
+      input: GenerateMasterInputSchema.parse(serviceInput),
+      quiet,
+    });
   } catch (error) {
     return err(toServiceError(error));
   }

@@ -55,7 +55,6 @@ const GenerateMasterRawInputSchema = z.preprocess(
       no_loop: z.boolean().default(false),
       pin_first: z.array(z.string().min(1)).default([]),
       pin_first_count: z.number().int().nonnegative().optional(),
-      quiet: z.boolean().default(false),
       shuffle: z.boolean().default(false),
       shuffle_seed: z.number().int().optional(),
       target_duration_min: z.number().int().positive().optional(),
@@ -96,7 +95,6 @@ const GenerateMasterInternalInputSchema = z
     noLoop: z.boolean(),
     pinFirst: z.array(z.string().min(1)),
     pinFirstCount: z.number().int().nonnegative().optional(),
-    quiet: z.boolean(),
     shuffle: z.boolean(),
     shuffleSeed: z.number().int().optional(),
     specified: z
@@ -171,5 +169,11 @@ export const GenerateMasterOutputSchema = z
   })
   .strict();
 
-export type GenerateMasterInput = z.infer<typeof GenerateMasterInputSchema>;
+export type GenerateMasterInternalInput = z.infer<
+  typeof GenerateMasterInputSchema
+>;
+export type GenerateMasterInput = Omit<
+  GenerateMasterInternalInput,
+  "specified"
+>;
 export type GenerateMasterOutput = z.infer<typeof GenerateMasterOutputSchema>;

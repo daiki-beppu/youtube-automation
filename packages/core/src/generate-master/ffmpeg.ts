@@ -61,8 +61,6 @@ export const buildFfmpegArgs = (
       ...OUTPUT_CODEC_ARGS,
       "-b:a",
       input.bitrate,
-      "-q:a",
-      "0",
       outputPath,
       "-loglevel",
       "error",
@@ -80,8 +78,6 @@ export const buildFfmpegArgs = (
     ...OUTPUT_CODEC_ARGS,
     "-b:a",
     input.bitrate,
-    "-q:a",
-    "0",
     outputPath,
     "-loglevel",
     "error"

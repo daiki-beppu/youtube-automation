@@ -37,7 +37,6 @@ afterEach(restoreGenerateMasterFixtures);
 
 describe("generateMasterService — audio collection and ffmpeg command", () => {
   test("collects mp3, m4a, and wav inputs sorted by filename", async () => {
-    // Given a CHANNEL_DIR-relative collection with mixed supported audio files
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", [
       "02-beta.wav",
@@ -45,22 +44,20 @@ describe("generateMasterService — audio collection and ffmpeg command", () => 
       "03-gamma.mp3",
     ]);
     const logPath = installFakeFfmpeg();
-
-    // When the service generates a master
     const output = await runOk({
       bitrate: "256k",
       channel_dir: channelRoot,
       collection: "collections/demo",
       crossfade_duration: 1.5,
     });
-
-    // Then ffmpeg receives all supported files in sorted order.
     const [args] = readFfmpegCalls(logPath);
     expect(args).toBeDefined();
     expect(
       inputFilesInCommand(args ?? []).map((path) => basename(path))
     ).toEqual(["01-alpha.m4a", "02-beta.wav", "03-gamma.mp3"]);
     expect(args).toContain("-filter_complex");
+    expect(args).toContain("-b:a");
+    expect(args).not.toContain("-q:a");
     const expectedFilter = [
       "[0:a][1:a]acrossfade=d=1.5:c1=tri:c2=tri[cf1]",
       "[cf1][2:a]acrossfade=d=1.5:c1=tri:c2=tri[aout]",
@@ -79,20 +76,15 @@ describe("generateMasterService — audio collection and ffmpeg command", () => 
   });
 
   test("copies a single mp3 without invoking ffmpeg", async () => {
-    // Given one mp3 input
     const channelRoot = makeTempRoot("generate-master-channel-");
     const collection = setupCollection(channelRoot, "collections/demo", [
       "01-only.mp3",
     ]);
     const logPath = installFakeFfmpeg();
-
-    // When mastering runs
     const output = await runOk({
       channel_dir: channelRoot,
       collection: "collections/demo",
     });
-
-    // Then the existing copy fast path is preserved.
     expect(readFfmpegCalls(logPath)).toEqual([]);
     expect(output.segmentCount).toBe(1);
     expect(output.outputPath).toBe(join(collection, "01-master", "master.mp3"));
@@ -100,23 +92,20 @@ describe("generateMasterService — audio collection and ffmpeg command", () => 
   });
 
   test("transcodes a single non-mp3 input to master.mp3", async () => {
-    // Given one wav input
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-only.wav"]);
     const logPath = installFakeFfmpeg();
-
-    // When mastering runs
     const output = await runOk({
       channel_dir: channelRoot,
       collection: "collections/demo",
     });
-
-    // Then ffmpeg runs without a crossfade filter and writes master.mp3.
     const [args] = readFfmpegCalls(logPath);
     expect(
       inputFilesInCommand(args ?? []).map((path) => basename(path))
     ).toEqual(["01-only.wav"]);
     expect(args).not.toContain("-filter_complex");
+    expect(args).toContain("-b:a");
+    expect(args).not.toContain("-q:a");
     expect(output.outputPath.endsWith("/01-master/master.mp3")).toBe(true);
     expect(existsSync(output.outputPath)).toBe(true);
   });
@@ -144,7 +133,6 @@ describe("generateMasterService — pin, shuffle, and loop ordering", () => {
   });
 
   test("pins before shuffle and repeats the resolved order for each loop", async () => {
-    // Given sorted tracks, one pinned first track, shuffle, and two loops
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", [
       "01-a.mp3",
@@ -159,8 +147,6 @@ describe("generateMasterService — pin, shuffle, and loop ordering", () => {
       "03-c.mp3": 30,
       "04-d.mp3": 30,
     });
-
-    // When mastering runs twice with the same seed
     const output = await runOk({
       channel_dir: channelRoot,
       collection: "collections/demo",
@@ -177,9 +163,6 @@ describe("generateMasterService — pin, shuffle, and loop ordering", () => {
       shuffle: true,
       shuffle_seed: 42,
     });
-
-    // Then both calls use the same resolved order, and each loop starts with
-    // the pinned first track rather than shuffling per loop.
     const [firstCall, secondCall] = readFfmpegCalls(logPath).map((args) =>
       inputFilesInCommand(args).map((path) => basename(path))
     );
@@ -351,23 +334,9 @@ describe("generateMasterService — filesystem safety and output errors", () => 
     const ffmpegLog = installFakeFfmpeg();
 
     const result = await generateMasterService({
-      bitrate: "192k",
-      channelDir: channelRoot,
+      channel_dir: channelRoot,
       collection: "collections/demo",
-      crossfadeDuration: -1,
-      loop: 1,
-      noLoop: false,
-      pinFirst: [],
-      quiet: false,
-      shuffle: false,
-      specified: {
-        bitrate: false,
-        crossfadeDuration: true,
-        pinFirstCount: false,
-        shuffle: false,
-        shuffleSeed: false,
-        targetDurationMin: false,
-      },
+      crossfade_duration: -1,
     });
 
     expect(result.ok).toBe(false);

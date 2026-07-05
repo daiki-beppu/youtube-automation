@@ -148,6 +148,21 @@ const runTaykFrom = (
   });
 };
 
+const runYtAlias = (...argv: string[]): ReturnType<typeof Bun.spawnSync> => {
+  const binDir = makeTempRoot("yt-generate-master-alias-bin-");
+  const executable = join(binDir, "yt");
+  writeText(
+    executable,
+    `#!/usr/bin/env sh\nexec bun ${JSON.stringify(taykScript)} "$@"\n`
+  );
+  chmodSync(executable, 0o755);
+  return Bun.spawnSync([executable, ...argv], {
+    cwd: repoRoot,
+    env: { ...process.env },
+    timeout: CLI_SMOKE_TIMEOUT_MS,
+  });
+};
+
 const readFfmpegCall = (logPath: string): string[] => {
   const [line] = readFileSync(logPath, "utf-8").trim().split("\n");
   if (line === undefined) {
@@ -200,20 +215,23 @@ describe("tayk dispatcher — generate-master", () => {
   test(
     "help lists the generate-master subcommand",
     () => {
-      // Given the dispatcher invoked with --help
       const proc = runTayk({}, "--help");
-
-      // Then the new command is reachable from the single dispatcher.
       expect(proc.exitCode).toBe(0);
       expect(proc.stdout?.toString()).toContain("generate-master");
     },
     CLI_SMOKE_TIMEOUT_MS
   );
 
+  testCliSmoke("yt alias reaches generate-master help", () => {
+    const proc = runYtAlias("generate-master", "--help");
+
+    expect(proc.exitCode).toBe(0);
+    expect(proc.stdout?.toString()).toContain("--target-duration");
+  });
+
   testCliSmoke(
     "runs generate-master through registry and prints JSON output",
     () => {
-      // Given a channel-root-relative collection and fake ffmpeg on PATH
       const channelRoot = makeTempRoot("yt-generate-master-channel-");
       setupCollection(channelRoot, "collections/demo", [
         "01-a.mp3",
@@ -221,8 +239,6 @@ describe("tayk dispatcher — generate-master", () => {
         "03-c.mp3",
       ]);
       const fake = installFakeFfmpeg();
-
-      // When the collection positional is explicit and --pin-first receives multiple files
       const proc = runTayk(
         fake.env,
         "generate-master",
@@ -233,8 +249,6 @@ describe("tayk dispatcher — generate-master", () => {
         "--pin-first=03-c.mp3",
         "01-a.mp3"
       );
-
-      // Then the CLI adapter passes the real contract shape to the service.
       expect(proc.exitCode).toBe(0);
       expect(proc.stderr?.toString()).toBe("");
       const parsed = JSON.parse(proc.stdout?.toString() ?? "") as {
@@ -363,7 +377,6 @@ describe("tayk dispatcher — generate-master", () => {
   testCliSmoke(
     "accepts equals value flags and negative numeric flag values",
     () => {
-      // Given a channel-root-relative collection and fake ffmpeg on PATH
       const channelRoot = makeTempRoot("yt-generate-master-channel-");
       setupCollection(channelRoot, "collections/demo", [
         "01-a.mp3",
@@ -374,8 +387,6 @@ describe("tayk dispatcher — generate-master", () => {
         "01-a.mp3": 30,
         "02-b.mp3": 30,
       });
-
-      // When citty help-advertised --flag=value syntax and a negative seed are used
       const proc = runTayk(
         {
           ...fakeFfmpeg.env,
@@ -395,8 +406,6 @@ describe("tayk dispatcher — generate-master", () => {
         "-1",
         "collections/demo"
       );
-
-      // Then the raw parser preserves the CLI contract before service execution.
       expect(proc.exitCode).toBe(0);
       expect(proc.stderr?.toString()).toBe("");
       const parsed = JSON.parse(proc.stdout?.toString() ?? "") as {
@@ -411,7 +420,6 @@ describe("tayk dispatcher — generate-master", () => {
   testCliSmoke(
     "uses trailing collection after pin-first when it resolves under channel dir",
     () => {
-      // Given a channel-root-relative collection and fake ffmpeg on PATH
       const channelRoot = makeTempRoot("yt-generate-master-channel-");
       setupCollection(channelRoot, "collections/demo", [
         "01-a.mp3",
@@ -419,8 +427,6 @@ describe("tayk dispatcher — generate-master", () => {
         "03-c.mp3",
       ]);
       const fake = installFakeFfmpeg();
-
-      // When the collection argument appears after --pin-first before another option
       const proc = runTayk(
         fake.env,
         "generate-master",
@@ -432,8 +438,6 @@ describe("tayk dispatcher — generate-master", () => {
         "collections/demo",
         "--shuffle"
       );
-
-      // Then the trailing directory is treated as collection, not as a pin-first file.
       expect(proc.exitCode).toBe(0);
       expect(proc.stderr?.toString()).toBe("");
       const parsed = JSON.parse(proc.stdout?.toString() ?? "") as {
@@ -498,11 +502,8 @@ describe("tayk dispatcher — generate-master", () => {
   testCliSmoke(
     "service errors flow through run-command stderr and exit code",
     () => {
-      // Given the requested collection does not exist
       const channelRoot = makeTempRoot("yt-generate-master-channel-");
       const fake = installFakeFfmpeg();
-
-      // When the command is executed
       const proc = runTayk(
         fake.env,
         "generate-master",
@@ -510,8 +511,6 @@ describe("tayk dispatcher — generate-master", () => {
         channelRoot,
         "collections/missing"
       );
-
-      // Then emitResult handles the ServiceError boundary.
       expect(proc.exitCode).toBe(1);
       expect(proc.stdout?.toString()).toBe("");
       expect(proc.stderr?.toString()).toContain("[validation]");
@@ -521,10 +520,7 @@ describe("tayk dispatcher — generate-master", () => {
   testCliSmoke(
     "parse errors flow through run-command stderr and exit code",
     () => {
-      // Given an unknown option before service execution
       const proc = runTayk({}, "generate-master", "--unknown-option");
-
-      // Then the CLI still emits the shared ServiceError format.
       expect(proc.exitCode).toBe(1);
       expect(proc.stdout?.toString()).toBe("");
       expect(proc.stderr?.toString()).toContain("[validation]");
@@ -565,7 +561,6 @@ describe("tayk dispatcher — generate-master", () => {
   testCliSmoke(
     "uses cwd collection with multiple pin-first files when collection positional is omitted",
     () => {
-      // Given the process cwd is a collection directory
       const channelRoot = makeTempRoot("yt-generate-master-channel-");
       const collection = join(channelRoot, "collections", "demo");
       setupCollection(channelRoot, "collections/demo", [
@@ -574,8 +569,6 @@ describe("tayk dispatcher — generate-master", () => {
         "03-intro.mp3",
       ]);
       const fake = installFakeFfmpeg();
-
-      // When pin-first is passed without a collection positional
       const proc = runTaykFrom(
         collection,
         { ...fake.env, CHANNEL_DIR: channelRoot },
@@ -585,8 +578,6 @@ describe("tayk dispatcher — generate-master", () => {
         "03-intro.mp3",
         "--shuffle"
       );
-
-      // Then pin-first stays a pin value and cwd supplies the collection.
       expect(proc.exitCode).toBe(0);
       expect(proc.stderr?.toString()).toBe("");
       expect(

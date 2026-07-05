@@ -9,6 +9,7 @@ import {
 
 import {
   installFakeFfmpeg,
+  installFakeFfprobe,
   makeTempRoot,
   readFfmpegCalls,
   restoreGenerateMasterFixtures,
@@ -31,7 +32,6 @@ afterEach(restoreGenerateMasterFixtures);
 
 describe("generateMasterService — skill config override", () => {
   test("uses config/skills/masterup.json before masterup.yaml", async () => {
-    // Given both compatibility files exist under the channel root
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
     writeText(
@@ -45,14 +45,10 @@ describe("generateMasterService — skill config override", () => {
       })
     );
     const logPath = installFakeFfmpeg();
-
-    // When no CLI-level values override config
     const output = await runOk({
       channel_dir: channelRoot,
       collection: "collections/demo",
     });
-
-    // Then JSON wins over YAML.
     const [args] = readFfmpegCalls(logPath);
     expect(args).toContain("[0:a][1:a]acrossfade=d=2.5:c1=tri:c2=tri[aout]");
     expect(args).toContain("320k");
@@ -61,7 +57,6 @@ describe("generateMasterService — skill config override", () => {
   });
 
   test("falls back to config/skills/masterup.yaml when JSON is absent", async () => {
-    // Given only the legacy YAML override exists
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", [
       "01-a.mp3",
@@ -80,18 +75,46 @@ describe("generateMasterService — skill config override", () => {
       ].join("\n")
     );
     installFakeFfmpeg();
+    const output = await runOk({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
+    expect(output.bitrate).toBe("224k");
+    expect(output.crossfadeDuration).toBe(2);
+    expect(output.messages).toContain("[Shuffle] seed=0");
+    expect(output.messages.some((line) => line.includes("[Pin]"))).toBe(true);
+  });
 
-    // When mastering runs with no explicit shuffle/pin options
+  test("reads legacy audio.finalize YAML values", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.yaml"),
+      [
+        "audio:",
+        "  finalize:",
+        "    bitrate: 256k",
+        "    crossfade_duration: 3",
+        "    target_duration_min: 3",
+      ].join("\n")
+    );
+    const ffmpegLog = installFakeFfmpeg();
+    installFakeFfprobe({
+      "01-a.mp3": 30,
+      "02-b.mp3": 30,
+    });
+
     const output = await runOk({
       channel_dir: channelRoot,
       collection: "collections/demo",
     });
 
-    // Then the YAML audio scalars are applied.
-    expect(output.bitrate).toBe("224k");
-    expect(output.crossfadeDuration).toBe(2);
-    expect(output.messages).toContain("[Shuffle] seed=0");
-    expect(output.messages.some((line) => line.includes("[Pin]"))).toBe(true);
+    const [args] = readFfmpegCalls(ffmpegLog);
+    expect(args).toBeDefined();
+    expect(args).toContain("256k");
+    expect((args ?? []).join(" ")).toContain("acrossfade=d=3");
+    expect(output.loopCount).toBeGreaterThan(1);
+    expect(output.bitrate).toBe("256k");
   });
 
   test("parses quoted YAML scalars and inline comments", async () => {
@@ -139,6 +162,30 @@ describe("generateMasterService — skill config override", () => {
       expect(result.error.message).toContain("unsupported masterup audio YAML");
     }
     expect(readFfmpegCalls(logPath)).toEqual([]);
+  });
+
+  test("returns config error for inline or scalar audio YAML before ffmpeg", async () => {
+    for (const yaml of ["audio: {}", "audio: null"]) {
+      const channelRoot = makeTempRoot("generate-master-channel-");
+      setupCollection(channelRoot, "collections/demo", [
+        "01-a.mp3",
+        "02-b.mp3",
+      ]);
+      writeText(join(channelRoot, "config", "skills", "masterup.yaml"), yaml);
+      const logPath = installFakeFfmpeg();
+
+      const result = await generateMasterService({
+        channel_dir: channelRoot,
+        collection: "collections/demo",
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.domain).toBe("config");
+        expect(result.error.message).toContain("audio YAML must be a mapping");
+      }
+      expect(readFfmpegCalls(logPath)).toEqual([]);
+    }
   });
 
   test("treats missing audio section as an empty compatibility override", async () => {
@@ -261,7 +308,6 @@ describe("generateMasterService — skill config override", () => {
   });
 
   test("keeps explicit CLI default values above config overrides", async () => {
-    // Given config overrides differ from the schema defaults
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
     writeText(
@@ -271,16 +317,12 @@ describe("generateMasterService — skill config override", () => {
       })
     );
     const logPath = installFakeFfmpeg();
-
-    // When the caller explicitly passes the same values as schema defaults
     const output = await runOk({
       bitrate: "192k",
       channel_dir: channelRoot,
       collection: "collections/demo",
       crossfade_duration: 1,
     });
-
-    // Then presence, not value equality, controls CLI > config precedence.
     const [args] = readFfmpegCalls(logPath);
     expect(args).toContain("[0:a][1:a]acrossfade=d=1:c1=tri:c2=tri[aout]");
     expect(args).toContain("192k");
@@ -291,20 +333,15 @@ describe("generateMasterService — skill config override", () => {
 
 describe("generateMasterService — Result error contract", () => {
   test("returns a validation-domain error when no supported audio files exist", async () => {
-    // Given an otherwise valid collection with an empty music directory
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", []);
     installFakeFfmpeg();
-
-    // When the service runs
     const result = await generateMasterService(
       GenerateMasterInputSchema.parse({
         channel_dir: channelRoot,
         collection: "collections/demo",
       })
     );
-
-    // Then the service resolves to Result.err instead of throwing.
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.domain).toBe("validation");
@@ -313,12 +350,9 @@ describe("generateMasterService — Result error contract", () => {
   });
 
   test("returns a validation-domain error for a missing pin_first file", async () => {
-    // Given pin_first names a file outside the collected track set
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
     installFakeFfmpeg();
-
-    // When the service runs
     const result = await generateMasterService(
       GenerateMasterInputSchema.parse({
         channel_dir: channelRoot,
@@ -326,8 +360,6 @@ describe("generateMasterService — Result error contract", () => {
         pin_first: ["missing.mp3"],
       })
     );
-
-    // Then it fails loudly through the Result error arm.
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.domain).toBe("validation");
@@ -336,20 +368,15 @@ describe("generateMasterService — Result error contract", () => {
   });
 
   test("normalizes ffmpeg subprocess failure through ServiceError", async () => {
-    // Given ffmpeg exits non-zero
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
     installFakeFfmpeg(42);
-
-    // When the service runs
     const result = await generateMasterService(
       GenerateMasterInputSchema.parse({
         channel_dir: channelRoot,
         collection: "collections/demo",
       })
     );
-
-    // Then the boundary still resolves with a ServiceError Result.
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.domain).toBe("io");
@@ -358,7 +385,6 @@ describe("generateMasterService — Result error contract", () => {
   });
 
   test("returns a config-domain error before ffmpeg for invalid masterup audio config", async () => {
-    // Given masterup config has the wrong scalar type
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
     writeText(
@@ -366,16 +392,12 @@ describe("generateMasterService — Result error contract", () => {
       JSON.stringify({ audio: { crossfade_duration: "bad" } })
     );
     const logPath = installFakeFfmpeg();
-
-    // When the service runs
     const result = await generateMasterService(
       GenerateMasterInputSchema.parse({
         channel_dir: channelRoot,
         collection: "collections/demo",
       })
     );
-
-    // Then config validation stops before subprocess execution.
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.domain).toBe("config");

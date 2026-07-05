@@ -4,9 +4,9 @@ import { basename, extname, isAbsolute, join, relative } from "node:path";
 import type { MasterupAudioConfig } from "./config.ts";
 import { MUSIC_DIRNAME, SUPPORTED_AUDIO_EXTENSIONS } from "./constants.ts";
 import { probeDuration, seededRandom } from "./ffmpeg.ts";
-import type { GenerateMasterInput } from "./schema.ts";
+import type { GenerateMasterInternalInput } from "./schema.ts";
 
-export type EffectiveGenerateMasterInput = GenerateMasterInput & {
+export type EffectiveGenerateMasterInput = GenerateMasterInternalInput & {
   bitrate: string;
   crossfadeDuration: number;
   pinFirst: string[];
@@ -58,7 +58,7 @@ const assertSafeAudioFile = async (
 };
 
 export const withConfigOverrides = (
-  input: GenerateMasterInput,
+  input: GenerateMasterInternalInput,
   config: MasterupAudioConfig
 ): EffectiveGenerateMasterInput => {
   const bitrate =

@@ -26,17 +26,22 @@ import {
   GenerateMasterOutputSchema,
   ParseableGenerateMasterInputSchema,
 } from "./schema.ts";
-import type { GenerateMasterInput, GenerateMasterOutput } from "./schema.ts";
+import type {
+  GenerateMasterInternalInput,
+  GenerateMasterOutput,
+} from "./schema.ts";
 
 interface GenerateMasterDeps {
   channelDir: string;
 }
 
-const parseGenerateMasterInput = (input: unknown): GenerateMasterInput =>
+const parseGenerateMasterInput = (
+  input: unknown
+): GenerateMasterInternalInput =>
   ParseableGenerateMasterInputSchema.parse(input);
 
 const resolveCollectionPath = (
-  input: GenerateMasterInput,
+  input: GenerateMasterInternalInput,
   deps: Partial<GenerateMasterDeps> | undefined
 ): string => {
   if (input.collection === undefined) {
@@ -57,7 +62,7 @@ const resolveCollectionPath = (
 };
 
 const resolveConfigChannelDir = (
-  input: GenerateMasterInput,
+  input: GenerateMasterInternalInput,
   deps: Partial<GenerateMasterDeps> | undefined
 ): string | undefined => {
   const channelDir = input.channelDir ?? deps?.channelDir;
@@ -99,7 +104,7 @@ const tempMasterPath = (outputPath: string): string =>
   `${outputPath}.tmp-${process.pid}-${randomUUID()}`;
 
 const runGenerateMaster = async (
-  input: GenerateMasterInput,
+  input: GenerateMasterInternalInput,
   deps?: Partial<GenerateMasterDeps>
 ): Promise<GenerateMasterOutput> => {
   const collectionDir = resolveCollectionPath(input, deps);

@@ -1,8 +1,8 @@
-import { isAbsolute } from "node:path";
+import { statSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import process from "node:process";
 
 import { err, toServiceError } from "@youtube-automation/core";
-import { findChannelRootForCollection } from "@youtube-automation/core/generate-master";
 import type { GenerateMasterInput } from "@youtube-automation/core/generate-master";
 import type { DepsMap } from "@youtube-automation/core/registry";
 import { REGISTRY } from "@youtube-automation/core/registry";
@@ -26,6 +26,30 @@ type GenerateMasterDeps = Pick<
 const isMissingChannelDirError = (error: unknown): boolean =>
   error instanceof Error &&
   error.message.startsWith("config: CHANNEL_DIR 環境変数を設定するか");
+
+const isDirectory = (path: string): boolean => {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
+const findChannelRootForCollection = (
+  collection: string
+): string | undefined => {
+  let current = resolve(collection);
+  for (;;) {
+    if (isDirectory(join(current, "config", "channel"))) {
+      return current;
+    }
+    const parent = dirname(current);
+    if (parent === current) {
+      return undefined;
+    }
+    current = parent;
+  }
+};
 
 const resolveGenerateMasterDeps = (
   input: GenerateMasterInput,
@@ -164,8 +188,7 @@ export const generateMasterCommand = defineCommand({
         if (!parsedInput.ok) {
           return err(parsedInput.error);
         }
-        const input = parsedInput.value;
-        const { quiet: inputQuiet } = input;
+        const { input, quiet: inputQuiet } = parsedInput.value;
         quiet = inputQuiet;
         const deps = resolveGenerateMasterDeps(input, channelDir);
         return await generateMasterEntry.run(input, deps);

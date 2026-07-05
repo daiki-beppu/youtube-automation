@@ -143,21 +143,45 @@ const parseScalar = (value: string): string | number | boolean => {
 const parseMasterupYaml = (text: string): unknown => {
   const audio: Record<string, string | number | boolean> = {};
   let inAudio = false;
+  let inFinalize = false;
   for (const line of text.split(/\r?\n/u)) {
     if (line.trim().length === 0 || line.trimStart().startsWith("#")) {
       continue;
     }
-    if (!line.startsWith(" ") && line.trim() === `${AUDIO_SECTION_KEY}:`) {
-      inAudio = true;
-      continue;
-    }
     if (!line.startsWith(" ")) {
+      const topLevelAudio = new RegExp(
+        `^${AUDIO_SECTION_KEY}:\\s*(.*)$`,
+        "u"
+      ).exec(line.trim());
+      if (topLevelAudio !== null) {
+        const [, value] = topLevelAudio;
+        if (value !== undefined && value.length > 0) {
+          throw new Error("config: masterup audio YAML must be a mapping");
+        }
+        inAudio = true;
+        inFinalize = false;
+        continue;
+      }
       inAudio = false;
+      inFinalize = false;
     }
     if (inAudio) {
+      if (/^ {2}finalize:\s*$/u.test(line)) {
+        inFinalize = true;
+        continue;
+      }
       const match = /^ {2}([a-zA-Z0-9_]+):\s*(.+)$/u.exec(line);
       if (match !== null) {
         const [, key, value] = match;
+        if (key !== undefined && value !== undefined) {
+          inFinalize = false;
+          audio[key] = parseScalar(value.trim());
+          continue;
+        }
+      }
+      const finalizeMatch = /^ {4}([a-zA-Z0-9_]+):\s*(.+)$/u.exec(line);
+      if (inFinalize && finalizeMatch !== null) {
+        const [, key, value] = finalizeMatch;
         if (key !== undefined && value !== undefined) {
           audio[key] = parseScalar(value.trim());
           continue;

@@ -7,7 +7,6 @@ import {
 
 describe("GenerateMasterInputSchema — snake_case input contract", () => {
   test("transforms snake_case CLI/config input into camelCase service input", () => {
-    // Given raw input at the external contract boundary
     const parsed = GenerateMasterInputSchema.parse({
       bitrate: "256k",
       channel_dir: "/tmp/channel",
@@ -16,37 +15,29 @@ describe("GenerateMasterInputSchema — snake_case input contract", () => {
       no_loop: false,
       pin_first: ["03-track.mp3", "01-track.mp3"],
       pin_first_count: undefined,
-      quiet: true,
       shuffle_seed: 0,
       target_duration_min: 120,
     });
-
-    // Then service code receives the normalized camelCase shape.
     expect(parsed.bitrate).toBe("256k");
     expect(parsed.channelDir).toBe("/tmp/channel");
     expect(parsed.collection).toBe("collections/demo");
     expect(parsed.crossfadeDuration).toBe(1.5);
     expect(parsed.noLoop).toBe(false);
     expect(parsed.pinFirst).toEqual(["03-track.mp3", "01-track.mp3"]);
-    expect(parsed.quiet).toBe(true);
     expect(parsed.shuffleSeed).toBe(0);
     expect(parsed.targetDurationMin).toBe(120);
   });
 
   test("declares runtime defaults in zod, not a config.default file", () => {
-    // Given only the required collection selector
     const parsed = GenerateMasterInputSchema.parse({
       collection: "collections/demo",
     });
-
-    // Then defaults needed for ffmpeg execution are present after parsing.
     expect(parsed.crossfadeDuration).toBe(1);
     expect(parsed.bitrate).toBe("192k");
     expect(parsed.loop).toBeUndefined();
     expect(parsed.noLoop).toBe(false);
     expect(parsed.pinFirst).toEqual([]);
     expect(parsed.pinFirstCount).toBeUndefined();
-    expect(parsed.quiet).toBe(false);
     expect(parsed.shuffle).toBe(false);
     expect(parsed.shuffleSeed).toBeUndefined();
     expect(parsed.targetDurationMin).toBeUndefined();
