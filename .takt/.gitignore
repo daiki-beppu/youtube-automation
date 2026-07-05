@@ -14,3 +14,8 @@
 # Structured output schemas (tracked)
 !schemas/
 !schemas/*.json
+
+# Custom facets (tracked): takt 自動生成 worktree でも
+# instruction/policy 参照を解決できるよう必ずコミットする
+!facets/
+!facets/**
