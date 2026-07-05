@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(masterup)`: `/masterup` の playlist 取得直後に playlist 曲名 × `suno-prompts.json` entry name の突合ゲート `yt-suno-verify-playlist` を追加した。別コレクション曲の混入（unknown）・生成漏れ（missing）・clip 不足（underfilled、既定 2 clip/entry・`--expected-clips-per-entry` で調整）を fail-loud で検出し、非 0 終了時は Step 3（ダウンロード）へ進まない。曲名は `/suno` が Song Title 欄へ注入する `{name_jp} — {name_en}` を照合キーとし、NFKC・空白圧縮・casefold で表記ゆれを吸収する。背景: 最新セット未完のまま前後コレクションの曲が playlist に混入して master 化される事故の再発防止（下流チャンネル実例: 深夜コレクションに昼テーマ 2 ペア混入 + 深夜 2 entry 未生成）
+
 ### Changed
 
 - `feat(takt)`: lite workflow に提出前セルフ監査を組み込んだ（#1508）。過去の review-takt-default 指摘 371 件（183 レビュー）の全件分類から頻出 8 パターンを抽出した `.takt/facets/policies/pre-review-checklist.md` を新設し、`implement` step（自己監査 + 受入条件充足表の出力）と `review` step（独立照合、スコープ外の改善提案は verdict に影響させない）に注入。あわせて lite の `plan` step に `instruction: plan` を追加し、リポジトリ強化版 plan instruction（`.takt/facets/instructions/plan.md`）が lite でも注入されるようにした。運用・更新手順は `docs/takt-operations.md` の「提出前セルフ監査」節を参照

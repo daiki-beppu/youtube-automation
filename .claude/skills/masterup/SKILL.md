@@ -73,6 +73,7 @@ Lyria で音源を生成するチャンネルでは `/lyria` が `01-master/mast
 | `yt-generate-master --pin-first <files...>` | 先頭固定する MP3 ファイル名を順番指定（`--shuffle` 併用時も pin の順序は保持） | `yt-generate-master --pin-first 00-hook.mp3 --shuffle` |
 | `yt-generate-master --pin-first-count N` | ソート済み先頭 N 件を固定（`--shuffle` 併用時は残り N+1〜末尾のみシャッフル） | `yt-generate-master --pin-first-count 1 --shuffle` |
 | `yt-suno-audio-cleanup plan/apply` | Suno 個別音源の後処理を plan / apply。apply は元ファイルを backup して同名置換 | `yt-suno-audio-cleanup plan <collection>` |
+| `yt-suno-verify-playlist` | playlist 曲名 × suno-prompts.json entry name の突合（混入 / 生成漏れ / clip 不足を fail-loud 検出） | `yt-suno-verify-playlist <collection> --titles-file titles.txt` |
 | (skill-config) `pair_selection.mode` | 歌詞-aware 採用整理。歌詞ありならペア片方、歌詞なしなら両方採用 | `mode: auto` |
 | (skill-config) `pair_selection.min_song_sec` / `.max_song_sec` | 短すぎる / 長すぎる Suno 失敗生成を master から除外 | `min_song_sec: 45`, `max_song_sec: 300` |
 | (skill-config) `audio.target_duration_min` | CLI フラグ未指定時のデフォルト目標尺（分）。`config/skills/masterup.yaml` で設定 | `target_duration_min: 120` |
@@ -167,6 +168,20 @@ $ARGUMENTS
    - 総曲数のメタ表記が WebFetch から取得できなかった場合も同様に中断し、ユーザーへ「件数突合不能のため処理を停止」と報告する（silent な続行を禁止）
    - **総曲数 ≤ 50 で件数が一致した場合のみ Step 3 へ進む**
 4. WebFetch の結果から曲リストをパースして Step 3 に渡す
+5. **playlist × suno-prompts.json 突合ゲート（必須・混入検出）**:
+   - 取得した曲タイトル一覧を `yt-suno-verify-playlist` に渡し、`suno-prompts.json` の entry name と突合する
+
+   ```bash
+   # titles.txt: Step 2 で取得した曲タイトルを 1 行 1 曲で保存
+   uv run yt-suno-verify-playlist <collection-path> --titles-file titles.txt
+   ```
+
+   - **unknown（どの entry にも一致しない曲）**: 別コレクション由来の混入。playlist から除外するまで Step 3 に進まない
+   - **missing（playlist に存在しない entry）**: 生成漏れ。`/suno-helper` で追補生成するまで Step 3 に進まない
+   - **underfilled（clip 数が期待未満の entry）**: 生成が途中で止まった疑い。既定は 2 clip/entry（`--expected-clips-per-entry` で調整、`0` で無効化）
+   - 非 0 終了時はレポートをそのままユーザーへ提示して停止する。**ユーザーが混入込みでの続行を明示指示した場合のみ**、混入内容と影響（世界観不整合・メタデータずれ）を報告した上で続行できる
+
+   > **背景**: playlist には「最新セットの生成が未完のまま、前後コレクションの曲が混入する」事故が繰り返し起きている（実例: 深夜コレクションに昼テーマ 2 ペアが混入 + 深夜 2 entry 未生成のまま master 化）。曲名は `/suno` が Song Title 欄へ注入する `{name_jp} — {name_en}` で一意なため、機械突合で確実に検出できる。silent な続行は禁止。
 
 **取得手段のフォールバック方針**: WebFetch は suno.com のサーバー描画分（上限 50 件）しか拾えないため、本 skill は「50 曲以下のプレイリスト」を前提運用とする。50 曲超のプレイリストは現状 50 曲単位に分割して個別実行するか、手動で `02-Individual-music/` に MP3 を揃えてから `yt-generate-master` を直接実行するワークフローへ切り替える（内部 API / 公式 API への移行は別 issue）。
 
@@ -367,6 +382,7 @@ yt-suno-select-tracks <collection-path> --dry-run
 - Step 3 の検証で `failed` 配列が空でない（サイズ異常・再生時間異常・Content-Type 不正）
 - 期待ファイル突合チェックで `missing` 配列が空でない
 - Step 2 の件数突合で不一致が検出されている
+- Step 2 の `yt-suno-verify-playlist` が非 0 終了している（混入 / 生成漏れ / clip 不足。ユーザーが混入込み続行を明示指示した場合を除く）
 - Step 4.5 の `yt-suno-select-tracks` が非 0 終了している（尺フィルタ後の採用候補 0 件、stock 移動失敗など）
 
 検証失敗時は Step 4 / 4.5 のレポートを提示し、ユーザーに手動修正（再ダウンロード / Suno UI からの手動取得 / `/suno-helper` 追補生成）を促してから再実行する。
