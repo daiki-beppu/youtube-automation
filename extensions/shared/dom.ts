@@ -200,7 +200,12 @@ export async function setLyricsValue(
     return;
   }
   el.focus();
-  document.execCommand("selectAll", false);
+  const selected = document.execCommand("selectAll", false);
+  if (!selected) {
+    throw new FatalRunError(
+      "Lyrics 欄の全選択に失敗しました。Suno UI の Lexical editor 状態を確認してください。",
+    );
+  }
   await sleep(LEXICAL_SELECTION_SYNC_MS);
   const data = new DataTransfer();
   data.setData("text/plain", value);
@@ -212,6 +217,11 @@ export async function setLyricsValue(
     }),
   );
   await sleep(LEXICAL_SELECTION_SYNC_MS);
+  if ((el.textContent ?? "") !== value) {
+    throw new FatalRunError(
+      "Lyrics 欄への paste 反映に失敗しました。Generate へ進まず停止します。",
+    );
+  }
 }
 
 /**

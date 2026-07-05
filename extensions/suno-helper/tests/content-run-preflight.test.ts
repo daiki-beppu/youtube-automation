@@ -10,12 +10,10 @@ const harness = vi.hoisted(() => {
   const handlers = new Map<string, (message: { data: unknown }) => unknown>();
   const feedPollerStart = vi.fn();
   const feedPollerStop = vi.fn();
-  const runEntryWithRetry = vi.fn(
-    async (options: Pick<RunEntryWithRetryOptions, "attempt">): Promise<EntryRunResult> => {
-      await options.attempt();
-      return { outcome: "ok" };
-    },
-  );
+  const runEntryWithRetry = vi.fn(async (options: RunEntryWithRetryOptions): Promise<EntryRunResult> => {
+    await options.attempt();
+    return { outcome: "ok" };
+  });
 
   return {
     handlers,
@@ -220,6 +218,17 @@ function makeLexicalLyrics(initialText: string): HTMLElement {
   return lexical;
 }
 
+function makeUnresponsiveLexicalLyrics(initialText: string): HTMLElement {
+  const lexical = document.createElement("div");
+  lexical.className = "lyrics-editor-content";
+  lexical.setAttribute("data-lexical-editor", "true");
+  lexical.setAttribute("contenteditable", "true");
+  lexical.textContent = initialText;
+  markBbox(lexical, 320, 96);
+  document.body.appendChild(lexical);
+  return lexical;
+}
+
 function addCompletedRemixCard(): void {
   const card = document.createElement("div");
   for (const label of ["Select clip", "Remix clip", "Edit title"]) {
@@ -284,8 +293,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubGlobal("DataTransfer", DataTransferStub);
   vi.stubGlobal("ClipboardEvent", ClipboardEventStub);
-  (document as unknown as { execCommand: ReturnType<typeof vi.fn> }).execCommand = vi.fn();
-  harness.runEntryWithRetry.mockImplementation(async (options: Pick<RunEntryWithRetryOptions, "attempt">) => {
+  (document as unknown as { execCommand: ReturnType<typeof vi.fn> }).execCommand = vi.fn(() => true);
+  harness.runEntryWithRetry.mockImplementation(async (options: RunEntryWithRetryOptions) => {
     await options.attempt();
     return { outcome: "ok" };
   });
@@ -513,6 +522,45 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     expect(lyricsAtGenerate).toBe("new lexical lyrics");
   });
 
+  it("Given Lexical lyrics editor が paste を反映しない When run を受ける Then Generate へ進まず ERROR を emit する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    const lyrics = makeUnresponsiveLexicalLyrics("old lyrics");
+    const onGenerate = vi.fn();
+    makeGenerateButtonWithClickObserver(onGenerate);
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = [{ name: "lexical", style: "neo soul", lyrics: "new lexical lyrics" }];
+    harness.runEntryWithRetry.mockImplementationOnce(async (options: RunEntryWithRetryOptions) => {
+      try {
+        await options.attempt();
+        return { outcome: "ok" };
+      } catch (error) {
+        return options.isFatal(error) ? { outcome: "fatal", error } : { outcome: "failed", error };
+      }
+    });
+
+    const result = runHandler({ data: makeRunPayload(entries) });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(
+      () =>
+        expect(progressPayloads()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              phase: PHASE.ERROR,
+              message: expect.stringContaining("Lyrics 欄への paste 反映に失敗しました"),
+            }),
+          ]),
+        ),
+      { timeout: 3000 },
+    );
+    expect(onGenerate).not.toHaveBeenCalled();
+    expect(lyrics.textContent).toBe("old lyrics");
+  });
+
   it("Given indices 指定で supported view かつ entries がある When run を受ける Then 指定 index だけを絶対 index で処理する", async () => {
     makeRunnableSunoDom("Grid");
     await loadContentScript();
@@ -547,7 +595,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     const runHandler = getRunHandler();
     const entries = makePromptEntries(5);
     harness.runEntryWithRetry
-      .mockImplementationOnce(async (options: Pick<RunEntryWithRetryOptions, "attempt">) => {
+      .mockImplementationOnce(async (options: RunEntryWithRetryOptions) => {
         await options.attempt();
         return { outcome: "ok" };
       })
@@ -607,13 +655,11 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     await loadContentScript();
     const runHandler = getRunHandler();
     const entries = makePromptEntries(1);
-    harness.runEntryWithRetry.mockImplementationOnce(
-      async (options: Pick<RunEntryWithRetryOptions, "attempt" | "onRetry">) => {
-        await options.attempt();
-        options.onRetry?.(1, 2, new Error("temporary"));
-        return { outcome: "ok" };
-      },
-    );
+    harness.runEntryWithRetry.mockImplementationOnce(async (options: RunEntryWithRetryOptions) => {
+      await options.attempt();
+      options.onRetry?.(1, 2, new Error("temporary"));
+      return { outcome: "ok" };
+    });
 
     const result = runHandler({ data: makeRunPayload(entries) });
 

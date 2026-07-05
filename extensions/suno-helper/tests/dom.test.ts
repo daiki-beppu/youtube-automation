@@ -388,11 +388,20 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
     return pastes;
   }
 
+  function applyLexicalPaste(el: HTMLElement): void {
+    el.addEventListener("paste", (e) => {
+      const ev = e as unknown as ClipboardEventStub;
+      el.textContent = ev.clipboardData?.getData("text/plain") ?? "";
+      e.preventDefault();
+    });
+  }
+
   beforeEach(() => {
     vi.stubGlobal("DataTransfer", DataTransferStub);
     vi.stubGlobal("ClipboardEvent", ClipboardEventStub);
     (document as unknown as { execCommand: typeof execCommand }).execCommand = execCommand;
-    execCommand.mockClear();
+    execCommand.mockReset();
+    execCommand.mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -423,6 +432,7 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
     const div = addLexicalLyrics();
     const focusSpy = vi.spyOn(div, "focus");
     const pastes = capturePastes(div);
+    applyLexicalPaste(div);
 
     const injected = setLyricsValue(div, "verse one");
 
@@ -440,10 +450,38 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
     await injected;
   });
 
+  it("Given selectAll が失敗する When Lexical lyrics へ注入する Then paste せず fail-loud する", async () => {
+    vi.useFakeTimers();
+    execCommand.mockReturnValue(false);
+    const div = addLexicalLyrics();
+    const pastes = capturePastes(div);
+
+    const injected = setLyricsValue(div, "verse one");
+
+    await expect(injected).rejects.toThrow("Lyrics 欄の全選択に失敗しました");
+    expect(pastes).toEqual([]);
+  });
+
+  it("Given paste 後に Lyrics が反映されない When Lexical lyrics へ注入する Then fail-loud する", async () => {
+    vi.useFakeTimers();
+    const div = addLexicalLyrics();
+    div.textContent = "old lyrics";
+    const pastes = capturePastes(div);
+
+    const injected = setLyricsValue(div, "verse one");
+    const rejection = expect(injected).rejects.toThrow("Lyrics 欄への paste 反映に失敗しました");
+    await vi.advanceTimersByTimeAsync(400);
+
+    await rejection;
+    expect(pastes).toEqual([{ text: "verse one", bubbles: true, cancelable: true }]);
+    expect(div.textContent).toBe("old lyrics");
+  });
+
   it("Given contenteditable div + 空文字 (instrumental) When 注入する Then 空の text/plain を paste する", async () => {
     vi.useFakeTimers();
     const div = addLexicalLyrics();
     const pastes = capturePastes(div);
+    applyLexicalPaste(div);
 
     const injected = setLyricsValue(div, "");
     await vi.advanceTimersByTimeAsync(400);
