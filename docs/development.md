@@ -50,9 +50,9 @@ Git hooks は [lefthook](https://lefthook.dev) で宣言的に管理する（設
 
 - **pre-commit**: 変更した Python ファイルに `ruff check` / `ruff format --check` をかける（CI の lint ジョブと同等）
 - **pre-push**:
-  - CHANGELOG ゲート。CI（`.github/workflows/ci.yml` の `changelog` ジョブ）と同じく、実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更したのに `CHANGELOG.md` の `[Unreleased]` が未更新なら push を止める。ロジック本体は `.lefthook/pre-push/changelog-gate.sh`
+  - CHANGELOG ゲート。CI（`.github/workflows/ci.yml` の `changelog` ジョブ）と同じく、実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更したのに `CHANGELOG.md` の `[Unreleased]` が未更新なら push を止める。ロジック本体は `.lefthook/pre-push/changelog-gate.sh`。lefthook は同一 hook で `use_stdin` を持てるコマンドを 1 つに制限するため、このスクリプトが pre-push の唯一の stdin 受信者としてブランチ削除 push を判定し、末尾でテスト差分警告・型注釈ゲートを連鎖実行する（削除 push はこの 3 ゲートすべてが対象外）
   - テスト差分警告。`src/youtube_automation/` に差分があるのに `tests/` の差分がない場合、または `extensions/*/lib/` に差分があるのに extensions 配下の `*.test.ts` 差分がない場合に警告を出す。これは粗い検出なので push は止めない。意図的に省く場合は `SKIP_TEST_DIFF=1 git push` とし、skip した事実を hook 出力に残す。ロジック本体は `.lefthook/pre-push/test-diff-gate.sh`
-  - 広すぎる型注釈ゲート。`origin/main` からの新規追加行だけを対象に、Python の typing module 経由の Any 型、または TypeScript の any 型注釈を検出したら push を止める。既存行は対象外。ロジック本体は `.lefthook/pre-push/any-usage-gate.sh`
+  - 広すぎる型注釈ゲート。`origin/main` からの新規追加行だけを対象に、ディレクトリを問わず全 `*.py` / `*.ts` / `*.tsx` の Python の typing module 経由の Any 型（`typing.Any` の修飾形と、`from typing import Any` の直接 import 経由で使う裸の `Any` の両方）、または TypeScript の any 型注釈を検出したら push を止める。既存行は対象外。ロジック本体は `.lefthook/pre-push/any-usage-gate.sh`
 
 Python 側の未使用コード検出は、追加依存なしで CI / pre-commit に載っている Ruff `F` 系（未使用 import / 変数、未定義名など）を継続採用する。vulture は新規依存追加が必要で、Ruff `ARG` は既存コードに多数の既存違反があるため #1510 では採用しない。TS 側の未使用 export / dead code は CI の `ts-knip` で検出する。
 

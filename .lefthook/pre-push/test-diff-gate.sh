@@ -33,22 +33,27 @@ extension_tests_touched=0
 
 while IFS= read -r f; do
   [ -z "$f" ] && continue
+  # 各パターンを独立判定する（case/esac の排他マッチにしない）。
+  # extensions/*/lib/*.test.ts のように lib 配下のテストファイルは
+  # extension_lib_touched と extension_tests_touched の両方に該当し得る。
   case "$f" in
     src/youtube_automation/*)
       python_code_touched=1
       ;;
+  esac
+  case "$f" in
     tests/*)
       python_tests_touched=1
       ;;
+  esac
+  case "$f" in
     extensions/*/lib/*)
       extension_lib_touched=1
       ;;
-    extensions/*)
-      case "$f" in
-        *.test.ts)
-          extension_tests_touched=1
-          ;;
-      esac
+  esac
+  case "$f" in
+    extensions/*.test.ts)
+      extension_tests_touched=1
       ;;
   esac
 done <<EOF
