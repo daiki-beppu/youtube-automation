@@ -1,6 +1,6 @@
 ---
 name: benchmark
-description: "Use when 競合チャンネルのベンチマークデータを最新化したいとき。YouTube Data API (OAuth) で競合の最新動画データを取得し docs/benchmarks/*.md を更新する。「競合分析」「ベンチマーク更新」「競合の最新データ」など、競合情報の取得・更新に関わる場面で使用すること"
+description: "Use when 競合チャンネルのベンチマークデータを最新化するとき。「競合分析」「ベンチマーク更新」で発動。docs/benchmarks/*.md を更新"
 ---
 
 ## Overview
@@ -24,7 +24,7 @@ description: "Use when 競合チャンネルのベンチマークデータを最
 
 存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## 取得データ（拡充版）
 

@@ -1,6 +1,6 @@
 ---
 name: short
-description: "Use when collection 型チャンネル（BGM テイスター）でショート動画を生成・投稿したいとき。CC 動画公開後に 9:16 ショートを 3 本前後生成し多言語ローカライズで投稿。「ショート作って」「shorts」「ショートテイスター」「BGM 切り抜き」「告知ショート」など、本編 CC → ショート誘導に関わる場面で必ず使用すること。release 型（JP+EN クリップ）チャンネルは `/short-release` を使う"
+description: "Use when collection 型（BGM テイスター）チャンネルでショートを生成・投稿するとき。「ショート作って」「shorts」「BGM 切り抜き」で発動。release 型は /short-release"
 ---
 
 ## Overview
@@ -25,7 +25,7 @@ description: "Use when collection 型チャンネル（BGM テイスター）で
 - `config.youtube.content_model.type == "collection"`
 - CC 動画が YouTube にアップ済みで、`20-documentation/upload_tracking.json::complete_collection.video_url` が記録されている
 
-いずれか欠ける場合は早期に止めて該当 skill / config 更新を案内する（`/channel-import` / `/setup` / `/video-upload`）。
+いずれか欠ける場合は早期に止めて該当 skill / config 更新を案内する（`/channel-new` 既存チャンネル取り込みモード / `/setup` / `/video-upload`）。
 
 ## Quick Reference
 

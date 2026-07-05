@@ -23,7 +23,7 @@ from PIL import UnidentifiedImageError
 
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
-from youtube_automation.scripts.benchmark_collector import load_benchmark_videos
+from youtube_automation.scripts.benchmark_collector import load_benchmark_videos, select_top_vod_benchmark_videos
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.numbered_duplicates import (
     CLEANUP_GUIDE_URL,
@@ -46,7 +46,7 @@ SKILL_FILENAME = "SKILL.md"
 AUTOMATION_PACKAGE_NAME = "youtube-channels-automation"
 SKILLS_SYNC_CMD = "uv run yt-skills sync --asset skills --force"
 SKILLS_SYNC_PRUNE_CMD = "uv run yt-skills sync --asset skills --force --prune --yes"
-LEGACY_BUNDLED_SKILLS = ("onboard", "distrokid-prep")
+LEGACY_BUNDLED_SKILLS = ("onboard", "distrokid-prep", "channel-import")
 
 BOOTSTRAP_CATEGORY = "bootstrap"
 API_CATEGORY = "api"
@@ -889,7 +889,7 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
                 message=f"config/channel/ ロード失敗: {e}",
                 next_action={
                     "kind": "human",
-                    "instructions": "/channel-import を実行して設定を修復してください",
+                    "instructions": ("/channel-new（既存チャンネル取り込みモード）を実行して設定を修復してください"),
                 },
             )
 
@@ -1111,13 +1111,20 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
 
     missing, approved_exceptions = _missing_ttp_readiness_items(channel_dir, channels)
     missing.extend(channels_read.errors)
-    missing.extend(_missing_channel_setup_benchmark_items(channel_dir, approved_exceptions, channels))
+    benchmark_missing, benchmark_notes = _missing_channel_setup_benchmark_items(
+        channel_dir, approved_exceptions, channels
+    )
+    missing.extend(benchmark_missing)
+    # live 配信除外の note は未充足条件ではないため missing に混ぜず、message 末尾に併記する
+    note_suffix = ("。" + "; ".join(benchmark_notes)) if benchmark_notes else ""
     if missing:
         return CheckResult(
             id="ttp_wf_new_readiness",
             status="warn",
             category=DATA_CATEGORY,
-            message="/channel-setup benchmark 反映未完了の可能性 / TTP 完了条件が未充足: " + "; ".join(missing),
+            message="/channel-setup benchmark 反映未完了の可能性 / TTP 完了条件が未充足: "
+            + "; ".join(missing)
+            + note_suffix,
             next_action={
                 "kind": "human",
                 "instructions": (
@@ -1135,7 +1142,7 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
         category=DATA_CATEGORY,
         message=(
             "TTP 対象承認・branding snapshot・benchmark docs・thumbnail / music readiness が "
-            "/wf-new 接続可能（/channel-setup 完了相当）"
+            "/wf-new 接続可能（/channel-setup 完了相当）" + note_suffix
         ),
     )
 
@@ -1255,24 +1262,26 @@ def _missing_channel_setup_benchmark_items(
     channel_dir: Path,
     approved_exceptions: set[str],
     channels: list[dict[str, object]],
-) -> list[str]:
+) -> tuple[list[str], list[str]]:
     missing: list[str] = []
     if not _matching_files(channel_dir / "data", "benchmark_*.json"):
         missing.append("data/benchmark_*.json が無い")
-    missing.extend(_missing_video_analysis_items(channel_dir, _approved_ttp_channel_slugs(channels)))
+    analysis_missing, notes = _missing_video_analysis_items(channel_dir, _approved_ttp_channel_slugs(channels))
+    missing.extend(analysis_missing)
     if not _benchmark_report_files(channel_dir):
         missing.append("docs/benchmarks/*.md が無い")
     if "thumbnail" not in approved_exceptions and not _benchmark_thumbnail_files(channel_dir):
         missing.append("data/thumbnail_compare/benchmark/ に TTP 参照画像が無い")
-    return missing
+    return missing, notes
 
 
-def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) -> list[str]:
+def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) -> tuple[list[str], list[str]]:
     approved_slug_set = set(approved_slugs)
     if not approved_slug_set:
-        return []
+        return [], []
     benchmark_by_slug, errors = _latest_benchmark_videos_by_slug(channel_dir, approved_slug_set)
     missing = list(errors)
+    notes: list[str] = []
     video_analysis_dir = channel_dir / "data" / "video_analysis"
     for slug in approved_slugs:
         slug_dir, slug_error = _video_analysis_slug_dir(channel_dir, video_analysis_dir, slug)
@@ -1280,8 +1289,14 @@ def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) 
             missing.append(slug_error)
             continue
         videos = benchmark_by_slug.get(slug, [])
-        top_videos = videos[:TTP_VIDEO_ANALYZE_TOP_N]
-        if len(top_videos) < TTP_VIDEO_ANALYZE_TOP_N:
+        top_videos, skipped_live = select_top_vod_benchmark_videos(videos, TTP_VIDEO_ANALYZE_TOP_N)
+        excluded_live = len(skipped_live)
+        if excluded_live:
+            notes.append(
+                f"{slug}: live 配信 {excluded_live} 本は Gemini で解析不能のため "
+                f"benchmark top {TTP_VIDEO_ANALYZE_TOP_N} の判定から除外（次点 VOD を繰り上げ）"
+            )
+        if len(videos) < TTP_VIDEO_ANALYZE_TOP_N and not excluded_live:
             missing.append(
                 f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} が不足 ({len(top_videos)}/{TTP_VIDEO_ANALYZE_TOP_N})"
             )
@@ -1289,7 +1304,10 @@ def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) 
         if len(expected_ids) < len(top_videos):
             missing.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id 欠落があります")
         if not expected_ids:
-            missing.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id がありません")
+            if excluded_live and videos:
+                missing.append(f"{slug}: benchmark 上位が live 配信のみで解析可能な VOD がありません")
+            else:
+                missing.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id がありません")
             continue
         done_ids, analysis_errors = _verified_video_analysis_ids(
             slug,
@@ -1298,11 +1316,14 @@ def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) 
         )
         missing.extend(analysis_errors)
         done = len(done_ids)
+        # live 除外が発生した場合のみ母数を実際に解析可能な VOD 数へ縮小する
+        # （除外なしで benchmark が N 本未満の従来ケースは分母 N のまま warn を維持）
+        required = len(top_videos) if excluded_live else TTP_VIDEO_ANALYZE_TOP_N
         if done == 0:
-            missing.append(f"{slug}: video_analysis 未実行 (0/{TTP_VIDEO_ANALYZE_TOP_N})")
-        elif done < TTP_VIDEO_ANALYZE_TOP_N:
-            missing.append(f"{slug}: video_analysis が一部のみ ({done}/{TTP_VIDEO_ANALYZE_TOP_N})")
-    return missing
+            missing.append(f"{slug}: video_analysis 未実行 (0/{required})")
+        elif done < required:
+            missing.append(f"{slug}: video_analysis が一部のみ ({done}/{required})")
+    return missing, notes
 
 
 def _latest_benchmark_videos_by_slug(

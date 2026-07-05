@@ -86,6 +86,9 @@ export const INJECT_ACK_TIMEOUT_MS = 30000;
  * これを超えても in-flight が増えなければ fail-loud で ERROR phase に落とす。 */
 export const MAX_INJECT_RETRY = 2;
 
+/** duration 歩留まり NG 時に同じ entry を再生成する最大 retry 回数 (#1266)。 */
+export const MAX_YIELD_RETRY = 2;
+
 /** 速度プリセットの選択値を保存する chrome.storage.local の key (#875)。
  * popup（書込）と content（読込）が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
 export const SPEED_PRESET_STORAGE_KEY = "sunoSpeedPreset";
@@ -163,12 +166,14 @@ export const SUNO_API_ORIGIN = "https://studio-api-prod.suno.com";
 /** 生成投入 endpoint のパス（#948）。レスポンス JSON の `clips[].id` / `clips[].status` を観測する。 */
 export const GENERATE_ENDPOINT_PATH = "/api/generate/v2-web/";
 
-/** clip status 照会 endpoint のパス prefix（#948）。`/api/feed/v2?ids=...` 形式で Bearer 必須。
- * ページ自身の fetch を passive 観測しつつ、必要時は bridge が同 endpoint を active poll する。 */
-export const FEED_ENDPOINT_PATH = "/api/feed/";
-
 /** active feed poll に使う具体 endpoint（#948）。 */
 export const FEED_V2_PATH = "/api/feed/v2";
+
+/** passive fetch 観測 / duration 取得に使う feed v3 endpoint（#1258, #1265）。 */
+export const FEED_V3_PATH = "/api/feed/v3";
+
+/** feed v3 の request method（#1258, #1265）。v2 の GET poll と区別するため契約値として固定する。 */
+export const FEED_V3_METHOD = "POST";
 
 /** MAIN world bridge ⇄ ISOLATED content script の window.postMessage 識別マーカー（#948）。 */
 export const BRIDGE_SOURCE = "suno-helper-bridge";
@@ -183,6 +188,10 @@ export const BRIDGE_MSG = {
   FEED_POLL_REQUEST: "feed-poll-request",
   /** bridge → content: active poll の応答（requestId + clips | null）。 */
   FEED_POLL_RESPONSE: "feed-poll-response",
+  /** content → bridge: feed/v3 の active poll 要求（requestId + ids）。 */
+  FEED_V3_POLL_REQUEST: "feed-v3-poll-request",
+  /** bridge → content: feed/v3 active poll の応答（requestId + clips | null）。 */
+  FEED_V3_POLL_RESPONSE: "feed-v3-poll-response",
   /** content → bridge: slider 値注入要求（requestId + ariaLabel + target）（#973）。 */
   SLIDER_SET_REQUEST: "slider-set-request",
   /** bridge → content: slider 値注入の応答（requestId + ok + actual | null）（#973）。 */
@@ -209,6 +218,7 @@ export const FEED_POLL_RESPONSE_TIMEOUT_MS = 10000;
 export interface ObservedClip {
   id: string;
   status: string;
+  duration?: number;
 }
 
 /** yt-collection-serve の DistroKid collection 列挙サブパス（#934、dir mode のみ。単一 mode では 404）。
@@ -267,13 +277,59 @@ export const PHASE = {
 
 export type Phase = (typeof PHASE)[keyof typeof PHASE];
 
-/** runner content → overlay の進捗ペイロード。 */
-export interface ProgressPayload {
+/** runner content が overlay / popup に表示させる構造化ログ (#1270)。 */
+export type ProgressLog =
+  | {
+      kind: "duration-check";
+      entryName: string;
+      durationSec: number;
+      ok: boolean;
+      minSec?: number;
+      maxSec?: number;
+    }
+  | {
+      kind: "retry";
+      entryName: string;
+      attempt: number;
+      max: number;
+    }
+  | {
+      kind: "skip";
+      entryName: string;
+    };
+
+type ProgressPayloadBase = {
   phase: Phase;
   total: number;
   index?: number;
   message?: string;
-}
+};
+
+type ProgressPayloadWithoutLog = ProgressPayloadBase & {
+  log?: undefined;
+};
+
+type DurationCheckProgressPayload = ProgressPayloadBase & {
+  phase: typeof PHASE.DONE;
+  log: Extract<ProgressLog, { kind: "duration-check" }>;
+};
+
+type RetryProgressPayload = ProgressPayloadBase & {
+  phase: typeof PHASE.WAITING_SLOT;
+  log: Extract<ProgressLog, { kind: "retry" }>;
+};
+
+type SkipProgressPayload = ProgressPayloadBase & {
+  phase: typeof PHASE.ENTRY_FAILED;
+  log: Extract<ProgressLog, { kind: "skip" }>;
+};
+
+/** runner content → overlay の進捗ペイロード。log は phase/kind の許可組み合わせだけに載せる。 */
+export type ProgressPayload =
+  | ProgressPayloadWithoutLog
+  | DurationCheckProgressPayload
+  | RetryProgressPayload
+  | SkipProgressPayload;
 
 /** overlay の各パターン行の表示状態。failed はリトライ上限まで失敗しスキップされた entry (#948)。 */
 export type ItemState = "idle" | "active" | "done" | "failed";
@@ -295,6 +351,8 @@ export interface SnapshotPayload {
   // リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
   // ENTRY_FAILED phase の受信ごとに蓄積され、popup の「失敗分のみ再実行」導線が消費する。
   failedIndices?: number[];
+  // 明示 indices 実行が途中中断したとき、再開で実行すべき残りの 0-based index 列。
+  remainingIndices?: number[];
   // playlist 追加対象として generate response から観測済みの clip ID 一覧。
   submittedClipIds?: string[];
   // playlist 追加時に揃っているべき clip ID 件数。

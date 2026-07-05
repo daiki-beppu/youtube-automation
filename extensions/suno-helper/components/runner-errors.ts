@@ -3,7 +3,7 @@
 // (`Could not establish connection. Receiving end does not exist.`) を検知して、
 // popup の案内に対処法（⌘+Shift+R）を含める。
 // #852: content の snapshot を popup の status 文字列 / 復元 state へ変換する純関数も同居する。
-import { PHASE, type SnapshotPayload } from "../../shared/constants";
+import { PHASE, type ProgressLog, type SnapshotPayload } from "../../shared/constants";
 
 /** popup の再 open 復元に使う state。useSunoRunner の restore effect がそのまま React state へ流す。 */
 export interface RestoreState {
@@ -20,10 +20,75 @@ export interface RestoreState {
   failedIndex?: number;
   // リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
   failedIndices?: number[];
+  // 明示 indices 実行が途中中断したとき、再開で実行すべき残りの 0-based index 列。
+  remainingIndices?: number[];
   // playlist 追加対象として generate response から観測済みの clip ID 一覧。
   submittedClipIds?: string[];
   // playlist 追加時に揃っているべき clip ID 件数。
   playlistExpectedClipCount?: number;
+}
+
+function formatSeconds(value: number): string {
+  return `${Math.round(value)}s`;
+}
+
+function formatDurationLimit(log: Extract<ProgressLog, { kind: "duration-check" }>): string {
+  if (log.ok) {
+    return "";
+  }
+  if (log.maxSec !== undefined && log.durationSec > log.maxSec) {
+    return ` (max ${formatSeconds(log.maxSec)})`;
+  }
+  if (log.minSec !== undefined && log.durationSec < log.minSec) {
+    return ` (min ${formatSeconds(log.minSec)})`;
+  }
+  if (log.maxSec !== undefined) {
+    return ` (max ${formatSeconds(log.maxSec)})`;
+  }
+  if (log.minSec !== undefined) {
+    return ` (min ${formatSeconds(log.minSec)})`;
+  }
+  return "";
+}
+
+function formatProgressLog(log: ProgressLog): { text: string; error?: boolean } {
+  switch (log.kind) {
+    case "duration-check": {
+      const mark = log.ok ? "✓" : "✗";
+      return {
+        text: `"${log.entryName}": ${formatSeconds(log.durationSec)} ${mark}${formatDurationLimit(log)}`,
+      };
+    }
+    case "retry":
+      return { text: `"${log.entryName}": リトライ ${log.attempt}/${log.max}` };
+    case "skip":
+      return { text: `"${log.entryName}": 全滅 — スキップ` };
+    default: {
+      const exhaustive: never = log;
+      throw new Error(`未知の progress log: ${String(exhaustive)}`);
+    }
+  }
+}
+
+function formatAllowedProgressLog(progress: SnapshotPayload["progress"]): { text: string; error?: boolean } | null {
+  if (!progress.log) {
+    return null;
+  }
+  switch (progress.phase) {
+    case PHASE.DONE:
+      return progress.log.kind === "duration-check" ? formatProgressLog(progress.log) : null;
+    case PHASE.WAITING_SLOT:
+      return progress.log.kind === "retry" ? formatProgressLog(progress.log) : null;
+    case PHASE.ENTRY_FAILED: {
+      if (progress.log.kind !== "skip") {
+        return null;
+      }
+      const status = formatProgressLog(progress.log);
+      return progress.message ? { ...status, text: `${status.text}: ${progress.message}` } : status;
+    }
+    default:
+      return null;
+  }
 }
 
 /**
@@ -35,6 +100,11 @@ export function phaseToStatus(
   progress: SnapshotPayload["progress"],
   entries: SnapshotPayload["entries"],
 ): { text: string; error?: boolean } {
+  const logStatus = formatAllowedProgressLog(progress);
+  if (logStatus) {
+    return logStatus;
+  }
+
   const { phase, index, total, message } = progress;
   const n = (index ?? 0) + 1;
   switch (phase) {
@@ -93,6 +163,7 @@ export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | 
     playlistName: snap.playlistName,
     failedIndex: snap.failedIndex,
     failedIndices: snap.failedIndices,
+    remainingIndices: snap.remainingIndices,
     submittedClipIds: snap.submittedClipIds,
     playlistExpectedClipCount: snap.playlistExpectedClipCount,
   };

@@ -1,6 +1,6 @@
 ---
 name: pinned-comment
-description: "Use when 新規アップロード動画にチャンネルオーナーの固定コメントを自動投稿したいとき。`config/channel/pinned-comment.json` のテンプレを使い dry-run でプレビューしてから apply で投稿する。ピン留めは YouTube Data API 非対応のため Studio UI で手動。「固定コメント」「ピンコメント」「オーナーコメント」「リピーター動線」など視聴者との接点を増やす運用に関わる場面で使用すること"
+description: "Use when 新規動画へオーナー固定コメントを自動投稿するとき。「固定コメント」「ピンコメント」で発動。dry-run 後 apply、ピン留めは Studio で手動"
 ---
 
 ## Overview
@@ -54,10 +54,19 @@ video_id 直接指定の場合:
 uv run yt-pinned-comment --video-id <id1> --video-id <id2> --dry-run --lang en
 ```
 
-確認ポイント:
-- `planned` 件数が期待値か
-- 生成テキストが `scene_phrase` / `scene_emoji` を正しく展開しているか
-- `SKIP ... already_posted` / `SKIP ... video_not_found` / `SKIP ... video_private` が想定どおりか
+確認ポイント(**全項目 PASS の場合のみ** Phase 2 へ進む):
+- [ ] `planned` 件数が期待値である
+- [ ] 生成テキストが `scene_phrase` / `scene_emoji` を正しく展開している
+- [ ] `SKIP` の内訳が想定どおりである(`already_posted` / `video_not_found` / `video_private` 以外の予期しない skip がない)
+
+1 項目でも FAIL ならテンプレートや対象指定を見直して dry-run(Phase 1)を再実行する。FAIL のまま Phase 2 に進んではならない。
+
+### 承認ゲート: apply 実行前の確認
+
+Phase 1 の確認ポイントが全項目 PASS になったら、Phase 2(apply)実行前に必ずユーザーの承認を取る。
+
+- **Claude Code**: AskUserQuestion で dry-run 結果の要約(`planned` 件数・生成テキストの代表例)を提示し、「投稿する」「キャンセル」の明示 2 択で確認する。承認されるまで Phase 2 を絶対に実行しない
+- **AskUserQuestion 非対応環境(Codex 等)**: dry-run 結果の要約をテキストで提示し、ユーザーからの明示的な承認発言を待つ。無応答・曖昧な返答のまま Phase 2 に進んではならない
 
 ### Phase 2: apply で投稿
 
