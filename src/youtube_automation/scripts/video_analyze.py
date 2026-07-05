@@ -30,7 +30,7 @@ from google.genai import errors as genai_errors
 
 from youtube_automation.scripts.benchmark_collector import load_benchmark_videos, select_top_vod_benchmark_videos
 from youtube_automation.utils.config import channel_dir as _channel_dir
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.genai_client import create_genai_client
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.video_analyzer import (
@@ -252,6 +252,16 @@ def _resolve_targets(args: argparse.Namespace, *, channel_dir: Path, data_dir: P
     return args.collection, _resolve_own_targets(channel_dir=channel_dir, collection_name=args.collection)
 
 
+def _analysis_window_sec_from_config(cfg: dict) -> int:
+    """skill-config の `analysis_window_sec` を正の整数秒として検証する。"""
+    value = cfg.get("analysis_window_sec")
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ConfigError(
+            f"video-analyze.analysis_window_sec は bool ではない正の整数秒である必要があります (received: {value!r})"
+        )
+    return value
+
+
 def _run_analysis(*, analyzer: VideoAnalyzer, targets: list[VideoTarget]) -> tuple[list[dict], list[dict]]:
     """targets を順に Gemini で解析し、(成功 results, 失敗 failures) を返す。
 
@@ -288,6 +298,7 @@ def main():
     channel_dir = _channel_dir()
     data_dir = channel_dir / "data"
     reports_dir = channel_dir / "reports"
+    analysis_window_sec = _analysis_window_sec_from_config(cfg)
 
     slug, targets = _resolve_targets(args, channel_dir=channel_dir, data_dir=data_dir)
     logger.info("解析対象: slug='%s' 件数=%d", slug, len(targets))
@@ -298,7 +309,7 @@ def main():
         prompt=cfg["prompt"],
         delay_sec=cfg["delay_sec"],
         data_dir=data_dir,
-        analysis_window_sec=cfg["analysis_window_sec"],
+        analysis_window_sec=analysis_window_sec,
     )
 
     results, failures = _run_analysis(analyzer=analyzer, targets=targets)

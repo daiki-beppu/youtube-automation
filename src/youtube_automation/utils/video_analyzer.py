@@ -109,7 +109,12 @@ class VideoAnalyzer:
         )
         payload = _parse_json_response(response.text)
         time.sleep(self.delay_sec)
-        return _attach_metadata(payload, target=target, model=self.model)
+        return _attach_metadata(
+            payload,
+            target=target,
+            model=self.model,
+            analysis_window_sec=self.analysis_window_sec,
+        )
 
     def save_json(self, target: VideoTarget, payload: dict[str, Any]) -> Path:
         """`data_dir/video_analysis/<slug>/<video_id>.json` に書き出す。"""
@@ -133,7 +138,13 @@ def _parse_json_response(text: str) -> dict[str, Any]:
         raise ValidationError(f"Gemini レスポンスの JSON パースに失敗: {err}") from err
 
 
-def _attach_metadata(payload: dict[str, Any], *, target: VideoTarget, model: str) -> dict[str, Any]:
+def _attach_metadata(
+    payload: dict[str, Any],
+    *,
+    target: VideoTarget,
+    model: str,
+    analysis_window_sec: int,
+) -> dict[str, Any]:
     """ドメインキーは payload を保ち、メタデータは target で上書きする (envelope)。"""
     return {
         **payload,
@@ -143,6 +154,12 @@ def _attach_metadata(payload: dict[str, Any], *, target: VideoTarget, model: str
         "title": target.title,
         "analyzed_at": datetime.now().isoformat(timespec="seconds"),
         "model": model,
+        "analysis_window_sec": analysis_window_sec,
+        "analysis_scope": {
+            "start_offset_sec": 0,
+            "end_offset_sec": analysis_window_sec,
+            "description": "opening clip window",
+        },
     }
 
 
@@ -195,6 +212,7 @@ def _render_video_section(result: dict[str, Any]) -> list[str]:
     title = result.get("title", "")
     url = result.get("url", "")
     analyzed_at = result.get("analyzed_at", "")
+    analysis_window_sec = result.get("analysis_window_sec", "")
 
     block: list[str] = [
         f"### {title} ({video_id})",
@@ -202,6 +220,7 @@ def _render_video_section(result: dict[str, Any]) -> list[str]:
         f"- URL: {url}",
         f"- analyzed_at: {analyzed_at}",
         f"- model: {result.get('model', '')}",
+        f"- analysis_window_sec: {analysis_window_sec}",
         "",
         "**Hook (`hook_structure`)**",
         "",

@@ -87,6 +87,7 @@ AskUserQuestion で新タイトルフォーマットを確認。
 - `collections/live/*/20-documentation/` — 音楽プロンプト
 - `collections/live/*/workflow-state.json` — タイトル・テーマ
 - `data/video_analysis/<slug>/<video_id>.json` — `/video-analyze` の `thumbnail_alignment` 出力（サムネ vs 本編の整合性監査の根拠）
+  - 冒頭クリップ窓（既定 900 秒、JSON の `analysis_window_sec`）内の整合性データ。窓外で回収される訴求まで確認済みとは扱わない。
 
 ## Next Step
 

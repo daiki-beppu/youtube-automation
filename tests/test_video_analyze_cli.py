@@ -23,6 +23,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from youtube_automation.scripts.video_analyze import (
+    _analysis_window_sec_from_config,
     _build_parser,
     _extract_video_id_from_url,
     _resolve_benchmark_targets,
@@ -30,8 +31,9 @@ from youtube_automation.scripts.video_analyze import (
     _resolve_url_target,
     main,
 )
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.utils.skill_config import reset as reset_skill_config
 from youtube_automation.utils.video_analyzer import VideoTarget
 
 # ----------------------------------------------------------------------------
@@ -460,6 +462,109 @@ class TestAnalysisWindowSkillConfig:
 
         # Then: override が有効に効く
         assert cfg["analysis_window_sec"] == 300
+
+
+class TestAnalysisWindowValidation:
+    @pytest.mark.parametrize("value", [0, -1, "300", True, False, None])
+    def test_rejects_non_positive_or_non_int_window(self, value):
+        # Given: skill-config から読み込まれた契約外の窓幅
+        cfg = {
+            "model": "gemini-2.5-flash",
+            "prompt": "analyze",
+            "delay_sec": 0,
+            "analysis_window_sec": value,
+        }
+
+        # When/Then: Gemini API 呼び出し前の境界で fail-fast する
+        with pytest.raises(ConfigError, match="analysis_window_sec"):
+            _analysis_window_sec_from_config(cfg)
+
+    @pytest.mark.parametrize("yaml_value", ["0", "-1", "'300'", "true", "false", "null"])
+    def test_channel_override_invalid_window_is_rejected(self, tmp_path, yaml_value):
+        # Given: config/skills/video-analyze.yaml に不正な override
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "video-analyze.yaml").write_text(
+            f"analysis_window_sec: {yaml_value}\n",
+            encoding="utf-8",
+        )
+        cfg = load_skill_config("video-analyze", use_cache=False, channel_dir=tmp_path)
+
+        # When/Then: deep-merge 後の境界検証で拒否される
+        with pytest.raises(ConfigError, match="analysis_window_sec"):
+            _analysis_window_sec_from_config(cfg)
+
+
+class TestMainAnalysisWindowFlow:
+    def _run_main_with_channel(self, tmp_path, monkeypatch, config_yaml: str) -> MagicMock:
+        from youtube_automation.utils.config import reset as reset_config
+
+        skills_dir = tmp_path / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "video-analyze.yaml").write_text(config_yaml, encoding="utf-8")
+
+        monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
+        reset_config()
+        reset_skill_config("video-analyze")
+
+        client = MagicMock()
+        response = MagicMock()
+        response.text = json.dumps(
+            {
+                "hook_structure": {"intro_sec": 5, "first_text_at": 2.0},
+                "bgm_arc": {"intro": "0-15s", "peak": "1:30", "outro": "4:30-end of clip"},
+                "scene_timeline": [{"start": "0:00", "summary": "fade-in cafe"}],
+                "thumbnail_alignment": {"signature_present": True},
+                "editing_metrics": {"avg_cut_sec": 6.5, "text_per_min": 3},
+                "suno_preset": {
+                    "genre_line": "lo-fi jazz, soft piano",
+                    "exclude_styles": "heavy metal",
+                    "rationale": "Soft opening clip.",
+                },
+            }
+        )
+        client.models.generate_content.return_value = response
+
+        try:
+            with (
+                patch("youtube_automation.scripts.video_analyze.create_genai_client", return_value=client),
+                patch("sys.argv", ["yt-video-analyze", "--url", "https://www.youtube.com/watch?v=ABCDEFGHIJK"]),
+            ):
+                main()
+        finally:
+            reset_skill_config("video-analyze")
+            reset_config()
+
+        return client
+
+    def test_channel_override_flows_to_gemini_end_offset_and_outputs(self, tmp_path, monkeypatch):
+        # Given: チャンネル override で 300 秒に変更
+        client = self._run_main_with_channel(
+            tmp_path,
+            monkeypatch,
+            "analysis_window_sec: 300\ndelay_sec: 0\n",
+        )
+
+        # Then: 実 main() + 実 VideoAnalyzer 経由で SDK metadata に届く
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        assert contents[0].video_metadata.end_offset == "300s"
+
+        # And: JSON / Markdown 生成物にも実際の窓幅が残る
+        json_path = tmp_path / "data" / "video_analysis" / "url" / "ABCDEFGHIJK.json"
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+        assert payload["analysis_window_sec"] == 300
+        assert payload["analysis_scope"]["end_offset_sec"] == 300
+
+        report_path = tmp_path / "reports" / "video_analysis" / "url.md"
+        assert "- analysis_window_sec: 300" in report_path.read_text(encoding="utf-8")
+
+    def test_default_window_flows_to_gemini_end_offset(self, tmp_path, monkeypatch):
+        # Given: delay だけ override し、analysis_window_sec は配布 default の 900 秒
+        client = self._run_main_with_channel(tmp_path, monkeypatch, "delay_sec: 0\n")
+
+        # Then: default の 900 秒が同じ入口から SDK metadata に届く
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        assert contents[0].video_metadata.end_offset == "900s"
 
 
 # ----------------------------------------------------------------------------

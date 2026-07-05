@@ -110,6 +110,12 @@ class TestVideoAnalyzerAnalyzeUrl:
         assert result["url"] == target.url
         assert result["title"] == target.title
         assert result["model"] == "gemini-3.5-flash"
+        assert result["analysis_window_sec"] == 900
+        assert result["analysis_scope"] == {
+            "start_offset_sec": 0,
+            "end_offset_sec": 900,
+            "description": "opening clip window",
+        }
         # analyzed_at は ISO 文字列で保存される
         assert isinstance(result["analyzed_at"], str) and result["analyzed_at"]
 
@@ -309,6 +315,7 @@ class TestVideoAnalysisReport:
                 "title": "Celtic Forest",
                 "analyzed_at": "2026-04-29T10:00:00",
                 "model": "gemini-3.5-flash",
+                "analysis_window_sec": 900,
                 **_VALID_PAYLOAD,
             },
             {
@@ -318,6 +325,7 @@ class TestVideoAnalysisReport:
                 "title": "Celtic Lake",
                 "analyzed_at": "2026-04-29T10:01:00",
                 "model": "gemini-3.5-flash",
+                "analysis_window_sec": 900,
                 "hook_structure": {"intro_sec": 8},
                 "bgm_arc": {"intro": "0-10s"},
                 "scene_timeline": [],
@@ -345,6 +353,7 @@ class TestVideoAnalysisReport:
         assert "scene_timeline" in md or "シーン" in md or "Scene" in md
         assert "thumbnail_alignment" in md or "サムネ" in md or "Thumbnail" in md
         assert "editing_metrics" in md or "編集" in md or "Editing" in md
+        assert "analysis_window_sec: 900" in md
 
     def test_render_includes_suno_preset_section(self):
         """issue #360: payload に suno_preset が含まれていれば Markdown に登場する."""

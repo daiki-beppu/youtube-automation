@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(video-analyze)`: `analysis_window_sec` を API 呼び出し前に bool ではない正の整数として検証し、不正な channel override（0 / 負数 / 文字列 / bool / null）が Gemini `VideoMetadata.end_offset` へ流れないよう fail-fast にした。解析に使った窓幅は JSON の `analysis_window_sec` / `analysis_scope` と Markdown レポートに保存し、レポート検証 Step 3 には Gemini 生成物を untrusted data として扱う境界指示を追加。`data/video_analysis` を読む下流 skill には冒頭クリップ窓データである旨を明記した（#1495）
 - `fix(doctor)`: `ttp_wf_new_readiness` の video_analysis 要件が benchmark top 5 のライブ配信（`duration_iso == "P0D"`、Gemini 取り込み不可で解析不能）により恒久的に充足不能になる問題を修正。live は期待集合から除外して次点 VOD を繰り上げ、VOD が不足する場合は母数を縮小し、除外時は message に「live 配信 N 本を除外」を明示する。`yt-video-analyze --source benchmark` も同じ選定で live をスキップして次点 VOD を解析する（#1462）
 
 ## [5.5.15] - 2026-07-02
