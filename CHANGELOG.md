@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(suno-lyric)`: `/suno-lyric` がマルチ曲 collection で `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` を全曲一言一句同一のまま出力するのを防ぐため、Workflow に「これらの section も曲ごとの scene / persona で書き分ける」指示を明記し、Validation に曲間セクション重複のセルフチェックと書き分け直し手順を追加。`suno-lyrics.json` の曲間重複を機械検出する `references/check_lyric_duplication.py` を新設（重複検出時は exit 1、#1445）
 - `fix(doctor)`: `ttp_wf_new_readiness` の video_analysis 要件が benchmark top 5 のライブ配信（`duration_iso == "P0D"`、Gemini 取り込み不可で解析不能）により恒久的に充足不能になる問題を修正。live は期待集合から除外して次点 VOD を繰り上げ、VOD が不足する場合は母数を縮小し、除外時は message に「live 配信 N 本を除外」を明示する。`yt-video-analyze --source benchmark` も同じ選定で live をスキップして次点 VOD を解析する（#1462）
 - `fix(hooks)`: oxlint.config.ts / oxfmt.config.ts の `ignorePatterns` 対象パス（`examples/**` `docs/**` `config/**` など）のみを変更した commit で lefthook pre-commit の oxlint / oxfmt が「対象ファイルなし」を non-zero exit で返し必ず失敗する問題（#1428 の同型）を修正。`lefthook.yml` の両コマンドに `--no-error-on-unmatched-pattern` を追加し、対象 0 件を成功として扱うようにした（ignorePatterns のパスを exclude へ列挙する二重管理は回避、#1452）
+- `fix(analytics-report)`: `analytics-report/SKILL.md` の「CTR 値の解釈」が「整数値 2606」から意味不明な式の否定を経て「そのまま使用」に至る自己矛盾した記述になっており、コード実態（`reporting_api.py` の `total_weighted / total_impressions` が返す百分率 float。例 `4.2` = 4.2%、`tests/test_ctr_resolver.py` のフィクスチャも 4.2）と食い違っていた。百分率 float である旨・表示フォーマット（小数 1〜2 桁 + `%`）・100 で割る/掛ける/整数再解釈の禁止・`None` 時の表示を一義的な規則として書き直した（#1514）
 
 ## [5.5.15] - 2026-07-02
 
