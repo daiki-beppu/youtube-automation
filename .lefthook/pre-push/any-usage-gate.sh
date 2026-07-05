@@ -18,34 +18,55 @@ fi
 
 current_file=""
 current_line=0
-current_file_direct_any_import=0
+current_file_any_aliases=()
 violations=()
 python_any_pattern='typing[.]Any'
-# 直接 import された裸の Any（`from typing import Any` 経由）を単語境界つきで検出する。
-# `typing.Any` や `AnyStr` のような別シンボルを誤検出しないよう、前後に英数字/アンダースコア/
-# ドットが続かないことを要求する。
-python_bare_any_pattern='(^|[^A-Za-z0-9_.])Any([^A-Za-z0-9_]|$)'
-python_direct_import_pattern='^[[:space:]]*from[[:space:]]+typing[[:space:]]+import.*[^A-Za-z0-9_]Any([^A-Za-z0-9_]|$)'
-typescript_any_pattern=':[[:space:]]any([^[:alnum:]_]|$)'
+# TypeScript の any は型位置（: any, ジェネリック引数 <any>, union/intersection,
+# tuple 要素）に限定して検出する。素の単語境界だけだと "any" を含む英語の
+# コメントや文字列（"works for any input" 等）を誤検知するため、型を導入する
+# 記号（: < , | & ( [）の直後という条件を必須にする。
+typescript_any_pattern='(:|<|,|\||&|\(|\[)[[:space:]]*any([^A-Za-z0-9_$]|$)'
 diff_output=$(git diff --unified=0 --no-color "${diff_base}" HEAD -- 2>/dev/null || true)
 
 [ -z "${diff_output}" ] && exit 0
 
-# 対象ファイルが `from typing import ... Any ...` を直接 import しているかを
-# HEAD 時点の内容から判定する（1 行ずつの照合。複数行 import 文は対象外）。
-file_has_direct_any_import() {
+PYTHON3_BIN=""
+if command -v python3 >/dev/null 2>&1; then
+  PYTHON3_BIN="python3"
+else
+  echo "any-usage-gate: WARNING: python3 が見つからないため typing.Any の直接 import 検出（複数行 import / alias 対応）を省略します。" >&2
+fi
+
+# 対象ファイルが HEAD 時点で `from typing import ...` により Any をどの
+# ローカル名（alias 含む）に束縛しているかを AST で解決する。単一行の正規表現
+# ではなく AST を使うのは、複数行の括弧 import
+# (`from typing import (\n    Any,\n)`) を正しく扱うため。
+_PYTHON_ANY_ALIAS_RESOLVER='
+import ast
+import sys
+
+try:
+    tree = ast.parse(sys.stdin.read())
+except SyntaxError:
+    sys.exit(0)
+
+names = set()
+for node in ast.walk(tree):
+    if isinstance(node, ast.ImportFrom) and node.module == "typing":
+        for alias in node.names:
+            if alias.name == "Any":
+                names.add(alias.asname or alias.name)
+
+for name in sorted(names):
+    print(name)
+'
+
+resolve_python_any_aliases() {
   local file="$1"
-  local content
-  content=$(git show "HEAD:${file}" 2>/dev/null) || return 1
-  local import_line
-  while IFS= read -r import_line; do
-    if [[ "${import_line}" =~ ${python_direct_import_pattern} ]]; then
-      return 0
-    fi
-  done <<EOF
-${content}
-EOF
-  return 1
+  [ -z "${PYTHON3_BIN}" ] && return 0
+  # `-c` でプログラムを渡す（`- <<EOF` だと heredoc が stdin を占有し、
+  # git show の内容を sys.stdin.read() に渡せなくなるため使わない）。
+  git show "HEAD:${file}" 2>/dev/null | "${PYTHON3_BIN}" -c "${_PYTHON_ANY_ALIAS_RESOLVER}"
 }
 
 while IFS= read -r line; do
@@ -53,12 +74,12 @@ while IFS= read -r line; do
     "+++ b/"*)
       current_file="${line#+++ b/}"
       current_line=0
-      current_file_direct_any_import=0
+      current_file_any_aliases=()
       case "${current_file}" in
         *.py)
-          if file_has_direct_any_import "${current_file}"; then
-            current_file_direct_any_import=1
-          fi
+          while IFS= read -r alias_name; do
+            [ -n "${alias_name}" ] && current_file_any_aliases+=("${alias_name}")
+          done < <(resolve_python_any_aliases "${current_file}")
           ;;
       esac
       continue
@@ -89,9 +110,16 @@ while IFS= read -r line; do
   is_violation=0
   if [[ "${added}" =~ ${python_any_pattern} ]]; then
     is_violation=1
-  elif [[ "${current_file}" == *.py ]] && [ "${current_file_direct_any_import}" -eq 1 ] && [[ "${added}" =~ ${python_bare_any_pattern} ]]; then
-    is_violation=1
-  elif [[ "${added}" =~ ${typescript_any_pattern} ]]; then
+  elif [[ "${current_file}" == *.py ]] && [ "${#current_file_any_aliases[@]}" -gt 0 ]; then
+    for alias_name in "${current_file_any_aliases[@]}"; do
+      bare_alias_pattern="(^|[^A-Za-z0-9_.])${alias_name}([^A-Za-z0-9_]|\$)"
+      if [[ "${added}" =~ ${bare_alias_pattern} ]]; then
+        is_violation=1
+        break
+      fi
+    done
+  fi
+  if [ "${is_violation}" -eq 0 ] && [[ "${added}" =~ ${typescript_any_pattern} ]]; then
     is_violation=1
   fi
   if [ "${is_violation}" -eq 1 ]; then

@@ -141,6 +141,27 @@ def test_changelog_gate_chains_any_usage_gate_failure_on_normal_push(tmp_path: P
     assert "any-usage-gate: ERROR" in result.stderr
 
 
+def test_changelog_gate_skip_changelog_still_chains_other_gates(tmp_path: Path) -> None:
+    """SKIP_CHANGELOG=1 は CHANGELOG チェックのみ省略し、test-diff-gate / any-usage-gate は継続する。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(repo, "src/youtube_automation/new_feature.py", "def main() -> str:\n    return 'ok'\n")
+    _write(
+        repo,
+        "extensions/demo/lib/types.ts",
+        "export const passthrough = (value: " + "any) => value;\n",
+    )
+    _commit_all(repo, "add code without changelog, tests, and with broad type")
+    current_sha = _run_git(repo, "rev-parse", "HEAD").stdout.strip()
+    stdin_text = f"refs/heads/feature {current_sha} refs/heads/feature {_ZERO_SHA}\n"
+
+    result = _run_gate_with_stdin(repo, _CHANGELOG_GATE_PATH, stdin_text, extra_env={"SKIP_CHANGELOG": "1"})
+
+    assert result.returncode == 1
+    assert "changelog-gate: SKIP_CHANGELOG=1 のためスキップします。" in result.stderr
+    assert "test-diff-gate: WARNING" in result.stderr
+    assert "any-usage-gate: ERROR" in result.stderr
+
+
 def test_test_diff_gate_warns_for_python_code_without_test_diff(tmp_path: Path) -> None:
     repo = _init_repo_with_origin_main(tmp_path)
     _write(repo, "src/youtube_automation/new_feature.py", "def main() -> str:\n    return 'ok'\n")
@@ -311,6 +332,90 @@ def test_any_usage_gate_ignores_bare_any_word_without_direct_typing_import(tmp_p
         "class Any:\n    pass\n",
     )
     _commit_all(repo, "add unrelated Any class")
+
+    result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+
+
+def test_any_usage_gate_fails_for_multiline_parenthesized_direct_import(tmp_path: Path) -> None:
+    """複数行の括弧 import 経由の裸 Any も検出する（1 行正規表現では見落とす回帰）。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(
+        repo,
+        "src/youtube_automation/broad_type.py",
+        "from typing import (\n    Any,\n    Optional,\n)\n\nvalue: Any = None\n",
+    )
+    _commit_all(repo, "add multiline parenthesized import")
+
+    result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
+
+    assert result.returncode == 1
+    assert "any-usage-gate: ERROR" in result.stderr
+    # import 文自体の `Any,`（2 行目）と実使用箇所（6 行目）の両方が検出される。
+    assert "src/youtube_automation/broad_type.py:6" in result.stderr
+
+
+def test_any_usage_gate_fails_for_aliased_direct_import(tmp_path: Path) -> None:
+    """`from typing import Any as X` のように alias された名前も検出する。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(
+        repo,
+        "src/youtube_automation/broad_type.py",
+        "from typing import Any as LooseType\n\nvalue: LooseType = None\n",
+    )
+    _commit_all(repo, "add aliased direct import")
+
+    result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
+
+    assert result.returncode == 1
+    assert "any-usage-gate: ERROR" in result.stderr
+    assert "src/youtube_automation/broad_type.py:3" in result.stderr
+
+
+def test_any_usage_gate_fails_for_typescript_generic_any(tmp_path: Path) -> None:
+    """コロン直後の型注釈以外の型位置（ジェネリック引数・union）の any も検出する。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(
+        repo,
+        "extensions/demo/lib/types.ts",
+        "export const values: Array<" + "any> = [];\n",
+    )
+    _commit_all(repo, "add generic any")
+
+    result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
+
+    assert result.returncode == 1
+    assert "any-usage-gate: ERROR" in result.stderr
+    assert "extensions/demo/lib/types.ts:1" in result.stderr
+
+
+def test_any_usage_gate_fails_for_typescript_record_value_any(tmp_path: Path) -> None:
+    """カンマ区切りの 2 番目の型引数（Record の value 型のような位置）の any も検出する。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(
+        repo,
+        "extensions/demo/lib/types.ts",
+        "export const config: Record<string, " + "any> = {};\n",
+    )
+    _commit_all(repo, "add record any")
+
+    result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
+
+    assert result.returncode == 1
+    assert "any-usage-gate: ERROR" in result.stderr
+
+
+def test_any_usage_gate_ignores_prose_any_in_comments_and_strings(tmp_path: Path) -> None:
+    """型位置以外（コメント文・文字列リテラル内の英語 "any"）は誤検知しない。"""
+    repo = _init_repo_with_origin_main(tmp_path)
+    _write(
+        repo,
+        "extensions/demo/lib/helper.ts",
+        "// Check if any element matches\nexport const msg = 'works for " + "any input';\n",
+    )
+    _commit_all(repo, "add prose mentioning any")
 
     result = _run_gate(repo, _ANY_USAGE_GATE_PATH)
 
