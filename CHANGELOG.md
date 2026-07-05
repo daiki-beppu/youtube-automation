@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(video-description)`: `BAHMetadataGenerator.generate_timestamps()` / `format_timestamps_text()` に `loops` パラメータを追加した。master をループ生成しているコレクション（`yt-generate-master --loop N` / `--target-duration`）で全ループ分のチャプターを機械展開できる。2 周目以降の開始秒は 1 周目と同じクロスフェード算術（`int(current + duration - crossfade)`）で連続計算し、各行に 1 始まりの `loop` フィールドを付与（2 周目以降のタイトル装飾は呼び出し側の LLM リネームに委ねる）。既定 `loops=1` は従来挙動と完全互換。従来は 1 ループ分しか生成できず、全ループ展開運用のチャンネルでは毎回 LLM が手計算していた
+
 ### Changed
 
 - `feat(takt)`: lite workflow に提出前セルフ監査を組み込んだ（#1508）。過去の review-takt-default 指摘 371 件（183 レビュー）の全件分類から頻出 8 パターンを抽出した `.takt/facets/policies/pre-review-checklist.md` を新設し、`implement` step（自己監査 + 受入条件充足表の出力）と `review` step（独立照合、スコープ外の改善提案は verdict に影響させない）に注入。あわせて lite の `plan` step に `instruction: plan` を追加し、リポジトリ強化版 plan instruction（`.takt/facets/instructions/plan.md`）が lite でも注入されるようにした。運用・更新手順は `docs/takt-operations.md` の「提出前セルフ監査」節を参照

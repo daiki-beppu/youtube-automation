@@ -1472,3 +1472,91 @@ class TestAnalyzeAudioFilesSkipDetection:
         assert len(tracks) == 3
         assert "スキップ" not in caplog.text
         assert "欠落" not in caplog.text
+
+
+# ===========================================================================
+# generate_timestamps(loops=N) のテスト
+# ===========================================================================
+
+
+class TestGenerateTimestampsLoops:
+    """master の複数ループ展開に合わせた全ループ分チャプター生成の検証。"""
+
+    def _gen_with_tracks(self) -> BAHMetadataGenerator:
+        gen = _make_generator()
+        gen._crossfade_sec = 1.0
+        # 120s + 90s の 2 曲。1 周目: 0:00 / 1:59（int(0+120-1)=119）
+        gen.tracks = [
+            _track("01-alpha.mp3", "Alpha", "00:00", None, duration=120),
+            _track("02-beta.mp3", "Beta", "01:59", None, duration=90),
+        ]
+        return gen
+
+    def test_loops_1_matches_legacy_output(self):
+        """Given 2 トラック
+        When loops=1（既定）で生成する
+        Then 従来どおり保存済み timestamp がそのまま使われる。
+        """
+        gen = self._gen_with_tracks()
+        out = gen.generate_timestamps()
+        assert [(t["timestamp"], t["title"]) for t in out] == [("00:00", "Alpha"), ("01:59", "Beta")]
+        assert all(t["loop"] == 1 for t in out)
+
+    def test_loops_2_continues_crossfade_arithmetic(self):
+        """Given 2 トラック（120s / 90s, crossfade 1s）
+        When loops=2 で生成する
+        Then 2 周目の開始秒が 1 周目と同じ算術で連続する。
+        """
+        gen = self._gen_with_tracks()
+        out = gen.generate_timestamps(loops=2)
+        assert len(out) == 4
+        # 1 周目末尾: current = int(119 + 90 - 1) = 208 → 2 周目 Alpha は 03:28
+        # 2 周目 Alpha 後: current = int(208 + 120 - 1) = 327 → Beta は 05:27
+        assert [(t["timestamp"], t["title"], t["loop"]) for t in out] == [
+            ("00:00", "Alpha", 1),
+            ("01:59", "Beta", 1),
+            ("03:28", "Alpha", 2),
+            ("05:27", "Beta", 2),
+        ]
+
+    def test_loops_2_reemits_theme_headers_per_loop(self):
+        """Given pattern_key 付きトラック
+        When loops=2 で生成する
+        Then 各周回の pattern 切り替わりで theme_header が再挿入される。
+        """
+        gen = _make_generator()
+        gen._crossfade_sec = 1.0
+        gen.tracks = [
+            _track("01-pattern-a-alpha.mp3", "Alpha", "00:00", "a", duration=120),
+            _track("02-pattern-b-beta.mp3", "Beta", "01:59", "b", duration=90),
+        ]
+        out = gen.generate_timestamps(loops=2)
+        headers = [t for t in out if t["type"] == "theme_header"]
+        assert len(headers) == 4  # a/b × 2 周
+        assert [h["loop"] for h in headers] == [1, 1, 2, 2]
+
+    def test_loops_zero_raises(self):
+        """Given loops=0
+        When 生成する
+        Then ValueError で停止する。
+        """
+        gen = self._gen_with_tracks()
+        with pytest.raises(ValueError):
+            gen.generate_timestamps(loops=0)
+
+    def test_format_timestamps_text_expands_all_loops(self):
+        """Given 2 トラック
+        When format_timestamps_text(loops=3) する
+        Then 6 行の楽曲行が strictly ascending で出力される。
+        """
+        gen = self._gen_with_tracks()
+        text = gen.format_timestamps_text(loops=3)
+        lines = [line for line in text.splitlines() if line]
+        assert len(lines) == 6
+
+        def to_sec(ts: str) -> int:
+            parts = [int(p) for p in ts.split(":")]
+            return parts[0] * 3600 + parts[1] * 60 + parts[2] if len(parts) == 3 else parts[0] * 60 + parts[1]
+
+        secs = [to_sec(line.split(" ")[0]) for line in lines]
+        assert secs == sorted(secs) and len(set(secs)) == len(secs)
