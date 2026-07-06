@@ -479,18 +479,29 @@ class BAHMetadataGenerator:
 
     # ─── タイムスタンプ生成 ─────────────────────────────
 
-    def generate_timestamps(self) -> list[dict]:
+    def generate_timestamps(self, loops: int = 1) -> list[dict]:
         """テーマ見出し + 楽曲行の構造化タイムスタンプを生成する。
 
         ファイル名規約 `\\d+-pattern-[a-d]` から検出した pattern_key の切り替わりごとに
         `theme_header` 行を挿入する。pattern_key が無いトラック群はフラットに並べる。
 
-        戻り値: `list[{"type": "theme_header"|"track", "timestamp": str, "title": str}]`。
-        トラックが無ければ空リスト。
+        Args:
+            loops: master のループ回数（`yt-generate-master --loop N` /
+                `--target-duration` のループ展開と同じ回数）。2 以上を指定すると
+                トラック列を N 回繰り返し、2 周目以降の開始秒は 1 周目と同じ
+                クロスフェード算術（`int(current + duration - crossfade)`）で
+                連続計算する。既定 1（従来挙動）。
+
+        戻り値: `list[{"type": "theme_header"|"track", "timestamp": str, "title": str, "loop": int}]`。
+        トラックが無ければ空リスト。`loop` は 1 始まりの周回番号。
+        2 周目以降のタイトルは 1 周目と同一なので、チャプター名をユニークにしたい
+        チャンネルでは呼び出し側（LLM リネーム / track_display_names）で装飾する。
 
         self.tracks が未 populate のときは 02-Individual-music/ の存在を見て
         analyze_audio_files() を実行する。
         """
+        if loops < 1:
+            raise ValueError(f"loops must be >= 1: {loops}")
         if not self.tracks:
             audio_dir = self.collection_path / "02-Individual-music"
             if audio_dir.exists() and any(audio_dir.iterdir()):
@@ -499,29 +510,40 @@ class BAHMetadataGenerator:
             return []
 
         theme_names = self._load_theme_display_names()
+        crossfade = self._crossfade_sec
         out: list[dict] = []
-        last_pattern: str | None = None
-        for track in self.tracks:
-            pattern = track.get("pattern_key")
-            if pattern and pattern != last_pattern:
-                label = theme_names.get(pattern, f"Pattern {pattern.upper()}")
-                out.append({"type": "theme_header", "timestamp": track["timestamp"], "title": label})
-                last_pattern = pattern
-            out.append({"type": "track", "timestamp": track["timestamp"], "title": track["title"]})
+        current_time = 0
+        for loop_index in range(1, loops + 1):
+            last_pattern: str | None = None
+            for track in self.tracks:
+                # 1 周目は analyze_audio_files() が保存した timestamp をそのまま使い
+                # 従来挙動と完全一致させる。2 周目以降は同じ算術で連続計算する。
+                timestamp = track["timestamp"] if loop_index == 1 else self._format_timestamp(current_time)
+                pattern = track.get("pattern_key")
+                if pattern and pattern != last_pattern:
+                    label = theme_names.get(pattern, f"Pattern {pattern.upper()}")
+                    out.append({"type": "theme_header", "timestamp": timestamp, "title": label, "loop": loop_index})
+                    last_pattern = pattern
+                out.append({"type": "track", "timestamp": timestamp, "title": track["title"], "loop": loop_index})
+                current_time = int(current_time + track["duration"] - crossfade)
         return out
 
-    def format_timestamps_text(self) -> str:
+    def format_timestamps_text(self, loops: int = 1) -> str:
         """タイムスタンプを YouTube 概要欄用テキストに整形.
 
         テーマ見出し行は `section_headers.theme_inline.{prefix,suffix}` の装飾を適用。
         デフォルトは `"── "` / `" ──"` で、`section_headers.theme_inline` を上書きすれば
         チャンネル別に変更できる。
 
+        Args:
+            loops: master のループ回数。`generate_timestamps(loops=N)` に委譲し、
+                全ループ分のチャプターを展開する。既定 1（従来挙動）。
+
         YouTube のチャプター仕様は timestamps が strictly ascending である必要があるため、
         テーマ見出し行には **leading timestamp を載せない**（直後の楽曲行と同秒になると
         chapter list 全体が無効化される）。
         """
-        timestamps = self.generate_timestamps()
+        timestamps = self.generate_timestamps(loops=loops)
         if not timestamps:
             return ""
         section_headers = self._video_description_config.get("section_headers", {})
@@ -966,7 +988,7 @@ class BAHMetadataGenerator:
 
         return localizations
 
-    def generate_complete_collection_metadata(self, title_override: str | None = None) -> Dict:
+    def generate_complete_collection_metadata(self, title_override: str | None = None, loops: int = 1) -> Dict:
         """
         Complete Collection 用メタデータ生成
 
@@ -976,6 +998,8 @@ class BAHMetadataGenerator:
                 生成（`_generate_title` = `title.template.format(...)`）をスキップする。
                 これにより `title.template` が未知プレースホルダを含んでいても upload 全体が
                 `KeyError`/`ValidationError` で巻き込まれない（#574）。
+            loops: master のループ回数。`format_timestamps_text(loops=loops)` に渡し、
+                全ループ分のチャプターを展開する。既定 1（従来挙動）。
 
         Returns:
             Dict: YouTube アップロード用メタデータ
@@ -999,7 +1023,7 @@ class BAHMetadataGenerator:
         description_parts.append(header)
         description_parts.append("")
 
-        timestamp_body = self.format_timestamps_text()
+        timestamp_body = self.format_timestamps_text(loops=loops)
         if timestamp_body:
             description_parts.append(timestamp_body)
 
