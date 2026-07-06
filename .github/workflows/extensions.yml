@@ -119,6 +119,18 @@ jobs:
               console.error("生成 manifest の host_permissions が distrokid.com 限定と不一致:", actualHosts);
               process.exit(1);
             }
+            const expectedContentScriptMatches = ["*://*.distrokid.com/new*"];
+            const contentScripts = manifest.content_scripts ?? [];
+            const actualContentScriptMatches = contentScripts.flatMap(
+              (script) => script.matches ?? [],
+            );
+            const sameContentScriptMatches =
+              actualContentScriptMatches.length === expectedContentScriptMatches.length &&
+              expectedContentScriptMatches.every((p) => actualContentScriptMatches.includes(p));
+            if (!sameContentScriptMatches) {
+              console.error("生成 manifest の content_scripts.matches が DistroKid /new 限定と不一致:", actualContentScriptMatches);
+              process.exit(1);
+            }
           '
       - name: E2E (Playwright)
         run: pnpm test:e2e

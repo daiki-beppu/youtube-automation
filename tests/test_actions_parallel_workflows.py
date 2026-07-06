@@ -260,6 +260,10 @@ def test_distrokid_helper_manifest_permission_check_preserves_least_privilege_co
     assert 'const expectedHosts = ["*://*.distrokid.com/*"];' in run_script
     assert "const actualHosts = manifest.host_permissions ?? [];" in run_script
     assert "expectedHosts.every((p) => actualHosts.includes(p))" in run_script
+    assert 'const expectedContentScriptMatches = ["*://*.distrokid.com/new*"];' in run_script
+    assert "const contentScripts = manifest.content_scripts ?? [];" in run_script
+    assert "const actualContentScriptMatches = contentScripts.flatMap(" in run_script
+    assert "expectedContentScriptMatches.every((p) => actualContentScriptMatches.includes(p))" in run_script
     assert "process.exit(1);" in run_script
 
 
