@@ -11,6 +11,7 @@ import pytest
 from youtube_automation.scripts import suno_verify_playlist
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.suno_playlist_verification import (
+    format_display_text,
     format_verification_report,
     load_entry_names,
     normalize_title,
@@ -139,6 +140,26 @@ def test_human_report_escapes_control_characters():
     assert "Song\nA" not in report
 
 
+def test_human_report_keeps_printable_japanese_titles():
+    """Given 日本語を含む title/name
+    When human report を整形する
+    Then ユーザーが読める文字は Unicode escape 化しない。
+    """
+    result = verify_playlist_titles([ENTRIES[0]], [ENTRIES[0]])
+    report = format_verification_report(result)
+
+    assert ENTRIES[0] in report
+    assert "\\u706f" not in report
+
+
+def test_display_text_escapes_only_control_characters():
+    """Given printable Unicode と制御文字の混在
+    When stdout 表示用に sanitize する
+    Then 通常文字は保持し制御文字だけ escape する。
+    """
+    assert format_display_text("灯り\t\x1b[31m") == "灯り\\t\\x1b[31m"
+
+
 def test_load_entry_names_reads_prompts_json(tmp_path):
     """Given 正常な suno-prompts.json
     When load_entry_names する
@@ -151,6 +172,47 @@ def test_load_entry_names_reads_prompts_json(tmp_path):
         encoding="utf-8",
     )
     assert load_entry_names(tmp_path) == ENTRIES
+
+
+def test_load_entry_names_prefers_title_when_present(tmp_path):
+    """Given entry.title がある suno-prompts.json
+    When load_entry_names する
+    Then suno-helper と同じ entry.title ?? entry.name 契約で title を使う。
+    """
+    doc = tmp_path / "20-documentation"
+    doc.mkdir()
+    (doc / "suno-prompts.json").write_text(
+        json.dumps(
+            [
+                {
+                    "name": "internal-slug",
+                    "title": ENTRIES[0],
+                    "style": "s",
+                    "lyrics": "l",
+                }
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    assert load_entry_names(tmp_path) == [ENTRIES[0]]
+    assert verify_playlist_titles(load_entry_names(tmp_path), [ENTRIES[0], ENTRIES[0]]).ok
+
+
+def test_load_entry_names_rejects_non_string_title(tmp_path):
+    """Given entry.title が非文字列
+    When load_entry_names する
+    Then Song Title 契約違反として fail-loud する。
+    """
+    doc = tmp_path / "20-documentation"
+    doc.mkdir()
+    (doc / "suno-prompts.json").write_text(
+        json.dumps([{"name": "Song A", "title": ["Song A"], "style": "s"}]),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValidationError, match="title must be a string"):
+        load_entry_names(tmp_path)
 
 
 def test_load_entry_names_fails_on_missing_name(tmp_path):
@@ -296,3 +358,54 @@ def test_cli_rejects_negative_expected_clip_count(tmp_path, monkeypatch, capsys)
     assert code == 1
     assert out == ""
     assert "0 以上" in err
+
+
+def test_cli_passes_expected_clip_count_to_verifier(tmp_path, monkeypatch, capsys):
+    """Given 1 clip だけの playlist
+    When expected clip 数を CLI option で変更する
+    Then 既定値は NG、1 または 0 指定は OK になる。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+
+    default_code, default_out, default_err = _run_cli(
+        monkeypatch,
+        capsys,
+        [str(tmp_path), "--titles", ENTRIES[0]],
+    )
+    one_code, one_out, one_err = _run_cli(
+        monkeypatch,
+        capsys,
+        [str(tmp_path), "--titles", ENTRIES[0], "--expected-clips-per-entry", "1"],
+    )
+    disabled_code, disabled_out, disabled_err = _run_cli(
+        monkeypatch,
+        capsys,
+        [str(tmp_path), "--titles", ENTRIES[0], "--expected-clips-per-entry", "0"],
+    )
+
+    assert default_code == 1
+    assert "clip 不足" in default_out
+    assert default_err == ""
+    assert one_code == 0
+    assert "→ OK" in one_out
+    assert one_err == ""
+    assert disabled_code == 0
+    assert "→ OK" in disabled_out
+    assert disabled_err == ""
+
+
+@pytest.mark.parametrize("payload", [{}, None, [ENTRIES[0], 123]])
+def test_cli_rejects_json_titles_file_with_invalid_shape(tmp_path, monkeypatch, capsys, payload):
+    """Given JSON titles-file が文字列配列ではない
+    When CLI main を実行する
+    Then playlist title 入力契約違反として exit 1。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    titles_file = tmp_path / "titles.json"
+    titles_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--titles-file", str(titles_file)])
+
+    assert code == 1
+    assert out == ""
+    assert "文字列の配列" in err

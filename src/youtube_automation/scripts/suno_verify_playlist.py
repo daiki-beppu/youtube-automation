@@ -48,7 +48,7 @@ def _read_titles(args: argparse.Namespace) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Suno playlist の曲名一覧を suno-prompts.json の entry name と突合し、"
+            "Suno playlist の曲名一覧を suno-prompts.json の entry title/name と突合し、"
             "混入（unknown）と未生成（missing）を fail-loud で検出する"
         )
     )

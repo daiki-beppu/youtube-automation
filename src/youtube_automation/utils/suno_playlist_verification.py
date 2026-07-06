@@ -1,12 +1,12 @@
-"""Suno playlist の曲名と suno-prompts.json entry name の突合検証.
+"""Suno playlist の曲名と suno-prompts.json entry title/name の突合検証.
 
 /masterup の前段ゲート。playlist に別コレクションの曲が混入したまま
 master 化される事故（前コレクション曲の紛れ込み・最新セット未完）を
 fail-loud で検出する。
 
-照合キーは `/suno` が Suno UI の Song Title 欄へ注入する
-`{name_jp} — {name_en}` の entry name。Suno 側でタイトルは保持される
-前提だが、空白ゆれ・Unicode 正規化差・大文字小文字は吸収する。
+照合キーは `/suno-helper` が Suno UI の Song Title 欄へ注入する
+`entry.title ?? entry.name`。Suno 側でタイトルは保持される前提だが、
+空白ゆれ・Unicode 正規化差・大文字小文字は吸収する。
 """
 
 from __future__ import annotations
@@ -36,10 +36,10 @@ class PlaylistVerificationResult:
     """突合結果。
 
     Attributes:
-        matched: entry name（原文）→ playlist 内の一致曲数
+        matched: entry title/name（原文）→ playlist 内の一致曲数
         unknown_titles: どの entry にも一致しない playlist 曲名（混入疑い）
-        missing_entries: playlist に 1 曲も現れない entry name（未生成疑い）
-        underfilled_entries: 一致数が expected_clips_per_entry 未満の entry name
+        missing_entries: playlist に 1 曲も現れない entry title/name（未生成疑い）
+        underfilled_entries: 一致数が expected_clips_per_entry 未満の entry title/name
     """
 
     matched: Mapping[str, int]
@@ -53,7 +53,7 @@ class PlaylistVerificationResult:
 
 
 def load_entry_names(collection_dir: Path) -> list[str]:
-    """suno-prompts.json から entry name の一覧を読み出す."""
+    """suno-prompts.json から Song Title 欄に入る title/name の一覧を読み出す."""
     try:
         entries = read_suno_prompt_entries(collection_dir)
     except (OSError, ValueError) as exc:
@@ -63,9 +63,13 @@ def load_entry_names(collection_dir: Path) -> list[str]:
         if not isinstance(entry, Mapping):
             raise ValidationError(f"suno-prompts.json: entry {i} must be an object")
         name = entry.get("name")
+        title = entry.get("title")
+        if title is not None and not isinstance(title, str):
+            raise ValidationError(f"suno-prompts.json: entry {i} title must be a string")
         if not isinstance(name, str) or not name.strip():
             raise ValidationError(f"suno-prompts.json: entry {i} has no name")
-        names.append(name.strip())
+        song_title = title if title is not None and title.strip() else name
+        names.append(song_title.strip())
     if not names:
         raise ValidationError("suno-prompts.json に entry がありません")
     return names
@@ -77,10 +81,10 @@ def verify_playlist_titles(
     *,
     expected_clips_per_entry: int = 2,
 ) -> PlaylistVerificationResult:
-    """playlist 曲名一覧を entry name と突合する.
+    """playlist 曲名一覧を entry title/name と突合する.
 
     Args:
-        entry_names: suno-prompts.json の entry name（原文）
+        entry_names: suno-prompts.json の entry title/name（原文）
         playlist_titles: playlist の曲名（原文）
         expected_clips_per_entry: entry あたりの期待 clip 数
             （1 Generate = 2 clip の既定運用は 2。再生成で増えた分は許容し、
@@ -91,7 +95,7 @@ def verify_playlist_titles(
     for name in originals:
         key = normalize_title(name)
         if key in lookup:
-            raise ValidationError(f"entry name が正規化後に衝突しています: {lookup[key]!r} / {name!r}")
+            raise ValidationError(f"entry title/name が正規化後に衝突しています: {lookup[key]!r} / {name!r}")
         lookup[key] = name
 
     matched: dict[str, int] = {name: 0 for name in originals}
@@ -144,7 +148,20 @@ def format_verification_report(result: PlaylistVerificationResult) -> str:
 
 def format_display_text(value: str) -> str:
     """外部由来 title/name を stdout 用に制御文字 escape する."""
-    text = ascii(value)[1:-1]
+    text = "".join(_escape_display_character(char) for char in value)
     if len(text) <= _MAX_DISPLAY_TEXT_LEN:
         return text
     return text[: _MAX_DISPLAY_TEXT_LEN - 3] + "..."
+
+
+def _escape_display_character(char: str) -> str:
+    """通常文字は保持し、制御文字だけ Python escape 表記へ変換する."""
+    if char == "\n":
+        return "\\n"
+    if char == "\r":
+        return "\\r"
+    if char == "\t":
+        return "\\t"
+    if unicodedata.category(char)[0] == "C":
+        return char.encode("unicode_escape").decode("ascii")
+    return char
