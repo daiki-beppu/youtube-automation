@@ -578,3 +578,91 @@ class TestExecuteCompleteCollectionResume:
         # Then
         assert _read_resume_uri(tracking_path) is None
         assert result["action"] == "complete_collection_failed"
+
+
+class TestShowPlanPrivacyDisplay:
+    """#1472: --plan の公開設定表示は実効 privacy_status（youtube.json）を反映する。
+
+    schedule 無効時に固定 "即時公開 (public)" を出すと、unlisted / private 運用
+    チャンネルで表示と実効値が乖離する（FB 起点バグ）。
+    """
+
+    def _plan_output(self, tmp_path, capsys, privacy_status):
+        uploader, _ = _make_uploader_with_schedule_config(
+            tmp_path,
+            {"schedule": {"auto_schedule_enabled": False, "timezone": "Asia/Tokyo"}},
+        )
+        config_mock = MagicMock()
+        config_mock.youtube.api.privacy_status = privacy_status
+        with patch(
+            "youtube_automation.agents.collection_uploader.load_config",
+            return_value=config_mock,
+        ):
+            uploader.show_plan(tmp_path / "collections" / "planning" / "Test Collection")
+        return capsys.readouterr().out
+
+    def test_unlisted_channel_shows_effective_privacy_not_fixed_public(self, tmp_path, capsys):
+        out = self._plan_output(tmp_path, capsys, "unlisted")
+        assert "📅 公開設定: 限定公開 (unlisted)" in out
+        assert "即時公開 (public)" not in out
+        assert "youtube.json::privacy_status" in out
+
+    def test_private_channel_shows_effective_privacy(self, tmp_path, capsys):
+        out = self._plan_output(tmp_path, capsys, "private")
+        assert "📅 公開設定: 非公開 (private)" in out
+        assert "即時公開 (public)" not in out
+
+    def test_public_channel_keeps_immediate_publish_wording(self, tmp_path, capsys):
+        """skill docs（test_skill_docs_consistency）が例示する文字列を維持する。"""
+        out = self._plan_output(tmp_path, capsys, "public")
+        assert "📅 公開設定: 即時公開 (public)" in out
+
+
+def test_execute_collection_suppresses_lower_default_publish_fallback_when_schedule_disabled(tmp_path):
+    col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+    uploader, mock_inner = _make_uploader_with_schedule_config(
+        tmp_path,
+        {"schedule": {"auto_schedule_enabled": False, "timezone": "Asia/Tokyo"}},
+    )
+    mock_inner.upload_collection.return_value = {
+        "complete_video": {
+            "video_id": "V_NO_FALLBACK",
+            "video_url": "https://www.youtube.com/watch?v=V_NO_FALLBACK",
+            "title": "t",
+            "file_path": "p",
+        }
+    }
+
+    tracking = uploader._load_tracking(col)
+    uploader._execute_complete_collection(col, tracking, publish_at=None)
+
+    call_kwargs = mock_inner.upload_collection.call_args.kwargs
+    assert call_kwargs["publish_at"] is None
+    assert call_kwargs["apply_default_publish_at"] is False
+
+
+class TestScheduleConfigPrivacyStatusDeprecation:
+    """#1472: schedule_config.json::upload_settings.privacy_status は未参照。
+
+    実効値は config/channel/youtube.json::privacy_status に一本化し、
+    残存設定には警告で案内する。
+    """
+
+    def test_warns_when_legacy_privacy_status_present_in_schedule_config(self, tmp_path, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.collection_uploader"):
+            _make_uploader_with_schedule_config(
+                tmp_path,
+                {"upload_settings": {"privacy_status": "unlisted"}},
+            )
+        assert "upload_settings.privacy_status は参照されません" in caplog.text
+        assert "youtube.json::privacy_status" in caplog.text
+
+    def test_default_config_has_no_privacy_status_and_no_warning(self, tmp_path, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.collection_uploader"):
+            uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        assert "privacy_status" not in uploader.config["upload_settings"]
+        assert "upload_settings.privacy_status" not in caplog.text

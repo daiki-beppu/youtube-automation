@@ -1,6 +1,6 @@
 ---
 name: audience-persona-design
-description: "Use when ターゲット視聴者を第一ペルソナとして設計・見直しするとき。「ペルソナ設定」「視聴者像」「ターゲット層」で発動。/viewer-voice を必須入力に persona-definition.md を確定"
+description: "Use when ターゲット視聴者を第一ペルソナとして設計・見直しするとき。「ペルソナ設定」「視聴者像」「ターゲット層」で発動。/viewer-voice の viewer-voice-analysis.md を必須入力に persona-definition.md を確定"
 ---
 
 ## Overview
@@ -128,6 +128,8 @@ options:
 - 競合に寄せるべき利用シーンと、避けるべき利用シーン
 
 ### Phase 6: 最終 persona-definition.md 更新
+
+**前提確認（必須）**: `docs/plans/viewing-scene-matrix.md` が存在しない場合、Phase 6 に進んではならない。ユーザーがスキップを明示した場合のみ、`persona-definition.md` に「viewing-scene 未検証」と注記した上で確定してよい。
 
 `viewing-scene-matrix.md` の結果を反映して `docs/channel/personas/persona-definition.md` を更新する。
 最終版では「暫定」の表記を外し、第一ペルソナ 1 人に収束した判断軸として完成させる。
