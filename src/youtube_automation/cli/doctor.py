@@ -1818,6 +1818,17 @@ def _missing_channel_branding_output_image(
 ) -> list[str]:
     path = channel_dir / relative_path
     if not path.is_file():
+        candidates = _channel_branding_output_candidates(channel_dir, relative_path)
+        if candidates:
+            candidate_list = ", ".join(candidates)
+            if len(candidates) > 1:
+                return [
+                    f"{label} は見つかりませんが、既存候補が複数あります: {candidate_list}。"
+                    f"最終版を確認してから変換してください。採用後に {label} にしてください（自動判定はしません）"
+                ]
+            return [
+                f"{label} は見つかりませんが、既存候補があります: {candidate_list}。{label} にリネーム/変換してください"
+            ]
         return [f"{label} が未生成"]
     try:
         if path.stat().st_size > max_size_bytes:
@@ -1838,6 +1849,24 @@ def _missing_channel_branding_output_image(
     if abs(actual_ratio - expected_ratio) > 0.03:
         return [f"{label} のアスペクト比が不正です"]
     return []
+
+
+def _channel_branding_output_candidates(channel_dir: Path, relative_path: str) -> list[str]:
+    target = Path(relative_path)
+    branding_dir = channel_dir / target.parent
+    if not branding_dir.is_dir():
+        return []
+
+    allowed_suffixes = {".png", ".jpg", ".jpeg", ".webp"}
+    target_stem = target.stem
+    versioned_pattern = re.compile(rf"^{re.escape(target_stem)}-v\d+$")
+    candidates: list[str] = []
+    for candidate in sorted(branding_dir.iterdir(), key=lambda item: item.name):
+        if not candidate.is_file() or candidate.suffix.lower() not in allowed_suffixes:
+            continue
+        if candidate.stem == target_stem or versioned_pattern.fullmatch(candidate.stem):
+            candidates.append(candidate.relative_to(channel_dir).as_posix())
+    return candidates
 
 
 def _channel_branding_output_approved(seed_text: str) -> bool:

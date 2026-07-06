@@ -424,8 +424,19 @@ uv run yt-doctor
 uv run yt-channel-status
 ```
 
-- `yt-doctor` で WARNING / FAILED が出た場合は `/setup` を起動して再診断するよう案内
-- `command not found` / `No module named` が出た場合は **追従内容が原因と判断せず**、env 側の問題として `uv sync` → それでもダメなら `uv cache clean && uv lock --upgrade-package youtube-channels-automation && uv sync` を案内
+`command not found` / `No module named` が出た場合は **追従内容が原因と判断せず**、env 側の問題として以下を案内:
+
+```bash
+uv sync
+uv pip list | grep youtube-channels-automation
+# それでもダメなら
+uv cache clean
+uv lock --upgrade-package youtube-channels-automation
+uv sync
+```
+
+`yt-doctor` で WARNING / FAILED が出た場合は `/setup` を起動して再診断するよう案内。
+ただし `branding/icon.png` / `branding/banner.png` の「未生成」が報告された場合は、新規生成の前に必ず `branding/` 配下の既存ファイルを確認する。同名 stem の別拡張子（例: `icon.jpg` / `banner.webp`）と別サフィックス（例: `banner-v2.jpg` / `banner-v3.png`）も候補に含め、複数候補がある場合はどれが最終版か人間に確認してからリネーム/変換する。
 
 #### 番号付き重複ファイルの検知と再発防止
 
