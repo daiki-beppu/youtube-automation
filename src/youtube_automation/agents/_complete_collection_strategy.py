@@ -61,7 +61,7 @@ class CompleteCollectionMixin:
 
         # メタデータ生成（BAHMetadataGenerator — localizations 等）
         metadata = metadata_gen.generate_complete_collection_metadata(
-            title_override=prebuilt["title"] if prebuilt else None
+            loops=1, title_override=prebuilt["title"] if prebuilt else None
         )
 
         # descriptions.md が存在すれば title/description/tags を上書き

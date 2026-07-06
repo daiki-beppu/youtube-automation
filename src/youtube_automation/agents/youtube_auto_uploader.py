@@ -206,6 +206,7 @@ class YouTubeAutoUploader(
         collection_path: str,
         publish_at: str = None,
         *,
+        apply_default_publish_at: bool = True,
         resume_session_uri: Optional[str] = None,
         on_session_uri_changed: Optional[Callable[[Optional[str]], None]] = None,
         on_upload_complete: Optional[Callable[[], None]] = None,
@@ -216,6 +217,7 @@ class YouTubeAutoUploader(
         Args:
             collection_path (str): コレクションディレクトリパス
             publish_at (str): スケジュール公開日時（ISO 8601）
+            apply_default_publish_at: publish_at 省略時に channel default publish time を適用するか
             resume_session_uri: 前回中断時の resumable upload session URI
             on_session_uri_changed: session URI 変化通知コールバック
             on_upload_complete: アップロード成功通知コールバック
@@ -231,7 +233,7 @@ class YouTubeAutoUploader(
         logger.info(f"🎵 コレクションアップロード開始: {collection_dir.name}")
         logger.info(f"📁 パス: {collection_dir}")
 
-        if publish_at is None:
+        if publish_at is None and apply_default_publish_at:
             publish_at = _resolve_default_publish_at(load_config())
             if publish_at:
                 logger.info(f"チャンネル既定の予約投稿時刻を適用: publish_at={publish_at}")
