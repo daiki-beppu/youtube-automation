@@ -50,7 +50,7 @@ jobs:
             const manifest = JSON.parse(
               readFileSync(".output/chrome-mv3/manifest.json", "utf8"),
             );
-            const expected = ["storage", "activeTab", "tabs", "downloads", "debugger"];
+            const expected = ["storage", "activeTab", "downloads", "debugger"];
             const actual = manifest.permissions ?? [];
             const same =
               actual.length === expected.length &&
@@ -94,5 +94,48 @@ jobs:
             run: pnpm build
           - name: Install Playwright browser
             run: pnpm exec playwright install --with-deps chromium
+      - name: Verify generated manifest permissions (least-privilege)
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const manifest = JSON.parse(
+              readFileSync(".output/chrome-mv3/manifest.json", "utf8"),
+            );
+            const expected = ["storage", "activeTab"];
+            const actual = manifest.permissions ?? [];
+            const same =
+              actual.length === expected.length &&
+              expected.every((p) => actual.includes(p));
+            if (!same) {
+              console.error("生成 manifest の permissions が最小権限と不一致:", actual);
+              process.exit(1);
+            }
+            const expectedHosts = [
+              "*://*.distrokid.com/*",
+              "http://*.localhost/*",
+              "http://localhost/*",
+              "http://127.0.0.1/*",
+            ];
+            const actualHosts = manifest.host_permissions ?? [];
+            const sameHosts =
+              actualHosts.length === expectedHosts.length &&
+              expectedHosts.every((p) => actualHosts.includes(p));
+            if (!sameHosts) {
+              console.error("生成 manifest の host_permissions が DistroKid + ローカル配信元と不一致:", actualHosts);
+              process.exit(1);
+            }
+            const expectedContentScriptMatches = ["*://*.distrokid.com/new*"];
+            const contentScripts = manifest.content_scripts ?? [];
+            const actualContentScriptMatches = contentScripts.flatMap(
+              (script) => script.matches ?? [],
+            );
+            const sameContentScriptMatches =
+              actualContentScriptMatches.length === expectedContentScriptMatches.length &&
+              expectedContentScriptMatches.every((p) => actualContentScriptMatches.includes(p));
+            if (!sameContentScriptMatches) {
+              console.error("生成 manifest の content_scripts.matches が DistroKid /new 限定と不一致:", actualContentScriptMatches);
+              process.exit(1);
+            }
+          '
       - name: E2E (Playwright)
         run: pnpm test:e2e

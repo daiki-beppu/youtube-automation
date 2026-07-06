@@ -13,17 +13,20 @@ export interface DownloadFlow {
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
-    sunoPlaylistUrl: string,
   ) => Promise<void>;
-  recordPlaylistUrl: (context: DownloadContext, collectionId: string, sunoPlaylistUrl: string) => Promise<void>;
   downloadBestEffort: (
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
-    sunoPlaylistUrl: string,
   ) => Promise<string | null>;
-  retryDownload: (options: RetryDownloadOptions) => Promise<void>;
+  retryDownload: (options: RetryDownloadOptions) => Promise<RetryDownloadResult>;
+}
+
+export interface RetryDownloadResult {
+  /** FINISHED まで到達し resume state 消去も成功したか。呼び出し側の完了時リロード発火判定に使う (#1411)。
+   * false は中断（STOPPED）または resume state 消去失敗（リロードすると再開バナーが誤判定するため見送る）。 */
+  completedAndCleared: boolean;
 }
 
 export interface DownloadFlowDeps {
@@ -34,11 +37,8 @@ export interface DownloadFlowDeps {
 export interface RetryDownloadOptions {
   context: DownloadContext;
   collectionId: string;
-  playlistName: string;
-  savedSunoPlaylistUrl?: string;
   submittedClipIds: string[];
   expectedClipCount?: number;
-  resolvePlaylistUrl: (playlistName: string) => Promise<string>;
   selectClipIds: (submittedClipIds: string[]) => Promise<void>;
   clearResumeState: (collectionId: string) => Promise<void>;
 }
@@ -99,7 +99,6 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
-    sunoPlaylistUrl: string,
   ): Promise<void> {
     if (deps.isAborted()) return;
 
@@ -136,7 +135,6 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
           file_count: expectedFileCount,
           expected_file_count: expectedFileCount,
           format: context.format,
-          suno_playlist_url: sunoPlaylistUrl,
           download_path: downloadResult.filename,
         },
       });
@@ -150,31 +148,14 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     }
   }
 
-  async function recordPlaylistUrl(
-    context: DownloadContext,
-    collectionId: string,
-    sunoPlaylistUrl: string,
-  ): Promise<void> {
-    await sendMessage("postDownloaded", {
-      baseUrl: context.baseUrl,
-      collectionId,
-      body: {
-        file_count: 0,
-        format: context.format,
-        suno_playlist_url: sunoPlaylistUrl,
-      },
-    });
-  }
-
   async function downloadBestEffort(
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
-    sunoPlaylistUrl: string,
   ): Promise<string | null> {
     try {
-      await performDownload(context, collectionId, progressTotal, expectedFileCount, sunoPlaylistUrl);
+      await performDownload(context, collectionId, progressTotal, expectedFileCount);
       return null;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -188,7 +169,7 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     }
   }
 
-  async function retryDownload(options: RetryDownloadOptions): Promise<void> {
+  async function retryDownload(options: RetryDownloadOptions): Promise<RetryDownloadResult> {
     const total = options.submittedClipIds.length;
     if (options.submittedClipIds.length === 0) {
       throw new Error("retryDownload に必要な clip ID がありません");
@@ -197,41 +178,29 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     await options.selectClipIds(options.submittedClipIds);
     if (deps.isAborted()) {
       deps.emitProgress({ phase: PHASE.STOPPED, total: 0 });
-      return;
+      return { completedAndCleared: false };
     }
-    const savedSunoPlaylistUrl = options.savedSunoPlaylistUrl?.trim();
-    let sunoPlaylistUrl: string;
-    if (savedSunoPlaylistUrl) {
-      sunoPlaylistUrl = savedSunoPlaylistUrl;
-    } else {
-      try {
-        sunoPlaylistUrl = await options.resolvePlaylistUrl(options.playlistName);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        throw new Error(
-          `保存済み playlist URL が無く、playlist 名からの再解決にも失敗しました: ${options.playlistName} (${message})`,
-        );
-      }
-    }
-    await performDownload(
-      options.context,
-      options.collectionId,
-      total,
-      options.expectedClipCount ?? total,
-      sunoPlaylistUrl,
-    );
+    await performDownload(options.context, options.collectionId, total, options.expectedClipCount ?? total);
     if (deps.isAborted()) {
       deps.emitProgress({ phase: PHASE.STOPPED, total: 0 });
-      return;
+      return { completedAndCleared: false };
     }
-    await options.clearResumeState(options.collectionId);
+    // 消去失敗でも FINISHED は維持する（download 自体は成功しているため）。
+    // その場合はリロードを見送る合図として completedAndCleared=false を返す (#1411)。
+    let resumeStateCleared = true;
+    try {
+      await options.clearResumeState(options.collectionId);
+    } catch (err) {
+      resumeStateCleared = false;
+      console.warn("[suno-helper] resume state の消去に失敗しました。完了時リロードを見送ります:", err);
+    }
     deps.emitProgress({ phase: PHASE.FINISHED, total: 0 });
+    return { completedAndCleared: resumeStateCleared };
   }
 
   return {
     installMessageHandlers,
     performDownload,
-    recordPlaylistUrl,
     downloadBestEffort,
     retryDownload,
   };

@@ -40,6 +40,9 @@ export const PROFILE_SELECTORS = {
   sub_genre: "#genreSecondary",
 } as const;
 
+// main genre 変更後、DistroKid が secondary genre の option を再生成するまでの待ち上限（ms）（#1407）。
+const GENRE_SECONDARY_OPTION_WAIT_TIMEOUT_MS = 10_000;
+
 // アルバム名（アルバム時のみ存在。シングルモードでは要素不在 → skip）。
 export const ALBUM_SELECTORS = {
   album_title: "#albumTitleInput",
@@ -191,8 +194,12 @@ export class FieldNotFoundError extends Error {
 // `.trim()` で crash するため、silent skip せず fail-loud にして config と実機 UI の不整合を
 // 即座に検知する（#888 第2回 retest で判明）。
 export class OptionNotFoundError extends Error {
-  constructor(selector: string, payloadValue: string) {
-    super(`<select> に該当 option がありません: ${selector} / payload="${payloadValue}"`);
+  constructor(selector: string, payloadValue: string, optionLabels?: readonly string[]) {
+    const options =
+      optionLabels === undefined
+        ? ""
+        : ` / options=[${optionLabels.length === 0 ? "(empty)" : optionLabels.join(" / ")}]`;
+    super(`<select> に該当 option がありません: ${selector} / payload="${payloadValue}"${options}`);
     this.name = "OptionNotFoundError";
   }
 }
@@ -263,16 +270,20 @@ function normalizeOptionText(s: string): string {
   return s.normalize("NFKC").replace(/／/g, "/").toLowerCase().trim();
 }
 
-// <select> に対して payload 値で option を選ぶ。
+function selectSelector(el: HTMLSelectElement): string {
+  return el.id ? `#${el.id}` : el.tagName.toLowerCase();
+}
+
+function selectOptionLabels(el: HTMLSelectElement): string[] {
+  return Array.from(el.options).map((o) => o.text.trim() || o.value || "(blank)");
+}
+
 // 優先順: option.value 完全一致 → option.text 完全一致（normalize）→ option.text 部分一致
 // （normalize、placeholder value="" は除外）。一致無しなら OptionNotFoundError で fail-loud。
-function setSelectValue(el: HTMLSelectElement, payloadValue: string): void {
+function findSelectOptionIndex(el: HTMLSelectElement, payloadValue: string): number {
   const target = normalizeOptionText(payloadValue);
   const opts = Array.from(el.options);
-  let idx = opts.findIndex((o) => o.value === payloadValue);
-  if (idx === -1) {
-    idx = opts.findIndex((o) => normalizeOptionText(o.text) === target);
-  }
+  let idx = findExactSelectOptionIndex(el, payloadValue);
   if (idx === -1) {
     idx = opts.findIndex((o) => {
       if (o.value === "") return false;
@@ -280,8 +291,27 @@ function setSelectValue(el: HTMLSelectElement, payloadValue: string): void {
       return t.includes(target) || target.includes(t);
     });
   }
+  return idx;
+}
+
+// 依存 dropdown の readiness 判定は曖昧な部分一致を使わない。
+// "テクノ" を待っている途中に "ハードコア／ハードテクノ" が先に出ても、完全一致の
+// option が現れるまで待つ必要がある。
+function findExactSelectOptionIndex(el: HTMLSelectElement, payloadValue: string): number {
+  const target = normalizeOptionText(payloadValue);
+  const opts = Array.from(el.options);
+  let idx = opts.findIndex((o) => o.value === payloadValue);
   if (idx === -1) {
-    throw new OptionNotFoundError(el.id ? `#${el.id}` : el.tagName.toLowerCase(), payloadValue);
+    idx = opts.findIndex((o) => normalizeOptionText(o.text) === target);
+  }
+  return idx;
+}
+
+// <select> に対して payload 値で option を選ぶ。
+function setSelectValue(el: HTMLSelectElement, payloadValue: string): void {
+  const idx = findSelectOptionIndex(el, payloadValue);
+  if (idx === -1) {
+    throw new OptionNotFoundError(selectSelector(el), payloadValue, selectOptionLabels(el));
   }
   el.selectedIndex = idx;
   el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -303,15 +333,99 @@ function requireVisibleField(root: ParentNode, selector: string): ValueElement {
   return el;
 }
 
+function findVisibleSelectWithOption(
+  root: ParentNode,
+  selector: string,
+  payloadValue: string,
+): HTMLSelectElement | null {
+  const el = findVisibleField(root, selector);
+  if (!(el instanceof HTMLSelectElement)) {
+    return null;
+  }
+  return findExactSelectOptionIndex(el, payloadValue) === -1 ? null : el;
+}
+
+function mutationTouchesSelector(mutation: MutationRecord, selector: string, current: Element | null): boolean {
+  const target = mutation.target;
+  if (current !== null && (target === current || current.contains(target) || target.contains(current))) {
+    return true;
+  }
+  for (const node of [...mutation.addedNodes, ...mutation.removedNodes]) {
+    if (!(node instanceof Element)) {
+      continue;
+    }
+    if (node.matches(selector) || node.querySelector(selector) !== null) {
+      return true;
+    }
+    if (current !== null && (node === current || node.contains(current) || current.contains(node))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// 依存 dropdown の option 再生成を待つ（#1407）。
+// #genrePrimary の change 後、#genreSecondary は非同期に populate されるため、
+// payload と一致する option が現れてから setNativeValue する。
+function waitForSelectOption(
+  root: ParentNode,
+  selector: string,
+  payloadValue: string,
+  timeoutMs: number,
+  options: { requireSelectorMutation?: boolean } = {},
+): Promise<HTMLSelectElement> {
+  const initial = requireVisibleField(root, selector);
+  if (!(initial instanceof HTMLSelectElement)) {
+    throw new FieldNotFoundError(selector);
+  }
+  if (options.requireSelectorMutation !== true) {
+    const existing = findVisibleSelectWithOption(root, selector, payloadValue);
+    if (existing !== null) {
+      return Promise.resolve(existing);
+    }
+  }
+  const observeRoot = ownerDocumentOf(root).body ?? ownerDocumentOf(root);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      observer.disconnect();
+      const current = findVisibleField(root, selector);
+      const options = current instanceof HTMLSelectElement ? selectOptionLabels(current) : [];
+      reject(new OptionNotFoundError(selector, payloadValue, options));
+    }, timeoutMs);
+    const observer = new MutationObserver((mutations) => {
+      if (
+        options.requireSelectorMutation === true &&
+        !mutations.some((mutation) => mutationTouchesSelector(mutation, selector, findVisibleField(root, selector)))
+      ) {
+        return;
+      }
+      const found = findVisibleSelectWithOption(root, selector, payloadValue);
+      if (found !== null) {
+        clearTimeout(timer);
+        observer.disconnect();
+        resolve(found);
+      }
+    });
+    observer.observe(observeRoot, { childList: true, subtree: true, characterData: true, attributes: true });
+  });
+}
+
 // 静的プロファイル（artist / sub_genre は任意、language / main_genre は必須）を注入する。
-export function injectProfile(root: ParentNode, profile: DistrokidProfile): void {
+export async function injectProfile(root: ParentNode, profile: DistrokidProfile): Promise<void> {
   if (profile.artist.trim() !== "") {
     setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.artist), profile.artist.trim());
   }
   setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.language), profile.language);
   setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.main_genre), profile.main_genre);
   if (profile.sub_genre !== null) {
-    setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.sub_genre), profile.sub_genre);
+    const subGenre = await waitForSelectOption(
+      root,
+      PROFILE_SELECTORS.sub_genre,
+      profile.sub_genre,
+      GENRE_SECONDARY_OPTION_WAIT_TIMEOUT_MS,
+      { requireSelectorMutation: true },
+    );
+    setNativeValue(subGenre, profile.sub_genre);
   }
 }
 

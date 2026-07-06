@@ -3,24 +3,20 @@
 // overlay (content script) は `browser.tabs.*` を呼べないため、overlay の no-tabId メッセージを受けて
 // 送信元と同一タブの runner content へ tabs.sendMessage で転送する（#892, 詳細は lib/overlay-relay.ts）。
 import {
+  fetchCollectionPromptResponse,
   fetchCollectionPrompts,
   fetchCollections,
-  fetchPrompts,
   fetchServerInfo,
   postDownloaded,
   resolveCompatibilityWarning,
 } from "../../shared/api";
 import { describeRelayFailure } from "../components/runner-errors";
-import { captureFromTab } from "../lib/auto-capture";
 import { installDownloadWatcher } from "../lib/download-watcher";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { relayTabId, requireRelayTab } from "../lib/overlay-relay";
 import { sendTrustedCmdP } from "../lib/trusted-shortcut";
 
 export default defineBackground(() => {
-  const SUNO_ME_PLAYLISTS_URL = "https://suno.com/me/playlists";
-  const PLAYLIST_URL_RESOLVE_TIMEOUT_MS = 15000;
-  const PLAYLIST_URL_RESOLVE_POLL_MS = 500;
   const downloadWatcher = installDownloadWatcher({ sendMessage });
 
   browser.runtime.onInstalled.addListener((details) => {
@@ -59,10 +55,6 @@ export default defineBackground(() => {
   onMessage("queryProgress", ({ sender }) =>
     sendMessage("queryProgress", undefined, requireRelayTab(sender, "queryProgress")),
   );
-  onMessage("capturePlaylists", ({ sender }) =>
-    sendMessage("capturePlaylists", undefined, requireRelayTab(sender, "capturePlaylists")),
-  );
-
   onMessage("startDownload", async ({ data, sender }) => {
     const tabId = relayTabId(sender);
     if (tabId === null) {
@@ -102,14 +94,20 @@ export default defineBackground(() => {
     return fetchCollections(data.baseUrl);
   });
 
-  onMessage("fetchPrompts", ({ data, sender }) => {
-    requireRelayTab(sender, "fetchPrompts");
-    return fetchPrompts(data.baseUrl);
-  });
-
   onMessage("fetchCollectionPrompts", ({ data, sender }) => {
     requireRelayTab(sender, "fetchCollectionPrompts");
+    if (typeof data.collectionId !== "string" || data.collectionId.length === 0) {
+      throw new Error("fetchCollectionPrompts.collectionId must be non-empty string");
+    }
     return fetchCollectionPrompts(data.baseUrl, data.collectionId);
+  });
+
+  onMessage("fetchCollectionPromptResponse", ({ data, sender }) => {
+    requireRelayTab(sender, "fetchCollectionPromptResponse");
+    if (typeof data.collectionId !== "string" || data.collectionId.length === 0) {
+      throw new Error("fetchCollectionPromptResponse.collectionId must be non-empty string");
+    }
+    return fetchCollectionPromptResponse(data.baseUrl, data.collectionId);
   });
 
   // runner → background: content script から localhost server へ直接 token 取得しないよう、
@@ -117,33 +115,6 @@ export default defineBackground(() => {
   onMessage("postDownloaded", async ({ data, sender }) => {
     requireRelayTab(sender, "postDownloaded");
     await postDownloaded(data.baseUrl, data.collectionId, data.body);
-  });
-
-  onMessage("resolvePlaylistUrl", async ({ data, sender }) => {
-    requireRelayTab(sender, "resolvePlaylistUrl");
-    const tab = await browser.tabs.create({ url: SUNO_ME_PLAYLISTS_URL, active: false });
-    if (typeof tab.id !== "number") {
-      throw new Error("playlist URL 解決用タブを作成できませんでした");
-    }
-    const tabId = tab.id;
-    try {
-      const items = await captureFromTab(tabId, {
-        sendCapture: (targetTabId) => sendMessage("capturePlaylists", undefined, targetTabId),
-        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-        now: () => Date.now(),
-        timeoutMs: PLAYLIST_URL_RESOLVE_TIMEOUT_MS,
-        pollMs: PLAYLIST_URL_RESOLVE_POLL_MS,
-      });
-      const item = items.find((playlist) => playlist.title === data.playlistName);
-      if (!item) {
-        throw new Error(`playlist URL を解決できません: ${data.playlistName}`);
-      }
-      return { url: item.url };
-    } finally {
-      await browser.tabs.remove(tabId).catch((err: unknown) => {
-        console.debug("[suno-helper] playlist URL 解決用タブの close に失敗:", err);
-      });
-    }
   });
 
   // runner → overlay 中継 (#892)。runner content が emit する progress 通知を送信元と同一タブへ転送する

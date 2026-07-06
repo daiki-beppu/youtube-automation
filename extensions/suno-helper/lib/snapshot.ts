@@ -1,30 +1,45 @@
 // content script が SSOT として保持する進捗スナップショットの構築・更新を行う純関数 (#852)。
 // itemStates の遷移ロジックを content (snapshot 構築) と popup (live 表示 / restore) で
 // 二重定義しないため、ここに 1 箇所だけ集約する。useSunoRunner と content.ts の双方が import する。
-import type { PromptEntry } from "../../shared/api";
+import type { DurationFilter, PromptEntry } from "../../shared/api";
 import { PHASE, type ItemState, type Phase, type ProgressPayload, type SnapshotPayload } from "../../shared/constants";
+
+interface InitSnapshotOptions {
+  collectionId: string;
+  playlistName?: string;
+  durationFilter?: DurationFilter;
+}
 
 /**
  * 連続実行の開始時スナップショット。全 idle・isRunning=true・entries を保持して初期化する。
- * playlistName は collection mode のみ渡され、再 open 復元時の display 用に保持する (#854)。
- * 単一ファイル mode では省略され undefined（playlist phase を実行しない）。
+ * playlistName は再 open 復元時の display 用に保持する (#854)。
  */
-export function initSnapshot(entries: PromptEntry[], playlistName?: string): SnapshotPayload {
+export function initSnapshot(
+  entries: PromptEntry[],
+  options: InitSnapshotOptions = { collectionId: "" },
+): SnapshotPayload {
   return {
+    collectionId: options.collectionId,
     entries,
     itemStates: entries.map(() => "idle"),
     isRunning: true,
     progress: { phase: PHASE.INJECTING, total: entries.length },
-    playlistName,
+    playlistName: options.playlistName,
+    ...(options.durationFilter ? { durationFilter: options.durationFilter } : {}),
   };
 }
 
 /** itemStates を phase に応じて遷移させる（INJECTING / DONE / ENTRY_FAILED のみ、他 phase は不変）。非破壊で新配列を返す。 */
-export function nextItemStates(prev: ItemState[], phase: Phase, index?: number): ItemState[] {
+export function nextItemStates(prev: ItemState[], payload: ProgressPayload): ItemState[] {
+  const { phase, index } = payload;
+
   if (phase === PHASE.INJECTING) {
     return prev.map((s, i) => (i === index ? "active" : s === "active" ? "idle" : s));
   }
   if (phase === PHASE.DONE) {
+    if (payload.log?.kind === "duration-check" && !payload.log.ok) {
+      return [...prev];
+    }
     return prev.map((s, i) => (i === index ? "done" : s));
   }
   if (phase === PHASE.ENTRY_FAILED) {
@@ -34,16 +49,26 @@ export function nextItemStates(prev: ItemState[], phase: Phase, index?: number):
   return prev;
 }
 
-/** 連続実行を終える phase（以降 isRunning=false）。snapshot 自体は破棄せず再 open 表示用に残す。 */
+/** 連続実行を終える phase（以降 isRunning=false）。snapshot 自体は破棄せず再 open 表示用に残す。
+ * ただし run 一式完了時リロード (#1411) は in-memory snapshot ごと content script を破棄するため、
+ * FINISHED の再 open 表示はリロード直前に chrome.storage へ退避した分 (lib/finished-snapshot.ts) が引き継ぐ。 */
 export function isTerminalPhase(phase: Phase): boolean {
   return phase === PHASE.FINISHED || phase === PHASE.STOPPED || phase === PHASE.ERROR;
 }
 
 /** progress 受信でスナップショットを更新する。終了 phase で isRunning=false（entries/itemStates は保持）。 */
 export function applyProgress(snap: SnapshotPayload, payload: ProgressPayload): SnapshotPayload {
+  const nextAcceptedClipIds =
+    payload.acceptedClipIds && payload.acceptedClipIds.length > 0
+      ? Array.from(new Set([...(snap.yieldAcceptedClipIds ?? []), ...payload.acceptedClipIds]))
+      : snap.yieldAcceptedClipIds;
+  const nextYieldRetryCounts =
+    payload.index !== undefined && payload.yieldRetryCount !== undefined
+      ? { ...(snap.yieldRetryCounts ?? {}), [payload.index]: payload.yieldRetryCount }
+      : snap.yieldRetryCounts;
   return {
     ...snap,
-    itemStates: nextItemStates(snap.itemStates, payload.phase, payload.index),
+    itemStates: nextItemStates(snap.itemStates, payload),
     progress: payload,
     isRunning: isTerminalPhase(payload.phase) ? false : snap.isRunning,
     // ERROR phase でのみ failedIndex を確定する（chrome.storage の resume state と二重化, #872）。
@@ -56,5 +81,7 @@ export function applyProgress(snap: SnapshotPayload, payload: ProgressPayload): 
       payload.phase === PHASE.ENTRY_FAILED && payload.index !== undefined
         ? [...(snap.failedIndices ?? []), payload.index]
         : snap.failedIndices,
+    yieldAcceptedClipIds: nextAcceptedClipIds,
+    yieldRetryCounts: nextYieldRetryCounts,
   };
 }

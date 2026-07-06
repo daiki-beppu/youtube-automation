@@ -19,6 +19,17 @@ _SHORT_LOOP_INPUT_NAMES = ("short.png", "short.jpg")
 # main.png/jpg は textless 動画背景なので、ここでは fallback しない。
 _THUMBNAIL_CANDIDATES = ("thumbnail.jpg", "thumbnail.png")
 
+# 標準コレクション骨格の必須サブディレクトリ（#1494）。
+# 03-Individual-movie/ は個別動画チャンネルのみ使う optional 扱いなので含めない。
+# 作る側（yt-init-collection）と検証側（yt-collection-preflight）の両方が
+# この定義を共有し、骨格の二重定義による作成漏れを防ぐ。
+REQUIRED_SUBDIRS = (
+    "01-master",
+    "02-Individual-music",
+    "10-assets",
+    "20-documentation",
+)
+
 
 class CollectionPaths:
     """標準コレクションディレクトリ構造のパスリゾルバ。
@@ -97,6 +108,31 @@ class CollectionPaths:
                 f"Shorts サムネイル拡張子は {_SHORT_THUMBNAIL_EXTENSIONS} のいずれかが必要です: {ext}"
             )
         return self.assets_dir / f"short-thumbnail.{ext}"
+
+    def missing_required_dirs(self) -> list[str]:
+        """必須骨格（``REQUIRED_SUBDIRS``）のうち欠落しているサブディレクトリ名を返す。"""
+        return [sub for sub in REQUIRED_SUBDIRS if not (self.root / sub).is_dir()]
+
+    def invalid_required_dirs(self) -> list[str]:
+        """必須骨格名と同名だがディレクトリではない既存パスを返す。"""
+        return [sub for sub in REQUIRED_SUBDIRS if (self.root / sub).exists() and not (self.root / sub).is_dir()]
+
+    def ensure_required_dirs(self) -> list[str]:
+        """欠落している必須サブディレクトリを冪等に作成し、作成した名前を返す。
+
+        既存のディレクトリ・ファイルには一切触れない（非破壊）。
+        """
+        invalid = self.invalid_required_dirs()
+        if invalid:
+            raise ValidationError(
+                "必須サブディレクトリ名と同名のファイルがあります: "
+                + ", ".join(invalid)
+                + "。ファイルを退避してから再実行してください。"
+            )
+        missing = self.missing_required_dirs()
+        for sub in missing:
+            (self.root / sub).mkdir(parents=True, exist_ok=True)
+        return missing
 
     def find_master_video(self) -> Path | None:
         """01-master/ からマスター動画（.mp4）を探す。"""

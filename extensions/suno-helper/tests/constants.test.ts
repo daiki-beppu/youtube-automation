@@ -5,15 +5,19 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BRIDGE_MSG,
   CLIPS_PER_REQUEST,
   COLLECTIONS_ROUTE,
   collectionPromptsRoute,
   DEFAULT_SERVER_SOURCES,
   DEFAULT_URL,
+  FEED_V3_METHOD,
+  FEED_V3_PATH,
   INJECT_ACK_TIMEOUT_MS,
   INTER_CREATE_DELAY_MS,
   MAX_INFLIGHT_REQUESTS,
   MAX_INJECT_RETRY,
+  MAX_YIELD_RETRY,
   OVERLAY_STATE_KEY,
   PHASE,
   PROMPTS_ROUTE,
@@ -23,6 +27,7 @@ import {
   SPEED_PRESET_STORAGE_KEY,
   SPEED_PRESETS,
   STORAGE_KEY,
+  type ObservedClip,
 } from "../../shared/constants";
 
 describe("shared/constants: サーバー互換の契約値", () => {
@@ -101,6 +106,17 @@ describe("shared/constants: collection 列挙ルート (#816 dir mode)", () => {
       "/collections/20260526-rainy%20jazz-collection/suno/prompts.json",
     );
   });
+
+  it("Given 空 collection id When collectionPromptsRoute(id) Then throw する", () => {
+    expect(() => collectionPromptsRoute("")).toThrow(/collectionId/);
+  });
+});
+
+describe("shared/constants: Suno feed v3 endpoint (#1265)", () => {
+  it("Given FEED_V3_PATH / FEED_V3_METHOD When 読む Then passive 観測対象の endpoint 契約である", () => {
+    expect(FEED_V3_PATH).toBe("/api/feed/v3");
+    expect(FEED_V3_METHOD).toBe("POST");
+  });
 });
 
 describe("shared/constants: Suno queue 上限 (#816)", () => {
@@ -112,6 +128,26 @@ describe("shared/constants: Suno queue 上限 (#816)", () => {
 
   it("Given 上限定数 When 積で最大 clip を求める Then 20 clip になる", () => {
     expect(MAX_INFLIGHT_REQUESTS * CLIPS_PER_REQUEST).toBe(20);
+  });
+});
+
+describe("shared/constants: Suno feed bridge 契約 (#1258)", () => {
+  it("Given feed endpoint constants When 読む Then v3 POST 用 path/method を固定する", () => {
+    expect(FEED_V3_PATH).toBe("/api/feed/v3");
+    expect(FEED_V3_METHOD).toBe("POST");
+  });
+
+  it("Given BRIDGE_MSG When feed v3 poll の message type を読む Then 契約値が固定されている", () => {
+    expect(BRIDGE_MSG.FEED_V3_POLL_REQUEST).toBe("feed-v3-poll-request");
+    expect(BRIDGE_MSG.FEED_V3_POLL_RESPONSE).toBe("feed-v3-poll-response");
+  });
+
+  it("Given ObservedClip When duration を持つ clip / 持たない clip を扱う Then optional field として型付けできる", () => {
+    const withDuration = { id: "clip-1", status: "complete", duration: 241.2 } satisfies ObservedClip;
+    const withoutDuration = { id: "clip-2", status: "queued" } satisfies ObservedClip;
+
+    expect(withDuration.duration).toBe(241.2);
+    expect("duration" in withoutDuration).toBe(false);
   });
 });
 
@@ -141,6 +177,10 @@ describe("shared/constants: inject 検証 + queue 待機 timeout 独立化 (#864
   it("Given MAX_INJECT_RETRY When 読む Then silent drop 時の最大 retry 回数 2 である", () => {
     // #864 root cause 3: ack されなければ同じ entry を最大 2 回 retry、それでも増えなければ fail-loud。
     expect(MAX_INJECT_RETRY).toBe(2);
+  });
+
+  it("Given MAX_YIELD_RETRY When 読む Then duration NG 時の最大 retry 回数 2 である", () => {
+    expect(MAX_YIELD_RETRY).toBe(2);
   });
 });
 

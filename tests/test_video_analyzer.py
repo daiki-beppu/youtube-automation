@@ -90,6 +90,7 @@ class TestVideoAnalyzerAnalyzeUrl:
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
+            analysis_window_sec=900,
         )
         target = _make_target()
 
@@ -109,6 +110,12 @@ class TestVideoAnalyzerAnalyzeUrl:
         assert result["url"] == target.url
         assert result["title"] == target.title
         assert result["model"] == "gemini-3.5-flash"
+        assert result["analysis_window_sec"] == 900
+        assert result["analysis_scope"] == {
+            "start_offset_sec": 0,
+            "end_offset_sec": 900,
+            "description": "opening clip window",
+        }
         # analyzed_at は ISO 文字列で保存される
         assert isinstance(result["analyzed_at"], str) and result["analyzed_at"]
 
@@ -125,6 +132,7 @@ class TestVideoAnalyzerAnalyzeUrl:
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
+            analysis_window_sec=900,
         )
 
         # When: analyze_url を呼ぶ
@@ -143,6 +151,7 @@ class TestVideoAnalyzerAnalyzeUrl:
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
+            analysis_window_sec=900,
         )
 
         # When/Then: タグ無しでもパースできる
@@ -158,6 +167,7 @@ class TestVideoAnalyzerAnalyzeUrl:
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
+            analysis_window_sec=900,
         )
 
         # When/Then: 握りつぶさず ValidationError を投げる
@@ -173,6 +183,7 @@ class TestVideoAnalyzerAnalyzeUrl:
             prompt="analyze the video",
             delay_sec=0,
             data_dir=tmp_path,
+            analysis_window_sec=900,
         )
         target = _make_target(url="https://youtu.be/SHORTID0001")
 
@@ -185,6 +196,48 @@ class TestVideoAnalyzerAnalyzeUrl:
         assert "https://youtu.be/SHORTID0001" in rendered
         assert "analyze the video" in rendered
 
+    def test_passes_clip_window_video_metadata(self, tmp_path):
+        # Given: 既定 900 秒のクリップ窓 (#1495: 全尺ではなく冒頭のみ解析)
+        client = _make_client(json.dumps(_VALID_PAYLOAD))
+        analyzer = VideoAnalyzer(
+            client=client,
+            model="gemini-3.5-flash",
+            prompt="analyze",
+            delay_sec=0,
+            data_dir=tmp_path,
+            analysis_window_sec=900,
+        )
+        target = _make_target()
+
+        # When: analyze_url
+        analyzer.analyze_url(target)
+
+        # Then: offset 付き video_metadata の Part が Gemini に渡る
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        part = contents[0]
+        assert part.file_data.file_uri == target.url
+        assert part.video_metadata.start_offset == "0s"
+        assert part.video_metadata.end_offset == "900s"
+
+    def test_custom_window_is_reflected_in_end_offset(self, tmp_path):
+        # Given: チャンネル側上書き相当のカスタム窓幅
+        client = _make_client(json.dumps(_VALID_PAYLOAD))
+        analyzer = VideoAnalyzer(
+            client=client,
+            model="gemini-3.5-flash",
+            prompt="analyze",
+            delay_sec=0,
+            data_dir=tmp_path,
+            analysis_window_sec=600,
+        )
+
+        # When: analyze_url
+        analyzer.analyze_url(_make_target())
+
+        # Then: end_offset に窓幅が反映される
+        contents = client.models.generate_content.call_args.kwargs["contents"]
+        assert contents[0].video_metadata.end_offset == "600s"
+
     def test_sleeps_delay_sec_between_calls(self, tmp_path):
         # Given: delay_sec を指定
         client = _make_client(json.dumps(_VALID_PAYLOAD))
@@ -194,6 +247,7 @@ class TestVideoAnalyzerAnalyzeUrl:
             prompt="analyze",
             delay_sec=7,
             data_dir=tmp_path,
+            analysis_window_sec=900,
         )
 
         # When: analyze_url を呼ぶ
@@ -213,6 +267,7 @@ class TestVideoAnalyzerSaveJson:
             prompt="analyze",
             delay_sec=0,
             data_dir=tmp_path,
+            analysis_window_sec=900,
         )
         target = _make_target(video_id="VID42", slug="celtic-forest")
         payload = {"video_id": "VID42", **_VALID_PAYLOAD}
@@ -238,6 +293,7 @@ class TestVideoAnalyzerSaveJson:
             prompt="analyze",
             delay_sec=0,
             data_dir=nested,
+            analysis_window_sec=900,
         )
         target = _make_target(video_id="V1", slug="ambient")
 
@@ -259,6 +315,7 @@ class TestVideoAnalysisReport:
                 "title": "Celtic Forest",
                 "analyzed_at": "2026-04-29T10:00:00",
                 "model": "gemini-3.5-flash",
+                "analysis_window_sec": 900,
                 **_VALID_PAYLOAD,
             },
             {
@@ -268,6 +325,7 @@ class TestVideoAnalysisReport:
                 "title": "Celtic Lake",
                 "analyzed_at": "2026-04-29T10:01:00",
                 "model": "gemini-3.5-flash",
+                "analysis_window_sec": 900,
                 "hook_structure": {"intro_sec": 8},
                 "bgm_arc": {"intro": "0-10s"},
                 "scene_timeline": [],
@@ -295,6 +353,7 @@ class TestVideoAnalysisReport:
         assert "scene_timeline" in md or "シーン" in md or "Scene" in md
         assert "thumbnail_alignment" in md or "サムネ" in md or "Thumbnail" in md
         assert "editing_metrics" in md or "編集" in md or "Editing" in md
+        assert "analysis_window_sec: 900" in md
 
     def test_render_includes_suno_preset_section(self):
         """issue #360: payload に suno_preset が含まれていれば Markdown に登場する."""

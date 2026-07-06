@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "youtube-channels-automation"
-version = "5.5.14"
+version = "5.5.15"
 description = "YouTube channel automation toolkit - analytics, AI content generation, and auto-upload"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
@@ -16,7 +16,7 @@ dependencies = [
     "google-auth-httplib2>=0.3,<1",
     "google-genai>=1,<2",
     "openai>=2,<3",
-    "Pillow>=12,<13",
+    "Pillow>=12.2.0,<13",
     "python-dotenv>=1,<2",
     "pandas>=3,<4",
     "matplotlib>=3,<4",
@@ -38,6 +38,7 @@ veo = []  # google-genai, Pillow moved to main dependencies
 # CLI script entry points (yt-* prefix)
 yt-analytics = "youtube_automation.cli_entrypoints:yt_analytics"
 yt-apply-rain-layers = "youtube_automation.cli_entrypoints:yt_apply_rain_layers"
+yt-automation-update = "youtube_automation.cli_entrypoints:yt_automation_update"
 yt-benchmark-collect = "youtube_automation.cli_entrypoints:yt_benchmark_collect"
 yt-benchmark-comments = "youtube_automation.cli_entrypoints:yt_benchmark_comments"
 yt-bulk-update-desc = "youtube_automation.cli_entrypoints:yt_bulk_update_desc"
@@ -47,6 +48,7 @@ yt-channel-seed = "youtube_automation.cli_entrypoints:yt_channel_seed"
 yt-channel-settings = "youtube_automation.cli_entrypoints:yt_channel_settings"
 yt-channel-status = "youtube_automation.cli_entrypoints:yt_channel_status"
 yt-channel-trend = "youtube_automation.cli_entrypoints:yt_channel_trend"
+yt-collection-preflight = "youtube_automation.cli_entrypoints:yt_collection_preflight"
 yt-collection-serve = "youtube_automation.cli_entrypoints:yt_collection_serve"
 yt-comments-reply = "youtube_automation.cli_entrypoints:yt_comments_reply"
 yt-config-migrate = "youtube_automation.cli_entrypoints:yt_config_migrate"
@@ -76,12 +78,15 @@ yt-stock-preview = "youtube_automation.cli_entrypoints:yt_stock_preview"
 yt-stock-prune = "youtube_automation.cli_entrypoints:yt_stock_prune"
 yt-suno-audio-cleanup = "youtube_automation.cli_entrypoints:yt_suno_audio_cleanup"
 yt-suno-select-tracks = "youtube_automation.cli_entrypoints:yt_suno_select_tracks"
+yt-suno-verify-playlist = "youtube_automation.cli_entrypoints:yt_suno_verify_playlist"
 yt-stream-archive-check = "youtube_automation.cli_entrypoints:yt_stream_archive_check"
 yt-stream-bandwidth = "youtube_automation.cli_entrypoints:yt_stream_bandwidth"
 yt-theme-compare = "youtube_automation.cli_entrypoints:yt_theme_compare"
+yt-thumbnail-auto-select = "youtube_automation.cli_entrypoints:yt_thumbnail_auto_select"
 yt-thumbnail-check = "youtube_automation.cli_entrypoints:yt_thumbnail_check"
 yt-thumbnail-compare = "youtube_automation.cli_entrypoints:yt_thumbnail_compare"
 yt-thumbnail-correlate = "youtube_automation.cli_entrypoints:yt_thumbnail_correlate"
+yt-thumbnail-text = "youtube_automation.cli_entrypoints:yt_thumbnail_text"
 yt-title-duplicate-check = "youtube_automation.cli_entrypoints:yt_title_duplicate_check"
 yt-video-analyze = "youtube_automation.cli_entrypoints:yt_video_analyze"
 yt-vote-log = "youtube_automation.cli_entrypoints:yt_vote_log"
@@ -97,6 +102,7 @@ yt-shorts-bulk-update-loc = "youtube_automation.cli_entrypoints:yt_shorts_bulk_u
 
 # Skill management
 yt-skills = "youtube_automation.cli_entrypoints:yt_skills"
+yt-setup-dirs = "youtube_automation.cli_entrypoints:yt_setup_dirs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/youtube_automation"]
@@ -113,6 +119,7 @@ packages = ["src/youtube_automation"]
 # 配布された SKILL.md / CLAUDE.md の相対 link が install 版と同 version の docs/ を指せる
 "docs/workflow-cheatsheet.md" = "youtube_automation/_docs/workflow-cheatsheet.md"
 "docs/features.md" = "youtube_automation/_docs/features.md"
+"auth/client_secrets.template.json" = "youtube_automation/_auth/client_secrets.template.json"
 
 # templates/*.md はパッケージディレクトリ内なので packages 設定で同梱される
 
@@ -125,7 +132,7 @@ include = [
     "docs/workflow-cheatsheet.md",
     "docs/features.md",
     "auth/SETUP.md",
-    "auth/client_secrets_template.json",
+    "auth/client_secrets.template.json",
     "README.md",
     "LICENSE",
     "pyproject.toml",

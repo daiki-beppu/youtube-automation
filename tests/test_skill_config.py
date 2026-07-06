@@ -68,6 +68,64 @@ def test_channel_override_merged(tmp_path, monkeypatch):
     assert "model" in gemini_block
 
 
+def test_collection_ideate_freshness_days_default_comes_from_skill_config(tmp_path):
+    """collection-ideate の絶対鮮度 default は実 loader で読める."""
+    channel_dir = tmp_path / "ch"
+    channel_dir.mkdir()
+
+    cfg = skill_config.load_skill_config("collection-ideate", use_cache=False, channel_dir=channel_dir)
+
+    assert cfg.get("freshness_days") == 7
+
+
+def test_collection_ideate_freshness_days_channel_override(tmp_path):
+    """channel override の freshness_days が default より優先される."""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    override = channel_dir / "config" / "skills" / "collection-ideate.yaml"
+    override.write_text(yaml.safe_dump({"freshness_days": 14}), encoding="utf-8")
+
+    cfg = skill_config.load_skill_config("collection-ideate", use_cache=False, channel_dir=channel_dir)
+
+    assert cfg.get("freshness_days") == 14
+    assert cfg.get("preview", {}).get("thumbnail_mode") == "parallel"
+
+
+def test_explicit_channel_dir_override_does_not_use_env(tmp_path, monkeypatch):
+    """明示 channel_dir 指定時は CHANNEL_DIR ではなく指定先の override を読む."""
+    env_channel = tmp_path / "env-ch"
+    explicit_channel = tmp_path / "explicit-ch"
+    (env_channel / "config" / "skills").mkdir(parents=True)
+    (explicit_channel / "config" / "skills").mkdir(parents=True)
+    (env_channel / "config" / "skills" / "thumbnail.yaml").write_text(
+        yaml.safe_dump({"marker": "env"}),
+        encoding="utf-8",
+    )
+    (explicit_channel / "config" / "skills" / "thumbnail.yaml").write_text(
+        yaml.safe_dump({"marker": "explicit"}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(env_channel))
+
+    env_cfg = skill_config.load_skill_config("thumbnail")
+    cfg = skill_config.load_skill_config("thumbnail", channel_dir=explicit_channel)
+
+    assert env_cfg.get("marker") == "env"
+    assert cfg.get("marker") == "explicit"
+    assert skill_config.load_skill_config("thumbnail").get("marker") == "env"
+
+
+def test_channel_override_root_must_be_mapping(tmp_path, monkeypatch):
+    """override の root が dict 以外なら ConfigError にする."""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text("[]\n", encoding="utf-8")
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="root は dict"):
+        skill_config.load_skill_config("thumbnail", use_cache=False)
+
+
 def test_cache_reset(tmp_path, monkeypatch):
     """reset でキャッシュがクリアされ、再度ロードされること"""
     channel_dir = tmp_path / "ch"

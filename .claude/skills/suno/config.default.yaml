@@ -83,13 +83,48 @@ model: V5.5
 # スタイル戦略: mixed (1 コレクション内で混合) / single (統一)
 style_strategy: single
 
+# Style 自動バリエーション (#1456)
+# 同一コレクション内の entry ごとに texture / rhythm feel の descriptor を Style 第 1 行末尾へ
+# 決定的ローテーションで付与し、Suno V5.5 での楽曲同質化を防ぐ。genre_line のコアジャンルは変えない。
+# - 先頭 entry (通し番号 0) は descriptor なしの base style を維持する (コレクションの基準曲)
+# - 割り当ては entry の通し番号ベースで決定的 (再生成しても同じ結果)
+# - pattern に `style: <variant-key>` の明示 override がある entry には付与しない
+# - pools は axis 名 → descriptor 配列。チャンネル側 config/skills/suno.yaml で axis 単位に丸ごと置換できる
+# - descriptor には禁止形容詞 (references/suno-examples.md) と雨音・環境音 NG ワードを入れないこと
+style_variation:
+  enabled: true
+  pools:
+    texture:
+      - warm rounded texture
+      - soft airy texture
+      - dusty mellow texture
+      - smooth velvet texture
+      - gentle hazy glow
+      - deep woody warmth
+      - quiet intimate closeness
+      - bright open air
+    rhythm:
+      - laid-back rhythm feel
+      - steady unhurried pulse
+      - sparse relaxed groove
+      - gentle flowing momentum
+      - soft rolling swing
+      - low-key driving pulse
+
 # インストモード: 曲数ベースの運用方針
-# - tracks_per_collection: 1 コレクションあたりの最終 clip 数。Suno は 1 リクエスト = 2 曲生成のため、
+# - tracks_per_collection: 1 コレクションあたりの生成・期待 clip 数。Suno は 1 リクエスト = 2 曲生成のため、
 #   yaml `suno-patterns.yaml` の `patterns:` 配列には ceil(tracks_per_collection / 2) 個の entry を
-#   並べる。既定の 20 なら 10 entries → 20 clips（2 clip 両方採用）。
+#   並べる。既定の 20 なら 10 entries → 20 clips を生成する。
+#   最終 playlist 採用数は下の duration_filter 適用後に減る場合がある。
 #   コレクション単位の上書きは `suno-patterns.yaml` の top-level `tracks:` キーで可能。
 # - pattern 概念は廃止: 各 entry は独立した情景フレーズで設計する (旧 4 パターン × 3 回生成は使わない)。
 tracks_per_collection: 20
+
+# Suno helper の playlist 採用判定に使う collection 単位 duration guard（秒）。
+# 生成された clip がこの範囲外なら playlist 追加対象から除外される。
+duration_filter:
+  min_sec: 60
+  max_sec: 300
 
 # ボーカルモード専用: パターン運用方針 (インストモードでは無視される)
 # - pattern_strategy: パターン運用の戦略名 (`mixed` = N パターンで起伏を作る / `single` = 1 パターン統合)。

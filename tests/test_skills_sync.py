@@ -114,6 +114,33 @@ def test_cmd_sync_default_asset_is_all() -> None:
     assert args.asset == "all"
 
 
+def test_cmd_sync_default_all_includes_auth_template(
+    fake_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (fake_repo / ".claude" / "CLAUDE.template.md").write_text("# policy\n", encoding="utf-8")
+    docs = fake_repo / "docs"
+    docs.mkdir()
+    (docs / "workflow-cheatsheet.md").write_text("# workflow\n", encoding="utf-8")
+    (docs / "features.md").write_text("# features\n", encoding="utf-8")
+    auth = fake_repo / "auth"
+    auth.mkdir()
+    (auth / "client_secrets.template.json").write_text('{"installed": {}}\n', encoding="utf-8")
+    downstream = tmp_path / "downstream"
+    downstream.mkdir()
+    monkeypatch.chdir(downstream)
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--force"])
+    rc = args.func(args)
+
+    assert rc == 0
+    assert (downstream / ".claude" / "skills" / "channel-research" / "SKILL.md").exists()
+    assert (downstream / ".claude" / "CLAUDE.md").read_text(encoding="utf-8") == "# policy\n"
+    assert (downstream / "docs" / "workflow-cheatsheet.md").exists()
+    assert (downstream / "docs" / "features.md").exists()
+    assert (downstream / "auth" / "client_secrets.template.json").exists()
+
+
 def test_cmd_sync_all_keeps_target_unset_after_resolve() -> None:
     """`--asset all` では target は asset ごとに resolve するため、parse 直後は None のまま。"""
     parser = build_parser()
@@ -204,6 +231,96 @@ def test_cmd_sync_skills_copies_skill_dirs(fake_repo: Path, tmp_path: Path) -> N
     assert rc == 0
     assert (target / "channel-research" / "SKILL.md").read_text(encoding="utf-8") == "# research\n"
     assert (target / "channel-direction" / "SKILL.md").exists()
+
+
+def test_cmd_sync_warns_on_numbered_duplicates_in_target(
+    fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """sync 先に iCloud bounce 形式の重複があると stderr で警告する (#1410)。削除はしない。"""
+    target = tmp_path / "out" / ".claude" / "skills"
+    # bounce された skill ディレクトリ (bundled entry 名と一致しないため sync は触らない)
+    bounced_dir = target / "channel-research 2"
+    bounced_dir.mkdir(parents=True)
+    (bounced_dir / "SKILL.md").write_text("# research\n", encoding="utf-8")
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "番号付き重複ファイルを検出" in err
+    assert "channel-research 2" in err
+    assert "numbered-duplicate-files-cleanup" in err
+    assert "https://github.com/daiki-beppu/youtube-automation/blob/main/" in err
+    # 検知のみで自動削除はしない
+    assert bounced_dir.exists()
+
+
+def test_cmd_sync_without_force_warns_on_bounced_file_inside_skill(
+    fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--force なし (skip) では skill 内の bounce ファイルが残るため警告される。"""
+    target = tmp_path / "out" / ".claude" / "skills"
+    existing = target / "channel-research"
+    existing.mkdir(parents=True)
+    (existing / "SKILL.md").write_text("# research\n", encoding="utf-8")
+    (existing / "SKILL 2.md").write_text("# research\n", encoding="utf-8")
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target)])
+    rc = args.func(args)
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "番号付き重複ファイルを検出" in err
+    assert "SKILL 2.md" in err
+
+
+def test_cmd_sync_force_warns_before_overwriting_bounced_file_inside_skill(
+    fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--force で skill dir を削除する前に bounce ファイルを警告する。"""
+    target = tmp_path / "out" / ".claude" / "skills"
+    existing = target / "channel-research"
+    existing.mkdir(parents=True)
+    (existing / "SKILL.md").write_text("OLD\n", encoding="utf-8")
+    bounced_file = existing / "SKILL 2.md"
+    bounced_file.write_text("OLD duplicate\n", encoding="utf-8")
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+    assert rc == 0
+    err = capsys.readouterr().err
+    assert "番号付き重複ファイルを検出" in err
+    assert "SKILL 2.md" in err
+    assert not bounced_file.exists()
+
+
+def test_cmd_sync_resolves_symlink_target(fake_repo: Path, tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    target = tmp_path / "out" / ".claude" / "skills"
+    target.parent.mkdir(parents=True)
+    target.symlink_to(outside, target_is_directory=True)
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+
+    assert rc == 0
+    assert target.is_symlink()
+    assert (outside / "channel-research" / "SKILL.md").read_text(encoding="utf-8") == "# research\n"
+
+
+def test_cmd_sync_no_duplicate_warning_when_clean(
+    fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    target = tmp_path / "out" / ".claude" / "skills"
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
+    rc = args.func(args)
+    assert rc == 0
+    assert "番号付き重複ファイル" not in capsys.readouterr().err
 
 
 def test_cmd_sync_force_overwrites_existing_skill(fake_repo: Path, tmp_path: Path) -> None:
