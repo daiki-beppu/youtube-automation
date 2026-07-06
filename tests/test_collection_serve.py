@@ -898,6 +898,31 @@ def test_build_collections_index_uses_workflow_expected_file_count_when_larger(t
     assert row["expected_file_count"] == 6
 
 
+def test_build_collections_index_uses_filtered_workflow_expected_file_count_when_smaller(tmp_path):
+    """Given prompts 2 件 + workflow-state.json に filtered expected_file_count=1
+    When build_collections_index を呼ぶ
+    Then duration-filtered 採用数を完了判定に使う。
+    """
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-filtered-collection",
+        entries=[{"name": "A", "style": "s", "lyrics": ""}, {"name": "B", "style": "s", "lyrics": ""}],
+    )
+    (coll / "workflow-state.json").write_text(
+        json.dumps({"planning": {"music": {"expected_file_count": 1}}}),
+        encoding="utf-8",
+    )
+    music_dir = coll / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "track1.mp3").write_bytes(b"fake")
+
+    row = build_collections_index(tmp_path)[0]
+
+    assert row["status"] == "downloaded"
+    assert row["downloaded_count"] == 1
+    assert row["expected_file_count"] == 1
+
+
 def test_build_collections_index_includes_saved_suno_playlist_url(tmp_path):
     """Given workflow-state.json に suno_playlist_url がある
     When build_collections_index を呼ぶ
@@ -3066,10 +3091,10 @@ def test_post_downloaded_partial_zip_keeps_download_archive(serve_dir, tmp_path)
     assert zip_path.exists()
 
 
-def test_post_downloaded_partial_zip_with_underreported_expected_count_returns_500(serve_dir, tmp_path):
+def test_post_downloaded_partial_zip_with_filtered_expected_count_succeeds(serve_dir, tmp_path):
     """Given prompts 2 件に対して range ZIP の音声が 1 件
     When expected_file_count=1 で POST /collections/<id>/downloaded を送る
-    Then prompt_count * 2 を期待数として使い 500 を返す。
+    Then duration-filtered 採用数を期待数として保存し downloaded 扱いにする。
     """
     planning = tmp_path / "planning"
     _make_collection(
@@ -3091,18 +3116,25 @@ def test_post_downloaded_partial_zip_with_underreported_expected_count_returns_5
         "download_path": str(zip_path),
     }
 
-    with pytest.raises(urllib.error.HTTPError) as exc_info:
-        _post(
-            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
-            payload,
-            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
-        )
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+        result = json.loads(resp.read().decode("utf-8"))
 
-    assert exc_info.value.code == 500
+    assert result["ok"] is True
+    assert result["placed_count"] == 1
     ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
-    assert not ws_path.exists()
+    workflow_state = json.loads(ws_path.read_text(encoding="utf-8"))
+    assert workflow_state["planning"]["music"]["expected_file_count"] == 1
+    assert workflow_state["assets"]["music_downloaded"] is True
     music_dir = planning / "20260601-clm-aaa-collection" / "02-Individual-music"
-    assert not music_dir.exists() or list(music_dir.iterdir()) == []
+    assert len(list(music_dir.glob("*.mp3"))) == 1
+    row = build_collections_index(planning)[0]
+    assert row["status"] == "downloaded"
+    assert row["expected_file_count"] == 1
 
 
 def test_post_downloaded_success_includes_placed_count(serve_dir, tmp_path):

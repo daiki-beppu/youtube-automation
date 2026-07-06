@@ -2,7 +2,7 @@
 // これらは yt-collection-serve (#692/#698) との互換契約であり、変更すると
 // サーバー側 (`/suno/prompts.json`) と整合しなくなる。
 // SSOT: src/youtube_automation/scripts/suno_artifacts.py SUNO_PROMPTS_ROUTE
-import type { PromptEntry } from "./api";
+import type { DurationFilter, PromptEntry } from "./api";
 
 /** chrome.storage.local に保存するサーバー URL の key。 */
 export const STORAGE_KEY = "sunoServerUrl";
@@ -166,9 +166,6 @@ export const SUNO_API_ORIGIN = "https://studio-api-prod.suno.com";
 /** 生成投入 endpoint のパス（#948）。レスポンス JSON の `clips[].id` / `clips[].status` を観測する。 */
 export const GENERATE_ENDPOINT_PATH = "/api/generate/v2-web/";
 
-/** active feed poll に使う具体 endpoint（#948）。 */
-export const FEED_V2_PATH = "/api/feed/v2";
-
 /** passive fetch 観測 / duration 取得に使う feed v3 endpoint（#1258, #1265）。 */
 export const FEED_V3_PATH = "/api/feed/v3";
 
@@ -184,10 +181,6 @@ export const BRIDGE_MSG = {
   GENERATE_CLIPS: "generate-clips",
   /** bridge → content: feed レスポンスで観測した clip status 一覧。 */
   FEED_CLIPS: "feed-clips",
-  /** content → bridge: feed/v2 の active poll 要求（requestId + ids）。 */
-  FEED_POLL_REQUEST: "feed-poll-request",
-  /** bridge → content: active poll の応答（requestId + clips | null）。 */
-  FEED_POLL_RESPONSE: "feed-poll-response",
   /** content → bridge: feed/v3 の active poll 要求（requestId + ids）。 */
   FEED_V3_POLL_REQUEST: "feed-v3-poll-request",
   /** bridge → content: feed/v3 active poll の応答（requestId + clips | null）。 */
@@ -212,12 +205,13 @@ export const FEED_STALE_MS = 15000;
 export const FEED_POLL_INTERVAL_MS = 5000;
 
 /** active feed poll の応答待ち上限 (ms)。bridge 不在・token 未捕捉時に listener 側が諦める時間。 */
-export const FEED_POLL_RESPONSE_TIMEOUT_MS = 10000;
+export const FEED_V3_POLL_RESPONSE_TIMEOUT_MS = 10000;
 
 /** bridge が観測した clip の最小表現（#948）。status は Suno API の生値（submitted/queued/streaming/complete/error 等）。 */
 export interface ObservedClip {
   id: string;
   status: string;
+  /** Suno feed metadata.duration 由来の秒数。generate response では未観測のため optional。 */
   duration?: number;
 }
 
@@ -345,6 +339,8 @@ export interface SnapshotPayload {
   progress: ProgressPayload;
   // playlist 名 (#854)。再 open 復元時の display 用。download-only snapshot では undefined。
   playlistName?: string;
+  // collection 単位 duration guard 閾値 (#1259)。再 open 後も同じ OK/NG 判定を維持する。
+  durationFilter?: DurationFilter;
   // ERROR 停止した entry の index (#872)。chrome.storage の resume state と二重化し、
   // popup の進捗復元でも参照する。ERROR phase 到達時のみ確定し、それ以外は undefined。
   failedIndex?: number;
@@ -355,6 +351,8 @@ export interface SnapshotPayload {
   remainingIndices?: number[];
   // playlist 追加対象として generate response から観測済みの clip ID 一覧。
   submittedClipIds?: string[];
+  // true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。
+  submittedClipIdsAreDurationFiltered?: boolean;
   // playlist 追加時に揃っているべき clip ID 件数。
   playlistExpectedClipCount?: number;
 }

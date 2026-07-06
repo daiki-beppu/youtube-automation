@@ -49,8 +49,12 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
   let feedAt = 0;
   let changeAt = 0;
 
+  function isValidDuration(duration: unknown): duration is number {
+    return typeof duration === "number" && Number.isFinite(duration) && duration >= 0;
+  }
+
   function recordDuration(clip: ObservedClip): void {
-    if (typeof clip.duration === "number") {
+    if (isValidDuration(clip.duration)) {
       durationById.set(clip.id, clip.duration);
     }
   }
@@ -59,6 +63,10 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
     const prev = statusById.get(clip.id);
     if (prev !== clip.status) {
       statusById.set(clip.id, clip.status);
+      changeAt = now();
+    }
+    if (isValidDuration(clip.duration) && durationById.get(clip.id) !== clip.duration) {
+      durationById.set(clip.id, clip.duration);
       changeAt = now();
     }
   }

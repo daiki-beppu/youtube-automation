@@ -112,12 +112,19 @@ style_variation:
       - low-key driving pulse
 
 # インストモード: 曲数ベースの運用方針
-# - tracks_per_collection: 1 コレクションあたりの最終 clip 数。Suno は 1 リクエスト = 2 曲生成のため、
+# - tracks_per_collection: 1 コレクションあたりの生成・期待 clip 数。Suno は 1 リクエスト = 2 曲生成のため、
 #   yaml `suno-patterns.yaml` の `patterns:` 配列には ceil(tracks_per_collection / 2) 個の entry を
-#   並べる。既定の 20 なら 10 entries → 20 clips（2 clip 両方採用）。
+#   並べる。既定の 20 なら 10 entries → 20 clips を生成する。
+#   最終 playlist 採用数は下の duration_filter 適用後に減る場合がある。
 #   コレクション単位の上書きは `suno-patterns.yaml` の top-level `tracks:` キーで可能。
 # - pattern 概念は廃止: 各 entry は独立した情景フレーズで設計する (旧 4 パターン × 3 回生成は使わない)。
 tracks_per_collection: 20
+
+# Suno helper の playlist 採用判定に使う collection 単位 duration guard（秒）。
+# 生成された clip がこの範囲外なら playlist 追加対象から除外される。
+duration_filter:
+  min_sec: 60
+  max_sec: 300
 
 # ボーカルモード専用: パターン運用方針 (インストモードでは無視される)
 # - pattern_strategy: パターン運用の戦略名 (`mixed` = N パターンで起伏を作る / `single` = 1 パターン統合)。

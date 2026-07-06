@@ -149,12 +149,14 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
   it("Given failed-only rerun の入力 When payload を構築する Then indices と保存済み playlist 情報が同じ戻り値に入る", () => {
     const overrides = buildFailedEntriesRunOverrides([2, 7], {
       submittedClipIds: ["clip-a", "clip-b"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
     });
 
     expect(overrides).toEqual({
       indices: [2, 7],
       submittedClipIds: ["clip-a", "clip-b"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
     });
   });
@@ -163,12 +165,14 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
     const banner = makeBanner({ failedIndex: 4, total: 4 });
     const overrides = buildResumeRunOverrides(banner, {
       submittedClipIds: ["clip-a", "clip-b", "clip-c", "clip-d"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 4,
     });
 
     expect(overrides).toEqual({
       range: { start: 4, end: 3 },
       submittedClipIds: ["clip-a", "clip-b", "clip-c", "clip-d"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 4,
     });
   });
@@ -177,6 +181,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
     const entries = [{ name: "pattern-1", style: "ambient", lyrics: "[Instrumental]" }];
     const overrides = buildResumeRunOverrides(makeBanner({ failedIndex: 1, total: 3 }), {
       submittedClipIds: ["clip-a", "clip-b"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
     });
 
@@ -195,6 +200,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       collectionId: "collection-a",
       indices: undefined,
       submittedClipIds: ["clip-a", "clip-b"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
     });
   });
@@ -202,12 +208,14 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
   it("Given indices 部分実行の resume state When payload を構築する Then range ではなく残り indices を渡す", () => {
     const overrides = buildResumeRunOverrides(makeBanner({ failedIndex: 2, total: 5, remainingIndices: [2, 4] }), {
       submittedClipIds: ["clip-a", "clip-b"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 6,
     });
 
     expect(overrides).toEqual({
       indices: [2, 4],
       submittedClipIds: ["clip-a", "clip-b"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 6,
     });
   });
@@ -216,6 +224,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
     const entries = [{ name: "pattern-1", style: "ambient", lyrics: "[Instrumental]" }];
     const overrides = buildFailedEntriesRunOverrides([0, 2], {
       submittedClipIds: ["clip-a", "clip-c"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
     });
 
@@ -234,6 +243,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       collectionId: "collection-a",
       indices: [0, 2],
       submittedClipIds: ["clip-a", "clip-c"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
     });
   });
@@ -312,19 +322,31 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
 
   it("Given playlist phase When content.ts を読む Then 保存済み ID と今回観測 ID を resolvePlaylistClipIds で合成してから scrollAndMultiSelectByIds で row 解決する", () => {
     expect(contentSource).toMatch(
-      /const currentSubmittedIds = tracker\.getSubmittedIds\(\);[\s\S]*?const submittedIds = resolvePlaylistClipIds\(\s*previousSubmittedClipIds,\s*currentSubmittedIds,\s*expectedClipCount,?\s*\);[\s\S]*?scrollAndMultiSelectByIds\(submittedIds,/,
+      /const rawSubmittedIds = resolvePlaylistClipIds\(\s*previousSubmittedClipIds,\s*currentSubmittedIds,\s*expectedClipCount,?\s*\);[\s\S]*?const plan = buildPlaylistClipPlan\([\s\S]*?scrollAndMultiSelectByIds\(plan\.clipIds,/,
+    );
+    expect(contentSource).toMatch(
+      /verifiedPlaylistClipCount = await addClipsToPlaylist\([\s\S]*?previousSubmittedClipIds,[\s\S]*?expectedRawPlaylistClipCount,[\s\S]*?entries,/,
     );
   });
 
-  it("Given resume state persist When content.ts を読む Then playlist resume 情報を storage と snapshot の両方に保持する", () => {
+  it("Given resume / failed-only rerun When content.ts を読む Then raw 合成期待数は保存済み OK 件数と別計算にする", () => {
     expect(contentSource).toMatch(
-      /const persistedSubmittedClipIds = Array\.from\(\s*new Set\(\[\.\.\.previousSubmittedClipIds, \.\.\.tracker\.getSubmittedIds\(\)\]\),\s*\);[\s\S]*?submittedClipIds: persistedSubmittedClipIds,[\s\S]*?playlistExpectedClipCount: expectedPlaylistClipCount,/,
+      /const expectedRawPlaylistClipCount =[\s\S]*?order\.length === 0[\s\S]*?\? \(playlistExpectedClipCount \?\? total \* CLIPS_PER_REQUEST\)[\s\S]*?: new Set\(previousSubmittedClipIds\)\.size \+ order\.length \* CLIPS_PER_REQUEST;/,
+    );
+    expect(contentSource).toMatch(
+      /const shouldRunDownloadAfterPlaylist = expectedRawPlaylistClipCount >= total \* CLIPS_PER_REQUEST;/,
+    );
+  });
+
+  it("Given resume state persist When content.ts を読む Then OK clip filter 後の playlist resume 情報で上書きできる", () => {
+    expect(contentSource).toMatch(
+      /const currentSubmittedIds = tracker\.getSubmittedIds\(\);[\s\S]*?const fallbackPlaylistPersistInfo = resolvePlaylistPersistInfo\([\s\S]*?previousSubmittedClipIds,[\s\S]*?currentSubmittedIds,[\s\S]*?options\.durationFilter,[\s\S]*?options\.submittedClipIdsAreDurationFiltered === true,[\s\S]*?\);[\s\S]*?const playlistSubmittedClipIds =[\s\S]*?playlistPersistInfo\?\.submittedClipIds \?\? fallbackPlaylistPersistInfo\.submittedClipIds;[\s\S]*?const playlistExpectedCount =[\s\S]*?playlistPersistInfo\?\.playlistExpectedClipCount \?\? fallbackPlaylistPersistInfo\.playlistExpectedClipCount;[\s\S]*?submittedClipIds: playlistSubmittedClipIds,[\s\S]*?playlistExpectedClipCount: playlistExpectedCount,/,
     );
   });
 
   it("Given playlist error persist When content.ts を読む Then snapshot に failedIndex も保持する", () => {
     expect(contentSource).toMatch(
-      /currentSnapshot =[\s\S]*?\{\s*\.\.\.currentSnapshot,\s*failedIndex: interruptedIndex,[\s\S]*?submittedClipIds: persistedSubmittedClipIds,\s*playlistExpectedClipCount: expectedPlaylistClipCount,/,
+      /currentSnapshot =[\s\S]*?\{\s*\.\.\.currentSnapshot,\s*failedIndex: interruptedIndex,[\s\S]*?submittedClipIds: playlistSubmittedClipIds,[\s\S]*?playlistExpectedClipCount: playlistExpectedCount,/,
     );
   });
 
@@ -336,5 +358,25 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
     expect(runnerSource).toMatch(
       /if \(!playlistName\) \{[\s\S]*?report\(\s*"playlist 名を解決できないため、playlist 追加を再開できません。コレクションを選択し直してください。",\s*true,\s*\);[\s\S]*?return;/,
     );
+  });
+
+  it("Given OK clip 数が full collection 件数より少ない When retryPlaylist を読む Then shouldDownload は resume 完走状態で判定する", () => {
+    expect(runnerSource).toMatch(
+      /const shouldDownload =\s*resumeBanner !== null && resumeBanner\.failedIndex >= resumeBanner\.total && !resumeBanner\.remainingIndices\?\.length;/,
+    );
+    expect(runnerSource).not.toMatch(/expectedClipCount >= fullCollectionClipCount/);
+  });
+
+  it("Given playlist-only resume When retryPlaylist を読む Then durationFilter と正規化済み ID 契約を payload に載せる", () => {
+    expect(runnerSource).toMatch(
+      /sendMessage\("retryPlaylist", \{[\s\S]*?durationFilter: durationFilterForResume,[\s\S]*?submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,[\s\S]*?shouldDownload,[\s\S]*?\}\)/,
+    );
+  });
+
+  it("Given 手動採用 When useSunoRunner を読む Then 未検証 ID として保存し retryPlaylist 側で duration filter を通す", () => {
+    expect(runnerSource).toMatch(
+      /submittedClipIds: result\.clipIds,[\s\S]*?durationFilter,[\s\S]*?submittedClipIdsAreDurationFiltered: false,[\s\S]*?playlistExpectedClipCount: result\.clipIds\.length,/,
+    );
+    expect(runnerSource).toMatch(/setRestoredSubmittedClipIdsAreDurationFiltered\(false\);/);
   });
 });

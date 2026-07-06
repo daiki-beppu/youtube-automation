@@ -115,6 +115,7 @@ export function useSunoRunner(): RunnerState {
   const [restoredFailedIndices, setRestoredFailedIndices] = useState<number[] | undefined>(undefined);
   const [restoredRemainingIndices, setRestoredRemainingIndices] = useState<number[] | undefined>(undefined);
   const [restoredSubmittedClipIds, setRestoredSubmittedClipIds] = useState<string[] | undefined>(undefined);
+  const [restoredSubmittedClipIdsAreDurationFiltered, setRestoredSubmittedClipIdsAreDurationFiltered] = useState(false);
   const [restoredPlaylistExpectedClipCount, setRestoredPlaylistExpectedClipCount] = useState<number | undefined>(
     undefined,
   );
@@ -239,6 +240,34 @@ export function useSunoRunner(): RunnerState {
     return restoredCollectionId === selectedCollectionId ? (restoredSubmittedClipIds ?? []) : [];
   }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredCollectionId, restoredSubmittedClipIds]);
 
+  const submittedClipIdsAreDurationFilteredForResume = useMemo<boolean>(() => {
+    if (
+      resumeCheckedAt !== null &&
+      persistedResume &&
+      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+    ) {
+      return persistedResume.submittedClipIdsAreDurationFiltered === true;
+    }
+    return restoredCollectionId === selectedCollectionId ? restoredSubmittedClipIdsAreDurationFiltered : false;
+  }, [
+    persistedResume,
+    selectedCollectionId,
+    resumeCheckedAt,
+    restoredCollectionId,
+    restoredSubmittedClipIdsAreDurationFiltered,
+  ]);
+
+  const durationFilterForResume = useMemo<DurationFilter | undefined>(() => {
+    if (
+      resumeCheckedAt !== null &&
+      persistedResume &&
+      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+    ) {
+      return persistedResume.durationFilter ?? durationFilter;
+    }
+    return durationFilter;
+  }, [persistedResume, selectedCollectionId, resumeCheckedAt, durationFilter]);
+
   const playlistExpectedClipCountForResume = useMemo<number | undefined>(() => {
     if (
       resumeCheckedAt !== null &&
@@ -312,6 +341,7 @@ export function useSunoRunner(): RunnerState {
     setRestoredFailedIndices(undefined);
     setRestoredRemainingIndices(undefined);
     setRestoredSubmittedClipIds(undefined);
+    setRestoredSubmittedClipIdsAreDurationFiltered(false);
     setRestoredPlaylistExpectedClipCount(undefined);
   }, []);
 
@@ -401,11 +431,13 @@ export function useSunoRunner(): RunnerState {
         setRestoredCollectionId(restored.collectionId);
         setSelectedCollectionId(restored.collectionId);
         setRestoredPlaylistName(restored.playlistName);
+        setDurationFilter(restored.durationFilter);
         // ERROR 停止の snapshot なら failedIndex を再開バナーの冗長ソースへ流す (#872 要件3)。
         setRestoredFailedIndex(restored.failedIndex);
         setRestoredFailedIndices(restored.failedIndices);
         setRestoredRemainingIndices(restored.remainingIndices);
         setRestoredSubmittedClipIds(restored.submittedClipIds);
+        setRestoredSubmittedClipIdsAreDurationFiltered(restored.submittedClipIdsAreDurationFiltered === true);
         setRestoredPlaylistExpectedClipCount(restored.playlistExpectedClipCount);
         report(restored.status, restored.isError);
       } catch {
@@ -503,13 +535,8 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     const expectedClipCount = playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length;
-    const fullCollectionClipCount = maxDefined(
-      selectedCollection?.expected_file_count,
-      selectedCollection?.pattern_count ? selectedCollection.pattern_count * CLIPS_PER_REQUEST : undefined,
-      entries.length > 0 ? entries.length * CLIPS_PER_REQUEST : undefined,
-      playlistExpectedClipCountForResume,
-    );
-    const shouldDownload = fullCollectionClipCount !== undefined && expectedClipCount >= fullCollectionClipCount;
+    const shouldDownload =
+      resumeBanner !== null && resumeBanner.failedIndex >= resumeBanner.total && !resumeBanner.remainingIndices?.length;
     if (submittedClipIdsForResume.length === 0 || expectedClipCount <= 0) {
       report(
         "playlist 再開に必要な clip ID がありません。Suno タブを開いたまま「データ取得」後に再試行してください。",
@@ -524,6 +551,8 @@ export function useSunoRunner(): RunnerState {
         submittedClipIds: submittedClipIdsForResume,
         expectedClipCount,
         collectionId: selectedCollectionId,
+        durationFilter: durationFilterForResume,
+        submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,
         shouldDownload,
       });
       setResumeDismissed(true);
@@ -537,11 +566,12 @@ export function useSunoRunner(): RunnerState {
   }, [
     isRunning,
     playlistName,
-    entries.length,
+    durationFilterForResume,
     submittedClipIdsForResume,
+    submittedClipIdsAreDurationFilteredForResume,
     playlistExpectedClipCountForResume,
+    resumeBanner,
     selectedCollectionId,
-    selectedCollection,
     report,
   ]);
 
@@ -564,6 +594,7 @@ export function useSunoRunner(): RunnerState {
     void run(
       buildResumeRunOverrides(resumeBanner, {
         submittedClipIds: submittedClipIdsForResume,
+        submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,
         playlistExpectedClipCount: playlistExpectedClipCountForResume,
       }),
     );
@@ -574,6 +605,7 @@ export function useSunoRunner(): RunnerState {
     report,
     run,
     submittedClipIdsForResume,
+    submittedClipIdsAreDurationFilteredForResume,
     playlistExpectedClipCountForResume,
   ]);
 
@@ -646,13 +678,16 @@ export function useSunoRunner(): RunnerState {
             ? persistedResume.remainingIndices
             : restoredRemainingIndices,
         submittedClipIds: result.clipIds,
-        playlistExpectedClipCount: expectedClipCountForManualAdoption,
+        durationFilter,
+        submittedClipIdsAreDurationFiltered: false,
+        playlistExpectedClipCount: result.clipIds.length,
       };
       await writeResumeState(nextResume);
       setPersistedResume(nextResume);
       setResumeCheckedAt(Date.now());
       setRestoredSubmittedClipIds(result.clipIds);
-      setRestoredPlaylistExpectedClipCount(expectedClipCountForManualAdoption);
+      setRestoredSubmittedClipIdsAreDurationFiltered(false);
+      setRestoredPlaylistExpectedClipCount(result.clipIds.length);
       setResumeDismissed(false);
       report(`選択中の曲 ${result.clipIds.length} 件を採用しました。Playlist / Download から再開できます。`);
     } catch (err) {
@@ -670,6 +705,7 @@ export function useSunoRunner(): RunnerState {
     selectedCollection,
     restoredFailedIndices,
     restoredRemainingIndices,
+    durationFilter,
     report,
   ]);
 
@@ -684,10 +720,17 @@ export function useSunoRunner(): RunnerState {
     void run(
       buildFailedEntriesRunOverrides(failedEntries, {
         submittedClipIds: submittedClipIdsForResume,
+        submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,
         playlistExpectedClipCount: playlistExpectedClipCountForResume,
       }),
     );
-  }, [failedEntries, run, submittedClipIdsForResume, playlistExpectedClipCountForResume]);
+  }, [
+    failedEntries,
+    run,
+    submittedClipIdsForResume,
+    submittedClipIdsAreDurationFilteredForResume,
+    playlistExpectedClipCountForResume,
+  ]);
 
   const stop = useCallback(async () => {
     try {

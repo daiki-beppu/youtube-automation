@@ -342,6 +342,28 @@ class _ResolvedPattern:
 _ADVANCED_JSON_KEYS = ("style_influence", "weirdness", "exclude_styles", "vocal_gender")
 
 
+def _duration_filter_from_config(suno: dict) -> dict:
+    raw = suno.get("duration_filter", {})
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise ConfigError("config/skills/suno.yaml::duration_filter must be a mapping")
+    min_sec = raw.get("min_sec", 60)
+    max_sec = raw.get("max_sec", 300)
+    if (
+        isinstance(min_sec, bool)
+        or isinstance(max_sec, bool)
+        or not isinstance(min_sec, (int, float))
+        or not isinstance(max_sec, (int, float))
+        or not math.isfinite(min_sec)
+        or not math.isfinite(max_sec)
+    ):
+        raise ConfigError("config/skills/suno.yaml::duration_filter min_sec/max_sec must be finite numeric")
+    if min_sec < 0 or max_sec < 0 or min_sec > max_sec:
+        raise ConfigError("config/skills/suno.yaml::duration_filter must satisfy 0 <= min_sec <= max_sec")
+    return {"min_sec": min_sec, "max_sec": max_sec}
+
+
 def _build_advanced_json_fields(override: dict) -> dict:
     """channel override から JSON 反映用 advanced フィールド dict を構築する (#900)。
 
@@ -757,7 +779,11 @@ def main():
 
     json_path = patterns_path.parent / SUNO_PROMPTS_JSON_FILENAME
     entries = build_prompt_entries(patterns_path)
-    json_path.write_text(json.dumps(entries, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    payload = {
+        "entries": entries,
+        "duration_filter": _duration_filter_from_config(load_skill_config("suno")),
+    }
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Generated: {json_path}")
 
 

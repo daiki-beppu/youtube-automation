@@ -173,4 +173,15 @@ describe("buildRestoreState: failedIndex の surface (#872 要件3 二重化)", 
 
     expect(buildRestoreState(snap)?.collectionId).toBe("20260601-clm-theme-a-collection");
   });
+
+  it("Given durationFilter 付き snapshot When buildRestoreState Then durationFilter を surface する", () => {
+    const durationFilter = { min_sec: 75, max_sec: 180 };
+    const snap = initSnapshot(makePromptEntries(2), {
+      collectionId: "20260601-clm-theme-a-collection",
+      playlistName: "clm | theme-a",
+      durationFilter,
+    });
+
+    expect(buildRestoreState(snap)?.durationFilter).toEqual(durationFilter);
+  });
 });

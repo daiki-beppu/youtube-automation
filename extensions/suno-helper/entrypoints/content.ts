@@ -1,6 +1,6 @@
 // Suno Custom Mode への Style / Lyrics 注入と Generate 連続実行 (content script)。
 // DOM 操作は shared/dom の純関数へ委譲し、本ファイルは連続実行のフロー制御に専念する。
-import type { DurationFilter, PromptEntry } from "../../shared/api";
+import { DEFAULT_DURATION_FILTER, type DurationFilter, type PromptEntry } from "../../shared/api";
 import {
   CLIPS_PER_REQUEST,
   INFLIGHT_STALL_TIMEOUT_MS,
@@ -159,6 +159,10 @@ function assertRunPayload(value: unknown): RunPayload {
     collectionId: assertNonEmptyString(record.collectionId, "run.collectionId"),
     durationFilter: assertOptionalDurationFilter(record.durationFilter, "run.durationFilter"),
     indices: assertOptionalIndices(record.indices, "run.indices", record.entries.length),
+    submittedClipIdsAreDurationFiltered: assertOptionalBoolean(
+      record.submittedClipIdsAreDurationFiltered,
+      "run.submittedClipIdsAreDurationFiltered",
+    ),
   };
 }
 
@@ -169,6 +173,11 @@ function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload {
     submittedClipIds: assertStringArray(record.submittedClipIds, "retryPlaylist.submittedClipIds"),
     expectedClipCount: assertOptionalFiniteNumber(record.expectedClipCount, "retryPlaylist.expectedClipCount") ?? 0,
     collectionId: assertNonEmptyString(record.collectionId, "retryPlaylist.collectionId"),
+    durationFilter: assertOptionalDurationFilter(record.durationFilter, "retryPlaylist.durationFilter"),
+    submittedClipIdsAreDurationFiltered: assertOptionalBoolean(
+      record.submittedClipIdsAreDurationFiltered,
+      "retryPlaylist.submittedClipIdsAreDurationFiltered",
+    ),
     shouldDownload: assertOptionalBoolean(record.shouldDownload, "retryPlaylist.shouldDownload"),
   };
 }
@@ -197,6 +206,17 @@ function buildTitleFallbackMap(entries: PromptEntry[], order: number[], submitte
     }
   }
   return map;
+}
+
+interface PlaylistClipPlan {
+  clipIds: string[];
+  expectedClipCount: number;
+  titleFallbackMap: Map<string, string>;
+}
+
+interface PlaylistClipPersistInfo {
+  submittedClipIds: string[];
+  playlistExpectedClipCount: number;
 }
 
 async function resolveDownloadContext(): Promise<DownloadContext> {
@@ -372,9 +392,15 @@ export default defineContentScript({
       expectedClipCount: number,
       entries: PromptEntry[],
       order: number[],
+      durationFilter: DurationFilter | undefined,
+      previousSubmittedClipIdsAreDurationFiltered = false,
+      onResolvedPlaylistClipIds?: (info: PlaylistClipPersistInfo) => void,
     ): Promise<number> {
       emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total: progressTotal, message: playlistName });
       const currentSubmittedIds = tracker.getSubmittedIds();
+      const allowUnknownDurationIds = previousSubmittedClipIdsAreDurationFiltered
+        ? new Set(previousSubmittedClipIds)
+        : new Set<string>();
       const allSubmittedIds = [...previousSubmittedClipIds, ...currentSubmittedIds];
       const observedCount = new Set(allSubmittedIds).size;
       if (observedCount !== expectedClipCount) {
@@ -382,22 +408,27 @@ export default defineContentScript({
           `[suno-helper] bridge observation gap: expected ${expectedClipCount} clip IDs, observed ${observedCount}`,
         );
       }
-      const submittedIds = resolvePlaylistClipIds(previousSubmittedClipIds, currentSubmittedIds, expectedClipCount);
+      const rawSubmittedIds = resolvePlaylistClipIds(previousSubmittedClipIds, currentSubmittedIds, expectedClipCount);
       const currentTitleFallbackMap = buildTitleFallbackMap(entries, order, currentSubmittedIds);
       const currentOrder = new Set(order);
       const previousOrder = entries.map((_, index) => index).filter((index) => !currentOrder.has(index));
       const previousTitleFallbackMap = buildTitleFallbackMap(entries, previousOrder, previousSubmittedClipIds);
       const titleFallbackMap = new Map([...previousTitleFallbackMap, ...currentTitleFallbackMap]);
-      const selectedCount = await scrollAndMultiSelectByIds(submittedIds, {
+      const plan = buildPlaylistClipPlan(rawSubmittedIds, titleFallbackMap, durationFilter, allowUnknownDurationIds);
+      onResolvedPlaylistClipIds?.({
+        submittedClipIds: plan.clipIds,
+        playlistExpectedClipCount: plan.expectedClipCount,
+      });
+      const selectedCount = await scrollAndMultiSelectByIds(plan.clipIds, {
         isAborted: () => aborted,
-        titleFallbackMap,
+        titleFallbackMap: plan.titleFallbackMap,
       });
       if (aborted) {
         return selectedCount;
       }
-      if (selectedCount !== expectedClipCount) {
+      if (selectedCount !== plan.expectedClipCount) {
         throw new Error(
-          `playlist 対象の DOM 選択数が一致しません: expected ${expectedClipCount}, selected ${selectedCount}`,
+          `playlist 対象の DOM 選択数が一致しません: expected ${plan.expectedClipCount}, selected ${selectedCount}`,
         );
       }
       await abortableSleep(SETTLE_MS, () => aborted);
@@ -418,7 +449,7 @@ export default defineContentScript({
         actualSelectedIds = await readSelectedClipIds({
           isAborted: () => aborted,
           maxScanPasses: 1,
-          stopAboveCount: expectedClipCount,
+          stopAboveCount: plan.expectedClipCount,
           skipUnresolvedIds: true,
         });
       } catch (err) {
@@ -429,12 +460,12 @@ export default defineContentScript({
       if (aborted) {
         return selectedCount;
       }
-      if (actualSelectedIds !== null && actualSelectedIds.length > expectedClipCount) {
-        const targetIdSet = new Set(submittedIds);
+      if (actualSelectedIds !== null && actualSelectedIds.length > plan.expectedClipCount) {
+        const targetIdSet = new Set(plan.clipIds);
         const extraIds = actualSelectedIds.filter((id) => !targetIdSet.has(id));
         throw new Error(
           `選択中 clip が playlist 対象より多く、前回実行の選択が残っている可能性があります` +
-            `（expected ${expectedClipCount}, selected ${actualSelectedIds.length}）。` +
+            `（expected ${plan.expectedClipCount}, selected ${actualSelectedIds.length}）。` +
             `ページをリロードして選択状態を解除してから再実行してください。` +
             `参考: target 集合外の選択中 ID（title fallback で選択した正当な clip を含む場合があります）: ${extraIds.join(", ")}`,
         );
@@ -458,6 +489,64 @@ export default defineContentScript({
         timeoutMs: GENERATE_TIMEOUT_MS,
       });
       return selectedCount;
+    }
+
+    function resolveDurationFilter(durationFilter: DurationFilter | undefined): { minSec: number; maxSec: number } {
+      const minSec = durationFilter?.min_sec;
+      const maxSec = durationFilter?.max_sec;
+      return {
+        minSec: typeof minSec === "number" && Number.isFinite(minSec) ? minSec : DEFAULT_DURATION_FILTER.min_sec,
+        maxSec: typeof maxSec === "number" && Number.isFinite(maxSec) ? maxSec : DEFAULT_DURATION_FILTER.max_sec,
+      };
+    }
+
+    function isDurationAccepted(
+      clipId: string,
+      durationFilter: DurationFilter | undefined,
+      allowUnknownDuration = false,
+    ): boolean {
+      const duration = tracker.getDuration(clipId);
+      if (duration === undefined) {
+        return allowUnknownDuration;
+      }
+      const filter = resolveDurationFilter(durationFilter);
+      return duration >= filter.minSec && duration <= filter.maxSec;
+    }
+
+    function buildPlaylistClipPlan(
+      rawSubmittedIds: string[],
+      titleFallbackMap: Map<string, string>,
+      durationFilter: DurationFilter | undefined,
+      allowUnknownDurationIds: Set<string> = new Set(),
+    ): PlaylistClipPlan {
+      const clipIds = rawSubmittedIds.filter((clipId) =>
+        isDurationAccepted(clipId, durationFilter, allowUnknownDurationIds.has(clipId)),
+      );
+      if (clipIds.length === 0) {
+        throw new Error("playlist 対象の OK clip ID が 0 件です。全 clip が duration filter で除外されました。");
+      }
+      return {
+        clipIds,
+        expectedClipCount: clipIds.length,
+        titleFallbackMap,
+      };
+    }
+
+    function resolvePlaylistPersistInfo(
+      previousSubmittedClipIds: string[],
+      currentSubmittedIds: string[],
+      durationFilter: DurationFilter | undefined,
+      previousSubmittedClipIdsAreDurationFiltered: boolean,
+    ): PlaylistClipPersistInfo {
+      const previousAcceptedIds = previousSubmittedClipIds.filter((clipId) =>
+        isDurationAccepted(clipId, durationFilter, previousSubmittedClipIdsAreDurationFiltered),
+      );
+      const currentAcceptedIds = currentSubmittedIds.filter((clipId) => isDurationAccepted(clipId, durationFilter));
+      const submittedClipIds = Array.from(new Set([...previousAcceptedIds, ...currentAcceptedIds]));
+      return {
+        submittedClipIds,
+        playlistExpectedClipCount: submittedClipIds.length,
+      };
     }
 
     async function waitForSubmittedClipsComplete(
@@ -512,7 +601,9 @@ export default defineContentScript({
       indices?: number[];
       // 再開前の run で観測済みの playlist 対象 clip ID。
       submittedClipIds?: string[];
-      // playlist 追加時に揃っているべき clip ID 件数。
+      // true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。
+      submittedClipIdsAreDurationFiltered?: boolean;
+      // duration filter 後に playlist 追加・download へ採用する OK clip 件数。
       playlistExpectedClipCount?: number;
     }
 
@@ -534,15 +625,16 @@ export default defineContentScript({
       // 実行対象の 0-based index 列。indices（チェック選択/失敗分再実行）が最優先、無ければ range 由来。
       const order = options.indices ?? Array.from({ length: endIndex - startIndex + 1 }, (_, k) => startIndex + k);
       const hasExplicitIndices = options.indices !== undefined;
-      const expectedPlaylistClipCount =
-        playlistExpectedClipCount ??
-        (order.length === 0
-          ? total * CLIPS_PER_REQUEST
-          : new Set(previousSubmittedClipIds).size + order.length * CLIPS_PER_REQUEST);
+      const expectedRawPlaylistClipCount =
+        order.length === 0
+          ? (playlistExpectedClipCount ?? total * CLIPS_PER_REQUEST)
+          : new Set(previousSubmittedClipIds).size + order.length * CLIPS_PER_REQUEST;
+      const shouldRunDownloadAfterPlaylist = expectedRawPlaylistClipCount >= total * CLIPS_PER_REQUEST;
       // リトライ上限まで失敗しスキップした entry の 0-based index (#948)。終了時に resume state へ
       // 永続化し、popup の「失敗分のみ再実行」導線が消費する。
       const failedIndices: number[] = [];
       let keepResumeStateForDownloadRetry = false;
+      let playlistPersistInfo: PlaylistClipPersistInfo | null = null;
       // 中断 entry を永続化し、reload 後の ResumeBanner で続きから再開できるようにする。
       // ERROR phase (#872 要件3) と STOPPED phase (#898 要件1/2/3) の共通処理。failedIndex 名は
       // そのまま流用し (要件3)、中断 index を載せる。
@@ -552,9 +644,17 @@ export default defineContentScript({
           hasExplicitIndices && orderPosition !== undefined
             ? order.slice(interruptedIndex === order[orderPosition] ? orderPosition : orderPosition + 1)
             : undefined;
-        const persistedSubmittedClipIds = Array.from(
-          new Set([...previousSubmittedClipIds, ...tracker.getSubmittedIds()]),
+        const currentSubmittedIds = tracker.getSubmittedIds();
+        const fallbackPlaylistPersistInfo = resolvePlaylistPersistInfo(
+          previousSubmittedClipIds,
+          currentSubmittedIds,
+          options.durationFilter,
+          options.submittedClipIdsAreDurationFiltered === true,
         );
+        const playlistSubmittedClipIds =
+          playlistPersistInfo?.submittedClipIds ?? fallbackPlaylistPersistInfo.submittedClipIds;
+        const playlistExpectedCount =
+          playlistPersistInfo?.playlistExpectedClipCount ?? fallbackPlaylistPersistInfo.playlistExpectedClipCount;
         currentSnapshot =
           currentSnapshot === null
             ? currentSnapshot
@@ -562,8 +662,10 @@ export default defineContentScript({
                 ...currentSnapshot,
                 failedIndex: interruptedIndex,
                 remainingIndices,
-                submittedClipIds: persistedSubmittedClipIds,
-                playlistExpectedClipCount: expectedPlaylistClipCount,
+                submittedClipIds: playlistSubmittedClipIds,
+                durationFilter: options.durationFilter,
+                submittedClipIdsAreDurationFiltered: true,
+                playlistExpectedClipCount: playlistExpectedCount,
               };
         void writeResumeState({
           collectionId,
@@ -572,8 +674,10 @@ export default defineContentScript({
           timestamp: Date.now(),
           failedIndices: failedIndices.length > 0 ? [...failedIndices] : undefined,
           remainingIndices,
-          submittedClipIds: persistedSubmittedClipIds,
-          playlistExpectedClipCount: expectedPlaylistClipCount,
+          submittedClipIds: playlistSubmittedClipIds,
+          durationFilter: options.durationFilter,
+          submittedClipIdsAreDurationFiltered: true,
+          playlistExpectedClipCount: playlistExpectedCount,
         });
       }
       for (const [orderPosition, i] of order.entries()) {
@@ -707,14 +811,14 @@ export default defineContentScript({
         });
         return;
       }
-      let verifiedPlaylistClipCount = expectedPlaylistClipCount;
+      let verifiedPlaylistClipCount = playlistExpectedClipCount ?? expectedRawPlaylistClipCount;
       if (aborted) {
         persistInterruptState(total);
         emitProgress({ phase: PHASE.STOPPED, total });
         return;
       }
       try {
-        await waitForSubmittedClipsComplete(expectedPlaylistClipCount, previousSubmittedClipIds, () => aborted);
+        await waitForSubmittedClipsComplete(expectedRawPlaylistClipCount, previousSubmittedClipIds, () => aborted);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         persistInterruptState(total);
@@ -731,12 +835,20 @@ export default defineContentScript({
           total,
           playlistName,
           previousSubmittedClipIds,
-          expectedPlaylistClipCount,
+          expectedRawPlaylistClipCount,
           entries,
           order,
+          options.durationFilter,
+          options.submittedClipIdsAreDurationFiltered === true,
+          (info) => {
+            playlistPersistInfo = info;
+          },
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        if (message.includes("playlist 対象の OK clip ID が 0 件")) {
+          playlistPersistInfo = { submittedClipIds: [], playlistExpectedClipCount: 0 };
+        }
         persistInterruptState(total);
         emitProgress({ phase: PHASE.ERROR, index: total, total, message });
         return;
@@ -748,8 +860,7 @@ export default defineContentScript({
       }
 
       // --- DOWNLOADING phase (#1146) ---
-      const fullCollectionClipCount = total * CLIPS_PER_REQUEST;
-      if (expectedPlaylistClipCount >= fullCollectionClipCount) {
+      if (shouldRunDownloadAfterPlaylist) {
         persistInterruptState(total);
         try {
           const downloadContext = await resolveDownloadContext();
@@ -813,13 +924,14 @@ export default defineContentScript({
         collectionId,
         indices,
         submittedClipIds,
+        submittedClipIdsAreDurationFiltered,
         playlistExpectedClipCount,
       } = assertRunPayload(data);
       // 直前 run の完了時リロードが保留中なら取り消す (#1411)。猶予中に受理した新 run を
       // リロードが巻き添えに殺すと STOPPED/ERROR も resume state も残らない。取り消しで
       // 残る stale selection は Cmd+P 前ガードが検知する。
       cancelScheduledRunCompleteReload();
-      currentSnapshot = initSnapshot(entries, { collectionId, playlistName });
+      currentSnapshot = initSnapshot(entries, { collectionId, playlistName, durationFilter });
       // 新 run 開始で直近完了 run の退避 snapshot を消去する（前 run の完了表示が復元されるのを防ぐ）。
       // in-memory の currentSnapshot が queryProgress で優先されるため fire-and-forget でよい。
       void clearFinishedSnapshot();
@@ -846,6 +958,7 @@ export default defineContentScript({
         playlistName,
         indices,
         submittedClipIds,
+        submittedClipIdsAreDurationFiltered,
         playlistExpectedClipCount,
       }).finally(() => {
         running = false;
@@ -863,9 +976,16 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
-      const { playlistName, submittedClipIds, expectedClipCount, collectionId, shouldDownload } =
-        assertRetryPlaylistPayload(data);
-      currentSnapshot = initSnapshot([], { collectionId, playlistName });
+      const {
+        playlistName,
+        submittedClipIds,
+        expectedClipCount,
+        collectionId,
+        durationFilter,
+        submittedClipIdsAreDurationFiltered,
+        shouldDownload,
+      } = assertRetryPlaylistPayload(data);
+      currentSnapshot = initSnapshot([], { collectionId, playlistName, durationFilter });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
       // 直前 run の完了時リロードが保留中なら取り消す (#1411)。理由は run handler と同じ。
@@ -881,6 +1001,8 @@ export default defineContentScript({
             expectedClipCount,
             [],
             [],
+            durationFilter,
+            submittedClipIdsAreDurationFiltered === true,
           );
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });

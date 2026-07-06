@@ -872,7 +872,7 @@ def test_main_writes_suno_prompts_json_alongside_md(channel_dir, tmp_path, monke
 def test_main_json_output_is_loadable_array_of_entries(channel_dir, tmp_path, monkeypatch):
     """Given main 実行後の suno-prompts.json
     When json.loads する
-    Then {name, style, lyrics} を持つ entry の配列としてロードできる。
+    Then duration_filter 付き envelope としてロードできる。
     """
     _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
     patterns_path = _write_minimal_patterns(tmp_path)
@@ -881,10 +881,48 @@ def test_main_json_output_is_loadable_array_of_entries(channel_dir, tmp_path, mo
     main()
 
     data = json.loads((patterns_path.parent / "suno-prompts.json").read_text(encoding="utf-8"))
-    assert isinstance(data, list)
-    assert len(data) == 1
+    assert set(data) == {"entries", "duration_filter"}
+    assert data["duration_filter"] == {"min_sec": 60, "max_sec": 300}
+    assert len(data["entries"]) == 1
     # #900: strict 等価から subset 検証へ緩和 (build_prompt_entries 側の relaxation と同様)。
-    assert {"name", "style", "lyrics"} <= set(data[0])
+    assert {"name", "style", "lyrics"} <= set(data["entries"][0])
+
+
+@pytest.mark.parametrize(
+    ("duration_filter", "expected"),
+    [
+        (False, "must be a mapping"),
+        ({"min_sec": "60", "max_sec": 300}, "finite numeric"),
+        ({"min_sec": True, "max_sec": 300}, "finite numeric"),
+        ({"min_sec": 60, "max_sec": False}, "finite numeric"),
+        ({"min_sec": float("nan"), "max_sec": 300}, "finite numeric"),
+        ({"min_sec": 60, "max_sec": float("inf")}, "finite numeric"),
+        ({"min_sec": -1, "max_sec": 300}, "0 <= min_sec <= max_sec"),
+        ({"min_sec": 301, "max_sec": 300}, "0 <= min_sec <= max_sec"),
+    ],
+)
+def test_main_json_duration_filter_rejects_invalid_numeric_config(
+    channel_dir,
+    tmp_path,
+    monkeypatch,
+    duration_filter,
+    expected,
+):
+    """duration_filter は TS 側 validator と同じ finite number 契約で fail-loud する."""
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz, soft piano",
+        duration_filter=duration_filter,
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(patterns_path)])
+
+    with pytest.raises(ConfigError) as exc_info:
+        main()
+
+    assert expected in str(exc_info.value)
 
 
 def test_main_collection_dir_merges_vocal_suno_lyrics_json(channel_dir, tmp_path, monkeypatch):
@@ -901,7 +939,7 @@ def test_main_collection_dir_merges_vocal_suno_lyrics_json(channel_dir, tmp_path
     main()
 
     data = json.loads((docs_dir / "suno-prompts.json").read_text(encoding="utf-8"))
-    assert data[0]["lyrics"] == "[Verse]\nfrom collection dir"
+    assert data["entries"][0]["lyrics"] == "[Verse]\nfrom collection dir"
 
 
 # ---------------------------------------------------------------------------
@@ -1664,6 +1702,7 @@ def test_main_json_output_includes_advanced_fields_when_overridden(channel_dir, 
     main()
 
     data = json.loads((patterns_path.parent / "suno-prompts.json").read_text(encoding="utf-8"))
-    assert data[0]["style_influence"] == 85
-    assert data[0]["weirdness"] == 30
-    assert data[0]["exclude_styles"] == "hyperpop, edm"
+    entry = data["entries"][0]
+    assert entry["style_influence"] == 85
+    assert entry["weirdness"] == 30
+    assert entry["exclude_styles"] == "hyperpop, edm"
