@@ -1,6 +1,6 @@
 ---
 name: video-description
-description: "Use when コレクションのYouTube概要欄を自動生成する必要があるとき。Complete Collection 形式に対応（情景フック＋タイムスタンプ＋Perfect for）。概要欄、タイトル作成、SEO最適化、メタデータ生成、動画の説明文など、YouTube投稿用テキストが必要な場面で必ず使用すること"
+description: "Use when YouTube 概要欄を Complete Collection 形式で自動生成するとき。「概要欄」「説明文」「SEO最適化」「メタデータ生成」で発動"
 ---
 
 ## Overview
@@ -97,6 +97,7 @@ $ARGUMENTS
 ### タイムスタンプ生成手順
 
 1. **個別トラックがある場合**（`02-Individual-music/`）: `metadata_generator.py` の `analyze_audio_files()` で自動計算
+   - master をループ生成しているコレクション（`yt-generate-master --loop N` / `--target-duration`）で**全ループ分のチャプター**を展開する場合は `generate_timestamps(loops=N)` / `format_timestamps_text(loops=N)` を使う。2 周目以降の開始秒は 1 周目と同じクロスフェード算術で連続計算される。2 周目以降のタイトルは 1 周目と同一になるため、チャプター名をユニークにしたいチャンネルでは各行の `loop` フィールド（1 始まり）を手掛かりに LLM リネームで装飾する（1 ループ分のみ載せる従来運用は `loops=1` のままで変更なし）
 2. ファイル名規約 `\d+-pattern-[a-d]` を持つコレクションでは、`format_timestamps_text()` がテーマ見出し（`── Pattern A: <name> ──`）と楽曲行（`00:00 Track 1`）を組み合わせた **個別楽曲単位** のタイムスタンプを返す。テーマ見出し行は YouTube のチャプター parser に拾われないよう先頭 timestamp を持たない（重複 timestamp は chapter list 全体を無効化する）
    - テーマ表示名は `workflow-state.json` の `planning.music.patterns[<letter>].display_name`（無ければ `.name` を `Pattern X: <name>` に整形）から解決される。両方無ければ `Pattern X` にフォールバック
    - pattern 規約に従わない legacy コレクションはテーマ見出し無しのフラット出力（後方互換）
@@ -133,7 +134,9 @@ skill-config (`.claude/skills/video-description/config.default.yaml` / 上書き
 - `[総時間]`: `2+ Hours` / `1+ Hour` 等（切り捨て表記）
 - ユースケースはコレクションテーマに応じて調整
 
-タイトル案を決めたら、`descriptions.md` に保存する前に過去 live タイトルとの重複 warning を確認する:
+タイトル案を決めたら、まず **100 codepoint 以内**であることを確認する（YouTube タイトル上限。超過は upload preflight で必ず fail するため、この段階で RHS の修飾語を削って短縮する。用途語・尺表記・テーマ語は残す）。
+
+続けて、`descriptions.md` に保存する前に過去 live タイトルとの重複 warning を確認する（`yt-title-duplicate-check` は 100 codepoint 超過も検出し、超過時は `--strict` に関係なく exit 1 になる）:
 
 ```bash
 uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
@@ -171,6 +174,7 @@ uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
 
 ### 品質チェック
 
+- [ ] タイトルが 100 codepoint 以内（YouTube 上限。`yt-title-duplicate-check` が超過検出）
 - [ ] 誇張表現なし（Epic/Ultimate等 不使用）
 - [ ] AI 透明性あり（Usage & Attribution セクション）
 - [ ] チャンネル CTA 含む

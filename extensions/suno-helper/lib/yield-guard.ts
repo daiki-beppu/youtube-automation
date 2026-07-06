@@ -38,3 +38,9 @@ export function evaluateClips(clips: DurationClip[], filter: DurationFilter): Du
 export function shouldRetry(attemptCount: number, maxRetry: number = MAX_YIELD_RETRY): boolean {
   return attemptCount < maxRetry;
 }
+
+export function formatYieldFailure(evaluation: DurationEvaluation, filter: DurationFilter): string {
+  const range = `${filter.min_sec}-${filter.max_sec}s`;
+  const rejected = evaluation.ng.length === 0 ? "none" : evaluation.ng.join(", ");
+  return `duration guard NG (${range}): ${rejected}`;
+}

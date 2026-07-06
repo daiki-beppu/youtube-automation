@@ -27,6 +27,7 @@ export {
   extractPatternKey,
   type PatternKey,
   type ThemeInline,
+  type TimestampLoopOptions,
   type TimestampTrack,
 } from "./metadata/tracks.ts";
 export { loadTemplate } from "./templates.ts";

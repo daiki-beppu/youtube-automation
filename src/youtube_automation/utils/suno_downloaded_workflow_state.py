@@ -27,12 +27,11 @@ def read_pattern_count(coll_dir: Path, *, default: int | None = None) -> int | N
 
 
 def expected_download_count(pattern_count: int | None, explicit_expected: int | None = None) -> int | None:
-    if pattern_count is None:
+    if explicit_expected is not None:
         return explicit_expected
-    pattern_expected = pattern_count * _SUNO_CLIPS_PER_PROMPT
-    if explicit_expected is None:
-        return pattern_expected
-    return max(pattern_expected, explicit_expected)
+    if pattern_count is None:
+        return None
+    return pattern_count * _SUNO_CLIPS_PER_PROMPT
 
 
 def _read_existing_workflow_state(ws_path: Path) -> dict:
@@ -69,13 +68,8 @@ def update_workflow_state_downloaded(
     if suno_playlist_url:
         music["suno_playlist_url"] = suno_playlist_url
     pattern_count = read_pattern_count(coll_dir)
-    full_expected_count = expected_download_count(pattern_count)
     effective_expected_count = expected_download_count(pattern_count, expected_file_count)
-    if (
-        expected_file_count is not None
-        and full_expected_count is not None
-        and expected_file_count >= full_expected_count
-    ):
+    if expected_file_count is not None and expected_file_count > 0:
         music["expected_file_count"] = expected_file_count
 
     assets = data.setdefault("assets", {})

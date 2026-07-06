@@ -9,7 +9,7 @@ import {
   BRIDGE_MSG,
   BRIDGE_SOURCE,
   FEED_POLL_INTERVAL_MS,
-  FEED_POLL_RESPONSE_TIMEOUT_MS,
+  FEED_V3_POLL_RESPONSE_TIMEOUT_MS,
   FEED_STALE_MS,
   type ObservedClip,
   SLIDER_SET_RESPONSE_TIMEOUT_MS,
@@ -36,7 +36,8 @@ function isObservedClipArray(value: unknown): value is ObservedClip[] {
       return (
         typeof clip.id === "string" &&
         typeof clip.status === "string" &&
-        (clip.duration === undefined || (typeof clip.duration === "number" && Number.isFinite(clip.duration)))
+        (clip.duration === undefined ||
+          (typeof clip.duration === "number" && Number.isFinite(clip.duration) && clip.duration >= 0))
       );
     })
   );
@@ -44,7 +45,7 @@ function isObservedClipArray(value: unknown): value is ObservedClip[] {
 
 /**
  * bridge からの観測イベントを tracker へ配線する。返り値の関数で解除できる。
- * FEED_POLL_RESPONSE は requestFeedPoll 側の一時 listener が個別に拾うため、ここでは扱わない。
+ * FEED_V3_POLL_RESPONSE は requestFeedPoll 側の一時 listener が個別に拾うが、tracker にも観測として合流させる。
  */
 export function attachBridgeListener(tracker: ClipTracker): () => void {
   const handler = (event: MessageEvent): void => {
@@ -57,7 +58,7 @@ export function attachBridgeListener(tracker: ClipTracker): () => void {
     }
     if (data.type === BRIDGE_MSG.GENERATE_CLIPS) {
       tracker.registerSubmitted(data.clips);
-    } else if (data.type === BRIDGE_MSG.FEED_CLIPS || data.type === BRIDGE_MSG.FEED_POLL_RESPONSE) {
+    } else if (data.type === BRIDGE_MSG.FEED_CLIPS || data.type === BRIDGE_MSG.FEED_V3_POLL_RESPONSE) {
       // active poll の応答も観測の一種として tracker に合流させる（requestId の突合は poller 側）。
       tracker.applyFeedStatuses(data.clips);
     }
@@ -75,7 +76,7 @@ let nextRequestId = 1;
  */
 export function requestFeedPoll(
   ids: string[],
-  timeoutMs: number = FEED_POLL_RESPONSE_TIMEOUT_MS,
+  timeoutMs: number = FEED_V3_POLL_RESPONSE_TIMEOUT_MS,
 ): Promise<ObservedClip[] | null> {
   return new Promise((resolve) => {
     const requestId = nextRequestId++;
@@ -92,7 +93,7 @@ export function requestFeedPoll(
       if (
         !data ||
         data.source !== BRIDGE_SOURCE ||
-        data.type !== BRIDGE_MSG.FEED_POLL_RESPONSE ||
+        data.type !== BRIDGE_MSG.FEED_V3_POLL_RESPONSE ||
         data.requestId !== requestId
       ) {
         return;
@@ -102,7 +103,7 @@ export function requestFeedPoll(
     const timer = setTimeout(() => cleanup(null), timeoutMs);
     window.addEventListener("message", handler);
     window.postMessage(
-      { source: BRIDGE_SOURCE, type: BRIDGE_MSG.FEED_POLL_REQUEST, requestId, ids },
+      { source: BRIDGE_SOURCE, type: BRIDGE_MSG.FEED_V3_POLL_REQUEST, requestId, ids },
       window.location.origin,
     );
   });

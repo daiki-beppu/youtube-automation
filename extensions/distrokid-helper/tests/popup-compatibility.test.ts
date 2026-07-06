@@ -55,6 +55,8 @@ vi.mock("../lib/storage", () => ({
     getValue: vi.fn(async () => ""),
     setValue: vi.fn(async () => undefined),
   },
+  readServerSources: vi.fn(async () => [{ id: "localhost-7873", label: "localhost", url: BASE_URL }]),
+  rememberServerSource: vi.fn(async () => [{ id: "localhost-7873", label: "localhost", url: BASE_URL }]),
 }));
 
 vi.mock("../lib/messaging", () => ({
@@ -74,13 +76,13 @@ function jsonResponse(status: number, body: unknown): Response {
   } as Response;
 }
 
-function setInputValue(input: HTMLInputElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+function setSelectValue(select: HTMLSelectElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
   if (!setter) {
-    throw new Error("HTMLInputElement.value setter is unavailable");
+    throw new Error("HTMLSelectElement.value setter is unavailable");
   }
-  setter.call(input, value);
-  input.dispatchEvent(new Event("input", { bubbles: true }));
+  setter.call(select, value);
+  select.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 async function waitFor(assertion: () => void): Promise<void> {
@@ -127,12 +129,22 @@ describe("DistroKid popup compatibility check", () => {
 
   it("データ取得時に manifest version で /version を先に呼び、非互換警告を表示して release 取得を継続する", async () => {
     fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          channel_name: "Localhost",
+          channel_short: "local",
+          hostname: "localhost",
+          port: 7873,
+          base_url: BASE_URL,
+          label: "localhost",
+        }),
+      )
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: "0.2.0" }))
       .mockResolvedValueOnce(jsonResponse(404, {}))
       .mockResolvedValueOnce(jsonResponse(200, RELEASE_PAYLOAD));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>("#server-url")!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("#server-url")!, BASE_URL);
     });
     await act(async () => {
       container.querySelector<HTMLButtonElement>("button")!.click();
@@ -142,19 +154,21 @@ describe("DistroKid popup compatibility check", () => {
       expect(container.textContent).toContain(`拡張を更新してください（拡張 ${MANIFEST_VERSION}`);
       expect(container.textContent).toContain(RELEASE_PAYLOAD.release.album_title);
     });
-    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
-    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/distrokid/collections`);
-    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/distrokid/release.json`, { method: "GET" });
+    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/server-info`);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/version`);
+    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/distrokid/collections`);
+    expect(fetchMock).toHaveBeenNthCalledWith(4, `${BASE_URL}/distrokid/release.json`, { method: "GET" });
   });
 
   it("旧サーバーの /version 404 は警告なしで release 取得を継続する", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(404, {}))
       .mockResolvedValueOnce(jsonResponse(404, {}))
+      .mockResolvedValueOnce(jsonResponse(404, {}))
       .mockResolvedValueOnce(jsonResponse(200, RELEASE_PAYLOAD));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>("#server-url")!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("#server-url")!, BASE_URL);
     });
     await act(async () => {
       container.querySelector<HTMLButtonElement>("button")!.click();
@@ -164,8 +178,9 @@ describe("DistroKid popup compatibility check", () => {
       expect(container.textContent).toContain(RELEASE_PAYLOAD.release.album_title);
     });
     expect(container.textContent).not.toContain("拡張を更新してください");
-    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
-    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/distrokid/collections`);
-    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/distrokid/release.json`, { method: "GET" });
+    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/server-info`);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/version`);
+    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/distrokid/collections`);
+    expect(fetchMock).toHaveBeenNthCalledWith(4, `${BASE_URL}/distrokid/release.json`, { method: "GET" });
   });
 });

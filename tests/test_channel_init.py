@@ -255,7 +255,7 @@ def test_main_creates_full_package_files_when_target_is_empty(tmp_path):
 
     schedule = _read_json(tmp_path / "config" / "schedule_config.json")
     assert schedule["upload_settings"]["category_id"] == "10"
-    assert schedule["upload_settings"]["privacy_status"] == "private"
+    assert "privacy_status" not in schedule["upload_settings"]
 
 
 def test_main_does_not_generate_distrokid_json_by_default(tmp_path, monkeypatch):
@@ -629,13 +629,13 @@ def test_channel_init_does_not_generate_legacy_upload_settings_file(tmp_path):
     assert not (tmp_path / "config" / "upload_settings.json").exists()
 
 
-def test_channel_setup_legacy_upload_settings_template_is_removed() -> None:
+def test_channel_new_legacy_upload_settings_template_is_removed() -> None:
     """#1310: sync で配布する旧 upload settings template を復活させない。"""
     template_path = (
         Path(__file__).resolve().parents[1]
         / ".claude"
         / "skills"
-        / "channel-setup"
+        / "channel-new"
         / "references"
         / "upload-settings-template.json"
     )

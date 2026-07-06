@@ -1,6 +1,6 @@
 ---
 name: community-draft
-description: "Use when YouTube コミュニティ投稿の下書きを生成したいとき。`--type` で behind-the-scenes / next-teaser / poll (deprecated) / day-of-reminder / weekly-feedback を切り替え、本文を生成して `pbcopy` でクリップボードに送る。「コミュニティ投稿作って」「community post」「day-of reminder」「sunday vote」「weekly feedback」「視聴者投票」「公開当日リマインダー」など、YouTube Studio に手動投稿するコミュニティ投稿の下書きが必要な場面で使用すること"
+description: "Use when コミュニティ投稿の下書きを --type 別に生成するとき。「コミュニティ投稿作って」「day-of reminder」「weekly feedback」で発動"
 ---
 
 ## Overview

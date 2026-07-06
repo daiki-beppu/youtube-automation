@@ -1,6 +1,6 @@
 ---
 name: collection-ideate
-description: "Use when 新コレクションの企画が必要なとき、データドリブンな意思決定をしたいとき。「次何作る？」「テーマ選び」「コレクション候補」「企画提案」「アイデア」など、新規コンテンツの方向性を決める場面で必ず使用すること"
+description: "Use when 新コレクションの企画・テーマ選定をデータドリブンに行うとき。「次何作る？」「テーマ選び」「企画提案」で発動"
 ---
 
 ## Overview
@@ -54,13 +54,13 @@ Phase 1 に入る前に入力モードを 1 回だけ判定し、以降の分析
 analytics mode では `/analytics-analyze` と `/benchmark` を独立・並列で鮮度判定（stale 検出）し、
 `/audience-persona-design` の最終 persona chain（`persona-definition.md` と `viewing-scene-matrix.md`）は存在チェックのみ行う（更新タイミングは戦略判断のため人間が決める）。
 
-- `reports/analysis_*.md` が存在するが stale → fallback せず中断。stale 判定は相対比較（最新 `data/analytics_data_*.json` より古い）と絶対鮮度（収集データ自体が実行日から `freshness_days`（既定 7 日、`config/skills/collection-ideate.yaml` で上書き可）を超えて経過）の OR（#1427）。ユーザーに `/analytics-analyze` 再実行を案内（必要なら `/analytics-collect` 先行。絶対鮮度 stale では収集データ自体が古いため `/analytics-collect` → `/analytics-analyze` の順で必須）。**自動呼び出し不可**（AI 推論コスト発生のため）
+- `reports/analysis_*.md` が存在するが stale → fallback せず中断。ユーザーに `/analytics-analyze` 再実行を案内（絶対鮮度 stale では `/analytics-collect` → `/analytics-analyze` の順で必須）。**自動呼び出し不可**（AI 推論コスト発生のため）
 - analytics mode で `/benchmark` が stale → Skill ツールで実行（内部で差分更新）
 - analytics mode で `/audience-persona-design` が未生成 → ユーザーに案内（更新タイミングは戦略判断のため人間が決める）
 - analytics mode で `viewing-scene-matrix.md` が未生成、または viewing-scene 結果が最終 `persona-definition.md` に未反映 → `/audience-persona-design` で `/viewing-scene` 実行と最終 persona 更新を行うよう案内
 
-判定ルール（鮮度・存在チェックの擬似コード・workflow-state との同期）は
-`references/freshness-rules.md` を参照。analytics mode の必須入力で stale または未生成を検出したら
+stale 判定（相対比較・絶対鮮度の OR・既定 freshness_days）を含む鮮度・存在チェックの完全な定義（擬似コード・workflow-state との同期含む）は
+references/freshness-rules.md を正とする。analytics mode の必須入力で stale または未生成を検出したら
 Phase 1 を中断して該当スキルの実行を促すこと。
 
 ## 実行フロー

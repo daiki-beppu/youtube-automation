@@ -728,6 +728,133 @@ def test_workflow_wf_next_approval_gates_partial(tmp_path, monkeypatch):
     assert config.workflow.wf_next.approval_gates.upload is False
 
 
+def test_workflow_wf_next_skip_manual_mastering_default(tmp_path, monkeypatch):
+    """#1449: `skip_manual_mastering` 未設定なら `False`（従来通り最終マスター配置待ち）."""
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.wf_next.skip_manual_mastering is False
+
+
+def test_workflow_wf_next_skip_manual_mastering_explicit(tmp_path, monkeypatch):
+    """#1449: `skip_manual_mastering: true` で raw=final 運用を宣言できる."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {
+                "skip_manual_mastering": True,
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.wf_next.skip_manual_mastering is True
+    # approval_gates は独立した設定であり default を維持する
+    assert config.workflow.wf_next.approval_gates.audio is False
+    assert config.workflow.wf_next.approval_gates.upload is False
+
+
+@pytest.mark.parametrize("invalid", ["false", "true", 1, 0, None, {}, []])
+def test_workflow_wf_next_skip_manual_mastering_must_be_boolean(tmp_path, monkeypatch, invalid):
+    """#1449: string/int/null/object は raw=final を誤作動させず ConfigError."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {
+                "skip_manual_mastering": invalid,
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="workflow.wf_next.skip_manual_mastering は boolean"):
+        load_config()
+
+
+@pytest.mark.parametrize("gate_key", ["audio", "upload"])
+def test_workflow_wf_next_approval_gates_must_be_boolean(tmp_path, monkeypatch, gate_key):
+    """#508/#1449: wf_next の boolean 契約を Python/TS で揃える."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {
+                "approval_gates": {gate_key: "false"},
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=f"workflow.wf_next.approval_gates.{gate_key} は boolean"):
+        load_config()
+
+
+@pytest.mark.parametrize(
+    ("workflow_value", "message"),
+    [
+        ([], "workflow セクションは object"),
+        ("", "workflow セクションは object"),
+        (False, "workflow セクションは object"),
+        (None, "workflow セクションは object"),
+    ],
+)
+def test_workflow_section_falsy_non_objects_are_rejected(tmp_path, monkeypatch, workflow_value, message):
+    """#1449: falsy な非 object を未設定扱いせず、TS schema と同じ契約で弾く."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": workflow_value}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=message):
+        load_config()
+
+
+@pytest.mark.parametrize(
+    ("wf_next_value", "message"),
+    [
+        ([], "workflow.wf_next は object"),
+        ("", "workflow.wf_next は object"),
+        (False, "workflow.wf_next は object"),
+        (None, "workflow.wf_next は object"),
+    ],
+)
+def test_workflow_wf_next_falsy_non_objects_are_rejected(tmp_path, monkeypatch, wf_next_value, message):
+    """#1449: wf_next の falsy 非 object も default に潰さない."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"wf_next": wf_next_value}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=message):
+        load_config()
+
+
+@pytest.mark.parametrize(
+    ("gates_value", "message"),
+    [
+        ([], "workflow.wf_next.approval_gates は object"),
+        ("", "workflow.wf_next.approval_gates は object"),
+        (False, "workflow.wf_next.approval_gates は object"),
+        (None, "workflow.wf_next.approval_gates は object"),
+    ],
+)
+def test_workflow_approval_gates_falsy_non_objects_are_rejected(tmp_path, monkeypatch, gates_value, message):
+    """#1449: approval_gates の falsy 非 object も default に潰さない."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"wf_next": {"approval_gates": gates_value}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=message):
+        load_config()
+
+
 def test_workflow_section_must_be_object(tmp_path, monkeypatch):
     """#508: `workflow` セクションが object でないと ConfigError."""
     sections = _minimal_sections()

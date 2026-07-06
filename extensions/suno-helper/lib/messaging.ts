@@ -9,6 +9,7 @@ import type {
   DurationFilter,
   PromptEntry,
   PromptResponse,
+  ServerInfo,
 } from "../../shared/api";
 import type { ProgressPayload, SnapshotPayload } from "../../shared/constants";
 import type { RunRange } from "./resume-state";
@@ -25,11 +26,13 @@ export interface RunPayload {
   durationFilter?: DurationFilter;
   range?: RunRange;
   collectionId: string;
-  /** 実行対象の 0-based index 列 (#948)。「失敗分のみ再実行」で使う。指定時は range より優先。 */
+  /** 任意の部分実行対象の 0-based index 列。チェック選択や失敗分再実行で使う。指定時は range より優先。 */
   indices?: number[];
   /** 再開前の run で観測済みの playlist 対象 clip ID。 */
   submittedClipIds?: string[];
-  /** playlist 追加時に揃っているべき clip ID 件数。 */
+  /** true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。 */
+  submittedClipIdsAreDurationFiltered?: boolean;
+  /** duration filter 後に playlist 追加・download へ採用する OK clip 件数。 */
   playlistExpectedClipCount?: number;
 }
 
@@ -38,6 +41,10 @@ export interface RetryPlaylistPayload {
   submittedClipIds: string[];
   expectedClipCount: number;
   collectionId: string;
+  /** retryPlaylist 入口でも通常 run と同じ duration guard 契約を適用する。 */
+  durationFilter?: DurationFilter;
+  /** true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。 */
+  submittedClipIdsAreDurationFiltered?: boolean;
   shouldDownload?: boolean;
 }
 
@@ -94,6 +101,8 @@ interface ProtocolMap {
   sendTrustedCmdP(payload: { isMac: boolean }): void;
   /** overlay → background: localhost read API を extension origin から取得する。 */
   fetchCompatibilityWarning(payload: { baseUrl: string; extensionVersion: string }): string;
+  /** overlay → background: `/server-info` を extension origin から取得する。 */
+  fetchServerInfo(payload: { baseUrl: string }): ServerInfo;
   /** overlay → background: `/collections` を extension origin から取得する。 */
   fetchCollections(payload: { baseUrl: string }): CollectionSummary[];
   /** overlay → background: collection prompts を extension origin から取得する。 */

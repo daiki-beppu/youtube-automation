@@ -27,12 +27,12 @@ def _read_thumbnail_default_config() -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _read_channel_setup_thumbnail_template() -> str:
+def _read_channel_new_thumbnail_template() -> str:
     path = (
         _repo_root()
         / ".claude"
         / "skills"
-        / "channel-setup"
+        / "channel-new"
         / "references"
         / "config-template"
         / "skills"
@@ -53,8 +53,8 @@ def _load_thumbnail_default_config() -> dict:
     return yaml.safe_load(_read_thumbnail_default_config()) or {}
 
 
-def _load_channel_setup_thumbnail_template() -> dict:
-    return yaml.safe_load(_read_channel_setup_thumbnail_template()) or {}
+def _load_channel_new_thumbnail_template() -> dict:
+    return yaml.safe_load(_read_channel_new_thumbnail_template()) or {}
 
 
 def _codex_prompt_template(config: dict) -> str:
@@ -125,6 +125,24 @@ def test_ttp_preflight_checklist_covers_required_operational_checks() -> None:
     assert "--no-rotate" in checklist_block
     assert "/thumbnail-compare" in checklist_block
     assert "承認**前**" in checklist_block
+
+
+def test_thumbnail_skill_isolates_private_repo_reference_as_operator_note() -> None:
+    skill = _read_thumbnail_skill()
+    rjn_lines = [line for line in skill.splitlines() if "daiki-beppu/rjn" in line]
+
+    assert "実装事例として" not in skill
+    assert rjn_lines == [
+        "> **参考（オペレーター向け・実行時は無視してよい）**: `daiki-beppu/rjn` の "
+        "`config/skills/thumbnail.yaml` が参考になる"
+        "（jazzgak チャンネルの 5 サムネを `color_themes.<theme>.reference_image` で多軸切替）。"
+        "private リポジトリのため下流リポジトリの実行者はアクセスできない。取得を試みないこと。"
+    ]
+    note = rjn_lines[0]
+    assert note.startswith("> ")
+    assert "実行時は無視" in note
+    assert "取得を試みないこと" in note
+    assert "color_themes.<theme>.reference_image" in note
 
 
 def test_thumbnail_skill_documents_thumbnail_compare_and_alignment_check_roles() -> None:
@@ -317,6 +335,24 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     assert 'diff_prompt_template: ""' in config
 
 
+def test_thumbnail_default_config_keeps_font_stabilization_contract() -> None:
+    config = _load_thumbnail_default_config()
+    gemini_config = config["image_generation"]["gemini"]
+
+    typography_clause = gemini_config["single_step"]["typography_clause"]
+    assert "consistent {font_description} typeface" in typography_clause
+    assert "Do not mix multiple typefaces" in typography_clause
+
+    overlay = gemini_config["thumbnail_text"]["overlay"]
+    assert overlay["font"]["title"] == ""
+    assert overlay["font"]["channel_name"] == ""
+    assert overlay["title"]["size"] == 96
+    assert overlay["title"]["stroke_width"] == 4
+    assert overlay["channel_name"]["size"] == 36
+    assert overlay["layout"]["anchor"] == "bottom-center"
+    assert overlay["layout"]["line_spacing"] == 1.15
+
+
 def test_thumbnail_skill_requires_reference_per_ttp_attempt_and_drops_prompt_only_fallback() -> None:
     skill = _read_thumbnail_skill()
 
@@ -358,13 +394,13 @@ def test_thumbnail_default_config_provides_codex_ttp_upgrade_prompt() -> None:
         assert required in template
 
 
-def test_channel_setup_thumbnail_template_includes_codex_ttp_upgrade_prompt() -> None:
-    """#1300: channel-setup で生成される thumbnail config も同じ Codex 既定文言を持つ。"""
+def test_channel_new_thumbnail_template_includes_codex_ttp_upgrade_prompt() -> None:
+    """#1300: channel-new（再生成モード）で生成される thumbnail config も同じ Codex 既定文言を持つ。"""
     default_template = _codex_prompt_template(_load_thumbnail_default_config())
-    channel_setup_template = _codex_prompt_template(_load_channel_setup_thumbnail_template())
+    channel_new_template = _codex_prompt_template(_load_channel_new_thumbnail_template())
 
-    assert channel_setup_template == default_template
-    assert channel_setup_template.count("{title}") == 1
+    assert channel_new_template == default_template
+    assert channel_new_template.count("{title}") == 1
     for required in (
         "TTP this reference thumbnail",
         "winning layout",
@@ -375,11 +411,11 @@ def test_channel_setup_thumbnail_template_includes_codex_ttp_upgrade_prompt() ->
         "no broken hands",
         "Use the title {title}.",
     ):
-        assert required in channel_setup_template
+        assert required in channel_new_template
 
 
-def test_channel_setup_thumbnail_template_includes_channel_branding_contract() -> None:
-    template = _load_channel_setup_thumbnail_template()
+def test_channel_new_thumbnail_template_includes_channel_branding_contract() -> None:
+    template = _load_channel_new_thumbnail_template()
     reference_images = template["image_generation"]["gemini"]["reference_images"]
 
     assert reference_images["channel_branding"] == {
