@@ -24,6 +24,7 @@ from youtube_automation.utils.thumbnail_references import (
 from youtube_automation.utils.youtube_tag import parse_youtube_tags, youtube_tag_chars
 
 YT_TAG_CHAR_LIMIT = 500
+YOUTUBE_TITLE_MAX_CODEPOINTS = 100
 REQUIRED_LOCALIZATION_LANGUAGES = ("ja", "en", "de")
 LOW_CPM_LOCALIZATION_LANGUAGES = ("ko", "es", "pt", "zh-CN")
 
@@ -71,6 +72,14 @@ def check_chapter_count(ts_count: int, chapter_max: int) -> str | None:
     """chapter 件数が上限超過なら issue 文字列、範囲内なら None."""
     if ts_count > chapter_max:
         return f"too many timestamps: {ts_count} (> chapter_max={chapter_max})"
+    return None
+
+
+def check_title_codepoint_limit(title: str) -> str | None:
+    """YouTube タイトル上限超過なら issue 文字列、範囲内なら None."""
+    length = len(title)
+    if length > YOUTUBE_TITLE_MAX_CODEPOINTS:
+        return f"タイトルが {length} codepoint。YouTube 制限 {YOUTUBE_TITLE_MAX_CODEPOINTS} を超過。\n  {title}"
     return None
 
 
@@ -134,7 +143,7 @@ def check_thumbnail_skill_config(channel_dir: Path, thumbnail_cfg: Mapping[str, 
         if resolved_refs.placeholders or (not resolved_refs.references and not resolved_refs.invalid_reasons):
             issues.append(
                 "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
-                "が未設定/空/TBD です。/channel-setup で benchmark サムネ参照を設定してください"
+                "が未設定/空/TBD です。/channel-new（再生成モード）で benchmark サムネ参照を設定してください"
             )
         elif resolved_refs.references:
             unique_refs = list(dict.fromkeys(resolved_refs.references))

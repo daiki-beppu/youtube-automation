@@ -88,7 +88,20 @@ Phase 3 ─ 公開（全自動）             /wf-next
 A. `collections/planning/<dir>/` ごと削除して `/wf-new` をやり直す（`workflow-state.json` だけ書き換えても 10-assets/ の素材と整合しない）。
 
 **Q. `/wf-next` を呼んだら何も起きない**
-A. `phase: "prepared"` で `raw_master` 配置済み + `master_audio` 未配置の場合、**ユーザーが mixing+mastering を完了して `01-master/` に最終マスターを置く** ことが次の前提。`/wf-status` で詳細を見ると「ミキシング+マスタリング待ち」と表示される。
+A. `phase: "prepared"` で `raw_master` 配置済み + `master_audio` 未配置の場合、**ユーザーが mixing+mastering を完了して `01-master/` に最終マスターを置く** ことが次の前提。`/wf-status` で詳細を見ると「ミキシング+マスタリング待ち」と表示される。raw master をそのまま公開する運用なら次項の `skip_manual_mastering` を参照。
+
+**Q. raw master をそのまま最終マスターとして使いたい（外部 DAW でのマスタリング不要）**
+A. `config/channel/workflow.json` に `workflow.wf_next.skip_manual_mastering: true` を設定する。`/wf-next` のマスター音源検出（2-B）で `01-master/` に別ファイルが見つからなくても、`assets.raw_master` をそのまま `assets.master_audio` として採用し `phase: "mastered"` へ自動で進む（毎回 `workflow-state.json` を手で編集する必要はない）。`approval_gates.audio` は「採用前に確認プロンプトを出すか」だけを制御する別設定で、こちらを `true` にしても raw=final の自動採用は有効にならない。
+
+```json
+{
+  "workflow": {
+    "wf_next": {
+      "skip_manual_mastering": true
+    }
+  }
+}
+```
 
 **Q. `/wf-next` がエラーで止まった**
 A. `phase: "publishing"` で停止していれば、`assets` フラグの状態から未完了ステップを特定し、`/wf-next` をもう一度呼ぶと未完了ステップから再開する（冪等性あり）。

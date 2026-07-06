@@ -57,7 +57,8 @@ phase 値と日本語ラベル:
 `prepared` の場合は `assets` フラグで詳細表示:
 - `assets.raw_master = null` + `music_engine = suno` → 「Suno 作成待ち」
 - `assets.raw_master = null` + `music_engine = lyria` → 「Lyria 生成待ち（/wf-next で開始）」
-- `assets.raw_master != null` + `assets.master_audio = null` → 「ミキシング+マスタリング待ち」
+- `assets.raw_master != null` + `assets.master_audio = null` + `load_config().workflow.wf_next.skip_manual_mastering = true` → 「raw master 直採用待ち（/wf-next で mastered へ進行）」
+- `assets.raw_master != null` + `assets.master_audio = null` + `load_config().workflow.wf_next.skip_manual_mastering = false` → 「ミキシング+マスタリング待ち」
 
 詳細表示（コレクション1つの場合 or ユーザーが指定した場合）:
 ```

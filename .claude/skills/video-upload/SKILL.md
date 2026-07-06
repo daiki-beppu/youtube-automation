@@ -1,6 +1,6 @@
 ---
 name: video-upload
-description: "Use when コレクションの動画が完成し、YouTubeへのアップロード自動化が必要なとき。Complete Collection のアップロードと live 移行を実行"
+description: "Use when コレクションの動画が完成し、YouTubeへのアップロード自動化が必要なとき。Complete Collection のアップロードと live 移行を実行。動画ファイルの生成（MP3→MP4）は /videoup"
 ---
 
 ## Overview

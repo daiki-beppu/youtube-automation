@@ -23,6 +23,7 @@ from youtube_automation.utils.preflight_checks import (
     check_low_cpm_localization_languages,
     check_tags_count,
     check_tags_yt_chars,
+    check_title_codepoint_limit,
     check_title_template_compliance,
     extract_descriptions_md_tags,
     requires_scene_phrases,
@@ -95,8 +96,8 @@ class PreflightMixin:
         if not title or not description:
             raise RuntimeError(f"❌ {desc_path}: タイトル案 / Complete Collection 概要欄 が空")
 
-        if len(title) > 100:
-            raise RuntimeError(f"❌ タイトルが {len(title)} codepoint。YouTube 制限 100 を超過。\n  {title}")
+        if msg := check_title_codepoint_limit(title):
+            raise RuntimeError(f"❌ {msg}")
 
         config = load_config()
 
