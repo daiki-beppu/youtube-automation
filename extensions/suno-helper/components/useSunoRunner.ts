@@ -679,15 +679,15 @@ export function useSunoRunner(): RunnerState {
             : restoredRemainingIndices,
         submittedClipIds: result.clipIds,
         durationFilter,
-        submittedClipIdsAreDurationFiltered: true,
-        playlistExpectedClipCount: expectedClipCountForManualAdoption,
+        submittedClipIdsAreDurationFiltered: false,
+        playlistExpectedClipCount: result.clipIds.length,
       };
       await writeResumeState(nextResume);
       setPersistedResume(nextResume);
       setResumeCheckedAt(Date.now());
       setRestoredSubmittedClipIds(result.clipIds);
-      setRestoredSubmittedClipIdsAreDurationFiltered(true);
-      setRestoredPlaylistExpectedClipCount(expectedClipCountForManualAdoption);
+      setRestoredSubmittedClipIdsAreDurationFiltered(false);
+      setRestoredPlaylistExpectedClipCount(result.clipIds.length);
       setResumeDismissed(false);
       report(`選択中の曲 ${result.clipIds.length} 件を採用しました。Playlist / Download から再開できます。`);
     } catch (err) {

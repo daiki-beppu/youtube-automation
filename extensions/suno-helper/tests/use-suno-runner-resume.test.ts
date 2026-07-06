@@ -322,7 +322,19 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
 
   it("Given playlist phase When content.ts を読む Then 保存済み ID と今回観測 ID を resolvePlaylistClipIds で合成してから scrollAndMultiSelectByIds で row 解決する", () => {
     expect(contentSource).toMatch(
-      /const currentSubmittedIds = tracker\.getSubmittedIds\(\);[\s\S]*?const rawSubmittedIds = resolvePlaylistClipIds\(\s*previousSubmittedClipIds,\s*currentSubmittedIds,\s*expectedClipCount,?\s*\);[\s\S]*?const plan = buildPlaylistClipPlan\([\s\S]*?scrollAndMultiSelectByIds\(plan\.clipIds,/,
+      /const rawSubmittedIds = resolvePlaylistClipIds\(\s*previousSubmittedClipIds,\s*currentSubmittedIds,\s*expectedClipCount,?\s*\);[\s\S]*?const plan = buildPlaylistClipPlan\([\s\S]*?scrollAndMultiSelectByIds\(plan\.clipIds,/,
+    );
+    expect(contentSource).toMatch(
+      /verifiedPlaylistClipCount = await addClipsToPlaylist\([\s\S]*?previousSubmittedClipIds,[\s\S]*?expectedRawPlaylistClipCount,[\s\S]*?entries,/,
+    );
+  });
+
+  it("Given resume / failed-only rerun When content.ts を読む Then raw 合成期待数は保存済み OK 件数と別計算にする", () => {
+    expect(contentSource).toMatch(
+      /const expectedRawPlaylistClipCount =[\s\S]*?order\.length === 0[\s\S]*?\? \(playlistExpectedClipCount \?\? total \* CLIPS_PER_REQUEST\)[\s\S]*?: new Set\(previousSubmittedClipIds\)\.size \+ order\.length \* CLIPS_PER_REQUEST;/,
+    );
+    expect(contentSource).toMatch(
+      /const shouldRunDownloadAfterPlaylist = expectedRawPlaylistClipCount >= total \* CLIPS_PER_REQUEST;/,
     );
   });
 
@@ -359,5 +371,12 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
     expect(runnerSource).toMatch(
       /sendMessage\("retryPlaylist", \{[\s\S]*?durationFilter: durationFilterForResume,[\s\S]*?submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,[\s\S]*?shouldDownload,[\s\S]*?\}\)/,
     );
+  });
+
+  it("Given 手動採用 When useSunoRunner を読む Then 未検証 ID として保存し retryPlaylist 側で duration filter を通す", () => {
+    expect(runnerSource).toMatch(
+      /submittedClipIds: result\.clipIds,[\s\S]*?durationFilter,[\s\S]*?submittedClipIdsAreDurationFiltered: false,[\s\S]*?playlistExpectedClipCount: result\.clipIds\.length,/,
+    );
+    expect(runnerSource).toMatch(/setRestoredSubmittedClipIdsAreDurationFiltered\(false\);/);
   });
 });

@@ -28,7 +28,7 @@ export interface RestoreState {
   submittedClipIds?: string[];
   // true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。
   submittedClipIdsAreDurationFiltered?: boolean;
-  // playlist 追加時に揃っているべき clip ID 件数。
+  // duration filter 後に playlist 追加・download へ採用する OK clip 件数。
   playlistExpectedClipCount?: number;
 }
 

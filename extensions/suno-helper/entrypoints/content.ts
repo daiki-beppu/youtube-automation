@@ -603,7 +603,7 @@ export default defineContentScript({
       submittedClipIds?: string[];
       // true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。
       submittedClipIdsAreDurationFiltered?: boolean;
-      // playlist 追加時に揃っているべき clip ID 件数。
+      // duration filter 後に playlist 追加・download へ採用する OK clip 件数。
       playlistExpectedClipCount?: number;
     }
 
@@ -625,12 +625,11 @@ export default defineContentScript({
       // 実行対象の 0-based index 列。indices（チェック選択/失敗分再実行）が最優先、無ければ range 由来。
       const order = options.indices ?? Array.from({ length: endIndex - startIndex + 1 }, (_, k) => startIndex + k);
       const hasExplicitIndices = options.indices !== undefined;
-      const expectedPlaylistClipCount =
-        playlistExpectedClipCount ??
-        (order.length === 0
-          ? total * CLIPS_PER_REQUEST
-          : new Set(previousSubmittedClipIds).size + order.length * CLIPS_PER_REQUEST);
-      const shouldRunDownloadAfterPlaylist = expectedPlaylistClipCount >= total * CLIPS_PER_REQUEST;
+      const expectedRawPlaylistClipCount =
+        order.length === 0
+          ? (playlistExpectedClipCount ?? total * CLIPS_PER_REQUEST)
+          : new Set(previousSubmittedClipIds).size + order.length * CLIPS_PER_REQUEST;
+      const shouldRunDownloadAfterPlaylist = expectedRawPlaylistClipCount >= total * CLIPS_PER_REQUEST;
       // リトライ上限まで失敗しスキップした entry の 0-based index (#948)。終了時に resume state へ
       // 永続化し、popup の「失敗分のみ再実行」導線が消費する。
       const failedIndices: number[] = [];
@@ -812,14 +811,14 @@ export default defineContentScript({
         });
         return;
       }
-      let verifiedPlaylistClipCount = expectedPlaylistClipCount;
+      let verifiedPlaylistClipCount = playlistExpectedClipCount ?? expectedRawPlaylistClipCount;
       if (aborted) {
         persistInterruptState(total);
         emitProgress({ phase: PHASE.STOPPED, total });
         return;
       }
       try {
-        await waitForSubmittedClipsComplete(expectedPlaylistClipCount, previousSubmittedClipIds, () => aborted);
+        await waitForSubmittedClipsComplete(expectedRawPlaylistClipCount, previousSubmittedClipIds, () => aborted);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         persistInterruptState(total);
@@ -836,7 +835,7 @@ export default defineContentScript({
           total,
           playlistName,
           previousSubmittedClipIds,
-          expectedPlaylistClipCount,
+          expectedRawPlaylistClipCount,
           entries,
           order,
           options.durationFilter,

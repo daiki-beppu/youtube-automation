@@ -775,7 +775,7 @@ describe("Suno popup compatibility check", () => {
         failedIndex: 1,
         total: 1,
         submittedClipIds: ["clip-a", "clip-b"],
-        submittedClipIdsAreDurationFiltered: true,
+        submittedClipIdsAreDurationFiltered: false,
         playlistExpectedClipCount: 2,
       }),
     );
@@ -1108,7 +1108,7 @@ describe("Suno popup compatibility check", () => {
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
       durationFilter: undefined,
-      submittedClipIdsAreDurationFiltered: true,
+      submittedClipIdsAreDurationFiltered: false,
       shouldDownload: true,
     });
     await waitFor(() => {

@@ -31,6 +31,7 @@ const harness = vi.hoisted(() => {
     feedPollerStop,
     runEntryWithRetry,
     requestSliderSet: vi.fn(),
+    submittedClipIds: [] as string[],
   };
 });
 
@@ -80,6 +81,19 @@ vi.mock("../lib/entry-retry", () => ({
   runEntryWithRetry: harness.runEntryWithRetry,
 }));
 
+vi.mock("../lib/clip-tracker", () => ({
+  createClipTracker: vi.fn(() => ({
+    clearSubmittedIds: vi.fn(),
+    getSubmittedIds: vi.fn(() => harness.submittedClipIds),
+    getPendingSubmittedIds: vi.fn(() => []),
+    getDuration: vi.fn(() => 120),
+    getInFlightCount: vi.fn(() => 0),
+    hasObservedAnyTraffic: vi.fn(() => true),
+    lastChangeAt: vi.fn(() => Date.now()),
+    submissionCount: vi.fn(() => harness.submittedClipIds.length),
+  })),
+}));
+
 vi.mock("../lib/storage", () => ({
   serverUrlItem: { getValue: vi.fn(() => Promise.resolve("http://localhost:8787")) },
   downloadFormatItem: { getValue: vi.fn(() => Promise.resolve("mp3")) },
@@ -97,6 +111,15 @@ vi.mock("../lib/resume-state", async () => {
 
 vi.mock("../lib/download", () => ({
   triggerDownloadAll: vi.fn(() => Promise.resolve()),
+}));
+
+vi.mock("../lib/download-flow", () => ({
+  createDownloadFlow: vi.fn(() => ({
+    installMessageHandlers: vi.fn(),
+    downloadBestEffort: vi.fn(() => Promise.resolve(null)),
+    performDownload: vi.fn(() => Promise.resolve()),
+    retryDownload: vi.fn(() => Promise.resolve({ completedAndCleared: true })),
+  })),
 }));
 
 // 完了時リロード前の snapshot 退避。実物は chrome.storage へアクセスするため node/jsdom 環境では mock 必須。
@@ -277,17 +300,12 @@ function makeRunPayload(entries = makePromptEntries(0)): {
   entries: ReturnType<typeof makePromptEntries>;
   playlistName: string;
   collectionId: string;
-  submittedClipIds: string[];
-  submittedClipIdsAreDurationFiltered: boolean;
-  playlistExpectedClipCount: number;
 } {
+  harness.submittedClipIds = Array.from({ length: entries.length * 2 }, (_, index) => `generated-clip-${index + 1}`);
   return {
     entries,
     playlistName: "clm | preflight",
     collectionId: "20260601-clm-preflight-collection",
-    submittedClipIds: ["clip-a"],
-    submittedClipIdsAreDurationFiltered: true,
-    playlistExpectedClipCount: 1,
   };
 }
 
@@ -301,6 +319,7 @@ beforeEach(() => {
     await options.attempt();
     return { outcome: "ok" };
   });
+  harness.submittedClipIds = [];
   harness.handlers.clear();
   document.body.innerHTML = "";
 });
@@ -607,7 +626,10 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     const runHandler = getRunHandler();
     const entries = makePromptEntries(3);
 
-    const result = runHandler({ data: { ...makeRunPayload(entries), indices: [0, 2] } });
+    const payload = { ...makeRunPayload(entries), indices: [0, 2] };
+    harness.submittedClipIds = ["generated-clip-1", "generated-clip-2", "generated-clip-3", "generated-clip-4"];
+
+    const result = runHandler({ data: payload });
 
     expect(result).toEqual({ ok: true });
     await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
