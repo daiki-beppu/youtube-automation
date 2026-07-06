@@ -563,6 +563,7 @@ uv sync
 ```
 
 `yt-doctor` で WARNING / FAILED が出た場合は `/setup` を起動して再診断するよう案内。
+ただし `branding/icon.png` / `branding/banner.png` の「未生成」が報告された場合は、新規生成の前に必ず `branding/` 配下の既存ファイルを確認する。同名 stem の別拡張子（例: `icon.jpg` / `banner.webp`）と別サフィックス（例: `banner-v2.jpg` / `banner-v3.png`）も候補に含め、複数候補がある場合はどれが最終版か人間に確認してからリネーム/変換する。
 
 #### 番号付き重複ファイルの検知と再発防止
 

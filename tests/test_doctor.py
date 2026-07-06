@@ -2554,6 +2554,59 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert "branding/icon.png が未生成" in r.message
         assert "branding/banner.png を画像として読み込めません" in r.message
 
+    @pytest.mark.parametrize("extension", [".jpg", ".jpeg", ".webp"])
+    def test_channel_branding_generated_image_suggests_same_stem_candidate(self, tmp_path, extension):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "branding" / "icon.png").unlink()
+        (tmp_path / "branding" / f"icon{extension}").write_bytes(b"candidate")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "branding/icon.png が未生成" not in r.message
+        assert f"branding/icon{extension}" in r.message
+        assert "branding/icon.png にリネーム/変換してください" in r.message
+
+    def test_channel_branding_generated_image_lists_multiple_version_candidates(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "branding" / "banner.png").unlink()
+        PILImage.new("RGB", (2048, 1152), color=(10, 20, 30)).save(tmp_path / "branding" / "banner.jpg", format="JPEG")
+        PILImage.new("RGB", (2048, 1152), color=(30, 20, 10)).save(
+            tmp_path / "branding" / "banner-v2.jpg", format="JPEG"
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "branding/banner.png が未生成" not in r.message
+        assert "branding/banner.jpg" in r.message
+        assert "branding/banner-v2.jpg" in r.message
+        assert "最終版を確認してから変換してください" in r.message
+        assert "自動判定はしません" in r.message
+
+    def test_main_json_reports_channel_branding_candidates_through_public_cli(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        _write_minimal_config(tmp_path)
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "branding" / "banner.png").unlink()
+        (tmp_path / "branding" / "banner.jpeg").write_bytes(b"candidate")
+        (tmp_path / "branding" / "banner-v2.webp").write_bytes(b"candidate")
+
+        code = doctor.main(["--json", "--target", str(tmp_path)])
+
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        ttp_check = next(check for check in payload["checks"] if check["id"] == "ttp_wf_new_readiness")
+        assert ttp_check["status"] == "warn"
+        assert "branding/banner.png が未生成" not in ttp_check["message"]
+        assert "branding/banner.jpeg" in ttp_check["message"]
+        assert "branding/banner-v2.webp" in ttp_check["message"]
+        assert "最終版を確認してから変換してください" in ttp_check["message"]
+        assert "自動判定はしません" in ttp_check["message"]
+
     def test_channel_branding_generated_image_aspect_ratio_is_checked(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
         _write_ttp_readiness_files(tmp_path)

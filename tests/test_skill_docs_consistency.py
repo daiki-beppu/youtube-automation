@@ -156,6 +156,23 @@ def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     assert '"untrusted_data": True' in branding_snapshot_script
 
 
+def test_branding_missing_report_requires_existing_file_check_before_generation() -> None:
+    skill_docs = {
+        "channel-new": _read(".claude/skills/channel-new/SKILL.md"),
+        "automation-update": _read(".claude/skills/automation-update/SKILL.md"),
+    }
+
+    for text in skill_docs.values():
+        assert "`branding/icon.png` / `branding/banner.png` の「未生成」" in text
+        assert "新規生成の前に必ず `branding/` 配下の既存ファイルを確認" in text
+        assert "同名 stem の別拡張子" in text
+        assert "`icon.jpg` / `banner.webp`" in text
+        assert "別サフィックス" in text
+        assert "`banner-v2.jpg` / `banner-v3.png`" in text
+        assert "複数候補がある場合はどれが最終版か人間に確認" in text
+        assert "リネーム/変換" in text
+
+
 def test_channel_new_frontmatter_keeps_import_dispatch_keywords() -> None:
     frontmatter = _frontmatter(".claude/skills/channel-new/SKILL.md")
     assert frontmatter["name"] == "channel-new"
