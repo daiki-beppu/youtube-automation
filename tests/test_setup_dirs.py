@@ -13,6 +13,7 @@ from youtube_automation.utils.exceptions import ConfigError
 
 EXPECTED_SETUP_DIRECTORIES: tuple[str, ...] = (
     "auth",
+    "branding",
     "collections",
     "data",
     "docs/channel/personas",

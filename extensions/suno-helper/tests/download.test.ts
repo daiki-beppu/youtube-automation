@@ -33,6 +33,7 @@ function createMockDeps(overrides?: Partial<TriggerDownloadAllDeps>): TriggerDow
 describe("triggerDownloadAll", () => {
   afterEach(() => {
     document.body.innerHTML = "";
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -68,6 +69,19 @@ describe("triggerDownloadAll", () => {
     expect(deps.waitForModalClose).toHaveBeenCalledWith(formatModal, expect.any(Number), expect.any(Number));
 
     expect(deps.sleep).toHaveBeenCalled();
+  });
+
+  it("close 待ちは Suno 側の低速ロードを想定し 10 秒を超えて待つ", async () => {
+    const formatModal = stubElement();
+    const deps = createMockDeps({
+      waitForFormatModal: vi.fn(async () => formatModal),
+    });
+
+    await triggerDownloadAll("mp3", deps);
+
+    expect(deps.waitForModalClose).toHaveBeenCalledWith(formatModal, expect.any(Number), expect.any(Number));
+    const [, timeoutMs] = vi.mocked(deps.waitForModalClose).mock.calls[0];
+    expect(timeoutMs).toBeGreaterThan(10_000);
   });
 
   it("More ボタンが見つからない場合は throw する", async () => {
@@ -191,6 +205,46 @@ describe("triggerDownloadAll", () => {
     await triggerDownloadAll("mp3");
 
     expect(clicked).toEqual(["more", "download-all", "mp3", "confirm"]);
+  });
+
+  it("DOM fixture: Download 確定後に 10 秒超で閉じる形式選択モーダルを待てる", async () => {
+    vi.useFakeTimers();
+    const clicked: string[] = [];
+    vi.stubGlobal("PointerEvent", MouseEvent);
+    document.body.innerHTML = `
+      <div class="clip-browser-list-scroller">
+        <article>
+          <img src="clip.jpg" alt="" />
+          <div class="multi-select-button"><button aria-label="Deselect clip">Selected</button></div>
+          <button aria-label="More options">...</button>
+        </article>
+      </div>
+      <div data-context-menu="true">
+        <button aria-label="Download all">Download all</button>
+      </div>
+      <div class="modal-class modal-overlay">
+        <button class="flex w-full">MP3</button>
+        <button class="hxc-btn-variant-primary">Download</button>
+      </div>
+    `;
+    document
+      .querySelector<HTMLButtonElement>('button[aria-label="Download all"]')!
+      .addEventListener("click", () => clicked.push("download-all"));
+    document
+      .querySelector<HTMLButtonElement>("button.flex.w-full")!
+      .addEventListener("click", () => clicked.push("mp3"));
+    document.querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!.addEventListener("click", () => {
+      clicked.push("confirm");
+      setTimeout(() => {
+        document.querySelector(".modal-class.modal-overlay")?.remove();
+      }, 11_000);
+    });
+
+    const result = triggerDownloadAll("mp3");
+    await vi.advanceTimersByTimeAsync(20_000);
+
+    await expect(result).resolves.toBeUndefined();
+    expect(clicked).toEqual(["download-all", "mp3", "confirm"]);
   });
 
   it("DOM fixture: default deps は文書先頭の無関係な More ではなく selected clip row の More を押す", async () => {

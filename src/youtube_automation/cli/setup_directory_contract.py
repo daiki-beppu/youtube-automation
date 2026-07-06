@@ -10,6 +10,7 @@ GITKEEP_NAME = ".gitkeep"
 
 SETUP_DIRECTORIES: tuple[str, ...] = (
     "auth",
+    "branding",
     "collections",
     "data",
     "docs/channel/personas",

@@ -9,6 +9,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from PIL import Image as PILImage
 
 from youtube_automation.cli import doctor
 from youtube_automation.utils import secrets as secrets_module
@@ -121,6 +122,14 @@ def _write_thumbnail_skill_default_yaml(base: Path, default_yaml: str) -> None:
         "  gemini:\n"
         "    reference_images:\n"
         f"      default: {default_yaml}\n"
+        "      channel_branding:\n"
+        "        snapshot: docs/channel/competitor-branding-snapshot.json\n"
+        "        icon_references:\n"
+        "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].icon\n"
+        "        banner_references:\n"
+        "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].banner[0]\n"
+        "        output_icon: branding/icon.png\n"
+        "        output_banner: branding/banner.png\n"
         "      path_base: channel_dir\n",
         encoding="utf-8",
     )
@@ -135,7 +144,19 @@ def _write_thumbnail_skill_config(base: Path, references: list[str] | str) -> No
         refs_yaml = "\n".join(f"        - {json.dumps(ref)}" for ref in references)
         default_yaml = f"      default:\n{refs_yaml}\n"
     (skills_dir / "thumbnail.yaml").write_text(
-        f"image_generation:\n  gemini:\n    reference_images:\n{default_yaml}      path_base: channel_dir\n",
+        "image_generation:\n"
+        "  gemini:\n"
+        "    reference_images:\n"
+        f"{default_yaml}"
+        "      channel_branding:\n"
+        "        snapshot: docs/channel/competitor-branding-snapshot.json\n"
+        "        icon_references:\n"
+        "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].icon\n"
+        "        banner_references:\n"
+        "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].banner[0]\n"
+        "        output_icon: branding/icon.png\n"
+        "        output_banner: branding/banner.png\n"
+        "      path_base: channel_dir\n",
         encoding="utf-8",
     )
 
@@ -673,27 +694,29 @@ class TestCheckChannelConfig:
         assert "/channel-new" in instructions
         assert "setup 用ディレクトリ生成は完了していても config は未作成" in instructions
 
-    def test_config_dir_exists_but_invalid_json_is_fail_with_channel_import(self, tmp_path):
-        """config/channel/ 存在・JSON 破損: fail + /channel-import 案内 (既存チャンネル)."""
+    def test_config_dir_exists_but_invalid_json_is_fail_with_channel_new_import_mode(self, tmp_path):
+        """config/channel/ 存在・JSON 破損: fail + /channel-new 取り込みモード案内 (既存チャンネル)."""
         config_dir = tmp_path / "config" / "channel"
         config_dir.mkdir(parents=True)
         (config_dir / "meta.json").write_text("{broken json", encoding="utf-8")
         r = doctor.check_channel_config(tmp_path)
         assert r.status == "fail"
         assert r.next_action is not None
-        action_str = json.dumps(r.next_action)
-        assert "/channel-import" in action_str
+        action_str = json.dumps(r.next_action, ensure_ascii=False)
+        assert "/channel-new" in action_str
+        assert "既存チャンネル取り込みモード" in action_str
 
-    def test_config_dir_exists_but_missing_required_keys_is_fail_with_channel_import(self, tmp_path):
-        """config/channel/ 存在・必須キー不足: fail + /channel-import 案内."""
+    def test_config_dir_exists_but_missing_required_keys_is_fail_with_channel_new_import_mode(self, tmp_path):
+        """config/channel/ 存在・必須キー不足: fail + /channel-new 取り込みモード案内."""
         config_dir = tmp_path / "config" / "channel"
         config_dir.mkdir(parents=True)
         # meta.json のみ（必須キーも不足）
         (config_dir / "meta.json").write_text(json.dumps({"channel": {}}), encoding="utf-8")
         r = doctor.check_channel_config(tmp_path)
         assert r.status == "fail"
-        action_str = json.dumps(r.next_action)
-        assert "/channel-import" in action_str
+        action_str = json.dumps(r.next_action, ensure_ascii=False)
+        assert "/channel-new" in action_str
+        assert "既存チャンネル取り込みモード" in action_str
 
     def test_valid_config_is_ok(self, tmp_path):
         """load_config() が成功する設定: ok."""
@@ -822,7 +845,7 @@ class TestCheckInitialSetupReadiness:
         assert "genre_line" in r.message
         assert "descriptions.md parse failed" in r.message
         assert r.next_action is not None
-        assert "/channel-setup" in r.next_action["instructions"]
+        assert "/channel-new" in r.next_action["instructions"]
         assert "/video-description" in r.next_action["instructions"]
 
     def test_valid_initial_setup_is_ok(self, tmp_path):
@@ -1051,6 +1074,38 @@ class TestBootstrapChecks:
         assert "旧 distrokid-prep skill が残存" in r.message
         assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
 
+    def test_skills_synced_legacy_channel_import_orphan_is_fail_with_prune(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-new", "setup"])
+        for skill_name in ["channel-new", "setup", "channel-import"]:
+            skill_dir = tmp_path / ".claude" / "skills" / skill_name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(f"# {skill_name}", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "旧 channel-import skill が残存" in r.message
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
+
+    def test_skills_synced_legacy_channel_setup_orphan_is_fail_with_prune(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-new", "setup"])
+        for skill_name in ["channel-new", "setup", "channel-setup"]:
+            skill_dir = tmp_path / ".claude" / "skills" / skill_name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(f"# {skill_name}", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "旧 channel-setup skill が残存" in r.message
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
+
     def test_skills_synced_legacy_distrokid_prep_only_is_fail_with_prune(self, tmp_path, monkeypatch):
         monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["distrokid-helper"])
         skill_dir = tmp_path / ".claude" / "skills" / "distrokid-prep"
@@ -1179,8 +1234,9 @@ class TestCheckAnalyticsReport:
         assert r.next_action is not None
         assert "/analytics-analyze" in r.next_action["instructions"]
 
-    def test_analysis_file_same_date_as_latest_data_is_ok(self, tmp_path):
+    def test_analysis_file_same_date_as_latest_data_is_ok(self, tmp_path, monkeypatch):
         """analysis report が latest data と同日なら stale ではない."""
+        monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20240202")
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
         (reports_dir / "analysis_20240201.md").write_text("# Analysis", encoding="utf-8")
@@ -1193,8 +1249,47 @@ class TestCheckAnalyticsReport:
         assert r.status == "ok"
         assert "analytics mode" in r.message
 
-    def test_latest_analysis_file_controls_staleness(self, tmp_path):
+    def test_analysis_file_same_date_but_absolute_stale_is_fail(self, tmp_path, monkeypatch):
+        """data/report が同日でも収集日が freshness_days 超過なら stale."""
+        monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20260702")
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20260622.md").write_text("# Analysis", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20260622_120000.json").write_text("{}", encoding="utf-8")
+
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "fail"
+        assert "freshness_days" in r.message
+        assert r.next_action is not None
+        assert "/analytics-collect" in r.next_action["instructions"]
+        assert "/analytics-analyze" in r.next_action["instructions"]
+
+    def test_analysis_file_absolute_stale_respects_collection_ideate_override(self, tmp_path, monkeypatch):
+        """collection-ideate freshness_days override は doctor の絶対鮮度判定にも効く."""
+        monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20260702")
+        (tmp_path / "config" / "skills").mkdir(parents=True)
+        (tmp_path / "config" / "skills" / "collection-ideate.yaml").write_text(
+            "freshness_days: 14\n",
+            encoding="utf-8",
+        )
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        (reports_dir / "analysis_20260622.md").write_text("# Analysis", encoding="utf-8")
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "analytics_data_20260622_120000.json").write_text("{}", encoding="utf-8")
+
+        r = doctor.check_analytics_report(tmp_path)
+        assert r.status == "ok"
+        assert "analytics mode" in r.message
+
+    def test_latest_analysis_file_controls_staleness(self, tmp_path, monkeypatch):
         """複数 report がある場合は最新 report 日付で stale を判定する."""
+        monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20240203")
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
         (reports_dir / "analysis_20240101.md").write_text("# Old", encoding="utf-8")
@@ -1354,21 +1449,21 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         assert r.status == "warn"
         assert "承認済み TTP 対象が 0 件" in r.message
 
-    def test_benchmark_channels_without_artifacts_warns_channel_setup_incomplete(self, tmp_path):
-        """承認済み TTP 対象があるのに成果物が無ければ /channel-setup 未完了へ誘導する."""
+    def test_benchmark_channels_without_artifacts_warns_channel_new_incomplete(self, tmp_path):
+        """承認済み TTP 対象があるのに成果物が無ければ /channel-new 再生成モード未完了へ誘導する."""
         _write_benchmark_channels(tmp_path)
 
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "warn"
-        assert "/channel-setup benchmark 反映未完了" in r.message
+        assert "/channel-new benchmark 反映未完了" in r.message
         assert "data/benchmark_*.json が無い" in r.message
         assert "docs/benchmarks/*.md が無い" in r.message
         assert "data/thumbnail_compare/benchmark/" in r.message
         assert "reference_images.default" in r.message
         assert r.next_action is not None
         payload = json.dumps(r.next_action, ensure_ascii=False)
-        assert "/channel-setup" in payload
+        assert "/channel-new" in payload
         assert "yt-doctor" in payload
         assert "channel-new Step 9" not in payload
 
@@ -1418,7 +1513,7 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "ok"
-        assert "/channel-setup 完了相当" in r.message
+        assert "/channel-new 再生成モード完了相当" in r.message
         assert r.next_action is None
 
     def test_scalar_thumbnail_ref_is_ok(self, tmp_path):
@@ -1429,7 +1524,7 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "ok"
-        assert "/channel-setup 完了相当" in r.message
+        assert "/channel-new 再生成モード完了相当" in r.message
 
     def test_mixed_real_thumbnail_ref_and_placeholder_warns(self, tmp_path):
         """実パスと未解決 placeholder が混在していたら未転記として warn する."""
@@ -1497,7 +1592,7 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         assert "data/thumbnail_compare/benchmark/ 配下ではない" in r.message
 
     def test_missing_benchmark_docs_are_checked(self, tmp_path):
-        """docs/benchmarks/*.md も /channel-setup benchmark 反映の完了条件に含める."""
+        """docs/benchmarks/*.md も /channel-new benchmark 反映の完了条件に含める."""
         _write_benchmark_channels(tmp_path)
         data_dir = tmp_path / "data"
         data_dir.mkdir(parents=True)
@@ -1551,8 +1646,9 @@ class TestDataReadinessSummary:
         assert summary["fail"] == 1
         assert summary["next_check_id"] == "analytics_report"
 
-    def test_fresh_analytics_without_benchmark_has_single_input_mode(self, tmp_path):
+    def test_fresh_analytics_without_benchmark_has_single_input_mode(self, tmp_path, monkeypatch):
         """analytics_report と benchmark_data が同じ入力モード契約を参照する."""
+        monkeypatch.setattr(doctor, "_today_yyyymmdd", lambda: "20240202")
         reports_dir = tmp_path / "reports"
         reports_dir.mkdir()
         (reports_dir / "analysis_20240201.md").write_text("# Analysis", encoding="utf-8")
@@ -1632,6 +1728,7 @@ def _write_ttp_readiness_files(base: Path) -> None:
                 "- 転写したい要素: title-structure / thumbnail-composition / music-style",
                 "- relationship: title-structure / thumbnail-composition",
                 "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
+                "- 画像承認: channel branding 画像 branding/icon.png と branding/banner.png をユーザー承認済み",
                 "- 未反映項目: なし",
                 "",
             ]
@@ -1642,6 +1739,7 @@ def _write_ttp_readiness_files(base: Path) -> None:
         json.dumps(
             {
                 "untrusted_data": True,
+                "reference_only": True,
                 "source": "youtube.channels.list(part=snippet,brandingSettings,localizations)",
                 "items": [
                     {
@@ -1651,11 +1749,32 @@ def _write_ttp_readiness_files(base: Path) -> None:
                         "localizations": {},
                     }
                 ],
+                "channel_image_references": [
+                    {
+                        "channel_id": "UC123",
+                        "title": "Rival",
+                        "untrusted_data": True,
+                        "reference_only": True,
+                        "icon": {
+                            "source": "snippet.thumbnails.high",
+                            "url": "https://example.com/rival-icon.jpg",
+                            "width": 800,
+                            "height": 800,
+                        },
+                        "banner": [
+                            {
+                                "source": "brandingSettings.image.bannerExternalUrl",
+                                "url": "https://example.com/rival-banner.jpg",
+                            }
+                        ],
+                    }
+                ],
             },
             ensure_ascii=False,
         ),
         encoding="utf-8",
     )
+    _write_channel_branding_output_images(base)
     data_dir = base / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     video_ids = [f"VID{i}" for i in range(1, 6)]
@@ -1696,12 +1815,27 @@ def _write_ttp_readiness_files(base: Path) -> None:
                 "    reference_images:",
                 "      default:",
                 "        - data/thumbnail_compare/benchmark/rival_1.jpg",
+                "      channel_branding:",
+                "        snapshot: docs/channel/competitor-branding-snapshot.json",
+                "        icon_references:",
+                "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].icon",
+                "        banner_references:",
+                "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].banner[0]",
+                "        output_icon: branding/icon.png",
+                "        output_banner: branding/banner.png",
                 "",
             ]
         ),
         encoding="utf-8",
     )
     (skills_dir / "suno.yaml").write_text('genre_line: "lo-fi jazz, soft piano"\n', encoding="utf-8")
+
+
+def _write_channel_branding_output_images(base: Path) -> None:
+    branding_dir = base / "branding"
+    branding_dir.mkdir(parents=True, exist_ok=True)
+    PILImage.new("RGB", (800, 800), color=(40, 80, 120)).save(branding_dir / "icon.png", format="PNG")
+    PILImage.new("RGB", (2048, 1152), color=(120, 80, 40)).save(branding_dir / "banner.png", format="PNG")
 
 
 class TestCheckTtpWfNewReadinessChannelNew:
@@ -1857,7 +1991,25 @@ class TestCheckTtpWfNewReadinessChannelNew:
         )
         _write_ttp_readiness_files(tmp_path)
         (tmp_path / "data" / "thumbnail_compare" / "benchmark" / "rival_1.jpg").unlink()
-        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text("image_generation: {}\n", encoding="utf-8")
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    reference_images:",
+                    "      channel_branding:",
+                    "        snapshot: docs/channel/competitor-branding-snapshot.json",
+                    "        icon_references:",
+                    "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].icon",
+                    "        banner_references:",
+                    "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].banner[0]",
+                    "        output_icon: branding/icon.png",
+                    "        output_banner: branding/banner.png",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
         (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
             "\n".join(
                 [
@@ -1867,6 +2019,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
                     "- 転写したい要素: title-structure / thumbnail-composition / music-style",
                     "- relationship: title-structure / thumbnail-composition",
                     "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
+                    "- 画像承認: channel branding 画像 branding/icon.png と branding/banner.png をユーザー承認済み",
                     "- 未反映項目: ユーザー承認済み例外: thumbnail reference は後続 /thumbnail で補完するためスキップ",
                     "",
                 ]
@@ -1877,6 +2030,33 @@ class TestCheckTtpWfNewReadinessChannelNew:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "ok"
+
+    def test_approved_thumbnail_exception_does_not_skip_channel_branding_config(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "data" / "thumbnail_compare" / "benchmark" / "rival_1.jpg").unlink()
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text("image_generation: {}\n", encoding="utf-8")
+        (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
+            "\n".join(
+                [
+                    "- source: https://www.youtube.com/channel/UC123",
+                    "- seed fetch 要約: channel snippet / branding を取得済み",
+                    "- 承認 / 不採用判断: Rival を承認済み",
+                    "- 転写したい要素: title-structure / thumbnail-composition / music-style",
+                    "- relationship: title-structure / thumbnail-composition",
+                    "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
+                    "- 画像承認: channel branding 画像 branding/icon.png と branding/banner.png をユーザー承認済み",
+                    "- 未反映項目: ユーザー承認済み例外: thumbnail reference は後続 /thumbnail で補完するためスキップ",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.channel_branding 未設定" in r.message
 
     def test_approved_music_exception_satisfies_missing_suno_readiness(self, tmp_path):
         _write_ttp_analytics(
@@ -1895,6 +2075,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
                     "- 転写したい要素: title-structure / thumbnail-composition / music-style",
                     "- relationship: title-structure / thumbnail-composition",
                     "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
+                    "- 画像承認: channel branding 画像 branding/icon.png と branding/banner.png をユーザー承認済み",
                     "- 未反映項目: ユーザー承認済み例外: music / 曲構造 TTP は後続 /suno で補完するためスキップ",
                     "",
                 ]
@@ -2171,6 +2352,311 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "承認済み TTP 対象の snapshot 不足" in r.message
 
+    def test_branding_snapshot_requires_reference_only_and_image_references(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "competitor-branding-snapshot.json").write_text(
+            json.dumps(
+                {
+                    "untrusted_data": True,
+                    "items": [{"id": "UC123", "snippet": {}, "brandingSettings": {}, "localizations": {}}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_only が true ではありません" in r.message
+        assert "channel_image_references が list ではありません" in r.message
+        assert "画像参照メタ不足" in r.message
+
+    def test_branding_snapshot_allows_missing_image_urls_with_fallback_note(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        snapshot = tmp_path / "docs" / "channel" / "competitor-branding-snapshot.json"
+        payload = json.loads(snapshot.read_text(encoding="utf-8"))
+        payload["channel_image_references"][0]["icon"] = {}
+        payload["channel_image_references"][0]["banner"] = []
+        snapshot.write_text(json.dumps(payload), encoding="utf-8")
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    reference_images:",
+                    "      default:",
+                    "        - data/thumbnail_compare/benchmark/rival_1.jpg",
+                    "      channel_branding:",
+                    "        snapshot: docs/channel/competitor-branding-snapshot.json",
+                    "        icon_references: []",
+                    "        banner_references: []",
+                    "        output_icon: branding/icon.png",
+                    "        output_banner: branding/banner.png",
+                    '      notes: "fallback: TTP seed memo provides channel branding direction"',
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_branding_snapshot_missing_image_urls_without_fallback_note_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        snapshot = tmp_path / "docs" / "channel" / "competitor-branding-snapshot.json"
+        payload = json.loads(snapshot.read_text(encoding="utf-8"))
+        payload["channel_image_references"][0]["icon"] = {}
+        payload["channel_image_references"][0]["banner"] = []
+        snapshot.write_text(json.dumps(payload), encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "icon 画像参照または fallback 根拠 note がありません" in r.message
+        assert "banner 画像参照または fallback 根拠 note がありません" in r.message
+
+    def test_branding_snapshot_icon_only_without_banner_fallback_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        snapshot = tmp_path / "docs" / "channel" / "competitor-branding-snapshot.json"
+        payload = json.loads(snapshot.read_text(encoding="utf-8"))
+        payload["channel_image_references"][0]["banner"] = []
+        snapshot.write_text(json.dumps(payload), encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "banner 画像参照または fallback 根拠 note がありません" in r.message
+
+    def test_branding_snapshot_banner_only_without_icon_fallback_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        snapshot = tmp_path / "docs" / "channel" / "competitor-branding-snapshot.json"
+        payload = json.loads(snapshot.read_text(encoding="utf-8"))
+        payload["channel_image_references"][0]["icon"] = {}
+        snapshot.write_text(json.dumps(payload), encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "icon 画像参照または fallback 根拠 note がありません" in r.message
+
+    def test_thumbnail_channel_branding_config_missing_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    reference_images:",
+                    "      default:",
+                    "        - data/thumbnail_compare/benchmark/rival_1.jpg",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.channel_branding 未設定" in r.message
+
+    def test_thumbnail_channel_branding_refs_required_when_snapshot_has_urls(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    reference_images:",
+                    "      default:",
+                    "        - data/thumbnail_compare/benchmark/rival_1.jpg",
+                    "      channel_branding:",
+                    "        snapshot: docs/channel/competitor-branding-snapshot.json",
+                    "        icon_references: []",
+                    "        banner_references: []",
+                    "        output_icon: branding/icon.png",
+                    "        output_banner: branding/banner.png",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.channel_branding.icon_references 未設定" in r.message
+        assert "reference_images.channel_branding.banner_references 未設定" in r.message
+
+    def test_thumbnail_channel_branding_output_paths_required(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    reference_images:",
+                    "      default:",
+                    "        - data/thumbnail_compare/benchmark/rival_1.jpg",
+                    "      channel_branding:",
+                    "        snapshot: docs/channel/competitor-branding-snapshot.json",
+                    "        icon_references:",
+                    "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].icon",
+                    "        banner_references:",
+                    "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].banner[0]",
+                    "        output_icon: wrong/icon.png",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "reference_images.channel_branding.output_icon が未設定または不正" in r.message
+        assert "reference_images.channel_branding.output_banner が未設定または不正" in r.message
+
+    def test_thumbnail_channel_branding_refs_must_resolve_to_snapshot_urls(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "config" / "skills" / "thumbnail.yaml").write_text(
+            "\n".join(
+                [
+                    "image_generation:",
+                    "  gemini:",
+                    "    reference_images:",
+                    "      default:",
+                    "        - data/thumbnail_compare/benchmark/rival_1.jpg",
+                    "      channel_branding:",
+                    "        snapshot: docs/channel/competitor-branding-snapshot.json",
+                    "        icon_references:",
+                    "          - not-a-snapshot-icon-ref",
+                    "        banner_references:",
+                    "          - docs/channel/competitor-branding-snapshot.json#channel_image_references[0].banner[9]",
+                    "        output_icon: branding/icon.png",
+                    "        output_banner: branding/banner.png",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "icon_references に snapshot fragment として解決できない参照があります" in r.message
+        assert "banner_references に snapshot fragment として解決できない参照があります" in r.message
+
+    def test_channel_branding_generated_images_are_required(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "branding" / "icon.png").unlink()
+        (tmp_path / "branding" / "banner.png").write_text("not an image", encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "branding/icon.png が未生成" in r.message
+        assert "branding/banner.png を画像として読み込めません" in r.message
+
+    @pytest.mark.parametrize("extension", [".jpg", ".jpeg", ".webp"])
+    def test_channel_branding_generated_image_suggests_same_stem_candidate(self, tmp_path, extension):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "branding" / "icon.png").unlink()
+        (tmp_path / "branding" / f"icon{extension}").write_bytes(b"candidate")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "branding/icon.png が未生成" not in r.message
+        assert f"branding/icon{extension}" in r.message
+        assert "branding/icon.png にリネーム/変換してください" in r.message
+
+    def test_channel_branding_generated_image_lists_multiple_version_candidates(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "branding" / "banner.png").unlink()
+        PILImage.new("RGB", (2048, 1152), color=(10, 20, 30)).save(tmp_path / "branding" / "banner.jpg", format="JPEG")
+        PILImage.new("RGB", (2048, 1152), color=(30, 20, 10)).save(
+            tmp_path / "branding" / "banner-v2.jpg", format="JPEG"
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "branding/banner.png が未生成" not in r.message
+        assert "branding/banner.jpg" in r.message
+        assert "branding/banner-v2.jpg" in r.message
+        assert "最終版を確認してから変換してください" in r.message
+        assert "自動判定はしません" in r.message
+
+    def test_main_json_reports_channel_branding_candidates_through_public_cli(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        _write_minimal_config(tmp_path)
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "branding" / "banner.png").unlink()
+        (tmp_path / "branding" / "banner.jpeg").write_bytes(b"candidate")
+        (tmp_path / "branding" / "banner-v2.webp").write_bytes(b"candidate")
+
+        code = doctor.main(["--json", "--target", str(tmp_path)])
+
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        ttp_check = next(check for check in payload["checks"] if check["id"] == "ttp_wf_new_readiness")
+        assert ttp_check["status"] == "warn"
+        assert "branding/banner.png が未生成" not in ttp_check["message"]
+        assert "branding/banner.jpeg" in ttp_check["message"]
+        assert "branding/banner-v2.webp" in ttp_check["message"]
+        assert "最終版を確認してから変換してください" in ttp_check["message"]
+        assert "自動判定はしません" in ttp_check["message"]
+
+    def test_channel_branding_generated_image_aspect_ratio_is_checked(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        PILImage.new("RGB", (800, 600), color=(10, 20, 30)).save(tmp_path / "branding" / "icon.png", format="PNG")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "branding/icon.png のアスペクト比が不正です" in r.message
+
+    def test_channel_branding_generated_images_require_approval_record(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md").write_text(
+            "\n".join(
+                [
+                    "- source: https://www.youtube.com/channel/UC123",
+                    "- seed fetch 要約: channel snippet / branding を取得済み",
+                    "- 承認 / 不採用判断: Rival を承認済み",
+                    "- 転写したい要素: title-structure / thumbnail-composition / music-style",
+                    "- relationship: title-structure / thumbnail-composition",
+                    "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
+                    "- 未反映項目: なし",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "channel branding 画像のユーザー承認記録がありません" in r.message
+
     def test_missing_thumbnail_reference_file_warns(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
         _write_ttp_readiness_files(tmp_path)
@@ -2384,6 +2870,112 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "rival: VID1.json のトップレベルが object ではありません" in r.message
         assert "rival: video_analysis が一部のみ (4/5)" in r.message
+
+    def _write_rival_benchmark(self, tmp_path, videos: list[dict]) -> None:
+        (tmp_path / "data" / "benchmark_20240101.json").write_text(
+            json.dumps({"channels": [{"slug": "rival", "videos": videos}]}),
+            encoding="utf-8",
+        )
+
+    def _write_rival_analyses(self, tmp_path, video_ids: list[str]) -> None:
+        analysis_dir = tmp_path / "data" / "video_analysis" / "rival"
+        for path in analysis_dir.glob("*.json"):
+            path.unlink()
+        for video_id in video_ids:
+            (analysis_dir / f"{video_id}.json").write_text(json.dumps({"video_id": video_id}), encoding="utf-8")
+
+    def test_live_video_is_excluded_and_next_vod_promoted(self, tmp_path):
+        # Given: top 5 の 2 位が live 配信 (duration_iso == "P0D")、次点 VOD 込みで 5 本の解析済み
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        videos = [
+            {"video_id": "VID1", "views": 50000, "duration_iso": "PT1H"},
+            {"video_id": "LIVE1", "views": 49000, "duration_iso": "P0D"},
+            {"video_id": "VID2", "views": 48000, "duration_iso": "PT1H"},
+            {"video_id": "VID3", "views": 47000, "duration_iso": "PT1H"},
+            {"video_id": "VID4", "views": 46000, "duration_iso": "PT1H"},
+            {"video_id": "VID5", "views": 45000, "duration_iso": "PT1H"},
+        ]
+        self._write_rival_benchmark(tmp_path, videos)
+        self._write_rival_analyses(tmp_path, ["VID1", "VID2", "VID3", "VID4", "VID5"])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+        assert "live 配信 1 本" in r.message
+
+    def test_live_exclusion_shrinks_denominator_when_vods_run_short(self, tmp_path):
+        # Given: benchmark が 5 本ちょうどで 1 本が live → VOD 4 本の解析で充足する
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        videos = [
+            {"video_id": "VID1", "views": 50000, "duration_iso": "PT1H"},
+            {"video_id": "LIVE1", "views": 49000, "duration_iso": "P0D"},
+            {"video_id": "VID2", "views": 48000, "duration_iso": "PT1H"},
+            {"video_id": "VID3", "views": 47000, "duration_iso": "PT1H"},
+            {"video_id": "VID4", "views": 46000, "duration_iso": "PT1H"},
+        ]
+        self._write_rival_benchmark(tmp_path, videos)
+        self._write_rival_analyses(tmp_path, ["VID1", "VID2", "VID3", "VID4"])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+        assert "live 配信 1 本" in r.message
+
+    def test_live_exclusion_shrinks_underfilled_benchmark_denominator(self, tmp_path):
+        # Given: benchmark 総数が 5 本未満でも live 混在なら解析可能 VOD を母数にする
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        videos = [
+            {"video_id": "VID1", "views": 50000, "duration_iso": "PT1H"},
+            {"video_id": "LIVE1", "views": 49000, "duration_iso": "P0D"},
+            {"video_id": "VID2", "views": 48000, "duration_iso": "PT1H"},
+            {"video_id": "VID3", "views": 47000, "duration_iso": "PT1H"},
+        ]
+        self._write_rival_benchmark(tmp_path, videos)
+        self._write_rival_analyses(tmp_path, ["VID1", "VID2", "VID3"])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+        assert "live 配信 1 本" in r.message
+        assert "benchmark top 5 が不足" not in r.message
+
+    def test_promoted_vod_without_analysis_still_warns_with_live_note(self, tmp_path):
+        # Given: live 除外で 6 位 VOD が繰り上がるが、その解析がまだ無い
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        videos = [
+            {"video_id": "VID1", "views": 50000, "duration_iso": "PT1H"},
+            {"video_id": "LIVE1", "views": 49000, "duration_iso": "P0D"},
+            {"video_id": "VID2", "views": 48000, "duration_iso": "PT1H"},
+            {"video_id": "VID3", "views": 47000, "duration_iso": "PT1H"},
+            {"video_id": "VID4", "views": 46000, "duration_iso": "PT1H"},
+            {"video_id": "VID5", "views": 45000, "duration_iso": "PT1H"},
+        ]
+        self._write_rival_benchmark(tmp_path, videos)
+        self._write_rival_analyses(tmp_path, ["VID1", "VID2", "VID3", "VID4"])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "rival: video_analysis が一部のみ (4/5)" in r.message
+        assert "live 配信 1 本" in r.message
+
+    def test_all_live_benchmark_warns_no_analyzable_vod(self, tmp_path):
+        # Given: 該当 slug の benchmark が live 配信のみ
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        videos = [{"video_id": f"LIVE{i}", "views": 50000 - i, "duration_iso": "P0D"} for i in range(1, 6)]
+        self._write_rival_benchmark(tmp_path, videos)
+        self._write_rival_analyses(tmp_path, [])
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "rival: benchmark 上位が live 配信のみで解析可能な VOD がありません" in r.message
+        assert "live 配信 5 本" in r.message
 
     def test_video_analysis_symlink_outside_channel_is_rejected(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])

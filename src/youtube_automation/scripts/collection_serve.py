@@ -23,7 +23,7 @@ import re
 import tempfile
 import urllib.parse
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -40,7 +40,6 @@ from youtube_automation.scripts.suno_artifacts import (
     COLLECTIONS_ROUTE,
     DOCUMENTATION_DIRNAME,
     DOWNLOADED_ROUTE_SUFFIX,
-    SUNO_PLAYLISTS_ROUTE,
     SUNO_PROMPTS_JSON_FILENAME,
     SUNO_PROMPTS_ROUTE,
     collection_downloaded_route,
@@ -62,6 +61,7 @@ from youtube_automation.utils.suno_downloaded_artifacts import (
 
 DEFAULT_PORT = 7873
 VERSION_ROUTE = "/version"
+SERVER_INFO_ROUTE = "/server-info"
 MIN_EXTENSION_VERSION = "0.2.0"
 _EXTENSION_ORIGIN_SCHEME = "chrome-extension://"
 # overlay 化（#892/#895）で content script の fetch が page origin になったため、
@@ -77,13 +77,9 @@ _DEFAULT_ALLOWED_WEB_ORIGINS = frozenset(
 # `collections/planning/` 配下で 1 コレクションを示すディレクトリ接尾辞。
 _COLLECTION_DIR_SUFFIX = "-collection"
 
-# Suno playlist capture の出力先（`<root>/config/suno-playlists.json`）と env fallback 名（#893）。
-_PLAYLISTS_OUTPUT_RELPATH = Path("config") / "suno-playlists.json"
-_PLAYLIST_CAPTURE_ROOT_ENV = "PLAYLIST_CAPTURE_ROOT"
-_PLAYLIST_CAPTURE_PREFIX_ENV = "PLAYLIST_CAPTURE_PREFIX"
-
 # DistroKid dir mode: リリース記録の出力先 JSON（`<root>/config/distrokid-releases.json`）（#934）。
 _DISTROKID_RELEASES_OUTPUT_RELPATH = Path("config") / "distrokid-releases.json"
+_DISTROKID_CAPTURE_ROOT_ENV = "DISTROKID_CAPTURE_ROOT"
 
 # 30-distrokid サブディレクトリ名（#934）。コレクション配下のこのサブディレクトリが disc を含む。
 _DISTROKID_DIRNAME = "30-distrokid"
@@ -100,95 +96,34 @@ _MAX_POST_BODY_BYTES = 1024 * 1024
 _MAX_DOWNLOADED_POST_BODY_BYTES = 10 * 1024
 
 
-def playlists_output_path(root: Path) -> Path:
-    """capture 出力先 JSON の実体パス `<root>/config/suno-playlists.json` を返す（#893）。"""
-    return root / _PLAYLISTS_OUTPUT_RELPATH
+def _hostname_slug(text: str) -> str:
+    """チャンネル名を `*.localhost` 用の ASCII hostname label にする（#1352）。"""
+    slug = re.sub(r"[^a-z0-9]+", "-", text.strip().lower())
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug or "youtube-automation"
 
 
-def _slugify(text: str) -> str:
-    """テーマ文字列を小文字・連続空白畳み込みの slug にする（#893）。
-
-    前後空白を除去し、連続空白を `-` 1 つに畳み込み、小文字化する。
-    既にハイフン区切りの文字列（collection dir 由来）は空白が無いため不変。
-    """
-    return re.sub(r"\s+", "-", text.strip().lower())
+def channel_hostname(channel_name: str) -> str:
+    """チャンネル識別できるローカル hostname を返す。"""
+    return f"{_hostname_slug(channel_name)}.localhost"
 
 
-def _prefix_pattern(prefix: str) -> str:
-    r"""prefix を空白/ハイフン無差別の正規表現片にする（#976）。
-
-    `soulful-grooves` ↔ playlist title 側の `Soulful Grooves` のように、チャンネル名の
-    区切りが title では空白・slug ではハイフンになる。セグメント単位で escape し
-    `[\s-]+` で連結することで両表記を同一視する（大小無視は呼び出し側の IGNORECASE）。
-    """
-    segments = [re.escape(seg) for seg in re.split(r"[\s-]+", prefix.strip()) if seg]
-    return r"[\s-]+".join(segments)
-
-
-def normalize_suno_title(title: str, prefix: str) -> str | None:
-    """`<prefix> | <theme>` を `<prefix>-<theme-slug>` に正規化する（#893 要件3）。
-
-    .. deprecated:: #1145
-        slug matching による status 判定は status enum に置換された。
-        write_suno_playlists の内部利用を除き呼び出し元は残らない。
-        後方互換のために残置。次回 breaking で削除予定。
-
-    prefix はパイプ直前トークンと完全一致する必要がある（部分一致は弾く）。大小無視、
-    区切りの空白/ハイフンは無差別（`Soulful Grooves |` も prefix `soulful-grooves` に
-    一致する、#976）、パイプ前後の空白は任意、theme の連続空白は `-` に畳み込む。
-    prefix 不一致・パイプ無しは None（channel-agnostic フィルタはこの純関数に閉じる）。
-    出力 slug の prefix 部は `prefix.lower()` のハイフン正準形。
-    """
-    pattern = re.compile(rf"^{_prefix_pattern(prefix)}\s*\|\s*(.+)$", re.IGNORECASE)
-    match = pattern.match(title.strip())
-    if match is None:
-        return None
-    theme_slug = _slugify(match.group(1))
-    if not theme_slug:
-        return None
-    return f"{prefix.lower()}-{theme_slug}"
-
-
-def _playlists_list_to_dict(data: list) -> dict:
-    """旧 wf-batch list スキーマ `[{slug, suno_url, suno_title, captured_at}]` を dict へ写像する（#976）。
-
-    手書き運用時代のチャンネル（rjn / deepfocus365）に残る形式。slug が無い・非 dict の
-    item は skip（fail-soft）。`suno_title`/`suno_url` を正準キー `title`/`url` に改名し、
-    同名キーが既にあればそちらを優先する。
-    """
-    out: dict = {}
-    for item in data:
-        if not isinstance(item, dict):
-            continue
-        slug = item.get("slug")
-        if not isinstance(slug, str) or not slug:
-            continue
-        out[slug] = {
-            "title": str(item.get("title") or item.get("suno_title") or ""),
-            "url": str(item.get("url") or item.get("suno_url") or ""),
-            "captured_at": str(item.get("captured_at") or ""),
-        }
-    return out
-
-
-def _read_playlists_json(target: Path) -> dict:
-    """既存 capture JSON を dict で読む。不在・破損・非 dict/list は空 dict 扱い（#893）。
-
-    旧 wf-batch list スキーマは dict へ写像して返す（#976）。これにより
-    `write_suno_playlists` の merge が list 形式の既存ファイルを
-    「破損」扱いで無視・上書き消失させない。
-    """
-    if not target.is_file():
-        return {}
-    try:
-        data = json.loads(target.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return {}
-    if isinstance(data, dict):
-        return data
-    if isinstance(data, list):
-        return _playlists_list_to_dict(data)
-    return {}
+def build_server_info(channel_name: str, channel_short: str, port: int) -> dict[str, str | int]:
+    """helper 拡張の接続先 selector に出す配信元情報（#1352）。"""
+    hostname_source = (
+        channel_short if channel_short and not re.search(r"[a-z0-9]", channel_name.lower()) else channel_name
+    )
+    hostname = channel_hostname(hostname_source)
+    base_url = f"http://{hostname}:{port}"
+    short = channel_short or channel_name
+    return {
+        "channel_name": channel_name,
+        "channel_short": short,
+        "hostname": hostname,
+        "port": port,
+        "base_url": base_url,
+        "label": f"{channel_name} ({hostname}:{port})",
+    }
 
 
 def distrokid_releases_output_path(root: Path) -> Path:
@@ -340,42 +275,6 @@ def build_distrokid_collections_index(
                 }
             )
     return index
-
-
-def write_suno_playlists(root: Path, payload: list[dict], *, prefix: str) -> int:
-    """capture した playlist を `<root>/config/suno-playlists.json` へ atomic merge write する（#893 要件4）。
-
-    .. deprecated:: #1145
-        新規コレクションは POST ``/collections/<id>/downloaded`` で playlist URL を
-        workflow-state.json に記録する。本関数は旧 ``POST /suno/playlists`` の内部実装
-        として後方互換のために残置する。下流チャンネル repo の `/wf-batch` 系スキルが
-        ``config/suno-playlists.json`` を読まなくなったことを確認してから #1301 で削除する。
-
-    prefix 不一致 item は skip、同 slug は captured_at 後勝ちで上書き、既存 JSON 破損は
-    空 dict 扱いで再作成する。`tempfile.mkstemp` → `os.replace` で中間 temp を残さず
-    書き込み、実際に書いた件数を返す。
-    """
-    target = playlists_output_path(root)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    data = _read_playlists_json(target)
-
-    captured_at = datetime.now(timezone.utc).isoformat()
-    written = 0
-    for item in payload:
-        title = str(item.get("title", ""))
-        slug = normalize_suno_title(title, prefix)
-        url = str(item.get("url", ""))
-        if slug is None or not url:
-            continue
-        entry = {"title": title, "url": url, "captured_at": captured_at}
-        existing = data.get(slug)
-        # captured_at 後勝ち。同一バッチ・新規書き込みは captured_at が等しい/新しいため上書きする。
-        if not isinstance(existing, dict) or str(existing.get("captured_at", "")) <= captured_at:
-            data[slug] = entry
-            written += 1
-
-    _atomic_json_write(target, data, prefix=".suno-playlists-")
-    return written
 
 
 def resolve_prompts_path(path: Path) -> Path:
@@ -631,12 +530,13 @@ def create_server(
     port: int,
     allow_origin: str | None,
     *,
+    server_info: dict[str, str | int] | None = None,
     prompts_path: Path | None,
     collection_dir: Path | None,
     distrokid: Distrokid | None,
     collections_root: Path | None = None,
     distrokid_source: str | None = None,
-    playlist_capture: tuple[Path, str | None] | None = None,
+    capture_root: Path | None = None,
 ) -> ThreadingHTTPServer:
     """サブパス分離した GET / POST / CORS preflight を返すサーバーを生成する.
 
@@ -644,16 +544,17 @@ def create_server(
     単一ファイル mode の `/suno/prompts.json` は配信しない）。既定 None は
     単一ファイル mode（`/suno/prompts.json` + `/distrokid/*`）。
 
-    `playlist_capture=(root, prefix)` 指定時のみ POST `/suno/playlists` を有効化する（#893）。
-    `playlist_capture=(root, None)` は DistroKid release capture のみ有効化し、Suno POST は 404。
+    `capture_root` 指定時のみ DistroKid release capture の POST を有効化する。
     None なら capture 系 POST は 404。
 
     distrokid が None または `enabled == False` のとき `/distrokid/*` は 404。
     """
     dir_mode = collections_root is not None
     distrokid_enabled = distrokid is not None and distrokid.enabled
-    capture_root, capture_prefix = playlist_capture if playlist_capture is not None else (None, None)
     serve_token = str(uuid.uuid4())
+    resolved_server_info = (
+        server_info if server_info is not None else build_server_info("YouTube Automation", "YA", port)
+    )
 
     class _Handler(BaseHTTPRequestHandler):
         def _allowed_origin(self) -> str | None:
@@ -776,39 +677,6 @@ def create_server(
 
         def do_POST(self) -> None:  # noqa: N802
             # GET と異なり POST は route ごとに書き込み可否を明示的に判定する。
-            origin = self._allowed_origin()
-
-            # POST /suno/playlists: capture 有効時のみ（#893 要件5）。
-            # .. deprecated:: #1145
-            #     新規コレクションは POST /collections/<id>/downloaded を使用する。
-            #     下流チャンネル repo の /wf-batch 系スキルが config/suno-playlists.json を読む
-            #     旧運用との互換だけに残置。削除条件は #1301 で追跡する。
-            if self.path == SUNO_PLAYLISTS_ROUTE:
-                if capture_root is None or capture_prefix is None:
-                    self.send_error(404, "Not Found")
-                    return
-                if origin is None:
-                    self.send_error(403, "Forbidden")
-                    return
-                raw = self._read_limited_post_body()
-                if raw is None:
-                    return
-                try:
-                    payload = json.loads(raw.decode("utf-8"))
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    # 不正 JSON は fail-loud（silent に空書き込みしない、#893 要件5）。
-                    self.send_error(400, "Bad Request")
-                    return
-                if not isinstance(payload, list):
-                    # body は配列契約のまま受ける（envelope 流用を弾く）。
-                    self.send_error(400, "Bad Request")
-                    return
-                written = write_suno_playlists(capture_root, payload, prefix=capture_prefix)
-                resp_body = json.dumps({"written": written, "path": str(playlists_output_path(capture_root))}).encode(
-                    "utf-8"
-                )
-                self._send_bytes(resp_body, "application/json; charset=utf-8")
-                return
 
             # POST /distrokid/releases: capture 有効時のみ（#934）。
             if self.path == _DISTROKID_RELEASES_ROUTE:
@@ -816,12 +684,15 @@ def create_server(
                     # distrokid disabled / capture root 未指定時は endpoint 自体を出さない。
                     self.send_error(404, "Not Found")
                     return
+                # 書き込み境界（#1360）: /downloaded と同じく extension lock + serve token 必須。
+                # MV3 background fetch は Origin を省略しうるため _is_locked_extension_request で
+                # 「Origin 無し or 完全一致」を許可し、本人性は X-Serve-Token で担保する。
                 raw_origin = self.headers.get("Origin")
-                if (
-                    allow_origin is None
-                    or not allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME)
-                    or raw_origin != allow_origin
-                ):
+                if not _is_locked_extension_request(raw_origin, allow_origin):
+                    self.send_error(403, "Forbidden")
+                    return
+                req_token = self.headers.get("X-Serve-Token")
+                if req_token != serve_token:
                     self.send_error(403, "Forbidden")
                     return
                 raw = self._read_limited_post_body()
@@ -877,17 +748,15 @@ def create_server(
                 return
 
             # その他のパスは 404。POST は定義済みルートのみハンドルする。
-            if capture_root is None:
-                self.send_error(404, "Not Found")
-                return
-            if origin is None:
-                self.send_error(403, "Forbidden")
-                return
             self.send_error(404, "Not Found")
 
         def do_GET(self) -> None:  # noqa: N802
             if self.path == VERSION_ROUTE:
                 body = json.dumps(build_version_payload()).encode("utf-8")
+                self._send_bytes(body, "application/json; charset=utf-8")
+                return
+            if self.path == SERVER_INFO_ROUTE:
+                body = json.dumps(resolved_server_info, ensure_ascii=False).encode("utf-8")
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return
             if self.path == "/auth/token":
@@ -1059,26 +928,16 @@ def create_server(
         def log_message(self, *args) -> None:  # サーバーログを抑制
             pass
 
-    return ThreadingHTTPServer(("localhost", port), _Handler)
+    server = ThreadingHTTPServer(("localhost", port), _Handler)
+    if server_info is None:
+        resolved_server_info.update(build_server_info("YouTube Automation", "YA", server.server_address[1]))
+    return server
 
 
-def _resolve_playlist_capture(root_arg: str | None, prefix_arg: str | None) -> tuple[Path, str | None] | None:
-    """CLI 引数 + env fallback から playlist capture 設定を解決する（#893 要件1/2）.
-
-    root 未設定なら capture は無効。prefix だけ指定は `ConfigError` で fail-loud する。
-    root だけ指定した場合は DistroKid release capture のみ有効化し、Suno playlist capture は無効。
-    両方設定なら `(Path(root).expanduser(), prefix)`。
-    """
-    root = root_arg if root_arg is not None else os.environ.get(_PLAYLIST_CAPTURE_ROOT_ENV)
-    prefix = prefix_arg if prefix_arg is not None else os.environ.get(_PLAYLIST_CAPTURE_PREFIX_ENV)
-    if root is None and prefix is None:
-        return None
-    if root is None:
-        raise ConfigError(
-            "--playlist-capture-prefix を指定する場合は --playlist-capture-root も指定してください "
-            f"(env: {_PLAYLIST_CAPTURE_ROOT_ENV} / {_PLAYLIST_CAPTURE_PREFIX_ENV})。"
-        )
-    return Path(root).expanduser(), prefix
+def _resolve_distrokid_capture_root(root_arg: str | None) -> Path | None:
+    """CLI 引数 + env fallback から DistroKid release capture root を解決する."""
+    root = root_arg if root_arg is not None else os.environ.get(_DISTROKID_CAPTURE_ROOT_ENV)
+    return Path(root).expanduser() if root is not None else None
 
 
 def main() -> None:
@@ -1103,8 +962,9 @@ def main() -> None:
         "--allow-origin",
         default=None,
         help=(
-            "lock CORS to a single origin via exact match. POST /collections/<id>/downloaded "
-            "and GET /auth/token require an explicit chrome-extension://<EXTENSION_ID> lock. "
+            "lock CORS to a single origin via exact match. POST /collections/<id>/downloaded, "
+            f"POST {_DISTROKID_RELEASES_ROUTE} and GET /auth/token require an explicit "
+            "chrome-extension://<EXTENSION_ID> lock. "
             "Default allows chrome-extension scheme plus suno.com / distrokid.com helper origins "
             "for read-only routes only."
         ),
@@ -1118,25 +978,16 @@ def main() -> None:
         ),
     )
     parser.add_argument(
-        "--playlist-capture-root",
+        "--distrokid-capture-root",
         default=None,
         help=(
-            "downstream channel repo root for capture writes; enables POST "
-            f"{_DISTROKID_RELEASES_ROUTE}, and with --playlist-capture-prefix also enables "
-            f"POST {SUNO_PLAYLISTS_ROUTE} (env fallback: {_PLAYLIST_CAPTURE_ROOT_ENV})"
-        ),
-    )
-    parser.add_argument(
-        "--playlist-capture-prefix",
-        default=None,
-        help=(
-            "Suno title / slug prefix to capture, e.g. 'df365'. "
-            f"Only required for POST {SUNO_PLAYLISTS_ROUTE} (env fallback: {_PLAYLIST_CAPTURE_PREFIX_ENV})"
+            "downstream channel repo root for DistroKid release capture writes; enables POST "
+            f"{_DISTROKID_RELEASES_ROUTE} (env fallback: {_DISTROKID_CAPTURE_ROOT_ENV})"
         ),
     )
     args = parser.parse_args()
 
-    playlist_capture = _resolve_playlist_capture(args.playlist_capture_root, args.playlist_capture_prefix)
+    capture_root = _resolve_distrokid_capture_root(args.distrokid_capture_root)
 
     # path が `*-collection/` を並べたディレクトリなら dir mode（#816）。
     collection_dirs = find_collection_dirs(args.path)
@@ -1144,22 +995,31 @@ def main() -> None:
         # dir mode でも distrokid エンドポイントを有効化するため load_config() を試みる（#934）。
         # distrokid 設定が無いチャンネルでは None のままにして 404 にフォールバックする。
         try:
-            distrokid_cfg = load_config().distrokid
+            config = load_config()
+            distrokid_cfg = config.distrokid
+            channel_name = config.meta.channel_name
+            channel_short = config.meta.channel_short
         except ConfigError:
             distrokid_cfg = None
+            channel_name = "YouTube Automation"
+            channel_short = "YA"
+        server_info = build_server_info(channel_name, channel_short, args.port)
         server = create_server(
             args.port,
             args.allow_origin,
+            server_info=server_info,
             prompts_path=None,
             collection_dir=None,
             distrokid=distrokid_cfg,
             collections_root=args.path,
-            playlist_capture=playlist_capture,
+            capture_root=capture_root,
         )
         port = server.server_address[1]
-        print(
-            f"Serving {len(collection_dirs)} collections from {args.path} at http://localhost:{port}{COLLECTIONS_ROUTE}"
-        )
+        server_info.update(build_server_info(channel_name, channel_short, port))
+        canonical_url = str(server_info["base_url"])
+        print(f"Serving {len(collection_dirs)} collections from {args.path} at {canonical_url}{COLLECTIONS_ROUTE}")
+        print(f"  legacy URL: http://localhost:{port}{COLLECTIONS_ROUTE}")
+        print(f"  selector label: {server_info['label']}")
         if distrokid_cfg is not None and distrokid_cfg.enabled:
             print(
                 f"  distrokid dir mode enabled: {_DISTROKID_COLLECTIONS_ROUTE}, "
@@ -1170,40 +1030,43 @@ def main() -> None:
         prompts_path = resolve_prompts_path(args.path)
         # collection dir: dir 引数はそのまま、json ファイル引数なら <collection>/20-documentation/x.json から 2 階層上。
         collection_dir = args.path if args.path.is_dir() else args.path.parent.parent
-        distrokid = load_config().distrokid
+        config = load_config()
+        distrokid = config.distrokid
+        channel_name = config.meta.channel_name
+        channel_short = config.meta.channel_short
+        server_info = build_server_info(channel_name, channel_short, args.port)
 
         server = create_server(
             args.port,
             args.allow_origin,
+            server_info=server_info,
             prompts_path=prompts_path,
             collection_dir=collection_dir,
             distrokid=distrokid,
             distrokid_source=args.distrokid_source,
-            playlist_capture=playlist_capture,
+            capture_root=capture_root,
         )
         port = server.server_address[1]
-        print(f"Serving {collection_dir} at http://localhost:{port}{SUNO_PROMPTS_ROUTE}")
+        server_info.update(build_server_info(channel_name, channel_short, port))
+        canonical_url = str(server_info["base_url"])
+        print(f"Serving {collection_dir} at {canonical_url}{SUNO_PROMPTS_ROUTE}")
+        print(f"  legacy URL: http://localhost:{port}{SUNO_PROMPTS_ROUTE}")
+        print(f"  selector label: {server_info['label']}")
         if distrokid.enabled:
             print(f"  distrokid endpoints enabled: {DISTROKID_RELEASE_ROUTE}, {DISTROKID_ASSETS_PREFIX}<path>")
         distrokid_capture_active = distrokid.enabled
-    if playlist_capture is not None and distrokid_capture_active:
-        capture_root, _ = playlist_capture
+    if capture_root is not None and distrokid_capture_active:
         print(
             f"  distrokid releases enabled: POST {_DISTROKID_RELEASES_ROUTE} "
             f"-> {distrokid_releases_output_path(capture_root)}"
         )
-    if playlist_capture is not None and playlist_capture[1] is not None:
-        capture_root, capture_prefix = playlist_capture
-        print(
-            f"  playlist capture enabled: POST {SUNO_PLAYLISTS_ROUTE} "
-            f"-> {playlists_output_path(capture_root)} (prefix='{capture_prefix}')"
-        )
     if args.allow_origin is not None and args.allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME):
-        print(f"  serve token: GET http://localhost:{port}/auth/token")
+        print(f"  serve token: GET {canonical_url}/auth/token")
     else:
         print(
             "  serve token: disabled until --allow-origin "
-            "chrome-extension://<EXTENSION_ID> is set for /auth/token and /downloaded"
+            "chrome-extension://<EXTENSION_ID> is set for /auth/token, "
+            f"/downloaded and {_DISTROKID_RELEASES_ROUTE}"
         )
     print("Press Ctrl-C to stop.")
     try:

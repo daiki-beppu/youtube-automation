@@ -53,9 +53,6 @@ async function loadBackground(opts?: {
   postDownloadedError?: Error;
   sessionState?: StoredDownloadWatcher;
   sessionGetDelayMs?: number;
-  tabCreateResult?: { id?: number };
-  capturePlaylistsResult?: Array<{ title: string; url: string }>;
-  capturePlaylistsError?: Error;
   useRealPostDownloaded?: boolean;
   fetchImpl?: ReturnType<typeof vi.fn>;
 }) {
@@ -71,18 +68,12 @@ async function loadBackground(opts?: {
     return fn;
   });
 
-  const browserTabs = {
-    create: vi.fn(() => Promise.resolve(opts?.tabCreateResult ?? { id: 99 })),
-    remove: vi.fn(() => Promise.resolve()),
-  };
-
   vi.stubGlobal("browser", {
     runtime: {
       onInstalled: { addListener: vi.fn() },
       getManifest: () => ({ version: "0.1.0" }),
     },
     action: { onClicked: { addListener: vi.fn() } },
-    tabs: browserTabs,
   });
 
   // chrome.downloads stub
@@ -203,23 +194,10 @@ async function loadBackground(opts?: {
     vi.doMock("../../shared/api", () => ({
       fetchCollectionPrompts: vi.fn(() => Promise.resolve([])),
       fetchCollections: vi.fn(() => Promise.resolve([])),
-      fetchPrompts: vi.fn(() => Promise.resolve([])),
       postDownloaded: postDownloadedMock,
       resolveCompatibilityWarning: vi.fn(() => Promise.resolve("")),
     }));
   }
-
-  const captureFromTabMock = opts?.capturePlaylistsError
-    ? vi.fn(() => Promise.reject(opts.capturePlaylistsError))
-    : vi.fn((_tabId: number, deps: { sendCapture: (tabId: number) => Promise<unknown> }) => {
-        void deps.sendCapture(99);
-        return Promise.resolve(
-          opts?.capturePlaylistsResult ?? [{ title: "vj | regression", url: "https://suno.com/playlist/regression" }],
-        );
-      });
-  vi.doMock("../lib/auto-capture", () => ({
-    captureFromTab: captureFromTabMock,
-  }));
 
   vi.doMock("../components/runner-errors", () => ({
     describeRelayFailure: vi.fn(() => ({ level: "debug" as const, text: "test" })),
@@ -249,8 +227,6 @@ async function loadBackground(opts?: {
     chromeDownloads,
     chromeDebugger,
     postDownloadedMock,
-    browserTabs,
-    captureFromTabMock,
     sessionStore,
   };
 }
@@ -366,12 +342,11 @@ describe("background read API handlers: localhost read を extension origin 境�
     vi.unstubAllGlobals();
   });
 
-  it("collections/prompts/version を background fetch で取得する", async () => {
+  it("collections/collection prompts/version を background fetch で取得する", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [] })
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ name: "p1", style: "lofi", lyrics: "" }] })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => [{ name: "p2", style: "lofi", lyrics: "" }] })
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -380,10 +355,6 @@ describe("background read API handlers: localhost read を extension origin 境�
     const { handlers } = await loadBackground({ useRealPostDownloaded: true, fetchImpl });
 
     await handlers.get("fetchCollections")!({
-      data: { baseUrl: "http://localhost:7873" },
-      sender: { tab: { id: 42 } },
-    });
-    await handlers.get("fetchPrompts")!({
       data: { baseUrl: "http://localhost:7873" },
       sender: { tab: { id: 42 } },
     });
@@ -399,10 +370,29 @@ describe("background read API handlers: localhost read を extension origin 境�
     ).resolves.toContain("拡張を更新してください");
 
     expect(fetchImpl).toHaveBeenNthCalledWith(1, "http://localhost:7873/collections");
-    expect(fetchImpl).toHaveBeenNthCalledWith(2, "http://localhost:7873/suno/prompts.json");
-    expect(fetchImpl).toHaveBeenNthCalledWith(3, "http://localhost:7873/collections/20260601-clm/suno/prompts.json");
-    expect(fetchImpl).toHaveBeenNthCalledWith(4, "http://localhost:7873/version");
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, "http://localhost:7873/collections/20260601-clm/suno/prompts.json");
+    expect(fetchImpl).toHaveBeenNthCalledWith(3, "http://localhost:7873/version");
   });
+
+  it.each([
+    ["空文字", ""],
+    ["欠落", undefined],
+    ["非 string", 123],
+  ] as const)(
+    "fetchCollectionPrompts の collectionId が%sなら localhost fetch へ渡さず throw する",
+    async (_label, collectionId) => {
+      const fetchImpl = vi.fn();
+      const { handlers } = await loadBackground({ useRealPostDownloaded: true, fetchImpl });
+
+      expect(() =>
+        handlers.get("fetchCollectionPrompts")!({
+          data: { baseUrl: "http://localhost:7873", collectionId },
+          sender: { tab: { id: 42 } },
+        }),
+      ).toThrow(/collectionId/);
+      expect(fetchImpl).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('background onMessage("startDownload"): 非 .zip ダウンロードは無視する', () => {
@@ -1275,89 +1265,6 @@ describe('background onMessage("postDownloaded"): privileged POST boundary', () 
     ).rejects.toThrow("postDownloaded test error");
 
     expect(postDownloadedMock).not.toHaveBeenCalled();
-  });
-});
-
-describe('background onMessage("resolvePlaylistUrl"): playlist URL 解決タブ境界', () => {
-  it("Given matching playlist When handler runs Then hidden tab で capture して URL を返し tab を閉じる", async () => {
-    const { handlers, browserTabs, captureFromTabMock, sentMessages } = await loadBackground({
-      capturePlaylistsResult: [
-        { title: "vj | other", url: "https://suno.com/playlist/other" },
-        { title: "vj | regression", url: "https://suno.com/playlist/regression" },
-      ],
-    });
-
-    await expect(
-      handlers.get("resolvePlaylistUrl")!({
-        data: { playlistName: "vj | regression" },
-        sender: { tab: { id: 42 } },
-      }),
-    ).resolves.toEqual({ url: "https://suno.com/playlist/regression" });
-
-    expect(browserTabs.create).toHaveBeenCalledWith({ url: "https://suno.com/me/playlists", active: false });
-    expect(captureFromTabMock).toHaveBeenCalledWith(99, expect.objectContaining({ sendCapture: expect.any(Function) }));
-    expect(sentMessages).toContainEqual({ type: "capturePlaylists", data: undefined, tabId: 99 });
-    expect(browserTabs.remove).toHaveBeenCalledWith(99);
-  });
-
-  it("Given playlist が見つからない When handler runs Then reject して tab を閉じる", async () => {
-    const { handlers, browserTabs } = await loadBackground({
-      capturePlaylistsResult: [{ title: "vj | other", url: "https://suno.com/playlist/other" }],
-    });
-
-    await expect(
-      handlers.get("resolvePlaylistUrl")!({
-        data: { playlistName: "vj | missing" },
-        sender: { tab: { id: 42 } },
-      }),
-    ).rejects.toThrow(/playlist URL を解決できません/);
-
-    expect(browserTabs.remove).toHaveBeenCalledWith(99);
-  });
-
-  it("Given capture が失敗 When handler runs Then reject して tab を閉じる", async () => {
-    const { handlers, browserTabs } = await loadBackground({
-      capturePlaylistsError: new Error("capture failed"),
-    });
-
-    await expect(
-      handlers.get("resolvePlaylistUrl")!({
-        data: { playlistName: "vj | regression" },
-        sender: { tab: { id: 42 } },
-      }),
-    ).rejects.toThrow(/capture failed/);
-
-    expect(browserTabs.remove).toHaveBeenCalledWith(99);
-  });
-
-  it("Given tab id が返らない When handler runs Then capture せず reject する", async () => {
-    const { handlers, browserTabs, captureFromTabMock } = await loadBackground({
-      tabCreateResult: {},
-    });
-
-    await expect(
-      handlers.get("resolvePlaylistUrl")!({
-        data: { playlistName: "vj | regression" },
-        sender: { tab: { id: 42 } },
-      }),
-    ).rejects.toThrow(/タブを作成できません/);
-
-    expect(captureFromTabMock).not.toHaveBeenCalled();
-    expect(browserTabs.remove).not.toHaveBeenCalled();
-  });
-
-  it("Given sender tab が無い When handler runs Then hidden tab を作成しない", async () => {
-    const { handlers, browserTabs, captureFromTabMock } = await loadBackground();
-
-    await expect(
-      handlers.get("resolvePlaylistUrl")!({
-        data: { playlistName: "vj | regression" },
-        sender: {},
-      }) as Promise<unknown>,
-    ).rejects.toThrow("resolvePlaylistUrl test error");
-
-    expect(browserTabs.create).not.toHaveBeenCalled();
-    expect(captureFromTabMock).not.toHaveBeenCalled();
   });
 });
 

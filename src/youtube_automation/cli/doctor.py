@@ -13,14 +13,17 @@ import tomllib
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
 import yaml
+from PIL import Image as PILImage
+from PIL import UnidentifiedImageError
 
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.skills_sync import bundled_skill_names
-from youtube_automation.scripts.benchmark_collector import load_benchmark_videos
+from youtube_automation.scripts.benchmark_collector import load_benchmark_videos, select_top_vod_benchmark_videos
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.numbered_duplicates import (
     CLEANUP_GUIDE_URL,
@@ -43,7 +46,7 @@ SKILL_FILENAME = "SKILL.md"
 AUTOMATION_PACKAGE_NAME = "youtube-channels-automation"
 SKILLS_SYNC_CMD = "uv run yt-skills sync --asset skills --force"
 SKILLS_SYNC_PRUNE_CMD = "uv run yt-skills sync --asset skills --force --prune --yes"
-LEGACY_BUNDLED_SKILLS = ("onboard", "distrokid-prep")
+LEGACY_BUNDLED_SKILLS = ("onboard", "distrokid-prep", "channel-import", "channel-setup")
 
 BOOTSTRAP_CATEGORY = "bootstrap"
 API_CATEGORY = "api"
@@ -91,6 +94,7 @@ class _WfNewInputMode:
     report_count: int
     benchmark_count: int
     stale_report: bool
+    stale_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -712,7 +716,7 @@ def check_env_file(channel_dir: Path) -> CheckResult:
             next_action={
                 "kind": "ai-exec",
                 "cmd": (
-                    ".claude/skills/channel-setup/references/gcp-bootstrap.sh <project-id> を実行して .env を書き出す"
+                    ".claude/skills/channel-new/references/gcp-bootstrap.sh <project-id> を実行して .env を書き出す"
                 ),
             },
         )
@@ -885,7 +889,7 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
                 message=f"config/channel/ ロード失敗: {e}",
                 next_action={
                     "kind": "human",
-                    "instructions": "/channel-import を実行して設定を修復してください",
+                    "instructions": ("/channel-new（既存チャンネル取り込みモード）を実行して設定を修復してください"),
                 },
             )
 
@@ -911,16 +915,25 @@ def _temporary_channel_dir(channel_dir: Path) -> Iterator[None]:
 def check_analytics_report(channel_dir: Path) -> CheckResult:
     input_mode = _resolve_wf_new_input_mode(channel_dir)
     if input_mode.stale_report:
+        if input_mode.stale_reason == "absolute":
+            message = (
+                "最新 data/analytics_data_*.json が実行日から freshness_days を超えて古い。"
+                "/wf-new は stale report では開始不可"
+            )
+            instructions = "/analytics-collect → /analytics-analyze の順で再実行してください"
+        else:
+            message = (
+                "reports/analysis_*.md が最新 data/analytics_data_*.json より古い。/wf-new は stale report では開始不可"
+            )
+            instructions = "/analytics-analyze を再実行してください（必要なら先に /analytics-collect）"
         return CheckResult(
             id="analytics_report",
             status="fail",
             category=DATA_CATEGORY,
-            message=(
-                "reports/analysis_*.md が最新 data/analytics_data_*.json より古い。/wf-new は stale report では開始不可"
-            ),
+            message=message,
             next_action={
                 "kind": "human",
-                "instructions": "/analytics-analyze を再実行してください（必要なら先に /analytics-collect）",
+                "instructions": instructions,
             },
         )
 
@@ -950,12 +963,17 @@ def _resolve_wf_new_input_mode(channel_dir: Path) -> _WfNewInputMode:
     if reports:
         latest_report = _latest_filename_date(reports)
         latest_data = _latest_filename_date(data_files)
-        stale_report = latest_data is not None and (latest_report is None or latest_report[0] < latest_data[0])
+        stale_reason: str | None = None
+        if latest_data is not None and (latest_report is None or latest_report[0] < latest_data[0]):
+            stale_reason = "relative"
+        elif latest_data is not None and _analytics_data_exceeds_freshness_days(latest_data[0], channel_dir):
+            stale_reason = "absolute"
         return _WfNewInputMode(
             mode="analytics mode",
             report_count=len(reports),
             benchmark_count=len(benchmarks),
-            stale_report=stale_report,
+            stale_report=stale_reason is not None,
+            stale_reason=stale_reason,
         )
     if benchmarks:
         return _WfNewInputMode(
@@ -987,6 +1005,31 @@ def _latest_filename_date(paths: list[Path]) -> Optional[tuple[str, Path]]:
     if not dated_paths:
         return None
     return max(dated_paths, key=lambda item: item[0])
+
+
+def _analytics_data_exceeds_freshness_days(data_date: str, channel_dir: Path) -> bool:
+    cfg = load_skill_config("collection-ideate", use_cache=False, channel_dir=channel_dir)
+    freshness_days = _parse_positive_int(cfg.get("freshness_days", 7), "collection-ideate.freshness_days")
+    elapsed_days = (_yyyymmdd_to_date(_today_yyyymmdd()) - _yyyymmdd_to_date(data_date)).days
+    return elapsed_days > freshness_days
+
+
+def _parse_positive_int(value: object, label: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(f"{label} は整数である必要があります: {value!r}") from exc
+    if parsed < 0:
+        raise ConfigError(f"{label} は 0 以上である必要があります: {value!r}")
+    return parsed
+
+
+def _yyyymmdd_to_date(value: str) -> date:
+    return datetime.strptime(value, "%Y%m%d").date()
+
+
+def _today_yyyymmdd() -> str:
+    return date.today().strftime("%Y%m%d")
 
 
 def check_benchmark_data(channel_dir: Path) -> CheckResult:
@@ -1068,17 +1111,26 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
 
     missing, approved_exceptions = _missing_ttp_readiness_items(channel_dir, channels)
     missing.extend(channels_read.errors)
-    missing.extend(_missing_channel_setup_benchmark_items(channel_dir, approved_exceptions, channels))
+    benchmark_missing, benchmark_notes = _missing_channel_new_benchmark_items(
+        channel_dir,
+        approved_exceptions,
+        channels,
+    )
+    missing.extend(benchmark_missing)
+    # live 配信除外の note は未充足条件ではないため missing に混ぜず、message 末尾に併記する
+    note_suffix = ("。" + "; ".join(benchmark_notes)) if benchmark_notes else ""
     if missing:
         return CheckResult(
             id="ttp_wf_new_readiness",
             status="warn",
             category=DATA_CATEGORY,
-            message="/channel-setup benchmark 反映未完了の可能性 / TTP 完了条件が未充足: " + "; ".join(missing),
+            message="/channel-new benchmark 反映未完了の可能性 / TTP 完了条件が未充足: "
+            + "; ".join(missing)
+            + note_suffix,
             next_action={
                 "kind": "human",
                 "instructions": (
-                    "/channel-new Step 5-9 と /channel-setup Step 3.5 の不足項目を解消してください。"
+                    "/channel-new 初回モード Step 5-9 と再生成モード Step R3.5 の不足項目を解消してください。"
                     "意図的にスキップする場合は docs/channel/ttp-seed-confirmation.md に "
                     "ユーザー承認済み例外として未反映項目を明記し、最後に `uv run yt-doctor --json` で "
                     "`ttp_wf_new_readiness` が ok になることを確認してください"
@@ -1092,7 +1144,7 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
         category=DATA_CATEGORY,
         message=(
             "TTP 対象承認・branding snapshot・benchmark docs・thumbnail / music readiness が "
-            "/wf-new 接続可能（/channel-setup 完了相当）"
+            "/wf-new 接続可能（/channel-new 再生成モード完了相当）" + note_suffix
         ),
     )
 
@@ -1156,6 +1208,7 @@ def _benchmark_channels(analytics: dict[str, object]) -> _BenchmarkChannelsRead:
 def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, object]]) -> tuple[list[str], set[str]]:
     missing: list[str] = []
     approved_exceptions: set[str] = set()
+    seed_text = ""
 
     channels_without_relationship = [
         _channel_diagnostic_label(index, channel)
@@ -1177,7 +1230,7 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
         seed_missing, approved_exceptions = _validate_ttp_seed_confirmation(seed_text, channels)
         missing.extend(seed_missing)
 
-    missing.extend(_missing_branding_snapshot_items(channel_dir, channels))
+    missing.extend(_missing_branding_snapshot_items(channel_dir, channels, seed_text))
 
     thumbnail_read = _skill_config_mapping(channel_dir, "thumbnail")
     if thumbnail_read.error:
@@ -1207,28 +1260,30 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
     return missing, approved_exceptions
 
 
-def _missing_channel_setup_benchmark_items(
+def _missing_channel_new_benchmark_items(
     channel_dir: Path,
     approved_exceptions: set[str],
     channels: list[dict[str, object]],
-) -> list[str]:
+) -> tuple[list[str], list[str]]:
     missing: list[str] = []
     if not _matching_files(channel_dir / "data", "benchmark_*.json"):
         missing.append("data/benchmark_*.json が無い")
-    missing.extend(_missing_video_analysis_items(channel_dir, _approved_ttp_channel_slugs(channels)))
+    analysis_missing, notes = _missing_video_analysis_items(channel_dir, _approved_ttp_channel_slugs(channels))
+    missing.extend(analysis_missing)
     if not _benchmark_report_files(channel_dir):
         missing.append("docs/benchmarks/*.md が無い")
     if "thumbnail" not in approved_exceptions and not _benchmark_thumbnail_files(channel_dir):
         missing.append("data/thumbnail_compare/benchmark/ に TTP 参照画像が無い")
-    return missing
+    return missing, notes
 
 
-def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) -> list[str]:
+def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) -> tuple[list[str], list[str]]:
     approved_slug_set = set(approved_slugs)
     if not approved_slug_set:
-        return []
+        return [], []
     benchmark_by_slug, errors = _latest_benchmark_videos_by_slug(channel_dir, approved_slug_set)
     missing = list(errors)
+    notes: list[str] = []
     video_analysis_dir = channel_dir / "data" / "video_analysis"
     for slug in approved_slugs:
         slug_dir, slug_error = _video_analysis_slug_dir(channel_dir, video_analysis_dir, slug)
@@ -1236,8 +1291,14 @@ def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) 
             missing.append(slug_error)
             continue
         videos = benchmark_by_slug.get(slug, [])
-        top_videos = videos[:TTP_VIDEO_ANALYZE_TOP_N]
-        if len(top_videos) < TTP_VIDEO_ANALYZE_TOP_N:
+        top_videos, skipped_live = select_top_vod_benchmark_videos(videos, TTP_VIDEO_ANALYZE_TOP_N)
+        excluded_live = len(skipped_live)
+        if excluded_live:
+            notes.append(
+                f"{slug}: live 配信 {excluded_live} 本は Gemini で解析不能のため "
+                f"benchmark top {TTP_VIDEO_ANALYZE_TOP_N} の判定から除外（次点 VOD を繰り上げ）"
+            )
+        if len(videos) < TTP_VIDEO_ANALYZE_TOP_N and not excluded_live:
             missing.append(
                 f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} が不足 ({len(top_videos)}/{TTP_VIDEO_ANALYZE_TOP_N})"
             )
@@ -1245,7 +1306,10 @@ def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) 
         if len(expected_ids) < len(top_videos):
             missing.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id 欠落があります")
         if not expected_ids:
-            missing.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id がありません")
+            if excluded_live and videos:
+                missing.append(f"{slug}: benchmark 上位が live 配信のみで解析可能な VOD がありません")
+            else:
+                missing.append(f"{slug}: benchmark top {TTP_VIDEO_ANALYZE_TOP_N} に video_id がありません")
             continue
         done_ids, analysis_errors = _verified_video_analysis_ids(
             slug,
@@ -1254,11 +1318,14 @@ def _missing_video_analysis_items(channel_dir: Path, approved_slugs: list[str]) 
         )
         missing.extend(analysis_errors)
         done = len(done_ids)
+        # live 除外が発生した場合のみ母数を実際に解析可能な VOD 数へ縮小する
+        # （除外なしで benchmark が N 本未満の従来ケースは分母 N のまま warn を維持）
+        required = len(top_videos) if excluded_live else TTP_VIDEO_ANALYZE_TOP_N
         if done == 0:
-            missing.append(f"{slug}: video_analysis 未実行 (0/{TTP_VIDEO_ANALYZE_TOP_N})")
-        elif done < TTP_VIDEO_ANALYZE_TOP_N:
-            missing.append(f"{slug}: video_analysis が一部のみ ({done}/{TTP_VIDEO_ANALYZE_TOP_N})")
-    return missing
+            missing.append(f"{slug}: video_analysis 未実行 (0/{required})")
+        elif done < required:
+            missing.append(f"{slug}: video_analysis が一部のみ ({done}/{required})")
+    return missing, notes
 
 
 def _latest_benchmark_videos_by_slug(
@@ -1478,7 +1545,11 @@ def _approved_exception_has_reason(line: str) -> bool:
     return "ため" in line or "理由" in line or "because" in lower_line or "進める" in line
 
 
-def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str, object]]) -> list[str]:
+def _missing_branding_snapshot_items(
+    channel_dir: Path,
+    channels: list[dict[str, object]],
+    seed_text: str,
+) -> list[str]:
     branding_read = _read_json_mapping(channel_dir / "docs" / "channel" / "competitor-branding-snapshot.json")
     if branding_read.error:
         return [branding_read.error]
@@ -1493,13 +1564,26 @@ def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str,
         return ["docs/channel/competitor-branding-snapshot.json 未作成または空"]
 
     missing: list[str] = []
+    if branding_snapshot.get("reference_only") is not True:
+        missing.append("competitor-branding-snapshot.json の reference_only が true ではありません")
     if any(not isinstance(item, dict) for item in snapshot_items):
         missing.append("competitor-branding-snapshot.json の items に object ではない要素があります")
+    image_references = branding_snapshot.get("channel_image_references")
+    if not isinstance(image_references, list):
+        missing.append("competitor-branding-snapshot.json の channel_image_references が list ではありません")
+        image_references = []
+    elif any(not isinstance(item, dict) for item in image_references):
+        missing.append("competitor-branding-snapshot.json の channel_image_references に object ではない要素があります")
     approved_ids = _approved_ttp_channel_ids(channels)
     snapshot_by_id = {
         str(item.get("id")): item
         for item in snapshot_items
         if isinstance(item, dict) and str(item.get("id") or "").strip()
+    }
+    image_reference_by_id = {
+        str(item.get("channel_id")): item
+        for item in image_references
+        if isinstance(item, dict) and str(item.get("channel_id") or "").strip()
     }
 
     channels_without_id = [
@@ -1515,6 +1599,13 @@ def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str,
         missing.append(
             "competitor-branding-snapshot.json に承認済み TTP 対象の snapshot 不足 (" + ", ".join(missing_ids) + ")"
         )
+    missing_image_reference_ids = [channel_id for channel_id in approved_ids if channel_id not in image_reference_by_id]
+    if missing_image_reference_ids:
+        missing.append(
+            "competitor-branding-snapshot.json に承認済み TTP 対象の画像参照メタ不足 ("
+            + ", ".join(missing_image_reference_ids)
+            + ")"
+        )
 
     for channel_id in approved_ids:
         item = snapshot_by_id.get(channel_id)
@@ -1527,12 +1618,289 @@ def _missing_branding_snapshot_items(channel_dir: Path, channels: list[dict[str,
             missing.append(
                 f"competitor-branding-snapshot.json の {channel_id} に必須 field 不足 ({', '.join(missing_fields)})"
             )
+        image_reference = image_reference_by_id.get(channel_id)
+        if image_reference is None:
+            continue
+        if image_reference.get("reference_only") is not True:
+            missing.append(
+                f"competitor-branding-snapshot.json の {channel_id} 画像参照メタ reference_only が true ではありません"
+            )
+        fallback_note_recorded = _channel_branding_fallback_note_recorded(channel_dir)
+        if not _channel_image_reference_has_icon_source(image_reference) and not fallback_note_recorded:
+            missing.append(
+                f"competitor-branding-snapshot.json の {channel_id} に "
+                "icon 画像参照または fallback 根拠 note がありません"
+            )
+        if not _channel_image_reference_has_banner_source(image_reference) and not fallback_note_recorded:
+            missing.append(
+                f"competitor-branding-snapshot.json の {channel_id} に "
+                "banner 画像参照または fallback 根拠 note がありません"
+            )
 
+    missing.extend(
+        _missing_channel_branding_thumbnail_config(channel_dir, approved_ids, image_references, image_reference_by_id)
+    )
+    missing.extend(_missing_channel_branding_outputs(channel_dir, seed_text))
     return missing
 
 
 def _approved_ttp_channel_ids(channels: list[dict[str, object]]) -> list[str]:
     return [channel_id for channel in channels if (channel_id := str(channel.get("id") or "").strip())]
+
+
+def _channel_image_reference_has_icon_source(image_reference: dict[str, object]) -> bool:
+    icon = image_reference.get("icon")
+    return isinstance(icon, dict) and isinstance(icon.get("url"), str) and bool(icon["url"].strip())
+
+
+def _channel_image_reference_has_banner_source(image_reference: dict[str, object]) -> bool:
+    banner = image_reference.get("banner")
+    return isinstance(banner, list) and any(
+        isinstance(item, dict) and isinstance(item.get("url"), str) and item["url"].strip() for item in banner
+    )
+
+
+def _missing_channel_branding_thumbnail_config(
+    channel_dir: Path,
+    approved_ids: list[str],
+    image_references: list[object],
+    image_reference_by_id: dict[str, dict[str, object]],
+) -> list[str]:
+    thumbnail_read = _skill_config_mapping(channel_dir, "thumbnail")
+    if thumbnail_read.error:
+        return []
+    image_generation = thumbnail_read.data.get("image_generation")
+    if not isinstance(image_generation, dict):
+        return ["thumbnail.yaml の image_generation.gemini.reference_images.channel_branding 未設定"]
+    gemini = image_generation.get("gemini")
+    if not isinstance(gemini, dict):
+        return ["thumbnail.yaml の image_generation.gemini.reference_images.channel_branding 未設定"]
+    reference_images = gemini.get("reference_images")
+    if not isinstance(reference_images, dict):
+        return ["thumbnail.yaml の image_generation.gemini.reference_images.channel_branding 未設定"]
+    channel_branding = reference_images.get("channel_branding")
+    if not isinstance(channel_branding, dict):
+        return ["thumbnail.yaml の reference_images.channel_branding 未設定"]
+
+    missing: list[str] = []
+    if channel_branding.get("snapshot") != "docs/channel/competitor-branding-snapshot.json":
+        missing.append("thumbnail.yaml の reference_images.channel_branding.snapshot が未設定または不正")
+    if channel_branding.get("output_icon") != "branding/icon.png":
+        missing.append("thumbnail.yaml の reference_images.channel_branding.output_icon が未設定または不正")
+    if channel_branding.get("output_banner") != "branding/banner.png":
+        missing.append("thumbnail.yaml の reference_images.channel_branding.output_banner が未設定または不正")
+
+    icon_required = any(
+        _channel_image_reference_has_icon_source(image_reference_by_id[channel_id])
+        for channel_id in approved_ids
+        if channel_id in image_reference_by_id
+    )
+    banner_required = any(
+        _channel_image_reference_has_banner_source(image_reference_by_id[channel_id])
+        for channel_id in approved_ids
+        if channel_id in image_reference_by_id
+    )
+    if icon_required:
+        missing.extend(
+            _missing_channel_branding_reference_list(
+                "icon_references",
+                channel_branding.get("icon_references"),
+                image_references,
+                "icon",
+            )
+        )
+    if banner_required:
+        missing.extend(
+            _missing_channel_branding_reference_list(
+                "banner_references",
+                channel_branding.get("banner_references"),
+                image_references,
+                "banner",
+            )
+        )
+    return missing
+
+
+def _missing_channel_branding_reference_list(
+    field_name: str,
+    value: object,
+    image_references: list[object],
+    kind: str,
+) -> list[str]:
+    label = f"thumbnail.yaml の reference_images.channel_branding.{field_name}"
+    if not isinstance(value, list) or not value:
+        return [f"{label} 未設定"]
+
+    invalid_refs = [
+        str(item) for item in value if not _channel_branding_reference_resolves(item, image_references, kind)
+    ]
+    if invalid_refs:
+        return [f"{label} に snapshot fragment として解決できない参照があります ({', '.join(invalid_refs)})"]
+    return []
+
+
+def _channel_branding_reference_resolves(value: object, image_references: list[object], kind: str) -> bool:
+    if not isinstance(value, str) or not value.strip() or "{{" in value:
+        return False
+
+    if kind == "icon":
+        match = re.fullmatch(
+            r"docs/channel/competitor-branding-snapshot\.json#channel_image_references\[(\d+)\]\.icon",
+            value.strip(),
+        )
+        if match is None:
+            return False
+        index = int(match.group(1))
+        if index >= len(image_references):
+            return False
+        image_reference = image_references[index]
+        return isinstance(image_reference, dict) and _channel_image_reference_has_icon_source(image_reference)
+
+    if kind == "banner":
+        match = re.fullmatch(
+            r"docs/channel/competitor-branding-snapshot\.json#channel_image_references\[(\d+)\]\.banner\[(\d+)\]",
+            value.strip(),
+        )
+        if match is None:
+            return False
+        image_index = int(match.group(1))
+        banner_index = int(match.group(2))
+        if image_index >= len(image_references):
+            return False
+        image_reference = image_references[image_index]
+        if not isinstance(image_reference, dict):
+            return False
+        banner = image_reference.get("banner")
+        if not isinstance(banner, list) or banner_index >= len(banner):
+            return False
+        banner_reference = banner[banner_index]
+        return (
+            isinstance(banner_reference, dict)
+            and isinstance(banner_reference.get("url"), str)
+            and bool(banner_reference["url"].strip())
+        )
+
+    return False
+
+
+def _missing_channel_branding_outputs(channel_dir: Path, seed_text: str) -> list[str]:
+    missing: list[str] = []
+    missing.extend(
+        _missing_channel_branding_output_image(
+            channel_dir,
+            "branding/icon.png",
+            expected_ratio=1.0,
+            max_size_bytes=4 * 1024 * 1024,
+            label="branding/icon.png",
+        )
+    )
+    missing.extend(
+        _missing_channel_branding_output_image(
+            channel_dir,
+            "branding/banner.png",
+            expected_ratio=16 / 9,
+            max_size_bytes=6 * 1024 * 1024,
+            label="branding/banner.png",
+        )
+    )
+    if not _channel_branding_output_approved(seed_text):
+        missing.append("docs/channel/ttp-seed-confirmation.md に channel branding 画像のユーザー承認記録がありません")
+    return missing
+
+
+def _missing_channel_branding_output_image(
+    channel_dir: Path,
+    relative_path: str,
+    *,
+    expected_ratio: float,
+    max_size_bytes: int,
+    label: str,
+) -> list[str]:
+    path = channel_dir / relative_path
+    if not path.is_file():
+        candidates = _channel_branding_output_candidates(channel_dir, relative_path)
+        if candidates:
+            candidate_list = ", ".join(candidates)
+            if len(candidates) > 1:
+                return [
+                    f"{label} は見つかりませんが、既存候補が複数あります: {candidate_list}。"
+                    f"最終版を確認してから変換してください。採用後に {label} にしてください（自動判定はしません）"
+                ]
+            return [
+                f"{label} は見つかりませんが、既存候補があります: {candidate_list}。{label} にリネーム/変換してください"
+            ]
+        return [f"{label} が未生成"]
+    try:
+        if path.stat().st_size > max_size_bytes:
+            return [f"{label} のファイルサイズが上限を超えています"]
+    except OSError as exc:
+        return [f"{label} のファイルサイズを確認できません ({exc})"]
+
+    try:
+        with PILImage.open(path) as image:
+            width, height = image.size
+            image.verify()
+    except (OSError, UnidentifiedImageError) as exc:
+        return [f"{label} を画像として読み込めません ({exc})"]
+
+    if width <= 0 or height <= 0:
+        return [f"{label} の画像サイズが不正です"]
+    actual_ratio = width / height
+    if abs(actual_ratio - expected_ratio) > 0.03:
+        return [f"{label} のアスペクト比が不正です"]
+    return []
+
+
+def _channel_branding_output_candidates(channel_dir: Path, relative_path: str) -> list[str]:
+    target = Path(relative_path)
+    branding_dir = channel_dir / target.parent
+    if not branding_dir.is_dir():
+        return []
+
+    allowed_suffixes = {".png", ".jpg", ".jpeg", ".webp"}
+    target_stem = target.stem
+    versioned_pattern = re.compile(rf"^{re.escape(target_stem)}-v\d+$")
+    candidates: list[str] = []
+    for candidate in sorted(branding_dir.iterdir(), key=lambda item: item.name):
+        if not candidate.is_file() or candidate.suffix.lower() not in allowed_suffixes:
+            continue
+        if candidate.stem == target_stem or versioned_pattern.fullmatch(candidate.stem):
+            candidates.append(candidate.relative_to(channel_dir).as_posix())
+    return candidates
+
+
+def _channel_branding_output_approved(seed_text: str) -> bool:
+    for line in seed_text.splitlines():
+        lower_line = line.lower()
+        mentions_branding_output = (
+            "branding/icon.png" in lower_line
+            or "branding/banner.png" in lower_line
+            or "channel branding" in lower_line
+            or "チャンネル画像" in line
+        )
+        if mentions_branding_output and ("承認済み" in line or "approved" in lower_line):
+            return True
+    return False
+
+
+def _channel_branding_fallback_note_recorded(channel_dir: Path) -> bool:
+    thumbnail_read = _skill_config_mapping(channel_dir, "thumbnail")
+    if thumbnail_read.error:
+        return False
+    image_generation = thumbnail_read.data.get("image_generation")
+    if not isinstance(image_generation, dict):
+        return False
+    gemini = image_generation.get("gemini")
+    if not isinstance(gemini, dict):
+        return False
+    reference_images = gemini.get("reference_images")
+    if not isinstance(reference_images, dict):
+        return False
+    notes = reference_images.get("notes")
+    if not isinstance(notes, str):
+        return False
+    lower_notes = notes.lower()
+    return "fallback" in lower_notes or "取得できない" in notes or "参照画像なし" in notes
 
 
 def _approved_ttp_channel_slugs(channels: list[dict[str, object]]) -> list[str]:
@@ -1732,7 +2100,7 @@ def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
         next_action={
             "kind": "human",
             "instructions": (
-                "/channel-setup で config/skills/thumbnail.yaml と config/skills/suno.yaml を再確認し、"
+                "/channel-new（再生成モード）で config/skills/thumbnail.yaml と config/skills/suno.yaml を再確認し、"
                 "descriptions.md の parse 失敗は /video-description で再生成してください"
             ),
         },

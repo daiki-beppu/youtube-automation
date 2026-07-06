@@ -7,11 +7,13 @@ import { makePromptEntries } from "./_helpers";
 
 interface RunPayload {
   entries: PromptEntry[];
-  playlistName?: string;
+  playlistName: string;
+  durationFilter?: { min_sec: number; max_sec: number };
   range?: RunRange;
-  collectionId?: string;
+  collectionId: string;
   indices?: number[];
   submittedClipIds?: string[];
+  submittedClipIdsAreDurationFiltered?: boolean;
   playlistExpectedClipCount?: number;
 }
 
@@ -27,6 +29,12 @@ interface ProgressMessage {
   message?: string;
 }
 
+function expectPostDownloadedBody(payload: unknown, expectedBody: Record<string, unknown>): void {
+  expect(payload).toMatchObject({ body: expectedBody });
+  const body = (payload as { body?: Record<string, unknown> }).body;
+  expect(body).not.toHaveProperty("suno_playlist_url");
+}
+
 async function loadContentScriptWithPlaylistRows(
   submittedIdsFromTracker: string[],
   playlistRowsResult: HTMLElement[] | Error,
@@ -34,6 +42,7 @@ async function loadContentScriptWithPlaylistRows(
     postDownloadedError?: Error;
     postDownloadedRejectOnCall?: number;
     downloadFormatValue?: unknown;
+    durationsById?: Record<string, number | undefined>;
     // Cmd+P 前ガードが読む「実際の選択中 clip ID」(#1411)。未指定は multi-select した ID と同一
     //（= 余剰なしでガード通過）。stale selection の混入はここへ余剰 ID を足して再現する。
     guardSelectedClipIds?: string[];
@@ -112,9 +121,10 @@ async function loadContentScriptWithPlaylistRows(
   }));
 
   vi.doMock("../lib/snapshot", () => ({
-    initSnapshot: vi.fn((entries: PromptEntry[], playlistName?: string) => ({
+    initSnapshot: vi.fn((entries: PromptEntry[], options: { collectionId: string; playlistName?: string }) => ({
+      collectionId: options.collectionId,
       entries,
-      playlistName,
+      playlistName: options.playlistName,
       itemStates: entries.map(() => "pending"),
       isRunning: true,
       submittedClipIds: [],
@@ -134,6 +144,11 @@ async function loadContentScriptWithPlaylistRows(
       clearSubmittedIds: vi.fn(),
       getSubmittedIds: vi.fn(() => submittedIdsFromTracker),
       getPendingSubmittedIds: vi.fn(() => []),
+      getDuration: vi.fn((id: string) =>
+        overrides?.durationsById && Object.prototype.hasOwnProperty.call(overrides.durationsById, id)
+          ? overrides.durationsById[id]
+          : 120,
+      ),
       getInFlightCount: vi.fn(() => 0),
       hasObservedAnyTraffic: vi.fn(() => true),
       lastChangeAt: vi.fn(() => Date.now()),
@@ -153,6 +168,7 @@ async function loadContentScriptWithPlaylistRows(
     resolveAdvancedFields: vi.fn(() => ({})),
     resolveFields: vi.fn(() => ({ style: {} as HTMLTextAreaElement, lyrics: null, title: null })),
     resolveGenerateButton: vi.fn(() => ({ click: vi.fn() }) as unknown as HTMLButtonElement),
+    setLyricsValue: vi.fn(() => Promise.resolve()),
     setNativeValue: vi.fn(),
     sleep: vi.fn(() => Promise.resolve()),
     waitForCaptchaClear: vi.fn(() => Promise.resolve()),
@@ -183,13 +199,6 @@ async function loadContentScriptWithPlaylistRows(
     clearFinishedSnapshot: vi.fn(() => Promise.resolve()),
   }));
 
-  vi.doMock("../../shared/playlist-scrape", () => ({
-    scrapePlaylistsFromMe: vi.fn(() => [
-      { title: "vj | regression", url: "https://suno.com/playlist/regression" },
-      { title: "vj | manual range", url: "https://suno.com/playlist/manual-range" },
-    ]),
-  }));
-
   vi.doMock("../lib/ack-probe", () => ({
     createAckWaiter: vi.fn(() => vi.fn(() => Promise.resolve())),
     markAck: vi.fn(() => Promise.resolve({ submissions: 0, domInFlight: 0 })),
@@ -216,7 +225,8 @@ async function loadContentScriptWithPlaylistRows(
     triggerDownloadAll: vi.fn(() => Promise.resolve()),
   }));
 
-  vi.doMock("../../shared/api", () => ({
+  vi.doMock("../../shared/api", async () => ({
+    ...(await vi.importActual<typeof import("../../shared/api")>("../../shared/api")),
     postDownloaded: vi.fn(() => Promise.resolve()),
   }));
 
@@ -389,6 +399,358 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expect(options.titleFallbackMap.get("new-clip-2")).toBe("Track Two");
   });
 
+  it("Given 保存済み OK 件数が raw 件数より少ない途中再開 When playlist 追加 Then raw 合成件数で検証して OK 件数で保存する", async () => {
+    const entries: PromptEntry[] = [
+      { name: "track-1", title: "Track One", style: "style 1", lyrics: "" },
+      { name: "track-2", title: "Track Two", style: "style 2", lyrics: "" },
+    ];
+    const previousSubmittedClipIds = ["old-ok-1", "old-ok-2"];
+    const currentSubmittedClipIds = ["new-ok-1", "new-short"];
+    const rows = ["old-ok-1", "old-ok-2", "new-ok-1"].map(() => ({}) as HTMLElement);
+    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      currentSubmittedClipIds,
+      rows,
+      {
+        durationsById: {
+          "old-ok-1": undefined,
+          "old-ok-2": undefined,
+          "new-ok-1": 120,
+          "new-short": 30,
+        },
+      },
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+        indices: [1],
+        submittedClipIds: previousSubmittedClipIds,
+        submittedClipIdsAreDurationFiltered: true,
+        playlistExpectedClipCount: 2,
+        durationFilter: { min_sec: 60, max_sec: 300 },
+      },
+    });
+
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["old-ok-1", "old-ok-2", "new-ok-1"],
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+    );
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        submittedClipIds: ["old-ok-1", "old-ok-2", "new-ok-1"],
+        playlistExpectedClipCount: 3,
+      }),
+    );
+  });
+
+  it("Given duration NG clip が混在 When playlist 追加 Then OK clip IDs のみを multi-select し resume count も OK 件数で保存する", async () => {
+    const entries: PromptEntry[] = [
+      {
+        name: "track-1",
+        title: "Track One",
+        style: "style 1",
+        lyrics: "",
+      },
+      {
+        name: "track-2",
+        title: "Track Two",
+        style: "style 2",
+        lyrics: "",
+      },
+    ];
+    const currentSubmittedClipIds = ["clip-ok-1", "clip-short", "clip-long", "clip-ok-2"];
+    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      currentSubmittedClipIds,
+      new Error("playlist rows missing"),
+      {
+        durationsById: {
+          "clip-ok-1": 120,
+          "clip-short": 30,
+          "clip-long": 420,
+          "clip-ok-2": 180,
+        },
+      },
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+        durationFilter: { min_sec: 60, max_sec: 300 },
+      },
+    });
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["clip-ok-1", "clip-ok-2"],
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+    );
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        submittedClipIds: ["clip-ok-1", "clip-ok-2"],
+        durationFilter: { min_sec: 60, max_sec: 300 },
+        playlistExpectedClipCount: 2,
+      }),
+    );
+  });
+
+  it("Given durationFilter 省略 When playlist 追加から download 完了 Then default 境界内 clip だけを採用件数として POST する", async () => {
+    const entries: PromptEntry[] = [
+      { name: "track-1", title: "Track One", style: "style 1", lyrics: "" },
+      { name: "track-2", title: "Track Two", style: "style 2", lyrics: "" },
+    ];
+    const currentSubmittedClipIds = ["clip-59", "clip-60", "clip-300", "clip-301"];
+    const rows = ["clip-60", "clip-300"].map(() => ({}) as HTMLElement);
+    const { handlers, scrollAndMultiSelectByIdsMock, runHandler, sentMessages } =
+      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows, {
+        durationsById: {
+          "clip-59": 59,
+          "clip-60": 60,
+          "clip-300": 300,
+          "clip-301": 301,
+        },
+      });
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | default filter",
+        collectionId: "collection-a",
+      },
+    });
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+
+    handlers.get("downloadComplete")!({
+      data: { filename: "/Users/test/Downloads/default-filter.zip" },
+    });
+
+    await vi.waitFor(() => expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(1));
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["clip-60", "clip-300"],
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+    );
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        submittedClipIds: ["clip-60", "clip-300"],
+        playlistExpectedClipCount: 2,
+      }),
+    );
+    expectPostDownloadedBody(sentMessages.find((m) => m.type === "postDownloaded")?.payload, {
+      file_count: 2,
+      expected_file_count: 2,
+      format: "mp3",
+      download_path: "/Users/test/Downloads/default-filter.zip",
+    });
+  });
+
+  it("Given duration 未観測 clip が混在 When playlist 追加 Then 未観測 ID は multi-select しない", async () => {
+    const entries: PromptEntry[] = [{ name: "track-1", title: "Track One", style: "style 1", lyrics: "" }];
+    const currentSubmittedClipIds = ["clip-ok", "clip-unknown"];
+    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      currentSubmittedClipIds,
+      new Error("playlist rows missing"),
+      {
+        durationsById: {
+          "clip-ok": 120,
+          "clip-unknown": undefined,
+        },
+      },
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+        durationFilter: { min_sec: 60, max_sec: 300 },
+      },
+    });
+
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["clip-ok"],
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+    );
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        submittedClipIds: ["clip-ok"],
+        durationFilter: { min_sec: 60, max_sec: 300 },
+        playlistExpectedClipCount: 1,
+      }),
+    );
+  });
+
+  it("Given resume の保存済み ID に duration NG が混在 When playlist 追加 Then OK clip IDs のみに正規化する", async () => {
+    const entries: PromptEntry[] = [{ name: "track-1", title: "Track One", style: "style 1", lyrics: "" }];
+    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      [],
+      new Error("playlist rows missing"),
+      {
+        durationsById: {
+          "old-ok": 120,
+          "old-short": 30,
+        },
+      },
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+        range: { start: entries.length, end: entries.length - 1 },
+        durationFilter: { min_sec: 60, max_sec: 300 },
+        submittedClipIds: ["old-ok", "old-short"],
+        playlistExpectedClipCount: 2,
+      },
+    });
+
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["old-ok"],
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+    );
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        submittedClipIds: ["old-ok"],
+        durationFilter: { min_sec: 60, max_sec: 300 },
+        playlistExpectedClipCount: 1,
+      }),
+    );
+  });
+
+  it("Given resume の保存済み ID が正規化済み When duration 再観測前でも playlist 対象に残す", async () => {
+    const entries: PromptEntry[] = [{ name: "track-1", title: "Track One", style: "style 1", lyrics: "" }];
+    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      [],
+      new Error("playlist rows missing"),
+      {
+        durationsById: {
+          "old-ok": undefined,
+        },
+      },
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+        range: { start: entries.length, end: entries.length - 1 },
+        durationFilter: { min_sec: 60, max_sec: 300 },
+        submittedClipIds: ["old-ok"],
+        submittedClipIdsAreDurationFiltered: true,
+        playlistExpectedClipCount: 1,
+      },
+    });
+
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["old-ok"],
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+    );
+  });
+
+  it("Given 全 submitted clip が duration NG When playlist 追加 Then raw ID を resume に残さず ERROR で止める", async () => {
+    const entries: PromptEntry[] = [
+      { name: "track-1", title: "Track One", style: "style 1", lyrics: "" },
+      { name: "track-2", title: "Track Two", style: "style 2", lyrics: "" },
+    ];
+    const currentSubmittedClipIds = ["clip-short-1", "clip-short-2", "clip-long-1", "clip-long-2"];
+    const { progressMessages, scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      currentSubmittedClipIds,
+      [],
+      {
+        durationsById: {
+          "clip-short-1": 30,
+          "clip-short-2": 40,
+          "clip-long-1": 420,
+          "clip-long-2": 480,
+        },
+      },
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+        durationFilter: { min_sec: 60, max_sec: 300 },
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({
+          phase: PHASE.ERROR,
+          index: entries.length,
+          message: expect.stringContaining("playlist 対象の OK clip ID が 0 件"),
+        }),
+      ),
+    );
+    expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        submittedClipIds: [],
+        durationFilter: { min_sec: 60, max_sec: 300 },
+        playlistExpectedClipCount: 0,
+      }),
+    );
+  });
+
+  it("Given 1 entry 丸ごと duration NG で別 entry は OK When playlist 追加 Then OK entry の clip だけで継続する", async () => {
+    const entries: PromptEntry[] = [
+      { name: "track-1", title: "Track One", style: "style 1", lyrics: "" },
+      { name: "track-2", title: "Track Two", style: "style 2", lyrics: "" },
+    ];
+    const currentSubmittedClipIds = ["ng-1", "ng-2", "ok-1", "ok-2"];
+    const rows = ["ok-1", "ok-2"].map(() => ({}) as HTMLElement);
+    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      currentSubmittedClipIds,
+      rows,
+      {
+        durationsById: {
+          "ng-1": 30,
+          "ng-2": 45,
+          "ok-1": 120,
+          "ok-2": 180,
+        },
+      },
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | mixed all-ng entry",
+        collectionId: "collection-a",
+        durationFilter: { min_sec: 60, max_sec: 300 },
+      },
+    });
+
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["ok-1", "ok-2"],
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+    );
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        submittedClipIds: ["ok-1", "ok-2"],
+        durationFilter: { min_sec: 60, max_sec: 300 },
+        playlistExpectedClipCount: 2,
+      }),
+    );
+  });
+
   it("Given 旧 payload が期待件数なしで playlist-only resume When ID が不足 Then ERROR で止める", async () => {
     const entries: PromptEntry[] = [
       { name: "track-1", style: "style 1", lyrics: "" },
@@ -488,22 +850,12 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expect(clearResumeStateForCollectionMock).toHaveBeenCalledWith("collection-a");
 
     const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
-    expect(downloadedPosts).toHaveLength(2);
-    expect(downloadedPosts[0].payload).toMatchObject({
-      body: {
-        file_count: 0,
-        format: "mp3",
-        suno_playlist_url: "https://suno.com/playlist/regression",
-      },
-    });
-    expect(downloadedPosts[1].payload).toMatchObject({
-      body: {
-        file_count: 2,
-        expected_file_count: 2,
-        format: "mp3",
-        suno_playlist_url: "https://suno.com/playlist/regression",
-        download_path: "/Users/test/Downloads/regression.zip",
-      },
+    expect(downloadedPosts).toHaveLength(1);
+    expectPostDownloadedBody(downloadedPosts[0].payload, {
+      file_count: 2,
+      expected_file_count: 2,
+      format: "mp3",
+      download_path: "/Users/test/Downloads/regression.zip",
     });
   });
 
@@ -537,9 +889,8 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       );
       expect(sentMessages.find((m) => m.type === "startDownload")?.payload).toMatchObject({ format });
       const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
-      expect(downloadedPosts).toHaveLength(2);
-      expect(downloadedPosts[0].payload).toMatchObject({ body: { format } });
-      expect(downloadedPosts[1].payload).toMatchObject({ body: { format } });
+      expect(downloadedPosts).toHaveLength(1);
+      expectPostDownloadedBody(downloadedPosts[0].payload, { format });
     },
   );
 
@@ -552,7 +903,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       rows,
       {
         postDownloadedError: new Error("POST downloaded failed: 500 Internal Server Error"),
-        postDownloadedRejectOnCall: 2,
+        postDownloadedRejectOnCall: 1,
       },
     );
 
@@ -578,7 +929,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         }),
       ),
     );
-    expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(2);
+    expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(1);
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         collectionId: "collection-a",
@@ -732,19 +1083,6 @@ describe("content.ts run 一式完了時のページリロード (#1411)", () =>
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
 
     expect(scheduleRunCompleteReloadMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("Given playlist 無しの run（単一ファイル mode）が完走 When FINISHED Then リロードは走らない", async () => {
-    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
-    const { progressMessages, runHandler, scheduleRunCompleteReloadMock, scrollAndMultiSelectByIdsMock } =
-      await loadContentScriptWithPlaylistRows([], []);
-
-    runHandler({ data: { entries } });
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
-
-    // multi-select 自体が走らない = 選択状態を作らないためリロード不要
-    expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
-    expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
   });
 
   it("Given resume state 消去が失敗 When run 完走 Then FINISHED は維持しリロードのみ見送る", async () => {

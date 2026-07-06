@@ -12,7 +12,7 @@ from youtube_automation.utils import suno_track_selection
 from youtube_automation.utils.exceptions import ValidationError
 
 
-def _make_collection(tmp_path: Path, prompts: list[dict]) -> Path:
+def _make_collection(tmp_path: Path, prompts: object) -> Path:
     collection = tmp_path / "collections" / "planning" / "20260629-test-collection"
     (collection / "20-documentation").mkdir(parents=True)
     (collection / "02-Individual-music").mkdir()
@@ -88,6 +88,26 @@ def test_instrumental_prompt_keeps_both_clips_after_duration_filter(tmp_path, mo
     assert result.mode_counts == {"vocal": 0, "instrumental": 1}
 
 
+def test_prompt_response_envelope_keeps_track_selection_compatible(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        {
+            "entries": [{"name": "夜明け — Dawn Song", "lyrics": "[Verse]\nhello dawn"}],
+            "duration_filter": {"min_sec": 60, "max_sec": 300},
+        },
+    )
+    _write_audio(collection, "01a-Dawn Song.mp3")
+    _write_audio(collection, "01b-Dawn Song.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+
+    result = suno_track_selection.select_suno_tracks(collection, _cfg())
+
+    music_files = sorted(p.name for p in (collection / "02-Individual-music").iterdir() if p.is_file())
+    assert music_files == ["01-Dawn Song.mp3"]
+    assert len(result.winners) == 1
+    assert len(result.stocked) == 1
+
+
 def test_duration_filter_stocks_too_short_and_keeps_survivor(tmp_path, monkeypatch):
     collection = _make_collection(
         tmp_path,
@@ -109,6 +129,32 @@ def test_duration_filter_stocks_too_short_and_keeps_survivor(tmp_path, monkeypat
     assert len(result.stocked) == 1
     assert result.stocked[0].exists()
     assert "Dawn Groove" in result.dropped[0].title
+
+
+def test_dry_run_reports_under_min_candidates_with_threshold(tmp_path, monkeypatch, capsys):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
+    )
+    short = _write_audio(collection, "01a-Dawn Groove.mp3")
+    survivor = _write_audio(collection, "01b-Dawn Groove.mp3")
+
+    def fake_probe(path: Path) -> float:
+        return 44.5 if path == short else 120.0
+
+    monkeypatch.setattr(suno_track_selection, "probe_duration", fake_probe)
+
+    result = suno_track_selection.select_suno_tracks(collection, _cfg(), dry_run=True)
+
+    assert short.exists()
+    assert survivor.exists()
+    assert len(result.dropped) == 1
+    assert not (collection / "01-master" / ".selection.log").exists()
+    stdout = capsys.readouterr().out
+    assert "[dropped_under_min]" in stdout
+    assert "01 a Dawn Groove duration=44.50s min_song_sec=45.00s source=01a-Dawn Groove.mp3" in stdout
+    assert "[dropped_duration]" in stdout
+    assert "01 a Dawn Groove duration=44.50s source=01a-Dawn Groove.mp3" in stdout
 
 
 def test_all_candidates_dropped_fails_loud(tmp_path, monkeypatch):
@@ -395,6 +441,7 @@ def test_best_effort_dry_run_reports_exception_without_side_effects(tmp_path, mo
     assert "[exceptions_over_limit]" in stdout
     assert "source=01a-Red Pressure.mp3" in stdout
     assert "reason=all_candidates_over_max_song_sec; selected_shortest_over_limit" in stdout
+    assert "min_song_sec=" not in stdout
 
 
 def test_never_mode_skips_selection(tmp_path, monkeypatch):
@@ -846,6 +893,29 @@ def test_main_uses_cwd_and_dry_run(tmp_path, monkeypatch, capsys):
     assert "dry_run=true" in capsys.readouterr().out
 
 
+def test_main_dry_run_reports_under_min_summary_and_details(tmp_path, monkeypatch, capsys):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
+    )
+    short = _write_audio(collection, "01a-Dawn Groove.mp3")
+    survivor = _write_audio(collection, "01b-Dawn Groove.mp3")
+
+    def fake_probe(path: Path) -> float:
+        return 44.5 if path == short else 120.0
+
+    monkeypatch.setattr(suno_track_selection, "probe_duration", fake_probe)
+    monkeypatch.setattr(suno_select_tracks, "load_skill_config", lambda _: _cfg())
+    monkeypatch.setattr(sys, "argv", ["yt-suno-select-tracks", "--dry-run", str(collection)])
+
+    assert suno_select_tracks.main() == 0
+    assert short.exists()
+    assert survivor.exists()
+    stdout = capsys.readouterr().out
+    assert "dropped_under_min=1" in stdout
+    assert "duration=44.50s min_song_sec=45.00s source=01a-Dawn Groove.mp3" in stdout
+
+
 def test_main_passes_best_effort_over_max_flag(tmp_path, monkeypatch, capsys):
     collection = _make_collection(
         tmp_path,
@@ -884,3 +954,18 @@ def test_project_scripts_registers_suno_select_tracks_entrypoint():
         pyproject["project"]["scripts"]["yt-suno-select-tracks"]
         == "youtube_automation.cli_entrypoints:yt_suno_select_tracks"
     )
+
+
+def test_masterup_skill_documents_under_min_confirmation_gate():
+    text = Path(".claude/skills/masterup/SKILL.md").read_text(encoding="utf-8")
+
+    assert "yt-suno-select-tracks --dry-run <collection-path>" in text
+    assert "[dropped_under_min]" in text
+    assert "source=<filename>" in text
+    assert "duration=<sec>s" in text
+    assert "min_song_sec=<sec>s" in text
+    assert "続行する" in text
+    assert "続行しない" in text
+    assert "/suno-helper" in text
+    assert "Step 5 へ進まない" in text
+    assert "`pair_selection.max_song_sec` 超過だけの候補では、この確認プロンプトを出さない" in text

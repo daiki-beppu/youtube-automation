@@ -12,18 +12,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PHASE, type SnapshotPayload } from "../../shared/constants";
-import type { PromptEntry } from "../../shared/api";
-import type { RunRange } from "../lib/resume-state";
+import type { RunPayload } from "../lib/messaging";
 import { makePromptEntries } from "./_helpers";
-
-interface RunPayload {
-  entries: PromptEntry[];
-  playlistName?: string;
-  range?: RunRange;
-  collectionId?: string;
-  submittedClipIds?: string[];
-  playlistExpectedClipCount?: number;
-}
 
 type Handler = (message: { data?: Record<string, unknown> }) => unknown;
 
@@ -112,6 +102,7 @@ async function loadContentScript(
       clearSubmittedIds: vi.fn(),
       getSubmittedIds: vi.fn(() => submittedIdsFromTracker),
       getPendingSubmittedIds: vi.fn(() => []),
+      getDuration: vi.fn(() => 120),
       getInFlightCount: vi.fn(() => 0),
       hasObservedAnyTraffic: vi.fn(() => true),
       lastChangeAt: vi.fn(() => Date.now()),
@@ -131,6 +122,7 @@ async function loadContentScript(
     resolveAdvancedFields: vi.fn(() => ({})),
     resolveFields: vi.fn(() => ({ style: {} as HTMLTextAreaElement, lyrics: null, title: null })),
     resolveGenerateButton: vi.fn(() => ({ click: vi.fn() }) as unknown as HTMLButtonElement),
+    setLyricsValue: vi.fn(() => Promise.resolve()),
     setNativeValue: vi.fn(),
     sleep: vi.fn(() => Promise.resolve()),
     waitForCaptchaClear: vi.fn(() => Promise.resolve()),
@@ -149,10 +141,6 @@ async function loadContentScript(
       return Promise.resolve(ids.length);
     }),
     waitForPlaylistDialogClose: vi.fn(() => Promise.resolve()),
-  }));
-
-  vi.doMock("../../shared/playlist-scrape", () => ({
-    scrapePlaylistsFromMe: vi.fn(() => []),
   }));
 
   vi.doMock("../lib/ack-probe", () => ({
@@ -179,7 +167,9 @@ async function loadContentScript(
     triggerDownloadAll: vi.fn(() => Promise.resolve()),
   }));
 
-  vi.doMock("../../shared/api", () => ({}));
+  vi.doMock("../../shared/api", async () => ({
+    ...(await vi.importActual<typeof import("../../shared/api")>("../../shared/api")),
+  }));
 
   const content = await import("../entrypoints/content");
   content.default.main({} as NonNullable<Parameters<typeof content.default.main>[0]>);
@@ -225,13 +215,13 @@ describe("content.ts 完了時リロード前の FINISHED snapshot 退避", () =
     expect(writeFinishedSnapshotMock).toHaveBeenCalledTimes(1);
     expect(writeFinishedSnapshotMock).toHaveBeenCalledWith({
       snapshot: expect.objectContaining({
+        collectionId: "coll-1",
         isRunning: false,
         progress: expect.objectContaining({ phase: PHASE.FINISHED }),
         // range {0,0} の部分実行: entry 0 のみ done、entry 1 は未実行のまま（per-entry 状態の引き継ぎ）
         itemStates: ["done", "idle"],
         playlistName: "pl",
       }),
-      collectionId: "coll-1",
       timestamp: expect.any(Number),
     });
     // 退避の完了を待ってからリロードを予約する（逆順だとリロードが write を巻き添えに殺しうる）
@@ -254,17 +244,6 @@ describe("content.ts 完了時リロード前の FINISHED snapshot 退避", () =
     expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
   });
 
-  it("Given 単一ファイル mode（playlist 無し）が完走 When FINISHED Then リロード対象外のため退避もしない", async () => {
-    const { runHandler, progressMessages, writeFinishedSnapshotMock, scheduleRunCompleteReloadMock } =
-      await loadContentScript([]);
-
-    runHandler({ data: { entries: [] } });
-
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
-    expect(writeFinishedSnapshotMock).not.toHaveBeenCalled();
-    expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
-  });
-
   it("Given retryPlaylist が完走 When FINISHED Then 退避してからリロードを予約する", async () => {
     const { handlers, progressMessages, writeFinishedSnapshotMock, scheduleRunCompleteReloadMock } =
       await loadContentScript([]);
@@ -281,7 +260,10 @@ describe("content.ts 完了時リロード前の FINISHED snapshot 退避", () =
 
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
     expect(writeFinishedSnapshotMock).toHaveBeenCalledWith(
-      expect.objectContaining({ collectionId: "coll-1", timestamp: expect.any(Number) }),
+      expect.objectContaining({
+        snapshot: expect.objectContaining({ collectionId: "coll-1" }),
+        timestamp: expect.any(Number),
+      }),
     );
     expect(scheduleRunCompleteReloadMock).toHaveBeenCalledTimes(1);
     expect(writeFinishedSnapshotMock.mock.invocationCallOrder[0]).toBeLessThan(
@@ -294,7 +276,7 @@ describe("content.ts 実行開始時の退避 snapshot 消去", () => {
   it("Given run 受理 When initSnapshot Then 直近完了 run の退避 snapshot を消去する", async () => {
     const { runHandler, clearFinishedSnapshotMock } = await loadContentScript([]);
 
-    runHandler({ data: { entries: [] } });
+    runHandler({ data: partialRunPayload() });
 
     expect(clearFinishedSnapshotMock).toHaveBeenCalledTimes(1);
   });
@@ -303,7 +285,7 @@ describe("content.ts 実行開始時の退避 snapshot 消去", () => {
     const { handlers, clearFinishedSnapshotMock } = await loadContentScript([]);
 
     handlers.get("retryPlaylist")!({
-      data: { playlistName: "pl", submittedClipIds: ["clip-1"], expectedClipCount: 1 },
+      data: { playlistName: "pl", submittedClipIds: ["clip-1"], expectedClipCount: 1, collectionId: "coll-1" },
     });
 
     // 消去は initSnapshot 直後に同期で発火する（完了を待つ必要はない）
@@ -323,9 +305,12 @@ describe("content.ts 実行開始時の退避 snapshot 消去", () => {
 
 describe('content.ts onMessage("queryProgress"): 退避 snapshot への fallback', () => {
   it("Given run 実行済み（in-memory snapshot あり）When queryProgress Then in-memory を返し storage は読まない", async () => {
-    const { handlers, runHandler, progressMessages, readFreshFinishedSnapshotMock } = await loadContentScript([]);
+    const { handlers, runHandler, progressMessages, readFreshFinishedSnapshotMock } = await loadContentScript([
+      "clip-1",
+      "clip-2",
+    ]);
 
-    runHandler({ data: { entries: [] } });
+    runHandler({ data: partialRunPayload() });
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
 
     const snapshot = (await handlers.get("queryProgress")!({})) as SnapshotPayload | null;
@@ -336,6 +321,7 @@ describe('content.ts onMessage("queryProgress"): 退避 snapshot への fallback
 
   it("Given run 未実行 + 退避 snapshot あり（リロード直後）When queryProgress Then 退避分を返す", async () => {
     const persisted: SnapshotPayload = {
+      collectionId: "collection-a",
       entries: makePromptEntries(2),
       itemStates: ["done", "done"],
       isRunning: false,

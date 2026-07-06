@@ -13,11 +13,14 @@ import {
   isFinishedSnapshotFresh,
 } from "../lib/finished-snapshot";
 import { applyProgress, initSnapshot } from "../lib/snapshot";
-import { makePromptEntries } from "./_helpers";
+import { makePromptEntries, snapshotOptions } from "./_helpers";
 
 function makeFinishedState(timestamp: number): FinishedSnapshotState {
-  const snapshot = applyProgress(initSnapshot(makePromptEntries(2), "pl"), { phase: PHASE.FINISHED, total: 2 });
-  return { snapshot, collectionId: "coll-1", timestamp };
+  const snapshot = applyProgress(initSnapshot(makePromptEntries(2), snapshotOptions("pl")), {
+    phase: PHASE.FINISHED,
+    total: 2,
+  });
+  return { snapshot, timestamp };
 }
 
 describe("isFinishedSnapshotFresh: 退避 snapshot の鮮度判定", () => {

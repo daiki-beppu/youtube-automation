@@ -112,6 +112,28 @@ class TestAuditLocalPreflightContract:
 
         assert audit_local(collection_dir, _audit_config(["ja"])) == []
 
+    def test_single_language_channel_without_scene_phrases_passes(self, tmp_path: Path) -> None:
+        """単一言語チャンネルは populate が no-op のため scene_phrases 無しでも audit が通る (#1470)."""
+        collection_dir = _write_local_collection(
+            tmp_path,
+            scene_phrases={},
+            description="A continuous BGM mix without chapter markers.",
+        )
+
+        assert audit_local(collection_dir, _audit_config(["en"])) == []
+
+    def test_single_language_channel_malformed_workflow_state_fails(self, tmp_path: Path) -> None:
+        """単一言語でも workflow-state.json 自体の破損は audit で見逃さない (#1470)."""
+        collection_dir = _write_local_collection(
+            tmp_path,
+            scene_phrases={},
+            description="A continuous BGM mix without chapter markers.",
+        )
+        (collection_dir / "workflow-state.json").write_text("{not json", encoding="utf-8")
+
+        with pytest.raises(json.JSONDecodeError):
+            audit_local(collection_dir, _audit_config(["en"]))
+
     def test_heading_mismatch_reports_descriptions_md_diagnostics(self, tmp_path: Path) -> None:
         collection_dir = _write_local_collection(
             tmp_path,
