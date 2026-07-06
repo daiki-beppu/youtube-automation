@@ -9,7 +9,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from youtube_automation.cli.automation_update_refs import PACKAGE_NAME, UPSTREAM_REPO, _canonicalize_name
+from youtube_automation.cli.automation_update_refs import PACKAGE_NAME, _canonicalize_name
 from youtube_automation.utils.exceptions import ConfigError
 
 
@@ -27,22 +27,6 @@ def _github_api_get(path: str) -> dict:
             return json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
         raise ConfigError(f"GitHub API の呼び出しに失敗しました ({url}): {e}")
-
-
-def _fetch_latest_release_tag() -> str:
-    release = _github_api_get(f"repos/{UPSTREAM_REPO}/releases/latest")
-    tag = release.get("tag_name")
-    if not isinstance(tag, str) or not tag:
-        raise ConfigError("upstream 最新リリースの tag_name を取得できません")
-    return tag
-
-
-def _fetch_branch_head_sha(branch: str) -> str:
-    commit = _github_api_get(f"repos/{UPSTREAM_REPO}/commits/{branch}")
-    sha = commit.get("sha")
-    if not isinstance(sha, str) or not sha:
-        raise ConfigError(f"upstream {branch} の HEAD sha を取得できません")
-    return sha
 
 
 def _locked_git_sha(root: Path) -> str | None:
