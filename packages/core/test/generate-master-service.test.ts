@@ -7,7 +7,7 @@ import {
   rmSync,
   symlinkSync,
 } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { generateMasterService } from "@youtube-automation/core/generate-master";
 
@@ -178,6 +178,56 @@ describe("generateMasterService — pin, shuffle, and loop ordering", () => {
       '[Pin] first 1 track(s) fixed: ["01-a.mp3"]'
     );
   });
+
+  test("does not shuffle when config only provides shuffle_seed", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", [
+      "01-a.mp3",
+      "02-b.mp3",
+      "03-c.mp3",
+    ]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify({ audio: { shuffle_seed: 42 } })
+    );
+    const logPath = installFakeFfmpeg();
+
+    const output = await runOk({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
+
+    const [args] = readFfmpegCalls(logPath);
+    expect(
+      inputFilesInCommand(args ?? []).map((path) => basename(path))
+    ).toEqual(["01-a.mp3", "02-b.mp3", "03-c.mp3"]);
+    expect(output.messages).not.toContain("[Shuffle] seed=42");
+  });
+
+  test("uses config shuffle_seed when config enables shuffle", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", [
+      "01-a.mp3",
+      "02-b.mp3",
+      "03-c.mp3",
+    ]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify({ audio: { shuffle: true, shuffle_seed: 42 } })
+    );
+    const logPath = installFakeFfmpeg();
+
+    const output = await runOk({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
+
+    const [args] = readFfmpegCalls(logPath);
+    expect(
+      inputFilesInCommand(args ?? []).map((path) => basename(path))
+    ).not.toEqual(["01-a.mp3", "02-b.mp3", "03-c.mp3"]);
+    expect(output.messages).toContain("[Shuffle] seed=42");
+  });
 });
 
 describe("generateMasterService — target duration probing", () => {
@@ -258,6 +308,33 @@ describe("generateMasterService — target duration probing", () => {
     expect(readFfprobeCalls(ffprobeLog)).toHaveLength(2);
   });
 
+  test("ignores config target_duration_min when no_loop is explicit", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify({ audio: { target_duration_min: 3 } })
+    );
+    const ffmpegLog = installFakeFfmpeg();
+    const ffprobeLog = installFakeFfprobe({
+      "01-a.mp3": 30,
+      "02-b.mp3": 30,
+    });
+
+    const output = await runOk({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+      no_loop: true,
+    });
+
+    const [args] = readFfmpegCalls(ffmpegLog);
+    expect(output.loopCount).toBe(1);
+    expect(output.segmentCount).toBe(2);
+    expect(output.durationPreview?.targetSeconds).toBeUndefined();
+    expect(inputFilesInCommand(args ?? [])).toHaveLength(2);
+    expect(readFfprobeCalls(ffprobeLog)).toHaveLength(2);
+  });
+
   test("does not probe config target_duration_min when explicit loop wins", async () => {
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
@@ -297,6 +374,26 @@ describe("generateMasterService — target duration probing", () => {
     if (!result.ok) {
       expect(result.error.domain).toBe("validation");
       expect(result.error.message).toContain("failed to probe");
+    }
+    expect(readFfmpegCalls(ffmpegLog)).toEqual([]);
+  });
+
+  test("returns validation error and does not run ffmpeg when ffprobe is missing", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    const ffmpegLog = installFakeFfmpeg();
+    process.env.PATH = dirname(ffmpegLog);
+
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+      target_duration_min: 3,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("validation");
+      expect(result.error.message).toContain("ffprobe not found");
     }
     expect(readFfmpegCalls(ffmpegLog)).toEqual([]);
   });

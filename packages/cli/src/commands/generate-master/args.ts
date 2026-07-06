@@ -1,5 +1,4 @@
 import { err, ok, toServiceError } from "@youtube-automation/core";
-import { GenerateMasterInputSchema } from "@youtube-automation/core/generate-master";
 
 import {
   isCollectionCandidate,
@@ -274,7 +273,7 @@ export const parseGenerateMasterInput = (
       options
     );
     return ok({
-      input: GenerateMasterInputSchema.parse(serviceInput),
+      input: serviceInput,
       quiet,
     });
   } catch (error) {

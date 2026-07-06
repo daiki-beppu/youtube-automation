@@ -98,7 +98,12 @@ const runProcess = async (
   child.stderr.on("data", (chunk: Buffer) => {
     stderrChunks.push(chunk);
   });
-  const [code] = (await once(child, "close")) as [number | null];
+  const [code] = (await Promise.race([
+    once(child, "close") as Promise<[number | null]>,
+    once(child, "error").then(([error]) => {
+      throw error instanceof Error ? error : new Error(String(error));
+    }) as Promise<[number | null]>,
+  ])) as [number | null];
   return {
     exitCode: code ?? 1,
     stderr: Buffer.concat(stderrChunks).toString("utf-8"),
@@ -106,8 +111,26 @@ const runProcess = async (
   };
 };
 
+const resolveExecutableFromPath = (name: string): string | null => {
+  const pathValue = process.env.PATH;
+  if (pathValue === undefined || pathValue.length === 0) {
+    return null;
+  }
+  for (const dir of pathValue.split(delimiter)) {
+    const candidate = join(dir, name);
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
 export const probeDuration = async (file: string): Promise<number> => {
-  const { exitCode, stdout } = await runProcess("ffprobe", [
+  const ffprobe = resolveExecutableFromPath("ffprobe");
+  if (ffprobe === null) {
+    throw new Error("validation: ffprobe not found");
+  }
+  const { exitCode, stdout } = await runProcess(ffprobe, [
     "-v",
     "error",
     "-show_entries",
@@ -125,20 +148,6 @@ export const probeDuration = async (file: string): Promise<number> => {
     throw new Error(`validation: invalid track duration: ${file}`);
   }
   return duration;
-};
-
-const resolveExecutableFromPath = (name: string): string | null => {
-  const pathValue = process.env.PATH;
-  if (pathValue === undefined || pathValue.length === 0) {
-    return null;
-  }
-  for (const dir of pathValue.split(delimiter)) {
-    const candidate = join(dir, name);
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return null;
 };
 
 export const runFfmpeg = async (args: string[]): Promise<void> => {

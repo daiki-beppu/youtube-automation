@@ -85,6 +85,13 @@ const GenerateMasterRawInputSchema = z.preprocess(
     })
 );
 
+const GenerateMasterExternalInputSchema =
+  GenerateMasterRawInputSchema.transform((input) => {
+    const { __specified, ...externalInput } = input;
+    void __specified;
+    return snakeToCamel(externalInput);
+  });
+
 const GenerateMasterInternalInputSchema = z
   .object({
     bitrate: z.string(),
@@ -134,19 +141,70 @@ const GenerateMasterInternalInputSchema = z
     }
   });
 
-export const GenerateMasterInputSchema = GenerateMasterRawInputSchema.transform(
-  (input) => {
+const GenerateMasterCamelInputSchema = z
+  .object({
+    bitrate: z.string(),
+    channelDir: z.string().optional(),
+    collection: z.string().min(1).optional(),
+    crossfadeDuration: z.number().positive(),
+    loop: z.number().int().positive().optional(),
+    noLoop: z.boolean(),
+    pinFirst: z.array(z.string().min(1)),
+    pinFirstCount: z.number().int().nonnegative().optional(),
+    shuffle: z.boolean(),
+    shuffleSeed: z.number().int().optional(),
+    targetDurationMin: z.number().int().positive().optional(),
+  })
+  .strict()
+  .superRefine((input, ctx) => {
+    if (input.loop !== undefined && input.targetDurationMin !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "loop and targetDurationMin are mutually exclusive",
+        path: ["targetDurationMin"],
+      });
+    }
+    if (input.noLoop && input.targetDurationMin !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "noLoop and targetDurationMin are mutually exclusive",
+        path: ["targetDurationMin"],
+      });
+    }
+    if (input.pinFirst.length > 0 && input.pinFirstCount !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        message: "pinFirst and pinFirstCount are mutually exclusive",
+        path: ["pinFirstCount"],
+      });
+    }
+  });
+
+const GenerateMasterRawServiceInputSchema =
+  GenerateMasterRawInputSchema.transform((input) => {
     const { __specified, ...externalInput } = input;
     return {
       ...snakeToCamel(externalInput),
       specified: __specified,
     };
-  }
-);
+  });
+
+const unspecifiedFields = Object.fromEntries(
+  inputSpecifiedFields.map(([, outputField]) => [outputField, false])
+) as GenerateMasterInternalInput["specified"];
+
+const GenerateMasterExternalServiceInputSchema =
+  GenerateMasterCamelInputSchema.transform((input) => ({
+    ...input,
+    specified: unspecifiedFields,
+  }));
+
+export const GenerateMasterInputSchema = GenerateMasterExternalInputSchema;
 
 export const ParseableGenerateMasterInputSchema = z.union([
   GenerateMasterInternalInputSchema,
-  GenerateMasterInputSchema,
+  GenerateMasterRawServiceInputSchema,
+  GenerateMasterExternalServiceInputSchema,
 ]);
 
 export const GenerateMasterOutputSchema = z
@@ -170,10 +228,7 @@ export const GenerateMasterOutputSchema = z
   .strict();
 
 export type GenerateMasterInternalInput = z.infer<
-  typeof GenerateMasterInputSchema
+  typeof GenerateMasterInternalInputSchema
 >;
-export type GenerateMasterInput = Omit<
-  GenerateMasterInternalInput,
-  "specified"
->;
+export type GenerateMasterInput = z.infer<typeof GenerateMasterInputSchema>;
 export type GenerateMasterOutput = z.infer<typeof GenerateMasterOutputSchema>;

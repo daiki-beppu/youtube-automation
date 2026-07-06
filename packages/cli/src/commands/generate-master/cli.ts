@@ -52,7 +52,7 @@ const findChannelRootForCollection = (
 };
 
 const resolveGenerateMasterDeps = (
-  input: GenerateMasterInput,
+  input: Pick<Partial<GenerateMasterInput>, "channelDir" | "collection">,
   channelDir: string | undefined
 ): GenerateMasterDeps => {
   if (input.channelDir !== undefined) {
@@ -190,8 +190,17 @@ export const generateMasterCommand = defineCommand({
         }
         const { input, quiet: inputQuiet } = parsedInput.value;
         quiet = inputQuiet;
-        const deps = resolveGenerateMasterDeps(input, channelDir);
-        return await generateMasterEntry.run(input, deps);
+        const deps = resolveGenerateMasterDeps(
+          {
+            channelDir: input.channel_dir,
+            collection: input.collection,
+          },
+          channelDir
+        );
+        return await generateMasterEntry.run(
+          input as GenerateMasterInput,
+          deps
+        );
       } catch (error) {
         return err(toServiceError(error));
       }

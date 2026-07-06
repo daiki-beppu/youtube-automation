@@ -2,14 +2,10 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  generateMasterService,
-  GenerateMasterInputSchema,
-} from "@youtube-automation/core/generate-master";
+import { generateMasterService } from "@youtube-automation/core/generate-master";
 
 import {
   installFakeFfmpeg,
-  installFakeFfprobe,
   makeTempRoot,
   readFfmpegCalls,
   restoreGenerateMasterFixtures,
@@ -19,8 +15,7 @@ import {
 } from "./generate-master-fixtures.ts";
 
 const runOk = async (rawInput: unknown) => {
-  const input = GenerateMasterInputSchema.parse(rawInput);
-  const result = await generateMasterService(input);
+  const result = await generateMasterService(rawInput);
   if (!result.ok) {
     throw new Error(`expected ok Result, got ${JSON.stringify(result.error)}`);
   }
@@ -85,24 +80,24 @@ describe("generateMasterService — skill config override", () => {
     expect(output.messages.some((line) => line.includes("[Pin]"))).toBe(true);
   });
 
-  test("reads legacy audio.finalize YAML values", async () => {
+  test("ignores legacy audio.finalize YAML values", async () => {
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
     writeText(
       join(channelRoot, "config", "skills", "masterup.yaml"),
       [
         "audio:",
+        "  bitrate: 224k",
+        "  crossfade_duration: 2",
         "  finalize:",
         "    bitrate: 256k",
         "    crossfade_duration: 3",
         "    target_duration_min: 3",
+        "    ambient_layers:",
+        "      enabled: true",
       ].join("\n")
     );
     const ffmpegLog = installFakeFfmpeg();
-    installFakeFfprobe({
-      "01-a.mp3": 30,
-      "02-b.mp3": 30,
-    });
 
     const output = await runOk({
       channel_dir: channelRoot,
@@ -111,10 +106,11 @@ describe("generateMasterService — skill config override", () => {
 
     const [args] = readFfmpegCalls(ffmpegLog);
     expect(args).toBeDefined();
-    expect(args).toContain("256k");
-    expect((args ?? []).join(" ")).toContain("acrossfade=d=3");
-    expect(output.loopCount).toBeGreaterThan(1);
-    expect(output.bitrate).toBe("256k");
+    expect(args).toContain("224k");
+    expect((args ?? []).join(" ")).toContain("acrossfade=d=2");
+    expect(output.loopCount).toBe(1);
+    expect(output.bitrate).toBe("224k");
+    expect(output.crossfadeDuration).toBe(2);
   });
 
   test("parses quoted YAML scalars and inline comments", async () => {
@@ -216,12 +212,10 @@ describe("generateMasterService — skill config override", () => {
     );
     const logPath = installFakeFfmpeg();
 
-    const result = await generateMasterService(
-      GenerateMasterInputSchema.parse({
-        channel_dir: channelRoot,
-        collection: "collections/demo",
-      })
-    );
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -240,12 +234,10 @@ describe("generateMasterService — skill config override", () => {
     );
     const logPath = installFakeFfmpeg();
 
-    const result = await generateMasterService(
-      GenerateMasterInputSchema.parse({
-        channel_dir: channelRoot,
-        collection: "collections/demo",
-      })
-    );
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -336,12 +328,10 @@ describe("generateMasterService — Result error contract", () => {
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", []);
     installFakeFfmpeg();
-    const result = await generateMasterService(
-      GenerateMasterInputSchema.parse({
-        channel_dir: channelRoot,
-        collection: "collections/demo",
-      })
-    );
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.domain).toBe("validation");
@@ -353,13 +343,11 @@ describe("generateMasterService — Result error contract", () => {
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
     installFakeFfmpeg();
-    const result = await generateMasterService(
-      GenerateMasterInputSchema.parse({
-        channel_dir: channelRoot,
-        collection: "collections/demo",
-        pin_first: ["missing.mp3"],
-      })
-    );
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+      pin_first: ["missing.mp3"],
+    });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.domain).toBe("validation");
@@ -371,12 +359,10 @@ describe("generateMasterService — Result error contract", () => {
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
     installFakeFfmpeg(42);
-    const result = await generateMasterService(
-      GenerateMasterInputSchema.parse({
-        channel_dir: channelRoot,
-        collection: "collections/demo",
-      })
-    );
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.domain).toBe("io");
@@ -392,12 +378,10 @@ describe("generateMasterService — Result error contract", () => {
       JSON.stringify({ audio: { crossfade_duration: "bad" } })
     );
     const logPath = installFakeFfmpeg();
-    const result = await generateMasterService(
-      GenerateMasterInputSchema.parse({
-        channel_dir: channelRoot,
-        collection: "collections/demo",
-      })
-    );
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.domain).toBe("config");
@@ -415,12 +399,10 @@ describe("generateMasterService — Result error contract", () => {
     );
     const logPath = installFakeFfmpeg();
 
-    const result = await generateMasterService(
-      GenerateMasterInputSchema.parse({
-        channel_dir: channelRoot,
-        collection: "collections/demo",
-      })
-    );
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
 
     expect(result.ok).toBe(false);
     if (!result.ok) {

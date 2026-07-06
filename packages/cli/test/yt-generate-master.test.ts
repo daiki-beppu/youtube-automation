@@ -410,12 +410,39 @@ describe("tayk dispatcher — generate-master", () => {
       expect(proc.stderr?.toString()).toBe("");
       const parsed = JSON.parse(proc.stdout?.toString() ?? "") as {
         loopCount: number;
+        messages: string[];
         segmentCount: number;
       };
       expect(parsed.loopCount).toBe(2);
       expect(parsed.segmentCount).toBe(4);
+      expect(parsed.messages).toContain("[Shuffle] seed=-1");
+      expect(
+        inputFilesInCommand(readFfmpegCall(fakeFfmpeg.logPath)).map((path) =>
+          basename(path)
+        )
+      ).not.toEqual(["01-a.mp3", "02-b.mp3", "01-a.mp3", "02-b.mp3"]);
     }
   );
+
+  testCliSmoke("quiet still prints the auto shuffle seed message", () => {
+    const channelRoot = makeTempRoot("yt-generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    const fake = installFakeFfmpeg();
+
+    const proc = runTayk(
+      fake.env,
+      "generate-master",
+      "--quiet",
+      "--shuffle",
+      "--channel-dir",
+      channelRoot,
+      "collections/demo"
+    );
+
+    expect(proc.exitCode).toBe(0);
+    expect(proc.stderr?.toString()).toBe("");
+    expect(proc.stdout?.toString()).toMatch(/^\[Shuffle\] seed=\d+\n?$/u);
+  });
 
   testCliSmoke(
     "uses trailing collection after pin-first when it resolves under channel dir",

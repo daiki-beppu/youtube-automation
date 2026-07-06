@@ -166,26 +166,25 @@ const parseMasterupYaml = (text: string): unknown => {
       inFinalize = false;
     }
     if (inAudio) {
-      if (/^ {2}finalize:\s*$/u.test(line)) {
-        inFinalize = true;
-        continue;
-      }
       const match = /^ {2}([a-zA-Z0-9_]+):\s*(.+)$/u.exec(line);
       if (match !== null) {
         const [, key, value] = match;
         if (key !== undefined && value !== undefined) {
+          if (key === "finalize") {
+            inFinalize = false;
+            continue;
+          }
           inFinalize = false;
           audio[key] = parseScalar(value.trim());
           continue;
         }
       }
-      const finalizeMatch = /^ {4}([a-zA-Z0-9_]+):\s*(.+)$/u.exec(line);
-      if (inFinalize && finalizeMatch !== null) {
-        const [, key, value] = finalizeMatch;
-        if (key !== undefined && value !== undefined) {
-          audio[key] = parseScalar(value.trim());
-          continue;
-        }
+      if (/^ {2}finalize:\s*$/u.test(line)) {
+        inFinalize = true;
+        continue;
+      }
+      if (inFinalize && /^ {4,}/u.test(line)) {
+        continue;
       }
       throw new Error(`config: unsupported masterup audio YAML line: ${line}`);
     }
