@@ -99,6 +99,47 @@ const MOCK_SUNO_HTML_NO_TITLE = `<!doctype html>
   </body>
 </html>`;
 
+// 2026-07 UI 改装を模す: Lyrics は Lexical contenteditable div、Style は styles-wrapper 内 textarea。
+// 実 Lexical と同じく paste / delete を自前ハンドリングして内部 state を更新する UI を最小再現する。
+const MOCK_SUNO_HTML_LEXICAL = `<!doctype html>
+<html>
+  <body>
+    <div data-testid="create-form-styles-wrapper">
+      <textarea id="style" placeholder="地下の罠, コントラルト, リズミカルなベース"></textarea>
+    </div>
+    <div id="lyrics" class="lyrics-editor-content" contenteditable="true" data-lexical-editor="true" style="width:300px;height:120px"><p>previous lyrics</p></div>
+    <div id="captured-style">-</div>
+    <div id="captured-lyrics">-</div>
+    <script>
+      document.getElementById('style').addEventListener('input', (e) => {
+        document.getElementById('captured-style').textContent = e.target.value;
+      });
+      // Lexical を模す: paste を preventDefault で横取りし、text/plain で選択範囲を置換する。
+      // selectAll が成立していない場合は insertion になり、前回歌詞が残るため回帰を検出できる。
+      const lyrics = document.getElementById('lyrics');
+      lyrics.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const text = e.clipboardData.getData('text/plain');
+        const selection = window.getSelection();
+        const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+        if (range && range.intersectsNode(lyrics) && range.toString() === lyrics.textContent) {
+          range.deleteContents();
+          if (text !== '') {
+            range.insertNode(document.createTextNode(text));
+          }
+          selection.removeAllRanges();
+        } else {
+          lyrics.insertAdjacentText('afterbegin', text);
+        }
+        document.getElementById('captured-lyrics').textContent = lyrics.textContent;
+      });
+      lyrics.addEventListener('input', () => {
+        document.getElementById('captured-lyrics').textContent = lyrics.textContent;
+      });
+    </script>
+  </body>
+</html>`;
+
 test("Suno mock へ Style/Lyrics を注入し Generate を押下できる", async ({ page }) => {
   await page.setContent(MOCK_SUNO_HTML);
 
@@ -261,6 +302,66 @@ test("Suno mock へ More Options 3 フィールド (exclude/weirdness/style_infl
   // radix slider: keydown が届き aria-valuenow が target へ動く。
   await expect(page.locator("#weirdness")).toHaveAttribute("aria-valuenow", "30");
   await expect(page.locator("#style-influence")).toHaveAttribute("aria-valuenow", "85");
+});
+
+test("Lexical Lyrics mock (2026-07 UI) へ selectAll → paste で歌詞を全置換できる", async ({ page }) => {
+  await page.setContent(MOCK_SUNO_HTML_LEXICAL);
+
+  // 本番 resolveFields の新 UI 識別 + setLyricsValue の Lexical 経路を inline 再現する
+  // (Playwright は shared/dom.ts を import できないため、既存テストと同じ方針)。
+  // 役割の限定: DataTransfer / ClipboardEvent の合成 paste が実 Chromium で contenteditable に
+  // 届き、UI 側の paste ハンドラが text/plain を取り出せることを担保する煙テスト。
+  await page.evaluate(async () => {
+    // resolveFields の新 UI 識別: Lyrics は Lexical fallback、Style は styles-wrapper 一次識別。
+    const lyrics = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        'div.lyrics-editor-content[data-lexical-editor][contenteditable="true"], div.lyrics-editor-content[data-lexical-editor][contenteditable=""]',
+      ),
+    ).find((el) => el.getBoundingClientRect().width > 0)!;
+    const style = Array.from(document.querySelectorAll("textarea")).find(
+      (el) => el.closest('[data-testid="create-form-styles-wrapper"]') !== null,
+    ) as HTMLTextAreaElement;
+
+    // Style は従来どおり setNativeValue 経路。
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+    setter.call(style, "cinematic ambient, warm pads");
+    style.dispatchEvent(new Event("input", { bubbles: true }));
+
+    // Lyrics は setLyricsValue の Lexical 経路: focus → selectAll → (selection 同期待ち) → paste。
+    lyrics.focus();
+    document.execCommand("selectAll", false);
+    await new Promise((r) => setTimeout(r, 200));
+    const data = new DataTransfer();
+    data.setData("text/plain", "new verse from entry two");
+    lyrics.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    await new Promise((r) => setTimeout(r, 200));
+  });
+
+  await expect(page.locator("#captured-style")).toHaveText("cinematic ambient, warm pads");
+  // 前 entry の歌詞 ("previous lyrics") が残らず全置換される。
+  await expect(page.locator("#captured-lyrics")).toHaveText("new verse from entry two");
+  await expect(page.locator("#lyrics")).toHaveText("new verse from entry two");
+});
+
+test("Lexical Lyrics mock (2026-07 UI) で instrumental 空文字を selectAll → delete でクリアする", async ({ page }) => {
+  await page.setContent(MOCK_SUNO_HTML_LEXICAL);
+
+  await page.evaluate(async () => {
+    const lyrics = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        'div.lyrics-editor-content[data-lexical-editor][contenteditable="true"], div.lyrics-editor-content[data-lexical-editor][contenteditable=""]',
+      ),
+    ).find((el) => el.getBoundingClientRect().width > 0)!;
+    lyrics.focus();
+    document.execCommand("selectAll", false);
+    await new Promise((r) => setTimeout(r, 200));
+    document.execCommand("delete", false);
+    await new Promise((r) => setTimeout(r, 200));
+    document.getElementById("captured-lyrics")!.textContent = lyrics.textContent;
+  });
+
+  await expect(page.locator("#captured-lyrics")).toHaveText("");
+  await expect(page.locator("#lyrics")).toHaveText("");
 });
 
 test("instrumental パターン (lyrics='') で前パターンの歌詞をクリアする", async ({ page }) => {

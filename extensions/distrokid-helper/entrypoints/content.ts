@@ -10,6 +10,7 @@
 
 import { createDocumentInjector } from "@/lib/content-injector";
 import { InjectSession } from "@/lib/inject-session";
+import { MANIFEST_CONTENT_SCRIPT_MATCHES } from "@/lib/manifest";
 import { onMessage, sendMessage } from "@/lib/messaging";
 
 // document 束縛の注入 primitive。AI 開示モーダル（Suno 楽曲は通過必須）も含め
@@ -17,7 +18,7 @@ import { onMessage, sendMessage } from "@/lib/messaging";
 const documentInjector = createDocumentInjector(document);
 
 export default defineContentScript({
-  matches: ["*://*.distrokid.com/new*"],
+  matches: [...MANIFEST_CONTENT_SCRIPT_MATCHES],
   main() {
     const session = new InjectSession(documentInjector, (phase, message) =>
       sendMessage("progress", { phase, message }),
