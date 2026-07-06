@@ -54,6 +54,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-stock-prune": "youtube_automation.scripts.stock_prune",
     "yt-suno-audio-cleanup": "youtube_automation.scripts.suno_audio_cleanup",
     "yt-suno-select-tracks": "youtube_automation.scripts.suno_select_tracks",
+    "yt-suno-verify-playlist": "youtube_automation.scripts.suno_verify_playlist",
     "yt-stream-archive-check": "youtube_automation.scripts.streaming_archive_check",
     "yt-stream-bandwidth": "youtube_automation.cli.stream_bandwidth",
     "yt-theme-compare": "youtube_automation.scripts.theme_compare",
