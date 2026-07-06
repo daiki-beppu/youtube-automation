@@ -98,6 +98,11 @@ def _detect_pin(pyproject: dict) -> Pin:
             if not isinstance(git_url, str):
                 continue
             _require_official_upstream(git_url)
+            ref_keys = [key for key in ("tag", "rev", "branch") if key in spec]
+            if len(ref_keys) > 1:
+                raise ConfigError(
+                    f"[tool.uv.sources] の tag / rev / branch は同時指定できません: {', '.join(ref_keys)}"
+                )
             tag = spec.get("tag")
             if isinstance(tag, str):
                 kind, _ = _classify_git_ref(tag)

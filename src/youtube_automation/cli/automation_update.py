@@ -28,8 +28,8 @@ from youtube_automation.cli.automation_update_refs import (
     _SHA_RE,
     PACKAGE_NAME,
     UPSTREAM_REPO,
-    Pin,
     _canonicalize_name,
+    _classify_git_ref,
     _describe_pin,
     _detect_pin,
     _rewrite_pin,
@@ -42,19 +42,6 @@ from youtube_automation.utils.exceptions import ConfigError
 EXIT_UP_TO_DATE = 0
 EXIT_DIFF = 1
 EXIT_ERROR = 2
-
-__all__ = [
-    "EXIT_DIFF",
-    "EXIT_ERROR",
-    "EXIT_UP_TO_DATE",
-    "Pin",
-    "_detect_pin",
-    "_github_api_get",
-    "build_parser",
-    "cmd_apply",
-    "cmd_check",
-    "main",
-]
 
 
 class _StepFailed(Exception):
@@ -147,6 +134,13 @@ def _fetch_branch_head_sha(branch: str) -> str:
     return sha
 
 
+def _require_tag_ref(ref: str, *, source: str) -> str:
+    kind, value = _classify_git_ref(ref)
+    if kind != "tag":
+        raise ConfigError(f"{source} には vX.Y.Z 形式の tag を指定してください: {ref}")
+    return value
+
+
 def _git_status_porcelain(root: Path) -> str:
     try:
         proc = subprocess.run(
@@ -214,7 +208,7 @@ def cmd_check(args: argparse.Namespace) -> int:
             )
 
         if pin.kind == "tag":
-            latest = args.tag or _fetch_latest_release_tag()
+            latest = _require_tag_ref(args.tag or _fetch_latest_release_tag(), source="比較先")
             print(f"upstream 最新リリース: {latest}")
             if pin.value == latest:
                 print(f"✓ 既に最新です ({latest})")
@@ -274,7 +268,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
             raise ConfigError("--rev には 40 桁の hex sha を指定してください")
         new_ref: str | None = None
         if pin.kind == "tag":
-            new_ref = args.tag or _fetch_latest_release_tag()
+            new_ref = _require_tag_ref(args.tag or _fetch_latest_release_tag(), source="追従先")
         elif pin.kind == "sha":
             new_ref = args.rev
     except ConfigError as e:

@@ -5,14 +5,8 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.cli import automation_update
-from youtube_automation.cli.automation_update import (
-    EXIT_DIFF,
-    EXIT_ERROR,
-    EXIT_UP_TO_DATE,
-    Pin,
-    _detect_pin,
-    main,
-)
+from youtube_automation.cli.automation_update import EXIT_DIFF, EXIT_ERROR, EXIT_UP_TO_DATE, main
+from youtube_automation.cli.automation_update_refs import Pin, _detect_pin
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "automation-update" / "SKILL.md"
@@ -237,6 +231,20 @@ def test_detect_pin_inline_branch_other_than_main_is_rejected() -> None:
         _detect_pin(pyproject)
 
 
+def test_detect_pin_inline_table_rejects_multiple_ref_keys() -> None:
+    import tomllib
+
+    pyproject = tomllib.loads(
+        '[project]\nname = "x"\ndependencies = ["youtube-channels-automation"]\n'
+        "[tool.uv.sources]\n"
+        'youtube-channels-automation = { git = "https://github.com/daiki-beppu/youtube-automation", '
+        f'tag = "v5.5.0", rev = "{_SHA_OLD}" }}\n'
+    )
+
+    with pytest.raises(automation_update.ConfigError, match="同時指定できません"):
+        _detect_pin(pyproject)
+
+
 def test_detect_pin_rejects_unofficial_inline_git_url() -> None:
     import tomllib
 
@@ -342,6 +350,25 @@ def test_check_fetches_latest_release_when_tag_omitted(
     assert "v9.9.9" in capsys.readouterr().out
 
 
+def test_check_rejects_invalid_explicit_tag(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+
+    assert main(["check", "--target", str(repo), "--tag", "not-a-version"]) == EXIT_ERROR
+
+    assert "vX.Y.Z" in capsys.readouterr().err
+
+
+def test_check_rejects_invalid_latest_release_tag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    monkeypatch.setattr(automation_update, "_fetch_latest_release_tag", lambda: "not-a-version")
+
+    assert main(["check", "--target", str(repo)]) == EXIT_ERROR
+
+    assert "vX.Y.Z" in capsys.readouterr().err
+
+
 def test_check_uses_cwd_when_target_omitted(
     tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
@@ -417,6 +444,36 @@ def test_apply_fetches_latest_release_when_tag_omitted(
     text = (repo / "pyproject.toml").read_text(encoding="utf-8")
     assert 'tag = "v9.9.9"' in text
     assert ["uv", "run", "yt-config-migrate", "verify", "--target", str(repo)] in recorded_commands
+
+
+def test_apply_rejects_invalid_explicit_tag_without_side_effects(
+    tmp_path: Path, no_network, recorded_commands: list[list[str]], capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    before = (repo / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert main(["apply", "--target", str(repo), "--tag", "not-a-version"]) == EXIT_ERROR
+
+    assert "vX.Y.Z" in capsys.readouterr().err
+    assert (repo / "pyproject.toml").read_text(encoding="utf-8") == before
+    assert recorded_commands == []
+
+
+def test_apply_rejects_invalid_latest_release_tag_without_side_effects(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    recorded_commands: list[list[str]],
+    capsys: pytest.CaptureFixture,
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    before = (repo / "pyproject.toml").read_text(encoding="utf-8")
+    monkeypatch.setattr(automation_update, "_fetch_latest_release_tag", lambda: "not-a-version")
+
+    assert main(["apply", "--target", str(repo)]) == EXIT_ERROR
+
+    assert "vX.Y.Z" in capsys.readouterr().err
+    assert (repo / "pyproject.toml").read_text(encoding="utf-8") == before
+    assert recorded_commands == []
 
 
 def test_apply_uses_cwd_when_target_omitted(
