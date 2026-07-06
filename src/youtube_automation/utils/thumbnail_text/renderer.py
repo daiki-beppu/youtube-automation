@@ -133,8 +133,7 @@ def _validate_background_file(background: Path) -> None:
         raise ValidationError(f"背景画像を読み込めません: {background} ({exc})") from exc
     if size > _MAX_BACKGROUND_BYTES:
         raise ValidationError(
-            f"背景画像のファイルサイズが大きすぎます: {background} "
-            f"({size} bytes > {_MAX_BACKGROUND_BYTES} bytes)"
+            f"背景画像のファイルサイズが大きすぎます: {background} ({size} bytes > {_MAX_BACKGROUND_BYTES} bytes)"
         )
 
 
