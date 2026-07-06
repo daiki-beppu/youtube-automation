@@ -1,6 +1,6 @@
 ---
 name: wf-new
-description: "Use when まだコレクションディレクトリが存在せず、新規コレクション制作を立ち上げたいとき。「新しいコレクション始めたい」「制作開始」「新規ワークフロー」など、企画選択からディレクトリ作成・素材準備までを行う初期化フェーズで使用する。既存コレクションの進行は /wf-next"
+description: "Use when 新規コレクション制作を立ち上げるとき（ディレクトリ未作成）。「新しいコレクション始めたい」「制作開始」で発動。既存の進行は /wf-next"
 ---
 
 ## Overview
@@ -74,7 +74,7 @@ Step 1（企画）を自動実行中...
 | benchmark fallback mode | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config |
 | minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | ユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config |
 
-`reports/analysis_*.md` が存在するが stale の場合は fallback せず、`/analytics-analyze` 再実行を案内して中断する。古い分析と別入力の混在を避けるため。stale 判定は相対比較（最新 `data/analytics_data_*.json` より古い）と絶対鮮度（収集データ自体が実行日から `freshness_days` を超えて経過。この場合 `/analytics-collect` を先行案内）の OR。絶対鮮度では `/collection-ideate` と同じく `.claude/skills/collection-ideate/config.default.yaml` + `config/skills/collection-ideate.yaml` を deep-merge した解決済み `freshness_days`（既定 7 日）を使う — 詳細は `/collection-ideate` の `references/freshness-rules.md` を参照。
+`reports/analysis_*.md` が存在するが stale の場合は fallback せず、`/analytics-analyze` 再実行を案内して中断する（絶対鮮度 stale では `/analytics-collect` を先行案内）。stale 判定（相対比較・絶対鮮度の OR）の完全な定義は `/collection-ideate` の references/freshness-rules.md を正とする。絶対鮮度は `.claude/skills/collection-ideate/config.default.yaml` + `config/skills/collection-ideate.yaml` を deep-merge した解決済み `freshness_days`（既定 7 日）を使う。
 
 2. **Skill ツールで `/collection-ideate` を実行** — 入力モードに応じて企画候補をプレビューサムネイル付きで生成
    - analytics mode: 日次収集データ + ベンチマークを基に分析 + ペルソナ別候補を生成
@@ -110,31 +110,45 @@ bunx tayk init-collection "<Collection Name>" "<theme-slug>" --track-count <N> -
 
 スクリプトが以下を自動実行:
 - `collections/planning/YYYYMMDD-<short>-<theme>-collection/` ディレクトリ作成
-- サブディレクトリ（10-assets, 20-documentation）作成
-- `workflow-state.json` 初期化（stage=planning, phase=planning-approved）
+- 標準骨格サブディレクトリ（`01-master`, `02-Individual-music`, `10-assets`, `20-documentation`）作成
+- `workflow-state.json` 初期化（stage=planning, phase=planning）
+
+実行後、骨格が作り切れていることをプリフライトで検証する（fail-loud、#1494）:
+
+```bash
+bunx tayk collection-preflight <collection-dir-name>
+```
+
+- `[NG]` が出たら `bunx tayk collection-preflight <collection-dir-name> --fix` で欠落を補完してから先へ進む
+- `bunx tayk init-collection` が「ディレクトリが既に存在します」で止まった場合も、**手動 mkdir で復旧しない**。`bunx tayk collection-preflight <collection-dir-name> --fix` で骨格を補完する（`workflow-state.json` が無ければ改めて `bunx tayk init-collection` の失敗原因を解消する）
 
 出力されたパスを後続ステップで使用する。フルスキーマは `references/schema.md` を参照。
 
 #### 2b. scene_phrases 初期化
 
-次に、多言語タイトル生成で必須となる `workflow-state.json.scene_phrases` を投入する:
+次に、多言語タイトル生成で必須となる `workflow-state.json.scene_phrases` を投入する。
 
-まず Agent ツールでサブエージェントを起動し、`en` 以外の `supported_languages` 全件に対する翻訳 JSON object だけを生成させる。CLI 内部から Gemini / Claude CLI を呼ばない。
+`config/localizations.json` の `supported_languages` が 2 言語以上の場合だけ、まず Agent ツールでサブエージェントを起動し、`en` 以外の `supported_languages` 全件に対する翻訳 JSON object だけを生成させる。CLI 内部から Gemini / Claude CLI を呼ばない。`config/channel/content.json` の `title.theme_scenes[<theme>]` が未定義の場合は、Agent が企画内容から英語 scene phrase も生成し、`--en` で明示指定する。
 
 ```bash
 bunx tayk populate-scene-phrases <collection-dir-name> \
+  --translations-file /tmp/scene-phrases.json
+
+# theme_scenes[<theme>] が未定義の場合
+bunx tayk populate-scene-phrases <collection-dir-name> \
+  --en "<Agent-generated English scene phrase>" \
   --translations-file /tmp/scene-phrases.json
 ```
 
 - `<collection-dir-name>`: 2a で作成された `YYYYMMDD-<short>-<theme>-collection` のディレクトリ名
 - 英語フレーズは `config/channel/content.json` の `title.theme_scenes[<theme>].scene` から自動解決される。翻訳文は Agent ツールで生成し、`--translations-json` または `--translations-file` で渡す
-- **`supported_languages` が 1 言語以下のチャンネルでは CLI 側で自動スキップ**されるため、条件分岐は不要（そのまま呼んで構わない）
+- **`supported_languages` が 1 言語以下のチャンネルでは翻訳 JSON を生成しない**。CLI 側で自動スキップされるため、必要なら確認目的で引数なし実行してよいが、Agent に翻訳 JSON を作らせない
 - 既に `scene_phrases` が存在する場合もスキップ（`--overwrite` で上書き可能）
-- `theme_scenes[<theme>]` が未定義の場合は `--en "<custom phrase>"` で英語フレーズを明示指定する。詳細は `references/scene_phrases.md` 参照
+- `theme_scenes[<theme>]` が未定義の場合は停止せず、企画内容から Agent が英語 scene phrase と翻訳 JSON を生成し、`--en "<Agent-generated English scene phrase>" --translations-file ...` で投入する。詳細は `references/scene_phrases.md` 参照
 
 **エラーハンドリング:**
 - `theme_scenes` 未定義 + `--en` 未指定 → エラー終了。`config/channel/content.json` の `title.theme_scenes` に該当 theme を追加するか、`--en` を渡して再実行
-- 翻訳 JSON 未指定 / 言語欠落 → エラーに表示されるプロンプトで Agent に JSON を再生成させる（メタデータ生成前に `/wf-next` から再実行可能）
+- 多言語チャンネルで翻訳 JSON 未指定 / 言語欠落 → エラーに表示されるプロンプトで Agent に JSON を再生成させる（メタデータ生成前に `/wf-next` から再実行可能）
 
 #### 2b. ドキュメント保存
 
@@ -225,9 +239,9 @@ Phase 1 の成果物を `20-documentation/` に保存:
 4. **起動後の疎通確認（3 点すべて必須）**:
 
    ```bash
-   curl -s "http://localhost:${PORT}/collections" | python3 -m json.tool | head -20
+   curl -s "http://<channel>.localhost:${PORT}/collections" | python3 -m json.tool | head -20
    curl -s -H "Origin: chrome-extension://${EXTENSION_ID}" \
-     "http://localhost:${PORT}/auth/token" | python3 -m json.tool
+     "http://<channel>.localhost:${PORT}/auth/token" | python3 -m json.tool
    ```
 
    - `/collections` が JSON array を返す
@@ -251,14 +265,14 @@ Phase 1 の成果物を `20-documentation/` に保存:
 ディレクトリ: collections/planning/YYYYMMDD-<short>-<theme>-collection/
 現在のフェーズ: prepared
 ループ動画: ✅ 生成済み / ⚠️ 失敗（`/wf-next` で再試行可能）
-Suno-helper server: ✅ http://localhost:<PORT> 起動済み / ⚠️ 未起動（Suno の場合のみ）
+Suno-helper server: ✅ http://<channel>.localhost:<PORT> 起動済み / ⚠️ 未起動（Suno の場合のみ）
 ```
 
 音楽エンジンに応じた次ステップ案内:
-- **Suno**: 「suno-helper server は `http://localhost:<PORT>` で起動済みです。Chrome で Suno Custom Mode を開き、suno-helper popup のサーバー URL をこの URL に合わせて、対象 collection を選んで連続実行してください。全件完了で playlist 一括追加 + ZIP 一括 DL まで自動。完了後に `/wf-next` を実行（plain Suno UI への手動投入は非推奨）」
+- **Suno**: 「suno-helper server は `http://<channel>.localhost:<PORT>` で起動済みです。Chrome で Suno Custom Mode を開き、suno-helper popup のローカル配信元からこのチャンネルを選び、対象 collection を選んで連続実行してください。全件完了で playlist 一括追加 + ZIP 一括 DL まで自動。完了後に `/wf-next` を実行（plain Suno UI への手動投入は非推奨）」
 - **Lyria**: 「`/wf-next` を実行すると Lyria 3 API が呼ばれ、コレクション尺に応じてセグメントが生成されます → ミキシング+マスタリング後に再度 `/wf-next`」
 
-**重要**: `/wf-new` が自動で行うのは Suno 用 localhost server の起動と疎通確認まで。`/suno-helper` のブラウザ実行（Chrome + Suno ログイン + 拡張ロード + 連続実行開始）と `/wf-next` の次フェーズ進行は user に委ねる。
+**重要**: `/wf-new` が自動で行うのは Suno 用ローカル server の起動と疎通確認まで。`/suno-helper` のブラウザ実行（Chrome + Suno ログイン + 拡張ロード + 連続実行開始）と `/wf-next` の次フェーズ進行は user に委ねる。
 
 ## 障害時ガイダンス
 

@@ -1,6 +1,6 @@
 ---
 name: alignment-check
-description: "Use when 各コレクションの音楽ムード × サムネイル雰囲気 × タイトル訴求の整合性を監査したいとき。「整合性チェック」「一致してるか確認」「タイトル見直し」「サムネと音楽の一致」「タイトル改善」「CTR改善」など。CTR に最も影響するチェックポイント。方向性見直し時に必ず使用すること"
+description: "Use when 音楽ムード × サムネ × タイトルの整合性を監査するとき。「整合性チェック」「タイトル見直し」「CTR改善」で発動。方向性見直し時に必須"
 ---
 
 ## Overview
@@ -87,6 +87,7 @@ AskUserQuestion で新タイトルフォーマットを確認。
 - `collections/live/*/20-documentation/` — 音楽プロンプト
 - `collections/live/*/workflow-state.json` — タイトル・テーマ
 - `data/video_analysis/<slug>/<video_id>.json` — `/video-analyze` の `thumbnail_alignment` 出力（サムネ vs 本編の整合性監査の根拠）
+  - 冒頭クリップ窓（既定 900 秒、JSON の `analysis_window_sec`）内の整合性データ。窓外で回収される訴求まで確認済みとは扱わない。
 
 ## Next Step
 

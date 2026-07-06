@@ -63,12 +63,13 @@ $ bunx tayk populate-scene-phrases 20260322-rjn-city-collection \
 | 状況 | 終了コード | 対応 |
 |---|---|---|
 | `<collection-dir-name>` が存在しない | 1 | コレクション名を確認 |
+| `supported_languages` が 1 言語以下 | 0 | `scene_phrases` 不要のため no-op |
 | `theme_scenes[<theme>]` 未定義 + `--en` 未指定 | 1 | `--en` で明示指定、または `content.json::title.theme_scenes` に該当 theme を追加 |
-| `--translations-json` / `--translations-file` 未指定 | 1 | Agent ツールで翻訳 JSON を生成して渡す |
+| 多言語チャンネルで `--translations-json` / `--translations-file` 未指定 | 1 | Agent ツールで翻訳 JSON を生成して渡す |
 | 翻訳 JSON 不正 / 言語欠落 | 1 | エラーに表示されるプロンプトで Agent に JSON を再生成させる |
 
 ## 関連
 
-- 検証: `bunx tayk metadata-audit` が `scene_phrases` の `en` + `supported_languages` 完全性を検証する
+- 検証: `bunx tayk metadata-audit` は `workflow-state.json` 自体を常に検証し、`supported_languages` が 2 言語以上のチャンネルでのみ `scene_phrases` の `supported_languages` 完全性を検証する
 - メタデータ生成: `metadata_generator.py::_load_scene_phrases` が `workflow-state.json` から読み込んでタイトル・localizations を生成する
-- アップロード時 preflight: `youtube_auto_uploader.py` が `scene_phrases` の `supported_languages` 分の言語欠落を検出すると upload が中断する（en-only チャンネルなら en のみで通る）
+- アップロード時 preflight: `youtube_auto_uploader.py` が多言語チャンネルで `scene_phrases` の `supported_languages` 分の言語欠落を検出すると upload が中断する。単一言語チャンネルでは populate と同じ判定で `scene_phrases` を要求しない

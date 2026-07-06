@@ -91,6 +91,8 @@ bunx tayk upload-collection --plan -c <COLLECTION_NAME>
 
 - 予約公開時 → `📅 公開予定: 2026-06-15T20:00:00+09:00`
 - 即時公開時 → `📅 公開設定: 即時公開 (public)`
+- 限定公開時 → `📅 公開設定: 限定公開 (unlisted)`
+- 非公開時 → `📅 公開設定: 非公開 (private)`
 - 「設定したのに即時公開」の場合は `⚠️  schedule.auto_schedule_enabled が false ...` という警告が出る
 
 ### 2. 実アップロード後の YouTube 側状態確認

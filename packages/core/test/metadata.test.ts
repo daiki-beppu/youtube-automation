@@ -10,7 +10,7 @@
 // Signature contract (the test-first spec the draft implements), from plan §4-B:
 //   cleanTrackTitle(filename) -> string
 //   extractPatternKey(filename) -> "a"|"b"|"c"|"d"|null
-//   buildTimestampsText(tracks, themeNames, themeInline) -> string
+//   buildTimestampsText(tracks, themeNames, themeInline, options?) -> string
 //   formatShortDurationPhrase(audio) -> string
 //   buildShortDescription(config, {collectionName, ccVideoUrl}) -> string
 //   buildShortLocalizations(config, {collectionName, theme, ccVideoUrl}) -> record
@@ -274,6 +274,43 @@ describe("buildTimestampsText", () => {
     expect(buildTimestampsText(tracks, {}, themeInline)).toBe(
       "0:00 One\n1:30 Two"
     );
+  });
+
+  test("expands multiple loops with crossfade arithmetic", () => {
+    const tracks = [
+      { durationSec: 120, timestamp: "0:00", title: "Alpha" },
+      { durationSec: 90, timestamp: "1:59", title: "Beta" },
+    ];
+
+    expect(buildTimestampsText(tracks, {}, themeInline, { loops: 2 })).toBe(
+      ["0:00 Alpha", "1:59 Beta", "3:28 Alpha", "5:27 Beta"].join("\n")
+    );
+  });
+
+  test("reemits theme headers at loop boundaries", () => {
+    const tracks = [
+      { durationSec: 120, patternKey: "a", timestamp: "0:00", title: "Alpha" },
+      { durationSec: 90, patternKey: "a", timestamp: "1:59", title: "Beta" },
+    ];
+
+    expect(buildTimestampsText(tracks, {}, themeInline, { loops: 2 })).toBe(
+      [
+        "── Pattern A ──",
+        "0:00 Alpha",
+        "1:59 Beta",
+        "── Pattern A ──",
+        "3:28 Alpha",
+        "5:27 Beta",
+      ].join("\n")
+    );
+  });
+
+  test("requires durations for loop expansion", () => {
+    const tracks = [{ timestamp: "0:00", title: "One" }];
+
+    expect(() =>
+      buildTimestampsText(tracks, {}, themeInline, { loops: 2 })
+    ).toThrow("durationSec is required when loops > 1");
   });
 });
 

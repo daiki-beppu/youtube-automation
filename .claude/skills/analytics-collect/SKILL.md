@@ -1,6 +1,6 @@
 ---
 name: analytics-collect
-description: "Use when YouTube Analyticsデータの収集・最新化が必要なとき。/analytics-analyze 実行前のデータ準備ステップとして使用。ユーザーが「データ更新」「最新の数字」「統計を取得」「分析の準備」と言及したとき、または analytics_system.py の実行が必要な場面で必ず使用すること"
+description: "Use when YouTube Analytics データの収集・最新化が必要なとき。「データ更新」「統計を取得」「分析の準備」で発動。/analytics-analyze の前段"
 ---
 
 ## Overview

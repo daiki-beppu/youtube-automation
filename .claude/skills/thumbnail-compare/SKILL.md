@@ -1,6 +1,6 @@
 ---
 name: thumbnail-compare
-description: "Use when サムネイルをベンチマーク競合と並べて比較検証したいとき。「サムネ比較」「サムネイル検証」「目立ってるか確認」「サムネ並べて」「モバイル表示テスト」「320px」など。文字サイズ・コントラスト・縮小表示での視認性を検証。方向性見直し時に必ず使用すること"
+description: "Use when サムネイルを競合と並べて視認性を比較検証するとき。「サムネ比較」「目立ってるか確認」「モバイル表示テスト」「320px」で発動。方向性見直し時に必須"
 ---
 
 ## Overview
@@ -80,3 +80,4 @@ open data/thumbnail_compare/
 - `collections/live/*/10-assets/thumbnail.jpg` — 自チャンネルサムネイル
 - `docs/benchmarks/common-patterns.md` — サムネイルチェックリスト v4
 - `data/video_analysis/<slug>/<video_id>.json` — `/video-analyze` の `signature_elements` / `hook_structure` 出力（競合のサムネ実装パターン抽出を補強）
+  - 冒頭クリップ窓（既定 900 秒、JSON の `analysis_window_sec`）内の実装パターン。動画全尺で出る signature 要素を網羅したものとは扱わない。

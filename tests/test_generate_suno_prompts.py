@@ -11,6 +11,7 @@ import yaml
 
 from youtube_automation.scripts.generate_suno_prompts import build_prompt_entries, generate, main
 from youtube_automation.utils import skill_config
+from youtube_automation.utils.exceptions import ConfigError
 
 # `_skills/<skill>/config.default.yaml` の解決元になる editable install のソースツリー
 _DEFAULT_YAML = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "config.default.yaml"
@@ -22,7 +23,7 @@ _CONFIG_RULES_MD = (
     Path(__file__).resolve().parents[1]
     / ".claude"
     / "skills"
-    / "channel-setup"
+    / "channel-new"
     / "references"
     / "config-generation-rules.md"
 )
@@ -306,7 +307,7 @@ def test_suno_lyric_default_yaml_defines_cta_and_safe_quote_source_contract():
     assert data["source"]["index_path"].startswith("/meigen/")
 
 
-def test_channel_setup_rules_list_suno_lyrics_override_keys():
+def test_channel_new_rules_list_suno_lyrics_override_keys():
     text = _CONFIG_RULES_MD.read_text(encoding="utf-8")
 
     assert "config/skills/suno-lyric.yaml" in text
@@ -540,6 +541,26 @@ def test_build_prompt_entries_name_combines_jp_and_en(channel_dir, tmp_path):
     assert entries[0]["name"] == "テスト — Test"
 
 
+def test_build_prompt_entries_rejects_padded_pattern_name_part(channel_dir, tmp_path):
+    """Given suno-patterns.yaml の name_jp に外側 whitespace がある
+    When build_prompt_entries を呼ぶ
+    Then final entry name を暗黙正規化せず fail-loud する。
+    """
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    patterns_path = _write_minimal_patterns(tmp_path)
+    payload = yaml.safe_load(patterns_path.read_text(encoding="utf-8"))
+    payload["patterns"][0]["name_jp"] = " テスト "
+    patterns_path.write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    message = str(exc_info.value)
+    assert "suno-patterns.yaml patterns[1].name_jp must not have leading or trailing whitespace" in message
+
+
 def test_build_prompt_entries_instrumental_has_empty_lyrics(channel_dir, tmp_path):
     """Given instrumental モード + auto_lyrics_structure: false
     When lyrics を読む
@@ -592,7 +613,12 @@ def test_build_prompt_entries_vocal_includes_rstripped_external_lyrics(channel_d
     When lyrics を読む
     Then rstrip された歌詞本文が入る。
     """
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
+    _write_suno_override(
+        channel_dir,
+        genre_line="dream pop vocals",
+        auto_lyrics_structure=False,
+        tracks_per_pattern=1,
+    )
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
     _write_suno_lyrics_json(tmp_path, ["歌もの — Vocal"], lyrics="[Verse]\nla la la\n\n")
 
@@ -605,7 +631,7 @@ def test_build_prompt_entries_vocal_requires_suno_lyrics_json(channel_dir, tmp_p
     """vocal mode は `/suno-lyric` が出す suno-lyrics.json を必須にする."""
     from youtube_automation.utils.exceptions import ConfigError
 
-    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
 
     with pytest.raises(ConfigError) as exc_info:
@@ -621,7 +647,12 @@ def test_build_prompt_entries_vocal_prefers_suno_lyrics_json(channel_dir, tmp_pa
     When build_prompt_entries を呼ぶ
     Then pattern 内 lyrics ではなく suno-lyrics.json の lyrics を採用する。
     """
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
+    _write_suno_override(
+        channel_dir,
+        genre_line="dream pop vocals",
+        auto_lyrics_structure=False,
+        tracks_per_pattern=1,
+    )
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
     (tmp_path / "suno-lyrics.json").write_text(
         json.dumps(
@@ -650,7 +681,12 @@ def test_build_prompt_entries_vocal_merges_suno_lyrics_json_by_variation_name(ch
     When build_prompt_entries を呼ぶ
     Then 各 entry に同名 lyrics がマージされる。
     """
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
+    _write_suno_override(
+        channel_dir,
+        genre_line="dream pop vocals",
+        auto_lyrics_structure=False,
+        tracks_per_pattern=1,
+    )
     patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
     (tmp_path / "suno-lyrics.json").write_text(
         json.dumps(
@@ -675,7 +711,7 @@ def test_build_prompt_entries_vocal_fails_on_duplicate_suno_lyrics_names(channel
     """
     from youtube_automation.utils.exceptions import ConfigError
 
-    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
     (tmp_path / "suno-lyrics.json").write_text(
         json.dumps(
@@ -699,7 +735,7 @@ def test_build_prompt_entries_vocal_fails_when_suno_lyrics_json_missing_expected
     """suno-lyrics.json が存在する場合、期待 entry name の欠落は fallback せず fail-loud."""
     from youtube_automation.utils.exceptions import ConfigError
 
-    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
     (tmp_path / "suno-lyrics.json").write_text(
         json.dumps([{"name": "別名 — Wrong", "lyrics": "[Verse]\nwrong"}], ensure_ascii=False),
@@ -719,7 +755,7 @@ def test_build_prompt_entries_vocal_fails_when_multi_scene_suno_lyrics_json_is_i
     """multi scene では Variation ごとの lyrics entry が全て必要."""
     from youtube_automation.utils.exceptions import ConfigError
 
-    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
     patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
     (tmp_path / "suno-lyrics.json").write_text(
         json.dumps([{"name": "歌もの — Vocal (Variation 1)", "lyrics": "[Verse]\none"}], ensure_ascii=False),
@@ -732,11 +768,33 @@ def test_build_prompt_entries_vocal_fails_when_multi_scene_suno_lyrics_json_is_i
     assert "missing: 歌もの — Vocal (Variation 2)" in str(exc_info.value)
 
 
+def test_build_prompt_entries_vocal_rejects_padded_suno_lyrics_name(channel_dir, tmp_path):
+    """Given suno-lyrics.json の name に外側 whitespace がある
+    When build_prompt_entries を呼ぶ
+    Then prompt entry name との完全一致契約として fail-loud する。
+    """
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
+    _write_suno_lyrics_json(tmp_path, [" 歌もの — Vocal "], lyrics="[Verse]\nexternal lyric")
+
+    with pytest.raises(ConfigError) as exc_info:
+        build_prompt_entries(patterns_path)
+
+    assert "suno-lyrics.json entry 1.name must not have leading or trailing whitespace" in str(exc_info.value)
+
+
 def test_build_prompt_entries_vocal_rejects_suno_lyrics_json_title_alias(channel_dir, tmp_path):
     """suno-lyrics.json の公開 contract は `name` 必須で、未定義 `title` alias は受け付けない."""
     from youtube_automation.utils.exceptions import ConfigError
 
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
+    _write_suno_override(
+        channel_dir,
+        genre_line="dream pop vocals",
+        auto_lyrics_structure=False,
+        tracks_per_pattern=1,
+    )
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
     (tmp_path / "suno-lyrics.json").write_text(
         json.dumps([{"title": "歌もの — Vocal", "lyrics": "[Verse]\nfrom title"}], ensure_ascii=False),
@@ -753,7 +811,7 @@ def test_build_prompt_entries_auto_vocal_requires_suno_lyrics_json(channel_dir, 
     """mode 省略でも genre_line が vocal なら suno-lyrics.json 必須契約を適用する."""
     from youtube_automation.utils.exceptions import ConfigError
 
-    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
     patterns_path = _write_minimal_patterns(tmp_path)
     data = yaml.safe_load(patterns_path.read_text(encoding="utf-8"))
     data.pop("mode", None)
@@ -767,7 +825,12 @@ def test_build_prompt_entries_auto_vocal_requires_suno_lyrics_json(channel_dir, 
 
 def test_build_prompt_entries_auto_vocal_merges_suno_lyrics_json(channel_dir, tmp_path):
     """mode 省略 + vocal genre_line でも suno-lyrics.json を merge する."""
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
+    _write_suno_override(
+        channel_dir,
+        genre_line="dream pop vocals",
+        auto_lyrics_structure=False,
+        tracks_per_pattern=1,
+    )
     patterns_path = _write_minimal_patterns(tmp_path)
     data = yaml.safe_load(patterns_path.read_text(encoding="utf-8"))
     data.pop("mode", None)
@@ -799,7 +862,7 @@ def test_build_prompt_entries_vocal_fails_on_invalid_suno_lyrics_json_shapes(
     """外部 lyrics JSON の shape error は ConfigError として固定する."""
     from youtube_automation.utils.exceptions import ConfigError
 
-    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
     raw = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
     (tmp_path / "suno-lyrics.json").write_text(raw, encoding="utf-8")
@@ -815,7 +878,7 @@ def test_build_prompt_entries_multiple_scenes_become_separate_variations(channel
     When entries を読む
     Then scene 単位で 2 entry に分かれ、name に ` (Variation N)` が付く。
     """
-    _write_suno_override(channel_dir, genre_line="dream pop vocals")
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
     patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
     _write_suno_lyrics_json(
         tmp_path,
@@ -832,6 +895,52 @@ def test_build_prompt_entries_multiple_scenes_become_separate_variations(channel
     # 各 variation は自分の scene を style に含む
     assert "scene one" in entries[0]["style"]
     assert "scene two" in entries[1]["style"]
+
+
+def test_build_prompt_entries_vocal_expands_default_tracks_per_pattern(channel_dir, tmp_path):
+    """Given tracks_per_pattern を override しない vocal pattern
+    When build_prompt_entries を呼ぶ
+    Then default の 3 take 分に entry name と lyrics merge が展開される。
+    """
+    _write_suno_override(
+        channel_dir,
+        genre_line="dream pop vocals",
+        auto_lyrics_structure=False,
+    )
+    patterns_path = _write_vocal_patterns(tmp_path, ["scene one"])
+    names = [
+        "歌もの — Vocal (Take 1)",
+        "歌もの — Vocal (Take 2)",
+        "歌もの — Vocal (Take 3)",
+    ]
+    _write_suno_lyrics_json(tmp_path, names)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert [entry["name"] for entry in entries] == names
+    assert [entry["lyrics"] for entry in entries] == ["[Verse]\nexternal lyric"] * 3
+    assert all("scene one" in entry["style"] for entry in entries)
+
+
+def test_generate_vocal_md_expands_default_tracks_per_pattern_headings(channel_dir, tmp_path):
+    """Given tracks_per_pattern を override しない vocal pattern
+    When generate で suno-prompts.md 本文を作る
+    Then 手動投入用見出しにも default の 3 take 分の entry name を出す。
+    """
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
+    patterns_path = _write_vocal_patterns(tmp_path, ["scene one"])
+    names = [
+        "歌もの — Vocal (Take 1)",
+        "歌もの — Vocal (Take 2)",
+        "歌もの — Vocal (Take 3)",
+    ]
+    _write_suno_lyrics_json(tmp_path, names)
+
+    md = generate(patterns_path)
+
+    for name in names:
+        assert f"### {name}" in md
+    assert "### Variation 1" not in md
 
 
 def test_json_style_line_shares_part_with_md_styles_line(channel_dir, tmp_path):
@@ -871,7 +980,7 @@ def test_main_writes_suno_prompts_json_alongside_md(channel_dir, tmp_path, monke
 def test_main_json_output_is_loadable_array_of_entries(channel_dir, tmp_path, monkeypatch):
     """Given main 実行後の suno-prompts.json
     When json.loads する
-    Then {name, style, lyrics} を持つ entry の配列としてロードできる。
+    Then duration_filter 付き envelope としてロードできる。
     """
     _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
     patterns_path = _write_minimal_patterns(tmp_path)
@@ -880,10 +989,48 @@ def test_main_json_output_is_loadable_array_of_entries(channel_dir, tmp_path, mo
     main()
 
     data = json.loads((patterns_path.parent / "suno-prompts.json").read_text(encoding="utf-8"))
-    assert isinstance(data, list)
-    assert len(data) == 1
+    assert set(data) == {"entries", "duration_filter"}
+    assert data["duration_filter"] == {"min_sec": 60, "max_sec": 300}
+    assert len(data["entries"]) == 1
     # #900: strict 等価から subset 検証へ緩和 (build_prompt_entries 側の relaxation と同様)。
-    assert {"name", "style", "lyrics"} <= set(data[0])
+    assert {"name", "style", "lyrics"} <= set(data["entries"][0])
+
+
+@pytest.mark.parametrize(
+    ("duration_filter", "expected"),
+    [
+        (False, "must be a mapping"),
+        ({"min_sec": "60", "max_sec": 300}, "finite numeric"),
+        ({"min_sec": True, "max_sec": 300}, "finite numeric"),
+        ({"min_sec": 60, "max_sec": False}, "finite numeric"),
+        ({"min_sec": float("nan"), "max_sec": 300}, "finite numeric"),
+        ({"min_sec": 60, "max_sec": float("inf")}, "finite numeric"),
+        ({"min_sec": -1, "max_sec": 300}, "0 <= min_sec <= max_sec"),
+        ({"min_sec": 301, "max_sec": 300}, "0 <= min_sec <= max_sec"),
+    ],
+)
+def test_main_json_duration_filter_rejects_invalid_numeric_config(
+    channel_dir,
+    tmp_path,
+    monkeypatch,
+    duration_filter,
+    expected,
+):
+    """duration_filter は TS 側 validator と同じ finite number 契約で fail-loud する."""
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz, soft piano",
+        duration_filter=duration_filter,
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(patterns_path)])
+
+    with pytest.raises(ConfigError) as exc_info:
+        main()
+
+    assert expected in str(exc_info.value)
 
 
 def test_main_collection_dir_merges_vocal_suno_lyrics_json(channel_dir, tmp_path, monkeypatch):
@@ -891,7 +1038,12 @@ def test_main_collection_dir_merges_vocal_suno_lyrics_json(channel_dir, tmp_path
     collection_dir = tmp_path / "collection"
     docs_dir = collection_dir / "20-documentation"
     docs_dir.mkdir(parents=True)
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
+    _write_suno_override(
+        channel_dir,
+        genre_line="dream pop vocals",
+        auto_lyrics_structure=False,
+        tracks_per_pattern=1,
+    )
     patterns_path = _write_vocal_patterns(docs_dir, ["a dreamy scene"])
     patterns_path.rename(docs_dir / "suno-patterns.yaml")
     _write_suno_lyrics_json(docs_dir, ["歌もの — Vocal"], lyrics="[Verse]\nfrom collection dir")
@@ -900,7 +1052,7 @@ def test_main_collection_dir_merges_vocal_suno_lyrics_json(channel_dir, tmp_path
     main()
 
     data = json.loads((docs_dir / "suno-prompts.json").read_text(encoding="utf-8"))
-    assert data[0]["lyrics"] == "[Verse]\nfrom collection dir"
+    assert data["entries"][0]["lyrics"] == "[Verse]\nfrom collection dir"
 
 
 # ---------------------------------------------------------------------------
@@ -986,6 +1138,7 @@ def test_vocal_mode_skips_tracks_per_collection_validation(channel_dir, tmp_path
         channel_dir,
         genre_line="lo-fi hip hop with soft male vocals",
         tracks_per_collection=20,
+        tracks_per_pattern=1,
     )
     patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=1)
     # mode を vocal に上書きして genre_line の vocal 判定と整合させる
@@ -1126,6 +1279,7 @@ def test_unique_titles_allow_same_pattern_name_when_variation_suffix_disambiguat
     _write_suno_override(
         channel_dir,
         genre_line="lo-fi hip hop with soft male vocals",
+        tracks_per_pattern=1,
     )
     payload: dict = {
         "title": "Vocal Test",
@@ -1354,7 +1508,7 @@ def test_advanced_fields_apply_to_every_entry_collection_scope(channel_dir, tmp_
     When build_prompt_entries を呼ぶ
     Then 全 entry に同じ weirdness が載る (3 値は collection スコープで全 entry 共通)。
     """
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", weirdness=40)
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", weirdness=40, tracks_per_pattern=1)
     patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
     _write_suno_lyrics_json(
         tmp_path,
@@ -1365,6 +1519,289 @@ def test_advanced_fields_apply_to_every_entry_collection_scope(channel_dir, tmp_
 
     assert len(entries) == 2
     assert all(e["weirdness"] == 40 for e in entries)
+
+
+# ---------------------------------------------------------------------------
+# issue #1456: Style 自動バリエーション (entry ごとの微差付与)
+#
+# 契約: `style_variation.enabled` (default.yaml で true) のとき、entry の通し番号で
+# pools から descriptor を決定的に割り当て Style 第 1 行末尾へ付与する。
+# 先頭 entry (index 0) は base style を維持し、明示 style variant のある entry は
+# override を優先して付与しない。genre_line のコアジャンルは全 entry で維持される。
+# ---------------------------------------------------------------------------
+
+
+def _style_first_lines(entries: list[dict]) -> list[str]:
+    return [entry["style"].splitlines()[0] for entry in entries]
+
+
+def _style_blocks_from_md(md: str) -> list[str]:
+    lines = md.splitlines()
+    blocks: list[str] = []
+    for i, line in enumerate(lines):
+        if line != "**Styles:**":
+            continue
+        if i + 1 >= len(lines) or lines[i + 1] != "```":
+            continue
+        block_lines: list[str] = []
+        for block_line in lines[i + 2 :]:
+            if block_line == "```":
+                break
+            block_lines.append(block_line)
+        blocks.append("\n".join(block_lines))
+    return blocks
+
+
+def _four_distinct_entries() -> list[dict]:
+    return [
+        {"name_jp": "屋上の静寂", "name_en": "Rooftop Silence", "tempo": "slow", "scenes": ["a quiet rooftop"]},
+        {"name_jp": "朝のキッチン", "name_en": "Morning Kitchen", "tempo": "slow", "scenes": ["a warm kitchen"]},
+        {"name_jp": "港の夜明け", "name_en": "Harbor Dawn", "tempo": "slow", "scenes": ["a still harbor"]},
+        {"name_jp": "路地の灯り", "name_en": "Alley Glow", "tempo": "slow", "scenes": ["a narrow alley"]},
+    ]
+
+
+def test_default_yaml_enables_style_variation_with_pools():
+    """default.yaml が style_variation を有効化し、非空の pools を持つこと (#1456 の既定動作を pin)."""
+    data = yaml.safe_load(_DEFAULT_YAML.read_text(encoding="utf-8"))
+
+    variation = data["style_variation"]
+    assert variation["enabled"] is True
+    pools = variation["pools"]
+    assert isinstance(pools, dict) and pools
+    assert all(isinstance(pool, list) and pool for pool in pools.values())
+
+
+@pytest.mark.parametrize(
+    ("style_variation", "error_pattern"),
+    [
+        (None, r"suno\.style_variation は mapping"),
+        ([], r"suno\.style_variation は mapping"),
+        ({"enabled": "yes"}, r"enabled は bool"),
+        ({"enabled": True, "pools": None}, r"pools は mapping"),
+        ({"enabled": True, "pools": []}, r"pools は mapping"),
+        ({"enabled": True, "pools": {"": ["warm texture"]}}, r"axis 名"),
+        ({"enabled": True, "pools": {1: ["warm texture"]}}, r"axis 名"),
+        ({"enabled": True, "pools": {"texture": "warm texture"}}, r"texture は list\[str\]"),
+        ({"enabled": True, "pools": {"texture": [3]}}, r"descriptor は非空文字列"),
+        ({"enabled": True, "pools": {"texture": [""]}}, r"descriptor は非空文字列"),
+        ({"enabled": True, "pools": {"texture": ["thundering warmth"]}}, r"禁止形容詞"),
+        ({"enabled": True, "pools": {"texture": ["rain texture"]}}, r"雨音・環境音 NG ワード"),
+        ({"enabled": True, "pools": {"texture": ["piano"]}}, r"裸楽器名"),
+        ({"enabled": True, "pools": {"texture": ["Drake texture"]}}, r"アーティスト名"),
+    ],
+)
+def test_style_variation_rejects_invalid_config_shapes(channel_dir, tmp_path, style_variation, error_pattern):
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", style_variation=style_variation)
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=_four_distinct_entries(), tracks_top=8)
+
+    with pytest.raises(ConfigError, match=error_pattern):
+        build_prompt_entries(patterns_path)
+
+
+def test_style_variation_rejects_unknown_explicit_style_variant(channel_dir, tmp_path):
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        style_variants={"ambient": {"name": "ambient pad", "genre_line": "ambient pad, soft synth"}},
+    )
+    entries_def = _four_distinct_entries()
+    entries_def[1]["style"] = "typo_variant"
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=entries_def, tracks_top=8)
+
+    with pytest.raises(ConfigError, match="未定義の style variant"):
+        build_prompt_entries(patterns_path)
+
+
+def test_style_variation_makes_entry_style_first_lines_distinct(channel_dir, tmp_path):
+    """要件1: Given 複数 entry のインスト yaml (default で variation 有効)
+    When build_prompt_entries を呼ぶ
+    Then 各 entry の Style 第 1 行が互いに異なる文字列になる。
+    """
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=_four_distinct_entries(), tracks_top=8)
+
+    entries = build_prompt_entries(patterns_path)
+
+    first_lines = _style_first_lines(entries)
+    assert len(first_lines) == 4
+    assert len(set(first_lines)) == 4, f"Style 第 1 行が重複している: {first_lines!r}"
+
+
+def test_style_variation_keeps_first_entry_base_style(channel_dir, tmp_path):
+    """先頭 entry (通し番号 0) は descriptor なしの base style を維持する (後方互換の核心)."""
+    genre = "lo-fi jazz, soft piano"
+    _write_suno_override(channel_dir, genre_line=genre)
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=_four_distinct_entries(), tracks_top=8)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert _style_first_lines(entries)[0] == f"slow, {genre},"
+
+
+def test_style_variation_preserves_core_genre_line_in_all_entries(channel_dir, tmp_path):
+    """要件2: バリエーションは genre_line のコアジャンルを変えない (全 entry に共通プレフィックスが残る)."""
+    genre = "lo-fi jazz, soft piano"
+    _write_suno_override(channel_dir, genre_line=genre)
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=_four_distinct_entries(), tracks_top=8)
+
+    entries = build_prompt_entries(patterns_path)
+
+    for line in _style_first_lines(entries):
+        assert line.startswith(f"slow, {genre},"), f"コアジャンルが維持されていない: {line!r}"
+
+
+def test_style_variation_is_deterministic_across_runs(channel_dir, tmp_path):
+    """決定的ローテーション: 同じ入力から 2 回生成しても同一の entries になる (再生成の再現性)."""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=_four_distinct_entries(), tracks_top=8)
+
+    first = build_prompt_entries(patterns_path)
+    second = build_prompt_entries(patterns_path)
+
+    assert first == second
+
+
+def test_style_variation_interleaves_pools_by_sorted_axis_name(channel_dir, tmp_path):
+    """複数 axis は axis 名の辞書順で round-robin に interleave する."""
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        style_variation={
+            "enabled": True,
+            "pools": {"texture": [], "rhythm": [], "z": ["z1", "z2"], "a": ["a1"]},
+        },
+    )
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=_four_distinct_entries(), tracks_top=8)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert _style_first_lines(entries) == [
+        "slow, lo-fi jazz,",
+        "slow, lo-fi jazz, a1,",
+        "slow, lo-fi jazz, z1,",
+        "slow, lo-fi jazz, z2,",
+    ]
+
+
+def test_style_variation_disabled_restores_legacy_identical_first_lines(channel_dir, tmp_path):
+    """要件3: `style_variation.enabled: false` で従来動作 (全 entry 同一の Style 第 1 行) に戻る."""
+    genre = "lo-fi jazz, soft piano"
+    _write_suno_override(channel_dir, genre_line=genre, style_variation={"enabled": False})
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=_four_distinct_entries(), tracks_top=8)
+
+    entries = build_prompt_entries(patterns_path)
+
+    assert set(_style_first_lines(entries)) == {f"slow, {genre},"}
+
+
+def test_style_variation_skips_explicit_style_variant_entries(channel_dir, tmp_path):
+    """要件4: 明示 `style` variant のある entry は override を優先し descriptor を付与しない."""
+    variant_genre = "ambient pad, soft synth, airy textures"
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz, soft piano",
+        style_variants={"ambient": {"name": "ambient pad", "genre_line": variant_genre}},
+        style_variation={
+            "enabled": True,
+            "pools": {"texture": ["alpha texture", "beta texture", "gamma texture"], "rhythm": []},
+        },
+    )
+    entries_def = _four_distinct_entries()
+    entries_def[2]["style"] = "ambient"  # 3 番目 (通し番号 2) だけ明示 variant
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=entries_def, tracks_top=8)
+
+    entries = build_prompt_entries(patterns_path)
+
+    first_lines = _style_first_lines(entries)
+    # variant entry は variant genre_line そのまま (descriptor なし)
+    assert first_lines[2] == f"slow, {variant_genre},"
+    assert first_lines[1] == "slow, lo-fi jazz, soft piano, alpha texture,"
+    assert first_lines[3] == "slow, lo-fi jazz, soft piano, gamma texture,"
+    assert len(set(first_lines)) == 4
+
+
+def test_style_variation_applies_to_vocal_multi_scene_entries(channel_dir, tmp_path):
+    """ボーカルモード: 同一 pattern 内の複数 scene (Variation N) にも entry 単位で微差が付く."""
+    _write_suno_override(
+        channel_dir,
+        genre_line="dream pop vocals",
+        auto_lyrics_structure=False,
+        tracks_per_pattern=1,
+    )
+    patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
+    _write_suno_lyrics_json(
+        tmp_path,
+        ["歌もの — Vocal (Variation 1)", "歌もの — Vocal (Variation 2)"],
+    )
+
+    entries = build_prompt_entries(patterns_path)
+
+    first_lines = _style_first_lines(entries)
+    assert first_lines[0] == "mid, dream pop vocals,"
+    assert first_lines[1] != first_lines[0]
+    assert first_lines[1].startswith("mid, dream pop vocals,")
+
+
+def test_style_variation_md_and_json_share_same_style_lines(channel_dir, tmp_path):
+    """md の Styles ブロックと JSON entry の style がバリエーション込みで同一部品を共有する (ドリフト防止)."""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=_four_distinct_entries(), tracks_top=8)
+
+    md = generate(patterns_path)
+    entries = build_prompt_entries(patterns_path)
+
+    assert _style_blocks_from_md(md) == [entry["style"] for entry in entries]
+
+
+def test_style_variation_wraps_when_pool_is_exhausted(channel_dir, tmp_path):
+    """pool が枯渇したら循環割り当てに戻る (エラーにしない).
+
+    pools は deep-merge で axis 単位にマージされるため、default の rhythm axis は
+    空リスト上書きで無効化して texture 1 語だけの pool を作る (axis 無効化の検証を兼ねる)。
+    """
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        style_variation={"enabled": True, "pools": {"texture": ["warm rounded texture"], "rhythm": []}},
+    )
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=_four_distinct_entries()[:3], tracks_top=6)
+
+    entries = build_prompt_entries(patterns_path)
+
+    first_lines = _style_first_lines(entries)
+    assert first_lines[0] == "slow, lo-fi jazz,"
+    assert first_lines[1] == "slow, lo-fi jazz, warm rounded texture,"
+    assert first_lines[2] == "slow, lo-fi jazz, warm rounded texture,"
+
+
+def test_build_prompt_entries_warns_on_duplicate_full_style(channel_dir, tmp_path, capsys):
+    """要件6: 全 entry の Style 文が完全一致する組があれば生成時に警告する."""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz", style_variation={"enabled": False})
+    patterns_path = _write_patterns_with_explicit_entries(
+        tmp_path,
+        entries=[
+            {"name_jp": "屋上の静寂", "name_en": "Rooftop Silence", "tempo": "slow", "scenes": ["a quiet rooftop"]},
+            {"name_jp": "屋上の残響", "name_en": "Rooftop Echoes", "tempo": "slow", "scenes": ["a quiet rooftop"]},
+        ],
+        tracks_top=4,
+    )
+
+    build_prompt_entries(patterns_path)
+
+    captured = capsys.readouterr()
+    assert "Duplicate Style text" in captured.err
+
+
+def test_build_prompt_entries_no_duplicate_style_warning_when_unique(channel_dir, tmp_path, capsys):
+    """バリエーション有効時、scene が異なる複数 entry では重複警告が出ない."""
+    _write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=_four_distinct_entries(), tracks_top=8)
+
+    build_prompt_entries(patterns_path)
+
+    captured = capsys.readouterr()
+    assert "Duplicate Style text" not in captured.err
 
 
 def test_main_json_output_includes_advanced_fields_when_overridden(channel_dir, tmp_path, monkeypatch):
@@ -1385,6 +1822,7 @@ def test_main_json_output_includes_advanced_fields_when_overridden(channel_dir, 
     main()
 
     data = json.loads((patterns_path.parent / "suno-prompts.json").read_text(encoding="utf-8"))
-    assert data[0]["style_influence"] == 85
-    assert data[0]["weirdness"] == 30
-    assert data[0]["exclude_styles"] == "hyperpop, edm"
+    entry = data["entries"][0]
+    assert entry["style_influence"] == 85
+    assert entry["weirdness"] == 30
+    assert entry["exclude_styles"] == "hyperpop, edm"

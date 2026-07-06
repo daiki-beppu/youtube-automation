@@ -1,6 +1,6 @@
 ---
 name: video-upload
-description: "Use when コレクションの動画が完成し、YouTubeへのアップロード自動化が必要なとき。Complete Collection のアップロードと live 移行を実行"
+description: "Use when コレクションの動画が完成し、YouTubeへのアップロード自動化が必要なとき。Complete Collection のアップロードと live 移行を実行。動画ファイルの生成（MP3→MP4）は /videoup"
 ---
 
 ## Overview
@@ -39,8 +39,8 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 ### collection 型
 - 下記フローのとおり Complete Collection を1本アップロード
 - `collection_uploader.py` を使用
-- 多言語ローカライゼーションは `config/localizations.json` の `supported_languages` + `default_language` が対象（scene_phrases / 概要欄多言語版 / YouTube localization メタデータ）
-- `load_config().localizations.supported_languages` は `config/localizations.json` の `supported_languages` が Canonical ソース（v2.0.0 以降は単一ソース化）
+- 多言語ローカライゼーションは `config/localizations.json` の `supported_languages` が Canonical ソース（v2.0.0 以降は単一ソース化）
+- `supported_languages` が 2 言語以上の場合のみ `scene_phrases` / 概要欄多言語版 / YouTube localization メタデータを生成・検証する。単一言語チャンネルでは `scene_phrases` は不要
 
 ### single_release + languages: ["jp","en"]（COT）
 - **同日2本アップロード**: JP + EN を同日投稿（API クォータ: 2 × 1,600 = 3,200 ユニット）
@@ -131,10 +131,11 @@ collection 型では、ユーザーに公開方法を提示する前の挙動確
 ```bash
 bunx tayk upload-collection --plan -c <NAME>
 # → "📅 公開予定: 2026-06-15T20:00:00+09:00" が出れば予約公開、
-#   "📅 公開設定: 即時公開 (public)" なら即時公開
+#   "📅 公開設定: 即時公開 (public)" なら即時公開、
+#   "📅 公開設定: 限定公開 (unlisted)" / "📅 公開設定: 非公開 (private)" ならその公開範囲でアップロード
 ```
 
-「即時公開」と断定してよいのは、plan 結果が `📅 公開設定: 即時公開 (public)` の場合のみ。`📅 公開予定: <日時>` が出た場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の公開予定時刻を明示して案内する。
+「即時公開」と断定してよいのは、plan 結果が `📅 公開設定: 即時公開 (public)` の場合のみ。`📅 公開設定: 限定公開 (unlisted)` / `📅 公開設定: 非公開 (private)` が出た場合は、その公開範囲でアップロードされることを明示する。`📅 公開予定: <日時>` が出た場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の公開予定時刻を明示して案内する。
 
 詳細とトラブルシュート（"設定したのに即時公開された" の早期発見手順）は `references/scheduled-publish.md` を参照。
 

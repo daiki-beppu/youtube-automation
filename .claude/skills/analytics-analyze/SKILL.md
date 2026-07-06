@@ -1,6 +1,6 @@
 ---
 name: analytics-analyze
-description: "Use when 収集済みのAnalyticsデータを詳細分析し、戦略的改善提案が必要なとき。/analytics-collect でデータ収集後に実行。CTR改善、パフォーマンス分析、戦略検討、データ分析、コレクション比較、投稿の振り返りなど、データに基づく判断が求められる場面で必ず使用すること"
+description: "Use when 収集済み Analytics データの分析と戦略提案が必要なとき。「パフォーマンス分析」「戦略検討」「振り返り」で発動。/analytics-collect の後工程"
 ---
 
 ## Overview
@@ -109,3 +109,4 @@ $ARGUMENTS
 ## 関連ファイル
 
 - `data/video_analysis/<slug>/<video_id>.json` — `/video-analyze` の `scene_timeline` 出力（retention drop と動画展開のクロス参照に使う）
+  - 冒頭クリップ窓（既定 900 秒、JSON の `analysis_window_sec`）内の分析結果。retention drop との照合では、窓外の全尺展開を推測しない。
