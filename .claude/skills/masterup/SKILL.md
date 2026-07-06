@@ -73,6 +73,7 @@ Lyria で音源を生成するチャンネルでは `/lyria` が `01-master/mast
 | `yt-generate-master --pin-first <files...>` | 先頭固定する MP3 ファイル名を順番指定（`--shuffle` 併用時も pin の順序は保持） | `yt-generate-master --pin-first 00-hook.mp3 --shuffle` |
 | `yt-generate-master --pin-first-count N` | ソート済み先頭 N 件を固定（`--shuffle` 併用時は残り N+1〜末尾のみシャッフル） | `yt-generate-master --pin-first-count 1 --shuffle` |
 | `yt-suno-audio-cleanup plan/apply` | Suno 個別音源の後処理を plan / apply。apply は元ファイルを backup して同名置換 | `yt-suno-audio-cleanup plan <collection>` |
+| `yt-suno-verify-playlist` | playlist 曲名 × suno-prompts.json `entry.title ?? entry.name` の突合（混入 / 生成漏れ / clip 不足を fail-loud 検出） | `yt-suno-verify-playlist <collection> --titles-file titles.txt` |
 | (skill-config) `pair_selection.mode` | 歌詞-aware 採用整理。歌詞ありならペア片方、歌詞なしなら両方採用 | `mode: auto` |
 | (skill-config) `pair_selection.min_song_sec` / `.max_song_sec` | 短すぎる / 長すぎる Suno 失敗生成を master から除外 | `min_song_sec: 45`, `max_song_sec: 300` |
 | (skill-config) `audio.target_duration_min` | CLI フラグ未指定時のデフォルト目標尺（分）。`config/skills/masterup.yaml` で設定 | `target_duration_min: 120` |
@@ -111,7 +112,7 @@ Lyria で音源を生成するチャンネルでは `/lyria` が `01-master/mast
 2. アクティブコレクションの `02-Individual-music/` に配置し、ファイル名を連番 + タイトルで揃える（例: `01-pattern-a-arrival.mp3`）
 3. `uv run yt-generate-master`（または `--target-duration` / `--shuffle` などのオプション付き）を **直接実行**
 4. 必要に応じて `uv run yt-finalize-master`（雨音レイヤー）→ `uv run yt-fix-timestamps`（タイムスタンプ整合）→ Step 6 の `rsync` 同期を **手動で順番に実行**
-5. `workflow-state.json` の `music.approved = true` / `mp3_count` / `master_audio` / `phase = "music-approved"` を手動更新（または `/masterup` の「完了時の更新」を別途呼ぶ）
+5. `workflow-state.json` の `assets.raw_master`（マスターファイル名）/ `updated_at` を手動更新（または `/masterup` の「完了時の更新」を別途呼ぶ）
 
 このフォールバックは **`/masterup` が壊れていても master.mp3 を生成できる最小経路**であり、Suno 公式 API 公開までの暫定運用として機能する。
 
@@ -146,7 +147,7 @@ $ARGUMENTS
 ### Step 1: コレクションの特定
 
 1. `collections/planning/` の `workflow-state.json` を検索
-2. `music.generated = true` かつ `music.approved = false` のコレクションを対象
+2. `assets.music_prompts = true` かつ `assets.raw_master = null` のコレクションを対象
 3. 複数ある場合はユーザーに選択を促す
 
 ### Step 1.5: DL 完全性チェック（部分ダウンロード検知）
@@ -177,13 +178,36 @@ print(f'pattern_count={pattern_count} expected={expected} actual={actual}')
 判定:
 - **`actual == 0`**: `/suno-helper` 未実行として「`/suno-helper` を実行してダウンロードを完了してください」を案内して停止
 - **`0 < actual < expected`**: 部分ダウンロードとして扱う。`assets.music_downloaded` が `true` であっても揃っているとはみなさない。不足曲数（`expected - actual`）を提示し、「`/suno-helper` を再実行して不足分を DL するか、Suno UI から手動で不足曲をダウンロードして `02-Individual-music/` に配置してください」を案内して停止
-- **`actual >= expected`**: チェック OK として Step 2 へ進む
+- **`actual >= expected`**: チェック OK として Step 1.6 へ進む
 
 `pattern_count` が `None`（`suno-prompts.json` が存在しない）の場合は期待曲数が算出不能なため本チェックをスキップし、以降の既存フローに委ねる。
 
+### Step 1.6: playlist × suno-prompts.json 突合ゲート（必須・混入検出）
+
+> **Step 5 前の共通ゲート**: この突合は Step 2 fallback 専用ではない。`02-Individual-music/` に音源があり Step 2-3 をスキップする primary path でも、Step 5 に進む前に必ず完了させる。
+
+playlist 曲タイトル一覧を `yt-suno-verify-playlist` に渡し、`20-documentation/suno-prompts.json` の `entry.title ?? entry.name` と突合する。
+
+```bash
+# titles.txt: Suno playlist URL の WebFetch 結果、またはユーザー提示の曲タイトルを 1 行 1 曲で保存
+uv run yt-suno-verify-playlist <collection-path> --titles-file titles.txt
+```
+
+title list の取得元:
+- primary path（suno-helper DL 済み）: `workflow-state.json::planning.music.suno_playlist_url`（またはユーザーが第1引数で渡した playlist URL）を WebFetch して title list を作る。URL が無い、または WebFetch で全 title list を取得できない場合は検証不能として停止し、ユーザーに title list の提示を求める
+- fallback path: Step 2 の WebFetch 結果から title list を作る
+
+判定:
+- **unknown（どの entry にも一致しない曲）**: 別コレクション由来の混入。playlist から除外するまで Step 5 に進まない
+- **missing（playlist に存在しない entry）**: 生成漏れ。`/suno-helper` で追補生成するまで Step 5 に進まない
+- **underfilled（clip 数が期待未満の entry）**: 生成が途中で止まった疑い。既定は 2 clip/entry（`--expected-clips-per-entry` で調整、`0` で無効化）
+- 非 0 終了時はレポートをそのままユーザーへ提示して停止する。**ユーザーが混入込みでの続行を明示指示した場合のみ**、混入内容と影響（世界観不整合・メタデータずれ）を報告した上で続行できる
+
+> **背景**: playlist には「最新セットの生成が未完のまま、前後コレクションの曲が混入する」事故が繰り返し起きている（実例: 深夜コレクションに昼テーマ 2 ペアが混入 + 深夜 2 entry 未生成のまま master 化）。曲名は `/suno-helper` が Song Title 欄へ注入する `entry.title ?? entry.name` で一意なため、機械突合で確実に検出できる。silent な続行は禁止。
+
 ### Step 2: WebFetch でプレイリスト情報を取得 (DEPRECATED -- fallback only)
 
-> **suno-helper DL 済みの場合はスキップ**: `02-Individual-music/` ディレクトリにオーディオファイル（mp3 / m4a / wav）が既に存在する場合、suno-helper が一括ダウンロード済みと判断し、**Step 2-3 をスキップして Step 5 へ直行する**。この経路が primary path であり、以下の WebFetch + CDN curl は suno-helper のダウンロードが使えない場合のフォールバックとしてのみ使用する。
+> **suno-helper DL 済みの場合はスキップ**: `02-Individual-music/` ディレクトリにオーディオファイル（mp3 / m4a / wav）が既に存在する場合、suno-helper が一括ダウンロード済みと判断し、**Step 1.6 の突合ゲート完了後に Step 2-3 をスキップして Step 5 へ進む**。この経路が primary path であり、以下の WebFetch + CDN curl は suno-helper のダウンロードが使えない場合のフォールバックとしてのみ使用する。
 
 1. 引数のプレイリストURLを WebFetch で取得
 2. prompt で全曲の情報を抽出するよう指示。**プレイリスト全体の総曲数（メタ表記）も同時に取得する**:
@@ -199,6 +223,7 @@ print(f'pattern_count={pattern_count} expected={expected} actual={actual}')
    - 総曲数のメタ表記が WebFetch から取得できなかった場合も同様に中断し、ユーザーへ「件数突合不能のため処理を停止」と報告する（silent な続行を禁止）
    - **総曲数 ≤ 50 で件数が一致した場合のみ Step 3 へ進む**
 4. WebFetch の結果から曲リストをパースして Step 3 に渡す
+5. Step 1.6 の突合ゲートが未実行なら、この曲リストで `yt-suno-verify-playlist` を実行してから Step 3 に進む
 
 **取得手段のフォールバック方針**: WebFetch は suno.com のサーバー描画分（上限 50 件）しか拾えないため、本 skill は「50 曲以下のプレイリスト」を前提運用とする。50 曲超のプレイリストは現状 50 曲単位に分割して個別実行するか、手動で `02-Individual-music/` に MP3 を揃えてから `yt-generate-master` を直接実行するワークフローへ切り替える（内部 API / 公式 API への移行は別 issue）。
 
@@ -342,7 +367,19 @@ fi
 
 ### Step 4.5: Suno clip 採用整理（歌詞-aware + 尺フィルタ）
 
-`yt-generate-master` の直前に `yt-suno-select-tracks` を実行し、`02-Individual-music/` を master 入力として安全な状態に整理する:
+`yt-generate-master` の直前に `yt-suno-select-tracks` を実行し、`02-Individual-music/` を master 入力として安全な状態に整理する。
+
+本実行でファイル移動・削除が発生する前に、必ず dry-run で `pair_selection.min_song_sec` 未満の候補を確認する:
+
+```bash
+yt-suno-select-tracks --dry-run <collection-path>
+```
+
+dry-run stdout の `[dropped_under_min]` セクションに 1 件以上ある場合は、各行の `source=<filename>` / `duration=<sec>s` / `min_song_sec=<sec>s` をユーザーへ提示し、続行可否を確認する。Claude Code では AskUserQuestion で「続行する」「続行しない」の 2 択を出す。AskUserQuestion 非対応環境（Codex 等）では、同じ情報をテキストで提示し、ユーザーの明示的な承認発言を待つ。
+
+- **続行する**: 下記の本実行へ進み、既存の `pair_selection.out_of_range_action` に従って除外する。その後 Step 5 へ進む
+- **続行しない**: 本実行を行わず、`/suno-helper` での追補生成または該当曲の手動確認を案内して停止する。Step 5 へ進まない
+- `[dropped_under_min]` に候補が無い場合: 確認プロンプトを出さず、下記の本実行へ進む。`pair_selection.max_song_sec` 超過だけの候補では、この確認プロンプトを出さない
 
 ```bash
 yt-suno-select-tracks <collection-path>
@@ -391,7 +428,7 @@ yt-suno-select-tracks <collection-path> --allow-best-effort-over-max
 yt-suno-select-tracks <collection-path> --dry-run
 ```
 
-ファイル移動なしで winner / loser / 尺外除外の plan を stdout に出す。採用整理の挙動が不安なときは先に dry-run を見る。
+ファイル移動なしで winner / loser / 尺外除外の plan を stdout に出す。`[dropped_under_min]` には `pair_selection.min_song_sec` 未満で除外される候補だけが、ファイル名・duration・設定中の `min_song_sec` 付きで表示される。
 
 ### Step 5: マスター音源生成（CLI）
 
@@ -399,6 +436,7 @@ yt-suno-select-tracks <collection-path> --dry-run
 - Step 3 の検証で `failed` 配列が空でない（サイズ異常・再生時間異常・Content-Type 不正）
 - 期待ファイル突合チェックで `missing` 配列が空でない
 - Step 2 の件数突合で不一致が検出されている
+- Step 1.6 の `yt-suno-verify-playlist` が未実行、検証不能、または非 0 終了している（混入 / 生成漏れ / clip 不足。ユーザーが混入込み続行を明示指示した場合を除く）
 - Step 4.5 の `yt-suno-select-tracks` が非 0 終了している（尺フィルタ後の採用候補 0 件、stock 移動失敗など）
 
 検証失敗時は Step 4 / 4.5 のレポートを提示し、ユーザーに手動修正（再ダウンロード / Suno UI からの手動取得 / `/suno-helper` 追補生成）を促してから再実行する。
@@ -439,7 +477,7 @@ yt-generate-master --pin-first-count 1 --shuffle               # ソート済み
 `02-Individual-music/` のオーディオファイル（MP3 / M4A / WAV）を自動検出し、skill-config の `audio.crossfade_duration` / `audio.bitrate` でクロスフェード結合します。metadata_generator のタイムスタンプ計算と同じ設定値を参照するため、実音声と description のタイムスタンプが常に一致します。suno-helper の DL フォーマット設定（`sunoDownloadFormat`）により入力形式が MP3 以外になる場合があるため、拡張子で判別する。
 **この処理は常にダウンロード後（または suno-helper DL 済み確認後）に自動実行する。**
 
-**ループ時の注意**: `--loop` / `--target-duration` は Suno/Lyria のトラック数が少ないコレクションで raw master の尺を target に届かせるためのオプション。`--loop` / `--target-duration` / `--no-loop` は同時指定不可。実行前にトラック総尺・目標尺・ループ回数・見込み尺の preview が表示される。`--no-loop` は `config/skills/masterup.yaml::audio.target_duration_min` が設定されていても 1 パス生成を明示するためのフラグ。metadata_generator が生成する YouTube タイムスタンプは現状 **1 ループ分のみ** なので、動画尺が timestamp 末尾より長くなる（DJ セット動画では許容範囲。複数ループを timestamp に反映したい場合は別途 issue 化）。
+**ループ時の注意**: `--loop` / `--target-duration` は Suno/Lyria のトラック数が少ないコレクションで raw master の尺を target に届かせるためのオプション。`--loop` / `--target-duration` / `--no-loop` は同時指定不可。実行前にトラック総尺・目標尺・ループ回数・見込み尺の preview が表示される。`--no-loop` は `config/skills/masterup.yaml::audio.target_duration_min` が設定されていても 1 パス生成を明示するためのフラグ。全ループ分の YouTube チャプターが必要な場合は、preview の loop count と同じ `N` を `metadata_generator.generate_timestamps(loops=N)` / `format_timestamps_text(loops=N)` に渡して展開する。1 ループ分のみ載せる従来運用は `loops=1` のままで変更なし。
 
 **シャッフル時の注意**: `--shuffle` はループ展開の**前**に 1 回だけ実行され、シャッフルされた順序がループごとに同じ並びで N 回繰り返される（ループごとに独立してシャッフルし直すわけではない）。再現性が必要な場合は `--shuffle-seed N` を指定するか、`--shuffle` 単独実行時に stdout に出る `[Shuffle] seed=<N>` の値を控えておけば後で同じ並びを再現できる。再現性ログは `--quiet` 指定時も常に出力される。
 
@@ -599,11 +637,10 @@ fi
 
 ### 完了時の更新
 
-- `workflow-state.json` の `music.approved = true` に更新
-- `mp3_count` にダウンロード曲数を記録
-- `master_audio` に `"master.mp3"` を記録
+- `workflow-state.json` の `assets.raw_master` に生成したマスターファイル名（例: `"master.mp3"`）を記録
 - `updated_at` を現在時刻に更新
-- `phase` を `"music-approved"` に更新
+
+`phase` は `"prepared"` のまま変更しない。`raw_master` → `master_audio` 確定後の `"mastered"` フェーズ遷移は `/wf-next` の責務（本スキルはユーザーのミキシング+マスタリング前の raw master 生成までを担う）。
 
 ## CDN URL パターン (DEPRECATED -- fallback only)
 

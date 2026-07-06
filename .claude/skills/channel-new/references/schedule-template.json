@@ -6,7 +6,6 @@
     "cadence": ["tue", "thu", "sat"]
   },
   "upload_settings": {
-    "privacy_status": "private",
     "category_id": "10",
     "auto_create_playlist": true,
     "max_retries": 3,

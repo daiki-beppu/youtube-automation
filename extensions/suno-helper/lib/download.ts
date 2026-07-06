@@ -15,7 +15,7 @@ const MENU_APPEAR_TIMEOUT_MS = 5000;
 const MODAL_APPEAR_POLL_MS = 200;
 const MODAL_APPEAR_TIMEOUT_MS = 10000;
 const MODAL_CLOSE_POLL_MS = 200;
-const MODAL_CLOSE_TIMEOUT_MS = 10000;
+const MODAL_CLOSE_TIMEOUT_MS = 120000;
 const SETTLE_AFTER_CLICK_MS = 500;
 
 async function waitForElement<T extends HTMLElement>(
@@ -150,7 +150,10 @@ async function waitForFormatModalClose(modal: HTMLElement, timeoutMs: number, po
     }
     await sleep(pollMs);
   }
-  throw new Error(`形式選択モーダルが閉じませんでした (${timeoutMs}ms)`);
+  throw new Error(
+    `形式選択モーダルが閉じませんでした (${timeoutMs}ms)。` +
+      "Suno 側のダウンロード準備が長引いているか、UI が変更された可能性があります。",
+  );
 }
 
 export interface TriggerDownloadAllDeps {

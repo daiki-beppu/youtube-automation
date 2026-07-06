@@ -1,7 +1,7 @@
 # GCP / Vertex AI ブートストラップ
 
 新チャンネル用の GCP プロジェクト + API + 認証情報を用意するためのリファレンス。
-`/channel-new` / `/channel-setup` から共通参照する。
+`/channel-new`（初回モード / 再生成モード）から参照する。
 
 上流リポジトリ (`daiki-beppu/youtube-automation`、PyPI 配布名は `youtube-channels-automation`) の `auth/SETUP.md` と `infra/terraform/gcp/README.md` が詳細版。このリファレンスは **スキルが実行するときの判断材料** に絞ってある。
 
@@ -16,7 +16,7 @@
 │     │  └─ No → ルート A (bootstrap.sh、--create 付き)
 ```
 
-- **ルート A** (`.claude/skills/channel-setup/references/gcp-bootstrap.sh`): 最速。gcloud を順次叩くだけの冪等シェル。
+- **ルート A** (`.claude/skills/channel-new/references/gcp-bootstrap.sh`): 最速。gcloud を順次叩くだけの冪等シェル。
 - **ルート B** (`infra/terraform/gcp/`): 宣言的 IaC。複数環境・多人数運用向け。
 
 ## 実行コマンド
@@ -26,7 +26,7 @@
 チャンネルリポジトリから実行する場合（yt-skills sync 配布後のパスを使う）:
 
 ```bash
-SKILL_REF="$(git rev-parse --show-toplevel)/.claude/skills/channel-setup/references"
+SKILL_REF="$(git rev-parse --show-toplevel)/.claude/skills/channel-new/references"
 
 # 新規作成 (Billing account を渡す)
 bash "$SKILL_REF/gcp-bootstrap.sh" \
@@ -43,7 +43,7 @@ bash "$SKILL_REF/gcp-bootstrap.sh" <PROJECT_ID>
 ### ルート B: terraform
 
 ```bash
-SKILL_REF="$(git rev-parse --show-toplevel)/.claude/skills/channel-setup/references"
+SKILL_REF="$(git rev-parse --show-toplevel)/.claude/skills/channel-new/references"
 
 # tfvars を用意 (初回のみ)
 cp "$SKILL_REF/terraform-gcp/terraform.tfvars.example" \
