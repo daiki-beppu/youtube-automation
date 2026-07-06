@@ -705,6 +705,56 @@ describe("generateMasterService — filesystem safety and output errors", () => 
     expect(readFfmpegCalls(ffmpegLog)).toEqual([]);
   });
 
+  test("rejects symlink master directory before writing", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    const collection = setupCollection(channelRoot, "collections/demo", [
+      "01-a.mp3",
+      "02-b.mp3",
+    ]);
+    const outsideMasterDir = join(channelRoot, "outside-master-dir");
+    mkdirSync(outsideMasterDir, { recursive: true });
+    writeText(join(outsideMasterDir, "master.mp3"), "outside");
+    rmSync(join(collection, "01-master"), { force: true, recursive: true });
+    symlinkSync(outsideMasterDir, join(collection, "01-master"), "dir");
+    const ffmpegLog = installFakeFfmpeg();
+
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("validation");
+      expect(result.error.message).toContain("unsafe master directory");
+    }
+    expect(readFfmpegCalls(ffmpegLog)).toEqual([]);
+    expect(readFileSync(join(outsideMasterDir, "master.mp3"), "utf-8")).toBe(
+      "outside"
+    );
+  });
+
+  test("rejects non-directory master path before ffmpeg", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    const collection = setupCollection(channelRoot, "collections/demo", [
+      "01-a.mp3",
+      "02-b.mp3",
+    ]);
+    const masterPath = join(collection, "01-master");
+    rmSync(masterPath, { force: true, recursive: true });
+    writeText(masterPath, "not-a-directory");
+    const ffmpegLog = installFakeFfmpeg();
+
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
+
+    expect(result.ok).toBe(false);
+    expect(readFfmpegCalls(ffmpegLog)).toEqual([]);
+    expect(readFileSync(masterPath, "utf-8")).toBe("not-a-directory");
+  });
+
   test("returns io error when ffmpeg exits zero without creating output", async () => {
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);

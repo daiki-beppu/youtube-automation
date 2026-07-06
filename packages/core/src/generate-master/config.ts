@@ -179,7 +179,10 @@ const parseMasterupYaml = (text: string): unknown => {
       ).exec(line.trim());
       if (topLevelAudio !== null) {
         const [, value] = topLevelAudio;
-        if (value !== undefined && value.length > 0) {
+        if (
+          value !== undefined &&
+          stripInlineComment(value).trim().length > 0
+        ) {
           throw new Error("config: masterup audio YAML must be a mapping");
         }
         inAudio = true;
@@ -195,7 +198,12 @@ const parseMasterupYaml = (text: string): unknown => {
         const [, key, value] = match;
         if (key !== undefined && value !== undefined) {
           if (key === "finalize") {
-            inFinalize = false;
+            if (stripInlineComment(value).trim().length > 0) {
+              throw new Error(
+                `config: unsupported masterup audio YAML line: ${line}`
+              );
+            }
+            inFinalize = true;
             continue;
           }
           inFinalize = false;

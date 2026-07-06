@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, symlinkSync } from "node:fs";
+import { mkdirSync, readFileSync, symlinkSync } from "node:fs";
 import { lstat, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
-import { generateMasterService } from "@youtube-automation/core/generate-master";
+import {
+  DEFAULT_BITRATE,
+  DEFAULT_CROSSFADE_DURATION,
+  generateMasterService,
+} from "@youtube-automation/core/generate-master";
 
 import {
   installFakeFfmpeg,
@@ -23,10 +27,26 @@ const runOk = async (rawInput: unknown) => {
   return result.value;
 };
 
+const repoRoot = resolve(import.meta.dir, "..", "..", "..");
+
 beforeEach(saveGenerateMasterEnv);
 afterEach(restoreGenerateMasterFixtures);
 
 describe("generateMasterService — skill config override", () => {
+  test("keeps bundled masterup defaults synchronized with TS defaults", () => {
+    const defaultConfig = readFileSync(
+      join(repoRoot, ".claude", "skills", "masterup", "config.default.yaml"),
+      "utf-8"
+    );
+    const bitrateMatch = /^ {2}bitrate:\s*"([^"]+)"$/mu.exec(defaultConfig);
+    const crossfadeMatch = /^ {2}crossfade_duration:\s*([0-9.]+)$/mu.exec(
+      defaultConfig
+    );
+
+    expect(bitrateMatch?.[1]).toBe(DEFAULT_BITRATE);
+    expect(Number(crossfadeMatch?.[1])).toBe(DEFAULT_CROSSFADE_DURATION);
+  });
+
   test("uses config/skills/masterup.json before masterup.yaml", async () => {
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
@@ -120,9 +140,11 @@ describe("generateMasterService — skill config override", () => {
     writeText(
       join(channelRoot, "config", "skills", "masterup.yaml"),
       [
-        "audio:",
+        "audio: # runtime overrides",
         '  bitrate: "256k" # keep ffmpeg bitrate unquoted',
         "  crossfade_duration: 2 # seconds",
+        "  finalize: # legacy nested config is ignored",
+        "    bitrate: 999k",
       ].join("\n")
     );
     const logPath = installFakeFfmpeg();
