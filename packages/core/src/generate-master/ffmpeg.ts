@@ -56,17 +56,19 @@ export const buildFfmpegArgs = (
     }
     return [
       "-y",
+      "-loglevel",
+      "error",
       "-i",
       only,
       ...OUTPUT_CODEC_ARGS,
       "-b:a",
       input.bitrate,
+      "-f",
+      "mp3",
       outputPath,
-      "-loglevel",
-      "error",
     ];
   }
-  const args = ["-y"];
+  const args = ["-y", "-loglevel", "error"];
   for (const file of inputs) {
     args.push("-i", file);
   }
@@ -78,9 +80,9 @@ export const buildFfmpegArgs = (
     ...OUTPUT_CODEC_ARGS,
     "-b:a",
     input.bitrate,
-    outputPath,
-    "-loglevel",
-    "error"
+    "-f",
+    "mp3",
+    outputPath
   );
   return args;
 };

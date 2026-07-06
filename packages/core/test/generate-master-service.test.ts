@@ -61,6 +61,9 @@ describe("generateMasterService — audio collection and ffmpeg command", () => 
     expect(args).toContain("-filter_complex");
     expect(args).toContain("-b:a");
     expect(args).not.toContain("-q:a");
+    expect(args?.at(-3)).toBe("-f");
+    expect(args?.at(-2)).toBe("mp3");
+    expect(args?.at(-1)).toMatch(/master\.mp3\.tmp-.+\.mp3$/u);
     const expectedFilter = [
       "[0:a][1:a]acrossfade=d=1.5:c1=tri:c2=tri[cf1]",
       "[cf1][2:a]acrossfade=d=1.5:c1=tri:c2=tri[aout]",
@@ -97,6 +100,9 @@ describe("generateMasterService — audio collection and ffmpeg command", () => 
     expect(output.segmentCount).toBe(1);
     expect(output.outputPath).toBe(join(collection, "01-master", "master.mp3"));
     expect(readFileSync(output.outputPath, "utf-8")).toBe("fake-master");
+    expect(args?.at(-3)).toBe("-f");
+    expect(args?.at(-2)).toBe("mp3");
+    expect(args?.at(-1)).toMatch(/master\.mp3\.tmp-.+\.mp3$/u);
   });
 
   test("transcodes a single non-mp3 input to master.mp3", async () => {
@@ -280,6 +286,69 @@ describe("generateMasterService — pin, shuffle, and loop ordering", () => {
     const input = GenerateMasterInputSchema.parse({
       collection: "collections/demo",
     });
+    const result = await generateMasterService(input, {
+      channelDir: channelRoot,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(
+        `expected ok Result, got ${JSON.stringify(result.error)}`
+      );
+    }
+    const [args] = readFfmpegCalls(logPath);
+    expect(args).toContain("320k");
+    expect(args).toContain("[0:a][1:a]acrossfade=d=2.5:c1=tri:c2=tri[aout]");
+    expect(result.value.bitrate).toBe("320k");
+    expect(result.value.crossfadeDuration).toBe(2.5);
+  });
+
+  test("keeps public parsed defaults overridable after structured clone", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify({ audio: { bitrate: "320k", crossfade_duration: 2.5 } })
+    );
+    const logPath = installFakeFfmpeg();
+
+    const input = structuredClone(
+      GenerateMasterInputSchema.parse({
+        collection: "collections/demo",
+      })
+    );
+    const result = await generateMasterService(input, {
+      channelDir: channelRoot,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(
+        `expected ok Result, got ${JSON.stringify(result.error)}`
+      );
+    }
+    const [args] = readFfmpegCalls(logPath);
+    expect(args).toContain("320k");
+    expect(args).toContain("[0:a][1:a]acrossfade=d=2.5:c1=tri:c2=tri[aout]");
+    expect(result.value.bitrate).toBe("320k");
+    expect(result.value.crossfadeDuration).toBe(2.5);
+  });
+
+  test("keeps public parsed defaults overridable after JSON round trip", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify({ audio: { bitrate: "320k", crossfade_duration: 2.5 } })
+    );
+    const logPath = installFakeFfmpeg();
+
+    const serializedInput = JSON.stringify(
+      GenerateMasterInputSchema.parse({
+        collection: "collections/demo",
+      })
+    );
+    const input = JSON.parse(serializedInput);
     const result = await generateMasterService(input, {
       channelDir: channelRoot,
     });

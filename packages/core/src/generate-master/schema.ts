@@ -16,10 +16,6 @@ const inputSpecifiedFields = [
   ["target_duration_min", "targetDurationMin"],
 ] as const;
 
-const outputSpecifiedFields = inputSpecifiedFields.map(
-  ([, outputField]) => outputField
-);
-
 const GenerateMasterSpecifiedSchema = z
   .object({
     bitrate: z.boolean(),
@@ -31,19 +27,8 @@ const GenerateMasterSpecifiedSchema = z
   })
   .strict();
 
-type GenerateMasterSpecified = z.infer<typeof GenerateMasterSpecifiedSchema>;
-
-const specifiedMetadata = new WeakMap<
-  Record<string, unknown>,
-  GenerateMasterSpecified
->();
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-const specifiedFromMetadata = (
-  value: Record<string, unknown>
-): GenerateMasterSpecified | undefined => specifiedMetadata.get(value);
 
 const withInputPresence = (value: unknown): unknown => {
   if (!isRecord(value)) {
@@ -58,32 +43,6 @@ const withInputPresence = (value: unknown): unknown => {
       ])
     ),
   };
-};
-
-const withCamelInputPresence = (value: unknown): unknown => {
-  if (!isRecord(value)) {
-    return value;
-  }
-  const specified = specifiedFromMetadata(value);
-  return {
-    ...value,
-    __specified:
-      specified ??
-      Object.fromEntries(
-        outputSpecifiedFields.map((field) => [
-          field,
-          Object.hasOwn(value, field),
-        ])
-      ),
-  };
-};
-
-const withSpecifiedMetadata = (
-  value: Record<string, unknown>,
-  specified: GenerateMasterSpecified
-): Record<string, unknown> => {
-  specifiedMetadata.set(value, specified);
-  return value;
 };
 
 interface GenerateMasterInvariantInput {
@@ -166,12 +125,6 @@ const GenerateMasterRawInputSchema = z.preprocess(
     })
 );
 
-const GenerateMasterExternalInputSchema =
-  GenerateMasterRawInputSchema.transform((input) => {
-    const { __specified, ...externalInput } = input;
-    return withSpecifiedMetadata(snakeToCamel(externalInput), __specified);
-  });
-
 const GenerateMasterInternalInputSchema = z
   .object({
     bitrate: BitrateSchema,
@@ -195,39 +148,6 @@ const GenerateMasterInternalInputSchema = z
     });
   });
 
-const GenerateMasterCamelServiceInputSchema = z.preprocess(
-  withCamelInputPresence,
-  z
-    .object({
-      __specified: GenerateMasterSpecifiedSchema,
-      bitrate: BitrateSchema,
-      channelDir: z.string().optional(),
-      collection: z.string().min(1).optional(),
-      crossfadeDuration: z.number().positive(),
-      loop: z.number().int().positive().optional(),
-      noLoop: z.boolean(),
-      pinFirst: z.array(z.string().min(1)),
-      pinFirstCount: z.number().int().nonnegative().optional(),
-      shuffle: z.boolean(),
-      shuffleSeed: z.number().int().optional(),
-      targetDurationMin: z.number().int().positive().optional(),
-    })
-    .strict()
-    .superRefine((input, ctx) => {
-      addGenerateMasterInvariantIssues(input, ctx, {
-        pinFirstCount: "pinFirstCount",
-        targetDurationMin: "targetDurationMin",
-      });
-    })
-    .transform((input) => {
-      const { __specified, ...serviceInput } = input;
-      return {
-        ...serviceInput,
-        specified: __specified,
-      };
-    })
-);
-
 const GenerateMasterRawServiceInputSchema =
   GenerateMasterRawInputSchema.transform((input) => {
     const { __specified, ...externalInput } = input;
@@ -237,7 +157,7 @@ const GenerateMasterRawServiceInputSchema =
     };
   });
 
-export const GenerateMasterInputSchema = GenerateMasterExternalInputSchema;
+export const GenerateMasterInputSchema = GenerateMasterRawServiceInputSchema;
 
 export const GenerateMasterServiceInputSchema =
   GenerateMasterRawServiceInputSchema;
@@ -245,7 +165,6 @@ export const GenerateMasterServiceInputSchema =
 export const ParseableGenerateMasterInputSchema = z.union([
   GenerateMasterInternalInputSchema,
   GenerateMasterRawServiceInputSchema,
-  GenerateMasterCamelServiceInputSchema,
 ]);
 
 export const GenerateMasterOutputSchema = z

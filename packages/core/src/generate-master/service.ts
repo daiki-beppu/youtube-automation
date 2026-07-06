@@ -103,7 +103,7 @@ const assertMasterOutputPathSafe = async (
 };
 
 const tempMasterPath = (outputPath: string): string =>
-  `${outputPath}.tmp-${process.pid}-${randomUUID()}`;
+  `${outputPath}.tmp-${process.pid}-${randomUUID()}.mp3`;
 
 const runGenerateMaster = async (
   input: GenerateMasterInternalInput,

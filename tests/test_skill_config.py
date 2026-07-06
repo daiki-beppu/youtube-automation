@@ -210,6 +210,50 @@ def test_load_skill_config_masterup_json_lstat_error_raises_without_yaml_fallbac
         skill_config.load_skill_config("masterup", use_cache=False)
 
 
+def test_load_skill_config_masterup_yaml_directory_raises_when_json_absent(tmp_path, monkeypatch):
+    """masterup.yaml が directory の場合は ConfigError."""
+    channel_dir = tmp_path / "ch"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "masterup.yaml").mkdir()
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="regular file"):
+        skill_config.load_skill_config("masterup", use_cache=False)
+
+
+def test_load_skill_config_masterup_broken_yaml_symlink_raises_when_json_absent(tmp_path, monkeypatch):
+    """broken masterup.yaml symlink の場合は ConfigError."""
+    channel_dir = tmp_path / "ch"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "masterup.yaml").symlink_to(channel_dir / "missing-masterup.yaml")
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="regular file"):
+        skill_config.load_skill_config("masterup", use_cache=False)
+
+
+def test_load_skill_config_masterup_yaml_lstat_error_raises_when_json_absent(tmp_path, monkeypatch):
+    """masterup.yaml の stat 失敗時は ConfigError."""
+    channel_dir = tmp_path / "ch"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "masterup.yaml").write_text("audio:\n  bitrate: 128k\n", encoding="utf-8")
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+    original_lstat = Path.lstat
+
+    def fake_lstat(path: Path):
+        if path.name == "masterup.yaml":
+            raise PermissionError("permission denied")
+        return original_lstat(path)
+
+    monkeypatch.setattr(Path, "lstat", fake_lstat)
+
+    with pytest.raises(ConfigError, match="skill-config 読み込み失敗"):
+        skill_config.load_skill_config("masterup", use_cache=False)
+
+
 def test_load_channel_override_masterup_json_wins_over_yaml(tmp_path, monkeypatch):
     """load_channel_override() でも masterup JSON override が YAML より優先されること."""
     channel_dir = tmp_path / "ch"
@@ -240,6 +284,38 @@ def test_load_channel_override_masterup_broken_json_raises_without_yaml_fallback
         encoding="utf-8",
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="skill-config 読み込み失敗"):
+        skill_config.load_channel_override("masterup")
+
+
+def test_load_channel_override_masterup_yaml_directory_raises_when_json_absent(tmp_path, monkeypatch):
+    """load_channel_override() でも masterup.yaml directory は ConfigError."""
+    channel_dir = tmp_path / "ch"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "masterup.yaml").mkdir()
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="regular file"):
+        skill_config.load_channel_override("masterup")
+
+
+def test_load_channel_override_masterup_yaml_lstat_error_raises_when_json_absent(tmp_path, monkeypatch):
+    """load_channel_override() でも masterup.yaml stat 失敗は ConfigError."""
+    channel_dir = tmp_path / "ch"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "masterup.yaml").write_text("audio:\n  bitrate: 128k\n", encoding="utf-8")
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+    original_lstat = Path.lstat
+
+    def fake_lstat(path: Path):
+        if path.name == "masterup.yaml":
+            raise PermissionError("permission denied")
+        return original_lstat(path)
+
+    monkeypatch.setattr(Path, "lstat", fake_lstat)
 
     with pytest.raises(ConfigError, match="skill-config 読み込み失敗"):
         skill_config.load_channel_override("masterup")

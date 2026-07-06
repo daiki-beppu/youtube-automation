@@ -20,16 +20,6 @@ interface GenerateMasterRawInput {
   target_duration_min?: number;
 }
 
-type ValueFlagParser = (
-  value: string,
-  flag: string
-) => Partial<GenerateMasterRawInput>;
-
-interface ValueFlagSpec {
-  acceptsDashPrefixedValue: boolean;
-  parse: ValueFlagParser;
-}
-
 interface ParseOptions {
   channelDir?: string;
   defaultCollection?: string;
@@ -43,76 +33,90 @@ const parseNumberFlag = (flag: string, value: string): number => {
   return parsed;
 };
 
-const VALUE_FLAG_SPECS: Record<string, ValueFlagSpec> = {
-  "--bitrate": {
-    acceptsDashPrefixedValue: false,
-    parse: (value) => ({ bitrate: value }),
-  },
-  "--channel-dir": {
-    acceptsDashPrefixedValue: false,
-    parse: (value) => ({ channel_dir: value }),
-  },
-  "--crossfade-duration": {
-    acceptsDashPrefixedValue: true,
-    parse: (value, flag) => ({
-      crossfade_duration: parseNumberFlag(flag, value),
-    }),
-  },
-  "--loop": {
-    acceptsDashPrefixedValue: true,
-    parse: (value, flag) => ({ loop: parseNumberFlag(flag, value) }),
-  },
-  "--pin-first-count": {
-    acceptsDashPrefixedValue: true,
-    parse: (value, flag) => ({
-      pin_first_count: parseNumberFlag(flag, value),
-    }),
-  },
-  "--shuffle-seed": {
-    acceptsDashPrefixedValue: true,
-    parse: (value, flag) => ({
-      shuffle_seed: parseNumberFlag(flag, value),
-    }),
-  },
-  "--target-duration": {
-    acceptsDashPrefixedValue: true,
-    parse: (value, flag) => ({
-      target_duration_min: parseNumberFlag(flag, value),
-    }),
-  },
-};
+const VALUE_FLAGS = [
+  "--bitrate",
+  "--channel-dir",
+  "--crossfade-duration",
+  "--loop",
+  "--pin-first-count",
+  "--shuffle-seed",
+  "--target-duration",
+] as const;
+
+const DASH_PREFIX_VALUE_FLAGS = [
+  "--crossfade-duration",
+  "--loop",
+  "--pin-first-count",
+  "--shuffle-seed",
+  "--target-duration",
+] as const;
+
+const isValueFlag = (flag: string): boolean =>
+  (VALUE_FLAGS as readonly string[]).includes(flag);
 
 const parseValueFlag = (
   arg: string
-):
-  | { flag: string; inlineValue: string | undefined; spec: ValueFlagSpec }
-  | undefined => {
+): { flag: string; inlineValue: string | undefined } | undefined => {
   const separatorIndex = arg.indexOf("=");
   const flag = separatorIndex === -1 ? arg : arg.slice(0, separatorIndex);
-  const spec = VALUE_FLAG_SPECS[flag];
-  if (spec === undefined) {
+  if (!isValueFlag(flag)) {
     return undefined;
   }
   if (separatorIndex === -1) {
-    return { flag, inlineValue: undefined, spec };
+    return { flag, inlineValue: undefined };
   }
   const inlineValue = arg.slice(separatorIndex + 1);
   if (inlineValue.length === 0) {
     throw new Error(`validation: ${flag} requires a value`);
   }
-  return { flag, inlineValue, spec };
+  return { flag, inlineValue };
+};
+
+const acceptsDashPrefixedValue = (flag: string): boolean =>
+  (DASH_PREFIX_VALUE_FLAGS as readonly string[]).includes(flag);
+
+const parseValueFlagPatch = (
+  flag: string,
+  value: string
+): Partial<GenerateMasterRawInput> => {
+  switch (flag) {
+    case "--bitrate": {
+      return { bitrate: value };
+    }
+    case "--channel-dir": {
+      return { channel_dir: value };
+    }
+    case "--crossfade-duration": {
+      return { crossfade_duration: parseNumberFlag(flag, value) };
+    }
+    case "--loop": {
+      return { loop: parseNumberFlag(flag, value) };
+    }
+    case "--pin-first-count": {
+      return { pin_first_count: parseNumberFlag(flag, value) };
+    }
+    case "--shuffle-seed": {
+      return { shuffle_seed: parseNumberFlag(flag, value) };
+    }
+    case "--target-duration": {
+      return { target_duration_min: parseNumberFlag(flag, value) };
+    }
+    default: {
+      throw new Error(`validation: unknown option: ${flag}`);
+    }
+  }
 };
 
 const requireValue = (
   rawArgs: string[],
   index: number,
   flag: string,
-  spec: ValueFlagSpec
+  allowDashPrefixedValue: boolean
 ): string => {
   const value = rawArgs.at(index + 1);
   if (
     value === undefined ||
-    (!spec.acceptsDashPrefixedValue && value.startsWith("-"))
+    (!allowDashPrefixedValue && value.startsWith("-"))
   ) {
     throw new Error(`validation: ${flag} requires a value`);
   }
@@ -273,8 +277,13 @@ const parseGenerateMasterArgs = (
     if (valueFlag !== undefined) {
       const value =
         valueFlag.inlineValue ??
-        requireValue(rawArgs, index, valueFlag.flag, valueFlag.spec);
-      state = mergeInput(state, valueFlag.spec.parse(value, valueFlag.flag));
+        requireValue(
+          rawArgs,
+          index,
+          valueFlag.flag,
+          acceptsDashPrefixedValue(valueFlag.flag)
+        );
+      state = mergeInput(state, parseValueFlagPatch(valueFlag.flag, value));
       if (valueFlag.inlineValue === undefined) {
         index += 1;
       }

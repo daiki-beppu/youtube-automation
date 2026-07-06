@@ -27,7 +27,11 @@ describe("GenerateMasterInputSchema — snake_case input contract", () => {
     expect(parsed.pinFirst).toEqual(["03-track.mp3", "01-track.mp3"]);
     expect(parsed.shuffleSeed).toBe(0);
     expect(parsed.targetDurationMin).toBe(120);
-    expect(Object.hasOwn(parsed, "specified")).toBe(false);
+    expect(parsed.specified.bitrate).toBe(true);
+    expect(parsed.specified.crossfadeDuration).toBe(true);
+    expect(parsed.specified.pinFirstCount).toBe(true);
+    expect(parsed.specified.shuffleSeed).toBe(true);
+    expect(parsed.specified.targetDurationMin).toBe(true);
   });
 
   test("declares runtime defaults in zod, not a config.default file", () => {
