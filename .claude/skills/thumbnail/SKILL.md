@@ -336,7 +336,9 @@ uv run yt-generate-image \
 2. `reference_images.default` の list を見直し、別のベンチマーク候補を追加
 3. `diff_prompt_template` の差分指示を見直し（特に `variation_clause` / `style_lock_clause` のオン/オフ）
 
-差分プロンプトの具体例は skill-config の `image_generation.gemini.diff_prompt_template` を参照し、チャンネル固有のオブジェクト・カラーを埋める。実装事例として `daiki-beppu/rjn` の `config/skills/thumbnail.yaml` が参考になる（jazzgak チャンネルの 5 サムネを `color_themes.<theme>.reference_image` で多軸切替）。
+差分プロンプトの具体例は skill-config の `image_generation.gemini.diff_prompt_template` を参照し、チャンネル固有のオブジェクト・カラーを埋める。
+
+> **参考（オペレーター向け・実行時は無視してよい）**: `daiki-beppu/rjn` の `config/skills/thumbnail.yaml` が参考になる（jazzgak チャンネルの 5 サムネを `color_themes.<theme>.reference_image` で多軸切替）。private リポジトリのため下流リポジトリの実行者はアクセスできない。取得を試みないこと。
 
 #### TTP プリフライト・チェックリスト
 

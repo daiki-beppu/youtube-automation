@@ -12,20 +12,21 @@ WXT + React + TypeScript + Tailwind CSS + [@webext-core/messaging](https://webex
 
 ## ディレクトリ構成
 
-| パス                        | 役割                                                                                           |
-| --------------------------- | ---------------------------------------------------------------------------------------------- |
-| `wxt.config.ts`             | Manifest V3 定義（最小権限 `storage` / `activeTab`、`host_permissions` は distrokid.com 限定） |
-| `entrypoints/background.ts` | service worker（ライフサイクルログのみ）                                                       |
-| `entrypoints/content.ts`    | `distrokid.com/new` での DOM 注入（テキスト + popup から受け取った File）                      |
-| `entrypoints/popup/`        | popup UI（React）。URL 入力 / データ取得 / レビュー / 一括入力 / 停止 / 進捗                   |
-| `components/`               | popup プレゼンテーション部品                                                                   |
-| `lib/api.ts`                | `/distrokid/release.json` / assets の fetch client（`ReleaseUnavailableError`）                |
-| `lib/asset-transfer.ts`     | popup で fetch した asset を content へ渡すための base64 直列化（CORS 回避）                   |
-| `lib/distrokid-injector.ts` | React 互換ネイティブイベント注入 + `DataTransfer` ファイル注入 + セレクタ契約                  |
-| `lib/messaging.ts`          | popup ↔ content の型付き channel（`PHASES` 進捗契約）                                         |
-| `lib/storage.ts`            | サーバー URL 永続化（既定 `http://localhost:7873`）                                            |
-| `lib/types.ts`              | `/distrokid/release.json` の JSON 契約型                                                       |
-| `tests/`                    | Vitest unit + Playwright e2e                                                                   |
+| パス                        | 役割                                                                                 |
+| --------------------------- | ------------------------------------------------------------------------------------ |
+| `wxt.config.ts`             | Manifest V3 定義（permissions / host_permissions は `lib/manifest.ts` の定数を参照） |
+| `lib/manifest.ts`           | manifest 権限の SSOT（最小権限 `storage` / `activeTab`、host は distrokid.com 限定） |
+| `entrypoints/background.ts` | service worker（ライフサイクルログのみ）                                             |
+| `entrypoints/content.ts`    | `distrokid.com/new` での DOM 注入（テキスト + popup から受け取った File）            |
+| `entrypoints/popup/`        | popup UI（React）。URL 入力 / データ取得 / レビュー / 一括入力 / 停止 / 進捗         |
+| `components/`               | popup プレゼンテーション部品                                                         |
+| `lib/api.ts`                | `/distrokid/release.json` / assets の fetch client（`ReleaseUnavailableError`）      |
+| `lib/asset-transfer.ts`     | popup で fetch した asset を content へ渡すための base64 直列化（CORS 回避）         |
+| `lib/distrokid-injector.ts` | React 互換ネイティブイベント注入 + `DataTransfer` ファイル注入 + セレクタ契約        |
+| `lib/messaging.ts`          | popup ↔ content の型付き channel（`PHASES` 進捗契約）                               |
+| `lib/storage.ts`            | サーバー URL 永続化（既定 `http://localhost:7873`）                                  |
+| `lib/types.ts`              | `/distrokid/release.json` の JSON 契約型                                             |
+| `tests/`                    | Vitest unit + Playwright e2e                                                         |
 
 ## 開発フロー
 
