@@ -21,10 +21,18 @@ export interface ClipTracker {
   getInFlightCount(): number;
   /** 未終端 clip の id 一覧（active feed poll の照会対象）。 */
   getPendingIds(): string[];
+  /** 指定した id のうち、まだ終端 status に達していない id 一覧。 */
+  getPendingIdsByIds(ids: string[]): string[];
   /** この run で投入した clip のうち、まだ終端 status に達していない id 一覧。 */
   getPendingSubmittedIds(): string[];
   /** この run の generate レスポンスで観測した clip id 一覧。playlist 対象の SSOT。 */
   getSubmittedIds(): string[];
+  /** duration yield guard を通過した submitted clip id を記録する。 */
+  markAccepted(ids: string[]): void;
+  /** duration yield guard を通過した submitted clip id 一覧。 */
+  getAcceptedSubmittedIds(): string[];
+  /** duration yield guard で不採用になった attempt の clip id を playlist 対象から外す。 */
+  dropSubmittedIds(ids: string[]): void;
   /** 観測済み clip の duration (sec)。未観測または generate/feed に duration が無い場合は undefined。 */
   getDuration(clipId: string): number | undefined;
   /** run 開始時に playlist 対象 ID だけを初期化する。status 集計は残す。 */
@@ -43,6 +51,7 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
   const statusById = new Map<string, string>();
   const durationById = new Map<string, number>();
   const submittedById = new Map<string, true>();
+  const acceptedSubmittedById = new Map<string, true>();
   let submissions = 0;
   let observedGenerate = false;
   let observedFeed = false;
@@ -54,8 +63,9 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
   }
 
   function recordDuration(clip: ObservedClip): void {
-    if (isValidDuration(clip.duration)) {
-      durationById.set(clip.id, clip.duration);
+    const duration = clip.duration ?? clip.durationSec;
+    if (isValidDuration(duration)) {
+      durationById.set(clip.id, duration);
     }
   }
 
@@ -65,8 +75,9 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
       statusById.set(clip.id, clip.status);
       changeAt = now();
     }
-    if (isValidDuration(clip.duration) && durationById.get(clip.id) !== clip.duration) {
-      durationById.set(clip.id, clip.duration);
+    const duration = clip.duration ?? clip.durationSec;
+    if (isValidDuration(duration) && durationById.get(clip.id) !== duration) {
+      durationById.set(clip.id, duration);
       changeAt = now();
     }
   }
@@ -111,6 +122,12 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
       }
       return ids;
     },
+    getPendingIdsByIds(ids) {
+      return ids.filter((id) => {
+        const status = statusById.get(id);
+        return !status || !TERMINAL.has(status);
+      });
+    },
     getPendingSubmittedIds() {
       const ids: string[] = [];
       for (const id of submittedById.keys()) {
@@ -124,11 +141,28 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
     getSubmittedIds() {
       return Array.from(submittedById.keys());
     },
+    markAccepted(ids) {
+      for (const id of ids) {
+        if (submittedById.has(id)) {
+          acceptedSubmittedById.set(id, true);
+        }
+      }
+    },
+    getAcceptedSubmittedIds() {
+      return Array.from(acceptedSubmittedById.keys());
+    },
+    dropSubmittedIds(ids) {
+      for (const id of ids) {
+        submittedById.delete(id);
+        acceptedSubmittedById.delete(id);
+      }
+    },
     getDuration(clipId) {
       return durationById.get(clipId);
     },
     clearSubmittedIds() {
       submittedById.clear();
+      acceptedSubmittedById.clear();
     },
     hasObservedAnyTraffic() {
       return observedGenerate || observedFeed;

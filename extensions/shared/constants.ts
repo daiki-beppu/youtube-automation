@@ -213,6 +213,8 @@ export interface ObservedClip {
   status: string;
   /** Suno feed metadata.duration 由来の秒数。generate response では未観測のため optional。 */
   duration?: number;
+  /** 旧 yield guard 実装の互換フィールド。 */
+  durationSec?: number;
 }
 
 /** yt-collection-serve の DistroKid collection 列挙サブパス（#934、dir mode のみ。単一 mode では 404）。
@@ -297,6 +299,10 @@ type ProgressPayloadBase = {
   total: number;
   index?: number;
   message?: string;
+  /** duration yield guard の同一 prompt 再生成回数 (#1268)。 */
+  yieldRetryCount?: number;
+  /** duration yield guard を通過した clip ID (#1268)。 */
+  acceptedClipIds?: string[];
 };
 
 type ProgressPayloadWithoutLog = ProgressPayloadBase & {
@@ -355,4 +361,8 @@ export interface SnapshotPayload {
   submittedClipIdsAreDurationFiltered?: boolean;
   // playlist 追加時に揃っているべき clip ID 件数。
   playlistExpectedClipCount?: number;
+  // duration check を通過した clip ID 一覧 (#1268)。
+  yieldAcceptedClipIds?: string[];
+  // entry index -> duration guard retry 回数 (#1268)。
+  yieldRetryCounts?: Record<number, number>;
 }

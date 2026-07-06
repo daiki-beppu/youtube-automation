@@ -14,7 +14,10 @@ interface InitSnapshotOptions {
  * 連続実行の開始時スナップショット。全 idle・isRunning=true・entries を保持して初期化する。
  * playlistName は再 open 復元時の display 用に保持する (#854)。
  */
-export function initSnapshot(entries: PromptEntry[], options: InitSnapshotOptions): SnapshotPayload {
+export function initSnapshot(
+  entries: PromptEntry[],
+  options: InitSnapshotOptions = { collectionId: "" },
+): SnapshotPayload {
   return {
     collectionId: options.collectionId,
     entries,
@@ -55,6 +58,14 @@ export function isTerminalPhase(phase: Phase): boolean {
 
 /** progress 受信でスナップショットを更新する。終了 phase で isRunning=false（entries/itemStates は保持）。 */
 export function applyProgress(snap: SnapshotPayload, payload: ProgressPayload): SnapshotPayload {
+  const nextAcceptedClipIds =
+    payload.acceptedClipIds && payload.acceptedClipIds.length > 0
+      ? Array.from(new Set([...(snap.yieldAcceptedClipIds ?? []), ...payload.acceptedClipIds]))
+      : snap.yieldAcceptedClipIds;
+  const nextYieldRetryCounts =
+    payload.index !== undefined && payload.yieldRetryCount !== undefined
+      ? { ...(snap.yieldRetryCounts ?? {}), [payload.index]: payload.yieldRetryCount }
+      : snap.yieldRetryCounts;
   return {
     ...snap,
     itemStates: nextItemStates(snap.itemStates, payload),
@@ -70,5 +81,7 @@ export function applyProgress(snap: SnapshotPayload, payload: ProgressPayload): 
       payload.phase === PHASE.ENTRY_FAILED && payload.index !== undefined
         ? [...(snap.failedIndices ?? []), payload.index]
         : snap.failedIndices,
+    yieldAcceptedClipIds: nextAcceptedClipIds,
+    yieldRetryCounts: nextYieldRetryCounts,
   };
 }
