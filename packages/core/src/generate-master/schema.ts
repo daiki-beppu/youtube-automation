@@ -31,8 +31,19 @@ const GenerateMasterSpecifiedSchema = z
   })
   .strict();
 
+type GenerateMasterSpecified = z.infer<typeof GenerateMasterSpecifiedSchema>;
+
+const specifiedMetadata = new WeakMap<
+  Record<string, unknown>,
+  GenerateMasterSpecified
+>();
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+const specifiedFromMetadata = (
+  value: Record<string, unknown>
+): GenerateMasterSpecified | undefined => specifiedMetadata.get(value);
 
 const withInputPresence = (value: unknown): unknown => {
   if (!isRecord(value)) {
@@ -53,12 +64,26 @@ const withCamelInputPresence = (value: unknown): unknown => {
   if (!isRecord(value)) {
     return value;
   }
+  const specified = specifiedFromMetadata(value);
   return {
     ...value,
-    __specified: Object.fromEntries(
-      outputSpecifiedFields.map((field) => [field, Object.hasOwn(value, field)])
-    ),
+    __specified:
+      specified ??
+      Object.fromEntries(
+        outputSpecifiedFields.map((field) => [
+          field,
+          Object.hasOwn(value, field),
+        ])
+      ),
   };
+};
+
+const withSpecifiedMetadata = (
+  value: Record<string, unknown>,
+  specified: GenerateMasterSpecified
+): Record<string, unknown> => {
+  specifiedMetadata.set(value, specified);
+  return value;
 };
 
 interface GenerateMasterInvariantInput {
@@ -144,8 +169,7 @@ const GenerateMasterRawInputSchema = z.preprocess(
 const GenerateMasterExternalInputSchema =
   GenerateMasterRawInputSchema.transform((input) => {
     const { __specified, ...externalInput } = input;
-    void __specified;
-    return snakeToCamel(externalInput);
+    return withSpecifiedMetadata(snakeToCamel(externalInput), __specified);
   });
 
 const GenerateMasterInternalInputSchema = z

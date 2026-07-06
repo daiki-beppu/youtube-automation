@@ -1,3 +1,4 @@
+import type { Stats } from "node:fs";
 import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -20,6 +21,13 @@ export type MasterupAudioConfig = Partial<{
   targetDurationMin: number;
 }>;
 
+export interface MasterupConfigFs {
+  readonly lstat: (path: string) => Promise<Stats>;
+  readonly readFile: (path: string, encoding: "utf-8") => Promise<string>;
+}
+
+const defaultFs: MasterupConfigFs = { lstat, readFile };
+
 const MasterupAudioConfigSchema = z
   .object({
     bitrate: z.string().trim().min(1).optional(),
@@ -37,9 +45,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isNodeErrorCode = (error: unknown, code: string): boolean =>
   isRecord(error) && error.code === code;
 
-const configFileExists = async (path: string): Promise<boolean> => {
+const configFileExists = async (
+  path: string,
+  fs: MasterupConfigFs
+): Promise<boolean> => {
   try {
-    const stats = await lstat(path);
+    const stats = await fs.lstat(path);
     if (!stats.isFile() || stats.isSymbolicLink()) {
       throw new Error(`config: ${path} must be a regular file`);
     }
@@ -48,7 +59,13 @@ const configFileExists = async (path: string): Promise<boolean> => {
     if (isNodeErrorCode(error, "ENOENT")) {
       return false;
     }
-    throw error;
+    if (error instanceof Error && error.message.startsWith("config:")) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`config: failed to inspect ${path}: ${message}`, {
+      cause: error,
+    });
   }
 };
 
@@ -56,19 +73,23 @@ const configPath = (channelDir: string, filename: string): string =>
   join(channelDir, MASTERUP_CONFIG_DIR, filename);
 
 const existingConfigPath = async (
-  channelDir: string
+  channelDir: string,
+  fs: MasterupConfigFs
 ): Promise<string | null> => {
   const json = configPath(channelDir, MASTERUP_JSON_FILENAME);
-  if (await configFileExists(json)) {
+  if (await configFileExists(json, fs)) {
     return json;
   }
   const yaml = configPath(channelDir, MASTERUP_YAML_FILENAME);
-  return (await configFileExists(yaml)) ? yaml : null;
+  return (await configFileExists(yaml, fs)) ? yaml : null;
 };
 
-const readConfigText = async (path: string): Promise<string> => {
+const readConfigText = async (
+  path: string,
+  fs: MasterupConfigFs
+): Promise<string> => {
   try {
-    return await readFile(path, "utf-8");
+    return await fs.readFile(path, "utf-8");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`config: failed to read ${path}: ${message}`, {
@@ -126,6 +147,9 @@ const parseQuotedScalar = (value: string): string | undefined => {
 
 const parseScalar = (value: string): string | number | boolean => {
   const normalized = stripInlineComment(value).trim();
+  if (normalized.length === 0) {
+    throw new Error("config: empty masterup audio YAML scalar");
+  }
   const quoted = parseQuotedScalar(normalized);
   if (quoted !== undefined) {
     return quoted;
@@ -209,16 +233,17 @@ const parseMasterupConfig = (path: string, text: string): unknown => {
 };
 
 export const readMasterupAudioConfig = async (
-  channelDir: string | undefined
+  channelDir: string | undefined,
+  fs: MasterupConfigFs = defaultFs
 ): Promise<MasterupAudioConfig> => {
   if (channelDir === undefined) {
     return {};
   }
-  const path = await existingConfigPath(channelDir);
+  const path = await existingConfigPath(channelDir, fs);
   if (path === null) {
     return {};
   }
-  const parsed = parseMasterupConfig(path, await readConfigText(path));
+  const parsed = parseMasterupConfig(path, await readConfigText(path, fs));
   if (!isRecord(parsed)) {
     throw new Error(`config: ${path} must contain an object`);
   }

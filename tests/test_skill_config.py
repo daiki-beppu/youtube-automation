@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 import yaml
@@ -166,6 +167,46 @@ def test_load_skill_config_masterup_broken_json_symlink_raises_without_yaml_fall
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
     with pytest.raises(ConfigError, match="regular file"):
+        skill_config.load_skill_config("masterup", use_cache=False)
+
+
+def test_load_skill_config_masterup_json_directory_raises_without_yaml_fallback(tmp_path, monkeypatch):
+    """masterup.json が directory の場合は YAML fallback せず ConfigError."""
+    channel_dir = tmp_path / "ch"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "masterup.json").mkdir()
+    (skills_dir / "masterup.yaml").write_text(
+        yaml.safe_dump({"audio": {"bitrate": "128k"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="regular file"):
+        skill_config.load_skill_config("masterup", use_cache=False)
+
+
+def test_load_skill_config_masterup_json_lstat_error_raises_without_yaml_fallback(tmp_path, monkeypatch):
+    """masterup.json の stat 失敗時は YAML fallback せず ConfigError."""
+    channel_dir = tmp_path / "ch"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "masterup.json").write_text("{}", encoding="utf-8")
+    (skills_dir / "masterup.yaml").write_text(
+        yaml.safe_dump({"audio": {"bitrate": "128k"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+    original_lstat = Path.lstat
+
+    def fake_lstat(path: Path):
+        if path.name == "masterup.json":
+            raise PermissionError("permission denied")
+        return original_lstat(path)
+
+    monkeypatch.setattr(Path, "lstat", fake_lstat)
+
+    with pytest.raises(ConfigError, match="skill-config 読み込み失敗"):
         skill_config.load_skill_config("masterup", use_cache=False)
 
 

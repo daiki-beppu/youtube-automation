@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { copyFile, lstat, mkdir, rename, rm } from "node:fs/promises";
-import { extname, isAbsolute, join, resolve } from "node:path";
+import { lstat, mkdir, rename, rm } from "node:fs/promises";
+import { isAbsolute, join, resolve } from "node:path";
 import process from "node:process";
 
 import { toServiceError } from "../errors.ts";
@@ -16,6 +16,7 @@ import {
   withConfigOverrides,
 } from "./audio.ts";
 import { readMasterupAudioConfig } from "./config.ts";
+import type { MasterupConfigFs } from "./config.ts";
 import { MASTER_DIRNAME, MASTER_FILENAME } from "./constants.ts";
 import { buildFfmpegArgs, runFfmpeg } from "./ffmpeg.ts";
 import {
@@ -33,6 +34,7 @@ import type {
 
 interface GenerateMasterDeps {
   channelDir: string;
+  masterupConfigFs: MasterupConfigFs;
 }
 
 const parseGenerateMasterInput = (
@@ -109,7 +111,8 @@ const runGenerateMaster = async (
 ): Promise<GenerateMasterOutput> => {
   const collectionDir = resolveCollectionPath(input, deps);
   const config = await readMasterupAudioConfig(
-    resolveConfigChannelDir(input, deps)
+    resolveConfigChannelDir(input, deps),
+    deps?.masterupConfigFs
   );
   const effectiveInput = withConfigOverrides(input, config);
   const paths = new CollectionPaths(collectionDir);
@@ -128,15 +131,8 @@ const runGenerateMaster = async (
   const outputPath = join(paths.masterDir, MASTER_FILENAME);
   await assertMasterOutputPathSafe(paths.masterDir, outputPath);
   const tempPath = tempMasterPath(outputPath);
-  const [onlySegment] = segments;
-  const shouldCopySingleMp3 =
-    segments.length === 1 &&
-    onlySegment !== undefined &&
-    extname(onlySegment).toLowerCase() === ".mp3";
   try {
-    await (shouldCopySingleMp3
-      ? copyFile(onlySegment, tempPath)
-      : runFfmpeg(buildFfmpegArgs(segments, tempPath, effectiveInput)));
+    await runFfmpeg(buildFfmpegArgs(segments, tempPath, effectiveInput));
     if (!existsSync(tempPath)) {
       throw new Error(`io: master output was not created: ${outputPath}`);
     }

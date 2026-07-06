@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, symlinkSync } from "node:fs";
+import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { generateMasterService } from "@youtube-automation/core/generate-master";
@@ -160,6 +161,36 @@ describe("generateMasterService — skill config override", () => {
     expect(readFfmpegCalls(logPath)).toEqual([]);
   });
 
+  test("returns config error for blank numeric YAML scalars before ffmpeg", async () => {
+    for (const yamlLine of [
+      "  pin_first_count: # blank",
+      "  shuffle_seed: # blank",
+    ]) {
+      const channelRoot = makeTempRoot("generate-master-channel-");
+      setupCollection(channelRoot, "collections/demo", [
+        "01-a.mp3",
+        "02-b.mp3",
+      ]);
+      writeText(
+        join(channelRoot, "config", "skills", "masterup.yaml"),
+        ["audio:", yamlLine].join("\n")
+      );
+      const logPath = installFakeFfmpeg();
+
+      const result = await generateMasterService({
+        channel_dir: channelRoot,
+        collection: "collections/demo",
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.domain).toBe("config");
+        expect(result.error.message).toContain("empty masterup audio YAML");
+      }
+      expect(readFfmpegCalls(logPath)).toEqual([]);
+    }
+  });
+
   test("returns config error for inline or scalar audio YAML before ffmpeg", async () => {
     for (const yaml of ["audio: {}", "audio: null"]) {
       const channelRoot = makeTempRoot("generate-master-channel-");
@@ -295,6 +326,47 @@ describe("generateMasterService — skill config override", () => {
     if (!result.ok) {
       expect(result.error.domain).toBe("config");
       expect(result.error.message).toContain("must be a regular file");
+    }
+    expect(readFfmpegCalls(logPath)).toEqual([]);
+  });
+
+  test("does not fall back to YAML when masterup.json inspection fails", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify({ audio: { bitrate: "320k" } })
+    );
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.yaml"),
+      "audio:\n  bitrate: 64k\n"
+    );
+    const logPath = installFakeFfmpeg();
+
+    const result = await generateMasterService(
+      {
+        channel_dir: channelRoot,
+        collection: "collections/demo",
+      },
+      {
+        masterupConfigFs: {
+          lstat: (path) => {
+            if (path.endsWith("masterup.json")) {
+              throw Object.assign(new Error("permission denied"), {
+                code: "EACCES",
+              });
+            }
+            return lstat(path);
+          },
+          readFile,
+        },
+      }
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("config");
+      expect(result.error.message).toContain("failed to inspect");
     }
     expect(readFfmpegCalls(logPath)).toEqual([]);
   });

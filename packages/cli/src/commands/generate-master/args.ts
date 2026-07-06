@@ -20,15 +20,14 @@ interface GenerateMasterRawInput {
   target_duration_min?: number;
 }
 
-type ValueFlagHandler = (
-  input: GenerateMasterRawInput,
+type ValueFlagParser = (
   value: string,
   flag: string
-) => void;
+) => Partial<GenerateMasterRawInput>;
 
 interface ValueFlagSpec {
   acceptsDashPrefixedValue: boolean;
-  apply: ValueFlagHandler;
+  parse: ValueFlagParser;
 }
 
 interface ParseOptions {
@@ -47,45 +46,39 @@ const parseNumberFlag = (flag: string, value: string): number => {
 const VALUE_FLAG_SPECS: Record<string, ValueFlagSpec> = {
   "--bitrate": {
     acceptsDashPrefixedValue: false,
-    apply: (input, value) => {
-      input.bitrate = value;
-    },
+    parse: (value) => ({ bitrate: value }),
   },
   "--channel-dir": {
     acceptsDashPrefixedValue: false,
-    apply: (input, value) => {
-      input.channel_dir = value;
-    },
+    parse: (value) => ({ channel_dir: value }),
   },
   "--crossfade-duration": {
     acceptsDashPrefixedValue: true,
-    apply: (input, value, flag) => {
-      input.crossfade_duration = parseNumberFlag(flag, value);
-    },
+    parse: (value, flag) => ({
+      crossfade_duration: parseNumberFlag(flag, value),
+    }),
   },
   "--loop": {
     acceptsDashPrefixedValue: true,
-    apply: (input, value, flag) => {
-      input.loop = parseNumberFlag(flag, value);
-    },
+    parse: (value, flag) => ({ loop: parseNumberFlag(flag, value) }),
   },
   "--pin-first-count": {
     acceptsDashPrefixedValue: true,
-    apply: (input, value, flag) => {
-      input.pin_first_count = parseNumberFlag(flag, value);
-    },
+    parse: (value, flag) => ({
+      pin_first_count: parseNumberFlag(flag, value),
+    }),
   },
   "--shuffle-seed": {
     acceptsDashPrefixedValue: true,
-    apply: (input, value, flag) => {
-      input.shuffle_seed = parseNumberFlag(flag, value);
-    },
+    parse: (value, flag) => ({
+      shuffle_seed: parseNumberFlag(flag, value),
+    }),
   },
   "--target-duration": {
     acceptsDashPrefixedValue: true,
-    apply: (input, value, flag) => {
-      input.target_duration_min = parseNumberFlag(flag, value);
-    },
+    parse: (value, flag) => ({
+      target_duration_min: parseNumberFlag(flag, value),
+    }),
   },
 };
 
@@ -126,48 +119,44 @@ const requireValue = (
   return value;
 };
 
-const applyBooleanFlag = (
-  input: GenerateMasterRawInput,
+const parseBooleanFlag = (
   arg: string
-): boolean => {
+): Partial<GenerateMasterRawInput> | undefined => {
   if (arg === "--quiet") {
-    input.quiet = true;
-    return true;
+    return { quiet: true };
   }
   if (arg === "--no-loop") {
-    input.no_loop = true;
-    return true;
+    return { no_loop: true };
   }
   if (arg === "--shuffle") {
-    input.shuffle = true;
-    return true;
+    return { shuffle: true };
   }
-  return arg === "--json";
+  return arg === "--json" ? {} : undefined;
 };
 
 const collectPinFirstValues = (
   rawArgs: string[],
-  startIndex: number,
-  pendingPinFirst: string[]
-): number => {
+  startIndex: number
+): { endIndex: number; values: string[] } => {
   let index = startIndex;
   while (rawArgs.at(index + 1) !== undefined) {
     const next = rawArgs.at(index + 1);
     if (next === undefined || next.startsWith("-")) {
       break;
     }
-    pendingPinFirst.push(next);
     index += 1;
   }
-  return index;
+  return {
+    endIndex: index,
+    values: rawArgs.slice(startIndex + 1, index + 1),
+  };
 };
 
 const collectInlinePinFirstValues = (
   rawArgs: string[],
   index: number,
-  arg: string,
-  pendingPinFirst: string[]
-): number | undefined => {
+  arg: string
+): { endIndex: number; values: string[] } | undefined => {
   const prefix = "--pin-first=";
   if (!arg.startsWith(prefix)) {
     return undefined;
@@ -176,16 +165,19 @@ const collectInlinePinFirstValues = (
   if (firstValue.length === 0) {
     throw new Error("validation: --pin-first requires a value");
   }
-  pendingPinFirst.push(firstValue);
-  return collectPinFirstValues(rawArgs, index, pendingPinFirst);
+  const collected = collectPinFirstValues(rawArgs, index);
+  return {
+    endIndex: collected.endIndex,
+    values: [firstValue, ...collected.values],
+  };
 };
 
-const applyCollectionAndPinFirst = (
+const withCollectionAndPinFirst = (
   input: GenerateMasterRawInput,
   positionals: string[],
   pendingPinFirst: string[],
   options: ParseOptions
-): void => {
+): GenerateMasterRawInput => {
   if (positionals.length > 1) {
     throw new Error(
       "validation: generate-master accepts at most one collection positional"
@@ -193,53 +185,88 @@ const applyCollectionAndPinFirst = (
   }
   if (positionals.length === 1) {
     const [collection] = positionals;
-    input.collection = collection;
-  } else {
-    const trailingPinFirst = pendingPinFirst.at(-1);
-    if (
-      trailingPinFirst !== undefined &&
-      (isCollectionCandidate(input, trailingPinFirst, options) ||
-        isPathLikeCollectionToken(trailingPinFirst))
-    ) {
-      input.collection = trailingPinFirst;
-      pendingPinFirst.pop();
-    }
+    return { ...input, collection, pin_first: pendingPinFirst };
   }
-  input.collection ??= options.defaultCollection;
-  input.pin_first = pendingPinFirst;
+  const trailingPinFirst = pendingPinFirst.at(-1);
+  if (
+    trailingPinFirst !== undefined &&
+    (isCollectionCandidate(input, trailingPinFirst, options) ||
+      isPathLikeCollectionToken(trailingPinFirst))
+  ) {
+    return {
+      ...input,
+      collection: trailingPinFirst,
+      pin_first: pendingPinFirst.slice(0, -1),
+    };
+  }
+  return {
+    ...input,
+    collection: input.collection ?? options.defaultCollection,
+    pin_first: pendingPinFirst,
+  };
 };
+
+interface ParseState {
+  input: GenerateMasterRawInput;
+  pendingPinFirst: string[];
+  positionals: string[];
+}
+
+const appendPinFirstValues = (
+  state: ParseState,
+  values: string[]
+): ParseState => ({
+  ...state,
+  pendingPinFirst: [...state.pendingPinFirst, ...values],
+});
+
+const appendPositional = (state: ParseState, value: string): ParseState => ({
+  ...state,
+  positionals: [...state.positionals, value],
+});
+
+const mergeInput = (
+  state: ParseState,
+  patch: Partial<GenerateMasterRawInput>
+): ParseState => ({
+  ...state,
+  input: { ...state.input, ...patch },
+});
+
+const emptyParseState = (): ParseState => ({
+  input: { pin_first: [] },
+  pendingPinFirst: [],
+  positionals: [],
+});
 
 const parseGenerateMasterArgs = (
   rawArgs: string[],
   options: ParseOptions
 ): GenerateMasterRawInput => {
-  const input: GenerateMasterRawInput = { pin_first: [] };
-  const pendingPinFirst: string[] = [];
-  const positionals: string[] = [];
+  let state = emptyParseState();
   for (let index = 0; index < rawArgs.length; index += 1) {
     const arg = rawArgs[index];
     if (arg === undefined) {
       continue;
     }
-    if (applyBooleanFlag(input, arg)) {
+    const booleanPatch = parseBooleanFlag(arg);
+    if (booleanPatch !== undefined) {
+      state = mergeInput(state, booleanPatch);
       continue;
     }
     if (arg === "--pin-first") {
-      const previousLength = pendingPinFirst.length;
-      index = collectPinFirstValues(rawArgs, index, pendingPinFirst);
-      if (pendingPinFirst.length === previousLength) {
+      const collected = collectPinFirstValues(rawArgs, index);
+      if (collected.values.length === 0) {
         throw new Error("validation: --pin-first requires a value");
       }
+      state = appendPinFirstValues(state, collected.values);
+      index = collected.endIndex;
       continue;
     }
-    const inlinePinFirstEndIndex = collectInlinePinFirstValues(
-      rawArgs,
-      index,
-      arg,
-      pendingPinFirst
-    );
-    if (inlinePinFirstEndIndex !== undefined) {
-      index = inlinePinFirstEndIndex;
+    const inlinePinFirst = collectInlinePinFirstValues(rawArgs, index, arg);
+    if (inlinePinFirst !== undefined) {
+      state = appendPinFirstValues(state, inlinePinFirst.values);
+      index = inlinePinFirst.endIndex;
       continue;
     }
     const valueFlag = parseValueFlag(arg);
@@ -247,7 +274,7 @@ const parseGenerateMasterArgs = (
       const value =
         valueFlag.inlineValue ??
         requireValue(rawArgs, index, valueFlag.flag, valueFlag.spec);
-      valueFlag.spec.apply(input, value, valueFlag.flag);
+      state = mergeInput(state, valueFlag.spec.parse(value, valueFlag.flag));
       if (valueFlag.inlineValue === undefined) {
         index += 1;
       }
@@ -256,11 +283,15 @@ const parseGenerateMasterArgs = (
     if (arg.startsWith("-")) {
       throw new Error(`validation: unknown option: ${arg}`);
     }
-    positionals.push(arg);
+    state = appendPositional(state, arg);
   }
 
-  applyCollectionAndPinFirst(input, positionals, pendingPinFirst, options);
-  return input;
+  return withCollectionAndPinFirst(
+    state.input,
+    state.positionals,
+    state.pendingPinFirst,
+    options
+  );
 };
 
 export const parseGenerateMasterInput = (
