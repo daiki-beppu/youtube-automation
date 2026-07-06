@@ -2,7 +2,7 @@
 // これらは yt-collection-serve (#692/#698) との互換契約であり、変更すると
 // サーバー側 (`/suno/prompts.json`) と整合しなくなる。
 // SSOT: src/youtube_automation/scripts/suno_artifacts.py SUNO_PROMPTS_ROUTE
-import type { PromptEntry } from "./api";
+import type { DurationFilter, PromptEntry } from "./api";
 
 /** chrome.storage.local に保存するサーバー URL の key。 */
 export const STORAGE_KEY = "sunoServerUrl";
@@ -14,6 +14,11 @@ export const RESUME_STATE_KEY = "sunoResumeState";
 /** overlay の position/minimized/hidden を保存する chrome.storage.local の単一 key (#892)。
  * Suno は 1 タブ運用前提のため global 単一 key とする。lib/overlay-state.ts が SSOT として参照する。 */
 export const OVERLAY_STATE_KEY = "sunoOverlayState";
+
+/** run 一式完了時リロード (#1411) で失われる直近完了 run の snapshot を退避する chrome.storage.local の key。
+ * content が FINISHED 到達時（リロード予約の直前）に書き、リロード後の queryProgress が復元ソースとして読む。
+ * lib/finished-snapshot.ts が SSOT として参照する。 */
+export const FINISHED_SNAPSHOT_KEY = "sunoFinishedSnapshot";
 
 /** yt-collection-serve の download 完了通知サブパス (#1215、POST)。
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py collection_downloaded_route。 */
@@ -39,6 +44,9 @@ export const VERSION_ROUTE = "/version";
 
 /** 個別 collection の prompts 配信サブパス `/collections/<id>/suno/prompts.json` を組み立てる (#816)。 */
 export function collectionPromptsRoute(id: string): string {
+  if (id.length === 0) {
+    throw new Error("collectionId must be non-empty string");
+  }
   return `${COLLECTIONS_ROUTE}/${encodeURIComponent(id)}${PROMPTS_ROUTE}`;
 }
 
@@ -77,6 +85,9 @@ export const INJECT_ACK_TIMEOUT_MS = 30000;
 /** inject が ack されなかったときに同じ entry を再投入する最大 retry 回数 (#864 root cause 3)。
  * これを超えても in-flight が増えなければ fail-loud で ERROR phase に落とす。 */
 export const MAX_INJECT_RETRY = 2;
+
+/** duration 歩留まり NG 時に同じ entry を再生成する最大 retry 回数 (#1266)。 */
+export const MAX_YIELD_RETRY = 2;
 
 /** 速度プリセットの選択値を保存する chrome.storage.local の key (#875)。
  * popup（書込）と content（読込）が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
@@ -155,12 +166,11 @@ export const SUNO_API_ORIGIN = "https://studio-api-prod.suno.com";
 /** 生成投入 endpoint のパス（#948）。レスポンス JSON の `clips[].id` / `clips[].status` を観測する。 */
 export const GENERATE_ENDPOINT_PATH = "/api/generate/v2-web/";
 
-/** clip status 照会 endpoint のパス prefix（#948）。`/api/feed/v2?ids=...` 形式で Bearer 必須。
- * ページ自身の fetch を passive 観測しつつ、必要時は bridge が同 endpoint を active poll する。 */
-export const FEED_ENDPOINT_PATH = "/api/feed/";
+/** passive fetch 観測 / duration 取得に使う feed v3 endpoint（#1258, #1265）。 */
+export const FEED_V3_PATH = "/api/feed/v3";
 
-/** active feed poll に使う具体 endpoint（#948）。 */
-export const FEED_V2_PATH = "/api/feed/v2";
+/** feed v3 の request method（#1258, #1265）。v2 の GET poll と区別するため契約値として固定する。 */
+export const FEED_V3_METHOD = "POST";
 
 /** MAIN world bridge ⇄ ISOLATED content script の window.postMessage 識別マーカー（#948）。 */
 export const BRIDGE_SOURCE = "suno-helper-bridge";
@@ -171,10 +181,10 @@ export const BRIDGE_MSG = {
   GENERATE_CLIPS: "generate-clips",
   /** bridge → content: feed レスポンスで観測した clip status 一覧。 */
   FEED_CLIPS: "feed-clips",
-  /** content → bridge: feed/v2 の active poll 要求（requestId + ids）。 */
-  FEED_POLL_REQUEST: "feed-poll-request",
-  /** bridge → content: active poll の応答（requestId + clips | null）。 */
-  FEED_POLL_RESPONSE: "feed-poll-response",
+  /** content → bridge: feed/v3 の active poll 要求（requestId + ids）。 */
+  FEED_V3_POLL_REQUEST: "feed-v3-poll-request",
+  /** bridge → content: feed/v3 active poll の応答（requestId + clips | null）。 */
+  FEED_V3_POLL_RESPONSE: "feed-v3-poll-response",
   /** content → bridge: slider 値注入要求（requestId + ariaLabel + target）（#973）。 */
   SLIDER_SET_REQUEST: "slider-set-request",
   /** bridge → content: slider 値注入の応答（requestId + ok + actual | null）（#973）。 */
@@ -195,12 +205,16 @@ export const FEED_STALE_MS = 15000;
 export const FEED_POLL_INTERVAL_MS = 5000;
 
 /** active feed poll の応答待ち上限 (ms)。bridge 不在・token 未捕捉時に listener 側が諦める時間。 */
-export const FEED_POLL_RESPONSE_TIMEOUT_MS = 10000;
+export const FEED_V3_POLL_RESPONSE_TIMEOUT_MS = 10000;
 
 /** bridge が観測した clip の最小表現（#948）。status は Suno API の生値（submitted/queued/streaming/complete/error 等）。 */
 export interface ObservedClip {
   id: string;
   status: string;
+  /** Suno feed metadata.duration 由来の秒数。generate response では未観測のため optional。 */
+  duration?: number;
+  /** 旧 yield guard 実装の互換フィールド。 */
+  durationSec?: number;
 }
 
 /** yt-collection-serve の DistroKid collection 列挙サブパス（#934、dir mode のみ。単一 mode では 404）。
@@ -259,13 +273,63 @@ export const PHASE = {
 
 export type Phase = (typeof PHASE)[keyof typeof PHASE];
 
-/** runner content → overlay の進捗ペイロード。 */
-export interface ProgressPayload {
+/** runner content が overlay / popup に表示させる構造化ログ (#1270)。 */
+export type ProgressLog =
+  | {
+      kind: "duration-check";
+      entryName: string;
+      durationSec: number;
+      ok: boolean;
+      minSec?: number;
+      maxSec?: number;
+    }
+  | {
+      kind: "retry";
+      entryName: string;
+      attempt: number;
+      max: number;
+    }
+  | {
+      kind: "skip";
+      entryName: string;
+    };
+
+type ProgressPayloadBase = {
   phase: Phase;
   total: number;
   index?: number;
   message?: string;
-}
+  /** duration yield guard の同一 prompt 再生成回数 (#1268)。 */
+  yieldRetryCount?: number;
+  /** duration yield guard を通過した clip ID (#1268)。 */
+  acceptedClipIds?: string[];
+};
+
+type ProgressPayloadWithoutLog = ProgressPayloadBase & {
+  log?: undefined;
+};
+
+type DurationCheckProgressPayload = ProgressPayloadBase & {
+  phase: typeof PHASE.DONE;
+  log: Extract<ProgressLog, { kind: "duration-check" }>;
+};
+
+type RetryProgressPayload = ProgressPayloadBase & {
+  phase: typeof PHASE.WAITING_SLOT;
+  log: Extract<ProgressLog, { kind: "retry" }>;
+};
+
+type SkipProgressPayload = ProgressPayloadBase & {
+  phase: typeof PHASE.ENTRY_FAILED;
+  log: Extract<ProgressLog, { kind: "skip" }>;
+};
+
+/** runner content → overlay の進捗ペイロード。log は phase/kind の許可組み合わせだけに載せる。 */
+export type ProgressPayload =
+  | ProgressPayloadWithoutLog
+  | DurationCheckProgressPayload
+  | RetryProgressPayload
+  | SkipProgressPayload;
 
 /** overlay の各パターン行の表示状態。failed はリトライ上限まで失敗しスキップされた entry (#948)。 */
 export type ItemState = "idle" | "active" | "done" | "failed";
@@ -273,21 +337,32 @@ export type ItemState = "idle" | "active" | "done" | "failed";
 /** content script が SSOT として保持する進捗スナップショット (#852)。
  * overlay を閉じても content が保持し、再 open 時に `queryProgress` で返す。 */
 export interface SnapshotPayload {
+  // 実行元 collection。popup 再 open 復元時に別 collection の entries を現在選択へ誤適用しないため保持する。
+  collectionId: string;
   entries: PromptEntry[];
   itemStates: ItemState[];
   isRunning: boolean;
   progress: ProgressPayload;
-  // collection mode のときの playlist 名 (#854)。再 open 復元時の display 用。
-  // 単一ファイル mode（collection 未選択）は playlist phase を実行しないため undefined。
+  // playlist 名 (#854)。再 open 復元時の display 用。download-only snapshot では undefined。
   playlistName?: string;
+  // collection 単位 duration guard 閾値 (#1259)。再 open 後も同じ OK/NG 判定を維持する。
+  durationFilter?: DurationFilter;
   // ERROR 停止した entry の index (#872)。chrome.storage の resume state と二重化し、
   // popup の進捗復元でも参照する。ERROR phase 到達時のみ確定し、それ以外は undefined。
   failedIndex?: number;
   // リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
   // ENTRY_FAILED phase の受信ごとに蓄積され、popup の「失敗分のみ再実行」導線が消費する。
   failedIndices?: number[];
+  // 明示 indices 実行が途中中断したとき、再開で実行すべき残りの 0-based index 列。
+  remainingIndices?: number[];
   // playlist 追加対象として generate response から観測済みの clip ID 一覧。
   submittedClipIds?: string[];
+  // true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。
+  submittedClipIdsAreDurationFiltered?: boolean;
   // playlist 追加時に揃っているべき clip ID 件数。
   playlistExpectedClipCount?: number;
+  // duration check を通過した clip ID 一覧 (#1268)。
+  yieldAcceptedClipIds?: string[];
+  // entry index -> duration guard retry 回数 (#1268)。
+  yieldRetryCounts?: Record<number, number>;
 }

@@ -648,12 +648,15 @@ def create_server(
                     # distrokid disabled / capture root 未指定時は endpoint 自体を出さない。
                     self.send_error(404, "Not Found")
                     return
+                # 書き込み境界（#1360）: /downloaded と同じく extension lock + serve token 必須。
+                # MV3 background fetch は Origin を省略しうるため _is_locked_extension_request で
+                # 「Origin 無し or 完全一致」を許可し、本人性は X-Serve-Token で担保する。
                 raw_origin = self.headers.get("Origin")
-                if (
-                    allow_origin is None
-                    or not allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME)
-                    or raw_origin != allow_origin
-                ):
+                if not _is_locked_extension_request(raw_origin, allow_origin):
+                    self.send_error(403, "Forbidden")
+                    return
+                req_token = self.headers.get("X-Serve-Token")
+                if req_token != serve_token:
                     self.send_error(403, "Forbidden")
                     return
                 raw = self._read_limited_post_body()
@@ -808,7 +811,7 @@ def create_server(
             # `/distrokid/assets/<rel>` → collection-scoped アセット配信
             distrokid_assets_infix = "distrokid/assets/"
             if sub.startswith(distrokid_assets_infix):
-                relpath = sub[len(distrokid_assets_infix) :]
+                relpath = urllib.parse.unquote(sub[len(distrokid_assets_infix) :])
                 # コレクションルートからの相対パスで resolve（30-distrokid 配下も含む）
                 resolved = resolve_asset_path(coll_dir, relpath)
                 if resolved is None:
@@ -874,7 +877,7 @@ def create_server(
             if not distrokid_enabled:
                 self.send_error(404, "Not Found")
                 return
-            relpath = self.path[len(DISTROKID_ASSETS_PREFIX) :]
+            relpath = urllib.parse.unquote(self.path[len(DISTROKID_ASSETS_PREFIX) :])
             resolved = resolve_asset_path(collection_dir, relpath)
             if resolved is None:
                 self.send_error(404, "Not Found")
@@ -916,8 +919,9 @@ def main() -> None:
         "--allow-origin",
         default=None,
         help=(
-            "lock CORS to a single origin via exact match. POST /collections/<id>/downloaded "
-            "and GET /auth/token require an explicit chrome-extension://<EXTENSION_ID> lock. "
+            "lock CORS to a single origin via exact match. POST /collections/<id>/downloaded, "
+            f"POST {_DISTROKID_RELEASES_ROUTE} and GET /auth/token require an explicit "
+            "chrome-extension://<EXTENSION_ID> lock. "
             "Default allows chrome-extension scheme plus suno.com / distrokid.com helper origins "
             "for read-only routes only."
         ),
@@ -1000,7 +1004,8 @@ def main() -> None:
     else:
         print(
             "  serve token: disabled until --allow-origin "
-            "chrome-extension://<EXTENSION_ID> is set for /auth/token and /downloaded"
+            "chrome-extension://<EXTENSION_ID> is set for /auth/token, "
+            f"/downloaded and {_DISTROKID_RELEASES_ROUTE}"
         )
     print("Press Ctrl-C to stop.")
     try:

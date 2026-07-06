@@ -36,13 +36,15 @@ describe("runEntryWithRetry: 失敗分類と再試行", () => {
   it("Given 1 回目失敗 → 2 回目成功 When 実行 Then outcome=ok・retry 間に sleep を挟む", async () => {
     const attempt = vi.fn().mockRejectedValueOnce(new Error("一時的失敗")).mockResolvedValueOnce(undefined);
     const sleep = vi.fn().mockResolvedValue(undefined);
+    const onRetry = vi.fn();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const result = await runEntryWithRetry(makeOptions({ attempt, sleep, retryDelayMs: () => 1234 }));
+    const result = await runEntryWithRetry(makeOptions({ attempt, sleep, retryDelayMs: () => 1234, onRetry }));
 
     expect(result).toEqual({ outcome: "ok" });
     expect(attempt).toHaveBeenCalledTimes(2);
     expect(sleep).toHaveBeenCalledWith(1234, expect.any(Function));
+    expect(onRetry).toHaveBeenCalledWith(1, 2, expect.any(Error));
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });
@@ -50,12 +52,16 @@ describe("runEntryWithRetry: 失敗分類と再試行", () => {
   it("Given maxRetry=2 で全 attempt 失敗 When 実行 Then outcome=failed・attempt 3 回・error を保持", async () => {
     const error = new Error("毎回失敗");
     const attempt = vi.fn().mockRejectedValue(error);
+    const onRetry = vi.fn();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const result = await runEntryWithRetry(makeOptions({ attempt, maxRetry: 2 }));
+    const result = await runEntryWithRetry(makeOptions({ attempt, maxRetry: 2, onRetry }));
 
     expect(result).toEqual({ outcome: "failed", error });
     expect(attempt).toHaveBeenCalledTimes(3); // 初回 + retry 2
+    expect(onRetry).toHaveBeenNthCalledWith(1, 1, 2, error);
+    expect(onRetry).toHaveBeenNthCalledWith(2, 2, 2, error);
+    expect(onRetry).toHaveBeenCalledTimes(2); // 終端 attempt は予告しない
     expect(warn).toHaveBeenCalledTimes(2); // 終端 attempt は予告しない
     warn.mockRestore();
   });

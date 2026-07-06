@@ -1,6 +1,6 @@
 ---
 name: distrokid-helper
-description: "Use when コレクションの楽曲を DistroKid 配信用に準備し、distrokid-helper Chrome 拡張へ渡すローカルサーバーを起動したいとき（30-distrokid 生成 / disc 分割 / metadata.md / ジャケット 3000×3000 新規生成 / yt-collection-serve 起動）。『DistroKid 準備』『配信準備』『アルバム化』『distrokid-helper』で発動。DistroKid Web への転記・アップロード操作そのものは Chrome 拡張側の責務"
+description: "Use when 楽曲の DistroKid 配信準備と Chrome 拡張向けローカルサーバー起動をするとき。「DistroKid 準備」「配信準備」「アルバム化」で発動。Web への転記は拡張側の責務"
 ---
 
 ## Overview
