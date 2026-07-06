@@ -89,7 +89,7 @@ def main():
         print(f"[ERROR] ディレクトリが既に存在します: {base_path}", file=sys.stderr)
         print(
             "        骨格の欠落を補完する場合は手動 mkdir ではなく "
-            f"`uv run yt-collection-preflight {shlex.quote(dir_name)} --fix` を使ってください",
+            f"`bunx tayk collection-preflight {shlex.quote(dir_name)} --fix` を使ってください",
             file=sys.stderr,
         )
         sys.exit(1)

@@ -42,8 +42,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **BREAKING** `refactor(skills)`: `/channel-import` スキルを削除し、`/channel-new` の「既存チャンネル取り込みモード」として統合した（#1460、epic #1459 の 1/2）。取り込みモードは呼び出し文脈（「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」）から自動判別し、ヒアリング → config 生成 → 検証 → OAuth / channel_id 取得 → 次ステップ案内を担う。旧 Step 0 のテンプレートリポジトリ clone 手順は廃止し、`/channel-new` の方式（現在のディレクトリ + `/setup` 前提）に整合させた。`yt-doctor` の `channel_config` ロード失敗時の案内と他スキル SKILL.md / `docs/features.md` の `/channel-import` 言及も `/channel-new`（取り込みモード）へ更新。下流リポジトリは `yt-skills sync` の prune で削除に追従する
 
+### Changed
+
+- `chore(ts-rewrite)`: main を feat/ts-rewrite へ追従 merge した（v5.5.15 まで、ADR-0008 の同期運用）。main 側の OAuth 契約 fix（#1330: `installed` ブロック必須化 + `redirect_uris` 検証）・TTP readiness（#1357）・DistroKid / comments config fix（#1211）を取り込み、OAuth boundary テストの fixture を新契約に追随。main が更新した lifecycle skill 文書（masterup の Suno 選曲 #1308/#1324、video-upload の予約公開 plan #1406、channel-import 統合 #1460 等）へ #965 の `bunx tayk <cmd>` 置換を再適用し、`distrokid-prep` → `distrokid-helper` rename にも追随した。main でリリース済みの [Unreleased] エントリは各リリースセクションへ整理
+- `fix(ts-rewrite/cli)`: CLI smoke test が Bun デフォルト timeout（5000ms）に当たり REJECT される構造的問題を修正した（#1107）。subprocess smoke test に明示 timeout を設定し、重いロジック検証は `createXxxCommand()` を直接呼ぶ in-process テストに移行。subprocess テストは「dispatcher が subcommand を認識する」確認のみに限定。
+- `refactor(ts-rewrite/core)`: registry の `METADATA_GENERATE_REGISTRY_KEY` 定数を除去し、service キーをリテラル文字列でインライン化した（#1112）。public export を減らし registry データ内に閉じ込めることで、外部からの参照結合を排除。回帰テスト `registry-deps.test.ts` で定数非 export を機械担保。
+- `refactor(ts-rewrite/core)`: OAuth service（`interactiveAuthService` / `refreshTokenService`）を `createService` フレームに移行し、ADR-0003 の構造的不整合を解消した（#1139）。output schema を `oauth/schema.ts` に追加し、OAuth callback の `state` 生成・検証を追加。boundary テスト（input validation / success / failure）も追加。
+- `refactor(ts-rewrite/core)`: ADR-0003 の service 境界 frame（try/catch → Result 変換）を `createService` ヘルパ（`service-frame.ts`）に抽出し、対象 10 service（analytics 5 + image / skills-sync 2 / suno-prompts / upload）を移行した（#1109）。新規 service は core function + schemas だけ書けば frame を正しく適用できるようになり、手書き frame のレビュー負荷と誤実装 fail mode を除去。
+- `refactor(ts-rewrite/core)`: analytics 5 service の共通クエリ実行を `analytics/query.ts::executeQuery` に、列ヘッダー解決を `analytics/columns.ts` に集約し、各 service の try/catch/ok/err ボイラープレートを `service.ts::createService` ラッパーで除去した（#1110）。`column-helpers.ts` → `columns.ts` リネーム、`analytics/query.ts` / `service.ts` 新設。テスト追加: `analytics-query.test.ts` / `service.test.ts`
+- `feat(ts-rewrite/core)`: Audience analytics の demographics / country / subscribedStatus 3 クエリを並列開始するよう変更した（#1115）。失敗時は開始済み retry が settled になるまで待ってから Result へ変換し、service 戻り後に API retry が残らないようにした。
+- `refactor(ts-rewrite/core)`: analytics service の列ヘッダー解決とセル読み取り処理を `analytics/column-helpers.ts` に共通化し、channel / audience / traffic-source の重複実装を整理した（#1113）。
+- `refactor(ts-rewrite/core)`: analytics のエラー分類ロジックを `errors.ts` に統合した（#1108）。`analytics/query-error.ts` と `audience/service.ts` 内の重複実装（`toAnalyticsQueryError` / `shouldRetryAnalyticsQuery` / `parseRetryAfterSeconds`）を削除し、`classifyGaxiosError` / `shouldRetryApiQuery` / RFC 7231 準拠の `parseRetryAfterSeconds` に一本化。ネットワークエラーの retry 漏れも修正。
+- `feat(skills)`: dogfood ライフサイクルが踏む 12 skill（wf-new / wf-next / suno / suno-helper / masterup / videoup / video-upload / thumbnail / video-description / analytics-collect / playlist / distrokid-prep）の `uv run yt-*` 呼び出しを `bunx tayk <cmd>`（ADR-0007 rebrand / ADR-0004 単一 dispatcher）へ置換した（#965）。TS 版を pin した下流でも skill 経由で Python が実行され dogfood が始まらない問題を解消する。対象 skill の `uv run` 残骸ゼロを `tests/test_lifecycle_skills_no_uv_run.py` で機械担保。lifecycle 外の skill の置換は #966 で対応予定。
+
+### Added
+
+- `feat(ts-rewrite/core)`: Traffic source 内訳（search / browse / external / suggested 等）を期間集計する `collectTrafficSourceService` を ADR-0003 準拠で実装した（#832）。`packages/core/src/analytics/traffic-source/`（schema / service / index）を新設し、Python `utils/traffic_source_analytics.py` Mixin を翻訳せず TS で新規記述。あわせて analytics 共通のエラー分類を `analytics/query-error.ts`（`toAnalyticsQueryError` / `shouldRetryAnalyticsQuery`）へ集約し、video / channel / video-daily / traffic-source の各 service から参照する。quota（429）は `withRetry` で retry せず `domain: "quota"` の Result で返す
+- `feat(ts-rewrite/core)`: resumable upload + thumbnail 圧縮 + metadata update を 1 atomic service に集約した `uploadVideoService` を ADR-0003 準拠で実装した（#837）
+- `feat(ts-rewrite/core)`: Per-video metrics（views / likes / comments / shares 等 8 指標）を YouTube Analytics API から収集する analytics video service を ADR-0003 準拠で実装した（#829）
+- `refactor(ts-rewrite/cli)`: `generate-suno` の `getCwd()` を遅延評価に変更し explicit path 指定時の不要な cwd 解決を排除。`skills-bundle-pack.test.ts` の `beforeAll` 共有 fixture を各テスト独立生成に改善（#1156）
+
 ### Fixed
 
+- `fix(ts-rewrite/generate-master)`: review 指摘を受け、`masterup.yaml` fallback は `audio` 直下の generate-master 用キーだけを読み、finalize-master 用 namespace の `audio.finalize.*` は無視するよう修正した。JSON 優先は `masterup` override に限定し、inline / scalar `audio`、JSON root / audio shape 不備、空白 `bitrate` は config / validation error に統一した。registry 経由でも明示 CLI 値の presence が config override より優先されるよう schema 境界を分離した。`ffmpeg` の bitrate 指定では `-b:a` と `-q:a` の併用をやめ、single MP3 も bitrate 契約どおり encode 経路へ統一した。`generate-master` public subpath から CLI 用 path resolver を外し、`tayk generate-master` の CLI flag 実行 smoke と関連回帰テストを追加した（#772）
+- `fix(ts-rewrite/core)`: ADR-0009（JSON-only config）との実装乖離を解消し、`packages/core` から `yaml` 依存を排除した（#1415）。suno-prompts の定義ファイルを JSON 化（`suno-patterns.yaml` → `suno-patterns.json`、`config/skills/suno.yaml` → `suno.json`）し、parser を `JSON.parse` ベース（`parseTopLevelJson` / `parsePatternsJson`）に変更。`packages/core/package.json` から `yaml` を削除し、ADR-0009 に Status（乖離解消日）を追記した。
+- `fix(ts-rewrite/core)`: `uploadVideoService` の予約公開時刻正規化で、不正な timezone offset（例: `+25:99`）を UTC 変換対象にしないよう修正した（#1120）。
+- `refactor(ts-rewrite/core)`: `collectVideoDailyAnalyticsService` の列マッピングをハードコード位置参照から `columnHeaders` ベースの動的解決（`requireHeaders` / `resolveColumnIndex`）へ移行した（#1114）。API レスポンスの列順変更に対する堅牢性を向上
+- `fix(ts-rewrite/core)`: `readReferenceFiles` の参照画像読み込み失敗時エラーに対象パスを含め、元の filesystem error を `cause` に保持するよう修正した（#1121）。
 - `fix(config)`: `channel-import`（`/channel-new` 取り込みモード）が生成する `config/localizations.json` の `title_template` がアップローダー許可プレースホルダ（`{scene_phrase}` / `{activities}` / `{scene_emoji}`）と不整合になり、アップロード時までエラーに気づけない問題を修正。`yt-config-migrate verify` が生成直後に不正プレースホルダを検出して失敗するようにし（`validate_localizations_title_templates` を新設）、`channel-setup/references/localizations-template.json` を許可プレースホルダのみの形へ更新、SKILL.md / config-generation-rules.md に許可リスト契約を明記した（#1471）
 - `fix(suno)`: ボーカルモードの `tracks_per_pattern` を prompt entry name 契約に反映し、`/suno` が `suno-prompts.json` を展開後 entry 数で生成、`/suno-lyric` / `yt-suno-verify` が同じ `Take N` 付き name と件数を検証するよう修正（#1484）
 - `fix(suno)`: `yt-suno-verify` と `/suno` の final entry name 生成を共有化し、`suno-patterns.yaml` / `suno-prompts.json` / `suno-lyrics.json` の `name` に外側 whitespace がある場合は暗黙正規化せず fail-loud するよう修正（#1484）
@@ -87,6 +112,11 @@ local fix 衝突注意:
 サマリ:
 
 - `particles` / `bokeh` エフェクトが緑一色・黒一色になる重大バグを修正した。エラーなく「生成完了」と表示されるため気づきにくく、該当エフェクトを使っている下流チャンネルは取り込み後に出力確認を推奨する。
+
+### Migration
+
+- `#775`: Python `yt-generate-suno` 相当の導線は TS dispatcher の `tayk generate-suno <collection-dir> [--json]` に移行する。per-CLI bin は追加せず、core registry entry `suno.generate` 経由で `suno-prompts.md` / `suno-prompts.json` を生成する。
+- `#772`: Python `yt-generate-master` 相当の導線は TS dispatcher の `tayk generate-master <collection-dir> [--json]` に移行する。per-CLI bin / `yt` alias は追加せず、core registry entry `masterup.generate-master` 経由で Suno ダウンロード済み音声を `master.mp3` へクロスフェード結合する。skill-config は `config/skills/masterup.json` を優先し、存在しない場合のみ既存 `config/skills/masterup.yaml` を fallback として読む。`audio` section は optional で、存在する場合は object のみ有効。未対応 YAML 行や空 scalar は config error として停止する。
 
 ## [5.5.15] - 2026-07-02
 

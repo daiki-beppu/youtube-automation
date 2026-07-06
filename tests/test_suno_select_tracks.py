@@ -959,7 +959,7 @@ def test_project_scripts_registers_suno_select_tracks_entrypoint():
 def test_masterup_skill_documents_under_min_confirmation_gate():
     text = Path(".claude/skills/masterup/SKILL.md").read_text(encoding="utf-8")
 
-    assert "yt-suno-select-tracks --dry-run <collection-path>" in text
+    assert "bunx tayk suno-select-tracks --dry-run <collection-path>" in text
     assert "[dropped_under_min]" in text
     assert "source=<filename>" in text
     assert "duration=<sec>s" in text

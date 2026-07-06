@@ -6,27 +6,13 @@
 
 import type { Audio } from "../config/audio.ts";
 import type { ChannelConfig } from "../config/config.ts";
+import { roundHalfToEven } from "./duration.ts";
 import {
   DESCRIPTION_CODEPOINT_LIMIT,
   pyFormat,
   truncateCodepoints,
 } from "./format.ts";
 import { rawLocalizations } from "./loc-data.ts";
-
-// Python 組み込み `round()` 相当の round-half-to-even（banker's rounding）。
-// `Math.round` は half-up のため 2.5 → 3 となり Python（2.5 → 2）と乖離する。
-// 30 分の奇数倍（例 150 分）で差が出るため、faithful port では Python と揃える。
-const roundHalfToEven = (value: number): number => {
-  const floor = Math.floor(value);
-  const diff = value - floor;
-  if (diff < 0.5) {
-    return floor;
-  }
-  if (diff > 0.5) {
-    return floor + 1;
-  }
-  return floor % 2 === 0 ? floor : floor + 1;
-};
 
 /**
  * `audio.target_duration_min` から「2 hours」等の表示文字列を組み立てる。

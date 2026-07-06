@@ -5,6 +5,7 @@ BAHMetadataGenerator のユニットテスト
 副作用のない純粋ロジック（タイムスタンプ計算、ファイル名サニタイズ、メタデータ生成）を検証する。
 """
 
+import shutil
 import sys
 from pathlib import Path
 
@@ -578,6 +579,35 @@ class TestCrossfade:
 
         cfg = load_skill_config("masterup")
         assert cfg.get("audio", {}).get("crossfade_duration") == 1.0
+
+    def test_metadata_generator_uses_masterup_json_before_yaml(self, tmp_path, monkeypatch):
+        """metadata_generator も TS generate-master と同じ JSON 優先 override を使うこと。"""
+        from youtube_automation.utils.config import reset as reset_config
+        from youtube_automation.utils.skill_config import reset as reset_skill_config
+
+        fixture = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
+        channel = tmp_path / "sample_channel"
+        shutil.copytree(fixture, channel)
+        skills_dir = channel / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "masterup.yaml").write_text(
+            "audio:\n  crossfade_duration: 9\n",
+            encoding="utf-8",
+        )
+        (skills_dir / "masterup.json").write_text(
+            '{"audio": {"crossfade_duration": 2.5}}',
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(channel))
+        reset_config()
+        reset_skill_config()
+
+        try:
+            gen = BAHMetadataGenerator(str(channel / "collections" / "demo"))
+            assert gen._crossfade_sec == 2.5
+        finally:
+            reset_config()
+            reset_skill_config()
 
     def test_timestamp_with_crossfade(self):
         """3曲のタイムスタンプがクロスフェード分だけ前倒しされること

@@ -11,14 +11,14 @@
 `config/channel/playlists.json` が存在するチャンネルでは、初投稿前に未作成プレイリストを初期化する。
 
 ```bash
-uv run yt-playlist-status
-uv run yt-playlist-manager --init --dry-run
-uv run yt-playlist-manager --init
+bunx tayk playlist-status
+bunx tayk playlist-manager --init --dry-run
+bunx tayk playlist-manager --init
 ```
 
-- [ ] `uv run yt-playlist-status` で `(未作成)` の有無を確認した
-- [ ] `(未作成)` がある場合、`uv run yt-playlist-manager --init --dry-run` の内容を確認した
-- [ ] ユーザー確認後に `uv run yt-playlist-manager --init` を実行し、`playlist_id` が `config/channel/playlists.json` に書き戻された
+- [ ] `bunx tayk playlist-status` で `(未作成)` の有無を確認した
+- [ ] `(未作成)` がある場合、`bunx tayk playlist-manager --init --dry-run` の内容を確認した
+- [ ] ユーザー確認後に `bunx tayk playlist-manager --init` を実行し、`playlist_id` が `config/channel/playlists.json` に書き戻された
 - [ ] 初回動画の追加は `/video-upload` 内部の自動 assign に任せる。手動 `--assign` は実行しない
 
 ## コンテンツ品質確認
@@ -30,11 +30,11 @@ uv run yt-playlist-manager --init
 
 ## アップロード実行
 
-collection 型では、アップロード実行前にユーザーに公開方法を提示するための公開タイミングを必ず確定する。single_release 型では `yt-upload-collection --plan` を使わず、`yt-upload-auto` の公開時刻決定に従う。
+collection 型では、アップロード実行前にユーザーに公開方法を提示するための公開タイミングを必ず確定する。single_release 型では `bunx tayk upload-collection --plan` を使わず、`bunx tayk upload-auto` の公開時刻決定に従う。
 
 ```bash
 # スケジュール計算（アップロード API は叩かない。予約日時計算で YouTube read API を呼ぶ場合がある）
-uv run yt-upload-collection --plan [-c NAME]
+bunx tayk upload-collection --plan [-c NAME]
 ```
 
 - [ ] plan 結果が `📅 公開設定: 即時公開 (public)` の場合だけ「即時公開」と表現する
@@ -44,7 +44,7 @@ uv run yt-upload-collection --plan [-c NAME]
 ```bash
 
 # Complete Collection アップロード（デフォルト動作）
-uv run yt-upload-collection [-c NAME]
+bunx tayk upload-collection [-c NAME]
 ```
 
 ## アップロード後確認

@@ -18,6 +18,8 @@
 
 from __future__ import annotations
 
+import json
+import stat
 from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Any
@@ -55,10 +57,38 @@ def _default_path(skill: str) -> Path:
     )
 
 
-def _channel_override_path(skill: str, target_channel_dir: Path | None = None) -> Path:
+def _channel_override_path(skill: str, target_channel_dir: Path | None = None, suffix: str = "yaml") -> Path:
     """チャンネルリポジトリ側の上書き config パスを返す (存在チェックは呼び出し側)。"""
     root = target_channel_dir if target_channel_dir is not None else configured_channel_dir()
-    return root / "config" / "skills" / f"{skill}.yaml"
+    return root / "config" / "skills" / f"{skill}.{suffix}"
+
+
+def _channel_override_candidates(skill: str, target_channel_dir: Path | None = None) -> list[Path]:
+    """チャンネル側 override 候補を返す。
+
+    JSON 優先は masterup の TS generate-master 互換に限定する。全 skill の
+    JSON override 契約は docs / skill 側の読み替えも必要なため別 issue で扱う。
+    """
+    if skill == "masterup":
+        return [
+            _channel_override_path(skill, target_channel_dir, "json"),
+            _channel_override_path(skill, target_channel_dir, "yaml"),
+        ]
+    return [_channel_override_path(skill, target_channel_dir, "yaml")]
+
+
+def _override_candidate_exists(path: Path, *, strict_regular_file: bool) -> bool:
+    if not strict_regular_file:
+        return path.exists()
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise ConfigError(f"skill-config 読み込み失敗: {path}: {exc}") from exc
+    if not stat.S_ISREG(mode):
+        raise ConfigError(f"skill-config は regular file である必要があります: {path}")
+    return True
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -88,6 +118,23 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
+def _load_json(path: Path) -> dict[str, Any]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ConfigError(f"skill-config 読み込み失敗: {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ConfigError(f"skill-config の root は dict である必要があります: {path}")
+    return data
+
+
+def _load_override(path: Path) -> dict[str, Any]:
+    if path.suffix == ".json":
+        return _load_json(path)
+    return _load_yaml(path)
+
+
 def load_skill_config(
     skill: str,
     *,
@@ -114,9 +161,16 @@ def load_skill_config(
 
     defaults = _load_yaml(_default_path(skill))
 
-    override_path = _channel_override_path(skill, channel_dir)
-    if override_path.exists():
-        override = _load_yaml(override_path)
+    override_path = next(
+        (
+            path
+            for path in _channel_override_candidates(skill, channel_dir)
+            if _override_candidate_exists(path, strict_regular_file=skill == "masterup")
+        ),
+        None,
+    )
+    if override_path is not None:
+        override = _load_override(override_path)
         merged = _deep_merge(defaults, override)
     else:
         merged = defaults
@@ -132,10 +186,17 @@ def load_channel_override(skill: str) -> dict[str, Any]:
     skill-config の旧 namespace 移行など、ユーザーが明示的に設定したキーだけを
     検出したいケースで使う。override ファイルが無ければ空 dict。
     """
-    path = _channel_override_path(skill)
-    if not path.exists():
+    path = next(
+        (
+            candidate
+            for candidate in _channel_override_candidates(skill)
+            if _override_candidate_exists(candidate, strict_regular_file=skill == "masterup")
+        ),
+        None,
+    )
+    if path is None:
         return {}
-    return _load_yaml(path)
+    return _load_override(path)
 
 
 THUMBNAIL_MODE_PARALLEL = "parallel"

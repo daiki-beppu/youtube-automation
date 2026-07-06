@@ -1,14 +1,14 @@
 ---
 name: suno-helper
-description: "Use when Suno UI の連続生成 + playlist 追加 + 一括 DL をブラウザ自動実行するとき。「suno-helper」「Suno 自動生成」で発動。/suno でプロンプトが揃った後に使う"
+description: "Use when Suno UI に投入する曲をブラウザで連続生成 + playlist 追加 + 一括ダウンロードしたいとき。bunx tayk collection-serve で suno-prompts.json を配信し、suno-helper Chrome 拡張で 1 タブ完結の自動実行（pattern 注入 → Generate → 完了待機 → 次へ → 全件完了で playlist 一括追加 → ZIP 一括 DL）を回す operator 手順。`/suno` でプロンプトが揃った後、または既存 collection の途中再開で使用する"
 ---
 
 ## Overview
 
-`<CHANNEL_DIR>/collections/planning/<theme>-collection/` の `suno-prompts.json` を `yt-collection-serve` で配信し、Chrome 拡張 **suno-helper** が Suno (suno.com/create) タブ上で各 pattern の Style/Lyrics 注入 → Generate → 完了待ち → 次の pattern、を自動反復する。全件完了後に clip を一括選択 → Cmd+P → Add to Playlist dialog → 自動 playlist 化 → ZIP 一括ダウンロードまで進める。
+`<CHANNEL_DIR>/collections/planning/<theme>-collection/` の `suno-prompts.json` を `bunx tayk collection-serve` で配信し、Chrome 拡張 **suno-helper** が Suno (suno.com/create) タブ上で各 pattern の Style/Lyrics 注入 → Generate → 完了待ち → 次の pattern、を自動反復する。全件完了後に clip を一括選択 → Cmd+P → Add to Playlist dialog → 自動 playlist 化 → ZIP 一括ダウンロードまで進める。
 
 このスキルはプロンプト生成（`/suno`）の **次工程** であり、マスター化（`/masterup`）の **前工程** にあたる。suno-helper は生成 → playlist 追加 → 一括ダウンロードまでを 1 タブで完結させるため、`/masterup` の DL ステップ（Step 2-3）は原則スキップされる。
-新規 collection を `/wf-new` から開始した直後は、`/wf-new` が `yt-collection-serve` の起動と疎通確認まで完了している場合がある。その場合、本スキルは既存 server を再利用し、Chrome popup 以降の operator 手順から進める。
+新規 collection を `/wf-new` から開始した直後は、`/wf-new` が `bunx tayk collection-serve` の起動と疎通確認まで完了している場合がある。その場合、本スキルは既存 server を再利用し、Chrome popup 以降の operator 手順から進める。
 
 ## When to Use
 
@@ -32,7 +32,7 @@ description: "Use when Suno UI の連続生成 + playlist 追加 + 一括 DL を
 
 | 役割 | コマンド |
 |---|---|
-| サーバー起動（必須: dir mode + 拡張 origin lock） | `uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" --allow-origin "chrome-extension://<EXTENSION_ID>"` |
+| サーバー起動（必須: dir mode + 拡張 origin lock） | `bunx tayk collection-serve "$CHANNEL_DIR/collections/planning" --allow-origin "chrome-extension://<EXTENSION_ID>"` |
 | ポート変更（並走時） | 末尾に `--port 7874` |
 | 拡張をリロード | chrome://extensions → suno-helper の再読み込みアイコン |
 | Suno タブ | https://suno.com/create にアクセス、Custom Mode |
@@ -44,7 +44,7 @@ description: "Use when Suno UI の連続生成 + playlist 追加 + 一括 DL を
 起動（または再利用確認）の前に、対象コレクションの骨格プリフライトを実行する（fail-loud、#1494）:
 
 ```bash
-uv run yt-collection-preflight <collection-dir-name>
+bunx tayk collection-preflight <collection-dir-name>
 ```
 
 `[NG]`（`01-master/` 等の欠落）が報告されたら `--fix` で補完してから進む。DL 完走後に初期化漏れへ気づく事故を防ぐため、このステップは省略しない。
@@ -52,7 +52,7 @@ uv run yt-collection-preflight <collection-dir-name>
 **必ず dir mode + 拡張 origin lock 付き**で起動する。
 
 ```bash
-uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" \
+bunx tayk collection-serve "$CHANNEL_DIR/collections/planning" \
   --allow-origin "chrome-extension://<EXTENSION_ID>"
 ```
 

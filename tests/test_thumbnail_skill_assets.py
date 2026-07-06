@@ -255,7 +255,7 @@ def test_thumbnail_skill_quality_check_separates_thumbnail_and_textless_main_qa(
         "textless main 候補生成後",
         "`main-v1.png` / `main-v1.jpg`",
         "タイトル文字、字幕、ロゴ、透かし、タイポグラフィ、チャンネル名が残っていないか",
-        "yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
+        "bunx tayk thumbnail-check <collection-path>/10-assets/main-v1.png --json",
     ):
         assert required in qa_block
 
