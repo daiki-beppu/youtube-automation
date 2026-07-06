@@ -414,7 +414,8 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
 
     assert "チャンネル立ち上げ・方向性見直し時に必ず使用" not in viewer_voice
     assert "`/channel-new` の標準フローでは実行せず" in viewer_voice
-    assert "任意後続スキル" in viewer_voice
+    assert "任意後続スキル" not in viewer_voice
+    assert "/audience-persona-design の必須入力（viewer-voice-analysis.md）" in viewer_voice
 
     for path_text in (setup, channel_setup, channel_direction, onboarding):
         assert "TTP benchmark" not in path_text
@@ -436,6 +437,22 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
 
     assert "新規チャンネル開設 → 競合発掘 → 方向性決定 → セットアップ" not in features
     assert "`/setup` → `/channel-new` → `/wf-new`" in features
+
+
+def test_skill_frontmatter_descriptions_disambiguate_sibling_routes() -> None:
+    benchmark_desc = _frontmatter(".claude/skills/benchmark/SKILL.md")["description"]
+    channel_research_desc = _frontmatter(".claude/skills/channel-research/SKILL.md")["description"]
+    videoup_desc = _frontmatter(".claude/skills/videoup/SKILL.md")["description"]
+    video_upload_desc = _frontmatter(".claude/skills/video-upload/SKILL.md")["description"]
+
+    assert "「競合分析」" not in benchmark_desc
+    assert "「競合データ収集」" in benchmark_desc
+    assert "収集済みデータの分析は /channel-research" in benchmark_desc
+    assert "「競合分析」" in channel_research_desc
+    assert "データ収集・更新は /benchmark（未実行なら先に案内）" in channel_research_desc
+
+    assert "YouTube への投稿は /video-upload" in videoup_desc
+    assert "動画ファイルの生成（MP3→MP4）は /videoup" in video_upload_desc
 
 
 def test_thumbnail_search_order_is_documented() -> None:
