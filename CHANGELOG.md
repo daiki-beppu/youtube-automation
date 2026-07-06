@@ -76,6 +76,7 @@ local fix 衝突注意:
 
 ### Changed
 
+- `refactor(distrokid-helper)`: popup `App.tsx` から fetch / collection 選択 / 注入 / 停止 / 配信済み記録の実行制御を `useDistrokidRunner` hook へ抽出し、suno-helper と同じ helper extension shell 構成（ADR-0016）へ揃えた。popup UI と「注入後にユーザーが目視確認して手動で続行する」安全境界は維持（#1361）
 - `refactor(suno-helper)`: サーバー側の旧 `POST /suno/playlists` エンドポイントと `suno-playlists.json` 向け URL マッピング関数を撤去し、playlist URL 記録を `POST /collections/<id>/downloaded` に一本化（#1261）
 - `feat(suno-helper)`: `suno-prompts.json` の `duration_filter` envelope を shared API で型付けし、省略時は 60〜300 秒の既定値へ正規化するようにした（#1259）
 - `docs(skills)`: `/audience-persona` を `/audience-persona-design` に改名し、`/viewer-voice` と `/viewing-scene` を束ねて第一ペルソナ 1 人へ収束させる設計フローに更新（#1371）
