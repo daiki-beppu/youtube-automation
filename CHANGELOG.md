@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `fix(automation-update)`: `yt-automation-update apply` の sync-only / smoke check / 失敗ステップ表示を hardened。URL 直接参照の不明 ref を拒否し、`--sync-only` は指定 skill のみ同期、`yt-config-migrate verify --target <repo>` で対象 repo を固定、`pyproject.toml` 書き換え時の I/O 失敗もステップ名付きで報告するようにした（#1473）
+- `fix(automation-update)`: `yt-automation-update apply` の sync-only / smoke check / 失敗ステップ表示を hardened。URL 直接参照と inline table の ref 許可規則を `main` / 40 桁 sha / `vX.Y.Z` tag に統一し、`--sync-only` は指定 skill の skills asset と claude-md を同期、未知 skill 名は副作用前に拒否、`yt-config-migrate verify --target <repo>` で対象 repo を固定、`pyproject.toml` 書き換え時の I/O 失敗もステップ名付きで報告するようにした（#1473）
 - `fix(suno-helper)`: popup のチェック選択実行を旧 range 指定から `indices` payload に切り替え、done/failed 状態を含む選択復元・再実行で絶対 index がずれないようにした。旧 range UI 文言と helper を撤去し、content runner 側は `indices` を `range` より優先して部分実行する（#1267）
 - `fix(suno-lyric)`: `/suno-lyric` がマルチ曲 collection で `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` を全曲一言一句同一のまま出力するのを防ぐため、Workflow に「これらの section も曲ごとの scene / persona で書き分ける」指示を明記し、Validation に曲間セクション重複のセルフチェックと書き分け直し手順を追加。`suno-lyrics.json` の曲間重複を機械検出する `references/check_lyric_duplication.py` を新設（重複検出時は exit 1、#1445）
 - `fix(doctor)`: `ttp_wf_new_readiness` の video_analysis 要件が benchmark top 5 のライブ配信（`duration_iso == "P0D"`、Gemini 取り込み不可で解析不能）により恒久的に充足不能になる問題を修正。live は期待集合から除外して次点 VOD を繰り上げ、VOD が不足する場合は母数を縮小し、除外時は message に「live 配信 N 本を除外」を明示する。`yt-video-analyze --source benchmark` も同じ選定で live をスキップして次点 VOD を解析する（#1462）

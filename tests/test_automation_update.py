@@ -223,6 +223,20 @@ def test_detect_pin_url_unknown_ref_is_rejected() -> None:
         _detect_pin(pyproject)
 
 
+def test_detect_pin_inline_branch_other_than_main_is_rejected() -> None:
+    import tomllib
+
+    pyproject = tomllib.loads(
+        '[project]\nname = "x"\ndependencies = ["youtube-channels-automation"]\n'
+        "[tool.uv.sources]\n"
+        'youtube-channels-automation = { git = "https://github.com/daiki-beppu/youtube-automation", '
+        'branch = "develop" }\n'
+    )
+
+    with pytest.raises(automation_update.ConfigError, match="main / 40 桁 sha / vX.Y.Z tag"):
+        _detect_pin(pyproject)
+
+
 def test_detect_pin_rejects_unofficial_inline_git_url() -> None:
     import tomllib
 
@@ -273,10 +287,10 @@ def test_detect_pin_accepts_canonical_official_git_urls(git_url: str) -> None:
     pyproject = tomllib.loads(
         '[project]\nname = "x"\ndependencies = ["youtube-channels-automation"]\n'
         "[tool.uv.sources]\n"
-        f'youtube-channels-automation = {{ git = "{git_url}", tag = "v1" }}\n'
+        f'youtube-channels-automation = {{ git = "{git_url}", tag = "v1.2.3" }}\n'
     )
 
-    assert _detect_pin(pyproject).value == "v1"
+    assert _detect_pin(pyproject).value == "v1.2.3"
 
 
 def test_detect_pin_rejects_unofficial_direct_git_url() -> None:
@@ -632,7 +646,7 @@ def test_apply_sync_only_is_allowlist_and_forces_selected_assets(
         "suno",
         "--force",
     ] in recorded_commands
-    assert ["uv", "run", "yt-skills", "sync", "--asset", "claude-md", "--force"] not in recorded_commands
+    assert ["uv", "run", "yt-skills", "sync", "--asset", "claude-md", "--force"] in recorded_commands
 
 
 def test_apply_sync_only_bypasses_local_fix_guard_for_selected_skills(
@@ -654,7 +668,20 @@ def test_apply_sync_only_bypasses_local_fix_guard_for_selected_skills(
         "suno",
         "--force",
     ] in recorded_commands
-    assert ["uv", "run", "yt-skills", "sync", "--asset", "claude-md", "--force"] not in recorded_commands
+    assert ["uv", "run", "yt-skills", "sync", "--asset", "claude-md", "--force"] in recorded_commands
+
+
+def test_apply_sync_only_rejects_unknown_skill_before_side_effects(
+    tmp_path: Path, no_network, recorded_commands: list[list[str]], capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    before = (repo / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--sync-only", "typo-skill"]) == EXIT_ERROR
+
+    assert "同梱版に存在しない skill" in capsys.readouterr().err
+    assert (repo / "pyproject.toml").read_text(encoding="utf-8") == before
+    assert recorded_commands == []
 
 
 def test_apply_config_migrate_verify_uses_target_even_when_channel_dir_differs(
@@ -786,6 +813,7 @@ def test_skill_md_delegates_mechanical_steps_to_cli() -> None:
     assert "yt-automation-update check" in text
     assert "yt-automation-update apply" in text
     assert "指定した安全な skill だけ同期" in text
+    assert "claude-md は通常どおり同期" in text
     assert "yt-skills export" not in text
     assert '_asset_root("skills")' in text
     assert "main 追従は upstream HEAD sha" in text

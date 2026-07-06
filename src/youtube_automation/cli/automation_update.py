@@ -17,50 +17,48 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import json
-import os
-import re
 import subprocess
 import sys
 import tomllib
-import urllib.error
-import urllib.parse
-import urllib.request
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
 from pathlib import Path
 
+from youtube_automation.cli.automation_update_refs import (
+    _DEPENDENCY_NAME_RE,
+    _SHA_RE,
+    PACKAGE_NAME,
+    UPSTREAM_REPO,
+    Pin,
+    _canonicalize_name,
+    _describe_pin,
+    _detect_pin,
+    _rewrite_pin,
+)
+from youtube_automation.cli.automation_update_remote import _github_api_get as _remote_github_api_get
+from youtube_automation.cli.automation_update_remote import _locked_git_sha
+from youtube_automation.cli.skills_sync import bundled_skill_names
 from youtube_automation.utils.exceptions import ConfigError
-
-UPSTREAM_REPO = "daiki-beppu/youtube-automation"
-PACKAGE_NAME = "youtube-channels-automation"
 
 EXIT_UP_TO_DATE = 0
 EXIT_DIFF = 1
 EXIT_ERROR = 2
 
-_SHA_RE = re.compile(r"[0-9a-f]{40}")
-_RELEASE_TAG_RE = re.compile(r"v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?")
-_DEPENDENCY_NAME_RE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
-_GIT_REFERENCE_RE = re.compile(r"@\s*git\+(?P<url>[^\s;]+)")
+__all__ = [
+    "EXIT_DIFF",
+    "EXIT_ERROR",
+    "EXIT_UP_TO_DATE",
+    "Pin",
+    "_detect_pin",
+    "_github_api_get",
+    "build_parser",
+    "cmd_apply",
+    "cmd_check",
+    "main",
+]
 
 
 class _StepFailed(Exception):
     """apply のステップ失敗（どのステップで失敗したかは実行ループ側が表示する）."""
-
-
-@dataclass(frozen=True)
-class Pin:
-    """pyproject.toml における youtube-channels-automation の参照形式."""
-
-    style: str  # "inline-table" ([tool.uv.sources]) | "url" (PEP 508 direct reference)
-    kind: str  # "tag" | "branch" | "sha" | "registry"
-    value: str  # tag 名 / branch 名 / sha / requirement 文字列
-    git_url: str | None = field(default=None, compare=False)
-
-
-def _canonicalize_name(name: str) -> str:
-    return re.sub(r"[-_.]+", "-", name).lower()
 
 
 def _resolve_repo_root(target: str | None) -> Path:
@@ -120,147 +118,17 @@ def _require_downstream(pyproject: dict, root: Path) -> None:
     raise ConfigError(f"{root} は {PACKAGE_NAME} を依存として参照するチャンネルリポジトリではありません。\n{hint}")
 
 
-def _split_git_ref(url: str) -> tuple[str, str | None]:
-    """git URL 末尾の @<ref> を分離する。ssh 形式の git@host は ref と誤認しない."""
-    base, sep, ref = url.rpartition("@")
-    if sep and ref and "/" not in ref and ":" not in ref:
-        return base, ref
-    return url, None
-
-
-def _normalized_github_path(path: str) -> str:
-    return urllib.parse.unquote(path).strip("/").removesuffix(".git")
-
-
-def _is_official_upstream_url(git_url: str) -> bool:
-    url = git_url.removeprefix("git+")
-    if url.startswith("git@github.com:"):
-        path = _normalized_github_path(url.removeprefix("git@github.com:"))
-        return path == UPSTREAM_REPO
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme == "https":
-        if parsed.hostname != "github.com":
-            return False
-        if parsed.params or parsed.query or parsed.fragment:
-            return False
-        path = _normalized_github_path(parsed.path)
-        return path == UPSTREAM_REPO
-    if parsed.scheme == "ssh":
-        if parsed.hostname != "github.com" or parsed.username != "git":
-            return False
-        if parsed.params or parsed.query or parsed.fragment:
-            return False
-        path = _normalized_github_path(parsed.path)
-        return path == UPSTREAM_REPO
-    return False
-
-
-def _github_repo_slug(git_url: str) -> str | None:
-    """GitHub URL から owner/repo を返す（表示・後方互換用）。
-
-    security boundary では使わない。official upstream 判定は path traversal や余剰 path を
-    拒否するため `_is_official_upstream_url()` の厳格一致を使う。
-    """
-    url = git_url.removeprefix("git+")
-    if url.startswith("git@github.com:"):
-        path = _normalized_github_path(url.removeprefix("git@github.com:"))
-    else:
-        parsed = urllib.parse.urlparse(url)
-        if parsed.hostname != "github.com":
-            return None
-        path = _normalized_github_path(parsed.path)
-    parts = path.split("/")
-    if len(parts) < 2:
-        return None
-    return f"{parts[0]}/{parts[1]}"
-
-
-def _require_official_upstream(git_url: str) -> None:
-    if not _is_official_upstream_url(git_url):
-        raise ConfigError(
-            f"{PACKAGE_NAME} の Git URL は official upstream ({UPSTREAM_REPO}) を参照してください: {git_url}"
-        )
-
-
-def _detect_pin(pyproject: dict) -> Pin:
-    tool = pyproject.get("tool")
-    sources = None
-    if isinstance(tool, dict):
-        uv_table = tool.get("uv")
-        if isinstance(uv_table, dict):
-            sources = uv_table.get("sources")
-    if isinstance(sources, dict):
-        for key, spec in sources.items():
-            if _canonicalize_name(key) != PACKAGE_NAME or not isinstance(spec, dict):
-                continue
-            git_url = spec.get("git")
-            if not isinstance(git_url, str):
-                continue
-            _require_official_upstream(git_url)
-            tag = spec.get("tag")
-            if isinstance(tag, str):
-                return Pin("inline-table", "tag", tag, git_url)
-            rev = spec.get("rev")
-            if isinstance(rev, str):
-                return Pin("inline-table", "sha", rev, git_url)
-            branch = spec.get("branch")
-            return Pin("inline-table", "branch", branch if isinstance(branch, str) else "main", git_url)
-
-    project = pyproject.get("project")
-    dependencies = project.get("dependencies") if isinstance(project, dict) else None
-    if isinstance(dependencies, list):
-        for dependency in dependencies:
-            if not isinstance(dependency, str):
-                continue
-            match = _DEPENDENCY_NAME_RE.match(dependency)
-            if not match or _canonicalize_name(match.group(1)) != PACKAGE_NAME:
-                continue
-            git_match = _GIT_REFERENCE_RE.search(dependency)
-            if not git_match:
-                return Pin("url", "registry", dependency.strip())
-            url = git_match.group("url").split("#", 1)[0]
-            base_url, ref = _split_git_ref(url)
-            _require_official_upstream(base_url)
-            if ref is None:
-                return Pin("url", "branch", "main", base_url)
-            if _SHA_RE.fullmatch(ref):
-                return Pin("url", "sha", ref, base_url)
-            if ref == "main":
-                return Pin("url", "branch", ref, base_url)
-            if not _RELEASE_TAG_RE.fullmatch(ref):
-                raise ConfigError(
-                    "pyproject.toml の URL 直接参照で、main / 40 桁 sha / vX.Y.Z tag 以外の ref は"
-                    f"自動追従できません: {ref}"
-                )
-            return Pin("url", "tag", ref, base_url)
-    raise ConfigError(f"pyproject.toml から {PACKAGE_NAME} の pin を特定できません")
-
-
-def _describe_pin(pin: Pin) -> str:
-    style = "inline table [tool.uv.sources]" if pin.style == "inline-table" else "URL 直接参照 (dependencies)"
-    if pin.kind == "tag":
-        return f"tag pin ({pin.value}, {style})"
-    if pin.kind == "sha":
-        return f"sha pin ({pin.value[:12]}, {style})"
-    if pin.kind == "branch":
-        return f"main 追従 (branch={pin.value}, {style})"
-    return f"registry 参照 ({pin.value})"
+def _validate_sync_only(sync_only: list[str] | None) -> None:
+    if not sync_only:
+        return
+    available = set(bundled_skill_names())
+    unknown = sorted(set(sync_only) - available)
+    if unknown:
+        raise ConfigError(f"--sync-only に同梱版に存在しない skill が指定されています: {', '.join(unknown)}")
 
 
 def _github_api_get(path: str) -> dict:
-    url = f"https://api.github.com/{path}"
-    request = urllib.request.Request(
-        url,
-        headers={"Accept": "application/vnd.github+json", "User-Agent": "yt-automation-update"},
-    )
-    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
-    if token:
-        request.add_header("Authorization", f"Bearer {token}")
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
-        raise ConfigError(f"GitHub API の呼び出しに失敗しました ({url}): {e}")
+    return _remote_github_api_get(path)
 
 
 def _fetch_latest_release_tag() -> str:
@@ -277,63 +145,6 @@ def _fetch_branch_head_sha(branch: str) -> str:
     if not isinstance(sha, str) or not sha:
         raise ConfigError(f"upstream {branch} の HEAD sha を取得できません")
     return sha
-
-
-def _locked_git_sha(root: Path) -> str | None:
-    """uv.lock から youtube-channels-automation の解決済み git sha を取り出す."""
-    lock_path = root / "uv.lock"
-    if not lock_path.is_file():
-        return None
-    try:
-        lock = tomllib.loads(lock_path.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError) as e:
-        raise ConfigError(f"uv.lock を読み込めません: {lock_path}: {e}")
-    packages = lock.get("package")
-    if not isinstance(packages, list):
-        return None
-    for package in packages:
-        if not isinstance(package, dict):
-            continue
-        if _canonicalize_name(str(package.get("name", ""))) != PACKAGE_NAME:
-            continue
-        source = package.get("source")
-        git = source.get("git") if isinstance(source, dict) else None
-        if isinstance(git, str) and "#" in git:
-            return git.rsplit("#", 1)[1]
-    return None
-
-
-def _rewrite_pin(text: str, pin: Pin, new_ref: str) -> str:
-    """pyproject.toml のテキストを直接書き換える（コメント・整形を保存するため TOML 再出力はしない）."""
-    package_pattern = r"[\"']?youtube[-_.]channels[-_.]automation[\"']?"
-    if pin.style == "inline-table":
-        key = "tag" if pin.kind == "tag" else "rev"
-        pattern = re.compile(
-            r"(" + package_pattern + r"\s*=\s*\{[^}]*?" + key + r"\s*=\s*)([\"'])([^\"']+)(\2)",
-            re.DOTALL,
-        )
-        new_text, count = pattern.subn(lambda m: f"{m.group(1)}{m.group(2)}{new_ref}{m.group(4)}", text, count=1)
-    else:
-        pattern = re.compile(r"(" + package_pattern + r"\s*@\s*git\+)([^\s\"';]+)")
-
-        def _replace_url_ref(match: re.Match[str]) -> str:
-            url, sep, fragment = match.group(2).partition("#")
-            base_url, ref = _split_git_ref(url)
-            if ref is None:
-                raise ConfigError(
-                    "pyproject.toml の URL 直接参照に ref が無いため自動書き換えできません。"
-                    "該当行を手動で更新してから再実行してください"
-                )
-            suffix = f"{sep}{fragment}" if sep else ""
-            return f"{match.group(1)}{base_url}@{new_ref}{suffix}"
-
-        new_text, count = pattern.subn(_replace_url_ref, text, count=1)
-    if count != 1:
-        raise ConfigError(
-            "pyproject.toml の pin 記法が想定と異なり自動書き換えできません。"
-            "該当行を手動で更新してから再実行してください"
-        )
-    return new_text
 
 
 def _git_status_porcelain(root: Path) -> str:
@@ -444,6 +255,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
         pyproject = _load_pyproject(pyproject_path)
         _require_downstream(pyproject, root)
         pin = _detect_pin(pyproject)
+        _validate_sync_only(args.sync_only)
         if pin.kind == "registry":
             raise ConfigError(
                 "registry 参照 (git 参照ではない) のため自動追従できません。"
@@ -530,6 +342,12 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 run(["uv", "run", "yt-skills", "sync", "--asset", "skills", "--only", *args.sync_only, *force]),
             )
         )
+        steps.append(
+            (
+                "yt-skills sync (--asset claude-md --force)",
+                run(["uv", "run", "yt-skills", "sync", "--asset", "claude-md", *force]),
+            )
+        )
     else:
         steps.append(("yt-skills sync (--asset all --force)", run(["uv", "run", "yt-skills", "sync", *force])))
     steps.append(("smoke check: yt-skills list", run(["uv", "run", "yt-skills", "list"])))
@@ -583,7 +401,7 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         default=None,
         metavar="SKILL",
-        help="skills asset を指定スキルのみ同期する（claude-md asset は同期しない）",
+        help="skills asset を指定スキルのみ同期する（claude-md asset は通常どおり同期）",
     )
     p_apply.add_argument(
         "--allow-dirty",
