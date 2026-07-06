@@ -397,15 +397,24 @@ def _build_workflow(merged: dict) -> Workflow:
     # 旧 top-level `post_upload` / `short` キーが残っていても silently ignore する
     # （`_REQUIRED_KEYS_BY_SECTION` に workflow.json キーを登録していないため）。
     # Shorts スケジュール公開時刻は `shorts.publish_time` に移動。
-    wf = merged.get("workflow") or {}
+    if "workflow" in merged:
+        wf = merged["workflow"]
+    else:
+        wf = {}
     if not isinstance(wf, dict):
         raise ConfigError(f"workflow セクションは object でなければなりません（got {type(wf).__name__}）")
 
-    wf_next_raw = wf.get("wf_next") or {}
+    if "wf_next" in wf:
+        wf_next_raw = wf["wf_next"]
+    else:
+        wf_next_raw = {}
     if not isinstance(wf_next_raw, dict):
         raise ConfigError(f"workflow.wf_next は object でなければなりません（got {type(wf_next_raw).__name__}）")
 
-    gates_raw = wf_next_raw.get("approval_gates") or {}
+    if "approval_gates" in wf_next_raw:
+        gates_raw = wf_next_raw["approval_gates"]
+    else:
+        gates_raw = {}
     if not isinstance(gates_raw, dict):
         raise ConfigError(
             f"workflow.wf_next.approval_gates は object でなければなりません（got {type(gates_raw).__name__}）"
@@ -414,11 +423,23 @@ def _build_workflow(merged: dict) -> Workflow:
     return Workflow(
         wf_next=WfNext(
             approval_gates=ApprovalGates(
-                audio=bool(gates_raw.get("audio", False)),
-                upload=bool(gates_raw.get("upload", False)),
+                audio=_workflow_bool(gates_raw, "audio", "workflow.wf_next.approval_gates.audio"),
+                upload=_workflow_bool(gates_raw, "upload", "workflow.wf_next.approval_gates.upload"),
+            ),
+            skip_manual_mastering=_workflow_bool(
+                wf_next_raw,
+                "skip_manual_mastering",
+                "workflow.wf_next.skip_manual_mastering",
             ),
         ),
     )
+
+
+def _workflow_bool(raw: dict, key: str, path: str) -> bool:
+    value = raw.get(key, False)
+    if not isinstance(value, bool):
+        raise ConfigError(f"{path} は boolean でなければなりません（got {type(value).__name__}）")
+    return value
 
 
 def _build_shorts(merged: dict) -> Shorts:

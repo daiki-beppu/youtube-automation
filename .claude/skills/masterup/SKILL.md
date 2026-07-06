@@ -149,6 +149,38 @@ $ARGUMENTS
 2. `music.generated = true` かつ `music.approved = false` のコレクションを対象
 3. 複数ある場合はユーザーに選択を促す
 
+### Step 1.5: DL 完全性チェック（部分ダウンロード検知）
+
+`02-Individual-music/` の実ファイル数を期待曲数と突合する。**`assets.music_downloaded` が `true` でも本チェックはスキップしない**（フラグと実ファイル数が食い違う部分ダウンロード — 例: 10 曲中 5 曲失敗 — を見逃さないため）。
+
+期待曲数・実ファイル数は `/suno-helper` の DL 完了判定・`yt-collection-serve` の `status` 判定と同じロジック（既存ユーティリティ）で算出し、算式を二重管理しない:
+
+```bash
+uv run python3 -c "
+from pathlib import Path
+from youtube_automation.utils.suno_downloaded_workflow_state import read_pattern_count, expected_download_count
+from youtube_automation.utils.suno_downloaded_archive import count_audio_files
+from youtube_automation.utils.collection_paths import CollectionPaths
+
+coll_dir = Path('.')  # アクティブなコレクションディレクトリで実行
+pattern_count = read_pattern_count(coll_dir)
+expected = expected_download_count(pattern_count)
+actual = count_audio_files(CollectionPaths(coll_dir).music_dir)
+print(f'pattern_count={pattern_count} expected={expected} actual={actual}')
+"
+```
+
+- `pattern_count`: `20-documentation/suno-prompts.json` の entry 数
+- `expected`（期待曲数）: `pattern_count × 2`。Suno は 1 Generate = 2 clip を生成するため、インスト / ボーカルいずれのモードでも共通の算式（ボーカルモードの 1 曲 1 winner 採用は Step 4.5 の後段処理であり、ダウンロード完了判定には影響しない）
+- `actual`（実ファイル数）: `02-Individual-music/` 内の `.mp3` / `.m4a` / `.wav` ファイル数
+
+判定:
+- **`actual == 0`**: `/suno-helper` 未実行として「`/suno-helper` を実行してダウンロードを完了してください」を案内して停止
+- **`0 < actual < expected`**: 部分ダウンロードとして扱う。`assets.music_downloaded` が `true` であっても揃っているとはみなさない。不足曲数（`expected - actual`）を提示し、「`/suno-helper` を再実行して不足分を DL するか、Suno UI から手動で不足曲をダウンロードして `02-Individual-music/` に配置してください」を案内して停止
+- **`actual >= expected`**: チェック OK として Step 2 へ進む
+
+`pattern_count` が `None`（`suno-prompts.json` が存在しない）の場合は期待曲数が算出不能なため本チェックをスキップし、以降の既存フローに委ねる。
+
 ### Step 2: WebFetch でプレイリスト情報を取得 (DEPRECATED -- fallback only)
 
 > **suno-helper DL 済みの場合はスキップ**: `02-Individual-music/` ディレクトリにオーディオファイル（mp3 / m4a / wav）が既に存在する場合、suno-helper が一括ダウンロード済みと判断し、**Step 2-3 をスキップして Step 5 へ直行する**。この経路が primary path であり、以下の WebFetch + CDN curl は suno-helper のダウンロードが使えない場合のフォールバックとしてのみ使用する。

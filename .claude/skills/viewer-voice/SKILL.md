@@ -1,6 +1,6 @@
 ---
 name: viewer-voice
-description: "Use when 競合コメントの収集・分析で視聴者インサイトを抽出するとき。「視聴者の声」「コメント分析」「ユーザーリサーチ」で発動。/audience-persona-design らの前提データを作る任意後続スキル"
+description: "Use when 競合コメントの収集・分析で視聴者インサイトを抽出するとき。「視聴者の声」「コメント分析」「ユーザーリサーチ」で発動。/audience-persona-design の必須入力（viewer-voice-analysis.md）を作る前工程。実行タイミングは任意"
 ---
 
 ## Overview
