@@ -1,6 +1,6 @@
 ---
 name: videoup
-description: "Use when 音声ファイルが揃い動画生成が必要なとき。「動画変換」「MP3→MP4」「generate_videos」「videoup」で発動。マスター音源・マスター動画生成を案内"
+description: "Use when 音声ファイルが揃い動画生成が必要なとき。「動画変換」「MP3→MP4」「generate_videos」「videoup」で発動。マスター音源・マスター動画生成を案内。YouTube への投稿は /video-upload"
 ---
 
 ## Overview
@@ -42,26 +42,26 @@ $ARGUMENTS
 ```
 
 引数が指定されている場合、そのコレクションを対象とします。
-未指定の場合、`collections/planning/` から `music.approved = true` かつ `production.generated = false` のコレクションを自動検出します。
+未指定の場合、`collections/planning/` から `assets.master_audio` が設定済み（`null` 以外）かつ `assets.master_video` が `null` のコレクションを自動検出します。
 
 ### ステップ
 
 1. **対象コレクション確認**: `workflow-state.json` で状態確認
-2. **マスター音源**: `master-mix.{wav,m4a,aac,mp3,flac}` または `master.{wav,m4a,aac,mp3,flac}` が既にあればスキップ。なければ `/masterup` または `/lyria` でのマスター音源生成を案内（DAW バウンス済みの場合は `master-mix.m4a` をそのまま配置可、`/lyria` / `/masterup` の自動生成出力は `master.{wav,mp3}` で配置される）
+2. **マスター音源**: `workflow-state.json::assets.master_audio` にファイル名が記録されていればそれを最優先で使用し、`01-master/` 内に存在することを確認する。未設定の場合のみ `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順で探す。`assets.master_audio` が不正 JSON / 非 string / パス付き / 存在しないファイルを指す場合、`generate_videos.sh` は固定名探索へ fallback せずエラー停止する。なければ `/masterup` または `/lyria` でのマスター音源生成を案内（DAW バウンス済みの場合は `master-mix.m4a` をそのまま配置可、`/lyria` / `/masterup` の自動生成出力は `master.{wav,mp3}` で配置される）
 3. **ループ動画背景**: `10-assets/loop.mp4` が既にあればスキップ。
    `config/skills/loop-video.yaml::enabled: false` のチャンネルではループ動画化が無効化されているため、`/loop-video` を案内せず textless `10-assets/main.png` または `main.jpg` を静止背景として使用する。
    この場合、既存の `10-assets/loop.mp4` が残っていても `generate_videos.sh` は無視し、静止背景に切り替える。
    それ以外（`enabled` 未指定 or `true`）で `loop.mp4` が無ければ `/loop-video` でのループ動画生成を案内。
    `loop.mp4` があると `generate_videos.sh` が自動的に動画背景を使用（静止画の代わり）
 4. **動画生成**: `generate_videos.sh` の実行コマンドを案内
-5. **workflow-state.json 更新**: `production.generated = true` に更新
+5. **workflow-state.json 更新**: `assets.master_video` に生成された動画ファイル名（例: `01-master/Theme-Name-Master.mp4`）を記録
 
 ### 自動検出される要素
 
 スクリプトはコレクションのディレクトリ構造から以下を自動検出します:
 
 - **コレクション名**: ディレクトリ名から（`YYYYMMDD-xxx-theme-collection` → `Theme-Name`）
-- **マスター音声**: `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順に検出（m4a/aac は `-c:a copy` で再エンコード回避）。`master-mix.*` は DAW バウンス・手動配置、`master.*` は `/lyria` / `/masterup`（`yt-generate-master`）の自動生成出力（#507）
+- **マスター音声**: `workflow-state.json::assets.master_audio` が最優先。未設定の場合のみ `master-mix.{wav,m4a,aac,mp3,flac}` → `master.{wav,m4a,aac,mp3,flac}` の順に検出（m4a/aac は `-c:a copy` で再エンコード回避）。`master-mix.*` は DAW バウンス・手動配置、`master.*` は `/lyria` / `/masterup`（`yt-generate-master`）の自動生成出力（#507）。明示された `assets.master_audio` が壊れている場合は fail-closed し、別音源で動画生成を続行しない
 - **動画背景**: `10-assets/main.png` 優先、`main.jpg` フォールバック。`thumbnail.jpg/png` は YouTube アップロード用のテキスト付きサムネイルなので動画背景には使わない
 - **個別音楽**: `02-Individual-music/*.mp3`（アルファベット順）
 

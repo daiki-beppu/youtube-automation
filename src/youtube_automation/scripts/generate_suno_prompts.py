@@ -3,8 +3,11 @@
 
 import argparse
 import json
+import math
 import re
 import sys
+from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
@@ -30,6 +33,58 @@ from youtube_automation.utils.suno_artifact_validation import (
 )
 from youtube_automation.utils.suno_effective_config import infer_suno_mode, resolve_suno_config
 from youtube_automation.utils.suno_lyrics import load_suno_lyrics_by_name
+
+_STYLE_VARIATION_BANNED_ADJECTIVES = frozenset(
+    {
+        "thundering",
+        "blazing",
+        "crushing",
+        "soaring",
+        "screaming",
+        "devastating",
+        "explosive",
+        "ferocious",
+        "towering",
+        "surging",
+        "crystalline",
+        "shimmering",
+        "lush",
+        "sweeping",
+        "majestic",
+        "glorious",
+        "echoing",
+    }
+)
+_STYLE_VARIATION_ENVIRONMENT_NG_WORDS = frozenset(
+    {
+        "ambient noise",
+        "dripping",
+        "drops",
+        "puddles",
+        "pouring",
+        "rain",
+        "rain sounds",
+        "splashing",
+        "streaming water",
+        "trickling",
+        "vinyl crackle",
+        "white noise",
+    }
+)
+_STYLE_VARIATION_BARE_INSTRUMENTS = frozenset(
+    {
+        "bass",
+        "cello",
+        "drums",
+        "flute",
+        "guitar",
+        "organ",
+        "piano",
+        "strings",
+        "synth",
+        "trumpet",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Quality rules (#904): suno-bgm ベースの品質ガード
@@ -138,14 +193,107 @@ class QualityReport:
         return len(self.warnings) > 0
 
 
-def _style_line(tempo: str | None, effective_style: str) -> str:
+def _style_line(tempo: str | None, effective_style: str, variation_descriptor: str) -> str:
     """Styles 欄の 1 行目（`<tempo>, <style>,`）を組み立てる共有部品.
 
     md 出力と JSON 出力で同一の文字列を使うことでドリフトを防ぐ。
     """
     parts = [tempo] if tempo else []
     parts.append(effective_style)
+    if variation_descriptor:
+        parts.append(variation_descriptor)
     return ", ".join(parts) + ","
+
+
+def _build_variation_sequence(pools: Mapping[str, list[str]]) -> list[str]:
+    # Sort axes so channel config key order cannot change generated prompts.
+    axes = [pools[name] for name in sorted(pools) if pools[name]]
+    if not axes:
+        return []
+    sequence: list[str] = []
+    for i in range(max(len(axis) for axis in axes)):
+        for axis in axes:
+            if i < len(axis):
+                sequence.append(axis[i])
+    return sequence
+
+
+def _variation_descriptor(entry_index: int, sequence: list[str]) -> str:
+    if entry_index == 0 or not sequence:
+        return ""
+    return sequence[(entry_index - 1) % len(sequence)]
+
+
+@dataclass(frozen=True)
+class _ResolvedStyleVariation:
+    enabled: bool
+    sequence: list[str]
+
+
+def _contains_token_or_phrase(text: str, phrase: str) -> bool:
+    if " " in phrase:
+        return phrase in text
+    return re.search(rf"\b{re.escape(phrase)}\b", text) is not None
+
+
+def _validate_style_variation_descriptor(axis: str, descriptor: str, banned_artists: list[str]) -> None:
+    normalized = " ".join(descriptor.lower().split())
+    if normalized in _STYLE_VARIATION_BARE_INSTRUMENTS:
+        raise ConfigError(f"suno.style_variation.pools.{axis} の descriptor は裸楽器名を使用できません: {descriptor!r}")
+    for word in sorted(_STYLE_VARIATION_BANNED_ADJECTIVES):
+        if _contains_token_or_phrase(normalized, word):
+            raise ConfigError(
+                f"suno.style_variation.pools.{axis} の descriptor に禁止形容詞を含めることはできません: {descriptor!r}"
+            )
+    for word in sorted(_STYLE_VARIATION_ENVIRONMENT_NG_WORDS):
+        if _contains_token_or_phrase(normalized, word):
+            raise ConfigError(
+                f"suno.style_variation.pools.{axis} の descriptor に"
+                f"雨音・環境音 NG ワードを含めることはできません: {descriptor!r}"
+            )
+    for artist in banned_artists:
+        if isinstance(artist, str) and artist.strip() and artist.lower() in normalized:
+            raise ConfigError(
+                f"suno.style_variation.pools.{axis} の descriptor に"
+                f"アーティスト名を含めることはできません: {descriptor!r}"
+            )
+
+
+def _resolve_style_variation(raw: object, *, banned_artists: list[str] | None = None) -> _ResolvedStyleVariation:
+    if raw is None:
+        raise ConfigError("suno.style_variation は mapping である必要があります: None")
+    if not isinstance(raw, Mapping):
+        raise ConfigError(f"suno.style_variation は mapping である必要があります: {raw!r}")
+
+    enabled = raw.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ConfigError(f"suno.style_variation.enabled は bool である必要があります: {enabled!r}")
+
+    pools_raw = raw.get("pools", {})
+    if pools_raw is None:
+        raise ConfigError("suno.style_variation.pools は mapping である必要があります: None")
+    if not isinstance(pools_raw, Mapping):
+        raise ConfigError(f"suno.style_variation.pools は mapping である必要があります: {pools_raw!r}")
+
+    pools: dict[str, list[str]] = {}
+    for axis, descriptors_raw in pools_raw.items():
+        if not isinstance(axis, str) or not axis.strip():
+            raise ConfigError(f"suno.style_variation.pools の axis 名は非空文字列である必要があります: {axis!r}")
+        if not isinstance(descriptors_raw, list):
+            raise ConfigError(
+                f"suno.style_variation.pools.{axis} は list[str] である必要があります: {descriptors_raw!r}"
+            )
+        descriptors: list[str] = []
+        for descriptor in descriptors_raw:
+            if not isinstance(descriptor, str) or not descriptor.strip():
+                raise ConfigError(
+                    f"suno.style_variation.pools.{axis} の descriptor は非空文字列である必要があります: {descriptor!r}"
+                )
+            _validate_style_variation_descriptor(axis, descriptor, banned_artists or [])
+            descriptors.append(descriptor)
+        pools[axis] = descriptors
+
+    return _ResolvedStyleVariation(enabled=enabled, sequence=_build_variation_sequence(pools) if enabled else [])
 
 
 @dataclass
@@ -153,8 +301,8 @@ class _ResolvedPattern:
     name_jp: str
     name_en: str
     style_label: str
-    style_line: str
     entry_names: list[str]
+    style_lines: list[str]  # scenes と同じ長さ。entry ごとの Styles 第 1 行 (#1456)
     scenes: list[str]
     lyrics_by_scene: list[str]  # scenes と同じ長さ。各値は rstrip 済み。歌詞が無ければ ""
 
@@ -168,6 +316,28 @@ class _ResolvedPattern:
 # (拡張型契約: "male" | "female" | "neutral" | "auto")。空文字は「未指定」として JSON 出力から省く
 # (_build_advanced_json_fields の skip ロジック参照)。
 _ADVANCED_JSON_KEYS = ("style_influence", "weirdness", "exclude_styles", "vocal_gender")
+
+
+def _duration_filter_from_config(suno: dict) -> dict:
+    raw = suno.get("duration_filter", {})
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise ConfigError("config/skills/suno.yaml::duration_filter must be a mapping")
+    min_sec = raw.get("min_sec", 60)
+    max_sec = raw.get("max_sec", 300)
+    if (
+        isinstance(min_sec, bool)
+        or isinstance(max_sec, bool)
+        or not isinstance(min_sec, (int, float))
+        or not isinstance(max_sec, (int, float))
+        or not math.isfinite(min_sec)
+        or not math.isfinite(max_sec)
+    ):
+        raise ConfigError("config/skills/suno.yaml::duration_filter min_sec/max_sec must be finite numeric")
+    if min_sec < 0 or max_sec < 0 or min_sec > max_sec:
+        raise ConfigError("config/skills/suno.yaml::duration_filter must satisfy 0 <= min_sec <= max_sec")
+    return {"min_sec": min_sec, "max_sec": max_sec}
 
 
 def _build_advanced_json_fields(override: dict) -> dict:
@@ -269,6 +439,11 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     style_influence = suno.get("style_influence", 50)
     weirdness = suno.get("weirdness", 50)
 
+    style_variation = _resolve_style_variation(
+        suno.get("style_variation"),
+        banned_artists=suno.get("banned_artists", []),
+    )
+
     base_parts = [genre_line]
     if mood_descriptors:
         base_parts.append(mood_descriptors)
@@ -294,6 +469,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
 
     resolved: list[_ResolvedPattern] = []
     expected_external_lyrics_names: set[str] = set()
+    entry_index = 0
     for pattern_index, pattern in enumerate(patterns, 1):
         tempo = pattern.get("tempo")
         style_key = pattern.get("style")
@@ -303,7 +479,10 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
         _require_pattern_name_without_padding(patterns_path, pattern_index, "name_en", name_en)
 
         # Per-pattern style variant override
-        if style_key and style_key in style_variants:
+        if style_key and style_key not in style_variants:
+            raise ConfigError(f"pattern.style に未定義の style variant が指定されています: {style_key!r}")
+        has_explicit_variant = bool(style_key)
+        if has_explicit_variant:
             variant = style_variants[style_key]
             effective_style = variant["genre_line"]
             style_label = f" [{style_key}: {variant['name']}]"
@@ -322,6 +501,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
         raw_lyrics = pattern.get("lyrics")
         fallback_lyrics = raw_lyrics.rstrip() if raw_lyrics else ""
         lyrics_by_scene = []
+        style_lines = []
         for entry_name in entry_names:
             if has_external_lyrics:
                 expected_external_lyrics_names.add(entry_name)
@@ -329,13 +509,20 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
             else:
                 lyrics_by_scene.append(fallback_lyrics)
 
+            descriptor = ""
+            if style_variation.enabled and not has_explicit_variant:
+                descriptor = _variation_descriptor(entry_index, style_variation.sequence)
+            style_lines.append(_style_line(tempo, effective_style, descriptor))
+            # Explicit variants keep their override style but still reserve the YAML entry position.
+            entry_index += 1
+
         resolved.append(
             _ResolvedPattern(
                 name_jp=name_jp,
                 name_en=name_en,
                 style_label=style_label,
-                style_line=_style_line(tempo, effective_style),
                 entry_names=entry_names,
+                style_lines=style_lines,
                 scenes=entry_scenes,
                 lyrics_by_scene=lyrics_by_scene,
             )
@@ -401,17 +588,18 @@ def generate(patterns_path: Path) -> str:
         lines.append("")
         lines.append(f"## Pattern {label}: {pattern.name_jp} — {pattern.name_en}{pattern.style_label}")
 
-        for entry_name, scene, lyrics in zip(
+        for entry_name, scene, lyrics, style_line in zip(
             pattern.entry_names,
             pattern.scenes,
             pattern.lyrics_by_scene,
+            pattern.style_lines,
             strict=True,
         ):
             lines.append("")
             lines.append(f"### {entry_name}")
             lines.append("**Styles:**")
             lines.append("```")
-            lines.append(pattern.style_line)
+            lines.append(style_line)
             lines.append(scene)
             lines.append("```")
 
@@ -448,6 +636,8 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
     - Style 文字数上限チェック (警告)
     - 禁止アーティスト名チェック (エラー)
     - auto_lyrics_structure による歌詞構造の自動補強
+
+    Style 重複検証 (#1456): 全 entry の Style 文が完全一致する組があれば警告する
     """
     resolved = _resolve_prompts(patterns_path)
     suno = load_skill_config("suno")
@@ -458,25 +648,26 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
     report = QualityReport()
 
     # 5 要素順序チェックは genre_line（ユーザーが config に書く部分）を 1 回だけ検証する。
-    # pattern.style_line の先頭は `_style_line` が tempo を置くため full_style では false positive になる。
+    # Styles 第 1 行の先頭は `_style_line` が tempo を置くため full_style では false positive になる。
     genre_line = suno.get("genre_line", "")
     if genre_line:
         report.warnings.extend(validate_5_element_order(genre_line))
 
     entries: list[dict] = []
     for pattern in resolved.patterns:
-        for name, scene, lyrics_source in zip(
+        for name, scene, lyrics_source, style_line in zip(
             pattern.entry_names,
             pattern.scenes,
             pattern.lyrics_by_scene,
+            pattern.style_lines,
             strict=True,
         ):
-            full_style = f"{pattern.style_line}\n{scene}"
+            full_style = f"{style_line}\n{scene}"
 
             # Quality rules: Style テキストの検証 (#904)
             # style_char_limit と banned_artists は完成形の full_style を検証する。
             # 5 要素順序チェックは genre_line（ユーザーが config に書く部分）を検証する。
-            # pattern.style_line の先頭は `_style_line` が tempo を置くため、
+            # Styles 第 1 行の先頭は `_style_line` が tempo を置くため、
             # full_style での先頭テンポ検知は false positive になる。
             report.warnings.extend(validate_style_char_limit(full_style, limit=style_char_limit))
             report.errors.extend(validate_banned_artists(full_style, banned_artists))
@@ -496,6 +687,14 @@ def build_prompt_entries(patterns_path: Path) -> list[dict]:
             # (gating は resolve 段で `key in override` 済み)。
             entry.update(resolved.advanced_json_fields)
             entries.append(entry)
+
+    style_counts = Counter(entry["style"] for entry in entries)
+    for style_text, count in style_counts.items():
+        if count > 1:
+            duplicated_names = ", ".join(e["name"] for e in entries if e["style"] == style_text)
+            report.warnings.append(
+                f"Duplicate Style text across {count} entries ({duplicated_names}): {style_text.splitlines()[0]}"
+            )
 
     # Quality report: エラーがあれば fail-loud、警告は stderr に出力
     if report.has_warnings:
@@ -531,7 +730,11 @@ def main():
 
     json_path = patterns_path.parent / SUNO_PROMPTS_JSON_FILENAME
     entries = build_prompt_entries(patterns_path)
-    json_path.write_text(json.dumps(entries, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    payload = {
+        "entries": entries,
+        "duration_filter": _duration_filter_from_config(load_skill_config("suno")),
+    }
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Generated: {json_path}")
 
 

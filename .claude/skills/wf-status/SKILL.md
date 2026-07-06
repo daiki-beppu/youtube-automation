@@ -57,7 +57,8 @@ phase 値と日本語ラベル:
 `prepared` の場合は `assets` フラグで詳細表示:
 - `assets.raw_master = null` + `music_engine = suno` → 「Suno 作成待ち」
 - `assets.raw_master = null` + `music_engine = lyria` → 「Lyria 生成待ち（/wf-next で開始）」
-- `assets.raw_master != null` + `assets.master_audio = null` → 「ミキシング+マスタリング待ち」
+- `assets.raw_master != null` + `assets.master_audio = null` + `load_config().workflow.wf_next.skip_manual_mastering = true` → 「raw master 直採用待ち（/wf-next で mastered へ進行）」
+- `assets.raw_master != null` + `assets.master_audio = null` + `load_config().workflow.wf_next.skip_manual_mastering = false` → 「ミキシング+マスタリング待ち」
 
 詳細表示（コレクション1つの場合 or ユーザーが指定した場合）:
 ```
@@ -65,6 +66,8 @@ phase 値と日本語ラベル:
 テーマ: late-night-jazz
 音楽エンジン: suno
 フェーズ: prepared（制作中）
+ディレクトリ骨格: ✅ OK
+                （欠落時: ⚠️ 01-master 欠落 — `uv run yt-collection-preflight <dir名> --fix` で補完）
 
 素材状況:
   サムネイル:      ✅
@@ -75,6 +78,8 @@ phase 値と日本語ラベル:
   動画:           ❌
   概要欄:         ❌
 ```
+
+ディレクトリ骨格行は `uv run yt-collection-preflight <dir名>`（`--fix` なし = 読み取り専用）の結果で判定する（#1494）。欠落があっても `/wf-status` からは補完しない — `--fix` 実行はユーザーまたは `/wf-next` に委ねる。
 
 ### 旧スキーマ（v1）の表示
 

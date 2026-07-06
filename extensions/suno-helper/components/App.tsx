@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 
-import { DEFAULT_URL, DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
+import { DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
+import {
+  buildInitialPatternSelection,
+  reconcilePatternSelection,
+  selectedEntryCount as countSelectedEntries,
+} from "../lib/pattern-selection";
+import { buildSelectedEntriesRunOverrides } from "../lib/run-overrides";
 import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../lib/storage";
-import { buildInitialPatternSelection, PatternList, reconcilePatternSelection } from "./PatternList";
+import { PatternList } from "./PatternList";
 import { useSunoRunner } from "./useSunoRunner";
 
 // 実行モード selector の表示順 (#875)。Fast → Balanced → Safe で速度順に並べる。
@@ -15,6 +21,7 @@ export function App() {
   const {
     url,
     setUrl,
+    serverSources,
     collections,
     selectedCollectionId,
     selectCollection,
@@ -26,12 +33,6 @@ export function App() {
     canRun,
     isRunning,
     playlistName,
-    rangeMode,
-    setRangeMode,
-    rangeStart,
-    setRangeStart,
-    rangeEnd,
-    setRangeEnd,
     speedPresetId,
     setSpeedPreset,
     resumeBanner,
@@ -96,20 +97,48 @@ export function App() {
 
   const resolvedSelectedEntries =
     selectedEntries.length === entries.length ? selectedEntries : buildInitialPatternSelection(entries, itemStates);
+  const selectedEntryCount = countSelectedEntries({
+    selectedEntries: resolvedSelectedEntries,
+    itemStates,
+    entryCount: entries.length,
+  });
+  const canRunSelectedEntries = canRun && selectedEntryCount > 0;
+  const runButtonLabel =
+    entries.length > 0 && selectedEntryCount === 0
+      ? "実行対象を選択"
+      : entries.length > 0 && selectedEntryCount < entries.length
+        ? `選択した${selectedEntryCount}件を連続実行`
+        : "全パターンを連続実行";
 
+  const runSelectedEntries = (): void => {
+    if (selectedEntryCount === 0) {
+      return;
+    }
+    void run(
+      buildSelectedEntriesRunOverrides({
+        selectedEntries: resolvedSelectedEntries,
+        itemStates,
+        entryCount: entries.length,
+      }),
+    );
+  };
   return (
     <div className="flex flex-col gap-3 p-3 text-gray-900">
       <h1 className="text-base font-semibold">Suno Helper</h1>
 
       <label className="flex flex-col gap-1 text-sm">
-        サーバー URL
-        <input
-          type="text"
+        ローカル配信元
+        <select
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder={DEFAULT_URL}
           className="rounded border border-gray-300 px-2 py-1"
-        />
+        >
+          {serverSources.map((source) => (
+            <option key={source.url} value={source.url}>
+              {source.label} - {source.url}
+            </option>
+          ))}
+        </select>
       </label>
 
       <label className="flex flex-col gap-1 text-sm">
@@ -193,46 +222,6 @@ export function App() {
       )}
 
       <fieldset className="flex flex-col gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
-        <legend className="px-1 text-xs text-gray-600">実行範囲</legend>
-        <label className="flex items-center gap-2">
-          <input type="radio" name="range-mode" checked={rangeMode === "all"} onChange={() => setRangeMode("all")} />
-          全パターン
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="radio"
-            name="range-mode"
-            checked={rangeMode === "range"}
-            onChange={() => setRangeMode("range")}
-          />
-          範囲指定
-        </label>
-        {rangeMode === "range" && (
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min={1}
-              value={rangeStart}
-              onChange={(e) => setRangeStart(e.target.value)}
-              placeholder="開始"
-              aria-label="開始 entry"
-              className="w-20 rounded border border-gray-300 px-2 py-1"
-            />
-            <span className="text-gray-500">〜</span>
-            <input
-              type="number"
-              min={1}
-              value={rangeEnd}
-              onChange={(e) => setRangeEnd(e.target.value)}
-              placeholder="終了 (省略可)"
-              aria-label="終了 entry"
-              className="w-28 rounded border border-gray-300 px-2 py-1"
-            />
-          </div>
-        )}
-      </fieldset>
-
-      <fieldset className="flex flex-col gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
         <legend className="px-1 text-xs text-gray-600">実行モード</legend>
         {SPEED_PRESET_ORDER.map((id) => {
           const preset = SPEED_PRESETS[id];
@@ -279,11 +268,11 @@ export function App() {
         </button>
         <button
           type="button"
-          onClick={() => void run()}
-          disabled={!canRun}
+          onClick={runSelectedEntries}
+          disabled={!canRunSelectedEntries}
           className="flex-1 rounded bg-blue-600 px-2 py-1 text-sm text-white hover:bg-blue-500 disabled:opacity-40"
         >
-          {rangeMode === "range" ? "範囲を連続実行" : "全パターンを連続実行"}
+          {runButtonLabel}
         </button>
         <button
           type="button"

@@ -232,6 +232,40 @@ def test_generated_vocal_prompts_with_default_tracks_per_pattern_verify_successf
     assert "expected_entries=3" in output
 
 
+def test_generated_prompt_envelope_verifies_successfully(channel_dir, tmp_path, monkeypatch, capsys):
+    """Given /suno の現行 envelope 形式 suno-prompts.json
+    When yt-suno-verify を実行する
+    Then entries 配列を読んで検証できる。
+    """
+    write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    collection = tmp_path / "collection"
+    docs = docs_dir(collection)
+    write_patterns(docs, mode="instrumental", scenes=["scene one", "scene two"], tracks=4)
+    names = prompt_names(mode="instrumental", scenes_count=2)
+    entries = [
+        {"name": name, "style": f"slow, lo-fi jazz,\nscene {index}", "lyrics": ""}
+        for index, name in enumerate(names, 1)
+    ]
+    (docs / "suno-prompts.json").write_text(
+        json.dumps(
+            {
+                "entries": entries,
+                "duration_filter": {"min_sec": 60, "max_sec": 300},
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    code = run_verify(monkeypatch, collection)
+    output = capsys.readouterr().out
+
+    assert code == 0
+    assert "mode=instrumental" in output
+    assert "prompt_entries=2" in output
+
+
 def test_vocal_prompt_entry_count_uses_scene_variations(channel_dir, tmp_path, monkeypatch, capsys):
     """Given patterns は 2 scene variations だが prompts は 1 entry
     When yt-suno-verify を実行する

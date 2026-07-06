@@ -14,7 +14,7 @@ from youtube_automation.utils.descriptions_md import (
     extract_descriptions_md_section,
 )
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.preflight_checks import check_title_duplicate_warnings
+from youtube_automation.utils.preflight_checks import check_title_codepoint_limit, check_title_duplicate_warnings
 
 
 def extract_section(text: str, header: str) -> str | None:
@@ -82,6 +82,12 @@ def main(argv: list[str] | None = None) -> int:
         title = read_descriptions_title(collection_dir)
     else:
         raise SystemExit("collection or --title is required")
+
+    # Upload preflight と同じ YouTube タイトル上限を、duplicate warning より先に fail-loud する。
+    if msg := check_title_codepoint_limit(title):
+        print(f"❌ {msg}")
+        print("→ RHS の修飾語を削って短縮してください（用途語・尺表記・テーマ語は残す）。")
+        return 1
 
     try:
         config = load_config()

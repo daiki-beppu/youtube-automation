@@ -74,11 +74,13 @@ uv run yt-comments-reply --dry-run --export-candidates --json --limit 5 > /tmp/c
 uv run yt-comments-reply --dry-run --agent-replies-file /tmp/comment-replies.json --limit 5
 ```
 
-出力の確認ポイント:
-- `返信候補` が期待件数になっているか
-- `reply` 欄の Agent 生成文がチャンネル persona とコメント言語に合っているか
-- `skipped` に `already_replied` / `ng_word` / `reply_contains_ng_word` があるかを確認
-- `agent_reply_missing` が出た場合は `/tmp/comment-replies.json` に該当 `comment_id` の返信がない
+出力の確認ポイント(**全項目 PASS の場合のみ** Phase 5 へ進む):
+- [ ] `返信候補` が期待件数になっている
+- [ ] `reply` 欄の Agent 生成文がチャンネル persona とコメント言語に合っている
+- [ ] `skipped` の内訳が想定どおりである(`already_replied` / `ng_word` / `reply_contains_ng_word` 以外の予期しない skip がない)
+- [ ] `agent_reply_missing` が出ていない(出た場合は `/tmp/comment-replies.json` に該当 `comment_id` の返信を追加してから再実行)
+
+1 項目でも FAIL なら返信文を修正して dry-run(Phase 4)を再実行する。FAIL のまま Phase 5 に進んではならない。
 
 ## 設定スキーマ
 
@@ -106,6 +108,13 @@ uv run yt-comments-reply --dry-run --agent-replies-file /tmp/comment-replies.jso
 - `comments.rules`: 後方互換のため残っていても読み込まれるが、返信対象判定・provider 解決では無視される
 - `fallback_on_error`: `skip` / `retry`
 - **破壊的変更**: 旧 `comments.generator.type`、`comments.templates`、`fallback_on_error: "template"` は廃止。`comments.rules[].template_key` / `comments.rules[].generator` は互換で読み捨てられる
+
+### 承認ゲート: apply 実行前の確認
+
+Phase 4 の確認ポイントが全項目 PASS になったら、Phase 5(apply)実行前に必ずユーザーの承認を取る。
+
+- **Claude Code**: AskUserQuestion で dry-run 結果の要約(返信候補件数・skipped 内訳・代表的な reply_text 数件)を提示し、「投稿する」「キャンセル」の明示 2 択で確認する。承認されるまで Phase 5 を絶対に実行しない
+- **AskUserQuestion 非対応環境(Codex 等)**: dry-run 結果の要約をテキストで提示し、ユーザーからの明示的な承認発言を待つ。無応答・曖昧な返答のまま Phase 5 に進んではならない
 
 ### Phase 5: apply で反映
 

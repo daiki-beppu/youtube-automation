@@ -84,8 +84,14 @@ def load_prompt_entries(prompts_path: Path) -> tuple[ArtifactEntries, list[str]]
     raw, issues = _load_json(prompts_path, SUNO_PROMPTS_JSON_FILENAME)
     if raw is None:
         return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), issues
+    if isinstance(raw, Mapping):
+        raw_entries = raw.get("entries")
+        if not isinstance(raw_entries, list):
+            issues.append(f"{SUNO_PROMPTS_JSON_FILENAME} root mapping must contain list field 'entries'")
+            return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), issues
+        raw = raw_entries
     if not isinstance(raw, list):
-        issues.append(f"{SUNO_PROMPTS_JSON_FILENAME} root must be a list of entries")
+        issues.append(f"{SUNO_PROMPTS_JSON_FILENAME} root must be a list of entries or mapping with 'entries'")
         return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), issues
     entries, entry_issues = _prompt_entries_from_json_list(raw)
     issues.extend(entry_issues)
