@@ -113,7 +113,7 @@ class CollectionUploader(
         """スケジュール設定読み込み"""
         default_config = {
             "schedule": {"day1_time": "10:00", "timezone": "Asia/Tokyo"},
-            "upload_settings": {"privacy_status": "public", "category_id": "10"},
+            "upload_settings": {"category_id": "10"},
             "collections_management": {"auto_move_to_live": True},
             "api_limits": {"upload_quota_per_day": 6, "concurrent_uploads": 1, "delay_between_uploads": 5},
         }
@@ -122,6 +122,12 @@ class CollectionUploader(
             try:
                 with open(self.config_path, "r", encoding="utf-8") as f:
                     loaded_config = json.load(f)
+                upload_settings = loaded_config.get("upload_settings")
+                if isinstance(upload_settings, dict) and upload_settings.get("privacy_status") is not None:
+                    logger.warning(
+                        "⚠️  schedule_config.json の upload_settings.privacy_status は参照されません。"
+                        "実効値は config/channel/youtube.json::privacy_status です (#1472)"
+                    )
                 for key, val in loaded_config.items():
                     if isinstance(val, dict) and key in default_config:
                         default_config[key].update(val)
@@ -247,10 +253,13 @@ class CollectionUploader(
         if publish_at:
             print(f"  📅 公開予定: {publish_at}")
         else:
-            print("  📅 公開設定: 即時公開 (public)")
-            # #647: ユーザーが予約投稿の設定をしたつもりで即時公開された FB を受けて、
-            # cadence / publish_time / day1_time が明示設定されているのにスケジュールが
-            # 無効化されているケースを早期に発見できるよう案内する。
+            privacy_status = load_config().youtube.api.privacy_status
+            privacy_label = {"public": "即時公開", "unlisted": "限定公開", "private": "非公開"}.get(
+                privacy_status, privacy_status
+            )
+            print(f"  📅 公開設定: {privacy_label} ({privacy_status})")
+            if privacy_status != "public":
+                print("     └ config/channel/youtube.json::privacy_status を反映")
             looks_like_schedule_intent = any(schedule_cfg.get(k) for k in ("cadence", "publish_time", "day1_time"))
             if looks_like_schedule_intent and schedule_cfg.get("auto_schedule_enabled") is False:
                 print(

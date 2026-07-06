@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(upload)`: `yt-upload-collection --plan` の公開設定表示が schedule 無効時に固定「即時公開 (public)」となり実効 privacy_status と乖離する問題を修正。実効値（`config/channel/youtube.json::privacy_status`）を反映して public / unlisted / private を正しく表示する。あわせて、どこからも参照されていなかった `schedule_config.json::upload_settings.privacy_status` をデフォルト設定・`yt-channel-init` テンプレート・`schedule-template.json` から撤去して設定箇所を `youtube.json::privacy_status` に一本化し、既存の schedule_config.json に残存する場合は警告ログで案内する（#1472）
 - `fix(upload)`: 単一言語チャンネル（`supported_languages` が 1 言語以下）で `yt-populate-scene-phrases` は no-op なのに upload preflight / metadata audit / localizations 生成が `scene_phrases` を必須要求してエラー停止する矛盾を解消。「scene_phrases が必要か」の判定を `preflight_checks.requires_scene_phrases()` に一本化し、単一言語では preflight・audit のチェックをスキップ、`generate_localizations()` は空 dict を返す（デフォルト言語のタイトル・概要欄は snippet 側で供給済みのため情報損失なし）。これにより populate → upload の通し実行が手動修正なしで成功する（#1470）
 - `fix(upload)`: upload preflight で `workflow-state.json` の存在と JSON parse を単一言語チャンネルでも常時検証するようにし、`scene_phrases` 完全性チェックだけを多言語チャンネル限定にした。`/metadata-audit` と `/wf-new` の skill 手順も単一言語では翻訳 JSON 不要、多言語では `scene_phrases` 必須という契約に揃えた（#1470）
 - `fix(upload)`: metadata generator の `workflow-state.json` 読み込みも fail-loud に揃え、単一言語チャンネルでも壊れた `workflow-state.json` を localizations 空 dict の成功扱いで見逃さないようにした。`yt-populate-scene-phrases` の collection 名拒否テストに空・`.`・`..`・backslash 入力を追加し、利用者向け `scene_phrases.md` のエラーハンドリング表も単一言語 no-op / 多言語必須を明示した（#1470）

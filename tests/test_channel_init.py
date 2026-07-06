@@ -252,7 +252,7 @@ def test_main_creates_full_package_files_when_target_is_empty(tmp_path):
 
     schedule = _read_json(tmp_path / "config" / "schedule_config.json")
     assert schedule["upload_settings"]["category_id"] == "10"
-    assert schedule["upload_settings"]["privacy_status"] == "private"
+    assert "privacy_status" not in schedule["upload_settings"]
 
 
 def test_main_does_not_generate_distrokid_json_by_default(tmp_path, monkeypatch):

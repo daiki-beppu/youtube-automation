@@ -138,8 +138,8 @@ description: "Use when 既存コレクション（collections/planning/）を一
    - `assets.master_video`, `assets.description` を更新
 3. **アップロード承認ゲート 3-B（`approval_gates.upload = true` のとき）**:
    - 並列 A 完了直後、ユーザーに公開方法を提示する前に必ず `uv run yt-upload-collection --plan [-c <collection-name>]` を実行し、`config/schedule_config.json` / `config/channel/youtube.json` を反映した実際の公開タイミングを確定する
-   - plan 結果が `📅 公開設定: 即時公開 (public)` の場合だけ「即時公開」と表現する。`📅 公開予定: <日時>` が出た場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の予約時刻を AskUserQuestion の文面に含める
-   - `/video-upload` を呼ぶ前に AskUserQuestion で「YouTube にアップロード + live 移行してよいか」を確認する。このとき、plan 結果に基づく公開タイミング（即時公開または予約公開日時）を必ず明示する
+   - plan 結果が `📅 公開設定: 即時公開 (public)` の場合だけ「即時公開」と表現する。`📅 公開設定: 限定公開 (unlisted)` / `📅 公開設定: 非公開 (private)` が出た場合は、その公開範囲でアップロードされることを AskUserQuestion の文面に含める。`📅 公開予定: <日時>` が出た場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の予約時刻を AskUserQuestion の文面に含める
+   - `/video-upload` を呼ぶ前に AskUserQuestion で「YouTube にアップロード + live 移行してよいか」を確認する。このとき、plan 結果に基づく公開タイミングまたは公開範囲（即時公開 / 限定公開 / 非公開 / 予約公開日時）を必ず明示する
    - 承認されたら次ステップへ進む。却下されたら `phase` を `mastered` のままにして停止し、ガイダンス「準備が整ったら `/wf-next` を再実行してください」を表示
    - `approval_gates.upload = false` のときは確認なしでそのまま進む（従来の全自動挙動）
 4. **初投稿プレイリスト初期化**:
