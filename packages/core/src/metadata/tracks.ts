@@ -66,6 +66,7 @@ export interface TimestampTrack {
   readonly patternKey?: string | null;
   readonly timestamp: string;
   readonly title: string;
+  readonly durationSec?: number;
 }
 
 /** テーマ見出し行の装飾（`section_headers.theme_inline` 由来）。 */
@@ -74,31 +75,71 @@ export interface ThemeInline {
   readonly suffix: string;
 }
 
+/** 複数ループ展開のオプション。 */
+export interface TimestampLoopOptions {
+  readonly loops?: number;
+  readonly crossfadeSec?: number;
+}
+
+const formatTimestamp = (seconds: number): string => {
+  const total = Math.max(0, Math.trunc(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, "0")}:${secs
+      .toString()
+      .padStart(2, "0")}`;
+  }
+  return `${minutes}:${secs.toString().padStart(2, "0")}`;
+};
+
 /**
  * 構造化トラック列を YouTube 概要欄用テキストへ整形する。
  *
  * pattern_key の切り替わりごとにテーマ見出し行を挿入する。見出し行は
  * YouTube チャプター仕様（timestamps が strictly ascending）を壊さないよう
- * leading timestamp を載せない。トラックが無ければ空文字。
+ * leading timestamp を載せない。`loops` が 2 以上ならトラック列を繰り返し、
+ * 2 周目以降の開始秒は `durationSec - crossfadeSec` で連続計算する。
+ * トラックが無ければ空文字。
  */
 export const buildTimestampsText = (
   tracks: readonly TimestampTrack[],
   themeNames: Readonly<Record<string, string>>,
-  themeInline: ThemeInline
+  themeInline: ThemeInline,
+  options: TimestampLoopOptions = {}
 ): string => {
   if (tracks.length === 0) {
     return "";
   }
+  const loops = options.loops ?? 1;
+  if (loops < 1) {
+    throw new Error(`loops must be >= 1: ${loops}`);
+  }
+  const crossfadeSec = options.crossfadeSec ?? 1;
   const lines: string[] = [];
-  let lastPattern: string | null = null;
-  for (const track of tracks) {
-    const pattern = track.patternKey ?? null;
-    if (pattern && pattern !== lastPattern) {
-      const label = themeNames[pattern] ?? `Pattern ${pattern.toUpperCase()}`;
-      lines.push(`${themeInline.prefix}${label}${themeInline.suffix}`);
-      lastPattern = pattern;
+  let currentTime = 0;
+  for (let loopIndex = 1; loopIndex <= loops; loopIndex += 1) {
+    let lastPattern: string | null = null;
+    for (const track of tracks) {
+      const timestamp =
+        loopIndex === 1 ? track.timestamp : formatTimestamp(currentTime);
+      const pattern = track.patternKey ?? null;
+      if (pattern && pattern !== lastPattern) {
+        const label = themeNames[pattern] ?? `Pattern ${pattern.toUpperCase()}`;
+        lines.push(`${themeInline.prefix}${label}${themeInline.suffix}`);
+        lastPattern = pattern;
+      }
+      lines.push(`${timestamp} ${track.title}`);
+      if (loops > 1) {
+        if (track.durationSec === undefined) {
+          throw new Error("durationSec is required when loops > 1");
+        }
+        currentTime = Math.trunc(
+          currentTime + track.durationSec - crossfadeSec
+        );
+      }
     }
-    lines.push(`${track.timestamp} ${track.title}`);
   }
   return lines.join("\n");
 };
