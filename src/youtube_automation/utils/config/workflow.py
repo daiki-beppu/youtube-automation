@@ -24,9 +24,17 @@ class ApprovalGates:
 
 @dataclass(frozen=True)
 class WfNext:
-    """`/wf-next` 関連の設定（`wf_next` セクション）."""
+    """`/wf-next` 関連の設定（`wf_next` セクション）.
+
+    - `skip_manual_mastering`: `True` のとき、`prepared` フェーズ 2-B（マスター音源検出）で
+      `01-master/` に raw master と別の最終マスター候補が見つからなくても、
+      `assets.raw_master` をそのまま `assets.master_audio` として採用し
+      `phase: "mastered"` へ進む（raw=final 運用）。既定 `False` は従来通り
+      ユーザーによる最終マスター配置を待って停止する。
+    """
 
     approval_gates: ApprovalGates = field(default_factory=ApprovalGates)
+    skip_manual_mastering: bool = False
 
 
 @dataclass(frozen=True)

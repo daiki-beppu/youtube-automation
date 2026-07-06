@@ -168,6 +168,7 @@ async function loadContentScriptWithPlaylistRows(
     resolveAdvancedFields: vi.fn(() => ({})),
     resolveFields: vi.fn(() => ({ style: {} as HTMLTextAreaElement, lyrics: null, title: null })),
     resolveGenerateButton: vi.fn(() => ({ click: vi.fn() }) as unknown as HTMLButtonElement),
+    setLyricsValue: vi.fn(() => Promise.resolve()),
     setNativeValue: vi.fn(),
     sleep: vi.fn(() => Promise.resolve()),
     waitForCaptchaClear: vi.fn(() => Promise.resolve()),

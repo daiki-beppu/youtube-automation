@@ -39,6 +39,7 @@ import {
   resolveAdvancedFields,
   resolveFields,
   resolveGenerateButton,
+  setLyricsValue,
   setNativeValue,
   sleep,
   waitForCaptchaClear,
@@ -325,7 +326,7 @@ export default defineContentScript({
       setNativeValue(style, entry.style);
       if (lyrics) {
         // 空文字でも上書きする。instrumental パターン (entry.lyrics === "") のとき前パターンの歌詞を残さない。
-        setNativeValue(lyrics, entry.lyrics);
+        await setLyricsValue(lyrics, entry.lyrics);
       } else if (entry.lyrics) {
         // 歌詞があるのに Lyrics 欄が見つからないのは設定不整合。silent に飛ばさず停止する。
         // 設定不整合は全 entry で再発するため fatal（entry retry の対象外）。
