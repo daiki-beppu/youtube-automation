@@ -5,12 +5,12 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_oxfmt_hook_allows_unmatched_patterns_without_copying_ignore_patterns() -> None:
+def test_oxfmt_hook_allows_unmatched_patterns_and_syncs_ignore_excludes() -> None:
     config = yaml.safe_load((ROOT / "lefthook.yml").read_text(encoding="utf-8"))
     oxfmt = config["pre-commit"]["commands"]["oxfmt"]
 
     assert "--no-error-on-unmatched-pattern" in oxfmt["run"]
-    assert "poc/**" not in oxfmt.get("exclude", [])
+    assert "poc/**" in oxfmt.get("exclude", [])
 
 
 def test_oxfmt_config_ignores_poc_directory() -> None:

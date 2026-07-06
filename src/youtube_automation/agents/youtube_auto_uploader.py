@@ -68,6 +68,7 @@ from youtube_automation.agents._uploader_constants import (  # noqa: E402
 from youtube_automation.utils.channel_settings import build_upload_status_flags  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator  # noqa: E402
+from youtube_automation.utils.preflight_checks import check_title_codepoint_limit  # noqa: E402
 from youtube_automation.utils.publish_schedule import (  # noqa: E402
     resolve_default_publish_at as _resolve_default_publish_at,
 )
@@ -144,10 +145,10 @@ class YouTubeAutoUploader(
         Returns:
             str: アップロードされた動画のID（失敗時はNone）
         """
-        # タイトル長バリデーション（YouTube上限100文字）
+        # タイトル長バリデーション（YouTube上限100 codepoint）
         title = metadata.get("title", "")
-        if len(title) > 100:
-            raise ValueError(f"タイトルが100文字を超えています（{len(title)}文字）: {title}")
+        if msg := check_title_codepoint_limit(title):
+            raise ValueError(msg)
 
         # リクエストボディ作成
         # AI 開示（containsSyntheticMedia）/ 子供向け申告（selfDeclaredMadeForKids）は
