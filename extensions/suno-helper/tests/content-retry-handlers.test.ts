@@ -269,7 +269,11 @@ describe('content onMessage("retryPlaylist"): payload contract', () => {
     ["collectionId 欠落", { collectionId: undefined }, /retryPlaylist\.collectionId/],
     ["playlistName 欠落", { playlistName: undefined }, /retryPlaylist\.playlistName/],
     ["durationFilter が不正", { durationFilter: { min_sec: true, max_sec: 300 } }, /retryPlaylist\.durationFilter/],
-    ["durationFilter が min > max", { durationFilter: { min_sec: 301, max_sec: 300 } }, /retryPlaylist\.durationFilter/],
+    [
+      "durationFilter が min > max",
+      { durationFilter: { min_sec: 301, max_sec: 300 } },
+      /retryPlaylist\.durationFilter/,
+    ],
     [
       "submittedClipIdsAreDurationFiltered が非 boolean",
       { submittedClipIdsAreDurationFiltered: "true" },
