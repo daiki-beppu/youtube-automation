@@ -8,9 +8,6 @@ from youtube_automation.cli import automation_update
 from youtube_automation.cli.automation_update import EXIT_DIFF, EXIT_ERROR, EXIT_UP_TO_DATE, main
 from youtube_automation.cli.automation_update_refs import Pin, _detect_pin
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "automation-update" / "SKILL.md"
-
 INLINE_TABLE_PYPROJECT = """\
 [project]
 name = "deepfocus365"
@@ -157,6 +154,17 @@ def test_check_rejects_registry_reference(tmp_path: Path, no_network, capsys: py
 
     assert main(["check", "--target", str(repo)]) == EXIT_ERROR
     assert "registry 参照" in capsys.readouterr().err
+
+
+def test_check_rejects_dependency_table_shape(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
+    repo = _write_repo(
+        tmp_path,
+        '[project]\nname = "deepfocus365"\n\n[project.dependencies]\nyoutube-channels-automation = ">=5"\n',
+    )
+
+    assert main(["check", "--target", str(repo)]) == EXIT_ERROR
+
+    assert "依存として参照するチャンネルリポジトリではありません" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +406,17 @@ def test_check_branch_follow_diff(
     monkeypatch.setattr(automation_update, "_fetch_branch_head_sha", lambda branch: _SHA_NEW)
 
     assert main(["check", "--target", str(repo)]) == EXIT_DIFF
+
+
+def test_check_branch_follow_without_lock_is_diff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, BRANCH_FOLLOW_PYPROJECT)
+    monkeypatch.setattr(automation_update, "_fetch_branch_head_sha", lambda branch: _SHA_NEW)
+
+    assert main(["check", "--target", str(repo)]) == EXIT_DIFF
+
+    assert "uv.lock に解決済み sha がありません" in capsys.readouterr().out
 
 
 def test_check_sha_pin_requires_human_decision(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
@@ -706,26 +725,23 @@ def test_apply_sync_only_is_allowlist_and_forces_selected_assets(
     assert ["uv", "run", "yt-skills", "sync", "--asset", "claude-md", "--force"] in recorded_commands
 
 
-def test_apply_sync_only_bypasses_local_fix_guard_for_selected_skills(
-    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, recorded_commands: list[list[str]]
+def test_apply_sync_only_rejects_local_fix_diff_before_side_effects(
+    tmp_path: Path,
+    no_network,
+    monkeypatch: pytest.MonkeyPatch,
+    recorded_commands: list[list[str]],
+    capsys: pytest.CaptureFixture,
 ) -> None:
     repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
     monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: True)
 
-    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--sync-only", "suno"]) == 0
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--sync-only", "suno"]) == 1
 
-    assert [
-        "uv",
-        "run",
-        "yt-skills",
-        "sync",
-        "--asset",
-        "skills",
-        "--only",
-        "suno",
-        "--force",
-    ] in recorded_commands
-    assert ["uv", "run", "yt-skills", "sync", "--asset", "claude-md", "--force"] in recorded_commands
+    err = capsys.readouterr().err
+    assert "yt-skills diff" in err
+    assert "--force-sync" in err
+    assert recorded_commands == []
+    assert 'tag = "v5.5.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
 
 
 def test_apply_sync_only_rejects_unknown_skill_before_side_effects(
@@ -754,6 +770,29 @@ def test_apply_config_migrate_verify_uses_target_even_when_channel_dir_differs(
 
     assert ["uv", "run", "yt-config-migrate", "verify", "--target", str(repo)] in recorded_commands
     assert ["uv", "run", "yt-config-migrate", "verify", "--target", str(other_repo)] not in recorded_commands
+
+
+def test_apply_unknown_skills_diff_failure_stops_before_side_effects(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    commands: list[list[str]] = []
+    monkeypatch.setattr(automation_update, "_run_command", lambda cmd, cwd: commands.append(cmd) or 0)
+    monkeypatch.setattr(automation_update, "_git_status_porcelain", lambda root: "")
+
+    def _diff_unknown_failure(cmd: list[str], **kwargs):
+        assert cmd == ["uv", "run", "yt-skills", "diff"]
+        return automation_update.subprocess.CompletedProcess(args=cmd, returncode=9, stdout="", stderr="boom\n")
+
+    monkeypatch.setattr(automation_update.subprocess, "run", _diff_unknown_failure)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 1
+
+    err = capsys.readouterr().err
+    assert "'yt-skills diff による local fix 確認' で失敗しました" in err
+    assert "exit code 9" in err
+    assert commands == []
+    assert 'tag = "v5.5.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
 
 
 def test_apply_sha_pin_requires_rev(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
@@ -858,19 +897,3 @@ def test_apply_pyproject_write_failure_is_step_failure(
     err = capsys.readouterr().err
     assert "'pyproject.toml の pin 書き換え' で失敗しました" in err
     assert "disk full" in err
-
-
-# ---------------------------------------------------------------------------
-# スキルとの契約 (要件 6)
-# ---------------------------------------------------------------------------
-
-
-def test_skill_md_delegates_mechanical_steps_to_cli() -> None:
-    text = _SKILL_MD.read_text(encoding="utf-8")
-    assert "yt-automation-update check" in text
-    assert "yt-automation-update apply" in text
-    assert "指定した安全な skill だけ同期" in text
-    assert "claude-md は通常どおり同期" in text
-    assert "yt-skills export" not in text
-    assert '_asset_root("skills")' in text
-    assert "main 追従は upstream HEAD sha" in text

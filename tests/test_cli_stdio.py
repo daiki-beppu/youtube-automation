@@ -59,6 +59,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-thumbnail-check": "youtube_automation.scripts.thumbnail_check",
     "yt-thumbnail-compare": "youtube_automation.scripts.compare_thumbnails",
     "yt-thumbnail-correlate": "youtube_automation.scripts.thumbnail_correlate",
+    "yt-thumbnail-text": "youtube_automation.scripts.thumbnail_text",
     "yt-title-duplicate-check": "youtube_automation.scripts.title_duplicate_check",
     "yt-video-analyze": "youtube_automation.scripts.video_analyze",
     "yt-vote-log": "youtube_automation.scripts.vote_log",

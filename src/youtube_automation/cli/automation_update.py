@@ -289,13 +289,13 @@ def cmd_apply(args: argparse.Namespace) -> int:
             )
 
     def step_local_fix_guard() -> None:
-        if args.force_sync or args.sync_only:
+        if args.force_sync:
             return
         if _skills_diff_has_changes(root):
             raise _StepFailed(
                 "yt-skills diff で local fix 差分を検出しました。"
                 "--force-sync で upstream 版へ上書きするか、"
-                "--sync-only <skill...> で安全に同期する skill だけを指定してください"
+                "local fix を手動解消してから再実行してください"
             )
 
     def step_rewrite() -> None:
@@ -395,7 +395,7 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         default=None,
         metavar="SKILL",
-        help="skills asset を指定スキルのみ同期する（claude-md asset は通常どおり同期）",
+        help="skills asset を指定スキルのみ同期する（claude-md asset も同期するため local fix guard は実行）",
     )
     p_apply.add_argument(
         "--allow-dirty",
