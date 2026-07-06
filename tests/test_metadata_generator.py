@@ -17,10 +17,13 @@ from youtube_automation.utils import metadata_generator as metadata_generator_mo
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.metadata_generator import (
+    LOCALIZED_TITLE_PLACEHOLDERS,
     BAHMetadataGenerator,
     SceneTitleViolation,
+    _localized_title_values,
     format_scene_title_violations,
     format_title_template,
+    validate_localizations_title_templates,
     validate_scene_phrases,
 )
 from youtube_automation.utils.time_utils import format_duration_display
@@ -1238,6 +1241,41 @@ class TestTitleTemplateUnknownPlaceholder:
             "{scene_phrase} | {activities}", {"scene_phrase": "Rainy", "activities": "Study"}, context="ctx"
         )
         assert out == "Rainy | Study"
+
+    # --- localizations title_template 検証（#1471） -------------------------
+
+    def test_localized_title_values_keys_match_allowed_placeholders(self):
+        """uploader が渡す values のキー集合と許可リスト定数の drift を防ぐ。"""
+        values = _localized_title_values(scene_phrase="Rainy", activities="Study", scene_emoji="🌧")
+        assert set(values) == set(LOCALIZED_TITLE_PLACEHOLDERS)
+
+    def test_validate_localizations_title_templates_detects_unknown_placeholder(self):
+        """channel-import が生成した `{axis_label}` 入り template を生成時に検出できる。"""
+        loc = {
+            "languages": {
+                "en": {"title_template": "{axis_label} - {scene_phrase}"},
+                "ja": {"title_template": "{scene_phrase}（{activities}）"},
+            }
+        }
+        errors = validate_localizations_title_templates(loc)
+        assert len(errors) == 1
+        assert "axis_label" in errors[0]
+        assert "en" in errors[0]
+        assert "scene_phrase" in errors[0]  # 許可キー一覧の提示
+
+    def test_validate_localizations_title_templates_accepts_allowed_placeholders(self):
+        loc = {
+            "languages": {
+                "en": {"title_template": "{scene_phrase} | Jazz BGM ({activities}) {scene_emoji}"},
+            }
+        }
+        assert validate_localizations_title_templates(loc) == []
+
+    def test_validate_localizations_title_templates_tolerates_missing_sections(self):
+        # languages 無し / title_template 無し / 非 dict 言語エントリは検証対象外として黙って通す
+        assert validate_localizations_title_templates({}) == []
+        assert validate_localizations_title_templates({"languages": {"en": {}}}) == []
+        assert validate_localizations_title_templates({"languages": {"en": "broken"}}) == []
 
     # --- _generate_title 経路 ---------------------------------------------
 

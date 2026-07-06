@@ -245,9 +245,17 @@ def cmd_verify(args: argparse.Namespace) -> int:
     os.environ["CHANNEL_DIR"] = str(target)
     try:
         from youtube_automation.utils.config import load_config, reset
+        from youtube_automation.utils.metadata_generator import validate_localizations_title_templates
 
         reset()
         config = load_config()
+        if config.localizations.exists:
+            template_errors = validate_localizations_title_templates(config.localizations.data)
+            if template_errors:
+                print(f"[error] {LOCALIZATIONS_FILENAME}: title_template がアップローダー非対応です", file=sys.stderr)
+                for error in template_errors:
+                    print(f"[error] {error}", file=sys.stderr)
+                return 1
         print(f"OK: ChannelConfig loaded (meta.channel_name={config.meta.channel_name!r})")
         return 0
     except ConfigError as e:

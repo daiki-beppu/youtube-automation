@@ -266,6 +266,41 @@ def test_verify_success(tmp_path, capsys):
     assert "Test Channel" in out
 
 
+def _write_localizations(tmp_path: Path, title_template: str) -> None:
+    loc = {
+        "supported_languages": ["en"],
+        "default_language": "en",
+        "languages": {"en": {"title_template": title_template, "description_opening": "Relaxing music."}},
+    }
+    (tmp_path / "config" / LOCALIZATIONS_FILENAME).write_text(
+        json.dumps(loc, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def test_verify_rejects_disallowed_title_template_placeholder(tmp_path, capsys):
+    """Issue #1471: channel-import 生成の不正 title_template をアップロード前に検出する。"""
+    _write_legacy(tmp_path, _minimal_legacy())
+    assert main(["migrate", "--apply", "--delete-source", "--target", str(tmp_path)]) == 0
+    _write_localizations(tmp_path, "{axis_label} - {scene_phrase}")
+    capsys.readouterr()  # clear
+    rc = main(["verify", "--target", str(tmp_path)])
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "axis_label" in err  # 不正プレースホルダ名
+    assert "scene_phrase" in err  # 許可キー一覧の提示
+
+
+def test_verify_accepts_allowed_title_template_placeholders(tmp_path, capsys):
+    _write_legacy(tmp_path, _minimal_legacy())
+    assert main(["migrate", "--apply", "--delete-source", "--target", str(tmp_path)]) == 0
+    _write_localizations(tmp_path, "{scene_phrase} | Jazz BGM ({activities})")
+    capsys.readouterr()  # clear
+    rc = main(["verify", "--target", str(tmp_path)])
+    out = capsys.readouterr().out
+    assert rc == 0, f"verify failed. output={out}"
+    assert "OK" in out
+
+
 # ----------------------- diff -----------------------
 
 

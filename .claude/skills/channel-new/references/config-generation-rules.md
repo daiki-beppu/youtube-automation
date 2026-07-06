@@ -32,7 +32,7 @@
 
 ## ルート設定ファイル
 
-- `config/localizations.json` — `supported_languages` が scene_phrases / 概要欄多言語版 / YouTube localization メタデータ対象言語の Canonical ソース。2 言語以上の場合のみ `scene_phrases` を必須とし、単一言語チャンネルでは不要。`supported_languages` は多言語チャンネルなら高 CPM 言語（`ja` / `en` / `de`）を推奨、低 CPM 言語（`ko` / `es` / `pt` / `zh-CN` など）は原則追加しない（issue #272）。en-only 運用も可（preflight は `supported_languages` を尊重し、ハードコード必須言語は無い）。**TTP 路線時**は競合の `localizations` エントリ言語を最優先で踏襲する。競合が多言語化していないチャンネル（en 一択など）を TTP 対象にしている場合、自分も同様に絞る選択肢を必ずユーザーに提示する
+- `config/localizations.json` — `supported_languages` が scene_phrases / 概要欄多言語版 / YouTube localization メタデータ対象言語の Canonical ソース。2 言語以上の場合のみ `scene_phrases` を必須とし、単一言語チャンネルでは不要。`languages.<lang>.title_template` に使えるプレースホルダは **`{scene_phrase}` / `{activities}` / `{scene_emoji}` のみ**（アップローダー許可リスト、issue #1471）。content.json の `title.template` 用キー（`{style}` / `{theme}` / `{activity}` / `{duration_display}` / `{axis_label}` 等）を流用しない。生成後は `uv run yt-config-migrate verify` が違反を検出する。`supported_languages` は多言語チャンネルなら高 CPM 言語（`ja` / `en` / `de`）を推奨、低 CPM 言語（`ko` / `es` / `pt` / `zh-CN` など）は原則追加しない（issue #272）。en-only 運用も可（preflight は `supported_languages` を尊重し、ハードコード必須言語は無い）。**TTP 路線時**は競合の `localizations` エントリ言語を最優先で踏襲する。競合が多言語化していないチャンネル（en 一択など）を TTP 対象にしている場合、自分も同様に絞る選択肢を必ずユーザーに提示する
 
 ## 各フィールドの生成ルール
 
