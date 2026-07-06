@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(masterup)`: `masterup/SKILL.md` に残存していた workflow-state.json 旧スキーマ（v1: `music.generated` / `music.approved` / `mp3_count` / `phase: "music-approved"`）の記述を現行スキーマ（v2、`.claude/skills/wf-new/references/schema.md` が正）に合わせて修正した。Step 1 のコレクション特定条件を `assets.music_prompts = true` かつ `assets.raw_master = null`（`/wf-next` の Suno パス前提条件と一致）に修正し、フォールバック運用節（Suno 依存の脆弱性と復旧手段）の手動更新手順、および「完了時の更新」節を `assets.raw_master` への生成ファイル名記録（+ `updated_at` 更新）のみに縮約した。`mp3_count` は v2 に存在せずコード上も未使用と裏取り済みのため削除し、最終マスター確定（`assets.master_audio` への記録・`phase: "mastered"` への遷移）はユーザーのミキシング+マスタリング後に `/wf-next` が検出する責務であり masterup 自身の責務ではないことを明確化した（Step 5.6 の rain layers 節など既に v2 で正しかった箇所は変更なし、コード変更なし）
 - `fix(wf-next)`: raw=final 採用時の `/wf-next` state 更新で `workflow-state.json` / `01-master` / 採用音源の symlink を拒否し、collection 外の state 書き込みや外部音源採用を fail-closed にした。あわせて `approval_gates.upload` の非 boolean 拒否テストを `audio` と同じ契約で固定（#1449）
 - `fix(suno-helper)`: popup のチェック選択実行を旧 range 指定から `indices` payload に切り替え、done/failed 状態を含む選択復元・再実行で絶対 index がずれないようにした。旧 range UI 文言と helper を撤去し、content runner 側は `indices` を `range` より優先して部分実行する（#1267）
 - `fix(suno-lyric)`: `/suno-lyric` がマルチ曲 collection で `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` を全曲一言一句同一のまま出力するのを防ぐため、Workflow に「これらの section も曲ごとの scene / persona で書き分ける」指示を明記し、Validation に曲間セクション重複のセルフチェックと書き分け直し手順を追加。`suno-lyrics.json` の曲間重複を機械検出する `references/check_lyric_duplication.py` を新設（重複検出時は exit 1、#1445）
