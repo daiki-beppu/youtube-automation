@@ -19,6 +19,7 @@
 #        - 静止画/ループのエンコード値・effect・shrink を config/skills/videoup.yaml から取得
 #          (新規 env override は追加しない。キー欠落時は現行の固定値へフォールバック=無回帰)
 #        - shrink.enabled で生成後の容量最適化 re-encode を opt-in 追加
+# v14.1: workflow-state.json::assets.master_audio があれば固定名探索より優先 (#1449)
 #
 # Usage:
 #   bash .claude/skills/videoup/references/generate_videos.sh <collection-path>
@@ -188,20 +189,91 @@ for candidate in "${ASSETS_DIR}/main.png" "${ASSETS_DIR}/main.jpg"; do
     fi
 done
 
+workflow_state_master_audio() {
+    local state_path="${COLLECTION_DIR}/workflow-state.json"
+    if [[ ! -e "$state_path" ]]; then
+        if [[ -L "$state_path" ]]; then
+            echo "ERROR: workflow-state.json is a broken symlink: ${state_path}" >&2
+            return 2
+        fi
+        return 1
+    fi
+    if [[ ! -f "$state_path" ]]; then
+        echo "ERROR: workflow-state.json must be a file: ${state_path}" >&2
+        return 2
+    fi
+    if ! command -v python3 &>/dev/null; then
+        echo "ERROR: python3 is required to read workflow-state.json::assets.master_audio" >&2
+        return 2
+    fi
+    python3 - "$state_path" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+except json.JSONDecodeError as exc:
+    print(f"ERROR: workflow-state.json is invalid JSON: {exc}", file=sys.stderr)
+    sys.exit(2)
+except OSError as exc:
+    print(f"ERROR: workflow-state.json could not be read: {exc}", file=sys.stderr)
+    sys.exit(2)
+
+if not isinstance(data, dict):
+    print("ERROR: workflow-state.json root must be an object", file=sys.stderr)
+    sys.exit(2)
+
+assets = data.get("assets", {}) if "assets" not in data else data["assets"]
+if not isinstance(assets, dict):
+    print("ERROR: workflow-state.json::assets must be an object", file=sys.stderr)
+    sys.exit(2)
+
+value = assets.get("master_audio")
+if value is None or value == "":
+    sys.exit(1)
+if not isinstance(value, str):
+    print("ERROR: workflow-state.json::assets.master_audio must be a string", file=sys.stderr)
+    sys.exit(2)
+print(value)
+PY
+}
+
 # 検出順:
-#   1. `master-mix.{wav,m4a,aac,mp3,flac}` — DAW バウンス・手動配置 (優先)
-#   2. `master.{wav,m4a,aac,mp3,flac}` — `/lyria` / `/masterup` (`yt-generate-master`) の自動生成出力 (#507)
+#   1. `workflow-state.json::assets.master_audio` — `/wf-next` が確定した最終マスター
+#   2. `master-mix.{wav,m4a,aac,mp3,flac}` — DAW バウンス・手動配置
+#   3. `master.{wav,m4a,aac,mp3,flac}` — `/lyria` / `/masterup` (`yt-generate-master`) の自動生成出力 (#507)
 # 拡張子は wav 優先、なければ m4a / aac / mp3 / flac の順
 MASTER_AUDIO=""
-for basename in master-mix master; do
-    for ext in wav m4a aac mp3 flac; do
-        candidate="${MASTER_DIR}/${basename}.${ext}"
-        if [[ -f "$candidate" ]]; then
-            MASTER_AUDIO="$candidate"
-            break 2
-        fi
+STATE_MASTER_AUDIO=""
+workflow_state_status=0
+STATE_MASTER_AUDIO="$(workflow_state_master_audio)" || workflow_state_status=$?
+if [[ "$workflow_state_status" -eq 2 ]]; then
+    exit 1
+fi
+if [[ -n "$STATE_MASTER_AUDIO" ]]; then
+    if [[ "$STATE_MASTER_AUDIO" == */* || "$STATE_MASTER_AUDIO" == *\\* || "$STATE_MASTER_AUDIO" == *..* ]]; then
+        echo "ERROR: workflow-state.json::assets.master_audio must be a filename: ${STATE_MASTER_AUDIO}"
+        exit 1
+    fi
+    candidate="${MASTER_DIR}/${STATE_MASTER_AUDIO}"
+    if [[ ! -f "$candidate" ]]; then
+        echo "ERROR: workflow-state.json::assets.master_audio not found in ${MASTER_DIR}/: ${STATE_MASTER_AUDIO}"
+        exit 1
+    fi
+    MASTER_AUDIO="$candidate"
+else
+    for basename in master-mix master; do
+        for ext in wav m4a aac mp3 flac; do
+            candidate="${MASTER_DIR}/${basename}.${ext}"
+            if [[ -f "$candidate" ]]; then
+                MASTER_AUDIO="$candidate"
+                break 2
+            fi
+        done
     done
-done
+fi
 
 MASTER_OUTPUT="${MASTER_DIR}/${COLLECTION_NAME}-Master.mp4"
 LOOP_TARGET_WIDTH="1920"
@@ -382,7 +454,7 @@ if [[ -z "$VIDEO_BACKGROUND" && -z "$LOOP_VIDEO" ]]; then
     echo "ERROR: No video background found in ${ASSETS_DIR}/ (main.png or main.jpg required; thumbnail.jpg/png is upload-only)"; exit 1
 fi
 if [[ -z "$MASTER_AUDIO" ]]; then
-    echo "ERROR: master-mix.{wav,m4a,aac,mp3,flac} または master.{wav,m4a,aac,mp3,flac} not found in ${MASTER_DIR}/"; exit 1
+    echo "ERROR: workflow-state.json::assets.master_audio, master-mix.{wav,m4a,aac,mp3,flac}, or master.{wav,m4a,aac,mp3,flac} not found in ${MASTER_DIR}/"; exit 1
 fi
 if ! ffprobe -v error "$MASTER_AUDIO" &>/dev/null; then
     echo "ERROR: Corrupted file: $MASTER_AUDIO"; exit 1

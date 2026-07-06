@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -272,6 +273,197 @@ def test_loop_video_background_does_not_require_main_image(tmp_path: Path) -> No
     master_cmd = _master_ffmpeg_command(ffmpeg_log)
     assert "10-assets/loop.mp4" in master_cmd
     assert "10-assets/thumbnail.jpg" not in master_cmd
+
+
+def test_workflow_state_master_audio_takes_priority_over_fixed_names(tmp_path: Path) -> None:
+    """#1449: raw=final の任意ファイル名を `/videoup` でも使える."""
+    collection = _create_collection(tmp_path, master_filename="master-mix.wav")
+    (collection / "01-master" / "master-rain.wav").write_bytes(b"fake-raw-final-audio")
+    (collection / "workflow-state.json").write_text(
+        json.dumps({"assets": {"master_audio": "master-rain.wav"}}),
+        encoding="utf-8",
+    )
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Audio    : master-rain.wav" in result.stdout
+    master_cmd = _master_ffmpeg_command(ffmpeg_log)
+    assert "01-master/master-rain.wav" in master_cmd
+    assert "01-master/master-mix.wav" not in master_cmd
+
+
+@pytest.mark.parametrize(
+    ("state", "message"),
+    [
+        ({"assets": {"master_audio": "../master-rain.wav"}}, "must be a filename"),
+        ({"assets": {"master_audio": "subdir/master-rain.wav"}}, "must be a filename"),
+        ({"assets": {"master_audio": "subdir\\master-rain.wav"}}, "must be a filename"),
+        ({"assets": {"master_audio": "missing.wav"}}, "not found"),
+        ({"assets": {"master_audio": 123}}, "assets.master_audio must be a string"),
+        ({"assets": None}, "assets must be an object"),
+        ({"assets": []}, "assets must be an object"),
+    ],
+)
+def test_workflow_state_master_audio_invalid_values_fail_closed(
+    tmp_path: Path,
+    state: dict,
+    message: str,
+) -> None:
+    """#1449: 壊れた explicit state では固定名探索へ fallback しない."""
+    collection = _create_collection(tmp_path, master_filename="master-mix.wav")
+    (collection / "workflow-state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert message in output
+    assert "Audio    : master-mix.wav" not in output
+    assert not ffmpeg_log.exists()
+
+
+def test_workflow_state_master_audio_malformed_json_fails_closed(tmp_path: Path) -> None:
+    """#1449: workflow-state.json が壊れている場合は別音源で進めない."""
+    collection = _create_collection(tmp_path, master_filename="master-mix.wav")
+    (collection / "workflow-state.json").write_text("{broken", encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "workflow-state.json is invalid JSON" in output
+    assert "Audio    : master-mix.wav" not in output
+    assert not ffmpeg_log.exists()
+
+
+def test_workflow_state_master_audio_directory_fails_closed(tmp_path: Path) -> None:
+    """#1449: workflow-state.json が directory の場合は固定名探索へ fallback しない."""
+    collection = _create_collection(tmp_path, master_filename="master-mix.wav")
+    state_path = collection / "workflow-state.json"
+    state_path.mkdir()
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "workflow-state.json must be a file" in output
+    assert "Audio    : master-mix.wav" not in output
+    assert not ffmpeg_log.exists()
+
+
+def test_workflow_state_master_audio_broken_symlink_fails_closed(tmp_path: Path) -> None:
+    """#1449: broken symlink は未設定扱いせず固定名探索へ fallback しない."""
+    collection = _create_collection(tmp_path, master_filename="master-mix.wav")
+    state_path = collection / "workflow-state.json"
+    try:
+        state_path.symlink_to(collection / "missing-workflow-state.json")
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "workflow-state.json is a broken symlink" in output
+    assert "Audio    : master-mix.wav" not in output
+    assert not ffmpeg_log.exists()
+
+
+def test_workflow_state_master_audio_unreadable_file_fails_closed(tmp_path: Path) -> None:
+    """#1449: 読み取り不能な state は固定名探索へ fallback しない."""
+    collection = _create_collection(tmp_path, master_filename="master-mix.wav")
+    state_path = collection / "workflow-state.json"
+    state_path.write_text(json.dumps({"assets": {"master_audio": "selected.wav"}}), encoding="utf-8")
+    (collection / "01-master" / "selected.wav").write_bytes(b"selected-audio")
+    state_path.chmod(0)
+
+    try:
+        result, ffmpeg_log = _run_generate_videos(
+            tmp_path,
+            "1920,1080,yuv420p,24/1",
+            stream_bitrate_output="5000000",
+            collection=collection,
+        )
+    finally:
+        state_path.chmod(0o644)
+
+    output = result.stdout + result.stderr
+    if result.returncode == 0 and "Audio    : selected.wav" in output:
+        pytest.skip("current user can still read chmod 000 files")
+    assert result.returncode != 0
+    assert "workflow-state.json could not be read" in output
+    assert "Audio    : master-mix.wav" not in output
+    assert not ffmpeg_log.exists()
+
+
+def test_workflow_state_master_audio_non_object_root_fails_closed(tmp_path: Path) -> None:
+    """#1449: workflow-state.json root の shape 不正は固定名探索へ fallback しない."""
+    collection = _create_collection(tmp_path, master_filename="master-mix.wav")
+    (collection / "workflow-state.json").write_text("[]", encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    output = result.stdout + result.stderr
+    assert result.returncode != 0
+    assert "workflow-state.json root must be an object" in output
+    assert "Audio    : master-mix.wav" not in output
+    assert not ffmpeg_log.exists()
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        {},
+        {"assets": {}},
+        {"assets": {"master_audio": None}},
+        {"assets": {"master_audio": ""}},
+    ],
+)
+def test_workflow_state_master_audio_unset_falls_back_to_fixed_names(tmp_path: Path, state: dict) -> None:
+    """#1449: master_audio 未設定だけは従来の固定名探索を維持する."""
+    collection = _create_collection(tmp_path, master_filename="master-mix.wav")
+    (collection / "workflow-state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Audio    : master-mix.wav" in result.stdout
 
 
 def test_loop_video_disabled_uses_textless_main_even_when_loop_exists(tmp_path: Path) -> None:

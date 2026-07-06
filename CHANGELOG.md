@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(wf-next)`: `config/channel/workflow.json::workflow.wf_next.skip_manual_mastering`（default `false`）を新設。`true` のとき `/wf-next` のマスター音源検出（2-B）で `01-master/` に別ファイルが無くても `assets.raw_master` をそのまま `assets.master_audio` として採用し `phase: "mastered"` へ進む（raw=final 運用）。`approval_gates.audio` とは独立で、後方互換（未設定は従来通り停止）。docs/workflow-cheatsheet.md のよくある質問に設定手順を追記（#1449）
+
 ### Changed
 
 - `feat(hooks)`: review 頻出パターンのうち機械検出可能なテスト差分ゼロと広すぎる Any / any 型注釈を lefthook pre-push で検出するゲートを追加。`SKIP_TEST_DIFF=1` でテスト差分警告のみ明示 skip できるようにし、Python 未使用コード検出は既存 Ruff `F` 系継続、TS 未使用 export / dead code は既存 `ts-knip` 継続として docs に採否根拠を記録した（#1510）。その後の review-takt-default 指摘を受け、(1) any-usage-gate のスコープを `src/` / `tests/` / `extensions/` / `packages/` 限定からディレクトリ非依存の全 `*.py` / `*.ts` / `*.tsx` に拡大（`.claude/skills/*/references/*.py` 等も対象化）、(2) Python 側で `from typing import Any` 直接 import 経由の裸 `Any` 使用も検出、(3) test-diff-gate の `extensions/*/lib/*.test.ts` が lib 判定に先取りされテスト差分ありなのに誤警告するバグを修正、(4) test-diff-gate に対応テスト差分ありなら警告しない成功パスの契約テストを追加、(5) lefthook の「同一 hook で use_stdin を持てるコマンドは 1 つ」制約に対応するため test-diff-gate / any-usage-gate を独立コマンドから外し changelog-gate.sh 1 本のエントリポイントに統合、ブランチ削除 push のスキップを 3 ゲート共通にした（#1510、PR #1525 review-takt-default 指摘対応）。再レビューでの追加指摘を受け、(6) Python 側の Any import 検出を 1 行正規表現から `python3`/`ast` ベースに置き換え、複数行の括弧 import と `as` alias も解決できるようにし、(7) TypeScript 側は `: any` 直書きに加え `Array<any>` / `Record<string, any>` 等のジェネリック引数・union / intersection・tuple 要素の型位置 `any` も検出し、英語コメント・文字列リテラル中の "any" は誤検知しないよう型導入記号の直後という制約を追加、(8) `SKIP_CHANGELOG=1` が CHANGELOG チェックのみを省略し test-diff-gate / any-usage-gate は継続する契約テストを追加した（PR #1525 2 回目の review-takt-default 指摘対応）。3 回目の review-takt-default 指摘を受け、any-usage-gate の検出方式を正規表現の継ぎ足しから構造的な解析へ刷新した: Python 側は `.lefthook/pre-push/any_usage_python_resolver.py`（新設）が `ast` でファイルを解析し、`typing.Any` 修飾アクセスと直接 import 経由の裸 `Any`（alias 含む）の両方を実際の参照行番号として解決するため、コメント・docstring・文字列リテラル中の "Any" は AST 上に現れず誤検知しない。TypeScript 側は型エイリアス代入（`type X = any;`）・型アサーション（`value as any`）も検出対象に加え、正規表現で候補行を検出したのち `.lefthook/pre-push/any_usage_ts_line_cleaner.py`（新設）で行コメント・文字列リテラルの中身を除去してから再判定することでコメント・文字列内の "any" 誤検知を防ぐ。あわせて diff の基準点（`origin/main` との merge-base）を changelog-gate.sh で一度だけ解決し `PRE_PUSH_DIFF_BASE` として子ゲートへ export することで、3 スクリプトが個別に基準を再計算する重複を解消した（PR #1525 3 回目の review-takt-default 指摘対応）
@@ -23,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(wf-next)`: raw=final 採用時の `/wf-next` state 更新で `workflow-state.json` / `01-master` / 採用音源の symlink を拒否し、collection 外の state 書き込みや外部音源採用を fail-closed にした。あわせて `approval_gates.upload` の非 boolean 拒否テストを `audio` と同じ契約で固定（#1449）
 - `fix(suno-helper)`: popup のチェック選択実行を旧 range 指定から `indices` payload に切り替え、done/failed 状態を含む選択復元・再実行で絶対 index がずれないようにした。旧 range UI 文言と helper を撤去し、content runner 側は `indices` を `range` より優先して部分実行する（#1267）
 - `fix(suno-lyric)`: `/suno-lyric` がマルチ曲 collection で `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` を全曲一言一句同一のまま出力するのを防ぐため、Workflow に「これらの section も曲ごとの scene / persona で書き分ける」指示を明記し、Validation に曲間セクション重複のセルフチェックと書き分け直し手順を追加。`suno-lyrics.json` の曲間重複を機械検出する `references/check_lyric_duplication.py` を新設（重複検出時は exit 1、#1445）
 - `fix(doctor)`: `ttp_wf_new_readiness` の video_analysis 要件が benchmark top 5 のライブ配信（`duration_iso == "P0D"`、Gemini 取り込み不可で解析不能）により恒久的に充足不能になる問題を修正。live は期待集合から除外して次点 VOD を繰り上げ、VOD が不足する場合は母数を縮小し、除外時は message に「live 配信 N 本を除外」を明示する。`yt-video-analyze --source benchmark` も同じ選定で live をスキップして次点 VOD を解析する（#1462）
