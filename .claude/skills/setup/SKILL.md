@@ -20,7 +20,7 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 | `bootstrap` | ffmpeg / ffprobe / uv / pyproject.toml / automation パッケージ / `yt-skills sync`（6 check） |
 | `api` | gcloud CLI・GCP プロジェクト・Billing・APIs・ADC・IAM・.env・OAuth 認証（11 check） |
 | `channel` | config/channel/ のロード可能性（1 check）。fail 時は `/channel-new`（新規開設 / 既存チャンネル取り込みモード）を案内するだけ |
-| `data` | `/wf-new` の入力モード判定データ（analytics_report / benchmark_data / ttp_wf_new_readiness）。minimal mode / benchmark fallback mode は setup のブロッカーにしない。analytics report は最新 `data/analytics_data_*.json` との相対比較に加え、`collection-ideate` の解決済み `freshness_days` を超えた絶対鮮度 stale も検出する。承認済み TTP がある場合だけ `/channel-setup` benchmark 反映完了を確認する |
+| `data` | `/wf-new` の入力モード判定データ（analytics_report / benchmark_data / ttp_wf_new_readiness）。minimal mode / benchmark fallback mode は setup のブロッカーにしない。analytics report は最新 `data/analytics_data_*.json` との相対比較に加え、`collection-ideate` の解決済み `freshness_days` を超えた絶対鮮度 stale も検出する。承認済み TTP がある場合だけ `/channel-new`（再生成モード） benchmark 反映完了を確認する |
 | `upload` | upload 必須 scope 充足・channel_id 設定済み（1 check） |
 
 setup の完了条件は、ツール、API 認証、アップロード前提が揃った状態。`data` カテゴリは `/wf-new` の入力モード確認用で、stale analytics report 以外は新規チャンネル初回制作を止めない。新規チャンネル作成は次に `/channel-new` を実行する。
@@ -292,7 +292,7 @@ uv run yt-channel-status
 `yt-doctor` の `next_action.instructions` を確認:
 
 - **`/channel-new` 案内** (config/channel/ ディレクトリ未存在): 新規チャンネルの場合は `/channel-new` を実行して設定を作成する
-- **`/channel-new`（既存チャンネル取り込みモード）案内** (ディレクトリ存在・ロード失敗): 既存チャンネルの config を持ち込む場合は `/channel-new` の既存チャンネル取り込みモードで設定を修復する
+- **`/channel-new` 取り込みモード案内** (ディレクトリ存在・ロード失敗): 既存チャンネルの config を持ち込む場合は `/channel-new`（既存チャンネル取り込みモード）を実行して設定を修復する
 
 AI は config をここで生成しない。`yt-setup-dirs` で setup 用ディレクトリが作成済みでも `config/channel/*.json` は未生成で正常な中間状態として扱う。`yt-doctor` の `message` に含まれるエラー詳細をそのまま利用者に示し、どちらのルートかを確認してから案内する。
 
@@ -318,13 +318,13 @@ benchmark の有無は analytics report の有無より優先しない:
 
 minimal mode / benchmark fallback mode は新規チャンネル初回制作を始めるための許容状態であり、setup の完了を止めない。
 
-#### `ttp_wf_new_readiness` — 承認済み TTP の `/channel-setup` benchmark 反映状態
+#### `ttp_wf_new_readiness` — 承認済み TTP の `/channel-new` benchmark 反映状態
 
-`benchmark.channels` に承認済み TTP 対象がある場合だけ、初回 `/wf-new` 前に `/channel-setup` の benchmark 反映が完了しているか確認する。`yt-doctor` の `message` に `/channel-setup benchmark 反映未完了` が含まれる場合は、以下を案内する:
+`benchmark.channels` に承認済み TTP 対象がある場合だけ、初回 `/wf-new` 前に `/channel-new`（再生成モード）の benchmark 反映が完了しているか確認する。`yt-doctor` の `message` に `/channel-new benchmark 反映未完了` が含まれる場合は、以下を案内する:
 
-- `/channel-setup` の benchmark 反映ステップを再実行する
+- `/channel-new`（再生成モード）の benchmark 反映ステップ（Step R3.5）を再実行する
 - `data/benchmark_*.json`、`docs/benchmarks/*.md`、`data/thumbnail_compare/benchmark/` の参照画像を揃える
-- `config/skills/thumbnail.yaml::reference_images.default` に `data/thumbnail_compare/benchmark/...` の相対パスを転記する
+- `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` に `data/thumbnail_compare/benchmark/...` の相対パスを転記する
 - 完了後に `uv run yt-doctor --json` を再実行し、`ttp_wf_new_readiness` が ok になることを確認する
 
 `benchmark.channels` 未設定の場合は minimal mode として扱われるため、setup の完了を止めない。
@@ -376,4 +376,4 @@ channel_id 未設定の場合は AI が以下を確認・案内:
 
 複数チャンネルを横断管理したい / 別 PC へ引っ越したい / GCP 側の drift を検出したい場合は `infra/terraform/gcp/` の README を参照。tfstate で構成管理できる代わりに `terraform.tfvars` 編集の 1 ステップが増える。
 
-AI が tfvars を Write して `.claude/skills/channel-setup/references/gcp-terraform-apply.sh --auto-approve` を Bash で叩けば自動化可能。Google Auth Platform の Branding / Audience Test users / Clients 設定と `client_secrets.json` 配置は両ルート共通。
+AI が tfvars を Write して `.claude/skills/channel-new/references/gcp-terraform-apply.sh --auto-approve` を Bash で叩けば自動化可能。Google Auth Platform の Branding / Audience Test users / Clients 設定と `client_secrets.json` 配置は両ルート共通。

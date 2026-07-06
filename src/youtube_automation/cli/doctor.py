@@ -46,7 +46,7 @@ SKILL_FILENAME = "SKILL.md"
 AUTOMATION_PACKAGE_NAME = "youtube-channels-automation"
 SKILLS_SYNC_CMD = "uv run yt-skills sync --asset skills --force"
 SKILLS_SYNC_PRUNE_CMD = "uv run yt-skills sync --asset skills --force --prune --yes"
-LEGACY_BUNDLED_SKILLS = ("onboard", "distrokid-prep", "channel-import")
+LEGACY_BUNDLED_SKILLS = ("onboard", "distrokid-prep", "channel-import", "channel-setup")
 
 BOOTSTRAP_CATEGORY = "bootstrap"
 API_CATEGORY = "api"
@@ -716,7 +716,7 @@ def check_env_file(channel_dir: Path) -> CheckResult:
             next_action={
                 "kind": "ai-exec",
                 "cmd": (
-                    ".claude/skills/channel-setup/references/gcp-bootstrap.sh <project-id> を実行して .env を書き出す"
+                    ".claude/skills/channel-new/references/gcp-bootstrap.sh <project-id> を実行して .env を書き出す"
                 ),
             },
         )
@@ -1111,8 +1111,10 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
 
     missing, approved_exceptions = _missing_ttp_readiness_items(channel_dir, channels)
     missing.extend(channels_read.errors)
-    benchmark_missing, benchmark_notes = _missing_channel_setup_benchmark_items(
-        channel_dir, approved_exceptions, channels
+    benchmark_missing, benchmark_notes = _missing_channel_new_benchmark_items(
+        channel_dir,
+        approved_exceptions,
+        channels,
     )
     missing.extend(benchmark_missing)
     # live 配信除外の note は未充足条件ではないため missing に混ぜず、message 末尾に併記する
@@ -1122,13 +1124,13 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
             id="ttp_wf_new_readiness",
             status="warn",
             category=DATA_CATEGORY,
-            message="/channel-setup benchmark 反映未完了の可能性 / TTP 完了条件が未充足: "
+            message="/channel-new benchmark 反映未完了の可能性 / TTP 完了条件が未充足: "
             + "; ".join(missing)
             + note_suffix,
             next_action={
                 "kind": "human",
                 "instructions": (
-                    "/channel-new Step 5-9 と /channel-setup Step 3.5 の不足項目を解消してください。"
+                    "/channel-new 初回モード Step 5-9 と再生成モード Step R3.5 の不足項目を解消してください。"
                     "意図的にスキップする場合は docs/channel/ttp-seed-confirmation.md に "
                     "ユーザー承認済み例外として未反映項目を明記し、最後に `uv run yt-doctor --json` で "
                     "`ttp_wf_new_readiness` が ok になることを確認してください"
@@ -1142,7 +1144,7 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
         category=DATA_CATEGORY,
         message=(
             "TTP 対象承認・branding snapshot・benchmark docs・thumbnail / music readiness が "
-            "/wf-new 接続可能（/channel-setup 完了相当）" + note_suffix
+            "/wf-new 接続可能（/channel-new 再生成モード完了相当）" + note_suffix
         ),
     )
 
@@ -1258,7 +1260,7 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
     return missing, approved_exceptions
 
 
-def _missing_channel_setup_benchmark_items(
+def _missing_channel_new_benchmark_items(
     channel_dir: Path,
     approved_exceptions: set[str],
     channels: list[dict[str, object]],
@@ -2069,7 +2071,7 @@ def check_initial_setup_readiness(channel_dir: Path) -> CheckResult:
         next_action={
             "kind": "human",
             "instructions": (
-                "/channel-setup で config/skills/thumbnail.yaml と config/skills/suno.yaml を再確認し、"
+                "/channel-new（再生成モード）で config/skills/thumbnail.yaml と config/skills/suno.yaml を再確認し、"
                 "descriptions.md の parse 失敗は /video-description で再生成してください"
             ),
         },

@@ -300,7 +300,7 @@ uv run yt-generate-image "${REF_ARGS[@]}" \
 
 stock 画像を別スコープとして混ぜたい場合だけ、`config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.stock.enabled: true` を明示し、採用ログ stderr の `[INFO] stock 採用: ...` を保存する。stock を混ぜると「同じベンチマークチャンネルの別サムネ」ではなくなるため、生成後の `thumbnail-prompts.md` に attempt ごとの参照元を必ず記録する。
 
-4. `open` でプレビュー → `/thumbnail-compare` で 320px 視認性検証 → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`
+4. `open` でプレビュー → `/thumbnail-compare` で 320px 視認性検証 → ユーザー承認 → `cp thumbnail-v1.jpg thumbnail.jpg`。`image_generation.auto_selection.enabled: true` のチャンネルでは、ユーザー承認の代わりに「自動選択（auto-selection・opt-in）」章の `yt-thumbnail-auto-select` で確定する
 5. 承認済み `thumbnail.jpg` を参照画像にして、テキストなし動画背景を AI 再生成:
 
 ```bash
@@ -447,6 +447,49 @@ uv run yt-thumbnail-text \
 
 決定的合成を使わない判断をした場合は、AI プロンプト経路（上記 `typography_clause` / two_phase の `thumbnail_text.font`）へフォールバックする。その場合フォントの厳密な再現は保証されないことをユーザーに伝えること。
 
+## 自動選択（auto-selection・opt-in）
+
+TTP 参照画像が固定されているチャンネルでは、候補生成後のユーザー承認を省略し、`yt-thumbnail-auto-select` で `10-assets/thumbnail.jpg` を自動確定できる（#1370）。`auto_selection.enabled` が false / 未設定のチャンネルでは何も変わらず、従来の手動承認フローを使う。
+
+有効化（チャンネル側 `config/skills/thumbnail.yaml`）:
+
+```yaml
+image_generation:
+  auto_selection:
+    enabled: true          # opt-in。false / 未設定なら従来の手動承認フロー
+    min_width: 1280        # 候補の最小解像度
+    min_height: 720
+    aspect_tolerance: 0.01 # 16:9 判定の許容誤差
+```
+
+実行手順（`auto_selection.enabled: true` のチャンネルのみ。無効チャンネルで実行すると終了コード 2 の明示エラー）:
+
+1. 候補生成後、dry-run で採点とランキングを確認する:
+
+```bash
+uv run yt-thumbnail-auto-select <collection-path> --dry-run
+```
+
+2. 問題なければ apply で確定する（`--json` で選択理由を構造化出力できる）:
+
+```bash
+uv run yt-thumbnail-auto-select <collection-path> --apply
+```
+
+選択ロジック（deterministic・学習なし）:
+
+- `image_generation.gemini.reference_images.default` の各参照画像から特徴量（brightness / contrast / saturation / dominant_hue / colorfulness）を抽出して centroid を作る
+- `10-assets/` の候補（`thumbnail-v*.jpg` / `thumbnail-v*.png` / `thumbnail-codex-v*.png`）を採点し、16:9・最小解像度を満たす候補のうち centroid に最も近いもの（distance 最小）を選ぶ
+- apply 時は選択候補を `thumbnail.jpg` にコピー（PNG 候補は JPEG 変換）し、`workflow-state.json` があれば `thumbnail_auto_selection` キーに選択候補・distance・ランキング・実行時刻を記録する
+
+失敗時は silent fallback しない（終了コード 1 / 2 の明示エラー）:
+
+- 候補なし / 参照画像なし / 適格候補なし（全候補が 16:9 逸脱・解像度不足）
+- 確定済み `thumbnail.jpg` / `thumbnail.png` が既に存在（上書きは `--force` の明示が必要）
+- `auto_selection.enabled` が false のまま実行
+
+自動確定後も `/thumbnail-compare` の 320px 視認性検証と下記の品質チェックリストは通すこと。textless `main.png` 再生成以降の後工程は従来どおり。
+
 ## 品質チェック
 
 textless 背景候補の自動セルフチェック（#489）:
@@ -564,6 +607,8 @@ JSON
 ### `workflow-state.json` 更新
 
 画像確認・承認後、`thumbnail.approved = true` を更新する。
+
+`yt-thumbnail-auto-select --apply` で確定した場合は、選択候補・distance・ランキング・実行時刻が `thumbnail_auto_selection` キーに監査ログとして自動記録される（#1370）。
 
 ## stock 退避と再利用
 
