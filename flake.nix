@@ -45,8 +45,8 @@
 
             # Git hooks (lefthook) を有効化。stale な Nix store 固定パスを残さないよう
             # devShell 入室ごとに再生成し、失敗は commit / push 前に明示的に止める。
-            if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
-              bash "$git_root/.lefthook/install.sh" || exit 1
+            if git rev-parse --git-dir >/dev/null 2>&1; then
+              bash "${./.}/.lefthook/install.sh" || exit 1
             fi
           '';
         };

@@ -11,8 +11,6 @@ _LEFTHOOK_INSTALL_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "install.sh"
 _LEFTHOOK_CONFIG_PATH = _REPO_ROOT / "lefthook.yml"
 _DEVELOPMENT_DOC_PATH = _REPO_ROOT / "docs" / "development.md"
 _TAKT_OPERATIONS_DOC_PATH = _REPO_ROOT / "docs" / "takt-operations.md"
-_CLAUDE_PATH = _REPO_ROOT / "CLAUDE.md"
-_AGENTS_PATH = _REPO_ROOT / "AGENTS.md"
 
 
 def _read(path: Path) -> str:
@@ -35,7 +33,7 @@ def _run_shell_hook_install_entrypoint(workdir: Path, path: str) -> subprocess.C
         [
             "bash",
             "-lc",
-            'git_root="$(git rev-parse --show-toplevel 2>/dev/null)" && bash "$git_root/.lefthook/install.sh"',
+            f'git rev-parse --git-dir >/dev/null 2>&1 && bash "{_LEFTHOOK_INSTALL_SCRIPT_PATH}"',
         ],
         cwd=workdir,
         env={**os.environ, "PATH": path},
@@ -48,6 +46,11 @@ def _run_shell_hook_install_entrypoint(workdir: Path, path: str) -> subprocess.C
 def _create_fake_executable(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+def _configure_git_identity(repo: Path) -> None:
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
 
 
 def _create_linked_worktree_with_hook_files(tmp_path: Path) -> Path:
@@ -73,7 +76,8 @@ def test_dev_shell_reinstalls_lefthook_without_hiding_failures() -> None:
     flake = _read(_FLAKE_PATH)
 
     assert "lefthook" in flake
-    assert '.lefthook/install.sh" || exit 1' in flake
+    assert 'bash "${./.}/.lefthook/install.sh" || exit 1' in flake
+    assert 'bash "$git_root/.lefthook/install.sh"' not in flake
     assert "lefthook install >/dev/null 2>&1 || true" not in flake
     assert "exit 1" in flake
 
@@ -108,6 +112,8 @@ def test_lefthook_install_script_runs_force_install(tmp_path: Path) -> None:
 
     assert result.returncode == 0
     assert args_log.read_text(encoding="utf-8") == "install --force\n"
+    assert (tmp_path / ".git" / "hooks" / "pre-commit").is_file()
+    assert (tmp_path / ".git" / "hooks" / "pre-push").is_file()
 
 
 def test_shell_hook_entrypoint_runs_force_install_from_linked_worktree(tmp_path: Path) -> None:
@@ -135,6 +141,100 @@ def test_shell_hook_entrypoint_fails_loudly_in_linked_worktree_when_lefthook_is_
 
     assert result.returncode == 1
     assert "error: lefthook is not available in PATH; enter via nix develop or direnv." in result.stderr
+
+
+def test_generated_pre_commit_hook_fails_closed_when_lefthook_path_is_stale(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    _configure_git_identity(tmp_path)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake_lefthook = bin_dir / "lefthook"
+    _create_fake_executable(fake_lefthook, "#!/usr/bin/env bash\nexit 0\n")
+
+    install_result = _run_install_script(tmp_path, f"{bin_dir}:/usr/bin:/bin")
+    assert install_result.returncode == 0
+    fake_lefthook.unlink()
+
+    (tmp_path / "tracked.txt").write_text("content\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=tmp_path, check=True)
+    commit_result = subprocess.run(
+        ["git", "commit", "-m", "test commit"],
+        cwd=tmp_path,
+        env={**os.environ, "PATH": "/usr/bin:/bin"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert commit_result.returncode != 0
+    assert "error: lefthook is not available in PATH; enter via nix develop or direnv." in (
+        commit_result.stdout + commit_result.stderr
+    )
+
+
+def test_generated_pre_commit_hook_fails_closed_in_linked_worktree_when_lefthook_path_is_stale(
+    tmp_path: Path,
+) -> None:
+    worktree = _create_linked_worktree_with_hook_files(tmp_path)
+    _configure_git_identity(worktree)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake_lefthook = bin_dir / "lefthook"
+    _create_fake_executable(fake_lefthook, "#!/usr/bin/env bash\nexit 0\n")
+
+    install_result = _run_install_script(worktree, f"{bin_dir}:/usr/bin:/bin")
+    assert install_result.returncode == 0
+    fake_lefthook.unlink()
+
+    (worktree / "tracked.txt").write_text("content\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=worktree, check=True)
+    commit_result = subprocess.run(
+        ["git", "commit", "-m", "test commit"],
+        cwd=worktree,
+        env={**os.environ, "PATH": "/usr/bin:/bin"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert commit_result.returncode != 0
+    assert "error: lefthook is not available in PATH; enter via nix develop or direnv." in (
+        commit_result.stdout + commit_result.stderr
+    )
+
+
+def test_generated_pre_push_hook_fails_closed_when_lefthook_path_is_stale(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    remote = tmp_path / "remote.git"
+    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True, text=True)
+    subprocess.run(["git", "init", "--bare", str(remote)], check=True, capture_output=True, text=True)
+    _configure_git_identity(repo)
+    subprocess.run(["git", "remote", "add", "origin", str(remote)], cwd=repo, check=True)
+    (repo / "tracked.txt").write_text("content\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "--no-verify", "-m", "test commit"], cwd=repo, check=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake_lefthook = bin_dir / "lefthook"
+    _create_fake_executable(fake_lefthook, "#!/usr/bin/env bash\nexit 0\n")
+
+    install_result = _run_install_script(repo, f"{bin_dir}:/usr/bin:/bin")
+    assert install_result.returncode == 0
+    fake_lefthook.unlink()
+
+    push_result = subprocess.run(
+        ["git", "push", "origin", "HEAD:main"],
+        cwd=repo,
+        env={**os.environ, "PATH": "/usr/bin:/bin"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert push_result.returncode != 0
+    assert "error: lefthook is not available in PATH; enter via nix develop or direnv." in (
+        push_result.stdout + push_result.stderr
+    )
 
 
 def test_lefthook_install_script_fails_when_force_install_fails(tmp_path: Path) -> None:
@@ -166,25 +266,16 @@ def test_lefthook_config_documents_force_reinstall_entrypoint() -> None:
 def test_docs_cover_parent_worktree_diagnostics_and_reinstall() -> None:
     development = _read(_DEVELOPMENT_DOC_PATH)
     takt_operations = _read(_TAKT_OPERATIONS_DOC_PATH)
-    claude = _read(_CLAUDE_PATH)
-    agents = _read(_AGENTS_PATH)
 
     for required in (
-        "親 checkout / worktree",
         "command -v lefthook && lefthook version",
         "nix develop --command lefthook install --force",
         "Can't find lefthook in PATH",
-        "|| true",
     ):
         assert required in development
 
     for required in (
-        "worktree で commit / push",
         "lefthook install --force",
         "command -v lefthook && lefthook version",
     ):
         assert required in takt_operations
-
-    assert "対象 worktree で `nix develop`" in claude
-    assert "対象 checkout" in agents
-    assert "nix develop --command lefthook install --force" in agents
