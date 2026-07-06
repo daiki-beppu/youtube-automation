@@ -1,6 +1,6 @@
 ---
 name: video-description
-description: "Use when コレクションのYouTube概要欄を自動生成する必要があるとき。Complete Collection 形式に対応（情景フック＋タイムスタンプ＋Perfect for）。概要欄、タイトル作成、SEO最適化、メタデータ生成、動画の説明文など、YouTube投稿用テキストが必要な場面で必ず使用すること"
+description: "Use when YouTube 概要欄を Complete Collection 形式で自動生成するとき。「概要欄」「説明文」「SEO最適化」「メタデータ生成」で発動"
 ---
 
 ## Overview
@@ -133,7 +133,9 @@ skill-config (`.claude/skills/video-description/config.default.yaml` / 上書き
 - `[総時間]`: `2+ Hours` / `1+ Hour` 等（切り捨て表記）
 - ユースケースはコレクションテーマに応じて調整
 
-タイトル案を決めたら、`descriptions.md` に保存する前に過去 live タイトルとの重複 warning を確認する:
+タイトル案を決めたら、まず **100 codepoint 以内**であることを確認する（YouTube タイトル上限。超過は upload preflight で必ず fail するため、この段階で RHS の修飾語を削って短縮する。用途語・尺表記・テーマ語は残す）。
+
+続けて、`descriptions.md` に保存する前に過去 live タイトルとの重複 warning を確認する（`yt-title-duplicate-check` は 100 codepoint 超過も検出し、超過時は `--strict` に関係なく exit 1 になる）:
 
 ```bash
 uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
@@ -171,6 +173,7 @@ uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
 
 ### 品質チェック
 
+- [ ] タイトルが 100 codepoint 以内（YouTube 上限。`yt-title-duplicate-check` が超過検出）
 - [ ] 誇張表現なし（Epic/Ultimate等 不使用）
 - [ ] AI 透明性あり（Usage & Attribution セクション）
 - [ ] チャンネル CTA 含む

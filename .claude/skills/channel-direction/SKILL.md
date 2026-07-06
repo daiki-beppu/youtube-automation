@@ -1,6 +1,6 @@
 ---
 name: channel-direction
-description: "Use when /channel-new 後に新チャンネルの方向性を再検討・精緻化したいとき。「方向性決めたい」「チャンネルの方針」「ポジショニング」「差別化」「ブレスト」「TTP 対象を決める」など、docs/channel/ttp-seed-confirmation.md や docs/channel/competitor-branding-snapshot.json、または後続の benchmark / viewer-voice 分析をもとに戦略的方向性を対話で見直す場面で使用すること。初回セットアップは /channel-new だけで完結する"
+description: "Use when /channel-new 後にチャンネル方向性を再検討するとき。「方向性決めたい」「ポジショニング」「差別化」「ブレスト」で発動"
 ---
 
 ## Overview

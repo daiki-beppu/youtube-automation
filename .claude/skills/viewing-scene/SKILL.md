@@ -1,6 +1,6 @@
 ---
 name: viewing-scene
-description: "Use when 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義したいとき。「視聴シーン」「利用シーン」「どんな時に聴かれるか」「シーン分析」「視聴者はいつ聴く」「TTP の用途設計版」など。/audience-persona-design の結果を踏まえてシーン別パフォーマンスを分析。チャンネル立ち上げ・方向性見直し時に必ず使用すること"
+description: "Use when 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義するとき。「視聴シーン」「利用シーン」「シーン分析」で発動。/audience-persona-design の結果を踏まえる"
 ---
 
 ## Overview

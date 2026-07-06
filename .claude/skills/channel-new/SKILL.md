@@ -284,6 +284,8 @@ image_generation:
 
 ### Step 7: 簡易ペルソナ導出
 
+**入口ゲート**: 開始前に `config/channel/analytics.json::benchmark.channels` に承認済み TTP 対象が 1 件以上あることを確認する。0 件なら本 Step 以降に進まず Step 5 に戻って候補を再確認するか、ユーザーに停止を確認して終了する（判定基準は冒頭「TTP 完了条件（新規開設モード）」を参照）。
+
 新チャンネルには `/viewer-voice` や `/benchmark` の結果がまだない場合があるため、ここでは軽量版だけ作る。
 
 入力:

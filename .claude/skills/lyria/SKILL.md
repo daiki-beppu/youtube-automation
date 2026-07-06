@@ -1,6 +1,6 @@
 ---
 name: lyria
-description: "Use when Vertex AI Lyria 3 でマスター音源を自動生成したいとき。skill-config と Lyria 3 `interactions` REST API を組み合わせ、コレクション尺に合わせて複数セグメント (1 リクエスト = 最大 ~184 秒のオーディオ、API は MP3 を返し保存時に PCM s16le WAV へ変換) を生成しクロスフェード結合してマスター音源を出力する（人手介入なし、/masterup 不要、次工程は /videoup）。Suno で人手生成するチャンネルでは /suno を使う"
+description: "Use when Vertex AI Lyria 3 でマスター音源を自動生成するとき（/masterup 不要、次工程 /videoup）。Suno 人手生成チャンネルは /suno を使う"
 ---
 
 ## Overview

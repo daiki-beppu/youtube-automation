@@ -1,6 +1,6 @@
 ---
 name: wf-new
-description: "Use when まだコレクションディレクトリが存在せず、新規コレクション制作を立ち上げたいとき。「新しいコレクション始めたい」「制作開始」「新規ワークフロー」など、企画選択からディレクトリ作成・素材準備までを行う初期化フェーズで使用する。既存コレクションの進行は /wf-next"
+description: "Use when 新規コレクション制作を立ち上げるとき（ディレクトリ未作成）。「新しいコレクション始めたい」「制作開始」で発動。既存の進行は /wf-next"
 ---
 
 ## Overview
@@ -74,7 +74,7 @@ Step 1（企画）を自動実行中...
 | benchmark fallback mode | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config |
 | minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | ユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config |
 
-`reports/analysis_*.md` が存在するが stale の場合は fallback せず、`/analytics-analyze` 再実行を案内して中断する。古い分析と別入力の混在を避けるため。stale 判定は相対比較（最新 `data/analytics_data_*.json` より古い）と絶対鮮度（収集データ自体が実行日から `freshness_days` を超えて経過。この場合 `/analytics-collect` を先行案内）の OR。絶対鮮度では `/collection-ideate` と同じく `.claude/skills/collection-ideate/config.default.yaml` + `config/skills/collection-ideate.yaml` を deep-merge した解決済み `freshness_days`（既定 7 日）を使う — 詳細は `/collection-ideate` の `references/freshness-rules.md` を参照。
+`reports/analysis_*.md` が存在するが stale の場合は fallback せず、`/analytics-analyze` 再実行を案内して中断する（絶対鮮度 stale では `/analytics-collect` を先行案内）。stale 判定（相対比較・絶対鮮度の OR）の完全な定義は `/collection-ideate` の references/freshness-rules.md を正とする。絶対鮮度は `.claude/skills/collection-ideate/config.default.yaml` + `config/skills/collection-ideate.yaml` を deep-merge した解決済み `freshness_days`（既定 7 日）を使う。
 
 2. **Skill ツールで `/collection-ideate` を実行** — 入力モードに応じて企画候補をプレビューサムネイル付きで生成
    - analytics mode: 日次収集データ + ベンチマークを基に分析 + ペルソナ別候補を生成

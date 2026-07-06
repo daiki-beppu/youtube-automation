@@ -1,6 +1,6 @@
 ---
 name: setup
-description: "Use when YouTube automation のツール導入と GCP / OAuth まわりの API 設定を新規にセットアップしたい、または既存セットアップを再診断したいとき。「セットアップして」「ツール入れて」「環境構築」「API 設定して」「gcloud 設定」「OAuth 設定」「`/setup`」「旧 `/onboard`」など。AI が `yt-doctor` で状態を診断し、次に必要な 1 アクションだけを案内する wizard。"
+description: "Use when ツール導入と GCP / OAuth の API 設定をセットアップ・再診断するとき。「セットアップして」「環境構築」「/setup」「旧 /onboard」で発動。yt-doctor 診断 wizard"
 ---
 
 ## Overview
@@ -156,7 +156,10 @@ brew install --cask google-cloud-sdk
 
 - チャンネル名: `config/channel/meta.json` の `channel.name` が存在すればそれを使う。未設定の場合は `<channel_dir>` のベースネームを title case 化して使う (例: `lofi-beats` -> `Lofi Beats`)
 - project ID: `yt-{channel-slug}`。`channel-slug` はチャンネル名を kebab-case 化し、英小文字・数字・ハイフン以外をハイフンに置換、連続ハイフンを 1 個に畳み、先頭末尾のハイフンを削る
-- project ID は GCP 制約に合わせて 6-30 文字、英小文字開始、英小文字/数字/ハイフン終端に収める。30 文字を超える場合は `yt-` を含めて 30 文字以内に truncate し、短すぎる/空になる場合はカスタム入力を求める
+- project ID は GCP 制約に合わせて 6-30 文字、英小文字開始、末尾は英小文字か数字（ハイフン終端は不可）に収める。`yt-{channel-slug}` が 30 文字を超える場合は次の 3 段で truncate する:
+  1. `yt-` prefix は必ず保持し、超過分は `channel-slug` の末尾から削って全体を 30 文字以内にする（prefix 側からは削らない）
+  2. 切り詰め後の末尾がハイフンになった場合は、そのハイフンも追加で削る（例: `yt-midnight-drive-time-lounge-a`（31 文字）を先頭 30 文字で単純に切ると `yt-midnight-drive-time-lounge-`（30 文字、末尾ハイフンで GCP 制約違反）になるため、ハイフンを削って `yt-midnight-drive-time-lounge`（29 文字）にする）
+  3. 上記処理後に 6 文字未満になる・空になる・truncate で意味が読み取れなくなる場合は自動生成をやめ、カスタム入力を求める
 - project 表示名 (`--name`): `{チャンネル名} YouTube` (例: `Lo-Fi Beats YouTube`)
 
 利用者には「推奨 project ID は `<suggested-project-id>`、表示名は `<channel-name> YouTube`。この ID で作成してよいか、またはカスタム project ID を入力してください」と確認する。project ID はグローバルユニークなので、作成失敗時は別 ID を聞いてリトライする。

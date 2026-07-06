@@ -1,15 +1,18 @@
 # Lefthook 設定（https://lefthook.dev）
 #
 # 有効化: devShell（`nix develop` / direnv `use flake`）に入ると flake.nix の
-# shellHook が `lefthook install` を自動実行する。手動なら `lefthook install`。
+# shellHook が `.lefthook/install.sh` を自動実行する。手動再生成も
+# `nix develop --command bash .lefthook/install.sh` を使う。
 #
 # - pre-commit:
 #   - Python: ruff の lint / format チェック
 #   - TypeScript: oxlint / oxfmt --check / tsc -b --noEmit (ADR 0001)
-# - pre-push:   CHANGELOG ゲート（CI の changelog ジョブをローカル再現）
+# - pre-push:   CHANGELOG ゲート（CI の changelog ジョブをローカル再現）、
+#               テスト差分警告、新規 Any / any 型注釈ゲート
 #
 # 個別スキップ: `LEFTHOOK=0 git push` で全 hook を無効化。
 # CHANGELOG ゲートのみ省く: `SKIP_CHANGELOG=1 git push`
+# テスト差分警告のみ省く: `SKIP_TEST_DIFF=1 git push`
 
 # use_stdin は lefthook 1.4.11、exclude の glob 配列は 1.5.0 で追加。古い lefthook は
 # 未知 key / 未対応の値形式を黙って無視し判定が no-op になるため、最低バージョンを明示する
@@ -25,16 +28,18 @@ pre-commit:
       glob: "*.py"
       run: uv run ruff format --check {staged_files}
     # oxlint / oxfmt / typecheck は root ツールチェーン（ADR 0001）の対象のみに絞る。
-    # extensions/ は自前の ESLint / Prettier / tsc 管理（CI: extensions.yml）であり、
-    # oxlint.config.ts の ignorePatterns も extensions/** を除外しているため、staged files が
-    # extensions のみだと oxlint / oxfmt が「対象ファイルなし」を exit 1 で返し commit が
-    # 必ず落ちる (#1428)。exclude で staged files から外せば、対象 0 件のとき lefthook が
-    # コマンドごと skip する。
+    # oxlint.config.ts / oxfmt.config.ts の ignorePatterns 対象（examples/ docs/ config/ など）
+    # のみが staged だと、両ツールが「対象ファイルなし」を non-zero exit で返し commit が
+    # 必ず落ちる (#1428 #1452)。--no-error-on-unmatched-pattern で対象 0 件を成功として扱う
+    # （実際の lint / format 違反は従来どおり検知される）。ignorePatterns のパスを exclude に
+    # 列挙する二重管理はしない。
+    # extensions/ は自前の ESLint / Prettier / tsc 管理（CI: extensions.yml）のため exclude で
+    # staged files から外し、extensions のみの変更ではコマンド起動ごと skip する。
     oxlint:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs}"
       exclude:
         - "extensions/**"
-      run: bunx oxlint {staged_files}
+      run: bunx oxlint --no-error-on-unmatched-pattern {staged_files}
     oxfmt:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc}"
       # .claude/**（skill references の JSON 等）は oxfmt.config.ts の ignorePatterns で
@@ -49,7 +54,7 @@ pre-commit:
         - "poc/**"
         - ".claude/**"
         - ".takt/**"
-      run: bunx oxfmt --check {staged_files}
+      run: bunx oxfmt --check --no-error-on-unmatched-pattern {staged_files}
     typecheck:
       # root の tsc -b は extensions を含まないため、extensions のみの変更では起動しない
       glob: "*.{ts,tsx}"
@@ -63,7 +68,10 @@ pre-push:
       # git が stdin に渡す "<local ref> <local sha> <remote ref> <remote sha>" を
       # スクリプトへ転送する（ブランチ削除 push の判定に必要）。
       # 注意: lefthook の仕様で use_stdin を持つコマンドが同一 hook に複数あると
-      # stdin を受け取れるのは 1 つだけ。pre-push に stdin を使うコマンドを
-      # 追加するときはこのゲートの削除 push スキップが壊れないか確認すること
+      # stdin を受け取れるのは 1 つだけ。そのため changelog-gate.sh が pre-push
+      # 全ゲートの唯一のエントリポイントとなり、削除 push 判定を内部で
+      # test-diff-gate.sh / any-usage-gate.sh にも連鎖適用する。この 1 コマンド
+      # 構成を崩さないこと（3 コマンドに分割すると削除 push スキップが
+      # test-diff-gate / any-usage-gate に効かなくなる）
       use_stdin: true
       run: bash .lefthook/pre-push/changelog-gate.sh
