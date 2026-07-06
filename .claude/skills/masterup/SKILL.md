@@ -111,7 +111,7 @@ Lyria で音源を生成するチャンネルでは `/lyria` が `01-master/mast
 2. アクティブコレクションの `02-Individual-music/` に配置し、ファイル名を連番 + タイトルで揃える（例: `01-pattern-a-arrival.mp3`）
 3. `uv run yt-generate-master`（または `--target-duration` / `--shuffle` などのオプション付き）を **直接実行**
 4. 必要に応じて `uv run yt-finalize-master`（雨音レイヤー）→ `uv run yt-fix-timestamps`（タイムスタンプ整合）→ Step 6 の `rsync` 同期を **手動で順番に実行**
-5. `workflow-state.json` の `music.approved = true` / `mp3_count` / `master_audio` / `phase = "music-approved"` を手動更新（または `/masterup` の「完了時の更新」を別途呼ぶ）
+5. `workflow-state.json` の `assets.raw_master`（マスターファイル名）/ `updated_at` を手動更新（または `/masterup` の「完了時の更新」を別途呼ぶ）
 
 このフォールバックは **`/masterup` が壊れていても master.mp3 を生成できる最小経路**であり、Suno 公式 API 公開までの暫定運用として機能する。
 
@@ -146,7 +146,7 @@ $ARGUMENTS
 ### Step 1: コレクションの特定
 
 1. `collections/planning/` の `workflow-state.json` を検索
-2. `music.generated = true` かつ `music.approved = false` のコレクションを対象
+2. `assets.music_prompts = true` かつ `assets.raw_master = null` のコレクションを対象
 3. 複数ある場合はユーザーに選択を促す
 
 ### Step 2: WebFetch でプレイリスト情報を取得 (DEPRECATED -- fallback only)
@@ -567,11 +567,10 @@ fi
 
 ### 完了時の更新
 
-- `workflow-state.json` の `music.approved = true` に更新
-- `mp3_count` にダウンロード曲数を記録
-- `master_audio` に `"master.mp3"` を記録
+- `workflow-state.json` の `assets.raw_master` に生成したマスターファイル名（例: `"master.mp3"`）を記録
 - `updated_at` を現在時刻に更新
-- `phase` を `"music-approved"` に更新
+
+`phase` は `"prepared"` のまま変更しない。`raw_master` → `master_audio` 確定後の `"mastered"` フェーズ遷移は `/wf-next` の責務（本スキルはユーザーのミキシング+マスタリング前の raw master 生成までを担う）。
 
 ## CDN URL パターン (DEPRECATED -- fallback only)
 
