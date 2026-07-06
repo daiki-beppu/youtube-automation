@@ -32,5 +32,5 @@ This file provides guidance to Codex CLI (developers.openai.com/codex) when work
 
 ### lefthook と worktree
 
-- commit / push 前に、対象 checkout（親 checkout / worktree のどちらも）で `nix develop` または direnv に入り、`flake.nix` の shellHook による `lefthook install --force` を通す
-- `Can't find lefthook in PATH` が出る場合は `docs/development.md` の Git hooks 診断手順に従い、対象 checkout で `nix develop --command lefthook install --force` を実行する
+- commit / push 前に、対象 checkout（親 checkout / worktree のどちらも）で `nix develop` または direnv に入り、`flake.nix` の shellHook による `.lefthook/install.sh` を通す
+- `Can't find lefthook in PATH` が出る場合は `docs/development.md` の Git hooks 診断手順に従い、対象 checkout で `nix develop --command bash .lefthook/install.sh` を実行する

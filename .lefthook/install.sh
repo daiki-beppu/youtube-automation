@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -u
+set -euo pipefail
 
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
   exit 0
@@ -11,7 +11,7 @@ if ! lefthook_bin="$(command -v lefthook 2>/dev/null)"; then
 fi
 
 if ! "$lefthook_bin" install --force; then
-  echo "error: lefthook install failed; run 'nix develop --command lefthook install --force' after fixing the error." >&2
+  echo "error: lefthook install failed; run 'nix develop --command bash .lefthook/install.sh' after fixing the error." >&2
   exit 1
 fi
 
@@ -21,10 +21,20 @@ mkdir -p "$hooks_dir"
 install_hook_wrapper() {
   local hook_name="$1"
   local hook_path="$hooks_dir/$hook_name"
+  local tmp_hook="$hooks_dir/.$hook_name.tmp.$$"
 
-  cat >"$hook_path" <<EOF
+  if [ -e "$hook_path" ] && [ ! -f "$hook_path" ]; then
+    echo "error: cannot install $hook_name hook because $hook_path is not a file." >&2
+    return 1
+  fi
+
+  cat >"$tmp_hook" <<EOF
 #!/usr/bin/env bash
 set -u
+
+if [ "\${LEFTHOOK:-}" = "0" ]; then
+  exit 0
+fi
 
 installed_lefthook='$lefthook_bin'
 
@@ -39,7 +49,13 @@ fi
 echo "error: lefthook is not available in PATH; enter via nix develop or direnv." >&2
 exit 1
 EOF
-  chmod +x "$hook_path"
+  chmod +x "$tmp_hook"
+  mv -f "$tmp_hook" "$hook_path"
+
+  if [ ! -f "$hook_path" ] || [ ! -x "$hook_path" ]; then
+    echo "error: failed to install executable $hook_name hook at $hook_path." >&2
+    return 1
+  fi
 }
 
 install_hook_wrapper pre-commit

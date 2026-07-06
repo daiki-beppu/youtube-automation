@@ -1,8 +1,8 @@
 # Lefthook 設定（https://lefthook.dev）
 #
 # 有効化: devShell（`nix develop` / direnv `use flake`）に入ると flake.nix の
-# shellHook が `lefthook install --force` を自動実行する。手動再生成も
-# `nix develop --command lefthook install --force` を使う。
+# shellHook が `.lefthook/install.sh` を自動実行する。手動再生成も
+# `nix develop --command bash .lefthook/install.sh` を使う。
 #
 # - pre-commit:
 #   - Python: ruff の lint / format チェック
