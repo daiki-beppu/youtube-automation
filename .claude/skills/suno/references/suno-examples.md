@@ -37,6 +37,27 @@ instrumental, sparse and reflective,
 snow falling outside a library window, a half-finished teacup on the desk
 ```
 
+## Style 自動バリエーションの例（#1456）
+
+同一コレクション内で `genre_line` は共通のまま、entry ごとに texture / rhythm feel の descriptor が
+Style 第 1 行末尾へ決定的に付与される（先頭 entry は base のまま）:
+
+```
+# entry 1 (base)
+slow, lo-fi jazz, soft piano, warm rhodes,
+a quiet rooftop at dawn
+
+# entry 2
+slow, lo-fi jazz, soft piano, warm rhodes, laid-back rhythm feel,
+grey smoke trailing upward from a rooftop chimney
+
+# entry 3
+gentle, lo-fi jazz, soft piano, warm rhodes, warm rounded texture,
+a single paper lantern swaying above a narrow alley
+```
+
+descriptor はジャンルを変えない形容詞句に限定する。禁止形容詞・雨音 NG ワードは pool に入れないこと。
+
 ## 情景フレーズ設計の共通原則
 
 1. **命令文なし**: "Create a..." で始めない
