@@ -523,6 +523,35 @@ def test_apply_url_tag_pin_rewrites(tmp_path: Path, no_network, recorded_command
     assert "@v5.5.0" not in text
 
 
+def test_apply_url_tag_pin_ignores_optional_dependency_before_active_project_dependency(
+    tmp_path: Path, no_network, recorded_commands: list[list[str]]
+) -> None:
+    repo = _write_repo(
+        tmp_path,
+        """\
+[project.optional-dependencies]
+dev = [
+    "youtube-channels-automation @ git+https://github.com/daiki-beppu/youtube-automation@v5.4.0",
+]
+
+[project]
+name = "deepfocus365"
+dependencies = [
+    # "youtube-channels-automation @ git+https://github.com/daiki-beppu/youtube-automation@v5.3.0",
+    "youtube-channels-automation @ git+https://github.com/daiki-beppu/youtube-automation@v5.5.0",
+]
+""",
+    )
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 0
+
+    text = (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert "youtube-automation@v5.4.0" in text
+    assert "youtube-automation@v5.3.0" in text
+    assert "youtube-automation@v5.6.0" in text
+    assert "youtube-automation@v5.5.0" not in text
+
+
 def test_apply_ssh_url_tag_pin_rewrites_only_ref(
     tmp_path: Path, no_network, recorded_commands: list[list[str]]
 ) -> None:
@@ -534,6 +563,30 @@ def test_apply_ssh_url_tag_pin_rewrites_only_ref(
     assert "git+ssh://git@github.com/daiki-beppu/youtube-automation.git@v5.6.0" in text
     assert "git+ssh://git@v5.6.0" not in text
     assert "@v5.5.0" not in text
+
+
+def test_apply_inline_table_tag_pin_ignores_commented_source_before_active_entry(
+    tmp_path: Path, no_network, recorded_commands: list[list[str]]
+) -> None:
+    repo = _write_repo(
+        tmp_path,
+        """\
+[project]
+name = "deepfocus365"
+dependencies = ["youtube-channels-automation"]
+
+[tool.uv.sources]
+# youtube-channels-automation = { git = "https://github.com/daiki-beppu/youtube-automation", tag = "v5.4.0" }
+youtube-channels-automation = { git = "https://github.com/daiki-beppu/youtube-automation", tag = "v5.5.0" }
+""",
+    )
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 0
+
+    text = (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'tag = "v5.4.0"' in text
+    assert 'tag = "v5.6.0"' in text
+    assert 'tag = "v5.5.0"' not in text
 
 
 def test_apply_same_tag_is_idempotent(
@@ -690,6 +743,46 @@ def test_apply_allow_dirty_skips_worktree_check(
     )
 
     assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--allow-dirty"]) == 0
+
+
+def test_apply_failed_step_can_rerun_with_allow_dirty_from_rewritten_pin(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    commands: list[list[str]] = []
+    git_status_calls = 0
+    fail_next_lock = True
+
+    def _status(root: Path) -> str:
+        nonlocal git_status_calls
+        git_status_calls += 1
+        return ""
+
+    def _run(cmd: list[str], cwd: Path) -> int:
+        nonlocal fail_next_lock
+        commands.append(cmd)
+        if fail_next_lock and cmd[:2] == ["uv", "lock"]:
+            fail_next_lock = False
+            return 1
+        return 0
+
+    monkeypatch.setattr(automation_update, "_run_command", _run)
+    monkeypatch.setattr(automation_update, "_git_status_porcelain", _status)
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 1
+    assert 'tag = "v5.6.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
+
+    commands.clear()
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--allow-dirty"]) == 0
+
+    assert git_status_calls == 1
+    assert commands == [
+        ["uv", "lock", "--upgrade-package", "youtube-channels-automation"],
+        ["uv", "run", "yt-skills", "sync", "--force"],
+        ["uv", "run", "yt-skills", "list"],
+        ["uv", "run", "yt-config-migrate", "verify", "--target", str(repo)],
+    ]
 
 
 def test_apply_force_sync_passes_force_flag(tmp_path: Path, no_network, recorded_commands: list[list[str]]) -> None:
