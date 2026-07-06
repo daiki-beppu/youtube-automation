@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `feat(cli)`: 下流リポの automation 追従を機械実行する `yt-automation-update` CLI を追加（#1473）。`check` が実行場所・pin 形式（inline table / URL 直接参照の tag pin、main 追従、sha pin）・upstream 最新リリースとの差分を判定し exit code（0=最新 / 1=差分あり / 2=エラー）で返す。`apply` が pin 書き換え → `uv lock` → `yt-skills sync`（skills / claude-md 両 asset）→ smoke check（`yt-skills list` / `yt-config-migrate verify`）を順に実行し、失敗ステップを明示して非 0 終了する。commit / push は責務外（スキル・人間側に残置）
+- `feat(suno)`: `/suno` の Style プロンプト生成に entry ごとの自動バリエーション機構（`style_variation`、既定で有効）を追加。`genre_line` のコアジャンルを維持したまま texture / rhythm feel の descriptor を entry 通し番号ベースの決定的ローテーションで Style 第 1 行へ付与し、Suno V5.5 での楽曲同質化を防ぐ。先頭 entry は base style を維持（単一 entry の既存コレクションは出力不変）、`style` variant の明示 override がある entry は従来どおり優先、`style_variation.enabled: false` で従来動作へ戻せる。全 entry の Style 文が完全一致する組は生成時に警告する（#1456）
 - `feat(wf-next)`: `config/channel/workflow.json::workflow.wf_next.skip_manual_mastering`（default `false`）を新設。`true` のとき `/wf-next` のマスター音源検出（2-B）で `01-master/` に別ファイルが無くても `assets.raw_master` をそのまま `assets.master_audio` として採用し `phase: "mastered"` へ進む（raw=final 運用）。`approval_gates.audio` とは独立で、後方互換（未設定は従来通り停止）。docs/workflow-cheatsheet.md のよくある質問に設定手順を追記（#1449）
 
 ### Changed
