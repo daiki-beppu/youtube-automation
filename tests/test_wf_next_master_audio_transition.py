@@ -4,6 +4,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SCRIPT = _REPO_ROOT / ".claude" / "skills" / "wf-next" / "references" / "master_audio_transition.py"
 
@@ -494,6 +496,66 @@ def test_raw_final_requires_raw_master_file_without_state_update(tmp_path: Path)
 
     assert result.returncode == 1
     assert "master audio file does not exist: 01-master/raw-master.wav" in result.stderr
+    assert _state_text(collection) == before
+
+
+def test_workflow_state_symlink_is_rejected_without_writing_target(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    state_path = collection / "workflow-state.json"
+    outside_state = tmp_path / "outside-workflow-state.json"
+    outside_state.write_text(_state_text(collection), encoding="utf-8")
+    state_path.unlink()
+    try:
+        state_path.symlink_to(outside_state)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+    before = outside_state.read_text(encoding="utf-8")
+
+    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=False)
+
+    assert result.returncode == 1
+    assert "workflow-state.json must be a regular file, not a symlink" in result.stderr
+    assert outside_state.read_text(encoding="utf-8") == before
+
+
+def test_raw_final_rejects_raw_master_symlink_without_state_update(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    raw_path = collection / "01-master" / "raw-master.wav"
+    outside_audio = tmp_path / "outside-raw-master.wav"
+    outside_audio.write_bytes(b"outside-raw")
+    raw_path.unlink()
+    try:
+        raw_path.symlink_to(outside_audio)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+    before = _state_text(collection)
+
+    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=False)
+
+    assert result.returncode == 1
+    assert "master audio file must be a regular file, not a symlink: 01-master/raw-master.wav" in result.stderr
+    assert _state_text(collection) == before
+
+
+def test_master_dir_symlink_is_rejected_without_state_update(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    master_dir = collection / "01-master"
+    outside_master_dir = tmp_path / "outside-master"
+    outside_master_dir.mkdir()
+    (outside_master_dir / "raw-master.wav").write_bytes(b"outside-raw")
+    for child in master_dir.iterdir():
+        child.unlink()
+    master_dir.rmdir()
+    try:
+        master_dir.symlink_to(outside_master_dir, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+    before = _state_text(collection)
+
+    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=False)
+
+    assert result.returncode == 1
+    assert "01-master must be a directory inside the collection, not a symlink" in result.stderr
     assert _state_text(collection) == before
 
 

@@ -46,6 +46,7 @@ def _approval_arg(value: str) -> bool:
 
 
 def _load_state(path: Path) -> JsonObject:
+    _validate_state_path(path)
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -61,7 +62,19 @@ def _load_state(path: Path) -> JsonObject:
 
 
 def _write_state(path: Path, state: JsonObject) -> None:
-    path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _validate_state_path(path)
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    tmp_path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp_path.replace(path)
+
+
+def _validate_state_path(path: Path) -> None:
+    if path.is_symlink():
+        raise ValueError("workflow-state.json must be a regular file, not a symlink")
+    if not path.exists():
+        raise ValueError("workflow-state.json could not be read: file does not exist")
+    if not path.is_file():
+        raise ValueError("workflow-state.json must be a regular file")
 
 
 def _validate_filename(value: object, field: str) -> str | None:
@@ -109,10 +122,10 @@ def _final_candidates(master_dirs: list[tuple[str, Path]], raw_master: str) -> l
     candidates: list[MasterCandidate] = []
     seen: set[tuple[str, Path]] = set()
     for source, master_dir in master_dirs:
-        if not master_dir.is_dir():
+        if master_dir.is_symlink() or not master_dir.is_dir():
             continue
         for path in sorted(master_dir.iterdir()):
-            if path.name == raw_master or not path.is_file():
+            if path.name == raw_master or path.is_symlink() or not path.is_file():
                 continue
             if path.suffix.lower() not in AUDIO_EXTENSIONS:
                 continue
@@ -142,7 +155,10 @@ def _find_selected_candidate(candidates: list[MasterCandidate], selection: str) 
 
 
 def _copy_to_worktree(candidate: MasterCandidate, master_dir: Path) -> Path:
+    _validate_master_dir(master_dir)
     target = master_dir / candidate.name
+    if target.is_symlink():
+        raise ValueError(f"master audio file must be a regular file, not a symlink: 01-master/{candidate.name}")
     if candidate.source == "worktree":
         return target
     master_dir.mkdir(parents=True, exist_ok=True)
@@ -230,11 +246,24 @@ def _local_master_path(master_dir: Path, selected: str) -> Path:
     return master_dir / selected
 
 
+def _validate_master_dir(master_dir: Path) -> None:
+    if master_dir.is_symlink():
+        raise ValueError("01-master must be a directory inside the collection, not a symlink")
+
+
+def _validate_local_master_file(master_dir: Path, selected: str) -> None:
+    _validate_master_dir(master_dir)
+    path = _local_master_path(master_dir, selected)
+    if path.is_symlink():
+        raise ValueError(f"master audio file must be a regular file, not a symlink: 01-master/{selected}")
+    if not path.is_file():
+        raise ValueError(f"master audio file does not exist: 01-master/{selected}")
+
+
 def _prepare_selected_file(candidate: MasterCandidate | None, master_dir: Path, selected: str) -> None:
     if candidate is not None:
         _copy_to_worktree(candidate, master_dir)
-    if not _local_master_path(master_dir, selected).is_file():
-        raise ValueError(f"master audio file does not exist: 01-master/{selected}")
+    _validate_local_master_file(master_dir, selected)
 
 
 def _master_dirs(collection: Path, master_dir: Path, main_repo_root: Path | None = None) -> list[tuple[str, Path]]:

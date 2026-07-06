@@ -777,20 +777,21 @@ def test_workflow_wf_next_skip_manual_mastering_must_be_boolean(tmp_path, monkey
         load_config()
 
 
-def test_workflow_wf_next_approval_gates_must_be_boolean(tmp_path, monkeypatch):
+@pytest.mark.parametrize("gate_key", ["audio", "upload"])
+def test_workflow_wf_next_approval_gates_must_be_boolean(tmp_path, monkeypatch, gate_key):
     """#508/#1449: wf_next の boolean 契約を Python/TS で揃える."""
     sections = _minimal_sections()
     sections["workflow.json"] = {
         "workflow": {
             "wf_next": {
-                "approval_gates": {"audio": "false"},
+                "approval_gates": {gate_key: "false"},
             },
         },
     }
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="workflow.wf_next.approval_gates.audio は boolean"):
+    with pytest.raises(ConfigError, match=f"workflow.wf_next.approval_gates.{gate_key} は boolean"):
         load_config()
 
 
