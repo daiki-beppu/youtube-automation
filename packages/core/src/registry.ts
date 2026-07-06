@@ -4,8 +4,8 @@ import type { ChannelConfig } from "./config/index.ts";
 import type { ServiceError } from "./errors.ts";
 import {
   generateMasterService,
-  GenerateMasterInputSchema,
   GenerateMasterOutputSchema,
+  GenerateMasterServiceInputSchema,
 } from "./generate-master/index.ts";
 import {
   GenerateMetadataInput,
@@ -81,7 +81,7 @@ export const REGISTRY = {
     deps: ["channelDir"],
     description:
       "Suno ダウンロード済み音声をクロスフェード結合して master.mp3 を生成する",
-    inputSchema: GenerateMasterInputSchema,
+    inputSchema: GenerateMasterServiceInputSchema,
     outputSchema: GenerateMasterOutputSchema,
     run: generateMasterService,
   }),

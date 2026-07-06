@@ -1,9 +1,9 @@
-import { statSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { isAbsolute } from "node:path";
 import process from "node:process";
 
 import { err, toServiceError } from "@youtube-automation/core";
-import type { GenerateMasterInput } from "@youtube-automation/core/generate-master";
+import { tryFindChannelRootForCollection } from "@youtube-automation/core/generate-master";
+import type { GenerateMasterServiceInput } from "@youtube-automation/core/generate-master";
 import type { DepsMap } from "@youtube-automation/core/registry";
 import { REGISTRY } from "@youtube-automation/core/registry";
 import { defineCommand } from "citty";
@@ -27,32 +27,8 @@ const isMissingChannelDirError = (error: unknown): boolean =>
   error instanceof Error &&
   error.message.startsWith("config: CHANNEL_DIR 環境変数を設定するか");
 
-const isDirectory = (path: string): boolean => {
-  try {
-    return statSync(path).isDirectory();
-  } catch {
-    return false;
-  }
-};
-
-const findChannelRootForCollection = (
-  collection: string
-): string | undefined => {
-  let current = resolve(collection);
-  for (;;) {
-    if (isDirectory(join(current, "config", "channel"))) {
-      return current;
-    }
-    const parent = dirname(current);
-    if (parent === current) {
-      return undefined;
-    }
-    current = parent;
-  }
-};
-
 const resolveGenerateMasterDeps = (
-  input: Pick<Partial<GenerateMasterInput>, "channelDir" | "collection">,
+  input: Pick<Partial<GenerateMasterServiceInput>, "channelDir" | "collection">,
   channelDir: string | undefined
 ): GenerateMasterDeps => {
   if (input.channelDir !== undefined) {
@@ -62,7 +38,9 @@ const resolveGenerateMasterDeps = (
     return { channelDir };
   }
   if (input.collection !== undefined && isAbsolute(input.collection)) {
-    const collectionChannelDir = findChannelRootForCollection(input.collection);
+    const collectionChannelDir = tryFindChannelRootForCollection(
+      input.collection
+    );
     if (collectionChannelDir !== undefined) {
       return { channelDir: collectionChannelDir };
     }
@@ -190,17 +168,9 @@ export const generateMasterCommand = defineCommand({
         }
         const { input, quiet: inputQuiet } = parsedInput.value;
         quiet = inputQuiet;
-        const deps = resolveGenerateMasterDeps(
-          {
-            channelDir: input.channel_dir,
-            collection: input.collection,
-          },
-          channelDir
-        );
-        return await generateMasterEntry.run(
-          input as GenerateMasterInput,
-          deps
-        );
+        const serviceInput = generateMasterEntry.inputSchema.parse(input);
+        const deps = resolveGenerateMasterDeps(serviceInput, channelDir);
+        return await generateMasterEntry.run(serviceInput, deps);
       } catch (error) {
         return err(toServiceError(error));
       }

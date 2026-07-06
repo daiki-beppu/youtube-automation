@@ -219,7 +219,7 @@ describe("generateMasterService — skill config override", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.domain).toBe("validation");
+      expect(result.error.domain).toBe("config");
       expect(result.error.message).toContain("audio must be an object");
     }
     expect(readFfmpegCalls(logPath)).toEqual([]);
@@ -241,7 +241,7 @@ describe("generateMasterService — skill config override", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error.domain).toBe("validation");
+      expect(result.error.domain).toBe("config");
       expect(result.error.message).toContain("must contain an object");
     }
     expect(readFfmpegCalls(logPath)).toEqual([]);

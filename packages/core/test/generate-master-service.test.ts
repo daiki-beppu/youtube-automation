@@ -425,6 +425,28 @@ describe("generateMasterService — filesystem safety and output errors", () => 
     );
   });
 
+  test("surfaces channel root inspection errors instead of treating them as not found", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    const collection = setupCollection(channelRoot, "collections/demo", [
+      "01-a.mp3",
+      "02-b.mp3",
+    ]);
+    mkdirSync(join(channelRoot, "config"), { recursive: true });
+    symlinkSync("channel", join(channelRoot, "config", "channel"), "dir");
+    const ffmpegLog = installFakeFfmpeg();
+
+    const result = await generateMasterService({
+      collection,
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("io");
+      expect(result.error.message).toContain("failed to inspect channel root");
+    }
+    expect(readFfmpegCalls(ffmpegLog)).toEqual([]);
+  });
+
   test("rejects parsed-like invalid input at the service boundary", async () => {
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3"]);

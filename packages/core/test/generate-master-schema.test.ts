@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   GenerateMasterInputSchema,
   GenerateMasterOutputSchema,
+  GenerateMasterServiceInputSchema,
 } from "@youtube-automation/core/generate-master";
 
 describe("GenerateMasterInputSchema — snake_case input contract", () => {
@@ -42,6 +43,24 @@ describe("GenerateMasterInputSchema — snake_case input contract", () => {
     expect(parsed.shuffle).toBe(false);
     expect(parsed.shuffleSeed).toBeUndefined();
     expect(parsed.targetDurationMin).toBeUndefined();
+  });
+
+  test("service input schema preserves explicit field presence for config overrides", () => {
+    const parsed = GenerateMasterServiceInputSchema.parse({
+      bitrate: "256k",
+      collection: "collections/demo",
+      crossfade_duration: 1.5,
+      shuffle_seed: 0,
+    });
+
+    expect(parsed.bitrate).toBe("256k");
+    expect(parsed.crossfadeDuration).toBe(1.5);
+    expect(parsed.shuffleSeed).toBe(0);
+    expect(parsed.specified.bitrate).toBe(true);
+    expect(parsed.specified.crossfadeDuration).toBe(true);
+    expect(parsed.specified.shuffleSeed).toBe(true);
+    expect(parsed.specified.shuffle).toBe(false);
+    expect(parsed.specified.targetDurationMin).toBe(false);
   });
 
   test("rejects unknown keys instead of silently dropping them", () => {

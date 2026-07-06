@@ -220,13 +220,13 @@ export const readMasterupAudioConfig = async (
   }
   const parsed = parseMasterupConfig(path, await readConfigText(path));
   if (!isRecord(parsed)) {
-    throw new Error(`validation: ${path} must contain an object`);
+    throw new Error(`config: ${path} must contain an object`);
   }
   const audioSection = Object.hasOwn(parsed, AUDIO_SECTION_KEY)
     ? parsed[AUDIO_SECTION_KEY]
     : {};
   if (!isRecord(audioSection)) {
-    throw new Error(`validation: ${path} audio must be an object`);
+    throw new Error(`config: ${path} audio must be an object`);
   }
   const result = MasterupAudioConfigSchema.safeParse(
     snakeToCamel(audioSection)

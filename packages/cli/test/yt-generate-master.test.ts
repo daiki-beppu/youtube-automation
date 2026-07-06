@@ -424,6 +424,106 @@ describe("tayk dispatcher — generate-master", () => {
     }
   );
 
+  testCliSmoke("passes bitrate and crossfade-duration to ffmpeg", () => {
+    const channelRoot = makeTempRoot("yt-generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    const fake = installFakeFfmpeg();
+
+    const proc = runTayk(
+      fake.env,
+      "generate-master",
+      "--json",
+      "--channel-dir",
+      channelRoot,
+      "--bitrate",
+      "160k",
+      "--crossfade-duration",
+      "2.5",
+      "collections/demo"
+    );
+
+    expect(proc.exitCode).toBe(0);
+    expect(proc.stderr?.toString()).toBe("");
+    const parsed = JSON.parse(proc.stdout?.toString() ?? "") as {
+      bitrate: string;
+      crossfadeDuration: number;
+    };
+    expect(parsed.bitrate).toBe("160k");
+    expect(parsed.crossfadeDuration).toBe(2.5);
+    const args = readFfmpegCall(fake.logPath);
+    expect(args).toContain("160k");
+    expect(args).toContain("[0:a][1:a]acrossfade=d=2.5:c1=tri:c2=tri[aout]");
+  });
+
+  testCliSmoke(
+    "passes pin-first-count and no-loop through the CLI entrypoint",
+    () => {
+      const channelRoot = makeTempRoot("yt-generate-master-channel-");
+      setupCollection(channelRoot, "collections/demo", [
+        "01-a.mp3",
+        "02-b.mp3",
+        "03-c.mp3",
+        "04-d.mp3",
+      ]);
+      writeText(
+        join(channelRoot, "config", "skills", "masterup.json"),
+        JSON.stringify({ audio: { target_duration_min: 5 } })
+      );
+      const fakeFfmpeg = installFakeFfmpeg();
+      const fakeFfprobe = installFakeFfprobe({
+        "01-a.mp3": 30,
+        "02-b.mp3": 30,
+        "03-c.mp3": 30,
+        "04-d.mp3": 30,
+      });
+
+      const proc = runTayk(
+        {
+          ...fakeFfmpeg.env,
+          ...fakeFfprobe.env,
+          PATH: [
+            dirname(fakeFfprobe.logPath),
+            dirname(fakeFfmpeg.logPath),
+            process.env.PATH ?? "",
+          ].join(delimiter),
+        },
+        "generate-master",
+        "--json",
+        "--channel-dir",
+        channelRoot,
+        "--pin-first-count",
+        "2",
+        "--shuffle",
+        "--shuffle-seed",
+        "42",
+        "--no-loop",
+        "collections/demo"
+      );
+
+      expect(proc.exitCode).toBe(0);
+      expect(proc.stderr?.toString()).toBe("");
+      const parsed = JSON.parse(proc.stdout?.toString() ?? "") as {
+        durationPreview?: { targetSeconds?: number };
+        loopCount: number;
+        messages: string[];
+        segmentCount: number;
+      };
+      expect(parsed.loopCount).toBe(1);
+      expect(parsed.segmentCount).toBe(4);
+      expect(parsed.durationPreview?.targetSeconds).toBeUndefined();
+      expect(parsed.messages).toContain("[Shuffle] seed=42");
+      expect(parsed.messages).toContain(
+        '[Pin] first 2 track(s) fixed: ["01-a.mp3","02-b.mp3"]'
+      );
+      expect(readFfprobeCalls(fakeFfprobe.logPath)).toHaveLength(4);
+      expect(
+        inputFilesInCommand(readFfmpegCall(fakeFfmpeg.logPath))
+          .slice(0, 2)
+          .map((path) => basename(path))
+      ).toEqual(["01-a.mp3", "02-b.mp3"]);
+    }
+  );
+
   testCliSmoke("quiet still prints the auto shuffle seed message", () => {
     const channelRoot = makeTempRoot("yt-generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);

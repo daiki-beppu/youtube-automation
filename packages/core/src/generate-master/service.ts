@@ -19,8 +19,8 @@ import { readMasterupAudioConfig } from "./config.ts";
 import { MASTER_DIRNAME, MASTER_FILENAME } from "./constants.ts";
 import { buildFfmpegArgs, runFfmpeg } from "./ffmpeg.ts";
 import {
-  findChannelRootForCollection,
   resolveCollectionPathForChannel,
+  tryFindChannelRootForCollection,
 } from "./paths.ts";
 import {
   GenerateMasterOutputSchema,
@@ -70,7 +70,7 @@ const resolveConfigChannelDir = (
     return channelDir;
   }
   return input.collection !== undefined && isAbsolute(input.collection)
-    ? findChannelRootForCollection(input.collection)
+    ? tryFindChannelRootForCollection(input.collection)
     : undefined;
 };
 

@@ -7,6 +7,9 @@ const isNodeErrorCode = (error: unknown, code: string): boolean =>
   "code" in error &&
   error.code === code;
 
+const isMissingPathError = (error: unknown): boolean =>
+  isNodeErrorCode(error, "ENOENT") || isNodeErrorCode(error, "ENOTDIR");
+
 const realpathIfExists = (path: string): string | undefined => {
   try {
     return realpathSync(path);
@@ -26,17 +29,23 @@ const isPathInsideOrSame = (root: string, path: string): boolean => {
 const isDirectory = (path: string): boolean => {
   try {
     return statSync(path).isDirectory();
-  } catch {
-    return false;
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return false;
+    }
+    throw error;
   }
 };
 
-export const findChannelRootForCollection = (
+const hasChannelConfigDirectory = (path: string): boolean =>
+  isDirectory(join(path, "config", "channel"));
+
+const findChannelRootForCollection = (
   collection: string
 ): string | undefined => {
   let current = resolve(collection);
   for (;;) {
-    if (isDirectory(join(current, "config", "channel"))) {
+    if (hasChannelConfigDirectory(current)) {
       return current;
     }
     const parent = dirname(current);
@@ -44,6 +53,19 @@ export const findChannelRootForCollection = (
       return undefined;
     }
     current = parent;
+  }
+};
+
+export const tryFindChannelRootForCollection = (
+  collection: string
+): string | undefined => {
+  try {
+    return findChannelRootForCollection(collection);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`io: failed to inspect channel root: ${message}`, {
+      cause: error,
+    });
   }
 };
 

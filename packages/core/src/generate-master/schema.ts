@@ -201,6 +201,9 @@ const GenerateMasterExternalServiceInputSchema =
 
 export const GenerateMasterInputSchema = GenerateMasterExternalInputSchema;
 
+export const GenerateMasterServiceInputSchema =
+  GenerateMasterRawServiceInputSchema;
+
 export const ParseableGenerateMasterInputSchema = z.union([
   GenerateMasterInternalInputSchema,
   GenerateMasterRawServiceInputSchema,
@@ -231,4 +234,7 @@ export type GenerateMasterInternalInput = z.infer<
   typeof GenerateMasterInternalInputSchema
 >;
 export type GenerateMasterInput = z.infer<typeof GenerateMasterInputSchema>;
+export type GenerateMasterServiceInput = z.infer<
+  typeof GenerateMasterServiceInputSchema
+>;
 export type GenerateMasterOutput = z.infer<typeof GenerateMasterOutputSchema>;
