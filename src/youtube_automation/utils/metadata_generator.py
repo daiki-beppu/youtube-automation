@@ -25,6 +25,7 @@ from youtube_automation.utils.audio_formats import AUDIO_EXTS
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.utils.preflight_checks import requires_scene_phrases
 from youtube_automation.utils.probe import probe_duration
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.time_utils import format_duration_display, format_duration_short, format_timestamp
@@ -211,6 +212,8 @@ def validate_scene_phrases(
 
     `/video-description` など `workflow-state.json` への書き込み前に呼ぶことで、
     アップロード時 preflight まで超過発覚を遅らせず、全言語分をまとめて検査できる.
+    単一言語チャンネルでは localizations 用の scene_phrases を生成しないため、
+    空の scene_phrases を許容して空リストを返す.
 
     Args:
         scene_phrases: {"en": ..., "ja": ..., ...} コレクション別の感情フレーズ翻訳
@@ -220,11 +223,15 @@ def validate_scene_phrases(
         違反のリスト。空なら全言語 100 codepoint 以内.
 
     Raises:
-        ValueError: scene_phrases が一部言語で欠落している場合、または
-            `localizations.json` に `title_template` が無い言語がある場合.
+        ValueError: 多言語チャンネルで scene_phrases が一部言語で欠落している場合、
+            または `localizations.json` に `title_template` が無い言語がある場合.
     """
     loc_config = config.localizations.data
     supported = loc_config.get("supported_languages", [])
+
+    # 単一言語チャンネルは scene_phrases 不要（populate も no-op）#1470
+    if not requires_scene_phrases(supported):
+        return []
 
     missing_langs = [lang for lang in supported if not scene_phrases.get(lang)]
     if missing_langs:
@@ -834,29 +841,39 @@ class BAHMetadataGenerator:
 
     def _load_scene_phrases(self) -> Dict[str, str]:
         """workflow-state.json から scene_phrases を読み込み"""
+        state = self._load_workflow_state()
+        scene_phrases = state.get("scene_phrases", {})
+        if not isinstance(scene_phrases, dict):
+            raise ValidationError("workflow-state.json::scene_phrases は object である必要があります")
+        return scene_phrases
+
+    def _load_workflow_state(self) -> dict:
+        """workflow-state.json を読み込む。存在しない場合は空 dict を返す。"""
         paths = CollectionPaths(self.collection_path)
         ws_path = paths.workflow_state_path
-        if ws_path.exists():
-            try:
-                with open(ws_path, "r", encoding="utf-8") as f:
-                    state = json.load(f)
-                return state.get("scene_phrases", {})
-            except (json.JSONDecodeError, KeyError):
-                pass
-        return {}
+        if not ws_path.exists():
+            return {}
+        try:
+            with open(ws_path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+        except json.JSONDecodeError as exc:
+            raise ValidationError(f"workflow-state.json の JSON パースに失敗: {ws_path}: {exc}") from exc
+        except OSError as exc:
+            raise ValidationError(f"workflow-state.json を読み込めません: {ws_path}: {exc}") from exc
+        if not isinstance(state, dict):
+            raise ValidationError(f"workflow-state.json の root は object である必要があります: {ws_path}")
+        return state
 
     def _load_scene_emoji(self) -> str:
         """workflow-state.json から planning.scene_emoji を読み込み"""
-        paths = CollectionPaths(self.collection_path)
-        ws_path = paths.workflow_state_path
-        if ws_path.exists():
-            try:
-                with open(ws_path, "r", encoding="utf-8") as f:
-                    state = json.load(f)
-                return state.get("planning", {}).get("scene_emoji", "")
-            except (json.JSONDecodeError, KeyError):
-                pass
-        return ""
+        state = self._load_workflow_state()
+        planning = state.get("planning", {})
+        if not isinstance(planning, dict):
+            raise ValidationError("workflow-state.json::planning は object である必要があります")
+        scene_emoji = planning.get("scene_emoji", "")
+        if not isinstance(scene_emoji, str):
+            raise ValidationError("workflow-state.json::planning.scene_emoji は string である必要があります")
+        return scene_emoji
 
     def generate_localizations(
         self,
@@ -866,6 +883,9 @@ class BAHMetadataGenerator:
         scene_emoji: str = "",
     ) -> Dict:
         """各言語のローカライズされたタイトル・説明文を生成（jazzgak. TTP ハイブリッド方式）
+
+        単一言語チャンネルでは YouTube snippet 側がデフォルト言語のタイトル・概要欄を
+        持つため、localizations は生成せず空 dict を返す.
 
         Args:
             english_title: 英語デフォルトタイトル（フォールバック用）
@@ -878,6 +898,12 @@ class BAHMetadataGenerator:
         localizations = {}
         loc_config = self.config.localizations.data
         scene_phrases = scene_phrases or {}
+
+        # 単一言語チャンネルは scene_phrases が populate されない（no-op）ため
+        # localizations 自体を生成しない。デフォルト言語のタイトル・概要欄は
+        # snippet 側で供給済みなので localizations 欠落による情報損失はない (#1470)
+        if not requires_scene_phrases(loc_config.get("supported_languages", [])):
+            return {}
 
         # 英語固定パーツ（config/channel/content.json の descriptions.metadata から取得）
         desc_metadata = self.config.content.descriptions.metadata

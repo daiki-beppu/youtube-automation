@@ -59,6 +59,7 @@ class CompleteCollectionExecutorMixin:
             result = self.uploader.upload_collection(
                 str(collection_path),
                 publish_at=publish_at,
+                apply_default_publish_at=False,
                 resume_session_uri=resume_session_uri,
                 on_session_uri_changed=_on_session_uri_changed,
                 on_upload_complete=_on_upload_complete,
