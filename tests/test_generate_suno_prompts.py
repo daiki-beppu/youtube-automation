@@ -1382,6 +1382,23 @@ def _style_first_lines(entries: list[dict]) -> list[str]:
     return [entry["style"].splitlines()[0] for entry in entries]
 
 
+def _style_blocks_from_md(md: str) -> list[str]:
+    lines = md.splitlines()
+    blocks: list[str] = []
+    for i, line in enumerate(lines):
+        if line != "**Styles:**":
+            continue
+        if i + 1 >= len(lines) or lines[i + 1] != "```":
+            continue
+        block_lines: list[str] = []
+        for block_line in lines[i + 2 :]:
+            if block_line == "```":
+                break
+            block_lines.append(block_line)
+        blocks.append("\n".join(block_lines))
+    return blocks
+
+
 def _four_distinct_entries() -> list[dict]:
     return [
         {"name_jp": "屋上の静寂", "name_en": "Rooftop Silence", "tempo": "slow", "scenes": ["a quiet rooftop"]},
@@ -1410,6 +1427,8 @@ def test_default_yaml_enables_style_variation_with_pools():
         ({"enabled": "yes"}, r"enabled は bool"),
         ({"enabled": True, "pools": None}, r"pools は mapping"),
         ({"enabled": True, "pools": []}, r"pools は mapping"),
+        ({"enabled": True, "pools": {"": ["warm texture"]}}, r"axis 名"),
+        ({"enabled": True, "pools": {1: ["warm texture"]}}, r"axis 名"),
         ({"enabled": True, "pools": {"texture": "warm texture"}}, r"texture は list\[str\]"),
         ({"enabled": True, "pools": {"texture": [3]}}, r"descriptor は非空文字列"),
         ({"enabled": True, "pools": {"texture": [""]}}, r"descriptor は非空文字列"),
@@ -1424,6 +1443,20 @@ def test_style_variation_rejects_invalid_config_shapes(channel_dir, tmp_path, st
     patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=_four_distinct_entries(), tracks_top=8)
 
     with pytest.raises(ConfigError, match=error_pattern):
+        build_prompt_entries(patterns_path)
+
+
+def test_style_variation_rejects_unknown_explicit_style_variant(channel_dir, tmp_path):
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        style_variants={"ambient": {"name": "ambient pad", "genre_line": "ambient pad, soft synth"}},
+    )
+    entries_def = _four_distinct_entries()
+    entries_def[1]["style"] = "typo_variant"
+    patterns_path = _write_patterns_with_explicit_entries(tmp_path, entries=entries_def, tracks_top=8)
+
+    with pytest.raises(ConfigError, match="未定義の style variant"):
         build_prompt_entries(patterns_path)
 
 
@@ -1560,9 +1593,7 @@ def test_style_variation_md_and_json_share_same_style_lines(channel_dir, tmp_pat
     md = generate(patterns_path)
     entries = build_prompt_entries(patterns_path)
 
-    md_lines = md.splitlines()
-    for line in _style_first_lines(entries):
-        assert line in md_lines, f"JSON の Style 第 1 行が md に存在しない: {line!r}"
+    assert _style_blocks_from_md(md) == [entry["style"] for entry in entries]
 
 
 def test_style_variation_wraps_when_pool_is_exhausted(channel_dir, tmp_path):

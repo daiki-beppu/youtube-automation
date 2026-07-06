@@ -520,7 +520,9 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
         style_key = pattern.get("style")
 
         # Per-pattern style variant override
-        has_explicit_variant = bool(style_key and style_key in style_variants)
+        if style_key and style_key not in style_variants:
+            raise ConfigError(f"pattern.style に未定義の style variant が指定されています: {style_key!r}")
+        has_explicit_variant = bool(style_key)
         if has_explicit_variant:
             variant = style_variants[style_key]
             effective_style = variant["genre_line"]
