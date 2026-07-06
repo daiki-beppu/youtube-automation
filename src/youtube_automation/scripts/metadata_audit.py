@@ -36,6 +36,7 @@ from youtube_automation.utils.preflight_checks import (  # noqa: E402
     check_duration,
     check_tags_count,
     check_tags_yt_chars,
+    check_title_codepoint_limit,
     extract_descriptions_md_tags,
 )
 from youtube_automation.utils.probe import probe_duration  # noqa: E402
@@ -78,8 +79,8 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
         pass
     elif not title:
         issues.append("missing 'タイトル案' section")
-    elif len(title) > 100:
-        issues.append(f"title too long: {len(title)} codepoints (>100)")
+    elif msg := check_title_codepoint_limit(title):
+        issues.append(msg)
 
     if description_raw is None:
         pass
@@ -157,8 +158,8 @@ def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
         desc = snippet.get("description", "")
         locs = item.get("localizations", {}) or {}
 
-        if len(title) > 100:
-            issues[vid].append(f"YT title too long: {len(title)}")
+        if msg := check_title_codepoint_limit(title):
+            issues[vid].append(f"YT {msg}")
         if "🎧  🌧" in title or "🎧   🌧" in title:
             issues[vid].append("YT title scene_phrase missing (auto-truncated)")
 
