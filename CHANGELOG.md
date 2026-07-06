@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `feat(thumbnail)`: サムネイル文字フォントを安定して指定できる決定的合成経路を追加（#1332）。`yt-thumbnail-text` CLI が textless 背景（`main.png` 系）に実フォントファイル（.ttf/.otf/.ttc）を Pillow で描画し、同一の背景・テキスト・設定なら常に同一の出力を生成する。フォント指定は skill-config `image_generation.gemini.thumbnail_text.overlay`（`config/skills/thumbnail.yaml`）で行い、フォント未設定・ファイル不在時は理由と代替手順（AI 経路へのフォールバック含む）を明示して停止する。AI プロンプト経路向けにも `single_step.typography_clause` を追加し、SKILL.md に 2 経路の使い分けを示す「フォント安定化」章を新設
+- `feat(suno)`: `/suno` の Style プロンプト生成に entry ごとの自動バリエーション機構（`style_variation`、既定で有効）を追加。`genre_line` のコアジャンルを維持したまま texture / rhythm feel の descriptor を entry 通し番号ベースの決定的ローテーションで Style 第 1 行へ付与し、Suno V5.5 での楽曲同質化を防ぐ。先頭 entry は base style を維持（単一 entry の既存コレクションは出力不変）、`style` variant の明示 override がある entry は従来どおり優先、`style_variation.enabled: false` で従来動作へ戻せる。全 entry の Style 文が完全一致する組は生成時に警告する（#1456）
 - `feat(wf-next)`: `config/channel/workflow.json::workflow.wf_next.skip_manual_mastering`（default `false`）を新設。`true` のとき `/wf-next` のマスター音源検出（2-B）で `01-master/` に別ファイルが無くても `assets.raw_master` をそのまま `assets.master_audio` として採用し `phase: "mastered"` へ進む（raw=final 運用）。`approval_gates.audio` とは独立で、後方互換（未設定は従来通り停止）。docs/workflow-cheatsheet.md のよくある質問に設定手順を追記（#1449）
 
 ### Changed
