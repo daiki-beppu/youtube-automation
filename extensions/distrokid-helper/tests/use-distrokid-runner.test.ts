@@ -157,8 +157,9 @@ describe("useDistrokidRunner", () => {
     vi.clearAllMocks();
   });
 
-  // dir mode サーバーの URL ルーティング fetch mock。released record POST を受けると
-  // 以降の /distrokid/collections で該当 disc を released:true にする（サーバー挙動の再現）。
+  // dir mode サーバーの URL ルーティング fetch mock。released record は background message
+  // に委譲されるため、recordRelease message を受けると以降の /distrokid/collections で
+  // 該当 disc を released:true にする（サーバー挙動の再現）。
   function stubDirModeServer({ recordStatus = 200 }: { recordStatus?: number } = {}) {
     let disc1Released = false;
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
@@ -181,6 +182,15 @@ describe("useDistrokidRunner", () => {
         return jsonResponse(recordStatus, {});
       }
       throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.mocked(sendMessage).mockImplementation(async (type) => {
+      if (type === "recordRelease") {
+        if (recordStatus >= 300) {
+          throw new Error(`HTTP ${recordStatus}`);
+        }
+        disc1Released = true;
+      }
+      return undefined;
     });
   }
 
@@ -248,11 +258,15 @@ describe("useDistrokidRunner", () => {
     expect(sendMessage).toHaveBeenCalledWith("injectStart", expect.anything(), 1);
     expect(sendMessage).toHaveBeenCalledWith("injectTrack", expect.objectContaining({ trackIndex: 0 }), 1);
     expect(sendMessage).toHaveBeenCalledWith("injectFinish", undefined, 1);
-    // 配信済み記録 POST 後の再取得で disc1 が select から消える。
-    expect(fetchMock).toHaveBeenCalledWith(
-      `${BASE_URL}/distrokid/releases`,
-      expect.objectContaining({ method: "POST" }),
-    );
+    // 配信済み記録は background に委譲し、その成功後の再取得で disc1 が select から消える。
+    expect(sendMessage).toHaveBeenCalledWith("recordRelease", {
+      baseUrl: BASE_URL,
+      record: {
+        collection_id: DISC1.collection_id,
+        disc: DISC1.disc,
+        album_title: DISC1.album_title,
+      },
+    });
     expect(current.collections.map((c) => c.disc)).toEqual([DISC2.disc]);
   });
 

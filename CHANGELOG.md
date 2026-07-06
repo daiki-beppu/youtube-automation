@@ -76,6 +76,7 @@ local fix 衝突注意:
 
 ### Changed
 
+- `feat(distrokid-helper)`: `POST /distrokid/releases` を suno-helper の downloaded POST と同じ background + serve token 必須の書き込み境界に統一（ADR-0016）。サーバー側で `X-Serve-Token` を検証し token なし / 不正 token / 不正 origin を 403 で拒否、popup は直接 POST せず background service worker へ typed message（`recordRelease`）で委譲、token stale の 403 は token 再取得で 1 回だけ retry する。token 取得 / 403 retry は shared API の共通ヘルパに集約し、書き込みには `--allow-origin chrome-extension://<EXTENSION_ID>` が必須になった（#1360）
 - `refactor(distrokid-helper)`: popup `App.tsx` から fetch / collection 選択 / 注入 / 停止 / 配信済み記録の実行制御を `useDistrokidRunner` hook へ抽出し、suno-helper と同じ helper extension shell 構成（ADR-0016）へ揃えた。popup UI と「注入後にユーザーが目視確認して手動で続行する」安全境界は維持（#1361）
 - `refactor(suno-helper)`: サーバー側の旧 `POST /suno/playlists` エンドポイントと `suno-playlists.json` 向け URL マッピング関数を撤去し、playlist URL 記録を `POST /collections/<id>/downloaded` に一本化（#1261）
 - `feat(suno-helper)`: `suno-prompts.json` の `duration_filter` envelope を shared API で型付けし、省略時は 60〜300 秒の既定値へ正規化するようにした（#1259）

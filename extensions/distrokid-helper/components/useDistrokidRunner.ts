@@ -13,7 +13,6 @@ import type { ReleasePayload } from "@/lib/types";
 import {
   fetchDistrokidCollections,
   excludeReleasedDiscs,
-  recordDistrokidRelease,
   resolveCompatibilityWarning,
   type DistrokidCollectionSummary,
   type DistrokidReleaseRecord,
@@ -211,11 +210,13 @@ export function useDistrokidRunner(): DistrokidRunnerState {
       // フィル完了後、dir mode で payload を取得した disc のみ配信済み記録を POST する (#934)。
       // 現在の select 値ではなく payload 取得元（payloadSourceRef）に束縛する —
       // fetch 後に select を変えてもフィルされたのは取得済み payload の disc のため。
+      // POST は popup から直接 fetch せず background に委譲する — serve token 必須の
+      // 書き込み境界は extension origin の background で越える（#1360、ADR-0016）。
       // POST 失敗はフィル成功を覆さない（warning を添えるだけ）。
       const source = payloadSourceRef.current;
       if (isDirModeRef.current && source !== null) {
         try {
-          await recordDistrokidRelease(serverUrl, source);
+          await sendMessage("recordRelease", { baseUrl: serverUrl.trim(), record: source });
           // 配信済み記録成功後、一覧を再取得して select から消す (#934)。
           await loadCollections(serverUrl.trim());
         } catch (recordError) {
