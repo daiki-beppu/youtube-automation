@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(suno-lyric)`: `/suno-lyric` がマルチ曲 collection で `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` を全曲一言一句同一のまま出力するのを防ぐため、Workflow に「これらの section も曲ごとの scene / persona で書き分ける」指示を明記し、Validation に曲間セクション重複のセルフチェックと書き分け直し手順を追加。`suno-lyrics.json` の曲間重複を機械検出する `references/check_lyric_duplication.py` を新設（重複検出時は exit 1、#1445）
 - `fix(doctor)`: `ttp_wf_new_readiness` の video_analysis 要件が benchmark top 5 のライブ配信（`duration_iso == "P0D"`、Gemini 取り込み不可で解析不能）により恒久的に充足不能になる問題を修正。live は期待集合から除外して次点 VOD を繰り上げ、VOD が不足する場合は母数を縮小し、除外時は message に「live 配信 N 本を除外」を明示する。`yt-video-analyze --source benchmark` も同じ選定で live をスキップして次点 VOD を解析する（#1462）
 - `fix(hooks)`: oxlint.config.ts / oxfmt.config.ts の `ignorePatterns` 対象パス（`examples/**` `docs/**` `config/**` など）のみを変更した commit で lefthook pre-commit の oxlint / oxfmt が「対象ファイルなし」を non-zero exit で返し必ず失敗する問題（#1428 の同型）を修正。`lefthook.yml` の両コマンドに `--no-error-on-unmatched-pattern` を追加し、対象 0 件を成功として扱うようにした（ignorePatterns のパスを exclude へ列挙する二重管理は回避、#1452）
+- `fix(videoup)`: `generate_videos.sh` の `build_effect_filter()` で `VIDEOUP_EFFECT=particles` / `bokeh` を指定すると出力が緑一色または黒一色になる問題を修正。原因は 2 点あり、(1) `geq=lum='...'` で `cb`/`cr`（色差）を省略すると環境によってデフォルト値が中央値 128 ではなく 0 になり YUV→RGB 変換で緑被りが発生する、(2) `geq` の直前が `format=yuv420p`（アルファプレーン無し）のままだと `a=` の不透明度式が無視され常時アルファ=255（完全不透明）になり、エフェクトレイヤーが背景を完全に覆い隠して黒一色化する。`gradient` エフェクトは元々 `geq` 直前に `format=yuva420p` を明示していたためこの問題を踏んでいなかった。`particles` は `geq=` に `cb=128:cr=128` を追加して白い粒子を維持し、`bokeh` は `cb='cb(X,Y)':cr='cr(X,Y)'` で元の暖色 chroma を維持したまま、両方で `noise=...` の後・`geq=...` の前に `format=yuva420p` を挿入した。あわせて `fx_baked.params` に filtergraph stamp を含め、旧 filtergraph で焼いた cache を再利用しないようにした
 - `fix(analytics-report)`: `analytics-report/SKILL.md` の「CTR 値の解釈」が「整数値 2606」から意味不明な式の否定を経て「そのまま使用」に至る自己矛盾した記述になっており、コード実態（`reporting_api.py` の `total_weighted / total_impressions` が返す百分率 float。例 `4.2` = 4.2%、`tests/test_ctr_resolver.py` のフィクスチャも 4.2）と食い違っていた。百分率 float である旨・表示フォーマット（小数 1〜2 桁 + `%`）・100 で割る/掛ける/整数再解釈の禁止・`None` 時の表示を一義的な規則として書き直した（#1514）
 - `fix(skills)`: 兄弟スキル間の frontmatter description 矛盾・発動キーワード衝突を解消。viewer-voice の「/audience-persona-design らの前提データを作る任意後続スキル」を「/audience-persona-design の必須入力（viewer-voice-analysis.md）を作る前工程。実行タイミングは任意」に書き換え、audience-persona-design 側の必須入力表記との矛盾を解消（audience-persona-design 側も対象ファイル名を明記して双方向に整合）。benchmark と channel-research が共に持っていた発動キーワード「競合分析」の重複は、benchmark を「競合データ収集」に変更し末尾に「収集済みデータの分析は /channel-research」の否定トリガーを追加、channel-research 側に「データ収集・更新は /benchmark（未実行なら先に案内）」を追記して解消。videoup / video-upload は名前類似で相互区別が無かったため、互いを名指しする一文（videoup→「YouTube への投稿は /video-upload」、video-upload→「動画ファイルの生成（MP3→MP4）は /videoup」）を追加した（#1515）
 - `fix(setup)`: `/setup` の GCP project ID 推奨値生成で、30 文字超過時の truncate 手順が 2 通りに読め、機械的に切ると末尾ハイフン（GCP 制約違反）の ID も生成されうる問題を修正。`yt-` prefix は必ず保持し slug 末尾から削る→切り詰め後の末尾ハイフンを追加除去する→6 文字未満や意味が読み取れなくなる場合は自動生成をやめカスタム入力を求める、の 3 段手順 + 31→30 文字の具体例で一義化した（slug 生成規則自体は無変更、#1523）
@@ -35,6 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(live-clean)`: `/live-clean` Step 3 末尾の削除承認指示が「AskUserQuestion で確認、承認されるまで実行しない」という自由記述のみで、質問文の内容・選択肢・曖昧応答時の扱いが未指定だった。AskUserQuestion の質問文に削除対象の実数（「削除対象: N コレクション / M ファイル / X.X GB」）と「削除は取り消せません（rm -f による物理削除）」の警告を含め、選択肢を「削除を実行する」「キャンセル」の明示 2 択に固定（デフォルトを実行側にしない）。「削除を実行する」が明示的に選ばれた場合のみ Step 4 へ進み、それ以外の応答（自由文・別話題・無回答）はすべてキャンセル扱いとした。AskUserQuestion 非対応環境（Codex 等）ではテキスト提示 + 明示的な承認発言待ちを明記し、Step 4 の実行条件も同じ選択文言（「削除を実行する」が明示的に選ばれた場合のみ）に揃えた（#1518）
 - `fix(masterup)`: `/masterup` が部分ダウンロード（例: 10 曲中 5 曲失敗）を検知できず、`assets.music_downloaded` が `true` のまま欠けた曲数でマスター音源を生成しうる問題を修正。コレクション特定 Step 直後に「DL 完全性チェック」を追加し、`02-Individual-music/` の実ファイル数（mp3/m4a/wav）を期待曲数（`suno-prompts.json` の entry 数 × 2、インスト / ボーカル共通の算式）と突合する。不足時は `music_downloaded` フラグに関わらず揃っているとみなさず不足曲数を提示して停止、ファイルが 0 件なら `/suno-helper` 未実行として案内して停止する。期待曲数・実ファイル数の算出は `/suno-helper` の DL 完了判定・`yt-collection-serve` の status 判定と同じ既存ユーティリティ（`suno_downloaded_workflow_state` / `suno_downloaded_archive`）を再利用し、算式を二重管理しない（#1521）
 - `fix(wf-next)`: `/wf-next` の Suno パスが `workflow-state.json::planning.music.suno_playlist_url` に記録済みの playlist URL を確認せず、`02-Individual-music/` のダウンロード完了実態も見ないまま常に AskUserQuestion で URL 再入力を要求していた問題を修正。URL 記録済み + 音声ファイル（mp3/m4a/wav）実在なら記録済み URL で `/masterup <URL>` を自動実行し、URL 記録済みだがファイル未実在ならダウンロード未完了の可能性を案内して停止、URL 未記録なら従来通り AskUserQuestion で入力を求めるようにした。`wf-new/references/schema.md` に `planning.music.suno_playlist_url` / `assets.music_downloaded` のフィールド定義も追記（#1539）
+
+### Migration
+
+所要時間の目安: 0〜2 分
+
+local fix 衝突注意:
+- videoup: `generate_videos.sh` の `build_effect_filter()`（`particles` / `bokeh`）をこのバグの回避のためローカルパッチ済みの下流リポジトリは、`yt-skills sync` 取り込み後にローカルパッチを外すこと（残したままだと二重適用にはならないが、次回 upstream 側の当該箇所の変更が sync で上書きされずローカル差分として残り続ける）。取り込み後は `VIDEOUP_EFFECT=particles` / `bokeh` で一度動画を生成し、緑/黒一色になっていないか確認する。
+
+サマリ:
+
+- `particles` / `bokeh` エフェクトが緑一色・黒一色になる重大バグを修正した。エラーなく「生成完了」と表示されるため気づきにくく、該当エフェクトを使っている下流チャンネルは取り込み後に出力確認を推奨する。
 
 ## [5.5.15] - 2026-07-02
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -168,6 +169,67 @@ def _run_generate_videos(
         cwd=_REPO_ROOT,
     )
     return result, ffmpeg_log
+
+
+def _assert_effect_alpha_plane_and_neutral_chroma(
+    final_cmd: str,
+    *,
+    noise_filter: str,
+    lum_threshold: int,
+) -> None:
+    final_cmd = final_cmd.replace("\t", "")
+    effect_layer = f"{noise_filter},format=yuva420p,geq=lum='if(gt(lum(X,Y),{lum_threshold}),255,0)':cb=128:cr=128:a="
+    assert effect_layer in final_cmd
+
+
+def _assert_effect_alpha_plane_and_source_chroma(
+    final_cmd: str,
+    *,
+    noise_filter: str,
+    lum_threshold: int,
+) -> None:
+    final_cmd = final_cmd.replace("\t", "")
+    effect_layer = (
+        f"{noise_filter},format=yuva420p,geq=lum='if(gt(lum(X,Y),{lum_threshold}),255,0)':cb='cb(X,Y)':cr='cr(X,Y)':a="
+    )
+    assert effect_layer in final_cmd
+
+
+def _run_ffmpeg_rgba_frame(filtergraph: str, *, width: int, height: int) -> bytes:
+    if shutil.which("ffmpeg") is None:
+        pytest.skip("ffmpeg is required for visual filter integration tests")
+
+    result = subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            filtergraph,
+            "-frames:v",
+            "1",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgba",
+            "-",
+        ],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    assert len(result.stdout) == width * height * 4
+    return result.stdout
+
+
+def _filter_complex_command(ffmpeg_log: Path) -> str:
+    commands = ffmpeg_log.read_text(encoding="utf-8").splitlines()
+    for command in commands:
+        if "-filter_complex" in command:
+            return command
+    raise AssertionError(f"filter_complex command not found: {commands}")
 
 
 @pytest.mark.parametrize("thumbnail_name", ["thumbnail.jpg", "thumbnail.png"])
@@ -562,11 +624,16 @@ def test_particles_effect_switches_to_libx264_with_filter_complex(tmp_path: Path
         extra_env={"VIDEOUP_EFFECT": "particles"},
     )
     assert result.returncode == 0, result.stderr
-    final_cmd = ffmpeg_log.read_text(encoding="utf-8").splitlines()[-1]
+    final_cmd = _filter_complex_command(ffmpeg_log)
     assert "-filter_complex" in final_cmd
     assert "[vout]" in final_cmd
     assert "-c:v libx264" in final_cmd
     assert "-c:v copy" not in final_cmd
+    _assert_effect_alpha_plane_and_neutral_chroma(
+        final_cmd,
+        noise_filter="noise=alls=80:allf=t+u",
+        lum_threshold=230,
+    )
     # subtle (default) は alpha=0.10
     assert "0.10*255" in final_cmd
 
@@ -580,10 +647,76 @@ def test_bokeh_effect_uses_gblur(tmp_path: Path) -> None:
         extra_env={"VIDEOUP_EFFECT": "bokeh", "VIDEOUP_EFFECT_INTENSITY": "medium"},
     )
     assert result.returncode == 0, result.stderr
-    final_cmd = ffmpeg_log.read_text(encoding="utf-8").splitlines()[-1]
+    final_cmd = _filter_complex_command(ffmpeg_log)
     assert "gblur" in final_cmd
+    _assert_effect_alpha_plane_and_source_chroma(
+        final_cmd,
+        noise_filter="noise=alls=100:allf=t+u",
+        lum_threshold=240,
+    )
     # medium は alpha=0.20
     assert "0.20*255" in final_cmd
+
+
+def test_effect_bake_cache_stamp_includes_filtergraph(tmp_path: Path) -> None:
+    """旧形式の stamp は filtergraph 変更後に cache hit せず再ベイクされる。"""
+    collection = _create_collection(tmp_path)
+    assets_dir = collection / "10-assets"
+    background = assets_dir / "main.jpg"
+    (assets_dir / "fx_baked.mp4").write_bytes(b"stale-cache")
+    old_stamp = f"particles|subtle|36|{int(background.stat().st_mtime)}|6000k"
+    (assets_dir / "fx_baked.params").write_text(old_stamp, encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"VIDEOUP_EFFECT": "particles", "FFPROBE_DURATION": "120"},
+        collection=collection,
+        with_loop=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Baking particles effect loop" in result.stdout
+    assert "Effect loop cache hit" not in result.stdout
+    assert "|filter:" in (assets_dir / "fx_baked.params").read_text(encoding="utf-8")
+    assert len(ffmpeg_log.read_text(encoding="utf-8").splitlines()) == 2
+
+
+def test_particles_geq_outputs_neutral_non_green_pixels_with_real_ffmpeg() -> None:
+    """geq 後の色差固定で実出力が緑被りしないことを最小フレームで確認する。"""
+    frame = _run_ffmpeg_rgba_frame(
+        "color=c=white:s=2x2:r=1:d=1,format=yuv420p,format=yuva420p,"
+        "geq=lum='if(gt(lum(X,Y),230),255,0)':cb=128:cr=128:a='if(gt(lum(X,Y),230),255,0)',"
+        "format=rgba",
+        width=2,
+        height=2,
+    )
+    pixels = [tuple(frame[index : index + 4]) for index in range(0, len(frame), 4)]
+    assert pixels
+    for red, green, blue, alpha in pixels:
+        assert alpha == 255
+        assert red >= 250 and green >= 250 and blue >= 250
+        assert max(red, green, blue) - min(red, green, blue) <= 2
+
+
+def test_bokeh_geq_preserves_warm_chroma_with_real_ffmpeg() -> None:
+    """bokeh は alpha plane を持たせつつ 0xffe8b0 由来の暖色 chroma を維持する。"""
+    frame = _run_ffmpeg_rgba_frame(
+        "color=c=0xffe8b0:s=240x135:r=24:d=1,format=yuv420p,"
+        "noise=alls=100:allf=t+u,format=yuva420p,"
+        "geq=lum='if(gt(lum(X,Y),240),255,0)':cb='cb(X,Y)':cr='cr(X,Y)':a='if(gt(lum(X,Y),240),255,0)',"
+        "scale=240:135:flags=lanczos,gblur=sigma=2,format=rgba",
+        width=240,
+        height=135,
+    )
+    pixels = [tuple(frame[index : index + 4]) for index in range(0, len(frame), 4)]
+    visible = [pixel for pixel in pixels if pixel[3] > 0]
+    assert visible
+    avg_red = sum(pixel[0] for pixel in visible) / len(visible)
+    avg_green = sum(pixel[1] for pixel in visible) / len(visible)
+    avg_blue = sum(pixel[2] for pixel in visible) / len(visible)
+    assert avg_red > avg_green > avg_blue
+    assert avg_red - avg_blue >= 40
 
 
 def test_gradient_effect_uses_gradients_source(tmp_path: Path) -> None:
