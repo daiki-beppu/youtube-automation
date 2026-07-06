@@ -455,6 +455,27 @@ describe("tayk dispatcher — generate-master", () => {
     expect(args).toContain("[0:a][1:a]acrossfade=d=2.5:c1=tri:c2=tri[aout]");
   });
 
+  testCliSmoke("rejects blank bitrate before ffmpeg", () => {
+    const channelRoot = makeTempRoot("yt-generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    const fake = installFakeFfmpeg();
+
+    const proc = runTayk(
+      fake.env,
+      "generate-master",
+      "--channel-dir",
+      channelRoot,
+      "--bitrate",
+      "   ",
+      "collections/demo"
+    );
+
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stdout?.toString()).toBe("");
+    expect(proc.stderr?.toString()).toContain("[validation]");
+    expect(existsSync(fake.logPath)).toBe(false);
+  });
+
   testCliSmoke(
     "passes pin-first-count and no-loop through the CLI entrypoint",
     () => {

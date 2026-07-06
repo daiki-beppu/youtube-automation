@@ -63,6 +63,23 @@ describe("GenerateMasterInputSchema — snake_case input contract", () => {
     expect(parsed.specified.targetDurationMin).toBe(false);
   });
 
+  test("rejects blank bitrate values", () => {
+    for (const bitrate of ["", "   "]) {
+      expect(() =>
+        GenerateMasterInputSchema.parse({
+          bitrate,
+          collection: "collections/demo",
+        })
+      ).toThrow();
+      expect(() =>
+        GenerateMasterServiceInputSchema.parse({
+          bitrate,
+          collection: "collections/demo",
+        })
+      ).toThrow();
+    }
+  });
+
   test("rejects unknown keys instead of silently dropping them", () => {
     expect(() =>
       GenerateMasterInputSchema.parse({

@@ -9,7 +9,10 @@ import {
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-import { generateMasterService } from "@youtube-automation/core/generate-master";
+import {
+  generateMasterService,
+  GenerateMasterInputSchema,
+} from "@youtube-automation/core/generate-master";
 
 import {
   inputFilesInCommand,
@@ -227,6 +230,37 @@ describe("generateMasterService — pin, shuffle, and loop ordering", () => {
       inputFilesInCommand(args ?? []).map((path) => basename(path))
     ).not.toEqual(["01-a.mp3", "02-b.mp3", "03-c.mp3"]);
     expect(output.messages).toContain("[Shuffle] seed=42");
+  });
+
+  test("keeps public parsed camelCase input ahead of config overrides", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify({ audio: { bitrate: "320k", crossfade_duration: 2.5 } })
+    );
+    const logPath = installFakeFfmpeg();
+
+    const input = GenerateMasterInputSchema.parse({
+      bitrate: "192k",
+      collection: "collections/demo",
+      crossfade_duration: 1,
+    });
+    const result = await generateMasterService(input, {
+      channelDir: channelRoot,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error(
+        `expected ok Result, got ${JSON.stringify(result.error)}`
+      );
+    }
+    const [args] = readFfmpegCalls(logPath);
+    expect(args).toContain("192k");
+    expect(args).toContain("[0:a][1:a]acrossfade=d=1:c1=tri:c2=tri[aout]");
+    expect(result.value.bitrate).toBe("192k");
+    expect(result.value.crossfadeDuration).toBe(1);
   });
 });
 

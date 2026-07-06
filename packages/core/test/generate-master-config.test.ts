@@ -321,6 +321,28 @@ describe("generateMasterService — skill config override", () => {
     expect(output.crossfadeDuration).toBe(1);
     expect(output.bitrate).toBe("192k");
   });
+
+  test("returns config error for blank masterup bitrate before ffmpeg", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify({ audio: { bitrate: "   " } })
+    );
+    const logPath = installFakeFfmpeg();
+
+    const result = await generateMasterService({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.domain).toBe("config");
+      expect(result.error.message).toContain("invalid masterup audio config");
+    }
+    expect(readFfmpegCalls(logPath)).toEqual([]);
+  });
 });
 
 describe("generateMasterService — Result error contract", () => {

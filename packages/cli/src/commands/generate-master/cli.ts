@@ -2,7 +2,6 @@ import { isAbsolute } from "node:path";
 import process from "node:process";
 
 import { err, toServiceError } from "@youtube-automation/core";
-import { tryFindChannelRootForCollection } from "@youtube-automation/core/generate-master";
 import type { GenerateMasterServiceInput } from "@youtube-automation/core/generate-master";
 import type { DepsMap } from "@youtube-automation/core/registry";
 import { REGISTRY } from "@youtube-automation/core/registry";
@@ -38,15 +37,7 @@ const resolveGenerateMasterDeps = (
     return { channelDir };
   }
   if (input.collection !== undefined && isAbsolute(input.collection)) {
-    const collectionChannelDir = tryFindChannelRootForCollection(
-      input.collection
-    );
-    if (collectionChannelDir !== undefined) {
-      return { channelDir: collectionChannelDir };
-    }
-    throw new Error(
-      "validation: absolute collection requires --channel-dir, CHANNEL_DIR, or config/channel ancestor"
-    );
+    return { channelDir: "" };
   }
   throw new Error(
     "validation: relative collection requires channel_dir or CHANNEL_DIR"

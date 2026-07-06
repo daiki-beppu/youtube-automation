@@ -22,7 +22,7 @@ export type MasterupAudioConfig = Partial<{
 
 const MasterupAudioConfigSchema = z
   .object({
-    bitrate: z.string().optional(),
+    bitrate: z.string().trim().min(1).optional(),
     crossfadeDuration: z.number().positive().optional(),
     pinFirstCount: z.number().int().nonnegative().optional(),
     shuffle: z.boolean().optional(),

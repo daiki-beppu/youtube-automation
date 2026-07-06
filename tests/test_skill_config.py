@@ -70,23 +70,42 @@ def test_channel_override_merged(tmp_path, monkeypatch):
     assert "model" in gemini_block
 
 
-def test_load_skill_config_json_override_wins_over_yaml(tmp_path, monkeypatch):
-    """JSON override が YAML override より優先されること."""
+def test_load_skill_config_masterup_json_override_wins_over_yaml(tmp_path, monkeypatch):
+    """masterup は JSON override が YAML override より優先されること."""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    (channel_dir / "config" / "skills" / "masterup.yaml").write_text(
+        yaml.safe_dump({"audio": {"bitrate": "128k"}}),
+        encoding="utf-8",
+    )
+    (channel_dir / "config" / "skills" / "masterup.json").write_text(
+        json.dumps({"audio": {"bitrate": "256k"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_skill_config("masterup", use_cache=False)
+
+    assert cfg.get("audio", {}).get("bitrate") == "256k"
+
+
+def test_load_skill_config_non_masterup_json_is_ignored(tmp_path, monkeypatch):
+    """masterup 以外は既存 YAML override 契約のままにする."""
     channel_dir = tmp_path / "ch"
     (channel_dir / "config" / "skills").mkdir(parents=True)
     (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text(
-        yaml.safe_dump({"marker": "yaml"}),
+        yaml.safe_dump({"image_generation": {"gemini": {"brand_background": "yaml"}}}),
         encoding="utf-8",
     )
     (channel_dir / "config" / "skills" / "thumbnail.json").write_text(
-        json.dumps({"marker": "json"}),
+        json.dumps({"image_generation": {"gemini": {"brand_background": "json"}}}),
         encoding="utf-8",
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
     cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
 
-    assert cfg.get("marker") == "json"
+    assert cfg.get("image_generation", {}).get("gemini", {}).get("brand_background") == "yaml"
 
 
 def test_load_skill_config_falls_back_to_yaml_when_json_absent(tmp_path, monkeypatch):
@@ -104,53 +123,85 @@ def test_load_skill_config_falls_back_to_yaml_when_json_absent(tmp_path, monkeyp
     assert cfg.get("marker") == "yaml"
 
 
-def test_load_skill_config_json_root_must_be_mapping(tmp_path, monkeypatch):
-    """JSON override の root が dict 以外なら YAML fallback せず ConfigError."""
+def test_load_skill_config_masterup_json_root_must_be_mapping(tmp_path, monkeypatch):
+    """masterup JSON override の root が dict 以外なら YAML fallback せず ConfigError."""
     channel_dir = tmp_path / "ch"
     (channel_dir / "config" / "skills").mkdir(parents=True)
-    (channel_dir / "config" / "skills" / "thumbnail.json").write_text("[]\n", encoding="utf-8")
-    (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text(
+    (channel_dir / "config" / "skills" / "masterup.json").write_text("[]\n", encoding="utf-8")
+    (channel_dir / "config" / "skills" / "masterup.yaml").write_text(
         yaml.safe_dump({"marker": "yaml"}),
         encoding="utf-8",
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
     with pytest.raises(ConfigError, match="root は dict"):
-        skill_config.load_skill_config("thumbnail", use_cache=False)
+        skill_config.load_skill_config("masterup", use_cache=False)
 
 
-def test_load_skill_config_broken_json_raises_without_yaml_fallback(tmp_path, monkeypatch):
-    """壊れた JSON override がある場合は YAML fallback せず ConfigError."""
+def test_load_skill_config_masterup_broken_json_raises_without_yaml_fallback(tmp_path, monkeypatch):
+    """壊れた masterup JSON override がある場合は YAML fallback せず ConfigError."""
     channel_dir = tmp_path / "ch"
     (channel_dir / "config" / "skills").mkdir(parents=True)
-    (channel_dir / "config" / "skills" / "thumbnail.json").write_text("{", encoding="utf-8")
-    (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text(
+    (channel_dir / "config" / "skills" / "masterup.json").write_text("{", encoding="utf-8")
+    (channel_dir / "config" / "skills" / "masterup.yaml").write_text(
         yaml.safe_dump({"marker": "yaml"}),
         encoding="utf-8",
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
     with pytest.raises(ConfigError, match="skill-config 読み込み失敗"):
-        skill_config.load_skill_config("thumbnail", use_cache=False)
+        skill_config.load_skill_config("masterup", use_cache=False)
 
 
-def test_load_channel_override_json_wins_over_yaml(tmp_path, monkeypatch):
-    """load_channel_override() でも JSON override が YAML より優先されること."""
+def test_load_skill_config_masterup_broken_json_symlink_raises_without_yaml_fallback(tmp_path, monkeypatch):
+    """broken masterup.json symlink がある場合は YAML fallback せず ConfigError."""
     channel_dir = tmp_path / "ch"
-    (channel_dir / "config" / "skills").mkdir(parents=True)
-    (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text(
-        yaml.safe_dump({"marker": "yaml"}),
-        encoding="utf-8",
-    )
-    (channel_dir / "config" / "skills" / "thumbnail.json").write_text(
-        json.dumps({"marker": "json"}),
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "masterup.json").symlink_to(channel_dir / "missing-masterup.json")
+    (skills_dir / "masterup.yaml").write_text(
+        yaml.safe_dump({"audio": {"bitrate": "128k"}}),
         encoding="utf-8",
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
 
-    cfg = skill_config.load_channel_override("thumbnail")
+    with pytest.raises(ConfigError, match="regular file"):
+        skill_config.load_skill_config("masterup", use_cache=False)
 
-    assert cfg == {"marker": "json"}
+
+def test_load_channel_override_masterup_json_wins_over_yaml(tmp_path, monkeypatch):
+    """load_channel_override() でも masterup JSON override が YAML より優先されること."""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    (channel_dir / "config" / "skills" / "masterup.yaml").write_text(
+        yaml.safe_dump({"audio": {"bitrate": "128k"}}),
+        encoding="utf-8",
+    )
+    (channel_dir / "config" / "skills" / "masterup.json").write_text(
+        json.dumps({"audio": {"bitrate": "256k"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_channel_override("masterup")
+
+    assert cfg == {"audio": {"bitrate": "256k"}}
+
+
+def test_load_channel_override_masterup_broken_json_raises_without_yaml_fallback(tmp_path, monkeypatch):
+    """load_channel_override() でも壊れた masterup JSON は YAML fallback しない."""
+    channel_dir = tmp_path / "ch"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "masterup.json").write_text("{", encoding="utf-8")
+    (skills_dir / "masterup.yaml").write_text(
+        yaml.safe_dump({"audio": {"bitrate": "128k"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.raises(ConfigError, match="skill-config 読み込み失敗"):
+        skill_config.load_channel_override("masterup")
 
 
 def test_load_channel_override_falls_back_to_yaml_when_json_absent(tmp_path, monkeypatch):

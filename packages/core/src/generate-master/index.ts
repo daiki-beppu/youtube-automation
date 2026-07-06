@@ -10,5 +10,4 @@ export type {
   GenerateMasterOutput,
   GenerateMasterServiceInput,
 } from "./schema.ts";
-export { tryFindChannelRootForCollection } from "./paths.ts";
 export { generateMasterService } from "./service.ts";

@@ -5,6 +5,8 @@ import { snakeToCamel } from "../../internal/case.ts";
 export const DEFAULT_BITRATE = "192k";
 export const DEFAULT_CROSSFADE_DURATION = 1;
 
+const BitrateSchema = z.string().trim().min(1);
+
 const inputSpecifiedFields = [
   ["bitrate", "bitrate"],
   ["crossfade_duration", "crossfadeDuration"],
@@ -13,6 +15,21 @@ const inputSpecifiedFields = [
   ["shuffle_seed", "shuffleSeed"],
   ["target_duration_min", "targetDurationMin"],
 ] as const;
+
+const outputSpecifiedFields = inputSpecifiedFields.map(
+  ([, outputField]) => outputField
+);
+
+const GenerateMasterSpecifiedSchema = z
+  .object({
+    bitrate: z.boolean(),
+    crossfadeDuration: z.boolean(),
+    pinFirstCount: z.boolean(),
+    shuffle: z.boolean(),
+    shuffleSeed: z.boolean(),
+    targetDurationMin: z.boolean(),
+  })
+  .strict();
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -32,19 +49,65 @@ const withInputPresence = (value: unknown): unknown => {
   };
 };
 
+const withCamelInputPresence = (value: unknown): unknown => {
+  if (!isRecord(value)) {
+    return value;
+  }
+  return {
+    ...value,
+    __specified: Object.fromEntries(
+      outputSpecifiedFields.map((field) => [field, Object.hasOwn(value, field)])
+    ),
+  };
+};
+
+interface GenerateMasterInvariantInput {
+  loop?: number;
+  noLoop: boolean;
+  pinFirst: string[];
+  pinFirstCount?: number;
+  targetDurationMin?: number;
+}
+
+interface GenerateMasterInvariantPaths {
+  pinFirstCount: string;
+  targetDurationMin: string;
+}
+
+const addGenerateMasterInvariantIssues = (
+  input: GenerateMasterInvariantInput,
+  ctx: z.RefinementCtx,
+  paths: GenerateMasterInvariantPaths
+): void => {
+  if (input.loop !== undefined && input.targetDurationMin !== undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: `loop and ${paths.targetDurationMin} are mutually exclusive`,
+      path: [paths.targetDurationMin],
+    });
+  }
+  if (input.noLoop && input.targetDurationMin !== undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: `noLoop and ${paths.targetDurationMin} are mutually exclusive`,
+      path: [paths.targetDurationMin],
+    });
+  }
+  if (input.pinFirst.length > 0 && input.pinFirstCount !== undefined) {
+    ctx.addIssue({
+      code: "custom",
+      message: `pinFirst and ${paths.pinFirstCount} are mutually exclusive`,
+      path: [paths.pinFirstCount],
+    });
+  }
+};
+
 const GenerateMasterRawInputSchema = z.preprocess(
   withInputPresence,
   z
     .object({
-      __specified: z.object({
-        bitrate: z.boolean(),
-        crossfadeDuration: z.boolean(),
-        pinFirstCount: z.boolean(),
-        shuffle: z.boolean(),
-        shuffleSeed: z.boolean(),
-        targetDurationMin: z.boolean(),
-      }),
-      bitrate: z.string().default(DEFAULT_BITRATE),
+      __specified: GenerateMasterSpecifiedSchema,
+      bitrate: BitrateSchema.default(DEFAULT_BITRATE),
       channel_dir: z.string().optional(),
       collection: z.string().min(1).optional(),
       crossfade_duration: z
@@ -61,27 +124,20 @@ const GenerateMasterRawInputSchema = z.preprocess(
     })
     .strict()
     .superRefine((input, ctx) => {
-      if (input.loop !== undefined && input.target_duration_min !== undefined) {
-        ctx.addIssue({
-          code: "custom",
-          message: "loop and target_duration_min are mutually exclusive",
-          path: ["target_duration_min"],
-        });
-      }
-      if (input.no_loop && input.target_duration_min !== undefined) {
-        ctx.addIssue({
-          code: "custom",
-          message: "no_loop and target_duration_min are mutually exclusive",
-          path: ["target_duration_min"],
-        });
-      }
-      if (input.pin_first.length > 0 && input.pin_first_count !== undefined) {
-        ctx.addIssue({
-          code: "custom",
-          message: "pin_first and pin_first_count are mutually exclusive",
-          path: ["pin_first_count"],
-        });
-      }
+      addGenerateMasterInvariantIssues(
+        {
+          loop: input.loop,
+          noLoop: input.no_loop,
+          pinFirst: input.pin_first,
+          pinFirstCount: input.pin_first_count,
+          targetDurationMin: input.target_duration_min,
+        },
+        ctx,
+        {
+          pinFirstCount: "pin_first_count",
+          targetDurationMin: "target_duration_min",
+        }
+      );
     })
 );
 
@@ -94,7 +150,7 @@ const GenerateMasterExternalInputSchema =
 
 const GenerateMasterInternalInputSchema = z
   .object({
-    bitrate: z.string(),
+    bitrate: BitrateSchema,
     channelDir: z.string().optional(),
     collection: z.string().min(1).optional(),
     crossfadeDuration: z.number().positive(),
@@ -104,81 +160,49 @@ const GenerateMasterInternalInputSchema = z
     pinFirstCount: z.number().int().nonnegative().optional(),
     shuffle: z.boolean(),
     shuffleSeed: z.number().int().optional(),
-    specified: z
-      .object({
-        bitrate: z.boolean(),
-        crossfadeDuration: z.boolean(),
-        pinFirstCount: z.boolean(),
-        shuffle: z.boolean(),
-        shuffleSeed: z.boolean(),
-        targetDurationMin: z.boolean(),
-      })
-      .strict(),
+    specified: GenerateMasterSpecifiedSchema,
     targetDurationMin: z.number().int().positive().optional(),
   })
   .strict()
   .superRefine((input, ctx) => {
-    if (input.loop !== undefined && input.targetDurationMin !== undefined) {
-      ctx.addIssue({
-        code: "custom",
-        message: "loop and targetDurationMin are mutually exclusive",
-        path: ["targetDurationMin"],
-      });
-    }
-    if (input.noLoop && input.targetDurationMin !== undefined) {
-      ctx.addIssue({
-        code: "custom",
-        message: "noLoop and targetDurationMin are mutually exclusive",
-        path: ["targetDurationMin"],
-      });
-    }
-    if (input.pinFirst.length > 0 && input.pinFirstCount !== undefined) {
-      ctx.addIssue({
-        code: "custom",
-        message: "pinFirst and pinFirstCount are mutually exclusive",
-        path: ["pinFirstCount"],
-      });
-    }
+    addGenerateMasterInvariantIssues(input, ctx, {
+      pinFirstCount: "pinFirstCount",
+      targetDurationMin: "targetDurationMin",
+    });
   });
 
-const GenerateMasterCamelInputSchema = z
-  .object({
-    bitrate: z.string(),
-    channelDir: z.string().optional(),
-    collection: z.string().min(1).optional(),
-    crossfadeDuration: z.number().positive(),
-    loop: z.number().int().positive().optional(),
-    noLoop: z.boolean(),
-    pinFirst: z.array(z.string().min(1)),
-    pinFirstCount: z.number().int().nonnegative().optional(),
-    shuffle: z.boolean(),
-    shuffleSeed: z.number().int().optional(),
-    targetDurationMin: z.number().int().positive().optional(),
-  })
-  .strict()
-  .superRefine((input, ctx) => {
-    if (input.loop !== undefined && input.targetDurationMin !== undefined) {
-      ctx.addIssue({
-        code: "custom",
-        message: "loop and targetDurationMin are mutually exclusive",
-        path: ["targetDurationMin"],
+const GenerateMasterCamelServiceInputSchema = z.preprocess(
+  withCamelInputPresence,
+  z
+    .object({
+      __specified: GenerateMasterSpecifiedSchema,
+      bitrate: BitrateSchema,
+      channelDir: z.string().optional(),
+      collection: z.string().min(1).optional(),
+      crossfadeDuration: z.number().positive(),
+      loop: z.number().int().positive().optional(),
+      noLoop: z.boolean(),
+      pinFirst: z.array(z.string().min(1)),
+      pinFirstCount: z.number().int().nonnegative().optional(),
+      shuffle: z.boolean(),
+      shuffleSeed: z.number().int().optional(),
+      targetDurationMin: z.number().int().positive().optional(),
+    })
+    .strict()
+    .superRefine((input, ctx) => {
+      addGenerateMasterInvariantIssues(input, ctx, {
+        pinFirstCount: "pinFirstCount",
+        targetDurationMin: "targetDurationMin",
       });
-    }
-    if (input.noLoop && input.targetDurationMin !== undefined) {
-      ctx.addIssue({
-        code: "custom",
-        message: "noLoop and targetDurationMin are mutually exclusive",
-        path: ["targetDurationMin"],
-      });
-    }
-    if (input.pinFirst.length > 0 && input.pinFirstCount !== undefined) {
-      ctx.addIssue({
-        code: "custom",
-        message: "pinFirst and pinFirstCount are mutually exclusive",
-        path: ["pinFirstCount"],
-      });
-    }
-  });
+    })
+    .transform((input) => {
+      const { __specified, ...serviceInput } = input;
+      return {
+        ...serviceInput,
+        specified: __specified,
+      };
+    })
+);
 
 const GenerateMasterRawServiceInputSchema =
   GenerateMasterRawInputSchema.transform((input) => {
@@ -189,16 +213,6 @@ const GenerateMasterRawServiceInputSchema =
     };
   });
 
-const unspecifiedFields = Object.fromEntries(
-  inputSpecifiedFields.map(([, outputField]) => [outputField, false])
-) as GenerateMasterInternalInput["specified"];
-
-const GenerateMasterExternalServiceInputSchema =
-  GenerateMasterCamelInputSchema.transform((input) => ({
-    ...input,
-    specified: unspecifiedFields,
-  }));
-
 export const GenerateMasterInputSchema = GenerateMasterExternalInputSchema;
 
 export const GenerateMasterServiceInputSchema =
@@ -207,12 +221,12 @@ export const GenerateMasterServiceInputSchema =
 export const ParseableGenerateMasterInputSchema = z.union([
   GenerateMasterInternalInputSchema,
   GenerateMasterRawServiceInputSchema,
-  GenerateMasterExternalServiceInputSchema,
+  GenerateMasterCamelServiceInputSchema,
 ]);
 
 export const GenerateMasterOutputSchema = z
   .object({
-    bitrate: z.string(),
+    bitrate: BitrateSchema,
     crossfadeDuration: z.number().positive(),
     durationPreview: z
       .object({
