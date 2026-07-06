@@ -257,6 +257,17 @@ export function useSunoRunner(): RunnerState {
     restoredSubmittedClipIdsAreDurationFiltered,
   ]);
 
+  const durationFilterForResume = useMemo<DurationFilter | undefined>(() => {
+    if (
+      resumeCheckedAt !== null &&
+      persistedResume &&
+      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+    ) {
+      return persistedResume.durationFilter ?? durationFilter;
+    }
+    return durationFilter;
+  }, [persistedResume, selectedCollectionId, resumeCheckedAt, durationFilter]);
+
   const playlistExpectedClipCountForResume = useMemo<number | undefined>(() => {
     if (
       resumeCheckedAt !== null &&
@@ -330,6 +341,7 @@ export function useSunoRunner(): RunnerState {
     setRestoredFailedIndices(undefined);
     setRestoredRemainingIndices(undefined);
     setRestoredSubmittedClipIds(undefined);
+    setRestoredSubmittedClipIdsAreDurationFiltered(false);
     setRestoredPlaylistExpectedClipCount(undefined);
   }, []);
 
@@ -419,6 +431,7 @@ export function useSunoRunner(): RunnerState {
         setRestoredCollectionId(restored.collectionId);
         setSelectedCollectionId(restored.collectionId);
         setRestoredPlaylistName(restored.playlistName);
+        setDurationFilter(restored.durationFilter);
         // ERROR 停止の snapshot なら failedIndex を再開バナーの冗長ソースへ流す (#872 要件3)。
         setRestoredFailedIndex(restored.failedIndex);
         setRestoredFailedIndices(restored.failedIndices);
@@ -538,7 +551,7 @@ export function useSunoRunner(): RunnerState {
         submittedClipIds: submittedClipIdsForResume,
         expectedClipCount,
         collectionId: selectedCollectionId,
-        durationFilter,
+        durationFilter: durationFilterForResume,
         submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,
         shouldDownload,
       });
@@ -553,7 +566,7 @@ export function useSunoRunner(): RunnerState {
   }, [
     isRunning,
     playlistName,
-    durationFilter,
+    durationFilterForResume,
     submittedClipIdsForResume,
     submittedClipIdsAreDurationFilteredForResume,
     playlistExpectedClipCountForResume,
@@ -665,14 +678,15 @@ export function useSunoRunner(): RunnerState {
             ? persistedResume.remainingIndices
             : restoredRemainingIndices,
         submittedClipIds: result.clipIds,
-        submittedClipIdsAreDurationFiltered: false,
+        durationFilter,
+        submittedClipIdsAreDurationFiltered: true,
         playlistExpectedClipCount: expectedClipCountForManualAdoption,
       };
       await writeResumeState(nextResume);
       setPersistedResume(nextResume);
       setResumeCheckedAt(Date.now());
       setRestoredSubmittedClipIds(result.clipIds);
-      setRestoredSubmittedClipIdsAreDurationFiltered(false);
+      setRestoredSubmittedClipIdsAreDurationFiltered(true);
       setRestoredPlaylistExpectedClipCount(expectedClipCountForManualAdoption);
       setResumeDismissed(false);
       report(`選択中の曲 ${result.clipIds.length} 件を採用しました。Playlist / Download から再開できます。`);
@@ -691,6 +705,7 @@ export function useSunoRunner(): RunnerState {
     selectedCollection,
     restoredFailedIndices,
     restoredRemainingIndices,
+    durationFilter,
     report,
   ]);
 

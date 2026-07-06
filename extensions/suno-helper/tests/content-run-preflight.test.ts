@@ -107,7 +107,8 @@ vi.mock("../lib/finished-snapshot", () => ({
   clearFinishedSnapshot: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock("../../shared/api", () => ({
+vi.mock("../../shared/api", async () => ({
+  ...(await vi.importActual<typeof import("../../shared/api")>("../../shared/api")),
   postDownloaded: vi.fn(() => Promise.resolve()),
 }));
 
@@ -321,6 +322,15 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
   it.each([
     ["collectionId 欠落", { collectionId: undefined }, /run\.collectionId/],
     ["playlistName 欠落", { playlistName: undefined }, /run\.playlistName/],
+    ["durationFilter が null", { durationFilter: null }, /run\.durationFilter/],
+    ["durationFilter が空 object", { durationFilter: {} }, /run\.durationFilter/],
+    ["durationFilter が boolean", { durationFilter: false }, /run\.durationFilter/],
+    ["durationFilter が min > max", { durationFilter: { min_sec: 301, max_sec: 300 } }, /run\.durationFilter/],
+    [
+      "submittedClipIdsAreDurationFiltered が非 boolean",
+      { submittedClipIdsAreDurationFiltered: "true" },
+      /run\.submittedClipIdsAreDurationFiltered/,
+    ],
   ] as const)(
     "Given %s payload When run を受ける Then fail-loud し副作用を起こさない",
     async (_label, override, message) => {

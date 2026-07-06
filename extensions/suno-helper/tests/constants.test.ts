@@ -10,7 +10,6 @@ import {
   COLLECTIONS_ROUTE,
   collectionPromptsRoute,
   DEFAULT_URL,
-  FEED_V2_PATH,
   FEED_V3_METHOD,
   FEED_V3_PATH,
   INJECT_ACK_TIMEOUT_MS,
@@ -120,15 +119,12 @@ describe("shared/constants: Suno queue 上限 (#816)", () => {
 });
 
 describe("shared/constants: Suno feed bridge 契約 (#1258)", () => {
-  it("Given feed endpoint constants When 読む Then v2 GET poll と v3 POST 用 path/method を固定する", () => {
-    expect(FEED_V2_PATH).toBe("/api/feed/v2");
+  it("Given feed endpoint constants When 読む Then v3 POST 用 path/method を固定する", () => {
     expect(FEED_V3_PATH).toBe("/api/feed/v3");
     expect(FEED_V3_METHOD).toBe("POST");
   });
 
-  it("Given BRIDGE_MSG When feed v3 poll の message type を読む Then v2 と別名で固定されている", () => {
-    expect(BRIDGE_MSG.FEED_POLL_REQUEST).toBe("feed-poll-request");
-    expect(BRIDGE_MSG.FEED_POLL_RESPONSE).toBe("feed-poll-response");
+  it("Given BRIDGE_MSG When feed v3 poll の message type を読む Then 契約値が固定されている", () => {
     expect(BRIDGE_MSG.FEED_V3_POLL_REQUEST).toBe("feed-v3-poll-request");
     expect(BRIDGE_MSG.FEED_V3_POLL_RESPONSE).toBe("feed-v3-poll-response");
   });

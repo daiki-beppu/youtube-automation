@@ -775,7 +775,7 @@ describe("Suno popup compatibility check", () => {
         failedIndex: 1,
         total: 1,
         submittedClipIds: ["clip-a", "clip-b"],
-        submittedClipIdsAreDurationFiltered: false,
+        submittedClipIdsAreDurationFiltered: true,
         playlistExpectedClipCount: 2,
       }),
     );
@@ -1108,7 +1108,7 @@ describe("Suno popup compatibility check", () => {
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
       durationFilter: undefined,
-      submittedClipIdsAreDurationFiltered: false,
+      submittedClipIdsAreDurationFiltered: true,
       shouldDownload: true,
     });
     await waitFor(() => {
@@ -1127,6 +1127,7 @@ describe("Suno popup compatibility check", () => {
       total: 1,
       timestamp: Date.now(),
       submittedClipIds: ["clip-a", "clip-b"],
+      durationFilter: { min_sec: 75, max_sec: 180 },
       submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
     } as never);
@@ -1173,7 +1174,7 @@ describe("Suno popup compatibility check", () => {
       playlistName: "clm | theme-a",
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
-      durationFilter: undefined,
+      durationFilter: { min_sec: 75, max_sec: 180 },
       submittedClipIdsAreDurationFiltered: true,
       shouldDownload: true,
     });

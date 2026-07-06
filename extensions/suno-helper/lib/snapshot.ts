@@ -1,12 +1,13 @@
 // content script が SSOT として保持する進捗スナップショットの構築・更新を行う純関数 (#852)。
 // itemStates の遷移ロジックを content (snapshot 構築) と popup (live 表示 / restore) で
 // 二重定義しないため、ここに 1 箇所だけ集約する。useSunoRunner と content.ts の双方が import する。
-import type { PromptEntry } from "../../shared/api";
+import type { DurationFilter, PromptEntry } from "../../shared/api";
 import { PHASE, type ItemState, type Phase, type ProgressPayload, type SnapshotPayload } from "../../shared/constants";
 
 interface InitSnapshotOptions {
   collectionId: string;
   playlistName?: string;
+  durationFilter?: DurationFilter;
 }
 
 /**
@@ -21,6 +22,7 @@ export function initSnapshot(entries: PromptEntry[], options: InitSnapshotOption
     isRunning: true,
     progress: { phase: PHASE.INJECTING, total: entries.length },
     playlistName: options.playlistName,
+    ...(options.durationFilter ? { durationFilter: options.durationFilter } : {}),
   };
 }
 

@@ -1,6 +1,6 @@
 // Suno Custom Mode への Style / Lyrics 注入と Generate 連続実行 (content script)。
 // DOM 操作は shared/dom の純関数へ委譲し、本ファイルは連続実行のフロー制御に専念する。
-import type { DurationFilter, PromptEntry } from "../../shared/api";
+import { DEFAULT_DURATION_FILTER, type DurationFilter, type PromptEntry } from "../../shared/api";
 import {
   CLIPS_PER_REQUEST,
   INFLIGHT_STALL_TIMEOUT_MS,
@@ -218,11 +218,6 @@ interface PlaylistClipPersistInfo {
   submittedClipIds: string[];
   playlistExpectedClipCount: number;
 }
-
-const DEFAULT_DURATION_FILTER = {
-  minSec: 60,
-  maxSec: 300,
-};
 
 async function resolveDownloadContext(): Promise<DownloadContext> {
   return {
@@ -500,8 +495,8 @@ export default defineContentScript({
       const minSec = durationFilter?.min_sec;
       const maxSec = durationFilter?.max_sec;
       return {
-        minSec: typeof minSec === "number" && Number.isFinite(minSec) ? minSec : DEFAULT_DURATION_FILTER.minSec,
-        maxSec: typeof maxSec === "number" && Number.isFinite(maxSec) ? maxSec : DEFAULT_DURATION_FILTER.maxSec,
+        minSec: typeof minSec === "number" && Number.isFinite(minSec) ? minSec : DEFAULT_DURATION_FILTER.min_sec,
+        maxSec: typeof maxSec === "number" && Number.isFinite(maxSec) ? maxSec : DEFAULT_DURATION_FILTER.max_sec,
       };
     }
 
@@ -669,6 +664,7 @@ export default defineContentScript({
                 failedIndex: interruptedIndex,
                 remainingIndices,
                 submittedClipIds: playlistSubmittedClipIds,
+                durationFilter: options.durationFilter,
                 submittedClipIdsAreDurationFiltered: true,
                 playlistExpectedClipCount: playlistExpectedCount,
               };
@@ -680,6 +676,7 @@ export default defineContentScript({
           failedIndices: failedIndices.length > 0 ? [...failedIndices] : undefined,
           remainingIndices,
           submittedClipIds: playlistSubmittedClipIds,
+          durationFilter: options.durationFilter,
           submittedClipIdsAreDurationFiltered: true,
           playlistExpectedClipCount: playlistExpectedCount,
         });
@@ -935,7 +932,7 @@ export default defineContentScript({
       // リロードが巻き添えに殺すと STOPPED/ERROR も resume state も残らない。取り消しで
       // 残る stale selection は Cmd+P 前ガードが検知する。
       cancelScheduledRunCompleteReload();
-      currentSnapshot = initSnapshot(entries, { collectionId, playlistName });
+      currentSnapshot = initSnapshot(entries, { collectionId, playlistName, durationFilter });
       // 新 run 開始で直近完了 run の退避 snapshot を消去する（前 run の完了表示が復元されるのを防ぐ）。
       // in-memory の currentSnapshot が queryProgress で優先されるため fire-and-forget でよい。
       void clearFinishedSnapshot();
@@ -989,7 +986,7 @@ export default defineContentScript({
         submittedClipIdsAreDurationFiltered,
         shouldDownload,
       } = assertRetryPlaylistPayload(data);
-      currentSnapshot = initSnapshot([], { collectionId, playlistName });
+      currentSnapshot = initSnapshot([], { collectionId, playlistName, durationFilter });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
       // 直前 run の完了時リロードが保留中なら取り消す (#1411)。理由は run handler と同じ。

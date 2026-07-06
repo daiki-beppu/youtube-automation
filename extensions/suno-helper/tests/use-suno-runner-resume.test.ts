@@ -357,7 +357,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
 
   it("Given playlist-only resume When retryPlaylist を読む Then durationFilter と正規化済み ID 契約を payload に載せる", () => {
     expect(runnerSource).toMatch(
-      /sendMessage\("retryPlaylist", \{[\s\S]*?durationFilter,[\s\S]*?submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,[\s\S]*?shouldDownload,[\s\S]*?\}\)/,
+      /sendMessage\("retryPlaylist", \{[\s\S]*?durationFilter: durationFilterForResume,[\s\S]*?submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,[\s\S]*?shouldDownload,[\s\S]*?\}\)/,
     );
   });
 });

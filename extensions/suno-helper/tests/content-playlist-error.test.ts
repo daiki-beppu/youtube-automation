@@ -225,7 +225,8 @@ async function loadContentScriptWithPlaylistRows(
     triggerDownloadAll: vi.fn(() => Promise.resolve()),
   }));
 
-  vi.doMock("../../shared/api", () => ({
+  vi.doMock("../../shared/api", async () => ({
+    ...(await vi.importActual<typeof import("../../shared/api")>("../../shared/api")),
     postDownloaded: vi.fn(() => Promise.resolve()),
   }));
 
@@ -445,6 +446,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         submittedClipIds: ["clip-ok-1", "clip-ok-2"],
+        durationFilter: { min_sec: 60, max_sec: 300 },
         playlistExpectedClipCount: 2,
       }),
     );
@@ -482,6 +484,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         submittedClipIds: ["clip-ok"],
+        durationFilter: { min_sec: 60, max_sec: 300 },
         playlistExpectedClipCount: 1,
       }),
     );
@@ -520,6 +523,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         submittedClipIds: ["old-ok"],
+        durationFilter: { min_sec: 60, max_sec: 300 },
         playlistExpectedClipCount: 1,
       }),
     );
@@ -597,6 +601,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         submittedClipIds: [],
+        durationFilter: { min_sec: 60, max_sec: 300 },
         playlistExpectedClipCount: 0,
       }),
     );

@@ -15,6 +15,8 @@ export interface RestoreState {
   isError: boolean;
   // collection mode の playlist 名 (#854)。再 open 時の display only 表示に使う。
   playlistName?: string;
+  // collection 単位 duration guard 閾値。復元後も同じ OK/NG 判定を維持する。
+  durationFilter?: SnapshotPayload["durationFilter"];
   // ERROR 停止した entry の 0-based index (#872 要件3)。chrome.storage の resume state と二重化し、
   // popup の再開バナーの冗長ソースとして消費する。ERROR phase 到達時のみ確定、それ以外は undefined。
   failedIndex?: number;
@@ -163,6 +165,7 @@ export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | 
     status: text,
     isError: Boolean(error),
     playlistName: snap.playlistName,
+    ...(snap.durationFilter ? { durationFilter: snap.durationFilter } : {}),
     failedIndex: snap.failedIndex,
     failedIndices: snap.failedIndices,
     remainingIndices: snap.remainingIndices,

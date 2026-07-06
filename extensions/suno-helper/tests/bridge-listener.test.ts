@@ -2,7 +2,7 @@
 //
 // ISOLATED 側 bridge 受信配線 (#948) の回帰テスト。
 //   - source マーカー / event.source の検証で他者の message を弾く
-//   - GENERATE_CLIPS → registerSubmitted / FEED_CLIPS・FEED_POLL_RESPONSE → applyFeedStatuses
+//   - GENERATE_CLIPS → registerSubmitted / FEED_CLIPS・FEED_V3_POLL_RESPONSE → applyFeedStatuses
 //   - feed poller は「未終端 clip あり かつ passive 観測が stale」のときだけ poll を発行する
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -56,7 +56,7 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
     detach();
   });
 
-  it("Given FEED_CLIPS / FEED_POLL_RESPONSE message When 受信する Then applyFeedStatuses される", () => {
+  it("Given FEED_CLIPS / FEED_V3_POLL_RESPONSE message When 受信する Then applyFeedStatuses される", () => {
     const tracker = createClipTracker();
     const applyFeedStatuses = vi.spyOn(tracker, "applyFeedStatuses");
     const detach = attachBridgeListener(tracker);
@@ -76,7 +76,7 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
 
     dispatchBridgeMessage({
       source: BRIDGE_SOURCE,
-      type: BRIDGE_MSG.FEED_POLL_RESPONSE,
+      type: BRIDGE_MSG.FEED_V3_POLL_RESPONSE,
       requestId: 1,
       clips: [{ id: "c1", status: "complete", duration: 187.25 }],
     });

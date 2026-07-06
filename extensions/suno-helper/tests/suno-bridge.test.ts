@@ -4,12 +4,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BRIDGE_MSG,
   BRIDGE_SOURCE,
-  FEED_V2_PATH,
   FEED_V3_METHOD,
   FEED_V3_PATH,
   GENERATE_ENDPOINT_PATH,
   SUNO_API_ORIGIN,
 } from "../../shared/constants";
+
+const FEED_V2_PATH = "/api/feed/v2";
 
 function jsonResponse(json: unknown): Response {
   return new Response(JSON.stringify(json), {

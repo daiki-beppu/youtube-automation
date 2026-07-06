@@ -215,7 +215,9 @@ async function loadContentScript(overrides?: {
     triggerDownloadAll: triggerDownloadAllMock,
   }));
 
-  vi.doMock("../../shared/api", () => ({}));
+  vi.doMock("../../shared/api", async () => ({
+    ...(await vi.importActual<typeof import("../../shared/api")>("../../shared/api")),
+  }));
 
   const content = await import("../entrypoints/content");
   content.default.main({} as NonNullable<Parameters<typeof content.default.main>[0]>);
@@ -267,6 +269,12 @@ describe('content onMessage("retryPlaylist"): payload contract', () => {
     ["collectionId 欠落", { collectionId: undefined }, /retryPlaylist\.collectionId/],
     ["playlistName 欠落", { playlistName: undefined }, /retryPlaylist\.playlistName/],
     ["durationFilter が不正", { durationFilter: { min_sec: true, max_sec: 300 } }, /retryPlaylist\.durationFilter/],
+    ["durationFilter が min > max", { durationFilter: { min_sec: 301, max_sec: 300 } }, /retryPlaylist\.durationFilter/],
+    [
+      "submittedClipIdsAreDurationFiltered が非 boolean",
+      { submittedClipIdsAreDurationFiltered: "true" },
+      /retryPlaylist\.submittedClipIdsAreDurationFiltered/,
+    ],
   ] as const)(
     "Given %s payload When retryPlaylist Then fail-loud し副作用を起こさない",
     async (_label, override, message) => {
