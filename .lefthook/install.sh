@@ -10,7 +10,23 @@ if ! lefthook_bin="$(command -v lefthook 2>/dev/null)"; then
   exit 1
 fi
 
-if ! "$lefthook_bin" install --force; then
+run_lefthook_install() {
+  local attempt
+
+  for attempt in 1 2 3; do
+    if "$lefthook_bin" install --force; then
+      return 0
+    fi
+
+    if [ "$attempt" -lt 3 ]; then
+      sleep 0.2
+    fi
+  done
+
+  return 1
+}
+
+if ! run_lefthook_install; then
   echo "error: lefthook install failed; run 'nix develop --command bash .lefthook/install.sh' after fixing the error." >&2
   exit 1
 fi

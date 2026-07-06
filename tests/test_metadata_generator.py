@@ -700,6 +700,13 @@ class TestValidateScenePhrases:
         with pytest.raises(ValueError, match="scene_phrases"):
             validate_scene_phrases({}, config)
 
+    def test_single_language_channel_empty_scene_phrases_ok(self):
+        """単一言語チャンネルは scene_phrases 不要（populate no-op と対称 #1470）"""
+        from types import SimpleNamespace
+
+        config = SimpleNamespace(localizations=SimpleNamespace(data={"supported_languages": ["en"], "languages": {}}))
+        assert validate_scene_phrases({}, config) == []
+
     def test_format_scene_title_violations_joins_all(self):
         """format_scene_title_violations は全件を複数行にまとめる（CLI で 1 回で報告するため）"""
         config = load_config()
@@ -709,6 +716,32 @@ class TestValidateScenePhrases:
         for v in violations:
             assert f"[{v.lang}]" in text
             assert str(v.length) in text
+
+
+class TestGenerateLocalizationsSingleLanguage:
+    """単一言語チャンネルでは localizations を生成しない（scene_phrases 不要 #1470）."""
+
+    def test_returns_empty_without_scene_phrases(self):
+        from types import SimpleNamespace
+
+        gen = _make_generator()
+        gen.config = SimpleNamespace(
+            localizations=SimpleNamespace(data={"supported_languages": ["en"], "languages": {}})
+        )
+        assert gen.generate_localizations("Continuous Focus Mix", "00:00 Intro", {}) == {}
+
+    def test_malformed_workflow_state_fails_before_scene_phrases_fallback(self, tmp_path):
+        from types import SimpleNamespace
+
+        gen = _make_generator()
+        gen.collection_path = tmp_path
+        gen.config = SimpleNamespace(
+            localizations=SimpleNamespace(data={"supported_languages": ["en"], "languages": {}})
+        )
+        (tmp_path / "workflow-state.json").write_text("{not json", encoding="utf-8")
+
+        with pytest.raises(ValidationError, match="workflow-state.json"):
+            gen._load_scene_phrases()
 
 
 class TestGenerateLocalizationsBulkReport:

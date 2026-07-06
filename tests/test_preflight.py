@@ -185,6 +185,48 @@ def test_scene_phrases_require_only_supported_languages(tmp_path: Path, monkeypa
     _run_preflight(channel_dir, collection_dir, monkeypatch)
 
 
+def test_single_language_channel_without_scene_phrases_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """単一言語チャンネルは populate が no-op のため scene_phrases 無しでも preflight が通る (#1470)."""
+    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en"])
+    collection_dir = _write_collection(
+        channel_dir,
+        scene_phrases={},
+        description="A continuous BGM mix without chapter markers.",
+    )
+
+    _run_preflight(channel_dir, collection_dir, monkeypatch)
+
+
+def test_single_language_channel_missing_workflow_state_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """単一言語でも workflow-state.json の存在は preflight で必須 (#1470)."""
+    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en"])
+    collection_dir = _write_collection(
+        channel_dir,
+        scene_phrases={},
+        description="A continuous BGM mix without chapter markers.",
+    )
+    (collection_dir / "workflow-state.json").unlink()
+
+    with pytest.raises(RuntimeError, match="workflow-state.json .*存在しません"):
+        _run_preflight(channel_dir, collection_dir, monkeypatch)
+
+
+def test_single_language_channel_malformed_workflow_state_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """単一言語でも workflow-state.json 自体の破損は preflight で見逃さない (#1470)."""
+    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en"])
+    collection_dir = _write_collection(
+        channel_dir,
+        scene_phrases={},
+        description="A continuous BGM mix without chapter markers.",
+    )
+    (collection_dir / "workflow-state.json").write_text("{not json", encoding="utf-8")
+
+    with pytest.raises(json.JSONDecodeError):
+        _run_preflight(channel_dir, collection_dir, monkeypatch)
+
+
 def test_missing_supported_scene_phrase_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en", "ja", "de"])
     collection_dir = _write_collection(

@@ -104,7 +104,7 @@ Complete Collection アップロード + live 移動を実行:
 
 - **Canonical 宣言**: `config/localizations.json` の `supported_languages` + `default_language`
 - **翻訳データ**: `config/localizations.json` の `languages.<lang>` に title/description/hashtag テンプレート
-- **scene_phrases**: `collections/*/workflow-state.json` に `default_language + supported_languages` 全てのチャプター情景フレーズ翻訳が必要
+- **scene_phrases**: `supported_languages` が 2 言語以上の場合のみ、`collections/*/workflow-state.json` に `supported_languages` 全てのチャプター情景フレーズ翻訳が必要。単一言語チャンネルでは populate / preflight / metadata audit / localizations 生成が `scene_phrases` を要求しない
 - **ランタイム参照**: `load_config().localizations.supported_languages`（`localizations.json` が唯一の Canonical ソース）
 - **`content_model.languages`**: `config/channel/youtube.json` で定義。collection 型では未使用（`localizations.supported_languages` を使う）。single_release 型では発音言語リストとして解釈される
 

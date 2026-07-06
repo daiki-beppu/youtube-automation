@@ -57,6 +57,17 @@ THUMBNAIL_COMPOSITION_REQUIRED_KEYS = (
 )
 
 
+def requires_scene_phrases(supported_languages: Sequence[str]) -> bool:
+    """チャンネルが workflow-state.json.scene_phrases を必要とするかどうか (#1470).
+
+    scene_phrases は多言語 localizations のタイトル生成にのみ使われるため、
+    `supported_languages` が 1 言語以下のチャンネルでは不要。populate
+    （`yt-populate-scene-phrases` の no-op 判定）と検証側（preflight /
+    metadata audit / localizations 生成）はこの判定を共有する。
+    """
+    return len(set(supported_languages)) > 1
+
+
 def check_chapter_count(ts_count: int, chapter_max: int) -> str | None:
     """chapter 件数が上限超過なら issue 文字列、範囲内なら None."""
     if ts_count > chapter_max:
