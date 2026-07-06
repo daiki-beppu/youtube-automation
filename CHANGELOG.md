@@ -113,6 +113,7 @@ local fix 衝突注意:
 
 ### Fixed
 
+- `fix(suno-helper)`: 全 entry 投入済みの resume state が残っている場合に popup の「playlist 追加から再開しますか？」バナーを表示しないようにし、既存の「Playlist から再開」ボタンへ導線を一本化した（#1440）
 - `fix(collection-ideate)`: 分析レポートの鮮度判定に実行日基準の絶対鮮度チェック（`freshness_days` 既定 7 日、`config/skills/collection-ideate.yaml` で上書き可）を追加し、レポートと収集データが同日付でも収集自体が古い場合は stale として `/analytics-collect` → `/analytics-analyze` の再実行を案内するようにした（#1427）
 - `fix(suno-helper)`: Download all ZIP 完了 POST を playlist URL なしで受理し、既存 `suno_playlist_url` を保持したまま `assets.music_downloaded` を更新できるようにした。Download 再開 payload から未使用の `playlistName` 必須契約も削除（#1260）
 - `fix(suno-helper)`: run 一式完了時リロード（#1411）が content script の in-memory snapshot（popup 進捗復元の SSOT）を破棄し、run 中に popup を閉じていた運用者が完了後に再 open しても完走結果や per-entry の done/failed を確認できない問題を修正。FINISHED 到達時（リロード予約の直前）に snapshot を timestamp + collectionId 付きで `chrome.storage.local` へ退避し、リロード後の `queryProgress` が in-memory 不在時の fallback として返すようにした（24h stale 判定付き、次の実行開始で消去、退避失敗時はリロードを見送り in-memory 復元を維持）
