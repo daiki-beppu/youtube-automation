@@ -367,7 +367,19 @@ fi
 
 ### Step 4.5: Suno clip 採用整理（歌詞-aware + 尺フィルタ）
 
-`yt-generate-master` の直前に `yt-suno-select-tracks` を実行し、`02-Individual-music/` を master 入力として安全な状態に整理する:
+`yt-generate-master` の直前に `yt-suno-select-tracks` を実行し、`02-Individual-music/` を master 入力として安全な状態に整理する。
+
+本実行でファイル移動・削除が発生する前に、必ず dry-run で `pair_selection.min_song_sec` 未満の候補を確認する:
+
+```bash
+yt-suno-select-tracks --dry-run <collection-path>
+```
+
+dry-run stdout の `[dropped_under_min]` セクションに 1 件以上ある場合は、各行の `source=<filename>` / `duration=<sec>s` / `min_song_sec=<sec>s` をユーザーへ提示し、続行可否を確認する。Claude Code では AskUserQuestion で「続行する」「続行しない」の 2 択を出す。AskUserQuestion 非対応環境（Codex 等）では、同じ情報をテキストで提示し、ユーザーの明示的な承認発言を待つ。
+
+- **続行する**: 下記の本実行へ進み、既存の `pair_selection.out_of_range_action` に従って除外する。その後 Step 5 へ進む
+- **続行しない**: 本実行を行わず、`/suno-helper` での追補生成または該当曲の手動確認を案内して停止する。Step 5 へ進まない
+- `[dropped_under_min]` に候補が無い場合: 確認プロンプトを出さず、下記の本実行へ進む。`pair_selection.max_song_sec` 超過だけの候補では、この確認プロンプトを出さない
 
 ```bash
 yt-suno-select-tracks <collection-path>
@@ -416,7 +428,7 @@ yt-suno-select-tracks <collection-path> --allow-best-effort-over-max
 yt-suno-select-tracks <collection-path> --dry-run
 ```
 
-ファイル移動なしで winner / loser / 尺外除外の plan を stdout に出す。採用整理の挙動が不安なときは先に dry-run を見る。
+ファイル移動なしで winner / loser / 尺外除外の plan を stdout に出す。`[dropped_under_min]` には `pair_selection.min_song_sec` 未満で除外される候補だけが、ファイル名・duration・設定中の `min_song_sec` 付きで表示される。
 
 ### Step 5: マスター音源生成（CLI）
 
