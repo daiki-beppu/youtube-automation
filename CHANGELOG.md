@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `fix(ts-rewrite/generate-master)`: review 指摘を受け、`masterup.yaml` fallback は `audio` 直下の generate-master 用キーだけを読み、finalize-master 用 namespace の `audio.finalize.*` は無視するよう修正した。JSON 優先は `masterup` override に限定し、inline / scalar `audio`、JSON root / audio shape 不備、空白 `bitrate` は config / validation error に統一した。registry 経由でも明示 CLI 値の presence が config override より優先されるよう schema 境界を分離した。`ffmpeg` の bitrate 指定では `-b:a` と `-q:a` の併用をやめ、single MP3 も bitrate 契約どおり encode 経路へ統一した。`generate-master` public subpath から CLI 用 path resolver を外し、`yt` alias / CLI flag の実行 smoke と関連回帰テストを追加した（#772）
+- `fix(ts-rewrite/generate-master)`: review 指摘を受け、`masterup.yaml` fallback は `audio` 直下の generate-master 用キーだけを読み、finalize-master 用 namespace の `audio.finalize.*` は無視するよう修正した。JSON 優先は `masterup` override に限定し、inline / scalar `audio`、JSON root / audio shape 不備、空白 `bitrate` は config / validation error に統一した。registry 経由でも明示 CLI 値の presence が config override より優先されるよう schema 境界を分離した。`ffmpeg` の bitrate 指定では `-b:a` と `-q:a` の併用をやめ、single MP3 も bitrate 契約どおり encode 経路へ統一した。`generate-master` public subpath から CLI 用 path resolver を外し、`tayk generate-master` の CLI flag 実行 smoke と関連回帰テストを追加した（#772）
 - `fix(ts-rewrite/core)`: ADR-0009（JSON-only config）との実装乖離を解消し、`packages/core` から `yaml` 依存を排除した（#1415）。suno-prompts の定義ファイルを JSON 化（`suno-patterns.yaml` → `suno-patterns.json`、`config/skills/suno.yaml` → `suno.json`）し、parser を `JSON.parse` ベース（`parseTopLevelJson` / `parsePatternsJson`）に変更。`packages/core/package.json` から `yaml` を削除し、ADR-0009 に Status（乖離解消日）を追記した。
 - `fix(ts-rewrite/core)`: `uploadVideoService` の予約公開時刻正規化で、不正な timezone offset（例: `+25:99`）を UTC 変換対象にしないよう修正した（#1120）。
 - `refactor(ts-rewrite/core)`: `collectVideoDailyAnalyticsService` の列マッピングをハードコード位置参照から `columnHeaders` ベースの動的解決（`requireHeaders` / `resolveColumnIndex`）へ移行した（#1114）。API レスポンスの列順変更に対する堅牢性を向上
@@ -43,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Migration
 
 - `#775`: Python `yt-generate-suno` 相当の導線は TS dispatcher の `tayk generate-suno <collection-dir> [--json]` に移行する。per-CLI bin は追加せず、core registry entry `suno.generate` 経由で `suno-prompts.md` / `suno-prompts.json` を生成する。
-- `#772`: Python `yt-generate-master` 相当の導線は TS dispatcher の `tayk generate-master <collection-dir> [--json]` に移行する。互換 alias として `yt` bin も同じ dispatcher を指す。core registry entry `masterup.generate-master` 経由で Suno ダウンロード済み音声を `master.mp3` へクロスフェード結合する。skill-config は `config/skills/masterup.json` を優先し、存在しない場合のみ既存 `config/skills/masterup.yaml` を fallback として読む。`audio` section は optional で、存在する場合は object のみ有効。未対応 YAML 行や空 scalar は config error として停止する。
+- `#772`: Python `yt-generate-master` 相当の導線は TS dispatcher の `tayk generate-master <collection-dir> [--json]` に移行する。per-CLI bin / `yt` alias は追加せず、core registry entry `masterup.generate-master` 経由で Suno ダウンロード済み音声を `master.mp3` へクロスフェード結合する。skill-config は `config/skills/masterup.json` を優先し、存在しない場合のみ既存 `config/skills/masterup.yaml` を fallback として読む。`audio` section は optional で、存在する場合は object のみ有効。未対応 YAML 行や空 scalar は config error として停止する。
 
 ## [5.5.15] - 2026-07-02
 
