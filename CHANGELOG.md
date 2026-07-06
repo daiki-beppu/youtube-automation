@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.16] - 2026-07-06
+
 ### Added
 
 - `feat(suno)`: `/suno` / `/suno-lyric` の成果物を検証する `yt-suno-verify` CLI を追加。`suno-patterns.yaml` / `suno-prompts.json` / `suno-lyrics.json` の曲数、entry name 整合、歌詞構造、`genre_line` 文字数を Suno UI 投入前に fail-loud で確認できるようにした（#1484）
@@ -104,16 +106,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Migration
 
-所要時間の目安: 0〜2 分
+所要時間の目安: 0〜10 分
 
 local fix 衝突注意:
 - videoup: `generate_videos.sh` の `build_effect_filter()`（`particles` / `bokeh`）をこのバグの回避のためローカルパッチ済みの下流リポジトリは、`yt-skills sync` 取り込み後にローカルパッチを外すこと（残したままだと二重適用にはならないが、次回 upstream 側の当該箇所の変更が sync で上書きされずローカル差分として残り続ける）。取り込み後は `VIDEOUP_EFFECT=particles` / `bokeh` で一度動画を生成し、緑/黒一色になっていないか確認する。
 
 サマリ:
 
+- `/suno` / `/suno-lyric` の成果物検証、playlist 突合、コレクション骨格 preflight、thumbnail 自動選択など、制作フローの fail-loud 化と自動化を追加した。
+- `/channel-setup` / `/channel-import` を `/channel-new` に統合し、旧スキルを削除した。下流リポジトリは `yt-skills sync` の prune で追従する。
+- `yt-automation-update` CLI を追加し、下流リポジトリの pin 更新・lock 同期・skill sync・smoke check を機械実行できるようにした。
 - `particles` / `bokeh` エフェクトが緑一色・黒一色になる重大バグを修正した。エラーなく「生成完了」と表示されるため気づきにくく、該当エフェクトを使っている下流チャンネルは取り込み後に出力確認を推奨する。
 
-### Migration
+追加移行メモ:
 
 - `#775`: Python `yt-generate-suno` 相当の導線は TS dispatcher の `tayk generate-suno <collection-dir> [--json]` に移行する。per-CLI bin は追加せず、core registry entry `suno.generate` 経由で `suno-prompts.md` / `suno-prompts.json` を生成する。
 - `#772`: Python `yt-generate-master` 相当の導線は TS dispatcher の `tayk generate-master <collection-dir> [--json]` に移行する。per-CLI bin / `yt` alias は追加せず、core registry entry `masterup.generate-master` 経由で Suno ダウンロード済み音声を `master.mp3` へクロスフェード結合する。skill-config は `config/skills/masterup.json` を優先し、存在しない場合のみ既存 `config/skills/masterup.yaml` を fallback として読む。`audio` section は optional で、存在する場合は object のみ有効。未対応 YAML 行や空 scalar は config error として停止する。
@@ -1424,6 +1429,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.5.16]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.16
 [5.5.15]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.15
 [5.5.14]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.14
 [5.5.13]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.13
