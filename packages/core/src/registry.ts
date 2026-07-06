@@ -3,6 +3,11 @@ import type { z } from "zod";
 import type { ChannelConfig } from "./config/index.ts";
 import type { ServiceError } from "./errors.ts";
 import {
+  generateMasterService,
+  GenerateMasterOutputSchema,
+  GenerateMasterServiceInputSchema,
+} from "./generate-master/index.ts";
+import {
   GenerateMetadataInput,
   GenerateMetadataOutput,
 } from "./metadata/schema.ts";
@@ -72,6 +77,14 @@ const defineRegistryEntry = <
 ): RegistryEntry<I, O, D> => entry;
 
 export const REGISTRY = {
+  "masterup.generate-master": defineRegistryEntry({
+    deps: [],
+    description:
+      "Suno ダウンロード済み音声をクロスフェード結合して master.mp3 を生成する",
+    inputSchema: GenerateMasterServiceInputSchema,
+    outputSchema: GenerateMasterOutputSchema,
+    run: generateMasterService,
+  }),
   "metadata.generate": defineRegistryEntry({
     deps: ["config"],
     description: "コレクションの動画メタデータを一括生成する",

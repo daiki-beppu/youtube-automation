@@ -30,6 +30,9 @@ export const createEmitResult =
     const rendered = options.json
       ? JSON.stringify(result.value)
       : options.renderText(result.value);
+    if (rendered.length === 0) {
+      return;
+    }
     writeStdout(`${rendered}\n`);
   };
 
