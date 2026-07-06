@@ -33,6 +33,8 @@ export interface RunEntryWithRetryOptions {
   maxRetry: number;
   /** retry 間の待機 (ms)。jitter 込みで毎回 fresh 算出する。 */
   retryDelayMs: () => number;
+  /** retry 予告時に progress 等へ通知する hook。attempt は 1-based。 */
+  onRetry?: (attempt: number, max: number, error: unknown) => void;
   /** 中断可能な sleep（= shared/dom の abortableSleep）。 */
   sleep: (ms: number, isAborted: () => boolean) => Promise<void>;
   /** warn メッセージ用の entry 特定文字列。 */
@@ -61,6 +63,7 @@ export async function runEntryWithRetry(options: RunEntryWithRetryOptions): Prom
       if (attempt < options.maxRetry) {
         const message = error instanceof Error ? error.message : String(error);
         console.warn(`${options.describeEntry()} が失敗、entry retry (${attempt + 1}/${options.maxRetry}): ${message}`);
+        options.onRetry?.(attempt + 1, options.maxRetry, error);
         await options.sleep(options.retryDelayMs(), options.isAborted);
         if (options.isAborted()) {
           return { outcome: "aborted" };

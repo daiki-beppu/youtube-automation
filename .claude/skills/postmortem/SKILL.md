@@ -1,6 +1,6 @@
 ---
 name: postmortem
-description: "Use when 公開済み動画が「思ったより伸びなかった」原因を仮説 → 検証で切り分けたいとき。「伸びなかった」「振り返り」「postmortem」「why flopped」「原因分析」「仮説検証」「flop 分析」「伸び悩み」など、単一動画の事後原因切り分けに関わる場面で使用すること。`/analytics-analyze`（チャンネル横断の戦略）や `/alignment-check`（事前整合性監査）とは責務が異なる。実際の検証は `/thumbnail-compare` `/alignment-check` `/viewer-voice` `/video-analyze` 等の既存スキルへバトンする"
+description: "Use when 公開済み動画が伸びなかった原因を切り分けるとき。「伸びなかった」「postmortem」「flop 分析」で発動。横断戦略は /analytics-analyze、事前監査は /alignment-check"
 ---
 
 ## Overview
@@ -17,7 +17,7 @@ description: "Use when 公開済み動画が「思ったより伸びなかった
 
 存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 加えて、対象動画について以下が揃っていること:
 - `data/analytics_data_*.json` の `video_analytics[<video_id>]` に当該動画が含まれている（含まれていない場合は `/analytics-collect` を先に案内）
@@ -88,7 +88,15 @@ Phase 2 の症状から仮説を生成する。複数の症状が同時に成立
 | `impressions` が過去平均の 0.5 倍未満 | — | タイトル / タグ SEO 弱 / 初動エンゲージメント低 | 公開時刻ミス / 再生リスト未登録 |
 | 全指標が中央値前後（±10%）で `ratio_vs_median < 0.9` | — | テーマ自体の市場性不足 | 競合過密ジャンル |
 
-閾値は固定値ではなく **チャンネル特性に応じて文脈調整可** とする。判定にあたって閾値を変更した場合は postmortem.md の「症状サマリー」欄に明示する。
+閾値は固定値ではなく **チャンネル特性に応じて文脈調整可** とする。ただし調整して良いのは以下の 3 ケースに限る:
+
+| ケース | 調整内容 |
+|--------|---------|
+| 新チャンネル（公開 10 本未満 or 開設 30 日未満） | 平均比閾値を ±0.1 まで緩和可 |
+| 直近テーマ転換 | 過去平均比較は参考値とし `ratio_vs_median` 系を優先 |
+| 外部要因の明確な痕跡 | 該当指標の判定を保留し外部要因を先に記録 |
+
+該当ケースがなければ表の係数をそのまま使う（自由裁量での調整は不可）。調整した場合は、変更前後の閾値と適用したケース名を postmortem.md の「症状サマリー」欄に必ず明示する。
 
 per-video 流入経路シェア（`YT_SEARCH` / `YT_BROWSE` 等）に基づく「YouTube 内露出不足」仮説は、既存データには per-video の `insightTrafficSourceType` が含まれないため Phase 3 では仮説化しない。`impressions` が過去平均の 0.5 倍未満（上表 3 行目）と判定された場合のみ、Phase 4 の検証ステップで per-video の流入経路を YouTube Analytics API に直接問い合わせて切り分ける。
 

@@ -35,7 +35,7 @@ describe("nextItemStates: ADDING_TO_PLAYLIST では itemStates 不変", () => {
   it("Given 全 done の itemStates When ADDING_TO_PLAYLIST を適用 Then prev と等価（遷移しない）", () => {
     const prev = ["done", "done", "done"] as const;
 
-    expect(nextItemStates([...prev], PHASE.ADDING_TO_PLAYLIST, 0)).toEqual([...prev]);
+    expect(nextItemStates([...prev], { phase: PHASE.ADDING_TO_PLAYLIST, index: 0, total: 3 })).toEqual([...prev]);
   });
 });
 

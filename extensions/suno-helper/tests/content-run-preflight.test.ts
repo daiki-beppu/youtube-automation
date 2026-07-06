@@ -2,12 +2,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PHASE } from "../../shared/constants";
+import type { EntryRunResult, RunEntryWithRetryOptions } from "../lib/entry-retry";
+import { writeResumeState } from "../lib/resume-state";
 import { makePromptEntries, markBbox } from "./_helpers";
 
 const harness = vi.hoisted(() => {
   const handlers = new Map<string, (message: { data: unknown }) => unknown>();
   const feedPollerStart = vi.fn();
   const feedPollerStop = vi.fn();
+  const runEntryWithRetry = vi.fn(async (options: RunEntryWithRetryOptions): Promise<EntryRunResult> => {
+    await options.attempt();
+    return { outcome: "ok" };
+  });
 
   return {
     handlers,
@@ -23,6 +29,7 @@ const harness = vi.hoisted(() => {
     })),
     feedPollerStart,
     feedPollerStop,
+    runEntryWithRetry,
     requestSliderSet: vi.fn(),
   };
 });
@@ -67,6 +74,10 @@ vi.mock("../lib/bridge-listener", () => ({
   createFeedPoller: harness.createFeedPoller,
   requestFeedPoll: vi.fn(() => Promise.resolve([])),
   requestSliderSet: harness.requestSliderSet,
+}));
+
+vi.mock("../lib/entry-retry", () => ({
+  runEntryWithRetry: harness.runEntryWithRetry,
 }));
 
 vi.mock("../lib/storage", () => ({
@@ -160,6 +171,64 @@ function makeGenerateButton(): HTMLButtonElement {
   return button;
 }
 
+function makeGenerateButtonWithClickObserver(onClick: () => void): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.textContent = "Create";
+  button.addEventListener("click", () => {
+    onClick();
+    addStatusOnlyCard();
+    addStatusOnlyCard();
+  });
+  markBbox(button, 120, 40);
+  document.body.appendChild(button);
+  return button;
+}
+
+class DataTransferStub {
+  private store = new Map<string, string>();
+  setData(type: string, value: string): void {
+    this.store.set(type, value);
+  }
+  getData(type: string): string {
+    return this.store.get(type) ?? "";
+  }
+}
+
+class ClipboardEventStub extends Event {
+  readonly clipboardData: DataTransferStub | null;
+  constructor(type: string, init: EventInit & { clipboardData?: DataTransferStub } = {}) {
+    super(type, init);
+    this.clipboardData = init.clipboardData ?? null;
+  }
+}
+
+function makeLexicalLyrics(initialText: string): HTMLElement {
+  const lexical = document.createElement("div");
+  lexical.className = "lyrics-editor-content";
+  lexical.setAttribute("data-lexical-editor", "true");
+  lexical.setAttribute("contenteditable", "true");
+  lexical.textContent = initialText;
+  lexical.addEventListener("paste", (e) => {
+    const ev = e as unknown as ClipboardEventStub;
+    lexical.textContent = ev.clipboardData?.getData("text/plain") ?? "";
+    e.preventDefault();
+  });
+  markBbox(lexical, 320, 96);
+  document.body.appendChild(lexical);
+  return lexical;
+}
+
+function makeUnresponsiveLexicalLyrics(initialText: string): HTMLElement {
+  const lexical = document.createElement("div");
+  lexical.className = "lyrics-editor-content";
+  lexical.setAttribute("data-lexical-editor", "true");
+  lexical.setAttribute("contenteditable", "true");
+  lexical.textContent = initialText;
+  markBbox(lexical, 320, 96);
+  document.body.appendChild(lexical);
+  return lexical;
+}
+
 function addCompletedRemixCard(): void {
   const card = document.createElement("div");
   for (const label of ["Select clip", "Remix clip", "Edit title"]) {
@@ -222,6 +291,13 @@ function makeRunPayload(entries = makePromptEntries(0)): {
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
+  vi.stubGlobal("DataTransfer", DataTransferStub);
+  vi.stubGlobal("ClipboardEvent", ClipboardEventStub);
+  (document as unknown as { execCommand: ReturnType<typeof vi.fn> }).execCommand = vi.fn(() => true);
+  harness.runEntryWithRetry.mockImplementation(async (options: RunEntryWithRetryOptions) => {
+    await options.attempt();
+    return { outcome: "ok" };
+  });
   harness.handlers.clear();
   document.body.innerHTML = "";
 });
@@ -250,6 +326,27 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       const runHandler = getRunHandler();
 
       expect(() => runHandler({ data: { ...makeRunPayload(makePromptEntries(1)), ...override } })).toThrow(message);
+      expect(harness.sendMessage).not.toHaveBeenCalled();
+      expect(harness.feedPollerStart).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["文字列", "0", /run\.indices/],
+    ["null", null, /run\.indices/],
+    ["空配列", [], /run\.indices/],
+    ["非整数", [1.5], /run\.indices/],
+    ["負数", [-1], /run\.indices/],
+    ["範囲外", [2], /run\.indices/],
+    ["重複", [0, 0], /run\.indices/],
+  ] as const)(
+    "Given indices が%s When run を受ける Then fail-loud し副作用を起こさない",
+    async (_label, indices, message) => {
+      await loadContentScript();
+      const runHandler = getRunHandler();
+      const entries = makePromptEntries(2);
+
+      expect(() => runHandler({ data: { ...makeRunPayload(entries), indices } })).toThrow(message);
       expect(harness.sendMessage).not.toHaveBeenCalled();
       expect(harness.feedPollerStart).not.toHaveBeenCalled();
     },
@@ -403,6 +500,149 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     },
   );
 
+  it("Given Lexical lyrics editor When run を受ける Then actual run handler が paste 完了後に Generate する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    const lyrics = makeLexicalLyrics("old lyrics");
+    let lyricsAtGenerate = "";
+    makeGenerateButtonWithClickObserver(() => {
+      lyricsAtGenerate = lyrics.textContent ?? "";
+    });
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = [{ name: "lexical", style: "neo soul", lyrics: "new lexical lyrics" }];
+
+    const result = runHandler({ data: makeRunPayload(entries) });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(lyrics.textContent).toBe("new lexical lyrics");
+    expect(lyricsAtGenerate).toBe("new lexical lyrics");
+  });
+
+  it("Given Lexical lyrics editor と空 lyrics When run を受ける Then actual run handler がクリア完了後に Generate する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    const lyrics = makeLexicalLyrics("old lyrics");
+    (document as unknown as { execCommand: ReturnType<typeof vi.fn> }).execCommand = vi.fn((command) => {
+      if (command === "delete") {
+        lyrics.textContent = "";
+      }
+      return true;
+    });
+    let lyricsAtGenerate = "not clicked";
+    makeGenerateButtonWithClickObserver(() => {
+      lyricsAtGenerate = lyrics.textContent ?? "";
+    });
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = [{ name: "instrumental", style: "cinematic instrumental", lyrics: "" }];
+
+    const result = runHandler({ data: makeRunPayload(entries) });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(lyrics.textContent).toBe("");
+    expect(lyricsAtGenerate).toBe("");
+  });
+
+  it("Given Lexical lyrics editor が paste を反映しない When run を受ける Then Generate へ進まず ERROR を emit する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    const lyrics = makeUnresponsiveLexicalLyrics("old lyrics");
+    const onGenerate = vi.fn();
+    makeGenerateButtonWithClickObserver(onGenerate);
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = [{ name: "lexical", style: "neo soul", lyrics: "new lexical lyrics" }];
+    harness.runEntryWithRetry.mockImplementationOnce(async (options: RunEntryWithRetryOptions) => {
+      try {
+        await options.attempt();
+        return { outcome: "ok" };
+      } catch (error) {
+        return options.isFatal(error) ? { outcome: "fatal", error } : { outcome: "failed", error };
+      }
+    });
+
+    const result = runHandler({ data: makeRunPayload(entries) });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(
+      () =>
+        expect(progressPayloads()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              phase: PHASE.ERROR,
+              message: expect.stringContaining("Lyrics 欄への paste 反映に失敗しました"),
+            }),
+          ]),
+        ),
+      { timeout: 3000 },
+    );
+    expect(onGenerate).not.toHaveBeenCalled();
+    expect(lyrics.textContent).toBe("old lyrics");
+  });
+
+  it("Given indices 指定で supported view かつ entries がある When run を受ける Then 指定 index だけを絶対 index で処理する", async () => {
+    makeRunnableSunoDom("Grid");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(3);
+
+    const result = runHandler({ data: { ...makeRunPayload(entries), indices: [0, 2] } });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: PHASE.WAITING_SLOT, index: 0, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.INJECTING, index: 0, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.GENERATING, index: 0, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.DONE, index: 0, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.WAITING_SLOT, index: 2, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.INJECTING, index: 2, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.GENERATING, index: 2, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.DONE, index: 2, total: entries.length }),
+        expect.objectContaining({ phase: PHASE.FINISHED, total: entries.length }),
+      ]),
+    );
+    expect(progressPayloads()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ index: 1 }), expect.objectContaining({ phase: PHASE.ERROR })]),
+    );
+  });
+
+  it("Given indices 部分実行の途中で停止 When resume state を保存する Then 未選択 index を含まない残り indices を保持する", async () => {
+    makeRunnableSunoDom("Grid");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(5);
+    harness.runEntryWithRetry
+      .mockImplementationOnce(async (options: RunEntryWithRetryOptions) => {
+        await options.attempt();
+        return { outcome: "ok" };
+      })
+      .mockResolvedValueOnce({ outcome: "aborted" as const });
+
+    const result = runHandler({ data: { ...makeRunPayload(entries), indices: [0, 2, 4] } });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(writeResumeState).toHaveBeenCalledOnce());
+    expect(writeResumeState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionId: "20260601-clm-preflight-collection",
+        failedIndex: 2,
+        total: entries.length,
+        remainingIndices: [2, 4],
+      }),
+    );
+  });
+
   it.each(["Waveform", "Grid"] as const)(
     "Given %s view で Remix 0 かつ空 queue When run を受ける Then 初回 WAITING_SLOT で失敗せず FINISHED まで進む",
     async (viewLabel) => {
@@ -437,4 +677,55 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       );
     },
   );
+
+  it("Given entry retry が発生する When run を受ける Then retry progress log を content 経由で emit する", async () => {
+    makeRunnableSunoDom("List ▼");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(1);
+    harness.runEntryWithRetry.mockImplementationOnce(async (options: RunEntryWithRetryOptions) => {
+      await options.attempt();
+      options.onRetry?.(1, 2, new Error("temporary"));
+      return { outcome: "ok" };
+    });
+
+    const result = runHandler({ data: makeRunPayload(entries) });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.WAITING_SLOT,
+          index: 0,
+          total: entries.length,
+          log: { kind: "retry", entryName: "pattern-1", attempt: 1, max: 2 },
+        }),
+      ]),
+    );
+  });
+
+  it("Given entry が retry 上限後に failed outcome になる When run を受ける Then skip progress log を content 経由で emit する", async () => {
+    makeRunnableSunoDom("List ▼");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(1);
+    harness.runEntryWithRetry.mockResolvedValueOnce({ outcome: "failed" as const, error: new Error("queue timeout") });
+
+    const result = runHandler({ data: makeRunPayload(entries) });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.ENTRY_FAILED,
+          index: 0,
+          total: entries.length,
+          message: "queue timeout",
+          log: { kind: "skip", entryName: "pattern-1" },
+        }),
+      ]),
+    );
+  });
 });

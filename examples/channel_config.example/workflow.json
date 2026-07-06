@@ -4,7 +4,8 @@
       "approval_gates": {
         "audio": false,
         "upload": false
-      }
+      },
+      "skip_manual_mastering": false
     }
   }
 }
