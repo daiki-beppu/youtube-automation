@@ -7,6 +7,14 @@
 
 import type { PromptEntry } from "../../shared/api";
 
+export const TEST_COLLECTION_ID = "20260601-clm-test-collection";
+
+export function snapshotOptions(playlistName?: string): { collectionId: string; playlistName?: string } {
+  return playlistName === undefined
+    ? { collectionId: TEST_COLLECTION_ID }
+    : { collectionId: TEST_COLLECTION_ID, playlistName };
+}
+
 /**
  * テスト用の PromptEntry 配列を生成する (#852)。name は `pattern-1..N`。
  * snapshot 系テスト (query-progress / phase-to-status / use-suno-runner-restore) が

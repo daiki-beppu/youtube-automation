@@ -2,86 +2,31 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+詳細ドキュメント: アーキテクチャ全容・主要モジュール表は `docs/architecture.md`、パッケージング / extensions / lefthook 詳細は `docs/development.md`、takt 運用詳細は `docs/takt-operations.md`。
+
 ## プロジェクト概要
 
-YouTube チャンネル運営を自動化するツールキット。`youtube-channels-automation` パッケージとして配布し、各チャンネルリポジトリへ git+https または submodule 経由で導入される。Analytics 収集、AI コンテンツ生成（Lyria / Veo / Gemini / Suno）、動画アップロード、メタデータ生成、ベンチマーク分析を統合提供する。
+YouTube チャンネル運営を自動化するツールキット。`youtube-channels-automation` パッケージとして配布し、各チャンネルリポジトリへ導入される（Analytics 収集、AI コンテンツ生成、動画アップロード、メタデータ生成、ベンチマーク分析）。
 
 ## プロジェクト固有コマンド
 
 ```bash
-uv run yt-skills sync                                # チャンネルリポジトリへ .claude/skills を配布
-uv run yt-skills sync --asset claude-md              # .claude/CLAUDE.md (BGM 運営方針テンプレ) を配布
-uv run yt-skills list                                # 同梱スキル一覧
-uv run yt-skills list --asset claude-md              # 同梱 CLAUDE.md テンプレ一覧
-uv run yt-skills diff                                # 同梱版と target の差分確認
-uv run yt-skills diff --asset claude-md              # CLAUDE.md テンプレの差分確認
-uv run yt-config-migrate diff                        # 旧 channel_config.json → 責務別分割のプレビュー
-uv run yt-config-migrate migrate --apply             # 実際に分割実行
-uv run yt-config-migrate verify                      # 新 loader で読み込み検証
+uv run yt-skills sync             # チャンネルリポジトリへ .claude/skills を配布（--asset claude-md で CLAUDE.md テンプレ）
+uv run yt-skills list             # 同梱スキル一覧
+uv run yt-skills diff             # 同梱版と target の差分確認
+uv run yt-config-migrate diff     # 旧 channel_config.json → 責務別分割のプレビュー（migrate --apply / verify も有り）
 ```
 
 `yt-*` 系 CLI 全 30 件超は `pyproject.toml` の `[project.scripts]` に登録されている。新規 CLI を追加するときは **必ず `yt-*` プレフィックス**を踏襲し、entry point を登録すること。
 
-## アーキテクチャ
+## アーキテクチャ要点
 
-このリポジトリは **このリポジトリ自体** と **下流のチャンネルリポジトリ** の 2 層構造で動く。
+このリポジトリは **このリポジトリ自体** と **下流のチャンネルリポジトリ** の 2 層構造で動く（全容・主要モジュール表は `docs/architecture.md`）。
 
-### 自リポジトリ
-
-- `src/youtube_automation/utils/` — コアライブラリ（設定ローダー、API クライアント、analytics、upload）
-- `src/youtube_automation/agents/` — アップロードエージェント（Auto / Collection）
-- `src/youtube_automation/scripts/` — `yt-*` CLI 本体
-- `src/youtube_automation/cli/` — ユーザー向け CLI（`yt-skills`, `yt-config-migrate`, `yt-cost-report`）
-- `src/youtube_automation/templates/` — 説明文テンプレート
-- `.claude/skills/` — 自動化スキル群（Claude Code / Codex 共用）。wheel に `_skills/` として `force-include` され、`yt-skills sync` で各チャンネルへ展開される
-- `.claude/CLAUDE.template.md` — BGM チャンネル運営方針テンプレ（共通骨格）。wheel に `_claude_md/CLAUDE.template.md` として `force-include` され、`yt-skills sync --asset claude-md` で各チャンネルの `.claude/CLAUDE.md` として展開される
-- `.agents/skills` — `.claude/skills` への symlink。Codex CLI 用の探索パス（Codex 規約 `$REPO_ROOT/.agents/skills`）
-- `AGENTS.md` — Codex CLI 向けエージェント指示。本ファイル（CLAUDE.md）と並立し、Codex 視点のドキュメント補足を含む
-- `auth/` — submodule 利用者向け **後方互換 shim**（OAuth 認証情報のみ維持。`utils/`・`agents/`・`scripts/` のルート shim は廃止済み）
-
-### 下流チャンネルリポジトリ（`CHANNEL_DIR` が指す先）
-
-```
-config/channel/         # 責務別分割設定（v2.0.0 以降）
-  meta.json             # channel / youtube_channel
-  content.json          # genre / tags / descriptions / title
-  youtube.json          # youtube / music_engine / content_model
-  analytics.json        # analytics / benchmark
-  playlists.json        # playlists
-  workflow.json         # (v4.0.0 で short / community 撤去、後方互換で素通し)
-  audio.json            # audio
-  shorts.json           # shorts (optional)
-  comments.json         # comments (optional)
-  pinned-comment.json   # pinned_comment (optional)
-  distrokid.json        # distrokid (optional)
-config/localizations.json
-auth/{client_secrets,token}.json
-.claude/skills/         # yt-skills sync で展開
-.agents/skills          # → ../.claude/skills の symlink。skills sync が併設（Codex 探索パス）
-collections/            # コンテンツ成果物
-assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下に画像 + .meta.json
-```
-
-## 主要モジュール
-
-| モジュール | 責務 |
-|---|---|
-| `utils.config` | `config/channel/*.json` の glob ロード／バリデーション。`load_config()` / `channel_dir()` / `reset()` / `ChannelConfig` を export |
-| `utils.config.{meta,content,youtube,analytics,playlists,workflow,shorts,audio,localizations,comments,pinned_comment,distrokid}` | 責務別 dataclass |
-| `cli.config_migrate` | `yt-config-migrate` 本体（v1 → v2 変換） |
-| `utils.youtube_service` | YouTube API サービスファクトリ（ServiceRegistry） |
-| `utils.upload_core` | 再開可能アップロード・サムネイル圧縮の共通コア |
-| `utils.exceptions` | ドメイン例外（`AutomationError` 基底、`ConfigError` / `YouTubeAPIError` / `ValidationError` / `UploadError`） |
-| `utils.collection_paths` | コレクションディレクトリ構造の解決 |
-| `utils.metadata_generator` | タイトル・説明文・タグ・ローカライゼーション生成 |
-| `utils.analytics_collector` | Analytics API 収集（Mixin 構成、`VideoDailyAnalyticsMixin` で動画×日次取得） |
-| `utils.launch_curve_*` / `channel_trend` / `theme_performance` | 視聴推移分析（pandas / matplotlib） |
-| `utils.thumbnail_features` / `thumbnail_correlation` | サムネ特徴量＋ CTR/views 相関（Pillow） |
-| `utils.image_provider` | 画像生成プロバイダー抽象化（Gemini / OpenAI 切り替え） |
-| `utils.stock` | ボツ画像ストック化（`assets/stock/<theme>/` への退避・列挙・整理、隣接 `.meta.json` 管理） |
-| `auth.oauth_handler` | OAuth 2.0 トークン管理 |
-| `utils.secrets` | シークレット解決（`_SECRET_REFS` で参照定義） |
-| `cli.skills_sync` | `yt-skills` 本体 |
+- `src/youtube_automation/{utils,agents,scripts,cli,templates}/` — コアライブラリ / アップロードエージェント / `yt-*` CLI 本体 / ユーザー向け CLI / 説明文テンプレート
+- `.claude/skills/` — 自動化スキル群（Claude Code / Codex 共用）。wheel に同梱され `yt-skills sync` で各チャンネルへ展開。`.agents/skills` は Codex CLI 探索パス用の symlink（実体は常に `.claude/skills/` 側を編集）
+- `auth/` — submodule 利用者向け後方互換 shim（OAuth 認証情報のみ）
+- 下流チャンネルリポジトリ（`CHANNEL_DIR`）: `config/channel/*.json`（責務別分割。meta / content / youtube / analytics / playlists / workflow / audio + optional の shorts.json / comments.json / pinned-comment.json / distrokid.json）、`config/localizations.json`、`auth/`、`.claude/skills/`、`collections/`、`assets/stock/`
 
 ## 開発規約
 
@@ -109,16 +54,17 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 
 ### 依存ポリシー: deprecated 表明済み依存の取り扱い
 
-- **`google-auth-httplib2`（PyPI 0.4.0 で deprecated 表明）**:
-  - `src/youtube_automation/` / `tests/` 配下に `google_auth_httplib2` の **直 import を新規追加しない**（現状 0 件、回帰テスト `tests/test_no_google_auth_httplib2_direct_import.py` で機械担保）
-  - 既存の transitive 依存は `googleapiclient.discovery.build(..., credentials=credentials)` 経由で残置する（上流 `google-api-python-client` が内部で `google_auth_httplib2.AuthorizedHttp` を要求しているため、即時撤去不可）
-  - 上流が non-httplib2 transport（`google.auth.transport.requests` など）を正式サポートした際の移行手順・撤去判断は `docs/migration/google-auth-httplib2.md` を参照
-  - `pyproject.toml::dependencies` の `"google-auth-httplib2"` 直接宣言の撤去は transport 切替完了後に別 issue で再検証する
+- `google-auth-httplib2` の **直 import を新規追加しない**（回帰テスト `tests/test_no_google_auth_httplib2_direct_import.py` で機械担保）
+- transitive 依存の残置理由・移行手順は `docs/migration/google-auth-httplib2.md` と `docs/development.md` を参照
 
 ### スクリプト配置
 
-- **skill 固有のスクリプト**は `.claude/skills/<skill>/references/` に配置する（例: `.claude/skills/videoup/references/generate_videos.sh`）
-- 共通スクリプト（例: `gcp-bootstrap.sh` / `gcp-terraform-apply.sh`）も該当 skill の `references/` 配下に置く（現状は `.claude/skills/channel-setup/references/`）。ルート直下に `scripts/` ディレクトリは設けない
+- skill 固有・共通スクリプトはいずれも該当 skill の `.claude/skills/<skill>/references/` に配置する。ルート直下に `scripts/` ディレクトリは設けない
+
+### skill frontmatter
+
+- SKILL.md の frontmatter `description:` は **必ず double-quoted string** で書く（値内の `: ` が strict YAML でマッピング区切りと誤解釈されるため）
+- スキルの新規作成・改訂時は `docs/skill-design/skill-authoring-guidelines.md` の 7 ルール（発動キーワードの相互排他 / 承認ゲート / 前提存在ガード / 判断基準の明確化 / references 単一ソース化 / Hard Gates 冒頭配置 / 未接続参照の隔離）に従う。既存スキルの一括改修は不要
 
 ### テスト
 
@@ -129,23 +75,11 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 
 ### パッケージング
 
-- `.claude/skills/` は `[tool.hatch.build.targets.wheel.force-include]` で wheel 内 `_skills/` に同梱され、`yt-skills sync` が `importlib.resources` で参照する
-- `.claude/CLAUDE.template.md` も同様に `[tool.hatch.build.targets.wheel.force-include]` で wheel 内 `_claude_md/CLAUDE.template.md` に同梱され、`yt-skills sync --asset claude-md` で `.claude/CLAUDE.md` として展開される
-- 配布アセットの追加は `src/youtube_automation/cli/skills_sync.py::_ASSET_SPECS` に entry を追加するだけで `list/sync/diff` が自動的にサポートされる（`kind="dir" | "file"` を選ぶ）
-- `skills` asset を標準レイアウト（`.claude/skills`）へ sync すると、下流リポにも `.agents/skills -> ../.claude/skills` の相対 symlink を併設する（Codex CLI 探索パス規約）。既存の正しい symlink は冪等にスキップし、張り直しは `--force`、symlink 非対応環境では警告のみで sync は継続する（`_ops.py::_ensure_agents_skills_symlink`）
-- バージョン bump は `pyproject.toml::version` のみを更新する（`src/youtube_automation/__init__.py::__version__` は `importlib.metadata` 経由で動的に読み込むため触らない）。リリース運用全体は `/automation-release` スキルで一気通貫に実行する
+- `.claude/skills/` と `.claude/CLAUDE.template.md` は wheel に force-include され `yt-skills sync` で配布される。バージョン bump は `pyproject.toml::version` のみ（`__version__` は動的読込）。詳細は `docs/development.md`、リリースは `/automation-release` スキル
 
 ### extensions（Chrome 拡張開発）
 
-`extensions/` 配下の Chrome 拡張は **WXT + React + TypeScript + Tailwind CSS** スタックで開発する（Python 本体とは独立した Node ツールチェーン）。詳細は `extensions/README.md`。
-
-- **ディレクトリ規約**: 各拡張は `extensions/<name>/` に WXT 規約（`entrypoints/` 構成）で配置。複数拡張で再利用する共通コードは `extensions/shared/`（契約定数 / API client / origin allowlist / DOM ヘルパ）に集約し、各拡張から相対 import（`../../shared/*`）で参照する
-- **manifest は自動生成**: `manifest.json` を手書きせず `wxt.config.ts` から生成する。権限は最小権限を `lib/manifest.ts` の `MANIFEST_PERMISSIONS` 単一定数で宣言し、`wxt.config.ts` がそれを参照する（過剰権限の混入は Vitest で機械担保）
-- **型安全**: 全 source を TypeScript で書き、`@types/chrome` で `chrome.*` を型付け。message は `@webext-core/messaging`、`chrome.storage` は `@wxt-dev/storage` の型付き wrapper を経由する
-- **契約文字列**: サーバー（`yt-collection-serve`）との互換契約値（storage key / 配信ルート / phase 値）は `extensions/shared/constants.ts` の定数として 1 箇所で定義する。メッセージ種別（`run` / `stop` / `progress`）は各拡張の `lib/messaging.ts` で `@webext-core/messaging` の ProtocolMap として型付け定義する。ハードコーディング禁止
-- **テスト必須**: unit は Vitest（`pnpm test`）、e2e は Playwright（`pnpm test:e2e`、Suno UI mock への DOM 注入スモーク）。CI は `.github/workflows/extensions.yml` が lint / 型チェック / Vitest / Playwright を実行する
-- **成果物は commit しない**: `node_modules/` / `dist/` / `.wxt/` / `.output/` は `.gitignore` 済み。配布は `release-extensions.yml` が tag push 時に zip を GitHub Release へ添付する
-- **パッケージマネージャ**: `pnpm`（`ni`/`nr` ではなく直接 `pnpm` を使う。WXT/Playwright の前提）
+- `extensions/` 配下は WXT + React + TypeScript + Tailwind CSS（pnpm）。規約詳細は `docs/development.md` と `extensions/README.md`
 
 ## セキュリティ
 
@@ -154,48 +88,19 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 - 参照定義は `utils/secrets.py` の `_SECRET_REFS`（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`）
 - AI 系（Vertex AI）は ADC 認証のため `op` 取得は不要
 
-### Git hooks（lefthook）
+### CHANGELOG ゲート
 
-Git hooks は [lefthook](https://lefthook.dev) で宣言的に管理する（設定は `lefthook.yml`）。
-
-- **pre-commit**: 変更した Python ファイルに `ruff check` / `ruff format --check` をかける（CI の lint ジョブと同等）
-- **pre-push**: CHANGELOG ゲート。CI（`.github/workflows/ci.yml` の `changelog` ジョブ）と同じく、実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更したのに `CHANGELOG.md` の `[Unreleased]` が未更新なら push を止める。ロジック本体は `.lefthook/pre-push/changelog-gate.sh`
-
-有効化と運用:
-
-- **有効化**: `nix develop`（または direnv `use flake`）で devShell に入ると `flake.nix` の shellHook が `lefthook install` を自動実行する。手動なら `lefthook install`（クローン後 1 回）
-- **全 hook をスキップ**: `LEFTHOOK=0 git push` / `LEFTHOOK=0 git commit`
-- **CHANGELOG ゲートのみ省く**: `SKIP_CHANGELOG=1 git push`（CI 側は PR の `skip-changelog` ラベル）
-- refactor / fix でも src を触れば CHANGELOG 追記が要る。tests / docs だけの変更はゲート対象外（hook も CI も自動 skip）
+- 実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更したら `CHANGELOG.md` の `[Unreleased]` 追記が必須（lefthook pre-push + CI で機械担保）
+- tests / docs だけの変更はゲート対象外。意図的に省く場合は `SKIP_CHANGELOG=1 git push`（CI 側は PR の `skip-changelog` ラベル）
+- lefthook の有効化手順・pre-commit の詳細は `docs/development.md`
+- worktree で commit / push する場合も、対象 worktree で `nix develop`（または direnv）に入り `.lefthook/install.sh` を通す。診断・再インストール手順は `docs/development.md` の「Git hooks（lefthook）」を参照
 
 ## 開発ワークフロー
 
-このリポジトリの開発は **必ず worktree 上で行う**。メインの作業ツリー（リポジトリ本体のチェックアウト先）で直接ブランチを切って作業してはならない — 作業状態の競合や他作業との干渉を避けるため。
-
-標準ルートは **takt + GitHub issue**（`takt-issue` スキル経由で issue → worktree → PR を統一手順化）。takt を使わないアドホックな修正でも、`git worktree add` で worktree を作成してから作業すること。
-
-worktree の置き場は以下に統一する:
-
-- **takt 自動生成**: `<repo-parent>/takt-worktrees/<timestamp>-<N>-<slug>/`（takt が自動管理）
-- **手動 `git worktree add`**: `$REPO_ROOT/.worktrees/<slug>/`（リポジトリ内・gitignore 済み・`parallel` スキルと共通）
-
-`<repo-parent>/automation-worktrees/` 等のリポジトリ外手動置き場は非推奨（過去の残骸のみ）。
+このリポジトリの開発は **必ず worktree 上で行う**（メインの作業ツリーで直接ブランチを切らない）。標準ルートは **takt + GitHub issue**。worktree 置き場・takt 設定の継承・skill 編集と takt の関係・Codex 読み替えの詳細は `docs/takt-operations.md`。
 
 - **issue 起票**: `gh issue create` または `/issue` スキル
 - **takt 起動**: `takt add '#<N>'` → `takt run`（base branch は **main** 固定、PR は通常 PR）
+- **workflow 使い分け**: 小〜中規模 issue はリポジトリ同梱の軽量 workflow **`lite`**（plan → implement → review の 3 step、トークン消費が少ない）。セキュリティ・認証・アップロード系、スキル横断・破壊的変更、テスト戦略設計が要る issue は組み込み **default**（9 step）を使う。基準は `docs/takt-operations.md`
 - **commit 規約**: 日本語 Conventional Commits + タイトル末尾に `(#<N>)`。`commit-convention` スキル参照
-- **takt 設定**: リポジトリ固有 `.takt/config.yaml` は `draft_pr: false` / `base_branch` のみ上書きし、provider・model・language・persona はグローバル `~/.takt/config.yaml` を継承する。グローバルは Codex + Opus ハイブリッド（default `provider: claude` / `model: opus 4.6`、doer/planner 系のみ `codex` に override、レビュー系・supervisor は opus、`language: ja`）
-- workflow は組み込み **default**（plan → review → ... → reviewers の 9 step）
-- **リリース**: `/automation-release` スキルで Release PR パターンを自動化（prepare → リリース PR → publish の 2 フェーズ）。post-release の運営者向けガイドと下流追従 issue は `/release-notes` が担当
-
-### skill 編集と takt の関係
-
-`.claude/skills/**` を含む `.claude/` 配下は Claude Code の **protected paths**（`acceptEdits` モードでも write 時に必ず prompt が出る領域）に該当する。takt は Claude Agent SDK を `settingSources: ['project']` + `permissionMode: 'acceptEdits'` で呼ぶため prompt に答える人間がおらず、**Claude provider が走る persona から** `.claude/skills/<name>/SKILL.md` 等への Edit/Write は `Claude requested permissions to write to ..., but you haven't granted it yet.` で deny される（`permissions.allow` ルールでは bypass 不可、`bypassPermissions` のみが bypass）。
-
-ただし、**実装を担う `coder` persona を codex provider にしている（グローバル設定から継承）ため**、実装ファイルへの編集は Codex CLI 経由で行われ Claude Code の protected paths 制約を回避できる（Codex は独自のサンドボックスで動作し、`$REPO_ROOT/.agents/skills` を探索パスに含む）。レビュー系 persona は opus（Claude）だが書き込みは行わないため影響しない。そのため、**skill 配下を変更する issue も takt から問題なく回せる**。実際の運用例として、`.claude/skills/videoup/references/generate_videos.sh` 等の skill 配下スクリプト修正も takt 経由で完走実績がある。
-
-逆に `coder` を Claude provider に戻している環境では、従来通り skill 配下の Edit が deny される。その場合は通常の Claude Code 対話セッション（cmux pane 等）で直接編集し、コミット・PR 作成は `commit-convention` / `pr` スキル経由で実施する。
-
-### Codex 共用時の skill 表記読み替え
-
-`.claude/skills/**` は Claude Code / Codex CLI 共用だが、既存 SKILL.md には Claude Code 固有表現が残る。Codex で実行するときは、`AskUserQuestion` は通常のユーザー確認、`Read ツール` は画像/ファイル閲覧手段、`Bash ツール run_in_background=true` は長時間コマンドを非同期 session で起動して進捗を poll、`TodoWrite` は Codex の plan/checklist 更新として読み替える。これらの表記が残っていても実装不整合とは扱わず、同等の Codex 機能で実行する。
+- **リリース**: `/automation-release` スキル（post-release は `/release-notes`）

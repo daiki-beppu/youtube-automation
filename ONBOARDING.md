@@ -1,5 +1,8 @@
 # Onboarding
 
+> [!WARNING]
+> **移行告知（2026-07-02）**: 本 Python 版は **2026-08 中に提供終了**し、TypeScript 製の後継 **`tayk`**（npm パッケージ）へ切り替わります。これから新規導入する場合も必ず [`docs/migration/python-to-tayk.md`](docs/migration/python-to-tayk.md) を先に読んでください。
+
 `youtube-channels-automation` は **複数の BGM 系 YouTube チャンネルを 1 人で運営するためのツールキット**である。本書は **下流チャンネルリポジトリの運営者** を一次読者とし、`/channel-new` から始まる新規開設フロー → 1 コレクション完成 → 継続運用までの動線をまとめる。
 
 > 本リポジトリそのものを編集する開発者向けのメモは末尾の §6「付録: 開発者向け」に置く。
@@ -56,11 +59,20 @@ uv add "git+https://github.com/daiki-beppu/youtube-channels-automation@v5.5.0"
 
 ### 2.3 OAuth セットアップ
 
-**Claude Code 上で `/setup` を実行する**。AI が `yt-doctor` でツール導入と API 設定の状態を診断し、GCP プロジェクト作成・API 有効化・IAM 付与・`.env` 書き出し・OAuth クライアント ID 配置まで wizard で誘導する。
+**Claude Code 上で `/setup` を実行する**。AI が `yt-doctor` でツール導入と API 設定の状態を診断し、GCP プロジェクト作成・API 有効化・IAM 付与・`.env` 書き出し・Google Auth Platform 手動設定まで wizard で誘導する。
 
-`gcloud auth login` / `gcloud auth application-default login` / Google Cloud Console での OAuth クライアント ID 作成の 3 ステップだけは PKCE / GUI 制約で AI 実行不可なため利用者が手動で行うが、それ以外 (プロジェクト作成・billing 紐付け・API 有効化・IAM 付与・トークン取得など) は AI が gcloud を直接 Bash で実行する。
+`gcloud auth login` / `gcloud auth application-default login` / Google Auth Platform の Branding・Audience Test users・Clients 設定と `client_secrets.json` 配置は PKCE / GUI 制約で AI 実行不可なため利用者が手動で行うが、それ以外 (プロジェクト作成・billing 紐付け・API 有効化・IAM 付与・トークン取得など) は AI が gcloud を直接 Bash で実行する。
 
-手動で全工程やりたい上級者向けの 2 ルート (bootstrap.sh / Terraform) は [`auth/SETUP.md`](auth/SETUP.md) と `.claude/skills/channel-setup/references/gcp-bootstrap.sh` / `infra/terraform/gcp/` を参照（submodule 利用の場合は `automation/` プレフィックスを追加）。
+Google Cloud Console の新 UI では、OAuth 関連の手動操作は **Google Auth Platform** に集約されている。`/setup` が URL を出したら、以下の画面名を目印に進める:
+
+1. **Google Auth Platform > Branding**: アプリ名は `<channel-name> YouTube Automation`、ユーザーサポートメールとデベロッパー連絡先には自分の Google アカウントを入れて保存する。
+2. **Google Auth Platform > Audience**: User type は **External**、Publishing status は **Testing** のままでよい。**Test users** に、OAuth 認証でログインする Google アカウントを必ず追加する。追加しないと初回認証が `403 access_denied` で止まる。
+3. **Google Auth Platform > Clients**: **Create client** から Application type **Desktop app** を選び、名前は `<channel-name> Desktop Client` にする。
+4. 作成した client を開き、**Client secrets > Add secret** で新しい secret を発行する。`auth/client_secrets.template.json` をコピーし、`client_id` / `project_id` / `client_secret` を転記して `<channel_dir>/auth/client_secrets.json` として保存する。
+
+`yt-channel-status` などの初回認証で `403 access_denied` が出た場合は、上記 **Audience > Test users** にログイン中の Google アカウントが入っているか確認し、`<channel_dir>/auth/token.json` を削除してから再実行する。
+
+手動で全工程やりたい上級者向けの 2 ルート (bootstrap.sh / Terraform) は [`auth/SETUP.md`](auth/SETUP.md) と `.claude/skills/channel-new/references/gcp-bootstrap.sh` / `infra/terraform/gcp/` を参照（submodule 利用の場合は `automation/` プレフィックスを追加）。
 
 ---
 
@@ -79,7 +91,7 @@ uv add "git+https://github.com/daiki-beppu/youtube-channels-automation@v5.5.0"
 /viewer-voice         → コメント収集と視聴者インサイト分析
 /channel-research     → /benchmark / /viewer-voice 後の詳細分析
 /channel-direction    → 方向性ブレスト（差別化決定）
-/channel-setup        → config 再生成 / branding 再反映
+/channel-new 再生成モード → config 再生成 / branding 再反映
 yt-skills sync                # Claude Code スキル群を新リポへ展開
 yt-skills sync --asset claude-md   # BGM 運営方針テンプレを新リポへ展開
 ```
@@ -102,7 +114,7 @@ yt-skills sync --asset claude-md   # BGM 運営方針テンプレを新リポへ
 
 `/channel-new` が保存した `docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json`、または `/channel-research` の分析結果をもとに、対話で「このチャンネルは何で勝つか」を決める。コメント分析が必要な場合は `/viewer-voice` を先に実行してターゲット層と利用シーンを言語化する。
 
-### 3.4 任意: `/channel-setup`（テクニカルセットアップ）
+### 3.4 任意: `/channel-new` 再生成モード（テクニカルセットアップ）
 
 `/channel-direction` 後の config 再生成や、運用中の branding 再反映が必要な場合に使う。GCP / OAuth / ADC の API 設定は `/setup` が担当する。
 
@@ -111,8 +123,10 @@ yt-skills sync --asset claude-md   # BGM 運営方針テンプレを新リポへ
 `/channel-new` Step 2 で自動実行されるが、後から手動で再実行する場合:
 
 ```bash
-yt-skills sync                       # .claude/skills/ をコピー
+yt-skills sync                       # 全 asset を一括展開 (--asset all がデフォルト)
+yt-skills sync --asset skills        # .claude/skills/ だけをコピー
 yt-skills sync --asset claude-md     # .claude/CLAUDE.md (BGM 運営方針テンプレ) を展開
+yt-skills sync --asset auth-template # auth/client_secrets.template.json を展開
 yt-skills diff                       # 同梱版とローカルの差分
 yt-skills sync --asset claude-md --force  # 共通骨格を最新版で上書き
 ```
@@ -195,7 +209,7 @@ yt-skills sync --asset claude-md --force  # 共通骨格を最新版で上書き
 | 月次 | `/benchmark` | 競合チャンネル最新データ取得 |
 | 月次 | `/channel-status` | チャンネル全体統計（登録者数・総再生回数）取得 |
 | 月次 | `/alignment-check` | 過去動画のタイトル × サムネ × 音楽整合性監査 |
-| 四半期 | `/audience-persona` + `/viewing-scene` 見直し | ターゲット層・利用シーンの再検証 |
+| 四半期 | `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` 見直し | ターゲット層・利用シーンの再検証 |
 | 容量逼迫時 | `/live-clean` | 公開済みコレクションの大容量メディア削除 |
 
 ### 5.2 困ったときに参照するスキル
@@ -206,7 +220,7 @@ yt-skills sync --asset claude-md --force  # 共通骨格を最新版で上書き
 | 次に何やる？ | `/wf-next`（既存コレクション継続） / `/collection-ideate`（新規企画） |
 | このコレクション CTR 弱くない？ | `/alignment-check` → `/thumbnail-compare` |
 | シリーズ広げるべき？ | `/analytics-analyze`（テーマ別パフォーマンス） |
-| 視聴者は誰？何を求めてる？ | `/audience-persona` + `/viewer-voice` + `/viewing-scene` |
+| 視聴者は誰？何を求めてる？ | `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` |
 | 競合は今どんな動画出してる？ | `/benchmark` → `/video-analyze` |
 
 ### 5.3 共通運営方針の更新
@@ -248,6 +262,7 @@ uv sync --extra dev --extra veo
 
 - `.claude/skills/` — Claude Code スキル群。wheel 内 `_skills/` に `force-include` され、`yt-skills sync --asset skills` で配布
 - `.claude/CLAUDE.template.md` — BGM チャンネル運営方針テンプレ。wheel 内 `_claude_md/CLAUDE.template.md` に `force-include` され、`yt-skills sync --asset claude-md` で `.claude/CLAUDE.md` として配布
+- `auth/client_secrets.template.json` — Google Auth Platform の JSON ダウンロードが使えない場合の OAuth client secrets テンプレ。wheel 内 `_auth/client_secrets.template.json` に `force-include` され、`yt-skills sync --asset auth-template` で配布
 
 新しい配布アセットを追加するときは `src/youtube_automation/cli/skills_sync.py::_ASSET_SPECS` に entry を追加するだけで `list/sync/diff` が自動的にサポートする（`kind="dir"` / `"file"` を選ぶ）。
 

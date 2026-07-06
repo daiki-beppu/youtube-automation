@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "properties": {
+    "verdict": {
+      "type": "string",
+      "enum": ["approved", "needs_fix"]
+    },
+    "feedback": {
+      "type": "string",
+      "description": "needs_fix の場合の修正指示（具体的なファイル・箇所・理由）。approved なら空文字"
+    }
+  },
+  "required": ["verdict", "feedback"],
+  "additionalProperties": false
+}

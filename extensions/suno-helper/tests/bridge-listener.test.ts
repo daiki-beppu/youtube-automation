@@ -2,12 +2,12 @@
 //
 // ISOLATED 側 bridge 受信配線 (#948) の回帰テスト。
 //   - source マーカー / event.source の検証で他者の message を弾く
-//   - GENERATE_CLIPS → registerSubmitted / FEED_CLIPS・FEED_POLL_RESPONSE → applyFeedStatuses
+//   - GENERATE_CLIPS → registerSubmitted / FEED_CLIPS・FEED_V3_POLL_RESPONSE → applyFeedStatuses
 //   - feed poller は「未終端 clip あり かつ passive 観測が stale」のときだけ poll を発行する
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BRIDGE_MSG, BRIDGE_SOURCE } from "../../shared/constants";
-import { attachBridgeListener, createFeedPoller, requestSliderSet } from "../lib/bridge-listener";
+import { attachBridgeListener, createFeedPoller, requestFeedPoll, requestSliderSet } from "../lib/bridge-listener";
 import { createClipTracker } from "../lib/clip-tracker";
 
 /** bridge からの postMessage を模した MessageEvent を同期 dispatch する。 */
@@ -24,7 +24,7 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
       source: BRIDGE_SOURCE,
       type: BRIDGE_MSG.GENERATE_CLIPS,
       clips: [
-        { id: "c1", status: "submitted" },
+        { id: "c1", status: "submitted", duration: 241.2 },
         { id: "c2", status: "submitted" },
       ],
     });
@@ -32,6 +32,7 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
     expect(tracker.submissionCount()).toBe(1);
     expect(tracker.getInFlightCount()).toBe(2);
     expect(tracker.getSubmittedIds()).toEqual(["c1", "c2"]);
+    expect(tracker.getDuration("c1")).toBe(241.2);
     detach();
   });
 
@@ -55,7 +56,36 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
     detach();
   });
 
-  it("Given FEED_CLIPS / FEED_POLL_RESPONSE message When 受信する Then applyFeedStatuses される", () => {
+  it("Given FEED_CLIPS / FEED_V3_POLL_RESPONSE message When 受信する Then applyFeedStatuses される", () => {
+    const tracker = createClipTracker();
+    const applyFeedStatuses = vi.spyOn(tracker, "applyFeedStatuses");
+    const detach = attachBridgeListener(tracker);
+    dispatchBridgeMessage({
+      source: BRIDGE_SOURCE,
+      type: BRIDGE_MSG.GENERATE_CLIPS,
+      clips: [{ id: "c1", status: "submitted" }],
+    });
+
+    dispatchBridgeMessage({
+      source: BRIDGE_SOURCE,
+      type: BRIDGE_MSG.FEED_CLIPS,
+      clips: [{ id: "c1", status: "streaming", duration: 187.25 }],
+    });
+    expect(applyFeedStatuses).toHaveBeenLastCalledWith([{ id: "c1", status: "streaming", duration: 187.25 }]);
+    expect(tracker.getInFlightCount()).toBe(1);
+
+    dispatchBridgeMessage({
+      source: BRIDGE_SOURCE,
+      type: BRIDGE_MSG.FEED_V3_POLL_RESPONSE,
+      requestId: 1,
+      clips: [{ id: "c1", status: "complete", duration: 187.25 }],
+    });
+    expect(applyFeedStatuses).toHaveBeenLastCalledWith([{ id: "c1", status: "complete", duration: 187.25 }]);
+    expect(tracker.getInFlightCount()).toBe(0); // active poll の応答も観測として合流する
+    detach();
+  });
+
+  it("Given FEED_CLIPS message に duration がある When 受信する Then tracker に透過される", () => {
     const tracker = createClipTracker();
     const detach = attachBridgeListener(tracker);
     dispatchBridgeMessage({
@@ -67,17 +97,10 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
     dispatchBridgeMessage({
       source: BRIDGE_SOURCE,
       type: BRIDGE_MSG.FEED_CLIPS,
-      clips: [{ id: "c1", status: "streaming" }],
+      clips: [{ id: "c1", status: "complete", duration: 201.7 }],
     });
-    expect(tracker.getInFlightCount()).toBe(1);
 
-    dispatchBridgeMessage({
-      source: BRIDGE_SOURCE,
-      type: BRIDGE_MSG.FEED_POLL_RESPONSE,
-      requestId: 1,
-      clips: [{ id: "c1", status: "complete" }],
-    });
-    expect(tracker.getInFlightCount()).toBe(0); // active poll の応答も観測として合流する
+    expect(tracker.getDuration("c1")).toBe(201.7);
     detach();
   });
 
@@ -94,7 +117,20 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
     );
     // clips の形崩れ
     dispatchBridgeMessage({ source: BRIDGE_SOURCE, type: BRIDGE_MSG.GENERATE_CLIPS, clips: [{ id: 1 }] });
+    dispatchBridgeMessage({
+      source: BRIDGE_SOURCE,
+      type: BRIDGE_MSG.GENERATE_CLIPS,
+      clips: [{ id: "x", status: "s", duration: "bad" }],
+    });
     dispatchBridgeMessage({ source: BRIDGE_SOURCE, type: BRIDGE_MSG.GENERATE_CLIPS });
+    // duration は optional だが、存在する場合は finite non-negative number のみ受け入れる
+    for (const duration of ["241.2", Number.NaN, Infinity, -1]) {
+      dispatchBridgeMessage({
+        source: BRIDGE_SOURCE,
+        type: BRIDGE_MSG.GENERATE_CLIPS,
+        clips: [{ id: "x", status: "submitted", duration }],
+      });
+    }
 
     expect(tracker.hasObservedAnyTraffic()).toBe(false);
     expect(tracker.getInFlightCount()).toBe(0);
@@ -112,6 +148,60 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
       clips: [{ id: "c1", status: "submitted" }],
     });
     expect(tracker.hasObservedAnyTraffic()).toBe(false);
+  });
+});
+
+describe("requestFeedPoll: active poll 応答の ObservedClip 境界検証", () => {
+  async function captureFeedPollRequestId(): Promise<number> {
+    return new Promise<number>((resolve) => {
+      const probe = (event: MessageEvent): void => {
+        const data = event.data as { requestId?: number; type?: string };
+        if (data?.type === BRIDGE_MSG.FEED_V3_POLL_REQUEST && typeof data.requestId === "number") {
+          window.removeEventListener("message", probe);
+          resolve(data.requestId);
+        }
+      };
+      window.addEventListener("message", probe);
+    });
+  }
+
+  it("Given duration あり / なしの poll 応答 When 受信する Then ObservedClip[] として resolve する", async () => {
+    const pending = requestFeedPoll(["c1", "c2"]);
+    const requestId = await captureFeedPollRequestId();
+
+    dispatchBridgeMessage({
+      source: BRIDGE_SOURCE,
+      type: BRIDGE_MSG.FEED_V3_POLL_RESPONSE,
+      requestId,
+      clips: [
+        { id: "c1", status: "streaming", duration: 241.2 },
+        { id: "c2", status: "complete" },
+      ],
+    });
+
+    await expect(pending).resolves.toEqual([
+      { id: "c1", status: "streaming", duration: 241.2 },
+      { id: "c2", status: "complete" },
+    ]);
+  });
+
+  it.each([
+    ["string", "241.2"],
+    ["NaN", Number.NaN],
+    ["Infinity", Infinity],
+    ["negative", -1],
+  ])("Given duration が %s の poll 応答 When 受信する Then null で resolve する", async (_label, duration) => {
+    const pending = requestFeedPoll(["c1"]);
+    const requestId = await captureFeedPollRequestId();
+
+    dispatchBridgeMessage({
+      source: BRIDGE_SOURCE,
+      type: BRIDGE_MSG.FEED_V3_POLL_RESPONSE,
+      requestId,
+      clips: [{ id: "c1", status: "streaming", duration }],
+    });
+
+    await expect(pending).resolves.toBeNull();
   });
 });
 

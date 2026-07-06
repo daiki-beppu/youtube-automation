@@ -88,13 +88,26 @@ Phase 3 ─ 公開（全自動）             /wf-next
 A. `collections/planning/<dir>/` ごと削除して `/wf-new` をやり直す（`workflow-state.json` だけ書き換えても 10-assets/ の素材と整合しない）。
 
 **Q. `/wf-next` を呼んだら何も起きない**
-A. `phase: "prepared"` で `raw_master` 配置済み + `master_audio` 未配置の場合、**ユーザーが mixing+mastering を完了して `01-master/` に最終マスターを置く** ことが次の前提。`/wf-status` で詳細を見ると「ミキシング+マスタリング待ち」と表示される。
+A. `phase: "prepared"` で `raw_master` 配置済み + `master_audio` 未配置の場合、**ユーザーが mixing+mastering を完了して `01-master/` に最終マスターを置く** ことが次の前提。`/wf-status` で詳細を見ると「ミキシング+マスタリング待ち」と表示される。raw master をそのまま公開する運用なら次項の `skip_manual_mastering` を参照。
+
+**Q. raw master をそのまま最終マスターとして使いたい（外部 DAW でのマスタリング不要）**
+A. `config/channel/workflow.json` に `workflow.wf_next.skip_manual_mastering: true` を設定する。`/wf-next` のマスター音源検出（2-B）で `01-master/` に別ファイルが見つからなくても、`assets.raw_master` をそのまま `assets.master_audio` として採用し `phase: "mastered"` へ自動で進む（毎回 `workflow-state.json` を手で編集する必要はない）。`approval_gates.audio` は「採用前に確認プロンプトを出すか」だけを制御する別設定で、こちらを `true` にしても raw=final の自動採用は有効にならない。
+
+```json
+{
+  "workflow": {
+    "wf_next": {
+      "skip_manual_mastering": true
+    }
+  }
+}
+```
 
 **Q. `/wf-next` がエラーで止まった**
 A. `phase: "publishing"` で停止していれば、`assets` フラグの状態から未完了ステップを特定し、`/wf-next` をもう一度呼ぶと未完了ステップから再開する（冪等性あり）。
 
 **Q. analytics やベンチマークが無いと `/collection-ideate` は止まる？**
-A. `reports/analysis_*.md` が無い場合は止まらず、`data/benchmark_*.json` があれば benchmark fallback mode、どちらも無ければ minimal mode で進む。minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認する。`reports/analysis_*.md` が最新 `data/analytics_data_*.json` より古い場合だけ fallback せず、`/analytics-analyze` 再実行を案内して止まる。
+A. `reports/analysis_*.md` が無い場合は止まらず、`data/benchmark_*.json` があれば benchmark fallback mode、どちらも無ければ minimal mode で進む。minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認する。`reports/analysis_*.md` が stale（最新 `data/analytics_data_*.json` より古い、または収集データ自体が実行日から解決済み `freshness_days` を超えて経過）の場合だけ fallback せず、`/analytics-analyze` 再実行（絶対鮮度 stale では `/analytics-collect` を先行）を案内して止まる。`freshness_days` は `.claude/skills/collection-ideate/config.default.yaml` の既定 7 日を使い、`config/skills/collection-ideate.yaml` で上書きできる。
 
 **Q. 「planning/」と「live/」って何**
 A. 制作中は `collections/planning/<dir>/`、`/video-upload` で公開完了すると `collections/live/<dir>/` に移動する（`/wf-next` の Phase 3 最後）。

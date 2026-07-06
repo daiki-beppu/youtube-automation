@@ -3,10 +3,11 @@
 // (`Could not establish connection. Receiving end does not exist.`) を検知して、
 // popup の案内に対処法（⌘+Shift+R）を含める。
 // #852: content の snapshot を popup の status 文字列 / 復元 state へ変換する純関数も同居する。
-import { PHASE, type SnapshotPayload } from "../../shared/constants";
+import { PHASE, type ProgressLog, type SnapshotPayload } from "../../shared/constants";
 
 /** popup の再 open 復元に使う state。useSunoRunner の restore effect がそのまま React state へ流す。 */
 export interface RestoreState {
+  collectionId: string;
   entries: SnapshotPayload["entries"];
   itemStates: SnapshotPayload["itemStates"];
   isRunning: boolean;
@@ -14,15 +15,84 @@ export interface RestoreState {
   isError: boolean;
   // collection mode の playlist 名 (#854)。再 open 時の display only 表示に使う。
   playlistName?: string;
+  // collection 単位 duration guard 閾値。復元後も同じ OK/NG 判定を維持する。
+  durationFilter?: SnapshotPayload["durationFilter"];
   // ERROR 停止した entry の 0-based index (#872 要件3)。chrome.storage の resume state と二重化し、
   // popup の再開バナーの冗長ソースとして消費する。ERROR phase 到達時のみ確定、それ以外は undefined。
   failedIndex?: number;
   // リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
   failedIndices?: number[];
+  // 明示 indices 実行が途中中断したとき、再開で実行すべき残りの 0-based index 列。
+  remainingIndices?: number[];
   // playlist 追加対象として generate response から観測済みの clip ID 一覧。
   submittedClipIds?: string[];
-  // playlist 追加時に揃っているべき clip ID 件数。
+  // true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。
+  submittedClipIdsAreDurationFiltered?: boolean;
+  // duration filter 後に playlist 追加・download へ採用する OK clip 件数。
   playlistExpectedClipCount?: number;
+}
+
+function formatSeconds(value: number): string {
+  return `${Math.round(value)}s`;
+}
+
+function formatDurationLimit(log: Extract<ProgressLog, { kind: "duration-check" }>): string {
+  if (log.ok) {
+    return "";
+  }
+  if (log.maxSec !== undefined && log.durationSec > log.maxSec) {
+    return ` (max ${formatSeconds(log.maxSec)})`;
+  }
+  if (log.minSec !== undefined && log.durationSec < log.minSec) {
+    return ` (min ${formatSeconds(log.minSec)})`;
+  }
+  if (log.maxSec !== undefined) {
+    return ` (max ${formatSeconds(log.maxSec)})`;
+  }
+  if (log.minSec !== undefined) {
+    return ` (min ${formatSeconds(log.minSec)})`;
+  }
+  return "";
+}
+
+function formatProgressLog(log: ProgressLog): { text: string; error?: boolean } {
+  switch (log.kind) {
+    case "duration-check": {
+      const mark = log.ok ? "✓" : "✗";
+      return {
+        text: `"${log.entryName}": ${formatSeconds(log.durationSec)} ${mark}${formatDurationLimit(log)}`,
+      };
+    }
+    case "retry":
+      return { text: `"${log.entryName}": リトライ ${log.attempt}/${log.max}` };
+    case "skip":
+      return { text: `"${log.entryName}": 全滅 — スキップ` };
+    default: {
+      const exhaustive: never = log;
+      throw new Error(`未知の progress log: ${String(exhaustive)}`);
+    }
+  }
+}
+
+function formatAllowedProgressLog(progress: SnapshotPayload["progress"]): { text: string; error?: boolean } | null {
+  if (!progress.log) {
+    return null;
+  }
+  switch (progress.phase) {
+    case PHASE.DONE:
+      return progress.log.kind === "duration-check" ? formatProgressLog(progress.log) : null;
+    case PHASE.WAITING_SLOT:
+      return progress.log.kind === "retry" ? formatProgressLog(progress.log) : null;
+    case PHASE.ENTRY_FAILED: {
+      if (progress.log.kind !== "skip") {
+        return null;
+      }
+      const status = formatProgressLog(progress.log);
+      return progress.message ? { ...status, text: `${status.text}: ${progress.message}` } : status;
+    }
+    default:
+      return null;
+  }
 }
 
 /**
@@ -34,6 +104,11 @@ export function phaseToStatus(
   progress: SnapshotPayload["progress"],
   entries: SnapshotPayload["entries"],
 ): { text: string; error?: boolean } {
+  const logStatus = formatAllowedProgressLog(progress);
+  if (logStatus) {
+    return logStatus;
+  }
+
   const { phase, index, total, message } = progress;
   const n = (index ?? 0) + 1;
   switch (phase) {
@@ -83,15 +158,19 @@ export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | 
   }
   const { text, error } = phaseToStatus(snap.progress, snap.entries);
   return {
+    collectionId: snap.collectionId,
     entries: snap.entries,
     itemStates: snap.itemStates,
     isRunning: snap.isRunning,
     status: text,
     isError: Boolean(error),
     playlistName: snap.playlistName,
+    ...(snap.durationFilter ? { durationFilter: snap.durationFilter } : {}),
     failedIndex: snap.failedIndex,
     failedIndices: snap.failedIndices,
+    remainingIndices: snap.remainingIndices,
     submittedClipIds: snap.submittedClipIds,
+    submittedClipIdsAreDurationFiltered: snap.submittedClipIdsAreDurationFiltered,
     playlistExpectedClipCount: snap.playlistExpectedClipCount,
   };
 }

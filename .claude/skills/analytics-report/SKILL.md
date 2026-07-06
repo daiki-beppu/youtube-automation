@@ -1,6 +1,6 @@
 ---
 name: analytics-report
-description: "Use when Analytics分析レポートの表示・閲覧が必要なとき。過去レポートの比較やパフォーマンスレビュー時に使用。「レポート見せて」「過去データ確認」「パフォーマンスレビュー」「前回の分析結果」など、既存レポートの参照・比較が必要な場面で必ず使用すること"
+description: "Use when 既存の Analytics レポートを表示・比較したいとき。「レポート見せて」「過去データ確認」「前回の分析結果」で発動"
 ---
 
 ## Overview
@@ -13,7 +13,7 @@ description: "Use when Analytics分析レポートの表示・閲覧が必要な
 
 存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## When to Use
 
@@ -111,10 +111,10 @@ description: "Use when Analytics分析レポートの表示・閲覧が必要な
 
 #### CTR 値の解釈
 
-Analytics API の `ctr_percentage` は **整数値**（例: 2606 = 実際のパーセントとして解釈が必要）。
-`impressions` と `ctr_percentage` の関係から実際の CTR% を算出:
-- `click_count ≈ impressions × (ctr_percentage / impressions)` ではなく
-- 実際には API が返す値をそのまま使用し、表示時に適切にフォーマットする
+`aggregated_ctr_percentage`（および `per_video[].ctr_percentage` / `per_day[].ctr_percentage`）は**百分率を表す float**（例: `4.2` = 4.2%）。
+- 表示は小数 1〜2 桁 + `%` をそのまま付与する（例: `4.2%`）
+- 100 で割る/掛ける、整数として再解釈するなどの変換は禁止（値はすでに百分率）
+- `None` は「CTR データなし（Reporting API 未取得）」と表示する
 
 #### 注意事項
 
