@@ -159,6 +159,39 @@ def test_lefthook_install_script_runs_force_install(tmp_path: Path) -> None:
     assert (tmp_path / ".git" / "hooks" / "pre-push").is_file()
 
 
+def test_lefthook_install_script_retries_transient_force_install_failure(
+    tmp_path: Path,
+) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    args_log = tmp_path / "lefthook-args.txt"
+    count_file = tmp_path / "lefthook-count.txt"
+    _create_fake_executable(
+        bin_dir / "lefthook",
+        f"""#!/usr/bin/env bash
+set -eu
+count=0
+if [ -f {count_file} ]; then
+  count="$(cat {count_file})"
+fi
+count="$((count + 1))"
+printf '%s' "$count" > {count_file}
+printf '%s\\n' "$*" >> {args_log}
+if [ "$count" -eq 1 ]; then
+  exit 42
+fi
+""",
+    )
+
+    result = _run_install_script(tmp_path, f"{bin_dir}:/usr/bin:/bin")
+
+    assert result.returncode == 0
+    assert args_log.read_text(encoding="utf-8") == "install --force\ninstall --force\n"
+    assert (tmp_path / ".git" / "hooks" / "pre-commit").is_file()
+    assert (tmp_path / ".git" / "hooks" / "pre-push").is_file()
+
+
 def test_shell_hook_entrypoint_runs_force_install_from_linked_worktree(tmp_path: Path) -> None:
     worktree = _create_linked_worktree_with_hook_files(tmp_path)
     bin_dir = tmp_path / "bin"
@@ -484,13 +517,13 @@ def test_lefthook_install_script_fails_when_force_install_fails(tmp_path: Path) 
     args_log = tmp_path / "lefthook-args.txt"
     _create_fake_executable(
         bin_dir / "lefthook",
-        f"#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" > {args_log}\nexit 42\n",
+        f"#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> {args_log}\nexit 42\n",
     )
 
     result = _run_install_script(tmp_path, f"{bin_dir}:/usr/bin:/bin")
 
     assert result.returncode == 1
-    assert args_log.read_text(encoding="utf-8") == "install --force\n"
+    assert args_log.read_text(encoding="utf-8") == ("install --force\ninstall --force\ninstall --force\n")
     assert (
         "error: lefthook install failed; run 'nix develop --command bash .lefthook/install.sh' after fixing the error."
     ) in result.stderr
