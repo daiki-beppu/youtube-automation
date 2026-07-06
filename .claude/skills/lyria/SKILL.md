@@ -228,10 +228,10 @@ bash "$(git rev-parse --show-toplevel)/.claude/skills/lyria/references/worktree_
 ## Step 5: 完了時の更新
 
 - `workflow-state.json` の `planning.music` セクションを populate（下記参照）
-- `workflow-state.json` の `music.generated = true`, `music.approved = true` に更新
-- `music.master_audio` にマスター音源ファイル名を記録
-- `music.engine` に `"lyria"` を記録
-- `phase` を `"music-approved"` に更新
+- `assets.music_prompts = true` に更新
+- `assets.raw_master` に生成されたマスター音源ファイル名（例: `master.mp3`）を記録
+
+最終マスター確定（`assets.master_audio`）と `phase: "mastered"` への遷移は、ユーザーがミキシング+マスタリングした最終ファイルを `01-master/` に配置した後に `/wf-next` が検出して更新する（本スキルの責務外）。
 
 ### planning.music スキーマ
 
