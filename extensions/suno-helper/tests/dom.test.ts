@@ -477,17 +477,43 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
     expect(div.textContent).toBe("old lyrics");
   });
 
-  it("Given contenteditable div + 空文字 (instrumental) When 注入する Then 空の text/plain を paste する", async () => {
+  it("Given contenteditable div + 空文字 (instrumental) When 注入する Then 空 paste ではなく delete でクリアする", async () => {
     vi.useFakeTimers();
     const div = addLexicalLyrics();
+    div.textContent = "previous lyrics";
     const pastes = capturePastes(div);
-    applyLexicalPaste(div);
+    execCommand.mockImplementation((command) => {
+      if (command === "delete") {
+        div.textContent = "";
+      }
+      return true;
+    });
 
     const injected = setLyricsValue(div, "");
-    await vi.advanceTimersByTimeAsync(400);
+
+    await vi.advanceTimersByTimeAsync(200);
+    expect(execCommand).toHaveBeenNthCalledWith(1, "selectAll", false);
+    expect(execCommand).toHaveBeenNthCalledWith(2, "delete", false);
+    await vi.advanceTimersByTimeAsync(200);
     await injected;
 
-    expect(pastes).toEqual([{ text: "", bubbles: true, cancelable: true }]);
+    expect(pastes).toEqual([]);
+    expect(div.textContent).toBe("");
+  });
+
+  it("Given contenteditable div + 空文字で delete が反映されない When 注入する Then fail-loud する", async () => {
+    vi.useFakeTimers();
+    const div = addLexicalLyrics();
+    div.textContent = "previous lyrics";
+    const pastes = capturePastes(div);
+
+    const injected = setLyricsValue(div, "");
+    const rejection = expect(injected).rejects.toThrow("Lyrics 欄のクリア反映に失敗しました");
+    await vi.advanceTimersByTimeAsync(400);
+
+    await rejection;
+    expect(pastes).toEqual([]);
+    expect(div.textContent).toBe("previous lyrics");
   });
 });
 

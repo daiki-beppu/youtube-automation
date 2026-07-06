@@ -522,6 +522,34 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     expect(lyricsAtGenerate).toBe("new lexical lyrics");
   });
 
+  it("Given Lexical lyrics editor と空 lyrics When run を受ける Then actual run handler がクリア完了後に Generate する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    const lyrics = makeLexicalLyrics("old lyrics");
+    (document as unknown as { execCommand: ReturnType<typeof vi.fn> }).execCommand = vi.fn((command) => {
+      if (command === "delete") {
+        lyrics.textContent = "";
+      }
+      return true;
+    });
+    let lyricsAtGenerate = "not clicked";
+    makeGenerateButtonWithClickObserver(() => {
+      lyricsAtGenerate = lyrics.textContent ?? "";
+    });
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = [{ name: "instrumental", style: "cinematic instrumental", lyrics: "" }];
+
+    const result = runHandler({ data: makeRunPayload(entries) });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(lyrics.textContent).toBe("");
+    expect(lyricsAtGenerate).toBe("");
+  });
+
   it("Given Lexical lyrics editor が paste を反映しない When run を受ける Then Generate へ進まず ERROR を emit する", async () => {
     makeViewButton("Newest ▼");
     makeViewButton("Grid");

@@ -184,11 +184,14 @@ const LEXICAL_SELECTION_SYNC_MS = 200;
 
 /**
  * Lyrics 欄への値注入。旧 UI の textarea / input は setNativeValue へ委譲し、
- * 新 UI (2026-07) の Lexical contenteditable div は selectAll → paste 合成イベントで全置換する。
+ * 新 UI (2026-07) の Lexical contenteditable div は selectAll 後、非空 lyrics を paste 合成イベントで
+ * 全置換し、空 lyrics は delete command でクリアする。
  *
  * Lexical は value setter を持たず、innerText 直接代入は内部 EditorState と乖離して
  * 次の再レンダーで巻き戻る。Lexical 自身が購読する paste イベント（DataTransfer の
  * text/plain）に載せるのが React 互換で最も壊れにくい経路（実ページで動作検証済み）。
+ * 空の text/plain paste は Lexical 側で no-op になる可能性があるため、空 lyrics は全選択後に
+ * delete command でクリアする。
  * 同期実行では selection が Lexical に同期されず置換に失敗するため async 必須。
  */
 export async function setLyricsValue(
@@ -207,6 +210,21 @@ export async function setLyricsValue(
     );
   }
   await sleep(LEXICAL_SELECTION_SYNC_MS);
+  if (value === "") {
+    const cleared = document.execCommand("delete", false);
+    if (!cleared) {
+      throw new FatalRunError(
+        "Lyrics 欄のクリアに失敗しました。Suno UI の Lexical editor 状態を確認してください。",
+      );
+    }
+    await sleep(LEXICAL_SELECTION_SYNC_MS);
+    if ((el.textContent ?? "") !== "") {
+      throw new FatalRunError(
+        "Lyrics 欄のクリア反映に失敗しました。Generate へ進まず停止します。",
+      );
+    }
+    return;
+  }
   const data = new DataTransfer();
   data.setData("text/plain", value);
   el.dispatchEvent(
