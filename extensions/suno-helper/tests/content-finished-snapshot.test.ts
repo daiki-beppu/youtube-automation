@@ -102,7 +102,7 @@ async function loadContentScript(
       clearSubmittedIds: vi.fn(),
       getSubmittedIds: vi.fn(() => submittedIdsFromTracker),
       getPendingSubmittedIds: vi.fn(() => []),
-      getDuration: vi.fn(() => undefined),
+      getDuration: vi.fn(() => 120),
       getInFlightCount: vi.fn(() => 0),
       hasObservedAnyTraffic: vi.fn(() => true),
       lastChangeAt: vi.fn(() => Date.now()),

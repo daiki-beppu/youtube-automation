@@ -29,6 +29,8 @@ export interface RunPayload {
   indices?: number[];
   /** 再開前の run で観測済みの playlist 対象 clip ID。 */
   submittedClipIds?: string[];
+  /** true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。 */
+  submittedClipIdsAreDurationFiltered?: boolean;
   /** playlist 追加時に揃っているべき clip ID 件数。 */
   playlistExpectedClipCount?: number;
 }
@@ -38,6 +40,10 @@ export interface RetryPlaylistPayload {
   submittedClipIds: string[];
   expectedClipCount: number;
   collectionId: string;
+  /** retryPlaylist 入口でも通常 run と同じ duration guard 契約を適用する。 */
+  durationFilter?: DurationFilter;
+  /** true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。 */
+  submittedClipIdsAreDurationFiltered?: boolean;
   shouldDownload?: boolean;
 }
 

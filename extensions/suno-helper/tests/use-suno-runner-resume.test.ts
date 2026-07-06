@@ -149,12 +149,14 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
   it("Given failed-only rerun の入力 When payload を構築する Then indices と保存済み playlist 情報が同じ戻り値に入る", () => {
     const overrides = buildFailedEntriesRunOverrides([2, 7], {
       submittedClipIds: ["clip-a", "clip-b"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
     });
 
     expect(overrides).toEqual({
       indices: [2, 7],
       submittedClipIds: ["clip-a", "clip-b"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
     });
   });
@@ -163,12 +165,14 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
     const banner = makeBanner({ failedIndex: 4, total: 4 });
     const overrides = buildResumeRunOverrides(banner, {
       submittedClipIds: ["clip-a", "clip-b", "clip-c", "clip-d"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 4,
     });
 
     expect(overrides).toEqual({
       range: { start: 4, end: 3 },
       submittedClipIds: ["clip-a", "clip-b", "clip-c", "clip-d"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 4,
     });
   });
@@ -177,6 +181,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
     const entries = [{ name: "pattern-1", style: "ambient", lyrics: "[Instrumental]" }];
     const overrides = buildResumeRunOverrides(makeBanner({ failedIndex: 1, total: 3 }), {
       submittedClipIds: ["clip-a", "clip-b"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
     });
 
@@ -195,6 +200,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       collectionId: "collection-a",
       indices: undefined,
       submittedClipIds: ["clip-a", "clip-b"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
     });
   });
@@ -202,12 +208,14 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
   it("Given indices 部分実行の resume state When payload を構築する Then range ではなく残り indices を渡す", () => {
     const overrides = buildResumeRunOverrides(makeBanner({ failedIndex: 2, total: 5, remainingIndices: [2, 4] }), {
       submittedClipIds: ["clip-a", "clip-b"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 6,
     });
 
     expect(overrides).toEqual({
       indices: [2, 4],
       submittedClipIds: ["clip-a", "clip-b"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 6,
     });
   });
@@ -216,6 +224,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
     const entries = [{ name: "pattern-1", style: "ambient", lyrics: "[Instrumental]" }];
     const overrides = buildFailedEntriesRunOverrides([0, 2], {
       submittedClipIds: ["clip-a", "clip-c"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
     });
 
@@ -234,6 +243,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       collectionId: "collection-a",
       indices: [0, 2],
       submittedClipIds: ["clip-a", "clip-c"],
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
     });
   });
@@ -318,7 +328,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
 
   it("Given resume state persist When content.ts を読む Then OK clip filter 後の playlist resume 情報で上書きできる", () => {
     expect(contentSource).toMatch(
-      /const playlistSubmittedClipIds = playlistPersistInfo\?\.submittedClipIds \?\? persistedSubmittedClipIds;[\s\S]*?const playlistExpectedCount = playlistPersistInfo\?\.playlistExpectedClipCount \?\? expectedPlaylistClipCount;[\s\S]*?submittedClipIds: playlistSubmittedClipIds,[\s\S]*?playlistExpectedClipCount: playlistExpectedCount,/,
+      /const currentSubmittedIds = tracker\.getSubmittedIds\(\);[\s\S]*?const fallbackPlaylistPersistInfo = resolvePlaylistPersistInfo\([\s\S]*?previousSubmittedClipIds,[\s\S]*?currentSubmittedIds,[\s\S]*?options\.durationFilter,[\s\S]*?options\.submittedClipIdsAreDurationFiltered === true,[\s\S]*?\);[\s\S]*?const playlistSubmittedClipIds =[\s\S]*?playlistPersistInfo\?\.submittedClipIds \?\? fallbackPlaylistPersistInfo\.submittedClipIds;[\s\S]*?const playlistExpectedCount =[\s\S]*?playlistPersistInfo\?\.playlistExpectedClipCount \?\? fallbackPlaylistPersistInfo\.playlistExpectedClipCount;[\s\S]*?submittedClipIds: playlistSubmittedClipIds,[\s\S]*?playlistExpectedClipCount: playlistExpectedCount,/,
     );
   });
 
@@ -343,5 +353,11 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       /const shouldDownload =\s*resumeBanner !== null && resumeBanner\.failedIndex >= resumeBanner\.total && !resumeBanner\.remainingIndices\?\.length;/,
     );
     expect(runnerSource).not.toMatch(/expectedClipCount >= fullCollectionClipCount/);
+  });
+
+  it("Given playlist-only resume When retryPlaylist を読む Then durationFilter と正規化済み ID 契約を payload に載せる", () => {
+    expect(runnerSource).toMatch(
+      /sendMessage\("retryPlaylist", \{[\s\S]*?durationFilter,[\s\S]*?submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,[\s\S]*?shouldDownload,[\s\S]*?\}\)/,
+    );
   });
 });

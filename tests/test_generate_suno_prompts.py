@@ -887,6 +887,43 @@ def test_main_json_output_is_loadable_array_of_entries(channel_dir, tmp_path, mo
     assert {"name", "style", "lyrics"} <= set(data["entries"][0])
 
 
+@pytest.mark.parametrize(
+    ("duration_filter", "expected"),
+    [
+        (False, "must be a mapping"),
+        ({"min_sec": "60", "max_sec": 300}, "finite numeric"),
+        ({"min_sec": True, "max_sec": 300}, "finite numeric"),
+        ({"min_sec": 60, "max_sec": False}, "finite numeric"),
+        ({"min_sec": float("nan"), "max_sec": 300}, "finite numeric"),
+        ({"min_sec": 60, "max_sec": float("inf")}, "finite numeric"),
+        ({"min_sec": -1, "max_sec": 300}, "0 <= min_sec <= max_sec"),
+        ({"min_sec": 301, "max_sec": 300}, "0 <= min_sec <= max_sec"),
+    ],
+)
+def test_main_json_duration_filter_rejects_invalid_numeric_config(
+    channel_dir,
+    tmp_path,
+    monkeypatch,
+    duration_filter,
+    expected,
+):
+    """duration_filter は TS 側 validator と同じ finite number 契約で fail-loud する."""
+    from youtube_automation.utils.exceptions import ConfigError
+
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz, soft piano",
+        duration_filter=duration_filter,
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(patterns_path)])
+
+    with pytest.raises(ConfigError) as exc_info:
+        main()
+
+    assert expected in str(exc_info.value)
+
+
 def test_main_collection_dir_merges_vocal_suno_lyrics_json(channel_dir, tmp_path, monkeypatch):
     """collection directory 引数でも 20-documentation/suno-lyrics.json を JSON 出力へ merge する."""
     collection_dir = tmp_path / "collection"

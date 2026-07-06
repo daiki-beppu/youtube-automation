@@ -13,6 +13,7 @@ interface RunPayload {
   collectionId: string;
   indices?: number[];
   submittedClipIds?: string[];
+  submittedClipIdsAreDurationFiltered?: boolean;
   playlistExpectedClipCount?: number;
 }
 
@@ -41,7 +42,7 @@ async function loadContentScriptWithPlaylistRows(
     postDownloadedError?: Error;
     postDownloadedRejectOnCall?: number;
     downloadFormatValue?: unknown;
-    durationsById?: Record<string, number>;
+    durationsById?: Record<string, number | undefined>;
     // Cmd+P 前ガードが読む「実際の選択中 clip ID」(#1411)。未指定は multi-select した ID と同一
     //（= 余剰なしでガード通過）。stale selection の混入はここへ余剰 ID を足して再現する。
     guardSelectedClipIds?: string[];
@@ -143,7 +144,11 @@ async function loadContentScriptWithPlaylistRows(
       clearSubmittedIds: vi.fn(),
       getSubmittedIds: vi.fn(() => submittedIdsFromTracker),
       getPendingSubmittedIds: vi.fn(() => []),
-      getDuration: vi.fn((id: string) => overrides?.durationsById?.[id]),
+      getDuration: vi.fn((id: string) =>
+        overrides?.durationsById && Object.prototype.hasOwnProperty.call(overrides.durationsById, id)
+          ? overrides.durationsById[id]
+          : 120,
+      ),
       getInFlightCount: vi.fn(() => 0),
       hasObservedAnyTraffic: vi.fn(() => true),
       lastChangeAt: vi.fn(() => Date.now()),
@@ -441,6 +446,112 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         submittedClipIds: ["clip-ok-1", "clip-ok-2"],
         playlistExpectedClipCount: 2,
       }),
+    );
+  });
+
+  it("Given duration 未観測 clip が混在 When playlist 追加 Then 未観測 ID は multi-select しない", async () => {
+    const entries: PromptEntry[] = [{ name: "track-1", title: "Track One", style: "style 1", lyrics: "" }];
+    const currentSubmittedClipIds = ["clip-ok", "clip-unknown"];
+    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      currentSubmittedClipIds,
+      new Error("playlist rows missing"),
+      {
+        durationsById: {
+          "clip-ok": 120,
+          "clip-unknown": undefined,
+        },
+      },
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+        durationFilter: { min_sec: 60, max_sec: 300 },
+      },
+    });
+
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["clip-ok"],
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+    );
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        submittedClipIds: ["clip-ok"],
+        playlistExpectedClipCount: 1,
+      }),
+    );
+  });
+
+  it("Given resume の保存済み ID に duration NG が混在 When playlist 追加 Then OK clip IDs のみに正規化する", async () => {
+    const entries: PromptEntry[] = [{ name: "track-1", title: "Track One", style: "style 1", lyrics: "" }];
+    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      [],
+      new Error("playlist rows missing"),
+      {
+        durationsById: {
+          "old-ok": 120,
+          "old-short": 30,
+        },
+      },
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+        durationFilter: { min_sec: 60, max_sec: 300 },
+        submittedClipIds: ["old-ok", "old-short"],
+        playlistExpectedClipCount: 2,
+      },
+    });
+
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["old-ok"],
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+    );
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        submittedClipIds: ["old-ok"],
+        playlistExpectedClipCount: 1,
+      }),
+    );
+  });
+
+  it("Given resume の保存済み ID が正規化済み When duration 再観測前でも playlist 対象に残す", async () => {
+    const entries: PromptEntry[] = [{ name: "track-1", title: "Track One", style: "style 1", lyrics: "" }];
+    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      [],
+      new Error("playlist rows missing"),
+      {
+        durationsById: {
+          "old-ok": undefined,
+        },
+      },
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | regression",
+        collectionId: "collection-a",
+        durationFilter: { min_sec: 60, max_sec: 300 },
+        submittedClipIds: ["old-ok"],
+        submittedClipIdsAreDurationFiltered: true,
+        playlistExpectedClipCount: 1,
+      },
+    });
+
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["old-ok"],
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
     );
   });
 

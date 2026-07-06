@@ -221,6 +221,7 @@ function makeRunPayload(entries = makePromptEntries(0)): {
   playlistName: string;
   collectionId: string;
   submittedClipIds: string[];
+  submittedClipIdsAreDurationFiltered: boolean;
   playlistExpectedClipCount: number;
 } {
   return {
@@ -228,6 +229,7 @@ function makeRunPayload(entries = makePromptEntries(0)): {
     playlistName: "clm | preflight",
     collectionId: "20260601-clm-preflight-collection",
     submittedClipIds: ["clip-a"],
+    submittedClipIdsAreDurationFiltered: true,
     playlistExpectedClipCount: 1,
   };
 }

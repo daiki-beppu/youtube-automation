@@ -158,6 +158,10 @@ function assertRunPayload(value: unknown): RunPayload {
     collectionId: assertNonEmptyString(record.collectionId, "run.collectionId"),
     durationFilter: assertOptionalDurationFilter(record.durationFilter, "run.durationFilter"),
     indices: assertOptionalIndices(record.indices, "run.indices", record.entries.length),
+    submittedClipIdsAreDurationFiltered: assertOptionalBoolean(
+      record.submittedClipIdsAreDurationFiltered,
+      "run.submittedClipIdsAreDurationFiltered",
+    ),
   };
 }
 
@@ -168,6 +172,11 @@ function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload {
     submittedClipIds: assertStringArray(record.submittedClipIds, "retryPlaylist.submittedClipIds"),
     expectedClipCount: assertOptionalFiniteNumber(record.expectedClipCount, "retryPlaylist.expectedClipCount") ?? 0,
     collectionId: assertNonEmptyString(record.collectionId, "retryPlaylist.collectionId"),
+    durationFilter: assertOptionalDurationFilter(record.durationFilter, "retryPlaylist.durationFilter"),
+    submittedClipIdsAreDurationFiltered: assertOptionalBoolean(
+      record.submittedClipIdsAreDurationFiltered,
+      "retryPlaylist.submittedClipIdsAreDurationFiltered",
+    ),
     shouldDownload: assertOptionalBoolean(record.shouldDownload, "retryPlaylist.shouldDownload"),
   };
 }
@@ -388,10 +397,14 @@ export default defineContentScript({
       entries: PromptEntry[],
       order: number[],
       durationFilter: DurationFilter | undefined,
+      previousSubmittedClipIdsAreDurationFiltered = false,
       onResolvedPlaylistClipIds?: (info: PlaylistClipPersistInfo) => void,
     ): Promise<number> {
       emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total: progressTotal, message: playlistName });
       const currentSubmittedIds = tracker.getSubmittedIds();
+      const allowUnknownDurationIds = previousSubmittedClipIdsAreDurationFiltered
+        ? new Set(previousSubmittedClipIds)
+        : new Set<string>();
       const allSubmittedIds = [...previousSubmittedClipIds, ...currentSubmittedIds];
       const observedCount = new Set(allSubmittedIds).size;
       if (observedCount !== expectedClipCount) {
@@ -405,7 +418,7 @@ export default defineContentScript({
       const previousOrder = entries.map((_, index) => index).filter((index) => !currentOrder.has(index));
       const previousTitleFallbackMap = buildTitleFallbackMap(entries, previousOrder, previousSubmittedClipIds);
       const titleFallbackMap = new Map([...previousTitleFallbackMap, ...currentTitleFallbackMap]);
-      const plan = buildPlaylistClipPlan(rawSubmittedIds, titleFallbackMap, durationFilter);
+      const plan = buildPlaylistClipPlan(rawSubmittedIds, titleFallbackMap, durationFilter, allowUnknownDurationIds);
       onResolvedPlaylistClipIds?.({
         submittedClipIds: plan.clipIds,
         playlistExpectedClipCount: plan.expectedClipCount,
@@ -491,10 +504,14 @@ export default defineContentScript({
       };
     }
 
-    function isDurationAccepted(clipId: string, durationFilter: DurationFilter | undefined): boolean {
+    function isDurationAccepted(
+      clipId: string,
+      durationFilter: DurationFilter | undefined,
+      allowUnknownDuration = false,
+    ): boolean {
       const duration = tracker.getDuration(clipId);
       if (duration === undefined) {
-        return true;
+        return allowUnknownDuration;
       }
       const filter = resolveDurationFilter(durationFilter);
       return duration >= filter.minSec && duration <= filter.maxSec;
@@ -504,8 +521,11 @@ export default defineContentScript({
       rawSubmittedIds: string[],
       titleFallbackMap: Map<string, string>,
       durationFilter: DurationFilter | undefined,
+      allowUnknownDurationIds: Set<string> = new Set(),
     ): PlaylistClipPlan {
-      const clipIds = rawSubmittedIds.filter((clipId) => isDurationAccepted(clipId, durationFilter));
+      const clipIds = rawSubmittedIds.filter((clipId) =>
+        isDurationAccepted(clipId, durationFilter, allowUnknownDurationIds.has(clipId)),
+      );
       if (clipIds.length === 0) {
         throw new Error("playlist 対象の OK clip ID が 0 件です。全 clip が duration filter で除外されました。");
       }
@@ -513,6 +533,23 @@ export default defineContentScript({
         clipIds,
         expectedClipCount: clipIds.length,
         titleFallbackMap,
+      };
+    }
+
+    function resolvePlaylistPersistInfo(
+      previousSubmittedClipIds: string[],
+      currentSubmittedIds: string[],
+      durationFilter: DurationFilter | undefined,
+      previousSubmittedClipIdsAreDurationFiltered: boolean,
+    ): PlaylistClipPersistInfo {
+      const previousAcceptedIds = previousSubmittedClipIds.filter((clipId) =>
+        isDurationAccepted(clipId, durationFilter, previousSubmittedClipIdsAreDurationFiltered),
+      );
+      const currentAcceptedIds = currentSubmittedIds.filter((clipId) => isDurationAccepted(clipId, durationFilter));
+      const submittedClipIds = Array.from(new Set([...previousAcceptedIds, ...currentAcceptedIds]));
+      return {
+        submittedClipIds,
+        playlistExpectedClipCount: submittedClipIds.length,
       };
     }
 
@@ -568,6 +605,8 @@ export default defineContentScript({
       indices?: number[];
       // 再開前の run で観測済みの playlist 対象 clip ID。
       submittedClipIds?: string[];
+      // true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。
+      submittedClipIdsAreDurationFiltered?: boolean;
       // playlist 追加時に揃っているべき clip ID 件数。
       playlistExpectedClipCount?: number;
     }
@@ -610,11 +649,17 @@ export default defineContentScript({
           hasExplicitIndices && orderPosition !== undefined
             ? order.slice(interruptedIndex === order[orderPosition] ? orderPosition : orderPosition + 1)
             : undefined;
-        const persistedSubmittedClipIds = Array.from(
-          new Set([...previousSubmittedClipIds, ...tracker.getSubmittedIds()]),
+        const currentSubmittedIds = tracker.getSubmittedIds();
+        const fallbackPlaylistPersistInfo = resolvePlaylistPersistInfo(
+          previousSubmittedClipIds,
+          currentSubmittedIds,
+          options.durationFilter,
+          options.submittedClipIdsAreDurationFiltered === true,
         );
-        const playlistSubmittedClipIds = playlistPersistInfo?.submittedClipIds ?? persistedSubmittedClipIds;
-        const playlistExpectedCount = playlistPersistInfo?.playlistExpectedClipCount ?? expectedPlaylistClipCount;
+        const playlistSubmittedClipIds =
+          playlistPersistInfo?.submittedClipIds ?? fallbackPlaylistPersistInfo.submittedClipIds;
+        const playlistExpectedCount =
+          playlistPersistInfo?.playlistExpectedClipCount ?? fallbackPlaylistPersistInfo.playlistExpectedClipCount;
         currentSnapshot =
           currentSnapshot === null
             ? currentSnapshot
@@ -623,6 +668,7 @@ export default defineContentScript({
                 failedIndex: interruptedIndex,
                 remainingIndices,
                 submittedClipIds: playlistSubmittedClipIds,
+                submittedClipIdsAreDurationFiltered: true,
                 playlistExpectedClipCount: playlistExpectedCount,
               };
         void writeResumeState({
@@ -633,6 +679,7 @@ export default defineContentScript({
           failedIndices: failedIndices.length > 0 ? [...failedIndices] : undefined,
           remainingIndices,
           submittedClipIds: playlistSubmittedClipIds,
+          submittedClipIdsAreDurationFiltered: true,
           playlistExpectedClipCount: playlistExpectedCount,
         });
       }
@@ -795,6 +842,7 @@ export default defineContentScript({
           entries,
           order,
           options.durationFilter,
+          options.submittedClipIdsAreDurationFiltered === true,
           (info) => {
             playlistPersistInfo = info;
           },
@@ -879,6 +927,7 @@ export default defineContentScript({
         collectionId,
         indices,
         submittedClipIds,
+        submittedClipIdsAreDurationFiltered,
         playlistExpectedClipCount,
       } = assertRunPayload(data);
       // 直前 run の完了時リロードが保留中なら取り消す (#1411)。猶予中に受理した新 run を
@@ -912,6 +961,7 @@ export default defineContentScript({
         playlistName,
         indices,
         submittedClipIds,
+        submittedClipIdsAreDurationFiltered,
         playlistExpectedClipCount,
       }).finally(() => {
         running = false;
@@ -929,8 +979,15 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
-      const { playlistName, submittedClipIds, expectedClipCount, collectionId, shouldDownload } =
-        assertRetryPlaylistPayload(data);
+      const {
+        playlistName,
+        submittedClipIds,
+        expectedClipCount,
+        collectionId,
+        durationFilter,
+        submittedClipIdsAreDurationFiltered,
+        shouldDownload,
+      } = assertRetryPlaylistPayload(data);
       currentSnapshot = initSnapshot([], { collectionId, playlistName });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
@@ -947,7 +1004,8 @@ export default defineContentScript({
             expectedClipCount,
             [],
             [],
-            undefined,
+            durationFilter,
+            submittedClipIdsAreDurationFiltered === true,
           );
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });

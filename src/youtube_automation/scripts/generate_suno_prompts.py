@@ -202,13 +202,22 @@ _ADVANCED_JSON_KEYS = ("style_influence", "weirdness", "exclude_styles", "vocal_
 
 
 def _duration_filter_from_config(suno: dict) -> dict:
-    raw = suno.get("duration_filter") or {}
+    raw = suno.get("duration_filter", {})
+    if raw is None:
+        raw = {}
     if not isinstance(raw, dict):
         raise ConfigError("config/skills/suno.yaml::duration_filter must be a mapping")
     min_sec = raw.get("min_sec", 60)
     max_sec = raw.get("max_sec", 300)
-    if not isinstance(min_sec, (int, float)) or not isinstance(max_sec, (int, float)):
-        raise ConfigError("config/skills/suno.yaml::duration_filter min_sec/max_sec must be numeric")
+    if (
+        isinstance(min_sec, bool)
+        or isinstance(max_sec, bool)
+        or not isinstance(min_sec, (int, float))
+        or not isinstance(max_sec, (int, float))
+        or not math.isfinite(min_sec)
+        or not math.isfinite(max_sec)
+    ):
+        raise ConfigError("config/skills/suno.yaml::duration_filter min_sec/max_sec must be finite numeric")
     if min_sec < 0 or max_sec < 0 or min_sec > max_sec:
         raise ConfigError("config/skills/suno.yaml::duration_filter must satisfy 0 <= min_sec <= max_sec")
     return {"min_sec": min_sec, "max_sec": max_sec}

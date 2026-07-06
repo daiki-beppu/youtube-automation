@@ -356,6 +356,8 @@ export interface SnapshotPayload {
   remainingIndices?: number[];
   // playlist 追加対象として generate response から観測済みの clip ID 一覧。
   submittedClipIds?: string[];
+  // true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。
+  submittedClipIdsAreDurationFiltered?: boolean;
   // playlist 追加時に揃っているべき clip ID 件数。
   playlistExpectedClipCount?: number;
 }
