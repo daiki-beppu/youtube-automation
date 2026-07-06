@@ -60,7 +60,9 @@ Python 側の未使用コード検出は、追加依存なしで CI / pre-commit
 
 有効化と運用:
 
-- **有効化**: `nix develop`（または direnv `use flake`）で devShell に入ると `flake.nix` の shellHook が `lefthook install` を自動実行する。手動なら `lefthook install`（クローン後 1 回）
+- **有効化**: 親 checkout / worktree のどちらでも `nix develop`（または direnv `use flake`）で devShell に入る。`flake.nix` の shellHook が `lefthook` を PATH に供給し、`lefthook install --force` で hook を再生成する。手動再生成も `nix develop --command lefthook install --force` を使う
+- **診断**: 親 checkout / worktree のそれぞれで `nix develop --command sh -c 'command -v lefthook && lefthook version'` を実行し、`lefthook` が PATH から解決できることを確認する。`git commit` / `git push` で `Can't find lefthook in PATH` が出る場合は、対象 checkout で `nix develop --command lefthook install --force` を実行して stale な hook を再生成する
+- **失敗時の扱い**: shellHook は `lefthook` 不在や `lefthook install --force` 失敗を `|| true` で握りつぶさない。devShell 入室時に明示的に失敗させ、commit / push 時の hook no-op を防ぐ
 - **全 hook をスキップ**: `LEFTHOOK=0 git push` / `LEFTHOOK=0 git commit`
 - **CHANGELOG ゲートのみ省く**: `SKIP_CHANGELOG=1 git push`（CI 側は PR の `skip-changelog` ラベル）
 - **テスト差分警告のみ省く**: `SKIP_TEST_DIFF=1 git push`

@@ -43,9 +43,10 @@
             # Nix 環境でも見えるようにする。Linux CI 用の救済で、darwin では無害。
             export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.zlib ]}:''${LD_LIBRARY_PATH:-}"
 
-            # Git hooks (lefthook) を有効化。冪等なので devShell 入室ごとに実行してよい。
-            if git rev-parse --git-dir >/dev/null 2>&1; then
-              lefthook install >/dev/null 2>&1 || true
+            # Git hooks (lefthook) を有効化。stale な Nix store 固定パスを残さないよう
+            # devShell 入室ごとに再生成し、失敗は commit / push 前に明示的に止める。
+            if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+              bash "$git_root/.lefthook/install.sh" || exit 1
             fi
           '';
         };
