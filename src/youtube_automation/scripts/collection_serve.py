@@ -75,11 +75,9 @@ _DEFAULT_ALLOWED_WEB_ORIGINS = frozenset(
 # `collections/planning/` 配下で 1 コレクションを示すディレクトリ接尾辞。
 _COLLECTION_DIR_SUFFIX = "-collection"
 
-# Capture root の env fallback 名。DistroKid release 記録で使用する。
-_PLAYLIST_CAPTURE_ROOT_ENV = "PLAYLIST_CAPTURE_ROOT"
-
 # DistroKid dir mode: リリース記録の出力先 JSON（`<root>/config/distrokid-releases.json`）（#934）。
 _DISTROKID_RELEASES_OUTPUT_RELPATH = Path("config") / "distrokid-releases.json"
+_DISTROKID_CAPTURE_ROOT_ENV = "DISTROKID_CAPTURE_ROOT"
 
 # 30-distrokid サブディレクトリ名（#934）。コレクション配下のこのサブディレクトリが disc を含む。
 _DISTROKID_DIRNAME = "30-distrokid"
@@ -513,7 +511,7 @@ def create_server(
     単一ファイル mode の `/suno/prompts.json` は配信しない）。既定 None は
     単一ファイル mode（`/suno/prompts.json` + `/distrokid/*`）。
 
-    `capture_root` 指定時のみ DistroKid release capture POST を有効化する。
+    `capture_root` 指定時のみ DistroKid release capture の POST を有効化する。
     None なら capture 系 POST は 404。
 
     distrokid が None または `enabled == False` のとき `/distrokid/*` は 404。
@@ -893,9 +891,9 @@ def create_server(
     return ThreadingHTTPServer(("localhost", port), _Handler)
 
 
-def _resolve_capture_root(root_arg: str | None) -> Path | None:
-    """CLI 引数 + env fallback から DistroKid release capture root を解決する。"""
-    root = root_arg if root_arg is not None else os.environ.get(_PLAYLIST_CAPTURE_ROOT_ENV)
+def _resolve_distrokid_capture_root(root_arg: str | None) -> Path | None:
+    """CLI 引数 + env fallback から DistroKid release capture root を解決する."""
+    root = root_arg if root_arg is not None else os.environ.get(_DISTROKID_CAPTURE_ROOT_ENV)
     return Path(root).expanduser() if root is not None else None
 
 
@@ -937,16 +935,16 @@ def main() -> None:
         ),
     )
     parser.add_argument(
-        "--playlist-capture-root",
+        "--distrokid-capture-root",
         default=None,
         help=(
             "downstream channel repo root for DistroKid release capture writes; enables POST "
-            f"{_DISTROKID_RELEASES_ROUTE} (env fallback: {_PLAYLIST_CAPTURE_ROOT_ENV})"
+            f"{_DISTROKID_RELEASES_ROUTE} (env fallback: {_DISTROKID_CAPTURE_ROOT_ENV})"
         ),
     )
     args = parser.parse_args()
 
-    capture_root = _resolve_capture_root(args.playlist_capture_root)
+    capture_root = _resolve_distrokid_capture_root(args.distrokid_capture_root)
 
     # path が `*-collection/` を並べたディレクトリなら dir mode（#816）。
     collection_dirs = find_collection_dirs(args.path)

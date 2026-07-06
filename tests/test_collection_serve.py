@@ -38,7 +38,7 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.scripts.collection_serve import (
-    _resolve_capture_root,
+    _resolve_distrokid_capture_root,
     build_collections_index,
     create_server,
     find_collection_dirs,
@@ -145,7 +145,7 @@ def test_resolve_prompts_path_missing_path_raises(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# _resolve_capture_root: DistroKid capture root の CLI/env 優先順位
+# _resolve_distrokid_capture_root: DistroKid capture root の CLI/env 優先順位
 # ---------------------------------------------------------------------------
 
 
@@ -154,10 +154,10 @@ def test_resolve_capture_root_returns_none_without_arg_or_env(monkeypatch):
     When capture root を解決する
     Then DistroKid capture は無効のまま None を返す。
     """
-    monkeypatch.delenv("PLAYLIST_CAPTURE_ROOT", raising=False)
+    monkeypatch.delenv("DISTROKID_CAPTURE_ROOT", raising=False)
     monkeypatch.delenv("PLAYLIST_CAPTURE_PREFIX", raising=False)
 
-    assert _resolve_capture_root(None) is None
+    assert _resolve_distrokid_capture_root(None) is None
 
 
 def test_resolve_capture_root_prefers_cli_arg_over_env(tmp_path, monkeypatch):
@@ -167,9 +167,9 @@ def test_resolve_capture_root_prefers_cli_arg_over_env(tmp_path, monkeypatch):
     """
     env_root = tmp_path / "env"
     arg_root = tmp_path / "arg"
-    monkeypatch.setenv("PLAYLIST_CAPTURE_ROOT", str(env_root))
+    monkeypatch.setenv("DISTROKID_CAPTURE_ROOT", str(env_root))
 
-    assert _resolve_capture_root(str(arg_root)) == arg_root
+    assert _resolve_distrokid_capture_root(str(arg_root)) == arg_root
 
 
 def test_resolve_capture_root_uses_env_fallback(tmp_path, monkeypatch):
@@ -178,9 +178,9 @@ def test_resolve_capture_root_uses_env_fallback(tmp_path, monkeypatch):
     Then env の root を返す。
     """
     env_root = tmp_path / "env"
-    monkeypatch.setenv("PLAYLIST_CAPTURE_ROOT", str(env_root))
+    monkeypatch.setenv("DISTROKID_CAPTURE_ROOT", str(env_root))
 
-    assert _resolve_capture_root(None) == env_root
+    assert _resolve_distrokid_capture_root(None) == env_root
 
 
 def test_resolve_capture_root_ignores_legacy_playlist_capture_prefix(tmp_path, monkeypatch):
@@ -188,10 +188,10 @@ def test_resolve_capture_root_ignores_legacy_playlist_capture_prefix(tmp_path, m
     When capture root を解決する
     Then DistroKid capture root は有効化しない。
     """
-    monkeypatch.delenv("PLAYLIST_CAPTURE_ROOT", raising=False)
+    monkeypatch.delenv("DISTROKID_CAPTURE_ROOT", raising=False)
     monkeypatch.setenv("PLAYLIST_CAPTURE_PREFIX", str(tmp_path / "legacy"))
 
-    assert _resolve_capture_root(None) is None
+    assert _resolve_distrokid_capture_root(None) is None
 
 
 # ---------------------------------------------------------------------------
@@ -1086,20 +1086,18 @@ def test_get_collections_lists_planning_collections(serve_dir, tmp_path):
 
 
 def test_get_collections_does_not_include_playlist_name_when_capture_enabled(serve_dir, tmp_path):
-    """Given capture root 付き dir mode サーバー
+    """Given dir mode サーバー
     When `GET /collections`
     Then playlist_name は返さない（拡張側で collection id/name から導出する）。
     """
     planning = tmp_path / "planning"
-    channel_root = tmp_path / "channel"
-    channel_root.mkdir()
     _make_collection(
         planning,
         "20260601-soulful-grooves-wah-groove-collection",
         entries=[{"name": "A", "style": "s", "lyrics": ""}],
         theme="wah-groove",
     )
-    base = serve_dir(planning, capture_root=channel_root)
+    base = serve_dir(planning)
 
     with urllib.request.urlopen(f"{base}{_COLLECTIONS_ROUTE}") as resp:
         assert resp.status == 200

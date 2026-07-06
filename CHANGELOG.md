@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(suno-helper)`: 旧 Suno playlist capture 互換 route（`POST /suno/playlists`）と `write_suno_playlists()` / `normalize_suno_title()` / `--playlist-capture-*` を撤去し、DistroKid release 記録用の capture root を `--distrokid-capture-root` に分離（#1301）
+- `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
 - `feat(video-analyze)`: `yt-video-analyze` を全尺解析から動画冒頭のクリップ窓解析（既定 900 秒 = 15 分、skill-config `analysis_window_sec` で上書き可）に変更。Gemini へ渡す Part に `video_metadata`（`start_offset` / `end_offset`）を付与して冒頭 2〜3 曲相当のみを解析し、長尺 Complete Collection の API コストを削減する。プロンプトをクリップ窓前提（`bgm_arc.outro` は窓内終盤、`scene_timeline` / `editing_metrics` は窓内対象）に整合させ、SKILL.md に解析後のレポート検証ステップ（窓超過タイムスタンプ・スキーマ欠落・不自然値の subagent レビュー）を追加。下流 `/suno` にも冒頭クリップ窓データである旨を注記した（#1495）
 - **BREAKING** `refactor(skills)`: `/channel-setup` スキルを削除し、`/channel-new` に統合した。詳細セットアップ/再生成（旧 Step 1〜8）は再生成モード（Step R1〜R8）、設定 push（旧 Step 9: `yt-channel-settings` diff / push / pull）は設定 push モードとして `/channel-new` が文脈から自動判別して受ける。共通テンプレート・スクリプト置き場は `.claude/skills/channel-setup/references/` から `.claude/skills/channel-new/references/` へ移設し、競合 branding snapshot 取得はインライン Python を廃止して `references/fetch_branding_snapshot.py` に一本化。`yt-doctor` / preflight の `/channel-setup` 案内文言と CLAUDE.md / AGENTS.md のスクリプト配置規約も `/channel-new` 系へ更新した。下流リポジトリは `yt-skills sync` の prune で追従する（#1461）
 - `refactor(automation-update)`: `/automation-update` スキルの機械的ステップ（実行場所判定 / pin 形式判定 / 差分判定 / pin 書き換え / `uv lock` / sync / smoke check）を `yt-automation-update` CLI 呼び出しに置き換え、スキルは判断ポイント（リリース要約 / local fix 衝突 / 同意取得 / コミット）専任に薄型化（#1473）

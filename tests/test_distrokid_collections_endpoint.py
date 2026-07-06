@@ -28,6 +28,7 @@ import pytest
 from youtube_automation.scripts.collection_serve import (
     _DISTROKID_COLLECTIONS_ROUTE,
     _DISTROKID_RELEASES_ROUTE,
+    _resolve_distrokid_capture_root,
     build_distrokid_collections_index,
     create_server,
     distrokid_releases_output_path,
@@ -50,6 +51,36 @@ _MP3_BYTES = b"ID3\x03\x00\x00\x00fake-mp3-bytes"
 _JPG_BYTES = b"\xff\xd8\xff\xe0fake-jpg-bytes"
 _DEFAULT_DISTROKID = object()
 _DEFAULT_ALLOW_ORIGIN = object()
+
+
+def test_resolve_distrokid_capture_root_returns_none_when_absent(monkeypatch):
+    """Given CLI 引数と env が無い
+    When capture root を解決する
+    Then release capture は無効になる。
+    """
+    monkeypatch.delenv("DISTROKID_CAPTURE_ROOT", raising=False)
+
+    assert _resolve_distrokid_capture_root(None) is None
+
+
+def test_resolve_distrokid_capture_root_expands_cli_arg(monkeypatch):
+    """Given CLI 引数で capture root が指定されている
+    When capture root を解決する
+    Then env より CLI 引数を優先し expanduser した Path を返す。
+    """
+    monkeypatch.setenv("DISTROKID_CAPTURE_ROOT", "/env/root")
+
+    assert _resolve_distrokid_capture_root("~/channel") == Path("~/channel").expanduser()
+
+
+def test_resolve_distrokid_capture_root_falls_back_to_env(monkeypatch):
+    """Given CLI 引数なしで env がある
+    When capture root を解決する
+    Then env の Path を返す。
+    """
+    monkeypatch.setenv("DISTROKID_CAPTURE_ROOT", "/srv/channel")
+
+    assert _resolve_distrokid_capture_root(None) == Path("/srv/channel")
 
 
 def _profile() -> DistrokidProfile:
@@ -990,7 +1021,7 @@ def test_post_distrokid_releases_overwrite_on_repost(tmp_path, serve_dir_dk):
 
 
 def test_post_distrokid_releases_without_capture_root_returns_404(tmp_path, serve_dir_dk):
-    """Given capture_root 未指定（--playlist-capture-root 無し相当）
+    """Given capture_root 未指定（--distrokid-capture-root 無し相当）
     When POST する
     Then 404 を返す（endpoint 自体が無い）。
     """
