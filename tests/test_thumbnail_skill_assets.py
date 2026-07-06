@@ -127,6 +127,24 @@ def test_ttp_preflight_checklist_covers_required_operational_checks() -> None:
     assert "承認**前**" in checklist_block
 
 
+def test_thumbnail_skill_isolates_private_repo_reference_as_operator_note() -> None:
+    skill = _read_thumbnail_skill()
+    rjn_lines = [line for line in skill.splitlines() if "daiki-beppu/rjn" in line]
+
+    assert "実装事例として" not in skill
+    assert rjn_lines == [
+        "> **参考（オペレーター向け・実行時は無視してよい）**: `daiki-beppu/rjn` の "
+        "`config/skills/thumbnail.yaml` が参考になる"
+        "（jazzgak チャンネルの 5 サムネを `color_themes.<theme>.reference_image` で多軸切替）。"
+        "private リポジトリのため下流リポジトリの実行者はアクセスできない。取得を試みないこと。"
+    ]
+    note = rjn_lines[0]
+    assert note.startswith("> ")
+    assert "実行時は無視" in note
+    assert "取得を試みないこと" in note
+    assert "color_themes.<theme>.reference_image" in note
+
+
 def test_thumbnail_skill_documents_thumbnail_compare_and_alignment_check_roles() -> None:
     skill = _read_thumbnail_skill()
     quality_idx = skill.find("## 品質チェック")
@@ -315,6 +333,24 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     assert 'source_role: "thumbnail_candidate"' in config
     assert "fallback_when_empty: true" in config
     assert 'diff_prompt_template: ""' in config
+
+
+def test_thumbnail_default_config_keeps_font_stabilization_contract() -> None:
+    config = _load_thumbnail_default_config()
+    gemini_config = config["image_generation"]["gemini"]
+
+    typography_clause = gemini_config["single_step"]["typography_clause"]
+    assert "consistent {font_description} typeface" in typography_clause
+    assert "Do not mix multiple typefaces" in typography_clause
+
+    overlay = gemini_config["thumbnail_text"]["overlay"]
+    assert overlay["font"]["title"] == ""
+    assert overlay["font"]["channel_name"] == ""
+    assert overlay["title"]["size"] == 96
+    assert overlay["title"]["stroke_width"] == 4
+    assert overlay["channel_name"]["size"] == 36
+    assert overlay["layout"]["anchor"] == "bottom-center"
+    assert overlay["layout"]["line_spacing"] == 1.15
 
 
 def test_thumbnail_skill_requires_reference_per_ttp_attempt_and_drops_prompt_only_fallback() -> None:

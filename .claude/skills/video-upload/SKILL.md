@@ -1,6 +1,6 @@
 ---
 name: video-upload
-description: "Use when コレクションの動画が完成し、YouTubeへのアップロード自動化が必要なとき。Complete Collection のアップロードと live 移行を実行"
+description: "Use when コレクションの動画が完成し、YouTubeへのアップロード自動化が必要なとき。Complete Collection のアップロードと live 移行を実行。動画ファイルの生成（MP3→MP4）は /videoup"
 ---
 
 ## Overview
@@ -13,7 +13,7 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 
 存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## When to Use
 

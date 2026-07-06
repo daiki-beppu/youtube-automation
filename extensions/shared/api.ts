@@ -33,6 +33,24 @@ export interface PromptEntry {
   vocal_gender?: "male" | "female" | "neutral" | "auto";
 }
 
+/** collection 単位の Suno duration guard 閾値 (#1259)。秒単位。 */
+export interface DurationFilter {
+  min_sec: number;
+  max_sec: number;
+}
+
+/** duration_filter 未指定時の既定値 (#1259 / ADR-0012)。 */
+export const DEFAULT_DURATION_FILTER: DurationFilter = {
+  min_sec: 60,
+  max_sec: 300,
+};
+
+/** `/suno/prompts.json` の envelope 形式。legacy 配列 JSON も normalize してこの形で扱う。 */
+export interface PromptResponse {
+  entries: PromptEntry[];
+  duration_filter?: DurationFilter;
+}
+
 /** collection の状態 (#1216)。サーバーがファイルシステムから動的に判定する。
  * - `needs_prompts`: suno-prompts.json が未作成
  * - `ready`: prompts 存在・ダウンロード未完了
@@ -51,12 +69,6 @@ export interface CollectionSummary {
   theme?: string;
   expected_file_count?: number | null;
   suno_playlist_url?: string;
-}
-
-/** Suno `/me` から捕捉した 1 playlist。legacy scrape 互換の内部型。 */
-export interface CapturedPlaylist {
-  title: string;
-  url: string;
 }
 
 /** GET /version の wire スキーマ（#1023）。 */
@@ -170,6 +182,13 @@ function assertNonNegativeInteger(value: unknown, field: string): number {
   return value as number;
 }
 
+function assertNonNegativeNumber(value: unknown, field: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error(`${field} must be non-negative number`);
+  }
+  return value;
+}
+
 function assertOptionalNonNegativeInteger(
   value: unknown,
   field: string,
@@ -193,20 +212,63 @@ function assertCollectionStatus(
   return value as CollectionStatus;
 }
 
+function assertDurationFilter(value: unknown, field: string): DurationFilter {
+  const record = assertObject(value, field);
+  const minSec = assertNonNegativeNumber(record.min_sec, `${field}.min_sec`);
+  const maxSec = assertNonNegativeNumber(record.max_sec, `${field}.max_sec`);
+  if (minSec > maxSec) {
+    throw new Error(`${field}.min_sec must be less than or equal to max_sec`);
+  }
+  return { min_sec: minSec, max_sec: maxSec };
+}
+
+function durationFilterOrDefault(
+  durationFilter?: DurationFilter,
+): DurationFilter {
+  return durationFilter ?? { ...DEFAULT_DURATION_FILTER };
+}
+
+function normalizePromptResponse(data: unknown): PromptResponse {
+  if (Array.isArray(data)) {
+    if (data.length === 0) {
+      throw new Error("空、または配列ではない JSON が返りました。");
+    }
+    return {
+      entries: data as PromptEntry[],
+      duration_filter: durationFilterOrDefault(),
+    };
+  }
+
+  const record = assertObject(data, "prompts response");
+  const entries = record.entries;
+  if (!Array.isArray(entries) || entries.length === 0) {
+    throw new Error("空、または配列ではない JSON が返りました。");
+  }
+  const durationFilter =
+    record.duration_filter === undefined
+      ? undefined
+      : assertDurationFilter(record.duration_filter, "duration_filter");
+  return {
+    entries: entries as PromptEntry[],
+    duration_filter: durationFilterOrDefault(durationFilter),
+  };
+}
+
 /**
  * prompts.json 系エンドポイントの共通 fetch 本体 (#816)。
  * 非 2xx / 空配列 / 非配列で throw する fail-loud 契約。
  */
-async function fetchPromptArray(url: string): Promise<PromptEntry[]> {
+async function fetchPromptResponseBody(url: string): Promise<PromptResponse> {
   const resp = await fetch(url);
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
   }
   const data: unknown = await resp.json();
-  if (!Array.isArray(data) || data.length === 0) {
-    throw new Error("空、または配列ではない JSON が返りました。");
-  }
-  return data as PromptEntry[];
+  return normalizePromptResponse(data);
+}
+
+async function fetchPromptArray(url: string): Promise<PromptEntry[]> {
+  return (await fetchPromptResponseBody(url)).entries;
 }
 
 /** サーバー version envelope を取得する（#1023）。404 は caller が旧サーバー判定に使う。 */
@@ -338,6 +400,16 @@ export async function fetchCollectionPrompts(
   id: string,
 ): Promise<PromptEntry[]> {
   return fetchPromptArray(
+    `${baseUrl}${collectionPromptsRoute(assertCollectionId(id))}`,
+  );
+}
+
+/** 指定 collection の prompts.json を PromptResponse として取得する (#1259)。 */
+export async function fetchCollectionPromptResponse(
+  baseUrl: string,
+  id: string,
+): Promise<PromptResponse> {
+  return fetchPromptResponseBody(
     `${baseUrl}${collectionPromptsRoute(assertCollectionId(id))}`,
   );
 }
@@ -561,9 +633,6 @@ export async function postDownloaded(
   collectionId: string,
   payload: DownloadedPayload,
 ): Promise<void> {
-  if (payload.download_path && !payload.suno_playlist_url) {
-    throw new Error("download_path を送る場合は suno_playlist_url が必要です");
-  }
   if (payload.file_count > 0 && !payload.download_path) {
     throw new Error("file_count が正数の場合は download_path が必要です");
   }

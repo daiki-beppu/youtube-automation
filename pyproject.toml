@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "youtube-channels-automation"
-version = "5.5.14"
+version = "5.5.15"
 description = "YouTube channel automation toolkit - analytics, AI content generation, and auto-upload"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
@@ -16,7 +16,7 @@ dependencies = [
     "google-auth-httplib2>=0.3,<1",
     "google-genai>=1,<2",
     "openai>=2,<3",
-    "Pillow>=12,<13",
+    "Pillow>=12.2.0,<13",
     "python-dotenv>=1,<2",
     "pandas>=3,<4",
     "matplotlib>=3,<4",
@@ -38,6 +38,7 @@ veo = []  # google-genai, Pillow moved to main dependencies
 # CLI script entry points (yt-* prefix)
 yt-analytics = "youtube_automation.cli_entrypoints:yt_analytics"
 yt-apply-rain-layers = "youtube_automation.cli_entrypoints:yt_apply_rain_layers"
+yt-automation-update = "youtube_automation.cli_entrypoints:yt_automation_update"
 yt-benchmark-collect = "youtube_automation.cli_entrypoints:yt_benchmark_collect"
 yt-benchmark-comments = "youtube_automation.cli_entrypoints:yt_benchmark_comments"
 yt-bulk-update-desc = "youtube_automation.cli_entrypoints:yt_bulk_update_desc"
@@ -82,6 +83,7 @@ yt-theme-compare = "youtube_automation.cli_entrypoints:yt_theme_compare"
 yt-thumbnail-check = "youtube_automation.cli_entrypoints:yt_thumbnail_check"
 yt-thumbnail-compare = "youtube_automation.cli_entrypoints:yt_thumbnail_compare"
 yt-thumbnail-correlate = "youtube_automation.cli_entrypoints:yt_thumbnail_correlate"
+yt-thumbnail-text = "youtube_automation.cli_entrypoints:yt_thumbnail_text"
 yt-title-duplicate-check = "youtube_automation.cli_entrypoints:yt_title_duplicate_check"
 yt-video-analyze = "youtube_automation.cli_entrypoints:yt_video_analyze"
 yt-vote-log = "youtube_automation.cli_entrypoints:yt_vote_log"

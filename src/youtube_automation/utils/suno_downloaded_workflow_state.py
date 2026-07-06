@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Protocol
 
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.suno_artifact_contracts import DOCUMENTATION_DIRNAME, SUNO_PROMPTS_JSON_FILENAME
+from youtube_automation.utils.suno_prompts_json import read_suno_prompt_entries, suno_prompts_path
 
 _SUNO_CLIPS_PER_PROMPT = 2
 
@@ -17,14 +17,11 @@ class AtomicJsonWriter(Protocol):
 
 
 def read_pattern_count(coll_dir: Path, *, default: int | None = None) -> int | None:
-    prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
-    if not prompts_path.is_file():
+    if not suno_prompts_path(coll_dir).is_file():
         return default
     try:
-        prompts = json.loads(prompts_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return default
-    if not isinstance(prompts, list):
+        prompts = read_suno_prompt_entries(coll_dir)
+    except ValueError:
         return default
     return len(prompts)
 

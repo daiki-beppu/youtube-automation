@@ -1,6 +1,6 @@
 // Suno Custom Mode への Style / Lyrics 注入と Generate 連続実行 (content script)。
 // DOM 操作は shared/dom の純関数へ委譲し、本ファイルは連続実行のフロー制御に専念する。
-import type { PromptEntry } from "../../shared/api";
+import type { DurationFilter, PromptEntry } from "../../shared/api";
 import {
   CLIPS_PER_REQUEST,
   INFLIGHT_STALL_TIMEOUT_MS,
@@ -39,6 +39,7 @@ import {
   resolveAdvancedFields,
   resolveFields,
   resolveGenerateButton,
+  setLyricsValue,
   setNativeValue,
   sleep,
   waitForCaptchaClear,
@@ -53,7 +54,6 @@ import {
   scrollAndMultiSelectByIds,
   waitForPlaylistDialogClose,
 } from "../../shared/playlist-dom";
-import { scrapePlaylistsFromMe } from "../../shared/playlist-scrape";
 import { onMessage, sendMessage } from "../lib/messaging";
 import type { RetryDownloadPayload, RetryPlaylistPayload, RunPayload } from "../lib/messaging";
 import { clearFinishedSnapshot, readFreshFinishedSnapshot, writeFinishedSnapshot } from "../lib/finished-snapshot";
@@ -102,6 +102,51 @@ function assertOptionalBoolean(value: unknown, field: string): boolean | undefin
   return value;
 }
 
+function assertOptionalDurationFilter(value: unknown, field: string): DurationFilter | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const record = assertRecord(value, field);
+  const minSec = assertOptionalFiniteNumber(record.min_sec, `${field}.min_sec`);
+  const maxSec = assertOptionalFiniteNumber(record.max_sec, `${field}.max_sec`);
+  if (minSec === undefined || maxSec === undefined) {
+    throw new Error(`${field}.min_sec and ${field}.max_sec are required`);
+  }
+  if (minSec < 0 || maxSec < 0) {
+    throw new Error(`${field}.min_sec and ${field}.max_sec must be non-negative`);
+  }
+  if (minSec > maxSec) {
+    throw new Error(`${field}.min_sec must be less than or equal to max_sec`);
+  }
+  return { min_sec: minSec, max_sec: maxSec };
+}
+
+function assertOptionalIndices(value: unknown, field: string, entryCount: number): number[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`${field} must be number array`);
+  }
+  if (value.length === 0) {
+    throw new Error(`${field} must not be empty`);
+  }
+  const seen = new Set<number>();
+  return value.map((item, index) => {
+    if (typeof item !== "number" || !Number.isInteger(item)) {
+      throw new Error(`${field}[${index}] must be integer`);
+    }
+    if (item < 0 || item >= entryCount) {
+      throw new Error(`${field}[${index}] must be within entries range`);
+    }
+    if (seen.has(item)) {
+      throw new Error(`${field}[${index}] must be unique`);
+    }
+    seen.add(item);
+    return item;
+  });
+}
+
 function assertRunPayload(value: unknown): RunPayload {
   const record = assertRecord(value, "run payload");
   if (!Array.isArray(record.entries)) {
@@ -112,6 +157,8 @@ function assertRunPayload(value: unknown): RunPayload {
     entries: record.entries as PromptEntry[],
     playlistName: assertNonEmptyString(record.playlistName, "run.playlistName"),
     collectionId: assertNonEmptyString(record.collectionId, "run.collectionId"),
+    durationFilter: assertOptionalDurationFilter(record.durationFilter, "run.durationFilter"),
+    indices: assertOptionalIndices(record.indices, "run.indices", record.entries.length),
   };
 }
 
@@ -130,13 +177,8 @@ function assertRetryDownloadPayload(value: unknown): RetryDownloadPayload {
   const record = assertRecord(value, "retryDownload payload");
   return {
     collectionId: assertNonEmptyString(record.collectionId, "retryDownload.collectionId"),
-    playlistName: assertNonEmptyString(record.playlistName, "retryDownload.playlistName"),
     submittedClipIds: assertStringArray(record.submittedClipIds, "retryDownload.submittedClipIds"),
     expectedClipCount: assertOptionalFiniteNumber(record.expectedClipCount, "retryDownload.expectedClipCount"),
-    sunoPlaylistUrl:
-      record.sunoPlaylistUrl === undefined
-        ? undefined
-        : assertNonEmptyString(record.sunoPlaylistUrl, "retryDownload.sunoPlaylistUrl"),
   };
 }
 
@@ -217,6 +259,10 @@ export default defineContentScript({
       void sendMessage("progress", payload);
     }
 
+    function entryDisplayName(entry: PromptEntry): string {
+      return entry.title ?? entry.name;
+    }
+
     /**
      * 完了時リロード (#1411) の直前に FINISHED snapshot を chrome.storage.local へ退避する。
      * リロードは in-memory の currentSnapshot（queryProgress の復元 SSOT, #852）を破棄するため、
@@ -245,17 +291,6 @@ export default defineContentScript({
     });
     downloadFlow.installMessageHandlers();
 
-    async function resolvePlaylistUrl(playlistName: string): Promise<string> {
-      const item = scrapePlaylistsFromMe(globalThis.document as Document).find(
-        (playlist) => playlist.title === playlistName,
-      );
-      if (item) {
-        return item.url;
-      }
-      const resolved = await sendMessage("resolvePlaylistUrl", { playlistName });
-      return resolved.url;
-    }
-
     async function injectAndGenerate(entry: PromptEntry, index: number, total: number): Promise<void> {
       // attempt ごとに lastSubmittedEntryIndex を -1 にリセットする。
       // injectWithVerification が silent drop を検知して同一 entry を retry するとき、
@@ -266,7 +301,7 @@ export default defineContentScript({
       setNativeValue(style, entry.style);
       if (lyrics) {
         // 空文字でも上書きする。instrumental パターン (entry.lyrics === "") のとき前パターンの歌詞を残さない。
-        setNativeValue(lyrics, entry.lyrics);
+        await setLyricsValue(lyrics, entry.lyrics);
       } else if (entry.lyrics) {
         // 歌詞があるのに Lyrics 欄が見つからないのは設定不整合。silent に飛ばさず停止する。
         // 設定不整合は全 entry で再発するため fatal（entry retry の対象外）。
@@ -464,6 +499,8 @@ export default defineContentScript({
     }
 
     interface RunOptions {
+      // collection 単位 duration guard 閾値 (#1259)。実フィルタは yield guard 側で消費する。
+      durationFilter?: DurationFilter;
       // 0-based inclusive な実行範囲 (#872)。未指定は全 entry。判断A: range 指定でも entries 全体と
       // 絶対 index を保ち、range 内の entry だけを処理する（slice 再採番による index ズレを起こさない）。
       range?: RunRange;
@@ -471,7 +508,7 @@ export default defineContentScript({
       collectionId: string;
       // collection mode のときの playlist 名 (#854)。全 entry 完了後の clip 一括追加に使う。
       playlistName: string;
-      // 実行対象の 0-based index 列 (#948)。「失敗分のみ再実行」で使う。指定時は range より優先。
+      // 任意の部分実行対象の 0-based index 列。チェック選択や失敗分再実行で使う。指定時は range より優先。
       indices?: number[];
       // 再開前の run で観測済みの playlist 対象 clip ID。
       submittedClipIds?: string[];
@@ -494,8 +531,9 @@ export default defineContentScript({
       }
       const startIndex = range ? range.start : 0;
       const endIndex = range ? range.end : total - 1;
-      // 実行対象の 0-based index 列 (#948)。indices（失敗分のみ再実行）が最優先、無ければ range 由来。
+      // 実行対象の 0-based index 列。indices（チェック選択/失敗分再実行）が最優先、無ければ range 由来。
       const order = options.indices ?? Array.from({ length: endIndex - startIndex + 1 }, (_, k) => startIndex + k);
+      const hasExplicitIndices = options.indices !== undefined;
       const expectedPlaylistClipCount =
         playlistExpectedClipCount ??
         (order.length === 0
@@ -509,7 +547,11 @@ export default defineContentScript({
       // ERROR phase (#872 要件3) と STOPPED phase (#898 要件1/2/3) の共通処理。failedIndex 名は
       // そのまま流用し (要件3)、中断 index を載せる。
       // スキップ済み failedIndices があれば一緒に永続化する (#948)。
-      function persistInterruptState(interruptedIndex: number): void {
+      function persistInterruptState(interruptedIndex: number, orderPosition?: number): void {
+        const remainingIndices =
+          hasExplicitIndices && orderPosition !== undefined
+            ? order.slice(interruptedIndex === order[orderPosition] ? orderPosition : orderPosition + 1)
+            : undefined;
         const persistedSubmittedClipIds = Array.from(
           new Set([...previousSubmittedClipIds, ...tracker.getSubmittedIds()]),
         );
@@ -519,6 +561,7 @@ export default defineContentScript({
             : {
                 ...currentSnapshot,
                 failedIndex: interruptedIndex,
+                remainingIndices,
                 submittedClipIds: persistedSubmittedClipIds,
                 playlistExpectedClipCount: expectedPlaylistClipCount,
               };
@@ -528,14 +571,15 @@ export default defineContentScript({
           total,
           timestamp: Date.now(),
           failedIndices: failedIndices.length > 0 ? [...failedIndices] : undefined,
+          remainingIndices,
           submittedClipIds: persistedSubmittedClipIds,
           playlistExpectedClipCount: expectedPlaylistClipCount,
         });
       }
-      for (const i of order) {
+      for (const [orderPosition, i] of order.entries()) {
         if (aborted) {
           // ループ先頭の中断: この時点でまだ Generate を click していないため i をそのまま使う (#924)。
-          persistInterruptState(i);
+          persistInterruptState(i, orderPosition);
           emitProgress({ phase: PHASE.STOPPED, index: i, total });
           return;
         }
@@ -596,6 +640,13 @@ export default defineContentScript({
           isFatal: (err) => err instanceof FatalRunError,
           maxRetry: preset.maxEntryRetry,
           retryDelayMs: () => applyJitter(preset.interCreateDelayMs, preset.jitterMs),
+          onRetry: (attempt, max) =>
+            emitProgress({
+              phase: PHASE.WAITING_SLOT,
+              index: i,
+              total,
+              log: { kind: "retry", entryName: entryDisplayName(entries[i]), attempt, max },
+            }),
           sleep: abortableSleep,
           describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
         });
@@ -610,14 +661,14 @@ export default defineContentScript({
             result.error instanceof InjectNotAcknowledgedError,
           );
           emitProgress({ phase: PHASE.ERROR, index: interruptIndex, total, message });
-          persistInterruptState(interruptIndex);
+          persistInterruptState(interruptIndex, orderPosition);
           return;
         }
         if (result.outcome === "aborted" || aborted) {
           // attempt 中の中断（waitForQueueSlot / injectAndGenerate 内の silent return 含む）。
           // Generate click 済みなら i+1 を persist し再開時の重複生成を防ぐ (#924)。
           const interruptIndex = resolveInterruptIndex(i, lastSubmittedEntryIndex === i, false);
-          persistInterruptState(interruptIndex);
+          persistInterruptState(interruptIndex, orderPosition);
           emitProgress({ phase: PHASE.STOPPED, index: interruptIndex, total });
           return;
         }
@@ -625,7 +676,13 @@ export default defineContentScript({
           const message = result.error instanceof Error ? result.error.message : String(result.error);
           failedIndices.push(i);
           console.warn(`[suno-helper] entry ${i} をスキップして続行します: ${message}`);
-          emitProgress({ phase: PHASE.ENTRY_FAILED, index: i, total, message });
+          emitProgress({
+            phase: PHASE.ENTRY_FAILED,
+            index: i,
+            total,
+            message,
+            log: { kind: "skip", entryName: entryDisplayName(entries[i]) },
+          });
           continue; // run 全体は止めない。retry 間で既に間隔を空けているため即次 entry へ。
         }
         if (result.outcome === "presumed-done") {
@@ -696,14 +753,11 @@ export default defineContentScript({
         persistInterruptState(total);
         try {
           const downloadContext = await resolveDownloadContext();
-          const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
-          await downloadFlow.recordPlaylistUrl(downloadContext, collectionId, sunoPlaylistUrl);
           const downloadError = await downloadFlow.downloadBestEffort(
             downloadContext,
             collectionId,
             total,
             verifiedPlaylistClipCount,
-            sunoPlaylistUrl,
           );
           keepResumeStateForDownloadRetry = downloadError !== null;
           if (downloadError !== null) {
@@ -751,8 +805,16 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
-      const { entries, playlistName, range, collectionId, indices, submittedClipIds, playlistExpectedClipCount } =
-        assertRunPayload(data);
+      const {
+        entries,
+        playlistName,
+        durationFilter,
+        range,
+        collectionId,
+        indices,
+        submittedClipIds,
+        playlistExpectedClipCount,
+      } = assertRunPayload(data);
       // 直前 run の完了時リロードが保留中なら取り消す (#1411)。猶予中に受理した新 run を
       // リロードが巻き添えに殺すと STOPPED/ERROR も resume state も残らない。取り消しで
       // 残る stale selection は Cmd+P 前ガードが検知する。
@@ -778,6 +840,7 @@ export default defineContentScript({
       // poller は stale 判定で自発的に黙る（intervalMs ごとの no-op tick のみ）。
       feedPoller.start();
       void runAll(entries, {
+        durationFilter,
         range,
         collectionId,
         playlistName,
@@ -825,15 +888,7 @@ export default defineContentScript({
           }
           if (shouldDownload) {
             const downloadContext = await resolveDownloadContext();
-            const sunoPlaylistUrl = await resolvePlaylistUrl(playlistName);
-            await downloadFlow.recordPlaylistUrl(downloadContext, collectionId, sunoPlaylistUrl);
-            await downloadFlow.performDownload(
-              downloadContext,
-              collectionId,
-              verifiedClipCount,
-              verifiedClipCount,
-              sunoPlaylistUrl,
-            );
+            await downloadFlow.performDownload(downloadContext, collectionId, verifiedClipCount, verifiedClipCount);
           }
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
@@ -870,8 +925,7 @@ export default defineContentScript({
       if (running) {
         return { ok: true } as const;
       }
-      const { collectionId, playlistName, submittedClipIds, expectedClipCount, sunoPlaylistUrl } =
-        assertRetryDownloadPayload(data);
+      const { collectionId, submittedClipIds, expectedClipCount } = assertRetryDownloadPayload(data);
       currentSnapshot = initSnapshot([], { collectionId });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
@@ -885,11 +939,8 @@ export default defineContentScript({
           const result = await downloadFlow.retryDownload({
             context: downloadContext,
             collectionId,
-            playlistName,
-            savedSunoPlaylistUrl: sunoPlaylistUrl,
             submittedClipIds,
             expectedClipCount,
-            resolvePlaylistUrl,
             selectClipIds: async (clipIds) => {
               await scrollAndMultiSelectByIds(clipIds, { isAborted: () => aborted });
             },
@@ -926,9 +977,5 @@ export default defineContentScript({
     // in-memory が破棄された後は、リロード直前に退避した直近完了 run の snapshot を fallback で返す
     // （stale 判定込み、次 run 開始で消去）。どちらも無ければ null（buildRestoreState が従来表示へ）。
     onMessage("queryProgress", async () => currentSnapshot ?? (await readFreshFinishedSnapshot(Date.now())));
-
-    // 自身の document（Suno `/me`）から playlist 一覧を scrape して返す (#893)。
-    // overlay の手動 Capture（background 経由）と background の bg tab 自動 capture が共用する。
-    onMessage("capturePlaylists", () => scrapePlaylistsFromMe(document));
   },
 });

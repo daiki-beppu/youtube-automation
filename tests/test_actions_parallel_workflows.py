@@ -219,7 +219,7 @@ def test_suno_helper_manifest_permission_check_preserves_least_privilege_contrac
     run_script = str(manifest_step.get("run", ""))
 
     assert ".output/chrome-mv3/manifest.json" in run_script
-    assert 'const expected = ["storage", "activeTab", "tabs", "downloads", "debugger"];' in run_script
+    assert 'const expected = ["storage", "activeTab", "downloads", "debugger"];' in run_script
     assert "const actual = manifest.permissions ?? [];" in run_script
     assert "expected.every((p) => actual.includes(p))" in run_script
     assert "process.exit(1);" in run_script
@@ -236,10 +236,35 @@ def test_distrokid_helper_checks_use_dependency_safe_parallel_groups() -> None:
     build_parallel_index = _parallel_group_index_containing(steps, "Build")
 
     assert install_index < fast_parallel_index < build_parallel_index
+    assert _parallel_group_index_containing(steps, "Build") < _top_level_step_index(
+        steps, "Verify generated manifest permissions (least-privilege)"
+    )
+    manifest_check_index = _top_level_step_index(steps, "Verify generated manifest permissions (least-privilege)")
+    assert manifest_check_index < _top_level_step_index(steps, "E2E (Playwright)")
     assert _parallel_group_index_containing(steps, "Install Playwright browser") < _top_level_step_index(
         steps, "E2E (Playwright)"
     )
     _assert_parallel_runs_do_not_use_shell_backgrounding(steps)
+
+
+def test_distrokid_helper_manifest_permission_check_preserves_least_privilege_contract() -> None:
+    """Given distrokid-helper CI, When manifest is built, Then permission verification remains meaningful."""
+    steps = _job_steps(_load_workflow(_EXTENSIONS_WORKFLOW_PATH), "distrokid-helper")
+    manifest_step = _top_level_step(steps, "Verify generated manifest permissions (least-privilege)")
+    run_script = str(manifest_step.get("run", ""))
+
+    assert ".output/chrome-mv3/manifest.json" in run_script
+    assert 'const expected = ["storage", "activeTab"];' in run_script
+    assert "const actual = manifest.permissions ?? [];" in run_script
+    assert "expected.every((p) => actual.includes(p))" in run_script
+    assert 'const expectedHosts = ["*://*.distrokid.com/*"];' in run_script
+    assert "const actualHosts = manifest.host_permissions ?? [];" in run_script
+    assert "expectedHosts.every((p) => actualHosts.includes(p))" in run_script
+    assert 'const expectedContentScriptMatches = ["*://*.distrokid.com/new*"];' in run_script
+    assert "const contentScripts = manifest.content_scripts ?? [];" in run_script
+    assert "const actualContentScriptMatches = contentScripts.flatMap(" in run_script
+    assert "expectedContentScriptMatches.every((p) => actualContentScriptMatches.includes(p))" in run_script
+    assert "process.exit(1);" in run_script
 
 
 def test_release_extensions_builds_both_zips_before_release_attachment() -> None:

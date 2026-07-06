@@ -1,6 +1,6 @@
 ---
 name: channel-status
-description: "Use when チャンネル全体の YouTube 統計（登録者数・総再生回数・動画別パフォーマンス）を取得したいとき。「登録者数は？」「チャンネルの最新情報」「YouTube の数字見せて」など、YouTube API から数字を取得するときに使用する。ローカルのコレクション制作進捗は /wf-status"
+description: "Use when チャンネルの YouTube 統計（登録者・再生回数）を取得するとき。「登録者数は？」「YouTube の数字」で発動。制作進捗は /wf-status"
 ---
 
 ## Overview
@@ -13,7 +13,7 @@ description: "Use when チャンネル全体の YouTube 統計（登録者数・
 
 存在しない場合、ユーザーに確認:
 - **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-import` を案内
+- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
 ## Instructions
 
