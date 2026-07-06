@@ -11,6 +11,15 @@ CLAUDE.md の「開発ワークフロー」節の詳細版。要点は CLAUDE.md
   - テスト戦略の設計が必要な新機能
 - 導入後に新しい takt バージョンへ上げた場合は `takt workflow doctor lite` で静的検証すること（step スキーマのキー名が変わる可能性がある）
 
+## 提出前セルフ監査（pre-review-checklist）
+
+`.takt/facets/policies/pre-review-checklist.md` は、過去の review-takt-default 指摘 371 件（183 レビュー）を全件分類して抽出した頻出 8 パターンの監査基準（issue #1508）。lite の `implement` / `review` step に `policy:` で注入され、実装者が提出前に自己監査 → reviewer が独立照合する二段構えで、post-hoc レビュー（1 回 ~15M tokens）の REJECT 再走を減らす。
+
+- **implement step**: 8 項目を根拠（ファイル:行）付きで照合し、受入条件充足表を出力してから完了する
+- **review step**: 実装者の自己監査を鵜呑みにせず独立照合。8 項目 pass + issue スコープ内欠陥なしのときのみ approved。スコープ外の改善提案は follow-up 候補として記録し verdict に影響させない（moving goalposts の防止）
+- **更新手順**: レビュー REJECT の傾向が変わったら `.takt/runs/*/reports/review-summary.md` の指摘を再分類し、checklist の項目・頻出度を更新する。policy のインライン注入は 2,000 字で truncate されるため、冒頭のサマリー表に要点を収める構成を維持すること
+- 機械検出可能なパターン（lint / 未使用コード / `typing.Any` grep / テスト差分ゼロ検知）は checklist ではなく lefthook / CI ゲートに委譲する方針
+
 ## トークン消費の計測（observability）
 
 `.takt/config.yaml` で有効化済み:
@@ -22,7 +31,9 @@ observability:
 ```
 
 - 記録先: `.takt/runs/<run>/logs/<session>-usage-events.phase.jsonl`（step × phase × provider × model 粒度）
-- 集計: takt リポジトリ同梱の `npm run analyze:usage -- .takt/runs/<run>`（`--format csv` 可）
+- **worktree 実行時の注意**: takt 自動 worktree（task の `worktree: true`）では、この `.takt/runs/` は**メインリポジトリではなく worktree 側**（`<repo-parent>/takt-worktrees/<timestamp>-<slug>/.takt/runs/`）に作られる。worktree を削除するとログも消えるため、計測を残したい run はログを先に回収すること
+- 集計: takt リポジトリ同梱の `npm run analyze:usage -- <run ディレクトリ>`（`--format csv` 可）。複数 run の横断比較は同梱の `tools/token-usage.sh <takt-worktrees のパス>` が run × step 粒度で整形表示してくれる
+- codex step の input tokens は agentic ループの各ターンで会話履歴全体が再送されるため累積計上され、見かけが大きくなる。実効コストは `cached_input_tokens` を差し引いた非キャッシュ input で見ること
 - 消費が異常に見えたときは、まず phase JSONL で「どの step のどの phase が食っているか」を特定してから対策する
 
 ## worktree の置き場
@@ -66,7 +77,12 @@ takt（v0.49 時点）の 1 step は最大 3 phase の LLM 呼び出しで構成
 
 takt の自動 worktree（task の `worktree: true`）では **step 間のセッション resume が無効化される**（実行 cwd がプロジェクト cwd と異なるため。ディレクトリ間汚染の防止ガード）。この場合、同一 persona の step 再訪（review⇄implement ループの implement 再訪など）でも毎回新規セッションになり、リポジトリ再探索コストがかかる。
 
-回避策: **手動で worktree を作り、その中で `takt add` → `takt run`（task の `worktree` 指定を省略 = カレントディレクトリ実行）** にすると `cwd === projectCwd` となり resume が有効化される。リポジトリの worktree ポリシーも手動 worktree で満たせる。ただし auto-commit / push / auto_pr は worktree 実行時のフローなので、カレント実行では commit・PR 作成を手動（`commit-convention` / `pr` スキル）で行うこと。
+**実測結果（2026-07、#1484 の default workflow で resume OFF/ON を A/B 比較）: review⇄fix ループを持つ workflow では resume 有効化は逆効果**。非キャッシュ input が OFF ≈ 7.2M → ON ≈ 19.3M と約 2.7 倍に増えた。原因は「resume でスレッド履歴が周回ごとに肥大する」×「プロンプトキャッシュの TTL（数分）より review⇄fix の 1 周（10〜25 分）が長い」の組み合わせで、周回のたびに失効した長履歴がほぼ丸ごと非キャッシュで再課金されるため。リポジトリ再探索の節約（〜100K/回）では相殺できない。
+
+resume が効くのは**キャッシュ TTL 内に次 step が始まる隣接 step のみ**（同実験で write_tests→implement の非キャッシュ input が 187K → 102K に減少するのを確認）。したがって:
+
+- ループを持つ workflow（default 等）は **resume 無効のまま（= takt デフォルト挙動）が安い**。このガードはコスト面では防御として機能している
+- 手動 worktree 内で `takt add` → `takt run`（task の `worktree` 指定を省略 = カレント実行）にすれば `cwd === projectCwd` となり resume は有効化できるが、検討に値するのは**ループのない短い直列 workflow だけ**。この場合 auto-commit / push / auto_pr は worktree 実行時のフローなので、commit・PR 作成は手動（`commit-convention` / `pr` スキル）で行うこと
 
 ### 計測との突き合わせ
 

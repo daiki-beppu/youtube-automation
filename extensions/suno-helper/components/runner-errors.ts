@@ -20,6 +20,8 @@ export interface RestoreState {
   failedIndex?: number;
   // リトライ上限まで失敗しスキップされた entry の 0-based index 一覧 (#948)。
   failedIndices?: number[];
+  // 明示 indices 実行が途中中断したとき、再開で実行すべき残りの 0-based index 列。
+  remainingIndices?: number[];
   // playlist 追加対象として generate response から観測済みの clip ID 一覧。
   submittedClipIds?: string[];
   // playlist 追加時に揃っているべき clip ID 件数。
@@ -161,6 +163,7 @@ export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | 
     playlistName: snap.playlistName,
     failedIndex: snap.failedIndex,
     failedIndices: snap.failedIndices,
+    remainingIndices: snap.remainingIndices,
     submittedClipIds: snap.submittedClipIds,
     playlistExpectedClipCount: snap.playlistExpectedClipCount,
   };
