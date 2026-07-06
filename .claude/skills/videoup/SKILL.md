@@ -42,7 +42,7 @@ $ARGUMENTS
 ```
 
 引数が指定されている場合、そのコレクションを対象とします。
-未指定の場合、`collections/planning/` から `music.approved = true` かつ `production.generated = false` のコレクションを自動検出します。
+未指定の場合、`collections/planning/` から `assets.master_audio` が設定済み（`null` 以外）かつ `assets.master_video` が `null` のコレクションを自動検出します。
 
 ### ステップ
 
@@ -54,7 +54,7 @@ $ARGUMENTS
    それ以外（`enabled` 未指定 or `true`）で `loop.mp4` が無ければ `/loop-video` でのループ動画生成を案内。
    `loop.mp4` があると `generate_videos.sh` が自動的に動画背景を使用（静止画の代わり）
 4. **動画生成**: `generate_videos.sh` の実行コマンドを案内
-5. **workflow-state.json 更新**: `production.generated = true` に更新
+5. **workflow-state.json 更新**: `assets.master_video` に生成された動画ファイル名（例: `01-master/Theme-Name-Master.mp4`）を記録
 
 ### 自動検出される要素
 

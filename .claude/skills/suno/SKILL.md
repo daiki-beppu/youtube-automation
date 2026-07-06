@@ -375,7 +375,7 @@ patterns:
 uv run yt-generate-suno <collection-path>
 ```
 
-`config/skills/suno.yaml` の `genre_line` + `exclude_styles` + `style_influence` をパターンに自動付加して `suno-prompts.md` と `suno-prompts.json` を生成する。ボーカルモードでは同階層の `suno-lyrics.json` を優先して読み、entry `name` が一致する lyrics を Style とマージする。保存後、`workflow-state.json` の `music.generated = true` に更新する。
+`config/skills/suno.yaml` の `genre_line` + `exclude_styles` + `style_influence` をパターンに自動付加して `suno-prompts.md` と `suno-prompts.json` を生成する。ボーカルモードでは同階層の `suno-lyrics.json` を優先して読み、entry `name` が一致する lyrics を Style とマージする。保存後、`workflow-state.json` の `assets.music_prompts = true` に更新する。
 
 ### Step 3: `/suno-helper` で自動投入（推奨）
 
