@@ -10,7 +10,7 @@ from PIL import Image
 
 from youtube_automation.utils import config as config_mod
 from youtube_automation.utils import skill_config
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.thumbnail_text import OverlaySpec, TextStyle, compose_thumbnail_text
 from youtube_automation.utils.thumbnail_text.config import (
     overlay_config_from_skill_config,
@@ -50,6 +50,19 @@ def _overlay_config_dict(font_path: Path, **overlay_extra) -> dict:
 def _skill_config_dict(font_path: Path, **overlay_extra) -> dict:
     overlay = _overlay_config_dict(font_path, **overlay_extra)
     return {"image_generation": {"gemini": {"thumbnail_text": {"overlay": overlay}}}}
+
+
+def _non_background_bbox(path: Path, background_color: tuple[int, int, int]) -> tuple[int, int, int, int]:
+    image = Image.open(path).convert("RGB")
+    xs: list[int] = []
+    ys: list[int] = []
+    for y in range(image.height):
+        for x in range(image.width):
+            if image.getpixel((x, y)) != background_color:
+                xs.append(x)
+                ys.append(y)
+    assert xs
+    return min(xs), min(ys), max(xs), max(ys)
 
 
 def test_package_root_exports_only_domain_api():
@@ -348,8 +361,68 @@ class TestComposeThumbnailText:
 
         assert out_without_channel.read_bytes() != out_with_channel.read_bytes()
 
+    @pytest.mark.parametrize(
+        ("anchor", "expected_horizontal", "expected_vertical"),
+        [
+            ("top-left", "left", "top"),
+            ("center", "center", "center"),
+            ("bottom-right", "right", "bottom"),
+        ],
+    )
+    def test_anchor_and_margins_move_rendered_pixels(
+        self,
+        tmp_path: Path,
+        test_font: Path,
+        anchor: str,
+        expected_horizontal: str,
+        expected_vertical: str,
+    ):
+        background_color = (18, 52, 86)
+        background = tmp_path / f"{anchor}.png"
+        output = tmp_path / f"{anchor}-out.png"
+        Image.new("RGB", (400, 200), color=background_color).save(background)
+        spec = OverlaySpec(
+            title_style=TextStyle(
+                font_path=test_font,
+                size=32,
+                color="#FFFFFF",
+                stroke_width=0,
+                stroke_color="#000000",
+            ),
+            channel_name_style=None,
+            anchor=anchor,
+            margin_x=24,
+            margin_y=18,
+            line_spacing=1.0,
+            gap=0,
+        )
+
+        compose_thumbnail_text(
+            background=background,
+            output=output,
+            channel_root=tmp_path,
+            spec=spec,
+            title_lines=["Anchor"],
+        )
+
+        left, top, right, bottom = _non_background_bbox(output, background_color)
+        center_x = (left + right) / 2
+        center_y = (top + bottom) / 2
+        if expected_horizontal == "left":
+            assert 20 <= left <= 32
+        elif expected_horizontal == "right":
+            assert 366 <= right <= 380
+        else:
+            assert 185 <= center_x <= 215
+        if expected_vertical == "top":
+            assert 18 <= top <= 34
+        elif expected_vertical == "bottom":
+            assert 153 <= bottom <= 182
+        else:
+            assert 84 <= center_y <= 116
+
     def test_empty_title_raises(self, tmp_path: Path, background: Path, test_font: Path):
-        with pytest.raises(ConfigError, match="タイトル行が空"):
+        with pytest.raises(ValidationError, match="タイトル行が空"):
             compose_thumbnail_text(
                 background=background,
                 output=tmp_path / "out.jpg",
@@ -373,7 +446,7 @@ class TestComposeThumbnailText:
         output_name: str,
         message: str,
     ):
-        with pytest.raises(ConfigError, match=message):
+        with pytest.raises(ValidationError, match=message):
             compose_thumbnail_text(
                 background=background,
                 output=tmp_path / output_name,
@@ -391,7 +464,7 @@ class TestComposeThumbnailText:
         channel_root = tmp_path / "channel"
         channel_root.mkdir()
 
-        with pytest.raises(ConfigError, match="channel_dir 配下"):
+        with pytest.raises(ValidationError, match="channel_dir 配下"):
             compose_thumbnail_text(
                 background=background,
                 output=tmp_path / "thumbnail-v1.jpg",
@@ -427,7 +500,7 @@ class TestComposeThumbnailText:
 
         monkeypatch.setattr(renderer, "validate_thumbnail_output_path", racing_validate)
 
-        with pytest.raises(ConfigError, match="出力画像を保存できません"):
+        with pytest.raises(ValidationError, match="出力画像を保存できません"):
             compose_thumbnail_text(
                 background=background,
                 output=output,
@@ -439,7 +512,7 @@ class TestComposeThumbnailText:
         assert not (outside / "thumbnail-v1.jpg").exists()
 
     def test_missing_background_raises(self, tmp_path: Path, test_font: Path):
-        with pytest.raises(ConfigError, match="背景画像が見つかりません"):
+        with pytest.raises(ValidationError, match="背景画像が見つかりません"):
             compose_thumbnail_text(
                 background=tmp_path / "missing.png",
                 output=tmp_path / "out.jpg",
@@ -448,10 +521,10 @@ class TestComposeThumbnailText:
                 title_lines=["Title"],
             )
 
-    def test_broken_background_raises_config_error(self, tmp_path: Path, test_font: Path):
+    def test_broken_background_raises_validation_error(self, tmp_path: Path, test_font: Path):
         broken = tmp_path / "broken.png"
         broken.write_bytes(b"not a real image")
-        with pytest.raises(ConfigError, match="背景画像を読み込めません"):
+        with pytest.raises(ValidationError, match="背景画像を読み込めません"):
             compose_thumbnail_text(
                 background=broken,
                 output=tmp_path / "out.jpg",
@@ -460,7 +533,50 @@ class TestComposeThumbnailText:
                 title_lines=["Title"],
             )
 
-    def test_broken_font_raises_with_guidance(self, tmp_path: Path, background: Path):
+    def test_oversized_background_pixels_raise_validation_error(
+        self,
+        tmp_path: Path,
+        background: Path,
+        test_font: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        from youtube_automation.utils.thumbnail_text import renderer
+
+        monkeypatch.setattr(renderer, "_MAX_BACKGROUND_PIXELS", 10)
+
+        with pytest.raises(ValidationError, match="ピクセル数が大きすぎます"):
+            compose_thumbnail_text(
+                background=background,
+                output=tmp_path / "out.jpg",
+                channel_root=tmp_path,
+                spec=self._spec(test_font),
+                title_lines=["Title"],
+            )
+
+    def test_decompression_bomb_exits_as_validation_error(
+        self,
+        tmp_path: Path,
+        background: Path,
+        test_font: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        from youtube_automation.utils.thumbnail_text import renderer
+
+        def raise_decompression_bomb(_path: Path):
+            raise Image.DecompressionBombError("too many pixels")
+
+        monkeypatch.setattr(renderer.Image, "open", raise_decompression_bomb)
+
+        with pytest.raises(ValidationError, match="背景画像を読み込めません"):
+            compose_thumbnail_text(
+                background=background,
+                output=tmp_path / "out.jpg",
+                channel_root=tmp_path,
+                spec=self._spec(test_font),
+                title_lines=["Title"],
+            )
+
+    def test_broken_font_raises_config_error(self, tmp_path: Path, background: Path):
         broken = tmp_path / "broken.ttf"
         broken.write_bytes(b"not a real font")
         style = TextStyle(font_path=broken, size=96, color="#FFFFFF", stroke_width=0, stroke_color="#000000")
@@ -481,15 +597,13 @@ class TestComposeThumbnailText:
                 spec=spec,
                 title_lines=["Title"],
             )
-        message = str(exc_info.value)
-        assert "フォントファイルを読み込めません" in message
-        assert "対処:" in message
+        assert "フォントファイルを読み込めません" in str(exc_info.value)
 
-    def test_output_save_failure_raises_config_error(self, tmp_path: Path, background: Path, test_font: Path):
+    def test_output_save_failure_raises_validation_error(self, tmp_path: Path, background: Path, test_font: Path):
         parent_file = tmp_path / "parent-file"
         parent_file.write_text("not a directory", encoding="utf-8")
 
-        with pytest.raises(ConfigError) as exc_info:
+        with pytest.raises(ValidationError) as exc_info:
             compose_thumbnail_text(
                 background=background,
                 output=parent_file / "out.jpg",
@@ -512,7 +626,7 @@ class TestComposeThumbnailText:
         output = tmp_path / "out.jpg"
         monkeypatch.setattr(renderer.os, "supports_dir_fd", set())
 
-        with pytest.raises(ConfigError, match="fd-based"):
+        with pytest.raises(ValidationError, match="fd-based"):
             compose_thumbnail_text(
                 background=background,
                 output=output,
@@ -538,7 +652,7 @@ class TestComposeThumbnailText:
 
         monkeypatch.setattr(Image.Image, "save", fail_save)
 
-        with pytest.raises(ConfigError, match="出力画像を保存できません"):
+        with pytest.raises(ValidationError, match="出力画像を保存できません"):
             compose_thumbnail_text(
                 background=background,
                 output=output,

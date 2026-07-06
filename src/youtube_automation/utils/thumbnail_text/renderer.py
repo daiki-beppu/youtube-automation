@@ -1,5 +1,3 @@
-"""Pillow によるサムネイルテキスト描画。"""
-
 from __future__ import annotations
 
 import os
@@ -7,22 +5,20 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 
-from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.thumbnail_text.config import _font_fallback_guidance
+from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.thumbnail_text.models import OverlaySpec, TextStyle
 
 _FINAL_THUMBNAIL_NAMES = frozenset({"thumbnail.jpg", "thumbnail.jpeg", "thumbnail.png"})
 _ALLOWED_OUTPUT_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
+_MAX_BACKGROUND_BYTES = 32 * 1024 * 1024
+_MAX_BACKGROUND_PIXELS = 16_000_000
 
 
 def load_font(style: TextStyle) -> ImageFont.FreeTypeFont:
-    """TextStyle からフォントをロードする。ロード不能なら ConfigError。"""
     try:
         return ImageFont.truetype(str(style.font_path), style.size)
     except OSError as exc:
-        raise ConfigError(
-            f"フォントファイルを読み込めません: {style.font_path} ({exc})\n{_font_fallback_guidance(style.font_key)}"
-        ) from exc
+        raise ConfigError(f"フォントファイルを読み込めません: {style.font_path} ({exc})") from exc
 
 
 def _line_height(font: ImageFont.FreeTypeFont) -> int:
@@ -52,29 +48,30 @@ def _has_symlink_parent(path: Path) -> bool:
 
 
 def validate_thumbnail_output_path(output: Path, *, channel_root: Path) -> None:
-    """候補サムネ出力先の安全契約を検証する。"""
     final_names = ", ".join(sorted(_FINAL_THUMBNAIL_NAMES))
     if output.name.lower() in _FINAL_THUMBNAIL_NAMES:
-        raise ConfigError(
+        raise ValidationError(
             f"最終サムネイル名への直接出力はできません: {output} "
             f"(候補名 thumbnail-v1.jpg などへ出力し、承認後に {final_names} へコピーしてください)"
         )
     if output.is_symlink():
-        raise ConfigError(f"出力先にシンボリックリンクは指定できません: {output}")
+        raise ValidationError(f"出力先にシンボリックリンクは指定できません: {output}")
     if output.exists():
-        raise ConfigError(f"出力先ファイルは既に存在します: {output} (候補名を変えるか、不要な候補を削除してください)")
+        raise ValidationError(
+            f"出力先ファイルは既に存在します: {output} (候補名を変えるか、不要な候補を削除してください)"
+        )
     if output.suffix.lower() not in _ALLOWED_OUTPUT_SUFFIXES:
         allowed = ", ".join(sorted(_ALLOWED_OUTPUT_SUFFIXES))
-        raise ConfigError(f"出力先の拡張子は {allowed} のいずれかを指定してください: {output}")
+        raise ValidationError(f"出力先の拡張子は {allowed} のいずれかを指定してください: {output}")
 
     output_abs = _absolute_path(output)
     if _has_symlink_parent(output_abs):
-        raise ConfigError(f"出力先の親ディレクトリにシンボリックリンクは指定できません: {output}")
+        raise ValidationError(f"出力先の親ディレクトリにシンボリックリンクは指定できません: {output}")
 
     channel_root_resolved = channel_root.resolve()
     output_resolved = output_abs.resolve(strict=False)
     if not output_resolved.is_relative_to(channel_root_resolved):
-        raise ConfigError(
+        raise ValidationError(
             f"出力先は channel_dir 配下に指定してください: {output} (channel_dir: {channel_root_resolved})"
         )
 
@@ -100,10 +97,16 @@ def _open_output_file_no_follow(output: Path, *, channel_root: Path):
         dir_flags |= os.O_NOFOLLOW
 
     if os.open not in os.supports_dir_fd:
-        raise ConfigError("出力画像を保存できません: fd-based の安全なファイル作成を利用できません")
-    dir_fd = os.open(output.parent, dir_flags)
+        raise ValidationError("出力画像を保存できません: fd-based の安全なファイル作成を利用できません")
     try:
-        file_fd = os.open(output.name, flags, 0o666, dir_fd=dir_fd)
+        dir_fd = os.open(output.parent, dir_flags)
+    except OSError as exc:
+        raise ValidationError(f"出力画像を保存できません: {output} ({exc})") from exc
+    try:
+        try:
+            file_fd = os.open(output.name, flags, 0o666, dir_fd=dir_fd)
+        except OSError as exc:
+            raise ValidationError(f"出力画像を保存できません: {output} ({exc})") from exc
     finally:
         os.close(dir_fd)
     return os.fdopen(file_fd, "wb")
@@ -120,7 +123,29 @@ def _save_image_safely(image: Image.Image, output: Path, *, channel_root: Path) 
     except (OSError, ValueError) as exc:
         if output.exists() and not output.is_symlink():
             output.unlink()
-        raise ConfigError(f"出力画像を保存できません: {output} ({exc})") from exc
+        raise ValidationError(f"出力画像を保存できません: {output} ({exc})") from exc
+
+
+def _validate_background_file(background: Path) -> None:
+    try:
+        size = background.stat().st_size
+    except OSError as exc:
+        raise ValidationError(f"背景画像を読み込めません: {background} ({exc})") from exc
+    if size > _MAX_BACKGROUND_BYTES:
+        raise ValidationError(
+            f"背景画像のファイルサイズが大きすぎます: {background} "
+            f"({size} bytes > {_MAX_BACKGROUND_BYTES} bytes)"
+        )
+
+
+def _validate_background_pixels(image: Image.Image, *, background: Path) -> None:
+    width, height = image.size
+    pixels = width * height
+    if pixels > _MAX_BACKGROUND_PIXELS:
+        raise ValidationError(
+            f"背景画像のピクセル数が大きすぎます: {background} "
+            f"({width}x{height} = {pixels} pixels > {_MAX_BACKGROUND_PIXELS} pixels)"
+        )
 
 
 def compose_thumbnail_text(
@@ -132,26 +157,25 @@ def compose_thumbnail_text(
     title_lines: list[str],
     channel_name: str | None = None,
 ) -> Path:
-    """textless 背景にタイトル (+ チャンネル名) を決定的に描画して保存する。
-
-    同一の背景・テキスト・設定なら常に同一の出力になる (AI 生成に依存しない)。
-    """
     if not background.is_file():
-        raise ConfigError(f"背景画像が見つかりません: {background}")
+        raise ValidationError(f"背景画像が見つかりません: {background}")
     lines = [line for line in (s.strip() for s in title_lines) if line]
     if not lines:
-        raise ConfigError("タイトル行が空です。--title で 1 行以上指定してください")
+        raise ValidationError("タイトル行が空です。--title で 1 行以上指定してください")
     if channel_name and spec.channel_name_style is None:
-        raise ConfigError("channel_name 指定時は OverlaySpec.channel_name_style が必要です")
+        raise ValidationError("channel_name 指定時は OverlaySpec.channel_name_style が必要です")
     validate_thumbnail_output_path(output, channel_root=channel_root)
 
     title_font = load_font(spec.title_style)
     channel_font = load_font(spec.channel_name_style) if channel_name and spec.channel_name_style else None
 
+    _validate_background_file(background)
     try:
-        image = Image.open(background).convert("RGB")
-    except (OSError, UnidentifiedImageError) as exc:
-        raise ConfigError(f"背景画像を読み込めません: {background} ({exc})") from exc
+        with Image.open(background) as opened:
+            _validate_background_pixels(opened, background=background)
+            image = opened.convert("RGB")
+    except (OSError, UnidentifiedImageError, Image.DecompressionBombError) as exc:
+        raise ValidationError(f"背景画像を読み込めません: {background} ({exc})") from exc
     draw = ImageDraw.Draw(image)
 
     title_line_height = round(_line_height(title_font) * spec.line_spacing)

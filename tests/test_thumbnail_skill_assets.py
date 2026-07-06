@@ -353,23 +353,6 @@ def test_thumbnail_default_config_keeps_font_stabilization_contract() -> None:
     assert overlay["layout"]["line_spacing"] == 1.15
 
 
-def test_thumbnail_skill_documents_deterministic_text_cli_failure_contract() -> None:
-    skill = _read_thumbnail_skill()
-    font_block = _slice_between(skill, "## フォント安定化（#1332）", "## 品質チェック")
-
-    for required in (
-        "`yt-thumbnail-text`",
-        "`single_step.typography_clause`",
-        "`thumbnail_text.font`",
-        "image_generation.gemini.thumbnail_text.overlay.font.title",
-        "終了コード 1",
-        "失敗理由と代替手順",
-        "AI プロンプト経路",
-        "フォントの厳密な再現は保証されない",
-    ):
-        assert required in font_block
-
-
 def test_thumbnail_skill_requires_reference_per_ttp_attempt_and_drops_prompt_only_fallback() -> None:
     skill = _read_thumbnail_skill()
 

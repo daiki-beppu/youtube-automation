@@ -1,17 +1,14 @@
-"""skill-config overlay mapping から描画仕様を組み立てる。"""
-
 from __future__ import annotations
 
 import math
 from collections.abc import Mapping
 from pathlib import Path
 
-from PIL import ImageColor
+from PIL import ImageColor, ImageFont
 
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.thumbnail_text.models import OverlaySpec, TextStyle
 
-# 出力サムネの標準サイズ (YouTube 推奨 1280x720) を基準にした既定値
 _DEFAULT_TITLE_SIZE = 96
 _DEFAULT_CHANNEL_NAME_SIZE = 36
 _DEFAULT_COLOR = "#FFFFFF"
@@ -50,11 +47,6 @@ def _font_fallback_guidance(key: str) -> str:
 
 
 def resolve_font_path(raw: str, *, channel_root: Path, key: str) -> Path:
-    """設定値のフォントパスを検証込みで解決する。
-
-    絶対パスはそのまま、相対パスは channel_dir 起点で解決する。
-    未設定・実在しないパスは理由と代替手順つきの ConfigError にする。
-    """
     if not raw or not raw.strip():
         raise ConfigError(f"フォント指定が未設定です: {key}\n{_font_fallback_guidance(key)}")
     candidate = Path(raw.strip()).expanduser()
@@ -63,6 +55,13 @@ def resolve_font_path(raw: str, *, channel_root: Path, key: str) -> Path:
     if not candidate.is_file():
         raise ConfigError(f"フォントファイルが見つかりません: {key} = {candidate}\n{_font_fallback_guidance(key)}")
     return candidate
+
+
+def _validate_font_loadable(path: Path, *, size: int, key: str) -> None:
+    try:
+        ImageFont.truetype(str(path), size)
+    except OSError as exc:
+        raise ConfigError(f"フォントファイルを読み込めません: {path} ({exc})\n{_font_fallback_guidance(key)}") from exc
 
 
 def _parse_color(raw: object, *, default: str, key: str) -> str:
@@ -94,11 +93,6 @@ def _parse_int(raw: object, *, default: int, key: str, minimum: int = 0) -> int:
 
 
 def _mapping_at(parent: Mapping[str, object], name: str, *, key: str) -> Mapping[str, object]:
-    """Optional mapping section reader.
-
-    Missing keys inherit defaults, but explicitly provided non-mapping values are
-    configuration errors so typos do not silently fall back to defaults.
-    """
     if name not in parent:
         return {}
     value = parent[name]
@@ -133,7 +127,6 @@ def _font_path_value(font_cfg: Mapping[str, object], name: str, *, key: str) -> 
 
 
 def overlay_config_from_skill_config(skill_config: object) -> Mapping[str, object]:
-    """thumbnail skill-config から deterministic overlay 設定を取り出す。"""
     if not isinstance(skill_config, Mapping):
         raise ConfigError(f"thumbnail skill-config はマッピングで指定してください ({_SKILL_CONFIG_PATH_HINT})")
     image_generation = _mapping_at(skill_config, "image_generation", key="image_generation")
@@ -160,9 +153,12 @@ def _build_text_style(
     default_size: int,
     default_stroke_width: int,
 ) -> TextStyle:
+    font_path = resolve_font_path(font_raw, channel_root=channel_root, key=font_key)
+    size = _parse_int(section.get("size"), default=default_size, key=f"{key_prefix}.size", minimum=1)
+    _validate_font_loadable(font_path, size=size, key=font_key)
     return TextStyle(
-        font_path=resolve_font_path(font_raw, channel_root=channel_root, key=font_key),
-        size=_parse_int(section.get("size"), default=default_size, key=f"{key_prefix}.size", minimum=1),
+        font_path=font_path,
+        size=size,
         color=_parse_color(section.get("color"), default=_DEFAULT_COLOR, key=f"{key_prefix}.color"),
         stroke_width=_parse_int(
             section.get("stroke_width"),
@@ -174,7 +170,6 @@ def _build_text_style(
             default=_DEFAULT_STROKE_COLOR,
             key=f"{key_prefix}.stroke_color",
         ),
-        font_key=font_key,
     )
 
 
@@ -185,10 +180,6 @@ def overlay_spec_from_overlay_config(
     with_channel_name: bool,
     key_prefix: str = _DEFAULT_OVERLAY_KEY_PREFIX,
 ) -> OverlaySpec:
-    """Provider 非依存の overlay mapping から OverlaySpec を組み立てる。
-
-    フォント未設定などの不備は ConfigError (理由 + 代替手順つき) にする。
-    """
     if not isinstance(overlay_config, Mapping):
         raise ConfigError(f"{key_prefix} はマッピングで指定してください ({_SKILL_CONFIG_PATH_HINT})")
 
@@ -209,7 +200,6 @@ def overlay_spec_from_overlay_config(
 
     channel_name_style: TextStyle | None = None
     if with_channel_name:
-        # channel_name 用フォント未設定時はタイトルフォントを継承する
         channel_font_raw = _font_path_value(font_cfg, "channel_name", key=f"{key_prefix}.font.channel_name")
         if not channel_font_raw:
             channel_font_raw = title_font_raw
