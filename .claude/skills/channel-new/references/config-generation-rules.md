@@ -1,17 +1,17 @@
 # config/channel/*.json 生成ルール
 
-`/channel-setup` と `/channel-new`（既存チャンネル取り込みモード）から共通参照するルール集。
-テンプレートは同ディレクトリの `config-template/*.json`。
+`/channel-new`（再生成モード / 既存チャンネル取り込みモード）から共通参照するルール集。
+テンプレートは同ディレクトリの `config-template/` 配下（`config-template/*.json` と `config-template/skills/*.yaml`）。
 
 ## TTP（徹底的にパクる）路線時の優先順位
 
 `docs/channel/channel-direction.md` で「TTP 完全コピー路線」が選ばれている場合、各フィールド生成ルール（後述）は **競合スナップショットの転写を最優先** し、独自設計はあとから差分として乗せる。
 
-1. **`/channel-setup` Step 2.1 で取得した競合の `channels().list(part='snippet,brandingSettings,localizations')` レスポンス**を Claude のコンテキストに必ず載せる
+1. **`/channel-new` 再生成モード Step R2.1 で取得した競合の `channels().list(part='snippet,brandingSettings,localizations')` レスポンス**を Claude のコンテキストに必ず載せる
 2. 競合の構造（章立て・段落順・箇条書きの数・絵文字の有無）をそのままコピーし、`competitor → my-channel` の固有名詞置換だけを行う
 3. `brandingSettings.channel.keywords` は数・順序・スペース入りクォート形式（`"chill beats"` 等）まで踏襲する
 4. `localizations` で多言語化されている言語セットを `config/localizations.json::supported_languages` の決定に反映する（独自に絞る場合は理由を明文化）
-5. TTP self-check（SKILL.md Step 2.3）に通してから提案する
+5. TTP self-check（SKILL.md Step R2.3）に通してから提案する
 
 「独自路線」「ハイブリッド路線」を選んでいる場合は競合スナップショットを必ず参照しつつも、転写率と差別化の比率を方向性ドキュメントに合わせる。
 
@@ -53,7 +53,7 @@
 | `perfect_for` | **4 項目**（例: Study & Focus, Relaxation, Creative Work, Sleep） |
 | `hashtags` | **5 個** 程度 |
 
-**TTP 路線**: チャンネル概要欄（`snippet.description` / `brandingSettings.channel.description`）の章立て・段落構造を `descriptions.opening` + `descriptions.sub_opening` + `descriptions.perfect_for` に転写する。welcome 行・絵文字・箇条書きセクションの並び順を変えないこと。「TTP できているか」は SKILL.md Step 2.3 の self-check で必ず検証する。
+**TTP 路線**: チャンネル概要欄（`snippet.description` / `brandingSettings.channel.description`）の章立て・段落構造を `descriptions.opening` + `descriptions.sub_opening` + `descriptions.perfect_for` に転写する。welcome 行・絵文字・箇条書きセクションの並び順を変えないこと。「TTP できているか」は SKILL.md Step R2.3 の self-check で必ず検証する。
 
 ### `title`
 
@@ -63,7 +63,7 @@
 | `theme_scenes` | テーマ → アクティビティ + 英語シーンフレーズのマッピング（TTP 形式・推奨）。`{theme: {activities: "...", scene: "..."}}` 形式。`yt-populate-scene-phrases` の `--en` 自動補完に使われる |
 | `theme_activities` | テーマ → アクティビティのマッピング（レガシー形式）。`theme_scenes` 未設定のときのみ参照される |
 
-`theme_scenes` / `theme_activities` をどちらも空のまま `/channel-setup` を抜けると
+`theme_scenes` / `theme_activities` をどちらも空のまま `/channel-new`（再生成モード）を抜けると
 下流 `yt-populate-scene-phrases` が手動 `--en` 指定を要求する。channel-direction.md で
 テーマ群が確定しているなら空のまま終了しないこと（issue #567）。
 
@@ -75,7 +75,7 @@
 | `target_duration_max` | 最大目標尺（分）。固定尺戦略のチャンネルでは `target_duration_min` と同値にする |
 | `chapter_max` | チャプター数の上限（デフォルト 100） |
 
-固定尺戦略を取るチャンネルでも、`target_duration_min` を空のまま `/channel-setup` を
+固定尺戦略を取るチャンネルでも、`target_duration_min` を空のまま `/channel-new`（再生成モード）を
 抜けてはならない（issue #567）。
 
 ## skill-config で管理するセクション
@@ -99,7 +99,7 @@
 ### channel-direction.md の決定を必ず転記する skill-config（issue #567）
 
 下記は「チャンネル固有の上書きが必要」ではなく **方向性が決まっていれば必ず書く**
-セクション。空のまま `/channel-setup` を抜けてはならない。雛形は
+セクション。空のまま `/channel-new`（再生成モード）を抜けてはならない。雛形は
 `references/config-template/skills/<skill>.yaml`。
 
 **Suno**（`music_engine: suno` のチャンネル）:
@@ -127,10 +127,10 @@
 **手動 download はしない**（issue #567）。
 
 `benchmark.channels` が設定済みのチャンネルでは、`uv run yt-doctor --json` の
-`ttp_wf_new_readiness` で `/channel-setup benchmark 反映未完了` が出ないことを完了条件にする。
+`ttp_wf_new_readiness` で `/channel-new benchmark 反映未完了` が出ないことを完了条件にする。
 この check は `data/benchmark_*.json`、`docs/benchmarks/*.md`、
-`data/thumbnail_compare/benchmark/`、`config/skills/thumbnail.yaml::reference_images.default`、
-`config/skills/thumbnail.yaml::reference_images.channel_branding`
+`data/thumbnail_compare/benchmark/`、`config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default`、
+`config/skills/thumbnail.yaml::image_generation.gemini.reference_images.channel_branding`
 の欠落を読むだけで検出する。
 
 設定生成後は `uv run yt-doctor` を実行し、`initial_setup_readiness` が OK であることを確認する。
@@ -147,6 +147,7 @@ Style 欄 120 文字超過、planning 中 `descriptions.md` の parser 不一致
 
 ## 参考
 
-- `config-template/*.json` — 責務別 config の雛形
-- `/channel-setup` — 方向性ドキュメントから config 完成までの手順
+- `config-template/*.json` — `config/channel/*.json` の責務別雛形
+- `config-template/skills/*.yaml` — `config/skills/*.yaml` のチャンネル固有上書き雛形
+- `/channel-new`（再生成モード） — 方向性ドキュメントから config 完成までの手順
 - `/channel-new`（既存チャンネル取り込みモード） — 既存チャンネル取り込みの手順

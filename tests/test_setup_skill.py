@@ -181,8 +181,8 @@ def test_setup_skill_handles_ttp_wf_new_readiness_next_check() -> None:
     assert (
         "`data` | `/wf-new` の入力モード判定データ（analytics_report / benchmark_data / ttp_wf_new_readiness）" in text
     )
-    assert "#### `ttp_wf_new_readiness` — 承認済み TTP の `/channel-setup` benchmark 反映状態" in text
-    assert "/channel-setup benchmark 反映未完了" in text
-    assert "`config/skills/thumbnail.yaml::reference_images.default`" in text
+    assert "#### `ttp_wf_new_readiness` — 承認済み TTP の `/channel-new` benchmark 反映状態" in text
+    assert "/channel-new benchmark 反映未完了" in text
+    assert "`config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default`" in text
     assert "`data/thumbnail_compare/benchmark/`" in text
     assert "uv run yt-doctor --json" in text

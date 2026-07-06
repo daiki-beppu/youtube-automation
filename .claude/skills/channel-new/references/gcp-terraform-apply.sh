@@ -2,7 +2,7 @@
 # gcp-terraform-apply.sh — Terraform apply → .env 書き出しまでを 1 コマンドで
 #
 # Usage:
-#   .claude/skills/channel-setup/references/gcp-terraform-apply.sh [--tf-dir DIR] [--env-file PATH] [--auto-approve]
+#   .claude/skills/channel-new/references/gcp-terraform-apply.sh [--tf-dir DIR] [--env-file PATH] [--auto-approve]
 #
 # Options:
 #   --tf-dir DIR       Terraform モジュールパス (既定: infra/terraform/gcp)

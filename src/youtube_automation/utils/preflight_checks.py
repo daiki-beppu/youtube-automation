@@ -132,7 +132,7 @@ def check_thumbnail_skill_config(channel_dir: Path, thumbnail_cfg: Mapping[str, 
         if resolved_refs.placeholders or (not resolved_refs.references and not resolved_refs.invalid_reasons):
             issues.append(
                 "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
-                "が未設定/空/TBD です。/channel-setup で benchmark サムネ参照を設定してください"
+                "が未設定/空/TBD です。/channel-new（再生成モード）で benchmark サムネ参照を設定してください"
             )
         elif resolved_refs.references:
             unique_refs = list(dict.fromkeys(resolved_refs.references))
