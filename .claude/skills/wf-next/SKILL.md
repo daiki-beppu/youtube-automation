@@ -68,6 +68,13 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 - `collections/planning/` の `workflow-state.json` を探索
 - 複数ある場合はユーザーに選択を促す
+- 対象確定後、フェーズ処理へ進む前に骨格プリフライトを実行する（fail-loud、#1494）:
+
+  ```bash
+  uv run yt-collection-preflight <collection-dir-name>
+  ```
+
+  `[NG]`（`01-master/` 等の欠落）が報告されたら `--fix` で補完してから続行する。欠落したまま後工程へ進むと `/masterup` / `/videoup` がマスター音源の置き場を見失う
 
 ### 2. フェーズ別処理
 

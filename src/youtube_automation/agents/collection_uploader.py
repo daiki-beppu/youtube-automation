@@ -53,6 +53,7 @@ from youtube_automation.agents.youtube_auto_uploader import (  # noqa: E402
     UPLOAD_SOURCE_EXISTING,
     YouTubeAutoUploader,
 )
+from youtube_automation.scripts.collection_preflight import ensure_collection_preflight  # noqa: E402
 from youtube_automation.scripts.playlist_manager import PlaylistManager  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
@@ -361,10 +362,12 @@ def main():
         elif args.plan:
             target = uploader._find_collection(args.collection)
             if target:
+                ensure_collection_preflight(target)
                 uploader.show_plan(target)
         else:
             target = uploader._find_collection(args.collection)
             if target:
+                ensure_collection_preflight(target)
                 uploader.execute_next_step(target)
 
     except KeyboardInterrupt:

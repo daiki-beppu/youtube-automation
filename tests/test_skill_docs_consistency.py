@@ -88,6 +88,14 @@ def test_localizations_docs_use_root_localizations_file() -> None:
         assert "config/localizations.json::supported_languages" in text
 
 
+def test_wf_new_theme_scenes_fallback_uses_agent_generated_en_phrase() -> None:
+    wf_new = _read(".claude/skills/wf-new/SKILL.md")
+
+    assert "theme_scenes[<theme>] が未定義の場合" in wf_new
+    assert '--en "<Agent-generated English scene phrase>"' in wf_new
+    assert "--translations-file /tmp/scene-phrases.json" in wf_new
+
+
 def test_upload_settings_contract_is_nested_in_schedule_config() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     channel_init = _read("src/youtube_automation/cli/channel_init_templates.py")

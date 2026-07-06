@@ -110,8 +110,17 @@ uv run yt-init-collection "<Collection Name>" "<theme-slug>" --track-count <N> -
 
 スクリプトが以下を自動実行:
 - `collections/planning/YYYYMMDD-<short>-<theme>-collection/` ディレクトリ作成
-- サブディレクトリ（10-assets, 20-documentation）作成
-- `workflow-state.json` 初期化（stage=planning, phase=planning-approved）
+- 標準骨格サブディレクトリ（`01-master`, `02-Individual-music`, `10-assets`, `20-documentation`）作成
+- `workflow-state.json` 初期化（stage=planning, phase=planning）
+
+実行後、骨格が作り切れていることをプリフライトで検証する（fail-loud、#1494）:
+
+```bash
+uv run yt-collection-preflight <collection-dir-name>
+```
+
+- `[NG]` が出たら `uv run yt-collection-preflight <collection-dir-name> --fix` で欠落を補完してから先へ進む
+- `yt-init-collection` が「ディレクトリが既に存在します」で止まった場合も、**手動 mkdir で復旧しない**。`yt-collection-preflight <collection-dir-name> --fix` で骨格を補完する（`workflow-state.json` が無ければ改めて `yt-init-collection` の失敗原因を解消する）
 
 出力されたパスを後続ステップで使用する。フルスキーマは `references/schema.md` を参照。
 
@@ -119,10 +128,15 @@ uv run yt-init-collection "<Collection Name>" "<theme-slug>" --track-count <N> -
 
 次に、多言語タイトル生成で必須となる `workflow-state.json.scene_phrases` を投入する。
 
-`config/localizations.json` の `supported_languages` が 2 言語以上の場合だけ、まず Agent ツールでサブエージェントを起動し、`en` 以外の `supported_languages` 全件に対する翻訳 JSON object だけを生成させる。CLI 内部から Gemini / Claude CLI を呼ばない。
+`config/localizations.json` の `supported_languages` が 2 言語以上の場合だけ、まず Agent ツールでサブエージェントを起動し、`en` 以外の `supported_languages` 全件に対する翻訳 JSON object だけを生成させる。CLI 内部から Gemini / Claude CLI を呼ばない。`config/channel/content.json` の `title.theme_scenes[<theme>]` が未定義の場合は、Agent が企画内容から英語 scene phrase も生成し、`--en` で明示指定する。
 
 ```bash
 uv run yt-populate-scene-phrases <collection-dir-name> \
+  --translations-file /tmp/scene-phrases.json
+
+# theme_scenes[<theme>] が未定義の場合
+uv run yt-populate-scene-phrases <collection-dir-name> \
+  --en "<Agent-generated English scene phrase>" \
   --translations-file /tmp/scene-phrases.json
 ```
 
@@ -130,7 +144,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 - 英語フレーズは `config/channel/content.json` の `title.theme_scenes[<theme>].scene` から自動解決される。翻訳文は Agent ツールで生成し、`--translations-json` または `--translations-file` で渡す
 - **`supported_languages` が 1 言語以下のチャンネルでは翻訳 JSON を生成しない**。CLI 側で自動スキップされるため、必要なら確認目的で引数なし実行してよいが、Agent に翻訳 JSON を作らせない
 - 既に `scene_phrases` が存在する場合もスキップ（`--overwrite` で上書き可能）
-- `theme_scenes[<theme>]` が未定義の場合は `--en "<custom phrase>"` で英語フレーズを明示指定する。詳細は `references/scene_phrases.md` 参照
+- `theme_scenes[<theme>]` が未定義の場合は停止せず、企画内容から Agent が英語 scene phrase と翻訳 JSON を生成し、`--en "<Agent-generated English scene phrase>" --translations-file ...` で投入する。詳細は `references/scene_phrases.md` 参照
 
 **エラーハンドリング:**
 - `theme_scenes` 未定義 + `--en` 未指定 → エラー終了。`config/channel/content.json` の `title.theme_scenes` に該当 theme を追加するか、`--en` を渡して再実行
