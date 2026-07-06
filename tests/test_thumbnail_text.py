@@ -180,8 +180,9 @@ class TestOverlaySpecFromOverlayConfig:
         with pytest.raises(ConfigError, match=message):
             overlay_spec_from_overlay_config(cfg, channel_root=tmp_path, with_channel_name=with_channel_name)
 
-    def test_invalid_anchor_raises(self, tmp_path: Path, test_font: Path):
-        cfg = _overlay_config_dict(test_font, layout={"anchor": "middle"})
+    @pytest.mark.parametrize("anchor", ["middle", False, 0, []])
+    def test_invalid_anchor_raises(self, tmp_path: Path, test_font: Path, anchor):
+        cfg = _overlay_config_dict(test_font, layout={"anchor": anchor})
         with pytest.raises(ConfigError, match="anchor"):
             overlay_spec_from_overlay_config(cfg, channel_root=tmp_path, with_channel_name=False)
 
@@ -486,6 +487,7 @@ class TestComposeThumbnailText:
         outside = tmp_path / "outside"
         output = channel_root / "new-parent" / "thumbnail-v1.jpg"
         channel_root.mkdir()
+        output.parent.mkdir()
         outside.mkdir()
         original_validate = renderer.validate_thumbnail_output_path
         calls = 0
@@ -510,6 +512,46 @@ class TestComposeThumbnailText:
             )
 
         assert not (outside / "thumbnail-v1.jpg").exists()
+
+    def test_public_compose_rejects_intermediate_symlink_race_after_validation(
+        self,
+        tmp_path: Path,
+        background: Path,
+        test_font: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        from youtube_automation.utils.thumbnail_text import renderer
+
+        channel_root = tmp_path / "channel"
+        outside = tmp_path / "outside"
+        backup = tmp_path / "backup-a"
+        output = channel_root / "a" / "b" / "thumbnail-v1.jpg"
+        channel_root.mkdir()
+        output.parent.mkdir(parents=True)
+        (outside / "b").mkdir(parents=True)
+        original_validate = renderer.validate_thumbnail_output_path
+        calls = 0
+
+        def racing_validate(path: Path, *, channel_root: Path) -> None:
+            nonlocal calls
+            calls += 1
+            original_validate(path, channel_root=channel_root)
+            if calls == 2:
+                (channel_root / "a").rename(backup)
+                (channel_root / "a").symlink_to(outside, target_is_directory=True)
+
+        monkeypatch.setattr(renderer, "validate_thumbnail_output_path", racing_validate)
+
+        with pytest.raises(ValidationError, match="出力画像を保存できません"):
+            compose_thumbnail_text(
+                background=background,
+                output=output,
+                channel_root=channel_root,
+                spec=self._spec(test_font),
+                title_lines=["Title"],
+            )
+
+        assert not (outside / "b" / "thumbnail-v1.jpg").exists()
 
     def test_missing_background_raises(self, tmp_path: Path, test_font: Path):
         with pytest.raises(ValidationError, match="背景画像が見つかりません"):

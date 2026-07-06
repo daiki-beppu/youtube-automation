@@ -126,6 +126,16 @@ def _font_path_value(font_cfg: Mapping[str, object], name: str, *, key: str) -> 
     return raw
 
 
+def _parse_anchor(raw: object, *, default: str, key: str) -> str:
+    if raw in (None, ""):
+        return default
+    if not isinstance(raw, str):
+        raise ConfigError(f"{key} は文字列で指定してください: {raw!r}")
+    if raw not in _VALID_ANCHORS:
+        raise ConfigError(f"{key} が不正です: {raw!r} (指定可能: {', '.join(sorted(_VALID_ANCHORS))})")
+    return raw
+
+
 def overlay_config_from_skill_config(skill_config: object) -> Mapping[str, object]:
     if not isinstance(skill_config, Mapping):
         raise ConfigError(f"thumbnail skill-config はマッピングで指定してください ({_SKILL_CONFIG_PATH_HINT})")
@@ -214,11 +224,7 @@ def overlay_spec_from_overlay_config(
         )
 
     layout = _mapping_at(overlay_config, "layout", key=f"{key_prefix}.layout")
-    anchor = str(layout.get("anchor") or "bottom-center")
-    if anchor not in _VALID_ANCHORS:
-        raise ConfigError(
-            f"{key_prefix}.layout.anchor が不正です: {anchor!r} (指定可能: {', '.join(sorted(_VALID_ANCHORS))})"
-        )
+    anchor = _parse_anchor(layout.get("anchor"), default="bottom-center", key=f"{key_prefix}.layout.anchor")
 
     line_spacing = _parse_positive_float(
         layout.get("line_spacing"),

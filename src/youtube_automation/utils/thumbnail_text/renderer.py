@@ -82,26 +82,71 @@ def _image_format_for_suffix(output: Path) -> str:
     return "PNG"
 
 
+def _relative_output_parts(output: Path, *, channel_root: Path) -> tuple[str, ...]:
+    channel_root_resolved = channel_root.resolve()
+    output_abs = _absolute_path(output)
+    try:
+        relative = output_abs.relative_to(channel_root_resolved)
+    except ValueError as exc:
+        raise ValidationError(
+            f"出力先は channel_dir 配下に指定してください: {output} (channel_dir: {channel_root_resolved})"
+        ) from exc
+    parts = relative.parts
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        raise ValidationError(f"出力先パスが不正です: {output}")
+    return parts
+
+
+def _directory_flags() -> int:
+    flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    return flags
+
+
+def _open_or_create_dir_at(parent_fd: int, name: str, *, output: Path) -> int:
+    flags = _directory_flags()
+    try:
+        return os.open(name, flags, dir_fd=parent_fd)
+    except FileNotFoundError:
+        try:
+            os.mkdir(name, 0o777, dir_fd=parent_fd)
+            return os.open(name, flags, dir_fd=parent_fd)
+        except OSError as exc:
+            raise ValidationError(f"出力画像を保存できません: {output} ({exc})") from exc
+    except OSError as exc:
+        raise ValidationError(f"出力画像を保存できません: {output} ({exc})") from exc
+
+
+def _open_output_parent_dir(output: Path, *, channel_root: Path) -> int:
+    parts = _relative_output_parts(output, channel_root=channel_root)
+    try:
+        current_fd = os.open(channel_root.resolve(), _directory_flags())
+    except OSError as exc:
+        raise ValidationError(f"出力画像を保存できません: {output} ({exc})") from exc
+
+    for part in parts[:-1]:
+        try:
+            next_fd = _open_or_create_dir_at(current_fd, part, output=output)
+        finally:
+            os.close(current_fd)
+        current_fd = next_fd
+    return current_fd
+
+
 def _open_output_file_no_follow(output: Path, *, channel_root: Path):
-    output.parent.mkdir(parents=True, exist_ok=True)
     validate_thumbnail_output_path(output, channel_root=channel_root)
 
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
 
-    dir_flags = os.O_RDONLY
-    if hasattr(os, "O_DIRECTORY"):
-        dir_flags |= os.O_DIRECTORY
-    if hasattr(os, "O_NOFOLLOW"):
-        dir_flags |= os.O_NOFOLLOW
-
-    if os.open not in os.supports_dir_fd:
+    if os.open not in os.supports_dir_fd or os.mkdir not in os.supports_dir_fd:
         raise ValidationError("出力画像を保存できません: fd-based の安全なファイル作成を利用できません")
-    try:
-        dir_fd = os.open(output.parent, dir_flags)
-    except OSError as exc:
-        raise ValidationError(f"出力画像を保存できません: {output} ({exc})") from exc
+
+    dir_fd = _open_output_parent_dir(output, channel_root=channel_root)
     try:
         try:
             file_fd = os.open(output.name, flags, 0o666, dir_fd=dir_fd)
