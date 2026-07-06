@@ -129,6 +129,8 @@ options:
 
 ### Phase 6: 最終 persona-definition.md 更新
 
+**前提確認（必須）**: `docs/plans/viewing-scene-matrix.md` が存在しない場合、Phase 6 に進んではならない。ユーザーがスキップを明示した場合のみ、`persona-definition.md` に「viewing-scene 未検証」と注記した上で確定してよい。
+
 `viewing-scene-matrix.md` の結果を反映して `docs/channel/personas/persona-definition.md` を更新する。
 最終版では「暫定」の表記を外し、第一ペルソナ 1 人に収束した判断軸として完成させる。
 
