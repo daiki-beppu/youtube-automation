@@ -36,7 +36,9 @@ from youtube_automation.utils.preflight_checks import (  # noqa: E402
     check_duration,
     check_tags_count,
     check_tags_yt_chars,
+    check_title_codepoint_limit,
     extract_descriptions_md_tags,
+    requires_scene_phrases,
 )
 from youtube_automation.utils.probe import probe_duration  # noqa: E402
 
@@ -78,8 +80,8 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
         pass
     elif not title:
         issues.append("missing 'タイトル案' section")
-    elif len(title) > 100:
-        issues.append(f"title too long: {len(title)} codepoints (>100)")
+    elif msg := check_title_codepoint_limit(title):
+        issues.append(msg)
 
     if description_raw is None:
         pass
@@ -94,15 +96,19 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
             if msg:
                 issues.append(msg)
 
-    # workflow-state.json scene_phrases
+    # workflow-state.json は upload preflight と同じく常に parse する。
+    # 単一言語チャンネルでは scene_phrases の完全性チェックだけを不要扱いにする (#1470)。
     ws = paths.workflow_state_path
     if ws.exists():
         state = json.loads(ws.read_text(encoding="utf-8"))
-        sp = state.get("scene_phrases") or {}
-        required = list(dict.fromkeys(supported_langs))
-        missing = [lang for lang in required if not sp.get(lang)]
-        if missing:
-            issues.append(f"workflow-state.scene_phrases missing langs: {missing[:6]}{'…' if len(missing) > 6 else ''}")
+        if requires_scene_phrases(supported_langs):
+            sp = state.get("scene_phrases") or {}
+            required = list(dict.fromkeys(supported_langs))
+            missing = [lang for lang in required if not sp.get(lang)]
+            if missing:
+                issues.append(
+                    f"workflow-state.scene_phrases missing langs: {missing[:6]}{'…' if len(missing) > 6 else ''}"
+                )
     else:
         issues.append("workflow-state.json missing")
 
@@ -157,8 +163,8 @@ def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
         desc = snippet.get("description", "")
         locs = item.get("localizations", {}) or {}
 
-        if len(title) > 100:
-            issues[vid].append(f"YT title too long: {len(title)}")
+        if msg := check_title_codepoint_limit(title):
+            issues[vid].append(f"YT {msg}")
         if "🎧  🌧" in title or "🎧   🌧" in title:
             issues[vid].append("YT title scene_phrase missing (auto-truncated)")
 

@@ -11,7 +11,7 @@ description: "Use when プレイリストの作成・割り当て・確認をす
 
 ## 前提
 
-`config/channel/playlists.json` が存在し、`playlists` セクションが定義されていること。未定義の場合は `/channel-setup` を案内する。
+`config/channel/playlists.json` が存在し、`playlists` セクションが定義されていること。未定義の場合は `/channel-new`（再生成モード）を案内する。
 
 ## When to Use
 
@@ -92,7 +92,7 @@ uv run yt-playlist-manager --clean-deleted              # 実反映
 ## Cross References
 
 - `/video-upload` — アップロード時に内部で `assign_video()` が呼ばれる（手動 assign 不要が基本）
-- `/channel-setup` — `playlists.json` の初期定義
+- `/channel-new`（再生成モード） — `playlists.json` の初期定義
 - `config/channel/playlists.json` — Canonical ソース
 - `src/youtube_automation/scripts/playlist_manager.py` — 実装本体
 - `src/youtube_automation/scripts/playlist_status.py` — 状態表示の読み取り専用 viewer

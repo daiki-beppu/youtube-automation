@@ -180,59 +180,119 @@ describe("excludeReleasedDiscs", () => {
 });
 
 // --- recordDistrokidRelease ---
+// #1360: serve token 必須の書き込み POST。GET /auth/token で token を取得してから
+// X-Serve-Token 付きで POST し、403 は stale token とみなして 1 回だけ retry する
+// （suno-helper の postDownloaded と同じ書き込み境界契約）。
+
+const RELEASE_RECORD = {
+  collection_id: DISC_UNRELEASED.collection_id,
+  disc: DISC_UNRELEASED.disc,
+  album_title: DISC_UNRELEASED.album_title,
+};
+
+/** /auth/token は 200 + token を返し、POST には指定応答を返す fetch mock。 */
+function mockFetchWithToken(postResponse: () => Response, token = "test-token"): void {
+  fetchMock.mockImplementation(async (url: string) => {
+    if (typeof url === "string" && url.includes("/auth/token")) {
+      return jsonResponse(200, { token });
+    }
+    return postResponse();
+  });
+}
+
+function postCalls(): Array<[string, RequestInit]> {
+  return fetchMock.mock.calls.filter(
+    (c) => typeof c[0] === "string" && (c[0] as string).includes("/distrokid/releases"),
+  ) as unknown as Array<[string, RequestInit]>;
+}
 
 describe("recordDistrokidRelease", () => {
-  it("200 のとき void を返す（POST body と URL の確認）", async () => {
+  it("200 のとき void を返す（token 取得 → X-Serve-Token 付き POST の確認）", async () => {
     // Given
-    fetchMock.mockResolvedValue(jsonResponse(200, {}));
+    mockFetchWithToken(() => jsonResponse(200, {}));
 
     // When
-    await recordDistrokidRelease(BASE_URL, {
-      collection_id: DISC_UNRELEASED.collection_id,
-      disc: DISC_UNRELEASED.disc,
-      album_title: DISC_UNRELEASED.album_title,
-    });
+    await recordDistrokidRelease(BASE_URL, RELEASE_RECORD);
 
-    // Then: 正しい URL と body で POST する。
+    // Then: token 取得 1 回 + POST 1 回。正しい URL / header / body で POST する。
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/auth/token`);
     expect(fetchMock).toHaveBeenCalledWith(
       `${BASE_URL}/distrokid/releases`,
       expect.objectContaining({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          collection_id: DISC_UNRELEASED.collection_id,
-          disc: DISC_UNRELEASED.disc,
-          album_title: DISC_UNRELEASED.album_title,
-        }),
+        headers: { "Content-Type": "application/json", "X-Serve-Token": "test-token" },
+        body: JSON.stringify(RELEASE_RECORD),
       }),
     );
   });
 
-  it("非 OK のとき throw する（caller が warn 処理する）", async () => {
-    // Given: サーバーエラー（500 等）のとき throw して caller に伝える。
-    fetchMock.mockResolvedValue(jsonResponse(500, {}));
+  it("baseUrl 末尾 slash を正規化して token と POST の URL を組み立てる", async () => {
+    // Given
+    mockFetchWithToken(() => jsonResponse(200, {}));
+
+    // When
+    await recordDistrokidRelease(`${BASE_URL}/`, RELEASE_RECORD);
+
+    // Then
+    expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/auth/token`);
+    expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/distrokid/releases`, expect.anything());
+  });
+
+  it("/auth/token が非 2xx のとき POST に進まず throw する", async () => {
+    // Given: token 取得に失敗する（--allow-origin 未 lock のサーバー等）。
+    fetchMock.mockResolvedValue(jsonResponse(403, {}));
 
     // When / Then
-    await expect(
-      recordDistrokidRelease(BASE_URL, {
-        collection_id: "col-id",
-        disc: "disc1",
-        album_title: "Album",
-      }),
-    ).rejects.toThrow("HTTP 500");
+    await expect(recordDistrokidRelease(BASE_URL, RELEASE_RECORD)).rejects.toThrow(/GET \/auth\/token failed: 403/);
+    expect(postCalls()).toHaveLength(0);
+  });
+
+  it("POST が 403 のとき token を再取得して 1 回だけ retry し成功する（stale token）", async () => {
+    // Given: 1 回目の POST は 403（サーバー再起動で token が stale）、2 回目は 200。
+    let tokenCallCount = 0;
+    let postCallCount = 0;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.includes("/auth/token")) {
+        tokenCallCount += 1;
+        return jsonResponse(200, { token: tokenCallCount === 1 ? "stale-token" : "fresh-token" });
+      }
+      postCallCount += 1;
+      return postCallCount === 1 ? jsonResponse(403, {}) : jsonResponse(200, {});
+    });
+
+    // When / Then
+    await expect(recordDistrokidRelease(BASE_URL, RELEASE_RECORD)).resolves.toBeUndefined();
+
+    // token 2 回 + POST 2 回 = 4 回。retry は再取得した fresh token を使う。
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    const posts = postCalls();
+    expect(posts).toHaveLength(2);
+    expect((posts[1][1].headers as Record<string, string>)["X-Serve-Token"]).toBe("fresh-token");
+  });
+
+  it("retry 後も 403 のとき throw する（無限 retry しない）", async () => {
+    // Given: POST が常に 403。
+    mockFetchWithToken(() => jsonResponse(403, {}));
+
+    // When / Then: retry は 1 回まで（token 2 回 + POST 2 回）。
+    await expect(recordDistrokidRelease(BASE_URL, RELEASE_RECORD)).rejects.toThrow("HTTP 403");
+    expect(postCalls()).toHaveLength(2);
+  });
+
+  it("非 OK（500 等）のとき throw する（caller が warn 処理する）", async () => {
+    // Given: サーバーエラー（500 等）のとき throw して caller に伝える。
+    mockFetchWithToken(() => jsonResponse(500, {}));
+
+    // When / Then
+    await expect(recordDistrokidRelease(BASE_URL, RELEASE_RECORD)).rejects.toThrow("HTTP 500");
   });
 
   it("204 でも成功とみなす（No Content レスポンス対応）", async () => {
     // Given: 一部サーバーは 204 No Content で応答する。
-    fetchMock.mockResolvedValue(jsonResponse(204, null));
+    mockFetchWithToken(() => jsonResponse(204, null));
 
     // When / Then: throw しない。
-    await expect(
-      recordDistrokidRelease(BASE_URL, {
-        collection_id: "col-id",
-        disc: "disc1",
-        album_title: "Album",
-      }),
-    ).resolves.toBeUndefined();
+    await expect(recordDistrokidRelease(BASE_URL, RELEASE_RECORD)).resolves.toBeUndefined();
   });
 });

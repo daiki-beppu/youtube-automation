@@ -65,6 +65,8 @@ def _cmd_diff(args: argparse.Namespace) -> int:
     youtube = get_youtube()
     remote_raw = fetch_channel(youtube)
     remote_channel, remote_loc = parse_api_response(remote_raw)
+    if args.no_localizations:
+        remote_loc = {}
     channel_id = remote_raw.get("id", "<unknown>")
     print(f"📡 fetched remote channel settings (channelId={channel_id})")
 
@@ -80,6 +82,8 @@ def _cmd_push(args: argparse.Namespace) -> int:
     youtube = get_youtube()
     remote_raw = fetch_channel(youtube)
     remote_channel, remote_loc = parse_api_response(remote_raw)
+    if args.no_localizations:
+        remote_loc = {}
     channel_id = remote_raw["id"]
     print(f"📡 fetched remote channel settings (channelId={channel_id})")
 
@@ -133,6 +137,8 @@ def _cmd_pull(args: argparse.Namespace) -> int:
     youtube = get_youtube()
     remote_raw = fetch_channel(youtube)
     remote_channel, remote_loc = parse_api_response(remote_raw)
+    if args.no_localizations:
+        remote_loc = {}
     channel_id = remote_raw["id"]
     print(f"📡 fetched remote channel settings (channelId={channel_id})")
 

@@ -1,6 +1,6 @@
 # config/skills/suno.yaml テンプレ（チャンネル個別上書き）
 #
-# `/channel-setup` で `docs/channel/channel-direction.md` の決定を転記する。
+# `/channel-new`（再生成モード）で `docs/channel/channel-direction.md` の決定を転記する。
 # 同梱デフォルトは `.claude/skills/suno/config.default.yaml`。ここに置いたキーで
 # deep-merge 上書きする。`music_engine: lyria` のチャンネルでは生成不要。
 
