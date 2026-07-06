@@ -14,6 +14,7 @@ import pytest
 EXPECTED_ENTRYPOINT_MODULES = {
     "yt-analytics": "youtube_automation.scripts.analytics_system",
     "yt-apply-rain-layers": "youtube_automation.scripts.apply_rain_layers",
+    "yt-automation-update": "youtube_automation.cli.automation_update",
     "yt-benchmark-collect": "youtube_automation.scripts.benchmark_collector",
     "yt-benchmark-comments": "youtube_automation.scripts.fetch_benchmark_comments",
     "yt-bulk-update-desc": "youtube_automation.scripts.bulk_update_descriptions_from_md",
