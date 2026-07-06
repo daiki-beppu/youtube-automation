@@ -13,8 +13,9 @@ description: "Use when 下流リポジトリで automation を最新リリース
 
 Phase 2 の入力源の優先順位:
 
-1. `gh release view <target_tag> --json body` の本文（`<target_tag>` は `v5.5.15` のような `v` 付き tag。`gh` 未インストール時は GitHub REST API を `curl` で取得）
+1. tag pin / sha pin から release tag へ追従する場合は `gh release view <target_tag> --json body` の本文（`<target_tag>` は `v5.5.15` のような `v` 付き tag。`gh` 未インストール時は GitHub REST API を `curl` で取得）
 2. 上記が空 / 取得失敗した場合は `gh api .../contents/CHANGELOG.md` または raw `CHANGELOG.md` を `curl` で取得し、`[<target_version>] - <DATE>` セクションを抽出（`target_version="${target_tag#v}"`）
+3. main 追従の場合は release tag を使わず、`yt-automation-update check` が出力した `uv.lock` の `<current_sha>` と `upstream main HEAD` の `<target_sha>` を使って GitHub compare / commit API から変更要約を作る
 
 Migration セクションの構造契約は `docs/changelog-contract.md` を参照（所要時間の目安 / local fix 衝突注意 が必須要素）。
 
@@ -142,7 +143,38 @@ else
 fi
 ```
 
-### Step 2-1. Release 本文の取得（単一バージョン差分）
+### Step 2-1. 変更本文の取得（単一差分）
+
+**main 追従（branch = "main" / URL `@main`）の場合**
+
+Release / CHANGELOG ではなく SHA 範囲で要約する。`check` 出力から `upstream main HEAD` を `<target_sha>`、`uv.lock 解決済み sha` を `<current_sha>` として控える。`uv.lock` に sha が無い場合は `<current_sha>` 不明として `<target_sha>` の commit 詳細だけを取得し、範囲不明であることを Step 2-4 に明記する。
+
+```bash
+target_sha="<target_sha>"
+current_sha="<current_sha>"  # uv.lock に無い場合は空
+
+if [ -n "$current_sha" ]; then
+  if [ "${YT_AUTOMATION_GITHUB_MODE:-gh}" = "gh" ]; then
+    gh api "repos/daiki-beppu/youtube-automation/compare/${current_sha}...${target_sha}" \
+      > "/tmp/compare-main-${target_sha}.json"
+  else
+    curl -fsSL "https://api.github.com/repos/daiki-beppu/youtube-automation/compare/${current_sha}...${target_sha}" \
+      > "/tmp/compare-main-${target_sha}.json"
+  fi
+else
+  if [ "${YT_AUTOMATION_GITHUB_MODE:-gh}" = "gh" ]; then
+    gh api "repos/daiki-beppu/youtube-automation/commits/${target_sha}" \
+      > "/tmp/commit-main-${target_sha}.json"
+  else
+    curl -fsSL "https://api.github.com/repos/daiki-beppu/youtube-automation/commits/${target_sha}" \
+      > "/tmp/commit-main-${target_sha}.json"
+  fi
+fi
+```
+
+AI は compare / commit JSON から commit message、PR 番号らしき参照、変更ファイルの要約を抽出する。main 追従では `<target_tag>` / `target_version` を使わない。
+
+**tag pin / sha pin から release tag へ追従する場合**
 
 **第 1 経路: GitHub Release 本文**
 
@@ -239,7 +271,7 @@ AI は以下を抽出して提示する:
 
 ```
 > [HUMAN STEP]
-> 以下が <target_tag> への追従内容です（CHANGELOG.md / GitHub Release 本文より抽出）:
+> 以下が <target_tag または target_sha> への追従内容です（tag 追従は CHANGELOG.md / GitHub Release 本文、main 追従は GitHub compare / commit API より抽出）:
 >
 >   所要時間: <elapsed>（Migration セクションより）
 >   重大変更 Top 3:
@@ -252,7 +284,7 @@ AI は以下を抽出して提示する:
 >     <conflicts>
 >
 > このまま Phase 3 (実行) に進んでよければ "yes" と返してください。
-> 詳細を確認したければ /tmp/release-<target_tag>.md または /tmp/changelog-section-<target_tag>.md を開いてください。
+> 詳細を確認したければ tag 追従では /tmp/release-<target_tag>.md または /tmp/changelog-section-<target_tag>.md、main 追従では /tmp/compare-main-<target_sha>.json または /tmp/commit-main-<target_sha>.json を開いてください。
 > 中止する場合は "no" と返してください（Phase 3 はスキップして終了）。
 ```
 
@@ -440,16 +472,16 @@ git add pyproject.toml uv.lock .claude/skills/
 
 ### Step 4-2. コミット
 
-`commit-convention` スキル準拠で日本語 Conventional Commits:
+`commit-convention` スキル準拠で日本語 Conventional Commits。`<target_ref>` は tag 追従では `<target_tag>`、main 追従では短縮した `<target_sha>`（例: 先頭 12 桁）にする:
 
 ```bash
-git commit -m "chore: youtube-automation <target_tag> への追従"
+git commit -m "chore: youtube-automation <target_ref> への追従"
 ```
 
 下流側に追従 issue 番号が確定している場合（例: bobble#41 のような）は、利用者に確認して末尾に `(#N)` を付ける:
 
 ```bash
-git commit -m "chore: youtube-automation <target_tag> への追従 (#N)"
+git commit -m "chore: youtube-automation <target_ref> への追従 (#N)"
 ```
 
 ### Step 4-3. push は AI が実行しない
@@ -457,7 +489,7 @@ git commit -m "chore: youtube-automation <target_tag> への追従 (#N)"
 完了メッセージで以下を案内するだけで終了:
 
 ```
-✓ <target_tag> へのローカル追従が完了しました。
+✓ <target_ref> へのローカル追従が完了しました。
   以下を実行してリモートへ反映してください:
     git push
 

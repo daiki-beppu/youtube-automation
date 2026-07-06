@@ -219,11 +219,11 @@ def cmd_check(args: argparse.Namespace) -> int:
         if pin.kind == "branch":
             head = _fetch_branch_head_sha(pin.value)
             locked = _locked_git_sha(root)
-            print(f"upstream {pin.value} HEAD: {head[:12]}")
+            print(f"upstream {pin.value} HEAD: {head}")
             if locked is None:
                 print("→ uv.lock に解決済み sha がありません（yt-automation-update apply で取り込めます）")
                 return EXIT_DIFF
-            print(f"uv.lock 解決済み sha: {locked[:12]}")
+            print(f"uv.lock 解決済み sha: {locked}")
             if locked == head:
                 print("✓ 既に最新です (uv.lock が upstream HEAD と一致)")
                 return EXIT_UP_TO_DATE

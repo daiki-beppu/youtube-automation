@@ -407,6 +407,10 @@ def test_check_branch_follow_diff(
 
     assert main(["check", "--target", str(repo)]) == EXIT_DIFF
 
+    out = capsys.readouterr().out
+    assert _SHA_OLD in out
+    assert _SHA_NEW in out
+
 
 def test_check_branch_follow_without_lock_is_diff(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
@@ -416,7 +420,9 @@ def test_check_branch_follow_without_lock_is_diff(
 
     assert main(["check", "--target", str(repo)]) == EXIT_DIFF
 
-    assert "uv.lock に解決済み sha がありません" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert _SHA_NEW in out
+    assert "uv.lock に解決済み sha がありません" in out
 
 
 def test_check_sha_pin_requires_human_decision(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
