@@ -6,6 +6,7 @@ export const DEFAULT_BITRATE = "192k";
 export const DEFAULT_CROSSFADE_DURATION = 1;
 
 const BitrateSchema = z.string().trim().min(1);
+const ChannelDirSchema = z.string().trim().min(1);
 
 const inputSpecifiedFields = [
   ["bitrate", "bitrate"],
@@ -92,7 +93,7 @@ const GenerateMasterRawInputSchema = z.preprocess(
     .object({
       __specified: GenerateMasterSpecifiedSchema,
       bitrate: BitrateSchema.default(DEFAULT_BITRATE),
-      channel_dir: z.string().optional(),
+      channel_dir: ChannelDirSchema.optional(),
       collection: z.string().min(1).optional(),
       crossfade_duration: z
         .number()
@@ -128,7 +129,7 @@ const GenerateMasterRawInputSchema = z.preprocess(
 const GenerateMasterInternalInputSchema = z
   .object({
     bitrate: BitrateSchema,
-    channelDir: z.string().optional(),
+    channelDir: ChannelDirSchema.optional(),
     collection: z.string().min(1).optional(),
     crossfadeDuration: z.number().positive(),
     loop: z.number().int().positive().optional(),

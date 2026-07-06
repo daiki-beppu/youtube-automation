@@ -61,6 +61,8 @@ export const withConfigOverrides = (
   input: GenerateMasterInternalInput,
   config: MasterupAudioConfig
 ): EffectiveGenerateMasterInput => {
+  const { shuffleSeed: inputShuffleSeed } = input;
+  const { shuffleSeed: configShuffleSeed } = config;
   const bitrate =
     !input.specified.bitrate && config.bitrate !== undefined
       ? config.bitrate
@@ -79,9 +81,16 @@ export const withConfigOverrides = (
     input.specified.shuffle || input.specified.shuffleSeed
       ? input.shuffle || input.shuffleSeed !== undefined
       : config.shuffle === true;
-  const shuffleSeed = input.specified.shuffleSeed
-    ? input.shuffleSeed
-    : config.shuffleSeed;
+  const useConfigShuffleSeed =
+    !input.specified.shuffle &&
+    !input.specified.shuffleSeed &&
+    config.shuffle === true;
+  let shuffleSeed: number | undefined;
+  if (input.specified.shuffleSeed) {
+    shuffleSeed = inputShuffleSeed;
+  } else if (useConfigShuffleSeed) {
+    shuffleSeed = configShuffleSeed;
+  }
   const pinFirstCount =
     input.pinFirst.length === 0 && !input.specified.pinFirstCount
       ? config.pinFirstCount

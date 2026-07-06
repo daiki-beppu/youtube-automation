@@ -18,11 +18,10 @@ beforeEach(saveGenerateMasterEnv);
 afterEach(restoreGenerateMasterFixtures);
 
 describe("core registry — masterup.generate-master entry", () => {
-  test("is registered under a dotted key with channelDir dependency", () => {
+  test("is registered under a dotted key without required dependencies", () => {
     const entry = REGISTRY["masterup.generate-master"];
-    // receives channel root resolution through the registry boundary.
     expect(entry).toBeDefined();
-    expect(entry.deps).toEqual(["channelDir"]);
+    expect(entry.deps).toEqual([]);
     expect(entry.description.length).toBeGreaterThan(0);
   });
 
@@ -32,7 +31,7 @@ describe("core registry — masterup.generate-master entry", () => {
       collection: "/tmp/does-not-exist",
       crossfade_duration: 1,
     });
-    const result = await entry.run(input, { channelDir: "/tmp/channel" });
+    const result = await entry.run(input, {});
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.domain).toBe("validation");
@@ -53,10 +52,11 @@ describe("core registry — masterup.generate-master entry", () => {
 
     const input = entry.inputSchema.parse({
       bitrate: "192k",
+      channel_dir: channelRoot,
       collection: "collections/demo",
       crossfade_duration: 1,
     });
-    const result = await entry.run(input, { channelDir: channelRoot });
+    const result = await entry.run(input, {});
 
     expect(result.ok).toBe(true);
     if (!result.ok) {

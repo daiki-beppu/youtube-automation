@@ -148,21 +148,6 @@ const runTaykFrom = (
   });
 };
 
-const runYtAlias = (...argv: string[]): ReturnType<typeof Bun.spawnSync> => {
-  const binDir = makeTempRoot("yt-generate-master-alias-bin-");
-  const executable = join(binDir, "yt");
-  writeText(
-    executable,
-    `#!/usr/bin/env sh\nexec bun ${JSON.stringify(taykScript)} "$@"\n`
-  );
-  chmodSync(executable, 0o755);
-  return Bun.spawnSync([executable, ...argv], {
-    cwd: repoRoot,
-    env: { ...process.env },
-    timeout: CLI_SMOKE_TIMEOUT_MS,
-  });
-};
-
 const readFfmpegCall = (logPath: string): string[] => {
   const [line] = readFileSync(logPath, "utf-8").trim().split("\n");
   if (line === undefined) {
@@ -209,7 +194,7 @@ describe("tayk dispatcher — generate-master", () => {
     };
 
     expect(packageJson.bin.tayk).toBe("./bin/tayk.ts");
-    expect(packageJson.bin.yt).toBe("./bin/tayk.ts");
+    expect(Object.keys(packageJson.bin).toSorted()).toEqual(["tayk"]);
   });
 
   test(
@@ -221,13 +206,6 @@ describe("tayk dispatcher — generate-master", () => {
     },
     CLI_SMOKE_TIMEOUT_MS
   );
-
-  testCliSmoke("yt alias reaches generate-master help", () => {
-    const proc = runYtAlias("generate-master", "--help");
-
-    expect(proc.exitCode).toBe(0);
-    expect(proc.stdout?.toString()).toContain("--target-duration");
-  });
 
   testCliSmoke(
     "runs generate-master through registry and prints JSON output",
@@ -468,6 +446,27 @@ describe("tayk dispatcher — generate-master", () => {
       "--bitrate",
       "   ",
       "collections/demo"
+    );
+
+    expect(proc.exitCode).toBe(1);
+    expect(proc.stdout?.toString()).toBe("");
+    expect(proc.stderr?.toString()).toContain("[validation]");
+    expect(existsSync(fake.logPath)).toBe(false);
+  });
+
+  testCliSmoke("rejects blank channel-dir before ffmpeg", () => {
+    const channelRoot = makeTempRoot("yt-generate-master-channel-");
+    const collection = join(channelRoot, "collections/demo");
+    setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
+    const fake = installFakeFfmpeg();
+
+    const proc = runTayk(
+      fake.env,
+      "generate-master",
+      "--json",
+      "--channel-dir",
+      "   ",
+      collection
     );
 
     expect(proc.exitCode).toBe(1);

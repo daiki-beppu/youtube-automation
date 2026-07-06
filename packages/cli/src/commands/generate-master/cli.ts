@@ -3,7 +3,6 @@ import process from "node:process";
 
 import { err, toServiceError } from "@youtube-automation/core";
 import type { GenerateMasterServiceInput } from "@youtube-automation/core/generate-master";
-import type { DepsMap } from "@youtube-automation/core/registry";
 import { REGISTRY } from "@youtube-automation/core/registry";
 import { defineCommand } from "citty";
 
@@ -17,27 +16,22 @@ import {
 
 const generateMasterEntry = REGISTRY["masterup.generate-master"];
 
-type GenerateMasterDeps = Pick<
-  DepsMap,
-  (typeof generateMasterEntry.deps)[number]
->;
-
 const isMissingChannelDirError = (error: unknown): boolean =>
   error instanceof Error &&
   error.message.startsWith("config: CHANNEL_DIR 環境変数を設定するか");
 
-const resolveGenerateMasterDeps = (
-  input: Pick<Partial<GenerateMasterServiceInput>, "channelDir" | "collection">,
+const withContextChannelDir = (
+  input: GenerateMasterServiceInput,
   channelDir: string | undefined
-): GenerateMasterDeps => {
+): GenerateMasterServiceInput => {
   if (input.channelDir !== undefined) {
-    return { channelDir: input.channelDir };
+    return input;
   }
   if (channelDir !== undefined) {
-    return { channelDir };
+    return { ...input, channelDir };
   }
   if (input.collection !== undefined && isAbsolute(input.collection)) {
-    return { channelDir: "" };
+    return input;
   }
   throw new Error(
     "validation: relative collection requires channel_dir or CHANNEL_DIR"
@@ -51,15 +45,15 @@ const parseExplicitChannelDir = (rawArgs: string[]): string | undefined => {
       continue;
     }
     if (arg.startsWith("--channel-dir=")) {
-      const value = arg.slice("--channel-dir=".length);
+      const value = arg.slice("--channel-dir=".length).trim();
       if (value.length === 0) {
         throw new Error("validation: --channel-dir requires a value");
       }
       return value;
     }
     if (arg === "--channel-dir") {
-      const value = rawArgs[index + 1];
-      if (value === undefined || value.startsWith("-")) {
+      const value = rawArgs[index + 1]?.trim();
+      if (value === undefined || value.length === 0 || value.startsWith("-")) {
         throw new Error("validation: --channel-dir requires a value");
       }
       return value;
@@ -76,7 +70,7 @@ const resolveContextChannelDir = async (
     return explicit;
   }
   try {
-    const deps = await resolveDeps(generateMasterEntry.deps);
+    const deps = await resolveDeps(["channelDir"] as const);
     return deps.channelDir;
   } catch (error) {
     if (isMissingChannelDirError(error)) {
@@ -159,9 +153,11 @@ export const generateMasterCommand = defineCommand({
         }
         const { input, quiet: inputQuiet } = parsedInput.value;
         quiet = inputQuiet;
-        const serviceInput = generateMasterEntry.inputSchema.parse(input);
-        const deps = resolveGenerateMasterDeps(serviceInput, channelDir);
-        return await generateMasterEntry.run(serviceInput, deps);
+        const serviceInput = withContextChannelDir(
+          generateMasterEntry.inputSchema.parse(input),
+          channelDir
+        );
+        return await generateMasterEntry.run(serviceInput, {});
       } catch (error) {
         return err(toServiceError(error));
       }

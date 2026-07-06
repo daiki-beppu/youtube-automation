@@ -84,6 +84,23 @@ describe("GenerateMasterInputSchema — snake_case input contract", () => {
     }
   });
 
+  test("rejects blank channel_dir values", () => {
+    for (const channelDir of ["", "   "]) {
+      expect(() =>
+        GenerateMasterInputSchema.parse({
+          channel_dir: channelDir,
+          collection: "/tmp/collection",
+        })
+      ).toThrow();
+      expect(() =>
+        GenerateMasterServiceInputSchema.parse({
+          channelDir,
+          collection: "/tmp/collection",
+        })
+      ).toThrow();
+    }
+  });
+
   test("rejects unknown keys instead of silently dropping them", () => {
     expect(() =>
       GenerateMasterInputSchema.parse({

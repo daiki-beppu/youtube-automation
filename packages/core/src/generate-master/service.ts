@@ -42,6 +42,17 @@ const parseGenerateMasterInput = (
 ): GenerateMasterInternalInput =>
   ParseableGenerateMasterInputSchema.parse(input);
 
+const resolveChannelDir = (
+  input: GenerateMasterInternalInput,
+  deps: Partial<GenerateMasterDeps> | undefined
+): string | undefined => {
+  const channelDir = input.channelDir ?? deps?.channelDir;
+  if (channelDir !== undefined && channelDir.trim().length === 0) {
+    throw new Error("validation: channel_dir requires a value");
+  }
+  return channelDir;
+};
+
 const resolveCollectionPath = (
   input: GenerateMasterInternalInput,
   deps: Partial<GenerateMasterDeps> | undefined
@@ -49,13 +60,13 @@ const resolveCollectionPath = (
   if (input.collection === undefined) {
     return resolveCollectionDir(null);
   }
-  const channelDir = input.channelDir ?? deps?.channelDir;
+  const channelDir = resolveChannelDir(input, deps);
   if (isAbsolute(input.collection)) {
-    return channelDir === undefined || channelDir.length === 0
+    return channelDir === undefined
       ? resolve(input.collection)
       : resolveCollectionPathForChannel(channelDir, input.collection);
   }
-  if (channelDir === undefined || channelDir.length === 0) {
+  if (channelDir === undefined) {
     throw new Error(
       "validation: relative collection requires channel_dir or CHANNEL_DIR"
     );
@@ -67,8 +78,8 @@ const resolveConfigChannelDir = (
   input: GenerateMasterInternalInput,
   deps: Partial<GenerateMasterDeps> | undefined
 ): string | undefined => {
-  const channelDir = input.channelDir ?? deps?.channelDir;
-  if (channelDir !== undefined && channelDir.length > 0) {
+  const channelDir = resolveChannelDir(input, deps);
+  if (channelDir !== undefined) {
     return channelDir;
   }
   return input.collection !== undefined && isAbsolute(input.collection)

@@ -243,6 +243,31 @@ describe("generateMasterService — pin, shuffle, and loop ordering", () => {
     expect(output.messages).toContain("[Shuffle] seed=42");
   });
 
+  test("uses an auto seed for explicit shuffle without shuffle_seed", async () => {
+    const channelRoot = makeTempRoot("generate-master-channel-");
+    setupCollection(channelRoot, "collections/demo", [
+      "01-a.mp3",
+      "02-b.mp3",
+      "03-c.mp3",
+    ]);
+    writeText(
+      join(channelRoot, "config", "skills", "masterup.json"),
+      JSON.stringify({ audio: { shuffle_seed: 42 } })
+    );
+    installFakeFfmpeg();
+
+    const output = await runOk({
+      channel_dir: channelRoot,
+      collection: "collections/demo",
+      shuffle: true,
+    });
+
+    expect(
+      output.messages.some((message) => /^\[Shuffle\] seed=\d+$/u.test(message))
+    ).toBe(true);
+    expect(output.messages).not.toContain("[Shuffle] seed=42");
+  });
+
   test("keeps public parsed camelCase input ahead of config overrides", async () => {
     const channelRoot = makeTempRoot("generate-master-channel-");
     setupCollection(channelRoot, "collections/demo", ["01-a.mp3", "02-b.mp3"]);
