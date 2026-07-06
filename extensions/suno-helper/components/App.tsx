@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { DEFAULT_URL, DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
+import { DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
 import {
   buildInitialPatternSelection,
   reconcilePatternSelection,
@@ -21,6 +21,7 @@ export function App() {
   const {
     url,
     setUrl,
+    serverSources,
     collections,
     selectedCollectionId,
     selectCollection,
@@ -126,14 +127,18 @@ export function App() {
       <h1 className="text-base font-semibold">Suno Helper</h1>
 
       <label className="flex flex-col gap-1 text-sm">
-        サーバー URL
-        <input
-          type="text"
+        ローカル配信元
+        <select
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder={DEFAULT_URL}
           className="rounded border border-gray-300 px-2 py-1"
-        />
+        >
+          {serverSources.map((source) => (
+            <option key={source.url} value={source.url}>
+              {source.label} - {source.url}
+            </option>
+          ))}
+        </select>
       </label>
 
       <label className="flex flex-col gap-1 text-sm">

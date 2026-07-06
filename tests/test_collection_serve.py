@@ -40,6 +40,8 @@ import pytest
 from youtube_automation.scripts.collection_serve import (
     _resolve_distrokid_capture_root,
     build_collections_index,
+    build_server_info,
+    channel_hostname,
     create_server,
     find_collection_dirs,
     is_origin_allowed,
@@ -64,6 +66,9 @@ _COLLECTIONS_ROUTE = "/collections"
 
 # 外部 HTTP 契約（#1023）: 拡張が初回接続時に fetch する互換確認サブパス。
 _VERSION_ROUTE = "/version"
+
+# 外部 HTTP 契約（#1352）: 拡張が接続先 selector の label 更新に使う配信元情報。
+_SERVER_INFO_ROUTE = "/server-info"
 
 
 def _collection_prompts_route(cid: str) -> str:
@@ -290,6 +295,55 @@ def test_get_suno_prompts_json_returns_array_body(serve):
         body = json.loads(resp.read().decode("utf-8"))
 
     assert body == entries
+
+
+def test_channel_hostname_slugifies_channel_name():
+    """Given channel name
+    When channel_hostname を呼ぶ
+    Then `*.localhost` のチャンネル識別 hostname を返す。
+    """
+    assert channel_hostname("Rainy Jazz Night") == "rainy-jazz-night.localhost"
+    assert channel_hostname("  DeepFocus 365  ") == "deepfocus-365.localhost"
+
+
+def test_build_server_info_returns_selector_payload():
+    """Given channel meta と port
+    When build_server_info を呼ぶ
+    Then helper selector が表示・保存できる payload を返す。
+    """
+    assert build_server_info("Test Channel", "TC", 7873) == {
+        "channel_name": "Test Channel",
+        "channel_short": "TC",
+        "hostname": "test-channel.localhost",
+        "port": 7873,
+        "base_url": "http://test-channel.localhost:7873",
+        "label": "Test Channel (test-channel.localhost:7873)",
+    }
+
+
+def test_build_server_info_uses_channel_short_when_name_has_no_hostname_chars():
+    """Given 非 ASCII の channel name と short
+    When build_server_info を呼ぶ
+    Then hostname は short から作る。
+    """
+    assert build_server_info("雨のジャズ", "rjn", 7874)["base_url"] == "http://rjn.localhost:7874"
+
+
+def test_get_server_info_returns_json_body(serve):
+    """Given prompts データを公開するサーバー
+    When `GET /server-info`
+    Then selector 用の配信元情報を JSON で返す。
+    """
+    base = serve([{"name": "A", "style": "slow", "lyrics": ""}])
+
+    with urllib.request.urlopen(f"{base}{_SERVER_INFO_ROUTE}") as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert body["channel_name"] == "YouTube Automation"
+    assert body["hostname"] == "youtube-automation.localhost"
+    assert body["port"] == urllib.parse.urlparse(base).port
+    assert body["base_url"] == f"http://youtube-automation.localhost:{body['port']}"
 
 
 def test_post_suno_playlists_single_mode_returns_404_without_creating_legacy_json(serve, tmp_path):

@@ -83,6 +83,8 @@ vi.mock("../lib/storage", () => ({
     getValue: vi.fn(async () => ""),
     setValue: vi.fn(async () => undefined),
   },
+  readServerSources: vi.fn(async () => [{ id: "localhost-7873", label: "localhost", url: BASE_URL }]),
+  rememberServerSource: vi.fn(async () => [{ id: "localhost-7873", label: "localhost", url: BASE_URL }]),
 }));
 
 vi.mock("../lib/messaging", () => ({

@@ -9,6 +9,7 @@ import {
   CLIPS_PER_REQUEST,
   COLLECTIONS_ROUTE,
   collectionPromptsRoute,
+  DEFAULT_SERVER_SOURCES,
   DEFAULT_URL,
   FEED_V3_METHOD,
   FEED_V3_PATH,
@@ -22,6 +23,7 @@ import {
   PROMPTS_ROUTE,
   QUEUE_ERROR_WAIT_MS,
   QUEUE_SLOT_WAIT_TIMEOUT_MS,
+  SERVER_HOST_PERMISSIONS,
   SPEED_PRESET_STORAGE_KEY,
   SPEED_PRESETS,
   STORAGE_KEY,
@@ -38,8 +40,19 @@ describe("shared/constants: サーバー互換の契約値", () => {
     expect(PROMPTS_ROUTE).toBe("/suno/prompts.json");
   });
 
-  it("Given 移行後の定数 When DEFAULT_URL を読む Then 旧実装と同じローカル配信元である", () => {
-    expect(DEFAULT_URL).toBe("http://localhost:7873");
+  it("Given server selector When DEFAULT_URL を読む Then チャンネル識別可能な既定 hostname である", () => {
+    expect(DEFAULT_URL).toBe("http://youtube-automation.localhost:7873");
+  });
+
+  it("Given server selector When 既定候補を読む Then チャンネル別 hostname と legacy localhost を持つ", () => {
+    expect(DEFAULT_SERVER_SOURCES.map((source) => source.url)).toEqual([
+      "http://youtube-automation.localhost:7873",
+      "http://localhost:7873",
+    ]);
+  });
+
+  it("Given server selector When host permissions を読む Then *.localhost を許可する", () => {
+    expect(SERVER_HOST_PERMISSIONS).toContain("http://*.localhost/*");
   });
 
   it("Given overlay 化 (#892) When OVERLAY_STATE_KEY を読む Then overlay 位置・最小化を永続化する key 名である", () => {

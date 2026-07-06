@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { SERVER_HOST_PERMISSIONS } from "../../shared/constants";
 import { MANIFEST_CONTENT_SCRIPT_MATCHES, MANIFEST_HOST_PERMISSIONS, MANIFEST_PERMISSIONS } from "../lib/manifest";
 import wxtConfig from "../wxt.config";
 
@@ -39,9 +40,9 @@ describe("wxt.config: manifest 権限の SSOT 一致", () => {
     expect((manifest as { permissions?: string[] }).permissions).toEqual([...MANIFEST_PERMISSIONS]);
   });
 
-  it("Given wxt.config の manifest When host_permissions を読む Then MANIFEST_HOST_PERMISSIONS と一致する", () => {
+  it("Given wxt.config の manifest When host_permissions を読む Then DistroKid とローカル配信元を許可する", () => {
     const manifest = wxtConfig.manifest as { host_permissions?: string[] };
-    expect(manifest.host_permissions).toEqual([...MANIFEST_HOST_PERMISSIONS]);
+    expect(manifest.host_permissions).toEqual([...MANIFEST_HOST_PERMISSIONS, ...SERVER_HOST_PERMISSIONS]);
   });
 
   it("Given wxt.config の manifest When 過剰権限を探す Then 広域権限と suno-helper 専用権限を含まない", () => {

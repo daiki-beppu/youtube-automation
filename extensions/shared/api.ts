@@ -6,6 +6,7 @@ import {
   COLLECTIONS_ROUTE,
   DISTROKID_COLLECTIONS_ROUTE,
   DISTROKID_RELEASES_ROUTE,
+  SERVER_INFO_ROUTE,
   VERSION_ROUTE,
 } from "./constants";
 
@@ -75,6 +76,16 @@ export interface CollectionSummary {
 export interface ServerVersionInfo {
   version: string;
   min_extension_version: string;
+}
+
+/** GET /server-info の wire スキーマ（#1352）。 */
+export interface ServerInfo {
+  channel_name: string;
+  channel_short: string;
+  hostname: string;
+  port: number;
+  base_url: string;
+  label: string;
 }
 
 export type CompatibilityResult =
@@ -291,6 +302,23 @@ export async function fetchServerVersion(
   return {
     version: assertSemver(record.version, "version"),
     min_extension_version: minExtensionVersion,
+  };
+}
+
+export async function fetchServerInfo(baseUrl: string): Promise<ServerInfo> {
+  const resp = await fetch(`${normalizeBaseUrl(baseUrl)}${SERVER_INFO_ROUTE}`);
+  if (!resp.ok) {
+    throw new Error(`HTTP ${resp.status}`);
+  }
+  const data: unknown = await resp.json();
+  const record = assertObject(data, "server-info");
+  return {
+    channel_name: assertString(record.channel_name, "channel_name"),
+    channel_short: assertString(record.channel_short, "channel_short"),
+    hostname: assertString(record.hostname, "hostname"),
+    port: assertNonNegativeInteger(record.port, "port"),
+    base_url: assertString(record.base_url, "base_url"),
+    label: assertString(record.label, "label"),
   };
 }
 

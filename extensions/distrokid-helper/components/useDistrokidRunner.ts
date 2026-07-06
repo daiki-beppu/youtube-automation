@@ -8,15 +8,17 @@ import { fetchAsset, fetchCollectionRelease, fetchRelease, ReleaseUnavailableErr
 import { onMessage, sendMessage, PHASES } from "@/lib/messaging";
 import type { Phase } from "@/lib/messaging";
 import { runInjection } from "@/lib/inject-runner";
-import { serverUrlItem } from "@/lib/storage";
+import { readServerSources, rememberServerSource, serverUrlItem } from "@/lib/storage";
 import type { ReleasePayload } from "@/lib/types";
 import {
-  fetchDistrokidCollections,
   excludeReleasedDiscs,
+  fetchDistrokidCollections,
+  fetchServerInfo,
   resolveCompatibilityWarning,
   type DistrokidCollectionSummary,
   type DistrokidReleaseRecord,
 } from "../../shared/api";
+import type { LocalServerSource } from "../../shared/constants";
 
 // 無効チャンネル（distrokid.enabled=false / 未配置）時のガイダンス（要件 #16）。
 const UNAVAILABLE_GUIDANCE =
@@ -26,6 +28,7 @@ const UNAVAILABLE_GUIDANCE =
 export interface DistrokidRunnerState {
   serverUrl: string;
   setServerUrl: (url: string) => void;
+  serverSources: LocalServerSource[];
   payload: ReleasePayload | null;
   busy: boolean;
   phase: Phase | null;
@@ -56,6 +59,7 @@ async function activeTabId(): Promise<number> {
 
 export function useDistrokidRunner(): DistrokidRunnerState {
   const [serverUrl, setServerUrl] = useState("");
+  const [serverSources, setServerSources] = useState<LocalServerSource[]>([]);
   const [payload, setPayload] = useState<ReleasePayload | null>(null);
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<Phase | null>(null);
@@ -109,6 +113,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
         void loadCollections(trimmed);
       }
     });
+    void readServerSources().then(setServerSources);
   }, [loadCollections]);
 
   useEffect(() => {
@@ -128,15 +133,24 @@ export function useDistrokidRunner(): DistrokidRunnerState {
     setBusy(true);
     setPhase(null);
     setMessage("");
-    await serverUrlItem.setValue(serverUrl);
-    const trimmedServerUrl = serverUrl.trim();
+    let baseUrl = serverUrl.trim();
+    try {
+      const info = await fetchServerInfo(baseUrl);
+      baseUrl = info.base_url;
+      setServerUrl(baseUrl);
+      await serverUrlItem.setValue(baseUrl);
+      setServerSources(await rememberServerSource(baseUrl, info.label));
+    } catch {
+      await serverUrlItem.setValue(baseUrl);
+      setServerSources(await rememberServerSource(baseUrl));
+    }
     const extensionVersion = browser.runtime.getManifest().version;
-    setCompatibilityWarning(await resolveCompatibilityWarning(trimmedServerUrl, extensionVersion));
+    setCompatibilityWarning(await resolveCompatibilityWarning(baseUrl, extensionVersion));
 
     // URL 変更時に collection 一覧を再取得する（blur 後の最初のデータ取得で最新化）。
     // state の collections/selectedIndex はこのレンダーの closure では古いままなので、
     // 戻り値の最新一覧を直接使う（stale closure 回避、#934）。
-    const list = await loadCollections(trimmedServerUrl);
+    const list = await loadCollections(baseUrl);
 
     try {
       let result: ReleasePayload;
@@ -162,11 +176,11 @@ export function useDistrokidRunner(): DistrokidRunnerState {
           disc: selected.disc,
           album_title: selected.album_title,
         };
-        result = await fetchCollectionRelease(serverUrl, selected.collection_id, selected.disc);
+        result = await fetchCollectionRelease(baseUrl, selected.collection_id, selected.disc);
       } else {
         // 単一 mode（後方互換）: 従来の /distrokid/release.json を取得する。
         payloadSourceRef.current = null;
-        result = await fetchRelease(serverUrl);
+        result = await fetchRelease(baseUrl);
       }
       setPayload(result);
     } catch (error) {
@@ -248,6 +262,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
   return {
     serverUrl,
     setServerUrl,
+    serverSources,
     payload,
     busy,
     phase,

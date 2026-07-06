@@ -14,7 +14,7 @@ import {
   resolvePromptCollectionId,
   visiblePromptCollections,
 } from "../../shared/api";
-import { CLIPS_PER_REQUEST, type ItemState, type SpeedPresetId } from "../../shared/constants";
+import { CLIPS_PER_REQUEST, type ItemState, type LocalServerSource, type SpeedPresetId } from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { DEFAULT_SPEED_PRESET_ID, readSpeedPresetId, writeSpeedPresetId } from "../lib/preset-state";
 import {
@@ -32,13 +32,14 @@ import {
   type RunOverrides,
 } from "../lib/run-overrides";
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
-import { serverUrlItem } from "../lib/storage";
+import { readServerSources, rememberServerSource, serverUrlItem } from "../lib/storage";
 import { shouldReportLiveProgressStatus } from "./live-progress-status";
 import { buildRestoreState, formatRunError, formatStopError, phaseToStatus } from "./runner-errors";
 
 interface RunnerState {
   url: string;
   setUrl: (url: string) => void;
+  serverSources: LocalServerSource[];
   collections: CollectionSummary[];
   selectedCollectionId: string;
   selectCollection: (id: string) => void;
@@ -95,6 +96,7 @@ function maxDefined(...values: Array<number | null | undefined>): number | undef
 
 export function useSunoRunner(): RunnerState {
   const [url, setUrlState] = useState("");
+  const [serverSources, setServerSources] = useState<LocalServerSource[]>([]);
   const [allCollections, setAllCollections] = useState<CollectionSummary[]>([]);
   const [selectedCollectionIdState, setSelectedCollectionId] = useState("");
   const [entries, setEntries] = useState<PromptEntry[]>([]);
@@ -395,6 +397,7 @@ export function useSunoRunner(): RunnerState {
         void loadCollections(trimmed);
       }
     });
+    void readServerSources().then(setServerSources);
   }, [loadCollections]);
 
   useEffect(() => {
@@ -449,18 +452,28 @@ export function useSunoRunner(): RunnerState {
   const fetchData = useCallback(async () => {
     const trimmed = url.trim();
     if (!trimmed) {
-      report("サーバー URL を入力してください。", true);
+      report("ローカル配信元を選択してください。", true);
       return;
     }
-    await serverUrlItem.setValue(trimmed);
+    let baseUrl = trimmed;
+    try {
+      const info = await sendMessage("fetchServerInfo", { baseUrl: trimmed });
+      baseUrl = info.base_url;
+      setUrlState(baseUrl);
+      await serverUrlItem.setValue(baseUrl);
+      setServerSources(await rememberServerSource(baseUrl, info.label));
+    } catch {
+      await serverUrlItem.setValue(baseUrl);
+      setServerSources(await rememberServerSource(baseUrl));
+    }
     report("取得中…");
     clearLoadedRunState();
     const extensionVersion = browser.runtime.getManifest().version;
-    const warning = await sendMessage("fetchCompatibilityWarning", { baseUrl: trimmed, extensionVersion });
+    const warning = await sendMessage("fetchCompatibilityWarning", { baseUrl, extensionVersion });
     setCompatibilityWarning(typeof warning === "string" ? warning : "");
     try {
-      const collectionId = await syncCollections(trimmed, selectedCollectionId);
-      const data = await fetchCollectionPromptResponse(trimmed, collectionId);
+      const collectionId = await syncCollections(baseUrl, selectedCollectionId);
+      const data = await fetchCollectionPromptResponse(baseUrl, collectionId);
       setEntries(data.entries);
       setDurationFilter(data.duration_filter);
       setItemStates(data.entries.map(() => "idle"));
@@ -745,6 +758,7 @@ export function useSunoRunner(): RunnerState {
   return {
     url,
     setUrl: updateUrl,
+    serverSources,
     collections,
     selectedCollectionId,
     selectCollection,
