@@ -44,10 +44,14 @@ describe("shared/constants: サーバー互換の契約値", () => {
     expect(DEFAULT_URL).toBe("http://youtube-automation.localhost:7873");
   });
 
-  it("Given server selector When 既定候補を読む Then チャンネル別 hostname と legacy localhost を持つ", () => {
+  it("Given server selector When 既定候補を読む Then チャンネル別 hostname と localhost fallback を持つ", () => {
     expect(DEFAULT_SERVER_SOURCES.map((source) => source.url)).toEqual([
       "http://youtube-automation.localhost:7873",
       "http://localhost:7873",
+      "http://localhost:7874",
+      "http://localhost:7875",
+      "http://localhost:7876",
+      "http://localhost:7877",
     ]);
   });
 
