@@ -35,7 +35,7 @@ const SELECTORS = {
   // 付けた属性) で候補を全 query → textContent 完全一致で Male/Female を絞り込む方式を採用。
   // Emotion class hash や親 div の role/class には依存しない。
   vocalGenderButtons: 'button[data-selected][type="button"]',
-  generateLabel: /^(create|generate|生成)$/i,
+  generateLabel: /^(create|generate|生成|作成(?:する)?)$/i,
   recaptcha:
     'iframe[src*="recaptcha"], iframe[title*="recaptcha" i], iframe[src*="hcaptcha"]',
 } as const;
@@ -629,7 +629,7 @@ export function resolveGenerateButton(): HTMLButtonElement {
   );
   if (!btn) {
     throw new FatalRunError(
-      "Generate ボタンが見つかりません。Suno の UI 変更の可能性があります。",
+      "生成ボタン（Create / Generate / 作成）が見つかりません。Suno の UI 変更または UI 言語ラベル変更の可能性があります。",
     );
   }
   return btn;
