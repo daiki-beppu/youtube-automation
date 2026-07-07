@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **BREAKING** `refactor(channel-new)`: 旧 `/channel-direction` を削除し、`/channel-new` の方向性検討モード（Step D1〜D5）へ統合した。新規開設モードでは従来どおり方向性・差別化・ポジショニングを聞かず TTP 対象の転写要素だけを確認し、必要な方向性ブレストは同じ `/channel-new` の別モードで `docs/channel/channel-direction.md` に保存する。config 生成用の初期値確認は Step 1 から Step 4 へ分離し、再生成モードは方向性検討モードの成果物を入力にする契約へ更新した（#1499）
+- `docs(wf-new)`: workflow-state schema の `assets.music_downloaded` 説明に、Suno 一括 DL 完了と `raw_master` 生成前の中間状態（DL 済み・raw master 未生成）の意味を明記した（#1568）
 
 ### Fixed
 
