@@ -89,7 +89,7 @@ function mountStaticForm(trackCount: number, fallbackArtist: string): void {
   mountInput({ name: "bandname" });
   mountSelect("language", ["English", "Japanese"]);
   mountSelect("genrePrimary", ["Electronic", "Jazz"]);
-  mountSelect("genreSecondary", ["Ambient", "House"]);
+  mountSelect("subGenrePrimary", ["Ambient", "House"]);
   mountInput({ id: "albumTitleInput" });
   mountInput({ id: "release-date-dp", type: "date" });
   mountInput({ id: "artistName", type: "hidden", value: fallbackArtist });
@@ -116,7 +116,7 @@ function mountStaticForm(trackCount: number, fallbackArtist: string): void {
 
 function wireGenreSecondaryPopulate(options: ReadonlyArray<{ value: string; text: string }>): void {
   const genre = document.querySelector<HTMLSelectElement>("#genrePrimary")!;
-  const subGenre = document.querySelector<HTMLSelectElement>("#genreSecondary")!;
+  const subGenre = document.querySelector<HTMLSelectElement>("#subGenrePrimary")!;
   genre.addEventListener("change", () => {
     setTimeout(() => {
       subGenre.innerHTML = "";
@@ -170,7 +170,7 @@ describe("createDocumentInjector", () => {
   it("injectStaticFields が main_genre change 後の非同期 sub_genre populate を待ってから後続注入する", async () => {
     // Given
     mountStaticForm(1, "Soulful Grooves");
-    const subGenre = document.querySelector<HTMLSelectElement>("#genreSecondary")!;
+    const subGenre = document.querySelector<HTMLSelectElement>("#subGenrePrimary")!;
     subGenre.innerHTML = "";
     const staleOption = document.createElement("option");
     staleOption.value = "old-ambient";
