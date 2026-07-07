@@ -197,36 +197,36 @@ Phase 1 の成果物を `20-documentation/` に保存:
 
 `/suno` が生成した `20-documentation/suno-prompts.json` を Chrome 拡張へ配信するため、`yt-collection-serve` を **dir mode + 拡張 origin lock** で起動する。これは `/wf-new` の責務に含める。Suno UI での連続生成、playlist 追加、ZIP 一括 DL は引き続き `/suno-helper` の user 操作に委ねる。
 
-1. **拡張 ID を確認**:
-   - 既知であればそれを使う
-   - 不明であれば user に `chrome://extensions` → suno-helper → 詳細 → ID を確認してもらい、`<EXTENSION_ID>` として受け取る
-   - ID が得られない場合はサーバー起動をスキップし、下記コマンドを完了ガイダンスに出して停止しない
+1. **拡張 ID 自動検出を前提にする**:
+   - 通常は `--allow-extension suno-helper` を使い、Chrome profile preferences から unpacked 拡張 ID を検出する
+   - 検出 0 件・複数 ID 競合・Preferences 読み取り不可で失敗した場合のみ、エラーに表示された候補を確認して `--allow-origin "chrome-extension://<EXTENSION_ID>"` を手動 fallback として完了ガイダンスに出す
+   - 自動検出も fallback 指示も出せない場合はサーバー起動をスキップし、後で `/suno-helper` の Step 1 から起動し直せることを完了ガイダンスに出して停止しない
 
 2. **port を決める**:
    - 既定は `7873`
-   - 既に `7873` が使われている場合、同じ `Origin: chrome-extension://<EXTENSION_ID>` で下記の疎通確認 3 点が通るなら既存サーバーを再利用する
+   - 既に `7873` が使われている場合、既存サーバーの出力にある detected extension の origin で下記の疎通確認 3 点が通るなら既存サーバーを再利用する
    - 既存サーバーが別用途または疎通確認に失敗する場合は `7874`, `7875`... の空き port を選ぶ
 
 3. **バックグラウンド起動**:
 
    ```bash
-   EXTENSION_ID="<EXTENSION_ID>"
    PORT=7873
    mkdir -p .tmp/logs
    nohup uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" \
-     --allow-origin "chrome-extension://${EXTENSION_ID}" \
+     --allow-extension suno-helper \
      --port "${PORT}" \
      > ".tmp/logs/yt-collection-serve-${PORT}.log" 2>&1 &
    ```
 
    - 必ず `"$CHANNEL_DIR/collections/planning"` を渡す（dir mode）。collection 単体パスや `suno-prompts.json` 直指定は playlist phase がスキップされるため使わない
-   - `--allow-origin` は必須。未指定だと `GET /auth/token` と `POST /collections/<id>/downloaded` が 403 になる
+   - 起動ログに `detected extension: suno-helper -> <id> (chrome-extension://<id>)` が出ることを確認し、その origin を疎通確認に使う
+   - `--allow-extension` または fallback の `--allow-origin` は必須。未指定だと `GET /auth/token` と `POST /collections/<id>/downloaded` が 403 になる
 
 4. **起動後の疎通確認（3 点すべて必須）**:
 
    ```bash
    curl -s "http://localhost:${PORT}/collections" | python3 -m json.tool | head -20
-   curl -s -H "Origin: chrome-extension://${EXTENSION_ID}" \
+   curl -s -H "Origin: chrome-extension://<detected-id>" \
      "http://localhost:${PORT}/auth/token" | python3 -m json.tool
    ```
 

@@ -46,6 +46,14 @@ def test_skill_md_documents_auto_inject_flow() -> None:
     text = _read()
     for token in ("Step 3", "yt-collection-serve", "suno-helper", "連続実行"):
         assert token in text, f"SKILL.md に新フローの記載がない（`{token}` 不在）"
+    assert "--allow-extension suno-helper" in text, "SKILL.md の Step 3 が拡張 ID 自動検出で起動していない"
+    assert '--allow-origin "chrome-extension://<EXTENSION_ID>"' in text, (
+        "SKILL.md に検出失敗時の allow-origin fallback がない"
+    )
+    assert "detected extension: suno-helper -> <id> (chrome-extension://<id>)" in text, (
+        "SKILL.md に detected extension 起動ログ確認がない"
+    )
+    assert "GET /auth/token" in text, "SKILL.md に exact origin lock の疎通確認対象 `/auth/token` がない"
     assert "yt-suno-serve" not in text, "SKILL.md に旧 CLI 名 `yt-suno-serve` が残っている（#698 で廃止）"
     assert "Step 2.5" not in text, "SKILL.md に旧 `Step 2.5` 表記が残っている（PR #886 で整数並びへ採番し直し）"
 

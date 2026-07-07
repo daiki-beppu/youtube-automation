@@ -398,9 +398,11 @@ uv run yt-generate-suno <collection-path>
 `suno-prompts.json` を Chrome 拡張（`extensions/suno-helper/`）が読み取り、連続実行する。
 
 1. **拡張をビルドしてロード**（初回のみ）: `pnpm install && pnpm build` → Chrome で `chrome://extensions` → `.output/chrome-mv3/` を選択
-2. **サーバー起動**: `uv run yt-collection-serve collections/planning/<theme>` → `http://localhost:7873/suno/prompts.json` で配信
+2. **サーバー起動**: `uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" --allow-extension suno-helper` → `http://localhost:7873/suno/prompts.json` で配信
 3. **Suno を開く**: Chrome で Custom Mode 画面（ボーカルは **Instrumental OFF**）
 4. **取得 → 連続実行**: 拡張ポップアップでデータ取得 → 全パターンを連続実行。スキップされた entry は再実行ボタンで再投入可能
+
+`--allow-extension suno-helper` は Chrome の profile preferences から unpacked 拡張 ID を検出し、`chrome-extension://<id>` の exact origin lock として使う。起動ログの `detected extension: suno-helper -> <id> (chrome-extension://<id>)` を確認し、検出 0 件・複数 ID 競合・Preferences 読み取り不可で失敗した場合のみ `--allow-origin "chrome-extension://<EXTENSION_ID>"` を fallback として手動指定する。`GET /auth/token` と `POST /collections/<id>/downloaded` は exact origin lock がないと 403 になる。
 
 UI 変更で注入先セレクタが外れた場合は `extensions/shared/dom.ts` の `SELECTORS` を保守する。
 

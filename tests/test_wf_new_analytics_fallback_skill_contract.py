@@ -249,8 +249,10 @@ def test_wf_new_starts_suno_helper_server_before_handoff() -> None:
     for token in (
         '"$CHANNEL_DIR/collections/planning"',
         "PORT=7873",
-        "--allow-origin",
-        "chrome-extension://<EXTENSION_ID>",
+        "--allow-extension suno-helper",
+        "detected extension: suno-helper -> <id> (chrome-extension://<id>)",
+        '--allow-origin "chrome-extension://<EXTENSION_ID>"',
+        "chrome-extension://<detected-id>",
         "--port",
         "/collections",
         "/auth/token",
