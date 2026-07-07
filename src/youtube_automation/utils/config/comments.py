@@ -57,7 +57,7 @@ class Comments:
     - `ng_words`: 本文にいずれかが含まれるコメントは除外
     - `max_replies_per_run`: 1 回の実行で返信する上限件数
     - `delay_between_replies_sec`: 返信 API 呼び出し間の sleep 秒
-    - `history_file`: チャンネルディレクトリからの相対パスで履歴 JSON を保存
+    - `history_file`: プロジェクトルートからの相対パスで履歴 JSON を保存
     - `skip_held_for_review`: `moderationStatus == 'heldForReview'` のコメントを skip するか
     - `generator`: AI ジェネレーター設定。省略時は codex
     """
