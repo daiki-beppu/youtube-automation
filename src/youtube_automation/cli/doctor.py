@@ -912,7 +912,7 @@ def check_playlist_config(channel_dir: Path) -> CheckResult:
             next_action={
                 "kind": "human",
                 "instructions": (
-                    "/channel-setup で config/channel/playlists.json を作成し、"
+                    "/channel-new（再生成モード）で config/channel/playlists.json を作成し、"
                     "playlist スキルが使う playlists 定義を追加してください"
                 ),
             },

@@ -817,7 +817,8 @@ class TestCheckPlaylistConfig:
         assert "playlists.json が存在しない" in r.message
         assert r.next_action is not None
         assert r.next_action["kind"] == "human"
-        assert "/channel-setup" in r.next_action["instructions"]
+        assert "/channel-new" in r.next_action["instructions"]
+        assert "再生成モード" in r.next_action["instructions"]
 
     def test_broken_json_is_fail_with_human_action(self, tmp_path):
         config_dir = tmp_path / "config" / "channel"
