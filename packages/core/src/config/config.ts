@@ -5,44 +5,95 @@
 // バケット構成（Issue #827）:
 //   identity     → { meta }
 //   publishing   → { audio, content, shorts, workflow, youtube }
-//   engagement   → { comments, pinnedComment, playlists }（localizations は loader 注入）
+//   engagement   → { comments, pinnedComment, playlists, localizations }
 //   integrations → { analytics, distrokid }
 //
 // content.tags.channelName は identity.meta 由来のセクション横断値のため、合成ルートで注入する。
-// cross-section 検証（title.theme_scenes ⊆ tags.themes）は superRefine で行う。
-// localizations は別ファイル（`config/localizations.json`）由来のため loader が engagement へ合成する。
+// cross-section / cross-file 検証は superRefine で行う。
 
 import { z } from "zod";
 
 import { Engagement } from "./engagement.ts";
 import { Identity } from "./identity.ts";
 import { Integrations } from "./integrations.ts";
-import type { Localizations } from "./localizations.ts";
+import { addIssues, isPlainObject } from "./internal.ts";
+import { Localizations, localizationsAbsent } from "./localizations.ts";
 import { Publishing } from "./publishing.ts";
 
-const assemble = (merged: unknown) => {
-  const identity = Identity.parse(merged);
-  const publishing = Publishing.parse(merged);
+const LOCALIZATIONS_KEY = "localizations";
+
+const parseLocalizations = (
+  locRaw: unknown,
+  fallbackLanguage: string,
+  ctx: z.RefinementCtx
+) => {
+  if (locRaw === undefined) {
+    return localizationsAbsent(fallbackLanguage);
+  }
+
+  const localizations = Localizations.safeParse(locRaw);
+  if (localizations.success) {
+    return localizations.data;
+  }
+
+  addIssues(ctx, localizations.error.issues, [LOCALIZATIONS_KEY]);
+  return z.NEVER;
+};
+
+const assemble = (merged: unknown, ctx: z.RefinementCtx) => {
+  const identity = Identity.safeParse(merged);
+  const publishing = Publishing.safeParse(merged);
+  const engagement = Engagement.safeParse(merged);
+  const integrations = Integrations.safeParse(merged);
+
+  if (!identity.success) {
+    addIssues(ctx, identity.error.issues);
+  }
+  if (!publishing.success) {
+    addIssues(ctx, publishing.error.issues);
+  }
+  if (!engagement.success) {
+    addIssues(ctx, engagement.error.issues);
+  }
+  if (!integrations.success) {
+    addIssues(ctx, integrations.error.issues);
+  }
+  if (
+    !identity.success ||
+    !publishing.success ||
+    !engagement.success ||
+    !integrations.success
+  ) {
+    return z.NEVER;
+  }
+
+  const locRaw = isPlainObject(merged) ? merged[LOCALIZATIONS_KEY] : undefined;
+  const localizations = parseLocalizations(
+    locRaw,
+    publishing.data.youtube.api.language,
+    ctx
+  );
+
   // tags.channelName は content 単体では決まらないため meta（identity）から注入する。
   const content = {
-    ...publishing.content,
+    ...publishing.data.content,
     tags: {
-      ...publishing.content.tags,
-      channelName: identity.meta.channelName,
+      ...publishing.data.content.tags,
+      channelName: identity.data.meta.channelName,
     },
   };
   return {
-    engagement: Engagement.parse(merged),
-    identity,
-    integrations: Integrations.parse(merged),
-    publishing: { ...publishing, content },
+    engagement: { ...engagement.data, localizations },
+    identity: identity.data,
+    integrations: integrations.data,
+    publishing: { ...publishing.data, content },
   };
 };
 
-/** merged config を 4 バケット ChannelConfig（localizations を除く）へ組み立てる schema。 */
+/** merged config を 4 バケット ChannelConfig へ組み立てる schema。 */
 export const ChannelConfigSchema = z
   .unknown()
-  .transform(assemble)
+  .transform((merged, ctx) => assemble(merged, ctx))
   .superRefine((config, ctx) => {
     // title.theme_scenes のキー ⊆ tags.themes のキー
     const themeKeys = new Set(
@@ -59,17 +110,23 @@ export const ChannelConfigSchema = z
         message: `title.theme_scenes に tags.themes で定義されていないテーマキーがあります: ${JSON.stringify(unknownScenes)}`,
       });
     }
+
+    if (config.engagement.localizations.exists) {
+      const supported = new Set(
+        config.engagement.localizations.supportedLanguages
+      );
+      const unknownLangs =
+        config.publishing.youtube.contentModel.languages.filter(
+          (lang) => !supported.has(lang)
+        );
+      if (unknownLangs.length > 0) {
+        ctx.addIssue({
+          code: "custom",
+          message: `content_model.languages に localizations.supported_languages へ未登録の言語があります: ${JSON.stringify(unknownLangs)}`,
+        });
+      }
+    }
   });
 
-type Assembled = z.infer<typeof ChannelConfigSchema>;
-
-/**
- * チャンネル設定の合成ルート（4 バケット名前空間でアクセスする）。
- * localizations は loader が engagement バケットへ注入するため、合成スキーマの infer に
- * 後付けする（schema 単体では表現できない cross-file 値のため intersection で合成する）。
- */
-export type ChannelConfig = Omit<Assembled, "engagement"> & {
-  readonly engagement: Assembled["engagement"] & {
-    readonly localizations: Localizations;
-  };
-};
+/** チャンネル設定の合成ルート（4 バケット名前空間でアクセスする）。 */
+export type ChannelConfig = z.infer<typeof ChannelConfigSchema>;

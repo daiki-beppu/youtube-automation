@@ -1,8 +1,7 @@
 // Tests for the template loader (plan §4-C). The description templates live in
 // packages/core/templates/ and are resolved relative to the module via
 // import.meta — NOT via process.cwd() — so the loader works regardless of the
-// caller's working directory. loadTemplate is re-exported through the metadata
-// subpath (plan §4-C), which this import also exercises.
+// caller's working directory.
 //
 // These assertions pin the *machine* contract (the {placeholder} tokens the
 // str.format pipeline consumes), not the prose of the template, so they remain
@@ -10,7 +9,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { loadTemplate } from "@youtube-automation/core/metadata";
+import { loadTemplate } from "../src/templates.ts";
 
 describe("loadTemplate", () => {
   test("loads the complete-collection template with its format placeholders", () => {

@@ -26,6 +26,7 @@ from youtube_automation.utils.preflight_checks import (
     check_title_codepoint_limit,
     check_title_template_compliance,
     extract_descriptions_md_tags,
+    requires_scene_phrases,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,8 +65,10 @@ class PreflightMixin:
 
         過去事例の再発防止:
         1. descriptions.md が存在すること（Track 01 仮名フォールバックを防ぐ）
-        2. workflow-state.json.scene_phrases に supported_languages が
-           揃っていること（多言語タイトルが EN ベタコピーになる事故を防ぐ）
+        2. workflow-state.json が存在し、有効な JSON であること。多言語チャンネルでは
+           workflow-state.json.scene_phrases に supported_languages が揃っていること。
+           単一言語チャンネルでは populate が no-op のため scene_phrases は要求しない
+           （多言語タイトルが EN ベタコピーになる事故を防ぐ）
         3. タイムスタンプ件数が `audio.chapter_max` 以内かつ chapter 名に
            パターン展開接尾辞（v1〜v6 / ロマン数字 I〜VIII）を含まないこと
            （個別トラック = 1 chapter の per-track 命名はデフォルトで許容）
@@ -123,19 +126,25 @@ class PreflightMixin:
         if msg:
             raise RuntimeError(f"❌ {msg}: 1 パターン = 1 chapter で再生成してください。")
 
-        # scene_phrases 完全性検証
+        # workflow-state.json 自体は全チャンネルで必須。scene_phrases 完全性だけを
+        # 単一言語チャンネルでは不要扱いにする（populate 側と同じ判定を共有 #1470）。
         ws_path = paths.workflow_state_path
-        state = json.loads(ws_path.read_text(encoding="utf-8")) if ws_path.exists() else {}
+        if not ws_path.exists():
+            raise RuntimeError(
+                f"❌ {ws_path} が存在しません。/wf-new または /video-description の前提を確認してください。"
+            )
+        state = json.loads(ws_path.read_text(encoding="utf-8"))
         scene_phrases = state.get("scene_phrases") or {}
 
-        required_langs = list(dict.fromkeys(config.localizations.supported_languages))
-        missing = [lang for lang in required_langs if not scene_phrases.get(lang)]
-        if missing:
-            raise RuntimeError(
-                f"❌ workflow-state.json.scene_phrases に翻訳が不足: {missing}\n"
-                f"→ /video-description で多言語翻訳を含めて再生成してください。\n"
-                f"→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
-            )
+        if requires_scene_phrases(config.localizations.supported_languages):
+            required_langs = list(dict.fromkeys(config.localizations.supported_languages))
+            missing = [lang for lang in required_langs if not scene_phrases.get(lang)]
+            if missing:
+                raise RuntimeError(
+                    f"❌ workflow-state.json.scene_phrases に翻訳が不足: {missing}\n"
+                    f"→ /video-description で多言語翻訳を含めて再生成してください。\n"
+                    f"→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
+                )
 
         # タグ件数 / quotation 文字数チェック
         # descriptions.md の「タグ（YouTube タグ欄）」が _upload_complete_collection で

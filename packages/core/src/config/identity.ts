@@ -3,9 +3,10 @@
 
 import { z } from "zod";
 
+import { parseWithIssues } from "./internal.ts";
 import { ChannelMeta } from "./meta.ts";
 
 /** identity バケット: merged から meta セクションを取り出して束ねる。 */
-export const Identity = z.unknown().transform((merged) => ({
-  meta: ChannelMeta.parse(merged),
+export const Identity = z.unknown().transform((merged, ctx) => ({
+  meta: parseWithIssues(ChannelMeta, merged, ctx),
 }));

@@ -7,7 +7,7 @@ issue #692 受け入れ基準: 「`.claude/skills/suno/SKILL.md` に新フロー
 全テストが pass してしまうため、ドキュメント契約をこのテストで機械的に担保し再発を防ぐ。
 
 検証する契約:
-1. Chrome 拡張 + `yt-collection-serve` の自動投入フロー（Step 3）が記載されている。
+1. Chrome 拡張 + `collection-serve` の自動投入フロー（Step 3）が記載されている。
 2. 拡張が使えない／壊れたとき向けの手コピペ fallback 節が記載されている。
 3. 自動投入が読む配信元 `suno-prompts.json` への言及がある。
 """
@@ -55,16 +55,17 @@ def test_suno_lyric_skill_md_exists() -> None:
 def test_skill_md_documents_auto_inject_flow() -> None:
     """Given suno SKILL.md
     When 本文を読む
-    Then Chrome 拡張 + `yt-collection-serve` の自動投入フロー（Step 3）が記載されている。
+    Then Chrome 拡張 + `collection-serve` の自動投入フロー（Step 3）が記載されている。
 
-    #698: CLI を `yt-suno-serve` → `yt-collection-serve` に rename したため、
-    起動コマンド契約（machine-coupled）を新名に追従する。旧名が残っていないことも検証する。
+    #965: CLI 起動文字列を `bunx tayk collection-serve` に変更したため、
+    起動コマンド契約（machine-coupled）を新サブコマンド名に追従する。旧名が残っていないことも検証する。
     PR #886: 旧 `Step 2.5` 表記は整数並びへ採番し直し、Step 3 タイトルに `/suno-helper` を露出。
     """
     text = _read()
-    for token in ("Step 3", "yt-collection-serve", "suno-helper", "連続実行"):
+    for token in ("Step 3", "collection-serve", "suno-helper", "連続実行"):
         assert token in text, f"SKILL.md に新フローの記載がない（`{token}` 不在）"
     assert "yt-suno-serve" not in text, "SKILL.md に旧 CLI 名 `yt-suno-serve` が残っている（#698 で廃止）"
+    assert "yt-collection-serve" not in text, "SKILL.md に旧 CLI 名 `yt-collection-serve` が残っている（#965 で廃止）"
     assert "Step 2.5" not in text, "SKILL.md に旧 `Step 2.5` 表記が残っている（PR #886 で整数並びへ採番し直し）"
 
 
@@ -183,9 +184,9 @@ def test_suno_lyric_json_contract_supplies_reviewer_context() -> None:
 
 
 def test_suno_lyric_documents_verify_before_semantic_review() -> None:
-    """Issue #1485: /suno-lyric は yt-suno-verify 通過後に LLM semantic review へ進む。"""
+    """Issue #1485: /suno-lyric は bunx tayk suno-verify 通過後に LLM semantic review へ進む。"""
     text = _read(SUNO_LYRIC_SKILL_MD)
-    _assert_before(text, "yt-suno-verify <collection>", "LLM semantic review")
+    _assert_before(text, "bunx tayk suno-verify <collection-path>", "LLM semantic review")
 
 
 def test_suno_lyric_documents_pass_fail_loop_contract() -> None:
@@ -224,9 +225,9 @@ def test_suno_json_only_review_uses_existing_prompt_fields() -> None:
 
 
 def test_suno_documents_verify_before_semantic_review() -> None:
-    """Issue #1485: /suno は yt-suno-verify 通過後に LLM semantic review へ進む。"""
+    """Issue #1485: /suno は bunx tayk suno-verify 通過後に LLM semantic review へ進む。"""
     text = _read()
-    _assert_before(text, "yt-suno-verify <collection>", "LLM semantic review")
+    _assert_before(text, "bunx tayk suno-verify <collection-path>", "LLM semantic review")
 
 
 def test_suno_documents_pass_fail_loop_contract() -> None:
@@ -236,8 +237,8 @@ def test_suno_documents_pass_fail_loop_contract() -> None:
         assert token in text, f"/suno SKILL.md に PASS/FAIL ループ契約がない（`{token}` 不在）"
 
 
-def test_suno_updates_generated_state_only_after_semantic_review_passes() -> None:
-    """Issue #1485: /suno は semantic review 全 PASS 後だけ生成完了 state を更新する。"""
+def test_suno_blocks_step_3_until_semantic_review_passes() -> None:
+    """Issue #1485: /suno は semantic review 全 PASS 後だけ Suno UI 投入へ進む。"""
     text = _read()
     step_2_match = re.search(
         r"### Step 2: スクリプトで suno-prompts\.md を生成\b.*?(?=^### Step 3:)",
@@ -248,14 +249,13 @@ def test_suno_updates_generated_state_only_after_semantic_review_passes() -> Non
     step_2 = step_2_match.group(0)
 
     for token in (
-        "この保存時点では、まだ `workflow-state.json` の `music.generated = true` に更新しない",
-        "全 entry が `PASS` した後にだけ `workflow-state.json` の `music.generated = true` に更新する",
-        "`music.generated` を更新せず",
+        "`workflow-state.json` の `assets.music_prompts = true` に更新する",
+        "全 entry が `PASS` した後にだけ Suno UI へ投入する",
         "Step 3 へ進まず",
     ):
-        assert token in step_2, f"/suno Step 2 に生成完了 state のゲート契約がない（`{token}` 不在）"
+        assert token in step_2, f"/suno Step 2 に semantic review gate 契約がない（`{token}` 不在）"
 
-    _assert_before(step_2, "LLM semantic review", "`music.generated = true` に更新する")
+    _assert_before(step_2, "LLM semantic review", "Suno UI へ投入する")
 
 
 def test_review_rubric_documents_required_semantic_viewpoints() -> None:
@@ -272,7 +272,7 @@ def test_review_rubric_documents_required_semantic_viewpoints() -> None:
         "PASS | FAIL",
         "FAIL` entry のみ",
         "2 周",
-        "yt-suno-verify",
+        "bunx tayk suno-verify",
     ):
         assert token in text, f"review-rubric.md に必須観点またはループ契約がない（`{token}` 不在）"
 

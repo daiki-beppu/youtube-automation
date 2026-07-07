@@ -53,8 +53,8 @@ reason: <PASS または FAIL の根拠を 1-3 文で記述>
 
 ## 再検証ループ
 
-1. `yt-suno-verify <collection>` が exit 0 で通過した成果物だけを reviewer が読む
+1. `bunx tayk suno-verify <collection-path>` が exit 0 で通過した成果物だけを reviewer が読む
 2. reviewer は entry ごとに `PASS` / `FAIL` と理由を出す
 3. generator は `FAIL` entry のみを再生成する
-4. 再生成後は `yt-suno-verify` からやり直す
+4. 再生成後は `bunx tayk suno-verify` からやり直す
 5. ループ上限は 2 周。2 周後も `FAIL` が残る場合は、残った entry name、FAIL 理由、次に直す観点をユーザーに提示して停止する

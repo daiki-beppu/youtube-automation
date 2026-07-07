@@ -3,6 +3,15 @@ import { defineConfig } from "wxt";
 import { SERVER_HOST_PERMISSIONS, SUNO_MATCHES } from "../shared/constants";
 import { MANIFEST_PERMISSIONS } from "./lib/manifest";
 
+const isTestBuild = process.env.SUNO_HELPER_TEST_BUILD === "1";
+const extensionName = isTestBuild
+  ? "[TEST] Suno Helper (youtube-channels-automation)"
+  : "Suno Helper (youtube-channels-automation)";
+const extensionDescription = isTestBuild
+  ? "[TEST BUILD] /suno が生成した Style/Lyrics を Suno Custom Mode に順次注入し Generate を連続実行する補助拡張。"
+  : "/suno が生成した Style/Lyrics を Suno Custom Mode に順次注入し Generate を連続実行する補助拡張。";
+const actionTitle = isTestBuild ? "[TEST] Suno Helper" : "Suno Helper";
+
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
@@ -12,13 +21,13 @@ export default defineConfig({
   // suno-bridge は MAIN world の fetch 観測 bridge (#948)。
   filterEntrypoints: ["background", "content", "overlay", "suno-bridge"],
   manifest: {
-    name: "Suno Helper (youtube-channels-automation)",
-    description: "/suno が生成した Style/Lyrics を Suno Custom Mode に順次注入し Generate を連続実行する補助拡張。",
+    name: extensionName,
+    description: extensionDescription,
     // 最小権限。SSOT は lib/manifest.ts (tests/manifest.test.ts で機械担保)。
     permissions: [...MANIFEST_PERMISSIONS],
     host_permissions: [...SERVER_HOST_PERMISSIONS, ...SUNO_MATCHES],
     action: {
-      default_title: "Suno Helper",
+      default_title: actionTitle,
     },
   },
 });

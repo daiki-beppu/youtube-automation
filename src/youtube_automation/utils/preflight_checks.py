@@ -57,6 +57,17 @@ THUMBNAIL_COMPOSITION_REQUIRED_KEYS = (
 )
 
 
+def requires_scene_phrases(supported_languages: Sequence[str]) -> bool:
+    """チャンネルが workflow-state.json.scene_phrases を必要とするかどうか (#1470).
+
+    scene_phrases は多言語 localizations のタイトル生成にのみ使われるため、
+    `supported_languages` が 1 言語以下のチャンネルでは不要。populate
+    （`yt-populate-scene-phrases` の no-op 判定）と検証側（preflight /
+    metadata audit / localizations 生成）はこの判定を共有する。
+    """
+    return len(set(supported_languages)) > 1
+
+
 def check_chapter_count(ts_count: int, chapter_max: int) -> str | None:
     """chapter 件数が上限超過なら issue 文字列、範囲内なら None."""
     if ts_count > chapter_max:
@@ -132,7 +143,7 @@ def check_thumbnail_skill_config(channel_dir: Path, thumbnail_cfg: Mapping[str, 
         if resolved_refs.placeholders or (not resolved_refs.references and not resolved_refs.invalid_reasons):
             issues.append(
                 "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
-                "が未設定/空/TBD です。/channel-setup で benchmark サムネ参照を設定してください"
+                "が未設定/空/TBD です。/channel-new（再生成モード）で benchmark サムネ参照を設定してください"
             )
         elif resolved_refs.references:
             unique_refs = list(dict.fromkeys(resolved_refs.references))
