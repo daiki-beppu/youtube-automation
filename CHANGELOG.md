@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `feat(collection-serve)`: `yt-collection-serve` に unpacked Chrome 拡張名から exact origin lock を自動解決する `--allow-extension <name>` を追加（#1486）。macOS Chrome profile の `Secure Preferences`（無ければ `Preferences`）を走査し、`extensions.settings[*].path` が絶対パスかつ basename が指定名に一致する拡張 IDから `chrome-extension://<id>` を組み立て、既存の `/auth/token` / write endpoint lock にそのまま適用する。`--allow-origin` とは排他で、検出 0 件・複数 ID 競合・Preferences 読み取り不可・Preferences JSON parse failure は `--allow-origin` fallback 案内付きの `ConfigError` で fail-loud する。`/suno-helper` / `/distrokid-helper` / `/wf-new` のサーバー起動手順も `--allow-extension` 基準へ更新した
+- `feat(collection-serve)`: `yt-collection-serve` に unpacked Chrome 拡張名から exact origin lock を自動解決する `--allow-extension <name>` を追加（#1486）。macOS Chrome profile の `Secure Preferences`（無ければ `Preferences`）を走査し、`extensions.settings[*].path` が絶対パスかつ basename が指定名に一致する拡張 IDから `chrome-extension://<id>` を組み立て、既存の `/auth/token` / write endpoint lock にそのまま適用する。`--allow-origin` とは排他で、検出 0 件・複数 ID 競合・profile root 走査不可・Preferences 読み取り不可・Preferences JSON parse failure は `--allow-origin` fallback 案内付きの `ConfigError` で fail-loud する。`/suno-helper` / `/distrokid-helper` / `/wf-new` のサーバー起動手順と拡張 README も `--allow-extension` 基準へ更新した
 
 ## [5.5.16] - 2026-07-06
 

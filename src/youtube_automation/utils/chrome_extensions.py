@@ -79,9 +79,15 @@ def _find_unpacked_extension_candidates(extension_name: str, root: Path) -> list
 
 
 def _iter_profile_dirs(root: Path) -> list[Path]:
-    if not root.is_dir():
-        return []
-    return sorted((path for path in root.iterdir() if path.is_dir()), key=lambda path: path.name)
+    try:
+        if not root.is_dir():
+            return []
+        return sorted((path for path in root.iterdir() if path.is_dir()), key=lambda path: path.name)
+    except OSError as exc:
+        raise ConfigError(
+            f"Failed to scan Chrome profiles at {root}: {exc}. "
+            "Pass --allow-origin chrome-extension://<EXTENSION_ID> manually."
+        ) from exc
 
 
 def _preferences_path(profile_dir: Path) -> Path | None:

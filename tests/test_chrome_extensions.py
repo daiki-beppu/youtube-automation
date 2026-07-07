@@ -17,6 +17,11 @@ def _write_preferences(profile_dir: Path, filename: str, settings: dict[str, obj
     (profile_dir / filename).write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _write_preferences_payload(profile_dir: Path, filename: str, payload: object) -> None:
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    (profile_dir / filename).write_text(json.dumps(payload), encoding="utf-8")
+
+
 def _extension_path(tmp_path: Path, name: str) -> str:
     return str(tmp_path / "chrome-extensions" / name)
 
@@ -85,6 +90,32 @@ def test_resolve_unpacked_extension_origin_missing_extension_guides_allow_origin
 
     message = str(exc_info.value)
     assert "suno-helper" in message
+    assert "--allow-origin chrome-extension://<EXTENSION_ID>" in message
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        {},
+        {"extensions": None},
+        {"extensions": {"settings": []}},
+        {"extensions": {"settings": {"gdjhjiphejeeclngbljhajiffhpdepee": None}}},
+        {"extensions": {"settings": {"gdjhjiphejeeclngbljhajiffhpdepee": {"path": None}}}},
+        {"extensions": {"settings": {"gdjhjiphejeeclngbljhajiffhpdepee": {"path": "relative/suno-helper"}}}},
+    ),
+)
+def test_resolve_unpacked_extension_origin_ignores_valid_but_malformed_preferences_shape(
+    tmp_path,
+    payload,
+):
+    _write_preferences_payload(tmp_path / "Default", "Secure Preferences", payload)
+
+    with pytest.raises(ConfigError) as exc_info:
+        resolve_unpacked_extension_origin("suno-helper", chrome_user_data_dir=tmp_path)
+
+    message = str(exc_info.value)
+    assert "suno-helper" in message
+    assert "was not found" in message
     assert "--allow-origin chrome-extension://<EXTENSION_ID>" in message
 
 
@@ -162,5 +193,26 @@ def test_resolve_unpacked_extension_origin_read_failure_guides_allow_origin(tmp_
     message = str(exc_info.value)
     assert "Failed to read Chrome preferences" in message
     assert str(preferences_path) in message
+    assert "permission denied" in message
+    assert "--allow-origin chrome-extension://<EXTENSION_ID>" in message
+
+
+def test_resolve_unpacked_extension_origin_profile_scan_failure_guides_allow_origin(tmp_path, monkeypatch):
+    tmp_path.mkdir(exist_ok=True)
+
+    def fail_iterdir(self):
+        if self == tmp_path:
+            raise OSError("permission denied")
+        return original_iterdir(self)
+
+    original_iterdir = Path.iterdir
+    monkeypatch.setattr(Path, "iterdir", fail_iterdir)
+
+    with pytest.raises(ConfigError) as exc_info:
+        resolve_unpacked_extension_origin("suno-helper", chrome_user_data_dir=tmp_path)
+
+    message = str(exc_info.value)
+    assert "Failed to scan Chrome profiles" in message
+    assert str(tmp_path) in message
     assert "permission denied" in message
     assert "--allow-origin chrome-extension://<EXTENSION_ID>" in message
