@@ -62,7 +62,7 @@ ls data/benchmark_*.json data/comments_*.json docs/benchmarks/*.md
 - **成長段階**: 各チャンネルの推定フェーズ（立ち上げ/成長/安定/停滞）
 - **投稿トレンド**: 加速/減速/安定
 - **勝ちパターン**: 高再生数動画の共通点
-- **TTP 対象**: 上記から自チャンネルに転写すべき構造・パターン・型を明示（後段 `/channel-direction` の入力になる）
+- **TTP 対象**: 上記から自チャンネルに転写すべき構造・パターン・型を明示（後段 `/channel-new` 方向性検討モードの入力になる）
 
 ### Step 3: コンテンツ戦略分析
 
@@ -137,7 +137,7 @@ ls data/benchmark_*.json data/comments_*.json docs/benchmarks/*.md
 
 ### Step 7: 次アクション案内
 
-「分析レポートが完成しました。方向性を見直す場合は `/channel-direction`、現在の方針で制作に進む場合は `/wf-new` に進めます。」
+「分析レポートが完成しました。方向性を見直す場合は `/channel-new`（方向性検討モード）、現在の方針で制作に進む場合は `/wf-new` に進めます。」
 
 ## 障害時ガイダンス
 
@@ -152,5 +152,5 @@ ls data/benchmark_*.json data/comments_*.json docs/benchmarks/*.md
 - `/channel-new` → 前提: TTP 対象確認 / 初回 config / persona / branding
 - `/benchmark` → 前提: 承認済み TTP 対象の動画データ収集
 - `/viewer-voice` → 前提: コメント収集と視聴者インサイト分析
-- `/channel-direction` → 任意: 方向性の再検討
+- `/channel-new`（方向性検討モード） → 任意: 方向性の再検討
 - `/wf-new` → 初回コレクション制作

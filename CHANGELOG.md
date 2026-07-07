@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `docs(channel-new)`: `/channel-new` の TTP 原則と Step 1 TTP ヒアリングから「方向性より先に TTP を聞く」余地をなくし、方向性・差別化・ポジショニングを聞かず TTP 対象の転写要素だけを確認する契約へ明文化した。config 生成用の初期値確認は Step 1 から Step 4 へ分離し、方向性の検討・精緻化は `/channel-new` 完了後の `/channel-direction` に委譲することを Overview、モード判別、Step 7、Cross References に追記した（#1499）
+- **BREAKING** `refactor(channel-new)`: 旧 `/channel-direction` を削除し、`/channel-new` の方向性検討モード（Step D1〜D5）へ統合した。新規開設モードでは従来どおり方向性・差別化・ポジショニングを聞かず TTP 対象の転写要素だけを確認し、必要な方向性ブレストは同じ `/channel-new` の別モードで `docs/channel/channel-direction.md` に保存する。config 生成用の初期値確認は Step 1 から Step 4 へ分離し、再生成モードは方向性検討モードの成果物を入力にする契約へ更新した（#1499）
 - `refactor(suno-helper)`: 旧 Suno playlist capture 互換 route（`POST /suno/playlists`）と `write_suno_playlists()` / `normalize_suno_title()` / `--playlist-capture-*` を撤去し、DistroKid release 記録用の capture root を `--distrokid-capture-root` に分離（#1301）
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
 - `feat(video-analyze)`: `yt-video-analyze` を全尺解析から動画冒頭のクリップ窓解析（既定 900 秒 = 15 分、skill-config `analysis_window_sec` で上書き可）に変更。Gemini へ渡す Part に `video_metadata`（`start_offset` / `end_offset`）を付与して冒頭 2〜3 曲相当のみを解析し、長尺 Complete Collection の API コストを削減する。プロンプトをクリップ窓前提（`bgm_arc.outro` は窓内終盤、`scene_timeline` / `editing_metrics` は窓内対象）に整合させ、SKILL.md に解析後のレポート検証ステップ（窓超過タイムスタンプ・スキーマ欠落・不自然値の subagent レビュー）を追加。下流 `/suno` にも冒頭クリップ窓データである旨を注記した（#1495）

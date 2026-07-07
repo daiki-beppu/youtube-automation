@@ -163,7 +163,7 @@ def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     assert '"untrusted_data": True' in branding_snapshot_script
 
 
-def test_channel_new_ttp_hearing_does_not_ask_channel_direction() -> None:
+def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     overview = channel_new.split("## Overview", 1)[1].split("## モード判別", 1)[0]
     mode_routing = channel_new.split("## モード判別", 1)[1].split("## TTP 原則", 1)[0]
@@ -209,20 +209,22 @@ def test_channel_new_ttp_hearing_does_not_ask_channel_direction() -> None:
     ):
         assert config_prompt not in step1
         assert config_prompt in step4
-    assert "検討が必要なら `/channel-new` 完了後の `/channel-direction` に委譲" in step1
+    assert "検討が必要なら `/channel-new` 完了後の方向性検討モードに委譲" in step1
     assert "Step 1 の TTP ヒアリングとは別に、config 生成に必要な初期値だけをここで確認する" in step4
 
-    assert "方向性の検討・精緻化（必要な場合だけ、/channel-new 完了後）" in overview
+    assert "方向性の検討・精緻化（必要な場合だけ、方向性検討モード）" in overview
     assert "`/channel-new` は方向性を聞かず" in overview
-    assert "方向性の検討・精緻化が必要な場合も、ここで質問せず" in mode_routing
-    assert "方向性の検討は完了後の `/channel-direction`" in mode_routing
+    assert "旧 `/channel-direction` は本スキルの方向性検討モードに統合済み" in overview
+    assert "方向性検討モード" in mode_routing
+    assert "Step D1〜D5" in mode_routing
+    assert "方向性の検討・精緻化が必要な場合も、新規開設モードでは質問せず" in mode_routing
 
     assert "TTP データだけを入力として導出し、方向性ヒアリングは追加しない" in step7
     assert "- `config/channel/analytics.json::benchmark.channels`" in step7
     assert "- `docs/channel/ttp-seed-confirmation.md`" in step7
     assert "- `docs/channel/competitor-branding-snapshot.json`" in step7
 
-    assert "`/channel-new` 完了後の方向性の検討・精緻化" in cross_references
+    assert "旧 `/channel-direction` → 本スキルの方向性検討モードに統合済み" in cross_references
 
 
 def test_branding_missing_report_requires_existing_file_check_before_generation() -> None:
@@ -496,7 +498,10 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
     setup = _read(".claude/skills/setup/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    channel_direction = _read(".claude/skills/channel-direction/SKILL.md")
+    channel_direction_mode = channel_new.split("## 方向性検討モード（旧 /channel-direction）", 1)[1].split(
+        "## 再生成モード",
+        1,
+    )[0]
     onboarding = _read("ONBOARDING.md")
     features = _read("docs/features.md")
 
@@ -517,22 +522,25 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "任意後続スキル" not in viewer_voice
     assert "/audience-persona-design の必須入力（viewer-voice-analysis.md）" in viewer_voice
 
-    for path_text in (setup, channel_new, channel_direction, onboarding):
+    for path_text in (setup, channel_new, channel_direction_mode, onboarding):
         assert "TTP benchmark" not in path_text
         assert "TTP ベンチマーク収集" not in path_text
 
     assert "TTP 対象確認、config 生成、ペルソナ、branding" in setup
     assert "TTP 対象確認 / seed fetch / 承認済み benchmark.channels 反映" in channel_new
-    assert "docs/channel/ttp-seed-confirmation.md" in channel_direction
-    assert "docs/channel/competitor-branding-snapshot.json" in channel_direction
-    assert "untrusted data" in channel_direction
-    assert "動画尺 / 投稿頻度 / コメント語彙は収集済みデータがある場合だけ使う" in channel_direction
+    assert "旧 `/channel-direction` は本スキルの方向性検討モードに統合済み" in channel_new
+    assert "docs/channel/ttp-seed-confirmation.md" in channel_direction_mode
+    assert "docs/channel/competitor-branding-snapshot.json" in channel_direction_mode
+    assert "untrusted data" in channel_direction_mode
+    assert "動画尺 / 投稿頻度 / コメント語彙は収集済みデータがある場合だけ使う" in channel_direction_mode
 
     assert "ビジョン共有 + 競合発掘" not in onboarding
     assert "yt-discover-competitors` で 5-10 件" not in onboarding
     assert "ベンチマークデータ + コメント収集まで実行" not in onboarding
     assert "docs/channel/ttp-seed-confirmation.md" in onboarding
     assert "docs/channel/competitor-branding-snapshot.json" in onboarding
+    assert "/channel-new 方向性検討モード" in onboarding
+    assert "| /channel-direction |" not in features
     assert "untrusted data" in onboarding
 
     assert "新規チャンネル開設 → 競合発掘 → 方向性決定 → セットアップ" not in features
