@@ -371,6 +371,27 @@ def test_channel_new_pre_wf_new_checks_include_analytics_reporting_and_live_stre
     assert "/streaming の準備確認" in success_message
 
 
+def test_wf_new_fail_fast_contract_points_to_channel_new_and_doctor_readiness() -> None:
+    wf_new = _read(".claude/skills/wf-new/SKILL.md")
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    doctor = _read("src/youtube_automation/cli/doctor.py")
+
+    hard_gates = wf_new.split("## Hard Gates", 1)[1].split("## When to Use", 1)[0]
+
+    assert "config/channel/` が存在し、`load_config()` でロードできること" in hard_gates
+    assert "存在しない場合は `/channel-new`" in hard_gates
+    assert "ロード失敗の場合は `/channel-new`（既存チャンネル取り込みモード）" in hard_gates
+    assert "Suno readiness gate" in hard_gates
+    assert "bunx tayk video-analyze --source benchmark --channel <slug> --top 5" in hard_gates
+
+    assert "既存チャンネル取り込みモード" in channel_new
+    assert "ttp_wf_new_readiness" in channel_new
+    assert "def check_channel_config" in doctor
+    assert 'id="channel_config"' in doctor
+    assert "def check_ttp_wf_new_readiness" in doctor
+    assert 'id="ttp_wf_new_readiness"' in doctor
+
+
 def test_analytics_collect_documents_reporting_api_preflight() -> None:
     analytics_collect = _read(".claude/skills/analytics-collect/SKILL.md")
 

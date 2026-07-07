@@ -78,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(wf-new)`: `/wf-new` の冒頭に channel config / Suno readiness の Hard Gates を置き、前提未達時は `/channel-new` や `bunx tayk video-analyze --source benchmark --channel <slug> --top 5` を案内して停止し、`/collection-ideate`、`bunx tayk init-collection`、`/suno`、`workflow-state.json` / `assets.*` 更新へ進まない契約を明記した（#1609）
 - `fix(config)`: `channel_dir()` / `_resolve_channel_dir()` と TS `channelDir()`、comments / pinned_comment の `history_file` docstring、thumbnail skill / channel-new テンプレートの `path_base: "channel_dir"` 説明を、`config/channel/` 自体ではなくそれを含むプロジェクトルートを指す説明へ統一した（#1569）
 - `fix(benchmark)`: ベンチマーク収集でショート動画の `thumbnail_url` を選ぶ際、縦型を返しうる `maxres` / `standard` ではなく横型キー（`high` / `medium` / `default`）を優先するようにした。通常動画は従来どおり `maxres` 優先を維持する（#1501）
 - `fix(ts-rewrite/generate-master)`: review 指摘を受け、`masterup.yaml` fallback は `audio` 直下の generate-master 用キーだけを読み、finalize-master 用 namespace の `audio.finalize.*` は無視するよう修正した。JSON 優先は `masterup` override に限定し、inline / scalar `audio`、JSON root / audio shape 不備、空白 `bitrate` は config / validation error に統一した。registry 経由でも明示 CLI 値の presence が config override より優先されるよう schema 境界を分離した。`ffmpeg` の bitrate 指定では `-b:a` と `-q:a` の併用をやめ、single MP3 も bitrate 契約どおり encode 経路へ統一した。`generate-master` public subpath から CLI 用 path resolver を外し、`tayk generate-master` の CLI flag 実行 smoke と関連回帰テストを追加した（#772）
