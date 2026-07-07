@@ -20,10 +20,20 @@ from pathlib import Path
 # リポジトリルート (tests/ の親)
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "suno" / "SKILL.md"
+SUNO_LYRIC_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "SKILL.md"
+REVIEW_RUBRIC_MD = _REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "references" / "review-rubric.md"
 
 
-def _read() -> str:
-    return SKILL_MD.read_text(encoding="utf-8")
+def _read(path: Path = SKILL_MD) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def _assert_before(text: str, earlier: str, later: str) -> None:
+    earlier_index = text.find(earlier)
+    later_index = text.find(later)
+    assert earlier_index != -1, f"`{earlier}` が見つからない"
+    assert later_index != -1, f"`{later}` が見つからない"
+    assert earlier_index < later_index, f"`{earlier}` が `{later}` より前に記載されていない"
 
 
 def test_skill_md_exists() -> None:
@@ -32,6 +42,14 @@ def test_skill_md_exists() -> None:
     Then ファイルが存在する。
     """
     assert SKILL_MD.exists(), f"{SKILL_MD} が存在しません"
+
+
+def test_suno_lyric_skill_md_exists() -> None:
+    """Given リポジトリ
+    When suno-lyric SKILL.md を探す
+    Then ファイルが存在する。
+    """
+    assert SUNO_LYRIC_SKILL_MD.exists(), f"{SUNO_LYRIC_SKILL_MD} が存在しません"
 
 
 def test_skill_md_documents_auto_inject_flow() -> None:
@@ -129,3 +147,162 @@ def test_skill_md_documents_tracks_per_collection_for_instrumental() -> None:
     assert "tracks_per_collection" in text, "SKILL.md に新キー `tracks_per_collection` への言及がない"
     # 算出式 ceil(N/2) の言及 (Suno 1 Generate = 2 clip 仕様の反映確認)
     assert "ceil" in text, "SKILL.md に `ceil(N/2)` 算出式の言及がない"
+
+
+def test_suno_lyric_documents_generator_reviewer_contract() -> None:
+    """Issue #1485: /suno-lyric の生成と意味的品質検証は別コンテキストで行う。"""
+    text = _read(SUNO_LYRIC_SKILL_MD)
+    for token in (
+        "Generator-Reviewer Quality Gate",
+        "generator",
+        "reviewer",
+        "subagent",
+        "Codex",
+        "別コンテキスト",
+        "suno-lyrics.json",
+        "suno-lyrics.json` と `references/review-rubric.md` のみ",
+    ):
+        assert token in text, f"/suno-lyric SKILL.md に generator-reviewer 契約がない（`{token}` 不在）"
+
+
+def test_suno_lyric_json_contract_supplies_reviewer_context() -> None:
+    """Issue #1485: reviewer が成果物 JSON だけでルーブリック観点を検証できる。"""
+    text = _read(SUNO_LYRIC_SKILL_MD)
+    for token in (
+        "review_context",
+        "reviewer-only",
+        "collection_theme",
+        "scene",
+        "mood",
+        "persona_target",
+        "persona_vocabulary",
+        "quote_essence",
+        "`/suno` の merge loader は `name` / `lyrics` だけを使用",
+    ):
+        assert token in text, f"/suno-lyric の JSON contract に reviewer context 契約がない（`{token}` 不在）"
+
+
+def test_suno_lyric_documents_verify_before_semantic_review() -> None:
+    """Issue #1485: /suno-lyric は yt-suno-verify 通過後に LLM semantic review へ進む。"""
+    text = _read(SUNO_LYRIC_SKILL_MD)
+    _assert_before(text, "yt-suno-verify <collection>", "LLM semantic review")
+
+
+def test_suno_lyric_documents_pass_fail_loop_contract() -> None:
+    """Issue #1485: /suno-lyric は entry ごとの PASS / FAIL と上限 2 周の再生成を固定する。"""
+    text = _read(SUNO_LYRIC_SKILL_MD)
+    for token in ("entry ごと", "PASS", "FAIL", "理由", "FAIL` entry のみ", "最大 2 周", "残課題", "ユーザー"):
+        assert token in text, f"/suno-lyric SKILL.md に PASS/FAIL ループ契約がない（`{token}` 不在）"
+
+
+def test_suno_documents_generator_reviewer_contract_for_style_prompts() -> None:
+    """Issue #1485: /suno の Style プロンプトも別コンテキスト reviewer が成果物 JSON だけで検証する。"""
+    text = _read()
+    for token in (
+        "Generator-Reviewer Quality Gate",
+        "generator",
+        "reviewer",
+        "subagent",
+        "Codex",
+        "別コンテキスト",
+        "suno-prompts.json",
+        "suno-prompts.json` と `/suno-lyric` の `references/review-rubric.md` のみ",
+    ):
+        assert token in text, f"/suno SKILL.md に Style prompt review 契約がない（`{token}` 不在）"
+
+
+def test_suno_json_only_review_uses_existing_prompt_fields() -> None:
+    """Issue #1485: /suno reviewer は既存 suno-prompts.json fields だけを読む。"""
+    text = _read()
+    for token in (
+        "`name`, `style`, `lyrics`",
+        "More Options 補助 field",
+        "`/suno` reviewer は `review_context` を要求せず",
+        "外部資料で補完しない",
+    ):
+        assert token in text, f"/suno reviewer の JSON-only 入力契約が不明確（`{token}` 不在）"
+
+
+def test_suno_documents_verify_before_semantic_review() -> None:
+    """Issue #1485: /suno は yt-suno-verify 通過後に LLM semantic review へ進む。"""
+    text = _read()
+    _assert_before(text, "yt-suno-verify <collection>", "LLM semantic review")
+
+
+def test_suno_documents_pass_fail_loop_contract() -> None:
+    """Issue #1485: /suno は entry ごとの PASS / FAIL と上限 2 周の再生成を固定する。"""
+    text = _read()
+    for token in ("entry ごと", "PASS", "FAIL", "理由", "FAIL` entry のみ", "最大 2 周", "残課題", "ユーザー"):
+        assert token in text, f"/suno SKILL.md に PASS/FAIL ループ契約がない（`{token}` 不在）"
+
+
+def test_suno_updates_generated_state_only_after_semantic_review_passes() -> None:
+    """Issue #1485: /suno は semantic review 全 PASS 後だけ生成完了 state を更新する。"""
+    text = _read()
+    step_2_match = re.search(
+        r"### Step 2: スクリプトで suno-prompts\.md を生成\b.*?(?=^### Step 3:)",
+        text,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    assert step_2_match, "SKILL.md に `/suno` Step 2 節が見つからない"
+    step_2 = step_2_match.group(0)
+
+    for token in (
+        "この保存時点では、まだ `workflow-state.json` の `music.generated = true` に更新しない",
+        "全 entry が `PASS` した後にだけ `workflow-state.json` の `music.generated = true` に更新する",
+        "`music.generated` を更新せず",
+        "Step 3 へ進まず",
+    ):
+        assert token in step_2, f"/suno Step 2 に生成完了 state のゲート契約がない（`{token}` 不在）"
+
+    _assert_before(step_2, "LLM semantic review", "`music.generated = true` に更新する")
+
+
+def test_review_rubric_documents_required_semantic_viewpoints() -> None:
+    """Issue #1485: references/ に意味的品質検証ルーブリックを固定する。"""
+    assert REVIEW_RUBRIC_MD.exists(), f"{REVIEW_RUBRIC_MD} が存在しません"
+    text = _read(REVIEW_RUBRIC_MD)
+    for token in (
+        "テーマ・名言エッセンスの反映度",
+        "曲間の同質化",
+        "Section tag 構成の妥当性",
+        "不自然な表現・禁止表現",
+        "suno-lyrics.json",
+        "suno-prompts.json",
+        "PASS | FAIL",
+        "FAIL` entry のみ",
+        "2 周",
+        "yt-suno-verify",
+    ):
+        assert token in text, f"review-rubric.md に必須観点またはループ契約がない（`{token}` 不在）"
+
+
+def test_review_rubric_is_connected_to_json_only_reviewer_context() -> None:
+    """Issue #1485: rubric の必須観点は成果物 JSON 内の context から判定する。"""
+    text = _read(REVIEW_RUBRIC_MD)
+    for token in (
+        "JSON-only 入力契約",
+        "review_context",
+        "collection_theme",
+        "scene",
+        "mood",
+        "persona_target",
+        "persona_vocabulary",
+        "quote_essence",
+        "外部資料で補完せず `FAIL`",
+    ):
+        assert token in text, f"review-rubric.md が JSON-only context と必須観点を接続していない（`{token}` 不在）"
+
+
+def test_review_rubric_scopes_suno_to_existing_prompt_fields() -> None:
+    """Issue #1485: /suno rubric は suno-prompts.json に実在する field だけで判定する。"""
+    text = _read(REVIEW_RUBRIC_MD)
+    for token in (
+        "`/suno` の `suno-prompts.json` は既存 consumer 互換",
+        "`name`, `style`, `lyrics`",
+        "More Options",
+        "`/suno` entry に `review_context` は要求しない",
+        "`review_context` 欠落だけを理由に `FAIL` しない",
+        "`/suno` `PASS`",
+    ):
+        assert token in text, f"review-rubric.md が /suno の実在 field scope を固定していない（`{token}` 不在）"
