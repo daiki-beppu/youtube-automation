@@ -35,6 +35,7 @@ from youtube_automation.utils.image_provider.composition import (
     resolve_reference_paths,
     select_reference,
     validate_single_step_references,
+    validate_single_step_request_references,
 )
 from youtube_automation.utils.image_provider.config import replace_model
 from youtube_automation.utils.profile import section
@@ -380,10 +381,17 @@ def main():
         assert cfg.gemini is not None
         model = cfg.gemini.model
         image_size = args.size
-    else:
+    elif cfg.provider == "openai":
         assert cfg.openai is not None
         model = cfg.openai.model
         image_size = cfg.openai.quality
+    elif cfg.provider == "gemini_cli":
+        assert cfg.gemini_cli is not None
+        model = cfg.gemini_cli.model
+        image_size = args.size
+    else:
+        print(f"[ERROR] provider={cfg.provider!r} は yt-generate-image では未対応です")
+        sys.exit(1)
 
     # max_attempts / rotate / reference_index の解決（コスト表示前に出すため早期解決）
     single_step_section = gemini_section.get("single_step") if isinstance(gemini_section, dict) else None
@@ -396,21 +404,23 @@ def main():
         cli_max_attempts = 1
     rotate = (not args.no_rotate) and config_rotate
 
-    # TTP strict preflight は既存出力確認・コスト確認・provider 初期化より前に済ませる。
-    if args.ttp_strict_references and generation_mode == "single_step" and not args.reference:
+    # single_step preflight は既存出力確認・コスト確認・provider 初期化より前に済ませる。
+    if generation_mode == "single_step" and not args.reference:
         try:
             validate_single_step_references(skill_cfg)
+            validate_single_step_request_references(generation_mode, [])
         except ConfigError as e:
             print(f"[ERROR] {e}")
             sys.exit(1)
-        print(
-            "[ERROR] thumbnail TTP strict 生成では --reference の指定が必須です。"
-            "skill-config の image_generation.gemini.reference_images.default を CLI へ展開してください。"
-        )
-        sys.exit(1)
 
     try:
         reference_images = resolve_reference_paths(args.reference)
+    except ConfigError as e:
+        print(f"[ERROR] {e}")
+        sys.exit(1)
+
+    try:
+        validate_single_step_request_references(generation_mode, reference_images)
     except ConfigError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)
