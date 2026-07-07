@@ -52,6 +52,14 @@ vi.mock("../lib/storage", () => ({
   serverUrlItem: storageMocks,
   downloadFormatItem: downloadFormatMocks,
   readDownloadFormat: vi.fn(() => downloadFormatMocks.getValue()),
+  readServerSources: vi.fn(async () => [
+    { id: "localhost-7873", label: "localhost", url: BASE_URL },
+    { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
+  ]),
+  rememberServerSource: vi.fn(async () => [
+    { id: "localhost-7873", label: "localhost", url: BASE_URL },
+    { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
+  ]),
 }));
 
 vi.mock("../lib/messaging", () => messagingMocks);
@@ -80,6 +88,16 @@ function defaultSendMessage(message: string, payload?: Record<string, string>): 
       }
       return `拡張を更新してください（拡張 ${payload?.extensionVersion} / 必要 ${data.min_extension_version} / サーバー ${data.version}）。`;
     })();
+  }
+  if (message === "fetchServerInfo") {
+    return Promise.resolve({
+      channel_name: "Localhost",
+      channel_short: "local",
+      hostname: "localhost",
+      port: 7873,
+      base_url: BASE_URL,
+      label: "localhost",
+    });
   }
   if (message === "fetchCollections") {
     return readJson(`${payload?.baseUrl}/collections`);
@@ -112,15 +130,6 @@ function jsonResponse(status: number, body: unknown): Response {
     status,
     json: async () => body,
   } as Response;
-}
-
-function setInputValue(input: HTMLInputElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  if (!setter) {
-    throw new Error("HTMLInputElement.value setter is unavailable");
-  }
-  setter.call(input, value);
-  input.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 function setSelectValue(select: HTMLSelectElement, value: string): void {
@@ -269,7 +278,7 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -304,7 +313,7 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -342,7 +351,7 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, entries));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -401,7 +410,7 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, entries));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -552,7 +561,7 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, fetchedEntries));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -601,7 +610,7 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, entries));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -652,7 +661,7 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, entries));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -699,7 +708,7 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -751,7 +760,7 @@ describe("Suno popup compatibility check", () => {
     });
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -774,6 +783,7 @@ describe("Suno popup compatibility check", () => {
         failedIndex: 1,
         total: 1,
         submittedClipIds: ["clip-a", "clip-b"],
+        submittedClipIdsAreDurationFiltered: false,
         playlistExpectedClipCount: 2,
       }),
     );
@@ -807,7 +817,7 @@ describe("Suno popup compatibility check", () => {
     });
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -864,7 +874,7 @@ describe("Suno popup compatibility check", () => {
     });
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -920,7 +930,7 @@ describe("Suno popup compatibility check", () => {
     });
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -1080,7 +1090,7 @@ describe("Suno popup compatibility check", () => {
     });
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -1105,6 +1115,8 @@ describe("Suno popup compatibility check", () => {
       playlistName: "clm | theme-a",
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
+      durationFilter: undefined,
+      submittedClipIdsAreDurationFiltered: false,
       shouldDownload: true,
     });
     await waitFor(() => {
@@ -1123,6 +1135,8 @@ describe("Suno popup compatibility check", () => {
       total: 1,
       timestamp: Date.now(),
       submittedClipIds: ["clip-a", "clip-b"],
+      durationFilter: { min_sec: 75, max_sec: 180 },
+      submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
     } as never);
     fetchMock.mockReset();
@@ -1147,15 +1161,16 @@ describe("Suno popup compatibility check", () => {
       root.render(createElement(App));
     });
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
     });
 
     await waitFor(() => {
-      expect(container.textContent).toContain("全 entry 投入済みです。playlist 追加から再開しますか？");
+      expect(container.textContent).not.toContain("全 entry 投入済みです。playlist 追加から再開しますか？");
       expect(container.textContent).toContain("Playlist: clm | theme-a");
+      expect(container.textContent).toContain("Playlist から再開");
     });
 
     messagingMocks.sendMessage.mockClear();
@@ -1168,6 +1183,8 @@ describe("Suno popup compatibility check", () => {
       playlistName: "clm | theme-a",
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
+      durationFilter: { min_sec: 75, max_sec: 180 },
+      submittedClipIdsAreDurationFiltered: true,
       shouldDownload: true,
     });
   });
@@ -1205,7 +1222,7 @@ describe("Suno popup compatibility check", () => {
       root.render(createElement(App));
     });
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -1244,7 +1261,7 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -1293,7 +1310,7 @@ describe("Suno popup compatibility check", () => {
     });
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -1338,7 +1355,7 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -1373,7 +1390,7 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -1385,7 +1402,7 @@ describe("Suno popup compatibility check", () => {
 
     messagingMocks.sendMessage.mockClear();
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, `${BASE_URL}/changed`);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, `${BASE_URL}/changed`);
     });
 
     const runButton = buttonByText(container, "全パターンを連続実行");
@@ -1403,7 +1420,7 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, []));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -1423,7 +1440,7 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(404, {}));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();
@@ -1512,7 +1529,7 @@ describe("Suno popup compatibility check", () => {
       .mockRejectedValueOnce(new TypeError("Failed to fetch"));
 
     await act(async () => {
-      setInputValue(container.querySelector<HTMLInputElement>('input[type="text"]')!, BASE_URL);
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
     await act(async () => {
       buttonByText(container, "データ取得").click();

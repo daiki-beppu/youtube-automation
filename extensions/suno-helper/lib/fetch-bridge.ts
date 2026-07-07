@@ -119,12 +119,16 @@ function withDuration(clip: RawObservedClip, duration: number | undefined): Obse
     : { id: clip.id as string, status: clip.status as string, duration };
 }
 
+function isValidDuration(duration: unknown): duration is number {
+  return typeof duration === "number" && Number.isFinite(duration) && duration >= 0;
+}
+
 function parseDuration(clip: RawObservedClip): number | null | undefined {
   if (clip.duration !== undefined) {
-    return typeof clip.duration === "number" && Number.isFinite(clip.duration) ? clip.duration : null;
+    return isValidDuration(clip.duration) ? clip.duration : null;
   }
   const metadataDuration = clip.metadata?.duration;
-  return typeof metadataDuration === "number" && Number.isFinite(metadataDuration) ? metadataDuration : undefined;
+  return isValidDuration(metadataDuration) ? metadataDuration : undefined;
 }
 
 /** unknown JSON から `{id, status, duration?}` を持つ clip 配列を fail-soft で取り出す共通処理。 */

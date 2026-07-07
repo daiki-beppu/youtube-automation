@@ -622,6 +622,7 @@ def _apply_plan(
     collection_dir: Path,
     plan: SelectionPlan,
     stock_cfg: StockConfig,
+    min_song_sec: float | None,
 ) -> SelectionResult:
     workflow_state = (
         _read_workflow_state(CollectionPaths(collection_dir).workflow_state_path)
@@ -687,6 +688,7 @@ def _apply_plan(
             collection_dir=collection_dir,
             log_path=plan.log_path,
             seed=plan.seed,
+            min_song_sec=min_song_sec,
             kept=result.kept,
             stocked=result.stocked,
             deleted=result.deleted,
@@ -718,6 +720,7 @@ def _write_log(
     collection_dir: Path,
     log_path: Path,
     seed: int,
+    min_song_sec: float | None,
     kept: list[Path],
     stocked: list[Path],
     deleted: list[Path],
@@ -734,6 +737,14 @@ def _write_log(
     dropped_lines = [
         f"{c.prompt_index:02d} {c.variant or '-'} {c.title} duration={c.duration:.2f}s source={c.path.name}"
         for c in dropped
+    ]
+    dropped_under_min_lines = [
+        (
+            f"{c.prompt_index:02d} {c.variant or '-'} {c.title} "
+            f"duration={c.duration:.2f}s min_song_sec={min_song_sec:.2f}s source={c.path.name}"
+        )
+        for c in dropped
+        if min_song_sec is not None and c.duration < min_song_sec
     ]
     exception_lines = [
         (
@@ -757,6 +768,8 @@ def _write_log(
         *winner_lines,
         "[exceptions_over_limit]",
         *exception_lines,
+        "[dropped_under_min]",
+        *dropped_under_min_lines,
         "[dropped_duration]",
         *dropped_lines,
         "[stocked]",
@@ -869,6 +882,7 @@ def select_suno_tracks(
             collection_dir=collection_dir,
             log_path=plan.log_path,
             seed=plan.seed,
+            min_song_sec=parsed_cfg.pair.min_song_sec,
             kept=result.kept,
             stocked=result.stocked,
             deleted=result.deleted,
@@ -879,5 +893,10 @@ def select_suno_tracks(
             dry_run=True,
         )
     else:
-        result = _apply_plan(collection_dir=collection_dir, plan=plan, stock_cfg=parsed_cfg.stock)
+        result = _apply_plan(
+            collection_dir=collection_dir,
+            plan=plan,
+            stock_cfg=parsed_cfg.stock,
+            min_song_sec=parsed_cfg.pair.min_song_sec,
+        )
     return result

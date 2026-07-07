@@ -10,8 +10,8 @@ import {
   CLIPS_PER_REQUEST,
   COLLECTIONS_ROUTE,
   collectionPromptsRoute,
+  DEFAULT_SERVER_SOURCES,
   DEFAULT_URL,
-  FEED_V2_PATH,
   FEED_V3_METHOD,
   FEED_V3_PATH,
   INJECT_ACK_TIMEOUT_MS,
@@ -24,6 +24,7 @@ import {
   PROMPTS_ROUTE,
   QUEUE_ERROR_WAIT_MS,
   QUEUE_SLOT_WAIT_TIMEOUT_MS,
+  SERVER_HOST_PERMISSIONS,
   STORAGE_KEY,
   type ObservedClip,
 } from "../../shared/constants";
@@ -38,8 +39,19 @@ describe("shared/constants: サーバー互換の契約値", () => {
     expect(PROMPTS_ROUTE).toBe("/suno/prompts.json");
   });
 
-  it("Given 移行後の定数 When DEFAULT_URL を読む Then 旧実装と同じローカル配信元である", () => {
-    expect(DEFAULT_URL).toBe("http://localhost:7873");
+  it("Given server selector When DEFAULT_URL を読む Then チャンネル識別可能な既定 hostname である", () => {
+    expect(DEFAULT_URL).toBe("http://youtube-automation.localhost:7873");
+  });
+
+  it("Given server selector When 既定候補を読む Then チャンネル別 hostname と legacy localhost を持つ", () => {
+    expect(DEFAULT_SERVER_SOURCES.map((source) => source.url)).toEqual([
+      "http://youtube-automation.localhost:7873",
+      "http://localhost:7873",
+    ]);
+  });
+
+  it("Given server selector When host permissions を読む Then *.localhost を許可する", () => {
+    expect(SERVER_HOST_PERMISSIONS).toContain("http://*.localhost/*");
   });
 
   it("Given overlay 化 (#892) When OVERLAY_STATE_KEY を読む Then overlay 位置・最小化を永続化する key 名である", () => {
@@ -119,15 +131,12 @@ describe("shared/constants: Suno queue 上限 (#816)", () => {
 });
 
 describe("shared/constants: Suno feed bridge 契約 (#1258)", () => {
-  it("Given feed endpoint constants When 読む Then v2 GET poll と v3 POST 用 path/method を固定する", () => {
-    expect(FEED_V2_PATH).toBe("/api/feed/v2");
+  it("Given feed endpoint constants When 読む Then v3 POST 用 path/method を固定する", () => {
     expect(FEED_V3_PATH).toBe("/api/feed/v3");
     expect(FEED_V3_METHOD).toBe("POST");
   });
 
-  it("Given BRIDGE_MSG When feed v3 poll の message type を読む Then v2 と別名で固定されている", () => {
-    expect(BRIDGE_MSG.FEED_POLL_REQUEST).toBe("feed-poll-request");
-    expect(BRIDGE_MSG.FEED_POLL_RESPONSE).toBe("feed-poll-response");
+  it("Given BRIDGE_MSG When feed v3 poll の message type を読む Then 契約値が固定されている", () => {
     expect(BRIDGE_MSG.FEED_V3_POLL_REQUEST).toBe("feed-v3-poll-request");
     expect(BRIDGE_MSG.FEED_V3_POLL_RESPONSE).toBe("feed-v3-poll-response");
   });

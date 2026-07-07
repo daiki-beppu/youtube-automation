@@ -4,6 +4,39 @@
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
+## 第 3 回監査（takt リジェクト多発の原因調査、2026-07-06、基準 commit `bf68c73d` / dotfiles `9a030ff`）
+
+調査テーマ: review-takt-default の REJECT 多発（`.takt/runs/` 239 run・指摘 676 件の全数解析）。
+主要結果 — (1) REJECT 率 91%（171/187）は 7 観点ゼロトレランス全員一致ゲートの数理的帰結
+（各観点の個別 REJECT 率 27〜41% → 通過率 ≈9%）で品質シグナルではない。(2) fix → 再レビュー
+126 ペアの 91% が再 REJECT だが、前回指摘未解消（persists）は 14% のみで、77% は「同じファイル
+への新規指摘」＝ fix がレビュアーの走査範囲（累積差分全体）を自己監査していない。(3) issue 品質が
+効く指摘は全体の ~11%、CI ツーリング不足は ~3% のみ。(4) 上流対策（#1508 チェックリスト・
+強化 plan 指示）は 2026-07-03〜05 投入でクリーンな効果測定サンプル 0 件。
+
+**注意: 018 / 019 の変更対象は dotfiles リポジトリ（`~/01-dev/dotfiles/config/.claude/skills/`）**。
+プランファイルだけが本リポジトリにある。
+
+### Execution order & status
+
+| Plan | Title | Priority | Effort | Depends on | Issue | PR | Status |
+|------|-------|----------|--------|------------|-------|-----|--------|
+| 019 | takt-review の fix を累積差分の自己監査 + finding_id 解消根拠表つきに再設計 | P1 | M | — | — | — | DONE（executor worktree `scratchpad/wt-019`・branch `feat/takt-review-fix-self-audit`・commit `874d28b`。レビュー済み・未マージ） |
+| 018 | issue / to-issues / takt-issue テンプレに「兄弟入口・貫通先」列挙を必須化 | P2 | S | — | — | — | DONE（executor worktree `scratchpad/wt-018`・branch `feat/issue-sibling-entrypoints`・commit `cf6a598`。レビュー済み・未マージ） |
+
+### Findings considered and rejected（再監査不要）
+
+- **「issue の内容が悪いから REJECT される」説**: 主因ではない。要求解釈系の指摘は 676 件中 75 件（11%）。issue 本文の長さ・テンプレ準拠と REJECT 回数に相関なし（2,105 字・影響ファイル記載ありの #1141 でも 14 REJECT）。
+- **「CI / lint ツーリング不足」説**: 機械捕捉可能クラス（未使用コード・依存脆弱性・型）は指摘の ~3%。knip / oxlint / tests は機能している。
+- **「/issue・/to-issues に受入条件・スコープ外が無い」**: 2026-07-05 のスキル改訂で導入済み（takt-issue の preflight 正規化も同日導入済み）。残ギャップは「兄弟入口・貫通先」の観点のみ → Plan 018。
+- **takt 本体（builtin review policy のゼロトレランス設計・7 観点一致）の変更**: ユーザー前提により対象外（takt は据え置き）。
+
+### 監査で plan 化を見送った残課題
+
+- **効果測定基盤**（`.takt/runs` から verdict / persists / High 件数 / 欠陥クラス別の自動集計を常設し、#1508 チェックリストと本監査 018/019 の効果を 20〜30 run で判定）— 提案済み・ユーザー未選択
+- **自己申告ゲートの機械化**（変更行カバレッジゲート、config キーの定義⇔loader⇔使用の貫通チェック CLI）— 指摘最頻 2 クラスの CI 昇格。効果測定の結果を見てから判断
+- **運用指標の変更**（REJECT 数ではなく persists 数 + High 件数を見る）— ドキュメント化のみの小変更だが docs/takt-operations.md の改訂はユーザー確認待ち
+
 ## 第 2 回監査（スキル全般の Sonnet-safe 化、2026-07-05、基準 commit `8deb3f02`）
 
 監査テーマ: `.claude/skills/` 全 47 スキルを「Sonnet 級のより弱いモデルが実行しても作者の期待とズレなく解釈できるか」の観点で監査（TRIGGER / AMBIG / DRIFT / ROBUST の 4 ディメンション、並列 4 subagent + 全 findings を advisor が実読 vet）。42 件の生 findings から 12 件を有効と判定し、規約 1 本 + 個別修正 12 本に plan 化した。

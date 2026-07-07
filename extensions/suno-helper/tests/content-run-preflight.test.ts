@@ -42,6 +42,7 @@ const harness = vi.hoisted(() => {
     legacyReadSpeedPresetId,
     legacyResolveSpeedPreset,
     requestSliderSet: vi.fn(),
+    submittedClipIds: [] as string[],
   };
 });
 
@@ -91,6 +92,19 @@ vi.mock("../lib/entry-retry", () => ({
   runEntryWithRetry: harness.runEntryWithRetry,
 }));
 
+vi.mock("../lib/clip-tracker", () => ({
+  createClipTracker: vi.fn(() => ({
+    clearSubmittedIds: vi.fn(),
+    getSubmittedIds: vi.fn(() => harness.submittedClipIds),
+    getPendingSubmittedIds: vi.fn(() => []),
+    getDuration: vi.fn(() => 120),
+    getInFlightCount: vi.fn(() => 0),
+    hasObservedAnyTraffic: vi.fn(() => true),
+    lastChangeAt: vi.fn(() => Date.now()),
+    submissionCount: vi.fn(() => harness.submittedClipIds.length),
+  })),
+}));
+
 vi.mock("../lib/storage", () => ({
   serverUrlItem: { getValue: vi.fn(() => Promise.resolve("http://localhost:8787")) },
   downloadFormatItem: { getValue: vi.fn(() => Promise.resolve("mp3")) },
@@ -110,6 +124,15 @@ vi.mock("../lib/download", () => ({
   triggerDownloadAll: vi.fn(() => Promise.resolve()),
 }));
 
+vi.mock("../lib/download-flow", () => ({
+  createDownloadFlow: vi.fn(() => ({
+    installMessageHandlers: vi.fn(),
+    downloadBestEffort: vi.fn(() => Promise.resolve(null)),
+    performDownload: vi.fn(() => Promise.resolve()),
+    retryDownload: vi.fn(() => Promise.resolve({ completedAndCleared: true })),
+  })),
+}));
+
 // 完了時リロード前の snapshot 退避。実物は chrome.storage へアクセスするため node/jsdom 環境では mock 必須。
 // 退避契約そのものの検証は content-finished-snapshot.test.ts が担う。
 vi.mock("../lib/finished-snapshot", () => ({
@@ -118,7 +141,8 @@ vi.mock("../lib/finished-snapshot", () => ({
   clearFinishedSnapshot: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock("../../shared/api", () => ({
+vi.mock("../../shared/api", async () => ({
+  ...(await vi.importActual<typeof import("../../shared/api")>("../../shared/api")),
   postDownloaded: vi.fn(() => Promise.resolve()),
 }));
 
@@ -287,15 +311,12 @@ function makeRunPayload(entries = makePromptEntries(0)): {
   entries: ReturnType<typeof makePromptEntries>;
   playlistName: string;
   collectionId: string;
-  submittedClipIds: string[];
-  playlistExpectedClipCount: number;
 } {
+  harness.submittedClipIds = Array.from({ length: entries.length * 2 }, (_, index) => `generated-clip-${index + 1}`);
   return {
     entries,
     playlistName: "clm | preflight",
     collectionId: "20260601-clm-preflight-collection",
-    submittedClipIds: ["clip-a"],
-    playlistExpectedClipCount: 1,
   };
 }
 
@@ -309,6 +330,7 @@ beforeEach(() => {
     await options.attempt();
     return { outcome: "ok" };
   });
+  harness.submittedClipIds = [];
   harness.handlers.clear();
   document.body.innerHTML = "";
 });
@@ -330,6 +352,15 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
   it.each([
     ["collectionId 欠落", { collectionId: undefined }, /run\.collectionId/],
     ["playlistName 欠落", { playlistName: undefined }, /run\.playlistName/],
+    ["durationFilter が null", { durationFilter: null }, /run\.durationFilter/],
+    ["durationFilter が空 object", { durationFilter: {} }, /run\.durationFilter/],
+    ["durationFilter が boolean", { durationFilter: false }, /run\.durationFilter/],
+    ["durationFilter が min > max", { durationFilter: { min_sec: 301, max_sec: 300 } }, /run\.durationFilter/],
+    [
+      "submittedClipIdsAreDurationFiltered が非 boolean",
+      { submittedClipIdsAreDurationFiltered: "true" },
+      /run\.submittedClipIdsAreDurationFiltered/,
+    ],
   ] as const)(
     "Given %s payload When run を受ける Then fail-loud し副作用を起こさない",
     async (_label, override, message) => {
@@ -606,7 +637,10 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     const runHandler = getRunHandler();
     const entries = makePromptEntries(3);
 
-    const result = runHandler({ data: { ...makeRunPayload(entries), indices: [0, 2] } });
+    const payload = { ...makeRunPayload(entries), indices: [0, 2] };
+    harness.submittedClipIds = ["generated-clip-1", "generated-clip-2", "generated-clip-3", "generated-clip-4"];
+
+    const result = runHandler({ data: payload });
 
     expect(result).toEqual({ ok: true });
     await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
@@ -643,7 +677,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     const result = runHandler({ data: { ...makeRunPayload(entries), indices: [0, 2, 4] } });
 
     expect(result).toEqual({ ok: true });
-    await vi.waitFor(() => expect(writeResumeState).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(writeResumeState).toHaveBeenCalledOnce(), { timeout: 3000 });
     expect(writeResumeState).toHaveBeenCalledWith(
       expect.objectContaining({
         collectionId: "20260601-clm-preflight-collection",

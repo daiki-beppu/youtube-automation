@@ -120,8 +120,8 @@ describe("ChannelConfig — bucket membership", () => {
   });
 
   test("engagement carries comments/pinnedComment/playlists/localizations", () => {
-    // localizations is loader-injected (it lives in config/localizations.json,
-    // outside config/channel/) but is grouped under the engagement bucket.
+    // localizations is assembled from the config/localizations.json sidecar
+    // and grouped under the engagement bucket.
     const config = load(minimalSections());
     expect(Object.keys(config.engagement).toSorted()).toEqual([
       "comments",

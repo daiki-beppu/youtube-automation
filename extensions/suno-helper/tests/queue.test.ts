@@ -35,7 +35,7 @@ import {
   isClipGenerating,
   waitForQueueSlot,
 } from "../../shared/dom";
-import { addClipCard, addQueueErrorDialog, buildClipCard, completeClipCard, markBbox } from "./_helpers";
+import { addClipCard, addQueueErrorDialog, buildClipCard, markBbox } from "./_helpers";
 
 /** card 内の Remix btn (findCardRoot の anchor) を取り出す。 */
 function remixBtnOf(card: HTMLElement): HTMLButtonElement {
@@ -445,11 +445,10 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
   });
 
   it("Given in-flight が上限ちょうど When 1 clip 完了で空く Then 投入を再開 (resolve) する", async () => {
-    // 20 card 生成中 = 10 リクエスト in-flight = 上限。11 件目はここで待たされる。
-    const cards = Array.from({ length: 20 }, () => addClipCard({ generating: true }));
-    expect(getInFlightClipCount()).toBe(20);
+    let inFlightCount = 20;
+    const getCount = vi.fn(() => inFlightCount);
 
-    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
+    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS, getCount });
 
     // 上限のままでは resolve しない（poll しても 20 >= 20）。
     let settled = false;
@@ -459,12 +458,12 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs * 3);
     expect(settled).toBe(false);
 
-    // 1 clip 完了 (Remix btn enabled) → in-flight 19 < 20 → 次の poll で resolve。
-    completeClipCard(cards[0]);
+    // 1 clip 完了相当 → in-flight 19 < 20 → 次の poll で resolve。
+    inFlightCount = 19;
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs);
 
     await expect(pending).resolves.toBeUndefined();
-    expect(getInFlightClipCount()).toBe(19);
+    expect(getCount).toHaveBeenCalled();
   });
 
   it("Given isAborted が true When 待機する Then 上限超でも即 resolve する (throw しない)", async () => {
@@ -477,12 +476,18 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
   });
 
   it("Given 上限のまま空かない When deadline 超過 Then timeout throw する", async () => {
-    Array.from({ length: 20 }, () => addClipCard({ generating: true }));
+    const getCount = vi.fn(() => 20);
 
-    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
-    const expectation = expect(pending).rejects.toThrow();
+    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS, getCount });
+    const rejection = pending.then(
+      () => {
+        throw new Error("waitForQueueSlot should reject");
+      },
+      (err: unknown) => err,
+    );
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.timeoutMs + FAST_OPTIONS.pollIntervalMs + 50);
-    await expectation;
+    expect(await rejection).toBeInstanceOf(Error);
+    expect(getCount).toHaveBeenCalled();
   }, 15_000);
 });
 

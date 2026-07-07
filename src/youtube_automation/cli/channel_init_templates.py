@@ -184,7 +184,6 @@ def _render_schedule(_ctx: ChannelInitContext) -> dict:
             "cadence": ["tue", "thu", "sat"],
         },
         "upload_settings": {
-            "privacy_status": "private",
             "category_id": "10",
             "auto_create_playlist": True,
             "max_retries": 3,

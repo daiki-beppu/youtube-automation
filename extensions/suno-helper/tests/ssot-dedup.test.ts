@@ -1,5 +1,5 @@
 // architect 指摘の再発防止:
-//   - ssot-drift (ARCH-NEW-app-placeholder): popup の placeholder に DEFAULT_URL を
+//   - ssot-drift (ARCH-NEW-app-placeholder): popup/overlay に DEFAULT_URL を
 //     直書きすると、定数変更時に UI がドリフトする。契約値の直書きをソースで禁止する。
 //   - dry-violation (ARCH-NEW-sleep-dup): content script が shared/dom の timing util を
 //     再定義すると DRY 違反になる。一元化（shared/dom export）を機械担保する。
@@ -16,17 +16,16 @@ import { sleep } from "../../shared/dom";
 
 const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
-describe("ssot-drift: popup の placeholder は DEFAULT_URL を参照する", () => {
+describe("ssot-drift: ローカル配信元 selector は候補 state を参照する", () => {
   const appSource = read("../components/App.tsx");
 
   it("Given App.tsx When 文字列を探す Then DEFAULT_URL の値を直書きしていない", () => {
     expect(appSource).not.toContain(DEFAULT_URL);
   });
 
-  it("Given App.tsx When placeholder を読む Then 定数 DEFAULT_URL を参照する", () => {
-    // named import の並びに依存せず「DEFAULT_URL が shared/constants から来ている」ことだけを担保する。
-    expect(appSource).toMatch(/import \{[^}]*\bDEFAULT_URL\b[^}]*\} from "\.\.\/\.\.\/shared\/constants"/);
-    expect(appSource).toMatch(/placeholder=\{DEFAULT_URL\}/);
+  it("Given App.tsx When selector を読む Then serverSources を options として表示する", () => {
+    expect(appSource).toMatch(/serverSources\.map/);
+    expect(appSource).toMatch(/<select\s+value=\{url\}/);
   });
 });
 

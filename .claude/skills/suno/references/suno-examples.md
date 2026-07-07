@@ -95,7 +95,7 @@ rain sounds, vinyl crackle, white noise, ambient noise
 
 ## Instrument Adjective Pairs (Bad/Good)
 
-楽器名だけでは Suno の生成が不安定になる。必ず音響的な形容詞を付けること（`config/skills/suno.yaml::banned_adjective_free_instruments` に該当する楽器名は `yt-generate-suno` が警告する）。
+楽器名だけでは Suno の生成が不安定になる。必ず音響的な形容詞を付けること（`config/skills/suno.yaml::banned_adjective_free_instruments` に該当する楽器名は `bunx tayk generate-suno` が警告する）。
 
 | Bad (vague) | Good (descriptive) |
 |---|---|
