@@ -8,8 +8,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SETUP_SKILL = REPO_ROOT / ".claude" / "skills" / "setup" / "SKILL.md"
-CHANNEL_SETUP_SKILL = REPO_ROOT / ".claude" / "skills" / "channel-setup" / "SKILL.md"
-GCP_BOOTSTRAP_MD = REPO_ROOT / ".claude" / "skills" / "channel-setup" / "references" / "gcp-bootstrap.md"
+CHANNEL_NEW_SKILL = REPO_ROOT / ".claude" / "skills" / "channel-new" / "SKILL.md"
+GCP_BOOTSTRAP_MD = REPO_ROOT / ".claude" / "skills" / "channel-new" / "references" / "gcp-bootstrap.md"
 
 GOOGLE_AUTH_PLATFORM_KEYWORDS = (
     "Google Auth Platform",
@@ -62,7 +62,7 @@ esac
 """,
     )
     env = os.environ | {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
-    script = REPO_ROOT / ".claude/skills/channel-setup/references/gcp-bootstrap.sh"
+    script = REPO_ROOT / ".claude/skills/channel-new/references/gcp-bootstrap.sh"
 
     result = subprocess.run(
         ["bash", str(script), "--dry-run", "--skip-adc", "--env-file", str(tmp_path / ".env"), "test-proj"],
@@ -109,7 +109,7 @@ exit 0
 """,
     )
     env = os.environ | {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
-    script = REPO_ROOT / ".claude/skills/channel-setup/references/gcp-terraform-apply.sh"
+    script = REPO_ROOT / ".claude/skills/channel-new/references/gcp-terraform-apply.sh"
 
     result = subprocess.run(
         ["bash", str(script), "--tf-dir", str(tf_dir), "--env-file", str(tmp_path / ".env"), "--auto-approve"],
@@ -131,7 +131,7 @@ def test_setup_entrypoints_do_not_keep_stale_oauth_contract() -> None:
         "作成直後",
         "JSON をダウンロード",
     )
-    for path in (SETUP_SKILL, CHANNEL_SETUP_SKILL, GCP_BOOTSTRAP_MD):
+    for path in (SETUP_SKILL, CHANNEL_NEW_SKILL, GCP_BOOTSTRAP_MD):
         text = path.read_text(encoding="utf-8")
         assert "Google Auth Platform" in text
         assert "Audience" in text

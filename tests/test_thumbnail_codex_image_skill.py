@@ -1,6 +1,6 @@
 """thumbnail skill の codex 補助生成導線に関する静的契約テスト。
 
-Issue #501 では provider 抽象化 (`yt-generate-image` / `ImageProvider`) に触らず、
+Issue #501 では provider 抽象化 (`bunx tayk generate-image` / `ImageProvider`) に触らず、
 `.claude/skills/thumbnail/references/codex-image.sh` という独立 shell script を
 追加し、`thumbnail/SKILL.md` から直接案内する。Issue #547 で codex CLI 0.131 系の
 新プロトコル（旧 stdout `generated image <id> <base64>` 廃止）に追従して書き直し。
@@ -934,11 +934,11 @@ def test_thumbnail_skill_codex_section_follows_thumbnail_then_textless_main_cont
 def test_thumbnail_skill_codex_section_documents_api_route_boundary() -> None:
     """Given codex 経路セクション
     When 本文を読む
-    Then 正規 provider だが yt-generate-image / ImageProvider の API 経路ではないことを説明する。
+    Then 正規 provider だが bunx tayk generate-image / ImageProvider の API 経路ではないことを説明する。
     """
     section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
     assert "正規" in section
-    assert "yt-generate-image" in section
+    assert "bunx tayk generate-image" in section
     assert "ImageProvider" in section
     assert "codex-image.sh" in section
 

@@ -38,8 +38,10 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.scripts.collection_serve import (
-    _resolve_capture_root,
+    _resolve_distrokid_capture_root,
     build_collections_index,
+    build_server_info,
+    channel_hostname,
     create_server,
     find_collection_dirs,
     is_origin_allowed,
@@ -64,6 +66,9 @@ _COLLECTIONS_ROUTE = "/collections"
 
 # 外部 HTTP 契約（#1023）: 拡張が初回接続時に fetch する互換確認サブパス。
 _VERSION_ROUTE = "/version"
+
+# 外部 HTTP 契約（#1352）: 拡張が接続先 selector の label 更新に使う配信元情報。
+_SERVER_INFO_ROUTE = "/server-info"
 
 
 def _collection_prompts_route(cid: str) -> str:
@@ -145,7 +150,7 @@ def test_resolve_prompts_path_missing_path_raises(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# _resolve_capture_root: DistroKid capture root の CLI/env 優先順位
+# _resolve_distrokid_capture_root: DistroKid capture root の CLI/env 優先順位
 # ---------------------------------------------------------------------------
 
 
@@ -154,10 +159,10 @@ def test_resolve_capture_root_returns_none_without_arg_or_env(monkeypatch):
     When capture root を解決する
     Then DistroKid capture は無効のまま None を返す。
     """
-    monkeypatch.delenv("PLAYLIST_CAPTURE_ROOT", raising=False)
+    monkeypatch.delenv("DISTROKID_CAPTURE_ROOT", raising=False)
     monkeypatch.delenv("PLAYLIST_CAPTURE_PREFIX", raising=False)
 
-    assert _resolve_capture_root(None) is None
+    assert _resolve_distrokid_capture_root(None) is None
 
 
 def test_resolve_capture_root_prefers_cli_arg_over_env(tmp_path, monkeypatch):
@@ -167,9 +172,9 @@ def test_resolve_capture_root_prefers_cli_arg_over_env(tmp_path, monkeypatch):
     """
     env_root = tmp_path / "env"
     arg_root = tmp_path / "arg"
-    monkeypatch.setenv("PLAYLIST_CAPTURE_ROOT", str(env_root))
+    monkeypatch.setenv("DISTROKID_CAPTURE_ROOT", str(env_root))
 
-    assert _resolve_capture_root(str(arg_root)) == arg_root
+    assert _resolve_distrokid_capture_root(str(arg_root)) == arg_root
 
 
 def test_resolve_capture_root_uses_env_fallback(tmp_path, monkeypatch):
@@ -178,9 +183,9 @@ def test_resolve_capture_root_uses_env_fallback(tmp_path, monkeypatch):
     Then env の root を返す。
     """
     env_root = tmp_path / "env"
-    monkeypatch.setenv("PLAYLIST_CAPTURE_ROOT", str(env_root))
+    monkeypatch.setenv("DISTROKID_CAPTURE_ROOT", str(env_root))
 
-    assert _resolve_capture_root(None) == env_root
+    assert _resolve_distrokid_capture_root(None) == env_root
 
 
 def test_resolve_capture_root_ignores_legacy_playlist_capture_prefix(tmp_path, monkeypatch):
@@ -188,10 +193,10 @@ def test_resolve_capture_root_ignores_legacy_playlist_capture_prefix(tmp_path, m
     When capture root を解決する
     Then DistroKid capture root は有効化しない。
     """
-    monkeypatch.delenv("PLAYLIST_CAPTURE_ROOT", raising=False)
+    monkeypatch.delenv("DISTROKID_CAPTURE_ROOT", raising=False)
     monkeypatch.setenv("PLAYLIST_CAPTURE_PREFIX", str(tmp_path / "legacy"))
 
-    assert _resolve_capture_root(None) is None
+    assert _resolve_distrokid_capture_root(None) is None
 
 
 # ---------------------------------------------------------------------------
@@ -290,6 +295,55 @@ def test_get_suno_prompts_json_returns_array_body(serve):
         body = json.loads(resp.read().decode("utf-8"))
 
     assert body == entries
+
+
+def test_channel_hostname_slugifies_channel_name():
+    """Given channel name
+    When channel_hostname を呼ぶ
+    Then `*.localhost` のチャンネル識別 hostname を返す。
+    """
+    assert channel_hostname("Rainy Jazz Night") == "rainy-jazz-night.localhost"
+    assert channel_hostname("  DeepFocus 365  ") == "deepfocus-365.localhost"
+
+
+def test_build_server_info_returns_selector_payload():
+    """Given channel meta と port
+    When build_server_info を呼ぶ
+    Then helper selector が表示・保存できる payload を返す。
+    """
+    assert build_server_info("Test Channel", "TC", 7873) == {
+        "channel_name": "Test Channel",
+        "channel_short": "TC",
+        "hostname": "test-channel.localhost",
+        "port": 7873,
+        "base_url": "http://test-channel.localhost:7873",
+        "label": "Test Channel (test-channel.localhost:7873)",
+    }
+
+
+def test_build_server_info_uses_channel_short_when_name_has_no_hostname_chars():
+    """Given 非 ASCII の channel name と short
+    When build_server_info を呼ぶ
+    Then hostname は short から作る。
+    """
+    assert build_server_info("雨のジャズ", "rjn", 7874)["base_url"] == "http://rjn.localhost:7874"
+
+
+def test_get_server_info_returns_json_body(serve):
+    """Given prompts データを公開するサーバー
+    When `GET /server-info`
+    Then selector 用の配信元情報を JSON で返す。
+    """
+    base = serve([{"name": "A", "style": "slow", "lyrics": ""}])
+
+    with urllib.request.urlopen(f"{base}{_SERVER_INFO_ROUTE}") as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert body["channel_name"] == "YouTube Automation"
+    assert body["hostname"] == "youtube-automation.localhost"
+    assert body["port"] == urllib.parse.urlparse(base).port
+    assert body["base_url"] == f"http://youtube-automation.localhost:{body['port']}"
 
 
 def test_post_suno_playlists_single_mode_returns_404_without_creating_legacy_json(serve, tmp_path):
@@ -898,6 +952,31 @@ def test_build_collections_index_uses_workflow_expected_file_count_when_larger(t
     assert row["expected_file_count"] == 6
 
 
+def test_build_collections_index_uses_filtered_workflow_expected_file_count_when_smaller(tmp_path):
+    """Given prompts 2 件 + workflow-state.json に filtered expected_file_count=1
+    When build_collections_index を呼ぶ
+    Then duration-filtered 採用数を完了判定に使う。
+    """
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-filtered-collection",
+        entries=[{"name": "A", "style": "s", "lyrics": ""}, {"name": "B", "style": "s", "lyrics": ""}],
+    )
+    (coll / "workflow-state.json").write_text(
+        json.dumps({"planning": {"music": {"expected_file_count": 1}}}),
+        encoding="utf-8",
+    )
+    music_dir = coll / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "track1.mp3").write_bytes(b"fake")
+
+    row = build_collections_index(tmp_path)[0]
+
+    assert row["status"] == "downloaded"
+    assert row["downloaded_count"] == 1
+    assert row["expected_file_count"] == 1
+
+
 def test_build_collections_index_includes_saved_suno_playlist_url(tmp_path):
     """Given workflow-state.json に suno_playlist_url がある
     When build_collections_index を呼ぶ
@@ -1061,20 +1140,18 @@ def test_get_collections_lists_planning_collections(serve_dir, tmp_path):
 
 
 def test_get_collections_does_not_include_playlist_name_when_capture_enabled(serve_dir, tmp_path):
-    """Given capture root 付き dir mode サーバー
+    """Given dir mode サーバー
     When `GET /collections`
     Then playlist_name は返さない（拡張側で collection id/name から導出する）。
     """
     planning = tmp_path / "planning"
-    channel_root = tmp_path / "channel"
-    channel_root.mkdir()
     _make_collection(
         planning,
         "20260601-soulful-grooves-wah-groove-collection",
         entries=[{"name": "A", "style": "s", "lyrics": ""}],
         theme="wah-groove",
     )
-    base = serve_dir(planning, capture_root=channel_root)
+    base = serve_dir(planning)
 
     with urllib.request.urlopen(f"{base}{_COLLECTIONS_ROUTE}") as resp:
         assert resp.status == 200
@@ -3066,10 +3143,10 @@ def test_post_downloaded_partial_zip_keeps_download_archive(serve_dir, tmp_path)
     assert zip_path.exists()
 
 
-def test_post_downloaded_partial_zip_with_underreported_expected_count_returns_500(serve_dir, tmp_path):
+def test_post_downloaded_partial_zip_with_filtered_expected_count_succeeds(serve_dir, tmp_path):
     """Given prompts 2 件に対して range ZIP の音声が 1 件
     When expected_file_count=1 で POST /collections/<id>/downloaded を送る
-    Then prompt_count * 2 を期待数として使い 500 を返す。
+    Then duration-filtered 採用数を期待数として保存し downloaded 扱いにする。
     """
     planning = tmp_path / "planning"
     _make_collection(
@@ -3091,18 +3168,25 @@ def test_post_downloaded_partial_zip_with_underreported_expected_count_returns_5
         "download_path": str(zip_path),
     }
 
-    with pytest.raises(urllib.error.HTTPError) as exc_info:
-        _post(
-            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
-            payload,
-            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
-        )
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+        result = json.loads(resp.read().decode("utf-8"))
 
-    assert exc_info.value.code == 500
+    assert result["ok"] is True
+    assert result["placed_count"] == 1
     ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
-    assert not ws_path.exists()
+    workflow_state = json.loads(ws_path.read_text(encoding="utf-8"))
+    assert workflow_state["planning"]["music"]["expected_file_count"] == 1
+    assert workflow_state["assets"]["music_downloaded"] is True
     music_dir = planning / "20260601-clm-aaa-collection" / "02-Individual-music"
-    assert not music_dir.exists() or list(music_dir.iterdir()) == []
+    assert len(list(music_dir.glob("*.mp3"))) == 1
+    row = build_collections_index(planning)[0]
+    assert row["status"] == "downloaded"
+    assert row["expected_file_count"] == 1
 
 
 def test_post_downloaded_success_includes_placed_count(serve_dir, tmp_path):

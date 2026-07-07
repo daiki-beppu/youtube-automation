@@ -8,21 +8,35 @@
 // off the public oauth subpath.
 //
 // Seam contract (the helpers delegate to a google-auth-library OAuth2Client):
-//   buildAuthUrl(client, scopes) -> client.generateAuthUrl({ access_type, scope })
+//   buildAuthUrl(client, scopes, state) -> generateAuthUrl({ access_type, scope, state })
 //   exchangeCode(client, code)   -> (await client.getToken(code)).tokens
 
 import { describe, expect, test } from "bun:test";
 
 import {
+  OAUTH_STATE_MISMATCH_MESSAGE,
   buildAuthUrl,
   exchangeCode,
+  generateOAuthState,
+  parseOAuthCallback,
 } from "../src/oauth/interactive-internal.ts";
 import * as interactiveModule from "../src/oauth/interactive.ts";
+import { interactiveAuthService } from "../src/oauth/interactive.ts";
 
 const scopes = [
   "https://www.googleapis.com/auth/youtube",
   "https://www.googleapis.com/auth/yt-analytics.readonly",
 ];
+
+describe("generateOAuthState", () => {
+  test("returns a URL-safe unpadded 32-byte state token", () => {
+    const state = generateOAuthState();
+
+    expect(state).toHaveLength(43);
+    expect(state).toMatch(/^[A-Za-z0-9_-]+$/u);
+    expect(state).not.toContain("=");
+  });
+});
 
 describe("buildAuthUrl", () => {
   test("requests offline access for every scope so a refresh_token is issued", () => {
@@ -36,7 +50,7 @@ describe("buildAuthUrl", () => {
     } as unknown as Parameters<typeof buildAuthUrl>[0];
 
     // When building the consent URL
-    const url = buildAuthUrl(client, scopes);
+    const url = buildAuthUrl(client, scopes, "state-123");
 
     // Then the generated URL is returned verbatim ...
     expect(url).toBe("https://accounts.google.com/o/oauth2/v2/auth?mock=1");
@@ -50,6 +64,58 @@ describe("buildAuthUrl", () => {
     expect(JSON.stringify(captured[0])).toContain(
       "https://www.googleapis.com/auth/yt-analytics.readonly"
     );
+    // ... and the CSRF state is attached for callback verification
+    expect(captured[0]?.state).toBe("state-123");
+  });
+});
+
+describe("parseOAuthCallback", () => {
+  test("returns the code when callback state matches", () => {
+    const result = parseOAuthCallback(
+      new Request("http://localhost/?code=auth-code&state=expected-state"),
+      "expected-state"
+    );
+
+    expect(result).toEqual({ code: "auth-code", status: "code" });
+  });
+
+  test("returns an auth error when state is missing", () => {
+    const result = parseOAuthCallback(
+      new Request("http://localhost/?code=auth-code"),
+      "expected-state"
+    );
+
+    expect(result.status).toBe("error");
+    if (result.status !== "error") {
+      throw new Error("expected callback error");
+    }
+    expect(result.error.message).toBe(OAUTH_STATE_MISMATCH_MESSAGE);
+  });
+
+  test("returns an auth error when state is mismatched", () => {
+    const result = parseOAuthCallback(
+      new Request("http://localhost/?code=auth-code&state=attacker-state"),
+      "expected-state"
+    );
+
+    expect(result.status).toBe("error");
+    if (result.status !== "error") {
+      throw new Error("expected callback error");
+    }
+    expect(result.error.message).toBe(OAUTH_STATE_MISMATCH_MESSAGE);
+  });
+
+  test("returns an auth error when consent is denied", () => {
+    const result = parseOAuthCallback(
+      new Request("http://localhost/?error=access_denied&state=expected-state"),
+      "expected-state"
+    );
+
+    expect(result.status).toBe("error");
+    if (result.status !== "error") {
+      throw new Error("expected callback error");
+    }
+    expect(result.error.message).toBe("auth: consent denied: access_denied");
   });
 });
 
@@ -88,6 +154,161 @@ describe("exchangeCode", () => {
     await expect(exchangeCode(client, "bad-code")).rejects.toThrow(
       "invalid_grant"
     );
+  });
+});
+
+type InteractiveDeps = NonNullable<
+  Parameters<typeof interactiveAuthService>[1]
+>;
+type InteractiveInput = Parameters<typeof interactiveAuthService>[0];
+
+const clientSecretsJson = JSON.stringify({
+  installed: {
+    client_id: "cid.apps.googleusercontent.com",
+    client_secret: "the-client-secret",
+    redirect_uris: ["http://localhost"],
+  },
+});
+
+const makeInteractiveDeps = (
+  callbackState: "match" | "mismatch",
+  exchangeBehavior: () => Promise<Record<string, unknown>>
+) => {
+  let fetchHandler:
+    | ((request: Request) => Response | Promise<Response>)
+    | undefined;
+  const exchangedCodes: string[] = [];
+  const openedUrls: string[] = [];
+  const stopped: boolean[] = [];
+
+  const deps: InteractiveDeps = {
+    createOAuthClient: () =>
+      ({
+        generateAuthUrl: (options: {
+          access_type: "offline";
+          scope: string[];
+          state: string;
+        }) =>
+          `https://accounts.google.com/mock?state=${encodeURIComponent(
+            options.state
+          )}`,
+        getToken: () => Promise.reject(new Error("unused")),
+      }) as ReturnType<InteractiveDeps["createOAuthClient"]>,
+    exchangeCode: (_client, code) => {
+      exchangedCodes.push(code);
+      return exchangeBehavior() as ReturnType<InteractiveDeps["exchangeCode"]>;
+    },
+    generateState: () => "expected-state",
+    openBrowser: (url) => {
+      openedUrls.push(url);
+      const state =
+        callbackState === "match" ? "expected-state" : "attacker-state";
+      if (!fetchHandler) {
+        throw new Error("test setup: callback server was not started");
+      }
+      void fetchHandler(
+        new Request(`http://localhost/?code=auth-code-123&state=${state}`)
+      );
+    },
+    serve: (options) => {
+      fetchHandler = options.fetch;
+      return {
+        port: 34_567,
+        stop: (force: boolean) => {
+          stopped.push(force);
+        },
+      };
+    },
+  };
+  return { deps, exchangedCodes, openedUrls, stopped };
+};
+
+describe("interactiveAuthService boundary", () => {
+  test("returns issued credentials as token.json when callback state matches", async () => {
+    const { deps, exchangedCodes, openedUrls, stopped } = makeInteractiveDeps(
+      "match",
+      () =>
+        Promise.resolve({
+          access_token: "issued-access",
+          refresh_token: "issued-refresh",
+        })
+    );
+
+    const r = await interactiveAuthService({ clientSecretsJson, scopes }, deps);
+
+    expect(r.ok).toBe(true);
+    if (!r.ok) {
+      throw new Error(`expected ok, got ${r.error.domain}: ${r.error.message}`);
+    }
+    expect(JSON.parse(r.value.tokenJson)).toEqual({
+      access_token: "issued-access",
+      refresh_token: "issued-refresh",
+    });
+    expect(openedUrls[0]).toContain("state=expected-state");
+    expect(exchangedCodes).toEqual(["auth-code-123"]);
+    expect(stopped).toEqual([true]);
+  });
+
+  test("returns an auth ServiceError when callback state mismatches", async () => {
+    const { deps, exchangedCodes, stopped } = makeInteractiveDeps(
+      "mismatch",
+      () => Promise.resolve({ access_token: "unused" })
+    );
+
+    const r = await interactiveAuthService({ clientSecretsJson, scopes }, deps);
+
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      throw new Error("expected failure");
+    }
+    expect(r.error.domain).toBe("auth");
+    expect(r.error.message).toBe(OAUTH_STATE_MISMATCH_MESSAGE);
+    expect(exchangedCodes).toEqual([]);
+    expect(stopped).toEqual([true]);
+  });
+
+  test("maps code exchange failure to an auth ServiceError", async () => {
+    const { deps, stopped } = makeInteractiveDeps("match", () =>
+      Promise.reject(new Error("invalid_grant: bad verification code"))
+    );
+
+    const r = await interactiveAuthService({ clientSecretsJson, scopes }, deps);
+
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      throw new Error("expected failure");
+    }
+    expect(r.error.domain).toBe("auth");
+    expect(r.error.message).toContain("code exchange failed");
+    expect(stopped).toEqual([true]);
+  });
+
+  test("rejects malformed input before starting the callback server", async () => {
+    let serveCalls = 0;
+    const { deps } = makeInteractiveDeps("match", () =>
+      Promise.resolve({ access_token: "unused" })
+    );
+    const guardedDeps: InteractiveDeps = {
+      ...deps,
+      serve: (options) => {
+        serveCalls += 1;
+        return deps.serve(options);
+      },
+    };
+    const malformed = {
+      clientSecretsJson,
+      scopes,
+      unexpected: true,
+    } as unknown as InteractiveInput;
+
+    const r = await interactiveAuthService(malformed, guardedDeps);
+
+    expect(r.ok).toBe(false);
+    if (r.ok) {
+      throw new Error("expected validation failure");
+    }
+    expect(r.error.domain).toBe("validation");
+    expect(serveCalls).toBe(0);
   });
 });
 

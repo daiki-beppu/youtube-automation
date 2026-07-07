@@ -188,5 +188,6 @@ describe("parseClipsFromFeedResponse: feed レスポンスの解析 (両形対�
     expect(parseClipsFromFeedResponse([{ status: "complete" }])).toBeNull();
     expect(parseClipsFromFeedResponse({ clips: [{ id: "c1", status: "streaming", duration: "241.2" }] })).toBeNull();
     expect(parseClipsFromFeedResponse([{ id: "c1", status: "complete", duration: "241.2" }])).toBeNull();
+    expect(parseClipsFromFeedResponse([{ id: "c1", status: "complete", duration: -1 }])).toBeNull();
   });
 });
