@@ -753,20 +753,11 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
         ackTimeoutMs: BALANCED_RUN_PACING.injectAckTimeoutMs,
       }),
     );
-    expect(applyJitter).toHaveBeenCalledWith(
-      BALANCED_RUN_PACING.interCreateDelayMs,
-      BALANCED_RUN_PACING.jitterMs,
-    );
+    expect(applyJitter).toHaveBeenCalledWith(BALANCED_RUN_PACING.interCreateDelayMs, BALANCED_RUN_PACING.jitterMs);
     vi.mocked(applyJitter).mockClear();
     expect(retryDelayMs()).toBe(BALANCED_RUN_PACING.interCreateDelayMs);
-    expect(applyJitter).toHaveBeenCalledWith(
-      BALANCED_RUN_PACING.interCreateDelayMs,
-      BALANCED_RUN_PACING.jitterMs,
-    );
-    expect(abortableSleep).toHaveBeenCalledWith(
-      BALANCED_RUN_PACING.interCreateDelayMs,
-      expect.any(Function),
-    );
+    expect(applyJitter).toHaveBeenCalledWith(BALANCED_RUN_PACING.interCreateDelayMs, BALANCED_RUN_PACING.jitterMs);
+    expect(abortableSleep).toHaveBeenCalledWith(BALANCED_RUN_PACING.interCreateDelayMs, expect.any(Function));
     expect(harness.legacyReadSpeedPresetId).not.toHaveBeenCalled();
     expect(harness.legacyResolveSpeedPreset).not.toHaveBeenCalled();
   });
