@@ -4,12 +4,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BRIDGE_MSG,
   BRIDGE_SOURCE,
-  FEED_V2_PATH,
   FEED_V3_METHOD,
   FEED_V3_PATH,
   GENERATE_ENDPOINT_PATH,
   SUNO_API_ORIGIN,
 } from "../../shared/constants";
+
+const FEED_V2_PATH = "/api/feed/v2";
 
 function jsonResponse(json: unknown): Response {
   return new Response(JSON.stringify(json), {
@@ -83,6 +84,47 @@ describe("suno-bridge fetch interceptor", () => {
         source: BRIDGE_SOURCE,
         type: BRIDGE_MSG.GENERATE_CLIPS,
         clips: [{ id: "clip-1", status: "submitted" }],
+      },
+      window.location.origin,
+    );
+  });
+
+  it("Given auth 捕捉済み When active poll request を受ける Then feed v3 POST で duration 付き clip を返す", async () => {
+    const originalFetch = vi.fn(async () =>
+      jsonResponse({ clips: [{ id: "clip-1", status: "complete", metadata: { duration: 121.5 } }] }),
+    );
+    vi.stubGlobal("fetch", originalFetch);
+    const postMessage = vi.spyOn(window, "postMessage").mockImplementation(() => undefined);
+
+    await loadBridge();
+    await window.fetch(`${SUNO_API_ORIGIN}${FEED_V3_PATH}`, {
+      method: FEED_V3_METHOD,
+      headers: { authorization: "Bearer token" },
+    });
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: window,
+        data: {
+          source: BRIDGE_SOURCE,
+          type: BRIDGE_MSG.FEED_V3_POLL_REQUEST,
+          requestId: 123,
+          ids: ["clip-1"],
+        },
+      }),
+    );
+    await flushObservedFetch();
+
+    expect(originalFetch).toHaveBeenLastCalledWith(`${SUNO_API_ORIGIN}${FEED_V3_PATH}`, {
+      method: FEED_V3_METHOD,
+      headers: { authorization: "Bearer token", "content-type": "application/json" },
+      body: JSON.stringify({ ids: ["clip-1"] }),
+    });
+    expect(postMessage).toHaveBeenCalledWith(
+      {
+        source: BRIDGE_SOURCE,
+        type: BRIDGE_MSG.FEED_V3_POLL_RESPONSE,
+        requestId: 123,
+        clips: [{ id: "clip-1", status: "complete", duration: 121.5 }],
       },
       window.location.origin,
     );

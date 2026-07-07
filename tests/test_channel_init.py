@@ -22,7 +22,10 @@ from youtube_automation.cli.channel_init import (
 from youtube_automation.utils.channel_settings import build_update_body
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.metadata_generator import validate_scene_phrases
+from youtube_automation.utils.metadata_generator import (
+    validate_localizations_title_templates,
+    validate_scene_phrases,
+)
 
 # ----------------------- Fixtures / constants -----------------------
 
@@ -252,7 +255,7 @@ def test_main_creates_full_package_files_when_target_is_empty(tmp_path):
 
     schedule = _read_json(tmp_path / "config" / "schedule_config.json")
     assert schedule["upload_settings"]["category_id"] == "10"
-    assert schedule["upload_settings"]["privacy_status"] == "private"
+    assert "privacy_status" not in schedule["upload_settings"]
 
 
 def test_main_does_not_generate_distrokid_json_by_default(tmp_path, monkeypatch):
@@ -598,6 +601,10 @@ def test_localizations_and_skill_configs_reflect_channel_init_args(tmp_path):
     assert suno["workspace_name"] == "Focus Atlas"
     assert suno["genre_line"] == "warm lo-fi ambient music for late-night study"
 
+    # Issue #1471: 生成された localizations.json がアップローダー許可プレースホルダ検証を通る
+    errors = validate_localizations_title_templates(localizations)
+    assert errors == [], "\n".join(errors)
+
     thumbnail = yaml.safe_load((tmp_path / "config" / "skills" / "thumbnail.yaml").read_text(encoding="utf-8"))
     reference_images = thumbnail["image_generation"]["gemini"]["reference_images"]
     assert (
@@ -622,13 +629,13 @@ def test_channel_init_does_not_generate_legacy_upload_settings_file(tmp_path):
     assert not (tmp_path / "config" / "upload_settings.json").exists()
 
 
-def test_channel_setup_legacy_upload_settings_template_is_removed() -> None:
+def test_channel_new_legacy_upload_settings_template_is_removed() -> None:
     """#1310: sync で配布する旧 upload settings template を復活させない。"""
     template_path = (
         Path(__file__).resolve().parents[1]
         / ".claude"
         / "skills"
-        / "channel-setup"
+        / "channel-new"
         / "references"
         / "upload-settings-template.json"
     )

@@ -39,6 +39,8 @@ function retryPlaylistMessage(overrides: Partial<RetryPlaylistPayload> = {}): { 
 
 async function loadContentScript(overrides?: {
   addClipsToPlaylistError?: Error;
+  durationsById?: Record<string, number | undefined>;
+  guardSelectedClipIds?: string[];
   readSelectedClipIdsError?: Error;
   triggerDownloadAllError?: Error;
   startDownloadResult?: { ok: true } | { ok: false; message: string };
@@ -124,6 +126,11 @@ async function loadContentScript(overrides?: {
       clearSubmittedIds: vi.fn(),
       getSubmittedIds: vi.fn(() => []),
       getPendingSubmittedIds: vi.fn(() => []),
+      getDuration: vi.fn((clipId: string) =>
+        overrides?.durationsById && Object.prototype.hasOwnProperty.call(overrides.durationsById, clipId)
+          ? overrides.durationsById[clipId]
+          : 120,
+      ),
       getInFlightCount: vi.fn(() => 0),
       hasObservedAnyTraffic: vi.fn(() => true),
       lastChangeAt: vi.fn(() => Date.now()),
@@ -152,6 +159,7 @@ async function loadContentScript(overrides?: {
     detectSunoViewMode: vi.fn(() => "list"),
   }));
 
+  const scrollAndMultiSelectByIdsMock = vi.fn((ids: string[]) => Promise.resolve(ids.length));
   vi.doMock("../../shared/playlist-dom", () => ({
     clickPlaylistRowByName: overrides?.addClipsToPlaylistError
       ? vi.fn(() => Promise.reject(overrides.addClipsToPlaylistError))
@@ -160,8 +168,8 @@ async function loadContentScript(overrides?: {
     openAddToPlaylistDialogViaCmdP: vi.fn(() => Promise.resolve({} as HTMLElement)),
     readSelectedClipIds: overrides?.readSelectedClipIdsError
       ? vi.fn(() => Promise.reject(overrides.readSelectedClipIdsError))
-      : vi.fn(() => Promise.resolve(["clip-1", "clip-2"])),
-    scrollAndMultiSelectByIds: vi.fn((ids: string[]) => Promise.resolve(ids.length)),
+      : vi.fn(() => Promise.resolve(overrides?.guardSelectedClipIds ?? ["clip-1", "clip-2"])),
+    scrollAndMultiSelectByIds: scrollAndMultiSelectByIdsMock,
     waitForPlaylistDialogClose: vi.fn(() => Promise.resolve()),
   }));
 
@@ -207,12 +215,21 @@ async function loadContentScript(overrides?: {
     triggerDownloadAll: triggerDownloadAllMock,
   }));
 
-  vi.doMock("../../shared/api", () => ({}));
+  vi.doMock("../../shared/api", async () => ({
+    ...(await vi.importActual<typeof import("../../shared/api")>("../../shared/api")),
+  }));
 
   const content = await import("../entrypoints/content");
   content.default.main({} as NonNullable<Parameters<typeof content.default.main>[0]>);
 
-  return { handlers, progressMessages, sentMessages, triggerDownloadAllMock, scheduleRunCompleteReloadMock };
+  return {
+    handlers,
+    progressMessages,
+    sentMessages,
+    triggerDownloadAllMock,
+    scrollAndMultiSelectByIdsMock,
+    scheduleRunCompleteReloadMock,
+  };
 }
 
 // retryPlaylist ----------------------------------------------------------------
@@ -251,6 +268,17 @@ describe('content onMessage("retryPlaylist"): payload contract', () => {
   it.each([
     ["collectionId 欠落", { collectionId: undefined }, /retryPlaylist\.collectionId/],
     ["playlistName 欠落", { playlistName: undefined }, /retryPlaylist\.playlistName/],
+    ["durationFilter が不正", { durationFilter: { min_sec: true, max_sec: 300 } }, /retryPlaylist\.durationFilter/],
+    [
+      "durationFilter が min > max",
+      { durationFilter: { min_sec: 301, max_sec: 300 } },
+      /retryPlaylist\.durationFilter/,
+    ],
+    [
+      "submittedClipIdsAreDurationFiltered が非 boolean",
+      { submittedClipIdsAreDurationFiltered: "true" },
+      /retryPlaylist\.submittedClipIdsAreDurationFiltered/,
+    ],
   ] as const)(
     "Given %s payload When retryPlaylist Then fail-loud し副作用を起こさない",
     async (_label, override, message) => {
@@ -332,6 +360,35 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
     expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
     expect(sentMessages.filter((m) => m.type === "startDownload")).toHaveLength(0);
     expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(0);
+  });
+
+  it("Given retryPlaylist に duration NG clip が混在 When 未正規化 payload Then OK clip IDs のみを multi-select する", async () => {
+    const { handlers, progressMessages, scrollAndMultiSelectByIdsMock } = await loadContentScript({
+      durationsById: {
+        "clip-ok": 120,
+        "clip-short": 30,
+        "clip-unknown": undefined,
+      },
+      guardSelectedClipIds: ["clip-ok"],
+    });
+
+    handlers.get("retryPlaylist")!({
+      data: {
+        playlistName: "test-playlist",
+        submittedClipIds: ["clip-ok", "clip-short", "clip-unknown"],
+        expectedClipCount: 3,
+        collectionId: "coll-1",
+        durationFilter: { min_sec: 60, max_sec: 300 },
+        submittedClipIdsAreDurationFiltered: false,
+        shouldDownload: false,
+      },
+    });
+
+    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["clip-ok"],
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+    );
   });
 
   it("Given resume state 消去が失敗 When retryPlaylist 成功 Then FINISHED を維持しリロードのみ見送る（ERROR にしない）", async () => {

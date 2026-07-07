@@ -15,7 +15,8 @@
 import {
   BRIDGE_MSG,
   BRIDGE_SOURCE,
-  FEED_V2_PATH,
+  FEED_V3_METHOD,
+  FEED_V3_PATH,
   type ObservedClip,
   SUNO_API_ORIGIN,
   SUNO_MATCHES,
@@ -93,14 +94,17 @@ export default defineContentScript({
 
     /** content script からの active feed poll 要求に応える。token 未捕捉・失敗は clips: null。 */
     async function handleFeedPoll(requestId: number, ids: string[]): Promise<void> {
-      const respond = (clips: ObservedClip[] | null): void => post(BRIDGE_MSG.FEED_POLL_RESPONSE, { requestId, clips });
+      const respond = (clips: ObservedClip[] | null): void =>
+        post(BRIDGE_MSG.FEED_V3_POLL_RESPONSE, { requestId, clips });
       if (!authHeader || ids.length === 0) {
         respond(null);
         return;
       }
       try {
-        const res = await originalFetch(`${SUNO_API_ORIGIN}${FEED_V2_PATH}?ids=${ids.join(",")}`, {
-          headers: { authorization: authHeader },
+        const res = await originalFetch(`${SUNO_API_ORIGIN}${FEED_V3_PATH}`, {
+          method: FEED_V3_METHOD,
+          headers: { authorization: authHeader, "content-type": "application/json" },
+          body: JSON.stringify({ ids }),
         });
         if (res.status === 401) {
           // token 失効。破棄してページの次リクエストでの再捕捉に委ねる。
@@ -155,7 +159,7 @@ export default defineContentScript({
       if (!data || data.source !== BRIDGE_SOURCE || typeof data.requestId !== "number") {
         return;
       }
-      if (data.type === BRIDGE_MSG.FEED_POLL_REQUEST && Array.isArray(data.ids)) {
+      if (data.type === BRIDGE_MSG.FEED_V3_POLL_REQUEST && Array.isArray(data.ids)) {
         void handleFeedPoll(data.requestId, data.ids);
       } else if (
         data.type === BRIDGE_MSG.SLIDER_SET_REQUEST &&
