@@ -51,6 +51,21 @@ _CHANNELS_BATCH_SIZE = 50
 _VIDEO_DESCRIPTION_FIELD = "description"
 _DESCRIPTION_TTP_SECTION_TITLE = "概要欄TTPサンプル"
 _DESCRIPTION_TTP_SAMPLE_LIMIT = 3
+_SHORT_THUMBNAIL_KEYS = ("high", "medium", "default")
+_DEFAULT_THUMBNAIL_KEYS = ("maxres", "standard", "high", "medium", "default")
+
+
+def is_short_benchmark_duration(duration_iso: str) -> bool:
+    match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration_iso)
+    if not match:
+        return False
+    hours = int(match.group(1) or 0)
+    minutes = int(match.group(2) or 0)
+    return hours == 0 and minutes < 5
+
+
+def is_short_benchmark_video(video: dict) -> bool:
+    return is_short_benchmark_duration(str(video.get("duration_iso") or ""))
 
 
 def _markdown_code_fence(content: str) -> str:
@@ -241,6 +256,8 @@ class BenchmarkCollector:
                     logger.warning("duration 欠落のためスキップ: %s", video.get("id"))
                     continue
 
+                is_short = is_short_benchmark_duration(duration_iso)
+                thumbnail_keys = _SHORT_THUMBNAIL_KEYS if is_short else _DEFAULT_THUMBNAIL_KEYS
                 v = {
                     "video_id": video["id"],
                     "title": snippet["title"],
@@ -254,7 +271,10 @@ class BenchmarkCollector:
                     "tags": snippet.get("tags", []),
                     _VIDEO_DESCRIPTION_FIELD: snippet.get(_VIDEO_DESCRIPTION_FIELD, ""),
                     "description_keywords": extract_description_keywords(snippet.get(_VIDEO_DESCRIPTION_FIELD, "")),
-                    "thumbnail_url": self._best_thumbnail_url(snippet.get("thumbnails", {})),
+                    "thumbnail_url": self._best_thumbnail_url(
+                        snippet.get("thumbnails", {}),
+                        keys=thumbnail_keys,
+                    ),
                     "thumbnail_analysis": None,
                 }
                 v["daily_views"] = compute_daily_views(v, self.today)
@@ -278,7 +298,7 @@ class BenchmarkCollector:
         channel_data["posting_trend"] = compute_posting_intervals(videos) if videos else {}
 
         # 集計（フィルタ後の Long 動画のみ対象）
-        long_videos = [v for v in videos if not self._is_short(v)]
+        long_videos = [v for v in videos if not is_short_benchmark_video(v)]
         if long_videos:
             channel_data["avg_views"] = round(sum(v["views"] for v in long_videos) / len(long_videos))
             channel_data["avg_daily_views"] = round(sum(v["daily_views"] for v in long_videos) / len(long_videos), 1)
@@ -539,20 +559,8 @@ class BenchmarkCollector:
     # --- 内部メソッド ---
 
     @staticmethod
-    def _is_short(video: dict) -> bool:
-        """Short 動画かどうかを判定する。"""
-        duration = video.get("duration_iso", "")
-        match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration)
-        if not match:
-            return False
-        hours = int(match.group(1) or 0)
-        minutes = int(match.group(2) or 0)
-        return hours == 0 and minutes < 5
-
-    @staticmethod
-    def _best_thumbnail_url(thumbnails: dict) -> str:
-        """最高解像度のサムネイルURLを返す。"""
-        for key in ("maxres", "standard", "high", "medium", "default"):
+    def _best_thumbnail_url(thumbnails: dict, *, keys: tuple[str, ...]) -> str:
+        for key in keys:
             if key in thumbnails:
                 return thumbnails[key]["url"]
         return ""
@@ -826,21 +834,10 @@ class BenchmarkReportGenerator:
         except (ValueError, TypeError):
             return "—"
 
-    @staticmethod
-    def _is_short(video: dict) -> bool:
-        """Short 動画かどうかを判定する（レポート生成時のフィルタ用）。"""
-        duration = video.get("duration_iso", "")
-        match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration)
-        if not match:
-            return False
-        hours = int(match.group(1) or 0)
-        minutes = int(match.group(2) or 0)
-        return hours == 0 and minutes < 5
-
     def _generate_channel_md(self, channel: dict) -> str:
         """個別チャンネルの Markdown を生成する。"""
         videos = channel.get("videos", [])
-        long_videos = [v for v in videos if not self._is_short(v)]
+        long_videos = [v for v in videos if not is_short_benchmark_video(v)]
         posting = channel.get("posting_trend", {})
 
         # ヘッダー

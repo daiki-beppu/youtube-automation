@@ -37,11 +37,12 @@ export const PROFILE_SELECTORS = {
   artist: 'input[name="bandname"]',
   language: "#language",
   main_genre: "#genrePrimary",
-  sub_genre: "#genreSecondary",
+  sub_genre: "#subGenrePrimary",
 } as const;
 
-// main genre 変更後、DistroKid が secondary genre の option を再生成するまでの待ち上限（ms）（#1407）。
+// main genre 変更後、DistroKid が primary subgenre の option を再生成するまでの待ち上限（ms）（#1407）。
 const GENRE_SECONDARY_OPTION_WAIT_TIMEOUT_MS = 10_000;
+const GENRE_SECONDARY_EXISTING_OPTION_FALLBACK_MS = 50;
 
 // アルバム名（アルバム時のみ存在。シングルモードでは要素不在 → skip）。
 export const ALBUM_SELECTORS = {
@@ -307,6 +308,14 @@ function findExactSelectOptionIndex(el: HTMLSelectElement, payloadValue: string)
   return idx;
 }
 
+function selectSelectedOptionMatches(el: HTMLSelectElement, payloadValue: string): boolean {
+  const selected = el.options[el.selectedIndex];
+  if (selected === undefined) {
+    return false;
+  }
+  return selected.value === payloadValue || normalizeOptionText(selected.text) === normalizeOptionText(payloadValue);
+}
+
 // <select> に対して payload 値で option を選ぶ。
 function setSelectValue(el: HTMLSelectElement, payloadValue: string): void {
   const idx = findSelectOptionIndex(el, payloadValue);
@@ -365,19 +374,19 @@ function mutationTouchesSelector(mutation: MutationRecord, selector: string, cur
 }
 
 // 依存 dropdown の option 再生成を待つ（#1407）。
-// #genrePrimary の change 後、#genreSecondary は非同期に populate されるため、
+// #genrePrimary の change 後、#subGenrePrimary は非同期に populate されるため、
 // payload と一致する option が現れてから setNativeValue する。
 function waitForSelectOption(
   root: ParentNode,
   selector: string,
   payloadValue: string,
   timeoutMs: number,
-  options: { requireSelectorMutation?: boolean } = {},
+  options: { allowExistingAfterQuietMs?: number; requireSelectorMutation?: boolean } = {},
 ): Promise<HTMLSelectElement> {
-  const initial = requireVisibleField(root, selector);
-  if (!(initial instanceof HTMLSelectElement)) {
-    throw new FieldNotFoundError(selector);
-  }
+  const currentSelect = (): HTMLSelectElement | null => {
+    const current = findVisibleField(root, selector);
+    return current instanceof HTMLSelectElement ? current : null;
+  };
   if (options.requireSelectorMutation !== true) {
     const existing = findVisibleSelectWithOption(root, selector, payloadValue);
     if (existing !== null) {
@@ -386,27 +395,48 @@ function waitForSelectOption(
   }
   const observeRoot = ownerDocumentOf(root).body ?? ownerDocumentOf(root);
   return new Promise((resolve, reject) => {
+    let quietTimer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (select: HTMLSelectElement) => {
+      clearTimeout(timer);
+      if (quietTimer !== undefined) {
+        clearTimeout(quietTimer);
+      }
+      observer.disconnect();
+      resolve(select);
+    };
     const timer = setTimeout(() => {
       observer.disconnect();
-      const current = findVisibleField(root, selector);
-      const options = current instanceof HTMLSelectElement ? selectOptionLabels(current) : [];
-      reject(new OptionNotFoundError(selector, payloadValue, options));
+      if (quietTimer !== undefined) {
+        clearTimeout(quietTimer);
+      }
+      const current = currentSelect();
+      if (current === null) {
+        reject(new FieldNotFoundError(selector));
+        return;
+      }
+      reject(new OptionNotFoundError(selector, payloadValue, selectOptionLabels(current)));
     }, timeoutMs);
     const observer = new MutationObserver((mutations) => {
       if (
         options.requireSelectorMutation === true &&
-        !mutations.some((mutation) => mutationTouchesSelector(mutation, selector, findVisibleField(root, selector)))
+        !mutations.some((mutation) => mutationTouchesSelector(mutation, selector, currentSelect()))
       ) {
         return;
       }
       const found = findVisibleSelectWithOption(root, selector, payloadValue);
       if (found !== null) {
-        clearTimeout(timer);
-        observer.disconnect();
-        resolve(found);
+        finish(found);
       }
     });
     observer.observe(observeRoot, { childList: true, subtree: true, characterData: true, attributes: true });
+    if (options.allowExistingAfterQuietMs !== undefined) {
+      quietTimer = setTimeout(() => {
+        const existing = findVisibleSelectWithOption(root, selector, payloadValue);
+        if (existing !== null) {
+          finish(existing);
+        }
+      }, options.allowExistingAfterQuietMs);
+    }
   });
 }
 
@@ -416,14 +446,20 @@ export async function injectProfile(root: ParentNode, profile: DistrokidProfile)
     setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.artist), profile.artist.trim());
   }
   setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.language), profile.language);
-  setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.main_genre), profile.main_genre);
+  const mainGenre = requireVisibleField(root, PROFILE_SELECTORS.main_genre);
+  const mainGenreAlreadySelected =
+    mainGenre instanceof HTMLSelectElement && selectSelectedOptionMatches(mainGenre, profile.main_genre);
+  setNativeValue(mainGenre, profile.main_genre);
   if (profile.sub_genre !== null) {
     const subGenre = await waitForSelectOption(
       root,
       PROFILE_SELECTORS.sub_genre,
       profile.sub_genre,
       GENRE_SECONDARY_OPTION_WAIT_TIMEOUT_MS,
-      { requireSelectorMutation: true },
+      {
+        allowExistingAfterQuietMs: mainGenreAlreadySelected ? GENRE_SECONDARY_EXISTING_OPTION_FALLBACK_MS : undefined,
+        requireSelectorMutation: true,
+      },
     );
     setNativeValue(subGenre, profile.sub_genre);
   }
@@ -472,6 +508,11 @@ const IMPORTANT_TERMS_REQUIRED_IDS = [
   "#areyousuretandc",
 ] as const;
 
+const IMPORTANT_TERMS_OPTIONAL_DIRECT_IDS = [
+  // Non-standard capitalization warning appears asynchronously after DistroKid validates title fields.
+  "#areyousurenonstandardscaps",
+] as const;
+
 // 条件付き重要事項 checkbox のセレクタ（ストア選択に連動して可視化）（#923）。
 const IMPORTANT_TERMS_CONDITIONAL_SELECTOR = 'input[type="checkbox"].areyousure';
 
@@ -484,8 +525,16 @@ export function acceptImportantTerms(root: ParentNode): void {
   for (const id of IMPORTANT_TERMS_REQUIRED_IDS) {
     setChecked(requireInput(root, id), true);
   }
+  for (const id of IMPORTANT_TERMS_OPTIONAL_DIRECT_IDS) {
+    const cb = root.querySelector<HTMLInputElement>(id);
+    if (cb !== null) {
+      setChecked(cb, true);
+    }
+  }
   // conditional: .areyousure を列挙し、required id を除外した上で可視のもののみ check
-  const requiredIds = new Set(IMPORTANT_TERMS_REQUIRED_IDS.map((id) => id.slice(1)));
+  const requiredIds = new Set(
+    [...IMPORTANT_TERMS_REQUIRED_IDS, ...IMPORTANT_TERMS_OPTIONAL_DIRECT_IDS].map((id) => id.slice(1)),
+  );
   const conditionals = Array.from(root.querySelectorAll<HTMLInputElement>(IMPORTANT_TERMS_CONDITIONAL_SELECTOR)).filter(
     (cb) => !requiredIds.has(cb.id) && isVisible(cb),
   );

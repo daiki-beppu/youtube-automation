@@ -17,7 +17,7 @@ CORS はデフォルトで `chrome-extension://` と suno.com / distrokid.com �
     `GET /suno/prompts.json` で配列 JSON、`OPTIONS` で preflight を返すサーバーを生成する。
     distrokid は `Distrokid | None`（None / 無効時は `/distrokid/*` が 404）。
 - `main()`
-    argparse CLI（positional path / `--port`（既定 7873）/ `--allow-origin`）。
+    argparse CLI（positional path / `--port`（既定 7873）/ `--allow-origin` / `--allow-extension`）。
 """
 
 from __future__ import annotations
@@ -37,6 +37,7 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.scripts import collection_serve as collection_serve_module
 from youtube_automation.scripts.collection_serve import (
     _resolve_distrokid_capture_root,
     build_collections_index,
@@ -49,6 +50,7 @@ from youtube_automation.scripts.collection_serve import (
     resolve_collection_prompts_path,
     resolve_prompts_path,
 )
+from youtube_automation.utils.chrome_extensions import ChromeExtensionOrigin, resolve_unpacked_extension_origin
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.suno_downloaded_apply import apply_downloaded_artifacts
 from youtube_automation.utils.suno_downloaded_archive import commit_staged_music_files, extract_and_rename_music
@@ -698,6 +700,161 @@ def test_removed_playlist_capture_prefix_cli_option_exits_with_usage_error(monke
     stderr = capsys.readouterr().err
     assert "unrecognized arguments" in stderr
     assert "--playlist-capture-prefix" in stderr
+
+
+def test_allow_extension_and_allow_origin_are_mutually_exclusive(monkeypatch, capsys, tmp_path):
+    """--allow-extension と --allow-origin の同時指定は argparse 入口で拒否する。"""
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "yt-collection-serve",
+            str(tmp_path),
+            "--allow-origin",
+            "chrome-extension://abcdefghijklmnopabcdefghijklmnop",
+            "--allow-extension",
+            "suno-helper",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 2
+    stderr = capsys.readouterr().err
+    assert "not allowed with argument" in stderr
+    assert "--allow-extension" in stderr
+    assert "--allow-origin" in stderr
+
+
+def test_main_resolves_allow_extension_to_allow_origin(monkeypatch, capsys, tmp_path):
+    """--allow-extension は検出 origin を create_server の allow_origin に渡す。"""
+
+    class FakeServer:
+        server_address = ("localhost", 7873)
+
+        def __init__(self) -> None:
+            self.closed = False
+
+        def serve_forever(self) -> None:
+            raise KeyboardInterrupt
+
+        def server_close(self) -> None:
+            self.closed = True
+
+    detected = ChromeExtensionOrigin(
+        name="suno-helper",
+        extension_id="gdjhjiphejeeclngbljhajiffhpdepee",
+        origin="chrome-extension://gdjhjiphejeeclngbljhajiffhpdepee",
+        profile="Default",
+        path=tmp_path / "chrome-extensions" / "suno-helper",
+    )
+    recorded: list[tuple[int, str | None]] = []
+    fake_server = FakeServer()
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+
+    def fake_resolve_unpacked_extension_origin(extension_name: str) -> ChromeExtensionOrigin:
+        assert extension_name == "suno-helper"
+        return detected
+
+    def fake_create_server(port: int, allow_origin: str | None, **kwargs: object) -> FakeServer:
+        assert kwargs["collections_root"] == planning
+        recorded.append((port, allow_origin))
+        return fake_server
+
+    monkeypatch.setattr(
+        collection_serve_module,
+        "resolve_unpacked_extension_origin",
+        fake_resolve_unpacked_extension_origin,
+    )
+    monkeypatch.setattr(collection_serve_module, "create_server", fake_create_server)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "yt-collection-serve",
+            str(planning),
+            "--allow-extension",
+            "suno-helper",
+        ],
+    )
+
+    main()
+
+    assert recorded == [(7873, "chrome-extension://gdjhjiphejeeclngbljhajiffhpdepee")]
+    assert fake_server.closed is True
+    stdout = capsys.readouterr().out
+    assert "detected extension: suno-helper -> gdjhjiphejeeclngbljhajiffhpdepee" in stdout
+    assert "chrome-extension://gdjhjiphejeeclngbljhajiffhpdepee" in stdout
+    assert "serve token: GET http://test-channel.localhost:7873/auth/token" in stdout
+
+
+def test_main_resolves_allow_extension_from_chrome_preferences(monkeypatch, capsys, tmp_path):
+    """--allow-extension は実 Chrome Preferences fixture から create_server まで通る。"""
+
+    class FakeServer:
+        server_address = ("localhost", 7873)
+
+        def __init__(self) -> None:
+            self.closed = False
+
+        def serve_forever(self) -> None:
+            raise KeyboardInterrupt
+
+        def server_close(self) -> None:
+            self.closed = True
+
+    home = tmp_path / "home"
+    chrome_root = home / "Library" / "Application Support" / "Google" / "Chrome" / "Default"
+    chrome_root.mkdir(parents=True)
+    extension_id = "gdjhjiphejeeclngbljhajiffhpdepee"
+    extension_path = tmp_path / "chrome-extensions" / "suno-helper"
+    (chrome_root / "Secure Preferences").write_text(
+        json.dumps({"extensions": {"settings": {extension_id: {"path": str(extension_path)}}}}),
+        encoding="utf-8",
+    )
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    recorded: list[str | None] = []
+    fake_server = FakeServer()
+
+    def fake_create_server(port: int, allow_origin: str | None, **kwargs: object) -> FakeServer:
+        assert kwargs["collections_root"] == planning
+        recorded.append(allow_origin)
+        return fake_server
+
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(collection_serve_module, "create_server", fake_create_server)
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning), "--allow-extension", "suno-helper"])
+
+    main()
+
+    assert recorded == [f"chrome-extension://{extension_id}"]
+    assert fake_server.closed is True
+    stdout = capsys.readouterr().out
+    assert f"detected extension: suno-helper -> {extension_id}" in stdout
+    assert f"chrome-extension://{extension_id}" in stdout
+
+
+def test_main_allow_extension_parse_failure_guides_manual_origin(monkeypatch, tmp_path):
+    """main() 経由でも Preferences JSON 破損は fallback 案内付き ConfigError にする。"""
+    home = tmp_path / "home"
+    profile_dir = home / "Library" / "Application Support" / "Google" / "Chrome" / "Default"
+    profile_dir.mkdir(parents=True)
+    (profile_dir / "Secure Preferences").write_text("{", encoding="utf-8")
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning), "--allow-extension", "suno-helper"])
+
+    with pytest.raises(ConfigError) as exc_info:
+        main()
+
+    message = str(exc_info.value)
+    assert "Failed to parse Chrome preferences" in message
+    assert "--allow-origin chrome-extension://<EXTENSION_ID>" in message
 
 
 # ---------------------------------------------------------------------------
@@ -2494,6 +2651,32 @@ def test_get_auth_token_returns_uuid(serve_dir, tmp_path):
     assert "token" in body
     # UUID v4 format: 8-4-4-4-12 hex digits
     assert re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", body["token"])
+
+
+def test_detected_extension_origin_allows_auth_token_request(serve_dir, tmp_path):
+    """Given Chrome Preferences から検出した extension origin
+    When その origin で GET /auth/token を送る
+    Then production server の exact lock を通り 200 を返す。
+    """
+    chrome_root = tmp_path / "Chrome"
+    profile_dir = chrome_root / "Default"
+    profile_dir.mkdir(parents=True)
+    extension_id = "gdjhjiphejeeclngbljhajiffhpdepee"
+    (profile_dir / "Secure Preferences").write_text(
+        json.dumps({"extensions": {"settings": {extension_id: {"path": str(tmp_path / "suno-helper")}}}}),
+        encoding="utf-8",
+    )
+    detected = resolve_unpacked_extension_origin("suno-helper", chrome_user_data_dir=chrome_root)
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=detected.origin)
+    req = urllib.request.Request(f"{base}/auth/token", headers={"Origin": detected.origin})
+
+    with urllib.request.urlopen(req) as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert "token" in body
 
 
 def test_get_auth_token_default_rejects_extension_origin_without_exact_lock(serve_dir, tmp_path):
