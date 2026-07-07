@@ -108,9 +108,6 @@ const fakeClientSecretsJson = JSON.stringify({
 
 describe("resolveDeps — empty deps", () => {
   test("returns {} without loading config or authenticating", async () => {
-    // Given an environment where BOTH a config load and an auth dance would
-    // fail (a missing channel dir, no client secrets) — so any eager work would
-    // surface as a throw or an op spawn.
     process.env.CHANNEL_DIR = join(
       tmpdir(),
       "resolve-deps-nonexistent-xyz-993"
@@ -118,11 +115,8 @@ describe("resolveDeps — empty deps", () => {
     reset();
     const spawnSpy = spyOn(Bun, "spawn");
 
-    // When resolving an empty dep list
     const deps = await resolveDeps([]);
 
-    // Then nothing is built and no side effect runs (lazy): an empty result and
-    // op was never spawned, despite the deliberately broken environment.
     expect(deps).toEqual({});
     expect(spawnSpy).not.toHaveBeenCalled();
 
@@ -133,23 +127,39 @@ describe("resolveDeps — empty deps", () => {
 // --- config --------------------------------------------------------------
 
 describe("resolveDeps — config", () => {
-  // Repo root is three levels up from packages/cli/test/ (see yt-skills.test).
   const repoRoot = resolve(import.meta.dir, "..", "..", "..");
   const sampleChannel = join(repoRoot, "tests", "fixtures", "sample_channel");
 
   test("loads the channel config via loadConfig and returns it under `config`", async () => {
-    // Given the committed sample channel selected via CHANNEL_DIR
     process.env.CHANNEL_DIR = sampleChannel;
     reset();
 
-    // When resolving the config dependency
     const deps = await resolveDeps(["config"]);
 
-    // Then the loaded ChannelConfig is returned (cross-section value matches the
-    // fixture on disk), and only the requested key is present.
     expect(deps.config.identity.meta.channelName).toBe("Test Channel");
     expect("yt" in deps).toBe(false);
     expect("ytAnalytics" in deps).toBe(false);
+  });
+});
+
+// --- channelDir ----------------------------------------------------------
+
+describe("resolveDeps — channelDir", () => {
+  test("resolves the selected channel root without loading config or auth", async () => {
+    const dir = makeChannelDir();
+    process.env.CHANNEL_DIR = dir;
+    reset();
+    const spawnSpy = spyOn(Bun, "spawn");
+
+    const deps = await resolveDeps(["channelDir"]);
+
+    expect(deps.channelDir).toBe(dir);
+    expect("config" in deps).toBe(false);
+    expect("yt" in deps).toBe(false);
+    expect("ytAnalytics" in deps).toBe(false);
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    spawnSpy.mockRestore();
   });
 });
 
@@ -157,7 +167,6 @@ describe("resolveDeps — config", () => {
 
 describe("resolveDeps — yt", () => {
   test("builds the Data API client from a still-valid stored token without op", async () => {
-    // Given env-supplied secrets and a non-expired token on disk
     const dir = makeChannelDir();
     process.env.CHANNEL_DIR = dir;
     process.env.CLIENT_SECRETS_JSON = fakeClientSecretsJson;
@@ -165,11 +174,8 @@ describe("resolveDeps — yt", () => {
     reset();
     const spawnSpy = spyOn(Bun, "spawn");
 
-    // When resolving only the yt dependency
     const deps = await resolveDeps(["yt"]);
 
-    // Then a youtube_v3 client (exposing `videos`) is built network-free, only
-    // the requested key is present, and op was never consulted.
     expect(typeof deps.yt.videos).toBe("object");
     expect("config" in deps).toBe(false);
     expect("ytAnalytics" in deps).toBe(false);
@@ -183,7 +189,6 @@ describe("resolveDeps — yt", () => {
 
 describe("resolveDeps — ytAnalytics", () => {
   test("builds the Analytics API client from a still-valid stored token without op", async () => {
-    // Given env-supplied secrets and a non-expired token on disk
     const dir = makeChannelDir();
     process.env.CHANNEL_DIR = dir;
     process.env.CLIENT_SECRETS_JSON = fakeClientSecretsJson;
@@ -191,11 +196,8 @@ describe("resolveDeps — ytAnalytics", () => {
     reset();
     const spawnSpy = spyOn(Bun, "spawn");
 
-    // When resolving only the ytAnalytics dependency
     const deps = await resolveDeps(["ytAnalytics"]);
 
-    // Then a youtubeAnalytics_v2 client (exposing `reports`) is built network-
-    // free, only the requested key is present, and op was never consulted.
     expect(typeof deps.ytAnalytics.reports).toBe("object");
     expect("yt" in deps).toBe(false);
     expect(spawnSpy).not.toHaveBeenCalled();
@@ -208,9 +210,6 @@ describe("resolveDeps — ytAnalytics", () => {
 
 describe("resolveDeps — yt + ytAnalytics share a single auth dance", () => {
   test("resolves the token once (op consulted a single time) and builds both clients", async () => {
-    // Given a non-expired token on disk and client_secrets reachable ONLY via op
-    // (no CLIENT_SECRETS_JSON env, no client_secrets.json file), so the secret
-    // resolution is a single countable Bun.spawn.
     const dir = makeChannelDir();
     process.env.CHANNEL_DIR = dir;
     seedValidToken(dir);
@@ -220,14 +219,10 @@ describe("resolveDeps — yt + ytAnalytics share a single auth dance", () => {
       fakeProc(fakeClientSecretsJson, 0)
     );
 
-    // When resolving both client dependencies together
     const deps = await resolveDeps(["yt", "ytAnalytics"]);
 
-    // Then both clients are built from the one resolved token ...
     expect(typeof deps.yt.videos).toBe("object");
     expect(typeof deps.ytAnalytics.reports).toBe("object");
-    // ... and the auth dance ran exactly once (op read called a single time),
-    // proving yt + ytAnalytics did not each resolve the token independently.
     expect(spawnSpy).toHaveBeenCalledTimes(1);
 
     whichSpy.mockRestore();

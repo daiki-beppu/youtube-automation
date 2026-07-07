@@ -27,12 +27,12 @@ def _read_thumbnail_default_config() -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _read_channel_setup_thumbnail_template() -> str:
+def _read_channel_new_thumbnail_template() -> str:
     path = (
         _repo_root()
         / ".claude"
         / "skills"
-        / "channel-setup"
+        / "channel-new"
         / "references"
         / "config-template"
         / "skills"
@@ -53,8 +53,8 @@ def _load_thumbnail_default_config() -> dict:
     return yaml.safe_load(_read_thumbnail_default_config()) or {}
 
 
-def _load_channel_setup_thumbnail_template() -> dict:
-    return yaml.safe_load(_read_channel_setup_thumbnail_template()) or {}
+def _load_channel_new_thumbnail_template() -> dict:
+    return yaml.safe_load(_read_channel_new_thumbnail_template()) or {}
 
 
 def _codex_prompt_template(config: dict) -> str:
@@ -197,7 +197,7 @@ def test_thumbnail_skill_documents_textless_background_to_text_included_flow() -
 
     for required in (
         "/thumbnail-compare",
-        "yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
+        "bunx tayk thumbnail-check <collection-path>/10-assets/main-v1.png --json",
         "cp main-v1.png main.png",
         "THUMBNAIL_PROMPT=\"$(cat <<'PROMPT'",
         '--reference "${COLLECTION_PATH}/10-assets/main.png"',
@@ -283,7 +283,7 @@ def test_thumbnail_skill_quality_check_separates_thumbnail_and_textless_main_qa(
         "`main-v1.png` / `main-v1.jpg`",
         "ベンチマーク参照の構図",
         "タイトル文字、字幕、ロゴ、透かし、タイポグラフィ、チャンネル名が残っていないか",
-        "yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
+        "bunx tayk thumbnail-check <collection-path>/10-assets/main-v1.png --json",
         "テキスト付き thumbnail 候補生成後",
         "`thumbnail-v1.jpg` / `thumbnail-codex-v1.png`",
         "承認済み `main.png/jpg` の構図",
@@ -438,13 +438,13 @@ def test_thumbnail_default_config_provides_codex_textless_background_prompt() ->
         assert required in template
 
 
-def test_channel_setup_thumbnail_template_includes_codex_ttp_upgrade_prompt() -> None:
-    """#1300: channel-setup で生成される thumbnail config も同じ Codex 既定文言を持つ。"""
+def test_channel_new_thumbnail_template_includes_codex_ttp_upgrade_prompt() -> None:
+    """#1300: channel-new（再生成モード）で生成される thumbnail config も同じ Codex 既定文言を持つ。"""
     default_template = _codex_prompt_template(_load_thumbnail_default_config())
-    channel_setup_template = _codex_prompt_template(_load_channel_setup_thumbnail_template())
+    channel_new_template = _codex_prompt_template(_load_channel_new_thumbnail_template())
 
-    assert channel_setup_template == default_template
-    assert channel_setup_template.count("{title}") == 1
+    assert channel_new_template == default_template
+    assert channel_new_template.count("{title}") == 1
     for required in (
         "TTP this reference thumbnail into a stronger original textless background",
         "winning layout",
@@ -455,11 +455,11 @@ def test_channel_setup_thumbnail_template_includes_codex_ttp_upgrade_prompt() ->
         "brand marks",
         "Do not add any title text yet",
     ):
-        assert required in channel_setup_template
+        assert required in channel_new_template
 
 
-def test_channel_setup_thumbnail_template_includes_channel_branding_contract() -> None:
-    template = _load_channel_setup_thumbnail_template()
+def test_channel_new_thumbnail_template_includes_channel_branding_contract() -> None:
+    template = _load_channel_new_thumbnail_template()
     reference_images = template["image_generation"]["gemini"]["reference_images"]
 
     assert reference_images["channel_branding"] == {

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.suno_artifact_contracts import SUNO_LYRICS_JSON_FILENAME
+from youtube_automation.utils.suno_artifact_validation import surrounding_whitespace_issue
 
 
 @dataclass(frozen=True)
@@ -48,11 +49,17 @@ def validate_suno_lyrics_entries(raw: object) -> list[SunoLyricsEntry]:
             raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: entry {i}.name must be a non-empty string")
         if not isinstance(lyrics, str):
             raise ConfigError(f"{SUNO_LYRICS_JSON_FILENAME}: entry {i}.lyrics must be a string")
-        clean_name = name.strip()
-        if clean_name in seen_names:
-            duplicates.add(clean_name)
-        seen_names.add(clean_name)
-        entries.append(SunoLyricsEntry(name=clean_name, lyrics=lyrics.rstrip()))
+        issue = surrounding_whitespace_issue(
+            source_name=SUNO_LYRICS_JSON_FILENAME,
+            field_path=f"entry {i}.name",
+            value=name,
+        )
+        if issue is not None:
+            raise ConfigError(issue)
+        if name in seen_names:
+            duplicates.add(name)
+        seen_names.add(name)
+        entries.append(SunoLyricsEntry(name=name, lyrics=lyrics.rstrip()))
 
     if duplicates:
         duplicate_names = ", ".join(sorted(duplicates))

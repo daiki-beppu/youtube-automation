@@ -29,6 +29,7 @@ from pathlib import Path
 
 from youtube_automation.utils.config import channel_dir, load_config
 from youtube_automation.utils.exceptions import AutomationError, ConfigError, ValidationError
+from youtube_automation.utils.preflight_checks import requires_scene_phrases
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,13 @@ SOURCE_LANG = "en"
 
 
 def _resolve_collection_path(name: str) -> Path:
+    path_name = Path(name)
+    if path_name.is_absolute() or name in {"", ".", ".."} or "/" in name or "\\" in name:
+        raise ConfigError(
+            f"コレクション名が不正です: {name!r}. "
+            "collections/planning または collections/live 直下のディレクトリ名だけを指定してください"
+        )
+
     root = channel_dir() / "collections"
     for sub in ("planning", "live"):
         candidate = root / sub / name
@@ -180,7 +188,7 @@ def main(argv: list[str] | None = None) -> int:
         state = json.loads(ws_path.read_text(encoding="utf-8"))
 
         supported = list(config.localizations.supported_languages)
-        if len(supported) <= 1:
+        if not requires_scene_phrases(supported):
             print(
                 f"⏭️  {args.collection}: localizations.supported_languages が 1 言語以下 → "
                 "scene_phrases は不要、スキップ"

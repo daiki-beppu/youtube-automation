@@ -102,6 +102,7 @@ async function loadContentScript(
       clearSubmittedIds: vi.fn(),
       getSubmittedIds: vi.fn(() => submittedIdsFromTracker),
       getPendingSubmittedIds: vi.fn(() => []),
+      getDuration: vi.fn(() => 120),
       getInFlightCount: vi.fn(() => 0),
       hasObservedAnyTraffic: vi.fn(() => true),
       lastChangeAt: vi.fn(() => Date.now()),
@@ -166,7 +167,9 @@ async function loadContentScript(
     triggerDownloadAll: vi.fn(() => Promise.resolve()),
   }));
 
-  vi.doMock("../../shared/api", () => ({}));
+  vi.doMock("../../shared/api", async () => ({
+    ...(await vi.importActual<typeof import("../../shared/api")>("../../shared/api")),
+  }));
 
   const content = await import("../entrypoints/content");
   content.default.main({} as NonNullable<Parameters<typeof content.default.main>[0]>);
