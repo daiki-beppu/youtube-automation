@@ -14,6 +14,8 @@ import { z } from "zod";
 
 import { isRecord } from "../internal/guards.ts";
 
+const NON_RETRYABLE_PREFIXES = ["config:", "validation:", "auth:"] as const;
+
 const parseJson = (text: string): unknown => {
   try {
     return JSON.parse(text);
@@ -127,6 +129,74 @@ export class QuotaExhaustedError extends YouTubeAPIError {
     this.retryAfterSeconds = retryAfterSeconds;
   }
 }
+
+export const defaultShouldRetry = (error: unknown): boolean => {
+  if (error instanceof QuotaExhaustedError) {
+    return false;
+  }
+  const message = error instanceof Error ? error.message : "";
+  return !NON_RETRYABLE_PREFIXES.some((prefix) => message.startsWith(prefix));
+};
+
+/**
+ * Read the Retry-After hint (in seconds) off a Gaxios-shaped error.
+ *
+ * A missing header, an empty/blank string, or a non-numeric value all yield
+ * undefined: `Number("")` is 0 and must not be misread as "retry in 0 seconds".
+ */
+const retryAfterSecondsFrom = (error: unknown): number | undefined => {
+  const headers = (
+    error as { response?: { headers?: Record<string, unknown> } }
+  )?.response?.headers;
+  const raw = headers
+    ? Object.entries(headers).find(
+        ([key]) => key.toLowerCase() === "retry-after"
+      )?.[1]
+    : undefined;
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  const seconds = Number(trimmed);
+  return Number.isFinite(seconds) ? seconds : undefined;
+};
+
+/**
+ * Classify a Gaxios-shaped API failure into a payload-carrying throw type,
+ * sitting next to {@link YouTubeAPIError.fromGaxiosError} as the single home for
+ * gaxios-error triage shared by the service boundaries.
+ *
+ * A 429 is promoted to {@link QuotaExhaustedError} (carrying the Retry-After
+ * hint) so `withRetry` stops retrying and the boundary surfaces a quota
+ * ServiceError per the ADR-0003 retry規約; every other status stays a
+ * {@link YouTubeAPIError} for the transient-retry path. `context` names the
+ * failing operation for the message prefix.
+ */
+export const classifyGaxiosError = (
+  error: unknown,
+  context: string
+): YouTubeAPIError => {
+  if (error instanceof QuotaExhaustedError) {
+    return error;
+  }
+  if (error instanceof YouTubeAPIError) {
+    if (error.statusCode === 429) {
+      return new QuotaExhaustedError(error.message);
+    }
+    return error;
+  }
+  const apiError = YouTubeAPIError.fromGaxiosError(error, context);
+  if (apiError.statusCode === 429) {
+    return new QuotaExhaustedError(
+      apiError.message,
+      retryAfterSecondsFrom(error)
+    );
+  }
+  return apiError;
+};
 
 // ServiceError (ADR-0003 §2): the wire-shape every service boundary emits. A
 // zod discriminated union on `domain` so MCP can `JSON.stringify` it straight

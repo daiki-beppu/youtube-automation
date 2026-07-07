@@ -97,6 +97,7 @@ $ARGUMENTS
 ### タイムスタンプ生成手順
 
 1. **個別トラックがある場合**（`02-Individual-music/`）: `metadata_generator.py` の `analyze_audio_files()` で自動計算
+   - master をループ生成しているコレクション（`yt-generate-master --loop N` / `--target-duration`）で**全ループ分のチャプター**を展開する場合は `generate_timestamps(loops=N)` / `format_timestamps_text(loops=N)` を使う。2 周目以降の開始秒は 1 周目と同じクロスフェード算術で連続計算される。2 周目以降のタイトルは 1 周目と同一になるため、チャプター名をユニークにしたいチャンネルでは各行の `loop` フィールド（1 始まり）を手掛かりに LLM リネームで装飾する（1 ループ分のみ載せる従来運用は `loops=1` のままで変更なし）
 2. ファイル名規約 `\d+-pattern-[a-d]` を持つコレクションでは、`format_timestamps_text()` がテーマ見出し（`── Pattern A: <name> ──`）と楽曲行（`00:00 Track 1`）を組み合わせた **個別楽曲単位** のタイムスタンプを返す。テーマ見出し行は YouTube のチャプター parser に拾われないよう先頭 timestamp を持たない（重複 timestamp は chapter list 全体を無効化する）
    - テーマ表示名は `workflow-state.json` の `planning.music.patterns[<letter>].display_name`（無ければ `.name` を `Pattern X: <name>` に整形）から解決される。両方無ければ `Pattern X` にフォールバック
    - pattern 規約に従わない legacy コレクションはテーマ見出し無しのフラット出力（後方互換）
@@ -138,7 +139,7 @@ skill-config (`.claude/skills/video-description/config.default.yaml` / 上書き
 続けて、`descriptions.md` に保存する前に過去 live タイトルとの重複 warning を確認する（`yt-title-duplicate-check` は 100 codepoint 超過も検出し、超過時は `--strict` に関係なく exit 1 になる）:
 
 ```bash
-uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
+bunx tayk title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
 ```
 
 - `タイトル全体` / `タイトル後半` / 長い `タイトル末尾` が過去タイトルと一致した warning は、アップロード直前まで持ち越さずこの段階で見直す

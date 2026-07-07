@@ -217,13 +217,13 @@ def test_wf_new_declares_sequential_child_skill_orchestration() -> None:
 
     expected_order = (
         "/collection-ideate",
-        "yt-init-collection",
-        "yt-populate-scene-phrases",
+        "bunx tayk init-collection",
+        "bunx tayk populate-scene-phrases",
         "/thumbnail",
         "/suno",
         "/lyria",
         "/loop-video",
-        "yt-collection-serve",
+        "bunx tayk collection-serve",
     )
     cursor = -1
     for token in expected_order:
@@ -241,7 +241,7 @@ def test_wf_new_starts_suno_helper_server_before_handoff() -> None:
 
     for token in (
         "Suno チャンネルでは",
-        "yt-collection-serve",
+        "bunx tayk collection-serve",
         "Chrome 拡張でのブラウザ実行だけを user に引き継ぐ",
     ):
         assert token in overview, f"wf-new Overview に Suno server 起動責務 `{token}` がありません"
@@ -263,7 +263,7 @@ def test_wf_new_starts_suno_helper_server_before_handoff() -> None:
 
     assert "Suno-helper server" in phase_2g
     assert "collection 単体パスや `suno-prompts.json` 直指定は playlist phase がスキップ" in phase_2f
-    assert "`/wf-new` が自動で行うのは Suno 用 localhost server の起動と疎通確認まで" in text
+    assert "`/wf-new` が自動で行うのは Suno 用ローカル server の起動と疎通確認まで" in text
 
 
 def test_wf_new_cross_references_document_fallback_differences() -> None:

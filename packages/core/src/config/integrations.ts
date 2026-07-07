@@ -5,9 +5,10 @@ import { z } from "zod";
 
 import { Analytics } from "./analytics.ts";
 import { Distrokid } from "./distrokid.ts";
+import { parseWithIssues } from "./internal.ts";
 
 /** integrations バケット: merged から外部連携セクションを取り出して束ねる。 */
-export const Integrations = z.unknown().transform((merged) => ({
-  analytics: Analytics.parse(merged),
-  distrokid: Distrokid.parse(merged),
+export const Integrations = z.unknown().transform((merged, ctx) => ({
+  analytics: parseWithIssues(Analytics, merged, ctx),
+  distrokid: parseWithIssues(Distrokid, merged, ctx),
 }));

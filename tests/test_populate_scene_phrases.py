@@ -3,13 +3,27 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
 
+from youtube_automation.agents._preflight import PreflightMixin
 from youtube_automation.scripts import populate_scene_phrases
-from youtube_automation.utils.config import reset
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.utils.config import load_config, reset
+from youtube_automation.utils.exceptions import ConfigError, ValidationError
+from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
+
+
+class _PreflightHarness(PreflightMixin):
+    def __init__(self, collections_root: Path) -> None:
+        self.collections_root = collections_root
+
+    @staticmethod
+    def _extract_md_section(text: str, header: str) -> str | None:
+        pattern = rf"^## {re.escape(header)}\n```(?:\w+)?\n(.*?)\n```"
+        match = re.search(pattern, text, re.MULTILINE | re.DOTALL)
+        return match.group(1) if match else None
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -98,6 +112,24 @@ def _setup_channel(
     return ch
 
 
+def _write_descriptions_md(collection_dir: Path) -> None:
+    docs_dir = collection_dir / "20-documentation"
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    (docs_dir / "descriptions.md").write_text(
+        """## タイトル案
+```
+Late-night neon city, jazz between rain and streetlights | 3 Hours of Study
+```
+
+## Complete Collection 概要欄
+```
+A continuous BGM mix without chapter markers.
+```
+""",
+        encoding="utf-8",
+    )
+
+
 @pytest.fixture(autouse=True)
 def _isolate_config(monkeypatch):
     """各テスト前後で CHANNEL_DIR / config singleton をリセット."""
@@ -181,6 +213,62 @@ class TestMainCLI:
         assert rc == 0
         out = capsys.readouterr().out
         assert "1 言語以下" in out
+
+    @pytest.mark.parametrize(
+        "bad_name",
+        [
+            "",
+            ".",
+            "..",
+            "/tmp/outside",
+            "../outside",
+            "planning/20260322-tc-city-collection",
+            r"planning\20260322-tc-city-collection",
+        ],
+    )
+    def test_rejects_collection_path_escape(self, tmp_path, monkeypatch, bad_name):
+        ch = _setup_channel(
+            tmp_path,
+            supported_languages=["en"],
+            workflow_state={"theme": "city"},
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        with pytest.raises(ConfigError, match="コレクション名が不正"):
+            populate_scene_phrases._resolve_collection_path(bad_name)
+
+    def test_single_language_populate_to_upload_metadata_path_passes(self, tmp_path, monkeypatch, capsys):
+        """単一言語では populate no-op 後の upload 側経路も scene_phrases 無しで通る (#1470)."""
+        collection_name = "20260322-tc-city-collection"
+        ch = _setup_channel(
+            tmp_path,
+            supported_languages=["en"],
+            workflow_state={"theme": "city"},
+            collection_name=collection_name,
+        )
+        collection_dir = ch / "collections" / "planning" / collection_name
+        _write_descriptions_md(collection_dir)
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+        rc = populate_scene_phrases.main([collection_name])
+
+        assert rc == 0
+        assert "1 言語以下" in capsys.readouterr().out
+        state = json.loads((collection_dir / "workflow-state.json").read_text(encoding="utf-8"))
+        assert "scene_phrases" not in state
+
+        _PreflightHarness(ch / "collections")._preflight_check(collection_dir)
+
+        gen = object.__new__(BAHMetadataGenerator)
+        gen.config = load_config()
+        assert (
+            gen.generate_localizations(
+                "Late-night neon city, jazz between rain and streetlights | 3 Hours of Study",
+                "00:00 Intro",
+                {},
+            )
+            == {}
+        )
 
     def test_skips_when_no_localizations_file(self, tmp_path, monkeypatch, capsys):
         ch = _setup_channel(

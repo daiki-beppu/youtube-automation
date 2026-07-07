@@ -66,6 +66,8 @@ phase 値と日本語ラベル:
 テーマ: late-night-jazz
 音楽エンジン: suno
 フェーズ: prepared（制作中）
+ディレクトリ骨格: ✅ OK
+                （欠落時: ⚠️ 01-master 欠落 — `uv run yt-collection-preflight <dir名> --fix` で補完）
 
 素材状況:
   サムネイル:      ✅
@@ -76,6 +78,8 @@ phase 値と日本語ラベル:
   動画:           ❌
   概要欄:         ❌
 ```
+
+ディレクトリ骨格行は `uv run yt-collection-preflight <dir名>`（`--fix` なし = 読み取り専用）の結果で判定する（#1494）。欠落があっても `/wf-status` からは補完しない — `--fix` 実行はユーザーまたは `/wf-next` に委ねる。
 
 ### 旧スキーマ（v1）の表示
 
