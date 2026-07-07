@@ -557,8 +557,25 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "旧 `/channel-direction` は本スキルの方向性検討モードに統合済み" not in channel_new
     assert "docs/channel/ttp-seed-confirmation.md" in channel_direction_mode
     assert "docs/channel/competitor-branding-snapshot.json" in channel_direction_mode
+    assert "config/channel/analytics.json::benchmark.channels" in channel_direction_mode
+    assert "入力がすべて欠けている場合" in channel_direction_mode
+    assert "根拠なしに方向性検討を進めない" in channel_direction_mode
+    assert "/channel-new` 新規開設モード" in channel_direction_mode
     assert "untrusted data" in channel_direction_mode
     assert "動画尺 / 投稿頻度 / コメント語彙は収集済みデータがある場合だけ使う" in channel_direction_mode
+
+    followup_direction_files = [
+        ".claude/skills/alignment-check/SKILL.md",
+        ".claude/skills/collection-ideate/SKILL.md",
+        ".claude/skills/lyria/SKILL.md",
+        ".claude/skills/postmortem/SKILL.md",
+        ".claude/skills/video-analyze/SKILL.md",
+    ]
+    for path in followup_direction_files:
+        content = _read(path)
+        assert "/channel-new" in content
+        assert "方向性検討モード" in content
+        assert "`/channel-direction`" not in content
 
     assert "ビジョン共有 + 競合発掘" not in onboarding
     assert "yt-discover-competitors` で 5-10 件" not in onboarding

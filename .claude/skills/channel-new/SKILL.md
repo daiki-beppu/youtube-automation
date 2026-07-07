@@ -487,6 +487,10 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 `docs/channel/competitor-branding-snapshot.json`、`config/channel/analytics.json::benchmark.channels`
 を読み込んでユーザーに要点をサマリーで提示:
 
+上記の入力がすべて欠けている場合は、根拠なしに方向性検討を進めない。不足している入力を明示し、
+`/channel-new` 新規開設モードで TTP seed confirmation / branding snapshot / benchmark.channels を作成するか、
+必要に応じて `/benchmark` / `/viewer-voice` / `/channel-research` を先に実行するよう案内して停止する。
+
 - 承認済み TTP 対象の全体像（チャンネル名、登録者数、動画数、直近タイトル）
 - 最も参考になるチャンネル（ロールモデル候補）
 - 転写したい型（タイトル構造、サムネ構図、branding。投稿頻度と動画尺は収集済みデータまたは手動メモがある場合だけ）
