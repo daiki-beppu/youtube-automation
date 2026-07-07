@@ -21,13 +21,13 @@ image_generation:
   # provider: codex
 
   codex:
-    # 参照サムネを winning template として扱い、{title} だけを差し替える
-    # 「TTPを徹底して上位互換の生成」用の短い既定プロンプト。
+    # 参照サムネを winning template として扱い、textless 背景を先に固める
+    # 「TTPを徹底して textless 背景を先に固める」用の短い既定プロンプト。
     default_prompt_template: |
-      TTP this reference thumbnail, then improve it into a stronger original thumbnail.
-      Keep the winning layout, typography feel, character scale, color mood, texture, and energy.
-      Make it cleaner, more readable on mobile, stronger face impact, no logos, no watermarks, no broken hands.
-      Use the title {title}.
+      TTP this reference thumbnail into a stronger original textless background for {title}.
+      Keep the winning layout, character scale, color mood, lighting, texture, and energy.
+      Remove all text, typography, logos, watermarks, brand marks, and channel badges.
+      Do not add any title text yet; the approved background will be used for the final thumbnail.
 
   gemini:
     # チャンネル統一の背景色（channel-direction の「ビジュアルアイデンティティ」

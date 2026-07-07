@@ -165,8 +165,8 @@ def test_thumbnail_skill_documents_thumbnail_compare_and_alignment_check_roles()
     assert "公開**後**" in role_block
 
 
-def test_thumbnail_skill_documents_text_included_to_textless_background_flow() -> None:
-    """#1310: /thumbnail は文字入りサムネ承認後に文字なし main を AI 再生成する。"""
+def test_thumbnail_skill_documents_textless_background_to_text_included_flow() -> None:
+    """#1502: /thumbnail は文字なし main 承認後に文字入り thumbnail を生成する。"""
     skill = _read_thumbnail_skill()
 
     standard_block = _slice_between(
@@ -181,11 +181,13 @@ def test_thumbnail_skill_documents_text_included_to_textless_background_flow() -
     )
 
     for required in (
-        "テキスト付き YouTube サムネ → テキストなし動画背景",
+        "テキストなし動画背景 → テキスト付き YouTube サムネ",
         "ベンチマーク先サムネを参照画像",
         "10-assets/thumbnail.jpg",
         "10-assets/main.png",
         "10-assets/main.jpg",
+        "承認済み `main.png/jpg` を参照画像",
+        "/thumbnail-compare",
         "config/skills/loop-video.yaml::enabled: true",
         "config/skills/loop-video.yaml::enabled: false",
         "静止画背景",
@@ -195,25 +197,55 @@ def test_thumbnail_skill_documents_text_included_to_textless_background_flow() -
 
     for required in (
         "/thumbnail-compare",
-        "TEXTLESS_PROMPT=\"$(cat <<'PROMPT'",
-        '--reference "${COLLECTION_PATH}/10-assets/thumbnail.jpg"',
-        '--prompt "$TEXTLESS_PROMPT"',
-        '--output "${COLLECTION_PATH}/10-assets/main-v1.png"',
+        "yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
+        "cp main-v1.png main.png",
+        "THUMBNAIL_PROMPT=\"$(cat <<'PROMPT'",
+        '--reference "${COLLECTION_PATH}/10-assets/main.png"',
+        '--prompt "$THUMBNAIL_PROMPT"',
+        '--output "${COLLECTION_PATH}/10-assets/thumbnail-v1.jpg"',
+        "cp thumbnail-v1.jpg thumbnail.jpg",
+        "テキストなし背景生成プロンプト",
         "cp main-v1.png main.png",
         "テキスト付き生成プロンプト",
-        "テキストなし再生成プロンプト",
         "文字入り `thumbnail.jpg` をそのまま動画背景や `/loop-video` 入力にしない",
     ):
         assert required in single_step_block
 
 
-def test_thumbnail_skill_initial_generation_examples_output_text_included_candidates() -> None:
-    """#1310: 標準入口の初回生成例は main ではなく thumbnail 候補を出す。"""
+def test_thumbnail_skill_single_step_notes_do_not_inherit_reference_text() -> None:
+    """#1502: textless 背景生成の運用メモに旧テキスト継承契約を残さない。"""
+    skill = _read_thumbnail_skill()
+    notes_block = _slice_between(skill, "#### 運用上の注意", "#### 失敗時の対処")
+
+    assert "テキスト除去" in notes_block
+    assert "text_strip_clause" in notes_block
+    assert "Remove all text" in notes_block
+    assert "文字情報は第2段のテキスト付きサムネ生成だけで扱う" in notes_block
+    assert "キャッチコピー・ジャンルタグ・フォントはデフォルトで継承される" not in notes_block
+    assert "変えたい部分だけ明示指示" not in notes_block
+
+
+def test_thumbnail_skill_initial_generation_examples_output_textless_background_candidates() -> None:
+    """#1502: 標準入口の初回生成例は thumbnail ではなく main 候補を出す。"""
     skill = _read_thumbnail_skill()
     mode_block = _slice_between(skill, "## 生成モード判定", "## ワークフロー")
 
-    assert "--output <collection-path>/10-assets/thumbnail-v1.jpg -y" in mode_block
-    assert "--output <collection-path>/10-assets/main-v1.jpg -y" not in mode_block
+    assert "--output <collection-path>/10-assets/main-v1.png -y" in mode_block
+    assert "--output <collection-path>/10-assets/thumbnail-v1.jpg -y" not in mode_block
+
+
+def test_thumbnail_skill_keeps_typography_out_of_initial_textless_prompt() -> None:
+    """#1502: single_step 初回の textless 背景プロンプトへ title typography を混ぜない。"""
+    skill = _read_thumbnail_skill()
+    prompt_construction_block = _slice_between(skill, "#### プロンプト構築", "#### 生成コマンド")
+    font_block = _slice_between(skill, "## フォント安定化", "## 品質チェック")
+
+    assert "typography_clause" not in prompt_construction_block
+    assert "Render the title text" not in prompt_construction_block
+    assert "初回 `diff_prompt_template` は textless `main-v1.png/jpg` 背景生成専用" in font_block
+    assert "`${typography_clause}` やタイトル文字の描画指示を入れない" in font_block
+    assert "第2段のテキスト付き thumbnail prompt に `single_step.typography_clause` を展開" in font_block
+    assert "diff_prompt_template` に `${typography_clause}` を展開" not in font_block
 
 
 def test_thumbnail_skill_prompt_log_and_file_contract_cover_issue_1310_outputs() -> None:
@@ -223,10 +255,10 @@ def test_thumbnail_skill_prompt_log_and_file_contract_cover_issue_1310_outputs()
     naming_block = _slice_between(skill, "## ファイル命名ルール（上書き禁止）", "### クリーンアップ")
 
     for required in (
+        "## Textless Background Prompt (main.png/main.jpg)",
         "## Text-Included Thumbnail Prompt (thumbnail.jpg)",
-        "## Textless Background Regeneration Prompt (main.png/main.jpg)",
+        "テキストなし背景を生成したプロンプト",
         "テキスト付きサムネを生成したプロンプト",
-        "テキストなし背景を再生成したプロンプト",
     ):
         assert required in prompt_block
 
@@ -247,17 +279,21 @@ def test_thumbnail_skill_quality_check_separates_thumbnail_and_textless_main_qa(
     qa_block = _slice_between(skill, "## 品質チェック", "## 視認性検証")
 
     for required in (
+        "textless main 候補生成後",
+        "`main-v1.png` / `main-v1.jpg`",
+        "ベンチマーク参照の構図",
+        "タイトル文字、字幕、ロゴ、透かし、タイポグラフィ、チャンネル名が残っていないか",
+        "yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
         "テキスト付き thumbnail 候補生成後",
         "`thumbnail-v1.jpg` / `thumbnail-codex-v1.png`",
+        "承認済み `main.png/jpg` の構図",
         "/thumbnail-compare",
         "タイトル可読性",
         "`thumbnail_text.channel_name` が表示されているか",
-        "textless main 候補生成後",
-        "`main-v1.png` / `main-v1.jpg`",
-        "タイトル文字、字幕、ロゴ、透かし、タイポグラフィ、チャンネル名が残っていないか",
-        "yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
     ):
         assert required in qa_block
+
+    assert qa_block.find("textless main 候補生成後") < qa_block.find("テキスト付き thumbnail 候補生成後")
 
     assert "Phase 1 生成後" not in qa_block
     assert "Phase 2 生成後" not in qa_block
@@ -286,10 +322,11 @@ def test_thumbnail_skill_two_phase_keeps_thumbnail_and_main_separate() -> None:
     two_phase_block = _slice_between(skill, "### Two-Phase モード", "## 品質チェック")
 
     assert "旧チャンネル向けのフォールバック" in two_phase_block
+    assert "textless 背景を先に承認" in two_phase_block
     assert "`thumbnail.jpg`（テキスト付き YouTube サムネ）" in two_phase_block
     assert "`main.png/jpg`（テキストなし動画背景）" in two_phase_block
     assert "既存 `main.png/jpg` は企画参照または過去背景として扱い" in two_phase_block
-    assert "承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成" in two_phase_block
+    assert "承認済み `main.png/jpg` を Phase 2 の参照画像として使う" in two_phase_block
     assert "既に存在する場合は Phase 1 をスキップ" not in two_phase_block
 
 
@@ -310,7 +347,7 @@ def test_loop_video_skill_uses_textless_main_image_and_respects_disabled_channel
 
     assert "`10-assets/thumbnail.jpg` ではなく、テキストなし `main.png/jpg` を入力" in prerequisites_block
     assert "Veo を実行せず" in steps_block
-    assert "文字入り `thumbnail.jpg` しか無い場合は `/thumbnail` に戻ってテキストなし版を再生成" in steps_block
+    assert "文字入り `thumbnail.jpg` しか無い場合は `/thumbnail` に戻って textless 背景を生成・承認" in steps_block
 
 
 def test_thumbnail_default_config_remains_ttp_aligned() -> None:
@@ -336,8 +373,12 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
 
 
 def test_thumbnail_default_config_keeps_font_stabilization_contract() -> None:
+    config_text = _read_thumbnail_default_config()
     config = _load_thumbnail_default_config()
     gemini_config = config["image_generation"]["gemini"]
+
+    assert "初回 textless 背景用の diff_prompt_template には展開しない" in config_text
+    assert "diff_prompt_template に ${typography_clause} として展開する" not in config_text
 
     typography_clause = gemini_config["single_step"]["typography_clause"]
     assert "consistent {font_description} typeface" in typography_clause
@@ -371,25 +412,28 @@ def test_thumbnail_sample_prompts_are_short_ttp_diff_not_prompt_only_style() -> 
     )
 
     assert "Single-Step / TTP の短い差分プロンプト" in sample
-    assert "No logos, signatures, watermarks" in sample
+    assert "Create a stronger original textless background" in sample
+    assert "Remove all text, typography, logos, signatures, watermarks" in sample
+    assert "Do not add title text yet" in sample
+    assert "内容改変なし・移動のみ" not in sample
     assert "プロンプトベースモード" not in sample
     assert "reference_images` がない場合" not in sample
 
 
-def test_thumbnail_default_config_provides_codex_ttp_upgrade_prompt() -> None:
-    """#1300: Codex 経路の既定プロンプトは短い TTP 上位互換型にする。"""
+def test_thumbnail_default_config_provides_codex_textless_background_prompt() -> None:
+    """#1502: Codex 経路の既定プロンプトは TTP 背景先行型にする。"""
     template = _codex_prompt_template(_load_thumbnail_default_config())
 
     assert template.count("{title}") == 1
     for required in (
-        "TTP this reference thumbnail",
+        "TTP this reference thumbnail into a stronger original textless background",
         "winning layout",
-        "more readable on mobile",
-        "stronger face impact",
-        "no logos",
-        "no watermarks",
-        "no broken hands",
-        "Use the title {title}.",
+        "color mood",
+        "Remove all text",
+        "logos",
+        "watermarks",
+        "brand marks",
+        "Do not add any title text yet",
     ):
         assert required in template
 
@@ -402,14 +446,14 @@ def test_channel_setup_thumbnail_template_includes_codex_ttp_upgrade_prompt() ->
     assert channel_setup_template == default_template
     assert channel_setup_template.count("{title}") == 1
     for required in (
-        "TTP this reference thumbnail",
+        "TTP this reference thumbnail into a stronger original textless background",
         "winning layout",
-        "more readable on mobile",
-        "stronger face impact",
-        "no logos",
-        "no watermarks",
-        "no broken hands",
-        "Use the title {title}.",
+        "color mood",
+        "Remove all text",
+        "logos",
+        "watermarks",
+        "brand marks",
+        "Do not add any title text yet",
     ):
         assert required in channel_setup_template
 
@@ -445,8 +489,8 @@ def test_codex_prompt_helper_cli_renders_default_template(tmp_path: Path) -> Non
     )
 
     assert result.returncode == 0, result.stderr
-    assert "TTP this reference thumbnail" in result.stdout
-    assert "Use the title Rain Study." in result.stdout
+    assert "TTP this reference thumbnail into a stronger original textless background for Rain Study." in result.stdout
+    assert "Do not add any title text yet" in result.stdout
     assert "{title}" not in result.stdout
 
 
