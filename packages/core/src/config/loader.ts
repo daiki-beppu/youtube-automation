@@ -66,7 +66,7 @@ const resolveChannelDir = (): string => {
   );
 };
 
-/** チャンネルディレクトリを返す（シングルトン解決）。 */
+/** config/channel/ を含むプロジェクトルートを返す（シングルトン解決）。 */
 export const channelDir = (): string => {
   if (channelDirCache === null) {
     channelDirCache = resolveChannelDir();
