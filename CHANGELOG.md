@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `fix(distrokid-helper)`: `ext-v0.2.3` リリース前に DistroKid Helper の manifest / popup 表示名へ残っていた `(TEST)` 接尾辞を外し、配布 zip が本番名 `DistroKid Helper` として表示されるようにした。
+- `fix(videoup)`: `generate_videos.sh` の overlays 経路で `overlays.audio_visualizer.enabled` が false/未設定（`subscribe_popup` のみ有効等）のとき、`AUDIO_LABEL="1:a"`（生の入力ストリーム指定）がセットされるが最終 ffmpeg コマンドは常に `-map "[${AUDIO_LABEL}]"` とブラケットで囲むため `-map "[1:a]"` という無効な構文になり `Output with label '1:a' does not exist in any defined filter graph` で失敗するバグを修正。else 分岐でも `[1:a]anull[a_pass]` を filter_complex に追加し `AUDIO_LABEL="a_pass"` とすることで、`av_enabled` の真偽に関わらず常に有効な named label を経由するようにした。下流チャンネルリポジトリで実際に再現（`overlays.enabled=true` + `subscribe_popup.enabled=true` + `audio_visualizer` 未設定の組み合わせ）。
 
 ## [5.5.16] - 2026-07-06
 
