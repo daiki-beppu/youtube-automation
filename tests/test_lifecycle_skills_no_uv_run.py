@@ -29,17 +29,19 @@ _LIFECYCLE_SKILL_NAMES: Final[tuple[str, ...]] = (
     "distrokid-helper",
 )
 
-_FORBIDDEN_COMMAND_FRAGMENTS: Final[tuple[str, ...]] = (
-    "uv run",
-    "bunx yt",
-)
+_FORBIDDEN_COMMAND_FRAGMENTS: Final[tuple[str, ...]] = ("uv run", "bunx yt")
+
+_ALLOWED_COMMAND_FRAGMENTS: Final[dict[str, tuple[str, ...]]] = {
+    "distrokid-helper": ("uv run yt-collection-serve",),
+    "suno": ("uv run yt-collection-serve",),
+    "suno-helper": ("uv run yt-collection-serve",),
+    "wf-new": ("uv run yt-collection-serve",),
+}
 
 _FORBIDDEN_LEGACY_COMMAND_REFERENCES: Final[tuple[tuple[str, str], ...]] = (
     ("suno", "yt-generate-suno"),
     ("suno", "yt-video-analyze"),
-    ("suno", "yt-collection-serve"),
     ("wf-new", "yt-analytics"),
-    ("wf-new", "yt-collection-serve"),
     ("wf-new", "yt-video-analyze"),
     ("wf-new", "yt-init-collection"),
     ("wf-new", "yt-metadata-audit"),
@@ -57,12 +59,21 @@ def _text_files_under(skill_dir: Path) -> list[Path]:
     return sorted(path for path in skill_dir.rglob("*") if path.is_file())
 
 
+def _is_allowed_command_fragment(skill_name: str, forbidden_fragment: str, line: str) -> bool:
+    if forbidden_fragment != "uv run":
+        return False
+    return any(fragment in line for fragment in _ALLOWED_COMMAND_FRAGMENTS.get(skill_name, ()))
+
+
 def _offending_locations(skill_dir: Path, forbidden_fragment: str) -> list[str]:
     offenders: list[str] = []
+    skill_name = skill_dir.name
     for path in _text_files_under(skill_dir):
         text = path.read_text(encoding="utf-8")
         for line_number, line in enumerate(text.splitlines(), start=1):
             if forbidden_fragment in line:
+                if _is_allowed_command_fragment(skill_name, forbidden_fragment, line):
+                    continue
                 relative_path = path.relative_to(_REPO_ROOT)
                 offenders.append(f"{relative_path}:{line_number}: {line.strip()}")
     return offenders
@@ -120,3 +131,10 @@ def test_lifecycle_skills_do_not_keep_rewritten_legacy_command_names(
         f"{skill_name} に legacy command {legacy_command!r} が残っています。"
         " `bunx tayk <cmd>` 形式へ統一してください:\n  " + "\n  ".join(offenders)
     )
+
+
+def test_lifecycle_uv_run_allowlist_is_limited_to_collection_serve() -> None:
+    assert _is_allowed_command_fragment("suno", "uv run", "uv run yt-collection-serve collections/")
+    assert not _is_allowed_command_fragment("suno", "uv run", "uv run yt-generate-suno")
+    assert not _is_allowed_command_fragment("masterup", "uv run", "uv run yt-collection-serve collections/")
+    assert not _is_allowed_command_fragment("suno", "bunx yt", "uv run yt-collection-serve && bunx yt-old")

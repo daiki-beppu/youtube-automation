@@ -357,7 +357,7 @@ describe("PROFILE_SELECTORS（id ベース・実 DOM 検証）", () => {
     expect(PROFILE_SELECTORS.artist).toBe('input[name="bandname"]');
     expect(PROFILE_SELECTORS.language).toBe("#language");
     expect(PROFILE_SELECTORS.main_genre).toBe("#genrePrimary");
-    expect(PROFILE_SELECTORS.sub_genre).toBe("#genreSecondary");
+    expect(PROFILE_SELECTORS.sub_genre).toBe("#subGenrePrimary");
   });
 });
 
@@ -460,7 +460,7 @@ describe("injectProfile（language/main_genre 必須・sub_genre 任意・isVisi
     const artist = mountInput({ name: "bandname" });
     const language = mountSelect("language", ["ja", "en"]);
     const genre = mountSelect("genrePrimary", ["Electronic", "Pop"]);
-    const sub = mountSelect("genreSecondary", ["House", "Techno"]);
+    const sub = mountSelect("subGenrePrimary", ["House", "Techno"]);
     genre.addEventListener("change", () => {
       setTimeout(() => {
         sub.innerHTML = "";
@@ -483,12 +483,12 @@ describe("injectProfile（language/main_genre 必須・sub_genre 任意・isVisi
     expect(sub.value).toBe("House");
   });
 
-  it("sub_genre が null なら genreSecondary を触らない（skip）", async () => {
+  it("sub_genre が null なら subGenrePrimary を触らない（skip）", async () => {
     // Given
     mountInput({ name: "bandname" });
     mountSelect("language", ["ja"]);
     mountSelect("genrePrimary", ["Electronic"]);
-    const sub = mountSelect("genreSecondary", ["House", "Techno"]);
+    const sub = mountSelect("subGenrePrimary", ["House", "Techno"]);
     let subChanges = 0;
     sub.addEventListener("change", () => {
       subChanges += 1;
@@ -548,7 +548,7 @@ describe("injectProfile（language/main_genre 必須・sub_genre 任意・isVisi
     mountInput({ name: "bandname" });
     mountSelect("language", ["ja"]);
     const genre = mountSelect("genrePrimary", ["エレクトロニック", "ポップ"]);
-    const sub = mountSelectWithOptions("genreSecondary", [{ value: "", text: "サブジャンルを選択" }]);
+    const sub = mountSelectWithOptions("subGenrePrimary", [{ value: "", text: "サブジャンルを選択" }]);
     genre.addEventListener("change", () => {
       setTimeout(() => {
         for (const text of ["ハウス", "テクノ", "トランス"]) {
@@ -572,12 +572,63 @@ describe("injectProfile（language/main_genre 必須・sub_genre 任意・isVisi
     expect(sub.value).toBe("テクノ");
   });
 
+  it("main_genre の change 後に sub_genre select 自体が mount される場合も待って選択する", async () => {
+    // Given: DistroKid 実機ではサブジャンル select が main genre 選択後に遅れて mount される場合がある。
+    mountInput({ name: "bandname" });
+    mountSelect("language", ["ja"]);
+    const genre = mountSelect("genrePrimary", ["エレクトロニック", "ポップ"]);
+    genre.addEventListener("change", () => {
+      setTimeout(() => {
+        mountSelectWithOptions("subGenrePrimary", [
+          { value: "", text: "サブジャンルを選択" },
+          { value: "53", text: "テクノ" },
+        ]);
+      }, 0);
+    });
+
+    // When
+    await injectProfile(document, {
+      ...SAMPLE_PROFILE,
+      language: "ja",
+      main_genre: "エレクトロニック",
+      sub_genre: "テクノ",
+    });
+
+    // Then
+    expect(document.querySelector<HTMLSelectElement>("#subGenrePrimary")!.value).toBe("53");
+  });
+
+  it("main_genre が既に一致している場合は populate 済み sub_genre option をそのまま選択する", async () => {
+    // Given: 実機で再実行した状態。main genre と subgenre options は既に選択可能。
+    mountInput({ name: "bandname" });
+    mountSelect("language", ["ja"]);
+    mountSelectWithOptions("genrePrimary", [
+      { value: "", text: "ジャンルを選択" },
+      { value: "9", text: "エレクトロニック" },
+    ]).value = "9";
+    const sub = mountSelectWithOptions("subGenrePrimary", [
+      { value: "", text: "サブジャンルを選択" },
+      { value: "53", text: "テクノ" },
+    ]);
+
+    // When
+    await injectProfile(document, {
+      ...SAMPLE_PROFILE,
+      language: "ja",
+      main_genre: "エレクトロニック",
+      sub_genre: "テクノ",
+    });
+
+    // Then
+    expect(sub.value).toBe("53");
+  });
+
   it("sub_genre option 待機は部分一致では resolve せず完全一致の option を待つ（#1407）", async () => {
     // Given
     mountInput({ name: "bandname" });
     mountSelect("language", ["ja"]);
     const genre = mountSelect("genrePrimary", ["エレクトロニック"]);
-    const sub = mountSelectWithOptions("genreSecondary", [
+    const sub = mountSelectWithOptions("subGenrePrimary", [
       { value: "", text: "サブジャンルを選択" },
       { value: "hardcore-techno", text: "ハードコア／ハードテクノ" },
     ]);
@@ -607,7 +658,7 @@ describe("injectProfile（language/main_genre 必須・sub_genre 任意・isVisi
     mountInput({ name: "bandname" });
     mountSelect("language", ["ja"]);
     const genre = mountSelect("genrePrimary", ["エレクトロニック"]);
-    const sub = mountSelectWithOptions("genreSecondary", [
+    const sub = mountSelectWithOptions("subGenrePrimary", [
       { value: "", text: "サブジャンルを選択" },
       { value: "old-techno", text: "テクノ" },
     ]);
@@ -644,7 +695,7 @@ describe("injectProfile（language/main_genre 必須・sub_genre 任意・isVisi
     mountInput({ name: "bandname" });
     mountSelect("language", ["ja"]);
     mountSelect("genrePrimary", ["エレクトロニック"]);
-    const sub = mountSelectWithOptions("genreSecondary", [
+    const sub = mountSelectWithOptions("subGenrePrimary", [
       { value: "", text: "サブジャンルを選択" },
       { value: "house", text: "ハウス" },
     ]);
@@ -1518,6 +1569,22 @@ describe("acceptImportantTerms（#923 重要事項 4 個 + 条件付き）", () 
     // Then: visible は check、hidden は skip
     expect(visibleCond.checked).toBe(true);
     expect(hiddenCond.checked).toBe(false);
+  });
+
+  it("non-standard caps warning は表示タイミングに依存せず存在すれば check する", () => {
+    // Given: DistroKid が title 検証後に追加する capitalization warning。
+    mountRequiredTerms();
+    const caps = document.createElement("input");
+    caps.type = "checkbox";
+    caps.id = "areyousurenonstandardscaps";
+    caps.className = "areyousure";
+    document.body.appendChild(caps);
+
+    // When
+    acceptImportantTerms(document);
+
+    // Then
+    expect(caps.checked).toBe(true);
   });
 
   it("required id のいずれかが不在なら FieldNotFoundError", () => {

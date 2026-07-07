@@ -7,14 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(collection-serve)`: `yt-collection-serve` に unpacked Chrome 拡張名から exact origin lock を自動解決する `--allow-extension <name>` を追加（#1486）。macOS Chrome profile の `Secure Preferences`（無ければ `Preferences`）を走査し、`extensions.settings[*].path` が絶対パスかつ basename が指定名に一致する拡張 IDから `chrome-extension://<id>` を組み立て、既存の `/auth/token` / write endpoint lock にそのまま適用する。`--allow-origin` とは排他で、検出 0 件・複数 ID 競合・profile root 走査不可・Preferences 読み取り不可・Preferences JSON parse failure は `--allow-origin` fallback 案内付きの `ConfigError` で fail-loud する。`/suno-helper` / `/distrokid-helper` / `/wf-new` のサーバー起動手順と拡張 README も `--allow-extension` 基準へ更新した
+
 ### Changed
 
 - `docs(wf-new)`: workflow-state schema の `assets.music_downloaded` 説明に、Suno 一括 DL 完了と `raw_master` 生成前の中間状態（DL 済み・raw master 未生成）の意味を明記した（#1568）
 
+### Fixed
+
+- `fix(distrokid-helper)`: `ext-v0.2.3` リリース前に DistroKid Helper の manifest / popup 表示名へ残っていた `(TEST)` 接尾辞を外し、配布 zip が本番名 `DistroKid Helper` として表示されるようにした。
+
 ## [5.5.16] - 2026-07-06
 
 ### Added
-
 - `feat(suno)`: `/suno` / `/suno-lyric` の成果物を検証する `yt-suno-verify` CLI を追加。`suno-patterns.yaml` / `suno-prompts.json` / `suno-lyrics.json` の曲数、entry name 整合、歌詞構造、`genre_line` 文字数を Suno UI 投入前に fail-loud で確認できるようにした（#1484）
 - `feat(helper)`: `yt-collection-serve` に `GET /server-info` とチャンネル別 `*.localhost` の canonical URL 表示を追加し、suno-helper / distrokid-helper の popup がローカル配信元候補を保存・選択できるようにした（#1352）。既定候補は `http://youtube-automation.localhost:7873` と legacy `http://localhost:7873` を併存し、複数チャンネルのサーバーを label 付きで切り替えられる
 - `feat(video-description)`: `BAHMetadataGenerator.generate_timestamps()` / `format_timestamps_text()` に `loops` パラメータを追加した。master をループ生成しているコレクション（`yt-generate-master --loop N` / `--target-duration`）で全ループ分のチャプターを機械展開できる。2 周目以降の開始秒は 1 周目と同じクロスフェード算術（`int(current + duration - crossfade)`）で連続計算し、各行に 1 始まりの `loop` フィールドを付与（2 周目以降のタイトル装飾は呼び出し側の LLM リネームに委ねる）。既定 `loops=1` は従来挙動と完全互換。従来は 1 ループ分しか生成できず、全ループ展開運用のチャンネルでは毎回 LLM が手計算していた

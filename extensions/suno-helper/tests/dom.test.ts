@@ -529,7 +529,7 @@ describe("resolveFields: Song Title 欄の解決 (#844, fail-soft)", () => {
     expect(fields.title).toBe(title);
   });
 
-  it.each(["Song Title (Optional)", "song title", "SONG TITLE", "Enter Song Title here"])(
+  it.each(["Song Title (Optional)", "song title", "SONG TITLE", "Enter Song Title here", "曲名(任意)"])(
     "Given placeholder '%s' When 解決する Then 弱い case-insensitive substring match で title に解決する",
     (placeholder) => {
       // (Optional) を含めない弱マッチ + i フラグ（order.md: Suno の表記変更耐性）。
@@ -605,7 +605,7 @@ describe("resolveFields: Song Title 欄の解決 (#844, fail-soft)", () => {
 });
 
 describe("resolveGenerateButton: Generate ボタンの解決", () => {
-  it.each(["Create", "Generate", "生成", "  generate  "])(
+  it.each(["Create", "Generate", "生成", "作成", "作成する", "  generate  "])(
     "Given ラベル '%s' When 解決する Then 一致するボタンを返す",
     (label) => {
       const btn = addButton(label);
