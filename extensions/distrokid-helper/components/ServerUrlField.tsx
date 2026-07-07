@@ -20,6 +20,7 @@ export function ServerUrlField({ value, sources, disabled, onChange, onFetch }: 
         className="rounded border border-gray-300 px-2 py-1 text-sm"
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        disabled={disabled}
       >
         {sources.map((source) => (
           <option key={source.url} value={source.url}>

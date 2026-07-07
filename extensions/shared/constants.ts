@@ -249,6 +249,8 @@ export const DEFAULT_SERVER_HOSTNAME = "youtube-automation.localhost" as const;
 export const LEGACY_DEFAULT_URL =
   `http://localhost:${DEFAULT_SERVER_PORT}` as const;
 
+const FALLBACK_LOCALHOST_PORTS = [7874, 7875, 7876, 7877] as const;
+
 /** ローカル配信元の既定 URL。 */
 export const DEFAULT_URL =
   `http://${DEFAULT_SERVER_HOSTNAME}:${DEFAULT_SERVER_PORT}` as const;
@@ -274,6 +276,11 @@ export const DEFAULT_SERVER_SOURCES: LocalServerSource[] = [
     label: "localhost fallback",
     url: LEGACY_DEFAULT_URL,
   },
+  ...FALLBACK_LOCALHOST_PORTS.map((port) => ({
+    id: `localhost-${port}`,
+    label: `localhost fallback ${port}`,
+    url: `http://localhost:${port}`,
+  })),
 ] as const satisfies LocalServerSource[];
 
 export function normalizeServerUrl(url: string): string {
