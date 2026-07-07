@@ -1090,7 +1090,7 @@ class TestCheckInitialSetupReadiness:
         assert "genre_line" in r.message
         assert "descriptions.md parse failed" in r.message
         assert r.next_action is not None
-        assert "/channel-setup" in r.next_action["instructions"]
+        assert "/channel-new" in r.next_action["instructions"]
         assert "/video-description" in r.next_action["instructions"]
 
     def test_valid_initial_setup_is_ok(self, tmp_path):
@@ -1333,6 +1333,22 @@ class TestBootstrapChecks:
         assert r.status == "fail"
         assert r.category == "bootstrap"
         assert "旧 channel-import skill が残存" in r.message
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
+
+    def test_skills_synced_legacy_channel_setup_orphan_is_fail_with_prune(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-new", "setup"])
+        for skill_name in ["channel-new", "setup", "channel-setup"]:
+            skill_dir = tmp_path / ".claude" / "skills" / skill_name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(f"# {skill_name}", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "旧 channel-setup skill が残存" in r.message
         assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
 
     def test_skills_synced_legacy_distrokid_prep_only_is_fail_with_prune(self, tmp_path, monkeypatch):
@@ -1678,21 +1694,21 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         assert r.status == "warn"
         assert "承認済み TTP 対象が 0 件" in r.message
 
-    def test_benchmark_channels_without_artifacts_warns_channel_setup_incomplete(self, tmp_path):
-        """承認済み TTP 対象があるのに成果物が無ければ /channel-setup 未完了へ誘導する."""
+    def test_benchmark_channels_without_artifacts_warns_channel_new_incomplete(self, tmp_path):
+        """承認済み TTP 対象があるのに成果物が無ければ /channel-new 再生成モード未完了へ誘導する."""
         _write_benchmark_channels(tmp_path)
 
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "warn"
-        assert "/channel-setup benchmark 反映未完了" in r.message
+        assert "/channel-new benchmark 反映未完了" in r.message
         assert "data/benchmark_*.json が無い" in r.message
         assert "docs/benchmarks/*.md が無い" in r.message
         assert "data/thumbnail_compare/benchmark/" in r.message
         assert "reference_images.default" in r.message
         assert r.next_action is not None
         payload = json.dumps(r.next_action, ensure_ascii=False)
-        assert "/channel-setup" in payload
+        assert "/channel-new" in payload
         assert "yt-doctor" in payload
         assert "channel-new Step 9" not in payload
 
@@ -1742,7 +1758,7 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "ok"
-        assert "/channel-setup 完了相当" in r.message
+        assert "/channel-new 再生成モード完了相当" in r.message
         assert r.next_action is None
 
     def test_scalar_thumbnail_ref_is_ok(self, tmp_path):
@@ -1753,7 +1769,7 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
 
         assert r.status == "ok"
-        assert "/channel-setup 完了相当" in r.message
+        assert "/channel-new 再生成モード完了相当" in r.message
 
     def test_mixed_real_thumbnail_ref_and_placeholder_warns(self, tmp_path):
         """実パスと未解決 placeholder が混在していたら未転記として warn する."""
@@ -1821,7 +1837,7 @@ class TestCheckTtpWfNewReadinessChannelSetup:
         assert "data/thumbnail_compare/benchmark/ 配下ではない" in r.message
 
     def test_missing_benchmark_docs_are_checked(self, tmp_path):
-        """docs/benchmarks/*.md も /channel-setup benchmark 反映の完了条件に含める."""
+        """docs/benchmarks/*.md も /channel-new benchmark 反映の完了条件に含める."""
         _write_benchmark_channels(tmp_path)
         data_dir = tmp_path / "data"
         data_dir.mkdir(parents=True)
@@ -2798,6 +2814,59 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "branding/icon.png が未生成" in r.message
         assert "branding/banner.png を画像として読み込めません" in r.message
+
+    @pytest.mark.parametrize("extension", [".jpg", ".jpeg", ".webp"])
+    def test_channel_branding_generated_image_suggests_same_stem_candidate(self, tmp_path, extension):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "branding" / "icon.png").unlink()
+        (tmp_path / "branding" / f"icon{extension}").write_bytes(b"candidate")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "branding/icon.png が未生成" not in r.message
+        assert f"branding/icon{extension}" in r.message
+        assert "branding/icon.png にリネーム/変換してください" in r.message
+
+    def test_channel_branding_generated_image_lists_multiple_version_candidates(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "branding" / "banner.png").unlink()
+        PILImage.new("RGB", (2048, 1152), color=(10, 20, 30)).save(tmp_path / "branding" / "banner.jpg", format="JPEG")
+        PILImage.new("RGB", (2048, 1152), color=(30, 20, 10)).save(
+            tmp_path / "branding" / "banner-v2.jpg", format="JPEG"
+        )
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "branding/banner.png が未生成" not in r.message
+        assert "branding/banner.jpg" in r.message
+        assert "branding/banner-v2.jpg" in r.message
+        assert "最終版を確認してから変換してください" in r.message
+        assert "自動判定はしません" in r.message
+
+    def test_main_json_reports_channel_branding_candidates_through_public_cli(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        _write_minimal_config(tmp_path)
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "branding" / "banner.png").unlink()
+        (tmp_path / "branding" / "banner.jpeg").write_bytes(b"candidate")
+        (tmp_path / "branding" / "banner-v2.webp").write_bytes(b"candidate")
+
+        code = doctor.main(["--json", "--target", str(tmp_path)])
+
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        ttp_check = next(check for check in payload["checks"] if check["id"] == "ttp_wf_new_readiness")
+        assert ttp_check["status"] == "warn"
+        assert "branding/banner.png が未生成" not in ttp_check["message"]
+        assert "branding/banner.jpeg" in ttp_check["message"]
+        assert "branding/banner-v2.webp" in ttp_check["message"]
+        assert "最終版を確認してから変換してください" in ttp_check["message"]
+        assert "自動判定はしません" in ttp_check["message"]
 
     def test_channel_branding_generated_image_aspect_ratio_is_checked(self, tmp_path):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])

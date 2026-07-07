@@ -68,6 +68,13 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 - `collections/planning/` の `workflow-state.json` を探索
 - 複数ある場合はユーザーに選択を促す
+- 対象確定後、フェーズ処理へ進む前に骨格プリフライトを実行する（fail-loud、#1494）:
+
+  ```bash
+  bunx tayk collection-preflight <collection-dir-name>
+  ```
+
+  `[NG]`（`01-master/` 等の欠落）が報告されたら `--fix` で補完してから続行する。欠落したまま後工程へ進むと `/masterup` / `/videoup` がマスター音源の置き場を見失う
 
 ### 2. フェーズ別処理
 
@@ -137,14 +144,14 @@ description: "Use when 既存コレクション（collections/planning/）を一
 2. 並列 A 完了後:
    - `assets.master_video`, `assets.description` を更新
 3. **アップロード承認ゲート 3-B（`approval_gates.upload = true` のとき）**:
-   - 並列 A 完了直後、ユーザーに公開方法を提示する前に必ず `uv run yt-upload-collection --plan [-c <collection-name>]` を実行し、`config/schedule_config.json` / `config/channel/youtube.json` を反映した実際の公開タイミングを確定する
-   - plan 結果が `📅 公開設定: 即時公開 (public)` の場合だけ「即時公開」と表現する。`📅 公開予定: <日時>` が出た場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の予約時刻を AskUserQuestion の文面に含める
-   - `/video-upload` を呼ぶ前に AskUserQuestion で「YouTube にアップロード + live 移行してよいか」を確認する。このとき、plan 結果に基づく公開タイミング（即時公開または予約公開日時）を必ず明示する
+   - 並列 A 完了直後、ユーザーに公開方法を提示する前に必ず `bunx tayk upload-collection --plan [-c <collection-name>]` を実行し、`config/schedule_config.json` / `config/channel/youtube.json` を反映した実際の公開タイミングを確定する
+   - plan 結果が `📅 公開設定: 即時公開 (public)` の場合だけ「即時公開」と表現する。`📅 公開設定: 限定公開 (unlisted)` / `📅 公開設定: 非公開 (private)` が出た場合は、その公開範囲でアップロードされることを AskUserQuestion の文面に含める。`📅 公開予定: <日時>` が出た場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の予約時刻を AskUserQuestion の文面に含める
+   - `/video-upload` を呼ぶ前に AskUserQuestion で「YouTube にアップロード + live 移行してよいか」を確認する。このとき、plan 結果に基づく公開タイミングまたは公開範囲（即時公開 / 限定公開 / 非公開 / 予約公開日時）を必ず明示する
    - 承認されたら次ステップへ進む。却下されたら `phase` を `mastered` のままにして停止し、ガイダンス「準備が整ったら `/wf-next` を再実行してください」を表示
    - `approval_gates.upload = false` のときは確認なしでそのまま進む（従来の全自動挙動）
 4. **初投稿プレイリスト初期化**:
-   - `config/channel/playlists.json` が存在する場合、Skill `/playlist` で `uv run yt-playlist-status` を実行する
-   - `playlist_id` 未設定の `(未作成)` がある場合は、`uv run yt-playlist-manager --init --dry-run` を表示し、ユーザー確認後に `uv run yt-playlist-manager --init` を実行してから `/video-upload` へ進む
+   - `config/channel/playlists.json` が存在する場合、Skill `/playlist` で `bunx tayk playlist-status` を実行する
+   - `playlist_id` 未設定の `(未作成)` がある場合は、`bunx tayk playlist-manager --init --dry-run` を表示し、ユーザー確認後に `bunx tayk playlist-manager --init` を実行してから `/video-upload` へ進む
    - この確認は `approval_gates.upload` とは別の playlist 作成ゲート。`approval_gates.upload = false` でも、YouTube 上の playlist 作成と `config/channel/playlists.json` 書き戻しを伴うため未作成 playlist がある場合は確認を省略しない
    - ユーザーが playlist 初期化を却下した場合は `/video-upload` を実行せず停止し、`/playlist` で初期化してから `/wf-next` を再実行するよう案内する
    - これは YouTube 上の playlist 作成と `playlist_id` 書き戻しが目的。初回動画の追加は次の `/video-upload` 内部の自動 assign (`assign_video()`) に任せる
@@ -158,7 +165,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 `assets` フラグで未完了ステップを特定し、そこから再実行。
 - `assets.master_video = null` → 並列 A から
-- `upload.video_id = null` → 初投稿プレイリスト初期化ゲート（`yt-playlist-status` → 必要なら `--init --dry-run` → 確認後 `--init`）を通してから `/video-upload` へ進む
+- `upload.video_id = null` → 初投稿プレイリスト初期化ゲート（`bunx tayk playlist-status` → 必要なら `--init --dry-run` → 確認後 `--init`）を通してから `/video-upload` へ進む
 
 #### `complete` → 完了案内
 
