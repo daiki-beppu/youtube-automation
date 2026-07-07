@@ -605,7 +605,7 @@ describe("resolveFields: Song Title 欄の解決 (#844, fail-soft)", () => {
 });
 
 describe("resolveGenerateButton: Generate ボタンの解決", () => {
-  it.each(["Create", "Generate", "生成", "  generate  "])(
+  it.each(["Create", "Generate", "生成", "作成", "作成する", "  generate  "])(
     "Given ラベル '%s' When 解決する Then 一致するボタンを返す",
     (label) => {
       const btn = addButton(label);
