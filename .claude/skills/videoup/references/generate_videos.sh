@@ -687,7 +687,11 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
         CURRENT_LABEL="bg_av"
         AUDIO_LABEL="a_out"
     else
-        AUDIO_LABEL="1:a"
+        # av_enabled=false でも後段は常に -map "[${AUDIO_LABEL}]" とブラケットで
+        # 参照するため、生の入力ストリーム指定 "1:a" ではなく filter_complex の
+        # named label を経由させる。
+        FILTER+="[1:a]anull[a_pass];"
+        AUDIO_LABEL="a_pass"
     fi
 
     if [[ "$sp_enabled" == "true" ]]; then
