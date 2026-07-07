@@ -20,7 +20,27 @@ from youtube_automation.utils.preflight_checks import (
     check_title_duplicate_warnings,
     check_title_template_compliance,
     extract_descriptions_md_tags,
+    requires_scene_phrases,
 )
+
+
+class TestRequiresScenePhrases:
+    """単一言語チャンネルでは scene_phrases を要求しない (#1470)."""
+
+    def test_multi_language_requires(self) -> None:
+        assert requires_scene_phrases(["en", "ja"]) is True
+
+    def test_single_language_skips(self) -> None:
+        assert requires_scene_phrases(["en"]) is False
+
+    def test_single_non_en_language_skips(self) -> None:
+        assert requires_scene_phrases(["ja"]) is False
+
+    def test_empty_skips(self) -> None:
+        assert requires_scene_phrases([]) is False
+
+    def test_duplicated_single_language_skips(self) -> None:
+        assert requires_scene_phrases(["en", "en"]) is False
 
 
 class TestCheckTagsCount:

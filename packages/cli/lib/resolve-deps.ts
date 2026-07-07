@@ -7,7 +7,7 @@
 //
 // MCP 到着時は env token + refresh のみの別 adapter を作る（interactive flow を持たない）。
 
-import { loadConfig } from "@youtube-automation/core/config";
+import { channelDir, loadConfig } from "@youtube-automation/core/config";
 import {
   buildYouTubeAnalyticsClient,
   buildYouTubeClient,
@@ -32,6 +32,10 @@ export const resolveDeps = async <D extends keyof DepsMap>(
 
   if (requested.has("config")) {
     resolved.config = loadConfig();
+  }
+
+  if (requested.has("channelDir")) {
+    resolved.channelDir = channelDir();
   }
 
   const needsYt = requested.has("yt");

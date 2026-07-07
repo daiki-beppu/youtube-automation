@@ -5,6 +5,7 @@ BAHMetadataGenerator のユニットテスト
 副作用のない純粋ロジック（タイムスタンプ計算、ファイル名サニタイズ、メタデータ生成）を検証する。
 """
 
+import shutil
 import sys
 from pathlib import Path
 
@@ -17,10 +18,13 @@ from youtube_automation.utils import metadata_generator as metadata_generator_mo
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.metadata_generator import (
+    LOCALIZED_TITLE_PLACEHOLDERS,
     BAHMetadataGenerator,
     SceneTitleViolation,
+    _localized_title_values,
     format_scene_title_violations,
     format_title_template,
+    validate_localizations_title_templates,
     validate_scene_phrases,
 )
 from youtube_automation.utils.time_utils import format_duration_display
@@ -576,6 +580,35 @@ class TestCrossfade:
         cfg = load_skill_config("masterup")
         assert cfg.get("audio", {}).get("crossfade_duration") == 1.0
 
+    def test_metadata_generator_uses_masterup_json_before_yaml(self, tmp_path, monkeypatch):
+        """metadata_generator も TS generate-master と同じ JSON 優先 override を使うこと。"""
+        from youtube_automation.utils.config import reset as reset_config
+        from youtube_automation.utils.skill_config import reset as reset_skill_config
+
+        fixture = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
+        channel = tmp_path / "sample_channel"
+        shutil.copytree(fixture, channel)
+        skills_dir = channel / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        (skills_dir / "masterup.yaml").write_text(
+            "audio:\n  crossfade_duration: 9\n",
+            encoding="utf-8",
+        )
+        (skills_dir / "masterup.json").write_text(
+            '{"audio": {"crossfade_duration": 2.5}}',
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(channel))
+        reset_config()
+        reset_skill_config()
+
+        try:
+            gen = BAHMetadataGenerator(str(channel / "collections" / "demo"))
+            assert gen._crossfade_sec == 2.5
+        finally:
+            reset_config()
+            reset_skill_config()
+
     def test_timestamp_with_crossfade(self):
         """3曲のタイムスタンプがクロスフェード分だけ前倒しされること
 
@@ -700,6 +733,13 @@ class TestValidateScenePhrases:
         with pytest.raises(ValueError, match="scene_phrases"):
             validate_scene_phrases({}, config)
 
+    def test_single_language_channel_empty_scene_phrases_ok(self):
+        """単一言語チャンネルは scene_phrases 不要（populate no-op と対称 #1470）"""
+        from types import SimpleNamespace
+
+        config = SimpleNamespace(localizations=SimpleNamespace(data={"supported_languages": ["en"], "languages": {}}))
+        assert validate_scene_phrases({}, config) == []
+
     def test_format_scene_title_violations_joins_all(self):
         """format_scene_title_violations は全件を複数行にまとめる（CLI で 1 回で報告するため）"""
         config = load_config()
@@ -709,6 +749,32 @@ class TestValidateScenePhrases:
         for v in violations:
             assert f"[{v.lang}]" in text
             assert str(v.length) in text
+
+
+class TestGenerateLocalizationsSingleLanguage:
+    """単一言語チャンネルでは localizations を生成しない（scene_phrases 不要 #1470）."""
+
+    def test_returns_empty_without_scene_phrases(self):
+        from types import SimpleNamespace
+
+        gen = _make_generator()
+        gen.config = SimpleNamespace(
+            localizations=SimpleNamespace(data={"supported_languages": ["en"], "languages": {}})
+        )
+        assert gen.generate_localizations("Continuous Focus Mix", "00:00 Intro", {}) == {}
+
+    def test_malformed_workflow_state_fails_before_scene_phrases_fallback(self, tmp_path):
+        from types import SimpleNamespace
+
+        gen = _make_generator()
+        gen.collection_path = tmp_path
+        gen.config = SimpleNamespace(
+            localizations=SimpleNamespace(data={"supported_languages": ["en"], "languages": {}})
+        )
+        (tmp_path / "workflow-state.json").write_text("{not json", encoding="utf-8")
+
+        with pytest.raises(ValidationError, match="workflow-state.json"):
+            gen._load_scene_phrases()
 
 
 class TestGenerateLocalizationsBulkReport:
@@ -1206,6 +1272,41 @@ class TestTitleTemplateUnknownPlaceholder:
         )
         assert out == "Rainy | Study"
 
+    # --- localizations title_template 検証（#1471） -------------------------
+
+    def test_localized_title_values_keys_match_allowed_placeholders(self):
+        """uploader が渡す values のキー集合と許可リスト定数の drift を防ぐ。"""
+        values = _localized_title_values(scene_phrase="Rainy", activities="Study", scene_emoji="🌧")
+        assert set(values) == set(LOCALIZED_TITLE_PLACEHOLDERS)
+
+    def test_validate_localizations_title_templates_detects_unknown_placeholder(self):
+        """channel-import が生成した `{axis_label}` 入り template を生成時に検出できる。"""
+        loc = {
+            "languages": {
+                "en": {"title_template": "{axis_label} - {scene_phrase}"},
+                "ja": {"title_template": "{scene_phrase}（{activities}）"},
+            }
+        }
+        errors = validate_localizations_title_templates(loc)
+        assert len(errors) == 1
+        assert "axis_label" in errors[0]
+        assert "en" in errors[0]
+        assert "scene_phrase" in errors[0]  # 許可キー一覧の提示
+
+    def test_validate_localizations_title_templates_accepts_allowed_placeholders(self):
+        loc = {
+            "languages": {
+                "en": {"title_template": "{scene_phrase} | Jazz BGM ({activities}) {scene_emoji}"},
+            }
+        }
+        assert validate_localizations_title_templates(loc) == []
+
+    def test_validate_localizations_title_templates_tolerates_missing_sections(self):
+        # languages 無し / title_template 無し / 非 dict 言語エントリは検証対象外として黙って通す
+        assert validate_localizations_title_templates({}) == []
+        assert validate_localizations_title_templates({"languages": {"en": {}}}) == []
+        assert validate_localizations_title_templates({"languages": {"en": "broken"}}) == []
+
     # --- _generate_title 経路 ---------------------------------------------
 
     def test_generate_title_raises_actionable_without_override(self, gen_with_tracks):
@@ -1472,3 +1573,146 @@ class TestAnalyzeAudioFilesSkipDetection:
         assert len(tracks) == 3
         assert "スキップ" not in caplog.text
         assert "欠落" not in caplog.text
+
+
+# ===========================================================================
+# generate_timestamps(loops=N) のテスト
+# ===========================================================================
+
+
+class TestGenerateTimestampsLoops:
+    """master の複数ループ展開に合わせた全ループ分チャプター生成の検証。"""
+
+    def _gen_with_tracks(self) -> BAHMetadataGenerator:
+        gen = _make_generator()
+        gen._crossfade_sec = 1.0
+        # 120s + 90s の 2 曲。1 周目: 0:00 / 1:59（int(0+120-1)=119）
+        gen.tracks = [
+            _track("01-alpha.mp3", "Alpha", "00:00", None, duration=120),
+            _track("02-beta.mp3", "Beta", "01:59", None, duration=90),
+        ]
+        return gen
+
+    def test_loops_1_matches_legacy_output(self):
+        """Given 2 トラック
+        When loops=1（既定）で生成する
+        Then 従来どおり保存済み timestamp がそのまま使われる。
+        """
+        gen = self._gen_with_tracks()
+        out = gen.generate_timestamps()
+        assert [(t["timestamp"], t["title"]) for t in out] == [("00:00", "Alpha"), ("01:59", "Beta")]
+        assert all(t["loop"] == 1 for t in out)
+
+    def test_loops_2_continues_crossfade_arithmetic(self):
+        """Given 2 トラック（120s / 90s, crossfade 1s）
+        When loops=2 で生成する
+        Then 2 周目の開始秒が 1 周目と同じ算術で連続する。
+        """
+        gen = self._gen_with_tracks()
+        out = gen.generate_timestamps(loops=2)
+        assert len(out) == 4
+        # 1 周目末尾: current = int(119 + 90 - 1) = 208 → 2 周目 Alpha は 03:28
+        # 2 周目 Alpha 後: current = int(208 + 120 - 1) = 327 → Beta は 05:27
+        assert [(t["timestamp"], t["title"], t["loop"]) for t in out] == [
+            ("00:00", "Alpha", 1),
+            ("01:59", "Beta", 1),
+            ("03:28", "Alpha", 2),
+            ("05:27", "Beta", 2),
+        ]
+
+    def test_loops_2_reemits_theme_headers_per_loop(self):
+        """Given pattern_key 付きトラック
+        When loops=2 で生成する
+        Then 各周回の pattern 切り替わりで theme_header が再挿入される。
+        """
+        gen = _make_generator()
+        gen._crossfade_sec = 1.0
+        gen.tracks = [
+            _track("01-pattern-a-alpha.mp3", "Alpha", "00:00", "a", duration=120),
+            _track("02-pattern-b-beta.mp3", "Beta", "01:59", "b", duration=90),
+        ]
+        out = gen.generate_timestamps(loops=2)
+        headers = [t for t in out if t["type"] == "theme_header"]
+        assert len(headers) == 4  # a/b × 2 周
+        assert [h["loop"] for h in headers] == [1, 1, 2, 2]
+
+    def test_loops_2_reemits_theme_header_when_loop_boundary_keeps_same_pattern(self):
+        """Given 同一 pattern の複数トラック
+        When loops=2 で生成する
+        Then 周回境界で pattern が同じでも各周回の theme_header が再挿入される。
+        """
+        gen = _make_generator()
+        gen._crossfade_sec = 1.0
+        gen.tracks = [
+            _track("01-pattern-a-alpha.mp3", "Alpha", "00:00", "a", duration=120),
+            _track("02-pattern-a-beta.mp3", "Beta", "01:59", "a", duration=90),
+        ]
+        out = gen.generate_timestamps(loops=2)
+        headers = [t for t in out if t["type"] == "theme_header"]
+
+        assert [(h["timestamp"], h["title"], h["loop"]) for h in headers] == [
+            ("00:00", "Pattern A", 1),
+            ("03:28", "Pattern A", 2),
+        ]
+
+    def test_format_timestamps_text_reemits_theme_header_per_loop(self):
+        """Given 同一 pattern の複数トラック
+        When format_timestamps_text(loops=2) する
+        Then 2 周目の先頭にも theme_header が出力される。
+        """
+        gen = _make_generator()
+        gen._crossfade_sec = 1.0
+        gen.tracks = [
+            _track("01-pattern-a-alpha.mp3", "Alpha", "00:00", "a", duration=120),
+            _track("02-pattern-a-beta.mp3", "Beta", "01:59", "a", duration=90),
+        ]
+
+        assert gen.format_timestamps_text(loops=2).splitlines() == [
+            "── Pattern A ──",
+            "00:00 Alpha",
+            "01:59 Beta",
+            "── Pattern A ──",
+            "03:28 Alpha",
+            "05:27 Beta",
+        ]
+
+    def test_generate_complete_collection_metadata_passes_loops_to_timestamps(self, monkeypatch):
+        """Given loops=2 の Complete Collection メタデータ生成
+        When description を組み立てる
+        Then 全ループ分のチャプターが概要欄に含まれる。
+        """
+        gen = self._gen_with_tracks()
+        monkeypatch.setattr(gen, "generate_localizations", lambda *args, **kwargs: {})
+
+        meta = gen.generate_complete_collection_metadata(title_override="Looped Mix", loops=2)
+
+        assert "00:00 Alpha" in meta["description"]
+        assert "01:59 Beta" in meta["description"]
+        assert "03:28 Alpha" in meta["description"]
+        assert "05:27 Beta" in meta["description"]
+
+    def test_loops_zero_raises(self):
+        """Given loops=0
+        When 生成する
+        Then ValueError で停止する。
+        """
+        gen = self._gen_with_tracks()
+        with pytest.raises(ValueError):
+            gen.generate_timestamps(loops=0)
+
+    def test_format_timestamps_text_expands_all_loops(self):
+        """Given 2 トラック
+        When format_timestamps_text(loops=3) する
+        Then 6 行の楽曲行が strictly ascending で出力される。
+        """
+        gen = self._gen_with_tracks()
+        text = gen.format_timestamps_text(loops=3)
+        lines = [line for line in text.splitlines() if line]
+        assert len(lines) == 6
+
+        def to_sec(ts: str) -> int:
+            parts = [int(p) for p in ts.split(":")]
+            return parts[0] * 3600 + parts[1] * 60 + parts[2] if len(parts) == 3 else parts[0] * 60 + parts[1]
+
+        secs = [to_sec(line.split(" ")[0]) for line in lines]
+        assert secs == sorted(secs) and len(set(secs)) == len(secs)

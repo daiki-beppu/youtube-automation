@@ -8,6 +8,7 @@
 // 64MiB 上限を超えるため、popup・content とも常時 1 asset 分のみメモリ保持する設計にする。
 
 import { defineExtensionMessaging } from "@webext-core/messaging";
+import type { DistrokidReleaseRecord } from "../../shared/api";
 import type { SerializedAsset } from "./asset-transfer";
 import type { ReleasePayload } from "./types";
 
@@ -63,6 +64,10 @@ export interface ProtocolMap {
   stop(): void;
   // content -> popup: 進捗を通知する。
   progress(message: ProgressMessage): void;
+  // popup -> background: 配信済み記録を serve token 付き POST で実行する（#1360）。
+  // popup は server state を更新する POST を直接呼ばず、background の extension origin に
+  // 委譲する（ADR-0016 の書き込み境界。suno-helper の postDownloaded と同型）。
+  recordRelease(payload: { baseUrl: string; record: DistrokidReleaseRecord }): void;
 }
 
 export const { sendMessage, onMessage } = defineExtensionMessaging<ProtocolMap>();
