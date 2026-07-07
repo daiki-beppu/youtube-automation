@@ -90,7 +90,7 @@ Google Cloud Console の新 UI では、OAuth 関連の手動操作は **Google 
 /benchmark            → 承認済み TTP 対象の動画データ収集
 /viewer-voice         → コメント収集と視聴者インサイト分析
 /channel-research     → /benchmark / /viewer-voice 後の詳細分析
-/channel-direction    → 方向性ブレスト（差別化決定）
+/channel-new 方向性検討モード → 方向性ブレスト（差別化決定）
 /channel-new 再生成モード → config 再生成 / branding 再反映
 yt-skills sync                # Claude Code スキル群を新リポへ展開
 yt-skills sync --asset claude-md   # BGM 運営方針テンプレを新リポへ展開
@@ -110,13 +110,13 @@ yt-skills sync --asset claude-md   # BGM 運営方針テンプレを新リポへ
 
 `/benchmark` や `/viewer-voice` で集めたデータを徹底分析。タイトル構造・サムネ構図・動画尺・投稿頻度・コメント語彙の **型** を抽出する。
 
-### 3.3 任意: `/channel-direction`（方向性決定）
+### 3.3 任意: `/channel-new` 方向性検討モード（方向性決定）
 
 `/channel-new` が保存した `docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json`、または `/channel-research` の分析結果をもとに、対話で「このチャンネルは何で勝つか」を決める。コメント分析が必要な場合は `/viewer-voice` を先に実行してターゲット層と利用シーンを言語化する。
 
 ### 3.4 任意: `/channel-new` 再生成モード（テクニカルセットアップ）
 
-`/channel-direction` 後の config 再生成や、運用中の branding 再反映が必要な場合に使う。GCP / OAuth / ADC の API 設定は `/setup` が担当する。
+方向性検討後の config 再生成や、運用中の branding 再反映が必要な場合に使う。GCP / OAuth / ADC の API 設定は `/setup` が担当する。
 
 ### 3.5 `yt-skills sync` でスキル + 運営方針を新リポへ展開
 

@@ -163,6 +163,87 @@ def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     assert '"untrusted_data": True' in branding_snapshot_script
 
 
+def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    overview = channel_new.split("## Overview", 1)[1].split("## モード判別", 1)[0]
+    mode_routing = channel_new.split("## モード判別", 1)[1].split("## TTP 原則", 1)[0]
+    direction_mode_row = next(line for line in mode_routing.splitlines() if line.startswith("| 方向性検討モード |"))
+    direction_mode = channel_new.split("## 方向性検討モード", 1)[1].split("\n## 再生成モード", 1)[0]
+    ttp_principles = channel_new.split("## TTP 原則", 1)[1].split(
+        "### TTP 完了条件（新規開設モード）",
+        1,
+    )[0]
+    step1 = channel_new.split("### Step 1: TTP ヒアリング", 1)[1].split(
+        "### Step 2: 現在のディレクトリを repo 初期化",
+        1,
+    )[0]
+    step4 = channel_new.split("### Step 4: フルパッケージ config / 初期運用ファイル生成", 1)[1].split(
+        "### Step 5: TTP seed fetch と承認済み対象反映",
+        1,
+    )[0]
+    step7 = channel_new.split("### Step 7: 簡易ペルソナ導出", 1)[1].split(
+        "### Step 8: branding 初回反映",
+        1,
+    )[0]
+    cross_references = channel_new.split("## Cross References", 1)[1]
+
+    assert "「どんなチャンネルにしたいか」より先に" not in ttp_principles
+    assert "`/channel-new` では方向性・差別化・ポジショニングを聞かず" in ttp_principles
+
+    assert "TTP 対象への転写要素（タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding）に限定" in step1
+    step1_questions = [line for line in step1.splitlines() if line.startswith("- **")]
+    assert step1_questions == [
+        "- **TTP したいチャンネル**: URL / handle / channel ID を 1 件以上",
+        "- **転写したい要素**: タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding のどれか",
+        "- **要素ごとの関係性メモ**: "
+        "タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding のうち、どの観察をどう転写するか",
+        "- **branding 方針**: TTP 対象の description / keywords / localizations をどの程度転写するか",
+    ]
+    for forbidden in ("方向性を聞く", "差別化を聞く", "ポジショニングを聞く"):
+        assert forbidden not in step1
+    for config_prompt in (
+        "**仮チャンネル名と SHORT**",
+        "**初期ジャンル情報**",
+        "**動画尺の初期値（分）**",
+        "**音楽エンジン**",
+        "**DistroKid 配信有無**",
+        "**DistroKid 初期 profile**",
+    ):
+        assert config_prompt not in step1
+        assert config_prompt in step4
+    assert "検討が必要なら `/channel-new` 完了後の方向性検討モードに委譲" in step1
+    assert "Step 1 の TTP ヒアリングとは別に、config 生成に必要な初期値だけをここで確認する" in step4
+
+    assert "方向性の検討・精緻化（必要な場合だけ、方向性検討モード）" in overview
+    assert "`/channel-new` は方向性を聞かず" in overview
+    assert "旧 `/channel-direction`" not in overview
+    assert "方向性検討モード" in mode_routing
+    assert "Step D1〜D5" in mode_routing
+    assert "方向性の検討・精緻化が必要な場合も、新規開設モードでは質問せず" in mode_routing
+    for trigger in ("方向性決めたい", "ポジショニング", "差別化", "ブレスト"):
+        assert trigger in direction_mode_row
+
+    for heading in (
+        "### Step D1: 分析レポートの読み込みとサマリー",
+        "### Step D2: ポジショニング議論",
+        "### Step D3: 決定事項の整理",
+        "### Step D4: 方向性ドキュメント保存",
+        "### Step D5: 次フェーズへの案内",
+    ):
+        assert heading in direction_mode
+    assert "決定事項を `docs/channel/channel-direction.md` に保存" in direction_mode
+    assert "`mkdir -p docs/channel`" in direction_mode
+    assert "config を再生成・再反映する場合は `/channel-new`（再生成モード）" in direction_mode
+    assert "制作に進む場合は `/wf-new`" in direction_mode
+
+    assert "TTP データだけを入力として導出し、方向性ヒアリングは追加しない" in step7
+    assert "- `config/channel/analytics.json::benchmark.channels`" in step7
+    assert "- `docs/channel/ttp-seed-confirmation.md`" in step7
+    assert "- `docs/channel/competitor-branding-snapshot.json`" in step7
+
+    assert "旧 `/channel-direction`" not in cross_references
+
+
 def test_branding_missing_report_requires_existing_file_check_before_generation() -> None:
     skill_docs = {
         "channel-new": _read(".claude/skills/channel-new/SKILL.md"),
@@ -184,7 +265,16 @@ def test_channel_new_frontmatter_keeps_import_dispatch_keywords() -> None:
     frontmatter = _frontmatter(".claude/skills/channel-new/SKILL.md")
     assert frontmatter["name"] == "channel-new"
     description = frontmatter["description"]
-    for keyword in ("既存チャンネル", "チャンネル取り込み", "config 生成", "channel-import"):
+    for keyword in (
+        "既存チャンネル",
+        "チャンネル取り込み",
+        "config 生成",
+        "channel-import",
+        "方向性決めたい",
+        "ポジショニング",
+        "差別化",
+        "ブレスト",
+    ):
         assert keyword in description
 
 
@@ -434,7 +524,10 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
     setup = _read(".claude/skills/setup/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    channel_direction = _read(".claude/skills/channel-direction/SKILL.md")
+    channel_direction_mode = channel_new.split("## 方向性検討モード", 1)[1].split(
+        "\n## 再生成モード",
+        1,
+    )[0]
     onboarding = _read("ONBOARDING.md")
     features = _read("docs/features.md")
 
@@ -455,22 +548,42 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "任意後続スキル" not in viewer_voice
     assert "/audience-persona-design の必須入力（viewer-voice-analysis.md）" in viewer_voice
 
-    for path_text in (setup, channel_new, channel_direction, onboarding):
+    for path_text in (setup, channel_new, channel_direction_mode, onboarding):
         assert "TTP benchmark" not in path_text
         assert "TTP ベンチマーク収集" not in path_text
 
     assert "TTP 対象確認、config 生成、ペルソナ、branding" in setup
     assert "TTP 対象確認 / seed fetch / 承認済み benchmark.channels 反映" in channel_new
-    assert "docs/channel/ttp-seed-confirmation.md" in channel_direction
-    assert "docs/channel/competitor-branding-snapshot.json" in channel_direction
-    assert "untrusted data" in channel_direction
-    assert "動画尺 / 投稿頻度 / コメント語彙は収集済みデータがある場合だけ使う" in channel_direction
+    assert "旧 `/channel-direction` は本スキルの方向性検討モードに統合済み" not in channel_new
+    assert "docs/channel/ttp-seed-confirmation.md" in channel_direction_mode
+    assert "docs/channel/competitor-branding-snapshot.json" in channel_direction_mode
+    assert "config/channel/analytics.json::benchmark.channels" in channel_direction_mode
+    assert "入力がすべて欠けている場合" in channel_direction_mode
+    assert "根拠なしに方向性検討を進めない" in channel_direction_mode
+    assert "/channel-new` 新規開設モード" in channel_direction_mode
+    assert "untrusted data" in channel_direction_mode
+    assert "動画尺 / 投稿頻度 / コメント語彙は収集済みデータがある場合だけ使う" in channel_direction_mode
+
+    followup_direction_files = [
+        ".claude/skills/alignment-check/SKILL.md",
+        ".claude/skills/collection-ideate/SKILL.md",
+        ".claude/skills/lyria/SKILL.md",
+        ".claude/skills/postmortem/SKILL.md",
+        ".claude/skills/video-analyze/SKILL.md",
+    ]
+    for path in followup_direction_files:
+        content = _read(path)
+        assert "/channel-new" in content
+        assert "方向性検討モード" in content
+        assert "`/channel-direction`" not in content
 
     assert "ビジョン共有 + 競合発掘" not in onboarding
     assert "yt-discover-competitors` で 5-10 件" not in onboarding
     assert "ベンチマークデータ + コメント収集まで実行" not in onboarding
     assert "docs/channel/ttp-seed-confirmation.md" in onboarding
     assert "docs/channel/competitor-branding-snapshot.json" in onboarding
+    assert "/channel-new 方向性検討モード" in onboarding
+    assert "| /channel-direction |" not in features
     assert "untrusted data" in onboarding
 
     assert "新規チャンネル開設 → 競合発掘 → 方向性決定 → セットアップ" not in features
