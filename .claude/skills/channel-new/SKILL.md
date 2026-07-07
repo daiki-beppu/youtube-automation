@@ -12,11 +12,13 @@ description: "Use when 新チャンネル用リポジトリの初期化、また
 ```
 /setup        → GCP / OAuth / ADC / automation パッケージ準備
 /channel-new  → TTP hearing + seed confirmation + config + persona + branding ← このスキル
+/channel-direction → 方向性の検討・精緻化（必要な場合だけ、/channel-new 完了後）
 /wf-new       → 初回コレクション制作
 ```
 
 `/channel-research`、`/channel-direction`、`/channel-setup` は廃止しない。
-追加の競合探索、本格ベンチマーク収集、詳細分析、方向性の再検討、運用中の設定 push / pull が必要なときに追加で使う。
+追加の競合探索、本格ベンチマーク収集、詳細分析、方向性の検討・精緻化、運用中の設定 push / pull が必要なときに追加で使う。
+`/channel-new` は方向性を聞かず、方向性の検討・精緻化は `/channel-new` 完了後に `/channel-direction` で行う。
 
 既に YouTube で運営中のチャンネルを取り込む場合は、後述の **既存チャンネル取り込みモード** を使う（旧 `/channel-import` を統合したもの）。
 
@@ -26,15 +28,16 @@ description: "Use when 新チャンネル用リポジトリの初期化、また
 
 | モード | 発動文脈の例 | 実行内容 |
 |---|---|---|
-| 新規開設モード（既定） | 「新チャンネル」「チャンネル開設」「チャンネル追加」「TTP 対象を集める」 | Step 1〜10（TTP hearing → config → persona → branding） |
+| 新規開設モード（既定） | 「新チャンネル」「チャンネル開設」「チャンネル追加」「TTP 対象を集める」 | Step 1〜10（TTP hearing → config → persona → branding。方向性の検討は完了後の `/channel-direction`） |
 | 既存チャンネル取り込みモード | 「既存チャンネル」「チャンネル取り込み」「config 生成」「channel-import」 | 取り込み Step 1〜8（ヒアリング → config 生成 → 検証 → OAuth / channel_id 取得 → 次ステップ案内） |
 
 YouTube 側にまだチャンネル実体がない（これから開設する）場合は新規開設モード、既に YouTube で公開・運営中のチャンネルの設定ファイルを生成して取り込む場合は取り込みモードを使う。
+方向性の検討・精緻化が必要な場合も、ここで質問せず `/channel-new` 完了後に `/channel-direction` へ進める。
 
 ## TTP 原則
 
 `/channel-new` の主目的は、競合チャンネルを **seed** ではなく **TTP 対象** として収集し、転写する型を明文化すること。
-ユーザーには「どんなチャンネルにしたいか」より先に「どのチャンネルの何を TTP したいか」を聞く。
+`/channel-new` では方向性・差別化・ポジショニングを聞かず、TTP 対象の転写に必要な情報だけを確認する。
 
 TTP メモは最低限、以下の観点を含める:
 
@@ -72,18 +75,15 @@ YouTube の第三者チャンネル由来データ（`snippet.description`、`br
 ### Step 1: TTP ヒアリング
 
 ユーザーに以下を質問し、各チャンネルごとに「何を転写するか」の関係性メモを必須で残す。
+TTP に関する質問は、TTP 対象への転写要素（タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding）に限定する。
+方向性・差別化・ポジショニングはここでは聞かず、検討が必要なら `/channel-new` 完了後の `/channel-direction` に委譲する。
 
 - **TTP したいチャンネル**: URL / handle / channel ID を 1 件以上
 - **転写したい要素**: タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding のどれか
-- **仮チャンネル名と SHORT**: `meta.json::channel.name` / `channel.short` に入れる
-- **初期ジャンル情報**: `genre.primary` / `genre.style` / `genre.context`
-- **動画尺の初期値（分）**: `audio.target_duration_min` / `target_duration_max`
-- **音楽エンジン**: `music_engine` に入れる `suno` / `lyria` のどちらか
-- **DistroKid 配信有無**: 配信する場合は `distrokid.enabled=true` で初期化する
-- **DistroKid 初期 profile**: 配信する場合のみ `artist` / `language` / `main_genre` / `sub_genre` / songwriter first / last
+- **要素ごとの関係性メモ**: タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding のうち、どの観察をどう転写するか
 - **branding 方針**: TTP 対象の description / keywords / localizations をどの程度転写するか
 
-このヒアリング結果は `yt-channel-init` の CLI 引数と、後続の seed fetch / TTP 対象反映に使う。
+このヒアリング結果は後続の seed fetch / TTP 対象反映に使う。
 ヒアリング後は `docs/channel/ttp-seed-confirmation.md` を作成し、TTP したいチャンネル URL / handle / channel ID、転写したい要素、関係性メモを保存する。
 
 ### Step 2: 現在のディレクトリを repo 初期化
@@ -142,6 +142,16 @@ seed fetch は YouTube Data API 認証に依存するため、既存チャンネ
 ### Step 4: フルパッケージ config / 初期運用ファイル生成
 
 `yt-channel-init` で `config/channel/*.json` と channel-new で必要な初期運用ファイルを一括生成する。`/setup` が作成済みのディレクトリはそのまま再利用する:
+Step 1 の TTP ヒアリングとは別に、config 生成に必要な初期値だけをここで確認する:
+
+- **仮チャンネル名と SHORT**: `meta.json::channel.name` / `channel.short` に入れる
+- **初期ジャンル情報**: `genre.primary` / `genre.style` / `genre.context`
+- **動画尺の初期値（分）**: `audio.target_duration_min` / `target_duration_max`
+- **音楽エンジン**: `music_engine` に入れる `suno` / `lyria` のどちらか
+- **DistroKid 配信有無**: 配信する場合は `distrokid.enabled=true` で初期化する
+- **DistroKid 初期 profile**: 配信する場合のみ `artist` / `language` / `main_genre` / `sub_genre` / songwriter first / last
+
+ここで確認した入力は `yt-channel-init` の CLI 引数に使う。
 
 ```bash
 uv run yt-channel-init \
@@ -291,6 +301,7 @@ image_generation:
 **入口ゲート**: 開始前に `config/channel/analytics.json::benchmark.channels` に承認済み TTP 対象が 1 件以上あることを確認する。0 件なら本 Step 以降に進まず Step 5 に戻って候補を再確認するか、ユーザーに停止を確認して終了する（判定基準は冒頭「TTP 完了条件（新規開設モード）」を参照）。
 
 新チャンネルには `/viewer-voice` や `/benchmark` の結果がまだない場合があるため、ここでは軽量版だけ作る。
+簡易ペルソナは下記の TTP データだけを入力として導出し、方向性ヒアリングは追加しない。
 
 入力:
 
@@ -386,7 +397,7 @@ uv run yt-channel-settings push --apply
 | Analytics データがまだ無い | #1272 で wf-new 側対応予定。初回は TTP メモと seed fetch 結果を企画根拠として使う |
 | `config/skills/thumbnail.yaml` の reference_images が空 | `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` に存在する参照画像を設定する。意図的に後続へ回す場合は `docs/channel/ttp-seed-confirmation.md` に `ユーザー承認済み例外: thumbnail ... /thumbnail ...` として未反映内容・理由・後続 skill を残す。本格収集が必要なら `/benchmark` で `yt-benchmark-collect --keep-thumbnails` を実行する |
 | `reference_images.channel_branding.icon_references` / `banner_references` が空 | `docs/channel/competitor-branding-snapshot.json::channel_image_references` の URL 参照を転記する。参照画像が取得できない場合は TTP メモ由来の fallback 根拠を `reference_images.notes` に残してから `branding/icon.png` / `branding/banner.png` を生成する |
-| `config/skills/suno.yaml` が placeholder のまま | Step 1 のジャンル情報を `genre_line` に反映してから進む |
+| `config/skills/suno.yaml` が placeholder のまま | Step 4 の初期ジャンル情報を `genre_line` に反映してから進む |
 | `config/channel/playlists.json` に `playlist_id` 未設定がある | 初投稿前に `/playlist` が `yt-playlist-status` → `yt-playlist-manager --init --dry-run` → `--init` で初期化する。初回動画の追加は `/video-upload` 内部の自動 assign に任せる |
 | `auth/token.json` が無い | `/setup` を再実行し、OAuth を完了してから YouTube API 操作に戻る |
 | Analytics / Reporting レポート取得設定が未確認 | 初回制作は止めず、公開後の分析に備えて `/analytics-collect` で YouTube Analytics / Reporting API の収集前提と Reporting API job 作成状態を確認する。不足する GCP / OAuth / API 設定が出たら `/setup` に戻す |
@@ -533,7 +544,7 @@ config 生成・認証完了後、以下を案内:
 - `/viewer-voice` → コメント収集と視聴者インサイト分析
 - `/audience-persona-design` → 公開後の本格ペルソナ見直し
 - `/channel-research` → 収集済みデータの詳細分析
-- `/channel-direction` → 方向性の再検討
+- `/channel-direction` → `/channel-new` 完了後の方向性の検討・精緻化
 - `/channel-setup` → 運用中の設定 push / pull と詳細セットアップ
 - `channel-setup/references/config-template/*.json` → 取り込みモードの config テンプレート（責務別 5 ファイル: meta / content / youtube / analytics / audio）
 - `/wf-new` → 初回コレクション制作

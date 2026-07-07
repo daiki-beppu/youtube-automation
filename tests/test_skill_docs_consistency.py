@@ -156,6 +156,68 @@ def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
     assert '"untrusted_data": True' in branding_snapshot_script
 
 
+def test_channel_new_ttp_hearing_does_not_ask_channel_direction() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    overview = channel_new.split("## Overview", 1)[1].split("## モード判別", 1)[0]
+    mode_routing = channel_new.split("## モード判別", 1)[1].split("## TTP 原則", 1)[0]
+    ttp_principles = channel_new.split("## TTP 原則", 1)[1].split(
+        "### TTP 完了条件（新規開設モード）",
+        1,
+    )[0]
+    step1 = channel_new.split("### Step 1: TTP ヒアリング", 1)[1].split(
+        "### Step 2: 現在のディレクトリを repo 初期化",
+        1,
+    )[0]
+    step4 = channel_new.split("### Step 4: フルパッケージ config / 初期運用ファイル生成", 1)[1].split(
+        "### Step 5: TTP seed fetch と承認済み対象反映",
+        1,
+    )[0]
+    step7 = channel_new.split("### Step 7: 簡易ペルソナ導出", 1)[1].split(
+        "### Step 8: branding 初回反映",
+        1,
+    )[0]
+    cross_references = channel_new.split("## Cross References", 1)[1]
+
+    assert "「どんなチャンネルにしたいか」より先に" not in ttp_principles
+    assert "`/channel-new` では方向性・差別化・ポジショニングを聞かず" in ttp_principles
+
+    assert "TTP 対象への転写要素（タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding）に限定" in step1
+    step1_questions = [line for line in step1.splitlines() if line.startswith("- **")]
+    assert step1_questions == [
+        "- **TTP したいチャンネル**: URL / handle / channel ID を 1 件以上",
+        "- **転写したい要素**: タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding のどれか",
+        "- **要素ごとの関係性メモ**: "
+        "タイトル構造 / サムネ構図 / 投稿頻度 / 尺 / ジャンル / branding のうち、どの観察をどう転写するか",
+        "- **branding 方針**: TTP 対象の description / keywords / localizations をどの程度転写するか",
+    ]
+    for forbidden in ("方向性を聞く", "差別化を聞く", "ポジショニングを聞く"):
+        assert forbidden not in step1
+    for config_prompt in (
+        "**仮チャンネル名と SHORT**",
+        "**初期ジャンル情報**",
+        "**動画尺の初期値（分）**",
+        "**音楽エンジン**",
+        "**DistroKid 配信有無**",
+        "**DistroKid 初期 profile**",
+    ):
+        assert config_prompt not in step1
+        assert config_prompt in step4
+    assert "検討が必要なら `/channel-new` 完了後の `/channel-direction` に委譲" in step1
+    assert "Step 1 の TTP ヒアリングとは別に、config 生成に必要な初期値だけをここで確認する" in step4
+
+    assert "方向性の検討・精緻化（必要な場合だけ、/channel-new 完了後）" in overview
+    assert "`/channel-new` は方向性を聞かず" in overview
+    assert "方向性の検討・精緻化が必要な場合も、ここで質問せず" in mode_routing
+    assert "方向性の検討は完了後の `/channel-direction`" in mode_routing
+
+    assert "TTP データだけを入力として導出し、方向性ヒアリングは追加しない" in step7
+    assert "- `config/channel/analytics.json::benchmark.channels`" in step7
+    assert "- `docs/channel/ttp-seed-confirmation.md`" in step7
+    assert "- `docs/channel/competitor-branding-snapshot.json`" in step7
+
+    assert "`/channel-new` 完了後の方向性の検討・精緻化" in cross_references
+
+
 def test_channel_new_frontmatter_keeps_import_dispatch_keywords() -> None:
     frontmatter = _frontmatter(".claude/skills/channel-new/SKILL.md")
     assert frontmatter["name"] == "channel-new"
