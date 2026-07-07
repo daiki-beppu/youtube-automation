@@ -11,12 +11,16 @@ from pathlib import Path
 
 import pytest
 
+import youtube_automation.utils.config as config_api
+import youtube_automation.utils.config.loader as config_loader
 from youtube_automation.utils.config import (
     ChannelConfig,
     channel_dir,
     load_config,
     reset,
 )
+from youtube_automation.utils.config.comments import Comments
+from youtube_automation.utils.config.pinned_comment import PinnedComment
 from youtube_automation.utils.exceptions import ConfigError
 
 # ----- helpers -------------------------------------------------------------
@@ -1298,6 +1302,7 @@ def test_channel_dir_from_env(tmp_path, monkeypatch):
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
     assert channel_dir() == ch
+    assert channel_dir() != ch / "config" / "channel"
 
 
 def test_channel_dir_ancestor_search(tmp_path, monkeypatch):
@@ -1308,6 +1313,21 @@ def test_channel_dir_ancestor_search(tmp_path, monkeypatch):
     monkeypatch.delenv("CHANNEL_DIR", raising=False)
 
     assert channel_dir().resolve() == ch.resolve()
+    assert channel_dir().resolve() != (ch / "config" / "channel").resolve()
+
+
+def test_channel_dir_docstrings_describe_project_root_contract():
+    assert "`config/channel/` を含むプロジェクトルート" in config_loader._resolve_channel_dir.__doc__
+    assert "`config/channel/` を持つ祖先ディレクトリ" in config_loader._resolve_channel_dir.__doc__
+    assert "`config/channel/` を含むプロジェクトルート" in channel_dir.__doc__
+    assert "config/channel/ を含むプロジェクトルート解決" in config_api.__doc__
+
+
+def test_history_file_docstrings_describe_project_root_contract():
+    assert "`history_file`: プロジェクトルートからの相対パス" in Comments.__doc__
+    assert "`history_file`: プロジェクトルートからの相対パス" in PinnedComment.__doc__
+    assert "チャンネルディレクトリからの相対パス" not in Comments.__doc__
+    assert "チャンネルディレクトリからの相対パス" not in PinnedComment.__doc__
 
 
 # ----- comments.generator section -------------------------------------------

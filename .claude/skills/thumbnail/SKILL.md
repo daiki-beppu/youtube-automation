@@ -204,7 +204,7 @@ uv run yt-generate-image \
 - `reference_images.default` には同じベンチマークチャンネル内の別サムネイル画像を並べる
 - `--max-attempts N` のときは N 枚以上のユニーク参照画像が必要。不足・重複・同一参照の再利用はエラー
 - `--reference-index N` を指定した場合のみ単一参照固定になり、attempt 数は 1 に固定される
-- `path_base: "channel_dir"` の場合、パスはチャンネルディレクトリからの相対パス
+- `path_base: "channel_dir"` の場合、パスはプロジェクトルートからの相対パス
 - `--reference` 使用時は `composition_prefix` が自動スキップされる（generate_image.py 修正済み）
 
 ## プロンプト構築

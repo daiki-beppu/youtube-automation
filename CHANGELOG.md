@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(config)`: `channel_dir()` / `_resolve_channel_dir()` と comments / pinned_comment の `history_file` docstring、thumbnail skill の `path_base: "channel_dir"` 説明を、`config/channel/` 自体ではなくそれを含むプロジェクトルートを指す説明へ統一した（#1569）
 - `fix(automation-update)`: `yt-automation-update apply` の sync-only / smoke check / 失敗ステップ表示を hardened。URL 直接参照と inline table の ref 許可規則を `main` / 40 桁 sha / `vX.Y.Z` tag に統一し、`--sync-only` は local fix guard を通したうえで指定 skill の skills asset と claude-md を同期、未知 skill 名は副作用前に拒否、`yt-config-migrate verify --target <repo>` で対象 repo を固定、`pyproject.toml` 書き換え時の I/O 失敗もステップ名付きで報告するようにした（#1473）
 - `fix(thumbnail)`: `yt-generate-image` の `${typography_clause}` 展開で malformed な `image_generation.gemini.single_step` / `thumbnail_text.font` 設定を `{}` や `"consistent"` に丸めず、`ConfigError` として `[ERROR]` + exit 1 で fail-loud するようにした（#1332）
 - `fix(suno-helper)`: Suno UI 改装（2026-07-04 観測、Lyrics 欄の Lexical エディタ化）で連続実行が「Lyrics 欄が見つかりません」の FatalRunError で必ず中断する問題を修正した（#1506）。Suno Custom Mode の Lyrics 欄が `textarea[data-testid="lyrics-textarea"]` から `div.lyrics-editor-content[contenteditable][data-lexical-editor]`（Meta Lexical エディタ）へ変わり、`resolveFields` が textarea 前提の解決で lyrics を見失っていた。対応: (1) `shared/dom.ts::resolveFields` の lyrics 解決に Lexical contenteditable の fallback を追加（従来の testid textarea を最優先に維持して旧 UI と併存、`contenteditable=""` の boolean 属性形式も許容、bbox 幅非ゼロで非マウント要素を除外）。`ResolvedFields.lyrics` は `HTMLTextAreaElement | HTMLElement | null` へ拡張。(2) Style 解決は `[data-testid="create-form-styles-wrapper"]` 内の可視 textarea を一次識別に昇格（lyrics が textarea でなくなり「Lyrics 以外の可視 textarea」述語だけでは特定根拠が弱くなったため。wrapper 不在の旧 UI は従来述語へ fallback）。(3) 注入は新設の `setLyricsValue` が分岐する: textarea / input は従来の同期 `setNativeValue`、Lexical contenteditable は value setter を持たないため `focus → execCommand("selectAll") → 200ms 待ち → DataTransfer + ClipboardEvent("paste") dispatch → 200ms 待ち` の合成 paste で全置換する（Lexical 自身が購読する paste に text/plain を載せる React 互換経路）。selectAll の選択は Lexical が selectionchange 経由で内部 state に取り込むため反映が非同期で、**同期実行では全選択が乗らず「置換」でなく「先頭挿入」に化ける**（実機検証）— 200ms の selection 同期待ちが本質で、呼び出し側 `content.ts::injectAndGenerate` の lyrics 注入も await 化した。実ページで 6 entries × 12 clips の連続生成 → playlist 一括追加 → ZIP DL の完走を確認済み。Vitest に resolveFields の Lexical fallback 5 ケース / styles-wrapper 一次識別 2 ケース / setLyricsValue の経路分岐・selectAll→paste 順序（fake timer で同期 paste 禁止を pin）・instrumental 空文字 3 ケースを追加、Playwright e2e に Lexical mock（paste 横取りで全置換する contenteditable）への注入スモークを追加。
@@ -1288,7 +1289,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 
 - **`utils.config` パッケージ** — 責務別に分割された設定ローダー・dataclass 群。
   - `youtube_automation.utils.config.load_config()`: シングルトン取得（旧 `ChannelConfig.load()` 相当）
-  - `youtube_automation.utils.config.channel_dir()`: チャンネルディレクトリ path 解決のみ
+  - `youtube_automation.utils.config.channel_dir()`: `config/channel/` を含むプロジェクトルート path 解決のみ
   - `youtube_automation.utils.config.reset()`: シングルトン state リセット（テスト用）
   - サブモジュール: `meta` / `content` / `youtube` / `analytics` / `playlists` / `workflow` / `audio` / `localizations`
 - **`yt-config-migrate` CLI** — 旧 `config/channel_config.json` を新 `config/channel/*.json` 構造に分割する移行ツール。
