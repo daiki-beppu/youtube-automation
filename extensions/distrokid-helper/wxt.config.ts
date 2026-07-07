@@ -7,10 +7,10 @@ import { MANIFEST_HOST_PERMISSIONS, MANIFEST_PERMISSIONS } from "./lib/manifest"
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   manifest: {
-    name: "DistroKid Helper (TEST)",
+    name: "DistroKid Helper",
     description: "DistroKid 登録フォームに静的プロファイル + 動的データを自動入力する",
     action: {
-      default_title: "DistroKid Helper (TEST)",
+      default_title: "DistroKid Helper",
     },
     // 最小権限。SSOT は lib/manifest.ts (tests/manifest.test.ts で機械担保)。
     permissions: [...MANIFEST_PERMISSIONS],
