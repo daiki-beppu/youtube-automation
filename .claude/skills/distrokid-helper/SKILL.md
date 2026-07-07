@@ -1,18 +1,18 @@
 ---
 name: distrokid-helper
-description: "Use when コレクションの楽曲を DistroKid 配信用に準備し、distrokid-helper Chrome 拡張へ渡すローカルサーバーを起動したいとき（30-distrokid 生成 / disc 分割 / metadata.md / ジャケット 3000×3000 新規生成 / bunx tayk collection-serve 起動）。『DistroKid 準備』『配信準備』『アルバム化』『distrokid-helper』で発動。DistroKid Web への転記・アップロード操作そのものは Chrome 拡張側の責務"
+description: "Use when コレクションの楽曲を DistroKid 配信用に準備し、distrokid-helper Chrome 拡張へ渡すローカルサーバーを起動したいとき（30-distrokid 生成 / disc 分割 / metadata.md / ジャケット 3000×3000 新規生成 / uv run yt-collection-serve 起動）。『DistroKid 準備』『配信準備』『アルバム化』『distrokid-helper』で発動。DistroKid Web への転記・アップロード操作そのものは Chrome 拡張側の責務"
 ---
 
 ## Overview
 
 コレクションの楽曲（`02-Individual-music/*.mp3`）を DistroKid 配信向けに整備し、`30-distrokid/` 以下に成果物一式を生成します。
 
-- **spec.json** — 分割計画・メタデータの機械可読 JSON。**`bunx tayk collection-serve` が直接読む SSOT**（#941）。`build` が canonical パス `30-distrokid/spec.json` へ atomic write する。LLM がタイトルユニーク化・アルバム名決定を担当
+- **spec.json** — 分割計画・メタデータの機械可読 JSON。**`uv run yt-collection-serve` が直接読む SSOT**（#941）。`build` が canonical パス `30-distrokid/spec.json` へ atomic write する。LLM がタイトルユニーク化・アルバム名決定を担当
 - **disc 分割 + mp3 コピー** — 1 アルバム 35 曲上限を考慮して均等分割し、各 disc ディレクトリへ mp3 をコピー
 - **metadata.md** — DistroKid Web フォーム転記用の人間向けドキュメント（各 disc に生成）。`serve` の読み取り優先は spec.json であり、metadata.md は拡張が使えないときの手動フォールバック用
 - **README.md** — アップロード手順書（`30-distrokid/README.md`）
 - **cover_art_3000.jpg** — 新規 AI 生成した 3000×3000 JPEG ジャケット
-- **bunx tayk collection-serve 起動** — `distrokid-helper` Chrome 拡張が読む `/distrokid/collections` と `/collections/<id>/distrokid/<disc>/release.json` を localhost で配信
+- **uv run yt-collection-serve 起動** — `distrokid-helper` Chrome 拡張が読む `/distrokid/collections` と `/collections/<id>/distrokid/<disc>/release.json` を localhost で配信
 
 CLI 仕様の詳細は `references/distrokid_prepare.py`（実体: `src/youtube_automation/scripts/distrokid_prepare.py`）を参照。
 
@@ -30,7 +30,7 @@ CLI 仕様の詳細は `references/distrokid_prepare.py`（実体: `src/youtube_
 | `bunx tayk distrokid-prepare build --spec <spec.json> <collection> [--force] [--release-date YYYY-MM-DD]` | spec 検証 → mp3 分割コピー → ffprobe 尺計測 → metadata.md + README.md 生成 |
 | `bunx tayk distrokid-prepare cover --input <image> <collection> [--force] [--crop]` | 新規 AI 生成した 1:1 画像を 3000×3000 JPEG（`30-distrokid/cover_art_3000.jpg`）に最終化 |
 | `bunx tayk distrokid-prepare verify <collection>` | cover サイズ / release_date / タイトルユニーク / ≤35 曲 を最終検証 |
-| `bunx tayk collection-serve <collections-root> --distrokid-capture-root <channel-root> --allow-extension distrokid-helper --port 7874` | distrokid-helper 拡張向けに DistroKid dir mode サーバーを起動し、配信済み記録の POST も有効化 |
+| `uv run yt-collection-serve <collections-root> --distrokid-capture-root <channel-root> --allow-extension distrokid-helper --port 7874` | distrokid-helper 拡張向けに DistroKid dir mode サーバーを起動し、配信済み記録の POST も有効化 |
 
 ## Instructions
 
@@ -225,14 +225,14 @@ verify のサマリーをユーザーに提示して完了を確認する。
 
 ### ステップ 9: distrokid-helper サーバー起動
 
-verify が green になったら、DistroKid Web 操作へ進む前に `bunx tayk collection-serve` を **DistroKid dir mode** で起動する。これは本スキルの責務に含める。
+verify が green になったら、DistroKid Web 操作へ進む前に `uv run yt-collection-serve` を **DistroKid dir mode** で起動する。これは本スキルの責務に含める。
 
 ```bash
 # CHANNEL_DIR がチャンネルルートを指している場合
-bunx tayk collection-serve "$CHANNEL_DIR/collections/planning" --distrokid-capture-root "$CHANNEL_DIR" --allow-extension distrokid-helper --port 7874
+uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" --distrokid-capture-root "$CHANNEL_DIR" --allow-extension distrokid-helper --port 7874
 
 # CHANNEL_DIR が未設定、またはチャンネル外の CWD から起動する場合
-CHANNEL_DIR=/path/to/channel bunx tayk collection-serve /path/to/channel/collections/planning --distrokid-capture-root /path/to/channel --allow-extension distrokid-helper --port 7874
+CHANNEL_DIR=/path/to/channel uv run yt-collection-serve /path/to/channel/collections/planning --distrokid-capture-root /path/to/channel --allow-extension distrokid-helper --port 7874
 ```
 
 起動後、以下を確認する:
@@ -249,7 +249,7 @@ curl -s http://localhost:7874/distrokid/collections | python3 -m json.tool | hea
 4. サーバー出力に `distrokid releases enabled` が表示されること
 5. サーバー出力に `detected extension: distrokid-helper -> <id> (chrome-extension://<id>)` が表示されること
 
-`--distrokid-capture-root` は distrokid-helper の配信済み記録 `POST /distrokid/releases` に必要。DistroKid dir mode では必ずチャンネルルートを指定する。`--allow-extension distrokid-helper` は Chrome の profile preferences から unpacked 拡張 ID を検出し、DistroKid page origin からの write POST を許可しない exact origin lock として使う。検出 0 件・複数 ID 競合・Preferences 読み取り不可で失敗する場合のみ、エラーに表示された候補を確認して `--allow-origin chrome-extension://<EXTENSION_ID>` を手動指定する。
+`--distrokid-capture-root` は distrokid-helper の配信済み記録 `POST /distrokid/releases` に必要。DistroKid dir mode では必ずチャンネルルートを指定する。`--allow-extension distrokid-helper` は Chrome の profile preferences から unpacked 拡張 ID を検出し、DistroKid page origin からの write POST を許可しない exact origin lock として使う。検出 0 件・複数 ID 競合・Preferences 読み取り不可・Preferences JSON parse failure で失敗する場合のみ、エラーに表示された候補を確認して `--allow-origin chrome-extension://<EXTENSION_ID>` を手動指定する。
 
 ユーザーには `http://localhost:7874` を distrokid-helper popup のサーバー URL として案内する。Chrome 拡張 **distrokid-helper** を使った DistroKid Web フォームへの転記・アップロード操作そのものは本スキルの範囲外。
 
@@ -265,7 +265,7 @@ curl -s http://localhost:7874/distrokid/collections | python3 -m json.tool | hea
 | 既存 30-distrokid がある | build 時に「disc dir already exists」エラー | `build --force` で spec 記載の disc だけ再生成される。`cover_art_3000.jpg` は `--force` でも上書きされない（cover は `cover --force` で別途上書き）。`spec.json` は build が毎回上書きする（`--force` 有無問わず） |
 | `distrokid.enabled` が false | ConfigError または plan 実行時エラー | `config/channel/distrokid.json` の `distrokid.enabled` を `true` に設定してからリトライ |
 | タイトル重複エラー | build 時に「duplicate title across discs」エラー | spec.json を開き `needs_unique: true` のトラックに em-dash サフィックスを付与して再度 build |
-| `/distrokid/collections` が 404 | single file mode で起動している、または collections root が違う | `<collection>` ではなく `<channel>/collections/planning` を渡して `bunx tayk collection-serve` を起動し直す |
+| `/distrokid/collections` が 404 | single file mode で起動している、または collections root が違う | `<collection>` ではなく `<channel>/collections/planning` を渡して `uv run yt-collection-serve` を起動し直す |
 | `distrokid dir mode enabled` が出ない | `config/channel/distrokid.json` が読めない、または `enabled=false` | `CHANNEL_DIR` がチャンネルルートを指していることと `distrokid.enabled` を確認してからサーバーを再起動 |
 | `distrokid releases` が disabled または POST が 404 | `--distrokid-capture-root` が未指定、またはチャンネルルート以外を指している | `--distrokid-capture-root "$CHANNEL_DIR"` または `--distrokid-capture-root /path/to/channel` を付けて再起動 |
 

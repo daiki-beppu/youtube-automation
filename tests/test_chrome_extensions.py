@@ -12,7 +12,7 @@ from youtube_automation.utils.exceptions import ConfigError
 
 
 def _write_preferences(profile_dir: Path, filename: str, settings: dict[str, object]) -> None:
-    profile_dir.mkdir(parents=True)
+    profile_dir.mkdir(parents=True, exist_ok=True)
     payload = {"extensions": {"settings": settings}}
     (profile_dir / filename).write_text(json.dumps(payload), encoding="utf-8")
 
@@ -52,6 +52,25 @@ def test_resolve_unpacked_extension_origin_uses_preferences_fallback(tmp_path):
 
     assert resolved.origin == "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
     assert resolved.profile == "Profile 1"
+
+
+def test_resolve_unpacked_extension_origin_prefers_secure_preferences_when_both_exist(tmp_path):
+    profile_dir = tmp_path / "Default"
+    _write_preferences(
+        profile_dir,
+        "Preferences",
+        {"abcdefghijklmnopabcdefghijklmnop": {"path": _extension_path(tmp_path, "suno-helper")}},
+    )
+    _write_preferences(
+        profile_dir,
+        "Secure Preferences",
+        {"gdjhjiphejeeclngbljhajiffhpdepee": {"path": _extension_path(tmp_path, "suno-helper")}},
+    )
+
+    resolved = resolve_unpacked_extension_origin("suno-helper", chrome_user_data_dir=tmp_path)
+
+    assert resolved.extension_id == "gdjhjiphejeeclngbljhajiffhpdepee"
+    assert resolved.origin == "chrome-extension://gdjhjiphejeeclngbljhajiffhpdepee"
 
 
 def test_resolve_unpacked_extension_origin_missing_extension_guides_allow_origin(tmp_path):

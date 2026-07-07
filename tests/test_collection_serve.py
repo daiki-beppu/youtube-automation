@@ -790,6 +790,73 @@ def test_main_resolves_allow_extension_to_allow_origin(monkeypatch, capsys, tmp_
     assert "serve token: GET http://test-channel.localhost:7873/auth/token" in stdout
 
 
+def test_main_resolves_allow_extension_from_chrome_preferences(monkeypatch, capsys, tmp_path):
+    """--allow-extension は実 Chrome Preferences fixture から create_server まで通る。"""
+
+    class FakeServer:
+        server_address = ("localhost", 7873)
+
+        def __init__(self) -> None:
+            self.closed = False
+
+        def serve_forever(self) -> None:
+            raise KeyboardInterrupt
+
+        def server_close(self) -> None:
+            self.closed = True
+
+    home = tmp_path / "home"
+    chrome_root = home / "Library" / "Application Support" / "Google" / "Chrome" / "Default"
+    chrome_root.mkdir(parents=True)
+    extension_id = "gdjhjiphejeeclngbljhajiffhpdepee"
+    extension_path = tmp_path / "chrome-extensions" / "suno-helper"
+    (chrome_root / "Secure Preferences").write_text(
+        json.dumps({"extensions": {"settings": {extension_id: {"path": str(extension_path)}}}}),
+        encoding="utf-8",
+    )
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    recorded: list[str | None] = []
+    fake_server = FakeServer()
+
+    def fake_create_server(port: int, allow_origin: str | None, **kwargs: object) -> FakeServer:
+        assert kwargs["collections_root"] == planning
+        recorded.append(allow_origin)
+        return fake_server
+
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(collection_serve_module, "create_server", fake_create_server)
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning), "--allow-extension", "suno-helper"])
+
+    main()
+
+    assert recorded == [f"chrome-extension://{extension_id}"]
+    assert fake_server.closed is True
+    stdout = capsys.readouterr().out
+    assert f"detected extension: suno-helper -> {extension_id}" in stdout
+    assert f"chrome-extension://{extension_id}" in stdout
+
+
+def test_main_allow_extension_parse_failure_guides_manual_origin(monkeypatch, tmp_path):
+    """main() 経由でも Preferences JSON 破損は fallback 案内付き ConfigError にする。"""
+    home = tmp_path / "home"
+    profile_dir = home / "Library" / "Application Support" / "Google" / "Chrome" / "Default"
+    profile_dir.mkdir(parents=True)
+    (profile_dir / "Secure Preferences").write_text("{", encoding="utf-8")
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning), "--allow-extension", "suno-helper"])
+
+    with pytest.raises(ConfigError) as exc_info:
+        main()
+
+    message = str(exc_info.value)
+    assert "Failed to parse Chrome preferences" in message
+    assert "--allow-origin chrome-extension://<EXTENSION_ID>" in message
+
+
 # ---------------------------------------------------------------------------
 # dir mode（#816）: `collections/planning/` 配下の collection 列挙 + 個別配信
 #

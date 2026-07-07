@@ -223,7 +223,7 @@ def test_wf_new_declares_sequential_child_skill_orchestration() -> None:
         "/suno",
         "/lyria",
         "/loop-video",
-        "bunx tayk collection-serve",
+        "uv run yt-collection-serve",
     )
     cursor = -1
     for token in expected_order:
@@ -241,7 +241,7 @@ def test_wf_new_starts_suno_helper_server_before_handoff() -> None:
 
     for token in (
         "Suno チャンネルでは",
-        "bunx tayk collection-serve",
+        "uv run yt-collection-serve",
         "Chrome 拡張でのブラウザ実行だけを user に引き継ぐ",
     ):
         assert token in overview, f"wf-new Overview に Suno server 起動責務 `{token}` がありません"
@@ -250,6 +250,7 @@ def test_wf_new_starts_suno_helper_server_before_handoff() -> None:
         '"$CHANNEL_DIR/collections/planning"',
         "PORT=7873",
         "--allow-extension suno-helper",
+        "Preferences JSON parse failure",
         "detected extension: suno-helper -> <id> (chrome-extension://<id>)",
         '--allow-origin "chrome-extension://<EXTENSION_ID>"',
         "chrome-extension://<detected-id>",

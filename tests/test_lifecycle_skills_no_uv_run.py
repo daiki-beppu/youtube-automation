@@ -29,17 +29,12 @@ _LIFECYCLE_SKILL_NAMES: Final[tuple[str, ...]] = (
     "distrokid-helper",
 )
 
-_FORBIDDEN_COMMAND_FRAGMENTS: Final[tuple[str, ...]] = (
-    "uv run",
-    "bunx yt",
-)
+_FORBIDDEN_COMMAND_FRAGMENTS: Final[tuple[str, ...]] = ("bunx yt",)
 
 _FORBIDDEN_LEGACY_COMMAND_REFERENCES: Final[tuple[tuple[str, str], ...]] = (
     ("suno", "yt-generate-suno"),
     ("suno", "yt-video-analyze"),
-    ("suno", "yt-collection-serve"),
     ("wf-new", "yt-analytics"),
-    ("wf-new", "yt-collection-serve"),
     ("wf-new", "yt-video-analyze"),
     ("wf-new", "yt-init-collection"),
     ("wf-new", "yt-metadata-audit"),
