@@ -37,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(claude-md)`: 配布用 `CLAUDE.md` テンプレートの行動原則に自律実行方針を追加。ユーザー確認が必須でない限り合理的な仮定を置いて調査・実装・検証・簡潔な報告まで進めることと、公開・削除・課金 API・外部投稿・機密情報・不可逆操作は明示確認が必要な境界であることを明記した（#1608）
 - `refactor(suno-helper)`: 旧 Suno playlist capture 互換 route（`POST /suno/playlists`）と `write_suno_playlists()` / `normalize_suno_title()` / `--playlist-capture-*` を撤去し、DistroKid release 記録用の capture root を `--distrokid-capture-root` に分離（#1301）
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
 - `feat(video-analyze)`: `yt-video-analyze` を全尺解析から動画冒頭のクリップ窓解析（既定 900 秒 = 15 分、skill-config `analysis_window_sec` で上書き可）に変更。Gemini へ渡す Part に `video_metadata`（`start_offset` / `end_offset`）を付与して冒頭 2〜3 曲相当のみを解析し、長尺 Complete Collection の API コストを削減する。プロンプトをクリップ窓前提（`bgm_arc.outro` は窓内終盤、`scene_timeline` / `editing_metrics` は窓内対象）に整合させ、SKILL.md に解析後のレポート検証ステップ（窓超過タイムスタンプ・スキーマ欠落・不自然値の subagent レビュー）を追加。下流 `/suno` にも冒頭クリップ窓データである旨を注記した（#1495）
