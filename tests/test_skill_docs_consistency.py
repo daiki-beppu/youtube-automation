@@ -167,6 +167,8 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     overview = channel_new.split("## Overview", 1)[1].split("## モード判別", 1)[0]
     mode_routing = channel_new.split("## モード判別", 1)[1].split("## TTP 原則", 1)[0]
+    direction_mode_row = next(line for line in mode_routing.splitlines() if line.startswith("| 方向性検討モード |"))
+    direction_mode = channel_new.split("## 方向性検討モード", 1)[1].split("\n## 再生成モード", 1)[0]
     ttp_principles = channel_new.split("## TTP 原則", 1)[1].split(
         "### TTP 完了条件（新規開設モード）",
         1,
@@ -218,6 +220,21 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
     assert "方向性検討モード" in mode_routing
     assert "Step D1〜D5" in mode_routing
     assert "方向性の検討・精緻化が必要な場合も、新規開設モードでは質問せず" in mode_routing
+    for trigger in ("方向性決めたい", "ポジショニング", "差別化", "ブレスト"):
+        assert trigger in direction_mode_row
+
+    for heading in (
+        "### Step D1: 分析レポートの読み込みとサマリー",
+        "### Step D2: ポジショニング議論",
+        "### Step D3: 決定事項の整理",
+        "### Step D4: 方向性ドキュメント保存",
+        "### Step D5: 次フェーズへの案内",
+    ):
+        assert heading in direction_mode
+    assert "決定事項を `docs/channel/channel-direction.md` に保存" in direction_mode
+    assert "`mkdir -p docs/channel`" in direction_mode
+    assert "config を再生成・再反映する場合は `/channel-new`（再生成モード）" in direction_mode
+    assert "制作に進む場合は `/wf-new`" in direction_mode
 
     assert "TTP データだけを入力として導出し、方向性ヒアリングは追加しない" in step7
     assert "- `config/channel/analytics.json::benchmark.channels`" in step7
@@ -248,7 +265,16 @@ def test_channel_new_frontmatter_keeps_import_dispatch_keywords() -> None:
     frontmatter = _frontmatter(".claude/skills/channel-new/SKILL.md")
     assert frontmatter["name"] == "channel-new"
     description = frontmatter["description"]
-    for keyword in ("既存チャンネル", "チャンネル取り込み", "config 生成", "channel-import"):
+    for keyword in (
+        "既存チャンネル",
+        "チャンネル取り込み",
+        "config 生成",
+        "channel-import",
+        "方向性決めたい",
+        "ポジショニング",
+        "差別化",
+        "ブレスト",
+    ):
         assert keyword in description
 
 
@@ -499,7 +525,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     setup = _read(".claude/skills/setup/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     channel_direction_mode = channel_new.split("## 方向性検討モード", 1)[1].split(
-        "## 再生成モード",
+        "\n## 再生成モード",
         1,
     )[0]
     onboarding = _read("ONBOARDING.md")
