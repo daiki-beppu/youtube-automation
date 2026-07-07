@@ -56,7 +56,6 @@ _DEFAULT_THUMBNAIL_KEYS = ("maxres", "standard", "high", "medium", "default")
 
 
 def is_short_benchmark_duration(duration_iso: str) -> bool:
-    """ISO 8601 duration から Short 動画かどうかを判定する。"""
     match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration_iso)
     if not match:
         return False
@@ -66,7 +65,6 @@ def is_short_benchmark_duration(duration_iso: str) -> bool:
 
 
 def is_short_benchmark_video(video: dict) -> bool:
-    """benchmark 動画エントリが Short 動画かどうかを判定する。"""
     return is_short_benchmark_duration(str(video.get("duration_iso") or ""))
 
 
@@ -562,7 +560,6 @@ class BenchmarkCollector:
 
     @staticmethod
     def _best_thumbnail_url(thumbnails: dict, *, keys: tuple[str, ...]) -> str:
-        """指定された key 優先順で最初に見つかった thumbnail URL を返す。"""
         for key in keys:
             if key in thumbnails:
                 return thumbnails[key]["url"]

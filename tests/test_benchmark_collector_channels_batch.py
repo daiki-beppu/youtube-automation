@@ -232,8 +232,23 @@ class TestCollectChannelWithPrefetchedItem:
         ("wide_thumbnails", "expected_url"),
         [
             (
+                {
+                    "high": {"url": "https://example.com/short-high-wide.jpg"},
+                    "medium": {"url": "https://example.com/short-medium-wide.jpg"},
+                    "default": {"url": "https://example.com/short-default-wide.jpg"},
+                },
+                "https://example.com/short-high-wide.jpg",
+            ),
+            (
                 {"high": {"url": "https://example.com/short-high-wide.jpg"}},
                 "https://example.com/short-high-wide.jpg",
+            ),
+            (
+                {
+                    "medium": {"url": "https://example.com/short-medium-wide.jpg"},
+                    "default": {"url": "https://example.com/short-default-wide.jpg"},
+                },
+                "https://example.com/short-medium-wide.jpg",
             ),
             (
                 {"medium": {"url": "https://example.com/short-medium-wide.jpg"}},
@@ -243,6 +258,7 @@ class TestCollectChannelWithPrefetchedItem:
                 {"default": {"url": "https://example.com/short-default-wide.jpg"}},
                 "https://example.com/short-default-wide.jpg",
             ),
+            ({}, ""),
         ],
     )
     def test_short_video_thumbnail_uses_wide_key_not_maxres_or_standard(self, wide_thumbnails, expected_url):
@@ -273,6 +289,9 @@ class TestCollectChannelWithPrefetchedItem:
         video = result["videos"][0]
         assert video["duration_iso"] == "PT45S"
         assert video["thumbnail_url"] == expected_url
+        assert result["avg_views"] == 0
+        assert result["avg_daily_views"] == 0
+        assert result["avg_engagement_rate"] == 0
 
     def test_long_video_thumbnail_keeps_maxres_priority(self):
         youtube = MagicMock()
