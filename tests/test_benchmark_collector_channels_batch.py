@@ -61,6 +61,7 @@ def _video_item(
     description: str = "",
     view_count: str = "20000",
     duration: str = "PT1H30M",
+    thumbnails: dict | None = None,
 ) -> dict:
     return {
         "id": video_id,
@@ -69,7 +70,9 @@ def _video_item(
             "publishedAt": "2026-05-01T12:00:00Z",
             "description": description,
             "tags": ["ambient", "study"],
-            "thumbnails": {"high": {"url": f"https://example.com/{video_id}.jpg"}},
+            "thumbnails": thumbnails
+            if thumbnails is not None
+            else {"high": {"url": f"https://example.com/{video_id}.jpg"}},
         },
         "statistics": {
             "viewCount": view_count,
@@ -224,6 +227,62 @@ class TestCollectChannelWithPrefetchedItem:
         assert video["description"] == description
         assert "description_keywords" in video
         assert "ambientstudy" in video["description_keywords"]
+
+    def test_short_video_thumbnail_uses_wide_key_not_maxres_or_standard(self):
+        youtube = MagicMock()
+        youtube.playlistItems.return_value.list.return_value.execute.return_value = {
+            "items": [{"contentDetails": {"videoId": "VID_SHORT"}}],
+            "nextPageToken": None,
+        }
+        youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [
+                _video_item(
+                    "VID_SHORT",
+                    duration="PT45S",
+                    thumbnails={
+                        "maxres": {"url": "https://example.com/short-maxres-vertical.jpg"},
+                        "standard": {"url": "https://example.com/short-standard-vertical.jpg"},
+                        "high": {"url": "https://example.com/short-high-wide.jpg"},
+                    },
+                )
+            ],
+        }
+        collector = _make_collector(youtube)
+        collector.benchmark_config = {"scan_recent": 1, "min_views": 10000}
+
+        result = collector.collect_channel({"id": "UC_OK", "name": "ok", "slug": "ok"}, _ch_item("UC_OK"))
+
+        video = result["videos"][0]
+        assert video["duration_iso"] == "PT45S"
+        assert video["thumbnail_url"] == "https://example.com/short-high-wide.jpg"
+
+    def test_long_video_thumbnail_keeps_maxres_priority(self):
+        youtube = MagicMock()
+        youtube.playlistItems.return_value.list.return_value.execute.return_value = {
+            "items": [{"contentDetails": {"videoId": "VID_LONG"}}],
+            "nextPageToken": None,
+        }
+        youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [
+                _video_item(
+                    "VID_LONG",
+                    duration="PT1H30M",
+                    thumbnails={
+                        "maxres": {"url": "https://example.com/long-maxres.jpg"},
+                        "standard": {"url": "https://example.com/long-standard.jpg"},
+                        "high": {"url": "https://example.com/long-high.jpg"},
+                    },
+                )
+            ],
+        }
+        collector = _make_collector(youtube)
+        collector.benchmark_config = {"scan_recent": 1, "min_views": 10000}
+
+        result = collector.collect_channel({"id": "UC_OK", "name": "ok", "slug": "ok"}, _ch_item("UC_OK"))
+
+        video = result["videos"][0]
+        assert video["duration_iso"] == "PT1H30M"
+        assert video["thumbnail_url"] == "https://example.com/long-maxres.jpg"
 
 
 class TestCollectAllPrefetchesChannels:

@@ -254,9 +254,9 @@ class BenchmarkCollector:
                     "tags": snippet.get("tags", []),
                     _VIDEO_DESCRIPTION_FIELD: snippet.get(_VIDEO_DESCRIPTION_FIELD, ""),
                     "description_keywords": extract_description_keywords(snippet.get(_VIDEO_DESCRIPTION_FIELD, "")),
-                    "thumbnail_url": self._best_thumbnail_url(snippet.get("thumbnails", {})),
                     "thumbnail_analysis": None,
                 }
+                v["thumbnail_url"] = self._best_thumbnail_url(snippet.get("thumbnails", {}), v)
                 v["daily_views"] = compute_daily_views(v, self.today)
                 v["engagement_rate"] = compute_engagement_rate(v)
                 raw_videos.append(v)
@@ -550,9 +550,20 @@ class BenchmarkCollector:
         return hours == 0 and minutes < 5
 
     @staticmethod
-    def _best_thumbnail_url(thumbnails: dict) -> str:
-        """最高解像度のサムネイルURLを返す。"""
-        for key in ("maxres", "standard", "high", "medium", "default"):
+    def _best_thumbnail_url(thumbnails: dict, video: dict) -> str:
+        """Short は high/medium/default、通常動画は maxres/standard/high/medium/default の順で返す。"""
+        keys = (
+            ("high", "medium", "default")
+            if BenchmarkCollector._is_short(video)
+            else (
+                "maxres",
+                "standard",
+                "high",
+                "medium",
+                "default",
+            )
+        )
+        for key in keys:
             if key in thumbnails:
                 return thumbnails[key]["url"]
         return ""
