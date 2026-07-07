@@ -197,11 +197,11 @@
 | 汎用化できるか | imagegen の「identity-preserve」タクソノミーと概念が近いが、skill-config YAML での定義方法は固有 |
 | 削っても運用が回るか | △ **チャンネル依存**。キャラなしチャンネルには不要。キャラありチャンネルには必須 |
 
-### 3-8. Two-Phase モード（背景 → テキストオーバーレイ）
+### 3-8. Two-Phase モード（既存参照 → thumbnail → textless main）
 
 | 観点 | 詳細 |
 |------|------|
-| 概要 | Phase 1 で背景（`main.png`）を生成し、Phase 2 でテキストオーバーレイを追加する従来方式 |
+| 概要 | Phase 1 で既存参照を選び、Phase 2 でテキスト付き `thumbnail.jpg` を確定し、Phase 3 で承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成するフォールバック |
 | 実装箇所 | SKILL.md「Two-Phase モード」セクション |
 | YouTube 固有か | ✅ **固有**。YouTube サムネのテキスト＋背景合成ワークフローに特化 |
 | 汎用化できるか | imagegen の「edit（inpainting / compositing）」と概念は近いが、2 フェーズに分けた YouTube 専用フロー |
