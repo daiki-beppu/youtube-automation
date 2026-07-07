@@ -20,8 +20,8 @@ const SELECTORS = {
   // 「Lyrics 以外の可視 textarea」述語だけでは Style の特定根拠が弱くなったため一次識別にする。
   stylesWrapper: '[data-testid="create-form-styles-wrapper"]',
   // Song Title 欄は testid/aria/label を持たず placeholder のみ安定 (#844 実 DOM 検証)。
-  // 表記変更 ((Optional) の有無等) に耐えるよう "Song Title" の弱い case-insensitive substring match。
-  title: 'input[placeholder*="Song Title" i]',
+  // 英語 UI は "Song Title (Optional)"、日本語 UI は "曲名(任意)"（2026-07 実 DOM）で出る。
+  title: 'input[placeholder*="Song Title" i], input[placeholder*="曲名"]',
   // Custom Mode > More Options の 3 フィールド (#900、chrome-devtools-mcp で実機確定済み)。
   //   - Exclude styles: native text input/textarea (placeholder / aria-label の表記ゆれを許容)
   //   - Weirdness / Style Influence: radix slider ([role="slider"] + aria-label で区別)
