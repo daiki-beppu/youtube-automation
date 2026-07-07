@@ -118,6 +118,8 @@ git commit -m "chore: submodule automation から uv add git+https へ移行"
 1. `CLIENT_SECRETS_DIR` 環境変数
 2. `<channel_dir>/auth/client_secrets.json`
 3. `<channel_dir>/automation/auth/client_secrets.json`（submodule 互換）
-4. 1Password (`op read`) の `CLIENT_SECRETS_JSON`
+4. `CLIENT_SECRETS_JSON` env / 1Password (`op read`)
+
+`YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` の場合は 4 の `op` 探索と `op read` 起動をスキップし、env/file で解決できなければ最終エラーへ進む。通常テストではこの opt-out を既定有効にし、op fallback 検証だけ明示的に解除する。
 
 いずれかに配置する。

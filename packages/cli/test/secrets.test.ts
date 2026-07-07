@@ -13,6 +13,7 @@ import { reset } from "@youtube-automation/core/config";
 // (5 名前タグ class 撤廃) — the `config:` prefix on plain Error is now the
 // single source of domain truth, routed by toServiceError.
 import {
+  OP_READ_DISABLED_ENV,
   resolveClientSecretsJson,
   resolveSecret,
   SECRET_REFS,
@@ -49,6 +50,8 @@ beforeEach(() => {
     savedEnv[key] = process.env[key];
     Reflect.deleteProperty(process.env, key);
   }
+  savedEnv[OP_READ_DISABLED_ENV] = process.env[OP_READ_DISABLED_ENV];
+  process.env[OP_READ_DISABLED_ENV] = "1";
 });
 
 afterEach(() => {
@@ -59,6 +62,12 @@ afterEach(() => {
     } else {
       process.env[key] = original;
     }
+  }
+  const originalOpReadDisabled = savedEnv[OP_READ_DISABLED_ENV];
+  if (originalOpReadDisabled === undefined) {
+    Reflect.deleteProperty(process.env, OP_READ_DISABLED_ENV);
+  } else {
+    process.env[OP_READ_DISABLED_ENV] = originalOpReadDisabled;
   }
 });
 
@@ -125,6 +134,7 @@ describe("resolveSecret env path", () => {
   test("ignores an empty env value and falls through to op", async () => {
     // Given an env var set to an empty string (falsy, like secrets.py:56)
     process.env.OPENAI_API_KEY = "";
+    process.env[OP_READ_DISABLED_ENV] = "0";
     const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
     const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
       fakeProc("op-openai-value\n", 0)
@@ -146,6 +156,7 @@ describe("resolveSecret env path", () => {
 describe("resolveSecret op path", () => {
   test("returns the trimmed op read output", async () => {
     // Given no env var but an available op CLI returning a value
+    process.env[OP_READ_DISABLED_ENV] = "0";
     const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
     const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
       fakeProc("  op-secret-value  \n", 0)
@@ -163,6 +174,7 @@ describe("resolveSecret op path", () => {
 
   test("invokes `op read` with the mapped reference URI, not the name", async () => {
     // Given an available op CLI
+    process.env[OP_READ_DISABLED_ENV] = "0";
     const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
     const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
       fakeProc("value\n", 0)
@@ -185,6 +197,7 @@ describe("resolveSecret op path", () => {
 
   test("throws a config:-prefixed error when op exits non-zero", async () => {
     // Given an available op CLI that fails (e.g. not signed in)
+    process.env[OP_READ_DISABLED_ENV] = "0";
     const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
     const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(fakeProc("", 1));
 
@@ -200,6 +213,7 @@ describe("resolveSecret op path", () => {
 
   test("throws a config:-prefixed error when op succeeds but output is blank", async () => {
     // Given op exits 0 but yields only whitespace
+    process.env[OP_READ_DISABLED_ENV] = "0";
     const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
     const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(fakeProc("   \n", 0));
 
@@ -228,6 +242,7 @@ describe("resolveSecret failures", () => {
 
   test("throws a config:-prefixed error when env is unset and op is unavailable", async () => {
     // Given no env var and no op CLI on PATH (secrets.py:60 false branch)
+    process.env[OP_READ_DISABLED_ENV] = "0";
     const whichSpy = spyOn(Bun, "which").mockReturnValue(null);
 
     // When resolving the name
@@ -237,6 +252,26 @@ describe("resolveSecret failures", () => {
     await expect(promise).rejects.toThrow(/OPENAI_API_KEY/u);
 
     whichSpy.mockRestore();
+  });
+
+  test("does not consult op when test harness disables op read", async () => {
+    // Given normal test harness settings and a real-looking op on PATH
+    process.env[OP_READ_DISABLED_ENV] = "1";
+    const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
+    const spawnSpy = spyOn(Bun, "spawn").mockReturnValue(
+      fakeProc("value\n", 0)
+    );
+
+    // When resolving without env
+    const promise = resolveSecret("OPENAI_API_KEY");
+
+    // Then resolution fails without touching the op CLI discovery/spawn path
+    await expect(promise).rejects.toThrow(/^config:/u);
+    expect(whichSpy).not.toHaveBeenCalled();
+    expect(spawnSpy).not.toHaveBeenCalled();
+
+    whichSpy.mockRestore();
+    spawnSpy.mockRestore();
   });
 
   test("the thrown failure is a plain Error tagged by the config: prefix", async () => {
@@ -263,6 +298,9 @@ describe("resolveSecret failures", () => {
 //   2. <channel>/auth/client_secrets.json
 //   3. <channel>/automation/auth/client_secrets.json
 //   4. CLIENT_SECRETS_JSON env / op read SECRET_REFS.CLIENT_SECRETS_JSON
+//      (`YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` skips op discovery/spawn and
+//      proceeds to the final error; normal tests enable this by default, and
+//      op fallback tests explicitly opt back in)
 // The return value is the JSON *content* string (not a path), per the
 // `clientSecretsJson: string` contract.
 describe("resolveClientSecretsJson", () => {
@@ -473,6 +511,7 @@ describe("resolveClientSecretsJson", () => {
     // Given a channel dir without any client_secrets.json file (step 4 op path)
     const dir = makeChannelDir();
     process.env.CHANNEL_DIR = dir;
+    process.env[OP_READ_DISABLED_ENV] = "0";
     reset();
     const opJson = '{"installed":{"client_id":"from-op"}}';
     const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
@@ -500,6 +539,7 @@ describe("resolveClientSecretsJson", () => {
     // Given no env, a channel dir without the file, and no op CLI on PATH
     const dir = makeChannelDir();
     process.env.CHANNEL_DIR = dir;
+    process.env[OP_READ_DISABLED_ENV] = "0";
     reset();
     const whichSpy = spyOn(Bun, "which").mockReturnValue(null);
 

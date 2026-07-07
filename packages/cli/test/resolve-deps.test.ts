@@ -21,6 +21,7 @@ import { join, resolve } from "node:path";
 import { reset } from "@youtube-automation/core/config";
 
 import { resolveDeps } from "../lib/resolve-deps.ts";
+import { OP_READ_DISABLED_ENV } from "../lib/secrets.ts";
 
 // --- env harness ---------------------------------------------------------
 
@@ -34,6 +35,8 @@ beforeEach(() => {
     savedEnv[key] = process.env[key];
     Reflect.deleteProperty(process.env, key);
   }
+  savedEnv[OP_READ_DISABLED_ENV] = process.env[OP_READ_DISABLED_ENV];
+  process.env[OP_READ_DISABLED_ENV] = "1";
   reset();
 });
 
@@ -45,6 +48,12 @@ afterEach(() => {
     } else {
       process.env[key] = original;
     }
+  }
+  const originalOpReadDisabled = savedEnv[OP_READ_DISABLED_ENV];
+  if (originalOpReadDisabled === undefined) {
+    Reflect.deleteProperty(process.env, OP_READ_DISABLED_ENV);
+  } else {
+    process.env[OP_READ_DISABLED_ENV] = originalOpReadDisabled;
   }
   reset();
   while (tmpDirs.length > 0) {
@@ -212,6 +221,7 @@ describe("resolveDeps — yt + ytAnalytics share a single auth dance", () => {
   test("resolves the token once (op consulted a single time) and builds both clients", async () => {
     const dir = makeChannelDir();
     process.env.CHANNEL_DIR = dir;
+    process.env[OP_READ_DISABLED_ENV] = "0";
     seedValidToken(dir);
     reset();
     const whichSpy = spyOn(Bun, "which").mockReturnValue("/usr/bin/op");
