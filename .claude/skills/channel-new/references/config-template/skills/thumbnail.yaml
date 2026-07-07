@@ -35,7 +35,7 @@ image_generation:
     brand_background: "{{BRAND_BACKGROUND}}"
 
     # TTP 参照画像（channel-direction で選定した TTP 対象の代表サムネ）。
-    # path_base: channel_dir なので channel_dir からの相対パスで列挙する
+    # path_base: channel_dir なのでプロジェクトルートからの相対パスで列挙する
     reference_images:
       default:
         - "{{REFERENCE_IMAGE_1}}"

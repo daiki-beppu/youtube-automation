@@ -118,7 +118,7 @@ image_generation:
     #     - data/thumbnail_compare/benchmark/<channel>-<vid1>.jpg
     #     - data/thumbnail_compare/benchmark/<channel>-<vid2>.jpg
     #     - data/thumbnail_compare/benchmark/<channel>-<vid3>.jpg
-    #   path_base: channel_dir  # channel_dir からの相対パス
+    #   path_base: channel_dir  # プロジェクトルートからの相対パス
     #   notes: ""
 
     # stock 再利用 (#364 PR-B): assets/stock/<theme>/ のボツ画像を参照プールに
@@ -199,7 +199,7 @@ image_generation:
       overlay:
         font:
           # タイトル行のフォントファイル (.ttf / .otf / .ttc)。
-          # 絶対パス、または channel_dir からの相対パスで指定 (必須)。
+          # 絶対パス、またはプロジェクトルートからの相対パスで指定 (必須)。
           # 例) title: "assets/fonts/NotoSansJP-Bold.ttf"
           title: ""
           # チャンネル名のフォント。未設定なら title を継承
