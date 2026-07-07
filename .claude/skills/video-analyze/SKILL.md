@@ -112,7 +112,7 @@ skill-config (`.claude/skills/video-analyze/config.default.yaml`):
 `bgm_arc.outro` は「動画全体のアウトロ」ではなく「窓内終盤」を指すため、下流での平均計算や
 フェーズ設計に使う際は「冒頭 N 分のデータ」である前提で扱うこと。
 
-- `/channel-direction` — Step 1 の分析サマリーで `bgm_arc` 平均（intro / peak / outro 秒）を提示し、
+- `/channel-new`（方向性検討モード） — Step D1 の分析サマリーで `bgm_arc` 平均（intro / peak / outro 秒）を提示し、
   Step 2 の議論ポイント「6. 競合の BGM 構造」と Step 3 決定事項「BGM 構造方針」の根拠データとして使う
 - `/suno` — Instructions 冒頭で `bgm_arc` 平均を読み込み、4 パターンの起伏配置の初期値とする。
   `scene_timeline[].summary` は情景フレーズ設計ルール 5 の素材として利用（コピペ禁止、世界観翻訳）

@@ -1090,6 +1090,22 @@ class TestBootstrapChecks:
         assert "旧 channel-import skill が残存" in r.message
         assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
 
+    def test_skills_synced_legacy_channel_direction_orphan_is_fail_with_prune(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-new", "setup"])
+        for skill_name in ["channel-new", "setup", "channel-direction"]:
+            skill_dir = tmp_path / ".claude" / "skills" / skill_name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(f"# {skill_name}", encoding="utf-8")
+        agents_dir = tmp_path / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(tmp_path)
+        assert r.status == "fail"
+        assert r.category == "bootstrap"
+        assert "旧 channel-direction skill が残存" in r.message
+        assert r.next_action["cmd"] == "uv run yt-skills sync --asset skills --force --prune --yes"
+
     def test_skills_synced_legacy_channel_setup_orphan_is_fail_with_prune(self, tmp_path, monkeypatch):
         monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-new", "setup"])
         for skill_name in ["channel-new", "setup", "channel-setup"]:
