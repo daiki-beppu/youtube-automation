@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import re
@@ -11,7 +12,7 @@ import subprocess
 import sys
 import tomllib
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -892,6 +893,200 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
                     "instructions": ("/channel-new（既存チャンネル取り込みモード）を実行して設定を修復してください"),
                 },
             )
+
+
+def check_playlist_config(channel_dir: Path) -> CheckResult:
+    path = channel_dir / "config" / "channel" / "playlists.json"
+    if not path.exists():
+        return CheckResult(
+            id="playlist_config",
+            status="warn",
+            category=CHANNEL_CATEGORY,
+            message="config/channel/playlists.json が存在しない",
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "/channel-setup で config/channel/playlists.json を作成し、"
+                    "playlist スキルが使う playlists 定義を追加してください"
+                ),
+            },
+        )
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        return CheckResult(
+            id="playlist_config",
+            status="fail",
+            category=CHANNEL_CATEGORY,
+            message=f"config/channel/playlists.json JSON パース失敗: {e}",
+            next_action={
+                "kind": "human",
+                "instructions": "config/channel/playlists.json の JSON 構文を修正してください",
+            },
+        )
+    except OSError as e:
+        return CheckResult(
+            id="playlist_config",
+            status="fail",
+            category=CHANNEL_CATEGORY,
+            message=f"config/channel/playlists.json 読み込み失敗: {e}",
+            next_action={
+                "kind": "human",
+                "instructions": "config/channel/playlists.json の存在と読み取り権限を確認してください",
+            },
+        )
+
+    if not isinstance(data, dict):
+        return CheckResult(
+            id="playlist_config",
+            status="fail",
+            category=CHANNEL_CATEGORY,
+            message="config/channel/playlists.json のトップレベルは object でなければなりません",
+            next_action={
+                "kind": "human",
+                "instructions": 'config/channel/playlists.json を {"playlists": {...}} 形式に修正してください',
+            },
+        )
+
+    playlists = data.get("playlists")
+    if playlists is None:
+        return CheckResult(
+            id="playlist_config",
+            status="warn",
+            category=CHANNEL_CATEGORY,
+            message="config/channel/playlists.json に playlists セクションがありません",
+            next_action={
+                "kind": "human",
+                "instructions": "config/channel/playlists.json に playlists セクションを追加してください",
+            },
+        )
+    if not isinstance(playlists, dict):
+        return CheckResult(
+            id="playlist_config",
+            status="fail",
+            category=CHANNEL_CATEGORY,
+            message=f"playlists セクションは object でなければなりません（got {type(playlists).__name__}）",
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    'playlists セクションを {"key": {"playlist_id": "...", "title": "..."}} 形式に修正してください'
+                ),
+            },
+        )
+
+    invalid_entries: list[str] = []
+    missing_playlist_ids: list[str] = []
+    for key, value in playlists.items():
+        if isinstance(value, str):
+            if not value.strip():
+                missing_playlist_ids.append(key)
+            continue
+        if isinstance(value, dict):
+            playlist_id = value.get("playlist_id")
+            if not isinstance(playlist_id, str) or not playlist_id.strip():
+                missing_playlist_ids.append(key)
+            continue
+        invalid_entries.append(f"{key} ({type(value).__name__})")
+
+    if invalid_entries:
+        return CheckResult(
+            id="playlist_config",
+            status="fail",
+            category=CHANNEL_CATEGORY,
+            message=f"playlists の値は string または object でなければなりません: {', '.join(invalid_entries)}",
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "各 playlist 定義を playlist_id 文字列、または playlist_id/title を持つ object に修正してください"
+                ),
+            },
+        )
+
+    if missing_playlist_ids:
+        return CheckResult(
+            id="playlist_config",
+            status="warn",
+            category=CHANNEL_CATEGORY,
+            message=f"playlist_id 未設定: {', '.join(missing_playlist_ids)}",
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "`uv run yt-playlist-manager --init --dry-run` で作成計画を確認し、"
+                    "問題なければ `uv run yt-playlist-manager --init` で playlist_id を書き戻してください"
+                ),
+            },
+        )
+
+    return CheckResult(
+        id="playlist_config",
+        status="ok",
+        category=CHANNEL_CATEGORY,
+        message=f"config/channel/playlists.json ロード成功 ({len(playlists)} 件)",
+    )
+
+
+def check_playlist_create_dry_run(channel_dir: Path) -> CheckResult:
+    from youtube_automation.scripts.playlist_manager import PlaylistManager
+    from youtube_automation.utils.exceptions import ConfigError
+
+    with _temporary_channel_dir(channel_dir):
+        try:
+            manager = PlaylistManager()
+            missing_titles = [
+                key
+                for key, playlist in manager.config.playlists.items.items()
+                if not playlist.get("playlist_id")
+                and (not isinstance(playlist.get("title"), str) or not playlist["title"].strip())
+            ]
+            if missing_titles:
+                return CheckResult(
+                    id="playlist_create_dry_run",
+                    status="fail",
+                    category=CHANNEL_CATEGORY,
+                    message=f"playlist 作成 dry-run の title 未設定: {', '.join(missing_titles)}",
+                    next_action={
+                        "kind": "human",
+                        "instructions": (
+                            "playlist_id 未設定の playlist 定義には title を追加してください。"
+                            "`uv run yt-playlist-manager --init --dry-run` の作成計画に必要です"
+                        ),
+                    },
+                )
+            with redirect_stdout(io.StringIO()):
+                manager.create_all_playlists(dry_run=True)
+        except ConfigError as e:
+            return CheckResult(
+                id="playlist_create_dry_run",
+                status="fail",
+                category=CHANNEL_CATEGORY,
+                message=f"playlist 作成 dry-run の設定ロード失敗: {e}",
+                next_action={
+                    "kind": "human",
+                    "instructions": "config/channel/*.json と config/channel/playlists.json の設定を修正してください",
+                },
+            )
+        except (OSError, RuntimeError, TypeError, ValueError) as e:
+            return CheckResult(
+                id="playlist_create_dry_run",
+                status="fail",
+                category=CHANNEL_CATEGORY,
+                message=f"playlist 作成 dry-run 失敗: {e}",
+                next_action={
+                    "kind": "human",
+                    "instructions": (
+                        "`uv run yt-playlist-manager --init --dry-run` を実行し、"
+                        "表示されたエラーに従って playlists.json または認証/API 前提を修正してください"
+                    ),
+                },
+            )
+
+    return CheckResult(
+        id="playlist_create_dry_run",
+        status="ok",
+        category=CHANNEL_CATEGORY,
+        message="PlaylistManager.create_all_playlists(dry_run=True) 成功",
+    )
 
 
 @contextmanager
@@ -2207,6 +2402,8 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
         check_client_secrets(channel_dir),
         check_oauth_token(channel_dir),
         check_channel_config(channel_dir),
+        check_playlist_config(channel_dir),
+        check_playlist_create_dry_run(channel_dir),
         check_analytics_report(channel_dir),
         check_benchmark_data(channel_dir),
         check_ttp_wf_new_readiness(channel_dir),

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(doctor)`: `yt-doctor` に playlist スキル向けの `playlist_config` / `playlist_create_dry_run` チェックを追加（#1504）。`config/channel/playlists.json` の欠落・JSON 破損・`playlist_id` 未設定を channel カテゴリで診断し、`PlaylistManager.create_all_playlists(dry_run=True)` 経路で作成計画を検証する。dry-run は YouTube API への書き込みを行わず、失敗時は human next_action で設定修正手順を示す。
 - `feat(cli)`: 下流リポの automation 追従を機械実行する `yt-automation-update` CLI を追加（#1473）。`check` が実行場所・pin 形式（inline table / URL 直接参照の tag pin、main 追従、sha pin）・upstream 最新リリースとの差分を判定し exit code（0=最新 / 1=差分あり / 2=エラー）で返す。`apply` が pin 書き換え → `uv lock` → `yt-skills sync`（skills / claude-md 両 asset）→ smoke check（`yt-skills list` / `yt-config-migrate verify`）を順に実行し、失敗ステップを明示して非 0 終了する。commit / push は責務外（スキル・人間側に残置）
 - `feat(video-description)`: `yt-title-duplicate-check` に YouTube タイトル上限（100 codepoint）の前倒しチェックを追加した。超過時は `--strict` に関係なく exit 1 で報告し、`/video-description` の品質チェックにも「100 codepoint 以内」を明記。upload preflight（`agents/_preflight.py`）まで持ち越すと quota と時間を浪費するため、タイトル案の保存前に検出する（下流チャンネル実例: 104 codepoint でアップロード時に fail、2026-07-05）
 - `feat(thumbnail)`: サムネイル文字フォントを安定して指定できる決定的合成経路を追加（#1332）。`yt-thumbnail-text` CLI が textless 背景（`main.png` 系）に実フォントファイル（.ttf/.otf/.ttc）を Pillow で描画し、同一の背景・テキスト・設定なら常に同一の出力を生成する。フォント指定は skill-config `image_generation.gemini.thumbnail_text.overlay`（`config/skills/thumbnail.yaml`）で行い、フォント未設定・ファイル不在時は理由と代替手順（AI 経路へのフォールバック含む）を明示して停止する。AI プロンプト経路向けにも `single_step.typography_clause` を追加し、SKILL.md に 2 経路の使い分けを示す「フォント安定化」章を新設

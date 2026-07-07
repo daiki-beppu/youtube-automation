@@ -85,6 +85,15 @@ def _write_minimal_config(base: Path) -> None:
     )
 
 
+def _write_playlists_config(base: Path, playlists: object) -> None:
+    config_dir = base / "config" / "channel"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "playlists.json").write_text(
+        json.dumps({"playlists": playlists}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
 def _write_benchmark_channels_value(base: Path, channels: object) -> None:
     config_dir = base / "config" / "channel"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -623,8 +632,8 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 7 bootstrap + 11 api + 1 channel + 4 data + 1 upload = 24
-        assert len(payload["checks"]) == 24
+        # 7 bootstrap + 11 api + 3 channel + 4 data + 1 upload = 26
+        assert len(payload["checks"]) == 26
         for c in payload["checks"]:
             assert c["status"] in ("ok", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
@@ -639,6 +648,46 @@ class TestMain:
         out = capsys.readouterr().out
         assert "summary:" in out
         assert "channel_dir:" in out
+
+    def test_json_output_suppresses_playlist_dry_run_stdout(self, monkeypatch, tmp_path, capsys):
+        _write_minimal_config(tmp_path)
+        _write_playlists_config(tmp_path, {"main": {"title": "Main Playlist"}})
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        monkeypatch.setattr(doctor, "resolve_channel_dir", lambda t: tmp_path)
+
+        def fail_if_youtube_requested():
+            raise AssertionError("YouTube API should not be requested during playlist create dry-run")
+
+        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.get_youtube", fail_if_youtube_requested)
+
+        code = doctor.main(["--json"])
+
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "[DRY-RUN]" not in out
+        payload = json.loads(out)
+        assert payload["channel_dir"] == str(tmp_path)
+        playlist_check = next(c for c in payload["checks"] if c["id"] == "playlist_create_dry_run")
+        assert playlist_check["status"] == "ok"
+
+    def test_human_output_suppresses_playlist_dry_run_stdout(self, monkeypatch, tmp_path, capsys):
+        _write_minimal_config(tmp_path)
+        _write_playlists_config(tmp_path, {"main": {"title": "Main Playlist"}})
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        monkeypatch.setattr(doctor, "resolve_channel_dir", lambda t: tmp_path)
+
+        def fail_if_youtube_requested():
+            raise AssertionError("YouTube API should not be requested during playlist create dry-run")
+
+        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.get_youtube", fail_if_youtube_requested)
+
+        code = doctor.main([])
+
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "[DRY-RUN]" not in out
+        assert "summary:" in out
+        assert "playlist_create_dry_run" in out
 
 
 # ---------------------------------------------------------------------------
@@ -742,6 +791,202 @@ class TestCheckChannelConfig:
         doctor.check_channel_config(tmp_path)
 
         assert "CHANNEL_DIR" not in os.environ
+
+
+class TestCheckPlaylistConfig:
+    def test_valid_playlists_config_is_ok(self, tmp_path):
+        _write_playlists_config(
+            tmp_path,
+            {
+                "main": {"playlist_id": "PL_MAIN", "title": "Main"},
+                "archive": "PL_ARCHIVE",
+            },
+        )
+
+        r = doctor.check_playlist_config(tmp_path)
+
+        assert r.id == "playlist_config"
+        assert r.category == "channel"
+        assert r.status == "ok"
+        assert "2 件" in r.message
+
+    def test_missing_playlists_json_is_warn_with_human_action(self, tmp_path):
+        r = doctor.check_playlist_config(tmp_path)
+
+        assert r.status == "warn"
+        assert "playlists.json が存在しない" in r.message
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+        assert "/channel-setup" in r.next_action["instructions"]
+
+    def test_broken_json_is_fail_with_human_action(self, tmp_path):
+        config_dir = tmp_path / "config" / "channel"
+        config_dir.mkdir(parents=True)
+        (config_dir / "playlists.json").write_text("{broken json", encoding="utf-8")
+
+        r = doctor.check_playlist_config(tmp_path)
+
+        assert r.status == "fail"
+        assert "JSON パース失敗" in r.message
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+        assert "JSON 構文" in r.next_action["instructions"]
+
+    def test_read_error_is_fail_with_human_action(self, tmp_path):
+        config_dir = tmp_path / "config" / "channel"
+        config_dir.mkdir(parents=True)
+        (config_dir / "playlists.json").mkdir()
+
+        r = doctor.check_playlist_config(tmp_path)
+
+        assert r.status == "fail"
+        assert "読み込み失敗" in r.message
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+        assert "読み取り権限" in r.next_action["instructions"]
+
+    def test_top_level_non_object_is_fail_with_human_action(self, tmp_path):
+        config_dir = tmp_path / "config" / "channel"
+        config_dir.mkdir(parents=True)
+        (config_dir / "playlists.json").write_text(json.dumps(["main"]), encoding="utf-8")
+
+        r = doctor.check_playlist_config(tmp_path)
+
+        assert r.status == "fail"
+        assert "トップレベルは object" in r.message
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+        assert '{"playlists": {...}}' in r.next_action["instructions"]
+
+    def test_missing_playlists_section_is_warn_with_human_action(self, tmp_path):
+        config_dir = tmp_path / "config" / "channel"
+        config_dir.mkdir(parents=True)
+        (config_dir / "playlists.json").write_text(json.dumps({"other": {}}), encoding="utf-8")
+
+        r = doctor.check_playlist_config(tmp_path)
+
+        assert r.status == "warn"
+        assert "playlists セクションがありません" in r.message
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+        assert "playlists セクションを追加" in r.next_action["instructions"]
+
+    def test_playlists_section_non_object_is_fail_with_human_action(self, tmp_path):
+        _write_playlists_config(tmp_path, ["PL_MAIN"])
+
+        r = doctor.check_playlist_config(tmp_path)
+
+        assert r.status == "fail"
+        assert "playlists セクションは object" in r.message
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+        assert '{"key": {"playlist_id": "...", "title": "..."}}' in r.next_action["instructions"]
+
+    def test_missing_playlist_id_is_warn_with_init_instructions(self, tmp_path):
+        _write_playlists_config(
+            tmp_path,
+            {
+                "main": {"playlist_id": "", "title": "Main"},
+                "focus": {"title": "Focus"},
+                "archive": "PL_ARCHIVE",
+            },
+        )
+
+        r = doctor.check_playlist_config(tmp_path)
+
+        assert r.status == "warn"
+        assert "playlist_id 未設定: main, focus" in r.message
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+        assert "yt-playlist-manager --init --dry-run" in r.next_action["instructions"]
+
+    def test_invalid_playlist_entry_shape_is_fail(self, tmp_path):
+        _write_playlists_config(tmp_path, {"main": ["PL_MAIN"]})
+
+        r = doctor.check_playlist_config(tmp_path)
+
+        assert r.status == "fail"
+        assert "string または object" in r.message
+        assert r.next_action is not None
+
+
+class TestCheckPlaylistCreateDryRun:
+    def test_calls_playlist_manager_create_all_playlists_with_dry_run(self, tmp_path, monkeypatch):
+        from youtube_automation.scripts.playlist_manager import PlaylistManager
+
+        _write_minimal_config(tmp_path)
+        _write_playlists_config(tmp_path, {"main": {"playlist_id": "PL_MAIN", "title": "Main"}})
+        calls: list[bool] = []
+
+        def fake_create_all_playlists(self, *, dry_run):
+            calls.append(dry_run)
+            return {}
+
+        monkeypatch.setattr(PlaylistManager, "create_all_playlists", fake_create_all_playlists)
+
+        r = doctor.check_playlist_create_dry_run(tmp_path)
+
+        assert r.status == "ok"
+        assert calls == [True]
+
+    def test_dry_run_uses_real_path_without_youtube_api_write(self, tmp_path, monkeypatch, capsys):
+        _write_minimal_config(tmp_path)
+        _write_playlists_config(tmp_path, {"main": {"title": "Main Playlist"}})
+
+        def fail_if_youtube_requested():
+            raise AssertionError("YouTube API should not be requested during playlist create dry-run")
+
+        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.get_youtube", fail_if_youtube_requested)
+
+        r = doctor.check_playlist_create_dry_run(tmp_path)
+
+        assert r.status == "ok"
+        assert "[DRY-RUN]" not in capsys.readouterr().out
+
+    def test_dry_run_missing_title_is_fail_with_human_action(self, tmp_path, monkeypatch):
+        _write_minimal_config(tmp_path)
+        _write_playlists_config(tmp_path, {"main": {"playlist_id": ""}})
+
+        def fail_if_youtube_requested():
+            raise AssertionError("YouTube API should not be requested when playlist title is missing")
+
+        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.get_youtube", fail_if_youtube_requested)
+
+        r = doctor.check_playlist_create_dry_run(tmp_path)
+
+        assert r.status == "fail"
+        assert "title 未設定: main" in r.message
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+        assert "title を追加" in r.next_action["instructions"]
+
+    def test_dry_run_config_error_is_fail_with_human_action(self, tmp_path):
+        r = doctor.check_playlist_create_dry_run(tmp_path)
+
+        assert r.status == "fail"
+        assert "設定ロード失敗" in r.message
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+        assert "config/channel" in r.next_action["instructions"]
+
+    def test_dry_run_exception_is_fail_with_human_action(self, tmp_path, monkeypatch):
+        from youtube_automation.scripts.playlist_manager import PlaylistManager
+
+        _write_minimal_config(tmp_path)
+        _write_playlists_config(tmp_path, {"main": {"playlist_id": "PL_MAIN", "title": "Main"}})
+
+        def fail_create_all_playlists(self, *, dry_run):
+            raise RuntimeError("dry-run failed")
+
+        monkeypatch.setattr(PlaylistManager, "create_all_playlists", fail_create_all_playlists)
+
+        r = doctor.check_playlist_create_dry_run(tmp_path)
+
+        assert r.status == "fail"
+        assert "dry-run failed" in r.message
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+        assert "yt-playlist-manager --init --dry-run" in r.next_action["instructions"]
 
 
 class TestCheckInitialSetupReadiness:
@@ -3335,11 +3580,11 @@ class TestCheckNumberedDuplicates:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_24_checks(self, monkeypatch, tmp_path):
-        """7 bootstrap + 11 api + 1 channel + 4 data + 1 upload = 計 24 件."""
+    def test_returns_26_checks(self, monkeypatch, tmp_path):
+        """7 bootstrap + 11 api + 3 channel + 4 data + 1 upload = 計 26 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 24
+        assert len(results) == 26
 
     def test_existing_11_api_checks_present(self, monkeypatch, tmp_path):
         """既存 11 check が全て api カテゴリで含まれている."""
@@ -3358,6 +3603,8 @@ class TestRunAllChecksExtended:
         assert "automation_package" in ids
         assert "skills_synced" in ids
         assert "channel_config" in ids
+        assert "playlist_config" in ids
+        assert "playlist_create_dry_run" in ids
         assert "analytics_report" in ids
         assert "benchmark_data" in ids
         assert "ttp_wf_new_readiness" in ids
@@ -3382,13 +3629,12 @@ class TestRunAllChecksExtended:
         assert first_channel < first_data
         assert first_data < first_upload
 
-    def test_channel_config_is_only_channel_check(self, monkeypatch, tmp_path):
-        """channel カテゴリは channel_config の 1 件のみ."""
+    def test_channel_checks_include_config_and_playlist_checks(self, monkeypatch, tmp_path):
+        """channel カテゴリは channel_config と playlist 系 check を含む."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        channel_results = [r for r in results if r.category == "channel"]
-        assert len(channel_results) == 1
-        assert channel_results[0].id == "channel_config"
+        channel_ids = [r.id for r in results if r.category == "channel"]
+        assert channel_ids == ["channel_config", "playlist_config", "playlist_create_dry_run"]
 
     def test_bootstrap_checks_are_tool_setup_checks(self, monkeypatch, tmp_path):
         """bootstrap カテゴリはツール・automation 導入系 check のみ."""
@@ -3456,6 +3702,8 @@ class TestRenderTableCategories:
         assert "automation_package" in output
         assert "skills_synced" in output
         assert "channel_config" in output
+        assert "playlist_config" in output
+        assert "playlist_create_dry_run" in output
         assert "analytics_report" in output
         assert "benchmark_data" in output
         assert "ttp_wf_new_readiness" in output
