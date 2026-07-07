@@ -79,15 +79,6 @@ async function loadContentScript(
 
   vi.doMock("../lib/preset-state", () => ({
     applyJitter: (baseMs: number) => baseMs,
-    readSpeedPresetId: vi.fn(() => Promise.resolve("balanced")),
-    resolveSpeedPreset: vi.fn(() => ({
-      maxInflightRequests: 10,
-      maxInjectRetry: 0,
-      maxEntryRetry: 0,
-      injectAckTimeoutMs: 1,
-      interCreateDelayMs: 0,
-      jitterMs: 0,
-    })),
   }));
 
   vi.doMock("../lib/bridge-listener", () => ({

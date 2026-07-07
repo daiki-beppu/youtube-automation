@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { DEFAULT_URL, DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
+import { DEFAULT_URL, DOWNLOAD_FORMAT_DEFAULT } from "../../shared/constants";
 import {
   buildInitialPatternSelection,
   reconcilePatternSelection,
@@ -11,8 +11,6 @@ import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../
 import { PatternList } from "./PatternList";
 import { useSunoRunner } from "./useSunoRunner";
 
-// 実行モード selector の表示順 (#875)。Fast → Balanced → Safe で速度順に並べる。
-const SPEED_PRESET_ORDER: SpeedPresetId[] = ["fast", "balanced", "safe"];
 const DOWNLOAD_FORMAT_OPTIONS: DownloadFormat[] = ["mp3", "m4a", "wav"];
 
 export function App() {
@@ -32,8 +30,6 @@ export function App() {
     canRun,
     isRunning,
     playlistName,
-    speedPresetId,
-    setSpeedPreset,
     resumeBanner,
     acceptResume,
     dismissResume,
@@ -215,28 +211,6 @@ export function App() {
           </button>
         </div>
       )}
-
-      <fieldset className="flex flex-col gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
-        <legend className="px-1 text-xs text-gray-600">実行モード</legend>
-        {SPEED_PRESET_ORDER.map((id) => {
-          const preset = SPEED_PRESETS[id];
-          return (
-            <label key={id} className="flex items-start gap-2">
-              <input
-                type="radio"
-                name="speed-preset"
-                className="mt-1"
-                checked={speedPresetId === id}
-                onChange={() => setSpeedPreset(id)}
-              />
-              <span className="flex flex-col">
-                <span className="font-medium">{preset.label}</span>
-                <span className="text-xs text-gray-500">{preset.riskNote}</span>
-              </span>
-            </label>
-          );
-        })}
-      </fieldset>
 
       <label className="flex flex-col gap-1 text-sm">
         DL 形式
