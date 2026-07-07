@@ -123,6 +123,19 @@ function jsonResponse(status: number, body: unknown): Response {
   } as Response;
 }
 
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolvePromise: (value: T) => void = () => undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return { promise, resolve: resolvePromise };
+}
+
 function setInputValue(input: HTMLInputElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   if (!setter) {
@@ -157,6 +170,12 @@ function expectRangeUiAbsent(container: HTMLElement): void {
   expect(container.querySelector('input[name="range-mode"]')).toBeNull();
   expect(container.querySelector('[aria-label="開始 entry"]')).toBeNull();
   expect(container.querySelector('[aria-label="終了 entry"]')).toBeNull();
+}
+
+function expectControl(container: HTMLElement, control: string): HTMLElement {
+  const element = container.querySelector<HTMLElement>(`[data-suno-control="${control}"]`);
+  expect(element).not.toBeNull();
+  return element!;
 }
 
 async function waitFor(assertion: () => void): Promise<void> {
@@ -233,10 +252,14 @@ describe("Suno popup compatibility check", () => {
 
   it("progress handler が DONE + duration-check log を受けると live status を更新する", async () => {
     expect(messagingMocks.progressHandler).toBeDefined();
+    const panel = container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]');
+    expect(panel).not.toBeNull();
+    expect(panel?.dataset.sunoPhase).toBe("idle");
 
     await act(async () => {
       messagingMocks.progressHandler?.({ data: { phase: PHASE.DONE, index: 1, total: 3 } });
     });
+    expect(panel?.dataset.sunoPhase).toBe(PHASE.DONE);
     expect(container.textContent).not.toContain('"p2": 259s ✓');
 
     await act(async () => {
@@ -251,6 +274,99 @@ describe("Suno popup compatibility check", () => {
     });
 
     expect(container.textContent).toContain('"p2": 259s ✓');
+    expect(container.querySelector('[role="status"]')?.getAttribute("data-suno-status")).toBe("ok");
+  });
+
+  it("agent 操作用の root 状態属性と主要 control selector を実 DOM に公開する", async () => {
+    const entries = [
+      { name: "p1", style: "lofi", lyrics: "" },
+      { name: "p2", style: "ambient", lyrics: "" },
+    ];
+    const panel = container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]');
+    expect(panel).not.toBeNull();
+    expect(panel?.dataset.sunoPhase).toBe("idle");
+    expect(panel?.dataset.sunoRunning).toBe("false");
+    expect(panel?.dataset.sunoError).toBe("false");
+    expect(panel?.dataset.sunoCollectionId).toBe("");
+    expect(panel?.dataset.sunoEntryCount).toBe("0");
+    expect(panel?.dataset.sunoSelectedEntryCount).toBe("0");
+    for (const control of ["server-url", "collection-select", "fetch-data", "run", "stop"]) {
+      expectControl(container, control);
+    }
+
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a",
+            channel: "clm",
+            theme: "theme-a",
+            status: "ready",
+            pattern_count: 2,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+
+    await act(async () => {
+      setInputValue(expectControl(container, "server-url") as HTMLInputElement, BASE_URL);
+    });
+    await act(async () => {
+      expectControl(container, "fetch-data").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("2 パターンを取得しました。");
+    });
+    expect(panel?.dataset.sunoPhase).toBe("idle");
+    expect(panel?.dataset.sunoRunning).toBe("false");
+    expect(panel?.dataset.sunoError).toBe("false");
+    expect(panel?.dataset.sunoCollectionId).toBe("20260601-clm-theme-a-collection");
+    expect(panel?.dataset.sunoEntryCount).toBe("2");
+    expect(panel?.dataset.sunoSelectedEntryCount).toBe("2");
+    expect(container.querySelector('[role="status"]')?.getAttribute("data-suno-status")).toBe("ok");
+    expect(container.querySelector("[data-suno-entry-list]")).not.toBeNull();
+    expect(container.querySelectorAll("[data-suno-entry-index]")).toHaveLength(2);
+    for (const control of ["adopt-selected-clips", "retry-playlist", "retry-download"]) {
+      expectControl(container, control);
+    }
+  });
+
+  it("データ取得中と取得失敗を root phase と status 属性で公開する", async () => {
+    const versionResponse = deferred<Response>();
+    const panel = container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]');
+    expect(panel).not.toBeNull();
+    fetchMock
+      .mockReturnValueOnce(versionResponse.promise)
+      .mockResolvedValueOnce(jsonResponse(500, { error: "server down" }));
+
+    await act(async () => {
+      setInputValue(expectControl(container, "server-url") as HTMLInputElement, BASE_URL);
+    });
+    await act(async () => {
+      expectControl(container, "fetch-data").click();
+    });
+
+    await waitFor(() => {
+      expect(panel?.dataset.sunoPhase).toBe("loading");
+      expect(panel?.dataset.sunoRunning).toBe("false");
+      expect(container.querySelector('[role="status"]')?.getAttribute("data-suno-status")).toBe("ok");
+      expect(container.textContent).toContain("取得中…");
+    });
+
+    await act(async () => {
+      versionResponse.resolve(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }));
+    });
+
+    await waitFor(() => {
+      expect(panel?.dataset.sunoPhase).toBe("error");
+      expect(panel?.dataset.sunoError).toBe("true");
+      expect(container.querySelector('[role="status"]')?.getAttribute("data-suno-status")).toBe("error");
+      expect(container.textContent).toContain("取得失敗: HTTP 500");
+    });
   });
 
   it("データ取得時に manifest version で /version を先に呼び、非互換警告を表示して prompts 取得を継続する", async () => {
@@ -325,6 +441,7 @@ describe("Suno popup compatibility check", () => {
 
   it("dir mode で URL 入力後にデータ取得すると collection endpoint の entries を run payload に渡す", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    const runResponse = deferred<unknown>();
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
@@ -354,13 +471,32 @@ describe("Suno popup compatibility check", () => {
     });
     expectRangeUiAbsent(container);
 
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "run") {
+        return runResponse.promise;
+      }
+      return defaultSendMessage(message, payload);
+    });
     await act(async () => {
       buttonByText(container, "全パターンを連続実行").click();
     });
 
     await waitFor(() => {
+      const panel = container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]');
+      expect(panel?.dataset.sunoPhase).toBe("starting");
+      expect(panel?.dataset.sunoRunning).toBe("true");
+      expect(buttonByText(container, "停止").disabled).toBe(false);
+    });
+
+    await act(async () => {
+      runResponse.resolve({ ok: true });
+    });
+    await waitFor(() => {
       expect(container.textContent).toContain("連続実行を開始しました。");
     });
+    expect(container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')?.dataset.sunoRunning).toBe(
+      "true",
+    );
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
     expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -726,6 +862,7 @@ describe("Suno popup compatibility check", () => {
 
   it("clip ID が無い再開時に Suno 上の選択中 clip を採用して resume state に保存する", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    const adoptionResponse = deferred<{ ok: true; clipIds: string[] }>();
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
@@ -746,7 +883,7 @@ describe("Suno popup compatibility check", () => {
         throw new Error("runner unavailable");
       }
       if (message === "adoptSelectedClips") {
-        return Promise.resolve({ ok: true, clipIds: ["clip-a", "clip-b"] });
+        return adoptionResponse.promise;
       }
       return defaultSendMessage(message, payload);
     });
@@ -766,8 +903,20 @@ describe("Suno popup compatibility check", () => {
     });
 
     await waitFor(() => {
+      const panel = container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]');
+      expect(panel?.dataset.sunoPhase).toBe("adopting");
+      expect(panel?.dataset.sunoRunning).toBe("true");
+    });
+    await act(async () => {
+      adoptionResponse.resolve({ ok: true, clipIds: ["clip-a", "clip-b"] });
+    });
+    await waitFor(() => {
       expect(container.textContent).toContain("選択中の曲 2 件を採用しました。");
     });
+    expect(container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')?.dataset.sunoPhase).toBe("idle");
+    expect(container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')?.dataset.sunoRunning).toBe(
+      "false",
+    );
     expect(messagingMocks.sendMessage).toHaveBeenCalledWith("adoptSelectedClips", { expectedClipCount: 2 });
     expect(resumeStateMocks.writeResumeState).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -782,6 +931,7 @@ describe("Suno popup compatibility check", () => {
 
   it("選択中 clip 採用後に Download から再開すると retryDownload payload を送る", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    const downloadResponse = deferred<unknown>();
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
@@ -803,6 +953,9 @@ describe("Suno popup compatibility check", () => {
       }
       if (message === "adoptSelectedClips") {
         return Promise.resolve({ ok: true, clipIds: ["clip-a", "clip-b"] });
+      }
+      if (message === "retryDownload") {
+        return downloadResponse.promise;
       }
       return defaultSendMessage(message, payload);
     });
@@ -829,10 +982,21 @@ describe("Suno popup compatibility check", () => {
       buttonByText(container, "Download から再開").click();
     });
 
+    await waitFor(() => {
+      const panel = container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]');
+      expect(panel?.dataset.sunoPhase).toBe("downloading");
+      expect(panel?.dataset.sunoRunning).toBe("true");
+    });
     expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryDownload", {
       collectionId: "20260601-clm-theme-a-collection",
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
+    });
+    await act(async () => {
+      downloadResponse.resolve({ ok: true });
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("ダウンロードを再実行しています…");
     });
   });
 
@@ -1055,6 +1219,7 @@ describe("Suno popup compatibility check", () => {
 
   it("選択中 clip 採用後に Playlist から再開すると retryPlaylist payload を送る", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    const playlistResponse = deferred<unknown>();
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
@@ -1076,6 +1241,9 @@ describe("Suno popup compatibility check", () => {
       }
       if (message === "adoptSelectedClips") {
         return Promise.resolve({ ok: true, clipIds: ["clip-a", "clip-b"] });
+      }
+      if (message === "retryPlaylist") {
+        return playlistResponse.promise;
       }
       return defaultSendMessage(message, payload);
     });
@@ -1101,12 +1269,20 @@ describe("Suno popup compatibility check", () => {
       buttonByText(container, "Playlist から再開").click();
     });
 
+    await waitFor(() => {
+      const panel = container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]');
+      expect(panel?.dataset.sunoPhase).toBe("adding-to-playlist");
+      expect(panel?.dataset.sunoRunning).toBe("true");
+    });
     expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryPlaylist", {
       collectionId: "20260601-clm-theme-a-collection",
       playlistName: "clm | theme-a",
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
       shouldDownload: true,
+    });
+    await act(async () => {
+      playlistResponse.resolve({ ok: true });
     });
     await waitFor(() => {
       expect(container.textContent).toContain("playlist 追加とダウンロードを再実行しています…");
@@ -1158,6 +1334,8 @@ describe("Suno popup compatibility check", () => {
       expect(container.textContent).toContain("全 entry 投入済みです。playlist 追加から再開しますか？");
       expect(container.textContent).toContain("Playlist: clm | theme-a");
     });
+    expectControl(container, "resume");
+    expectControl(container, "dismiss-resume");
 
     messagingMocks.sendMessage.mockClear();
     await act(async () => {
