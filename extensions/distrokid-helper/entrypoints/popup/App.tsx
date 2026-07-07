@@ -26,7 +26,7 @@ export function App() {
 
   return (
     <main className="flex flex-col gap-3 p-4">
-      <h1 className="text-base font-bold text-gray-900">DistroKid Helper (TEST)</h1>
+      <h1 className="text-base font-bold text-gray-900">DistroKid Helper</h1>
 
       <ServerUrlField
         value={serverUrl}
