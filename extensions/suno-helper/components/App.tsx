@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { DEFAULT_URL, DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
+import { DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
 import {
   buildInitialPatternSelection,
   reconcilePatternSelection,
@@ -21,6 +21,7 @@ export function App() {
   const {
     url,
     setUrl,
+    serverSources,
     collections,
     selectedCollectionId,
     selectCollection,
@@ -49,6 +50,8 @@ export function App() {
   } = useSunoRunner();
   const previousEntriesRef = useRef(entries);
   const previousItemStatesRef = useRef(itemStates);
+
+  const visibleResumeBanner = resumeBanner && resumeBanner.failedIndex < resumeBanner.total ? resumeBanner : null;
 
   useEffect(() => {
     let mounted = true;
@@ -136,15 +139,19 @@ export function App() {
       <h1 className="text-base font-semibold">Suno Helper</h1>
 
       <label className="flex flex-col gap-1 text-sm">
-        サーバー URL
-        <input
-          type="text"
+        ローカル配信元
+        <select
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder={DEFAULT_URL}
           data-suno-control="server-url"
           className="rounded border border-gray-300 px-2 py-1"
-        />
+        >
+          {serverSources.map((source) => (
+            <option key={source.url} value={source.url}>
+              {source.label} - {source.url}
+            </option>
+          ))}
+        </select>
       </label>
 
       <label className="flex flex-col gap-1 text-sm">
@@ -174,17 +181,11 @@ export function App() {
         </p>
       )}
 
-      {resumeBanner && (
+      {visibleResumeBanner && (
         <div className="flex flex-col gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-2 text-xs text-amber-900">
           <p>
-            {resumeBanner.failedIndex < resumeBanner.total ? (
-              <>
-                前回の実行が中断されました。entry <span className="font-semibold">{resumeBanner.failedIndex + 1}</span>{" "}
-                から再開しますか？
-              </>
-            ) : (
-              <>全 entry 投入済みです。playlist 追加から再開しますか？</>
-            )}
+            前回の実行が中断されました。entry{" "}
+            <span className="font-semibold">{visibleResumeBanner.failedIndex + 1}</span> から再開しますか？
           </p>
           <div className="flex gap-2">
             <button

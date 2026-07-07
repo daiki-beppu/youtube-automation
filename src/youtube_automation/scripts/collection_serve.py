@@ -10,7 +10,7 @@ issue #698: #692 の `yt-suno-serve` を一般化し、エンドポイントを�
 `distrokid` が None または `enabled == False` のとき `/distrokid/*` は 404。
 CORS はデフォルトで Chrome 拡張オリジン (`chrome-extension://...`) と helper サイト
 web origin (`https://suno.com` / `https://distrokid.com` 系) を許可し、全ルートで
-同一ポリシー。`--allow-origin` 指定時はその値との完全一致のみに lock する。
+同一ポリシー。`--allow-origin` / `--allow-extension` 指定時はその値との完全一致のみに lock する。
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ import argparse
 import json
 import mimetypes
 import os
+import re
 import tempfile
 import urllib.parse
 import uuid
@@ -43,6 +44,7 @@ from youtube_automation.scripts.suno_artifacts import (
     SUNO_PROMPTS_ROUTE,
     collection_downloaded_route,
 )
+from youtube_automation.utils.chrome_extensions import ChromeExtensionOrigin, resolve_unpacked_extension_origin
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import Distrokid, load_config
 from youtube_automation.utils.distrokid_metadata import parse_album_metadata
@@ -60,6 +62,7 @@ from youtube_automation.utils.suno_downloaded_artifacts import (
 
 DEFAULT_PORT = 7873
 VERSION_ROUTE = "/version"
+SERVER_INFO_ROUTE = "/server-info"
 MIN_EXTENSION_VERSION = "0.2.0"
 _EXTENSION_ORIGIN_SCHEME = "chrome-extension://"
 # overlay 化（#892/#895）で content script の fetch が page origin になったため、
@@ -75,11 +78,9 @@ _DEFAULT_ALLOWED_WEB_ORIGINS = frozenset(
 # `collections/planning/` 配下で 1 コレクションを示すディレクトリ接尾辞。
 _COLLECTION_DIR_SUFFIX = "-collection"
 
-# Capture root の env fallback 名。DistroKid release 記録で使用する。
-_PLAYLIST_CAPTURE_ROOT_ENV = "PLAYLIST_CAPTURE_ROOT"
-
 # DistroKid dir mode: リリース記録の出力先 JSON（`<root>/config/distrokid-releases.json`）（#934）。
 _DISTROKID_RELEASES_OUTPUT_RELPATH = Path("config") / "distrokid-releases.json"
+_DISTROKID_CAPTURE_ROOT_ENV = "DISTROKID_CAPTURE_ROOT"
 
 # 30-distrokid サブディレクトリ名（#934）。コレクション配下のこのサブディレクトリが disc を含む。
 _DISTROKID_DIRNAME = "30-distrokid"
@@ -94,6 +95,36 @@ _DISTROKID_RELEASES_ROUTE = "/distrokid/releases"
 # small JSON objects/lists; larger bodies are rejected before reading from rfile.
 _MAX_POST_BODY_BYTES = 1024 * 1024
 _MAX_DOWNLOADED_POST_BODY_BYTES = 10 * 1024
+
+
+def _hostname_slug(text: str) -> str:
+    """チャンネル名を `*.localhost` 用の ASCII hostname label にする（#1352）。"""
+    slug = re.sub(r"[^a-z0-9]+", "-", text.strip().lower())
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug or "youtube-automation"
+
+
+def channel_hostname(channel_name: str) -> str:
+    """チャンネル識別できるローカル hostname を返す。"""
+    return f"{_hostname_slug(channel_name)}.localhost"
+
+
+def build_server_info(channel_name: str, channel_short: str, port: int) -> dict[str, str | int]:
+    """helper 拡張の接続先 selector に出す配信元情報（#1352）。"""
+    hostname_source = (
+        channel_short if channel_short and not re.search(r"[a-z0-9]", channel_name.lower()) else channel_name
+    )
+    hostname = channel_hostname(hostname_source)
+    base_url = f"http://{hostname}:{port}"
+    short = channel_short or channel_name
+    return {
+        "channel_name": channel_name,
+        "channel_short": short,
+        "hostname": hostname,
+        "port": port,
+        "base_url": base_url,
+        "label": f"{channel_name} ({hostname}:{port})",
+    }
 
 
 def distrokid_releases_output_path(root: Path) -> Path:
@@ -500,6 +531,7 @@ def create_server(
     port: int,
     allow_origin: str | None,
     *,
+    server_info: dict[str, str | int] | None = None,
     prompts_path: Path | None,
     collection_dir: Path | None,
     distrokid: Distrokid | None,
@@ -513,7 +545,7 @@ def create_server(
     単一ファイル mode の `/suno/prompts.json` は配信しない）。既定 None は
     単一ファイル mode（`/suno/prompts.json` + `/distrokid/*`）。
 
-    `capture_root` 指定時のみ DistroKid release capture POST を有効化する。
+    `capture_root` 指定時のみ DistroKid release capture の POST を有効化する。
     None なら capture 系 POST は 404。
 
     distrokid が None または `enabled == False` のとき `/distrokid/*` は 404。
@@ -521,6 +553,9 @@ def create_server(
     dir_mode = collections_root is not None
     distrokid_enabled = distrokid is not None and distrokid.enabled
     serve_token = str(uuid.uuid4())
+    resolved_server_info = (
+        server_info if server_info is not None else build_server_info("YouTube Automation", "YA", port)
+    )
 
     class _Handler(BaseHTTPRequestHandler):
         def _allowed_origin(self) -> str | None:
@@ -650,12 +685,15 @@ def create_server(
                     # distrokid disabled / capture root 未指定時は endpoint 自体を出さない。
                     self.send_error(404, "Not Found")
                     return
+                # 書き込み境界（#1360）: /downloaded と同じく extension lock + serve token 必須。
+                # MV3 background fetch は Origin を省略しうるため _is_locked_extension_request で
+                # 「Origin 無し or 完全一致」を許可し、本人性は X-Serve-Token で担保する。
                 raw_origin = self.headers.get("Origin")
-                if (
-                    allow_origin is None
-                    or not allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME)
-                    or raw_origin != allow_origin
-                ):
+                if not _is_locked_extension_request(raw_origin, allow_origin):
+                    self.send_error(403, "Forbidden")
+                    return
+                req_token = self.headers.get("X-Serve-Token")
+                if req_token != serve_token:
                     self.send_error(403, "Forbidden")
                     return
                 raw = self._read_limited_post_body()
@@ -716,6 +754,10 @@ def create_server(
         def do_GET(self) -> None:  # noqa: N802
             if self.path == VERSION_ROUTE:
                 body = json.dumps(build_version_payload()).encode("utf-8")
+                self._send_bytes(body, "application/json; charset=utf-8")
+                return
+            if self.path == SERVER_INFO_ROUTE:
+                body = json.dumps(resolved_server_info, ensure_ascii=False).encode("utf-8")
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return
             if self.path == "/auth/token":
@@ -887,13 +929,25 @@ def create_server(
         def log_message(self, *args) -> None:  # サーバーログを抑制
             pass
 
-    return ThreadingHTTPServer(("localhost", port), _Handler)
+    server = ThreadingHTTPServer(("localhost", port), _Handler)
+    if server_info is None:
+        resolved_server_info.update(build_server_info("YouTube Automation", "YA", server.server_address[1]))
+    return server
 
 
-def _resolve_capture_root(root_arg: str | None) -> Path | None:
-    """CLI 引数 + env fallback から DistroKid release capture root を解決する。"""
-    root = root_arg if root_arg is not None else os.environ.get(_PLAYLIST_CAPTURE_ROOT_ENV)
+def _resolve_distrokid_capture_root(root_arg: str | None) -> Path | None:
+    """CLI 引数 + env fallback から DistroKid release capture root を解決する."""
+    root = root_arg if root_arg is not None else os.environ.get(_DISTROKID_CAPTURE_ROOT_ENV)
     return Path(root).expanduser() if root is not None else None
+
+
+def _resolve_allow_origin(
+    allow_origin: str | None, allow_extension: str | None
+) -> tuple[str | None, ChromeExtensionOrigin | None]:
+    if allow_extension is None:
+        return allow_origin, None
+    detected = resolve_unpacked_extension_origin(allow_extension)
+    return detected.origin, detected
 
 
 def main() -> None:
@@ -914,14 +968,24 @@ def main() -> None:
         default=DEFAULT_PORT,
         help=f"port to listen on (default: {DEFAULT_PORT})",
     )
-    parser.add_argument(
+    allow_origin_group = parser.add_mutually_exclusive_group()
+    allow_origin_group.add_argument(
         "--allow-origin",
         default=None,
         help=(
-            "lock CORS to a single origin via exact match. POST /collections/<id>/downloaded "
-            "and GET /auth/token require an explicit chrome-extension://<EXTENSION_ID> lock. "
+            "lock CORS to a single origin via exact match. POST /collections/<id>/downloaded, "
+            f"POST {_DISTROKID_RELEASES_ROUTE} and GET /auth/token require an explicit "
+            "chrome-extension://<EXTENSION_ID> lock. "
             "Default allows chrome-extension scheme plus suno.com / distrokid.com helper origins "
             "for read-only routes only."
+        ),
+    )
+    allow_origin_group.add_argument(
+        "--allow-extension",
+        default=None,
+        help=(
+            "detect an unpacked Chrome extension by directory name from macOS Chrome profiles "
+            "and lock CORS to chrome-extension://<detected-id>. Use --allow-origin as manual fallback."
         ),
     )
     parser.add_argument(
@@ -933,16 +997,17 @@ def main() -> None:
         ),
     )
     parser.add_argument(
-        "--playlist-capture-root",
+        "--distrokid-capture-root",
         default=None,
         help=(
             "downstream channel repo root for DistroKid release capture writes; enables POST "
-            f"{_DISTROKID_RELEASES_ROUTE} (env fallback: {_PLAYLIST_CAPTURE_ROOT_ENV})"
+            f"{_DISTROKID_RELEASES_ROUTE} (env fallback: {_DISTROKID_CAPTURE_ROOT_ENV})"
         ),
     )
     args = parser.parse_args()
 
-    capture_root = _resolve_capture_root(args.playlist_capture_root)
+    capture_root = _resolve_distrokid_capture_root(args.distrokid_capture_root)
+    allow_origin, detected_extension = _resolve_allow_origin(args.allow_origin, args.allow_extension)
 
     # path が `*-collection/` を並べたディレクトリなら dir mode（#816）。
     collection_dirs = find_collection_dirs(args.path)
@@ -950,12 +1015,19 @@ def main() -> None:
         # dir mode でも distrokid エンドポイントを有効化するため load_config() を試みる（#934）。
         # distrokid 設定が無いチャンネルでは None のままにして 404 にフォールバックする。
         try:
-            distrokid_cfg = load_config().distrokid
+            config = load_config()
+            distrokid_cfg = config.distrokid
+            channel_name = config.meta.channel_name
+            channel_short = config.meta.channel_short
         except ConfigError:
             distrokid_cfg = None
+            channel_name = "YouTube Automation"
+            channel_short = "YA"
+        server_info = build_server_info(channel_name, channel_short, args.port)
         server = create_server(
             args.port,
-            args.allow_origin,
+            allow_origin,
+            server_info=server_info,
             prompts_path=None,
             collection_dir=None,
             distrokid=distrokid_cfg,
@@ -963,9 +1035,11 @@ def main() -> None:
             capture_root=capture_root,
         )
         port = server.server_address[1]
-        print(
-            f"Serving {len(collection_dirs)} collections from {args.path} at http://localhost:{port}{COLLECTIONS_ROUTE}"
-        )
+        server_info.update(build_server_info(channel_name, channel_short, port))
+        canonical_url = str(server_info["base_url"])
+        print(f"Serving {len(collection_dirs)} collections from {args.path} at {canonical_url}{COLLECTIONS_ROUTE}")
+        print(f"  legacy URL: http://localhost:{port}{COLLECTIONS_ROUTE}")
+        print(f"  selector label: {server_info['label']}")
         if distrokid_cfg is not None and distrokid_cfg.enabled:
             print(
                 f"  distrokid dir mode enabled: {_DISTROKID_COLLECTIONS_ROUTE}, "
@@ -976,11 +1050,16 @@ def main() -> None:
         prompts_path = resolve_prompts_path(args.path)
         # collection dir: dir 引数はそのまま、json ファイル引数なら <collection>/20-documentation/x.json から 2 階層上。
         collection_dir = args.path if args.path.is_dir() else args.path.parent.parent
-        distrokid = load_config().distrokid
+        config = load_config()
+        distrokid = config.distrokid
+        channel_name = config.meta.channel_name
+        channel_short = config.meta.channel_short
+        server_info = build_server_info(channel_name, channel_short, args.port)
 
         server = create_server(
             args.port,
-            args.allow_origin,
+            allow_origin,
+            server_info=server_info,
             prompts_path=prompts_path,
             collection_dir=collection_dir,
             distrokid=distrokid,
@@ -988,7 +1067,11 @@ def main() -> None:
             capture_root=capture_root,
         )
         port = server.server_address[1]
-        print(f"Serving {collection_dir} at http://localhost:{port}{SUNO_PROMPTS_ROUTE}")
+        server_info.update(build_server_info(channel_name, channel_short, port))
+        canonical_url = str(server_info["base_url"])
+        print(f"Serving {collection_dir} at {canonical_url}{SUNO_PROMPTS_ROUTE}")
+        print(f"  legacy URL: http://localhost:{port}{SUNO_PROMPTS_ROUTE}")
+        print(f"  selector label: {server_info['label']}")
         if distrokid.enabled:
             print(f"  distrokid endpoints enabled: {DISTROKID_RELEASE_ROUTE}, {DISTROKID_ASSETS_PREFIX}<path>")
         distrokid_capture_active = distrokid.enabled
@@ -997,12 +1080,18 @@ def main() -> None:
             f"  distrokid releases enabled: POST {_DISTROKID_RELEASES_ROUTE} "
             f"-> {distrokid_releases_output_path(capture_root)}"
         )
-    if args.allow_origin is not None and args.allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME):
-        print(f"  serve token: GET http://localhost:{port}/auth/token")
+    if detected_extension is not None:
+        print(
+            f"  detected extension: {detected_extension.name} -> "
+            f"{detected_extension.extension_id} ({detected_extension.origin})"
+        )
+    if allow_origin is not None and allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME):
+        print(f"  serve token: GET {canonical_url}/auth/token")
     else:
         print(
-            "  serve token: disabled until --allow-origin "
-            "chrome-extension://<EXTENSION_ID> is set for /auth/token and /downloaded"
+            "  serve token: disabled until --allow-origin chrome-extension://<EXTENSION_ID> "
+            "or --allow-extension <name> is set for /auth/token, "
+            f"/downloaded and {_DISTROKID_RELEASES_ROUTE}"
         )
     print("Press Ctrl-C to stop.")
     try:

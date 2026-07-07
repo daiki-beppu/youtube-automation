@@ -16,7 +16,7 @@
 | `components/`                        | popup UI（`App.tsx` / `PatternList.tsx` / `useSunoRunner.ts`）                                              |
 | `lib/messaging.ts`                   | popup ⇄ content の型付き message（@webext-core/messaging）                                                  |
 | `lib/clip-tracker.ts` ほか           | bridge 観測の集計（in-flight / ACK / stall。`bridge-listener` / `ack-probe` / `entry-retry`）               |
-| `lib/storage.ts`                     | サーバー URL / resume state / overlay state の型付き storage（@wxt-dev/storage）                            |
+| `lib/storage.ts`                     | ローカル配信元候補 / resume state / overlay state の型付き storage（@wxt-dev/storage）                      |
 | `lib/manifest.ts`                    | 最小権限定数 `MANIFEST_PERMISSIONS`                                                                         |
 | `../shared/`                         | DOM 注入 / API client / origin allowlist / 契約定数（複数拡張で共有）                                       |
 
@@ -58,25 +58,29 @@ pnpm test:e2e           # Playwright e2e（初回 pnpm exec playwright install c
 ## インストール（unpacked）
 
 1. `pnpm install && pnpm build` を実行。
-2. Chrome で `chrome://extensions` を開く。
-3. 右上の **デベロッパーモード** を ON。
-4. **パッケージ化されていない拡張機能を読み込む** → この拡張の `.output/chrome-mv3/` ディレクトリを選択。
+2. build artifact を basename が `suno-helper` になる固定パスへコピーする:
+   ```bash
+   mkdir -p "$HOME/chrome-extensions/suno-helper"
+   rsync -a --delete .output/chrome-mv3/ "$HOME/chrome-extensions/suno-helper/"
+   ```
+3. Chrome で `chrome://extensions` を開く。
+4. 右上の **デベロッパーモード** を ON。
+5. **パッケージ化されていない拡張機能を読み込む** → `$HOME/chrome-extensions/suno-helper` を選択。
 
 ## 使い方
 
-1. Chrome の `chrome://extensions` で suno-helper の拡張 ID を確認する。
-2. ターミナルで collection 一覧サーバーを拡張 ID の origin に固定して起動:
+1. ターミナルで collection 一覧サーバーを `suno-helper` の拡張 origin に固定して起動:
    ```bash
    uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" \
-     --allow-origin "chrome-extension://<EXTENSION_ID>"
-   # → http://localhost:7873/collections と /auth/token を配信
+     --allow-extension suno-helper
+   # → http://<channel>.localhost:7873/collections と /auth/token を配信
    ```
-3. Chrome で Suno の **Custom Mode** 画面を開く。
-4. 拡張アイコンからポップアップを開き、**サーバー URL**（既定 `http://localhost:7873`）を入れて **データ取得**。
-5. `ready` な collection を選び、**全パターンを連続実行** を押す。
-6. 各パターンで Style/Lyrics を注入 → Generate 押下 → 生成完了検知 → 次へ、を自動で繰り返す。
-7. 全件完了後、対象 clip を一括選択 → playlist 追加 → More menu の **Download all** → format 選択 → ZIP ダウンロード完了監視 → `POST /collections/<id>/downloaded` で ZIP パス通知、まで実行する。サーバーは ZIP を展開し、`02-Individual-music/` と `workflow-state.json` を更新する。
-8. captcha challenge は waiting-captcha 表示で解消（多くは自動 verify）を待って続行する。entry 単位の一時的な失敗は preset 連動で自動リトライし、上限超過分はスキップして完走する（#948）。スキップされた entry は一覧表示され、**失敗分のみ再実行** で再投入できる。
+2. Chrome で Suno の **Custom Mode** 画面を開く。
+3. 拡張アイコンからポップアップを開き、**ローカル配信元** でチャンネル名つき候補を選んで **データ取得**。
+4. `ready` な collection を選び、**全パターンを連続実行** を押す。
+5. 各パターンで Style/Lyrics を注入 → Generate 押下 → 生成完了検知 → 次へ、を自動で繰り返す。
+6. 全件完了後、対象 clip を一括選択 → playlist 追加 → More menu の **Download all** → format 選択 → ZIP ダウンロード完了監視 → `POST /collections/<id>/downloaded` で ZIP パス通知、まで実行する。サーバーは ZIP を展開し、`02-Individual-music/` と `workflow-state.json` を更新する。
+7. captcha challenge は waiting-captcha 表示で解消（多くは自動 verify）を待って続行する。entry 単位の一時的な失敗は preset 連動で自動リトライし、上限超過分はスキップして完走する（#948）。スキップされた entry は一覧表示され、**失敗分のみ再実行** で再投入できる。
 
 ### in-flight 検知と停止判断（#948）
 
@@ -86,9 +90,19 @@ pnpm test:e2e           # Playwright e2e（初回 pnpm exec playwright install c
 
 ## Origin / token 契約
 
-`GET /auth/token` と `POST /collections/<id>/downloaded` は、`--allow-origin "chrome-extension://<EXTENSION_ID>"` で指定した exact origin 以外を 403 にする。`/auth/token` が返す token は Download all 完了通知時に `X-Serve-Token` として送るため、`--allow-origin` なし起動では ZIP 展開・DL 完了記録は動かない。
+`GET /auth/token` と `POST /collections/<id>/downloaded` は、`--allow-extension suno-helper` で解決した exact origin 以外を 403 にする。`--allow-extension` は macOS Chrome profile の `Secure Preferences` を優先し、無ければ `Preferences` を読み、`extensions.settings[*].path` が絶対パスかつ basename is `suno-helper` の unpacked extension ID から `chrome-extension://<id>` を組み立てる。
+
+検出 0 件、複数 ID、Preferences read failure、JSON parse failure の場合だけ、Chrome の `chrome://extensions` で suno-helper の拡張 ID を確認し、手動 fallback として `--allow-origin "chrome-extension://<EXTENSION_ID>"` を指定する。`.output/chrome-mv3/` を直接ロードすると basename is `chrome-mv3` になり `--allow-extension suno-helper` では検出できないため、通常は `$HOME/chrome-extensions/suno-helper` のような固定パスをロードする。
+
+`/auth/token` が返す token は Download all 完了通知時に `X-Serve-Token` として送るため、`--allow-extension` または fallback の `--allow-origin` なし起動では ZIP 展開・DL 完了記録は動かない。
 
 `GET /collections` などの読み取り API と違い、downloaded POST は workflow-state と `02-Individual-music/` を更新する書き込み境界なので、origin と token の両方を必須にしている。
+
+## ローカル配信元 selector
+
+`yt-collection-serve` は起動時に `http://<channel>.localhost:<PORT>` 形式の URL と selector label を表示し、`GET /server-info` でも同じ情報を返す。拡張は `データ取得` 成功時にこの label と URL を保存するため、複数チャンネルのサーバーを使い分ける場合は popup の **ローカル配信元** からチャンネル名を見て選択する。
+
+後方互換として `http://localhost:7873` も既定候補に残しているが、新規運用ではチャンネル別 hostname を使う。
 
 ## スコープ外
 

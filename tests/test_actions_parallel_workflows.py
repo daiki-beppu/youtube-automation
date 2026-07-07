@@ -257,7 +257,10 @@ def test_distrokid_helper_manifest_permission_check_preserves_least_privilege_co
     assert 'const expected = ["storage", "activeTab"];' in run_script
     assert "const actual = manifest.permissions ?? [];" in run_script
     assert "expected.every((p) => actual.includes(p))" in run_script
-    assert 'const expectedHosts = ["*://*.distrokid.com/*"];' in run_script
+    assert '"*://*.distrokid.com/*"' in run_script
+    assert '"http://*.localhost/*"' in run_script
+    assert '"http://localhost/*"' in run_script
+    assert '"http://127.0.0.1/*"' in run_script
     assert "const actualHosts = manifest.host_permissions ?? [];" in run_script
     assert "expectedHosts.every((p) => actualHosts.includes(p))" in run_script
     assert 'const expectedContentScriptMatches = ["*://*.distrokid.com/new*"];' in run_script

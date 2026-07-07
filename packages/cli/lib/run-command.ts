@@ -10,17 +10,34 @@ import type { Result, ServiceError } from "@youtube-automation/core";
 const exitCodeForServiceError = (error: ServiceError): number =>
   error.domain === "quota" ? 75 : 1;
 
-export const emitResult = <T>(
-  result: Result<T, ServiceError>,
-  options: { json: boolean; renderText: (value: T) => string }
-): void => {
-  if (!result.ok) {
-    process.stderr.write(`[${result.error.domain}] ${result.error.message}\n`);
-    process.exit(exitCodeForServiceError(result.error));
-  }
+interface EmitResultDeps {
+  exit: (code: number) => never;
+  writeStderr: (message: string) => unknown;
+  writeStdout: (message: string) => unknown;
+}
 
-  const rendered = options.json
-    ? JSON.stringify(result.value)
-    : options.renderText(result.value);
-  process.stdout.write(`${rendered}\n`);
-};
+export const createEmitResult =
+  ({ exit, writeStderr, writeStdout }: EmitResultDeps) =>
+  <T>(
+    result: Result<T, ServiceError>,
+    options: { json: boolean; renderText: (value: T) => string }
+  ): void => {
+    if (!result.ok) {
+      writeStderr(`[${result.error.domain}] ${result.error.message}\n`);
+      return exit(exitCodeForServiceError(result.error));
+    }
+
+    const rendered = options.json
+      ? JSON.stringify(result.value)
+      : options.renderText(result.value);
+    if (rendered.length === 0) {
+      return;
+    }
+    writeStdout(`${rendered}\n`);
+  };
+
+export const emitResult = createEmitResult({
+  exit: process.exit,
+  writeStderr: (message: string) => process.stderr.write(message),
+  writeStdout: (message: string) => process.stdout.write(message),
+});

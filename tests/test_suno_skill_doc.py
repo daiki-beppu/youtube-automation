@@ -7,7 +7,7 @@ issue #692 受け入れ基準: 「`.claude/skills/suno/SKILL.md` に新フロー
 全テストが pass してしまうため、ドキュメント契約をこのテストで機械的に担保し再発を防ぐ。
 
 検証する契約:
-1. Chrome 拡張 + `yt-collection-serve` の自動投入フロー（Step 3）が記載されている。
+1. Chrome 拡張 + `collection-serve` の自動投入フロー（Step 3）が記載されている。
 2. 拡張が使えない／壊れたとき向けの手コピペ fallback 節が記載されている。
 3. 自動投入が読む配信元 `suno-prompts.json` への言及がある。
 """
@@ -72,31 +72,41 @@ def test_skill_md_exists() -> None:
 def test_skill_md_documents_auto_inject_flow() -> None:
     """Given suno SKILL.md
     When 本文を読む
-    Then Chrome 拡張 + `yt-collection-serve` の自動投入フロー（Step 3）が記載されている。
+    Then Chrome 拡張 + `collection-serve` の自動投入フロー（Step 3）が記載されている。
 
-    #698: CLI を `yt-suno-serve` → `yt-collection-serve` に rename したため、
-    起動コマンド契約（machine-coupled）を新名に追従する。旧名が残っていないことも検証する。
+    PR #1574: `--allow-extension` は Python の `yt-collection-serve` に実装されているため、
+    起動コマンド契約（machine-coupled）は実在 CLI を固定する。
     PR #886: 旧 `Step 2.5` 表記は整数並びへ採番し直し、Step 3 タイトルに `/suno-helper` を露出。
     """
     text = _read()
-    for token in ("Step 3", "yt-collection-serve", "suno-helper", "連続実行"):
+    for token in ("Step 3", "collection-serve", "suno-helper", "連続実行"):
         assert token in text, f"SKILL.md に新フローの記載がない（`{token}` 不在）"
+    assert "uv run yt-collection-serve" in text, "SKILL.md の Step 3 が実在する collection-serve CLI を使っていない"
+    assert "--allow-extension suno-helper" in text, "SKILL.md の Step 3 が拡張 ID 自動検出で起動していない"
+    assert '--allow-origin "chrome-extension://<EXTENSION_ID>"' in text, (
+        "SKILL.md に検出失敗時の allow-origin fallback がない"
+    )
+    assert "Preferences JSON parse failure" in text, "SKILL.md に Preferences JSON parse failure 時の fallback がない"
+    assert "detected extension: suno-helper -> <id> (chrome-extension://<id>)" in text, (
+        "SKILL.md に detected extension 起動ログ確認がない"
+    )
+    assert "GET /auth/token" in text, "SKILL.md に exact origin lock の疎通確認対象 `/auth/token` がない"
     assert "yt-suno-serve" not in text, "SKILL.md に旧 CLI 名 `yt-suno-serve` が残っている（#698 で廃止）"
+    assert "bunx tayk collection-serve" not in text, "SKILL.md が未実装の `tayk collection-serve` を案内している"
     assert "Step 2.5" not in text, "SKILL.md に旧 `Step 2.5` 表記が残っている（PR #886 で整数並びへ採番し直し）"
 
 
 def test_skill_md_documents_wxt_unpacked_load_flow() -> None:
     """Given suno SKILL.md
     When 拡張ロード手順を読む
-    Then WXT 化後の build → `.output/chrome-mv3/` unpacked ロード手順が記載されている。
+    Then WXT 化後の build 成果物を安定 basename の unpacked directory としてロードする手順が記載されている。
 
     #697: 素 JS(手書き manifest.json) → WXT 化で manifest は `wxt.config.ts` から
-    `.output/chrome-mv3/` に生成されるようになった。旧手順「`extensions/suno-helper/` を
-    直接ロード」は同ディレクトリに manifest.json が無く破綻するため、`pnpm build` →
-    `.output/chrome-mv3/` を選択する新フローを機械的に担保し再発を防ぐ（family: spec-noncompliance）。
+    `.output/chrome-mv3/` に生成されるが、`--allow-extension suno-helper` は Chrome Preferences の
+    path basename を照合する。ロードする unpacked directory は `suno-helper` basename でなければならない。
     """
     text = _read()
-    for token in ("pnpm build", ".output/chrome-mv3"):
+    for token in ("pnpm build", ".output/chrome-mv3", "~/chrome-extensions/suno-helper"):
         assert token in text, f"SKILL.md に WXT ロード手順の記載がない（`{token}` 不在）"
 
 
@@ -116,13 +126,19 @@ def test_skill_md_has_no_dangling_content_js_reference() -> None:
 def test_skill_md_documents_serve_url_contract() -> None:
     """Given suno SKILL.md
     When 自動投入フローを読む
-    Then 拡張が fetch する `suno-prompts.json` 配信元と新サブパス `/suno/prompts.json` の言及がある。
+    Then dir mode で拡張が fetch する collection-scoped `suno-prompts.json` 配信元の言及がある。
 
-    #698: エンドポイントを `/prompts.json` → `/suno/prompts.json` にサブパス分離。
+    #816: dir mode は `/collections` と `/collections/<id>/suno/prompts.json` を配信し、
+    `/suno/prompts.json` は single file mode 専用で 404 になる。
     """
     text = _read()
     assert "suno-prompts.json" in text, "SKILL.md に配信元 `suno-prompts.json` の言及がない"
-    assert "/suno/prompts.json" in text, "SKILL.md に新配信エンドポイント `/suno/prompts.json` の言及がない（#698）"
+    assert "/collections/<id>/suno/prompts.json" in text, (
+        "SKILL.md に dir mode の collection-scoped prompts endpoint がない"
+    )
+    assert "http://localhost:7873/suno/prompts.json" not in text, (
+        "SKILL.md が dir mode で 404 になる `/suno/prompts.json` 直 URL を案内している"
+    )
 
 
 def test_skill_md_documents_manual_fallback() -> None:

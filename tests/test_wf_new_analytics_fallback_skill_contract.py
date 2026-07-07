@@ -217,13 +217,13 @@ def test_wf_new_declares_sequential_child_skill_orchestration() -> None:
 
     expected_order = (
         "/collection-ideate",
-        "yt-init-collection",
-        "yt-populate-scene-phrases",
+        "bunx tayk init-collection",
+        "bunx tayk populate-scene-phrases",
         "/thumbnail",
         "/suno",
         "/lyria",
         "/loop-video",
-        "yt-collection-serve",
+        "uv run yt-collection-serve",
     )
     cursor = -1
     for token in expected_order:
@@ -241,7 +241,7 @@ def test_wf_new_starts_suno_helper_server_before_handoff() -> None:
 
     for token in (
         "Suno チャンネルでは",
-        "yt-collection-serve",
+        "uv run yt-collection-serve",
         "続きは `/suno-helper` が browser use",
         "拡張 overlay を操作できる状態にする",
     ):
@@ -250,8 +250,11 @@ def test_wf_new_starts_suno_helper_server_before_handoff() -> None:
     for token in (
         '"$CHANNEL_DIR/collections/planning"',
         "PORT=7873",
-        "--allow-origin",
-        "chrome-extension://<EXTENSION_ID>",
+        "--allow-extension suno-helper",
+        "Preferences JSON parse failure",
+        "detected extension: suno-helper -> <id> (chrome-extension://<id>)",
+        '--allow-origin "chrome-extension://<EXTENSION_ID>"',
+        "chrome-extension://<detected-id>",
         "--port",
         "/collections",
         "/auth/token",
@@ -262,7 +265,7 @@ def test_wf_new_starts_suno_helper_server_before_handoff() -> None:
 
     assert "Suno-helper server" in phase_2g
     assert "collection 単体パスや `suno-prompts.json` 直指定は playlist phase がスキップ" in phase_2f
-    assert "`/wf-new` が自動で行うのは Suno 用 localhost server の起動と疎通確認まで" in text
+    assert "`/wf-new` が自動で行うのは Suno 用ローカル server の起動と疎通確認まで" in text
     assert "次工程の `/suno-helper` が browser use 主経路で進める" in text
 
 

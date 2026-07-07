@@ -613,7 +613,12 @@ def test_any_usage_gate_warns_and_skips_direct_import_detection_without_python3(
     for command in ("bash", "git", "dirname"):
         target = shutil.which(command)
         assert target is not None
-        (bin_dir / command).symlink_to(target)
+        command_path = bin_dir / command
+        if command == "git":
+            command_path.write_text(f'#!/usr/bin/env bash\nexec {target!r} "$@"\n', encoding="utf-8")
+            command_path.chmod(0o755)
+        else:
+            command_path.symlink_to(target)
 
     result = _run_gate(repo, _ANY_USAGE_GATE_PATH, extra_env={"PATH": str(bin_dir)})
 

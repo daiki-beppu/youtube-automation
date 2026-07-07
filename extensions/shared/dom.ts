@@ -20,8 +20,8 @@ const SELECTORS = {
   // 「Lyrics 以外の可視 textarea」述語だけでは Style の特定根拠が弱くなったため一次識別にする。
   stylesWrapper: '[data-testid="create-form-styles-wrapper"]',
   // Song Title 欄は testid/aria/label を持たず placeholder のみ安定 (#844 実 DOM 検証)。
-  // 表記変更 ((Optional) の有無等) に耐えるよう "Song Title" の弱い case-insensitive substring match。
-  title: 'input[placeholder*="Song Title" i]',
+  // 英語 UI は "Song Title (Optional)"、日本語 UI は "曲名(任意)"（2026-07 実 DOM）で出る。
+  title: 'input[placeholder*="Song Title" i], input[placeholder*="曲名"]',
   // Custom Mode > More Options の 3 フィールド (#900、chrome-devtools-mcp で実機確定済み)。
   //   - Exclude styles: native text input/textarea (placeholder / aria-label の表記ゆれを許容)
   //   - Weirdness / Style Influence: radix slider ([role="slider"] + aria-label で区別)
@@ -35,7 +35,7 @@ const SELECTORS = {
   // 付けた属性) で候補を全 query → textContent 完全一致で Male/Female を絞り込む方式を採用。
   // Emotion class hash や親 div の role/class には依存しない。
   vocalGenderButtons: 'button[data-selected][type="button"]',
-  generateLabel: /^(create|generate|生成)$/i,
+  generateLabel: /^(create|generate|生成|作成(?:する)?)$/i,
   recaptcha:
     'iframe[src*="recaptcha"], iframe[title*="recaptcha" i], iframe[src*="hcaptcha"]',
 } as const;
@@ -629,7 +629,7 @@ export function resolveGenerateButton(): HTMLButtonElement {
   );
   if (!btn) {
     throw new FatalRunError(
-      "Generate ボタンが見つかりません。Suno の UI 変更の可能性があります。",
+      "生成ボタン（Create / Generate / 作成）が見つかりません。Suno の UI 変更または UI 言語ラベル変更の可能性があります。",
     );
   }
   return btn;
