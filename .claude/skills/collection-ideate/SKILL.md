@@ -80,7 +80,7 @@ uv run yt-channel-status
 - `docs/channel/strategy.md` — チャンネル戦略の集約文書
 - `docs/channel/channel-direction.md` — 方向性決定の記録
 
-どちらも任意扱い。存在しない場合は warning を表示して進行する（`/channel-direction` で生成できる旨を案内）。
+どちらも任意扱い。存在しない場合は warning を表示して進行する（`/channel-new` の方向性検討モードで生成できる旨を案内）。
 
 #### Phase 1-2: 自チャンネル Analytics 分析
 

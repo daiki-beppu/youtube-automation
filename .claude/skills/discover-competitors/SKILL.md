@@ -124,7 +124,7 @@ uv run yt-discover-competitors \
 
 - 競合の動画詳細分析 → `/benchmark`
 - 視聴者コメント分析 → `/viewer-voice`
-- 方向性決定・config 生成 → `/channel-direction` / `/channel-new`（再生成モード）
+- 方向性決定・config 生成 → `/channel-new`（方向性検討モード）/ `/channel-new`（再生成モード）
 - ベンチマーク再収集 → `/benchmark`
 
 このスキルは **発掘**だけに責任を持つ。深堀分析は専用スキルにバトンを渡す。
