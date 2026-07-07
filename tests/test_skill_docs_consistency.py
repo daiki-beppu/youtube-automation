@@ -214,7 +214,7 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
 
     assert "方向性の検討・精緻化（必要な場合だけ、方向性検討モード）" in overview
     assert "`/channel-new` は方向性を聞かず" in overview
-    assert "旧 `/channel-direction` は本スキルの方向性検討モードに統合済み" in overview
+    assert "旧 `/channel-direction`" not in overview
     assert "方向性検討モード" in mode_routing
     assert "Step D1〜D5" in mode_routing
     assert "方向性の検討・精緻化が必要な場合も、新規開設モードでは質問せず" in mode_routing
@@ -224,7 +224,7 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
     assert "- `docs/channel/ttp-seed-confirmation.md`" in step7
     assert "- `docs/channel/competitor-branding-snapshot.json`" in step7
 
-    assert "旧 `/channel-direction` → 本スキルの方向性検討モードに統合済み" in cross_references
+    assert "旧 `/channel-direction`" not in cross_references
 
 
 def test_branding_missing_report_requires_existing_file_check_before_generation() -> None:
@@ -498,7 +498,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
     setup = _read(".claude/skills/setup/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    channel_direction_mode = channel_new.split("## 方向性検討モード（旧 /channel-direction）", 1)[1].split(
+    channel_direction_mode = channel_new.split("## 方向性検討モード", 1)[1].split(
         "## 再生成モード",
         1,
     )[0]
@@ -528,7 +528,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
 
     assert "TTP 対象確認、config 生成、ペルソナ、branding" in setup
     assert "TTP 対象確認 / seed fetch / 承認済み benchmark.channels 反映" in channel_new
-    assert "旧 `/channel-direction` は本スキルの方向性検討モードに統合済み" in channel_new
+    assert "旧 `/channel-direction` は本スキルの方向性検討モードに統合済み" not in channel_new
     assert "docs/channel/ttp-seed-confirmation.md" in channel_direction_mode
     assert "docs/channel/competitor-branding-snapshot.json" in channel_direction_mode
     assert "untrusted data" in channel_direction_mode
