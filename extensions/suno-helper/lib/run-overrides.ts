@@ -7,11 +7,13 @@ export interface RunOverrides {
   range?: RunRange;
   indices?: number[];
   submittedClipIds?: string[];
+  submittedClipIdsAreDurationFiltered?: boolean;
   playlistExpectedClipCount?: number;
 }
 
 export interface PlaylistResumePayload {
   submittedClipIds: string[];
+  submittedClipIdsAreDurationFiltered: boolean;
   playlistExpectedClipCount: number | undefined;
 }
 
@@ -33,6 +35,7 @@ export function buildRunPayload(input: RunPayloadInput): RunPayload {
     collectionId: input.collectionId,
     indices: input.overrides?.indices,
     submittedClipIds: input.overrides?.submittedClipIds,
+    submittedClipIdsAreDurationFiltered: input.overrides?.submittedClipIdsAreDurationFiltered,
     playlistExpectedClipCount: input.overrides?.playlistExpectedClipCount,
   };
 }
@@ -45,12 +48,14 @@ export function buildResumeRunOverrides(
     return {
       indices: [...resumeBanner.remainingIndices],
       submittedClipIds: [...playlistResume.submittedClipIds],
+      submittedClipIdsAreDurationFiltered: playlistResume.submittedClipIdsAreDurationFiltered,
       playlistExpectedClipCount: playlistResume.playlistExpectedClipCount,
     };
   }
   return {
     range: resumeRunRange(resumeBanner),
     submittedClipIds: [...playlistResume.submittedClipIds],
+    submittedClipIdsAreDurationFiltered: playlistResume.submittedClipIdsAreDurationFiltered,
     playlistExpectedClipCount: playlistResume.playlistExpectedClipCount,
   };
 }
@@ -62,6 +67,7 @@ export function buildFailedEntriesRunOverrides(
   return {
     indices: [...failedEntries],
     submittedClipIds: [...playlistResume.submittedClipIds],
+    submittedClipIdsAreDurationFiltered: playlistResume.submittedClipIdsAreDurationFiltered,
     playlistExpectedClipCount: playlistResume.playlistExpectedClipCount,
   };
 }

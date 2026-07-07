@@ -2,7 +2,7 @@
 
 ## Status
 
-accepted (2026-06-15)。実装は `feat/ts-rewrite` 上で進行中（cutover #790 で main へ反映予定）。
+accepted。実装乖離（`packages/core` の `yaml` 依存と suno-prompts の YAML 読み込みが残存、#1413 監査で検出）は 2026-07-02 に解消済み (#1415)
 
 ## Context
 

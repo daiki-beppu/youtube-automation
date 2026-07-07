@@ -2,9 +2,9 @@
   "name": "@youtube-automation/cli",
   "version": "0.1.0-alpha.0",
   "private": true,
-  "description": "yt command line entry point for the youtube-channels-automation TS rewrite (ADR-0004 citty dispatcher).",
+  "description": "tayk command line entry point for the youtube-channels-automation TS rewrite (ADR-0004 citty dispatcher).",
   "bin": {
-    "yt": "./bin/yt.ts"
+    "tayk": "./bin/tayk.ts"
   },
   "files": [
     "bin",

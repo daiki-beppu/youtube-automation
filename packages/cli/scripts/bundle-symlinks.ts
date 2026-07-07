@@ -8,7 +8,7 @@
 // files, both assets absent). `prepack` replaces each link with a dereferenced
 // real copy; `postpack` restores the link, leaving the working tree unchanged.
 
-import { cp, lstat, rm, symlink } from "node:fs/promises";
+import { cp, lstat, mkdir, rm, symlink, unlink } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 
 // packages/cli/scripts → packages/cli → packages → repo root.
@@ -46,18 +46,42 @@ const lstatOrNull = async (path: string) => {
   }
 };
 
+const ensureRealParentDirectory = async (path: string): Promise<void> => {
+  const parent = dirname(path);
+  const stat = await lstatOrNull(parent);
+  if (stat === null) {
+    await mkdir(parent, { recursive: true });
+  }
+};
+
+const removePathIfPresent = async (path: string): Promise<void> => {
+  const stat = await lstatOrNull(path);
+  if (stat === null) {
+    return;
+  }
+  if (stat.isSymbolicLink() || stat.isFile()) {
+    await unlink(path);
+    return;
+  }
+  await rm(path, { force: true, recursive: true });
+};
+
+const restoreSymlink = async (link: string, source: string): Promise<void> => {
+  const target = relative(dirname(link), source);
+  await symlink(target, link);
+};
+
 // Replace each committed symlink with a dereferenced real copy of its source so
 // the tarball ships real files. Idempotent: an already-materialized asset (real
 // path, not a symlink) is left untouched.
 const materialize = async (): Promise<void> => {
   for (const { link, source } of ASSETS) {
+    await ensureRealParentDirectory(link);
     const stat = await lstatOrNull(link);
     if (stat && !stat.isSymbolicLink()) {
       continue;
     }
-    if (stat) {
-      await rm(link, { force: true, recursive: true });
-    }
+    await removePathIfPresent(link);
     await cp(source, link, { dereference: true, recursive: true });
   }
 };
@@ -66,8 +90,9 @@ const materialize = async (): Promise<void> => {
 // on-disk shape (self-healing — works even if materialize ran only partially).
 const restore = async (): Promise<void> => {
   for (const { link, source } of ASSETS) {
-    await rm(link, { force: true, recursive: true });
-    await symlink(relative(dirname(link), source), link);
+    await ensureRealParentDirectory(link);
+    await removePathIfPresent(link);
+    await restoreSymlink(link, source);
   }
 };
 

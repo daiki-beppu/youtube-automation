@@ -1,5 +1,5 @@
 // `config/channel/*.json` を glob ロード・バリデーションし `ChannelConfig` を組み立てる。
-// singleton + reset + channelDir + cross-file 検証（localizations 別ファイル）を担う。
+// singleton + reset + channelDir + localizations sidecar の pre-merge を担う。
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -9,22 +9,39 @@ import { z } from "zod";
 import { ChannelConfigSchema } from "./config.ts";
 import type { ChannelConfig } from "./config.ts";
 import { isPlainObject } from "./internal.ts";
-import { Localizations, localizationsAbsent } from "./localizations.ts";
 
 let instance: ChannelConfig | null = null;
 let channelDirCache: string | null = null;
+
+const LOCALIZATIONS_FILENAME = "localizations.json";
+const LOCALIZATIONS_KEY = "localizations";
 
 const isDir = (path: string): boolean =>
   existsSync(path) && statSync(path).isDirectory();
 
 // zod の issue 列を `config:` prefix の 1 行メッセージへ整形する（path. + message）。
+const formatIssuePath = (path: z.ZodIssue["path"]): string | null => {
+  if (path.length === 0) {
+    return null;
+  }
+
+  const [first, ...rest] = path;
+  if (first === LOCALIZATIONS_KEY) {
+    if (rest.length === 0) {
+      return LOCALIZATIONS_FILENAME;
+    }
+    return `${LOCALIZATIONS_FILENAME}: ${rest.map(String).join(".")}`;
+  }
+
+  return path.map(String).join(".");
+};
+
 const formatZodError = (error: z.ZodError): string =>
   error.issues
-    .map((issue) =>
-      issue.path.length > 0
-        ? `${issue.path.join(".")}: ${issue.message}`
-        : issue.message
-    )
+    .map((issue) => {
+      const path = formatIssuePath(issue.path);
+      return path === null ? issue.message : `${path}: ${issue.message}`;
+    })
     .join("; ");
 
 // CHANNEL_DIR 環境変数を優先し、未設定なら CWD 祖先を辿って config/channel/ を探す。
@@ -94,35 +111,40 @@ const loadAndMerge = (files: string[]): Record<string, unknown> => {
   return merged;
 };
 
-// localizations.json（config/ 直下・config/channel/ の外）を読み込む。
-const loadLocalizations = (
-  channelRoot: string,
-  fallbackLanguage: string
-): Localizations => {
-  const locPath = join(channelRoot, "config", "localizations.json");
+// localizations.json（config/ 直下・config/channel/ の外）を raw のまま読み込む。
+const loadLocalizationsRaw = (channelRoot: string): unknown | undefined => {
+  const locPath = join(channelRoot, "config", LOCALIZATIONS_FILENAME);
   if (!existsSync(locPath)) {
-    return localizationsAbsent(fallbackLanguage);
+    return undefined;
   }
-  let data: unknown;
   try {
-    data = JSON.parse(readFileSync(locPath, "utf-8"));
+    return JSON.parse(readFileSync(locPath, "utf-8"));
   } catch (error) {
     throw new Error(
-      `config: localizations.json の JSON パース失敗: ${locPath}: ${String(error)}`,
+      `config: ${LOCALIZATIONS_FILENAME} の JSON パース失敗: ${locPath}: ${String(error)}`,
       { cause: error }
     );
   }
-  try {
-    return Localizations.parse(data);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      throw new TypeError(
-        `config: localizations.json: ${formatZodError(error)}`,
-        { cause: error }
-      );
-    }
-    throw error;
+};
+
+const assertNoChannelLocalizations = (
+  merged: Record<string, unknown>
+): void => {
+  if (LOCALIZATIONS_KEY in merged) {
+    throw new Error(
+      `config: '${LOCALIZATIONS_KEY}' キーは config/channel/*.json ではなく config/${LOCALIZATIONS_FILENAME} に配置してください`
+    );
   }
+};
+
+const mergeLocalizations = (
+  merged: Record<string, unknown>,
+  localizationsRaw: unknown | undefined
+): Record<string, unknown> => {
+  if (localizationsRaw === undefined) {
+    return merged;
+  }
+  return { ...merged, [LOCALIZATIONS_KEY]: localizationsRaw };
 };
 
 const build = (channelRoot: string): ChannelConfig => {
@@ -150,41 +172,20 @@ const build = (channelRoot: string): ChannelConfig => {
     );
   }
 
-  const merged = loadAndMerge(files);
-
-  let parsed: z.infer<typeof ChannelConfigSchema>;
+  const channelConfig = loadAndMerge(files);
+  assertNoChannelLocalizations(channelConfig);
+  const merged = mergeLocalizations(
+    channelConfig,
+    loadLocalizationsRaw(channelRoot)
+  );
   try {
-    parsed = ChannelConfigSchema.parse(merged);
+    return ChannelConfigSchema.parse(merged);
   } catch (error) {
     if (error instanceof z.ZodError) {
       throw new TypeError(`config: ${formatZodError(error)}`, { cause: error });
     }
     throw error;
   }
-
-  const localizations = loadLocalizations(
-    channelRoot,
-    parsed.publishing.youtube.api.language
-  );
-
-  // cross-file: content_model.languages ⊆ localizations.supported_languages（存在時）。
-  if (localizations.exists) {
-    const unknownLangs =
-      parsed.publishing.youtube.contentModel.languages.filter(
-        (lang) => !localizations.supportedLanguages.includes(lang)
-      );
-    if (unknownLangs.length > 0) {
-      throw new Error(
-        `config: content_model.languages に localizations.supported_languages へ未登録の言語があります: ${JSON.stringify(unknownLangs)}`
-      );
-    }
-  }
-
-  // localizations は engagement バケットへ注入する（トップレベルには置かない、#827）。
-  return {
-    ...parsed,
-    engagement: { ...parsed.engagement, localizations },
-  };
 };
 
 /** `config/channel/*.json` を glob ロードし `ChannelConfig` を返す（シングルトン）。 */

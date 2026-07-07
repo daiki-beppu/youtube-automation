@@ -45,7 +45,7 @@ const OP_SPAWN_BANNED_IN_CORE = [
     object: "Bun",
     property: "spawnSync",
   },
-];
+] as const;
 
 // ADR 0003 §5 / Enforcement: interactiveAuthService は browser open + local server を
 // 起動する CLI 専用 service。MCP サーバプロセスは browser を開けず boot 時に hang する
@@ -94,6 +94,15 @@ export default defineConfig({
     "_skills/**",
   ],
   overrides: [
+    {
+      files: ["packages/**"],
+      rules: {
+        "eslint/no-await-in-loop": "off",
+        "eslint/prefer-named-capture-group": "off",
+        "typescript/method-signature-style": "off",
+        "unicorn/import-style": "off",
+      },
+    },
     {
       files: ["packages/cli/**"],
       rules: {

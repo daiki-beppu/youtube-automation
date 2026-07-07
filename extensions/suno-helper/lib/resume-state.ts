@@ -9,6 +9,7 @@
 import { storage } from "wxt/utils/storage";
 
 import { CLIPS_PER_REQUEST, RESUME_STATE_KEY } from "../../shared/constants";
+import type { DurationFilter } from "../../shared/api";
 
 /** ERROR 停止時に永続化する再開メタ情報 (#872)。 */
 export interface ResumeState {
@@ -33,7 +34,11 @@ export interface ResumeState {
   remainingIndices?: number[];
   /** playlist 追加対象として generate response から観測済みの clip ID 一覧。 */
   submittedClipIds?: string[];
-  /** playlist 追加時に揃っているべき clip ID 件数。 */
+  /** collection 単位 duration guard 閾値。復元後も同じ OK/NG 判定を維持する。 */
+  durationFilter?: DurationFilter;
+  /** true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。 */
+  submittedClipIdsAreDurationFiltered?: boolean;
+  /** duration filter 後に playlist 追加・download へ採用する OK clip 件数。 */
   playlistExpectedClipCount?: number;
 }
 

@@ -19,10 +19,8 @@
 import { describe, expect, test } from "bun:test";
 
 import { refreshTokenService } from "@youtube-automation/core/oauth/refresh";
+import type { RefreshDeps } from "@youtube-automation/core/oauth/refresh";
 
-// Derive the deps bag type from the service itself (image-gemini.test.ts:38-40)
-// so the test does not hard-code the injection shape's exported name.
-type RefreshDeps = NonNullable<Parameters<typeof refreshTokenService>[1]>;
 type RefreshInput = Parameters<typeof refreshTokenService>[0];
 
 const clientSecretsJson = JSON.stringify({
