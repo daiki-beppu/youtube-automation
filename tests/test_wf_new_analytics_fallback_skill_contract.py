@@ -106,6 +106,35 @@ def test_wf_new_phase_1_declares_analytics_absent_input_modes() -> None:
     assert "deep-merge した解決済み `freshness_days`" in phase_1
 
 
+def test_wf_new_hard_gates_block_missing_channel_config_before_child_skills() -> None:
+    text = _read(_WF_NEW_SKILL_MD)
+    hard_gates = _section(text, "## Hard Gates")
+    hard_gate_line = text[: text.index("## Hard Gates")].count("\n") + 1
+
+    assert hard_gate_line <= 60
+    assert text.index("## Hard Gates") < text.index("### 実行シーケンス")
+    assert "`config/channel/` が存在し、`load_config()` でロードできること" in hard_gates
+    assert "存在しない場合は `/channel-new`" in hard_gates
+    assert "ロード失敗の場合は `/channel-new`（既存チャンネル取り込みモード）" in hard_gates
+    assert "満たすまで後続 Step へ進まない" in hard_gates
+    assert "/collection-ideate`、`/thumbnail`、`/suno`、`/lyria` を呼ばない" in hard_gates
+    assert "`bunx tayk init-collection` を実行しない" in hard_gates
+    assert "`collections/planning/`、`workflow-state.json`、`assets.*` を新規作成・更新しない" in hard_gates
+
+
+def test_wf_new_hard_gates_stop_before_suno_when_music_readiness_is_missing() -> None:
+    text = _read(_WF_NEW_SKILL_MD)
+    hard_gates = _section(text, "## Hard Gates")
+    phase_2c = _section(text, "#### 2c. サムネイル確定 + 音楽素材生成")
+
+    for section in (hard_gates, phase_2c):
+        assert "`config/skills/suno.yaml::genre_line` または `data/video_analysis/<slug>/*.json`" in section
+        assert "`/suno` を呼ばず" in section or "`/suno` を起動せず" in section
+        assert "`bunx tayk video-analyze --source benchmark --channel <slug> --top 5`" in section
+        assert "AI が `genre_line` を手書き" in section
+        assert "`assets.music_prompts = true` に更新することは禁止" in section
+
+
 def test_collection_ideate_preflight_declares_same_input_modes() -> None:
     text = _read(_COLLECTION_IDEATE_SKILL_MD)
     preflight = _section(text, "## 前提スキル状態確認")
