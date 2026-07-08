@@ -41,8 +41,8 @@ def _font_fallback_guidance(key: str) -> str:
         "  2. 利用可能なフォントの例: macOS は /System/Library/Fonts/、Google Fonts から\n"
         "     ダウンロードしたファイルを <channel_dir>/assets/fonts/ に置く運用を推奨\n"
         "  3. 決定的合成を使わない場合は AI 経路にフォールバックする\n"
-        "     (SKILL.md「フォント安定化」参照。single_step の typography_clause / two_phase の\n"
-        "     thumbnail_text.font でフォントの雰囲気を指示できるが、書体の厳密な再現は保証されない)"
+        "     (SKILL.md「フォント安定化」参照。single_step は第2段の文字入り thumbnail prompt、\n"
+        "     two_phase は thumbnail_text.font でフォントの雰囲気を指示できるが、書体の厳密な再現は保証されない)"
     )
 
 

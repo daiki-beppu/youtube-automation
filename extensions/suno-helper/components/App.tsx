@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
+import { DOWNLOAD_FORMAT_DEFAULT } from "../../shared/constants";
 import {
   buildInitialPatternSelection,
   reconcilePatternSelection,
@@ -11,8 +11,6 @@ import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../
 import { PatternList } from "./PatternList";
 import { useSunoRunner } from "./useSunoRunner";
 
-// 実行モード selector の表示順 (#875)。Fast → Balanced → Safe で速度順に並べる。
-const SPEED_PRESET_ORDER: SpeedPresetId[] = ["fast", "balanced", "safe"];
 const DOWNLOAD_FORMAT_OPTIONS: DownloadFormat[] = ["mp3", "m4a", "wav"];
 
 export function App() {
@@ -28,13 +26,12 @@ export function App() {
     entries,
     itemStates,
     status,
+    phase,
     isError,
     compatibilityWarning,
     canRun,
     isRunning,
     playlistName,
-    speedPresetId,
-    setSpeedPreset,
     resumeBanner,
     acceptResume,
     dismissResume,
@@ -125,7 +122,16 @@ export function App() {
     );
   };
   return (
-    <div className="flex flex-col gap-3 p-3 text-gray-900">
+    <div
+      className="flex flex-col gap-3 p-3 text-gray-900"
+      data-suno-helper="control-panel"
+      data-suno-phase={phase}
+      data-suno-running={isRunning ? "true" : "false"}
+      data-suno-error={isError ? "true" : "false"}
+      data-suno-collection-id={selectedCollectionId}
+      data-suno-entry-count={entries.length}
+      data-suno-selected-entry-count={selectedEntryCount}
+    >
       <h1 className="text-base font-semibold">Suno Helper</h1>
 
       <label className="flex flex-col gap-1 text-sm">
@@ -133,6 +139,7 @@ export function App() {
         <select
           value={url}
           onChange={(e) => setUrl(e.target.value)}
+          data-suno-control="server-url"
           className="rounded border border-gray-300 px-2 py-1"
         >
           {serverSources.map((source) => (
@@ -148,6 +155,7 @@ export function App() {
         <select
           value={selectedCollectionId}
           onChange={(e) => selectCollection(e.target.value)}
+          data-suno-control="collection-select"
           className="rounded border border-gray-300 px-2 py-1"
         >
           {collections.length === 0 && (
@@ -179,6 +187,7 @@ export function App() {
             <button
               type="button"
               onClick={acceptResume}
+              data-suno-control="resume"
               className="rounded bg-amber-600 px-2 py-1 text-white hover:bg-amber-500"
             >
               再開
@@ -186,6 +195,7 @@ export function App() {
             <button
               type="button"
               onClick={dismissResume}
+              data-suno-control="dismiss-resume"
               className="rounded border border-amber-400 px-2 py-1 hover:bg-amber-100"
             >
               閉じる
@@ -217,28 +227,6 @@ export function App() {
         </div>
       )}
 
-      <fieldset className="flex flex-col gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
-        <legend className="px-1 text-xs text-gray-600">実行モード</legend>
-        {SPEED_PRESET_ORDER.map((id) => {
-          const preset = SPEED_PRESETS[id];
-          return (
-            <label key={id} className="flex items-start gap-2">
-              <input
-                type="radio"
-                name="speed-preset"
-                className="mt-1"
-                checked={speedPresetId === id}
-                onChange={() => setSpeedPreset(id)}
-              />
-              <span className="flex flex-col">
-                <span className="font-medium">{preset.label}</span>
-                <span className="text-xs text-gray-500">{preset.riskNote}</span>
-              </span>
-            </label>
-          );
-        })}
-      </fieldset>
-
       <label className="flex flex-col gap-1 text-sm">
         DL 形式
         <select
@@ -258,6 +246,7 @@ export function App() {
         <button
           type="button"
           onClick={() => void fetchData()}
+          data-suno-control="fetch-data"
           className="flex-1 rounded bg-gray-800 px-2 py-1 text-sm text-white hover:bg-gray-700"
         >
           データ取得
@@ -266,6 +255,7 @@ export function App() {
           type="button"
           onClick={runSelectedEntries}
           disabled={!canRunSelectedEntries}
+          data-suno-control="run"
           className="flex-1 rounded bg-blue-600 px-2 py-1 text-sm text-white hover:bg-blue-500 disabled:opacity-40"
         >
           {runButtonLabel}
@@ -274,6 +264,7 @@ export function App() {
           type="button"
           onClick={() => void stop()}
           disabled={!isRunning}
+          data-suno-control="stop"
           className="rounded bg-red-600 px-2 py-1 text-sm text-white hover:bg-red-500 disabled:opacity-40"
         >
           停止
@@ -285,6 +276,7 @@ export function App() {
           <button
             type="button"
             onClick={() => void adoptSelectedClips()}
+            data-suno-control="adopt-selected-clips"
             className="rounded border border-gray-400 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
           >
             選択中の曲を採用
@@ -294,6 +286,7 @@ export function App() {
               <button
                 type="button"
                 onClick={() => void retryPlaylist()}
+                data-suno-control="retry-playlist"
                 className="flex-1 rounded border border-amber-500 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
               >
                 Playlist から再開
@@ -303,6 +296,7 @@ export function App() {
               type="button"
               onClick={() => void retryDownload()}
               disabled={!selectedCollectionId}
+              data-suno-control="retry-download"
               className="flex-1 rounded border border-green-500 px-2 py-1 text-xs text-green-700 hover:bg-green-50 disabled:opacity-40"
             >
               Download から再開
@@ -319,7 +313,14 @@ export function App() {
       />
 
       {status && (
-        <p className={`whitespace-pre-wrap text-xs ${isError ? "text-red-600" : "text-gray-600"}`}>{status}</p>
+        <p
+          role="status"
+          aria-live="polite"
+          data-suno-status={isError ? "error" : "ok"}
+          className={`whitespace-pre-wrap text-xs ${isError ? "text-red-600" : "text-gray-600"}`}
+        >
+          {status}
+        </p>
       )}
     </div>
   );

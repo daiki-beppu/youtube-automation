@@ -29,7 +29,7 @@ export interface RunEntryWithRetryOptions {
   wasSubmitted: (error: unknown) => boolean;
   /** run 全体を止めるべき致命的エラーか（= FatalRunError の instanceof 判定）。 */
   isFatal: (error: unknown) => boolean;
-  /** 同一 entry を再試行する最大回数（preset.maxEntryRetry）。 */
+  /** 同一 entry を再試行する最大回数。 */
   maxRetry: number;
   /** retry 間の待機 (ms)。jitter 込みで毎回 fresh 算出する。 */
   retryDelayMs: () => number;

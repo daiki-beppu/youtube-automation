@@ -19,6 +19,7 @@ import type {
 } from "@youtube-automation/core/skills-sync";
 import { runCommand } from "citty";
 
+import { createCollectionPreflightCommand } from "../src/commands/collection-preflight/cli.ts";
 import { createSkillsCommand } from "../src/commands/skills/cli.ts";
 
 const CLI_SMOKE_TIMEOUT_MS = 15_000;
@@ -143,6 +144,7 @@ describe("tayk skills — dispatcher smoke", () => {
       const proc = runTayk("--help");
 
       expect(proc.exitCode).toBe(0);
+      expect(proc.stdout.toString()).toContain("collection-preflight");
       expect(proc.stdout.toString()).toContain("skills");
     },
     CLI_SMOKE_TIMEOUT_MS
@@ -159,6 +161,69 @@ describe("tayk skills — dispatcher smoke", () => {
     },
     CLI_SMOKE_TIMEOUT_MS
   );
+});
+
+describe("tayk collection-preflight — Python entrypoint proxy", () => {
+  test("forwards raw args to yt-collection-preflight", () => {
+    const calls: {
+      command: string[];
+      options: {
+        stderr: "inherit";
+        stdin: "inherit";
+        stdout: "inherit";
+      };
+    }[] = [];
+    const command = createCollectionPreflightCommand({
+      exit: (code: number): never => {
+        throw new Error(`unexpected exit ${code}`);
+      },
+      spawnSync: (spawnCommand, options) => {
+        calls.push({ command: spawnCommand, options });
+        return { exitCode: 0 };
+      },
+    });
+
+    command.run({
+      rawArgs: [
+        "20260702-demo-collection",
+        "--fix",
+        "--planning-root",
+        "/tmp/planning",
+      ],
+    });
+
+    expect(calls).toEqual([
+      {
+        command: [
+          "uv",
+          "run",
+          "yt-collection-preflight",
+          "20260702-demo-collection",
+          "--fix",
+          "--planning-root",
+          "/tmp/planning",
+        ],
+        options: {
+          stderr: "inherit",
+          stdin: "inherit",
+          stdout: "inherit",
+        },
+      },
+    ]);
+  });
+
+  test("propagates non-zero exit code", () => {
+    const command = createCollectionPreflightCommand({
+      exit: (code: number): never => {
+        throw new Error(`exit ${code}`);
+      },
+      spawnSync: () => ({ exitCode: 2 }),
+    });
+
+    expect(() => command.run({ rawArgs: ["missing-collection"] })).toThrow(
+      "exit 2"
+    );
+  });
 });
 
 describe("createSkillsCommand list — in-process adapter contract", () => {

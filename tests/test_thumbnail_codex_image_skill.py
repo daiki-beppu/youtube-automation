@@ -257,6 +257,17 @@ def _provider_section(text: str) -> str:
     return match.group(0)
 
 
+def _provider_fallback_section(text: str) -> str:
+    match = re.search(
+        r"^## 障害時の provider fallback\b.*?(?=^## |\Z)",
+        text,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    if not match:
+        raise AssertionError("thumbnail/SKILL.md に `## 障害時の provider fallback` セクションが見つかりません")
+    return match.group(0)
+
+
 def test_codex_image_script_exists() -> None:
     """Given Issue #501 / #547 の実装後
     When canonical path の script を探す
@@ -913,19 +924,30 @@ def test_thumbnail_skill_codex_section_documents_login_and_direct_command() -> N
     section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
     assert "codex login status" in section
     assert ".claude/skills/thumbnail/references/codex-image.sh" in section
-    assert "thumbnail-codex-v1.png" in section
+    assert "main-v1.png" in section
 
 
-def test_thumbnail_skill_codex_section_follows_thumbnail_then_textless_main_contract() -> None:
-    """#1310: codex 経路も文字入り thumbnail と textless main を別成果物にする。"""
+def test_thumbnail_skill_provider_fallback_codex_example_starts_with_textless_main() -> None:
+    """#1502: GCP 課金なし codex wrapper 入口も初回は textless main を生成する。"""
+    section = _provider_fallback_section(_read(_THUMBNAIL_SKILL_MD))
+    assert ".claude/skills/thumbnail/references/codex-image.sh" in section
+    assert "<textless background prompt>" in section
+    assert "<collection-path>/10-assets/main-v1.png" in section
+    assert "<thumbnail prompt>" not in section
+    assert "<collection-path>/10-assets/thumbnail-codex-v1.png" not in section
+
+
+def test_thumbnail_skill_codex_section_follows_textless_main_then_thumbnail_contract() -> None:
+    """#1502: codex 経路も textless main 先行で文字入り thumbnail を別成果物にする。"""
     section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
 
     for required in (
         "codex 経路でも標準ファイル契約は同じ",
-        "10-assets/thumbnail-codex-v1.png",
-        "10-assets/thumbnail.jpg",
         "10-assets/main-v1.png",
         "10-assets/main.png",
+        "承認済み `main.png`",
+        "10-assets/thumbnail-codex-v1.png",
+        "10-assets/thumbnail.jpg",
         "動画背景には使わない",
     ):
         assert required in section
