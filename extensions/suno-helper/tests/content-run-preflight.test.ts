@@ -30,8 +30,13 @@ const harness = vi.hoisted(() => {
     feedPollerStart,
     feedPollerStop,
     runEntryWithRetry,
+    maxInflightRequests: 10,
+    maxEntryRetry: 0,
     requestSliderSet: vi.fn(),
     submittedClipIds: [] as string[],
+    durationsById: {} as Record<string, number | undefined>,
+    waitForGeneration: vi.fn<() => Promise<void>>(async () => undefined),
+    waitForQueueSlot: vi.fn<(maxGeneratingClips: number) => Promise<void>>(async () => undefined),
   };
 });
 
@@ -43,10 +48,10 @@ vi.mock("../lib/preset-state", async () => {
     resolveSpeedPreset: vi.fn(() => ({
       interCreateDelayMs: 0,
       jitterMs: 0,
-      maxInflightRequests: 10,
+      maxInflightRequests: harness.maxInflightRequests,
       maxInjectRetry: 0,
       injectAckTimeoutMs: 100,
-      maxEntryRetry: 0,
+      maxEntryRetry: harness.maxEntryRetry,
       label: "Test",
       riskNote: "Test preset",
     })),
@@ -61,7 +66,8 @@ vi.mock("../../shared/dom", async () => {
     abortableSleep: vi.fn(async () => undefined),
     injectAdvancedFields: vi.fn(async () => undefined),
     waitForCaptchaClear: vi.fn(async () => undefined),
-    waitForGeneration: vi.fn(async () => undefined),
+    waitForGeneration: harness.waitForGeneration,
+    waitForQueueSlot: harness.waitForQueueSlot,
   };
 });
 
@@ -86,7 +92,10 @@ vi.mock("../lib/clip-tracker", () => ({
     clearSubmittedIds: vi.fn(),
     getSubmittedIds: vi.fn(() => harness.submittedClipIds),
     getPendingSubmittedIds: vi.fn(() => []),
-    getDuration: vi.fn(() => 120),
+    getPendingIdsByIds: vi.fn(() => []),
+    getDuration: vi.fn((id: string) =>
+      Object.prototype.hasOwnProperty.call(harness.durationsById, id) ? harness.durationsById[id] : 120,
+    ),
     getInFlightCount: vi.fn(() => 0),
     hasObservedAnyTraffic: vi.fn(() => true),
     lastChangeAt: vi.fn(() => Date.now()),
@@ -276,6 +285,11 @@ function addStatusOnlyCard(): void {
   document.body.appendChild(card);
 }
 
+function appendSubmittedClipIdsForRequest(prefix: string): void {
+  const next = harness.submittedClipIds.length + 1;
+  harness.submittedClipIds.push(`${prefix}-${next}`, `${prefix}-${next + 1}`);
+}
+
 function makeRunnableSunoDom(viewLabel: "List ▼" | "Waveform" | "Grid"): void {
   makeViewButton("Newest ▼");
   makeViewButton(viewLabel);
@@ -300,12 +314,14 @@ function makeRunPayload(entries = makePromptEntries(0)): {
   entries: ReturnType<typeof makePromptEntries>;
   playlistName: string;
   collectionId: string;
+  runMode: "serial";
 } {
   harness.submittedClipIds = Array.from({ length: entries.length * 2 }, (_, index) => `generated-clip-${index + 1}`);
   return {
     entries,
     playlistName: "clm | preflight",
     collectionId: "20260601-clm-preflight-collection",
+    runMode: "serial",
   };
 }
 
@@ -319,7 +335,14 @@ beforeEach(() => {
     await options.attempt();
     return { outcome: "ok" };
   });
+  harness.maxInflightRequests = 10;
+  harness.maxEntryRetry = 0;
   harness.submittedClipIds = [];
+  harness.durationsById = {};
+  harness.waitForGeneration.mockReset();
+  harness.waitForGeneration.mockResolvedValue(undefined);
+  harness.waitForQueueSlot.mockReset();
+  harness.waitForQueueSlot.mockResolvedValue(undefined);
   harness.handlers.clear();
   document.body.innerHTML = "";
 });
@@ -345,11 +368,18 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     ["durationFilter が空 object", { durationFilter: {} }, /run\.durationFilter/],
     ["durationFilter が boolean", { durationFilter: false }, /run\.durationFilter/],
     ["durationFilter が min > max", { durationFilter: { min_sec: 301, max_sec: 300 } }, /run\.durationFilter/],
+    ["runMode 欠落", { runMode: undefined }, /run\.runMode/],
+    ["runMode が未知値", { runMode: "parallel" }, /run\.runMode/],
+    ["runMode が prototype 継承 key", { runMode: "toString" }, /run\.runMode/],
+    ["submittedClipIds が非配列", { submittedClipIds: "clip-1" }, /run\.submittedClipIds/],
+    ["submittedClipIds に非 string", { submittedClipIds: ["clip-1", 2] }, /run\.submittedClipIds/],
     [
       "submittedClipIdsAreDurationFiltered が非 boolean",
       { submittedClipIdsAreDurationFiltered: "true" },
       /run\.submittedClipIdsAreDurationFiltered/,
     ],
+    ["playlistExpectedClipCount が小数", { playlistExpectedClipCount: 1.5 }, /run\.playlistExpectedClipCount/],
+    ["playlistExpectedClipCount が負数", { playlistExpectedClipCount: -1 }, /run\.playlistExpectedClipCount/],
   ] as const)(
     "Given %s payload When run を受ける Then fail-loud し副作用を起こさない",
     async (_label, override, message) => {
@@ -361,6 +391,23 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       expect(harness.feedPollerStart).not.toHaveBeenCalled();
     },
   );
+
+  it("Given durationFilter が小数秒 When run を受ける Then payload を受理して実行を開始する", async () => {
+    makeViewButton("Grid");
+    await loadContentScript();
+    const runHandler = getRunHandler();
+
+    const result = runHandler({
+      data: {
+        ...makeRunPayload(),
+        durationFilter: { min_sec: 1.5, max_sec: 300.25 },
+      },
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(harness.feedPollerStart).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+  });
 
   it.each([
     ["文字列", "0", /run\.indices/],
@@ -673,6 +720,185 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
         failedIndex: 2,
         total: entries.length,
         remainingIndices: [2, 4],
+      }),
+    );
+  });
+
+  it("Given queue mode When 1 entry 目の生成完了が未観測 Then 完了待ちの前に 2 entry 目を投入する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    const style = makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    const clickedStyles: string[] = [];
+    makeGenerateButtonWithClickObserver(() => {
+      clickedStyles.push(style.value);
+      appendSubmittedClipIdsForRequest("queue-clip");
+    });
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = [
+      { name: "queue-1", style: "style 1", lyrics: "" },
+      { name: "queue-2", style: "style 2", lyrics: "" },
+    ];
+    let releaseFirstGeneration!: () => void;
+    const firstGeneration = new Promise<void>((resolve) => {
+      releaseFirstGeneration = resolve;
+    });
+    harness.waitForGeneration.mockImplementationOnce(() => firstGeneration);
+
+    const payload = { ...makeRunPayload(entries), runMode: "queue" as const };
+    harness.submittedClipIds = [];
+    const result = runHandler({ data: payload });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(clickedStyles).toContain("style 1"));
+    let secondClickBeforeCompletion = false;
+    try {
+      await vi.waitFor(() => expect(clickedStyles).toContain("style 2"), { timeout: 200 });
+      secondClickBeforeCompletion = true;
+    } catch {
+      secondClickBeforeCompletion = false;
+    } finally {
+      releaseFirstGeneration();
+    }
+    expect(secondClickBeforeCompletion).toBe(true);
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    const progress = progressPayloads();
+    const submitted0Index = progress.findIndex(
+      (payload) =>
+        typeof payload === "object" &&
+        payload !== null &&
+        (payload as { phase?: string; index?: number }).phase === PHASE.SUBMITTED &&
+        (payload as { phase?: string; index?: number }).index === 0,
+    );
+    const submitted1Index = progress.findIndex(
+      (payload) =>
+        typeof payload === "object" &&
+        payload !== null &&
+        (payload as { phase?: string; index?: number }).phase === PHASE.SUBMITTED &&
+        (payload as { phase?: string; index?: number }).index === 1,
+    );
+    const done0Index = progress.findIndex(
+      (payload) =>
+        typeof payload === "object" &&
+        payload !== null &&
+        (payload as { phase?: string; index?: number }).phase === PHASE.DONE &&
+        (payload as { phase?: string; index?: number }).index === 0,
+    );
+    expect(submitted0Index).toBeGreaterThanOrEqual(0);
+    expect(submitted1Index).toBeGreaterThan(submitted0Index);
+    expect(done0Index).toBeGreaterThan(submitted1Index);
+  });
+
+  it("Given queue mode かつ preset が上限超過 When 11 entry を実行する Then 10 request cap で待機し 11件目を投入しない", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    makeGenerateButtonWithClickObserver(() => appendSubmittedClipIdsForRequest("queue-cap-clip"));
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(11);
+    let releaseEleventhSlot!: () => void;
+    const eleventhSlot = new Promise<void>((resolve) => {
+      releaseEleventhSlot = resolve;
+    });
+    harness.maxInflightRequests = 99;
+    harness.waitForQueueSlot.mockImplementation(async () => {
+      if (harness.waitForQueueSlot.mock.calls.length === 11) {
+        await eleventhSlot;
+      }
+    });
+
+    const payload = { ...makeRunPayload(entries), runMode: "queue" as const };
+    harness.submittedClipIds = [];
+    const result = runHandler({ data: payload });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.waitForQueueSlot).toHaveBeenCalledTimes(11));
+    expect(harness.waitForQueueSlot.mock.calls.map(([maxGeneratingClips]) => maxGeneratingClips)).toEqual(
+      Array.from({ length: 11 }, () => 20),
+    );
+    expect(document.querySelectorAll("article[aria-busy='true']")).toHaveLength(20);
+    releaseEleventhSlot();
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+  });
+
+  it("Given queue mode の投入済み clip が duration 未観測 When fatal 停止する Then raw submitted IDs を resume state に保持する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    makeGenerateButtonWithClickObserver(() => {
+      harness.submittedClipIds = ["queue-pending-clip-1", "queue-pending-clip-2"];
+    });
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(2);
+    const payload = { ...makeRunPayload(entries), runMode: "queue" as const };
+    harness.submittedClipIds = [];
+    harness.durationsById = {
+      "queue-pending-clip-1": undefined,
+      "queue-pending-clip-2": undefined,
+    };
+    harness.runEntryWithRetry.mockImplementationOnce(async (options: RunEntryWithRetryOptions) => {
+      await options.attempt();
+      return { outcome: "fatal" as const, error: new Error("fatal queue stop") };
+    });
+
+    const result = runHandler({ data: payload });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(writeResumeState).toHaveBeenCalledOnce(), { timeout: 3000 });
+    expect(writeResumeState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        collectionId: "20260601-clm-preflight-collection",
+        submittedClipIds: ["queue-pending-clip-1", "queue-pending-clip-2"],
+        submittedClipIdsAreDurationFiltered: false,
+        playlistExpectedClipCount: 2,
+      }),
+    );
+  });
+
+  it("Given queue mode が DOM-only ACK で clip ID 未観測 When entry retry 上限が残る Then 再クリックせず停止する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    const clickGenerate = vi.fn();
+    makeGenerateButtonWithClickObserver(clickGenerate);
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(1);
+    const payload = { ...makeRunPayload(entries), runMode: "queue" as const };
+    harness.submittedClipIds = [];
+    harness.maxEntryRetry = 2;
+    harness.runEntryWithRetry.mockImplementationOnce(async (options: RunEntryWithRetryOptions) => {
+      const actual = await vi.importActual<typeof import("../lib/entry-retry")>("../lib/entry-retry");
+      return actual.runEntryWithRetry(options);
+    });
+
+    const result = runHandler({ data: payload });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(writeResumeState).toHaveBeenCalledOnce(), { timeout: 3000 });
+    expect(clickGenerate).toHaveBeenCalledTimes(1);
+    expect(progressPayloads()).toContainEqual(
+      expect.objectContaining({
+        phase: PHASE.ERROR,
+        index: 1,
+        message: expect.stringContaining("投入 clip ID"),
+      }),
+    );
+    expect(progressPayloads()).not.toContainEqual(expect.objectContaining({ phase: PHASE.DONE, index: 0 }));
+    expect(writeResumeState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        failedIndex: 1,
+        submittedClipIds: [],
       }),
     );
   });

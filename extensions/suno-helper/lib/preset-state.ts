@@ -7,12 +7,22 @@
 // (純関数テスト preset-state.test.ts を壊さないため。resume-state.ts と同方針)。
 import { storage } from "wxt/utils/storage";
 
-import { SPEED_PRESET_STORAGE_KEY, SPEED_PRESETS, type SpeedPreset, type SpeedPresetId } from "../../shared/constants";
+import {
+  RUN_MODE_STORAGE_KEY,
+  SPEED_PRESET_STORAGE_KEY,
+  SPEED_PRESETS,
+  type RunModeId,
+  type SpeedPreset,
+  type SpeedPresetId,
+} from "../../shared/constants";
 
 export type { SpeedPresetId };
+export type { RunModeId };
 
 /** 既定の速度プリセット (要件2: デフォルトは Balanced)。 */
 export const DEFAULT_SPEED_PRESET_ID: SpeedPresetId = "balanced";
+/** 既定の投入方式 (#1586): 既存の直列実行を維持する。 */
+export const DEFAULT_RUN_MODE_ID: RunModeId = "serial";
 
 /**
  * preset id を SpeedPreset へ解決する (要件3)。
@@ -45,13 +55,27 @@ function createPresetItem() {
   });
 }
 
-let cachedItem: ReturnType<typeof createPresetItem> | null = null;
+function createRunModeItem() {
+  return storage.defineItem<RunModeId>(`local:${RUN_MODE_STORAGE_KEY}`, {
+    fallback: DEFAULT_RUN_MODE_ID,
+  });
+}
+
+let cachedPresetItem: ReturnType<typeof createPresetItem> | null = null;
+let cachedRunModeItem: ReturnType<typeof createRunModeItem> | null = null;
 
 function presetItem(): ReturnType<typeof createPresetItem> {
-  if (!cachedItem) {
-    cachedItem = createPresetItem();
+  if (!cachedPresetItem) {
+    cachedPresetItem = createPresetItem();
   }
-  return cachedItem;
+  return cachedPresetItem;
+}
+
+function runModeItem(): ReturnType<typeof createRunModeItem> {
+  if (!cachedRunModeItem) {
+    cachedRunModeItem = createRunModeItem();
+  }
+  return cachedRunModeItem;
 }
 
 /** 永続化済みの preset id を読む。未設定は既定 (Balanced)。 */
@@ -62,4 +86,12 @@ export async function readSpeedPresetId(): Promise<SpeedPresetId> {
 /** popup の選択を永続化する (要件2)。 */
 export async function writeSpeedPresetId(id: SpeedPresetId): Promise<void> {
   await presetItem().setValue(id);
+}
+
+export async function readRunModeId(): Promise<RunModeId> {
+  return runModeItem().getValue();
+}
+
+export async function writeRunModeId(id: RunModeId): Promise<void> {
+  await runModeItem().setValue(id);
 }

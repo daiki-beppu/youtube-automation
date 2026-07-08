@@ -18,7 +18,13 @@
 import { describe, expect, it } from "vitest";
 
 import { SPEED_PRESETS } from "../../shared/constants";
-import { applyJitter, DEFAULT_SPEED_PRESET_ID, resolveSpeedPreset, type SpeedPresetId } from "../lib/preset-state";
+import {
+  applyJitter,
+  DEFAULT_RUN_MODE_ID,
+  DEFAULT_SPEED_PRESET_ID,
+  resolveSpeedPreset,
+  type SpeedPresetId,
+} from "../lib/preset-state";
 
 describe("DEFAULT_SPEED_PRESET_ID: 既定 preset (要件2)", () => {
   it("Given 定数 When 読む Then balanced である（デフォルトは Balanced）", () => {
@@ -34,6 +40,12 @@ describe("resolveSpeedPreset: id → SpeedPreset の解決 (要件3)", () => {
   it("Given 不正な id When 解決する Then throw する（fail-loud, silent fallback しない）", () => {
     // 設定取り違えを silent に既定 preset へ落とさず、即エラーにする。
     expect(() => resolveSpeedPreset("turbo" as SpeedPresetId)).toThrow();
+  });
+});
+
+describe("DEFAULT_RUN_MODE_ID: 既定の投入方式 (#1586)", () => {
+  it("Given 定数 When 読む Then serial である（既存の直列実行を既定として維持する）", () => {
+    expect(DEFAULT_RUN_MODE_ID).toBe("serial");
   });
 });
 

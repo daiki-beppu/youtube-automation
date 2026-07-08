@@ -3,7 +3,7 @@
 // More Options 3 フィールド (Style Influence / Weirdness / Exclude styles) の注入における
 // 非対称契約 (#900 要件4) の回帰テスト。
 //
-// この判定ロジックを content.ts の injectAndGenerate クロージャ内にインライン化すると unit test
+// この判定ロジックを content.ts の injectEntryAndClickGenerate クロージャ内にインライン化すると unit test
 // から到達できず、テスト側で再実装する (実呼び出しチェーンを通らない) アンチパターンに陥る。
 // そのため resolveAdvancedFields() の解決結果 (fields) と entry の値有無を突き合わせる純ロジックを
 // shared/dom.ts::injectAdvancedFields として抽出し、依存 (resolved fields) を引数注入して検証する。

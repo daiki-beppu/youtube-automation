@@ -8,6 +8,7 @@ import { makePromptEntries } from "./_helpers";
 interface RunPayload {
   entries: PromptEntry[];
   playlistName: string;
+  runMode?: "serial" | "queue";
   durationFilter?: { min_sec: number; max_sec: number };
   range?: RunRange;
   collectionId: string;
@@ -48,6 +49,8 @@ async function loadContentScriptWithPlaylistRows(
     guardSelectedClipIds?: string[];
     // Cmd+P 前ガードの走査自体を失敗させる (#1411 fail-open)。指定時 readSelectedClipIds が reject する。
     guardReadError?: Error;
+    pendingPreviousClipIds?: string[];
+    releasePreviousCompletion?: Promise<void>;
   },
 ) {
   vi.resetModules();
@@ -75,6 +78,14 @@ async function loadContentScriptWithPlaylistRows(
   const openAddToPlaylistDialogViaCmdPMock = vi.fn(() => Promise.resolve({} as HTMLElement));
   const scheduleRunCompleteReloadMock = vi.fn();
   const cancelScheduledRunCompleteReloadMock = vi.fn();
+  let pendingPreviousClipIds = overrides?.pendingPreviousClipIds ? [...overrides.pendingPreviousClipIds] : [];
+  const requestFeedPollMock = vi.fn(async () => {
+    if (overrides?.releasePreviousCompletion) {
+      await overrides.releasePreviousCompletion;
+      pendingPreviousClipIds = [];
+    }
+    return [];
+  });
 
   vi.doMock("../lib/messaging", () => ({
     onMessage: vi.fn((type: string, handler: Handler) => {
@@ -135,7 +146,7 @@ async function loadContentScriptWithPlaylistRows(
   vi.doMock("../lib/bridge-listener", () => ({
     attachBridgeListener: vi.fn(),
     createFeedPoller: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
-    requestFeedPoll: vi.fn(() => Promise.resolve([])),
+    requestFeedPoll: requestFeedPollMock,
     requestSliderSet: vi.fn(),
   }));
 
@@ -149,6 +160,7 @@ async function loadContentScriptWithPlaylistRows(
           ? overrides.durationsById[id]
           : 120,
       ),
+      getPendingIdsByIds: vi.fn((ids: string[]) => ids.filter((id) => pendingPreviousClipIds.includes(id))),
       getInFlightCount: vi.fn(() => 0),
       hasObservedAnyTraffic: vi.fn(() => true),
       lastChangeAt: vi.fn(() => Date.now()),
@@ -210,6 +222,7 @@ async function loadContentScriptWithPlaylistRows(
 
   vi.doMock("../lib/inject-retry", () => ({
     InjectNotAcknowledgedError: class InjectNotAcknowledgedError extends Error {},
+    SubmittedClipIdsNotObservedError: class SubmittedClipIdsNotObservedError extends Error {},
     injectWithVerification: vi.fn(() => Promise.resolve()),
   }));
 
@@ -242,10 +255,11 @@ async function loadContentScriptWithPlaylistRows(
     scrollAndMultiSelectByIdsMock,
     readSelectedClipIdsMock,
     openAddToPlaylistDialogViaCmdPMock,
+    requestFeedPollMock,
     scheduleRunCompleteReloadMock,
     cancelScheduledRunCompleteReloadMock,
     progressMessages,
-    runHandler,
+    runHandler: (message: { data: RunPayload }) => runHandler({ data: { runMode: "serial", ...message.data } }),
     sentMessages,
   };
 }
@@ -361,6 +375,49 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     );
 
     expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
+  });
+
+  it("Given queue resume の保存済み ID が未完了 When playlist-only resume Then feed poll で完了確認するまで playlist 追加へ進まない", async () => {
+    const entries: PromptEntry[] = [
+      { name: "track-1", style: "style 1", lyrics: "" },
+      { name: "track-2", style: "style 2", lyrics: "" },
+    ];
+    const previousSubmittedClipIds = ["old-clip-1", "old-clip-2", "old-clip-3", "old-clip-4"];
+    let releasePreviousCompletion!: () => void;
+    const releasePreviousCompletionPromise = new Promise<void>((resolve) => {
+      releasePreviousCompletion = resolve;
+    });
+    const { requestFeedPollMock, scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
+      [],
+      previousSubmittedClipIds.map(() => ({}) as HTMLElement),
+      {
+        pendingPreviousClipIds: previousSubmittedClipIds,
+        releasePreviousCompletion: releasePreviousCompletionPromise,
+      },
+    );
+
+    runHandler({
+      data: {
+        entries,
+        playlistName: "vj | queue resume",
+        collectionId: "collection-a",
+        runMode: "queue",
+        range: { start: entries.length, end: entries.length - 1 },
+        submittedClipIds: previousSubmittedClipIds,
+        submittedClipIdsAreDurationFiltered: false,
+        playlistExpectedClipCount: previousSubmittedClipIds.length,
+      },
+    });
+
+    await vi.waitFor(() => expect(requestFeedPollMock).toHaveBeenCalledWith(previousSubmittedClipIds));
+    expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
+
+    releasePreviousCompletion();
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      previousSubmittedClipIds,
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+    );
   });
 
   it("Given 保存済み ID と今回再実行 ID が混在 When title fallback を作る Then 旧 ID と今回 ID に対応 entry title を割り当てる", async () => {

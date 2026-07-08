@@ -126,6 +126,7 @@ async function loadContentScript(overrides?: {
       clearSubmittedIds: vi.fn(),
       getSubmittedIds: vi.fn(() => []),
       getPendingSubmittedIds: vi.fn(() => []),
+      getPendingIdsByIds: vi.fn(() => []),
       getDuration: vi.fn((clipId: string) =>
         overrides?.durationsById && Object.prototype.hasOwnProperty.call(overrides.durationsById, clipId)
           ? overrides.durationsById[clipId]
@@ -197,6 +198,7 @@ async function loadContentScript(overrides?: {
 
   vi.doMock("../lib/inject-retry", () => ({
     InjectNotAcknowledgedError: class InjectNotAcknowledgedError extends Error {},
+    SubmittedClipIdsNotObservedError: class SubmittedClipIdsNotObservedError extends Error {},
     injectWithVerification: vi.fn(() => Promise.resolve()),
   }));
 
@@ -389,6 +391,25 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
       ["clip-ok"],
       expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
     );
+  });
+
+  it("Given retryPlaylist の完了待ち直後に stop 済み When async flow が再開する Then playlist 追加に進まない", async () => {
+    const { handlers, progressMessages, scrollAndMultiSelectByIdsMock } = await loadContentScript();
+    const clipIds = ["clip-1"];
+
+    handlers.get("retryPlaylist")!({
+      data: {
+        playlistName: "test-playlist",
+        submittedClipIds: clipIds,
+        expectedClipCount: clipIds.length,
+        collectionId: "coll-1",
+        shouldDownload: false,
+      },
+    });
+    handlers.get("stop")!({ data: undefined });
+
+    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.STOPPED })));
+    expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
   });
 
   it("Given resume state 消去が失敗 When retryPlaylist 成功 Then FINISHED を維持しリロードのみ見送る（ERROR にしない）", async () => {

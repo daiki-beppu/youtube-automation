@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 
-import { DOWNLOAD_FORMAT_DEFAULT, SPEED_PRESETS, type SpeedPresetId } from "../../shared/constants";
+import {
+  DOWNLOAD_FORMAT_DEFAULT,
+  RUN_MODES,
+  SPEED_PRESETS,
+  type RunModeId,
+  type SpeedPresetId,
+} from "../../shared/constants";
 import {
   buildInitialPatternSelection,
   reconcilePatternSelection,
@@ -13,6 +19,7 @@ import { useSunoRunner } from "./useSunoRunner";
 
 // 実行モード selector の表示順 (#875)。Fast → Balanced → Safe で速度順に並べる。
 const SPEED_PRESET_ORDER: SpeedPresetId[] = ["fast", "balanced", "safe"];
+const RUN_MODE_ORDER: RunModeId[] = ["serial", "queue"];
 const DOWNLOAD_FORMAT_OPTIONS: DownloadFormat[] = ["mp3", "m4a", "wav"];
 
 export function App() {
@@ -35,6 +42,8 @@ export function App() {
     playlistName,
     speedPresetId,
     setSpeedPreset,
+    runModeId,
+    setRunMode,
     resumeBanner,
     acceptResume,
     dismissResume,
@@ -218,7 +227,29 @@ export function App() {
       )}
 
       <fieldset className="flex flex-col gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
-        <legend className="px-1 text-xs text-gray-600">実行モード</legend>
+        <legend className="px-1 text-xs text-gray-600">投入方式</legend>
+        {RUN_MODE_ORDER.map((id) => {
+          const mode = RUN_MODES[id];
+          return (
+            <label key={id} className="flex items-start gap-2">
+              <input
+                type="radio"
+                name="run-mode"
+                className="mt-1"
+                checked={runModeId === id}
+                onChange={() => setRunMode(id)}
+              />
+              <span className="flex flex-col">
+                <span className="font-medium">{mode.label}</span>
+                <span className="text-xs text-gray-500">{mode.riskNote}</span>
+              </span>
+            </label>
+          );
+        })}
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
+        <legend className="px-1 text-xs text-gray-600">速度プリセット</legend>
         {SPEED_PRESET_ORDER.map((id) => {
           const preset = SPEED_PRESETS[id];
           return (

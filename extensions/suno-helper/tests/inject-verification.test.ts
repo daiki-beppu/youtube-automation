@@ -11,7 +11,7 @@
 // 契約 (suno-helper/lib/inject-retry.ts):
 //   injectWithVerification<M>(options): Promise<void>
 //   options: {
-//     inject: () => Promise<void>;                 // = () => injectAndGenerate(entry, i, total)
+//     inject: () => Promise<void>;                 // = () => generateEntrySerially / submitEntryToQueue
 //     markBeforeInject: () => M;                   // inject 前の ACK 基準 marker（中身は ack-probe 側の関心）
 //     waitForAck: (marker: M, opts: {
 //       isAborted: () => boolean; pollIntervalMs: number; timeoutMs: number;

@@ -121,6 +121,8 @@ export function phaseToStatus(
       return { text: `[${n}/${total}] captcha 解消待ち…（多くは自動で解消します）` };
     case PHASE.GENERATING:
       return { text: `[${n}/${total}] 生成待ち…${message ? `（${message}）` : ""}` };
+    case PHASE.SUBMITTED:
+      return { text: `[${n}/${total}] 投入済み（生成完了待ち）` };
     case PHASE.DONE:
       return { text: `[${n}/${total}] 完了` };
     case PHASE.ENTRY_FAILED:

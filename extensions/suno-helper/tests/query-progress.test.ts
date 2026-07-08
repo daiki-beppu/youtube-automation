@@ -68,6 +68,10 @@ describe("nextItemStates: itemStates の遷移ロジック (useSunoRunner live h
     expect(nextItemStates(done0, { phase: PHASE.INJECTING, index: 1, total: 3 })).toEqual(["done", "active", "idle"]);
   });
 
+  it("Given queue ACK 後 When SUBMITTED index=0 Then index を submitted にし DONE とは区別する", () => {
+    expect(nextItemStates(base, { phase: PHASE.SUBMITTED, index: 0, total: 3 })).toEqual(["submitted", "idle", "idle"]);
+  });
+
   it("Given 全 idle When DONE index=0 Then index を done にする", () => {
     expect(nextItemStates(base, { phase: PHASE.DONE, index: 0, total: 3 })).toEqual(["done", "idle", "idle"]);
   });

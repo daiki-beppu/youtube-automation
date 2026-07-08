@@ -40,6 +40,13 @@ const resumeStateMocks = vi.hoisted(() => ({
   writeResumeState: vi.fn(async () => undefined),
 }));
 
+const presetStateMocks = vi.hoisted(() => ({
+  readSpeedPresetId: vi.fn(async () => "balanced"),
+  writeSpeedPresetId: vi.fn(async () => undefined),
+  readRunModeId: vi.fn(async () => "serial"),
+  writeRunModeId: vi.fn(async () => undefined),
+}));
+
 vi.mock("wxt/browser", () => ({
   browser: {
     runtime: {
@@ -119,8 +126,10 @@ vi.mock("../lib/preset-state", async () => {
   const actual = await vi.importActual<typeof import("../lib/preset-state")>("../lib/preset-state");
   return {
     ...actual,
-    readSpeedPresetId: vi.fn(async () => actual.DEFAULT_SPEED_PRESET_ID),
-    writeSpeedPresetId: vi.fn(async () => undefined),
+    readSpeedPresetId: presetStateMocks.readSpeedPresetId,
+    writeSpeedPresetId: presetStateMocks.writeSpeedPresetId,
+    readRunModeId: presetStateMocks.readRunModeId,
+    writeRunModeId: presetStateMocks.writeRunModeId,
   };
 });
 
@@ -158,6 +167,17 @@ function buttonByText(container: HTMLElement, text: string): HTMLButtonElement {
     throw new Error(`button not found: ${text}`);
   }
   return button;
+}
+
+function radioByLabel(container: HTMLElement, text: string): HTMLInputElement {
+  const label = Array.from(container.querySelectorAll("label")).find((candidate) =>
+    candidate.textContent?.includes(text),
+  );
+  const input = label?.querySelector<HTMLInputElement>('input[type="radio"]');
+  if (!input) {
+    throw new Error(`radio not found: ${text}`);
+  }
+  return input;
 }
 
 function expectRangeUiAbsent(container: HTMLElement): void {
@@ -198,6 +218,10 @@ describe("Suno popup compatibility check", () => {
     storageMocks.setValue.mockResolvedValue(undefined);
     downloadFormatMocks.getValue.mockResolvedValue("mp3");
     downloadFormatMocks.setValue.mockResolvedValue(undefined);
+    presetStateMocks.readSpeedPresetId.mockResolvedValue("balanced");
+    presetStateMocks.writeSpeedPresetId.mockResolvedValue(undefined);
+    presetStateMocks.readRunModeId.mockResolvedValue("serial");
+    presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
     messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
     messagingMocks.progressHandler = undefined;
     messagingMocks.onMessage.mockImplementation(
@@ -238,6 +262,10 @@ describe("Suno popup compatibility check", () => {
     storageMocks.setValue.mockResolvedValue(undefined);
     resumeStateMocks.readResumeState.mockResolvedValue(null);
     resumeStateMocks.writeResumeState.mockResolvedValue(undefined);
+    presetStateMocks.readSpeedPresetId.mockResolvedValue("balanced");
+    presetStateMocks.writeSpeedPresetId.mockResolvedValue(undefined);
+    presetStateMocks.readRunModeId.mockResolvedValue("serial");
+    presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
   });
 
   it("progress handler が DONE + duration-check log を受けると live status を更新する", async () => {
@@ -381,9 +409,130 @@ describe("Suno popup compatibility check", () => {
       playlistName: "clm | theme-a",
       range: undefined,
       collectionId: "20260601-clm-theme-a-collection",
+      runMode: "serial",
       indices: undefined,
       submittedClipIds: undefined,
+      submittedClipIdsAreDurationFiltered: undefined,
       playlistExpectedClipCount: undefined,
+    });
+  });
+
+  it("投入方式 Queue を選択して実行すると storage に保存し run payload に queue を渡す", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a",
+            channel: "clm",
+            theme: "theme-a",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+
+    await act(async () => {
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    await act(async () => {
+      radioByLabel(container, "Queue").click();
+    });
+    expect(presetStateMocks.writeRunModeId).toHaveBeenCalledWith("queue");
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "全パターンを連続実行").click();
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("run", {
+      entries,
+      playlistName: "clm | theme-a",
+      range: undefined,
+      collectionId: "20260601-clm-theme-a-collection",
+      runMode: "queue",
+      indices: undefined,
+      submittedClipIds: undefined,
+      submittedClipIdsAreDurationFiltered: undefined,
+      playlistExpectedClipCount: undefined,
+    });
+  });
+
+  it("ACK 済み clip ID 未観測の resume state から再開しても同じ entry を再投入しない", async () => {
+    const entries = [
+      { name: "p1", style: "lofi", lyrics: "" },
+      { name: "p2", style: "ambient", lyrics: "" },
+    ];
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    resumeStateMocks.readResumeState.mockResolvedValue({
+      collectionId: "20260601-clm-theme-a-collection",
+      failedIndex: 1,
+      total: 2,
+      timestamp: Date.now(),
+      submittedClipIds: [],
+    } as never);
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a",
+            channel: "clm",
+            theme: "theme-a",
+            status: "ready",
+            pattern_count: 2,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+    messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
+
+    await act(async () => {
+      root.render(createElement(App));
+    });
+    await act(async () => {
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("前回の実行が中断されました。");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "再開").click();
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("run", {
+      entries,
+      playlistName: "clm | theme-a",
+      range: { start: 1, end: 1 },
+      collectionId: "20260601-clm-theme-a-collection",
+      runMode: "serial",
+      indices: undefined,
+      submittedClipIds: [],
+      submittedClipIdsAreDurationFiltered: false,
+      playlistExpectedClipCount: 4,
     });
   });
 
@@ -444,8 +593,10 @@ describe("Suno popup compatibility check", () => {
       playlistName: "clm | theme-a",
       range: undefined,
       collectionId: "20260601-clm-theme-a-collection",
+      runMode: "serial",
       indices: [0, 2],
       submittedClipIds: undefined,
+      submittedClipIdsAreDurationFiltered: undefined,
       playlistExpectedClipCount: undefined,
     });
   });
@@ -509,8 +660,10 @@ describe("Suno popup compatibility check", () => {
       playlistName: "clm | snapshot",
       range: undefined,
       collectionId: "20260602-clm-snapshot-collection",
+      runMode: "serial",
       indices: undefined,
       submittedClipIds: undefined,
+      submittedClipIdsAreDurationFiltered: undefined,
       playlistExpectedClipCount: undefined,
     });
   });
@@ -581,8 +734,10 @@ describe("Suno popup compatibility check", () => {
       playlistName: "clm | fresh",
       range: undefined,
       collectionId: "20260603-clm-fresh-collection",
+      runMode: "serial",
       indices: undefined,
       submittedClipIds: undefined,
+      submittedClipIdsAreDurationFiltered: undefined,
       playlistExpectedClipCount: undefined,
     });
   });

@@ -29,12 +29,15 @@ export function initSnapshot(
   };
 }
 
-/** itemStates を phase に応じて遷移させる（INJECTING / DONE / ENTRY_FAILED のみ、他 phase は不変）。非破壊で新配列を返す。 */
+/** itemStates を phase に応じて遷移させる（INJECTING / SUBMITTED / DONE / ENTRY_FAILED のみ、他 phase は不変）。非破壊で新配列を返す。 */
 export function nextItemStates(prev: ItemState[], payload: ProgressPayload): ItemState[] {
   const { phase, index } = payload;
 
   if (phase === PHASE.INJECTING) {
     return prev.map((s, i) => (i === index ? "active" : s === "active" ? "idle" : s));
+  }
+  if (phase === PHASE.SUBMITTED) {
+    return prev.map((s, i) => (i === index ? "submitted" : s));
   }
   if (phase === PHASE.DONE) {
     if (payload.log?.kind === "duration-check" && !payload.log.ok) {

@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(suno-helper)`: queue 実行の resume payload 境界で `submittedClipIds` / `playlistExpectedClipCount` を fail-loud に検証し、未完了 clip を保持した再開時に不正な raw payload が playlist 完了待ちへ流れ込まないようにした（#1586）。
 - `fix(distrokid-helper)`: `ext-v0.2.3` リリース前に DistroKid Helper の manifest / popup 表示名へ残っていた `(TEST)` 接尾辞を外し、配布 zip が本番名 `DistroKid Helper` として表示されるようにした。
 
 ## [5.5.16] - 2026-07-06

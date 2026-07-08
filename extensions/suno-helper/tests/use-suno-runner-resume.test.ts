@@ -72,36 +72,44 @@ describe("resumeRunRange: playlist phase 停止 (failedIndex=total) は空 entry
 describe("content.ts: STOPPED phase は resume state を保存する (#898 要件1/2/3/7)", () => {
   const contentSource = read("../entrypoints/content.ts");
   const downloadFlowSource = read("../lib/download-flow.ts");
+  const queueRunnerSource = read("../lib/queue-runner.ts");
+  const runnerSources = `${contentSource}\n${downloadFlowSource}\n${queueRunnerSource}`;
 
-  it("Given runner sources When PHASE.STOPPED emit を数える Then 正確に 12 箇所（yield guard / download retry flow の中断を含む）", () => {
+  it("Given runner sources When PHASE.STOPPED emit を数える Then 正確に 15 箇所（queue mode / retryPlaylist / yield guard / download retry flow の中断を含む）", () => {
     const stoppedEmits =
-      `${contentSource}\n${downloadFlowSource}`.match(
-        /(?:emitProgress|deps\.emitProgress)\(\{ phase: PHASE\.STOPPED/g,
-      ) ?? [];
+      runnerSources.match(/(?:emitProgress|deps\.emitProgress|options\.emitProgress)\(\{ phase: PHASE\.STOPPED/g) ?? [];
 
-    expect(stoppedEmits).toHaveLength(12);
+    expect(stoppedEmits).toHaveLength(15);
   });
 
-  it("Given ループ内 STOPPED のうち未 click 箇所 When 直前を読む Then persistInterruptState(i) が隣接する（ループ先頭の 1 箇所, #948 で 2→1: queue 待ち後の中断は outcome=aborted 経路へ統合）", () => {
-    // attempt 中（waitForQueueSlot / injectAndGenerate）の中断は entry-retry の outcome=aborted で
+  it("Given ループ内 STOPPED のうち未 click 箇所 When 直前を読む Then persistInterruptState(i) が隣接する（serial / queue ループ先頭の 2 箇所）", () => {
+    // attempt 中（waitForQueueSlot / injectEntryAndClickGenerate）の中断は entry-retry の outcome=aborted で
     // 一元処理され、resolveInterruptIndex で補正した interruptIndex を使う（未 click なら i と等価）。
-    const loopStops =
+    const contentLoopStops =
       contentSource.match(
         /persistInterruptState\(i, orderPosition\);\s*emitProgress\(\{ phase: PHASE\.STOPPED, index: i, total \}\)/g,
       ) ?? [];
+    const queueLoopStops =
+      queueRunnerSource.match(
+        /options\.persistInterruptState\(index, orderPosition\);\s*options\.emitProgress\(\{ phase: PHASE\.STOPPED, index, total: options\.total \}\)/g,
+      ) ?? [];
 
-    expect(loopStops).toHaveLength(1);
+    expect([...contentLoopStops, ...queueLoopStops]).toHaveLength(2);
   });
 
-  it("Given injectWithVerification 後の STOPPED 3 箇所 When 直前を読む Then resolveInterruptIndex で補正した interruptIndex を使う (#924/#1268)", () => {
+  it("Given injectWithVerification 後の STOPPED 4 箇所 When 直前を読む Then resolveInterruptIndex で補正した interruptIndex を使う (#924/#1268/#1586)", () => {
     // Generate click 済みの場合は重複を防ぐため interruptIndex = i+1 に補正して persist / emit する。
     // #1268 で duration guard の完了待ち / 評価後の中断経路が同じ補正パターンを使う。
-    const postInjectStops =
+    const contentPostInjectStops =
       contentSource.match(
         /persistInterruptState\(interruptIndex, orderPosition\);\s*emitProgress\(\{ phase: PHASE\.STOPPED, index: interruptIndex, total \}\)/g,
       ) ?? [];
+    const queuePostInjectStops =
+      queueRunnerSource.match(
+        /options\.persistInterruptState\(interruptIndex, orderPosition\);\s*options\.emitProgress\(\{ phase: PHASE\.STOPPED, index: interruptIndex, total: options\.total \}\)/g,
+      ) ?? [];
 
-    expect(postInjectStops).toHaveLength(3);
+    expect([...contentPostInjectStops, ...queuePostInjectStops]).toHaveLength(4);
   });
 
   it("Given playlist / download phase STOPPED 4 箇所 When 直前を読む Then persistInterruptState(total) が隣接する（全 entry done 後 + 最終生成完了待ち + download 中断）", () => {
@@ -191,6 +199,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       playlistName: "target-playlist",
       range: overrides.range,
       collectionId: "collection-a",
+      runMode: "queue",
       overrides,
     });
 
@@ -199,6 +208,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       playlistName: "target-playlist",
       range: { start: 1, end: 2 },
       collectionId: "collection-a",
+      runMode: "queue",
       indices: undefined,
       submittedClipIds: ["clip-a", "clip-b"],
       submittedClipIdsAreDurationFiltered: true,
@@ -234,6 +244,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       playlistName: "target-playlist",
       range: undefined,
       collectionId: "collection-a",
+      runMode: "serial",
       overrides,
     });
 
@@ -242,6 +253,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       playlistName: "target-playlist",
       range: undefined,
       collectionId: "collection-a",
+      runMode: "serial",
       indices: [0, 2],
       submittedClipIds: ["clip-a", "clip-c"],
       submittedClipIdsAreDurationFiltered: true,
@@ -298,6 +310,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       durationFilter: { min_sec: 75, max_sec: 240 },
       range: undefined,
       collectionId: "collection-a",
+      runMode: "queue",
       overrides: undefined,
     });
 
@@ -306,7 +319,14 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       playlistName: "target-playlist",
       durationFilter: { min_sec: 75, max_sec: 240 },
       collectionId: "collection-a",
+      runMode: "queue",
     });
+  });
+
+  it("Given run mode state When useSunoRunner を読む Then run 送信用 payload へ投入方式を渡す", () => {
+    expect(runnerSource).toMatch(/const \[runModeId, setRunModeId\] = useState<RunModeId>\(DEFAULT_RUN_MODE_ID\)/);
+    expect(runnerSource).toMatch(/void readRunModeId\(\)\.then\(setRunModeId\)/);
+    expect(runnerSource).toMatch(/runMode: runModeId/);
   });
 
   it("Given 旧 ResumeState に期待件数が無い When useSunoRunner を読む Then total から期待件数を復元して渡す", () => {
@@ -339,9 +359,9 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
     );
   });
 
-  it("Given resume state persist When content.ts を読む Then OK clip filter 後の playlist resume 情報で上書きできる", () => {
+  it("Given resume state persist When content.ts を読む Then queue は raw ID を保持し playlist 後は OK clip 情報で上書きできる", () => {
     expect(contentSource).toMatch(
-      /const currentSubmittedIds = tracker\.getSubmittedIds\(\);[\s\S]*?const fallbackPlaylistPersistInfo = resolvePlaylistPersistInfo\([\s\S]*?previousSubmittedClipIds,[\s\S]*?currentSubmittedIds,[\s\S]*?options\.durationFilter,[\s\S]*?options\.submittedClipIdsAreDurationFiltered === true,[\s\S]*?\);[\s\S]*?const playlistSubmittedClipIds =[\s\S]*?playlistPersistInfo\?\.submittedClipIds \?\? fallbackPlaylistPersistInfo\.submittedClipIds;[\s\S]*?const playlistExpectedCount =[\s\S]*?playlistPersistInfo\?\.playlistExpectedClipCount \?\? fallbackPlaylistPersistInfo\.playlistExpectedClipCount;[\s\S]*?submittedClipIds: playlistSubmittedClipIds,[\s\S]*?playlistExpectedClipCount: playlistExpectedCount,/,
+      /const currentSubmittedIds = tracker\.getSubmittedIds\(\);[\s\S]*?const fallbackPlaylistPersistInfo =[\s\S]*?options\.runMode === "queue"[\s\S]*?\? resolveRawPlaylistPersistInfo\(previousSubmittedClipIds, currentSubmittedIds\)[\s\S]*?: resolvePlaylistPersistInfo\([\s\S]*?previousSubmittedClipIds,[\s\S]*?currentSubmittedIds,[\s\S]*?options\.durationFilter,[\s\S]*?options\.submittedClipIdsAreDurationFiltered === true,[\s\S]*?\);[\s\S]*?const playlistSubmittedClipIds =[\s\S]*?playlistPersistInfo\?\.submittedClipIds \?\? fallbackPlaylistPersistInfo\.submittedClipIds;[\s\S]*?const submittedClipIdsAreDurationFiltered =[\s\S]*?playlistPersistInfo\?\.submittedClipIdsAreDurationFiltered \?\?[\s\S]*?fallbackPlaylistPersistInfo\.submittedClipIdsAreDurationFiltered;[\s\S]*?const playlistExpectedCount =[\s\S]*?playlistPersistInfo\?\.playlistExpectedClipCount \?\? fallbackPlaylistPersistInfo\.playlistExpectedClipCount;[\s\S]*?submittedClipIds: playlistSubmittedClipIds,[\s\S]*?submittedClipIdsAreDurationFiltered,[\s\S]*?playlistExpectedClipCount: playlistExpectedCount,/,
     );
   });
 

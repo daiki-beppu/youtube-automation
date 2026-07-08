@@ -1,4 +1,5 @@
 import type { DurationFilter, PromptEntry } from "../../shared/api";
+import type { RunModeId } from "../../shared/constants";
 import type { RunPayload } from "./messaging";
 import { selectedEntryIndices, type PatternSelectionInput } from "./pattern-selection";
 import { resumeRunRange, type ResumeBanner, type RunRange } from "./resume-state";
@@ -23,6 +24,7 @@ export interface RunPayloadInput {
   durationFilter?: DurationFilter;
   range: RunRange | undefined;
   collectionId: string;
+  runMode: RunModeId;
   overrides: RunOverrides | undefined;
 }
 
@@ -33,6 +35,7 @@ export function buildRunPayload(input: RunPayloadInput): RunPayload {
     ...(input.durationFilter ? { durationFilter: input.durationFilter } : {}),
     range: input.range,
     collectionId: input.collectionId,
+    runMode: input.runMode,
     indices: input.overrides?.indices,
     submittedClipIds: input.overrides?.submittedClipIds,
     submittedClipIdsAreDurationFiltered: input.overrides?.submittedClipIdsAreDurationFiltered,

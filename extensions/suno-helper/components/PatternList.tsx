@@ -12,6 +12,7 @@ interface PatternListProps {
 const STATE_CLASS: Record<ItemState, string> = {
   idle: "text-gray-700",
   active: "bg-blue-100 font-medium text-blue-800",
+  submitted: "bg-amber-50 font-medium text-amber-800",
   done: "text-green-700 line-through",
   // リトライ上限まで失敗しスキップされた entry (#948)。「失敗分のみ再実行」の対象。
   failed: "bg-red-50 font-medium text-red-700",
