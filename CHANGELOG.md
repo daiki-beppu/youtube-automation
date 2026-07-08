@@ -9,11 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(doctor)`: `yt-doctor` に playlist スキル向けの `playlist_config` / `playlist_create_dry_run` チェックを追加（#1504）。`config/channel/playlists.json` の欠落・JSON 破損・`playlist_id` 未設定を channel カテゴリで診断し、`PlaylistManager.create_all_playlists(dry_run=True)` 経路で作成計画を検証する。dry-run は YouTube API への書き込みを行わず、失敗時は human next_action で設定修正手順を示す。
 - `feat(collection-serve)`: `yt-collection-serve` に unpacked Chrome 拡張名から exact origin lock を自動解決する `--allow-extension <name>` を追加（#1486）。macOS Chrome profile の `Secure Preferences`（無ければ `Preferences`）を走査し、`extensions.settings[*].path` が絶対パスかつ basename が指定名に一致する拡張 IDから `chrome-extension://<id>` を組み立て、既存の `/auth/token` / write endpoint lock にそのまま適用する。`--allow-origin` とは排他で、検出 0 件・複数 ID 競合・profile root 走査不可・Preferences 読み取り不可・Preferences JSON parse failure は `--allow-origin` fallback 案内付きの `ConfigError` で fail-loud する。`/suno-helper` / `/distrokid-helper` / `/wf-new` のサーバー起動手順と拡張 README も `--allow-extension` 基準へ更新した
+
+### Changed
+
+- **BREAKING** `refactor(channel-new)`: 旧 `/channel-direction` を削除し、`/channel-new` の方向性検討モード（Step D1〜D5）へ統合した。新規開設モードでは従来どおり方向性・差別化・ポジショニングを聞かず TTP 対象の転写要素だけを確認し、必要な方向性ブレストは同じ `/channel-new` の別モードで `docs/channel/channel-direction.md` に保存する。config 生成用の初期値確認は Step 1 から Step 4 へ分離し、再生成モードは方向性検討モードの成果物を入力にする契約へ更新した（#1499）
+- `docs(wf-new)`: workflow-state schema の `assets.music_downloaded` 説明に、Suno 一括 DL 完了と `raw_master` 生成前の中間状態（DL 済み・raw master 未生成）の意味を明記した（#1568）
+
+### Fixed
+
+- `fix(skills)`: 音楽制作系 7 スキル（suno / suno-lyric / suno-helper / masterup / lyria / videoup / loop-video）の整合性監査で検出した記述ドリフトを修正（#1432）。`suno/SKILL.md` の slug 自動実行 argv 例に残っていた `["uv", "run", "bunx tayk video-analyze", ...]` の混在表記を `["bunx", "tayk", "video-analyze", ...]` に統一、`suno/references/suno-examples.md` から実装に存在しない設定キー `banned_adjective_free_instruments` への言及を削除、`loop-video/SKILL.md` の `generate_videos.sh` バージョン表記（v11.0 → v14）とループ背景の正規化 CRF 表記（20 → 22）を現行実装に合わせた
+- `fix(distrokid-helper)`: `ext-v0.2.3` リリース前に DistroKid Helper の manifest / popup 表示名へ残っていた `(TEST)` 接尾辞を外し、配布 zip が本番名 `DistroKid Helper` として表示されるようにした。
 
 ## [5.5.16] - 2026-07-06
 
 ### Added
+
+- `feat(suno)`: `/suno` と `/suno-lyric` に generator-reviewer 分離の意味的品質検証フローを追加した（#1485）。生成は subagent / 別コンテキストに委譲し、reviewer は成果物 JSON（`suno-prompts.json` / `suno-lyrics.json`）と共通ルーブリックだけを読んで entry ごとに `PASS` / `FAIL` + 理由を判定する。`suno-lyrics.json` には reviewer-only の `review_context` を含め、JSON だけで theme / scene / mood / persona / quote essence を判定できる契約にした。`yt-suno-verify` 通過後に LLM semantic review を実行し、`FAIL` entry のみ最大 2 周まで再生成、上限到達時は残課題をユーザーへ引き継ぐ
 - `feat(suno)`: `/suno` / `/suno-lyric` の成果物を検証する `yt-suno-verify` CLI を追加。`suno-patterns.yaml` / `suno-prompts.json` / `suno-lyrics.json` の曲数、entry name 整合、歌詞構造、`genre_line` 文字数を Suno UI 投入前に fail-loud で確認できるようにした（#1484）
 - `feat(helper)`: `yt-collection-serve` に `GET /server-info` とチャンネル別 `*.localhost` の canonical URL 表示を追加し、suno-helper / distrokid-helper の popup がローカル配信元候補を保存・選択できるようにした（#1352）。既定候補は `http://youtube-automation.localhost:7873` と legacy `http://localhost:7873` を併存し、複数チャンネルのサーバーを label 付きで切り替えられる
 - `feat(video-description)`: `BAHMetadataGenerator.generate_timestamps()` / `format_timestamps_text()` に `loops` パラメータを追加した。master をループ生成しているコレクション（`yt-generate-master --loop N` / `--target-duration`）で全ループ分のチャプターを機械展開できる。2 周目以降の開始秒は 1 周目と同じクロスフェード算術（`int(current + duration - crossfade)`）で連続計算し、各行に 1 始まりの `loop` フィールドを付与（2 周目以降のタイトル装飾は呼び出し側の LLM リネームに委ねる）。既定 `loops=1` は従来挙動と完全互換。従来は 1 ループ分しか生成できず、全ループ展開運用のチャンネルでは毎回 LLM が手計算していた
@@ -29,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `refactor(suno-helper)`: popup の実行モード選択（Fast / Balanced / Safe）を廃止し、content 実行時のペーシングを Balanced 固定にした。legacy `sunoSpeedPreset` が chrome.storage.local に残っていても実行設定へ反映せず、README と `/suno-helper` スキルの手順から mode 選択・preset 永続化の説明を削除した（#1573）
+- `docs(thumbnail)`: `/thumbnail` の標準手順を textless `main.png/jpg` 背景先行に変更し、承認済み背景を参照してテキスト付き `thumbnail.jpg` を生成する契約へ更新した。`single_step` / `two_phase` / codex 経路、TTP チェックリスト、prompt 保存、下流スキルの入力説明、フォント指定失敗時の実行時ガイダンスも同じ順序へ揃えた（#1502）
 - `refactor(suno-helper)`: 旧 Suno playlist capture 互換 route（`POST /suno/playlists`）と `write_suno_playlists()` / `normalize_suno_title()` / `--playlist-capture-*` を撤去し、DistroKid release 記録用の capture root を `--distrokid-capture-root` に分離（#1301）
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
 - `feat(video-analyze)`: `yt-video-analyze` を全尺解析から動画冒頭のクリップ窓解析（既定 900 秒 = 15 分、skill-config `analysis_window_sec` で上書き可）に変更。Gemini へ渡す Part に `video_metadata`（`start_offset` / `end_offset`）を付与して冒頭 2〜3 曲相当のみを解析し、長尺 Complete Collection の API コストを削減する。プロンプトをクリップ窓前提（`bgm_arc.outro` は窓内終盤、`scene_timeline` / `editing_metrics` は窓内対象）に整合させ、SKILL.md に解析後のレポート検証ステップ（窓超過タイムスタンプ・スキーマ欠落・不自然値の subagent レビュー）を追加。下流 `/suno` にも冒頭クリップ窓データである旨を注記した（#1495）
@@ -70,6 +84,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(collection)`: `tayk collection-preflight` を追加し、`yt-init-collection` の既存ディレクトリ検出時と `/wf-new` / `/wf-next` の復旧手順で実在する `bunx tayk collection-preflight <collection-dir-name> --fix` を案内するようにした（#1614）
+- `fix(config)`: `channel_dir()` / `_resolve_channel_dir()` と TS `channelDir()`、comments / pinned_comment の `history_file` docstring、thumbnail skill / channel-new テンプレートの `path_base: "channel_dir"` 説明を、`config/channel/` 自体ではなくそれを含むプロジェクトルートを指す説明へ統一した（#1569）
+- `fix(benchmark)`: ベンチマーク収集でショート動画の `thumbnail_url` を選ぶ際、縦型を返しうる `maxres` / `standard` ではなく横型キー（`high` / `medium` / `default`）を優先するようにした。通常動画は従来どおり `maxres` 優先を維持する（#1501）
 - `fix(ts-rewrite/generate-master)`: review 指摘を受け、`masterup.yaml` fallback は `audio` 直下の generate-master 用キーだけを読み、finalize-master 用 namespace の `audio.finalize.*` は無視するよう修正した。JSON 優先は `masterup` override に限定し、inline / scalar `audio`、JSON root / audio shape 不備、空白 `bitrate` は config / validation error に統一した。registry 経由でも明示 CLI 値の presence が config override より優先されるよう schema 境界を分離した。`ffmpeg` の bitrate 指定では `-b:a` と `-q:a` の併用をやめ、single MP3 も bitrate 契約どおり encode 経路へ統一した。`generate-master` public subpath から CLI 用 path resolver を外し、`tayk generate-master` の CLI flag 実行 smoke と関連回帰テストを追加した（#772）
 - `fix(ts-rewrite/core)`: ADR-0009（JSON-only config）との実装乖離を解消し、`packages/core` から `yaml` 依存を排除した（#1415）。suno-prompts の定義ファイルを JSON 化（`suno-patterns.yaml` → `suno-patterns.json`、`config/skills/suno.yaml` → `suno.json`）し、parser を `JSON.parse` ベース（`parseTopLevelJson` / `parsePatternsJson`）に変更。`packages/core/package.json` から `yaml` を削除し、ADR-0009 に Status（乖離解消日）を追記した。
 - `fix(ts-rewrite/core)`: `uploadVideoService` の予約公開時刻正規化で、不正な timezone offset（例: `+25:99`）を UTC 変換対象にしないよう修正した（#1120）。
@@ -1354,7 +1371,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 
 - **`utils.config` パッケージ** — 責務別に分割された設定ローダー・dataclass 群。
   - `youtube_automation.utils.config.load_config()`: シングルトン取得（旧 `ChannelConfig.load()` 相当）
-  - `youtube_automation.utils.config.channel_dir()`: チャンネルディレクトリ path 解決のみ
+  - `youtube_automation.utils.config.channel_dir()`: `config/channel/` を含むプロジェクトルート path 解決のみ
   - `youtube_automation.utils.config.reset()`: シングルトン state リセット（テスト用）
   - サブモジュール: `meta` / `content` / `youtube` / `analytics` / `playlists` / `workflow` / `audio` / `localizations`
 - **`yt-config-migrate` CLI** — 旧 `config/channel_config.json` を新 `config/channel/*.json` 構造に分割する移行ツール。

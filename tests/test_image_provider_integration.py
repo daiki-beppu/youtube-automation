@@ -134,10 +134,10 @@ class TestProviderSwitchEndToEnd:
         assert cfg.codex is not None
         assert cfg.codex.default_prompt_template.count("{title}") == 1
         for required in (
-            "TTP this reference thumbnail",
+            "TTP this reference thumbnail into a stronger original textless background",
             "winning layout",
-            "more readable on mobile",
-            "no broken hands",
+            "Remove all text",
+            "Do not add any title text yet",
         ):
             assert required in cfg.codex.default_prompt_template
         with pytest.raises(ConfigError, match="codex-image\\.sh"):

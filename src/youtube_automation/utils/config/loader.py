@@ -80,9 +80,9 @@ _REQUIRED_KEYS_BY_SECTION: dict[str, list[str]] = {
 
 
 def _resolve_channel_dir() -> Path:
-    """チャンネルディレクトリを解決する.
+    """`config/channel/` を含むプロジェクトルートを解決する.
 
-    優先順: `CHANNEL_DIR` 環境変数 → CWD 祖先探索で `config/channel/` を持つディレクトリ.
+    優先順: `CHANNEL_DIR` 環境変数 → CWD 祖先探索で `config/channel/` を持つ祖先ディレクトリ.
     """
     env = os.environ.get("CHANNEL_DIR")
     if env:
@@ -94,7 +94,7 @@ def _resolve_channel_dir() -> Path:
 
 
 def channel_dir() -> Path:
-    """チャンネルディレクトリを返す（シングルトン解決）."""
+    """`config/channel/` を含むプロジェクトルートを返す（シングルトン解決）."""
     global _channel_dir
     if _channel_dir is None:
         _channel_dir = _resolve_channel_dir()

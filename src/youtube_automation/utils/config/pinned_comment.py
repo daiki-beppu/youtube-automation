@@ -19,7 +19,7 @@ class PinnedComment:
     """`pinned_comment` セクション（optional）.
 
     - `enabled`: この機能を有効にするか（`comments.enabled` と対称のオプトイン）
-    - `history_file`: チャンネルディレクトリからの相対パスで履歴 JSON を保存
+    - `history_file`: プロジェクトルートからの相対パスで履歴 JSON を保存
     - `delay_between_posts_sec`: 投稿 API 呼び出し間の sleep 秒
     - `default_language`: `--lang` 省略時に使うテンプレート言語キー
     - `templates`: `{言語: テンプレート文字列}` 形式の辞書。

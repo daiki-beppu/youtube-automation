@@ -88,6 +88,8 @@ class TestResolveFontPath:
         assert "対処:" in message
         assert "config/skills/thumbnail.yaml" in message
         assert "image_generation.gemini.thumbnail_text.overlay.font.title" in message
+        assert "第2段の文字入り thumbnail prompt" in message
+        assert "single_step の typography_clause" not in message
 
     def test_nonexistent_raises_with_guidance(self, tmp_path: Path):
         with pytest.raises(ConfigError) as exc_info:
@@ -1038,6 +1040,8 @@ class TestCli:
         stderr = capsys.readouterr().err
         assert "フォント指定が未設定です" in stderr
         assert "対処:" in stderr
+        assert "第2段の文字入り thumbnail prompt" in stderr
+        assert "single_step の typography_clause" not in stderr
 
     def test_missing_font_file_exits_1_with_guidance(
         self,
