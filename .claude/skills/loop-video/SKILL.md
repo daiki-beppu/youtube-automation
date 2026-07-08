@@ -257,8 +257,8 @@ veo:
 
 ## Integration
 
-`loop.mp4` が `10-assets/` に存在すると、`generate_videos.sh` v11.0 が自動検出し、
-静止画の代わりにループ動画を背景として使用します（24fps、CRF 20）。
+`loop.mp4` が `10-assets/` に存在すると、`generate_videos.sh`（v14）が自動検出し、
+静止画の代わりにループ動画を背景として使用します（24fps、CRF 22 で正規化）。
 
 パイプラインは **Veo 生成 → strip_audio → CRF 圧縮**（`compression.enabled=true` のとき）。
 `--smooth` 経路でも同じ crf/preset が適用されるため、`/loop-video` → `--smooth` のいずれの順でも
