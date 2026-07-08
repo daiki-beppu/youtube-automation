@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(skills)`: lifecycle skill の起動文字列を `bunx tayk <cmd>` から `uv run yt-<cmd>` へ戻した（#1625）。tayk は次世代版 CLI で現時点では運用未使用（実装は別リポジトリへ分離予定）のため、#965 で置換した表記のままではスキルを読んだ AI 実行者が未実装 subcommand（suno: `video-analyze` / `suno-verify`、masterup: `suno-audio-cleanup` / `suno-verify-playlist` / `fix-timestamps` / `finalize-master` / `apply-rain-layers` / `suno-select-tracks` ほか）で実行不能になっていた。対象は masterup / suno / suno-lyric / suno-helper / thumbnail / video-upload / video-description / wf-new / wf-next / playlist / analytics-collect / distrokid-helper の SKILL.md・references・config.default.yaml（wf-new が references として同梱する `yt-init-collection` の復旧ヒント文言も同様に戻した）。起動文字列のみの置換で、周辺の手順・節構成・TS 実装（packages/）は変更しない。回帰テストは方針を反転し、tayk cutover まで lifecycle skill に `tayk` 表記が入らないことを担保する `tests/test_lifecycle_skills_no_tayk.py` へ改称・書き換えた
 - `fix(skills)`: 音楽制作系 7 スキル（suno / suno-lyric / suno-helper / masterup / lyria / videoup / loop-video）の整合性監査で検出した記述ドリフトを修正（#1432）。`suno/SKILL.md` の slug 自動実行 argv 例に残っていた `["uv", "run", "bunx tayk video-analyze", ...]` の混在表記を `["bunx", "tayk", "video-analyze", ...]` に統一、`suno/references/suno-examples.md` から実装に存在しない設定キー `banned_adjective_free_instruments` への言及を削除、`loop-video/SKILL.md` の `generate_videos.sh` バージョン表記（v11.0 → v14）とループ背景の正規化 CRF 表記（20 → 22）を現行実装に合わせた
 - `fix(distrokid-helper)`: `ext-v0.2.3` リリース前に DistroKid Helper の manifest / popup 表示名へ残っていた `(TEST)` 接尾辞を外し、配布 zip が本番名 `DistroKid Helper` として表示されるようにした。
 

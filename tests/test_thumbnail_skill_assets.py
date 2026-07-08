@@ -202,7 +202,7 @@ def test_thumbnail_skill_documents_textless_background_to_text_included_flow() -
 
     for required in (
         "/thumbnail-compare",
-        "bunx tayk thumbnail-check <collection-path>/10-assets/main-v1.png --json",
+        "uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
         "cp main-v1.png main.png",
         "THUMBNAIL_PROMPT=\"$(cat <<'PROMPT'",
         '--reference "${COLLECTION_PATH}/10-assets/main.png"',
@@ -285,7 +285,7 @@ def test_thumbnail_skill_quality_check_separates_thumbnail_and_textless_main_qa(
         "`main-v1.png` / `main-v1.jpg`",
         "ベンチマーク参照の構図",
         "タイトル文字、字幕、ロゴ、透かし、タイポグラフィ、チャンネル名が残っていないか",
-        "bunx tayk thumbnail-check <collection-path>/10-assets/main-v1.png --json",
+        "uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
         "テキスト付き thumbnail 候補生成後",
         "`thumbnail-v1.jpg` / `thumbnail-codex-v1.png`",
         "承認済み `main.png/jpg` の構図",
@@ -327,7 +327,7 @@ def test_thumbnail_skill_two_phase_keeps_thumbnail_and_main_separate() -> None:
         "#### Phase 1: 既存参照の選択（新規生成しない）",
         "#### Phase 2: テキストオーバーレイ（thumbnail.jpg）",
     )
-    first_generation_idx = two_phase_block.find("生成: `yt-generate-image")
+    first_generation_idx = two_phase_block.find("生成: `uv run yt-generate-image")
     first_generation_output_idx = two_phase_block.find("--output", first_generation_idx)
     thumbnail_generation_idx = two_phase_block.find("--output 10-assets/thumbnail-v1.jpg -y")
 
