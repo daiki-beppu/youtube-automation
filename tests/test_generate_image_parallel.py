@@ -78,9 +78,9 @@ class TestExpandThumbnailPromptClauses:
             }
         }
 
-        prompt = expand_thumbnail_prompt_clauses("TTP reference. ${typography_clause}", skill_cfg)
+        prompt = expand_thumbnail_prompt_clauses("Text-included thumbnail prompt. ${typography_clause}", skill_cfg)
 
-        assert prompt == "TTP reference. Render title in a consistent classic serif typeface."
+        assert prompt == "Text-included thumbnail prompt. Render title in a consistent classic serif typeface."
 
     def test_leaves_prompt_without_placeholder_unchanged(self) -> None:
         assert expand_thumbnail_prompt_clauses("No typography placeholder.", {}) == "No typography placeholder."
@@ -133,7 +133,7 @@ class TestExpandThumbnailPromptClauses:
     )
     def test_rejects_malformed_typography_config(self, skill_cfg: dict, message: str) -> None:
         with pytest.raises(ConfigError, match=message):
-            expand_thumbnail_prompt_clauses("TTP reference. ${typography_clause}", skill_cfg)
+            expand_thumbnail_prompt_clauses("Text-included thumbnail prompt. ${typography_clause}", skill_cfg)
 
 
 class TestPlanOutputPaths:
@@ -510,7 +510,7 @@ class TestGenerateImageCLIReferenceContract:
         provider = _FakeProvider()
         argv = [
             "--prompt",
-            "TTP reference. ${typography_clause}",
+            "Text-included thumbnail prompt. ${typography_clause}",
             "--output",
             str(tmp_path / "thumbnail-v1.jpg"),
             "--max-attempts",
@@ -525,7 +525,10 @@ class TestGenerateImageCLIReferenceContract:
         assert exc_info.value.code == 0
 
         assert len(provider.requests) == 1
-        assert provider.requests[0].prompt == "TTP reference. Render title in a consistent classic serif typeface."
+        assert (
+            provider.requests[0].prompt
+            == "Text-included thumbnail prompt. Render title in a consistent classic serif typeface."
+        )
 
     @pytest.mark.parametrize(
         "skill_cfg, message",
@@ -569,7 +572,7 @@ class TestGenerateImageCLIReferenceContract:
         provider = _FakeProvider()
         argv = [
             "--prompt",
-            "TTP reference. ${typography_clause}",
+            "Text-included thumbnail prompt. ${typography_clause}",
             "--output",
             str(tmp_path / "thumbnail-v1.jpg"),
             "--max-attempts",
