@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING** `refactor(repo)`: ADR-0021 に基づき `packages/`（TS core / cli 約 28K 行）と root TS ツールチェーン（`package.json` / `bun.lock` / `bunfig.toml` / `tsconfig.json` / `oxlint.config.ts` / `oxfmt.config.ts` / `knip.json` / root `pnpm-lock.yaml`）を削除し、本リポジトリを Python 版メンテナンスモードに純化した（#1629）。CI の TS レーン（ts-lint / ts-format-check / ts-typecheck / ts-test / ts-knip）と push トリガーの `feat/ts-rewrite`、lefthook pre-commit の oxlint / oxfmt / typecheck、CHANGELOG ゲート（CI / lefthook）の `packages/` / `package.json` 対象、flake.nix devShell の `bun` を撤去。CLAUDE.md の「TS レイヤー（packages/）」節は ADR-0021 参照へ置換。tayk の TS 開発は専用の別リポジトリで行う
 - **BREAKING** `refactor(channel-new)`: 旧 `/channel-direction` を削除し、`/channel-new` の方向性検討モード（Step D1〜D5）へ統合した。新規開設モードでは従来どおり方向性・差別化・ポジショニングを聞かず TTP 対象の転写要素だけを確認し、必要な方向性ブレストは同じ `/channel-new` の別モードで `docs/channel/channel-direction.md` に保存する。config 生成用の初期値確認は Step 1 から Step 4 へ分離し、再生成モードは方向性検討モードの成果物を入力にする契約へ更新した（#1499）
 - `docs(wf-new)`: workflow-state schema の `assets.music_downloaded` 説明に、Suno 一括 DL 完了と `raw_master` 生成前の中間状態（DL 済み・raw master 未生成）の意味を明記した（#1568）
+- `docs(skills)`: 主要スキル 5 件の前後工程 cross-reference を現行ワークフロー基準で補完（#1670）。`/videoup` に前工程 `/masterup`（Suno 系）/ `/lyria`（Lyria 系）を明記、`/thumbnail` の Next Step に Lyria チャンネル分岐（`/lyria`）を追加、`/video-description` に前工程 `/videoup` への参照、`/metadata-audit` の Cross References に前工程 `/video-upload` を追加し、`/analytics-analyze` の When to Use に `/wf-next` 完了（動画公開）から T+7 日後に実行する前提を追記した
 
 ### Fixed
 
