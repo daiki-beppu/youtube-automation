@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -14,9 +15,30 @@ _CHANGELOG_GATE_PATH = _REPO_ROOT / ".lefthook" / "pre-push" / "changelog-gate.s
 _LEFTHOOK_CONFIG_PATH = _REPO_ROOT / "lefthook.yml"
 
 _CHANGELOG_LABEL = "skip-changelog"
-_PATH_FILTER_PATTERN = (
-    "^(src/youtube_automation/|\\.claude/skills/|\\.claude/CLAUDE\\.template\\.md$|pyproject\\.toml$)"
+
+# CHANGELOG ゲート対象パスの単一ソース。CI workflow の path filter regex と
+# changelog-gate.sh の GATED_PATHS の双方をこの定数と照合する。
+# 末尾 `/` はディレクトリ prefix、それ以外はファイル完全一致。
+_CHANGELOG_GATED_PATHS = (
+    "src/youtube_automation/",
+    ".claude/skills/",
+    ".claude/CLAUDE.template.md",
+    "pyproject.toml",
 )
+
+
+def _build_ci_path_filter_pattern(gated_paths: tuple[str, ...]) -> str:
+    """ゲート対象パス集合から CI workflow の grep -E パターンを組み立てる。"""
+    alternatives = []
+    for path in gated_paths:
+        escaped = re.escape(path)
+        if not path.endswith("/"):
+            escaped += "$"
+        alternatives.append(escaped)
+    return "^(" + "|".join(alternatives) + ")"
+
+
+_PATH_FILTER_PATTERN = _build_ci_path_filter_pattern(_CHANGELOG_GATED_PATHS)
 # push で CI を回す対象 branch。PR は stacked PR base でも発火するよう branch 制限しない。
 _PUSH_TRIGGER_BRANCHES = ["main", "feat/1143-suno-bulk-download"]
 _CHANGELOG_FILE_PATTERN = "^CHANGELOG\\.md$"
@@ -139,18 +161,27 @@ def test_ci_workflow_pull_requests_allow_stacked_pr_base_branches() -> None:
     assert "branches" not in pull_request
 
 
-def test_ci_changelog_gate_excludes_removed_ts_packages() -> None:
-    """ADR-0021: packages/ 削除後、CI と lefthook の changelog ゲートに TS パスが残らない。"""
+def test_changelog_gate_paths_match_single_source_in_ci_and_lefthook() -> None:
+    """CI と lefthook の changelog ゲート対象パスを _CHANGELOG_GATED_PATHS と正方向に照合する。
+
+    どちらか一方からパスが落ちても（あるいは想定外のパスが増えても）fail する。
+    """
+    # CI 側: path filter の grep -E パターンを抽出し、定数から組み立てた regex と完全一致させる。
     run_script = _load_ci_workflow()["jobs"]["changelog"]["steps"][1]["run"]
+    ci_pattern_match = re.search(r"grep -qE '([^']+)'", run_script)
+    assert ci_pattern_match is not None, "CI run スクリプトに path filter の grep -qE が無い"
+    assert ci_pattern_match.group(1) == _PATH_FILTER_PATTERN, (
+        "CI workflow の path filter regex が _CHANGELOG_GATED_PATHS と一致しない"
+    )
+
+    # lefthook 側: changelog-gate.sh の GATED_PATHS 配列を抽出し、定数と順序込みで完全一致させる。
     gate_script = _read_text(_CHANGELOG_GATE_PATH)
-
-    assert _PATH_FILTER_PATTERN in run_script
-    for token in ("packages/", "package\\.json$"):
-        assert token not in run_script, f"CI path filter に {token} が残っている"
-
-    # lefthook 側 GATED_PATHS も CI と同じ範囲を担保する。
-    for token in ('"packages/"', '"package.json"'):
-        assert token not in gate_script, f"changelog-gate.sh に {token} が残っている"
+    gated_paths_match = re.search(r"GATED_PATHS=\((.*?)\)", gate_script, re.DOTALL)
+    assert gated_paths_match is not None, "changelog-gate.sh に GATED_PATHS 配列が無い"
+    gate_paths = tuple(re.findall(r'"([^"]+)"', gated_paths_match.group(1)))
+    assert gate_paths == _CHANGELOG_GATED_PATHS, (
+        "changelog-gate.sh の GATED_PATHS が _CHANGELOG_GATED_PATHS と一致しない"
+    )
 
 
 def test_lefthook_changelog_gate_skips_branch_deletion_push() -> None:
