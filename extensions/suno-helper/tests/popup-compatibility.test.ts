@@ -115,15 +115,6 @@ function defaultSendMessage(message: string, payload?: Record<string, string>): 
   return Promise.resolve({ ok: true });
 }
 
-vi.mock("../lib/preset-state", async () => {
-  const actual = await vi.importActual<typeof import("../lib/preset-state")>("../lib/preset-state");
-  return {
-    ...actual,
-    readSpeedPresetId: vi.fn(async () => actual.DEFAULT_SPEED_PRESET_ID),
-    writeSpeedPresetId: vi.fn(async () => undefined),
-  };
-});
-
 vi.mock("../lib/resume-state", async () => {
   const actual = await vi.importActual<typeof import("../lib/resume-state")>("../lib/resume-state");
   return {
@@ -238,6 +229,14 @@ describe("Suno popup compatibility check", () => {
     storageMocks.setValue.mockResolvedValue(undefined);
     resumeStateMocks.readResumeState.mockResolvedValue(null);
     resumeStateMocks.writeResumeState.mockResolvedValue(undefined);
+  });
+
+  it("popup に実行モード selector と Fast / Balanced / Safe の選択肢を表示しない", () => {
+    expect(container.textContent).not.toContain("実行モード");
+    expect(container.textContent).not.toContain("Fast");
+    expect(container.textContent).not.toContain("Balanced");
+    expect(container.textContent).not.toContain("Safe");
+    expect(container.querySelector('input[name="speed-preset"]')).toBeNull();
   });
 
   it("progress handler が DONE + duration-check log を受けると live status を更新する", async () => {

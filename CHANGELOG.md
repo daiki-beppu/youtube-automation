@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(suno-helper)`: popup の実行モード選択（Fast / Balanced / Safe）を廃止し、content 実行時のペーシングを Balanced 固定にした。legacy `sunoSpeedPreset` が chrome.storage.local に残っていても実行設定へ反映せず、README と `/suno-helper` スキルの手順から mode 選択・preset 永続化の説明を削除した（#1573）
 - `docs(thumbnail)`: `/thumbnail` の標準手順を textless `main.png/jpg` 背景先行に変更し、承認済み背景を参照してテキスト付き `thumbnail.jpg` を生成する契約へ更新した。`single_step` / `two_phase` / codex 経路、TTP チェックリスト、prompt 保存、下流スキルの入力説明、フォント指定失敗時の実行時ガイダンスも同じ順序へ揃えた（#1502）
 - `refactor(suno-helper)`: 旧 Suno playlist capture 互換 route（`POST /suno/playlists`）と `write_suno_playlists()` / `normalize_suno_title()` / `--playlist-capture-*` を撤去し、DistroKid release 記録用の capture root を `--distrokid-capture-root` に分離（#1301）
 - `docs(distrokid)`: `/distrokid-prep` スキルを `/distrokid-helper` に改名し、参照スクリプトと docs/features の表記を同期（#1350）
