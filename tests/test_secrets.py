@@ -2,8 +2,13 @@
 
 検証する 3 経路:
 1. os.environ に既にあれば op を呼ばずにそれを返す
-2. os.environ に無く op がある場合は op read で取得して返す（os.environ への書き戻しは行わない）
+2. os.environ に無く、`YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` でなく、op がある場合は
+   op read で取得して返す（os.environ への書き戻しは行わない）
 3. どちらも失敗したら ConfigError を raise する
+
+通常テストでは `tests/conftest.py` が `YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` を
+既定有効にし、op discovery/spawn を行わず最終エラーへ進む。op fallback を検証する
+テストだけ明示的に解除する。
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ from youtube_automation.utils.secrets import (
 
 _TEST_SECRET = "CLIENT_SECRETS_JSON"
 _MANAGED_SECRETS = ("CLIENT_SECRETS_JSON", "OPENAI_API_KEY")
+_OP_READ_DISABLED_ENV = secrets_module._OP_READ_DISABLED_ENV
 
 
 @pytest.fixture(autouse=True)
@@ -54,6 +60,7 @@ class TestGetSecret:
     def test_falls_back_to_op_read_when_environ_empty(self):
         """os.environ に無く op が成功すれば op read の値を返す"""
         with (
+            patch.dict(os.environ, {_OP_READ_DISABLED_ENV: "0"}),
             patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
             patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
         ):
@@ -65,11 +72,18 @@ class TestGetSecret:
             )
             value = get_secret(_TEST_SECRET)
         assert value == "from-op-67890"
-        mock_run.assert_called_once()
+        mock_run.assert_called_once_with(
+            ["op", "read", _SECRET_REFS[_TEST_SECRET]],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=secrets_module._OP_READ_TIMEOUT_SEC,
+        )
 
     def test_op_read_result_is_not_written_to_environ(self):
         """op read で取得した値は os.environ にセットされない（global env 注入禁止: Issue #163）"""
         with (
+            patch.dict(os.environ, {_OP_READ_DISABLED_ENV: "0"}),
             patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
             patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
         ):
@@ -84,13 +98,29 @@ class TestGetSecret:
 
     def test_raises_config_error_when_op_unavailable_and_environ_empty(self):
         """op が無く os.environ も空なら ConfigError"""
-        with patch("youtube_automation.utils.secrets.shutil.which", return_value=None):
+        with (
+            patch.dict(os.environ, {_OP_READ_DISABLED_ENV: "0"}),
+            patch("youtube_automation.utils.secrets.shutil.which", return_value=None),
+        ):
             with pytest.raises(ConfigError, match=_TEST_SECRET):
                 get_secret(_TEST_SECRET)
+
+    def test_test_harness_disables_op_read_even_when_op_is_on_path(self):
+        """通常テストでは op が PATH 上にあっても実 op read 分岐へ入らない。"""
+        with (
+            patch.dict(os.environ, {_OP_READ_DISABLED_ENV: "1"}),
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op") as mock_which,
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+        ):
+            with pytest.raises(ConfigError, match=_TEST_SECRET):
+                get_secret(_TEST_SECRET)
+        mock_which.assert_not_called()
+        mock_run.assert_not_called()
 
     def test_raises_config_error_when_op_read_fails(self):
         """op はあるが op read が失敗したら ConfigError"""
         with (
+            patch.dict(os.environ, {_OP_READ_DISABLED_ENV: "0"}),
             patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
             patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
         ):
@@ -106,6 +136,7 @@ class TestGetSecret:
     def test_lru_cache_avoids_repeated_op_reads(self):
         """同一名で 2 回呼んでも op read は 1 回しか呼ばれない"""
         with (
+            patch.dict(os.environ, {_OP_READ_DISABLED_ENV: "0"}),
             patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
             patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
         ):
@@ -147,6 +178,7 @@ class TestOpenAIApiKeyRegistered:
     def test_openai_api_key_falls_back_to_op_read(self):
         """os.environ に無く op が成功すれば op read の値を返す。"""
         with (
+            patch.dict(os.environ, {_OP_READ_DISABLED_ENV: "0"}),
             patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
             patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
         ):
@@ -162,7 +194,10 @@ class TestOpenAIApiKeyRegistered:
 
     def test_openai_api_key_raises_config_error_when_unavailable(self):
         """op が無く os.environ も空なら ConfigError。"""
-        with patch("youtube_automation.utils.secrets.shutil.which", return_value=None):
+        with (
+            patch.dict(os.environ, {_OP_READ_DISABLED_ENV: "0"}),
+            patch("youtube_automation.utils.secrets.shutil.which", return_value=None),
+        ):
             with pytest.raises(ConfigError, match="OPENAI_API_KEY"):
                 get_secret("OPENAI_API_KEY")
 
@@ -209,6 +244,7 @@ class TestStreamingSecretsRegistered:
     def test_falls_back_to_op_read(self, name: str):
         """env に無く op が成功すれば op read の値を返す。"""
         with (
+            patch.dict(os.environ, {_OP_READ_DISABLED_ENV: "0"}),
             patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
             patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
         ):
@@ -225,7 +261,10 @@ class TestStreamingSecretsRegistered:
     @pytest.mark.parametrize("name", ["VULTR_API_KEY", "STREAM_WEBHOOK_URL", "DISCORD_WEBHOOK_URL"])
     def test_raises_config_error_when_unavailable(self, name: str):
         """env も op も空なら ConfigError。"""
-        with patch("youtube_automation.utils.secrets.shutil.which", return_value=None):
+        with (
+            patch.dict(os.environ, {_OP_READ_DISABLED_ENV: "0"}),
+            patch("youtube_automation.utils.secrets.shutil.which", return_value=None),
+        ):
             with pytest.raises(ConfigError, match=name):
                 get_secret(name)
 

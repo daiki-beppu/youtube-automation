@@ -10,7 +10,8 @@
 // - 秘密はシェル環境変数や .env に常時存在させず、必要になった瞬間に取得する
 // - 取得経路は次の順で試行する
 //     1. `process.env` にあればそれを使う (OSS 利用者の .env / 既存 export 経由)
-//     2. `op` (1Password CLI) が利用可能なら `op read` で取得する
+//     2. `YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` でなく、かつ `op` (1Password CLI)
+//        が利用可能なら `op read` で取得する
 //     3. どちらも失敗したら `config:` prefix 付き Error を throw する
 //
 // Python 版の lru_cache メモ化は移植しない: テスト契約が同一プロセスで env を
@@ -34,6 +35,10 @@ export const SECRET_REFS = {
 
 const OP_BIN = "op";
 const OP_READ_TIMEOUT_MS = 10_000;
+export const OP_READ_DISABLED_ENV = "YOUTUBE_AUTOMATION_DISABLE_OP_READ";
+
+const isOpReadDisabled = (): boolean =>
+  process.env[OP_READ_DISABLED_ENV] === "1";
 
 // `op read <ref>` を実行して値を返す。op が値を供給しなかった場合 (PATH 不在は
 // 呼び出し側で判定済み・非ゼロ終了・空出力) は null を返し、上位の throw に委ねる。
@@ -71,7 +76,7 @@ export const resolveSecret = async (name: string): Promise<string> => {
     return envValue;
   }
 
-  if (Bun.which(OP_BIN)) {
+  if (!isOpReadDisabled() && Bun.which(OP_BIN)) {
     const value = await readFromOp(opRef);
     if (value !== null) {
       return value;
@@ -107,6 +112,7 @@ const readClientSecretsFile = (filePath: string): string | null => {
  *   2. `<channel>/auth/client_secrets.json` ファイル
  *   3. `<channel>/automation/auth/client_secrets.json` ファイル
  *   4. `CLIENT_SECRETS_JSON` env / `op read SECRET_REFS.CLIENT_SECRETS_JSON`
+ *      (`YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` の場合は env のみ)
  *
  * @returns client_secrets.json の内容文字列 (パスではなく content)
  * @throws {Error} `config:` prefix — 全ての取得経路で失敗した場合
@@ -135,6 +141,7 @@ export const resolveClientSecretsJson = async (): Promise<string> => {
     }
   }
 
-  // file が無ければ env / op 経路 (+ 最終 throw) を resolveSecret に委ねる。
+  // file が無ければ env / op 経路 (+ opt-out 時の op skip / 最終 throw) を
+  // resolveSecret に委ねる。
   return await resolveSecret("CLIENT_SECRETS_JSON");
 };

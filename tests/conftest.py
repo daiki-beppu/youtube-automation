@@ -32,6 +32,10 @@ if str(_SRC_DIR) not in sys.path:
 
 # テスト用フィクスチャディレクトリ（git 管理下のオリジナル）
 _FIXTURE_CHANNEL_DIR = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
+_OP_READ_DISABLED_ENV = "YOUTUBE_AUTOMATION_DISABLE_OP_READ"
+
+
+os.environ.setdefault(_OP_READ_DISABLED_ENV, "1")
 
 
 def _prepare_isolated_channel_dir() -> None:

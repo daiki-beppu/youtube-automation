@@ -128,7 +128,7 @@ bun run ci                 # 上記すべて一括
 ## セキュリティ
 
 - `auth/client_secrets.json` / `auth/token.json` / `.env` は **絶対にコミットしない**
-- シークレット解決順序: `os.environ` → `op read`（1Password CLI）→ `ConfigError`
+- シークレット解決順序: `os.environ` → `op read`（1Password CLI）→ `ConfigError`。`YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` の場合は `op read` をスキップし、通常テストではこの opt-out を既定有効化する
 - 参照定義は `utils/secrets.py` の `_SECRET_REFS`（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`）
 - AI 系（Vertex AI）は ADC 認証のため `op` 取得は不要
 
