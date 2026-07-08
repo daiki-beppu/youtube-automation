@@ -35,6 +35,8 @@ Claude はこのリポジトリ上で **「BGM チャンネルを運営して収
 | **TTP（徹底的にパクる）** | ベンチマーク競合（`config/channel/analytics.json::benchmark.channels`）の **型** をまず転写する。独自性は転写の後で出す |
 | **Complete Collection 原則** | 投稿は 1 完成形 = 1 動画。途中状態の試作品をアップロードしない |
 | **誇張禁止** | タイトル / サムネに「衝撃」「ヤバい」等の煽りを入れない。長期チャンネル登録に資するブランディングを優先 |
+| **自律実行** | ユーザー確認が必須でない限り、合理的な仮定を置いて調査・実装・検証・簡潔な報告まで止まらず進める |
+| **確認境界** | 公開、削除、課金 API、外部投稿、機密情報、不可逆操作は明示確認を取ってから実行する |
 | **Fail Fast** | 設定ミスや欠損データはエラーで早期に止める。フォールバックで握りつぶさない（`utils/exceptions.py` のドメイン例外を使う） |
 
 ### 判断の前に読むべきもの
@@ -208,7 +210,7 @@ ffmpeg / Veo / Lyria / 画像生成 API を呼ぶスキル（`/videoup` / `/mast
 ### 認証
 
 - `auth/client_secrets.json` / `auth/token.json` / `.env` は **絶対にコミットしない**
-- シークレット解決順序: `os.environ` → `op read`（1Password CLI）→ `ConfigError`
+- シークレット解決順序: `os.environ` → `op read`（1Password CLI）→ `ConfigError`。`YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` の場合は `op read` をスキップし、通常テストではこの opt-out を既定有効化する
 
 ---
 

@@ -85,6 +85,32 @@ def test_check_lyric_duplication_accepts_unique_target_sections(tmp_path: Path) 
     assert "OK: 曲間のセクション重複なし" in result.stdout
 
 
+def test_check_lyric_duplication_ignores_reviewer_context_fields(tmp_path: Path) -> None:
+    path = _write_lyrics(
+        tmp_path / "suno-lyrics.json",
+        [
+            {
+                "name": "Song A",
+                "lyrics": "[Intro]\nMorning light\n\n[Bridge]\nOpen road",
+                "style": None,
+                "review_context": {
+                    "collection_theme": "quiet recovery",
+                    "scene": "first light by a window",
+                    "mood": "warm",
+                    "persona_target": "tired adult listener",
+                    "persona_vocabulary": ["ゆっくり"],
+                    "quote_essence": "small courage matters",
+                },
+            }
+        ],
+    )
+
+    result = _run(path)
+
+    assert result.returncode == 0
+    assert "OK: 曲間のセクション重複なし" in result.stdout
+
+
 def test_check_lyric_duplication_ignores_same_song_repetition(tmp_path: Path) -> None:
     path = _write_lyrics(
         tmp_path / "suno-lyrics.json",

@@ -6,21 +6,21 @@
 
 audio:
   # トラック間クロスフェード秒数
-  # bunx tayk generate-master の ffmpeg acrossfade と metadata_generator.py の
+  # uv run yt-generate-master の ffmpeg acrossfade と metadata_generator.py の
   # タイムスタンプ計算の両方がこの値を参照する。
   crossfade_duration: 1.0
 
-  # マスター音源のビットレート (bunx tayk generate-master と bunx tayk finalize-master で共有)。
-  # `audio.finalize.bitrate` が明示指定されていればそちらが bunx tayk finalize-master の出力に勝つ。
+  # マスター音源のビットレート (uv run yt-generate-master と uv run yt-finalize-master で共有)。
+  # `audio.finalize.bitrate` が明示指定されていればそちらが uv run yt-finalize-master の出力に勝つ。
   bitrate: "192k"
 
   # CLI フラグ (`--loop` / `--target-duration`) が両方未指定のときに
-  # `bunx tayk generate-master --target-duration MIN` 相当のデフォルト値として使われる。
+  # `uv run yt-generate-master --target-duration MIN` 相当のデフォルト値として使われる。
   # 同梱デフォルトでは未設定 (= 1 ループで終了)。チャンネル側で opt-in する。
   # target_duration_min: 120
 
   # CLI フラグ (`--shuffle` / `--shuffle-seed`) のいずれも未指定のときに
-  # `bunx tayk generate-master --shuffle` 相当のデフォルトとして採用される。
+  # `uv run yt-generate-master --shuffle` 相当のデフォルトとして採用される。
   # Suno で同一プロンプトから生成した類似イントロ群が連続するのを避けたいときに有効化する。
   # 同梱デフォルトでは未設定 (= シャッフルしない)。チャンネル側で opt-in する。
   # shuffle: true
@@ -31,13 +31,13 @@ audio:
   # shuffle_seed: 42
 
   # CLI フラグ (`--pin-first` / `--pin-first-count`) のいずれも未指定のときに
-  # `bunx tayk generate-master --pin-first-count N` 相当のデフォルトとして採用される。
+  # `uv run yt-generate-master --pin-first-count N` 相当のデフォルトとして採用される。
   # ソート済み先頭 N 件を順序固定し、`audio.shuffle: true` と併用すると残りだけ
   # シャッフルされる。Suno で retention に強い 1 曲を冒頭に置きたい運用向け。
   # 既定 0 = 固定なし。
   pin_first_count: 0
 
-  # bunx tayk finalize-master の整音パイプライン設定 (#512)。
+  # uv run yt-finalize-master の整音パイプライン設定 (#512)。
   # branding/<dirname>/<glob> に該当ファイルが 1 件以上ある場合のみ有効。
   # 全項目に組み込みデフォルトがあり、未設定でも既存 v5.5.0 と同じ挙動になる。
   # finalize:
@@ -81,7 +81,7 @@ suno_download:
 
 # Suno 1 Generate = 2 clip の採用整理。
 # /suno-helper が全 clip を 02-Individual-music/ に配置した後、/masterup が
-# bunx tayk generate-master の直前に実行する。
+# uv run yt-generate-master の直前に実行する。
 pair_selection:
   # auto: suno-prompts.json の lyrics から歌詞あり/なしを判定する。
   #   - 歌詞あり: 同名タイトル / prompt entry ごとに 1 clip だけ winner 採用
@@ -124,9 +124,9 @@ stock:
 #     LRA: 11
 #     TP: -1.5
 
-# raw master への雨レイヤー後処理 (opt-in / bunx tayk apply-rain-layers が参照)
+# raw master への雨レイヤー後処理 (opt-in / uv run yt-apply-rain-layers が参照)
 #
-# `bunx tayk finalize-master` (rain_layer namespace) が master.mp3 を loudnorm 二段で
+# `uv run yt-finalize-master` (rain_layer namespace) が master.mp3 を loudnorm 二段で
 # in-place 上書きするのに対し、こちらは raw master (master.mp3) と
 # `branding/rain_layers/*.wav` を amix で合成して別ファイル (master-rain.wav)
 # に書き出す軽い後処理。後段で外部 DAW のミキシング+マスタリングを挟む運用向け。
@@ -134,7 +134,7 @@ stock:
 #
 # post_processing:
 #   suno_audio_cleanup:
-#     enabled: false              # opt-in。true なら /masterup の Suno DL 後に bunx tayk suno-audio-cleanup apply を実行
+#     enabled: false              # opt-in。true なら /masterup の Suno DL 後に uv run yt-suno-audio-cleanup apply を実行
 #     backup_originals: true      # 02-Individual-music/originals-pre-cleanup/ に元ファイルを保存
 #     bitrate: "192k"             # libmp3lame 出力ビットレート (未指定なら audio.bitrate)
 #     codec: "libmp3lame"
@@ -161,7 +161,7 @@ stock:
 #       fade_sec: 3
 #
 #   rain_layers:
-#     enabled: false              # opt-in (true にしないと bunx tayk apply-rain-layers は何もしない)
+#     enabled: false              # opt-in (true にしないと uv run yt-apply-rain-layers は何もしない)
 #     volume_db: -19              # 各レイヤーに当てる減衰 dB (10^(-19/20) ≈ 0.112)
 #     output_name: master-rain.wav # 出力ファイル名 (01-master/ 配下)
 #     output_codec: pcm_s16le      # 出力 ffmpeg コーデック (PCM 16-bit)

@@ -139,7 +139,7 @@ skill-config (`.claude/skills/video-description/config.default.yaml` / 上書き
 続けて、`descriptions.md` に保存する前に過去 live タイトルとの重複 warning を確認する（`yt-title-duplicate-check` は 100 codepoint 超過も検出し、超過時は `--strict` に関係なく exit 1 になる）:
 
 ```bash
-bunx tayk title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
+uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
 ```
 
 - `タイトル全体` / `タイトル後半` / 長い `タイトル末尾` が過去タイトルと一致した warning は、アップロード直前まで持ち越さずこの段階で見直す

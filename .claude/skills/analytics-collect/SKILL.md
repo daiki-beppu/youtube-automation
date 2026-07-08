@@ -42,20 +42,20 @@ description: "Use when YouTube Analytics データの収集・最新化が必要
 ## 実行コマンド
 
 ```bash
-bunx tayk analytics
+uv run yt-analytics
 ```
 
 Reporting API の初回前提を確認する場合:
 
 ```bash
-bunx tayk analytics --reporting-dry-run
-bunx tayk analytics --reporting-create-job
+uv run yt-analytics --reporting-dry-run
+uv run yt-analytics --reporting-create-job
 ```
 
 作成直後は最初のレポート取得可能まで最大 48 時間かかる。既存 job と生成済みレポートがある場合は、必要に応じて次で CTR / impressions も取り込む:
 
 ```bash
-bunx tayk analytics --include-reporting
+uv run yt-analytics --include-reporting
 ```
 
 ## 出力

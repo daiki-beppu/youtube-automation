@@ -64,11 +64,13 @@ class GeminiCliConfig:
         model: gemini CLI に ``-m`` で渡すモデル ID
         image_size: 解像度ヒント（プロンプトに埋め込む）
         timeout_seconds: subprocess 1 回あたりのタイムアウト秒
+        generation_mode: thumbnail の生成モード。``single_step`` の場合は参照画像を必須化する
     """
 
     model: str = _DEFAULT_GEMINI_CLI_MODEL
     image_size: str = _DEFAULT_GEMINI_CLI_IMAGE_SIZE
     timeout_seconds: int = _DEFAULT_GEMINI_CLI_TIMEOUT
+    generation_mode: str | None = None
 
 
 @dataclass(frozen=True)
@@ -169,7 +171,9 @@ def _build_from_new_namespace(section: dict[str, Any]) -> ImageGenerationConfig:
         return ImageGenerationConfig(provider="openai", gemini=None, openai=openai_cfg)
 
     if provider == "gemini_cli":
-        gemini_cli_cfg = _build_gemini_cli(section.get("gemini_cli") or {})
+        gemini_section = section.get("gemini")
+        generation_mode = gemini_section.get("generation_mode") if isinstance(gemini_section, dict) else None
+        gemini_cli_cfg = _build_gemini_cli(section.get("gemini_cli") or {}, generation_mode=generation_mode)
         return ImageGenerationConfig(provider="gemini_cli", gemini_cli=gemini_cli_cfg)
 
     codex_cfg = _build_codex(section.get("codex")) if "codex" in section else CodexConfig()
@@ -193,11 +197,12 @@ def _build_gemini(d: dict[str, Any]) -> GeminiConfig:
     )
 
 
-def _build_gemini_cli(d: dict[str, Any]) -> GeminiCliConfig:
+def _build_gemini_cli(d: dict[str, object], *, generation_mode: str | None = None) -> GeminiCliConfig:
     return GeminiCliConfig(
         model=d.get("model", _DEFAULT_GEMINI_CLI_MODEL),
         image_size=d.get("image_size", _DEFAULT_GEMINI_CLI_IMAGE_SIZE),
         timeout_seconds=int(d.get("timeout_seconds", _DEFAULT_GEMINI_CLI_TIMEOUT)),
+        generation_mode=generation_mode,
     )
 
 

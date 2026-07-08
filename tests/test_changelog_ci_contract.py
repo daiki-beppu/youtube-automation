@@ -13,19 +13,37 @@ _PR_TEMPLATE_PATH = _REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"
 _CI_WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
 _CHANGELOG_GATE_PATH = _REPO_ROOT / ".lefthook" / "pre-push" / "changelog-gate.sh"
 _LEFTHOOK_CONFIG_PATH = _REPO_ROOT / "lefthook.yml"
-_OXFMT_CONFIG_PATH = _REPO_ROOT / "oxfmt.config.ts"
 
 _CHANGELOG_LABEL = "skip-changelog"
-_PATH_FILTER_PATTERN = (
-    "^(src/youtube_automation/|\\.claude/skills/|\\.claude/CLAUDE\\.template\\.md$"
-    "|pyproject\\.toml$|packages/|package\\.json$)"
+
+# CHANGELOG ゲート対象パスの単一ソース。CI workflow の path filter regex と
+# changelog-gate.sh の GATED_PATHS の双方をこの定数と照合する。
+# 末尾 `/` はディレクトリ prefix、それ以外はファイル完全一致。
+_CHANGELOG_GATED_PATHS = (
+    "src/youtube_automation/",
+    ".claude/skills/",
+    ".claude/CLAUDE.template.md",
+    "pyproject.toml",
 )
+
+
+def _build_ci_path_filter_pattern(gated_paths: tuple[str, ...]) -> str:
+    """ゲート対象パス集合から CI workflow の grep -E パターンを組み立てる。"""
+    alternatives = []
+    for path in gated_paths:
+        escaped = re.escape(path)
+        if not path.endswith("/"):
+            escaped += "$"
+        alternatives.append(escaped)
+    return "^(" + "|".join(alternatives) + ")"
+
+
+_PATH_FILTER_PATTERN = _build_ci_path_filter_pattern(_CHANGELOG_GATED_PATHS)
 # push で CI を回す対象 branch。PR は stacked PR base でも発火するよう branch 制限しない。
-_PUSH_TRIGGER_BRANCHES = ["main", "feat/ts-rewrite", "feat/1143-suno-bulk-download"]
+_PUSH_TRIGGER_BRANCHES = ["main", "feat/1143-suno-bulk-download"]
 _CHANGELOG_FILE_PATTERN = "^CHANGELOG\\.md$"
 _LABELS_JOIN_EXPRESSION = "${{ join(github.event.pull_request.labels.*.name, ',') }}"
 _PR_EVENT_GUARD = "github.event_name == 'pull_request'"
-_OXFMT_STAGED_SUFFIXES = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".jsonc"}
 _PR_TEMPLATE_TEXT = """## 概要
 
 <!-- 何を、なぜ変更したか。issue があれば `Closes #N` -->
@@ -64,22 +82,6 @@ def _read_text(path: Path) -> str:
 
 def _load_ci_workflow() -> dict[str, object]:
     return yaml.safe_load(_read_text(_CI_WORKFLOW_PATH))
-
-
-def _oxfmt_ignore_patterns() -> set[str]:
-    text = _read_text(_OXFMT_CONFIG_PATH)
-    match = re.search(r"ignorePatterns:\s*\[(?P<body>.*?)\],", text, flags=re.DOTALL)
-    assert match is not None, "oxfmt.config.ts の ignorePatterns が見つからない"
-    return set(re.findall(r'"([^"]+)"', match.group("body")))
-
-
-def _ignore_pattern_has_oxfmt_staged_files(pattern: str) -> bool:
-    if not pattern.endswith("/**"):
-        return False
-    root = _REPO_ROOT / pattern.removesuffix("/**")
-    if not root.exists() or not root.is_dir():
-        return False
-    return any(path.is_file() and path.suffix in _OXFMT_STAGED_SUFFIXES for path in root.rglob("*"))
 
 
 def test_pull_request_template_matches_issue_485_contract() -> None:
@@ -137,10 +139,7 @@ def test_ci_workflow_changelog_job_checks_expected_paths_and_messages() -> None:
 
 
 def test_ci_workflow_keeps_push_branch_allowlist() -> None:
-    """#964: feat/ts-rewrite branch への push でも CI が走る必要がある。
-
-    #790 cutover で feat/ts-rewrite を branches から外したら本テストも更新する。
-    """
+    """push トリガーの branch allowlist を固定する（ADR-0021 で feat/ts-rewrite は除外済み）。"""
     workflow = _load_ci_workflow()
     # PyYAML は YAML 1.1 で bare な `on` を真偽値 True にパースするため両キーを許容する。
     triggers = workflow.get("on", workflow.get(True))
@@ -162,18 +161,27 @@ def test_ci_workflow_pull_requests_allow_stacked_pr_base_branches() -> None:
     assert "branches" not in pull_request
 
 
-def test_ci_changelog_gate_covers_ts_packages() -> None:
-    """#964: CI と lefthook の changelog ゲートが packages/ と package.json を対象にする。"""
+def test_changelog_gate_paths_match_single_source_in_ci_and_lefthook() -> None:
+    """CI と lefthook の changelog ゲート対象パスを _CHANGELOG_GATED_PATHS と正方向に照合する。
+
+    どちらか一方からパスが落ちても（あるいは想定外のパスが増えても）fail する。
+    """
+    # CI 側: path filter の grep -E パターンを抽出し、定数から組み立てた regex と完全一致させる。
     run_script = _load_ci_workflow()["jobs"]["changelog"]["steps"][1]["run"]
+    ci_pattern_match = re.search(r"grep -qE '([^']+)'", run_script)
+    assert ci_pattern_match is not None, "CI run スクリプトに path filter の grep -qE が無い"
+    assert ci_pattern_match.group(1) == _PATH_FILTER_PATTERN, (
+        "CI workflow の path filter regex が _CHANGELOG_GATED_PATHS と一致しない"
+    )
+
+    # lefthook 側: changelog-gate.sh の GATED_PATHS 配列を抽出し、定数と順序込みで完全一致させる。
     gate_script = _read_text(_CHANGELOG_GATE_PATH)
-
-    assert _PATH_FILTER_PATTERN in run_script
-    for token in ("packages/", "package\\.json$"):
-        assert token in run_script, f"CI path filter に {token} が無い"
-
-    # lefthook 側 GATED_PATHS は CI と同じ範囲を担保する。
-    for token in ('"packages/"', '"package.json"'):
-        assert token in gate_script, f"changelog-gate.sh に {token} が無い"
+    gated_paths_match = re.search(r"GATED_PATHS=\((.*?)\)", gate_script, re.DOTALL)
+    assert gated_paths_match is not None, "changelog-gate.sh に GATED_PATHS 配列が無い"
+    gate_paths = tuple(re.findall(r'"([^"]+)"', gated_paths_match.group(1)))
+    assert gate_paths == _CHANGELOG_GATED_PATHS, (
+        "changelog-gate.sh の GATED_PATHS が _CHANGELOG_GATED_PATHS と一致しない"
+    )
 
 
 def test_lefthook_changelog_gate_skips_branch_deletion_push() -> None:
@@ -195,22 +203,4 @@ def test_lefthook_changelog_gate_skips_branch_deletion_push() -> None:
     gate_command = lefthook_config["pre-push"]["commands"]["changelog-gate"]
     assert gate_command.get("use_stdin") is True, (
         "lefthook.yml の changelog-gate に use_stdin: true が無いと削除 push スキップが黙って無効化される"
-    )
-
-
-def test_lefthook_oxfmt_exclude_matches_formatter_ignore_contract() -> None:
-    """#1428 同型: oxfmt ignore 対象だけの staged commit で hook が失敗しない契約を固定する。"""
-    lefthook_config = yaml.safe_load(_read_text(_LEFTHOOK_CONFIG_PATH))
-    oxfmt_command = lefthook_config["pre-commit"]["commands"]["oxfmt"]
-    lefthook_excludes = set(oxfmt_command.get("exclude", []))
-    ignore_patterns = _oxfmt_ignore_patterns()
-    required_excludes = {pattern for pattern in ignore_patterns if _ignore_pattern_has_oxfmt_staged_files(pattern)}
-
-    assert required_excludes <= lefthook_excludes, (
-        "lefthook.yml の pre-commit.commands.oxfmt.exclude は、oxfmt.config.ts の ignorePatterns のうち "
-        f"対象拡張子の実ファイルがある path を含めること: {sorted(required_excludes - lefthook_excludes)}"
-    )
-    assert lefthook_excludes <= ignore_patterns, (
-        "lefthook.yml の oxfmt.exclude は oxfmt.config.ts の ignorePatterns と同期してください: "
-        f"{sorted(lefthook_excludes - ignore_patterns)}"
     )

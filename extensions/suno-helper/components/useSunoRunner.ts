@@ -19,16 +19,12 @@ import {
   type ItemState,
   type LocalServerSource,
   type RunModeId,
-  type SpeedPresetId,
 } from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
 import {
   DEFAULT_RUN_MODE_ID,
-  DEFAULT_SPEED_PRESET_ID,
   readRunModeId,
-  readSpeedPresetId,
   writeRunModeId,
-  writeSpeedPresetId,
 } from "../lib/preset-state";
 import {
   readResumeState,
@@ -59,15 +55,13 @@ interface RunnerState {
   entries: PromptEntry[];
   itemStates: ItemState[];
   status: string;
+  phase: string;
   isError: boolean;
   compatibilityWarning: string;
   canRun: boolean;
   isRunning: boolean;
   // collection 選択時の playlist 名 (#854)。display only。
   playlistName: string | undefined;
-  // 速度プリセット (#875)。実行モード selector の選択値。永続化は setSpeedPreset 内で行う。
-  speedPresetId: SpeedPresetId;
-  setSpeedPreset: (id: SpeedPresetId) => void;
   runModeId: RunModeId;
   setRunMode: (id: RunModeId) => void;
   // 再開バナー (#872)。chrome.storage / content snapshot いずれか有効なソース、無ければ null。
@@ -118,6 +112,7 @@ export function useSunoRunner(): RunnerState {
   const [durationFilter, setDurationFilter] = useState<DurationFilter | undefined>(undefined);
   const [itemStates, setItemStates] = useState<ItemState[]>([]);
   const [status, setStatus] = useState("");
+  const [phase, setPhase] = useState("idle");
   const [isError, setIsError] = useState(false);
   const [compatibilityWarning, setCompatibilityWarning] = useState("");
   const [isRunning, setIsRunning] = useState(false);
@@ -136,8 +131,7 @@ export function useSunoRunner(): RunnerState {
   const [restoredPlaylistExpectedClipCount, setRestoredPlaylistExpectedClipCount] = useState<number | undefined>(
     undefined,
   );
-  // 速度プリセット (#875)。マウント時に storage から復元し、選択時に永続化する。初期値は既定 (Balanced)。
-  const [speedPresetId, setSpeedPresetId] = useState<SpeedPresetId>(DEFAULT_SPEED_PRESET_ID);
+  // 投入方式 (#1586)。マウント時に storage から復元し、選択時に永続化する。
   const [runModeId, setRunModeId] = useState<RunModeId>(DEFAULT_RUN_MODE_ID);
   // chrome.storage から読んだ前回の ERROR 停止 state (#872)。表示可否は selectedCollectionId と時刻で判定する。
   const [persistedResume, setPersistedResume] = useState<ResumeState | null>(null);
@@ -334,19 +328,8 @@ export function useSunoRunner(): RunnerState {
     });
   }, []);
 
-  // popup 起動時に永続化済みの速度プリセットを復元する (#875 要件2)。
-  useEffect(() => {
-    void readSpeedPresetId().then(setSpeedPresetId);
-  }, []);
-
   useEffect(() => {
     void readRunModeId().then(setRunModeId);
-  }, []);
-
-  // 速度プリセットの選択を即時永続化する (#875 要件2)。content は run 開始時に storage から読む。
-  const setSpeedPreset = useCallback((id: SpeedPresetId) => {
-    setSpeedPresetId(id);
-    void writeSpeedPresetId(id);
   }, []);
 
   const setRunMode = useCallback((id: RunModeId) => {
@@ -362,6 +345,7 @@ export function useSunoRunner(): RunnerState {
     setEntries([]);
     setDurationFilter(undefined);
     setItemStates([]);
+    setPhase("idle");
     setRestoredCollectionId(undefined);
     setRestoredPlaylistName(undefined);
     setRestoredFailedIndex(undefined);
@@ -428,6 +412,7 @@ export function useSunoRunner(): RunnerState {
   useEffect(() => {
     const unwatch = onMessage("progress", ({ data }) => {
       setItemStates((prev) => nextItemStates(prev, data));
+      setPhase(data.phase);
       // DONE は当該 item を done 化するだけで status 文字列は更新しない（旧 popup.js の live 挙動を維持）。
       // ただし #1270 の duration check OK は DONE に log として載るため、その場合だけ表示更新する。
       // restore 経路は phaseToStatus(DONE) で「完了」を表示するため SSOT 側に DONE case は残す。
@@ -449,6 +434,9 @@ export function useSunoRunner(): RunnerState {
     void (async () => {
       try {
         const snapshot = await sendMessage("queryProgress", undefined);
+        if (!snapshot) {
+          return;
+        }
         const restored = buildRestoreState(snapshot);
         if (!restored) {
           return;
@@ -467,6 +455,7 @@ export function useSunoRunner(): RunnerState {
         setRestoredSubmittedClipIds(restored.submittedClipIds);
         setRestoredSubmittedClipIdsAreDurationFiltered(restored.submittedClipIdsAreDurationFiltered === true);
         setRestoredPlaylistExpectedClipCount(restored.playlistExpectedClipCount);
+        setPhase(snapshot.progress.phase);
         report(restored.status, restored.isError);
       } catch {
         // runner content 未注入（中継先不在）では queryProgress が到達しない。復元を諦め従来表示を維持する。
@@ -491,8 +480,9 @@ export function useSunoRunner(): RunnerState {
       await serverUrlItem.setValue(baseUrl);
       setServerSources(await rememberServerSource(baseUrl));
     }
-    report("取得中…");
     clearLoadedRunState();
+    setPhase("loading");
+    report("取得中…");
     const extensionVersion = browser.runtime.getManifest().version;
     const warning = await sendMessage("fetchCompatibilityWarning", { baseUrl, extensionVersion });
     setCompatibilityWarning(typeof warning === "string" ? warning : "");
@@ -502,11 +492,13 @@ export function useSunoRunner(): RunnerState {
       setEntries(data.entries);
       setDurationFilter(data.duration_filter);
       setItemStates(data.entries.map(() => "idle"));
+      setPhase("idle");
       report(`${data.entries.length} パターンを取得しました。`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setEntries([]);
       setItemStates([]);
+      setPhase("error");
       report(`取得失敗: ${message}\nyt-collection-serve が起動しているか確認してください。`, true);
     }
   }, [url, selectedCollectionId, syncCollections, clearLoadedRunState, report]);
@@ -531,6 +523,7 @@ export function useSunoRunner(): RunnerState {
       const range = overrides?.range;
       // 二重実行ガード成立後、送信前に実行中フラグを立てる (#892 要件7: setIsRunning を sendMessage の前へ)。
       setIsRunning(true);
+      setPhase("starting");
       try {
         // collection mode の payload だけを送る。collectionId は resume 紐付けと download 記録に必須。
         // tabId は指定せず background 宛に送り、同一タブの runner content へ中継させる (#892)。
@@ -550,6 +543,7 @@ export function useSunoRunner(): RunnerState {
       } catch (err) {
         // 送信失敗時はフラグを戻して再実行可能にする（実行は始まっていない）。
         setIsRunning(false);
+        setPhase("error");
         const message = err instanceof Error ? err.message : String(err);
         report(formatRunError(message), true);
       }
@@ -584,6 +578,7 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     setIsRunning(true);
+    setPhase("adding-to-playlist");
     try {
       await sendMessage("retryPlaylist", {
         playlistName,
@@ -598,6 +593,7 @@ export function useSunoRunner(): RunnerState {
       report("playlist 追加とダウンロードを再実行しています…");
     } catch (err) {
       setIsRunning(false);
+      setPhase("error");
       setResumeDismissed(false);
       const message = err instanceof Error ? err.message : String(err);
       report(formatRunError(message), true);
@@ -665,6 +661,7 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     setIsRunning(true);
+    setPhase("downloading");
     try {
       const payload = {
         collectionId: selectedCollectionId,
@@ -675,6 +672,7 @@ export function useSunoRunner(): RunnerState {
       report("ダウンロードを再実行しています…");
     } catch (err) {
       setIsRunning(false);
+      setPhase("error");
       const message = err instanceof Error ? err.message : String(err);
       report(formatRunError(message), true);
     }
@@ -693,6 +691,7 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     setIsRunning(true);
+    setPhase("adopting");
     try {
       const result = await sendMessage("adoptSelectedClips", {
         expectedClipCount: expectedClipCountForManualAdoption,
@@ -728,9 +727,11 @@ export function useSunoRunner(): RunnerState {
       setRestoredSubmittedClipIdsAreDurationFiltered(false);
       setRestoredPlaylistExpectedClipCount(result.clipIds.length);
       setResumeDismissed(false);
+      setPhase("idle");
       report(`選択中の曲 ${result.clipIds.length} 件を採用しました。Playlist / Download から再開できます。`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      setPhase("error");
       report(formatRunError(message), true);
     } finally {
       setIsRunning(false);
@@ -791,13 +792,12 @@ export function useSunoRunner(): RunnerState {
     entries,
     itemStates,
     status,
+    phase,
     isError,
     compatibilityWarning,
     canRun: entries.length > 0 && !isRunning,
     isRunning,
     playlistName,
-    speedPresetId,
-    setSpeedPreset,
     runModeId,
     setRunMode,
     resumeBanner,

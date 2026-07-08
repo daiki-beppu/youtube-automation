@@ -1,6 +1,6 @@
 """thumbnail skill の codex 補助生成導線に関する静的契約テスト。
 
-Issue #501 では provider 抽象化 (`bunx tayk generate-image` / `ImageProvider`) に触らず、
+Issue #501 では provider 抽象化 (`uv run yt-generate-image` / `ImageProvider`) に触らず、
 `.claude/skills/thumbnail/references/codex-image.sh` という独立 shell script を
 追加し、`thumbnail/SKILL.md` から直接案内する。Issue #547 で codex CLI 0.131 系の
 新プロトコル（旧 stdout `generated image <id> <base64>` 廃止）に追従して書き直し。
@@ -254,6 +254,17 @@ def _provider_section(text: str) -> str:
     )
     if not match:
         raise AssertionError("thumbnail/SKILL.md に `## プロバイダー切り替え` セクションが見つかりません")
+    return match.group(0)
+
+
+def _provider_fallback_section(text: str) -> str:
+    match = re.search(
+        r"^## 障害時の provider fallback\b.*?(?=^## |\Z)",
+        text,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    if not match:
+        raise AssertionError("thumbnail/SKILL.md に `## 障害時の provider fallback` セクションが見つかりません")
     return match.group(0)
 
 
@@ -916,14 +927,24 @@ def test_thumbnail_skill_codex_section_documents_login_and_direct_command() -> N
     assert "thumbnail-codex-v1.png" in section
 
 
+def test_thumbnail_skill_provider_fallback_codex_example_starts_with_thumbnail() -> None:
+    """#1611: GCP 課金なし codex wrapper 入口も初回は text-included thumbnail を生成する。"""
+    section = _provider_fallback_section(_read(_THUMBNAIL_SKILL_MD))
+    assert ".claude/skills/thumbnail/references/codex-image.sh" in section
+    assert "<thumbnail prompt>" in section
+    assert "<collection-path>/10-assets/thumbnail-codex-v1.png" in section
+    assert "<textless background prompt>" not in section
+
+
 def test_thumbnail_skill_codex_section_follows_thumbnail_then_textless_main_contract() -> None:
-    """#1310: codex 経路も文字入り thumbnail と textless main を別成果物にする。"""
+    """#1611: codex 経路も文字入り thumbnail 先行で textless main を別成果物にする。"""
     section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
 
     for required in (
         "codex 経路でも標準ファイル契約は同じ",
         "10-assets/thumbnail-codex-v1.png",
         "10-assets/thumbnail.jpg",
+        "確定した `thumbnail.jpg`",
         "10-assets/main-v1.png",
         "10-assets/main.png",
         "動画背景には使わない",
@@ -934,11 +955,11 @@ def test_thumbnail_skill_codex_section_follows_thumbnail_then_textless_main_cont
 def test_thumbnail_skill_codex_section_documents_api_route_boundary() -> None:
     """Given codex 経路セクション
     When 本文を読む
-    Then 正規 provider だが bunx tayk generate-image / ImageProvider の API 経路ではないことを説明する。
+    Then 正規 provider だが uv run yt-generate-image / ImageProvider の API 経路ではないことを説明する。
     """
     section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
     assert "正規" in section
-    assert "bunx tayk generate-image" in section
+    assert "uv run yt-generate-image" in section
     assert "ImageProvider" in section
     assert "codex-image.sh" in section
 

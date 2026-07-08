@@ -1,6 +1,6 @@
 # tayk
 
-YouTube チャンネル運営を自動化するツールキット (旧 `youtube-channels-automation`、ADR-0007 で `tayk` に rebrand)。Python から TypeScript(bun) へ MCP tool 中心設計で 0 ベース再設計中 (epic #727)。既存 Python コードの移植ではなく、skill に蓄積されたワークフロー知識を型付き MCP tool に結晶化するスクラップ&ビルド。本ファイルは実装詳細ではなく、本プロジェクト固有の用語の正書を定める **グロッサリ**である。
+YouTube チャンネル運営を自動化するツールキット (旧 `youtube-channels-automation`、ADR-0007 で `tayk` に rebrand)。Python から TypeScript(bun) へ MCP tool 中心設計で 0 ベース再設計中。既存 Python コードの移植ではなく、skill に蓄積されたワークフロー知識を型付き MCP tool に結晶化するスクラップ&ビルド。**開発は本リポではなく tayk 専用の別リポで行う (ADR-0021、2026-07-08)。本リポは Python 版のメンテナンスモード。**本ファイルは実装詳細ではなく、本プロジェクト固有の用語の正書を定める **グロッサリ**である。
 
 ## 配布・移行
 
@@ -9,7 +9,8 @@ YouTube チャンネル運営を自動化するツールキット (旧 `youtube-
 _Avoid_: youtube-channels-automation, yt-automation, yt (旧 bin 名)
 
 **cutover**:
-`feat/ts-rewrite` を Python 一掃済みの状態で main へ **merge commit** で統合し `tayk@0.1.0` を publish する単一イベント (#790)。これ以降 main は TS。
+first-party 下流の日常運用が tayk のみで回るようになり、Python 版 (本リポ) のメンテナンスを終了するイベント。tayk のリリース単位 (`v0.1.0` 等) とは独立の判断。
+_Avoid_: 旧定義「`feat/ts-rewrite` を main へ merge する単一イベント (#790)」(ADR-0021 で廃止。tayk は別リポで開発するため同一リポ内 big-bang merge は存在しない)
 
 **dogfood**:
 cutover 前に first-party 2 リポ (soulful-grooves / deepfocus365) で各コレクション 1 本のフルライフサイクルを実走させる受け入れ検証 (epic マイルストーン M2)。期間ではなく完走で判定する。
@@ -39,7 +40,7 @@ _Avoid_: 優先度, priority (Tier は priority ではなくゲート所属)
 ## 設定・データ形式
 
 **config format**:
-`packages/core` が読み書きするファイルはすべて JSON。YAML パーサー依存を持たない。takt / CI / lefthook 等の外部ツール所有ファイルは各ツールの規約に従う (YAML 等)。
+tayk core（別リポジトリで開発。ADR-0021 = `docs/adr/0021-separate-repo-restart.md`）が読み書きするファイルはすべて JSON。YAML パーサー依存を持たない。takt / CI / lefthook 等の外部ツール所有ファイルは各ツールの規約に従う (YAML 等)。
 _Avoid_: YAML / JSONC / JSON5 を core が読み書きするファイルに使うこと
 
 **skill config**:
@@ -118,6 +119,14 @@ _Avoid_: analytics dashboard (analytics は収集+分析を含意する。dashbo
 
 ## データ
 
+**データ 4 分類**:
+チャンネルリポのデータの SSOT を種類で機械的に決める分類。① 宣言的インテント (config 等、SSOT = git 管理 JSON) / ② ランタイム状態・履歴 (SSOT = local store) / ③ 生成成果物 (再生成可能。キャッシュ扱いで SSOT を持たない) / ④ リモート実状態 (SSOT = YouTube。ローカルにあるのは reconcile 対象のミラー)。「どこを見ればいいか」は種類の判定だけで答えが出る。
+_Avoid_: 「SSOT は DB に全部集約」(① の git レビュー可能性と ④ の原理的なリモート性を壊す)
+
 **local store**:
-チャンネルリポごとに `<CHANNEL_DIR>/data/local.db` に置く libSQL (Turso) embedded DB。時系列データ (analytics / コスト / 投票 / ベンチマーク) とコレクション状態を保持する SSOT (ADR-0017)。チャンネル設定 (`config/channel/*.json`) は含まない — 設定の SSOT は JSON ファイル。
+チャンネルリポごとに `<CHANNEL_DIR>/data/local.db` に置く libSQL (Turso) embedded DB。時系列データ (analytics / コスト / 投票 / ベンチマーク) とコレクション状態 (②) を保持する SSOT (ADR-0017)。チャンネル設定 (`config/channel/*.json`) は含まない — 設定の SSOT は JSON ファイル。
 _Avoid_: database, SQLite (実体は libSQL。SQLite 互換だが区別する)
+
+**read model**:
+local store が兼ねる読み取り専用のクエリ面。書き込みの正はデータ 4 分類のまま、① と ④ を DB へミラーし「何かを知りたいときは常に local store に SQL 一発」を保証する。ミラーは SSOT ではなく、① は git、④ は YouTube が常に正。
+_Avoid_: キャッシュ (③ と混同する)、SSOT (read model は読み口であって正本ではない)

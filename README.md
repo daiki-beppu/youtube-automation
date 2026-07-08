@@ -3,7 +3,7 @@
 YouTube チャンネル運営を自動化するツールキット。Analytics データ収集、AI コンテンツ生成、動画アップロード、メタデータ管理をまとめて提供します。
 
 > [!WARNING]
-> **移行告知（2026-07-02）**: 本 Python 版は **2026-08 中に提供終了**し、TypeScript 製の後継 **`tayk`**（npm パッケージ）へ切り替わります。cutover 当日に main ブランチが TS 実装になり、branch 参照の `uv add git+https://` は取得不可になります（git tag は残ります）。詳細と移行手順は [`docs/migration/python-to-tayk.md`](docs/migration/python-to-tayk.md) を参照してください。
+> **移行告知（2026-07-02 / 2026-07-08 改訂）**: 本 Python 版は**メンテナンスモード**（バグ修正のみ、新機能なし）です。後継の TypeScript 製 **`tayk`**（npm パッケージ）は別リポジトリで開発中で、実運用カバレッジに達した時点で cutover（main ブランチからの Python コード削除）を判断します。**具体的な期日は設けません**。cutover 実施後は branch 参照の `uv add git+https://` は取得不可になります（git tag は残ります）。詳細・マイルストーン・移行手順は [`docs/migration/python-to-tayk.md`](docs/migration/python-to-tayk.md) を参照してください。
 
 > **新規利用者の方へ**: セットアップ手順は [`ONBOARDING.md`](ONBOARDING.md) を参照してください。
 
@@ -140,8 +140,10 @@ yt-channel-status
 シークレットは次の優先順位で取得されます:
 
 1. `os.environ` に既にセットされていればそれを使う
-2. 1Password CLI (`op`) が利用可能なら `op read` で取得
+2. `YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` でなく、1Password CLI (`op`) が利用可能なら `op read` で取得
 3. 失敗した場合は `ConfigError`
+
+通常のテスト実行では `YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` を既定有効にし、`op` の探索と `op read` の起動を行わず、env/file で解決できなければ最終エラーへ進みます。`op read` fallback を検証するテストだけ、この opt-out を明示的に解除します。
 
 #### A. 標準方式: `.env` を直接編集（OSS 利用者向け）
 
@@ -154,7 +156,7 @@ $EDITOR .env  # Vertex AI 用変数 (`GOOGLE_CLOUD_LOCATION` 等) を書く。pr
 
 #### B. 1Password CLI 方式（秘密をディスクに書かない）
 
-`op` CLI にサインインしておけば、Python スクリプト実行時に必要な瞬間だけ `op read` で取得します。シェルの環境変数や `.env` ファイルには一切残りません。
+`op` CLI にサインインしておけば、Python スクリプト実行時に必要な瞬間だけ `op read` で取得します。シェルの環境変数や `.env` ファイルには一切残りません。`YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` を設定したプロセスではこの fallback を使わず、env/file で解決できない場合に `ConfigError` で停止します。
 
 ```bash
 op signin

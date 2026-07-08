@@ -2,9 +2,9 @@
 // DOM 操作は shared/dom の純関数へ委譲し、本ファイルは連続実行のフロー制御に専念する。
 import { DEFAULT_DURATION_FILTER, type DurationFilter, type PromptEntry } from "../../shared/api";
 import {
+  BALANCED_RUN_PACING,
   CLIPS_PER_REQUEST,
   INFLIGHT_STALL_TIMEOUT_MS,
-  MAX_INFLIGHT_REQUESTS,
   MAX_YIELD_RETRY,
   PHASE,
   type ProgressPayload,
@@ -16,7 +16,7 @@ import {
   SUNO_MATCHES,
 } from "../../shared/constants";
 import { applyProgress, initSnapshot } from "../lib/snapshot";
-import { applyJitter, readSpeedPresetId, resolveSpeedPreset } from "../lib/preset-state";
+import { applyJitter } from "../lib/preset-state";
 import {
   clearResumeStateForCollection,
   resolvePlaylistClipIds,
@@ -671,11 +671,9 @@ export default defineContentScript({
     async function runAll(entries: PromptEntry[], options: RunOptions): Promise<void> {
       const { range, collectionId, playlistName, submittedClipIds, playlistExpectedClipCount } = options;
       const previousSubmittedClipIds = submittedClipIds ?? [];
-      // 速度プリセット (#875) を run 開始時に確定する。以降のペーシング（間隔/並列数/retry/ack）は
-      // 既存定数の代わりにこの preset 値を使う。未選択でも storage fallback で Balanced になる。
-      const preset = resolveSpeedPreset(await readSpeedPresetId());
-      // Suno 同時生成キューに積める clip 数の上限（preset の並列リクエスト数 × 2 clip）。
-      const maxGeneratingClips = Math.min(preset.maxInflightRequests, MAX_INFLIGHT_REQUESTS) * CLIPS_PER_REQUEST;
+      const pacing = BALANCED_RUN_PACING;
+      // Suno 同時生成キューに積める clip 数の上限（Balanced の並列リクエスト数 × 2 clip）。
+      const maxGeneratingClips = pacing.maxInflightRequests * CLIPS_PER_REQUEST;
       const total = entries.length;
       if (total === 0) {
         emitProgress({ phase: PHASE.FINISHED, total });
@@ -773,7 +771,7 @@ export default defineContentScript({
           order,
           total,
           maxGeneratingClips,
-          preset,
+          preset: pacing,
           isAborted: () => aborted,
           isEntrySubmitted: (index) => lastSubmittedEntryIndex === index,
           getSubmittedIds: () => tracker.getSubmittedIds(),
@@ -807,7 +805,7 @@ export default defineContentScript({
           let yieldRetryCount = 0;
           for (;;) {
             const submittedStart = tracker.getSubmittedIds().length;
-            // 1 entry の実行を失敗分類つきで包む (#948)。一時的な失敗は preset.maxEntryRetry 回まで
+            // 1 entry の実行を失敗分類つきで包む (#948)。一時的な失敗は Balanced の maxEntryRetry 回まで
             // 同一 entry を再試行し、それでも失敗ならスキップして次へ（run 全体は止めない）。
             const result = await runEntryWithRetry({
               attempt: async () => {
@@ -831,8 +829,8 @@ export default defineContentScript({
                     }),
                   waitForAck,
                   isAborted: () => aborted,
-                  maxRetry: preset.maxInjectRetry,
-                  ackTimeoutMs: preset.injectAckTimeoutMs,
+                  maxRetry: pacing.maxInjectRetry,
+                  ackTimeoutMs: pacing.injectAckTimeoutMs,
                   pollIntervalMs: POLL_INTERVAL_MS,
                   describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
                 });
@@ -842,8 +840,8 @@ export default defineContentScript({
               // 重複生成になるため presumed-done（resolveInterruptIndex の i+1 判断と同じ）。
               wasSubmitted: (err) => lastSubmittedEntryIndex === i && !(err instanceof InjectNotAcknowledgedError),
               isFatal: (err) => err instanceof FatalRunError,
-              maxRetry: preset.maxEntryRetry,
-              retryDelayMs: () => applyJitter(preset.interCreateDelayMs, preset.jitterMs),
+              maxRetry: pacing.maxEntryRetry,
+              retryDelayMs: () => applyJitter(pacing.interCreateDelayMs, pacing.jitterMs),
               onRetry: (attempt, max) =>
                 emitProgress({
                   phase: PHASE.WAITING_SLOT,
@@ -952,7 +950,7 @@ export default defineContentScript({
                 message: `${message}; retry ${yieldRetryCount}/${MAX_YIELD_RETRY}`,
                 yieldRetryCount,
               });
-              await abortableSleep(applyJitter(preset.interCreateDelayMs, preset.jitterMs), () => aborted);
+              await abortableSleep(applyJitter(pacing.interCreateDelayMs, pacing.jitterMs), () => aborted);
               continue;
             }
             failedIndices.push(i);
@@ -968,8 +966,8 @@ export default defineContentScript({
             break;
           }
           // Create→clip-row DOM 反映ラグによる過剰投入 (race) を避けるため、次の投入前に間隔を空ける (#847)。
-          // preset の基準間隔に ±jitter を加えて bot 判定の固定間隔シグナルを消す (#875)。毎回 fresh 算出する。
-          await abortableSleep(applyJitter(preset.interCreateDelayMs, preset.jitterMs), () => aborted);
+          // Balanced の基準間隔に ±jitter を加えて bot 判定の固定間隔シグナルを消す。毎回 fresh 算出する。
+          await abortableSleep(applyJitter(pacing.interCreateDelayMs, pacing.jitterMs), () => aborted);
         }
       }
       // スキップした失敗 entry が残っている場合は playlist 追加を保留して終了する (#948)。

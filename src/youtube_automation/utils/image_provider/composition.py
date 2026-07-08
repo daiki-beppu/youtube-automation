@@ -19,6 +19,7 @@ CLI 共通ヘルパー（``generate_image`` の出力上書き分岐 / 参照画
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -319,6 +320,19 @@ def validate_single_step_references(skill_cfg: dict[str, Any]) -> None:
             "ベンチマークサムネを data/thumbnail_compare/benchmark/ 等に配置し、"
             "config/skills/thumbnail.yaml で参照してください。"
         )
+
+
+def validate_single_step_request_references(generation_mode: object, references: Sequence[Path]) -> None:
+    """``single_step`` 実行 request に参照画像が含まれることを検証する。"""
+    if generation_mode != "single_step":
+        return
+    if references:
+        return
+    raise ConfigError(
+        "single_step モードでは --reference の指定が必須です。"
+        "skill-config の image_generation.gemini.reference_images.default を CLI へ展開し、"
+        "--reference <path> で参照画像を 1 件以上渡してください。"
+    )
 
 
 def normalize_reference_default(default: str | list[str] | None) -> list[str]:
