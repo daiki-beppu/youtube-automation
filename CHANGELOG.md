@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(suno-helper)`: `/suno-helper` を browser use 主経路で操作・監視できるように、SKILL.md に agent primary flow、DOM signal、無限待機回避、handoff 条件を追加。Chrome DevTools MCP は診断・補助・フォールバック扱いに固定し、拡張 overlay / popup には `data-suno-*` と `role="status"` の観測 signal を追加した。`/wf-new` の Suno 後続案内も `/suno-helper` の browser use 主導フローへ接続する表現に更新（#1382）
 - `feat(doctor)`: `yt-doctor` に playlist スキル向けの `playlist_config` / `playlist_create_dry_run` チェックを追加（#1504）。`config/channel/playlists.json` の欠落・JSON 破損・`playlist_id` 未設定を channel カテゴリで診断し、`PlaylistManager.create_all_playlists(dry_run=True)` 経路で作成計画を検証する。dry-run は YouTube API への書き込みを行わず、失敗時は human next_action で設定修正手順を示す。
 - `feat(collection-serve)`: `yt-collection-serve` に unpacked Chrome 拡張名から exact origin lock を自動解決する `--allow-extension <name>` を追加（#1486）。macOS Chrome profile の `Secure Preferences`（無ければ `Preferences`）を走査し、`extensions.settings[*].path` が絶対パスかつ basename が指定名に一致する拡張 IDから `chrome-extension://<id>` を組み立て、既存の `/auth/token` / write endpoint lock にそのまま適用する。`--allow-origin` とは排他で、検出 0 件・複数 ID 競合・profile root 走査不可・Preferences 読み取り不可・Preferences JSON parse failure は `--allow-origin` fallback 案内付きの `ConfigError` で fail-loud する。`/suno-helper` / `/distrokid-helper` / `/wf-new` のサーバー起動手順と拡張 README も `--allow-extension` 基準へ更新した
 
