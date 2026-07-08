@@ -51,7 +51,7 @@
 | `opening` | `{style} {primary} music inspired by ...` の形式で開始 |
 | `sub_opening` | opening を補足する 1-2 文 |
 | `perfect_for` | **4 項目**（例: Study & Focus, Relaxation, Creative Work, Sleep） |
-| `hashtags` | **5 個** 程度 |
+| `hashtags` | **5 個** 程度（`config/channel/content.json::descriptions.hashtags` が単一ソース。`/video-description` と実装 `metadata_generator.py` はこの値をそのまま出力する。YouTube は最初の 3 個をタイトル下に表示） |
 
 **TTP 路線**: チャンネル概要欄（`snippet.description` / `brandingSettings.channel.description`）の章立て・段落構造を `descriptions.opening` + `descriptions.sub_opening` + `descriptions.perfect_for` に転写する。welcome 行・絵文字・箇条書きセクションの並び順を変えないこと。「TTP できているか」は SKILL.md Step R2.3 の self-check で必ず検証する。
 

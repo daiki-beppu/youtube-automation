@@ -11,6 +11,15 @@ description: "Use when 公開済み動画が伸びなかった原因を切り分
 
 責務は **症状の定量化 + 仮説リスト生成 + 検証スキル案内** までで、実検証（サムネ比較・タイトル評価・コメント分析等）は既存スキルへバトンする。
 
+## 設定読み込みゲート
+
+前提確認や Phase 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+
+1. `.claude/skills/postmortem/config.default.yaml`
+2. `config/skills/postmortem.yaml`（存在する場合）
+
+読み込み後は `youtube_automation.utils.skill_config.load_skill_config("postmortem")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。Phase 2 の症状判定は `thresholds.*`、Phase 3 の仮説マッピングは `hypothesis_ratios.*` を参照する。
+
 ## 前提
 
 `config/channel/` が存在すること（`load_config()` でロード可能）。
@@ -68,27 +77,27 @@ description: "Use when 公開済み動画が伸びなかった原因を切り分
 - **CTR / 平均視聴時間 / インプレッション**: 自チャンネル中央値のみで比較する（競合分は YouTube Data API では取得できないため）。基準値は `yt-launch-curve` の `target.benchmark_median` / `target.ratio_vs_median` と、`reporting_api.impressions_summary.aggregated_ctr_percentage`（チャンネル全体平均）を採用する
 - **views / 動画長**: 自チャンネル中央値 + 競合中央値（`data/benchmark_*.json`）の両方を引用してよい
 
-症状判定の閾値（`launch_curve_analyzer.py` の四分位ラベル p25/p50/p75 と整合）:
+症状判定の閾値は skill-config `thresholds.ratio_vs_median`（既定 `strong: 0.5` / `moderate: 0.7` / `mild: 0.9`。`launch_curve_analyzer.py` の四分位ラベル p25/p50/p75 と整合）:
 
 | 指標 | 判定 |
 |------|------|
-| `ratio_vs_median < 0.5` | 強い症状（赤） |
-| `0.5 ≦ ratio_vs_median < 0.7` | 中程度の症状（黄） |
-| `0.7 ≦ ratio_vs_median < 0.9` | 軽症（薄黄） |
-| `ratio_vs_median ≧ 0.9` | 健常（緑） |
+| `ratio_vs_median < strong` | 強い症状（赤） |
+| `strong ≦ ratio_vs_median < moderate` | 中程度の症状（黄） |
+| `moderate ≦ ratio_vs_median < mild` | 軽症（薄黄） |
+| `ratio_vs_median ≧ mild` | 健常（緑） |
 
 ### Phase 3: 仮説マッピング
 
-Phase 2 の症状から仮説を生成する。複数の症状が同時に成立した場合は該当行をすべて採用し、postmortem.md には全候補を列挙する:
+Phase 2 の症状から仮説を生成する。判定係数は skill-config `hypothesis_ratios`（既定 `ctr_low: 0.7` / `ctr_healthy: 0.9` / `avd_low: 0.7` / `impressions_low: 0.5`）と `thresholds.neutral_band_pct`（既定 10）を使う。複数の症状が同時に成立した場合は該当行をすべて採用し、postmortem.md には全候補を列挙する:
 
 | 主症状 | 副症状 | 主仮説 | 副仮説 |
 |--------|--------|--------|--------|
-| `ctr_percentage` が自チャンネル `aggregated_ctr_percentage` の 0.7 倍未満 | `impressions` は過去平均同等以上 | サムネ訴求弱 | タイトル訴求弱 / ターゲット層ミスマッチ / 差別化不足 |
-| `ctr_percentage` が自チャンネル `aggregated_ctr_percentage` の 0.9 倍以上 | `average_view_duration` が自チャンネル中央値の 0.7 倍未満 | 中身の弱さ（音源 / 編集 / テーマ） | サムネと中身の不一致 |
-| `impressions` が過去平均の 0.5 倍未満 | — | タイトル / タグ SEO 弱 / 初動エンゲージメント低 | 公開時刻ミス / 再生リスト未登録 |
-| 全指標が中央値前後（±10%）で `ratio_vs_median < 0.9` | — | テーマ自体の市場性不足 | 競合過密ジャンル |
+| `ctr_percentage` が自チャンネル `aggregated_ctr_percentage` の `ctr_low` 倍未満 | `impressions` は過去平均同等以上 | サムネ訴求弱 | タイトル訴求弱 / ターゲット層ミスマッチ / 差別化不足 |
+| `ctr_percentage` が自チャンネル `aggregated_ctr_percentage` の `ctr_healthy` 倍以上 | `average_view_duration` が自チャンネル中央値の `avd_low` 倍未満 | 中身の弱さ（音源 / 編集 / テーマ） | サムネと中身の不一致 |
+| `impressions` が過去平均の `impressions_low` 倍未満 | — | タイトル / タグ SEO 弱 / 初動エンゲージメント低 | 公開時刻ミス / 再生リスト未登録 |
+| 全指標が中央値前後（±`neutral_band_pct` %）で `ratio_vs_median < mild` | — | テーマ自体の市場性不足 | 競合過密ジャンル |
 
-閾値は固定値ではなく **チャンネル特性に応じて文脈調整可** とする。ただし調整して良いのは以下の 3 ケースに限る:
+閾値は skill-config の恒久上書きとは別に **チャンネル特性に応じて文脈調整可** とする。ただし一時調整して良いのは以下の 3 ケースに限る:
 
 | ケース | 調整内容 |
 |--------|---------|
@@ -98,7 +107,7 @@ Phase 2 の症状から仮説を生成する。複数の症状が同時に成立
 
 該当ケースがなければ表の係数をそのまま使う（自由裁量での調整は不可）。調整した場合は、変更前後の閾値と適用したケース名を postmortem.md の「症状サマリー」欄に必ず明示する。
 
-per-video 流入経路シェア（`YT_SEARCH` / `YT_BROWSE` 等）に基づく「YouTube 内露出不足」仮説は、既存データには per-video の `insightTrafficSourceType` が含まれないため Phase 3 では仮説化しない。`impressions` が過去平均の 0.5 倍未満（上表 3 行目）と判定された場合のみ、Phase 4 の検証ステップで per-video の流入経路を YouTube Analytics API に直接問い合わせて切り分ける。
+per-video 流入経路シェア（`YT_SEARCH` / `YT_BROWSE` 等）に基づく「YouTube 内露出不足」仮説は、既存データには per-video の `insightTrafficSourceType` が含まれないため Phase 3 では仮説化しない。`impressions` が過去平均の `impressions_low` 倍未満（上表 3 行目）と判定された場合のみ、Phase 4 の検証ステップで per-video の流入経路を YouTube Analytics API に直接問い合わせて切り分ける。
 
 ### Phase 4: 検証ステップの案内
 

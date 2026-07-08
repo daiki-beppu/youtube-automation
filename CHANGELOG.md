@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(skills)`: 2026-05 skills 監査の残件として、skill-config 未適用スキルの直書き値を skill-config 機構へ切り出した（#1669）。(1) analytics-collect / analytics-analyze 双方に直書きされていた鮮度判定しきい値（30 分）を `analytics-collect/config.default.yaml::freshness_minutes` に単一ソース化（`config/skills/analytics-collect.yaml` の上書きが両スキルの判定に効く）。(2) `discover-competitors`（検索フィルタ既定値・キーワード数ガイドレール）/ `live-clean`（削除対象・保護パターン）/ `postmortem`（症状判定しきい値・仮説マッピング係数）/ `video-upload`（preflight 探索パターン・誇張語 NG リスト）に `config.default.yaml` を新設し、各 SKILL.md の直書き値を config 参照へ書き換えた。`yt-discover-competitors` は CLI フラグ既定値を `load_skill_config("discover-competitors")` 経由で解決する（CLI フラグ明示指定 > チャンネル上書き > default）。(3) `analytics-report` の `#Shorts` 除外キーワードと KPI カード構成を `analytics-report/config.default.yaml::html.{exclude_title_keywords,kpi_cards}` に、`metadata-audit` の REMOTE チャプター上限（>12）を `metadata-audit/config.default.yaml::chapters.remote_max` に skill-config 化し、`metadata_audit.py::audit_remote` が実行時に読むよう変更した
+
+
 - `feat(suno-helper)`: 連続実行に投入方式セレクタ（Serial / Queue）を追加（#1586）。Queue は投入 ACK と clip ID 観測を確認したら生成完了を待たずに次 entry を先行投入し、最大 10 request（20 clip）まで Suno queue を使って全体の実行時間を短縮する。全 entry 投入後に生成完了をまとめて待ってから playlist 追加へ進む。進捗 UI には投入済み・生成未完了を表す `submitted` 状態（琥珀色）を追加。選択は chrome.storage.local（`sunoRunMode`）に永続化し、既定は従来挙動の Serial。中断時は投入方式を resume state に保存し、再開は popup の現在選択ではなく元 run のモードで行う。制約: Queue は per-entry duration guard の自動再生成を行わず（範囲外 clip は playlist 追加時に除外のみ）、bridge の clip ID 観測が必須（未観測は fail-loud で run 停止）
 - `feat(suno-helper)`: `/suno-helper` を browser use 主経路で操作・監視できるように、SKILL.md に agent primary flow、DOM signal、無限待機回避、handoff 条件を追加。Chrome DevTools MCP は診断・補助・フォールバック扱いに固定し、拡張 overlay / popup には `data-suno-*` と `role="status"` の観測 signal を追加した。`/wf-new` の Suno 後続案内も `/suno-helper` の browser use 主導フローへ接続する表現に更新（#1382）
 - `feat(doctor)`: `yt-doctor` に playlist スキル向けの `playlist_config` / `playlist_create_dry_run` チェックを追加（#1504）。`config/channel/playlists.json` の欠落・JSON 破損・`playlist_id` 未設定を channel カテゴリで診断し、`PlaylistManager.create_all_playlists(dry_run=True)` 経路で作成計画を検証する。dry-run は YouTube API への書き込みを行わず、失敗時は human next_action で設定修正手順を示す。
@@ -22,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(skills)`: `video-description/SKILL.md` の「ハッシュタグ 13 個」と `channel-new/references/config-generation-rules.md` の「5 個程度」の数値矛盾を解消（#1669、監査 M-10）。実装 `metadata_generator.py` は `config/channel/content.json::descriptions.hashtags` をそのまま出力し個数を強制しないため、両ファイルを `descriptions.hashtags` 単一ソース参照 + 目安 5 個程度（examples / fixtures は 3 個、YouTube がタイトル下に表示するのは先頭 3 個）へ統一した
 - `fix(suno-helper)`: queue 実行の resume payload 境界で `submittedClipIds` / `playlistExpectedClipCount` を fail-loud に検証し、未完了 clip を保持した再開時に不正な raw payload が playlist 完了待ちへ流れ込まないようにした（#1586）。
 - `fix(suno-helper)`: SKILL.md の進捗 phase 表に queue mode の `submitted` を追記（#1586）。shared/constants の PHASE と skill doc の照合テスト `test_suno_helper_phase_table_matches_shared_phase_constants` が新 phase 追加に追従しておらず fail していた
 - `fix(extensions)`: suno-helper の Playwright e2e が `SyntaxError: Named export ... not found（CommonJS module）` で全滅していた CI 失敗を修正（#1586 ブランチで顕在化）。根本原因は #1629（ADR-0021）の root `package.json`（`"type": "module"`）削除で `extensions/shared/` が Node ESM loader に CJS スコープ判定されるようになったこと。`extensions/shared/package.json`（`type: module`）を新設してスコープを復元した。あわせて #1586 が e2e に追加していた queue runner / completion gate の純ロジックテスト 3 件（page 不使用）を `tests/queue-runner.test.ts`（vitest）へ移設し、e2e は実ブラウザ layout を要する DOM スモークに限定した

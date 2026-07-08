@@ -41,10 +41,26 @@ from youtube_automation.utils.preflight_checks import (  # noqa: E402
     requires_scene_phrases,
 )
 from youtube_automation.utils.probe import probe_duration  # noqa: E402
+from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
 
 COLLECTIONS_DIR = channel_dir() / "collections" / "live"
 
 TS_RE = re.compile(r"^\d{1,2}:\d{2}")
+
+# skill-config に chapters.remote_max が無い場合の最終フォールバック
+_FALLBACK_REMOTE_CHAPTER_MAX = 12
+
+
+def _remote_chapter_max() -> int:
+    """REMOTE チェックのチャプター上限を skill-config から解決する。
+
+    `.claude/skills/metadata-audit/config.default.yaml::chapters.remote_max` が default、
+    `config/skills/metadata-audit.yaml` のチャンネル上書きが優先される。
+    """
+    chapters = load_skill_config("metadata-audit").get("chapters") or {}
+    if not isinstance(chapters, dict):
+        return _FALLBACK_REMOTE_CHAPTER_MAX
+    return int(chapters.get("remote_max", _FALLBACK_REMOTE_CHAPTER_MAX))
 
 
 def extract_section(text: str, header: str) -> str | None:
@@ -148,6 +164,7 @@ def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
 
     yt = get_youtube()
     issues: dict[str, list[str]] = {vid: [] for vid in video_ids}
+    remote_chapter_max = _remote_chapter_max()
 
     ids_csv = ",".join(video_ids.keys())
     resp = yt.videos().list(id=ids_csv, part="snippet,localizations").execute()
@@ -169,8 +186,8 @@ def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
             issues[vid].append("YT title scene_phrase missing (auto-truncated)")
 
         ts_lines = [line for line in desc.split("\n") if TS_RE.match(line.strip())]
-        if len(ts_lines) > 12:
-            issues[vid].append(f"YT description has {len(ts_lines)} chapters (>12)")
+        if len(ts_lines) > remote_chapter_max:
+            issues[vid].append(f"YT description has {len(ts_lines)} chapters (>{remote_chapter_max})")
 
         # ja localized title should contain Japanese characters
         ja_title = locs.get("ja", {}).get("title", "")

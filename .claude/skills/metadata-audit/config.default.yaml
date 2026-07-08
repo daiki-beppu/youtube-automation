@@ -1,0 +1,12 @@
+# metadata-audit skill default config
+#
+# `yt-metadata-audit` の監査しきい値。チャンネル側では `config/skills/metadata-audit.yaml` に上書き値を置く。
+#
+# 注意: LOCAL チェックのチャプター上限は `config/channel/audio.json` の `chapter_max`
+# （チャンネル config、既定 100。アップロード preflight と共有）が単一ソースのため、ここには置かない。
+
+chapters:
+  # REMOTE チェック: YouTube 側 description のタイムスタンプ行数がこの値を超えたら
+  # variation expansion regression として issue 化する。
+  # `metadata_audit.py::audit_remote` が `load_skill_config("metadata-audit")` 経由で読む。
+  remote_max: 12

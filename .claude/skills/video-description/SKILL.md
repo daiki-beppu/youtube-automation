@@ -159,7 +159,7 @@ uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
 1. **誇張表現回避**: Epic, Ultimate 等を避け Ancient, Enchanted 等を使用 — 誇張は CTR を下げる傾向があり、チャンネルブランドの信頼性も損なう
 2. **AI 透明性**: Usage & Attribution セクションを含める — AI 生成コンテンツの透明性維持はコミュニティとの信頼関係の基盤
 3. **SEO 最適化**: `config/channel/content.json` の `tags.base` に基づく戦略的キーワード — YouTube 検索とおすすめアルゴリズムの両方で発見性を高める
-4. **ハッシュタグ**: 13個（base + theme固有）— YouTube は概要欄の最初の3ハッシュタグをタイトル下に表示するため、数と順序が重要
+4. **ハッシュタグ**: `config/channel/content.json::descriptions.hashtags` が単一ソース（実装 `metadata_generator.py` は設定値をそのまま出力する。個数の目安は `/channel-new` の config-generation-rules と同じ **5 個程度**）— YouTube は概要欄の最初の3ハッシュタグをタイトル下に表示するため、順序が重要
 5. **タイムスタンプ必須**: `00:00` 始まり、3チャプター以上 — YouTube がチャプターを自動認識し、検索結果にプレビュー表示される
 
 ### Cards（YouTube Studio で手動設定）
@@ -178,7 +178,7 @@ uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
 - [ ] 誇張表現なし（Epic/Ultimate等 不使用）
 - [ ] AI 透明性あり（Usage & Attribution セクション）
 - [ ] チャンネル CTA 含む
-- [ ] ハッシュタグ 13個（base + theme）
+- [ ] ハッシュタグが `config/channel/content.json::descriptions.hashtags` と一致（個数の目安は 5 個程度）
 - [ ] モバイル読みやすさ（セクション区切り）
 - [ ] タイムスタンプあり（00:00 始まり、3チャプター以上）
 - [ ] カードセクション含む（タイミング・テキスト・リンク先）

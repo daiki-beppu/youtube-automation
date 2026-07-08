@@ -1,0 +1,16 @@
+# analytics-report skill default config
+#
+# HTML ビジュアルレポート生成の設定。チャンネル側では `config/skills/analytics-report.yaml` に上書き値を置く。
+
+html:
+  # ヘッダー直下に表示する KPI カード（表示順のまま 1 枚ずつ描画。枚数はこのリスト長で決まる）
+  kpi_cards:
+    - total_views      # 総再生数
+    - total_watch_time # 総視聴時間
+    - subscribers      # 登録者数
+    - ctr              # CTR
+  # 動画パフォーマンス表・動画別推移から除外する動画のタイトルキーワード（部分一致）。
+  # Complete Collection と KPI 構造（CTR / Avg Duration / 視聴維持の意味合い）が異なる
+  # Shorts を除外する既定値。リストは deep-merge で丸ごと置換される。
+  exclude_title_keywords:
+    - "#Shorts"

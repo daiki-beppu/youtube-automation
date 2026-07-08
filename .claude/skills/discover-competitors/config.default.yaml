@@ -1,0 +1,27 @@
+# discover-competitors skill default config
+#
+# `yt-discover-competitors` の既定フィルタ値。チャンネル側では
+# `config/skills/discover-competitors.yaml` に上書き値を置く。
+# 優先順位: CLI フラグ明示指定 > チャンネル上書き > このデフォルト。
+
+# CLI フラグ未指定時のフィルタ既定値
+# (`discover_competitors.py` が `load_skill_config("discover-competitors")` 経由で読む)
+search:
+  # 登録者数の下限。競合検証なら 10000 以上推奨
+  min_subscribers: 0
+  # 登録者数の上限。自分の目標帯の 10 倍以内に絞ると参考にしやすい
+  max_subscribers: 10000000
+  # 最終投稿日フィルタ（日）。「動いている競合」のみなら 30、1 年単位で見るなら 365
+  posted_within_days: 30
+  # レポートに出す件数
+  top: 20
+  # search.list の maxResults（合計クエリ数 = keywords × per_keyword）
+  per_keyword: 20
+
+# キーワード設計のガイドレール（Step 1 で AI が検査する）
+keywords:
+  # 推奨キーワード数の範囲。ニッチが鮮明なら下限で十分
+  recommended_min: 3
+  recommended_max: 5
+  # これを超えると API コスト過剰（search.list 100 units × keywords）
+  hard_max: 8
