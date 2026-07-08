@@ -120,6 +120,15 @@ uv run yt-discover-competitors \
 
 並行検証で連発するときは quota 残量に注意。
 
+## 障害時ガイダンス
+
+| 状況 | 兆候 | 対処 |
+|---|---|---|
+| OAuth 未認証/失効 | `auth.oauth_handler` の `FileNotFoundError`（`client_secrets.json` 不在）/ `AuthError` / HTTP 403 | 初回認証フローを再実行。403 が続く場合は `auth/token.json` を削除しスコープを確認のうえ再認証 |
+| YouTube quota / rate | HTTP 429 / 403 `quotaExceeded` | 日次 quota（既定 10,000 units・太平洋時間 0 時リセット）を待つか呼び出しを抑える。本スキルは 1 回あたり約 660 units を消費するため、並行検証の連発を控え、キーワード数や `--per-keyword` を減らして次回リセット後に再実行する |
+| API 障害 / サービス停止 | HTTP 503 / タイムアウト | Google Cloud / YouTube のステータスを確認し、時間を置いて再実行 |
+| 同一 `--output` での再実行 | 前回の `.md` / `.csv` の内容が消える | 仕様どおりの動作。出力ペア（`.md` + 同名 `.csv`）は再実行時に全体が上書きされ、部分結果のマージ・保持はされない（API 呼び出しが途中で失敗した場合はファイルは書き込まれず、前回の出力がそのまま残る）。結果を比較したい場合は実行ごとに `--output` を別ファイル名にする |
+
 ## スコープ外（他スキルへバトン）
 
 - 競合の動画詳細分析 → `/benchmark`
