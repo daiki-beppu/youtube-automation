@@ -1,0 +1,6 @@
+{
+  "name": "@youtube-automation/extensions-shared",
+  "private": true,
+  "type": "module",
+  "description": "suno-helper / distrokid-helper 共有モジュールの module scope 宣言。ADR-0021 で root package.json（type: module）が削除され、Node の ESM loader（Playwright e2e の TS transform 等）が本ディレクトリの .ts を CJS 判定して named import が壊れたため、スコープをここで明示的に復元する。"
+}
