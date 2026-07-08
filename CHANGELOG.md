@@ -42,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(claude-md)`: 配布用 `CLAUDE.md` テンプレートの行動原則に自律実行方針を追加。ユーザー確認が必須でない限り合理的な仮定を置いて調査・実装・検証・簡潔な報告まで進めることと、公開・削除・課金 API・外部投稿・機密情報・不可逆操作は明示確認が必要な境界であることを明記した（#1608）
 - `refactor(suno-helper)`: popup の実行モード選択（Fast / Balanced / Safe）を廃止し、content 実行時のペーシングを Balanced 固定にした。legacy `sunoSpeedPreset` が chrome.storage.local に残っていても実行設定へ反映せず、README と `/suno-helper` スキルの手順から mode 選択・preset 永続化の説明を削除した（#1573）
 - `docs(thumbnail)`: `/thumbnail` の標準手順を textless `main.png/jpg` 背景先行に変更し、承認済み背景を参照してテキスト付き `thumbnail.jpg` を生成する契約へ更新した。`single_step` / `two_phase` / codex 経路、TTP チェックリスト、prompt 保存、下流スキルの入力説明、フォント指定失敗時の実行時ガイダンスも同じ順序へ揃えた（#1502）
 - `refactor(suno-helper)`: 旧 Suno playlist capture 互換 route（`POST /suno/playlists`）と `write_suno_playlists()` / `normalize_suno_title()` / `--playlist-capture-*` を撤去し、DistroKid release 記録用の capture root を `--distrokid-capture-root` に分離（#1301）
