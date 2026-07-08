@@ -92,24 +92,15 @@ export const MAX_INJECT_RETRY = 2;
 /** duration 歩留まり NG 時に同じ entry を再生成する最大 retry 回数 (#1266)。 */
 export const MAX_YIELD_RETRY = 2;
 
-/** 速度プリセットの選択値を保存する chrome.storage.local の key (#875)。
- * popup（書込）と content（読込）が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
-export const SPEED_PRESET_STORAGE_KEY = "sunoSpeedPreset";
-
-/** 速度プリセットの識別子 (#875)。SPEED_PRESETS の key と 1:1 で対応する。 */
-export type SpeedPresetId = "fast" | "balanced" | "safe";
-
 /**
- * 連続実行のペーシング 1 段分の設定 (#875)。Cloudflare bot management + hCaptcha 連動による
- * silent drop / ban リスクを、間隔・並列数・retry 回数の保守度で調整する。
+ * 連続実行のペーシング設定。実行モード選択は廃止し、Balanced 相当の値だけを使う (#1573)。
  *   - interCreateDelayMs: Create 投入間の基準待機。jitterMs で散らして bot 判定の固定間隔シグナルを消す
- *   - jitterMs: 待機の振れ幅 (±)。0 なら固定間隔（Fast）
- *   - maxInflightRequests: 同時に積む生成リクエスト上限。低いほど人間らしい
- *   - maxInjectRetry: silent drop 時の同一 entry 再投入上限。0 なら即諦めて分割実行へ委ねる
+ *   - jitterMs: 待機の振れ幅 (±)
+ *   - maxInflightRequests: 同時に積む生成リクエスト上限
+ *   - maxInjectRetry: silent drop 時の同一 entry 再投入上限
  *   - injectAckTimeoutMs: inject 受理（in-flight 増分）待ちの上限
- *   - label / riskNote: popup の実行モード選択 UI 表示用（要件6: 選択時のリスク認識を促す）
  */
-export interface SpeedPreset {
+export interface RunPacing {
   interCreateDelayMs: number;
   jitterMs: number;
   maxInflightRequests: number;
@@ -117,49 +108,16 @@ export interface SpeedPreset {
   injectAckTimeoutMs: number;
   /** entry 単位の失敗（非 fatal）を同一 entry で再試行する最大回数 (#948)。超過でスキップして次 entry へ。 */
   maxEntryRetry: number;
-  label: string;
-  riskNote: string;
 }
 
-/**
- * 速度プリセット 3 段 (#875)。値の SSOT は order.md の表。
- * Fast は現状定数 (INTER_CREATE_DELAY_MS / MAX_INFLIGHT_REQUESTS / MAX_INJECT_RETRY / INJECT_ACK_TIMEOUT_MS)
- * を参照し「現状と同等の所要時間」を担保する（残置定数と preset 値の drift を回避）。
- */
-export const SPEED_PRESETS: Record<SpeedPresetId, SpeedPreset> = {
-  fast: {
-    interCreateDelayMs: INTER_CREATE_DELAY_MS,
-    jitterMs: 0,
-    maxInflightRequests: MAX_INFLIGHT_REQUESTS,
-    maxInjectRetry: MAX_INJECT_RETRY,
-    injectAckTimeoutMs: INJECT_ACK_TIMEOUT_MS,
-    maxEntryRetry: 1,
-    label: "⚡ Fast",
-    riskNote:
-      "〜10 entries の小 collection 向け。現状値。連続実行が長引くと bot 判定で silent drop しやすい。",
-  },
-  balanced: {
-    interCreateDelayMs: 6000,
-    jitterMs: 3000,
-    maxInflightRequests: MAX_INFLIGHT_REQUESTS,
-    maxInjectRetry: 1,
-    injectAckTimeoutMs: 45000,
-    maxEntryRetry: 2,
-    label: "⚖️ Balanced",
-    riskNote:
-      "20-55 entries の標準 collection 向け。6s ±3s 間隔で自然化したデフォルト。queue は Suno 実上限まで使う（#970、in-flight が API status 計数になった #948 以降は上限張り付きが正常状態）。",
-  },
-  safe: {
-    interCreateDelayMs: 20000,
-    jitterMs: 5000,
-    maxInflightRequests: 3,
-    maxInjectRetry: 0,
-    injectAckTimeoutMs: 60000,
-    maxEntryRetry: 3,
-    label: "🐢 Safe",
-    riskNote:
-      "30+ entries / 過去に hCaptcha challenge を踏んだ場合向け。20s ±5s と保守的で時間はかかる。",
-  },
+/** Balanced 固定の連続実行ペーシング (#1573)。 */
+export const BALANCED_RUN_PACING: RunPacing = {
+  interCreateDelayMs: 6000,
+  jitterMs: 3000,
+  maxInflightRequests: MAX_INFLIGHT_REQUESTS,
+  maxInjectRetry: 1,
+  injectAckTimeoutMs: 45000,
+  maxEntryRetry: 2,
 };
 
 /** Suno studio API のオリジン（#948、chrome-devtools 実機観測で確定）。
