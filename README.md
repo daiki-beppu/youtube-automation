@@ -140,8 +140,10 @@ yt-channel-status
 シークレットは次の優先順位で取得されます:
 
 1. `os.environ` に既にセットされていればそれを使う
-2. 1Password CLI (`op`) が利用可能なら `op read` で取得
+2. `YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` でなく、1Password CLI (`op`) が利用可能なら `op read` で取得
 3. 失敗した場合は `ConfigError`
+
+通常のテスト実行では `YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` を既定有効にし、`op` の探索と `op read` の起動を行わず、env/file で解決できなければ最終エラーへ進みます。`op read` fallback を検証するテストだけ、この opt-out を明示的に解除します。
 
 #### A. 標準方式: `.env` を直接編集（OSS 利用者向け）
 
@@ -154,7 +156,7 @@ $EDITOR .env  # Vertex AI 用変数 (`GOOGLE_CLOUD_LOCATION` 等) を書く。pr
 
 #### B. 1Password CLI 方式（秘密をディスクに書かない）
 
-`op` CLI にサインインしておけば、Python スクリプト実行時に必要な瞬間だけ `op read` で取得します。シェルの環境変数や `.env` ファイルには一切残りません。
+`op` CLI にサインインしておけば、Python スクリプト実行時に必要な瞬間だけ `op read` で取得します。シェルの環境変数や `.env` ファイルには一切残りません。`YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` を設定したプロセスではこの fallback を使わず、env/file で解決できない場合に `ConfigError` で停止します。
 
 ```bash
 op signin

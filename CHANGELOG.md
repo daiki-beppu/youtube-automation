@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(claude-md)`: 配布用 `CLAUDE.md` テンプレートの行動原則に自律実行方針を追加。ユーザー確認が必須でない限り合理的な仮定を置いて調査・実装・検証・簡潔な報告まで進めることと、公開・削除・課金 API・外部投稿・機密情報・不可逆操作は明示確認が必要な境界であることを明記した（#1608）
 - `refactor(suno-helper)`: popup の実行モード選択（Fast / Balanced / Safe）を廃止し、content 実行時のペーシングを Balanced 固定にした。legacy `sunoSpeedPreset` が chrome.storage.local に残っていても実行設定へ反映せず、README と `/suno-helper` スキルの手順から mode 選択・preset 永続化の説明を削除した（#1573）
 - `docs(thumbnail)`: `/thumbnail` の標準手順を textless `main.png/jpg` 背景先行に変更し、承認済み背景を参照してテキスト付き `thumbnail.jpg` を生成する契約へ更新した。`single_step` / `two_phase` / codex 経路、TTP チェックリスト、prompt 保存、下流スキルの入力説明、フォント指定失敗時の実行時ガイダンスも同じ順序へ揃えた（#1502）
 - `refactor(suno-helper)`: 旧 Suno playlist capture 互換 route（`POST /suno/playlists`）と `write_suno_playlists()` / `normalize_suno_title()` / `--playlist-capture-*` を撤去し、DistroKid release 記録用の capture root を `--distrokid-capture-root` に分離（#1301）
@@ -86,6 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(secrets)`: テスト実行時に実 `op read` へ落ちる経路を遮断するため、Python / TS の secret resolver に `YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` の opt-out を追加した。pytest は `tests/conftest.py` で既定有効化し、op fallback を検証する単体テストだけ明示的に解除する。本番の既定契約（env 未設定かつ `op` 利用可能なら `op read` fallback）は維持する（#1622）
+- `fix(wf-new)`: `/wf-new` の冒頭に channel config / Suno readiness の Hard Gates を置き、前提未達時は `/channel-new` や `bunx tayk video-analyze --source benchmark --channel <slug> --top 5` を案内して停止し、`/collection-ideate`、`bunx tayk init-collection`、`/suno`、`workflow-state.json` / `assets.*` 更新へ進まない契約を明記した（#1609）
 - `fix(thumbnail)`: `/thumbnail` の手順でテキスト付き `thumbnail.jpg` を先に確定し、承認済み `thumbnail.jpg` から textless `main.png/jpg` を後続再生成する契約を再固定した。frontmatter の旧 `main.png` サムネ表現、Two-Phase の draft 背景を最終 `main.png` に確定するよう読める手順、決定的合成経路で textless 再生成を不要扱いする記述、config コメントと設計ドキュメントの旧 Two-Phase 表現を修正し、`/wf-new` / `/collection-ideate` / `/loop-video` の役割契約と整合させた（#1611）
 - `fix(thumbnail)`: `yt-generate-image` の `generation_mode: single_step` で `--reference` 未指定の実行を `--ttp-strict-references` の有無に関係なく provider 初期化前に拒否するようにした（#1612）。`two_phase` など非 TTP 経路は従来どおり参照なし生成を許可し、`gemini_cli` provider 単体でも `single_step` request が参照なしなら gemini CLI 起動前に `ConfigError` で停止する
 - `fix(collection)`: `tayk collection-preflight` を追加し、`yt-init-collection` の既存ディレクトリ検出時と `/wf-new` / `/wf-next` の復旧手順で実在する `bunx tayk collection-preflight <collection-dir-name> --fix` を案内するようにした（#1614）

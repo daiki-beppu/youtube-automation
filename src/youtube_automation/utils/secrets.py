@@ -5,7 +5,8 @@
 - 必要になった瞬間に Python プロセス内だけで取得する
 - 取得経路は次の順で試行する
     1. 既に `os.environ` にあればそれを使う（OSS 利用者の `.env` / 既存 export 経由）
-    2. `op` (1Password CLI) が利用可能なら `op read` で取得する
+    2. `YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` でなく、かつ `op` (1Password CLI)
+       が利用可能なら `op read` で取得する
     3. どちらも失敗したら `ConfigError` を raise する
 - 同一プロセス内で 2 回以上呼ばれた場合は `lru_cache` でメモ化する
 """
@@ -34,6 +35,11 @@ _SECRET_REFS: dict[str, str] = {
 
 _OP_READ_TIMEOUT_SEC = 10
 _OP_WRITE_TIMEOUT_SEC = 10
+_OP_READ_DISABLED_ENV = "YOUTUBE_AUTOMATION_DISABLE_OP_READ"
+
+
+def _is_op_read_disabled() -> bool:
+    return os.environ.get(_OP_READ_DISABLED_ENV) == "1"
 
 
 @lru_cache(maxsize=None)
@@ -57,7 +63,7 @@ def get_secret(name: str) -> str:
         return env_value
 
     op_ref = _SECRET_REFS[name]
-    if shutil.which("op"):
+    if not _is_op_read_disabled() and shutil.which("op"):
         try:
             result = subprocess.run(
                 ["op", "read", op_ref],
@@ -85,7 +91,8 @@ _client_secrets_tempfile: Path | None = None
 def get_client_secrets_path() -> Path:
     """client_secrets.json のパスを取得する。
 
-    1Password から JSON 内容を取得し、一時ファイルに書き出して返す。
+    `get_secret("CLIENT_SECRETS_JSON")` で JSON 内容を取得し、一時ファイルに書き出して返す。
+    `YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` の場合、env が無ければ 1Password は読まない。
     同一プロセス内では同じ一時ファイルを再利用する。
 
     Returns:
