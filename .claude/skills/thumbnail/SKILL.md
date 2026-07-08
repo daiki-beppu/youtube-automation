@@ -72,8 +72,8 @@ image_generation:
 
 ```bash
 bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
-  "<textless background prompt>" \
-  <collection-path>/10-assets/main-v1.png \
+  "<thumbnail prompt>" \
+  <collection-path>/10-assets/thumbnail-codex-v1.png \
   <reference-image-1>
 ```
 
@@ -103,16 +103,17 @@ Gemini / OpenAI の CLI 経路で全 attempt が失敗した場合、`bunx tayk 
 
 ```bash
 bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
-  "TTP this reference thumbnail into a stronger original textless background for cozy cafe morning coffee. Remove all text, logos, and typography." \
-  collections/planning/sample/10-assets/main-v1.png \
+  "TTP this reference thumbnail, then improve it into a stronger original thumbnail for cozy cafe morning coffee. Keep the winning layout and make the title readable on mobile." \
+  collections/planning/sample/10-assets/thumbnail-codex-v1.png \
   data/thumbnail_compare/benchmark/<channel>/<reference>.jpg
 ```
 
 複数候補を作る場合でも、1 回の `codex-image.sh --require-reference` 呼び出しには候補に対応する参照画像 1 枚だけを渡す。TTP 生成では参照画像 0 件で停止する。DistroKid cover などの汎用 codex 生成は `--require-reference` を付けない。
 
-TTP 参照画像から textless 背景を先に作る場合は、長い個別指定ではなく
+TTP 参照画像から上位互換サムネを作る場合は、長い個別指定ではなく
 `image_generation.codex.default_prompt_template` を使う。参照画像は mood reference
-ではなく winning template として扱い、背景の構図・色温度・主役スケール・質感だけを踏襲する。
+ではなく winning template として扱い、変える要素は `{title}` と品質改善
+（mobile readability / face impact / no logos / no watermarks / no broken hands）に限定する。
 日本語方針は「TTPを徹底して textless 背景を先に固める」。
 
 codex 経路でも標準ファイル契約は同じ:
