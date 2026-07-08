@@ -30,7 +30,11 @@ from youtube_automation.utils.image_provider.base import (
     ImageGenerationRequest,
     ImageGenerationResult,
 )
-from youtube_automation.utils.image_provider.composition import log_image_cost, persist_image
+from youtube_automation.utils.image_provider.composition import (
+    log_image_cost,
+    persist_image,
+    validate_single_step_request_references,
+)
 from youtube_automation.utils.image_provider.config import GeminiCliConfig
 
 GEMINI_CLI_BINARY = "gemini"
@@ -84,6 +88,7 @@ class GeminiCliImageProvider:
         """req に従って gemini CLI で画像を生成して保存する。"""
         from PIL import Image as PILImage
 
+        validate_single_step_request_references(self._config.generation_mode, req.references)
         self._ensure_cli_available()
 
         image_size = req.image_size or self._config.image_size

@@ -81,7 +81,7 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 - **「thumbnail prompt-schema 試験導入の誤用リスク」**: 本文に「実本番フローからは未接続」と明示済み。
 - **「wf-new / wf-next / wf-status のトリガー衝突」「analytics-collect / analyze / report のトリガー衝突」**: 各 description に相互の否定トリガー（「既存の進行は /wf-next」「/analytics-analyze の前段」等）が既に記述済み。
 - **「video-analyze / community-post の設定読み込みゲート文言が矛盾」**: 文言は冗長だが「存在しない override は未設定として扱い、勝手に作成しない」「fallback 元としては使わない」と一義的に書かれており誤読の余地は小さい。
-- **「suno-helper 拡張 ID の形式説明不足」「preset 定義値が SKILL.md に無い」**: Cross References で `extensions/shared/constants.ts::SPEED_PRESETS` への参照が明示済み。情報の置き場所として妥当。
+- **「suno-helper 拡張 ID の形式説明不足」「ペーシング定義値が SKILL.md に無い」**: Cross References で `extensions/shared/constants.ts::BALANCED_RUN_PACING` への参照が明示済み。情報の置き場所として妥当。
 - **「community-draft の poll deprecated が frontmatter 未記載」**: 本文の型一覧表に DEPRECATED と移行ガイドが明記済み。frontmatter は現行型のみ列挙しており誤誘導なし。
 
 ### Plan 作成時の再 vet による縮小（監査 finding との差分）

@@ -48,7 +48,8 @@ image_generation:
     # 生成モード:
     #   single_step   : ベンチマーク模倣 (TTP) の推奨実装。テキスト付き参照画像から
     #                   差分のみ指示し 1 ステップで完成。reference_images.default が必須。
-    #   two_phase     : 従来の 2 フェーズ (背景 → テキストオーバーレイ)
+    #   two_phase     : 既存参照から text-included thumbnail を先に確定し、
+    #                   承認済み thumbnail から textless main を後続再生成するフォールバック
     #   diff_from_reference : 既存キャラ画像を参照に差分のみ指示
     generation_mode: single_step
 
@@ -91,8 +92,9 @@ image_generation:
         Do not reproduce any signature, autograph, handwritten name, watermark,
         logo, brand mark, channel badge, copyright notice, or identifying mark
         from the reference image. Keep all corners clean and free of such marks.
-      # typography_clause (#1332): タイトル文字の書体をプロンプトで指示する clause。
-      # diff_prompt_template に ${typography_clause} として展開する。
+      # typography_clause (#1332): タイトル文字の書体を第2段の
+      # テキスト付き thumbnail prompt で指示する clause。
+      # 初回 textless 背景用の diff_prompt_template には展開しない。
       # {font_description} は thumbnail_text.font.copy の値で置換して使う。
       # 注意: AI 画像生成はフォント名の厳密な再現を保証しない。書体をピクセル単位で
       # 固定したい場合は image_generation.gemini.thumbnail_text.overlay
@@ -249,9 +251,9 @@ image_generation:
     # ChatGPT サブスクの fair-use 上限内で使い、大量生成には使わない。
     # cost_per_image_usd: null
     # 参照サムネを mood reference ではなく winning template として扱い、
-    # {title} だけを差し替える短い TTP 上位互換プロンプト。
+    # textless 背景を先に固める短い TTP プロンプト。
     default_prompt_template: |
-      TTP this reference thumbnail, then improve it into a stronger original thumbnail.
-      Keep the winning layout, typography feel, character scale, color mood, texture, and energy.
-      Make it cleaner, more readable on mobile, stronger face impact, no logos, no watermarks, no broken hands.
-      Use the title {title}.
+      TTP this reference thumbnail into a stronger original textless background for {title}.
+      Keep the winning layout, character scale, color mood, lighting, texture, and energy.
+      Remove all text, typography, logos, watermarks, brand marks, and channel badges.
+      Do not add any title text yet; the approved background will be used for the final thumbnail.
