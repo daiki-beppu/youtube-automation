@@ -8,6 +8,16 @@ description: "Use when サムネイルを競合と並べて視認性を比較検
 自チャンネルの全サムネイルとベンチマーク3チャンネルの1万再生以上の動画サムネイルを
 ダウンロード・並列比較し、検索結果・おすすめで目立つかを検証する。
 
+## 前提
+
+以下を確認し、満たさなければ前工程を案内して停止する:
+
+- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/channel-new`（既存チャンネルは取り込みモード）を案内して停止する
+- `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定済みであること。未設定なら `/channel-new` / `/discover-competitors` を案内して停止する
+- `data/benchmark_*.json` が存在すること（鮮度が古い場合はスクリプトが自動更新する）。一度も収集していなければ先に `/benchmark` を案内する
+- 自チャンネルのサムネイル `collections/live/*/10-assets/thumbnail.jpg` が 1 件以上存在すること。無ければ比較対象なしとして `/thumbnail` → `/video-upload` の前工程を案内する
+- ベンチマーク更新は YouTube Data API を使うため `auth/token.json` の OAuth 認証が必要。未認証なら `/setup` を案内する
+
 ## 実行フロー
 
 ### Phase 1: サムネイル収集（スクリプト実行）

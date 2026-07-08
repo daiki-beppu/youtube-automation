@@ -16,6 +16,15 @@ description: "Use when 追加競合候補の自動発掘やニッチ仮説の並
 `/channel-new` の標準フローでは実行しない。TTP 対象確認後に追加の競合候補を広げたい場合や、複数のニッチ仮説を
 並行検証したい場合に、このスキルを任意で走らせる。
 
+## 前提
+
+以下を確認し、満たさなければ前工程を案内して停止する:
+
+- 実行場所がチャンネルリポジトリ（`CHANNEL_DIR`）配下であること
+- `auth/token.json` が存在すること（YouTube Data API を使用）。無ければ `/setup` の OAuth 認証を案内して停止する
+- YouTube API の日次 quota に約 660 units / 実行の余裕があること。並行検証で連発する場合は残量を確認する
+- seed 抽出に `config/channel/content.json` / `config/channel/analytics.json` を参照するが、無い場合（新規チャンネル企画・完全手探り）はユーザー宣言のキーワードだけで実行できるため停止しない（Step 1-A の抽出元マトリクス参照）
+
 ## Instructions
 
 ### Step 1: キーワード設計

@@ -9,6 +9,15 @@ description: "Use when 競合コメントの収集・分析で視聴者インサ
 感情・利用シーン・リクエスト・キャラ愛着の4軸で分析する。
 `/channel-new` の標準フローでは実行せず、コメントを含む視聴者インサイトが必要になった時点で明示的に実行する。
 
+## 前提
+
+以下を確認し、満たさなければ前工程を案内して停止する:
+
+- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/channel-new`（既存チャンネルは取り込みモード）を案内して停止する
+- `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定済みであること。未設定なら `/channel-new` / `/discover-competitors` を案内して停止する
+- `auth/token.json` の OAuth 認証が有効であること（YouTube Data API でコメント取得）。未認証なら `/setup` を案内して停止する
+- `data/benchmark_*.json` は無くても停止しない（`yt-benchmark-comments` が鮮度チェックのうえ自動更新する）
+
 ## TTP 原則（ベンチマーク参照）
 
 視聴者の声分析は **TTP（徹底的にパクる）の語彙版**。
