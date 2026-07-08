@@ -27,6 +27,11 @@ def _read_thumbnail_default_config() -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_thumbnail_diff_report() -> str:
+    path = _repo_root() / "docs" / "skill-design" / "thumbnail-codex-imagegen-diff-report.md"
+    return path.read_text(encoding="utf-8")
+
+
 def _read_channel_new_thumbnail_template() -> str:
     path = (
         _repo_root()
@@ -212,26 +217,23 @@ def test_thumbnail_skill_documents_textless_background_to_text_included_flow() -
         assert required in single_step_block
 
 
-def test_thumbnail_skill_single_step_notes_do_not_inherit_reference_text() -> None:
-    """#1502: textless 背景生成の運用メモに旧テキスト継承契約を残さない。"""
+def test_thumbnail_skill_frontmatter_names_thumbnail_as_primary_output() -> None:
+    """#1611: skill dispatch は main.png ではなく text-included thumbnail.jpg を主成果物として説明する。"""
     skill = _read_thumbnail_skill()
-    notes_block = _slice_between(skill, "#### 運用上の注意", "#### 失敗時の対処")
+    frontmatter = _slice_between(skill, "---", "---\n\n## Overview")
 
-    assert "テキスト除去" in notes_block
-    assert "text_strip_clause" in notes_block
-    assert "Remove all text" in notes_block
-    assert "文字情報は第2段のテキスト付きサムネ生成だけで扱う" in notes_block
-    assert "キャッチコピー・ジャンルタグ・フォントはデフォルトで継承される" not in notes_block
-    assert "変えたい部分だけ明示指示" not in notes_block
+    assert "YouTube サムネイル（thumbnail.jpg）" in frontmatter
+    assert "textless main.png/jpg を後続生成" in frontmatter
+    assert "サムネイル（main.png）" not in frontmatter
 
 
-def test_thumbnail_skill_initial_generation_examples_output_textless_background_candidates() -> None:
-    """#1502: 標準入口の初回生成例は thumbnail ではなく main 候補を出す。"""
+def test_thumbnail_skill_initial_generation_examples_output_text_included_candidates() -> None:
+    """#1310: 標準入口の初回生成例は main ではなく thumbnail 候補を出す。"""
     skill = _read_thumbnail_skill()
     mode_block = _slice_between(skill, "## 生成モード判定", "## ワークフロー")
 
-    assert "--output <collection-path>/10-assets/main-v1.png -y" in mode_block
-    assert "--output <collection-path>/10-assets/thumbnail-v1.jpg -y" not in mode_block
+    assert "--output <collection-path>/10-assets/thumbnail-v1.jpg -y" in mode_block
+    assert "--output <collection-path>/10-assets/main-v1.png -y" not in mode_block
 
 
 def test_thumbnail_skill_keeps_typography_out_of_initial_textless_prompt() -> None:
@@ -320,14 +322,52 @@ def test_thumbnail_skill_two_phase_keeps_thumbnail_and_main_separate() -> None:
     """#1310: Two-Phase フォールバックでも thumbnail と textless main を別成果物にする。"""
     skill = _read_thumbnail_skill()
     two_phase_block = _slice_between(skill, "### Two-Phase モード", "## 品質チェック")
+    reference_phase_block = _slice_between(
+        two_phase_block,
+        "#### Phase 1: 既存参照の選択（新規生成しない）",
+        "#### Phase 2: テキストオーバーレイ（thumbnail.jpg）",
+    )
+    first_generation_idx = two_phase_block.find("生成: `yt-generate-image")
+    first_generation_output_idx = two_phase_block.find("--output", first_generation_idx)
+    thumbnail_generation_idx = two_phase_block.find("--output 10-assets/thumbnail-v1.jpg -y")
 
     assert "旧チャンネル向けのフォールバック" in two_phase_block
     assert "textless 背景を先に承認" in two_phase_block
     assert "`thumbnail.jpg`（テキスト付き YouTube サムネ）" in two_phase_block
     assert "`main.png/jpg`（テキストなし動画背景）" in two_phase_block
-    assert "既存 `main.png/jpg` は企画参照または過去背景として扱い" in two_phase_block
-    assert "承認済み `main.png/jpg` を Phase 2 の参照画像として使う" in two_phase_block
+    assert "既存 `main.png/jpg`、`planning-preview.png`、または `reference_images`" in two_phase_block
+    assert "ここでは `yt-generate-image` を実行せず" in two_phase_block
+    assert "最終 `main.png/jpg` は Phase 3 で承認済み `thumbnail.jpg` から AI 再生成" in two_phase_block
+    assert first_generation_idx != -1
+    assert first_generation_output_idx == thumbnail_generation_idx
+    assert "--reference <既存参照画像>" in two_phase_block
+    assert "--output 10-assets/draft-background-v1.png -y" not in two_phase_block
+    assert "--reference 10-assets/draft-background-v1.png" not in two_phase_block
+    assert "#### Phase 3: 承認済み thumbnail から textless main を再生成" in two_phase_block
+    assert "承認済み `thumbnail.jpg` を参照して textless `main-v1.png` を AI 再生成" in two_phase_block
+    assert "cp main-v1.png main.png" in two_phase_block
+    assert "参照素材を `main.png/jpg` へコピーしない" in reference_phase_block
+    assert "cp main-v1.png main.png" not in reference_phase_block
+    assert "#### Phase 1: 背景候補生成（draft main）" not in two_phase_block
     assert "既に存在する場合は Phase 1 をスキップ" not in two_phase_block
+
+
+def test_thumbnail_skill_deterministic_text_path_keeps_textless_regeneration() -> None:
+    """#1611: フォント固定経路でも承認済み thumbnail から textless main を後続生成する。"""
+    skill = _read_thumbnail_skill()
+    deterministic_block = _slice_between(
+        skill,
+        "### 決定的合成経路（yt-thumbnail-text）",
+        "### フォント指定に失敗した場合",
+    )
+
+    assert "最初にテキスト付き `thumbnail-v*.jpg` を生成・承認して `thumbnail.jpg` を確定" in deterministic_block
+    assert "承認済み `thumbnail.jpg` から textless `main-v*.png/jpg` を AI 再生成" in deterministic_block
+    assert "cp main-v1.png main.png" in deterministic_block
+    assert "フォント安定化だけを担う" in deterministic_block
+    assert "旧順序には戻さず" in deterministic_block
+    assert "承認済み thumbnail.jpg から textless 版を AI 再生成する」工程は不要" not in deterministic_block
+    assert "背景がそのまま `main.png` になる" not in deterministic_block
 
 
 def test_loop_video_skill_uses_textless_main_image_and_respects_disabled_channels() -> None:
@@ -354,6 +394,9 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     config = _read_thumbnail_default_config()
 
     assert "generation_mode: single_step" in config
+    assert "既存参照から text-included thumbnail を先に確定" in config
+    assert "承認済み thumbnail から textless main を後続再生成" in config
+    assert "背景 → テキストオーバーレイ" not in config
     assert "rotate: true" in config
     assert "variation_clause: |" in config
     assert "style_lock_clause: |" in config
@@ -370,6 +413,17 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     assert 'source_role: "thumbnail_candidate"' in config
     assert "fallback_when_empty: true" in config
     assert 'diff_prompt_template: ""' in config
+
+
+def test_thumbnail_design_report_uses_current_two_phase_contract() -> None:
+    report = _read_thumbnail_diff_report()
+    two_phase_section = _slice_between(report, "### 3-8. Two-Phase モード", "### 3-9. 視認性検証")
+
+    assert "既存参照 → thumbnail → textless main" in two_phase_section
+    assert "Phase 2 でテキスト付き `thumbnail.jpg` を確定" in two_phase_section
+    assert "承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成" in two_phase_section
+    assert "背景 → テキストオーバーレイ" not in two_phase_section
+    assert "Phase 1 で背景（`main.png`）を生成" not in two_phase_section
 
 
 def test_thumbnail_default_config_keeps_font_stabilization_contract() -> None:
