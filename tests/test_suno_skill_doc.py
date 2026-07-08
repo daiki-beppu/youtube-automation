@@ -199,9 +199,9 @@ def test_suno_lyric_json_contract_supplies_reviewer_context() -> None:
 
 
 def test_suno_lyric_documents_verify_before_semantic_review() -> None:
-    """Issue #1485: /suno-lyric は bunx tayk suno-verify 通過後に LLM semantic review へ進む。"""
+    """Issue #1485: /suno-lyric は uv run yt-suno-verify 通過後に LLM semantic review へ進む。"""
     text = _read(SUNO_LYRIC_SKILL_MD)
-    _assert_before(text, "bunx tayk suno-verify <collection-path>", "LLM semantic review")
+    _assert_before(text, "uv run yt-suno-verify <collection-path>", "LLM semantic review")
 
 
 def test_suno_lyric_documents_pass_fail_loop_contract() -> None:
@@ -240,9 +240,9 @@ def test_suno_json_only_review_uses_existing_prompt_fields() -> None:
 
 
 def test_suno_documents_verify_before_semantic_review() -> None:
-    """Issue #1485: /suno は bunx tayk suno-verify 通過後に LLM semantic review へ進む。"""
+    """Issue #1485: /suno は uv run yt-suno-verify 通過後に LLM semantic review へ進む。"""
     text = _read()
-    _assert_before(text, "bunx tayk suno-verify <collection-path>", "LLM semantic review")
+    _assert_before(text, "uv run yt-suno-verify <collection-path>", "LLM semantic review")
 
 
 def test_suno_documents_pass_fail_loop_contract() -> None:
@@ -287,7 +287,7 @@ def test_review_rubric_documents_required_semantic_viewpoints() -> None:
         "PASS | FAIL",
         "FAIL` entry のみ",
         "2 周",
-        "bunx tayk suno-verify",
+        "uv run yt-suno-verify",
     ):
         assert token in text, f"review-rubric.md に必須観点またはループ契約がない（`{token}` 不在）"
 

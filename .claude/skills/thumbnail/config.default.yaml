@@ -19,11 +19,11 @@ image_generation:
   # 画像を <channel_dir>/assets/stock/<theme>/ に隣接 .meta.json 付きで退避する。
   # 別コレクションで参照画像として再利用できる。
   stock:
-    # false にすると bunx tayk stock-archive は退避せず unlink のみ実施 (従来挙動)
+    # false にすると uv run yt-stock-archive は退避せず unlink のみ実施 (従来挙動)
     enabled: true
-    # bunx tayk stock-prune の保持日数 (mtime 基準、未指定なら CLI 引数必須)
+    # uv run yt-stock-prune の保持日数 (mtime 基準、未指定なら CLI 引数必須)
     retention_days: 90
-    # bunx tayk stock-prune のテーマあたり最大保持件数 (未指定なら CLI 引数必須)
+    # uv run yt-stock-prune のテーマあたり最大保持件数 (未指定なら CLI 引数必須)
     max_per_theme: 50
 
   # thumbnail 候補の自動選択 (#1370): TTP 参照画像プール

@@ -217,8 +217,8 @@ def test_wf_new_declares_sequential_child_skill_orchestration() -> None:
 
     expected_order = (
         "/collection-ideate",
-        "bunx tayk init-collection",
-        "bunx tayk populate-scene-phrases",
+        "uv run yt-init-collection",
+        "uv run yt-populate-scene-phrases",
         "/thumbnail",
         "/suno",
         "/lyria",

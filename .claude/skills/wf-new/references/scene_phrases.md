@@ -1,4 +1,4 @@
-# `bunx tayk populate-scene-phrases` リファレンス
+# `uv run yt-populate-scene-phrases` リファレンス
 
 コレクションの `workflow-state.json.scene_phrases` を多言語翻訳で投入する CLI。
 翻訳文の生成は Claude Code のメインエージェントが Agent ツールでサブエージェントに委譲し、
@@ -13,7 +13,7 @@
 ## Usage
 
 ```bash
-bunx tayk populate-scene-phrases <collection-dir-name> [options]
+uv run yt-populate-scene-phrases <collection-dir-name> [options]
 ```
 
 `<collection-dir-name>` は `collections/planning/` または `collections/live/` 配下のディレクトリ名（例: `20260322-rjn-city-collection`）。
@@ -40,13 +40,13 @@ bunx tayk populate-scene-phrases <collection-dir-name> [options]
 ## 出力例
 
 ```bash
-$ bunx tayk populate-scene-phrases 20260322-rjn-city-collection \
+$ uv run yt-populate-scene-phrases 20260322-rjn-city-collection \
   --translations-json '{"ja":"深夜のネオン街、雨と街灯の間に流れるジャズ","ko":"..."}'
 ✅ 20260322-rjn-city-collection: scene_phrases に 16 言語を書き込みました
 ```
 
 ```bash
-$ bunx tayk populate-scene-phrases 20260322-rjn-city-collection \
+$ uv run yt-populate-scene-phrases 20260322-rjn-city-collection \
   --translations-file /tmp/scene-phrases.json \
   --dry-run
 {
@@ -70,6 +70,6 @@ $ bunx tayk populate-scene-phrases 20260322-rjn-city-collection \
 
 ## 関連
 
-- 検証: `bunx tayk metadata-audit` は `workflow-state.json` 自体を常に検証し、`supported_languages` が 2 言語以上のチャンネルでのみ `scene_phrases` の `supported_languages` 完全性を検証する
+- 検証: `uv run yt-metadata-audit` は `workflow-state.json` 自体を常に検証し、`supported_languages` が 2 言語以上のチャンネルでのみ `scene_phrases` の `supported_languages` 完全性を検証する
 - メタデータ生成: `metadata_generator.py::_load_scene_phrases` が `workflow-state.json` から読み込んでタイトル・localizations を生成する
 - アップロード時 preflight: `youtube_auto_uploader.py` が多言語チャンネルで `scene_phrases` の `supported_languages` 分の言語欠落を検出すると upload が中断する。単一言語チャンネルでは populate と同じ判定で `scene_phrases` を要求しない

@@ -49,10 +49,10 @@ generator は pattern draft、設定、benchmark analysis、必要な References
 
 検証順序は必ず直列にする:
 
-1. `bunx tayk suno-verify <collection-path>` を実行し、曲数・entry name・section tag・Style 文字数などの機械的検証が exit 0 で通過したことを確認する
+1. `uv run yt-suno-verify <collection-path>` を実行し、曲数・entry name・section tag・Style 文字数などの機械的検証が exit 0 で通過したことを確認する
 2. その後に reviewer が `.claude/skills/suno-lyric/references/review-rubric.md` に従って LLM semantic review を実行する
 3. reviewer は entry ごとに `PASS` / `FAIL` と理由を出す
-4. `FAIL` entry のみ generator に再生成させ、`bunx tayk suno-verify` → LLM semantic review を再実行する
+4. `FAIL` entry のみ generator に再生成させ、`uv run yt-suno-verify` → LLM semantic review を再実行する
 5. 再生成ループは最大 2 周。2 周後も `FAIL` が残る場合は完了扱いにせず、残課題（entry name、FAIL 理由、次に直す観点）をユーザーに提示して引き継ぐ
 
 ### スタイルバリアント（A/B テスト対応）
@@ -61,7 +61,7 @@ generator は pattern draft、設定、benchmark analysis、必要な References
 
 ### Style 自動バリエーション（entry ごとの微差付与）
 
-同一コレクション内の全 entry が同じ `genre_line`（+ `mood_descriptors`）を共有すると、Suno V5.5 は Style 第 1 行の影響が支配的なため似た曲が量産される。`bunx tayk generate-suno` は `style_variation` 設定（既定で有効）に基づき、entry ごとに texture / rhythm feel の descriptor を Style 第 1 行の末尾へ自動付与して同質化を防ぐ。
+同一コレクション内の全 entry が同じ `genre_line`（+ `mood_descriptors`）を共有すると、Suno V5.5 は Style 第 1 行の影響が支配的なため似た曲が量産される。`uv run yt-generate-suno` は `style_variation` 設定（既定で有効）に基づき、entry ごとに texture / rhythm feel の descriptor を Style 第 1 行の末尾へ自動付与して同質化を防ぐ。
 
 設計ルール:
 
@@ -70,22 +70,22 @@ generator は pattern draft、設定、benchmark analysis、必要な References
 - **先頭 entry は base のまま**: 通し番号 0 の entry には descriptor を付けず、コレクションの基準スタイルとして保存する（単一 entry の既存コレクションは出力不変 = 後方互換）
 - **明示 override 優先**: pattern に `style: <variant-key>` がある entry は `style_variants` の genre_line をそのまま使い、自動バリエーションは付与しない（通し番号は消費する）
 - **プール定義**: `config.default.yaml::style_variation.pools` に axis 名（`texture` / `rhythm` 等）→ descriptor 配列で定義する。axis 名の辞書順で round-robin に interleave した列を循環割り当てる。チャンネル側 `config/skills/suno.yaml` では axis 単位で丸ごと置換（deep-merge のリスト置換）・axis 追加・空リスト上書きによる axis 無効化ができる
-- **設定契約**: `style_variation` は mapping、`enabled` は bool、`pools` は mapping、各 axis は `list[str]`。descriptor は非空文字列のみ有効で、契約外 shape は `bunx tayk generate-suno` が `ConfigError` で停止する
+- **設定契約**: `style_variation` は mapping、`enabled` は bool、`pools` は mapping、各 axis は `list[str]`。descriptor は非空文字列のみ有効で、契約外 shape は `uv run yt-generate-suno` が `ConfigError` で停止する
 - **語彙の制約**: descriptor に禁止形容詞（`references/suno-examples.md`）・雨音／環境音 NG ワード・楽器名の裸置き・アーティスト名を入れない。120 文字上限は descriptor 込みの Style 文で検証される
-- **重複検証**: 生成時に全 entry の Style 文（第 1 行 + 情景行）が完全一致する組があれば `bunx tayk generate-suno` が警告する
+- **重複検証**: 生成時に全 entry の Style 文（第 1 行 + 情景行）が完全一致する組があれば `uv run yt-generate-suno` が警告する
 - **無効化**: チャンネル側で `style_variation.enabled: false` を設定すると従来動作（全 entry 同一の Style 第 1 行）に戻る
 
 ## Instructions
 
 ### 前提条件チェック（hard gate）
 
-**AI は `genre_line` を手書きしてはならない。** 方向性は必ずスクリプト（`bunx tayk video-analyze` の `suno_preset` 出力）由来とする。`/suno` 実行に入る最初のステップとして以下を機械的に判定し、不足データがあれば原則自動で収集する:
+**AI は `genre_line` を手書きしてはならない。** 方向性は必ずスクリプト（`uv run yt-video-analyze` の `suno_preset` 出力）由来とする。`/suno` 実行に入る最初のステップとして以下を機械的に判定し、不足データがあれば原則自動で収集する:
 
 1. `config/skills/suno.yaml` の `genre_line` を読む
 2. `config/channel/analytics.json` の `benchmark.channels[].slug` を列挙
 3. 各 slug について `data/video_analysis/<slug>/*.json` の存在を確認
 
-`benchmark.channels[].slug` は自動実行と出力パスに使うため、列挙直後に `^[A-Za-z0-9][A-Za-z0-9_-]*$` で検証する。不一致の slug が 1 件でもあれば自動準備を停止し、該当 slug を修正してから再実行する。slug を shell 文字列へ直埋めしてはいけない。実行する場合は `["bunx", "tayk", "video-analyze", "--source", "benchmark", "--channel", slug, "--top", "5"]` のような argv 配列で渡す。shell 経由が避けられない環境では `shlex.quote(slug)` 相当で quote する。
+`benchmark.channels[].slug` は自動実行と出力パスに使うため、列挙直後に `^[A-Za-z0-9][A-Za-z0-9_-]*$` で検証する。不一致の slug が 1 件でもあれば自動準備を停止し、該当 slug を修正してから再実行する。slug を shell 文字列へ直埋めしてはいけない。実行する場合は `["uv", "run", "yt-video-analyze", "--source", "benchmark", "--channel", slug, "--top", "5"]` のような argv 配列で渡す。shell 経由が避けられない環境では `shlex.quote(slug)` 相当で quote する。
 
 | 状態 | 判定 | アクション |
 |---|---|---|
@@ -96,7 +96,7 @@ generator は pattern draft、設定、benchmark analysis、必要な References
 自動準備の手順:
 
 1. `data/benchmark_*.json` が無ければ `/benchmark` 相当の収集を先行実行
-2. `data/benchmark_*.json` 取得済みなら、上記 validation 済み slug だけを対象に `bunx tayk video-analyze --source benchmark --channel <slug> --top 5` 相当を argv 配列で全 benchmark slug に実行
+2. `data/benchmark_*.json` 取得済みなら、上記 validation 済み slug だけを対象に `uv run yt-video-analyze --source benchmark --channel <slug> --top 5` 相当を argv 配列で全 benchmark slug に実行
 3. 生成された `data/video_analysis/<slug>/*.json` の `suno_preset` を fallback として採用
 4. そのまま `/suno` のパターン設計へ進む
 
@@ -112,7 +112,7 @@ generator は pattern draft、設定、benchmark analysis、必要な References
 
 ### Suno プリセット推奨（suno_preset fallback）
 
-`data/video_analysis/<slug>/*.json` の `suno_preset.genre_line` / `suno_preset.exclude_styles` を `bunx tayk generate-suno` が fallback として参照する。`config/skills/suno.yaml` の対応キーが空のとき、全 slug 横断で集約した推奨値を採用する。ユーザーが `config/skills/suno.yaml` に override を書いた瞬間にそちらが優先される（後方互換）。
+`data/video_analysis/<slug>/*.json` の `suno_preset.genre_line` / `suno_preset.exclude_styles` を `uv run yt-generate-suno` が fallback として参照する。`config/skills/suno.yaml` の対応キーが空のとき、全 slug 横断で集約した推奨値を採用する。ユーザーが `config/skills/suno.yaml` に override を書いた瞬間にそちらが優先される（後方互換）。
 
 > **方向性は必ずスクリプト由来とする（AI 手書き禁止）**: `genre_line` 空 + `suno_preset` fallback も取れない状態で本 skill が AI 推定の `genre_line` を書き起こすことは禁止する。
 
@@ -136,11 +136,11 @@ Style テキストは以下の順序で構成する。順序を守ることで S
 
 ### 120 Character Limit
 
-Style フィールドは **120 文字以下** でなければならない。`bunx tayk generate-suno` がビルド時に超過を警告する。5-Element Order に従って要素を絞り込み、収まらない修飾語は削る。
+Style フィールドは **120 文字以下** でなければならない。`uv run yt-generate-suno` がビルド時に超過を警告する。5-Element Order に従って要素を絞り込み、収まらない修飾語は削る。
 
 ### Artist Name Prohibition
 
-**Style テキストにアーティスト名を含めてはならない。** Suno ポリシーにより生成がブロックされるか品質が低下する。禁止リストは `config/skills/suno.yaml::banned_artists` に定義されており、`bunx tayk generate-suno` が検出するとエラーで停止する。
+**Style テキストにアーティスト名を含めてはならない。** Suno ポリシーにより生成がブロックされるか品質が低下する。禁止リストは `config/skills/suno.yaml::banned_artists` に定義されており、`uv run yt-generate-suno` が検出するとエラーで停止する。
 
 ### Instrument Adjective Requirements
 
@@ -152,7 +152,7 @@ Style フィールドは **120 文字以下** でなければならない。`bun
 
 ### Lyrics Structure Auto-Reinforcement
 
-`auto_lyrics_structure: true`（デフォルト）のとき、`bunx tayk generate-suno` が歌詞構造タグを自動補完する:
+`auto_lyrics_structure: true`（デフォルト）のとき、`uv run yt-generate-suno` が歌詞構造タグを自動補完する:
 
 - **インストモード**: 歌詞先頭に `[Instrumental]`、末尾に `[Extended Outro]` を自動付加
 - **ボーカルモード**: 最終セクションが `[Outro]` または `[Extended Outro]` であることを保証
@@ -182,7 +182,7 @@ Instrument Notes: lead with felt piano, background with soft pad
 
 ### バリデーション
 
-- **全タイトルユニーク**: コレクション内で `name_en` / `name_jp` の重複は `bunx tayk generate-suno` が fail-loud で停止
+- **全タイトルユニーク**: コレクション内で `name_en` / `name_jp` の重複は `uv run yt-generate-suno` が fail-loud で停止
 - **自然なフレーズ**: AI っぽい抽象語の羅列（word salad）は禁止。具体的な情景が浮かぶタイトルにする
 - **他コレクションとの差別化**: 他コレクションのタイトルと 3 単語以上の連続一致がないこと
 
@@ -309,7 +309,7 @@ patterns:
 3. `config/skills/suno.yaml::tracks_per_collection` を読み曲数を確定（上書き時は yaml の `tracks:` キー）
 4. `ceil(tracks / 2)` 個の entry を順序付き tracklist として設計。**各 entry は固有の `name_jp` / `name_en` を持ち、`scenes` は 1 行のみ**
 5. style variant を割り当て（`single` なら全 entry 同一、`mixed` なら entry ごとに切替）
-6. `bunx tayk generate-suno` 実行で検証（entry 数不一致・name 重複は fail-loud）
+6. `uv run yt-generate-suno` 実行で検証（entry 数不一致・name 重複は fail-loud）
 
 ## パターンベース設計（ボーカルモード）
 
@@ -405,7 +405,7 @@ patterns:
 ### Step 2: スクリプトで suno-prompts.md を生成
 
 ```bash
-bunx tayk generate-suno <collection-path>
+uv run yt-generate-suno <collection-path>
 ```
 
 `config/skills/suno.yaml` の `genre_line` + `exclude_styles` + `style_influence` をパターンに自動付加して `suno-prompts.md` と `suno-prompts.json` を生成する。ボーカルモードでは `tracks_per_pattern` 展開後の entry `name` を使い、同階層の `suno-lyrics.json` から同名 lyrics を Style とマージする。保存後、`workflow-state.json` の `assets.music_prompts = true` に更新する。
@@ -413,7 +413,7 @@ bunx tayk generate-suno <collection-path>
 生成後に成果物を検証する:
 
 ```bash
-bunx tayk suno-verify <collection-path>
+uv run yt-suno-verify <collection-path>
 ```
 
 `suno-prompts.json` / `suno-lyrics.json` の展開後 entry 数、entry name、歌詞構造、`genre_line` 文字数を検証し、exit 0 を確認する。その後、別コンテキスト reviewer が `suno-prompts.json` のみを読み、`.claude/skills/suno-lyric/references/review-rubric.md` に従って LLM semantic review を実行し、entry ごとに `PASS` / `FAIL` + 理由を出す。reviewer は `name`, `style`, `lyrics` と、存在する場合のみ More Options 補助 field だけを判定材料にし、`review_context` 欠落を `/suno` entry の failure reason にしない。`FAIL` entry のみ最大 2 周まで generator subagent（Codex では別コンテキスト実行）に再生成させる。全 entry が `PASS` した後にだけ Suno UI へ投入する。上限到達時に `FAIL` が残る場合は Step 3 へ進まず、残課題をユーザーに提示する。

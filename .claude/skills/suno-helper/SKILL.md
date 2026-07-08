@@ -45,7 +45,7 @@ description: "Use when Suno UI に投入する曲をブラウザで連続生成 
 起動（または再利用確認）の前に、対象コレクションの骨格プリフライトを実行する（fail-loud、#1494）:
 
 ```bash
-bunx tayk collection-preflight <collection-dir-name>
+uv run yt-collection-preflight <collection-dir-name>
 ```
 
 `[NG]`（`01-master/` 等の欠落）が報告されたら `--fix` で補完してから進む。DL 完走後に初期化漏れへ気づく事故を防ぐため、このステップは省略しない。

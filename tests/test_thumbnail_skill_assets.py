@@ -197,7 +197,7 @@ def test_thumbnail_skill_documents_textless_background_to_text_included_flow() -
 
     for required in (
         "/thumbnail-compare",
-        "bunx tayk thumbnail-check <collection-path>/10-assets/main-v1.png --json",
+        "uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
         "cp main-v1.png main.png",
         "THUMBNAIL_PROMPT=\"$(cat <<'PROMPT'",
         '--reference "${COLLECTION_PATH}/10-assets/main.png"',
@@ -283,7 +283,7 @@ def test_thumbnail_skill_quality_check_separates_thumbnail_and_textless_main_qa(
         "`main-v1.png` / `main-v1.jpg`",
         "ベンチマーク参照の構図",
         "タイトル文字、字幕、ロゴ、透かし、タイポグラフィ、チャンネル名が残っていないか",
-        "bunx tayk thumbnail-check <collection-path>/10-assets/main-v1.png --json",
+        "uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
         "テキスト付き thumbnail 候補生成後",
         "`thumbnail-v1.jpg` / `thumbnail-codex-v1.png`",
         "承認済み `main.png/jpg` の構図",

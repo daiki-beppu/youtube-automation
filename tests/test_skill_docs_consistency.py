@@ -375,9 +375,9 @@ def test_analytics_collect_documents_reporting_api_preflight() -> None:
     analytics_collect = _read(".claude/skills/analytics-collect/SKILL.md")
 
     assert "`/analytics-collect reporting`" in analytics_collect
-    assert "bunx tayk analytics --reporting-dry-run" in analytics_collect
-    assert "bunx tayk analytics --reporting-create-job" in analytics_collect
-    assert "bunx tayk analytics --include-reporting" in analytics_collect
+    assert "uv run yt-analytics --reporting-dry-run" in analytics_collect
+    assert "uv run yt-analytics --reporting-create-job" in analytics_collect
+    assert "uv run yt-analytics --include-reporting" in analytics_collect
     assert "最大 48 時間" in analytics_collect
     assert "youtubereporting.googleapis.com" in analytics_collect
 
@@ -625,7 +625,7 @@ def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
     scheduled_publish = _read(".claude/skills/video-upload/references/scheduled-publish.md")
 
     for text in (video_upload, wf_next, posting_checklist, scheduled_publish):
-        assert "bunx tayk upload-collection --plan" in text
+        assert "uv run yt-upload-collection --plan" in text
         assert "📅 公開設定: 即時公開 (public)" in text
         assert "📅 公開設定: 限定公開 (unlisted)" in text
         assert "📅 公開設定: 非公開 (private)" in text
@@ -642,25 +642,25 @@ def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
             "### single_release アップロードフロー"
         )
     ]
-    _assert_appears_before(collection_flow, "bunx tayk upload-collection --plan", "Complete Collection アップロード")
+    _assert_appears_before(collection_flow, "uv run yt-upload-collection --plan", "Complete Collection アップロード")
 
     single_release_flow = video_upload[
         video_upload.index("### single_release アップロードフロー") : video_upload.index("### コマンドリファレンス")
     ]
-    assert "bunx tayk upload-auto" in single_release_flow
-    assert "bunx tayk upload-collection --plan" in single_release_flow
+    assert "uv run yt-upload-auto" in single_release_flow
+    assert "uv run yt-upload-collection --plan" in single_release_flow
     assert "この分岐では実行しない" in single_release_flow
     assert "collection 用 plan 結果を流用しない" in single_release_flow
 
     _assert_appears_before(
         posting_checklist,
-        "bunx tayk upload-collection --plan",
-        "bunx tayk upload-collection [-c NAME]",
+        "uv run yt-upload-collection --plan",
+        "uv run yt-upload-collection [-c NAME]",
     )
 
     wf_next_gate = wf_next[wf_next.index("approval_gates.upload = true") :]
-    _assert_appears_before(wf_next_gate, "bunx tayk upload-collection --plan", "AskUserQuestion")
-    _assert_appears_before(wf_next_gate, "bunx tayk upload-collection --plan", "/video-upload")
+    _assert_appears_before(wf_next_gate, "uv run yt-upload-collection --plan", "AskUserQuestion")
+    _assert_appears_before(wf_next_gate, "uv run yt-upload-collection --plan", "/video-upload")
 
 
 def test_first_post_playlist_initialization_contract_is_documented() -> None:
@@ -675,9 +675,9 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
         assert trigger in description
 
     for command in (
-        "bunx tayk playlist-status",
-        "bunx tayk playlist-manager --init --dry-run",
-        "bunx tayk playlist-manager --init",
+        "uv run yt-playlist-status",
+        "uv run yt-playlist-manager --init --dry-run",
+        "uv run yt-playlist-manager --init",
     ):
         assert command in video_upload
         assert command in wf_next
