@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(suno)`: `/suno` と `/suno-lyric` に generator-reviewer 分離の意味的品質検証フローを追加した（#1485）。生成は subagent / 別コンテキストに委譲し、reviewer は成果物 JSON（`suno-prompts.json` / `suno-lyrics.json`）と共通ルーブリックだけを読んで entry ごとに `PASS` / `FAIL` + 理由を判定する。`suno-lyrics.json` には reviewer-only の `review_context` を含め、JSON だけで theme / scene / mood / persona / quote essence を判定できる契約にした。`yt-suno-verify` 通過後に LLM semantic review を実行し、`FAIL` entry のみ最大 2 周まで再生成、上限到達時は残課題をユーザーへ引き継ぐ
 - `feat(suno)`: `/suno` / `/suno-lyric` の成果物を検証する `yt-suno-verify` CLI を追加。`suno-patterns.yaml` / `suno-prompts.json` / `suno-lyrics.json` の曲数、entry name 整合、歌詞構造、`genre_line` 文字数を Suno UI 投入前に fail-loud で確認できるようにした（#1484）
 - `feat(helper)`: `yt-collection-serve` に `GET /server-info` とチャンネル別 `*.localhost` の canonical URL 表示を追加し、suno-helper / distrokid-helper の popup がローカル配信元候補を保存・選択できるようにした（#1352）。既定候補は `http://youtube-automation.localhost:7873` と legacy `http://localhost:7873` を併存し、複数チャンネルのサーバーを label 付きで切り替えられる
 - `feat(video-description)`: `BAHMetadataGenerator.generate_timestamps()` / `format_timestamps_text()` に `loops` パラメータを追加した。master をループ生成しているコレクション（`yt-generate-master --loop N` / `--target-duration`）で全ループ分のチャプターを機械展開できる。2 周目以降の開始秒は 1 周目と同じクロスフェード算術（`int(current + duration - crossfade)`）で連続計算し、各行に 1 始まりの `loop` フィールドを付与（2 周目以降のタイトル装飾は呼び出し側の LLM リネームに委ねる）。既定 `loops=1` は従来挙動と完全互換。従来は 1 ループ分しか生成できず、全ループ展開運用のチャンネルでは毎回 LLM が手計算していた
