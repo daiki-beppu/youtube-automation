@@ -23,10 +23,20 @@ SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "suno" / "SKILL.md"
 SUNO_HELPER_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "suno-helper" / "SKILL.md"
 WF_NEW_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md"
 SUNO_HELPER_PHASE_CONSTANTS_TS = _REPO_ROOT / "extensions" / "shared" / "constants.ts"
+SUNO_LYRIC_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "SKILL.md"
+REVIEW_RUBRIC_MD = _REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "references" / "review-rubric.md"
 
 
-def _read() -> str:
-    return SKILL_MD.read_text(encoding="utf-8")
+def _read(path: Path = SKILL_MD) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def _assert_before(text: str, earlier: str, later: str) -> None:
+    earlier_index = text.find(earlier)
+    later_index = text.find(later)
+    assert earlier_index != -1, f"`{earlier}` が見つからない"
+    assert later_index != -1, f"`{later}` が見つからない"
+    assert earlier_index < later_index, f"`{earlier}` が `{later}` より前に記載されていない"
 
 
 def _read_suno_helper() -> str:
@@ -44,7 +54,7 @@ def _read_phase_constants() -> str:
 def _suno_helper_phase_table_values() -> set[str]:
     text = _read_suno_helper()
     match = re.search(
-        r"### Step 6\. 進捗 phase を読む\b.*?\| phase \| 意味 \|(?P<body>.*?)(?=^\*\*phase 遷移の詳細\*\*)",
+        r"### Step 5\. 進捗 phase を読む\b.*?\| phase \| 意味 \|(?P<body>.*?)(?=^\*\*phase 遷移の詳細\*\*)",
         text,
         flags=re.DOTALL | re.MULTILINE,
     )
@@ -67,6 +77,14 @@ def test_skill_md_exists() -> None:
     Then ファイルが存在する。
     """
     assert SKILL_MD.exists(), f"{SKILL_MD} が存在しません"
+
+
+def test_suno_lyric_skill_md_exists() -> None:
+    """Given リポジトリ
+    When suno-lyric SKILL.md を探す
+    Then ファイルが存在する。
+    """
+    assert SUNO_LYRIC_SKILL_MD.exists(), f"{SUNO_LYRIC_SKILL_MD} が存在しません"
 
 
 def test_skill_md_documents_auto_inject_flow() -> None:
@@ -265,3 +283,161 @@ def test_wf_new_hands_off_to_suno_helper_browser_use_flow() -> None:
         "user 操作に委ねる",
     ):
         assert legacy not in text, f"wf-new SKILL.md に user 操作前提の旧文言が残っている（`{legacy}`）"
+
+
+def test_suno_lyric_documents_generator_reviewer_contract() -> None:
+    """Issue #1485: /suno-lyric の生成と意味的品質検証は別コンテキストで行う。"""
+    text = _read(SUNO_LYRIC_SKILL_MD)
+    for token in (
+        "Generator-Reviewer Quality Gate",
+        "generator",
+        "reviewer",
+        "subagent",
+        "Codex",
+        "別コンテキスト",
+        "suno-lyrics.json",
+        "suno-lyrics.json` と `references/review-rubric.md` のみ",
+    ):
+        assert token in text, f"/suno-lyric SKILL.md に generator-reviewer 契約がない（`{token}` 不在）"
+
+
+def test_suno_lyric_json_contract_supplies_reviewer_context() -> None:
+    """Issue #1485: reviewer が成果物 JSON だけでルーブリック観点を検証できる。"""
+    text = _read(SUNO_LYRIC_SKILL_MD)
+    for token in (
+        "review_context",
+        "reviewer-only",
+        "collection_theme",
+        "scene",
+        "mood",
+        "persona_target",
+        "persona_vocabulary",
+        "quote_essence",
+        "`/suno` の merge loader は `name` / `lyrics` だけを使用",
+    ):
+        assert token in text, f"/suno-lyric の JSON contract に reviewer context 契約がない（`{token}` 不在）"
+
+
+def test_suno_lyric_documents_verify_before_semantic_review() -> None:
+    """Issue #1485: /suno-lyric は bunx tayk suno-verify 通過後に LLM semantic review へ進む。"""
+    text = _read(SUNO_LYRIC_SKILL_MD)
+    _assert_before(text, "bunx tayk suno-verify <collection-path>", "LLM semantic review")
+
+
+def test_suno_lyric_documents_pass_fail_loop_contract() -> None:
+    """Issue #1485: /suno-lyric は entry ごとの PASS / FAIL と上限 2 周の再生成を固定する。"""
+    text = _read(SUNO_LYRIC_SKILL_MD)
+    for token in ("entry ごと", "PASS", "FAIL", "理由", "FAIL` entry のみ", "最大 2 周", "残課題", "ユーザー"):
+        assert token in text, f"/suno-lyric SKILL.md に PASS/FAIL ループ契約がない（`{token}` 不在）"
+
+
+def test_suno_documents_generator_reviewer_contract_for_style_prompts() -> None:
+    """Issue #1485: /suno の Style プロンプトも別コンテキスト reviewer が成果物 JSON だけで検証する。"""
+    text = _read()
+    for token in (
+        "Generator-Reviewer Quality Gate",
+        "generator",
+        "reviewer",
+        "subagent",
+        "Codex",
+        "別コンテキスト",
+        "suno-prompts.json",
+        "suno-prompts.json` と `/suno-lyric` の `references/review-rubric.md` のみ",
+    ):
+        assert token in text, f"/suno SKILL.md に Style prompt review 契約がない（`{token}` 不在）"
+
+
+def test_suno_json_only_review_uses_existing_prompt_fields() -> None:
+    """Issue #1485: /suno reviewer は既存 suno-prompts.json fields だけを読む。"""
+    text = _read()
+    for token in (
+        "`name`, `style`, `lyrics`",
+        "More Options 補助 field",
+        "`/suno` reviewer は `review_context` を要求せず",
+        "外部資料で補完しない",
+    ):
+        assert token in text, f"/suno reviewer の JSON-only 入力契約が不明確（`{token}` 不在）"
+
+
+def test_suno_documents_verify_before_semantic_review() -> None:
+    """Issue #1485: /suno は bunx tayk suno-verify 通過後に LLM semantic review へ進む。"""
+    text = _read()
+    _assert_before(text, "bunx tayk suno-verify <collection-path>", "LLM semantic review")
+
+
+def test_suno_documents_pass_fail_loop_contract() -> None:
+    """Issue #1485: /suno は entry ごとの PASS / FAIL と上限 2 周の再生成を固定する。"""
+    text = _read()
+    for token in ("entry ごと", "PASS", "FAIL", "理由", "FAIL` entry のみ", "最大 2 周", "残課題", "ユーザー"):
+        assert token in text, f"/suno SKILL.md に PASS/FAIL ループ契約がない（`{token}` 不在）"
+
+
+def test_suno_blocks_step_3_until_semantic_review_passes() -> None:
+    """Issue #1485: /suno は semantic review 全 PASS 後だけ Suno UI 投入へ進む。"""
+    text = _read()
+    step_2_match = re.search(
+        r"### Step 2: スクリプトで suno-prompts\.md を生成\b.*?(?=^### Step 3:)",
+        text,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    assert step_2_match, "SKILL.md に `/suno` Step 2 節が見つからない"
+    step_2 = step_2_match.group(0)
+
+    for token in (
+        "`workflow-state.json` の `assets.music_prompts = true` に更新する",
+        "全 entry が `PASS` した後にだけ Suno UI へ投入する",
+        "Step 3 へ進まず",
+    ):
+        assert token in step_2, f"/suno Step 2 に semantic review gate 契約がない（`{token}` 不在）"
+
+    _assert_before(step_2, "LLM semantic review", "Suno UI へ投入する")
+
+
+def test_review_rubric_documents_required_semantic_viewpoints() -> None:
+    """Issue #1485: references/ に意味的品質検証ルーブリックを固定する。"""
+    assert REVIEW_RUBRIC_MD.exists(), f"{REVIEW_RUBRIC_MD} が存在しません"
+    text = _read(REVIEW_RUBRIC_MD)
+    for token in (
+        "テーマ・名言エッセンスの反映度",
+        "曲間の同質化",
+        "Section tag 構成の妥当性",
+        "不自然な表現・禁止表現",
+        "suno-lyrics.json",
+        "suno-prompts.json",
+        "PASS | FAIL",
+        "FAIL` entry のみ",
+        "2 周",
+        "bunx tayk suno-verify",
+    ):
+        assert token in text, f"review-rubric.md に必須観点またはループ契約がない（`{token}` 不在）"
+
+
+def test_review_rubric_is_connected_to_json_only_reviewer_context() -> None:
+    """Issue #1485: rubric の必須観点は成果物 JSON 内の context から判定する。"""
+    text = _read(REVIEW_RUBRIC_MD)
+    for token in (
+        "JSON-only 入力契約",
+        "review_context",
+        "collection_theme",
+        "scene",
+        "mood",
+        "persona_target",
+        "persona_vocabulary",
+        "quote_essence",
+        "外部資料で補完せず `FAIL`",
+    ):
+        assert token in text, f"review-rubric.md が JSON-only context と必須観点を接続していない（`{token}` 不在）"
+
+
+def test_review_rubric_scopes_suno_to_existing_prompt_fields() -> None:
+    """Issue #1485: /suno rubric は suno-prompts.json に実在する field だけで判定する。"""
+    text = _read(REVIEW_RUBRIC_MD)
+    for token in (
+        "`/suno` の `suno-prompts.json` は既存 consumer 互換",
+        "`name`, `style`, `lyrics`",
+        "More Options",
+        "`/suno` entry に `review_context` は要求しない",
+        "`review_context` 欠落だけを理由に `FAIL` しない",
+        "`/suno` `PASS`",
+    ):
+        assert token in text, f"review-rubric.md が /suno の実在 field scope を固定していない（`{token}` 不在）"

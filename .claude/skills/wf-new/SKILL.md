@@ -165,7 +165,7 @@ Phase 1 の成果物を `20-documentation/` に保存:
    - プレビューディレクトリの自セッション分を削除
 
 2. **サムネイル skill を順番に処理**:
-   - `single_step` モードまたは `image_generation.provider: codex` の場合でも `/thumbnail <theme>` を Skill ツールで実行する。`/thumbnail` 側で、ベンチマーク参照からテキスト付き `10-assets/thumbnail.jpg` を生成し、承認済み `thumbnail.jpg` からテキストなし `10-assets/main.png` または `main.jpg` を AI 再生成する
+   - `single_step` モードまたは `image_generation.provider: codex` の場合でも `/thumbnail <theme>` を Skill ツールで実行する。`/thumbnail` 側で、ベンチマーク参照からテキストなし `10-assets/main.png` または `main.jpg` を先に生成・承認し、承認済み背景からテキスト付き `10-assets/thumbnail.jpg` を生成する
    - `two_phase` / `diff_from_reference` など、それ以外のモードでも `/thumbnail <theme>` を Skill ツールで実行し、同じく `thumbnail.jpg` と textless `main.png/jpg` を別成果物として確定する
    - `thumbnail.jpg` と `main.png/jpg` を同一画像で代用しない。`main.png` を `thumbnail.jpg` にコピーする旧運用は禁止
    - QA が NG の場合は `/collection-ideate` または `/thumbnail` の該当生成ステップへ戻し、`/wf-new` は停止する

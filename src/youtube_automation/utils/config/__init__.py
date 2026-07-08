@@ -2,7 +2,7 @@
 
 公開 API:
     load_config() -> ChannelConfig   # シングルトン取得（初回に glob ロード + .env ロード）
-    channel_dir() -> Path            # チャンネルディレクトリ解決
+    channel_dir() -> Path            # config/channel/ を含むプロジェクトルート解決
     reset() -> None                  # シングルトン state をリセット（テスト用）
     ChannelConfig                    # 合成ルート dataclass（型ヒント用）
     Shorts                           # `shorts` セクション（型ヒント用）

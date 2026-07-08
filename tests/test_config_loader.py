@@ -1298,6 +1298,7 @@ def test_channel_dir_from_env(tmp_path, monkeypatch):
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
     assert channel_dir() == ch
+    assert channel_dir() != ch / "config" / "channel"
 
 
 def test_channel_dir_ancestor_search(tmp_path, monkeypatch):
@@ -1308,6 +1309,7 @@ def test_channel_dir_ancestor_search(tmp_path, monkeypatch):
     monkeypatch.delenv("CHANNEL_DIR", raising=False)
 
     assert channel_dir().resolve() == ch.resolve()
+    assert channel_dir().resolve() != (ch / "config" / "channel").resolve()
 
 
 # ----- comments.generator section -------------------------------------------

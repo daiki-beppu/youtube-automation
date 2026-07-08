@@ -81,7 +81,7 @@ def _collection_ideate_next_step_block(text: str) -> str:
 def _assert_codex_ttp_prompt_policy(block: str) -> None:
     assert ".claude/skills/thumbnail/references/codex-prompt.py" in block
     assert "default_prompt_template" in block
-    assert "TTP 上位互換" in block
+    assert "TTP 背景先行" in block
     assert "短い" in block or "短縮" in block or "短く" in block
 
 
@@ -185,7 +185,7 @@ def test_collection_ideate_sequential_generation_branches_to_codex_image_script(
 def test_collection_ideate_codex_sequential_requires_short_prompt() -> None:
     """Given collection-ideate Phase 4-4 sequential の codex 分岐
     When codex-image.sh を呼ぶ
-    Then parallel と同じ TTP 上位互換 prompt template 契約を使う。
+    Then parallel と同じ TTP 背景先行 prompt template 契約を使う。
     """
     block = _phase_4_4_sequential_block(_read(_IDEATE_SKILL_MD))
 
@@ -202,8 +202,9 @@ def test_wf_new_routes_codex_and_single_step_through_thumbnail_contract() -> Non
     assert "codex" in block
     assert "single_step" in block
     assert "`/thumbnail <theme>`" in block
-    assert "テキスト付き `10-assets/thumbnail.jpg`" in block
     assert "テキストなし `10-assets/main.png` または `main.jpg`" in block
+    assert "先に生成・承認" in block
+    assert "承認済み背景からテキスト付き `10-assets/thumbnail.jpg`" in block
     assert "同一画像で代用しない" in block
     assert "旧運用は禁止" in block
     assert "cp <collection-path>/10-assets/main.png <collection-path>/10-assets/thumbnail.jpg" not in block
@@ -275,7 +276,8 @@ def test_collection_ideate_next_step_keeps_preview_out_of_main_background() -> N
     assert "`main.png` にはコピーしない" in block
     assert "planning-preview.png" in block
     assert "`/thumbnail <theme>`" in block
-    assert "テキスト付き `thumbnail.jpg` と textless `main.png/jpg`" in block
+    assert "textless `main.png/jpg` を先に確定" in block
+    assert "テキスト付き `thumbnail.jpg`" in block
     assert "`main.png` として動画背景に流用しない" in block
     assert (
         "cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/main.png"
@@ -290,8 +292,8 @@ def test_collection_ideate_cost_rejection_uses_new_thumbnail_contract() -> None:
     """
     text = _read(_IDEATE_SKILL_MD)
 
-    assert "後段の `/thumbnail <theme>` がベンチマーク参照からテキスト付き `thumbnail.jpg` を生成" in text
-    assert "承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成" in text
+    assert "後段の `/thumbnail <theme>` がベンチマーク参照から textless `main.png/jpg` を先に生成・承認" in text
+    assert "承認済み背景からテキスト付き `thumbnail.jpg` を生成" in text
     assert "`planning-preview.png` は未生成のまま Next Step に進み" in text
     assert "`main.png` 不在を検出して Phase 1" not in text
     assert "プレビューが `/wf-new` Phase 2c でそのまま最終 thumbnail に流用" not in text
@@ -314,4 +316,6 @@ def test_collection_ideate_config_and_lifecycle_reference_new_thumbnail_contract
     assert "textless `10-assets/main.png` または `main.jpg`" in lifecycle
     assert "サムネイル作成（テキスト付き thumbnail.jpg）" in lifecycle
     assert "textless 動画背景作成（main.png または main.jpg）" in lifecycle
+    assert lifecycle.find("textless `10-assets/main.png`") < lifecycle.find("テキスト付き `10-assets/thumbnail.jpg`")
+    assert lifecycle.find("textless 動画背景作成") < lifecycle.find("サムネイル作成")
     assert "画像生成 → `10-assets/thumbnail.jpg`" not in lifecycle

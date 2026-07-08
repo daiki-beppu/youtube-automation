@@ -9,6 +9,9 @@ export default defineConfig({
   manifest: {
     name: "DistroKid Helper",
     description: "DistroKid 登録フォームに静的プロファイル + 動的データを自動入力する",
+    action: {
+      default_title: "DistroKid Helper",
+    },
     // 最小権限。SSOT は lib/manifest.ts (tests/manifest.test.ts で機械担保)。
     permissions: [...MANIFEST_PERMISSIONS],
     host_permissions: [...MANIFEST_HOST_PERMISSIONS, ...SERVER_HOST_PERMISSIONS],

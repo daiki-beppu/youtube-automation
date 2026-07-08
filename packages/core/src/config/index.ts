@@ -2,7 +2,7 @@
 //
 // 公開 API:
 //   loadConfig() -> ChannelConfig   シングルトン取得（初回に glob ロード）
-//   channelDir() -> string          チャンネルディレクトリ解決
+//   channelDir() -> string          config/channel/ を含むプロジェクトルート解決
 //   reset() -> void                 シングルトン state をリセット（テスト用）
 //   ChannelConfig                   合成ルート型
 //   + content / branding ヘルパー（Python dataclass メソッドの純関数移植）

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PHASE } from "../../shared/constants";
+import { BALANCED_RUN_PACING, CLIPS_PER_REQUEST, PHASE } from "../../shared/constants";
 import type { EntryRunResult, RunEntryWithRetryOptions } from "../lib/entry-retry";
 import { writeResumeState } from "../lib/resume-state";
 import { makePromptEntries, markBbox } from "./_helpers";
@@ -14,6 +14,15 @@ const harness = vi.hoisted(() => {
     await options.attempt();
     return { outcome: "ok" };
   });
+  const legacyReadSpeedPresetId = vi.fn(async () => "fast");
+  const legacyResolveSpeedPreset = vi.fn(() => ({
+    interCreateDelayMs: 1234,
+    jitterMs: 0,
+    maxInflightRequests: 1,
+    maxInjectRetry: 9,
+    injectAckTimeoutMs: 12345,
+    maxEntryRetry: 9,
+  }));
 
   return {
     handlers,
@@ -30,6 +39,8 @@ const harness = vi.hoisted(() => {
     feedPollerStart,
     feedPollerStop,
     runEntryWithRetry,
+    legacyReadSpeedPresetId,
+    legacyResolveSpeedPreset,
     requestSliderSet: vi.fn(),
     submittedClipIds: [] as string[],
   };
@@ -39,18 +50,17 @@ vi.mock("../lib/preset-state", async () => {
   const actual = await vi.importActual<typeof import("../lib/preset-state")>("../lib/preset-state");
   return {
     ...actual,
-    readSpeedPresetId: vi.fn(async () => actual.DEFAULT_SPEED_PRESET_ID),
-    resolveSpeedPreset: vi.fn(() => ({
-      interCreateDelayMs: 0,
-      jitterMs: 0,
-      maxInflightRequests: 10,
-      maxInjectRetry: 0,
-      injectAckTimeoutMs: 100,
-      maxEntryRetry: 0,
-      label: "Test",
-      riskNote: "Test preset",
-    })),
+    readSpeedPresetId: harness.legacyReadSpeedPresetId,
+    resolveSpeedPreset: harness.legacyResolveSpeedPreset,
     applyJitter: vi.fn((baseMs: number) => baseMs),
+  };
+});
+
+vi.mock("../lib/inject-retry", async () => {
+  const actual = await vi.importActual<typeof import("../lib/inject-retry")>("../lib/inject-retry");
+  return {
+    ...actual,
+    injectWithVerification: vi.fn(actual.injectWithVerification),
   };
 });
 
@@ -60,6 +70,7 @@ vi.mock("../../shared/dom", async () => {
     ...actual,
     abortableSleep: vi.fn(async () => undefined),
     injectAdvancedFields: vi.fn(async () => undefined),
+    waitForQueueSlot: vi.fn(actual.waitForQueueSlot),
     waitForCaptchaClear: vi.fn(async () => undefined),
     waitForGeneration: vi.fn(async () => undefined),
   };
@@ -711,6 +722,45 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       );
     },
   );
+
+  it("Given legacy sunoSpeedPreset が残っていても When run を受ける Then Balanced 固定の pacing 値で実行する", async () => {
+    makeRunnableEmptyQueueSunoDom("Grid");
+    await loadContentScript();
+    const { waitForQueueSlot, abortableSleep } = await import("../../shared/dom");
+    const { injectWithVerification } = await import("../lib/inject-retry");
+    const { applyJitter } = await import("../lib/preset-state");
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(1);
+
+    const result = runHandler({ data: makeRunPayload(entries) });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(waitForQueueSlot).toHaveBeenCalledWith(
+      BALANCED_RUN_PACING.maxInflightRequests * CLIPS_PER_REQUEST,
+      expect.objectContaining({ stallTimeoutMs: expect.any(Number) }),
+    );
+    expect(harness.runEntryWithRetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxRetry: BALANCED_RUN_PACING.maxEntryRetry,
+        retryDelayMs: expect.any(Function),
+      }),
+    );
+    const retryDelayMs = harness.runEntryWithRetry.mock.calls[0][0].retryDelayMs;
+    expect(injectWithVerification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxRetry: BALANCED_RUN_PACING.maxInjectRetry,
+        ackTimeoutMs: BALANCED_RUN_PACING.injectAckTimeoutMs,
+      }),
+    );
+    expect(applyJitter).toHaveBeenCalledWith(BALANCED_RUN_PACING.interCreateDelayMs, BALANCED_RUN_PACING.jitterMs);
+    vi.mocked(applyJitter).mockClear();
+    expect(retryDelayMs()).toBe(BALANCED_RUN_PACING.interCreateDelayMs);
+    expect(applyJitter).toHaveBeenCalledWith(BALANCED_RUN_PACING.interCreateDelayMs, BALANCED_RUN_PACING.jitterMs);
+    expect(abortableSleep).toHaveBeenCalledWith(BALANCED_RUN_PACING.interCreateDelayMs, expect.any(Function));
+    expect(harness.legacyReadSpeedPresetId).not.toHaveBeenCalled();
+    expect(harness.legacyResolveSpeedPreset).not.toHaveBeenCalled();
+  });
 
   it("Given entry retry が発生する When run を受ける Then retry progress log を content 経由で emit する", async () => {
     makeRunnableSunoDom("List ▼");

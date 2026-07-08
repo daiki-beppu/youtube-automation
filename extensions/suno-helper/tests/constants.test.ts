@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  BALANCED_RUN_PACING,
   BRIDGE_MSG,
   CLIPS_PER_REQUEST,
   COLLECTIONS_ROUTE,
@@ -15,8 +16,8 @@ import {
   FEED_V3_PATH,
   INJECT_ACK_TIMEOUT_MS,
   INTER_CREATE_DELAY_MS,
-  MAX_INFLIGHT_REQUESTS,
   MAX_INJECT_RETRY,
+  MAX_INFLIGHT_REQUESTS,
   MAX_YIELD_RETRY,
   OVERLAY_STATE_KEY,
   PHASE,
@@ -24,8 +25,6 @@ import {
   QUEUE_ERROR_WAIT_MS,
   QUEUE_SLOT_WAIT_TIMEOUT_MS,
   SERVER_HOST_PERMISSIONS,
-  SPEED_PRESET_STORAGE_KEY,
-  SPEED_PRESETS,
   STORAGE_KEY,
   type ObservedClip,
 } from "../../shared/constants";
@@ -44,10 +43,14 @@ describe("shared/constants: サーバー互換の契約値", () => {
     expect(DEFAULT_URL).toBe("http://youtube-automation.localhost:7873");
   });
 
-  it("Given server selector When 既定候補を読む Then チャンネル別 hostname と legacy localhost を持つ", () => {
+  it("Given server selector When 既定候補を読む Then チャンネル別 hostname と localhost fallback を持つ", () => {
     expect(DEFAULT_SERVER_SOURCES.map((source) => source.url)).toEqual([
       "http://youtube-automation.localhost:7873",
       "http://localhost:7873",
+      "http://localhost:7874",
+      "http://localhost:7875",
+      "http://localhost:7876",
+      "http://localhost:7877",
     ]);
   });
 
@@ -184,76 +187,29 @@ describe("shared/constants: inject 検証 + queue 待機 timeout 独立化 (#864
   });
 });
 
-describe("shared/constants: 速度プリセット (#875)", () => {
-  // 契約 (draft が実装する public API, shared/constants.ts):
-  //   - SPEED_PRESET_STORAGE_KEY: string = "sunoSpeedPreset"
-  //   - SPEED_PRESETS: Record<"fast"|"balanced"|"safe", SpeedPreset>
-  //     SpeedPreset = { interCreateDelayMs; jitterMs; maxInflightRequests;
-  //                     maxInjectRetry; injectAckTimeoutMs; label; riskNote }
-  // 値の SSOT は order.md L23-27 の表。Fast は現状定数を残置し参照する（現状と同等を担保）。
-
-  it("Given SPEED_PRESET_STORAGE_KEY When 読む Then chrome.storage.local の preset key である", () => {
-    expect(SPEED_PRESET_STORAGE_KEY).toBe("sunoSpeedPreset");
-  });
-
-  it("Given SPEED_PRESETS When key を読む Then fast / balanced / safe の 3 preset を持つ", () => {
-    expect(Object.keys(SPEED_PRESETS).sort()).toEqual(["balanced", "fast", "safe"]);
-  });
-
-  it("Given fast preset When 数値を読む Then 現状定数と一致する（現状と同等, jitter なし）", () => {
-    // 受け入れ基準「Fast 選択時の所要時間が現状と同等」。既存定数を Fast から参照する設計を pin し、
-    // 残置定数と preset 値の drift を回帰ガードする。
-    expect(SPEED_PRESETS.fast.interCreateDelayMs).toBe(INTER_CREATE_DELAY_MS);
-    expect(SPEED_PRESETS.fast.jitterMs).toBe(0);
-    expect(SPEED_PRESETS.fast.maxInflightRequests).toBe(MAX_INFLIGHT_REQUESTS);
-    expect(SPEED_PRESETS.fast.maxInjectRetry).toBe(MAX_INJECT_RETRY);
-    expect(SPEED_PRESETS.fast.injectAckTimeoutMs).toBe(INJECT_ACK_TIMEOUT_MS);
-  });
-
-  it("Given balanced preset When 数値を読む Then 6s / ±3s / inflight 実上限 / retry 1 / ack 45s (#970)", () => {
+describe("shared/constants: Balanced 固定ペーシング (#1573)", () => {
+  it("Given BALANCED_RUN_PACING When 数値を読む Then 6s / ±3s / inflight 実上限 / retry 1 / ack 45s (#970)", () => {
     // #948 で in-flight が API status の正確な計数になったため、queue cap を Suno 実上限
     // （MAX_INFLIGHT_REQUESTS = 10、#816 実機検証）まで開放し、ジッター付き間隔だけで自然化する。
-    expect(SPEED_PRESETS.balanced).toMatchObject({
+    expect(BALANCED_RUN_PACING).toMatchObject({
       interCreateDelayMs: 6000,
       jitterMs: 3000,
       maxInflightRequests: MAX_INFLIGHT_REQUESTS,
       maxInjectRetry: 1,
       injectAckTimeoutMs: 45000,
+      maxEntryRetry: 2,
     });
   });
 
-  it("Given safe preset When 数値を読む Then 20s / ±5s / inflight 3 / retry 0 / ack 60s", () => {
-    expect(SPEED_PRESETS.safe).toMatchObject({
-      interCreateDelayMs: 20000,
-      jitterMs: 5000,
-      maxInflightRequests: 3,
-      maxInjectRetry: 0,
-      injectAckTimeoutMs: 60000,
-    });
-  });
-
-  it.each(["fast", "balanced", "safe"] as const)(
-    "Given %s preset When label / riskNote を読む Then 非空文字列を持つ（UI 表示用, 要件6）",
-    (id) => {
-      // label/riskNote が write-only な空フィールドへ退行しないことを担保（文言そのものは pin しない）。
-      expect(typeof SPEED_PRESETS[id].label).toBe("string");
-      expect(SPEED_PRESETS[id].label.length).toBeGreaterThan(0);
-      expect(typeof SPEED_PRESETS[id].riskNote).toBe("string");
-      expect(SPEED_PRESETS[id].riskNote.length).toBeGreaterThan(0);
-    },
-  );
-
-  it("Given balanced preset When jitter 適用域を求める Then 3000〜9000ms（#970 増速後の 3-9s）", () => {
-    // applyJitter の min/max は preset-state.test.ts で検証。ここでは preset 値が
+  it("Given BALANCED_RUN_PACING When jitter 適用域を求める Then 3000〜9000ms（#970 増速後の 3-9s）", () => {
+    // applyJitter の min/max は preset-state.test.ts で検証。ここでは pacing 値が
     // 受け入れ基準の範囲を表現できることだけを確認する。
-    const { interCreateDelayMs: base, jitterMs } = SPEED_PRESETS.balanced;
+    const { interCreateDelayMs: base, jitterMs } = BALANCED_RUN_PACING;
     expect(base - jitterMs).toBe(3000);
     expect(base + jitterMs).toBe(9000);
   });
 
-  it("Given safe preset When jitter 適用域を求める Then 15000〜25000ms（受け入れ基準 15-25s）", () => {
-    const { interCreateDelayMs: base, jitterMs } = SPEED_PRESETS.safe;
-    expect(base - jitterMs).toBe(15000);
-    expect(base + jitterMs).toBe(25000);
+  it("Given BALANCED_RUN_PACING When INTER_CREATE_DELAY_MS と比較 Then 旧 Fast 固定値ではない", () => {
+    expect(BALANCED_RUN_PACING.interCreateDelayMs).not.toBe(INTER_CREATE_DELAY_MS);
   });
 });
