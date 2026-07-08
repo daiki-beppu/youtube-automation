@@ -111,6 +111,24 @@ class TestCliAvailability:
                 provider.generate(req)
 
 
+class TestSingleStepReferenceGuard:
+    def test_single_step_without_reference_raises_before_cli_execution(self, request_factory):
+        cfg = GeminiCliConfig(
+            model="gemini-2.5-flash-image-preview",
+            image_size="2K",
+            timeout_seconds=300,
+            generation_mode="single_step",
+        )
+        runner = MagicMock()
+        provider = GeminiCliImageProvider(cfg, runner=runner)
+        req = request_factory(references=[])
+
+        with pytest.raises(ConfigError, match="single_step モードでは --reference"):
+            provider.generate(req)
+
+        assert runner.call_count == 0
+
+
 # ---------- 正常系 ----------
 
 

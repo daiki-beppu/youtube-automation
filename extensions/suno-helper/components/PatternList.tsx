@@ -22,15 +22,22 @@ export function PatternList({ entries, itemStates, selectedEntries, onToggleEntr
     return null;
   }
   return (
-    <ul className="max-h-48 overflow-y-auto rounded border border-gray-200">
+    <ul className="max-h-48 overflow-y-auto rounded border border-gray-200" data-suno-entry-list="true">
       {entries.map((entry, index) => {
         const itemState = itemStates[index] ?? "idle";
+        const selected = isEntrySelected(selectedEntries, itemStates, index);
         return (
-          <li key={`${entry.name}-${index}`} className={`px-2 py-1 text-sm ${STATE_CLASS[itemState]}`}>
+          <li
+            key={`${entry.name}-${index}`}
+            className={`px-2 py-1 text-sm ${STATE_CLASS[itemState]}`}
+            data-suno-entry-index={index}
+            data-suno-entry-state={itemState}
+            data-suno-entry-selected={selected ? "true" : "false"}
+          >
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
-                checked={isEntrySelected(selectedEntries, itemStates, index)}
+                checked={selected}
                 onChange={(event) => onToggleEntry(index, event.currentTarget.checked)}
                 aria-label={`entry ${index + 1}: ${entry.name}`}
                 className="h-4 w-4 shrink-0"

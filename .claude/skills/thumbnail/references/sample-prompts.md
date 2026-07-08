@@ -1,15 +1,15 @@
 # Thumbnail プロンプト例（サンプル集）
 
-SKILL.md 内に散在していたプロンプト例を集約（内容改変なし・移動のみ）。プロンプト構築の原則は `prompting.md` を参照。
+TTP 参照から textless 背景を先に生成し、承認済み背景へ文字を追加するための短いプロンプト例。プロンプト構築の原則は `prompting.md` を参照。
 
 ## Single-Step / TTP の短い差分プロンプト
 
 ```
 Use the reference thumbnail as the winning template.
-Create a stronger original thumbnail for {title}.
-Keep the readable layout, scale, lighting, and energy.
-Change the subject details, concrete objects, colors, and marks.
-No logos, signatures, watermarks, brand marks, or near-copy.
+Create a stronger original textless background for {title}.
+Keep the layout, scale, lighting, color mood, texture, and energy.
+Remove all text, typography, logos, signatures, watermarks, and brand marks.
+Do not add title text yet; the approved background will be used for the final thumbnail.
 ```
 
 ## Two-Phase モードのテキストオーバーレイ・フォールバックプロンプト

@@ -22,6 +22,28 @@
 
 DOM 注入セレクタ（Style / Lyrics の placeholder、Generate ボタンのラベル、reCAPTCHA 検知）は `../shared/dom.ts` の `SELECTORS` に集約する。Suno の UI 変更で注入先が見つからなくなった場合はここを更新する。見つからない場合は **silent に続行せず停止** し、popup に理由を表示する。
 
+## Agent 操作用 DOM signal
+
+browser use から overlay / popup を安定して観測できるよう、操作 panel は読み取り専用の `data-suno-*` 属性を持つ。これらは表示状態の公開契約であり、runner の実行制御や server API 契約は変更しない。
+
+| selector / 属性                                                                                 | 意味                                                                                                      |
+| ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `[data-suno-helper="control-panel"]`                                                            | 操作 panel の root                                                                                        |
+| `data-suno-phase`                                                                               | `idle` / `loading` / `starting` / progress phase（`waiting-captcha` / `entry-failed` を含む）/ `adopting` |
+| `data-suno-running`                                                                             | runner 実行中なら `"true"`                                                                                |
+| `data-suno-error`                                                                               | status がエラーなら `"true"`                                                                              |
+| `data-suno-collection-id`                                                                       | 選択中 collection id                                                                                      |
+| `data-suno-entry-count`                                                                         | 読み込み済み entry 数                                                                                     |
+| `data-suno-selected-entry-count`                                                                | 実行対象 entry 数                                                                                         |
+| `[data-suno-control="server-url"]`                                                              | サーバー URL 入力                                                                                         |
+| `[data-suno-control="collection-select"]`                                                       | collection 選択                                                                                           |
+| `[data-suno-control="fetch-data"]` / `[data-suno-control="run"]` / `[data-suno-control="stop"]` | 主要操作ボタン                                                                                            |
+| `[data-suno-control="resume"]` / `[data-suno-control="dismiss-resume"]`                         | 前回中断 resume バナーの再開 / 閉じる                                                                     |
+| `[data-suno-control="adopt-selected-clips"]`                                                    | Suno 上の選択中 clip を採用                                                                               |
+| `[data-suno-control="retry-playlist"]` / `[data-suno-control="retry-download"]`                 | playlist / download phase から再開                                                                        |
+| `role="status"` + `data-suno-status`                                                            | live status。`data-suno-status="error"` は handoff / retry 判断の入口                                     |
+| `[data-suno-entry-list]` / `[data-suno-entry-index]`                                            | entry 一覧。各行に `data-suno-entry-state` と `data-suno-entry-selected` が付く                           |
+
 ## 開発・ビルド・テスト
 
 ```bash
@@ -58,7 +80,7 @@ pnpm test:e2e           # Playwright e2e（初回 pnpm exec playwright install c
 4. `ready` な collection を選び、**全パターンを連続実行** を押す。
 5. 各パターンで Style/Lyrics を注入 → Generate 押下 → 生成完了検知 → 次へ、を自動で繰り返す。
 6. 全件完了後、対象 clip を一括選択 → playlist 追加 → More menu の **Download all** → format 選択 → ZIP ダウンロード完了監視 → `POST /collections/<id>/downloaded` で ZIP パス通知、まで実行する。サーバーは ZIP を展開し、`02-Individual-music/` と `workflow-state.json` を更新する。
-7. captcha challenge は waiting-captcha 表示で解消（多くは自動 verify）を待って続行する。entry 単位の一時的な失敗は preset 連動で自動リトライし、上限超過分はスキップして完走する（#948）。スキップされた entry は一覧表示され、**失敗分のみ再実行** で再投入できる。
+7. captcha challenge は waiting-captcha 表示で解消（多くは自動 verify）を待って続行する。entry 単位の一時的な失敗は Balanced 固定の上限で自動リトライし、上限超過分はスキップして完走する（#948）。スキップされた entry は一覧表示され、**失敗分のみ再実行** で再投入できる。
 
 ### in-flight 検知と停止判断（#948）
 
