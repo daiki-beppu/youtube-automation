@@ -3,7 +3,7 @@
 YouTube チャンネル運営を自動化するツールキット。Analytics データ収集、AI コンテンツ生成、動画アップロード、メタデータ管理をまとめて提供します。
 
 > [!WARNING]
-> **移行告知（2026-07-02）**: 本 Python 版は **2026-08 中に提供終了**し、TypeScript 製の後継 **`tayk`**（npm パッケージ）へ切り替わります。cutover 当日に main ブランチが TS 実装になり、branch 参照の `uv add git+https://` は取得不可になります（git tag は残ります）。詳細と移行手順は [`docs/migration/python-to-tayk.md`](docs/migration/python-to-tayk.md) を参照してください。
+> **移行告知（2026-07-02 / 2026-07-08 改訂）**: 本 Python 版は**メンテナンスモード**（バグ修正のみ、新機能なし）です。後継の TypeScript 製 **`tayk`**（npm パッケージ）は別リポジトリで開発中で、実運用カバレッジに達した時点で cutover（main ブランチからの Python コード削除）を判断します。**具体的な期日は設けません**。cutover 実施後は branch 参照の `uv add git+https://` は取得不可になります（git tag は残ります）。詳細・マイルストーン・移行手順は [`docs/migration/python-to-tayk.md`](docs/migration/python-to-tayk.md) を参照してください。
 
 > **新規利用者の方へ**: セットアップ手順は [`ONBOARDING.md`](ONBOARDING.md) を参照してください。
 
