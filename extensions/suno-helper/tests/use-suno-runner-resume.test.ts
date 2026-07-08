@@ -325,8 +325,19 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
 
   it("Given run mode state When useSunoRunner を読む Then run 送信用 payload へ投入方式を渡す", () => {
     expect(runnerSource).toMatch(/const \[runModeId, setRunModeId\] = useState<RunModeId>\(DEFAULT_RUN_MODE_ID\)/);
-    expect(runnerSource).toMatch(/void readRunModeId\(\)\.then\(setRunModeId\)/);
+    // 読込失敗は既定 serial のまま warn fallback（unhandled rejection にしない）。
+    expect(runnerSource).toMatch(/void readRunModeId\(\)\s*\.then\(setRunModeId\)\s*\.catch\(/);
     expect(runnerSource).toMatch(/runMode: runModeId/);
+  });
+
+  it("Given 中断 run の投入方式 When 再開・失敗分再実行する Then popup の現在選択ではなく resume state の runMode を引き継ぐ (#1586)", () => {
+    expect(runnerSource).toMatch(/return persistedResume\.runMode;/);
+    expect(runnerSource).toMatch(
+      /\.\.\.buildResumeRunOverrides\(resumeBanner, \{[\s\S]*?\}\),\s*runMode: runModeForResume,/,
+    );
+    expect(runnerSource).toMatch(
+      /\.\.\.buildFailedEntriesRunOverrides\(failedEntries, \{[\s\S]*?\}\),\s*runMode: runModeForResume,/,
+    );
   });
 
   it("Given 旧 ResumeState に期待件数が無い When useSunoRunner を読む Then total から期待件数を復元して渡す", () => {

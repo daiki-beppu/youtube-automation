@@ -14,8 +14,6 @@ import { InjectNotAcknowledgedError, SubmittedClipIdsNotObservedError, injectWit
 import { resolveInterruptIndex } from "./resume-state";
 import { runEntryWithRetry } from "./entry-retry";
 
-const QUEUE_SUBMISSION_YIELD_MS = 25;
-
 export interface QueueRunnerPreset {
   interCreateDelayMs: number;
   jitterMs: number;
@@ -31,7 +29,8 @@ export interface QueueSubmissionOptions {
   maxGeneratingClips: number;
   preset: QueueRunnerPreset;
   isAborted: () => boolean;
-  isEntrySubmitted: (index: number, error: unknown) => boolean;
+  /** 当該 entry の Generate を click 済みか（= content.ts の lastSubmittedEntryIndex === index）。 */
+  isEntrySubmitted: (index: number) => boolean;
   getSubmittedIds: () => string[];
   getSubmissionCount: () => number;
   getDomInFlightCount: () => number;
@@ -79,7 +78,8 @@ export interface SubmittedClipCompletionOptions {
   now?: () => number;
 }
 
-function entryDisplayName(entry: PromptEntry): string {
+/** entry のログ/UI 表示名。content.ts と共用する（title ?? name の fallback 規則の SSOT）。 */
+export function entryDisplayName(entry: PromptEntry): string {
   return entry.title ?? entry.name;
 }
 
@@ -152,13 +152,6 @@ export function emitQueueEntriesDone(
   }
 }
 
-function resolveQueueFatalInterruptIndex(index: number, submitted: boolean, error: unknown): number {
-  if (error instanceof SubmittedClipIdsNotObservedError) {
-    return resolveInterruptIndex(index, submitted, false);
-  }
-  return resolveInterruptIndex(index, submitted, error instanceof InjectNotAcknowledgedError);
-}
-
 export async function submitQueueEntries(options: QueueSubmissionOptions): Promise<QueueSubmissionResult> {
   const failedIndices: number[] = [];
   for (const [orderPosition, index] of options.order.entries()) {
@@ -170,7 +163,7 @@ export async function submitQueueEntries(options: QueueSubmissionOptions): Promi
     const result = await runEntryWithRetry({
       attempt: () => submitQueueEntry(options, index),
       isAborted: options.isAborted,
-      wasSubmitted: (error) => options.isEntrySubmitted(index, error) && !(error instanceof InjectNotAcknowledgedError),
+      wasSubmitted: (error) => options.isEntrySubmitted(index) && !(error instanceof InjectNotAcknowledgedError),
       isFatal: (error) => error instanceof FatalRunError || error instanceof SubmittedClipIdsNotObservedError,
       maxRetry: options.preset.maxEntryRetry,
       retryDelayMs: () => options.applyJitter(options.preset.interCreateDelayMs, options.preset.jitterMs),
@@ -187,17 +180,19 @@ export async function submitQueueEntries(options: QueueSubmissionOptions): Promi
     });
     if (result.outcome === "fatal") {
       const message = result.error instanceof Error ? result.error.message : String(result.error);
-      const interruptIndex = resolveQueueFatalInterruptIndex(
+      // SubmittedClipIdsNotObservedError は InjectNotAcknowledgedError ではないため第 3 引数は false になり、
+      // 投入済みなら index+1（再開時に再クリックせず skip）へ倒れる — DOM ACK 済み entry の重複生成を防ぐ意図どおり。
+      const interruptIndex = resolveInterruptIndex(
         index,
-        options.isEntrySubmitted(index, result.error),
-        result.error,
+        options.isEntrySubmitted(index),
+        result.error instanceof InjectNotAcknowledgedError,
       );
       options.emitProgress({ phase: PHASE.ERROR, index: interruptIndex, total: options.total, message });
       options.persistInterruptState(interruptIndex, orderPosition);
       return { completed: false, failedIndices };
     }
     if (result.outcome === "aborted" || options.isAborted()) {
-      const interruptIndex = resolveInterruptIndex(index, options.isEntrySubmitted(index, result), false);
+      const interruptIndex = resolveInterruptIndex(index, options.isEntrySubmitted(index), false);
       options.persistInterruptState(interruptIndex, orderPosition);
       options.emitProgress({ phase: PHASE.STOPPED, index: interruptIndex, total: options.total });
       return { completed: false, failedIndices };
@@ -221,7 +216,7 @@ export async function submitQueueEntries(options: QueueSubmissionOptions): Promi
       }
       options.emitProgress({ phase: PHASE.SUBMITTED, index, total: options.total, yieldRetryCount: 0 });
     }
-    await options.sleep(QUEUE_SUBMISSION_YIELD_MS);
+    // Create→clip-row DOM 反映ラグによる過剰投入 (race) を避けるため、次の投入前に間隔を空ける (#847)。
     await options.abortableSleep(
       options.applyJitter(options.preset.interCreateDelayMs, options.preset.jitterMs),
       options.isAborted,

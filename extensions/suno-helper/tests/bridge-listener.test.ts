@@ -56,9 +56,10 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
     detach();
   });
 
-  it("Given FEED_CLIPS / FEED_V3_POLL_RESPONSE message When 受信する Then applyFeedStatuses される", () => {
+  it("Given FEED_CLIPS / FEED_V3_POLL_RESPONSE message When 受信する Then passive / requested の各経路へ配線される", () => {
     const tracker = createClipTracker();
     const applyFeedStatuses = vi.spyOn(tracker, "applyFeedStatuses");
+    const applyRequestedStatuses = vi.spyOn(tracker, "applyRequestedStatuses");
     const detach = attachBridgeListener(tracker);
     dispatchBridgeMessage({
       source: BRIDGE_SOURCE,
@@ -80,8 +81,32 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
       requestId: 1,
       clips: [{ id: "c1", status: "complete", duration: 187.25 }],
     });
-    expect(applyFeedStatuses).toHaveBeenLastCalledWith([{ id: "c1", status: "complete", duration: 187.25 }]);
+    expect(applyRequestedStatuses).toHaveBeenLastCalledWith([{ id: "c1", status: "complete", duration: 187.25 }]);
     expect(tracker.getInFlightCount()).toBe(0); // active poll の応答も観測として合流する
+    detach();
+  });
+
+  it("Given reload 後 resume 相当（未知 clip の complete を照会応答で受信） When FEED_V3_POLL_RESPONSE Then pending 扱いが解消される (#1586)", () => {
+    // passive FEED_CLIPS は未知+終端 clip を捨てる（集計を膨らませない）が、ID 指定照会の応答まで
+    // 同じ規則にすると reload 後の resume 完了待ちが保存済み complete clip を永遠に pending 扱いして
+    // stall する。照会応答は終端でも登録することを配線ごと pin する。
+    const tracker = createClipTracker();
+    const detach = attachBridgeListener(tracker);
+    const previousClipIds = ["old-1", "old-2"];
+    expect(tracker.getPendingIdsByIds(previousClipIds)).toEqual(previousClipIds);
+
+    dispatchBridgeMessage({
+      source: BRIDGE_SOURCE,
+      type: BRIDGE_MSG.FEED_V3_POLL_RESPONSE,
+      requestId: 1,
+      clips: [
+        { id: "old-1", status: "complete", duration: 187.25 },
+        { id: "old-2", status: "complete", duration: 190.5 },
+      ],
+    });
+
+    expect(tracker.getPendingIdsByIds(previousClipIds)).toEqual([]);
+    expect(tracker.getInFlightCount()).toBe(0); // 終端 clip は in-flight を膨らませない
     detach();
   });
 

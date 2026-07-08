@@ -65,7 +65,12 @@ import { clearFinishedSnapshot, readFreshFinishedSnapshot, writeFinishedSnapshot
 import { cancelScheduledRunCompleteReload, scheduleRunCompleteReload } from "../lib/page-reload";
 import { readDownloadFormat, serverUrlItem } from "../lib/storage";
 import type { DownloadContext } from "../lib/download-flow";
-import { emitQueueEntriesDone, submitQueueEntries, waitForSubmittedClipsComplete } from "../lib/queue-runner";
+import {
+  emitQueueEntriesDone,
+  entryDisplayName,
+  submitQueueEntries,
+  waitForSubmittedClipsComplete,
+} from "../lib/queue-runner";
 
 function assertNonEmptyString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.length === 0) {
@@ -99,7 +104,7 @@ function assertOptionalNonNegativeInteger(value: unknown, field: string): number
   if (value === undefined) {
     return undefined;
   }
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || Object.is(value, -0)) {
     throw new Error(`${field} must be non-negative integer`);
   }
   return value;
@@ -109,7 +114,7 @@ function assertOptionalNonNegativeNumber(value: unknown, field: string): number 
   if (value === undefined) {
     return undefined;
   }
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || Object.is(value, -0)) {
     throw new Error(`${field} must be non-negative number`);
   }
   return value;
@@ -312,10 +317,6 @@ export default defineContentScript({
       }
       currentSnapshot = applyProgress(currentSnapshot, payload);
       void sendMessage("progress", payload);
-    }
-
-    function entryDisplayName(entry: PromptEntry): string {
-      return entry.title ?? entry.name;
     }
 
     /**
@@ -743,6 +744,7 @@ export default defineContentScript({
           durationFilter: options.durationFilter,
           submittedClipIdsAreDurationFiltered,
           playlistExpectedClipCount: playlistExpectedCount,
+          runMode: options.runMode,
         });
       }
 
@@ -832,7 +834,7 @@ export default defineContentScript({
                   maxRetry: pacing.maxInjectRetry,
                   ackTimeoutMs: pacing.injectAckTimeoutMs,
                   pollIntervalMs: POLL_INTERVAL_MS,
-                  describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
+                  describeEntry: () => `entry ${i} (${entryDisplayName(entries[i])})`,
                 });
               },
               isAborted: () => aborted,
@@ -851,7 +853,7 @@ export default defineContentScript({
                   log: { kind: "retry", entryName: entryDisplayName(entries[i]), attempt, max },
                 }),
               sleep: abortableSleep,
-              describeEntry: () => `entry ${i} (${entries[i].title ?? entries[i].name})`,
+              describeEntry: () => `entry ${i} (${entryDisplayName(entries[i])})`,
             });
             if (result.outcome === "fatal") {
               const message = result.error instanceof Error ? result.error.message : String(result.error);
@@ -1184,6 +1186,9 @@ export default defineContentScript({
       aborted = false;
       void (async () => {
         try {
+          // 完了待ちは feed poll の状況次第で分単位かかりうる。popup 再 open 時に initSnapshot の
+          // INJECTING が表示され続けないよう、待機中であることを先に明示する（#1586 review）。
+          emitProgress({ phase: PHASE.GENERATING, total: 0, message: "保存済み clip の生成完了を確認中" });
           await waitForSubmittedClipsComplete({
             expectedClipCount,
             previousSubmittedClipIds: submittedClipIds,

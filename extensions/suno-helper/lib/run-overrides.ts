@@ -10,6 +10,8 @@ export interface RunOverrides {
   submittedClipIds?: string[];
   submittedClipIdsAreDurationFiltered?: boolean;
   playlistExpectedClipCount?: number;
+  /** 再開時に元 run の投入方式を引き継ぐ (#1586)。未指定は popup の現在選択（RunPayloadInput.runMode）。 */
+  runMode?: RunModeId;
 }
 
 export interface PlaylistResumePayload {
@@ -35,7 +37,7 @@ export function buildRunPayload(input: RunPayloadInput): RunPayload {
     ...(input.durationFilter ? { durationFilter: input.durationFilter } : {}),
     range: input.range,
     collectionId: input.collectionId,
-    runMode: input.runMode,
+    runMode: input.overrides?.runMode ?? input.runMode,
     indices: input.overrides?.indices,
     submittedClipIds: input.overrides?.submittedClipIds,
     submittedClipIdsAreDurationFiltered: input.overrides?.submittedClipIdsAreDurationFiltered,

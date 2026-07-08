@@ -45,7 +45,10 @@ const harness = vi.hoisted(() => {
     submittedClipIds: [] as string[],
     durationsById: {} as Record<string, number | undefined>,
     waitForGeneration: vi.fn<() => Promise<void>>(async () => undefined),
-    waitForQueueSlot: vi.fn<(maxGeneratingClips: number) => Promise<void>>(async () => undefined),
+    waitForQueueSlot: vi.fn<(maxGeneratingClips: number, options?: unknown) => Promise<void>>(async () => undefined),
+    // 既定は実装呼び出し（下の shared/dom mock factory で束縛）。空 queue で WAITING_SLOT が
+    // 失敗しない回帰テストを実装ごと通すため、テスト個別の stall 注入だけ mockImplementation で上書きする。
+    actualWaitForQueueSlot: null as null | ((maxGeneratingClips: number, options?: unknown) => Promise<void>),
   };
 });
 
@@ -69,6 +72,10 @@ vi.mock("../lib/inject-retry", async () => {
 
 vi.mock("../../shared/dom", async () => {
   const actual = await vi.importActual<typeof import("../../shared/dom")>("../../shared/dom");
+  harness.actualWaitForQueueSlot = actual.waitForQueueSlot as unknown as (
+    maxGeneratingClips: number,
+    options?: unknown,
+  ) => Promise<void>;
   return {
     ...actual,
     abortableSleep: vi.fn(async () => undefined),
@@ -348,7 +355,11 @@ beforeEach(() => {
   harness.waitForGeneration.mockReset();
   harness.waitForGeneration.mockResolvedValue(undefined);
   harness.waitForQueueSlot.mockReset();
-  harness.waitForQueueSlot.mockResolvedValue(undefined);
+  // 既定は実装呼び出し（vi.fn(actual.waitForQueueSlot) 相当）。no-op 既定にすると
+  // 「Remix 0 かつ空 queue で初回 WAITING_SLOT で失敗しない」回帰テストが空虚に通る。
+  harness.waitForQueueSlot.mockImplementation((maxGeneratingClips, options) =>
+    harness.actualWaitForQueueSlot!(maxGeneratingClips, options),
+  );
   harness.handlers.clear();
   document.body.innerHTML = "";
 });
