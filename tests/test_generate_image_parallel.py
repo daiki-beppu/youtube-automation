@@ -507,12 +507,16 @@ class TestGenerateImageCLIReferenceContract:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        ref = tmp_path / "ref.jpg"
+        ref.write_bytes(b"fake image")
         provider = _FakeProvider()
         argv = [
             "--prompt",
             "Text-included thumbnail prompt. ${typography_clause}",
             "--output",
             str(tmp_path / "thumbnail-v1.jpg"),
+            "--reference",
+            str(ref),
             "--max-attempts",
             "1",
             "-y",
@@ -732,12 +736,77 @@ class TestGenerateImageCLIReferenceContract:
         assert "--reference" in captured.out
         assert "上書きしますか" not in captured.out
 
-    def test_generic_single_step_allows_no_reference_without_ttp_strict(
+    def test_generic_single_step_rejects_no_reference_without_ttp_strict(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        provider = _FakeProvider()
+        output = tmp_path / "short.png"
+        argv = [
+            "--prompt",
+            "prompt",
+            "--output",
+            str(output),
+            "--max-attempts",
+            "1",
+            "-y",
+        ]
+
+        _patch_generate_image_cli(monkeypatch, argv, provider=provider)
+
+        with pytest.raises(SystemExit) as exc_info:
+            generate_image_main()
+        assert exc_info.value.code == 1
+        assert provider.requests == []
+        assert not output.exists()
+        captured = capsys.readouterr()
+        assert "single_step モードでは --reference の指定が必須" in captured.out
+        assert "モード:" not in captured.out
+
+    def test_single_step_cli_allows_reference_without_ttp_strict(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ref = tmp_path / "ref.jpg"
+        ref.write_bytes(b"fake image")
+        provider = _FakeProvider()
+        argv = [
+            "--prompt",
+            "prompt",
+            "--output",
+            str(tmp_path / "short.png"),
+            "--reference",
+            str(ref),
+            "--max-attempts",
+            "1",
+            "-y",
+        ]
+
+        _patch_generate_image_cli(monkeypatch, argv, provider=provider)
+
+        with pytest.raises(SystemExit) as exc_info:
+            generate_image_main()
+        assert exc_info.value.code == 0
+        assert len(provider.requests) == 1
+        assert provider.requests[0].references == [ref]
+
+    def test_two_phase_cli_allows_no_reference(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         provider = _FakeProvider()
+        skill_cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "two_phase",
+                    "single_step": {"max_attempts": 1, "rotate": True},
+                }
+            }
+        }
         argv = [
             "--prompt",
             "prompt",
@@ -748,7 +817,7 @@ class TestGenerateImageCLIReferenceContract:
             "-y",
         ]
 
-        _patch_generate_image_cli(monkeypatch, argv, provider=provider)
+        _patch_generate_image_cli(monkeypatch, argv, provider=provider, skill_cfg_override=skill_cfg)
 
         with pytest.raises(SystemExit) as exc_info:
             generate_image_main()
