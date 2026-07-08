@@ -82,6 +82,18 @@ describe("PatternList checkbox UI", () => {
     const checkboxes = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
     expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([true, false, true]);
     expect(checkboxes[1].closest("li")?.className).toContain("line-through");
+    expect(container.querySelector("[data-suno-entry-list]")).not.toBeNull();
+    expect(
+      Array.from(container.querySelectorAll<HTMLLIElement>("[data-suno-entry-index]")).map((row) => ({
+        index: row.dataset.sunoEntryIndex,
+        selected: row.dataset.sunoEntrySelected,
+        state: row.dataset.sunoEntryState,
+      })),
+    ).toEqual([
+      { index: "0", selected: "true", state: "idle" },
+      { index: "1", selected: "false", state: "done" },
+      { index: "2", selected: "true", state: "failed" },
+    ]);
 
     act(() => {
       checkboxes[1].click();
