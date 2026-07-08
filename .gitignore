@@ -26,7 +26,6 @@ launchd/
 
 # IDE
 .vscode/*
-!.vscode/extensions.json
 .idea/
 
 # Logs
