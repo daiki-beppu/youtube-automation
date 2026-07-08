@@ -924,30 +924,29 @@ def test_thumbnail_skill_codex_section_documents_login_and_direct_command() -> N
     section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
     assert "codex login status" in section
     assert ".claude/skills/thumbnail/references/codex-image.sh" in section
-    assert "main-v1.png" in section
+    assert "thumbnail-codex-v1.png" in section
 
 
-def test_thumbnail_skill_provider_fallback_codex_example_starts_with_textless_main() -> None:
-    """#1502: GCP 課金なし codex wrapper 入口も初回は textless main を生成する。"""
+def test_thumbnail_skill_provider_fallback_codex_example_starts_with_thumbnail() -> None:
+    """#1611: GCP 課金なし codex wrapper 入口も初回は text-included thumbnail を生成する。"""
     section = _provider_fallback_section(_read(_THUMBNAIL_SKILL_MD))
     assert ".claude/skills/thumbnail/references/codex-image.sh" in section
-    assert "<textless background prompt>" in section
-    assert "<collection-path>/10-assets/main-v1.png" in section
-    assert "<thumbnail prompt>" not in section
-    assert "<collection-path>/10-assets/thumbnail-codex-v1.png" not in section
+    assert "<thumbnail prompt>" in section
+    assert "<collection-path>/10-assets/thumbnail-codex-v1.png" in section
+    assert "<textless background prompt>" not in section
 
 
-def test_thumbnail_skill_codex_section_follows_textless_main_then_thumbnail_contract() -> None:
-    """#1502: codex 経路も textless main 先行で文字入り thumbnail を別成果物にする。"""
+def test_thumbnail_skill_codex_section_follows_thumbnail_then_textless_main_contract() -> None:
+    """#1611: codex 経路も文字入り thumbnail 先行で textless main を別成果物にする。"""
     section = _codex_section(_read(_THUMBNAIL_SKILL_MD))
 
     for required in (
         "codex 経路でも標準ファイル契約は同じ",
-        "10-assets/main-v1.png",
-        "10-assets/main.png",
-        "承認済み `main.png`",
         "10-assets/thumbnail-codex-v1.png",
         "10-assets/thumbnail.jpg",
+        "確定した `thumbnail.jpg`",
+        "10-assets/main-v1.png",
+        "10-assets/main.png",
         "動画背景には使わない",
     ):
         assert required in section

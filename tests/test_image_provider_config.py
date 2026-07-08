@@ -226,6 +226,7 @@ class TestParseImageGenerationConfig:
         skill_cfg = {
             "image_generation": {
                 "provider": "gemini_cli",
+                "gemini": {"generation_mode": "single_step"},
                 "gemini_cli": {
                     "model": "gemini-2.5-flash-image-preview",
                     "image_size": "2K",
@@ -243,6 +244,7 @@ class TestParseImageGenerationConfig:
         assert cfg.gemini_cli.model == "gemini-2.5-flash-image-preview"
         assert cfg.gemini_cli.image_size == "2K"
         assert cfg.gemini_cli.timeout_seconds == 120
+        assert cfg.gemini_cli.generation_mode == "single_step"
         # 他 provider の sub-config は埋めない
         assert cfg.gemini is None
         assert cfg.openai is None

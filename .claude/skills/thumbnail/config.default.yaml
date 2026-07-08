@@ -47,9 +47,9 @@ image_generation:
 
     # 生成モード:
     #   single_step   : ベンチマーク模倣 (TTP) の推奨実装。テキスト付き参照画像から
-    #                   構図・色・質感だけを参照し、textless 背景を先に作る。
-    #                   reference_images.default が必須。
-    #   two_phase     : 従来の 2 フェーズ (背景 → テキストオーバーレイ)
+    #                   差分のみ指示し 1 ステップで完成。reference_images.default が必須。
+    #   two_phase     : 既存参照から text-included thumbnail を先に確定し、
+    #                   承認済み thumbnail から textless main を後続再生成するフォールバック
     #   diff_from_reference : 既存キャラ画像を参照に差分のみ指示
     generation_mode: single_step
 

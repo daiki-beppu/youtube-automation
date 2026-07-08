@@ -86,6 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(thumbnail)`: `/thumbnail` の手順でテキスト付き `thumbnail.jpg` を先に確定し、承認済み `thumbnail.jpg` から textless `main.png/jpg` を後続再生成する契約を再固定した。frontmatter の旧 `main.png` サムネ表現、Two-Phase の draft 背景を最終 `main.png` に確定するよう読める手順、決定的合成経路で textless 再生成を不要扱いする記述、config コメントと設計ドキュメントの旧 Two-Phase 表現を修正し、`/wf-new` / `/collection-ideate` / `/loop-video` の役割契約と整合させた（#1611）
+- `fix(thumbnail)`: `yt-generate-image` の `generation_mode: single_step` で `--reference` 未指定の実行を `--ttp-strict-references` の有無に関係なく provider 初期化前に拒否するようにした（#1612）。`two_phase` など非 TTP 経路は従来どおり参照なし生成を許可し、`gemini_cli` provider 単体でも `single_step` request が参照なしなら gemini CLI 起動前に `ConfigError` で停止する
 - `fix(collection)`: `tayk collection-preflight` を追加し、`yt-init-collection` の既存ディレクトリ検出時と `/wf-new` / `/wf-next` の復旧手順で実在する `bunx tayk collection-preflight <collection-dir-name> --fix` を案内するようにした（#1614）
 - `fix(config)`: `channel_dir()` / `_resolve_channel_dir()` と TS `channelDir()`、comments / pinned_comment の `history_file` docstring、thumbnail skill / channel-new テンプレートの `path_base: "channel_dir"` 説明を、`config/channel/` 自体ではなくそれを含むプロジェクトルートを指す説明へ統一した（#1569）
 - `fix(benchmark)`: ベンチマーク収集でショート動画の `thumbnail_url` を選ぶ際、縦型を返しうる `maxres` / `standard` ではなく横型キー（`high` / `medium` / `default`）を優先するようにした。通常動画は従来どおり `maxres` 優先を維持する（#1501）
