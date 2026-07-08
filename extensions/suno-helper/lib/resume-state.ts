@@ -8,7 +8,7 @@
 // 起こさないよう遅延生成する（純関数テスト resume-state.test.ts を壊さないため）。
 import { storage } from "wxt/utils/storage";
 
-import { CLIPS_PER_REQUEST, RESUME_STATE_KEY } from "../../shared/constants";
+import { CLIPS_PER_REQUEST, RESUME_STATE_KEY, type RunModeId } from "../../shared/constants";
 import type { DurationFilter } from "../../shared/api";
 
 /** ERROR 停止時に永続化する再開メタ情報 (#872)。 */
@@ -40,6 +40,9 @@ export interface ResumeState {
   submittedClipIdsAreDurationFiltered?: boolean;
   /** duration filter 後に playlist 追加・download へ採用する OK clip 件数。 */
   playlistExpectedClipCount?: number;
+  /** 中断した run の投入方式 (#1586)。再開時に popup の現在選択ではなく元 run のモードを引き継ぐ。
+   * 旧 state には無い optional（後方互換。無ければ popup の現在選択へフォールバック）。 */
+  runMode?: RunModeId;
 }
 
 /** content へ渡す 0-based inclusive な実行範囲。 */

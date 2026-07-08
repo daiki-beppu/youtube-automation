@@ -210,6 +210,11 @@ function getInstalledInFlightClipCountInPage(): number {
   return (window as unknown as InFlightCounterWindow).__sunoHelperE2EGetInFlightClipCount();
 }
 
+// queue runner / completion gate の production ロジック回帰は tests/queue-runner.test.ts (vitest) が担う。
+// Playwright 経由だと lib/queue-runner → shared/constants の transitive import が
+// package.json スコープ外（extensions/shared）で CJS 判定され ESM named import が壊れるため、
+// この spec は実ブラウザ layout を要する DOM スモークに限定する。
+
 test("11 件目は in-flight 上限 (20 clip) で待機し、1 clip 完了で投入が再開する", async ({ page }) => {
   await page.setContent(MOCK_QUEUE_HTML);
   await installInFlightCounter(page);

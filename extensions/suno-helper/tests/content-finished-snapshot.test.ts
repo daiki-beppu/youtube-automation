@@ -93,6 +93,7 @@ async function loadContentScript(
       clearSubmittedIds: vi.fn(),
       getSubmittedIds: vi.fn(() => submittedIdsFromTracker),
       getPendingSubmittedIds: vi.fn(() => []),
+      getPendingIdsByIds: vi.fn(() => []),
       getDuration: vi.fn(() => 120),
       getInFlightCount: vi.fn(() => 0),
       hasObservedAnyTraffic: vi.fn(() => true),
@@ -145,6 +146,7 @@ async function loadContentScript(
 
   vi.doMock("../lib/inject-retry", () => ({
     InjectNotAcknowledgedError: class InjectNotAcknowledgedError extends Error {},
+    SubmittedClipIdsNotObservedError: class SubmittedClipIdsNotObservedError extends Error {},
     injectWithVerification: vi.fn(() => Promise.resolve()),
   }));
 
@@ -188,6 +190,7 @@ function partialRunPayload(): RunPayload {
     playlistName: "pl",
     range: { start: 0, end: 0 },
     collectionId: "coll-1",
+    runMode: "serial",
   };
 }
 

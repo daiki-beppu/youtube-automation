@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { DOWNLOAD_FORMAT_DEFAULT } from "../../shared/constants";
+import { DOWNLOAD_FORMAT_DEFAULT, RUN_MODES, type RunModeId } from "../../shared/constants";
 import {
   buildInitialPatternSelection,
   reconcilePatternSelection,
@@ -11,6 +11,9 @@ import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../
 import { PatternList } from "./PatternList";
 import { useSunoRunner } from "./useSunoRunner";
 
+// RUN_MODES のキー集合から導出する（手書き複製だと mode 追加時に UI へ出ないまま型チェックが通る）。
+// Record の string キーは挿入順で列挙されるため、表示順は RUN_MODES の定義順 = serial, queue。
+const RUN_MODE_ORDER = Object.keys(RUN_MODES) as RunModeId[];
 const DOWNLOAD_FORMAT_OPTIONS: DownloadFormat[] = ["mp3", "m4a", "wav"];
 
 export function App() {
@@ -32,6 +35,8 @@ export function App() {
     canRun,
     isRunning,
     playlistName,
+    runModeId,
+    setRunMode,
     resumeBanner,
     acceptResume,
     dismissResume,
@@ -226,6 +231,31 @@ export function App() {
           </button>
         </div>
       )}
+
+      <fieldset className="flex flex-col gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
+        <legend className="px-1 text-xs text-gray-600">投入方式</legend>
+        {RUN_MODE_ORDER.map((id) => {
+          const mode = RUN_MODES[id];
+          return (
+            <label key={id} className="flex items-start gap-2">
+              <input
+                type="radio"
+                name="run-mode"
+                className="mt-1"
+                checked={runModeId === id}
+                // 実行中の切替は当該 run に効かないのに保存だけ即時反映され、次回 resume の
+                // モードを無言で変えてしまうため run 中は無効化する (#1586 review)。
+                disabled={isRunning}
+                onChange={() => setRunMode(id)}
+              />
+              <span className="flex flex-col">
+                <span className="font-medium">{mode.label}</span>
+                <span className="text-xs text-gray-500">{mode.riskNote}</span>
+              </span>
+            </label>
+          );
+        })}
+      </fieldset>
 
       <label className="flex flex-col gap-1 text-sm">
         DL 形式

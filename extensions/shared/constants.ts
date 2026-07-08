@@ -92,8 +92,14 @@ export const MAX_INJECT_RETRY = 2;
 /** duration 歩留まり NG 時に同じ entry を再生成する最大 retry 回数 (#1266)。 */
 export const MAX_YIELD_RETRY = 2;
 
+/** 投入方式の選択値を保存する chrome.storage.local の key (#1586)。 */
+export const RUN_MODE_STORAGE_KEY = "sunoRunMode";
+
+/** 投入方式の識別子 (#1586)。RUN_MODES の key と 1:1 で対応する。 */
+export type RunModeId = "serial" | "queue";
+
 /**
- * 連続実行のペーシング設定。実行モード選択は廃止し、Balanced 相当の値だけを使う (#1573)。
+ * 連続実行のペーシング設定。速度プリセット選択は廃止し、Balanced 相当の値だけを使う (#1573)。
  *   - interCreateDelayMs: Create 投入間の基準待機。jitterMs で散らして bot 判定の固定間隔シグナルを消す
  *   - jitterMs: 待機の振れ幅 (±)
  *   - maxInflightRequests: 同時に積む生成リクエスト上限
@@ -118,6 +124,24 @@ export const BALANCED_RUN_PACING: RunPacing = {
   maxInjectRetry: 1,
   injectAckTimeoutMs: 45000,
   maxEntryRetry: 2,
+};
+
+export interface RunMode {
+  label: string;
+  riskNote: string;
+}
+
+export const RUN_MODES: Record<RunModeId, RunMode> = {
+  serial: {
+    label: "Serial",
+    riskNote: "1 entry ずつ生成完了を待つ安定重視の従来モード。",
+  },
+  queue: {
+    label: "Queue",
+    riskNote:
+      "投入 ACK 後に次 entry を先行投入し、最大 10 request まで Suno queue を使う。" +
+      "duration 不足 clip の自動再生成は行わず playlist から除外のみ。bridge の clip ID 観測が必須。",
+  },
 };
 
 /** Suno studio API のオリジン（#948、chrome-devtools 実機観測で確定）。
@@ -283,6 +307,8 @@ export const PHASE = {
   WAITING_SLOT: "waiting-slot",
   // captcha challenge の解消（自動 verify or 手動解決）待ち。即 fail-loud せず待機して自動続行する。非終了 phase。
   WAITING_CAPTCHA: "waiting-captcha",
+  // queue mode で Generate が ACK され、clip ID 観測まで完了した状態。生成完了ではないため DONE と分ける。
+  SUBMITTED: "submitted",
   DONE: "done",
   // entry 単位の失敗 (#948)。リトライ上限まで失敗した entry をスキップして次へ進むときに emit する。
   // 非終了 phase（run 全体は継続する）。失敗 index は snapshot の failedIndices に蓄積される。
@@ -356,8 +382,8 @@ export type ProgressPayload =
   | RetryProgressPayload
   | SkipProgressPayload;
 
-/** overlay の各パターン行の表示状態。failed はリトライ上限まで失敗しスキップされた entry (#948)。 */
-export type ItemState = "idle" | "active" | "done" | "failed";
+/** overlay の各パターン行の表示状態。submitted は queue mode の投入済み・生成未完了状態 (#1586)。 */
+export type ItemState = "idle" | "active" | "submitted" | "done" | "failed";
 
 /** content script が SSOT として保持する進捗スナップショット (#852)。
  * overlay を閉じても content が保持し、再 open 時に `queryProgress` で返す。 */

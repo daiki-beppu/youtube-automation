@@ -24,9 +24,12 @@ import {
   PROMPTS_ROUTE,
   QUEUE_ERROR_WAIT_MS,
   QUEUE_SLOT_WAIT_TIMEOUT_MS,
+  RUN_MODE_STORAGE_KEY,
+  RUN_MODES,
   SERVER_HOST_PERMISSIONS,
   STORAGE_KEY,
   type ObservedClip,
+  type RunModeId,
 } from "../../shared/constants";
 
 describe("shared/constants: サーバー互換の契約値", () => {
@@ -71,12 +74,13 @@ describe("shared/constants: サーバー互換の契約値", () => {
 });
 
 describe("shared/constants: 進捗フェーズ (PHASE)", () => {
-  it("Given PHASE When 全フェーズを読む Then 既存値に加え waiting-slot / adding-to-playlist / waiting-captcha / entry-failed / downloading を保持する (#816, #854, #948, #1215)", () => {
+  it("Given PHASE When 全フェーズを読む Then queue submitted を含む進捗 phase を保持する (#816, #854, #948, #1215, #1586)", () => {
     expect(PHASE).toEqual({
       INJECTING: "injecting",
       GENERATING: "generating",
       WAITING_SLOT: "waiting-slot",
       WAITING_CAPTCHA: "waiting-captcha",
+      SUBMITTED: "submitted",
       DONE: "done",
       ENTRY_FAILED: "entry-failed",
       DOWNLOADING: "downloading",
@@ -212,4 +216,24 @@ describe("shared/constants: Balanced 固定ペーシング (#1573)", () => {
   it("Given BALANCED_RUN_PACING When INTER_CREATE_DELAY_MS と比較 Then 旧 Fast 固定値ではない", () => {
     expect(BALANCED_RUN_PACING.interCreateDelayMs).not.toBe(INTER_CREATE_DELAY_MS);
   });
+});
+
+describe("shared/constants: 投入方式 run mode (#1586)", () => {
+  it("Given RUN_MODE_STORAGE_KEY When 読む Then chrome.storage.local の run mode key である", () => {
+    expect(RUN_MODE_STORAGE_KEY).toBe("sunoRunMode");
+  });
+
+  it("Given RUN_MODES When key を読む Then serial / queue の 2 mode を持つ", () => {
+    expect(Object.keys(RUN_MODES).sort()).toEqual(["queue", "serial"]);
+  });
+
+  it.each(["serial", "queue"] as const)(
+    "Given %s mode When label / riskNote を読む Then UI 表示用の非空文字列を持つ",
+    (id: RunModeId) => {
+      expect(typeof RUN_MODES[id].label).toBe("string");
+      expect(RUN_MODES[id].label.length).toBeGreaterThan(0);
+      expect(typeof RUN_MODES[id].riskNote).toBe("string");
+      expect(RUN_MODES[id].riskNote.length).toBeGreaterThan(0);
+    },
+  );
 });

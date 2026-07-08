@@ -1,9 +1,15 @@
 // lib/preset-state.ts の jitter 純関数回帰テスト。
-// 実行モード選択と preset 永続化は #1573 で廃止済み。
+// speed preset 永続化は #1573 で廃止済み。run mode の既定値だけ #1586 で保持する。
 import { describe, expect, it } from "vitest";
 
 import { BALANCED_RUN_PACING } from "../../shared/constants";
-import { applyJitter } from "../lib/preset-state";
+import { applyJitter, DEFAULT_RUN_MODE_ID } from "../lib/preset-state";
+
+describe("DEFAULT_RUN_MODE_ID: 既定の投入方式 (#1586)", () => {
+  it("Given 定数 When 読む Then serial である（既存の直列実行を既定として維持する）", () => {
+    expect(DEFAULT_RUN_MODE_ID).toBe("serial");
+  });
+});
 
 describe("applyJitter: Balanced 固定ペーシングの jitter 範囲", () => {
   it("Given random=()=>0 When BALANCED_RUN_PACING で算出 Then min = 3000", () => {

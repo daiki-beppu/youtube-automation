@@ -79,6 +79,29 @@ describe("createClipTracker: status ベースの in-flight 集計", () => {
     expect(tracker.hasObservedAnyTraffic()).toBe(true);
   });
 
+  it("Given ID 指定照会の応答に未知+終端 clip When applyRequestedStatuses Then 登録して pending 扱いを解消する (#1586)", () => {
+    // reload 後の resume では保存済み clip が照会時点で complete 済みのことが多い。
+    // passive 合流（applyFeedStatuses）と同じ「未知+終端は捨てる」規則だと
+    // getPendingIdsByIds が永遠に pending を返し、完了待ちが stall timeout まで空回りする。
+    const tracker = createClipTracker();
+    const previousClipIds = ["old-1", "old-2"];
+    expect(tracker.getPendingIdsByIds(previousClipIds)).toEqual(previousClipIds);
+
+    tracker.applyRequestedStatuses([
+      { id: "old-1", status: "complete", duration: 187.25 },
+      { id: "old-2", status: "streaming" }, // 未終端はそのまま pending に残る
+    ]);
+
+    expect(tracker.getPendingIdsByIds(previousClipIds)).toEqual(["old-2"]);
+    expect(tracker.getInFlightCount()).toBe(1); // 終端 clip は in-flight を膨らませない
+    expect(tracker.getDuration("old-1")).toBe(187.25);
+    expect(tracker.hasObservedAnyTraffic()).toBe(true);
+
+    tracker.applyRequestedStatuses([{ id: "old-2", status: "complete" }]);
+    expect(tracker.getPendingIdsByIds(previousClipIds)).toEqual([]);
+    expect(tracker.getInFlightCount()).toBe(0);
+  });
+
   it("Given 既知 clip の終端後 feed 観測 When status が再掲される Then 二重登録せず status を維持する", () => {
     const tracker = createClipTracker();
     tracker.registerSubmitted([{ id: "c1", status: "submitted" }]);

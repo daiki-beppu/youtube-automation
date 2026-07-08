@@ -17,6 +17,13 @@ export interface ClipTracker {
   registerSubmitted(clips: ObservedClip[]): void;
   /** feed 観測で status を更新する。未知の未終端 clip は passive 合流で登録する。 */
   applyFeedStatuses(clips: ObservedClip[]): void;
+  /**
+   * active feed poll（ID 指定照会, FEED_V3_POLL_RESPONSE）の応答を反映する。
+   * passive feed と違い、未知 clip でも終端 status を含めて登録する: reload 後の resume では
+   * 保存済み clip が照会時点で complete 済みのことが多く、終端を落とすと getPendingIdsByIds が
+   * 永遠に pending 扱いして完了待ちが stall するため（#1586）。
+   */
+  applyRequestedStatuses(clips: ObservedClip[]): void;
   /** 終端 status に達していない観測済み clip 数。 */
   getInFlightCount(): number;
   /** 未終端 clip の id 一覧（active feed poll の照会対象）。 */
@@ -102,6 +109,16 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
         if (statusById.has(clip.id) || !TERMINAL.has(clip.status)) {
           upsert(clip);
         }
+      }
+    },
+    applyRequestedStatuses(clips) {
+      observedFeed = true;
+      feedAt = now();
+      for (const clip of clips) {
+        recordDuration(clip);
+        // ID 指定照会の応答は終端 status も含めて登録する（interface コメント参照, #1586）。
+        // 終端 clip は in-flight / pending の各集計から自然に外れるため過大カウントにはならない。
+        upsert(clip);
       }
     },
     getInFlightCount() {

@@ -11,7 +11,7 @@ import type {
   PromptResponse,
   ServerInfo,
 } from "../../shared/api";
-import type { ProgressPayload, SnapshotPayload } from "../../shared/constants";
+import type { ProgressPayload, RunModeId, SnapshotPayload } from "../../shared/constants";
 import type { RunRange } from "./resume-state";
 
 /**
@@ -26,6 +26,8 @@ export interface RunPayload {
   durationFilter?: DurationFilter;
   range?: RunRange;
   collectionId: string;
+  /** 生成完了待ちの方式。serial は従来挙動、queue は ACK 後に次 entry を投入する。 */
+  runMode: RunModeId;
   /** 任意の部分実行対象の 0-based index 列。チェック選択や失敗分再実行で使う。指定時は range より優先。 */
   indices?: number[];
   /** 再開前の run で観測済みの playlist 対象 clip ID。 */

@@ -58,9 +58,13 @@ export function attachBridgeListener(tracker: ClipTracker): () => void {
     }
     if (data.type === BRIDGE_MSG.GENERATE_CLIPS) {
       tracker.registerSubmitted(data.clips);
-    } else if (data.type === BRIDGE_MSG.FEED_CLIPS || data.type === BRIDGE_MSG.FEED_V3_POLL_RESPONSE) {
-      // active poll の応答も観測の一種として tracker に合流させる（requestId の突合は poller 側）。
+    } else if (data.type === BRIDGE_MSG.FEED_CLIPS) {
       tracker.applyFeedStatuses(data.clips);
+    } else if (data.type === BRIDGE_MSG.FEED_V3_POLL_RESPONSE) {
+      // active poll（ID 指定照会）の応答は終端 status の未知 clip も登録する（requestId の突合は poller 側）。
+      // reload 後 resume の保存済み clip は照会時点で complete 済みのことが多く、passive 合流と同じ
+      // 「未知+終端は捨てる」規則だと getPendingIdsByIds が永遠に pending 扱いして完了待ちが stall する（#1586）。
+      tracker.applyRequestedStatuses(data.clips);
     }
   };
   window.addEventListener("message", handler);

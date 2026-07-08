@@ -14,8 +14,9 @@ import {
   resolvePromptCollectionId,
   visiblePromptCollections,
 } from "../../shared/api";
-import { CLIPS_PER_REQUEST, type ItemState, type LocalServerSource } from "../../shared/constants";
+import { CLIPS_PER_REQUEST, type ItemState, type LocalServerSource, type RunModeId } from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
+import { DEFAULT_RUN_MODE_ID, readRunModeId, writeRunModeId } from "../lib/preset-state";
 import {
   readResumeState,
   resolvePlaylistExpectedClipCountForResume,
@@ -52,6 +53,8 @@ interface RunnerState {
   isRunning: boolean;
   // collection 選択時の playlist 名 (#854)。display only。
   playlistName: string | undefined;
+  runModeId: RunModeId;
+  setRunMode: (id: RunModeId) => void;
   // 再開バナー (#872)。chrome.storage / content snapshot いずれか有効なソース、無ければ null。
   resumeBanner: ResumeBanner | null;
   acceptResume: () => void;
@@ -119,6 +122,8 @@ export function useSunoRunner(): RunnerState {
   const [restoredPlaylistExpectedClipCount, setRestoredPlaylistExpectedClipCount] = useState<number | undefined>(
     undefined,
   );
+  // 投入方式 (#1586)。マウント時に storage から復元し、選択時に永続化する。
+  const [runModeId, setRunModeId] = useState<RunModeId>(DEFAULT_RUN_MODE_ID);
   // chrome.storage から読んだ前回の ERROR 停止 state (#872)。表示可否は selectedCollectionId と時刻で判定する。
   const [persistedResume, setPersistedResume] = useState<ResumeState | null>(null);
   // resume state を読んだ popup 起動時刻 (#872)。stale 判定の基準 now をここで一度だけ確定し、
@@ -266,6 +271,19 @@ export function useSunoRunner(): RunnerState {
     return durationFilter;
   }, [persistedResume, selectedCollectionId, resumeCheckedAt, durationFilter]);
 
+  // 中断した run の投入方式 (#1586)。再開は popup の現在選択ではなく元 run のモードで行う。
+  // 旧 state / snapshot 由来バナーには無いため undefined（run 側で現在選択へフォールバック）。
+  const runModeForResume = useMemo<RunModeId | undefined>(() => {
+    if (
+      resumeCheckedAt !== null &&
+      persistedResume &&
+      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+    ) {
+      return persistedResume.runMode;
+    }
+    return undefined;
+  }, [persistedResume, selectedCollectionId, resumeCheckedAt]);
+
   const playlistExpectedClipCountForResume = useMemo<number | undefined>(() => {
     if (
       resumeCheckedAt !== null &&
@@ -312,6 +330,21 @@ export function useSunoRunner(): RunnerState {
       setPersistedResume(state);
       setResumeCheckedAt(Date.now());
     });
+  }, []);
+
+  useEffect(() => {
+    // 読込失敗（拡張更新直後の context invalidated 等）は既定 serial のまま続行する。
+    // unhandled rejection にしない（UI は既定値表示と一致しており実行payload とも整合する）。
+    void readRunModeId()
+      .then(setRunModeId)
+      .catch((err) => console.warn("[suno-helper] run mode の読込に失敗しました（既定 serial を使用）:", err));
+  }, []);
+
+  const setRunMode = useCallback((id: RunModeId) => {
+    setRunModeId(id);
+    void writeRunModeId(id).catch((err) =>
+      console.warn("[suno-helper] run mode の保存に失敗しました（次回 popup では前回値に戻ります）:", err),
+    );
   }, []);
 
   const dismissResume = useCallback(() => {
@@ -512,6 +545,7 @@ export function useSunoRunner(): RunnerState {
             durationFilter,
             range,
             collectionId: selectedCollectionId,
+            runMode: runModeId,
             overrides,
           }),
         );
@@ -524,7 +558,7 @@ export function useSunoRunner(): RunnerState {
         report(formatRunError(message), true);
       }
     },
-    [isRunning, entries, durationFilter, playlistName, selectedCollectionId, report],
+    [isRunning, entries, durationFilter, playlistName, selectedCollectionId, runModeId, report],
   );
 
   // playlist 追加のみ再実行。entries 不要のため retryPlaylist 専用メッセージを送る。
@@ -602,13 +636,14 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     setResumeDismissed(true);
-    void run(
-      buildResumeRunOverrides(resumeBanner, {
+    void run({
+      ...buildResumeRunOverrides(resumeBanner, {
         submittedClipIds: submittedClipIdsForResume,
         submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,
         playlistExpectedClipCount: playlistExpectedClipCountForResume,
       }),
-    );
+      runMode: runModeForResume,
+    });
   }, [
     resumeBanner,
     retryPlaylist,
@@ -618,6 +653,7 @@ export function useSunoRunner(): RunnerState {
     submittedClipIdsForResume,
     submittedClipIdsAreDurationFilteredForResume,
     playlistExpectedClipCountForResume,
+    runModeForResume,
   ]);
 
   // ダウンロードのみ再実行 (#1251)。clip を再選択 → Download all を実行する。
@@ -733,19 +769,21 @@ export function useSunoRunner(): RunnerState {
     }
     setResumeDismissed(true);
     setRestoredFailedIndices(undefined);
-    void run(
-      buildFailedEntriesRunOverrides(failedEntries, {
+    void run({
+      ...buildFailedEntriesRunOverrides(failedEntries, {
         submittedClipIds: submittedClipIdsForResume,
         submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,
         playlistExpectedClipCount: playlistExpectedClipCountForResume,
       }),
-    );
+      runMode: runModeForResume,
+    });
   }, [
     failedEntries,
     run,
     submittedClipIdsForResume,
     submittedClipIdsAreDurationFilteredForResume,
     playlistExpectedClipCountForResume,
+    runModeForResume,
   ]);
 
   const stop = useCallback(async () => {
@@ -774,6 +812,8 @@ export function useSunoRunner(): RunnerState {
     canRun: entries.length > 0 && !isRunning,
     isRunning,
     playlistName,
+    runModeId,
+    setRunMode,
     resumeBanner,
     acceptResume,
     dismissResume,
