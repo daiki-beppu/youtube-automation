@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(skills)`: 音楽制作系 7 スキル（suno / suno-lyric / suno-helper / masterup / lyria / videoup / loop-video）の整合性監査で検出した記述ドリフトを修正（#1432）。`suno/SKILL.md` の slug 自動実行 argv 例に残っていた `["uv", "run", "bunx tayk video-analyze", ...]` の混在表記を `["bunx", "tayk", "video-analyze", ...]` に統一、`suno/references/suno-examples.md` から実装に存在しない設定キー `banned_adjective_free_instruments` への言及を削除、`loop-video/SKILL.md` の `generate_videos.sh` バージョン表記（v11.0 → v14）とループ背景の正規化 CRF 表記（20 → 22）を現行実装に合わせた
 - `fix(distrokid-helper)`: `ext-v0.2.3` リリース前に DistroKid Helper の manifest / popup 表示名へ残っていた `(TEST)` 接尾辞を外し、配布 zip が本番名 `DistroKid Helper` として表示されるようにした。
 
 ## [5.5.16] - 2026-07-06
