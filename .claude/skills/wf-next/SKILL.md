@@ -74,7 +74,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
   bunx tayk collection-preflight <collection-dir-name>
   ```
 
-  `[NG]`（`01-master/` 等の欠落）が報告されたら `--fix` で補完してから続行する。欠落したまま後工程へ進むと `/masterup` / `/videoup` がマスター音源の置き場を見失う
+  `[NG]`（`01-master/` 等の欠落）が報告されたら `bunx tayk collection-preflight <collection-dir-name> --fix` で補完してから続行する。欠落したまま後工程へ進むと `/masterup` / `/videoup` がマスター音源の置き場を見失う
 
 ### 2. フェーズ別処理
 

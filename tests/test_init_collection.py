@@ -57,6 +57,7 @@ class TestScaffold:
             err = capsys.readouterr().err
             assert "既に存在します" in err
             assert "bunx tayk collection-preflight" in err
+            assert "uv run yt-collection-preflight" not in err
         finally:
             import shutil
 
@@ -72,6 +73,7 @@ class TestScaffold:
                 _run(monkeypatch, ["Quote Scaffold", "quote scaffold"])
             err = capsys.readouterr().err
             assert "bunx tayk collection-preflight" in err
+            assert "uv run yt-collection-preflight" not in err
             assert "quote scaffold-collection'" in err
         finally:
             import shutil
