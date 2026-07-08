@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tomllib
+import unicodedata
 from collections.abc import Iterator
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import asdict, dataclass
@@ -84,6 +85,7 @@ UNSUPPORTED_VIDEO_ANALYZE_MODELS = {
 }
 
 TTP_VIDEO_ANALYZE_TOP_N = 5
+MAX_DISPLAY_VALUE_LEN = 120
 
 
 @dataclass
@@ -124,6 +126,25 @@ def _run(cmd: list[str], timeout: int = 30) -> tuple[int, str, str]:
         return 127, "", f"command not found: {cmd[0]}"
     except subprocess.TimeoutExpired:
         return 124, "", f"timeout: {' '.join(cmd)}"
+
+
+def _format_external_display_value(value: object) -> str:
+    text = "".join(_escape_display_character(char) for char in str(value))
+    if len(text) <= MAX_DISPLAY_VALUE_LEN:
+        return text
+    return text[: MAX_DISPLAY_VALUE_LEN - 3] + "..."
+
+
+def _escape_display_character(char: str) -> str:
+    if char == "\n":
+        return "\\n"
+    if char == "\r":
+        return "\\r"
+    if char == "\t":
+        return "\\t"
+    if unicodedata.category(char)[0] == "C":
+        return char.encode("unicode_escape").decode("ascii")
+    return char
 
 
 def _read_env_file(env_path: Path) -> dict[str, str]:
@@ -984,16 +1005,17 @@ def check_playlist_config(channel_dir: Path) -> CheckResult:
     invalid_entries: list[str] = []
     missing_playlist_ids: list[str] = []
     for key, value in playlists.items():
+        display_key = _format_external_display_value(key)
         if isinstance(value, str):
             if not value.strip():
-                missing_playlist_ids.append(key)
+                missing_playlist_ids.append(display_key)
             continue
         if isinstance(value, dict):
             playlist_id = value.get("playlist_id")
             if not isinstance(playlist_id, str) or not playlist_id.strip():
-                missing_playlist_ids.append(key)
+                missing_playlist_ids.append(display_key)
             continue
-        invalid_entries.append(f"{key} ({type(value).__name__})")
+        invalid_entries.append(f"{display_key} ({type(value).__name__})")
 
     if invalid_entries:
         return CheckResult(
@@ -1040,7 +1062,7 @@ def check_playlist_create_dry_run(channel_dir: Path) -> CheckResult:
         try:
             manager = PlaylistManager()
             missing_titles = [
-                key
+                _format_external_display_value(key)
                 for key, playlist in manager.config.playlists.items.items()
                 if not playlist.get("playlist_id")
                 and (not isinstance(playlist.get("title"), str) or not playlist["title"].strip())

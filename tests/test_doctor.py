@@ -901,6 +901,22 @@ class TestCheckPlaylistConfig:
         assert r.next_action["kind"] == "human"
         assert "yt-playlist-manager --init --dry-run" in r.next_action["instructions"]
 
+    def test_missing_playlist_id_escapes_control_characters_in_playlist_key(self, tmp_path):
+        playlist_key = "main\x1b]52;c;QUJD\x07"
+        _write_playlists_config(tmp_path, {playlist_key: {"playlist_id": "", "title": "Main"}})
+
+        r = doctor.check_playlist_config(tmp_path)
+        output = doctor.render_table([r], doctor.summarize([r]), tmp_path)
+
+        assert r.status == "warn"
+        assert "\x1b" not in r.message
+        assert "\x07" not in r.message
+        assert "\\x1b" in r.message
+        assert "\\x07" in r.message
+        assert playlist_key not in output
+        assert "\\x1b" in output
+        assert "\\x07" in output
+
     def test_invalid_playlist_entry_shape_is_fail(self, tmp_path):
         _write_playlists_config(tmp_path, {"main": ["PL_MAIN"]})
 
@@ -909,6 +925,19 @@ class TestCheckPlaylistConfig:
         assert r.status == "fail"
         assert "string または object" in r.message
         assert r.next_action is not None
+
+    def test_invalid_playlist_entry_shape_escapes_control_characters_in_playlist_key(self, tmp_path):
+        playlist_key = "bad\x1b[31m"
+        _write_playlists_config(tmp_path, {playlist_key: ["PL_MAIN"]})
+
+        r = doctor.check_playlist_config(tmp_path)
+        output = doctor.render_table([r], doctor.summarize([r]), tmp_path)
+
+        assert r.status == "fail"
+        assert "\x1b" not in r.message
+        assert "\\x1b" in r.message
+        assert playlist_key not in output
+        assert "\\x1b" in output
 
 
 class TestCheckPlaylistCreateDryRun:
@@ -960,6 +989,28 @@ class TestCheckPlaylistCreateDryRun:
         assert r.next_action is not None
         assert r.next_action["kind"] == "human"
         assert "title を追加" in r.next_action["instructions"]
+
+    def test_dry_run_missing_title_escapes_control_characters_in_playlist_key(self, tmp_path, monkeypatch):
+        playlist_key = "main\x1b]52;c;QUJD\x07"
+        _write_minimal_config(tmp_path)
+        _write_playlists_config(tmp_path, {playlist_key: {"playlist_id": ""}})
+
+        def fail_if_youtube_requested():
+            raise AssertionError("YouTube API should not be requested when playlist title is missing")
+
+        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.get_youtube", fail_if_youtube_requested)
+
+        r = doctor.check_playlist_create_dry_run(tmp_path)
+        output = doctor.render_table([r], doctor.summarize([r]), tmp_path)
+
+        assert r.status == "fail"
+        assert "\x1b" not in r.message
+        assert "\x07" not in r.message
+        assert "\\x1b" in r.message
+        assert "\\x07" in r.message
+        assert playlist_key not in output
+        assert "\\x1b" in output
+        assert "\\x07" in output
 
     def test_dry_run_config_error_is_fail_with_human_action(self, tmp_path):
         r = doctor.check_playlist_create_dry_run(tmp_path)
