@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(skills)`: `video-analyze/SKILL.md` の「呼び出し側スキル」から、現行 `/lyria` に実装が存在しない `bgm_arc` 平均読み込み・`composition.json` フェーズ境界・`phase.at_min` の記述（DJ Engine 時代の phase 設計の残骸）を削除した（#1651）。あわせて `.claude/CLAUDE.template.md` の音源生成表・音楽エンジン比較表の `/lyria` 表記を現行実装（プロンプト + API 入力パラメータ設計）に合わせて修正
 - `fix(suno-helper)`: queue 実行の resume payload 境界で `submittedClipIds` / `playlistExpectedClipCount` を fail-loud に検証し、未完了 clip を保持した再開時に不正な raw payload が playlist 完了待ちへ流れ込まないようにした（#1586）。
 - `fix(suno-helper)`: SKILL.md の進捗 phase 表に queue mode の `submitted` を追記（#1586）。shared/constants の PHASE と skill doc の照合テスト `test_suno_helper_phase_table_matches_shared_phase_constants` が新 phase 追加に追従しておらず fail していた
 - `fix(extensions)`: suno-helper の Playwright e2e が `SyntaxError: Named export ... not found（CommonJS module）` で全滅していた CI 失敗を修正（#1586 ブランチで顕在化）。根本原因は #1629（ADR-0021）の root `package.json`（`"type": "module"`）削除で `extensions/shared/` が Node ESM loader に CJS スコープ判定されるようになったこと。`extensions/shared/package.json`（`type: module`）を新設してスコープを復元した。あわせて #1586 が e2e に追加していた queue runner / completion gate の純ロジックテスト 3 件（page 不使用）を `tests/queue-runner.test.ts`（vitest）へ移設し、e2e は実ブラウザ layout を要する DOM スモークに限定した
