@@ -41,6 +41,7 @@ build/
 
 # Node / extensions (WXT)
 node_modules/
+coverage/
 extensions/*/dist/
 extensions/*/.wxt/
 extensions/*/.output/
@@ -56,11 +57,3 @@ terraform.tfvars
 
 # Bench results（perf #131 計測フェーズ）
 bench/results/
-
-# Node / Bun (TS rewrite, ADR 0001)
-node_modules/
-bun.lockb
-.bun/
-coverage/
-packages/*/dist/
-*.tsbuildinfo
