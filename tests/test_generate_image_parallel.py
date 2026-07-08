@@ -78,9 +78,9 @@ class TestExpandThumbnailPromptClauses:
             }
         }
 
-        prompt = expand_thumbnail_prompt_clauses("TTP reference. ${typography_clause}", skill_cfg)
+        prompt = expand_thumbnail_prompt_clauses("Text-included thumbnail prompt. ${typography_clause}", skill_cfg)
 
-        assert prompt == "TTP reference. Render title in a consistent classic serif typeface."
+        assert prompt == "Text-included thumbnail prompt. Render title in a consistent classic serif typeface."
 
     def test_leaves_prompt_without_placeholder_unchanged(self) -> None:
         assert expand_thumbnail_prompt_clauses("No typography placeholder.", {}) == "No typography placeholder."
@@ -133,7 +133,7 @@ class TestExpandThumbnailPromptClauses:
     )
     def test_rejects_malformed_typography_config(self, skill_cfg: dict, message: str) -> None:
         with pytest.raises(ConfigError, match=message):
-            expand_thumbnail_prompt_clauses("TTP reference. ${typography_clause}", skill_cfg)
+            expand_thumbnail_prompt_clauses("Text-included thumbnail prompt. ${typography_clause}", skill_cfg)
 
 
 class TestPlanOutputPaths:
@@ -507,12 +507,16 @@ class TestGenerateImageCLIReferenceContract:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        ref = tmp_path / "ref.jpg"
+        ref.write_bytes(b"fake image")
         provider = _FakeProvider()
         argv = [
             "--prompt",
-            "TTP reference. ${typography_clause}",
+            "Text-included thumbnail prompt. ${typography_clause}",
             "--output",
             str(tmp_path / "thumbnail-v1.jpg"),
+            "--reference",
+            str(ref),
             "--max-attempts",
             "1",
             "-y",
@@ -525,7 +529,10 @@ class TestGenerateImageCLIReferenceContract:
         assert exc_info.value.code == 0
 
         assert len(provider.requests) == 1
-        assert provider.requests[0].prompt == "TTP reference. Render title in a consistent classic serif typeface."
+        assert (
+            provider.requests[0].prompt
+            == "Text-included thumbnail prompt. Render title in a consistent classic serif typeface."
+        )
 
     @pytest.mark.parametrize(
         "skill_cfg, message",
@@ -569,7 +576,7 @@ class TestGenerateImageCLIReferenceContract:
         provider = _FakeProvider()
         argv = [
             "--prompt",
-            "TTP reference. ${typography_clause}",
+            "Text-included thumbnail prompt. ${typography_clause}",
             "--output",
             str(tmp_path / "thumbnail-v1.jpg"),
             "--max-attempts",
@@ -729,12 +736,77 @@ class TestGenerateImageCLIReferenceContract:
         assert "--reference" in captured.out
         assert "上書きしますか" not in captured.out
 
-    def test_generic_single_step_allows_no_reference_without_ttp_strict(
+    def test_generic_single_step_rejects_no_reference_without_ttp_strict(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        provider = _FakeProvider()
+        output = tmp_path / "short.png"
+        argv = [
+            "--prompt",
+            "prompt",
+            "--output",
+            str(output),
+            "--max-attempts",
+            "1",
+            "-y",
+        ]
+
+        _patch_generate_image_cli(monkeypatch, argv, provider=provider)
+
+        with pytest.raises(SystemExit) as exc_info:
+            generate_image_main()
+        assert exc_info.value.code == 1
+        assert provider.requests == []
+        assert not output.exists()
+        captured = capsys.readouterr()
+        assert "single_step モードでは --reference の指定が必須" in captured.out
+        assert "モード:" not in captured.out
+
+    def test_single_step_cli_allows_reference_without_ttp_strict(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ref = tmp_path / "ref.jpg"
+        ref.write_bytes(b"fake image")
+        provider = _FakeProvider()
+        argv = [
+            "--prompt",
+            "prompt",
+            "--output",
+            str(tmp_path / "short.png"),
+            "--reference",
+            str(ref),
+            "--max-attempts",
+            "1",
+            "-y",
+        ]
+
+        _patch_generate_image_cli(monkeypatch, argv, provider=provider)
+
+        with pytest.raises(SystemExit) as exc_info:
+            generate_image_main()
+        assert exc_info.value.code == 0
+        assert len(provider.requests) == 1
+        assert provider.requests[0].references == [ref]
+
+    def test_two_phase_cli_allows_no_reference(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         provider = _FakeProvider()
+        skill_cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "two_phase",
+                    "single_step": {"max_attempts": 1, "rotate": True},
+                }
+            }
+        }
         argv = [
             "--prompt",
             "prompt",
@@ -745,7 +817,7 @@ class TestGenerateImageCLIReferenceContract:
             "-y",
         ]
 
-        _patch_generate_image_cli(monkeypatch, argv, provider=provider)
+        _patch_generate_image_cli(monkeypatch, argv, provider=provider, skill_cfg_override=skill_cfg)
 
         with pytest.raises(SystemExit) as exc_info:
             generate_image_main()

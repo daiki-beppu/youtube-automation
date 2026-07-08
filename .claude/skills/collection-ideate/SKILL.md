@@ -193,7 +193,7 @@ else:
 
 例（`cost_per_image_usd` が設定済み・parallel・`candidate_count=3` の場合）: `3 枚 × $0.101 = $0.303 (parallel / gemini-3.1-flash-image-preview / 2K)`
 
-**ユーザーが拒否した場合** → プレビュー画像生成を完全スキップしテキストのみで提示（企画参照画像生成はブロッキングにしない）。`planning-preview.png` は未生成のまま Next Step に進み、後段の `/thumbnail <theme>` がベンチマーク参照からテキスト付き `thumbnail.jpg` を生成し、承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成する（Next Step の「コスト拒否 / 生成失敗で企画参照画像が無い場合」参照）。
+**ユーザーが拒否した場合** → プレビュー画像生成を完全スキップしテキストのみで提示（企画参照画像生成はブロッキングにしない）。`planning-preview.png` は未生成のまま Next Step に進み、後段の `/thumbnail <theme>` がベンチマーク参照から textless `main.png/jpg` を先に生成・承認し、承認済み背景からテキスト付き `thumbnail.jpg` を生成する（Next Step の「コスト拒否 / 生成失敗で企画参照画像が無い場合」参照）。
 
 **4-3: セッションディレクトリ作成**
 
@@ -280,7 +280,7 @@ LABELS=(a b c d e f g h)
 PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
-  # 参照画像を winning template として扱い、{title} だけを差し替える短い TTP 上位互換プロンプトにする。
+  # 参照画像を winning template として扱い、textless 背景を先に固める短い TTP 背景先行プロンプトにする。
   # 候補ごとに別参照画像 1 枚だけを渡す。参照不足なら生成せず設定を直す。
   if [ "${#REF_PATHS[@]}" -lt "$CANDIDATE_COUNT" ]; then
     echo "ERROR: codex single_step preview requires at least ${CANDIDATE_COUNT} unique reference images" >&2
@@ -377,7 +377,7 @@ parallel モードでは Next Step で `yt-stock-archive` による不採用 (`c
 PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
-  # 参照画像を winning template として扱い、{title} だけを差し替える短い TTP 上位互換プロンプトにする。
+  # 参照画像を winning template として扱い、textless 背景を先に固める短い TTP 背景先行プロンプトにする。
   # 選択した企画と同じ index の参照画像 1 枚だけを使う（a=0, b=1, c=2）。
   REF_INDEX="<選択された企画の0-based index>"
   if [ "${#REF_PATHS[@]}" -le "$REF_INDEX" ]; then
@@ -604,7 +604,7 @@ analytics mode / benchmark fallback mode ではベンチマークデータを分
 
 企画選択時にタイトルも確定する（`workflow-state.json` の `planning.final_title` に記録）。
 
-企画確定後、選択した企画のプレビュー画像は企画参照として保存し、**`main.png` にはコピーしない**。`main.png/jpg` は `/thumbnail` で承認済みテキスト付き `thumbnail.jpg` から再生成する textless 動画背景として確定する。`thumbnail_mode` と「画像が生成されたか」によって手順が分岐するため、ケース別に示す。
+企画確定後、選択した企画のプレビュー画像は企画参照として保存し、**`main.png` にはコピーしない**。`main.png/jpg` は `/thumbnail` で文字入りサムネより先に生成・承認する textless 動画背景として確定する。`thumbnail_mode` と「画像が生成されたか」によって手順が分岐するため、ケース別に示す。
 
 ### parallel モード（デフォルト）
 
@@ -661,7 +661,7 @@ rm -rf collections/planning/_plan-previews/<session-dir>/
 [ -d collections/planning/_plan-previews/<session-dir> ] && rm -rf collections/planning/_plan-previews/<session-dir>/
 ```
 
-このケースでも下流の `/thumbnail <theme>` がベンチマーク参照からテキスト付き `thumbnail.jpg` を生成し、承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成する流れに合流する（下記「企画選択後」参照）。
+このケースでも下流の `/thumbnail <theme>` がベンチマーク参照から textless `main.png/jpg` を先に生成・承認し、承認済み背景からテキスト付き `thumbnail.jpg` を生成する流れに合流する（下記「企画選択後」参照）。
 
 > **定期クリーンアップ**: 放棄されたセッションのディレクトリが残る場合、7 日以上前のものは手動削除可:
 > `find collections/planning/_plan-previews/ -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +`
@@ -669,5 +669,5 @@ rm -rf collections/planning/_plan-previews/<session-dir>/
 > stock 側の保守は `uv run yt-stock-prune --dry-run` で候補確認 →（必要なら）本実行。
 
 企画選択後:
-→ `/thumbnail <theme>` で、テキスト付き `thumbnail.jpg` と textless `main.png/jpg` を別成果物として確定する。企画プレビューは参照素材であり、`main.png` として動画背景に流用しない
+→ `/thumbnail <theme>` で、textless `main.png/jpg` を先に確定し、そこからテキスト付き `thumbnail.jpg` を別成果物として確定する。企画プレビューは参照素材であり、`main.png` として動画背景に流用しない
 → サムネイル確定後に `/suno <theme>` で SunoAI 音楽プロンプト生成（テーマ確定後に初めて実行）
