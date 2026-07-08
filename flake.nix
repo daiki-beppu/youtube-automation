@@ -24,7 +24,6 @@
             uv
             ffmpeg
             lefthook
-            bun
           ];
 
           # ランタイム供給のみ。秘密は youtube_automation.utils.secrets から

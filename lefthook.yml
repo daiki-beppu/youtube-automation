@@ -6,7 +6,6 @@
 #
 # - pre-commit:
 #   - Python: ruff の lint / format チェック
-#   - TypeScript: oxlint / oxfmt --check / tsc -b --noEmit (ADR 0001)
 # - pre-push:   CHANGELOG ゲート（CI の changelog ジョブをローカル再現）、
 #               テスト差分警告、新規 Any / any 型注釈ゲート
 #
@@ -27,40 +26,6 @@ pre-commit:
     ruff-format:
       glob: "*.py"
       run: uv run ruff format --check {staged_files}
-    # oxlint / oxfmt / typecheck は root ツールチェーン（ADR 0001）の対象のみに絞る。
-    # oxlint.config.ts / oxfmt.config.ts の ignorePatterns 対象（examples/ docs/ config/ など）
-    # のみが staged だと、両ツールが「対象ファイルなし」を non-zero exit で返し commit が
-    # 必ず落ちる (#1428 #1452)。--no-error-on-unmatched-pattern で対象 0 件を成功として扱う
-    # （実際の lint / format 違反は従来どおり検知される）。ignorePatterns のパスを exclude に
-    # 列挙する二重管理はしない。
-    # extensions/ は自前の ESLint / Prettier / tsc 管理（CI: extensions.yml）のため exclude で
-    # staged files から外し、extensions のみの変更ではコマンド起動ごと skip する。
-    oxlint:
-      glob: "*.{ts,tsx,js,jsx,mjs,cjs}"
-      exclude:
-        - "extensions/**"
-      run: bunx oxlint --no-error-on-unmatched-pattern {staged_files}
-    oxfmt:
-      glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc}"
-      # .claude/**（skill references の JSON 等）は oxfmt.config.ts の ignorePatterns で
-      # 除外済みのため、staged files が .claude のみでも #1428 と同型の「対象ファイルなし」
-      # で commit が落ちる。exclude を config 側の除外と揃える
-      exclude:
-        - "extensions/**"
-        - "src/youtube_automation/**"
-        - "tests/**"
-        - "examples/**"
-        - "auth/**"
-        - "poc/**"
-        - ".claude/**"
-        - ".takt/**"
-      run: bunx oxfmt --check --no-error-on-unmatched-pattern {staged_files}
-    typecheck:
-      # root の tsc -b は extensions を含まないため、extensions のみの変更では起動しない
-      glob: "*.{ts,tsx}"
-      exclude:
-        - "extensions/**"
-      run: bun run typecheck
 
 pre-push:
   commands:
