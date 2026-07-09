@@ -23,14 +23,14 @@ import re
 import sys
 from pathlib import Path
 
-from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E402
-from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
-from youtube_automation.utils.config.config import ChannelConfig  # noqa: E402
-from youtube_automation.utils.descriptions_md import (  # noqa: E402
+from youtube_automation.utils.collection_paths import CollectionPaths
+from youtube_automation.utils.config import channel_dir, load_config
+from youtube_automation.utils.config.config import ChannelConfig
+from youtube_automation.utils.descriptions_md import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
 )
-from youtube_automation.utils.preflight_checks import (  # noqa: E402
+from youtube_automation.utils.preflight_checks import (
     check_chapter_count,
     check_chapter_variation_suffix,
     check_duration,
@@ -40,8 +40,8 @@ from youtube_automation.utils.preflight_checks import (  # noqa: E402
     extract_descriptions_md_tags,
     requires_scene_phrases,
 )
-from youtube_automation.utils.probe import probe_duration  # noqa: E402
-from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
+from youtube_automation.utils.probe import probe_duration
+from youtube_automation.utils.skill_config import load_skill_config
 
 COLLECTIONS_DIR = channel_dir() / "collections" / "live"
 
@@ -170,7 +170,7 @@ def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
     resp = yt.videos().list(id=ids_csv, part="snippet,localizations").execute()
     by_id = {it["id"]: it for it in resp.get("items", [])}
 
-    for vid, name in video_ids.items():
+    for vid, _name in video_ids.items():
         item = by_id.get(vid)
         if not item:
             issues[vid].append("not found on YouTube")

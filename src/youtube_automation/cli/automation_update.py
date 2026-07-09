@@ -54,7 +54,7 @@ def _resolve_repo_root(target: str | None) -> Path:
         if not (path / "pyproject.toml").is_file():
             raise ConfigError(f"--target で指定されたディレクトリに pyproject.toml がありません: {path}")
         return path
-    for parent in [Path.cwd()] + list(Path.cwd().parents):
+    for parent in [Path.cwd(), *list(Path.cwd().parents)]:
         if (parent / "pyproject.toml").is_file():
             return parent
     raise ConfigError(
@@ -66,7 +66,7 @@ def _load_pyproject(path: Path) -> dict:
     try:
         return tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as e:
-        raise ConfigError(f"pyproject.toml を読み込めません: {path}: {e}")
+        raise ConfigError(f"pyproject.toml を読み込めません: {path}: {e}") from e
 
 
 def _classify_repo(pyproject: dict) -> str:
@@ -151,7 +151,7 @@ def _git_status_porcelain(root: Path) -> str:
             check=False,
         )
     except OSError as e:
-        raise _StepFailed(f"git status を起動できません: {e}")
+        raise _StepFailed(f"git status を起動できません: {e}") from e
     if proc.returncode != 0:
         raise _StepFailed(f"git status に失敗しました: {proc.stderr.strip()}")
     return proc.stdout.strip()
@@ -161,7 +161,7 @@ def _run_command(cmd: list[str], cwd: Path) -> int:
     try:
         return subprocess.run(cmd, cwd=cwd, check=False).returncode
     except OSError as e:
-        raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}")
+        raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}") from e
 
 
 def _skills_diff_has_changes(root: Path) -> bool:
@@ -175,7 +175,7 @@ def _skills_diff_has_changes(root: Path) -> bool:
             check=False,
         )
     except OSError as e:
-        raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}")
+        raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}") from e
     output = "\n".join(part for part in [proc.stdout, proc.stderr] if part)
     local_fix_markers = (
         "内容が異なる",

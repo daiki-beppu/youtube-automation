@@ -71,7 +71,7 @@ def _patch_lyria_generate(monkeypatch, *, payload: bytes | None = b"FAKE_MP3", c
     """`lyria_client.generate_music` を差し替え。call_log があれば各呼び出しの kwargs を記録する。"""
     log = call_log if call_log is not None else []
 
-    def fake_generate(prompt, model, **kwargs):  # noqa: ARG001
+    def fake_generate(prompt, model, **kwargs):
         log.append({"prompt": prompt, "model": model, **kwargs})
         return payload
 
@@ -101,7 +101,7 @@ def _patch_skill_configs(monkeypatch, *, lyria: dict | None = None, masterup: di
     lyria_cfg = lyria if lyria is not None else {"model": "lyria-3-pro-preview", "duration_padding_min": 3}
     masterup_cfg = masterup if masterup is not None else {"audio": {"crossfade_duration": 1.0, "bitrate": "192k"}}
 
-    def fake_load(skill, *, use_cache=True):  # noqa: ARG001
+    def fake_load(skill, *, use_cache=True):
         if skill == "lyria":
             return lyria_cfg
         if skill == "masterup":
@@ -230,7 +230,7 @@ class TestGenerateSegments:
         responses = iter([None, b"OK"])
         call_count = {"n": 0}
 
-        def fake_generate(*args, **kwargs):  # noqa: ARG001
+        def fake_generate(*args, **kwargs):
             call_count["n"] += 1
             return next(responses)
 

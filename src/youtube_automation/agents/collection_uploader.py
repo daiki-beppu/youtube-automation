@@ -26,7 +26,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-import schedule  # noqa: E402
+import schedule
 
 logger = logging.getLogger(__name__)
 
@@ -62,18 +62,18 @@ from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 # 既存テスト（``patch("youtube_automation.agents.collection_uploader.PlaylistManager")`` 等）に対応するため、
 # PlaylistManager / load_config / YouTubeAutoUploader 等もこの位置で import している。
 __all__ = [
-    "CollectionUploader",
-    "PlaylistManager",
-    "YouTubeAutoUploader",
-    "UPLOAD_SOURCE_EXISTING",
     "ACTION_COMPLETE_COLLECTION_DEDUP_SKIPPED",
     "ACTION_COMPLETE_COLLECTION_UPLOADED",
     "TRACKING_STATUS_COMPLETED",
+    "UPLOAD_SOURCE_EXISTING",
     "WORKFLOW_PHASE_COMPLETE",
     "WORKFLOW_STAGE_LIVE",
+    "CollectionUploader",
+    "PlaylistManager",
+    "YouTubeAutoUploader",
+    "_scheduling_enabled",
     "load_config",
     "main",
-    "_scheduling_enabled",
 ]
 
 
@@ -95,7 +95,7 @@ class CollectionUploader(
     - CC 実行ループ           : ``CompleteCollectionExecutorMixin``
     """
 
-    def __init__(self, collections_root: str = None, config_path: str = None):
+    def __init__(self, collections_root: str | None = None, config_path: str | None = None):
         if collections_root is None:
             collections_root = channel_dir() / "collections"
 
@@ -158,7 +158,7 @@ class CollectionUploader(
         collections.sort(key=lambda x: x.name)
         return collections
 
-    def _find_collection(self, collection_name: str = None) -> Path | None:
+    def _find_collection(self, collection_name: str | None = None) -> Path | None:
         """名前でコレクションを検索（部分一致、planning/ と live/ を探索）"""
         all_collections = self.find_collections()
         if collection_name:
@@ -327,7 +327,7 @@ class CollectionUploader(
 
     # ─── 手動実行 ────────────────────────────────────
 
-    def manual_run_next(self, collection_name: str = None):
+    def manual_run_next(self, collection_name: str | None = None):
         """手動: 次ステップ実行"""
         target = self._find_collection(collection_name)
         if target:

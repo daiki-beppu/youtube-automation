@@ -308,7 +308,7 @@ def test_mixin_fail_open_returns_none_on_exception(monkeypatch):
         def __init__(self, *_a, **_k):
             pass
 
-        def collect_impressions_summary(self, days: int = 7):  # noqa: ARG002
+        def collect_impressions_summary(self, days: int = 7):
             raise YouTubeAPIError("boom")
 
     monkeypatch.setattr(reporting_analytics, "ReportingAPIClient", _BoomClient)
@@ -328,7 +328,7 @@ def test_mixin_returns_summary_on_success(monkeypatch):
         def __init__(self, *_a, **_k):
             pass
 
-        def collect_impressions_summary(self, days: int = 7):  # noqa: ARG002
+        def collect_impressions_summary(self, days: int = 7):
             return {"aggregated_ctr_percentage": 4.2}
 
     monkeypatch.setattr(reporting_analytics, "ReportingAPIClient", _OkClient)

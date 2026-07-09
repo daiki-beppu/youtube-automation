@@ -21,11 +21,11 @@ import subprocess
 import urllib.request
 from pathlib import Path
 
-from youtube_automation.scripts.benchmark_collector import (  # noqa: E402
+from youtube_automation.scripts.benchmark_collector import (
     ensure_benchmark_fresh,
     load_benchmark_videos,
 )
-from youtube_automation.utils.config import channel_dir as _channel_dir  # noqa: E402
+from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.config import load_config
 
 logger = logging.getLogger(__name__)

@@ -35,7 +35,7 @@ def _positive_int(value: str) -> int:
     try:
         n = int(value)
     except ValueError:
-        raise argparse.ArgumentTypeError(f"invalid int value: '{value}'")
+        raise argparse.ArgumentTypeError(f"invalid int value: '{value}'") from None
     if n < 1:
         raise argparse.ArgumentTypeError(f"--expected must be >= 1, got {n}")
     return n

@@ -330,7 +330,7 @@ class ReportGenerator:
             ],
         }
 
-    def save_report_as_json(self, report_data: Dict, filename: str = None) -> str:
+    def save_report_as_json(self, report_data: Dict, filename: str | None = None) -> str:
         """JSONファイルとしてレポート保存"""
         if filename is None:
             config = load_config()
@@ -345,7 +345,7 @@ class ReportGenerator:
         logger.info(f"レポート保存完了: {filepath}")
         return str(filepath)
 
-    def save_report_as_html(self, report_data: Dict, filename: str = None) -> str:
+    def save_report_as_html(self, report_data: Dict, filename: str | None = None) -> str:
         """HTMLファイルとしてレポート保存"""
         if filename is None:
             config = load_config()

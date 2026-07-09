@@ -601,7 +601,7 @@ def create_server(
                 resolved_message = self.responses.get(code, ("???", "???"))[0]
             self._send_json_error(code, resolved_message)
 
-        def do_OPTIONS(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler 規約)
+        def do_OPTIONS(self) -> None:
             origin = self._allowed_origin()
             self.send_response(204)
             self._send_cors(origin)
@@ -676,7 +676,7 @@ def create_server(
                 return None
             return self.rfile.read(length) if length else b""
 
-        def do_POST(self) -> None:  # noqa: N802
+        def do_POST(self) -> None:
             # GET と異なり POST は route ごとに書き込み可否を明示的に判定する。
 
             # POST /distrokid/releases: capture 有効時のみ（#934）。
@@ -751,7 +751,7 @@ def create_server(
             # その他のパスは 404。POST は定義済みルートのみハンドルする。
             self.send_error(404, "Not Found")
 
-        def do_GET(self) -> None:  # noqa: N802
+        def do_GET(self) -> None:
             if self.path == VERSION_ROUTE:
                 body = json.dumps(build_version_payload()).encode("utf-8")
                 self._send_bytes(body, "application/json; charset=utf-8")

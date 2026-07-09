@@ -11,8 +11,8 @@ Usage:
 
 import logging
 
-from youtube_automation.utils.config import load_config  # noqa: E402
-from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
+from youtube_automation.utils.config import load_config
+from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
 

@@ -28,21 +28,21 @@ from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
-from googleapiclient.errors import HttpError  # noqa: E402
+from googleapiclient.errors import HttpError
 
-from youtube_automation.utils.benchmark_analyzer import (  # noqa: E402
+from youtube_automation.utils.benchmark_analyzer import (
     compute_daily_views,
     compute_engagement_rate,
     compute_posting_intervals,
     extract_description_keywords,
     parse_iso_duration,
 )
-from youtube_automation.utils.config import channel_dir as _channel_dir  # noqa: E402
+from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.config import load_config
-from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError  # noqa: E402
+from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
 from youtube_automation.utils.profile import section
-from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
-from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
+from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
 

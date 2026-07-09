@@ -122,7 +122,7 @@ class OpenAIImageProvider:
             except ConfigError:
                 # ConfigError は Fail Fast。リトライしない。
                 raise
-            except Exception as e:  # noqa: BLE001 - SDK 例外は文字列で分岐
+            except Exception as e:
                 error_msg = str(e)
                 print(f"  [Retry]  attempt {attempt + 1}/{RETRY_MAX}: {error_msg[:120]}")
 

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import youtube_automation.scripts.playlist_status as _playlist_status_module  # noqa: E402
+import youtube_automation.scripts.playlist_status as _playlist_status_module
 
 PLAYLIST_ID_STRING_SHAPE = "PL_test_string_275"
 

@@ -85,7 +85,7 @@ def format_eta(seconds: float | None) -> str:
     """
     if seconds is None or seconds <= 0:
         return "--"
-    total = int(round(seconds))
+    total = round(seconds)
     if total < 60:
         return f"≈{total}s"
     m, s = divmod(total, 60)
@@ -201,7 +201,7 @@ def render_progress_line(
     if expected_total and expected_total > 0:
         progress = estimate_progress(elapsed, expected_total)
         eta = estimate_eta(elapsed, expected_total)
-        pct = int(round(progress * 100))
+        pct = round(progress * 100)
         eta_fmt = format_eta(eta)
         return f"{frame} {label}... {elapsed_fmt} (≈{pct}%, ETA {eta_fmt})"
     return f"{frame} {label}... {elapsed_fmt}"

@@ -18,7 +18,7 @@ from typing import Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from bench.common import Stats, save_result, stats_from_samples  # noqa: E402
+from bench.common import Stats, save_result, stats_from_samples
 
 FFMPEG = shutil.which("ffmpeg")
 

@@ -303,7 +303,7 @@ class TestTagsComposition:
         tags = meta["tags"]
 
         # Then: 期待される順序が [:50] 内で維持される
-        expected = (["Shorts"] + base + battle)[:50]
+        expected = ["Shorts", *base, *battle][:50]
         assert tags == expected
 
 

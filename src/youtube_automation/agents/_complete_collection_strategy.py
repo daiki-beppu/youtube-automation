@@ -30,7 +30,7 @@ class CompleteCollectionMixin:
         self,
         collection_dir: Path,
         metadata_gen: BAHMetadataGenerator,
-        publish_at: str = None,
+        publish_at: Optional[str] = None,
         *,
         resume_session_uri: Optional[str] = None,
         on_session_uri_changed: Optional[Callable[[Optional[str]], None]] = None,

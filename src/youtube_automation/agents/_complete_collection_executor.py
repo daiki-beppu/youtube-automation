@@ -28,7 +28,9 @@ logger = logging.getLogger(__name__)
 class CompleteCollectionExecutorMixin:
     """Complete Collection アップロード実行ループを提供する mixin。"""
 
-    def _execute_complete_collection(self, collection_path: Path, tracking: dict, publish_at: str = None) -> dict:
+    def _execute_complete_collection(
+        self, collection_path: Path, tracking: dict, publish_at: str | None = None
+    ) -> dict:
         """Complete Collection アップロード"""
         logger.info("📅 Complete Collection アップロード開始")
         logger.info(f"🎵 コレクション: {collection_path.name}")

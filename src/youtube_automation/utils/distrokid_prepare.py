@@ -482,8 +482,8 @@ def render_readme_md(
             "|------|------|------|------|------|",
             "| 音源形式 | MP3/WAV/FLAC/M4A/AIFF | MP3 | 全 disc | ✅ |",
             "| カバーアート | 正方形 JPEG (3000×3000 推奨) | 3000×3000 JPEG | 全 disc | ✅ |",
+            *check_rows,
         ]
-        + check_rows
     )
 
     # アップロード手順
@@ -499,9 +499,7 @@ def render_readme_md(
             "2. **基本情報入力**: `metadata.md` の「アルバム情報」を上から転記",
             f"3. **カバーアート**: `{COVER_ART_FILENAME}` をドラッグ&ドロップ",
             "4. **トラックアップロード**:",
-        ]
-        + upload_steps
-        + [
+            *upload_steps,
             "   - 番号順に並んでいることを必ず確認 (DistroKid は並び順 = トラック番号)",
             "5. **各トラックメタ**: `metadata.md` のトラック表から転記",
             "   - ISRC は空欄 → DistroKid が自動発行",
@@ -608,7 +606,7 @@ def verify_roundtrip(
             f"ラウンドトリップ検証失敗: トラック数が一致しません。期待={len(spec_tracks)}, 読み戻し={len(tracks_read)}"
         )
 
-    for i, (track_read, track_spec, exp_num) in enumerate(zip(tracks_read, spec_tracks, expected_numbers)):
+    for i, (track_read, track_spec, exp_num) in enumerate(zip(tracks_read, spec_tracks, expected_numbers, strict=True)):
         if track_read["number"] != exp_num:
             raise ConfigError(
                 f"ラウンドトリップ検証失敗: track[{i}] の番号が一致しません。"

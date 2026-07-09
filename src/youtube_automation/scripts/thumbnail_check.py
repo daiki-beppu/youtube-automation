@@ -161,7 +161,7 @@ def _check_image(
                 prompt,
             ],
         )
-    except Exception as exc:  # noqa: BLE001 — provider 側エラーは一律 error として表面化
+    except Exception as exc:
         return CheckResult(
             image_path=image_path,
             passed=False,
@@ -316,7 +316,7 @@ def main(argv: list[str] | None = None) -> int:
         from youtube_automation.utils.genai_client import create_genai_client
 
         client = create_genai_client(location="global")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"error: Gemini Client 初期化失敗: {exc}", file=sys.stderr)
         return 2
 

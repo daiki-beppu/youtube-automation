@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
+from typing import ClassVar
 
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.publish_schedule import resolve_default_publish_at
@@ -43,7 +44,7 @@ class PublishedDatesMixin:
     """公開済み/予約済み動画の取得とスケジュール公開日時計算を提供する mixin。"""
 
     # 曜日名 → isoweekday() マッピング（月=1, 日=7）
-    _WEEKDAY_MAP = {
+    _WEEKDAY_MAP: ClassVar[dict[str, int]] = {
         "mon": 1,
         "tue": 2,
         "wed": 3,

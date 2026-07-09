@@ -55,7 +55,7 @@ BACKUP_SUFFIX = ".mp4"
 def load_config() -> dict:
     """loop-video skill-config 全体を読み込む（veo / compression を含む）。"""
     try:
-        from youtube_automation.utils.skill_config import load_skill_config  # noqa: E402
+        from youtube_automation.utils.skill_config import load_skill_config
 
         return load_skill_config("loop-video")
     except Exception:

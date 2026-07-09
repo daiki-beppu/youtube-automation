@@ -161,7 +161,7 @@ def get_channel_latest_status():
         return status
 
     except Exception as e:
-        return {"error": f"取得エラー: {str(e)}"}
+        return {"error": f"取得エラー: {e!s}"}
 
 
 def main():

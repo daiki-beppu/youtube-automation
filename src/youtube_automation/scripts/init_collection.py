@@ -60,7 +60,7 @@ def build_state(collection_name: str, theme: str, track_count: int, selected_pla
 
 
 def main():
-    from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
+    from youtube_automation.utils.config import channel_dir, load_config
 
     parser = argparse.ArgumentParser(description="コレクションディレクトリと workflow-state.json を初期化")
     parser.add_argument("collection_name", help="コレクション表示名")

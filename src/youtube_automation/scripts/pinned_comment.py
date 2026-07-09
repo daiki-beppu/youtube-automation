@@ -129,7 +129,7 @@ def fetch_video_status(youtube, video_ids: list[str]) -> dict[str, dict | None]:
         try:
             resp = youtube.videos().list(part="status", id=",".join(chunk)).execute()
         except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, "videos.list (preflight status check)")
+            raise YouTubeAPIError.from_http_error(e, "videos.list (preflight status check)") from e
         for item in resp.get("items", []):
             result[item["id"]] = item.get("status", {})
     return result
@@ -140,7 +140,7 @@ def fetch_video_title(youtube, video_id: str) -> str:
     try:
         resp = youtube.videos().list(part="snippet", id=video_id).execute()
     except HttpError as e:
-        raise YouTubeAPIError.from_http_error(e, f"videos.list (video_id={video_id})")
+        raise YouTubeAPIError.from_http_error(e, f"videos.list (video_id={video_id})") from e
     items = resp.get("items") or []
     if not items:
         return ""

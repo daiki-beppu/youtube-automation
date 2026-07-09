@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-__all__ = ["PromptSchema", "render", "from_skill_config"]
+__all__ = ["PromptSchema", "from_skill_config", "render"]
 
 
 @dataclass(frozen=True)

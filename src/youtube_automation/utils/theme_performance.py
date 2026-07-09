@@ -80,7 +80,7 @@ def analyze_theme_performance(
             {
                 "day": int(r["days_since_publish"]),
                 "mean_cumulative_views": round(float(r["mean_cumulative_views"]), 2),
-                "sample_size": int(len(theme_df[theme_df["days_since_publish"] == r["days_since_publish"]])),
+                "sample_size": len(theme_df[theme_df["days_since_publish"] == r["days_since_publish"]]),
             }
             for _, r in mean_by_day.iterrows()
         ]

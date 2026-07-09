@@ -36,7 +36,7 @@ class FakeChannels:
         self.responses = responses
         self.calls = calls
 
-    def list(self, *, part: str, id: str) -> FakeRequest:  # noqa: A002
+    def list(self, *, part: str, id: str) -> FakeRequest:
         self.calls.append({"part": part, "id": id})
         return FakeRequest(self.responses[id])
 

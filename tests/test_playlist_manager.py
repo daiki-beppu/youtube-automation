@@ -452,7 +452,7 @@ def _string_shape_channel(tmp_path: Path) -> Path:
     return ch
 
 
-import youtube_automation.scripts.playlist_manager as _playlist_manager_module  # noqa: E402,F401
+import youtube_automation.scripts.playlist_manager as _playlist_manager_module  # noqa: E402
 
 
 class TestStringShapePlaylistsRegression:

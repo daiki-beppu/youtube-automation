@@ -18,7 +18,7 @@ from youtube_automation.utils.distrokid_spec import (
     title_map_from_entry,
     write_collection_spec,
 )
-from youtube_automation.utils.exceptions import ConfigError  # noqa: F401 (used in pytest.raises)
+from youtube_automation.utils.exceptions import ConfigError
 
 # ---------------------------------------------------------------------------
 # テスト用ヘルパー
