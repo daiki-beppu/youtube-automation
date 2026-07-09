@@ -8,7 +8,7 @@
 > maintain the index.
 >
 > **Drift check (run first)**:
-> `git diff --stat 5394c378..HEAD -- src/youtube_automation/utils/report_generator.py src/youtube_automation/utils/report_renderer.py src/youtube_automation/utils/analytics_analyzer.py src/youtube_automation/utils/ctr_analytics.py`
+> `git diff --stat 717a92b2..HEAD -- src/youtube_automation/utils/report_generator.py src/youtube_automation/utils/report_renderer.py src/youtube_automation/utils/analytics_analyzer.py src/youtube_automation/utils/ctr_analytics.py`
 > 差分が出たら Step 1 の到達可能性検査を必ずやり直す。
 
 ## Status
@@ -18,7 +18,7 @@
 - **Risk**: LOW
 - **Depends on**: none
 - **Category**: tech-debt
-- **Planned at**: commit `5394c378`, 2026-07-09
+- **Planned at**: commit `717a92b2`, 2026-07-09（reconcile refresh: drift は ruff lint + type hint 近代化のみ、finding 有効）
 
 ## Why this matters
 
