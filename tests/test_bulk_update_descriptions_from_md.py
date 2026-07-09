@@ -670,6 +670,98 @@ class TestLoadCollection:
 # ---------------------------------------------------------------------------
 
 
+class TestBuildSnippetUpdateBody:
+    """`build_snippet_update_body` — read-modify-write で mutable キーのみ保持する."""
+
+    def test_should_preserve_default_audio_language(self):
+        """old_snippet に defaultAudioLanguage があれば body に引き継がれる (defaultAudioLanguage 消失防止)."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        # Given
+        old_snippet = {
+            "title": "old title",
+            "description": "old desc",
+            "categoryId": "10",
+            "defaultLanguage": "en",
+            "defaultAudioLanguage": "ja",
+        }
+
+        # When
+        body = mod.build_snippet_update_body("V1", old_snippet, "new title", "new desc", ["tag1"])
+
+        # Then
+        assert body["snippet"]["defaultAudioLanguage"] == "ja"
+
+    def test_should_omit_default_language_when_absent_from_old_snippet(self):
+        """old_snippet に defaultLanguage が無ければ body にも含めない（"en" 注入の再発防止）."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        # Given: defaultLanguage 未設定
+        old_snippet = {
+            "title": "old title",
+            "description": "old desc",
+            "categoryId": "10",
+        }
+
+        # When
+        body = mod.build_snippet_update_body("V1", old_snippet, "new title", "new desc", ["tag1"])
+
+        # Then
+        assert "defaultLanguage" not in body["snippet"]
+
+    def test_should_exclude_readonly_snippet_keys(self):
+        """old_snippet の read-only キー（publishedAt / thumbnails 等）は body に含めない."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        # Given: read-only フィールドが混ざった old_snippet
+        old_snippet = {
+            "title": "old title",
+            "description": "old desc",
+            "categoryId": "10",
+            "publishedAt": "2020-01-01T00:00:00Z",
+            "channelId": "UCxxxx",
+            "thumbnails": {"default": {"url": "https://example.com/x.jpg"}},
+            "channelTitle": "My Channel",
+            "localized": {"title": "old title", "description": "old desc"},
+            "liveBroadcastContent": "none",
+        }
+
+        # When
+        body = mod.build_snippet_update_body("V1", old_snippet, "new title", "new desc", ["tag1"])
+
+        # Then
+        for readonly_key in (
+            "publishedAt",
+            "channelId",
+            "thumbnails",
+            "channelTitle",
+            "localized",
+            "liveBroadcastContent",
+        ):
+            assert readonly_key not in body["snippet"]
+
+    def test_should_override_title_description_tags_with_arguments(self):
+        """title/description/tags は引数の値で上書きされる（old_snippet の値を無視する）."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        # Given
+        old_snippet = {
+            "title": "old title",
+            "description": "old desc",
+            "tags": ["old-tag"],
+            "categoryId": "10",
+        }
+
+        # When
+        body = mod.build_snippet_update_body("V1", old_snippet, "new title", "new desc", ["new-tag-1", "new-tag-2"])
+
+        # Then
+        assert body["id"] == "V1"
+        assert body["snippet"]["title"] == "new title"
+        assert body["snippet"]["description"] == "new desc"
+        assert body["snippet"]["tags"] == ["new-tag-1", "new-tag-2"]
+
+
 class TestExtractMdSection:
     """`load_collection` の Error テスト経路の前提となる補助 utility."""
 

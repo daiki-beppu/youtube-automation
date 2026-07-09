@@ -22,6 +22,8 @@ import argparse
 import json
 import time
 
+from googleapiclient.errors import HttpError
+
 from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.descriptions_md import (
     build_descriptions_md_parse_diagnostics,
@@ -29,6 +31,34 @@ from youtube_automation.utils.descriptions_md import (
 )
 from youtube_automation.utils.youtube_service import get_youtube
 from youtube_automation.utils.youtube_tag import parse_youtube_tags
+
+# videos.update(part="snippet") で書き込み可能な mutable フィールド。
+# videos().list(part="snippet") のレスポンスにはこれ以外に publishedAt / channelId /
+# thumbnails / channelTitle / localized / liveBroadcastContent 等の read-only
+# フィールドが混ざるため、丸ごとコピーせず whitelist で保持する。
+MUTABLE_SNIPPET_KEYS = (
+    "title",
+    "description",
+    "tags",
+    "categoryId",
+    "defaultLanguage",
+    "defaultAudioLanguage",
+)
+
+
+def build_snippet_update_body(video_id: str, old_snippet: dict, title: str, description: str, tags: list) -> dict:
+    """現 snippet の mutable キーを保持したまま title/description/tags を差し替えた update body を返す.
+
+    ``videos.update(part='snippet')`` は snippet リソース全体を置換するため、
+    body に含まれない mutable フィールド（defaultAudioLanguage 等）は消える。
+    bulk_update_synthetic_media.build_update_body と同じ read-modify-write 方式。
+    """
+    new_snippet = {k: old_snippet[k] for k in MUTABLE_SNIPPET_KEYS if k in old_snippet}
+    new_snippet["title"] = title
+    new_snippet["description"] = description
+    new_snippet["tags"] = tags
+    new_snippet.setdefault("categoryId", "10")
+    return {"id": video_id, "snippet": new_snippet}
 
 
 def discover_collections() -> list[str]:
@@ -153,20 +183,11 @@ def main() -> None:
         if args.dry_run:
             continue
 
-        body = {
-            "id": p["video_id"],
-            "snippet": {
-                "title": new_title,
-                "description": new_desc,
-                "tags": new_tags,
-                "categoryId": old_snippet.get("categoryId", "10"),
-                "defaultLanguage": old_snippet.get("defaultLanguage", "en"),
-            },
-        }
+        body = build_snippet_update_body(p["video_id"], old_snippet, new_title, new_desc, new_tags)
         try:
             yt.videos().update(part="snippet", body=body).execute()
             print("   ✅ updated")
-        except Exception as e:
+        except HttpError as e:
             print(f"   ❌ update failed: {e}")
         time.sleep(0.4)
 
