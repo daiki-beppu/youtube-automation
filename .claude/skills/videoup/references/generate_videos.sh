@@ -687,11 +687,9 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
         CURRENT_LABEL="bg_av"
         AUDIO_LABEL="a_out"
     else
-        # av_enabled=false でも後段は常に -map "[${AUDIO_LABEL}]" とブラケットで
-        # 参照するため、生の入力ストリーム指定 "1:a" ではなく filter_complex の
-        # named label を経由させる。
-        FILTER+="[1:a]anull[a_pass];"
-        AUDIO_LABEL="a_pass"
+        # 音声をフィルタしない場合は生の入力ストリーム指定のまま保持する
+        # (後段で -map のブラケット有無を出し分け、-c:a copy を温存できる)。
+        AUDIO_LABEL="1:a"
     fi
 
     if [[ "$sp_enabled" == "true" ]]; then
@@ -708,10 +706,21 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
         AUDIO_LABEL="a_norm"
     fi
 
+    # 音声 map の出し分け:
+    #   - 生ストリーム指定 (1:a) → ブラケットなしで map し、-c:a copy を温存
+    #   - filter_complex のラベル → ブラケット付きで map。filtergraph 出力は
+    #     stream copy 不可 (ffmpeg が fatal error) のため再エンコードを強制
+    if [[ "$AUDIO_LABEL" == "1:a" ]]; then
+        AUDIO_MAP="1:a"
+    else
+        AUDIO_MAP="[${AUDIO_LABEL}]"
+        AUDIO_OUT_OPTS=(-c:a "$AUDIO_ENCODER" -b:a 384k -ar 48000)
+    fi
+
     # 末尾ラベル統一: 最終 video ラベルが CURRENT_LABEL
     ffmpeg -y "${INPUTS[@]}" \
         -filter_complex "$FILTER" \
-        -map "[${CURRENT_LABEL}]" -map "[${AUDIO_LABEL}]" \
+        -map "[${CURRENT_LABEL}]" -map "$AUDIO_MAP" \
         -c:v "$enc_codec" -preset "$enc_preset" -crf "$enc_crf" \
         -maxrate "$enc_maxrate" -bufsize "$enc_bufsize" \
         -profile:v "$enc_profile" -pix_fmt "$enc_pix_fmt" \
