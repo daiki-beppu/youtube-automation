@@ -53,7 +53,7 @@ class _FakeProvider:
         self.calls: list[Path] = []
         self.requests: list = []
 
-    def generate(self, request):  # noqa: ANN001 - テスト用フェイク
+    def generate(self, request):
         with self._lock:
             self.calls.append(request.output_path)
             self.requests.append(request)

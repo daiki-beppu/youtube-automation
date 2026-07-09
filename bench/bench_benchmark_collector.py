@@ -14,7 +14,7 @@ from typing import Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from bench.common import Stats, save_result, stats_from_samples  # noqa: E402
+from bench.common import Stats, save_result, stats_from_samples
 
 # 大手チャンネル ID（YouTube の永続 ID。bench でのみ参照）
 CHANNEL_IDS = [
@@ -52,7 +52,7 @@ def _bench_batched(yt, ids: list[str]) -> Stats:
 def run() -> Sequence[Stats]:
     try:
         yt = _youtube_client()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"  [SKIP] youtube client 取得失敗: {e}")
         return []
 

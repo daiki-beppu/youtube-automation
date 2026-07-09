@@ -141,7 +141,7 @@ class TestSplitTracks:
         """分割後の全ファイル名が元の順序を維持する."""
         filenames = _filenames(71)
         chunks = split_tracks(filenames)
-        assert sum(chunks, []) == filenames
+        assert [name for chunk in chunks for name in chunk] == filenames
 
     def test_9_discs_allowed(self):
         """9 discs（上限）は OK."""
@@ -276,7 +276,7 @@ class TestValidateSpec:
         filenames = _filenames(4)
         spec = self._minimal_spec(filenames)
         # music には 5 ファイル目を追加
-        music_filenames = filenames + ["05-extra.mp3"]
+        music_filenames = [*filenames, "05-extra.mp3"]
         with pytest.raises(ValidationError, match="漏れ"):
             validate_spec(spec, music_filenames)
 
@@ -1022,7 +1022,7 @@ class TestVerify:
 def _unique_spec_inplace(spec: dict) -> None:
     """needs_unique なトラックにバリエーションサフィックスを付けてユニーク化する（テスト用）."""
     seen: dict[str, int] = {}
-    for disc_idx, disc in enumerate(spec.get("discs", [])):
+    for _disc_idx, disc in enumerate(spec.get("discs", [])):
         for track in disc.get("tracks", []):
             title = track["title"]
             if track.get("needs_unique"):

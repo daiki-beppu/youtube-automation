@@ -76,10 +76,10 @@ from youtube_automation.utils.upload_core import YouTubeUploadCore  # noqa: E402
 
 # 後方互換 / 公開 API: 定数は従来どおり本モジュールから import できるよう再エクスポートする。
 __all__ = [
-    "YouTubeAutoUploader",
     "UPLOAD_SOURCE_EXISTING",
     "UPLOAD_SOURCE_NEW",
     "YOUTUBE_VIDEO_URL_PREFIX",
+    "YouTubeAutoUploader",
     "main",
 ]
 
@@ -98,7 +98,7 @@ class YouTubeAutoUploader(
     責務別のロジック（dedup / descriptions.md / preflight / CC 経路）は mixin に分離。
     """
 
-    def __init__(self, collections_root: str = None):
+    def __init__(self, collections_root: Optional[str] = None):
         """
         初期化
 
@@ -125,7 +125,7 @@ class YouTubeAutoUploader(
         self,
         video_path: str,
         metadata: Dict,
-        thumbnail_path: str = None,
+        thumbnail_path: Optional[str] = None,
         *,
         resume_session_uri: Optional[str] = None,
         on_session_uri_changed: Optional[Callable[[Optional[str]], None]] = None,
@@ -204,7 +204,7 @@ class YouTubeAutoUploader(
     def upload_collection(
         self,
         collection_path: str,
-        publish_at: str = None,
+        publish_at: Optional[str] = None,
         *,
         apply_default_publish_at: bool = True,
         resume_session_uri: Optional[str] = None,
@@ -307,7 +307,7 @@ class YouTubeAutoUploader(
         logger.info("  [ ] YouTube Studio で収益化が ON になっているか確認")
         logger.info(f"  Studio: https://studio.youtube.com/video/{video_url.rsplit('=', 1)[-1]}/edit")
 
-    def process_collections_directory(self, status_filter: List[str] = None) -> Dict:
+    def process_collections_directory(self, status_filter: Optional[List[str]] = None) -> Dict:
         """
         collections/ ディレクトリ内の対象コレクションを一括処理
 
@@ -348,7 +348,7 @@ class YouTubeAutoUploader(
         }
 
         # 各コレクションを処理
-        for i, (status, collection_dir) in enumerate(target_collections, 1):
+        for i, (_status, collection_dir) in enumerate(target_collections, 1):
             logger.info(f"🎵 [{i}/{len(target_collections)}] {collection_dir.name}")
 
             try:

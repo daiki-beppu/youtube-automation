@@ -152,7 +152,7 @@ def _abs_diff(band_a: Image.Image, band_b: Image.Image) -> Image.Image:
     a = list(band_a.get_flattened_data())
     b = list(band_b.get_flattened_data())
     out = Image.new("L", band_a.size)
-    out.putdata([abs(x - y) for x, y in zip(a, b)])
+    out.putdata([abs(x - y) for x, y in zip(a, b, strict=True)])
     return out
 
 
@@ -162,5 +162,5 @@ def _abs_diff_half_sum(r: Image.Image, g: Image.Image, b: Image.Image) -> Image.
     gp = list(g.get_flattened_data())
     bp = list(b.get_flattened_data())
     out = Image.new("L", r.size)
-    out.putdata([min(255, int(abs(0.5 * (rr + gg) - bb))) for rr, gg, bb in zip(rp, gp, bp)])
+    out.putdata([min(255, int(abs(0.5 * (rr + gg) - bb))) for rr, gg, bb in zip(rp, gp, bp, strict=True)])
     return out

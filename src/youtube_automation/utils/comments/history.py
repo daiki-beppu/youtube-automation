@@ -33,7 +33,7 @@ class ReplyHistory:
             with open(self._path, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except json.JSONDecodeError as e:
-            raise ConfigError(f"comment_reply_history.json の JSON パース失敗: {self._path}: {e}")
+            raise ConfigError(f"comment_reply_history.json の JSON パース失敗: {self._path}: {e}") from e
         if not isinstance(data, dict):
             raise ConfigError(f"comment_reply_history.json のトップレベルは object でなければなりません: {self._path}")
         data.setdefault("schema_version", SCHEMA_VERSION)

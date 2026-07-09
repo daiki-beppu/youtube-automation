@@ -17,7 +17,7 @@ from typing import Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from bench.common import Stats, save_result, time_calls  # noqa: E402
+from bench.common import Stats, save_result, time_calls
 
 N_VIDEOS = 100
 MOCK_LATENCY_SEC = 0.05

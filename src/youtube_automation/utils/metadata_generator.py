@@ -929,7 +929,7 @@ class BAHMetadataGenerator:
         self,
         english_title: str,
         timestamp_body: str,
-        scene_phrases: Dict[str, str] = None,
+        scene_phrases: Dict[str, str] | None = None,
         scene_emoji: str = "",
     ) -> Dict:
         """各言語のローカライズされたタイトル・説明文を生成（jazzgak. TTP ハイブリッド方式）

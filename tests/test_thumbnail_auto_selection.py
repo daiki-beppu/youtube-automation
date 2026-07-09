@@ -60,7 +60,9 @@ def _write_channel_config(channel_dir, *, enabled=True, refs=_REF_RELPATHS):
 
 def _setup_channel(tmp_path, monkeypatch, *, enabled=True, refs=_REF_RELPATHS, ref_colors=_REF_COLORS):
     channel_dir = tmp_path / "channel"
-    for relpath, color in zip(refs, ref_colors):
+    # refs は空タプルで渡されるケース（test_no_reference_images_errors）があり、
+    # ref_colors とは意図的に非同長になり得るため strict=False（zip 既定 = 挙動保存）
+    for relpath, color in zip(refs, ref_colors, strict=False):
         _solid_image(channel_dir / relpath, color)
     _write_channel_config(channel_dir, enabled=enabled, refs=refs)
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
@@ -390,7 +392,7 @@ def test_state_record_failure_rolls_back_thumbnail(tmp_path, monkeypatch, capsys
     _solid_image(assets / "thumbnail-v1.jpg", _NEAR_COLOR)
     (collection / "workflow-state.json").write_text(json.dumps({"stage": "planning"}), encoding="utf-8")
 
-    def fail_record(*args, **kwargs):  # noqa: ANN001, ANN002, ANN003 - test double
+    def fail_record(*args, **kwargs):
         raise ValidationError("forced state write failure")
 
     monkeypatch.setattr(auto_select_thumbnail, "record_workflow_state", fail_record)

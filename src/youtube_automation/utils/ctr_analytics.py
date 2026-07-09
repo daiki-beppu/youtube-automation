@@ -198,7 +198,7 @@ class CTRAnalyticsMixin:
         views / likes / comments / shares / subscribersGained を返す。
         サムネ impressions/CTR は `_process_channel_impressions_summary` 側で扱う。
         """
-        if "rows" in response and response["rows"]:
+        if response.get("rows"):
             row = response["rows"][0]
             return {
                 "total_views": row[0],

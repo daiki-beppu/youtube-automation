@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v30
-      - run: nix develop --command uv sync --extra dev
+      - run: nix develop --command uv sync
       - parallel:
           - name: Ruff check
             run: nix develop --command uv run ruff check .
@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v30
       - name: Install dependencies
-        run: nix develop --command uv sync --extra dev
+        run: nix develop --command uv sync
       - name: Test
         run: nix develop --command uv run pytest
 
@@ -37,7 +37,7 @@ jobs:
           python-version: "3.11"
       - uses: astral-sh/setup-uv@v6
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync
       - name: Test cost tracker on Windows
         run: uv run pytest tests/test_cost_tracker.py -q
 
@@ -86,3 +86,15 @@ jobs:
             exit 1
           fi
           echo "ADR numbers are unique"
+
+  any-gate:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check new Any usage
+        env:
+          PRE_PUSH_DIFF_BASE: ${{ github.event.pull_request.base.sha }}
+        run: bash .lefthook/pre-push/any-usage-gate.sh

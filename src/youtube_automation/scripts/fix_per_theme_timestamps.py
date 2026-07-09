@@ -107,7 +107,7 @@ def compute_pattern_starts(music_dir: Path, patterns: dict[str, str]) -> list[tu
         letter = m.group(1).lower()
         # start time of this track in master = cumulative
         if letter not in seen:
-            seen[letter] = int(round(cumulative))
+            seen[letter] = round(cumulative)
         dur = get_duration(f)
         cumulative += dur
         if idx < len(files) - 1:

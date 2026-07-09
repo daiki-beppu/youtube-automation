@@ -290,7 +290,7 @@ class VideoValidator:
             # 4K: 35-68 Mbps, 1080p: 8-12 Mbps, 720p: 5-7.5 Mbps
             resolution = video_info.get("resolution", "0x0")
             try:
-                width, height = map(int, resolution.split("x"))
+                _width, height = map(int, resolution.split("x"))
 
                 if height >= 2160:  # 4K
                     lo, hi = BITRATE_4K

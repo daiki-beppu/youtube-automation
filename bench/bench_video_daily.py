@@ -14,7 +14,7 @@ from typing import Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from bench.common import Stats, save_result, stats_from_samples  # noqa: E402
+from bench.common import Stats, save_result, stats_from_samples
 
 
 def _collector():
@@ -43,7 +43,7 @@ def _bench_days(collector, days: int) -> Stats:
 def run() -> Sequence[Stats]:
     try:
         collector = _collector()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"  [SKIP] collector の初期化失敗: {e}")
         return []
 
@@ -51,7 +51,7 @@ def run() -> Sequence[Stats]:
     for days in (28, 90):
         try:
             results.append(_bench_days(collector, days))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"  [FAIL] {days}d: {e}")
     return results
 

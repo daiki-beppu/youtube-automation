@@ -79,7 +79,7 @@ class YouTubeUploadCore:
         self,
         video_path: str,
         body: dict,
-        thumbnail_path: str = None,
+        thumbnail_path: Optional[str] = None,
         *,
         resume_session_uri: Optional[str] = None,
         on_session_uri_changed: Optional[Callable[[Optional[str]], None]] = None,

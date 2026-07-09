@@ -167,9 +167,9 @@ def test_ci_lint_runs_ruff_checks_in_a_single_parallel_group() -> None:
     steps = _job_steps(_load_workflow(_CI_WORKFLOW_PATH), "lint")
 
     _assert_named_parallel_commands(steps, _CI_LINT_PARALLEL_STEPS)
-    assert _top_level_step_index_with_run(
-        steps, "nix develop --command uv sync --extra dev"
-    ) < _parallel_group_index_containing(steps, "Ruff check")
+    assert _top_level_step_index_with_run(steps, "nix develop --command uv sync") < _parallel_group_index_containing(
+        steps, "Ruff check"
+    )
     _assert_parallel_runs_do_not_use_shell_backgrounding(steps)
 
 

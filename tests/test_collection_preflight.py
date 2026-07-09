@@ -109,7 +109,7 @@ class TestCheckCollection:
     def test_fix_does_not_create_state(self, tmp_path):
         """--fix は workflow-state.json を捏造しない（/wf-new の責務）。"""
         collection = _make_collection(tmp_path, "20260702-tc-nst-collection", with_state=False)
-        ok, line = check_collection(collection, fix=True)
+        ok, _line = check_collection(collection, fix=True)
         assert not ok
         assert not (collection / "workflow-state.json").exists()
 

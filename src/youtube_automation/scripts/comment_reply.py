@@ -40,7 +40,7 @@ def _parse_since(value: str | None) -> datetime | None:
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as e:
-        raise SystemExit(f"[error] --since は ISO8601 形式で指定してください: {e}")
+        raise SystemExit(f"[error] --since は ISO8601 形式で指定してください: {e}") from e
 
 
 def _load_agent_replies(path: str | None) -> dict[str, str] | None:

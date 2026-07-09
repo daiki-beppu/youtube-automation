@@ -14,6 +14,7 @@ Issue #114 で追加する `yt-discover-competitors` のコアロジックを検
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import date, timedelta
 from unittest.mock import MagicMock
 
@@ -130,7 +131,7 @@ class TestDiscoveryParams:
         params = _make_params()
 
         # When/Then: 属性変更は FrozenInstanceError
-        with pytest.raises(Exception):  # noqa: BLE001 - dataclasses.FrozenInstanceError は AttributeError を継承
+        with pytest.raises(dataclasses.FrozenInstanceError):
             params.top = 5  # type: ignore[misc]
 
 

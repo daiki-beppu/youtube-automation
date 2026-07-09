@@ -135,8 +135,8 @@ class TestForwardsRequestToGeminiApi:
         # config 引数の中に aspect_ratio / image_size がセットされている
         cfg_arg = kwargs["config"]
         # GenerateContentConfig は属性アクセス可能
-        assert getattr(cfg_arg.image_config, "aspect_ratio") == "9:16"
-        assert getattr(cfg_arg.image_config, "image_size") == "2K"
+        assert cfg_arg.image_config.aspect_ratio == "9:16"
+        assert cfg_arg.image_config.image_size == "2K"
 
     def test_does_not_validate_aspect_ratio_for_gemini(self, gemini_config, request_factory, patched_genai_client):
         """Gemini は branding/icon.png 用途で 1:1 等の任意比率を許容する。"""

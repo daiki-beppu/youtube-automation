@@ -87,7 +87,7 @@ def _resolve_channel_dir() -> Path:
     env = os.environ.get("CHANNEL_DIR")
     if env:
         return Path(env)
-    for parent in [Path.cwd()] + list(Path.cwd().parents):
+    for parent in [Path.cwd(), *list(Path.cwd().parents)]:
         if (parent / "config" / "channel").is_dir():
             return parent
     raise ConfigError("CHANNEL_DIR 環境変数を設定するか、config/channel/ を持つディレクトリ配下で実行してください")
@@ -154,7 +154,7 @@ def _load_and_merge(files: list[Path]) -> dict:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except json.JSONDecodeError as e:
-            raise ConfigError(f"JSON パース失敗: {path}: {e}")
+            raise ConfigError(f"JSON パース失敗: {path}: {e}") from e
         if not isinstance(data, dict):
             raise ConfigError(f"{path} のトップレベルは object でなければなりません")
         for key, value in data.items():
@@ -704,7 +704,7 @@ def _load_localizations(channel_dir_path: Path, fallback_language: str) -> Local
         with open(loc_path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
-        raise ConfigError(f"localizations.json の JSON パース失敗: {loc_path}: {e}")
+        raise ConfigError(f"localizations.json の JSON パース失敗: {loc_path}: {e}") from e
     if not isinstance(data, dict):
         raise ConfigError(f"localizations.json のトップレベルは object でなければなりません: {loc_path}")
     return Localizations(

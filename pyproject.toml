@@ -21,7 +21,6 @@ dependencies = [
     "pandas>=3,<4",
     "matplotlib>=3,<4",
     "japanize-matplotlib>=1,<2",
-    "seaborn>=0.13,<1",
     "schedule>=1,<2",
     "pyyaml>=6,<7",
     "requests>=2,<3",
@@ -31,7 +30,6 @@ dependencies = [
 Repository = "https://github.com/daiki-beppu/youtube-automation"
 
 [project.optional-dependencies]
-dev = ["pytest>=9,<10", "ruff>=0.15,<1"]
 veo = []  # google-genai, Pillow moved to main dependencies
 
 [project.scripts]
@@ -150,9 +148,13 @@ target-version = "py311"
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W"]
+select = ["E", "F", "I", "W", "B", "RUF"]
+# RUF001/002/003: 日本語コードベースのため全角文字の ambiguous-unicode 検知は誤検知のみ
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+# pytest.raises(match=...) の正規表現メタ文字警告はテスト可読性を優先して抑制
+"tests/**" = ["RUF043"]
 
 [dependency-groups]
-dev = [
-    "pytest>=9.0.2",
-]
+dev = ["pytest>=9,<10", "ruff>=0.15,<1"]

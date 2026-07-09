@@ -310,20 +310,20 @@ class FinalizeConfig:
     """
 
     __slots__ = (
-        "volume_db",
-        "fadein_s",
+        "bitrate",
+        "codec",
         "fadein_curve",
+        "fadein_s",
+        "layers_dirname",
+        "layers_glob",
+        "layers_overrides",
         "loudnorm",
         "loudnorm_enabled",
         "loudnorm_mode",
         "mix_duration",
         "mix_normalize",
-        "bitrate",
-        "codec",
         "sample_rate",
-        "layers_dirname",
-        "layers_glob",
-        "layers_overrides",
+        "volume_db",
     )
 
     def __init__(

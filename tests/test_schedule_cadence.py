@@ -5,6 +5,7 @@ collection_uploader のインポート依存（schedule パッケージ等）を
 """
 
 from datetime import date, datetime, timedelta
+from typing import ClassVar
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Asia/Tokyo")
@@ -57,7 +58,7 @@ def calculate_publish_at(
 class TestCadenceScheduling:
     """cadence が正しく適用されるかのテスト"""
 
-    CADENCE = ["tue", "thu", "sat"]
+    CADENCE: ClassVar[list[str]] = ["tue", "thu", "sat"]
 
     def test_skips_non_cadence_day(self):
         """木曜 14:00 → 公開時刻過ぎ → 金曜スキップ → 土曜に公開"""

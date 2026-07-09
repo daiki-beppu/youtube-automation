@@ -28,7 +28,7 @@ class Tags:
 
     def default(self) -> list[str]:
         """チャンネル名を含むデフォルトタグリスト."""
-        return list(self.base) + [self.channel_name.lower()]
+        return [*list(self.base), self.channel_name.lower()]
 
     def for_collection(self, collection_name: str) -> list[str]:
         """コレクション名からタグリストを生成（最大 50 件）."""

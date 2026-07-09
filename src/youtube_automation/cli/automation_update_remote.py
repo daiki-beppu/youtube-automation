@@ -26,7 +26,7 @@ def _github_api_get(path: str) -> dict:
         with urllib.request.urlopen(request, timeout=30) as response:
             return json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
-        raise ConfigError(f"GitHub API の呼び出しに失敗しました ({url}): {e}")
+        raise ConfigError(f"GitHub API の呼び出しに失敗しました ({url}): {e}") from e
 
 
 def _locked_git_sha(root: Path) -> str | None:
@@ -37,7 +37,7 @@ def _locked_git_sha(root: Path) -> str | None:
     try:
         lock = tomllib.loads(lock_path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as e:
-        raise ConfigError(f"uv.lock を読み込めません: {lock_path}: {e}")
+        raise ConfigError(f"uv.lock を読み込めません: {lock_path}: {e}") from e
     packages = lock.get("package")
     if not isinstance(packages, list):
         return None

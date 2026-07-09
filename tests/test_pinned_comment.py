@@ -50,7 +50,7 @@ class _FakeVideos:
     def __init__(self, yt: "FakeYouTube"):
         self.yt = yt
 
-    def list(self, part, id):  # noqa: A002 - YouTube API kwarg
+    def list(self, part, id):
         ids = id.split(",")
         self.yt.status_calls.append(ids)
         items = []
@@ -86,7 +86,7 @@ class FakeYouTube:
     def videos(self):
         return _FakeVideos(self)
 
-    def commentThreads(self):  # noqa: N802 - mirrors googleapiclient API
+    def commentThreads(self):
         return _FakeCommentThreads(self)
 
 

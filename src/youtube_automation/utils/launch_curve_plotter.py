@@ -8,11 +8,11 @@ from typing import Optional
 import matplotlib
 
 matplotlib.use("Agg")  # non-interactive backend
-import japanize_matplotlib  # noqa: E402, F401 — registers Japanese fonts
-import matplotlib.pyplot as plt  # noqa: E402
-import pandas as pd  # noqa: E402
+import japanize_matplotlib  # noqa: F401 — registers Japanese fonts
+import matplotlib.pyplot as plt
+import pandas as pd
 
-from youtube_automation.utils.launch_curve_analyzer import (  # noqa: E402
+from youtube_automation.utils.launch_curve_analyzer import (
     compute_benchmark,
     judge_video_vs_benchmark,
 )

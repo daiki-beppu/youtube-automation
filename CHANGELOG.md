@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(suno-helper)`: `/suno-helper` を browser use 主経路で操作・監視できるように、SKILL.md に agent primary flow、DOM signal、無限待機回避、handoff 条件を追加。Chrome DevTools MCP は診断・補助・フォールバック扱いに固定し、拡張 overlay / popup には `data-suno-*` と `role="status"` の観測 signal を追加した。`/wf-new` の Suno 後続案内も `/suno-helper` の browser use 主導フローへ接続する表現に更新（#1382）
 - `feat(doctor)`: `yt-doctor` に playlist スキル向けの `playlist_config` / `playlist_create_dry_run` チェックを追加（#1504）。`config/channel/playlists.json` の欠落・JSON 破損・`playlist_id` 未設定を channel カテゴリで診断し、`PlaylistManager.create_all_playlists(dry_run=True)` 経路で作成計画を検証する。dry-run は YouTube API への書き込みを行わず、失敗時は human next_action で設定修正手順を示す。
 - `feat(collection-serve)`: `yt-collection-serve` に unpacked Chrome 拡張名から exact origin lock を自動解決する `--allow-extension <name>` を追加（#1486）。macOS Chrome profile の `Secure Preferences`（無ければ `Preferences`）を走査し、`extensions.settings[*].path` が絶対パスかつ basename が指定名に一致する拡張 IDから `chrome-extension://<id>` を組み立て、既存の `/auth/token` / write endpoint lock にそのまま適用する。`--allow-origin` とは排他で、検出 0 件・複数 ID 競合・profile root 走査不可・Preferences 読み取り不可・Preferences JSON parse failure は `--allow-origin` fallback 案内付きの `ConfigError` で fail-loud する。`/suno-helper` / `/distrokid-helper` / `/wf-new` のサーバー起動手順と拡張 README も `--allow-extension` 基準へ更新した
+- `test(deps)`: 2020 年から未更新の `japanize-matplotlib` の font 登録が壊れたら検知する回帰テスト `tests/test_japanize_font_regression.py` を追加した（plan 024）。壊れた場合の症状（日本語ラベルの豆腐化）を matplotlib の `Glyph ... missing from font(s)` UserWarning で機械検知する
 
 ### Changed
 
@@ -25,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING** `refactor(channel-new)`: 旧 `/channel-direction` を削除し、`/channel-new` の方向性検討モード（Step D1〜D5）へ統合した。新規開設モードでは従来どおり方向性・差別化・ポジショニングを聞かず TTP 対象の転写要素だけを確認し、必要な方向性ブレストは同じ `/channel-new` の別モードで `docs/channel/channel-direction.md` に保存する。config 生成用の初期値確認は Step 1 から Step 4 へ分離し、再生成モードは方向性検討モードの成果物を入力にする契約へ更新した（#1499）
 - `docs(wf-new)`: workflow-state schema の `assets.music_downloaded` 説明に、Suno 一括 DL 完了と `raw_master` 生成前の中間状態（DL 済み・raw master 未生成）の意味を明記した（#1568）
 - `docs(skills)`: 主要スキル 5 件の前後工程 cross-reference を現行ワークフロー基準で補完（#1670）。`/videoup` に前工程 `/masterup`（Suno 系）/ `/lyria`（Lyria 系）を明記、`/thumbnail` の Next Step に Lyria チャンネル分岐（`/lyria`）を追加、`/video-description` に前工程 `/videoup` への参照、`/metadata-audit` の Cross References に前工程 `/video-upload` を追加し、`/analytics-analyze` の When to Use に `/wf-next` 完了（動画公開）から T+7 日後に実行する前提を追記した
+- `chore(deps)`: dev 依存（`pytest` / `ruff`）を `[project.optional-dependencies].dev` と `[dependency-groups].dev` の二重宣言から `[dependency-groups].dev` へ一本化した（plan 024）。素の `uv sync` で `ruff` が入るようになり、`--extra dev` 指定は不要（README / ONBOARDING / flake.nix / CI の該当記述を更新）
+- `chore(lint)`: ruff の `select` に `B`（flake8-bugbear）/ `RUF` を追加した（plan 024）。`RUF001`/`RUF002`/`RUF003`（全角文字の ambiguous-unicode 検知、日本語コードベースでは誤検知のみ）は ignore、`RUF043`（pytest.raises の正規表現メタ文字警告）は `tests/**` のみ per-file-ignore。新規追加ルールで検出されたバックログ（`B904` の `raise ... from` 欠落、`B905` の `zip()` strict 未指定、`RUF012` の mutable class default、`RUF013` の implicit Optional、`RUF005` のリスト結合、`RUF046`/`RUF059`/`RUF015`/`RUF017`/`B007`/`B017` 等）を機械的に解消した
+- `chore(ci)`: 新規 Any 使用を検知する `.lefthook/pre-push/any-usage-gate.sh` を CI の `any-gate` job（PR イベントのみ）としても実行するようにした（plan 024）。従来は client-side lefthook のみで `origin/main` 不在時は self-skip していたため、CI バックストップを追加して実質 advisory だったゲートを強制力のあるものにした
+
+### Removed
+
+- `chore(deps)`: import ゼロで宣言のみ残っていた直接依存 `seaborn` を削除した（plan 024）。transitive に必要な `pandas` / `matplotlib` は引き続き `[project] dependencies` に独立宣言済み
 
 ### Fixed
 

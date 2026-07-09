@@ -7,6 +7,7 @@ CollectionPaths のユニットテスト
 
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -205,7 +206,7 @@ class TestFindThumbnail:
 
 
 class TestFindThumbnailUploadContract:
-    _UPLOAD_THUMBNAIL_ORDER = ["thumbnail.jpg", "thumbnail.png"]
+    _UPLOAD_THUMBNAIL_ORDER: ClassVar[list[str]] = ["thumbnail.jpg", "thumbnail.png"]
 
     @staticmethod
     def _pick_first_existing(assets_dir, order):
@@ -533,7 +534,7 @@ class TestLiteralCollectionSubpathRegression:
     issue #357 の移行対象 4 ファイルを機械的に検査する安全網。
     """
 
-    _MIGRATED_FILES = [
+    _MIGRATED_FILES: ClassVar[list[str]] = [
         "src/youtube_automation/agents/short_uploader.py",
         "src/youtube_automation/agents/collection_uploader.py",
         "src/youtube_automation/agents/youtube_auto_uploader.py",
@@ -549,7 +550,7 @@ class TestLiteralCollectionSubpathRegression:
     ]
 
     # CollectionPaths が唯一の参照元であるべきコレクションサブパス文字列
-    _COLLECTION_SUBPATH_LITERALS = [
+    _COLLECTION_SUBPATH_LITERALS: ClassVar[list[str]] = [
         "01-master",
         "10-assets",
         "20-documentation",

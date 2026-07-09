@@ -101,7 +101,7 @@ class ReportingAPIClient:
         try:
             response = self._service.reportTypes().list().execute()
         except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, "reporting:reportTypes.list")
+            raise YouTubeAPIError.from_http_error(e, "reporting:reportTypes.list") from e
 
         available = {rt["id"] for rt in response.get("reportTypes", []) if "id" in rt}
         for candidate in _REPORT_TYPE_PRIORITIES:
@@ -124,12 +124,12 @@ class ReportingAPIClient:
         try:
             rt_response = self._service.reportTypes().list().execute()
         except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, "reporting:reportTypes.list")
+            raise YouTubeAPIError.from_http_error(e, "reporting:reportTypes.list") from e
 
         try:
             job_response = self._service.jobs().list().execute()
         except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, "reporting:jobs.list")
+            raise YouTubeAPIError.from_http_error(e, "reporting:jobs.list") from e
 
         report_types = rt_response.get("reportTypes", [])
         available_ids = {rt["id"] for rt in report_types if "id" in rt}
@@ -179,7 +179,7 @@ class ReportingAPIClient:
         try:
             existing = self._service.jobs().list().execute()
         except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, "reporting:jobs.list")
+            raise YouTubeAPIError.from_http_error(e, "reporting:jobs.list") from e
 
         for job in existing.get("jobs", []):
             if job.get("reportTypeId") == report_type_id and job.get("name") == self.JOB_NAME:
@@ -191,7 +191,7 @@ class ReportingAPIClient:
                 self._service.jobs().create(body={"reportTypeId": report_type_id, "name": self.JOB_NAME}).execute()
             )
         except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, "reporting:jobs.create")
+            raise YouTubeAPIError.from_http_error(e, "reporting:jobs.create") from e
 
         job_id = created["id"]
         logger.info(
@@ -226,7 +226,7 @@ class ReportingAPIClient:
                     kwargs["pageToken"] = page_token
                 response = self._service.jobs().reports().list(**kwargs).execute()
             except HttpError as e:
-                raise YouTubeAPIError.from_http_error(e, "reporting:jobs.reports.list")
+                raise YouTubeAPIError.from_http_error(e, "reporting:jobs.reports.list") from e
 
             reports.extend(response.get("reports", []))
             page_token = response.get("nextPageToken")

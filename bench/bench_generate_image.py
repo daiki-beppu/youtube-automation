@@ -15,7 +15,7 @@ from typing import Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from bench.common import Stats, save_result, stats_from_samples  # noqa: E402
+from bench.common import Stats, save_result, stats_from_samples
 
 
 def _provider(batch: int):
@@ -69,7 +69,7 @@ def run() -> Sequence[Stats]:
             save_result(s, extra={"batch": batch})
             results.append(s)
             print(f"  batch={batch}: p50={s.p50_ms:.0f}ms p95={s.p95_ms:.0f}ms")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"  [FAIL] batch={batch}: {e}")
     return results
 

@@ -84,7 +84,7 @@ def _resolve_target_dir(target: str | None) -> Path:
             raise ConfigError(f"CHANNEL_DIR で指定されたディレクトリが存在しません: {path}")
         return path
 
-    for parent in [Path.cwd()] + list(Path.cwd().parents):
+    for parent in [Path.cwd(), *list(Path.cwd().parents)]:
         if (parent / "config" / "channel").is_dir():
             return parent
 
@@ -175,7 +175,7 @@ def _load_distrokid(path: Path) -> dict:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
-        raise ConfigError(f"distrokid.json の JSON パース失敗: {path}: {e}")
+        raise ConfigError(f"distrokid.json の JSON パース失敗: {path}: {e}") from e
     return data
 
 

@@ -218,7 +218,7 @@ class TestGenerateTags:
         themes = config.content.tags.themes
         # テーマが存在する場合のみテスト
         if themes:
-            theme_name = list(themes.keys())[0]
+            theme_name = next(iter(themes.keys()))
             gen = _make_generator(f"20250907-live-8bit-{theme_name}-music")
             tags = gen._generate_tags()
             for theme_tag in themes[theme_name]:

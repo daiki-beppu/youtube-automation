@@ -18,7 +18,7 @@ def _daily_metrics(dates, views_list, subs_list=None):
             "subscribers_gained": s,
             "subscribers_lost": 0,
         }
-        for d, v, s in zip(dates, views_list, subs_list)
+        for d, v, s in zip(dates, views_list, subs_list, strict=True)
     ]
 
 

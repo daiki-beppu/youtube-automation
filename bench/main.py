@@ -71,7 +71,7 @@ def main() -> int:
             continue
         try:
             stats_list = run()
-        except Exception as e:  # noqa: BLE001 — bench 単位で握りつぶす
+        except Exception as e:
             print(f"  [FAIL] {e}", file=sys.stderr)
             continue
         for stats in stats_list or []:

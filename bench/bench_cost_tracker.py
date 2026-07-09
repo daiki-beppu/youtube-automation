@@ -16,7 +16,7 @@ from typing import Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from bench.common import Stats, save_result, time_calls  # noqa: E402
+from bench.common import Stats, save_result, time_calls
 
 SIZES = (156, 500, 1000)
 

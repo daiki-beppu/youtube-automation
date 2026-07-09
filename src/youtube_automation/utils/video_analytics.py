@@ -59,7 +59,7 @@ class VideoAnalyticsMixin:
                 video_ids = [row[0] for row in response["rows"]]
                 video_details = self._get_video_details(video_ids)
 
-                for i, row in enumerate(response["rows"]):
+                for _i, row in enumerate(response["rows"]):
                     video_id = row[0]
                     video_detail = video_details.get(video_id, {})
 
@@ -120,7 +120,7 @@ class VideoAnalyticsMixin:
                 .execute()
             )
 
-            if "rows" in response and response["rows"]:
+            if response.get("rows"):
                 row = response["rows"][0]
                 return {
                     "video_id": video_id,

@@ -690,7 +690,7 @@ class TestComposeThumbnailText:
     ):
         output = tmp_path / "out.jpg"
 
-        def fail_save(self, fp, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003 - test double
+        def fail_save(self, fp, *args, **kwargs):
             fp.write(b"partial")
             raise OSError("forced save failure")
 

@@ -646,7 +646,7 @@ def test_send_error_unknown_status_returns_json_with_standard_fallback(tmp_path)
     server = create_server(0, None, prompts_path=json_path, collection_dir=tmp_path, distrokid=None)
 
     class UnknownStatusHandler(server.RequestHandlerClass):
-        def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler 規約)
+        def do_GET(self) -> None:
             self.send_error(599)
 
     server.RequestHandlerClass = UnknownStatusHandler

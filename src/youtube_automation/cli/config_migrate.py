@@ -57,7 +57,7 @@ def _resolve_target_dir(target: str | None) -> Path:
             raise ConfigError(f"CHANNEL_DIR で指定されたディレクトリが存在しません: {path}")
         return path
 
-    for parent in [Path.cwd()] + list(Path.cwd().parents):
+    for parent in [Path.cwd(), *list(Path.cwd().parents)]:
         # 新構造を優先 (post-migrate 後の通常運用状態)
         if (parent / "config" / "channel").is_dir():
             return parent
@@ -80,7 +80,7 @@ def _load_legacy_json(target: Path) -> dict:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
-        raise ConfigError(f"channel_config.json の JSON パース失敗: {path}: {e}")
+        raise ConfigError(f"channel_config.json の JSON パース失敗: {path}: {e}") from e
     if not isinstance(data, dict):
         raise ConfigError(f"channel_config.json のトップレベルは object でなければなりません: {path}")
     return data
@@ -131,7 +131,7 @@ def _compute_localization_merge(target: Path, localization_data: dict) -> tuple[
         with open(loc_path, "r", encoding="utf-8") as f:
             existing = json.load(f)
     except json.JSONDecodeError as e:
-        raise ConfigError(f"{LOCALIZATIONS_FILENAME} の JSON パース失敗: {loc_path}: {e}")
+        raise ConfigError(f"{LOCALIZATIONS_FILENAME} の JSON パース失敗: {loc_path}: {e}") from e
     if not isinstance(existing, dict):
         raise ConfigError(f"{LOCALIZATIONS_FILENAME} のトップレベルは object でなければなりません: {loc_path}")
 
@@ -266,7 +266,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
             from youtube_automation.utils.config import reset
 
             reset()
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
         if original_env is None:
             os.environ.pop("CHANNEL_DIR", None)

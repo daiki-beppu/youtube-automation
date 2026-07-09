@@ -171,7 +171,7 @@ def build_requests(
 ) -> list[ImageGenerationRequest]:
     """確定済みの出力パス・参照割り当てから attempt 順の生成リクエストを組み立てる。"""
     requests: list[ImageGenerationRequest] = []
-    for output_path, selected_ref in zip(planned_paths, reference_assignments):
+    for output_path, selected_ref in zip(planned_paths, reference_assignments, strict=False):
         request_refs = [selected_ref] if selected_ref is not None else []
         requests.append(
             ImageGenerationRequest(

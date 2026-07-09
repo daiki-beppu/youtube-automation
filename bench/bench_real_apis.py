@@ -65,7 +65,7 @@ def main() -> int:
         print(f"\n=== {name} ===")
         try:
             mod.run()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"  [FAIL] {e}")
     return 0
 

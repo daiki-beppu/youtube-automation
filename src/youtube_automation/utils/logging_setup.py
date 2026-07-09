@@ -10,7 +10,7 @@ Usage:
 import logging
 
 
-def setup_logging(name: str = None, level: int = logging.INFO) -> logging.Logger:
+def setup_logging(name: str | None = None, level: int = logging.INFO) -> logging.Logger:
     """ログ設定を行い、logger を返す。
 
     Args:

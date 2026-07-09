@@ -21,12 +21,12 @@ import logging
 import sys
 from datetime import date, datetime
 
-from youtube_automation.scripts.benchmark_collector import (  # noqa: E402
+from youtube_automation.scripts.benchmark_collector import (
     ensure_benchmark_fresh,
     load_benchmark_videos,
 )
-from youtube_automation.utils.config import channel_dir as _channel_dir  # noqa: E402
-from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
+from youtube_automation.utils.config import channel_dir as _channel_dir
+from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +159,7 @@ def print_summary(data: dict):
     print(f"   対象動画: {summary.get('total_videos', 0)}本")
     print(f"   総コメント: {summary.get('total_comments', 0)}件")
     print()
-    for slug, info in summary.get("by_channel", {}).items():
+    for _slug, info in summary.get("by_channel", {}).items():
         print(f"   {info['name']}: {info['video_count']}本, {info['comment_count']}件")
     print("\n📁 動画別コメント数:")
     for v in data.get("videos", []):

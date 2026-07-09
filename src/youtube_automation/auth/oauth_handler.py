@@ -16,6 +16,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 import google.auth.exceptions
 from google.auth.transport.requests import Request
@@ -119,7 +120,7 @@ class YouTubeOAuthHandler:
     # YouTube Full Access + Analytics + Reporting スコープ
     # yt-analytics-monetary.readonly は Reporting API v1 (#84) で
     # videoThumbnailImpressions / videoThumbnailImpressionsClickThroughRate を取得するため必須。
-    SCOPES = [
+    SCOPES: ClassVar[list[str]] = [
         "https://www.googleapis.com/auth/youtube",
         "https://www.googleapis.com/auth/youtube.force-ssl",
         "https://www.googleapis.com/auth/yt-analytics.readonly",
@@ -349,7 +350,7 @@ def main():
             paths.extend([auth_handler.client_secrets_file, auth_handler.token_file])
         logger.error("CLI 実行失敗: %s", _redact(str(e), *paths))
         sys.exit(1)
-    except Exception as e:  # noqa: BLE001 - CLI top-level panic-handler: exit code 1 で必ず終了させる契約
+    except Exception as e:
         # 想定外例外の最終 fallback。traceback は logger.exception が付与し、
         # _redact で token 値・絶対パスの leak を防ぐ。
         logger.exception("CLI 実行中に想定外のエラー: %s", _redact(str(e)))

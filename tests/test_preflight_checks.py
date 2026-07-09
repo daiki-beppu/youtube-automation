@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -692,11 +693,11 @@ class TestCheckTitleTemplateCompliance:
     """`check_title_template_compliance` の鋳型逸脱・巻数表記・RHS 重複検出 (#602)."""
 
     # soulful-grooves チャンネルを想定した鋳型設定
-    CFG = {
+    CFG: ClassVar[dict[str, object]] = {
         "template": "{adjective} Soul/Funk {noun} | {hours} Hours of {mood}",
         "core_vocabulary": ["Soul", "Funk"],
     }
-    EXISTING = [
+    EXISTING: ClassVar[list[str]] = [
         "Pure Soul & Funk Infinity | 3 Hours of Soulful Retro Funk Grooves",
         "Golden Hour Soul Flow | 4 Hours of Smooth City Funk",
     ]
@@ -788,11 +789,11 @@ class TestCheckTitleTemplateCompliance:
 class TestCheckTitleDuplicateWarnings:
     """企画/タイトル決定段階の早期 warning。upload preflight の fail 判定とは分離する。"""
 
-    CFG = {
+    CFG: ClassVar[dict[str, object]] = {
         "template": "{adjective} Soul/Funk {noun} | {hours} Hours of {mood}",
         "separator": " | ",
     }
-    EXISTING = [
+    EXISTING: ClassVar[list[str]] = [
         "Pure Soul & Funk Infinity | 3 Hours of Soulful Retro Funk Grooves",
         "Golden Hour Soul Flow | 4 Hours of Smooth City Funk",
     ]
