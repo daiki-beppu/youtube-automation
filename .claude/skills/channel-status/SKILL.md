@@ -25,8 +25,9 @@ uv run yt-channel-status
 
 取得される情報:
 - チャンネル統計: 登録者数、総再生回数、動画数
-- コレクション一覧: タイトル、公開日、再生数、いいね数、コメント数
-- 制作中コレクション: `collections/planning/` 内の workflow-state.json から現在フェーズを表示
+- コレクション一覧: タイトル、公開日、再生数、総視聴時間、平均視聴時間
+
+制作中コレクションの進捗（`collections/planning/` の workflow-state.json）は本スキルでは扱わない — `/wf-status` を使う。
 
 `--json` オプションで JSON 出力、`--summary` でサマリーのみ表示も可能。
 
