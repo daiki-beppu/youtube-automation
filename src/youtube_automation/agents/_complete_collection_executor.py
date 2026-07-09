@@ -15,10 +15,12 @@ from pathlib import Path
 
 from youtube_automation.agents._collection_uploader_constants import (
     ACTION_COMPLETE_COLLECTION_DEDUP_SKIPPED,
+    ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED,
     ACTION_COMPLETE_COLLECTION_UPLOADED,
     TRACKING_STATUS_COMPLETED,
 )
 from youtube_automation.agents.youtube_auto_uploader import UPLOAD_SOURCE_EXISTING
+from youtube_automation.utils.exceptions import QuotaExhaustedError
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +109,14 @@ class CompleteCollectionExecutorMixin:
                 logger.error(f"❌ Complete Collection 失敗: {error_msg}")
                 return {"action": "complete_collection_failed", "details": {"error": error_msg}}
 
+        except QuotaExhaustedError as e:
+            # リトライ可能: tracking を failed にせず、resume URI（callback が永続化済み）を
+            # 温存して次回実行に委ねる
+            logger.error(f"⏸️  quota 枯渇のため中断（再実行で resume）: {e}")
+            return {
+                "action": ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED,
+                "details": {"error": str(e), "retry_after_seconds": e.retry_after_seconds},
+            }
         except Exception as e:
             # 例外パスでも callback が書いた disk 状態を尊重するため再ロード
             current = self._load_tracking(collection_path) or tracking

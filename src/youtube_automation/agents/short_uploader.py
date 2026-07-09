@@ -29,7 +29,7 @@ from typing import Optional
 from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import channel_dir, load_config
-from youtube_automation.utils.exceptions import UploadError
+from youtube_automation.utils.exceptions import QuotaExhaustedError, UploadError
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
 from youtube_automation.utils.schedule import get_schedule_timezone, now_in_schedule_tz
 
@@ -314,6 +314,12 @@ class ShortUploader:
                 on_session_uri_changed=_on_session_uri_changed,
                 on_upload_complete=_on_upload_complete,
             )
+        except QuotaExhaustedError as e:
+            logger.error(f"⏸️  quota 枯渇のため中断・時間をおいて再実行してください: {e}")
+            return {
+                "action": ACTION_FAILED,
+                "details": {"error": str(e), "retryable": True, "retry_after_seconds": e.retry_after_seconds},
+            }
         except Exception as e:
             logger.error(f"❌ upload_video 失敗: {e}")
             return {"action": ACTION_FAILED, "details": {"error": str(e)}}

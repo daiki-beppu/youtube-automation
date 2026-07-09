@@ -761,6 +761,24 @@ class TestUploadShort:
         # Then
         assert result["action"] == "short_upload_failed"
 
+    def test_upload_video_raises_quota_exhausted_error_marks_result_retryable(self, tmp_path):
+        """plan 020 Step 4: QuotaExhaustedError は details.retryable=True で区別する."""
+        from youtube_automation.utils.exceptions import QuotaExhaustedError
+
+        # Given
+        col = _setup_collection(tmp_path)
+        with _make_short_uploader() as (uploader, mock_inner):
+            self._patch_interval_ok(uploader)
+            mock_inner.upload_video.side_effect = QuotaExhaustedError("quota exceeded", retry_after_seconds=17.5)
+
+            # When
+            result = uploader.upload_short(col)
+
+        # Then
+        assert result["action"] == "short_upload_failed"
+        assert result["details"]["retryable"] is True
+        assert result["details"]["retry_after_seconds"] == 17.5
+
 
 # ---------------------------------------------------------------------------
 # 7. TestUpdateWorkflowState (plan アンチパターン #10 / test-design TDR-002)
