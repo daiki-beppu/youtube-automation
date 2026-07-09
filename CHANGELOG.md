@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - `chore(deps)`: import ゼロで宣言のみ残っていた直接依存 `seaborn` を削除した（plan 024）。transitive に必要な `pandas` / `matplotlib` は引き続き `[project] dependencies` に独立宣言済み
+- `refactor(utils)`: 旧 analytics モノリスの unreachable な残骸（`report_generator.py` / `report_renderer.py` / `analytics_analyzer.py`、計 1,016 行）を削除した（plan 023）。現行の analytics は `analytics_base.py` Protocol + `strategic_analytics.py` / `ctr_analytics.py` 等の mixin 構成に移行済みで、これら 3 ファイルはどこからも import されていなかった。`ctr_analytics.py` の docstring に残っていた `analytics_analyzer._analyze_collection_ctrs` への stale な参照も削除した
 
 ### Fixed
 
