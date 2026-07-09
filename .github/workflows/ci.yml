@@ -86,3 +86,15 @@ jobs:
             exit 1
           fi
           echo "ADR numbers are unique"
+
+  any-gate:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check new Any usage
+        env:
+          PRE_PUSH_DIFF_BASE: ${{ github.event.pull_request.base.sha }}
+        run: bash .lefthook/pre-push/any-usage-gate.sh
