@@ -13,8 +13,6 @@ Connector でも同症状が報告されている未解決問題のため、本 
 非同期 CSV bulk download 経由の thumbnail impressions / CTR を取得できる。
 ジョブ作成後 最大 48h で初回レポート取得可能（過去 30 日分が backfill）、
 以降は日次 D+2、API データ保持上限 60 日。
-コレクション別ランキングは `analytics_analyzer._analyze_collection_ctrs` 側で
-Reporting API per_video CTR を最優先で参照する。
 """
 
 from __future__ import annotations
