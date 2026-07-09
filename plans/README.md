@@ -16,7 +16,7 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 | 020 | アップロード経路の堅牢化（tracking アトミック化 / QuotaExhaustedError 非終端化 / サムネ temp リーク） | P1 | S-M | — | — | — | DONE（executor worktree `agent-af61959883980ebd7` の commit `34fd53ec`、レビュー承認済み・未マージ） |
 | 021 | bulk_update_desc の snippet 更新を read-modify-write 化（defaultAudioLanguage 消失防止） | P1 | S | — | — | — | TODO |
 | 022 | analytics collect の uploads playlist 二重取得解消 + video_listing の例外/TZ 修正 | P2 | S | — | — | — | DONE |
-| 023 | dead analytics/report クラスタ 3 ファイル（1,016 行）削除 | P2 | S | — | — | — | TODO |
+| 023 | dead analytics/report クラスタ 3 ファイル（1,016 行）削除 | P2 | S | — | — | — | DONE（executor worktree `agent-acf19331a2fa55eef` の commit `94dc02f0`、レビュー承認済み・未マージ） |
 | 024 | ツールチェーン整備（dev 依存一本化 / ruff B・RUF / seaborn 削除 / Any-gate CI / CJK フォント回帰テスト） | P2 | M | — | — | — | DONE（executor worktree `agent-a13b54d744b264348` の commit `f8d3799e`、レビュー承認済み・未マージ） |
 
 ### Dependency notes
