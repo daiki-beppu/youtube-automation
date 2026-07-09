@@ -144,7 +144,7 @@ curl -H "Authorization: Bearer $(gcloud auth print-access-token)" \
 
 ## 関連
 
-- `agents/collection_uploader.py::_calculate_publish_at` — スケジュール計算ロジック
-- `agents/collection_uploader.py::_scheduling_enabled` — 有効性判定ヘルパー（#647）
+- `agents/_published_dates.py::_calculate_publish_at` — スケジュール計算ロジック（`CollectionUploader` が mixin 経由で使用）
+- `agents/_published_dates.py::_scheduling_enabled` — 有効性判定ヘルパー（#647、`collection_uploader.py` から re-export）
 - `agents/youtube_auto_uploader.py::_normalize_publish_at` — `status.publishAt` の UTC 正規化
 - YouTube Data API: <https://developers.google.com/youtube/v3/docs/videos>

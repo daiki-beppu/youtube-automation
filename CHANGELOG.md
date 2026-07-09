@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(skills)`: 視覚・公開系 8 スキルの整合性監査（#1685）で検出した記述ドリフトを実装準拠に修正。`/short`: 実在しない `yt-upload-shorts --ignore-interval` フラグの記述を削除（bypass は config 側の `min_hours_between_shorts_per_collection` 調整で行う）、`yt-shorts-bulk-update-loc` は collection パス引数を取らず `collections/live/` 全件走査であることを明記、loop-mp4 クロップ位置は `generate-shorts.sh` 側 env（`SHORT_CROP_X`）ではなく中央固定であり center 以外は手動 ffmpeg 実行が必要と修正。`/short-thumbnail`: `yt-generate-shorts-loop` の Veo 設定は skill-config `short`（`.claude/skills/short/config.default.yaml` の `veo` セクション / `config/skills/short.yaml`）を読む実装に合わせて設定表を修正し、`yt-generate-image` が生成しない「自動生成 `short.jpg`」と固定解像度 1536x2752 の記述を削除。`/video-upload`: `references/scheduled-publish.md` の関連リンクを `_calculate_publish_at` / `_scheduling_enabled` の実体 `agents/_published_dates.py` に修正
 - `fix(skills)`: `video-analyze/SKILL.md` の「呼び出し側スキル」から、現行 `/lyria` に実装が存在しない `bgm_arc` 平均読み込み・`composition.json` フェーズ境界・`phase.at_min` の記述（DJ Engine 時代の phase 設計の残骸）を削除した（#1651）。あわせて `.claude/CLAUDE.template.md` の音源生成表・音楽エンジン比較表の `/lyria` 表記を現行実装（プロンプト + API 入力パラメータ設計）に合わせて修正
 - `fix(suno-helper)`: queue 実行の resume payload 境界で `submittedClipIds` / `playlistExpectedClipCount` を fail-loud に検証し、未完了 clip を保持した再開時に不正な raw payload が playlist 完了待ちへ流れ込まないようにした（#1586）。
 - `fix(suno-helper)`: SKILL.md の進捗 phase 表に queue mode の `submitted` を追記（#1586）。shared/constants の PHASE と skill doc の照合テスト `test_suno_helper_phase_table_matches_shared_phase_constants` が新 phase 追加に追従しておらず fail していた

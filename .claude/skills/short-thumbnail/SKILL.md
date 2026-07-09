@@ -58,7 +58,7 @@ uv run yt-generate-image \
   -y
 ```
 
-出力: `10-assets/short.png`（1536x2752）+ 自動生成 `short.jpg`
+出力: `10-assets/short.png`（9:16。解像度は Gemini の `--size` 設定に依存、デフォルト 2K）
 
 ### Step 4: 確認・承認
 
@@ -69,7 +69,7 @@ open <collection-path>/10-assets/short.png
 `AskUserQuestion` で承認 / 再生成を選ばせる。再生成時は `--output short-v2.png` のように自動バージョニング。
 
 **チェック項目**:
-- [ ] 9:16 縦型（1536x2752）
+- [ ] 9:16 縦型
 - [ ] テキスト 3 層がすべて読める
 - [ ] 斜め後ろ / 横顔構図（カメラ目線 NG）
 - [ ] 既存の textless 動画背景 / 参考ビジュアルとの世界観の一貫性
@@ -107,8 +107,8 @@ open <collection-path>/10-assets/short-loop.mp4
 
 | 配置 | ファイル | 責務 |
 |------|---------|------|
-| ループ動画 skill 動作 | `.claude/skills/short-thumbnail/config.default.yaml`（あれば） | Veo モデル / プロンプト / クロップオフセット |
-| チャンネル上書き | `config/skills/short-thumbnail.yaml` | skill-config 差し替え |
+| ループ動画 skill 動作 | `.claude/skills/short/config.default.yaml` の `veo` セクション（未定義時は内蔵デフォルト） | Veo モデル / デフォルトプロンプト |
+| チャンネル上書き | `config/skills/short.yaml` | skill-config 差し替え（`yt-generate-shorts-loop` は skill-config `short` を読む） |
 
 ## Gotchas
 
@@ -126,7 +126,7 @@ open <collection-path>/10-assets/short-loop.mp4
 ├── main.png          # 16:9 textless 動画背景 / 参考ビジュアル
 ├── thumbnail.jpg     # 16:9 テキスト付きサムネ（YouTube 用）
 ├── short.png         # 9:16 ショート用サムネ（本スキルで生成）
-├── short.jpg         # 9:16 JPEG 版（自動生成）
+├── short.jpg         # 9:16 JPEG 版（任意。short.png 不在時の yt-generate-shorts-loop 入力フォールバック）
 ├── short-loop.mp4    # 9:16 ループ動画（Step 5 で生成）
 └── loop.mp4          # 16:9 ループ動画背景
 ```

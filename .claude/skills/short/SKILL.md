@@ -36,7 +36,7 @@ description: "Use when collection 型（BGM テイスター）チャンネルで
 | `uv run yt-upload-shorts <collection-path> --plan` | メタデータプレビュー（API 呼ばない） |
 | `bash .claude/skills/short/references/generate-shorts.sh <collection-path>` | FFmpeg 一括生成 |
 | `bash .claude/skills/short/references/test-crop-positions.sh <master> 30` | loop-mp4 素材時のクロップ位置確認 |
-| `uv run yt-shorts-bulk-update-loc <collection-path>` | 投稿済みショートの localizations を一括差し替え |
+| `uv run yt-shorts-bulk-update-loc [--dry-run]` | 投稿済みショートの localizations を一括差し替え（`collections/live/` 全件走査。個別コレクション指定は不可） |
 
 ## Instructions
 
@@ -79,7 +79,7 @@ assert cfg.youtube.content_model.type == "collection", "release 型は /short-re
 bash .claude/skills/short/references/test-crop-positions.sh "$MASTER_VIDEO" 30
 ```
 
-`center` / `x=400` / `x=350` の 3 パターンを `/tmp/short-test-*.jpg` に書き出し `open` で表示。選択結果を `SHORT_CROP_X` 等の env で `generate-shorts.sh` 側に渡す（`crop=ih*9/16:ih:<X>:0`）。
+`center` / `x=400` / `x=350` の 3 パターンを `/tmp/short-test-*.jpg` に書き出し `open` で表示。`generate-shorts.sh` の loop-mp4 経路は中央クロップ（`crop=ih*9/16:ih`）固定のため、center 以外を選んだ場合は該当 ffmpeg コマンドの `-vf` のクロップ部分を `crop=ih*9/16:ih:<X>:0` に差し替えて手動実行する。
 
 ### Step 5: 一括生成
 
@@ -155,7 +155,7 @@ uv run yt-upload-shorts <collection-path>              # 実投稿
 - **drawtext アポストロフィ**: `SHORT_COLLECTION_NAME` に `'` が含まれるとシェルクォートと衝突。アポストロフィを除去するか `'\''` でエスケープしてから渡す
 - **fps=30 必須**: マスター動画が静止画ベース（1fps）の場合、`fps=30` フィルタなしで生成すると YouTube がショート認識しない
 - **CC video_url 未記録**: `upload_tracking.json::complete_collection.video_url` が空だと CC リンク行が描画欄から省略される（例外は投げない）。完全状態にするには CC 動画アップ後に `yt-upload-collection` の出力で記録を確認
-- **投稿間隔**: 同コレクションで前回投稿から `cfg.shorts.min_hours_between_shorts_per_collection` 時間以内は新規投稿が block される。テスト中は `--ignore-interval` フラグで bypass 可
+- **投稿間隔**: 同コレクションで前回投稿から `cfg.shorts.min_hours_between_shorts_per_collection` 時間以内は新規投稿が block される。bypass フラグは無いため、テスト中は `config/channel/shorts.json` の `min_hours_between_shorts_per_collection` を一時的に小さくして対応する
 
 ## 長時間処理の取り扱い
 
@@ -179,6 +179,6 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 
 ## Next Step
 
-- 投稿済みショートの localizations を一括更新: `uv run yt-shorts-bulk-update-loc <collection-path>`
+- 投稿済みショートの localizations を一括更新: `uv run yt-shorts-bulk-update-loc`（`collections/live/` 全件対象。`--dry-run` でプレビュー）
 - 全本数完了後の進捗確認: `/wf-status`
 - release 型チャンネルでショートを作りたい場合: `/short-release`
