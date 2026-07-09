@@ -11,22 +11,27 @@
 ├── data/                        # ベンチマーク・コメント・分析データ
 ├── docs/
 │   ├── benchmarks/              # 競合チャンネル分析レポート
-│   └── plans/                   # チャンネル方向性・企画ドキュメント
+│   ├── channel/                 # TTP メモ・方向性・branding snapshot
+│   │   └── personas/            # ペルソナ定義
+│   └── plans/                   # 企画ドキュメント（viewer-voice 等の出力）
 ├── collections/
 │   ├── planning/                # 制作中コレクション
 │   └── live/                    # 公開済みコレクション
 ├── reports/                     # Analytics レポート
+├── research/                    # リサーチメモ
 ├── branding/                    # アイコン・バナー等
 └── .claude/                     # Claude Code 設定（yt-skills sync が展開）
 ```
+
+`auth/` `branding/` `collections/` `data/` `docs/channel/personas/` `docs/benchmarks/` `research/` は `/setup` の `uv run yt-setup-dirs` が冪等に作成する（setup 用最小セット）。
 
 ## 作成コマンド
 
 ```bash
 mkdir -p config auth data \
-  docs/benchmarks docs/plans \
+  docs/benchmarks docs/channel/personas docs/plans \
   collections/planning collections/live \
-  reports branding .claude
+  reports research branding .claude
 ```
 
 ## オプションディレクトリ
