@@ -4,6 +4,46 @@
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
+## 第 4 回監査（Python コア本体の一般監査、2026-07-09、基準 commit `5394c378`）
+
+初の `src/youtube_automation/`（~46K 行）本体監査。並列 4 subagent（正確性+セキュリティ / パフォ+依存 / テスト+負債 / DX+docs+方向性）→ 全 findings を advisor が実読 vet。
+総評: subprocess・パス traversal・OAuth・シークレット・コメント冪等性は防御済み、クリティカルパスは 4,976 テストで実挙動検証済みと**健全**。実弾はアップロード経路のエラー処理・dead code・ツールチェーンのほつれに集中。
+
+### Execution order & status
+
+| Plan | Title | Priority | Effort | Depends on | Issue | PR | Status |
+|------|-------|----------|--------|------------|-------|-----|--------|
+| 020 | アップロード経路の堅牢化（tracking アトミック化 / QuotaExhaustedError 非終端化 / サムネ temp リーク） | P1 | S-M | — | — | — | TODO |
+| 021 | bulk_update_desc の snippet 更新を read-modify-write 化（defaultAudioLanguage 消失防止） | P1 | S | — | — | — | TODO |
+| 022 | analytics collect の uploads playlist 二重取得解消 + video_listing の例外/TZ 修正 | P2 | S | — | — | — | TODO |
+| 023 | dead analytics/report クラスタ 3 ファイル（1,016 行）削除 | P2 | S | — | — | — | TODO |
+| 024 | ツールチェーン整備（dev 依存一本化 / ruff B・RUF / seaborn 削除 / Any-gate CI / CJK フォント回帰テスト） | P2 | M | — | — | — | TODO |
+
+### Dependency notes
+
+- 020〜023 は互いにファイル非重複で並列実行可。**024 は全プランと CHANGELOG.md が、020 と `upload_core.py` の近傍が競合しうる**ため、連続実行時は 024 を最後に回して rebase する
+- 020〜024 すべて CHANGELOG `[Unreleased]` 追記必須（docs/tests のみの変更なし）
+
+### Findings considered and rejected（再監査不要）
+
+- **`ci.yml` の `parallel:` ステップが不正構文疑い**: 誤り。現行 GitHub Actions の正規のステップグループ構文で、run 29001443387 で Ruff 両ステップの実行成功を確認済み
+- **`collection_serve` の同時 POST `/downloaded` race**: 単一オペレーター + 単一拡張の運用モデルでは実発生確率ほぼゼロ（第 1 回監査の `write_distrokid_release` TOCTOU 棄却と同判断）。多重化するなら per-cid lock を検討
+- **mypy/pyright 導入**: tayk（TS 後継、ADR-0021）移行済みのメンテナンスモードでは L+ 工数の回収期間が無い。「導入しない」を本行で明文化とする。型規律は any-usage-gate（024 で CI 化）が代替
+- **`QuotaExceededError` が dormant という subagent 報告**: 二重に誤り。実名は `QuotaExhaustedError`（exceptions.py:45）で、upload_core.py:205 から raise されテスト済み。問題は「呼び出し側が握りつぶす」ことで、020 が修正する
+- **`schedule.py` vs `publish_schedule.py` の重複疑い / `profile.py` 等の dead 疑い / comments の generator 3 実装**: いずれも誤検知（責務が別 / 現役 importer あり / 意図した strategy パターン）
+- **CLI 起動時の pandas/matplotlib 重量 import**: 誤検知。`cli_entrypoints.py` は `import_module` の遅延 dispatcher で、重量 import は plotting 系コマンドに閉じている
+- **retention の per-video Analytics クエリ**: audience retention curve にバッチ endpoint が無い API 制約。by design
+- **GitHub Actions の Node 20 deprecation 注記**: 現状は自動 fallback で実害なし。actions メジャー bump は任意のついで作業
+
+### 監査で plan 化を見送った残課題
+
+- **doctor.py（2,650 行・61 コミット churn）の god module 分割**（L、テストは厚く安全）— TTP/branding 業務ロジックの `utils/` 移設 + GCP チェックのサブモジュール化。ユーザー未選択
+- **中粒の構造整理**（M）— utils 83 モジュールの flat 化解消（suno_downloaded_* 8 分片の統合、`utils/comments/`・`utils/config/` パッケージ方式に倣う）/ metadata_generator.py（1,271 行）の 4 責務分割 / doc-contract 系テスト ~25 本への pytest marker 付与と behavioral-only fast lane。ユーザー未選択
+- **PERF-02: サブ分析間の `_get_video_details` / `dimensions=video` クエリ共有**（M、collect 1 回のクォータをさらに削減）— 022 の続編として設計余地
+- **`strategic_analytics.py` の `comprehensive` モード**（呼び出し元ゼロ、per-video N+1 内蔵）— 使うか消すかの判断待ち。023 のスコープ外として温存
+- **japanize-matplotlib の置換移行**（S-M、MED リスク）— 024 は glyph 回帰テストの設置まで。テストが fail したら `font_manager.addfont()` 直接登録へ移行
+- **Direction 3 件（ユーザー未選択、spike/design プラン候補）**: (1) Data API クォータ可観測性 — cost_tracker 相当の units 台帳 + pre-flight 見積（無人運転を止める最有力因子に事前可視性）。(2) `yt-unpublish` — 公開 3 entrypoint に対する逆操作の不在。`videos().update` の既存配管で `privacyStatus=private` 一括復帰、dry-run→confirm 必須。(3) cost_tracker の `estimated_cost_usd` null 固定（Issue #132 の意図的決定）の再訪 — 単価表 1 枚でドル換算が完成する
+
 ## 第 3 回監査（takt リジェクト多発の原因調査、2026-07-06、基準 commit `bf68c73d` / dotfiles `9a030ff`）
 
 調査テーマ: review-takt-default の REJECT 多発（`.takt/runs/` 239 run・指摘 676 件の全数解析）。
