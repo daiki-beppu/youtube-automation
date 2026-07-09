@@ -75,6 +75,16 @@ generator は pattern draft、設定、benchmark analysis、必要な References
 - **重複検証**: 生成時に全 entry の Style 文（第 1 行 + 情景行）が完全一致する組があれば `uv run yt-generate-suno` が警告する
 - **無効化**: チャンネル側で `style_variation.enabled: false` を設定すると従来動作（全 entry 同一の Style 第 1 行）に戻る
 
+## 前提
+
+以下を確認し、満たさなければ前工程を案内して停止する:
+
+- `config/channel/` が存在すること（`load_config()` でロード可能）。存在しない場合は `/channel-new`（既存チャンネルは取り込みモード）を案内して停止する
+- チャンネルの音楽エンジンが Suno であること。Lyria チャンネルでは本スキルを使わず `/lyria` を案内する
+- 対象コレクション（`collections/planning/` 配下の `workflow-state.json`）が `/wf-new` で作成済みであること。無ければ `/wf-new` を案内して停止する
+- `config/skills/suno.yaml::genre_line` または `data/video_analysis/<slug>/*.json`（`suno_preset`）が利用可能であること。詳細な判定と自動準備は「前提条件チェック（hard gate）」に従う
+- ボーカルモードの merge 段階では `20-documentation/suno-lyrics.json` が必要。無ければ先に `/suno-lyric` を実行する
+
 ## Instructions
 
 ### 前提条件チェック（hard gate）
