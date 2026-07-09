@@ -13,16 +13,15 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 
 | Plan | Title | Priority | Effort | Depends on | Issue | PR | Status |
 |------|-------|----------|--------|------------|-------|-----|--------|
-| 020 | アップロード経路の堅牢化（tracking アトミック化 / QuotaExhaustedError 非終端化 / サムネ temp リーク） | P1 | S-M | — | — | — | DONE（executor worktree `agent-af61959883980ebd7` の commit `34fd53ec`、レビュー承認済み・未マージ） |
-| 021 | bulk_update_desc の snippet 更新を read-modify-write 化（defaultAudioLanguage 消失防止） | P1 | S | — | — | — | TODO |
-| 022 | analytics collect の uploads playlist 二重取得解消 + video_listing の例外/TZ 修正 | P2 | S | — | — | — | DONE |
-| 023 | dead analytics/report クラスタ 3 ファイル（1,016 行）削除 | P2 | S | — | — | — | TODO |
-| 024 | ツールチェーン整備（dev 依存一本化 / ruff B・RUF / seaborn 削除 / Any-gate CI / CJK フォント回帰テスト） | P2 | M | — | — | — | DONE（executor worktree `agent-a13b54d744b264348` の commit `f8d3799e`、レビュー承認済み・未マージ） |
+| 020 | アップロード経路の堅牢化（tracking アトミック化 / QuotaExhaustedError 非終端化 / サムネ temp リーク） | P1 | S-M | — | — | [#1786](https://github.com/daiki-beppu/youtube-automation/pull/1786) | DONE（main マージ済み `34935fc7`） |
+| 021 | bulk_update_desc の snippet 更新を read-modify-write 化（defaultAudioLanguage 消失防止） | P1 | S | — | — | [#1789](https://github.com/daiki-beppu/youtube-automation/pull/1789) | DONE（独立修正済み `fbde9a4d`） |
+| 022 | analytics collect の uploads playlist 二重取得解消 + video_listing の例外/TZ 修正 | P2 | S | — | — | [#1788](https://github.com/daiki-beppu/youtube-automation/pull/1788) | DONE（main マージ済み `373f7409`） |
+| 023 | dead analytics/report クラスタ 3 ファイル（1,016 行）削除 | P2 | S | — | — | [#1791](https://github.com/daiki-beppu/youtube-automation/pull/1791) | DONE（main マージ済み `d9de12f3`） |
+| 024 | ツールチェーン整備（dev 依存一本化 / ruff B・RUF / seaborn 削除 / Any-gate CI / CJK フォント回帰テスト） | P2 | M | — | — | [#1790](https://github.com/daiki-beppu/youtube-automation/pull/1790) | DONE（main マージ済み `717a92b2`） |
 
 ### Dependency notes
 
-- 020〜023 は互いにファイル非重複で並列実行可。**024 は全プランと CHANGELOG.md が、020 と `upload_core.py` の近傍が競合しうる**ため、連続実行時は 024 を最後に回して rebase する
-- 020〜024 すべて CHANGELOG `[Unreleased]` 追記必須（docs/tests のみの変更なし）
+- 020〜024 すべて main マージ済み。第 4 回監査の全プラン完了
 
 ### Findings considered and rejected（再監査不要）
 
@@ -61,8 +60,8 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 
 | Plan | Title | Priority | Effort | Depends on | Issue | PR | Status |
 |------|-------|----------|--------|------------|-------|-----|--------|
-| 019 | takt-review の fix を累積差分の自己監査 + finding_id 解消根拠表つきに再設計 | P1 | M | — | — | — | DONE（executor worktree `scratchpad/wt-019`・branch `feat/takt-review-fix-self-audit`・commit `874d28b`。レビュー済み・未マージ） |
-| 018 | issue / to-issues / takt-issue テンプレに「兄弟入口・貫通先」列挙を必須化 | P2 | S | — | — | — | DONE（executor worktree `scratchpad/wt-018`・branch `feat/issue-sibling-entrypoints`・commit `cf6a598`。レビュー済み・未マージ） |
+| 019 | takt-review の fix を累積差分の自己監査 + finding_id 解消根拠表つきに再設計 | P1 | M | — | — | — | DONE（dotfiles main マージ済み `71d453f`） |
+| 018 | issue / to-issues / takt-issue テンプレに「兄弟入口・貫通先」列挙を必須化 | P2 | S | — | — | — | DONE（dotfiles main マージ済み `3dbd88e`） |
 
 ### Findings considered and rejected（再監査不要）
 
