@@ -83,7 +83,7 @@ takt の自動 worktree（task の `worktree: true`）では **step 間のセッ
 resume が効くのは**キャッシュ TTL 内に次 step が始まる隣接 step のみ**（同実験で write_tests→implement の非キャッシュ input が 187K → 102K に減少するのを確認）。したがって:
 
 - ループを持つ workflow（default 等）は **resume 無効のまま（= takt デフォルト挙動）が安い**。このガードはコスト面では防御として機能している
-- 手動 worktree 内で `takt add` → `takt run`（task の `worktree` 指定を省略 = カレント実行）にすれば `cwd === projectCwd` となり resume は有効化できるが、検討に値するのは**ループのない短い直列 workflow だけ**。この場合 auto-commit / push / auto_pr は worktree 実行時のフローなので、commit・PR 作成は手動（`commit-convention` / `pr` スキル）で行うこと
+- 手動 worktree 内で `takt add` → `takt run`（task の `worktree` 指定を省略 = カレント実行）にすれば `cwd === projectCwd` となり resume は有効化できるが、検討に値するのは**ループのない短い直列 workflow だけ**。この場合 auto-commit / push / auto_pr は worktree 実行時のフローなので、commit・PR 作成は手動（CLAUDE.md「開発ワークフロー」の commit 規約 + `gh pr create`）で行うこと
 
 ### 計測との突き合わせ
 
@@ -95,7 +95,7 @@ resume が効くのは**キャッシュ TTL 内に次 step が始まる隣接 st
 
 ただし、**実装を担う `coder` persona を codex provider にしている（グローバル設定から継承）ため**、実装ファイルへの編集は Codex CLI 経由で行われ Claude Code の protected paths 制約を回避できる（Codex は独自のサンドボックスで動作し、`$REPO_ROOT/.agents/skills` を探索パスに含む）。レビュー系 persona は opus（Claude）だが書き込みは行わないため影響しない。そのため、**skill 配下を変更する issue も takt から問題なく回せる**。実際の運用例として、`.claude/skills/videoup/references/generate_videos.sh` 等の skill 配下スクリプト修正も takt 経由で完走実績がある。
 
-逆に `coder` を Claude provider に戻している環境では、従来通り skill 配下の Edit が deny される。その場合は通常の Claude Code 対話セッション（cmux pane 等）で直接編集し、コミット・PR 作成は `commit-convention` / `pr` スキル経由で実施する。
+逆に `coder` を Claude provider に戻している環境では、従来通り skill 配下の Edit が deny される。その場合は通常の Claude Code 対話セッション（cmux pane 等）で直接編集し、コミット・PR 作成は CLAUDE.md「開発ワークフロー」の規約に従い手動で実施する。
 
 ## Codex 共用時の skill 表記読み替え
 
