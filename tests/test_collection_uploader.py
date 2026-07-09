@@ -579,6 +579,37 @@ class TestExecuteCompleteCollectionResume:
         assert _read_resume_uri(tracking_path) is None
         assert result["action"] == "complete_collection_failed"
 
+    def test_should_not_mark_failed_and_returns_quota_exhausted_action_when_quota_error_raised(self, tmp_path):
+        """plan 020 Step 3: QuotaExhaustedError はリトライ可能として非終端化する.
+
+        tracking の complete_collection.status を "failed" にせず、resume URI
+        （callback が既に永続化済み）を温存したまま次回実行に委ねる。
+        """
+        from youtube_automation.agents._collection_uploader_constants import (
+            ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED,
+        )
+        from youtube_automation.utils.exceptions import QuotaExhaustedError
+
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+
+        def _side_effect(*args, **kwargs):
+            kwargs["on_session_uri_changed"](_SESS_NEW)
+            raise QuotaExhaustedError("quota exceeded", retry_after_seconds=42.0)
+
+        mock_inner.upload_collection.side_effect = _side_effect
+
+        tracking = uploader._load_tracking(col)
+        result = uploader._execute_complete_collection(col, tracking, publish_at=None)
+
+        assert result["action"] == ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED
+        assert result["details"]["retry_after_seconds"] == 42.0
+
+        saved = json.loads(tracking_path.read_text(encoding="utf-8"))
+        assert saved["complete_collection"].get("status") != "failed"
+        # callback が既に永続化した resume URI は温存されている
+        assert saved["complete_collection"]["resume_session_uri"] == _SESS_NEW
+
 
 class TestShowPlanPrivacyDisplay:
     """#1472: --plan の公開設定表示は実効 privacy_status（youtube.json）を反映する。
@@ -666,3 +697,33 @@ class TestScheduleConfigPrivacyStatusDeprecation:
             uploader, _ = _make_uploader_with_collection_mock(tmp_path)
         assert "privacy_status" not in uploader.config["upload_settings"]
         assert "upload_settings.privacy_status" not in caplog.text
+
+
+class TestTrackingIOAtomicity:
+    """plan 020 Step 1/2: tracking JSON のアトミック書き込み・破損検出を検証する。"""
+
+    def test_save_tracking_leaves_no_tmp_file_and_roundtrips(self, tmp_path):
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+
+        tracking = uploader._load_tracking(col)
+        tracking["status"] = "updated"
+        uploader._save_tracking(col, tracking)
+
+        tmp_path_file = tracking_path.with_suffix(tracking_path.suffix + ".tmp")
+        assert not tmp_path_file.exists()
+        saved = json.loads(tracking_path.read_text(encoding="utf-8"))
+        assert saved["status"] == "updated"
+
+    def test_load_tracking_returns_none_and_quarantines_corrupt_file(self, tmp_path):
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        tracking_path.write_text("{truncated", encoding="utf-8")
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+
+        result = uploader._load_tracking(col)
+
+        assert result is None
+        corrupt_path = tracking_path.with_suffix(".json.corrupt")
+        assert corrupt_path.exists()
+        assert corrupt_path.read_text(encoding="utf-8") == "{truncated"
+        assert not tracking_path.exists()

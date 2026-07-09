@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 
 from youtube_automation.agents._collection_uploader_constants import (
@@ -37,7 +38,12 @@ class TrackingIOMixin:
         try:
             with open(tracking_file, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            # 破損ファイルを退避してから None を返す（無言で消さず証拠を保全）。
+            # 呼び出し側は None を「tracking なし」として扱い dedup 探索が働く。
+            corrupt_path = tracking_file.with_suffix(".json.corrupt")
+            os.replace(tracking_file, corrupt_path)
+            logger.error(f"❌ tracking 破損を検出、{corrupt_path} へ退避しました（原因: {e}）")
             return None
 
     def _save_tracking(self, collection_path: Path, tracking: dict):
@@ -45,10 +51,13 @@ class TrackingIOMixin:
         tracking_file = self._get_tracking_path(collection_path)
         tracking_file.parent.mkdir(exist_ok=True)
         try:
-            with open(tracking_file, "w", encoding="utf-8") as f:
-                json.dump(tracking, f, indent=2, ensure_ascii=False)
+            text = json.dumps(tracking, indent=2, ensure_ascii=False)
+            # 途中断絶時の tracking 破損を防ぐため tmp に書いてから rename で差し替える
+            tmp_path = tracking_file.with_suffix(tracking_file.suffix + ".tmp")
+            tmp_path.write_text(text, encoding="utf-8")
+            os.replace(tmp_path, tracking_file)
         except Exception as e:
-            logger.warning(f"⚠️  追跡ファイル保存エラー: {e}")
+            logger.error(f"❌ 追跡ファイル保存エラー: {tracking_file}: {e}")
 
     def _completed_tracking_record(self, complete_video: dict, publish_at: str | None) -> dict:
         record = {

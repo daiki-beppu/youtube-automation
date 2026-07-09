@@ -280,5 +280,12 @@ class YouTubeUploadCore:
                 return compressed
             failed_qualities.add(quality)
 
-        logger.warning(f"サムネイル圧縮後も {compressed.stat().st_size / 1024:.0f}KB — 上限超過")
+        if compressed.exists():
+            logger.warning(
+                f"サムネイル圧縮後も {compressed.stat().st_size / 1024:.0f}KB — 上限超過、"
+                f"元ファイル({thumbnail_path.stat().st_size / 1024:.0f}KB)のまま試行"
+            )
+            compressed.unlink(missing_ok=True)
+        else:
+            logger.warning(f"サムネイル圧縮失敗、元ファイル({thumbnail_path.stat().st_size / 1024:.0f}KB)のまま試行")
         return thumbnail_path

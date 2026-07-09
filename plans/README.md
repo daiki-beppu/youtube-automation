@@ -13,7 +13,7 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 
 | Plan | Title | Priority | Effort | Depends on | Issue | PR | Status |
 |------|-------|----------|--------|------------|-------|-----|--------|
-| 020 | アップロード経路の堅牢化（tracking アトミック化 / QuotaExhaustedError 非終端化 / サムネ temp リーク） | P1 | S-M | — | — | — | TODO |
+| 020 | アップロード経路の堅牢化（tracking アトミック化 / QuotaExhaustedError 非終端化 / サムネ temp リーク） | P1 | S-M | — | — | — | DONE（executor worktree `agent-af61959883980ebd7` の commit `34fd53ec`、レビュー承認済み・未マージ） |
 | 021 | bulk_update_desc の snippet 更新を read-modify-write 化（defaultAudioLanguage 消失防止） | P1 | S | — | — | — | TODO |
 | 022 | analytics collect の uploads playlist 二重取得解消 + video_listing の例外/TZ 修正 | P2 | S | — | — | — | TODO |
 | 023 | dead analytics/report クラスタ 3 ファイル（1,016 行）削除 | P2 | S | — | — | — | TODO |
