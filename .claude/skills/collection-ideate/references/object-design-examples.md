@@ -37,25 +37,17 @@ differentiation_axes:
 
 装備品・道具・環境要素をオブジェクトスロットにする例。
 
-```json
-{
-  "ideate": {
-    "objects": {
-      "swappable": [
-        {
-          "slot": "foreground_item",
-          "description_template": "{item_name}, {material} texture, {state}",
-          "story_template": "冒険者が {location} で手にした {item_name}"
-        },
-        {
-          "slot": "background_element",
-          "description_template": "{environment_feature}"
-        }
-      ],
-      "fixed": ["character", "campfire"]
-    }
-  }
-}
+```yaml
+objects:
+  swappable:
+    - slot: foreground_item
+      description_template: "{item_name}, {material} texture, {state}"
+      story_template: "冒険者が {location} で手にした {item_name}"
+    - slot: background_element
+      description_template: "{environment_feature}"
+  fixed:
+    - character
+    - campfire
 ```
 
 ## オブジェクト設計の原則
