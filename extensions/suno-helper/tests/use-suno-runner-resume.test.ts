@@ -357,7 +357,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       /const rawSubmittedIds = resolvePlaylistClipIds\(\s*previousSubmittedClipIds,\s*currentSubmittedIds,\s*expectedClipCount,?\s*\);[\s\S]*?const plan = buildPlaylistClipPlan\([\s\S]*?scrollAndMultiSelectByIds\(plan\.clipIds,/,
     );
     expect(contentSource).toMatch(
-      /verifiedPlaylistClipCount = await addClipsToPlaylist\([\s\S]*?previousSubmittedClipIds,[\s\S]*?expectedRawPlaylistClipCount,[\s\S]*?entries,/,
+      /verifiedPlaylistClipCount = await addClipsToPlaylist\([\s\S]*?previousSubmittedClipIds,[\s\S]*?expectedPlaylistClipCount,[\s\S]*?entries,/,
     );
   });
 
@@ -367,6 +367,12 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
     );
     expect(contentSource).toMatch(
       /const shouldRunDownloadAfterPlaylist = expectedRawPlaylistClipCount >= total \* CLIPS_PER_REQUEST;/,
+    );
+  });
+
+  it("Given queue mode When content.ts を読む Then playlist 期待数は queue mapping から解決して渡す", () => {
+    expect(contentSource).toMatch(
+      /const expectedPlaylistClipCount =[\s\S]*?options\.runMode === "queue" && queueClipIdsByEntry !== null[\s\S]*?\? countQueuePlaylistClipIds\(previousSubmittedClipIds, queueClipIdsByEntry\)[\s\S]*?: expectedRawPlaylistClipCount;/,
     );
   });
 

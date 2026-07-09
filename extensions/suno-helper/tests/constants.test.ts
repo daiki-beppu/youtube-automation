@@ -236,4 +236,10 @@ describe("shared/constants: 投入方式 run mode (#1586)", () => {
       expect(RUN_MODES[id].riskNote.length).toBeGreaterThan(0);
     },
   );
+
+  it("Given queue mode When riskNote を読む Then duration 範囲外 entry の失敗検知と再実行導線を説明する", () => {
+    expect(RUN_MODES.queue.riskNote).toEqual(expect.stringContaining("範囲外"));
+    expect(RUN_MODES.queue.riskNote).toEqual(expect.stringContaining("失敗"));
+    expect(RUN_MODES.queue.riskNote).toEqual(expect.stringContaining("失敗分のみ再実行"));
+  });
 });

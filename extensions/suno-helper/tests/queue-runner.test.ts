@@ -5,11 +5,11 @@
 // shared/constants の transitive import が package.json スコープ外（extensions/shared）で
 // CJS 判定され ESM named import が壊れる（CI 再現）。責務どおり vitest へ移設した。
 // 実ブラウザ layout 上の queue 監視スモークは引き続き e2e (suno-queue.spec.ts) が担う。
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PromptEntry } from "../../shared/api";
 import { CLIPS_PER_REQUEST, MAX_INFLIGHT_REQUESTS, PHASE } from "../../shared/constants";
-import { submitQueueEntries, waitForSubmittedClipsComplete } from "../lib/queue-runner";
+import { finalizeQueueEntriesYield, submitQueueEntries, waitForSubmittedClipsComplete } from "../lib/queue-runner";
 import type { QueueSubmissionOptions, SubmittedClipCompletionOptions } from "../lib/queue-runner";
 import { buildRunPayload } from "../lib/run-overrides";
 
@@ -72,6 +72,14 @@ function makeQueueSubmissionOptions(input: {
   };
 }
 
+function mapEntries(map: Map<number, string[]>): Array<[number, string[]]> {
+  return Array.from(map.entries());
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("queue-runner: production ロジック (#1586)", () => {
   it("production payload と queue runner は queue mode で生成完了待ちなしに次 entry を投入する", async () => {
     const entries = makePromptEntries(2);
@@ -96,10 +104,70 @@ describe("queue-runner: production ロジック (#1586)", () => {
     const result = await submitQueueEntries(options);
 
     expect(payload.runMode).toBe("queue");
-    expect(result).toEqual({ completed: true, failedIndices: [] });
+    expect(result.completed).toBe(true);
+    expect(result.failedIndices).toEqual([]);
+    expect(mapEntries(result.clipIdsByEntry)).toEqual([
+      [0, ["clip-0-a", "clip-0-b"]],
+      [1, ["clip-1-a", "clip-1-b"]],
+    ]);
     expect(submittedIndexes).toEqual([0, 1]);
     expect(submittedClipIds).toEqual(["clip-0-a", "clip-0-b", "clip-1-a", "clip-1-b"]);
     expect(progress).toEqual([`${PHASE.SUBMITTED}:0`, `${PHASE.SUBMITTED}:1`]);
+  });
+
+  it("Given getSubmittedIds が suffix 順を保証しない When queue entry を投入する Then 投入前後の Set 差分で mapping する", async () => {
+    const entries = makePromptEntries(2);
+    const submittedIndexes: number[] = [];
+    const submittedClipIds: string[] = [];
+    const options = makeQueueSubmissionOptions({ entries, submittedIndexes, submittedClipIds });
+    options.getSubmittedIds = () => [...submittedClipIds].sort();
+    options.submitEntryToQueue = async (_entry, index) => {
+      submittedIndexes.push(index);
+      if (index === 0) {
+        submittedClipIds.push("clip-z-a", "clip-z-b");
+        return;
+      }
+      submittedClipIds.push("clip-a-a", "clip-a-b");
+    };
+
+    const result = await submitQueueEntries(options);
+
+    expect(result.completed).toBe(true);
+    expect(result.failedIndices).toEqual([]);
+    expect(mapEntries(result.clipIdsByEntry)).toEqual([
+      [0, ["clip-z-a", "clip-z-b"]],
+      [1, ["clip-a-a", "clip-a-b"]],
+    ]);
+  });
+
+  it("Given 1回目の ACK 失敗後に clip ID が遅延観測される When entry retry が成功する Then retry attempt 分も同じ entry に帰属する", async () => {
+    const entries = makePromptEntries(1);
+    const submittedIndexes: number[] = [];
+    const submittedClipIds: string[] = [];
+    const options = makeQueueSubmissionOptions({ entries, submittedIndexes, submittedClipIds });
+    options.preset = { ...options.preset, maxEntryRetry: 1 };
+    options.waitForAck = vi
+      .fn<QueueSubmissionOptions["waitForAck"]>()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    options.submitEntryToQueue = async (_entry, index) => {
+      submittedIndexes.push(index);
+      if (submittedIndexes.length === 2) {
+        submittedClipIds.push("clip-retry-a", "clip-retry-b");
+      }
+    };
+    options.abortableSleep = async () => {
+      submittedClipIds.push("clip-delayed-a", "clip-delayed-b");
+    };
+
+    const result = await submitQueueEntries(options);
+
+    expect(result.completed).toBe(true);
+    expect(result.failedIndices).toEqual([]);
+    expect(submittedIndexes).toEqual([0, 0]);
+    expect(mapEntries(result.clipIdsByEntry)).toEqual([
+      [0, ["clip-delayed-a", "clip-delayed-b", "clip-retry-a", "clip-retry-b"]],
+    ]);
   });
 
   it("production queue runner は 10 request cap 到達中に 11 件目を投入しない", async () => {
@@ -130,8 +198,173 @@ describe("queue-runner: production ロジック (#1586)", () => {
     expect(submittedIndexes).toEqual(Array.from({ length: MAX_INFLIGHT_REQUESTS }, (_, i) => i));
 
     eleventhSlot.resolve();
-    await expect(pending).resolves.toEqual({ completed: true, failedIndices: [] });
+    const result = await pending;
+    expect(result.completed).toBe(true);
+    expect(result.failedIndices).toEqual([]);
+    expect(mapEntries(result.clipIdsByEntry)).toEqual(
+      Array.from({ length: MAX_INFLIGHT_REQUESTS + 1 }, (_, i) => [i, [`clip-${i}-a`, `clip-${i}-b`]]),
+    );
     expect(submittedIndexes).toEqual(Array.from({ length: MAX_INFLIGHT_REQUESTS + 1 }, (_, i) => i));
+  });
+
+  it("Given queue finalizer と全 clip が duration filter 内 When entry を確定する Then acceptedClipIds 付き DONE を emit する", async () => {
+    const entries = makePromptEntries(1);
+    const emitProgress = vi.fn();
+    const markAccepted = vi.fn();
+    const dropSubmittedIds = vi.fn();
+
+    const result = await finalizeQueueEntriesYield({
+      entries,
+      order: [0],
+      total: entries.length,
+      clipIdsByEntry: new Map([[0, ["clip-ok-a", "clip-ok-b"]]]),
+      durationFilter: { min_sec: 75, max_sec: 240 },
+      getDuration: (clipId: string) => {
+        const durations: Record<string, number> = { "clip-ok-a": 120, "clip-ok-b": 180 };
+        return durations[clipId];
+      },
+      markAccepted,
+      dropSubmittedIds,
+      emitProgress,
+    });
+
+    expect(result).toEqual({ failedIndices: [] });
+    expect(markAccepted).toHaveBeenCalledWith(["clip-ok-a", "clip-ok-b"]);
+    expect(dropSubmittedIds).not.toHaveBeenCalled();
+    expect(emitProgress).toHaveBeenCalledWith({
+      phase: PHASE.DONE,
+      index: 0,
+      total: entries.length,
+      yieldRetryCount: 0,
+      acceptedClipIds: ["clip-ok-a", "clip-ok-b"],
+    });
+  });
+
+  it("Given queue finalizer と全 clip が duration filter 外 When entry を確定する Then ENTRY_FAILED と failedIndices を返す", async () => {
+    const entries = makePromptEntries(2);
+    const emitProgress = vi.fn();
+    const markAccepted = vi.fn();
+    const dropSubmittedIds = vi.fn();
+
+    const result = await finalizeQueueEntriesYield({
+      entries,
+      order: [1],
+      total: entries.length,
+      clipIdsByEntry: new Map([[1, ["clip-ng-a", "clip-ng-b"]]]),
+      durationFilter: { min_sec: 75, max_sec: 240 },
+      getDuration: (clipId: string) => {
+        const durations: Record<string, number> = { "clip-ng-a": 45, "clip-ng-b": 360 };
+        return durations[clipId];
+      },
+      markAccepted,
+      dropSubmittedIds,
+      emitProgress,
+    });
+
+    expect(result).toEqual({ failedIndices: [1] });
+    expect(markAccepted).not.toHaveBeenCalled();
+    expect(dropSubmittedIds).toHaveBeenCalledWith(["clip-ng-a", "clip-ng-b"]);
+    expect(emitProgress).toHaveBeenCalledWith({
+      phase: PHASE.ENTRY_FAILED,
+      index: 1,
+      total: entries.length,
+      message: "duration guard NG (75-240s): clip-ng-a, clip-ng-b",
+      yieldRetryCount: 0,
+      log: { kind: "skip", entryName: "queue-entry-2" },
+    });
+  });
+
+  it("Given queue finalizer と一部 clip だけが duration filter 内 When entry を確定する Then OK clip だけ accepted にして DONE にする", async () => {
+    const entries = makePromptEntries(1);
+    const emitProgress = vi.fn();
+    const markAccepted = vi.fn();
+    const dropSubmittedIds = vi.fn();
+
+    const result = await finalizeQueueEntriesYield({
+      entries,
+      order: [0],
+      total: entries.length,
+      clipIdsByEntry: new Map([[0, ["clip-partial-ok", "clip-partial-ng"]]]),
+      durationFilter: { min_sec: 75, max_sec: 240 },
+      getDuration: (clipId: string) => {
+        const durations: Record<string, number> = { "clip-partial-ok": 180, "clip-partial-ng": 45 };
+        return durations[clipId];
+      },
+      markAccepted,
+      dropSubmittedIds,
+      emitProgress,
+    });
+
+    expect(result).toEqual({ failedIndices: [] });
+    expect(markAccepted).toHaveBeenCalledWith(["clip-partial-ok"]);
+    expect(dropSubmittedIds).not.toHaveBeenCalled();
+    expect(emitProgress).toHaveBeenCalledWith({
+      phase: PHASE.DONE,
+      index: 0,
+      total: entries.length,
+      yieldRetryCount: 0,
+      acceptedClipIds: ["clip-partial-ok"],
+    });
+  });
+
+  it("Given queue finalizer と entry の clip ID mapping が空 When entry を確定する Then warn して DONE に縮退する", async () => {
+    const entries = makePromptEntries(1);
+    const emitProgress = vi.fn();
+    const markAccepted = vi.fn();
+    const dropSubmittedIds = vi.fn();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const result = await finalizeQueueEntriesYield({
+      entries,
+      order: [0],
+      total: entries.length,
+      clipIdsByEntry: new Map([[0, []]]),
+      durationFilter: { min_sec: 75, max_sec: 240 },
+      getDuration: () => {
+        throw new Error("duration should not be read without clip IDs");
+      },
+      markAccepted,
+      dropSubmittedIds,
+      emitProgress,
+    });
+
+    expect(result).toEqual({ failedIndices: [] });
+    expect(markAccepted).not.toHaveBeenCalled();
+    expect(dropSubmittedIds).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      "[suno-helper] entry 0 の clip ID を bridge で観測できなかったため duration guard を skip します。",
+    );
+    expect(emitProgress).toHaveBeenCalledWith({
+      phase: PHASE.DONE,
+      index: 0,
+      total: entries.length,
+      yieldRetryCount: 0,
+    });
+  });
+
+  it("Given queue finalizer に durationFilter が未指定 When entry を確定する Then DEFAULT_DURATION_FILTER で検査する", async () => {
+    const entries = makePromptEntries(1);
+    const emitProgress = vi.fn();
+
+    const result = await finalizeQueueEntriesYield({
+      entries,
+      order: [0],
+      total: entries.length,
+      clipIdsByEntry: new Map([[0, ["clip-short"]]]),
+      getDuration: () => 45,
+      markAccepted: vi.fn(),
+      dropSubmittedIds: vi.fn(),
+      emitProgress,
+    });
+
+    expect(result).toEqual({ failedIndices: [0] });
+    expect(emitProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phase: PHASE.ENTRY_FAILED,
+        index: 0,
+        message: "duration guard NG (60-300s): clip-short",
+      }),
+    );
   });
 
   it("production completion gate は resume 済み未完了 clip を playlist 前に feed poll 対象へ入れる", async () => {

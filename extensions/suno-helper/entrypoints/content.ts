@@ -66,8 +66,8 @@ import { cancelScheduledRunCompleteReload, scheduleRunCompleteReload } from "../
 import { readDownloadFormat, serverUrlItem } from "../lib/storage";
 import type { DownloadContext } from "../lib/download-flow";
 import {
-  emitQueueEntriesDone,
   entryDisplayName,
+  finalizeQueueEntriesYield,
   submitQueueEntries,
   waitForSubmittedClipsComplete,
 } from "../lib/queue-runner";
@@ -615,6 +615,13 @@ export default defineContentScript({
       };
     }
 
+    function countQueuePlaylistClipIds(
+      previousSubmittedClipIds: string[],
+      clipIdsByEntry: Map<number, string[]>,
+    ): number {
+      return new Set([...previousSubmittedClipIds, ...Array.from(clipIdsByEntry.values()).flat()]).size;
+    }
+
     async function waitForAttemptClipsComplete(clipIds: string[], isAborted: () => boolean): Promise<void> {
       if (clipIds.length === 0) {
         throw new Error(
@@ -693,6 +700,7 @@ export default defineContentScript({
       // リトライ上限まで失敗しスキップした entry の 0-based index (#948)。終了時に resume state へ
       // 永続化し、popup の「失敗分のみ再実行」導線が消費する。
       const failedIndices: number[] = [];
+      let queueClipIdsByEntry: Map<number, string[]> | null = null;
       let keepResumeStateForDownloadRetry = false;
       let playlistPersistInfo: PlaylistClipPersistInfo | null = null;
       // 中断 entry を永続化し、reload 後の ResumeBanner で続きから再開できるようにする。
@@ -748,6 +756,20 @@ export default defineContentScript({
         });
       }
 
+      function finishWithFailedEntriesIfNeeded(): boolean {
+        if (failedIndices.length === 0) {
+          return false;
+        }
+        persistInterruptState(total);
+        const list = failedIndices.map((i) => i + 1).join(", ");
+        emitProgress({
+          phase: PHASE.FINISHED,
+          total,
+          message: `${failedIndices.length} 件の entry が失敗しました (entry ${list})。「失敗分のみ再実行」で完走後に playlist 追加が実行されます。`,
+        });
+        return true;
+      }
+
       async function waitForQueueCapacity(index: number, yieldRetryCount: number): Promise<void> {
         emitProgress({
           phase: PHASE.WAITING_SLOT,
@@ -791,6 +813,7 @@ export default defineContentScript({
           abortableSleep,
           sleep,
         });
+        queueClipIdsByEntry = result.clipIdsByEntry;
         failedIndices.push(...result.failedIndices);
         if (!result.completed) {
           return;
@@ -975,17 +998,14 @@ export default defineContentScript({
       // スキップした失敗 entry が残っている場合は playlist 追加を保留して終了する (#948)。
       // 失敗分のみ再実行して完走した run が playlist 追加を実行する（同名 playlist の重複作成と
       // 歯抜け playlist を防ぐ）。failedIndex=total で persist し、failedIndices を再実行導線へ渡す。
-      if (failedIndices.length > 0) {
-        persistInterruptState(total);
-        const list = failedIndices.map((i) => i + 1).join(", ");
-        emitProgress({
-          phase: PHASE.FINISHED,
-          total,
-          message: `${failedIndices.length} 件の entry が失敗しました (entry ${list})。「失敗分のみ再実行」で完走後に playlist 追加が実行されます。`,
-        });
+      if (finishWithFailedEntriesIfNeeded()) {
         return;
       }
-      let verifiedPlaylistClipCount = playlistExpectedClipCount ?? expectedRawPlaylistClipCount;
+      const expectedPlaylistClipCount =
+        options.runMode === "queue" && queueClipIdsByEntry !== null
+          ? countQueuePlaylistClipIds(previousSubmittedClipIds, queueClipIdsByEntry)
+          : expectedRawPlaylistClipCount;
+      let verifiedPlaylistClipCount = playlistExpectedClipCount ?? expectedPlaylistClipCount;
       if (aborted) {
         persistInterruptState(total);
         emitProgress({ phase: PHASE.STOPPED, total });
@@ -993,7 +1013,7 @@ export default defineContentScript({
       }
       try {
         await waitForSubmittedClipsComplete({
-          expectedClipCount: expectedRawPlaylistClipCount,
+          expectedClipCount: expectedPlaylistClipCount,
           previousSubmittedClipIds,
           isAborted: () => aborted,
           getSubmittedIds: () => tracker.getSubmittedIds(),
@@ -1014,14 +1034,31 @@ export default defineContentScript({
         return;
       }
       if (options.runMode === "queue") {
-        emitQueueEntriesDone(order, total, emitProgress);
+        if (queueClipIdsByEntry === null) {
+          throw new Error("queue clip ID mapping is required before queue yield finalization");
+        }
+        const yieldResult = await finalizeQueueEntriesYield({
+          entries,
+          order,
+          total,
+          clipIdsByEntry: queueClipIdsByEntry,
+          durationFilter: options.durationFilter,
+          getDuration: (id) => tracker.getDuration(id),
+          markAccepted: (ids) => tracker.markAccepted(ids),
+          dropSubmittedIds: (ids) => tracker.dropSubmittedIds(ids),
+          emitProgress,
+        });
+        failedIndices.push(...yieldResult.failedIndices);
+        if (finishWithFailedEntriesIfNeeded()) {
+          return;
+        }
       }
       try {
         verifiedPlaylistClipCount = await addClipsToPlaylist(
           total,
           playlistName,
           previousSubmittedClipIds,
-          expectedRawPlaylistClipCount,
+          expectedPlaylistClipCount,
           entries,
           order,
           options.durationFilter,

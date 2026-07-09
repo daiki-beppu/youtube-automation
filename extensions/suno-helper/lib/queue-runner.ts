@@ -1,6 +1,5 @@
-import type { PromptEntry } from "../../shared/api";
+import { DEFAULT_DURATION_FILTER, type DurationFilter, type PromptEntry } from "../../shared/api";
 import {
-  CLIPS_PER_REQUEST,
   INFLIGHT_STALL_TIMEOUT_MS,
   PHASE,
   type ProgressPayload,
@@ -10,9 +9,10 @@ import {
 import { FatalRunError, POLL_INTERVAL_MS } from "../../shared/dom";
 import type { AckMarker } from "./ack-probe";
 import { markAck } from "./ack-probe";
-import { InjectNotAcknowledgedError, SubmittedClipIdsNotObservedError, injectWithVerification } from "./inject-retry";
+import { InjectNotAcknowledgedError, injectWithVerification } from "./inject-retry";
 import { resolveInterruptIndex } from "./resume-state";
 import { runEntryWithRetry } from "./entry-retry";
+import { evaluateClips, formatYieldFailure } from "./yield-guard";
 
 export interface QueueRunnerPreset {
   interCreateDelayMs: number;
@@ -64,6 +64,7 @@ export interface QueueSubmissionOptions {
 export interface QueueSubmissionResult {
   completed: boolean;
   failedIndices: number[];
+  clipIdsByEntry: Map<number, string[]>;
 }
 
 export interface SubmittedClipCompletionOptions {
@@ -76,6 +77,22 @@ export interface SubmittedClipCompletionOptions {
   requestFeedPoll: (ids: string[]) => Promise<unknown>;
   abortableSleep: (ms: number, isAborted: () => boolean) => Promise<void>;
   now?: () => number;
+}
+
+export interface QueueEntriesYieldOptions {
+  entries: PromptEntry[];
+  order: number[];
+  total: number;
+  clipIdsByEntry: Map<number, string[]>;
+  durationFilter?: DurationFilter;
+  getDuration: (clipId: string) => number | undefined;
+  markAccepted: (ids: string[]) => void;
+  dropSubmittedIds: (ids: string[]) => void;
+  emitProgress: (payload: ProgressPayload) => void;
+}
+
+export interface QueueEntriesYieldResult {
+  failedIndices: number[];
 }
 
 /** entry のログ/UI 表示名。content.ts と共用する（title ?? name の fallback 規則の SSOT）。 */
@@ -106,17 +123,11 @@ async function waitForQueueCapacity(options: QueueSubmissionOptions, index: numb
   });
 }
 
-function assertQueueClipIdsObserved(options: QueueSubmissionOptions, submittedStart: number, index: number): void {
-  const observed = options.getSubmittedIds().length - submittedStart;
-  if (observed < CLIPS_PER_REQUEST) {
-    throw new SubmittedClipIdsNotObservedError(
-      `${describeEntry(options.entries, index)} の投入 clip ID を ${observed}/${CLIPS_PER_REQUEST} 件しか観測できませんでした`,
-    );
-  }
+function getNewSubmittedIds(before: ReadonlySet<string>, current: string[]): string[] {
+  return current.filter((id) => !before.has(id));
 }
 
 async function submitQueueEntry(options: QueueSubmissionOptions, index: number): Promise<void> {
-  const submittedStart = options.getSubmittedIds().length;
   await waitForQueueCapacity(options, index);
   if (options.isAborted()) {
     return;
@@ -137,34 +148,68 @@ async function submitQueueEntry(options: QueueSubmissionOptions, index: number):
     pollIntervalMs: POLL_INTERVAL_MS,
     describeEntry: () => describeEntry(options.entries, index),
   });
-  if (!options.isAborted()) {
-    assertQueueClipIdsObserved(options, submittedStart, index);
-  }
 }
 
-export function emitQueueEntriesDone(
-  order: number[],
-  total: number,
-  emitProgress: (payload: ProgressPayload) => void,
-): void {
-  for (const index of order) {
-    emitProgress({ phase: PHASE.DONE, index, total, yieldRetryCount: 0 });
+export async function finalizeQueueEntriesYield(options: QueueEntriesYieldOptions): Promise<QueueEntriesYieldResult> {
+  const failedIndices: number[] = [];
+  const durationFilter = options.durationFilter ?? DEFAULT_DURATION_FILTER;
+  for (const index of options.order) {
+    const entryClipIds = options.clipIdsByEntry.get(index) ?? [];
+    if (entryClipIds.length === 0) {
+      console.warn(
+        `[suno-helper] entry ${index} の clip ID を bridge で観測できなかったため duration guard を skip します。`,
+      );
+      options.emitProgress({ phase: PHASE.DONE, index, total: options.total, yieldRetryCount: 0 });
+      continue;
+    }
+    const evaluation = evaluateClips(
+      entryClipIds.map((id) => ({ id, duration: options.getDuration(id) })),
+      durationFilter,
+    );
+    if (evaluation.ok.length > 0) {
+      options.markAccepted(evaluation.ok);
+      options.emitProgress({
+        phase: PHASE.DONE,
+        index,
+        total: options.total,
+        yieldRetryCount: 0,
+        acceptedClipIds: evaluation.ok,
+      });
+      continue;
+    }
+    const message = formatYieldFailure(evaluation, durationFilter);
+    options.dropSubmittedIds(entryClipIds);
+    failedIndices.push(index);
+    console.warn(`[suno-helper] entry ${index} は duration guard 全滅のためスキップします: ${message}`);
+    options.emitProgress({
+      phase: PHASE.ENTRY_FAILED,
+      index,
+      total: options.total,
+      message,
+      yieldRetryCount: 0,
+      log: { kind: "skip", entryName: entryDisplayName(options.entries[index]) },
+    });
   }
+  return { failedIndices };
 }
 
 export async function submitQueueEntries(options: QueueSubmissionOptions): Promise<QueueSubmissionResult> {
   const failedIndices: number[] = [];
+  const clipIdsByEntry = new Map<number, string[]>();
   for (const [orderPosition, index] of options.order.entries()) {
     if (options.isAborted()) {
       options.persistInterruptState(index, orderPosition);
       options.emitProgress({ phase: PHASE.STOPPED, index, total: options.total });
-      return { completed: false, failedIndices };
+      return { completed: false, failedIndices, clipIdsByEntry };
     }
+    const submittedBeforeEntry = new Set(options.getSubmittedIds());
     const result = await runEntryWithRetry({
-      attempt: () => submitQueueEntry(options, index),
+      attempt: async () => {
+        await submitQueueEntry(options, index);
+      },
       isAborted: options.isAborted,
       wasSubmitted: (error) => options.isEntrySubmitted(index) && !(error instanceof InjectNotAcknowledgedError),
-      isFatal: (error) => error instanceof FatalRunError || error instanceof SubmittedClipIdsNotObservedError,
+      isFatal: (error) => error instanceof FatalRunError,
       maxRetry: options.preset.maxEntryRetry,
       retryDelayMs: () => options.applyJitter(options.preset.interCreateDelayMs, options.preset.jitterMs),
       onRetry: (attempt, max) =>
@@ -180,8 +225,6 @@ export async function submitQueueEntries(options: QueueSubmissionOptions): Promi
     });
     if (result.outcome === "fatal") {
       const message = result.error instanceof Error ? result.error.message : String(result.error);
-      // SubmittedClipIdsNotObservedError は InjectNotAcknowledgedError ではないため第 3 引数は false になり、
-      // 投入済みなら index+1（再開時に再クリックせず skip）へ倒れる — DOM ACK 済み entry の重複生成を防ぐ意図どおり。
       const interruptIndex = resolveInterruptIndex(
         index,
         options.isEntrySubmitted(index),
@@ -189,13 +232,13 @@ export async function submitQueueEntries(options: QueueSubmissionOptions): Promi
       );
       options.emitProgress({ phase: PHASE.ERROR, index: interruptIndex, total: options.total, message });
       options.persistInterruptState(interruptIndex, orderPosition);
-      return { completed: false, failedIndices };
+      return { completed: false, failedIndices, clipIdsByEntry };
     }
     if (result.outcome === "aborted" || options.isAborted()) {
       const interruptIndex = resolveInterruptIndex(index, options.isEntrySubmitted(index), false);
       options.persistInterruptState(interruptIndex, orderPosition);
       options.emitProgress({ phase: PHASE.STOPPED, index: interruptIndex, total: options.total });
-      return { completed: false, failedIndices };
+      return { completed: false, failedIndices, clipIdsByEntry };
     }
     if (result.outcome === "failed") {
       const message = result.error instanceof Error ? result.error.message : String(result.error);
@@ -214,6 +257,7 @@ export async function submitQueueEntries(options: QueueSubmissionOptions): Promi
         const message = result.error instanceof Error ? result.error.message : String(result.error);
         console.warn(`[suno-helper] entry ${index} は投入済みのため生成済み扱いで続行します: ${message}`);
       }
+      clipIdsByEntry.set(index, getNewSubmittedIds(submittedBeforeEntry, options.getSubmittedIds()));
       options.emitProgress({ phase: PHASE.SUBMITTED, index, total: options.total, yieldRetryCount: 0 });
     }
     // Create→clip-row DOM 反映ラグによる過剰投入 (race) を避けるため、次の投入前に間隔を空ける (#847)。
@@ -222,7 +266,7 @@ export async function submitQueueEntries(options: QueueSubmissionOptions): Promi
       options.isAborted,
     );
   }
-  return { completed: true, failedIndices };
+  return { completed: true, failedIndices, clipIdsByEntry };
 }
 
 export async function waitForSubmittedClipsComplete(options: SubmittedClipCompletionOptions): Promise<string[]> {
