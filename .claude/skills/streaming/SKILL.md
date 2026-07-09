@@ -53,7 +53,7 @@ export TF_VAR_stream_key=$(op read 'op://Personal/YouTube/stream_key')
 export TF_VAR_discord_webhook_url=$(op read 'op://Personal/YouTube_Stream_Discord_Webhook/url')
 
 terraform init
-terraform plan   # vultr_ssh_key + vultr_instance + null_resource.deploy = 3 add
+terraform plan   # tls_private_key + vultr_ssh_key + vultr_firewall_group + vultr_firewall_rule×N + vultr_instance + null_resource.deploy（全リソースは README 参照）
 terraform apply
 ```
 

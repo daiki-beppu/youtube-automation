@@ -179,7 +179,8 @@ def test_channel_new_setup_gate_does_not_require_doctor_all_green() -> None:
 def test_setup_skill_handles_ttp_wf_new_readiness_next_check() -> None:
     text = _SETUP_SKILL.read_text(encoding="utf-8")
     assert (
-        "`data` | `/wf-new` の入力モード判定データ（analytics_report / benchmark_data / ttp_wf_new_readiness）" in text
+        "`data` | `/wf-new` の入力モード判定データ + 初期セットアップ事前検査"
+        "（analytics_report / benchmark_data / ttp_wf_new_readiness / initial_setup_readiness）" in text
     )
     assert "#### `ttp_wf_new_readiness` — 承認済み TTP の `/channel-new` benchmark 反映状態" in text
     assert "/channel-new benchmark 反映未完了" in text

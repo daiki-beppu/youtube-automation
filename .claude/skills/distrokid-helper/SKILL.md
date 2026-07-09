@@ -39,7 +39,7 @@ DistroKid Web への転記・アップロードは Chrome 拡張（`/ext-install
 | `uv run yt-distrokid-prepare plan <collection> [--discs N] [--max-per-disc 35] [--output PATH]` | MP3 を列挙して均等分割し draft spec.json を出力。重複素タイトルには `needs_unique: true` が付く |
 | `uv run yt-distrokid-prepare build --spec <spec.json> <collection> [--force] [--release-date YYYY-MM-DD]` | spec 検証 → mp3 分割コピー → ffprobe 尺計測 → metadata.md + README.md 生成 |
 | `uv run yt-distrokid-prepare cover --input <image> <collection> [--force] [--crop]` | 新規 AI 生成した 1:1 画像を 3000×3000 JPEG（`30-distrokid/cover_art_3000.jpg`）に最終化 |
-| `uv run yt-distrokid-prepare verify <collection>` | cover サイズ / release_date / タイトルユニーク / ≤35 曲 を最終検証 |
+| `uv run yt-distrokid-prepare verify <collection>` | cover サイズ / タイトルユニーク / ≤35 曲 を最終検証（release_date 未設定は warning） |
 | `uv run yt-collection-serve <collections-root> --distrokid-capture-root <channel-root> --allow-extension distrokid-helper --port 7874` | distrokid-helper 拡張向けに DistroKid dir mode サーバーを起動し、配信済み記録の POST も有効化 |
 
 ## Instructions
@@ -219,11 +219,12 @@ uv run yt-distrokid-prepare build \
 uv run yt-distrokid-prepare verify <collection>
 ```
 
-verify は以下を検証する:
+verify は以下を error として検証する（1 件でもあれば exit 1）:
 - cover_art_3000.jpg が 3000×3000 JPEG であること
-- release_date が設定されていること
 - 全 disc でタイトルがコレクション横断でユニークであること
 - 各 disc が 35 曲以下であること
+
+release_date（`workflow-state.json` の `planning.publish_target_at`）未設定は error ではなく **warning** として表示される。
 
 verify のサマリーをユーザーに提示して完了を確認する。
 

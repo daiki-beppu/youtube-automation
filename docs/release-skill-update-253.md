@@ -134,7 +134,7 @@ git log <last-tag>..HEAD --oneline           # 前回以降のコミット一覧
 1. `git pull origin main`（ローカル main を最新に同期）
 2. `git switch -c release/v<version>`
 3. `package.json` の `version` フィールドを更新
-4. `/skills commit-convention` に従いコミット（例: `release: v0.5.0`）
+4. Conventional Commits 規約に従いコミット（例: `release: v0.5.0`）
 5. `git push -u origin release/v<version>`
 
 #### Step 4: sub-PR の Closes 集約と PR 本文生成
@@ -281,7 +281,7 @@ git push origin --delete release/v<version> 2>/dev/null  # リモート（自動
 - リリースノートは `--generate-notes` で GitHub に任せる
 - 対応リポジトリは Node.js / npm（`package.json`）に限定。Cargo.toml / pyproject.toml / go.mod 等は対象外
 - バージョン更新は `package.json` の `version` フィールドのみ
-- コミットメッセージは commit-convention に従う（タイプ: `release`）
+- コミットメッセージは Conventional Commits 規約に従う（タイプ: `release`）
 - バージョン判定はユーザーが上書き可能
 - リリースブランチの命名: `release/v<version>`
 - リリース PR 本文は sub-PR から `Closes #N` を集約し、main マージ時の自動クローズ発火を保証する（対象キーワード: `Closes` / `Fixes` / `Resolves`、case-insensitive）

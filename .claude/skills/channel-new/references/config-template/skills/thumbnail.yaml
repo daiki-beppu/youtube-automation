@@ -12,7 +12,7 @@
 #
 # `reference_images.default` は `/benchmark` 取得済みの TTP 競合サムネを
 # `data/thumbnail_compare/benchmark/<channel>-<vid>.jpg` 形式で並べる。
-# `/channel-new`（再生成モード）中に `yt-download-benchmark-thumbnails` 相当のステップで
+# `/channel-new`（再生成モード）中に `/benchmark`（CLI は `yt-benchmark-collect`）で
 # 自動 download される想定（手動 download を回避する導線、issue #567）。
 
 image_generation:

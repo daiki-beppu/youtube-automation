@@ -1,7 +1,7 @@
 # GCP / Vertex AI ブートストラップ
 
 新チャンネル用の GCP プロジェクト + API + 認証情報を用意するためのリファレンス。
-`/channel-new`（初回モード / 再生成モード）から参照する。
+`/channel-new`（新規開設モード / 再生成モード）から参照する。
 
 上流リポジトリ (`daiki-beppu/youtube-automation`、PyPI 配布名は `youtube-channels-automation`) の `auth/SETUP.md` と `infra/terraform/gcp/README.md` が詳細版。このリファレンスは **スキルが実行するときの判断材料** に絞ってある。
 
