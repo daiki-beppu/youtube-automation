@@ -679,4 +679,5 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 ## Next Step
 
 サムネイル確定後:
-→ `/suno <theme>` で音楽プロンプト生成
+→ Suno チャンネル: `/suno <theme>` で音楽プロンプト生成
+→ Lyria チャンネル: `/lyria <theme>` でマスター音源生成（`/suno` 系工程は不要）
