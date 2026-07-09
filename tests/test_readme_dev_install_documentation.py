@@ -6,16 +6,18 @@ Issue #329: pytest 全実行で optional dependency 未インストール時の 
 本リポジトリでは README.md の Development 節に以下を含めることで満たす:
 
 1. Editable install のコマンド例から空 extra (`--extra veo`) を取り除き、
-   `uv sync --extra dev` 単独で揃うことを示す。
+   `uv sync` 単独で揃うことを示す。
    - 理由: `pyproject.toml:33-35` で `veo = []` (空 extra) になっており、
      `--extra veo` を案内し続けるのは「optional dep を明文化」の主旨と矛盾する。
+   - Plan 024 (dev 依存一本化) で `pytest` / `ruff` は `[dependency-groups].dev`
+     経由の default group となり、`--extra dev` 指定は不要になった。
 
 2. テスト実行節に、`uv run pytest` が collection error 0 件で走るために
    何が揃っている必要があるかを明文化する。
    - 検索性のため Issue #329 で使われた語彙 (`collection error` / `optional dependency`)
      を 1 箇所以上含める。
    - 主因となった `Pillow` が main dependencies に含まれている事実を示す。
-   - `pytest` 自体は `[project.optional-dependencies].dev` 経由で入ることを示す。
+   - `pytest` 自体は `[dependency-groups].dev` 経由で入ることを示す。
 
 参照: `.takt/runs/20260518-060411-issue-329-.../reports/plan.md`
 """
@@ -109,13 +111,16 @@ def test_editable_install_drops_empty_veo_extra() -> None:
     )
 
 
-def test_editable_install_uses_uv_sync_extra_dev() -> None:
+def test_editable_install_uses_plain_uv_sync() -> None:
     """Given README.md Editable install ブロック
     When 推奨コマンドを読む
-    Then `uv sync --extra dev` が案内されている。
+    Then `uv sync` が案内されている（dev 依存は default group のため extra 指定不要）。
     """
     block = _editable_install_block(_development_section(_read(README)))
-    assert "uv sync --extra dev" in block, f"Editable install で `uv sync --extra dev` が案内されていない:\n{block}"
+    assert "uv sync" in block, f"Editable install で `uv sync` が案内されていない:\n{block}"
+    assert "--extra dev" not in block, (
+        f"Editable install に不要な `--extra dev` が残存 (dev は default group):\n{block}"
+    )
 
 
 # ---------- テスト実行節: Issue #329 完了条件 3 の明文化 ----------
@@ -157,13 +162,13 @@ def test_test_run_section_mentions_pillow_in_main_deps() -> None:
     assert "Pillow" in section, f"テスト実行節に `Pillow` への言及がない (Issue #329 主因の dep):\n{section}"
 
 
-def test_test_run_section_explains_extra_dev_is_sufficient() -> None:
+def test_test_run_section_explains_uv_sync_is_sufficient() -> None:
     """Given README.md `### テスト実行` 節
     When 本文を読む
-    Then `uv sync --extra dev` 単独でテストが揃う旨が案内されている。
+    Then `uv sync` 単独でテストが揃う旨が案内されている。
     """
     section = _test_run_section(_development_section(_read(README)))
-    assert "uv sync --extra dev" in section, f"テスト実行節に `uv sync --extra dev` で揃う旨の案内がない:\n{section}"
+    assert "uv sync" in section, f"テスト実行節に `uv sync` で揃う旨の案内がない:\n{section}"
 
 
 def test_test_run_section_is_expanded_beyond_single_codeblock() -> None:

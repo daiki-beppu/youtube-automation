@@ -31,7 +31,7 @@
           # nixpkgs から外し、システム（Homebrew 等）の op を利用する想定。
           #
           # 初回セットアップ:
-          #   uv sync --extra dev --extra veo
+          #   uv sync --extra veo
           # その後の利用:
           #   uv run yt-skills list
           #   uv run pytest
