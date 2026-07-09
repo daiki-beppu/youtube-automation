@@ -69,12 +69,12 @@ uv run yt-analytics --include-reporting
 
 ```
 📊 YouTube Analytics データ収集
-チャンネル: <channel_config: channel.name>
+チャンネル: <config/channel/meta.json の channel.name>
 期間: YYYY-MM-DD 〜 YYYY-MM-DD
 
 ✅ チャンネル統計: 登録者 X / 総再生 Y
 ✅ 動画パフォーマンス: 上位50本 + 直近30日投稿を収集
-✅ データ保存: data/analytics_YYYYMMDD.json
+✅ データ保存: data/analytics_data_YYYYMMDD_HHMMSS.json
 ```
 
 データ収集完了後、`/analytics-analyze` で詳細分析を実行してください。
