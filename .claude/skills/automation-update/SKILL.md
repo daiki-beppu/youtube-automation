@@ -492,7 +492,7 @@ git add pyproject.toml uv.lock .claude/skills/
 
 ### Step 4-2. コミット
 
-`commit-convention` スキル準拠で日本語 Conventional Commits。`<target_ref>` は tag 追従では `<target_tag>`、main 追従では短縮した `<target_sha>`（例: 先頭 12 桁）にする:
+日本語 Conventional Commits 規約に準拠する。`<target_ref>` は tag 追従では `<target_tag>`、main 追従では短縮した `<target_sha>`（例: 先頭 12 桁）にする:
 
 ```bash
 git commit -m "chore: youtube-automation <target_ref> への追従"
@@ -543,4 +543,3 @@ git commit -m "chore: youtube-automation <target_ref> への追従 (#N)"
 - `docs/changelog-contract.md`（upstream リポ）— CHANGELOG.md / Release 本文の Migration セクションフォーマット契約（本スキルの入力構造定義）
 - `/automation-release`（upstream リポ）— リリース PR を作成し CHANGELOG.md を昇格させる upstream 側スキル（本スキルが読み取るリリース本文を生成する）
 - `/setup` — 追従後に `yt-doctor` で WARNING / FAILED が出た場合の再診断入口、および `[HUMAN STEP]` の書き方の参考実装
-- `commit-convention` — Phase 4 のコミットメッセージ規約
