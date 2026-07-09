@@ -140,7 +140,8 @@ export const RUN_MODES: Record<RunModeId, RunMode> = {
     label: "Queue",
     riskNote:
       "投入 ACK 後に次 entry を先行投入し、最大 10 request まで Suno queue を使う。" +
-      "duration 不足 clip の自動再生成は行わず playlist から除外のみ。bridge の clip ID 観測が必須。",
+      "duration 範囲外のみの entry は失敗として検知し「失敗分のみ再実行」に載せる。" +
+      "自動再生成は行わず、bridge の clip ID 観測が必須。",
   },
 };
 

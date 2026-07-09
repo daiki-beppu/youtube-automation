@@ -43,6 +43,8 @@ const harness = vi.hoisted(() => {
     legacyResolveSpeedPreset,
     requestSliderSet: vi.fn(),
     submittedClipIds: [] as string[],
+    acceptedClipIds: [] as string[],
+    droppedClipIds: [] as string[],
     durationsById: {} as Record<string, number | undefined>,
     waitForGeneration: vi.fn<() => Promise<void>>(async () => undefined),
     waitForQueueSlot: vi.fn<(maxGeneratingClips: number, options?: unknown) => Promise<void>>(async () => undefined),
@@ -111,6 +113,21 @@ vi.mock("../lib/clip-tracker", () => ({
     getDuration: vi.fn((id: string) =>
       Object.prototype.hasOwnProperty.call(harness.durationsById, id) ? harness.durationsById[id] : 120,
     ),
+    markAccepted: vi.fn((ids: string[]) => {
+      const submitted = new Set(harness.submittedClipIds);
+      for (const id of ids) {
+        if (submitted.has(id) && !harness.acceptedClipIds.includes(id)) {
+          harness.acceptedClipIds.push(id);
+        }
+      }
+    }),
+    getAcceptedSubmittedIds: vi.fn(() => harness.acceptedClipIds),
+    dropSubmittedIds: vi.fn((ids: string[]) => {
+      const dropped = new Set(ids);
+      harness.droppedClipIds.push(...ids);
+      harness.submittedClipIds = harness.submittedClipIds.filter((id) => !dropped.has(id));
+      harness.acceptedClipIds = harness.acceptedClipIds.filter((id) => !dropped.has(id));
+    }),
     getInFlightCount: vi.fn(() => 0),
     hasObservedAnyTraffic: vi.fn(() => true),
     lastChangeAt: vi.fn(() => Date.now()),
@@ -351,6 +368,8 @@ beforeEach(() => {
     return { outcome: "ok" };
   });
   harness.submittedClipIds = [];
+  harness.acceptedClipIds = [];
+  harness.droppedClipIds = [];
   harness.durationsById = {};
   harness.waitForGeneration.mockReset();
   harness.waitForGeneration.mockResolvedValue(undefined);
@@ -879,19 +898,104 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     );
   });
 
-  it("Given queue mode が DOM-only ACK で clip ID 未観測 When entry retry 上限が残る Then 再クリックせず停止する", async () => {
+  it("Given queue mode で一部 entry の clip が全て duration filter 外 When 完了待ち後に確定する Then 失敗分を保存し playlist 追加へ進まない", async () => {
     makeViewButton("Newest ▼");
     makeViewButton("Grid");
     makeTextarea(null);
     makeTextarea("lyrics-textarea");
-    const clickGenerate = vi.fn();
+    makeGenerateButtonWithClickObserver(() => appendSubmittedClipIdsForRequest("queue-duration-clip"));
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(2);
+    const payload = {
+      ...makeRunPayload(entries),
+      runMode: "queue" as const,
+      durationFilter: { min_sec: 75, max_sec: 240 },
+    };
+    harness.submittedClipIds = [];
+    harness.durationsById = {
+      "queue-duration-clip-1": 120,
+      "queue-duration-clip-2": 180,
+      "queue-duration-clip-3": 45,
+      "queue-duration-clip-4": 46,
+    };
+
+    const result = runHandler({ data: payload });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(
+      () =>
+        expect(writeResumeState).toHaveBeenCalledWith(
+          expect.objectContaining({
+            collectionId: "20260601-clm-preflight-collection",
+            failedIndex: entries.length,
+            total: entries.length,
+            failedIndices: [1],
+          }),
+        ),
+      { timeout: 3000 },
+    );
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(harness.acceptedClipIds).toEqual(["queue-duration-clip-1", "queue-duration-clip-2"]);
+    expect(harness.droppedClipIds).toEqual(["queue-duration-clip-3", "queue-duration-clip-4"]);
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.DONE,
+          index: 0,
+          acceptedClipIds: ["queue-duration-clip-1", "queue-duration-clip-2"],
+        }),
+        expect.objectContaining({
+          phase: PHASE.ENTRY_FAILED,
+          index: 1,
+          message: "duration guard NG (75-240s): queue-duration-clip-3, queue-duration-clip-4",
+          log: { kind: "skip", entryName: "pattern-2" },
+        }),
+        expect.objectContaining({
+          phase: PHASE.FINISHED,
+          total: entries.length,
+          message: expect.stringContaining("失敗分のみ再実行"),
+        }),
+      ]),
+    );
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.FINISHED,
+          message: expect.stringContaining("entry 2"),
+        }),
+      ]),
+    );
+    expect(progressPayloads()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ phase: PHASE.ADDING_TO_PLAYLIST })]),
+    );
+  });
+
+  it("Given queue mode が DOM-only ACK で clip ID 未観測 entry を含む When 完了待ち後に確定する Then warn して DONE に縮退する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    let clickCount = 0;
+    const clickGenerate = vi.fn(() => {
+      clickCount += 1;
+      if (clickCount === 2) {
+        appendSubmittedClipIdsForRequest("queue-observed-clip");
+      }
+    });
     makeGenerateButtonWithClickObserver(clickGenerate);
     addCompletedRemixCard();
     await loadContentScript();
     const runHandler = getRunHandler();
-    const entries = makePromptEntries(1);
+    const entries = makePromptEntries(2);
     const payload = { ...makeRunPayload(entries), runMode: "queue" as const };
     harness.submittedClipIds = [];
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    harness.runEntryWithRetry.mockImplementationOnce(async (options: RunEntryWithRetryOptions) => {
+      const actual = await vi.importActual<typeof import("../lib/entry-retry")>("../lib/entry-retry");
+      return actual.runEntryWithRetry(options);
+    });
     harness.runEntryWithRetry.mockImplementationOnce(async (options: RunEntryWithRetryOptions) => {
       const actual = await vi.importActual<typeof import("../lib/entry-retry")>("../lib/entry-retry");
       return actual.runEntryWithRetry(options);
@@ -900,20 +1004,46 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     const result = runHandler({ data: payload });
 
     expect(result).toEqual({ ok: true });
-    await vi.waitFor(() => expect(writeResumeState).toHaveBeenCalledOnce(), { timeout: 3000 });
-    expect(clickGenerate).toHaveBeenCalledTimes(1);
-    expect(progressPayloads()).toContainEqual(
-      expect.objectContaining({
-        phase: PHASE.ERROR,
-        index: 1,
-        message: expect.stringContaining("投入 clip ID"),
-      }),
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce(), { timeout: 3000 });
+    expect(clickGenerate).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith(
+      "[suno-helper] entry 0 の clip ID を bridge で観測できなかったため duration guard を skip します。",
     );
-    expect(progressPayloads()).not.toContainEqual(expect.objectContaining({ phase: PHASE.DONE, index: 0 }));
+    expect(harness.acceptedClipIds).toEqual(["queue-observed-clip-1", "queue-observed-clip-2"]);
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.DONE,
+          index: 0,
+        }),
+        expect.objectContaining({
+          phase: PHASE.DONE,
+          index: 1,
+          acceptedClipIds: ["queue-observed-clip-1", "queue-observed-clip-2"],
+        }),
+        expect.objectContaining({
+          phase: PHASE.ADDING_TO_PLAYLIST,
+          total: entries.length,
+        }),
+        expect.objectContaining({
+          phase: PHASE.FINISHED,
+          total: entries.length,
+        }),
+      ]),
+    );
+    expect(progressPayloads()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.ERROR,
+        }),
+      ]),
+    );
     expect(writeResumeState).toHaveBeenCalledWith(
       expect.objectContaining({
-        failedIndex: 1,
-        submittedClipIds: [],
+        failedIndex: entries.length,
+        submittedClipIds: ["queue-observed-clip-1", "queue-observed-clip-2"],
+        submittedClipIdsAreDurationFiltered: true,
+        playlistExpectedClipCount: 2,
       }),
     );
   });

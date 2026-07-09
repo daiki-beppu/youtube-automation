@@ -24,17 +24,6 @@ export class InjectNotAcknowledgedError extends Error {
   }
 }
 
-/**
- * ACK は観測済みだが、bridge/feed から submitted clip ID を必要数観測できなかった。
- * DOM ACK は Suno 側が受理済みの可能性があるため、silent drop 用の entry retry と混ぜない。
- */
-export class SubmittedClipIdsNotObservedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SubmittedClipIdsNotObservedError";
-  }
-}
-
 export interface InjectWithVerificationOptions<M> {
   /** entry を 1 回 inject + Generate する（= () => injectAndGenerate(entry, i, total)）。 */
   inject: () => Promise<void>;

@@ -213,7 +213,6 @@ async function loadContentScriptWithPlaylistRows(
 
   vi.doMock("../lib/inject-retry", () => ({
     InjectNotAcknowledgedError: class InjectNotAcknowledgedError extends Error {},
-    SubmittedClipIdsNotObservedError: class SubmittedClipIdsNotObservedError extends Error {},
     injectWithVerification: vi.fn(() => Promise.resolve()),
   }));
 
