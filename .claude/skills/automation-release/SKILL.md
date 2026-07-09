@@ -13,7 +13,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 **責務分離**:
 - 本スキル = リリース実施（prepare + publish）
 - 下流追従 = 各チャンネルリポジトリで `/automation-update` スキル（本リポジトリで配布）が CHANGELOG.md / GitHub Release 本文を読み取って実施
-- グローバル `/release`（`~/.claude/skills/release/`）= Node.js / npm リポジトリ向けで本リポジトリでは使わない
+- グローバル `/release` スキルは廃止済みで存在しない。本リポジトリのリリースは常に本スキルを使う
 
 ## 前提
 
@@ -26,7 +26,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 
 ## Instructions
 
-**実行場所**: youtube-automation リポジトリのルート（`/Users/mba/02-yt/automation`）
+**実行場所**: youtube-automation リポジトリのルート（`/Users/mba/02-yt/00-automation`）
 
 ### Phase 0: 状態判定
 
@@ -128,7 +128,7 @@ git add pyproject.toml uv.lock CHANGELOG.md
 git commit -m "chore(release): v${VER} リリース PR"
 ```
 
-commit メッセージは `commit-convention` スキルの規約に準拠（`chore(release):` プレフィックス + 日本語）。`uv.lock` を必ず同 commit に含めること（1-5 のドリフト再発防止策）。
+commit メッセージは日本語 Conventional Commits 規約（CLAUDE.md「開発ワークフロー」参照）に準拠（`chore(release):` プレフィックス + 日本語）。`uv.lock` を必ず同 commit に含めること（1-5 のドリフト再発防止策）。
 
 #### 1-7. push + PR 作成
 
@@ -136,7 +136,7 @@ commit メッセージは `commit-convention` スキルの規約に準拠（`cho
 git push -u origin "release/v${VER}"
 ```
 
-PR 作成は `gh pr create` を直接呼ぶ（`/pr` スキルは self-review を回すため、リリース PR では不要）:
+PR 作成は `gh pr create` を直接呼ぶ（リリース PR は機械的な昇格 diff のため self-review 付きの通常 PR フローは不要）:
 
 ```bash
 gh pr create --base main --title "chore(release): v${VER}" --body "$(cat <<'EOF'
@@ -252,7 +252,7 @@ PR マージ時に GitHub 側で自動削除されているケースもあるた
 
 - このスキル自体の編集は **takt 経由 NG**（CLAUDE.md 規約: skill 編集は通常の Claude Code 対話セッションで）
 - `src/youtube_automation/__init__.py` は **直接編集禁止**（`importlib.metadata` 経由の動的読み込みのため、版数は `pyproject.toml` を bump するだけで追従する）
-- リリース PR の commit メッセージは `chore(release): v<VER> リリース PR` 固定（`commit-convention` 規約準拠 + 検索容易性）
+- リリース PR の commit メッセージは `chore(release): v<VER> リリース PR` 固定（日本語 Conventional Commits 準拠 + 検索容易性）
 - `release/v<VER>` ブランチ命名は固定（state detection と publish クリーンアップが依存）
 - prepare 1-4 で `Migration` セクション欠落を warning する（下流の `/automation-update` が `所要時間` / `local fix 衝突注意` を抽出する契約上の入力源）
 - prepare 1-5 で **必ず** `uv lock` を実行し、`uv.lock` の version を `pyproject.toml::version` と同期させる（#515 再発防止）。bump コミットに `uv.lock` を含めず main にマージするのは禁止
@@ -266,6 +266,4 @@ PR マージ時に GitHub 側で自動削除されているケースもあるた
 - `references/changelog-promotion.md` — CHANGELOG.md 昇格手順
 - `docs/changelog-contract.md` — CHANGELOG.md / Release 本文の Migration セクションフォーマット契約（下流 `/automation-update` との接合点）
 - `/automation-update`（下流チャンネルリポジトリ）— publish 後の追従スキル
-- `/release` — グローバル Node.js 向け（本リポジトリでは使わない、参考のみ）
-- `commit-convention` — commit メッセージ規約
-- `/pr` — 通常 PR 作成（リリース PR では使わず、`gh pr create` 直接呼び）
+- CLAUDE.md「開発ワークフロー」— commit メッセージ規約（日本語 Conventional Commits）
