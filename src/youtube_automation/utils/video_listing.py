@@ -6,10 +6,12 @@ YouTubeAnalyticsCollector のチャンネル動画リスト取得メソッド群
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Dict, List
 
 from googleapiclient.errors import HttpError
+
+from youtube_automation.utils.exceptions import YouTubeAPIError
 
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
@@ -21,13 +23,23 @@ logger = logging.getLogger(__name__)
 class VideoListingMixin:
     """動画一覧取得の Mixin"""
 
-    def get_all_channel_videos(self) -> List[Dict]:
+    def get_all_channel_videos(self, refresh: bool = False) -> List[Dict]:
         """
         チャンネルの全動画リストを取得（YouTube Data API v3使用）
+
+        1 プロセス内では動画リストが変わらない前提でインスタンスキャッシュする。
+        空リストはキャッシュしない（エラー時の再試行余地を残すため）。
+
+        Args:
+            refresh (bool): True の場合キャッシュを無視して再取得する
 
         Returns:
             List[Dict]: 動画情報リスト
         """
+        cached = getattr(self, "_all_videos_cache", None)
+        if not refresh and cached is not None:
+            return cached
+
         if not self.youtube_service:
             self.initialize()
 
@@ -76,14 +88,13 @@ class VideoListingMixin:
                 logger.info(f"{len(videos)}本の動画を取得済み...")
 
             logger.info(f"全動画取得完了: {len(videos)}本")
+            if videos:
+                self._all_videos_cache = videos
             return videos
 
         except HttpError as e:
             logger.error(f"YouTube API エラー（動画リスト取得）: {e}")
-            return []
-        except Exception as e:
-            logger.error(f"動画リスト取得エラー: {e}")
-            return []
+            raise YouTubeAPIError.from_http_error(e, "チャンネル動画リスト取得") from e
 
     def get_recent_videos(self, days: int = 30) -> List[Dict]:
         """
@@ -100,27 +111,22 @@ class VideoListingMixin:
 
         logger.info(f"直近{days}日間の投稿動画を取得中...")
 
-        try:
-            cutoff_date = datetime.now() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
 
-            # 全動画リストを取得
-            all_videos = self.get_all_channel_videos()
+        # 全動画リストを取得
+        all_videos = self.get_all_channel_videos()
 
-            # 直近の動画をフィルタリング
-            recent_videos = []
-            for video in all_videos:
-                # ISO形式の日付をパース
-                published_date = datetime.fromisoformat(video["published_at"].replace("Z", "+00:00"))
+        # 直近の動画をフィルタリング
+        recent_videos = []
+        for video in all_videos:
+            # ISO形式の日付をパース
+            published_date = datetime.fromisoformat(video["published_at"].replace("Z", "+00:00"))
 
-                if published_date.replace(tzinfo=None) >= cutoff_date:
-                    recent_videos.append(video)
+            if published_date >= cutoff_date:
+                recent_videos.append(video)
 
-            # 投稿日時で降順ソート（新しい順）
-            recent_videos.sort(key=lambda x: x["published_at"], reverse=True)
+        # 投稿日時で降順ソート（新しい順）
+        recent_videos.sort(key=lambda x: x["published_at"], reverse=True)
 
-            logger.info(f"直近{days}日間の投稿動画取得完了: {len(recent_videos)}本")
-            return recent_videos
-
-        except Exception as e:
-            logger.error(f"直近動画取得エラー: {e}")
-            return []
+        logger.info(f"直近{days}日間の投稿動画取得完了: {len(recent_videos)}本")
+        return recent_videos

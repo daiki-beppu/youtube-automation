@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Dict, List
 
 from googleapiclient.errors import HttpError
@@ -53,14 +53,14 @@ class StrategicAnalyticsMixin:
 
         # Step 2: 直近投稿動画をフィルタリング
         logger.info(f"直近{recent_days}日間の投稿動画をフィルタリング中...")
-        cutoff_date = datetime.now() - timedelta(days=recent_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=recent_days)
 
         recent_video_ids = set()
         recent_videos_info = []
 
         for video in all_videos:
             published_date = datetime.fromisoformat(video["published_at"].replace("Z", "+00:00"))
-            if published_date.replace(tzinfo=None) >= cutoff_date:
+            if published_date >= cutoff_date:
                 recent_video_ids.add(video["video_id"])
                 recent_videos_info.append(video)
 
