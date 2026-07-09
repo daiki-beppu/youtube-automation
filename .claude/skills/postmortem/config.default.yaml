@@ -1,0 +1,22 @@
+# postmortem skill default config
+#
+# 症状判定・仮説マッピングのしきい値。チャンネル側では `config/skills/postmortem.yaml` に上書き値を置く。
+# SKILL.md の「文脈調整可」ルール（新チャンネル等の 3 ケース限定の一時調整）は
+# この恒久上書きとは別レイヤーで、Phase 2/3 実行時に AI が適用し postmortem.md に明示する。
+
+# Phase 2: `yt-launch-curve` の ratio_vs_median に対する症状判定
+# (`launch_curve_analyzer.py` の四分位ラベル p25/p50/p75 と整合させること)
+thresholds:
+  ratio_vs_median:
+    strong: 0.5    # これ未満 = 強い症状（赤）
+    moderate: 0.7  # strong 以上これ未満 = 中程度の症状（黄）
+    mild: 0.9      # moderate 以上これ未満 = 軽症（薄黄）。これ以上 = 健常（緑）
+  # 「全指標が中央値前後」とみなす帯（±パーセント）
+  neutral_band_pct: 10
+
+# Phase 3: 仮説マッピングの係数（自チャンネル基準値に対する比率）
+hypothesis_ratios:
+  ctr_low: 0.7          # ctr_percentage < aggregated_ctr_percentage × この値 → サムネ訴求弱
+  ctr_healthy: 0.9      # ctr_percentage ≧ aggregated_ctr_percentage × この値（かつ視聴時間低）→ 中身の弱さ
+  avd_low: 0.7          # average_view_duration < 自チャンネル中央値 × この値
+  impressions_low: 0.5  # impressions < 過去平均 × この値 → SEO 弱 / 初動エンゲージメント低

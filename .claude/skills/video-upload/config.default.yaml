@@ -1,0 +1,26 @@
+# video-upload skill default config
+#
+# アップロード前チェックとメタデータ基準の設定。
+# チャンネル側では `config/skills/video-upload.yaml` に上書き値を置く。
+#
+# 注意: `status.selfDeclaredMadeForKids` / `status.containsSyntheticMedia` は
+# `config/channel/youtube.json` の `self_declared_made_for_kids` / `contains_synthetic_media`
+# （チャンネル config）が単一ソースのため、ここには置かない。
+
+# アップロード前の存在チェック（AI が Step「前提条件チェック」で使う探索パターン）
+preflight:
+  # マスター動画の探索 glob（順に評価し、最初に見つかったものを使用）
+  master_video_globs:
+    - "01-master/*.mp4"
+    - "03-Individual-movie/*master*.mp4"
+  # アップロード用サムネイルの候補順（main.png/jpg は textless 動画背景なので含めない）
+  thumbnail_candidates:
+    - "10-assets/thumbnail.jpg"
+    - "10-assets/thumbnail.png"
+
+# メタデータ基準（AI がタイトル・概要欄の確認時に検査する）
+metadata:
+  # 避けるべき誇張語。CTR とチャンネルブランドの信頼性を損なうため使用しない
+  banned_exaggeration_words:
+    - Epic
+    - Ultimate

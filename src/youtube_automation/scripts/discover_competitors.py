@@ -31,7 +31,8 @@ from youtube_automation.utils.competitor_scoring import (
     DiscoveryParams,
     ScoredCandidate,
 )
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.utils.exceptions import ConfigError, ValidationError
+from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
@@ -58,12 +59,35 @@ _CSV_COLUMNS: tuple[str, ...] = (
     "channel_url",
 )
 
-# CLI デフォルト値（plan §7.5）
+# skill-config (.claude/skills/discover-competitors/config.default.yaml) が
+# 読めない場合の最終フォールバック（plan §7.5 の値と同一）
 _DEFAULT_MIN_SUBSCRIBERS = 0
 _DEFAULT_MAX_SUBSCRIBERS = 10_000_000
 _DEFAULT_POSTED_WITHIN_DAYS = 30
 _DEFAULT_TOP = 20
 _DEFAULT_PER_KEYWORD = 20
+
+
+def _search_defaults() -> dict[str, int]:
+    """CLI フラグ未指定時の既定値を skill-config から解決する。
+
+    `.claude/skills/discover-competitors/config.default.yaml::search.*` が default、
+    `config/skills/discover-competitors.yaml` のチャンネル上書きが優先される
+    （優先順位: CLI フラグ明示指定 > チャンネル上書き > default）。
+    """
+    try:
+        search = load_skill_config("discover-competitors").get("search") or {}
+    except ConfigError:
+        search = {}
+    if not isinstance(search, dict):
+        search = {}
+    return {
+        "min_subscribers": int(search.get("min_subscribers", _DEFAULT_MIN_SUBSCRIBERS)),
+        "max_subscribers": int(search.get("max_subscribers", _DEFAULT_MAX_SUBSCRIBERS)),
+        "posted_within_days": int(search.get("posted_within_days", _DEFAULT_POSTED_WITHIN_DAYS)),
+        "top": int(search.get("top", _DEFAULT_TOP)),
+        "per_keyword": int(search.get("per_keyword", _DEFAULT_PER_KEYWORD)),
+    }
 
 
 # ----------------------------------------------------------------------------
@@ -81,14 +105,15 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         help="カンマ区切りのキーワード（例: 'lo-fi study,chill beats'）",
     )
-    parser.add_argument("--min-subscribers", type=int, default=_DEFAULT_MIN_SUBSCRIBERS)
-    parser.add_argument("--max-subscribers", type=int, default=_DEFAULT_MAX_SUBSCRIBERS)
-    parser.add_argument("--posted-within-days", type=int, default=_DEFAULT_POSTED_WITHIN_DAYS)
-    parser.add_argument("--top", type=int, default=_DEFAULT_TOP)
+    defaults = _search_defaults()
+    parser.add_argument("--min-subscribers", type=int, default=defaults["min_subscribers"])
+    parser.add_argument("--max-subscribers", type=int, default=defaults["max_subscribers"])
+    parser.add_argument("--posted-within-days", type=int, default=defaults["posted_within_days"])
+    parser.add_argument("--top", type=int, default=defaults["top"])
     parser.add_argument(
         "--per-keyword",
         type=int,
-        default=_DEFAULT_PER_KEYWORD,
+        default=defaults["per_keyword"],
         help="search.list の maxResults（キーワード毎の取得上限）",
     )
     parser.add_argument(

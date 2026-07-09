@@ -7,6 +7,15 @@ description: "Use when YouTube Analytics データの収集・最新化が必要
 
 `analytics_system.py` を実行し、チャンネルの YouTube Analytics データを収集します。
 
+## 設定読み込みゲート
+
+前提確認や鮮度チェックに入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+
+1. `.claude/skills/analytics-collect/config.default.yaml`
+2. `config/skills/analytics-collect.yaml`（存在する場合）
+
+読み込み後は `youtube_automation.utils.skill_config.load_skill_config("analytics-collect")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。
+
 ## 前提
 
 `config/channel/` が存在すること（`load_config()` でロード可能）。
@@ -31,11 +40,13 @@ description: "Use when YouTube Analytics データの収集・最新化が必要
 
 ## 鮮度チェック（並列実行対応）
 
-実行前に既存データの鮮度を確認する:
+実行前に既存データの鮮度を確認する。しきい値は skill-config の `freshness_minutes`（既定 30 分）を使う:
 
 1. `ls -t data/analytics_data_*.json 2>/dev/null | head -1` で最新ファイルを取得
-2. ファイルの更新時刻が **30分以内** → 収集をスキップし、既存データを使用
-3. 30分以上経過 or ファイルなし → 通常どおり下記コマンドを実行
+2. ファイルの更新時刻が **`freshness_minutes` 分以内** → 収集をスキップし、既存データを使用
+3. `freshness_minutes` 分以上経過 or ファイルなし → 通常どおり下記コマンドを実行
+
+`freshness_minutes` は `/analytics-analyze` の鮮度チェックとも共有される単一ソース（`config/skills/analytics-collect.yaml` の上書きが両スキルに効く）。
 
 スキップ時: 「既存データが十分新しいため収集をスキップしました（`<filename>`、`<N>`分前に収集）」と表示。
 

@@ -10,15 +10,19 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 1. **prepare**: `main` の `[Unreleased]` を吸い上げて `release/vX.Y.Z` ブランチを切り、`pyproject.toml::version` を bump し、`CHANGELOG.md` を昇格し、リリース PR を作成する
 2. **publish**: マージ済みリリース PR を tag push + GitHub Release 化し、リリースブランチを削除する
 
-**前提**:
-- バージョン管理は `pyproject.toml::version` を **唯一のソース** とする（`src/youtube_automation/__init__.py` は `importlib.metadata` 経由で自動追従）
-- 配布は git+https + tag pin（PyPI 公開しない）
-- `[Unreleased]` セクションに各 PR 時点で内容を書き溜めている運用が前提（書かれていない場合は prepare を中止）
-
 **責務分離**:
 - 本スキル = リリース実施（prepare + publish）
 - 下流追従 = 各チャンネルリポジトリで `/automation-update` スキル（本リポジトリで配布）が CHANGELOG.md / GitHub Release 本文を読み取って実施
 - グローバル `/release`（`~/.claude/skills/release/`）= Node.js / npm リポジトリ向けで本リポジトリでは使わない
+
+## 前提
+
+以下を確認し、満たさなければ案内して停止する:
+
+- 実行場所が youtube-automation リポジトリ本体（`pyproject.toml::[project].name` が `youtube-channels-automation`）であること。下流チャンネルリポジトリでの追従は `/automation-update` を使う
+- `gh` CLI がインストール済みで認証済み（`gh auth status` が green）であること。未認証なら `gh auth login` を依頼して停止する
+- prepare の場合、`CHANGELOG.md` の `[Unreleased]` セクションに内容が書き溜められていること。空の場合は prepare を中止する（各 PR 時点で書き溜める運用が前提）
+- バージョン管理は `pyproject.toml::version` を **唯一のソース** とする（`src/youtube_automation/__init__.py` は `importlib.metadata` 経由で自動追従）。配布は git+https + tag pin（PyPI 公開しない）
 
 ## Instructions
 
