@@ -1,0 +1,24 @@
+# live-clean skill default config
+#
+# live コレクションクリーンアップの削除対象 / 保護パターン。
+# チャンネル側では `config/skills/live-clean.yaml` に上書き値を置く。
+# パターンはコレクションディレクトリ（`collections/live/<dir>/`）からの相対 glob。
+# リストは deep-merge で丸ごと置換されるため、上書き時は必要な全項目を列挙すること。
+
+# 削除対象（YouTube に存在する or 再生成可能なもののみ列挙する）
+delete_patterns:
+  - "01-master/master.mp3"          # raw マスター（個別トラックから再生成可能）
+  - "01-master/master-mix.wav"      # ミックスダウン済み（DAW で再生成可能）
+  - "01-master/*-Master.mp4"        # YouTube マスター動画（YouTube に存在）
+  - "02-Individual-music/*.mp3"     # 個別ソーストラック（Suno から再取得可能）
+  - "10-assets/loop_normalized.mp4" # 正規化キャッシュ（loop.mp4 から再生成可能）
+
+# 絶対に削除しないファイル（delete_patterns と重なった場合はこちらが優先）
+protect_patterns:
+  - "workflow-state.json"
+  - "10-assets/main.png"
+  - "10-assets/main.jpg"
+  - "10-assets/thumbnail.jpg"
+  - "10-assets/thumbnail.png"
+  - "10-assets/loop.mp4"            # オリジナル、再生成不可
+  - "20-documentation/*"

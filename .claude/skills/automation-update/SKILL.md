@@ -19,6 +19,15 @@ Phase 2 の入力源の優先順位:
 
 Migration セクションの構造契約は `docs/changelog-contract.md` を参照（所要時間の目安 / local fix 衝突注意 が必須要素）。
 
+## 前提
+
+以下を確認し、満たさなければ案内して停止する:
+
+- 実行場所が下流チャンネルリポジトリであること（`pyproject.toml` が `youtube-channels-automation` を依存参照している側。判定と exit 2 時の候補探索は次の「実行場所」セクションに従う）
+- `uv run yt-automation-update` CLI が存在すること。`command not found` の場合は CLI 追加前の旧版からの初回追従として Gotchas の手順に従う
+- 作業ツリーが clean であること（`git status --porcelain` が空。非空なら Step 1-2 の `[HUMAN STEP]` で停止する）
+- GitHub 取得経路として `gh` CLI（要 `gh auth login`）または `curl` のいずれかが使えること（Phase 2 の経路決定参照）
+
 ## 実行場所
 
 下流チャンネルリポジトリ（自リポが `youtube-channels-automation` を依存として `pyproject.toml` で参照している側）でのみ意味を持つ。判定は `yt-automation-update check` が機械的に行う: upstream リポ自身（`[project].name` が `youtube-channels-automation`）や依存参照のないリポで実行すると exit 2 の明示エラーで停止する。

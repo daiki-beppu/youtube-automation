@@ -28,6 +28,14 @@ description: "Use when 新しい YouTube チャンネル用の独立リポジト
 追加の競合探索、本格ベンチマーク収集、詳細分析が必要なときに追加で使う。
 初回の `/channel-new` は方向性を聞かず、方向性の検討・精緻化が必要な場合は同じ `/channel-new` の方向性検討モードで行う。
 
+## 前提
+
+以下を確認し、満たさなければ前工程を案内して停止する:
+
+- `/setup` が完了していること（automation CLI・GCP / OAuth / ADC が整備済み。新規開設モードでは Step 3 で `uv run yt-doctor --json` により機械確認し、必須 check が fail なら `/setup` を案内して停止する。「後続 Step で解消するため許容する fail」は Step 3 の一覧に従う）
+- 実行場所がチャンネル用の独立ディレクトリであること（新規開設モードでは空ディレクトリ可。automation リポジトリ本体の中では実行しない）
+- 方向性検討モードは TTP メモまたは `docs/channel-research.md` 等の分析レポート、再生成モードは決定済み方向性（`docs/channel/channel-direction.md` または TTP メモ）、設定 push モードは `config/channel/meta.json`（必要に応じて `config/localizations.json`）と `auth/token.json` の OAuth 認証を入力として要求する。欠けている場合は該当モードに入らず、先行モード / `/setup` を案内する
+
 ## モード判別
 
 呼び出し文脈から以下の 5 モードを自動判別する。判別できない場合は AskUserQuestion でユーザーに確認する。

@@ -626,3 +626,51 @@ def _make_params_for_render() -> DiscoveryParams:
         per_keyword_results=20,
         require_music_topic=True,
     )
+
+
+# ----------------------------------------------------------------------------
+# skill-config 経由の CLI デフォルト値 (#1669)
+# ----------------------------------------------------------------------------
+
+
+class TestSkillConfigDefaults:
+    """`config/skills/discover-competitors.yaml` の上書きが CLI 既定値に反映されること."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_skill_config_cache(self):
+        from youtube_automation.utils import skill_config
+
+        skill_config.reset("discover-competitors")
+        yield
+        skill_config.reset("discover-competitors")
+
+    def test_channel_override_changes_parser_defaults(self, tmp_path: Path, monkeypatch) -> None:
+        channel = tmp_path / "ch"
+        (channel / "config" / "skills").mkdir(parents=True)
+        (channel / "config" / "skills" / "discover-competitors.yaml").write_text(
+            "search:\n  min_subscribers: 5000\n  top: 10\n", encoding="utf-8"
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(channel))
+
+        parser = _build_parser()
+        args = parser.parse_args(["--keywords", "lo-fi", "--output", "out.md"])
+
+        # Then: 上書きしたキーは override 値、未上書きキーは config.default.yaml の値
+        assert args.min_subscribers == 5000
+        assert args.top == 10
+        assert args.max_subscribers == 10_000_000
+        assert args.posted_within_days == 30
+        assert args.per_keyword == 20
+
+    def test_cli_flag_wins_over_channel_override(self, tmp_path: Path, monkeypatch) -> None:
+        channel = tmp_path / "ch"
+        (channel / "config" / "skills").mkdir(parents=True)
+        (channel / "config" / "skills" / "discover-competitors.yaml").write_text(
+            "search:\n  min_subscribers: 5000\n", encoding="utf-8"
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(channel))
+
+        parser = _build_parser()
+        args = parser.parse_args(["--keywords", "lo-fi", "--output", "out.md", "--min-subscribers", "777"])
+
+        assert args.min_subscribers == 777

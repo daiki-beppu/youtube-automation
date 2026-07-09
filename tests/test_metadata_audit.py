@@ -215,3 +215,51 @@ class TestAuditRemoteZhCodes:
         assert len(zh_issues) == expected_count
         for token in must_contain:
             assert token in zh_issues[0]
+
+
+class TestRemoteChapterMaxSkillConfig:
+    """REMOTE チェックのチャプター上限が skill-config で上書き可能なこと (#1669)."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_skill_config_cache(self):
+        from youtube_automation.utils import skill_config
+
+        skill_config.reset("metadata-audit")
+        yield
+        skill_config.reset("metadata-audit")
+
+    def test_default_remote_chapter_max_is_12(self) -> None:
+        from youtube_automation.scripts.metadata_audit import _remote_chapter_max
+
+        assert _remote_chapter_max() == 12
+
+    def test_channel_override_changes_remote_chapter_max(self, tmp_path: Path, monkeypatch) -> None:
+        from youtube_automation.scripts.metadata_audit import _remote_chapter_max
+
+        channel = tmp_path / "ch"
+        (channel / "config" / "skills").mkdir(parents=True)
+        (channel / "config" / "skills" / "metadata-audit.yaml").write_text(
+            "chapters:\n  remote_max: 20\n", encoding="utf-8"
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(channel))
+
+        assert _remote_chapter_max() == 20
+
+    def test_audit_remote_flags_chapters_over_default_limit(self) -> None:
+        video_id = "VID"
+        desc = "\n".join(f"{i:02d}:00 Track {i}" for i in range(13))
+        response = {
+            "items": [
+                {
+                    "id": video_id,
+                    "snippet": {"title": "test title", "description": desc},
+                    "localizations": {},
+                }
+            ]
+        }
+        with patch(
+            "youtube_automation.utils.youtube_service.get_youtube",
+            return_value=_patched_yt(response),
+        ):
+            result = audit_remote({video_id: "test-collection"})
+        assert any("chapters (>12)" in issue for issue in result[video_id])

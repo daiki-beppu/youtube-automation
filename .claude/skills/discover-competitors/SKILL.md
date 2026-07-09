@@ -16,12 +16,30 @@ description: "Use when 追加競合候補の自動発掘やニッチ仮説の並
 `/channel-new` の標準フローでは実行しない。TTP 対象確認後に追加の競合候補を広げたい場合や、複数のニッチ仮説を
 並行検証したい場合に、このスキルを任意で走らせる。
 
+## 設定読み込みゲート
+
+Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+
+1. `.claude/skills/discover-competitors/config.default.yaml`
+2. `config/skills/discover-competitors.yaml`（存在する場合）
+
+読み込み後は `youtube_automation.utils.skill_config.load_skill_config("discover-competitors")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。`yt-discover-competitors` CLI も同じ skill-config をフラグ既定値として読む（CLI フラグ明示指定 > チャンネル上書き > default の優先順位）。
+
+## 前提
+
+以下を確認し、満たさなければ前工程を案内して停止する:
+
+- 実行場所がチャンネルリポジトリ（`CHANNEL_DIR`）配下であること
+- `auth/token.json` が存在すること（YouTube Data API を使用）。無ければ `/setup` の OAuth 認証を案内して停止する
+- YouTube API の日次 quota に約 660 units / 実行の余裕があること。並行検証で連発する場合は残量を確認する
+- seed 抽出に `config/channel/content.json` / `config/channel/analytics.json` を参照するが、無い場合（新規チャンネル企画・完全手探り）はユーザー宣言のキーワードだけで実行できるため停止しない（Step 1-A の抽出元マトリクス参照）
+
 ## Instructions
 
 ### Step 1: キーワード設計
 
-ユーザーから対象ニッチを聞き出し、**3-5 個（多くて 8 個まで）の検索キーワード**に分解する。
-キーワード数は API コストに線形効くので、ニッチが鮮明なら 3 個で十分。
+ユーザーから対象ニッチを聞き出し、skill-config `keywords.recommended_min`〜`keywords.recommended_max` 個（既定 3-5 個、多くて `keywords.hard_max` = 既定 8 個まで）の検索キーワードに分解する。
+キーワード数は API コストに線形効くので、ニッチが鮮明なら下限で十分。
 
 #### 1-A. シード語の収集元
 
@@ -73,7 +91,7 @@ config からの抽出例（rjn）:
 
 実行前に以下を確認:
 
-- [ ] 3-5 個に絞れているか（8 個超えは API コスト過剰）
+- [ ] `keywords.recommended_min`〜`recommended_max` 個（既定 3-5 個）に絞れているか（`hard_max` = 既定 8 個超えは API コスト過剰）
 - [ ] 4 軸（ジャンル/用途/雰囲気/アクティビティ）のうち 2 軸以上をカバーしているか
 - [ ] 1 単語クエリは含まれていないか（`music` のような単独ワード）
 - [ ] 表記揺れは 1 つに統一されているか
@@ -81,13 +99,15 @@ config からの抽出例（rjn）:
 
 ### Step 2: フィルタ条件の決定
 
-| フラグ | 既定値 | 推奨用途 |
-|-------|--------|---------|
-| `--min-subscribers` | 0 | 小規模チャンネルも拾うなら 0、競合検証なら 10K 以上推奨 |
-| `--max-subscribers` | 10,000,000 | 自分の目標帯の 10 倍以内に絞ると参考にしやすい |
-| `--posted-within-days` | 30 | 「動いている競合」のみ。1 年単位で見たいなら 365 |
-| `--top` | 20 | レポートに出す件数 |
-| `--per-keyword` | 20 | search.list の maxResults（合計クエリ数 = keywords × per-keyword） |
+各フラグの既定値は skill-config の `search.*`（`config.default.yaml` 参照。チャンネル側は `config/skills/discover-competitors.yaml` で恒久上書き可能）:
+
+| フラグ | skill-config キー | 推奨用途 |
+|-------|------------------|---------|
+| `--min-subscribers` | `search.min_subscribers`（既定 0） | 小規模チャンネルも拾うなら 0、競合検証なら 10K 以上推奨 |
+| `--max-subscribers` | `search.max_subscribers`（既定 10,000,000） | 自分の目標帯の 10 倍以内に絞ると参考にしやすい |
+| `--posted-within-days` | `search.posted_within_days`（既定 30） | 「動いている競合」のみ。1 年単位で見たいなら 365 |
+| `--top` | `search.top`（既定 20） | レポートに出す件数 |
+| `--per-keyword` | `search.per_keyword`（既定 20） | search.list の maxResults（合計クエリ数 = keywords × per-keyword） |
 
 ### Step 3: 実行
 

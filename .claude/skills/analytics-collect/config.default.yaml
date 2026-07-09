@@ -1,0 +1,11 @@
+# analytics-collect skill default config
+#
+# Analytics データ収集の設定。チャンネル側では `config/skills/analytics-collect.yaml` に上書き値を置く。
+
+# 鮮度判定しきい値（分）。
+# `data/analytics_data_*.json` の最新ファイルの更新時刻がこの分数以内なら
+# 収集をスキップして既存データを使う（並列実行対応）。
+# `/analytics-analyze` の鮮度チェック（`reports/` 最新レポートの判定）も
+# このキーを単一ソースとして参照する。ここ（または `config/skills/analytics-collect.yaml`）を
+# 書き換えると両スキルの鮮度判定が同時に変わる。
+freshness_minutes: 30

@@ -11,6 +11,16 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 
 利用者は GCP / OAuth に不慣れな前提。AI ができる作業は AI が直接 Bash で実行し、AI にできない 3 ステップ (後述) だけ利用者に依頼する。
 
+## 前提
+
+本スキルはセットアップの起点であり、前工程スキルの成果物を要求しない。確認するのは以下のみ:
+
+- 実行場所がチャンネル用ディレクトリであること（空フォルダ可。automation CLI の導入から「起動時のチェック」の手順で行う）
+- `uv` が利用可能であること。無ければ最初の step（bootstrap カテゴリの `uv` check）でインストールを案内する
+- 利用者が Google アカウントを持ち、GCP プロジェクト作成・OAuth 同意画面設定・`gcloud auth login` を自分のブラウザ / ターミナルで実行できること（AI が代行できない `[HUMAN STEP]` として依頼する）
+
+`config/channel/*.json` の存在は前提にしない（channel カテゴリの check が fail でも `/channel-new` を案内するだけで setup 自体は完了できる）。
+
 ### カテゴリ別チェック構成
 
 `yt-doctor` は診断を 5 カテゴリで段階表示する:

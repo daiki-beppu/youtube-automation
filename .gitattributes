@@ -1,0 +1,34 @@
+# バイナリファイルの diff 抑止（git diff でテキスト差分を表示しない）
+# binary は -diff -merge -text の macro（GitHub issue #1671 要件 1）
+
+# 画像
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+
+# 音声
+*.mp3 binary
+*.wav binary
+*.flac binary
+*.m4a binary
+
+# 動画
+*.mp4 binary
+*.mov binary
+*.webm binary
+
+# アーカイブ
+*.zip binary
+*.gz binary
+
+# フォント
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+
+# ドキュメント
+*.pdf binary
