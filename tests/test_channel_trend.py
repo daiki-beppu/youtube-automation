@@ -41,12 +41,29 @@ def test_detect_anomalies_flags_spike():
     assert any(a["date"] == "2026-04-16" and a["type"] == "spike" for a in anomalies)
 
 
+def test_detect_anomalies_uses_a_baseline_that_excludes_the_spike_day():
+    dates = pd.date_range("2026-04-01", periods=16).strftime("%Y-%m-%d").tolist()
+    views = [24, 6, 15, 26, 13, 7, 27, 30, 24, 23, 30, 10, 8, 19, 29, 41]
+
+    result = analyze_channel_trend(_daily_metrics(dates, views))
+
+    assert any(anomaly["date"] == "2026-04-16" and anomaly["type"] == "spike" for anomaly in result["anomalies"])
+
+
 def test_detect_anomalies_flags_dip():
     dates = [f"2026-04-{i:02d}" for i in range(1, 21)]
     views = [100] * 15 + [5] + [100] * 4
     df = build_trend_frame(_daily_metrics(dates, views))
     anomalies = detect_anomalies(df, z_threshold=2.0)
     assert any(a["date"] == "2026-04-16" and a["type"] == "dip" for a in anomalies)
+
+
+def test_analyze_channel_trend_marks_z_score_as_undetermined_before_min_periods():
+    dates = pd.date_range("2026-04-01", periods=7).strftime("%Y-%m-%d").tolist()
+    result = analyze_channel_trend(_daily_metrics(dates, list(range(10, 17))))
+
+    assert [day["views_z_score"] for day in result["daily_series"]] == [None] * 7
+    assert result["anomalies"] == []
 
 
 def test_analyze_channel_trend_produces_summary():
@@ -63,8 +80,8 @@ def test_analyze_channel_trend_produces_summary():
 
 
 def test_analyze_channel_trend_detects_upward_trend():
-    dates = [f"2026-04-{i:02d}" for i in range(1, 29)]
-    views = list(range(10, 38))  # 明確な増加
+    dates = pd.date_range("2026-04-01", periods=56).strftime("%Y-%m-%d").tolist()
+    views = [100] * 28 + [100] * 7 + [140] * 14 + [80] * 7
     result = analyze_channel_trend(_daily_metrics(dates, views))
     assert result["summary"]["trend_direction"] == "up"
 
@@ -91,3 +108,16 @@ def test_week_over_week_includes_delta_pct():
     assert w2["delta_pct"] == pytest.approx(100.0, abs=0.01)
     w3 = next(w for w in wow if w["week_starting"] == "2026-03-16")
     assert w3["delta_pct"] == pytest.approx(-25.0, abs=0.01)
+
+
+def test_week_over_week_excludes_leading_and_trailing_partial_weeks():
+    dates = pd.date_range("2026-03-04", periods=24).strftime("%Y-%m-%d").tolist()
+    views = [100] * 5 + [10] * 7 + [20] * 7 + [100] * 5
+
+    result = analyze_channel_trend(_daily_metrics(dates, views))
+
+    assert result["week_over_week"] == [
+        {"week_starting": "2026-03-09", "views": 70, "delta_pct": None},
+        {"week_starting": "2026-03-16", "views": 140, "delta_pct": 100.0},
+    ]
+    assert result["summary"]["wow_growth_rate"] == 100.0

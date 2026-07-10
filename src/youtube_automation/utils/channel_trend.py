@@ -46,11 +46,11 @@ def build_trend_frame(daily_metrics: List[Dict]) -> pd.DataFrame:
     df["views_7d_ma"] = df["views"].rolling(window=7, min_periods=1).mean()
     df["views_28d_ma"] = df["views"].rolling(window=28, min_periods=1).mean()
 
-    # z-score は過去 14 日の分布に対する (今日 - 平均) / 標準偏差
-    rolling_mean = df["views"].rolling(window=14, min_periods=7).mean()
-    rolling_std = df["views"].rolling(window=14, min_periods=7).std()
+    # z-score は当日を除く過去 14 日の分布に対する (今日 - 平均) / 標準偏差
+    baseline_views = df["views"].shift(1)
+    rolling_mean = baseline_views.rolling(window=14, min_periods=7).mean()
+    rolling_std = baseline_views.rolling(window=14, min_periods=7).std()
     df["views_z_score"] = (df["views"] - rolling_mean) / rolling_std
-    df["views_z_score"] = df["views_z_score"].fillna(0)
 
     return df
 
@@ -62,7 +62,7 @@ def detect_anomalies(df: pd.DataFrame, z_threshold: float = 2.0) -> List[Dict]:
     anomalies = []
     for _, row in df.iterrows():
         z = float(row["views_z_score"])
-        if abs(z) < z_threshold:
+        if pd.isna(z) or abs(z) < z_threshold:
             continue
         anomalies.append(
             {
@@ -80,8 +80,14 @@ def _compute_week_over_week(df: pd.DataFrame) -> List[Dict]:
     """週次 (週の開始=月曜) の views 合計と前週比増減率を計算。"""
     if df.empty:
         return []
-    weekly = df.set_index("date")["views"].resample("W-MON", label="left", closed="left").sum().reset_index()
-    weekly.columns = ["week_starting", "views"]
+    weekly = (
+        df.set_index("date")["views"]
+        .resample("W-MON", label="left", closed="left")
+        .agg(views="sum", days="count")
+        .reset_index()
+        .rename(columns={"date": "week_starting"})
+    )
+    weekly = weekly[weekly["days"] == 7].copy()
     weekly["delta_pct"] = weekly["views"].pct_change() * 100
     return [
         {
@@ -95,10 +101,10 @@ def _compute_week_over_week(df: pd.DataFrame) -> List[Dict]:
 
 def _judge_trend_direction(df: pd.DataFrame) -> str:
     """直近 28日 MA と それ以前 28日 MA を比較して up/flat/down 判定。"""
-    if len(df) < 14:
+    if len(df) < 56:
         return "flat"
-    recent = df["views"].tail(7).mean()
-    prior = df["views"].head(max(7, len(df) - 7)).tail(7).mean() if len(df) > 14 else df["views"].head(7).mean()
+    recent = df["views"].tail(28).mean()
+    prior = df["views"].iloc[-56:-28].mean()
     if prior == 0:
         return "up" if recent > 0 else "flat"
     ratio = recent / prior
@@ -160,7 +166,9 @@ def analyze_channel_trend(
             "subs_net": int(r["subs_net"]),
             "views_7d_ma": round(float(r["views_7d_ma"]), 2),
             "views_28d_ma": round(float(r["views_28d_ma"]), 2),
-            "views_z_score": round(float(r["views_z_score"]), 2),
+            "views_z_score": (
+                round(float(r["views_z_score"]), 2) if pd.notna(r["views_z_score"]) else None
+            ),
         }
         for _, r in df.iterrows()
     ]
