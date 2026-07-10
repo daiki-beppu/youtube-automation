@@ -29,16 +29,21 @@ veo:
   # いずれかが非空なら default_prompt より優先される。
   # 推奨: 数や形を保持したい要素は "two animals (count remains 2)" のように
   # 肯定文で固定する書き方が効く。
+  # 動きの強度は motion_targets の文言のみで制御する (issue #1747)。
+  # 静かな動きなら "subtle steam rising from coffee" のように強度語を対象側に含め、
+  # はっきり動かすなら "clearly rolling ocean waves" のように書く（テンプレは強度を付加しない）。
   motion_targets: []         # 例: ["slow leaves swaying", "subtle steam rising from coffee"]
   static_targets: []         # 例: ["the character", "two animals (count remains 2)", "bird bath"]
 
   # Veo 3.1 公式の 5 要素 (Cinematography + Action + Style) を圧縮し、
   # ポジティブ表現で「存在の固定」を明示するテンプレート。
   # {motion_clause} / {static_clause} / {base_rules} がプレースホルダ。
+  # 強度断定（subtle 等）はテンプレに書かない — motion_targets の指定と矛盾し
+  # Veo がほぼ静止画を返す原因になる (issue #1747)。
   prompt_template: |
     Locked camera, static composition, no camera movement.
     The scene is a living painting: {static_clause} remain exactly as in the source image — same count, same shape, same position, perfectly still.
-    The only motion is {motion_clause} — subtle, gentle, barely perceptible, natural.
+    The only motion is {motion_clause}.
     {base_rules}
     Loop seamlessly with the first frame matching the last frame.
 
