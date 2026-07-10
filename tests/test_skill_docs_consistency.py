@@ -663,19 +663,17 @@ def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
         assert "API 非消費" not in text
 
     collection_flow = video_upload[
-        video_upload.index("### collection アップロードフロー") : video_upload.index(
-            "### single_release アップロードフロー"
-        )
+        video_upload.index("### collection アップロードフロー") : video_upload.index("### release アップロードフロー")
     ]
     _assert_appears_before(collection_flow, "uv run yt-upload-collection --plan", "Complete Collection アップロード")
 
-    single_release_flow = video_upload[
-        video_upload.index("### single_release アップロードフロー") : video_upload.index("### コマンドリファレンス")
+    release_flow = video_upload[
+        video_upload.index("### release アップロードフロー") : video_upload.index("### コマンドリファレンス")
     ]
-    assert "uv run yt-upload-auto" in single_release_flow
-    assert "uv run yt-upload-collection --plan" in single_release_flow
-    assert "この分岐では実行しない" in single_release_flow
-    assert "collection 用 plan 結果を流用しない" in single_release_flow
+    assert "uv run yt-upload-auto" in release_flow
+    assert "uv run yt-upload-collection --plan" in release_flow
+    assert "この分岐では実行しない" in release_flow
+    assert "collection 用 plan 結果を流用しない" in release_flow
 
     _assert_appears_before(
         posting_checklist,

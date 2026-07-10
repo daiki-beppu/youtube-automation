@@ -417,6 +417,65 @@ class TestGenerateCompleteCollectionMetadata:
                 scene_phrases={},
             )
 
+    @staticmethod
+    def _extract_usage_body(description: str) -> str:
+        """概要欄から Usage & Attribution セクションの本文（ヘッダー直後〜次の空行まで）を抽出する."""
+        header = "📝 Usage & Attribution:"
+        assert header in description
+        after = description.split(header, 1)[1]
+        return after.lstrip("\n").split("\n\n", 1)[0]
+
+    def test_localizations_usage_attribution_respects_override(self, tmp_path, monkeypatch):
+        """skill-config の usage_attribution_lines 上書きが全言語のローカライズ概要欄に反映される（#1650）"""
+        from youtube_automation.utils.config import reset as reset_config
+        from youtube_automation.utils.skill_config import reset as reset_skill_config
+
+        fixture = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
+        channel = tmp_path / "sample_channel"
+        shutil.copytree(fixture, channel)
+        skills_dir = channel / "config" / "skills"
+        skills_dir.mkdir(parents=True)
+        custom_lines = [
+            "• Custom license line for this channel",
+            "• Contact us for commercial licensing",
+        ]
+        (skills_dir / "video-description.yaml").write_text(
+            yaml.safe_dump({"usage_attribution_lines": custom_lines}, allow_unicode=True),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(channel))
+        reset_config()
+        reset_skill_config()
+
+        try:
+            gen = BAHMetadataGenerator(str(channel / "collections" / "demo"))
+            locs = gen.generate_localizations(
+                english_title="Test",
+                timestamp_body="00:00 01. Track 1",
+                scene_phrases=self._all_phrases(),
+            )
+            assert len(locs) >= 2  # 多言語チャンネルで全言語に反映されることを確認
+            for lang, loc in locs.items():
+                assert self._extract_usage_body(loc["description"]) == "\n".join(custom_lines), lang
+        finally:
+            reset_config()
+            reset_skill_config()
+
+    def test_localizations_usage_attribution_matches_complete_collection_default(self, gen_with_tracks):
+        """デフォルト設定時、localizations と Complete Collection の Usage & Attribution 本文が同一（#1650）"""
+        from youtube_automation.utils.skill_config import load_skill_config
+
+        meta = gen_with_tracks.generate_complete_collection_metadata()
+        main_body = self._extract_usage_body(meta["description"])
+
+        expected = "\n".join(load_skill_config("video-description").get("usage_attribution_lines", []))
+        assert expected  # デフォルト config に本文行が存在すること
+        assert main_body == expected
+
+        assert meta["localizations"]  # 多言語チャンネルなので localizations が生成される
+        for lang, loc in meta["localizations"].items():
+            assert self._extract_usage_body(loc["description"]) == main_body, lang
+
     def test_description_header_matches_title(self, gen_with_tracks):
         """説明文ヘッダーが新タイトルと連動すること"""
         meta = gen_with_tracks.generate_complete_collection_metadata()

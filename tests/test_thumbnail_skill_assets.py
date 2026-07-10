@@ -1,6 +1,7 @@
 """thumbnail skill の配布アセット内容を固定化するテスト。"""
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -474,40 +475,64 @@ def test_thumbnail_sample_prompts_are_short_ttp_diff_not_prompt_only_style() -> 
     assert "reference_images` がない場合" not in sample
 
 
-def test_thumbnail_default_config_provides_codex_textless_background_prompt() -> None:
-    """#1502: Codex 経路の既定プロンプトは TTP 背景先行型にする。"""
+def _skill_md_codex_default_template() -> str:
+    """thumbnail/SKILL.md の「既定テンプレート:」直後の ```text fenced block を抽出する。"""
+    skill = _read_thumbnail_skill()
+    match = re.search(r"既定テンプレート:\n\n```text\n(.*?)```\n", skill, flags=re.DOTALL)
+    assert match is not None, "thumbnail/SKILL.md に「既定テンプレート」の ```text ブロックが見つかりません"
+    return match.group(1)
+
+
+def test_thumbnail_default_config_provides_codex_thumbnail_first_prompt() -> None:
+    """#1680: Codex 経路の既定プロンプトは #1611 のテキスト付き thumbnail 先行型にする。"""
     template = _codex_prompt_template(_load_thumbnail_default_config())
 
     assert template.count("{title}") == 1
     for required in (
-        "TTP this reference thumbnail into a stronger original textless background",
+        "TTP this reference thumbnail, then improve it into a stronger original thumbnail",
         "winning layout",
+        "typography feel",
         "color mood",
-        "Remove all text",
-        "logos",
-        "watermarks",
-        "brand marks",
-        "Do not add any title text yet",
+        "more readable on mobile",
+        "no logos",
+        "no watermarks",
+        "no broken hands",
+        "Use the title {title}.",
     ):
         assert required in template
+    for forbidden in (
+        "textless background",
+        "Remove all text",
+        "Do not add any title text yet",
+    ):
+        assert forbidden not in template
+
+
+def test_thumbnail_default_config_codex_template_matches_skill_md_block() -> None:
+    """#1680: SKILL.md「既定テンプレート」ブロックと config.default.yaml を完全一致で機械担保する。"""
+    config_template = _codex_prompt_template(_load_thumbnail_default_config())
+    skill_template = _skill_md_codex_default_template()
+
+    assert config_template == skill_template
 
 
 def test_channel_new_thumbnail_template_includes_codex_ttp_upgrade_prompt() -> None:
-    """#1300: channel-new（再生成モード）で生成される thumbnail config も同じ Codex 既定文言を持つ。"""
+    """#1300 / #1680: channel-new（再生成モード）で生成される thumbnail config も同じ Codex 既定文言を持つ。"""
     default_template = _codex_prompt_template(_load_thumbnail_default_config())
     channel_new_template = _codex_prompt_template(_load_channel_new_thumbnail_template())
 
     assert channel_new_template == default_template
     assert channel_new_template.count("{title}") == 1
     for required in (
-        "TTP this reference thumbnail into a stronger original textless background",
+        "TTP this reference thumbnail, then improve it into a stronger original thumbnail",
         "winning layout",
+        "typography feel",
         "color mood",
-        "Remove all text",
-        "logos",
-        "watermarks",
-        "brand marks",
-        "Do not add any title text yet",
+        "more readable on mobile",
+        "no logos",
+        "no watermarks",
+        "no broken hands",
+        "Use the title {title}.",
     ):
         assert required in channel_new_template
 
@@ -543,8 +568,8 @@ def test_codex_prompt_helper_cli_renders_default_template(tmp_path: Path) -> Non
     )
 
     assert result.returncode == 0, result.stderr
-    assert "TTP this reference thumbnail into a stronger original textless background for Rain Study." in result.stdout
-    assert "Do not add any title text yet" in result.stdout
+    assert "TTP this reference thumbnail, then improve it into a stronger original thumbnail." in result.stdout
+    assert "Use the title Rain Study." in result.stdout
     assert "{title}" not in result.stdout
 
 
