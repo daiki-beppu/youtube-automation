@@ -169,7 +169,7 @@ export function App() {
             </option>
           )}
           {collections.map((c) => (
-            <option key={c.id} value={c.id} disabled={c.status !== "ready"}>
+            <option key={c.id} value={c.id} disabled={c.status === "needs_prompts"}>
               {c.status === "downloaded"
                 ? `${c.name}（完了 ${c.downloaded_count}/${c.expected_file_count ?? (c.pattern_count ?? 0) * 2}）`
                 : c.status === "ready"

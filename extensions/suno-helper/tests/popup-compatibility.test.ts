@@ -1860,7 +1860,7 @@ describe("Suno popup compatibility check", () => {
     const doneOption = Array.from(container.querySelectorAll("option")).find((option) =>
       option.textContent?.includes("done-collection"),
     );
-    expect(doneOption?.disabled).toBe(true);
+    expect(doneOption?.disabled).toBe(false);
   });
 
   it("CORS なし 404 (TypeError) で /collections が reject されたら legacy endpoint へ fallback しない", async () => {

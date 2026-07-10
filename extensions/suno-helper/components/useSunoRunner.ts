@@ -147,11 +147,7 @@ export function useSunoRunner(): RunnerState {
     (source: CollectionSummary[], currentSelectedId: string) => {
       const visibleCollections = visiblePromptCollections(source);
       const preferredSelectedId = currentSelectedId || resumableCollectionId || "";
-      const nextSelectedId = resolvePromptCollectionId(
-        visibleCollections,
-        preferredSelectedId,
-        Boolean(resumableCollectionId),
-      );
+      const nextSelectedId = resolvePromptCollectionId(visibleCollections, preferredSelectedId, true);
       return { visibleCollections, nextSelectedId };
     },
     [resumableCollectionId],
