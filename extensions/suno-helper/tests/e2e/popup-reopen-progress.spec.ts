@@ -90,7 +90,7 @@ test("popup を閉じて再 open すると content の snapshot から itemState
           case PHASE.FINISHED:
             return { text: `完了: ${total} パターンを実行しました。` };
           case PHASE.STOPPED:
-            return { text: "停止しました。手動で続行できます。", error: true };
+            return { text: "停止しました。再実行できます。" };
           default:
             return { text: `中断: ${message ?? ""}`, error: true };
         }

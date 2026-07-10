@@ -31,6 +31,7 @@ import { createAckWaiter, markAck } from "../lib/ack-probe";
 import { attachBridgeListener, createFeedPoller, requestFeedPoll, requestSliderSet } from "../lib/bridge-listener";
 import { createClipTracker } from "../lib/clip-tracker";
 import { createDownloadFlow } from "../lib/download-flow";
+import { acquireDomRunLock, releaseDomRunLock } from "../lib/dom-run-lock";
 import {
   abortableSleep,
   CAPTCHA_WAIT_TIMEOUT_MS,
@@ -268,10 +269,20 @@ async function resolveDownloadContext(): Promise<DownloadContext> {
 
 export default defineContentScript({
   matches: [...SUNO_MATCHES],
-  main() {
+  main(ctx) {
     let aborted = false;
     // 連続実行の二重起動ガード (#892 要件7)。runAll 実行中の run 再着信を弾く。
     let running = false;
+    const runLockOwner = `${Date.now()}-${Math.random()}`;
+    // WXT 実行時 context がある実ブラウザだけDOM共有lockを使う。node単体テストの簡易contextでは
+    // 従来のclosure内 runningガードへ縮退し、テスト間でdocument属性を共有しない。
+    const runLockRoot =
+      typeof document !== "undefined" && typeof ctx?.onInvalidated === "function" ? document.documentElement : null;
+    const acquireRunLock = (): boolean => runLockRoot === null || acquireDomRunLock(runLockRoot, runLockOwner);
+    const releaseRunLock = (): void => {
+      if (runLockRoot !== null) releaseDomRunLock(runLockRoot, runLockOwner);
+    };
+    ctx?.onInvalidated?.(releaseRunLock);
     // 直近の injectEntryAndClickGenerate で Generate を click した entry の 0-based index (#924)。
     // -1 は「まだ click していない」。中断時に submitted 判定と組み合わせて interruptIndex を決定する。
     // run ハンドラで -1 にリセットし、injectEntryAndClickGenerate の冒頭でも attempt ごとにリセットする（理由は同関数コメント参照）。
@@ -1184,6 +1195,9 @@ export default defineContentScript({
         });
         return { ok: true } as const;
       }
+      if (!acquireRunLock()) {
+        return { ok: true } as const;
+      }
       running = true;
       aborted = false;
       lastSubmittedEntryIndex = -1;
@@ -1204,6 +1218,7 @@ export default defineContentScript({
       }).finally(() => {
         running = false;
         feedPoller.stop();
+        releaseRunLock();
       });
       return { ok: true } as const;
     });
@@ -1226,6 +1241,9 @@ export default defineContentScript({
         submittedClipIdsAreDurationFiltered,
         shouldDownload,
       } = assertRetryPlaylistPayload(data);
+      if (!acquireRunLock()) {
+        return { ok: true } as const;
+      }
       currentSnapshot = initSnapshot([], { collectionId, playlistName, durationFilter });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
@@ -1297,6 +1315,7 @@ export default defineContentScript({
         }
       })().finally(() => {
         running = false;
+        releaseRunLock();
       });
       return { ok: true } as const;
     });
@@ -1306,6 +1325,9 @@ export default defineContentScript({
         return { ok: true } as const;
       }
       const { collectionId, submittedClipIds, expectedClipCount } = assertRetryDownloadPayload(data);
+      if (!acquireRunLock()) {
+        return { ok: true } as const;
+      }
       currentSnapshot = initSnapshot([], { collectionId });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
@@ -1339,6 +1361,7 @@ export default defineContentScript({
         }
       })().finally(() => {
         running = false;
+        releaseRunLock();
       });
       return { ok: true } as const;
     });

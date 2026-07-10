@@ -11,6 +11,7 @@ import {
   resolveCompatibilityWarning,
 } from "../../shared/api";
 import { describeRelayFailure } from "../components/runner-errors";
+import { installSunoContentScriptRecovery } from "../lib/content-script-recovery";
 import { installDownloadWatcher } from "../lib/download-watcher";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { relayTabId, requireRelayTab } from "../lib/overlay-relay";
@@ -18,6 +19,25 @@ import { sendTrustedCmdP } from "../lib/trusted-shortcut";
 
 export default defineBackground(() => {
   const downloadWatcher = installDownloadWatcher({ sendMessage });
+
+  installSunoContentScriptRecovery({
+    addTabUpdatedListener: (listener) => browser.tabs.onUpdated.addListener(listener),
+    executeScript: (details) => {
+      if (details.files) {
+        return chrome.scripting.executeScript({
+          target: details.target,
+          files: details.files.map((path) => path.replace(/^\//, "")),
+          world: details.world,
+        });
+      }
+      if (details.func) {
+        return chrome.scripting.executeScript({ target: details.target, func: details.func });
+      }
+      return Promise.reject(new Error("executeScript requires files or func"));
+    },
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    warn: (message, error) => console.warn(message, error),
+  });
 
   browser.runtime.onInstalled.addListener((details) => {
     console.info(`[suno-helper] installed/updated: ${details.reason}`);

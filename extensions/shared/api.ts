@@ -442,15 +442,11 @@ export async function fetchCollectionPromptResponse(
   );
 }
 
-/** popup の実行対象一覧に出す collection。完了済みは次の作業対象ではないため非表示にする。 */
+/** popup に表示する collection。完了済みも結果確認のため一覧に残す。 */
 export function visiblePromptCollections(
   collections: CollectionSummary[],
-  includeDownloadedIds: string[] = [],
 ): CollectionSummary[] {
-  const include = new Set(includeDownloadedIds);
-  return collections.filter(
-    (c) => c.status !== "downloaded" || include.has(c.id),
-  );
+  return collections;
 }
 
 /** `status` ベースで prompts 取得可能な collection を判定する。 */
