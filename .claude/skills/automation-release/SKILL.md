@@ -123,13 +123,13 @@ fi
 
 #### 1-6. Chrome 拡張の release 前検証
 
-`suno-helper` / `distrokid-helper` は、各 `package.json::packageManager`、pnpm 9 形式の lockfile、esbuild の build-script approval、CI と揃えた **pnpm 9.15.9** で検証する。ambient `pnpm` は使わず、両拡張で frozen install → build → zip を実行する:
+`suno-helper` / `distrokid-helper` は、各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` の build-script approval、CI と揃えた **pnpm 11.11.0** で検証する。ambient `pnpm` は使わず、両拡張で frozen install → build → zip を実行する:
 
 ```bash
 for name in suno-helper distrokid-helper; do
-  npx -y pnpm@9.15.9 -C "extensions/${name}" install --frozen-lockfile --ignore-workspace
-  npx -y pnpm@9.15.9 -C "extensions/${name}" build
-  npx -y pnpm@9.15.9 -C "extensions/${name}" zip
+  npx -y pnpm@11.11.0 -C "extensions/${name}" install --frozen-lockfile
+  npx -y pnpm@11.11.0 -C "extensions/${name}" build
+  npx -y pnpm@11.11.0 -C "extensions/${name}" zip
   version=$(node -p "require('./extensions/${name}/package.json').version")
   test -f "extensions/${name}/.output/${name}-${version}-chrome.zip" || exit 1
 done
@@ -265,7 +265,7 @@ PR マージ時に GitHub 側で自動削除されているケースもあるた
 - **tag だけ先に push してしまった場合**: GitHub Release 作成（2-3）を再実行すれば idempotent（gh release create が既存 tag を拾う）
 - **`--generate-notes` が空**: 前回 tag から PR が無い場合、自動生成本文が空になる。下流の `/automation-update` 側が CHANGELOG.md fallback で抽出するため publish 時点では問題視しない
 - **`uv.lock` の version 乖離**: `pyproject.toml` だけ bump して `uv.lock` を同期し忘れると、別 PR で `uv sync` を叩いた瞬間に機械的な 1 行差分が無関係な PR に混入する（#515 の既往）。prepare Phase 1-5 で **必ず** `uv lock` を実行し、bump コミットに `uv.lock` も含めること。`uv` が未導入なら `nix develop --command uv lock` で囲む
-- **Chrome 拡張の pnpm 版数乖離**: ambient pnpm は `.npmrc::package-manager-strict=false` により拒否されない。prepare Phase 1-6 の pnpm 9.15.9 固定コマンドで両拡張を検証し、期待 zip と lockfile 無差分を確認する
+- **Chrome 拡張の pnpm 版数乖離**: ambient pnpm の版は各環境で異なり得る。prepare Phase 1-6 の pnpm 11.11.0 固定コマンドで両拡張を検証し、期待 zip と lockfile 無差分を確認する
 
 ## Rules
 
@@ -275,7 +275,7 @@ PR マージ時に GitHub 側で自動削除されているケースもあるた
 - `release/v<VER>` ブランチ命名は固定（state detection と publish クリーンアップが依存）
 - prepare 1-4 で `Migration` セクション欠落を warning する（下流の `/automation-update` が `所要時間` / `local fix 衝突注意` を抽出する契約上の入力源）
 - prepare 1-5 で **必ず** `uv lock` を実行し、`uv.lock` の version を `pyproject.toml::version` と同期させる（#515 再発防止）。bump コミットに `uv.lock` を含めず main にマージするのは禁止
-- prepare 1-6 で **必ず** pnpm 9.15.9 を使って両 Chrome 拡張の frozen install / build / zip を実行し、期待 zip の存在と両 `pnpm-lock.yaml` の無差分を確認する
+- prepare 1-6 で **必ず** pnpm 11.11.0 を使って両 Chrome 拡張の frozen install / build / zip を実行し、期待 zip の存在と両 `pnpm-lock.yaml` の無差分を確認する
 - 状態判定の結果は `AskUserQuestion` でユーザー確認してから次に進む（誤判定時の脱出口）
 
 ## Cross References

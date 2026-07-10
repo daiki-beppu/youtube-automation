@@ -23,16 +23,16 @@ extensions/
 
 ## pnpm バージョン契約
 
-両拡張（`suno-helper` / `distrokid-helper`）のローカル検証には **pnpm 9.15.9** を使う。各 `package.json::packageManager`、pnpm 9 形式の lockfile、`pnpm.onlyBuiltDependencies` による esbuild の build-script approval、および CI の pnpm 9 を同じ契約に保つためである。
+両拡張（`suno-helper` / `distrokid-helper`）のローカル検証には **pnpm 11.11.0** を使う。各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` による依存 build script の承認、および CI を同じ契約に保つためである。
 
-ambient `pnpm` が別の版でも `.npmrc::package-manager-strict=false` により事前拒否されないため、再現可能な検証では版数を省略せず `npx -y pnpm@9.15.9` を使う。Corepack で各 `package.json::packageManager` の版を有効化済みの場合に限り、以下の `npx -y pnpm@9.15.9` は `pnpm` に置き換えられる。
+ambient `pnpm` の版は各環境で異なり得るため、再現可能な検証では版数を省略せず `npx -y pnpm@11.11.0` を使う。Corepack で各 `package.json::packageManager` の版を有効化済みの場合に限り、以下の `npx -y pnpm@11.11.0` は `pnpm` に置き換えられる。
 
 任意の `<name>`（`suno-helper` または `distrokid-helper`）を検証する標準コマンド:
 
 ```bash
-npx -y pnpm@9.15.9 -C extensions/<name> install --frozen-lockfile --ignore-workspace
-npx -y pnpm@9.15.9 -C extensions/<name> build
-npx -y pnpm@9.15.9 -C extensions/<name> zip
+npx -y pnpm@11.11.0 -C extensions/<name> install --frozen-lockfile
+npx -y pnpm@11.11.0 -C extensions/<name> build
+npx -y pnpm@11.11.0 -C extensions/<name> zip
 ```
 
 `zip` は `extensions/<name>/.output/<name>-<version>-chrome.zip` を生成する。release 前は両拡張で上記 3 コマンドを実行し、成果物の存在と lockfile が不変であることを確認する:
@@ -45,7 +45,7 @@ git diff --exit-code -- extensions/suno-helper/pnpm-lock.yaml extensions/distrok
 
 ## 開発フロー（suno-helper を例に）
 
-すべて `extensions/suno-helper/` で実行する。以下の `pnpm` は、前節に従って pnpm 9.15.9 を有効化済みの場合の省略形である。
+すべて `extensions/suno-helper/` で実行する。以下の `pnpm` は、前節に従って pnpm 11.11.0 を有効化済みの場合の省略形である。
 
 | 目的 | コマンド |
 |---|---|

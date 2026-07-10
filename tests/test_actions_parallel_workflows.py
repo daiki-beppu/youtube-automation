@@ -280,7 +280,7 @@ def test_release_extensions_builds_both_zips_before_release_attachment() -> None
         working_directory, required_command = _RELEASE_BUILD_PARALLEL_STEPS[str(step["name"])]
         assert step.get("working-directory") == working_directory
         assert required_command in str(step.get("run", ""))
-        assert "pnpm install --frozen-lockfile --ignore-workspace" in str(step.get("run", ""))
+        assert "pnpm install --frozen-lockfile" in str(step.get("run", ""))
     assert _top_level_step_index_with_uses(steps, "actions/checkout@v4") < build_parallel_index
     assert _top_level_step_index_with_uses(steps, "pnpm/action-setup@v4") < build_parallel_index
     assert _top_level_step_index_with_uses(steps, "actions/setup-node@v4") < build_parallel_index
