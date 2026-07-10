@@ -8,9 +8,11 @@ CollectionUploader のユニットテスト
 """
 
 import json
+import shutil
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -35,9 +37,12 @@ def test_collection_uploader_imports_playlist_manager():
     assert collection_uploader.PlaylistManager.__module__ == "youtube_automation.scripts.playlist_manager"
 
 
-@pytest.mark.parametrize(("argv", "method_name"), [(["--plan"], "show_plan"), ([], "execute_next_step")])
-def test_main_runs_collection_preflight_before_plan_or_execute(monkeypatch, tmp_path, argv, method_name):
-    """yt-upload-collection の --plan / 通常実行入口でも骨格 preflight を必ず通す。"""
+@pytest.mark.parametrize(
+    ("argv", "method_name"),
+    [(["--status"], "show_status"), (["--plan"], "show_plan"), ([], "execute_next_step")],
+)
+def test_main_runs_shared_preflight_before_status_plan_or_execute(monkeypatch, tmp_path, argv, method_name):
+    """実引数の3 CLI 入口は同じ upload preflight を通してから処理する。"""
     from youtube_automation.agents import collection_uploader
 
     target = tmp_path / "collections" / "planning" / "20990101-test-collection"
@@ -51,12 +56,105 @@ def test_main_runs_collection_preflight_before_plan_or_execute(monkeypatch, tmp_
     with (
         patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
         patch("youtube_automation.agents.collection_uploader.CollectionUploader", return_value=mock_uploader),
-        patch("youtube_automation.agents.collection_uploader.ensure_collection_preflight") as mock_preflight,
     ):
         collection_uploader.main()
 
-    mock_preflight.assert_called_once_with(target)
+    mock_uploader.ensure_upload_preflight.assert_called_once_with(target)
     getattr(mock_uploader, method_name).assert_called_once_with(target)
+
+
+def _write_cli_title_collection(channel_dir: Path, *, title_template_check: dict[str, object] | None) -> Path:
+    """CLI が実際に解決する planning コレクションを作る。"""
+    collection = channel_dir / "collections" / "planning" / "20990101-volume-collection"
+    for subdir in ("01-master", "02-Individual-music", "03-Individual-movie", "10-assets", "20-documentation"):
+        (collection / subdir).mkdir(parents=True, exist_ok=True)
+    (collection / "20-documentation" / "descriptions.md").write_text(
+        """## タイトル案
+```
+Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves
+```
+
+## Complete Collection 概要欄
+```
+00:00 Opening Groove
+10:00 Midnight Funk
+20:00 Last Call Soul
+```
+
+## タグ（YouTube タグ欄）
+```
+soul funk, retro groove, study music
+```
+""",
+        encoding="utf-8",
+    )
+    state: dict[str, object] = {"scene_phrases": {lang: {"title": f"title-{lang}"} for lang in ("ja", "en", "de")}}
+    if title_template_check is not None:
+        state["title_template_check"] = title_template_check
+    (collection / "workflow-state.json").write_text(json.dumps(state), encoding="utf-8")
+    return collection
+
+
+def _title_preflight_config() -> SimpleNamespace:
+    return SimpleNamespace(
+        audio=SimpleNamespace(chapter_max=100),
+        content=SimpleNamespace(
+            tags=SimpleNamespace(min_count=None, for_collection=lambda _name: ["fallback"]),
+            title=SimpleNamespace(
+                template="{adjective} Soul/Funk {noun} | {hours} Hours of {mood}",
+                template_check={"core_vocabulary": ["Soul", "Funk"]},
+            ),
+        ),
+        localizations=SimpleNamespace(supported_languages=["ja", "en", "de"]),
+    )
+
+
+@pytest.mark.parametrize(
+    ("argv", "method_name"),
+    [(["--status"], "show_status"), (["--plan"], "show_plan"), ([], "execute_next_step")],
+)
+@pytest.mark.parametrize(
+    ("title_template_check", "expected_outcome"),
+    [({"allow_volume_patterns": True}, "pass"), (None, "fail")],
+)
+def test_main_title_preflight_honors_collection_opt_in_for_each_cli_entry(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    argv: list[str],
+    method_name: str,
+    title_template_check: dict[str, object] | None,
+    expected_outcome: str,
+) -> None:
+    """実引数で起動した各 CLI 入口が state の title opt-in を実際に評価する。"""
+    from youtube_automation.agents import collection_uploader
+    from youtube_automation.agents.collection_uploader import CollectionUploader
+    from youtube_automation.utils.config import reset as reset_config
+
+    fixture_channel = Path(__file__).parent / "fixtures" / "sample_channel"
+    test_channel = tmp_path / "channel"
+    shutil.copytree(fixture_channel, test_channel)
+    collection = _write_cli_title_collection(test_channel, title_template_check=title_template_check)
+    mock_config = MagicMock()
+    mock_config.meta.channel_short = "test"
+
+    monkeypatch.setenv("CHANNEL_DIR", str(test_channel))
+    monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv, "-c", collection.name])
+    reset_config()
+
+    with (
+        patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
+        patch("youtube_automation.agents._preflight.load_config", return_value=_title_preflight_config()),
+        patch.object(CollectionUploader, method_name) as mock_action,
+    ):
+        if expected_outcome == "pass":
+            collection_uploader.main()
+            mock_action.assert_called_once_with(collection)
+        else:
+            with pytest.raises(SystemExit, match="1"):
+                collection_uploader.main()
+            assert "巻数表記を検出" in capsys.readouterr().out
+            mock_action.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

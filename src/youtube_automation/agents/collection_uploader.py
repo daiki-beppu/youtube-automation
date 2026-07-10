@@ -212,6 +212,11 @@ class CollectionUploader(
         logger.info("✅ 全ステップ完了")
         return {"action": "all_completed", "details": {}}
 
+    def ensure_upload_preflight(self, collection_path: Path) -> None:
+        """CLI の各入口で共通の骨格・タイトル preflight を実行する。"""
+        ensure_collection_preflight(collection_path)
+        self.uploader._preflight_check(collection_path)
+
     # ─── ステータス表示 ──────────────────────────────
 
     def show_status(self, collection_path: Path):
@@ -358,16 +363,17 @@ def main():
         elif args.status:
             target = uploader._find_collection(args.collection)
             if target:
+                uploader.ensure_upload_preflight(target)
                 uploader.show_status(target)
         elif args.plan:
             target = uploader._find_collection(args.collection)
             if target:
-                ensure_collection_preflight(target)
+                uploader.ensure_upload_preflight(target)
                 uploader.show_plan(target)
         else:
             target = uploader._find_collection(args.collection)
             if target:
-                ensure_collection_preflight(target)
+                uploader.ensure_upload_preflight(target)
                 uploader.execute_next_step(target)
 
     except KeyboardInterrupt:

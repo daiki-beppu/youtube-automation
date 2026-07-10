@@ -712,6 +712,18 @@ class TestCheckTitleTemplateCompliance:
         assert msg is not None
         assert "巻数表記" in msg
 
+    @pytest.mark.parametrize("volume_patterns", [None, []])
+    def test_null_or_empty_volume_patterns_keep_default_detection(self, volume_patterns: object) -> None:
+        cfg = {**self.CFG, "volume_patterns": volume_patterns}
+        msg = check_title_template_compliance(
+            "Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves",
+            [],
+            cfg,
+        )
+
+        assert msg is not None
+        assert "巻数表記" in msg
+
     def test_part_notation_rejected(self) -> None:
         title = "Funky Soul Spirit Part 3 | 3 Hours of Feel-Good Retro Grooves"
         msg = check_title_template_compliance(title, [], self.CFG)
