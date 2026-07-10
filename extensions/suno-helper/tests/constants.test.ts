@@ -237,9 +237,13 @@ describe("shared/constants: 投入方式 run mode (#1586)", () => {
     },
   );
 
-  it("Given queue mode When riskNote を読む Then duration 範囲外 entry の失敗検知と再実行導線を説明する", () => {
-    expect(RUN_MODES.queue.riskNote).toEqual(expect.stringContaining("範囲外"));
-    expect(RUN_MODES.queue.riskNote).toEqual(expect.stringContaining("失敗"));
-    expect(RUN_MODES.queue.riskNote).toEqual(expect.stringContaining("失敗分のみ再実行"));
+  it("Given serial mode When label / riskNote を読む Then 安全モードとして安定性重視の説明を表示する (#1862)", () => {
+    expect(RUN_MODES.serial.label).toBe("安全モード");
+    expect(RUN_MODES.serial.riskNote).toBe("1件ずつ完了を待つ、安定性重視のモードです。");
+  });
+
+  it("Given queue mode When label / riskNote を読む Then 高速モードとして速度重視の説明を表示する (#1862)", () => {
+    expect(RUN_MODES.queue.label).toBe("高速モード");
+    expect(RUN_MODES.queue.riskNote).toBe("最大10件を先行投入する、速度重視のモードです。");
   });
 });

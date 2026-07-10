@@ -554,7 +554,7 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
-  it("投入方式 Queue を選択して実行すると storage に保存し run payload に queue を渡す", async () => {
+  it("投入方式 高速モードを選択して実行すると storage に保存し run payload に queue を渡す", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
@@ -584,7 +584,7 @@ describe("Suno popup compatibility check", () => {
     });
 
     await act(async () => {
-      radioByLabel(container, "Queue").click();
+      radioByLabel(container, "高速モード").click();
     });
     expect(presetStateMocks.writeRunModeId).toHaveBeenCalledWith("queue");
 
