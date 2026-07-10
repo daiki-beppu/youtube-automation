@@ -14,7 +14,10 @@
 //     fields: ResolvedAdvancedFields { excludeStyles, weirdness, styleInfluence, vocalGender: { male, female } }
 //   注入順序: Exclude styles (text, 高速) → vocal_gender (click 1 回) → Weirdness → Style Influence
 //   各フィールドの非対称契約:
-//     - entry に値有 (=== undefined でない) + 対応 selector が null → throw (fail-loud、UI 改装検知)
+//     - entry に値有 (=== undefined でない) + 対応 selector が null:
+//         - exclude_styles / vocal_gender → throw (fail-loud、UI 改装検知)
+//         - slider 2 つ → console.warn + onSliderSkip + skip (fail-soft、#1720。値は UI で手動設定でき
+//           Create を跨いで永続するため、Suno のリネームによる未検出で run を中断しない)
 //     - entry に値無 (=== undefined)                              → skip (fail-soft、後方互換)
 //     - entry に値有 + selector 有                                 → 注入する
 //       (exclude_styles は setNativeValue / slider 2 つは setSliderValue / vocal_gender は click)
@@ -95,13 +98,50 @@ afterEach(() => {
 });
 
 describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", () => {
-  describe("値有 + selector 不在 → throw (fail-loud)", () => {
-    it("Given entry.style_influence 有 + styleInfluence selector null When 注入 Then throw する", async () => {
-      await expect(injectAdvancedFields({ style_influence: 85 }, ALL_NULL)).rejects.toThrow();
+  describe("値有 + selector 不在 → exclude_styles は throw、slider は warn-skip (#1720)", () => {
+    it("Given entry.style_influence 有 + styleInfluence selector null When 注入 Then throw せず warn + onSliderSkip で skip する", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const onSliderSkip = vi.fn();
+
+      await expect(injectAdvancedFields({ style_influence: 85 }, ALL_NULL, { onSliderSkip })).resolves.toBeUndefined();
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Style Influence slider が見つかりません"));
+      expect(onSliderSkip).toHaveBeenCalledWith("Style Influence");
+      warnSpy.mockRestore();
     });
 
-    it("Given entry.weirdness 有 + weirdness selector null When 注入 Then throw する", async () => {
-      await expect(injectAdvancedFields({ weirdness: 30 }, ALL_NULL)).rejects.toThrow();
+    it("Given entry.weirdness 有 + weirdness selector null When 注入 Then throw せず warn + onSliderSkip で skip する", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const onSliderSkip = vi.fn();
+
+      await expect(injectAdvancedFields({ weirdness: 30 }, ALL_NULL, { onSliderSkip })).resolves.toBeUndefined();
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Weirdness slider が見つかりません"));
+      expect(onSliderSkip).toHaveBeenCalledWith("Weirdness");
+      warnSpy.mockRestore();
+    });
+
+    it("Given 両 slider 有 + 両 selector null When 注入 Then run を止めず両方 skip を通知する", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const onSliderSkip = vi.fn();
+
+      await expect(
+        injectAdvancedFields({ weirdness: 30, style_influence: 85 }, ALL_NULL, { onSliderSkip }),
+      ).resolves.toBeUndefined();
+
+      expect(onSliderSkip).toHaveBeenCalledTimes(2);
+      expect(onSliderSkip).toHaveBeenNthCalledWith(1, "Weirdness");
+      expect(onSliderSkip).toHaveBeenNthCalledWith(2, "Style Influence");
+      warnSpy.mockRestore();
+    });
+
+    it("Given slider selector null + onSliderSkip 省略 When 注入 Then throw せず console.warn のみで skip する", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      await expect(injectAdvancedFields({ weirdness: 30 }, ALL_NULL)).resolves.toBeUndefined();
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Weirdness slider が見つかりません"));
+      warnSpy.mockRestore();
     });
 
     it("Given entry.exclude_styles 有 + excludeStyles selector null When 注入 Then throw する", async () => {
@@ -256,6 +296,19 @@ describe("injectAdvancedFields: 非対称契約 (fail-loud / fail-soft, #900)", 
       await expect(pending).resolves.toBeUndefined();
 
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Weirdness slider 注入を skip"), expect.any(Error));
+      warnSpy.mockRestore();
+    });
+
+    it("Given weirdness slider が反応しない + onSliderSkip 有 When 注入 Then skip を通知する（#1720、観測可能性）", async () => {
+      const weirdness = makeSlider(50, { respond: false });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const onSliderSkip = vi.fn();
+
+      const pending = injectAdvancedFields({ weirdness: 30 }, { ...ALL_NULL, weirdness }, { onSliderSkip });
+      await vi.advanceTimersByTimeAsync(2000);
+      await expect(pending).resolves.toBeUndefined();
+
+      expect(onSliderSkip).toHaveBeenCalledWith("Weirdness");
       warnSpy.mockRestore();
     });
 
