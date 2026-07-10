@@ -478,10 +478,7 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
     const div = addLexicalLyrics();
     applyLexicalPasteAsParagraphs(div);
 
-    const injected = setLyricsValue(
-      div,
-      "[Verse 1]\nfirst line\n\n[Chorus]\nsecond line",
-    );
+    const injected = setLyricsValue(div, "[Verse 1]\nfirst line\n\n[Chorus]\nsecond line");
 
     await vi.advanceTimersByTimeAsync(400);
     await injected;
