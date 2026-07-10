@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(loop-video)`: 既定 `prompt_template` が `{motion_clause}` の直後に強度断定「— subtle, gentle, barely perceptible, natural.」を必ず付加していたため、`motion_targets` で "clearly rolling ocean waves" 等の強い動きを指定してもテンプレ側の弱化文言と自己矛盾し Veo がほぼ静止画を生成していた問題を修正（#1747）。強度断定をテンプレから除去し、動きの強度は motion_targets の文言のみで制御する方式に変更（静かな動きは "subtle steam rising from coffee" のように強度語を対象側に書く）。`motion_targets` 未指定時は従来どおり `default_prompt`（subtle 系の静的シーン向け文言）へフォールバックするため後方互換、チャンネル側 `config/skills/loop-video.yaml` の `prompt_template` 上書きも引き続き有効
 - `fix(scripts)`: `bulk_update_descriptions_from_md.py`（`yt-bulk-update-desc`）が `videos().update(part="snippet")` の body を手組みで列挙しており、`defaultAudioLanguage` を含めていなかったため、このツールを通した全動画で音声言語設定が消えていた問題を修正。`defaultLanguage` 未設定の動画に `"en"` を注入していた挙動も廃止。`bulk_update_synthetic_media.py::build_update_body` と同じ read-modify-write 方式（`build_snippet_update_body`）に統一し、mutable 6 キー（title / description / tags / categoryId / defaultLanguage / defaultAudioLanguage）だけを whitelist で保持する
 - `fix(suno-helper)`: queue mode で全 entry 投入後に duration guard を一括実行し、範囲外 clip のみだった entry を `ENTRY_FAILED` として `failedIndices` に保存するようにした（#1762）。対象 entry は「失敗分のみ再実行」導線に載せ、playlist 追加は保留する。部分的に OK clip がある entry は OK clip を accepted として `DONE` にし、duration filter 未指定時は `DEFAULT_DURATION_FILTER` で検査する。
 - `fix(suno-helper)`: queue mode の `clipIdsByEntry` を投入前後の Set 差分で捕捉し、entry retry 中に遅延観測された clip ID も同じ entry へ帰属させるようにした（#1762）。DOM-only ACK で clip ID が未観測の entry は fatal 停止せず、finalizer の warn + `DONE` 縮退へ到達する。
