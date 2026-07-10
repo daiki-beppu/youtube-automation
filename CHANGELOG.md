@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(auth)`: OAuth token の scope 分離を導入し、read-only skill が write scope の token を共用しない設計にした。`YouTubeOAuthHandler` に `READONLY_SCOPES`（`youtube.readonly` + `yt-analytics(.monetary)?.readonly`、write scope なし）と用途別 token `auth/token.readonly.json` の発行・解決（`create_readonly` / `readonly_token_path`。探索順は #1721 と同じ channel 側 → main worktree 側）を追加し、新 CLI `yt-oauth`（`--readonly` で readonly token 発行）を登録した。`ServiceRegistry` の read 系（`analytics` / `reporting` / 新設の `youtube_readonly` / `credentials_readonly` / `get_readonly_handler`）は readonly token を優先し、未発行時は warning ログで発行手順を案内した上で `token.json` へフォールバックする（サイレント失敗しない。既存運用は無変更で動作）。read-only 系呼び出し元（analytics 収集 / benchmark / channel-status / metadata-audit / playlist-status / discover-competitors / stream-bandwidth）を readonly 経路へ移行し、write 系（upload / playlist 管理 / bulk update / コメント投稿）は従来どおり `token.json` を使う。skill × 実効 scope の対応表と運用手順を `docs/oauth-scopes.md` に新設した（#1699）。
 ### Added
 
+- `feat(videoup)`: `generate_videos.sh --preview [15-30]` で effect / audio visualizer / subscribe popup を反映した短尺 MP4 を `01-master/<Collection>-Preview.mp4` として生成できるようにした。プレビューは全尺 Master と workflow state を更新せず、全尺の経路種別・時間見通しを表示する。`/videoup` は visual 設定が有効な場合、プレビューの明示受理前に全尺エンコードへ進まない（#1749）
+
 - `yt-retention-timeline` を追加し、収集済み retention drop を `/video-analyze` の scene / BGM 区間へ自動照合して JSON / Markdown レポートを生成できるようにした (#1814)
 
 - `feat(cost)`: 動画 metadata 一括更新 3 CLI（`yt-bulk-update-desc` / `yt-shorts-bulk-update-loc` / `yt-bulk-update-synthetic-media`）に YouTube Data API quota 記録（`cost_tracker.log_quota`）を配線した。read-before-write を含む発行済みリクエスト 1 回につき 1 エントリ（`videos.list` / `channels.list` / `playlistItems.list` = 1 unit、`videos.update` = 50 units）を記録し、dry-run は実際に発行した read のみ、batch / pagination はリクエスト回数と記録件数が一致する。quota はリクエスト失敗時も消費されるため、update 失敗時も記録した上で従来の例外・部分進捗契約（continue / exit code / 最初の失敗の再 raise）を維持する（#2058）。
@@ -230,7 +232,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(analytics)`: 動画別の `subscribersGained ÷ views × 100` による登録転換率ランキングと、登録済み／未登録視聴者別の `subscribedStatus` 集計を analytics スナップショットへ追加した。`/analytics-analyze` は両データを組み合わせて「登録を生む動画の型」を分析し、チャンネル全体の subscribedStatus を動画個別の因果として断定しない（#1813）。
 - `feat(analytics)`: standard / full depth の Analytics 収集に、視聴数上位 200 件の playlist dimension における views・平均視聴時間・上位 200 件内の視聴シェアを追加し、`/analytics-analyze` が Complete Collection を含むプレイリスト内視聴をレポートできるようにした（#1815）。
-
 ## [5.5.17] - 2026-07-10
 
 ### Added
