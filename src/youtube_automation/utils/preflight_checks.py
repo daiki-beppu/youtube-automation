@@ -227,14 +227,21 @@ def check_title_template_compliance(
     - **ジャンル核語彙**（任意）: `core_vocabulary` 設定時、LHS にいずれかを含むか
 
     鋳型語彙・パターンは `title_template_cfg`（チャンネル config 由来）から導出し、
-    未指定キーは既定値にフォールバックする。`title_template_cfg["template"]` に
-    セパレータを含まないチャンネル（` | ` 鋳型を使わない）では適用せず None を返す
-    （後方互換・誤検出防止のための自動 opt-in）。
+    未指定・null・空リストの `volume_patterns` は既定値にフォールバックする。
+    コレクション単位の opt-in は JSON で表せない空 tuple を内部的に渡し、巻数表記の
+    照合だけを省略する。`title_template_cfg["template"]` にセパレータを含まない
+    チャンネル（` | ` 鋳型を使わない）では適用せず None を返す（後方互換・誤検出防止
+    のための自動 opt-in）。
     """
     cfg: Mapping[str, object] = title_template_cfg or {}
     separator = str(cfg.get("separator") or DEFAULT_TITLE_SEPARATOR)
     rhs_pattern = str(cfg.get("rhs_pattern") or DEFAULT_TITLE_RHS_PATTERN)
-    volume_patterns = cfg.get("volume_patterns") or DEFAULT_TITLE_VOLUME_PATTERNS
+    configured_volume_patterns = cfg.get("volume_patterns")
+    volume_patterns = (
+        ()
+        if isinstance(configured_volume_patterns, tuple) and not configured_volume_patterns
+        else configured_volume_patterns or DEFAULT_TITLE_VOLUME_PATTERNS
+    )
     core_vocabulary = cfg.get("core_vocabulary") or ()
 
     # 鋳型がセパレータ運用でないチャンネルには適用しない（template から自動判定）。
