@@ -27,7 +27,7 @@ const SELECTORS = {
   //   - Weirdness / Style Influence: radix slider ([role="slider"] + aria-label で区別)
   // data-testid は Suno UI で Lyrics 以外に存在しないため placeholder / aria-label を SSOT にする。
   excludeStyles:
-    'input[placeholder*="Exclude" i], textarea[placeholder*="Exclude" i], input[aria-label*="Exclude" i], textarea[aria-label*="Exclude" i]',
+    'input[placeholder*="Exclude" i], textarea[placeholder*="Exclude" i], input[aria-label*="Exclude" i], textarea[aria-label*="Exclude" i], input[placeholder*="除外"], textarea[placeholder*="除外"], input[aria-label*="除外"], textarea[aria-label*="除外"]',
   // 2026-07 の Suno 新 Create UI で slider がリネームされた（Weirdness → Bizarreness /
   // Style Influence → Style influence〈小文字 i〉、#1720）。完全一致だと表記ゆれのたびに run が
   // 中断するため、旧新両ラベルにマッチする case-insensitive substring match（tolerant match）にする。
