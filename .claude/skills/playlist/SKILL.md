@@ -32,6 +32,10 @@ description: "Use when プレイリストの作成・割り当て・確認をす
 
 `uv run yt-playlist-manager --status` も同じ `PlaylistStatusViewer` に委譲するため、`uv run yt-playlist-status` と等価。
 
+## 完了条件
+
+実行したモードのコマンドが exit 0 で終了した時点で完了。init モードでは加えて `playlists.json` の全エントリに `playlist_id` が書き戻され、`uv run yt-playlist-status` で `(未作成)` が残っていないことを確認する。status モードは一覧表示のみで完了。
+
 ## Instructions
 
 ### Step 1: 状態確認（必ず最初に実行）
@@ -52,7 +56,7 @@ uv run yt-playlist-manager --init --dry-run    # まずプレビュー
 uv run yt-playlist-manager --init              # 実反映
 ```
 
-**注意**: `--dry-run` フラグなしが実反映。`yt-channel-settings` のように `--apply` 経由ではないので、dry-run → 確認 → 本番の 2 段階運用を徹底する。
+**注意**: `--dry-run` フラグなしが実反映。`yt-channel-settings` のように `--apply` 経由ではないので、dry-run → 確認 → 本番の 2 段階運用を徹底する。ここでの「確認」は、dry-run 出力（作成されるプレイリスト名と割り当て件数）をユーザーに提示し、問題ない旨の応答を得ることを指す。dry-run 出力を提示しないまま実反映コマンドを実行しない。
 
 実行後、`playlists.json` の各エントリに `playlist_id` が書き戻される。
 

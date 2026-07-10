@@ -18,14 +18,18 @@ YouTube Data API v3 の `commentThreads.list` / `comments.insert` を使い、
 - `comments.enabled: true` になっている
 - `auth/token.json` が `youtube.force-ssl` スコープで発行済み
 
+## 完了条件
+
+Phase 5 の apply が完了し、`実返信` が期待件数・`errors` が 0 である時点で完了。dry-run のみの依頼では、Phase 4 の確認ポイント提示までで完了。承認ゲートでキャンセルされた場合は apply を実行せず、dry-run 結果の報告で終了する。
+
 ## 実行フロー
 
 ### Phase 1: 基本フィルタ / provider の確認
 
-`config/channel/comments.json` の `ng_words`, `language`, `generator` を Read ツールで確認する。
+`config/channel/comments.json` の `ng_words`, `language`, `generator` を Read（Codex では同等のファイル閲覧機能）で確認する。
 `rules` は後方互換のため残っていても処理では無視される。keywords / pattern の未マッチで skip される経路はない。
-Claude Code 運用では CLI 内部の provider 生成を使わず、メインエージェントが Agent ツールで
-サブエージェントを呼び出して返信 JSON を作成する。CLI は候補抽出・検証・YouTube 投稿だけを担当する。
+Claude Code 運用では CLI 内部の provider 生成を使わず、メインエージェントが Agent ツール
+（Codex では同等のサブエージェント機能に読み替え）でサブエージェントを呼び出して返信 JSON を作成する。CLI は候補抽出・検証・YouTube 投稿だけを担当する。
 CLI 内部から `claude -p` は呼ばない。
 
 ### Phase 2: 返信候補を export
@@ -82,6 +86,22 @@ uv run yt-comments-reply --dry-run --agent-replies-file /tmp/comment-replies.jso
 
 1 項目でも FAIL なら返信文を修正して dry-run(Phase 4)を再実行する。FAIL のまま Phase 5 に進んではならない。
 
+### 承認ゲート: apply 実行前の確認
+
+Phase 4 の確認ポイントが全項目 PASS になったら、Phase 5(apply)実行前に必ずユーザーの承認を取る。
+
+- **Claude Code**: AskUserQuestion で dry-run 結果の要約(返信候補件数・skipped 内訳・代表的な reply_text 数件)を提示し、「投稿する」「キャンセル」の明示 2 択で確認する。承認されるまで Phase 5 を絶対に実行しない
+- **AskUserQuestion 非対応環境(Codex 等)**: dry-run 結果の要約をテキストで提示し、ユーザーからの明示的な承認発言を待つ。無応答・曖昧な返答のまま Phase 5 に進んではならない
+
+### Phase 5: apply で反映
+
+```bash
+uv run yt-comments-reply --apply --agent-replies-file /tmp/comment-replies.json --limit 5
+```
+
+- `実返信` が期待件数になっていれば成功
+- `errors` が 0 でない場合は `comment_reply_history.json` に書き込まれない該当コメントを要確認
+
 ## 設定スキーマ
 
 ```json
@@ -108,22 +128,6 @@ uv run yt-comments-reply --dry-run --agent-replies-file /tmp/comment-replies.jso
 - `comments.rules`: 後方互換のため残っていても読み込まれるが、返信対象判定・provider 解決では無視される
 - `fallback_on_error`: `skip` / `retry`
 - **破壊的変更**: 旧 `comments.generator.type`、`comments.templates`、`fallback_on_error: "template"` は廃止。`comments.rules[].template_key` / `comments.rules[].generator` は互換で読み捨てられる
-
-### 承認ゲート: apply 実行前の確認
-
-Phase 4 の確認ポイントが全項目 PASS になったら、Phase 5(apply)実行前に必ずユーザーの承認を取る。
-
-- **Claude Code**: AskUserQuestion で dry-run 結果の要約(返信候補件数・skipped 内訳・代表的な reply_text 数件)を提示し、「投稿する」「キャンセル」の明示 2 択で確認する。承認されるまで Phase 5 を絶対に実行しない
-- **AskUserQuestion 非対応環境(Codex 等)**: dry-run 結果の要約をテキストで提示し、ユーザーからの明示的な承認発言を待つ。無応答・曖昧な返答のまま Phase 5 に進んではならない
-
-### Phase 5: apply で反映
-
-```bash
-uv run yt-comments-reply --apply --agent-replies-file /tmp/comment-replies.json --limit 5
-```
-
-- `実返信` が期待件数になっていれば成功
-- `errors` が 0 でない場合は `comment_reply_history.json` に書き込まれない該当コメントを要確認
 
 ## Quick Reference
 
