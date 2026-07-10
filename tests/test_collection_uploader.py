@@ -226,6 +226,174 @@ def _read_resume_uri(tracking_path: Path) -> str | None:
     return data.get("complete_collection", {}).get("resume_session_uri")
 
 
+def _write_workflow_state(collection: Path, *, phase: str, video_id: str | None) -> None:
+    collection.mkdir(parents=True)
+    (collection / "workflow-state.json").write_text(
+        json.dumps({"phase": phase, "upload": {"video_id": video_id}}), encoding="utf-8"
+    )
+
+
+class TestAutoDetectCollection:
+    def test_auto_detect_selects_only_unpublished_mastered_planning_collection(self, tmp_path):
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        live = tmp_path / "collections" / "live" / "20260101-published-collection"
+        target = tmp_path / "collections" / "planning" / "20260201-mastered-collection"
+        _write_workflow_state(live, phase="complete", video_id="published-video")
+        _write_workflow_state(target, phase="mastered", video_id=None)
+
+        assert uploader._find_collection() == target
+
+    def test_auto_detect_fails_when_no_unpublished_mastered_planning_collection(self, tmp_path):
+        from youtube_automation.utils.exceptions import ValidationError
+
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        _write_workflow_state(
+            tmp_path / "collections" / "live" / "20260101-published-collection",
+            phase="complete",
+            video_id="published-video",
+        )
+        _write_workflow_state(
+            tmp_path / "collections" / "planning" / "20260201-uploaded-collection",
+            phase="mastered",
+            video_id="already-uploaded",
+        )
+
+        with pytest.raises(ValidationError, match="自動選択できる対象コレクションがありません"):
+            uploader._find_collection()
+
+    def test_auto_detect_fails_when_video_id_is_missing(self, tmp_path):
+        from youtube_automation.utils.exceptions import ValidationError
+
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        collection = tmp_path / "collections" / "planning" / "20260201-incomplete-collection"
+        collection.mkdir(parents=True)
+        (collection / "workflow-state.json").write_text(
+            json.dumps({"phase": "mastered", "upload": {}}), encoding="utf-8"
+        )
+
+        with pytest.raises(ValidationError, match="自動選択できる対象コレクションがありません"):
+            uploader._find_collection()
+
+    def test_auto_detect_fails_when_multiple_unpublished_mastered_planning_collections(self, tmp_path):
+        from youtube_automation.utils.exceptions import ValidationError
+
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        _write_workflow_state(
+            tmp_path / "collections" / "planning" / "20260201-first-collection", phase="mastered", video_id=None
+        )
+        _write_workflow_state(
+            tmp_path / "collections" / "planning" / "20260202-second-collection", phase="mastered", video_id=None
+        )
+
+        with pytest.raises(ValidationError, match="-c で対象を明示してください"):
+            uploader._find_collection()
+
+    def test_explicit_collection_name_can_still_select_live_collection(self, tmp_path):
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        live = tmp_path / "collections" / "live" / "20260101-published-collection"
+        _write_workflow_state(live, phase="complete", video_id="published-video")
+
+        assert uploader._find_collection("published") == live
+
+    @pytest.mark.parametrize(
+        ("argv", "method_name"),
+        [(["--status"], "show_status"), (["--plan"], "show_plan"), ([], "execute_next_step")],
+    )
+    def test_main_uses_safe_auto_detect_for_status_plan_and_upload(self, monkeypatch, tmp_path, argv, method_name):
+        from youtube_automation.agents import collection_uploader
+
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        live = tmp_path / "collections" / "live" / "20260101-published-collection"
+        target = tmp_path / "collections" / "planning" / "20260201-mastered-collection"
+        _write_workflow_state(live, phase="complete", video_id="published-video")
+        _write_workflow_state(target, phase="mastered", video_id=None)
+        method = MagicMock()
+        monkeypatch.setattr(uploader, method_name, method)
+        mock_config = MagicMock()
+        mock_config.meta.channel_short = "test"
+
+        monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
+        with (
+            patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
+            patch("youtube_automation.agents.collection_uploader.CollectionUploader", return_value=uploader),
+            patch("youtube_automation.agents.collection_uploader.ensure_collection_preflight") as mock_preflight,
+        ):
+            collection_uploader.main()
+
+        method.assert_called_once_with(target)
+        if argv == ["--status"]:
+            mock_preflight.assert_not_called()
+        else:
+            mock_preflight.assert_called_once_with(target)
+
+    @pytest.mark.parametrize("argv", [["--status"], ["--plan"], []])
+    def test_main_fails_loudly_when_auto_detect_has_no_candidate(self, monkeypatch, tmp_path, capsys, argv):
+        from youtube_automation.agents import collection_uploader
+
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        mock_config = MagicMock()
+        mock_config.meta.channel_short = "test"
+        monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
+
+        with (
+            patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
+            patch("youtube_automation.agents.collection_uploader.CollectionUploader", return_value=uploader),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            collection_uploader.main()
+
+        assert exc_info.value.code == 1
+        assert "-c で対象を明示してください" in capsys.readouterr().out
+
+    @pytest.mark.parametrize(
+        ("argv", "method_name"),
+        [(["--status"], "show_status"), (["--plan"], "show_plan"), ([], "execute_next_step")],
+    )
+    def test_main_fails_loudly_when_auto_detect_is_ambiguous(self, monkeypatch, tmp_path, capsys, argv, method_name):
+        from youtube_automation.agents import collection_uploader
+
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        _write_workflow_state(
+            tmp_path / "collections" / "planning" / "20260201-first-collection", phase="mastered", video_id=None
+        )
+        _write_workflow_state(
+            tmp_path / "collections" / "planning" / "20260202-second-collection", phase="mastered", video_id=None
+        )
+        mock_config = MagicMock()
+        mock_config.meta.channel_short = "test"
+        method = MagicMock()
+        monkeypatch.setattr(uploader, method_name, method)
+        monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
+
+        with (
+            patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
+            patch("youtube_automation.agents.collection_uploader.CollectionUploader", return_value=uploader),
+            patch("youtube_automation.agents.collection_uploader.ensure_collection_preflight") as mock_preflight,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            collection_uploader.main()
+
+        assert exc_info.value.code == 1
+        assert "-c で対象を明示してください" in capsys.readouterr().out
+        mock_preflight.assert_not_called()
+        method.assert_not_called()
+
+    def test_daily_check_skips_when_auto_detect_is_ambiguous(self, tmp_path, caplog):
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        _write_workflow_state(
+            tmp_path / "collections" / "planning" / "20260201-first-collection", phase="mastered", video_id=None
+        )
+        _write_workflow_state(
+            tmp_path / "collections" / "planning" / "20260202-second-collection", phase="mastered", video_id=None
+        )
+        uploader.execute_next_step = MagicMock()
+
+        uploader._daily_check_and_upload()
+
+        uploader.execute_next_step.assert_not_called()
+        assert "-c で対象を明示してください" in caplog.text
+
+
 class TestDefaultPublishTimeFallback:
     """#1054: schedule_config 未指定時に channel youtube.default_publish_time を使う。"""
 

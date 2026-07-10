@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `fix(upload)`: `yt-upload-collection` の `-c` 未指定時の自動選択を、`collections/planning/` 配下で `phase=mastered` かつ `upload.video_id=null` の未公開コレクション 1 件だけに限定した。`live/` の公開済みコレクションは候補外とし、候補が 0 件または複数件なら `-c` 明示を要求して停止する。`--plan` / `--status` / 実アップロードと日次実行に同じ選択条件を適用した（#1731）。
+
 ## [5.5.17] - 2026-07-10
 
 ### Added
