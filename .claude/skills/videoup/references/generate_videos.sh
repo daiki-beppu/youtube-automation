@@ -139,7 +139,16 @@ yaml_top_get() {
     if [[ -z "$val" ]]; then echo "$fallback"; else echo "$val"; fi
 }
 
-stat_mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0; }
+stat_mtime() {
+    local value
+    if value="$(stat -f %m "$1" 2>/dev/null)"; then
+        printf '%s\n' "$value"
+    elif value="$(stat -c %Y "$1" 2>/dev/null)"; then
+        printf '%s\n' "$value"
+    else
+        echo 0
+    fi
+}
 
 # effect の 1 ループ周期（秒）。filter を整数周期に揃えてあるので定数で持つ。
 effect_period() {
