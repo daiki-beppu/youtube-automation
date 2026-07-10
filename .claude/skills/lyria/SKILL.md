@@ -9,6 +9,10 @@ Vertex AI Lyria 3 REST API (`interactions` エンドポイント) を使い、`c
 
 Lyria 3 Pro は **1 リクエストあたり最大約 184 秒（~3 分）** までのオーディオを返す。本スキルは `config/channel/audio.json` の `audio.target_duration_min` から必要セグメント数 N を自動算出し、`yt-generate-lyria-master` CLI 経由で N セグメント生成 → クロスフェード結合まで一気通貫で実行する（`generate_master.generate_master()` の WAV 経路を再利用）。
 
+## 完了条件
+
+`01-master/master.mp3` が生成され、`workflow-state.json` の `planning.music` / `assets.music_prompts = true` / `assets.raw_master` が更新されたとき完了とする（詳細は Step 5 が正）。`assets.master_audio` の確定と `phase: "mastered"` への遷移は `/wf-next` の責務で、本スキルには含まれない。
+
 ## 設定読み込みゲート
 
 前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
@@ -167,7 +171,7 @@ celtic folk only, clean dry recording, no pads, gentle melodic phrases rising an
    - 設計上の意図（主役楽器、雰囲気、テーマとの関係）
    - 品質チェックリスト
 
-2. ユーザーにプロンプト・パラメータの確認を求める
+2. ユーザーにプロンプト・パラメータの確認を求める。Claude Code では AskUserQuestion で「この内容で生成する」「修正する」の明示 2 択を出す。AskUserQuestion 非対応環境（Codex 等）では同じ情報をテキストで提示し、ユーザーの明示的な承認発言を待つ。Lyria 3 API は課金 API のため、承認されるまで Step 4 を実行しない
 3. 修正があれば `lyria-prompt.md` を編集して再確認
 
 ## Step 4: 音楽生成 + マスター結合
@@ -282,7 +286,7 @@ bash "$(git rev-parse --show-toplevel)/.claude/skills/lyria/references/worktree_
 
 ## 長時間処理の取り扱い
 
-`yt-generate-lyria-master` は Lyria 3 API を N セグメント分逐次呼び出し、最後にクロスフェード結合まで行うため **N × 30〜90 秒** かかる（典型的にコレクション全体で 5〜20 分）。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+`yt-generate-lyria-master` は Lyria 3 API を N セグメント分逐次呼び出し、最後にクロスフェード結合まで行うため **N × 30〜90 秒** かかる（典型的にコレクション全体で 5〜20 分）。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。Codex など `run_in_background` 非対応の実行環境では、同コマンドを `nohup ... > <log> 2>&1 &` で background 起動し、完了はログ末尾で確認する読み替えとする。
 
 spawn 例:
 

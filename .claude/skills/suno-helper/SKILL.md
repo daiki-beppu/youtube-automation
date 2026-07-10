@@ -10,6 +10,10 @@ description: "Use when Suno UI に投入する曲をブラウザで連続生成 
 このスキルはプロンプト生成（`/suno`）の **次工程** であり、マスター化（`/masterup`）の **前工程** にあたる。suno-helper は生成 → playlist 追加 → 一括ダウンロードまでを 1 タブで完結させるため、`/masterup` の DL ステップ（Step 2-3）は原則スキップされる。
 新規 collection を `/wf-new` から開始した直後は、`/wf-new` が `uv run yt-collection-serve` の起動と疎通確認まで完了している場合がある。その場合、本スキルは既存 server を再利用し、browser use で Suno タブ上の suno-helper overlay を操作する。
 
+## 完了条件
+
+overlay の phase が `finished` に到達し、Step 6 の 6 点（playlist 紐付け / clip 数 = entry 数 × 2 / `02-Individual-music/` への音声配置 / `status = downloaded` / `suno_playlist_url` 記録 / `assets.music_downloaded = true`）がすべて確認できたとき完了とする（詳細は Step 6 が正）。`entry-failed` や clip 数不足が残る場合は完了扱いにせず、失敗分の再実行を提案する。
+
 ## When to Use
 
 - `/suno` でプロンプトが揃い、Suno で実際に曲を生成したいとき
@@ -20,11 +24,10 @@ description: "Use when Suno UI に投入する曲をブラウザで連続生成 
 
 ## 前提
 
-- Chrome に suno-helper 拡張がロード済み（拡張アイコンが popup を出す）
+- Chrome に unpacked の suno-helper 拡張がロード済み（拡張アイコンが popup を出す。ID 検出に失敗した場合のみ `--allow-origin` fallback で拡張 ID を手動指定する）
 - Suno (suno.com/create) にログイン済み・**Custom Mode** が選択されている
 - Style 入力欄が出ていること（Instrumental ON/OFF はパターンに依存、Lyrics ありなら OFF）
 - automation リポジトリで `uv` が使える・`CHANNEL_DIR` 環境変数を当該チャンネルへ向けてある
-- Chrome に unpacked の suno-helper 拡張がロード済み（検出に失敗した場合のみ `--allow-origin` fallback で拡張 ID を手動指定する）
 - collection ディレクトリ名が **`*-collection` suffix** を持つ（dir mode 必須）。例: `20260201-soulful-grooves-rainy-night-soul-collection/`
 - 7873 / 7874 など特定 port を既に他の collection で使っていないか確認（並走させる場合は明示的に分ける）
 
