@@ -55,6 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(suno-helper)`: ユーザー操作による `stopped` を赤いエラー扱いにせず、「停止しました。再実行できます。」と通常状態で表示するようにした。
 - `fix(suno-helper)`: ダウンロード完了済み collection を popup の一覧から消さず、「完了 N/N」として再表示するように戻した。完了済み collection も選択でき、同じテストを再実行できる。
 - `fix(suno-helper)`: playlist 追加前に Lyrics editor など入力欄の focus を外し、Suno が trusted `Cmd+P` を無視して Add to Playlist dialog を開けない問題を修正した。
 - `fix(suno-helper)`: Suno の Lexical Lyrics editor で複数行の段落を改行付きで比較し、空文字クリア時は `beforeinput` fallback を使うことで、反映済みでも paste / clear 失敗として停止する問題を修正した。重複 content script が同じ run を二重実行しない DOM lock も追加した。

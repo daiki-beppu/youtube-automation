@@ -784,7 +784,7 @@ describe("Suno popup compatibility check", () => {
       root.render(createElement(App));
     });
     await waitFor(() => {
-      expect(container.textContent).toContain("停止しました。手動で続行できます。");
+      expect(container.textContent).toContain("停止しました。再実行できます。");
     });
 
     messagingMocks.sendMessage.mockClear();
@@ -831,7 +831,7 @@ describe("Suno popup compatibility check", () => {
       root.render(createElement(App));
     });
     await waitFor(() => {
-      expect(container.textContent).toContain("停止しました。手動で続行できます。");
+      expect(container.textContent).toContain("停止しました。再実行できます。");
     });
 
     fetchMock

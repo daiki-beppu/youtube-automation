@@ -51,11 +51,11 @@ describe("phaseToStatus: 終了 phase の文言と error フラグ", () => {
     expect(result.error).toBeFalsy();
   });
 
-  it("Given STOPPED When phaseToStatus Then 停止文言・error=true", () => {
+  it("Given STOPPED When phaseToStatus Then 再実行可能な停止文言・error は falsy", () => {
     const result = statusOf({ phase: PHASE.STOPPED, index: 0, total: 3 });
 
-    expect(result.text).toBe("停止しました。手動で続行できます。");
-    expect(result.error).toBe(true);
+    expect(result.text).toBe("停止しました。再実行できます。");
+    expect(result.error).toBeFalsy();
   });
 
   it("Given ERROR (message 付き) When phaseToStatus Then 中断文言に message を含み error=true", () => {
