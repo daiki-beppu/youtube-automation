@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(channel-new)`: 新規チャンネル初期化時のデフォルト `schedule.cadence` を週 3 回（`["tue", "thu", "sat"]`）から毎日投稿（`["sun", "mon", "tue", "wed", "thu", "fri", "sat"]`）に変更した（#1730）。対象は配布テンプレート `.claude/skills/channel-new/references/schedule-template.json` と `yt-channel-init` が生成する `schedule_config.json`（`cli/channel_init_templates.py::_render_schedule`）の 2 箇所。`publish_time`（20:00）・`auto_schedule_enabled`（true）等の他キーは変更なし。既存チャンネルの `schedule_config.json` には影響しない
 - `fix(thumbnail)`: OpenAI Image provider の既定 `quality` を `high` から `medium` に変更した（#1697）。provider を OpenAI に切り替えた際に無自覚に高単価 API を叩くのを防ぐため、`high` は `image_generation.openai.quality: high` の明示 opt-in のみとする。`src/youtube_automation/utils/image_provider/config.py::_build_openai` のフォールバック既定値と `.claude/skills/thumbnail/config.default.yaml` の同梱既定値の両方を `medium` にし、thumbnail SKILL.md の provider 切替 runbook に quality 既定値と単価差の注記を追記した
 - `docs(live-clean)`: SKILL.md の障害時ガイダンスに Ctrl+C（SIGINT）中断ケースを追記した（#1696）。削除はファイル単位 `rm -f` で idempotent（`workflow-state.json` は保護対象のため再実行時の安全性検証もそのまま機能）であり、スキル再実行で Step 1 / T1 の再スキャンにより残件から安全に継続できることを文書化。再実行時も承認ゲートを改めて通る
 - `docs(video-upload)`: SKILL.md の frontmatter description に release 型（単曲リリースアップロード）の発動トリガー語（「楽曲リリースをアップロード」「リリース動画を公開」）と /short-release への棲み分けを追記した（#1692）。従来は collection 型のみ前提に読める記述で、実装は release 型対応済みにもかかわらず発動語が欠けていた。型名表記は実装の正（`ContentModel.type = "release"`、#1772 の用語統一方針）に合わせた
