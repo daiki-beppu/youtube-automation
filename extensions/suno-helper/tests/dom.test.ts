@@ -1278,6 +1278,47 @@ describe("resolveAdvancedFields: More Options 3 フィールドの解決 (#900, 
     expect(fields.excludeStyles).toBeNull();
   });
 
+  it("Given 新 Create UI のリネーム後ラベル（Bizarreness / Style influence）When 解決する Then tolerant match で両 slider を解決する（#1720）", () => {
+    // 2026-07 の Suno 新 Create UI: Weirdness → Bizarreness、Style Influence → Style influence（小文字 i）。
+    const bizarreness = addSlider({ ariaLabel: "Bizarreness", value: 0 });
+    const styleInfluence = addSlider({ ariaLabel: "Style influence", value: 50 });
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.weirdness).toBe(bizarreness);
+    expect(fields.styleInfluence).toBe(styleInfluence);
+  });
+
+  it("Given 旧ラベル（Weirdness / Style Influence）When 解決する Then 引き続きマッチする（後方互換、#1720）", () => {
+    const weirdness = addSlider({ ariaLabel: "Weirdness", value: 10 });
+    const styleInfluence = addSlider({ ariaLabel: "Style Influence", value: 60 });
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.weirdness).toBe(weirdness);
+    expect(fields.styleInfluence).toBe(styleInfluence);
+  });
+
+  it("Given 大文字小文字ゆれのみのリネーム（style influence 全小文字等）When 解決する Then case-insensitive でマッチする（#1720）", () => {
+    const weirdness = addSlider({ ariaLabel: "WEIRDNESS", value: 0 });
+    const styleInfluence = addSlider({ ariaLabel: "style influence", value: 50 });
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.weirdness).toBe(weirdness);
+    expect(fields.styleInfluence).toBe(styleInfluence);
+  });
+
+  it("Given Bizarreness と Style influence が並ぶ新 UI When 解決する Then weirdness セレクタが Style influence を誤って掴まない（#1720）", () => {
+    // substring match の排他性: "influence" は weirdness セレクタ（weirdness / bizarre）にマッチしない。
+    const styleInfluence = addSlider({ ariaLabel: "Style influence", value: 50 });
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.weirdness).toBeNull();
+    expect(fields.styleInfluence).toBe(styleInfluence);
+  });
+
   it("Given hidden slider のみ When 解決する Then hidden 要素を返す（collapsed 時の DOM 要素を掴む）", () => {
     // More Options collapsed 時の挙動。strict visible 必須を撤回した結果、hidden でも DOM 上の要素を返す。
     const hidden = addSlider({ ariaLabel: "Weirdness", value: 0, visible: false });

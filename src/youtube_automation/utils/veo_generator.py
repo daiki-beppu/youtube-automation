@@ -468,6 +468,33 @@ def compress_loop(video_path: Path, crf: int = 22, preset: str = "slow") -> bool
     return True
 
 
+def _relocate_stale_raw(raw_path: Path) -> Path:
+    """残存する前回の `*_raw.mp4` を `*_raw-v{n}.mp4` へ退避する（番号衝突回避）。
+
+    smooth_loop 再実行時に前回の raw が残っていると、`Path.rename` が
+    FileExistsError（Windows）または無警告上書き（POSIX）になる。
+    raw は Veo 生成（課金済み）の原本のため削除せず、
+    `generate_loop_video._backup_existing_loop` の `loop-v{n}` と同じ
+    連番退避方式で保全する（Issue #1748）。
+
+    Args:
+        raw_path: 残存している `*_raw.mp4` の path。
+
+    Returns:
+        退避先 path（`*_raw-v{n}.mp4`）。
+    """
+    parent = raw_path.parent
+    n = 1
+    while True:
+        backup = parent / f"{raw_path.stem}-v{n}{raw_path.suffix}"
+        if not backup.exists():
+            break
+        n += 1
+    raw_path.rename(backup)
+    print(f"  [Backup] 前回の {raw_path.name} を {backup.name} に退避")
+    return backup
+
+
 def smooth_loop(
     video_path: Path,
     crossfade_sec: float = 0.5,
@@ -546,8 +573,11 @@ def smooth_loop(
             print(f"  [ERROR]  FFmpeg 失敗: {e.stderr[:200]}")
             return False
 
-        # 元ファイルをバックアップして置き換え
+        # 元ファイルをバックアップして置き換え。
+        # 再実行で前回 raw が残存している場合は連番退避して衝突を回避する（Issue #1748）。
         backup = video_path.with_stem(video_path.stem + "_raw")
+        if backup.exists():
+            _relocate_stale_raw(backup)
         video_path.rename(backup)
         output.rename(video_path)
         size_mb = video_path.stat().st_size / (1024 * 1024)
