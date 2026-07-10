@@ -86,12 +86,24 @@ class TestStatePath:
 class TestSave:
     """save() の書き込み・構造テスト."""
 
+    @staticmethod
+    def _image_path(tmp_path: Path) -> Path:
+        image_path = tmp_path / "main.png"
+        image_path.write_bytes(b"test-image")
+        return image_path
+
     def test_creates_state_file(self, tmp_path: Path) -> None:
         # Given
         output_path = tmp_path / "loop.mp4"
 
         # When
-        saved = store.save(output_path, "projects/veo/12345", "veo-3.1-fast", channel_root=tmp_path)
+        saved = store.save(
+            output_path,
+            self._image_path(tmp_path),
+            "projects/veo/12345",
+            "veo-3.1-fast",
+            channel_root=tmp_path,
+        )
 
         # Then
         assert saved.exists()
@@ -103,13 +115,15 @@ class TestSave:
         model = "veo-3.1-fast"
 
         # When
-        saved = store.save(output_path, operation_name, model, channel_root=tmp_path)
+        image_path = self._image_path(tmp_path)
+        saved = store.save(output_path, image_path, operation_name, model, channel_root=tmp_path)
         data = json.loads(saved.read_text(encoding="utf-8"))
 
         # Then
         assert data["operation_name"] == operation_name
         assert data["output_path"] == str(output_path.resolve())
         assert data["model"] == model
+        assert data["input_image_sha256"] == hashlib.sha256(image_path.read_bytes()).hexdigest()
 
     def test_submitted_at_is_not_in_saved_state(self, tmp_path: Path) -> None:
         """submitted_at は state schema に含まれない（未使用フィールドによる契約膨張の防止）。"""
@@ -117,7 +131,7 @@ class TestSave:
         output_path = tmp_path / "loop.mp4"
 
         # When
-        saved = store.save(output_path, "op-name", "veo-3.1-fast", channel_root=tmp_path)
+        saved = store.save(output_path, self._image_path(tmp_path), "op-name", "veo-3.1-fast", channel_root=tmp_path)
         data = json.loads(saved.read_text(encoding="utf-8"))
 
         # Then: 使われていないフィールドは state に含まれない
@@ -130,7 +144,7 @@ class TestSave:
         assert not ops_dir.exists()
 
         # When
-        store.save(output_path, "op-name", "model", channel_root=tmp_path)
+        store.save(output_path, self._image_path(tmp_path), "op-name", "model", channel_root=tmp_path)
 
         # Then
         assert ops_dir.exists()
@@ -141,7 +155,7 @@ class TestSave:
         output_path = tmp_path / "loop.mp4"
 
         # When
-        saved = store.save(output_path, "op-name", "model", channel_root=tmp_path)
+        saved = store.save(output_path, self._image_path(tmp_path), "op-name", "model", channel_root=tmp_path)
 
         # Then
         tmp_remnant = saved.with_suffix(saved.suffix + ".tmp")
@@ -153,7 +167,7 @@ class TestSave:
         expected = store.state_path(output_path, channel_root=tmp_path)
 
         # When
-        result = store.save(output_path, "op-name", "model", channel_root=tmp_path)
+        result = store.save(output_path, self._image_path(tmp_path), "op-name", "model", channel_root=tmp_path)
 
         # Then
         assert result == expected
@@ -162,10 +176,11 @@ class TestSave:
         """2 回 save しても壊れず最新データが残る."""
         # Given
         output_path = tmp_path / "loop.mp4"
-        store.save(output_path, "op-old", "model", channel_root=tmp_path)
+        image_path = self._image_path(tmp_path)
+        store.save(output_path, image_path, "op-old", "model", channel_root=tmp_path)
 
         # When
-        saved = store.save(output_path, "op-new", "model", channel_root=tmp_path)
+        saved = store.save(output_path, image_path, "op-new", "model", channel_root=tmp_path)
         data = json.loads(saved.read_text(encoding="utf-8"))
 
         # Then
@@ -193,7 +208,9 @@ class TestLoad:
     def test_returns_dict_after_save(self, tmp_path: Path) -> None:
         # Given
         output_path = tmp_path / "loop.mp4"
-        store.save(output_path, "projects/veo/99", "veo-3.1-fast", channel_root=tmp_path)
+        image_path = tmp_path / "main.png"
+        image_path.write_bytes(b"test-image")
+        store.save(output_path, image_path, "projects/veo/99", "veo-3.1-fast", channel_root=tmp_path)
 
         # When
         result = store.load(output_path, channel_root=tmp_path)
@@ -233,7 +250,9 @@ class TestLoad:
         """load の返り値を mutate しても次回 load に影響しない（イミュータブル保証）."""
         # Given
         output_path = tmp_path / "loop.mp4"
-        store.save(output_path, "op-original", "model", channel_root=tmp_path)
+        image_path = tmp_path / "main.png"
+        image_path.write_bytes(b"test-image")
+        store.save(output_path, image_path, "op-original", "model", channel_root=tmp_path)
 
         # When: 返り値を mutate
         data = store.load(output_path, channel_root=tmp_path)
@@ -251,7 +270,11 @@ class TestLoad:
         output_path = tmp_path / "loop.mp4"
         state_file = store.state_path(output_path, channel_root=tmp_path)
         state_file.parent.mkdir(parents=True, exist_ok=True)
-        incomplete = {"model": "veo-3.1-fast", "output_path": str(output_path.resolve())}
+        incomplete = {
+            "model": "veo-3.1-fast",
+            "output_path": str(output_path.resolve()),
+            "input_image_sha256": "test-hash",
+        }
         state_file.write_text(json.dumps(incomplete), encoding="utf-8")
 
         # When
@@ -275,6 +298,7 @@ class TestLoad:
             "operation_name": "projects/veo/mismatch",
             "model": "veo-3.1-fast",
             "output_path": str(other_path.resolve()),
+            "input_image_sha256": "test-hash",
         }
         state_file.write_text(json.dumps(mismatched), encoding="utf-8")
 
@@ -297,6 +321,7 @@ class TestLoad:
             "operation_name": 12345,  # 非文字列
             "model": "veo-3.1-fast",
             "output_path": str(output_path.resolve()),
+            "input_image_sha256": "test-hash",
         }
         state_file.write_text(json.dumps(invalid), encoding="utf-8")
 
@@ -319,6 +344,7 @@ class TestLoad:
             "operation_name": "projects/veo/99",
             "model": None,  # 非文字列
             "output_path": str(output_path.resolve()),
+            "input_image_sha256": "test-hash",
         }
         state_file.write_text(json.dumps(invalid), encoding="utf-8")
 
@@ -331,6 +357,25 @@ class TestLoad:
         assert "[Warn]" in out
         assert not state_file.exists()
 
+    def test_returns_none_when_input_image_hash_is_not_str(self, tmp_path: Path, capsys) -> None:
+        """input_image_sha256 が非文字列の state は削除する。"""
+        output_path = tmp_path / "loop.mp4"
+        state_file = store.state_path(output_path, channel_root=tmp_path)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        invalid = {
+            "operation_name": "projects/veo/99",
+            "model": "veo-3.1-fast",
+            "output_path": str(output_path.resolve()),
+            "input_image_sha256": 123,
+        }
+        state_file.write_text(json.dumps(invalid), encoding="utf-8")
+
+        result = store.load(output_path, channel_root=tmp_path)
+
+        assert result is None
+        assert "input_image_sha256" in capsys.readouterr().out
+        assert not state_file.exists()
+
     def test_returns_none_when_output_path_is_not_str(self, tmp_path: Path, capsys) -> None:
         """output_path が非文字列の state は None を返し、state ファイルを削除する（ai-review-006）。"""
         # Given: output_path を整数で書き込む（壊れた state）
@@ -341,6 +386,7 @@ class TestLoad:
             "operation_name": "projects/veo/99",
             "model": "veo-3.1-fast",
             "output_path": 123,  # 非文字列
+            "input_image_sha256": "test-hash",
         }
         state_file.write_text(json.dumps(invalid), encoding="utf-8")
 
@@ -363,6 +409,7 @@ class TestLoad:
             "operation_name": "projects/veo/99",
             "model": "veo-3.1-fast",
             "output_path": {"path": "/some/path"},  # dict（非文字列）
+            "input_image_sha256": "test-hash",
         }
         state_file.write_text(json.dumps(invalid), encoding="utf-8")
 
@@ -373,6 +420,24 @@ class TestLoad:
         # Then: None を返し、[Warn] を出力し、state ファイルを削除する
         assert result is None
         assert "[Warn]" in out
+        assert not state_file.exists()
+
+    def test_returns_none_and_removes_legacy_state_without_input_image_hash(self, tmp_path: Path, capsys) -> None:
+        """入力画像識別子がない旧 state は安全側で破棄する。"""
+        output_path = tmp_path / "loop.mp4"
+        state_file = store.state_path(output_path, channel_root=tmp_path)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        legacy_state = {
+            "operation_name": "projects/veo/legacy",
+            "model": "veo-3.1-fast",
+            "output_path": str(output_path.resolve()),
+        }
+        state_file.write_text(json.dumps(legacy_state), encoding="utf-8")
+
+        result = store.load(output_path, channel_root=tmp_path)
+
+        assert result is None
+        assert "input_image_sha256" in capsys.readouterr().out
         assert not state_file.exists()
 
     def test_returns_none_when_state_is_json_array(self, tmp_path: Path, capsys) -> None:
@@ -421,7 +486,7 @@ class TestClear:
     def test_removes_existing_state(self, tmp_path: Path) -> None:
         # Given
         output_path = tmp_path / "loop.mp4"
-        store.save(output_path, "op-name", "model", channel_root=tmp_path)
+        store.save(output_path, TestSave._image_path(tmp_path), "op-name", "model", channel_root=tmp_path)
         assert store.state_path(output_path, channel_root=tmp_path).exists()
 
         # When
@@ -441,7 +506,7 @@ class TestClear:
     def test_load_returns_none_after_clear(self, tmp_path: Path) -> None:
         # Given
         output_path = tmp_path / "loop.mp4"
-        store.save(output_path, "op-name", "model", channel_root=tmp_path)
+        store.save(output_path, TestSave._image_path(tmp_path), "op-name", "model", channel_root=tmp_path)
 
         # When
         store.clear(output_path, channel_root=tmp_path)
