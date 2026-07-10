@@ -4,7 +4,8 @@
 # チャンネル側で config/skills/suno-lyric.yaml に上書きする。
 
 # 名言ソース（iyashitour.com の英語名言ページ）
-# 安全境界: scheme=https / host=iyashitour.com / path は /meigen/ 配下のみ許可。
+# 安全境界: scheme=https / host=iyashitour.com。path は /meigen/ 配下（インデックス）に加え、
+# そこからリンクで辿る /archives/<ID>（英語名言の原文ページ）への 1 ホップのみ許可。
 # 別 host や private IP への自動取得は禁止し、人間が取得済み引用メモを渡す。
 source:
   base_url: "https://iyashitour.com"
