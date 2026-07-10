@@ -23,11 +23,12 @@ const SELECTORS = {
   // 英語 UI は "Song Title (Optional)"、日本語 UI は "曲名(任意)"（2026-07 実 DOM）で出る。
   title: 'input[placeholder*="Song Title" i], input[placeholder*="曲名"]',
   // Custom Mode > More Options の 3 フィールド (#900、chrome-devtools-mcp で実機確定済み)。
-  //   - Exclude styles: native text input/textarea (placeholder / aria-label の表記ゆれを許容)
+  //   - Exclude styles: native text input/textarea (placeholder / aria-label の表記ゆれを許容)。
+  //     英語 UI は "Exclude styles"、日本語 UI は「スタイルを除外」placeholder で出る（#1840、title と同じ英日並記）。
   //   - Weirdness / Style Influence: radix slider ([role="slider"] + aria-label で区別)
   // data-testid は Suno UI で Lyrics 以外に存在しないため placeholder / aria-label を SSOT にする。
   excludeStyles:
-    'input[placeholder*="Exclude" i], textarea[placeholder*="Exclude" i], input[aria-label*="Exclude" i], textarea[aria-label*="Exclude" i]',
+    'input[placeholder*="Exclude" i], textarea[placeholder*="Exclude" i], input[placeholder*="除外"], textarea[placeholder*="除外"], input[aria-label*="Exclude" i], textarea[aria-label*="Exclude" i]',
   // 2026-07 の Suno 新 Create UI で slider がリネームされた（Weirdness → Bizarreness /
   // Style Influence → Style influence〈小文字 i〉、#1720）。完全一致だと表記ゆれのたびに run が
   // 中断するため、旧新両ラベルにマッチする case-insensitive substring match（tolerant match）にする。
