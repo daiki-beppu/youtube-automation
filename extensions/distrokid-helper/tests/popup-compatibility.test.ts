@@ -8,6 +8,7 @@ import { App } from "../entrypoints/popup/App";
 import type { ReleasePayload } from "../lib/types";
 
 const BASE_URL = "http://localhost:7873";
+const FALLBACK_URL = "http://localhost:7877";
 const MANIFEST_VERSION = "0.1.9";
 
 const RELEASE_PAYLOAD: ReleasePayload = {
@@ -55,8 +56,14 @@ vi.mock("../lib/storage", () => ({
     getValue: vi.fn(async () => ""),
     setValue: vi.fn(async () => undefined),
   },
-  readServerSources: vi.fn(async () => [{ id: "localhost-7873", label: "localhost", url: BASE_URL }]),
-  rememberServerSource: vi.fn(async () => [{ id: "localhost-7873", label: "localhost", url: BASE_URL }]),
+  readServerSources: vi.fn(async () => [
+    { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
+    { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
+  ]),
+  rememberServerSource: vi.fn(async () => [
+    { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
+    { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
+  ]),
 }));
 
 vi.mock("../lib/messaging", () => ({
@@ -125,6 +132,20 @@ describe("DistroKid popup compatibility check", () => {
     container.remove();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+  });
+
+  it("ローカル配信元 option は URL を表示せず、URL value はデータ取得先として維持する", async () => {
+    const select = container.querySelector<HTMLSelectElement>("#server-url")!;
+
+    await waitFor(() => {
+      expect(select.options).toHaveLength(2);
+    });
+
+    expect(Array.from(select.options, (option) => ({ text: option.text, value: option.value }))).toEqual([
+      { text: "ABYSS MI | distrokid-helper", value: BASE_URL },
+      { text: "localhost fallback 7877 | distrokid-helper", value: FALLBACK_URL },
+    ]);
+    expect(select.textContent).not.toContain("http://");
   });
 
   it("データ取得時に manifest version で /version を先に呼び、非互換警告を表示して release 取得を継続する", async () => {

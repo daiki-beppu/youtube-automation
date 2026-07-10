@@ -1,4 +1,4 @@
-// `lib/storage.ts` の契約テスト。
+// `lib/storage.ts` の候補復元契約テスト。
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,23 +7,18 @@ const storageMocks = vi.hoisted(() => ({
   setValue: vi.fn(),
 }));
 
-vi.mock("@wxt-dev/storage", () => ({
+vi.mock("wxt/utils/storage", () => ({
   storage: {
     defineItem: vi.fn(() => storageMocks),
   },
 }));
 
-import { DEFAULT_URL } from "../../shared/constants";
 import { readServerSources } from "../lib/storage";
 
-describe("DEFAULT_URL (shared constants)", () => {
+describe("local server source storage", () => {
   beforeEach(() => {
     storageMocks.getValue.mockReset();
     storageMocks.setValue.mockReset();
-  });
-
-  it("yt-collection-serve の既定ポート 7873 を指す", () => {
-    expect(DEFAULT_URL).toBe("http://youtube-automation.localhost:7873");
   });
 
   it("保存済み候補の label と id が欠損しても、既存の URL を接続先として復元する", async () => {
