@@ -56,6 +56,9 @@ _MAX_DISCS = 9
 # slug バリデーション正規表現（disc{N}-kebab-case）
 _DISC_SLUG_RE = re.compile(r"^disc\d+-[a-z0-9][a-z0-9-]*$")
 
+# 単一 disc 用 slug バリデーション正規表現（kebab-case）
+_SINGLE_DISC_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
 # ファイル名先頭の連番プレフィックス（例: "01-" "123-"）
 _TRACK_PREFIX_RE = re.compile(r"^\d+-")
 
@@ -137,7 +140,9 @@ def build_draft_spec(
     """分割ファイル名リストから draft spec dict を生成する（#936）.
 
     collection_name からコレクション slug（日付プレフィックスとチャンネル slug を除去）を
-    抽出して disc slug と album_title を自動命名する。LLM が後で編集する前提。
+    抽出して disc slug と album_title を自動命名する。単一 disc では
+    {coll_slug} / {Theme}、複数 disc では disc{N}-{coll_slug}-vol{N} /
+    {Theme} Vol.{N} を使う。LLM が後で編集する前提。
 
     素タイトル（連番プレフィックスを除去した stem の kebab→Title）がコレクション全体で
     重複するトラックには needs_unique=True を付与する（重複グループ全件）。
@@ -158,11 +163,16 @@ def build_draft_spec(
     title_counts = Counter(all_base_titles)
     duplicated = {t for t, c in title_counts.items() if c > 1}
 
+    is_multi_disc = len(filenames_split) > 1
+    collection_title = kebab_to_title(coll_slug)
     discs: list[dict] = []
     for disc_idx, disc_files in enumerate(filenames_split, start=1):
-        slug = f"disc{disc_idx}-{coll_slug}-vol{disc_idx}"
-        # slug の "disc1-" 以降を album_title に変換
-        album_title = kebab_to_title(slug[len(f"disc{disc_idx}-") :])
+        if is_multi_disc:
+            slug = f"disc{disc_idx}-{coll_slug}-vol{disc_idx}"
+            album_title = f"{collection_title} Vol.{disc_idx}"
+        else:
+            slug = coll_slug
+            album_title = collection_title
 
         tracks: list[dict] = []
         for fn in disc_files:
@@ -224,7 +234,8 @@ def validate_spec(spec: dict, music_filenames: list[str]) -> None:
     2. spec の全 filename が music_filenames に exactly-once で出現
        （漏れ・重複・未知ファイルを個別に報告）
     3. トラックタイトルがコレクション全体（disc 横断）でユニーク
-    4. slug が disc{N}-kebab-case かつ N が出現順（1, 2, ...）
+    4. 単一 disc の slug が kebab-case、複数 disc の slug が
+       disc{N}-kebab-case かつ N が出現順（1, 2, ...）
     5. artist / language / 各 album_title が非空
     """
     errors: list[str] = []
@@ -240,6 +251,7 @@ def validate_spec(spec: dict, music_filenames: list[str]) -> None:
     all_spec_filenames: list[str] = []
     all_titles: list[str] = []
     slug_nums: list[int] = []
+    is_multi_disc = len(discs) > 1
 
     for disc_idx, disc in enumerate(discs, start=1):
         # 5. album_title 非空
@@ -248,12 +260,15 @@ def validate_spec(spec: dict, music_filenames: list[str]) -> None:
 
         # 4. slug バリデーション
         slug = disc.get("slug", "")
-        if not _DISC_SLUG_RE.match(slug):
-            errors.append(f"discs[{disc_idx - 1}].slug '{slug}' は disc{{N}}-kebab-case 形式ではありません。")
-        else:
-            # N を抽出して出現順チェック
-            n = int(re.match(r"disc(\d+)-", slug).group(1))  # type: ignore[union-attr]
-            slug_nums.append(n)
+        if is_multi_disc:
+            if not _DISC_SLUG_RE.match(slug):
+                errors.append(f"discs[{disc_idx - 1}].slug '{slug}' は disc{{N}}-kebab-case 形式ではありません。")
+            else:
+                # N を抽出して出現順チェック
+                n = int(re.match(r"disc(\d+)-", slug).group(1))  # type: ignore[union-attr]
+                slug_nums.append(n)
+        elif not _SINGLE_DISC_SLUG_RE.match(slug):
+            errors.append(f"discs[{disc_idx - 1}].slug '{slug}' は kebab-case 形式ではありません。")
 
         tracks = disc.get("tracks", [])
 
@@ -270,7 +285,7 @@ def validate_spec(spec: dict, music_filenames: list[str]) -> None:
             title = track.get("title", "")
             all_titles.append(title)
 
-    # 4. slug N が出現順（1, 2, ...）
+    # 4. 複数 disc の slug N が出現順（1, 2, ...）
     expected_nums = list(range(1, len(discs) + 1))
     if slug_nums and slug_nums != expected_nums:
         errors.append(f"disc slug の番号順が {slug_nums} で、期待する出現順 {expected_nums} と異なります。")
