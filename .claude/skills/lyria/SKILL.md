@@ -74,7 +74,7 @@ $ARGUMENTS → コレクションのテーマ指定
 | `prompt_prefix` | プロンプト先頭の共通ジャンル句 |
 | `style_hints` | 補足スタイル句（optional） |
 | `ng_words` | プロンプトに使用禁止の語（Claude がプロンプト設計時にチェック） |
-| `duration_padding_min` | `audio.target_duration_min` に上乗せする余裕分（分）。`yt-generate-lyria-master` が `ceil((target + padding) * 60 / 184)` でセグメント数を算出する |
+| `duration_padding_min` | `audio.target_duration_min` に上乗せする余裕分（分）。`yt-generate-lyria-master` が `ceil((target + padding) * 60 / 184)` でセグメント数を算出する（上限 60 セグメント、超過時は clamp + warning） |
 | `default_bpm` | チャンネル共通 BPM（generate_music() の `bpm` 引数に流用、個別上書き可） |
 | `default_intensity` | チャンネル共通 intensity（generate_music() の `intensity` に流用、個別上書き可） |
 | `default_mode` | チャンネル共通 mode（generate_music() の `mode` に流用、個別上書き可） |
@@ -178,7 +178,7 @@ celtic folk only, clean dry recording, no pads, gentle melodic phrases rising an
 
 ユーザー承認後、`yt-generate-lyria-master` CLI を呼ぶ。CLI が以下を一気通貫で実行する:
 
-1. `audio.target_duration_min` + skill-config `duration_padding_min` から必要セグメント数 N を自動算出（`ceil((target + padding) * 60 / 184)`）
+1. `audio.target_duration_min` + skill-config `duration_padding_min` から必要セグメント数 N を自動算出（`ceil((target + padding) * 60 / 184)`）。上限は 60 セグメント（= Lyria API リクエスト数の hard cap）で、超過時は 60 に clamp して warning を stderr に出力する
 2. `lyria_client.generate_music()` を N 回呼び、レスポンスを `02-Individual-music/{NN}_{name}.wav` に PCM s16le 48 kHz stereo で保存（既存ファイルは skip = resume 可能）
 3. 失敗時は `--max-retries` 回までリトライ
 4. 全セグメント揃ったら `generate_master.generate_master()` 経由でクロスフェード結合し `01-master/master.mp3` を出力（`masterup.audio.crossfade_duration` を参照）
