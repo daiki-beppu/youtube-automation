@@ -410,10 +410,14 @@ export default defineContentScript({
       // Custom Mode > More Options の 3 フィールド (#900)。slider 注入は MAIN world bridge 経由
       // （React onKeyDown 直接呼び出しで isTrusted チェックを通過、#973）を優先し、失敗時は従来の
       // 合成 keydown dispatch へ縮退する（e2e mock の plain DOM はこちらで動く）。entry に値があり
-      // selector が不在なら injectAdvancedFields が throw する (fail-loud)。値が無ければ skip する
+      // selector が不在なら input / vocal_gender は injectAdvancedFields が throw する (fail-loud)。
+      // slider 2 つは throw せず warn + skip し (#1720)、onSliderSkip 経由で GENERATING の status
+      // message に載せてユーザーに観測可能にする（サイレント skip の禁止）。値が無ければ skip する
       // (fail-soft、後方互換)。
+      const skippedSliders: string[] = [];
       await injectAdvancedFields(entry, resolveAdvancedFields(), {
         bridgeSetSlider: requestSliderSet,
+        onSliderSkip: (name) => skippedSliders.push(name),
       });
       await abortableSleep(SETTLE_MS, () => aborted);
 
@@ -439,7 +443,15 @@ export default defineContentScript({
       // 「この entry は click 済み（submitted）」と判定できるようにする (#924)。
       lastSubmittedEntryIndex = index;
       // Generate 押下後は最大 GENERATE_TIMEOUT_MS の生成完了待ちに入る。注入中と区別して表示する。
-      emitProgress({ phase: PHASE.GENERATING, index, total });
+      // slider を warn + skip した場合は message に載せて overlay / popup の status で観測可能にする (#1720)。
+      emitProgress({
+        phase: PHASE.GENERATING,
+        index,
+        total,
+        ...(skippedSliders.length > 0
+          ? { message: `${skippedSliders.join(" / ")} slider を skip しました（値は手動設定できます）` }
+          : {}),
+      });
       return button;
     }
 

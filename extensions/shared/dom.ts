@@ -28,8 +28,12 @@ const SELECTORS = {
   // data-testid は Suno UI で Lyrics 以外に存在しないため placeholder / aria-label を SSOT にする。
   excludeStyles:
     'input[placeholder*="Exclude" i], textarea[placeholder*="Exclude" i], input[aria-label*="Exclude" i], textarea[aria-label*="Exclude" i]',
-  weirdness: '[role="slider"][aria-label="Weirdness"]',
-  styleInfluence: '[role="slider"][aria-label="Style Influence"]',
+  // 2026-07 の Suno 新 Create UI で slider がリネームされた（Weirdness → Bizarreness /
+  // Style Influence → Style influence〈小文字 i〉、#1720）。完全一致だと表記ゆれのたびに run が
+  // 中断するため、旧新両ラベルにマッチする case-insensitive substring match（tolerant match）にする。
+  weirdness:
+    '[role="slider"][aria-label*="weirdness" i], [role="slider"][aria-label*="bizarre" i]',
+  styleInfluence: '[role="slider"][aria-label*="influence" i]',
   // Voice section の Male / Female ボタン (chrome-devtools-mcp 実機検証で確認)。
   // aria-label / data-testid を持たないため、`data-selected` 属性 (Suno が排他トグル用に意図して
   // 付けた属性) で候補を全 query → textContent 完全一致で Male/Female を絞り込む方式を採用。
@@ -502,7 +506,9 @@ function resolveVocalGenderButtons(): {
  * 注入順序は Exclude styles (text, 高速) → Weirdness → Style Influence。
  *
  * 非対称契約:
- *   - entry に値有 (`!== undefined`) + 対応 selector が null → throw（fail-loud、UI 改装検知）
+ *   - entry に値有 (`!== undefined`) + 対応 selector が null → input / vocal_gender は throw（fail-loud、UI 改装検知）。
+ *     slider 2 つは warn + skip（#1720。slider 値は UI で手動設定でき Create を跨いで永続するため、
+ *     Suno のリネームによる未検出は run 中断に値しない。skip は onSliderSkip で観測可能にする）
  *   - entry に値無 (`=== undefined`)                        → skip（fail-soft、後方互換）
  *   - entry に値有 + selector 有 + input                    → setNativeValue で注入（collapsed でも React 反映を実機確認済み）
  *   - entry に値有 + selector 有 + slider                   → 注入試行し失敗時は warn + skip
@@ -525,6 +531,9 @@ function resolveVocalGenderButtons(): {
 export interface AdvancedInjectOptions {
   /** MAIN world bridge 経由の slider 注入。成功で true。省略時は合成イベント経路のみ。 */
   bridgeSetSlider?: (ariaLabel: string, target: number) => Promise<boolean>;
+  /** slider を warn + skip したときの通知（#1720）。呼び出し側が overlay / popup へ
+   * skip を観測可能にするために使う（サイレント skip の禁止）。省略時は console.warn のみ。 */
+  onSliderSkip?: (sliderName: "Weirdness" | "Style Influence") => void;
 }
 
 /** bridge 優先 → 合成 dispatchEvent 縮退の順で slider に target 値を注入する（#973）。 */
@@ -576,35 +585,43 @@ export async function injectAdvancedFields(
     }
   }
   if (entry.weirdness !== undefined) {
+    // slider 未検出は throw せず warn + skip（#1720）。値は UI で手動設定でき Create を跨いで
+    // 永続するため、Suno のリネーム / UI 改装で run 全体を中断しない。
     if (!fields.weirdness) {
-      throw new FatalRunError(
-        "Weirdness slider が見つかりません。Suno の UI 変更の可能性があります。",
+      console.warn(
+        "[suno-helper] Weirdness slider が見つかりません（Suno の UI 変更の可能性）。注入を skip して続行します。",
       );
-    }
-    try {
-      await injectSliderValue(
-        fields.weirdness,
-        entry.weirdness,
-        options.bridgeSetSlider,
-      );
-    } catch (e) {
-      console.warn("[suno-helper] Weirdness slider 注入を skip:", e);
+      options.onSliderSkip?.("Weirdness");
+    } else {
+      try {
+        await injectSliderValue(
+          fields.weirdness,
+          entry.weirdness,
+          options.bridgeSetSlider,
+        );
+      } catch (e) {
+        console.warn("[suno-helper] Weirdness slider 注入を skip:", e);
+        options.onSliderSkip?.("Weirdness");
+      }
     }
   }
   if (entry.style_influence !== undefined) {
     if (!fields.styleInfluence) {
-      throw new FatalRunError(
-        "Style Influence slider が見つかりません。Suno の UI 変更の可能性があります。",
+      console.warn(
+        "[suno-helper] Style Influence slider が見つかりません（Suno の UI 変更の可能性）。注入を skip して続行します。",
       );
-    }
-    try {
-      await injectSliderValue(
-        fields.styleInfluence,
-        entry.style_influence,
-        options.bridgeSetSlider,
-      );
-    } catch (e) {
-      console.warn("[suno-helper] Style Influence slider 注入を skip:", e);
+      options.onSliderSkip?.("Style Influence");
+    } else {
+      try {
+        await injectSliderValue(
+          fields.styleInfluence,
+          entry.style_influence,
+          options.bridgeSetSlider,
+        );
+      } catch (e) {
+        console.warn("[suno-helper] Style Influence slider 注入を skip:", e);
+        options.onSliderSkip?.("Style Influence");
+      }
     }
   }
 }
