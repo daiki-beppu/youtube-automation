@@ -133,15 +133,12 @@ export interface RunMode {
 
 export const RUN_MODES: Record<RunModeId, RunMode> = {
   serial: {
-    label: "Serial",
-    riskNote: "1 entry ずつ生成完了を待つ安定重視の従来モード。",
+    label: "安全モード",
+    riskNote: "1件ずつ完了を待つ、安定性重視のモードです。",
   },
   queue: {
-    label: "Queue",
-    riskNote:
-      "投入 ACK 後に次 entry を先行投入し、最大 10 request まで Suno queue を使う。" +
-      "duration 範囲外のみの entry は失敗として検知し「失敗分のみ再実行」に載せる。" +
-      "自動再生成は行わず、bridge の clip ID 観測が必須。",
+    label: "高速モード",
+    riskNote: "最大10件を先行投入する、速度重視のモードです。",
   },
 };
 
@@ -245,6 +242,15 @@ export interface LocalServerSource {
   id: string;
   label: string;
   url: string;
+}
+
+export type HelperProcessName = "distrokid-helper" | "suno-helper";
+
+export function formatServerSourceLabel(
+  source: LocalServerSource,
+  helper: HelperProcessName,
+): string {
+  return `${source.label} | ${helper}`;
 }
 
 /** 拡張初回起動時のローカル配信元候補。 */

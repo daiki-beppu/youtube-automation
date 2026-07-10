@@ -7,10 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `feat(upload)`: collection の `workflow-state.json::title_template_check.allow_volume_patterns: true` で、そのコレクションだけ公開タイトルの `Vol.` / `Part` / `#N` / ローマ数字の巻数表記を upload preflight で許可できるようにした。未設定・`false` の既定検出、RHS 鋳型・完全重複・核語彙の検査、および `content.json::title.template_check.volume_patterns` は変更しない（#1729）
+
+### Fixed
+
+- `fix(upload)`: `yt-upload-collection` の `-c` 未指定時の自動選択を、`collections/planning/` 配下で `phase=mastered` かつ `upload.video_id=null` の未公開コレクション 1 件だけに限定した。`live/` の公開済みコレクションは候補外とし、候補が 0 件または複数件なら `-c` 明示を要求して停止する。`--plan` / `--status` / 実アップロードと日次実行に同じ選択条件を適用した（#1731）。
+- `fix(upload)`: タグ件数下限が YouTube の 500 字上限の下で到達不能な場合、upload preflight と metadata audit が件数不足ではなく、`tags.min_count` を下げるか base タグを短縮するよう案内する明示診断を返すようにした。配布する content.json テンプレートの `tags.min_count` も 26 に統一した（#1732）。
+- `fix(loop-video)`: Ctrl+C 後の Veo operation resume state に入力画像の SHA-256 を保存し、再実行時に指定モデルまたは入力画像内容が state と異なる場合は旧 operation を破棄して指定どおり新規生成するようにした（#1746）。旧形式 state は安全側で破棄する。
+
 ## [5.5.17] - 2026-07-10
 
 ### Added
 
+- `fix(loop-video)`: 通常生成時の `loop-v{n}.mp4` バックアップに保持上限（default 3、skill-config の `max_backups` で上書き可）を追加し、上限超過分を最古から削除して削除ファイル名を表示するようにした。`--skip-existing` / `--smooth` の early-exit 経路は既存バックアップを変更しない（#1654）
+- `feat(comments-reply)`: Author の返信案を別コンテキスト Reviewer が persona / NG ワード / 最大文字数 / 言語一致の 4 基準で判定する品質ゲートを追加。判定条件は候補 JSON と comments config の正規値から固定し、FAIL の `reply_text` のみ最大 2 周再生成する。上限後も FAIL の候補は dry-run 前に除外して件数と理由を承認サマリへ表示する（#1666）
 - `feat(video-description)`: skill-config に `chapters_enabled`（既定 `true`）を追加し、章運用を廃止したチャンネル（BGM / ASMR 等）向けの標準 opt-out を提供した（#1665）。`config/skills/video-description.yaml` で `chapters_enabled: false` を設定すると、タイムスタンプ列（チャプター行・テーマ見出し行）の生成・重複トラック名の LLM リネーム・`workflow-state.json` への `track_display_names` 永続化をすべて skip する（構造化メタブロック / Music Time セパレータ / playlist 名 / CTA / hashtag は変わらず生成）。未設定チャンネルは既定 `true` で挙動不変
 - `feat(skills)`: 2026-05 skills 監査の残件として、skill-config 未適用スキルの直書き値を skill-config 機構へ切り出した（#1669）。(1) analytics-collect / analytics-analyze 双方に直書きされていた鮮度判定しきい値（30 分）を `analytics-collect/config.default.yaml::freshness_minutes` に単一ソース化（`config/skills/analytics-collect.yaml` の上書きが両スキルの判定に効く）。(2) `discover-competitors`（検索フィルタ既定値・キーワード数ガイドレール）/ `live-clean`（削除対象・保護パターン）/ `postmortem`（症状判定しきい値・仮説マッピング係数）/ `video-upload`（preflight 探索パターン・誇張語 NG リスト）に `config.default.yaml` を新設し、各 SKILL.md の直書き値を config 参照へ書き換えた。`yt-discover-competitors` は CLI フラグ既定値を `load_skill_config("discover-competitors")` 経由で解決する（CLI フラグ明示指定 > チャンネル上書き > default）。(3) `analytics-report` の `#Shorts` 除外キーワードと KPI カード構成を `analytics-report/config.default.yaml::html.{exclude_title_keywords,kpi_cards}` に、`metadata-audit` の REMOTE チャプター上限（>12）を `metadata-audit/config.default.yaml::chapters.remote_max` に skill-config 化し、`metadata_audit.py::audit_remote` が実行時に読むよう変更した
 - `chore(repo)`: リポジトリルートに `.gitattributes` を追加し、画像 / 音声 / 動画 / アーカイブ / フォント / PDF（計 20 拡張子）を `binary` macro で diff 抑止指定した（#1671）。`git diff` にバイナリ差分がテキスト表示されなくなる
@@ -22,9 +34,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(doctor)`: `yt-doctor` に playlist スキル向けの `playlist_config` / `playlist_create_dry_run` チェックを追加（#1504）。`config/channel/playlists.json` の欠落・JSON 破損・`playlist_id` 未設定を channel カテゴリで診断し、`PlaylistManager.create_all_playlists(dry_run=True)` 経路で作成計画を検証する。dry-run は YouTube API への書き込みを行わず、失敗時は human next_action で設定修正手順を示す。
 - `feat(collection-serve)`: `yt-collection-serve` に unpacked Chrome 拡張名から exact origin lock を自動解決する `--allow-extension <name>` を追加（#1486）。macOS Chrome profile の `Secure Preferences`（無ければ `Preferences`）を走査し、`extensions.settings[*].path` が絶対パスかつ basename が指定名に一致する拡張 IDから `chrome-extension://<id>` を組み立て、既存の `/auth/token` / write endpoint lock にそのまま適用する。`--allow-origin` とは排他で、検出 0 件・複数 ID 競合・profile root 走査不可・Preferences 読み取り不可・Preferences JSON parse failure は `--allow-origin` fallback 案内付きの `ConfigError` で fail-loud する。`/suno-helper` / `/distrokid-helper` / `/wf-new` のサーバー起動手順と拡張 README も `--allow-extension` 基準へ更新した
 - `test(deps)`: 2020 年から未更新の `japanize-matplotlib` の font 登録が壊れたら検知する回帰テスト `tests/test_japanize_font_regression.py` を追加した（plan 024）。壊れた場合の症状（日本語ラベルの豆腐化）を matplotlib の `Glyph ... missing from font(s)` UserWarning で機械検知する
+- `feat(automation-release)`: `/automation-release` に Chrome 拡張リリース（`ext-vX.Y.Z`）の extension release phase を追加した（#1735）。`suno-helper をリリースしたい v0.2.2` / `ext-v0.2.2` 形式の依頼を Phase R（リリース種別判定）で extension release と判定して Python 本体の `pyproject.toml` bump flow から分離し、`release/ext-v<VER>` ブランチでの `extensions/<name>/package.json::version` のみの bump、`release-extensions.yml` と同一契約（`pnpm install --frozen-lockfile --ignore-workspace` → `pnpm zip`）の local verify と version 以外の差分で停止する差分ガード、merge 済み PR の merge commit への `ext-v<VER>` tag push、Release Extensions workflow の成功確認と Release asset（`<name>-<VER>-chrome.zip`）の確認、worktree 環境で `gh pr merge --delete-branch` が local checkout 後処理で non-zero を返す footgun の復旧手順（remote PR state / mergeCommit を確認して merge 済みなら続行）までを手順化した。エッジケースは `references/extension-release-checklist.md` に整理。Python 本体の `vX.Y.Z` flow は変更なし
 
 ### Changed
 
+- `feat(suno-helper)`: 投入方式の表示名を `Serial` →「安全モード」、`Queue` →「高速モード」へ改称し、各モードの説明文を速度と安定性の違いが 1 行で伝わる簡潔な文面（安全モード:「1件ずつ完了を待つ、安定性重視のモードです。」/ 高速モード:「最大10件を先行投入する、速度重視のモードです。」）に簡素化した（#1862）。変更は `shared/constants.ts` の `RUN_MODES` 表示ラベル・説明文のみで、内部識別子 `serial` / `queue`（chrome.storage.local の `sunoRunMode` 保存値・run payload・resume state）は互換性維持のため不変。`/suno-helper` SKILL.md の利用者向け `Queue mode` 表記も「高速モード（内部値: queue）」へ追従
+- `perf(videoup)`: effect なしの静止画背景を 1 GOP 分だけベイクし、`-stream_loop -1 -c:v copy -t <audio_duration> -shortest` で全尺化する経路へ統合。生成後は ffprobe で映像の読み取りと尺を検証し、1 フレーム超の差または probe 失敗を fail-loud にした（#1681）
+- `docs(extensions)`: Chrome 拡張のローカル検証を npm の現行 pnpm 11.11.0 に固定した。`suno-helper` / `distrokid-helper` 共通の pinned install / build / zip、期待 zip、lockfile 無差分の確認手順を共通・各拡張 README、開発 docs、`/suno`、`/automation-release` へ明記した（#1682）
+- `fix(distrokid-helper)`: `yt-distrokid-prepare plan` が 35 曲以下の単一 disc には `{coll_slug}` / `{Theme}` を、35 曲超の複数 disc にのみ `disc{N}-{coll_slug}-vol{N}` / `{Theme} Vol.{N}` を生成するよう修正した。build の slug 検証も単一 disc の kebab-case slug を受理する（#1734）
 - `docs(wf-new)`: Phase 2c の codex / single_step 分岐に残っていた textless 背景先行の旧フロー記述を、#1611 のテキスト付き thumbnail 先行フロー（テキスト付き `thumbnail.jpg` を先に生成・承認 → 承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成）へ更新した（#1854）。契約テスト `test_wf_new_routes_codex_and_single_step_through_thumbnail_contract` も新フロー表記をロックするよう追従
 - `refactor(repo)`: GitHub owner `daiki-beppu` のハードコード残存（fork 運営者に生成物のズレを生む固定参照）を整理した（#1653）。`yt-doctor` の `automation_package` fail 時の `next_action.cmd` を `automation_update_refs.UPSTREAM_REPO` 定数（official upstream 検証と同じ単一ソース）から組み立てるよう変更し、リテラル重複を削減。`/automation-update` に Step 1-0、`/ext-install` に Step 0 を新設し、両スキルの `gh` / `curl` コマンドの upstream 参照を導入済みパッケージの `UPSTREAM_REPO` から実行時導出する形へ置換。定数から導出できない箇所（`/setup` の bootstrap 用 `uv add`（パッケージ導入前に実行）、prose・doc リンク等）は固定のまま、`.claude/CLAUDE.template.md` に新設した「fork 運用者向け」節（§9）に残存ファイル一覧と `rg` ポインタを明記した。サプライチェーン保護の `_require_official_upstream` / `UPSTREAM_REPO` 自体は変更していない
 - `docs(skills)`: `content_model.type` の docs 表記を実装（`ContentModel.type = "release" / "collection"`、`src/youtube_automation/utils/config/youtube.py`）の正に合わせ、`single_release` を `release` に統一した（#1772）。対象は `video-upload/SKILL.md`（完了条件 / Channel Adaptation 表 / release アップロードフロー / コマンドリファレンス）、`video-upload/references/posting-checklist.md`、`channel-new/references/claude-md-template.md`。型名の初出箇所には「release 型（単曲リリース）」の補足を付与し、doc-contract テスト（`tests/test_skill_docs_consistency.py`）の見出し担保も新表記へ追従。無関係な GitHub release 集約テスト名 `test_attaches_both_zips_to_single_release` は誤検知回避のため `test_attaches_both_zips_to_one_gh_release` にリネーム
@@ -57,6 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(suno-helper)`: Lexical Lyrics 欄で paste 反映検証が失敗した場合に inject retry 後 beforeinput fallback を試し、全方式が失敗したときは entry 名・歌詞長・差分付き診断を出して停止するようにした（#1676）。
 - `fix(suno-helper)`: ユーザー操作による `stopped` を赤いエラー扱いにせず、「停止しました。再実行できます。」と通常状態で表示するようにした。
 - `fix(suno-helper)`: ダウンロード完了済み collection を popup の一覧から消さず、「完了 N/N」として再表示するように戻した。完了済み collection も選択でき、同じテストを再実行できる。
 - `fix(suno-helper)`: playlist 追加前に Lyrics editor など入力欄の focus を外し、Suno が trusted `Cmd+P` を無視して Add to Playlist dialog を開けない問題を修正した。

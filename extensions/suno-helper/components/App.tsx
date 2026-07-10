@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { DOWNLOAD_FORMAT_DEFAULT, RUN_MODES, type RunModeId } from "../../shared/constants";
+import { DOWNLOAD_FORMAT_DEFAULT, formatServerSourceLabel, RUN_MODES, type RunModeId } from "../../shared/constants";
 import {
   buildInitialPatternSelection,
   reconcilePatternSelection,
@@ -149,7 +149,7 @@ export function App() {
         >
           {serverSources.map((source) => (
             <option key={source.url} value={source.url}>
-              {source.label} - {source.url}
+              {formatServerSourceLabel(source, "suno-helper")}
             </option>
           ))}
         </select>

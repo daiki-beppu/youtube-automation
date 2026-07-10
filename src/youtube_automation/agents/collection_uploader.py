@@ -55,7 +55,9 @@ from youtube_automation.agents.youtube_auto_uploader import (  # noqa: E402
 )
 from youtube_automation.scripts.collection_preflight import ensure_collection_preflight  # noqa: E402
 from youtube_automation.scripts.playlist_manager import PlaylistManager  # noqa: E402
+from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
+from youtube_automation.utils.exceptions import ValidationError  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 
 # 後方互換 / 公開 API: 定数・主要シンボルは従来どおり本モジュールから import できるよう再エクスポートする。
@@ -159,7 +161,7 @@ class CollectionUploader(
         return collections
 
     def _find_collection(self, collection_name: str | None = None) -> Path | None:
-        """名前でコレクションを検索（部分一致、planning/ と live/ を探索）"""
+        """名前指定なら全ステージ、未指定なら未公開の planning コレクションを検索する。"""
         all_collections = self.find_collections()
         if collection_name:
             for col in all_collections:
@@ -167,10 +169,36 @@ class CollectionUploader(
                     return col
             logger.error(f"❌ コレクションが見つかりません: {collection_name}")
             return None
-        if not all_collections:
-            logger.error("❌ 対象コレクションが見つかりません")
-            return None
-        return all_collections[0]
+
+        candidates = []
+        for collection in self.find_collections(("planning",)):
+            state_path = CollectionPaths(collection).workflow_state_path
+            try:
+                state = json.loads(state_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                logger.warning(f"⚠️  workflow-state.json を読み取れないため候補から除外します: {state_path}: {exc}")
+                continue
+
+            upload = state.get("upload") if isinstance(state, dict) else None
+            if (
+                isinstance(state, dict)
+                and state.get("phase") == "mastered"
+                and isinstance(upload, dict)
+                and "video_id" in upload
+                and upload["video_id"] is None
+            ):
+                candidates.append(collection)
+
+        if not candidates:
+            raise ValidationError(
+                "自動選択できる対象コレクションがありません。"
+                "planning/ 配下で phase=mastered かつ upload.video_id=null のコレクションを用意するか、"
+                "-c で対象を明示してください"
+            )
+        if len(candidates) > 1:
+            names = ", ".join(collection.name for collection in candidates)
+            raise ValidationError(f"自動選択対象が複数あります: {names}。-c で対象を明示してください")
+        return candidates[0]
 
     # ─── コアオーケストレーション ────────────────────
 
@@ -211,6 +239,11 @@ class CollectionUploader(
         self._save_tracking(collection_path, tracking)
         logger.info("✅ 全ステップ完了")
         return {"action": "all_completed", "details": {}}
+
+    def ensure_upload_preflight(self, collection_path: Path) -> None:
+        """CLI の各入口で共通の骨格・タイトル preflight を実行する。"""
+        ensure_collection_preflight(collection_path)
+        self.uploader._preflight_check(collection_path)
 
     # ─── ステータス表示 ──────────────────────────────
 
@@ -317,12 +350,12 @@ class CollectionUploader(
         """毎日の自動チェック・アップロード処理"""
         logger.info(f"📅 日次チェック実行: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-        collections = self.find_collections()
-        if not collections:
-            logger.info("📋 処理対象のコレクションはありません")
+        try:
+            target_collection = self._find_collection()
+        except ValidationError as exc:
+            logger.error(f"❌ 日次アップロードを実行しません: {exc}")
             return
 
-        target_collection = collections[0]
         self.execute_next_step(target_collection)
 
     # ─── 手動実行 ────────────────────────────────────
@@ -362,12 +395,12 @@ def main():
         elif args.plan:
             target = uploader._find_collection(args.collection)
             if target:
-                ensure_collection_preflight(target)
+                uploader.ensure_upload_preflight(target)
                 uploader.show_plan(target)
         else:
             target = uploader._find_collection(args.collection)
             if target:
-                ensure_collection_preflight(target)
+                uploader.ensure_upload_preflight(target)
                 uploader.execute_next_step(target)
 
     except KeyboardInterrupt:

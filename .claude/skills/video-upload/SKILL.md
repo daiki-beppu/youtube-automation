@@ -40,7 +40,7 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 | 引数 | 説明 | 例 |
 |------|------|-----|
 | `$ARGUMENTS` | コレクションディレクトリパス（省略可） | `/video-upload collections/planning/20260304-clm-fairy-forest-collection` |
-| 未指定 | `collections/planning/` から自動検出 | `/video-upload` |
+| 未指定 | `collections/planning/` の `phase=mastered` かつ `upload.video_id=null` の未公開候補が 1 件だけなら自動検出（0 件・複数件は `-c` 明示を要求） | `/video-upload` |
 
 ## Channel Adaptation
 
@@ -75,7 +75,7 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 $ARGUMENTS
 ```
 
-引数が指定されている場合はそのディレクトリを、未指定の場合は `collections/planning/` 配下のコレクションを自動検出します。
+引数が指定されている場合はそのディレクトリを対象にします。未指定の場合は `collections/planning/` 配下で `phase=mastered` かつ `upload.video_id=null` の未公開コレクションを自動検出します。候補が 0 件または複数件の場合は停止するため、`-c` で対象を明示します。`collections/live/` の公開済みコレクションは自動検出の対象外です。
 
 ### 前提条件チェック
 

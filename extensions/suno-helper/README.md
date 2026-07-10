@@ -46,18 +46,22 @@ browser use から overlay / popup を安定して観測できるよう、操作
 
 ## 開発・ビルド・テスト
 
+ローカル検証は CI・lockfile と同じ pnpm 11.11.0 に固定する。ambient `pnpm` の版は各環境で異なり得るため、以下の pinned command を使う。理由と両拡張共通の release 前検証は `extensions/README.md::pnpm バージョン契約` を参照する。
+
 ```bash
-pnpm install            # 依存インストール（postinstall で wxt prepare）
-pnpm dev                # 開発（HMR）
-pnpm build              # 本番ビルド → .output/chrome-mv3/
-pnpm compile            # 型チェック（tsc --noEmit）
-pnpm test               # Vitest unit
-pnpm test:e2e           # Playwright e2e（初回 pnpm exec playwright install chromium）
+npx -y pnpm@11.11.0 install --frozen-lockfile  # postinstall で wxt prepare
+npx -y pnpm@11.11.0 dev                                           # 開発（HMR）
+npx -y pnpm@11.11.0 build                                         # 本番ビルド → .output/chrome-mv3/
+npx -y pnpm@11.11.0 zip                                           # 配布用 zip
+npx -y pnpm@11.11.0 compile                                       # 型チェック（tsc --noEmit）
+npx -y pnpm@11.11.0 test                                          # Vitest unit
+npx -y pnpm@11.11.0 exec playwright install chromium              # Playwright 初回のみ
+npx -y pnpm@11.11.0 test:e2e                                      # Playwright e2e
 ```
 
 ## インストール（unpacked）
 
-1. `pnpm install && pnpm build` を実行。
+1. `npx -y pnpm@11.11.0 install --frozen-lockfile && npx -y pnpm@11.11.0 build` を実行。
 2. build artifact を basename が `suno-helper` になる固定パスへコピーする:
    ```bash
    mkdir -p "$HOME/chrome-extensions/suno-helper"
@@ -85,7 +89,7 @@ pnpm test:e2e           # Playwright e2e（初回 pnpm exec playwright install c
 ### in-flight 検知と停止判断（#948）
 
 - **in-flight カウント**: MAIN world bridge（`suno-bridge.content.ts`）が Suno API（`POST /api/generate/v2-web/` / `POST /api/feed/v3`）のレスポンスを観測し、clip status（complete/error 以外 = in-flight）で数える。「Remix ボタン disabled = 生成中」の旧 DOM プロキシは生成完了後も disabled が残り過大カウントするため fallback 専用（縮退中は popup に「bridge 未観測: DOM 計数で待機中」と表示される）
-- **停止判断**: queue 空き待ちは固定 timeout ではなく stall ベース（in-flight 集合が 10 分間まったく変化しないときのみ ERROR）。run 全体を止めるのは `FatalRunError`（DOM セレクタ不在 / captcha 手動解決 timeout / queue stall）のみ
+- **停止判断**: queue 空き待ちは固定 timeout ではなく stall ベース（in-flight 集合が 10 分間まったく変化しないときのみ ERROR）。run 全体を止めるのは `FatalRunError`（DOM セレクタ不在 / captcha 手動解決 timeout / queue stall / Lyrics 全注入方式失敗）のみ
 - **Bearer token**: bridge が MAIN world ローカルに保持し extension 側へは渡さない。401 で破棄しページの次リクエストで自動再捕捉
 
 ## Origin / token 契約

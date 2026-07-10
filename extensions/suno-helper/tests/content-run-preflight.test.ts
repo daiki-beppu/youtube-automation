@@ -283,6 +283,22 @@ function makeLexicalLyrics(initialText: string): HTMLElement {
   return lexical;
 }
 
+function makeBeforeInputOnlyLexicalLyrics(initialText: string): HTMLElement {
+  const lexical = document.createElement("div");
+  lexical.className = "lyrics-editor-content";
+  lexical.setAttribute("data-lexical-editor", "true");
+  lexical.setAttribute("contenteditable", "true");
+  lexical.textContent = initialText;
+  lexical.addEventListener("beforeinput", (e) => {
+    const ev = e as InputEvent;
+    lexical.textContent = ev.data ?? "";
+    e.preventDefault();
+  });
+  markBbox(lexical, 320, 96);
+  document.body.appendChild(lexical);
+  return lexical;
+}
+
 function makeUnresponsiveLexicalLyrics(initialText: string): HTMLElement {
   const lexical = document.createElement("div");
   lexical.className = "lyrics-editor-content";
@@ -622,6 +638,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     let lyricsAtGenerate = "";
     makeGenerateButtonWithClickObserver(() => {
       lyricsAtGenerate = lyrics.textContent ?? "";
+      addCompletedRemixCard();
     });
     addCompletedRemixCard();
     await loadContentScript();
@@ -670,6 +687,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     makeTextarea(null);
     const lyrics = makeUnresponsiveLexicalLyrics("old lyrics");
     const onGenerate = vi.fn();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     makeGenerateButtonWithClickObserver(onGenerate);
     addCompletedRemixCard();
     await loadContentScript();
@@ -693,7 +711,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
           expect.arrayContaining([
             expect.objectContaining({
               phase: PHASE.ERROR,
-              message: expect.stringContaining("Lyrics 欄への paste 反映に失敗しました"),
+              message: expect.stringContaining("beforeinput fallback"),
             }),
           ]),
         ),
@@ -701,6 +719,54 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     );
     expect(onGenerate).not.toHaveBeenCalled();
     expect(lyrics.textContent).toBe("old lyrics");
+    expect(consoleError).toHaveBeenCalledWith(
+      "[suno-helper] Lyrics 欄への全注入方式が失敗しました",
+      expect.objectContaining({
+        entryName: "lexical",
+        lyricsLength: "new lexical lyrics".length,
+        lyrics: "new lexical lyrics",
+        actualLength: "old lyrics".length,
+        actualLyrics: "old lyrics",
+        diagnosticMessage: expect.stringMatching(
+          new RegExp(
+            `expectedLength=${"new lexical lyrics".length}, actualLength=${"old lyrics".length}, ` +
+              'firstDiffIndex=0, expectedExcerpt="new lexical lyrics", actualExcerpt="old lyrics"',
+          ),
+        ),
+        pasteError: expect.any(Error),
+        fallbackError: expect.any(Error),
+      }),
+    );
+    consoleError.mockRestore();
+  });
+
+  it("Given Lexical lyrics editor が paste を反映せず beforeinput を反映する When run を受ける Then fallback 後に Generate へ進む", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    const lyrics = makeBeforeInputOnlyLexicalLyrics("old lyrics");
+    let lyricsAtGenerate = "";
+    makeGenerateButtonWithClickObserver(() => {
+      lyricsAtGenerate = lyrics.textContent ?? "";
+      addCompletedRemixCard();
+    });
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = [
+      {
+        name: "beforeinput-fallback",
+        style: "neo soul",
+        lyrics: "new lexical lyrics",
+      },
+    ];
+
+    const result = runHandler({ data: makeRunPayload(entries) });
+
+    expect(result).toEqual({ ok: true });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce(), { timeout: 3000 });
+    expect(lyrics.textContent).toBe("new lexical lyrics");
+    expect(lyricsAtGenerate).toBe("new lexical lyrics");
   });
 
   it("Given indices 指定で supported view かつ entries がある When run を受ける Then 指定 index だけを絶対 index で処理する", async () => {

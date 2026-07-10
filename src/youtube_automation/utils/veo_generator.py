@@ -71,15 +71,10 @@ def _handle_operations_get_error(exc: Exception, output_path: Path) -> None:
         print(f"\n  [ERROR]  operation.get 失敗（一時障害、state を保持）: {exc}")
 
 
-def _resume_operation(client, gen_types, output_path: Path, requested_model: str, state: dict):
+def _resume_operation(client, gen_types, output_path: Path, state: dict):
     """保存済み operation を復元し、resume 用の operation と実効モデルを返す。"""
     saved_model = state["model"]
     operation_name = state["operation_name"]
-    if saved_model != requested_model:
-        print(
-            f"  [Warn]   保存済みモデル ({saved_model}) と引数モデル ({requested_model}) が異なります。"
-            f"保存済みモデルで続行します"
-        )
     print(f"  [Resume] 前回の operation を引き継ぎます: {operation_name}")
     operation = gen_types.GenerateVideosOperation(name=operation_name)
     try:
@@ -173,7 +168,7 @@ def _submit_operation(
         return None
 
     if operation.name:
-        op_store.save(output_path, operation.name, model)
+        op_store.save(output_path, image_path, operation.name, model)
     else:
         print("  [Warn]   operation.name が空のため state を保存できません")
     return operation
@@ -326,17 +321,36 @@ def generate_loop_video(
 ) -> bool:
     """Veo 3.1 API でループ動画を生成する。
 
-    前回 Ctrl+C で中断した state が残っている場合は generate_videos を呼ばずに
-    保存済み operation_name から polling を再開する（二重課金防止）。
+    前回 Ctrl+C で中断した state があり、model と入力画像 SHA-256 が一致する場合は
+    generate_videos を呼ばずに保存済み operation_name から polling を再開する（二重課金防止）。
     """
     from google.genai import types as gen_types
 
     state = op_store.load(output_path)
 
     if state is not None:
-        operation, effective_model = _resume_operation(client, gen_types, output_path, model, state)
-        if operation is None:
-            return False
+        image_matches = state["input_image_sha256"] == op_store.image_sha256(image_path)
+        model_matches = state["model"] == model
+        if image_matches and model_matches:
+            operation, effective_model = _resume_operation(client, gen_types, output_path, state)
+            if operation is None:
+                return False
+        else:
+            print("  [Resume] 保存済み state のモデルまたは入力画像が現在の指定と一致しないため破棄し、新規生成します")
+            op_store.clear(output_path)
+            effective_model = model
+            operation = _submit_operation(
+                client,
+                gen_types,
+                image_path,
+                output_path,
+                model,
+                prompt,
+                aspect_ratio,
+                duration_seconds,
+            )
+            if operation is None:
+                return False
     else:
         effective_model = model
         operation = _submit_operation(

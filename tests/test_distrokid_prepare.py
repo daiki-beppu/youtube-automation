@@ -185,12 +185,12 @@ class TestBuildDraftSpec:
         spec = self._base_spec(_filenames(4))
         assert spec["label"] is None
 
-    def test_disc_slug_format(self):
-        """slug は disc{N}-<coll_slug>-vol{N} 形式。"""
-        spec = self._base_spec(_filenames(4))
+    def test_35_tracks_use_single_disc_slug_and_album_title(self):
+        """35 曲の単一 disc は suffix なしの slug / album_title を生成する。"""
+        spec = self._base_spec(_filenames(35))
         disc = spec["discs"][0]
-        assert disc["slug"].startswith("disc1-")
-        assert disc["slug"].endswith("-vol1")
+        assert disc["slug"] == "my-theme"
+        assert disc["album_title"] == "My Theme"
 
     def test_needs_unique_on_duplicate_titles(self):
         """重複する素タイトルを持つトラックには needs_unique=True が全件付く."""
@@ -226,14 +226,13 @@ class TestBuildDraftSpec:
             for track in disc["tracks"]:
                 assert "needs_unique" not in track
 
-    def test_multi_disc_vol_suffix(self):
-        """2 disc の場合 disc1-...-vol1 / disc2-...-vol2 が生成される."""
-        spec = self._base_spec(_filenames(50))
-        slugs = [d["slug"] for d in spec["discs"]]
-        assert slugs[0].startswith("disc1-")
-        assert slugs[1].startswith("disc2-")
-        assert slugs[0].endswith("-vol1")
-        assert slugs[1].endswith("-vol2")
+    def test_36_tracks_use_multi_disc_slug_and_album_title(self):
+        """36 曲の複数 disc は disc / Vol. suffix を生成する。"""
+        spec = self._base_spec(_filenames(36))
+        assert [(disc["slug"], disc["album_title"]) for disc in spec["discs"]] == [
+            ("disc1-my-theme-vol1", "My Theme Vol.1"),
+            ("disc2-my-theme-vol2", "My Theme Vol.2"),
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +257,14 @@ class TestValidateSpec:
         """有効な spec は ValidationError を raise しない."""
         filenames = _filenames(4)
         spec = self._minimal_spec(filenames)
+        validate_spec(spec, filenames)  # 例外なし
+
+    def test_single_disc_kebab_slug_passes(self):
+        """単一 disc の kebab-case slug は build 用 validation を通る。"""
+        filenames = _filenames(4)
+        spec = self._minimal_spec(filenames)
+        spec["discs"][0]["slug"] = "dark-techno"
+        spec["discs"][0]["album_title"] = "Dark Techno"
         validate_spec(spec, filenames)  # 例外なし
 
     def test_title_duplicate_across_discs_raises(self):
@@ -620,6 +627,38 @@ class TestWriteReleaseDate:
 class TestPlanIntegration:
     """main() を直接呼んで plan サブコマンドの config 反映を検証する。"""
 
+    @pytest.mark.parametrize(
+        ("n_tracks", "expected_discs"),
+        [
+            (35, [("channel-my-theme", "Channel My Theme")]),
+            (
+                36,
+                [
+                    ("disc1-channel-my-theme-vol1", "Channel My Theme Vol.1"),
+                    ("disc2-channel-my-theme-vol2", "Channel My Theme Vol.2"),
+                ],
+            ),
+        ],
+    )
+    def test_plan_emits_single_or_multi_disc_naming_at_35_track_boundary(
+        self, tmp_path, monkeypatch, n_tracks, expected_discs
+    ):
+        """公開 plan 入口が 35 曲境界に応じた slug / album_title を書き出す。"""
+        from youtube_automation.scripts import distrokid_prepare as dp_script
+
+        collection = _make_collection(tmp_path, n_tracks=n_tracks)
+        out = tmp_path / "spec.json"
+        monkeypatch.setattr(
+            "youtube_automation.scripts.distrokid_prepare.load_config",
+            lambda: _fake_config(artist="Test Artist"),
+        )
+
+        sys.argv = ["yt-distrokid-prepare", "plan", "--output", str(out), str(collection)]
+        dp_script.main()
+
+        spec = json.loads(out.read_text(encoding="utf-8"))
+        assert [(disc["slug"], disc["album_title"]) for disc in spec["discs"]] == expected_discs
+
     def test_plan_uses_profile_artist_when_configured(self, tmp_path, monkeypatch):
         """profile.artist が非空なら draft spec.artist に優先反映する."""
         from youtube_automation.scripts import distrokid_prepare as dp_script
@@ -713,6 +752,30 @@ class TestBuildIntegration:
 
         # README.md が存在する
         assert (distrokid_dir / "README.md").is_file()
+
+    def test_build_accepts_single_disc_kebab_slug(self, tmp_path, monkeypatch):
+        """公開 build 入口が単一 disc の kebab-case slug を成果物まで処理する。"""
+        from youtube_automation.scripts import distrokid_prepare as dp_script
+
+        collection = _make_collection(tmp_path, n_tracks=4)
+        music_dir = collection / INDIVIDUAL_MUSIC_DIRNAME
+        filenames = sorted(f.name for f in music_dir.glob("*.mp3"))
+        spec_path = self._make_spec(collection, filenames)
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        spec["discs"][0]["slug"] = "dark-techno"
+        spec["discs"][0]["album_title"] = "Dark Techno"
+        spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
+        monkeypatch.setattr(
+            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            lambda path: 199.0,
+        )
+
+        sys.argv = ["yt-distrokid-prepare", "build", "--spec", str(spec_path), str(collection)]
+        dp_script.main()
+
+        disc_dir = collection / DISTROKID_DIRNAME / "dark-techno"
+        assert len(list(disc_dir.glob("*.mp3"))) == 4
+        assert (disc_dir / "metadata.md").is_file()
 
     def test_build_metadata_parseable_by_parser(self, tmp_path, monkeypatch):
         """生成した metadata.md が parse_album_metadata / parse_track_table で読み戻せる."""
