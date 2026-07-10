@@ -9,6 +9,10 @@ description: "Use when 競合チャンネルのベンチマークデータを最
 チャンネル単位ではなく**動画単位**でベンチマーク対象を抽出する（伸びていない動画は分析から除外）。
 `/collection-ideate` の Phase 1-2 から自動呼び出しされるが、単独実行も可能。
 
+## 完了条件
+
+Step 1 のスクリプトが exit 0 で終了して `docs/benchmarks/*.md` と `data/benchmark_YYYYMMDD.json` が更新され、Step 2 のサムネイル分析セクション追記と Step 3 の結果サマリー報告を終えた時点で完了。
+
 ## 設定読み込みゲート
 
 前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
@@ -65,7 +69,7 @@ uv run yt-benchmark-collect -v               # 詳細ログ
 スクリプト完了後、エージェントが以下を実施:
 
 1. 各チャンネルのレポート（`docs/benchmarks/{slug}.md`）を読み、再生数上位 5 本の動画を特定
-2. 該当動画のサムネイル画像を `docs/benchmarks/thumbnails/{slug}_{video_id}.jpg` から Read ツールで読み込み
+2. 該当動画のサムネイル画像を `docs/benchmarks/thumbnails/{slug}_{video_id}.jpg` から Read（Codex では同等の画像閲覧機能）で読み込み
 3. 各サムネイルを以下の観点で分析:
    - **構図**: レイアウト・焦点・キャラクター配置
    - **配色**: 支配色・全体のムード/トーン
@@ -77,7 +81,7 @@ uv run yt-benchmark-collect -v               # 詳細ログ
 
 ### Step 3: 結果確認・戦略的評価
 
-1. 生成された `docs/benchmarks/*.md` を Read ツールで確認
+1. 生成された `docs/benchmarks/*.md` を Read（Codex では同等のファイル閲覧）で確認
 2. 高パフォーマンス動画のパターンを分析
 3. `common-patterns.md` の戦略的示唆を 自チャンネル向けに再評価
 4. 結果サマリーをユーザーに報告
