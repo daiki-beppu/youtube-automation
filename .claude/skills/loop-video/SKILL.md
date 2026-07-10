@@ -281,7 +281,7 @@ veo:
 | フェーズ | Ctrl+C の効き | API 側 operation | クレジット消費 | 再開可否 |
 |---|---|---|---|---|
 | `client.models.generate_videos(...)` 送信中（submit 中） | ローカルプロセスは即停止 | submit が成立していれば API 側で開始済み | submit 後ならフル課金 | **不可**（operation_name を持たない） |
-| polling 中（submit 済み、生成待ち） | ローカルプロセスは即停止 | **継続実行される**（cancel されない） | フル課金（中断しても止まらない） | **可**（`<CHANNEL_DIR>/tmp/veo-operations/` に保存された operation_name を次回実行で resume） |
+| polling 中（submit 済み、生成待ち） | ローカルプロセスは即停止 | **継続実行される**（cancel されない） | フル課金（中断しても止まらない） | **可**（同じ model・同じ入力画像なら、`<CHANNEL_DIR>/tmp/veo-operations/` に保存された operation_name を次回実行で resume） |
 | polling 中の `operations.get` 一時障害 | 例外捕捉、state を保持 | API 側継続 | フル課金 | 可 |
 | polling 中の `operations.get` で失効（404） | state を削除 | （失効済み） | 課金済み bytes は取りこぼし | 不可 |
 
@@ -289,8 +289,8 @@ veo:
 
 - **Veo API には `operations.cancel` 相当が現状未実装** (`client.operations.cancel` は未提供)。本スキルの実装 (`utils/veo_generator.py`) も `KeyboardInterrupt` を捕捉してメッセージ表示と state 保存だけを行い、cancel API を呼んでいない。**Ctrl+C はあくまでローカルプロセスを止めるだけで、API 側のジョブとクレジット消費は止められない**。
 - submit が成功した時点で課金は確定する想定で運用する。中断は「節約」にはならず、せいぜい「次回の二重課金を resume で防ぐ」効果しかない。
-- 中断 → 即再実行すれば、保存済み operation_name から resume して既課金分を回収できる（loop.mp4 を取り出せる）。**再課金は発生しない**。
-- 完全に捨てる場合でも、state ファイル (`<CHANNEL_DIR>/tmp/veo-operations/<output-hash>.json`) を手動削除しない限り、次回 `yt-generate-loop-video` 実行時に resume を試みる点に注意（不要なら削除）。
+- 中断 → 同じ model・同じ入力画像で即再実行すれば、保存済み operation_name から resume して既課金分を回収できる（loop.mp4 を取り出せる）。**再課金は発生しない**。
+- model または入力画像を変えて完全に作り直す場合は、state を手動削除する必要はない。次回 `yt-generate-loop-video` 実行時に自動で state を破棄して新規 submit する。
 
 ### 運用ガイドライン
 
@@ -302,7 +302,8 @@ veo:
 ### state ファイルの場所
 
 - パス: `<CHANNEL_DIR>/tmp/veo-operations/<output-hash>.json`
-- 中身: `{ "operation_name": "operations/...", "model": "veo-3.1-fast-generate-001", "output_path": "..." }`
+- 中身: `{ "operation_name": "operations/...", "model": "veo-3.1-fast-generate-001", "output_path": "...", "input_image_sha256": "..." }`
+- 再実行時は model と入力画像内容の SHA-256 が両方一致した state だけを resume する。不一致または旧形式の state は破棄して新規 submit する
 - 再開不要なら手動削除可（次回実行は新規 submit になる）
 
 ## 長時間処理の取り扱い
