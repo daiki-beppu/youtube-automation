@@ -109,6 +109,48 @@ def require_instrumental_track_count(
         raise ConfigError(issue)
 
 
+def vocal_track_count_issues(
+    *,
+    entries_count: int,
+    patterns_tracks: int,
+    workflow_track_count: int,
+) -> list[str]:
+    """Return vocal collection track-count contract violations.
+
+    A vocal collection selects one winner per generated prompt entry.  Extra
+    entries are valid audition buffer, but fewer entries than the collection's
+    planned track count cannot produce the requested number of winners.
+    """
+    issues: list[str] = []
+    if patterns_tracks != workflow_track_count:
+        issues.append(
+            "ボーカルモード: suno-patterns.yaml tracks="
+            f"{patterns_tracks} must match workflow-state.json track_count={workflow_track_count}."
+        )
+    if entries_count < workflow_track_count:
+        issues.append(
+            "ボーカルモード: workflow-state.json track_count="
+            f"{workflow_track_count} requires at least {workflow_track_count} prompt entries, "
+            f"but suno-patterns.yaml resolves to {entries_count}."
+        )
+    return issues
+
+
+def require_vocal_track_count(
+    *,
+    entries_count: int,
+    patterns_tracks: int,
+    workflow_track_count: int,
+) -> None:
+    issues = vocal_track_count_issues(
+        entries_count=entries_count,
+        patterns_tracks=patterns_tracks,
+        workflow_track_count=workflow_track_count,
+    )
+    if issues:
+        raise ConfigError(" ".join(issues))
+
+
 def duplicated_names(names: list[str]) -> list[str]:
     seen: set[str] = set()
     duplicates: set[str] = set()

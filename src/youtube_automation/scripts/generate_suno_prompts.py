@@ -21,6 +21,7 @@ from youtube_automation.scripts.suno_artifacts import (
     SUNO_PROMPTS_JSON_FILENAME,
     SUNO_PROMPTS_MD_FILENAME,
 )
+from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.skill_config import load_channel_override, load_skill_config
 from youtube_automation.utils.suno_artifact_validation import (
@@ -28,6 +29,7 @@ from youtube_automation.utils.suno_artifact_validation import (
     require_instrumental_track_count,
     require_matching_suno_lyrics_names,
     require_unique_entry_names,
+    require_vocal_track_count,
     suno_prompt_entry_names,
     surrounding_whitespace_issue,
 )
@@ -423,6 +425,43 @@ def _expand_scenes_for_entries(scenes: list[str], tracks_per_pattern: int) -> li
     return [scene for scene in scenes for _ in range(tracks_per_pattern)]
 
 
+def _vocal_workflow_state_path(patterns_path: Path) -> Path | None:
+    """Return the workflow-state path for a standard collection artifact.
+
+    The CLI also accepts a standalone patterns file, which has no collection
+    workflow state to validate.  A file in the standard
+    ``20-documentation/suno-patterns.yaml`` location must have one.
+    """
+    if patterns_path.name != SUNO_PATTERNS_FILENAME or patterns_path.parent.name != DOCUMENTATION_DIRNAME:
+        return None
+    return CollectionPaths(patterns_path.parent.parent).workflow_state_path
+
+
+def _read_vocal_workflow_track_count(workflow_state_path: Path) -> int:
+    if not workflow_state_path.is_file():
+        raise ConfigError(f"workflow-state.json is required for vocal mode: {workflow_state_path}")
+    try:
+        data = json.loads(workflow_state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ConfigError(f"workflow-state.json を読み取れませんでした: {workflow_state_path}") from exc
+    if not isinstance(data, Mapping):
+        raise ConfigError(f"workflow-state.json のトップレベルは object である必要があります: {workflow_state_path}")
+
+    track_count = data.get("track_count")
+    issue = positive_integer_issue(track_count, "workflow-state.json::track_count")
+    if issue is not None:
+        raise ConfigError(f"{issue}: {workflow_state_path}")
+    return cast(int, track_count)
+
+
+def _read_vocal_patterns_track_count(data: Mapping[str, object], patterns_path: Path) -> int:
+    track_count = data.get("tracks")
+    issue = positive_integer_issue(track_count, "suno-patterns.yaml::tracks")
+    if issue is not None:
+        raise ConfigError(f"{issue}: {patterns_path}")
+    return cast(int, track_count)
+
+
 def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     """config + patterns.yaml を解決し、md / JSON 双方の共通中間表現を返す."""
     suno = load_skill_config("suno")
@@ -458,6 +497,13 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     mode = data.get("mode", infer_suno_mode(genre_line))
     is_vocal = mode == "vocal"
     tracks_per_pattern = _resolve_vocal_tracks_per_pattern(suno) if is_vocal else 1
+    workflow_state_path = _vocal_workflow_state_path(patterns_path) if is_vocal else None
+    workflow_track_count = (
+        _read_vocal_workflow_track_count(workflow_state_path) if workflow_state_path is not None else None
+    )
+    patterns_track_count = (
+        _read_vocal_patterns_track_count(data, patterns_path) if is_vocal and workflow_state_path else None
+    )
     external_lyrics_path = patterns_path.parent / SUNO_LYRICS_JSON_FILENAME
     has_external_lyrics = is_vocal and external_lyrics_path.exists()
     if is_vocal and not has_external_lyrics:
@@ -535,16 +581,23 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
             actual_names=set(external_lyrics),
         )
 
-    # インストモードのみ: yaml `tracks:` (コレクション上書き) > config `tracks_per_collection` の順で曲数を解決し、
+    # インストモード: yaml `tracks:` (コレクション上書き) > config `tracks_per_collection` の順で曲数を解決し、
     # ceil(N/2) と yaml の entry 数 (scene 行数の合計) が一致するか fail-loud で検証する。
-    # ボーカルモードは曲数定義が異なるため (1 prompt = 1 ベストを選曲、別途整理予定) 検証しない。
-    # tracks_per_collection が未指定の旧運用は silent skip して後方互換を保つ。
+    # ボーカルの標準 collection は workflow-state.json::track_count を SSOT とし、yaml `tracks:` の完全一致と
+    # 展開済み prompt entry 数の下限を検証する。standalone patterns file は workflow state を持たないため対象外。
+    # tracks_per_collection が未指定の旧インスト運用は silent skip して後方互換を保つ。
     if not is_vocal:
         tracks_override = data.get("tracks")
         tracks_per_collection = tracks_override if tracks_override is not None else suno.get("tracks_per_collection")
         if tracks_per_collection is not None:
             entries_count = sum(len(p.scenes) for p in resolved)
             require_instrumental_track_count(patterns_path, entries_count, tracks_per_collection)
+    elif workflow_track_count is not None and patterns_track_count is not None:
+        require_vocal_track_count(
+            entries_count=len(_entry_names_from_resolved(resolved)),
+            patterns_tracks=patterns_track_count,
+            workflow_track_count=workflow_track_count,
+        )
 
     # 全曲ユニーク title: Suno UI Song Title 欄に注入される最終 name の重複を fail-loud で弾く。
     # インスト・ボーカル両モード一律で、後工程の同名 clip 追跡不能を生成時に弾く。

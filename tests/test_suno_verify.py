@@ -214,7 +214,8 @@ def test_generated_vocal_prompts_with_default_tracks_per_pattern_verify_successf
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
     names = prompt_names(mode="vocal", scenes_count=1, tracks_per_pattern=3)
-    write_patterns(docs, mode="vocal", scenes=["scene one"])
+    write_patterns(docs, mode="vocal", scenes=["scene one"], tracks=1)
+    (collection / "workflow-state.json").write_text(json.dumps({"track_count": 1}), encoding="utf-8")
     write_lyrics(docs, [{"name": name, "lyrics": "[Verse]\nla la"} for name in names])
     entries = build_prompt_entries(docs / "suno-patterns.yaml")
     (docs / "suno-prompts.json").write_text(

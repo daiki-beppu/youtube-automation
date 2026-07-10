@@ -73,6 +73,13 @@ def _write_suno_override(channel: Path, **overrides) -> None:
     (channel / "config" / "skills" / "suno.yaml").write_text(yaml.safe_dump(overrides), encoding="utf-8")
 
 
+def _write_workflow_state(collection_dir: Path, track_count: int) -> None:
+    (collection_dir / "workflow-state.json").write_text(
+        json.dumps({"track_count": track_count}),
+        encoding="utf-8",
+    )
+
+
 def _write_video_analysis(
     channel: Path,
     *,
@@ -1046,6 +1053,10 @@ def test_main_collection_dir_merges_vocal_suno_lyrics_json(channel_dir, tmp_path
     )
     patterns_path = _write_vocal_patterns(docs_dir, ["a dreamy scene"])
     patterns_path.rename(docs_dir / "suno-patterns.yaml")
+    payload = yaml.safe_load((docs_dir / "suno-patterns.yaml").read_text(encoding="utf-8"))
+    payload["tracks"] = 1
+    (docs_dir / "suno-patterns.yaml").write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+    _write_workflow_state(collection_dir, track_count=1)
     _write_suno_lyrics_json(docs_dir, ["歌もの — Vocal"], lyrics="[Verse]\nfrom collection dir")
     monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(collection_dir)])
 
@@ -1053,6 +1064,94 @@ def test_main_collection_dir_merges_vocal_suno_lyrics_json(channel_dir, tmp_path
 
     data = json.loads((docs_dir / "suno-prompts.json").read_text(encoding="utf-8"))
     assert data["entries"][0]["lyrics"] == "[Verse]\nfrom collection dir"
+
+
+def test_main_vocal_collection_rejects_patterns_tracks_mismatch_with_workflow_state(
+    channel_dir,
+    tmp_path,
+    monkeypatch,
+):
+    """標準 collection では yaml tracks と workflow-state の曲数不一致を生成前に止める。"""
+    collection_dir = tmp_path / "collection"
+    docs_dir = collection_dir / "20-documentation"
+    docs_dir.mkdir(parents=True)
+    _write_suno_override(
+        channel_dir,
+        genre_line="dream pop vocals",
+        auto_lyrics_structure=False,
+        tracks_per_pattern=1,
+    )
+    patterns_path = _write_vocal_patterns(docs_dir, ["a dreamy scene"])
+    patterns_path.rename(docs_dir / "suno-patterns.yaml")
+    payload = yaml.safe_load((docs_dir / "suno-patterns.yaml").read_text(encoding="utf-8"))
+    payload["tracks"] = 2
+    (docs_dir / "suno-patterns.yaml").write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+    _write_workflow_state(collection_dir, track_count=1)
+    _write_suno_lyrics_json(docs_dir, ["歌もの — Vocal"])
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(collection_dir)])
+
+    with pytest.raises(ConfigError) as exc_info:
+        main()
+
+    assert "suno-patterns.yaml tracks=2" in str(exc_info.value)
+    assert "workflow-state.json track_count=1" in str(exc_info.value)
+    assert not (docs_dir / "suno-prompts.json").exists()
+
+
+def test_main_vocal_collection_requires_workflow_state(channel_dir, tmp_path, monkeypatch):
+    """標準 collection の vocal 生成は track_count SSOT なしで続行しない。"""
+    collection_dir = tmp_path / "collection"
+    docs_dir = collection_dir / "20-documentation"
+    docs_dir.mkdir(parents=True)
+    _write_suno_override(
+        channel_dir,
+        genre_line="dream pop vocals",
+        auto_lyrics_structure=False,
+        tracks_per_pattern=1,
+    )
+    patterns_path = _write_vocal_patterns(docs_dir, ["a dreamy scene"])
+    patterns_path.rename(docs_dir / "suno-patterns.yaml")
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(collection_dir)])
+
+    with pytest.raises(ConfigError) as exc_info:
+        main()
+
+    assert "workflow-state.json is required for vocal mode" in str(exc_info.value)
+    assert not (docs_dir / "suno-prompts.json").exists()
+
+
+def test_main_vocal_collection_rejects_prompt_entries_below_workflow_track_count(
+    channel_dir,
+    tmp_path,
+    monkeypatch,
+):
+    """ボーカル prompt entry 数が SSOT の曲数未満なら、JSON を出力せず fail-loud にする。"""
+    collection_dir = tmp_path / "collection"
+    docs_dir = collection_dir / "20-documentation"
+    docs_dir.mkdir(parents=True)
+    _write_suno_override(
+        channel_dir,
+        genre_line="dream pop vocals",
+        auto_lyrics_structure=False,
+        tracks_per_pattern=1,
+    )
+    patterns_path = _write_vocal_patterns(docs_dir, ["a dreamy scene"])
+    patterns_path.rename(docs_dir / "suno-patterns.yaml")
+    payload = yaml.safe_load((docs_dir / "suno-patterns.yaml").read_text(encoding="utf-8"))
+    payload["tracks"] = 2
+    (docs_dir / "suno-patterns.yaml").write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
+    _write_workflow_state(collection_dir, track_count=2)
+    _write_suno_lyrics_json(docs_dir, ["歌もの — Vocal"])
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(collection_dir)])
+
+    with pytest.raises(ConfigError) as exc_info:
+        main()
+
+    message = str(exc_info.value)
+    assert "workflow-state.json track_count=2" in message
+    assert "at least 2 prompt entries" in message
+    assert "resolves to 1" in message
+    assert not (docs_dir / "suno-prompts.json").exists()
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `fix(suno)`: ボーカルの標準コレクション生成時に、`workflow-state.json::track_count` を曲数の SSOT として `suno-patterns.yaml::tracks` の完全一致および展開後 prompt entry 数の下限を fail-loud で検証するようにした。entry 数が曲数未満、または両ファイルの曲数が不一致なら `suno-prompts.json` を生成しない（#1785）。
+
 ## [5.5.17] - 2026-07-10
 
 ### Added
