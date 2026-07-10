@@ -22,10 +22,7 @@ case ",${labels}," in
   *,takt:default,*) is_takt_target=1 ;;
 esac
 case ",${labels}," in
-  *,takt:default-mini,*) is_takt_target=1 ;;
-esac
-case ",${labels}," in
-  *,takt:mini,*) is_takt_target=1 ;;
+  *,takt:lite,*) is_takt_target=1 ;;
 esac
 
 if [ "$is_takt_target" -ne 1 ]; then

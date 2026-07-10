@@ -52,6 +52,10 @@ from youtube_automation.utils.skill_config import load_skill_config
 # 必要呼び出し回数を割り出す基準として使う。short 化や引き伸ばしのトリミングは行わない。
 _LYRIA_SEGMENT_SEC = 184
 
+# セグメント数 (= Lyria API リクエスト数 = Vertex AI 課金回数) の hard cap。
+# `target_duration_min` の桁ミスで数百リクエスト規模の課金が走るのを防ぐ。
+_MAX_SEGMENT_COUNT = 60
+
 # `generate_music_dj._save_audio_as_wav` と揃える (ffmpeg 経由で PCM s16le に正規化する設定)。
 _WAV_SAMPLE_RATE = 48000
 _WAV_CHANNELS = 2
@@ -70,13 +74,24 @@ def _resolve_segment_count(target_min: float, padding_min: float) -> int:
 
     `(target_min + padding_min) * 60 / 184` を切り上げ。
     `target_min > 0` を validate するため戻り値は必ず 1 以上になる。
+    `_MAX_SEGMENT_COUNT` を超える場合は上限に clamp して warning を出す。
     """
     if target_min <= 0:
         raise ValidationError(f"--target-duration は 1 以上を指定してください (got {target_min})")
     if padding_min < 0:
         raise ValidationError(f"--padding-min は 0 以上を指定してください (got {padding_min})")
     total_sec = (target_min + padding_min) * 60
-    return math.ceil(total_sec / _LYRIA_SEGMENT_SEC)
+    count = math.ceil(total_sec / _LYRIA_SEGMENT_SEC)
+    if count > _MAX_SEGMENT_COUNT:
+        print(
+            f"WARNING: 算出セグメント数 {count} が上限 {_MAX_SEGMENT_COUNT} を超えたため "
+            f"{_MAX_SEGMENT_COUNT} に切り詰めます "
+            f"(target {target_min:g}min + padding {padding_min:g}min)。"
+            "--target-duration の指定を確認してください",
+            file=sys.stderr,
+        )
+        return _MAX_SEGMENT_COUNT
+    return count
 
 
 def _save_audio_as_wav(data: bytes, path: Path) -> None:
