@@ -35,7 +35,6 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-doctor": "youtube_automation.cli.doctor",
     "yt-fetch-stream-key": "youtube_automation.scripts.fetch_stream_key",
     "yt-finalize-master": "youtube_automation.scripts.finalize_master",
-    "yt-fix-timestamps": "youtube_automation.scripts.fix_per_theme_timestamps",
     "yt-generate-image": "youtube_automation.scripts.generate_image",
     "yt-generate-loop-video": "youtube_automation.scripts.generate_loop_video",
     "yt-generate-lyria-master": "youtube_automation.scripts.generate_lyria_master",
