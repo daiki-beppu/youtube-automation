@@ -16,6 +16,10 @@ description: "Use when 追加競合候補の自動発掘やニッチ仮説の並
 `/channel-new` の標準フローでは実行しない。TTP 対象確認後に追加の競合候補を広げたい場合や、複数のニッチ仮説を
 並行検証したい場合に、このスキルを任意で走らせる。
 
+## 完了条件
+
+Step 3 の実行で出力ペア（Markdown ランキング + 同名 CSV）を生成し、Step 4 でユーザーに Markdown を提示した時点で完了。`config/channel/analytics.json::benchmark.channels` への候補追加はユーザー承認があった場合のみ行う（承認が無ければ提示のみで終了する）。
+
 ## 設定読み込みゲート
 
 Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
