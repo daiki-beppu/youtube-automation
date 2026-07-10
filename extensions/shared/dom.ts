@@ -93,12 +93,32 @@ export const SETTLE_MS = 1500;
  *   - DOM セレクタ不在（Suno UI 改装 / Custom Mode 画面でない）
  *   - captcha challenge の手動解決待ち timeout（人間の介入が必要）
  *   - queue の stall / timeout（Suno 側の系統的な停滞）
- * 一時的・entry 固有の失敗（生成完了待ち timeout / inject 未受理）は通常の Error のまま残す。
+ *   - Lyrics 欄の paste retry + beforeinput fallback が全て不受理（原因特定ログを出して停止）
+ * 一時的・entry 固有の失敗（生成完了待ち timeout / inject 未受理 / retry 前の paste 不受理）は
+ * 通常の Error のまま残す。
  */
 export class FatalRunError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "FatalRunError";
+  }
+}
+
+export interface LyricsReflectionDiagnostics {
+  expectedLength: number;
+  actualLength: number;
+  firstDiffIndex: number;
+  expectedExcerpt: string;
+  actualExcerpt: string;
+}
+
+export class LyricsPasteReflectionError extends Error {
+  readonly diagnostics: LyricsReflectionDiagnostics;
+
+  constructor(message: string, diagnostics: LyricsReflectionDiagnostics) {
+    super(message);
+    this.name = "LyricsPasteReflectionError";
+    this.diagnostics = diagnostics;
   }
 }
 
@@ -181,6 +201,92 @@ export function setNativeValue(
  * paste 後の待ちは Lexical の DOM 反映（reconcile）完了を待つ安定化マージン。
  */
 const LEXICAL_SELECTION_SYNC_MS = 200;
+const LYRICS_DIFF_EXCERPT_RADIUS = 24;
+
+function readLexicalText(el: HTMLElement): string {
+  const paragraphs = Array.from(el.children).filter(
+    (child): child is HTMLElement => child instanceof HTMLElement && child.tagName === "P",
+  );
+  if (paragraphs.length > 0) {
+    return paragraphs.map((child) => child.textContent ?? "").join("\n");
+  }
+  return el.textContent ?? "";
+}
+
+function findFirstDiffIndex(expected: string, actual: string): number {
+  const maxComparableLength = Math.min(expected.length, actual.length);
+  for (let index = 0; index < maxComparableLength; index++) {
+    if (expected[index] !== actual[index]) {
+      return index;
+    }
+  }
+  return expected.length === actual.length ? -1 : maxComparableLength;
+}
+
+function excerptAround(text: string, index: number): string {
+  if (index < 0) {
+    return "";
+  }
+  const start = Math.max(0, index - LYRICS_DIFF_EXCERPT_RADIUS);
+  const end = Math.min(text.length, index + LYRICS_DIFF_EXCERPT_RADIUS);
+  return text.slice(start, end);
+}
+
+function buildLyricsReflectionDiagnostics(
+  expected: string,
+  actual: string,
+): LyricsReflectionDiagnostics {
+  const firstDiffIndex = findFirstDiffIndex(expected, actual);
+  return {
+    expectedLength: expected.length,
+    actualLength: actual.length,
+    firstDiffIndex,
+    expectedExcerpt: excerptAround(expected, firstDiffIndex),
+    actualExcerpt: excerptAround(actual, firstDiffIndex),
+  };
+}
+
+function formatLyricsReflectionMessage(
+  action: string,
+  diagnostics: LyricsReflectionDiagnostics,
+): string {
+  return (
+    `Lyrics 欄への ${action} 反映に失敗しました。Generate へ進まず停止します。` +
+    ` expectedLength=${diagnostics.expectedLength}, actualLength=${diagnostics.actualLength}, ` +
+    `firstDiffIndex=${diagnostics.firstDiffIndex}, expectedExcerpt=${JSON.stringify(diagnostics.expectedExcerpt)}, ` +
+    `actualExcerpt=${JSON.stringify(diagnostics.actualExcerpt)}`
+  );
+}
+
+async function selectAllLexicalLyrics(el: HTMLElement): Promise<void> {
+  el.focus();
+  const selected = document.execCommand("selectAll", false);
+  if (!selected) {
+    throw new FatalRunError(
+      "Lyrics 欄の全選択に失敗しました。Suno UI の Lexical editor 状態を確認してください。",
+    );
+  }
+  await sleep(LEXICAL_SELECTION_SYNC_MS);
+}
+
+function assertLexicalLyricsValue(
+  el: HTMLElement,
+  value: string,
+  action: string,
+): void {
+  const actual = readLexicalText(el);
+  if (actual === value) {
+    return;
+  }
+  const diagnostics = buildLyricsReflectionDiagnostics(value, actual);
+  if (action === "paste") {
+    throw new LyricsPasteReflectionError(
+      formatLyricsReflectionMessage(action, diagnostics),
+      diagnostics,
+    );
+  }
+  throw new FatalRunError(formatLyricsReflectionMessage(action, diagnostics));
+}
 
 /**
  * Lyrics 欄への値注入。旧 UI の textarea / input は setNativeValue へ委譲し、
@@ -202,14 +308,7 @@ export async function setLyricsValue(
     setNativeValue(el, value);
     return;
   }
-  el.focus();
-  const selected = document.execCommand("selectAll", false);
-  if (!selected) {
-    throw new FatalRunError(
-      "Lyrics 欄の全選択に失敗しました。Suno UI の Lexical editor 状態を確認してください。",
-    );
-  }
-  await sleep(LEXICAL_SELECTION_SYNC_MS);
+  await selectAllLexicalLyrics(el);
   if (value === "") {
     const cleared = document.execCommand("delete", false);
     if (!cleared) {
@@ -218,7 +317,7 @@ export async function setLyricsValue(
       );
     }
     await sleep(LEXICAL_SELECTION_SYNC_MS);
-    if ((el.textContent ?? "") !== "") {
+    if (readLexicalText(el) !== "") {
       throw new FatalRunError(
         "Lyrics 欄のクリア反映に失敗しました。Generate へ進まず停止します。",
       );
@@ -235,11 +334,29 @@ export async function setLyricsValue(
     }),
   );
   await sleep(LEXICAL_SELECTION_SYNC_MS);
-  if ((el.textContent ?? "") !== value) {
-    throw new FatalRunError(
-      "Lyrics 欄への paste 反映に失敗しました。Generate へ進まず停止します。",
-    );
+  assertLexicalLyricsValue(el, value, "paste");
+}
+
+export async function setLyricsValueViaBeforeInput(
+  el: HTMLTextAreaElement | HTMLElement,
+  value: string,
+): Promise<void> {
+  if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
+    setNativeValue(el, value);
+    return;
   }
+  await selectAllLexicalLyrics(el);
+  el.dispatchEvent(
+    new InputEvent("beforeinput", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      data: value,
+      inputType: value === "" ? "deleteContentBackward" : "insertFromPaste",
+    }),
+  );
+  await sleep(LEXICAL_SELECTION_SYNC_MS);
+  assertLexicalLyricsValue(el, value, "beforeinput fallback");
 }
 
 /**

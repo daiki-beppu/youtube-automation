@@ -24,7 +24,11 @@ import {
   type RunRange,
   writeResumeState,
 } from "../lib/resume-state";
-import { InjectNotAcknowledgedError, injectWithVerification } from "../lib/inject-retry";
+import {
+  InjectNotAcknowledgedError,
+  injectWithVerification,
+  retryInjectStepWithFallback,
+} from "../lib/inject-retry";
 import { runEntryWithRetry } from "../lib/entry-retry";
 import { evaluateClips, formatYieldFailure, shouldRetry } from "../lib/yield-guard";
 import { createAckWaiter, markAck } from "../lib/ack-probe";
@@ -36,6 +40,7 @@ import {
   CAPTCHA_WAIT_TIMEOUT_MS,
   FatalRunError,
   GENERATE_TIMEOUT_MS,
+  LyricsPasteReflectionError,
   POLL_INTERVAL_MS,
   SETTLE_MS,
   detectSunoViewMode,
@@ -45,6 +50,7 @@ import {
   resolveFields,
   resolveGenerateButton,
   setLyricsValue,
+  setLyricsValueViaBeforeInput,
   setNativeValue,
   sleep,
   waitForCaptchaClear,
@@ -361,7 +367,37 @@ export default defineContentScript({
       setNativeValue(style, entry.style);
       if (lyrics) {
         // 空文字でも上書きする。instrumental パターン (entry.lyrics === "") のとき前パターンの歌詞を残さない。
-        await setLyricsValue(lyrics, entry.lyrics);
+        await retryInjectStepWithFallback({
+          run: () => setLyricsValue(lyrics, entry.lyrics),
+          fallback: async (lastError) => {
+            try {
+              await setLyricsValueViaBeforeInput(lyrics, entry.lyrics);
+            } catch (fallbackError) {
+              const message =
+                fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+              const actualLyrics =
+                lyrics instanceof HTMLTextAreaElement || lyrics instanceof HTMLInputElement
+                  ? lyrics.value
+                  : lyrics.textContent ?? "";
+              console.error("[suno-helper] Lyrics 欄への全注入方式が失敗しました", {
+                entryName: entryDisplayName(entry),
+                lyricsLength: entry.lyrics.length,
+                lyrics: entry.lyrics,
+                actualLength: actualLyrics.length,
+                actualLyrics,
+                diagnosticMessage: message,
+                pasteError: lastError,
+                fallbackError,
+              });
+              throw new FatalRunError(
+                `entry ${index} (${entryDisplayName(entry)}) の Lyrics 注入に失敗しました: ${message}`,
+              );
+            }
+          },
+          isRetryable: (error) => error instanceof LyricsPasteReflectionError,
+          maxRetry: BALANCED_RUN_PACING.maxInjectRetry,
+          describeStep: () => `entry ${index} (${entryDisplayName(entry)}) Lyrics paste`,
+        });
       } else if (entry.lyrics) {
         // 歌詞があるのに Lyrics 欄が見つからないのは設定不整合。silent に飛ばさず停止する。
         // 設定不整合は全 entry で再発するため fatal（entry retry の対象外）。

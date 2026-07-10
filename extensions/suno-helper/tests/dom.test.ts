@@ -25,6 +25,7 @@ import {
   resolveFields,
   resolveGenerateButton,
   setLyricsValue,
+  setLyricsValueViaBeforeInput,
   setNativeValue,
   setSliderValue,
 } from "../../shared/dom";
@@ -396,6 +397,28 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
     });
   }
 
+  function applyLexicalPasteAsParagraphs(el: HTMLElement): void {
+    el.addEventListener("paste", (e) => {
+      const ev = e as unknown as ClipboardEventStub;
+      el.replaceChildren(
+        ...(ev.clipboardData?.getData("text/plain") ?? "").split("\n").map((line) => {
+          const paragraph = document.createElement("p");
+          paragraph.textContent = line;
+          return paragraph;
+        }),
+      );
+      e.preventDefault();
+    });
+  }
+
+  function applyLexicalBeforeInput(el: HTMLElement): void {
+    el.addEventListener("beforeinput", (e) => {
+      const ev = e as InputEvent;
+      el.textContent = ev.inputType === "deleteContentBackward" ? "" : ev.data ?? "";
+      e.preventDefault();
+    });
+  }
+
   beforeEach(() => {
     vi.stubGlobal("DataTransfer", DataTransferStub);
     vi.stubGlobal("ClipboardEvent", ClipboardEventStub);
@@ -450,6 +473,22 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
     await injected;
   });
 
+  it("Given Lexical が複数行 Lyrics を p 要素に分割する When paste 後に検証する Then p 間を改行として読み戻して成功する", async () => {
+    vi.useFakeTimers();
+    const div = addLexicalLyrics();
+    applyLexicalPasteAsParagraphs(div);
+
+    const injected = setLyricsValue(div, "line one\nline two");
+
+    await vi.advanceTimersByTimeAsync(400);
+    await injected;
+
+    expect(Array.from(div.children).map((child) => child.textContent)).toEqual([
+      "line one",
+      "line two",
+    ]);
+  });
+
   it("Given selectAll が失敗する When Lexical lyrics へ注入する Then paste せず fail-loud する", async () => {
     vi.useFakeTimers();
     execCommand.mockReturnValue(false);
@@ -474,6 +513,56 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
 
     await rejection;
     expect(pastes).toEqual([{ text: "verse one", bubbles: true, cancelable: true }]);
+    expect(div.textContent).toBe("old lyrics");
+  });
+
+  it("Given paste retry 後の fallback When beforeinput が反映される Then Lyrics を更新できる", async () => {
+    vi.useFakeTimers();
+    const div = addLexicalLyrics();
+    div.textContent = "old lyrics";
+    const beforeInputs: Array<{
+      data: string | null;
+      inputType: string;
+      bubbles: boolean;
+      cancelable: boolean;
+    }> = [];
+    div.addEventListener("beforeinput", (e) => {
+      const ev = e as InputEvent;
+      beforeInputs.push({
+        data: ev.data,
+        inputType: ev.inputType,
+        bubbles: e.bubbles,
+        cancelable: e.cancelable,
+      });
+    });
+    applyLexicalBeforeInput(div);
+
+    const injected = setLyricsValueViaBeforeInput(div, "fallback lyrics");
+
+    await vi.advanceTimersByTimeAsync(400);
+    await injected;
+
+    expect(beforeInputs).toEqual([
+      {
+        data: "fallback lyrics",
+        inputType: "insertFromPaste",
+        bubbles: true,
+        cancelable: true,
+      },
+    ]);
+    expect(div.textContent).toBe("fallback lyrics");
+  });
+
+  it("Given beforeinput fallback 後に Lyrics が反映されない When 検証する Then 差分付きで fail-loud する", async () => {
+    vi.useFakeTimers();
+    const div = addLexicalLyrics();
+    div.textContent = "old lyrics";
+
+    const injected = setLyricsValueViaBeforeInput(div, "fallback lyrics");
+    const rejection = expect(injected).rejects.toThrow(/firstDiffIndex=0/);
+    await vi.advanceTimersByTimeAsync(400);
+
+    await rejection;
     expect(div.textContent).toBe("old lyrics");
   });
 
