@@ -44,7 +44,7 @@ open_release_branch=$(git ls-remote --heads origin "release/v*" | head -1)
 
 | 状態 | 条件 | フェーズ |
 |---|---|---|
-| **prepare** | `open_release_branch` 無し かつ `main_sha != tag_sha` | Phase 1 へ |
+| **prepare** | `open_release_branch` 無し かつ `main_sha != tag_sha` かつ publish 条件に該当しない（`main` HEAD が bump コミットでない） | Phase 1 へ |
 | **publish** | リモートに `release/v<X.Y.Z>` ブランチ無し かつ `main` に bump コミットが含まれる かつ tag 未作成 | Phase 2 へ |
 | **publish (alt)** | リモートに `release/v<X.Y.Z>` ブランチ有り かつ PR が merged 済み | Phase 2 へ（マージ済みブランチが削除前のケース） |
 | **no-op** | `main_sha == tag_sha`（既にリリース済み） | 終了 |
@@ -136,7 +136,7 @@ commit メッセージは日本語 Conventional Commits 規約（CLAUDE.md「開
 git push -u origin "release/v${VER}"
 ```
 
-PR 作成は `gh pr create` を直接呼ぶ（リリース PR は機械的な昇格 diff のため self-review 付きの通常 PR フローは不要）:
+PR 作成は `gh pr create` を直接呼ぶ（リリース PR は機械的な昇格 diff のため self-review 付きの通常 PR フローは不要）。以下は quoted heredoc（`<<'EOF'`）のため本文中の `${VER}` / `$(date +%Y-%m-%d)` はシェル展開されない。実行前に本文のプレースホルダを実値へ置換すること:
 
 ```bash
 gh pr create --base main --title "chore(release): v${VER}" --body "$(cat <<'EOF'
