@@ -49,7 +49,6 @@ yt_distrokid_prepare = _make_entrypoint("youtube_automation.scripts.distrokid_pr
 yt_doctor = _make_entrypoint("youtube_automation.cli.doctor")
 yt_fetch_stream_key = _make_entrypoint("youtube_automation.scripts.fetch_stream_key")
 yt_finalize_master = _make_entrypoint("youtube_automation.scripts.finalize_master")
-yt_fix_timestamps = _make_entrypoint("youtube_automation.scripts.fix_per_theme_timestamps")
 yt_generate_image = _make_entrypoint("youtube_automation.scripts.generate_image")
 yt_generate_loop_video = _make_entrypoint("youtube_automation.scripts.generate_loop_video")
 yt_generate_lyria_master = _make_entrypoint("youtube_automation.scripts.generate_lyria_master")
