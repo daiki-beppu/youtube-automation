@@ -9,6 +9,10 @@ description: "Use when 競合コメントの収集・分析で視聴者インサ
 感情・利用シーン・リクエスト・キャラ愛着の4軸で分析する。
 `/channel-new` の標準フローでは実行せず、コメントを含む視聴者インサイトが必要になった時点で明示的に実行する。
 
+## 完了条件
+
+レポート構成 8 項目を統合した `docs/plans/viewer-voice-analysis.md` を保存し（Phase 3）、Phase 4 で主要発見をユーザーに要約提示した時点で完了。
+
 ## 前提
 
 以下を確認し、満たさなければ前工程を案内して停止する:
@@ -47,7 +51,7 @@ uv run yt-benchmark-comments --force
 
 ### Phase 2: コメント分析（サブエージェント並列）
 
-`data/comments_YYYYMMDD.json` を Read ツールで読み込み、**3つのサブエージェントを並列起動**（Agent ツール、単一メッセージで3つの Agent コール）:
+`data/comments_YYYYMMDD.json` を Read（Codex では同等のファイル閲覧）で読み込み、**3つのサブエージェントを並列起動**（Agent ツール、単一メッセージで3つの Agent コール。Codex では同等のエージェント機能に読み替え）:
 
 **Agent 1: 感情・没入分析**
 - 全コメントから感情表現を抽出・分類
