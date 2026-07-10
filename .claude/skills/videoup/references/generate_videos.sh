@@ -1,5 +1,5 @@
 #!/bin/bash
-# generate_videos.sh v14 — Master video generator
+# generate_videos.sh v14.2 — Master video generator
 # Static image + master audio → MP4 (macOS optimized)
 # v12.1: ループモードの高ビットレート入力を上限付き正規化に退避
 # v12.2: 短尺 master を音声側 stream_loop で動画尺に伸ばす opt-in 経路を追加 (#545)
@@ -20,6 +20,7 @@
 #          (新規 env override は追加しない。キー欠落時は現行の固定値へフォールバック=無回帰)
 #        - shrink.enabled で生成後の容量最適化 re-encode を opt-in 追加
 # v14.1: workflow-state.json::assets.master_audio があれば固定名探索より優先 (#1449)
+# v14.2: effect=none の静止画も 1 GOP 分だけベイクして stream copy で全尺化 (#1681)
 #
 # Usage:
 #   bash .claude/skills/videoup/references/generate_videos.sh <collection-path>
@@ -34,14 +35,14 @@
 #
 # Environment variables (#648):
 #   VIDEOUP_EFFECT            none | particles | bokeh | gradient   (default: none)
-#       none      : エフェクトなし（ループ動画は stream copy、静止画は従来の libx264 経路）
+#       none      : エフェクトなし（ループ動画・静止画ともに短尺ソースを stream copy）
 #       particles : 光の粒子（淡い白点が画面をゆっくり流れる）
 #       bokeh     : ボケ（柔らかな円形グラデーションがゆらぐ）
 #       gradient  : グラデーション流れ（半透明のカラーグラデーションが上下にうごく）
 #   VIDEOUP_EFFECT_INTENSITY  subtle | medium | strong               (default: subtle)
 #       透明度・密度をコントロール。基本は subtle 推奨（BGM 視聴の邪魔をしない）
 #
-# エフェクト有効時、ループ動画背景モードは stream copy ではなく libx264 再エンコードに切り替わる。
+# エフェクト有効時は 1 周期だけ libx264 でベイクし、通常はその短尺ソースを stream copy する。
 # 詳細は .claude/skills/videoup/SKILL.md を参照。
 #
 # Env (#511):
@@ -283,7 +284,7 @@ LOOP_TARGET_FRAME_RATE="24/1"
 LOOP_OUTPUT_FRAME_RATE="24"
 LOOP_MAX_BITRATE="$(yaml_get video loop_maxrate 6000k)"
 LOOP_BUFSIZE="$(yaml_get video loop_bufsize 12000k)"
-# 静止画(effect 無し)のエンコード値も config 駆動（fallback=現行値）
+# 静止画(effect 無し)の短尺ベイク値も config 駆動（fallback=現行値）
 STILL_FPS="$(yaml_get video still_fps 1)"
 STILL_CRF="$(yaml_get video still_crf 28)"
 STILL_GOP="$(yaml_get video still_gop 300)"
@@ -450,6 +451,9 @@ ov_get() {
 if ! command -v ffmpeg &>/dev/null; then
     echo "ERROR: ffmpeg not found"; exit 1
 fi
+if ! command -v ffprobe &>/dev/null; then
+    echo "ERROR: ffprobe not found"; exit 1
+fi
 if [[ -z "$VIDEO_BACKGROUND" && -z "$LOOP_VIDEO" ]]; then
     echo "ERROR: No video background found in ${ASSETS_DIR}/ (main.png or main.jpg required; thumbnail.jpg/png is upload-only)"; exit 1
 fi
@@ -524,7 +528,7 @@ fi
 
 # ─── Main ────────────────────────────────────────────────
 echo ""
-echo "  generate_videos.sh v14 — ${COLLECTION_NAME}"
+echo "  generate_videos.sh v14.2 — ${COLLECTION_NAME}"
 echo "  ──────────────────────────────────────────"
 echo ""
 if [[ -n "$LOOP_VIDEO" ]]; then
@@ -595,9 +599,9 @@ trap 'rm -f "$PROGRESS_FILE"' EXIT
 
 # ─── Step 表示 (Issue #641) ──────────────────────────────
 # Veo / ffmpeg 双方で「生成中 → 保存 → 後処理」のステップ感を共通化する。
-# ffmpeg 経路は (1) 入力正規化 (loop モードのみ) → (2) マスター動画生成
-# の 2 ステップ構成。静止画モードは (1) を skip。
-if [[ -n "$LOOP_VIDEO" || "$EFFECT" != "none" ]]; then
+# ffmpeg 経路は (1) 入力正規化 / 短尺ベイク → (2) マスター動画生成
+# の 2 ステップ構成。overlay 経路だけは従来どおり単一の全尺再エンコード。
+if [[ "$OVERLAYS_ENABLED" -eq 0 ]]; then
     FF_TOTAL_STEPS=2
 else
     FF_TOTAL_STEPS=1
@@ -737,7 +741,7 @@ else
     # 最終形を「シームレスな短尺ループクリップを -stream_loop -1 -c:v copy で連結」に寄せる。
     #   - loop.mp4 あり        → 1 度だけ正規化して LOOP_SOURCE を得る
     #   - effect != none かつ可 → 1 周期だけ fx_baked.mp4 に焼き、それを stream copy
-    #   - どちらでもない        → 静止画 1fps（従来 mode A）
+    #   - 静止画 + effect=none   → 1 GOP 分だけ still_baked.mp4 に焼いて stream copy
     # effect ベイク不能（短尺/過大尺）は従来の全尺再エンコードへフォールバックする。
 
     # 1) loop.mp4 正規化（あれば LOOP_SOURCE を確定。無ければ空のまま）
@@ -838,6 +842,36 @@ else
         fi
     elif [[ -n "$LOOP_SOURCE" ]]; then
         STREAM_SOURCE="$LOOP_SOURCE"
+    else
+        STILL_BAKED="${ASSETS_DIR}/still_baked.mp4"
+        STILL_STAMP="${ASSETS_DIR}/still_baked.params"
+        still_bake_len="$(awk -v gop="$STILL_GOP" -v fps="$STILL_FPS" 'BEGIN{if (fps > 0 && gop > 0) printf "%.6f", gop / fps}')"
+        if [[ -z "$still_bake_len" ]]; then
+            echo "  ERROR: video.still_fps and video.still_gop must be positive numbers"
+            exit 1
+        fi
+        want_stamp="$(stat_mtime "$VIDEO_BACKGROUND")|${STILL_FPS}|${STILL_CRF}|${STILL_GOP}"
+        have_stamp=""
+        [[ -f "$STILL_STAMP" ]] && have_stamp="$(cat "$STILL_STAMP" 2>/dev/null)"
+        if [[ -f "$STILL_BAKED" && "$have_stamp" == "$want_stamp" ]]; then
+            echo "  [Step 1/${FF_TOTAL_STEPS}] Still loop cache hit (${still_bake_len}s) → still_baked.mp4 再利用"
+        else
+            echo "  [Step 1/${FF_TOTAL_STEPS}] Baking still image loop (${still_bake_len}s, 1 GOP) → still_baked.mp4"
+            ffmpeg -y -framerate "$STILL_FPS" -loop 1 -i "$VIDEO_BACKGROUND" \
+                -c:v libx264 -tune stillimage -preset medium -crf "$STILL_CRF" -pix_fmt yuv420p \
+                -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
+                -g "$STILL_GOP" -r "$STILL_FPS" \
+                -t "$still_bake_len" \
+                -an -movflags +faststart \
+                -loglevel error \
+                "$STILL_BAKED"
+            if [[ $? -ne 0 || ! -f "$STILL_BAKED" ]]; then
+                echo "  ERROR: still_baked.mp4 の生成に失敗"
+                exit 1
+            fi
+            printf '%s' "$want_stamp" > "$STILL_STAMP"
+        fi
+        STREAM_SOURCE="$STILL_BAKED"
     fi
 
     # 3) 最終マスター動画生成
@@ -888,26 +922,6 @@ else
             -map "[vout]" -map 1:a:0 \
             -c:v libx264 -preset medium -crf "$STILL_EFFECT_CRF" -pix_fmt yuv420p \
             -r "$STILL_EFFECT_FPS" \
-            "${AUDIO_OUT_OPTS[@]}" "${AUDIO_AF_ARGS[@]}" \
-            -t "$video_duration" \
-            -movflags +faststart \
-            -shortest \
-            -loglevel error \
-            -progress "$PROGRESS_FILE" \
-            "$MASTER_OUTPUT" &
-    else
-        # 静止画背景モード（従来 mode A）。エンコード値は config 駆動（fallback=現行値）。
-        # I-frame を STILL_GOP フレーム間隔に間引き、変化のないフレームを P-frame で圧縮して小型化（#579）。
-        echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (still image)"
-        AUDIO_AF_ARGS=()
-        [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
-        echo "  ℹ️  ループ動画なし → 静止画背景で出力 (loop.mp4 を配置すればループ動画になります)"
-        ffmpeg -y -framerate "$STILL_FPS" -loop 1 -i "$VIDEO_BACKGROUND" \
-            "${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO" \
-            -c:v libx264 -tune stillimage -preset medium -crf "$STILL_CRF" -pix_fmt yuv420p \
-            -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2" \
-            -g "$STILL_GOP" \
-            -r "$STILL_FPS" \
             "${AUDIO_OUT_OPTS[@]}" "${AUDIO_AF_ARGS[@]}" \
             -t "$video_duration" \
             -movflags +faststart \
@@ -1009,6 +1023,34 @@ if [[ "$SHRINK_ENABLED" == "true" && ( -n "$SHRINK_MAXRATE" || -n "$SHRINK_CRF" 
         echo "  [shrink] WARN: 再エンコードに失敗。元ファイルを保持します"
         rm -f "$shrink_tmp"
     fi
+fi
+
+# ─── Final output validation ──────────────────────────────
+if ! ffprobe -v error "$MASTER_OUTPUT" &>/dev/null; then
+    echo "  ERROR: ffprobe could not decode final output: $MASTER_OUTPUT"
+    exit 1
+fi
+output_frame_rate="$(ffprobe -v error -select_streams v:0 \
+    -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 "$MASTER_OUTPUT" 2>/dev/null | head -1)"
+output_duration="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$MASTER_OUTPUT" 2>/dev/null)"
+duration_check="$(awk -v actual="$output_duration" -v expected="$video_duration" -v rate="$output_frame_rate" '
+    BEGIN {
+        split(rate, fps, "/")
+        if (actual !~ /^[0-9]+([.][0-9]+)?$/ || expected !~ /^[0-9]+([.][0-9]+)?$/ ||
+            fps[1] !~ /^[0-9]+([.][0-9]+)?$/ || fps[2] !~ /^[0-9]+([.][0-9]+)?$/ || fps[1] <= 0 || fps[2] <= 0) {
+            print "invalid"
+            exit
+        }
+        tolerance = fps[2] / fps[1]
+        delta = actual - expected
+        if (delta < 0) delta = -delta
+        printf "%s|%.6f|%.6f", (delta <= tolerance + 0.000001 ? "ok" : "mismatch"), delta, tolerance
+    }
+')"
+IFS='|' read -r duration_status duration_delta duration_tolerance <<< "$duration_check"
+if [[ "$duration_status" != "ok" ]]; then
+    echo "  ERROR: final output duration mismatch (expected=${video_duration}s, actual=${output_duration:-unreadable}s, frame_rate=${output_frame_rate:-unreadable}, delta=${duration_delta:-unreadable}s, tolerance=${duration_tolerance:-unreadable}s)"
+    exit 1
 fi
 
 size="$(ls -lh "$MASTER_OUTPUT" | awk '{print $5}')"
