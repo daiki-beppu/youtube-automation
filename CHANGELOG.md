@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- `refactor(cleanup)`: deprecated 表明済みの単発移行スクリプト `yt-fix-timestamps`（`scripts/fix_per_theme_timestamps.py`、2026-03/04 の特定コレクションをハードコード対象とする一括補修用）を削除した（#1673）。`pyproject.toml` の entry point / `cli_entrypoints.py` / `tests/test_fix_per_theme_timestamps.py` / `tests/test_cli_stdio.py` の参照も併せて除去。masterup SKILL.md が本 CLI を現役手順として記述していた矛盾（Step 5.7 / CLI 対応表 / フォールバック手動手順 / 完了条件）も解消した。現行のタイムスタンプ生成は `metadata_generator` の `generate_timestamps()` 系が正
 - `chore(deps)`: import ゼロで宣言のみ残っていた直接依存 `seaborn` を削除した（plan 024）。transitive に必要な `pandas` / `matplotlib` は引き続き `[project] dependencies` に独立宣言済み
 - `refactor(utils)`: 旧 analytics モノリスの unreachable な残骸（`report_generator.py` / `report_renderer.py` / `analytics_analyzer.py`、計 1,016 行）を削除した（plan 023）。現行の analytics は `analytics_base.py` Protocol + `strategic_analytics.py` / `ctr_analytics.py` 等の mixin 構成に移行済みで、これら 3 ファイルはどこからも import されていなかった。`ctr_analytics.py` の docstring に残っていた `analytics_analyzer._analyze_collection_ctrs` への stale な参照も削除した
 
