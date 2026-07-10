@@ -5,6 +5,8 @@ Issue #186: `trim_tail` / `smooth_loop` の duration 取得 argv に `"--"` sent
 
 Issue #358: `build_structured_prompt` のプロンプト構築検証。
 
+Issue #1748: `smooth_loop` 再実行時の `loop_raw.mp4` 残存衝突リグレッションガード。
+
 Issue #453: generate_loop_video() の resume / KeyboardInterrupt / state lifecycle を検証する。
 state は <CHANNEL_DIR>/tmp/veo-operations/<key>.json に決定的に着地する。
 CHANNEL_DIR を monkeypatch.setenv で tmp_path に向け config.reset() で再解決させる標準パターンを使う。
@@ -205,6 +207,85 @@ def test_smooth_loop_removes_tmp_when_ffmpeg_fails(tmp_path: Path, monkeypatch) 
     assert result is False
     # 部分書き出しされた tmp は finally で削除されている
     assert not output.exists()
+
+
+# ---------- smooth_loop 再実行時の raw 残存衝突 (Issue #1748) ----------
+
+
+def _install_smooth_success(monkeypatch, video: Path) -> None:
+    """ffprobe / ffmpeg を成功 fake 化し、_smooth.mp4 を書き出す挙動を再現する。"""
+    monkeypatch.setattr(veo_generator.subprocess, "check_output", lambda cmd, **_: "10.0")
+
+    output = video.with_stem(video.stem + "_smooth")
+
+    def fake_run(cmd, **kwargs):
+        output.write_bytes(b"smoothed")
+
+    monkeypatch.setattr(veo_generator.subprocess, "run", fake_run)
+
+
+def test_smooth_loop_relocates_stale_raw_before_rename(tmp_path: Path, monkeypatch, capsys) -> None:
+    """前回 raw 残存時もクラッシュせず、旧 raw を loop_raw-v1.mp4 に退避してログに明示する（Issue #1748）。"""
+    video = tmp_path / "loop.mp4"
+    video.write_bytes(b"current")
+    stale_raw = tmp_path / "loop_raw.mp4"
+    stale_raw.write_bytes(b"stale")
+    _install_smooth_success(monkeypatch, video)
+
+    result = veo_generator.smooth_loop(video)
+
+    assert result is True
+    # 補正済みが loop.mp4 に、今回の原本が loop_raw.mp4 に着地する
+    assert video.read_bytes() == b"smoothed"
+    assert (tmp_path / "loop_raw.mp4").read_bytes() == b"current"
+    # 前回 raw は無警告消失せず連番退避されている
+    assert (tmp_path / "loop_raw-v1.mp4").read_bytes() == b"stale"
+    out = capsys.readouterr().out
+    assert "[Backup] 前回の loop_raw.mp4 を loop_raw-v1.mp4 に退避" in out
+
+
+def test_smooth_loop_relocation_skips_occupied_version_numbers(tmp_path: Path, monkeypatch) -> None:
+    """loop_raw-v1.mp4 が既に存在する場合は v2 へ退避する（番号衝突回避）。"""
+    video = tmp_path / "loop.mp4"
+    video.write_bytes(b"current")
+    (tmp_path / "loop_raw.mp4").write_bytes(b"stale")
+    (tmp_path / "loop_raw-v1.mp4").write_bytes(b"older")
+    _install_smooth_success(monkeypatch, video)
+
+    result = veo_generator.smooth_loop(video)
+
+    assert result is True
+    assert (tmp_path / "loop_raw-v1.mp4").read_bytes() == b"older"
+    assert (tmp_path / "loop_raw-v2.mp4").read_bytes() == b"stale"
+
+
+def test_smooth_loop_first_run_without_stale_raw_keeps_legacy_behavior(tmp_path: Path, monkeypatch) -> None:
+    """raw 残存なしの初回実行は従来と同一挙動（-v ファイルを作らない、後方互換）。"""
+    video = tmp_path / "loop.mp4"
+    video.write_bytes(b"current")
+    _install_smooth_success(monkeypatch, video)
+
+    result = veo_generator.smooth_loop(video)
+
+    assert result is True
+    assert video.read_bytes() == b"smoothed"
+    assert (tmp_path / "loop_raw.mp4").read_bytes() == b"current"
+    assert not list(tmp_path.glob("loop_raw-v*.mp4"))
+
+
+def test_smooth_loop_relocates_stale_raw_for_short_loop_stem(tmp_path: Path, monkeypatch) -> None:
+    """generate_short_loop 経路（short-loop.mp4）でも stale raw を同様に退避する。"""
+    video = tmp_path / "short-loop.mp4"
+    video.write_bytes(b"current")
+    (tmp_path / "short-loop_raw.mp4").write_bytes(b"stale")
+    _install_smooth_success(monkeypatch, video)
+
+    result = veo_generator.smooth_loop(video)
+
+    assert result is True
+    assert video.read_bytes() == b"smoothed"
+    assert (tmp_path / "short-loop_raw.mp4").read_bytes() == b"current"
+    assert (tmp_path / "short-loop_raw-v1.mp4").read_bytes() == b"stale"
 
 
 # =============================================================================

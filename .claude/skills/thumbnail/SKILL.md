@@ -61,7 +61,7 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 | `openai` | OpenAI gpt-image 系（CJK 文字描画が綺麗、16:9/9:16 ネイティブ対応） | `OPENAI_API_KEY` |
 | `codex` | `codex-image.sh` 経由で ChatGPT サブスク認証を使う（GCP 課金なし） | `codex login status` が `Logged in using ChatGPT` |
 
-OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"` または `"9:16"` のいずれかに設定（thumbnail スキルは内部で 16:9 固定）。
+OpenAI provider 使用時は `image_generation.openai.aspect_ratio` を `"16:9"` または `"9:16"` のいずれかに設定（thumbnail スキルは内部で 16:9 固定）。`image_generation.openai.quality` の既定は `medium`。`high` は 1 枚あたりの単価が数倍高いため、コストを許容できるチャンネルのみ `quality: high` を明示指定する。
 
 `config/skills/thumbnail.yaml` の `image_generation.provider` が未設定の場合、デフォルトは `gemini`。channel-config 側で `image_generation.provider` が明示されている場合はそちらが優先される（既存の切り替え挙動は変更しない）。
 
@@ -93,6 +93,8 @@ image_generation:
   provider: openai
   openai:
     aspect_ratio: "16:9"
+    # quality 未指定時の既定は medium。high は単価が数倍高いので明示 opt-in のみ
+    # quality: high
 ```
 
 Gemini / OpenAI の CLI 経路で全 attempt が失敗した場合、`uv run yt-generate-image` はこの fallback 章を案内する。生成物の品質差が出るため、自動で provider を切り替えて上書きすることはしない。

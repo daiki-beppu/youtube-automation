@@ -70,6 +70,9 @@ def extract_downloaded_archive(coll_dir: Path, download_path: str, expected_coun
 
 _SUNO_TRACK_PREFIX_RE = re.compile(r"^Track\s+\d+\s+(.+)$", re.IGNORECASE)
 _LATIN_TITLE_TAIL_RE = re.compile(r"([A-Za-z][A-Za-z0-9 &'(),.!?:/-]*)$")
+# Suno はダウンロード ZIP 内のファイル名からアポストロフィを除去する（例: Greed's Rhythm → Greeds Rhythm.m4a）。
+# typographic apostrophe（U+2019）も同一視する。それ以外の記号は Suno 仕様が未確認のため除去しない
+_APOSTROPHE_RE = re.compile(r"['’]")
 _OUTPUT_STEM_SEPARATOR_RE = re.compile(r"[\\/]+")
 _OUTPUT_STEM_SPACE_RE = re.compile(r"\s+")
 
@@ -152,6 +155,12 @@ def _build_name_to_index(coll_dir: Path) -> dict[str, int]:
         if title:
             for candidate in _suno_name_lookup_candidates(title):
                 name_to_index.setdefault(candidate, i)
+    # Suno が ZIP ファイル名から除去するアポストロフィの除去版キーを fallback として登録する (#1787)。
+    # exact match を優先するため setdefault（既存キーは上書きしない）
+    for key, track_index in list(name_to_index.items()):
+        stripped = _APOSTROPHE_RE.sub("", key)
+        if stripped and stripped != key:
+            name_to_index.setdefault(stripped, track_index)
     return name_to_index
 
 
