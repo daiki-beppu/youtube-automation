@@ -98,15 +98,16 @@ def test_wf_new_theme_scenes_fallback_uses_agent_generated_en_phrase() -> None:
 
 def test_upload_settings_contract_is_nested_in_schedule_config() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
     channel_init = _read("src/youtube_automation/cli/channel_init_templates.py")
     channel_init_test = _read("tests/test_channel_init.py")
     schedule_template = _read(".claude/skills/channel-new/references/schedule-template.json")
 
-    for text in (channel_new, channel_init, channel_init_test):
+    for text in (channel_new, regeneration_mode, channel_init, channel_init_test):
         assert "config/upload_settings.json" not in text
 
     assert "`config/schedule_config.json`（`upload_settings` を含む）" in channel_new
-    assert "投稿頻度と `upload_settings`" in channel_new
+    assert "投稿頻度と `upload_settings`" in regeneration_mode
     assert '"upload_settings": {' in schedule_template
 
 
@@ -168,7 +169,8 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
     overview = channel_new.split("## Overview", 1)[1].split("## モード判別", 1)[0]
     mode_routing = channel_new.split("## モード判別", 1)[1].split("## TTP 原則", 1)[0]
     direction_mode_row = next(line for line in mode_routing.splitlines() if line.startswith("| 方向性検討モード |"))
-    direction_mode = channel_new.split("## 方向性検討モード", 1)[1].split("\n## 再生成モード", 1)[0]
+    direction_mode_stub = channel_new.split("## 方向性検討モード", 1)[1].split("\n## 再生成モード", 1)[0]
+    direction_mode = _read(".claude/skills/channel-new/references/direction-mode.md")
     ttp_principles = channel_new.split("## TTP 原則", 1)[1].split(
         "### TTP 完了条件（新規開設モード）",
         1,
@@ -223,12 +225,13 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
     for trigger in ("方向性決めたい", "ポジショニング", "差別化", "ブレスト"):
         assert trigger in direction_mode_row
 
+    assert "references/direction-mode.md" in direction_mode_stub
     for heading in (
-        "### Step D1: 分析レポートの読み込みとサマリー",
-        "### Step D2: ポジショニング議論",
-        "### Step D3: 決定事項の整理",
-        "### Step D4: 方向性ドキュメント保存",
-        "### Step D5: 次フェーズへの案内",
+        "## Step D1: 分析レポートの読み込みとサマリー",
+        "## Step D2: ポジショニング議論",
+        "## Step D3: 決定事項の整理",
+        "## Step D4: 方向性ドキュメント保存",
+        "## Step D5: 次フェーズへの案内",
     ):
         assert heading in direction_mode
     assert "決定事項を `docs/channel/channel-direction.md` に保存" in direction_mode
@@ -280,39 +283,42 @@ def test_channel_new_frontmatter_keeps_import_dispatch_keywords() -> None:
 
 def test_channel_new_import_mode_contract_is_separate_from_ttp_completion() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    import_mode = _read(".claude/skills/channel-new/references/import-mode.md")
     config_rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
 
     assert "TTP 完了条件（新規開設モード）" in channel_new
     assert "既存チャンネル取り込みモードにはこの TTP 完了条件を適用しない" in channel_new
     assert "取り込み Step 8: 次ステップ案内" in channel_new
-    assert "`music_engine` に入れる値は `suno` / `lyria` のどちらか" in channel_new
-    assert "both` は config 契約外" in channel_new
-    assert "audio.target_duration_min" in channel_new
-    assert "audio.target_duration_max" in channel_new
-    assert "meta / content / youtube / analytics / audio" in channel_new
-    assert "references/config-template/audio.json" in channel_new
-    assert "責務別 5 ファイル" in channel_new
+    assert "references/import-mode.md" in channel_new
+    assert "`music_engine` に入れる値は `suno` / `lyria` のどちらか" in import_mode
+    assert "both` は config 契約外" in import_mode
+    assert "audio.target_duration_min" in import_mode
+    assert "audio.target_duration_max" in import_mode
+    assert "meta / content / youtube / analytics / audio" in import_mode
+    assert "references/config-template/audio.json" in import_mode
+    assert "責務別 5 ファイル" in import_mode
     assert (ROOT / ".claude/skills/channel-new/references/config-template/audio.json").is_file()
     assert (
         "`config/channel/meta.json::channel.channel_id` が未設定の場合は、認証済みチャンネル ID を必ず取得"
-        in channel_new
+        in import_mode
     )
-    assert "`channel_id` の `config/channel/meta.json::channel.channel_id` 保存" in channel_new
-    assert "channel_id` 取得またはユーザー承認済み" not in channel_new
-    assert "ユーザー承認済みの未完了項目明記" not in channel_new
+    assert "`channel_id` の `config/channel/meta.json::channel.channel_id` 保存" in import_mode
+    for text in (channel_new, import_mode):
+        assert "channel_id` 取得またはユーザー承認済み" not in text
+        assert "ユーザー承認済みの未完了項目明記" not in text
     assert (
         "benchmark.channels`、`ttp-seed-confirmation.md`、branding snapshot、"
         "`ttp_wf_new_readiness` は取り込みモードの必須完了条件ではない"
-    ) in channel_new
+    ) in import_mode
     assert "config-template" + ".json" not in config_rules
     assert "config-template/*.json" in config_rules
 
 
 def test_channel_new_localizations_priority_matches_generation_rules() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
     rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
 
-    step_r5 = channel_new.split("### Step R5:", 1)[1].split("### Step R6:", 1)[0]
+    step_r5 = regeneration_mode.split("## Step R5:", 1)[1].split("## Step R6:", 1)[0]
     assert '`["ja", "en", "de"]` を必ず含める' not in step_r5
     assert 'テンプレート既定は広告単価が高い `["ja", "en", "de"]`' in step_r5
     assert "TTP 路線では競合 `localizations` の言語セットを最優先" in step_r5
@@ -545,10 +551,8 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
     setup = _read(".claude/skills/setup/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    channel_direction_mode = channel_new.split("## 方向性検討モード", 1)[1].split(
-        "\n## 再生成モード",
-        1,
-    )[0]
+    channel_regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
+    channel_direction_mode = _read(".claude/skills/channel-new/references/direction-mode.md")
     onboarding = _read("ONBOARDING.md")
     features = _read("docs/features.md")
 
@@ -569,12 +573,12 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "任意後続スキル" not in viewer_voice
     assert "/audience-persona-design の必須入力（viewer-voice-analysis.md）" in viewer_voice
 
-    for path_text in (setup, channel_new, channel_direction_mode, onboarding):
+    for path_text in (setup, channel_new, channel_regeneration_mode, channel_direction_mode, onboarding):
         assert "TTP benchmark" not in path_text
         assert "TTP ベンチマーク収集" not in path_text
 
     assert "TTP 対象確認、config 生成、ペルソナ、branding" in setup
-    assert "TTP 対象確認 / seed fetch / 承認済み benchmark.channels 反映" in channel_new
+    assert "TTP 対象確認 / seed fetch / 承認済み benchmark.channels 反映" in channel_regeneration_mode
     assert "旧 `/channel-direction` は本スキルの方向性検討モードに統合済み" not in channel_new
     assert "docs/channel/ttp-seed-confirmation.md" in channel_direction_mode
     assert "docs/channel/competitor-branding-snapshot.json" in channel_direction_mode
@@ -850,10 +854,10 @@ def test_collection_localization_docs_use_root_localizations_contract() -> None:
 
 
 def test_channel_new_regeneration_documents_ttp_wf_new_readiness_gate() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
     rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
 
-    for text in (channel_new, rules):
+    for text in (regeneration_mode, rules):
         assert "uv run yt-doctor --json" in text
         assert "ttp_wf_new_readiness" in text
         assert "/channel-new benchmark 反映未完了" in text
@@ -904,8 +908,8 @@ def test_channel_new_setting_push_mode_contract_is_documented() -> None:
 
 
 def test_channel_new_regeneration_snapshot_collects_all_benchmark_channels() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    step = channel_new.split("#### Step R2.1:", 1)[1].split("#### Step R2.2:", 1)[0]
+    regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
+    step = regeneration_mode.split("### Step R2.1:", 1)[1].split("### Step R2.2:", 1)[0]
 
     assert "benchmark.channels[0]" + "` が指定" not in step
     assert "承認済み TTP 対象" in step
@@ -917,8 +921,8 @@ def test_channel_new_regeneration_snapshot_collects_all_benchmark_channels() -> 
 
 
 def test_channel_new_regeneration_config_templates_include_audio_json() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    step = channel_new.split("#### Step R2.2:", 1)[1].split("#### Step R2.3:", 1)[0]
+    regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
+    step = regeneration_mode.split("### Step R2.2:", 1)[1].split("### Step R2.3:", 1)[0]
 
     assert "責務別 5 ファイル" in step
     assert "meta / content / youtube / analytics / audio" in step
@@ -926,8 +930,7 @@ def test_channel_new_regeneration_config_templates_include_audio_json() -> None:
 
 
 def test_channel_new_regeneration_uses_real_channel_research_output_path() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    mode = channel_new.split("## 再生成モード", 1)[1].split("## 設定 push モード", 1)[0]
+    mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
 
     assert "docs/channel-research.md" in mode
     assert "docs/channel/channel-research.md" not in mode
@@ -957,11 +960,11 @@ def test_config_generation_rules_reference_existing_templates_and_step_ids() -> 
 
 
 def test_channel_new_regeneration_does_not_recopy_youtube_json_after_config_completion() -> None:
-    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
 
-    assert "`config/channel/youtube.json::youtube.{category_id,privacy_status}`" in channel_new
+    assert "`config/channel/youtube.json::youtube.{category_id,privacy_status}`" in regeneration_mode
 
-    step_r5 = channel_new.split("### Step R5: 残りファイル生成", 1)[1].split("### Step R6:", 1)[0]
+    step_r5 = regeneration_mode.split("## Step R5: 残りファイル生成", 1)[1].split("## Step R6:", 1)[0]
     assert "`config/channel/youtube.json`" not in step_r5
 
 

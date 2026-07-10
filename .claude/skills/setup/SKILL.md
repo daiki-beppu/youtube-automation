@@ -33,7 +33,9 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 | `data` | `/wf-new` の入力モード判定データ + 初期セットアップ事前検査（analytics_report / benchmark_data / ttp_wf_new_readiness / initial_setup_readiness）。minimal mode / benchmark fallback mode は setup のブロッカーにしない。analytics report は最新 `data/analytics_data_*.json` との相対比較に加え、`collection-ideate` の解決済み `freshness_days` を超えた絶対鮮度 stale も検出する。承認済み TTP がある場合だけ `/channel-new`（再生成モード） benchmark 反映完了を確認する |
 | `upload` | upload 必須 scope 充足・channel_id 設定済み（1 check） |
 
-setup の完了条件は、ツール、API 認証、アップロード前提が揃った状態。`data` カテゴリは `/wf-new` の入力モード確認用で、stale analytics report 以外は新規チャンネル初回制作を止めない。新規チャンネル作成は次に `/channel-new` を実行する。
+### 完了条件
+
+`uv run yt-doctor --json` の `summary.next_check_id` が `null`（全 check 緑）になり、ツール、API 認証、アップロード前提が揃った状態が完了（報告文面は「完了時」セクションを参照）。`data` カテゴリは `/wf-new` の入力モード確認用で、stale analytics report 以外は新規チャンネル初回制作を止めない。新規チャンネル作成は次に `/channel-new` を実行する。
 
 ## 起動時のチェック
 
