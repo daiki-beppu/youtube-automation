@@ -7,6 +7,10 @@ description: "Use when チャンネルの YouTube 統計（登録者・再生回
 
 チャンネルの最新統計 + 個別動画パフォーマンスを YouTube API から取得する。
 
+## 完了条件
+
+`uv run yt-channel-status` が exit 0 で終了し、チャンネル統計とコレクション一覧をユーザーに提示した時点で完了。
+
 ## 前提
 
 `config/channel/` が存在すること（`load_config()` でロード可能）。
