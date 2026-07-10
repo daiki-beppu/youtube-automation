@@ -107,9 +107,9 @@ $ARGUMENTS
 audio:
   target_video_duration_min: 120   # 短尺 master を動画尺へ loop 伸長（#545, 既存 env 優先）
 video:
-  still_fps: 1            # 静止画(effect 無し)の fps（既定 1）
-  still_crf: 28           # 静止画(effect 無し)の CRF（既定 28、高画質寄りは 26）
-  still_gop: 300          # 静止画 GOP フレーム間隔（既定 300 = 1fps で 5 分）
+  still_fps: 1            # 静止画(effect 無し)の短尺ベイク fps（既定 1）
+  still_crf: 28           # 静止画(effect 無し)の短尺ベイク CRF（既定 28、高画質寄りは 26）
+  still_gop: 300          # 静止画ベイクの 1 周期（既定 300 frames = 1fps で 5 分）
   loop_maxrate: "6000k"   # loop 正規化 / effect ベイクの maxrate（既定 6000k、容量重視は 4000-4500k）
   loop_bufsize: "12000k"  # 同上 bufsize（既定 12000k）
 effect:
@@ -140,7 +140,7 @@ shrink:
 
 | `VIDEOUP_EFFECT` | 効果 | 想定用途 |
 |---|---|---|
-| `none` (デフォルト) | エフェクトなし。ループは stream copy、静止画は従来 libx264 経路 | 既存挙動の温存。コスト・容量を最小化したいとき |
+| `none` (デフォルト) | エフェクトなし。ループは stream copy、静止画は 1 GOP だけベイク後に stream copy | コスト・容量を最小化したいとき |
 | `particles` | 光の粒子（淡い白点が画面をゆっくり流れる） | 落ち着いた BGM・夜景・キラキラ系のサムネ |
 | `bokeh` | ボケ（柔らかな円形グラデーションがゆらぐ） | カフェ系・暖色系ジャズ・ロウソク系のサムネ |
 | `gradient` | グラデーション流れ（半透明のカラーグラデーションが上下にうごく） | ローファイヒップホップ・シティポップ・夜の街並み |
@@ -176,7 +176,7 @@ effect:
 
 ## Overlays（#511, v13）
 
-`config/channel/youtube.json::overlays` で audio visualizer + subscribe popup の合成を有効化できる。`overlays.enabled: true` のときだけ `generate_videos.sh` は **x264 再エンコード経路** に分岐し、`filter_complex` で背景の上に visualizer / popup を重ねる。`overlays.enabled: false`（既定）または `overlays` キー欠落時は従来の **stream copy / 静止画 1fps 経路**を 100% 維持する（後方互換）。
+`config/channel/youtube.json::overlays` で audio visualizer + subscribe popup の合成を有効化できる。`overlays.enabled: true` のときだけ `generate_videos.sh` は **x264 再エンコード経路** に分岐し、`filter_complex` で背景の上に visualizer / popup を重ねる。`overlays.enabled: false`（既定）または `overlays` キー欠落時は、ループ動画または静止画の短尺ベイクを使う **stream copy 経路**を維持する。
 
 ### 設定例（youtube.json）
 
@@ -231,7 +231,7 @@ effect:
 
 ## 長時間処理の取り扱い
 
-`generate_videos.sh` は ffmpeg を走らせるため数分かかる。目安（2 時間尺）: **エフェクト無し（stream copy / 静止画 1fps）= 約 1〜2 分** / **エフェクト有り（v14 ループ・ベイク）= 約 1〜2 分**（初回はベイク 10〜40 秒 + 連結 約 1 分、2 回目以降はベイク cache hit）。`shrink.enabled` の容量最適化や短尺フォールバックの全尺再エンコードを使うときは尺なりに数分〜十数分かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。Codex など `run_in_background` 非対応の実行環境では、同コマンドを `nohup ... > <log> 2>&1 &` で background 起動し、完了はログ末尾で確認する読み替えとする。
+`generate_videos.sh` は ffmpeg を走らせるため数分かかる。目安（2 時間尺）: **エフェクト無し（ループ / 静止画短尺ベイクの stream copy）= 約 1〜2 分** / **エフェクト有り（v14 ループ・ベイク）= 約 1〜2 分**（初回はベイク 10〜40 秒 + 連結 約 1 分、2 回目以降はベイク cache hit）。`shrink.enabled` の容量最適化や短尺フォールバックの全尺再エンコードを使うときは尺なりに数分〜十数分かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。Codex など `run_in_background` 非対応の実行環境では、同コマンドを `nohup ... > <log> 2>&1 &` で background 起動し、完了はログ末尾で確認する読み替えとする。
 
 spawn 例:
 
@@ -257,7 +257,7 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 
 ## オーディオビジュアライザー / オーバーレイについて
 
-`generate_videos.sh` は `config/channel/youtube.json::overlays.enabled: true` のときだけ、audio visualizer や subscribe popup を `filter_complex` で合成する。無効時または `jq` 不在時は従来の textless `main.png/jpg`（静止画背景）または `loop.mp4`（ループ動画背景）に音声を重ねる経路を維持する。
+`generate_videos.sh` は `config/channel/youtube.json::overlays.enabled: true` のときだけ、audio visualizer や subscribe popup を `filter_complex` で合成する。無効時または `jq` 不在時は textless `main.png/jpg` を短尺ベイクして stream copy するか、`loop.mp4` を stream copy して音声を重ねる。
 
 ### よくある誤解 (#646 feedback)
 
