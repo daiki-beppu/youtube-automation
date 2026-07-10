@@ -163,6 +163,16 @@ def test_content_json_reflects_genre_style_context_args(tmp_path):
     assert content["genre"]["context"] == "RPG"
 
 
+def test_content_json_uses_base_only_tags_min_count(tmp_path):
+    # Given/When: yt-channel-init の通常実行で content.json を生成
+    rc = main(_required_args(tmp_path))
+
+    # Then: 生成器が base-only 設計と整合する件数下限を明示する
+    assert rc == 0
+    content = _read_json(_channel_dir(tmp_path) / "content.json")
+    assert content["tags"]["min_count"] == 26
+
+
 # ===================== Case 5: genre/style/context のデフォルト "TBD" =====================
 
 

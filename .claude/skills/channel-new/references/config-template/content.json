@@ -5,6 +5,7 @@
     "context": "{{CONTEXT}}"
   },
   "tags": {
+    "min_count": 26,
     "base": [],
     "themes": {}
   },
