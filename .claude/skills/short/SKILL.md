@@ -9,6 +9,11 @@ description: "Use when collection 型（BGM テイスター）チャンネルで
 
 素材判定 → ハイライト区間決定 → FFmpeg 一括生成 → アップロードを 1 コマンドで進める。
 
+## 完了条件
+
+- ショート動画（既定 `shorts.collection.default_count` 本）が `01-master/shorts/` に生成され、プレビュー確認済み
+- `uv run yt-upload-shorts` の実投稿が完了し、`workflow-state.json::post_upload.shorts` に投稿分の entry が記録されている
+
 ## 設定読み込みゲート
 
 前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
@@ -97,6 +102,8 @@ export SHORT_COLLECTION_NAME="Collection Title"
 
 bash .claude/skills/short/references/generate-shorts.sh <collection-path>
 ```
+
+実行は後述「長時間処理の取り扱い」の background パターン（`run_in_background=true` + ログ redirect）に従う。
 
 ### Step 6: プレビュー → アップロード
 
