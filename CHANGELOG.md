@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `docs(suno)`: `/suno` ボーカルモードの pattern 数 → 最終 track 数の計算式（1 pattern = 1 prompt entry = 1 採用曲。必要 pattern 数 ≈ track_count + 数%の試聴落選バッファ）を SKILL.md に明記した（#1726）。インストモード節の `ceil(N/2)` 公式と対称の比較表で並記して類推適用の余地を排除し、`ceil(track_count / tracks_per_pattern)` が誤りであること、`pattern_strategy` / `tracks_per_pattern` は 1 パターンあたりの再生成回数の設計であって最終採用数には影響しない（採用は常に 1 グループ 1 曲）ことを SKILL.md と config.default.yaml のコメントに明文化した。曲数不足 prompts を fail-loud で止める機械検証は #1785 が扱う
 - `fix(scripts)`: `bulk_update_descriptions_from_md.py`（`yt-bulk-update-desc`）が `videos().update(part="snippet")` の body を手組みで列挙しており、`defaultAudioLanguage` を含めていなかったため、このツールを通した全動画で音声言語設定が消えていた問題を修正。`defaultLanguage` 未設定の動画に `"en"` を注入していた挙動も廃止。`bulk_update_synthetic_media.py::build_update_body` と同じ read-modify-write 方式（`build_snippet_update_body`）に統一し、mutable 6 キー（title / description / tags / categoryId / defaultLanguage / defaultAudioLanguage）だけを whitelist で保持する
 - `fix(suno-helper)`: queue mode で全 entry 投入後に duration guard を一括実行し、範囲外 clip のみだった entry を `ENTRY_FAILED` として `failedIndices` に保存するようにした（#1762）。対象 entry は「失敗分のみ再実行」導線に載せ、playlist 追加は保留する。部分的に OK clip がある entry は OK clip を accepted として `DONE` にし、duration filter 未指定時は `DEFAULT_DURATION_FILTER` で検査する。
 - `fix(suno-helper)`: queue mode の `clipIdsByEntry` を投入前後の Set 差分で捕捉し、entry retry 中に遅延観測された clip ID も同じ entry へ帰属させるようにした（#1762）。DOM-only ACK で clip ID が未観測の entry は fatal 停止せず、finalizer の warn + `DONE` 縮退へ到達する。
