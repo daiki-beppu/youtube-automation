@@ -638,6 +638,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     let lyricsAtGenerate = "";
     makeGenerateButtonWithClickObserver(() => {
       lyricsAtGenerate = lyrics.textContent ?? "";
+      addCompletedRemixCard();
     });
     addCompletedRemixCard();
     await loadContentScript();
@@ -918,7 +919,8 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     expect(harness.waitForQueueSlot.mock.calls.map(([maxGeneratingClips]) => maxGeneratingClips)).toEqual(
       Array.from({ length: 11 }, () => 20),
     );
-    expect(document.querySelectorAll("article[aria-busy='true']")).toHaveLength(20);
+    // 既存の busy card 2 件に、cap までに投入した 10 件 × 2 clip が加わる。
+    expect(document.querySelectorAll("article[aria-busy='true']")).toHaveLength(22);
     releaseEleventhSlot();
     await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
   });
