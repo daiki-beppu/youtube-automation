@@ -1624,7 +1624,7 @@ wheels = [
 
 [[package]]
 name = "youtube-channels-automation"
-version = "5.5.16"
+version = "5.5.17"
 source = { editable = "." }
 dependencies = [
     { name = "google-api-python-client" },
