@@ -104,5 +104,4 @@ cd ~/chrome-extensions/distrokid-helper && rm -rf * && unzip -o ~/Downloads/dist
 ## Notes
 
 - 展開先は `~/chrome-extensions/<name>/` を推奨するが、user が別の場所を希望すればそれに従う
-- `gh` CLI が未インストールの場合は、GitHub Release ページ (`https://github.com/daiki-beppu/youtube-automation/releases`) から手動ダウンロードを案内する
-- リポジトリがプライベートの場合、`gh auth login` で認証済みであることが前提
+- `gh` CLI 未インストール / 未認証時の手動ダウンロード fallback は冒頭「## 前提」を単一ソースとする（本セクションに重複記載しない）

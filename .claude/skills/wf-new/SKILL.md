@@ -158,11 +158,6 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 - `theme_scenes` 未定義 + `--en` 未指定 → エラー終了。`config/channel/content.json` の `title.theme_scenes` に該当 theme を追加するか、`--en` を渡して再実行
 - 多言語チャンネルで翻訳 JSON 未指定 / 言語欠落 → エラーに表示されるプロンプトで Agent に JSON を再生成させる（メタデータ生成前に `/wf-next` から再実行可能）
 
-#### 2b. ドキュメント保存
-
-Phase 1 の成果物を `20-documentation/` に保存:
-- 企画候補一覧と選択結果
-
 #### 2c. サムネイル確定 + 音楽素材生成
 
 このステップはサムネイル系 skill と音楽系 skill を順番に呼ぶ。音楽素材生成はサムネイルのローカル成果物が揃ってから実行する。

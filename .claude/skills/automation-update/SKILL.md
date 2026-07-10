@@ -331,7 +331,8 @@ uv run yt-skills diff
 
 ```bash
 # 自スキル分の同梱版を取得し、unified diff として表示
-python - <<'PY' > /tmp/automation-update-bundled.SKILL.md
+# youtube_automation を import するため uv 管理の venv 経由で実行する
+uv run python - <<'PY' > /tmp/automation-update-bundled.SKILL.md
 from youtube_automation.cli.skills_sync import _asset_root
 
 print((_asset_root("skills") / "automation-update" / "SKILL.md").read_text(encoding="utf-8"), end="")
