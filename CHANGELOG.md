@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(audio-gen)`: Suno がダウンロード ZIP 内のファイル名からアポストロフィを除去する（例: `Greed's Rhythm` → `Greeds Rhythm.m4a`）ため、`suno_downloaded_archive.py` の名前照合が失敗して該当トラックがスキップされ、`placed_count < expected_count` で ZIP 展開全体がロールバックされる問題を修正した（#1787）。`_build_name_to_index` で index 構築後にアポストロフィ（`'` / `’`）除去版キーを `setdefault` で fallback 登録する（exact match キーを優先、他の記号は Suno 仕様未確認のため除去しない）
 - `fix(scripts)`: `bulk_update_descriptions_from_md.py`（`yt-bulk-update-desc`）が `videos().update(part="snippet")` の body を手組みで列挙しており、`defaultAudioLanguage` を含めていなかったため、このツールを通した全動画で音声言語設定が消えていた問題を修正。`defaultLanguage` 未設定の動画に `"en"` を注入していた挙動も廃止。`bulk_update_synthetic_media.py::build_update_body` と同じ read-modify-write 方式（`build_snippet_update_body`）に統一し、mutable 6 キー（title / description / tags / categoryId / defaultLanguage / defaultAudioLanguage）だけを whitelist で保持する
 - `fix(suno-helper)`: queue mode で全 entry 投入後に duration guard を一括実行し、範囲外 clip のみだった entry を `ENTRY_FAILED` として `failedIndices` に保存するようにした（#1762）。対象 entry は「失敗分のみ再実行」導線に載せ、playlist 追加は保留する。部分的に OK clip がある entry は OK clip を accepted として `DONE` にし、duration filter 未指定時は `DEFAULT_DURATION_FILTER` で検査する。
 - `fix(suno-helper)`: queue mode の `clipIdsByEntry` を投入前後の Set 差分で捕捉し、entry retry 中に遅延観測された clip ID も同じ entry へ帰属させるようにした（#1762）。DOM-only ACK で clip ID が未観測の entry は fatal 停止せず、finalizer の warn + `DONE` 縮退へ到達する。
