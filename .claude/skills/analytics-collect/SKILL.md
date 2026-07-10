@@ -7,6 +7,10 @@ description: "Use when YouTube Analytics データの収集・最新化が必要
 
 `analytics_system.py` を実行し、チャンネルの YouTube Analytics データを収集します。
 
+## 完了条件
+
+収集コマンドが exit 0 で終了し、`data/analytics_data_YYYYMMDD_HHMMSS.json` が新規保存された時点で完了。鮮度チェックで収集をスキップした場合は、既存データのファイル名と経過分数の表示で完了。
+
 ## 設定読み込みゲート
 
 前提確認や鮮度チェックに入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
@@ -32,11 +36,11 @@ description: "Use when YouTube Analytics データの収集・最新化が必要
 
 ## Quick Reference
 
-| 引数 | 説明 |
-|------|------|
-| `/analytics-collect` | デフォルト: 効率モード（上位50本 + 直近30日投稿） |
-| `/analytics-collect reporting` | Reporting API の reportType / job 状態を確認し、必要なら job を作成 |
-| `$ARGUMENTS` | モード指定（省略可） |
+| 引数 | 説明 | 実行コマンド |
+|------|------|------|
+| `/analytics-collect` | デフォルト: 効率モード（上位50本 + 直近30日投稿） | `uv run yt-analytics` |
+| `/analytics-collect reporting` | Reporting API の reportType / job 状態を確認し、必要なら job を作成 | `uv run yt-analytics --reporting-dry-run` → 必要なら `--reporting-create-job` |
+| `$ARGUMENTS` | モード指定（省略可） | — |
 
 ## 鮮度チェック（並列実行対応）
 
