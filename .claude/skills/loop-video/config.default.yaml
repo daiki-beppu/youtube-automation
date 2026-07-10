@@ -8,6 +8,10 @@
 # サムネが完成しておりループ動画のリターンが Veo コストに見合わないチャンネルで false にする。
 enabled: true
 
+# 通常生成で既存 loop.mp4 を loop-v{n}.mp4 へ退避するときの保持上限。
+# 上限超過時は番号が最も小さい（最も古い）バックアップから自動削除する。
+max_backups: 3
+
 veo:
   # Veo モデル ID（API デフォルト: veo-3.1-fast-generate-001 / 選択肢: veo-3.1-fast-generate-001 | veo-3.1-generate-001 | veo-3.1-lite-generate-preview）
   model: "veo-3.1-fast-generate-001"

@@ -5,12 +5,13 @@ Issue #358: `--motion-targets` / `--static-targets` の構造化プロンプト�
             `resolve_prompt` の優先順位制御
 Issue #451: `--skip-existing` フラグ追加、`--smooth` の post-process 専用化
            （`main()` 制御フロー検証 + `resolve_collection_paths` の pure 化検証）
+Issue #1654: `loop-v{n}.mp4` の保持上限と古いバックアップの自動削除
 
 検証対象:
 1. `_build_parser`: `--skip-existing` / 構造化プロンプト系を含む全フラグの parse
 2. `resolve_prompt`: 純関数の優先順位制御（CLI > config > default）
 3. `resolve_collection_paths`: pure 化（rename 副作用ゼロ・validation ゼロ）
-4. `_backup_existing_loop`: 既存 `loop.mp4` を `loop-v{n}.mp4` へ rename
+4. `_backup_existing_loop`: 既存 `loop.mp4` の退避と保持上限超過分の削除
 5. `main()`: smooth 早期分岐 / skip-existing 早期分岐 / 通常経路の 3 分岐
 
 外部 IO（Vertex AI / load_skill_config / load_dotenv / 実 stdin 等）は touch しない。
@@ -464,7 +465,7 @@ class TestResolveCollectionPaths:
 
 
 class TestBackupExistingLoop:
-    """plan §3: 既存 `loop.mp4` を `loop-v{n}.mp4` へ番号衝突回避で rename する。"""
+    """既存 `loop.mp4` を連番退避し、保持上限超過分を古い順に削除する。"""
 
     def test_renames_loop_mp4_to_loop_v1_when_no_backup_exists(self, tmp_path):
         from youtube_automation.scripts.generate_loop_video import _backup_existing_loop
@@ -518,6 +519,43 @@ class TestBackupExistingLoop:
         assert not loop.exists()
         assert v3.exists()
         assert v3.read_bytes() == b"current"
+
+    def test_keeps_all_backups_when_count_is_within_limit(self, tmp_path):
+        from youtube_automation.scripts.generate_loop_video import _backup_existing_loop
+
+        col = _make_collection(tmp_path)
+        loop = _write_loop_mp4(col, LOOP_MP4, payload=b"current")
+        v1 = _write_loop_mp4(col, LOOP_V1, payload=b"prev1")
+        v2 = _write_loop_mp4(col, LOOP_V2, payload=b"prev2")
+
+        _backup_existing_loop(loop, max_backups=3)
+
+        assert v1.read_bytes() == b"prev1"
+        assert v2.read_bytes() == b"prev2"
+        assert (col / ASSETS_DIR / LOOP_V3).read_bytes() == b"current"
+
+    def test_deletes_oldest_backup_and_logs_filename_when_limit_is_exceeded(self, tmp_path, capsys):
+        from youtube_automation.scripts.generate_loop_video import _backup_existing_loop
+
+        col = _make_collection(tmp_path)
+        loop = _write_loop_mp4(col, LOOP_MP4, payload=b"current")
+        _write_loop_mp4(col, LOOP_V1, payload=b"oldest")
+        _write_loop_mp4(col, LOOP_V2, payload=b"prev2")
+        _write_loop_mp4(col, LOOP_V3, payload=b"prev3")
+
+        _backup_existing_loop(loop, max_backups=3)
+
+        assets = col / ASSETS_DIR
+        assert not (assets / LOOP_V1).exists()
+        assert (assets / LOOP_V2).read_bytes() == b"prev2"
+        assert (assets / LOOP_V3).read_bytes() == b"prev3"
+        assert (assets / "loop-v4.mp4").read_bytes() == b"current"
+        assert sorted(path.name for path in assets.glob("loop-v*.mp4")) == [
+            LOOP_V2,
+            LOOP_V3,
+            "loop-v4.mp4",
+        ]
+        assert "[Backup] 古いバックアップを削除: loop-v1.mp4" in capsys.readouterr().out
 
 
 # ---------------------------------------------------------------------------
@@ -586,6 +624,9 @@ class TestMainSkipExisting:
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
         loop = _write_loop_mp4(col, LOOP_MP4, payload=b"keep")
+        old_backups = [
+            _write_loop_mp4(col, f"loop-v{number}.mp4", payload=f"old-{number}".encode()) for number in range(1, 5)
+        ]
         monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "--skip-existing"])
 
         with _patch_main_boundaries() as mocks:
@@ -595,10 +636,11 @@ class TestMainSkipExisting:
             with pytest.raises(SystemExit) as excinfo:
                 mod.main()
 
-            # Then: loop.mp4 はそのまま残り、loop-v1.mp4 は作られない（R2）
+            # Then: loop.mp4 と既存バックアップはそのまま残り、新しい退避は作られない（R2）
             assert loop.exists()
             assert loop.read_bytes() == b"keep"
-            assert not (col / ASSETS_DIR / LOOP_V1).exists()
+            assert [backup.read_bytes() for backup in old_backups] == [b"old-1", b"old-2", b"old-3", b"old-4"]
+            assert not (col / ASSETS_DIR / "loop-v5.mp4").exists()
             assert excinfo.value.code == 0
 
     def test_runs_normal_path_when_skip_existing_set_but_loop_mp4_absent(self, tmp_path, monkeypatch):
@@ -661,6 +703,9 @@ class TestMainSmooth:
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
         _write_loop_mp4(col, LOOP_MP4)
+        old_backups = [
+            _write_loop_mp4(col, f"loop-v{number}.mp4", payload=f"old-{number}".encode()) for number in range(1, 5)
+        ]
         monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "--smooth"])
 
         with _patch_main_boundaries() as mocks:
@@ -674,6 +719,8 @@ class TestMainSmooth:
             assert mocks["smooth_loop"].call_count == 1
             assert mocks["generate_loop_video"].call_count == 0
             assert mocks["create_genai_client"].call_count == 0
+            assert [backup.read_bytes() for backup in old_backups] == [b"old-1", b"old-2", b"old-3", b"old-4"]
+            assert not (col / ASSETS_DIR / "loop-v5.mp4").exists()
             assert excinfo.value.code == 0
 
     def test_does_not_prompt_for_confirmation_in_smooth_mode(self, tmp_path, monkeypatch):
@@ -841,6 +888,78 @@ class TestMainNormal:
             assert mocks["generate_loop_video"].call_count == 1
             assert not (col / ASSETS_DIR / LOOP_V1).exists()
             assert excinfo.value.code == 0
+
+    def test_default_max_backups_is_applied_through_main(self, tmp_path, monkeypatch):
+        from youtube_automation.scripts import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_image(col, MAIN_PNG)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "-y"])
+
+        def _write_generated_loop(_client, _image, output, _model, _prompt, **_kwargs):
+            output.write_bytes(b"generated")
+            return True
+
+        with _patch_main_boundaries() as mocks:
+            _set_default_mocks(mocks)
+            mocks["generate_loop_video"].side_effect = _write_generated_loop
+            for _run_number in range(4):
+                if not (col / ASSETS_DIR / LOOP_MP4).exists():
+                    _write_loop_mp4(col, LOOP_MP4, payload=b"current")
+                with pytest.raises(SystemExit) as excinfo:
+                    mod.main()
+                assert excinfo.value.code == 0
+
+        assets = col / ASSETS_DIR
+        assert not (assets / LOOP_V1).exists()
+        assert sorted(path.name for path in assets.glob("loop-v*.mp4")) == [
+            LOOP_V2,
+            LOOP_V3,
+            "loop-v4.mp4",
+        ]
+
+    def test_max_backups_override_is_applied_through_main(self, tmp_path, monkeypatch):
+        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.utils import config as channel_config
+        from youtube_automation.utils import skill_config
+
+        col = _make_collection(tmp_path)
+        _write_image(col, MAIN_PNG)
+        _write_loop_mp4(col, LOOP_MP4, payload=b"current")
+        for number in range(1, 6):
+            _write_loop_mp4(col, f"loop-v{number}.mp4", payload=f"prev{number}".encode())
+        override_dir = tmp_path / "config" / "skills"
+        override_dir.mkdir(parents=True)
+        (override_dir / "loop-video.yaml").write_text("max_backups: 5\n", encoding="utf-8")
+        monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "-y"])
+        channel_config.reset()
+        skill_config.reset("loop-video")
+
+        with patch.multiple(
+            _TARGET_MODULE,
+            generate_loop_video=DEFAULT,
+            smooth_loop=DEFAULT,
+            create_genai_client=DEFAULT,
+            load_dotenv=DEFAULT,
+            find_dotenv=DEFAULT,
+        ) as mocks:
+            mocks["generate_loop_video"].return_value = True
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+        channel_config.reset()
+        skill_config.reset("loop-video")
+
+        assets = col / ASSETS_DIR
+        assert excinfo.value.code == 0
+        assert not (assets / LOOP_V1).exists()
+        assert sorted(path.name for path in assets.glob("loop-v*.mp4")) == [
+            LOOP_V2,
+            LOOP_V3,
+            "loop-v4.mp4",
+            "loop-v5.mp4",
+            "loop-v6.mp4",
+        ]
 
 
 # ---------------------------------------------------------------------------
