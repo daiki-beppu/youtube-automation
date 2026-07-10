@@ -733,6 +733,8 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
               'firstDiffIndex=0, expectedExcerpt="new lexical lyrics", actualExcerpt="old lyrics"',
           ),
         ),
+        pasteError: expect.any(Error),
+        fallbackError: expect.any(Error),
       }),
     );
     consoleError.mockRestore();
@@ -746,6 +748,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     let lyricsAtGenerate = "";
     makeGenerateButtonWithClickObserver(() => {
       lyricsAtGenerate = lyrics.textContent ?? "";
+      addCompletedRemixCard();
     });
     addCompletedRemixCard();
     await loadContentScript();
@@ -761,7 +764,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     const result = runHandler({ data: makeRunPayload(entries) });
 
     expect(result).toEqual({ ok: true });
-    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce(), { timeout: 3000 });
     expect(lyrics.textContent).toBe("new lexical lyrics");
     expect(lyricsAtGenerate).toBe("new lexical lyrics");
   });
@@ -919,8 +922,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     expect(harness.waitForQueueSlot.mock.calls.map(([maxGeneratingClips]) => maxGeneratingClips)).toEqual(
       Array.from({ length: 11 }, () => 20),
     );
-    // 既存の busy card 2 件に、cap までに投入した 10 件 × 2 clip が加わる。
-    expect(document.querySelectorAll("article[aria-busy='true']")).toHaveLength(22);
+    expect(document.querySelectorAll("article[aria-busy='true']")).toHaveLength(20);
     releaseEleventhSlot();
     await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
   });

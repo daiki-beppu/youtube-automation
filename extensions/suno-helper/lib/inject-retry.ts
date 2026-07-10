@@ -58,9 +58,7 @@ export interface RetryInjectStepWithFallbackOptions {
   describeStep: () => string;
 }
 
-export async function retryInjectStepWithFallback(
-  options: RetryInjectStepWithFallbackOptions,
-): Promise<void> {
+export async function retryInjectStepWithFallback(options: RetryInjectStepWithFallbackOptions): Promise<void> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= options.maxRetry; attempt++) {
     try {
@@ -73,9 +71,7 @@ export async function retryInjectStepWithFallback(
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
       if (attempt < options.maxRetry) {
-        console.warn(
-          `${options.describeStep()} が失敗、inject retry (${attempt + 1}/${options.maxRetry}): ${message}`,
-        );
+        console.warn(`${options.describeStep()} が失敗、inject retry (${attempt + 1}/${options.maxRetry}): ${message}`);
         continue;
       }
       console.warn(

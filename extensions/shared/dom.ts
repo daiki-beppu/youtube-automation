@@ -205,7 +205,8 @@ const LYRICS_DIFF_EXCERPT_RADIUS = 24;
 
 function readLexicalText(el: HTMLElement): string {
   const paragraphs = Array.from(el.children).filter(
-    (child): child is HTMLElement => child instanceof HTMLElement && child.tagName === "P",
+    (child): child is HTMLElement =>
+      child instanceof HTMLElement && child.tagName === "P",
   );
   if (paragraphs.length > 0) {
     return paragraphs.map((child) => child.textContent ?? "").join("\n");

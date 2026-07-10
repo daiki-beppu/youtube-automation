@@ -24,11 +24,7 @@ import {
   type RunRange,
   writeResumeState,
 } from "../lib/resume-state";
-import {
-  InjectNotAcknowledgedError,
-  injectWithVerification,
-  retryInjectStepWithFallback,
-} from "../lib/inject-retry";
+import { InjectNotAcknowledgedError, injectWithVerification, retryInjectStepWithFallback } from "../lib/inject-retry";
 import { runEntryWithRetry } from "../lib/entry-retry";
 import { evaluateClips, formatYieldFailure, shouldRetry } from "../lib/yield-guard";
 import { createAckWaiter, markAck } from "../lib/ack-probe";
@@ -373,12 +369,11 @@ export default defineContentScript({
             try {
               await setLyricsValueViaBeforeInput(lyrics, entry.lyrics);
             } catch (fallbackError) {
-              const message =
-                fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+              const message = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
               const actualLyrics =
                 lyrics instanceof HTMLTextAreaElement || lyrics instanceof HTMLInputElement
                   ? lyrics.value
-                  : lyrics.textContent ?? "";
+                  : (lyrics.textContent ?? "");
               console.error("[suno-helper] Lyrics 欄への全注入方式が失敗しました", {
                 entryName: entryDisplayName(entry),
                 lyricsLength: entry.lyrics.length,

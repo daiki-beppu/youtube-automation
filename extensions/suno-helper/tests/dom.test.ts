@@ -414,7 +414,7 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
   function applyLexicalBeforeInput(el: HTMLElement): void {
     el.addEventListener("beforeinput", (e) => {
       const ev = e as InputEvent;
-      el.textContent = ev.inputType === "deleteContentBackward" ? "" : ev.data ?? "";
+      el.textContent = ev.inputType === "deleteContentBackward" ? "" : (ev.data ?? "");
       e.preventDefault();
     });
   }
@@ -483,10 +483,7 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
     await vi.advanceTimersByTimeAsync(400);
     await injected;
 
-    expect(Array.from(div.children).map((child) => child.textContent)).toEqual([
-      "line one",
-      "line two",
-    ]);
+    expect(Array.from(div.children).map((child) => child.textContent)).toEqual(["line one", "line two"]);
   });
 
   it("Given selectAll が失敗する When Lexical lyrics へ注入する Then paste せず fail-loud する", async () => {
@@ -525,6 +522,7 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
       inputType: string;
       bubbles: boolean;
       cancelable: boolean;
+      composed: boolean;
     }> = [];
     div.addEventListener("beforeinput", (e) => {
       const ev = e as InputEvent;
@@ -533,6 +531,7 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
         inputType: ev.inputType,
         bubbles: e.bubbles,
         cancelable: e.cancelable,
+        composed: e.composed,
       });
     });
     applyLexicalBeforeInput(div);
@@ -548,6 +547,7 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
         inputType: "insertFromPaste",
         bubbles: true,
         cancelable: true,
+        composed: true,
       },
     ]);
     expect(div.textContent).toBe("fallback lyrics");
