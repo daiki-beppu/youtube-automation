@@ -76,6 +76,38 @@ class TestParseImageGenerationConfig:
         assert cfg.openai.thinking == "medium"
         assert cfg.openai.batch == 1
 
+    def test_openai_quality_defaults_to_medium_when_omitted(self):
+        """Given provider=openai で quality 未指定
+        When parse する
+        Then 既定 quality は medium（high は高単価のため明示 opt-in のみ、#1697）
+        """
+        skill_cfg = {
+            "image_generation": {
+                "provider": "openai",
+                "openai": {"aspect_ratio": "16:9"},
+            }
+        }
+
+        cfg = parse_image_generation_config(skill_cfg)
+
+        assert cfg.openai.quality == "medium"
+
+    def test_openai_quality_high_is_honored_when_explicitly_set(self):
+        """Given provider=openai で quality=high を明示 override
+        When parse する
+        Then high が採用される
+        """
+        skill_cfg = {
+            "image_generation": {
+                "provider": "openai",
+                "openai": {"quality": "high", "aspect_ratio": "16:9"},
+            }
+        }
+
+        cfg = parse_image_generation_config(skill_cfg)
+
+        assert cfg.openai.quality == "high"
+
     def test_parses_image_generation_namespace_for_codex_prompt_template(self):
         """Given image_generation.provider が codex
         When skill-config を parse する
