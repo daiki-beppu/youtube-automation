@@ -5,7 +5,7 @@ description: "Use when 下流リポジトリで automation を最新リリース
 
 ## Overview
 
-このスキルは **AI 主導の追従 wizard** である。下流チャンネルリポジトリ（bobble / deepfocus365 / rjn 等）で発動し、自リポの `pyproject.toml` を upstream `daiki-beppu/youtube-automation` の最新 tag まで bump して、`.claude/skills/` の同期、動作確認、コミットまでを 1 コマンドで回す。
+このスキルは **AI 主導の追従 wizard** である。下流チャンネルリポジトリ（bobble / deepfocus365 / rjn 等）で発動し、自リポの `pyproject.toml` を official upstream（`automation_update_refs.UPSTREAM_REPO` が単一ソース。既定: `daiki-beppu/youtube-automation`）の最新 tag まで bump して、`.claude/skills/` の同期、動作確認、コミットまでを 1 コマンドで回す。
 
 機械的に決まる手順（実行場所判定 / pin 形式判定 / 差分判定 / pin 書き換え / `uv lock` / `yt-skills sync` / smoke check）は upstream 同梱の **`yt-automation-update` CLI** に委譲する。本スキル（AI）は判断が必要なポイント — リリース内容の要約、local fix 上書き判断、同意取得、コミット — に専任する。
 
@@ -67,6 +67,17 @@ find "$HOME/02-yt" "$HOME/01-yt" "$HOME" -maxdepth 4 -type f -name pyproject.tom
 
 ## Phase 1: 現状把握
 
+### Step 1-0. upstream リポジトリの解決
+
+以降の `gh` / `curl` コマンドが参照する upstream リポジトリ（`<owner>/<repo>`）は、導入済みパッケージの `automation_update_refs.UPSTREAM_REPO` — `yt-automation-update` の official upstream 検証（サプライチェーン保護）と同じ単一ソース — から導出する:
+
+```bash
+UPSTREAM_REPO="$(uv run python -c 'from youtube_automation.cli.automation_update_refs import UPSTREAM_REPO; print(UPSTREAM_REPO)')"
+echo "$UPSTREAM_REPO"   # 既定: daiki-beppu/youtube-automation
+```
+
+fork 運用でパッケージ側の `UPSTREAM_REPO` を変更している場合も、この導出により本スキルのコマンドは自動で同じ upstream を参照する（ハードコードとのズレが構造的に起きない）。Bash 呼び出し間でシェル変数が保持されない環境では、この導出行を後続の各コマンドブロックと同一の Bash 呼び出し内で先頭に付けて実行する。
+
 ### Step 1-1. 差分チェック（CLI）
 
 ```bash
@@ -103,11 +114,11 @@ sha pin の場合の `[HUMAN STEP]`:
 選択に応じて sha を解決し、Phase 3 の `apply --rev <sha>` に使う。最新 release tag に揃える場合は annotated tag の tag object SHA を避けるため、必ず peeled commit SHA を取得する:
 
 ```bash
-target_tag="$(gh release view --repo daiki-beppu/youtube-automation --json tagName --jq .tagName)"
-git ls-remote --tags https://github.com/daiki-beppu/youtube-automation.git "refs/tags/${target_tag}^{}" | awk '{print $1}'
+target_tag="$(gh release view --repo "$UPSTREAM_REPO" --json tagName --jq .tagName)"
+git ls-remote --tags "https://github.com/${UPSTREAM_REPO}.git" "refs/tags/${target_tag}^{}" | awk '{print $1}'
 ```
 
-main HEAD に揃える場合は `gh api repos/daiki-beppu/youtube-automation/commits/main --jq .sha` を使う。
+main HEAD に揃える場合は `gh api "repos/${UPSTREAM_REPO}/commits/main" --jq .sha` を使う。
 
 ### Step 1-2. 前提確認
 
@@ -164,18 +175,18 @@ current_sha="<current_sha>"  # uv.lock に無い場合は空
 
 if [ -n "$current_sha" ]; then
   if [ "${YT_AUTOMATION_GITHUB_MODE:-gh}" = "gh" ]; then
-    gh api "repos/daiki-beppu/youtube-automation/compare/${current_sha}...${target_sha}" \
+    gh api "repos/${UPSTREAM_REPO}/compare/${current_sha}...${target_sha}" \
       > "/tmp/compare-main-${target_sha}.json"
   else
-    curl -fsSL "https://api.github.com/repos/daiki-beppu/youtube-automation/compare/${current_sha}...${target_sha}" \
+    curl -fsSL "https://api.github.com/repos/${UPSTREAM_REPO}/compare/${current_sha}...${target_sha}" \
       > "/tmp/compare-main-${target_sha}.json"
   fi
 else
   if [ "${YT_AUTOMATION_GITHUB_MODE:-gh}" = "gh" ]; then
-    gh api "repos/daiki-beppu/youtube-automation/commits/${target_sha}" \
+    gh api "repos/${UPSTREAM_REPO}/commits/${target_sha}" \
       > "/tmp/commit-main-${target_sha}.json"
   else
-    curl -fsSL "https://api.github.com/repos/daiki-beppu/youtube-automation/commits/${target_sha}" \
+    curl -fsSL "https://api.github.com/repos/${UPSTREAM_REPO}/commits/${target_sha}" \
       > "/tmp/commit-main-${target_sha}.json"
   fi
 fi
@@ -189,9 +200,9 @@ AI は compare / commit JSON から commit message、PR 番号らしき参照、
 
 ```bash
 if [ "${YT_AUTOMATION_GITHUB_MODE:-gh}" = "gh" ]; then
-  gh release view "<target_tag>" --repo daiki-beppu/youtube-automation --json body --jq .body > /tmp/release-<target_tag>.md
+  gh release view "<target_tag>" --repo "$UPSTREAM_REPO" --json body --jq .body > /tmp/release-<target_tag>.md
 else
-  curl -fsSL "https://api.github.com/repos/daiki-beppu/youtube-automation/releases/tags/<target_tag>" \
+  curl -fsSL "https://api.github.com/repos/${UPSTREAM_REPO}/releases/tags/<target_tag>" \
     > /tmp/release-<target_tag>.json
   python3 - <<'PY' > /tmp/release-<target_tag>.md
 import json
@@ -209,9 +220,9 @@ fi
 
 ```bash
 if [ "${YT_AUTOMATION_GITHUB_MODE:-gh}" = "gh" ]; then
-  gh api repos/daiki-beppu/youtube-automation/contents/CHANGELOG.md --jq .content | base64 -d > /tmp/changelog.md
+  gh api "repos/${UPSTREAM_REPO}/contents/CHANGELOG.md" --jq .content | base64 -d > /tmp/changelog.md
 else
-  curl -fsSL https://raw.githubusercontent.com/daiki-beppu/youtube-automation/main/CHANGELOG.md \
+  curl -fsSL "https://raw.githubusercontent.com/${UPSTREAM_REPO}/main/CHANGELOG.md" \
     > /tmp/changelog.md
 fi
 
@@ -231,10 +242,10 @@ awk -v ver="$target_version" '
 
 ```bash
 if [ "${YT_AUTOMATION_GITHUB_MODE:-gh}" = "gh" ]; then
-  gh release list --repo daiki-beppu/youtube-automation --limit 50 \
+  gh release list --repo "$UPSTREAM_REPO" --limit 50 \
     --json tagName,publishedAt,isLatest
 else
-  curl -fsSL 'https://api.github.com/repos/daiki-beppu/youtube-automation/releases?per_page=50' \
+  curl -fsSL "https://api.github.com/repos/${UPSTREAM_REPO}/releases?per_page=50" \
     > /tmp/youtube-automation-releases.json
   python3 - <<'PY'
 import json

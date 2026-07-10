@@ -224,3 +224,31 @@ ffmpeg / Veo / Lyria / 画像生成 API を呼ぶスキル（`/videoup` / `/mast
 | 同梱版との差分を見たい | `uv run yt-skills diff --asset claude-md` |
 
 > `--force` は `.claude/CLAUDE.md` のみを上書きする。`.claude/CLAUDE.local.md` には触れない。
+
+---
+
+## 9. fork 運用者向け: upstream owner 参照の一覧
+
+upstream リポジトリは `daiki-beppu/youtube-automation` を official upstream として前提にしている。upstream を fork して独自運用する場合、GitHub owner の固定参照が fork とズレて生成物・案内コマンドに齟齬を生むため、fork 側で以下を書き換える（パスはいずれも upstream リポジトリ内）。
+
+### 単一ソース（コード）
+
+- `src/youtube_automation/cli/automation_update_refs.py` の `UPSTREAM_REPO` 定数 — `yt-automation-update` の official upstream 検証（サプライチェーン保護の意図的ガード）と `yt-doctor` の suggested command、および `/automation-update` / `/ext-install` の `gh` / `curl` コマンド（実行時に定数から導出）はすべてここから決まる。fork ではまずこの定数を自 fork に変更する
+
+### 固定参照が残るファイル（`UPSTREAM_REPO` から導出されない。fork 後に手で書き換える）
+
+| ファイル | 残存箇所 |
+|---|---|
+| `.claude/CLAUDE.template.md` | このファイル自身（冒頭・§7・§8・本節の upstream 表記） |
+| `.claude/skills/setup/SKILL.md` | bootstrap 用 `uv add git+...`（パッケージ導入前に実行するため定数から導出できない） |
+| `.claude/skills/automation-update/SKILL.md` | 冒頭 prose と Step 1-0 の既定値表記、cleanup guide への doc リンク |
+| `.claude/skills/ext-install/SKILL.md` | `gh` 未導入時の手動ダウンロード fallback 用 Release ページ URL、Step 0 の既定値表記 |
+| `.claude/skills/automation-release/references/*.md` | リリースチェックリスト / CHANGELOG 昇格手順内の URL 例 |
+| `.claude/skills/channel-new/references/claude-md-template.md` / `gcp-bootstrap.md` | upstream リポジトリ名の説明 |
+| `src/youtube_automation/cli/skills_sync/__init__.py` | module docstring の導入コマンド例 |
+
+上記一覧は代表箇所のポインタであり、全箇所の機械的な列挙は upstream リポジトリで以下を実行する:
+
+```bash
+rg -n "daiki-beppu/youtube-automation"
+```
