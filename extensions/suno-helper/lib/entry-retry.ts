@@ -7,7 +7,8 @@
 //   - 再試行しても失敗 → "failed"（caller がスキップして次 entry へ進み、failedIndices に記録）
 //   - 投入済み（Generate click 済みで受理失敗確定でない）→ "presumed-done"（再試行すると重複生成
 //     になるため、生成済みとみなして次へ。従来の resolveInterruptIndex(i+1) と同じ判断）
-//   - 致命的（FatalRunError: DOM 不在 / captcha 手動解決 timeout / queue stall）→ "fatal"
+//   - 致命的（FatalRunError: DOM 不在 / captcha 手動解決 timeout / queue stall / Lyrics 全注入方式失敗）
+//     → "fatal"
 //     （caller が従来どおり run 全体を ERROR 停止する）
 //   - 中断 → "aborted"（caller の STOPPED 経路へ）
 // content.ts のクロージャ内に書くと unit test から到達できないため、依存を DI した純ロジックとして切り出す。

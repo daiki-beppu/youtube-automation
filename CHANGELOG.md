@@ -59,6 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(suno-helper)`: Lexical Lyrics 欄で paste 反映検証が失敗した場合に inject retry 後 beforeinput fallback を試し、全方式が失敗したときは entry 名・歌詞長・差分付き診断を出して停止するようにした（#1676）。
 - `fix(suno-helper)`: ユーザー操作による `stopped` を赤いエラー扱いにせず、「停止しました。再実行できます。」と通常状態で表示するようにした。
 - `fix(suno-helper)`: ダウンロード完了済み collection を popup の一覧から消さず、「完了 N/N」として再表示するように戻した。完了済み collection も選択でき、同じテストを再実行できる。
 - `fix(suno-helper)`: playlist 追加前に Lyrics editor など入力欄の focus を外し、Suno が trusted `Cmd+P` を無視して Add to Playlist dialog を開けない問題を修正した。
