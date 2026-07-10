@@ -391,7 +391,6 @@ def main():
         elif args.status:
             target = uploader._find_collection(args.collection)
             if target:
-                uploader.ensure_upload_preflight(target)
                 uploader.show_status(target)
         elif args.plan:
             target = uploader._find_collection(args.collection)

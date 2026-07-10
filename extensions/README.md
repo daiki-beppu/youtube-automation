@@ -38,7 +38,7 @@ npx -y pnpm@11.11.0 -C extensions/<name> zip
 `zip` は `extensions/<name>/.output/<name>-<version>-chrome.zip` を生成する。release 前は両拡張で上記 3 コマンドを実行し、成果物の存在と lockfile が不変であることを確認する:
 
 ```bash
-test -f extensions/suno-helper/.output/suno-helper-0.2.4-chrome.zip
+test -f extensions/suno-helper/.output/suno-helper-0.2.5-chrome.zip
 test -f extensions/distrokid-helper/.output/distrokid-helper-0.2.1-chrome.zip
 git diff --exit-code -- extensions/suno-helper/pnpm-lock.yaml extensions/distrokid-helper/pnpm-lock.yaml
 ```

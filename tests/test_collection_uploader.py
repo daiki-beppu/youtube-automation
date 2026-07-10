@@ -39,10 +39,10 @@ def test_collection_uploader_imports_playlist_manager():
 
 @pytest.mark.parametrize(
     ("argv", "method_name"),
-    [(["--status"], "show_status"), (["--plan"], "show_plan"), ([], "execute_next_step")],
+    [(["--plan"], "show_plan"), ([], "execute_next_step")],
 )
-def test_main_runs_shared_preflight_before_status_plan_or_execute(monkeypatch, tmp_path, argv, method_name):
-    """実引数の3 CLI 入口は同じ upload preflight を通してから処理する。"""
+def test_main_runs_shared_preflight_before_plan_or_execute(monkeypatch, tmp_path, argv, method_name):
+    """実行可能な CLI 入口は upload preflight を通してから処理する。"""
     from youtube_automation.agents import collection_uploader
 
     target = tmp_path / "collections" / "planning" / "20990101-test-collection"
@@ -111,7 +111,7 @@ def _title_preflight_config() -> SimpleNamespace:
 
 @pytest.mark.parametrize(
     ("argv", "method_name"),
-    [(["--status"], "show_status"), (["--plan"], "show_plan"), ([], "execute_next_step")],
+    [(["--plan"], "show_plan"), ([], "execute_next_step")],
 )
 @pytest.mark.parametrize(
     ("title_template_check", "expected_outcome"),
@@ -126,7 +126,7 @@ def test_main_title_preflight_honors_collection_opt_in_for_each_cli_entry(
     title_template_check: dict[str, object] | None,
     expected_outcome: str,
 ) -> None:
-    """実引数で起動した各 CLI 入口が state の title opt-in を実際に評価する。"""
+    """実行可能な CLI 入口が state の title opt-in を実際に評価する。"""
     from youtube_automation.agents import collection_uploader
     from youtube_automation.agents.collection_uploader import CollectionUploader
     from youtube_automation.utils.config import reset as reset_config
