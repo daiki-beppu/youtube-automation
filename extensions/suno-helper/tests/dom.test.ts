@@ -607,7 +607,8 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
 
     const injected = setLyricsValue(div, "");
     const rejection = expect(injected).rejects.toThrow("Lyrics 欄のクリア反映に失敗しました");
-    await vi.advanceTimersByTimeAsync(400);
+    // delete の反映が無い場合は beforeinput fallback の同期待ちも必要になる。
+    await vi.advanceTimersByTimeAsync(600);
 
     await rejection;
     expect(pastes).toEqual([]);
