@@ -205,9 +205,13 @@ def test_wf_new_routes_codex_and_single_step_through_thumbnail_contract() -> Non
     assert "codex" in block
     assert "single_step" in block
     assert "`/thumbnail <theme>`" in block
-    assert "テキストなし `10-assets/main.png` または `main.jpg`" in block
-    assert "先に生成・承認" in block
-    assert "承認済み背景からテキスト付き `10-assets/thumbnail.jpg`" in block
+    assert "テキスト付き `10-assets/thumbnail.jpg` を先に生成・承認" in block, (
+        "#1611/#1680: /thumbnail はテキスト付き thumbnail 先行フローを案内する"
+    )
+    assert "承認済み `thumbnail.jpg` からテキストなし `10-assets/main.png` または `main.jpg` を再生成" in block
+    assert "承認済み背景からテキスト付き `10-assets/thumbnail.jpg`" not in block, (
+        "#1680: textless 背景先行の旧記述を残さない"
+    )
     assert "同一画像で代用しない" in block
     assert "旧運用は禁止" in block
     assert "cp <collection-path>/10-assets/main.png <collection-path>/10-assets/thumbnail.jpg" not in block
