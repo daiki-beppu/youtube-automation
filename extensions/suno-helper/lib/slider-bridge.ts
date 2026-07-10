@@ -38,9 +38,7 @@ export function findReactKeyDownTarget(el: Element): ReactKeyDownTarget | null {
     const propsKey = Object.keys(node).find((k) => k.startsWith("__reactProps$"));
     if (propsKey) {
       const props = (node as unknown as Record<string, unknown>)[propsKey] as
-        | { onKeyDown?: unknown }
-        | null
-        | undefined;
+        { onKeyDown?: unknown } | null | undefined;
       if (props && typeof props.onKeyDown === "function") {
         return { handler: props.onKeyDown as (event: unknown) => void, owner: node };
       }

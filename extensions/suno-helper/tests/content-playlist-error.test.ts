@@ -832,14 +832,11 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
   });
 
   it("Given collection の manual range run When playlist 追加 Then /downloaded には送らない", async () => {
-    const entries = Array.from(
-      { length: 24 },
-      (_, index): PromptEntry => ({
-        name: `track-${index + 1}`,
-        style: `style ${index + 1}`,
-        lyrics: "",
-      }),
-    );
+    const entries = Array.from({ length: 24 }, (_, index): PromptEntry => ({
+      name: `track-${index + 1}`,
+      style: `style ${index + 1}`,
+      lyrics: "",
+    }));
     const range = { start: 4, end: 7 };
     const currentSubmittedClipIds = Array.from(
       { length: (range.end - range.start + 1) * CLIPS_PER_REQUEST },

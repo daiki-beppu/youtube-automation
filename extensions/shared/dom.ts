@@ -276,7 +276,9 @@ export async function setLyricsValue(
     }),
   );
   await sleep(LEXICAL_SELECTION_SYNC_MS);
-  if (normalizeLexicalText(readLexicalText(el)) !== normalizeLexicalText(value)) {
+  if (
+    normalizeLexicalText(readLexicalText(el)) !== normalizeLexicalText(value)
+  ) {
     throw new FatalRunError(
       "Lyrics 欄への paste 反映に失敗しました。Generate へ進まず停止します。",
     );
