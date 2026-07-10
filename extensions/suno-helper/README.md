@@ -46,18 +46,22 @@ browser use から overlay / popup を安定して観測できるよう、操作
 
 ## 開発・ビルド・テスト
 
+ローカル検証は CI・lockfile と同じ pnpm 9.15.9 に固定する。別版の ambient `pnpm` は `.npmrc` により拒否されないため、以下の pinned command を使う。理由と両拡張共通の release 前検証は `extensions/README.md::pnpm バージョン契約` を参照する。
+
 ```bash
-pnpm install            # 依存インストール（postinstall で wxt prepare）
-pnpm dev                # 開発（HMR）
-pnpm build              # 本番ビルド → .output/chrome-mv3/
-pnpm compile            # 型チェック（tsc --noEmit）
-pnpm test               # Vitest unit
-pnpm test:e2e           # Playwright e2e（初回 pnpm exec playwright install chromium）
+npx -y pnpm@9.15.9 install --frozen-lockfile --ignore-workspace  # postinstall で wxt prepare
+npx -y pnpm@9.15.9 dev                                           # 開発（HMR）
+npx -y pnpm@9.15.9 build                                         # 本番ビルド → .output/chrome-mv3/
+npx -y pnpm@9.15.9 zip                                           # 配布用 zip
+npx -y pnpm@9.15.9 compile                                       # 型チェック（tsc --noEmit）
+npx -y pnpm@9.15.9 test                                          # Vitest unit
+npx -y pnpm@9.15.9 exec playwright install chromium              # Playwright 初回のみ
+npx -y pnpm@9.15.9 test:e2e                                      # Playwright e2e
 ```
 
 ## インストール（unpacked）
 
-1. `pnpm install && pnpm build` を実行。
+1. `npx -y pnpm@9.15.9 install --frozen-lockfile --ignore-workspace && npx -y pnpm@9.15.9 build` を実行。
 2. build artifact を basename が `suno-helper` になる固定パスへコピーする:
    ```bash
    mkdir -p "$HOME/chrome-extensions/suno-helper"

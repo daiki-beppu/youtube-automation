@@ -124,7 +124,11 @@ def test_skill_md_documents_wxt_unpacked_load_flow() -> None:
     path basename を照合する。ロードする unpacked directory は `suno-helper` basename でなければならない。
     """
     text = _read()
-    for token in ("pnpm build", ".output/chrome-mv3", "~/chrome-extensions/suno-helper"):
+    for token in (
+        "npx -y pnpm@9.15.9 -C extensions/suno-helper build",
+        ".output/chrome-mv3",
+        "~/chrome-extensions/suno-helper",
+    ):
         assert token in text, f"SKILL.md に WXT ロード手順の記載がない（`{token}` 不在）"
 
 
