@@ -10,6 +10,10 @@ description: "Use when 音声ファイルが揃い動画生成が必要なとき
 
 前工程はマスター音源の用意: Suno 系チャンネルは `/masterup`、Lyria 系チャンネルは `/lyria`（`/masterup` 不要）でマスター音源を生成してから本スキルを実行する。
 
+## 完了条件
+
+`01-master/` にマスター動画（例: `Theme-Name-Master.mp4`）が生成され、`workflow-state.json` の `assets.master_video` に動画ファイル名が記録されたとき完了とする（詳細は「ステップ」4-5 が正）。
+
 ## 設定読み込みゲート
 
 Quick Reference や対象コレクション確認に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
@@ -64,7 +68,7 @@ $ARGUMENTS
    この場合、既存の `10-assets/loop.mp4` が残っていても `generate_videos.sh` は無視し、静止背景に切り替える。
    それ以外（`enabled` 未指定 or `true`）で `loop.mp4` が無ければ `/loop-video` でのループ動画生成を案内。
    `loop.mp4` があると `generate_videos.sh` が自動的に動画背景を使用（静止画の代わり）
-4. **動画生成**: `generate_videos.sh` の実行コマンドを案内
+4. **動画生成**: `generate_videos.sh` を実行する（「長時間処理の取り扱い」に従い background で起動する）
 5. **workflow-state.json 更新**: `assets.master_video` に生成された動画ファイル名（例: `01-master/Theme-Name-Master.mp4`）を記録
 
 ### 自動検出される要素
@@ -227,7 +231,7 @@ effect:
 
 ## 長時間処理の取り扱い
 
-`generate_videos.sh` は ffmpeg を走らせるため数分かかる。目安（2 時間尺）: **エフェクト無し（stream copy / 静止画 1fps）= 約 1〜2 分** / **エフェクト有り（v14 ループ・ベイク）= 約 1〜2 分**（初回はベイク 10〜40 秒 + 連結 約 1 分、2 回目以降はベイク cache hit）。`shrink.enabled` の容量最適化や短尺フォールバックの全尺再エンコードを使うときは尺なりに数分〜十数分かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+`generate_videos.sh` は ffmpeg を走らせるため数分かかる。目安（2 時間尺）: **エフェクト無し（stream copy / 静止画 1fps）= 約 1〜2 分** / **エフェクト有り（v14 ループ・ベイク）= 約 1〜2 分**（初回はベイク 10〜40 秒 + 連結 約 1 分、2 回目以降はベイク cache hit）。`shrink.enabled` の容量最適化や短尺フォールバックの全尺再エンコードを使うときは尺なりに数分〜十数分かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。Codex など `run_in_background` 非対応の実行環境では、同コマンドを `nohup ... > <log> 2>&1 &` で background 起動し、完了はログ末尾で確認する読み替えとする。
 
 spawn 例:
 
