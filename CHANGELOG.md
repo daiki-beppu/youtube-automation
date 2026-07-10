@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.5.17] - 2026-07-10
+
 ### Added
 
 - `feat(video-description)`: skill-config に `chapters_enabled`（既定 `true`）を追加し、章運用を廃止したチャンネル（BGM / ASMR 等）向けの標準 opt-out を提供した（#1665）。`config/skills/video-description.yaml` で `chapters_enabled: false` を設定すると、タイムスタンプ列（チャプター行・テーマ見出し行）の生成・重複トラック名の LLM リネーム・`workflow-state.json` への `track_display_names` 永続化をすべて skip する（構造化メタブロック / Music Time セパレータ / playlist 名 / CTA / hashtag は変わらず生成）。未設定チャンネルは既定 `true` で挙動不変
@@ -91,6 +93,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(skills)`: 音楽制作系 7 スキル（suno / suno-lyric / suno-helper / masterup / lyria / videoup / loop-video）の整合性監査で検出した記述ドリフトを修正（#1432）。`suno/SKILL.md` の slug 自動実行 argv 例に残っていた `["uv", "run", "bunx tayk video-analyze", ...]` の混在表記を `["bunx", "tayk", "video-analyze", ...]` に統一、`suno/references/suno-examples.md` から実装に存在しない設定キー `banned_adjective_free_instruments` への言及を削除、`loop-video/SKILL.md` の `generate_videos.sh` バージョン表記（v11.0 → v14）とループ背景の正規化 CRF 表記（20 → 22）を現行実装に合わせた
 - `fix(distrokid-helper)`: `ext-v0.2.3` リリース前に DistroKid Helper の manifest / popup 表示名へ残っていた `(TEST)` 接尾辞を外し、配布 zip が本番名 `DistroKid Helper` として表示されるようにした。
 - `fix(videoup)`: `generate_videos.sh` の overlays 経路で `overlays.audio_visualizer.enabled` が false/未設定（`subscribe_popup` のみ有効等）のとき、`AUDIO_LABEL="1:a"`（生の入力ストリーム指定）を最終 ffmpeg コマンドが常に `-map "[${AUDIO_LABEL}]"` とブラケットで囲むため `-map "[1:a]"` という無効な filtergraph ラベル参照になり `Output with label '1:a' does not exist in any defined filter graph` で失敗するバグを修正。音声 map を出し分ける方式とし、(1) 音声をフィルタしない場合は生ストリーム指定のままブラケットなしで `-map 1:a` する（m4a/aac マスターの `-c:a copy` を温存）、(2) 音声が filter_complex を通る場合（`audio_visualizer` 有効 or loudnorm 統合時）はブラケット付き map + 音声再エンコードを強制する。後者により、filtergraph 出力へ `-c:a copy` を要求して `Streamcopy requested for output stream fed from a complex filtergraph` で失敗する潜在バグ（`audio_visualizer` 有効 + m4a/aac マスターの組み合わせ）も解消。下流チャンネルリポジトリで実際に再現（`overlays.enabled=true` + `subscribe_popup.enabled=true` + `audio_visualizer` 未設定の組み合わせ）。
+- `fix(suno-helper)`: `weirdness` / `styleInfluence` セレクタに日本語ラベル（`ユニーク度` / `スタイルの影響度`）の tolerant match 対応を追加し、`setLyricsValue` の Lexical 反映確認に行頭・行末の空白差異を吸収する正規化（`normalizeLexicalText`）を導入した（#1872）
+
+### Migration
+
+所要時間の目安: 5〜10 分
+
+local fix 衝突注意:
+- suno-helper: queue mode 追加・DOM signal 変更・resume payload 検証強化など大幅改修。local fix があれば sync 時に上書きされる可能性が高い
+- channel-new: `/channel-direction` を削除し方向性検討モードへ統合、SKILL.md 本文を `references/{direction-mode,regeneration-mode,import-mode}.md` へ切り出し。`/channel-direction` を参照する local fix は要更新
+- videoup: overlays 音声 map の ffmpeg バグを修正。同箇所を local fix していた場合は要確認
+- distrokid-helper: 拡張 manifest/popup の表示名修正のみ、影響小
+
+サマリ:
+
+- BREAKING: `packages/`(TS core、約28K 行)と root TS ツールチェーンを削除し、本リポジトリを Python 版メンテナンスモードに純化(ADR-0021、#1629)
+- BREAKING: `/channel-direction` を `/channel-new` の方向性検討モードへ統合(#1499)
+- suno-helper に queue mode(並列投入で生成時間短縮)を追加、関連バグ修正多数(#1586, #1762)
+- skill-config 機構の適用を6 スキル(discover-competitors / live-clean / postmortem / video-upload / analytics-report / metadata-audit)へ拡大(#1669)
+- videoup の ffmpeg フィルタグラフバグ、analytics-collect の重複取得・TZ 境界バグなど計 12 件の Fixed
 
 ## [5.5.16] - 2026-07-06
 
@@ -1525,6 +1546,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.5.17]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.17
 [5.5.16]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.16
 [5.5.15]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.15
 [5.5.14]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.5.14

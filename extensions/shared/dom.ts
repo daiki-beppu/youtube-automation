@@ -31,9 +31,11 @@ const SELECTORS = {
   // 2026-07 の Suno 新 Create UI で slider がリネームされた（Weirdness → Bizarreness /
   // Style Influence → Style influence〈小文字 i〉、#1720）。完全一致だと表記ゆれのたびに run が
   // 中断するため、旧新両ラベルにマッチする case-insensitive substring match（tolerant match）にする。
+  // 日本語 UI ラベル(ユニーク度 / スタイルの影響度)も同じ tolerant match 方針で追加。
   weirdness:
-    '[role="slider"][aria-label*="weirdness" i], [role="slider"][aria-label*="bizarre" i]',
-  styleInfluence: '[role="slider"][aria-label*="influence" i]',
+    '[role="slider"][aria-label*="weirdness" i], [role="slider"][aria-label*="bizarre" i], [role="slider"][aria-label*="ユニーク度"]',
+  styleInfluence:
+    '[role="slider"][aria-label*="influence" i], [role="slider"][aria-label*="スタイルの影響度"]',
   // Voice section の Male / Female ボタン (chrome-devtools-mcp 実機検証で確認)。
   // aria-label / data-testid を持たないため、`data-selected` 属性 (Suno が排他トグル用に意図して
   // 付けた属性) で候補を全 query → textContent 完全一致で Male/Female を絞り込む方式を採用。
@@ -201,16 +203,25 @@ function readLexicalText(el: HTMLElement): string {
 }
 
 /**
+ * 行頭・行末の空白差異や空行混入は Lexical の reconcile タイミングで発生しうる誤差のため、
+ * 反映確認の比較前に各行を trim + 空行除去して吸収する。
+ */
+function normalizeLexicalText(s: string): string {
+  return s
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
  * Lyrics 欄への値注入。旧 UI の textarea / input は setNativeValue へ委譲し、
  * 新 UI (2026-07) の Lexical contenteditable div は selectAll 後、非空 lyrics を paste 合成イベントで
  * 全置換し、空 lyrics は delete command でクリアする。
  *
- * Lexical は value setter を持たず、innerText 直接代入は内部 EditorState と乖離して
- * 次の再レンダーで巻き戻る。Lexical 自身が購読する paste イベント（DataTransfer の
- * text/plain）に載せるのが React 互換で最も壊れにくい経路（実ページで動作検証済み）。
- * 空の text/plain paste は Lexical 側で no-op になる可能性があるため、空 lyrics は全選択後に
- * delete command でクリアする。
- * 同期実行では selection が Lexical に同期されず置換に失敗するため async 必須。
+ * 反映確認: Lexical は paste テキストを <p class="lyrics-paragraph"> ツリーに変換するため、
+ * textContent は改行なしの連結文字列になり入力値と不一致になる。各 <p> の textContent を
+ * "\n" で結合して再構築した文字列と比較する。
  */
 export async function setLyricsValue(
   el: HTMLTextAreaElement | HTMLElement,
@@ -265,7 +276,9 @@ export async function setLyricsValue(
     }),
   );
   await sleep(LEXICAL_SELECTION_SYNC_MS);
-  if (readLexicalText(el) !== value) {
+  if (
+    normalizeLexicalText(readLexicalText(el)) !== normalizeLexicalText(value)
+  ) {
     throw new FatalRunError(
       "Lyrics 欄への paste 反映に失敗しました。Generate へ進まず停止します。",
     );
