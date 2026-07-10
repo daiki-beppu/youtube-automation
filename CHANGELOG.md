@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `fix(benchmark)`: `scan_recent` を 200 以下に制限して API 呼び出し前に fail-fast し、通常収集の起動サマリーへ最大 quota 見積りを表示するようにした。推定値が 100 units を超える `--force` は `--yes` なしでは確認を求める（#1655）
+
 ### Added
 
 - `feat(skills)`: 2026-05 skills 監査の残件として、skill-config 未適用スキルの直書き値を skill-config 機構へ切り出した（#1669）。(1) analytics-collect / analytics-analyze 双方に直書きされていた鮮度判定しきい値（30 分）を `analytics-collect/config.default.yaml::freshness_minutes` に単一ソース化（`config/skills/analytics-collect.yaml` の上書きが両スキルの判定に効く）。(2) `discover-competitors`（検索フィルタ既定値・キーワード数ガイドレール）/ `live-clean`（削除対象・保護パターン）/ `postmortem`（症状判定しきい値・仮説マッピング係数）/ `video-upload`（preflight 探索パターン・誇張語 NG リスト）に `config.default.yaml` を新設し、各 SKILL.md の直書き値を config 参照へ書き換えた。`yt-discover-competitors` は CLI フラグ既定値を `load_skill_config("discover-competitors")` 経由で解決する（CLI フラグ明示指定 > チャンネル上書き > default）。(3) `analytics-report` の `#Shorts` 除外キーワードと KPI カード構成を `analytics-report/config.default.yaml::html.{exclude_title_keywords,kpi_cards}` に、`metadata-audit` の REMOTE チャプター上限（>12）を `metadata-audit/config.default.yaml::chapters.remote_max` に skill-config 化し、`metadata_audit.py::audit_remote` が実行時に読むよう変更した

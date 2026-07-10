@@ -48,11 +48,27 @@ logger = logging.getLogger(__name__)
 
 # channels.list バッチ単位（YouTube Data API 上限）
 _CHANNELS_BATCH_SIZE = 50
+_SCAN_RECENT_MAX = 200
+_HIGH_QUOTA_CONFIRM_THRESHOLD = 100
 _VIDEO_DESCRIPTION_FIELD = "description"
 _DESCRIPTION_TTP_SECTION_TITLE = "概要欄TTPサンプル"
 _DESCRIPTION_TTP_SAMPLE_LIMIT = 3
 _SHORT_THUMBNAIL_KEYS = ("high", "medium", "default")
 _DEFAULT_THUMBNAIL_KEYS = ("maxres", "standard", "high", "medium", "default")
+
+
+def _validate_scan_recent(scan_recent: int) -> None:
+    if scan_recent > _SCAN_RECENT_MAX:
+        raise ConfigError(
+            f"benchmark.scan_recent は {_SCAN_RECENT_MAX} 以下にしてください: {scan_recent}。"
+            "config/skills/benchmark.yaml を修正してください。"
+        )
+
+
+def _estimate_quota_units(num_channels: int, scan_recent: int) -> int:
+    channel_batches = (num_channels + _CHANNELS_BATCH_SIZE - 1) // _CHANNELS_BATCH_SIZE
+    video_pages_per_channel = (scan_recent + _CHANNELS_BATCH_SIZE - 1) // _CHANNELS_BATCH_SIZE
+    return channel_batches + num_channels * 2 * video_pages_per_channel
 
 
 def is_short_benchmark_duration(duration_iso: str) -> bool:
@@ -159,11 +175,13 @@ class BenchmarkCollector:
             チャンネルデータ辞書（概要 + 動画リスト + 派生指標）。
 
         Raises:
+            ConfigError: `scan_recent` が上限を超えているとき。
             YouTubeAPIError: `ch_item` が空（チャンネルが API レスポンスに存在しない）のとき。
                 空辞書で握りつぶさず、欠落を呼び出し側へ伝播させる
         """
         channel_id = channel_info["id"]
         scan_recent = self.benchmark_config.get("scan_recent", 50)
+        _validate_scan_recent(scan_recent)
         min_views = self.benchmark_config.get("min_views", 10000)
 
         if not ch_item:
@@ -330,9 +348,13 @@ class BenchmarkCollector:
             全チャンネルの収集結果
 
         Raises:
-            ConfigError: 指定 `channel_slug` が benchmark.channels に存在しないとき
+            ConfigError: `scan_recent` が上限を超えている、または指定 `channel_slug` が
+                benchmark.channels に存在しないとき
             YouTubeAPIError: 収集対象の一部が API レスポンスに存在しない（欠落）とき
         """
+        scan_recent = self.benchmark_config.get("scan_recent", 50)
+        _validate_scan_recent(scan_recent)
+
         if channel_slug:
             targets = [ch for ch in self.config.analytics.benchmark.channels if ch["slug"] == channel_slug]
             if not targets:
@@ -1262,7 +1284,7 @@ def ensure_benchmark_fresh(data_dir: Path | None = None):
 
     1つでも古い or 欠けているチャンネルがあれば --force で全チャンネル一括更新。
     Raises:
-        ConfigError: benchmark.channels が未設定のとき
+        ConfigError: benchmark.channels が未設定、または `scan_recent` が上限を超えているとき
         YouTubeAPIError: 最新化を試みたが 1 チャンネルも収集できなかったとき。
             黙って return せず、最新化失敗を呼び出し側へ通知する
     """
@@ -1404,11 +1426,14 @@ def main():
 
     analyze_thumbnails = collector.benchmark_config.get("gemini_thumbnail_analysis", False)
     scan_recent = collector.benchmark_config.get("scan_recent", 50)
-    num_channels = len(collector.config.analytics.benchmark.channels)
+    _validate_scan_recent(scan_recent)
+    num_channels = 1 if args.channel else len(collector.config.analytics.benchmark.channels)
+    estimated_quota_units = _estimate_quota_units(num_channels, scan_recent)
 
     print("\n=== Benchmark Collector ===")
     print(f"  対象チャンネル: {num_channels} 件")
     print(f"  走査プール: {scan_recent} 本/ch")
+    print(f"  推定 YouTube Data API quota: 最大 {estimated_quota_units} units")
     print(f"  鮮度基準: {collector.benchmark_config.get('freshness_days', 3)} 日")
     if args.no_thumbnails:
         print("  サムネイル分析: OFF（--no-thumbnails）")
@@ -1419,7 +1444,13 @@ def main():
         print("  サムネイル分析: ON（エージェント — 追加課金なし）")
     print()
 
-    if not args.yes and not args.force:
+    high_quota_force = args.force and estimated_quota_units > _HIGH_QUOTA_CONFIRM_THRESHOLD
+    if not args.yes and (not args.force or high_quota_force):
+        if high_quota_force:
+            print(
+                f"[WARNING] --force は推定最大 {estimated_quota_units} quota units "
+                f"（確認閾値 {_HIGH_QUOTA_CONFIRM_THRESHOLD} units）を消費します"
+            )
         try:
             answer = input("続行しますか？ [Y/n] ").strip().lower()
             if answer and answer != "y":

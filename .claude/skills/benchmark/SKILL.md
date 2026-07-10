@@ -57,7 +57,7 @@ uv run yt-benchmark-collect -v               # 詳細ログ
 スクリプトが自動で以下を実行:
 1. `config/channel/analytics.json` の `benchmark.channels` から対象チャンネルを読み込み
 2. `docs/benchmarks/*.md` の更新日時で鮮度チェック（`freshness_days` 日以上前なら更新）
-3. YouTube Data API で**直近 `scan_recent` 本（既定 50）** を走査し、**`min_views` 以上（既定 10,000）** の動画だけを抽出
+3. YouTube Data API で**直近 `scan_recent` 本（既定 50、上限 200）** を走査し、**`min_views` 以上（既定 10,000）** の動画だけを抽出
 4. 派生指標算出（日次再生数・ER%・投稿間隔トレンド）
 5. サムネイル画像を `docs/benchmarks/thumbnails/` にダウンロード
 6. `data/benchmark_YYYYMMDD.json` に中間データ保存
@@ -116,7 +116,7 @@ uv run yt-benchmark-collect -v               # 詳細ログ
 
 | 項目 | 既定 | 説明 |
 |---|---|---|
-| `scan_recent` | 50 | チャンネルあたりの走査プール本数（直近 N 投稿） |
+| `scan_recent` | 50 | チャンネルあたりの走査プール本数（直近 N 投稿、上限 200） |
 | `min_views` | 10000 | ベンチマーク対象の視聴数しきい値 |
 | `freshness_days` | 3 | レポート更新間隔（日） |
 | `gemini_thumbnail_analysis` | false | Gemini API によるサムネイル分析（Vertex AI 課金あり、通常は不要） |
@@ -126,7 +126,9 @@ uv run yt-benchmark-collect -v               # 詳細ログ
 
 ## コストに関する注意
 
-- **YouTube Data API**: 無料枠内（10,000 units/day）。1チャンネルあたり約 4 ユニット
+- **YouTube Data API**: 無料枠は 10,000 units/day。通常収集の最大見積りは `ceil(対象チャンネル数 / 50) + 対象チャンネル数 × 2 × ceil(scan_recent / 50)` units。先頭は `channels.list`、後半は各チャンネルの `playlistItems.list` と `videos.list`（いずれも 50 件単位で切り上げ）。例: 10 チャンネル、`scan_recent: 50` なら最大 21 units
+- `scan_recent` は 200 以下にする。上限を超える設定は API 呼び出し前に `ConfigError` で停止する
+- 推定最大値が 100 units を超える `--force` は、`-y` / `--yes` を指定しない限り確認を求める
 - **サムネイル分析**: デフォルトではエージェントが実行（追加コストなし）
 - **Gemini サムネイル分析** (`gemini_thumbnail_analysis: true`): Vertex AI 課金が発生する。10チャンネル × 各 20 本 = 200 回の API 呼び出しで数千円になる可能性があるため、通常は OFF のままにすること
 
