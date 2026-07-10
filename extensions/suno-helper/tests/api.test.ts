@@ -514,24 +514,24 @@ describe("shared/api fetchCollectionPrompts: 異常系 (fail-loud)", () => {
 // ---------------------------------------------------------------------------
 
 describe("shared/api visiblePromptCollections: popup 表示対象", () => {
-  it("Given ready/needs_prompts/downloaded When 表示対象へ絞る Then downloaded だけ除外する", () => {
+  it("Given ready/needs_prompts/downloaded When 表示対象を作る Then 完了済みも結果確認用に残す", () => {
     const collections: CollectionSummary[] = [
       { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
       { id: "c2", name: "c2", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
       { id: "c3", name: "c3", status: "downloaded", pattern_count: 2, downloaded_count: 4 },
     ];
 
-    expect(visiblePromptCollections(collections).map((c) => c.id)).toEqual(["c1", "c2"]);
+    expect(visiblePromptCollections(collections).map((c) => c.id)).toEqual(["c1", "c2", "c3"]);
   });
 
-  it("Given downloaded が resume 対象 When 表示対象へ絞る Then その collection だけ例外的に残す", () => {
+  it("Given downloaded が複数ある When 表示対象を作る Then 完了済みをすべて残す", () => {
     const collections: CollectionSummary[] = [
       { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
       { id: "c2", name: "c2", status: "downloaded", pattern_count: 2, downloaded_count: 4 },
       { id: "c3", name: "c3", status: "downloaded", pattern_count: 2, downloaded_count: 4 },
     ];
 
-    expect(visiblePromptCollections(collections, ["c2"]).map((c) => c.id)).toEqual(["c1", "c2"]);
+    expect(visiblePromptCollections(collections).map((c) => c.id)).toEqual(["c1", "c2", "c3"]);
   });
 });
 

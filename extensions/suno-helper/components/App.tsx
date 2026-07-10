@@ -169,8 +169,12 @@ export function App() {
             </option>
           )}
           {collections.map((c) => (
-            <option key={c.id} value={c.id} disabled={c.status === "needs_prompts"}>
-              {c.status !== "needs_prompts" ? `${c.name} (${c.pattern_count})` : `${c.name}（prompts なし）`}
+            <option key={c.id} value={c.id} disabled={c.status !== "ready"}>
+              {c.status === "downloaded"
+                ? `${c.name}（完了 ${c.downloaded_count}/${c.expected_file_count ?? (c.pattern_count ?? 0) * 2}）`
+                : c.status === "ready"
+                  ? `${c.name} (${c.pattern_count})`
+                  : `${c.name}（prompts なし）`}
             </option>
           ))}
         </select>
