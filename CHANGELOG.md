@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(veo)`: `smooth_loop` の後処理が `loop.mp4` → `loop_raw.mp4` の rename を存在チェックなしで行っており、再生成時に前回の `loop_raw.mp4` が残存していると FileExistsError でクラッシュ（POSIX では無警告上書き）する問題を修正した（#1748）。rename 前に残存 raw を検出し、`generate_loop_video` の `loop-v{n}` 退避と同じ連番方式で `loop_raw-v{n}.mp4` へ退避してログに明示する（raw は Veo 生成・課金済みの原本のため削除しない）。`/short-loop` 経路（`short-loop_raw.mp4`）と `--smooth` 単独経路にも同様に適用される。退避ファイルの保持数上限は #1654 のスコープ
 - `fix(scripts)`: `bulk_update_descriptions_from_md.py`（`yt-bulk-update-desc`）が `videos().update(part="snippet")` の body を手組みで列挙しており、`defaultAudioLanguage` を含めていなかったため、このツールを通した全動画で音声言語設定が消えていた問題を修正。`defaultLanguage` 未設定の動画に `"en"` を注入していた挙動も廃止。`bulk_update_synthetic_media.py::build_update_body` と同じ read-modify-write 方式（`build_snippet_update_body`）に統一し、mutable 6 キー（title / description / tags / categoryId / defaultLanguage / defaultAudioLanguage）だけを whitelist で保持する
 - `fix(suno-helper)`: queue mode で全 entry 投入後に duration guard を一括実行し、範囲外 clip のみだった entry を `ENTRY_FAILED` として `failedIndices` に保存するようにした（#1762）。対象 entry は「失敗分のみ再実行」導線に載せ、playlist 追加は保留する。部分的に OK clip がある entry は OK clip を accepted として `DONE` にし、duration filter 未指定時は `DEFAULT_DURATION_FILTER` で検査する。
 - `fix(suno-helper)`: queue mode の `clipIdsByEntry` を投入前後の Set 差分で捕捉し、entry retry 中に遅延観測された clip ID も同じ entry へ帰属させるようにした（#1762）。DOM-only ACK で clip ID が未観測の entry は fatal 停止せず、finalizer の warn + `DONE` 縮退へ到達する。
