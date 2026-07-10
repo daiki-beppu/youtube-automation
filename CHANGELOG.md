@@ -55,6 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(suno-helper)`: playlist 追加前に Lyrics editor など入力欄の focus を外し、Suno が trusted `Cmd+P` を無視して Add to Playlist dialog を開けない問題を修正した。
+- `fix(suno-helper)`: Suno の Lexical Lyrics editor で複数行の段落を改行付きで比較し、空文字クリア時は `beforeinput` fallback を使うことで、反映済みでも paste / clear 失敗として停止する問題を修正した。重複 content script が同じ run を二重実行しない DOM lock も追加した。
+- `fix(suno-helper)`: Chrome が Suno タブへの静的 content script 登録を取りこぼして overlay が表示されない場合、ページ読込完了時に background から bundle を明示再注入して自己復旧するようにした。通常注入済みなら DOM probe でスキップし、重複起動を避ける。
 - `fix(suno-helper)`: Exclude Styles 欄の selector に日本語 UI の placeholder / aria-label（「スタイルを除外」等）を追加し、表示言語が日本語でも欄を検出して値を投入できるようにした（#1840）。
 - `fix(suno-helper)`: Suno 新 Create UI の slider リネーム（Weirdness → Bizarreness / Style Influence → Style influence〈小文字 i〉）で aria-label 完全一致セレクタが不一致となり、slider が視認できても `Weirdness slider not found` で run 全体が中断する問題を修正（#1720）。`shared/dom.ts` のセレクタを旧新両ラベルにマッチする case-insensitive substring match（`[role="slider"][aria-label*="weirdness" i], [role="slider"][aria-label*="bizarre" i]` / `[role="slider"][aria-label*="influence" i]`）へ tolerant 化し、slider 未検出時も throw（`FatalRunError`）せず `console.warn` + skip で run を続行するようにした（値は UI で手動設定でき Create を跨いで永続するため中断に値しない）。skip はサイレントにせず、新設の `onSliderSkip` 通知を GENERATING の progress message に載せて overlay / popup の status（`[n/total] 生成待ち…（Weirdness slider を skip しました（値は手動設定できます））`）で観測可能にした。exclude_styles / vocal_gender の fail-loud 契約は従来どおり
 - `docs(suno)`: `/suno` ボーカルモードの pattern 数 → 最終 track 数の計算式（1 pattern = 1 prompt entry = 1 採用曲。必要 pattern 数 ≈ track_count + 数%の試聴落選バッファ）を SKILL.md に明記した（#1726）。インストモード節の `ceil(N/2)` 公式と対称の比較表で並記して類推適用の余地を排除し、`ceil(track_count / tracks_per_pattern)` が誤りであること、`pattern_strategy` / `tracks_per_pattern` は 1 パターンあたりの再生成回数の設計であって最終採用数には影響しない（採用は常に 1 グループ 1 曲）ことを SKILL.md と config.default.yaml のコメントに明文化した。曲数不足 prompts を fail-loud で止める機械検証は #1785 が扱う

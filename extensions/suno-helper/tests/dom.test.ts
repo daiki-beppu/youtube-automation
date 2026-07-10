@@ -397,6 +397,21 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
     });
   }
 
+  function applyLexicalPasteAsParagraphs(el: HTMLElement): void {
+    el.addEventListener("paste", (e) => {
+      const ev = e as unknown as ClipboardEventStub;
+      const lines = (ev.clipboardData?.getData("text/plain") ?? "").split("\n");
+      el.replaceChildren(
+        ...lines.map((line) => {
+          const paragraph = document.createElement("p");
+          paragraph.textContent = line;
+          return paragraph;
+        }),
+      );
+      e.preventDefault();
+    });
+  }
+
   beforeEach(() => {
     vi.stubGlobal("DataTransfer", DataTransferStub);
     vi.stubGlobal("ClipboardEvent", ClipboardEventStub);
@@ -451,6 +466,25 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
     await injected;
   });
 
+  it("Given Lexical が複数行 Lyrics を p 要素に分割する When paste 後に検証する Then p 間を改行として再結合して成功する", async () => {
+    vi.useFakeTimers();
+    const div = addLexicalLyrics();
+    applyLexicalPasteAsParagraphs(div);
+
+    const injected = setLyricsValue(div, "[Verse 1]\nfirst line\n\n[Chorus]\nsecond line");
+
+    await vi.advanceTimersByTimeAsync(400);
+    await injected;
+
+    expect(Array.from(div.children).map((child) => child.textContent)).toEqual([
+      "[Verse 1]",
+      "first line",
+      "",
+      "[Chorus]",
+      "second line",
+    ]);
+  });
+
   it("Given selectAll が失敗する When Lexical lyrics へ注入する Then paste せず fail-loud する", async () => {
     vi.useFakeTimers();
     execCommand.mockReturnValue(false);
@@ -502,6 +536,29 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
     expect(div.textContent).toBe("");
   });
 
+  it("Given delete command が反映されないが beforeinput は反映される When 空 Lyrics を注入する Then fallback でクリアする", async () => {
+    vi.useFakeTimers();
+    const div = addLexicalLyrics();
+    div.textContent = "previous lyrics";
+    const beforeInputs: string[] = [];
+    div.addEventListener("beforeinput", (event) => {
+      const inputEvent = event as InputEvent;
+      beforeInputs.push(inputEvent.inputType);
+      if (inputEvent.inputType === "deleteContentBackward") {
+        div.replaceChildren(document.createElement("p"));
+        event.preventDefault();
+      }
+    });
+
+    const injected = setLyricsValue(div, "");
+
+    await vi.advanceTimersByTimeAsync(600);
+    await injected;
+
+    expect(beforeInputs).toEqual(["deleteContentBackward"]);
+    expect(div.textContent).toBe("");
+  });
+
   it("Given contenteditable div + 空文字で delete が反映されない When 注入する Then fail-loud する", async () => {
     vi.useFakeTimers();
     const div = addLexicalLyrics();
@@ -510,7 +567,7 @@ describe("setLyricsValue: textarea / Lexical contenteditable 両対応の Lyrics
 
     const injected = setLyricsValue(div, "");
     const rejection = expect(injected).rejects.toThrow("Lyrics 欄のクリア反映に失敗しました");
-    await vi.advanceTimersByTimeAsync(400);
+    await vi.advanceTimersByTimeAsync(600);
 
     await rejection;
     expect(pastes).toEqual([]);

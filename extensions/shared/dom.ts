@@ -187,6 +187,20 @@ export function setNativeValue(
 const LEXICAL_SELECTION_SYNC_MS = 200;
 
 /**
+ * Lexical は改行ごとに直下の p 要素へ分割するため、textContent では段落境界が消える。
+ * p 要素がある場合は改行で再結合し、投入元の plain text と同じ表現へ戻して検証する。
+ */
+function readLexicalText(el: HTMLElement): string {
+  const paragraphs = Array.from(el.children).filter(
+    (child): child is HTMLElement =>
+      child instanceof HTMLElement && child.tagName === "P",
+  );
+  return paragraphs.length > 0
+    ? paragraphs.map((paragraph) => paragraph.textContent ?? "").join("\n")
+    : (el.textContent ?? "");
+}
+
+/**
  * Lyrics 欄への値注入。旧 UI の textarea / input は setNativeValue へ委譲し、
  * 新 UI (2026-07) の Lexical contenteditable div は selectAll 後、非空 lyrics を paste 合成イベントで
  * 全置換し、空 lyrics は delete command でクリアする。
@@ -222,10 +236,22 @@ export async function setLyricsValue(
       );
     }
     await sleep(LEXICAL_SELECTION_SYNC_MS);
-    if ((el.textContent ?? "") !== "") {
-      throw new FatalRunError(
-        "Lyrics 欄のクリア反映に失敗しました。Generate へ進まず停止します。",
+    if (readLexicalText(el) !== "") {
+      el.dispatchEvent(
+        new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          data: null,
+          inputType: "deleteContentBackward",
+        }),
       );
+      await sleep(LEXICAL_SELECTION_SYNC_MS);
+      if (readLexicalText(el) !== "") {
+        throw new FatalRunError(
+          "Lyrics 欄のクリア反映に失敗しました。Generate へ進まず停止します。",
+        );
+      }
     }
     return;
   }
@@ -239,7 +265,7 @@ export async function setLyricsValue(
     }),
   );
   await sleep(LEXICAL_SELECTION_SYNC_MS);
-  if ((el.textContent ?? "") !== value) {
+  if (readLexicalText(el) !== value) {
     throw new FatalRunError(
       "Lyrics 欄への paste 反映に失敗しました。Generate へ進まず停止します。",
     );
