@@ -124,8 +124,6 @@ yt-skills sync --asset skills --prune --yes  # 列挙したうえで実際に削
 `config/channel/*.json`（責務別分割の必須ファイル + optional ファイル）と `config/localizations.json` を作成します。
 サンプルは [`examples/channel_config.example/`](examples/channel_config.example/) と [`examples/localizations.example.json`](examples/localizations.example.json) を参照してください。
 
-v1.x から v2.0.0 へ移行するチャンネルは [`docs/migration/v2-config-split.md`](docs/migration/v2-config-split.md) の手順に従い、`uv run yt-config-migrate migrate --apply` で旧 `config/channel_config.json` を自動分割できます。
-
 ### 4. OAuth 認証をセットアップ
 
 [auth/SETUP.md](auth/SETUP.md) の手順に従って Google Auth Platform の Branding / Audience / Clients を設定し、チャンネルディレクトリの `auth/client_secrets.json` に配置してください。
