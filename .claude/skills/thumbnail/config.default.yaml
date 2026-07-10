@@ -231,7 +231,9 @@ image_generation:
     model: gpt-image-2
 
     # 品質階層: low | medium | high
-    quality: high
+    # 既定は medium。high は 1 枚あたりの単価が数倍高いため、
+    # コストを許容できるチャンネルのみ明示的に high へ変更する（#1697）
+    quality: medium
 
     # アスペクト比は "16:9" / "9:16" のみサポート（thumbnail スキルは内部で 16:9 固定）
     aspect_ratio: "16:9"

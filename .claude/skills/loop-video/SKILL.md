@@ -120,6 +120,11 @@ $ARGUMENTS
 - **微動語彙**: `subtle`, `gentle`, `slight`, `barely perceptible`, `slow sway`, `living painting`
 - I2V は 50〜100 words が目安（テンプレが既に圧縮されている）
 
+**動きの強度は motion_targets の文言のみで制御する**（issue #1747）:
+- 既定 `prompt_template` は `{motion_clause}` に強度断定（`subtle` 等）を付加しない。強度語は motion_targets の各項目に含める
+- 静かな動き: `subtle steam rising from coffee`, `gentle candle flame flicker` のように微動語彙を対象側に書く
+- はっきりした動き: `clearly rolling ocean waves`, `steady rain falling` のように書けば、テンプレ側の弱化文言と矛盾せずそのまま効く
+
 **動かす対象（motion_targets）の例**:
 - `slow leaves swaying`, `gentle leaves fluttering`（屋外）
 - `subtle steam rising from coffee`, `steam from mug`（カフェ/書斎）
@@ -249,7 +254,7 @@ veo:
 | `veo.model` | veo-3.1-fast-generate-001 | Veo API モデル（選択肢: veo-3.1-fast-generate-001 / veo-3.1-generate-001 / veo-3.1-lite-generate-preview） |
 | `veo.motion_targets` | `[]` | 動かす対象のリスト。structured prompt に展開される |
 | `veo.static_targets` | `[]` | 固定対象のリスト。count や shape を肯定文で書く |
-| `veo.prompt_template` | 公式 5 要素テンプレ | `{motion_clause}` / `{static_clause}` / `{base_rules}` をプレースホルダに持つ |
+| `veo.prompt_template` | 公式 5 要素テンプレ | `{motion_clause}` / `{static_clause}` / `{base_rules}` をプレースホルダに持つ。強度断定（subtle 等）は付加せず、強度は motion_targets の文言で制御（#1747） |
 | `veo.base_rules` | アンビエンス固定文 | `{base_rules}` に差し込まれる共通追加ルール |
 | `veo.default_prompt` | 汎用微動プロンプト | structured 未使用時の freeform プロンプト |
 | `veo.duration_seconds` | 8 | 生成尺（Veo API 制約で 8 秒固定） |
