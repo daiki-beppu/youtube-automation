@@ -30,6 +30,15 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 - **新規チャンネル** → `/channel-new` を案内
 - **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
+## 完了条件
+
+- `10-assets/thumbnail.jpg`（テキスト付き YouTube サムネ）と `10-assets/main.png`（または `main.jpg`、textless 動画背景）が**別成果物として**それぞれユーザー承認・確定済み
+- テキスト付きサムネは承認前に `/thumbnail-compare` の 320px 視認性検証を通過している
+- `20-documentation/thumbnail-prompts.md` に textless 背景用・テキスト付き用の両プロンプトを保存済み
+- `workflow-state.json` の `thumbnail.approved = true` に更新済み
+
+**読み順**: 標準フローは「ワークフロー > 標準生成順序とファイル契約」から読む。「codex 経由の生成」章は `image_generation.provider: codex` のチャンネルのみ、「フォント安定化」「自動選択」章は該当機能を明示的に使うチャンネルのみ参照すればよい。
+
 ## When to Use
 
 - コレクションが確定し、サムネイル制作に着手するとき
