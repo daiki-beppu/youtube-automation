@@ -16,6 +16,10 @@ description: "Use when 動画本体の中身（フック構造・シーン・BGM
 
 既存スキルが扱えていなかった「動画の中身」というドメインを埋め、`/benchmark`・`/analytics-analyze`・`/alignment-check`・`/thumbnail-compare`・`/viewer-voice` の精度を底上げする。
 
+## 完了条件
+
+Step 1 のスクリプトが exit 0 で終了して `data/video_analysis/<slug>/<video_id>.json` と `reports/video_analysis/<slug>.md` が生成され、Step 3 のレポート検証で検出された品質問題（なければ「問題なし」）をユーザーに報告した時点で完了。
+
 ## 設定読み込みゲート
 
 前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
