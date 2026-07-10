@@ -401,7 +401,7 @@ def test_cli_export_candidates_rejects_agent_replies_file_before_youtube(monkeyp
     get_youtube.assert_not_called()
 
 
-def test_cli_agent_replies_file_flows_to_replier_without_generator(
+def test_cli_reviewer_context_flows_to_replier_without_generator(
     monkeypatch, tmp_path, capsys, _mock_default_genai_client
 ):
     yt = _mock_youtube(
@@ -414,7 +414,24 @@ def test_cli_agent_replies_file_flows_to_replier_without_generator(
     )
     replies_path = tmp_path / "replies.json"
     replies_path.write_text(
-        json.dumps({"replies": [{"comment_id": "c1", "reply_text": "見つけてくださってありがとうございます。"}]}),
+        json.dumps(
+            {
+                "replies": [
+                    {
+                        "comment_id": "c1",
+                        "reply_text": "見つけてくださってありがとうございます。",
+                        "review_context": {
+                            "comment_text": "こんにちは！",
+                            "channel_persona": "Warm lo-fi host",
+                            "ng_words": ["spam"],
+                            "max_length": 280,
+                            "language": "ja",
+                        },
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
     monkeypatch.setattr(comment_reply, "load_config", lambda: config)
@@ -436,6 +453,7 @@ def test_cli_agent_replies_file_flows_to_replier_without_generator(
     payload = json.loads(capsys.readouterr().out)
     assert payload["planned"][0]["reply_source"] == "agent"
     assert payload["planned"][0]["reply_text"] == "@Alice 見つけてくださってありがとうございます。"
+    assert "review_context" not in payload["planned"][0]
     _mock_default_genai_client.models.generate_content.assert_not_called()
 
 
