@@ -45,3 +45,5 @@ extensions/
 ## release 添付方針
 
 ビルド成果物（`.output/` / `dist/` / `node_modules/`）は **commit しない**（`.gitignore` 済み）。配布は GitHub Release への zip 添付で行う。tag push 時に `.github/workflows/release-extensions.yml` が `pnpm zip` を実行し、生成 zip を Release に添付する。Chrome Web Store への公開はスコープ外（unpacked + Release zip 配布に留める）。
+
+リリースの実施（`extensions/<name>/package.json::version` bump → `release/ext-v<VER>` PR → merge commit への `ext-v<VER>` tag push → Release asset 確認）は `/automation-release` スキルの extension release phase（`.claude/skills/automation-release/SKILL.md` Phase E0〜E2）で一気通貫に実行する。tag 命名 `ext-v*` / バージョン独立の決定は `docs/adr/0011-extension-distribution.md`。

@@ -34,3 +34,4 @@ Chrome 拡張 (suno-helper / distrokid-helper) を当初は運営者 1 人で使
 - `yt-collection-serve` に `/version` エンドポイントを実装し、拡張の popup で互換性チェック + 警告表示を実装する
 - リリースノートテンプレを `release-extensions.yml` に組み込む
 - 人数が 50+ に増えた場合、自動アップデート通知や Chrome Web Store 移行を再検討する
+- リリースの実施手順（`package.json::version` bump → `release/ext-v*` PR → tag push → Release 確認）は `/automation-release` スキルの extension release phase として手順化した（#1735）
