@@ -101,6 +101,6 @@ TS 版（tayk）の開発は専用の別リポジトリで行う（`docs/adr/002
 
 - **issue 起票**: `gh issue create` または `/issue` スキル
 - **takt 起動**: `takt add '#<N>'` → `takt run`（base branch は **main** 固定、PR は通常 PR）
-- **workflow 使い分け**: 小〜中規模 issue はリポジトリ同梱の軽量 workflow **`lite`**（plan → implement → review の 3 step、トークン消費が少ない）。セキュリティ・認証・アップロード系、スキル横断・破壊的変更、テスト戦略設計が要る issue は組み込み **default**（9 step）を使う。基準は `docs/takt-operations.md`
+- **workflow 使い分け**: 小〜中規模 issue はリポジトリ同梱の軽量 workflow **`lite`**（plan → implement → review の 3 step、トークン消費が少ない）。セキュリティ・認証・アップロード系、スキル横断・破壊的変更、テスト戦略設計が要る issue は組み込み **default**（9 step）を使う。影響ファイルが `.claude/skills/` の記述のみ（コード変更ゼロ・テスト設計不要）の小規模 issue は takt を使わず `/issue-direct` や手動で直接実装する（`takt:none` ラベル）。基準は `docs/takt-operations.md`
 - **commit 規約**: 日本語 Conventional Commits + タイトル末尾に `(#<N>)`
 - **リリース**: `/automation-release` スキル（post-release は `/release-notes`）
