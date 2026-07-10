@@ -8,6 +8,7 @@ export async function sendTrustedCmdP(tabId: number, isMac: boolean): Promise<vo
         type: "rawKeyDown",
         modifiers,
         key: "p",
+        code: "KeyP",
         windowsVirtualKeyCode: 80,
         nativeVirtualKeyCode: 80,
       });
@@ -15,6 +16,7 @@ export async function sendTrustedCmdP(tabId: number, isMac: boolean): Promise<vo
         type: "keyUp",
         modifiers,
         key: "p",
+        code: "KeyP",
         windowsVirtualKeyCode: 80,
         nativeVirtualKeyCode: 80,
       });

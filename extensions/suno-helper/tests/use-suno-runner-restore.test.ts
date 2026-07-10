@@ -110,7 +110,7 @@ describe("buildRestoreState: 終了済み snapshot の復元", () => {
     expect(restored?.entries).toEqual(entries);
   });
 
-  it("Given STOPPED snapshot When buildRestoreState Then isRunning=false + 停止文言 + isError=true を復元する", () => {
+  it("Given STOPPED snapshot When buildRestoreState Then isRunning=false + 再実行可能な停止文言を復元する", () => {
     const snap = applyProgress(initSnapshot(makePromptEntries(2), snapshotOptions()), {
       phase: PHASE.STOPPED,
       index: 0,
@@ -120,8 +120,8 @@ describe("buildRestoreState: 終了済み snapshot の復元", () => {
     const restored = buildRestoreState(snap);
 
     expect(restored?.isRunning).toBe(false);
-    expect(restored?.status).toBe("停止しました。手動で続行できます。");
-    expect(restored?.isError).toBe(true);
+    expect(restored?.status).toBe("停止しました。再実行できます。");
+    expect(restored?.isError).toBe(false);
   });
 
   it("Given ERROR snapshot When buildRestoreState Then isRunning=false + 中断文言 + isError=true を復元する", () => {

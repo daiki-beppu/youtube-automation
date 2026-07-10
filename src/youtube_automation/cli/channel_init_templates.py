@@ -181,7 +181,7 @@ def _render_schedule(_ctx: ChannelInitContext) -> dict:
             "timezone": "Asia/Tokyo",
             "auto_schedule_enabled": True,
             "publish_time": "20:00",
-            "cadence": ["tue", "thu", "sat"],
+            "cadence": ["sun", "mon", "tue", "wed", "thu", "fri", "sat"],
         },
         "upload_settings": {
             "category_id": "10",

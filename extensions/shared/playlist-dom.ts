@@ -938,6 +938,17 @@ export async function openAddToPlaylistDialogViaCmdP(
   dispatchCmdP?: () => Promise<void>,
 ): Promise<HTMLElement> {
   for (let attempt = 0; attempt < CMD_P_MAX_RETRIES; attempt++) {
+    // Suno は Lyrics の Lexical editor など入力欄に focus が残っていると、
+    // trusted Cmd+P でも playlist shortcut として処理しない。clip 選択後は
+    // 最後に操作した入力欄へ focus が残り得るため、shortcut 発火前に明示的に外す。
+    const activeElement = document.activeElement;
+    if (
+      activeElement instanceof HTMLElement &&
+      activeElement !== document.body
+    ) {
+      activeElement.blur();
+    }
+
     if (dispatchCmdP) {
       await dispatchCmdP();
     } else {

@@ -74,6 +74,8 @@ async function loadBackground(opts?: {
       getManifest: () => ({ version: "0.1.0" }),
     },
     action: { onClicked: { addListener: vi.fn() } },
+    tabs: { onUpdated: { addListener: vi.fn() } },
+    scripting: { executeScript: vi.fn(() => Promise.resolve([{ result: true }])) },
   });
 
   // chrome.downloads stub
@@ -1287,12 +1289,12 @@ describe('background onMessage("sendTrustedCmdP"): Mac „ÅØ modifiers=4 (Meta) „Ç
     expect(chromeDebugger.sendCommand).toHaveBeenCalledWith(
       { tabId: 42 },
       "Input.dispatchKeyEvent",
-      expect.objectContaining({ type: "rawKeyDown", modifiers: 4, key: "p" }),
+      expect.objectContaining({ type: "rawKeyDown", modifiers: 4, key: "p", code: "KeyP" }),
     );
     expect(chromeDebugger.sendCommand).toHaveBeenCalledWith(
       { tabId: 42 },
       "Input.dispatchKeyEvent",
-      expect.objectContaining({ type: "keyUp", modifiers: 4, key: "p" }),
+      expect.objectContaining({ type: "keyUp", modifiers: 4, key: "p", code: "KeyP" }),
     );
     expect(chromeDebugger.detach).toHaveBeenCalledWith({ tabId: 42 });
   });

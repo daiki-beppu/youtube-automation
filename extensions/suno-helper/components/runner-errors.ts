@@ -139,7 +139,7 @@ export function phaseToStatus(
         ? { text: `完了（一部失敗）: ${message}`, error: true }
         : { text: `完了: ${total} パターンを実行しました。` };
     case PHASE.STOPPED:
-      return { text: "停止しました。手動で続行できます。", error: true };
+      return { text: "停止しました。再実行できます。" };
     case PHASE.ERROR:
       return { text: `中断: ${message ?? ""}`, error: true };
     default: {

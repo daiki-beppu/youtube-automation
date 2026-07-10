@@ -784,7 +784,7 @@ describe("Suno popup compatibility check", () => {
       root.render(createElement(App));
     });
     await waitFor(() => {
-      expect(container.textContent).toContain("停止しました。手動で続行できます。");
+      expect(container.textContent).toContain("停止しました。再実行できます。");
     });
 
     messagingMocks.sendMessage.mockClear();
@@ -831,7 +831,7 @@ describe("Suno popup compatibility check", () => {
       root.render(createElement(App));
     });
     await waitFor(() => {
-      expect(container.textContent).toContain("停止しました。手動で続行できます。");
+      expect(container.textContent).toContain("停止しました。再実行できます。");
     });
 
     fetchMock
@@ -1822,7 +1822,7 @@ describe("Suno popup compatibility check", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/collections`);
   });
 
-  it("popup 起動時の collection 一覧同期は downloaded collection を表示しない", async () => {
+  it("popup 起動時の collection 一覧同期は downloaded collection を完了件数付きで表示する", async () => {
     act(() => {
       root.unmount();
     });
@@ -1856,7 +1856,11 @@ describe("Suno popup compatibility check", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("ready-collection");
     });
-    expect(container.textContent).not.toContain("done-collection");
+    expect(container.textContent).toContain("done-collection（完了 4/4）");
+    const doneOption = Array.from(container.querySelectorAll("option")).find((option) =>
+      option.textContent?.includes("done-collection"),
+    );
+    expect(doneOption?.disabled).toBe(false);
   });
 
   it("CORS なし 404 (TypeError) で /collections が reject されたら legacy endpoint へ fallback しない", async () => {

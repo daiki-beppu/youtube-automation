@@ -32,6 +32,10 @@ _DEFAULT_GEMINI_CLI_MODEL = "gemini-2.5-flash-image-preview"
 _DEFAULT_GEMINI_CLI_IMAGE_SIZE = "2K"
 _DEFAULT_GEMINI_CLI_TIMEOUT = 300
 
+# OpenAI provider の既定 quality。high は単価が数倍高いため既定にしない
+# （provider 切替時の無自覚な高単価課金を防ぐ。high は明示 opt-in のみ、#1697）
+_DEFAULT_OPENAI_QUALITY = "medium"
+
 
 @dataclass(frozen=True)
 class GeminiConfig:
@@ -209,7 +213,7 @@ def _build_gemini_cli(d: dict[str, object], *, generation_mode: str | None = Non
 def _build_openai(d: dict[str, Any]) -> OpenAIConfig:
     return OpenAIConfig(
         model=d.get("model", "gpt-image-2"),
-        quality=d.get("quality", "high"),
+        quality=d.get("quality", _DEFAULT_OPENAI_QUALITY),
         aspect_ratio=d.get("aspect_ratio", "16:9"),
         thinking=d.get("thinking", "medium"),
         batch=int(d.get("batch", 1)),

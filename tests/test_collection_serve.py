@@ -2177,6 +2177,69 @@ def test_extract_japanese_name_with_english_tail(tmp_path):
     ]
 
 
+def test_extract_apostrophe_stripped_zip_names_match_prompts(tmp_path):
+    """Suno が ZIP ファイル名からアポストロフィを除去しても prompts の名前と照合される (#1787)。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[
+            {"name": "強欲の律動 — Greed's Rhythm", "style": "s", "lyrics": ""},
+            {"name": "硬貨の裁定 — The Coin's Verdict", "style": "s", "lyrics": ""},
+        ],
+    )
+    zip_path = _make_zip(
+        tmp_path / "download.zip",
+        {
+            "Greeds Rhythm.m4a": b"take-a",
+            "Greeds Rhythm_1.m4a": b"take-b",
+            "The Coins Verdict.m4a": b"take-a2",
+        },
+    )
+
+    result = extract_and_rename_music(coll, str(zip_path))
+
+    assert result == 3
+    music_dir = coll / "02-Individual-music"
+    names = sorted(f.name for f in music_dir.iterdir())
+    assert names == [
+        "01a-Greeds Rhythm.m4a",
+        "01b-Greeds Rhythm.m4a",
+        "02a-The Coins Verdict.m4a",
+    ]
+
+
+def test_extract_typographic_apostrophe_in_prompts_name(tmp_path):
+    """prompts 側の typographic apostrophe（’）も除去版 ZIP ファイル名と照合される (#1787)。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "強欲の律動 — Greed’s Rhythm", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(tmp_path / "download.zip", {"Greeds Rhythm.mp3": b"audio"})
+
+    result = extract_and_rename_music(coll, str(zip_path))
+
+    assert result == 1
+    music_dir = coll / "02-Individual-music"
+    assert [f.name for f in music_dir.iterdir()] == ["01a-Greeds Rhythm.mp3"]
+
+
+def test_extract_apostrophe_exact_match_still_wins(tmp_path):
+    """ZIP ファイル名にアポストロフィが残っている場合は従来どおり exact match で照合される (#1787)。"""
+    coll = _make_collection(
+        tmp_path,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "強欲の律動 — Greed's Rhythm", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(tmp_path / "download.zip", {"Greed's Rhythm.mp3": b"audio"})
+
+    result = extract_and_rename_music(coll, str(zip_path))
+
+    assert result == 1
+    music_dir = coll / "02-Individual-music"
+    assert [f.name for f in music_dir.iterdir()] == ["01a-Greed's Rhythm.mp3"]
+
+
 def test_extract_unmatched_files(tmp_path):
     """prompts にマッチしないファイルは配置せず、完了件数にも数えない。"""
     coll = _make_collection(

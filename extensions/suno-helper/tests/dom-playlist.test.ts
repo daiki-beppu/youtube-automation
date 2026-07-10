@@ -1214,6 +1214,24 @@ describe("multiSelectClips: click + selected 状態への遷移を verify", () =
 });
 
 describe("openAddToPlaylistDialogViaCmdP: Cmd+P で Add to Playlist dialog を開く", () => {
+  it("Given Lyrics editor に focus が残る When trusted Cmd+P を送る Then focus を外してから送信する", async () => {
+    const lyricsEditor = document.createElement("div");
+    lyricsEditor.contentEditable = "true";
+    lyricsEditor.tabIndex = 0;
+    document.body.appendChild(lyricsEditor);
+    lyricsEditor.focus();
+    expect(document.activeElement).toBe(lyricsEditor);
+
+    let activeElementAtDispatch: Element | null = null;
+    const dialog = await openAddToPlaylistDialogViaCmdP(async () => {
+      activeElementAtDispatch = document.activeElement;
+      addPlaylistDialog();
+    });
+
+    expect(activeElementAtDispatch).toBe(document.body);
+    expect(dialog).toBeDefined();
+  });
+
   it("Given dialog 表示中 When 実行する Then key=p + meta/ctrl の keydown を document に dispatch する", async () => {
     addPlaylistDialog();
     const dispatch = vi.spyOn(document, "dispatchEvent");

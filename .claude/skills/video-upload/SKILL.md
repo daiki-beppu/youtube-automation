@@ -1,6 +1,6 @@
 ---
 name: video-upload
-description: "Use when コレクションの動画が完成し、YouTubeへのアップロード自動化が必要なとき。Complete Collection のアップロードと live 移行を実行。動画ファイルの生成（MP3→MP4）は /videoup"
+description: "Use when コレクションの動画または release 型（単曲リリース）の楽曲リリース動画が完成し、YouTubeへのアップロード自動化が必要なとき。「楽曲リリースをアップロード」「リリース動画を公開」で発動。collection 型は Complete Collection のアップロードと live 移行、release 型は言語別アップロードを実行。動画ファイルの生成（MP3→MP4）は /videoup、リリースショート生成は /short-release"
 ---
 
 ## Overview
@@ -10,7 +10,7 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 ## 完了条件
 
 - **collection 型**: Complete Collection のアップロードが完了し、コレクションが `collections/live/` へ移動、`20-documentation/upload_tracking.json` に記録されている
-- **single_release 型**: `content_model.languages` の全言語分のアップロード・プレイリスト追加・概要欄の相互リンク更新が完了している
+- **release 型（単曲リリース）**: `content_model.languages` の全言語分のアップロード・プレイリスト追加・概要欄の相互リンク更新が完了している
 - 公開タイミングを、collection 型では `--plan` の結果（即時公開 / 予約公開 / 限定・非公開）どおりにユーザーへ案内済み
 
 ## 設定読み込みゲート
@@ -49,7 +49,7 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 | content_model.type | 動作 | 対応言語の出所 |
 |-------------------|------|--------------|
 | `collection` | Complete Collection アップロード → live 移動（単一動画） | `config/localizations.json` / `load_config().localizations.*` |
-| `single_release` | 言語ごとに別動画をアップロード | `content_model.languages`（発音言語リスト） |
+| `release` | 言語ごとに別動画をアップロード | `content_model.languages`（発音言語リスト） |
 
 ### collection 型
 - 下記フローのとおり Complete Collection を1本アップロード
@@ -57,13 +57,13 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 - 多言語ローカライゼーションは `config/localizations.json` の `supported_languages` が Canonical ソース（v2.0.0 以降は単一ソース化）
 - `supported_languages` が 2 言語以上の場合のみ `scene_phrases` / 概要欄多言語版 / YouTube localization メタデータを生成・検証する。単一言語チャンネルでは `scene_phrases` は不要
 
-### single_release + languages: ["jp","en"]（COT）
+### release 型 + languages: ["jp","en"]（COT）
 - **同日2本アップロード**: JP + EN を同日投稿（API クォータ: 2 × 1,600 = 3,200 ユニット）
 - **プレイリスト管理**: `config/channel/playlists.json` の `playlists.jp` / `playlists.en` に自動追加
 - **相互リンク**: アップロード後に概要欄を更新し、JP↔EN 動画 URL を相互記載
 - `uv run yt-upload-auto` を使用
-- single_release 型では `content_model.languages` が発音言語リストとして解釈される（collection 型とは意味が異なる）
-- `uv run yt-upload-collection --plan` は collection 専用の事前確認であり、single_release 型では使わない。公開時刻は `uv run yt-upload-auto` の実アップロード経路（metadata の `publish_at` または `config/channel/youtube.json` の既定時刻 fallback）に従う
+- release 型では `content_model.languages` が発音言語リストとして解釈される（collection 型とは意味が異なる）
+- `uv run yt-upload-collection --plan` は collection 専用の事前確認であり、release 型では使わない。公開時刻は `uv run yt-upload-auto` の実アップロード経路（metadata の `publish_at` または `config/channel/youtube.json` の既定時刻 fallback）に従う
 
 ## Instructions
 
@@ -99,9 +99,9 @@ $ARGUMENTS
 
 プレイリストへの動画追加は後続のアップロード経路が担う。`collection` 型では `collection_uploader` 内部の `assign_video()` に任せる。初投稿時に `/playlist` で行うのは未作成プレイリストの作成と `playlist_id` 書き戻しであり、個別動画の手動 assign ではない。
 
-### single_release アップロードフロー
+### release アップロードフロー
 
-`content_model.type = "single_release"` のときは `uv run yt-upload-auto` を使い、言語ごとに別動画をアップロードする。`uv run yt-upload-collection --plan` は collection uploader の公開予定計算なので、この分岐では実行しない。公開時刻を案内する場合は、`uv run yt-upload-auto` が読む metadata の `publish_at` と `config/channel/youtube.json` の既定時刻 fallback に基づくことを明示し、collection 用 plan 結果を流用しない。
+`content_model.type = "release"` のときは `uv run yt-upload-auto` を使い、言語ごとに別動画をアップロードする。`uv run yt-upload-collection --plan` は collection uploader の公開予定計算なので、この分岐では実行しない。公開時刻を案内する場合は、`uv run yt-upload-auto` が読む metadata の `publish_at` と `config/channel/youtube.json` の既定時刻 fallback に基づくことを明示し、collection 用 plan 結果を流用しない。
 
 ### コマンドリファレンス
 
@@ -115,7 +115,7 @@ uv run yt-upload-collection --status [-c NAME]
 # スケジュール計算（ドライラン）
 uv run yt-upload-collection --plan [-c NAME]
 
-# single_release アップロード
+# release 型アップロード
 uv run yt-upload-auto
 ```
 
