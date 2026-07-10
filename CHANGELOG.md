@@ -43,6 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(masterup)`: `02-Individual-music/` に音源が揃っているのに playlist URL 未指定を理由に「URL を教えてください」と案内して停止する誤導線を SKILL.md から除去した（#1743）。Step 1.6 の title list 取得を「第1引数の URL → `workflow-state.json::planning.music.suno_playlist_url` の保存済み URL（再質問しない）→ どちらも無ければ title list の提示 or 混入込み続行の明示確認の 2 択分岐」の解決順序として明記し、引数の解釈・前提・Quick Reference にも URL 省略可であることを明示した。#1530 の fail-loud 突合ゲート契約（silent 続行禁止・混入込み続行はユーザー明示指示のみ）と Step 1.5 の DL 完全性チェック（音源不足時は不足数を提示して停止）は変更なし
 - `fix(scripts)`: `bulk_update_descriptions_from_md.py`（`yt-bulk-update-desc`）が `videos().update(part="snippet")` の body を手組みで列挙しており、`defaultAudioLanguage` を含めていなかったため、このツールを通した全動画で音声言語設定が消えていた問題を修正。`defaultLanguage` 未設定の動画に `"en"` を注入していた挙動も廃止。`bulk_update_synthetic_media.py::build_update_body` と同じ read-modify-write 方式（`build_snippet_update_body`）に統一し、mutable 6 キー（title / description / tags / categoryId / defaultLanguage / defaultAudioLanguage）だけを whitelist で保持する
 - `fix(suno-helper)`: queue mode で全 entry 投入後に duration guard を一括実行し、範囲外 clip のみだった entry を `ENTRY_FAILED` として `failedIndices` に保存するようにした（#1762）。対象 entry は「失敗分のみ再実行」導線に載せ、playlist 追加は保留する。部分的に OK clip がある entry は OK clip を accepted として `DONE` にし、duration filter 未指定時は `DEFAULT_DURATION_FILTER` で検査する。
 - `fix(suno-helper)`: queue mode の `clipIdsByEntry` を投入前後の Set 差分で捕捉し、entry retry 中に遅延観測された clip ID も同じ entry へ帰属させるようにした（#1762）。DOM-only ACK で clip ID が未観測の entry は fatal 停止せず、finalizer の warn + `DONE` 縮退へ到達する。
