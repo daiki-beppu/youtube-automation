@@ -24,6 +24,7 @@ from PIL import Image as PILImage
 from PIL import UnidentifiedImageError
 
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
+from youtube_automation.cli.automation_update_refs import UPSTREAM_REPO
 from youtube_automation.cli.skills_sync import bundled_skill_names
 from youtube_automation.scripts.benchmark_collector import load_benchmark_videos, select_top_vod_benchmark_videos
 from youtube_automation.utils.exceptions import ConfigError
@@ -46,6 +47,9 @@ CLAUDE_SKILLS_DIR = Path(".claude") / "skills"
 AGENTS_SKILLS_LINK = Path(".agents") / "skills"
 SKILL_FILENAME = "SKILL.md"
 AUTOMATION_PACKAGE_NAME = "youtube-channels-automation"
+# fork 運用時に suggested command が official upstream 検証とズレないよう、
+# automation_update_refs.UPSTREAM_REPO（単一ソース）から組み立てる
+AUTOMATION_PACKAGE_INSTALL_CMD = f"uv add git+https://github.com/{UPSTREAM_REPO}.git"
 SKILLS_SYNC_CMD = "uv run yt-skills sync --asset skills --force"
 SKILLS_SYNC_PRUNE_CMD = "uv run yt-skills sync --asset skills --force --prune --yes"
 LEGACY_BUNDLED_SKILLS = (
@@ -381,7 +385,7 @@ def check_automation_package(channel_dir: Path) -> CheckResult:
             message="automation パッケージが pyproject.toml の dependencies に無い",
             next_action={
                 "kind": "ai-exec",
-                "cmd": "uv add git+https://github.com/daiki-beppu/youtube-automation.git",
+                "cmd": AUTOMATION_PACKAGE_INSTALL_CMD,
             },
         )
     return CheckResult(

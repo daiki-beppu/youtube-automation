@@ -111,6 +111,8 @@ AI が以下を直接実行:
 uv add git+https://github.com/daiki-beppu/youtube-automation.git
 ```
 
+> この `uv add`（および「起動時のチェック」手順 3 の同コマンド）は automation パッケージ導入 **前** に実行するため、リポジトリ参照をパッケージの `UPSTREAM_REPO` 定数から導出できずリテラル固定である。fork 運用者は owner を自 fork に読み替える（upstream `.claude/CLAUDE.template.md` の「fork 運用者向け」節を参照）。パッケージ導入後の `yt-doctor` の `next_action.cmd` は導入済みパッケージの定数から組み立てられる。
+
 #### `skills_synced` — スキル未展開
 
 `yt-doctor` の `next_action` に従う。

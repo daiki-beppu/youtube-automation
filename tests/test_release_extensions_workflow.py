@@ -96,7 +96,7 @@ def test_builds_and_zips_each_extension(name: str) -> None:
     assert "pnpm install --frozen-lockfile" in run_script
 
 
-def test_attaches_both_zips_to_single_release() -> None:
+def test_attaches_both_zips_to_one_gh_release() -> None:
     """単一の gh-release ステップで両拡張の zip を添付する。"""
     steps = _release_top_level_steps()
     release_steps = [step for step in steps if str(step.get("uses", "")).startswith(_GH_RELEASE_ACTION)]

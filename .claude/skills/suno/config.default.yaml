@@ -127,8 +127,11 @@ duration_filter:
   max_sec: 300
 
 # ボーカルモード専用: パターン運用方針 (インストモードでは無視される)
+# - 必要 pattern 数 ≈ track_count (1 pattern = 1 prompt entry = 1 採用曲。数%の試聴落選バッファを上乗せ)。
+#   インストの ceil(N/2) や ceil(track_count / tracks_per_pattern) を類推適用しないこと (SKILL.md の計算式参照)。
 # - pattern_strategy: パターン運用の戦略名 (`mixed` = N パターンで起伏を作る / `single` = 1 パターン統合)。
-# - tracks_per_pattern: 1 パターンあたりの prompt entry 数。`(Take N)` 付き entry name に展開する。
+# - tracks_per_pattern: 1 パターンあたりの再生成回数 (prompt entry 数)。`(Take N)` 付き entry name に展開する。
+#   最終採用数には影響しない (採用は常に 1 グループ 1 曲。増えるのは同一曲の再生成候補だけ)。
 # - pattern_strategy_note: AI への運用補足 (任意の自由記述)。
 pattern_strategy: mixed
 tracks_per_pattern: 3

@@ -6,6 +6,14 @@
 # 複数スキル（metadata_generator / short / upload 等）から参照される横断属性のため、
 # 引き続き config/channel/*.json で管理する。ここには description 固有の派生マッピングのみ置く。
 
+# チャプター（タイムスタンプ列）生成の有効 / 無効。
+# false にすると、タイムスタンプ列の生成・重複トラック名の LLM リネーム・
+# workflow-state.json への track_display_names 永続化をすべて skip する
+# （BGM / ASMR 等、章運用を廃止したチャンネル向けの標準 opt-out）。
+# 構造化メタブロック / Music Time セパレータ / playlist 名 / CTA / hashtag は
+# false でも変わらず生成される。
+chapters_enabled: true
+
 # 概要欄セクションの装飾ヘッダー。チャンネル特性に応じて差し替え可能。
 # `channel_link_template` は `{channel_name}` を含むテンプレート文字列。
 # デフォルトは BGM チャンネル想定（絵文字 + 装飾罫線）。ゲーム音楽 / ASMR /
