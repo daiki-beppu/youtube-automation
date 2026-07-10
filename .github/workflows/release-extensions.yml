@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 11.11.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -29,12 +29,12 @@ jobs:
           - name: Build and zip suno-helper
             working-directory: extensions/suno-helper
             run: |
-              pnpm install --frozen-lockfile --ignore-workspace
+              pnpm install --frozen-lockfile
               pnpm zip
           - name: Build and zip distrokid-helper
             working-directory: extensions/distrokid-helper
             run: |
-              pnpm install --frozen-lockfile --ignore-workspace
+              pnpm install --frozen-lockfile
               pnpm zip
       - name: Attach zips to Release
         uses: softprops/action-gh-release@v2

@@ -30,34 +30,36 @@ WXT + React + TypeScript + Tailwind CSS + [@webext-core/messaging](https://webex
 
 ## 開発フロー
 
-依存インストール（pnpm）:
+ローカル検証は CI・lockfile と同じ pnpm 11.11.0 に固定する。ambient `pnpm` の版は各環境で異なり得るため、以下の pinned command を使う。理由と両拡張共通の release 前検証は `extensions/README.md::pnpm バージョン契約` を参照する。
+
+依存インストール:
 
 ```bash
-pnpm install
+npx -y pnpm@11.11.0 install --frozen-lockfile
 ```
 
 開発（HMR 付き、Chrome を自動起動）:
 
 ```bash
-pnpm dev
+npx -y pnpm@11.11.0 dev
 ```
 
 ## ビルド
 
 ```bash
-pnpm build      # .output/chrome-mv3/ に Manifest V3 拡張を生成
-pnpm zip        # 配布用 zip を生成
+npx -y pnpm@11.11.0 build  # .output/chrome-mv3/ に Manifest V3 拡張を生成
+npx -y pnpm@11.11.0 zip    # 配布用 zip を生成
 ```
 
 型チェック（WXT 型生成 + tsc）:
 
 ```bash
-pnpm compile
+npx -y pnpm@11.11.0 compile
 ```
 
 ## unpacked ロード
 
-1. `pnpm build` で `.output/chrome-mv3/` を生成する。
+1. `npx -y pnpm@11.11.0 build` で `.output/chrome-mv3/` を生成する。
 2. build artifact を basename が `distrokid-helper` になる固定パスへコピーする:
    ```bash
    mkdir -p "$HOME/chrome-extensions/distrokid-helper"
@@ -112,9 +114,9 @@ pnpm compile
 ## テスト
 
 ```bash
-pnpm test                              # Vitest（API client / DOM 注入 / messaging / storage）
-pnpm exec playwright install chromium  # 初回のみ
-pnpm test:e2e                          # Playwright（distrokid.com/new モックへの注入スモーク）
+npx -y pnpm@11.11.0 test                              # Vitest（API client / DOM 注入 / messaging / storage）
+npx -y pnpm@11.11.0 exec playwright install chromium  # 初回のみ
+npx -y pnpm@11.11.0 test:e2e                          # Playwright（distrokid.com/new モックへの注入スモーク）
 ```
 
 ## DOM セレクタの保守

@@ -143,7 +143,25 @@ fi
 
 これを省くと、後続の `uv sync` を叩いた別 PR で `uv.lock` の 1 行差分（`version`）が機械的に発生し、無関係な PR に混入する（#515）。`uv` が未導入の環境では `nix develop --command uv lock` または `direnv exec . uv lock` で呼び出す。
 
-#### 1-6. commit
+#### 1-6. Chrome 拡張の release 前検証
+
+`suno-helper` / `distrokid-helper` は、各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` の build-script approval、CI と揃えた **pnpm 11.11.0** で検証する。ambient `pnpm` は使わず、両拡張で frozen install → build → zip を実行する:
+
+```bash
+for name in suno-helper distrokid-helper; do
+  npx -y pnpm@11.11.0 -C "extensions/${name}" install --frozen-lockfile
+  npx -y pnpm@11.11.0 -C "extensions/${name}" build
+  npx -y pnpm@11.11.0 -C "extensions/${name}" zip
+  version=$(node -p "require('./extensions/${name}/package.json').version")
+  test -f "extensions/${name}/.output/${name}-${version}-chrome.zip" || exit 1
+done
+
+git diff --exit-code -- extensions/suno-helper/pnpm-lock.yaml extensions/distrokid-helper/pnpm-lock.yaml
+```
+
+zip の欠落または lockfile 差分があれば release を中止する。lockfile は検証で更新せず、差分の原因を解消してから pinned コマンドを再実行する。詳細なローカル検証契約は `extensions/README.md::pnpm バージョン契約` を参照する。
+
+#### 1-7. commit
 
 ```bash
 git add pyproject.toml uv.lock CHANGELOG.md
@@ -152,7 +170,7 @@ git commit -m "chore(release): v${VER} リリース PR"
 
 commit メッセージは日本語 Conventional Commits 規約（CLAUDE.md「開発ワークフロー」参照）に準拠（`chore(release):` プレフィックス + 日本語）。`uv.lock` を必ず同 commit に含めること（1-5 のドリフト再発防止策）。
 
-#### 1-7. push + PR 作成
+#### 1-8. push + PR 作成
 
 ```bash
 git push -u origin "release/v${VER}"
@@ -420,6 +438,7 @@ Asset: <name>-<VER>-chrome.zip
 - **`gh pr merge --delete-branch` の non-zero（worktree footgun）**: worktree 環境では remote merge 成功後の local checkout 後処理が `fatal: 'main' is already used by worktree ...` で失敗し non-zero になる。remote merge 失敗と誤認して merge を再実行しない。E2-1 の通り `gh pr view <N> --json state,mergeCommit` で remote state を確認し、`MERGED` なら tag push へ進む
 - **`pnpm install --frozen-lockfile` の失敗**: version bump 自体では lockfile は乖離しない。失敗＝依存差分の混入なので、リリースとは切り離して lockfile 同期の修正 PR を先に main へ入れる
 - **ext-v tag 系列と package.json 版数の乖離**: `ext-v*` は両拡張共通の単一系列のため、bump 対象の拡張によっては tag 版数と package.json 版数がずれる（前例: `ext-v0.2.3` で distrokid-helper 0.2.1）。Release asset 名は package.json 版数に従う（E0 の「tag 版数の決定」参照）
+- **Chrome 拡張の pnpm 版数乖離**: ambient pnpm の版は各環境で異なり得る。prepare Phase 1-6 の pnpm 11.11.0 固定コマンドで両拡張を検証し、期待 zip と lockfile 無差分を確認する
 
 ## Rules
 
@@ -435,6 +454,7 @@ Asset: <name>-<VER>-chrome.zip
 - extension の commit / PR タイトルは `chore(<name>): ext-v<VER>` 固定（日本語 Conventional Commits 準拠 + 検索容易性）
 - extension の local verify は `.github/workflows/release-extensions.yml` と同じコマンド列（`pnpm install --frozen-lockfile --ignore-workspace` → `pnpm zip`）で行う。契約を変える場合は workflow 側と同時に更新する
 - `ext-v<VER>` tag は PR の merge commit（`gh pr view <N> --json mergeCommit`）に打つ。tag `ext-v*` / asset `<name>-<version>-chrome.zip` の命名契約は `/ext-install` が読む側で依存しているため変えない
+- prepare 1-6 で **必ず** pnpm 11.11.0 を使って両 Chrome 拡張の frozen install / build / zip を実行し、期待 zip の存在と両 `pnpm-lock.yaml` の無差分を確認する
 
 ## Cross References
 
