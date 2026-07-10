@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(doctor)`: `uv tool install youtube-channels-automation` によるグローバル導入を `uv_project` / `automation_package` の bootstrap check で検出し、pyproject.toml に依存がない正常な環境を fail と誤判定しないようにした（#1724）。
+
 ## [5.5.17] - 2026-07-10
 
 ### Added

@@ -623,6 +623,24 @@ class TestResolveChannelDir:
 
 
 class TestMain:
+    def test_json_output_reports_uv_tool_install_through_public_cli(self, monkeypatch, tmp_path, capsys):
+        def fake_run(cmd, **kwargs):
+            if cmd == ["uv", "tool", "list"]:
+                return 0, "youtube-channels-automation v5.5.15\n- yt-doctor\n", ""
+            return 127, "", "missing"
+
+        monkeypatch.setattr(doctor, "_run", fake_run)
+
+        code = doctor.main(["--json", "--target", str(tmp_path)])
+
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        checks = {check["id"]: check for check in payload["checks"]}
+        assert checks["uv_project"]["status"] == "ok"
+        assert "uv tool" in checks["uv_project"]["message"]
+        assert checks["automation_package"]["status"] == "ok"
+        assert "uv tool" in checks["automation_package"]["message"]
+
     def test_json_output(self, monkeypatch, tmp_path, capsys):
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         monkeypatch.setattr(doctor, "resolve_channel_dir", lambda t: tmp_path)
@@ -1228,7 +1246,25 @@ class TestBootstrapChecks:
         assert r.category == "bootstrap"
         assert r.next_action["kind"] == "human"
 
-    def test_uv_project_missing_is_fail_with_uv_init(self, tmp_path):
+    def test_uv_tool_install_without_pyproject_is_ok(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            doctor,
+            "_run",
+            lambda *args, **kwargs: (0, "youtube-channels-automation v5.5.15\n- yt-doctor\n", ""),
+        )
+
+        uv_project = doctor.check_uv_project(tmp_path)
+        automation_package = doctor.check_automation_package(tmp_path)
+
+        assert uv_project.status == "ok"
+        assert "uv tool" in uv_project.message
+        assert uv_project.next_action is None
+        assert automation_package.status == "ok"
+        assert "uv tool" in automation_package.message
+        assert automation_package.next_action is None
+
+    def test_uv_project_missing_is_fail_with_uv_init(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(doctor, "_run", lambda *args, **kwargs: (0, "", ""))
         r = doctor.check_uv_project(tmp_path)
         assert r.status == "fail"
         assert r.category == "bootstrap"
@@ -1241,19 +1277,22 @@ class TestBootstrapChecks:
         assert r.category == "bootstrap"
         assert "ファイルではない" in r.message
 
-    def test_uv_project_present_is_ok(self, tmp_path):
+    def test_uv_project_present_is_ok(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(doctor, "_run", lambda *args, **kwargs: pytest.fail("uv tool list should not run"))
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n', encoding="utf-8")
         r = doctor.check_uv_project(tmp_path)
         assert r.status == "ok"
         assert r.category == "bootstrap"
 
-    def test_automation_package_missing_pyproject_is_fail_with_uv_init(self, tmp_path):
+    def test_automation_package_missing_pyproject_is_fail_with_uv_init(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(doctor, "_run", lambda *args, **kwargs: (0, "", ""))
         r = doctor.check_automation_package(tmp_path)
         assert r.status == "fail"
         assert r.category == "bootstrap"
         assert r.next_action["cmd"] == "uv init"
 
-    def test_automation_package_missing_dependency_is_fail_with_uv_add(self, tmp_path):
+    def test_automation_package_missing_dependency_is_fail_with_uv_add(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(doctor, "_run", lambda *args, **kwargs: (0, "", ""))
         (tmp_path / "pyproject.toml").write_text(
             '[project]\nname = "x"\ndependencies = ["requests>=2"]\n',
             encoding="utf-8",
@@ -1263,7 +1302,25 @@ class TestBootstrapChecks:
         assert r.category == "bootstrap"
         assert "uv add" in r.next_action["cmd"]
 
-    def test_automation_package_dependency_name_is_ok(self, tmp_path):
+    def test_automation_package_uv_tool_install_with_pyproject_is_ok(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            doctor,
+            "_run",
+            lambda *args, **kwargs: (0, "youtube-channels-automation v5.5.15\n- yt-doctor\n", ""),
+        )
+        (tmp_path / "pyproject.toml").write_text(
+            '[project]\nname = "x"\ndependencies = ["requests>=2"]\n',
+            encoding="utf-8",
+        )
+
+        r = doctor.check_automation_package(tmp_path)
+
+        assert r.status == "ok"
+        assert "uv tool" in r.message
+        assert r.next_action is None
+
+    def test_automation_package_dependency_name_is_ok(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(doctor, "_run", lambda *args, **kwargs: pytest.fail("uv tool list should not run"))
         (tmp_path / "pyproject.toml").write_text(
             '[project]\nname = "x"\ndependencies = ["youtube-channels-automation>=5"]\n',
             encoding="utf-8",
@@ -1272,7 +1329,12 @@ class TestBootstrapChecks:
         assert r.status == "ok"
         assert r.category == "bootstrap"
 
-    def test_automation_package_similar_name_is_fail(self, tmp_path):
+    def test_automation_package_similar_name_is_fail(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(
+            doctor,
+            "_run",
+            lambda *args, **kwargs: (0, "youtube-channels-automation-extra v1.0.0\n", ""),
+        )
         (tmp_path / "pyproject.toml").write_text(
             '[project]\nname = "x"\ndependencies = ["youtube-channels-automation-extra>=1"]\n',
             encoding="utf-8",
@@ -1281,6 +1343,17 @@ class TestBootstrapChecks:
         assert r.status == "fail"
         assert r.category == "bootstrap"
         assert "uv add" in r.next_action["cmd"]
+
+    def test_uv_tool_list_failure_keeps_bootstrap_checks_failed(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(doctor, "_run", lambda *args, **kwargs: (1, "", "uv unavailable"))
+
+        uv_project = doctor.check_uv_project(tmp_path)
+        automation_package = doctor.check_automation_package(tmp_path)
+
+        assert uv_project.status == "fail"
+        assert uv_project.next_action == {"kind": "ai-exec", "cmd": "uv init"}
+        assert automation_package.status == "fail"
+        assert automation_package.next_action == {"kind": "ai-exec", "cmd": "uv init"}
 
     def test_automation_package_git_dependency_is_ok(self, tmp_path):
         (tmp_path / "pyproject.toml").write_text(
