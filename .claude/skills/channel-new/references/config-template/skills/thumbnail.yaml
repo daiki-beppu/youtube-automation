@@ -21,13 +21,16 @@ image_generation:
   # provider: codex
 
   codex:
-    # 参照サムネを winning template として扱い、textless 背景を先に固める
-    # 「TTPを徹底して textless 背景を先に固める」用の短い既定プロンプト。
+    # 参照サムネを winning template として扱い、テキスト付き thumbnail 候補を
+    # 先に確定する短い既定プロンプト（#1611 の thumbnail 先行フロー）。
+    # thumbnail/config.default.yaml・SKILL.md「既定テンプレート」と完全一致させる。
+    # {title} に渡すのはサムネに焼くテキスト（見出し + 短いサブタイトル）だけ。
+    # 動画タイトル全文を渡さない（全文が画像に焼き込まれる事故の再発防止）。
     default_prompt_template: |
-      TTP this reference thumbnail into a stronger original textless background for {title}.
-      Keep the winning layout, character scale, color mood, lighting, texture, and energy.
-      Remove all text, typography, logos, watermarks, brand marks, and channel badges.
-      Do not add any title text yet; the approved background will be used for the final thumbnail.
+      TTP this reference thumbnail, then improve it into a stronger original thumbnail.
+      Keep the winning layout, typography feel, character scale, color mood, texture, and energy.
+      Make it cleaner, more readable on mobile, stronger face impact, no logos, no watermarks, no broken hands.
+      Use the title {title}.
 
   gemini:
     # チャンネル統一の背景色（channel-direction の「ビジュアルアイデンティティ」

@@ -960,14 +960,7 @@ class BAHMetadataGenerator:
         genre_line = desc_metadata.get("genre", "Jazz")
         vibe_line = desc_metadata.get("vibe", "Rainy night, Cozy")
         best_for_line = desc_metadata.get("best_for", "Study, Focus, Late Night")
-        usage_lines = "\n".join(
-            [
-                "• Original AI composition",
-                "• Free for personal & non-commercial use",
-                "• For commercial use, check the platform's AI content policy",
-                "• Redistribution prohibited",
-            ]
-        )
+        usage_lines = "\n".join(self._video_description_config.get("usage_attribution_lines", []))
 
         # 欠落チェック + 100 codepoint 超過を全言語まとめて検出する
         # （従来は 1 言語ずつ fail していたため多言語対応チャンネルで再アップロードを繰り返していた）

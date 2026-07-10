@@ -81,8 +81,11 @@ def _collection_ideate_next_step_block(text: str) -> str:
 def _assert_codex_ttp_prompt_policy(block: str) -> None:
     assert ".claude/skills/thumbnail/references/codex-prompt.py" in block
     assert "default_prompt_template" in block
-    assert "TTP 背景先行" in block
+    assert "TTP thumbnail 先行" in block, "#1611/#1680: codex 分岐はテキスト付き thumbnail 先行フローを案内する"
+    assert "TTP 背景先行" not in block, "#1680: textless 背景先行の旧コメントを残さない"
     assert "短い" in block or "短縮" in block or "短く" in block
+    assert "サムネに焼くテキスト" in block, "#1680: {title} へ動画タイトル全文を渡さない注記が必要"
+    assert "動画タイトル全文" in block
 
 
 def test_collection_ideate_parallel_generation_branches_to_codex_image_script() -> None:
@@ -185,7 +188,7 @@ def test_collection_ideate_sequential_generation_branches_to_codex_image_script(
 def test_collection_ideate_codex_sequential_requires_short_prompt() -> None:
     """Given collection-ideate Phase 4-4 sequential の codex 分岐
     When codex-image.sh を呼ぶ
-    Then parallel と同じ TTP 背景先行 prompt template 契約を使う。
+    Then parallel と同じ TTP thumbnail 先行 prompt template 契約を使う。
     """
     block = _phase_4_4_sequential_block(_read(_IDEATE_SKILL_MD))
 
@@ -276,8 +279,9 @@ def test_collection_ideate_next_step_keeps_preview_out_of_main_background() -> N
     assert "`main.png` にはコピーしない" in block
     assert "planning-preview.png" in block
     assert "`/thumbnail <theme>`" in block
-    assert "textless `main.png/jpg` を先に確定" in block
-    assert "テキスト付き `thumbnail.jpg`" in block
+    assert "テキスト付き `thumbnail.jpg` を先に確定" in block
+    assert "承認済み `thumbnail.jpg` から textless `main.png/jpg` を別成果物として再生成・確定" in block
+    assert "textless `main.png/jpg` を先に確定" not in block, "#1680: textless 背景先行の旧記述を残さない"
     assert "`main.png` として動画背景に流用しない" in block
     assert (
         "cp collections/planning/_plan-previews/<session-dir>/plan-<x>-<slug>.png <collection-path>/10-assets/main.png"
@@ -292,8 +296,9 @@ def test_collection_ideate_cost_rejection_uses_new_thumbnail_contract() -> None:
     """
     text = _read(_IDEATE_SKILL_MD)
 
-    assert "後段の `/thumbnail <theme>` がベンチマーク参照から textless `main.png/jpg` を先に生成・承認" in text
-    assert "承認済み背景からテキスト付き `thumbnail.jpg` を生成" in text
+    assert "後段の `/thumbnail <theme>` がベンチマーク参照からテキスト付き `thumbnail.jpg` を先に生成・承認" in text
+    assert "承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成" in text
+    assert "textless `main.png/jpg` を先に生成・承認" not in text, "#1680: textless 背景先行の旧記述を残さない"
     assert "`planning-preview.png` は未生成のまま Next Step に進み" in text
     assert "`main.png` 不在を検出して Phase 1" not in text
     assert "プレビューが `/wf-new` Phase 2c でそのまま最終 thumbnail に流用" not in text

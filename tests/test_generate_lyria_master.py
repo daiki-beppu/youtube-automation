@@ -14,6 +14,7 @@ import pytest
 from youtube_automation.scripts import generate_lyria_master
 from youtube_automation.scripts.generate_lyria_master import (
     _LYRIA_SEGMENT_SEC,
+    _MAX_SEGMENT_COUNT,
     _generate_one_segment,
     _resolve_segment_count,
 )
@@ -65,6 +66,19 @@ class TestResolveSegmentCount:
     def test_negative_padding_raises(self):
         with pytest.raises(ValidationError, match="padding-min"):
             _resolve_segment_count(60, -1)
+
+    def test_over_cap_clamped_with_warning(self, capsys):
+        # (600 + 3) * 60 / 184 = 196.6... → 197 > 60 なので 60 に clamp + warning
+        assert _resolve_segment_count(600, 3) == _MAX_SEGMENT_COUNT
+        err = capsys.readouterr().err
+        assert "WARNING" in err
+        assert f"上限 {_MAX_SEGMENT_COUNT}" in err
+
+    def test_exactly_at_cap_no_warning(self, capsys):
+        # ちょうど 60 セグメント (60 * 184 秒 = 184 分) は clamp も warning もなし
+        target_min = _MAX_SEGMENT_COUNT * _LYRIA_SEGMENT_SEC / 60
+        assert _resolve_segment_count(target_min, 0) == _MAX_SEGMENT_COUNT
+        assert capsys.readouterr().err == ""
 
 
 def _patch_lyria_generate(monkeypatch, *, payload: bytes | None = b"FAKE_MP3", call_log: list | None = None):
