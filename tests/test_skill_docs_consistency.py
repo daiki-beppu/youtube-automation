@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import shlex
@@ -749,6 +750,20 @@ def test_distrokid_skill_uses_helper_name() -> None:
     assert "/distrokid-helper" in features
     assert "サーバー起動まで実行" in features
     assert "distrokid-prep" not in features
+
+
+def test_distrokid_skill_and_example_document_single_and_multi_disc_naming() -> None:
+    skill = _read(".claude/skills/distrokid-helper/SKILL.md")
+    example = json.loads(_read(".claude/skills/distrokid-helper/references/spec-example.json"))
+
+    assert "**単一 disc（35 曲以下）**" in skill
+    assert "`dark-techno`" in skill
+    assert "**複数 disc（35 曲超）**" in skill
+    assert "`disc{N}-<theme-kebab-case>-vol{N}`" in skill
+    assert example["single_disc"]["discs"][0]["slug"] == "dark-techno"
+    assert example["single_disc"]["discs"][0]["album_title"] == "Dark Techno"
+    assert example["multi_disc"]["discs"][0]["album_title"] == "Coding Focus Vol.1"
+    assert example["multi_disc"]["discs"][1]["slug"] == "disc2-coding-focus-vol2"
 
 
 def test_community_post_declares_raw_json_loader_exception() -> None:

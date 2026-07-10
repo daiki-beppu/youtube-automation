@@ -1,32 +1,52 @@
 {
-  "version": 1,
-  "artist": "Soulful Grooves",
-  "language": "English",
-  "genre_primary": "R&B/Soul",
-  "genre_secondary": "Neo-Soul",
-  "label": null,
-  "discs": [
-    {
-      "slug": "disc1-coding-focus-vol1",
-      "album_title": "Coding Focus Vol.1",
-      "tracks": [
-        {"filename": "01-slip-right-through.mp3", "title": "Slip Right Through"},
-        {"filename": "02-easy-release.mp3",       "title": "Easy Release"},
-        {"filename": "03-easy-release.mp3",       "title": "Easy Release — Reprise"},
-        {"filename": "04-slip-right-through.mp3", "title": "Slip Right Through — Reprise"},
-        {"filename": "05-slip-it-on.mp3",         "title": "Slip It On"}
-      ]
-    },
-    {
-      "slug": "disc2-coding-focus-vol2",
-      "album_title": "Coding Focus Vol.2",
-      "tracks": [
-        {"filename": "06-slip-it-loose.mp3",      "title": "Slip It Loose"},
-        {"filename": "07-slip-right-through.mp3", "title": "Slip Right Through — Dusk"},
-        {"filename": "08-let-it-glide.mp3",       "title": "Let It Glide"},
-        {"filename": "09-slip-it-loose.mp3",      "title": "Slip It Loose — Reprise"},
-        {"filename": "10-slip-it-softly.mp3",     "title": "Slip It Softly"}
-      ]
-    }
-  ]
+  "single_disc": {
+    "version": 1,
+    "artist": "Dark Frequencies",
+    "language": "English",
+    "genre_primary": "Electronic",
+    "genre_secondary": "Techno",
+    "label": null,
+    "discs": [
+      {
+        "slug": "dark-techno",
+        "album_title": "Dark Techno",
+        "tracks": [
+          {"filename": "01-night-drive.mp3", "title": "Night Drive"},
+          {"filename": "02-signal-loss.mp3", "title": "Signal Loss"}
+        ]
+      }
+    ]
+  },
+  "multi_disc": {
+    "version": 1,
+    "artist": "Soulful Grooves",
+    "language": "English",
+    "genre_primary": "R&B/Soul",
+    "genre_secondary": "Neo-Soul",
+    "label": null,
+    "discs": [
+      {
+        "slug": "disc1-coding-focus-vol1",
+        "album_title": "Coding Focus Vol.1",
+        "tracks": [
+          {"filename": "01-slip-right-through.mp3", "title": "Slip Right Through"},
+          {"filename": "02-easy-release.mp3", "title": "Easy Release"},
+          {"filename": "03-easy-release.mp3", "title": "Easy Release — Reprise"},
+          {"filename": "04-slip-right-through.mp3", "title": "Slip Right Through — Reprise"},
+          {"filename": "05-slip-it-on.mp3", "title": "Slip It On"}
+        ]
+      },
+      {
+        "slug": "disc2-coding-focus-vol2",
+        "album_title": "Coding Focus Vol.2",
+        "tracks": [
+          {"filename": "06-slip-it-loose.mp3", "title": "Slip It Loose"},
+          {"filename": "07-slip-right-through.mp3", "title": "Slip Right Through — Dusk"},
+          {"filename": "08-let-it-glide.mp3", "title": "Let It Glide"},
+          {"filename": "09-slip-it-loose.mp3", "title": "Slip It Loose — Reprise"},
+          {"filename": "10-slip-it-softly.mp3", "title": "Slip It Softly"}
+        ]
+      }
+    ]
+  }
 }
