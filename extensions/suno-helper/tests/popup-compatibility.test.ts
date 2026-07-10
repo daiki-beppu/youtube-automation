@@ -9,6 +9,7 @@ import { PHASE, type ProgressPayload } from "../../shared/constants";
 import { App } from "../components/App";
 
 const BASE_URL = "http://localhost:7873";
+const FALLBACK_URL = "http://localhost:7877";
 const MANIFEST_VERSION = "0.1.9";
 
 const messagingMocks = vi.hoisted(() => {
@@ -58,11 +59,13 @@ vi.mock("../lib/storage", () => ({
   downloadFormatItem: downloadFormatMocks,
   readDownloadFormat: vi.fn(() => downloadFormatMocks.getValue()),
   readServerSources: vi.fn(async () => [
-    { id: "localhost-7873", label: "localhost", url: BASE_URL },
+    { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
+    { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
     { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
   ]),
   rememberServerSource: vi.fn(async () => [
-    { id: "localhost-7873", label: "localhost", url: BASE_URL },
+    { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
+    { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
     { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
   ]),
 }));
@@ -277,6 +280,21 @@ describe("Suno popup compatibility check", () => {
     resumeStateMocks.writeResumeState.mockResolvedValue(undefined);
     presetStateMocks.readRunModeId.mockResolvedValue("serial");
     presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
+  });
+
+  it("ローカル配信元 option は URL を表示せず、URL value はデータ取得先として維持する", async () => {
+    const select = expectControl(container, "server-url") as HTMLSelectElement;
+
+    await waitFor(() => {
+      expect(select.options).toHaveLength(3);
+    });
+
+    expect(Array.from(select.options, (option) => ({ text: option.text, value: option.value }))).toEqual([
+      { text: "ABYSS MI | suno-helper", value: BASE_URL },
+      { text: "localhost fallback 7877 | suno-helper", value: FALLBACK_URL },
+      { text: "localhost changed | suno-helper", value: `${BASE_URL}/changed` },
+    ]);
+    expect(select.textContent).not.toContain("http://");
   });
 
   it("popup に投入方式 selector を表示し、Fast / Balanced / Safe の速度プリセットは表示しない", () => {

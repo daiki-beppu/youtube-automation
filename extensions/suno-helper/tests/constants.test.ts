@@ -14,6 +14,7 @@ import {
   DEFAULT_URL,
   FEED_V3_METHOD,
   FEED_V3_PATH,
+  formatServerSourceLabel,
   INJECT_ACK_TIMEOUT_MS,
   INTER_CREATE_DELAY_MS,
   MAX_INJECT_RETRY,
@@ -55,6 +56,18 @@ describe("shared/constants: サーバー互換の契約値", () => {
       "http://localhost:7876",
       "http://localhost:7877",
     ]);
+  });
+
+  it("Given server selector When helper ごとの option 表示名を組み立てる Then URL を含めずプロセスを識別できる", () => {
+    expect(
+      formatServerSourceLabel(
+        { id: "abyss-mi", label: "ABYSS MI", url: "http://abyss-mi.localhost:7873" },
+        "distrokid-helper",
+      ),
+    ).toBe("ABYSS MI | distrokid-helper");
+    expect(formatServerSourceLabel(DEFAULT_SERVER_SOURCES.at(-1)!, "suno-helper")).toBe(
+      "localhost fallback 7877 | suno-helper",
+    );
   });
 
   it("Given server selector When host permissions を読む Then *.localhost を許可する", () => {

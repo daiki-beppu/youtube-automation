@@ -247,6 +247,15 @@ export interface LocalServerSource {
   url: string;
 }
 
+export type HelperProcessName = "distrokid-helper" | "suno-helper";
+
+export function formatServerSourceLabel(
+  source: LocalServerSource,
+  helper: HelperProcessName,
+): string {
+  return `${source.label} | ${helper}`;
+}
+
 /** 拡張初回起動時のローカル配信元候補。 */
 export const DEFAULT_SERVER_SOURCES: LocalServerSource[] = [
   {
