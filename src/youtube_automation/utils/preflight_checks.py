@@ -419,10 +419,21 @@ def extract_descriptions_md_tags(desc_md: Path) -> list[str] | None:
 
 
 def check_tags_count(tags: list[str], min_count: int | None) -> str | None:
-    """件数下限を満たさない場合 issue 文字列、満たせば None."""
+    """タグ件数下限を検証し、500 字制約下で不可能なら原因を明示する."""
     if min_count is None:
         return None
     if len(tags) < min_count:
+        missing_count = min_count - len(tags)
+        current_chars = youtube_tag_chars(tags)
+        # 1 文字タグを追加する場合でも、既存タグがあれば各タグに `,` が必要になる。
+        minimum_chars = current_chars + (2 * missing_count) - (0 if tags else 1)
+        if minimum_chars > YT_TAG_CHAR_LIMIT:
+            return (
+                f"tags.min_count={min_count} is unreachable under YouTube's {YT_TAG_CHAR_LIMIT}-character "
+                f"tag limit: {len(tags)} current tags use {current_chars} characters, and adding "
+                f"{missing_count} one-character tags requires at least {minimum_chars}. "
+                "Reduce tags.min_count or shorten base tags."
+            )
         return f"tags count: {len(tags)} (min {min_count})"
     return None
 

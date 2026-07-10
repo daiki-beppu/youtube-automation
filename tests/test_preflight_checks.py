@@ -52,6 +52,22 @@ class TestCheckTagsCount:
         msg = check_tags_count(["a", "b"], 5)
         assert msg == "tags count: 2 (min 5)"
 
+    def test_under_min_at_character_limit_returns_existing_message(self) -> None:
+        tags = ["a" * 17] * 26 + ["b" * 26]
+
+        assert check_tags_count(tags, 30) == "tags count: 27 (min 30)"
+
+    def test_under_min_unreachable_under_character_limit_explains_resolution(self) -> None:
+        tags = ["a" * 17] * 26 + ["b" * 27]
+
+        msg = check_tags_count(tags, 30)
+
+        assert msg == (
+            "tags.min_count=30 is unreachable under YouTube's 500-character tag limit: "
+            "27 current tags use 495 characters, and adding 3 one-character tags requires at least 501. "
+            "Reduce tags.min_count or shorten base tags."
+        )
+
     def test_at_min_passes(self) -> None:
         assert check_tags_count(["a", "b", "c"], 3) is None
 
