@@ -11,6 +11,18 @@ CLAUDE.md の「開発ワークフロー」節の詳細版。要点は CLAUDE.md
   - テスト戦略の設計が必要な新機能
 - 導入後に新しい takt バージョンへ上げた場合は `takt workflow doctor lite` で静的検証すること（step スキーマのキー名が変わる可能性がある）
 
+### issue ラベルとの対応（takt:default / takt:lite / takt:manual / takt:none）
+
+issue には実行ルートを示す `takt:*` ラベルを付与し、着手時はラベルに従って経路を選ぶ:
+
+- **`takt:default`**: 組み込み default workflow（テスト先行 9 step）で自動実行可能。上記 default の基準に該当する issue
+- **`takt:lite`**: リポジトリ同梱 lite workflow（plan → implement → review の軽量 3 step）で自動実行可能。上記 lite の基準に該当する小〜中規模 issue
+- **`takt:manual`**: takt 不要・手動実装が妥当（takt に載せるより人間の判断・対話が主となる issue）
+- **`takt:none`**: takt 不要・`/issue-direct` や手動で直接実装できる小規模タスク。テスト設計が不要で、workflow の step 分解がオーバーヘッドにしかならない規模のうち、以下の **いずれか** に該当する issue に付与する
+  - **skill 記述のみの変更**: 影響ファイルが `.claude/skills/` 配下の記述のみ（SKILL.md / config.default.yaml / references のテンプレ・文言）で、`src/` 等のコード変更ゼロ
+  - **軽微なコード修正**: 単一関数〜数ファイルの機械的な修正で、期待挙動が issue 本文に一意に書かれ、設計判断・依存ブロッカーがないもの（例: 定数・文言の置換、dead code 削除、単一関数への上限 clamp 追加、セレクタの tolerant match 化、1 行の正規化追加）
+  - 境界例（**`takt:lite` に残す**）: 挙動選択に設計判断が要るもの（フォールバック方針、resume ポリシー、統計手法の整合）、複数経路への貫通確認や後方互換設計が要るもの、アップロード安全性などレビュー価値が高い修正
+
 ## 提出前セルフ監査（pre-review-checklist）
 
 `.takt/facets/policies/pre-review-checklist.md` は、過去の review-takt-default 指摘 371 件（183 レビュー）を全件分類して抽出した頻出 8 パターンの監査基準（issue #1508）。lite の `implement` / `review` step に `policy:` で注入され、実装者が提出前に自己監査 → reviewer が独立照合する二段構えで、post-hoc レビュー（1 回 ~15M tokens）の REJECT 再走を減らす。
