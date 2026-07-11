@@ -738,9 +738,7 @@ def test_codex_image_script_stops_on_other_preflight_failures_before_generation(
 
     invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
     exec_invocations = [args for args in invocations if args and args[0] == "exec"]
-    assert len(exec_invocations) == 1, (
-        f"プリフライト失敗時は本番生成 exec を呼ばない: {invocations!r}"
-    )
+    assert len(exec_invocations) == 1, f"プリフライト失敗時は本番生成 exec を呼ばない: {invocations!r}"
     assert "codex-model-compat-ok" in exec_invocations[0][-1]
 
 
