@@ -11,7 +11,7 @@ extensions/
     origin.ts             # CORS origin allowlist（collection_serve.py と対の契約）
     api.ts                # yt-collection-serve client + PromptEntry 型
     dom.ts                # Suno UI 注入の純関数群（注入 / 完了検知 / reCAPTCHA 検知）
-  suno-helper/            # Suno Custom Mode 自動投入拡張（WXT プロジェクト）
+  suno-helper/            # Suno Advanced タブ自動投入拡張（WXT プロジェクト）
     wxt.config.ts         # manifest 自動生成（最小権限は lib/manifest.ts が SSOT）
     entrypoints/          # background / content / popup
     components/           # popup の React UI

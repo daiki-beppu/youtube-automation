@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(upload)`: collection の `workflow-state.json::title_template_check.allow_volume_patterns: true` で、そのコレクションだけ公開タイトルの `Vol.` / `Part` / `#N` / ローマ数字の巻数表記を upload preflight で許可できるようにした。未設定・`false` の既定検出、RHS 鋳型・完全重複・核語彙の検査、および `content.json::title.template_check.volume_patterns` は変更しない（#1729）
 
+### Changed
+
+- `docs(suno-helper)`: Suno UI の旧「Custom Mode」および「Instrumental ON/OFF」表記を、現行の Advanced タブと Lyrics mode（Write / Instrumental）の用語へ更新した。operator 手順、拡張 description、保守用コメントを対象とし、実行時のセレクタ・エラーメッセージ・テスト期待値は変更していない（#1900）
+
 ### Fixed
 
 - `fix(upload)`: `yt-upload-collection` の `-c` 未指定時の自動選択を、`collections/planning/` 配下で `phase=mastered` かつ `upload.video_id=null` の未公開コレクション 1 件だけに限定した。`live/` の公開済みコレクションは候補外とし、候補が 0 件または複数件なら `-c` 明示を要求して停止する。`--plan` / `--status` / 実アップロードと日次実行に同じ選択条件を適用した（#1731）。
