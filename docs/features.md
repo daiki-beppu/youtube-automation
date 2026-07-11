@@ -1,6 +1,6 @@
 # 全 skill カタログ
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **45 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **46 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
@@ -111,6 +111,7 @@ YouTube Analytics と動画本体の解析。
 | /automation-release | 本リポジトリの新規リリースを作成（prepare → publish の 2 フェーズ） |
 | /automation-update | 下流チャンネルを upstream 最新版に追従（pin bump + `yt-skills sync` + 動作確認） |
 | /ext-install | Chrome 拡張（suno-helper / distrokid-helper）の初回インストールまたは更新ガイド |
+| /feedback | スキル実行中の不具合・摩擦・改善案を append-only JSONL に構造化記録 |
 
 ---
 
