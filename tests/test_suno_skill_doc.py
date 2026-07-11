@@ -189,10 +189,9 @@ def test_skill_md_documents_tracks_per_collection_for_instrumental() -> None:
     Then インストモードが pattern モデルから `tracks_per_collection` ベースに刷新されたことが記載されている。
 
     本 PR: `/suno-helper` の登場で連続生成 + playlist 一括化が自動化されたため、`/suno` 側の
-    `patterns_per_collection × tracks_per_pattern × 2 (Suno 1 Generate = 2 clip)` 入れ子モデルを
-    インスト側だけ廃止し、フラットな `tracks_per_collection` 指定 → `ceil(N/2)` 個の独立 entry に
-    切り替えた。ボーカルモードは選曲精度のため pattern モデル維持。読み手 (AI / operator) が
-    旧モデルで yaml を書き始めないよう、新節タイトルと算出式の存在をここで機械的に担保する。
+    インストモードをフラットな `tracks_per_collection` 指定 → `ceil(N/2)` 個の独立 entry に
+    切り替えた。読み手 (AI / operator) が旧モデルで yaml を書き始めないよう、新節タイトルと
+    算出式の存在をここで機械的に担保する。
     """
     text = _read()
     # 新節タイトルの存在 (インストとボーカルが視認できるレベルで明確に分離されていること)
