@@ -166,9 +166,7 @@ def analyze_channel_trend(
             "subs_net": int(r["subs_net"]),
             "views_7d_ma": round(float(r["views_7d_ma"]), 2),
             "views_28d_ma": round(float(r["views_28d_ma"]), 2),
-            "views_z_score": (
-                round(float(r["views_z_score"]), 2) if pd.notna(r["views_z_score"]) else None
-            ),
+            "views_z_score": (round(float(r["views_z_score"]), 2) if pd.notna(r["views_z_score"]) else None),
         }
         for _, r in df.iterrows()
     ]
