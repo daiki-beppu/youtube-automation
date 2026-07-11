@@ -101,6 +101,6 @@ TS 版（tayk）の開発は専用の別リポジトリで行う（`docs/adr/002
 
 - **issue 起票**: `gh issue create` または `/issue` スキル
 - **takt 起動**: `takt add '#<N>'` → `takt run`（base branch は **main** 固定、PR は通常 PR）
-- **workflow 使い分け**: 小〜中規模 issue はリポジトリ同梱の軽量 workflow **`lite`**（plan → implement → review の 3 step、トークン消費が少ない）。セキュリティ・認証・アップロード系、スキル横断・破壊的変更、テスト戦略設計が要る issue は組み込み **default**（9 step）を使う。skill 記述のみの変更、または設計判断・依存ブロッカーのない機械的な軽微コード修正（単一関数〜数ファイル・テスト設計不要）の小規模 issue は takt を使わず `/issue-direct` や手動で直接実装する（`takt:none` ラベル）。基準は `docs/takt-operations.md`
+- **workflow 使い分け**: issue の `takt:*` ラベルと同名の workflow で実行する（ラベル = workflow 名）。`takt:feature`（新規 feature・セキュリティ/認証・公開インターフェース/スキーマ変更。テスト先行の厳格 7 step）/ `takt:improve`（既存機能の意図的な挙動変更・拡張、interface 変更なし）/ `takt:diagnose-fix`（原因不明バグの診断 → 条件付き自動修正）/ `takt:fix`（原因特定済みの軽量修正）/ `takt:docs`（ドキュメント・skill のみの変更）/ `takt:lite`（refactor / chore 等の軽量タスク。迷ったらこれ）。`takt:manual` は takt を使わず `/issue-direct` や手動で直接実装する。判定基準と対応表は `docs/takt-operations.md`
 - **commit 規約**: 日本語 Conventional Commits + タイトル末尾に `(#<N>)`
 - **リリース**: `/automation-release` スキル（post-release は `/release-notes`）
