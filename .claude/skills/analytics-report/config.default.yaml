@@ -14,3 +14,19 @@ html:
   # Shorts を除外する既定値。リストは deep-merge で丸ごと置換される。
   exclude_title_keywords:
     - "#Shorts"
+
+theme:
+  colors:
+    background: "#0f1419"
+    card_background: "#1a2332"
+    accent: "#c8a96e"
+    text: "#e8e6e3"
+    chart_palette:
+      - "#4ecdc4"
+      - "#45b7d1"
+      - "#96ceb4"
+      - "#ffeaa7"
+      - "#dfe6e9"
+    success: "#00b894"
+    warning: "#fdcb6e"
+    danger: "#e17055"
