@@ -2,27 +2,27 @@
 
 CLAUDE.md の「開発ワークフロー」節の詳細版。要点は CLAUDE.md を参照。
 
-## workflow の使い分け（default / lite）
+## workflow の使い分け（ラベル = workflow 名）
 
-- **`lite`**（`.takt/workflows/lite.yaml`、リポジトリ同梱）: 小〜中規模 issue 用の軽量 3 step（plan → implement → review）。各 step でプロジェクトコンテキスト（CLAUDE.md + skill descriptions 等）が再注入されるため、step 数の削減がそのままトークン削減になる。`takt add` 時に workflow として `lite` を指定する
-- **組み込み `default`**（9 step: plan → write_tests → implement → ai-antipattern → 並列 review → supervisor）: 以下に該当する issue は必ず default を使う
-  - セキュリティ・認証（OAuth / secrets）に触れる変更
-  - アップロードの**対象選択・公開状態を変えるロジック**の変更（例: auto-detect の対象選択条件、publish / privacy 制御、live 移行）。preflight の**検証強化・メッセージ・しきい値調整**に留まる修正はここに含めない（lite で可）
-  - 複数スキル・複数モジュールを横断する変更、破壊的変更
-  - テスト戦略の設計が必要な新機能
+issue には実行ルートを示す `takt:*` ラベルを **1 つ** 付与し、着手時はラベルと同名の workflow で実行する（`takt add '#<N>' -w <名前>`）。判定基準の単一ソースはグローバル `/issue` スキルの workflow 判断表（`~/.claude/skills/issue/SKILL.md`）で、本表はその要約。
+
+| ラベル | workflow（step 構成） | 対象 |
+|---|---|---|
+| `takt:feature` | `feature`（plan → test_design → test_design_review → write_tests(red 実証) → implement → review → scope_review） | 新規 feature（既存挙動を触らない）。セキュリティ・認証（OAuth / secrets）系、公開インターフェース・スキーマ変更を伴う変更もこちら |
+| `takt:improve` | `improve`（plan → implement → review。挙動変更影響表で意図した変更と回帰を区別） | 既存機能の意図的な挙動変更・拡張（interface 変更なし） |
+| `takt:diagnose-fix` | `diagnose-fix`（diagnose → fix → supervise。fix 条件未達は診断レポートを残して停止） | 原因不明のバグ（再現手順・原因が issue 本文に無い） |
+| `takt:fix` | `fix`（fix → supervise の軽量 2 step。plan・テスト先行なし） | 原因特定済みの小さなバグ修正・軽微な指摘対応 |
+| `takt:docs` | `docs`（implement → review の最軽量 2 step） | ドキュメント・skill のみの変更（コード変更なし） |
+| `takt:lite` | `lite`（plan → implement → review。リポジトリ同梱 `.takt/workflows/lite.yaml`） | refactor / chore、既存テストで挙動確認できる軽量タスク。**迷ったらこれ（トークン節約優先）** |
+| `takt:manual` | なし | takt 不要。1 行修正・誤字・設定値 1 箇所変更などの極小タスク（`/issue-direct` や手動で直接実装）、または人間の判断・対話が主となる issue |
+
+- workflow の実体: `lite` はリポジトリ同梱（`.takt/workflows/lite.yaml`）、その他はグローバル `~/.takt/workflows/*.yaml`
+- 境界の指針:
+  - 影響範囲が未確定のときは `takt:feature` に寄せる（fail-safe）
+  - アップロードの**対象選択・公開状態を変えるロジック**の変更（例: auto-detect の対象選択条件、publish / privacy 制御、live 移行）、複数スキル・複数モジュール横断、破壊的変更は厳格側（`takt:feature`）。preflight の**検証強化・メッセージ・しきい値調整**に留まる修正は `takt:fix` / `takt:lite` で可
+  - 挙動選択に設計判断が要るもの（フォールバック方針、resume ポリシー、統計手法の整合）や後方互換設計が要るものは `takt:manual` に落とさず workflow に載せる
+- 旧体系からの読み替え: `takt:default` → `takt:feature`、`takt:none` → `takt:manual`（2026-07 に世代交代。旧ラベルは削除済みで、新規付与は新ラベルのみ）
 - 導入後に新しい takt バージョンへ上げた場合は `takt workflow doctor lite` で静的検証すること（step スキーマのキー名が変わる可能性がある）
-
-### issue ラベルとの対応（takt:default / takt:lite / takt:manual / takt:none）
-
-issue には実行ルートを示す `takt:*` ラベルを付与し、着手時はラベルに従って経路を選ぶ:
-
-- **`takt:default`**: 組み込み default workflow（テスト先行 9 step）で自動実行可能。上記 default の基準に該当する issue
-- **`takt:lite`**: リポジトリ同梱 lite workflow（plan → implement → review の軽量 3 step）で自動実行可能。上記 lite の基準に該当する小〜中規模 issue
-- **`takt:manual`**: takt 不要・手動実装が妥当（takt に載せるより人間の判断・対話が主となる issue）
-- **`takt:none`**: takt 不要・`/issue-direct` や手動で直接実装できる小規模タスク。テスト設計が不要で、workflow の step 分解がオーバーヘッドにしかならない規模のうち、以下の **いずれか** に該当する issue に付与する
-  - **skill 記述のみの変更**: 影響ファイルが `.claude/skills/` 配下の記述のみ（SKILL.md / config.default.yaml / references のテンプレ・文言）で、`src/` 等のコード変更ゼロ
-  - **軽微なコード修正**: 単一関数〜数ファイルの機械的な修正で、期待挙動が issue 本文に一意に書かれ、設計判断・依存ブロッカーがないもの（例: 定数・文言の置換、dead code 削除、単一関数への上限 clamp 追加、セレクタの tolerant match 化、1 行の正規化追加）
-  - 境界例（**`takt:lite` に残す**）: 挙動選択に設計判断が要るもの（フォールバック方針、resume ポリシー、統計手法の整合）、複数経路への貫通確認や後方互換設計が要るもの、アップロード系のうち preflight の検証強化・メッセージ・しきい値調整に留まる修正（レビュー価値が高いため `takt:none` には落とさない。ただしアップロードの**対象選択・公開状態を変えるロジック**は上記 default の基準に該当するため lite ではなく `takt:default`）
 
 ## 提出前セルフ監査（pre-review-checklist）
 
@@ -85,7 +85,7 @@ takt（v0.49 時点）の 1 step は最大 3 phase の LLM 呼び出しで構成
 
 - Claude provider の `settingSources: ['project']` はハードコード。CLAUDE.md / `.claude/skills` の description は Claude step の全 phase で毎回注入されるため、**注入量を減らす唯一の手段はリポジトリ側ドキュメント・description を薄く保つこと**
 - 状態判定（Phase 3）だけを別モデルにする設定は無い（判定は step と同じ provider/model。唯一の例外は `loop_monitors[].judge` の provider/model 指定）
-- 組み込み default は全 step にレポート契約 + 自然言語 rules を持つため Phase 2 / Phase 3 のコストが構造的に乗る。大型 issue で default を選ぶのは品質優先の判断として妥当
+- 厳格系 workflow（`feature` 等、レポート契約 + 自然言語 rules を持つ step が多いもの）は Phase 2 / Phase 3 のコストが構造的に乗る。大型 issue で `feature` を選ぶのは品質優先の判断として妥当
 
 ### session resume と worktree
 
