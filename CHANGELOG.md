@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `feat(upload)`: collection の `workflow-state.json::title_template_check.allow_volume_patterns: true` で、そのコレクションだけ公開タイトルの `Vol.` / `Part` / `#N` / ローマ数字の巻数表記を upload preflight で許可できるようにした。未設定・`false` の既定検出、RHS 鋳型・完全重複・核語彙の検査、および `content.json::title.template_check.volume_patterns` は変更しない（#1729）
+- `docs(setup)`: `/setup` wizard の起動直後にライブ配信予定の有無を確認し、予定ありの場合は YouTube のライブ配信有効化に最大 24 時間かかる旨と YouTube Studio での有効化リクエスト手順を `[HUMAN STEP]` で案内するようにした。案内後は有効化完了を待たず通常の setup フローを続行する（#1896）
 
 ### Fixed
 

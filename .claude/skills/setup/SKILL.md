@@ -39,17 +39,34 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 
 ## 起動時のチェック
 
-空フォルダでは `yt-doctor` がまだ存在しないため、最初に automation CLI を導入する:
+空フォルダでは `yt-doctor` がまだ存在しないため、最初にライブ配信予定を確認してから automation CLI を導入する:
 
-1. `uv` が無ければ `uv` step を案内する
-2. `pyproject.toml` が無ければ `uv init` を Bash で実行する
-3. `pyproject.toml` に `youtube-channels-automation` 依存が無ければ `uv add git+https://github.com/daiki-beppu/youtube-automation.git` を Bash で実行する
-4. `uv run yt-skills sync --asset skills --force` / `uv run yt-skills sync --asset claude-md` / `uv run yt-skills sync --asset auth-template` を Bash で実行する
-5. `uv run yt-setup-dirs` を Bash で実行し、OAuth クライアント JSON の配置先 `auth/` など setup に必要な最小ディレクトリを作成する
-6. `uv run yt-doctor --json` を Bash で実行し、結果を読む
-7. `summary.next_check_id` が `null` なら「全 check 緑です。`/setup` は完了済みです」と報告して終了
-8. `null` でないなら、その check に対応する手順 (§Steps) に進む
-9. 1 ステップ完了したら、必ず `uv run yt-doctor --json` を再実行して進捗確認してから次の `next_check_id` に移る
+1. 利用者に「このチャンネルで近いうちにライブ配信または 24/7 配信を予定していますか？」と 1 問だけ確認する
+   - 予定なしの場合: 追加案内はせず、次の手順へ進む
+   - 予定ありの場合: YouTube のライブ配信有効化はリクエストから最大 24 時間かかるため、今すぐ有効化しておくよう注意喚起し、以下を **[HUMAN STEP]** として案内する。ただし、この有効化完了は `/setup` のブロッカーにせず、案内後は次の手順へ進む
+
+```
+> [HUMAN STEP]
+> YouTube のライブ配信有効化は、リクエストから最大 24 時間かかる場合があります。
+> 近いうちにライブ配信または 24/7 配信を行う予定があるため、今すぐ有効化リクエストだけ済ませてください。
+>
+> 手順:
+>   1. https://studio.youtube.com を開く
+>   2. 右上の「作成」から「ライブ配信開始」を選ぶ
+>   3. 画面の案内に従ってライブ配信の有効化をリクエストする
+>
+> 有効化完了は待たずに、/setup wizard はこのまま続行します。
+```
+
+2. `uv` が無ければ `uv` step を案内する
+3. `pyproject.toml` が無ければ `uv init` を Bash で実行する
+4. `pyproject.toml` に `youtube-channels-automation` 依存が無ければ `uv add git+https://github.com/daiki-beppu/youtube-automation.git` を Bash で実行する
+5. `uv run yt-skills sync --asset skills --force` / `uv run yt-skills sync --asset claude-md` / `uv run yt-skills sync --asset auth-template` を Bash で実行する
+6. `uv run yt-setup-dirs` を Bash で実行し、OAuth クライアント JSON の配置先 `auth/` など setup に必要な最小ディレクトリを作成する
+7. `uv run yt-doctor --json` を Bash で実行し、結果を読む
+8. `summary.next_check_id` が `null` なら「全 check 緑です。`/setup` は完了済みです」と報告して終了
+9. `null` でないなら、その check に対応する手順 (§Steps) に進む
+10. 1 ステップ完了したら、必ず `uv run yt-doctor --json` を再実行して進捗確認してから次の `next_check_id` に移る
 
 `/setup` は `uv run yt-setup-dirs` で `auth/`, `branding/`, `collections/`, `data/`, `docs/channel/personas/`, `docs/benchmarks/`, `research/` を冪等に作成する。`/setup` では `config/channel/*.json` を生成しない。新規チャンネルの config、TTP メモ、ペルソナ、branding は引き続き `/channel-new` の責務。
 
@@ -76,6 +93,8 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 ```
 
 利用者が "done" と返すまで、次の Bash ツール呼び出しはしない。返ってきたら `uv run yt-doctor --json` を再実行して結果を確認する。
+
+例外: 「起動時のチェック」のライブ配信有効化リクエスト案内は、リードタイム確保のための早期注意喚起である。`[HUMAN STEP]` 書式で案内するが、完了待ちはせず wizard を通常どおり続行する。
 
 ## Steps (check id ごとの対応手順)
 
