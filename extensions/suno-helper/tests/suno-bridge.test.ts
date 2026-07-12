@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BRIDGE_MSG,
   BRIDGE_SOURCE,
+  FEED_V3_MAX_PAGES,
   FEED_V3_METHOD,
+  FEED_V3_PAGE_DELAY_MS,
   FEED_V3_PATH,
   GENERATE_ENDPOINT_PATH,
   SUNO_API_ORIGIN,
@@ -128,5 +130,54 @@ describe("suno-bridge fetch interceptor", () => {
       },
       window.location.origin,
     );
+  });
+
+  it("Given 対象 clip が先頭ページにない When active poll request を受ける Then cursor を辿って全対象を返す", async () => {
+    vi.useFakeTimers();
+    const originalFetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ clips: [] }))
+      .mockResolvedValueOnce(jsonResponse({ clips: [{ id: "new", status: "complete" }], next_cursor: "cursor-2" }))
+      .mockResolvedValueOnce(jsonResponse({ clips: [{ id: "old", status: "complete" }] }));
+    vi.stubGlobal("fetch", originalFetch);
+    const postMessage = vi.spyOn(window, "postMessage").mockImplementation(() => undefined);
+
+    await loadBridge();
+    await window.fetch(`${SUNO_API_ORIGIN}${FEED_V3_PATH}`, {
+      method: FEED_V3_METHOD,
+      headers: { authorization: "Bearer token" },
+    });
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: window,
+        data: {
+          source: BRIDGE_SOURCE,
+          type: BRIDGE_MSG.FEED_V3_POLL_REQUEST,
+          requestId: 124,
+          ids: ["new", "old"],
+        },
+      }),
+    );
+    await vi.runAllTimersAsync();
+
+    expect(originalFetch).toHaveBeenLastCalledWith(`${SUNO_API_ORIGIN}${FEED_V3_PATH}`, {
+      method: FEED_V3_METHOD,
+      headers: { authorization: "Bearer token", "content-type": "application/json" },
+      body: JSON.stringify({ ids: ["new", "old"], cursor: "cursor-2" }),
+    });
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: BRIDGE_MSG.FEED_V3_POLL_RESPONSE,
+        requestId: 124,
+        clips: [
+          { id: "new", status: "complete" },
+          { id: "old", status: "complete" },
+        ],
+      }),
+      window.location.origin,
+    );
+    expect(FEED_V3_MAX_PAGES).toBe(8);
+    expect(FEED_V3_PAGE_DELAY_MS).toBe(1000);
+    vi.useRealTimers();
   });
 });
