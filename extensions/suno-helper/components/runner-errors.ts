@@ -187,16 +187,29 @@ export function isContentScriptMissingError(message: string): boolean {
   return /receiving end does not exist|could not establish connection/i.test(message);
 }
 
+export function isExtensionContextInvalidatedError(message: string): boolean {
+  return /extension context invalidated|no response at sendmessage|wxt\/storage.*web extension environment/i.test(
+    message,
+  );
+}
+
+export const EXTENSION_RELOAD_REQUIRED_MESSAGE =
+  "拡張が更新されました。Suno タブをハードリロードしてから操作してください。";
+
+export function isExtensionReloadRequiredError(message: string): boolean {
+  return isContentScriptMissingError(message) || isExtensionContextInvalidatedError(message);
+}
+
 export function formatRunError(message: string): string {
-  if (isContentScriptMissingError(message)) {
-    return `開始失敗: ${message}\nSuno タブをハードリロード (⌘+Shift+R / Ctrl+Shift+R) してから再度実行してください。`;
+  if (isExtensionReloadRequiredError(message)) {
+    return `開始失敗: ${message}\n${EXTENSION_RELOAD_REQUIRED_MESSAGE}（⌘+Shift+R / Ctrl+Shift+R）`;
   }
   return `開始失敗: ${message}\nSuno の Custom Mode 画面を開いた状態で実行してください。`;
 }
 
 export function formatStopError(message: string): string {
-  if (isContentScriptMissingError(message)) {
-    return `停止リクエスト失敗: ${message}\nSuno タブをハードリロード (⌘+Shift+R / Ctrl+Shift+R) してから再度実行してください。`;
+  if (isExtensionReloadRequiredError(message)) {
+    return `停止リクエスト失敗: ${message}\n${EXTENSION_RELOAD_REQUIRED_MESSAGE}（⌘+Shift+R / Ctrl+Shift+R）`;
   }
   return `停止リクエスト失敗: ${message}`;
 }
