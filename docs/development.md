@@ -58,8 +58,9 @@ Python 側の未使用コード検出は、追加依存なしで CI / pre-commit
 
 有効化と運用:
 
-- **有効化**: 親 checkout / worktree のどちらでも `nix develop`（または direnv `use flake`）で devShell に入る。`flake.nix` の shellHook が `lefthook` を PATH に供給し、`.lefthook/install.sh` で hook を再生成する。手動再生成も `nix develop --command bash .lefthook/install.sh` を使う
-- **診断**: 親 checkout / worktree のそれぞれで `nix develop --command sh -c 'command -v lefthook && lefthook version'` を実行し、`lefthook` が PATH から解決できることを確認する。`git commit` / `git push` で `Can't find lefthook in PATH` が出る場合は、対象 checkout で `nix develop --command bash .lefthook/install.sh` を実行して stale な hook を再生成する
+- **有効化**: 親 checkout / 新規 worktree のどちらでも、最初に `bash .lefthook/setup-worktree.sh` を 1 回実行する。direnv があればルートの `.envrc`（`use flake`）を allow して devShell に入り、なければ `nix develop` を使う。どちらの経路でも shellHook と `.lefthook/install.sh` が hook wrapper を再生成する
+- **devShell 内での実行**: direnv の自動入室が有効な shell ではそのまま `uv run pytest` 等を実行できる。agent や非対話 shell では `bash .lefthook/setup-worktree.sh uv run pytest` のように引数を渡すと、同じ devShell 内でコマンドを実行できる
+- **診断**: 親 checkout / worktree のそれぞれで `bash .lefthook/setup-worktree.sh sh -c 'command -v lefthook && lefthook version'` を実行する。`git commit` / `git push` で `Can't find lefthook in PATH` が出る場合は `bash .lefthook/setup-worktree.sh` を再実行する。直接の Nix 診断・再生成には `nix develop --command sh -c 'command -v lefthook && lefthook version'` と `nix develop --command bash .lefthook/install.sh` も利用できる
 - **失敗時の扱い**: shellHook は `lefthook` 不在や hook 再生成失敗を `|| true` で握りつぶさない。devShell 入室時に明示的に失敗させ、commit / push 時の hook no-op を防ぐ
 - **全 hook をスキップ**: `LEFTHOOK=0 git push` / `LEFTHOOK=0 git commit`
 - **CHANGELOG ゲートのみ省く**: `SKIP_CHANGELOG=1 git push`（CI 側は PR の `skip-changelog` ラベル）

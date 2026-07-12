@@ -8,6 +8,9 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _FLAKE_PATH = _REPO_ROOT / "flake.nix"
 _LEFTHOOK_INSTALL_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "install.sh"
+_WORKTREE_SETUP_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "setup-worktree.sh"
+_ENVRC_PATH = _REPO_ROOT / ".envrc"
+_LITE_WORKFLOW_PATH = _REPO_ROOT / ".takt" / "workflows" / "lite.yaml"
 _LEFTHOOK_CONFIG_PATH = _REPO_ROOT / "lefthook.yml"
 _DEVELOPMENT_DOC_PATH = _REPO_ROOT / "docs" / "development.md"
 _TAKT_OPERATIONS_DOC_PATH = _REPO_ROOT / "docs" / "takt-operations.md"
@@ -50,6 +53,17 @@ def _create_fake_executable(path: Path, content: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
+def _run_worktree_setup(workdir: Path, path: str, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash", str(_WORKTREE_SETUP_SCRIPT_PATH), *args],
+        cwd=workdir,
+        env={**os.environ, "PATH": path},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
 def _configure_git_identity(repo: Path) -> None:
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
     subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
@@ -79,6 +93,18 @@ def _create_linked_worktree_with_hook_files(tmp_path: Path) -> Path:
     )
     (worktree / "lefthook.yml").write_text(_read(_LEFTHOOK_CONFIG_PATH), encoding="utf-8")
     return worktree
+
+
+def _create_parent_checkout_with_hook_files(tmp_path: Path) -> Path:
+    parent = tmp_path / "parent-checkout"
+    subprocess.run(["git", "init", str(parent)], check=True, capture_output=True, text=True)
+    (parent / ".lefthook").mkdir()
+    (parent / ".lefthook" / "install.sh").write_text(
+        _read(_LEFTHOOK_INSTALL_SCRIPT_PATH),
+        encoding="utf-8",
+    )
+    (parent / "lefthook.yml").write_text(_read(_LEFTHOOK_CONFIG_PATH), encoding="utf-8")
+    return parent
 
 
 def _commit_file(repo: Path, name: str = "tracked.txt", *, verify: bool = True) -> subprocess.CompletedProcess[str]:
@@ -527,6 +553,191 @@ def test_lefthook_install_script_fails_when_force_install_fails(tmp_path: Path) 
     assert (
         "error: lefthook install failed; run 'nix develop --command bash .lefthook/install.sh' after fixing the error."
     ) in result.stderr
+
+
+def test_worktree_setup_uses_direnv_allow_and_exec_with_forwarded_arguments(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    call_log = tmp_path / "direnv-calls.txt"
+    _create_fake_executable(
+        bin_dir / "direnv",
+        f"""#!/usr/bin/env bash
+printf '%s\n' "$*" >> "{call_log}"
+if [ "$1" = "allow" ]; then
+  exit 0
+fi
+shift 2
+exec "$@"
+""",
+    )
+
+    result = _run_worktree_setup(
+        tmp_path,
+        f"{bin_dir}:/usr/bin:/bin",
+        "sh",
+        "-c",
+        "printf forwarded",
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "forwarded"
+    assert call_log.read_text(encoding="utf-8").splitlines() == [
+        f"allow {tmp_path}",
+        f"exec {tmp_path} sh -c printf forwarded",
+    ]
+
+
+def test_worktree_setup_resolves_checkout_root_from_subdirectory(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    nested = tmp_path / "nested" / "directory"
+    nested.mkdir(parents=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    call_log = tmp_path / "direnv-calls.txt"
+    _create_fake_executable(
+        bin_dir / "direnv",
+        f'#!/usr/bin/env bash\nprintf \'%s\\n\' "$*" >> "{call_log}"\nexit 0\n',
+    )
+
+    result = _run_worktree_setup(nested, f"{bin_dir}:/usr/bin:/bin")
+
+    assert result.returncode == 0
+    assert call_log.read_text(encoding="utf-8").splitlines() == [
+        f"allow {tmp_path}",
+        f"exec {tmp_path} bash {tmp_path}/.lefthook/install.sh",
+    ]
+
+
+def test_worktree_setup_falls_back_to_nix_and_runs_default_install(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    (tmp_path / ".lefthook").mkdir()
+    install_log = tmp_path / "install-ran.txt"
+    _create_fake_executable(
+        tmp_path / ".lefthook" / "install.sh",
+        f'#!/usr/bin/env bash\nprintf installed > "{install_log}"\n',
+    )
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    nix_log = tmp_path / "nix-call.txt"
+    _create_fake_executable(
+        bin_dir / "nix",
+        f"""#!/usr/bin/env bash
+printf '%s\n' "$*" > "{nix_log}"
+shift 3
+exec "$@"
+""",
+    )
+
+    result = _run_worktree_setup(tmp_path, f"{bin_dir}:/usr/bin:/bin")
+
+    assert result.returncode == 0
+    assert nix_log.read_text(encoding="utf-8") == (
+        f"develop {tmp_path} --command bash {tmp_path}/.lefthook/install.sh\n"
+    )
+    assert install_log.read_text(encoding="utf-8") == "installed"
+
+
+def _assert_setup_supplies_dev_shell_tools_and_commit_hook(checkout: Path, tmp_path: Path) -> None:
+    _configure_git_identity(checkout)
+    hook_log = tmp_path / f"{checkout.name}-hook-ran.txt"
+    (checkout / "flake.nix").write_text(_read(_FLAKE_PATH), encoding="utf-8")
+    (checkout / "flake.lock").write_text(_read(_REPO_ROOT / "flake.lock"), encoding="utf-8")
+    (checkout / "lefthook.yml").write_text(
+        f"pre-commit:\n  commands:\n    prove-hook-runs:\n      run: printf ran > {hook_log}\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", "."], cwd=checkout, check=True)
+    subprocess.run(
+        ["git", "commit", "--no-verify", "-m", "prepare dev shell fixture"],
+        cwd=checkout,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    setup_result = _run_worktree_setup(
+        checkout,
+        "/nix/var/nix/profiles/default/bin:/usr/bin:/bin",
+        "sh",
+        "-c",
+        "command -v lefthook && command -v uv",
+    )
+    commit_result = _commit_file(checkout)
+
+    assert setup_result.returncode == 0
+    tool_paths = setup_result.stdout.splitlines()[-2:]
+    assert all(path.startswith("/nix/store/") for path in tool_paths)
+    assert tool_paths[0].endswith("/bin/lefthook")
+    assert tool_paths[1].endswith("/bin/uv")
+    assert commit_result.returncode == 0
+    assert hook_log.read_text(encoding="utf-8") == "ran"
+
+
+def test_parent_checkout_setup_supplies_dev_shell_tools_and_commit_hook(tmp_path: Path) -> None:
+    parent = _create_parent_checkout_with_hook_files(tmp_path)
+
+    _assert_setup_supplies_dev_shell_tools_and_commit_hook(parent, tmp_path)
+
+
+def test_linked_worktree_setup_supplies_dev_shell_tools_and_commit_hook(tmp_path: Path) -> None:
+    worktree = _create_linked_worktree_with_hook_files(tmp_path)
+
+    _assert_setup_supplies_dev_shell_tools_and_commit_hook(worktree, tmp_path)
+
+
+def test_worktree_setup_propagates_direnv_allow_failure(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _create_fake_executable(bin_dir / "direnv", "#!/usr/bin/env bash\nexit 23\n")
+
+    result = _run_worktree_setup(tmp_path, f"{bin_dir}:/usr/bin:/bin", "sh", "-c", "exit 0")
+
+    assert result.returncode == 23
+
+
+def test_worktree_setup_fails_outside_git_checkout(tmp_path: Path) -> None:
+    result = _run_worktree_setup(tmp_path, "/usr/bin:/bin")
+
+    assert result.returncode == 1
+    assert result.stderr == "error: run this script from a Git checkout or worktree.\n"
+
+
+def test_worktree_setup_fails_when_no_environment_loader_is_available(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+
+    result = _run_worktree_setup(tmp_path, "/usr/bin:/bin")
+
+    assert result.returncode == 1
+    assert result.stderr == "error: neither direnv nor nix is available in PATH.\n"
+
+
+def test_worktree_environment_contract_is_wired_into_lite_steps_and_docs() -> None:
+    assert _read(_ENVRC_PATH) == "use flake\n"
+    workflow = _read(_LITE_WORKFLOW_PATH)
+    setup_instruction = "最初に `bash .lefthook/setup-worktree.sh` を実行"
+    wrapped_command_instruction = "`bash .lefthook/setup-worktree.sh <command> [args...]` 経由"
+    assert workflow.count(setup_instruction) == 3
+    assert workflow.count(wrapped_command_instruction) == 3
+
+    for document in (_DEVELOPMENT_DOC_PATH, _TAKT_OPERATIONS_DOC_PATH, _CLAUDE_PATH):
+        content = _read(document)
+        assert "bash .lefthook/setup-worktree.sh" in content
+        assert ".envrc" in content
+
+
+def test_direnv_cache_is_gitignored() -> None:
+    result = subprocess.run(
+        ["git", "check-ignore", ".direnv/cache"],
+        cwd=_REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == ".direnv/cache\n"
 
 
 def test_lefthook_config_documents_install_script_entrypoint() -> None:
