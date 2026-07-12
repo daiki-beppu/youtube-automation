@@ -54,7 +54,7 @@
 
 ## 取り込み Step 6: 検証
 
-JSON 構文検証・config ロードテスト（`uv run yt-config-migrate verify`）は **`references/verification.md`** を参照。
+JSON 構文検証・config ロードテスト（`uv run yt-doctor --json` の `channel_config.status` 判定）は **`references/verification.md`** を参照。
 
 ## 取り込み Step 7: OAuth 認証と channel_id 取得
 
@@ -72,4 +72,4 @@ config 生成・認証完了後、以下を案内:
 4. **データ収集・分析**: `/analytics-collect` → `/analytics-analyze` で現状のパフォーマンスを把握
 5. **コレクション制作**: `/wf-new` で最初のコレクション制作を開始
 
-取り込みモードは、`config/channel/*.json` の生成、`uv run yt-config-migrate verify` の成功、OAuth 認証、`channel_id` の `config/channel/meta.json::channel.channel_id` 保存、次ステップ案内まで到達した時点で完了扱いにできる。新規開設モードの `benchmark.channels`、`ttp-seed-confirmation.md`、branding snapshot、`ttp_wf_new_readiness` は取り込みモードの必須完了条件ではない。
+取り込みモードは、`config/channel/*.json` の生成、`uv run yt-doctor --json` の `channel_config.status` が `ok`、OAuth 認証、`channel_id` の `config/channel/meta.json::channel.channel_id` 保存、次ステップ案内まで到達した時点で完了扱いにできる。新規開設モードの `benchmark.channels`、`ttp-seed-confirmation.md`、branding snapshot、`ttp_wf_new_readiness` は取り込みモードの必須完了条件ではない。

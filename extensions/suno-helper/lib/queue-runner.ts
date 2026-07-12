@@ -271,8 +271,9 @@ export async function submitQueueEntries(options: QueueSubmissionOptions): Promi
 
 export async function waitForSubmittedClipsComplete(options: SubmittedClipCompletionOptions): Promise<string[]> {
   const now = options.now ?? Date.now;
-  const deadline = now() + INFLIGHT_STALL_TIMEOUT_MS;
-  let lastPendingCount = Number.POSITIVE_INFINITY;
+  let lastProgressAt = now();
+  let deadline = lastProgressAt + INFLIGHT_STALL_TIMEOUT_MS;
+  let lastPendingCount: number | undefined;
   while (!options.isAborted()) {
     const submittedIds = options.getSubmittedIds();
     const observedSubmittedCount = new Set([...options.previousSubmittedClipIds, ...submittedIds]).size;
@@ -287,15 +288,21 @@ export async function waitForSubmittedClipsComplete(options: SubmittedClipComple
         `playlist 対象の clip ID 数が不足しています: expected ${options.expectedClipCount}, got ${observedSubmittedCount}`,
       );
     }
+    const currentNow = now();
+    const pendingCountDecreased = lastPendingCount !== undefined && pendingSubmittedIds.length < lastPendingCount;
+    if (pendingCountDecreased) {
+      lastProgressAt = currentNow;
+      deadline = lastProgressAt + INFLIGHT_STALL_TIMEOUT_MS;
+    }
     if (pendingSubmittedIds.length !== lastPendingCount) {
-      lastPendingCount = pendingSubmittedIds.length;
       console.info(
         `[suno-helper] final clip completion wait: submitted=${observedSubmittedCount}/${options.expectedClipCount}, pending=${pendingSubmittedIds.length}`,
       );
     }
-    if (now() >= deadline) {
+    lastPendingCount = pendingSubmittedIds.length;
+    if (currentNow >= deadline) {
       throw new Error(
-        `生成完了待ちがタイムアウトしました: submitted=${observedSubmittedCount}/${options.expectedClipCount}, pending=${pendingSubmittedIds.length}`,
+        `生成完了待ちがタイムアウトしました: submitted=${observedSubmittedCount}/${options.expectedClipCount}, pending=${pendingSubmittedIds.length}, 最後の進捗からの経過時間=${currentNow - lastProgressAt}ms`,
       );
     }
     await options.requestFeedPoll(pendingSubmittedIds);

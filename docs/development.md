@@ -11,9 +11,6 @@ uv run yt-skills list                                # 同梱スキル一覧
 uv run yt-skills list --asset claude-md              # 同梱 CLAUDE.md テンプレ一覧
 uv run yt-skills diff                                # 同梱版と target の差分確認
 uv run yt-skills diff --asset claude-md              # CLAUDE.md テンプレの差分確認
-uv run yt-config-migrate diff                        # 旧 channel_config.json → 責務別分割のプレビュー
-uv run yt-config-migrate migrate --apply             # 実際に分割実行
-uv run yt-config-migrate verify                      # 新 loader で読み込み検証
 ```
 
 ## パッケージング

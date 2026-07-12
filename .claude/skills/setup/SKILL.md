@@ -39,17 +39,34 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 
 ## 起動時のチェック
 
-空フォルダでは `yt-doctor` がまだ存在しないため、最初に automation CLI を導入する:
+空フォルダでは `yt-doctor` がまだ存在しないため、最初にライブ配信予定を確認してから automation CLI を導入する:
 
-1. `uv` が無ければ `uv` step を案内する
-2. `pyproject.toml` が無ければ `uv init` を Bash で実行する
-3. `pyproject.toml` に `youtube-channels-automation` 依存が無ければ `uv add git+https://github.com/daiki-beppu/youtube-automation.git` を Bash で実行する
-4. `uv run yt-skills sync --asset skills --force` / `uv run yt-skills sync --asset claude-md` / `uv run yt-skills sync --asset auth-template` を Bash で実行する
-5. `uv run yt-setup-dirs` を Bash で実行し、OAuth クライアント JSON の配置先 `auth/` など setup に必要な最小ディレクトリを作成する
-6. `uv run yt-doctor --json` を Bash で実行し、結果を読む
-7. `summary.next_check_id` が `null` なら「全 check 緑です。`/setup` は完了済みです」と報告して終了
-8. `null` でないなら、その check に対応する手順 (§Steps) に進む
-9. 1 ステップ完了したら、必ず `uv run yt-doctor --json` を再実行して進捗確認してから次の `next_check_id` に移る
+1. 利用者に「このチャンネルで近いうちにライブ配信または 24/7 配信を予定していますか？」と 1 問だけ確認する
+   - 予定なしの場合: 追加案内はせず、次の手順へ進む
+   - 予定ありの場合: YouTube のライブ配信有効化はリクエストから最大 24 時間かかるため、今すぐ有効化しておくよう注意喚起し、以下を **[HUMAN STEP]** として案内する。ただし、この有効化完了は `/setup` のブロッカーにせず、案内後は次の手順へ進む
+
+```
+> [HUMAN STEP]
+> YouTube のライブ配信有効化は、リクエストから最大 24 時間かかる場合があります。
+> 近いうちにライブ配信または 24/7 配信を行う予定があるため、今すぐ有効化リクエストだけ済ませてください。
+>
+> 手順:
+>   1. https://studio.youtube.com を開く
+>   2. 右上の「作成」から「ライブ配信開始」を選ぶ
+>   3. 画面の案内に従ってライブ配信の有効化をリクエストする
+>
+> 有効化完了は待たずに、/setup wizard はこのまま続行します。
+```
+
+2. `uv` が無ければ `uv` step を案内する
+3. `pyproject.toml` が無ければ `uv init` を Bash で実行する
+4. `pyproject.toml` に `youtube-channels-automation` 依存が無ければ `uv add git+https://github.com/daiki-beppu/youtube-automation.git` を Bash で実行する
+5. `uv run yt-skills sync --asset skills --force` / `uv run yt-skills sync --asset claude-md` / `uv run yt-skills sync --asset auth-template` を Bash で実行する
+6. `uv run yt-setup-dirs` を Bash で実行し、OAuth クライアント JSON の配置先 `auth/` など setup に必要な最小ディレクトリを作成する
+7. `uv run yt-doctor --json` を Bash で実行し、結果を読む
+8. `summary.next_check_id` が `null` なら「運用設定インタビュー」を実行してから「完了時」の報告を行う
+9. `null` でないなら、その check に対応する手順 (§Steps) に進む
+10. 1 ステップ完了したら、必ず `uv run yt-doctor --json` を再実行して進捗確認してから次の `next_check_id` に移る
 
 `/setup` は `uv run yt-setup-dirs` で `auth/`, `branding/`, `collections/`, `data/`, `docs/channel/personas/`, `docs/benchmarks/`, `research/` を冪等に作成する。`/setup` では `config/channel/*.json` を生成しない。新規チャンネルの config、TTP メモ、ペルソナ、branding は引き続き `/channel-new` の責務。
 
@@ -76,6 +93,8 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 ```
 
 利用者が "done" と返すまで、次の Bash ツール呼び出しはしない。返ってきたら `uv run yt-doctor --json` を再実行して結果を確認する。
+
+例外: 「起動時のチェック」のライブ配信有効化リクエスト案内は、リードタイム確保のための早期注意喚起である。`[HUMAN STEP]` 書式で案内するが、完了待ちはせず wizard を通常どおり続行する。
 
 ## Steps (check id ごとの対応手順)
 
@@ -309,7 +328,7 @@ uv run yt-channel-status
 
 `yt-doctor` の `next_action.instructions` を確認:
 
-- **`/channel-new` 案内** (config/channel/ ディレクトリ未存在): 新規チャンネルの場合は `/channel-new` を実行して設定を作成する
+- **`/channel-new` 案内** (config/channel/ ディレクトリ未存在): 新規チャンネルの場合は `/channel-new` を実行して設定を作成する。この経路では対象 config が未生成のため「運用設定インタビュー」はスキップし、「運用設定は `/channel-new` 完了後に `/setup` を再実行して設定できます」と案内する
 - **`/channel-new` 取り込みモード案内** (ディレクトリ存在・ロード失敗): 既存チャンネルの config を持ち込む場合は `/channel-new`（既存チャンネル取り込みモード）を実行して設定を修復する
 
 AI は config をここで生成しない。`yt-setup-dirs` で setup 用ディレクトリが作成済みでも `config/channel/*.json` は未生成で正常な中間状態として扱う。`yt-doctor` の `message` に含まれるエラー詳細をそのまま利用者に示し、どちらのルートかを確認してから案内する。
@@ -381,9 +400,32 @@ channel_id 未設定の場合は AI が以下を確認・案内:
 1. `uv run yt-channel-status` を Bash で実行してチャンネル ID を取得
 2. 取得した ID を `config/channel/meta.json` の `channel.channel_id` に書き込む
 
+## 運用設定インタビュー
+
+`uv run yt-doctor --json` で `summary.next_check_id` が `null` になった後、完了報告の**直前**に実行する。`/setup` の再診断時も同じ手順で現在の運用設定を確認する。
+
+### 実行条件と共通ルール
+
+1. `config/channel/` が存在せず `channel_config` の未生成経路に入った場合は、インタビューを実行しない。`channel_config` の手順どおり「運用設定は `/channel-new` 完了後に `/setup` を再実行して設定できます」と案内する。`/setup` は config を生成しない。
+2. `config/channel/` がロード可能なら、`config/channel/workflow.json` は任意であり、未存在でもインタビューを実行する。下表の workflow 3 行は、`workflow.json` またはその入れ子のキーが未設定ならいずれも `false` を現在値として扱う。回答が現在値と異なる場合は、必要な入れ子を含む `workflow.json` を作成または更新する。
+3. 下表の各行について、質問する直前に config を読んで現在値を取得する。現在値を利用者に質問してはならない。loop-video はまず `.claude/skills/loop-video/config.default.yaml` を読み、`config/skills/loop-video.yaml` が存在する場合はそれも読んで、`youtube_automation.utils.skill_config.load_skill_config("loop-video")` と同じ deep-merge（default の上に override）で `enabled` の現在値を解決する。override に `enabled` が無い場合も default の値を現在値とする。
+4. 質問は必ず 1 問ずつ表示し、回答を待ってから次の行へ進む。各質問には現在値と、現在値を維持する推奨回答を添える。複数の質問をまとめて表示してはならない。
+5. 回答が現在値と同じならファイルを編集しない。異なる場合だけ、その行の config を Edit で更新する。既存 `config/skills/loop-video.yaml` を更新するときは `enabled` だけを変更し、ほかの override キーを保持する。
+
+| 順番 | config | キー | default | 質問と推奨回答 |
+| --- | --- | --- | --- | --- |
+| 1 | `config/channel/workflow.json` | `workflow.wf_next.approval_gates.audio` | `false` | 「音源承認ゲートを有効にしますか？ 現在値: `<current>`。推奨: 現在値を維持（既存の音源承認フローを変えないため）」 |
+| 2 | `config/channel/workflow.json` | `workflow.wf_next.approval_gates.upload` | `false` | 「アップロード承認ゲートを有効にしますか？ 現在値: `<current>`。推奨: 現在値を維持（既存のアップロードフローを変えないため）」 |
+| 3 | `config/channel/workflow.json` | `workflow.wf_next.skip_manual_mastering` | `false` | 「手動マスタリング検出をスキップしますか？ 現在値: `<current>`。推奨: 現在値を維持（既存のマスタリングフローを変えないため）」 |
+| 4 | `config/skills/loop-video.yaml` | `enabled` | `true` | 「ループ動画生成を有効にしますか？ 現在値: `<current>`。Veo API の利用には課金が発生します。推奨: 現在値を維持（既存の Veo 利用方針を変えないため）」 |
+
+`workflow.wf_next.approval_gates.audio` は最終マスター候補の採用前、`workflow.wf_next.approval_gates.upload` は YouTube アップロード前に承認を取る設定である。`workflow.wf_next.skip_manual_mastering` を `true` にすると、最終マスター候補がなくても raw master を最終音源として採用する。
+
+`config/skills/loop-video.yaml` が存在しない場合は、解決した現在値と異なる回答のときだけ、回答値を `enabled` に持つ override ファイルを新規作成する。現在値のままなら override ファイルを作成してはならない。
+
 ## 完了時
 
-`uv run yt-doctor --json` で `summary.next_check_id` が `null` (全 check 緑) になったら:
+`uv run yt-doctor --json` で `summary.next_check_id` が `null` (全 check 緑) になり、「運用設定インタビュー」を終えたら:
 
 ```
 ✓ setup 完了。

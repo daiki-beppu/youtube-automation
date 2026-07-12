@@ -19,8 +19,10 @@ for p in sorted(glob.glob('config/channel/*.json')):
 ## load_config() ロードテスト
 
 ```bash
-uv run yt-config-migrate verify
+uv run yt-doctor --json
 ```
+
+出力の `checks` から `id` が `channel_config` の項目を探し、`status` が `ok` であることを確認する。`yt-doctor` は他の診断が失敗しても終了コード 0 のため、終了コードだけで config 正常と判定しない。
 
 または直接 API で確認:
 

@@ -2,7 +2,7 @@
 
 旧 distrokid.json（フラット 6 文字列の profile）を新 schema
 （nested songwriter + ai_disclosure、artist_name / apple_music_credit / track_type を drop）
-へ in-place 変換する移行ツール。`yt-config-migrate` の dry-run/`--apply`/backup パターンを踏襲した
+へ in-place 変換する移行ツール。dry-run/`--apply`/backup パターンを持つ
 単一目的 CLI（サブコマンドなし）。
 
 定義する契約（draft が実装する前提）:

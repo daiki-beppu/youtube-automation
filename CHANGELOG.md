@@ -9,13 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `docs(skills)`: 下流チャンネルリポジトリでスキル実行中の不具合・摩擦・改善案を `data/feedback/feedback-log.jsonl` に append-only JSONL として記録する `/feedback` スキルを追加した。entry schema は `.claude/skills/feedback/references/feedback-entry.schema.json` に単一ソース化し、`date` / `skill` / `category` / `summary` / `context` / `status` / `issue_url` の構造、`status="recorded"` の新規記録、機密情報の `***REDACTED***` マスクを SKILL.md に明記した。下流配布 CLAUDE.md テンプレにもスキル摩擦時に `/feedback` を案内する導線を追加した（#1828）。
+- `docs(setup)`: `/setup` の全 check 緑後・完了報告前に、`workflow.wf_next` の音源 / アップロード承認ゲート、手動マスタリング検出スキップ、Veo 課金を伴う loop-video の有効状態を 1 問ずつ確認する運用設定インタビューを追加した。現在値と推奨回答を提示し、変更時だけ config を更新する（#1902）
 - `feat(upload)`: collection の `workflow-state.json::title_template_check.allow_volume_patterns: true` で、そのコレクションだけ公開タイトルの `Vol.` / `Part` / `#N` / ローマ数字の巻数表記を upload preflight で許可できるようにした。未設定・`false` の既定検出、RHS 鋳型・完全重複・核語彙の検査、および `content.json::title.template_check.volume_patterns` は変更しない（#1729）
+- `docs(setup)`: `/setup` wizard の起動直後にライブ配信予定の有無を確認し、予定ありの場合は YouTube のライブ配信有効化に最大 24 時間かかる旨と YouTube Studio での有効化リクエスト手順を `[HUMAN STEP]` で案内するようにした。案内後は有効化完了を待たず通常の setup フローを続行する（#1896）
+- `feat(analytics-report)`: HTML レポートのテーマ色を `analytics-report/config.default.yaml::theme.colors` に移し、`config/skills/analytics-report.yaml` の channel override で差し替えられるようにした。未設定チャンネルでは既存パレットを維持する（#1691）
+
+### Changed
+
+- `docs(suno-helper)`: Suno UI の旧「Custom Mode」および「Instrumental ON/OFF」表記を、現行の Advanced タブと Lyrics mode（Write / Instrumental）の用語へ更新した。operator 手順、拡張 description、保守用コメントを対象とし、実行時のセレクタ・エラーメッセージ・テスト期待値は変更していない（#1900）
 
 ### Fixed
 
+- `fix(suno-helper)`: Download all メニューの短時間 auto-close レースに対し、More クリック直後から探索を開始し、検出失敗時は最大 3 回再クリックしてダウンロードを継続できるようにした（#1926）。
+- `fix(suno-helper)`: 拡張更新時に既存の Suno タブを自動リロードし、旧 content script の orphaned context を残さず新しい bundle を再注入するようにした（#1718）。
+- `fix(suno-helper)`: feed/v3 の active poll が `ids` フィルタ無効化後も cursor ページネーションを追跡し、最新ページ外の保存済み clip を完了確認できるようにした（#1929）。
+- `fix(thumbnail)`: `/thumbnail` SKILL.md の標準生成順序と Single-Step / TTP 章を、テキスト付き `thumbnail.jpg` 先行 → 承認済み `thumbnail.jpg` から textless `main.png/jpg` 後続再生成の契約へ統一した。`config.default.yaml` の single_step コメント、サンプルプロンプト、`short-thumbnail` の前提案内も同じ順序へ追従し、旧 textless 先行文言を回帰テストでロックした（#1901）。
+- `fix(thumbnail)`: `codex-image.sh` に codex CLI とサーバー側デフォルトモデルの互換性プリフライトを追加し、非互換時は画像生成を試みず CLI version・検出モデル・アップグレード手順を stderr に出して停止するようにした。生成失敗時の診断 dump にも codex CLI version と default model 推定値を含める（#1915）。
+- `fix(suno-helper)`: Download all ZIP の展開・音声配置・`workflow-state.json` 更新がすべて成功した後に、元 ZIP を自動削除するようにした。ZIP 削除だけが失敗した場合は、成功済みの音声と workflow-state を維持し、警告を記録する（#1890）。
 - `fix(upload)`: `yt-upload-collection` の `-c` 未指定時の自動選択を、`collections/planning/` 配下で `phase=mastered` かつ `upload.video_id=null` の未公開コレクション 1 件だけに限定した。`live/` の公開済みコレクションは候補外とし、候補が 0 件または複数件なら `-c` 明示を要求して停止する。`--plan` / `--status` / 実アップロードと日次実行に同じ選択条件を適用した（#1731）。
 - `fix(upload)`: タグ件数下限が YouTube の 500 字上限の下で到達不能な場合、upload preflight と metadata audit が件数不足ではなく、`tags.min_count` を下げるか base タグを短縮するよう案内する明示診断を返すようにした。配布する content.json テンプレートの `tags.min_count` も 26 に統一した（#1732）。
 - `fix(loop-video)`: Ctrl+C 後の Veo operation resume state に入力画像の SHA-256 を保存し、再実行時に指定モデルまたは入力画像内容が state と異なる場合は旧 operation を破棄して指定どおり新規生成するようにした（#1746）。旧形式 state は安全側で破棄する。
+- `fix(analytics)`: `yt-channel-trend` の z-score 基準から当日を除外し、min_periods 未達を `null` として明示するよう修正した。トレンド判定は直近 28 日とその前の 28 日の平均を比較し、週次前週比は完全な 7 日間の週だけで計算する（#1803）。
 
 ## [5.5.17] - 2026-07-10
 
@@ -38,6 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(suno)`: ボーカルモードの `tracks_per_pattern` / `(Take N)` 展開を廃止し、1 pattern = 1 prompt entry の生成・検証契約へ単純化した（#1923）。下流の `config/skills/suno.yaml` に旧キーが残っていても読み取らず、`yt-generate-suno` / `yt-suno-verify` は展開なしの entry name と件数で処理する。
+- `docs(channel-setup)`: チャンネル初回制作前に、サムネイルと楽曲の小規模パイロット試作を行い、結果を確認してから本制作へ進む検証フェーズを channel-new / wf-new / onboarding に追加した（#1657）。
+- `docs(skills)`: analytics / benchmark 系スキルに subagent 委譲時の入力・出力契約、委譲対象、結果の統合手順を明記し、収集・分析・競合発掘・視聴者調査の各経路で委譲後の検証責務を揃えた（#1663）。
 - `feat(suno-helper)`: 投入方式の表示名を `Serial` →「安全モード」、`Queue` →「高速モード」へ改称し、各モードの説明文を速度と安定性の違いが 1 行で伝わる簡潔な文面（安全モード:「1件ずつ完了を待つ、安定性重視のモードです。」/ 高速モード:「最大10件を先行投入する、速度重視のモードです。」）に簡素化した（#1862）。変更は `shared/constants.ts` の `RUN_MODES` 表示ラベル・説明文のみで、内部識別子 `serial` / `queue`（chrome.storage.local の `sunoRunMode` 保存値・run payload・resume state）は互換性維持のため不変。`/suno-helper` SKILL.md の利用者向け `Queue mode` 表記も「高速モード（内部値: queue）」へ追従
 - `perf(videoup)`: effect なしの静止画背景を 1 GOP 分だけベイクし、`-stream_loop -1 -c:v copy -t <audio_duration> -shortest` で全尺化する経路へ統合。生成後は ffprobe で映像の読み取りと尺を検証し、1 フレーム超の差または probe 失敗を fail-loud にした（#1681）
 - `docs(extensions)`: Chrome 拡張のローカル検証を npm の現行 pnpm 11.11.0 に固定した。`suno-helper` / `distrokid-helper` 共通の pinned install / build / zip、期待 zip、lockfile 無差分の確認手順を共通・各拡張 README、開発 docs、`/suno`、`/automation-release` へ明記した（#1682）
@@ -69,6 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - `refactor(cleanup)`: deprecated 表明済みの単発移行スクリプト `yt-fix-timestamps`（`scripts/fix_per_theme_timestamps.py`、2026-03/04 の特定コレクションをハードコード対象とする一括補修用）を削除した（#1673）。`pyproject.toml` の entry point / `cli_entrypoints.py` / `tests/test_fix_per_theme_timestamps.py` / `tests/test_cli_stdio.py` の参照も併せて除去。masterup SKILL.md が本 CLI を現役手順として記述していた矛盾（Step 5.7 / CLI 対応表 / フォールバック手動手順 / 完了条件）も解消した。現行のタイムスタンプ生成は `metadata_generator` の `generate_timestamps()` 系が正
+- `refactor(config)`: `/Users/mba/02-yt` 配下の下流チャンネル 6/6 件が `config/channel/*.json` の v2 分割構成でロードでき、旧 `config/channel_config.json` が 0 件であることを確認したため、移行専用の `yt-config-migrate` CLI（entry point / 実装 / テスト / 移行ガイド）を撤去した。channel-new の生成後検証と `yt-automation-update apply` の config smoke check は、loader と localization title placeholder を検証する `yt-doctor` の `channel_config` check に統一した（#1672）
 - `chore(deps)`: import ゼロで宣言のみ残っていた直接依存 `seaborn` を削除した（plan 024）。transitive に必要な `pandas` / `matplotlib` は引き続き `[project] dependencies` に独立宣言済み
 - `refactor(utils)`: 旧 analytics モノリスの unreachable な残骸（`report_generator.py` / `report_renderer.py` / `analytics_analyzer.py`、計 1,016 行）を削除した（plan 023）。現行の analytics は `analytics_base.py` Protocol + `strategic_analytics.py` / `ctr_analytics.py` 等の mixin 構成に移行済みで、これら 3 ファイルはどこからも import されていなかった。`ctr_analytics.py` の docstring に残っていた `analytics_analyzer._analyze_collection_ctrs` への stale な参照も削除した
 

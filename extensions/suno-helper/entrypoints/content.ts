@@ -1,4 +1,4 @@
-// Suno Custom Mode への Style / Lyrics 注入と Generate 連続実行 (content script)。
+// Suno の Advanced タブへの Style / Lyrics 注入と Generate 連続実行 (content script)。
 // DOM 操作は shared/dom の純関数へ委譲し、本ファイルは連続実行のフロー制御に専念する。
 import { DEFAULT_DURATION_FILTER, type DurationFilter, type PromptEntry } from "../../shared/api";
 import {
@@ -131,6 +131,49 @@ function assertOptionalBoolean(value: unknown, field: string): boolean | undefin
     throw new Error(`${field} must be boolean`);
   }
   return value;
+}
+
+export interface AttemptClipCompletionOptions {
+  getPendingIdsByIds: (clipIds: string[]) => string[];
+  requestFeedPoll: (clipIds: string[]) => Promise<unknown>;
+  abortableSleep: (milliseconds: number, isAborted: () => boolean) => Promise<void>;
+  isAborted: () => boolean;
+  now: () => number;
+}
+
+export async function waitForAttemptClipsComplete(
+  clipIds: string[],
+  options: AttemptClipCompletionOptions,
+): Promise<void> {
+  if (clipIds.length === 0) {
+    throw new Error("duration guard 用の clip ID を観測できませんでした。bridge の generate 観測を確認してください。");
+  }
+  let lastProgressAt = options.now();
+  let deadline = lastProgressAt + INFLIGHT_STALL_TIMEOUT_MS;
+  let lastPendingCount: number | undefined;
+  while (!options.isAborted()) {
+    const pendingIds = options.getPendingIdsByIds(clipIds);
+    if (pendingIds.length === 0) {
+      return;
+    }
+    const currentNow = options.now();
+    const pendingCountDecreased = lastPendingCount !== undefined && pendingIds.length < lastPendingCount;
+    if (pendingCountDecreased) {
+      lastProgressAt = currentNow;
+      deadline = lastProgressAt + INFLIGHT_STALL_TIMEOUT_MS;
+    }
+    if (pendingIds.length !== lastPendingCount) {
+      console.info(`[suno-helper] yield guard wait: pending=${pendingIds.length}/${clipIds.length}`);
+    }
+    lastPendingCount = pendingIds.length;
+    if (currentNow >= deadline) {
+      throw new Error(
+        `duration guard の clip 完了待ちがタイムアウトしました: pending=${pendingIds.length}, 最後の進捗からの経過時間=${currentNow - lastProgressAt}ms`,
+      );
+    }
+    await options.requestFeedPoll(pendingIds);
+    await options.abortableSleep(POLL_INTERVAL_MS, options.isAborted);
+  }
 }
 
 function assertOptionalDurationFilter(value: unknown, field: string): DurationFilter | undefined {
@@ -272,6 +315,28 @@ async function resolveDownloadContext(): Promise<DownloadContext> {
 export default defineContentScript({
   matches: [...SUNO_MATCHES],
   main(ctx) {
+    // 更新前に残った content script は service worker と別バージョンになり得る。
+    // handshake 自体の失敗も古い context では起こり得るため、必ず catch して未処理 rejection を残さない。
+    try {
+      const version = browser.runtime.getManifest().version;
+      void sendMessage("extensionVersionHandshake", { version })
+        .then((result) => {
+          if (!result.matches) {
+            console.warn(`[suno-helper] content script のバージョンが不一致です（${version} / ${result.version}）`);
+          }
+        })
+        .catch((error: unknown) => {
+          console.warn(
+            "[suno-helper] content script の version handshake に失敗しました（context invalidated?）:",
+            error,
+          );
+        });
+    } catch (error) {
+      console.warn(
+        "[suno-helper] content script の version handshake を開始できません（context invalidated?）:",
+        error,
+      );
+    }
     let aborted = false;
     // 連続実行の二重起動ガード (#892 要件7)。runAll 実行中の run 再着信を弾く。
     let running = false;
@@ -418,7 +483,7 @@ export default defineContentScript({
         // title 欄不在は Suno 側 UI 改装の可能性。style/lyrics と違い fail-soft（警告のみで続行）。
         console.warn("Song Title 欄が見つかりませんでした。タイトル注入を skip して続行します。");
       }
-      // Custom Mode > More Options の 3 フィールド (#900)。slider 注入は MAIN world bridge 経由
+      // Advanced タブ > More Options の 3 フィールド (#900)。slider 注入は MAIN world bridge 経由
       // （React onKeyDown 直接呼び出しで isTrusted チェックを通過、#973）を優先し、失敗時は従来の
       // 合成 keydown dispatch へ縮退する（e2e mock の plain DOM はこちらで動く）。entry に値があり
       // selector が不在なら input / vocal_gender は injectAdvancedFields が throw する (fail-loud)。
@@ -676,33 +741,14 @@ export default defineContentScript({
       return new Set([...previousSubmittedClipIds, ...Array.from(clipIdsByEntry.values()).flat()]).size;
     }
 
-    async function waitForAttemptClipsComplete(clipIds: string[], isAborted: () => boolean): Promise<void> {
-      if (clipIds.length === 0) {
-        throw new Error(
-          "duration guard 用の clip ID を観測できませんでした。bridge の generate 観測を確認してください。",
-        );
-      }
-      const deadline = Date.now() + INFLIGHT_STALL_TIMEOUT_MS;
-      let lastPendingCount = Number.POSITIVE_INFINITY;
-      while (!isAborted()) {
-        const pendingIds = tracker.getPendingIdsByIds(clipIds);
-        if (pendingIds.length === 0) {
-          return;
-        }
-        if (pendingIds.length !== lastPendingCount) {
-          lastPendingCount = pendingIds.length;
-          console.info(`[suno-helper] yield guard wait: pending=${pendingIds.length}/${clipIds.length}`);
-        }
-        if (Date.now() >= deadline) {
-          throw new Error(`duration guard の clip 完了待ちがタイムアウトしました: pending=${pendingIds.length}`);
-        }
-        await requestFeedPoll(pendingIds);
-        await abortableSleep(POLL_INTERVAL_MS, isAborted);
-      }
-    }
-
     async function evaluateAttemptYield(clipIds: string[], durationFilter: DurationFilter, isAborted: () => boolean) {
-      await waitForAttemptClipsComplete(clipIds, isAborted);
+      await waitForAttemptClipsComplete(clipIds, {
+        getPendingIdsByIds: (ids) => tracker.getPendingIdsByIds(ids),
+        requestFeedPoll,
+        abortableSleep,
+        isAborted,
+        now: Date.now,
+      });
       return evaluateClips(
         clipIds.map((id) => ({ id, duration: tracker.getDuration(id) })),
         durationFilter,

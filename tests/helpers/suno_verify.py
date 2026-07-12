@@ -53,10 +53,10 @@ def write_patterns(
     (docs / "suno-patterns.yaml").write_text(yaml.safe_dump(payload, allow_unicode=True), encoding="utf-8")
 
 
-def prompt_names(*, mode: str, scenes_count: int, tracks_per_pattern: int = 1) -> list[str]:
+def prompt_names(*, mode: str, scenes_count: int) -> list[str]:
     name_jp = "歌もの" if mode == "vocal" else "静かな雨"
     name_en = "Vocal" if mode == "vocal" else "Quiet Rain"
-    return suno_prompt_entry_names(name_jp, name_en, scenes_count, tracks_per_pattern=tracks_per_pattern)
+    return suno_prompt_entry_names(name_jp, name_en, scenes_count)
 
 
 def write_prompts(docs: Path, names: list[str], *, lyrics: str = "[Instrumental]\n") -> None:

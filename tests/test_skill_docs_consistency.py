@@ -839,6 +839,41 @@ def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
             )
 
 
+def test_analytics_report_theme_colors_are_config_driven() -> None:
+    skill = _read(".claude/skills/analytics-report/SKILL.md")
+    default_config = yaml.safe_load(_read(".claude/skills/analytics-report/config.default.yaml")) or {}
+
+    colors = default_config.get("theme", {}).get("colors")
+    assert colors == {
+        "background": "#0f1419",
+        "card_background": "#1a2332",
+        "accent": "#c8a96e",
+        "text": "#e8e6e3",
+        "chart_palette": ["#4ecdc4", "#45b7d1", "#96ceb4", "#ffeaa7", "#dfe6e9"],
+        "success": "#00b894",
+        "warning": "#fdcb6e",
+        "danger": "#e17055",
+    }
+
+    assert "`theme.colors`" in skill
+    assert "config/skills/analytics-report.yaml" in skill
+    for color in (
+        "#0f1419",
+        "#1a2332",
+        "#c8a96e",
+        "#e8e6e3",
+        "#4ecdc4",
+        "#45b7d1",
+        "#96ceb4",
+        "#ffeaa7",
+        "#dfe6e9",
+        "#00b894",
+        "#fdcb6e",
+        "#e17055",
+    ):
+        assert color not in skill
+
+
 def test_collection_lifecycle_uses_mp3_as_public_audio_contract() -> None:
     text = _read(".claude/skills/collection-ideate/references/collection-lifecycle.md")
 

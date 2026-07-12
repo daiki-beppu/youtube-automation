@@ -14,7 +14,6 @@ YouTube チャンネル運営を自動化するツールキット。`youtube-cha
 uv run yt-skills sync             # チャンネルリポジトリへ .claude/skills を配布（--asset claude-md で CLAUDE.md テンプレ）
 uv run yt-skills list             # 同梱スキル一覧
 uv run yt-skills diff             # 同梱版と target の差分確認
-uv run yt-config-migrate diff     # 旧 channel_config.json → 責務別分割のプレビュー（migrate --apply / verify も有り）
 ```
 
 `yt-*` 系 CLI 全 30 件超は `pyproject.toml` の `[project.scripts]` に登録されている。新規 CLI を追加するときは **必ず `yt-*` プレフィックス**を踏襲し、entry point を登録すること。

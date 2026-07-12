@@ -73,23 +73,17 @@ scripts/
 
 ---
 
-## 6.12 v1 → v2 設定移行残骸（`cli.config_migrate`）
+## 6.12 v1 → v2 設定移行残骸
 
 ### 6.12.1 配置と役割
 
-`src/youtube_automation/cli/config_migrate.py:1-13`（モジュール docstring 抜粋）:
+当時の移行 CLI のモジュール docstring 抜粋:
 
-> "yt-config-migrate — 旧 config/channel_config.json を新 config/channel/*.json 構造に分割する。
+> "旧 config/channel_config.json を新 config/channel/*.json 構造に分割する。
 > ...
 > automation v2.0.0 に pin-bump した直後、旧 channel_config.json のままでも実行可能である必要があるため。"
 
-`pyproject.toml:48`:
-
-```toml
-yt-config-migrate = "youtube_automation.cli.config_migrate:main"
-```
-
-→ entry point として登録継続。
+当時は `pyproject.toml:48` に entry point として登録継続。
 
 `src/youtube_automation/utils/config/loader.py:100-106`:
 
@@ -99,26 +93,26 @@ legacy_path = channel_dir_path / "config" / "channel_config.json"
 if legacy_path.exists():
     raise ConfigError(
         f"旧 channel_config.json が残っています: {legacy_path}\n"
-        "yt-config-migrate で新構造 (config/channel/*.json) へ変換してください"
+        "移行 CLI で新構造 (config/channel/*.json) へ変換してください"
     )
 ```
 
-→ **新 loader は legacy 形式を読まずに ConfigError で fail-fast**。`yt-config-migrate` で移行する前提。
+→ **新 loader は legacy 形式を読まずに ConfigError で fail-fast**。移行 CLI で変換する前提。
 
 ### 6.12.2 現在の役割（v5.5.0 時点）
 
-`docs/migration/v2-config-split.md` が存在（`docs/migration/` の中身を `Bash ls` で確認済み）。v2 移行ガイドが残っている。
+当時は v2 移行ガイドが残っていた。
 
-`config_migrate` 本体は読み取りロジックを independent に持つ（loader を使わない設計、`config_migrate.py:8-12` docstring 明記）。これは過去の判断としては適切。
+移行 CLI 本体は読み取りロジックを independent に持つ（loader を使わない設計）。これは過去の判断としては適切。
 
-`tests/test_config_migrate.py` などのテストカバレッジは未確認だが、`yt-config-migrate verify` が新 loader でロード検証可能。
+移行 CLI のテストカバレッジは未確認だが、verify サブコマンドが新 loader でロード検証可能だった。
 
 ### 6.12.3 廃止判定
 
 - v2.0.0 への pin-bump 後の移行用 → 既に **v5.5.0**（pyproject.toml:8）に到達。3 メジャーバージョン経過
 - 下流チャンネルが v1 → v2 移行を未完了で残しているケースは個別調査要だが、loader 側が hard fail するので「移行せずに使い続ける」運用は不可能
 
-→ `yt-config-migrate` を撤去するタイミングを検討する余地あり（**P3: 中長期判断**）。撤去判断には CHANGELOG / 配布実績の追跡が必要だが、新規ユーザーには不要 CLI。
+→ v1→v2 config 移行 CLI を撤去するタイミングを検討する余地あり（**P3: 中長期判断**）。撤去判断には CHANGELOG / 配布実績の追跡が必要だが、新規ユーザーには不要 CLI。
 
 ---
 
@@ -259,7 +253,7 @@ def _build_workflow(merged: dict) -> Workflow:
 |---|---|---|
 | 6.11 | `CLAUDE.md:38` が古く、`utils/`/`agents/` shim は実在しない（同ファイル L.100 と矛盾） | P2（docs） |
 | 6.11 | `auth/`, `scripts/` ルートディレクトリは shim ではなく template + 共通スクリプト | — |
-| 6.12 | `yt-config-migrate` v1→v2 移行 CLI は v5.5.0 でも残存。撤去判断が必要 | P3 |
+| 6.12 | v1→v2 config 移行 CLI は v5.5.0 でも残存。撤去判断が必要 | P3 |
 | 6.13 | `Workflow` dataclass 空、`_build_workflow` も placeholder。dead backward-compat shim | P2 |
 | 6.14 | skill バージョン追跡なし、wheel 同期は `--force` 明示要 | **P1**（下流ずれリスク） |
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BALANCED_RUN_PACING, CLIPS_PER_REQUEST, PHASE } from "../../shared/constants";
+import { BALANCED_RUN_PACING, CLIPS_PER_REQUEST, INFLIGHT_STALL_TIMEOUT_MS, PHASE } from "../../shared/constants";
 import type { EntryRunResult, RunEntryWithRetryOptions } from "../lib/entry-retry";
 import { writeResumeState } from "../lib/resume-state";
 import { makePromptEntries, markBbox } from "./_helpers";
@@ -404,6 +404,56 @@ afterEach(() => {
 });
 
 describe('content onMessage("run"): Run 開始前の Suno view preflight', () => {
+  it("duration guard の pending 減少後は新しい stall deadline まで待機し、停滞時だけ timeout する", async () => {
+    await loadContentScript();
+    const { waitForAttemptClipsComplete } = await import("../entrypoints/content");
+    let currentTime = 0;
+    let pollCount = 0;
+    const pendingClipIds = new Set(["clip-a", "clip-b"]);
+
+    await expect(
+      waitForAttemptClipsComplete(["clip-a", "clip-b"], {
+        getPendingIdsByIds: (ids) => ids.filter((id) => pendingClipIds.has(id)),
+        requestFeedPoll: async () => {
+          pollCount += 1;
+          if (pollCount === 1) {
+            pendingClipIds.delete("clip-a");
+          }
+        },
+        abortableSleep: async () => {
+          currentTime += INFLIGHT_STALL_TIMEOUT_MS;
+        },
+        isAborted: () => false,
+        now: () => currentTime,
+      }),
+    ).rejects.toThrow(`最後の進捗からの経過時間=${INFLIGHT_STALL_TIMEOUT_MS}ms`);
+    expect(pollCount).toBe(2);
+  });
+
+  it("duration guard の pending 増加は stall deadline をリセットしない", async () => {
+    await loadContentScript();
+    const { waitForAttemptClipsComplete } = await import("../entrypoints/content");
+    let currentTime = 0;
+    let pollCount = 0;
+    const pendingClipIds = new Set(["clip-a", "clip-b"]);
+
+    await expect(
+      waitForAttemptClipsComplete(["clip-a", "clip-b", "clip-c"], {
+        getPendingIdsByIds: (ids) => ids.filter((id) => pendingClipIds.has(id)),
+        requestFeedPoll: async () => {
+          pollCount += 1;
+          pendingClipIds.add("clip-c");
+        },
+        abortableSleep: async () => {
+          currentTime += INFLIGHT_STALL_TIMEOUT_MS;
+        },
+        isAborted: () => false,
+        now: () => currentTime,
+      }),
+    ).rejects.toThrow(`最後の進捗からの経過時間=${INFLIGHT_STALL_TIMEOUT_MS}ms`);
+    expect(pollCount).toBe(1);
+  });
+
   it("Given 旧 array payload When run を受ける Then fail-loud し副作用を起こさない", async () => {
     await loadContentScript();
     const runHandler = getRunHandler();

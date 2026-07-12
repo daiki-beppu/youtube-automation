@@ -190,6 +190,12 @@ export const FEED_POLL_INTERVAL_MS = 5000;
 /** active feed poll の応答待ち上限 (ms)。bridge 不在・token 未捕捉時に listener 側が諦める時間。 */
 export const FEED_V3_POLL_RESPONSE_TIMEOUT_MS = 10000;
 
+/** active feed poll が追跡する最大ページ数。実測した対象 clip の最大到達ページに余裕を持たせる。 */
+export const FEED_V3_MAX_PAGES = 8;
+
+/** active feed poll のページ間待機 (ms)。ページ連続取得による rate limit を避ける。 */
+export const FEED_V3_PAGE_DELAY_MS = 1000;
+
 /** bridge が観測した clip の最小表現（#948）。status は Suno API の生値（submitted/queued/streaming/complete/error 等）。 */
 export interface ObservedClip {
   id: string;

@@ -27,7 +27,6 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-collection-preflight": "youtube_automation.scripts.collection_preflight",
     "yt-collection-serve": "youtube_automation.scripts.collection_serve",
     "yt-comments-reply": "youtube_automation.scripts.comment_reply",
-    "yt-config-migrate": "youtube_automation.cli.config_migrate",
     "yt-cost-report": "youtube_automation.cli.cost_report",
     "yt-discover-competitors": "youtube_automation.scripts.discover_competitors",
     "yt-distrokid-migrate": "youtube_automation.cli.distrokid_migrate",
@@ -257,6 +256,17 @@ def test_project_scripts_route_through_cli_entrypoint_wrappers():
         assert module_name == "youtube_automation.cli_entrypoints"
         assert function_name
         assert hasattr(cli_entrypoints, function_name)
+
+
+def test_retired_config_migration_cli_is_not_registered():
+    from youtube_automation import cli_entrypoints
+
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    retired_script = "yt-config" + "-migrate"
+    retired_wrapper = "yt_config" + "_migrate"
+
+    assert retired_script not in pyproject["project"]["scripts"]
+    assert not hasattr(cli_entrypoints, retired_wrapper)
 
 
 @pytest.mark.parametrize(

@@ -17,6 +17,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 import tomllib
@@ -162,6 +163,39 @@ def _run_command(cmd: list[str], cwd: Path) -> int:
         return subprocess.run(cmd, cwd=cwd, check=False).returncode
     except OSError as e:
         raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}") from e
+
+
+def _check_channel_config(root: Path) -> str:
+    cmd = ["uv", "run", "yt-doctor", "--json", "--target", str(root)]
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as e:
+        raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}") from e
+    if proc.returncode != 0:
+        details = proc.stderr.strip() or proc.stdout.strip()
+        raise _StepFailed(f"exit code {proc.returncode}: {' '.join(cmd)}\n{details}")
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        raise _StepFailed(f"yt-doctor --json の出力を解析できません: {e}") from e
+    if not isinstance(payload, dict) or not isinstance(payload.get("checks"), list):
+        raise _StepFailed("yt-doctor --json の出力に checks 配列がありません")
+    result = next(
+        (check for check in payload["checks"] if isinstance(check, dict) and check.get("id") == "channel_config"),
+        None,
+    )
+    if result is None:
+        raise _StepFailed("yt-doctor --json の出力に channel_config check がありません")
+    message = result.get("message")
+    if result.get("status") != "ok":
+        raise _StepFailed(message if isinstance(message, str) else "channel_config check が失敗しました")
+    return message if isinstance(message, str) else "channel_config check 成功"
 
 
 def _skills_diff_has_changes(root: Path) -> bool:
@@ -313,6 +347,9 @@ def cmd_apply(args: argparse.Namespace) -> int:
             raise _StepFailed(f"pyproject.toml を書き換えられません: {e}") from e
         print(f"  {pin.value} → {new_ref}")
 
+    def step_channel_config() -> None:
+        print(f"  {_check_channel_config(root)}")
+
     def run(cmd: list[str]) -> Callable[[], None]:
         def _invoke() -> None:
             print(f"  $ {' '.join(cmd)}")
@@ -345,12 +382,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
     else:
         steps.append(("yt-skills sync (--asset all --force)", run(["uv", "run", "yt-skills", "sync", *force])))
     steps.append(("smoke check: yt-skills list", run(["uv", "run", "yt-skills", "list"])))
-    steps.append(
-        (
-            "smoke check: yt-config-migrate verify",
-            run(["uv", "run", "yt-config-migrate", "verify", "--target", str(root)]),
-        )
-    )
+    steps.append(("smoke check: channel config", step_channel_config))
 
     total = len(steps)
     for index, (name, action) in enumerate(steps, start=1):

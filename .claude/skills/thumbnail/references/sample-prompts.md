@@ -1,15 +1,15 @@
 # Thumbnail プロンプト例（サンプル集）
 
-TTP 参照から textless 背景を先に生成し、承認済み背景へ文字を追加するための短いプロンプト例。プロンプト構築の原則は `prompting.md` を参照。
+TTP 参照からテキスト付き thumbnail 候補を生成し、承認済み thumbnail から textless 背景を再生成するための短いプロンプト例。プロンプト構築の原則は `prompting.md` を参照。
 
 ## Single-Step / TTP の短い差分プロンプト
 
 ```
 Use the reference thumbnail as the winning template.
-Create a stronger original textless background for {title}.
-Keep the layout, scale, lighting, color mood, texture, and energy.
-Remove all text, typography, logos, signatures, watermarks, and brand marks.
-Do not add title text yet; the approved background will be used for the final thumbnail.
+Create a stronger original YouTube thumbnail for {title}.
+Keep the winning layout, scale, lighting, color mood, texture, typography feel, and energy.
+Render the title text clearly for mobile readability.
+Do not reproduce logos, signatures, watermarks, brand marks, or broken hands.
 ```
 
 ## Two-Phase モードのテキストオーバーレイ・フォールバックプロンプト

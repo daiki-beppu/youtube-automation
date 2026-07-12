@@ -82,7 +82,7 @@ dig step（観点 3〜6 を 3 Part 並列 + Part C 3 回再実行）で生成さ
 ### 2.3 P2 / P3
 
 - P2: 一次レポート集計で **約 17 件**（tmp 残骸、`.gitattributes` 不在、Terraform local state、SKILL.md `## 前提` 欠落、CLAUDE.md L38 と実態の矛盾、`Workflow` 空 dataclass dead shim 等）
-- P3: 一次レポート集計で **約 9 件**（冪等性明示の他 skill 展開、`yt-config-migrate` 撤去判断、`audio_units.py` の `lyria-002` dead reference、`requires-python>=3.11` 過剰制約 等）
+- P3: 一次レポート集計で **約 9 件**（冪等性明示の他 skill 展開、v1→v2 config 移行 CLI の撤去判断、`audio_units.py` の `lyria-002` dead reference、`requires-python>=3.11` 過剰制約 等）
 
 合計（重複除外見込み）: **約 50 件超の検出**。
 

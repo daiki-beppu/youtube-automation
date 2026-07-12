@@ -103,17 +103,15 @@ describe("OverlayState: 永続化する状態の形 (要件2)", () => {
   });
 });
 
-// --- writeOverlayState: storage 書き込み失敗時の握りつぶし回帰テスト (#1217) ---
-// overlay-state.ts は拡張更新後の invalidated context で storage アクセスが失敗するケースを
-// try-catch で握りつぶし console.warn のみで続行する。この挙動が維持されることを検証する。
+// --- writeOverlayState: storage 書き込み失敗の伝播テスト (#1718) ---
 // 上記の純関数テスト群とは異なり storage I/O を mock するため vi.doMock + 動的 import で隔離する。
-describe("writeOverlayState: storage 書き込み失敗は throw せず console.warn する", () => {
+describe("writeOverlayState: storage 書き込み失敗を UI へ伝播する", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
   });
 
-  it("Given setValue が reject When writeOverlayState Then throw しない + console.warn が呼ばれる", async () => {
+  it("Given setValue が reject When writeOverlayState Then 呼び出し元へ reject する", async () => {
     vi.resetModules();
     vi.doMock("wxt/utils/storage", () => ({
       storage: {
@@ -125,12 +123,8 @@ describe("writeOverlayState: storage 書き込み失敗は throw せず console.
     }));
 
     const { writeOverlayState } = await import("../lib/overlay-state");
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
     const state: OverlayState = { position: { x: 100, y: 200 }, minimized: false, hidden: false };
 
-    // throw しないことを検証
-    await expect(writeOverlayState(state)).resolves.toBeUndefined();
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("overlay state 書き込み失敗"), expect.any(Error));
+    await expect(writeOverlayState(state)).rejects.toThrow("Extension context invalidated");
   });
 });

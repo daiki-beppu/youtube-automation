@@ -3,7 +3,7 @@
 // overlay の実マウント（Shadow DOM）は entrypoints/overlay.content.ts が担う。
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { onMessage } from "../lib/messaging";
+import { onMessage, sendMessage } from "../lib/messaging";
 import {
   clampPosition,
   hiddenStyle,
@@ -14,6 +14,7 @@ import {
   writeOverlayState,
 } from "../lib/overlay-state";
 import { App } from "./App";
+import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
 import { useDraggable } from "./useDraggable";
 
 /** overlay shell の固定幅 (px)。clamp の初期サイズと top-right 初期位置の算出に使う。 */
@@ -31,11 +32,31 @@ interface Point {
 export function Overlay() {
   // undefined=読み込み中 / null=未保存 / OverlayState=復元。
   const [initial, setInitial] = useState<OverlayState | null | undefined>(undefined);
+  const [reloadRequired, setReloadRequired] = useState(false);
 
   useEffect(() => {
-    void readOverlayState().then((state) => setInitial(state ?? null));
+    void (async () => {
+      try {
+        const version = browser.runtime.getManifest().version;
+        const handshake = await sendMessage("extensionVersionHandshake", { version });
+        if (!handshake.matches) {
+          setReloadRequired(true);
+          return;
+        }
+        setInitial((await readOverlayState()) ?? null);
+      } catch (error) {
+        console.warn(
+          "[suno-helper] overlay の初期化に失敗しました（拡張更新後はタブを再読み込みしてください）:",
+          error,
+        );
+        setReloadRequired(true);
+      }
+    })();
   }, []);
 
+  if (reloadRequired) {
+    return <ReloadRequiredNotice />;
+  }
   if (initial === undefined) {
     return null;
   }
@@ -54,9 +75,16 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [minimized, setMinimized] = useState(initial?.minimized ?? false);
   const [hidden, setHidden] = useState(initial?.hidden ?? false);
+  const [reloadRequired, setReloadRequired] = useState(false);
 
   const persist = useCallback((state: OverlayState) => {
-    void writeOverlayState(state);
+    void writeOverlayState(state).catch((error: unknown) => {
+      console.warn(
+        "[suno-helper] overlay state の保存に失敗しました（拡張更新後はタブを再読み込みしてください）:",
+        error,
+      );
+      setReloadRequired(true);
+    });
   }, []);
 
   // 一度だけ登録する toggle リスナーや非同期 commit から最新値を読むための ref。
@@ -105,6 +133,10 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
       return next;
     });
   }, [persist]);
+
+  if (reloadRequired) {
+    return <ReloadRequiredNotice />;
+  }
 
   // hidden は unmount でなく display:none で表現する (要件1/3)。unmount すると toggleOverlay
   // リスナーが消え拡張アイコンで復帰不能になるため (#897)、DOM に残したまま CSS で隠す。
