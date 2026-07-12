@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(suno)`: ボーカルモードの `tracks_per_pattern` / `(Take N)` 展開を廃止し、1 pattern = 1 prompt entry の生成・検証契約へ単純化した（#1923）。下流の `config/skills/suno.yaml` に旧キーが残っていても読み取らず、`yt-generate-suno` / `yt-suno-verify` は展開なしの entry name と件数で処理する。
 - `feat(suno-helper)`: 投入方式の表示名を `Serial` →「安全モード」、`Queue` →「高速モード」へ改称し、各モードの説明文を速度と安定性の違いが 1 行で伝わる簡潔な文面（安全モード:「1件ずつ完了を待つ、安定性重視のモードです。」/ 高速モード:「最大10件を先行投入する、速度重視のモードです。」）に簡素化した（#1862）。変更は `shared/constants.ts` の `RUN_MODES` 表示ラベル・説明文のみで、内部識別子 `serial` / `queue`（chrome.storage.local の `sunoRunMode` 保存値・run payload・resume state）は互換性維持のため不変。`/suno-helper` SKILL.md の利用者向け `Queue mode` 表記も「高速モード（内部値: queue）」へ追従
 - `perf(videoup)`: effect なしの静止画背景を 1 GOP 分だけベイクし、`-stream_loop -1 -c:v copy -t <audio_duration> -shortest` で全尺化する経路へ統合。生成後は ffprobe で映像の読み取りと尺を検証し、1 フレーム超の差または probe 失敗を fail-loud にした（#1681）
 - `docs(extensions)`: Chrome 拡張のローカル検証を npm の現行 pnpm 11.11.0 に固定した。`suno-helper` / `distrokid-helper` 共通の pinned install / build / zip、期待 zip、lockfile 無差分の確認手順を共通・各拡張 README、開発 docs、`/suno`、`/automation-release` へ明記した（#1682）
