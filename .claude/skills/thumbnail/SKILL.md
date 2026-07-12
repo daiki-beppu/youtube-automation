@@ -107,6 +107,7 @@ Gemini / OpenAI の CLI 経路で全 attempt が失敗した場合、`uv run yt-
 - codex CLI 0.131 系以降（旧 stdout プロトコル `generated image <id> <base64>` は 0.131 で削除済み）
 - `codex login status` が `Logged in using ChatGPT` を返す
 - `jq` が PATH 上にある（`--json` の JSONL 解析に使う）
+- wrapper は生成前に最小 `codex exec --json` プローブで codex CLI とサーバー側デフォルトモデルの互換性を確認する。非互換時は生成を試みず、CLI version・検出モデル・アップグレード手順を stderr に出して停止する
 - TTP 生成のため、3 引数目以降に参照画像を 1 件以上渡す
 - ChatGPT サブスクの fair-use 上限は明文化されていないため、大量生成には使わない
 
@@ -149,6 +150,7 @@ Use the title {title}.
 
 内部実装の要約:
 
+- wrapper は `codex --version` で CLI version を控え、ログイン確認後に `codex exec --json --skip-git-repo-check -- "Reply with exactly codex-model-compat-ok."` の最小プローブを実行する。互換性エラーなら本番生成を呼ばず、`npm install -g @openai/codex@latest` / `brew upgrade codex` / `bun add -g @openai/codex@latest` を案内して非0終了する
 - wrapper は `codex exec --json --sandbox workspace-write --add-dir <out_dir> --skip-git-repo-check` で起動する
 - 受け取った prompt 末尾に `Generate a new image with the image_generation tool. Do not copy any provided reference image; produce a freshly generated PNG. After generation, copy the produced PNG to <out>. Then reply with exactly <out>.` を自動付与する（後述の reference cp failure mode を抑止するため、tool 呼び出しと「reference を copy するな」を明示）
 - agent 自身が `~/.codex/generated_images/<thread_id>/ig_*.png` から `<out>` へ `cp` し、最終 `agent_message.text` で `<out>` を返す
@@ -161,7 +163,7 @@ Use the title {title}.
 
 - **prompt は短く保つ**: 長すぎる prompt は agent が `image_generation` tool 呼び出しを skip して path だけ echo する failure mode に陥る。TTP 参照画像つきでは `image_generation.codex.default_prompt_template` を使い、`{title}` だけを差し替える。失敗したら短縮を最優先で試す
 - **reference 画像つきは prompt で「変更点」を明示する**: 「reference を参考に」程度の弱い指示だと agent が `image_generation` tool を skip して reference を `<out>` に cp するだけで終わる failure mode がある。wrapper の自動付与文 + MD5 一致検証で抑止しているが、prompt 側でも reference からの差分（色味の参考 / 構図だけ流用 / 主役を差し替え 等）を明示しておくと安定する
-- 失敗時 wrapper は `agent_message (最終)` と codex stderr の末尾 30 行を診断 dump するので、これを見て prompt 短縮 or 参照画像見直しに切り替える
+- 失敗時 wrapper は codex CLI version・デフォルトモデル推定値・`agent_message (最終)`・codex stderr の末尾 30 行を診断 dump するので、これを見て CLI upgrade / prompt 短縮 / 参照画像見直しに切り替える
 
 この経路のスコープ:
 - `uv run yt-generate-image` の API 呼び出しは使わない
