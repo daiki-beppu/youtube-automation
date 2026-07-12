@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(suno-helper)`: Download all メニューの短時間 auto-close レースに対し、More クリック直後から探索を開始し、検出失敗時は最大 3 回再クリックしてダウンロードを継続できるようにした（#1926）。
 - `fix(suno-helper)`: 拡張更新時に既存の Suno タブを自動リロードし、旧 content script の orphaned context を残さず新しい bundle を再注入するようにした（#1718）。
 - `fix(suno-helper)`: feed/v3 の active poll が `ids` フィルタ無効化後も cursor ページネーションを追跡し、最新ページ外の保存済み clip を完了確認できるようにした（#1929）。
+- `fix(thumbnail)`: `/thumbnail` SKILL.md の標準生成順序と Single-Step / TTP 章を、テキスト付き `thumbnail.jpg` 先行 → 承認済み `thumbnail.jpg` から textless `main.png/jpg` 後続再生成の契約へ統一した。`config.default.yaml` の single_step コメント、サンプルプロンプト、`short-thumbnail` の前提案内も同じ順序へ追従し、旧 textless 先行文言を回帰テストでロックした（#1901）。
 - `fix(upload)`: `yt-upload-collection` の `-c` 未指定時の自動選択を、`collections/planning/` 配下で `phase=mastered` かつ `upload.video_id=null` の未公開コレクション 1 件だけに限定した。`live/` の公開済みコレクションは候補外とし、候補が 0 件または複数件なら `-c` 明示を要求して停止する。`--plan` / `--status` / 実アップロードと日次実行に同じ選択条件を適用した（#1731）。
 - `fix(upload)`: タグ件数下限が YouTube の 500 字上限の下で到達不能な場合、upload preflight と metadata audit が件数不足ではなく、`tags.min_count` を下げるか base タグを短縮するよう案内する明示診断を返すようにした。配布する content.json テンプレートの `tags.min_count` も 26 に統一した（#1732）。
 - `fix(loop-video)`: Ctrl+C 後の Veo operation resume state に入力画像の SHA-256 を保存し、再実行時に指定モデルまたは入力画像内容が state と異なる場合は旧 operation を破棄して指定どおり新規生成するようにした（#1746）。旧形式 state は安全側で破棄する。
