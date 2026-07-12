@@ -11,6 +11,12 @@ description: "Use when YouTube Analytics データの収集・最新化が必要
 
 収集コマンドが exit 0 で終了し、`data/analytics_data_YYYYMMDD_HHMMSS.json` が新規保存された時点で完了。鮮度チェックで収集をスキップした場合は、既存データのファイル名と経過分数の表示で完了。
 
+## Subagent 委譲ゲート
+
+メインエージェントは設定読み込み、前提確認、鮮度チェック、ユーザーへの結果報告だけを担当する。YouTube Analytics API 呼び出し、Reporting API 確認、JSON ファイル生成は subagent へ委譲し、メイン会話には収集ログや `analytics_data_*.json` の中身を貼らない。
+
+subagent へ渡す入力は、解決済みの実行モード、実行コマンド、期待成果物だけにする。subagent は `workflow-state.json` を読み書きせず、完了時に `status`、実行したコマンド、生成または再利用した成果物パス、スキップ理由だけを返す。メインエージェントは完了報告だけで成功扱いにせず、`data/analytics_data_*.json` の存在またはスキップ対象ファイル名を機械的に確認してから完了を報告する。
+
 ## 設定読み込みゲート
 
 前提確認や鮮度チェックに入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
@@ -56,6 +62,8 @@ description: "Use when YouTube Analytics データの収集・最新化が必要
 
 ## 実行コマンド
 
+鮮度チェックで収集が必要と判断した場合、以下のコマンド実行は subagent へ委譲する。メインエージェントはコマンド出力の全文を会話へ展開せず、subagent の要約と成果物パスだけを受け取る。
+
 ```bash
 uv run yt-analytics
 ```
@@ -72,6 +80,15 @@ uv run yt-analytics --reporting-create-job
 ```bash
 uv run yt-analytics --include-reporting
 ```
+
+### 委譲プロンプト要件
+
+subagent へは次を具体値で渡す:
+
+- 入力パス: `.claude/skills/analytics-collect/config.default.yaml`、存在する場合は `config/skills/analytics-collect.yaml`、`config/channel/`
+- 実行する作業: `uv run yt-analytics`、または Reporting API 確認用の `uv run yt-analytics --reporting-dry-run` / `uv run yt-analytics --reporting-create-job` / `uv run yt-analytics --include-reporting`
+- 期待成果物: `data/analytics_data_YYYYMMDD_HHMMSS.json`（通常収集時）、または鮮度チェックで再利用する既存 `data/analytics_data_*.json`
+- 完了報告: `status: success | failure`、`command`、`artifacts`、`skipped_reason`、`errors`
 
 ## 出力
 

@@ -18,7 +18,13 @@ description: "Use when 追加競合候補の自動発掘やニッチ仮説の並
 
 ## 完了条件
 
-Step 3 の実行で出力ペア（Markdown ランキング + 同名 CSV）を生成し、Step 4 でユーザーに Markdown を提示した時点で完了。`config/channel/analytics.json::benchmark.channels` への候補追加はユーザー承認があった場合のみ行う（承認が無ければ提示のみで終了する）。
+Step 3 の実行で出力ペア（Markdown ランキング + 同名 CSV）を生成し、Step 4 でユーザーに Markdown パスと候補要約を提示した時点で完了。`config/channel/analytics.json::benchmark.channels` への候補追加はユーザー承認があった場合のみ行う（承認が無ければ提示のみで終了する）。
+
+## Subagent 委譲ゲート
+
+メインエージェントは設定読み込み、キーワード・フィルタ条件の決定、候補追加前のユーザー承認、成果物存在確認だけを担当する。YouTube Data API 呼び出し、候補スコアリング、Markdown + CSV の生成、生成済みランキングの読み込みは subagent へ委譲する。
+
+メインエージェントは `research/*-discovery.md` や同名 `.csv` の全行を直接 Read しない。subagent は成果物パス、候補件数、上位候補の短い要約だけを返す。`config/channel/analytics.json::benchmark.channels` への追記は、メインエージェントが subagent の要約と成果物パスを提示してユーザー承認を得た後にだけ行う。
 
 ## 設定読み込みゲート
 
@@ -115,7 +121,7 @@ config からの抽出例（rjn）:
 
 ### Step 3: 実行
 
-チャンネルディレクトリ配下から実行する（`auth/token.json` が存在する前提）:
+チャンネルディレクトリ配下からの実行を subagent へ委譲する（`auth/token.json` が存在する前提）:
 
 ```bash
 uv run yt-discover-competitors \
@@ -131,9 +137,18 @@ uv run yt-discover-competitors \
 
 ### Step 4: 結果の活用
 
-- ユーザーに Markdown を提示し、承認を得る
+- メインエージェントは subagent から受け取った Markdown パス、CSV パス、候補件数、上位候補の短い要約をユーザーに提示し、承認を得る
 - 採用した候補を `config/channel/analytics.json` の `benchmark.channels` に追加する場合は、ユーザー承認と relationship メモを必ず残す
 - 並行検証なら、ニッチ仮説ごとに `--output research/{niche}-discovery.md` で別ファイルに分けて比較する
+
+### 委譲プロンプト要件
+
+subagent へは次を具体値で渡す:
+
+- 入力パス: `.claude/skills/discover-competitors/config.default.yaml`、存在する場合は `config/skills/discover-competitors.yaml`、キーワード抽出に使う `config/channel/content.json` / `config/channel/analytics.json`（存在する場合）
+- 実行する作業: `uv run yt-discover-competitors ... --output research/{niche}-discovery.md`
+- 期待成果物: `research/{niche}-discovery.md` と同名の `research/{niche}-discovery.csv`
+- 完了報告: `status: success | failure`、`command`、`artifacts`、`candidate_count`、`top_candidates_summary`、`errors`
 
 ## API コスト
 
