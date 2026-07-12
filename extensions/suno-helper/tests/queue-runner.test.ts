@@ -8,7 +8,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PromptEntry } from "../../shared/api";
-import { CLIPS_PER_REQUEST, MAX_INFLIGHT_REQUESTS, PHASE } from "../../shared/constants";
+import { CLIPS_PER_REQUEST, INFLIGHT_STALL_TIMEOUT_MS, MAX_INFLIGHT_REQUESTS, PHASE } from "../../shared/constants";
 import { finalizeQueueEntriesYield, submitQueueEntries, waitForSubmittedClipsComplete } from "../lib/queue-runner";
 import type { QueueSubmissionOptions, SubmittedClipCompletionOptions } from "../lib/queue-runner";
 import { buildRunPayload } from "../lib/run-overrides";
@@ -401,5 +401,61 @@ describe("queue-runner: production ロジック (#1586)", () => {
     feedPollMayFinish.resolve();
     await pendingCompletion;
     expect(playlistReached).toBe(true);
+  });
+
+  it("production completion gate は pending 減少時に stall deadline をリセットする", async () => {
+    let currentTime = 0;
+    const pendingClipIds = new Set(["clip-a", "clip-b"]);
+    let pollCount = 0;
+    const options: SubmittedClipCompletionOptions = {
+      expectedClipCount: 2,
+      previousSubmittedClipIds: [],
+      isAborted: () => false,
+      getSubmittedIds: () => ["clip-a", "clip-b"],
+      getPendingIdsByIds: (ids) => ids.filter((id) => pendingClipIds.has(id)),
+      getPendingSubmittedIds: () => Array.from(pendingClipIds),
+      requestFeedPoll: async () => {
+        pollCount += 1;
+        if (pollCount === 1) {
+          pendingClipIds.delete("clip-a");
+        }
+      },
+      abortableSleep: async () => {
+        currentTime += INFLIGHT_STALL_TIMEOUT_MS;
+      },
+      now: () => currentTime,
+    };
+
+    await expect(waitForSubmittedClipsComplete(options)).rejects.toThrow(
+      `最後の進捗からの経過時間=${INFLIGHT_STALL_TIMEOUT_MS}ms`,
+    );
+    expect(pollCount).toBe(2);
+  });
+
+  it("production completion gate は pending 増加時に stall deadline をリセットしない", async () => {
+    let currentTime = 0;
+    const pendingClipIds = new Set(["clip-a", "clip-b"]);
+    let pollCount = 0;
+    const options: SubmittedClipCompletionOptions = {
+      expectedClipCount: 3,
+      previousSubmittedClipIds: [],
+      isAborted: () => false,
+      getSubmittedIds: () => ["clip-a", "clip-b", "clip-c"],
+      getPendingIdsByIds: (ids) => ids.filter((id) => pendingClipIds.has(id)),
+      getPendingSubmittedIds: () => Array.from(pendingClipIds),
+      requestFeedPoll: async () => {
+        pollCount += 1;
+        pendingClipIds.add("clip-c");
+      },
+      abortableSleep: async () => {
+        currentTime += INFLIGHT_STALL_TIMEOUT_MS;
+      },
+      now: () => currentTime,
+    };
+
+    await expect(waitForSubmittedClipsComplete(options)).rejects.toThrow(
+      `最後の進捗からの経過時間=${INFLIGHT_STALL_TIMEOUT_MS}ms`,
+    );
+    expect(pollCount).toBe(1);
   });
 });

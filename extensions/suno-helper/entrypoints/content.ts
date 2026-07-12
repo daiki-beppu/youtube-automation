@@ -133,6 +133,49 @@ function assertOptionalBoolean(value: unknown, field: string): boolean | undefin
   return value;
 }
 
+export interface AttemptClipCompletionOptions {
+  getPendingIdsByIds: (clipIds: string[]) => string[];
+  requestFeedPoll: (clipIds: string[]) => Promise<unknown>;
+  abortableSleep: (milliseconds: number, isAborted: () => boolean) => Promise<void>;
+  isAborted: () => boolean;
+  now: () => number;
+}
+
+export async function waitForAttemptClipsComplete(
+  clipIds: string[],
+  options: AttemptClipCompletionOptions,
+): Promise<void> {
+  if (clipIds.length === 0) {
+    throw new Error("duration guard 用の clip ID を観測できませんでした。bridge の generate 観測を確認してください。");
+  }
+  let lastProgressAt = options.now();
+  let deadline = lastProgressAt + INFLIGHT_STALL_TIMEOUT_MS;
+  let lastPendingCount: number | undefined;
+  while (!options.isAborted()) {
+    const pendingIds = options.getPendingIdsByIds(clipIds);
+    if (pendingIds.length === 0) {
+      return;
+    }
+    const currentNow = options.now();
+    const pendingCountDecreased = lastPendingCount !== undefined && pendingIds.length < lastPendingCount;
+    if (pendingCountDecreased) {
+      lastProgressAt = currentNow;
+      deadline = lastProgressAt + INFLIGHT_STALL_TIMEOUT_MS;
+    }
+    if (pendingIds.length !== lastPendingCount) {
+      console.info(`[suno-helper] yield guard wait: pending=${pendingIds.length}/${clipIds.length}`);
+    }
+    lastPendingCount = pendingIds.length;
+    if (currentNow >= deadline) {
+      throw new Error(
+        `duration guard の clip 完了待ちがタイムアウトしました: pending=${pendingIds.length}, 最後の進捗からの経過時間=${currentNow - lastProgressAt}ms`,
+      );
+    }
+    await options.requestFeedPoll(pendingIds);
+    await options.abortableSleep(POLL_INTERVAL_MS, options.isAborted);
+  }
+}
+
 function assertOptionalDurationFilter(value: unknown, field: string): DurationFilter | undefined {
   if (value === undefined) {
     return undefined;
@@ -676,33 +719,14 @@ export default defineContentScript({
       return new Set([...previousSubmittedClipIds, ...Array.from(clipIdsByEntry.values()).flat()]).size;
     }
 
-    async function waitForAttemptClipsComplete(clipIds: string[], isAborted: () => boolean): Promise<void> {
-      if (clipIds.length === 0) {
-        throw new Error(
-          "duration guard 用の clip ID を観測できませんでした。bridge の generate 観測を確認してください。",
-        );
-      }
-      const deadline = Date.now() + INFLIGHT_STALL_TIMEOUT_MS;
-      let lastPendingCount = Number.POSITIVE_INFINITY;
-      while (!isAborted()) {
-        const pendingIds = tracker.getPendingIdsByIds(clipIds);
-        if (pendingIds.length === 0) {
-          return;
-        }
-        if (pendingIds.length !== lastPendingCount) {
-          lastPendingCount = pendingIds.length;
-          console.info(`[suno-helper] yield guard wait: pending=${pendingIds.length}/${clipIds.length}`);
-        }
-        if (Date.now() >= deadline) {
-          throw new Error(`duration guard の clip 完了待ちがタイムアウトしました: pending=${pendingIds.length}`);
-        }
-        await requestFeedPoll(pendingIds);
-        await abortableSleep(POLL_INTERVAL_MS, isAborted);
-      }
-    }
-
     async function evaluateAttemptYield(clipIds: string[], durationFilter: DurationFilter, isAborted: () => boolean) {
-      await waitForAttemptClipsComplete(clipIds, isAborted);
+      await waitForAttemptClipsComplete(clipIds, {
+        getPendingIdsByIds: (ids) => tracker.getPendingIdsByIds(ids),
+        requestFeedPoll,
+        abortableSleep,
+        isAborted,
+        now: Date.now,
+      });
       return evaluateClips(
         clipIds.map((id) => ({ id, duration: tracker.getDuration(id) })),
         durationFilter,
