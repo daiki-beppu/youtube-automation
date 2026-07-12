@@ -349,10 +349,13 @@ export function useSunoRunner(): RunnerState {
     void readRunModeId().then(setRunModeId).catch(reportStorageFailure);
   }, [reportStorageFailure]);
 
-  const setRunMode = useCallback((id: RunModeId) => {
-    setRunModeId(id);
-    void writeRunModeId(id).catch(reportStorageFailure);
-  }, [reportStorageFailure]);
+  const setRunMode = useCallback(
+    (id: RunModeId) => {
+      setRunModeId(id);
+      void writeRunModeId(id).catch(reportStorageFailure);
+    },
+    [reportStorageFailure],
+  );
 
   const dismissResume = useCallback(() => {
     setResumeDismissed(true);

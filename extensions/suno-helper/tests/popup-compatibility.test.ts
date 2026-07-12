@@ -1361,8 +1361,14 @@ describe("Suno popup compatibility check", () => {
       "server sources",
       () => serverSourcesMocks.readServerSources.mockRejectedValueOnce(new Error("Extension context invalidated.")),
     ],
-    ["run mode", () => presetStateMocks.readRunModeId.mockRejectedValueOnce(new Error("Extension context invalidated."))],
-    ["resume state", () => resumeStateMocks.readResumeState.mockRejectedValueOnce(new Error("Extension context invalidated."))],
+    [
+      "run mode",
+      () => presetStateMocks.readRunModeId.mockRejectedValueOnce(new Error("Extension context invalidated.")),
+    ],
+    [
+      "resume state",
+      () => resumeStateMocks.readResumeState.mockRejectedValueOnce(new Error("Extension context invalidated.")),
+    ],
   ])("%s の読込失敗を再読み込み案内へ集約する", async (_label, rejectRead) => {
     rejectRead();
     await rerenderApp();
