@@ -1,6 +1,6 @@
 // 要件9: Suno UI mock に対する DOM 注入 E2E スモーク (実 Suno 非依存)。
 //
-// 実 Suno に依存せず、Suno Custom Mode を模した最小 HTML を Chromium に読み込み、
+// 実 Suno に依存せず、Suno の Advanced タブを模した最小 HTML を Chromium に読み込み、
 // content script の中核である「React 互換ネイティブ値注入 → Generate 押下」が
 // 実ブラウザ上で成立することを 1 ケースで検証する。
 //

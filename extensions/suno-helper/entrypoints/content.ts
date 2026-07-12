@@ -1,4 +1,4 @@
-// Suno Custom Mode への Style / Lyrics 注入と Generate 連続実行 (content script)。
+// Suno の Advanced タブへの Style / Lyrics 注入と Generate 連続実行 (content script)。
 // DOM 操作は shared/dom の純関数へ委譲し、本ファイルは連続実行のフロー制御に専念する。
 import { DEFAULT_DURATION_FILTER, type DurationFilter, type PromptEntry } from "../../shared/api";
 import {
@@ -483,7 +483,7 @@ export default defineContentScript({
         // title 欄不在は Suno 側 UI 改装の可能性。style/lyrics と違い fail-soft（警告のみで続行）。
         console.warn("Song Title 欄が見つかりませんでした。タイトル注入を skip して続行します。");
       }
-      // Custom Mode > More Options の 3 フィールド (#900)。slider 注入は MAIN world bridge 経由
+      // Advanced タブ > More Options の 3 フィールド (#900)。slider 注入は MAIN world bridge 経由
       // （React onKeyDown 直接呼び出しで isTrusted チェックを通過、#973）を優先し、失敗時は従来の
       // 合成 keydown dispatch へ縮退する（e2e mock の plain DOM はこちらで動く）。entry に値があり
       // selector が不在なら input / vocal_gender は injectAdvancedFields が throw する (fail-loud)。

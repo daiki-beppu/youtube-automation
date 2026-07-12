@@ -1,4 +1,4 @@
-// Suno Custom Mode への Style / Lyrics 注入と Generate 連続実行に使う DOM 操作群。
+// Suno の Advanced タブへの Style / Lyrics 注入と Generate 連続実行に使う DOM 操作群。
 // 旧 `content.js` の振る舞いを 1:1 で保持しつつ純関数化する。
 // Suno の DOM は変わりうるため、セレクタはこの 1 箇所に集約する（壊れたら README 参照で更新）。
 
@@ -22,7 +22,7 @@ const SELECTORS = {
   // Song Title 欄は testid/aria/label を持たず placeholder のみ安定 (#844 実 DOM 検証)。
   // 英語 UI は "Song Title (Optional)"、日本語 UI は "曲名(任意)"（2026-07 実 DOM）で出る。
   title: 'input[placeholder*="Song Title" i], input[placeholder*="曲名"]',
-  // Custom Mode > More Options の 3 フィールド (#900、chrome-devtools-mcp で実機確定済み)。
+  // Advanced タブ > More Options の 3 フィールド (#900、chrome-devtools-mcp で実機確定済み)。
   //   - Exclude styles: native text input/textarea (placeholder / aria-label の表記ゆれを許容)
   //   - Weirdness / Style Influence: radix slider ([role="slider"] + aria-label で区別)
   // data-testid は Suno UI で Lyrics 以外に存在しないため placeholder / aria-label を SSOT にする。
@@ -94,7 +94,7 @@ export const SETTLE_MS = 1500;
 /**
  * run 全体を止めるべき致命的エラー (#948)。entry 単位のリトライ/スキップ（lib/entry-retry.ts）の
  * 対象外で、catch されず ERROR phase へ直行する。該当するのは「次の entry でも必ず再発する」失敗:
- *   - DOM セレクタ不在（Suno UI 改装 / Custom Mode 画面でない）
+ *   - DOM セレクタ不在（Suno UI 改装 / Advanced タブが選択されていない）
  *   - captcha challenge の手動解決待ち timeout（人間の介入が必要）
  *   - queue の stall / timeout（Suno 側の系統的な停滞）
  *   - Lyrics 欄の paste retry + beforeinput fallback が全て不受理（原因特定ログを出して停止）
@@ -472,7 +472,7 @@ function pickPreferVisible<T extends HTMLElement>(els: T[]): T | null {
 }
 
 /**
- * Custom Mode > More Options の 3 フィールドを解決する（#900）。
+ * Advanced タブ > More Options の 3 フィールドを解決する（#900）。
  * visible 優先、なければ DOM 上の最初の要素を返す（collapsed 時の null 化を回避）。
  * 3 要素すべて不在でも throw しない（fail-soft）。throw / skip の非対称契約は呼び出し側
  * (injectAdvancedFields) が entry の値有無と突き合わせて判定する。

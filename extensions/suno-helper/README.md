@@ -1,6 +1,6 @@
 # suno-helper Chrome 拡張
 
-`/suno` が生成した `suno-prompts.json` を Suno Custom Mode に順次注入し、Generate を連続実行する個人利用向け補助拡張（WXT + React + TypeScript + Tailwind CSS / Manifest V3 / unpacked）。
+`/suno` が生成した `suno-prompts.json` を Suno の Advanced タブに順次注入し、Generate を連続実行する個人利用向け補助拡張（WXT + React + TypeScript + Tailwind CSS / Manifest V3 / unpacked）。
 
 > reCAPTCHA・トークン消費・速度の問題を避けるため、ヘッドレス／DevTools 経由ではなく **既ログイン状態の本物の Chrome セッション** 上で動かす設計です。
 
@@ -79,7 +79,7 @@ npx -y pnpm@11.11.0 test:e2e                                      # Playwright e
      --allow-extension suno-helper
    # → http://<channel>.localhost:7873/collections と /auth/token を配信
    ```
-2. Chrome で Suno の **Custom Mode** 画面を開く。
+2. Chrome で Suno の **Advanced** タブを選択する。
 3. 拡張アイコンからポップアップを開き、**ローカル配信元** でチャンネル名つき候補を選んで **データ取得**。
 4. `ready` な collection を選び、**全パターンを連続実行** を押す。
 5. 各パターンで Style/Lyrics を注入 → Generate 押下 → 生成完了検知 → 次へ、を自動で繰り返す。
