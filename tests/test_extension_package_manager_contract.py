@@ -10,8 +10,9 @@ import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _EXTENSION_NAMES = ("suno-helper", "distrokid-helper")
-_PINNED_PNPM = "11.11.0"
-_PINNED_COMMAND = f"npx -y pnpm@{_PINNED_PNPM}"
+_NIX_PNPM = "10.33.0"
+_DOCUMENTED_PNPM = "11.11.0"
+_PINNED_COMMAND = f"npx -y pnpm@{_DOCUMENTED_PNPM}"
 
 
 def _read(path: str) -> str:
@@ -47,11 +48,38 @@ def _pnpm_setup_versions(path: str) -> list[object]:
     return versions
 
 
-def test_both_extensions_pin_the_same_pnpm_and_build_approval() -> None:
+def test_extensions_shell_contains_only_the_node_toolchain() -> None:
+    flake = _read("flake.nix")
+    extensions_shell = re.search(
+        r"(?ms)^(?P<indent>[ \t]*)devShells\.extensions\s*="
+        r"\s*pkgs\.mkShell\s*\{"
+        r"\s*packages\s*=\s*with pkgs;\s*\[(?P<packages>.*?)\];"
+        r"\s*\};",
+        flake,
+    )
+
+    assert extensions_shell is not None
+    packages = extensions_shell.group("packages").split()
+    assert packages == ["nodejs_22", "pnpm"]
+
+    default_shell = re.search(r"(?m)^(?P<indent>[ \t]*)devShells\.default\s*=", flake)
+    assert default_shell is not None
+    assert extensions_shell.group("indent") == default_shell.group("indent")
+
+    block = extensions_shell.group(0)
+    for excluded in ("python311", "uv", "ffmpeg", "lefthook", "shellHook"):
+        assert excluded not in block
+
+
+def test_both_extensions_pin_the_nix_pnpm() -> None:
     for name in _EXTENSION_NAMES:
         package = json.loads(_read(f"extensions/{name}/package.json"))
 
-        assert package["packageManager"] == f"pnpm@{_PINNED_PNPM}"
+        assert package["packageManager"] == f"pnpm@{_NIX_PNPM}"
+
+
+def test_both_extensions_preserve_build_approval() -> None:
+    for name in _EXTENSION_NAMES:
         assert _workspace_settings(name)["allowBuilds"] == {"esbuild": True, "spawn-sync": False}
 
 
@@ -60,7 +88,7 @@ def test_ci_and_release_workflows_use_the_pinned_pnpm() -> None:
         versions = _pnpm_setup_versions(path)
 
         assert versions
-        assert versions == [_PINNED_PNPM] * len(versions)
+        assert versions == [_DOCUMENTED_PNPM] * len(versions)
 
 
 def test_shared_docs_precede_commands_with_the_pinned_contract() -> None:
@@ -81,7 +109,7 @@ def test_shared_docs_precede_commands_with_the_pinned_contract() -> None:
 
 def test_each_extension_readme_uses_the_pinned_contract() -> None:
     unpinned_command = re.compile(
-        rf"(?<!@{re.escape(_PINNED_PNPM)} )\bpnpm (?:install|dev|build|zip|compile|test|exec)"
+        rf"(?<!@{re.escape(_DOCUMENTED_PNPM)} )\bpnpm (?:install|dev|build|zip|compile|test|exec)"
     )
     for name in _EXTENSION_NAMES:
         readme = _read(f"extensions/{name}/README.md")

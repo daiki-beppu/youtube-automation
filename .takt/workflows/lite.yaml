@@ -16,12 +16,7 @@ steps:
     persona: planner
     provider: codex
     edit: false
-    instruction: |
-      最初に `bash .lefthook/setup-worktree.sh` を実行し、devShell と Git hooks をセットアップすること。
-      以降の `uv` / `ruff` コマンドは `bash .lefthook/setup-worktree.sh <command> [args...]` 経由で実行すること。
-      セットアップに失敗した場合は処理を続行せず、失敗内容を報告すること。
-
-      plan
+    instruction: plan
     rules:
       - condition: "実装計画が確定した"
         next: implement
@@ -32,10 +27,6 @@ steps:
     pass_previous_response: true
     policy: pre-review-checklist
     instruction: |
-      最初に `bash .lefthook/setup-worktree.sh` を実行し、devShell と Git hooks をセットアップすること。
-      以降の `uv` / `ruff` コマンドは `bash .lefthook/setup-worktree.sh <command> [args...]` 経由で実行すること。
-      セットアップに失敗した場合は処理を続行せず、失敗内容を報告すること。
-
       計画に従って実装・テスト追加・テスト実行を完了させたあと、ポリシー
       「提出前セルフ監査チェックリスト」の 8 項目を根拠（ファイル:行）付きで自己監査すること。
 
@@ -51,10 +42,6 @@ steps:
     pass_previous_response: true
     policy: pre-review-checklist
     instruction: |
-      最初に `bash .lefthook/setup-worktree.sh` を実行し、devShell と Git hooks をセットアップすること。
-      以降の `uv` / `ruff` コマンドは `bash .lefthook/setup-worktree.sh <command> [args...]` 経由で実行すること。
-      セットアップに失敗した場合は処理を続行せず、失敗内容を報告すること。
-
       実装者の自己監査を鵜呑みにせず、ポリシー「提出前セルフ監査チェックリスト」の
       8 項目を diff と実コードに対して独立に照合すること。
 

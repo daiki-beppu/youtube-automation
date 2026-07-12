@@ -18,6 +18,13 @@
         pkgs = import nixpkgs { inherit system; };
       in
       {
+        devShells.extensions = pkgs.mkShell {
+          packages = with pkgs; [
+            nodejs_22
+            pnpm
+          ];
+        };
+
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             python311
