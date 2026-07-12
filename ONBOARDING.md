@@ -208,7 +208,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | `pinned-comment.json` | `pinned_comment` (optional) |
 | `distrokid.json` | `distrokid` (optional) |
 
-サンプルは [`examples/channel_config.example/`](examples/channel_config.example/)（必須 + optional ファイル、`community.example.json` は skill-local raw JSON 例外）と [`examples/localizations.example.json`](examples/localizations.example.json)。v1.x からの移行は [`docs/migration/v2-config-split.md`](docs/migration/v2-config-split.md) と `uv run yt-config-migrate migrate --apply`。
+サンプルは [`examples/channel_config.example/`](examples/channel_config.example/)（必須 + optional ファイル、`community.example.json` は skill-local raw JSON 例外）と [`examples/localizations.example.json`](examples/localizations.example.json)。
 
 ---
 

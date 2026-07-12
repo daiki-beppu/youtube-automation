@@ -92,7 +92,7 @@ def format_title_template(template: str, values: Dict[str, str], *, context: str
 
 # localizations.json の languages.<lang>.title_template で使用できるプレースホルダ。
 # 多言語タイトル生成が format_title_template に渡す values のキー集合
-# （_localized_title_values）と、config 生成時検証（yt-config-migrate verify）の
+# （_localized_title_values）と、config 生成時検証の
 # 両方がこの集合を参照する（#1471）。
 LOCALIZED_TITLE_PLACEHOLDERS = frozenset({"scene_phrase", "activities", "scene_emoji"})
 
@@ -111,7 +111,7 @@ def validate_localizations_title_templates(loc_data: Dict) -> List[str]:
 
     channel-new / channel-import が生成した `config/localizations.json` が
     アップロード時まで気づけない不正プレースホルダ（例: `{axis_label}`）を
-    含んでいないか、生成直後の `yt-config-migrate verify` で検出するための
+    含んでいないか、生成直後の config 検証で検出するための
     ヘルパー（#1471）。
 
     Args:

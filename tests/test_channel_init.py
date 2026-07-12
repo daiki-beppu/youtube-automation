@@ -1,6 +1,5 @@
 """yt-channel-init CLI のユニット / 結合テスト (tmp_path ベース).
 
-設計参考: `tests/test_config_migrate.py` のスタイルを踏襲する。
 - `_auto_reset` autouse fixture で `CHANNEL_DIR` を外し、新 loader シングルトンをリセット。
 - `main(argv)` 直接呼び出し → 戻り値 `rc` と stdout/stderr を assert。
 - 期待 JSON は読み戻して scalar 値と必須キー存在を中心に検証 (DRY)。
