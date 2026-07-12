@@ -191,7 +191,7 @@ handoff 条件（agent は自動突破しない）:
 5. `workflow-state.json` の `planning.music.suno_playlist_url` に playlist URL が記録されている
 6. `workflow-state.json` の `assets.music_downloaded` が `true` になっている（DL 完了時）
 
-成功処理後、ユーザーの Downloads 配下にある Suno ZIP は自動削除されることがある。完了判定は ZIP の存在ではなく、展開済み音声ファイルと `workflow-state.json` を見る。
+音声配置と `workflow-state.json` 更新の両方に成功した後、ユーザーの Downloads 配下にある Suno ZIP は自動削除される。削除に失敗しても配置済み音声と workflow-state は維持され、警告が記録される。完了判定は ZIP の存在ではなく、展開済み音声ファイルと `workflow-state.json` を見る。
 
 ### Step 7. 中断時
 
