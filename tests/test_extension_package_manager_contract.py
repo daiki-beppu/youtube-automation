@@ -10,7 +10,7 @@ import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _EXTENSION_NAMES = ("suno-helper", "distrokid-helper")
-_NIX_PNPM = "10.33.0"
+_NIX_PNPM = "11.12.0"
 _DOCUMENTED_PNPM = "11.11.0"
 _PINNED_COMMAND = f"npx -y pnpm@{_DOCUMENTED_PNPM}"
 
@@ -60,7 +60,7 @@ def test_extensions_shell_contains_only_the_node_toolchain() -> None:
 
     assert extensions_shell is not None
     packages = extensions_shell.group("packages").split()
-    assert packages == ["nodejs_22", "pnpm"]
+    assert packages == ["nodejs_24", "pnpmLatest"]
 
     default_shell = re.search(r"(?m)^(?P<indent>[ \t]*)devShells\.default\s*=", flake)
     assert default_shell is not None
