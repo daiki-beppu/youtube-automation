@@ -34,9 +34,16 @@ import {
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
 import { readServerSources, rememberServerSource, serverUrlItem } from "../lib/storage";
 import { shouldReportLiveProgressStatus } from "./live-progress-status";
-import { buildRestoreState, formatRunError, formatStopError, phaseToStatus } from "./runner-errors";
+import {
+  buildRestoreState,
+  formatRunError,
+  formatStopError,
+  isExtensionReloadRequiredError,
+  phaseToStatus,
+} from "./runner-errors";
 
 interface RunnerState {
+  reloadRequired: boolean;
   url: string;
   setUrl: (url: string) => void;
   serverSources: LocalServerSource[];
@@ -95,6 +102,7 @@ function maxDefined(...values: Array<number | null | undefined>): number | undef
 }
 
 export function useSunoRunner(): RunnerState {
+  const [reloadRequired, setReloadRequired] = useState(false);
   const [url, setUrlState] = useState("");
   const [serverSources, setServerSources] = useState<LocalServerSource[]>([]);
   const [allCollections, setAllCollections] = useState<CollectionSummary[]>([]);
@@ -319,29 +327,32 @@ export function useSunoRunner(): RunnerState {
     setIsError(error);
   }, []);
 
+  const reportStorageFailure = useCallback((error: unknown) => {
+    console.warn("[suno-helper] storage 操作に失敗しました（拡張更新後はタブを再読み込みしてください）:", error);
+    setReloadRequired(true);
+  }, []);
+
   // popup 起動時に前回の ERROR 停止 state を読む (#872 要件4)。表示可否は resumeBanner 側で判定する。
   // 基準 now は読み込み完了時に確定する（render 中の Date.now() を避けるため effect 内で取得）。
   useEffect(() => {
-    void readResumeState().then((state) => {
-      setPersistedResume(state);
-      setResumeCheckedAt(Date.now());
-    });
-  }, []);
+    void readResumeState()
+      .then((state) => {
+        setPersistedResume(state);
+        setResumeCheckedAt(Date.now());
+      })
+      .catch((err: unknown) => {
+        reportStorageFailure(err);
+      });
+  }, [reportStorageFailure]);
 
   useEffect(() => {
-    // 読込失敗（拡張更新直後の context invalidated 等）は既定 serial のまま続行する。
-    // unhandled rejection にしない（UI は既定値表示と一致しており実行payload とも整合する）。
-    void readRunModeId()
-      .then(setRunModeId)
-      .catch((err) => console.warn("[suno-helper] run mode の読込に失敗しました（既定 serial を使用）:", err));
-  }, []);
+    void readRunModeId().then(setRunModeId).catch(reportStorageFailure);
+  }, [reportStorageFailure]);
 
   const setRunMode = useCallback((id: RunModeId) => {
     setRunModeId(id);
-    void writeRunModeId(id).catch((err) =>
-      console.warn("[suno-helper] run mode の保存に失敗しました（次回 popup では前回値に戻ります）:", err),
-    );
-  }, []);
+    void writeRunModeId(id).catch(reportStorageFailure);
+  }, [reportStorageFailure]);
 
   const dismissResume = useCallback(() => {
     setResumeDismissed(true);
@@ -405,15 +416,24 @@ export function useSunoRunner(): RunnerState {
   );
 
   useEffect(() => {
-    void serverUrlItem.getValue().then((stored) => {
-      setUrlState(stored);
-      const trimmed = stored.trim();
-      if (trimmed) {
-        void loadCollections(trimmed);
-      }
-    });
-    void readServerSources().then(setServerSources);
-  }, [loadCollections]);
+    void serverUrlItem
+      .getValue()
+      .then((stored) => {
+        setUrlState(stored);
+        const trimmed = stored.trim();
+        if (trimmed) {
+          void loadCollections(trimmed);
+        }
+      })
+      .catch((err: unknown) => {
+        reportStorageFailure(err);
+      });
+    void readServerSources()
+      .then(setServerSources)
+      .catch((err: unknown) => {
+        reportStorageFailure(err);
+      });
+  }, [loadCollections, reportStorageFailure]);
 
   useEffect(() => {
     const unwatch = onMessage("progress", ({ data }) => {
@@ -476,22 +496,39 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     let baseUrl = trimmed;
+    let serverLabel: string | undefined;
     try {
       const info = await sendMessage("fetchServerInfo", { baseUrl: trimmed });
       baseUrl = info.base_url;
       setUrlState(baseUrl);
-      await serverUrlItem.setValue(baseUrl);
-      setServerSources(await rememberServerSource(baseUrl, info.label));
+      serverLabel = info.label;
     } catch {
+      // 古い server は fetchServerInfo を提供しないため、入力 URL のまま継続する。
+    }
+    try {
       await serverUrlItem.setValue(baseUrl);
-      setServerSources(await rememberServerSource(baseUrl));
+      setServerSources(await rememberServerSource(baseUrl, serverLabel));
+    } catch (error) {
+      reportStorageFailure(error);
+      return;
     }
     clearLoadedRunState();
     setPhase("loading");
     report("取得中…");
-    const extensionVersion = browser.runtime.getManifest().version;
-    const warning = await sendMessage("fetchCompatibilityWarning", { baseUrl, extensionVersion });
-    setCompatibilityWarning(typeof warning === "string" ? warning : "");
+    try {
+      const extensionVersion = browser.runtime.getManifest().version;
+      const warning = await sendMessage("fetchCompatibilityWarning", { baseUrl, extensionVersion });
+      setCompatibilityWarning(typeof warning === "string" ? warning : "");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (isExtensionReloadRequiredError(message)) {
+        setReloadRequired(true);
+        return;
+      }
+      setPhase("error");
+      report(`互換性確認失敗: ${message}`, true);
+      return;
+    }
     try {
       const collectionId = await syncCollections(baseUrl, selectedCollectionId);
       const data = await fetchCollectionPromptResponse(baseUrl, collectionId);
@@ -507,7 +544,7 @@ export function useSunoRunner(): RunnerState {
       setPhase("error");
       report(`取得失敗: ${message}\nyt-collection-serve が起動しているか確認してください。`, true);
     }
-  }, [url, selectedCollectionId, syncCollections, clearLoadedRunState, report]);
+  }, [url, selectedCollectionId, syncCollections, clearLoadedRunState, report, reportStorageFailure]);
 
   const run = useCallback(
     async (overrides?: RunOverrides) => {
@@ -793,6 +830,7 @@ export function useSunoRunner(): RunnerState {
   }, [report]);
 
   return {
+    reloadRequired,
     url,
     setUrl: updateUrl,
     serverSources,

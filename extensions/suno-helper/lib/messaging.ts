@@ -75,6 +75,8 @@ export interface RetryDownloadPayload {
 }
 
 interface ProtocolMap {
+  /** content / overlay → background: 拡張更新後の実行コンテキストを確認する。 */
+  extensionVersionHandshake(payload: { version: string }): { version: string; matches: boolean };
   /** overlay → background → runner: 連続実行を開始する。 */
   run(payload: RunPayload): { ok: true };
   /** overlay → background → runner: 連続実行を中断する。 */

@@ -9,18 +9,35 @@ import {
 
 function createDeps(results: Array<Array<{ result?: unknown }>> = []) {
   let updatedListener: Parameters<ContentScriptRecoveryDeps["addTabUpdatedListener"]>[0] | undefined;
+  let installedListener: Parameters<ContentScriptRecoveryDeps["addInstalledListener"]>[0] | undefined;
   const executeScript = vi.fn(async () => results.shift() ?? []);
   const sleep = vi.fn(() => Promise.resolve());
   const warn = vi.fn();
+  const reloadTab = vi.fn(() => Promise.resolve());
+  const tabs: Array<{ id?: number; url?: string }> = [];
   const deps: ContentScriptRecoveryDeps = {
     addTabUpdatedListener: (listener) => {
       updatedListener = listener;
     },
+    addInstalledListener: (listener) => {
+      installedListener = listener;
+    },
+    queryTabs: vi.fn(() => Promise.resolve(tabs)),
+    reloadTab,
     executeScript,
     sleep,
     warn,
   };
-  return { deps, executeScript, sleep, warn, getUpdatedListener: () => updatedListener };
+  return {
+    deps,
+    executeScript,
+    sleep,
+    warn,
+    tabs,
+    reloadTab,
+    getUpdatedListener: () => updatedListener,
+    getInstalledListener: () => installedListener,
+  };
 }
 
 describe("isSunoPageUrl", () => {
@@ -101,5 +118,36 @@ describe("installSunoContentScriptRecovery", () => {
 
     await vi.waitFor(() => expect(warn).toHaveBeenCalledOnce());
     expect(warn).toHaveBeenCalledWith("[suno-helper] content script の自己復旧に失敗しました", expect.any(Error));
+  });
+
+  it("拡張更新時は既存の Suno タブを自動リロードする", async () => {
+    const { deps, executeScript, tabs, reloadTab, getInstalledListener } = createDeps();
+    tabs.push(
+      { id: 3, url: "https://suno.com/create" },
+      { id: 4, url: "https://example.com/" },
+      { url: "https://suno.com/create" },
+    );
+    installSunoContentScriptRecovery(deps);
+
+    getInstalledListener()!({ reason: "update" });
+
+    await vi.waitFor(() => expect(reloadTab).toHaveBeenCalledOnce());
+    expect(executeScript).not.toHaveBeenCalled();
+    expect(reloadTab).toHaveBeenCalledWith(3);
+  });
+
+  it("更新対象タブの自動リロードに失敗した場合は warn する", async () => {
+    const { deps, tabs, reloadTab, warn, getInstalledListener } = createDeps();
+    tabs.push({ id: 3, url: "https://suno.com/create" });
+    reloadTab.mockRejectedValueOnce(new Error("reload blocked"));
+    installSunoContentScriptRecovery(deps);
+
+    getInstalledListener()!({ reason: "update" });
+
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledOnce());
+    expect(warn).toHaveBeenCalledWith(
+      "[suno-helper] 拡張更新後の Suno タブ自動リロードに失敗しました",
+      expect.any(Error),
+    );
   });
 });

@@ -9,6 +9,7 @@ import {
 import { buildSelectedEntriesRunOverrides } from "../lib/run-overrides";
 import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../lib/storage";
 import { PatternList } from "./PatternList";
+import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
 import { useSunoRunner } from "./useSunoRunner";
 
 // RUN_MODES のキー集合から導出する（手書き複製だと mode 追加時に UI へ出ないまま型チェックが通る）。
@@ -18,8 +19,10 @@ const DOWNLOAD_FORMAT_OPTIONS: DownloadFormat[] = ["mp3", "m4a", "wav"];
 
 export function App() {
   const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>(DOWNLOAD_FORMAT_DEFAULT);
+  const [reloadRequired, setReloadRequired] = useState(false);
   const [selectedEntries, setSelectedEntries] = useState<boolean[]>([]);
   const {
+    reloadRequired: runnerReloadRequired,
     url,
     setUrl,
     serverSources,
@@ -56,11 +59,21 @@ export function App() {
 
   useEffect(() => {
     let mounted = true;
-    void readDownloadFormat().then((value) => {
-      if (mounted) {
-        setDownloadFormat(value);
-      }
-    });
+    void readDownloadFormat()
+      .then((value) => {
+        if (mounted) {
+          setDownloadFormat(value);
+        }
+      })
+      .catch((error: unknown) => {
+        console.warn(
+          "[suno-helper] ダウンロード形式の読込に失敗しました（拡張更新後はタブを再読み込みしてください）:",
+          error,
+        );
+        if (mounted) {
+          setReloadRequired(true);
+        }
+      });
     return () => {
       mounted = false;
     };
@@ -68,7 +81,13 @@ export function App() {
 
   const updateDownloadFormat = (value: DownloadFormat): void => {
     setDownloadFormat(value);
-    void downloadFormatItem.setValue(value);
+    void downloadFormatItem.setValue(value).catch((error: unknown) => {
+      console.warn(
+        "[suno-helper] ダウンロード形式の保存に失敗しました（拡張更新後はタブを再読み込みしてください）:",
+        error,
+      );
+      setReloadRequired(true);
+    });
   };
 
   useEffect(() => {
@@ -126,6 +145,10 @@ export function App() {
       }),
     );
   };
+  if (reloadRequired || runnerReloadRequired) {
+    return <ReloadRequiredNotice />;
+  }
+
   return (
     <div
       className="flex flex-col gap-3 p-3 text-gray-900"

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PHASE, type ProgressPayload } from "../../shared/constants";
 import { App } from "../components/App";
+import { EXTENSION_RELOAD_REQUIRED_MESSAGE } from "../components/runner-errors";
 
 const BASE_URL = "http://localhost:7873";
 const FALLBACK_URL = "http://localhost:7877";
@@ -36,6 +37,11 @@ const downloadFormatMocks = vi.hoisted(() => ({
   setValue: vi.fn(async () => undefined),
 }));
 
+const serverSourcesMocks = vi.hoisted(() => ({
+  readServerSources: vi.fn(),
+  rememberServerSource: vi.fn(),
+}));
+
 const resumeStateMocks = vi.hoisted(() => ({
   readResumeState: vi.fn(async () => null),
   writeResumeState: vi.fn(async () => undefined),
@@ -58,16 +64,8 @@ vi.mock("../lib/storage", () => ({
   serverUrlItem: storageMocks,
   downloadFormatItem: downloadFormatMocks,
   readDownloadFormat: vi.fn(() => downloadFormatMocks.getValue()),
-  readServerSources: vi.fn(async () => [
-    { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
-    { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
-    { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
-  ]),
-  rememberServerSource: vi.fn(async () => [
-    { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
-    { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
-    { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
-  ]),
+  readServerSources: serverSourcesMocks.readServerSources,
+  rememberServerSource: serverSourcesMocks.rememberServerSource,
 }));
 
 vi.mock("../lib/messaging", () => messagingMocks);
@@ -238,6 +236,12 @@ describe("Suno popup compatibility check", () => {
     downloadFormatMocks.setValue.mockResolvedValue(undefined);
     presetStateMocks.readRunModeId.mockResolvedValue("serial");
     presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
+    serverSourcesMocks.readServerSources.mockResolvedValue([
+      { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
+      { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
+      { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
+    ]);
+    serverSourcesMocks.rememberServerSource.mockResolvedValue([]);
     messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
     messagingMocks.progressHandler = undefined;
     messagingMocks.onMessage.mockImplementation(
@@ -267,6 +271,17 @@ describe("Suno popup compatibility check", () => {
     });
   }
 
+  async function rerenderApp(): Promise<void> {
+    await act(async () => {
+      root.unmount();
+    });
+    container.innerHTML = "";
+    root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(App));
+    });
+  }
+
   afterEach(() => {
     act(() => {
       root.unmount();
@@ -280,6 +295,8 @@ describe("Suno popup compatibility check", () => {
     resumeStateMocks.writeResumeState.mockResolvedValue(undefined);
     presetStateMocks.readRunModeId.mockResolvedValue("serial");
     presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
+    serverSourcesMocks.readServerSources.mockResolvedValue([]);
+    serverSourcesMocks.rememberServerSource.mockResolvedValue([]);
   });
 
   it("ローカル配信元 option は URL を表示せず、URL value はデータ取得先として維持する", async () => {
@@ -1316,6 +1333,109 @@ describe("Suno popup compatibility check", () => {
 
     expect(downloadFormatMocks.setValue).toHaveBeenCalledWith("wav");
     expect(select.value).toBe("wav");
+  });
+
+  it("DL 形式の読込が失敗すると未捕捉にせず再読み込み案内を表示する", async () => {
+    downloadFormatMocks.getValue.mockRejectedValueOnce(
+      new Error("'wxt/storage' must be loaded in a web extension environment"),
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.innerHTML = "";
+    root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(App));
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
+      expect(buttonByText(container, "タブを再読み込み")).toBeTruthy();
+    });
+  });
+
+  it.each([
+    ["server URL", () => storageMocks.getValue.mockRejectedValueOnce(new Error("Extension context invalidated."))],
+    [
+      "server sources",
+      () => serverSourcesMocks.readServerSources.mockRejectedValueOnce(new Error("Extension context invalidated.")),
+    ],
+    ["run mode", () => presetStateMocks.readRunModeId.mockRejectedValueOnce(new Error("Extension context invalidated."))],
+    ["resume state", () => resumeStateMocks.readResumeState.mockRejectedValueOnce(new Error("Extension context invalidated."))],
+  ])("%s の読込失敗を再読み込み案内へ集約する", async (_label, rejectRead) => {
+    rejectRead();
+    await rerenderApp();
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
+      expect(buttonByText(container, "タブを再読み込み")).toBeTruthy();
+    });
+  });
+
+  it("run mode の保存失敗を再読み込み案内へ集約する", async () => {
+    presetStateMocks.writeRunModeId.mockRejectedValueOnce(new Error("Extension context invalidated."));
+    const queueRadio = radioByLabel(container, "高速モード");
+
+    await act(async () => {
+      queueRadio.click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
+    });
+  });
+
+  it("server URL の保存失敗を再読み込み案内へ集約し、再保存しない", async () => {
+    storageMocks.setValue.mockRejectedValueOnce(new Error("Extension context invalidated."));
+    const serverSelect = expectControl(container, "server-url") as HTMLSelectElement;
+    setSelectValue(serverSelect, BASE_URL);
+
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
+    });
+    expect(storageMocks.setValue).toHaveBeenCalledOnce();
+  });
+
+  it("互換性確認の No response を未捕捉にせず再読み込み案内へ集約する", async () => {
+    messagingMocks.sendMessage.mockImplementation((message, payload) => {
+      if (message === "fetchCompatibilityWarning") {
+        return Promise.reject(new Error("No response at sendMessage"));
+      }
+      return defaultSendMessage(message, payload);
+    });
+    const serverSelect = expectControl(container, "server-url") as HTMLSelectElement;
+    setSelectValue(serverSelect, BASE_URL);
+
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
+      expect(buttonByText(container, "タブを再読み込み")).toBeTruthy();
+    });
+  });
+
+  it("DL 形式の保存が失敗すると未捕捉にせず再読み込み案内を表示する", async () => {
+    downloadFormatMocks.setValue.mockRejectedValueOnce(new Error("Extension context invalidated."));
+    const select = Array.from(container.querySelectorAll("select")).find((candidate) =>
+      Array.from(candidate.options).some((option) => option.value === "wav"),
+    );
+    if (!select) throw new Error("download format select not found");
+
+    await act(async () => {
+      setSelectValue(select, "wav");
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
+      expect(buttonByText(container, "タブを再読み込み")).toBeTruthy();
+    });
   });
 
   it("DL 形式 select は不正な storage 値を MP3 に戻す", async () => {

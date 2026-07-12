@@ -272,6 +272,28 @@ async function resolveDownloadContext(): Promise<DownloadContext> {
 export default defineContentScript({
   matches: [...SUNO_MATCHES],
   main(ctx) {
+    // 更新前に残った content script は service worker と別バージョンになり得る。
+    // handshake 自体の失敗も古い context では起こり得るため、必ず catch して未処理 rejection を残さない。
+    try {
+      const version = browser.runtime.getManifest().version;
+      void sendMessage("extensionVersionHandshake", { version })
+        .then((result) => {
+          if (!result.matches) {
+            console.warn(`[suno-helper] content script のバージョンが不一致です（${version} / ${result.version}）`);
+          }
+        })
+        .catch((error: unknown) => {
+          console.warn(
+            "[suno-helper] content script の version handshake に失敗しました（context invalidated?）:",
+            error,
+          );
+        });
+    } catch (error) {
+      console.warn(
+        "[suno-helper] content script の version handshake を開始できません（context invalidated?）:",
+        error,
+      );
+    }
     let aborted = false;
     // 連続実行の二重起動ガード (#892 要件7)。runAll 実行中の run 再着信を弾く。
     let running = false;
