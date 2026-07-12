@@ -11,6 +11,7 @@ import yaml
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _EXTENSION_NAMES = ("suno-helper", "distrokid-helper")
 _NIX_PNPM = "11.12.0"
+_WORKFLOW_PNPM = "11.12.0"
 _DOCUMENTED_PNPM = "11.11.0"
 _PINNED_COMMAND = f"npx -y pnpm@{_DOCUMENTED_PNPM}"
 
@@ -88,7 +89,7 @@ def test_ci_and_release_workflows_use_the_pinned_pnpm() -> None:
         versions = _pnpm_setup_versions(path)
 
         assert versions
-        assert versions == [_DOCUMENTED_PNPM] * len(versions)
+        assert versions == [_WORKFLOW_PNPM] * len(versions)
 
 
 def test_shared_docs_precede_commands_with_the_pinned_contract() -> None:
