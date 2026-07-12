@@ -109,8 +109,20 @@ _Avoid_: feature parity, UI parity
 
 ## マルチチャンネル運用
 
+**workspace**:
+複数チャンネルを `channels/<slug>/` として同居させる単一リポジトリ。共有物 (skills / CLAUDE.md / docs) はルートに 1 セット、per-channel 状態 (config / auth / data / collections / assets) は各 `channels/<slug>/` 配下に置く。単一チャンネルリポ構成は恒久サポートであり、workspace への移行は opt-in。
+_Avoid_: monorepo (一般語すぎる), multi-channel repo
+
+**channel slug**:
+workspace 内でチャンネルを識別する `channels/` 直下のディレクトリ名。`--channel <slug>` / `CHANNEL=<slug>` で実行対象を指定する。
+_Avoid_: channel id (YouTube 側の Channel ID と混同する)
+
+**competitor**:
+ベンチマーク分析の対象となる他者チャンネル (`analytics.benchmark.channels` のエントリ)。CLI フラグは `--competitor`。
+_Avoid_: `--channel` を競合 slug の意味で使うこと (自チャンネル指定に予約。旧 benchmark 系 CLI の用法は廃止)
+
 **channel registry**:
-運営者が所有する全 first-party チャンネルリポのパス一覧。`~/.config/tayk/channels.json` に JSON 配列で格納する。各エントリはチャンネルリポの絶対パスのみを持ち、表示名等のメタデータは各リポの `config/channel/meta.json` から動的に解決する（二重管理の回避）。dashboard が消費する。
+運営者が所有する全 first-party チャンネルのパス一覧。`~/.config/tayk/channels.json` に JSON 配列で格納する。各エントリはチャンネルディレクトリ (単一チャンネルリポ or workspace 内 `channels/<slug>/`) の絶対パスのみを持ち、表示名等のメタデータは各ディレクトリの `config/channel/meta.json` から動的に解決する（二重管理の回避）。dashboard が消費する。
 _Avoid_: channel list, channel config (config は `config/channel/*.json` のこと)
 
 **dashboard**:
