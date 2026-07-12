@@ -359,6 +359,53 @@ def test_collection_ideate_freshness_days_channel_override(tmp_path):
     assert cfg.get("preview", {}).get("thumbnail_mode") == "parallel"
 
 
+def test_analytics_report_theme_colors_default_comes_from_skill_config(tmp_path):
+    """analytics-report の HTML テーマ色 default は実 loader で読める."""
+    channel_dir = tmp_path / "ch"
+    channel_dir.mkdir()
+
+    cfg = skill_config.load_skill_config("analytics-report", use_cache=False, channel_dir=channel_dir)
+
+    assert cfg.get("theme", {}).get("colors") == {
+        "background": "#0f1419",
+        "card_background": "#1a2332",
+        "accent": "#c8a96e",
+        "text": "#e8e6e3",
+        "chart_palette": ["#4ecdc4", "#45b7d1", "#96ceb4", "#ffeaa7", "#dfe6e9"],
+        "success": "#00b894",
+        "warning": "#fdcb6e",
+        "danger": "#e17055",
+    }
+
+
+def test_analytics_report_theme_colors_channel_override(tmp_path):
+    """analytics-report の HTML テーマ色は channel override で差し替えられる."""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    override = channel_dir / "config" / "skills" / "analytics-report.yaml"
+    override.write_text(
+        yaml.safe_dump(
+            {
+                "theme": {
+                    "colors": {
+                        "accent": "#123456",
+                        "chart_palette": ["#111111", "#222222"],
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cfg = skill_config.load_skill_config("analytics-report", use_cache=False, channel_dir=channel_dir)
+
+    colors = cfg.get("theme", {}).get("colors")
+    assert colors.get("accent") == "#123456"
+    assert colors.get("chart_palette") == ["#111111", "#222222"]
+    assert colors.get("background") == "#0f1419"
+    assert cfg.get("html", {}).get("kpi_cards") == ["total_views", "total_watch_time", "subscribers", "ctr"]
+
+
 def test_explicit_channel_dir_override_does_not_use_env(tmp_path, monkeypatch):
     """明示 channel_dir 指定時は CHANNEL_DIR ではなく指定先の override を読む."""
     env_channel = tmp_path / "env-ch"
