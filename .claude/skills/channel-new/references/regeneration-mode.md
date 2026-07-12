@@ -163,4 +163,5 @@ JSON 構文検証・config ロードテスト・channel_id 自動取得コマン
 2. **OAuth 認証と channel_id 取得**: 手順は `references/verification.md`（「OAuth 認証」「channel_id の自動取得」）を参照
 3. **ブランディング素材**: 生成手順は `references/verification.md`（「ブランディング素材生成」）を参照
 4. **YouTube 側に設定を反映**: 初回反映は新規開設モード Step 8 で実施済み。再反映や運用中の更新は設定 push モードを参照
-5. **初回コレクション制作**: `/wf-new` を実行
+5. **任意のパイロット検証**: 色味・構図・ムード・テンポを先に確認したい場合は、仮コレクションで `/thumbnail` → `/thumbnail-compare`、および `music_engine` が `suno` なら `/suno` → `/suno-helper`、`lyria` なら `/lyria` を実行し、OK/NG を判断する。NG なら `config/skills/thumbnail.yaml` / `config/skills/suno.yaml` / `config/skills/lyria.yaml` を調整して再試作する。OK なら仮コレクションを削除するか、既存 `collections/planning/` として `/wf-next` で継続する
+6. **初回コレクション制作**: パイロットを省略する、またはパイロット OK 後に新規本制作を始める場合は `/wf-new` を実行
