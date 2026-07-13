@@ -83,10 +83,12 @@ build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helpe
    ```
 2. Chrome で Suno の **Advanced** タブを選択する。
 3. 拡張アイコンからポップアップを開き、**ローカル配信元** でチャンネル名つき候補を選んで **データ取得**。
-4. `ready` な collection を選び、**全パターンを連続実行** を押す。
+4. `ready` な collection を選び、データ取得後に **異常値の曲を再生成する** を選んでから **全パターンを連続実行** を押す。既定の ON は duration guard NG の entry を最大 2 回再生成する。OFF は追加生成せず、NG を警告表示したうえで生成済み全 clip を playlist / download 候補に残す。
 5. 各パターンで Style/Lyrics を注入 → Generate 押下 → 生成完了検知 → 次へ、を自動で繰り返す。
 6. 全件完了後、対象 clip を一括選択 → playlist 追加 → More menu の **Download all** → format 選択 → ZIP ダウンロード完了監視 → `POST /collections/<id>/downloaded` で ZIP パス通知、まで実行する。サーバーは ZIP を展開し、`02-Individual-music/` と `workflow-state.json` を更新する。
 7. captcha challenge は waiting-captcha 表示で解消（多くは自動 verify）を待って続行する。entry 単位の一時的な失敗は Balanced 固定の上限で自動リトライし、上限超過分はスキップして完走する（#948）。スキップされた entry は一覧表示され、**失敗分のみ再実行** で再投入できる。
+
+**異常値の曲を再生成する** を OFF にした run は、duration guard の閾値外 clip も歯抜けにせず playlist と ZIP に含める。popup の status / console warning で NG を確認し、完了後に対象 playlist を試聴して採否を手動判断する。popup を閉じて再表示した場合も選択は復元される。entry phase の ERROR / STOPPED は resume バナー、playlist / download phase の中断は **Playlist から再開** / **Download から再開** を使い、いずれも元 run の選択と警告を引き継ぐ。
 
 ### in-flight 検知と停止判断（#948）
 

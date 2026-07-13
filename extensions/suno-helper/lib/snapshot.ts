@@ -2,12 +2,21 @@
 // itemStates の遷移ロジックを content (snapshot 構築) と popup (live 表示 / restore) で
 // 二重定義しないため、ここに 1 箇所だけ集約する。useSunoRunner と content.ts の双方が import する。
 import type { DurationFilter, PromptEntry } from "../../shared/api";
-import { PHASE, type ItemState, type Phase, type ProgressPayload, type SnapshotPayload } from "../../shared/constants";
+import {
+  DEFAULT_REGENERATE_DURATION_OUTLIERS,
+  PHASE,
+  type ItemState,
+  type Phase,
+  type ProgressPayload,
+  type SnapshotPayload,
+} from "../../shared/constants";
 
 interface InitSnapshotOptions {
   collectionId: string;
   playlistName?: string;
   durationFilter?: DurationFilter;
+  regenerateDurationOutliers?: boolean;
+  durationOutlierWarnings?: Record<number, string>;
 }
 
 /**
@@ -25,6 +34,8 @@ export function initSnapshot(
     isRunning: true,
     progress: { phase: PHASE.INJECTING, total: entries.length },
     playlistName: options.playlistName,
+    regenerateDurationOutliers: options.regenerateDurationOutliers ?? DEFAULT_REGENERATE_DURATION_OUTLIERS,
+    ...(options.durationOutlierWarnings ? { durationOutlierWarnings: options.durationOutlierWarnings } : {}),
     ...(options.durationFilter ? { durationFilter: options.durationFilter } : {}),
   };
 }
@@ -69,6 +80,10 @@ export function applyProgress(snap: SnapshotPayload, payload: ProgressPayload): 
     payload.index !== undefined && payload.yieldRetryCount !== undefined
       ? { ...(snap.yieldRetryCounts ?? {}), [payload.index]: payload.yieldRetryCount }
       : snap.yieldRetryCounts;
+  const nextDurationOutlierWarnings =
+    payload.index !== undefined && payload.durationOutlierWarning
+      ? { ...(snap.durationOutlierWarnings ?? {}), [payload.index]: payload.durationOutlierWarning }
+      : snap.durationOutlierWarnings;
   return {
     ...snap,
     itemStates: nextItemStates(snap.itemStates, payload),
@@ -86,5 +101,6 @@ export function applyProgress(snap: SnapshotPayload, payload: ProgressPayload): 
         : snap.failedIndices,
     yieldAcceptedClipIds: nextAcceptedClipIds,
     yieldRetryCounts: nextYieldRetryCounts,
+    durationOutlierWarnings: nextDurationOutlierWarnings,
   };
 }

@@ -28,6 +28,8 @@ export interface RunPayload {
   collectionId: string;
   /** 生成完了待ちの方式。serial は従来挙動、queue は ACK 後に次 entry を投入する。 */
   runMode: RunModeId;
+  regenerateDurationOutliers: boolean;
+  durationOutlierWarnings?: Record<number, string>;
   /** 任意の部分実行対象の 0-based index 列。チェック選択や失敗分再実行で使う。指定時は range より優先。 */
   indices?: number[];
   /** 再開前の run で観測済みの playlist 対象 clip ID。 */
@@ -45,6 +47,9 @@ export interface RetryPlaylistPayload {
   collectionId: string;
   /** retryPlaylist 入口でも通常 run と同じ duration guard 契約を適用する。 */
   durationFilter?: DurationFilter;
+  /** false の run では保存済み NG clip も playlist/download 対象に維持する。 */
+  regenerateDurationOutliers: boolean;
+  durationOutlierWarnings?: Record<number, string>;
   /** true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。 */
   submittedClipIdsAreDurationFiltered?: boolean;
   shouldDownload?: boolean;

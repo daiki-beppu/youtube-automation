@@ -5,6 +5,7 @@ import {
   type ProgressPayload,
   QUEUE_ERROR_WAIT_MS,
   QUEUE_SLOT_WAIT_TIMEOUT_MS,
+  MAX_YIELD_RETRY,
 } from "../../shared/constants";
 import { FatalRunError, POLL_INTERVAL_MS } from "../../shared/dom";
 import type { AckMarker } from "./ack-probe";
@@ -12,7 +13,7 @@ import { markAck } from "./ack-probe";
 import { InjectNotAcknowledgedError, injectWithVerification } from "./inject-retry";
 import { resolveInterruptIndex } from "./resume-state";
 import { runEntryWithRetry } from "./entry-retry";
-import { evaluateClips, formatYieldFailure } from "./yield-guard";
+import { decideDurationAttempt, evaluateClips } from "./yield-guard";
 
 export interface QueueRunnerPreset {
   interCreateDelayMs: number;
@@ -89,10 +90,15 @@ export interface QueueEntriesYieldOptions {
   markAccepted: (ids: string[]) => void;
   dropSubmittedIds: (ids: string[]) => void;
   emitProgress: (payload: ProgressPayload) => void;
+  durationOutlierStrategy:
+    | { kind: "retain" }
+    | { kind: "regenerate"; regenerateEntry: (index: number, attempt: number) => Promise<string[]> };
+  isAborted?: () => boolean;
 }
 
 export interface QueueEntriesYieldResult {
   failedIndices: number[];
+  abortedIndex?: number;
 }
 
 /** entry のログ/UI 表示名。content.ts と共用する（title ?? name の fallback 規則の SSOT）。 */
@@ -154,7 +160,7 @@ export async function finalizeQueueEntriesYield(options: QueueEntriesYieldOption
   const failedIndices: number[] = [];
   const durationFilter = options.durationFilter ?? DEFAULT_DURATION_FILTER;
   for (const index of options.order) {
-    const entryClipIds = options.clipIdsByEntry.get(index) ?? [];
+    let entryClipIds = options.clipIdsByEntry.get(index) ?? [];
     if (entryClipIds.length === 0) {
       console.warn(
         `[suno-helper] entry ${index} の clip ID を bridge で観測できなかったため duration guard を skip します。`,
@@ -162,33 +168,108 @@ export async function finalizeQueueEntriesYield(options: QueueEntriesYieldOption
       options.emitProgress({ phase: PHASE.DONE, index, total: options.total, yieldRetryCount: 0 });
       continue;
     }
-    const evaluation = evaluateClips(
-      entryClipIds.map((id) => ({ id, duration: options.getDuration(id) })),
-      durationFilter,
-    );
-    if (evaluation.ok.length > 0) {
-      options.markAccepted(evaluation.ok);
+    let yieldRetryCount = 0;
+    for (;;) {
+      let attemptResult;
+      try {
+        attemptResult = {
+          kind: "evaluated" as const,
+          evaluation: evaluateClips(
+            entryClipIds.map((id) => ({ id, duration: options.getDuration(id) })),
+            durationFilter,
+          ),
+        };
+      } catch (error) {
+        attemptResult = {
+          kind: "evaluation-failed" as const,
+          message: error instanceof Error ? error.message : String(error),
+        };
+      }
+      const decision = decideDurationAttempt({
+        clipIds: entryClipIds,
+        result: attemptResult,
+        filter: durationFilter,
+        policy: options.durationOutlierStrategy,
+        attemptCount: yieldRetryCount,
+        maxRetry: MAX_YIELD_RETRY,
+      });
+      if (decision.kind === "accept") {
+        options.markAccepted(decision.acceptedClipIds);
+        if (decision.warning) {
+          console.warn(`[suno-helper] entry ${index}: ${decision.warning}`);
+        }
+        options.emitProgress({
+          phase: PHASE.DONE,
+          index,
+          total: options.total,
+          ...(decision.warning ? { message: decision.warning } : {}),
+          ...(decision.warning ? { durationOutlierWarning: decision.warning } : {}),
+          yieldRetryCount,
+          acceptedClipIds: decision.acceptedClipIds,
+        });
+        break;
+      }
+      if (decision.kind === "retry") {
+        if (options.durationOutlierStrategy.kind !== "regenerate") {
+          throw new Error("duration retain policy returned an invalid retry decision");
+        }
+        yieldRetryCount += 1;
+        console.warn(
+          `[suno-helper] entry ${index} duration guard NG、同一 prompt で再生成します (${yieldRetryCount}/${MAX_YIELD_RETRY}): ${decision.message}`,
+        );
+        options.emitProgress({
+          phase: PHASE.WAITING_SLOT,
+          index,
+          total: options.total,
+          message: `${decision.message}; retry ${yieldRetryCount}/${MAX_YIELD_RETRY}`,
+          yieldRetryCount,
+          log: {
+            kind: "retry",
+            entryName: entryDisplayName(options.entries[index]),
+            attempt: yieldRetryCount,
+            max: MAX_YIELD_RETRY,
+          },
+        });
+        try {
+          const regeneratedClipIds = await options.durationOutlierStrategy.regenerateEntry(index, yieldRetryCount);
+          if (options.isAborted?.()) {
+            return { failedIndices, abortedIndex: index };
+          }
+          options.dropSubmittedIds(entryClipIds);
+          entryClipIds = regeneratedClipIds;
+        } catch (error) {
+          const regenerationMessage = error instanceof Error ? error.message : String(error);
+          options.dropSubmittedIds(entryClipIds);
+          failedIndices.push(index);
+          console.warn(`[suno-helper] entry ${index} の duration 再生成に失敗しました: ${regenerationMessage}`);
+          options.emitProgress({
+            phase: PHASE.ENTRY_FAILED,
+            index,
+            total: options.total,
+            message: regenerationMessage,
+            yieldRetryCount,
+            log: { kind: "skip", entryName: entryDisplayName(options.entries[index]) },
+          });
+          break;
+        }
+        options.clipIdsByEntry.set(index, entryClipIds);
+        continue;
+      }
+      options.dropSubmittedIds(entryClipIds);
+      failedIndices.push(index);
+      console.warn(
+        `[suno-helper] entry ${index} は duration guard ${decision.reason === "evaluation" ? "評価失敗" : "全滅"}のためスキップします: ${decision.message}`,
+      );
       options.emitProgress({
-        phase: PHASE.DONE,
+        phase: PHASE.ENTRY_FAILED,
         index,
         total: options.total,
-        yieldRetryCount: 0,
-        acceptedClipIds: evaluation.ok,
+        message: decision.message,
+        yieldRetryCount,
+        log: { kind: "skip", entryName: entryDisplayName(options.entries[index]) },
       });
-      continue;
+      break;
     }
-    const message = formatYieldFailure(evaluation, durationFilter);
-    options.dropSubmittedIds(entryClipIds);
-    failedIndices.push(index);
-    console.warn(`[suno-helper] entry ${index} は duration guard 全滅のためスキップします: ${message}`);
-    options.emitProgress({
-      phase: PHASE.ENTRY_FAILED,
-      index,
-      total: options.total,
-      message,
-      yieldRetryCount: 0,
-      log: { kind: "skip", entryName: entryDisplayName(options.entries[index]) },
-    });
   }
   return { failedIndices };
 }

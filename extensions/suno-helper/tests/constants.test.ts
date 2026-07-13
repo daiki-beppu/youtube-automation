@@ -11,6 +11,7 @@ import {
   COLLECTIONS_ROUTE,
   collectionPromptsRoute,
   DEFAULT_SERVER_SOURCES,
+  DEFAULT_REGENERATE_DURATION_OUTLIERS,
   DEFAULT_URL,
   FEED_V3_METHOD,
   FEED_V3_PATH,
@@ -34,6 +35,9 @@ import {
 } from "../../shared/constants";
 
 describe("shared/constants: サーバー互換の契約値", () => {
+  it("Given 異常値再生成 option When 既定値を読む Then ON である", () => {
+    expect(DEFAULT_REGENERATE_DURATION_OUTLIERS).toBe(true);
+  });
   it("Given 移行後の定数 When STORAGE_KEY を読む Then 旧実装と同じ key 名である", () => {
     expect(STORAGE_KEY).toBe("sunoServerUrl");
   });

@@ -40,6 +40,8 @@ export function App() {
     playlistName,
     runModeId,
     setRunMode,
+    regenerateDurationOutliers,
+    setRegenerateDurationOutliers,
     resumeBanner,
     acceptResume,
     dismissResume,
@@ -283,6 +285,24 @@ export function App() {
           );
         })}
       </fieldset>
+
+      <label className="flex items-start gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={regenerateDurationOutliers}
+          disabled={entries.length === 0 || isRunning}
+          onChange={(event) => setRegenerateDurationOutliers(event.target.checked)}
+        />
+        <span className="flex flex-col">
+          <span className="font-medium">異常値の曲を再生成する</span>
+          {!regenerateDurationOutliers && (
+            <span className="text-xs text-amber-700">
+              OFF の場合、duration guard NG も Playlist / Download 候補に残ります。完了後に手動確認してください。
+            </span>
+          )}
+        </span>
+      </label>
 
       <label className="flex flex-col gap-1 text-sm">
         DL 形式

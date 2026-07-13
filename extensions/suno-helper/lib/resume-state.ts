@@ -43,6 +43,9 @@ export interface ResumeState {
   /** 中断した run の投入方式 (#1586)。再開時に popup の現在選択ではなく元 run のモードを引き継ぐ。
    * 旧 state には無い optional（後方互換。無ければ popup の現在選択へフォールバック）。 */
   runMode?: RunModeId;
+  regenerateDurationOutliers?: boolean;
+  /** 再生成 OFF で保持した clip を resume 後も operator が見落とさないため永続化する。 */
+  durationOutlierWarnings?: Record<number, string>;
 }
 
 /** content へ渡す 0-based inclusive な実行範囲。 */

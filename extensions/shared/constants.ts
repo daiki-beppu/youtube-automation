@@ -92,6 +92,8 @@ export const MAX_INJECT_RETRY = 2;
 /** duration 歩留まり NG 時に同じ entry を再生成する最大 retry 回数 (#1266)。 */
 export const MAX_YIELD_RETRY = 2;
 
+export const DEFAULT_REGENERATE_DURATION_OUTLIERS = true;
+
 /** 投入方式の選択値を保存する chrome.storage.local の key (#1586)。 */
 export const RUN_MODE_STORAGE_KEY = "sunoRunMode";
 
@@ -367,6 +369,7 @@ type ProgressPayloadBase = {
   yieldRetryCount?: number;
   /** duration yield guard を通過した clip ID (#1268)。 */
   acceptedClipIds?: string[];
+  durationOutlierWarning?: string;
 };
 
 type ProgressPayloadWithoutLog = ProgressPayloadBase & {
@@ -411,6 +414,7 @@ export interface SnapshotPayload {
   playlistName?: string;
   // collection 単位 duration guard 閾値 (#1259)。再 open 後も同じ OK/NG 判定を維持する。
   durationFilter?: DurationFilter;
+  regenerateDurationOutliers?: boolean;
   // ERROR 停止した entry の index (#872)。chrome.storage の resume state と二重化し、
   // popup の進捗復元でも参照する。ERROR phase 到達時のみ確定し、それ以外は undefined。
   failedIndex?: number;
@@ -429,4 +433,5 @@ export interface SnapshotPayload {
   yieldAcceptedClipIds?: string[];
   // entry index -> duration guard retry 回数 (#1268)。
   yieldRetryCounts?: Record<number, number>;
+  durationOutlierWarnings?: Record<number, string>;
 }

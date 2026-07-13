@@ -192,6 +192,7 @@ function partialRunPayload(): RunPayload {
     range: { start: 0, end: 0 },
     collectionId: "coll-1",
     runMode: "serial",
+    regenerateDurationOutliers: true,
   };
 }
 
@@ -249,6 +250,7 @@ describe("content.ts 完了時リロード前の FINISHED snapshot 退避", () =
         submittedClipIds: ["clip-1", "clip-2"],
         expectedClipCount: 2,
         collectionId: "coll-1",
+        regenerateDurationOutliers: true,
         shouldDownload: false,
       },
     });
@@ -280,7 +282,13 @@ describe("content.ts 実行開始時の退避 snapshot 消去", () => {
     const { handlers, clearFinishedSnapshotMock } = await loadContentScript([]);
 
     handlers.get("retryPlaylist")!({
-      data: { playlistName: "pl", submittedClipIds: ["clip-1"], expectedClipCount: 1, collectionId: "coll-1" },
+      data: {
+        playlistName: "pl",
+        submittedClipIds: ["clip-1"],
+        expectedClipCount: 1,
+        collectionId: "coll-1",
+        regenerateDurationOutliers: true,
+      },
     });
 
     // 消去は initSnapshot 直後に同期で発火する（完了を待つ必要はない）

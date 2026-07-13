@@ -32,6 +32,7 @@ function retryPlaylistMessage(overrides: Partial<RetryPlaylistPayload> = {}): { 
       submittedClipIds: [],
       expectedClipCount: 0,
       collectionId: "coll-1",
+      regenerateDurationOutliers: true,
       ...overrides,
     },
   };
@@ -273,6 +274,11 @@ describe('content onMessage("retryPlaylist"): payload contract', () => {
       { submittedClipIdsAreDurationFiltered: "true" },
       /retryPlaylist\.submittedClipIdsAreDurationFiltered/,
     ],
+    [
+      "regenerateDurationOutliers が非 boolean",
+      { regenerateDurationOutliers: "true" },
+      /retryPlaylist\.regenerateDurationOutliers/,
+    ],
   ] as const)(
     "Given %s payload When retryPlaylist Then fail-loud し副作用を起こさない",
     async (_label, override, message) => {
@@ -289,6 +295,17 @@ describe('content onMessage("retryPlaylist"): payload contract', () => {
       expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
     },
   );
+
+  it("Given option 欠落の旧 retryPlaylist payload When retry する Then 既定 ON でplaylist処理する", async () => {
+    const { handlers, scrollAndMultiSelectByIdsMock } = await loadContentScript();
+    const retryHandler = handlers.get("retryPlaylist")!;
+    const message = retryPlaylistMessage({ submittedClipIds: ["clip-1"], expectedClipCount: 1 });
+    delete (message.data as Partial<RetryPlaylistPayload>).regenerateDurationOutliers;
+
+    expect(retryHandler(message)).toEqual({ ok: true });
+
+    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(["clip-1"], expect.any(Object)));
+  });
 });
 
 describe('content onMessage("retryPlaylist"): 正常完了', () => {
@@ -305,15 +322,15 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
 
     // submittedClipIds を指定し resolvePlaylistClipIds が正常に返るようにする
     const clipIds = ["clip-1", "clip-2"];
-    handlers.get("retryPlaylist")!({
-      data: {
+    handlers.get("retryPlaylist")!(
+      retryPlaylistMessage({
         playlistName: "test-playlist",
         submittedClipIds: clipIds,
         expectedClipCount: clipIds.length,
         collectionId: "coll-1",
         shouldDownload: true,
-      },
-    });
+      }),
+    );
 
     await new Promise((r) => setTimeout(r, 0));
     handlers.get("downloadComplete")!({
@@ -340,15 +357,15 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
     const { handlers, progressMessages, sentMessages } = await loadContentScript();
     const clipIds = ["clip-1", "clip-2"];
 
-    handlers.get("retryPlaylist")!({
-      data: {
+    handlers.get("retryPlaylist")!(
+      retryPlaylistMessage({
         playlistName: "test-playlist",
         submittedClipIds: clipIds,
         expectedClipCount: clipIds.length,
         collectionId: "coll-1",
         shouldDownload: false,
-      },
-    });
+      }),
+    );
 
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
     expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
@@ -366,8 +383,8 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
       guardSelectedClipIds: ["clip-ok"],
     });
 
-    handlers.get("retryPlaylist")!({
-      data: {
+    handlers.get("retryPlaylist")!(
+      retryPlaylistMessage({
         playlistName: "test-playlist",
         submittedClipIds: ["clip-ok", "clip-short", "clip-unknown"],
         expectedClipCount: 3,
@@ -375,8 +392,8 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
         durationFilter: { min_sec: 60, max_sec: 300 },
         submittedClipIdsAreDurationFiltered: false,
         shouldDownload: false,
-      },
-    });
+      }),
+    );
 
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
@@ -385,19 +402,45 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
     );
   });
 
+  it("Given 再生成 OFF の retryPlaylist に duration NG clip が混在 When 未正規化 payload Then 全 clip IDs を multi-select する", async () => {
+    const { handlers, progressMessages, scrollAndMultiSelectByIdsMock } = await loadContentScript({
+      durationsById: { "clip-ok": 120, "clip-short": 30, "clip-unknown": undefined },
+      guardSelectedClipIds: ["clip-ok", "clip-short", "clip-unknown"],
+    });
+
+    handlers.get("retryPlaylist")!(
+      retryPlaylistMessage({
+        playlistName: "test-playlist",
+        submittedClipIds: ["clip-ok", "clip-short", "clip-unknown"],
+        expectedClipCount: 3,
+        collectionId: "coll-1",
+        durationFilter: { min_sec: 60, max_sec: 300 },
+        submittedClipIdsAreDurationFiltered: false,
+        regenerateDurationOutliers: false,
+        shouldDownload: false,
+      }),
+    );
+
+    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      ["clip-ok", "clip-short", "clip-unknown"],
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+    );
+  });
+
   it("Given retryPlaylist の完了待ち直後に stop 済み When async flow が再開する Then playlist 追加に進まない", async () => {
     const { handlers, progressMessages, scrollAndMultiSelectByIdsMock } = await loadContentScript();
     const clipIds = ["clip-1"];
 
-    handlers.get("retryPlaylist")!({
-      data: {
+    handlers.get("retryPlaylist")!(
+      retryPlaylistMessage({
         playlistName: "test-playlist",
         submittedClipIds: clipIds,
         expectedClipCount: clipIds.length,
         collectionId: "coll-1",
         shouldDownload: false,
-      },
-    });
+      }),
+    );
     handlers.get("stop")!({ data: undefined });
 
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.STOPPED })));
@@ -412,15 +455,15 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
     const { handlers, progressMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
     const clipIds = ["clip-1", "clip-2"];
 
-    handlers.get("retryPlaylist")!({
-      data: {
+    handlers.get("retryPlaylist")!(
+      retryPlaylistMessage({
         playlistName: "test-playlist",
         submittedClipIds: clipIds,
         expectedClipCount: clipIds.length,
         collectionId: "coll-1",
         shouldDownload: false,
-      },
-    });
+      }),
+    );
 
     await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
     expect(progressMessages).not.toContainEqual(expect.objectContaining({ phase: PHASE.ERROR }));
