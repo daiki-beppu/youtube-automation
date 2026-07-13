@@ -23,16 +23,16 @@ extensions/
 
 ## pnpm バージョン契約
 
-両拡張（`suno-helper` / `distrokid-helper`）のローカル検証には **pnpm 11.11.0** を使う。各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` による依存 build script の承認、および CI を同じ契約に保つためである。
+両拡張（`suno-helper` / `distrokid-helper`）のローカル検証には Nix extensions shell の **Node 24 / pnpm 11.12.0** を使う。各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` による依存 build script の承認、および CI を同じ契約に保つためである。
 
-ambient `pnpm` の版は各環境で異なり得るため、再現可能な検証では版数を省略せず `npx -y pnpm@11.11.0` を使う。Corepack で各 `package.json::packageManager` の版を有効化済みの場合に限り、以下の `npx -y pnpm@11.11.0` は `pnpm` に置き換えられる。
+ambient `node` / `pnpm` の版は各環境で異なり得るため、再現可能な検証では必ず `nix develop .#extensions --command` 経由で実行する。`--ignore-workspace` は `pnpm-workspace.yaml::allowBuilds` を無効化するため使用しない。
 
 任意の `<name>`（`suno-helper` または `distrokid-helper`）を検証する標準コマンド:
 
 ```bash
-npx -y pnpm@11.11.0 -C extensions/<name> install --frozen-lockfile
-npx -y pnpm@11.11.0 -C extensions/<name> build
-npx -y pnpm@11.11.0 -C extensions/<name> zip
+nix develop .#extensions --command pnpm -C extensions/<name> install --frozen-lockfile
+nix develop .#extensions --command pnpm -C extensions/<name> build
+nix develop .#extensions --command pnpm -C extensions/<name> zip
 ```
 
 `zip` は `extensions/<name>/.output/<name>-<version>-chrome.zip` を生成する。release 前は両拡張で上記 3 コマンドを実行し、成果物の存在と lockfile が不変であることを確認する:

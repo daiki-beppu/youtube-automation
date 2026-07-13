@@ -39,7 +39,7 @@ uv run yt-skills diff --asset claude-md              # CLAUDE.md テンプレの
 - **契約文字列**: サーバー（`yt-collection-serve`）との互換契約値（storage key / 配信ルート / phase 値）は `extensions/shared/constants.ts` の定数として 1 箇所で定義する。メッセージ種別（`run` / `stop` / `progress`）は各拡張の `lib/messaging.ts` で `@webext-core/messaging` の ProtocolMap として型付け定義する。ハードコーディング禁止
 - **テスト必須**: unit は Vitest（`pnpm test`）、e2e は Playwright（`pnpm test:e2e`、Suno UI mock への DOM 注入スモーク）。CI は `.github/workflows/extensions.yml` が lint / 型チェック / Vitest / Playwright を実行する
 - **成果物は commit しない**: `node_modules/` / `dist/` / `.wxt/` / `.output/` は `.gitignore` 済み。配布は `release-extensions.yml` が tag push 時に zip を GitHub Release へ添付する
-- **パッケージマネージャ**: 両拡張とも `pnpm 11.11.0` 固定（`ni`/`nr` や ambient `pnpm` ではなく、再現可能な検証では `npx -y pnpm@11.11.0` を使う）。各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` の依存 build script 承認、CI を揃えるための契約である。両拡張共通の install / build / zip コマンドと lockfile 無差分確認は `extensions/README.md::pnpm バージョン契約` を正とする
+- **パッケージマネージャ**: 両拡張とも Nix extensions shell の Node 24 / pnpm 11.12.0 固定（`ni`/`nr`、ambient `pnpm`、`npx` は使わない）。`nix develop .#extensions --command pnpm ...` により、各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` の依存 build script 承認、CI を揃える契約である。`--ignore-workspace` は使用しない。両拡張共通の install / build / zip コマンドと lockfile 無差分確認は `extensions/README.md::pnpm バージョン契約` を正とする
 - **リリース手順**: 拡張のリリース（`extensions/<name>/package.json::version` bump → `release/ext-v<VER>` PR → merge commit への `ext-v<VER>` tag push → Release asset 確認）は `/automation-release` スキルの extension release phase で実行する。tag は Python 本体の `v*` と分離した `ext-v*` 系列で、バージョンは Python 本体と完全独立（`docs/adr/0011-extension-distribution.md`）
 
 ## Git hooks（lefthook）

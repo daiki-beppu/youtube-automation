@@ -106,9 +106,16 @@ def test_shared_docs_precede_commands_with_the_pinned_contract() -> None:
 
         assert name in extensions_readme
         assert f"{name}-{package['version']}-chrome.zip" in extensions_readme
+    nix_command = "nix develop .#extensions --command pnpm"
+    assert "Node 24 / pnpm 11.12.0" in extensions_readme
     for command in ("install --frozen-lockfile", "build", "zip"):
-        assert f"{_PINNED_COMMAND} -C extensions/<name> {command}" in extensions_readme
-    assert _PINNED_COMMAND in development_doc
+        assert f"{nix_command} -C extensions/<name> {command}" in extensions_readme
+    assert "Node 24 / pnpm 11.12.0" in development_doc
+    assert "nix develop .#extensions --command pnpm" in development_doc
+    assert "`--ignore-workspace`" in extensions_readme
+    assert "`--ignore-workspace`" in development_doc
+    assert _PINNED_COMMAND not in extensions_readme
+    assert _PINNED_COMMAND not in development_doc
     assert "extensions/README.md::pnpm バージョン契約" in development_doc
 
 
@@ -145,6 +152,9 @@ def test_release_skill_verifies_both_zips_and_unchanged_lockfiles() -> None:
     for command in ("install --frozen-lockfile", "build", "zip"):
         assert f'nix develop .#extensions --command pnpm -C "extensions/${{name}}" {command}' in release_skill
     assert "Nix extensions shell（Node 24 / pnpm 11.12.0）" in release_skill
+    assert "nix develop .#extensions --command node --version" in release_skill
+    assert "nix develop .#extensions --command pnpm --version" in release_skill
+    assert "`pnpm -v` が 9 系" not in release_skill
     assert "`--ignore-workspace` により" in release_skill
     assert ".output/${name}-${version}-chrome.zip" in release_skill
     assert (

@@ -32,7 +32,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 - prepare（Python 本体）の場合、`CHANGELOG.md` の `[Unreleased]` セクションに内容が書き溜められていること。空の場合は prepare を中止する（各 PR 時点で書き溜める運用が前提）
 - Python 本体のバージョン管理は `pyproject.toml::version` を **唯一のソース** とする（`src/youtube_automation/__init__.py` は `importlib.metadata` 経由で自動追従）。配布は git+https + tag pin（PyPI 公開しない）
 - extension release のバージョン管理は `extensions/<name>/package.json::version` を **唯一のソース** とし、Python 本体とは完全独立（`docs/adr/0011-extension-distribution.md`）。extension release では `pyproject.toml` / `uv.lock` / `CHANGELOG.md` 昇格に一切触らない
-- extension release の場合、`pnpm` が利用可能であること（`pnpm -v` が 9 系。各拡張の `package.json::packageManager` の pin に従う）。無ければ導入を案内して停止する
+- extension release の場合、Nix extensions shell が利用可能であり、`nix develop .#extensions --command node --version` が Node 24、`nix develop .#extensions --command pnpm --version` が pnpm 11.12.0 を返すこと。利用できなければ Nix 環境を案内して停止する
 
 ## Instructions
 
