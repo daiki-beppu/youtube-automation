@@ -55,9 +55,11 @@ nix develop .#extensions --command pnpm -C extensions/suno-helper build         
 nix develop .#extensions --command pnpm -C extensions/suno-helper zip                         # 配布用 zip
 nix develop .#extensions --command pnpm -C extensions/suno-helper compile                     # 型チェック（tsc --noEmit）
 nix develop .#extensions --command pnpm -C extensions/suno-helper test                        # Vitest unit
-nix develop .#extensions --command pnpm -C extensions/suno-helper exec playwright install chromium  # Playwright 初回のみ
+nix develop .#extensions --command pnpm -C extensions/suno-helper exec playwright install --with-deps chromium  # Playwright 初回のみ（CI と同じ browser + system dependencies）
 nix develop .#extensions --command pnpm -C extensions/suno-helper test:e2e                    # Playwright e2e
 ```
+
+build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helper-<package.json の version>-chrome.zip` を確認する。期待名 zip が唯一の 1 件であることを含む release 前検証は、リポジトリ root で `bash .claude/skills/automation-release/references/verify-extensions.sh suno-helper` を実行する。
 
 ## インストール（unpacked）
 

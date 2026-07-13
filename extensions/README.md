@@ -37,24 +37,28 @@ bash .claude/skills/automation-release/references/verify-extensions.sh [<name>]
 
 ## 開発フロー（suno-helper を例に）
 
-すべて `extensions/suno-helper/` で実行する。以下の `pnpm` は、前節に従って Nix extensions shell（Node 24 / pnpm 11.12.0）を有効化済みの場合の省略形である。
+すべてリポジトリ root で実行する。コマンドごとに Nix extensions shell を入口にするため、別途 shell へ入る必要はない。
 
 | 目的 | コマンド |
 |---|---|
-| 依存インストール | `pnpm install` |
-| 開発（HMR） | `pnpm dev` |
-| 本番ビルド | `pnpm build`（`.output/chrome-mv3/` に MV3 拡張を生成） |
-| 型チェック | `pnpm compile` |
-| unit テスト（Vitest） | `pnpm test` |
-| e2e テスト（Playwright） | `pnpm test:e2e`（初回は `pnpm exec playwright install chromium`） |
-| lint / format | `pnpm lint` / `pnpm format:check` |
-| 配布 zip | `pnpm zip` |
+| 依存インストール | `nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile` |
+| 開発（HMR） | `nix develop .#extensions --command pnpm -C extensions/suno-helper dev` |
+| 本番ビルド | `nix develop .#extensions --command pnpm -C extensions/suno-helper build`（`.output/chrome-mv3/` に MV3 拡張を生成） |
+| 型チェック | `nix develop .#extensions --command pnpm -C extensions/suno-helper compile` |
+| unit テスト（Vitest） | `nix develop .#extensions --command pnpm -C extensions/suno-helper test` |
+| Playwright browser（初回） | `nix develop .#extensions --command pnpm -C extensions/suno-helper exec playwright install --with-deps chromium` |
+| e2e テスト（Playwright） | `nix develop .#extensions --command pnpm -C extensions/suno-helper test:e2e` |
+| lint / format | `nix develop .#extensions --command pnpm -C extensions/suno-helper lint` / `nix develop .#extensions --command pnpm -C extensions/suno-helper format:check` |
+| 配布 zip | `nix develop .#extensions --command pnpm -C extensions/suno-helper zip` |
+
+build 後は `extensions/suno-helper/.output/chrome-mv3/manifest.json`、zip 後は `extensions/suno-helper/.output/suno-helper-<package.json の version>-chrome.zip` が生成される。build / zip と期待名 zip が唯一の 1 件であることまで一括検証する場合は、前節の `verify-extensions.sh suno-helper` を使う。
 
 ## unpacked ロード手順
 
-1. `pnpm install && pnpm build` を実行する。
-2. Chrome で `chrome://extensions` を開き、右上の **デベロッパーモード** を ON。
-3. **パッケージ化されていない拡張機能を読み込む** → `extensions/suno-helper/.output/chrome-mv3/` を選択。
+1. `nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile` を実行する。
+2. `nix develop .#extensions --command pnpm -C extensions/suno-helper build` を実行する。
+3. Chrome で `chrome://extensions` を開き、右上の **デベロッパーモード** を ON。
+4. **パッケージ化されていない拡張機能を読み込む** → `extensions/suno-helper/.output/chrome-mv3/` を選択。
 
 ## release 添付方針
 

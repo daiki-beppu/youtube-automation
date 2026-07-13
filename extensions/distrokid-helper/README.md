@@ -115,9 +115,11 @@ nix develop .#extensions --command pnpm -C extensions/distrokid-helper compile
 
 ```bash
 nix develop .#extensions --command pnpm -C extensions/distrokid-helper test                              # Vitest（API client / DOM 注入 / messaging / storage）
-nix develop .#extensions --command pnpm -C extensions/distrokid-helper exec playwright install chromium  # 初回のみ
+nix develop .#extensions --command pnpm -C extensions/distrokid-helper exec playwright install --with-deps chromium  # 初回のみ（CI と同じ browser + system dependencies）
 nix develop .#extensions --command pnpm -C extensions/distrokid-helper test:e2e                          # Playwright（distrokid.com/new モックへの注入スモーク）
 ```
+
+build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/distrokid-helper-<package.json の version>-chrome.zip` を確認する。期待名 zip が唯一の 1 件であることを含む release 前検証は、リポジトリ root で `bash .claude/skills/automation-release/references/verify-extensions.sh distrokid-helper` を実行する。
 
 ## DOM セレクタの保守
 
