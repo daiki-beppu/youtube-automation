@@ -54,8 +54,7 @@
           # op read で都度取得する。`op` (1Password CLI) は unfree のため
           # nixpkgs から外し、システム（Homebrew 等）の op を利用する想定。
           #
-          # 初回セットアップ:
-          #   uv sync --extra veo
+          # devShell 入室時に uv sync が自動実行される。
           # その後の利用:
           #   uv run yt-skills list
           #   uv run pytest
@@ -71,6 +70,7 @@
             if git rev-parse --git-dir >/dev/null 2>&1; then
               bash "${./.}/.lefthook/install.sh" || exit 1
             fi
+            uv sync --quiet || echo "warning: uv sync failed; dependencies may be out of date." >&2
           '';
         };
       }
