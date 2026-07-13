@@ -1,6 +1,6 @@
 ---
 name: thumbnail
-description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を後続生成するとき。「サムネイル」「画像生成」「アイキャッチ」で発動。SVG・汎用画像生成には使わない"
+description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を後続生成するとき。「サムネイル生成」「画像生成」「アイキャッチ」で発動。競合の勝ちパターン分析は /thumbnail-research、320px 視認性比較は /thumbnail-compare、SVG・汎用画像生成には使わない"
 ---
 
 ## Overview
@@ -234,7 +234,9 @@ uv run yt-generate-image \
 
 `/thumbnail` の標準手順は、**テキスト付き YouTube サムネ → 承認済みサムネから textless 動画背景**の順に進める。
 
-1. ベンチマーク先サムネを参照画像にして、構図・色温度・主役スケール・背景テクスチャを踏襲したテキスト付き YouTube サムネ候補を生成する。
+`docs/benchmarks/thumbnail-analysis.md` が存在する場合は、生成前に Read（Codex では同等のファイル閲覧）で開き、`## /thumbnail への TTP 推奨事項` の「維持する構造」「テーマに合わせて差し替える要素」「避ける要素」「参照候補」を、参照画像選定と差分プロンプトの入力にする。存在せず競合サムネイルの勝ちパターンを先に深掘りする場合は `/thumbnail-research` を実行する。
+
+1. ベンチマーク先サムネを参照画像にして、`thumbnail-analysis.md` がある場合はその勝ちパターンも使い、構図・色温度・主役スケール・背景テクスチャを踏襲したテキスト付き YouTube サムネ候補を生成する。
 2. `/thumbnail-compare` で 320px 視認性検証後にユーザー承認し、テキスト付き最終サムネを `10-assets/thumbnail.jpg` として確定する。
 3. 承認済み `thumbnail.jpg` を参照画像にして、タイトル文字・字幕・ロゴ・透かしを除去した textless 動画背景候補を生成する。
 4. 背景候補を `open` と `uv run yt-thumbnail-check` で確認し、ユーザー承認後に `10-assets/main.png` または `10-assets/main.jpg` として確定する。

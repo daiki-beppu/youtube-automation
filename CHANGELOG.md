@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `docs(thumbnail-research)`: `/benchmark` の収集済み JSON と競合サムネイル画像を再生数上位群 / 下位群で比較し、構図・配色・テキスト配置・視線誘導・被写体の勝ちパターンを `docs/benchmarks/thumbnail-analysis.md` に出力する `/thumbnail-research` スキルを追加した。レポートの推奨事項と参照候補を `/thumbnail` の TTP 入力として相互参照し、データ収集・チャンネル全体分析・320px 視認性比較との発動条件を分離した（#1796）。
 - `docs(skills)`: 下流チャンネルリポジトリでスキル実行中の不具合・摩擦・改善案を `data/feedback/feedback-log.jsonl` に append-only JSONL として記録する `/feedback` スキルを追加した。entry schema は `.claude/skills/feedback/references/feedback-entry.schema.json` に単一ソース化し、`date` / `skill` / `category` / `summary` / `context` / `status` / `issue_url` の構造、`status="recorded"` の新規記録、機密情報の `***REDACTED***` マスクを SKILL.md に明記した。下流配布 CLAUDE.md テンプレにもスキル摩擦時に `/feedback` を案内する導線を追加した（#1828）。
 - `docs(setup)`: `/setup` の全 check 緑後・完了報告前に、`workflow.wf_next` の音源 / アップロード承認ゲート、手動マスタリング検出スキップ、Veo 課金を伴う loop-video の有効状態を 1 問ずつ確認する運用設定インタビューを追加した。現在値と推奨回答を提示し、変更時だけ config を更新する（#1902）
 - `feat(upload)`: collection の `workflow-state.json::title_template_check.allow_volume_patterns: true` で、そのコレクションだけ公開タイトルの `Vol.` / `Part` / `#N` / ローマ数字の巻数表記を upload preflight で許可できるようにした。未設定・`false` の既定検出、RHS 鋳型・完全重複・核語彙の検査、および `content.json::title.template_check.volume_patterns` は変更しない（#1729）
