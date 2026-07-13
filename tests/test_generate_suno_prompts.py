@@ -1154,6 +1154,44 @@ def test_main_vocal_collection_rejects_prompt_entries_below_workflow_track_count
     assert not (docs_dir / "suno-prompts.json").exists()
 
 
+@pytest.mark.parametrize("track_count", [1, 3, 5, 10, 15])
+def test_vocal_collections_with_consistent_track_counts_pass(
+    channel_dir,
+    tmp_path,
+    track_count,
+):
+    """整合済み vocal collection の固定5ケースは曲数検証を通過する。"""
+    collection_dir = tmp_path / f"collection-{track_count}"
+    docs_dir = collection_dir / "20-documentation"
+    docs_dir.mkdir(parents=True)
+    _write_suno_override(
+        channel_dir,
+        genre_line="dream pop vocals",
+        auto_lyrics_structure=False,
+        tracks_per_pattern=1,
+    )
+    scenes = [f"scene {index}" for index in range(track_count)]
+    patterns_path = _write_vocal_patterns(docs_dir, scenes)
+    patterns_path.rename(docs_dir / "suno-patterns.yaml")
+    payload = yaml.safe_load((docs_dir / "suno-patterns.yaml").read_text(encoding="utf-8"))
+    payload["tracks"] = track_count
+    (docs_dir / "suno-patterns.yaml").write_text(
+        yaml.safe_dump(payload, allow_unicode=True),
+        encoding="utf-8",
+    )
+    _write_workflow_state(collection_dir, track_count)
+    _write_suno_lyrics_json(
+        docs_dir,
+        [f"歌もの — Vocal (Variation {index})" for index in range(1, track_count + 1)]
+        if track_count > 1
+        else ["歌もの — Vocal"],
+    )
+
+    entries = build_prompt_entries(docs_dir / "suno-patterns.yaml")
+
+    assert len(entries) == track_count
+
+
 # ---------------------------------------------------------------------------
 # tracks_per_collection モデル (インストモードのフラット曲数指定) の回帰テスト
 # ---------------------------------------------------------------------------
