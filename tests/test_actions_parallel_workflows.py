@@ -19,22 +19,36 @@ _CI_LINT_PARALLEL_STEPS = {
 }
 
 _SUNO_FAST_PARALLEL_STEPS = {
-    "Lint": "pnpm lint",
-    "Format check": "pnpm format:check",
-    "Type check": "pnpm compile",
-    "Unit tests (Vitest)": "pnpm test",
+    "Lint": "nix develop .#extensions --command pnpm lint",
+    "Format check": "nix develop .#extensions --command pnpm format:check",
+    "Type check": "nix develop .#extensions --command pnpm compile",
+    "Unit tests (Vitest)": "nix develop .#extensions --command pnpm test",
 }
 _SUNO_BUILD_PARALLEL_STEPS = {
-    "Build": "pnpm build",
-    "Install Playwright browser": "pnpm exec playwright install --with-deps chromium",
+    "Build": "nix develop .#extensions --command pnpm build",
+    "Install Playwright browser": (
+        "nix develop .#extensions --command pnpm exec playwright install --with-deps chromium"
+    ),
 }
 _DISTROKID_FAST_PARALLEL_STEPS = {
-    "Lint": "pnpm lint",
-    "Format check": "pnpm format:check",
-    "Typecheck": "pnpm compile",
-    "Unit tests (Vitest)": "pnpm test",
+    "Lint": "nix develop .#extensions --command pnpm lint",
+    "Format check": "nix develop .#extensions --command pnpm format:check",
+    "Typecheck": "nix develop .#extensions --command pnpm compile",
+    "Unit tests (Vitest)": "nix develop .#extensions --command pnpm test",
 }
 _DISTROKID_BUILD_PARALLEL_STEPS = _SUNO_BUILD_PARALLEL_STEPS
+_EXTENSIONS_JOB_CONTRACTS = {
+    "check": {
+        "working_directory": "extensions/suno-helper",
+        "e2e_step": "E2E tests (Playwright)",
+    },
+    "distrokid-helper": {
+        "working_directory": "extensions/distrokid-helper",
+        "e2e_step": "E2E (Playwright)",
+    },
+}
+_NIX_EXTENSIONS_INSTALL_COMMAND = "nix develop .#extensions --command pnpm install --frozen-lockfile"
+_NIX_EXTENSIONS_E2E_COMMAND = "nix develop .#extensions --command pnpm test:e2e"
 
 _RELEASE_BUILD_PARALLEL_STEPS = {
     "Build and zip suno-helper": ("extensions/suno-helper", "pnpm zip"),
@@ -159,7 +173,42 @@ def test_extensions_pull_request_trigger_keeps_path_filter() -> None:
     pull_request = _on_section(workflow).get("pull_request")
 
     assert isinstance(pull_request, dict), "pull_request トリガーが存在しない"
-    assert pull_request.get("paths") == ["extensions/**", ".github/workflows/extensions.yml"]
+    expected_paths = ["extensions/**", ".github/workflows/extensions.yml", "flake.nix", "flake.lock"]
+    assert pull_request.get("paths") == expected_paths
+    assert _on_section(workflow).get("push", {}).get("paths") == expected_paths
+
+
+@pytest.mark.parametrize("job_name", ["check", "distrokid-helper"])
+def test_extensions_jobs_use_only_the_nix_extensions_toolchain(job_name: str) -> None:
+    """Given Extensions CI, When commands run, Then both jobs use the Nix extensions shell."""
+    steps = _job_steps(_load_workflow(_EXTENSIONS_WORKFLOW_PATH), job_name)
+
+    assert _top_level_step_index_with_uses(steps, "actions/checkout@v4") < _top_level_step_index_with_uses(
+        steps, "cachix/install-nix-action@v30"
+    )
+    uses = {step.get("uses") for step in steps}
+    assert "pnpm/action-setup@v4" not in uses
+    assert "actions/setup-node@v4" not in uses
+    run_steps = [step for step in steps if "run" in step]
+    run_steps.extend(child for group in _parallel_groups(steps) for child in group)
+    assert run_steps
+    assert all(str(step.get("run", "")).startswith("nix develop .#extensions --command ") for step in run_steps)
+
+
+@pytest.mark.parametrize("job_name", ["check", "distrokid-helper"])
+def test_extensions_jobs_preserve_working_directory_install_and_e2e_contract(job_name: str) -> None:
+    """Given Extensions CI, When Nix supplies its tools, Then each job keeps its check contract."""
+    workflow = _load_workflow(_EXTENSIONS_WORKFLOW_PATH)
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict), "jobs セクションが存在しない"
+    job = jobs.get(job_name)
+    assert isinstance(job, dict), f"{job_name} job が存在しない"
+    contract = _EXTENSIONS_JOB_CONTRACTS[job_name]
+
+    assert job.get("defaults") == {"run": {"working-directory": contract["working_directory"]}}
+    steps = _job_steps(workflow, job_name)
+    assert _top_level_step(steps, "Install dependencies").get("run") == _NIX_EXTENSIONS_INSTALL_COMMAND
+    assert _top_level_step(steps, contract["e2e_step"]).get("run") == _NIX_EXTENSIONS_E2E_COMMAND
 
 
 def test_ci_lint_runs_ruff_checks_in_a_single_parallel_group() -> None:
