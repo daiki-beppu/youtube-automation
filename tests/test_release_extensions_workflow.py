@@ -16,6 +16,8 @@ _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "release-extensions.yml"
 
 _RELEASE_TAG_GLOB = "ext-v*"
 _GH_RELEASE_ACTION = "softprops/action-gh-release@v2"
+_NIX_INSTALL_ACTION = "cachix/install-nix-action@v30"
+_EXTENSIONS_SHELL_COMMAND = "nix develop ../..#extensions --command bash -euo pipefail"
 _EXTENSIONS = ("suno-helper", "distrokid-helper")
 _ZIP_GLOBS = tuple(f"extensions/{name}/.output/*.zip" for name in _EXTENSIONS)
 # order.md が要求する手順アンカー。初回インストール（URL + Load unpacked）と
@@ -93,7 +95,23 @@ def test_builds_and_zips_each_extension(name: str) -> None:
     ]
     assert matched, f"{name} の build/zip ステップが存在しない"
     run_script = str(matched[0]["run"])
+    assert _EXTENSIONS_SHELL_COMMAND in run_script
     assert "pnpm install --frozen-lockfile" in run_script
+    assert run_script.index("pnpm install --frozen-lockfile") < run_script.index("pnpm zip")
+    assert "--ignore-workspace" not in run_script
+
+
+def test_installs_nix_before_parallel_extension_builds() -> None:
+    """release job が checkout 後、build 前に Nix を導入する。"""
+    steps = _release_top_level_steps()
+    checkout_index = next(index for index, step in enumerate(steps) if step.get("uses") == "actions/checkout@v4")
+    nix_index = next(index for index, step in enumerate(steps) if step.get("uses") == _NIX_INSTALL_ACTION)
+    parallel_index = next(index for index, step in enumerate(steps) if "parallel" in step)
+    uses = {step.get("uses") for step in steps if "uses" in step}
+
+    assert checkout_index < nix_index < parallel_index
+    assert "pnpm/action-setup@v4" not in uses
+    assert "actions/setup-node@v4" not in uses
 
 
 def test_attaches_both_zips_to_one_gh_release() -> None:

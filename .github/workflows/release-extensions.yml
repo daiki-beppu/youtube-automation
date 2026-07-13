@@ -15,27 +15,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.12.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: |
-            extensions/suno-helper/pnpm-lock.yaml
-            extensions/distrokid-helper/pnpm-lock.yaml
+      - uses: cachix/install-nix-action@v30
       - parallel:
           - name: Build and zip suno-helper
             working-directory: extensions/suno-helper
             run: |
-              pnpm install --frozen-lockfile
-              pnpm zip
+              nix develop ../..#extensions --command bash -euo pipefail -c '
+                pnpm install --frozen-lockfile
+                pnpm zip
+              '
           - name: Build and zip distrokid-helper
             working-directory: extensions/distrokid-helper
             run: |
-              pnpm install --frozen-lockfile
-              pnpm zip
+              nix develop ../..#extensions --command bash -euo pipefail -c '
+                pnpm install --frozen-lockfile
+                pnpm zip
+              '
       - name: Attach zips to Release
         uses: softprops/action-gh-release@v2
         with:

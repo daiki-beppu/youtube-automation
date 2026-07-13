@@ -84,12 +84,11 @@ def test_both_extensions_preserve_build_approval() -> None:
         assert _workspace_settings(name)["allowBuilds"] == {"esbuild": True, "spawn-sync": False}
 
 
-def test_ci_and_release_workflows_use_the_pinned_pnpm() -> None:
-    for path in (".github/workflows/extensions.yml", ".github/workflows/release-extensions.yml"):
-        versions = _pnpm_setup_versions(path)
+def test_ci_workflow_uses_the_pinned_pnpm() -> None:
+    versions = _pnpm_setup_versions(".github/workflows/extensions.yml")
 
-        assert versions
-        assert versions == [_WORKFLOW_PNPM] * len(versions)
+    assert versions
+    assert versions == [_WORKFLOW_PNPM] * len(versions)
 
 
 def test_shared_docs_precede_commands_with_the_pinned_contract() -> None:
@@ -134,11 +133,21 @@ def test_suno_skill_uses_the_pinned_extension_build_path() -> None:
 
 def test_release_skill_verifies_both_zips_and_unchanged_lockfiles() -> None:
     release_skill = _read(".claude/skills/automation-release/SKILL.md")
+    release_checklist = _read(".claude/skills/automation-release/references/extension-release-checklist.md")
+    changelog = _read("CHANGELOG.md")
 
     assert "for name in suno-helper distrokid-helper" in release_skill
     for command in ("install --frozen-lockfile", "build", "zip"):
-        assert f'{_PINNED_COMMAND} -C "extensions/${{name}}" {command}' in release_skill
+        assert f'nix develop .#extensions --command pnpm -C "extensions/${{name}}" {command}' in release_skill
+    assert "Nix extensions shell（Node 24 / pnpm 11.12.0）" in release_skill
+    assert "`--ignore-workspace` により" in release_skill
     assert ".output/${name}-${version}-chrome.zip" in release_skill
     assert (
         "git diff --exit-code -- extensions/suno-helper/pnpm-lock.yaml extensions/distrokid-helper/pnpm-lock.yaml"
     ) in release_skill
+    assert "Nix extensions shell が利用可能" in release_checklist
+    assert "nix develop .#extensions --command node --version" in release_checklist
+    assert "nix develop .#extensions --command pnpm --version" in release_checklist
+    assert "# → 11.12.0" in release_checklist
+    assert "Nix extensions shell 契約（Node 24 / pnpm 11.12.0" in changelog
+    assert "`pnpm install --frozen-lockfile` → `pnpm zip`" in changelog
