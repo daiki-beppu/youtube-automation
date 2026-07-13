@@ -134,10 +134,36 @@ def test_each_extension_readme_uses_the_nix_extensions_shell() -> None:
 
         assert "Node 24 / pnpm 11.12.0" in readme
         assert "extensions/README.md::pnpm バージョン契約" in readme
-        for command in ("install --frozen-lockfile", "build", "zip"):
+        for command in (
+            "install --frozen-lockfile",
+            "build",
+            "zip",
+            "test",
+            "exec playwright install --with-deps chromium",
+            "test:e2e",
+        ):
             assert f"{_NIX_COMMAND} -C extensions/{name} {command}" in readme
+        assert ".output/chrome-mv3/manifest.json" in readme
+        assert f".output/{name}-<package.json の version>-chrome.zip" in readme
+        assert f"bash {_VERIFY_SCRIPT_PATH} {name}" in readme
         assert _LEGACY_PNPM not in readme
         assert _LEGACY_NPX_COMMAND not in readme
+
+
+def test_shared_extension_readme_spells_out_the_nix_command_flow() -> None:
+    readme = _read("extensions/README.md")
+
+    for command in (
+        "install --frozen-lockfile",
+        "build",
+        "zip",
+        "test",
+        "exec playwright install --with-deps chromium",
+        "test:e2e",
+    ):
+        assert f"{_NIX_COMMAND} -C extensions/suno-helper {command}" in readme
+    assert "extensions/suno-helper/.output/chrome-mv3/manifest.json" in readme
+    assert "extensions/suno-helper/.output/suno-helper-<package.json の version>-chrome.zip" in readme
 
 
 def test_suno_skill_uses_the_nix_extensions_shell() -> None:
