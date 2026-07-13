@@ -51,11 +51,10 @@ _NIX_EXTENSIONS_INSTALL_COMMAND = "nix develop .#extensions --command pnpm insta
 _NIX_EXTENSIONS_E2E_COMMAND = "nix develop .#extensions --command pnpm test:e2e"
 
 _RELEASE_BUILD_PARALLEL_STEPS = {
-    "Build and zip suno-helper": ("extensions/suno-helper", "pnpm zip"),
-    "Build and zip distrokid-helper": ("extensions/distrokid-helper", "pnpm zip"),
+    "Build and zip suno-helper": ("extensions/suno-helper", "verify-extensions.sh suno-helper"),
+    "Build and zip distrokid-helper": ("extensions/distrokid-helper", "verify-extensions.sh distrokid-helper"),
 }
 _RELEASE_NIX_INSTALL_ACTION = "DeterminateSystems/nix-installer-action@main"
-_RELEASE_EXTENSIONS_SHELL_COMMAND = "nix develop ../..#extensions --command bash -euo pipefail"
 _SHELL_BACKGROUND_OPERATOR = re.compile(r"(?<!&)&(?!&)")
 
 
@@ -331,8 +330,7 @@ def test_release_extensions_builds_both_zips_before_release_attachment() -> None
         working_directory, required_command = _RELEASE_BUILD_PARALLEL_STEPS[str(step["name"])]
         assert step.get("working-directory") == working_directory
         assert required_command in str(step.get("run", ""))
-        assert _RELEASE_EXTENSIONS_SHELL_COMMAND in str(step.get("run", ""))
-        assert "pnpm install --frozen-lockfile" in str(step.get("run", ""))
+        assert str(step.get("run", "")).startswith("cd ../.. && bash ")
     assert _top_level_step_index_with_uses(steps, "actions/checkout@v4") < build_parallel_index
     assert _top_level_step_index_with_uses(steps, _RELEASE_NIX_INSTALL_ACTION) < build_parallel_index
     assert build_parallel_index < _top_level_step_index(steps, "Attach zips to Release")

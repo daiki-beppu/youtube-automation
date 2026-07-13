@@ -167,7 +167,21 @@ def test_verification_rejects_missing_zip(
     result = _run_verify(verify_environment, environment_overrides={"FAKE_SKIP_ZIP": "suno-helper"})
 
     assert result.returncode != 0
-    assert "expected zip not found: extensions/suno-helper/.output/suno-helper-1.2.3-chrome.zip" in result.stderr
+    assert "expected exactly one zip (extensions/suno-helper/.output/suno-helper-1.2.3-chrome.zip)" in result.stderr
+
+
+def test_verification_rejects_extra_zip(
+    verify_environment: tuple[Path, dict[str, str], Path],
+) -> None:
+    repository = verify_environment[0]
+    output_dir = repository / "extensions/suno-helper/.output"
+    output_dir.mkdir(parents=True)
+    (output_dir / "stale.zip").touch()
+
+    result = _run_verify(verify_environment, "suno-helper")
+
+    assert result.returncode != 0
+    assert "found 2" in result.stderr
 
 
 def test_verification_rejects_lockfile_diff(

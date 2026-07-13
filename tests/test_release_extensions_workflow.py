@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -18,7 +17,7 @@ _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "release-extensions.yml"
 _RELEASE_TAG_GLOB = "ext-v*"
 _GH_RELEASE_ACTION = "softprops/action-gh-release@v2"
 _NIX_INSTALL_ACTION = "DeterminateSystems/nix-installer-action@main"
-_EXTENSIONS_SHELL_COMMAND = "nix develop ../..#extensions --command bash -euo pipefail"
+_VERIFY_SCRIPT = ".claude/skills/automation-release/references/verify-extensions.sh"
 _EXTENSIONS = ("suno-helper", "distrokid-helper")
 _ZIP_GLOBS = tuple(f"extensions/{name}/.output/*.zip" for name in _EXTENSIONS)
 # order.md が要求する手順アンカー。初回インストール（URL + Load unpacked）と
@@ -92,13 +91,11 @@ def test_builds_and_zips_each_extension(name: str) -> None:
     matched = [
         step
         for step in steps
-        if step.get("working-directory") == f"extensions/{name}" and "pnpm zip" in str(step.get("run", ""))
+        if step.get("working-directory") == f"extensions/{name}" and _VERIFY_SCRIPT in str(step.get("run", ""))
     ]
     assert matched, f"{name} の build/zip ステップが存在しない"
     run_script = str(matched[0]["run"])
-    assert _EXTENSIONS_SHELL_COMMAND in run_script
-    assert "pnpm install --frozen-lockfile" in run_script
-    assert run_script.index("pnpm install --frozen-lockfile") < run_script.index("pnpm zip")
+    assert run_script == f"cd ../.. && bash {_VERIFY_SCRIPT} {name}"
     assert "--ignore-workspace" not in run_script
 
 
@@ -124,55 +121,6 @@ def test_attaches_both_zips_to_one_gh_release() -> None:
     files_value = str(release_steps[0].get("with", {}).get("files", ""))
     zip_globs = tuple(line.strip() for line in files_value.splitlines() if line.strip())
     assert zip_globs == _ZIP_GLOBS
-
-
-def test_validates_exactly_one_zip_per_extension_before_release() -> None:
-    steps = _release_top_level_steps()
-    validation_index = next(
-        index for index, step in enumerate(steps) if step.get("name") == "Validate exactly two zip assets"
-    )
-    release_index = next(
-        index for index, step in enumerate(steps) if str(step.get("uses", "")).startswith(_GH_RELEASE_ACTION)
-    )
-    validation_script = str(steps[validation_index].get("run", ""))
-
-    assert validation_index < release_index
-    assert "set -euo pipefail" in validation_script
-    assert "shopt -s nullglob" in validation_script
-    assert "for name in suno-helper distrokid-helper" in validation_script
-    assert 'zip_files=("extensions/${name}/.output"/*.zip)' in validation_script
-    assert "${#zip_files[@]} -ne 1" in validation_script
-    assert "exit 1" in validation_script
-
-
-@pytest.mark.parametrize(
-    ("suno_zip_count", "distrokid_zip_count", "expected_returncode"),
-    [(1, 1, 0), (2, 1, 1), (1, 0, 1)],
-)
-def test_zip_asset_validation_script_fails_unless_each_extension_has_one_zip(
-    tmp_path: Path,
-    suno_zip_count: int,
-    distrokid_zip_count: int,
-    expected_returncode: int,
-) -> None:
-    for name, count in (("suno-helper", suno_zip_count), ("distrokid-helper", distrokid_zip_count)):
-        output_dir = tmp_path / "extensions" / name / ".output"
-        output_dir.mkdir(parents=True)
-        for index in range(count):
-            (output_dir / f"{name}-{index}.zip").touch()
-
-    validation_step = next(
-        step for step in _release_top_level_steps() if step.get("name") == "Validate exactly two zip assets"
-    )
-    result = subprocess.run(
-        ["bash", "-c", str(validation_step["run"])],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert result.returncode == expected_returncode
 
 
 def test_release_body_embeds_install_and_update_template() -> None:

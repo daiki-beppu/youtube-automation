@@ -44,8 +44,11 @@ for name in "${extension_names[@]}"; do
 
   version=$(nix develop .#extensions --command node -p "require('./${extension_dir}/package.json').version")
   zip_path="${extension_dir}/.output/${name}-${version}-chrome.zip"
-  if [[ ! -f ${zip_path} ]]; then
-    echo "ERROR: expected zip not found: ${zip_path}" >&2
+  shopt -s nullglob
+  zip_files=("${extension_dir}/.output"/*.zip)
+  shopt -u nullglob
+  if [[ ${#zip_files[@]} -ne 1 || ${zip_files[0]:-} != "${zip_path}" ]]; then
+    echo "ERROR: expected exactly one zip (${zip_path}), found ${#zip_files[@]}" >&2
     exit 1
   fi
   lockfiles+=("${extension_dir}/pnpm-lock.yaml")

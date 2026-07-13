@@ -19,30 +19,10 @@ jobs:
       - parallel:
           - name: Build and zip suno-helper
             working-directory: extensions/suno-helper
-            run: |
-              nix develop ../..#extensions --command bash -euo pipefail -c '
-                pnpm install --frozen-lockfile
-                pnpm zip
-              '
+            run: cd ../.. && bash .claude/skills/automation-release/references/verify-extensions.sh suno-helper
           - name: Build and zip distrokid-helper
             working-directory: extensions/distrokid-helper
-            run: |
-              nix develop ../..#extensions --command bash -euo pipefail -c '
-                pnpm install --frozen-lockfile
-                pnpm zip
-              '
-      - name: Validate exactly two zip assets
-        shell: bash
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          for name in suno-helper distrokid-helper; do
-            zip_files=("extensions/${name}/.output"/*.zip)
-            if [[ ${#zip_files[@]} -ne 1 ]]; then
-              printf 'ERROR: expected exactly one zip for %s, found %s\n' "${name}" "${#zip_files[@]}" >&2
-              exit 1
-            fi
-          done
+            run: cd ../.. && bash .claude/skills/automation-release/references/verify-extensions.sh distrokid-helper
       - name: Attach zips to Release
         uses: softprops/action-gh-release@v2
         with:

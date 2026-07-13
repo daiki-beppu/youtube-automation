@@ -113,13 +113,10 @@ def test_shared_docs_precede_commands_with_the_pinned_contract() -> None:
 
     assert "## pnpm バージョン契約" in extensions_readme
     for name in _EXTENSION_NAMES:
-        package = json.loads(_read(f"extensions/{name}/package.json"))
-
         assert name in extensions_readme
-        assert f"{name}-{package['version']}-chrome.zip" in extensions_readme
     assert "Node 24 / pnpm 11.12.0" in extensions_readme
-    for command in ("install --frozen-lockfile", "build", "zip"):
-        assert f"{_NIX_COMMAND} -C extensions/<name> {command}" in extensions_readme
+    assert f"bash {_VERIFY_SCRIPT_PATH} [<name>]" in extensions_readme
+    assert "期待名 zip が唯一の1件" in extensions_readme
     assert "Node 24 / pnpm 11.12.0" in development_doc
     assert "nix develop .#extensions --command pnpm" in development_doc
     assert "`--ignore-workspace`" in extensions_readme
