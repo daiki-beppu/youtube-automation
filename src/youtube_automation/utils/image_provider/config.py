@@ -105,7 +105,7 @@ class CodexConfig:
     """Codex shell 経路で使う prompt 設定。"""
 
     default_prompt_template: str = ""
-    composition_rules: dict[str, Any] | None = None
+    composition_rules: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -228,7 +228,7 @@ def _build_openai(d: dict[str, Any]) -> OpenAIConfig:
     )
 
 
-def _build_codex(d: Any, *, composition_rules: dict[str, Any] | None) -> CodexConfig:
+def _build_codex(d: object, *, composition_rules: dict[str, object] | None) -> CodexConfig:
     if not isinstance(d, dict):
         raise ConfigError("image_generation.codex は mapping で指定してください")
     template = d.get("default_prompt_template", "")
@@ -239,7 +239,7 @@ def _build_codex(d: Any, *, composition_rules: dict[str, Any] | None) -> CodexCo
     return CodexConfig(default_prompt_template=template, composition_rules=composition_rules)
 
 
-def _composition_rules_from_gemini(section: Any) -> dict[str, Any] | None:
+def _composition_rules_from_gemini(section: object) -> dict[str, object] | None:
     if not isinstance(section, dict) or "composition_rules" not in section:
         return None
     rules = section["composition_rules"]
@@ -263,14 +263,14 @@ def render_codex_prompt(template: str, title: str) -> str:
     return _validate_codex_prompt_template(template).replace("{title}", title)
 
 
-def _render_codex_composition_rules(rules: dict[str, Any] | None) -> str:
+def _render_codex_composition_rules(rules: dict[str, object] | None) -> str:
     if not rules:
         return ""
     rendered = json.dumps(rules, ensure_ascii=False, sort_keys=True)
     return f"\n\nComposition rules (must follow; these override the reference subject):\n{rendered}"
 
 
-def _validate_required_legend_motif(rules: dict[str, Any] | None) -> None:
+def _validate_required_legend_motif(rules: dict[str, object] | None) -> None:
     if not rules:
         return
     legend_motif = rules.get("legend_motif")
