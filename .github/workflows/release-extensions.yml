@@ -31,6 +31,18 @@ jobs:
                 pnpm install --frozen-lockfile
                 pnpm zip
               '
+      - name: Validate exactly two zip assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for name in suno-helper distrokid-helper; do
+            zip_files=("extensions/${name}/.output"/*.zip)
+            if [[ ${#zip_files[@]} -ne 1 ]]; then
+              printf 'ERROR: expected exactly one zip for %s, found %s\n' "${name}" "${#zip_files[@]}" >&2
+              exit 1
+            fi
+          done
       - name: Attach zips to Release
         uses: softprops/action-gh-release@v2
         with:

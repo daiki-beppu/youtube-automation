@@ -45,7 +45,7 @@ git diff --exit-code -- extensions/suno-helper/pnpm-lock.yaml extensions/distrok
 
 ## 開発フロー（suno-helper を例に）
 
-すべて `extensions/suno-helper/` で実行する。以下の `pnpm` は、前節に従って pnpm 11.11.0 を有効化済みの場合の省略形である。
+すべて `extensions/suno-helper/` で実行する。以下の `pnpm` は、前節に従って Nix extensions shell（Node 24 / pnpm 11.12.0）を有効化済みの場合の省略形である。
 
 | 目的 | コマンド |
 |---|---|

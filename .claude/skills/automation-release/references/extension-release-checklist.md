@@ -25,13 +25,11 @@ git status --porcelain | wc -l
 ### 3. Nix extensions shell が利用可能
 
 ```bash
-nix develop .#extensions --command node --version
-# → v24 系
-nix develop .#extensions --command pnpm --version
-# → 11.12.0
+bash .claude/skills/automation-release/references/verify-extensions.sh <name>
+# → exit 0
 ```
 
-無ければ Nix の導入を案内して abort。Node / pnpm は `release-extensions.yml` と同じ extensions shell 契約に従う。
+検証ロジックとPASS/FAIL条件は `verify-extensions.sh` が単一ソース。non-zeroなら出力された原因を解消するまでabort。
 
 ### 4. 開いている release/ext-v* ブランチが無い
 
@@ -103,7 +101,7 @@ worktree 環境では remote merge 成功後の local checkout 後処理（`git 
 
 workflow は tag push 時点の main で **両拡張** を zip して添付する。bump していない側の拡張は現行版数の zip が付く（例: `ext-v0.2.4` に `suno-helper-0.2.4-chrome.zip` + `distrokid-helper-0.2.1-chrome.zip`）。
 
-**対応**: bump した拡張の `<name>-<VER>-chrome.zip` があれば成功。無い場合は tag が正しい merge commit を指しているか（`git rev-parse "ext-v${VER}^{commit}"` と `mergeCommit.oid` の一致）を確認する。
+**対応**: SKILL.md E2-4の検証を実行する。zip assetが合計2件かつ両拡張が各1件でなければ失敗。tagが正しいmerge commitを指すか（`git rev-parse "ext-v${VER}^{commit}"` と `mergeCommit.oid` の一致）を確認する。
 
 ---
 

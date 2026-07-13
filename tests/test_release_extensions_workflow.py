@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -121,8 +122,57 @@ def test_attaches_both_zips_to_one_gh_release() -> None:
     assert len(release_steps) == 1, "gh-release ステップは 1 個に集約する"
 
     files_value = str(release_steps[0].get("with", {}).get("files", ""))
-    for zip_glob in _ZIP_GLOBS:
-        assert zip_glob in files_value, f"{zip_glob} が files に含まれていない"
+    zip_globs = tuple(line.strip() for line in files_value.splitlines() if line.strip())
+    assert zip_globs == _ZIP_GLOBS
+
+
+def test_validates_exactly_one_zip_per_extension_before_release() -> None:
+    steps = _release_top_level_steps()
+    validation_index = next(
+        index for index, step in enumerate(steps) if step.get("name") == "Validate exactly two zip assets"
+    )
+    release_index = next(
+        index for index, step in enumerate(steps) if str(step.get("uses", "")).startswith(_GH_RELEASE_ACTION)
+    )
+    validation_script = str(steps[validation_index].get("run", ""))
+
+    assert validation_index < release_index
+    assert "set -euo pipefail" in validation_script
+    assert "shopt -s nullglob" in validation_script
+    assert "for name in suno-helper distrokid-helper" in validation_script
+    assert 'zip_files=("extensions/${name}/.output"/*.zip)' in validation_script
+    assert "${#zip_files[@]} -ne 1" in validation_script
+    assert "exit 1" in validation_script
+
+
+@pytest.mark.parametrize(
+    ("suno_zip_count", "distrokid_zip_count", "expected_returncode"),
+    [(1, 1, 0), (2, 1, 1), (1, 0, 1)],
+)
+def test_zip_asset_validation_script_fails_unless_each_extension_has_one_zip(
+    tmp_path: Path,
+    suno_zip_count: int,
+    distrokid_zip_count: int,
+    expected_returncode: int,
+) -> None:
+    for name, count in (("suno-helper", suno_zip_count), ("distrokid-helper", distrokid_zip_count)):
+        output_dir = tmp_path / "extensions" / name / ".output"
+        output_dir.mkdir(parents=True)
+        for index in range(count):
+            (output_dir / f"{name}-{index}.zip").touch()
+
+    validation_step = next(
+        step for step in _release_top_level_steps() if step.get("name") == "Validate exactly two zip assets"
+    )
+    result = subprocess.run(
+        ["bash", "-c", str(validation_step["run"])],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == expected_returncode
 
 
 def test_release_body_embeds_install_and_update_template() -> None:
