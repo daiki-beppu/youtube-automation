@@ -28,13 +28,20 @@ Step 1 のスクリプトが exit 0 で終了して `docs/benchmarks/*.md` と `
 
 読み込み後は `youtube_automation.utils.skill_config.load_skill_config("benchmark")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。
 
-## 前提
+## 前提成果物ガード
 
-`config/channel/` が存在すること（`load_config()` でロード可能）。
+後続 Step に入る前に、以下の前提を確認する。**停止する fail** が 1 件でもあれば、記載した前工程スキルを案内して停止し、解消するまで後続 Step に進まない。**許容する fail** は停止条件に含めない。
 
-存在しない場合、ユーザーに確認:
-- **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
+### 停止する fail
+
+- `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/channel-new`、既存チャンネルは `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
+- `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定されていない → `/channel-new` / `/discover-competitors` を案内して停止する
+- `auth/token.json` が存在しない、または OAuth 認証が無効 → `/setup` を案内して停止する
+
+### 許容する fail
+
+- `config/skills/benchmark.yaml` が無い → `.claude/skills/benchmark/config.default.yaml` を使うため停止しない
+- `data/benchmark_*.json` / `docs/benchmarks/*.md` が無い → 本スキルの Step 1 で生成するため停止しない
 
 ## 取得データ（拡充版）
 

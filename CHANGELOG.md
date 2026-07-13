@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(skills)`: リサーチ・戦略チェーンの 6 スキル（benchmark / discover-competitors / viewer-voice / audience-persona-design / viewing-scene / channel-research）の冒頭 60 行以内に、停止する fail と許容する fail を分離した前提成果物ガードを統一書式で整備した。必須入力が無い場合は生成元の前工程スキルを案内して停止し、後続 Step で生成・自動更新・代替できる入力欠如は停止条件から除外する（#1825）
+
 - `docs(automation-release)`: extension release の skill / checklist を Nix extensions shell 契約（Node 24 / pnpm 11.12.0）へ同期した（#1956）。両拡張の frozen install → build → zip、期待名 zip、lockfile 無差分を `verify-extensions.sh` で検証し、ambient Node / pnpm と `--ignore-workspace` を使わないことを明記。Python 本体の release flow と `release-extensions.yml` は変更なし
 
 - `docs(extensions)`: extension のローカル install / build / zip / Vitest / Playwright / 成果物確認と `/suno` の初回 build 導線を、CI と同じ Nix extensions shell（Node 24 / pnpm 11.12.0）入口へ統一した（#1957）。ambient pnpm / 旧 npx pnpm 導線の不在を文書契約テストで固定
