@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(automation-release)`: extension release の skill / checklist を Nix extensions shell 契約（Node 24 / pnpm 11.12.0）へ同期した（#1956）。両拡張の frozen install → build → zip、期待名 zip、lockfile 無差分を `verify-extensions.sh` で検証し、ambient Node / pnpm と `--ignore-workspace` を使わないことを明記。Python 本体の release flow と `release-extensions.yml` は変更なし
+
 - `docs(suno-helper)`: Suno UI の旧「Custom Mode」および「Instrumental ON/OFF」表記を、現行の Advanced タブと Lyrics mode（Write / Instrumental）の用語へ更新した。operator 手順、拡張 description、保守用コメントを対象とし、実行時のセレクタ・エラーメッセージ・テスト期待値は変更していない（#1900）
 
 ### Fixed

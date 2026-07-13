@@ -178,9 +178,20 @@ def test_release_skill_delegates_extension_verification_to_single_source() -> No
     assert "zip_path=" in verify_script
     assert 'git diff --exit-code -- "${lockfiles[@]}"' in verify_script
     assert "--ignore-workspace" not in verify_script
+    for document in (release_skill, release_checklist):
+        assert "Node 24 / pnpm 11.12.0" in document
+        assert "ambient `node` / `pnpm`" in document
+        assert "`--ignore-workspace`" in document
+        assert "`pnpm install --frozen-lockfile` → `pnpm build` → `pnpm zip`" in document
+        assert "期待名 zip が唯一の1件" in document
+        assert "lockfile に差分がない" in document
     assert "`pnpm -v` が 9 系" not in release_skill
-    assert "Nix extensions shell 契約（Node 24 / pnpm 11.12.0" in changelog
-    assert "`pnpm install --frozen-lockfile` → `pnpm zip`" in changelog
+    unreleased = changelog.split("## [Unreleased]", maxsplit=1)[1].split("\n## [", maxsplit=1)[0]
+    issue_entry = next(line for line in unreleased.splitlines() if "#1956" in line)
+    assert "Nix extensions shell 契約（Node 24 / pnpm 11.12.0" in issue_entry
+    assert "frozen install → build → zip" in issue_entry
+    assert "期待名 zip" in issue_entry
+    assert "lockfile 無差分" in issue_entry
 
 
 def test_release_skill_places_hard_gates_and_completion_criteria_in_first_60_lines() -> None:
