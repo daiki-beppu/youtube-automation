@@ -241,18 +241,50 @@ class CommentReplier:
         limit: int,
         export_candidates: bool,
     ) -> None:
-        comments = fetch_comments(self._youtube, video_id=video_id, max_results=per_video_limit, since=since)
-        while len(plan.planned) < limit:
-            try:
-                comment = next(comments)
-            except StopIteration:
-                return
-            except YouTubeAPIError as e:
-                if not _is_comments_disabled_error(e):
-                    raise
-                plan.skipped.append(self._video_skip_record(video_id, _COMMENTS_DISABLED_SKIP_REASON))
-                return
-            self._process_comment(comment, plan, dry_run, export_candidates)
+        comments = iter(fetch_comments(self._youtube, video_id=video_id, max_results=per_video_limit, since=since))
+        next_comment: FetchedComment | None = None
+        try:
+            while len(plan.planned) < limit:
+                if next_comment is None:
+                    try:
+                        first_comment = next(comments)
+                    except StopIteration:
+                        return
+                else:
+                    first_comment = next_comment
+                    next_comment = None
+                if len(plan.planned) + 1 == limit and self._skip_reason(first_comment, ()) is None:
+                    self._process_comment(first_comment, plan, dry_run, export_candidates, ())
+                    if len(plan.planned) >= limit:
+                        return
+                    thread_comments = []
+                else:
+                    thread_comments = [first_comment]
+                thread_id = first_comment.parent_id or first_comment.comment_id
+                while True:
+                    try:
+                        comment = next(comments)
+                    except StopIteration:
+                        break
+                    if (comment.parent_id or comment.comment_id) != thread_id:
+                        next_comment = comment
+                        break
+                    thread_comments.append(comment)
+                owner_reply_times = tuple(
+                    published_at
+                    for comment in thread_comments
+                    if comment.parent_id is not None
+                    and comment.author_channel_id == self._owner_channel_id
+                    and (published_at := _parse_published_at(comment.published_at)) is not None
+                )
+                for comment in thread_comments:
+                    if len(plan.planned) >= limit:
+                        return
+                    self._process_comment(comment, plan, dry_run, export_candidates, owner_reply_times)
+        except YouTubeAPIError as e:
+            if not _is_comments_disabled_error(e):
+                raise
+            plan.skipped.append(self._video_skip_record(video_id, _COMMENTS_DISABLED_SKIP_REASON))
 
     def _get_title(self, video_id: str) -> str:
         if video_id in self._title_cache:
@@ -274,8 +306,9 @@ class CommentReplier:
         plan: ReplyPlan,
         dry_run: bool,
         export_candidates: bool,
+        owner_reply_times: tuple[datetime, ...],
     ) -> None:
-        skip_reason = self._skip_reason(comment)
+        skip_reason = self._skip_reason(comment, owner_reply_times)
         if skip_reason is not None:
             plan.skipped.append(self._skip_record(comment, skip_reason))
             return
@@ -390,7 +423,7 @@ class CommentReplier:
         plan.skipped.append(self._skip_record(comment, "llm_error_skip"))
         return None
 
-    def _skip_reason(self, comment: FetchedComment) -> str | None:
+    def _skip_reason(self, comment: FetchedComment, owner_reply_times: tuple[datetime, ...]) -> str | None:
         if not comment.can_reply:
             return "canReply=False"
         if self._config.skip_held_for_review and comment.moderation_status == _HELD_FOR_REVIEW:
@@ -403,6 +436,11 @@ class CommentReplier:
         # reply 走査時に履歴外の自分のコメントを拾わないよう authorChannelId で除外する
         if self._owner_channel_id and comment.author_channel_id == self._owner_channel_id:
             return "own_comment"
+        published_at = _parse_published_at(comment.published_at)
+        if published_at is not None and any(
+            owner_published_at > published_at for owner_published_at in owner_reply_times
+        ):
+            return "owner_replied"
         return None
 
     def _audit_reply_text(
@@ -553,6 +591,16 @@ class CommentReplier:
 
 def _is_comments_disabled_error(error: YouTubeAPIError) -> bool:
     return error.status_code == 403 and error.reason == _COMMENTS_DISABLED_API_REASON
+
+
+def _parse_published_at(value: str) -> datetime | None:
+    try:
+        published_at = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if published_at.tzinfo is None:
+        return None
+    return published_at
 
 
 def _author_mention(author: str | None) -> str | None:
