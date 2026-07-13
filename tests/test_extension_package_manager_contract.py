@@ -88,6 +88,11 @@ def test_extensions_ci_uses_the_nix_pnpm_instead_of_a_setup_action() -> None:
     assert _pnpm_setup_versions(".github/workflows/extensions.yml") == []
 
 
+def test_local_pnpm_store_is_ignored_and_has_no_tracked_project_metadata() -> None:
+    assert ".pnpm-store/" in _read(".gitignore").splitlines()
+    assert not list((_REPO_ROOT / ".pnpm-store" / "v10" / "projects").glob("*"))
+
+
 def test_release_workflow_uses_the_pinned_pnpm_setup_action() -> None:
     versions = _pnpm_setup_versions(".github/workflows/release-extensions.yml")
 
