@@ -284,6 +284,8 @@ LABELS=(a b c d e f g h)
 PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
+  # image_generation.gemini.composition_rules（legend_motif / allowed_actions を含む）は
+  # codex-prompt.py が自動注入するため、title にレジェンドや楽器を重複して書かない。
   # 参照画像を winning template として扱い、テキスト付き候補を先に確定する短い TTP thumbnail 先行プロンプトにする（#1611）。
   # 候補ごとに別参照画像 1 枚だけを渡す。参照不足なら生成せず設定を直す。
   if [ "${#REF_PATHS[@]}" -lt "$CANDIDATE_COUNT" ]; then
@@ -383,6 +385,7 @@ parallel モードでは Next Step で `yt-stock-archive` による不採用 (`c
 PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
+  # image_generation.gemini.composition_rules は codex-prompt.py が自動注入する。
   # 参照画像を winning template として扱い、テキスト付き候補を先に確定する短い TTP thumbnail 先行プロンプトにする（#1611）。
   # 選択した企画と同じ index の参照画像 1 枚だけを使う（a=0, b=1, c=2）。
   REF_INDEX="<選択された企画の0-based index>"

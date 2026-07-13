@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- fix: Codex thumbnail prompts now include configured composition rules
+
 ### Added
 
 - `docs(feedback)`: `/feedback` に、`status="recorded"` の未還流 entry を一覧・選択し、open issue の類似タイトル照合とユーザー承認を経て `daiki-beppu/youtube-automation` へ `feedback` ラベル付き issue を起票する還流モードを追加した。成功した entry は `status="filed"` と `issue_url` を記録して候補から除外し、二重起票を防ぐ。起票本文テンプレート、発生チャンネル掲載の個別確認、起票直前の機密情報再マスクも明記した（#1829）。
