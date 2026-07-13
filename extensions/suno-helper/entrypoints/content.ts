@@ -35,6 +35,7 @@ import { acquireDomRunLock, releaseDomRunLock } from "../lib/dom-run-lock";
 import {
   abortableSleep,
   CAPTCHA_WAIT_TIMEOUT_MS,
+  diagnoseLyricsInputState,
   FatalRunError,
   GENERATE_TIMEOUT_MS,
   LyricsPasteReflectionError,
@@ -461,7 +462,7 @@ export default defineContentScript({
                 fallbackError,
               });
               throw new FatalRunError(
-                `entry ${index} (${entryDisplayName(entry)}) の Lyrics 注入に失敗しました: ${message}`,
+                `entry ${index} (${entryDisplayName(entry)}) の Lyrics 注入に失敗しました: ${message}\n${diagnoseLyricsInputState()}`,
               );
             }
           },
@@ -472,9 +473,7 @@ export default defineContentScript({
       } else if (entry.lyrics) {
         // 歌詞があるのに Lyrics 欄が見つからないのは設定不整合。silent に飛ばさず停止する。
         // 設定不整合は全 entry で再発するため fatal（entry retry の対象外）。
-        throw new FatalRunError(
-          "Lyrics 欄が見つかりません。Instrumental OFF（Custom Mode）になっているか確認してください。",
-        );
+        throw new FatalRunError(`Lyrics 欄が見つかりません。${diagnoseLyricsInputState()}`);
       }
       if (title) {
         // Song Title は entry.title 優先、無ければ entry.name で代替する (#844)。
