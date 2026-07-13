@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 from googleapiclient.errors import HttpError
 
+from youtube_automation.utils.exceptions import YouTubeAPIError
 from youtube_automation.utils.video_daily_analytics import VideoDailyAnalyticsMixin
 
 
@@ -50,9 +51,11 @@ def test_get_video_daily_analytics_query_uses_views_metric_only():
     assert "videoThumbnailImpressions" not in last_call_kwargs["metrics"]
 
 
-def test_get_video_daily_analytics_propagates_http_error():
+def test_get_video_daily_analytics_converts_permanent_http_error():
     mock_service = MagicMock()
     mock_service.reports().query().execute.side_effect = HttpError(MagicMock(status=400), b"metric not found")
     collector = DummyCollector(mock_service)
-    with pytest.raises(HttpError):
+    with pytest.raises(YouTubeAPIError) as raised:
         collector.get_video_daily_analytics("2026-04-01", "2026-04-01", video_ids=["vid_A"])
+    assert raised.value.status_code == 400
+    assert isinstance(raised.value.__cause__, HttpError)

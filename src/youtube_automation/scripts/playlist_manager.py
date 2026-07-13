@@ -19,6 +19,7 @@ from pathlib import Path
 
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import channel_dir, load_config, reset
+from youtube_automation.utils.retry import execute_with_retry
 from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,8 @@ class PlaylistManager:
                 "snippet": {"title": title, "description": description},
                 "status": {"privacyStatus": privacy_status},
             }
-            response = youtube.playlists().insert(part="snippet,status", body=body).execute()
+            request = youtube.playlists().insert(part="snippet,status", body=body)
+            response = execute_with_retry(request, "playlists.insert failed")
             playlist_id = response["id"]
             playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
             logger.info(f"✅ Playlist created: {playlist_id} ({playlist_url})")
@@ -89,7 +91,8 @@ class PlaylistManager:
             }
             if position is not None:
                 snippet["position"] = position
-            youtube.playlistItems().insert(part="snippet", body={"snippet": snippet}).execute()
+            request = youtube.playlistItems().insert(part="snippet", body={"snippet": snippet})
+            execute_with_retry(request, "playlistItems.insert failed")
             logger.info(f"✅ Video added to playlist ({where})")
             return True
         except Exception as e:
@@ -209,7 +212,7 @@ class PlaylistManager:
         try:
             request = youtube.playlistItems().list(playlistId=playlist_id, part="contentDetails", maxResults=50)
             while request:
-                response = request.execute()
+                response = execute_with_retry(request, "playlistItems.list failed")
                 for item in response.get("items", []):
                     video_ids.add(item["contentDetails"]["videoId"])
                 request = youtube.playlistItems().list_next(request, response)
@@ -366,16 +369,13 @@ class PlaylistManager:
             removed = 0
             page_token = None
             while True:
-                resp = (
-                    youtube.playlistItems()
-                    .list(
-                        part="snippet",
-                        playlistId=playlist_id,
-                        maxResults=50,
-                        pageToken=page_token,
-                    )
-                    .execute()
+                request = youtube.playlistItems().list(
+                    part="snippet",
+                    playlistId=playlist_id,
+                    maxResults=50,
+                    pageToken=page_token,
                 )
+                resp = execute_with_retry(request, "playlistItems.list failed")
 
                 for item in resp.get("items", []):
                     title = item["snippet"].get("title", "")
@@ -385,7 +385,8 @@ class PlaylistManager:
                         if dry_run:
                             print(f"  [DRY-RUN] {key}: 除去予定 {video_id} ({title})")
                         else:
-                            youtube.playlistItems().delete(id=item_id).execute()
+                            request = youtube.playlistItems().delete(id=item_id)
+                            execute_with_retry(request, "playlistItems.delete failed")
                             logger.info(f"  {key}: 除去 {video_id} ({title})")
                         removed += 1
 

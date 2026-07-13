@@ -8,7 +8,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Dict
 
-from googleapiclient.errors import HttpError
+from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.retry import execute_with_retry
 
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
@@ -37,18 +38,15 @@ class AudienceAnalyticsMixin:
         logger.info("デバイス別分析実行中...")
 
         try:
-            response = (
-                self.analytics_service.reports()
-                .query(
-                    ids=f"channel=={self.channel_id}",
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics="views,estimatedMinutesWatched,averageViewDuration",
-                    dimensions="deviceType",
-                    sort="-views",
-                )
-                .execute()
+            request = self.analytics_service.reports().query(
+                ids=f"channel=={self.channel_id}",
+                startDate=start_date,
+                endDate=end_date,
+                metrics="views,estimatedMinutesWatched,averageViewDuration",
+                dimensions="deviceType",
+                sort="-views",
             )
+            response = execute_with_retry(request, "YouTube Analytics API request failed")
 
             devices = {}
             if "rows" in response:
@@ -71,7 +69,7 @@ class AudienceAnalyticsMixin:
                 "total_views": total_views,
             }
 
-        except HttpError as e:
+        except YouTubeAPIError as e:
             logger.error(f"YouTube API エラー（デバイス分析）: {e}")
             return {"devices": {}, "total_views": 0, "error": str(e)}
         except Exception as e:
@@ -96,19 +94,16 @@ class AudienceAnalyticsMixin:
         logger.info("地域別分析実行中...")
 
         try:
-            response = (
-                self.analytics_service.reports()
-                .query(
-                    ids=f"channel=={self.channel_id}",
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics="views,estimatedMinutesWatched,averageViewDuration,subscribersGained",
-                    dimensions="country",
-                    sort="-views",
-                    maxResults=max_countries,
-                )
-                .execute()
+            request = self.analytics_service.reports().query(
+                ids=f"channel=={self.channel_id}",
+                startDate=start_date,
+                endDate=end_date,
+                metrics="views,estimatedMinutesWatched,averageViewDuration,subscribersGained",
+                dimensions="country",
+                sort="-views",
+                maxResults=max_countries,
             )
+            response = execute_with_retry(request, "YouTube Analytics API request failed")
 
             countries = {}
             if "rows" in response:
@@ -132,7 +127,7 @@ class AudienceAnalyticsMixin:
                 "total_views": total_views,
             }
 
-        except HttpError as e:
+        except YouTubeAPIError as e:
             logger.error(f"YouTube API エラー（地域分析）: {e}")
             return {"countries": {}, "total_views": 0, "error": str(e)}
         except Exception as e:

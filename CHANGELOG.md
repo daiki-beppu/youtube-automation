@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(api)`: playlist / benchmark / analytics / comments-reply / discover-competitors の YouTube API 呼び出しで、429・5xx・quota 系 403・network error を jitter 付き指数 backoff で最大 3 回試行し、恒久 4xx は即座にドメイン例外へ変換する共通 retry 境界を追加した（#1695）。
+
 - `fix(suno-helper)`: Download all メニューの短時間 auto-close レースに対し、More クリック直後から探索を開始し、検出失敗時は最大 3 回再クリックしてダウンロードを継続できるようにした（#1926）。
 - `fix(suno-helper)`: 拡張更新時に既存の Suno タブを自動リロードし、旧 content script の orphaned context を残さず新しい bundle を再注入するようにした（#1718）。
 - `fix(suno-helper)`: feed/v3 の active poll が `ids` フィルタ無効化後も cursor ページネーションを追跡し、最新ページ外の保存済み clip を完了確認できるようにした（#1929）。
