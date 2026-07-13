@@ -767,7 +767,7 @@ def test_candidate_limit_does_not_fetch_paginated_replies_from_later_thread(tmp_
     yt.comments.return_value.list.assert_not_called()
 
 
-def test_candidate_limit_does_not_fetch_paginated_replies_from_current_thread(tmp_path):
+def test_candidate_limit_scans_paginated_replies_from_current_thread(tmp_path):
     yt = _mock_youtube(
         video_ids=["v1"],
         comments_by_video={
@@ -792,7 +792,44 @@ def test_candidate_limit_does_not_fetch_paginated_replies_from_current_thread(tm
     plan = replier.run(dry_run=True)
 
     assert [row["comment_id"] for row in plan.planned] == ["first"]
-    yt.comments.return_value.list.assert_not_called()
+    yt.comments.return_value.list.assert_called_once()
+
+
+def test_candidate_limit_skips_last_slot_when_owner_replied_later_in_thread(tmp_path):
+    owner_id = "UCowner"
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {
+                    "comment_id": "top",
+                    "text": "Initial question",
+                    "published_at": "2026-04-01T00:00:00Z",
+                    "replies": [
+                        {
+                            "comment_id": "owner-reply",
+                            "text": "Owner answer",
+                            "author": "Owner",
+                            "author_channel_id": owner_id,
+                            "published_at": "2026-04-01T01:00:00Z",
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(max_replies_per_run=1),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id=owner_id,
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert plan.planned == []
+    assert any(row["comment_id"] == "top" and row["reason"] == "owner_replied" for row in plan.skipped)
 
 
 def test_unanswered_viewer_reply_remains_candidate(tmp_path):

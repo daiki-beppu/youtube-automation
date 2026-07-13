@@ -252,7 +252,13 @@ class CommentReplier:
                 else:
                     first_comment = next_comment
                     next_comment = None
-                if len(plan.planned) + 1 == limit and self._skip_reason(first_comment, ()) is None:
+                can_fill_last_slot_without_thread_scan = (
+                    len(plan.planned) + 1 == limit
+                    and first_comment.parent_id is None
+                    and first_comment.total_reply_count == 0
+                    and self._skip_reason(first_comment, ()) is None
+                )
+                if can_fill_last_slot_without_thread_scan:
                     self._process_comment(first_comment, plan, dry_run, export_candidates, ())
                     if len(plan.planned) >= limit:
                         return
