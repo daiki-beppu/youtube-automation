@@ -15,8 +15,6 @@ from collections import defaultdict
 from dataclasses import replace
 from datetime import datetime
 
-from googleapiclient.errors import HttpError
-
 from youtube_automation.utils.competitor_scoring import (
     _RECENT_VIDEOS_PER_CHANNEL,
     CandidateChannel,
@@ -27,6 +25,7 @@ from youtube_automation.utils.competitor_scoring import (
     _score_candidate,
 )
 from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.retry import execute_with_retry
 
 # channels.list バッチ単位（YouTube Data API 上限）
 _CHANNELS_BATCH_SIZE = 50
@@ -44,18 +43,15 @@ def _search_channels(youtube, keyword: str, max_results: int) -> dict[str, set[s
     重複 channel_id は呼び出し側で union する。
     """
     try:
-        resp = (
-            youtube.search()
-            .list(
-                part="snippet",
-                q=keyword,
-                type="channel",
-                maxResults=max_results,
-            )
-            .execute()
+        request = youtube.search().list(
+            part="snippet",
+            q=keyword,
+            type="channel",
+            maxResults=max_results,
         )
-    except HttpError as e:
-        raise YouTubeAPIError.from_http_error(e, f"search.list failed (q={keyword!r})") from e
+        resp = execute_with_retry(request, f"search.list failed (q={keyword!r})")
+    except YouTubeAPIError:
+        raise
 
     hits: dict[str, set[str]] = {}
     for item in resp.get("items", []):
@@ -78,13 +74,10 @@ def _fetch_channel_details(
     for i in range(0, len(channel_ids), _CHANNELS_BATCH_SIZE):
         batch = channel_ids[i : i + _CHANNELS_BATCH_SIZE]
         try:
-            resp = (
-                youtube.channels()
-                .list(part="snippet,statistics,contentDetails,topicDetails", id=",".join(batch))
-                .execute()
-            )
-        except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, "channels.list failed") from e
+            request = youtube.channels().list(part="snippet,statistics,contentDetails,topicDetails", id=",".join(batch))
+            resp = execute_with_retry(request, "channels.list failed")
+        except YouTubeAPIError:
+            raise
 
         for item in resp.get("items", []):
             ch_id = item["id"]
@@ -114,26 +107,24 @@ def _fetch_channel_details(
 def _fetch_recent_videos(youtube, uploads_playlist_id: str) -> list[VideoMetric]:
     """uploads playlist から直近動画を `_RECENT_VIDEOS_PER_CHANNEL` 本取得する。"""
     try:
-        playlist_resp = (
-            youtube.playlistItems()
-            .list(
-                part="contentDetails",
-                playlistId=uploads_playlist_id,
-                maxResults=_RECENT_VIDEOS_PER_CHANNEL,
-            )
-            .execute()
+        request = youtube.playlistItems().list(
+            part="contentDetails",
+            playlistId=uploads_playlist_id,
+            maxResults=_RECENT_VIDEOS_PER_CHANNEL,
         )
-    except HttpError as e:
-        raise YouTubeAPIError.from_http_error(e, f"playlistItems.list failed (playlist={uploads_playlist_id})") from e
+        playlist_resp = execute_with_retry(request, f"playlistItems.list failed (playlist={uploads_playlist_id})")
+    except YouTubeAPIError:
+        raise
 
     video_ids = [item["contentDetails"]["videoId"] for item in playlist_resp.get("items", [])]
     if not video_ids:
         return []
 
     try:
-        videos_resp = youtube.videos().list(part="snippet,statistics", id=",".join(video_ids)).execute()
-    except HttpError as e:
-        raise YouTubeAPIError.from_http_error(e, "videos.list failed") from e
+        request = youtube.videos().list(part="snippet,statistics", id=",".join(video_ids))
+        videos_resp = execute_with_retry(request, "videos.list failed")
+    except YouTubeAPIError:
+        raise
 
     metrics: list[VideoMetric] = []
     for item in videos_resp.get("items", []):

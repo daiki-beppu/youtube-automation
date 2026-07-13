@@ -88,6 +88,7 @@ def _mock_youtube(
             raise raw
         items = []
         for c in raw:
+            replies = c.get("replies", [])
             top_snippet: dict = {
                 "authorDisplayName": c.get("author", "Unknown"),
                 "textOriginal": c["text"],
@@ -96,18 +97,35 @@ def _mock_youtube(
             }
             if c.get("author_channel_id"):
                 top_snippet["authorChannelId"] = {"value": c["author_channel_id"]}
-            items.append(
-                {
-                    "snippet": {
-                        "canReply": c.get("can_reply", True),
-                        "totalReplyCount": c.get("total_reply_count", 0),
-                        "topLevelComment": {
-                            "id": c["comment_id"],
-                            "snippet": top_snippet,
-                        },
-                    }
+            item = {
+                "snippet": {
+                    "canReply": c.get("can_reply", True),
+                    "totalReplyCount": c.get("total_reply_count", len(replies)),
+                    "topLevelComment": {
+                        "id": c["comment_id"],
+                        "snippet": top_snippet,
+                    },
                 }
-            )
+            }
+            if replies:
+                item["replies"] = {
+                    "comments": [
+                        {
+                            "id": reply["comment_id"],
+                            "snippet": {
+                                "authorDisplayName": reply.get("author", "Unknown"),
+                                "authorChannelId": {"value": reply["author_channel_id"]}
+                                if reply.get("author_channel_id")
+                                else {},
+                                "textOriginal": reply["text"],
+                                "publishedAt": reply.get("published_at", "2026-04-01T00:00:00Z"),
+                                "moderationStatus": reply.get("moderation_status"),
+                            },
+                        }
+                        for reply in replies
+                    ]
+                }
+            items.append(item)
         return {"items": items}
 
     _list_execute.current_video_id = None
@@ -129,6 +147,59 @@ def _mock_youtube(
         insert_mock.execute.return_value = {"id": "insert-ok"}
     yt.comments.return_value.insert.return_value = insert_mock
     yt._insert_mock = insert_mock
+    return yt
+
+
+def _mock_youtube_with_paginated_owner_reply(owner_id: str) -> MagicMock:
+    inline_replies = [
+        {
+            "comment_id": f"viewer-{index}",
+            "text": f"Viewer reply {index}",
+            "author": "Viewer",
+            "author_channel_id": "UCviewer",
+            "published_at": f"2026-04-01T0{index}:00:00Z",
+        }
+        for index in range(1, 6)
+    ]
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {
+                    "comment_id": "top",
+                    "text": "Initial question",
+                    "published_at": "2026-04-01T00:00:00Z",
+                    "total_reply_count": 6,
+                    "replies": inline_replies,
+                }
+            ]
+        },
+    )
+    yt.comments.return_value.list.return_value.execute.return_value = {
+        "items": [
+            *[
+                {
+                    "id": reply["comment_id"],
+                    "snippet": {
+                        "authorDisplayName": reply["author"],
+                        "authorChannelId": {"value": reply["author_channel_id"]},
+                        "textOriginal": reply["text"],
+                        "publishedAt": reply["published_at"],
+                    },
+                }
+                for reply in inline_replies
+            ],
+            {
+                "id": "owner-page-2",
+                "snippet": {
+                    "authorDisplayName": "Owner",
+                    "authorChannelId": {"value": owner_id},
+                    "textOriginal": "Owner answer",
+                    "publishedAt": "2026-04-01T06:00:00Z",
+                },
+            },
+        ]
+    }
     return yt
 
 
@@ -314,6 +385,488 @@ def test_export_candidates_does_not_call_generator(tmp_path, _mock_default_genai
     _mock_default_genai_client.models.generate_content.assert_not_called()
 
 
+def test_dry_run_skips_viewer_reply_when_owner_replied_later_in_thread(tmp_path):
+    owner_id = "UCowner"
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {
+                    "comment_id": "top",
+                    "text": "Initial question",
+                    "published_at": "2026-04-01T00:00:00Z",
+                    "replies": [
+                        {
+                            "comment_id": "viewer-reply",
+                            "text": "Follow-up question",
+                            "author": "Viewer",
+                            "author_channel_id": "UCviewer",
+                            "published_at": "2026-04-01T01:00:00Z",
+                        },
+                        {
+                            "comment_id": "owner-reply",
+                            "text": "Owner answer",
+                            "author": "Owner",
+                            "author_channel_id": owner_id,
+                            "published_at": "2026-04-01T02:00:00Z",
+                        },
+                    ],
+                }
+            ]
+        },
+    )
+    yt.comments.return_value.list.return_value.execute.return_value = {"items": []}
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id=owner_id,
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert "viewer-reply" not in {row["comment_id"] for row in plan.planned}
+    assert any(row["comment_id"] == "viewer-reply" and row["reason"] == "owner_replied" for row in plan.skipped)
+    yt.commentThreads.return_value.list.assert_called_once()
+    yt.comments.return_value.list.assert_not_called()
+
+
+def test_export_candidates_excludes_comment_with_later_owner_reply(tmp_path, _mock_default_genai_client):
+    owner_id = "UCowner"
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {
+                    "comment_id": "top",
+                    "text": "Initial question",
+                    "published_at": "2026-04-01T00:00:00Z",
+                    "replies": [
+                        {
+                            "comment_id": "owner-reply",
+                            "text": "Owner answer",
+                            "author": "Owner",
+                            "author_channel_id": owner_id,
+                            "published_at": "2026-04-01T01:00:00Z",
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id=owner_id,
+    )
+
+    plan = replier.run(dry_run=True, export_candidates=True)
+
+    assert "top" not in {row["comment_id"] for row in plan.planned}
+    assert any(row["comment_id"] == "top" and row["reason"] == "owner_replied" for row in plan.skipped)
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
+def test_dry_run_skips_comments_when_paginated_owner_reply_is_later(tmp_path):
+    owner_id = "UCowner"
+    yt = _mock_youtube_with_paginated_owner_reply(owner_id)
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id=owner_id,
+    )
+
+    plan = replier.run(dry_run=True)
+
+    skipped = {(row["comment_id"], row["reason"]) for row in plan.skipped}
+    assert ("top", "owner_replied") in skipped
+    assert ("viewer-1", "owner_replied") in skipped
+    assert "top" not in {row["comment_id"] for row in plan.planned}
+    assert "viewer-1" not in {row["comment_id"] for row in plan.planned}
+    yt.comments.return_value.list.assert_called_once()
+
+
+def test_export_candidates_excludes_comment_with_paginated_owner_reply(
+    tmp_path,
+    _mock_default_genai_client,
+):
+    owner_id = "UCowner"
+    yt = _mock_youtube_with_paginated_owner_reply(owner_id)
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id=owner_id,
+    )
+
+    plan = replier.run(dry_run=True, export_candidates=True)
+
+    assert "top" not in {row["comment_id"] for row in plan.planned}
+    assert any(row["comment_id"] == "top" and row["reason"] == "owner_replied" for row in plan.skipped)
+    yt.comments.return_value.list.assert_called_once()
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
+def test_apply_does_not_post_to_comment_with_later_owner_reply(tmp_path, _mock_default_genai_client):
+    owner_id = "UCowner"
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {
+                    "comment_id": "top",
+                    "text": "Initial question",
+                    "published_at": "2026-04-01T00:00:00Z",
+                    "replies": [
+                        {
+                            "comment_id": "owner-reply",
+                            "text": "Owner answer",
+                            "author": "Owner",
+                            "author_channel_id": owner_id,
+                            "published_at": "2026-04-01T01:00:00Z",
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id=owner_id,
+    )
+
+    plan = replier.run(dry_run=False)
+
+    assert plan.planned == []
+    assert plan.replied == []
+    assert any(row["comment_id"] == "top" and row["reason"] == "owner_replied" for row in plan.skipped)
+    yt._insert_mock.execute.assert_not_called()
+    _mock_default_genai_client.models.generate_content.assert_not_called()
+
+
+def test_viewer_follow_up_after_owner_reply_remains_candidate(tmp_path):
+    owner_id = "UCowner"
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {
+                    "comment_id": "top",
+                    "text": "Initial question",
+                    "published_at": "2026-04-01T00:00:00Z",
+                    "replies": [
+                        {
+                            "comment_id": "owner-reply",
+                            "text": "Owner answer",
+                            "author": "Owner",
+                            "author_channel_id": owner_id,
+                            "published_at": "2026-04-01T01:00:00Z",
+                        },
+                        {
+                            "comment_id": "viewer-follow-up",
+                            "text": "One more question",
+                            "author": "Viewer",
+                            "author_channel_id": "UCviewer",
+                            "published_at": "2026-04-01T02:00:00Z",
+                        },
+                    ],
+                }
+            ]
+        },
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id=owner_id,
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert any(row["comment_id"] == "top" and row["reason"] == "owner_replied" for row in plan.skipped)
+    assert "viewer-follow-up" in {row["comment_id"] for row in plan.planned}
+
+
+def test_owner_reply_at_same_published_at_does_not_skip_comment(tmp_path):
+    owner_id = "UCowner"
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {
+                    "comment_id": "top",
+                    "text": "Initial question",
+                    "published_at": "2026-04-01T00:00:00Z",
+                    "replies": [
+                        {
+                            "comment_id": "viewer-reply",
+                            "text": "Follow-up question",
+                            "author": "Viewer",
+                            "author_channel_id": "UCviewer",
+                            "published_at": "2026-04-01T01:00:00Z",
+                        },
+                        {
+                            "comment_id": "owner-reply",
+                            "text": "Owner answer",
+                            "author": "Owner",
+                            "author_channel_id": owner_id,
+                            "published_at": "2026-04-01T01:00:00Z",
+                        },
+                    ],
+                }
+            ]
+        },
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id=owner_id,
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert "viewer-reply" in {row["comment_id"] for row in plan.planned}
+
+
+def test_owner_reply_timestamp_is_compared_as_rfc3339_instant(tmp_path):
+    owner_id = "UCowner"
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {
+                    "comment_id": "top",
+                    "text": "Initial question",
+                    "published_at": "2026-04-01T00:00:00Z",
+                    "replies": [
+                        {
+                            "comment_id": "viewer-reply",
+                            "text": "Follow-up question",
+                            "author": "Viewer",
+                            "author_channel_id": "UCviewer",
+                            "published_at": "2026-04-01T01:30:00+01:00",
+                        },
+                        {
+                            "comment_id": "owner-reply",
+                            "text": "Owner answer",
+                            "author": "Owner",
+                            "author_channel_id": owner_id,
+                            "published_at": "2026-04-01T00:45:00Z",
+                        },
+                    ],
+                }
+            ]
+        },
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id=owner_id,
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert any(row["comment_id"] == "viewer-reply" and row["reason"] == "owner_replied" for row in plan.skipped)
+
+
+@pytest.mark.parametrize(
+    ("viewer_published_at", "owner_published_at"),
+    [
+        ("2026-04-01T01:00:00Z", "invalid"),
+        ("invalid", "2026-04-01T02:00:00Z"),
+        ("2026-04-01T01:00:00Z", ""),
+        ("", "2026-04-01T02:00:00Z"),
+    ],
+)
+def test_unparseable_timestamp_does_not_apply_owner_replied_skip(
+    tmp_path,
+    viewer_published_at,
+    owner_published_at,
+):
+    owner_id = "UCowner"
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {
+                    "comment_id": "top",
+                    "text": "Initial question",
+                    "published_at": "2026-04-01T00:00:00Z",
+                    "replies": [
+                        {
+                            "comment_id": "viewer-reply",
+                            "text": "Follow-up question",
+                            "author": "Viewer",
+                            "author_channel_id": "UCviewer",
+                            "published_at": viewer_published_at,
+                        },
+                        {
+                            "comment_id": "owner-reply",
+                            "text": "Owner answer",
+                            "author": "Owner",
+                            "author_channel_id": owner_id,
+                            "published_at": owner_published_at,
+                        },
+                    ],
+                }
+            ]
+        },
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id=owner_id,
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert "viewer-reply" in {row["comment_id"] for row in plan.planned}
+
+
+def test_candidate_limit_does_not_fetch_paginated_replies_from_later_thread(tmp_path):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {"comment_id": "first", "text": "First candidate"},
+                {
+                    "comment_id": "later",
+                    "text": "Later candidate",
+                    "total_reply_count": 6,
+                },
+            ]
+        },
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(max_replies_per_run=1),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id="UCowner",
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert [row["comment_id"] for row in plan.planned] == ["first"]
+    yt.comments.return_value.list.assert_not_called()
+
+
+def test_candidate_limit_scans_paginated_replies_from_current_thread(tmp_path):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {
+                    "comment_id": "first",
+                    "text": "First candidate",
+                    "total_reply_count": 6,
+                }
+            ]
+        },
+    )
+    yt.comments.return_value.list.return_value.execute.return_value = {"items": []}
+    replier = CommentReplier(
+        yt,
+        config=_make_config(max_replies_per_run=1),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id="UCowner",
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert [row["comment_id"] for row in plan.planned] == ["first"]
+    yt.comments.return_value.list.assert_called_once()
+
+
+def test_candidate_limit_skips_last_slot_when_owner_replied_later_in_thread(tmp_path):
+    owner_id = "UCowner"
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {
+                    "comment_id": "top",
+                    "text": "Initial question",
+                    "published_at": "2026-04-01T00:00:00Z",
+                    "replies": [
+                        {
+                            "comment_id": "owner-reply",
+                            "text": "Owner answer",
+                            "author": "Owner",
+                            "author_channel_id": owner_id,
+                            "published_at": "2026-04-01T01:00:00Z",
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(max_replies_per_run=1),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id=owner_id,
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert plan.planned == []
+    assert any(row["comment_id"] == "top" and row["reason"] == "owner_replied" for row in plan.skipped)
+
+
+def test_unanswered_viewer_reply_remains_candidate(tmp_path):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {
+                    "comment_id": "top",
+                    "text": "Initial question",
+                    "published_at": "2026-04-01T00:00:00Z",
+                    "replies": [
+                        {
+                            "comment_id": "viewer-reply",
+                            "text": "Follow-up question",
+                            "author": "Viewer",
+                            "author_channel_id": "UCviewer",
+                            "published_at": "2026-04-01T01:00:00Z",
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    replier = CommentReplier(
+        yt,
+        config=_make_config(),
+        channel_dir=tmp_path,
+        default_language="ja",
+        owner_channel_id="UCowner",
+    )
+
+    plan = replier.run(dry_run=True)
+
+    assert "viewer-reply" in {row["comment_id"] for row in plan.planned}
+
+
 def test_export_candidates_rejects_apply_mode_before_generating(tmp_path, _mock_default_genai_client):
     yt = _mock_youtube(
         video_ids=["v1"],
@@ -363,6 +916,50 @@ def test_cli_export_candidates_requires_json(monkeypatch, tmp_path, capsys):
     assert rc == 1
     assert "--json" in capsys.readouterr().err
     get_youtube.assert_not_called()
+
+
+def test_cli_export_candidates_json_excludes_comment_with_later_owner_reply(
+    monkeypatch,
+    tmp_path,
+    capsys,
+    _mock_default_genai_client,
+):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [
+                {
+                    "comment_id": "top",
+                    "text": "Initial question",
+                    "published_at": "2026-04-01T00:00:00Z",
+                    "replies": [
+                        {
+                            "comment_id": "owner-reply",
+                            "text": "Owner answer",
+                            "author": "Owner",
+                            "author_channel_id": "UCtest",
+                            "published_at": "2026-04-01T01:00:00Z",
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+    config = SimpleNamespace(
+        comments=_make_config(),
+        youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
+    )
+    monkeypatch.setattr(comment_reply, "load_config", lambda: config)
+    monkeypatch.setattr(comment_reply, "get_youtube", lambda: yt)
+    monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
+
+    rc = comment_reply.main(["--dry-run", "--export-candidates", "--json", "--video-id", "v1"])
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["planned"] == []
+    assert any(row["comment_id"] == "top" and row["reason"] == "owner_replied" for row in payload["skipped"])
+    _mock_default_genai_client.models.generate_content.assert_not_called()
 
 
 def test_cli_export_candidates_rejects_apply_before_youtube(monkeypatch, tmp_path, capsys):
@@ -708,6 +1305,21 @@ def test_held_for_review_is_skipped(tmp_path):
     plan = replier.run(dry_run=True)
     assert any(row["reason"].startswith("moderationStatus") for row in plan.skipped)
     assert plan.planned == []
+
+
+def test_can_reply_false_is_skipped_with_existing_reason(tmp_path):
+    yt = _mock_youtube(
+        video_ids=["v1"],
+        comments_by_video={
+            "v1": [{"comment_id": "c1", "text": "こんにちは！", "can_reply": False}],
+        },
+    )
+    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+
+    plan = replier.run(dry_run=True)
+
+    assert plan.planned == []
+    assert any(row["comment_id"] == "c1" and row["reason"] == "canReply=False" for row in plan.skipped)
 
 
 def test_max_replies_per_run_caps_planned(tmp_path):

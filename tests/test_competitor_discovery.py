@@ -19,6 +19,8 @@ from datetime import date, timedelta
 from unittest.mock import MagicMock
 
 import pytest
+from googleapiclient.errors import HttpError
+from httplib2 import Response
 
 from youtube_automation.utils.competitor_discovery import discover_competitors
 from youtube_automation.utils.competitor_scoring import (
@@ -842,6 +844,18 @@ class TestDiscoverCompetitors:
         }
 
         return youtube
+
+    def test_retries_transient_api_failure_through_discovery_entrypoint(self, monkeypatch):
+        monkeypatch.setattr("youtube_automation.utils.retry.time.sleep", lambda _: None)
+        youtube = MagicMock()
+        transient = HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}')
+        request = youtube.search.return_value.list.return_value
+        request.execute.side_effect = [transient, {"items": []}]
+
+        result = discover_competitors(youtube, _make_params(keywords=("lo-fi study",)))
+
+        assert result == []
+        assert request.execute.call_count == 2
 
     def test_returns_scored_candidates_sorted_by_total_desc(self):
         # Given: 2 つのチャンネルが search で hit、両方ともフィルタ通過

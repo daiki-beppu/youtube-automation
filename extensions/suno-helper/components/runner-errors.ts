@@ -204,7 +204,7 @@ export function formatRunError(message: string): string {
   if (isExtensionReloadRequiredError(message)) {
     return `開始失敗: ${message}\n${EXTENSION_RELOAD_REQUIRED_MESSAGE}（⌘+Shift+R / Ctrl+Shift+R）`;
   }
-  return `開始失敗: ${message}\nSuno の Custom Mode 画面を開いた状態で実行してください。`;
+  return `開始失敗: ${message}\nSuno の Advanced タブを開き、Lyrics mode を確認してから実行してください。`;
 }
 
 export function formatStopError(message: string): string {

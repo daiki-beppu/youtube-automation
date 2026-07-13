@@ -38,13 +38,18 @@ description: "Use when ターゲット視聴者を第一ペルソナとして設
 自チャンネルのターゲット仮説の初期値として転写する。
 ペルソナ独自要素は、転写したパターンの上に重ねる順序で設計する。
 
-## 前提
+## 前提成果物ガード
 
-- `config/channel/` が存在すること（`load_config()` でロード可能）。
-  存在しない場合 → 新規チャンネルなら `/channel-new`、既存チャンネルなら `/channel-new`（既存チャンネル取り込みモード）を案内。
-- `docs/plans/viewer-voice-analysis.md` が存在すること。
-  未実施の場合は先に `/viewer-voice` を実行するよう案内し、本スキルは停止する。
-- `docs/channel/personas/channel-new-persona.md` が存在する場合は初期仮説として読み込み、公開後データで更新する。
+後続 Step に入る前に、以下の前提を確認する。**停止する fail** が 1 件でもあれば、記載した前工程スキルを案内して停止し、解消するまで後続 Step に進まない。**許容する fail** は停止条件に含めない。
+
+### 停止する fail
+
+- `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/channel-new`、既存チャンネルは `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
+- `docs/plans/viewer-voice-analysis.md` が無い → 前工程 `/viewer-voice` を案内して停止する
+
+### 許容する fail
+
+- `docs/channel/personas/channel-new-persona.md` が無い → 公開後データから本格版を設計できるため停止しない。存在する場合だけ初期仮説として読み込む
 
 ## 実行フロー
 

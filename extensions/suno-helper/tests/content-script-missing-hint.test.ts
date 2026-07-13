@@ -27,9 +27,10 @@ describe("formatRunError", () => {
     expect(text).toMatch(/⌘\+Shift\+R/);
   });
 
-  it("Given 他のエラー When formatRunError Then Custom Mode 起動案内を返す（従来挙動）", () => {
+  it("Given 他のエラー When formatRunError Then Advanced と Lyrics mode の案内を返す", () => {
     const text = formatRunError("アクティブなタブが見つかりません。");
-    expect(text).toMatch(/Custom Mode 画面を開いた状態/);
+    expect(text).toMatch(/Advanced タブ/);
+    expect(text).toMatch(/Lyrics mode/);
     expect(text).not.toMatch(/ハードリロード/);
   });
 });

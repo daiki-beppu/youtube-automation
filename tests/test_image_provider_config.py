@@ -245,6 +245,62 @@ class TestParseImageGenerationConfig:
 
         assert prompt == "Use the title Rain Study."
 
+    def test_build_codex_prompt_injects_gemini_composition_rules_for_codex(self):
+        prompt = build_codex_prompt(
+            {
+                "image_generation": {
+                    "provider": "codex",
+                    "gemini": {
+                        "composition_rules": {
+                            "legend_motif": {"required": True, "description": "blues legend"},
+                            "allowed_actions": "playing electric guitar",
+                        }
+                    },
+                    "codex": {"default_prompt_template": "Use the title {title}."},
+                }
+            },
+            "Night Groove",
+        )
+
+        assert "legend_motif" in prompt
+        assert '"required": true' in prompt
+        assert "blues legend" in prompt
+        assert "playing electric guitar" in prompt
+        assert "override the reference subject" in prompt
+
+    @pytest.mark.parametrize("description", [None, "", "   "])
+    def test_build_codex_prompt_rejects_required_legend_motif_without_subject_description(self, description):
+        skill_cfg = {
+            "image_generation": {
+                "provider": "codex",
+                "gemini": {
+                    "composition_rules": {
+                        "legend_motif": {"required": True, "description": description},
+                    }
+                },
+                "codex": {"default_prompt_template": "Use the title {title}."},
+            }
+        }
+
+        with pytest.raises(ConfigError, match="legend_motif.required=true"):
+            build_codex_prompt(skill_cfg, "Night Groove")
+
+    def test_gemini_config_does_not_change_when_composition_rules_are_present(self):
+        cfg = parse_image_generation_config(
+            {
+                "image_generation": {
+                    "provider": "gemini",
+                    "gemini": {
+                        "model": "gemini-test",
+                        "composition_rules": {"allowed_actions": "reading"},
+                    },
+                }
+            }
+        )
+
+        assert cfg.gemini.model == "gemini-test"
+        assert not hasattr(cfg.gemini, "composition_rules")
+
     def test_supported_providers_declares_codex(self):
         """Given provider 設定の許容値
         When SUPPORTED_PROVIDERS を読む

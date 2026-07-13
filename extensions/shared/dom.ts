@@ -134,6 +134,80 @@ export interface ResolvedFields {
   title?: HTMLInputElement;
 }
 
+const LYRICS_MODE_NAMES = ["Write", "Prompt", "Instrumental"] as const;
+const CREATE_FORM_MODE_NAMES = ["Simple", "Advanced", "Sounds"] as const;
+
+function controlName(el: Element): string {
+  return (el.getAttribute("aria-label") ?? el.textContent ?? "").trim();
+}
+
+function selectedModeName(
+  groupRole: "radiogroup" | "tablist",
+  controlRole: "radio" | "tab",
+  selectedAttribute: "aria-checked" | "aria-selected",
+  modeNames: readonly string[],
+): string | null {
+  const expectedNames = new Map(
+    modeNames.map((name) => [name.toLowerCase(), name]),
+  );
+  const candidates = Array.from(
+    document.querySelectorAll(`[role="${groupRole}"]`),
+  ).flatMap((group) => {
+    const controls = Array.from(
+      group.querySelectorAll(`[role="${controlRole}"]`),
+    );
+    const names = controls.map(controlName);
+    if (
+      !modeNames.every((modeName) =>
+        names.some((name) => name.toLowerCase() === modeName.toLowerCase()),
+      )
+    ) {
+      return [];
+    }
+    const selected = controls.filter(
+      (control) => control.getAttribute(selectedAttribute) === "true",
+    );
+    if (selected.length !== 1) {
+      return [];
+    }
+    const canonicalName = expectedNames.get(
+      controlName(selected[0]).toLowerCase(),
+    );
+    return canonicalName ? [canonicalName] : [];
+  });
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+/** Lyrics 欄を表示するためにユーザーが確認すべき、現在の Suno UI 状態を返す。DOM は変更しない。 */
+export function diagnoseLyricsInputState(): string {
+  const lyricsMode = selectedModeName(
+    "radiogroup",
+    "radio",
+    "aria-checked",
+    LYRICS_MODE_NAMES,
+  );
+  if (lyricsMode === "Prompt" || lyricsMode === "Instrumental") {
+    return `Lyrics mode が ${lyricsMode} になっています。Write に切り替えてください。`;
+  }
+
+  const createFormMode = selectedModeName(
+    "tablist",
+    "tab",
+    "aria-selected",
+    CREATE_FORM_MODE_NAMES,
+  );
+  if (createFormMode === "Simple" || createFormMode === "Sounds") {
+    return `Create form mode が ${createFormMode} になっています。Advanced タブを選択してください。`;
+  }
+
+  return [
+    "Lyrics 欄を表示できる状態か確認してください:",
+    "- Advanced タブが選択されているか",
+    "- Lyrics mode が Write になっているか",
+    "- Suno の UI 言語が日本語になっていないか（英語推奨）",
+  ].join("\n");
+}
+
 export interface WaitForGenerationOptions {
   /** 中断フラグ。true を返した時点で待機を打ち切り resolve する。 */
   isAborted: () => boolean;
@@ -746,7 +820,7 @@ export function resolveFields(): ResolvedFields {
   ).filter(isVisible);
   if (areas.length === 0) {
     throw new FatalRunError(
-      "textarea が見つかりません。Suno の Custom Mode 画面を開いてください。",
+      `textarea が見つかりません。${diagnoseLyricsInputState()}`,
     );
   }
 

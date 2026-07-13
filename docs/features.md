@@ -1,6 +1,6 @@
 # 全 skill カタログ
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **46 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **48 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
@@ -38,6 +38,7 @@
 | /viewing-scene | 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義 |
 | /alignment-check | 音楽ムード × サムネ × タイトル訴求の整合性を監査 |
 | /thumbnail-compare | サムネをベンチマーク競合と並べてモバイル視認性（320px）を検証 |
+| /thumbnail-test | Studio のサムネ A/B テストを設計し、watch time share・勝敗・勝ちパターンをコレクション履歴へ記録 |
 
 ## 企画・コンテンツ生成
 
@@ -93,6 +94,7 @@ YouTube Analytics と動画本体の解析。
 | Skill | なにができるか |
 |---|---|
 | /benchmark | 競合チャンネルの最新動画データを取得し `docs/benchmarks/*.md` を更新 |
+| /thumbnail-research | 収集済み競合サムネイルの再生数上位群 / 下位群を比較し、勝ちパターンと `/thumbnail` 向け TTP 推奨事項を生成 |
 
 ## 配信インフラ
 
