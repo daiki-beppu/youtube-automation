@@ -84,12 +84,20 @@ def test_both_extensions_preserve_build_approval() -> None:
         assert _workspace_settings(name)["allowBuilds"] == {"esbuild": True, "spawn-sync": False}
 
 
-def test_ci_and_release_workflows_use_the_pinned_pnpm() -> None:
-    for path in (".github/workflows/extensions.yml", ".github/workflows/release-extensions.yml"):
-        versions = _pnpm_setup_versions(path)
+def test_extensions_ci_uses_the_nix_pnpm_instead_of_a_setup_action() -> None:
+    assert _pnpm_setup_versions(".github/workflows/extensions.yml") == []
 
-        assert versions
-        assert versions == [_WORKFLOW_PNPM] * len(versions)
+
+def test_local_pnpm_store_is_ignored_and_has_no_tracked_project_metadata() -> None:
+    assert ".pnpm-store/" in _read(".gitignore").splitlines()
+    assert not list((_REPO_ROOT / ".pnpm-store" / "v10" / "projects").glob("*"))
+
+
+def test_release_workflow_uses_the_pinned_pnpm_setup_action() -> None:
+    versions = _pnpm_setup_versions(".github/workflows/release-extensions.yml")
+
+    assert versions
+    assert versions == [_WORKFLOW_PNPM] * len(versions)
 
 
 def test_shared_docs_precede_commands_with_the_pinned_contract() -> None:
