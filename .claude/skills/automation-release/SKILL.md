@@ -42,6 +42,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 - Python 本体のバージョン管理は `pyproject.toml::version` を **唯一のソース** とする（`src/youtube_automation/__init__.py` は `importlib.metadata` 経由で自動追従）。配布は git+https + tag pin（PyPI 公開しない）
 - extension release のバージョン管理は `extensions/<name>/package.json::version` を **唯一のソース** とし、Python 本体とは完全独立（`docs/adr/0011-extension-distribution.md`）。extension release では `pyproject.toml` / `uv.lock` / `CHANGELOG.md` 昇格に一切触らない
 - extension release の場合、`references/verify-extensions.sh <name>` がexit 0を返すこと。non-zeroなら出力された原因を解消するまで停止する
+- extension release の install / build / zip は Nix extensions shell（Node 24 / pnpm 11.12.0）経由で実行する。ambient `node` / `pnpm` は使わず、`extensions/<name>/pnpm-workspace.yaml::allowBuilds` を有効に保つため `--ignore-workspace` も使わない
 
 ## Instructions
 
@@ -322,7 +323,9 @@ git checkout -b "release/ext-v${VER}"
 bash .claude/skills/automation-release/references/verify-extensions.sh <name>
 ```
 
-検証ロジックとPASS/FAIL条件は `references/verify-extensions.sh` が単一ソース。non-zeroならreleaseを中止する。
+このスクリプトは `.github/workflows/release-extensions.yml` と同じ Nix extensions shell（Node 24 / pnpm 11.12.0）を使い、`pnpm install --frozen-lockfile` → `pnpm build` → `pnpm zip` を実行する。ambient `node` / `pnpm` や `--ignore-workspace` を使わない。
+
+検証ロジックとPASS/FAIL条件は `references/verify-extensions.sh` が単一ソース。対象拡張の期待名 zip が唯一の1件であることと、対象 lockfile に差分がないことまで確認し、non-zeroならreleaseを中止する。
 
 **差分ガード（PASS/FAIL）**: verify 完了後、version 以外の意図しない差分が無いことを確認する:
 
