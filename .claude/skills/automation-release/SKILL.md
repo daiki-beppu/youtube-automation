@@ -3,6 +3,15 @@ name: automation-release
 description: "Use when 本リポジトリの新規リリースを作成するとき。「リリースして」「/automation-release」「suno-helper をリリースしたい」「ext-v0.2.2 を出したい」で発動。Python 本体（vX.Y.Z）と Chrome 拡張（ext-vX.Y.Z）を判定し prepare / publish に自動分岐。グローバル /release は使わない。下流追従は /automation-update、拡張のインストールは /ext-install"
 ---
 
+## Hard Gates / 完了条件
+
+- Phase R / Phase 0 / Phase E0 の状態判定を表示し、`AskUserQuestion` の「進行 / 中止」2択で承認されるまで branch作成・version変更・tag pushへ進まない。
+- 「前提」のいずれかが不成立なら、記載した復旧手順を案内して停止する。前提が満たされるまで後続Phaseへ進まない。
+- extension verify は repository root で `bash .claude/skills/automation-release/references/verify-extensions.sh [<name>]` を実行し、exit 0を必須とする。non-zeroならreleaseを停止する。
+- tag push前に tag名・対象commit SHA・対象版数を表示し、取消不能な外部反映操作であることを警告して `AskUserQuestion` の「実行 / 中止」2択で承認を得る。承認前にpushしない。
+- Python prepare完了 = version / CHANGELOG / uv.lockが同期したPRを作成済み。Python publish完了 = tagとGitHub Releaseを作成済み。
+- extension prepare完了 = package.jsonのversion差分だけを含むPRを作成し、verifyと差分ガードがPASS。extension publish完了 = merge commitへのtag、workflow成功、Releaseのzip asset 2件を確認済み。
+
 ## Overview
 
 まず依頼内容から **Python 本体 release**（`vX.Y.Z`）と **Chrome 拡張 release**（`ext-vX.Y.Z`）のどちらかを判定し（Phase R）、次にリポジトリ状態で prepare / publish に自動分岐する:
@@ -32,7 +41,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 - prepare（Python 本体）の場合、`CHANGELOG.md` の `[Unreleased]` セクションに内容が書き溜められていること。空の場合は prepare を中止する（各 PR 時点で書き溜める運用が前提）
 - Python 本体のバージョン管理は `pyproject.toml::version` を **唯一のソース** とする（`src/youtube_automation/__init__.py` は `importlib.metadata` 経由で自動追従）。配布は git+https + tag pin（PyPI 公開しない）
 - extension release のバージョン管理は `extensions/<name>/package.json::version` を **唯一のソース** とし、Python 本体とは完全独立（`docs/adr/0011-extension-distribution.md`）。extension release では `pyproject.toml` / `uv.lock` / `CHANGELOG.md` 昇格に一切触らない
-- extension release の場合、`pnpm` が利用可能であること（`pnpm -v` が 9 系。各拡張の `package.json::packageManager` の pin に従う）。無ければ導入を案内して停止する
+- extension release の場合、`references/verify-extensions.sh <name>` がexit 0を返すこと。non-zeroなら出力された原因を解消するまで停止する
 
 ## Instructions
 
@@ -145,21 +154,13 @@ fi
 
 #### 1-6. Chrome 拡張の release 前検証
 
-`suno-helper` / `distrokid-helper` は、各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` の build-script approval、CI と揃えた **pnpm 11.11.0** で検証する。ambient `pnpm` は使わず、両拡張で frozen install → build → zip を実行する:
+両拡張を単一ソースの検証スクリプトで検証し、exit 0を確認する:
 
 ```bash
-for name in suno-helper distrokid-helper; do
-  npx -y pnpm@11.11.0 -C "extensions/${name}" install --frozen-lockfile
-  npx -y pnpm@11.11.0 -C "extensions/${name}" build
-  npx -y pnpm@11.11.0 -C "extensions/${name}" zip
-  version=$(node -p "require('./extensions/${name}/package.json').version")
-  test -f "extensions/${name}/.output/${name}-${version}-chrome.zip" || exit 1
-done
-
-git diff --exit-code -- extensions/suno-helper/pnpm-lock.yaml extensions/distrokid-helper/pnpm-lock.yaml
+bash .claude/skills/automation-release/references/verify-extensions.sh
 ```
 
-zip の欠落または lockfile 差分があれば release を中止する。lockfile は検証で更新せず、差分の原因を解消してから pinned コマンドを再実行する。詳細なローカル検証契約は `extensions/README.md::pnpm バージョン契約` を参照する。
+検証ロジックとPASS/FAIL条件は `references/verify-extensions.sh` が単一ソース。non-zeroならreleaseを中止し、原因を解消してから再実行する。
 
 #### 1-7. commit
 
@@ -315,16 +316,13 @@ git checkout -b "release/ext-v${VER}"
 
 #### E1-3. local verify（release-extensions.yml と同一契約）
 
-`.github/workflows/release-extensions.yml` が tag push 時に実行するのと同じコマンド列（pnpm 9 / Node 22 / `--frozen-lockfile --ignore-workspace`）で install / build / zip を通す。拡張は `ni`/`nr` ではなく直接 `pnpm` を使う（`docs/development.md` の extensions 節）:
+対象拡張を単一ソースの検証スクリプトで検証し、exit 0を確認する:
 
 ```bash
-cd extensions/<name>
-pnpm install --frozen-lockfile --ignore-workspace
-pnpm zip    # wxt zip（内部で production build も実行される）
-ls .output/<name>-${VER}-chrome.zip   # → 存在すること（無ければ FAIL）
+bash .claude/skills/automation-release/references/verify-extensions.sh <name>
 ```
 
-`pnpm install --frozen-lockfile` が失敗する場合は `package.json` と `pnpm-lock.yaml` が乖離している（version bump 自体では乖離しない — 依存を触った別変更の混入が原因）。リリースを中断し、lockfile 同期の修正を別 PR で先に main へ入れてから prepare をやり直す。
+検証ロジックとPASS/FAIL条件は `references/verify-extensions.sh` が単一ソース。non-zeroならreleaseを中止する。
 
 **差分ガード（PASS/FAIL）**: verify 完了後、version 以外の意図しない差分が無いことを確認する:
 
@@ -337,8 +335,7 @@ git diff -- "extensions/<name>/package.json"
 
 FAIL（それ以外の差分が出た）場合は **停止**し、原因と復旧手順をユーザーに表示する:
 
-- 典型原因: `--frozen-lockfile` / `--ignore-workspace` を付けずに install した（`pnpm-lock.yaml` の書き換わり・root への lockfile / workspace 設定の混入）、`pnpm add` の誤実行、もう一方の拡張のファイルを誤編集
-- 復旧: `git checkout -- <file>` で意図しない差分を破棄 → E1-3 を正しいフラグで再実行。ビルド成果物（`.output/` / `.wxt/` / `node_modules/`）は `.gitignore` 済みのため `git status` に出ない（出た場合は `.gitignore` の破損を疑い停止する）
+- 原因と復旧手順は `references/extension-release-checklist.md` のケースA/Bに従う。
 
 #### E1-4. commit + push + PR 作成
 
@@ -400,10 +397,14 @@ gh run watch "${run_id}" --exit-status
 #### E2-4. Release asset の確認
 
 ```bash
-gh release view "ext-v${VER}" --json assets -q '.assets[].name'
+assets=$(gh release view "ext-v${VER}" --json assets -q '.assets[].name')
+zip_count=$(printf '%s\n' "${assets}" | awk '/\.zip$/{count++} END{print count+0}')
+test "${zip_count}" -eq 2
+test "$(printf '%s\n' "${assets}" | grep -Ec '^suno-helper-[0-9]+\.[0-9]+\.[0-9]+-chrome\.zip$')" -eq 1
+test "$(printf '%s\n' "${assets}" | grep -Ec '^distrokid-helper-[0-9]+\.[0-9]+\.[0-9]+-chrome\.zip$')" -eq 1
 ```
 
-`<name>-<VER>-chrome.zip`（bump した拡張の zip）が含まれることを確認する。workflow は両拡張を zip するため、もう一方の拡張の zip も現行版数で添付される（正常。例: `ext-v0.2.4` には `suno-helper-0.2.4-chrome.zip` と `distrokid-helper-0.2.1-chrome.zip` が両方付く）。
+PASSはzip assetが合計2件で、`suno-helper-<version>-chrome.zip` と `distrokid-helper-<version>-chrome.zip` が各1件の場合のみ。件数過不足・重複・別名zipがあれば停止する。
 
 #### E2-5. クリーンアップと案内
 
@@ -438,7 +439,7 @@ Asset: <name>-<VER>-chrome.zip
 - **`gh pr merge --delete-branch` の non-zero（worktree footgun）**: worktree 環境では remote merge 成功後の local checkout 後処理が `fatal: 'main' is already used by worktree ...` で失敗し non-zero になる。remote merge 失敗と誤認して merge を再実行しない。E2-1 の通り `gh pr view <N> --json state,mergeCommit` で remote state を確認し、`MERGED` なら tag push へ進む
 - **`pnpm install --frozen-lockfile` の失敗**: version bump 自体では lockfile は乖離しない。失敗＝依存差分の混入なので、リリースとは切り離して lockfile 同期の修正 PR を先に main へ入れる
 - **ext-v tag 系列と package.json 版数の乖離**: `ext-v*` は両拡張共通の単一系列のため、bump 対象の拡張によっては tag 版数と package.json 版数がずれる（前例: `ext-v0.2.3` で distrokid-helper 0.2.1）。Release asset 名は package.json 版数に従う（E0 の「tag 版数の決定」参照）
-- **Chrome 拡張の pnpm 版数乖離**: ambient pnpm の版は各環境で異なり得る。prepare Phase 1-6 の pnpm 11.11.0 固定コマンドで両拡張を検証し、期待 zip と lockfile 無差分を確認する
+- **Chrome 拡張の pnpm 版数乖離**: ambient pnpm の版は各環境で異なり得る。prepare Phase 1-6 の Nix extensions shell（Node 24 / pnpm 11.12.0）で両拡張を検証し、期待 zip と lockfile 無差分を確認する
 
 ## Rules
 
@@ -452,15 +453,16 @@ Asset: <name>-<VER>-chrome.zip
 - extension release は `extensions/<name>/package.json::version` のみを変更する。`pyproject.toml` / `uv.lock` / `CHANGELOG.md` 昇格には触らない（バージョン系列は完全独立、ADR 0011）
 - `release/ext-v<VER>` ブランチ命名は固定（Phase E0 の状態判定と E2-5 のクリーンアップが依存）
 - extension の commit / PR タイトルは `chore(<name>): ext-v<VER>` 固定（日本語 Conventional Commits 準拠 + 検索容易性）
-- extension の local verify は `.github/workflows/release-extensions.yml` と同じコマンド列（`pnpm install --frozen-lockfile --ignore-workspace` → `pnpm zip`）で行う。契約を変える場合は workflow 側と同時に更新する
+- extension のlocal verifyは `references/verify-extensions.sh` を単一ソースとし、workflow契約を変える場合は同スクリプトと同時に更新する
 - `ext-v<VER>` tag は PR の merge commit（`gh pr view <N> --json mergeCommit`）に打つ。tag `ext-v*` / asset `<name>-<version>-chrome.zip` の命名契約は `/ext-install` が読む側で依存しているため変えない
-- prepare 1-6 で **必ず** pnpm 11.11.0 を使って両 Chrome 拡張の frozen install / build / zip を実行し、期待 zip の存在と両 `pnpm-lock.yaml` の無差分を確認する
+- prepare 1-6 で **必ず** `references/verify-extensions.sh` を引数なしで実行し、exit 0を確認する
 
 ## Cross References
 
 - `references/prepare-checklist.md` — prepare 実行前のチェックリストとエッジケース
 - `references/publish-checklist.md` — publish 実行前のチェックリストとエッジケース
 - `references/extension-release-checklist.md` — extension prepare / publish 実行前のチェックリストとエッジケース
+- `references/verify-extensions.sh` — Nix toolchain / frozen install / build / zip / asset / lockfileを検証する単一ソース
 - `references/version-rules.md` — semver bump 判定ルール
 - `references/changelog-promotion.md` — CHANGELOG.md 昇格手順
 - `.github/workflows/release-extensions.yml` — extension の install / build / zip 契約（local verify はこれと同一コマンド列で実行する）

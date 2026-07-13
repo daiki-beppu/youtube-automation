@@ -23,29 +23,21 @@ extensions/
 
 ## pnpm バージョン契約
 
-両拡張（`suno-helper` / `distrokid-helper`）のローカル検証には **pnpm 11.11.0** を使う。各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` による依存 build script の承認、および CI を同じ契約に保つためである。
+両拡張（`suno-helper` / `distrokid-helper`）のローカル検証には Nix extensions shell の **Node 24 / pnpm 11.12.0** を使う。各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` による依存 build script の承認、および CI を同じ契約に保つためである。
 
-ambient `pnpm` の版は各環境で異なり得るため、再現可能な検証では版数を省略せず `npx -y pnpm@11.11.0` を使う。Corepack で各 `package.json::packageManager` の版を有効化済みの場合に限り、以下の `npx -y pnpm@11.11.0` は `pnpm` に置き換えられる。
+ambient `node` / `pnpm` の版は各環境で異なり得るため、再現可能な検証では必ず `nix develop .#extensions --command` 経由で実行する。`--ignore-workspace` は `pnpm-workspace.yaml::allowBuilds` を無効化するため使用しない。
 
-任意の `<name>`（`suno-helper` または `distrokid-helper`）を検証する標準コマンド:
-
-```bash
-npx -y pnpm@11.11.0 -C extensions/<name> install --frozen-lockfile
-npx -y pnpm@11.11.0 -C extensions/<name> build
-npx -y pnpm@11.11.0 -C extensions/<name> zip
-```
-
-`zip` は `extensions/<name>/.output/<name>-<version>-chrome.zip` を生成する。release 前は両拡張で上記 3 コマンドを実行し、成果物の存在と lockfile が不変であることを確認する:
+release 前検証は単一ソースのスクリプトをリポジトリ root から実行する。引数を省略すると両拡張、`<name>`（`suno-helper` または `distrokid-helper`）を渡すと対象だけを検証する:
 
 ```bash
-test -f extensions/suno-helper/.output/suno-helper-0.2.5-chrome.zip
-test -f extensions/distrokid-helper/.output/distrokid-helper-0.2.1-chrome.zip
-git diff --exit-code -- extensions/suno-helper/pnpm-lock.yaml extensions/distrokid-helper/pnpm-lock.yaml
+bash .claude/skills/automation-release/references/verify-extensions.sh [<name>]
 ```
+
+スクリプトは Node / pnpm の版、frozen install → build → zip、各拡張の期待名 zip が唯一の1件であること、lockfile 無差分を fail-loud に検証する。non-zero の場合は release を停止する。
 
 ## 開発フロー（suno-helper を例に）
 
-すべて `extensions/suno-helper/` で実行する。以下の `pnpm` は、前節に従って pnpm 11.11.0 を有効化済みの場合の省略形である。
+すべて `extensions/suno-helper/` で実行する。以下の `pnpm` は、前節に従って Nix extensions shell（Node 24 / pnpm 11.12.0）を有効化済みの場合の省略形である。
 
 | 目的 | コマンド |
 |---|---|

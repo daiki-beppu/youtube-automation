@@ -125,7 +125,7 @@ def test_skill_md_documents_wxt_unpacked_load_flow() -> None:
     """
     text = _read()
     for token in (
-        "npx -y pnpm@11.11.0 -C extensions/suno-helper build",
+        "nix develop .#extensions --command pnpm -C extensions/suno-helper build",
         ".output/chrome-mv3",
         "~/chrome-extensions/suno-helper",
     ):

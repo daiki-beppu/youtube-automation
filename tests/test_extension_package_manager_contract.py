@@ -11,9 +11,19 @@ import yaml
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _EXTENSION_NAMES = ("suno-helper", "distrokid-helper")
 _NIX_PNPM = "11.12.0"
-_WORKFLOW_PNPM = "11.12.0"
-_DOCUMENTED_PNPM = "11.11.0"
-_PINNED_COMMAND = f"npx -y pnpm@{_DOCUMENTED_PNPM}"
+_LEGACY_PNPM = "11.11.0"
+_LEGACY_NPX_COMMAND = f"npx -y pnpm@{_LEGACY_PNPM}"
+_NIX_COMMAND = "nix develop .#extensions --command pnpm"
+_VERIFY_SCRIPT_PATH = ".claude/skills/automation-release/references/verify-extensions.sh"
+_CURRENT_CONTRACT_DOCS = (
+    "extensions/README.md",
+    "extensions/suno-helper/README.md",
+    "extensions/distrokid-helper/README.md",
+    "docs/development.md",
+    ".claude/skills/suno/SKILL.md",
+    ".claude/skills/automation-release/SKILL.md",
+    ".claude/skills/automation-release/references/extension-release-checklist.md",
+)
 
 
 def _read(path: str) -> str:
@@ -93,11 +103,8 @@ def test_local_pnpm_store_is_ignored_and_has_no_tracked_project_metadata() -> No
     assert not list((_REPO_ROOT / ".pnpm-store" / "v10" / "projects").glob("*"))
 
 
-def test_release_workflow_uses_the_pinned_pnpm_setup_action() -> None:
-    versions = _pnpm_setup_versions(".github/workflows/release-extensions.yml")
-
-    assert versions
-    assert versions == [_WORKFLOW_PNPM] * len(versions)
+def test_release_workflow_uses_the_nix_pnpm_instead_of_a_setup_action() -> None:
+    assert _pnpm_setup_versions(".github/workflows/release-extensions.yml") == []
 
 
 def test_shared_docs_precede_commands_with_the_pinned_contract() -> None:
@@ -106,47 +113,90 @@ def test_shared_docs_precede_commands_with_the_pinned_contract() -> None:
 
     assert "## pnpm バージョン契約" in extensions_readme
     for name in _EXTENSION_NAMES:
-        package = json.loads(_read(f"extensions/{name}/package.json"))
-
         assert name in extensions_readme
-        assert f"{name}-{package['version']}-chrome.zip" in extensions_readme
-    for command in ("install --frozen-lockfile", "build", "zip"):
-        assert f"{_PINNED_COMMAND} -C extensions/<name> {command}" in extensions_readme
-    assert _PINNED_COMMAND in development_doc
+    assert "Node 24 / pnpm 11.12.0" in extensions_readme
+    assert f"bash {_VERIFY_SCRIPT_PATH} [<name>]" in extensions_readme
+    assert "期待名 zip が唯一の1件" in extensions_readme
+    assert "Node 24 / pnpm 11.12.0" in development_doc
+    assert "nix develop .#extensions --command pnpm" in development_doc
+    assert "`--ignore-workspace`" in extensions_readme
+    assert "`--ignore-workspace`" in development_doc
+    assert _LEGACY_PNPM not in extensions_readme
+    assert _LEGACY_PNPM not in development_doc
+    assert _LEGACY_NPX_COMMAND not in extensions_readme
+    assert _LEGACY_NPX_COMMAND not in development_doc
     assert "extensions/README.md::pnpm バージョン契約" in development_doc
 
 
-def test_each_extension_readme_uses_the_pinned_contract() -> None:
-    unpinned_command = re.compile(
-        rf"(?<!@{re.escape(_DOCUMENTED_PNPM)} )\bpnpm (?:install|dev|build|zip|compile|test|exec)"
-    )
+def test_each_extension_readme_uses_the_nix_extensions_shell() -> None:
     for name in _EXTENSION_NAMES:
         readme = _read(f"extensions/{name}/README.md")
 
-        assert _PINNED_COMMAND in readme
+        assert "Node 24 / pnpm 11.12.0" in readme
         assert "extensions/README.md::pnpm バージョン契約" in readme
-        assert f"{_PINNED_COMMAND} install --frozen-lockfile" in readme
-        assert f"{_PINNED_COMMAND} build" in readme
-        assert f"{_PINNED_COMMAND} zip" in readme
-        assert unpinned_command.search(readme) is None
+        for command in ("install --frozen-lockfile", "build", "zip"):
+            assert f"{_NIX_COMMAND} -C extensions/{name} {command}" in readme
+        assert _LEGACY_PNPM not in readme
+        assert _LEGACY_NPX_COMMAND not in readme
 
 
-def test_suno_skill_uses_the_pinned_extension_build_path() -> None:
+def test_suno_skill_uses_the_nix_extensions_shell() -> None:
     suno_skill = _read(".claude/skills/suno/SKILL.md")
 
-    assert f"{_PINNED_COMMAND} -C extensions/suno-helper install --frozen-lockfile" in suno_skill
-    assert f"{_PINNED_COMMAND} -C extensions/suno-helper build" in suno_skill
+    assert "Nix extensions shell（Node 24 / pnpm 11.12.0）" in suno_skill
+    assert f"{_NIX_COMMAND} -C extensions/suno-helper install --frozen-lockfile" in suno_skill
+    assert f"{_NIX_COMMAND} -C extensions/suno-helper build" in suno_skill
     assert "extensions/README.md::pnpm バージョン契約" in suno_skill
-    assert "`pnpm install && pnpm build`" not in suno_skill
+    assert _LEGACY_PNPM not in suno_skill
+    assert _LEGACY_NPX_COMMAND not in suno_skill
 
 
-def test_release_skill_verifies_both_zips_and_unchanged_lockfiles() -> None:
+def test_current_extension_contract_docs_have_no_legacy_pnpm_command() -> None:
+    for path in _CURRENT_CONTRACT_DOCS:
+        text = _read(path)
+
+        assert _LEGACY_PNPM not in text, path
+        assert "npx -y pnpm@" not in text, path
+
+
+def test_release_skill_delegates_extension_verification_to_single_source() -> None:
+    release_skill = _read(".claude/skills/automation-release/SKILL.md")
+    release_checklist = _read(".claude/skills/automation-release/references/extension-release-checklist.md")
+    verify_script = _read(_VERIFY_SCRIPT_PATH)
+    changelog = _read("CHANGELOG.md")
+
+    invocation = f"bash {_VERIFY_SCRIPT_PATH}"
+    assert invocation in release_skill
+    assert invocation in release_checklist
+    assert "nix develop .#extensions --command pnpm -C" not in release_skill
+    assert "nix develop .#extensions --command pnpm -C" not in release_checklist
+    assert "extension_names=(suno-helper distrokid-helper)" in verify_script
+    for command in ("install --frozen-lockfile", "build", "zip"):
+        assert f'nix develop .#extensions --command pnpm -C "${{extension_dir}}" {command}' in verify_script
+    assert "node_version} != v24.*" in verify_script
+    assert "pnpm_version} != 11.12.0" in verify_script
+    assert "zip_path=" in verify_script
+    assert 'git diff --exit-code -- "${lockfiles[@]}"' in verify_script
+    assert "--ignore-workspace" not in verify_script
+    assert "`pnpm -v` が 9 系" not in release_skill
+    assert "Nix extensions shell 契約（Node 24 / pnpm 11.12.0" in changelog
+    assert "`pnpm install --frozen-lockfile` → `pnpm zip`" in changelog
+
+
+def test_release_skill_places_hard_gates_and_completion_criteria_in_first_60_lines() -> None:
+    first_60_lines = "\n".join(_read(".claude/skills/automation-release/SKILL.md").splitlines()[:60])
+
+    assert "## Hard Gates / 完了条件" in first_60_lines
+    assert "non-zeroならreleaseを停止" in first_60_lines
+    assert "承認前にpushしない" in first_60_lines
+    assert "extension prepare完了" in first_60_lines
+    assert "extension publish完了" in first_60_lines
+
+
+def test_release_skill_requires_exactly_two_named_zip_assets() -> None:
     release_skill = _read(".claude/skills/automation-release/SKILL.md")
 
-    assert "for name in suno-helper distrokid-helper" in release_skill
-    for command in ("install --frozen-lockfile", "build", "zip"):
-        assert f'{_PINNED_COMMAND} -C "extensions/${{name}}" {command}' in release_skill
-    assert ".output/${name}-${version}-chrome.zip" in release_skill
-    assert (
-        "git diff --exit-code -- extensions/suno-helper/pnpm-lock.yaml extensions/distrokid-helper/pnpm-lock.yaml"
-    ) in release_skill
+    assert 'test "${zip_count}" -eq 2' in release_skill
+    assert "^suno-helper-[0-9]+\\.[0-9]+\\.[0-9]+-chrome\\.zip$" in release_skill
+    assert "^distrokid-helper-[0-9]+\\.[0-9]+\\.[0-9]+-chrome\\.zip$" in release_skill
+    assert "件数過不足・重複・別名zipがあれば停止" in release_skill
