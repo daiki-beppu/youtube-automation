@@ -7,8 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- fix: Codex thumbnail prompts now include configured composition rules
-
 ### Added
 
 - `docs(feedback)`: `/feedback` に、`status="recorded"` の未還流 entry を一覧・選択し、open issue の類似タイトル照合とユーザー承認を経て `daiki-beppu/youtube-automation` へ `feedback` ラベル付き issue を起票する還流モードを追加した。成功した entry は `status="filed"` と `issue_url` を記録して候補から除外し、二重起票を防ぐ。起票本文テンプレート、発生チャンネル掲載の個別確認、起票直前の機密情報再マスクも明記した（#1829）。
@@ -108,6 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(thumbnail)`: Codex の thumbnail prompt に設定済み composition rules を含めるよう修正した（#1727）。
 - `fix(suno-helper)`: Lyrics 欄の不在・注入失敗時に、現行 Suno UI の ARIA 選択状態を read-only で診断し、Prompt / Instrumental なら Write、Simple / Sounds なら Advanced への切り替えを案内するよう改善した。状態を特定できない場合は Advanced / Write / 英語 UI 推奨のチェックリストを表示する（#1899）。
 - `fix(comments-reply)`: 同一スレッド内で対象コメントより後に投稿されたオーナー返信を検出し、Studio 等で手動返信済みのコメントへの重複返信を防止した。オーナー返信後の視聴者フォローアップは引き続き候補に含める（#1895）
 - `fix(suno-helper)`: Lexical Lyrics 欄で paste 反映検証が失敗した場合に inject retry 後 beforeinput fallback を試し、全方式が失敗したときは entry 名・歌詞長・差分付き診断を出して停止するようにした（#1676）。
