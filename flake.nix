@@ -16,8 +16,32 @@
       system:
       let
         pkgs = import nixpkgs { inherit system; };
+        pnpmLatest = pkgs.stdenvNoCC.mkDerivation {
+          pname = "pnpm";
+          version = "11.12.0";
+          src = pkgs.fetchurl {
+            url = "https://registry.npmjs.org/pnpm/-/pnpm-11.12.0.tgz";
+            hash = "sha256-HCvxCNdnuXY1PCwemtFNJAzruZ1L702Tp/Gp0Q2luBc=";
+          };
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          installPhase = ''
+            runHook preInstall
+            mkdir -p "$out/lib/pnpm" "$out/bin"
+            cp -R . "$out/lib/pnpm/"
+            makeWrapper "${pkgs.nodejs_24}/bin/node" "$out/bin/pnpm" \
+              --add-flags "$out/lib/pnpm/bin/pnpm.cjs"
+            runHook postInstall
+          '';
+        };
       in
       {
+        devShells.extensions = pkgs.mkShell {
+          packages = with pkgs; [
+            nodejs_24
+            pnpmLatest
+          ];
+        };
+
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             python311
