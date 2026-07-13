@@ -53,9 +53,7 @@ def project_copy(tmp_path: Path) -> Path:
 
 
 @pytest.mark.skipif(not _nix_is_available(), reason="a usable Nix daemon is required")
-def test_nix_develop_syncs_missing_environment_and_is_quiet_on_reentry(
-    project_copy: Path, tmp_path: Path
-) -> None:
+def test_nix_develop_syncs_missing_environment_and_is_quiet_on_reentry(project_copy: Path, tmp_path: Path) -> None:
     environment = tmp_path / "environment"
 
     first = _nix_develop(
@@ -78,9 +76,7 @@ def test_nix_develop_syncs_missing_environment_and_is_quiet_on_reentry(
 
 
 @pytest.mark.skipif(not _nix_is_available(), reason="a usable Nix daemon is required")
-def test_nix_develop_warns_when_sync_fails_but_enters_shell(
-    project_copy: Path, tmp_path: Path
-) -> None:
+def test_nix_develop_warns_when_sync_fails_but_enters_shell(project_copy: Path, tmp_path: Path) -> None:
     environment = tmp_path / "missing-parent" / "environment"
     environment.parent.mkdir()
     environment.parent.chmod(0o500)
