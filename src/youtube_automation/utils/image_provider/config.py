@@ -10,6 +10,7 @@ codex shell 経路を保持する `ImageGenerationConfig` を構築する。
 
 from __future__ import annotations
 
+import json
 import warnings
 from dataclasses import dataclass, replace
 from typing import Any, Literal
@@ -104,6 +105,7 @@ class CodexConfig:
     """Codex shell 経路で使う prompt 設定。"""
 
     default_prompt_template: str = ""
+    composition_rules: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -180,7 +182,13 @@ def _build_from_new_namespace(section: dict[str, Any]) -> ImageGenerationConfig:
         gemini_cli_cfg = _build_gemini_cli(section.get("gemini_cli") or {}, generation_mode=generation_mode)
         return ImageGenerationConfig(provider="gemini_cli", gemini_cli=gemini_cli_cfg)
 
-    codex_cfg = _build_codex(section.get("codex")) if "codex" in section else CodexConfig()
+    gemini_section = section.get("gemini")
+    composition_rules = _composition_rules_from_gemini(gemini_section)
+    codex_cfg = (
+        _build_codex(section.get("codex"), composition_rules=composition_rules)
+        if "codex" in section
+        else CodexConfig(composition_rules=composition_rules)
+    )
     return ImageGenerationConfig(provider="codex", gemini=None, openai=None, codex=codex_cfg)
 
 
@@ -220,7 +228,7 @@ def _build_openai(d: dict[str, Any]) -> OpenAIConfig:
     )
 
 
-def _build_codex(d: Any) -> CodexConfig:
+def _build_codex(d: Any, *, composition_rules: dict[str, Any] | None) -> CodexConfig:
     if not isinstance(d, dict):
         raise ConfigError("image_generation.codex は mapping で指定してください")
     template = d.get("default_prompt_template", "")
@@ -228,7 +236,16 @@ def _build_codex(d: Any) -> CodexConfig:
         raise ConfigError("image_generation.codex.default_prompt_template は文字列で指定してください")
     if template:
         template = _validate_codex_prompt_template(template)
-    return CodexConfig(default_prompt_template=template)
+    return CodexConfig(default_prompt_template=template, composition_rules=composition_rules)
+
+
+def _composition_rules_from_gemini(section: Any) -> dict[str, Any] | None:
+    if not isinstance(section, dict) or "composition_rules" not in section:
+        return None
+    rules = section["composition_rules"]
+    if not isinstance(rules, dict):
+        raise ConfigError("image_generation.gemini.composition_rules は mapping で指定してください")
+    return rules
 
 
 def _validate_codex_prompt_template(template: Any) -> str:
@@ -246,12 +263,35 @@ def render_codex_prompt(template: str, title: str) -> str:
     return _validate_codex_prompt_template(template).replace("{title}", title)
 
 
+def _render_codex_composition_rules(rules: dict[str, Any] | None) -> str:
+    if not rules:
+        return ""
+    rendered = json.dumps(rules, ensure_ascii=False, sort_keys=True)
+    return f"\n\nComposition rules (must follow; these override the reference subject):\n{rendered}"
+
+
+def _validate_required_legend_motif(rules: dict[str, Any] | None) -> None:
+    if not rules:
+        return
+    legend_motif = rules.get("legend_motif")
+    if not isinstance(legend_motif, dict) or legend_motif.get("required") is not True:
+        return
+    description = legend_motif.get("description")
+    if not isinstance(description, str) or not description.strip():
+        raise ConfigError(
+            "image_generation.gemini.composition_rules.legend_motif.required=true の場合、"
+            "被写体を指定する空でない description が必要です"
+        )
+
+
 def build_codex_prompt(skill_cfg: dict[str, Any], title: str) -> str:
     """thumbnail skill-config から Codex 用 prompt を生成する。"""
     cfg = parse_image_generation_config(skill_cfg)
     if cfg.provider != "codex" or cfg.codex is None:
         raise ConfigError("image_generation.provider=codex の設定で実行してください")
-    return render_codex_prompt(cfg.codex.default_prompt_template, title)
+    _validate_required_legend_motif(cfg.codex.composition_rules)
+    prompt = render_codex_prompt(cfg.codex.default_prompt_template, title)
+    return prompt + _render_codex_composition_rules(cfg.codex.composition_rules)
 
 
 def replace_model(cfg: ImageGenerationConfig, model: str) -> ImageGenerationConfig:
