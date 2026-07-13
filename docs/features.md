@@ -38,6 +38,7 @@
 | /viewing-scene | 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義 |
 | /alignment-check | 音楽ムード × サムネ × タイトル訴求の整合性を監査 |
 | /thumbnail-compare | サムネをベンチマーク競合と並べてモバイル視認性（320px）を検証 |
+| /thumbnail-test | Studio のサムネ A/B テストを設計し、watch time share・勝敗・勝ちパターンをコレクション履歴へ記録 |
 
 ## 企画・コンテンツ生成
 
