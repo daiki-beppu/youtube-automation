@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(extensions)`: extension のローカル install / build / zip / Vitest / Playwright / 成果物確認と `/suno` の初回 build 導線を、CI と同じ Nix extensions shell（Node 24 / pnpm 11.12.0）入口へ統一した（#1957）。ambient pnpm / 旧 npx pnpm 導線の不在を文書契約テストで固定
 - `docs(suno-helper)`: Suno UI の旧「Custom Mode」および「Instrumental ON/OFF」表記を、現行の Advanced タブと Lyrics mode（Write / Instrumental）の用語へ更新した。operator 手順、拡張 description、保守用コメントを対象とし、実行時のセレクタ・エラーメッセージ・テスト期待値は変更していない（#1900）
 
 ### Fixed
