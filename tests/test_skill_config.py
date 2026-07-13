@@ -71,6 +71,21 @@ def test_channel_override_merged(tmp_path, monkeypatch):
     assert "model" in gemini_block
 
 
+def test_thumbnail_dedup_window_can_be_overridden(tmp_path, monkeypatch):
+    """thumbnail の default 値と channel override が実行設定へマージされること。"""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text(
+        yaml.safe_dump({"image_generation": {"gemini": {"reference_images": {"dedup_recent_collections": 2}}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
+
+    assert cfg["image_generation"]["gemini"]["reference_images"]["dedup_recent_collections"] == 2
+
+
 def test_load_skill_config_masterup_json_override_wins_over_yaml(tmp_path, monkeypatch):
     """masterup は JSON override が YAML override より優先されること."""
     channel_dir = tmp_path / "ch"

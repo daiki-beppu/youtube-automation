@@ -10,6 +10,7 @@ _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _IDEATE_SKILL_MD = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
 _IDEATE_DEFAULT_CONFIG = _SKILLS_DIR / "collection-ideate" / "config.default.yaml"
 _IDEATE_LIFECYCLE_MD = _SKILLS_DIR / "collection-ideate" / "references" / "collection-lifecycle.md"
+_IDEATE_TTP_SELECTOR = _SKILLS_DIR / "collection-ideate" / "references" / "select-ttp-references.py"
 _LYRIA_DEFAULT_CONFIG = _SKILLS_DIR / "lyria" / "config.default.yaml"
 _LYRIA_SKILL_MD = _SKILLS_DIR / "lyria" / "SKILL.md"
 _SHORT_THUMBNAIL_SKILL_MD = _SKILLS_DIR / "short-thumbnail" / "SKILL.md"
@@ -199,12 +200,14 @@ def test_collection_ideate_parallel_validates_unique_single_channel_references()
     Then duplicate / mixed channel は生成前 validation に合流する。
     """
     block = _phase_4_4_parallel_block(_read(_IDEATE_SKILL_MD))
+    selector = _read(_IDEATE_TTP_SELECTOR)
 
-    assert "plan_ttp_reference_assignments" in block
-    assert "benchmark_root=channel_dir() / 'data' / 'thumbnail_compare' / 'benchmark'" in block
+    assert ".claude/skills/collection-ideate/references/select-ttp-references.py" in block
     assert "VALIDATED_REFS" in block
     assert "CANDIDATE_COUNT" in block
-    assert "candidate_count = int(sys.argv[1])" in block
+    assert "plan_ttp_reference_assignments" in selector
+    assert 'benchmark_root=root / "data" / "thumbnail_compare" / "benchmark"' in selector
+    assert "candidate_count = int(sys.argv[1])" in selector
 
 
 def test_collection_ideate_api_parallel_uses_one_reference_per_candidate() -> None:
