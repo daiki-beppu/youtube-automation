@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   abortableSleep,
   detectRecaptcha,
+  diagnoseLyricsInputState,
   isQueueLimitErrorVisible,
   QUEUE_LIMIT_ERROR_SELECTOR,
   resolveAdvancedFields,
@@ -105,8 +106,117 @@ function addLexicalLyrics(
   return div;
 }
 
+function addModeGroup(
+  groupRole: "radiogroup" | "tablist",
+  controlRole: "radio" | "tab",
+  selectedAttribute: "aria-checked" | "aria-selected",
+  names: readonly string[],
+  selectedName: string,
+  groupLabel: string,
+): void {
+  const group = document.createElement("div");
+  group.setAttribute("role", groupRole);
+  group.setAttribute("aria-label", groupLabel);
+  for (const name of names) {
+    const control = document.createElement("button");
+    control.setAttribute("role", controlRole);
+    control.setAttribute(selectedAttribute, String(name === selectedName));
+    control.textContent = name;
+    group.appendChild(control);
+  }
+  document.body.appendChild(group);
+}
+
+function addLyricsMode(selectedName: "Write" | "Prompt" | "Instrumental", groupLabel = "歌詞モード"): void {
+  addModeGroup("radiogroup", "radio", "aria-checked", ["Write", "Prompt", "Instrumental"], selectedName, groupLabel);
+}
+
+function addCreateFormMode(selectedName: "Simple" | "Advanced" | "Sounds", groupLabel = "作成フォームモード"): void {
+  addModeGroup("tablist", "tab", "aria-selected", ["Simple", "Advanced", "Sounds"], selectedName, groupLabel);
+}
+
 beforeEach(() => {
   document.body.innerHTML = "";
+});
+
+describe("diagnoseLyricsInputState: 現行 Suno UI の ARIA 状態診断 (#1899)", () => {
+  it.each(["Prompt", "Instrumental"] as const)(
+    "Given Lyrics mode が %s When 診断する Then 選択中モードと Write への切り替えを案内する",
+    (selectedName) => {
+      addLyricsMode(selectedName);
+      addCreateFormMode("Advanced");
+
+      expect(diagnoseLyricsInputState()).toBe(
+        `Lyrics mode が ${selectedName} になっています。Write に切り替えてください。`,
+      );
+    },
+  );
+
+  it.each(["Simple", "Sounds"] as const)(
+    "Given Create form mode が %s When 診断する Then Advanced タブを案内する",
+    (selectedName) => {
+      addLyricsMode("Write");
+      addCreateFormMode(selectedName);
+
+      expect(diagnoseLyricsInputState()).toBe(
+        `Create form mode が ${selectedName} になっています。Advanced タブを選択してください。`,
+      );
+    },
+  );
+
+  it("Given Lyrics mode と Create form mode の両方が不正 When 診断する Then Lyrics mode を優先する", () => {
+    addLyricsMode("Instrumental");
+    addCreateFormMode("Simple");
+
+    expect(diagnoseLyricsInputState()).toMatch(/^Lyrics mode が Instrumental/);
+  });
+
+  it("Given group の aria-label が英語名でない When 診断する Then role 構造と選択属性で状態を特定する", () => {
+    addLyricsMode("Prompt", "翻訳されたラベル");
+    addCreateFormMode("Advanced", "別の翻訳されたラベル");
+
+    expect(diagnoseLyricsInputState()).toContain("Lyrics mode が Prompt");
+  });
+
+  it.each([
+    ["group 不在", (): void => undefined],
+    [
+      "選択状態不明",
+      (): void =>
+        addModeGroup("radiogroup", "radio", "aria-checked", ["Write", "Prompt", "Instrumental"], "", "歌詞モード"),
+    ],
+    [
+      "Advanced + Write",
+      (): void => {
+        addLyricsMode("Write");
+        addCreateFormMode("Advanced");
+      },
+    ],
+  ] as const)("Given %s When 診断する Then 3 項目の fallback チェックリストを返す", (_label, arrange) => {
+    arrange();
+
+    const message = diagnoseLyricsInputState();
+    expect(message).toContain("Advanced タブが選択されているか");
+    expect(message).toContain("Lyrics mode が Write になっているか");
+    expect(message).toContain("UI 言語が日本語になっていないか（英語推奨）");
+  });
+
+  it("Given ARIA 状態を持つ DOM When 診断する Then DOM を変更しない", () => {
+    addLyricsMode("Prompt");
+    addCreateFormMode("Simple");
+    const before = document.body.innerHTML;
+
+    diagnoseLyricsInputState();
+
+    expect(document.body.innerHTML).toBe(before);
+  });
+
+  it("Given textarea 不在かつ Sounds 選択 When resolveFields Then Advanced 案内つきで fail-loud する", () => {
+    addLyricsMode("Write");
+    addCreateFormMode("Sounds");
+
+    expect(() => resolveFields()).toThrow("Advanced タブを選択してください");
+  });
 });
 
 describe("setNativeValue: React 互換の値注入", () => {

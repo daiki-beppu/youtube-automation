@@ -224,6 +224,34 @@ function makeTextarea(testId: string | null): HTMLTextAreaElement {
   return textarea;
 }
 
+function makeSelectedMode(
+  groupRole: "radiogroup" | "tablist",
+  controlRole: "radio" | "tab",
+  selectedAttribute: "aria-checked" | "aria-selected",
+  names: readonly string[],
+  selectedName: string,
+): void {
+  const group = document.createElement("div");
+  group.setAttribute("role", groupRole);
+  group.setAttribute("aria-label", "翻訳されたグループ名");
+  for (const name of names) {
+    const control = document.createElement("button");
+    control.setAttribute("role", controlRole);
+    control.setAttribute(selectedAttribute, String(name === selectedName));
+    control.textContent = name;
+    group.appendChild(control);
+  }
+  document.body.appendChild(group);
+}
+
+function makeLyricsMode(selectedName: "Write" | "Prompt" | "Instrumental"): void {
+  makeSelectedMode("radiogroup", "radio", "aria-checked", ["Write", "Prompt", "Instrumental"], selectedName);
+}
+
+function makeCreateFormMode(selectedName: "Simple" | "Advanced" | "Sounds"): void {
+  makeSelectedMode("tablist", "tab", "aria-selected", ["Simple", "Advanced", "Sounds"], selectedName);
+}
+
 function makeGenerateButton(): HTMLButtonElement {
   const button = document.createElement("button");
   button.textContent = "Create";
@@ -680,6 +708,108 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     },
   );
 
+  it.each([
+    [
+      "Lyrics mode = Prompt",
+      () => {
+        makeTextarea(null);
+        makeLyricsMode("Prompt");
+        makeCreateFormMode("Advanced");
+      },
+      "Lyrics mode が Prompt になっています。Write に切り替えてください。",
+    ],
+    [
+      "Create form mode = Simple",
+      () => {
+        makeLyricsMode("Write");
+        makeCreateFormMode("Simple");
+      },
+      "Advanced タブを選択してください。",
+    ],
+  ] as const)(
+    "Given %s で非空 lyrics When run を受ける Then 状態診断つき ERROR で停止する",
+    async (_label, arrange, expected) => {
+      makeViewButton("Newest ▼");
+      makeViewButton("Grid");
+      arrange();
+      await loadContentScript();
+      const runHandler = getRunHandler();
+      const entries = [{ name: "vocal", style: "neo soul", lyrics: "sing this" }];
+      harness.runEntryWithRetry.mockImplementationOnce(async (options: RunEntryWithRetryOptions) => {
+        try {
+          await options.attempt();
+          return { outcome: "ok" };
+        } catch (error) {
+          return options.isFatal(error) ? { outcome: "fatal", error } : { outcome: "failed", error };
+        }
+      });
+
+      expect(runHandler({ data: makeRunPayload(entries) })).toEqual({ ok: true });
+
+      await vi.waitFor(() =>
+        expect(progressPayloads()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              phase: PHASE.ERROR,
+              message: expect.stringContaining(expected),
+            }),
+          ]),
+        ),
+      );
+      expect(harness.feedPollerStop).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("Given ARIA 状態を特定できず Lyrics 欄がない When run を受ける Then 3 項目 checklist つき ERROR で停止する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = [{ name: "vocal", style: "neo soul", lyrics: "sing this" }];
+    harness.runEntryWithRetry.mockImplementationOnce(async (options: RunEntryWithRetryOptions) => {
+      try {
+        await options.attempt();
+        return { outcome: "ok" };
+      } catch (error) {
+        return options.isFatal(error) ? { outcome: "fatal", error } : { outcome: "failed", error };
+      }
+    });
+
+    expect(runHandler({ data: makeRunPayload(entries) })).toEqual({ ok: true });
+
+    await vi.waitFor(() => {
+      const errorMessage = progressPayloads().find(
+        (payload): payload is { phase: string; message: string } =>
+          typeof payload === "object" && payload !== null && "phase" in payload && payload.phase === PHASE.ERROR,
+      )?.message;
+      expect(errorMessage).toContain("Advanced タブが選択されているか");
+      expect(errorMessage).toContain("Lyrics mode が Write になっているか");
+      expect(errorMessage).toContain("UI 言語が日本語になっていないか（英語推奨）");
+    });
+    expect(harness.feedPollerStop).toHaveBeenCalledOnce();
+  });
+
+  it("Given Lyrics 欄がなく entry.lyrics が空 When run を受ける Then従来どおり停止せず Generate する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    const onGenerate = vi.fn();
+    makeGenerateButtonWithClickObserver(onGenerate);
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = [{ name: "instrumental", style: "cinematic", lyrics: "" }];
+
+    expect(runHandler({ data: makeRunPayload(entries) })).toEqual({ ok: true });
+
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ phase: PHASE.FINISHED, total: 1 })]),
+    );
+    expect(onGenerate).toHaveBeenCalledOnce();
+  });
+
   it("Given Lexical lyrics editor When run を受ける Then actual run handler が paste 完了後に Generate する", async () => {
     makeViewButton("Newest ▼");
     makeViewButton("Grid");
@@ -736,6 +866,8 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     makeViewButton("Grid");
     makeTextarea(null);
     const lyrics = makeUnresponsiveLexicalLyrics("old lyrics");
+    makeLyricsMode("Write");
+    makeCreateFormMode("Advanced");
     const onGenerate = vi.fn();
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     makeGenerateButtonWithClickObserver(onGenerate);
@@ -769,6 +901,15 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     );
     expect(onGenerate).not.toHaveBeenCalled();
     expect(lyrics.textContent).toBe("old lyrics");
+    const errorMessage = (
+      progressPayloads().find(
+        (payload): payload is { phase: string; message: string } =>
+          typeof payload === "object" && payload !== null && "phase" in payload && payload.phase === PHASE.ERROR,
+      ) as { message: string }
+    ).message;
+    expect(errorMessage).toContain("Advanced タブが選択されているか");
+    expect(errorMessage).toContain("Lyrics mode が Write になっているか");
+    expect(errorMessage).toContain("UI 言語が日本語になっていないか（英語推奨）");
     expect(consoleError).toHaveBeenCalledWith(
       "[suno-helper] Lyrics 欄への全注入方式が失敗しました",
       expect.objectContaining({
