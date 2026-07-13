@@ -54,7 +54,7 @@ _RELEASE_BUILD_PARALLEL_STEPS = {
     "Build and zip suno-helper": ("extensions/suno-helper", "pnpm zip"),
     "Build and zip distrokid-helper": ("extensions/distrokid-helper", "pnpm zip"),
 }
-_RELEASE_NIX_INSTALL_ACTION = "cachix/install-nix-action@v30"
+_RELEASE_NIX_INSTALL_ACTION = "DeterminateSystems/nix-installer-action@main"
 _RELEASE_EXTENSIONS_SHELL_COMMAND = "nix develop ../..#extensions --command bash -euo pipefail"
 _SHELL_BACKGROUND_OPERATOR = re.compile(r"(?<!&)&(?!&)")
 

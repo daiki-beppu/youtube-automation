@@ -16,7 +16,7 @@ _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "release-extensions.yml"
 
 _RELEASE_TAG_GLOB = "ext-v*"
 _GH_RELEASE_ACTION = "softprops/action-gh-release@v2"
-_NIX_INSTALL_ACTION = "cachix/install-nix-action@v30"
+_NIX_INSTALL_ACTION = "DeterminateSystems/nix-installer-action@main"
 _EXTENSIONS_SHELL_COMMAND = "nix develop ../..#extensions --command bash -euo pipefail"
 _EXTENSIONS = ("suno-helper", "distrokid-helper")
 _ZIP_GLOBS = tuple(f"extensions/{name}/.output/*.zip" for name in _EXTENSIONS)

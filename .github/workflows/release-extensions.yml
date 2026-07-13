@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v30
+      - uses: DeterminateSystems/nix-installer-action@main
       - parallel:
           - name: Build and zip suno-helper
             working-directory: extensions/suno-helper
