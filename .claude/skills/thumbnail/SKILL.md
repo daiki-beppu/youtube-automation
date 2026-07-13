@@ -1,6 +1,6 @@
 ---
 name: thumbnail
-description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を後続生成するとき。「サムネイル」「画像生成」「アイキャッチ」で発動。SVG・汎用画像生成には使わない"
+description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を後続生成するとき。「サムネイル」「画像生成」「アイキャッチ」で発動。Studio の A/B テスト設計・結果記録は /thumbnail-test、SVG・汎用画像生成には使わない"
 ---
 
 ## Overview
@@ -36,6 +36,18 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 - テキスト付きサムネは承認前に `/thumbnail-compare` の 320px 視認性検証を通過している
 - `20-documentation/thumbnail-prompts.md` に textless 背景用・テキスト付き用の両プロンプトを保存済み
 - `workflow-state.json` の `thumbnail.approved = true` に更新済み
+
+## 勝ちパターン参照ゲート
+
+プロンプト構築前に `collections/planning/*/20-documentation/thumbnail-test-history.json` と `collections/live/*/20-documentation/thumbnail-test-history.json` を列挙する。存在する各ファイルは `.claude/skills/thumbnail-test/references/history-schema.md` の `### Completed history` にある履歴構造検証コマンドだけで確認し、検証に失敗した履歴は黙って無視せず、対象パスとエラーを表示して修正を案内する。そのファイルを集計から除外してよいが、未検証値をプロンプトへ入れない。
+
+検証済み entry のうち `result.status == "winner"` だけを対象に、`result.result_candidate_id` と一致する candidate の `composition.subject_position` / `composition.subject_scale` / `color_palette[]` / `text_amount` を値ごとに集計する。自由記述の `composition.scene` は結果説明にだけ使い、反復集計しない。
+
+- 同じ値が 2 entry 以上で反復: 「検証済み勝ちパターン」として件数を示し、`Historical winners: subject_position=<value>, subject_scale=<value>, colors=<values>, text_amount=<value>.` のうち反復した field だけをプロンプト末尾へ追加する。既存の config 展開結果と TTP / anatomy / IP safety clause は変更・削除しない。
+- 1 entry だけ: 「単発観測」として表示するが、プロンプトの必須方針にはしない。
+- Winner が 0 件または履歴ファイルが 0 件: 「勝ちパターン履歴なし」と表示し、既存のプロンプト方針だけで続行する。
+
+履歴の `performed_same` / `inconclusive` は強い方針へ還元しない。履歴の作成・追記は `/thumbnail-test` の責務であり、このスキルから変更しない。
 
 **読み順**: 標準フローは「ワークフロー > 標準生成順序とファイル契約」から読む。「codex 経由の生成」章は `image_generation.provider: codex` のチャンネルのみ、「フォント安定化」「自動選択」章は該当機能を明示的に使うチャンネルのみ参照すればよい。
 
