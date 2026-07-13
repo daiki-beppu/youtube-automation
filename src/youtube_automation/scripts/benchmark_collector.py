@@ -28,8 +28,6 @@ from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
-from googleapiclient.errors import HttpError
-
 from youtube_automation.utils.benchmark_analyzer import (
     compute_daily_views,
     compute_engagement_rate,
@@ -41,6 +39,7 @@ from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
 from youtube_automation.utils.profile import section
+from youtube_automation.utils.retry import execute_with_retry
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.youtube_service import get_youtube
 
@@ -133,16 +132,13 @@ class BenchmarkCollector:
             batch = channel_ids[i : i + _CHANNELS_BATCH_SIZE]
             with section("benchmark.channels_list", batch_size=len(batch)):
                 try:
-                    resp = (
-                        self.youtube.channels()
-                        .list(
-                            part="snippet,statistics,contentDetails",
-                            id=",".join(batch),
-                        )
-                        .execute()
+                    request = self.youtube.channels().list(
+                        part="snippet,statistics,contentDetails",
+                        id=",".join(batch),
                     )
-                except HttpError as e:
-                    raise YouTubeAPIError.from_http_error(e, f"benchmark.channels_list (id={','.join(batch)})") from e
+                    resp = execute_with_retry(request, f"benchmark.channels_list (id={','.join(batch)})")
+                except YouTubeAPIError:
+                    raise
             for item in resp.get("items", []):
                 items_by_id[item["id"]] = item
         return items_by_id
@@ -193,20 +189,15 @@ class BenchmarkCollector:
         while remaining > 0:
             with section("benchmark.playlist_items", page_size=min(50, remaining)):
                 try:
-                    playlist_resp = (
-                        self.youtube.playlistItems()
-                        .list(
-                            part="contentDetails",
-                            playlistId=uploads_playlist_id,
-                            maxResults=min(50, remaining),
-                            pageToken=page_token,
-                        )
-                        .execute()
+                    request = self.youtube.playlistItems().list(
+                        part="contentDetails",
+                        playlistId=uploads_playlist_id,
+                        maxResults=min(50, remaining),
+                        pageToken=page_token,
                     )
-                except HttpError as e:
-                    raise YouTubeAPIError.from_http_error(
-                        e, f"benchmark.playlist_items ({channel_info.get('name', channel_id)})"
-                    ) from e
+                    playlist_resp = execute_with_retry(request, "benchmark.playlist_items")
+                except YouTubeAPIError:
+                    raise
             batch_ids = [item["contentDetails"]["videoId"] for item in playlist_resp.get("items", [])]
             video_ids.extend(batch_ids)
             page_token = playlist_resp.get("nextPageToken")
@@ -232,18 +223,13 @@ class BenchmarkCollector:
             batch = video_ids[i : i + 50]
             with section("benchmark.videos_list", batch_size=len(batch)):
                 try:
-                    videos_resp = (
-                        self.youtube.videos()
-                        .list(
-                            part="snippet,statistics,contentDetails",
-                            id=",".join(batch),
-                        )
-                        .execute()
+                    request = self.youtube.videos().list(
+                        part="snippet,statistics,contentDetails",
+                        id=",".join(batch),
                     )
-                except HttpError as e:
-                    raise YouTubeAPIError.from_http_error(
-                        e, f"benchmark.videos_list ({channel_info.get('name', channel_id)})"
-                    ) from e
+                    videos_resp = execute_with_retry(request, "benchmark.videos_list")
+                except YouTubeAPIError:
+                    raise
 
             for video in videos_resp.get("items", []):
                 snippet = video["snippet"]
@@ -390,16 +376,13 @@ class BenchmarkCollector:
         playlists_raw = []
         page_token = None
         while True:
-            resp = (
-                self.youtube.playlists()
-                .list(
-                    part="snippet,contentDetails",
-                    channelId=channel_id,
-                    maxResults=50,
-                    pageToken=page_token,
-                )
-                .execute()
+            request = self.youtube.playlists().list(
+                part="snippet,contentDetails",
+                channelId=channel_id,
+                maxResults=50,
+                pageToken=page_token,
             )
+            resp = execute_with_retry(request, "benchmark.playlists_list")
             playlists_raw.extend(resp.get("items", []))
             page_token = resp.get("nextPageToken")
             if not page_token:
@@ -418,16 +401,13 @@ class BenchmarkCollector:
             items = []
             item_page_token = None
             while True:
-                items_resp = (
-                    self.youtube.playlistItems()
-                    .list(
-                        part="snippet,contentDetails",
-                        playlistId=playlist_id,
-                        maxResults=50,
-                        pageToken=item_page_token,
-                    )
-                    .execute()
+                request = self.youtube.playlistItems().list(
+                    part="snippet,contentDetails",
+                    playlistId=playlist_id,
+                    maxResults=50,
+                    pageToken=item_page_token,
                 )
+                items_resp = execute_with_retry(request, "benchmark.playlist_items")
                 for item in items_resp.get("items", []):
                     item_snip = item["snippet"]
                     video_id = item["contentDetails"]["videoId"]
@@ -459,14 +439,11 @@ class BenchmarkCollector:
         video_id_list = list(all_video_ids)
         for i in range(0, len(video_id_list), 50):
             batch = video_id_list[i : i + 50]
-            videos_resp = (
-                self.youtube.videos()
-                .list(
-                    part="statistics,contentDetails",
-                    id=",".join(batch),
-                )
-                .execute()
+            request = self.youtube.videos().list(
+                part="statistics,contentDetails",
+                id=",".join(batch),
             )
+            videos_resp = execute_with_retry(request, "benchmark.videos_list")
             for v in videos_resp.get("items", []):
                 stats = v.get("statistics", {})
                 content = v.get("contentDetails", {})

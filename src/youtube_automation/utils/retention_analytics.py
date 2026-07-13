@@ -8,7 +8,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Dict, List
 
-from googleapiclient.errors import HttpError
+from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.retry import execute_with_retry
 
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
@@ -36,19 +37,16 @@ class RetentionAnalyticsMixin:
             self.initialize()
 
         try:
-            response = (
-                self.analytics_service.reports()
-                .query(
-                    ids=f"channel=={self.channel_id}",
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics="audienceWatchRatio,relativeRetentionPerformance",
-                    dimensions="elapsedVideoTimeRatio",
-                    filters=f"video=={video_id}",
-                    sort="elapsedVideoTimeRatio",
-                )
-                .execute()
+            request = self.analytics_service.reports().query(
+                ids=f"channel=={self.channel_id}",
+                startDate=start_date,
+                endDate=end_date,
+                metrics="audienceWatchRatio,relativeRetentionPerformance",
+                dimensions="elapsedVideoTimeRatio",
+                filters=f"video=={video_id}",
+                sort="elapsedVideoTimeRatio",
             )
+            response = execute_with_retry(request, "YouTube Analytics API request failed")
 
             retention_curve = []
             if "rows" in response:
@@ -80,7 +78,7 @@ class RetentionAnalyticsMixin:
                 "data_points": len(retention_curve),
             }
 
-        except HttpError as e:
+        except YouTubeAPIError as e:
             logger.warning(f"視聴維持率取得不可 (video={video_id}): {e}")
             return {
                 "video_id": video_id,
@@ -122,20 +120,17 @@ class RetentionAnalyticsMixin:
 
         # 上位動画の video_id を取得
         try:
-            response = (
-                self.analytics_service.reports()
-                .query(
-                    ids=f"channel=={self.channel_id}",
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics="views",
-                    dimensions="video",
-                    sort="-views",
-                    maxResults=top_n,
-                )
-                .execute()
+            request = self.analytics_service.reports().query(
+                ids=f"channel=={self.channel_id}",
+                startDate=start_date,
+                endDate=end_date,
+                metrics="views",
+                dimensions="video",
+                sort="-views",
+                maxResults=top_n,
             )
-        except HttpError as e:
+            response = execute_with_retry(request, "YouTube Analytics API request failed")
+        except YouTubeAPIError as e:
             logger.error(f"上位動画リスト取得エラー: {e}")
             return []
 

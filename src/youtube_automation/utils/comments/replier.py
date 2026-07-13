@@ -9,8 +9,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
-from googleapiclient.errors import HttpError
-
 from youtube_automation.utils.comments.fetcher import FetchedComment, fetch_comments
 from youtube_automation.utils.comments.generator import (
     ReplyContext,
@@ -24,6 +22,7 @@ from youtube_automation.utils.config.comments import (
     Comments,
 )
 from youtube_automation.utils.exceptions import ConfigError, GeneratorError, YouTubeAPIError
+from youtube_automation.utils.retry import execute_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +58,10 @@ def fetch_video_status(youtube, video_ids: list[str]) -> dict[str, dict | None]:
     for start in range(0, len(video_ids), _VIDEOS_LIST_CHUNK):
         chunk = video_ids[start : start + _VIDEOS_LIST_CHUNK]
         try:
-            resp = youtube.videos().list(part="status", id=",".join(chunk)).execute()
-        except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, f"videos.list (status) 失敗 (count={len(chunk)})") from e
+            request = youtube.videos().list(part="status", id=",".join(chunk))
+            resp = execute_with_retry(request, "videos.list (status) failed")
+        except YouTubeAPIError:
+            raise
         for item in resp.get("items", []):
             result[item["id"]] = item.get("status", {})
     return result
@@ -111,9 +111,10 @@ class CommentReplier:
         if self._owner_channel_id is not None:
             return
         try:
-            resp = self._youtube.channels().list(part="id", mine=True).execute()
-        except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, "channels.list (owner channel ID) 失敗") from e
+            request = self._youtube.channels().list(part="id", mine=True)
+            resp = execute_with_retry(request, "channels.list (owner channel ID) failed")
+        except YouTubeAPIError:
+            raise
         items = resp.get("items") or []
         if not items:
             raise YouTubeAPIError("channels.list が空を返しました — チャンネルが見つかりません")
@@ -122,9 +123,10 @@ class CommentReplier:
     def _fetch_channel_info(self) -> tuple[str, str]:
         """channels().list(part="contentDetails") から (owner_id, uploads_playlist_id) を返す."""
         try:
-            resp = self._youtube.channels().list(part="contentDetails", mine=True).execute()
-        except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, "channels.list (mine=True) 失敗") from e
+            request = self._youtube.channels().list(part="contentDetails", mine=True)
+            resp = execute_with_retry(request, "channels.list (mine=True) failed")
+        except YouTubeAPIError:
+            raise
         items = resp.get("items") or []
         if not items:
             raise YouTubeAPIError("channels.list が空を返しました — チャンネルが見つかりません")
@@ -135,18 +137,15 @@ class CommentReplier:
         page_token: str | None = None
         while True:
             try:
-                resp = (
-                    self._youtube.playlistItems()
-                    .list(
-                        part="contentDetails",
-                        playlistId=uploads_playlist_id,
-                        maxResults=50,
-                        pageToken=page_token,
-                    )
-                    .execute()
+                request = self._youtube.playlistItems().list(
+                    part="contentDetails",
+                    playlistId=uploads_playlist_id,
+                    maxResults=50,
+                    pageToken=page_token,
                 )
-            except HttpError as e:
-                raise YouTubeAPIError.from_http_error(e, "playlistItems.list 失敗") from e
+                resp = execute_with_retry(request, "playlistItems.list failed")
+            except YouTubeAPIError:
+                raise
             for item in resp.get("items", []):
                 yield item["contentDetails"]["videoId"]
             page_token = resp.get("nextPageToken")
@@ -258,9 +257,10 @@ class CommentReplier:
         if video_id in self._title_cache:
             return self._title_cache[video_id]
         try:
-            resp = self._youtube.videos().list(part="snippet", id=video_id).execute()
-        except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, f"videos.list 失敗 (video_id={video_id})") from e
+            request = self._youtube.videos().list(part="snippet", id=video_id)
+            resp = execute_with_retry(request, f"videos.list failed (video_id={video_id})")
+        except YouTubeAPIError:
+            raise
         title = ""
         for item in resp.get("items", []):
             title = item["snippet"].get("title", "")
@@ -453,7 +453,7 @@ class CommentReplier:
             False: insert 自体が失敗した。
         """
         try:
-            self._youtube.comments().insert(
+            request = self._youtube.comments().insert(
                 part="snippet",
                 body={
                     "snippet": {
@@ -461,9 +461,10 @@ class CommentReplier:
                         "textOriginal": reply_text,
                     }
                 },
-            ).execute()
-        except HttpError as e:
-            status = getattr(getattr(e, "resp", None), "status", None)
+            )
+            execute_with_retry(request, "comments.insert failed")
+        except YouTubeAPIError as e:
+            status = e.status_code
             plan.errors.append(
                 self._error_record(
                     comment,
