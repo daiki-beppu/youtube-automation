@@ -1,5 +1,3 @@
 /* overlay (#892) の Shadow DOM へ注入する Tailwind スタイル。
    entrypoints/ 外に置くことで CSS が独立 entrypoint 化するのを避ける（overlay.content.ts と名前衝突しない）。 */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "./theme.css";
