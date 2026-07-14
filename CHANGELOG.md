@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(thumbnail)`: TTP 参照画像の直近コレクション重複除外を追加（#1649）。`reference_images.dedup_recent_collections`（既定 5）が collection ごとに採用企画の参照 1 件を Reference Assignments へ保存し、全割当節から未使用参照を先頭候補として優先する。不足する候補枠だけ位置順で補うため、候補数より大きいプールは全参照が採用されるまで先頭候補を再利用しない。
+
 ### Added
 
 - `docs(feedback)`: `/feedback` に、`status="recorded"` の未還流 entry を一覧・選択し、open issue の類似タイトル照合とユーザー承認を経て `daiki-beppu/youtube-automation` へ `feedback` ラベル付き issue を起票する還流モードを追加した。成功した entry は `status="filed"` と `issue_url` を記録して候補から除外し、二重起票を防ぐ。起票本文テンプレート、発生チャンネル掲載の個別確認、起票直前の機密情報再マスクも明記した（#1829）。

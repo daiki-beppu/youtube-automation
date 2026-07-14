@@ -129,6 +129,9 @@ image_generation:
     # TTP single_step は同一ベンチマークチャンネルの複数サムネを前提にするため、
     # default では OFF。別スコープとして明示的に混ぜたいチャンネルのみ override する。
     reference_images:
+      # 全 collection の thumbnail-prompts.md から未使用参照を優先し、一巡後は直近この件数を除外する。
+      # 候補数に足りない枠だけ位置順で補い、全参照が採用される前の先頭候補重複を防ぐ。0 で無効化可。
+      dedup_recent_collections: 5
       stock:
         # true で stock 合成を有効化。TTP 参照プールとは別スコープとして扱うこと。
         enabled: false

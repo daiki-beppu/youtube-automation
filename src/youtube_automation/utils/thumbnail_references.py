@@ -10,6 +10,8 @@ from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider.composition import normalize_reference_default
 from youtube_automation.utils.placeholders import is_placeholder_value
 
+DEFAULT_DEDUP_RECENT_COLLECTIONS = 5
+
 
 @dataclass(frozen=True)
 class BenchmarkReferenceResolution:
@@ -107,14 +109,112 @@ def format_reference_assignment(reference_path: Path, benchmark_root: Path | Non
     return f"{reference_path} (benchmark_channel={infer_benchmark_channel(reference_path, benchmark_root)})"
 
 
+def record_ttp_reference_assignments(
+    prompt_log: Path,
+    reference_images: list[Path],
+    channel_dir: Path,
+) -> None:
+    """Append collection-level TTP reference assignments to a thumbnail prompt log."""
+    channel_root = channel_dir.resolve(strict=False)
+    benchmark_root = channel_dir / "data" / "thumbnail_compare" / "benchmark"
+    rows: list[str] = []
+    for index, reference in enumerate(reference_images, 1):
+        resolved_reference = reference.resolve(strict=False)
+        try:
+            documented_reference = resolved_reference.relative_to(channel_root)
+        except ValueError:
+            documented_reference = resolved_reference
+        rows.append(
+            f"| {index} | collection-ideate preview | `{documented_reference}` | "
+            f"{infer_benchmark_channel(resolved_reference, benchmark_root)} |"
+        )
+
+    rows_text = "\n".join(rows)
+    section = (
+        "## Reference Assignments\n"
+        "| attempt | output | reference_image | benchmark_channel |\n"
+        "|---:|---|---|---|\n"
+        f"{rows_text}\n"
+    )
+    try:
+        prompt_log.parent.mkdir(parents=True, exist_ok=True)
+        existing = prompt_log.read_text(encoding="utf-8") if prompt_log.exists() else ""
+        separator = "\n" if existing and not existing.endswith("\n\n") else ""
+        prompt_log.write_text(f"{existing}{separator}{section}", encoding="utf-8")
+    except OSError as exc:
+        raise ConfigError(f"参照画像履歴を保存できません: {prompt_log}: {exc}") from exc
+
+
+def resolve_dedup_recent_collections(value: object) -> int:
+    """Validate the configured number of recent collections used for deduplication."""
+    if value is None:
+        return DEFAULT_DEDUP_RECENT_COLLECTIONS
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ConfigError("reference_images.dedup_recent_collections は 0 以上の整数で指定してください")
+    return value
+
+
+def _reference_images_from_prompt_log(prompt_log: Path, channel_dir: Path) -> set[Path]:
+    """Read documented assignments, rejecting inaccessible history files."""
+    try:
+        lines = prompt_log.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise ConfigError(f"参照画像履歴を読み取れません: {prompt_log}: {exc}") from exc
+
+    in_assignments = False
+    references: set[Path] = set()
+    for line in lines:
+        if line.strip() == "## Reference Assignments":
+            in_assignments = True
+            continue
+        if in_assignments and line.startswith("## "):
+            in_assignments = False
+            continue
+        if not in_assignments or not line.lstrip().startswith("|"):
+            continue
+        columns = [column.strip() for column in line.strip().split("|")]
+        if len(columns) < 5 or columns[1] in {"attempt", "---:"}:
+            continue
+        reference = columns[3].strip("` ")
+        if not reference or reference.startswith("<"):
+            continue
+        path = Path(reference)
+        references.add((path if path.is_absolute() else channel_dir / path).resolve(strict=False))
+    return references
+
+
+def _reference_image_history(channel_dir: Path, recent_limit: int) -> tuple[set[Path], set[Path]]:
+    """Return references from the recent window and from all collection prompt logs."""
+    collections_root = channel_dir / "collections"
+    if not collections_root.is_dir():
+        return set(), set()
+    collection_dirs = sorted(
+        (path for path in collections_root.glob("*/*") if path.is_dir() and not path.name.startswith("_")),
+        key=lambda path: path.name,
+        reverse=True,
+    )
+    recent_references: set[Path] = set()
+    all_references: set[Path] = set()
+    for index, collection in enumerate(collection_dirs):
+        prompt_log = collection / "20-documentation" / "thumbnail-prompts.md"
+        if prompt_log.is_file():
+            references = _reference_images_from_prompt_log(prompt_log, channel_dir)
+            all_references.update(references)
+            if index < recent_limit:
+                recent_references.update(references)
+    return recent_references, all_references
+
+
 def plan_ttp_reference_assignments(
     reference_images: list[Path],
     count: int,
     rotate: bool,
     *,
     benchmark_root: Path | None = None,
+    channel_dir: Path | None = None,
+    dedup_recent_collections: int = 0,
 ) -> list[Path | None]:
-    """Plan strict thumbnail TTP reference assignment before generation."""
+    """Plan strict TTP assignments, excluding references used by recent collections."""
     if not reference_images:
         raise ConfigError(
             "single_step TTP 生成には参照画像が必須です。"
@@ -133,7 +233,22 @@ def plan_ttp_reference_assignments(
             f"(max_attempts={count}, references={len(reference_images)})。"
             "同じベンチマークチャンネル内の別サムネイル画像を追加してください。"
         )
-    selected_references = reference_images[:count]
+    selected_references = reference_images
+    if rotate and channel_dir is not None and dedup_recent_collections:
+        recent_references, all_references = _reference_image_history(channel_dir, dedup_recent_collections)
+        unused_references = [ref for ref in reference_images if ref.resolve(strict=False) not in all_references]
+        references_outside_recent_window = [
+            ref for ref in reference_images if ref.resolve(strict=False) not in recent_references
+        ]
+        if unused_references:
+            selected_references = unused_references + [
+                ref for ref in references_outside_recent_window if ref not in unused_references
+            ]
+        elif references_outside_recent_window:
+            selected_references = references_outside_recent_window
+        selected_references += [ref for ref in reference_images if ref not in selected_references]
+
+    selected_references = selected_references[:count]
     if benchmark_root is not None:
         selected_references = [canonicalize_benchmark_reference(ref, benchmark_root) for ref in selected_references]
 

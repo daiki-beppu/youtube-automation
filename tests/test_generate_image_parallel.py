@@ -13,6 +13,7 @@ API 呼び出しはフェイク provider で mock 化する。
 
 from __future__ import annotations
 
+import re
 import sys
 import threading
 from pathlib import Path
@@ -33,7 +34,11 @@ from youtube_automation.scripts.generate_image import (
 )
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider.composition import resolve_unique_path
-from youtube_automation.utils.thumbnail_references import plan_ttp_reference_assignments
+from youtube_automation.utils.thumbnail_references import (
+    plan_ttp_reference_assignments,
+    record_ttp_reference_assignments,
+    resolve_dedup_recent_collections,
+)
 
 # ---- フェイク provider ------------------------------------------------------
 
@@ -268,6 +273,235 @@ class TestPlanReferenceAssignments:
         refs = [Path("/data/thumbnail_compare/benchmark/jazzgak/a.jpg")]
         assert plan_ttp_reference_assignments(refs, 1, rotate=False) == refs
 
+    def test_no_rotate_single_attempt_pins_first_reference_despite_history(self, tmp_path: Path) -> None:
+        refs = _benchmark_refs(tmp_path, 2)
+        _write_reference_assignments(
+            tmp_path,
+            "planning/20260712-recent",
+            ["data/thumbnail_compare/benchmark/jazzgak/ref-0.jpg"],
+        )
+
+        assert plan_ttp_reference_assignments(
+            refs,
+            1,
+            rotate=False,
+            channel_dir=tmp_path,
+            dedup_recent_collections=1,
+        ) == [refs[0]]
+
+    def test_excludes_references_used_by_recent_collections(self, tmp_path: Path) -> None:
+        refs = _benchmark_refs(tmp_path, 4)
+        prompt_log = (
+            tmp_path / "collections" / "planning" / "20260712-recent" / "20-documentation" / "thumbnail-prompts.md"
+        )
+        prompt_log.parent.mkdir(parents=True)
+        prompt_log.write_text(
+            "## Reference Assignments\n\n"
+            "| attempt | output | reference_image | benchmark_channel |\n"
+            "|---:|---|---|---|\n"
+            "| 1 | output | `data/thumbnail_compare/benchmark/jazzgak/ref-0.jpg` | jazzgak |\n"
+            "| 2 | output | `data/thumbnail_compare/benchmark/jazzgak/ref-1.jpg` | jazzgak |\n",
+            encoding="utf-8",
+        )
+
+        assert (
+            plan_ttp_reference_assignments(refs, 2, rotate=True, channel_dir=tmp_path, dedup_recent_collections=1)
+            == refs[2:]
+        )
+
+    def test_excludes_references_from_every_assignment_section_in_one_log(self, tmp_path: Path) -> None:
+        refs = _benchmark_refs(tmp_path, 3)
+        prompt_log = (
+            tmp_path / "collections" / "planning" / "20260712-recent" / "20-documentation" / "thumbnail-prompts.md"
+        )
+        prompt_log.parent.mkdir(parents=True)
+        prompt_log.write_text(
+            "## Reference Assignments\n"
+            "| attempt | output | reference_image | benchmark_channel |\n"
+            "|---:|---|---|---|\n"
+            "| 1 | thumbnail | `data/thumbnail_compare/benchmark/jazzgak/ref-0.jpg` | jazzgak |\n"
+            "\n## Prompt Details\nold content\n\n"
+            "## Reference Assignments\n"
+            "| attempt | output | reference_image | benchmark_channel |\n"
+            "|---:|---|---|---|\n"
+            "| 1 | collection-ideate preview | `data/thumbnail_compare/benchmark/jazzgak/ref-1.jpg` | jazzgak |\n",
+            encoding="utf-8",
+        )
+
+        assert plan_ttp_reference_assignments(
+            refs,
+            1,
+            rotate=True,
+            channel_dir=tmp_path,
+            dedup_recent_collections=1,
+        ) == [refs[2]]
+
+    def test_recent_collection_window_is_ordered_by_collection_across_states(self, tmp_path: Path) -> None:
+        refs = _benchmark_refs(tmp_path, 3)
+        _write_reference_assignments(
+            tmp_path,
+            "planning/20260101-old",
+            ["data/thumbnail_compare/benchmark/jazzgak/ref-0.jpg"],
+        )
+        _write_reference_assignments(
+            tmp_path,
+            "live/20260712-new",
+            ["data/thumbnail_compare/benchmark/jazzgak/ref-1.jpg"],
+        )
+
+        assert plan_ttp_reference_assignments(
+            refs,
+            2,
+            rotate=True,
+            channel_dir=tmp_path,
+            dedup_recent_collections=1,
+        ) == [refs[2], refs[0]]
+
+    def test_zero_dedup_window_disables_history_exclusion(self, tmp_path: Path) -> None:
+        refs = _benchmark_refs(tmp_path, 2)
+        _write_reference_assignments(
+            tmp_path,
+            "planning/20260712-recent",
+            ["data/thumbnail_compare/benchmark/jazzgak/ref-0.jpg"],
+        )
+
+        assert (
+            plan_ttp_reference_assignments(
+                refs,
+                2,
+                rotate=True,
+                channel_dir=tmp_path,
+                dedup_recent_collections=0,
+            )
+            == refs
+        )
+
+    def test_missing_dedup_window_uses_default_of_five(self) -> None:
+        assert resolve_dedup_recent_collections(None) == 5
+
+    @pytest.mark.parametrize("value", [-1, True, 1.5, "2"])
+    def test_invalid_dedup_window_is_rejected(self, value: object) -> None:
+        with pytest.raises(ConfigError, match="0 以上の整数"):
+            resolve_dedup_recent_collections(value)
+
+    def test_falls_back_to_position_order_after_entire_pool_was_used(self, tmp_path: Path) -> None:
+        refs = _benchmark_refs(tmp_path, 2)
+        prompt_log = tmp_path / "collections" / "live" / "20260712-recent" / "20-documentation" / "thumbnail-prompts.md"
+        prompt_log.parent.mkdir(parents=True)
+        prompt_log.write_text(
+            "## Reference Assignments\n"
+            "| attempt | output | reference_image | benchmark_channel |\n"
+            "|---:|---|---|---|\n"
+            "| 1 | output | `data/thumbnail_compare/benchmark/jazzgak/ref-0.jpg` | jazzgak |\n"
+            "| 2 | output | `data/thumbnail_compare/benchmark/jazzgak/ref-1.jpg` | jazzgak |\n",
+            encoding="utf-8",
+        )
+
+        assert (
+            plan_ttp_reference_assignments(refs, 2, rotate=True, channel_dir=tmp_path, dedup_recent_collections=1)
+            == refs
+        )
+
+    def test_prefers_never_used_references_before_reusing_outside_recent_window(self, tmp_path: Path) -> None:
+        refs = _benchmark_refs(tmp_path, 10)
+        for index in range(6):
+            _write_reference_assignments(
+                tmp_path,
+                f"live/202607{index + 1:02d}-collection",
+                [f"data/thumbnail_compare/benchmark/jazzgak/ref-{index}.jpg"],
+            )
+
+        assert plan_ttp_reference_assignments(
+            refs,
+            1,
+            rotate=True,
+            channel_dir=tmp_path,
+            dedup_recent_collections=5,
+        ) == [refs[6]]
+
+    def test_fills_partial_dedup_shortage_in_position_order(self, tmp_path: Path) -> None:
+        refs = _benchmark_refs(tmp_path, 3)
+        prompt_log = (
+            tmp_path / "collections" / "planning" / "20260712-recent" / "20-documentation" / "thumbnail-prompts.md"
+        )
+        prompt_log.parent.mkdir(parents=True)
+        prompt_log.write_text(
+            "## Reference Assignments\n"
+            "| attempt | output | reference_image | benchmark_channel |\n"
+            "|---:|---|---|---|\n"
+            "| 1 | output | `data/thumbnail_compare/benchmark/jazzgak/ref-0.jpg` | jazzgak |\n"
+            "| 2 | output | `data/thumbnail_compare/benchmark/jazzgak/ref-1.jpg` | jazzgak |\n",
+            encoding="utf-8",
+        )
+
+        assert plan_ttp_reference_assignments(
+            refs,
+            2,
+            rotate=True,
+            channel_dir=tmp_path,
+            dedup_recent_collections=1,
+        ) == [refs[2], refs[0]]
+
+    def test_ignores_legacy_collection_without_reference_assignments(self, tmp_path: Path) -> None:
+        refs = _benchmark_refs(tmp_path, 2)
+        legacy_log = (
+            tmp_path / "collections" / "planning" / "20260712-legacy" / "20-documentation" / "thumbnail-prompts.md"
+        )
+        legacy_log.parent.mkdir(parents=True)
+        legacy_log.write_text("# old prompt format\n", encoding="utf-8")
+
+        assert (
+            plan_ttp_reference_assignments(refs, 2, rotate=True, channel_dir=tmp_path, dedup_recent_collections=1)
+            == refs
+        )
+
+    def test_legacy_collection_counts_toward_recent_window(self, tmp_path: Path) -> None:
+        refs = _benchmark_refs(tmp_path, 2)
+        _write_reference_assignments(
+            tmp_path,
+            "live/20260711-older",
+            ["data/thumbnail_compare/benchmark/jazzgak/ref-0.jpg"],
+        )
+        legacy_collection = tmp_path / "collections" / "planning" / "20260712-latest-legacy"
+        legacy_collection.mkdir(parents=True)
+
+        assert plan_ttp_reference_assignments(
+            refs,
+            2,
+            rotate=True,
+            channel_dir=tmp_path,
+            dedup_recent_collections=1,
+        ) == [refs[1], refs[0]]
+
+    def test_rejects_reference_history_that_cannot_be_read(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        refs = _benchmark_refs(tmp_path, 2)
+        prompt_log = _write_reference_assignments(
+            tmp_path,
+            "planning/20260712-unreadable",
+            ["data/thumbnail_compare/benchmark/jazzgak/ref-0.jpg"],
+        )
+        original_read_text = Path.read_text
+
+        def fail_for_prompt_log(path: Path, *args: object, **kwargs: object) -> str:
+            if path == prompt_log:
+                raise PermissionError("history denied")
+            return original_read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", fail_for_prompt_log)
+
+        with pytest.raises(ConfigError, match=f"{re.escape(str(prompt_log))}.*history denied"):
+            plan_ttp_reference_assignments(
+                refs,
+                2,
+                rotate=True,
+                channel_dir=tmp_path,
+                dedup_recent_collections=1,
+            )
+
     def test_strict_rejects_mixed_known_benchmark_channels(self) -> None:
         refs = [
             Path("/data/thumbnail_compare/benchmark/jazzgak-a.jpg"),
@@ -461,6 +695,35 @@ def _benchmark_refs(tmp_path: Path, count: int) -> list[Path]:
     return refs
 
 
+def _write_reference_assignments(tmp_path: Path, collection: str, references: list[str]) -> Path:
+    prompt_log = tmp_path / "collections" / collection / "20-documentation" / "thumbnail-prompts.md"
+    prompt_log.parent.mkdir(parents=True)
+    rows = "".join(f"| {index} | output | `{reference}` | jazzgak |\n" for index, reference in enumerate(references, 1))
+    prompt_log.write_text(
+        "## Reference Assignments\n"
+        "| attempt | output | reference_image | benchmark_channel |\n"
+        "|---:|---|---|---|\n"
+        f"{rows}",
+        encoding="utf-8",
+    )
+    return prompt_log
+
+
+def test_record_ttp_reference_assignments_wraps_persistence_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompt_log = tmp_path / "collections" / "planning" / "collection" / "20-documentation" / "thumbnail-prompts.md"
+
+    def fail_write(_self: Path, *_args: object, **_kwargs: object) -> int:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "write_text", fail_write)
+
+    with pytest.raises(ConfigError, match=rf"参照画像履歴を保存できません: {re.escape(str(prompt_log))}: disk full"):
+        record_ttp_reference_assignments(prompt_log, [tmp_path / "reference.jpg"], tmp_path)
+
+
 class TestGenerateImageCLIReferenceContract:
     def test_single_step_cli_assigns_one_unique_reference_per_attempt(
         self,
@@ -501,6 +764,54 @@ class TestGenerateImageCLIReferenceContract:
         ]
         captured = capsys.readouterr()
         assert "benchmark_channel=jazzgak" in captured.out
+
+    def test_cli_applies_configured_recent_collection_deduplication(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        refs = _benchmark_refs(tmp_path, 4)
+        prompt_log = (
+            tmp_path / "collections" / "planning" / "20260712-recent" / "20-documentation" / "thumbnail-prompts.md"
+        )
+        prompt_log.parent.mkdir(parents=True)
+        prompt_log.write_text(
+            "## Reference Assignments\n"
+            "| attempt | output | reference_image | benchmark_channel |\n"
+            "|---:|---|---|---|\n"
+            "| 1 | output | `data/thumbnail_compare/benchmark/jazzgak/ref-0.jpg` | jazzgak |\n"
+            "| 2 | output | `data/thumbnail_compare/benchmark/jazzgak/ref-1.jpg` | jazzgak |\n",
+            encoding="utf-8",
+        )
+        provider = _FakeProvider()
+        argv = [
+            "--prompt",
+            "prompt",
+            "--output",
+            str(tmp_path / "thumbnail-v1.jpg"),
+            "--max-attempts",
+            "2",
+            "--max-workers",
+            "1",
+            "--ttp-strict-references",
+            "-y",
+        ]
+        for ref in refs:
+            argv.extend(["--reference", str(ref)])
+        skill_cfg = {"image_generation": {"gemini": {"reference_images": {"dedup_recent_collections": 1}}}}
+        _patch_generate_image_cli(
+            monkeypatch,
+            argv,
+            provider=provider,
+            channel_root=tmp_path,
+            skill_cfg_override=skill_cfg,
+        )
+
+        with pytest.raises(SystemExit) as exc_info:
+            generate_image_main()
+
+        assert exc_info.value.code == 0
+        assert [request.references for request in provider.requests] == [[refs[2]], [refs[3]]]
 
     def test_cli_expands_typography_clause_before_provider_request(
         self,

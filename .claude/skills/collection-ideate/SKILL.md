@@ -9,7 +9,7 @@ description: "Use when 新コレクションの企画・テーマ選定をデー
 
 ## 完了条件
 
-企画候補をコレクションの `20-documentation/plan_proposals.md` に保存し、`workflow-state.json` の `planning.generated = true` へ更新（企画確定時は `planning.final_title` も記録）し、Next Step（`/thumbnail <theme>` → `/suno <theme>`）を案内した時点で完了。
+企画候補をコレクションの `20-documentation/plan_proposals.md` に保存し、`workflow-state.json` の `planning.generated = true` へ更新（企画確定時は `planning.final_title` も記録）し、Next Step（`/thumbnail <theme>` → `/suno <theme>`）を案内した時点で完了。画像生成を実施した場合は、採用企画の参照画像を `20-documentation/thumbnail-prompts.md` の `Reference Assignments` へ保存できるまで完了扱いにせず、保存失敗時は停止する。
 
 **JSON ペア検証 Hard Gate**: `references/freshness-rules.md` の鮮度判定へ進む前に、ファイル名日付が最新の `reports/analysis_*.md` と同日付の `.json` の存在を確認し、`.claude/skills/analytics-analyze/references/analysis-json-validator.md` の validator を同日付 JSON に実行する。exit 0 の場合だけ analytics mode の入力として使用する。Markdown だけが存在する、または validator が失敗した場合は必須入力不足として中断し、`/analytics-analyze` 再実行を案内する。
 
@@ -271,23 +271,8 @@ while IFS= read -r p; do
   [ -n "$p" ] && REF_PATHS+=("$p")
 done <<< "$REFS"
 
-VALIDATED_REFS=$(printf '%s\n' "${REF_PATHS[@]}" | uv run python3 -c "
-import sys
-from pathlib import Path
-from youtube_automation.utils.config import channel_dir
-from youtube_automation.utils.thumbnail_references import plan_ttp_reference_assignments
-
-refs = [Path(line.strip()) for line in sys.stdin if line.strip()]
-candidate_count = int(sys.argv[1])
-validated = plan_ttp_reference_assignments(
-    refs,
-    candidate_count,
-    True,
-    benchmark_root=channel_dir() / 'data' / 'thumbnail_compare' / 'benchmark',
-)
-for ref in validated:
-    print(ref)
-" "$CANDIDATE_COUNT")
+VALIDATED_REFS=$(printf '%s\n' "${REF_PATHS[@]}" | uv run python3 \
+  .claude/skills/collection-ideate/references/select-ttp-references.py "$CANDIDATE_COUNT")
 mapfile -t REF_PATHS <<< "$VALIDATED_REFS"
 
 # 順次実行。candidate_count の数だけ plan-{a,b,c,...} を生成する。
@@ -393,17 +378,17 @@ parallel モードでは Next Step で `yt-stock-archive` による不採用 (`c
 
 ```bash
 # <x> は選択された企画の番号（a/b/c）
+REF_INDEX="<選択された企画の0-based index>"
+if [ "${#REF_PATHS[@]}" -le "$REF_INDEX" ]; then
+  echo "ERROR: selected preview reference is missing: index=${REF_INDEX}" >&2
+  exit 1
+fi
 PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
   # image_generation.gemini.composition_rules は codex-prompt.py が自動注入する。
   # 参照画像を winning template として扱い、テキスト付き候補を先に確定する短い TTP thumbnail 先行プロンプトにする（#1611）。
   # 選択した企画と同じ index の参照画像 1 枚だけを使う（a=0, b=1, c=2）。
-  REF_INDEX="<選択された企画の0-based index>"
-  if [ "${#REF_PATHS[@]}" -le "$REF_INDEX" ]; then
-    echo "ERROR: selected preview reference is missing: index=${REF_INDEX}" >&2
-    exit 1
-  fi
   # title 引数にはサムネに焼くテキスト（見出し + 短いサブタイトル）だけを渡す。
   # 動画タイトル全文を渡さない（全文が画像に焼き込まれる事故の再発防止）。
   CODEX_PROMPT=$(uv run python3 .claude/skills/thumbnail/references/codex-prompt.py "<選択された企画タイトル>")
@@ -627,6 +612,15 @@ analytics mode / benchmark fallback mode ではベンチマークデータを分
 企画選択時にタイトルも確定する（`workflow-state.json` の `planning.final_title` に記録）。
 
 企画確定後、選択した企画のプレビュー画像は企画参照として保存し、**`main.png` にはコピーしない**。`main.png/jpg` は `/thumbnail` で承認済みのテキスト付き `thumbnail.jpg` から再生成して確定する textless 動画背景であり、文字入りサムネと同一画像にしない。`thumbnail_mode` と「画像が生成されたか」によって手順が分岐するため、ケース別に示す。
+
+画像生成を実施した場合、企画確定後かつプレビューディレクトリ削除前に、今回使用した参照割当を collection の履歴へ必ず保存する。保存に失敗した場合は処理を継続せず、エラーを解消して同じコマンドを再実行する。
+
+```bash
+REF_INDEX="<選択された企画の0-based index>"
+COLLECTION_PATH="<collection-path>"
+uv run python3 .claude/skills/collection-ideate/references/record-ttp-reference-assignments.py \
+  "$COLLECTION_PATH" "${REF_PATHS[$REF_INDEX]}"
+```
 
 ### parallel モード（デフォルト）
 

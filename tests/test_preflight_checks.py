@@ -267,6 +267,46 @@ class TestInitialSetupChecks:
 
         assert any("reference_images.default" in issue and "TBD" in issue for issue in issues)
 
+    def test_thumbnail_config_applies_recent_reference_deduplication(self, tmp_path: Path) -> None:
+        refs = [f"data/thumbnail_compare/benchmark/alpha/ref-{index}.jpg" for index in range(3)]
+        for reference in refs:
+            path = tmp_path / reference
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"jpg")
+        prompt_log = (
+            tmp_path / "collections" / "planning" / "20260712-recent" / "20-documentation" / "thumbnail-prompts.md"
+        )
+        prompt_log.parent.mkdir(parents=True)
+        prompt_log.write_text(
+            "## Reference Assignments\n"
+            "| attempt | output | reference_image | benchmark_channel |\n"
+            "|---:|---|---|---|\n"
+            "| 1 | output | `data/thumbnail_compare/benchmark/alpha/ref-0.jpg` | alpha |\n"
+            "| 2 | output | `data/thumbnail_compare/benchmark/alpha/ref-1.jpg` | alpha |\n",
+            encoding="utf-8",
+        )
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "single_step": {"max_attempts": 2, "rotate": True},
+                    "reference_images": {"default": refs, "dedup_recent_collections": 1},
+                    "composition_rules": {
+                        "environment": "desk",
+                        "character_size": "medium",
+                        "character_pose": "sitting",
+                        "allowed_actions": "reading",
+                        "ng_actions": "no text",
+                        "background": "warm room",
+                    },
+                }
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert issues == []
+
     def test_thumbnail_config_detects_unexpanded_template_composition(self, tmp_path: Path) -> None:
         ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "alpha.jpg"
         ref.parent.mkdir(parents=True)
