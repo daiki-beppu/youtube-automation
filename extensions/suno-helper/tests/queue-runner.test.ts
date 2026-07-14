@@ -219,7 +219,11 @@ describe("queue-runner: production ロジック (#1586)", () => {
       total: entries.length,
       clipIdsByEntry: new Map([[0, ["clip-ok-a", "clip-ok-b"]]]),
       durationFilter: { min_sec: 75, max_sec: 240 },
-      durationOutlierStrategy: { kind: "regenerate", regenerateEntry: vi.fn(async () => []) },
+      durationOutlierStrategy: {
+        kind: "regenerate",
+        regenerateEntry: vi.fn(async () => []),
+        waitForRegeneratedClips: vi.fn(async () => {}),
+      },
       getDuration: (clipId: string) => {
         const durations: Record<string, number> = { "clip-ok-a": 120, "clip-ok-b": 180 };
         return durations[clipId];
@@ -256,7 +260,7 @@ describe("queue-runner: production ロジック (#1586)", () => {
       total: entries.length,
       clipIdsByEntry: new Map([[1, ["clip-ng-a", "clip-ng-b"]]]),
       durationFilter: { min_sec: 75, max_sec: 240 },
-      durationOutlierStrategy: { kind: "regenerate", regenerateEntry },
+      durationOutlierStrategy: { kind: "regenerate", regenerateEntry, waitForRegeneratedClips: vi.fn(async () => {}) },
       getDuration: (clipId: string) => {
         const durations: Record<string, number> = { "clip-ng-a": 45, "clip-ng-b": 360 };
         return durations[clipId];
@@ -298,7 +302,7 @@ describe("queue-runner: production ロジック (#1586)", () => {
       total: 1,
       clipIdsByEntry: new Map([[0, ["clip-ng-a", "clip-ng-b"]]]),
       durationFilter: { min_sec: 75, max_sec: 240 },
-      durationOutlierStrategy: { kind: "regenerate", regenerateEntry },
+      durationOutlierStrategy: { kind: "regenerate", regenerateEntry, waitForRegeneratedClips: vi.fn(async () => {}) },
       getDuration: (id) => durations[id],
       markAccepted,
       dropSubmittedIds,
@@ -329,7 +333,7 @@ describe("queue-runner: production ロジック (#1586)", () => {
       total: 1,
       clipIdsByEntry: new Map([[0, ["clip-ng-0-a", "clip-ng-0-b"]]]),
       durationFilter: { min_sec: 75, max_sec: 240 },
-      durationOutlierStrategy: { kind: "regenerate", regenerateEntry },
+      durationOutlierStrategy: { kind: "regenerate", regenerateEntry, waitForRegeneratedClips: vi.fn(async () => {}) },
       getDuration: () => 45,
       markAccepted: vi.fn(),
       dropSubmittedIds: vi.fn(),
@@ -358,6 +362,7 @@ describe("queue-runner: production ロジック (#1586)", () => {
         regenerateEntry: vi.fn(async () => {
           throw new Error("inject failed");
         }),
+        waitForRegeneratedClips: vi.fn(async () => {}),
       },
       getDuration: () => 45,
       markAccepted: vi.fn(),
@@ -405,7 +410,7 @@ describe("queue-runner: production ロジック (#1586)", () => {
     );
   });
 
-  it("Given queue 再生成の完了待ち中にstop When finalizerを確定する Then 元clipを保持して中断indexを返す", async () => {
+  it("Given queue 再生成の投入直後にstop When finalizerを確定する Then retry clipを除去して中断indexを返す", async () => {
     const isAborted = vi.fn(() => true);
     const dropSubmittedIds = vi.fn();
 
@@ -418,6 +423,7 @@ describe("queue-runner: production ロジック (#1586)", () => {
       durationOutlierStrategy: {
         kind: "regenerate",
         regenerateEntry: vi.fn(async () => ["clip-retry-a", "clip-retry-b"]),
+        waitForRegeneratedClips: vi.fn(async () => {}),
       },
       isAborted,
       getDuration: () => 45,
@@ -427,7 +433,8 @@ describe("queue-runner: production ロジック (#1586)", () => {
     });
 
     expect(result).toEqual({ failedIndices: [], abortedIndex: 0 });
-    expect(dropSubmittedIds).not.toHaveBeenCalled();
+    expect(dropSubmittedIds).toHaveBeenCalledOnce();
+    expect(dropSubmittedIds).toHaveBeenCalledWith(["clip-retry-a", "clip-retry-b"]);
   });
 
   it("Given option OFF とOK/NG混在 When entryを確定する Then NGをdropせず全clipを採用候補に残す", async () => {
@@ -462,7 +469,7 @@ describe("queue-runner: production ロジック (#1586)", () => {
       total: 1,
       clipIdsByEntry: new Map([[0, ["clip-original"]]]),
       durationFilter: { min_sec: 75, max_sec: 240 },
-      durationOutlierStrategy: { kind: "regenerate", regenerateEntry },
+      durationOutlierStrategy: { kind: "regenerate", regenerateEntry, waitForRegeneratedClips: vi.fn(async () => {}) },
       getDuration: () => {
         throw new Error("feed unavailable");
       },
@@ -490,7 +497,11 @@ describe("queue-runner: production ロジック (#1586)", () => {
       total: entries.length,
       clipIdsByEntry: new Map([[0, ["clip-partial-ok", "clip-partial-ng"]]]),
       durationFilter: { min_sec: 75, max_sec: 240 },
-      durationOutlierStrategy: { kind: "regenerate", regenerateEntry: vi.fn(async () => []) },
+      durationOutlierStrategy: {
+        kind: "regenerate",
+        regenerateEntry: vi.fn(async () => []),
+        waitForRegeneratedClips: vi.fn(async () => {}),
+      },
       getDuration: (clipId: string) => {
         const durations: Record<string, number> = { "clip-partial-ok": 180, "clip-partial-ng": 45 };
         return durations[clipId];
@@ -525,7 +536,11 @@ describe("queue-runner: production ロジック (#1586)", () => {
       total: entries.length,
       clipIdsByEntry: new Map([[0, []]]),
       durationFilter: { min_sec: 75, max_sec: 240 },
-      durationOutlierStrategy: { kind: "regenerate", regenerateEntry: vi.fn(async () => []) },
+      durationOutlierStrategy: {
+        kind: "regenerate",
+        regenerateEntry: vi.fn(async () => []),
+        waitForRegeneratedClips: vi.fn(async () => {}),
+      },
       getDuration: () => {
         throw new Error("duration should not be read without clip IDs");
       },
@@ -560,6 +575,7 @@ describe("queue-runner: production ロジック (#1586)", () => {
       durationOutlierStrategy: {
         kind: "regenerate",
         regenerateEntry: vi.fn(async () => ["clip-short"]),
+        waitForRegeneratedClips: vi.fn(async () => {}),
       },
       getDuration: () => 45,
       markAccepted: vi.fn(),

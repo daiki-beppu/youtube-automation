@@ -140,7 +140,8 @@ export const RUN_MODES: Record<RunModeId, RunMode> = {
   },
   queue: {
     label: "高速モード",
-    riskNote: "最大10件を先行投入する、速度重視のモードです。",
+    riskNote:
+      "最大10件を先行投入し、duration guard NG 時は自動再生成する速度重視のモードです。",
   },
 };
 
