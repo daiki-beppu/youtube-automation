@@ -219,8 +219,9 @@ def test_suno_helper_documents_browser_use_primary_flow() -> None:
         '[data-suno-helper="control-panel"]',
         '[data-suno-control="server-url"]',
         '[data-suno-control="collection-select"]',
-        '[data-suno-control="fetch-data"]',
         '[data-suno-control="run"]',
+        "自動取得",
+        "ページを再読み込み",
         "data-suno-phase",
         'role="status"',
         "finished",
@@ -228,6 +229,8 @@ def test_suno_helper_documents_browser_use_primary_flow() -> None:
         "error",
     ):
         assert token in text, f"suno-helper SKILL.md に browser use 主経路の記載がない（`{token}` 不在）"
+    assert '[data-suno-control="fetch-data"]' not in text, "廃止した手動取得 selector が現行手順に残っている"
+    assert "サーバー URL 入力" not in text, "登録済み配信元 select を free-input と説明する旧契約が残っている"
 
 
 def test_suno_helper_devtools_mcp_is_not_required_flow() -> None:

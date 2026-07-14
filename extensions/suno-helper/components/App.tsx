@@ -50,7 +50,6 @@ export function App() {
     retryPlaylist,
     retryDownload,
     adoptSelectedClips,
-    fetchData,
     run,
     stop,
   } = useSunoRunner();
@@ -320,14 +319,6 @@ export function App() {
       </label>
 
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => void fetchData()}
-          data-suno-control="fetch-data"
-          className="flex-1 rounded bg-gray-800 px-2 py-1 text-sm text-white hover:bg-gray-700"
-        >
-          データ取得
-        </button>
         <button
           type="button"
           onClick={runSelectedEntries}
