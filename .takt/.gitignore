@@ -7,6 +7,10 @@
 # Project configuration
 !config.yaml
 
+# Runtime prepare script (tracked): sandbox 化された worker への
+# 環境変数注入（issue #1999）。worktree でも解決できるよう必ずコミットする
+!runtime-prepare.sh
+
 # Custom workflows (tracked)
 !workflows/
 !workflows/*.yaml

@@ -11,6 +11,14 @@ persona_providers:
   planner:
     provider: codex
 
+# sandbox 化された worker の direnv / lefthook セットアップ停滞対策（issue #1999）。
+# runtime-prepare.sh の stdout（KEY=VALUE）が全 worker の環境へ注入され、
+# XDG_DATA_HOME を worktree ローカルへ向けて direnv allow を通し、
+# lefthook install はスキップさせる（ゲートは CI 側で担保）。
+runtime:
+  prepare:
+    - .takt/runtime-prepare.sh
+
 # トークン消費の計測。記録先: .takt/runs/<run>/logs/<session>-usage-events.phase.jsonl
 observability:
   enabled: true
