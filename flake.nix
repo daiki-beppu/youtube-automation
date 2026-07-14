@@ -67,8 +67,15 @@
 
             # Git hooks (lefthook) を有効化。stale な Nix store 固定パスを残さないよう
             # devShell 入室ごとに再生成し、失敗は commit / push 前に明示的に止める。
+            # ただし sandbox 化された takt worker 等、hooks ディレクトリへ書込みできない
+            # 環境では YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1 で安全にスキップする
+            # （CHANGELOG 等のゲートは CI 側で担保される。issue #1999）。
             if git rev-parse --git-dir >/dev/null 2>&1; then
-              bash "${./.}/.lefthook/install.sh" || exit 1
+              if [ "''${YOUTUBE_AUTOMATION_SKIP_LEFTHOOK:-0}" = "1" ]; then
+                echo "info: YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1 のため lefthook install をスキップします。" >&2
+              else
+                bash "${./.}/.lefthook/install.sh" || exit 1
+              fi
             fi
             uv sync --quiet || echo "warning: uv sync failed; dependencies may be out of date." >&2
           '';

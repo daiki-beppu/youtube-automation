@@ -5,6 +5,13 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
   exit 0
 fi
 
+# sandbox 化された takt worker 等、hooks を書き込めない環境向けの安全なスキップ
+# （ゲートは CI 側で担保される。issue #1999）
+if [ "${YOUTUBE_AUTOMATION_SKIP_LEFTHOOK:-0}" = "1" ]; then
+  echo "info: YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1 のため lefthook install をスキップします。" >&2
+  exit 0
+fi
+
 if ! lefthook_bin="$(command -v lefthook 2>/dev/null)"; then
   echo "error: lefthook is not available in PATH; enter via nix develop or direnv." >&2
   exit 1

@@ -151,6 +151,55 @@ def test_dev_shell_reinstalls_lefthook_without_hiding_failures() -> None:
     assert "exit 1" in flake
 
 
+def test_dev_shell_skips_lefthook_install_when_skip_env_is_set() -> None:
+    # sandbox 化された takt worker（hooks を書き込めない）向けの安全なスキップ分岐
+    # （issue #1999）。既定では従来どおり fail-closed（|| exit 1）のまま
+    flake = _read(_FLAKE_PATH)
+
+    assert "YOUTUBE_AUTOMATION_SKIP_LEFTHOOK" in flake
+
+
+def test_lefthook_install_script_skips_when_skip_env_is_set(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+
+    # lefthook が PATH に無くても skip が優先され成功終了する
+    result = subprocess.run(
+        ["bash", str(_LEFTHOOK_INSTALL_SCRIPT_PATH)],
+        cwd=tmp_path,
+        env={**os.environ, "PATH": "/usr/bin:/bin", "YOUTUBE_AUTOMATION_SKIP_LEFTHOOK": "1"},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1" in result.stderr
+    hooks_dir = tmp_path / ".git" / "hooks"
+    assert not (hooks_dir / "pre-commit").exists()
+    assert not (hooks_dir / "pre-push").exists()
+
+
+def test_takt_runtime_prepare_injects_sandbox_safe_environment(tmp_path: Path) -> None:
+    # takt の runtime.prepare が全 worker へ worktree ローカルの XDG_DATA_HOME と
+    # lefthook skip を注入する配線契約（issue #1999）
+    takt_config = _read(_REPO_ROOT / ".takt" / "config.yaml")
+    assert ".takt/runtime-prepare.sh" in takt_config
+
+    runtime_root = tmp_path / "runtime"
+    result = subprocess.run(
+        ["bash", str(_REPO_ROOT / ".takt" / "runtime-prepare.sh")],
+        env={**os.environ, "TAKT_RUNTIME_ROOT": str(runtime_root)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    lines = result.stdout.splitlines()
+    assert f"XDG_DATA_HOME={runtime_root}/data" in lines
+    assert "YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1" in lines
+
+
 def test_lefthook_install_script_noops_outside_git_repo(tmp_path: Path) -> None:
     result = _run_install_script(tmp_path, "/usr/bin:/bin")
 
@@ -686,7 +735,33 @@ def test_linked_worktree_setup_supplies_dev_shell_tools_and_commit_hook(tmp_path
     _assert_setup_supplies_dev_shell_tools_and_commit_hook(worktree, tmp_path)
 
 
-def test_worktree_setup_propagates_direnv_allow_failure(tmp_path: Path) -> None:
+def test_worktree_setup_falls_back_to_nix_when_direnv_allow_fails(tmp_path: Path) -> None:
+    # sandbox 化された環境では direnv の allow ストア（$XDG_DATA_HOME/direnv/allow）へ
+    # 書込みできず direnv allow が失敗する。hard fail で反復停滞せず nix develop へ
+    # フォールバックする契約（issue #1999）
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _create_fake_executable(bin_dir / "direnv", "#!/usr/bin/env bash\nexit 23\n")
+    nix_log = tmp_path / "nix-call.txt"
+    _create_fake_executable(
+        bin_dir / "nix",
+        f"""#!/usr/bin/env bash
+printf '%s\n' "$*" > "{nix_log}"
+shift 3
+exec "$@"
+""",
+    )
+
+    result = _run_worktree_setup(tmp_path, f"{bin_dir}:/usr/bin:/bin", "sh", "-c", "printf ran")
+
+    assert result.returncode == 0
+    assert result.stdout == "ran"
+    assert "direnv allow に失敗しました" in result.stderr
+    assert nix_log.read_text(encoding="utf-8") == (f"develop {tmp_path} --command sh -c printf ran\n")
+
+
+def test_worktree_setup_fails_when_direnv_allow_fails_without_nix(tmp_path: Path) -> None:
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -694,7 +769,9 @@ def test_worktree_setup_propagates_direnv_allow_failure(tmp_path: Path) -> None:
 
     result = _run_worktree_setup(tmp_path, f"{bin_dir}:/usr/bin:/bin", "sh", "-c", "exit 0")
 
-    assert result.returncode == 23
+    assert result.returncode == 1
+    assert "direnv allow に失敗しました" in result.stderr
+    assert "error: neither direnv nor nix is available in PATH." in result.stderr
 
 
 def test_worktree_setup_fails_outside_git_checkout(tmp_path: Path) -> None:
