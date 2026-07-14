@@ -35,6 +35,10 @@
 
 ## 制作の 3 フェーズと skill の流れ
 
+`/wf-new` と `/wf-next` はオーケストレーターとして動作する。各 phase の生成・変換処理は Agent ツールで一作業ずつ subagent へ委譲し、メインエージェントは `workflow-state.json` の管理、AskUserQuestion / config 駆動の承認ゲート、成果物の存在・phase 整合検証を担当する。subagent は state を書き込まず、承認を取得しない。
+
+subagent が失敗した、期待成果物が無い、または現在の phase と整合しない場合、メインは state を更新しない。次の `/wf-new` / `/wf-next` は同じ未完了ステップから再開する。`approval_gates.audio` / `approval_gates.upload`、`skip_manual_mastering`、thumbnail 承認、playlist 初期化承認は従来どおりメインが config と実ファイルを確認して処理する。
+
 ```
 Phase 1 ─ 企画 + 素材準備           /wf-new
    ├─ /collection-ideate            (analytics mode / benchmark fallback mode / minimal mode で 3 候補生成)
@@ -63,7 +67,7 @@ Phase 3 ─ 公開（全自動）             /wf-next
 
 - **配置**: `collections/planning/<YYYYMMDD-short-theme>-collection/workflow-state.json`
 - **役割**: コレクションの phase / assets / upload 状態を持つ単一の真実源（single source of truth）
-- **更新主体**: 原則として **`/wf-new` `/wf-next` の skill が自動更新する**（`updated_at` / `phase` / `assets` / `upload`）
+- **更新主体**: **`/wf-new` `/wf-next` を実行するメインエージェントだけが更新する**（`updated_at` / `phase` / `assets` / `upload`）。実作業を担う subagent は読み取りが必要な場合を除き state に触れず、書き込まない
 
 ### 手で触っていい？ ダメ？
 
@@ -108,7 +112,7 @@ A. `config/channel/workflow.json` に `workflow.wf_next.skip_manual_mastering: t
 A. `phase: "publishing"` で停止していれば、`assets` フラグの状態から未完了ステップを特定し、`/wf-next` をもう一度呼ぶと未完了ステップから再開する（冪等性あり）。
 
 **Q. analytics やベンチマークが無いと `/collection-ideate` は止まる？**
-A. `reports/analysis_*.md` が無い場合は止まらず、`data/benchmark_*.json` があれば benchmark fallback mode、どちらも無ければ minimal mode で進む。minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認する。analytics mode へ進めるのは、ファイル名日付が最新の Markdown と同日付 JSON が揃い、analysis JSON validator が成功し、ペアが stale でない場合だけ。Markdown があるのに同日付 JSON がない、または validator が失敗する場合は fallback せず停止する。ペアが stale（最新 `data/analytics_data_*.json` より古い、あるいは収集データ自体が実行日から解決済み `freshness_days` を超えて経過）の場合は `/collection-ideate` がコスト見積もりを表示し、既定 `freshness.stale_action: ask` では「自動実行 / 案内のみ / 中断」を確認する。`auto` は見積可能かつ任意の上限内だけ自動実行し、`manual` は従来どおり案内して停止する。絶対鮮度 stale の再分析は `/analytics-collect` を先行する。`/wf-new` は判定を委譲するためダイアログは 1 回だけ。`yt-doctor` の入力モード表示は Markdown と stale の予備確認であり、JSON/validator の最終 Hard Gate は `/collection-ideate` が実行する。`freshness_days` は `.claude/skills/collection-ideate/config.default.yaml` の既定 7 日を使い、`config/skills/collection-ideate.yaml` で上書きできる。
+A. `reports/analysis_*.md` が無い場合は止まらず、`data/benchmark_*.json` があれば benchmark fallback mode、どちらも無ければ minimal mode で進む。minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認する。analytics mode へ進めるのは、ファイル名日付が最新の Markdown と同日付 JSON が揃い、analysis JSON validator が成功し、ペアが stale でない場合だけ。Markdown があるのに同日付 JSON がない、または validator が失敗する場合は fallback せず停止する。ペアが stale（最新 `data/analytics_data_*.json` より古い、あるいは収集データ自体が実行日から解決済み `freshness_days` を超えて経過）の場合はコスト見積もりを表示し、既定 `freshness.stale_action: ask` では「自動実行 / 案内のみ / 中断」を確認する。`auto` は見積可能かつ任意の上限内だけ自動実行し、`manual` は従来どおり案内して停止する。絶対鮮度 stale の再分析は `/analytics-collect` を先行する。`/wf-new` 経由ではメインエージェントが `/collection-ideate` の freshness helper を使って判定・承認・再検証を完了し、承認済み入力だけを subagent に渡すためダイアログは 1 回だけ。`yt-doctor` の入力モード表示は Markdown と stale の予備確認であり、JSON/validator の最終 Hard Gate には使わない。`freshness_days` は `.claude/skills/collection-ideate/config.default.yaml` の既定 7 日を使い、`config/skills/collection-ideate.yaml` で上書きできる。
 
 **Q. 「planning/」と「live/」って何**
 A. 制作中は `collections/planning/<dir>/`、`/video-upload` で公開完了すると `collections/live/<dir>/` に移動する（`/wf-next` の Phase 3 最後）。
