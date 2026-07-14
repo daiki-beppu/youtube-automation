@@ -259,8 +259,10 @@ describe("shared/constants: 投入方式 run mode (#1586)", () => {
     expect(RUN_MODES.serial.riskNote).toBe("1件ずつ完了を待つ、安定性重視のモードです。");
   });
 
-  it("Given queue mode When label / riskNote を読む Then 高速モードとして速度重視の説明を表示する (#1862)", () => {
+  it("Given queue mode When label / riskNote を読む Then 先行投入と duration NG 時の自動再生成を表示する (#1775)", () => {
     expect(RUN_MODES.queue.label).toBe("高速モード");
-    expect(RUN_MODES.queue.riskNote).toBe("最大10件を先行投入する、速度重視のモードです。");
+    expect(RUN_MODES.queue.riskNote).toBe(
+      "最大10件を先行投入し、duration guard NG 時は自動再生成する速度重視のモードです。",
+    );
   });
 });

@@ -92,7 +92,11 @@ export interface QueueEntriesYieldOptions {
   emitProgress: (payload: ProgressPayload) => void;
   durationOutlierStrategy:
     | { kind: "retain" }
-    | { kind: "regenerate"; regenerateEntry: (index: number, attempt: number) => Promise<string[]> };
+    | {
+        kind: "regenerate";
+        regenerateEntry: (index: number, attempt: number) => Promise<string[]>;
+        waitForRegeneratedClips: (clipIds: string[]) => Promise<void>;
+      };
   isAborted?: () => boolean;
 }
 
@@ -159,8 +163,10 @@ async function submitQueueEntry(options: QueueSubmissionOptions, index: number):
 export async function finalizeQueueEntriesYield(options: QueueEntriesYieldOptions): Promise<QueueEntriesYieldResult> {
   const failedIndices: number[] = [];
   const durationFilter = options.durationFilter ?? DEFAULT_DURATION_FILTER;
+  const pendingEntries = new Map<number, { clipIds: string[]; yieldRetryCount: number }>();
+
   for (const index of options.order) {
-    let entryClipIds = options.clipIdsByEntry.get(index) ?? [];
+    const entryClipIds = options.clipIdsByEntry.get(index) ?? [];
     if (entryClipIds.length === 0) {
       console.warn(
         `[suno-helper] entry ${index} の clip ID を bridge で観測できなかったため duration guard を skip します。`,
@@ -168,8 +174,17 @@ export async function finalizeQueueEntriesYield(options: QueueEntriesYieldOption
       options.emitProgress({ phase: PHASE.DONE, index, total: options.total, yieldRetryCount: 0 });
       continue;
     }
-    let yieldRetryCount = 0;
-    for (;;) {
+    pendingEntries.set(index, { clipIds: entryClipIds, yieldRetryCount: 0 });
+  }
+
+  while (pendingEntries.size > 0) {
+    const retries: Array<{ index: number; previousClipIds: string[]; yieldRetryCount: number }> = [];
+    for (const index of options.order) {
+      const pendingEntry = pendingEntries.get(index);
+      if (pendingEntry === undefined) {
+        continue;
+      }
+      const { clipIds: entryClipIds, yieldRetryCount } = pendingEntry;
       let attemptResult;
       try {
         attemptResult = {
@@ -207,52 +222,31 @@ export async function finalizeQueueEntriesYield(options: QueueEntriesYieldOption
           yieldRetryCount,
           acceptedClipIds: decision.acceptedClipIds,
         });
-        break;
+        pendingEntries.delete(index);
+        continue;
       }
       if (decision.kind === "retry") {
         if (options.durationOutlierStrategy.kind !== "regenerate") {
           throw new Error("duration retain policy returned an invalid retry decision");
         }
-        yieldRetryCount += 1;
+        const nextYieldRetryCount = yieldRetryCount + 1;
         console.warn(
-          `[suno-helper] entry ${index} duration guard NG、同一 prompt で再生成します (${yieldRetryCount}/${MAX_YIELD_RETRY}): ${decision.message}`,
+          `[suno-helper] entry ${index} duration guard NG、同一 prompt で再生成します (${nextYieldRetryCount}/${MAX_YIELD_RETRY}): ${decision.message}`,
         );
         options.emitProgress({
           phase: PHASE.WAITING_SLOT,
           index,
           total: options.total,
-          message: `${decision.message}; retry ${yieldRetryCount}/${MAX_YIELD_RETRY}`,
-          yieldRetryCount,
+          message: `${decision.message}; retry ${nextYieldRetryCount}/${MAX_YIELD_RETRY}`,
+          yieldRetryCount: nextYieldRetryCount,
           log: {
             kind: "retry",
             entryName: entryDisplayName(options.entries[index]),
-            attempt: yieldRetryCount,
+            attempt: nextYieldRetryCount,
             max: MAX_YIELD_RETRY,
           },
         });
-        try {
-          const regeneratedClipIds = await options.durationOutlierStrategy.regenerateEntry(index, yieldRetryCount);
-          if (options.isAborted?.()) {
-            return { failedIndices, abortedIndex: index };
-          }
-          options.dropSubmittedIds(entryClipIds);
-          entryClipIds = regeneratedClipIds;
-        } catch (error) {
-          const regenerationMessage = error instanceof Error ? error.message : String(error);
-          options.dropSubmittedIds(entryClipIds);
-          failedIndices.push(index);
-          console.warn(`[suno-helper] entry ${index} の duration 再生成に失敗しました: ${regenerationMessage}`);
-          options.emitProgress({
-            phase: PHASE.ENTRY_FAILED,
-            index,
-            total: options.total,
-            message: regenerationMessage,
-            yieldRetryCount,
-            log: { kind: "skip", entryName: entryDisplayName(options.entries[index]) },
-          });
-          break;
-        }
-        options.clipIdsByEntry.set(index, entryClipIds);
+        retries.push({ index, previousClipIds: entryClipIds, yieldRetryCount: nextYieldRetryCount });
         continue;
       }
       options.dropSubmittedIds(entryClipIds);
@@ -268,7 +262,90 @@ export async function finalizeQueueEntriesYield(options: QueueEntriesYieldOption
         yieldRetryCount,
         log: { kind: "skip", entryName: entryDisplayName(options.entries[index]) },
       });
-      break;
+      pendingEntries.delete(index);
+    }
+
+    if (retries.length === 0) {
+      continue;
+    }
+    const { durationOutlierStrategy } = options;
+    if (durationOutlierStrategy.kind !== "regenerate") {
+      throw new Error("duration retain policy returned retry entries");
+    }
+
+    const submittedRetries: Array<{
+      index: number;
+      previousClipIds: string[];
+      regeneratedClipIds: string[];
+      yieldRetryCount: number;
+    }> = [];
+    for (const retry of retries) {
+      try {
+        const regeneratedClipIds = await durationOutlierStrategy.regenerateEntry(retry.index, retry.yieldRetryCount);
+        if (options.isAborted?.()) {
+          options.dropSubmittedIds(regeneratedClipIds);
+          for (const submittedRetry of submittedRetries) {
+            options.dropSubmittedIds(submittedRetry.regeneratedClipIds);
+          }
+          return { failedIndices, abortedIndex: retries[0].index };
+        }
+        submittedRetries.push({ ...retry, regeneratedClipIds });
+      } catch (error) {
+        const regenerationMessage = error instanceof Error ? error.message : String(error);
+        options.dropSubmittedIds(retry.previousClipIds);
+        failedIndices.push(retry.index);
+        pendingEntries.delete(retry.index);
+        console.warn(`[suno-helper] entry ${retry.index} の duration 再生成に失敗しました: ${regenerationMessage}`);
+        options.emitProgress({
+          phase: PHASE.ENTRY_FAILED,
+          index: retry.index,
+          total: options.total,
+          message: regenerationMessage,
+          yieldRetryCount: retry.yieldRetryCount,
+          log: { kind: "skip", entryName: entryDisplayName(options.entries[retry.index]) },
+        });
+      }
+    }
+
+    const completionResults = await Promise.all(
+      submittedRetries.map(async (retry) => {
+        try {
+          await durationOutlierStrategy.waitForRegeneratedClips(retry.regeneratedClipIds);
+          return { ...retry, error: undefined };
+        } catch (error) {
+          return { ...retry, error: error instanceof Error ? error.message : String(error) };
+        }
+      }),
+    );
+    if (options.isAborted?.()) {
+      for (const completion of completionResults) {
+        options.dropSubmittedIds(completion.regeneratedClipIds);
+      }
+      return { failedIndices, abortedIndex: completionResults[0]?.index };
+    }
+    for (const completion of completionResults) {
+      if (completion.error !== undefined) {
+        options.dropSubmittedIds(completion.regeneratedClipIds);
+        options.dropSubmittedIds(completion.previousClipIds);
+        failedIndices.push(completion.index);
+        pendingEntries.delete(completion.index);
+        console.warn(`[suno-helper] entry ${completion.index} の duration 再生成に失敗しました: ${completion.error}`);
+        options.emitProgress({
+          phase: PHASE.ENTRY_FAILED,
+          index: completion.index,
+          total: options.total,
+          message: completion.error,
+          yieldRetryCount: completion.yieldRetryCount,
+          log: { kind: "skip", entryName: entryDisplayName(options.entries[completion.index]) },
+        });
+        continue;
+      }
+      options.dropSubmittedIds(completion.previousClipIds);
+      options.clipIdsByEntry.set(completion.index, completion.regeneratedClipIds);
+      pendingEntries.set(completion.index, {
+        clipIds: completion.regeneratedClipIds,
+        yieldRetryCount: completion.yieldRetryCount,
+      });
     }
   }
   return { failedIndices };

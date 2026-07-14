@@ -441,6 +441,18 @@ beforeEach(() => {
   harness.pendingClipIds = [];
   harness.requestFeedPollError = undefined;
   harness.abortOnRequestFeedPoll = false;
+  harness.requestFeedPoll.mockReset();
+  harness.requestFeedPoll.mockImplementation(async (ids: string[]) => {
+    if (harness.abortOnRequestFeedPoll) {
+      harness.handlers.get("stop")?.({ data: undefined });
+    }
+    if (harness.requestFeedPollError) {
+      throw harness.requestFeedPollError;
+    }
+    const requested = new Set(ids);
+    harness.pendingClipIds = harness.pendingClipIds.filter((id) => !requested.has(id));
+    return [];
+  });
   harness.waitForGeneration.mockReset();
   harness.waitForGeneration.mockResolvedValue(undefined);
   harness.waitForQueueSlot.mockReset();
@@ -1371,6 +1383,33 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       { timeout: 3000 },
     );
     await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(generateCount).toBe(4);
+    expect(harness.waitForQueueSlot).toHaveBeenCalledTimes(4);
+    const progress = progressPayloads();
+    const secondOriginalSubmittedAt = progress.findIndex(
+      (payload) =>
+        typeof payload === "object" &&
+        payload !== null &&
+        "phase" in payload &&
+        payload.phase === PHASE.SUBMITTED &&
+        "index" in payload &&
+        payload.index === 1 &&
+        "yieldRetryCount" in payload &&
+        payload.yieldRetryCount === 0,
+    );
+    const firstDurationRetryAt = progress.findIndex(
+      (payload) =>
+        typeof payload === "object" &&
+        payload !== null &&
+        "phase" in payload &&
+        payload.phase === PHASE.WAITING_SLOT &&
+        "index" in payload &&
+        payload.index === 1 &&
+        "yieldRetryCount" in payload &&
+        payload.yieldRetryCount === 1,
+    );
+    expect(secondOriginalSubmittedAt).toBeGreaterThanOrEqual(0);
+    expect(firstDurationRetryAt).toBeGreaterThan(secondOriginalSubmittedAt);
     expect(harness.acceptedClipIds).toEqual(["queue-duration-clip-1", "queue-duration-clip-2"]);
     expect(harness.requestFeedPoll).toHaveBeenCalledWith(["queue-duration-clip-5", "queue-duration-clip-6"]);
     expect(harness.droppedClipIds).toEqual([
@@ -1423,6 +1462,64 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     );
     expect(progressPayloads()).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ phase: PHASE.ADDING_TO_PLAYLIST })]),
+    );
+  });
+
+  it("Given queue mode で複数 entry の clip が全て duration filter 外 When 再生成する Then 最初の retry 完了待ち前に全 retry を ACK 済みにする", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    const events: string[] = [];
+    let generateCount = 0;
+    makeGenerateButtonWithClickObserver(() => {
+      generateCount += 1;
+      const firstClipNumber = generateCount * 2 - 1;
+      const generatedIds = [`queue-parallel-retry-${firstClipNumber}`, `queue-parallel-retry-${firstClipNumber + 1}`];
+      events.push(`generate-${generateCount}`);
+      harness.submittedClipIds.push(...generatedIds);
+      if (generateCount > 2) {
+        harness.pendingClipIds.push(...generatedIds);
+      }
+    });
+    addCompletedRemixCard();
+    await loadContentScript();
+    const entries = makePromptEntries(2);
+    const payload = {
+      ...makeRunPayload(entries),
+      runMode: "queue" as const,
+      durationFilter: { min_sec: 75, max_sec: 240 },
+    };
+    harness.submittedClipIds = [];
+    harness.durationsById = {
+      "queue-parallel-retry-1": 45,
+      "queue-parallel-retry-2": 46,
+      "queue-parallel-retry-3": 45,
+      "queue-parallel-retry-4": 46,
+      "queue-parallel-retry-5": 120,
+      "queue-parallel-retry-6": 180,
+      "queue-parallel-retry-7": 120,
+      "queue-parallel-retry-8": 180,
+    };
+    harness.requestFeedPoll.mockImplementation(async (ids: string[]) => {
+      events.push(`poll-${ids[0]}`);
+      const requested = new Set(ids);
+      harness.pendingClipIds = harness.pendingClipIds.filter((id) => !requested.has(id));
+      return [];
+    });
+
+    expect(getRunHandler()({ data: payload })).toEqual({ ok: true });
+
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce(), { timeout: 3000 });
+    expect(generateCount).toBe(4);
+    expect(harness.waitForQueueSlot).toHaveBeenCalledTimes(4);
+    expect(events.indexOf("generate-4")).toBeGreaterThan(events.indexOf("generate-3"));
+    expect(events.indexOf("generate-4")).toBeLessThan(events.findIndex((event) => event.startsWith("poll-")));
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: PHASE.DONE, index: 0, yieldRetryCount: 1 }),
+        expect.objectContaining({ phase: PHASE.DONE, index: 1, yieldRetryCount: 1 }),
+      ]),
     );
   });
 
@@ -1504,6 +1601,61 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       { timeout: 3000 },
     );
     expect(harness.droppedClipIds).toEqual(["queue-stop-2-a", "queue-stop-2-b", "queue-stop-1-a", "queue-stop-1-b"]);
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ phase: PHASE.STOPPED, index: 0 })]),
+    );
+  });
+
+  it("Given 複数queue retryの1件目ACK後 When 2件目の投入中にstop Then 全entryを再開候補にしてoriginalとretry IDsを除去する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    let generateCount = 0;
+    makeGenerateButtonWithClickObserver(() => {
+      generateCount += 1;
+      harness.submittedClipIds.push(`queue-submit-stop-${generateCount}-a`, `queue-submit-stop-${generateCount}-b`);
+    });
+    addCompletedRemixCard();
+    await loadContentScript();
+    const entries = makePromptEntries(2);
+    const payload = { ...makeRunPayload(entries), runMode: "queue" as const };
+    harness.submittedClipIds = [];
+    harness.durationsById = {
+      "queue-submit-stop-1-a": 45,
+      "queue-submit-stop-1-b": 46,
+      "queue-submit-stop-2-a": 45,
+      "queue-submit-stop-2-b": 46,
+    };
+    harness.waitForQueueSlot.mockImplementation(async () => {
+      if (harness.waitForQueueSlot.mock.calls.length === 4) {
+        harness.handlers.get("stop")?.({ data: undefined });
+      }
+    });
+
+    expect(getRunHandler()({ data: payload })).toEqual({ ok: true });
+
+    await vi.waitFor(
+      () =>
+        expect(writeResumeState).toHaveBeenCalledWith(
+          expect.objectContaining({
+            failedIndex: 0,
+            remainingIndices: [0, 1],
+            submittedClipIds: [],
+          }),
+        ),
+      { timeout: 3000 },
+    );
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(generateCount).toBe(3);
+    expect(harness.droppedClipIds).toEqual([
+      "queue-submit-stop-3-a",
+      "queue-submit-stop-3-b",
+      "queue-submit-stop-1-a",
+      "queue-submit-stop-1-b",
+      "queue-submit-stop-2-a",
+      "queue-submit-stop-2-b",
+    ]);
     expect(progressPayloads()).toEqual(
       expect.arrayContaining([expect.objectContaining({ phase: PHASE.STOPPED, index: 0 })]),
     );
