@@ -624,7 +624,6 @@ def test_build_prompt_entries_vocal_includes_rstripped_external_lyrics(channel_d
         channel_dir,
         genre_line="dream pop vocals",
         auto_lyrics_structure=False,
-        tracks_per_pattern=1,
     )
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
     _write_suno_lyrics_json(tmp_path, ["歌もの — Vocal"], lyrics="[Verse]\nla la la\n\n")
@@ -638,7 +637,7 @@ def test_build_prompt_entries_vocal_requires_suno_lyrics_json(channel_dir, tmp_p
     """vocal mode は `/suno-lyric` が出す suno-lyrics.json を必須にする."""
     from youtube_automation.utils.exceptions import ConfigError
 
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
 
     with pytest.raises(ConfigError) as exc_info:
@@ -658,7 +657,6 @@ def test_build_prompt_entries_vocal_prefers_suno_lyrics_json(channel_dir, tmp_pa
         channel_dir,
         genre_line="dream pop vocals",
         auto_lyrics_structure=False,
-        tracks_per_pattern=1,
     )
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
     (tmp_path / "suno-lyrics.json").write_text(
@@ -692,7 +690,6 @@ def test_build_prompt_entries_vocal_merges_suno_lyrics_json_by_variation_name(ch
         channel_dir,
         genre_line="dream pop vocals",
         auto_lyrics_structure=False,
-        tracks_per_pattern=1,
     )
     patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
     (tmp_path / "suno-lyrics.json").write_text(
@@ -718,7 +715,7 @@ def test_build_prompt_entries_vocal_fails_on_duplicate_suno_lyrics_names(channel
     """
     from youtube_automation.utils.exceptions import ConfigError
 
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
     (tmp_path / "suno-lyrics.json").write_text(
         json.dumps(
@@ -742,7 +739,7 @@ def test_build_prompt_entries_vocal_fails_when_suno_lyrics_json_missing_expected
     """suno-lyrics.json が存在する場合、期待 entry name の欠落は fallback せず fail-loud."""
     from youtube_automation.utils.exceptions import ConfigError
 
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
     (tmp_path / "suno-lyrics.json").write_text(
         json.dumps([{"name": "別名 — Wrong", "lyrics": "[Verse]\nwrong"}], ensure_ascii=False),
@@ -762,7 +759,7 @@ def test_build_prompt_entries_vocal_fails_when_multi_scene_suno_lyrics_json_is_i
     """multi scene では Variation ごとの lyrics entry が全て必要."""
     from youtube_automation.utils.exceptions import ConfigError
 
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
     (tmp_path / "suno-lyrics.json").write_text(
         json.dumps([{"name": "歌もの — Vocal (Variation 1)", "lyrics": "[Verse]\none"}], ensure_ascii=False),
@@ -782,7 +779,7 @@ def test_build_prompt_entries_vocal_rejects_padded_suno_lyrics_name(channel_dir,
     """
     from youtube_automation.utils.exceptions import ConfigError
 
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
     _write_suno_lyrics_json(tmp_path, [" 歌もの — Vocal "], lyrics="[Verse]\nexternal lyric")
 
@@ -800,7 +797,6 @@ def test_build_prompt_entries_vocal_rejects_suno_lyrics_json_title_alias(channel
         channel_dir,
         genre_line="dream pop vocals",
         auto_lyrics_structure=False,
-        tracks_per_pattern=1,
     )
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
     (tmp_path / "suno-lyrics.json").write_text(
@@ -818,7 +814,7 @@ def test_build_prompt_entries_auto_vocal_requires_suno_lyrics_json(channel_dir, 
     """mode 省略でも genre_line が vocal なら suno-lyrics.json 必須契約を適用する."""
     from youtube_automation.utils.exceptions import ConfigError
 
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_minimal_patterns(tmp_path)
     data = yaml.safe_load(patterns_path.read_text(encoding="utf-8"))
     data.pop("mode", None)
@@ -836,7 +832,6 @@ def test_build_prompt_entries_auto_vocal_merges_suno_lyrics_json(channel_dir, tm
         channel_dir,
         genre_line="dream pop vocals",
         auto_lyrics_structure=False,
-        tracks_per_pattern=1,
     )
     patterns_path = _write_minimal_patterns(tmp_path)
     data = yaml.safe_load(patterns_path.read_text(encoding="utf-8"))
@@ -869,7 +864,7 @@ def test_build_prompt_entries_vocal_fails_on_invalid_suno_lyrics_json_shapes(
     """外部 lyrics JSON の shape error は ConfigError として固定する."""
     from youtube_automation.utils.exceptions import ConfigError
 
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
     raw = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
     (tmp_path / "suno-lyrics.json").write_text(raw, encoding="utf-8")
@@ -885,7 +880,7 @@ def test_build_prompt_entries_multiple_scenes_become_separate_variations(channel
     When entries を読む
     Then scene 単位で 2 entry に分かれ、name に ` (Variation N)` が付く。
     """
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
     _write_suno_lyrics_json(
         tmp_path,
@@ -904,49 +899,49 @@ def test_build_prompt_entries_multiple_scenes_become_separate_variations(channel
     assert "scene two" in entries[1]["style"]
 
 
-def test_build_prompt_entries_vocal_expands_default_tracks_per_pattern(channel_dir, tmp_path):
-    """Given tracks_per_pattern を override しない vocal pattern
+def test_build_prompt_entries_vocal_ignores_legacy_tracks_per_pattern(channel_dir, tmp_path):
+    """Given 旧 tracks_per_pattern が残る vocal pattern
     When build_prompt_entries を呼ぶ
-    Then default の 3 take 分に entry name と lyrics merge が展開される。
+    Then 1 pattern は 1 entry のままで Take 展開されない。
     """
     _write_suno_override(
         channel_dir,
         genre_line="dream pop vocals",
         auto_lyrics_structure=False,
+        tracks_per_pattern=3,
     )
     patterns_path = _write_vocal_patterns(tmp_path, ["scene one"])
-    names = [
-        "歌もの — Vocal (Take 1)",
-        "歌もの — Vocal (Take 2)",
-        "歌もの — Vocal (Take 3)",
-    ]
+    names = ["歌もの — Vocal"]
     _write_suno_lyrics_json(tmp_path, names)
 
     entries = build_prompt_entries(patterns_path)
 
     assert [entry["name"] for entry in entries] == names
-    assert [entry["lyrics"] for entry in entries] == ["[Verse]\nexternal lyric"] * 3
+    assert entries[0]["lyrics"] == "[Verse]\nexternal lyric"
+    assert "(Take " not in entries[0]["name"]
     assert all("scene one" in entry["style"] for entry in entries)
 
 
-def test_generate_vocal_md_expands_default_tracks_per_pattern_headings(channel_dir, tmp_path):
-    """Given tracks_per_pattern を override しない vocal pattern
+def test_generate_vocal_md_uses_single_heading_when_legacy_tracks_per_pattern_remains(channel_dir, tmp_path):
+    """Given 旧 tracks_per_pattern が残る vocal pattern
     When generate で suno-prompts.md 本文を作る
-    Then 手動投入用見出しにも default の 3 take 分の entry name を出す。
+    Then 手動投入用見出しにも展開なしの entry name を出す。
     """
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
+    _write_suno_override(
+        channel_dir,
+        genre_line="dream pop vocals",
+        auto_lyrics_structure=False,
+        tracks_per_pattern=3,
+    )
     patterns_path = _write_vocal_patterns(tmp_path, ["scene one"])
-    names = [
-        "歌もの — Vocal (Take 1)",
-        "歌もの — Vocal (Take 2)",
-        "歌もの — Vocal (Take 3)",
-    ]
+    names = ["歌もの — Vocal"]
     _write_suno_lyrics_json(tmp_path, names)
 
     md = generate(patterns_path)
 
     for name in names:
         assert f"### {name}" in md
+    assert "(Take " not in md
     assert "### Variation 1" not in md
 
 
@@ -1049,7 +1044,6 @@ def test_main_collection_dir_merges_vocal_suno_lyrics_json(channel_dir, tmp_path
         channel_dir,
         genre_line="dream pop vocals",
         auto_lyrics_structure=False,
-        tracks_per_pattern=1,
     )
     patterns_path = _write_vocal_patterns(docs_dir, ["a dreamy scene"])
     patterns_path.rename(docs_dir / "suno-patterns.yaml")
@@ -1275,7 +1269,6 @@ def test_vocal_mode_skips_tracks_per_collection_validation(channel_dir, tmp_path
         channel_dir,
         genre_line="lo-fi hip hop with soft male vocals",
         tracks_per_collection=20,
-        tracks_per_pattern=1,
     )
     patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=1)
     # mode を vocal に上書きして genre_line の vocal 判定と整合させる
@@ -1416,7 +1409,6 @@ def test_unique_titles_allow_same_pattern_name_when_variation_suffix_disambiguat
     _write_suno_override(
         channel_dir,
         genre_line="lo-fi hip hop with soft male vocals",
-        tracks_per_pattern=1,
     )
     payload: dict = {
         "title": "Vocal Test",
@@ -1645,7 +1637,7 @@ def test_advanced_fields_apply_to_every_entry_collection_scope(channel_dir, tmp_
     When build_prompt_entries を呼ぶ
     Then 全 entry に同じ weirdness が載る (3 値は collection スコープで全 entry 共通)。
     """
-    _write_suno_override(channel_dir, genre_line="dream pop vocals", weirdness=40, tracks_per_pattern=1)
+    _write_suno_override(channel_dir, genre_line="dream pop vocals", weirdness=40)
     patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
     _write_suno_lyrics_json(
         tmp_path,
@@ -1864,7 +1856,6 @@ def test_style_variation_applies_to_vocal_multi_scene_entries(channel_dir, tmp_p
         channel_dir,
         genre_line="dream pop vocals",
         auto_lyrics_structure=False,
-        tracks_per_pattern=1,
     )
     patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
     _write_suno_lyrics_json(

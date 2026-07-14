@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -68,6 +69,48 @@ def _write_repo(tmp_path: Path, pyproject_body: str) -> Path:
     repo = tmp_path / "channel"
     repo.mkdir()
     (repo / "pyproject.toml").write_text(pyproject_body, encoding="utf-8")
+    config_dir = repo / "config" / "channel"
+    config_dir.mkdir(parents=True)
+    (config_dir / "meta.json").write_text(
+        json.dumps(
+            {
+                "channel": {
+                    "name": "Test Channel",
+                    "short": "test",
+                    "youtube_handle": "@test",
+                    "url": "https://youtube.com/@test",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    (config_dir / "content.json").write_text(
+        json.dumps(
+            {
+                "genre": {"primary": "bgm", "style": "ambient", "context": "study"},
+                "tags": {"base": ["bgm"], "themes": {}},
+                "descriptions": {
+                    "opening": "Relaxing {style}.",
+                    "perfect_for": ["Study"],
+                    "hashtags": ["#bgm"],
+                },
+                "title": {"template": "{theme} bgm"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (config_dir / "youtube.json").write_text(
+        json.dumps(
+            {
+                "youtube": {
+                    "category_id": "10",
+                    "privacy_status": "public",
+                    "language": "ja",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
     return repo
 
 
@@ -101,6 +144,7 @@ def recorded_commands(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
         return 0
 
     monkeypatch.setattr(automation_update, "_run_command", _record)
+    monkeypatch.setattr(automation_update, "_check_channel_config", lambda root: "config/channel/ ロード成功")
     monkeypatch.setattr(automation_update, "_git_status_porcelain", lambda root: "")
     monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
     return commands
@@ -453,7 +497,6 @@ def test_apply_inline_tag_pin_rewrites_and_runs_steps(
         ["uv", "lock", "--upgrade-package", "youtube-channels-automation"],
         ["uv", "run", "yt-skills", "sync", "--force"],
         ["uv", "run", "yt-skills", "list"],
-        ["uv", "run", "yt-config-migrate", "verify", "--target", str(repo)],
     ]
     assert "✓ 追従が完了しました" in capsys.readouterr().out
 
@@ -468,7 +511,7 @@ def test_apply_fetches_latest_release_when_tag_omitted(
 
     text = (repo / "pyproject.toml").read_text(encoding="utf-8")
     assert 'tag = "v9.9.9"' in text
-    assert ["uv", "run", "yt-config-migrate", "verify", "--target", str(repo)] in recorded_commands
+    assert ["uv", "run", "yt-skills", "list"] in recorded_commands
 
 
 def test_apply_rejects_invalid_explicit_tag_without_side_effects(
@@ -510,7 +553,7 @@ def test_apply_uses_cwd_when_target_omitted(
     assert main(["apply", "--tag", "v5.6.0"]) == 0
 
     assert 'tag = "v5.6.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
-    assert ["uv", "run", "yt-config-migrate", "verify", "--target", str(repo)] in recorded_commands
+    assert ["uv", "run", "yt-skills", "list"] in recorded_commands
 
 
 def test_apply_url_tag_pin_rewrites(tmp_path: Path, no_network, recorded_commands: list[list[str]]) -> None:
@@ -597,7 +640,7 @@ def test_apply_same_tag_is_idempotent(
     assert main(["apply", "--target", str(repo), "--tag", "v5.5.0"]) == 0
     assert 'tag = "v5.5.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
     assert "書き換えなし" in capsys.readouterr().out
-    assert len(recorded_commands) == 4  # lock / sync / smoke x2 は実行される
+    assert len(recorded_commands) == 3  # lock / sync / smoke check は実行される
 
 
 def test_apply_branch_follow_skips_rewrite(
@@ -767,6 +810,7 @@ def test_apply_failed_step_can_rerun_with_allow_dirty_from_rewritten_pin(
         return 0
 
     monkeypatch.setattr(automation_update, "_run_command", _run)
+    monkeypatch.setattr(automation_update, "_check_channel_config", lambda root: "config/channel/ ロード成功")
     monkeypatch.setattr(automation_update, "_git_status_porcelain", _status)
     monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
 
@@ -781,7 +825,6 @@ def test_apply_failed_step_can_rerun_with_allow_dirty_from_rewritten_pin(
         ["uv", "lock", "--upgrade-package", "youtube-channels-automation"],
         ["uv", "run", "yt-skills", "sync", "--force"],
         ["uv", "run", "yt-skills", "list"],
-        ["uv", "run", "yt-config-migrate", "verify", "--target", str(repo)],
     ]
 
 
@@ -856,19 +899,99 @@ def test_apply_sync_only_rejects_unknown_skill_before_side_effects(
     assert recorded_commands == []
 
 
-def test_apply_config_migrate_verify_uses_target_even_when_channel_dir_differs(
-    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, recorded_commands: list[list[str]]
+def test_apply_channel_config_check_uses_target_even_when_channel_dir_differs(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
     other_base = tmp_path / "other"
     other_base.mkdir()
     other_repo = _write_repo(other_base, INLINE_TABLE_PYPROJECT)
+    (other_repo / "config" / "channel" / "meta.json").write_text("{broken", encoding="utf-8")
     monkeypatch.setenv("CHANNEL_DIR", str(other_repo))
+    monkeypatch.setattr(automation_update, "_run_command", lambda cmd, cwd: 0)
+    monkeypatch.setattr(automation_update, "_git_status_porcelain", lambda root: "")
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
+
+    def _doctor(cmd: list[str], **kwargs):
+        assert cmd == ["uv", "run", "yt-doctor", "--json", "--target", str(repo)]
+        assert kwargs["cwd"] == repo
+        payload = {"checks": [{"id": "channel_config", "status": "ok", "message": "config/channel/ ロード成功"}]}
+        return automation_update.subprocess.CompletedProcess(cmd, 0, json.dumps(payload), "")
+
+    monkeypatch.setattr(automation_update.subprocess, "run", _doctor)
 
     assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 0
 
-    assert ["uv", "run", "yt-config-migrate", "verify", "--target", str(repo)] in recorded_commands
-    assert ["uv", "run", "yt-config-migrate", "verify", "--target", str(other_repo)] not in recorded_commands
+
+def test_apply_returns_nonzero_when_target_channel_config_is_invalid(
+    tmp_path: Path,
+    no_network,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    (repo / "config" / "channel" / "meta.json").write_text("{broken", encoding="utf-8")
+    commands: list[list[str]] = []
+    monkeypatch.setattr(automation_update, "_run_command", lambda cmd, cwd: commands.append(cmd) or 0)
+    monkeypatch.setattr(automation_update, "_git_status_porcelain", lambda root: "")
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
+
+    def _doctor(cmd: list[str], **kwargs):
+        assert cmd == ["uv", "run", "yt-doctor", "--json", "--target", str(repo)]
+        payload = {
+            "checks": [
+                {
+                    "id": "channel_config",
+                    "status": "fail",
+                    "message": "config/channel/ ロード失敗: broken JSON",
+                }
+            ]
+        }
+        return automation_update.subprocess.CompletedProcess(cmd, 0, json.dumps(payload), "")
+
+    monkeypatch.setattr(automation_update.subprocess, "run", _doctor)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 1
+
+    captured = capsys.readouterr()
+    assert "'smoke check: channel config' で失敗しました" in captured.err
+    assert "config/channel/ ロード失敗" in captured.err
+    assert "追従が完了しました" not in captured.out
+    assert commands[-1] == ["uv", "run", "yt-skills", "list"]
+
+
+@pytest.mark.parametrize(
+    ("completed", "expected"),
+    [
+        (
+            automation_update.subprocess.CompletedProcess([], 2, "", "doctor failed"),
+            "exit code 2",
+        ),
+        (
+            automation_update.subprocess.CompletedProcess([], 0, "not-json", ""),
+            "出力を解析できません",
+        ),
+        (
+            automation_update.subprocess.CompletedProcess([], 0, "{}", ""),
+            "checks 配列がありません",
+        ),
+        (
+            automation_update.subprocess.CompletedProcess([], 0, '{"checks": []}', ""),
+            "channel_config check がありません",
+        ),
+    ],
+)
+def test_apply_channel_config_check_reports_invalid_doctor_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    completed: automation_update.subprocess.CompletedProcess,
+    expected: str,
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    monkeypatch.setattr(automation_update.subprocess, "run", lambda *args, **kwargs: completed)
+
+    with pytest.raises(automation_update._StepFailed, match=expected):
+        automation_update._check_channel_config(repo)
 
 
 def test_apply_unknown_skills_diff_failure_stops_before_side_effects(

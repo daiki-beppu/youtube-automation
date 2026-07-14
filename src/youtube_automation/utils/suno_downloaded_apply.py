@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import tempfile
 from pathlib import Path
@@ -15,6 +16,8 @@ from youtube_automation.utils.suno_downloaded_workflow_state import (
     read_pattern_count,
     update_workflow_state_downloaded,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _restore_downloaded_transaction(
@@ -97,4 +100,9 @@ def apply_downloaded_artifacts(
     finally:
         if music_backup_dir is not None:
             shutil.rmtree(music_backup_dir, ignore_errors=True)
+    if payload.download_path:
+        try:
+            Path(payload.download_path).unlink()
+        except OSError as exc:
+            logger.warning("Suno download ZIP cleanup failed for %s: %s", payload.download_path, exc)
     return placed_count_for_response

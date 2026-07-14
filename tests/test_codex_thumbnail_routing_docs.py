@@ -10,9 +10,13 @@ _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _IDEATE_SKILL_MD = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
 _IDEATE_DEFAULT_CONFIG = _SKILLS_DIR / "collection-ideate" / "config.default.yaml"
 _IDEATE_LIFECYCLE_MD = _SKILLS_DIR / "collection-ideate" / "references" / "collection-lifecycle.md"
+_IDEATE_TTP_SELECTOR = _SKILLS_DIR / "collection-ideate" / "references" / "select-ttp-references.py"
 _LYRIA_DEFAULT_CONFIG = _SKILLS_DIR / "lyria" / "config.default.yaml"
 _LYRIA_SKILL_MD = _SKILLS_DIR / "lyria" / "SKILL.md"
 _SHORT_THUMBNAIL_SKILL_MD = _SKILLS_DIR / "short-thumbnail" / "SKILL.md"
+_THUMBNAIL_DIR = _SKILLS_DIR / "thumbnail"
+_THUMBNAIL_SKILL_MD = _THUMBNAIL_DIR / "SKILL.md"
+_THUMBNAIL_DEFAULT_CONFIG = _THUMBNAIL_DIR / "config.default.yaml"
 _WF_NEW_SKILL_MD = _SKILLS_DIR / "wf-new" / "SKILL.md"
 
 
@@ -78,6 +82,20 @@ def _collection_ideate_next_step_block(text: str) -> str:
     return match.group(1)
 
 
+def _thumbnail_standard_contract_block(text: str) -> str:
+    match = re.search(r"### 標準生成順序とファイル契約(.*?)(?:### Single-Step / TTP モード|\Z)", text, flags=re.DOTALL)
+    if not match:
+        raise AssertionError("thumbnail/SKILL.md に標準生成順序とファイル契約ブロックが見つかりません")
+    return match.group(1)
+
+
+def _thumbnail_single_step_block(text: str) -> str:
+    match = re.search(r"### Single-Step / TTP モード(.*?)(?:### Two-Phase モード|\Z)", text, flags=re.DOTALL)
+    if not match:
+        raise AssertionError("thumbnail/SKILL.md に Single-Step / TTP モードブロックが見つかりません")
+    return match.group(1)
+
+
 def _assert_codex_ttp_prompt_policy(block: str) -> None:
     assert ".claude/skills/thumbnail/references/codex-prompt.py" in block
     assert "default_prompt_template" in block
@@ -86,6 +104,65 @@ def _assert_codex_ttp_prompt_policy(block: str) -> None:
     assert "短い" in block or "短縮" in block or "短く" in block
     assert "サムネに焼くテキスト" in block, "#1680: {title} へ動画タイトル全文を渡さない注記が必要"
     assert "動画タイトル全文" in block
+
+
+def test_thumbnail_standard_contract_is_thumbnail_first() -> None:
+    """Given /thumbnail standard docs
+    Then text-included thumbnail is approved before textless main regeneration.
+    """
+    block = _thumbnail_standard_contract_block(_read(_THUMBNAIL_SKILL_MD))
+
+    assert "テキスト付き YouTube サムネ → 承認済みサムネから textless 動画背景" in block
+    assert "テキスト付き最終サムネを `10-assets/thumbnail.jpg` として確定" in block
+    assert "承認済み `thumbnail.jpg` を参照画像にして" in block
+    assert "テキストなし `main.png/jpg`" in block
+    assert "テキストなし動画背景 → テキスト付き YouTube サムネ" not in block
+    assert "承認済み `main.png/jpg` を参照画像にして" not in block
+
+
+def test_thumbnail_single_step_ttp_docs_are_thumbnail_first() -> None:
+    """Given gemini single_step/TTP docs
+    Then they generate thumbnail-v1 before regenerating main-v1.
+    """
+    block = _thumbnail_single_step_block(_read(_THUMBNAIL_SKILL_MD))
+
+    assert "--output <collection-path>/10-assets/thumbnail-v1.jpg -y" in block
+    assert "cp thumbnail-v1.jpg thumbnail.jpg" in block
+    assert '--reference "${COLLECTION_PATH}/10-assets/thumbnail.jpg"' in block
+    assert '--output "${COLLECTION_PATH}/10-assets/main-v1.png"' in block
+    assert "cp main-v1.png main.png" in block
+    assert "ベンチマーク参照からテキスト付き `thumbnail-v1.jpg/png` を生成" in block
+    assert "承認済み `thumbnail.jpg` を参照して textless `main-v1.png/jpg` を再生成" in block
+    assert "--output <collection-path>/10-assets/main-v1.png -y" not in block
+    assert "テキストなし版の先行確定" not in block
+    assert "承認済み `main.png/jpg` を参照してテキスト付き" not in block
+
+
+def test_thumbnail_default_config_comments_match_thumbnail_first_single_step() -> None:
+    """Given distributed thumbnail default config
+    Then single_step comments do not describe initial textless generation.
+    """
+    config = _read(_THUMBNAIL_DEFAULT_CONFIG)
+
+    assert "text-included thumbnail 候補を生成" in config
+    assert "text-included thumbnail を先に確定" in config
+    assert "承認済み thumbnail から textless main を後続再生成" in config
+    assert "承認済み thumbnail から作る textless 再生成プロンプトには展開しない" in config
+    assert "初回 textless 背景用" not in config
+
+
+def test_thumbnail_skill_dir_has_no_textless_first_wording() -> None:
+    """Given distributed thumbnail docs
+    Then old textless-first wording is absent from the skill directory.
+    """
+    offenders: list[str] = []
+    for path in _THUMBNAIL_DIR.rglob("*"):
+        if path.is_file():
+            text = _read(path)
+            if re.search(r"textless.*先に|テキストなし.*先行", text):
+                offenders.append(str(path.relative_to(_REPO_ROOT)))
+
+    assert offenders == []
 
 
 def test_collection_ideate_parallel_generation_branches_to_codex_image_script() -> None:
@@ -123,12 +200,14 @@ def test_collection_ideate_parallel_validates_unique_single_channel_references()
     Then duplicate / mixed channel は生成前 validation に合流する。
     """
     block = _phase_4_4_parallel_block(_read(_IDEATE_SKILL_MD))
+    selector = _read(_IDEATE_TTP_SELECTOR)
 
-    assert "plan_ttp_reference_assignments" in block
-    assert "benchmark_root=channel_dir() / 'data' / 'thumbnail_compare' / 'benchmark'" in block
+    assert ".claude/skills/collection-ideate/references/select-ttp-references.py" in block
     assert "VALIDATED_REFS" in block
     assert "CANDIDATE_COUNT" in block
-    assert "candidate_count = int(sys.argv[1])" in block
+    assert "plan_ttp_reference_assignments" in selector
+    assert 'benchmark_root=root / "data" / "thumbnail_compare" / "benchmark"' in selector
+    assert "candidate_count = int(sys.argv[1])" in selector
 
 
 def test_collection_ideate_api_parallel_uses_one_reference_per_candidate() -> None:
@@ -270,8 +349,10 @@ def test_short_thumbnail_uses_textless_main_wording() -> None:
 
     assert "16:9 textless 動画背景 / 参考ビジュアル" in text
     assert "既存の textless 動画背景 / 参考ビジュアル" in text
+    assert "テキスト付き thumbnail を確定し、承認済み thumbnail から textless 背景を生成" in text
     assert "16:9 サムネ（動画背景用）" not in text
     assert "既存サムネ" not in text
+    assert "textless 背景を先に生成" not in text
 
 
 def test_collection_ideate_next_step_keeps_preview_out_of_main_background() -> None:

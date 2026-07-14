@@ -2,8 +2,8 @@
 `command not found` 偽陽性ガード文言が定着しているかを検証する。
 
 背景:
-    v5.5.0 リリース後、ダウンストリーム agent が `uv run yt-config-migrate verify` を
-    「v5.5.0 に存在しない CLI」と誤判断し、env 側の不整合 (uv sync 未実行 / 古い venv /
+    v5.5.0 リリース後、ダウンストリーム agent が追従確認用 CLI を
+    「v5.5.0 に存在しない」と誤判断し、env 側の不整合 (uv sync 未実行 / 古い venv /
     cache) を「ガイドの誤り」と早合点して追従後確認をスキップする偽陽性が発生した
     (issue #335)。
 

@@ -16,7 +16,7 @@ PR #367 で扱った観点 1（汎用化・設定切り出し）/ 観点 2（整
 | **P0** | 0 | （即時 prod 停止級の検出なし） |
 | **P1** | 7 | Gemini 2.5 系 2 モデルが 2026-10-16 shutdown 予告 / `google-genai` メジャー遅延 / 全依存に version 上限なし / `google-auth-httplib2` deprecated / Suno 非公式依存 deprecation メモなし / skill バージョン追跡なし（`yt-skills sync --force` 不徹底で乖離） / `veo_generator` が ffmpeg 不在チェックなし |
 | **P2** | 11 | Lyria 3 が `v1beta1` 直叩き / Veo lite が preview / `japanize-matplotlib` 4 年超停滞 / `Workflow` dataclass 空 dead shim / `uv.lock` 下流非伝播 / CLAUDE.md L.38 が実態と矛盾 / skill 配布の `--force` 運用未明示 / skill 12 件で `## 前提` 欠落 / `veo_generator.strip_audio`/`trim_tail` の ffmpeg 直叩きフォールバックなし / `_disabled` フラグの仕様が lyria 以外で文書化されず / OAuth scope の skill 側記述欠落 |
-| **P3** | 5 | `requires-python>=3.11` 過剰制約の可能性 / dead extras `veo = []` / `yt-config-migrate` v1→v2 移行 CLI が v5.5.0 でも残存 / `lyria-002` が `audio_units._AUDIO_UNIT_BY_MODEL` に残置 / CLAUDE.md L.140 「旧 `get_channel_status` は廃止」の文言は配布 template 側 |
+| **P3** | 5 | `requires-python>=3.11` 過剰制約の可能性 / dead extras `veo = []` / v1→v2 config 移行 CLI が v5.5.0 でも残存 / `lyria-002` が `audio_units._AUDIO_UNIT_BY_MODEL` に残置 / CLAUDE.md L.140 「旧 `get_channel_status` は廃止」の文言は配布 template 側 |
 
 凡例: P0=即時障害、P1=数か月以内に対応必須、P2=リファクタ候補、P3=記述整備レベル。
 
@@ -203,7 +203,7 @@ PyPI `google-auth-httplib2 0.4.0` (2026-05-07 リリース) ページ:
 
 ### 5.4.3 v1→v2 設定移行 CLI の残存
 
-- `pyproject.toml:48`: `yt-config-migrate = "youtube_automation.cli.config_migrate:main"`
+- `pyproject.toml:48`: v1→v2 config 移行 CLI の entry point
 - `src/youtube_automation/utils/config/loader.py:100-106`: 旧 `channel_config.json` は ConfigError で fail-fast
 - 現在のバージョン: v5.5.0（`pyproject.toml:7`、3 メジャーバージョン経過）
 
@@ -522,7 +522,7 @@ with as_file(resource) as p:
 | R-17 | 5.2 | P2 | `uv.lock` を下流に伝播させる手段（git submodule with lockfile / `pip install --constraint`）を `README.md` で案内 | 0.25d |
 | R-18 | 5.4 | P3 | `pyproject.toml:35` の `veo = []` dead extras を削除（または何かに使う） | 0.05d |
 | R-19 | 5.3 | P3 | `requires-python` 緩和を検討する場合は transitive 解決を py3.10 でも試す。緩和不要なら現状維持 | 0.25d |
-| R-20 | 5.4 | P3 | `yt-config-migrate` の撤去判断。次期メジャー（v6）で削除候補とし CHANGELOG にアナウンスを 1 リリース前に出す | 0.1d |
+| R-20 | 5.4 | P3 | v1→v2 config 移行 CLI の撤去判断。次期メジャー（v6）で削除候補とし CHANGELOG にアナウンスを 1 リリース前に出す | 0.1d |
 | R-21 | 5.4 | P3 | `src/youtube_automation/utils/audio_units.py:16` の `"lyria-002": "30sec"` は「旧ログ読み出し互換のため残置」のコメントを追加 | 0.05d |
 | R-22 | 5.1 | P3 | `lyria-3-pro-preview` を `_AUDIO_UNIT_BY_MODEL` のキーとして固定しているのは preview 表記ごと変わるリスクあり。GA 化後に名称変更が来た場合のための fallback ロジック追加検討 | 0.25d |
 

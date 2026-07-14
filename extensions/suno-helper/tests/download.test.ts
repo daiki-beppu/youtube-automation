@@ -104,7 +104,25 @@ describe("triggerDownloadAll", () => {
     expect(deps.selectFormat).toHaveBeenCalledWith(expect.anything(), "m4a");
   });
 
-  it("waitForDownloadMenuItem が throw した場合はそのまま伝播する", async () => {
+  it("Download all の待機に失敗しても More の再クリックで成功できる", async () => {
+    const formatModal = stubElement();
+    const deps = createMockDeps({
+      waitForDownloadMenuItem: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("Download all menu item が見つかりませんでした"))
+        .mockResolvedValueOnce(stubElement()),
+      waitForFormatModal: vi.fn(async () => formatModal),
+    });
+
+    await triggerDownloadAll("mp3", deps);
+
+    expect(deps.findMoreButton).toHaveBeenCalledTimes(2);
+    expect(deps.waitForDownloadMenuItem).toHaveBeenCalledTimes(2);
+    expect(deps.clickElement).toHaveBeenCalledTimes(3);
+    expect(deps.selectFormat).toHaveBeenCalledWith(formatModal, "mp3");
+  });
+
+  it("Download all の待機に 3 回失敗した場合は最後のエラーを伝播する", async () => {
     const deps = createMockDeps({
       waitForDownloadMenuItem: vi.fn(async () => {
         throw new Error("Download all menu item が見つかりませんでした");
@@ -112,6 +130,8 @@ describe("triggerDownloadAll", () => {
     });
 
     await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(/Download all menu item/);
+    expect(deps.findMoreButton).toHaveBeenCalledTimes(3);
+    expect(deps.waitForDownloadMenuItem).toHaveBeenCalledTimes(3);
     // selectFormat / clickConfirm は呼ばれない
     expect(deps.selectFormat).not.toHaveBeenCalled();
     expect(deps.clickConfirm).not.toHaveBeenCalled();

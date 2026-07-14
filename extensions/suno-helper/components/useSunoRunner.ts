@@ -2,7 +2,7 @@
 // run / stop / queryProgress / progress は tabId を指定せず background 宛に送る（#892）。overlay は
 // content script で `browser.tabs.*` を呼べないため、background が送信元と同一タブの runner content へ中継する
 // （中継ロジックは entrypoints/background.ts + lib/overlay-relay.ts）。
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { browser } from "wxt/browser";
 
 import {
@@ -14,7 +14,13 @@ import {
   resolvePromptCollectionId,
   visiblePromptCollections,
 } from "../../shared/api";
-import { CLIPS_PER_REQUEST, type ItemState, type LocalServerSource, type RunModeId } from "../../shared/constants";
+import {
+  CLIPS_PER_REQUEST,
+  DEFAULT_REGENERATE_DURATION_OUTLIERS,
+  type ItemState,
+  type LocalServerSource,
+  type RunModeId,
+} from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { DEFAULT_RUN_MODE_ID, readRunModeId, writeRunModeId } from "../lib/preset-state";
 import {
@@ -34,9 +40,16 @@ import {
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
 import { readServerSources, rememberServerSource, serverUrlItem } from "../lib/storage";
 import { shouldReportLiveProgressStatus } from "./live-progress-status";
-import { buildRestoreState, formatRunError, formatStopError, phaseToStatus } from "./runner-errors";
+import {
+  buildRestoreState,
+  formatRunError,
+  formatStopError,
+  isExtensionReloadRequiredError,
+  phaseToStatus,
+} from "./runner-errors";
 
 interface RunnerState {
+  reloadRequired: boolean;
   url: string;
   setUrl: (url: string) => void;
   serverSources: LocalServerSource[];
@@ -55,6 +68,8 @@ interface RunnerState {
   playlistName: string | undefined;
   runModeId: RunModeId;
   setRunMode: (id: RunModeId) => void;
+  regenerateDurationOutliers: boolean;
+  setRegenerateDurationOutliers: (enabled: boolean) => void;
   // 再開バナー (#872)。chrome.storage / content snapshot いずれか有効なソース、無ければ null。
   resumeBanner: ResumeBanner | null;
   acceptResume: () => void;
@@ -95,6 +110,7 @@ function maxDefined(...values: Array<number | null | undefined>): number | undef
 }
 
 export function useSunoRunner(): RunnerState {
+  const [reloadRequired, setReloadRequired] = useState(false);
   const [url, setUrlState] = useState("");
   const [serverSources, setServerSources] = useState<LocalServerSource[]>([]);
   const [allCollections, setAllCollections] = useState<CollectionSummary[]>([]);
@@ -124,6 +140,13 @@ export function useSunoRunner(): RunnerState {
   );
   // 投入方式 (#1586)。マウント時に storage から復元し、選択時に永続化する。
   const [runModeId, setRunModeId] = useState<RunModeId>(DEFAULT_RUN_MODE_ID);
+  const [regenerateDurationOutliers, setRegenerateDurationOutliers] = useState(DEFAULT_REGENERATE_DURATION_OUTLIERS);
+  const [restoredRegenerateDurationOutliers, setRestoredRegenerateDurationOutliers] = useState<boolean | undefined>(
+    undefined,
+  );
+  const [restoredDurationOutlierWarnings, setRestoredDurationOutlierWarnings] = useState<
+    Record<number, string> | undefined
+  >(undefined);
   // chrome.storage から読んだ前回の ERROR 停止 state (#872)。表示可否は selectedCollectionId と時刻で判定する。
   const [persistedResume, setPersistedResume] = useState<ResumeState | null>(null);
   // resume state を読んだ popup 起動時刻 (#872)。stale 判定の基準 now をここで一度だけ確定し、
@@ -131,6 +154,7 @@ export function useSunoRunner(): RunnerState {
   const [resumeCheckedAt, setResumeCheckedAt] = useState<number | null>(null);
   // 一度承認/却下したバナーは再表示しない（同一 popup セッション内）。
   const [resumeDismissed, setResumeDismissed] = useState(false);
+  const durationOutlierWarningsRef = useRef<string[]>([]);
 
   const resumableCollectionId = useMemo(() => {
     if (
@@ -280,6 +304,39 @@ export function useSunoRunner(): RunnerState {
     return undefined;
   }, [persistedResume, selectedCollectionId, resumeCheckedAt]);
 
+  const regenerateDurationOutliersForResume = useMemo<boolean | undefined>(() => {
+    if (
+      resumeCheckedAt !== null &&
+      persistedResume &&
+      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+    ) {
+      return persistedResume.regenerateDurationOutliers;
+    }
+    if (restoredCollectionId === selectedCollectionId) {
+      return restoredRegenerateDurationOutliers;
+    }
+    return undefined;
+  }, [
+    persistedResume,
+    selectedCollectionId,
+    resumeCheckedAt,
+    restoredCollectionId,
+    restoredRegenerateDurationOutliers,
+  ]);
+  const durationOutlierWarningsForResume = useMemo<Record<number, string> | undefined>(() => {
+    if (
+      resumeCheckedAt !== null &&
+      persistedResume &&
+      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+    ) {
+      return persistedResume.durationOutlierWarnings;
+    }
+    if (restoredCollectionId === selectedCollectionId) {
+      return restoredDurationOutlierWarnings;
+    }
+    return undefined;
+  }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredCollectionId, restoredDurationOutlierWarnings]);
+
   const playlistExpectedClipCountForResume = useMemo<number | undefined>(() => {
     if (
       resumeCheckedAt !== null &&
@@ -319,29 +376,43 @@ export function useSunoRunner(): RunnerState {
     setIsError(error);
   }, []);
 
+  const reportStorageFailure = useCallback((error: unknown) => {
+    console.warn("[suno-helper] storage 操作に失敗しました（拡張更新後はタブを再読み込みしてください）:", error);
+    setReloadRequired(true);
+  }, []);
+
   // popup 起動時に前回の ERROR 停止 state を読む (#872 要件4)。表示可否は resumeBanner 側で判定する。
   // 基準 now は読み込み完了時に確定する（render 中の Date.now() を避けるため effect 内で取得）。
   useEffect(() => {
-    void readResumeState().then((state) => {
-      setPersistedResume(state);
-      setResumeCheckedAt(Date.now());
-    });
-  }, []);
+    void readResumeState()
+      .then((state) => {
+        const checkedAt = Date.now();
+        setPersistedResume(state);
+        setResumeCheckedAt(checkedAt);
+        if (
+          state &&
+          typeof state.regenerateDurationOutliers === "boolean" &&
+          shouldShowResumeBanner(state, state.collectionId, checkedAt)
+        ) {
+          setRegenerateDurationOutliers(state.regenerateDurationOutliers);
+        }
+      })
+      .catch((err: unknown) => {
+        reportStorageFailure(err);
+      });
+  }, [reportStorageFailure]);
 
   useEffect(() => {
-    // 読込失敗（拡張更新直後の context invalidated 等）は既定 serial のまま続行する。
-    // unhandled rejection にしない（UI は既定値表示と一致しており実行payload とも整合する）。
-    void readRunModeId()
-      .then(setRunModeId)
-      .catch((err) => console.warn("[suno-helper] run mode の読込に失敗しました（既定 serial を使用）:", err));
-  }, []);
+    void readRunModeId().then(setRunModeId).catch(reportStorageFailure);
+  }, [reportStorageFailure]);
 
-  const setRunMode = useCallback((id: RunModeId) => {
-    setRunModeId(id);
-    void writeRunModeId(id).catch((err) =>
-      console.warn("[suno-helper] run mode の保存に失敗しました（次回 popup では前回値に戻ります）:", err),
-    );
-  }, []);
+  const setRunMode = useCallback(
+    (id: RunModeId) => {
+      setRunModeId(id);
+      void writeRunModeId(id).catch(reportStorageFailure);
+    },
+    [reportStorageFailure],
+  );
 
   const dismissResume = useCallback(() => {
     setResumeDismissed(true);
@@ -360,6 +431,7 @@ export function useSunoRunner(): RunnerState {
     setRestoredSubmittedClipIds(undefined);
     setRestoredSubmittedClipIdsAreDurationFiltered(false);
     setRestoredPlaylistExpectedClipCount(undefined);
+    setRestoredDurationOutlierWarnings(undefined);
   }, []);
 
   const updateUrl = useCallback(
@@ -405,26 +477,39 @@ export function useSunoRunner(): RunnerState {
   );
 
   useEffect(() => {
-    void serverUrlItem.getValue().then((stored) => {
-      setUrlState(stored);
-      const trimmed = stored.trim();
-      if (trimmed) {
-        void loadCollections(trimmed);
-      }
-    });
-    void readServerSources().then(setServerSources);
-  }, [loadCollections]);
+    void serverUrlItem
+      .getValue()
+      .then((stored) => {
+        setUrlState(stored);
+        const trimmed = stored.trim();
+        if (trimmed) {
+          void loadCollections(trimmed);
+        }
+      })
+      .catch((err: unknown) => {
+        reportStorageFailure(err);
+      });
+    void readServerSources()
+      .then(setServerSources)
+      .catch((err: unknown) => {
+        reportStorageFailure(err);
+      });
+  }, [loadCollections, reportStorageFailure]);
 
   useEffect(() => {
     const unwatch = onMessage("progress", ({ data }) => {
       setItemStates((prev) => nextItemStates(prev, data));
       setPhase(data.phase);
-      // DONE は当該 item を done 化するだけで status 文字列は更新しない（旧 popup.js の live 挙動を維持）。
-      // ただし #1270 の duration check OK は DONE に log として載るため、その場合だけ表示更新する。
-      // restore 経路は phaseToStatus(DONE) で「完了」を表示するため SSOT 側に DONE case は残す。
+      if (data.durationOutlierWarning) {
+        durationOutlierWarningsRef.current.push(data.durationOutlierWarning);
+      }
       if (shouldReportLiveProgressStatus(data)) {
         const { text, error } = phaseToStatus(data, entries);
-        report(text, Boolean(error));
+        const terminalWarning =
+          data.phase === "finished" && durationOutlierWarningsRef.current.length > 0
+            ? ` / 異常値警告: ${durationOutlierWarningsRef.current.join("; ")}`
+            : "";
+        report(`${text}${terminalWarning}`, Boolean(error));
       }
       if (isTerminalPhase(data.phase)) {
         setIsRunning(false);
@@ -461,6 +546,10 @@ export function useSunoRunner(): RunnerState {
         setRestoredSubmittedClipIds(restored.submittedClipIds);
         setRestoredSubmittedClipIdsAreDurationFiltered(restored.submittedClipIdsAreDurationFiltered === true);
         setRestoredPlaylistExpectedClipCount(restored.playlistExpectedClipCount);
+        setRestoredRegenerateDurationOutliers(restored.regenerateDurationOutliers);
+        setRestoredDurationOutlierWarnings(restored.durationOutlierWarnings);
+        setRegenerateDurationOutliers(restored.regenerateDurationOutliers);
+        durationOutlierWarningsRef.current = Object.values(restored.durationOutlierWarnings);
         setPhase(snapshot.progress.phase);
         report(restored.status, restored.isError);
       } catch {
@@ -476,22 +565,39 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     let baseUrl = trimmed;
+    let serverLabel: string | undefined;
     try {
       const info = await sendMessage("fetchServerInfo", { baseUrl: trimmed });
       baseUrl = info.base_url;
       setUrlState(baseUrl);
-      await serverUrlItem.setValue(baseUrl);
-      setServerSources(await rememberServerSource(baseUrl, info.label));
+      serverLabel = info.label;
     } catch {
+      // 古い server は fetchServerInfo を提供しないため、入力 URL のまま継続する。
+    }
+    try {
       await serverUrlItem.setValue(baseUrl);
-      setServerSources(await rememberServerSource(baseUrl));
+      setServerSources(await rememberServerSource(baseUrl, serverLabel));
+    } catch (error) {
+      reportStorageFailure(error);
+      return;
     }
     clearLoadedRunState();
     setPhase("loading");
     report("取得中…");
-    const extensionVersion = browser.runtime.getManifest().version;
-    const warning = await sendMessage("fetchCompatibilityWarning", { baseUrl, extensionVersion });
-    setCompatibilityWarning(typeof warning === "string" ? warning : "");
+    try {
+      const extensionVersion = browser.runtime.getManifest().version;
+      const warning = await sendMessage("fetchCompatibilityWarning", { baseUrl, extensionVersion });
+      setCompatibilityWarning(typeof warning === "string" ? warning : "");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (isExtensionReloadRequiredError(message)) {
+        setReloadRequired(true);
+        return;
+      }
+      setPhase("error");
+      report(`互換性確認失敗: ${message}`, true);
+      return;
+    }
     try {
       const collectionId = await syncCollections(baseUrl, selectedCollectionId);
       const data = await fetchCollectionPromptResponse(baseUrl, collectionId);
@@ -507,7 +613,7 @@ export function useSunoRunner(): RunnerState {
       setPhase("error");
       report(`取得失敗: ${message}\nyt-collection-serve が起動しているか確認してください。`, true);
     }
-  }, [url, selectedCollectionId, syncCollections, clearLoadedRunState, report]);
+  }, [url, selectedCollectionId, syncCollections, clearLoadedRunState, report, reportStorageFailure]);
 
   const run = useCallback(
     async (overrides?: RunOverrides) => {
@@ -527,6 +633,7 @@ export function useSunoRunner(): RunnerState {
         return;
       }
       const range = overrides?.range;
+      durationOutlierWarningsRef.current = Object.values(overrides?.durationOutlierWarnings ?? {});
       // 二重実行ガード成立後、送信前に実行中フラグを立てる (#892 要件7: setIsRunning を sendMessage の前へ)。
       setIsRunning(true);
       setPhase("starting");
@@ -542,6 +649,8 @@ export function useSunoRunner(): RunnerState {
             range,
             collectionId: selectedCollectionId,
             runMode: runModeId,
+            regenerateDurationOutliers,
+            durationOutlierWarnings: overrides?.durationOutlierWarnings,
             overrides,
           }),
         );
@@ -554,7 +663,16 @@ export function useSunoRunner(): RunnerState {
         report(formatRunError(message), true);
       }
     },
-    [isRunning, entries, durationFilter, playlistName, selectedCollectionId, runModeId, report],
+    [
+      isRunning,
+      entries,
+      durationFilter,
+      playlistName,
+      selectedCollectionId,
+      runModeId,
+      regenerateDurationOutliers,
+      report,
+    ],
   );
 
   // playlist 追加のみ再実行。entries 不要のため retryPlaylist 専用メッセージを送る。
@@ -585,6 +703,7 @@ export function useSunoRunner(): RunnerState {
     }
     setIsRunning(true);
     setPhase("adding-to-playlist");
+    durationOutlierWarningsRef.current = Object.values(durationOutlierWarningsForResume ?? {});
     try {
       await sendMessage("retryPlaylist", {
         playlistName,
@@ -592,6 +711,8 @@ export function useSunoRunner(): RunnerState {
         expectedClipCount,
         collectionId: selectedCollectionId,
         durationFilter: durationFilterForResume,
+        regenerateDurationOutliers: regenerateDurationOutliersForResume ?? regenerateDurationOutliers,
+        durationOutlierWarnings: durationOutlierWarningsForResume,
         submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,
         shouldDownload,
       });
@@ -608,6 +729,9 @@ export function useSunoRunner(): RunnerState {
     isRunning,
     playlistName,
     durationFilterForResume,
+    regenerateDurationOutliersForResume,
+    regenerateDurationOutliers,
+    durationOutlierWarningsForResume,
     submittedClipIdsForResume,
     submittedClipIdsAreDurationFilteredForResume,
     playlistExpectedClipCountForResume,
@@ -639,6 +763,8 @@ export function useSunoRunner(): RunnerState {
         playlistExpectedClipCount: playlistExpectedClipCountForResume,
       }),
       runMode: runModeForResume,
+      regenerateDurationOutliers: regenerateDurationOutliersForResume,
+      durationOutlierWarnings: durationOutlierWarningsForResume,
     });
   }, [
     resumeBanner,
@@ -650,6 +776,8 @@ export function useSunoRunner(): RunnerState {
     submittedClipIdsAreDurationFilteredForResume,
     playlistExpectedClipCountForResume,
     runModeForResume,
+    regenerateDurationOutliersForResume,
+    durationOutlierWarningsForResume,
   ]);
 
   // ダウンロードのみ再実行 (#1251)。clip を再選択 → Download all を実行する。
@@ -727,6 +855,14 @@ export function useSunoRunner(): RunnerState {
         durationFilter,
         submittedClipIdsAreDurationFiltered: false,
         playlistExpectedClipCount: result.clipIds.length,
+        regenerateDurationOutliers:
+          persistedResume?.collectionId === selectedCollectionId
+            ? (persistedResume.regenerateDurationOutliers ?? regenerateDurationOutliers)
+            : regenerateDurationOutliers,
+        durationOutlierWarnings:
+          persistedResume?.collectionId === selectedCollectionId
+            ? persistedResume.durationOutlierWarnings
+            : restoredDurationOutlierWarnings,
       };
       await writeResumeState(nextResume);
       setPersistedResume(nextResume);
@@ -753,7 +889,9 @@ export function useSunoRunner(): RunnerState {
     selectedCollection,
     restoredFailedIndices,
     restoredRemainingIndices,
+    restoredDurationOutlierWarnings,
     durationFilter,
+    regenerateDurationOutliers,
     report,
   ]);
 
@@ -772,6 +910,8 @@ export function useSunoRunner(): RunnerState {
         playlistExpectedClipCount: playlistExpectedClipCountForResume,
       }),
       runMode: runModeForResume,
+      regenerateDurationOutliers: regenerateDurationOutliersForResume,
+      durationOutlierWarnings: durationOutlierWarningsForResume,
     });
   }, [
     failedEntries,
@@ -780,6 +920,8 @@ export function useSunoRunner(): RunnerState {
     submittedClipIdsAreDurationFilteredForResume,
     playlistExpectedClipCountForResume,
     runModeForResume,
+    regenerateDurationOutliersForResume,
+    durationOutlierWarningsForResume,
   ]);
 
   const stop = useCallback(async () => {
@@ -793,6 +935,7 @@ export function useSunoRunner(): RunnerState {
   }, [report]);
 
   return {
+    reloadRequired,
     url,
     setUrl: updateUrl,
     serverSources,
@@ -810,6 +953,8 @@ export function useSunoRunner(): RunnerState {
     playlistName,
     runModeId,
     setRunMode,
+    regenerateDurationOutliers,
+    setRegenerateDurationOutliers,
     resumeBanner,
     acceptResume,
     dismissResume,

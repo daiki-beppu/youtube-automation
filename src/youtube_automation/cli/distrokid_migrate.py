@@ -2,7 +2,7 @@
 
 PR #803 当時のフラット profile（`artist_name` / `apple_music_credit` / `track_type` を含む
 6 文字列）を、nested `songwriter` + `ai_disclosure` を持つ新 schema へ in-place 変換する。
-`yt-config-migrate` の dry-run / `--apply` / backup パターンを踏襲した単一目的 CLI。
+dry-run / `--apply` / backup パターンを持つ単一目的 CLI。
 
     引数なし          : dry-run（プレビューのみ、書き込みなし）
     --apply           : 実書き込み

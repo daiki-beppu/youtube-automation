@@ -27,13 +27,10 @@ def suno_prompt_entry_name(
     name_jp: str,
     name_en: str,
     variation_index: int | None = None,
-    take_index: int | None = None,
 ) -> str:
     base_name = f"{name_jp} — {name_en}"
     if variation_index is not None:
         base_name = f"{base_name} (Variation {variation_index})"
-    if take_index is not None:
-        base_name = f"{base_name} (Take {take_index})"
     return base_name
 
 
@@ -41,22 +38,8 @@ def suno_prompt_entry_names(
     name_jp: str,
     name_en: str,
     scenes_count: int,
-    *,
-    tracks_per_pattern: int = 1,
 ) -> list[str]:
-    scene_names = _scene_entry_names(name_jp, name_en, scenes_count)
-    if tracks_per_pattern == 1:
-        return scene_names
-    return [
-        suno_prompt_entry_name(
-            name_jp,
-            name_en,
-            variation_index=variation_index,
-            take_index=take_index,
-        )
-        for variation_index in _variation_indexes(scenes_count)
-        for take_index in range(1, tracks_per_pattern + 1)
-    ]
+    return _scene_entry_names(name_jp, name_en, scenes_count)
 
 
 def _scene_entry_names(name_jp: str, name_en: str, scenes_count: int) -> list[str]:

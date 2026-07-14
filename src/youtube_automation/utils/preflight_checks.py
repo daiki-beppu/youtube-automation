@@ -20,6 +20,7 @@ from youtube_automation.utils.placeholders import is_placeholder_value
 from youtube_automation.utils.thumbnail_references import (
     plan_ttp_reference_assignments,
     resolve_configured_benchmark_references,
+    resolve_dedup_recent_collections,
 )
 from youtube_automation.utils.youtube_tag import parse_youtube_tags, youtube_tag_chars
 
@@ -180,6 +181,10 @@ def check_thumbnail_skill_config(channel_dir: Path, thumbnail_cfg: Mapping[str, 
                     max_attempts,
                     rotate,
                     benchmark_root=benchmark_root,
+                    channel_dir=channel_dir,
+                    dedup_recent_collections=resolve_dedup_recent_collections(
+                        reference_images.get("dedup_recent_collections")
+                    ),
                 )
             except ConfigError as exc:
                 issues.append(
@@ -227,14 +232,21 @@ def check_title_template_compliance(
     - **ジャンル核語彙**（任意）: `core_vocabulary` 設定時、LHS にいずれかを含むか
 
     鋳型語彙・パターンは `title_template_cfg`（チャンネル config 由来）から導出し、
-    未指定キーは既定値にフォールバックする。`title_template_cfg["template"]` に
-    セパレータを含まないチャンネル（` | ` 鋳型を使わない）では適用せず None を返す
-    （後方互換・誤検出防止のための自動 opt-in）。
+    未指定・null・空リストの `volume_patterns` は既定値にフォールバックする。
+    コレクション単位の opt-in は JSON で表せない空 tuple を内部的に渡し、巻数表記の
+    照合だけを省略する。`title_template_cfg["template"]` にセパレータを含まない
+    チャンネル（` | ` 鋳型を使わない）では適用せず None を返す（後方互換・誤検出防止
+    のための自動 opt-in）。
     """
     cfg: Mapping[str, object] = title_template_cfg or {}
     separator = str(cfg.get("separator") or DEFAULT_TITLE_SEPARATOR)
     rhs_pattern = str(cfg.get("rhs_pattern") or DEFAULT_TITLE_RHS_PATTERN)
-    volume_patterns = cfg.get("volume_patterns") or DEFAULT_TITLE_VOLUME_PATTERNS
+    configured_volume_patterns = cfg.get("volume_patterns")
+    volume_patterns = (
+        ()
+        if isinstance(configured_volume_patterns, tuple) and not configured_volume_patterns
+        else configured_volume_patterns or DEFAULT_TITLE_VOLUME_PATTERNS
+    )
     core_vocabulary = cfg.get("core_vocabulary") or ()
 
     # 鋳型がセパレータ運用でないチャンネルには適用しない（template から自動判定）。
@@ -419,10 +431,21 @@ def extract_descriptions_md_tags(desc_md: Path) -> list[str] | None:
 
 
 def check_tags_count(tags: list[str], min_count: int | None) -> str | None:
-    """件数下限を満たさない場合 issue 文字列、満たせば None."""
+    """タグ件数下限を検証し、500 字制約下で不可能なら原因を明示する."""
     if min_count is None:
         return None
     if len(tags) < min_count:
+        missing_count = min_count - len(tags)
+        current_chars = youtube_tag_chars(tags)
+        # 1 文字タグを追加する場合でも、既存タグがあれば各タグに `,` が必要になる。
+        minimum_chars = current_chars + (2 * missing_count) - (0 if tags else 1)
+        if minimum_chars > YT_TAG_CHAR_LIMIT:
+            return (
+                f"tags.min_count={min_count} is unreachable under YouTube's {YT_TAG_CHAR_LIMIT}-character "
+                f"tag limit: {len(tags)} current tags use {current_chars} characters, and adding "
+                f"{missing_count} one-character tags requires at least {minimum_chars}. "
+                "Reduce tags.min_count or shorten base tags."
+            )
         return f"tags count: {len(tags)} (min {min_count})"
     return None
 

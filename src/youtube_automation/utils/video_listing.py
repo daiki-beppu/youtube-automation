@@ -9,9 +9,8 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Dict, List
 
-from googleapiclient.errors import HttpError
-
 from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.retry import execute_with_retry
 
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
@@ -47,7 +46,8 @@ class VideoListingMixin:
 
         try:
             # チャンネルのアップロード済みプレイリストIDを取得
-            channel_response = self.youtube_service.channels().list(part="contentDetails", id=self.channel_id).execute()
+            request = self.youtube_service.channels().list(part="contentDetails", id=self.channel_id)
+            channel_response = execute_with_retry(request, "YouTube Data API request failed")
 
             uploads_playlist_id = channel_response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
 
@@ -57,16 +57,13 @@ class VideoListingMixin:
 
             while True:
                 # プレイリストのアイテムを取得
-                playlist_response = (
-                    self.youtube_service.playlistItems()
-                    .list(
-                        part="snippet,contentDetails",
-                        playlistId=uploads_playlist_id,
-                        maxResults=50,
-                        pageToken=next_page_token,
-                    )
-                    .execute()
+                request = self.youtube_service.playlistItems().list(
+                    part="snippet,contentDetails",
+                    playlistId=uploads_playlist_id,
+                    maxResults=50,
+                    pageToken=next_page_token,
                 )
+                playlist_response = execute_with_retry(request, "YouTube Analytics API request failed")
 
                 for item in playlist_response["items"]:
                     video_info = {
@@ -92,9 +89,9 @@ class VideoListingMixin:
                 self._all_videos_cache = videos
             return videos
 
-        except HttpError as e:
+        except YouTubeAPIError as e:
             logger.error(f"YouTube API エラー（動画リスト取得）: {e}")
-            raise YouTubeAPIError.from_http_error(e, "チャンネル動画リスト取得") from e
+            raise YouTubeAPIError(str(e), status_code=e.status_code, reason=e.reason) from e
 
     def get_recent_videos(self, days: int = 30) -> List[Dict]:
         """

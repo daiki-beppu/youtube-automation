@@ -37,6 +37,8 @@ describe("buildRestoreState: 実行中 snapshot の復元", () => {
       isRunning: true,
       status: "[1/3] 注入中: pattern-1",
       isError: false,
+      regenerateDurationOutliers: true,
+      durationOutlierWarnings: {},
     });
   });
 
@@ -65,6 +67,28 @@ describe("buildRestoreState: 実行中 snapshot の復元", () => {
 
     expect(restored?.status).toBe('"pattern-2": 259s ✓');
     expect(restored?.isError).toBe(false);
+  });
+
+  it("Given 再生成 OFF warning 付き DONE snapshot When buildRestoreState Then warning 文言とdone stateを復元する", () => {
+    const snap = applyProgress(
+      initSnapshot(makePromptEntries(1), { ...snapshotOptions(), regenerateDurationOutliers: false }),
+      {
+        phase: PHASE.DONE,
+        index: 0,
+        total: 1,
+        message: "duration guard NG; 再生成 OFF のため全 clip を採用候補として保持します",
+        durationOutlierWarning: "duration guard NG; 再生成 OFF のため全 clip を採用候補として保持します",
+        acceptedClipIds: ["clip-ng-a", "clip-ng-b"],
+      },
+    );
+
+    const finished = applyProgress(snap, { phase: PHASE.FINISHED, total: 1 });
+    const restored = buildRestoreState(finished);
+
+    expect(restored?.status).toContain("異常値警告");
+    expect(restored?.status).toContain("duration guard NG");
+    expect(restored?.itemStates).toEqual(["done"]);
+    expect(restored?.regenerateDurationOutliers).toBe(false);
   });
 
   it("Given retry log 付き snapshot When buildRestoreState Then retry 文言を復元する", () => {
@@ -183,5 +207,14 @@ describe("buildRestoreState: failedIndex の surface (#872 要件3 二重化)", 
     });
 
     expect(buildRestoreState(snap)?.durationFilter).toEqual(durationFilter);
+  });
+
+  it("Given option OFF の snapshot When buildRestoreState Then OFF を surface する", () => {
+    const snap = initSnapshot(makePromptEntries(2), {
+      collectionId: "20260601-clm-theme-a-collection",
+      regenerateDurationOutliers: false,
+    });
+
+    expect(buildRestoreState(snap)?.regenerateDurationOutliers).toBe(false);
   });
 });

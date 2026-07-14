@@ -1,4 +1,4 @@
-import type { LocalServerSource } from "../../shared/constants";
+import { formatServerSourceLabel, type LocalServerSource } from "../../shared/constants";
 
 export interface ServerUrlFieldProps {
   value: string;
@@ -24,7 +24,7 @@ export function ServerUrlField({ value, sources, disabled, onChange, onFetch }: 
       >
         {sources.map((source) => (
           <option key={source.url} value={source.url}>
-            {source.label} - {source.url}
+            {formatServerSourceLabel(source, "distrokid-helper")}
           </option>
         ))}
       </select>

@@ -9,8 +9,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
-from googleapiclient.errors import HttpError
-
 from youtube_automation.utils.comments.fetcher import FetchedComment, fetch_comments
 from youtube_automation.utils.comments.generator import (
     ReplyContext,
@@ -24,6 +22,7 @@ from youtube_automation.utils.config.comments import (
     Comments,
 )
 from youtube_automation.utils.exceptions import ConfigError, GeneratorError, YouTubeAPIError
+from youtube_automation.utils.retry import execute_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +58,10 @@ def fetch_video_status(youtube, video_ids: list[str]) -> dict[str, dict | None]:
     for start in range(0, len(video_ids), _VIDEOS_LIST_CHUNK):
         chunk = video_ids[start : start + _VIDEOS_LIST_CHUNK]
         try:
-            resp = youtube.videos().list(part="status", id=",".join(chunk)).execute()
-        except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, f"videos.list (status) 失敗 (count={len(chunk)})") from e
+            request = youtube.videos().list(part="status", id=",".join(chunk))
+            resp = execute_with_retry(request, "videos.list (status) failed")
+        except YouTubeAPIError:
+            raise
         for item in resp.get("items", []):
             result[item["id"]] = item.get("status", {})
     return result
@@ -111,9 +111,10 @@ class CommentReplier:
         if self._owner_channel_id is not None:
             return
         try:
-            resp = self._youtube.channels().list(part="id", mine=True).execute()
-        except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, "channels.list (owner channel ID) 失敗") from e
+            request = self._youtube.channels().list(part="id", mine=True)
+            resp = execute_with_retry(request, "channels.list (owner channel ID) failed")
+        except YouTubeAPIError:
+            raise
         items = resp.get("items") or []
         if not items:
             raise YouTubeAPIError("channels.list が空を返しました — チャンネルが見つかりません")
@@ -122,9 +123,10 @@ class CommentReplier:
     def _fetch_channel_info(self) -> tuple[str, str]:
         """channels().list(part="contentDetails") から (owner_id, uploads_playlist_id) を返す."""
         try:
-            resp = self._youtube.channels().list(part="contentDetails", mine=True).execute()
-        except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, "channels.list (mine=True) 失敗") from e
+            request = self._youtube.channels().list(part="contentDetails", mine=True)
+            resp = execute_with_retry(request, "channels.list (mine=True) failed")
+        except YouTubeAPIError:
+            raise
         items = resp.get("items") or []
         if not items:
             raise YouTubeAPIError("channels.list が空を返しました — チャンネルが見つかりません")
@@ -135,18 +137,15 @@ class CommentReplier:
         page_token: str | None = None
         while True:
             try:
-                resp = (
-                    self._youtube.playlistItems()
-                    .list(
-                        part="contentDetails",
-                        playlistId=uploads_playlist_id,
-                        maxResults=50,
-                        pageToken=page_token,
-                    )
-                    .execute()
+                request = self._youtube.playlistItems().list(
+                    part="contentDetails",
+                    playlistId=uploads_playlist_id,
+                    maxResults=50,
+                    pageToken=page_token,
                 )
-            except HttpError as e:
-                raise YouTubeAPIError.from_http_error(e, "playlistItems.list 失敗") from e
+                resp = execute_with_retry(request, "playlistItems.list failed")
+            except YouTubeAPIError:
+                raise
             for item in resp.get("items", []):
                 yield item["contentDetails"]["videoId"]
             page_token = resp.get("nextPageToken")
@@ -241,26 +240,65 @@ class CommentReplier:
         limit: int,
         export_candidates: bool,
     ) -> None:
-        comments = fetch_comments(self._youtube, video_id=video_id, max_results=per_video_limit, since=since)
-        while len(plan.planned) < limit:
-            try:
-                comment = next(comments)
-            except StopIteration:
-                return
-            except YouTubeAPIError as e:
-                if not _is_comments_disabled_error(e):
-                    raise
-                plan.skipped.append(self._video_skip_record(video_id, _COMMENTS_DISABLED_SKIP_REASON))
-                return
-            self._process_comment(comment, plan, dry_run, export_candidates)
+        comments = iter(fetch_comments(self._youtube, video_id=video_id, max_results=per_video_limit, since=since))
+        next_comment: FetchedComment | None = None
+        try:
+            while len(plan.planned) < limit:
+                if next_comment is None:
+                    try:
+                        first_comment = next(comments)
+                    except StopIteration:
+                        return
+                else:
+                    first_comment = next_comment
+                    next_comment = None
+                can_fill_last_slot_without_thread_scan = (
+                    len(plan.planned) + 1 == limit
+                    and first_comment.parent_id is None
+                    and first_comment.total_reply_count == 0
+                    and self._skip_reason(first_comment, ()) is None
+                )
+                if can_fill_last_slot_without_thread_scan:
+                    self._process_comment(first_comment, plan, dry_run, export_candidates, ())
+                    if len(plan.planned) >= limit:
+                        return
+                    thread_comments = []
+                else:
+                    thread_comments = [first_comment]
+                thread_id = first_comment.parent_id or first_comment.comment_id
+                while True:
+                    try:
+                        comment = next(comments)
+                    except StopIteration:
+                        break
+                    if (comment.parent_id or comment.comment_id) != thread_id:
+                        next_comment = comment
+                        break
+                    thread_comments.append(comment)
+                owner_reply_times = tuple(
+                    published_at
+                    for comment in thread_comments
+                    if comment.parent_id is not None
+                    and comment.author_channel_id == self._owner_channel_id
+                    and (published_at := _parse_published_at(comment.published_at)) is not None
+                )
+                for comment in thread_comments:
+                    if len(plan.planned) >= limit:
+                        return
+                    self._process_comment(comment, plan, dry_run, export_candidates, owner_reply_times)
+        except YouTubeAPIError as e:
+            if not _is_comments_disabled_error(e):
+                raise
+            plan.skipped.append(self._video_skip_record(video_id, _COMMENTS_DISABLED_SKIP_REASON))
 
     def _get_title(self, video_id: str) -> str:
         if video_id in self._title_cache:
             return self._title_cache[video_id]
         try:
-            resp = self._youtube.videos().list(part="snippet", id=video_id).execute()
-        except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, f"videos.list 失敗 (video_id={video_id})") from e
+            request = self._youtube.videos().list(part="snippet", id=video_id)
+            resp = execute_with_retry(request, f"videos.list failed (video_id={video_id})")
+        except YouTubeAPIError:
+            raise
         title = ""
         for item in resp.get("items", []):
             title = item["snippet"].get("title", "")
@@ -274,8 +312,9 @@ class CommentReplier:
         plan: ReplyPlan,
         dry_run: bool,
         export_candidates: bool,
+        owner_reply_times: tuple[datetime, ...],
     ) -> None:
-        skip_reason = self._skip_reason(comment)
+        skip_reason = self._skip_reason(comment, owner_reply_times)
         if skip_reason is not None:
             plan.skipped.append(self._skip_record(comment, skip_reason))
             return
@@ -390,7 +429,7 @@ class CommentReplier:
         plan.skipped.append(self._skip_record(comment, "llm_error_skip"))
         return None
 
-    def _skip_reason(self, comment: FetchedComment) -> str | None:
+    def _skip_reason(self, comment: FetchedComment, owner_reply_times: tuple[datetime, ...]) -> str | None:
         if not comment.can_reply:
             return "canReply=False"
         if self._config.skip_held_for_review and comment.moderation_status == _HELD_FOR_REVIEW:
@@ -403,6 +442,11 @@ class CommentReplier:
         # reply 走査時に履歴外の自分のコメントを拾わないよう authorChannelId で除外する
         if self._owner_channel_id and comment.author_channel_id == self._owner_channel_id:
             return "own_comment"
+        published_at = _parse_published_at(comment.published_at)
+        if published_at is not None and any(
+            owner_published_at > published_at for owner_published_at in owner_reply_times
+        ):
+            return "owner_replied"
         return None
 
     def _audit_reply_text(
@@ -453,7 +497,7 @@ class CommentReplier:
             False: insert 自体が失敗した。
         """
         try:
-            self._youtube.comments().insert(
+            request = self._youtube.comments().insert(
                 part="snippet",
                 body={
                     "snippet": {
@@ -461,9 +505,10 @@ class CommentReplier:
                         "textOriginal": reply_text,
                     }
                 },
-            ).execute()
-        except HttpError as e:
-            status = getattr(getattr(e, "resp", None), "status", None)
+            )
+            execute_with_retry(request, "comments.insert failed")
+        except YouTubeAPIError as e:
+            status = e.status_code
             plan.errors.append(
                 self._error_record(
                     comment,
@@ -553,6 +598,16 @@ class CommentReplier:
 
 def _is_comments_disabled_error(error: YouTubeAPIError) -> bool:
     return error.status_code == 403 and error.reason == _COMMENTS_DISABLED_API_REASON
+
+
+def _parse_published_at(value: str) -> datetime | None:
+    try:
+        published_at = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if published_at.tzinfo is None:
+        return None
+    return published_at
 
 
 def _author_mention(author: str | None) -> str | None:

@@ -17,7 +17,7 @@
 | **P0** | 1 | Vertex AI Lyria 3 `interactions` API レスポンススキーマが **2026-05-26 にデフォルト切替 / 2026-06-08 に legacy 完全削除**。`lyria_client.py:149` は legacy `outputs` を直接読み込み済、無音失敗で `None` を返して停止 |
 | **P1** | 4 | (a) `gemini-2.5-flash` / `gemini-2.5-flash-lite` shutdown 2026-10-16 (4 use site), (b) `google-genai` 1.69 vs 2.4 major gap + 上限 pin なし → CI 再ビルドで突然 2.x が降ってくる, (c) `google-auth-httplib2` upstream で deprecated 表明, (d) skill バージョン追跡なし — `yt-skills sync --force` 明示が前提 |
 | **P2** | 6 | Lyria 3 endpoint `v1beta1` 直叩き、Veo 3.1 Lite ID の表記揺れ、`dead extras` (`veo = []`)、`japanize-matplotlib` 4 年超停滞、空 `Workflow` dataclass、CLAUDE.md L38 と L100 の矛盾 |
-| **P3** | 3 | `audio_units.py` の `lyria-002` 残置、`yt-config-migrate` 撤去判断、`requires-python = ">=3.11"` 過剰制約疑い |
+| **P3** | 3 | `audio_units.py` の `lyria-002` 残置、v1→v2 config 移行 CLI 撤去判断、`requires-python = ">=3.11"` 過剰制約疑い |
 | **CLI 要件欠落** | 5 | `ffmpeg` / `gcloud` / `gh` / `op` / `uv` の **最低バージョン**未明示。`ONBOARDING.md:31-39` 全項目「最新」のみ |
 | **障害時ガイダンス欠落** | 27/35 skill | SKILL.md に「API 障害時 / rate limit 時 / 未認証時 / CLI 不在時」のいずれも記述なし |
 | **調査不可** | 3 | Suno UI 仕様変更スケジュール、Lyria 3 GA 時期、`veo-3.1-lite-generate-preview` の公式 publisher model ID |
@@ -194,7 +194,7 @@ CLAUDE.md L100:
 | `Workflow` dataclass | `src/youtube_automation/utils/config/workflow.py:8-15` | フィールド 0 個の空 dataclass。v4.0.0 で `short` / `community` を撤去 | **dead shim**（P2: メジャー bump 時に整理候補） |
 | `_build_workflow` | `src/youtube_automation/utils/config/loader.py:266-271` | 常に空 `Workflow()` を返す placeholder | 上と同根 |
 | `workflow.json` 内 `short` / `community` キー | `CHANGELOG.md:500` で「素通し」運用宣言 | downstream の `workflow.json` 内の旧キーは無視される | 仕様的に確定済み |
-| `yt-config-migrate` | `pyproject.toml:48` 登録、`src/youtube_automation/cli/config_migrate.py` | v1→v2 migration CLI。**現在 v5.5.0**、3 メジャー超経過 | P3: 撤去判断要（loader 側は `loader.py:100-106` で legacy 形式を hard fail するため、コマンド自体は実質要らない可能性） |
+| v1→v2 config 移行 CLI | 当時 `pyproject.toml:48` に登録 | **現在 v5.5.0**、3 メジャー超経過 | P3: 撤去判断要（loader 側は `loader.py:100-106` で legacy 形式を hard fail するため、コマンド自体は実質要らない可能性） |
 | `gemini_image:` namespace 旧 schema | `src/youtube_automation/utils/image_provider/config.py:102-107` で `DeprecationWarning` 発行中 | 旧 namespace から新 `image_generation:` への移行ガード | `.claude/skills/**/config.default.yaml` には `gemini_image:` の利用箇所 **0 件**（grep 確認済み）→ 既に下流配布版で使われていない疑い |
 | `OpenAIConfig.thinking` | `src/youtube_automation/utils/image_provider/openai.py:53` で `warnings.warn` | openai-python SDK が `thinking` kwarg を受け取らないため警告のみ | SDK 側が対応するまで保持 |
 
@@ -328,7 +328,7 @@ CLAUDE.md L100:
 |---|---|---|---|
 | **H9** | `gemini-2.0-flash-exp` 等 `-exp` サフィックス付きモデルが production 経路で使われている | **否定** | `grep -rnE '-exp\b' src/ .claude/skills/` で 0 件。実利用は `gemini-2.5-flash` / `gemini-2.5-flash-lite` / `gemini-3.1-flash-image-preview` のみ |
 | **H10** | `veo-2.0-generate-001` の retire 後に動かなくなる skill が複数ある | **否定** | `grep -rnE 'veo-2\.0\|veo-3\.0' src/ .claude/skills/` で 0 件。実利用は `veo-3.1-fast-generate-001` / `veo-3.1-generate-001` / `veo-3.1-lite-generate-preview`。**ただし** Veo 系では `gemini-2.5-flash*` の方が 2026-10-16 リスクとして上位 |
-| **H11** | ルート直下 shim の中に「もはや誰も import していない死んだ shim」がある | **△ 部分検証 — ルート shim は実在しない、コード内 shim は実在** | `utils/` / `agents/` ルート直下に shim ファイル無し（既に削除済）。一方で `Workflow` dataclass (`src/youtube_automation/utils/config/workflow.py:8-15`) が空、`_build_workflow` (`loader.py:266-271`) が無条件 placeholder で **dead shim**。`yt-config-migrate` も v5.5.0 で 3 メジャー超経過しており撤去候補 |
+| **H11** | ルート直下 shim の中に「もはや誰も import していない死んだ shim」がある | **△ 部分検証 — ルート shim は実在しない、コード内 shim は実在** | `utils/` / `agents/` ルート直下に shim ファイル無し（既に削除済）。一方で `Workflow` dataclass (`src/youtube_automation/utils/config/workflow.py:8-15`) が空、`_build_workflow` (`loader.py:266-271`) が無条件 placeholder で **dead shim**。v1→v2 config 移行 CLI も v5.5.0 で 3 メジャー超経過しており撤去候補 |
 | **H12** | `pyproject.toml` の依存にメジャーバージョン pin が無く、google-cloud-aiplatform の breaking change で全停止する余地がある | **検証（pin 不在を確認、ただし google-cloud-aiplatform は直接依存していない）** | 直接依存は 16 件全て上限なし (`pyproject.toml:13-28`)。`google-cloud-aiplatform` は直接依存ではない（uv.lock にも未掲載）が、代わりに **`google-genai`** が 1.69 → 2.4 メジャー差で同等のリスク。実質的に H12 は `google-genai` で実現する |
 
 ---
@@ -380,7 +380,7 @@ CLAUDE.md L100:
 | # | アクション | 対象 |
 |---|---|---|
 | 13 | `audio_units.py` から `lyria-002` を削除 | `src/youtube_automation/utils/audio_units.py:16` |
-| 14 | `yt-config-migrate` 撤去判断（v1→v2 migration 完了とみなす） | `pyproject.toml:48`, `cli/config_migrate.py`, `loader.py:100-106` |
+| 14 | v1→v2 config 移行 CLI 撤去判断（migration 完了とみなす） | `pyproject.toml:48`, `loader.py:100-106` |
 | 15 | ONBOARDING.md に各 CLI の最低バージョンを明示（`ffmpeg >= 4.4`, `op >= 2.0`, `gh >= 2.0`, `gcloud >= 480`） | `ONBOARDING.md:31-39` |
 | 16 | `gemini_image:` namespace deprecation warning を撤去（実利用 0 件確認済） | `utils/image_provider/config.py:100-107` |
 | 17 | `masterup`, `videoup` に `yt-dlp` / `ffmpeg` の `command -v` チェックを追加（または skill 側で前提宣言） | 各 skill / references shell |
@@ -416,4 +416,3 @@ CLAUDE.md L100:
 35 skill のうち、SKILL.md 障害時ガイダンス監査は **全件カバー済み**（§7.1 表）。
 外部 CLI 依存マトリクスは **主要 9 skill 群 + その他 26 件 = 全 35 件カバー済み**（§4.1 表）。
 未調査 skill: **0 件**。
-

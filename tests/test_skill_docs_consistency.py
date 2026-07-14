@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import shlex
@@ -751,6 +752,20 @@ def test_distrokid_skill_uses_helper_name() -> None:
     assert "distrokid-prep" not in features
 
 
+def test_distrokid_skill_and_example_document_single_and_multi_disc_naming() -> None:
+    skill = _read(".claude/skills/distrokid-helper/SKILL.md")
+    example = json.loads(_read(".claude/skills/distrokid-helper/references/spec-example.json"))
+
+    assert "**単一 disc（35 曲以下）**" in skill
+    assert "`dark-techno`" in skill
+    assert "**複数 disc（35 曲超）**" in skill
+    assert "`disc{N}-<theme-kebab-case>-vol{N}`" in skill
+    assert example["single_disc"]["discs"][0]["slug"] == "dark-techno"
+    assert example["single_disc"]["discs"][0]["album_title"] == "Dark Techno"
+    assert example["multi_disc"]["discs"][0]["album_title"] == "Coding Focus Vol.1"
+    assert example["multi_disc"]["discs"][1]["slug"] == "disc2-coding-focus-vol2"
+
+
 def test_community_post_declares_raw_json_loader_exception() -> None:
     text = _read(".claude/skills/community-post/SKILL.md")
 
@@ -822,6 +837,41 @@ def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
             assert gate_pos < min(text.index(marker) for marker in operational_markers), (
                 f"{skill} config read gate must appear before operational steps"
             )
+
+
+def test_analytics_report_theme_colors_are_config_driven() -> None:
+    skill = _read(".claude/skills/analytics-report/SKILL.md")
+    default_config = yaml.safe_load(_read(".claude/skills/analytics-report/config.default.yaml")) or {}
+
+    colors = default_config.get("theme", {}).get("colors")
+    assert colors == {
+        "background": "#0f1419",
+        "card_background": "#1a2332",
+        "accent": "#c8a96e",
+        "text": "#e8e6e3",
+        "chart_palette": ["#4ecdc4", "#45b7d1", "#96ceb4", "#ffeaa7", "#dfe6e9"],
+        "success": "#00b894",
+        "warning": "#fdcb6e",
+        "danger": "#e17055",
+    }
+
+    assert "`theme.colors`" in skill
+    assert "config/skills/analytics-report.yaml" in skill
+    for color in (
+        "#0f1419",
+        "#1a2332",
+        "#c8a96e",
+        "#e8e6e3",
+        "#4ecdc4",
+        "#45b7d1",
+        "#96ceb4",
+        "#ffeaa7",
+        "#dfe6e9",
+        "#00b894",
+        "#fdcb6e",
+        "#e17055",
+    ):
+        assert color not in skill
 
 
 def test_collection_lifecycle_uses_mp3_as_public_audio_contract() -> None:

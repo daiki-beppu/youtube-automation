@@ -92,6 +92,8 @@ export const MAX_INJECT_RETRY = 2;
 /** duration 歩留まり NG 時に同じ entry を再生成する最大 retry 回数 (#1266)。 */
 export const MAX_YIELD_RETRY = 2;
 
+export const DEFAULT_REGENERATE_DURATION_OUTLIERS = true;
+
 /** 投入方式の選択値を保存する chrome.storage.local の key (#1586)。 */
 export const RUN_MODE_STORAGE_KEY = "sunoRunMode";
 
@@ -133,15 +135,12 @@ export interface RunMode {
 
 export const RUN_MODES: Record<RunModeId, RunMode> = {
   serial: {
-    label: "Serial",
-    riskNote: "1 entry ずつ生成完了を待つ安定重視の従来モード。",
+    label: "安全モード",
+    riskNote: "1件ずつ完了を待つ、安定性重視のモードです。",
   },
   queue: {
-    label: "Queue",
-    riskNote:
-      "投入 ACK 後に次 entry を先行投入し、最大 10 request まで Suno queue を使う。" +
-      "duration 範囲外のみの entry は失敗として検知し「失敗分のみ再実行」に載せる。" +
-      "自動再生成は行わず、bridge の clip ID 観測が必須。",
+    label: "高速モード",
+    riskNote: "最大10件を先行投入する、速度重視のモードです。",
   },
 };
 
@@ -192,6 +191,12 @@ export const FEED_POLL_INTERVAL_MS = 5000;
 
 /** active feed poll の応答待ち上限 (ms)。bridge 不在・token 未捕捉時に listener 側が諦める時間。 */
 export const FEED_V3_POLL_RESPONSE_TIMEOUT_MS = 10000;
+
+/** active feed poll が追跡する最大ページ数。実測した対象 clip の最大到達ページに余裕を持たせる。 */
+export const FEED_V3_MAX_PAGES = 8;
+
+/** active feed poll のページ間待機 (ms)。ページ連続取得による rate limit を避ける。 */
+export const FEED_V3_PAGE_DELAY_MS = 1000;
 
 /** bridge が観測した clip の最小表現（#948）。status は Suno API の生値（submitted/queued/streaming/complete/error 等）。 */
 export interface ObservedClip {
@@ -245,6 +250,15 @@ export interface LocalServerSource {
   id: string;
   label: string;
   url: string;
+}
+
+export type HelperProcessName = "distrokid-helper" | "suno-helper";
+
+export function formatServerSourceLabel(
+  source: LocalServerSource,
+  helper: HelperProcessName,
+): string {
+  return `${source.label} | ${helper}`;
 }
 
 /** 拡張初回起動時のローカル配信元候補。 */
@@ -355,6 +369,7 @@ type ProgressPayloadBase = {
   yieldRetryCount?: number;
   /** duration yield guard を通過した clip ID (#1268)。 */
   acceptedClipIds?: string[];
+  durationOutlierWarning?: string;
 };
 
 type ProgressPayloadWithoutLog = ProgressPayloadBase & {
@@ -399,6 +414,7 @@ export interface SnapshotPayload {
   playlistName?: string;
   // collection 単位 duration guard 閾値 (#1259)。再 open 後も同じ OK/NG 判定を維持する。
   durationFilter?: DurationFilter;
+  regenerateDurationOutliers?: boolean;
   // ERROR 停止した entry の index (#872)。chrome.storage の resume state と二重化し、
   // popup の進捗復元でも参照する。ERROR phase 到達時のみ確定し、それ以外は undefined。
   failedIndex?: number;
@@ -417,4 +433,5 @@ export interface SnapshotPayload {
   yieldAcceptedClipIds?: string[];
   // entry index -> duration guard retry 回数 (#1268)。
   yieldRetryCounts?: Record<number, number>;
+  durationOutlierWarnings?: Record<number, string>;
 }

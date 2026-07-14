@@ -6,9 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterator
 
-from googleapiclient.errors import HttpError
-
 from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.retry import execute_with_retry
 
 # YouTube API が commentThreads.list の replies.comments に含める最大件数
 _INLINE_REPLY_LIMIT = 5
@@ -85,19 +84,16 @@ def _fetch_replies_paginated(
     page_token: str | None = None
     while True:
         try:
-            response = (
-                youtube.comments()
-                .list(
-                    part="snippet",
-                    parentId=top_comment_id,
-                    maxResults=100,
-                    pageToken=page_token,
-                    textFormat="plainText",
-                )
-                .execute()
+            request = youtube.comments().list(
+                part="snippet",
+                parentId=top_comment_id,
+                maxResults=100,
+                pageToken=page_token,
+                textFormat="plainText",
             )
-        except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, f"comments.list 失敗 (parentId={top_comment_id})") from e
+            response = execute_with_retry(request, f"comments.list failed (parentId={top_comment_id})")
+        except YouTubeAPIError:
+            raise
 
         for item in response.get("items", []):
             if _after_since(item["snippet"].get("publishedAt", ""), since):
@@ -205,19 +201,16 @@ def fetch_comments(
     yielded = 0
     while yielded < max_results:
         try:
-            response = (
-                youtube.commentThreads()
-                .list(
-                    part="snippet,replies",
-                    videoId=video_id,
-                    maxResults=min(page_size, max_results - yielded),
-                    pageToken=next_page_token,
-                    textFormat="plainText",
-                )
-                .execute()
+            request = youtube.commentThreads().list(
+                part="snippet,replies",
+                videoId=video_id,
+                maxResults=min(page_size, max_results - yielded),
+                pageToken=next_page_token,
+                textFormat="plainText",
             )
-        except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, f"commentThreads.list 失敗 (video_id={video_id})") from e
+            response = execute_with_retry(request, f"commentThreads.list failed (video_id={video_id})")
+        except YouTubeAPIError:
+            raise
 
         for item in response.get("items", []):
             for comment in _iter_thread(youtube, item, video_id=video_id, since=since):

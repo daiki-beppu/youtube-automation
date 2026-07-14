@@ -45,6 +45,44 @@ export interface InjectWithVerificationOptions<M> {
   describeEntry: () => string;
 }
 
+export interface RetryInjectStepWithFallbackOptions {
+  /** retry 対象の inject step。例: Lyrics paste 注入。 */
+  run: () => Promise<void>;
+  /** 全 retry が失敗した後に 1 回だけ試す fallback。例: beforeinput 注入。 */
+  fallback: (lastError: unknown) => Promise<void>;
+  /** retry 対象エラーかを判定する。対象外エラーは即 throw する。 */
+  isRetryable: (error: unknown) => boolean;
+  /** run を再試行する最大回数。総 attempt 数は maxRetry + 1。 */
+  maxRetry: number;
+  /** warn メッセージ用の step 特定文字列。 */
+  describeStep: () => string;
+}
+
+export async function retryInjectStepWithFallback(options: RetryInjectStepWithFallbackOptions): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= options.maxRetry; attempt++) {
+    try {
+      await options.run();
+      return;
+    } catch (error) {
+      if (!options.isRetryable(error)) {
+        throw error;
+      }
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt < options.maxRetry) {
+        console.warn(`${options.describeStep()} が失敗、inject retry (${attempt + 1}/${options.maxRetry}): ${message}`);
+        continue;
+      }
+      console.warn(
+        `${options.describeStep()} が ${options.maxRetry + 1} 回失敗したため ` +
+          `beforeinput fallback を試します: ${message}`,
+      );
+    }
+  }
+  await options.fallback(lastError);
+}
+
 /**
  * entry を inject し、受理（ACK）されたことを検証する。
  *   - markBeforeInject() → inject() → 中断なら即 return（throw しない）→ waitForAck で受理確認

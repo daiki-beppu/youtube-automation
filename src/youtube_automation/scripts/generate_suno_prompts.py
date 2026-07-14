@@ -378,8 +378,7 @@ def _entry_names_from_resolved(resolved: list[_ResolvedPattern]) -> list[str]:
     """`build_prompt_entries` と同一ロジックで最終的な entry.name のみを構築する.
 
     Suno UI Song Title 欄へ注入される値 (suno-helper 拡張は `entry.title ?? entry.name` を読む)
-    の SSOT。`_resolve_prompts()` が scene variation と tracks_per_pattern を反映した
-    展開済み entry_names を作る。
+    の SSOT。`_resolve_prompts()` が scene variation を反映した entry_names を作る。
     """
     names: list[str] = []
     for p in resolved:
@@ -409,20 +408,6 @@ def _require_pattern_name_without_padding(
     )
     if issue is not None:
         raise ConfigError(f"{patterns_path}: {issue}")
-
-
-def _resolve_vocal_tracks_per_pattern(suno: dict) -> int:
-    value = suno.get("tracks_per_pattern")
-    issue = positive_integer_issue(value, "config/skills/suno.yaml::tracks_per_pattern")
-    if issue is not None:
-        raise ConfigError(issue)
-    return cast(int, value)
-
-
-def _expand_scenes_for_entries(scenes: list[str], tracks_per_pattern: int) -> list[str]:
-    if tracks_per_pattern == 1:
-        return scenes
-    return [scene for scene in scenes for _ in range(tracks_per_pattern)]
 
 
 def _vocal_workflow_state_path(patterns_path: Path) -> Path | None:
@@ -496,7 +481,6 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
 
     mode = data.get("mode", infer_suno_mode(genre_line))
     is_vocal = mode == "vocal"
-    tracks_per_pattern = _resolve_vocal_tracks_per_pattern(suno) if is_vocal else 1
     workflow_state_path = _vocal_workflow_state_path(patterns_path) if is_vocal else None
     workflow_track_count = (
         _read_vocal_workflow_track_count(workflow_state_path) if workflow_state_path is not None else None
@@ -537,13 +521,8 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
             style_label = ""
 
         scenes = pattern["scenes"]
-        entry_names = suno_prompt_entry_names(
-            name_jp,
-            name_en,
-            len(scenes),
-            tracks_per_pattern=tracks_per_pattern,
-        )
-        entry_scenes = _expand_scenes_for_entries(scenes, tracks_per_pattern)
+        entry_names = suno_prompt_entry_names(name_jp, name_en, len(scenes))
+        entry_scenes = scenes
         raw_lyrics = pattern.get("lyrics")
         fallback_lyrics = raw_lyrics.rstrip() if raw_lyrics else ""
         lyrics_by_scene = []
@@ -584,7 +563,7 @@ def _resolve_prompts(patterns_path: Path) -> _ResolvedPrompts:
     # インストモード: yaml `tracks:` (コレクション上書き) > config `tracks_per_collection` の順で曲数を解決し、
     # ceil(N/2) と yaml の entry 数 (scene 行数の合計) が一致するか fail-loud で検証する。
     # ボーカルの標準 collection は workflow-state.json::track_count を SSOT とし、yaml `tracks:` の完全一致と
-    # 展開済み prompt entry 数の下限を検証する。standalone patterns file は workflow state を持たないため対象外。
+    # prompt entry 数の下限を検証する。standalone patterns file は workflow state を持たないため対象外。
     # tracks_per_collection が未指定の旧インスト運用は silent skip して後方互換を保つ。
     if not is_vocal:
         tracks_override = data.get("tracks")
@@ -679,10 +658,10 @@ def generate(patterns_path: Path) -> str:
 def build_prompt_entries(patterns_path: Path) -> list[dict]:
     """拡張へ配信する `[{name, style, lyrics}]` を md と同じ部品から派生させる.
 
-    `_resolve_prompts()` が作る展開済み entry_names 単位で出力する。
-    複数 scene は `(Variation N)`、tracks_per_pattern > 1 は `(Take N)` を含む
-    name になり、style は md の Styles ブロック（`<tempo>, <style>,` 行 + scene 行）
-    と同一文字列を改行で結合する。
+    `_resolve_prompts()` が作る entry_names 単位で出力する。
+    複数 scene は `(Variation N)` を含む name になり、style は md の
+    Styles ブロック（`<tempo>, <style>,` 行 + scene 行）と同一文字列を
+    改行で結合する。
 
     品質ルール (#904):
     - 5 要素順序の簡易検証 (警告)

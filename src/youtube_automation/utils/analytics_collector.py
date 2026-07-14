@@ -30,6 +30,7 @@ from youtube_automation.utils.ctr_analytics import CTRAnalyticsMixin
 from youtube_automation.utils.exceptions import YouTubeAPIError
 from youtube_automation.utils.reporting_analytics import ReportingAPIMixin
 from youtube_automation.utils.retention_analytics import RetentionAnalyticsMixin
+from youtube_automation.utils.retry import execute_with_retry
 from youtube_automation.utils.strategic_analytics import StrategicAnalyticsMixin
 from youtube_automation.utils.traffic_source_analytics import TrafficSourceMixin
 from youtube_automation.utils.video_analytics import VideoAnalyticsMixin
@@ -75,7 +76,8 @@ class YouTubeAnalyticsCollector(
     def _get_channel_id(self) -> str:
         """チャンネルID取得"""
         try:
-            response = self.youtube_service.channels().list(part="id,snippet", mine=True).execute()
+            request = self.youtube_service.channels().list(part="id,snippet", mine=True)
+            response = execute_with_retry(request, "analytics channels.list failed")
 
             if response["items"]:
                 channel = response["items"][0]

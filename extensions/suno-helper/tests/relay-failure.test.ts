@@ -9,7 +9,12 @@
 // （Vitest env は node・chrome モック無しのため、既存 content-script-missing-hint.test.ts と同方針）。
 import { describe, expect, it } from "vitest";
 
-import { describeRelayFailure } from "../components/runner-errors";
+import {
+  EXTENSION_RELOAD_REQUIRED_MESSAGE,
+  describeRelayFailure,
+  formatRunError,
+  isExtensionContextInvalidatedError,
+} from "../components/runner-errors";
 
 describe("describeRelayFailure: content script 未注入（想定内）は info に落とす (#937)", () => {
   it("Given missing-receiver エラー When 整形 Then level=info + ハードリロード案内を含む", () => {
@@ -40,5 +45,16 @@ describe("describeRelayFailure: 想定外エラーは warn で残す (#937)", ()
 
   it("Given 空メッセージ When 整形 Then level=warn（missing-receiver 扱いにしない）", () => {
     expect(describeRelayFailure("toggleOverlay", "").level).toBe("warn");
+  });
+});
+
+describe("拡張更新後の context invalidated を再読み込み案内へ集約する (#1718)", () => {
+  it.each([
+    "Extension context invalidated.",
+    "Error: No response at sendMessage",
+    "Error: 'wxt/storage' must be loaded in a web extension environment",
+  ])("Given %j When 判定 Then 更新後エラーとして扱う", (message) => {
+    expect(isExtensionContextInvalidatedError(message)).toBe(true);
+    expect(formatRunError(message)).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
   });
 });

@@ -33,7 +33,6 @@ class PatternContract:
     expected_names: list[str]
     style_keys: frozenset[str]
     tracks_per_collection: int | None
-    tracks_per_pattern: int | None
 
 
 @dataclass(frozen=True)
@@ -58,14 +57,11 @@ def load_pattern_contract(
         return None, issues
 
     mode, mode_issues = _resolve_mode(raw, suno_cfg)
-    tracks_per_pattern, tracks_per_pattern_issues = _resolve_vocal_tracks_per_pattern(mode, suno_cfg)
     expected_names, style_keys, pattern_issues = _pattern_contract_data_from_patterns(
         raw.get("patterns"),
-        tracks_per_pattern if mode == "vocal" and tracks_per_pattern is not None else 1,
     )
     tracks_per_collection, tracks_issues = _resolve_tracks_per_collection(raw, suno_cfg)
     issues.extend(mode_issues)
-    issues.extend(tracks_per_pattern_issues)
     issues.extend(pattern_issues)
     issues.extend(tracks_issues)
     if mode is None:
@@ -75,7 +71,6 @@ def load_pattern_contract(
         expected_names=expected_names,
         style_keys=style_keys,
         tracks_per_collection=tracks_per_collection,
-        tracks_per_pattern=tracks_per_pattern,
     )
     return contract, issues
 
@@ -108,10 +103,6 @@ def load_lyric_entries(lyrics_path: Path) -> tuple[ArtifactEntries, list[str]]:
     entries, entry_issues = _lyric_entries_from_json_list(raw)
     issues.extend(entry_issues)
     return entries, issues
-
-
-def resolve_tracks_per_pattern(suno_cfg: Mapping[str, object]) -> tuple[int | None, list[str]]:
-    return _positive_int(suno_cfg.get("tracks_per_pattern"), "config/skills/suno.yaml::tracks_per_pattern")
 
 
 def _load_json(path: Path, filename: str) -> tuple[object | None, list[str]]:
@@ -155,18 +146,8 @@ def _positive_int(value: object, context: str) -> tuple[int | None, list[str]]:
     return cast(int, value), []
 
 
-def _resolve_vocal_tracks_per_pattern(
-    mode: str | None,
-    suno_cfg: ResolvedSunoConfig,
-) -> tuple[int | None, list[str]]:
-    if mode != "vocal":
-        return None, []
-    return resolve_tracks_per_pattern(suno_cfg.raw)
-
-
 def _pattern_contract_data_from_patterns(
     raw_patterns: object,
-    tracks_per_pattern: int,
 ) -> tuple[list[str], frozenset[str], list[str]]:
     if not isinstance(raw_patterns, list):
         return [], frozenset(), [f"{SUNO_PATTERNS_FILENAME} patterns must be a list"]
@@ -175,7 +156,7 @@ def _pattern_contract_data_from_patterns(
     style_keys: set[str] = set()
     issues: list[str] = []
     for index, pattern in enumerate(raw_patterns, 1):
-        pattern_names, pattern_issues = _entry_names_from_pattern(pattern, index, tracks_per_pattern)
+        pattern_names, pattern_issues = _entry_names_from_pattern(pattern, index)
         names.extend(pattern_names)
         issues.extend(pattern_issues)
         style_key = _style_key_from_pattern(pattern)
@@ -187,7 +168,6 @@ def _pattern_contract_data_from_patterns(
 def _entry_names_from_pattern(
     pattern: object,
     index: int,
-    tracks_per_pattern: int,
 ) -> tuple[list[str], list[str]]:
     issues: list[str] = []
     if not isinstance(pattern, Mapping):
@@ -218,7 +198,7 @@ def _entry_names_from_pattern(
         issues.append(f"{SUNO_PATTERNS_FILENAME} patterns[{index}].scenes has invalid entries: {joined}")
         return [], issues
 
-    return suno_prompt_entry_names(name_jp, name_en, len(scenes), tracks_per_pattern=tracks_per_pattern), issues
+    return suno_prompt_entry_names(name_jp, name_en, len(scenes)), issues
 
 
 def _style_key_from_pattern(pattern: object) -> str | None:

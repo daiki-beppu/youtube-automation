@@ -175,7 +175,13 @@ def _make_title_template_config(supported_languages: list[str]) -> SimpleNamespa
     return cfg
 
 
-def _write_title_collection(tmp_path: Path, title: str, *, status: str = "ready") -> Path:
+def _write_title_collection(
+    tmp_path: Path,
+    title: str,
+    *,
+    status: str = "ready",
+    title_template_check: dict[str, object] | None = None,
+) -> Path:
     col_dir = tmp_path / status / "20990101-foo-collection"
     doc_dir = col_dir / "20-documentation"
     doc_dir.mkdir(parents=True)
@@ -203,8 +209,11 @@ def _write_title_collection(tmp_path: Path, title: str, *, status: str = "ready"
         encoding="utf-8",
     )
     scene_phrases = {lang: {"title": f"title-{lang}"} for lang in ["en", "ja", "de"]}
+    workflow_state: dict[str, object] = {"scene_phrases": scene_phrases}
+    if title_template_check is not None:
+        workflow_state["title_template_check"] = title_template_check
     (col_dir / "workflow-state.json").write_text(
-        json.dumps({"scene_phrases": scene_phrases}),
+        json.dumps(workflow_state),
         encoding="utf-8",
     )
     return col_dir
@@ -262,6 +271,86 @@ class TestPreflightTitleTemplateCompliance:
             return_value=_make_title_template_config(["ja", "en", "de"]),
         ):
             uploader._preflight_check(col_dir)
+
+    def test_should_allow_opted_in_volume_without_disabling_default_detection(self, tmp_path):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        opted_in_collection = _write_title_collection(
+            tmp_path,
+            "Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves",
+            status="opted-in",
+            title_template_check={"allow_volume_patterns": True},
+        )
+        default_collection = _write_title_collection(
+            tmp_path,
+            "Funky Soul Spirit Vol.3 | 3 Hours of Feel-Good Retro Grooves",
+            status="default",
+        )
+        false_collection = _write_title_collection(
+            tmp_path,
+            "Funky Soul Spirit Vol.4 | 3 Hours of Feel-Good Retro Grooves",
+            status="false",
+            title_template_check={"allow_volume_patterns": False},
+        )
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with patch(
+            "youtube_automation.agents._preflight.load_config",
+            return_value=_make_title_template_config(["ja", "en", "de"]),
+        ):
+            uploader._preflight_check(opted_in_collection)
+            with pytest.raises(RuntimeError, match="巻数表記を検出"):
+                uploader._preflight_check(default_collection)
+            with pytest.raises(RuntimeError, match="巻数表記を検出"):
+                uploader._preflight_check(false_collection)
+
+    def test_upload_collection_reaches_post_preflight_for_opted_in_volume(self, tmp_path):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        class PostPreflightReached(Exception):
+            pass
+
+        collection = _write_title_collection(
+            tmp_path,
+            "Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves",
+            title_template_check={"allow_volume_patterns": True},
+        )
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with (
+            patch(
+                "youtube_automation.agents._preflight.load_config",
+                return_value=_make_title_template_config(["ja", "en", "de"]),
+            ),
+            patch(
+                "youtube_automation.agents.youtube_auto_uploader.BAHMetadataGenerator",
+                side_effect=PostPreflightReached,
+            ),
+            pytest.raises(PostPreflightReached),
+        ):
+            uploader.upload_collection(collection)
+
+    def test_upload_collection_rejects_default_volume_before_metadata_generation(self, tmp_path):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        collection = _write_title_collection(
+            tmp_path,
+            "Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves",
+        )
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with (
+            patch(
+                "youtube_automation.agents._preflight.load_config",
+                return_value=_make_title_template_config(["ja", "en", "de"]),
+            ),
+            patch(
+                "youtube_automation.agents.youtube_auto_uploader.BAHMetadataGenerator",
+                side_effect=AssertionError("metadata generation must not run"),
+            ),
+            pytest.raises(RuntimeError, match="巻数表記を検出"),
+        ):
+            uploader.upload_collection(collection)
 
 
 # ---------------------------------------------------------------------------

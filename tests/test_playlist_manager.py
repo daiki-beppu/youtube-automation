@@ -13,6 +13,8 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
+from googleapiclient.errors import HttpError
+from httplib2 import Response
 
 # ---------------------------------------------------------------------------
 # フィクスチャ
@@ -334,6 +336,17 @@ class TestCreatePlaylist:
         body = call_kwargs[1]["body"]
         assert body["status"]["privacyStatus"] == "unlisted"
         assert body["snippet"]["title"] == "T"
+
+    def test_retries_transient_api_failure_through_playlist_manager(self, manager, mock_youtube, monkeypatch):
+        monkeypatch.setattr("youtube_automation.utils.retry.time.sleep", lambda _: None)
+        transient = HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}')
+        request = mock_youtube.playlists.return_value.insert.return_value
+        request.execute.side_effect = [transient, {"id": "PL_NEW"}]
+
+        result = manager._create_playlist("My Playlist", "Desc")
+
+        assert result["playlist_id"] == "PL_NEW"
+        assert request.execute.call_count == 2
 
 
 # ---------------------------------------------------------------------------

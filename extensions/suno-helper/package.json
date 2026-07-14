@@ -3,8 +3,8 @@
   "version": "0.2.5",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@9.15.9",
-  "description": "/suno が生成した Style/Lyrics を Suno Custom Mode に順次注入し Generate を連続実行する補助拡張 (WXT + React + TS)。",
+  "packageManager": "pnpm@11.12.0",
+  "description": "/suno が生成した Style/Lyrics を Suno の Advanced タブに順次注入し Generate を連続実行する補助拡張 (WXT + React + TS)。",
   "scripts": {
     "postinstall": "wxt prepare",
     "dev": "wxt",
@@ -42,10 +42,5 @@
     "typescript-eslint": "8.60.1",
     "vitest": "4.1.8",
     "wxt": "0.20.26"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   }
 }

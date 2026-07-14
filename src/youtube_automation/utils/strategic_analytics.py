@@ -10,9 +10,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Dict, List
 
-from googleapiclient.errors import HttpError
-
+from youtube_automation.utils.exceptions import YouTubeAPIError
 from youtube_automation.utils.profile import section
+from youtube_automation.utils.retry import execute_with_retry
 
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
@@ -75,20 +75,17 @@ class StrategicAnalyticsMixin:
             batch_size = min(10, remaining_count)
 
             try:
-                response = (
-                    self.analytics_service.reports()
-                    .query(
-                        ids=f"channel=={self.channel_id}",
-                        startDate=start_date,
-                        endDate=end_date,
-                        metrics="views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained",
-                        dimensions="video",
-                        sort="-views",
-                        maxResults=batch_size,
-                        startIndex=len(top_videos_data) + 1,
-                    )
-                    .execute()
+                request = self.analytics_service.reports().query(
+                    ids=f"channel=={self.channel_id}",
+                    startDate=start_date,
+                    endDate=end_date,
+                    metrics="views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained",
+                    dimensions="video",
+                    sort="-views",
+                    maxResults=batch_size,
+                    startIndex=len(top_videos_data) + 1,
                 )
+                response = execute_with_retry(request, "YouTube Analytics API request failed")
 
                 if "rows" not in response:
                     break
@@ -130,7 +127,7 @@ class StrategicAnalyticsMixin:
                 if len(response["rows"]) < batch_size:
                     break
 
-            except HttpError as e:
+            except YouTubeAPIError as e:
                 logger.error(f"YouTube API エラー（上位動画取得）: {e}")
                 break
             except Exception as e:
@@ -287,20 +284,17 @@ class StrategicAnalyticsMixin:
             batch_size = min(10, remaining_count)
 
             try:
-                response = (
-                    self.analytics_service.reports()
-                    .query(
-                        ids=f"channel=={self.channel_id}",
-                        startDate=start_date,
-                        endDate=end_date,
-                        metrics="views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained",
-                        dimensions="video",
-                        sort="-views",
-                        maxResults=batch_size,
-                        startIndex=len(videos_data) + 1,
-                    )
-                    .execute()
+                request = self.analytics_service.reports().query(
+                    ids=f"channel=={self.channel_id}",
+                    startDate=start_date,
+                    endDate=end_date,
+                    metrics="views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained",
+                    dimensions="video",
+                    sort="-views",
+                    maxResults=batch_size,
+                    startIndex=len(videos_data) + 1,
                 )
+                response = execute_with_retry(request, "YouTube Analytics API request failed")
 
                 if "rows" not in response:
                     break
@@ -343,7 +337,7 @@ class StrategicAnalyticsMixin:
                 if len(response["rows"]) < batch_size:
                     break
 
-            except HttpError as e:
+            except YouTubeAPIError as e:
                 logger.error(f"YouTube API エラー（バッチ取得）: {e}")
                 break
             except Exception as e:

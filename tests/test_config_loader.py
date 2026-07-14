@@ -976,7 +976,7 @@ def test_legacy_config_detection(tmp_path, monkeypatch):
     _write_json(ch / "config" / "channel_config.json", {"legacy": True})
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="旧 channel_config.json が残っています"):
+    with pytest.raises(ConfigError, match="/channel-new の既存チャンネル取り込みモード"):
         load_config()
 
 

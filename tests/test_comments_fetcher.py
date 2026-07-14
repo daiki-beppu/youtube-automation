@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from googleapiclient.errors import HttpError
+from httplib2 import Response
+
 from youtube_automation.utils.comments.fetcher import fetch_comments
 
 
@@ -82,6 +85,19 @@ def test_top_level_comment_has_parent_id_none():
     assert comments[0].comment_id == "t1"
     assert comments[0].parent_id is None
     assert comments[0].video_id == "v1"
+
+
+def test_retries_transient_api_failure_through_comments_entrypoint(monkeypatch):
+    monkeypatch.setattr("youtube_automation.utils.retry.time.sleep", lambda _: None)
+    transient = HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}')
+    yt = _mock_youtube_threads([_make_thread_item(thread_id="t1", text="hello")])
+    request = yt.commentThreads.return_value.list.return_value
+    request.execute.side_effect = [transient, {"items": [_make_thread_item(thread_id="t1", text="hello")]}]
+
+    comments = list(fetch_comments(yt, video_id="v1"))
+
+    assert [comment.comment_id for comment in comments] == ["t1"]
+    assert request.execute.call_count == 2
 
 
 def test_top_level_comment_includes_author_channel_id():

@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.agents._preflight import PreflightMixin
+from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+from youtube_automation.utils.config import load_config
 
 
 class _PreflightHarness(PreflightMixin):
@@ -81,10 +83,25 @@ def _write_minimal_channel(
     return channel_dir
 
 
-def _write_collection(channel_dir: Path, *, scene_phrases: dict[str, str], description: str) -> Path:
+def _write_collection(
+    channel_dir: Path,
+    *,
+    scene_phrases: dict[str, str],
+    description: str,
+    tags: list[str] | None = None,
+) -> Path:
     collection_dir = channel_dir / "collections" / "planning" / "20260622-tc-continuous"
     docs_dir = collection_dir / "20-documentation"
     docs_dir.mkdir(parents=True, exist_ok=True)
+    tags_section = (
+        ""
+        if tags is None
+        else f"""\n## タグ（YouTube タグ欄）
+```
+{", ".join(tags)}
+```
+"""
+    )
     (docs_dir / "descriptions.md").write_text(
         f"""## タイトル案
 ```
@@ -95,6 +112,7 @@ Continuous Focus Mix
 ```
 {description}
 ```
+{tags_section}
 """,
         encoding="utf-8",
     )
@@ -276,3 +294,57 @@ def test_target_duration_config_does_not_block_upload_preflight(
     (master_dir / "master.mp4").write_bytes(b"not a valid mp4")
 
     _run_preflight(channel_dir, collection_dir, monkeypatch)
+
+
+def test_unreachable_tags_min_count_reports_character_limit_resolution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en"])
+    content_path = channel_dir / "config" / "channel" / "content.json"
+    content = json.loads(content_path.read_text(encoding="utf-8"))
+    content["tags"]["min_count"] = 30
+    _write_json(content_path, content)
+
+    collection_dir = _write_collection(
+        channel_dir,
+        scene_phrases={},
+        description="A continuous BGM mix without chapter markers.",
+        tags=["a" * 17] * 26 + ["b" * 27],
+    )
+
+    with pytest.raises(RuntimeError) as excinfo:
+        _run_preflight(channel_dir, collection_dir, monkeypatch)
+
+    message = str(excinfo.value)
+    assert "tags.min_count=30 is unreachable under YouTube's 500-character tag limit" in message
+    assert "Reduce tags.min_count or shorten base tags." in message
+
+
+def test_upload_collection_reports_unreachable_tags_min_count_from_channel_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """公開 upload agent は content.json を loader 経由で読み、到達不能設定を停止する。"""
+    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en"])
+    content_path = channel_dir / "config" / "channel" / "content.json"
+    content = json.loads(content_path.read_text(encoding="utf-8"))
+    content["tags"]["min_count"] = 30
+    _write_json(content_path, content)
+    collection_dir = _write_collection(
+        channel_dir,
+        scene_phrases={},
+        description="A continuous BGM mix without chapter markers.",
+        tags=["a" * 17] * 26 + ["b" * 27],
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    assert load_config().content.tags.min_count == 30
+    uploader = YouTubeAutoUploader(str(channel_dir / "collections"))
+
+    with pytest.raises(RuntimeError) as excinfo:
+        uploader.upload_collection(str(collection_dir), apply_default_publish_at=False)
+
+    message = str(excinfo.value)
+    assert "tags.min_count=30 is unreachable under YouTube's 500-character tag limit" in message
+    assert "Reduce tags.min_count or shorten base tags." in message

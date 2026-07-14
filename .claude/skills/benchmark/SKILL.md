@@ -1,6 +1,6 @@
 ---
 name: benchmark
-description: "Use when 競合チャンネルのベンチマークデータを最新化するとき。「競合データ収集」「ベンチマーク更新」で発動。docs/benchmarks/*.md を更新。収集済みデータの分析は /channel-research"
+description: "Use when 競合チャンネルのベンチマークデータを最新化するとき。「競合データ収集」「ベンチマーク更新」で発動。docs/benchmarks/*.md を更新。収集済みデータの分析は /channel-research、サムネイルだけの深掘りは /thumbnail-research"
 ---
 
 ## Overview
@@ -13,6 +13,12 @@ description: "Use when 競合チャンネルのベンチマークデータを最
 
 Step 1 のスクリプトが exit 0 で終了して `docs/benchmarks/*.md` と `data/benchmark_YYYYMMDD.json` が更新され、Step 2 のサムネイル分析セクション追記と Step 3 の結果サマリー報告を終えた時点で完了。
 
+## Subagent 委譲ゲート
+
+メインエージェントは設定読み込み、前提確認、必要なユーザー承認、成果物存在確認、結果サマリー報告だけを担当する。YouTube Data API 呼び出し、`data/benchmark_YYYYMMDD.json` 生成、`docs/benchmarks/*.md` 生成、サムネイル画像の読み込みと分析追記は subagent へ委譲する。
+
+メインエージェントは `data/benchmark_*.json`、`docs/benchmarks/*.md`、`docs/benchmarks/thumbnails/*` の中身を直接 Read しない。subagent は成果物パス、更新件数、主要パターンの要約だけを返し、生 JSON、Markdown 全文、画像分析の中間メモをメイン会話へ貼らない。メインエージェントは `ls` / `test` などで期待成果物の存在を機械的に確認してから完了を報告する。
+
 ## 設定読み込みゲート
 
 前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
@@ -22,13 +28,20 @@ Step 1 のスクリプトが exit 0 で終了して `docs/benchmarks/*.md` と `
 
 読み込み後は `youtube_automation.utils.skill_config.load_skill_config("benchmark")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。
 
-## 前提
+## 前提成果物ガード
 
-`config/channel/` が存在すること（`load_config()` でロード可能）。
+後続 Step に入る前に、以下の前提を確認する。**停止する fail** が 1 件でもあれば、記載した前工程スキルを案内して停止し、解消するまで後続 Step に進まない。**許容する fail** は停止条件に含めない。
 
-存在しない場合、ユーザーに確認:
-- **新規チャンネル** → `/channel-new` を案内
-- **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
+### 停止する fail
+
+- `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/channel-new`、既存チャンネルは `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
+- `config/channel/analytics.json::benchmark.channels` に承認済みベンチマークチャンネルが設定されていない → `/channel-new` / `/discover-competitors` を案内して停止する
+- `auth/token.json` が存在しない、または OAuth 認証が無効 → `/setup` を案内して停止する
+
+### 許容する fail
+
+- `config/skills/benchmark.yaml` が無い → `.claude/skills/benchmark/config.default.yaml` を使うため停止しない
+- `data/benchmark_*.json` / `docs/benchmarks/*.md` が無い → 本スキルの Step 1 で生成するため停止しない
 
 ## 取得データ（拡充版）
 
@@ -41,6 +54,8 @@ Step 1 のスクリプトが exit 0 で終了して `docs/benchmarks/*.md` と `
 ## 実行フロー
 
 ### Step 1: データ収集
+
+以下のコマンド実行は subagent へ委譲する。subagent は CLI の実行結果、更新された `data/benchmark_YYYYMMDD.json`、更新された `docs/benchmarks/*.md` のパスを完了報告に含める。
 
 ```bash
 # チャンネルディレクトリから実行（鮮度チェック → 古いもののみ更新）
@@ -64,9 +79,9 @@ uv run yt-benchmark-collect -v               # 詳細ログ
 7. `docs/benchmarks/*.md`（個別 + common-patterns + README）を自動生成
    - 該当動画が 0 件のチャンネルは「該当動画なし」注記付きの空レポートになる
 
-### Step 2: サムネイル分析（エージェント）
+### Step 2: サムネイル分析（subagent）
 
-スクリプト完了後、エージェントが以下を実施:
+スクリプト完了後、subagent が以下を実施:
 
 1. 各チャンネルのレポート（`docs/benchmarks/{slug}.md`）を読み、再生数上位 5 本の動画を特定
 2. 該当動画のサムネイル画像を `docs/benchmarks/thumbnails/{slug}_{video_id}.jpg` から Read（Codex では同等の画像閲覧機能）で読み込み
@@ -81,10 +96,18 @@ uv run yt-benchmark-collect -v               # 詳細ログ
 
 ### Step 3: 結果確認・戦略的評価
 
-1. 生成された `docs/benchmarks/*.md` を Read（Codex では同等のファイル閲覧）で確認
-2. 高パフォーマンス動画のパターンを分析
-3. `common-patterns.md` の戦略的示唆を 自チャンネル向けに再評価
-4. 結果サマリーをユーザーに報告
+1. メインエージェントは `docs/benchmarks/*.md` と `data/benchmark_YYYYMMDD.json` の存在を確認
+2. subagent から受け取った高パフォーマンス動画パターン、`common-patterns.md` の戦略的示唆、自チャンネル向け再評価の要約を確認
+3. 結果サマリーをユーザーに報告
+
+### 委譲プロンプト要件
+
+subagent へは次を具体値で渡す:
+
+- 入力パス: `.claude/skills/benchmark/config.default.yaml`、存在する場合は `config/skills/benchmark.yaml`、`config/channel/analytics.json`
+- 実行する作業: `uv run yt-benchmark-collect -y` と、必要なサムネイル分析追記
+- 期待成果物: `data/benchmark_YYYYMMDD.json`、`docs/benchmarks/*.md`、必要に応じて `docs/benchmarks/thumbnails/{slug}_{video_id}.jpg`
+- 完了報告: `status: success | failure`、`commands`、`artifacts`、`updated_reports`、`summary`、`errors`
 
 ## 新規競合チャンネル追加
 

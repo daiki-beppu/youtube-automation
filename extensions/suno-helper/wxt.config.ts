@@ -8,8 +8,8 @@ const extensionName = isTestBuild
   ? "[TEST] Suno Helper (youtube-channels-automation)"
   : "Suno Helper (youtube-channels-automation)";
 const extensionDescription = isTestBuild
-  ? "[TEST BUILD] /suno が生成した Style/Lyrics を Suno Custom Mode に順次注入し Generate を連続実行する補助拡張。"
-  : "/suno が生成した Style/Lyrics を Suno Custom Mode に順次注入し Generate を連続実行する補助拡張。";
+  ? "[TEST BUILD] /suno が生成した Style/Lyrics を Suno の Advanced タブに順次注入し Generate を連続実行する補助拡張。"
+  : "/suno が生成した Style/Lyrics を Suno の Advanced タブに順次注入し Generate を連続実行する補助拡張。";
 const actionTitle = isTestBuild ? "[TEST] Suno Helper" : "Suno Helper";
 
 // See https://wxt.dev/api/config.html

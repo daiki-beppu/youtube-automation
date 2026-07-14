@@ -30,38 +30,40 @@ WXT + React + TypeScript + Tailwind CSS + [@webext-core/messaging](https://webex
 
 ## 開発フロー
 
-依存インストール（pnpm）:
+ローカル検証は CI・lockfile と同じ Nix extensions shell の Node 24 / pnpm 11.12.0 に固定する。ambient `pnpm` の版は各環境で異なり得るため、リポジトリ root から以下のコマンドを使う。理由と両拡張共通の release 前検証は `extensions/README.md::pnpm バージョン契約` を参照する。
+
+依存インストール:
 
 ```bash
-pnpm install
+nix develop .#extensions --command pnpm -C extensions/distrokid-helper install --frozen-lockfile
 ```
 
 開発（HMR 付き、Chrome を自動起動）:
 
 ```bash
-pnpm dev
+nix develop .#extensions --command pnpm -C extensions/distrokid-helper dev
 ```
 
 ## ビルド
 
 ```bash
-pnpm build      # .output/chrome-mv3/ に Manifest V3 拡張を生成
-pnpm zip        # 配布用 zip を生成
+nix develop .#extensions --command pnpm -C extensions/distrokid-helper build  # .output/chrome-mv3/ に Manifest V3 拡張を生成
+nix develop .#extensions --command pnpm -C extensions/distrokid-helper zip    # 配布用 zip を生成
 ```
 
 型チェック（WXT 型生成 + tsc）:
 
 ```bash
-pnpm compile
+nix develop .#extensions --command pnpm -C extensions/distrokid-helper compile
 ```
 
 ## unpacked ロード
 
-1. `pnpm build` で `.output/chrome-mv3/` を生成する。
+1. リポジトリ root で `nix develop .#extensions --command pnpm -C extensions/distrokid-helper build` を実行し、`.output/chrome-mv3/` を生成する。
 2. build artifact を basename が `distrokid-helper` になる固定パスへコピーする:
    ```bash
    mkdir -p "$HOME/chrome-extensions/distrokid-helper"
-   rsync -a --delete .output/chrome-mv3/ "$HOME/chrome-extensions/distrokid-helper/"
+   rsync -a --delete extensions/distrokid-helper/.output/chrome-mv3/ "$HOME/chrome-extensions/distrokid-helper/"
    ```
 3. Chrome で `chrome://extensions` を開く。
 4. 右上の **デベロッパーモード** を ON。
@@ -112,10 +114,12 @@ pnpm compile
 ## テスト
 
 ```bash
-pnpm test                              # Vitest（API client / DOM 注入 / messaging / storage）
-pnpm exec playwright install chromium  # 初回のみ
-pnpm test:e2e                          # Playwright（distrokid.com/new モックへの注入スモーク）
+nix develop .#extensions --command pnpm -C extensions/distrokid-helper test                              # Vitest（API client / DOM 注入 / messaging / storage）
+nix develop .#extensions --command pnpm -C extensions/distrokid-helper exec playwright install --with-deps chromium  # 初回のみ（CI と同じ browser + system dependencies）
+nix develop .#extensions --command pnpm -C extensions/distrokid-helper test:e2e                          # Playwright（distrokid.com/new モックへの注入スモーク）
 ```
+
+build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/distrokid-helper-<package.json の version>-chrome.zip` を確認する。期待名 zip が唯一の 1 件であることを含む release 前検証は、リポジトリ root で `bash .claude/skills/automation-release/references/verify-extensions.sh distrokid-helper` を実行する。
 
 ## DOM セレクタの保守
 

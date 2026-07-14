@@ -6,10 +6,14 @@ on:
     paths:
       - "extensions/**"
       - ".github/workflows/extensions.yml"
+      - "flake.nix"
+      - "flake.lock"
   pull_request:
     paths:
       - "extensions/**"
       - ".github/workflows/extensions.yml"
+      - "flake.nix"
+      - "flake.lock"
 
 jobs:
   check:
@@ -19,33 +23,26 @@ jobs:
         working-directory: extensions/suno-helper
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: extensions/suno-helper/pnpm-lock.yaml
+      - uses: cachix/install-nix-action@v30
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-workspace
+        run: nix develop .#extensions --command pnpm install --frozen-lockfile
       - parallel:
           - name: Lint
-            run: pnpm lint
+            run: nix develop .#extensions --command pnpm lint
           - name: Format check
-            run: pnpm format:check
+            run: nix develop .#extensions --command pnpm format:check
           - name: Type check
-            run: pnpm compile
+            run: nix develop .#extensions --command pnpm compile
           - name: Unit tests (Vitest)
-            run: pnpm test
+            run: nix develop .#extensions --command pnpm test
       - parallel:
           - name: Build
-            run: pnpm build
+            run: nix develop .#extensions --command pnpm build
           - name: Install Playwright browser
-            run: pnpm exec playwright install --with-deps chromium
+            run: nix develop .#extensions --command pnpm exec playwright install --with-deps chromium
       - name: Verify generated manifest permissions (least-privilege)
         run: |
-          node --input-type=module -e '
+          nix develop .#extensions --command node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const manifest = JSON.parse(
               readFileSync(".output/chrome-mv3/manifest.json", "utf8"),
@@ -61,7 +58,7 @@ jobs:
             }
           '
       - name: E2E tests (Playwright)
-        run: pnpm test:e2e
+        run: nix develop .#extensions --command pnpm test:e2e
 
   distrokid-helper:
     runs-on: ubuntu-latest
@@ -70,33 +67,26 @@ jobs:
         working-directory: extensions/distrokid-helper
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: extensions/distrokid-helper/pnpm-lock.yaml
+      - uses: cachix/install-nix-action@v30
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-workspace
+        run: nix develop .#extensions --command pnpm install --frozen-lockfile
       - parallel:
           - name: Lint
-            run: pnpm lint
+            run: nix develop .#extensions --command pnpm lint
           - name: Format check
-            run: pnpm format:check
+            run: nix develop .#extensions --command pnpm format:check
           - name: Typecheck
-            run: pnpm compile
+            run: nix develop .#extensions --command pnpm compile
           - name: Unit tests (Vitest)
-            run: pnpm test
+            run: nix develop .#extensions --command pnpm test
       - parallel:
           - name: Build
-            run: pnpm build
+            run: nix develop .#extensions --command pnpm build
           - name: Install Playwright browser
-            run: pnpm exec playwright install --with-deps chromium
+            run: nix develop .#extensions --command pnpm exec playwright install --with-deps chromium
       - name: Verify generated manifest permissions (least-privilege)
         run: |
-          node --input-type=module -e '
+          nix develop .#extensions --command node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const manifest = JSON.parse(
               readFileSync(".output/chrome-mv3/manifest.json", "utf8"),
@@ -138,4 +128,4 @@ jobs:
             }
           '
       - name: E2E (Playwright)
-        run: pnpm test:e2e
+        run: nix develop .#extensions --command pnpm test:e2e

@@ -100,32 +100,9 @@ def test_vocal_valid_collection_reports_prompt_entries_and_expected_entries(
     monkeypatch,
     capsys,
 ):
-    """Given 2 scene variations と tracks_per_pattern=3 の vocal collection
+    """Given 旧 tracks_per_pattern=3 が残る 2 scene vocal collection
     When yt-suno-verify を実行する
-    Then tracks_per_pattern 展開後の prompt entry 数を summary に出す。
-    """
-    write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=3)
-    collection = tmp_path / "collection"
-    docs = docs_dir(collection)
-    names = prompt_names(mode="vocal", scenes_count=2, tracks_per_pattern=3)
-    write_patterns(docs, mode="vocal", scenes=["scene one", "scene two"])
-    write_prompts(docs, names, lyrics="[Verse]\nla la")
-    write_lyrics(docs, [{"name": name, "lyrics": "[Verse]\nla la"} for name in names])
-
-    code = run_verify(monkeypatch, collection)
-    output = capsys.readouterr().out
-
-    assert code == 0
-    assert "mode=vocal" in output
-    assert "prompt_entries=6" in output
-    assert "tracks_per_pattern=3" in output
-    assert "expected_entries=6" in output
-
-
-def test_vocal_tracks_per_pattern_mismatch_returns_one(channel_dir, tmp_path, monkeypatch, capsys):
-    """Given tracks_per_pattern=3 だが pattern-derived prompt entries 分しかない
-    When yt-suno-verify を実行する
-    Then vocal の期待曲数不一致として exit 1 にする。
+    Then 旧キーを無視し、scene variation 分だけの prompt entry 数を summary に出す。
     """
     write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=3)
     collection = tmp_path / "collection"
@@ -138,10 +115,40 @@ def test_vocal_tracks_per_pattern_mismatch_returns_one(channel_dir, tmp_path, mo
     code = run_verify(monkeypatch, collection)
     output = capsys.readouterr().out
 
-    assert code == 1
+    assert code == 0
     assert "mode=vocal" in output
-    assert "expected prompt entries=6" in output
-    assert "actual prompt entries=2" in output
+    assert "prompt_entries=2" in output
+    assert "expected_entries=2" in output
+    assert "tracks_per_pattern" not in output
+
+
+def test_vocal_legacy_tracks_per_pattern_override_does_not_expand_expected_names(
+    channel_dir,
+    tmp_path,
+    monkeypatch,
+    capsys,
+):
+    """Given 旧 tracks_per_pattern=3 が残るが prompt entries は展開なし
+    When yt-suno-verify を実行する
+    Then 旧キー由来の期待曲数不一致を出さず exit 0 にする。
+    """
+    write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=3)
+    collection = tmp_path / "collection"
+    docs = docs_dir(collection)
+    names = prompt_names(mode="vocal", scenes_count=2)
+    write_patterns(docs, mode="vocal", scenes=["scene one", "scene two"])
+    write_prompts(docs, names, lyrics="[Verse]\nla la")
+    write_lyrics(docs, [{"name": name, "lyrics": "[Verse]\nla la"} for name in names])
+
+    code = run_verify(monkeypatch, collection)
+    output = capsys.readouterr().out
+
+    assert code == 0
+    assert "mode=vocal" in output
+    assert "prompt_entries=2" in output
+    assert "expected_entries=2" in output
+    assert "expected prompt entries=6" not in output
+    assert "tracks_per_pattern" not in output
 
 
 def test_vocal_lyrics_can_be_verified_before_prompts_are_generated(
@@ -157,7 +164,7 @@ def test_vocal_lyrics_can_be_verified_before_prompts_are_generated(
     write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=3)
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
-    names = prompt_names(mode="vocal", scenes_count=1, tracks_per_pattern=3)
+    names = prompt_names(mode="vocal", scenes_count=1)
     write_patterns(docs, mode="vocal", scenes=["scene one"])
     write_lyrics(docs, [{"name": name, "lyrics": "[Verse]\nla la"} for name in names])
 
@@ -166,9 +173,9 @@ def test_vocal_lyrics_can_be_verified_before_prompts_are_generated(
 
     assert code == 0
     assert "mode=vocal" in output
-    assert "prompt_entries=3" in output
-    assert "tracks_per_pattern=3" in output
-    assert "expected_entries=3" in output
+    assert "prompt_entries=1" in output
+    assert "expected_entries=1" in output
+    assert "tracks_per_pattern" not in output
 
 
 def test_mode_omission_uses_video_analysis_fallback_genre_line_for_vocal(
@@ -185,7 +192,7 @@ def test_mode_omission_uses_video_analysis_fallback_genre_line_for_vocal(
     write_video_analysis_suno_preset(channel_dir, genre_line="dream pop vocals")
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
-    names = prompt_names(mode="instrumental", scenes_count=1, tracks_per_pattern=3)
+    names = prompt_names(mode="instrumental", scenes_count=1)
     write_patterns(docs, mode=None, scenes=["scene one"])
     write_prompts(docs, names, lyrics="[Verse]\nla la")
     write_lyrics(docs, [{"name": name, "lyrics": "[Verse]\nla la"} for name in names])
@@ -195,25 +202,25 @@ def test_mode_omission_uses_video_analysis_fallback_genre_line_for_vocal(
 
     assert code == 0
     assert "mode=vocal" in output
-    assert "prompt_entries=3" in output
-    assert "tracks_per_pattern=3" in output
-    assert "expected_entries=3" in output
+    assert "prompt_entries=1" in output
+    assert "expected_entries=1" in output
+    assert "tracks_per_pattern" not in output
 
 
-def test_generated_vocal_prompts_with_default_tracks_per_pattern_verify_successfully(
+def test_generated_vocal_prompts_without_take_expansion_verify_successfully(
     channel_dir,
     tmp_path,
     monkeypatch,
     capsys,
 ):
-    """Given /suno が default tracks_per_pattern=3 で prompt JSON を生成する
+    """Given /suno が vocal prompt JSON を生成する
     When yt-suno-verify を実行する
     Then generator と verifier の entry name 契約が一致し exit 0 にする。
     """
     write_suno_override(channel_dir, genre_line="dream pop vocals", auto_lyrics_structure=False)
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
-    names = prompt_names(mode="vocal", scenes_count=1, tracks_per_pattern=3)
+    names = prompt_names(mode="vocal", scenes_count=1)
     write_patterns(docs, mode="vocal", scenes=["scene one"], tracks=1)
     (collection / "workflow-state.json").write_text(json.dumps({"track_count": 1}), encoding="utf-8")
     write_lyrics(docs, [{"name": name, "lyrics": "[Verse]\nla la"} for name in names])
@@ -228,9 +235,9 @@ def test_generated_vocal_prompts_with_default_tracks_per_pattern_verify_successf
 
     assert code == 0
     assert "mode=vocal" in output
-    assert "prompt_entries=3" in output
-    assert "tracks_per_pattern=3" in output
-    assert "expected_entries=3" in output
+    assert "prompt_entries=1" in output
+    assert "expected_entries=1" in output
+    assert "tracks_per_pattern" not in output
 
 
 def test_generated_prompt_envelope_verifies_successfully(channel_dir, tmp_path, monkeypatch, capsys):
@@ -286,7 +293,7 @@ def test_vocal_prompt_entry_count_uses_scene_variations(channel_dir, tmp_path, m
     assert code == 1
     assert "mode=vocal" in output
     assert "expected" in output
-    assert "6" in output
+    assert "2" in output
     assert "1" in output
 
 
@@ -295,7 +302,7 @@ def test_vocal_lyrics_missing_extra_and_empty_are_all_reported(channel_dir, tmp_
     When yt-suno-verify を実行する
     Then 1件目で停止せず全 issue を列挙する。
     """
-    write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    write_suno_override(channel_dir, genre_line="dream pop vocals")
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
     expected_name = "歌もの — Vocal"
@@ -319,7 +326,7 @@ def test_vocal_lyrics_entry_name_must_be_non_empty(channel_dir, tmp_path, monkey
     When yt-suno-verify を実行する
     Then name の契約違反として exit 1 にする。
     """
-    write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    write_suno_override(channel_dir, genre_line="dream pop vocals")
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
     expected_name = "歌もの — Vocal"
@@ -339,7 +346,7 @@ def test_vocal_lyrics_entry_names_must_be_unique(channel_dir, tmp_path, monkeypa
     When yt-suno-verify を実行する
     Then 重複名を含む issue を列挙して exit 1 にする。
     """
-    write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    write_suno_override(channel_dir, genre_line="dream pop vocals")
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
     name = "歌もの — Vocal"
@@ -366,7 +373,7 @@ def test_duplicate_lyrics_entries_all_keep_structure_issues(channel_dir, tmp_pat
     When yt-suno-verify を実行する
     Then 重複 issue と entry 単位の lyrics issue を両方列挙する。
     """
-    write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    write_suno_override(channel_dir, genre_line="dream pop vocals")
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
     name = "歌もの — Vocal"
@@ -393,7 +400,7 @@ def test_duplicate_prompt_entries_all_keep_structure_issues(channel_dir, tmp_pat
     When yt-suno-verify を実行する
     Then prompt 重複 issue と entry 単位の lyrics issue を両方列挙する。
     """
-    write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    write_suno_override(channel_dir, genre_line="dream pop vocals")
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
     name = "歌もの — Vocal"
@@ -424,7 +431,7 @@ def test_vocal_prompt_and_lyric_names_are_compared_without_stripping(channel_dir
     When yt-suno-verify を実行する
     Then lyric name と strip 後に一致しても完全一致扱いにしない。
     """
-    write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    write_suno_override(channel_dir, genre_line="dream pop vocals")
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
     expected_name = "歌もの — Vocal"
@@ -446,7 +453,7 @@ def test_pattern_names_with_surrounding_whitespace_are_reported(channel_dir, tmp
     When yt-suno-verify を実行する
     Then generator と同じ entry name 契約違反として列挙する。
     """
-    write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    write_suno_override(channel_dir, genre_line="dream pop vocals")
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
     expected_name = "歌もの — Vocal"
@@ -470,7 +477,7 @@ def test_vocal_lyrics_without_section_tag_is_reported(channel_dir, tmp_path, mon
     When yt-suno-verify を実行する
     Then section tag 不足として exit 1 にする。
     """
-    write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    write_suno_override(channel_dir, genre_line="dream pop vocals")
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
     name = "歌もの — Vocal"
@@ -496,7 +503,7 @@ def test_vocal_prompt_lyrics_structure_is_reported_even_when_lyrics_json_is_vali
     When yt-suno-verify を実行する
     Then 実投入 artifact の prompts 側 lyrics 違反として exit 1 にする。
     """
-    write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    write_suno_override(channel_dir, genre_line="dream pop vocals")
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
     name = "歌もの — Vocal"
@@ -516,7 +523,7 @@ def test_vocal_lyrics_accept_numbered_section_tags(channel_dir, tmp_path, monkey
     When yt-suno-verify を実行する
     Then section tag として認識し exit 0 にする。
     """
-    write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    write_suno_override(channel_dir, genre_line="dream pop vocals")
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
     name = "歌もの — Vocal"
@@ -537,7 +544,7 @@ def test_vocal_lyrics_reject_instrumental_tag(channel_dir, tmp_path, monkeypatch
     When yt-suno-verify を実行する
     Then vocal 契約違反として exit 1 にする。
     """
-    write_suno_override(channel_dir, genre_line="dream pop vocals", tracks_per_pattern=1)
+    write_suno_override(channel_dir, genre_line="dream pop vocals")
     collection = tmp_path / "collection"
     docs = docs_dir(collection)
     name = "歌もの — Vocal"

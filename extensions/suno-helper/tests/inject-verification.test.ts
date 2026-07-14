@@ -31,6 +31,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   InjectNotAcknowledgedError,
   injectWithVerification,
+  retryInjectStepWithFallback,
   type InjectWithVerificationOptions,
 } from "../lib/inject-retry";
 
@@ -50,6 +51,69 @@ function makeOptions(
     ...overrides,
   };
 }
+
+describe("retryInjectStepWithFallback: inject step retry + fallback", () => {
+  it("Given retryable error が続き fallback が成功する When 実行 Then run を maxRetry+1 回試して fallback へ進む", async () => {
+    const retryableError = new Error("paste mismatch");
+    const run = vi.fn().mockRejectedValue(retryableError);
+    const fallback = vi.fn().mockResolvedValue(undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await expect(
+      retryInjectStepWithFallback({
+        run,
+        fallback,
+        isRetryable: (error) => error === retryableError,
+        maxRetry: 2,
+        describeStep: () => "entry 0 Lyrics paste",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(run).toHaveBeenCalledTimes(3);
+    expect(fallback).toHaveBeenCalledWith(retryableError);
+    expect(warn.mock.calls.map((call) => String(call[0]))).toEqual([
+      expect.stringContaining("inject retry (1/2)"),
+      expect.stringContaining("inject retry (2/2)"),
+      expect.stringContaining("beforeinput fallback"),
+    ]);
+    warn.mockRestore();
+  });
+
+  it("Given retryable error 後の fallback も失敗する When 実行 Then fallback error を throw する", async () => {
+    const retryableError = new Error("paste mismatch");
+    const fallbackError = new Error("beforeinput mismatch");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await expect(
+      retryInjectStepWithFallback({
+        run: vi.fn().mockRejectedValue(retryableError),
+        fallback: vi.fn().mockRejectedValue(fallbackError),
+        isRetryable: (error) => error === retryableError,
+        maxRetry: 0,
+        describeStep: () => "entry 0 Lyrics paste",
+      }),
+    ).rejects.toBe(fallbackError);
+
+    warn.mockRestore();
+  });
+
+  it("Given retry 対象外 error When 実行 Then fallback せず即 throw する", async () => {
+    const error = new Error("selectAll failed");
+    const fallback = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      retryInjectStepWithFallback({
+        run: vi.fn().mockRejectedValue(error),
+        fallback,
+        isRetryable: () => false,
+        maxRetry: 2,
+        describeStep: () => "entry 0 Lyrics paste",
+      }),
+    ).rejects.toBe(error);
+
+    expect(fallback).not.toHaveBeenCalled();
+  });
+});
 
 describe("injectWithVerification: inject 受理検証 + retry (#864/#948)", () => {
   it("Given 1 回目で ack される When 実行 Then inject 1 回・retry なし・throw なし", async () => {
