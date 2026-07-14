@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 
 import pytest
@@ -69,6 +70,116 @@ def test_channel_override_merged(tmp_path, monkeypatch):
     assert gemini_block.get("brand_background") == "custom-color"
     # default.yaml の他のキーが残っていること (モデル名など)
     assert "model" in gemini_block
+
+
+def test_load_skill_config_postmortem_prefers_flop_analysis_override(tmp_path, monkeypatch):
+    """postmortem は新名 flop-analysis override を default にマージする。"""
+    channel_dir = tmp_path / "ch"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "flop-analysis.yaml").write_text(
+        yaml.safe_dump({"thresholds": {"min_impressions": 321}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with warnings.catch_warnings(record=True) as warning_records:
+        warnings.simplefilter("always")
+        cfg = skill_config.load_skill_config("postmortem", use_cache=False)
+
+    assert cfg["thresholds"]["min_impressions"] == 321
+    assert "ctr_low" in cfg["hypothesis_ratios"]
+    assert not warning_records
+
+
+def test_load_skill_config_postmortem_warns_for_legacy_override(tmp_path, monkeypatch):
+    """旧名だけなら読み込み、旧名と移行先を含む UserWarning を出す。"""
+    channel_dir = tmp_path / "ch"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    legacy_path = skills_dir / "postmortem.yaml"
+    replacement_path = skills_dir / "flop-analysis.yaml"
+    legacy_path.write_text(
+        yaml.safe_dump({"thresholds": {"min_impressions": 654}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.warns(UserWarning) as warning_records:
+        cfg = skill_config.load_skill_config("postmortem", use_cache=False)
+
+    assert cfg["thresholds"]["min_impressions"] == 654
+    assert str(legacy_path) in str(warning_records[0].message)
+    assert str(replacement_path) in str(warning_records[0].message)
+    assert warning_records[0].filename == __file__
+
+
+def test_load_skill_config_postmortem_does_not_read_legacy_when_both_exist(tmp_path, monkeypatch):
+    """新旧併存時は新名を採用し、不正な旧名も読まず警告しない。"""
+    channel_dir = tmp_path / "ch"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "flop-analysis.yaml").write_text(
+        yaml.safe_dump({"thresholds": {"min_impressions": 777}}),
+        encoding="utf-8",
+    )
+    (skills_dir / "postmortem.yaml").write_text("[broken", encoding="utf-8")
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with warnings.catch_warnings(record=True) as warning_records:
+        warnings.simplefilter("always")
+        cfg = skill_config.load_skill_config("postmortem", use_cache=False)
+
+    assert cfg["thresholds"]["min_impressions"] == 777
+    assert not warning_records
+
+
+def test_load_channel_override_postmortem_uses_same_legacy_fallback(tmp_path, monkeypatch):
+    """override 単体 API も新名優先と旧名 fallback 警告を適用する。"""
+    channel_dir = tmp_path / "ch"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    legacy_path = skills_dir / "postmortem.yaml"
+    replacement_path = skills_dir / "flop-analysis.yaml"
+    legacy_path.write_text(yaml.safe_dump({"legacy_only": True}), encoding="utf-8")
+    replacement_path.write_text(yaml.safe_dump({"new_only": True}), encoding="utf-8")
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with warnings.catch_warnings(record=True) as warning_records:
+        warnings.simplefilter("always")
+        cfg = skill_config.load_channel_override("postmortem")
+
+    assert cfg == {"new_only": True}
+    assert not warning_records
+
+    replacement_path.unlink()
+    with pytest.warns(UserWarning) as warning_records:
+        cfg = skill_config.load_channel_override("postmortem")
+
+    assert cfg == {"legacy_only": True}
+    assert str(legacy_path) in str(warning_records[0].message)
+    assert str(replacement_path) in str(warning_records[0].message)
+
+
+def test_load_skill_config_postmortem_invalid_new_override_does_not_fallback(tmp_path, monkeypatch):
+    """不正な新名が選ばれたら有効な旧名へ逃げず ConfigError にする。"""
+    channel_dir = tmp_path / "ch"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    replacement_path = skills_dir / "flop-analysis.yaml"
+    replacement_path.write_text("[broken", encoding="utf-8")
+    (skills_dir / "postmortem.yaml").write_text(
+        yaml.safe_dump({"thresholds": {"min_impressions": 999}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with warnings.catch_warnings(record=True) as warning_records:
+        warnings.simplefilter("always")
+        with pytest.raises(ConfigError, match=str(replacement_path)):
+            skill_config.load_skill_config("postmortem", use_cache=False)
+
+    assert not warning_records
 
 
 def test_thumbnail_dedup_window_can_be_overridden(tmp_path, monkeypatch):

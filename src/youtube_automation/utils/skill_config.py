@@ -2,6 +2,8 @@
 
 各スキル (.claude/skills/<skill>/config.default.yaml) のデフォルト値と、
 チャンネルリポジトリ側 (config/skills/<skill>.yaml) の上書きをマージして返す。
+postmortem は `flop-analysis.yaml` を優先し、旧 `postmortem.yaml` だけが
+存在する場合は UserWarning を出して互換読み込みする。
 
 使い方:
 
@@ -20,6 +22,7 @@ from __future__ import annotations
 
 import json
 import stat
+import warnings
 from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Any
@@ -74,6 +77,11 @@ def _channel_override_candidates(skill: str, target_channel_dir: Path | None = N
             _channel_override_path(skill, target_channel_dir, "json"),
             _channel_override_path(skill, target_channel_dir, "yaml"),
         ]
+    if skill == "postmortem":
+        return [
+            _channel_override_path("flop-analysis", target_channel_dir, "yaml"),
+            _channel_override_path(skill, target_channel_dir, "yaml"),
+        ]
     return [_channel_override_path(skill, target_channel_dir, "yaml")]
 
 
@@ -89,6 +97,21 @@ def _override_candidate_exists(path: Path, *, strict_regular_file: bool) -> bool
     if not stat.S_ISREG(mode):
         raise ConfigError(f"skill-config は regular file である必要があります: {path}")
     return True
+
+
+def _resolve_channel_override(skill: str, target_channel_dir: Path | None = None) -> Path | None:
+    candidates = _channel_override_candidates(skill, target_channel_dir)
+    selected = next(
+        (path for path in candidates if _override_candidate_exists(path, strict_regular_file=skill == "masterup")),
+        None,
+    )
+    if skill == "postmortem" and selected == candidates[1]:
+        warnings.warn(
+            f"旧 skill-config {selected} を読み込みます。{candidates[0]} へリネームしてください。",
+            UserWarning,
+            stacklevel=3,
+        )
+    return selected
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -161,14 +184,7 @@ def load_skill_config(
 
     defaults = _load_yaml(_default_path(skill))
 
-    override_path = next(
-        (
-            path
-            for path in _channel_override_candidates(skill, channel_dir)
-            if _override_candidate_exists(path, strict_regular_file=skill == "masterup")
-        ),
-        None,
-    )
+    override_path = _resolve_channel_override(skill, channel_dir)
     if override_path is not None:
         override = _load_override(override_path)
         merged = _deep_merge(defaults, override)
@@ -186,14 +202,7 @@ def load_channel_override(skill: str) -> dict[str, Any]:
     skill-config の旧 namespace 移行など、ユーザーが明示的に設定したキーだけを
     検出したいケースで使う。override ファイルが無ければ空 dict。
     """
-    path = next(
-        (
-            candidate
-            for candidate in _channel_override_candidates(skill)
-            if _override_candidate_exists(candidate, strict_regular_file=skill == "masterup")
-        ),
-        None,
-    )
+    path = _resolve_channel_override(skill)
     if path is None:
         return {}
     return _load_override(path)

@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(skill-config)`: `load_skill_config("postmortem")` と `load_channel_override("postmortem")` は `config/skills/flop-analysis.yaml` を優先し、旧 `config/skills/postmortem.yaml` だけがある場合は互換読み込みして `UserWarning` で移行を案内する。利用者は `postmortem.yaml` を `flop-analysis.yaml` へリネームすることで警告を解消できる（#2022）。
 - `fix(dx)`: sandbox 化された takt worker がホーム配下（direnv allow ストア・共有 hooks）へ書込みできず direnv / lefthook セットアップが反復停滞する障害を解消した。`.takt/config.yaml` の `runtime.prepare`（`.takt/runtime-prepare.sh`）が全 worker へ `XDG_DATA_HOME=<worktree>/.takt/.runtime/data` と `YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1` を注入し、flake.nix shellHook / `.lefthook/install.sh` は同変数で lefthook install を安全にスキップ（ゲートは CI 側で担保）、`.lefthook/setup-worktree.sh` は `direnv allow` 失敗時に `nix develop` へフォールバックする（#1999）。
 - `docs(workflow)`: `/wf-new` と `/wf-next` の制作フェーズ実行を subagent 委譲契約へ統一し、親エージェントが前提確認・承認・状態更新を保持しつつ、各フェーズの成果物を絶対パス付きで受け取って検証する責務境界を明確化した。運用チートシートも同じ委譲モデルへ同期した（#1661）。
 - `docs(collection-ideate)`: stale な Analytics report 検出時に推論コスト見積もり付きの 3 択を提示し、承認時または上限内の `freshness.stale_action: auto` 時だけ `/analytics-analyze` を同一セッションで実行する導線を追加した。`/wf-new` は判定を委譲し二重ダイアログを防ぐ（#1716）。
