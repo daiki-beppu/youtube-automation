@@ -2267,6 +2267,54 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
+  it("配信元の一時失敗では明示した配信元と collection の表示を保持する", async () => {
+    const collections = [
+      {
+        id: "20260601-clm-theme-a-collection",
+        name: "theme-a-collection",
+        status: "ready",
+        pattern_count: 1,
+        downloaded_count: 0,
+      },
+    ];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(jsonResponse(200, collections))
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "initial", style: "lofi", lyrics: "" }]))
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    serverSourcesMocks.rememberServerSource.mockResolvedValue([
+      { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
+      { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
+    ]);
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "fetchServerInfo" && payload?.baseUrl === FALLBACK_URL) {
+        return Promise.resolve({ base_url: "http://127.0.0.1:7877", label: "fallback" });
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await act(async () => {
+      setSelectValue(expectControl(container, "server-url") as HTMLSelectElement, BASE_URL);
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    await act(async () => {
+      setSelectValue(expectControl(container, "server-url") as HTMLSelectElement, FALLBACK_URL);
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("取得失敗: Failed to fetch");
+    });
+    expect((expectControl(container, "server-url") as HTMLSelectElement).value).toBe(FALLBACK_URL);
+    expect(container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')?.dataset.sunoCollectionId).toBe(
+      "20260601-clm-theme-a-collection",
+    );
+    expect(container.textContent).toContain("initial");
+  });
+
   it("連続する配信元変更では遅い旧保存が最新 URL・配信元一覧・entries を上書きしない", async () => {
     const firstSave = deferred<undefined>();
     let saveCount = 0;
@@ -2332,7 +2380,7 @@ describe("Suno popup compatibility check", () => {
     storageMocks.getValue.mockResolvedValue(BASE_URL);
     serverSourcesMocks.readServerSources.mockReturnValueOnce(initialSources.promise);
     serverSourcesMocks.rememberServerSource.mockResolvedValue([
-      { id: "canonical", label: "Canonical source", url: "http://canonical.localhost:7873" },
+      { id: "selected", label: "Selected source", url: BASE_URL },
     ]);
     messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
       if (message === "fetchServerInfo") {
@@ -2371,7 +2419,7 @@ describe("Suno popup compatibility check", () => {
     await waitFor(() => {
       expect(
         Array.from((expectControl(container, "server-url") as HTMLSelectElement).options, (option) => option.value),
-      ).toEqual(["http://canonical.localhost:7873"]);
+      ).toEqual([BASE_URL]);
     });
   });
 

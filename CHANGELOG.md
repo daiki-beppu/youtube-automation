@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(suno-helper)`: server の一時的な取得失敗時に明示選択した配信元と collection を保持する（#2002）
+
 - `fix(collection-serve)`: SIGTERM による予期せぬ停止を専用例外へ変換し、終了理由と traceback が stderr に残るようにした（#2001）。
 - `chore(suno-helper)`: React 19 と Tailwind CSS 4 の Vite plugin 構成へ移行し、`@/*` alias、Shadow DOM 対応 CSS variable theme、`cn` utility、Button primitive を含む shadcn/ui 最小基盤を追加した（#2011）。
 - `chore(distrokid-helper)`: Tailwind CSS 4 の Vite plugin 構成へ移行し、`@/*` alias、CSS variable theme、`cn` utility、Button primitive を含む shadcn/ui 最小基盤を追加した（#2012）。

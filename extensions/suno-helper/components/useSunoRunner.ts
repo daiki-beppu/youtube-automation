@@ -423,9 +423,7 @@ export function useSunoRunner(): RunnerState {
   }, []);
 
   const clearLoadedRunState = useCallback(() => {
-    setEntries([]);
     setDurationFilter(undefined);
-    setItemStates([]);
     setPhase("idle");
     setRestoredCollectionId(undefined);
     setRestoredPlaylistName(undefined);
@@ -505,6 +503,7 @@ export function useSunoRunner(): RunnerState {
     async (targetUrl: string, preferredCollectionId: string) => {
       const requestId = ++fetchRequestIdRef.current;
       const isLatestRequest = (): boolean => requestId === fetchRequestIdRef.current;
+      const isRestoreFetch = (): boolean => restoredProgressRef.current || resumableCollectionId !== undefined;
       const trimmed = targetUrl.trim();
       if (!trimmed) {
         if (isLatestRequest()) {
@@ -520,7 +519,6 @@ export function useSunoRunner(): RunnerState {
           return;
         }
         baseUrl = info.base_url;
-        setUrlState(baseUrl);
         serverLabel = info.label;
       } catch {
         // 古い server は fetchServerInfo を提供しないため、入力 URL のまま継続する。
@@ -532,11 +530,11 @@ export function useSunoRunner(): RunnerState {
         if (!isLatestRequest()) {
           return;
         }
-        await serverUrlItem.setValue(baseUrl);
+        await serverUrlItem.setValue(trimmed);
         if (!isLatestRequest()) {
           return;
         }
-        const rememberedSources = await rememberServerSource(baseUrl, serverLabel);
+        const rememberedSources = await rememberServerSource(trimmed, serverLabel);
         if (!isLatestRequest()) {
           return;
         }
@@ -584,18 +582,23 @@ export function useSunoRunner(): RunnerState {
         if (!isLatestRequest()) {
           return;
         }
-        setAllCollections(fetched);
         const { nextSelectedId: collectionId } = resolveVisibleCollections(fetched, preferredCollectionId);
         if (collectionId === null) {
           throw new Error("prompts を取得できる collection がありません。");
         }
-        if (!restoredProgressRef.current) {
+        if (isRestoreFetch()) {
+          setAllCollections(fetched);
           setSelectedCollectionId(collectionId);
         }
         const data = await fetchCollectionPromptResponse(baseUrl, collectionId);
-        if (!isLatestRequest() || restoredProgressRef.current) {
+        if (!isLatestRequest()) {
           return;
         }
+        setAllCollections(fetched);
+        if (restoredProgressRef.current) {
+          return;
+        }
+        setSelectedCollectionId(collectionId);
         setEntries(data.entries);
         setDurationFilter(data.duration_filter);
         setItemStates(data.entries.map(() => "idle"));
@@ -606,13 +609,11 @@ export function useSunoRunner(): RunnerState {
           return;
         }
         const message = err instanceof Error ? err.message : String(err);
-        setEntries([]);
-        setItemStates([]);
         setPhase("error");
         report(`取得失敗: ${message}\nyt-collection-serve が起動しているか確認してください。`, true);
       }
     },
-    [report, reportStorageFailure, resolveVisibleCollections],
+    [report, reportStorageFailure, resolveVisibleCollections, resumableCollectionId],
   );
 
   const updateUrl = useCallback(
@@ -621,14 +622,13 @@ export function useSunoRunner(): RunnerState {
       setUrlState(nextUrl);
       restoredProgressRef.current = false;
       clearLoadedRunState();
-      void fetchData(nextUrl, "");
+      void fetchData(nextUrl, selectedCollectionId);
     },
-    [clearLoadedRunState, fetchData],
+    [clearLoadedRunState, fetchData, selectedCollectionId],
   );
 
   const selectCollection = useCallback(
     (id: string) => {
-      setSelectedCollectionId(id);
       restoredProgressRef.current = false;
       clearLoadedRunState();
       void fetchData(url, id);
