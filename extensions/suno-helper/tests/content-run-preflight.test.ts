@@ -426,6 +426,8 @@ function makeRunPayload(entries = makePromptEntries(0)): {
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
+  harness.sendMessage.mockReset();
+  harness.sendMessage.mockImplementation(() => undefined);
   vi.stubGlobal("DataTransfer", DataTransferStub);
   vi.stubGlobal("ClipboardEvent", ClipboardEventStub);
   (document as unknown as { execCommand: ReturnType<typeof vi.fn> }).execCommand = vi.fn(() => true);
@@ -843,6 +845,87 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       expect(errorMessage).toContain("UI 言語が日本語になっていないか（英語推奨）");
     });
     expect(harness.feedPollerStop).toHaveBeenCalledOnce();
+  });
+
+  it("Given collection server と Lyrics 欄が同時に利用不能 When run を受ける Then server ERROR を先に出す", async () => {
+    makeViewButton("Grid");
+    makeTextarea(null);
+    harness.sendMessage.mockImplementation((type: string) => {
+      if (type === "fetchCollectionPromptResponse") {
+        return Promise.reject(new Error("fetch failed"));
+      }
+      return undefined;
+    });
+    await loadContentScript();
+
+    expect(
+      getRunHandler()({ data: makeRunPayload([{ name: "missing-lyrics", style: "ambient", lyrics: "lyrics" }]) }),
+    ).toEqual({
+      ok: true,
+    });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.ERROR,
+          message: expect.stringContaining("collection server から実行対象を取得できません"),
+        }),
+      ]),
+    );
+    expect(progressPayloads()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ message: expect.stringContaining("Lyrics 欄が見つかりません") }),
+      ]),
+    );
+    expect(harness.sendMessage).toHaveBeenCalledWith("fetchCollectionPromptResponse", {
+      baseUrl: "http://localhost:8787",
+      collectionId: "20260601-clm-preflight-collection",
+    });
+  });
+
+  it("Given fetchServerInfo 非対応の旧 server は正常で Lyrics 欄だけがない When run を受ける Then 従来の Lyrics ERROR を出す", async () => {
+    makeViewButton("Grid");
+    makeTextarea(null);
+    harness.sendMessage.mockImplementation((type: string) => {
+      if (type === "fetchServerInfo") {
+        return Promise.reject(new Error("HTTP 404"));
+      }
+      if (type === "fetchCollectionPromptResponse") {
+        return Promise.resolve({ entries: [], duration_filter: { min_sec: 60, max_sec: 300 } });
+      }
+      return undefined;
+    });
+    harness.runEntryWithRetry.mockImplementationOnce(async (options: RunEntryWithRetryOptions) => {
+      try {
+        await options.attempt();
+        return { outcome: "ok" };
+      } catch (error) {
+        return options.isFatal(error) ? { outcome: "fatal", error } : { outcome: "failed", error };
+      }
+    });
+    await loadContentScript();
+
+    expect(
+      getRunHandler()({ data: makeRunPayload([{ name: "missing-lyrics", style: "ambient", lyrics: "lyrics" }]) }),
+    ).toEqual({
+      ok: true,
+    });
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+
+    expect(harness.sendMessage).not.toHaveBeenCalledWith("fetchServerInfo", expect.anything());
+    expect(harness.sendMessage).toHaveBeenCalledWith("fetchCollectionPromptResponse", {
+      baseUrl: "http://localhost:8787",
+      collectionId: "20260601-clm-preflight-collection",
+    });
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.ERROR,
+          message: expect.stringContaining("Lyrics 欄が見つかりません"),
+        }),
+      ]),
+    );
   });
 
   it("Given Lyrics 欄がなく entry.lyrics が空 When run を受ける Then従来どおり停止せず Generate する", async () => {
