@@ -17,6 +17,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from googleapiclient.errors import HttpError
+from httplib2 import Response
 
 from youtube_automation.scripts.benchmark_collector import (
     _CHANNELS_BATCH_SIZE,
@@ -84,6 +86,19 @@ def _video_item(
 
 
 class TestFetchChannelsMetadata:
+    def test_retries_transient_api_failure_through_benchmark_collector(self, monkeypatch):
+        monkeypatch.setattr("youtube_automation.utils.retry.time.sleep", lambda _: None)
+        youtube = MagicMock()
+        transient = HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}')
+        request = youtube.channels.return_value.list.return_value
+        request.execute.side_effect = [transient, {"items": [_ch_item("UC_OK")]}]
+        collector = _make_collector(youtube)
+
+        result = collector._fetch_channels_metadata([{"id": "UC_OK"}])
+
+        assert result == {"UC_OK": _ch_item("UC_OK")}
+        assert request.execute.call_count == 2
+
     def test_single_batch_uses_comma_separated_ids(self):
         # Given: 3 チャンネル分の channel_info
         channel_infos = [{"id": f"UC_{i}", "name": f"ch{i}", "slug": f"s{i}"} for i in range(3)]

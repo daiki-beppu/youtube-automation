@@ -202,7 +202,9 @@ handoff 条件（agent は自動突破しない）:
 - **entry phase の任意停止 / ERROR**（`stopped` / `error`）: 24h 以内なら次回 popup 起動時に resume バナーが出る。"再開" で保存した entry から再実行し、元 run の異常値再生成 option も引き継ぐ
 - **playlist / download phase の任意停止 / ERROR**: resume バナーは出ない。**Playlist から再開** / **Download から再開** を使い、元 run の異常値再生成 option と警告を引き継ぐ
 - ERROR 文言の代表例（いずれも fail-loud で停止する）:
-  - `Lyrics 欄が見つかりません。Instrumental OFF（Custom Mode）になっているか確認してください。`
+  - `Lyrics mode が Instrumental になっています。Write に切り替えてください。`
+  - `Create form mode が Simple になっています。Advanced タブを選択してください。`
+  - 状態を特定できない場合は Advanced タブ / Lyrics mode = Write / UI 言語（英語推奨）のチェックリストを表示する
   - `reCAPTCHA を検知しました。手動で解決してから再開してください。`
   - `Clip multi-select verification failed: expected N selected, got M`
   - `中断: Add to Playlist dialog を検出できませんでした。clip が selected 状態であることを確認してください。Suno の UI 変更の可能性があります。`

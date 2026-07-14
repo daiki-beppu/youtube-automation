@@ -10,9 +10,9 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict
 
-from googleapiclient.errors import HttpError
-
 from youtube_automation.utils.config import channel_dir
+from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.retry import execute_with_retry
 
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
@@ -64,17 +64,14 @@ class ChannelAnalyticsMixin:
 
         try:
             # 基本メトリクス
-            response = (
-                self.analytics_service.reports()
-                .query(
-                    ids=f"channel=={self.channel_id}",
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics="views,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost,likes,dislikes,comments,shares,averageViewPercentage,cardImpressions,cardClicks,cardClickRate",
-                    dimensions="day",
-                )
-                .execute()
+            request = self.analytics_service.reports().query(
+                ids=f"channel=={self.channel_id}",
+                startDate=start_date,
+                endDate=end_date,
+                metrics="views,estimatedMinutesWatched,averageViewDuration,subscribersGained,subscribersLost,likes,dislikes,comments,shares,averageViewPercentage,cardImpressions,cardClicks,cardClickRate",
+                dimensions="day",
             )
+            response = execute_with_retry(request, "YouTube Analytics API request failed")
 
             # Note: サムネイル CTR (impressions/impressionClickThroughRate) は
             # チャンネルレベル (dimensions=day) では取得不可。
@@ -91,7 +88,7 @@ class ChannelAnalyticsMixin:
                 "summary": self._calculate_summary_stats(response),
             }
 
-        except HttpError as e:
+        except YouTubeAPIError as e:
             logger.error(f"YouTube API エラー（チャンネル分析）: {e}")
             return {"error": str(e)}
         except Exception as e:

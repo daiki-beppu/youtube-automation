@@ -6,6 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 
@@ -79,6 +80,96 @@ def _slice_between(text: str, start_marker: str, end_marker: str) -> str:
         raise AssertionError(f"{end_marker!r} が見つかりません")
 
     return text[start_idx:end_idx]
+
+
+def _collection_ideate_reference_validation_script() -> Path:
+    return _repo_root() / ".claude" / "skills" / "collection-ideate" / "references" / "select-ttp-references.py"
+
+
+def _collection_ideate_reference_history_script() -> Path:
+    return (
+        _repo_root() / ".claude" / "skills" / "collection-ideate" / "references" / "record-ttp-reference-assignments.py"
+    )
+
+
+def _run_collection_ideate_generation_block(
+    tmp_path: Path,
+    mode: str,
+    references: list[Path],
+    *,
+    provider: str = "gemini",
+) -> subprocess.CompletedProcess[str]:
+    ideate_skill = (_repo_root() / ".claude" / "skills" / "collection-ideate" / "SKILL.md").read_text(encoding="utf-8")
+    if mode == "parallel":
+        section = _slice_between(
+            ideate_skill,
+            "**4-4: プロンプト構築 + 一括生成（parallel デフォルト）**",
+            "### Phase 4 補足: sequential モード (opt-in)",
+        )
+        block = _slice_between(section, "# 順次実行。candidate_count", "```")
+    else:
+        section = _slice_between(
+            ideate_skill,
+            "**sequential 用 4-4 (選択 → 1 枚生成)**:",
+            "**sequential 用 4-5 (1 枚承認)**:",
+        )
+        block = _slice_between(section, "# <x> は選択された企画", "```")
+        block = re.sub(r'^REF_INDEX="<[^\n]+>"$', "REF_INDEX=0", block, count=1, flags=re.MULTILINE)
+
+    block = block.replace("<dir>", "session").replace("<slug>", "preview").replace("<x>", "a")
+    reference_values = " ".join(f'"{reference}"' for reference in references)
+    script = f"CANDIDATE_COUNT={len(references)}\nREF_PATHS=({reference_values})\n{block}"
+
+    history_dir = tmp_path / "collections" / "planning" / "_plan-previews" / "session"
+    history_dir.mkdir(parents=True)
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    uv = fake_bin / "uv"
+    uv.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "$1" == run && "$2" == python3 && "$3" == -c ]]; then\n'
+        f"  printf '{provider}\\n'\n"
+        "  exit 0\n"
+        "fi\n"
+        'if [[ "$1" == run && "$2" == python3 ]]; then\n'
+        "  printf 'prompt\\n'\n"
+        "  exit 0\n"
+        "fi\n"
+        'if [[ "$1" == run && "$2" == yt-generate-image ]]; then\n'
+        '  for argument in "$@"; do\n'
+        '    if [[ "$argument" == *.jpg ]]; then\n'
+        '      printf \'%s\\n\' "$argument" >> "$INVOCATION_LOG"\n'
+        '      [[ "$argument" == *fail* ]] && exit 23\n'
+        "    fi\n"
+        "  done\n"
+        "  exit 0\n"
+        "fi\n"
+        "exit 99\n",
+        encoding="utf-8",
+    )
+    uv.chmod(0o755)
+    codex_image = tmp_path / ".claude" / "skills" / "thumbnail" / "references" / "codex-image.sh"
+    codex_image.parent.mkdir(parents=True)
+    codex_image.write_text(
+        '#!/usr/bin/env bash\nfor argument in "$@"; do\n'
+        '  if [[ "$argument" == *.jpg ]]; then\n'
+        '    printf \'%s\\n\' "$argument" >> "$INVOCATION_LOG"\n'
+        '    [[ "$argument" == *fail* ]] && exit 23\n'
+        "  fi\n"
+        "done\nexit 0\n",
+        encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["PATH"] = str(fake_bin) + os.pathsep + env["PATH"]
+    env["INVOCATION_LOG"] = str(tmp_path / "invocations.txt")
+    return subprocess.run(
+        ["bash", "-c", script],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
 
 
 def _run_codex_prompt_cli(tmp_path: Path, thumbnail_yaml: str, title: str) -> subprocess.CompletedProcess[str]:
@@ -466,6 +557,359 @@ def test_thumbnail_skill_requires_reference_per_ttp_attempt_and_drops_prompt_onl
     assert "benchmark_channel" in skill
     assert "プロンプトベースモード" not in skill
     assert "参照画像なしでプロンプトのみで生成" not in skill
+
+
+def test_ttp_reference_dedup_is_documented_and_collection_ideate_passes_it() -> None:
+    skill = _read_thumbnail_skill()
+    config = _load_thumbnail_default_config()
+    ideate_skill = (_repo_root() / ".claude" / "skills" / "collection-ideate" / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "reference_images.dedup_recent_collections" in skill
+    assert config["image_generation"]["gemini"]["reference_images"]["dedup_recent_collections"] == 5
+    assert ".claude/skills/collection-ideate/references/select-ttp-references.py" in ideate_skill
+    assert ".claude/skills/collection-ideate/references/record-ttp-reference-assignments.py" in ideate_skill
+
+
+def test_collection_ideate_persists_only_the_adopted_reference_after_selection() -> None:
+    ideate_skill = (_repo_root() / ".claude" / "skills" / "collection-ideate" / "SKILL.md").read_text(encoding="utf-8")
+    parallel = _slice_between(
+        ideate_skill,
+        "**4-4: プロンプト構築 + 一括生成（parallel デフォルト）**",
+        "### Phase 4 補足: sequential モード (opt-in)",
+    )
+    sequential = _slice_between(
+        ideate_skill,
+        "**sequential 用 4-4 (選択 → 1 枚生成)**:",
+        "**sequential 用 4-5 (1 枚承認)**:",
+    )
+    next_step = _slice_between(ideate_skill, "## Next Step", "### parallel モード（デフォルト）")
+
+    assert "REFERENCE_HISTORY_FILE" not in parallel
+    assert "REFERENCE_HISTORY_FILE" not in sequential
+    assert next_step.count("record-ttp-reference-assignments.py") == 1
+    assert '"$COLLECTION_PATH" "${REF_PATHS[$REF_INDEX]}"' in next_step
+
+
+def test_collection_ideate_parallel_generation_failure_continues_to_later_candidates(tmp_path: Path) -> None:
+    references = [tmp_path / "fail.jpg", tmp_path / "success.jpg"]
+
+    result = _run_collection_ideate_generation_block(tmp_path, "parallel", references)
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "invocations.txt").read_text(encoding="utf-8").splitlines() == [
+        str(references[0]),
+        str(references[1]),
+    ]
+
+
+def test_collection_ideate_sequential_generation_failure_is_nonzero_and_records_nothing(tmp_path: Path) -> None:
+    references = [tmp_path / "fail.jpg"]
+
+    result = _run_collection_ideate_generation_block(tmp_path, "sequential", references)
+
+    history_file = tmp_path / "collections" / "planning" / "_plan-previews" / "session" / "reference-assignments.txt"
+    assert result.returncode != 0
+    assert not history_file.exists()
+
+
+@pytest.mark.parametrize("mode", ["parallel", "sequential"])
+def test_collection_ideate_codex_generation_success_uses_selected_reference(tmp_path: Path, mode: str) -> None:
+    references = [tmp_path / "success.jpg"]
+
+    result = _run_collection_ideate_generation_block(tmp_path, mode, references, provider="codex")
+
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "invocations.txt").read_text(encoding="utf-8").splitlines() == [str(references[0])]
+
+
+@pytest.mark.parametrize("mode", ["parallel", "sequential"])
+def test_collection_ideate_codex_generation_failure_is_nonzero_and_records_nothing(tmp_path: Path, mode: str) -> None:
+    references = [tmp_path / "fail.jpg"]
+
+    result = _run_collection_ideate_generation_block(tmp_path, mode, references, provider="codex")
+
+    history_file = tmp_path / "collections" / "planning" / "_plan-previews" / "session" / "reference-assignments.txt"
+    assert result.returncode != 0
+    assert not history_file.exists() or history_file.read_text(encoding="utf-8") == ""
+
+
+def test_collection_ideate_reference_validation_executes_override_and_cross_state_history(tmp_path: Path) -> None:
+    channel_dir = tmp_path / "channel"
+    refs = [
+        channel_dir / "data" / "thumbnail_compare" / "benchmark" / "jazzgak" / f"ref-{index}.jpg" for index in range(3)
+    ]
+    for ref in refs:
+        ref.parent.mkdir(parents=True, exist_ok=True)
+        ref.write_bytes(b"jpg")
+
+    config_dir = channel_dir / "config" / "skills"
+    config_dir.mkdir(parents=True)
+    (config_dir / "thumbnail.yaml").write_text(
+        yaml.safe_dump({"image_generation": {"gemini": {"reference_images": {"dedup_recent_collections": 1}}}}),
+        encoding="utf-8",
+    )
+    for collection, reference in (
+        ("planning/20260101-old", refs[1]),
+        ("live/20260712-new", refs[0]),
+    ):
+        prompt_log = channel_dir / "collections" / collection / "20-documentation" / "thumbnail-prompts.md"
+        prompt_log.parent.mkdir(parents=True)
+        prompt_log.write_text(
+            "## Reference Assignments\n"
+            "| attempt | output | reference_image | benchmark_channel |\n"
+            "|---:|---|---|---|\n"
+            f"| 1 | output | `{reference.relative_to(channel_dir)}` | jazzgak |\n",
+            encoding="utf-8",
+        )
+
+    env = os.environ.copy()
+    env["CHANNEL_DIR"] = str(channel_dir)
+    env["PYTHONPATH"] = str(_repo_root() / "src") + os.pathsep + env.get("PYTHONPATH", "")
+    result = subprocess.run(
+        [sys.executable, str(_collection_ideate_reference_validation_script()), "2"],
+        cwd=_repo_root(),
+        env=env,
+        input="".join(f"{ref}\n" for ref in refs),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [str(refs[2]), str(refs[1])]
+
+
+def test_collection_ideate_persists_assignments_for_the_next_run(tmp_path: Path) -> None:
+    channel_dir = tmp_path / "channel"
+    refs = [
+        channel_dir / "data" / "thumbnail_compare" / "benchmark" / "jazzgak" / f"ref-{index}.jpg" for index in range(3)
+    ]
+    for ref in refs:
+        ref.parent.mkdir(parents=True, exist_ok=True)
+        ref.write_bytes(b"jpg")
+
+    env = os.environ.copy()
+    env["CHANNEL_DIR"] = str(channel_dir)
+    env["PYTHONPATH"] = str(_repo_root() / "src") + os.pathsep + env.get("PYTHONPATH", "")
+    validation_script = _collection_ideate_reference_validation_script()
+    first = subprocess.run(
+        [sys.executable, str(validation_script), "1"],
+        cwd=_repo_root(),
+        env=env,
+        input="".join(f"{ref}\n" for ref in refs),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert first.returncode == 0, first.stderr
+    assert first.stdout.splitlines() == [str(refs[0])]
+
+    collection_dir = channel_dir / "collections" / "planning" / "20260713-first"
+    prompt_log = collection_dir / "20-documentation" / "thumbnail-prompts.md"
+    prompt_log.parent.mkdir(parents=True)
+    prompt_log.write_text(
+        "## Reference Assignments\n"
+        "| attempt | output | reference_image | benchmark_channel |\n"
+        "|---:|---|---|---|\n"
+        f"| 1 | thumbnail | `{refs[2].relative_to(channel_dir)}` | jazzgak |\n"
+        "\n## Prompt Details\nexisting thumbnail prompt\n",
+        encoding="utf-8",
+    )
+    persisted = subprocess.run(
+        [
+            sys.executable,
+            str(_collection_ideate_reference_history_script()),
+            str(collection_dir),
+            first.stdout.strip(),
+        ],
+        cwd=_repo_root(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert persisted.returncode == 0, persisted.stderr
+    prompt_text = prompt_log.read_text(encoding="utf-8")
+    assert prompt_text.count("## Reference Assignments") == 2
+    assert f"`{refs[0].relative_to(channel_dir)}`" in prompt_text
+
+    second = subprocess.run(
+        [sys.executable, str(validation_script), "1"],
+        cwd=_repo_root(),
+        env=env,
+        input="".join(f"{ref}\n" for ref in refs),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert second.returncode == 0, second.stderr
+    assert second.stdout.splitlines() == [str(refs[1])]
+
+
+def test_collection_ideate_sequential_records_only_generated_reference_and_preserves_unused_order(
+    tmp_path: Path,
+) -> None:
+    channel_dir = tmp_path / "channel"
+    refs = [
+        channel_dir / "data" / "thumbnail_compare" / "benchmark" / "jazzgak" / f"ref-{index}.jpg" for index in range(4)
+    ]
+    for ref in refs:
+        ref.parent.mkdir(parents=True, exist_ok=True)
+        ref.write_bytes(b"jpg")
+
+    env = os.environ.copy()
+    env["CHANNEL_DIR"] = str(channel_dir)
+    env["PYTHONPATH"] = str(_repo_root() / "src") + os.pathsep + env.get("PYTHONPATH", "")
+    validation_script = _collection_ideate_reference_validation_script()
+    selected = subprocess.run(
+        [sys.executable, str(validation_script), "3"],
+        cwd=_repo_root(),
+        env=env,
+        input="".join(f"{ref}\n" for ref in refs),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert selected.returncode == 0, selected.stderr
+    selected_refs = selected.stdout.splitlines()
+    assert selected_refs == [str(ref) for ref in refs[:3]]
+
+    ref_index = 1
+    collection_dir = channel_dir / "collections" / "planning" / "20260713-first"
+    persisted = subprocess.run(
+        [
+            sys.executable,
+            str(_collection_ideate_reference_history_script()),
+            str(collection_dir),
+            selected_refs[ref_index],
+        ],
+        cwd=_repo_root(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert persisted.returncode == 0, persisted.stderr
+    prompt_log = (collection_dir / "20-documentation" / "thumbnail-prompts.md").read_text(encoding="utf-8")
+    assert f"`{refs[1].relative_to(channel_dir)}`" in prompt_log
+    assert f"`{refs[0].relative_to(channel_dir)}`" not in prompt_log
+    assert f"`{refs[2].relative_to(channel_dir)}`" not in prompt_log
+
+    next_selection = subprocess.run(
+        [sys.executable, str(validation_script), "3"],
+        cwd=_repo_root(),
+        env=env,
+        input="".join(f"{ref}\n" for ref in refs),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert next_selection.returncode == 0, next_selection.stderr
+    assert next_selection.stdout.splitlines() == [str(refs[0]), str(refs[2]), str(refs[3])]
+
+
+def test_collection_ideate_cycles_entire_pool_before_reuse(tmp_path: Path) -> None:
+    channel_dir = tmp_path / "channel"
+    refs = [
+        channel_dir / "data" / "thumbnail_compare" / "benchmark" / "jazzgak" / f"ref-{index}.jpg" for index in range(5)
+    ]
+    for ref in refs:
+        ref.parent.mkdir(parents=True, exist_ok=True)
+        ref.write_bytes(b"jpg")
+
+    env = os.environ.copy()
+    env["CHANNEL_DIR"] = str(channel_dir)
+    env["PYTHONPATH"] = str(_repo_root() / "src") + os.pathsep + env.get("PYTHONPATH", "")
+    validation_script = _collection_ideate_reference_validation_script()
+    history_script = _collection_ideate_reference_history_script()
+    selected: list[str] = []
+    planned: list[list[str]] = []
+
+    for index in range(len(refs)):
+        validation = subprocess.run(
+            [sys.executable, str(validation_script), "3"],
+            cwd=_repo_root(),
+            env=env,
+            input="".join(f"{ref}\n" for ref in refs),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert validation.returncode == 0, validation.stderr
+        planned_references = validation.stdout.splitlines()
+        planned.append(planned_references)
+        generated = _run_collection_ideate_generation_block(
+            tmp_path / f"preview-{index}",
+            "parallel",
+            [Path(reference) for reference in planned_references],
+        )
+        assert generated.returncode == 0, generated.stderr
+        invocation_log = tmp_path / f"preview-{index}" / "invocations.txt"
+        assert invocation_log.read_text(encoding="utf-8").splitlines() == planned_references
+
+        selected_reference = planned_references[0]
+        selected.append(selected_reference)
+        persisted = subprocess.run(
+            [
+                sys.executable,
+                str(history_script),
+                str(channel_dir / "collections" / "planning" / f"2026071{index}-collection"),
+                selected_reference,
+            ],
+            cwd=_repo_root(),
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert persisted.returncode == 0, persisted.stderr
+
+    assert selected == [str(ref) for ref in refs]
+    assert planned == [
+        [str(refs[0]), str(refs[1]), str(refs[2])],
+        [str(refs[1]), str(refs[2]), str(refs[3])],
+        [str(refs[2]), str(refs[3]), str(refs[4])],
+        [str(refs[3]), str(refs[4]), str(refs[0])],
+        [str(refs[4]), str(refs[0]), str(refs[1])],
+    ]
+
+    after_cycle = subprocess.run(
+        [sys.executable, str(validation_script), "3"],
+        cwd=_repo_root(),
+        env=env,
+        input="".join(f"{ref}\n" for ref in refs),
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert after_cycle.returncode == 0, after_cycle.stderr
+    assert after_cycle.stdout.splitlines()[0] == str(refs[0])
+
+
+def test_collection_ideate_reference_history_failure_is_nonzero(tmp_path: Path) -> None:
+    blocked_parent = tmp_path / "channel" / "blocked"
+    blocked_parent.parent.mkdir(parents=True)
+    blocked_parent.write_text("not a directory", encoding="utf-8")
+    collection_dir = blocked_parent / "20260713-collection"
+    env = os.environ.copy()
+    env["CHANNEL_DIR"] = str(tmp_path / "channel")
+    env["PYTHONPATH"] = str(_repo_root() / "src") + os.pathsep + env.get("PYTHONPATH", "")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(_collection_ideate_reference_history_script()),
+            str(collection_dir),
+            str(tmp_path / "reference.jpg"),
+        ],
+        cwd=_repo_root(),
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "参照画像履歴を保存できません" in result.stderr
 
 
 def test_thumbnail_sample_prompts_are_short_ttp_diff_not_prompt_only_style() -> None:

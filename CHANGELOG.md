@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(thumbnail)`: TTP 参照画像の直近コレクション重複除外を追加（#1649）。`reference_images.dedup_recent_collections`（既定 5）が collection ごとに採用企画の参照 1 件を Reference Assignments へ保存し、全割当節から未使用参照を先頭候補として優先する。不足する候補枠だけ位置順で補うため、候補数より大きいプールは全参照が採用されるまで先頭候補を再利用しない。
+
 ### Added
 
+- `docs(feedback)`: `/feedback` に、`status="recorded"` の未還流 entry を一覧・選択し、open issue の類似タイトル照合とユーザー承認を経て `daiki-beppu/youtube-automation` へ `feedback` ラベル付き issue を起票する還流モードを追加した。成功した entry は `status="filed"` と `issue_url` を記録して候補から除外し、二重起票を防ぐ。起票本文テンプレート、発生チャンネル掲載の個別確認、起票直前の機密情報再マスクも明記した（#1829）。
+- `docs(channel-research)`: サムネイルのフォント傾向・テキスト内容パターン・配置傾向を、固有名詞やコピー原文を除いた構造化プロファイル `docs/benchmarks/thumbnail-text-profile.md` として生成する契約を `/channel-research` に追加した。前回生成したプロファイルは個別ベンチマークレポートの存在判定と fallback 入力から除外する（#1906）。
+- `docs(thumbnail-research)`: `/benchmark` の収集済み JSON と競合サムネイル画像を再生数上位群 / 下位群で比較し、構図・配色・テキスト配置・視線誘導・被写体の勝ちパターンを `docs/benchmarks/thumbnail-analysis.md` に出力する `/thumbnail-research` スキルを追加した。レポートの推奨事項と参照候補を `/thumbnail` の TTP 入力として相互参照し、データ収集・チャンネル全体分析・320px 視認性比較との発動条件を分離した（#1796）。
+- `docs(channel-new)`: 入口系またはモード判別不能な発動時に既存チャンネル / 新規開設を最初に確認するゲートを追加した。既存チャンネルでは `yt-channel-seed --no-write-benchmark --json` の登録者数・動画数・直近タイトルを提示して既存踏襲 / 方向性見直しを確認し、見直し選択時も取り込み完了後に必要な TTP メモまたは分析レポートを明示して方向性検討モードへ接続する（#1897）
+- `docs(analytics)`: `/analytics-analyze` の必須 3 CLI 出力と数値 evidence を `reports/analysis_YYYYMMDD.json` に構造化保存し、Markdown とのペア生成と validator 成功を完了条件にした。`/collection-ideate` は同 validator で検証済みの固定キーから §5 / §6 / §8 相当を読み取る（#1805）。
+- `docs(thumbnail)`: YouTube Studio のサムネイル A/B テストについて、候補 2〜3 案の設計、operator 向け手動設定、watch time share・結果のコレクション別 JSON 記録を行う `/thumbnail-test` スキルを追加した。確定 Winner の構図・配色・文字量が 2 entry 以上で反復した場合に限り次回 `/thumbnail` のプロンプト方針へ還元し、`/postmortem` では対象動画のテスト結果を flop 仮説の根拠・反証として併記する（#1808）。
 - `docs(skills)`: 下流チャンネルリポジトリでスキル実行中の不具合・摩擦・改善案を `data/feedback/feedback-log.jsonl` に append-only JSONL として記録する `/feedback` スキルを追加した。entry schema は `.claude/skills/feedback/references/feedback-entry.schema.json` に単一ソース化し、`date` / `skill` / `category` / `summary` / `context` / `status` / `issue_url` の構造、`status="recorded"` の新規記録、機密情報の `***REDACTED***` マスクを SKILL.md に明記した。下流配布 CLAUDE.md テンプレにもスキル摩擦時に `/feedback` を案内する導線を追加した（#1828）。
 - `docs(setup)`: `/setup` の全 check 緑後・完了報告前に、`workflow.wf_next` の音源 / アップロード承認ゲート、手動マスタリング検出スキップ、Veo 課金を伴う loop-video の有効状態を 1 問ずつ確認する運用設定インタビューを追加した。現在値と推奨回答を提示し、変更時だけ config を更新する（#1902）
 - `feat(upload)`: collection の `workflow-state.json::title_template_check.allow_volume_patterns: true` で、そのコレクションだけ公開タイトルの `Vol.` / `Part` / `#N` / ローマ数字の巻数表記を upload preflight で許可できるようにした。未設定・`false` の既定検出、RHS 鋳型・完全重複・核語彙の検査、および `content.json::title.template_check.volume_patterns` は変更しない（#1729）
@@ -18,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `feat(suno-helper)`: duration guard NG の同一 prompt 再生成を popup の「異常値の曲を再生成する」で切り替え可能にした。既定 ON は安全・高速モードとも最大 2 回再生成し、OFF は NG を警告表示しつつ生成済み全 clip を playlist / download 候補に維持する。選択は popup 再表示、resume、失敗分再実行、playlist 再実行へ引き継ぐ（#1733）
+- `docs(skills)`: リサーチ・戦略チェーンの 6 スキル（benchmark / discover-competitors / viewer-voice / audience-persona-design / viewing-scene / channel-research）の冒頭 60 行以内に、停止する fail と許容する fail を分離した前提成果物ガードを統一書式で整備した。必須入力が無い場合は生成元の前工程スキルを案内して停止し、後続 Step で生成・自動更新・代替できる入力欠如は停止条件から除外する（#1825）
 
 - `docs(automation-release)`: extension release の skill / checklist を Nix extensions shell 契約（Node 24 / pnpm 11.12.0）へ同期した（#1956）。両拡張の frozen install → build → zip、期待名 zip、lockfile 無差分を `verify-extensions.sh` で検証し、ambient Node / pnpm と `--ignore-workspace` を使わないことを明記。Python 本体の release flow と `release-extensions.yml` は変更なし
 
@@ -25,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs(suno-helper)`: Suno UI の旧「Custom Mode」および「Instrumental ON/OFF」表記を、現行の Advanced タブと Lyrics mode（Write / Instrumental）の用語へ更新した。operator 手順、拡張 description、保守用コメントを対象とし、実行時のセレクタ・エラーメッセージ・テスト期待値は変更していない（#1900）
 
 ### Fixed
+
+- `fix(api)`: playlist / benchmark / analytics / comments-reply / discover-competitors の YouTube API 呼び出しで、429・5xx・quota 系 403・network error を jitter 付き指数 backoff で最大 3 回試行し、恒久 4xx は即座にドメイン例外へ変換する共通 retry 境界を追加した（#1695）。
 
 - `fix(suno-helper)`: Download all メニューの短時間 auto-close レースに対し、More クリック直後から探索を開始し、検出失敗時は最大 3 回再クリックしてダウンロードを継続できるようにした（#1926）。
 - `fix(suno-helper)`: 拡張更新時に既存の Suno タブを自動リロードし、旧 content script の orphaned context を残さず新しい bundle を再注入するようにした（#1718）。
@@ -98,6 +109,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(thumbnail)`: Codex の thumbnail prompt に設定済み composition rules を含めるよう修正した（#1727）。
+- `fix(suno-helper)`: Lyrics 欄の不在・注入失敗時に、現行 Suno UI の ARIA 選択状態を read-only で診断し、Prompt / Instrumental なら Write、Simple / Sounds なら Advanced への切り替えを案内するよう改善した。状態を特定できない場合は Advanced / Write / 英語 UI 推奨のチェックリストを表示する（#1899）。
+- `fix(comments-reply)`: 同一スレッド内で対象コメントより後に投稿されたオーナー返信を検出し、Studio 等で手動返信済みのコメントへの重複返信を防止した。オーナー返信後の視聴者フォローアップは引き続き候補に含める（#1895）
 - `fix(suno-helper)`: Lexical Lyrics 欄で paste 反映検証が失敗した場合に inject retry 後 beforeinput fallback を試し、全方式が失敗したときは entry 名・歌詞長・差分付き診断を出して停止するようにした（#1676）。
 - `fix(suno-helper)`: ユーザー操作による `stopped` を赤いエラー扱いにせず、「停止しました。再実行できます。」と通常状態で表示するようにした。
 - `fix(suno-helper)`: ダウンロード完了済み collection を popup の一覧から消さず、「完了 N/N」として再表示するように戻した。完了済み collection も選択でき、同じテストを再実行できる。

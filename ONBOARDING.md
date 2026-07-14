@@ -263,7 +263,7 @@ uv run yt-skills sync --asset claude-md --force
 ```bash
 git clone git@github.com:daiki-beppu/youtube-channels-automation.git
 cd youtube-channels-automation
-uv sync --extra veo
+nix develop  # shellHook が uv sync を自動実行する
 ```
 
 ### 6.2 開発フロー

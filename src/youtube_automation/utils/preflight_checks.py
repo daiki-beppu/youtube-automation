@@ -20,6 +20,7 @@ from youtube_automation.utils.placeholders import is_placeholder_value
 from youtube_automation.utils.thumbnail_references import (
     plan_ttp_reference_assignments,
     resolve_configured_benchmark_references,
+    resolve_dedup_recent_collections,
 )
 from youtube_automation.utils.youtube_tag import parse_youtube_tags, youtube_tag_chars
 
@@ -180,6 +181,10 @@ def check_thumbnail_skill_config(channel_dir: Path, thumbnail_cfg: Mapping[str, 
                     max_attempts,
                     rotate,
                     benchmark_root=benchmark_root,
+                    channel_dir=channel_dir,
+                    dedup_recent_collections=resolve_dedup_recent_collections(
+                        reference_images.get("dedup_recent_collections")
+                    ),
                 )
             except ConfigError as exc:
                 issues.append(

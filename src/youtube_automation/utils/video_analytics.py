@@ -8,7 +8,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Dict, List
 
-from googleapiclient.errors import HttpError
+from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.retry import execute_with_retry
 
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
@@ -38,19 +39,16 @@ class VideoAnalyticsMixin:
 
         try:
             # 動画別メトリクス取得
-            response = (
-                self.analytics_service.reports()
-                .query(
-                    ids=f"channel=={self.channel_id}",
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics="views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained",
-                    dimensions="video",
-                    sort="-views",
-                    maxResults=10,
-                )
-                .execute()
+            request = self.analytics_service.reports().query(
+                ids=f"channel=={self.channel_id}",
+                startDate=start_date,
+                endDate=end_date,
+                metrics="views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained",
+                dimensions="video",
+                sort="-views",
+                maxResults=10,
             )
+            response = execute_with_retry(request, "YouTube Analytics API request failed")
 
             videos_data = []
 
@@ -84,7 +82,7 @@ class VideoAnalyticsMixin:
 
             return videos_data
 
-        except HttpError as e:
+        except YouTubeAPIError as e:
             logger.error(f"YouTube API エラー（動画別分析）: {e}")
             return []
         except Exception as e:
@@ -108,17 +106,14 @@ class VideoAnalyticsMixin:
 
         try:
             # 動画別メトリクス取得
-            response = (
-                self.analytics_service.reports()
-                .query(
-                    ids=f"channel=={self.channel_id}",
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics="views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained",
-                    filters=f"video=={video_id}",
-                )
-                .execute()
+            request = self.analytics_service.reports().query(
+                ids=f"channel=={self.channel_id}",
+                startDate=start_date,
+                endDate=end_date,
+                metrics="views,estimatedMinutesWatched,averageViewDuration,likes,dislikes,comments,shares,subscribersGained",
+                filters=f"video=={video_id}",
             )
+            response = execute_with_retry(request, "YouTube Analytics API request failed")
 
             if response.get("rows"):
                 row = response["rows"][0]
@@ -146,7 +141,7 @@ class VideoAnalyticsMixin:
                     "subscribers_gained": 0,
                 }
 
-        except HttpError as e:
+        except YouTubeAPIError as e:
             logger.error(f"YouTube API エラー（動画ID {video_id}）: {e}")
             return {
                 "video_id": video_id,
@@ -187,11 +182,10 @@ class VideoAnalyticsMixin:
             for i in range(0, len(video_ids), 50):
                 batch_ids = video_ids[i : i + 50]
 
-                response = (
-                    self.youtube_service.videos()
-                    .list(part="snippet,statistics,contentDetails,topicDetails", id=",".join(batch_ids))
-                    .execute()
+                request = self.youtube_service.videos().list(
+                    part="snippet,statistics,contentDetails,topicDetails", id=",".join(batch_ids)
                 )
+                response = execute_with_retry(request, "YouTube Analytics API request failed")
 
                 for item in response.get("items", []):
                     video_id = item["id"]
@@ -213,7 +207,7 @@ class VideoAnalyticsMixin:
 
             return all_details
 
-        except HttpError as e:
+        except YouTubeAPIError as e:
             logger.warning(f"YouTube API エラー（動画詳細取得）: {e}")
             return {}
         except Exception as e:

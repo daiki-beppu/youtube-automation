@@ -108,7 +108,7 @@ A. `config/channel/workflow.json` に `workflow.wf_next.skip_manual_mastering: t
 A. `phase: "publishing"` で停止していれば、`assets` フラグの状態から未完了ステップを特定し、`/wf-next` をもう一度呼ぶと未完了ステップから再開する（冪等性あり）。
 
 **Q. analytics やベンチマークが無いと `/collection-ideate` は止まる？**
-A. `reports/analysis_*.md` が無い場合は止まらず、`data/benchmark_*.json` があれば benchmark fallback mode、どちらも無ければ minimal mode で進む。minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認する。`reports/analysis_*.md` が stale（最新 `data/analytics_data_*.json` より古い、または収集データ自体が実行日から解決済み `freshness_days` を超えて経過）の場合だけ fallback せず、`/analytics-analyze` 再実行（絶対鮮度 stale では `/analytics-collect` を先行）を案内して止まる。`freshness_days` は `.claude/skills/collection-ideate/config.default.yaml` の既定 7 日を使い、`config/skills/collection-ideate.yaml` で上書きできる。
+A. `reports/analysis_*.md` が無い場合は止まらず、`data/benchmark_*.json` があれば benchmark fallback mode、どちらも無ければ minimal mode で進む。minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認する。analytics mode へ進めるのは、ファイル名日付が最新の Markdown と同日付 JSON が揃い、analysis JSON validator が成功し、ペアが stale でない場合だけ。Markdown があるのに同日付 JSON がない、validator が失敗する、またはペアが stale（最新 `data/analytics_data_*.json` より古い、あるいは収集データ自体が実行日から解決済み `freshness_days` を超えて経過）の場合は fallback せず、`/analytics-analyze` 再実行（絶対鮮度 stale では `/analytics-collect` を先行）を案内して止まる。`yt-doctor` の入力モード表示は Markdown と stale の予備確認であり、JSON/validator の最終 Hard Gate は `/collection-ideate` が実行する。`freshness_days` は `.claude/skills/collection-ideate/config.default.yaml` の既定 7 日を使い、`config/skills/collection-ideate.yaml` で上書きできる。
 
 **Q. 「planning/」と「live/」って何**
 A. 制作中は `collections/planning/<dir>/`、`/video-upload` で公開完了すると `collections/live/<dir>/` に移動する（`/wf-next` の Phase 3 最後）。

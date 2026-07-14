@@ -10,7 +10,7 @@ YouTube Data API v3 の `commentThreads.list` / `comments.insert` を使い、
 
 - **dry-run**: 対象コメントと生成返信テキストのプレビューのみ（API 書き込みなし）
 - **apply**: 実際に YouTube 側へ返信を反映、同時に履歴 JSON を更新
-- **対象条件**: `ng_words` / 既返信 / held for review / 自チャンネル自身のコメント等の基本フィルタを通過した全コメント
+- **対象条件**: `ng_words` / 既返信 / held for review / 自チャンネル自身のコメント / 対象より後のオーナー返信等の基本フィルタを通過した全コメント
 
 ## 前提
 
@@ -128,7 +128,7 @@ uv run yt-comments-reply --dry-run --agent-replies-file /tmp/comment-replies.jso
 出力の確認ポイント(**全項目 PASS の場合のみ** Phase 6 へ進む):
 - [ ] `返信候補` が期待件数になっている
 - [ ] `reply` 欄の Agent 生成文がチャンネル persona とコメント言語に合っている
-- [ ] `skipped` の内訳が想定どおりである(`already_replied` / `ng_word` / `reply_contains_ng_word` 以外の予期しない skip がない)
+- [ ] `skipped` の内訳が想定どおりである(`already_replied` / `owner_replied` / `ng_word` / `reply_contains_ng_word` 以外の予期しない skip がない。`owner_replied` は同一スレッドに対象コメントより後のオーナー返信がある場合)
 - [ ] `agent_reply_missing` は Reviewer 起因の除外一覧と `comment_id` が一致するものだけである（一致しない場合は `/tmp/comment-replies.json` に該当返信を追加して再実行）
 
 1 項目でも FAIL なら返信文を修正して dry-run（Phase 5）を再実行する。FAIL のまま Phase 6 に進んではならない。
