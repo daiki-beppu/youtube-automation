@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `docs(collection-ideate)`: stale な Analytics report 検出時に推論コスト見積もり付きの 3 択を提示し、承認時または上限内の `freshness.stale_action: auto` 時だけ `/analytics-analyze` を同一セッションで実行する導線を追加した。`/wf-new` は判定を委譲し二重ダイアログを防ぐ（#1716）。
+- `docs(skills)`: wf-* から委譲される制作系 10 skill に subagent 入出力契約を追加し、リポジトリ相対の入力、成果物絶対パスの完了報告、state 非更新、承認・選択確定後のみの委譲を明記した。state を扱う `/masterup` の over-max 例外採用と `/suno` vocal の標準 collection 生成はメインエージェントが実行する（#1662）。
 
 - `feat(thumbnail)`: TTP 参照画像の直近コレクション重複除外を追加（#1649）。`reference_images.dedup_recent_collections`（既定 5）が collection ごとに採用企画の参照 1 件を Reference Assignments へ保存し、全割当節から未使用参照を先頭候補として優先する。不足する候補枠だけ位置順で補うため、候補数より大きいプールは全参照が採用されるまで先頭候補を再利用しない。
 

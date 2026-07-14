@@ -14,6 +14,10 @@ description: "Use when collection 型（BGM テイスター）チャンネルで
 - ショート動画（既定 `shorts.collection.default_count` 本）が `01-master/shorts/` に生成され、プレビュー確認済み
 - `uv run yt-upload-shorts` の実投稿が完了し、`workflow-state.json::post_upload.shorts` に投稿分の entry が記録されている
 
+## Subagent Contract
+
+subagent として呼ぶ場合、メインエージェントは対象コレクション、映像ソース、確定済みハイライト区間、クロップ位置をリポジトリルート相対パスまたは値で入力に含める。区間・クロップ・プレビュー・投稿の承認が必要なら、メインが承認を得るまで該当処理を subagent へ委譲しない。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。生成処理の完了報告には `status: success | failure`、生成した `01-master/shorts/short-*.mp4` の絶対パス一覧、エラーを含める。state を更新する実投稿 CLI は承認後にメインが実行し、成果物と tracking を検証する。直接実行時は既存手順を変更しない。
+
 ## 設定読み込みゲート
 
 前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
