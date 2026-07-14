@@ -4,7 +4,7 @@
 - `_ensure_target_parent`: 親ディレクトリの作成
 - `_copy_entry` / `_symlink_entry`: 単一 entry の配置
 - `_ensure_agents_skills_symlink`: Codex 探索パス `.agents/skills` の symlink を張る
-- `_prune_orphans`: 同梱外 entry の列挙・削除
+- `_prune_orphans`: 既知の upstream orphan の列挙・削除
 - `_has_diff`: `filecmp.dircmp` の再帰的差分検出
 """
 
@@ -18,6 +18,30 @@ from pathlib import Path
 # upstream リポの `.agents/skills -> ../.claude/skills` と同じ相対表現を用いる
 # ことで、リポジトリをどこに clone しても壊れないリンクにする。
 _AGENTS_SKILLS_LINK_TARGET = Path("..") / ".claude" / "skills"
+
+# 未知の target entry は symlink や file でもローカル自作 skill の可能性があるため、
+# upstream が管理していた既知名だけを prune 対象にする。
+_KNOWN_REMOVED_SKILL_NAMES = frozenset(
+    {
+        "analyze",
+        "collect",
+        "report",
+        "status",
+        "description",
+        "upload",
+        "ideate",
+        "persona",
+        "onboard",
+        "distrokid-prep",
+        "channel-import",
+        "channel-setup",
+        "channel-direction",
+    }
+)
+
+
+def _prunable_orphan_names(entry_names: set[str], bundled: set[str]) -> set[str]:
+    return (entry_names - bundled) & _KNOWN_REMOVED_SKILL_NAMES
 
 
 def _ensure_target_parent(target: Path) -> None:
@@ -130,18 +154,19 @@ def _prune_orphans(
     *,
     do_delete: bool,
 ) -> dict[str, int]:
-    """target_dir 直下で bundled に含まれない entry を列挙し、do_delete=True なら削除する。
+    """既知の upstream orphan だけを列挙し、do_delete=True なら削除する。
 
     戻り値: {"pruned": N} (実削除時) または {"would-prune": N} (列挙のみ)。
-    `iterdir()` は broken symlink も列挙するため、symlink → dir → file の順で判定する。
+    entry の種別にかかわらず、未知名はローカル entry として保護する。
     """
     label = "pruned" if do_delete else "would-prune"
     count = 0
-    for entry in sorted(target_dir.iterdir(), key=lambda p: p.name):
-        if entry.name in bundled:
-            continue
+    entries_by_name = {entry.name: entry for entry in target_dir.iterdir()}
+    prunable_names = _prunable_orphan_names(set(entries_by_name), bundled)
+    for name in sorted(prunable_names):
+        entry = entries_by_name[name]
         count += 1
-        print(f"  {label:>8}: {entry.name}")
+        print(f"  {label:>8}: {name}")
         if do_delete:
             if entry.is_symlink():
                 entry.unlink()
