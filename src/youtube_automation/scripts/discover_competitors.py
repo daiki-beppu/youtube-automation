@@ -25,7 +25,7 @@ import csv
 import logging
 from pathlib import Path
 
-from youtube_automation.utils.competitor_discovery import discover_competitors
+from youtube_automation.utils.competitor_discovery import SearchCacheMode, discover_competitors
 from youtube_automation.utils.competitor_scoring import (
     CandidateChannel,
     DiscoveryParams,
@@ -125,6 +125,11 @@ def _build_parser() -> argparse.ArgumentParser:
             "既定: ON（topic 不明チャンネルは fail-open で通す）。"
             "従来挙動に戻すには --no-require-music-topic"
         ),
+    )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="TTL 内の検索キャッシュも無視して search.list を再実行する",
     )
     parser.add_argument("--output", required=True, help="Markdown 出力先（同名 .csv も書き出す）")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -272,7 +277,8 @@ def main() -> None:
     params = _build_params(args)
 
     youtube = get_youtube()
-    scored = discover_competitors(youtube, params)
+    cache_mode = SearchCacheMode.REFRESH if args.refresh else SearchCacheMode.USE
+    scored = discover_competitors(youtube, params, cache_mode)
 
     output_md = Path(args.output)
     output_csv = output_md.with_suffix(".csv")

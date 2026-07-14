@@ -29,6 +29,7 @@ from youtube_automation.scripts.discover_competitors import (
     _write_markdown,
     main,
 )
+from youtube_automation.utils.competitor_discovery import SearchCacheMode
 from youtube_automation.utils.competitor_scoring import (
     CandidateChannel,
     DiscoveryParams,
@@ -128,6 +129,14 @@ class TestBuildParser:
         assert args.posted_within_days == 30
         assert args.top == 20
         assert args.per_keyword == 20
+        assert args.refresh is False
+
+    def test_refresh_flag_parses(self):
+        parser = _build_parser()
+
+        args = parser.parse_args(["--keywords", "lo-fi", "--refresh", "--output", "out.md"])
+
+        assert args.refresh is True
 
     def test_explicit_filter_values_override_defaults(self):
         # Given: 全フラグ指定
@@ -473,6 +482,56 @@ class TestWriteCsv:
 
 
 class TestMain:
+    def test_main_passes_default_cache_mode_to_discovery(self, tmp_path: Path, monkeypatch):
+        out_md = tmp_path / "cached.md"
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-discover-competitors", "--keywords", "lo-fi", "--output", str(out_md)],
+        )
+
+        with (
+            patch(
+                "youtube_automation.scripts.discover_competitors.discover_competitors",
+                return_value=[],
+            ) as discover,
+            patch(
+                "youtube_automation.scripts.discover_competitors.get_youtube",
+                return_value=MagicMock(),
+            ) as get_youtube_mock,
+        ):
+            main()
+
+        discover.assert_called_once()
+        youtube, params, cache_mode = discover.call_args.args
+        assert youtube is get_youtube_mock.return_value
+        assert params.keywords == ("lo-fi",)
+        assert cache_mode is SearchCacheMode.USE
+
+    def test_main_passes_refresh_mode_to_discovery(self, tmp_path: Path, monkeypatch):
+        out_md = tmp_path / "refresh.md"
+        monkeypatch.setattr(
+            "sys.argv",
+            ["yt-discover-competitors", "--keywords", "lo-fi", "--refresh", "--output", str(out_md)],
+        )
+
+        with (
+            patch(
+                "youtube_automation.scripts.discover_competitors.discover_competitors",
+                return_value=[],
+            ) as discover,
+            patch(
+                "youtube_automation.scripts.discover_competitors.get_youtube",
+                return_value=MagicMock(),
+            ) as get_youtube_mock,
+        ):
+            main()
+
+        discover.assert_called_once()
+        youtube, params, cache_mode = discover.call_args.args
+        assert youtube is get_youtube_mock.return_value
+        assert params.keywords == ("lo-fi",)
+        assert cache_mode is SearchCacheMode.REFRESH
+
     def test_main_writes_markdown_and_csv(self, tmp_path: Path, monkeypatch):
         # Given: discover_competitors を 2 件返すように mock
         scored = [

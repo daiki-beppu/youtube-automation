@@ -11,9 +11,15 @@ YouTube Data API I/O と公開関数 `discover_competitors` を提供する。
 
 from __future__ import annotations
 
+import json
+import logging
+import os
+import time
 from collections import defaultdict
 from dataclasses import replace
 from datetime import datetime
+from enum import Enum
+from pathlib import Path
 
 from youtube_automation.utils.competitor_scoring import (
     _RECENT_VIDEOS_PER_CHANNEL,
@@ -24,11 +30,92 @@ from youtube_automation.utils.competitor_scoring import (
     _apply_filters,
     _score_candidate,
 )
+from youtube_automation.utils.config import channel_dir, load_config
 from youtube_automation.utils.exceptions import YouTubeAPIError
 from youtube_automation.utils.retry import execute_with_retry
 
 # channels.list バッチ単位（YouTube Data API 上限）
 _CHANNELS_BATCH_SIZE = 50
+_SEARCH_CACHE_TTL_SECONDS = 24 * 60 * 60
+_SEARCH_CACHE_VERSION = 1
+logger = logging.getLogger(__name__)
+
+
+class SearchCacheMode(Enum):
+    """search.list キャッシュの利用方針。"""
+
+    USE = "use"
+    REFRESH = "refresh"
+
+
+def _search_cache_path() -> Path:
+    return channel_dir() / ".cache" / "youtube-automation" / "discover-competitors-search.json"
+
+
+def _cache_key(keyword: str, max_results: int) -> str:
+    return json.dumps([keyword, max_results], ensure_ascii=False, separators=(",", ":"))
+
+
+def _read_search_cache(path: Path) -> dict[str, dict]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        logger.warning("検索キャッシュを読み込めないため再検索します: %s", error)
+        return {}
+    if (
+        not isinstance(payload, dict)
+        or payload.get("version") != _SEARCH_CACHE_VERSION
+        or not isinstance(payload.get("entries"), dict)
+    ):
+        logger.warning("検索キャッシュの形式が不正なため再検索します: %s", path)
+        return {}
+    return payload["entries"]
+
+
+def _write_search_cache(path: Path, entries: dict[str, dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"version": _SEARCH_CACHE_VERSION, "entries": entries}
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def _cached_search_channels(
+    youtube,
+    keyword: str,
+    max_results: int,
+    cache_mode: SearchCacheMode,
+) -> dict[str, set[str]]:
+    path = _search_cache_path()
+    entries = _read_search_cache(path)
+    key = _cache_key(keyword, max_results)
+    entry = entries.get(key)
+    now = time.time()
+    if cache_mode is SearchCacheMode.USE and isinstance(entry, dict):
+        saved_at = entry.get("saved_at")
+        channel_ids = entry.get("channel_ids")
+        if (
+            isinstance(saved_at, (int, float))
+            and 0 <= now - saved_at < _SEARCH_CACHE_TTL_SECONDS
+            and isinstance(channel_ids, list)
+            and all(isinstance(channel_id, str) for channel_id in channel_ids)
+        ):
+            return {channel_id: {keyword} for channel_id in channel_ids}
+
+    hits = _search_channels(youtube, keyword, max_results)
+    entries[key] = {"saved_at": now, "channel_ids": list(hits)}
+    _write_search_cache(path, entries)
+    return hits
+
+
+def _discovered_channel_ids() -> set[str]:
+    return {
+        channel_id
+        for channel in load_config().analytics.benchmark.channels
+        if isinstance(channel, dict) and isinstance((channel_id := channel.get("id")), str) and channel_id
+    }
 
 
 # ----------------------------------------------------------------------------
@@ -153,21 +240,29 @@ def _fetch_recent_videos(youtube, uploads_playlist_id: str) -> list[VideoMetric]
 # ----------------------------------------------------------------------------
 
 
-def discover_competitors(youtube, params: DiscoveryParams) -> list[ScoredCandidate]:
+def discover_competitors(
+    youtube,
+    params: DiscoveryParams,
+    cache_mode: SearchCacheMode = SearchCacheMode.USE,
+) -> list[ScoredCandidate]:
     """競合チャンネル候補を発掘し、複合スコア降順で返す。
 
     パイプライン:
-      1. search.list × keywords → channel_id → matched_keywords map（直接 union）
-      2. channels.list → メタデータ + uploads playlist
-      3. _apply_filters（subs / total_videos）
-      4. _fetch_recent_videos → recent_videos + last_posted_at
-      5. _apply_filters（posted_within_days）
-      6. _score_candidate + sort + top N
+      1. TTL キャッシュまたは search.list × keywords → channel_id → matched_keywords map（直接 union）
+      2. benchmark.channels の検出済み channel ID を除外
+      3. channels.list → メタデータ + uploads playlist
+      4. _apply_filters（subs / total_videos）
+      5. _fetch_recent_videos → recent_videos + last_posted_at
+      6. _apply_filters（posted_within_days）
+      7. _score_candidate + sort + top N
     """
     keyword_map: dict[str, set[str]] = defaultdict(set)
     for keyword in params.keywords:
-        for ch_id, kws in _search_channels(youtube, keyword, params.per_keyword_results).items():
+        for ch_id, kws in _cached_search_channels(youtube, keyword, params.per_keyword_results, cache_mode).items():
             keyword_map[ch_id] |= kws
+
+    for channel_id in _discovered_channel_ids():
+        keyword_map.pop(channel_id, None)
 
     if not keyword_map:
         return []

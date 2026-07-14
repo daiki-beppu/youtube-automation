@@ -15,14 +15,16 @@ Issue #114 で追加する `yt-discover-competitors` のコアロジックを検
 from __future__ import annotations
 
 import dataclasses
+import json
 from datetime import date, timedelta
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.utils.competitor_discovery import discover_competitors
+from youtube_automation.utils.competitor_discovery import SearchCacheMode, discover_competitors
 from youtube_automation.utils.competitor_scoring import (
     _MUSIC_TOPIC_URLS,
     CandidateChannel,
@@ -40,6 +42,16 @@ from youtube_automation.utils.competitor_scoring import (
     _is_music_topic_match,
 )
 from youtube_automation.utils.exceptions import YouTubeAPIError
+
+
+@pytest.fixture(autouse=True)
+def _isolated_discovery_cache(tmp_path: Path, monkeypatch):
+    cache_path = tmp_path / "discover-competitors-search.json"
+    monkeypatch.setattr(
+        "youtube_automation.utils.competitor_discovery._search_cache_path",
+        lambda: cache_path,
+    )
+
 
 # ----------------------------------------------------------------------------
 # テストデータ生成ヘルパー
@@ -844,6 +856,138 @@ class TestDiscoverCompetitors:
         }
 
         return youtube
+
+    def _make_single_candidate_youtube(self, channel_id: str = "UC_NEW") -> MagicMock:
+        today_iso = date.today().isoformat()
+        return self._make_youtube_mock(
+            search_items=[{"snippet": {"channelId": channel_id}}],
+            channel_items=[
+                {
+                    "id": channel_id,
+                    "snippet": {"title": "New Channel", "customUrl": "@new"},
+                    "statistics": {"subscriberCount": "100000", "videoCount": "10"},
+                    "contentDetails": {"relatedPlaylists": {"uploads": "UU_NEW"}},
+                }
+            ],
+            playlist_items={"UU_NEW": [{"contentDetails": {"videoId": "V_NEW"}}]},
+            video_items=[
+                {
+                    "id": "V_NEW",
+                    "snippet": {"publishedAt": f"{today_iso}T00:00:00Z"},
+                    "statistics": {"viewCount": "10000", "likeCount": "100", "commentCount": "10"},
+                }
+            ],
+        )
+
+    def test_second_identical_run_uses_cached_search_results(self):
+        youtube = self._make_single_candidate_youtube()
+        params = _make_params(keywords=("lo-fi study",))
+
+        first = discover_competitors(youtube, params)
+        youtube.search.return_value.list.reset_mock()
+        second = discover_competitors(youtube, params)
+
+        assert [item.channel.channel_id for item in first] == ["UC_NEW"]
+        assert [item.channel.channel_id for item in second] == ["UC_NEW"]
+        assert youtube.search.return_value.list.call_count == 0
+
+    def test_expired_cache_repeats_search_and_updates_timestamp(self, tmp_path: Path):
+        youtube = self._make_single_candidate_youtube()
+        params = _make_params(keywords=("lo-fi study",))
+        discover_competitors(youtube, params)
+        cache_path = tmp_path / "discover-competitors-search.json"
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+        next(iter(payload["entries"].values()))["saved_at"] = 0
+        cache_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        discover_competitors(youtube, params)
+
+        updated = json.loads(cache_path.read_text(encoding="utf-8"))
+        assert youtube.search.return_value.list.call_count == 2
+        assert next(iter(updated["entries"].values()))["saved_at"] > 0
+
+    def test_refresh_repeats_search_with_fresh_cache(self):
+        youtube = self._make_single_candidate_youtube()
+        params = _make_params(keywords=("lo-fi study",))
+        discover_competitors(youtube, params)
+
+        discover_competitors(youtube, params, SearchCacheMode.REFRESH)
+
+        assert youtube.search.return_value.list.call_count == 2
+
+    def test_cache_write_failure_propagates_from_discovery_entrypoint(self, monkeypatch):
+        youtube = self._make_single_candidate_youtube()
+        params = _make_params(keywords=("lo-fi study",))
+
+        def fail_write_text(self, data, *, encoding=None, errors=None, newline=None):
+            raise PermissionError("cache is not writable")
+
+        monkeypatch.setattr(Path, "write_text", fail_write_text)
+
+        with pytest.raises(PermissionError, match="cache is not writable"):
+            discover_competitors(youtube, params)
+
+        assert youtube.search.return_value.list.call_count == 1
+
+    def test_skips_channel_already_registered_for_benchmark(self):
+        today_iso = date.today().isoformat()
+        youtube = self._make_youtube_mock(
+            search_items=[
+                {"snippet": {"channelId": "UC123"}},
+                {"snippet": {"channelId": "UC_NEW"}},
+            ],
+            channel_items=[
+                {
+                    "id": "UC_NEW",
+                    "snippet": {"title": "New Channel", "customUrl": "@new"},
+                    "statistics": {"subscriberCount": "100000", "videoCount": "10"},
+                    "contentDetails": {"relatedPlaylists": {"uploads": "UU_NEW"}},
+                }
+            ],
+            playlist_items={"UU_NEW": [{"contentDetails": {"videoId": "V_NEW"}}]},
+            video_items=[
+                {
+                    "id": "V_NEW",
+                    "snippet": {"publishedAt": f"{today_iso}T00:00:00Z"},
+                    "statistics": {"viewCount": "10000", "likeCount": "100", "commentCount": "10"},
+                }
+            ],
+        )
+        params = _make_params(keywords=("lo-fi study",))
+
+        result = discover_competitors(youtube, params)
+
+        assert [candidate.channel.channel_id for candidate in result] == ["UC_NEW"]
+        youtube.channels.return_value.list.assert_called_once()
+        assert youtube.channels.return_value.list.call_args.kwargs["id"] == "UC_NEW"
+
+    @pytest.mark.parametrize(
+        ("cache_contents", "warning"),
+        [
+            ("{not valid JSON", "検索キャッシュを読み込めないため再検索します"),
+            (json.dumps({"version": 0, "entries": []}), "検索キャッシュの形式が不正なため再検索します"),
+        ],
+    )
+    def test_invalid_cache_warns_researches_and_replaces_cache(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+        cache_contents: str,
+        warning: str,
+    ):
+        cache_path = tmp_path / "discover-competitors-search.json"
+        cache_path.write_text(cache_contents, encoding="utf-8")
+        youtube = self._make_single_candidate_youtube()
+
+        with caplog.at_level("WARNING"):
+            result = discover_competitors(youtube, _make_params(keywords=("lo-fi study",)))
+
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+        assert [candidate.channel.channel_id for candidate in result] == ["UC_NEW"]
+        assert any(warning in message for message in caplog.messages)
+        assert youtube.search.return_value.list.call_count == 1
+        assert payload["version"] == 1
+        assert len(payload["entries"]) == 1
 
     def test_retries_transient_api_failure_through_discovery_entrypoint(self, monkeypatch):
         monkeypatch.setattr("youtube_automation.utils.retry.time.sleep", lambda _: None)
