@@ -115,23 +115,44 @@ class TestCloudInitYaml:
     def test_cloud_init_yaml_no_longer_bakes_systemd_unit(self):
         """Given cloud-init.yaml
         When 全文を読む
-        Then ``write_files:`` ブロック・``systemd_unit`` テンプレート変数・
+        Then ``systemd_unit`` テンプレート変数・
              ``/etc/systemd/system/youtube-stream.service`` パスのいずれも含まれない (#212)。
 
         systemd unit は ``null_resource.deploy`` の ``provisioner "file"`` で SCP 配信するように
-        統一されたため、cloud-init 側の焼き付け経路を残してはならない。残骸を残すと
+        統一されたため、cloud-init 側に unit の焼き付け経路を残してはならない。残骸を残すと
         「設定したのに使われない」混乱と、初回 apply 時の二重配置リスクを招く。
+
+        ``write_files`` 自体は sshd など OS 初期設定ファイルの配置に利用できるため禁止しない。
         """
         text = read_file(_CLOUD_INIT_YAML)
-        assert not re.search(r"^write_files:", text, flags=re.MULTILINE), (
-            "write_files: ブロックが残っている（unit 配置は null_resource 経路に統一）"
-        )
         assert "systemd_unit" not in text, (
             "cloud-init.yaml に systemd_unit テンプレート変数が残っている"
             "（user_data の内側 templatefile 結線が撤去されたため未定義変数になる）"
         )
         assert not re.search(r"/etc/systemd/system/youtube-stream\.service", text), (
             "cloud-init.yaml に /etc/systemd/system/youtube-stream.service の配置宣言が残っている"
+        )
+
+    def test_write_files_pins_sshd_to_ed25519_host_key(self):
+        """Given cloud-init.yaml
+        When ``write_files`` を読む
+        Then sshd drop-in が ed25519 host key だけを提示する設定で配置される。
+
+        openssh-server の更新で ECDSA/RSA 鍵が再生成されても、Terraform provisioner の
+        ``host_key``（ed25519 固定）と SSH サーバーの提示鍵が食い違わないことを保証する。
+        """
+        loaded = yaml.safe_load(read_file(_CLOUD_INIT_YAML))
+        entries = loaded.get("write_files", [])
+        drop_in = next(
+            (entry for entry in entries if entry.get("path") == "/etc/ssh/sshd_config.d/99-hostkey-ed25519.conf"),
+            None,
+        )
+
+        assert drop_in is not None, "sshd の ed25519 host key 固定用 drop-in が配置されていない"
+        assert drop_in.get("owner") == "root:root", "sshd drop-in の owner が root:root でない"
+        assert drop_in.get("permissions") == "0644", "sshd drop-in の permissions が 0644 でない"
+        assert drop_in.get("content", "").splitlines() == ["HostKey /etc/ssh/ssh_host_ed25519_key"], (
+            "sshd drop-in が ed25519 以外の host key も提示する設定になっている"
         )
 
     def test_runcmd_does_not_invoke_systemctl_daemon_reload(self):

@@ -25,7 +25,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 - ssh-agent が起動済み（`SSH_AUTH_SOCK` が設定されている）かつ秘密鍵が登録済み（`ssh-add ~/.ssh/yt_stream_key`）。`null_resource.deploy.connection` は `agent = true` で ssh-agent 経由に接続するため、ssh-agent 未起動 / 鍵未登録 のいずれでも apply 時に `Permission denied (publickey)` で失敗する。`ssh-add -l` で登録済み鍵を確認できる（`Could not open a connection to your authentication agent.` が返れば agent 未起動）
     - **ssh-agent への登録は OS 起動時に自動では行われない**: macOS の launchd keychain 連携を別途設定していない限り、再起動・再ログインで agent は空になる。毎セッションで `ssh-add ~/.ssh/yt_stream_key` を実行する必要がある
     - **`ssh -i ~/.ssh/yt_stream_key root@<ip>` で SSH できることは agent 登録の検証にならない**: `-i` 指定は鍵ファイルを直接読むため agent 状態と無関係に成功する。Terraform provisioner は `agent = true` のみで動作するため、検証は **必ず `ssh-add -l`** で行う
-- `null_resource.deploy.connection` は `host_key` 検証を有効化している。host 鍵は Terraform が `tls_private_key.ssh_host` として生成し、cloud-init の `ssh_keys` で `/etc/ssh/ssh_host_ed25519_key{,.pub}` に固定配置するため、初回 apply でも TOFU に依存せず接続先ホストを検証できる
+- `null_resource.deploy.connection` は `host_key` 検証を有効化している。host 鍵は Terraform が `tls_private_key.ssh_host` として生成し、cloud-init の `ssh_keys` で `/etc/ssh/ssh_host_ed25519_key{,.pub}` に固定配置する。さらに sshd drop-in で提示鍵を Ed25519 のみに制限するため、`openssh-server` 更新時に ECDSA/RSA 鍵が再生成されても検証対象が変わらず、初回 apply でも継続運用時でも TOFU に依存せず接続先ホストを検証できる
 - 配信対象の MP4 ファイルがローカルにある（絶対パス）
 - `ffprobe` が PATH 上にある場合、`terraform plan` / `apply` 時に配信元 MP4 の YouTube 要件をプリフライト検証する（無い場合は soft skip）
 - operator のグローバル IP（`curl -s ifconfig.me` で取得）を `/32` 付き CIDR 形式で `allowed_ssh_cidr` に渡せる状態（Vultr ファイアウォールで SSH 22/tcp を operator IP からのみ許可するため）
