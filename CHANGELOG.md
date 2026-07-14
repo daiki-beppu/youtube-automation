@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(logging)`: `yt-bulk-update-desc` の進捗・成功・失敗出力を module logger 経由に統一した（#2031）。
 - `fix(skill-config)`: `load_skill_config("postmortem")` と `load_channel_override("postmortem")` は `config/skills/flop-analysis.yaml` を優先し、旧 `config/skills/postmortem.yaml` だけがある場合は互換読み込みして `UserWarning` で移行を案内する。利用者は `postmortem.yaml` を `flop-analysis.yaml` へリネームすることで警告を解消できる（#2022）。
 - `fix(skills)`: `yt-skills sync --prune` が upstream 管理外のローカル skill を削除しないよう、既知の旧 skill 名だけを prune 対象に限定した（#1939）。
 

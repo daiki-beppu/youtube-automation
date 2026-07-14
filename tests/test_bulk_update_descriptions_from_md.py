@@ -17,7 +17,10 @@ Issue #276 のリグレッションを担保する:
 from __future__ import annotations
 
 import json
+import logging
+import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
@@ -25,6 +28,7 @@ from unittest.mock import MagicMock, call, patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
+from googleapiclient.errors import HttpError
 
 from youtube_automation.utils.config import reset
 
@@ -394,8 +398,8 @@ class TestMainTargetSelection:
             # Then: API が呼ばれる（"nothing to do" で早期 return しない）
             assert yt_mock.videos.return_value.update.return_value.execute.call_count == 1
 
-    def test_should_print_nothing_to_do_when_no_collections_discovered(self, tmp_path, monkeypatch, capsys):
-        """検出 0 件で `"nothing to do"` を出力し API を呼ばない."""
+    def test_should_log_nothing_to_do_when_no_collections_discovered(self, tmp_path, monkeypatch, caplog):
+        """検出 0 件で `"nothing to do"` をログ出力し API を呼ばない."""
         from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
 
         # Given: live/ なし
@@ -403,18 +407,18 @@ class TestMainTargetSelection:
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
         reset()
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        caplog.set_level(logging.INFO, logger=mod.__name__)
 
         with patch.object(mod, "get_youtube") as gy:
             # When
             mod.main()
 
             # Then
-            out = capsys.readouterr().out
-            assert "nothing to do" in out
+            assert ("INFO", "nothing to do") in [(record.levelname, record.message) for record in caplog.records]
             gy.assert_not_called()
 
-    def test_should_print_nothing_to_do_when_only_matches_nothing(self, tmp_path, monkeypatch, capsys):
-        """`--only` ミスマッチで対象 0 件になった場合も `"nothing to do"` で API 未呼出."""
+    def test_should_log_nothing_to_do_when_only_matches_nothing(self, tmp_path, monkeypatch, caplog):
+        """`--only` ミスマッチで対象 0 件になった場合もログ出力し API 未呼出."""
         from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
 
         # Given: collection は存在するが --only は別 substring
@@ -423,15 +427,38 @@ class TestMainTargetSelection:
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
         reset()
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc", "--only", "nonexistent"])
+        caplog.set_level(logging.INFO, logger=mod.__name__)
 
         with patch.object(mod, "get_youtube") as gy:
             # When
             mod.main()
 
             # Then
-            out = capsys.readouterr().out
-            assert "nothing to do" in out
+            assert ("INFO", "nothing to do") in [(record.levelname, record.message) for record in caplog.records]
             gy.assert_not_called()
+
+    def test_console_entrypoint_should_emit_info_logs_to_stderr_without_logger_injection(self, tmp_path):
+        """実 console script は logger 設定の手注入なしで INFO を stderr に出す."""
+        ch = _setup_channel(tmp_path)
+        entrypoint = Path(sys.executable).with_name("yt-bulk-update-desc")
+        project_src = Path(__file__).resolve().parents[1] / "src"
+        assert entrypoint.is_file()
+
+        result = subprocess.run(
+            [entrypoint],
+            env={
+                **os.environ,
+                "CHANNEL_DIR": str(ch),
+                "PYTHONPATH": os.pathsep.join(filter(None, (str(project_src), os.environ.get("PYTHONPATH")))),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0
+        assert result.stdout == ""
+        assert result.stderr == "INFO: nothing to do\n"
 
 
 # ---------------------------------------------------------------------------
@@ -442,7 +469,7 @@ class TestMainTargetSelection:
 class TestMainExecution:
     """既存挙動（execute / dry-run / sleep / UTF-16 100 units 境界）の維持."""
 
-    def test_should_call_videos_update_execute_per_collection(self, tmp_path, monkeypatch):
+    def test_should_call_videos_update_execute_per_collection(self, tmp_path, monkeypatch, caplog):
         """通常実行で `videos().update().execute()` が collection 数分呼ばれる."""
         from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
 
@@ -454,6 +481,7 @@ class TestMainExecution:
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
         reset()
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        caplog.set_level(logging.INFO, logger=mod.__name__)
         yt_mock = _build_youtube_mock([_snippet("V1"), _snippet("V2"), _snippet("V3")])
 
         with (
@@ -465,8 +493,20 @@ class TestMainExecution:
 
             # Then
             assert yt_mock.videos.return_value.update.return_value.execute.call_count == 3
+            messages = [record.message for record in caplog.records]
+            assert messages.count("\n" + "─" * 60) == 3
+            assert "🎬 V1  a" in messages
+            assert "   title (old → new):" in messages
+            assert "     old title" in messages
+            assert "     テストタイトル  [7 units]" in messages
+            assert "   description first lines (old → new):" in messages
+            assert "     - old desc" in messages
+            assert "       …" in messages
+            assert "     + 本文" in messages
+            assert messages.count("   ✅ updated") == 3
+            assert "\n✅ done" in messages
 
-    def test_should_not_call_update_execute_when_dry_run(self, tmp_path, monkeypatch):
+    def test_should_not_call_update_execute_when_dry_run(self, tmp_path, monkeypatch, caplog):
         """`--dry-run` 時は `update().execute()` を呼ばない."""
         from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
 
@@ -476,6 +516,7 @@ class TestMainExecution:
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
         reset()
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc", "--dry-run"])
+        caplog.set_level(logging.INFO, logger=mod.__name__)
         yt_mock = _build_youtube_mock([_snippet("V_ALPHA")])
 
         with (
@@ -488,6 +529,7 @@ class TestMainExecution:
             # Then: update().execute() も sleep も呼ばれない
             yt_mock.videos.return_value.update.return_value.execute.assert_not_called()
             sleep_mock.assert_not_called()
+            assert "\n🔍 dry-run; 1 videos would be updated" in [record.message for record in caplog.records]
 
     def test_should_sleep_0_4_per_successful_update(self, tmp_path, monkeypatch):
         """quota throttle: 更新ごとに `time.sleep(0.4)` を呼ぶ."""
@@ -514,7 +556,7 @@ class TestMainExecution:
             for c in sleep_mock.call_args_list:
                 assert c == call(0.4)
 
-    def test_should_keep_old_title_when_new_title_exceeds_100_utf16_units(self, tmp_path, monkeypatch):
+    def test_should_keep_old_title_when_new_title_exceeds_100_utf16_units(self, tmp_path, monkeypatch, caplog):
         """新タイトル UTF-16 > 100 units 時は old title を保持し description のみ更新."""
         from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
 
@@ -531,6 +573,7 @@ class TestMainExecution:
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
         reset()
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        caplog.set_level(logging.INFO, logger=mod.__name__)
         yt_mock = _build_youtube_mock(
             [
                 _snippet("V_ALPHA", title="kept old title", description="old desc"),
@@ -549,6 +592,79 @@ class TestMainExecution:
             body = update_call.kwargs["body"]
             assert body["snippet"]["title"] == "kept old title"
             assert body["snippet"]["description"] == "new desc"
+            assert (
+                "WARNING",
+                "⚠️  V_ALPHA (alpha): new title is 101 UTF-16 units (>100). "
+                "Keeping old title; updating description only.",
+            ) in [(record.levelname, record.message) for record in caplog.records]
+
+    def test_should_log_collection_load_failure(self, tmp_path, monkeypatch, caplog):
+        """collection 読み込み失敗は collection 名と例外詳細を ERROR に残す."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_descriptions(ch, "alpha")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        caplog.set_level(logging.INFO, logger=mod.__name__)
+
+        with (
+            patch.object(mod, "load_collection", side_effect=RuntimeError("broken metadata")),
+            patch.object(mod, "get_youtube") as gy,
+        ):
+            mod.main()
+
+        assert ("ERROR", "❌ alpha: broken metadata") in [
+            (record.levelname, record.message) for record in caplog.records
+        ]
+        gy.assert_not_called()
+
+    def test_should_log_video_not_found_on_youtube(self, tmp_path, monkeypatch, caplog):
+        """list 結果に video ID がない場合は ID と collection を ERROR に残す."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_descriptions(ch, "alpha", video_id="V_MISSING")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        caplog.set_level(logging.INFO, logger=mod.__name__)
+        yt_mock = _build_youtube_mock([])
+
+        with patch.object(mod, "get_youtube", return_value=yt_mock):
+            mod.main()
+
+        assert ("ERROR", "❌ V_MISSING (alpha): not found on YouTube") in [
+            (record.levelname, record.message) for record in caplog.records
+        ]
+        yt_mock.videos.return_value.update.assert_not_called()
+
+    def test_should_log_http_error_when_update_fails(self, tmp_path, monkeypatch, caplog):
+        """videos.update の HttpError は例外詳細を ERROR に残す."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_descriptions(ch, "alpha", video_id="V_ALPHA")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        caplog.set_level(logging.INFO, logger=mod.__name__)
+        yt_mock = _build_youtube_mock([_snippet("V_ALPHA")])
+        response = MagicMock(status=403, reason="Forbidden")
+        http_error = HttpError(response, b'{"error": {"message": "quota exceeded"}}')
+        yt_mock.videos.return_value.update.return_value.execute.side_effect = http_error
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod.time, "sleep"),
+        ):
+            mod.main()
+
+        error_records = [record for record in caplog.records if record.levelname == "ERROR"]
+        assert len(error_records) == 1
+        assert error_records[0].message.startswith("   ❌ update failed: <HttpError 403")
+        assert "quota exceeded" in error_records[0].message
 
 
 # ---------------------------------------------------------------------------
