@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BALANCED_RUN_PACING, CLIPS_PER_REQUEST, INFLIGHT_STALL_TIMEOUT_MS, PHASE } from "../../shared/constants";
+import { scrollAndMultiSelectByIds } from "../../shared/playlist-dom";
 import type { EntryRunResult, RunEntryWithRetryOptions } from "../lib/entry-retry";
 import { writeResumeState } from "../lib/resume-state";
 import { makePromptEntries, markBbox } from "./_helpers";
@@ -46,6 +47,21 @@ const harness = vi.hoisted(() => {
     acceptedClipIds: [] as string[],
     droppedClipIds: [] as string[],
     durationsById: {} as Record<string, number | undefined>,
+    durationErrorsById: {} as Record<string, Error | undefined>,
+    pendingClipIds: [] as string[],
+    requestFeedPollError: undefined as Error | undefined,
+    abortOnRequestFeedPoll: false,
+    requestFeedPoll: vi.fn(async (ids: string[]) => {
+      if (harness.abortOnRequestFeedPoll) {
+        harness.handlers.get("stop")?.({ data: undefined });
+      }
+      if (harness.requestFeedPollError) {
+        throw harness.requestFeedPollError;
+      }
+      const requested = new Set(ids);
+      harness.pendingClipIds = harness.pendingClipIds.filter((id) => !requested.has(id));
+      return [];
+    }),
     waitForGeneration: vi.fn<() => Promise<void>>(async () => undefined),
     waitForQueueSlot: vi.fn<(maxGeneratingClips: number, options?: unknown) => Promise<void>>(async () => undefined),
     // 既定は実装呼び出し（下の shared/dom mock factory で束縛）。空 queue で WAITING_SLOT が
@@ -96,7 +112,7 @@ vi.mock("../lib/messaging", () => ({
 vi.mock("../lib/bridge-listener", () => ({
   attachBridgeListener: harness.attachBridgeListener,
   createFeedPoller: harness.createFeedPoller,
-  requestFeedPoll: vi.fn(() => Promise.resolve([])),
+  requestFeedPoll: harness.requestFeedPoll,
   requestSliderSet: harness.requestSliderSet,
 }));
 
@@ -109,10 +125,14 @@ vi.mock("../lib/clip-tracker", () => ({
     clearSubmittedIds: vi.fn(),
     getSubmittedIds: vi.fn(() => harness.submittedClipIds),
     getPendingSubmittedIds: vi.fn(() => []),
-    getPendingIdsByIds: vi.fn(() => []),
-    getDuration: vi.fn((id: string) =>
-      Object.prototype.hasOwnProperty.call(harness.durationsById, id) ? harness.durationsById[id] : 120,
-    ),
+    getPendingIdsByIds: vi.fn((ids: string[]) => ids.filter((id) => harness.pendingClipIds.includes(id))),
+    getDuration: vi.fn((id: string) => {
+      const durationError = harness.durationErrorsById[id];
+      if (durationError) {
+        throw durationError;
+      }
+      return Object.prototype.hasOwnProperty.call(harness.durationsById, id) ? harness.durationsById[id] : 120;
+    }),
     markAccepted: vi.fn((ids: string[]) => {
       const submitted = new Set(harness.submittedClipIds);
       for (const id of ids) {
@@ -391,6 +411,7 @@ function makeRunPayload(entries = makePromptEntries(0)): {
   playlistName: string;
   collectionId: string;
   runMode: "serial";
+  regenerateDurationOutliers: boolean;
 } {
   harness.submittedClipIds = Array.from({ length: entries.length * 2 }, (_, index) => `generated-clip-${index + 1}`);
   return {
@@ -398,6 +419,7 @@ function makeRunPayload(entries = makePromptEntries(0)): {
     playlistName: "clm | preflight",
     collectionId: "20260601-clm-preflight-collection",
     runMode: "serial",
+    regenerateDurationOutliers: true,
   };
 }
 
@@ -415,6 +437,10 @@ beforeEach(() => {
   harness.acceptedClipIds = [];
   harness.droppedClipIds = [];
   harness.durationsById = {};
+  harness.durationErrorsById = {};
+  harness.pendingClipIds = [];
+  harness.requestFeedPollError = undefined;
+  harness.abortOnRequestFeedPoll = false;
   harness.waitForGeneration.mockReset();
   harness.waitForGeneration.mockResolvedValue(undefined);
   harness.waitForQueueSlot.mockReset();
@@ -501,6 +527,11 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     ["runMode 欠落", { runMode: undefined }, /run\.runMode/],
     ["runMode が未知値", { runMode: "parallel" }, /run\.runMode/],
     ["runMode が prototype 継承 key", { runMode: "toString" }, /run\.runMode/],
+    [
+      "regenerateDurationOutliers が非 boolean",
+      { regenerateDurationOutliers: "true" },
+      /run\.regenerateDurationOutliers/,
+    ],
     ["submittedClipIds が非配列", { submittedClipIds: "clip-1" }, /run\.submittedClipIds/],
     ["submittedClipIds に非 string", { submittedClipIds: ["clip-1", 2] }, /run\.submittedClipIds/],
     [
@@ -521,6 +552,18 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       expect(harness.feedPollerStart).not.toHaveBeenCalled();
     },
   );
+
+  it("Given option 欠落の旧 run payload When run を受ける Then 既定 ON で実行を開始する", async () => {
+    makeRunnableSunoDom("Grid");
+    await loadContentScript();
+    const payload = makeRunPayload(makePromptEntries(1));
+    delete (payload as Partial<typeof payload>).regenerateDurationOutliers;
+
+    expect(getRunHandler()({ data: payload })).toEqual({ ok: true });
+
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(progressPayloads()).toEqual(expect.arrayContaining([expect.objectContaining({ phase: PHASE.FINISHED })]));
+  });
 
   it("Given durationFilter が小数秒 When run を受ける Then payload を受理して実行を開始する", async () => {
     makeViewButton("Grid");
@@ -1118,6 +1161,127 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
   });
 
+  it("Given serial mode と再生成 OFF で全clipがduration外 When 実行する Then 再生成せず全clipをplaylist候補に保持する", async () => {
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    const clickGenerate = vi.fn(() => appendSubmittedClipIdsForRequest("serial-off-clip"));
+    makeGenerateButtonWithClickObserver(clickGenerate);
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(1);
+    const payload = {
+      ...makeRunPayload(entries),
+      regenerateDurationOutliers: false,
+      durationFilter: { min_sec: 75, max_sec: 240 },
+    };
+    harness.submittedClipIds = [];
+    harness.durationsById = { "serial-off-clip-1": 45, "serial-off-clip-2": 46 };
+
+    expect(runHandler({ data: payload })).toEqual({ ok: true });
+
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce(), { timeout: 3000 });
+    expect(clickGenerate).toHaveBeenCalledTimes(1);
+    expect(harness.droppedClipIds).toEqual([]);
+    expect(harness.acceptedClipIds).toEqual(["serial-off-clip-1", "serial-off-clip-2"]);
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.DONE,
+          index: 0,
+          acceptedClipIds: ["serial-off-clip-1", "serial-off-clip-2"],
+          message: expect.stringContaining("再生成 OFF"),
+        }),
+        expect.objectContaining({ phase: PHASE.ADDING_TO_PLAYLIST }),
+        expect.objectContaining({ phase: PHASE.FINISHED }),
+      ]),
+    );
+  });
+
+  it("Given serial mode と再生成 ON で初回2回が全NG When 3回目がOK Then retry 2回をprogress表示して採用する", async () => {
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    let clickCount = 0;
+    const clickGenerate = vi.fn(() => {
+      clickCount += 1;
+      harness.submittedClipIds.push(`serial-on-${clickCount}-a`, `serial-on-${clickCount}-b`);
+    });
+    makeGenerateButtonWithClickObserver(clickGenerate);
+    addCompletedRemixCard();
+    await loadContentScript();
+    const runHandler = getRunHandler();
+    const entries = makePromptEntries(1);
+    const payload = {
+      ...makeRunPayload(entries),
+      durationFilter: { min_sec: 75, max_sec: 240 },
+    };
+    harness.submittedClipIds = [];
+    harness.durationsById = {
+      "serial-on-1-a": 45,
+      "serial-on-1-b": 46,
+      "serial-on-2-a": 360,
+      "serial-on-2-b": 361,
+      "serial-on-3-a": 120,
+      "serial-on-3-b": 180,
+    };
+
+    expect(runHandler({ data: payload })).toEqual({ ok: true });
+
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce(), { timeout: 3000 });
+    expect(clickGenerate).toHaveBeenCalledTimes(3);
+    expect(harness.droppedClipIds).toEqual(["serial-on-1-a", "serial-on-1-b", "serial-on-2-a", "serial-on-2-b"]);
+    expect(harness.acceptedClipIds).toEqual(["serial-on-3-a", "serial-on-3-b"]);
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          phase: PHASE.WAITING_SLOT,
+          message: expect.stringContaining("retry 1/2"),
+          log: { kind: "retry", entryName: "pattern-1", attempt: 1, max: 2 },
+        }),
+        expect.objectContaining({
+          phase: PHASE.WAITING_SLOT,
+          message: expect.stringContaining("retry 2/2"),
+          log: { kind: "retry", entryName: "pattern-1", attempt: 2, max: 2 },
+        }),
+        expect.objectContaining({
+          phase: PHASE.DONE,
+          acceptedClipIds: ["serial-on-3-a", "serial-on-3-b"],
+          yieldRetryCount: 2,
+        }),
+      ]),
+    );
+  });
+
+  it("Given serial mode と再生成 OFF でduration評価がthrow When 実行する Then DONEに見せずENTRY_FAILEDにする", async () => {
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    makeGenerateButtonWithClickObserver(() => appendSubmittedClipIdsForRequest("serial-error-clip"));
+    addCompletedRemixCard();
+    await loadContentScript();
+    const entries = makePromptEntries(1);
+    const payload = { ...makeRunPayload(entries), regenerateDurationOutliers: false };
+    harness.submittedClipIds = [];
+    harness.durationErrorsById = { "serial-error-clip-1": new Error("feed unavailable") };
+
+    expect(getRunHandler()({ data: payload })).toEqual({ ok: true });
+
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce(), { timeout: 3000 });
+    expect(harness.acceptedClipIds).toEqual([]);
+    expect(harness.droppedClipIds).toEqual(["serial-error-clip-1", "serial-error-clip-2"]);
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ phase: PHASE.ENTRY_FAILED, message: "feed unavailable" }),
+        expect.objectContaining({ phase: PHASE.FINISHED, message: expect.stringContaining("失敗分のみ再実行") }),
+      ]),
+    );
+    expect(progressPayloads()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ phase: PHASE.ADDING_TO_PLAYLIST })]),
+    );
+  });
+
   it("Given queue mode の投入済み clip が duration 未観測 When fatal 停止する Then raw submitted IDs を resume state に保持する", async () => {
     makeViewButton("Newest ▼");
     makeViewButton("Grid");
@@ -1160,7 +1324,16 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     makeViewButton("Grid");
     makeTextarea(null);
     makeTextarea("lyrics-textarea");
-    makeGenerateButtonWithClickObserver(() => appendSubmittedClipIdsForRequest("queue-duration-clip"));
+    let generateCount = 0;
+    makeGenerateButtonWithClickObserver(() => {
+      generateCount += 1;
+      const firstClipNumber = generateCount * 2 - 1;
+      const generatedIds = [`queue-duration-clip-${firstClipNumber}`, `queue-duration-clip-${firstClipNumber + 1}`];
+      harness.submittedClipIds.push(...generatedIds);
+      if (generateCount > 2) {
+        harness.pendingClipIds = generatedIds;
+      }
+    });
     addCompletedRemixCard();
     await loadContentScript();
     const runHandler = getRunHandler();
@@ -1176,6 +1349,10 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
       "queue-duration-clip-2": 180,
       "queue-duration-clip-3": 45,
       "queue-duration-clip-4": 46,
+      "queue-duration-clip-5": 45,
+      "queue-duration-clip-6": 46,
+      "queue-duration-clip-7": 45,
+      "queue-duration-clip-8": 46,
     };
 
     const result = runHandler({ data: payload });
@@ -1195,7 +1372,15 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     );
     await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
     expect(harness.acceptedClipIds).toEqual(["queue-duration-clip-1", "queue-duration-clip-2"]);
-    expect(harness.droppedClipIds).toEqual(["queue-duration-clip-3", "queue-duration-clip-4"]);
+    expect(harness.requestFeedPoll).toHaveBeenCalledWith(["queue-duration-clip-5", "queue-duration-clip-6"]);
+    expect(harness.droppedClipIds).toEqual([
+      "queue-duration-clip-3",
+      "queue-duration-clip-4",
+      "queue-duration-clip-5",
+      "queue-duration-clip-6",
+      "queue-duration-clip-7",
+      "queue-duration-clip-8",
+    ]);
     expect(progressPayloads()).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -1204,9 +1389,21 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
           acceptedClipIds: ["queue-duration-clip-1", "queue-duration-clip-2"],
         }),
         expect.objectContaining({
+          phase: PHASE.WAITING_SLOT,
+          index: 1,
+          message: expect.stringContaining("retry 1/2"),
+          log: { kind: "retry", entryName: "pattern-2", attempt: 1, max: 2 },
+        }),
+        expect.objectContaining({
+          phase: PHASE.WAITING_SLOT,
+          index: 1,
+          message: expect.stringContaining("retry 2/2"),
+          log: { kind: "retry", entryName: "pattern-2", attempt: 2, max: 2 },
+        }),
+        expect.objectContaining({
           phase: PHASE.ENTRY_FAILED,
           index: 1,
-          message: "duration guard NG (75-240s): queue-duration-clip-3, queue-duration-clip-4",
+          message: "duration guard NG (75-240s): queue-duration-clip-7, queue-duration-clip-8",
           log: { kind: "skip", entryName: "pattern-2" },
         }),
         expect.objectContaining({
@@ -1226,6 +1423,203 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     );
     expect(progressPayloads()).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ phase: PHASE.ADDING_TO_PLAYLIST })]),
+    );
+  });
+
+  it("Given queue 再生成clipの完了待ちがthrow When 失敗確定する Then originalとretry IDsをresume候補から除去する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    let generateCount = 0;
+    makeGenerateButtonWithClickObserver(() => {
+      generateCount += 1;
+      const generatedIds = [`queue-error-${generateCount}-a`, `queue-error-${generateCount}-b`];
+      harness.submittedClipIds.push(...generatedIds);
+      if (generateCount > 1) {
+        harness.pendingClipIds = generatedIds;
+      }
+    });
+    addCompletedRemixCard();
+    await loadContentScript();
+    const entries = makePromptEntries(1);
+    const payload = { ...makeRunPayload(entries), runMode: "queue" as const };
+    harness.submittedClipIds = [];
+    harness.durationsById = { "queue-error-1-a": 45, "queue-error-1-b": 46 };
+    harness.requestFeedPollError = new Error("feed unavailable");
+
+    expect(getRunHandler()({ data: payload })).toEqual({ ok: true });
+
+    await vi.waitFor(
+      () =>
+        expect(writeResumeState).toHaveBeenCalledWith(
+          expect.objectContaining({ failedIndices: [0], submittedClipIds: [] }),
+        ),
+      { timeout: 3000 },
+    );
+    expect(harness.droppedClipIds).toEqual([
+      "queue-error-2-a",
+      "queue-error-2-b",
+      "queue-error-1-a",
+      "queue-error-1-b",
+    ]);
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ phase: PHASE.ENTRY_FAILED, message: "feed unavailable" })]),
+    );
+  });
+
+  it("Given queue 再生成clipの完了待ち中にstop When 中断保存する Then 中断suffixのoriginalとretry IDsを除去する", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    let generateCount = 0;
+    makeGenerateButtonWithClickObserver(() => {
+      generateCount += 1;
+      const generatedIds = [`queue-stop-${generateCount}-a`, `queue-stop-${generateCount}-b`];
+      harness.submittedClipIds.push(...generatedIds);
+      if (generateCount > 1) {
+        harness.pendingClipIds = generatedIds;
+      }
+    });
+    addCompletedRemixCard();
+    await loadContentScript();
+    const entries = makePromptEntries(1);
+    const payload = { ...makeRunPayload(entries), runMode: "queue" as const };
+    harness.submittedClipIds = [];
+    harness.durationsById = { "queue-stop-1-a": 45, "queue-stop-1-b": 46 };
+    harness.abortOnRequestFeedPoll = true;
+
+    expect(getRunHandler()({ data: payload })).toEqual({ ok: true });
+
+    await vi.waitFor(
+      () =>
+        expect(writeResumeState).toHaveBeenCalledWith(
+          expect.objectContaining({
+            failedIndex: 0,
+            remainingIndices: [0],
+            submittedClipIds: [],
+          }),
+        ),
+      { timeout: 3000 },
+    );
+    expect(harness.droppedClipIds).toEqual(["queue-stop-2-a", "queue-stop-2-b", "queue-stop-1-a", "queue-stop-1-b"]);
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ phase: PHASE.STOPPED, index: 0 })]),
+    );
+  });
+
+  it("Given queue duration retry の WAITING_SLOT 中にstop When 中断保存する Then Generateを増やさず同じentryを再開候補に残す", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    let generateCount = 0;
+    makeGenerateButtonWithClickObserver(() => {
+      generateCount += 1;
+      harness.submittedClipIds.push(`queue-slot-stop-${generateCount}-a`, `queue-slot-stop-${generateCount}-b`);
+    });
+    addCompletedRemixCard();
+    await loadContentScript();
+    const entries = makePromptEntries(1);
+    const payload = { ...makeRunPayload(entries), runMode: "queue" as const };
+    harness.submittedClipIds = [];
+    harness.durationsById = { "queue-slot-stop-1-a": 45, "queue-slot-stop-1-b": 46 };
+    harness.waitForQueueSlot.mockImplementation(async () => {
+      if (harness.waitForQueueSlot.mock.calls.length === 2) {
+        harness.handlers.get("stop")?.({ data: undefined });
+      }
+    });
+
+    expect(getRunHandler()({ data: payload })).toEqual({ ok: true });
+
+    await vi.waitFor(
+      () =>
+        expect(writeResumeState).toHaveBeenCalledWith(
+          expect.objectContaining({
+            failedIndex: 0,
+            remainingIndices: [0],
+            submittedClipIds: [],
+          }),
+        ),
+      { timeout: 3000 },
+    );
+    await vi.waitFor(() => expect(harness.feedPollerStop).toHaveBeenCalledOnce());
+    expect(generateCount).toBe(1);
+    expect(harness.droppedClipIds).toEqual(["queue-slot-stop-1-a", "queue-slot-stop-1-b"]);
+    expect(new Set(harness.droppedClipIds).size).toBe(harness.droppedClipIds.length);
+    expect(progressPayloads()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ phase: PHASE.STOPPED, index: 0 })]),
+    );
+    expect(progressPayloads()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ phase: PHASE.ENTRY_FAILED, index: 0 })]),
+    );
+  });
+
+  it("Given 後続originalがduration OKのqueue再生成中にstop When 保存した残りを再開 Then entryごとに再生成した1組だけをplaylistへ渡す", async () => {
+    makeViewButton("Newest ▼");
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    let generateCount = 0;
+    makeGenerateButtonWithClickObserver(() => {
+      generateCount += 1;
+      const generatedIds = [`queue-resume-${generateCount}-a`, `queue-resume-${generateCount}-b`];
+      harness.submittedClipIds.push(...generatedIds);
+      if (generateCount === 3) {
+        harness.pendingClipIds = generatedIds;
+      }
+    });
+    addCompletedRemixCard();
+    await loadContentScript();
+    const entries = makePromptEntries(2);
+    const runHandler = getRunHandler();
+    const payload = { ...makeRunPayload(entries), runMode: "queue" as const };
+    harness.submittedClipIds = [];
+    harness.durationsById = {
+      "queue-resume-1-a": 45,
+      "queue-resume-1-b": 46,
+      "queue-resume-2-a": 120,
+      "queue-resume-2-b": 121,
+      "queue-resume-4-a": 120,
+      "queue-resume-4-b": 121,
+      "queue-resume-5-a": 122,
+      "queue-resume-5-b": 123,
+    };
+    harness.abortOnRequestFeedPoll = true;
+
+    expect(runHandler({ data: payload })).toEqual({ ok: true });
+    await vi.waitFor(
+      () =>
+        expect(writeResumeState).toHaveBeenCalledWith(
+          expect.objectContaining({ failedIndex: 0, remainingIndices: [0, 1], submittedClipIds: [] }),
+        ),
+      { timeout: 3000 },
+    );
+
+    harness.abortOnRequestFeedPoll = false;
+    harness.pendingClipIds = [];
+    harness.sendMessage.mockClear();
+    expect(
+      runHandler({
+        data: {
+          ...payload,
+          indices: [0, 1],
+          submittedClipIds: [],
+        },
+      }),
+    ).toEqual({ ok: true });
+
+    await vi.waitFor(
+      () =>
+        expect(progressPayloads()).toEqual(
+          expect.arrayContaining([expect.objectContaining({ phase: PHASE.FINISHED })]),
+        ),
+      { timeout: 3000 },
+    );
+    expect(scrollAndMultiSelectByIds).toHaveBeenCalledWith(
+      ["queue-resume-4-a", "queue-resume-4-b", "queue-resume-5-a", "queue-resume-5-b"],
+      expect.any(Object),
     );
   });
 

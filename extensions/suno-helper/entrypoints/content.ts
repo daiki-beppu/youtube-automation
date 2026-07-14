@@ -4,6 +4,7 @@ import { DEFAULT_DURATION_FILTER, type DurationFilter, type PromptEntry } from "
 import {
   BALANCED_RUN_PACING,
   CLIPS_PER_REQUEST,
+  DEFAULT_REGENERATE_DURATION_OUTLIERS,
   INFLIGHT_STALL_TIMEOUT_MS,
   MAX_YIELD_RETRY,
   PHASE,
@@ -26,7 +27,7 @@ import {
 } from "../lib/resume-state";
 import { InjectNotAcknowledgedError, injectWithVerification, retryInjectStepWithFallback } from "../lib/inject-retry";
 import { runEntryWithRetry } from "../lib/entry-retry";
-import { evaluateClips, formatYieldFailure, shouldRetry } from "../lib/yield-guard";
+import { decideDurationAttempt, evaluateClips, type DurationOutlierPolicy } from "../lib/yield-guard";
 import { createAckWaiter, markAck } from "../lib/ack-probe";
 import { attachBridgeListener, createFeedPoller, requestFeedPoll, requestSliderSet } from "../lib/bridge-listener";
 import { createClipTracker } from "../lib/clip-tracker";
@@ -237,6 +238,9 @@ function assertRunPayload(value: unknown): RunPayload {
     playlistName: assertNonEmptyString(record.playlistName, "run.playlistName"),
     collectionId: assertNonEmptyString(record.collectionId, "run.collectionId"),
     runMode: assertRunMode(record.runMode, "run.runMode"),
+    regenerateDurationOutliers:
+      assertOptionalBoolean(record.regenerateDurationOutliers, "run.regenerateDurationOutliers") ??
+      DEFAULT_REGENERATE_DURATION_OUTLIERS,
     durationFilter: assertOptionalDurationFilter(record.durationFilter, "run.durationFilter"),
     indices: assertOptionalIndices(record.indices, "run.indices", record.entries.length),
     submittedClipIds: assertOptionalStringArray(record.submittedClipIds, "run.submittedClipIds"),
@@ -248,7 +252,23 @@ function assertRunPayload(value: unknown): RunPayload {
       record.playlistExpectedClipCount,
       "run.playlistExpectedClipCount",
     ),
+    durationOutlierWarnings: assertOptionalDurationOutlierWarnings(record.durationOutlierWarnings),
   };
+}
+
+function assertOptionalDurationOutlierWarnings(value: unknown): Record<number, string> | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const record = assertRecord(value, "run.durationOutlierWarnings");
+  return Object.fromEntries(
+    Object.entries(record).map(([index, warning]) => {
+      if (!/^\d+$/.test(index) || typeof warning !== "string") {
+        throw new Error("run.durationOutlierWarnings must map entry indexes to strings");
+      }
+      return [Number(index), warning];
+    }),
+  );
 }
 
 function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload {
@@ -260,6 +280,10 @@ function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload {
       assertOptionalNonNegativeInteger(record.expectedClipCount, "retryPlaylist.expectedClipCount") ?? 0,
     collectionId: assertNonEmptyString(record.collectionId, "retryPlaylist.collectionId"),
     durationFilter: assertOptionalDurationFilter(record.durationFilter, "retryPlaylist.durationFilter"),
+    regenerateDurationOutliers:
+      assertOptionalBoolean(record.regenerateDurationOutliers, "retryPlaylist.regenerateDurationOutliers") ??
+      DEFAULT_REGENERATE_DURATION_OUTLIERS,
+    durationOutlierWarnings: assertOptionalDurationOutlierWarnings(record.durationOutlierWarnings),
     submittedClipIdsAreDurationFiltered: assertOptionalBoolean(
       record.submittedClipIdsAreDurationFiltered,
       "retryPlaylist.submittedClipIdsAreDurationFiltered",
@@ -564,6 +588,7 @@ export default defineContentScript({
       order: number[],
       durationFilter: DurationFilter | undefined,
       previousSubmittedClipIdsAreDurationFiltered = false,
+      durationOutlierPolicy: DurationOutlierPolicy = { kind: "regenerate" },
       onResolvedPlaylistClipIds?: (info: PlaylistClipPersistInfo) => void,
     ): Promise<number> {
       emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total: progressTotal, message: playlistName });
@@ -584,10 +609,16 @@ export default defineContentScript({
       const previousOrder = entries.map((_, index) => index).filter((index) => !currentOrder.has(index));
       const previousTitleFallbackMap = buildTitleFallbackMap(entries, previousOrder, previousSubmittedClipIds);
       const titleFallbackMap = new Map([...previousTitleFallbackMap, ...currentTitleFallbackMap]);
-      const plan = buildPlaylistClipPlan(rawSubmittedIds, titleFallbackMap, durationFilter, allowUnknownDurationIds);
+      const plan = buildPlaylistClipPlan(
+        rawSubmittedIds,
+        titleFallbackMap,
+        durationFilter,
+        allowUnknownDurationIds,
+        durationOutlierPolicy,
+      );
       onResolvedPlaylistClipIds?.({
         submittedClipIds: plan.clipIds,
-        submittedClipIdsAreDurationFiltered: true,
+        submittedClipIdsAreDurationFiltered: durationOutlierPolicy.kind === "regenerate",
         playlistExpectedClipCount: plan.expectedClipCount,
       });
       const selectedCount = await scrollAndMultiSelectByIds(plan.clipIds, {
@@ -689,10 +720,14 @@ export default defineContentScript({
       titleFallbackMap: Map<string, string>,
       durationFilter: DurationFilter | undefined,
       allowUnknownDurationIds: Set<string> = new Set(),
+      durationOutlierPolicy: DurationOutlierPolicy = { kind: "regenerate" },
     ): PlaylistClipPlan {
-      const clipIds = rawSubmittedIds.filter((clipId) =>
-        isDurationAccepted(clipId, durationFilter, allowUnknownDurationIds.has(clipId)),
-      );
+      const clipIds =
+        durationOutlierPolicy.kind === "regenerate"
+          ? rawSubmittedIds.filter((clipId) =>
+              isDurationAccepted(clipId, durationFilter, allowUnknownDurationIds.has(clipId)),
+            )
+          : [...rawSubmittedIds];
       if (clipIds.length === 0) {
         throw new Error("playlist 対象の OK clip ID が 0 件です。全 clip が duration filter で除外されました。");
       }
@@ -773,6 +808,7 @@ export default defineContentScript({
       submittedClipIdsAreDurationFiltered?: boolean;
       // duration filter 後に playlist 追加・download へ採用する OK clip 件数。
       playlistExpectedClipCount?: number;
+      durationOutlierPolicy: DurationOutlierPolicy;
     }
 
     async function runAll(entries: PromptEntry[], options: RunOptions): Promise<void> {
@@ -806,14 +842,21 @@ export default defineContentScript({
       // ERROR phase (#872 要件3) と STOPPED phase (#898 要件1/2/3) の共通処理。failedIndex 名は
       // そのまま流用し (要件3)、中断 index を載せる。
       // スキップ済み failedIndices があれば一緒に永続化する (#948)。
-      function persistInterruptState(interruptedIndex: number, orderPosition?: number): void {
+      function persistInterruptState(
+        interruptedIndex: number,
+        orderPosition?: number,
+        explicitRemainingIndices?: number[],
+      ): void {
         const remainingIndices =
-          hasExplicitIndices && orderPosition !== undefined
+          explicitRemainingIndices ??
+          (hasExplicitIndices && orderPosition !== undefined
             ? order.slice(interruptedIndex === order[orderPosition] ? orderPosition : orderPosition + 1)
-            : undefined;
+            : undefined);
         const currentSubmittedIds = tracker.getSubmittedIds();
-        const fallbackPlaylistPersistInfo =
-          options.runMode === "queue"
+        const regenerateDurationOutliers = options.durationOutlierPolicy.kind === "regenerate";
+        const fallbackPlaylistPersistInfo = !regenerateDurationOutliers
+          ? resolveRawPlaylistPersistInfo(previousSubmittedClipIds, currentSubmittedIds)
+          : options.runMode === "queue"
             ? resolveRawPlaylistPersistInfo(previousSubmittedClipIds, currentSubmittedIds)
             : resolvePlaylistPersistInfo(
                 previousSubmittedClipIds,
@@ -839,6 +882,8 @@ export default defineContentScript({
                 durationFilter: options.durationFilter,
                 submittedClipIdsAreDurationFiltered,
                 playlistExpectedClipCount: playlistExpectedCount,
+                regenerateDurationOutliers,
+                durationOutlierWarnings: currentSnapshot.durationOutlierWarnings,
               };
         void writeResumeState({
           collectionId,
@@ -852,6 +897,8 @@ export default defineContentScript({
           submittedClipIdsAreDurationFiltered,
           playlistExpectedClipCount: playlistExpectedCount,
           runMode: options.runMode,
+          regenerateDurationOutliers,
+          durationOutlierWarnings: currentSnapshot?.durationOutlierWarnings,
         });
       }
 
@@ -1029,7 +1076,7 @@ export default defineContentScript({
               break;
             }
             const durationFilter = options.durationFilter ?? DEFAULT_DURATION_FILTER;
-            let message = "";
+            let attemptResult;
             try {
               const evaluation = await evaluateAttemptYield(attemptClipIds, durationFilter, () => aborted);
               if (aborted) {
@@ -1038,22 +1085,12 @@ export default defineContentScript({
                 emitProgress({ phase: PHASE.STOPPED, index: interruptIndex, total });
                 return;
               }
-              if (evaluation.ok.length > 0) {
-                tracker.markAccepted(evaluation.ok);
-                emitProgress({
-                  phase: PHASE.DONE,
-                  index: i,
-                  total,
-                  yieldRetryCount,
-                  acceptedClipIds: evaluation.ok,
-                });
-                break;
-              }
-              tracker.dropSubmittedIds(attemptClipIds);
-              message = formatYieldFailure(evaluation, durationFilter);
+              attemptResult = { kind: "evaluated" as const, evaluation };
             } catch (err) {
-              tracker.dropSubmittedIds(attemptClipIds);
-              message = err instanceof Error ? err.message : String(err);
+              attemptResult = {
+                kind: "evaluation-failed" as const,
+                message: err instanceof Error ? err.message : String(err),
+              };
             }
 
             if (aborted) {
@@ -1062,28 +1099,62 @@ export default defineContentScript({
               emitProgress({ phase: PHASE.STOPPED, index: interruptIndex, total });
               return;
             }
-            if (shouldRetry(yieldRetryCount, MAX_YIELD_RETRY)) {
-              yieldRetryCount += 1;
-              console.warn(
-                `[suno-helper] entry ${i} duration guard NG、同一 prompt で再生成します (${yieldRetryCount}/${MAX_YIELD_RETRY}): ${message}`,
-              );
+            const decision = decideDurationAttempt({
+              clipIds: attemptClipIds,
+              result: attemptResult,
+              filter: durationFilter,
+              policy: options.durationOutlierPolicy,
+              attemptCount: yieldRetryCount,
+              maxRetry: MAX_YIELD_RETRY,
+            });
+            if (decision.kind === "accept") {
+              tracker.markAccepted(decision.acceptedClipIds);
+              if (decision.warning) {
+                console.warn(`[suno-helper] entry ${i}: ${decision.warning}`);
+              }
               emitProgress({
-                phase: PHASE.GENERATING,
+                phase: PHASE.DONE,
                 index: i,
                 total,
-                message: `${message}; retry ${yieldRetryCount}/${MAX_YIELD_RETRY}`,
+                ...(decision.warning ? { message: decision.warning } : {}),
+                ...(decision.warning ? { durationOutlierWarning: decision.warning } : {}),
                 yieldRetryCount,
+                acceptedClipIds: decision.acceptedClipIds,
+              });
+              break;
+            }
+            if (decision.kind === "retry") {
+              tracker.dropSubmittedIds(attemptClipIds);
+              yieldRetryCount += 1;
+              console.warn(
+                `[suno-helper] entry ${i} duration guard NG、同一 prompt で再生成します (${yieldRetryCount}/${MAX_YIELD_RETRY}): ${decision.message}`,
+              );
+              emitProgress({
+                phase: PHASE.WAITING_SLOT,
+                index: i,
+                total,
+                message: `${decision.message}; retry ${yieldRetryCount}/${MAX_YIELD_RETRY}`,
+                yieldRetryCount,
+                log: {
+                  kind: "retry",
+                  entryName: entryDisplayName(entries[i]),
+                  attempt: yieldRetryCount,
+                  max: MAX_YIELD_RETRY,
+                },
               });
               await abortableSleep(applyJitter(pacing.interCreateDelayMs, pacing.jitterMs), () => aborted);
               continue;
             }
+            tracker.dropSubmittedIds(attemptClipIds);
             failedIndices.push(i);
-            console.warn(`[suno-helper] entry ${i} は duration guard 全滅のためスキップします: ${message}`);
+            console.warn(
+              `[suno-helper] entry ${i} は duration guard ${decision.reason === "evaluation" ? "評価失敗" : "全滅"}のためスキップします: ${decision.message}`,
+            );
             emitProgress({
               phase: PHASE.ENTRY_FAILED,
               index: i,
               total,
-              message,
+              message: decision.message,
               yieldRetryCount,
               log: { kind: "skip", entryName: entryDisplayName(entries[i]) },
             });
@@ -1136,17 +1207,78 @@ export default defineContentScript({
         if (queueClipIdsByEntry === null) {
           throw new Error("queue clip ID mapping is required before queue yield finalization");
         }
+        const durationOutlierStrategy =
+          options.durationOutlierPolicy.kind === "retain"
+            ? options.durationOutlierPolicy
+            : {
+                kind: "regenerate" as const,
+                regenerateEntry: async (index: number, attempt: number) => {
+                  const submittedBefore = new Set(tracker.getSubmittedIds());
+                  await waitForQueueCapacity(index, attempt);
+                  if (aborted) {
+                    return [];
+                  }
+                  emitProgress({ phase: PHASE.INJECTING, index, total, yieldRetryCount: attempt });
+                  await injectWithVerification({
+                    inject: () => generateEntrySerially(entries[index], index, total),
+                    markBeforeInject: () =>
+                      markAck({
+                        getSubmissionCount: () => tracker.submissionCount(),
+                        getDomInFlightCount: getInFlightClipCount,
+                        sleep,
+                      }),
+                    waitForAck,
+                    isAborted: () => aborted,
+                    maxRetry: pacing.maxInjectRetry,
+                    ackTimeoutMs: pacing.injectAckTimeoutMs,
+                    pollIntervalMs: POLL_INTERVAL_MS,
+                    describeEntry: () => `entry ${index} (${entryDisplayName(entries[index])})`,
+                  });
+                  const regeneratedClipIds = tracker.getSubmittedIds().filter((id) => !submittedBefore.has(id));
+                  try {
+                    await waitForAttemptClipsComplete(regeneratedClipIds, {
+                      getPendingIdsByIds: (ids) => tracker.getPendingIdsByIds(ids),
+                      requestFeedPoll,
+                      abortableSleep,
+                      isAborted: () => aborted,
+                      now: Date.now,
+                    });
+                  } catch (error) {
+                    tracker.dropSubmittedIds(regeneratedClipIds);
+                    throw error;
+                  }
+                  if (aborted) {
+                    tracker.dropSubmittedIds(regeneratedClipIds);
+                  }
+                  return regeneratedClipIds;
+                },
+              };
         const yieldResult = await finalizeQueueEntriesYield({
           entries,
           order,
           total,
           clipIdsByEntry: queueClipIdsByEntry,
           durationFilter: options.durationFilter,
+          durationOutlierStrategy,
           getDuration: (id) => tracker.getDuration(id),
           markAccepted: (ids) => tracker.markAccepted(ids),
           dropSubmittedIds: (ids) => tracker.dropSubmittedIds(ids),
           emitProgress,
+          isAborted: () => aborted,
         });
+        if (yieldResult.abortedIndex !== undefined) {
+          const abortedOrderPosition = order.indexOf(yieldResult.abortedIndex);
+          if (abortedOrderPosition < 0) {
+            throw new Error(`queue yield aborted outside run order: entry ${yieldResult.abortedIndex}`);
+          }
+          const interruptedClipIds = order
+            .slice(abortedOrderPosition)
+            .flatMap((index) => queueClipIdsByEntry?.get(index) ?? []);
+          tracker.dropSubmittedIds(interruptedClipIds);
+          persistInterruptState(yieldResult.abortedIndex, undefined, order.slice(abortedOrderPosition));
+          emitProgress({ phase: PHASE.STOPPED, index: yieldResult.abortedIndex, total });
+          return;
+        }
         failedIndices.push(...yieldResult.failedIndices);
         if (finishWithFailedEntriesIfNeeded()) {
           return;
@@ -1162,6 +1294,7 @@ export default defineContentScript({
           order,
           options.durationFilter,
           options.submittedClipIdsAreDurationFiltered === true,
+          options.durationOutlierPolicy,
           (info) => {
             playlistPersistInfo = info;
           },
@@ -1249,16 +1382,27 @@ export default defineContentScript({
         range,
         collectionId,
         runMode,
+        regenerateDurationOutliers,
+        durationOutlierWarnings,
         indices,
         submittedClipIds,
         submittedClipIdsAreDurationFiltered,
         playlistExpectedClipCount,
       } = assertRunPayload(data);
+      const durationOutlierPolicy: DurationOutlierPolicy = regenerateDurationOutliers
+        ? { kind: "regenerate" }
+        : { kind: "retain" };
       // 直前 run の完了時リロードが保留中なら取り消す (#1411)。猶予中に受理した新 run を
       // リロードが巻き添えに殺すと STOPPED/ERROR も resume state も残らない。取り消しで
       // 残る stale selection は Cmd+P 前ガードが検知する。
       cancelScheduledRunCompleteReload();
-      currentSnapshot = initSnapshot(entries, { collectionId, playlistName, durationFilter });
+      currentSnapshot = initSnapshot(entries, {
+        collectionId,
+        playlistName,
+        durationFilter,
+        regenerateDurationOutliers,
+        durationOutlierWarnings,
+      });
       // 新 run 開始で直近完了 run の退避 snapshot を消去する（前 run の完了表示が復元されるのを防ぐ）。
       // in-memory の currentSnapshot が queryProgress で優先されるため fire-and-forget でよい。
       void clearFinishedSnapshot();
@@ -1287,6 +1431,7 @@ export default defineContentScript({
         collectionId,
         playlistName,
         runMode,
+        durationOutlierPolicy,
         indices,
         submittedClipIds,
         submittedClipIdsAreDurationFiltered,
@@ -1314,13 +1459,24 @@ export default defineContentScript({
         expectedClipCount,
         collectionId,
         durationFilter,
+        regenerateDurationOutliers,
+        durationOutlierWarnings,
         submittedClipIdsAreDurationFiltered,
         shouldDownload,
       } = assertRetryPlaylistPayload(data);
+      const durationOutlierPolicy: DurationOutlierPolicy = regenerateDurationOutliers
+        ? { kind: "regenerate" }
+        : { kind: "retain" };
       if (!acquireRunLock()) {
         return { ok: true } as const;
       }
-      currentSnapshot = initSnapshot([], { collectionId, playlistName, durationFilter });
+      currentSnapshot = initSnapshot([], {
+        collectionId,
+        playlistName,
+        durationFilter,
+        regenerateDurationOutliers,
+        durationOutlierWarnings,
+      });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
       // 直前 run の完了時リロードが保留中なら取り消す (#1411)。理由は run handler と同じ。
@@ -1355,6 +1511,7 @@ export default defineContentScript({
             [],
             durationFilter,
             submittedClipIdsAreDurationFiltered === true,
+            durationOutlierPolicy,
           );
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });

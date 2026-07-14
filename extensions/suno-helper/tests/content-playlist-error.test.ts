@@ -9,6 +9,7 @@ interface RunPayload {
   entries: PromptEntry[];
   playlistName: string;
   runMode?: "serial" | "queue";
+  regenerateDurationOutliers?: boolean;
   durationFilter?: { min_sec: number; max_sec: number };
   range?: RunRange;
   collectionId: string;
@@ -251,7 +252,8 @@ async function loadContentScriptWithPlaylistRows(
     scheduleRunCompleteReloadMock,
     cancelScheduledRunCompleteReloadMock,
     progressMessages,
-    runHandler: (message: { data: RunPayload }) => runHandler({ data: { runMode: "serial", ...message.data } }),
+    runHandler: (message: { data: RunPayload }) =>
+      runHandler({ data: { runMode: "serial", regenerateDurationOutliers: true, ...message.data } }),
     sentMessages,
   };
 }

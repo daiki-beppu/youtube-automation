@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(suno-helper)`: duration guard NG の同一 prompt 再生成を popup の「異常値の曲を再生成する」で切り替え可能にした。既定 ON は安全・高速モードとも最大 2 回再生成し、OFF は NG を警告表示しつつ生成済み全 clip を playlist / download 候補に維持する。選択は popup 再表示、resume、失敗分再実行、playlist 再実行へ引き継ぐ（#1733）
 - `docs(skills)`: リサーチ・戦略チェーンの 6 スキル（benchmark / discover-competitors / viewer-voice / audience-persona-design / viewing-scene / channel-research）の冒頭 60 行以内に、停止する fail と許容する fail を分離した前提成果物ガードを統一書式で整備した。必須入力が無い場合は生成元の前工程スキルを案内して停止し、後続 Step で生成・自動更新・代替できる入力欠如は停止条件から除外する（#1825）
 
 - `docs(automation-release)`: extension release の skill / checklist を Nix extensions shell 契約（Node 24 / pnpm 11.12.0）へ同期した（#1956）。両拡張の frozen install → build → zip、期待名 zip、lockfile 無差分を `verify-extensions.sh` で検証し、ambient Node / pnpm と `--ignore-workspace` を使わないことを明記。Python 本体の release flow と `release-extensions.yml` は変更なし

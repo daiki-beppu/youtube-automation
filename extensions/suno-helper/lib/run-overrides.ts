@@ -1,5 +1,5 @@
 import type { DurationFilter, PromptEntry } from "../../shared/api";
-import type { RunModeId } from "../../shared/constants";
+import { DEFAULT_REGENERATE_DURATION_OUTLIERS, type RunModeId } from "../../shared/constants";
 import type { RunPayload } from "./messaging";
 import { selectedEntryIndices, type PatternSelectionInput } from "./pattern-selection";
 import { resumeRunRange, type ResumeBanner, type RunRange } from "./resume-state";
@@ -12,6 +12,9 @@ export interface RunOverrides {
   playlistExpectedClipCount?: number;
   /** 再開時に元 run の投入方式を引き継ぐ (#1586)。未指定は popup の現在選択（RunPayloadInput.runMode）。 */
   runMode?: RunModeId;
+  regenerateDurationOutliers?: boolean;
+  /** resume の開始で live 警告を消去しないよう、前 run の警告を payload へ戻す。 */
+  durationOutlierWarnings?: Record<number, string>;
 }
 
 export interface PlaylistResumePayload {
@@ -27,6 +30,8 @@ export interface RunPayloadInput {
   range: RunRange | undefined;
   collectionId: string;
   runMode: RunModeId;
+  regenerateDurationOutliers?: boolean;
+  durationOutlierWarnings?: Record<number, string>;
   overrides: RunOverrides | undefined;
 }
 
@@ -38,10 +43,15 @@ export function buildRunPayload(input: RunPayloadInput): RunPayload {
     range: input.range,
     collectionId: input.collectionId,
     runMode: input.overrides?.runMode ?? input.runMode,
+    regenerateDurationOutliers:
+      input.overrides?.regenerateDurationOutliers ??
+      input.regenerateDurationOutliers ??
+      DEFAULT_REGENERATE_DURATION_OUTLIERS,
     indices: input.overrides?.indices,
     submittedClipIds: input.overrides?.submittedClipIds,
     submittedClipIdsAreDurationFiltered: input.overrides?.submittedClipIdsAreDurationFiltered,
     playlistExpectedClipCount: input.overrides?.playlistExpectedClipCount,
+    durationOutlierWarnings: input.overrides?.durationOutlierWarnings ?? input.durationOutlierWarnings,
   };
 }
 

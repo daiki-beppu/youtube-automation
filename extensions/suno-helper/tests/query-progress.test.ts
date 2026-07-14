@@ -28,6 +28,19 @@ describe("initSnapshot: 連続実行開始時の初期スナップショット",
     expect(snap.collectionId).toBe(TEST_COLLECTION_ID);
   });
 
+  it("Given option 未指定 When initSnapshot Then 異常値再生成を ON で保持する", () => {
+    expect(initSnapshot(makePromptEntries(1), snapshotOptions()).regenerateDurationOutliers).toBe(true);
+  });
+
+  it("Given option OFF When initSnapshot Then OFF を保持する", () => {
+    expect(
+      initSnapshot(makePromptEntries(1), {
+        ...snapshotOptions(),
+        regenerateDurationOutliers: false,
+      }).regenerateDurationOutliers,
+    ).toBe(false);
+  });
+
   it("Given entries When initSnapshot Then entries をそのまま保持する", () => {
     const entries = makePromptEntries(2);
     const snap = initSnapshot(entries, snapshotOptions());

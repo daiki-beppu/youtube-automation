@@ -3,7 +3,12 @@
 // (`Could not establish connection. Receiving end does not exist.`) を検知して、
 // popup の案内に対処法（⌘+Shift+R）を含める。
 // #852: content の snapshot を popup の status 文字列 / 復元 state へ変換する純関数も同居する。
-import { PHASE, type ProgressLog, type SnapshotPayload } from "../../shared/constants";
+import {
+  DEFAULT_REGENERATE_DURATION_OUTLIERS,
+  PHASE,
+  type ProgressLog,
+  type SnapshotPayload,
+} from "../../shared/constants";
 
 /** popup の再 open 復元に使う state。useSunoRunner の restore effect がそのまま React state へ流す。 */
 export interface RestoreState {
@@ -30,6 +35,8 @@ export interface RestoreState {
   submittedClipIdsAreDurationFiltered?: boolean;
   // duration filter 後に playlist 追加・download へ採用する OK clip 件数。
   playlistExpectedClipCount?: number;
+  regenerateDurationOutliers: boolean;
+  durationOutlierWarnings: Record<number, string>;
 }
 
 function formatSeconds(value: number): string {
@@ -124,7 +131,7 @@ export function phaseToStatus(
     case PHASE.SUBMITTED:
       return { text: `[${n}/${total}] 投入済み（生成完了待ち）` };
     case PHASE.DONE:
-      return { text: `[${n}/${total}] 完了` };
+      return { text: `[${n}/${total}] 完了${message ? `（警告: ${message}）` : ""}` };
     case PHASE.ENTRY_FAILED:
       // entry 単位の失敗スキップ (#948)。run 全体は継続するため error フラグは立てない（status は黄信号扱い）。
       return { text: `[${n}/${total}] 失敗のためスキップ: ${message ?? ""}` };
@@ -159,12 +166,19 @@ export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | 
     return null;
   }
   const { text, error } = phaseToStatus(snap.progress, snap.entries);
+  const durationWarnings = Object.entries(snap.durationOutlierWarnings ?? {}).map(([index, warning]) => {
+    const entryIndex = Number(index);
+    const entryName = snap.entries[entryIndex]?.name ?? `entry ${entryIndex + 1}`;
+    return `"${entryName}": ${warning}`;
+  });
+  const restoredStatus =
+    !snap.isRunning && durationWarnings.length > 0 ? `${text} / 異常値警告: ${durationWarnings.join("; ")}` : text;
   return {
     collectionId: snap.collectionId,
     entries: snap.entries,
     itemStates: snap.itemStates,
     isRunning: snap.isRunning,
-    status: text,
+    status: restoredStatus,
     isError: Boolean(error),
     playlistName: snap.playlistName,
     ...(snap.durationFilter ? { durationFilter: snap.durationFilter } : {}),
@@ -174,6 +188,8 @@ export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | 
     submittedClipIds: snap.submittedClipIds,
     submittedClipIdsAreDurationFiltered: snap.submittedClipIdsAreDurationFiltered,
     playlistExpectedClipCount: snap.playlistExpectedClipCount,
+    regenerateDurationOutliers: snap.regenerateDurationOutliers ?? DEFAULT_REGENERATE_DURATION_OUTLIERS,
+    durationOutlierWarnings: snap.durationOutlierWarnings ?? {},
   };
 }
 

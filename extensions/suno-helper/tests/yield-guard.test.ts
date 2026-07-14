@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { MAX_YIELD_RETRY } from "../../shared/constants";
-import { checkDuration, evaluateClips, shouldRetry } from "../lib/yield-guard";
+import { checkDuration, decideDurationAttempt, evaluateClips, shouldRetryDurationOutlier } from "../lib/yield-guard";
 import type { DurationFilter } from "../../shared/api";
 
 const FILTER: DurationFilter = { min_sec: 120, max_sec: 300 };
@@ -78,16 +78,70 @@ describe("yield-guard: clips 分類", () => {
   });
 });
 
-describe("yield-guard: retry 判定", () => {
-  it("Given default max retry When shouldRetry Then MAX_YIELD_RETRY 未満だけ true を返す", () => {
+describe("yield-guard: retry 上限判定", () => {
+  it("Given retry 回数 When 上限判定 Then MAX_YIELD_RETRY 未満だけ true を返す", () => {
     expect(MAX_YIELD_RETRY).toBe(2);
-    expect(shouldRetry(0)).toBe(true);
-    expect(shouldRetry(1)).toBe(true);
-    expect(shouldRetry(2)).toBe(false);
+    expect(shouldRetryDurationOutlier({ attemptCount: 0 })).toBe(true);
+    expect(shouldRetryDurationOutlier({ attemptCount: 1 })).toBe(true);
+    expect(shouldRetryDurationOutlier({ attemptCount: 2 })).toBe(false);
   });
 
-  it("Given custom max retry When shouldRetry Then 上限到達で false を返す", () => {
-    expect(shouldRetry(2, 3)).toBe(true);
-    expect(shouldRetry(3, 3)).toBe(false);
+  it("Given custom max retry When retry 判定 Then 上限到達で false を返す", () => {
+    expect(shouldRetryDurationOutlier({ attemptCount: 2, maxRetry: 3 })).toBe(true);
+    expect(shouldRetryDurationOutlier({ attemptCount: 3, maxRetry: 3 })).toBe(false);
+  });
+});
+
+describe("yield-guard: attempt 状態決定", () => {
+  it("Given OFF とOK/NG混在 When decide Then 警告付きで全clipを採用する", () => {
+    expect(
+      decideDurationAttempt({
+        clipIds: ["clip-ok", "clip-ng"],
+        result: { kind: "evaluated", evaluation: { ok: ["clip-ok"], ng: ["clip-ng"] } },
+        filter: FILTER,
+        policy: { kind: "retain" },
+        attemptCount: 0,
+      }),
+    ).toEqual({
+      kind: "accept",
+      acceptedClipIds: ["clip-ok", "clip-ng"],
+      warning: "duration guard NG (120-300s): clip-ng; 再生成 OFF のため全 clip を採用候補として保持します",
+    });
+  });
+
+  it("Given ON と全NG When retry上限前後 Then retryからfailへ遷移する", () => {
+    const base = {
+      clipIds: ["clip-ng"],
+      result: { kind: "evaluated" as const, evaluation: { ok: [], ng: ["clip-ng"] } },
+      filter: FILTER,
+      policy: { kind: "regenerate" as const },
+    };
+    expect(decideDurationAttempt({ ...base, attemptCount: 1 })).toEqual({
+      kind: "retry",
+      message: "duration guard NG (120-300s): clip-ng",
+    });
+    expect(decideDurationAttempt({ ...base, attemptCount: 2 })).toEqual({
+      kind: "fail",
+      message: "duration guard NG (120-300s): clip-ng",
+      reason: "outlier",
+    });
+  });
+
+  it("Given duration評価失敗 When decide Then ONはretryしOFFはfailする", () => {
+    const base = {
+      clipIds: ["clip-a"],
+      result: { kind: "evaluation-failed" as const, message: "feed unavailable" },
+      filter: FILTER,
+      attemptCount: 0,
+    };
+    expect(decideDurationAttempt({ ...base, policy: { kind: "regenerate" } })).toEqual({
+      kind: "retry",
+      message: "feed unavailable",
+    });
+    expect(decideDurationAttempt({ ...base, policy: { kind: "retain" } })).toEqual({
+      kind: "fail",
+      message: "feed unavailable",
+      reason: "evaluation",
+    });
   });
 });
