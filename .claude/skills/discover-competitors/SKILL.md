@@ -11,7 +11,7 @@ description: "Use when 追加競合候補の自動発掘やニッチ仮説の並
 
 - 入力: ニッチキーワード（カンマ区切り）+ フィルタ条件
 - 出力: ランキング付き Markdown + 同名 CSV（スコア内訳列付き）
-- 想定時間: 5 分以内（API quota 約 660 units / 実行）
+- 想定時間: 5 分以内（初回または強制更新時の API quota 約 660 units。24 時間以内の同一検索条件はキャッシュを利用）
 
 `/channel-new` の標準フローでは実行しない。TTP 対象確認後に追加の競合候補を広げたい場合や、複数のニッチ仮説を
 並行検証したい場合に、このスキルを任意で走らせる。
@@ -122,6 +122,7 @@ config からの抽出例（rjn）:
 | `--posted-within-days` | `search.posted_within_days`（既定 30） | 「動いている競合」のみ。1 年単位で見たいなら 365 |
 | `--top` | `search.top`（既定 20） | レポートに出す件数 |
 | `--per-keyword` | `search.per_keyword`（既定 20） | search.list の maxResults（合計クエリ数 = keywords × per-keyword） |
+| `--refresh` | — | 24 時間の TTL 内でも検索キャッシュを無視して search.list を再実行 |
 
 ### Step 3: 実行
 
@@ -134,6 +135,11 @@ uv run yt-discover-competitors \
   --posted-within-days 30 --top 20 \
   --output research/lo-fi-discovery.md
 ```
+
+同じ keyword と `--per-keyword` の組み合わせによる `search.list` 結果は、チャンネル配下の
+`.cache/youtube-automation/discover-competitors-search.json` に 24 時間保存される。最新結果が必要な場合だけ
+上記コマンドへ `--refresh` を追加する。`config/channel/analytics.json::benchmark.channels` に登録済みの
+channel ID は候補から除外される。
 
 出力ペア:
 - `research/lo-fi-discovery.md` — Markdown ランキングテーブル
@@ -156,7 +162,7 @@ subagent へは次を具体値で渡す:
 
 ## API コスト
 
-1 回実行あたり概ね 660 units（10,000/日 quota の 6.6%）:
+初回または `--refresh` 実行あたり概ね 660 units（10,000/日 quota の 6.6%）。同一条件の search.list は 24 時間キャッシュされる:
 - search.list × keywords: 100 units × N
 - channels.list: 1 unit × 候補数（バッチ）
 - videos.list: 1 unit × 候補数（直近 5 本まとめて 1 リクエスト）
@@ -168,7 +174,7 @@ subagent へは次を具体値で渡す:
 | 状況 | 兆候 | 対処 |
 |---|---|---|
 | OAuth 未認証/失効 | `auth.oauth_handler` の `FileNotFoundError`（`client_secrets.json` 不在）/ `AuthError` / HTTP 403 | 初回認証フローを再実行。403 が続く場合は `auth/token.json` を削除しスコープを確認のうえ再認証 |
-| YouTube quota / rate | HTTP 429 / 403 `quotaExceeded` | 日次 quota（既定 10,000 units・太平洋時間 0 時リセット）を待つか呼び出しを抑える。本スキルは 1 回あたり約 660 units を消費するため、並行検証の連発を控え、キーワード数や `--per-keyword` を減らして次回リセット後に再実行する |
+| YouTube quota / rate | HTTP 429 / 403 `quotaExceeded` | 日次 quota（既定 10,000 units・太平洋時間 0 時リセット）を待つか呼び出しを抑える。初回または `--refresh` は約 660 units を消費するため、並行検証の連発を控え、キーワード数や `--per-keyword` を減らして次回リセット後に再実行する |
 | API 障害 / サービス停止 | HTTP 503 / タイムアウト | Google Cloud / YouTube のステータスを確認し、時間を置いて再実行 |
 | 同一 `--output` での再実行 | 前回の `.md` / `.csv` の内容が消える | 仕様どおりの動作。出力ペア（`.md` + 同名 `.csv`）は再実行時に全体が上書きされ、部分結果のマージ・保持はされない（API 呼び出しが途中で失敗した場合はファイルは書き込まれず、前回の出力がそのまま残る）。結果を比較したい場合は実行ごとに `--output` を別ファイル名にする |
 
