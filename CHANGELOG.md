@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `fix(doctor)`: `uv tool install youtube-channels-automation` によるグローバル導入を `uv_project` / `automation_package` の bootstrap check で検出し、pyproject.toml に依存がない正常な環境を fail と誤判定しないようにした（#1724）。
+
 - `fix(api)`: playlist / benchmark / analytics / comments-reply / discover-competitors の YouTube API 呼び出しで、429・5xx・quota 系 403・network error を jitter 付き指数 backoff で最大 3 回試行し、恒久 4xx は即座にドメイン例外へ変換する共通 retry 境界を追加した（#1695）。
 
 - `fix(suno-helper)`: Download all メニューの短時間 auto-close レースに対し、More クリック直後から探索を開始し、検出失敗時は最大 3 回再クリックしてダウンロードを継続できるようにした（#1926）。
