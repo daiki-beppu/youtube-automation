@@ -1234,23 +1234,16 @@ export default defineContentScript({
                     pollIntervalMs: POLL_INTERVAL_MS,
                     describeEntry: () => `entry ${index} (${entryDisplayName(entries[index])})`,
                   });
-                  const regeneratedClipIds = tracker.getSubmittedIds().filter((id) => !submittedBefore.has(id));
-                  try {
-                    await waitForAttemptClipsComplete(regeneratedClipIds, {
-                      getPendingIdsByIds: (ids) => tracker.getPendingIdsByIds(ids),
-                      requestFeedPoll,
-                      abortableSleep,
-                      isAborted: () => aborted,
-                      now: Date.now,
-                    });
-                  } catch (error) {
-                    tracker.dropSubmittedIds(regeneratedClipIds);
-                    throw error;
-                  }
-                  if (aborted) {
-                    tracker.dropSubmittedIds(regeneratedClipIds);
-                  }
-                  return regeneratedClipIds;
+                  return tracker.getSubmittedIds().filter((id) => !submittedBefore.has(id));
+                },
+                waitForRegeneratedClips: async (regeneratedClipIds: string[]) => {
+                  await waitForAttemptClipsComplete(regeneratedClipIds, {
+                    getPendingIdsByIds: (ids) => tracker.getPendingIdsByIds(ids),
+                    requestFeedPoll,
+                    abortableSleep,
+                    isAborted: () => aborted,
+                    now: Date.now,
+                  });
                 },
               };
         const yieldResult = await finalizeQueueEntriesYield({

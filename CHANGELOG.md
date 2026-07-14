@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(suno-helper)`: Queue mode の duration guard 全滅 entry を、全 entry の ACK 先行投入後に既存 pacing で同一 prompt から最大 2 回自動再生成する挙動を明示し、Queue mode の説明文にも自動再生成を追記した（#1775）。
+
 - `perf(discover-competitors)`: `search.list` 結果を 24 時間キャッシュし、`--refresh` による強制更新と benchmark 登録済みチャンネルの除外を追加した（#1694）
 
 - `feat(suno-helper)`: duration guard NG の同一 prompt 再生成を popup の「異常値の曲を再生成する」で切り替え可能にした。既定 ON は安全・高速モードとも最大 2 回再生成し、OFF は NG を警告表示しつつ生成済み全 clip を playlist / download 候補に維持する。選択は popup 再表示、resume、失敗分再実行、playlist 再実行へ引き継ぐ（#1733）
