@@ -20,6 +20,7 @@ import json
 import mimetypes
 import os
 import re
+import signal
 import tempfile
 import urllib.parse
 import uuid
@@ -95,6 +96,14 @@ _DISTROKID_RELEASES_ROUTE = "/distrokid/releases"
 # small JSON objects/lists; larger bodies are rejected before reading from rfile.
 _MAX_POST_BODY_BYTES = 1024 * 1024
 _MAX_DOWNLOADED_POST_BODY_BYTES = 10 * 1024
+
+
+class _ServerTerminationSignal(RuntimeError):
+    """SIGTERM を未捕捉例外として記録可能にする。"""
+
+    def __init__(self, signum: int) -> None:
+        signal_name = signal.Signals(signum).name
+        super().__init__(f"{signal_name} (signal {signum}) requested server termination")
 
 
 def _hostname_slug(text: str) -> str:
@@ -1094,11 +1103,20 @@ def main() -> None:
             f"/downloaded and {_DISTROKID_RELEASES_ROUTE}"
         )
     print("Press Ctrl-C to stop.")
+
+    def handle_sigterm(signum: int, _frame: object) -> None:
+        raise _ServerTerminationSignal(signum)
+
+    previous_sigterm_handler = signal.signal(
+        signal.SIGTERM,
+        handle_sigterm,
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nStopped.")
     finally:
+        signal.signal(signal.SIGTERM, previous_sigterm_handler)
         server.server_close()
 
 
