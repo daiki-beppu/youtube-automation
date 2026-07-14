@@ -815,6 +815,19 @@ export default defineContentScript({
       const { range, collectionId, playlistName, submittedClipIds, playlistExpectedClipCount } = options;
       const previousSubmittedClipIds = submittedClipIds ?? [];
       const pacing = BALANCED_RUN_PACING;
+      try {
+        const baseUrl = await serverUrlItem.getValue();
+        await sendMessage("fetchCollectionPromptResponse", { baseUrl, collectionId });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        emitProgress({
+          phase: PHASE.ERROR,
+          index: 0,
+          total: entries.length,
+          message: `collection server から実行対象を取得できません。server が起動し、collection が利用可能か確認してください: ${message}`,
+        });
+        return;
+      }
       // Suno 同時生成キューに積める clip 数の上限（Balanced の並列リクエスト数 × 2 clip）。
       const maxGeneratingClips = pacing.maxInflightRequests * CLIPS_PER_REQUEST;
       const total = entries.length;

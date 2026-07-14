@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(suno-helper)`: 連続実行開始時に collection server の疎通を確認し、無応答時は Lyrics 欄エラーより先に明示的な server エラーで停止するようにした（#2003）。
+
 - `fix(suno-helper)`: server の一時的な取得失敗時に明示選択した配信元と collection を保持する（#2002）
 
 - `fix(collection-serve)`: SIGTERM による予期せぬ停止を専用例外へ変換し、終了理由と traceback が stderr に残るようにした（#2001）。
