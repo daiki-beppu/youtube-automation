@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(collection-ideate)`: skill-config に `ttp_mode`（既定 `false`）を追加した。`config/skills/collection-ideate.yaml` で `true` にすると差別化軸の掛け合わせと競合カバー済みテーマの回避をスキップし、競合の高再生コレクションから抽出した構造・パターン・型を転写元付きで企画候補へ反映する。転写元が無い minimal mode では `/benchmark` を案内して停止する（#1977）
 - `docs(feedback)`: `/feedback` に、`status="recorded"` の未還流 entry を一覧・選択し、open issue の類似タイトル照合とユーザー承認を経て `daiki-beppu/youtube-automation` へ `feedback` ラベル付き issue を起票する還流モードを追加した。成功した entry は `status="filed"` と `issue_url` を記録して候補から除外し、二重起票を防ぐ。起票本文テンプレート、発生チャンネル掲載の個別確認、起票直前の機密情報再マスクも明記した（#1829）。
 - `docs(channel-research)`: サムネイルのフォント傾向・テキスト内容パターン・配置傾向を、固有名詞やコピー原文を除いた構造化プロファイル `docs/benchmarks/thumbnail-text-profile.md` として生成する契約を `/channel-research` に追加した。前回生成したプロファイルは個別ベンチマークレポートの存在判定と fallback 入力から除外する（#1906）。
 - `docs(thumbnail-research)`: `/benchmark` の収集済み JSON と競合サムネイル画像を再生数上位群 / 下位群で比較し、構図・配色・テキスト配置・視線誘導・被写体の勝ちパターンを `docs/benchmarks/thumbnail-analysis.md` に出力する `/thumbnail-research` スキルを追加した。レポートの推奨事項と参照候補を `/thumbnail` の TTP 入力として相互参照し、データ収集・チャンネル全体分析・320px 視認性比較との発動条件を分離した（#1796）。

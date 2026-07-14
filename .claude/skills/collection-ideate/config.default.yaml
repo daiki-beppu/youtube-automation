@@ -19,20 +19,31 @@ freshness:
   # サイズベースの見積もりを平均する直近 report 数
   cost_estimate_recent_reports: 3
 
+# TTP 優先モード (#1977)
+# true のとき、differentiation_axes の掛け合わせをスキップし、競合の高再生
+# コレクションから抽出した構造・パターン・型を直接転写して企画候補を作る。
+# 競合がカバー済みの実績あるテーマを優先し、各企画に転写元を記録する。
+# data/benchmark_*.json が無い minimal mode では /benchmark を案内して停止する。
+# 投稿本数による自動切替は行わない。差別化へ移行するときは手動で false に戻す。
+ttp_mode: false
+
 # 構図ロック (#489)
-# true (デフォルト) のとき:
+# ttp_mode=false かつ true (デフォルト) のとき:
 #   - differentiation_axes は「企画コンセプトの内部メタデータ」として扱い、
 #     音楽プロンプト・概要欄訴求・タイトルバリエーションへ反映する。
 #   - サムネ構図は TTP 参照画像 + objects.fixed で固定する。
 #     differentiation_axes の値はサムネ生成プロンプトへ書き出さない。
 #   - サムネ差別化は objects.swappable の slot 値のみで取る。
-# false にすると従来どおり differentiation_axes をサムネ構図にも反映する
+# ttp_mode=false かつ false にすると従来どおり differentiation_axes をサムネ構図にも反映する
 # (TTP のスタイルアンカーが効きにくくなるので非推奨)。
+# ttp_mode=true のときは composition_lock の値にかかわらず differentiation_axes を
+# 企画候補生成に使わない。後続 skill の生成方針は変更しない。
 composition_lock: true
 
 # 差別化軸 (企画候補生成時の軸)
-# composition_lock=true のときはサムネ構図には反映されず、企画コンセプト
-# (音楽 / 概要欄 / タイトル) の内部メタデータとしてのみ使われる。
+# ttp_mode=false の場合だけ使用する。composition_lock=true のときはサムネ構図には
+# 反映されず、企画コンセプト (音楽 / 概要欄 / タイトル) の内部メタデータとしてのみ使う。
+# ttp_mode=true の場合は設定値が存在していても無視する。
 differentiation_axes:
   - location
   - time_of_day
@@ -59,7 +70,9 @@ preview:
   # 互換目的でキーは残すが、Phase 4-4 の生成手順では参照しない。
   stock_refs: false
 
-# 差し替え可能オブジェクトの定義 (省略可、未定義時はサムネイル差別化は色・テーマのみ)
+# 差し替え可能オブジェクトの定義 (省略可)
+# ttp_mode=false で未定義ならサムネイル差別化は色・テーマのみ。
+# ttp_mode=true では差別化軸から値を作らず、転写元の高再生パターンに基づいて定義する。
 # 詳しい例は references/object-design-examples.md を参照
 # objects:
 #   swappable:

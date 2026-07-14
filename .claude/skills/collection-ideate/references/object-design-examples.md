@@ -3,12 +3,18 @@
 `objects` を `config/skills/collection-ideate.yaml` で定義するときの参考例。
 **これは例示のみ** — 実際のオブジェクトは各チャンネルのコンセプトに合わせて自由に設計する。
 
+差別化軸を使う例は `ttp_mode: false` 専用。`ttp_mode: true` では
+`differentiation_axes` を無視し、転写元の高再生コレクションまたは勝ちパターンに
+基づいて `objects.swappable` の値を定義する。
+
 ## 例 1: bobble（jazzhop BGM + アライグマキャラ）
 
 Single-Step モードで、ベース参照画像の「左キャンドル + 右カクテル」をコレクションごとに差し替える構成。
 `config/skills/collection-ideate.yaml` での記述例:
 
 ```yaml
+ttp_mode: false
+
 objects:
   swappable:
     - slot: left_candle
@@ -55,20 +61,27 @@ objects:
 - **命名は短く詩的に**（"Inkwell", "Wanderer's Cup" 等）
 - **ストーリーは「誰が・どこで・なぜ」**を 1 文で描写
 - **ビジュアルは具体的に**（形状・色・質感の 3 要素を必ず指定）
-- **差し替えスロットは 2-3 個に絞る**（視覚的差別化のための単位）
+- **差し替えスロットは 2-3 個に絞る**。`ttp_mode: false` では視覚的差別化の単位にし、
+  `ttp_mode: true` では差別化軸を使わず転写元の高再生パターンから値を決める
 
 ## composition_lock (#489) — TTP 維持のための構図ロック
 
-`composition_lock: true`（`config/skills/collection-ideate.yaml` のトップレベル、
-デフォルト `true`）が有効なとき、`differentiation_axes`（location / time_of_day /
-weather / activity / mood）は **企画コンセプトの内部メタデータ** として扱い、
-**サムネ構図には反映しない**。差別化は `objects.swappable` の slot 値だけで取る。
+`ttp_mode: false` かつ `composition_lock: true`
+（`config/skills/collection-ideate.yaml` のトップレベル、デフォルト `true`）が有効なとき、
+`differentiation_axes`（location / time_of_day / weather / activity / mood）は
+**企画コンセプトの内部メタデータ**として扱い、**サムネ構図には反映しない**。
+差別化は `objects.swappable` の slot 値だけで取る。
+
+`ttp_mode: true` では `composition_lock` の値にかかわらず、この節の差別化軸を使う
+企画候補生成を適用せず、転写元の高再生コレクションまたは勝ちパターンに基づいて
+企画を作る。後続 skill の生成方針は変更しない。
 
 `objects.fixed` は TTP 構図そのもの — 全コレクション共通の「揺るがない要素」を書く。
 
 ### 例: DF365 (Mental Stamina Mode のような matte-black car + 飛行機 TTP)
 
 ```yaml
+ttp_mode: false
 composition_lock: true   # トップレベル
 
 differentiation_axes:
