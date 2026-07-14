@@ -4,6 +4,16 @@ ssh_keys:
   ed25519_private: |
     ${replace(trimspace(ssh_host_private_key), "\n", "\n    ")}
   ed25519_public: ${trimspace(ssh_host_public_key)}
+write_files:
+  # unattended-upgrades で openssh-server が更新されると ssh-keygen -A 相当で
+  # ECDSA/RSA ホスト鍵が再生成され、以後の SSH ネゴシエーションで ECDSA が
+  # 優先提示されて Terraform provisioner の host_key 検証（ed25519 固定）が
+  # "knownhosts: key mismatch" で失敗する。提示鍵を ed25519 のみに固定して防ぐ。
+  - path: /etc/ssh/sshd_config.d/99-hostkey-ed25519.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      HostKey /etc/ssh/ssh_host_ed25519_key
 package_update: true
 package_upgrade: true
 packages:
