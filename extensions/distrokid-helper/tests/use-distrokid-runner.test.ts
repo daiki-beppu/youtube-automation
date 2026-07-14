@@ -119,6 +119,22 @@ function blobResponse(): Response {
   } as unknown as Response;
 }
 
+async function waitFor(assertion: () => void): Promise<void> {
+  for (let i = 0; i < 20; i += 1) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      if (i === 19) {
+        throw error;
+      }
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+  }
+}
+
 // hook を直接マウントする probe。render のたびに最新の runner state を onState 経由で捕捉する
 // （component 内からモジュール変数へ直接代入すると react-hooks/globals に抵触するため）。
 function Probe({ onState }: { onState: (state: DistrokidRunnerState) => void }): null {
@@ -174,6 +190,12 @@ describe("useDistrokidRunner", () => {
       if (url === `${BASE_URL}/collections/${DISC1.collection_id}/distrokid/${DISC1.disc}/release.json`) {
         return jsonResponse(200, RELEASE_PAYLOAD);
       }
+      if (url === `${BASE_URL}/collections/${DISC2.collection_id}/distrokid/${DISC2.disc}/release.json`) {
+        return jsonResponse(200, {
+          ...RELEASE_PAYLOAD,
+          release: { ...RELEASE_PAYLOAD.release, album_title: DISC2.album_title },
+        });
+      }
       if (url === `${BASE_URL}/distrokid/assets/track-01.mp3`) {
         return blobResponse();
       }
@@ -200,8 +222,9 @@ describe("useDistrokidRunner", () => {
     await act(async () => {
       current.setServerUrl(BASE_URL);
     });
-    await act(async () => {
-      await current.fetchData();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+      expect(current.busy).toBe(false);
     });
   }
 
@@ -240,6 +263,54 @@ describe("useDistrokidRunner", () => {
     expect(current.busy).toBe(false);
   });
 
+  it("単一 mode: release が利用不可なら既存ガイダンスを表示して payload を返さない", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === `${BASE_URL}/version` || url === `${BASE_URL}/distrokid/collections`) {
+        return jsonResponse(404, {});
+      }
+      if (url === `${BASE_URL}/distrokid/release.json`) {
+        return jsonResponse(404, {});
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    await fetchDirModeRelease();
+
+    expect(current.payload).toBeNull();
+    expect(current.phase).toBe("error");
+    expect(current.message).toContain("distrokid 連携が無効です");
+    expect(current.busy).toBe(false);
+  });
+
+  it("単一 mode: 一般取得エラーなら詳細を表示して古い payload を無効化する", async () => {
+    stubDirModeServer();
+    await fetchDirModeRelease();
+    expect(current.payload).not.toBeNull();
+
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === `${BASE_URL}/version` || url === `${BASE_URL}/distrokid/collections`) {
+        return jsonResponse(404, {});
+      }
+      if (url === `${BASE_URL}/distrokid/release.json`) {
+        return jsonResponse(500, {});
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    await act(async () => {
+      current.setServerUrl(BASE_URL);
+    });
+    await waitFor(() => {
+      expect(current.message).toContain("HTTP 500");
+      expect(current.busy).toBe(false);
+    });
+
+    expect(current.payload).toBeNull();
+    expect(current.phase).toBe("error");
+    expect(current.message).toContain("HTTP 500");
+    expect(current.busy).toBe(false);
+  });
+
   it("stop: content へ stop message を送る", async () => {
     await act(async () => {
       await current.stop();
@@ -270,6 +341,78 @@ describe("useDistrokidRunner", () => {
       },
     });
     expect(current.collections.map((c) => c.disc)).toEqual([DISC2.disc]);
+  });
+
+  it("inject: collection 自動切替後は取得した最新 disc に配信済み記録を束縛する", async () => {
+    stubDirModeServer();
+    await fetchDirModeRelease();
+
+    await act(async () => {
+      current.selectCollection(1);
+    });
+    await waitFor(() => {
+      expect(current.payload?.release.album_title).toBe(DISC2.album_title);
+      expect(current.busy).toBe(false);
+    });
+    await act(async () => {
+      await current.inject();
+    });
+
+    expect(sendMessage).toHaveBeenCalledWith("recordRelease", {
+      baseUrl: BASE_URL,
+      record: {
+        collection_id: DISC2.collection_id,
+        disc: DISC2.disc,
+        album_title: DISC2.album_title,
+      },
+    });
+  });
+
+  it("inject: 開始後の強制選択変更を受け付けず、開始時 URL・payload・disc で完了する", async () => {
+    let resolveInjectionStart!: () => void;
+    const injectionStart = new Promise<void>((resolve) => {
+      resolveInjectionStart = resolve;
+    });
+    stubDirModeServer();
+    await fetchDirModeRelease();
+    vi.mocked(sendMessage).mockImplementation(async (type) => {
+      if (type === "injectStart") {
+        await injectionStart;
+      }
+      return undefined;
+    });
+
+    let injectionPromise!: Promise<void>;
+    await act(async () => {
+      injectionPromise = current.inject();
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith("injectStart", { payload: RELEASE_PAYLOAD }, 1);
+      expect(current.isInjecting).toBe(true);
+    });
+
+    await act(async () => {
+      current.setServerUrl("http://localhost:7999");
+      current.selectCollection(1);
+    });
+    await act(async () => {
+      resolveInjectionStart();
+      await injectionPromise;
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/distrokid/assets/track-01.mp3`, { method: "GET" });
+    expect(sendMessage).toHaveBeenCalledWith("recordRelease", {
+      baseUrl: BASE_URL,
+      record: {
+        collection_id: DISC1.collection_id,
+        disc: DISC1.disc,
+        album_title: DISC1.album_title,
+      },
+    });
+    expect(current.serverUrl).toBe(BASE_URL);
+    expect(current.selectedIndex).toBe(0);
+    expect(current.isInjecting).toBe(false);
   });
 
   it("inject: 配信済み記録の POST 失敗はフィル結果を覆さず warning を表示する", async () => {

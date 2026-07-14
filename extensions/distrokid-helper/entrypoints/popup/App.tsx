@@ -12,6 +12,7 @@ export function App() {
     serverSources,
     payload,
     busy,
+    isInjecting,
     phase,
     message,
     compatibilityWarning,
@@ -19,7 +20,6 @@ export function App() {
     allReleased,
     selectedIndex,
     selectCollection,
-    fetchData,
     inject,
     stop,
   } = useDistrokidRunner();
@@ -28,13 +28,7 @@ export function App() {
     <main className="flex flex-col gap-3 p-4">
       <h1 className="text-base font-bold text-gray-900">DistroKid Helper</h1>
 
-      <ServerUrlField
-        value={serverUrl}
-        sources={serverSources}
-        disabled={busy}
-        onChange={setServerUrl}
-        onFetch={() => void fetchData()}
-      />
+      <ServerUrlField value={serverUrl} sources={serverSources} disabled={isInjecting} onChange={setServerUrl} />
 
       {compatibilityWarning && (
         <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -48,6 +42,7 @@ export function App() {
           コレクション
           <select
             value={selectedIndex}
+            disabled={isInjecting}
             onChange={(e) => selectCollection(Number(e.target.value))}
             className="rounded border border-gray-300 px-2 py-1"
           >
@@ -77,7 +72,7 @@ export function App() {
         <button
           type="button"
           className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 disabled:opacity-50"
-          disabled={!busy}
+          disabled={!isInjecting}
           onClick={() => void stop()}
         >
           停止

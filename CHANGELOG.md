@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `feat(distrokid-helper)`: 初回表示、コレクション選択、ローカル配信元選択の各タイミングで collection 一覧と release.json を自動取得し、手動の「データ取得」ボタンを廃止した（#1992）。
+
 - `feat(suno-helper)`: 初回表示、コレクション選択、ローカル配信元選択の各タイミングで collection prompts を自動取得し、手動の「データ取得」ボタンを廃止した（#1991）。
 
 - `feat(suno-helper)`: Queue mode の duration guard 全滅 entry を、全 entry の ACK 先行投入後に既存 pacing で同一 prompt から最大 2 回自動再生成する挙動を明示し、Queue mode の説明文にも自動再生成を追記した（#1775）。
