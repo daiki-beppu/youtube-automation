@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `docs(workflow)`: `/wf-new` と `/wf-next` の制作フェーズ実行を subagent 委譲契約へ統一し、親エージェントが前提確認・承認・状態更新を保持しつつ、各フェーズの成果物を絶対パス付きで受け取って検証する責務境界を明確化した。運用チートシートも同じ委譲モデルへ同期した（#1661）。
 - `docs(collection-ideate)`: stale な Analytics report 検出時に推論コスト見積もり付きの 3 択を提示し、承認時または上限内の `freshness.stale_action: auto` 時だけ `/analytics-analyze` を同一セッションで実行する導線を追加した。`/wf-new` は判定を委譲し二重ダイアログを防ぐ（#1716）。
 - `docs(skills)`: wf-* から委譲される制作系 10 skill に subagent 入出力契約を追加し、リポジトリ相対の入力、成果物絶対パスの完了報告、state 非更新、承認・選択確定後のみの委譲を明記した。state を扱う `/masterup` の over-max 例外採用と `/suno` vocal の標準 collection 生成はメインエージェントが実行する（#1662）。
 
