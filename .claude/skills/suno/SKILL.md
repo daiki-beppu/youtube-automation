@@ -461,7 +461,7 @@ uv run yt-suno-verify <collection-path>
 1. **拡張をビルドしてロード**（初回のみ）: リポジトリ root で `nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile` → `nix develop .#extensions --command pnpm -C extensions/suno-helper build` → `test -f extensions/suno-helper/.output/chrome-mv3/manifest.json` → `mkdir -p ~/chrome-extensions/suno-helper && rsync -a --delete extensions/suno-helper/.output/chrome-mv3/ ~/chrome-extensions/suno-helper/` → Chrome で `chrome://extensions` → `~/chrome-extensions/suno-helper/` を選択。Nix extensions shell（Node 24 / pnpm 11.12.0）固定の理由と release 前検証は `extensions/README.md::pnpm バージョン契約` を参照
 2. **サーバー起動**: `uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" --allow-extension suno-helper` → `http://localhost:7873/collections` と `http://localhost:7873/collections/<id>/suno/prompts.json` で配信
 3. **Suno を開く**: Chrome で Advanced タブを選択（ボーカルは Lyrics mode = **Write**）
-4. **取得 → 連続実行**: 拡張ポップアップでデータ取得 → 全パターンを連続実行。スキップされた entry は再実行ボタンで再投入可能
+4. **自動取得 → 連続実行**: 拡張ポップアップで配信元と collection を選ぶと prompts と配信元 URL が自動取得・保存される。最新データを取り直す場合はページを再読み込みし、取得完了後に全パターンを連続実行する。スキップされた entry は再実行ボタンで再投入可能
 
 `--allow-extension suno-helper` は Chrome の profile preferences から unpacked 拡張 ID を検出し、`chrome-extension://<id>` の exact origin lock として使う。起動ログの `detected extension: suno-helper -> <id> (chrome-extension://<id>)` を確認し、検出 0 件・複数 ID 競合・Preferences 読み取り不可・Preferences JSON parse failure で失敗した場合のみ `--allow-origin "chrome-extension://<EXTENSION_ID>"` を fallback として手動指定する。`GET /auth/token` と `POST /collections/<id>/downloaded` は exact origin lock がないと 403 になる。
 

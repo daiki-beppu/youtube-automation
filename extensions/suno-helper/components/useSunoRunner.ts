@@ -82,7 +82,6 @@ interface RunnerState {
   retryPlaylist: () => Promise<void>;
   retryDownload: () => Promise<void>;
   adoptSelectedClips: () => Promise<void>;
-  fetchData: () => Promise<void>;
   // overrides.range があればそれを使う (#892 要件6)。
   // overrides.indices はチェック選択や失敗分再実行の部分実行対象。指定時は range より優先される。
   run: (overrides?: RunOverrides) => Promise<void>;
@@ -155,6 +154,11 @@ export function useSunoRunner(): RunnerState {
   // 一度承認/却下したバナーは再表示しない（同一 popup セッション内）。
   const [resumeDismissed, setResumeDismissed] = useState(false);
   const durationOutlierWarningsRef = useRef<string[]>([]);
+  const fetchRequestIdRef = useRef(0);
+  const serverSourcePersistenceRef = useRef<Promise<void>>(Promise.resolve());
+  const serverSourcesRevisionRef = useRef(0);
+  const restoredProgressRef = useRef(false);
+  const initialFetchStartedRef = useRef(false);
 
   const resumableCollectionId = useMemo(() => {
     if (
@@ -434,68 +438,6 @@ export function useSunoRunner(): RunnerState {
     setRestoredDurationOutlierWarnings(undefined);
   }, []);
 
-  const updateUrl = useCallback(
-    (nextUrl: string) => {
-      setUrlState(nextUrl);
-      clearLoadedRunState();
-    },
-    [clearLoadedRunState],
-  );
-
-  const selectCollection = useCallback(
-    (id: string) => {
-      setSelectedCollectionId(id);
-      clearLoadedRunState();
-    },
-    [clearLoadedRunState],
-  );
-
-  const syncCollections = useCallback(
-    async (baseUrl: string, currentSelectedId: string): Promise<string> => {
-      const fetched = await sendMessage("fetchCollections", { baseUrl });
-      setAllCollections(fetched);
-      const { nextSelectedId } = resolveVisibleCollections(fetched, currentSelectedId);
-      setSelectedCollectionId(nextSelectedId ?? "");
-      if (nextSelectedId === null) {
-        throw new Error("prompts を取得できる collection がありません。");
-      }
-      return nextSelectedId;
-    },
-    [resolveVisibleCollections],
-  );
-
-  const loadCollections = useCallback(
-    async (baseUrl: string) => {
-      try {
-        await syncCollections(baseUrl, "");
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        report(`コレクション一覧取得失敗: ${message}`, true);
-      }
-    },
-    [report, syncCollections],
-  );
-
-  useEffect(() => {
-    void serverUrlItem
-      .getValue()
-      .then((stored) => {
-        setUrlState(stored);
-        const trimmed = stored.trim();
-        if (trimmed) {
-          void loadCollections(trimmed);
-        }
-      })
-      .catch((err: unknown) => {
-        reportStorageFailure(err);
-      });
-    void readServerSources()
-      .then(setServerSources)
-      .catch((err: unknown) => {
-        reportStorageFailure(err);
-      });
-  }, [loadCollections, reportStorageFailure]);
-
   useEffect(() => {
     const unwatch = onMessage("progress", ({ data }) => {
       setItemStates((prev) => nextItemStates(prev, data));
@@ -532,6 +474,7 @@ export function useSunoRunner(): RunnerState {
         if (!restored) {
           return;
         }
+        restoredProgressRef.current = true;
         setEntries(restored.entries);
         setItemStates(restored.itemStates);
         setIsRunning(restored.isRunning);
@@ -558,62 +501,171 @@ export function useSunoRunner(): RunnerState {
     })();
   }, [report]);
 
-  const fetchData = useCallback(async () => {
-    const trimmed = url.trim();
-    if (!trimmed) {
-      report("ローカル配信元を選択してください。", true);
-      return;
-    }
-    let baseUrl = trimmed;
-    let serverLabel: string | undefined;
-    try {
-      const info = await sendMessage("fetchServerInfo", { baseUrl: trimmed });
-      baseUrl = info.base_url;
-      setUrlState(baseUrl);
-      serverLabel = info.label;
-    } catch {
-      // 古い server は fetchServerInfo を提供しないため、入力 URL のまま継続する。
-    }
-    try {
-      await serverUrlItem.setValue(baseUrl);
-      setServerSources(await rememberServerSource(baseUrl, serverLabel));
-    } catch (error) {
-      reportStorageFailure(error);
-      return;
-    }
-    clearLoadedRunState();
-    setPhase("loading");
-    report("取得中…");
-    try {
-      const extensionVersion = browser.runtime.getManifest().version;
-      const warning = await sendMessage("fetchCompatibilityWarning", { baseUrl, extensionVersion });
-      setCompatibilityWarning(typeof warning === "string" ? warning : "");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (isExtensionReloadRequiredError(message)) {
-        setReloadRequired(true);
+  const fetchData = useCallback(
+    async (targetUrl: string, preferredCollectionId: string) => {
+      const requestId = ++fetchRequestIdRef.current;
+      const isLatestRequest = (): boolean => requestId === fetchRequestIdRef.current;
+      const trimmed = targetUrl.trim();
+      if (!trimmed) {
+        if (isLatestRequest()) {
+          report("ローカル配信元を選択してください。", true);
+        }
         return;
       }
-      setPhase("error");
-      report(`互換性確認失敗: ${message}`, true);
+      let baseUrl = trimmed;
+      let serverLabel: string | undefined;
+      try {
+        const info = await sendMessage("fetchServerInfo", { baseUrl: trimmed });
+        if (!isLatestRequest()) {
+          return;
+        }
+        baseUrl = info.base_url;
+        setUrlState(baseUrl);
+        serverLabel = info.label;
+      } catch {
+        // 古い server は fetchServerInfo を提供しないため、入力 URL のまま継続する。
+        if (!isLatestRequest()) {
+          return;
+        }
+      }
+      const persistServerSource = serverSourcePersistenceRef.current.then(async () => {
+        if (!isLatestRequest()) {
+          return;
+        }
+        await serverUrlItem.setValue(baseUrl);
+        if (!isLatestRequest()) {
+          return;
+        }
+        const rememberedSources = await rememberServerSource(baseUrl, serverLabel);
+        if (!isLatestRequest()) {
+          return;
+        }
+        serverSourcesRevisionRef.current += 1;
+        setServerSources(rememberedSources);
+      });
+      serverSourcePersistenceRef.current = persistServerSource.catch(() => undefined);
+      try {
+        await persistServerSource;
+        if (!isLatestRequest()) {
+          return;
+        }
+      } catch (error) {
+        if (isLatestRequest()) {
+          reportStorageFailure(error);
+        }
+        return;
+      }
+      if (!restoredProgressRef.current) {
+        setPhase("loading");
+        report("取得中…");
+      }
+      try {
+        const extensionVersion = browser.runtime.getManifest().version;
+        const warning = await sendMessage("fetchCompatibilityWarning", { baseUrl, extensionVersion });
+        if (!isLatestRequest()) {
+          return;
+        }
+        setCompatibilityWarning(typeof warning === "string" ? warning : "");
+      } catch (error) {
+        if (!isLatestRequest()) {
+          return;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        if (isExtensionReloadRequiredError(message)) {
+          setReloadRequired(true);
+          return;
+        }
+        setPhase("error");
+        report(`互換性確認失敗: ${message}`, true);
+        return;
+      }
+      try {
+        const fetched = await sendMessage("fetchCollections", { baseUrl });
+        if (!isLatestRequest()) {
+          return;
+        }
+        setAllCollections(fetched);
+        const { nextSelectedId: collectionId } = resolveVisibleCollections(fetched, preferredCollectionId);
+        if (collectionId === null) {
+          throw new Error("prompts を取得できる collection がありません。");
+        }
+        if (!restoredProgressRef.current) {
+          setSelectedCollectionId(collectionId);
+        }
+        const data = await fetchCollectionPromptResponse(baseUrl, collectionId);
+        if (!isLatestRequest() || restoredProgressRef.current) {
+          return;
+        }
+        setEntries(data.entries);
+        setDurationFilter(data.duration_filter);
+        setItemStates(data.entries.map(() => "idle"));
+        setPhase("idle");
+        report(`${data.entries.length} パターンを取得しました。`);
+      } catch (err) {
+        if (!isLatestRequest() || restoredProgressRef.current) {
+          return;
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        setEntries([]);
+        setItemStates([]);
+        setPhase("error");
+        report(`取得失敗: ${message}\nyt-collection-serve が起動しているか確認してください。`, true);
+      }
+    },
+    [report, reportStorageFailure, resolveVisibleCollections],
+  );
+
+  const updateUrl = useCallback(
+    (nextUrl: string) => {
+      initialFetchStartedRef.current = true;
+      setUrlState(nextUrl);
+      restoredProgressRef.current = false;
+      clearLoadedRunState();
+      void fetchData(nextUrl, "");
+    },
+    [clearLoadedRunState, fetchData],
+  );
+
+  const selectCollection = useCallback(
+    (id: string) => {
+      setSelectedCollectionId(id);
+      restoredProgressRef.current = false;
+      clearLoadedRunState();
+      void fetchData(url, id);
+    },
+    [clearLoadedRunState, fetchData, url],
+  );
+
+  useEffect(() => {
+    if (resumeCheckedAt === null || initialFetchStartedRef.current) {
       return;
     }
-    try {
-      const collectionId = await syncCollections(baseUrl, selectedCollectionId);
-      const data = await fetchCollectionPromptResponse(baseUrl, collectionId);
-      setEntries(data.entries);
-      setDurationFilter(data.duration_filter);
-      setItemStates(data.entries.map(() => "idle"));
-      setPhase("idle");
-      report(`${data.entries.length} パターンを取得しました。`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setEntries([]);
-      setItemStates([]);
-      setPhase("error");
-      report(`取得失敗: ${message}\nyt-collection-serve が起動しているか確認してください。`, true);
-    }
-  }, [url, selectedCollectionId, syncCollections, clearLoadedRunState, report, reportStorageFailure]);
+    initialFetchStartedRef.current = true;
+    void serverUrlItem
+      .getValue()
+      .then((stored) => {
+        setUrlState(stored);
+        if (stored.trim()) {
+          void fetchData(stored, resumableCollectionId ?? "");
+        }
+      })
+      .catch((err: unknown) => {
+        reportStorageFailure(err);
+      });
+  }, [fetchData, reportStorageFailure, resumableCollectionId, resumeCheckedAt]);
+
+  useEffect(() => {
+    const revisionAtStart = serverSourcesRevisionRef.current;
+    void readServerSources()
+      .then((sources) => {
+        if (revisionAtStart === serverSourcesRevisionRef.current) {
+          setServerSources(sources);
+        }
+      })
+      .catch((err: unknown) => {
+        reportStorageFailure(err);
+      });
+  }, [reportStorageFailure]);
 
   const run = useCallback(
     async (overrides?: RunOverrides) => {
@@ -695,10 +747,7 @@ export function useSunoRunner(): RunnerState {
     const shouldDownload =
       resumeBanner !== null && resumeBanner.failedIndex >= resumeBanner.total && !resumeBanner.remainingIndices?.length;
     if (submittedClipIdsForResume.length === 0 || expectedClipCount <= 0) {
-      report(
-        "playlist 再開に必要な clip ID がありません。Suno タブを開いたまま「データ取得」後に再試行してください。",
-        true,
-      );
+      report("playlist 再開に必要な clip ID がありません。ページを再読み込みしてから再試行してください。", true);
       return;
     }
     setIsRunning(true);
@@ -752,7 +801,7 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     if (entries.length === 0) {
-      report("再開に必要なパターンが未取得です。データ取得後に再試行してください。", true);
+      report("再開に必要なパターンが未取得です。ページを再読み込みしてから再試行してください。", true);
       return;
     }
     setResumeDismissed(true);
@@ -790,10 +839,7 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     if (submittedClipIdsForResume.length === 0) {
-      report(
-        "ダウンロード再開に必要な clip ID がありません。Suno タブを開いたまま「データ取得」後に再試行してください。",
-        true,
-      );
+      report("ダウンロード再開に必要な clip ID がありません。ページを再読み込みしてから再試行してください。", true);
       return;
     }
     setIsRunning(true);
@@ -823,7 +869,7 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     if (expectedClipCountForManualAdoption === undefined || expectedClipCountForManualAdoption <= 0) {
-      report("期待 clip 数を解決できません。データ取得後に再試行してください。", true);
+      report("期待 clip 数を解決できません。ページを再読み込みしてから再試行してください。", true);
       return;
     }
     setIsRunning(true);
@@ -963,7 +1009,6 @@ export function useSunoRunner(): RunnerState {
     retryPlaylist,
     retryDownload,
     adoptSelectedClips,
-    fetchData,
     run,
     stop,
   };
