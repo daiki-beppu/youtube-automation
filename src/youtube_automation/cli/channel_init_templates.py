@@ -68,7 +68,7 @@ def _render_meta(ctx: ChannelInitContext) -> dict:
 def _render_content(ctx: ChannelInitContext) -> dict:
     return {
         "genre": {"primary": ctx.genre, "style": ctx.style, "context": ctx.context},
-        "tags": {"base": [], "themes": {}},
+        "tags": {"min_count": 26, "base": [], "themes": {}},
         "descriptions": {
             "opening": f"{ctx.style} {ctx.genre} music inspired by {ctx.context}.",
             "sub_opening": f"Perfect for studying, relaxing, or immersing yourself in {ctx.context}.",

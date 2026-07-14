@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import logging
 import re
 import shutil
 import socket
@@ -2463,10 +2464,10 @@ def test_post_downloaded_with_download_path_extracts_zip(serve_dir, tmp_path):
     assert names == ["01a-Song A.mp3", "01b-Song A.mp3", "02a-Song B.mp3", "02b-Song B.mp3"]
 
 
-def test_post_downloaded_success_keeps_download_archive(serve_dir, tmp_path):
-    """POST /downloaded が成功しても元 ZIP は削除しない。"""
+def test_post_downloaded_success_removes_download_archive(serve_dir, tmp_path):
+    """POST /downloaded が成功すると元 ZIP を削除する。"""
     planning = tmp_path / "planning"
-    _make_collection(
+    coll = _make_collection(
         planning,
         "20260601-clm-aaa-collection",
         entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
@@ -2490,7 +2491,60 @@ def test_post_downloaded_success_keeps_download_archive(serve_dir, tmp_path):
     ) as resp:
         assert resp.status == 200
 
+    assert not zip_path.exists()
+    assert sorted(path.name for path in (coll / "02-Individual-music").iterdir()) == [
+        "01a-Song A.mp3",
+        "01b-Song A.mp3",
+    ]
+    workflow_state = json.loads((coll / "workflow-state.json").read_text(encoding="utf-8"))
+    assert workflow_state["assets"]["music_downloaded"] is True
+
+
+def test_post_downloaded_archive_cleanup_failure_warns_and_keeps_artifacts(serve_dir, tmp_path, monkeypatch, caplog):
+    """ZIP 削除だけが失敗した場合、完了成果物を維持して警告する。"""
+    planning = tmp_path / "planning"
+    coll = _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(
+        tmp_path / "cleanup-fails.zip",
+        {"Song A.mp3": b"audio1", "Song A_1.mp3": b"audio2"},
+    )
+    real_unlink = Path.unlink
+
+    def fail_archive_unlink(path: Path, *args, **kwargs) -> None:
+        if path == zip_path:
+            raise OSError("simulated archive cleanup failure")
+        real_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_archive_unlink)
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+
+    with caplog.at_level(logging.WARNING, logger="youtube_automation.utils.suno_downloaded_apply"):
+        with _post(
+            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+            {
+                "file_count": 2,
+                "format": "mp3",
+                "suno_playlist_url": "https://suno.com/playlist/abc",
+                "download_path": str(zip_path),
+            },
+            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+        ) as resp:
+            assert resp.status == 200
+
     assert zip_path.exists()
+    assert sorted(path.name for path in (coll / "02-Individual-music").iterdir()) == [
+        "01a-Song A.mp3",
+        "01b-Song A.mp3",
+    ]
+    workflow_state = json.loads((coll / "workflow-state.json").read_text(encoding="utf-8"))
+    assert workflow_state["assets"]["music_downloaded"] is True
+    assert "Suno download ZIP cleanup failed for" in caplog.text
+    assert "simulated archive cleanup failure" in caplog.text
 
 
 # ---------------------------------------------------------------------------
@@ -3124,6 +3178,7 @@ def test_post_downloaded_empty_zip_returns_500(serve_dir, tmp_path):
         )
 
     assert exc_info.value.code == 500
+    assert zip_path.exists()
 
 
 def test_post_downloaded_partial_zip_returns_500_and_does_not_set_music_downloaded(serve_dir, tmp_path):
@@ -3318,6 +3373,7 @@ def test_post_downloaded_workflow_write_failure_rolls_back_music_and_workflow(se
     assert sorted(path.name for path in music_dir.iterdir()) == ["legacy.mp3"]
     assert (music_dir / "legacy.mp3").read_bytes() == b"legacy"
     assert json.loads(ws_path.read_text(encoding="utf-8")) == original_ws
+    assert zip_path.exists()
 
 
 def test_post_downloaded_invalid_workflow_state_rolls_back_zip_music(serve_dir, tmp_path):

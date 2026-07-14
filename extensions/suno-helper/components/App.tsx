@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { DOWNLOAD_FORMAT_DEFAULT, RUN_MODES, type RunModeId } from "../../shared/constants";
+import { DOWNLOAD_FORMAT_DEFAULT, formatServerSourceLabel, RUN_MODES, type RunModeId } from "../../shared/constants";
 import {
   buildInitialPatternSelection,
   reconcilePatternSelection,
@@ -9,6 +9,7 @@ import {
 import { buildSelectedEntriesRunOverrides } from "../lib/run-overrides";
 import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../lib/storage";
 import { PatternList } from "./PatternList";
+import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
 import { useSunoRunner } from "./useSunoRunner";
 
 // RUN_MODES のキー集合から導出する（手書き複製だと mode 追加時に UI へ出ないまま型チェックが通る）。
@@ -18,8 +19,10 @@ const DOWNLOAD_FORMAT_OPTIONS: DownloadFormat[] = ["mp3", "m4a", "wav"];
 
 export function App() {
   const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>(DOWNLOAD_FORMAT_DEFAULT);
+  const [reloadRequired, setReloadRequired] = useState(false);
   const [selectedEntries, setSelectedEntries] = useState<boolean[]>([]);
   const {
+    reloadRequired: runnerReloadRequired,
     url,
     setUrl,
     serverSources,
@@ -37,6 +40,8 @@ export function App() {
     playlistName,
     runModeId,
     setRunMode,
+    regenerateDurationOutliers,
+    setRegenerateDurationOutliers,
     resumeBanner,
     acceptResume,
     dismissResume,
@@ -56,11 +61,21 @@ export function App() {
 
   useEffect(() => {
     let mounted = true;
-    void readDownloadFormat().then((value) => {
-      if (mounted) {
-        setDownloadFormat(value);
-      }
-    });
+    void readDownloadFormat()
+      .then((value) => {
+        if (mounted) {
+          setDownloadFormat(value);
+        }
+      })
+      .catch((error: unknown) => {
+        console.warn(
+          "[suno-helper] ダウンロード形式の読込に失敗しました（拡張更新後はタブを再読み込みしてください）:",
+          error,
+        );
+        if (mounted) {
+          setReloadRequired(true);
+        }
+      });
     return () => {
       mounted = false;
     };
@@ -68,7 +83,13 @@ export function App() {
 
   const updateDownloadFormat = (value: DownloadFormat): void => {
     setDownloadFormat(value);
-    void downloadFormatItem.setValue(value);
+    void downloadFormatItem.setValue(value).catch((error: unknown) => {
+      console.warn(
+        "[suno-helper] ダウンロード形式の保存に失敗しました（拡張更新後はタブを再読み込みしてください）:",
+        error,
+      );
+      setReloadRequired(true);
+    });
   };
 
   useEffect(() => {
@@ -126,6 +147,10 @@ export function App() {
       }),
     );
   };
+  if (reloadRequired || runnerReloadRequired) {
+    return <ReloadRequiredNotice />;
+  }
+
   return (
     <div
       className="flex flex-col gap-3 p-3 text-gray-900"
@@ -149,7 +174,7 @@ export function App() {
         >
           {serverSources.map((source) => (
             <option key={source.url} value={source.url}>
-              {source.label} - {source.url}
+              {formatServerSourceLabel(source, "suno-helper")}
             </option>
           ))}
         </select>
@@ -260,6 +285,24 @@ export function App() {
           );
         })}
       </fieldset>
+
+      <label className="flex items-start gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
+        <input
+          type="checkbox"
+          className="mt-1"
+          checked={regenerateDurationOutliers}
+          disabled={entries.length === 0 || isRunning}
+          onChange={(event) => setRegenerateDurationOutliers(event.target.checked)}
+        />
+        <span className="flex flex-col">
+          <span className="font-medium">異常値の曲を再生成する</span>
+          {!regenerateDurationOutliers && (
+            <span className="text-xs text-amber-700">
+              OFF の場合、duration guard NG も Playlist / Download 候補に残ります。完了後に手動確認してください。
+            </span>
+          )}
+        </span>
+      </label>
 
       <label className="flex flex-col gap-1 text-sm">
         DL 形式

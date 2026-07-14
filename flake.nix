@@ -16,8 +16,32 @@
       system:
       let
         pkgs = import nixpkgs { inherit system; };
+        pnpmLatest = pkgs.stdenvNoCC.mkDerivation {
+          pname = "pnpm";
+          version = "11.12.0";
+          src = pkgs.fetchurl {
+            url = "https://registry.npmjs.org/pnpm/-/pnpm-11.12.0.tgz";
+            hash = "sha256-HCvxCNdnuXY1PCwemtFNJAzruZ1L702Tp/Gp0Q2luBc=";
+          };
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          installPhase = ''
+            runHook preInstall
+            mkdir -p "$out/lib/pnpm" "$out/bin"
+            cp -R . "$out/lib/pnpm/"
+            makeWrapper "${pkgs.nodejs_24}/bin/node" "$out/bin/pnpm" \
+              --add-flags "$out/lib/pnpm/bin/pnpm.cjs"
+            runHook postInstall
+          '';
+        };
       in
       {
+        devShells.extensions = pkgs.mkShell {
+          packages = with pkgs; [
+            nodejs_24
+            pnpmLatest
+          ];
+        };
+
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             python311
@@ -30,8 +54,7 @@
           # op read で都度取得する。`op` (1Password CLI) は unfree のため
           # nixpkgs から外し、システム（Homebrew 等）の op を利用する想定。
           #
-          # 初回セットアップ:
-          #   uv sync --extra veo
+          # devShell 入室時に uv sync が自動実行される。
           # その後の利用:
           #   uv run yt-skills list
           #   uv run pytest
@@ -47,6 +70,7 @@
             if git rev-parse --git-dir >/dev/null 2>&1; then
               bash "${./.}/.lefthook/install.sh" || exit 1
             fi
+            uv sync --quiet || echo "warning: uv sync failed; dependencies may be out of date." >&2
           '';
         };
       }

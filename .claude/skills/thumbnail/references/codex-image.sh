@@ -33,6 +33,54 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
+codex_cli_version="unknown"
+codex_default_model="unknown"
+
+detect_codex_cli_version() {
+  local raw_version
+  if raw_version=$(codex --version 2>/dev/null | head -n 1); then
+    if [[ "$raw_version" =~ ([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+      printf 'v%s\n' "${BASH_REMATCH[1]}"
+    elif [ -n "$raw_version" ]; then
+      printf '%s\n' "$raw_version"
+    else
+      printf 'unknown\n'
+    fi
+  else
+    printf 'unknown\n'
+  fi
+}
+
+extract_codex_model_from_text() {
+  local text=$1
+  local model
+  model=$(printf '%s\n' "$text" | grep -Eo 'gpt-[A-Za-z0-9._-]+' | head -n 1 || true)
+  if [ -n "$model" ]; then
+    printf '%s\n' "$model"
+  else
+    printf 'unknown\n'
+  fi
+}
+
+is_codex_model_incompatibility_error() {
+  local text=$1
+  printf '%s\n' "$text" | grep -Eiq '(incompat|unsupported|not supported|unknown model|requires[[:space:]].*newer|upgrade[[:space:]].*codex|model[[:space:]].*not[[:space:]].*supported)'
+}
+
+print_codex_environment() {
+  echo "codex CLI: ${codex_cli_version}" >&2
+  echo "codex default model: ${codex_default_model}" >&2
+}
+
+print_codex_upgrade_instructions() {
+  echo "アップグレード手順:" >&2
+  echo "  npm: npm install -g @openai/codex@latest" >&2
+  echo "  Homebrew: brew upgrade codex" >&2
+  echo "  Bun: bun add -g @openai/codex@latest" >&2
+}
+
+codex_cli_version=$(detect_codex_cli_version)
+
 if login_status=$(codex login status 2>&1); then
   :
 else
@@ -77,14 +125,42 @@ rm -f "$out"
 err_log=$(mktemp -t codex-image.XXXXXX)
 trap 'rm -f "$err_log"' EXIT
 
-# 3 つの error 分岐に同一 4 行ブロックがコピペされていた DRY 違反を解消するための helper。
+# error 分岐に同一診断ブロックがコピペされていた DRY 違反を解消するための helper。
 # `$err_log` はスクリプト全体で 1 つしか存在しないため引数化せずクロージャ的に参照する。
 dump_codex_stderr() {
+  if [ -s "$err_log" ]; then
+    local detected_model
+    detected_model=$(extract_codex_model_from_text "$(cat "$err_log")")
+    if [ "$detected_model" != "unknown" ]; then
+      codex_default_model=$detected_model
+    fi
+  fi
+  print_codex_environment
   if [ -s "$err_log" ]; then
     echo "--- codex stderr (tail) ---" >&2
     tail -n 30 "$err_log" >&2
   fi
 }
+
+if codex exec --json --skip-git-repo-check -- "Reply with exactly codex-model-compat-ok." \
+  </dev/null >/dev/null 2>"$err_log"; then
+  :
+else
+  rc=$?
+  preflight_stderr=$(cat "$err_log")
+  codex_default_model=$(extract_codex_model_from_text "$preflight_stderr")
+  if is_codex_model_incompatibility_error "$preflight_stderr"; then
+    echo "ERROR: codex CLI ${codex_cli_version} がモデル \`${codex_default_model}\` と非互換です" >&2
+    print_codex_upgrade_instructions
+    dump_codex_stderr
+    exit 1
+  fi
+  echo "ERROR: codex CLI とデフォルトモデルの互換性プリフライトに失敗しました (rc=${rc})" >&2
+  echo "ヒント: codex CLI / 認証 / ネットワーク状態を確認してください" >&2
+  dump_codex_stderr
+  exit 1
+fi
+: > "$err_log"
 
 if ! final_msg=$(codex exec --json --sandbox workspace-write --add-dir "$out_dir" --skip-git-repo-check \
   "${image_args[@]+"${image_args[@]}"}" -- "$full_prompt" </dev/null 2>"$err_log" \

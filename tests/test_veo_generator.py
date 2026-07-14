@@ -311,7 +311,10 @@ def channel_tmp(tmp_path: Path, monkeypatch):
 @pytest.fixture
 def output_mp4(channel_tmp: Path):
     """テスト用の出力パスを返す（ファイルは未作成）。"""
-    return channel_tmp / "collections" / "foo" / "10-assets" / "loop.mp4"
+    assets_dir = channel_tmp / "collections" / "foo" / "10-assets"
+    assets_dir.mkdir(parents=True)
+    (assets_dir / "main.png").write_bytes(b"test-image")
+    return assets_dir / "loop.mp4"
 
 
 def _make_done_operation(name: str = "projects/veo/12345") -> MagicMock:
@@ -416,7 +419,13 @@ class TestGenerateLoopVideoResume:
     def _write_state(self, channel_tmp: Path, output_mp4: Path, operation_name: str, model: str) -> None:
         from youtube_automation.utils import veo_operation_store as op_store
 
-        op_store.save(output_mp4, operation_name, model, channel_root=channel_tmp)
+        op_store.save(
+            output_mp4,
+            output_mp4.parent / "main.png",
+            operation_name,
+            model,
+            channel_root=channel_tmp,
+        )
 
     def test_skips_generate_videos_when_state_exists(self, channel_tmp: Path, output_mp4: Path, monkeypatch) -> None:
         """Given: state あり / When: generate_loop_video / Then: client.models.generate_videos 未呼び出し。"""
@@ -447,14 +456,13 @@ class TestGenerateLoopVideoResume:
         # Then: 保存済み operation_name で GenerateVideosOperation を再構築した
         mock_types.GenerateVideosOperation.assert_called_once_with(name="projects/veo/resumed-op")
 
-    def test_warns_on_model_mismatch(self, channel_tmp: Path, output_mp4: Path, monkeypatch, capsys) -> None:
-        """保存モデルと引数モデルが違う場合 [Warn] を出す。"""
-        mock_types = _patch_genai_types(monkeypatch)
+    def test_discards_state_and_submits_when_model_mismatches(
+        self, channel_tmp: Path, output_mp4: Path, monkeypatch, capsys
+    ) -> None:
+        """保存モデルと引数モデルが違う場合は resume せず新規 submit する。"""
+        _patch_genai_types(monkeypatch)
         client = MagicMock()
-        done_op = _make_done_operation("projects/veo/op-x")
-        mock_types.GenerateVideosOperation.return_value = MagicMock(name="projects/veo/op-x", done=True)
-        client.operations.get.return_value = done_op
-        # state に保存したモデルと引数モデルを意図的に変える
+        client.models.generate_videos.return_value = _make_done_operation("projects/veo/new-model")
         self._write_state(channel_tmp, output_mp4, "projects/veo/op-x", "veo-3.1-fast")
 
         with patch.multiple(
@@ -472,7 +480,68 @@ class TestGenerateLoopVideoResume:
                 )
 
         out = capsys.readouterr().out
-        assert "[Warn]" in out
+        assert "state のモデルまたは入力画像が現在の指定と一致しないため破棄し、新規生成します" in out
+        client.operations.get.assert_not_called()
+        client.models.generate_videos.assert_called_once()
+
+    def test_discards_old_state_when_new_submit_fails_after_model_mismatch(
+        self, channel_tmp: Path, output_mp4: Path, monkeypatch
+    ) -> None:
+        """モデル不一致後の submit 失敗でも、旧 state は残さない。"""
+        _patch_genai_types(monkeypatch)
+        client = MagicMock()
+        client.models.generate_videos.side_effect = RuntimeError("submit failed")
+        self._write_state(channel_tmp, output_mp4, "projects/veo/old-model", "veo-3.1-fast")
+
+        with patch.multiple(
+            "youtube_automation.utils.veo_generator",
+            strip_audio=MagicMock(),
+            cost_tracker=MagicMock(),
+        ):
+            result = veo_generator.generate_loop_video(
+                client,
+                output_mp4.parent / "main.png",
+                output_mp4,
+                model="veo-3.1-DIFFERENT-model",
+                prompt="test prompt",
+            )
+
+        assert result is False
+        client.operations.get.assert_not_called()
+        client.models.generate_videos.assert_called_once()
+        from youtube_automation.utils import veo_operation_store as op_store
+
+        assert op_store.load(output_mp4, channel_root=channel_tmp) is None
+
+    def test_discards_state_and_submits_when_input_image_changes(
+        self, channel_tmp: Path, output_mp4: Path, monkeypatch, capsys
+    ) -> None:
+        """入力画像の内容が変わった場合は旧 operation を resume しない。"""
+        _patch_genai_types(monkeypatch)
+        client = MagicMock()
+        client.models.generate_videos.return_value = _make_done_operation("projects/veo/new-image")
+        self._write_state(channel_tmp, output_mp4, "projects/veo/old-image", "veo-3.1-fast")
+        (output_mp4.parent / "main.png").write_bytes(b"replacement-image")
+
+        with patch.multiple(
+            "youtube_automation.utils.veo_generator",
+            strip_audio=MagicMock(),
+            cost_tracker=MagicMock(),
+        ):
+            with patch("time.sleep"):
+                result = veo_generator.generate_loop_video(
+                    client,
+                    output_mp4.parent / "main.png",
+                    output_mp4,
+                    model="veo-3.1-fast",
+                    prompt="test prompt",
+                )
+
+        assert result is True
+        output = capsys.readouterr().out
+        assert "state のモデルまたは入力画像が現在の指定と一致しないため破棄し、新規生成します" in output
+        client.operations.get.assert_not_called()
+        client.models.generate_videos.assert_called_once()
 
     def test_clears_state_on_success(self, channel_tmp: Path, output_mp4: Path, monkeypatch) -> None:
         """resume 成功後に state が削除される。"""
@@ -562,15 +631,15 @@ class TestGenerateLoopVideoResume:
 
         assert op_store.load(output_mp4, channel_root=channel_tmp) is None
 
-    def test_cost_log_uses_saved_model_on_mismatch(self, channel_tmp: Path, output_mp4: Path, monkeypatch) -> None:
-        """resume 時のモデル不一致でも cost_tracker には保存済みモデルを記録する（ai-review-002）。"""
-        mock_types = _patch_genai_types(monkeypatch)
+    def test_cost_log_uses_requested_model_after_model_mismatch(
+        self, channel_tmp: Path, output_mp4: Path, monkeypatch
+    ) -> None:
+        """モデル不一致で新規 submit した場合は指定モデルを課金ログへ記録する。"""
+        _patch_genai_types(monkeypatch)
         client = MagicMock()
-        done_op = _make_done_operation("projects/veo/op-mismatch")
-        mock_types.GenerateVideosOperation.return_value = MagicMock(name="projects/veo/op-mismatch", done=True)
-        client.operations.get.return_value = done_op
-        # state に保存したモデルと引数モデルを意図的に変える
+        client.models.generate_videos.return_value = _make_done_operation("projects/veo/new-model")
         saved_model = "veo-3.1-fast"
+        requested_model = "veo-3.1-DIFFERENT-model"
         self._write_state(channel_tmp, output_mp4, "projects/veo/op-mismatch", saved_model)
 
         mock_cost = MagicMock()
@@ -584,15 +653,13 @@ class TestGenerateLoopVideoResume:
                     client,
                     output_mp4.parent / "main.png",
                     output_mp4,
-                    model="veo-3.1-DIFFERENT-model",
+                    model=requested_model,
                     prompt="test prompt",
                 )
 
-        # Then: cost_tracker.log_generation は保存済みモデルで呼ばれる
         mock_cost.log_generation.assert_called_once()
         call_args = mock_cost.log_generation.call_args
-        # log_generation("video", model=...) なので keyword で渡される
-        assert call_args.kwargs.get("model") == saved_model
+        assert call_args.kwargs.get("model") == requested_model
 
 
 class TestGenerateLoopVideoSubmitInterrupt:

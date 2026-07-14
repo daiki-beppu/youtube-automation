@@ -22,6 +22,9 @@ export default defineBackground(() => {
 
   installSunoContentScriptRecovery({
     addTabUpdatedListener: (listener) => browser.tabs.onUpdated.addListener(listener),
+    addInstalledListener: (listener) => browser.runtime.onInstalled.addListener(listener),
+    queryTabs: () => browser.tabs.query({}),
+    reloadTab: (tabId) => browser.tabs.reload(tabId),
     executeScript: (details) => {
       if (details.files) {
         return chrome.scripting.executeScript({
@@ -41,6 +44,12 @@ export default defineBackground(() => {
 
   browser.runtime.onInstalled.addListener((details) => {
     console.info(`[suno-helper] installed/updated: ${details.reason}`);
+  });
+
+  onMessage("extensionVersionHandshake", ({ data, sender }) => {
+    requireRelayTab(sender, "extensionVersionHandshake");
+    const version = browser.runtime.getManifest().version;
+    return { version, matches: data.version === version };
   });
 
   // popup 廃止 (#892): default_popup を持たないため action クリックで onClicked が発火する。

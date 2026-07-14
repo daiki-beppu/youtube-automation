@@ -83,6 +83,7 @@ Google Cloud Console の新 UI では、OAuth 関連の手動操作は **Google 
 ```
 /setup             → Phase 0: ツール導入 + API 設定 (GCP + OAuth) を AI 主導で完結
 /channel-new       → Phase 1: TTP 対象確認 + seed confirmation artifacts + config + persona + branding
+パイロット検証    → 任意: 仮コレクションでサムネ/楽曲の方向性を確認
 /wf-new            → Phase 2: 初回コレクション制作
 
 # 任意後続: 追加調査や方向性再検討が必要なときだけ実行
@@ -133,6 +134,22 @@ yt-skills sync --asset claude-md --force  # 共通骨格を最新版で上書き
 
 > `--asset claude-md` は **共通骨格のみ** を `.claude/CLAUDE.md` に展開する。チャンネル固有の戦術メモ（ターゲット層・実験結果・運用ノウハウ）は `.claude/CLAUDE.local.md` に分離して書く。`sync --force` は `.claude/CLAUDE.local.md` には触れない。
 > 既存チャンネルの分離手順は [`docs/migration/claude-md-distribution.md`](docs/migration/claude-md-distribution.md) を参照。
+
+### 3.6 任意: パイロット検証フェーズ
+
+`/channel-new` 完了後、初回の本制作 `/wf-new` に入る前に、仮コレクションでサムネと楽曲の方向性だけを確認できる。必須ではないが、色味・構図・ムード・テンポに不安がある新チャンネルでは先に実施する。
+
+標準の進め方:
+
+```bash
+uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --track-count 2 --selected-plan A --music-engine <suno|lyria>
+```
+
+1. 生成された `collections/planning/YYYYMMDD-<short>-pilot-direction-check-collection/` を対象に `/thumbnail pilot-direction-check` を実行し、`10-assets/main.png` / `10-assets/thumbnail.jpg` を確認する。
+2. `/thumbnail-compare` でベンチマーク競合との 320px 表示を確認する。現行の比較 CLI は `collections/live/*/10-assets/thumbnail.jpg` を収集対象にするため、パイロットサムネを比較に含める場合は一時比較用の `collections/live/_pilot-thumbnail-compare/10-assets/thumbnail.jpg` にコピーし、確認後にその一時ディレクトリを削除する。
+3. `workflow-state.json::music_engine` に合わせて、Suno なら `/suno pilot-direction-check` でプロンプトを生成し、続けて `/suno-helper` で Suno UI へ投入・音源生成して試聴する。Lyria なら `/lyria pilot-direction-check` を実行して生成音源を試聴し、ムード・テンポを確認する。
+4. NG なら試作物を破棄し、`config/skills/thumbnail.yaml`、`config/skills/suno.yaml`、または `config/skills/lyria.yaml` の方向性項目を調整して再試作する。
+5. OK なら仮コレクションを削除して `/wf-new` に進む。仮コレクションを本制作へ昇格する場合は削除せず、既存 `collections/planning/` の続きとして `/wf-next` で進める。
 
 ---
 
@@ -191,7 +208,7 @@ yt-skills sync --asset claude-md --force  # 共通骨格を最新版で上書き
 | `pinned-comment.json` | `pinned_comment` (optional) |
 | `distrokid.json` | `distrokid` (optional) |
 
-サンプルは [`examples/channel_config.example/`](examples/channel_config.example/)（必須 + optional ファイル、`community.example.json` は skill-local raw JSON 例外）と [`examples/localizations.example.json`](examples/localizations.example.json)。v1.x からの移行は [`docs/migration/v2-config-split.md`](docs/migration/v2-config-split.md) と `uv run yt-config-migrate migrate --apply`。
+サンプルは [`examples/channel_config.example/`](examples/channel_config.example/)（必須 + optional ファイル、`community.example.json` は skill-local raw JSON 例外）と [`examples/localizations.example.json`](examples/localizations.example.json)。
 
 ---
 
@@ -246,7 +263,7 @@ uv run yt-skills sync --asset claude-md --force
 ```bash
 git clone git@github.com:daiki-beppu/youtube-channels-automation.git
 cd youtube-channels-automation
-uv sync --extra veo
+nix develop  # shellHook が uv sync を自動実行する
 ```
 
 ### 6.2 開発フロー

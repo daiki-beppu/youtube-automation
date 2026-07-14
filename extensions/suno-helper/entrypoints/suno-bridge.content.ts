@@ -15,7 +15,9 @@
 import {
   BRIDGE_MSG,
   BRIDGE_SOURCE,
+  FEED_V3_MAX_PAGES,
   FEED_V3_METHOD,
+  FEED_V3_PAGE_DELAY_MS,
   FEED_V3_PATH,
   type ObservedClip,
   SUNO_API_ORIGIN,
@@ -50,6 +52,10 @@ export default defineContentScript({
       if (clips) {
         post(type, { clips });
       }
+    }
+
+    function sleep(delayMs: number): Promise<void> {
+      return new Promise((resolve) => setTimeout(resolve, delayMs));
     }
 
     /** レスポンス clone を非同期で観測する。fetch の戻りを遅延させない・失敗を漏らさない。 */
@@ -101,22 +107,51 @@ export default defineContentScript({
         return;
       }
       try {
-        const res = await originalFetch(`${SUNO_API_ORIGIN}${FEED_V3_PATH}`, {
-          method: FEED_V3_METHOD,
-          headers: { authorization: authHeader, "content-type": "application/json" },
-          body: JSON.stringify({ ids }),
-        });
-        if (res.status === 401) {
-          // token 失効。破棄してページの次リクエストでの再捕捉に委ねる。
-          authHeader = null;
-          respond(null);
-          return;
+        const found = new Map<string, ObservedClip>();
+        let cursor: string | undefined;
+        for (let page = 0; page < FEED_V3_MAX_PAGES; page++) {
+          const res = await originalFetch(`${SUNO_API_ORIGIN}${FEED_V3_PATH}`, {
+            method: FEED_V3_METHOD,
+            headers: { authorization: authHeader, "content-type": "application/json" },
+            body: JSON.stringify(cursor === undefined ? { ids } : { ids, cursor }),
+          });
+          if (res.status === 401) {
+            // token 失効。破棄してページの次リクエストでの再捕捉に委ねる。
+            authHeader = null;
+            respond(null);
+            return;
+          }
+          if (!res.ok) {
+            respond(null);
+            return;
+          }
+          const json = await res.json();
+          const clips = parseClipsFromFeedResponse(json);
+          if (clips === null) {
+            respond(null);
+            return;
+          }
+          for (const clip of clips) {
+            if (ids.includes(clip.id)) {
+              found.set(clip.id, clip);
+            }
+          }
+          if (found.size === ids.length) {
+            respond([...found.values()]);
+            return;
+          }
+          const nextCursor =
+            typeof json === "object" && json !== null && "next_cursor" in json
+              ? (json as { next_cursor?: unknown }).next_cursor
+              : undefined;
+          if (typeof nextCursor !== "string" || nextCursor.length === 0) {
+            respond([...found.values()]);
+            return;
+          }
+          cursor = nextCursor;
+          await sleep(FEED_V3_PAGE_DELAY_MS);
         }
-        if (!res.ok) {
-          respond(null);
-          return;
-        }
-        respond(parseClipsFromFeedResponse(await res.json()));
+        respond([...found.values()]);
       } catch {
         respond(null);
       }

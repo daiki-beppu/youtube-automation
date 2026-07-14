@@ -11,9 +11,11 @@ import {
   COLLECTIONS_ROUTE,
   collectionPromptsRoute,
   DEFAULT_SERVER_SOURCES,
+  DEFAULT_REGENERATE_DURATION_OUTLIERS,
   DEFAULT_URL,
   FEED_V3_METHOD,
   FEED_V3_PATH,
+  formatServerSourceLabel,
   INJECT_ACK_TIMEOUT_MS,
   INTER_CREATE_DELAY_MS,
   MAX_INJECT_RETRY,
@@ -33,6 +35,9 @@ import {
 } from "../../shared/constants";
 
 describe("shared/constants: サーバー互換の契約値", () => {
+  it("Given 異常値再生成 option When 既定値を読む Then ON である", () => {
+    expect(DEFAULT_REGENERATE_DURATION_OUTLIERS).toBe(true);
+  });
   it("Given 移行後の定数 When STORAGE_KEY を読む Then 旧実装と同じ key 名である", () => {
     expect(STORAGE_KEY).toBe("sunoServerUrl");
   });
@@ -55,6 +60,18 @@ describe("shared/constants: サーバー互換の契約値", () => {
       "http://localhost:7876",
       "http://localhost:7877",
     ]);
+  });
+
+  it("Given server selector When helper ごとの option 表示名を組み立てる Then URL を含めずプロセスを識別できる", () => {
+    expect(
+      formatServerSourceLabel(
+        { id: "abyss-mi", label: "ABYSS MI", url: "http://abyss-mi.localhost:7873" },
+        "distrokid-helper",
+      ),
+    ).toBe("ABYSS MI | distrokid-helper");
+    expect(formatServerSourceLabel(DEFAULT_SERVER_SOURCES.at(-1)!, "suno-helper")).toBe(
+      "localhost fallback 7877 | suno-helper",
+    );
   });
 
   it("Given server selector When host permissions を読む Then *.localhost を許可する", () => {
@@ -237,9 +254,13 @@ describe("shared/constants: 投入方式 run mode (#1586)", () => {
     },
   );
 
-  it("Given queue mode When riskNote を読む Then duration 範囲外 entry の失敗検知と再実行導線を説明する", () => {
-    expect(RUN_MODES.queue.riskNote).toEqual(expect.stringContaining("範囲外"));
-    expect(RUN_MODES.queue.riskNote).toEqual(expect.stringContaining("失敗"));
-    expect(RUN_MODES.queue.riskNote).toEqual(expect.stringContaining("失敗分のみ再実行"));
+  it("Given serial mode When label / riskNote を読む Then 安全モードとして安定性重視の説明を表示する (#1862)", () => {
+    expect(RUN_MODES.serial.label).toBe("安全モード");
+    expect(RUN_MODES.serial.riskNote).toBe("1件ずつ完了を待つ、安定性重視のモードです。");
+  });
+
+  it("Given queue mode When label / riskNote を読む Then 高速モードとして速度重視の説明を表示する (#1862)", () => {
+    expect(RUN_MODES.queue.label).toBe("高速モード");
+    expect(RUN_MODES.queue.riskNote).toBe("最大10件を先行投入する、速度重視のモードです。");
   });
 });

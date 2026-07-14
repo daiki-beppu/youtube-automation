@@ -243,6 +243,34 @@ function freshZip(id: number, overrides: Partial<DownloadItem> = {}): DownloadIt
   };
 }
 
+describe('background onMessage("extensionVersionHandshake"): 拡張更新検知 (#1718)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("Given 同一タブの現行 version When handshake Then matches=true", async () => {
+    const { handlers } = await loadBackground();
+
+    expect(
+      handlers.get("extensionVersionHandshake")!({
+        data: { version: "0.1.0" },
+        sender: { tab: { id: 42 } },
+      }),
+    ).toEqual({ version: "0.1.0", matches: true });
+  });
+
+  it("Given stale content script version When handshake Then matches=false", async () => {
+    const { handlers } = await loadBackground();
+
+    expect(
+      handlers.get("extensionVersionHandshake")!({
+        data: { version: "0.0.9" },
+        sender: { tab: { id: 42 } },
+      }),
+    ).toEqual({ version: "0.1.0", matches: false });
+  });
+});
+
 async function flushPromises(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();

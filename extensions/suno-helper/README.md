@@ -1,6 +1,6 @@
 # suno-helper Chrome 拡張
 
-`/suno` が生成した `suno-prompts.json` を Suno Custom Mode に順次注入し、Generate を連続実行する個人利用向け補助拡張（WXT + React + TypeScript + Tailwind CSS / Manifest V3 / unpacked）。
+`/suno` が生成した `suno-prompts.json` を Suno の Advanced タブに順次注入し、Generate を連続実行する個人利用向け補助拡張（WXT + React + TypeScript + Tailwind CSS / Manifest V3 / unpacked）。
 
 > reCAPTCHA・トークン消費・速度の問題を避けるため、ヘッドレス／DevTools 経由ではなく **既ログイン状態の本物の Chrome セッション** 上で動かす設計です。
 
@@ -46,22 +46,28 @@ browser use から overlay / popup を安定して観測できるよう、操作
 
 ## 開発・ビルド・テスト
 
+ローカル検証は CI・lockfile と同じ Nix extensions shell の Node 24 / pnpm 11.12.0 に固定する。ambient `pnpm` の版は各環境で異なり得るため、リポジトリ root から以下のコマンドを使う。理由と両拡張共通の release 前検証は `extensions/README.md::pnpm バージョン契約` を参照する。
+
 ```bash
-pnpm install            # 依存インストール（postinstall で wxt prepare）
-pnpm dev                # 開発（HMR）
-pnpm build              # 本番ビルド → .output/chrome-mv3/
-pnpm compile            # 型チェック（tsc --noEmit）
-pnpm test               # Vitest unit
-pnpm test:e2e           # Playwright e2e（初回 pnpm exec playwright install chromium）
+nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile  # postinstall で wxt prepare
+nix develop .#extensions --command pnpm -C extensions/suno-helper dev                         # 開発（HMR）
+nix develop .#extensions --command pnpm -C extensions/suno-helper build                       # 本番ビルド → .output/chrome-mv3/
+nix develop .#extensions --command pnpm -C extensions/suno-helper zip                         # 配布用 zip
+nix develop .#extensions --command pnpm -C extensions/suno-helper compile                     # 型チェック（tsc --noEmit）
+nix develop .#extensions --command pnpm -C extensions/suno-helper test                        # Vitest unit
+nix develop .#extensions --command pnpm -C extensions/suno-helper exec playwright install --with-deps chromium  # Playwright 初回のみ（CI と同じ browser + system dependencies）
+nix develop .#extensions --command pnpm -C extensions/suno-helper test:e2e                    # Playwright e2e
 ```
+
+build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helper-<package.json の version>-chrome.zip` を確認する。期待名 zip が唯一の 1 件であることを含む release 前検証は、リポジトリ root で `bash .claude/skills/automation-release/references/verify-extensions.sh suno-helper` を実行する。
 
 ## インストール（unpacked）
 
-1. `pnpm install && pnpm build` を実行。
+1. リポジトリ root で `nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile && nix develop .#extensions --command pnpm -C extensions/suno-helper build` を実行。
 2. build artifact を basename が `suno-helper` になる固定パスへコピーする:
    ```bash
    mkdir -p "$HOME/chrome-extensions/suno-helper"
-   rsync -a --delete .output/chrome-mv3/ "$HOME/chrome-extensions/suno-helper/"
+   rsync -a --delete extensions/suno-helper/.output/chrome-mv3/ "$HOME/chrome-extensions/suno-helper/"
    ```
 3. Chrome で `chrome://extensions` を開く。
 4. 右上の **デベロッパーモード** を ON。
@@ -75,17 +81,19 @@ pnpm test:e2e           # Playwright e2e（初回 pnpm exec playwright install c
      --allow-extension suno-helper
    # → http://<channel>.localhost:7873/collections と /auth/token を配信
    ```
-2. Chrome で Suno の **Custom Mode** 画面を開く。
+2. Chrome で Suno の **Advanced** タブを選択する。
 3. 拡張アイコンからポップアップを開き、**ローカル配信元** でチャンネル名つき候補を選んで **データ取得**。
-4. `ready` な collection を選び、**全パターンを連続実行** を押す。
+4. `ready` な collection を選び、データ取得後に **異常値の曲を再生成する** を選んでから **全パターンを連続実行** を押す。既定の ON は duration guard NG の entry を最大 2 回再生成する。OFF は追加生成せず、NG を警告表示したうえで生成済み全 clip を playlist / download 候補に残す。
 5. 各パターンで Style/Lyrics を注入 → Generate 押下 → 生成完了検知 → 次へ、を自動で繰り返す。
 6. 全件完了後、対象 clip を一括選択 → playlist 追加 → More menu の **Download all** → format 選択 → ZIP ダウンロード完了監視 → `POST /collections/<id>/downloaded` で ZIP パス通知、まで実行する。サーバーは ZIP を展開し、`02-Individual-music/` と `workflow-state.json` を更新する。
 7. captcha challenge は waiting-captcha 表示で解消（多くは自動 verify）を待って続行する。entry 単位の一時的な失敗は Balanced 固定の上限で自動リトライし、上限超過分はスキップして完走する（#948）。スキップされた entry は一覧表示され、**失敗分のみ再実行** で再投入できる。
 
+**異常値の曲を再生成する** を OFF にした run は、duration guard の閾値外 clip も歯抜けにせず playlist と ZIP に含める。popup の status / console warning で NG を確認し、完了後に対象 playlist を試聴して採否を手動判断する。popup を閉じて再表示した場合も選択は復元される。entry phase の ERROR / STOPPED は resume バナー、playlist / download phase の中断は **Playlist から再開** / **Download から再開** を使い、いずれも元 run の選択と警告を引き継ぐ。
+
 ### in-flight 検知と停止判断（#948）
 
 - **in-flight カウント**: MAIN world bridge（`suno-bridge.content.ts`）が Suno API（`POST /api/generate/v2-web/` / `POST /api/feed/v3`）のレスポンスを観測し、clip status（complete/error 以外 = in-flight）で数える。「Remix ボタン disabled = 生成中」の旧 DOM プロキシは生成完了後も disabled が残り過大カウントするため fallback 専用（縮退中は popup に「bridge 未観測: DOM 計数で待機中」と表示される）
-- **停止判断**: queue 空き待ちは固定 timeout ではなく stall ベース（in-flight 集合が 10 分間まったく変化しないときのみ ERROR）。run 全体を止めるのは `FatalRunError`（DOM セレクタ不在 / captcha 手動解決 timeout / queue stall）のみ
+- **停止判断**: queue 空き待ちは固定 timeout ではなく stall ベース（in-flight 集合が 10 分間まったく変化しないときのみ ERROR）。run 全体を止めるのは `FatalRunError`（DOM セレクタ不在 / captcha 手動解決 timeout / queue stall / Lyrics 全注入方式失敗）のみ
 - **Bearer token**: bridge が MAIN world ローカルに保持し extension 側へは渡さない。401 で破棄しページの次リクエストで自動再捕捉
 
 ## Origin / token 契約

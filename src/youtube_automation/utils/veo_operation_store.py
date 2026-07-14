@@ -1,7 +1,7 @@
 """Veo operation 永続化ストア。
 
-Ctrl+C 中断時に operation_name を <CHANNEL_DIR>/tmp/veo-operations/ に保存し、
-再実行時に resume できるようにする pure I/O モジュール。google.genai 非依存。
+Ctrl+C 中断時に operation_name と入力画像 SHA-256 を <CHANNEL_DIR>/tmp/veo-operations/ に保存し、
+同一入力の再実行時に resume できるようにする pure I/O モジュール。google.genai 非依存。
 """
 
 from __future__ import annotations
@@ -12,7 +12,16 @@ import os
 from pathlib import Path
 
 _HASH_LEN = 16
-_REQUIRED_KEYS = {"operation_name", "model", "output_path"}
+_REQUIRED_KEYS = {"operation_name", "model", "output_path", "input_image_sha256"}
+
+
+def image_sha256(image_path: Path) -> str:
+    """入力画像の内容を識別する SHA-256 ハッシュを返す。"""
+    digest = hashlib.sha256()
+    with image_path.open("rb") as image_file:
+        for chunk in iter(lambda: image_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _resolve_channel_root(channel_root: Path | None) -> Path:
@@ -32,18 +41,20 @@ def state_path(output_path: Path, *, channel_root: Path | None = None) -> Path:
 
 def save(
     output_path: Path,
+    image_path: Path,
     operation_name: str,
     model: str,
     *,
     channel_root: Path | None = None,
 ) -> Path:
-    """state を JSON で永続化する（atomic write）。保存先パスを返す。"""
+    """入力画像識別子を含む state を JSON で永続化する（atomic write）。"""
     path = state_path(output_path, channel_root=channel_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     data = {
         "operation_name": operation_name,
         "output_path": str(output_path.resolve()),
         "model": model,
+        "input_image_sha256": image_sha256(image_path),
     }
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -75,13 +86,17 @@ def load(output_path: Path, *, channel_root: Path | None = None) -> dict | None:
         path.unlink(missing_ok=True)
         return None
 
-    # 型検証: operation_name, model, output_path は文字列である必要
+    # 型検証: operation_name, model, output_path, input_image_sha256 は文字列である必要
     if (
         not isinstance(data["operation_name"], str)
         or not isinstance(data["model"], str)
         or not isinstance(data["output_path"], str)
+        or not isinstance(data["input_image_sha256"], str)
     ):
-        print(f"  [Warn]   state の operation_name/model/output_path が文字列ではありません（削除します）: {path}")
+        print(
+            "  [Warn]   state の operation_name/model/output_path/input_image_sha256 が文字列ではありません"
+            f"（削除します）: {path}"
+        )
         path.unlink(missing_ok=True)
         return None
 

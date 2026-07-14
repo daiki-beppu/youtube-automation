@@ -65,12 +65,18 @@ def _write_fake_codex(bin_dir: Path) -> Path:
     """Fake codex CLI を tmp PATH に配置する。
 
     挙動:
+    - `--version` は `$FAKE_CODEX_VERSION`（未指定時 `codex-cli 0.142.5`）を返す
     - `login status` サブコマンドは `$FAKE_CODEX_LOGIN_STATUS` を stdout に返す
     - `$FAKE_CODEX_LOGIN_STATUS_RC` が非空のときは `login status` をその値で
       非 0 終了させる（`$FAKE_CODEX_LOGIN_STATUS` が指定されていれば stderr に
       流す）。wrapper の `codex login status` 自体が非 0 終了する failure mode
       の回帰テスト用
-    - `exec` サブコマンドは prompt 末尾の
+    - `exec` サブコマンドは、互換性プリフライト prompt
+      `Reply with exactly codex-model-compat-ok.` なら画像生成なしで JSONL を返す。
+      `$FAKE_CODEX_PREFLIGHT_INCOMPATIBLE` が非空のときは stderr に
+      codex CLI / model 非互換エラーを、`$FAKE_CODEX_PREFLIGHT_FAIL` が非空のときは
+      汎用エラーを出して非 0 終了する
+    - それ以外の `exec` サブコマンドは prompt 末尾の
       `copy the produced PNG to <path>` から `<path>` を抽出し、PNG マジックバイト
       を書き出した上で、最小 JSONL（`thread.started` / `turn.started` /
       `item.completed` × 2 (`agent_message`) / `turn.completed`）を stdout に流す
@@ -117,16 +123,12 @@ if [[ "${1:-}" == "login" && "${2:-}" == "status" ]]; then
   exit 0
 fi
 
-if [[ "${1:-}" == "exec" ]]; then
-  if [[ -n "${FAKE_CODEX_EXEC_FAIL:-}" ]]; then
-    # codex exec が非0で終了する failure mode を再現する。
-    # wrapper の `if ! final_msg=$(...); then ... fi` 経路が踏まれ、
-    # stderr ログの tail dump が呼び出し元 stderr に流れることを確認する。
-    printf 'fake codex exec: simulated failure line 1\n' >&2
-    printf 'fake codex exec: simulated failure line 2\n' >&2
-    exit "${FAKE_CODEX_EXEC_FAIL}"
-  fi
+if [[ "${1:-}" == "--version" ]]; then
+  printf '%s\n' "${FAKE_CODEX_VERSION:-codex-cli 0.142.5}"
+  exit 0
+fi
 
+if [[ "${1:-}" == "exec" ]]; then
   # `--` 区切り以降に来る prompt を取り出す
   prompt=""
   found_sep=0
@@ -139,6 +141,31 @@ if [[ "${1:-}" == "exec" ]]; then
       found_sep=1
     fi
   done
+
+  if [[ "$prompt" == "Reply with exactly codex-model-compat-ok." ]]; then
+    if [[ -n "${FAKE_CODEX_PREFLIGHT_INCOMPATIBLE:-}" ]]; then
+      printf 'fake codex exec: codex CLI v0.142.5 is incompatible with model gpt-5.6-terra\n' >&2
+      printf 'fake codex exec: upgrade codex CLI to use model gpt-5.6-terra\n' >&2
+      exit "${FAKE_CODEX_PREFLIGHT_INCOMPATIBLE}"
+    fi
+    if [[ -n "${FAKE_CODEX_PREFLIGHT_FAIL:-}" ]]; then
+      printf 'fake codex exec: network request timed out\n' >&2
+      exit "${FAKE_CODEX_PREFLIGHT_FAIL}"
+    fi
+    msg_preflight='{"type":"item.completed","item":{"id":"item_preflight",'
+    msg_preflight+='"type":"agent_message","text":"codex-model-compat-ok"}}'
+    printf '%s\n' "$msg_preflight"
+    exit 0
+  fi
+
+  if [[ -n "${FAKE_CODEX_EXEC_FAIL:-}" ]]; then
+    # codex exec が非0で終了する failure mode を再現する。
+    # wrapper の `if ! final_msg=$(...); then ... fi` 経路が踏まれ、
+    # stderr ログの tail dump が呼び出し元 stderr に流れることを確認する。
+    printf 'fake codex exec: simulated failure line 1 for model gpt-5.6-terra\n' >&2
+    printf 'fake codex exec: simulated failure line 2\n' >&2
+    exit "${FAKE_CODEX_EXEC_FAIL}"
+  fi
 
   out_path=""
   if [[ "$prompt" =~ copy\ the\ produced\ PNG\ to\ ([^[:space:]]+\.png) ]]; then
@@ -187,6 +214,8 @@ def _prepare_fake_codex_env(
     *,
     login_status: str | None = None,
     exec_fail_rc: int | None = None,
+    preflight_incompatible_rc: int | None = None,
+    preflight_fail_rc: int | None = None,
     login_status_rc: int | None = None,
     skip_cp: bool = False,
     agent_message_override: str | None = None,
@@ -204,6 +233,10 @@ def _prepare_fake_codex_env(
         env["FAKE_CODEX_LOGIN_STATUS"] = login_status
     if exec_fail_rc is not None:
         env["FAKE_CODEX_EXEC_FAIL"] = str(exec_fail_rc)
+    if preflight_incompatible_rc is not None:
+        env["FAKE_CODEX_PREFLIGHT_INCOMPATIBLE"] = str(preflight_incompatible_rc)
+    if preflight_fail_rc is not None:
+        env["FAKE_CODEX_PREFLIGHT_FAIL"] = str(preflight_fail_rc)
     if login_status_rc is not None:
         env["FAKE_CODEX_LOGIN_STATUS_RC"] = str(login_status_rc)
     if skip_cp:
@@ -531,6 +564,20 @@ def test_codex_image_script_checks_login_output_and_png_validity() -> None:
     assert "89504e470d0a1a0a" in text, "PNG ヘッダ検証のマジック値が無い"
 
 
+def test_codex_image_script_contains_model_compatibility_preflight_and_diagnostics() -> None:
+    """Given codex-image.sh
+    When 本文を読む
+    Then codex CLI version / default model 診断と互換性プリフライトが含まれる。
+    """
+    text = _read(_CODEX_IMAGE_SH)
+    assert "codex --version" in text, "codex CLI version 取得が無い"
+    assert "Reply with exactly codex-model-compat-ok." in text, "互換性プリフライト prompt が無い"
+    assert "codex default model:" in text, "default model 診断行が無い"
+    assert "npm install -g @openai/codex@latest" in text, "npm のアップグレード手順が無い"
+    assert "brew upgrade codex" in text, "Homebrew のアップグレード手順が無い"
+    assert "bun add -g @openai/codex@latest" in text, "Bun のアップグレード手順が無い"
+
+
 def test_codex_image_script_stops_when_codex_is_not_logged_in(tmp_path: Path) -> None:
     """Given 未ログイン状態の codex CLI
     When codex-image.sh を実行する
@@ -550,7 +597,9 @@ def test_codex_image_script_stops_when_codex_is_not_logged_in(tmp_path: Path) ->
         f"未ログイン時の案内が stderr に無い: {result.stderr!r}"
     )
     invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
-    assert invocations == [["login", "status"]], f"未ログイン時に `codex exec` を呼んではいけない: {invocations!r}"
+    assert invocations == [["--version"], ["login", "status"]], (
+        f"未ログイン時に `codex exec` を呼んではいけない: {invocations!r}"
+    )
     assert not output_path.exists(), "未ログイン時は出力ファイルを作らない"
 
 
@@ -574,7 +623,7 @@ def test_codex_image_script_rejects_not_logged_in_substring_false_positive(tmp_p
 
     assert result.returncode != 0, "`Not Logged in` でも `Logged in` の部分一致が通って未ログインで進んでしまっている"
     invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
-    assert invocations == [["login", "status"]], (
+    assert invocations == [["--version"], ["login", "status"]], (
         f"`Not Logged in` 時に `codex exec` を呼んではいけない: {invocations!r}"
     )
     assert not output_path.exists(), "`Not Logged in` 時は出力ファイルを作らない"
@@ -631,10 +680,90 @@ def test_codex_image_script_surfaces_codex_login_status_nonzero_exit(tmp_path: P
         f"経路で実 exit code を捕捉すること: {result.stderr!r}"
     )
     invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
-    assert invocations == [["login", "status"]], (
+    assert invocations == [["--version"], ["login", "status"]], (
         f"`codex login status` 非 0 終了時に `codex exec` を呼んではいけない: {invocations!r}"
     )
     assert not output_path.exists(), "`codex login status` 非 0 終了時は出力ファイルを作らない"
+
+
+def test_codex_image_script_stops_on_model_incompatibility_before_generation(tmp_path: Path) -> None:
+    """Given codex CLI とデフォルトモデルが非互換な環境
+    When codex-image.sh を実行する
+    Then 本番生成を試みる前に非 0 で停止し、CLI version / model / upgrade 手順を stderr に出す。
+    """
+    if not _CODEX_IMAGE_SH.exists():
+        pytest.fail(f"{_CODEX_IMAGE_SH.relative_to(_REPO_ROOT)} が存在しない")
+
+    env, log_file = _prepare_fake_codex_env(tmp_path, preflight_incompatible_rc=42)
+    output_path = tmp_path / "output.png"
+    ref_path = _write_reference_file(tmp_path)
+
+    result = _run_script(_CODEX_IMAGE_SH, "tiny prompt", str(output_path), str(ref_path), env=env)
+
+    assert result.returncode != 0, "モデル非互換時は wrapper も非 0 終了する必要がある"
+    assert "codex CLI v0.142.5" in result.stderr
+    assert "モデル `gpt-5.6-terra` と非互換" in result.stderr
+    assert "npm install -g @openai/codex@latest" in result.stderr
+    assert "brew upgrade codex" in result.stderr
+    assert "bun add -g @openai/codex@latest" in result.stderr
+    assert not output_path.exists(), "モデル非互換時は出力ファイルを作らない"
+
+    invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
+    exec_invocations = [args for args in invocations if args and args[0] == "exec"]
+    assert len(exec_invocations) == 1, (
+        f"モデル非互換時は互換性プリフライトだけで止まり、本番生成 exec を呼ばない: {invocations!r}"
+    )
+    assert "codex-model-compat-ok" in exec_invocations[0][-1]
+
+
+def test_codex_image_script_stops_on_other_preflight_failures_before_generation(tmp_path: Path) -> None:
+    """Given 互換性以外で codex のプリフライトが失敗する環境
+    When codex-image.sh を実行する
+    Then 本番生成を試みず、実 exit code と診断を stderr に出して非 0 で停止する。
+    """
+    if not _CODEX_IMAGE_SH.exists():
+        pytest.fail(f"{_CODEX_IMAGE_SH.relative_to(_REPO_ROOT)} が存在しない")
+
+    env, log_file = _prepare_fake_codex_env(tmp_path, preflight_fail_rc=43)
+    output_path = tmp_path / "output.png"
+    ref_path = _write_reference_file(tmp_path)
+
+    result = _run_script(_CODEX_IMAGE_SH, "tiny prompt", str(output_path), str(ref_path), env=env)
+
+    assert result.returncode != 0, "プリフライト失敗時は wrapper も非 0 終了する必要がある"
+    assert "互換性プリフライトに失敗しました (rc=43)" in result.stderr
+    assert "codex CLI / 認証 / ネットワーク状態を確認してください" in result.stderr
+    assert "fake codex exec: network request timed out" in result.stderr
+    assert not output_path.exists(), "プリフライト失敗時は出力ファイルを作らない"
+
+    invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
+    exec_invocations = [args for args in invocations if args and args[0] == "exec"]
+    assert len(exec_invocations) == 1, f"プリフライト失敗時は本番生成 exec を呼ばない: {invocations!r}"
+    assert "codex-model-compat-ok" in exec_invocations[0][-1]
+
+
+def test_codex_image_script_runs_model_compatibility_preflight_before_generation(tmp_path: Path) -> None:
+    """Given 互換な codex CLI 環境
+    When codex-image.sh を実行する
+    Then 本番生成 exec の前に最小 `codex exec --json` プリフライトを実行し、従来通り成功する。
+    """
+    if not _CODEX_IMAGE_SH.exists():
+        pytest.fail(f"{_CODEX_IMAGE_SH.relative_to(_REPO_ROOT)} が存在しない")
+
+    env, log_file = _prepare_fake_codex_env(tmp_path)
+    output_path = tmp_path / "output.png"
+    ref_path = _write_reference_file(tmp_path)
+
+    result = _run_script(_CODEX_IMAGE_SH, "tiny prompt", str(output_path), str(ref_path), env=env)
+
+    assert result.returncode == 0, result.stderr
+    assert output_path.exists()
+
+    invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
+    exec_invocations = [args for args in invocations if args and args[0] == "exec"]
+    assert len(exec_invocations) == 2, f"プリフライト exec と本番生成 exec の 2 回だけを期待: {invocations!r}"
+    assert "codex-model-compat-ok" in exec_invocations[0][-1]
+    assert f"copy the produced PNG to {output_path}" in exec_invocations[1][-1]
 
 
 def test_codex_image_script_surfaces_codex_exec_failure_diagnostics(tmp_path: Path) -> None:
@@ -658,6 +787,10 @@ def test_codex_image_script_surfaces_codex_exec_failure_diagnostics(tmp_path: Pa
 
     assert result.returncode != 0, "codex exec 非0終了時は wrapper も非0終了する必要がある"
     assert "ERROR" in result.stderr, f"診断ブロックの ERROR 行が stderr に届いていない: {result.stderr!r}"
+    assert "codex CLI: v0.142.5" in result.stderr, f"生成失敗診断に codex CLI version が出ていない: {result.stderr!r}"
+    assert "codex default model: gpt-5.6-terra" in result.stderr, (
+        f"生成失敗診断に default model が出ていない: {result.stderr!r}"
+    )
     assert "fake codex exec: simulated failure" in result.stderr, (
         f"codex stderr の tail dump が呼び出し元 stderr に出ていない (silent failure 再発): {result.stderr!r}"
     )
@@ -841,11 +974,11 @@ def test_codex_image_script_passes_bash_syntax_check() -> None:
 def test_codex_image_script_centralizes_stderr_tail_dump_in_helper() -> None:
     """Given codex-image.sh
     When 本文を読む
-    Then `dump_codex_stderr` ヘルパが 1 度だけ定義され、3 つの error 分岐から呼ばれている。
+    Then `dump_codex_stderr` ヘルパが 1 度だけ定義され、5 つの error 分岐から呼ばれている。
 
     回帰防止 (AI-547-006-N2 / family_tag: dry-violation-error-diagnostics):
     `--- codex stderr (tail) ---` を echo して `tail -n 30 "$err_log"` する 4 行ブロックが
-    3 つの error 分岐に直接コピペで散在していた DRY 違反を、共通ヘルパに集約した状態を維持する。
+    error 分岐に直接コピペで散在していた DRY 違反を、共通ヘルパに集約した状態を維持する。
     """
     text = _read(_CODEX_IMAGE_SH)
 
@@ -853,11 +986,12 @@ def test_codex_image_script_centralizes_stderr_tail_dump_in_helper() -> None:
     assert len(re.findall(r"^dump_codex_stderr\(\)\s*\{", text, flags=re.MULTILINE)) == 1, (
         "`dump_codex_stderr` ヘルパが 1 度だけ定義されている必要がある"
     )
-    # 呼び出しは error 3 分岐ぶん（行頭でない位置にあるかも知れないので空白許可）
+    # 呼び出しは error 5 分岐ぶん（行頭でない位置にあるかも知れないので空白許可）
     call_sites = re.findall(r"^\s*dump_codex_stderr\s*$", text, flags=re.MULTILINE)
-    assert len(call_sites) == 3, (
-        f"`dump_codex_stderr` 呼び出しが 3 箇所揃っていない (現在 {len(call_sites)} 件): "
-        "codex exec 失敗 / final_msg 不一致 / 画像未生成 の 3 つの error 分岐から呼ばれること"
+    assert len(call_sites) == 5, (
+        f"`dump_codex_stderr` 呼び出しが 5 箇所揃っていない (現在 {len(call_sites)} 件): "
+        "互換性プリフライト非互換 / 互換性プリフライト汎用失敗 / codex exec 失敗 / "
+        "final_msg 不一致 / 画像未生成 の 5 つの error 分岐から呼ばれること"
     )
     # コピペブロックが再び発生していないことを確認
     duplicated_pattern = re.findall(r'echo "--- codex stderr \(tail\) ---" >&2', text)

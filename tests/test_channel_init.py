@@ -1,6 +1,5 @@
 """yt-channel-init CLI のユニット / 結合テスト (tmp_path ベース).
 
-設計参考: `tests/test_config_migrate.py` のスタイルを踏襲する。
 - `_auto_reset` autouse fixture で `CHANNEL_DIR` を外し、新 loader シングルトンをリセット。
 - `main(argv)` 直接呼び出し → 戻り値 `rc` と stdout/stderr を assert。
 - 期待 JSON は読み戻して scalar 値と必須キー存在を中心に検証 (DRY)。
@@ -161,6 +160,16 @@ def test_content_json_reflects_genre_style_context_args(tmp_path):
     assert content["genre"]["primary"] == "chiptune"
     assert content["genre"]["style"] == "8-bit"
     assert content["genre"]["context"] == "RPG"
+
+
+def test_content_json_uses_base_only_tags_min_count(tmp_path):
+    # Given/When: yt-channel-init の通常実行で content.json を生成
+    rc = main(_required_args(tmp_path))
+
+    # Then: 生成器が base-only 設計と整合する件数下限を明示する
+    assert rc == 0
+    content = _read_json(_channel_dir(tmp_path) / "content.json")
+    assert content["tags"]["min_count"] == 26
 
 
 # ===================== Case 5: genre/style/context のデフォルト "TBD" =====================

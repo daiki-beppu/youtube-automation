@@ -791,6 +791,56 @@ class TestCheckChannelConfig:
         r = doctor.check_channel_config(tmp_path)
         assert r.status == "ok"
 
+    def test_invalid_localization_placeholder_is_fail(self, tmp_path):
+        """実 localizations.json の不正 placeholder を check から検出する."""
+        _write_minimal_config(tmp_path)
+        (tmp_path / "config" / "localizations.json").write_text(
+            json.dumps(
+                {
+                    "supported_languages": ["ja"],
+                    "default_language": "ja",
+                    "languages": {
+                        "ja": {"title_template": "{axis_label} - {scene_phrase}"},
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        r = doctor.check_channel_config(tmp_path)
+
+        assert r.status == "fail"
+        assert "config/localizations.json 検証失敗" in r.message
+        assert "axis_label" in r.message
+        assert "languages.ja.title_template" in r.message
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+
+    def test_main_json_reports_invalid_localization_placeholder(self, tmp_path, monkeypatch, capsys):
+        """CLI 公開入口の実 JSON で channel_config 失敗を報告する."""
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        _write_minimal_config(tmp_path)
+        (tmp_path / "config" / "localizations.json").write_text(
+            json.dumps(
+                {
+                    "supported_languages": ["ja"],
+                    "default_language": "ja",
+                    "languages": {
+                        "ja": {"title_template": "{axis_label} - {scene_phrase}"},
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        assert doctor.main(["--json", "--target", str(tmp_path)]) == 0
+
+        payload = json.loads(capsys.readouterr().out)
+        config_check = next(check for check in payload["checks"] if check["id"] == "channel_config")
+        assert config_check["status"] == "fail"
+        assert "config/localizations.json 検証失敗" in config_check["message"]
+        assert "axis_label" in config_check["message"]
+
     def test_channel_dir_env_restored_after_call(self, tmp_path, monkeypatch):
         """check_channel_config 呼び出し後、CHANNEL_DIR 環境変数が元に戻っている."""
         original = str(tmp_path / "original")

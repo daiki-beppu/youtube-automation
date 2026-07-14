@@ -1,4 +1,4 @@
-// Suno Custom Mode への Style / Lyrics 注入と Generate 連続実行に使う DOM 操作群。
+// Suno の Advanced タブへの Style / Lyrics 注入と Generate 連続実行に使う DOM 操作群。
 // 旧 `content.js` の振る舞いを 1:1 で保持しつつ純関数化する。
 // Suno の DOM は変わりうるため、セレクタはこの 1 箇所に集約する（壊れたら README 参照で更新）。
 
@@ -22,20 +22,18 @@ const SELECTORS = {
   // Song Title 欄は testid/aria/label を持たず placeholder のみ安定 (#844 実 DOM 検証)。
   // 英語 UI は "Song Title (Optional)"、日本語 UI は "曲名(任意)"（2026-07 実 DOM）で出る。
   title: 'input[placeholder*="Song Title" i], input[placeholder*="曲名"]',
-  // Custom Mode > More Options の 3 フィールド (#900、chrome-devtools-mcp で実機確定済み)。
+  // Advanced タブ > More Options の 3 フィールド (#900、chrome-devtools-mcp で実機確定済み)。
   //   - Exclude styles: native text input/textarea (placeholder / aria-label の表記ゆれを許容)
   //   - Weirdness / Style Influence: radix slider ([role="slider"] + aria-label で区別)
   // data-testid は Suno UI で Lyrics 以外に存在しないため placeholder / aria-label を SSOT にする。
   excludeStyles:
-    'input[placeholder*="Exclude" i], textarea[placeholder*="Exclude" i], input[aria-label*="Exclude" i], textarea[aria-label*="Exclude" i], input[placeholder*="除外"], textarea[placeholder*="除外"], input[aria-label*="除外"], textarea[aria-label*="除外"]',
+    'input[placeholder*="Exclude" i], textarea[placeholder*="Exclude" i], input[aria-label*="Exclude" i], textarea[aria-label*="Exclude" i]',
   // 2026-07 の Suno 新 Create UI で slider がリネームされた（Weirdness → Bizarreness /
   // Style Influence → Style influence〈小文字 i〉、#1720）。完全一致だと表記ゆれのたびに run が
   // 中断するため、旧新両ラベルにマッチする case-insensitive substring match（tolerant match）にする。
-  // 日本語 UI ラベル(ユニーク度 / スタイルの影響度)も同じ tolerant match 方針で追加。
   weirdness:
-    '[role="slider"][aria-label*="weirdness" i], [role="slider"][aria-label*="bizarre" i], [role="slider"][aria-label*="ユニーク度"]',
-  styleInfluence:
-    '[role="slider"][aria-label*="influence" i], [role="slider"][aria-label*="スタイルの影響度"]',
+    '[role="slider"][aria-label*="weirdness" i], [role="slider"][aria-label*="bizarre" i]',
+  styleInfluence: '[role="slider"][aria-label*="influence" i]',
   // Voice section の Male / Female ボタン (chrome-devtools-mcp 実機検証で確認)。
   // aria-label / data-testid を持たないため、`data-selected` 属性 (Suno が排他トグル用に意図して
   // 付けた属性) で候補を全 query → textContent 完全一致で Male/Female を絞り込む方式を採用。
@@ -96,15 +94,35 @@ export const SETTLE_MS = 1500;
 /**
  * run 全体を止めるべき致命的エラー (#948)。entry 単位のリトライ/スキップ（lib/entry-retry.ts）の
  * 対象外で、catch されず ERROR phase へ直行する。該当するのは「次の entry でも必ず再発する」失敗:
- *   - DOM セレクタ不在（Suno UI 改装 / Custom Mode 画面でない）
+ *   - DOM セレクタ不在（Suno UI 改装 / Advanced タブが選択されていない）
  *   - captcha challenge の手動解決待ち timeout（人間の介入が必要）
  *   - queue の stall / timeout（Suno 側の系統的な停滞）
- * 一時的・entry 固有の失敗（生成完了待ち timeout / inject 未受理）は通常の Error のまま残す。
+ *   - Lyrics 欄の paste retry + beforeinput fallback が全て不受理（原因特定ログを出して停止）
+ * 一時的・entry 固有の失敗（生成完了待ち timeout / inject 未受理 / retry 前の paste 不受理）は
+ * 通常の Error のまま残す。
  */
 export class FatalRunError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "FatalRunError";
+  }
+}
+
+export interface LyricsReflectionDiagnostics {
+  expectedLength: number;
+  actualLength: number;
+  firstDiffIndex: number;
+  expectedExcerpt: string;
+  actualExcerpt: string;
+}
+
+export class LyricsPasteReflectionError extends Error {
+  readonly diagnostics: LyricsReflectionDiagnostics;
+
+  constructor(message: string, diagnostics: LyricsReflectionDiagnostics) {
+    super(message);
+    this.name = "LyricsPasteReflectionError";
+    this.diagnostics = diagnostics;
   }
 }
 
@@ -114,6 +132,80 @@ export interface ResolvedFields {
   lyrics: HTMLTextAreaElement | HTMLElement | null;
   // Song Title 欄 (#844)。不在は throw せず undefined（fail-soft: style/lyrics の fail-loud とは非対称）。
   title?: HTMLInputElement;
+}
+
+const LYRICS_MODE_NAMES = ["Write", "Prompt", "Instrumental"] as const;
+const CREATE_FORM_MODE_NAMES = ["Simple", "Advanced", "Sounds"] as const;
+
+function controlName(el: Element): string {
+  return (el.getAttribute("aria-label") ?? el.textContent ?? "").trim();
+}
+
+function selectedModeName(
+  groupRole: "radiogroup" | "tablist",
+  controlRole: "radio" | "tab",
+  selectedAttribute: "aria-checked" | "aria-selected",
+  modeNames: readonly string[],
+): string | null {
+  const expectedNames = new Map(
+    modeNames.map((name) => [name.toLowerCase(), name]),
+  );
+  const candidates = Array.from(
+    document.querySelectorAll(`[role="${groupRole}"]`),
+  ).flatMap((group) => {
+    const controls = Array.from(
+      group.querySelectorAll(`[role="${controlRole}"]`),
+    );
+    const names = controls.map(controlName);
+    if (
+      !modeNames.every((modeName) =>
+        names.some((name) => name.toLowerCase() === modeName.toLowerCase()),
+      )
+    ) {
+      return [];
+    }
+    const selected = controls.filter(
+      (control) => control.getAttribute(selectedAttribute) === "true",
+    );
+    if (selected.length !== 1) {
+      return [];
+    }
+    const canonicalName = expectedNames.get(
+      controlName(selected[0]).toLowerCase(),
+    );
+    return canonicalName ? [canonicalName] : [];
+  });
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+/** Lyrics 欄を表示するためにユーザーが確認すべき、現在の Suno UI 状態を返す。DOM は変更しない。 */
+export function diagnoseLyricsInputState(): string {
+  const lyricsMode = selectedModeName(
+    "radiogroup",
+    "radio",
+    "aria-checked",
+    LYRICS_MODE_NAMES,
+  );
+  if (lyricsMode === "Prompt" || lyricsMode === "Instrumental") {
+    return `Lyrics mode が ${lyricsMode} になっています。Write に切り替えてください。`;
+  }
+
+  const createFormMode = selectedModeName(
+    "tablist",
+    "tab",
+    "aria-selected",
+    CREATE_FORM_MODE_NAMES,
+  );
+  if (createFormMode === "Simple" || createFormMode === "Sounds") {
+    return `Create form mode が ${createFormMode} になっています。Advanced タブを選択してください。`;
+  }
+
+  return [
+    "Lyrics 欄を表示できる状態か確認してください:",
+    "- Advanced タブが選択されているか",
+    "- Lyrics mode が Write になっているか",
+    "- Suno の UI 言語が日本語になっていないか（英語推奨）",
+  ].join("\n");
 }
 
 export interface WaitForGenerationOptions {
@@ -187,31 +279,100 @@ export function setNativeValue(
  * paste 後の待ちは Lexical の DOM 反映（reconcile）完了を待つ安定化マージン。
  */
 const LEXICAL_SELECTION_SYNC_MS = 200;
+const LYRICS_DIFF_EXCERPT_RADIUS = 24;
 
-/**
- * Lexical は改行ごとに直下の p 要素へ分割するため、textContent では段落境界が消える。
- * p 要素がある場合は改行で再結合し、投入元の plain text と同じ表現へ戻して検証する。
- */
 function readLexicalText(el: HTMLElement): string {
   const paragraphs = Array.from(el.children).filter(
     (child): child is HTMLElement =>
       child instanceof HTMLElement && child.tagName === "P",
   );
-  return paragraphs.length > 0
-    ? paragraphs.map((paragraph) => paragraph.textContent ?? "").join("\n")
-    : (el.textContent ?? "");
+  if (paragraphs.length > 0) {
+    return paragraphs.map((child) => child.textContent ?? "").join("\n");
+  }
+  return el.textContent ?? "";
 }
 
-/**
- * 行頭・行末の空白差異や空行混入は Lexical の reconcile タイミングで発生しうる誤差のため、
- * 反映確認の比較前に各行を trim + 空行除去して吸収する。
- */
-function normalizeLexicalText(s: string): string {
-  return s
+function normalizeLexicalText(value: string): string {
+  return value
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
     .join("\n");
+}
+
+function findFirstDiffIndex(expected: string, actual: string): number {
+  const maxComparableLength = Math.min(expected.length, actual.length);
+  for (let index = 0; index < maxComparableLength; index++) {
+    if (expected[index] !== actual[index]) {
+      return index;
+    }
+  }
+  return expected.length === actual.length ? -1 : maxComparableLength;
+}
+
+function excerptAround(text: string, index: number): string {
+  if (index < 0) {
+    return "";
+  }
+  const start = Math.max(0, index - LYRICS_DIFF_EXCERPT_RADIUS);
+  const end = Math.min(text.length, index + LYRICS_DIFF_EXCERPT_RADIUS);
+  return text.slice(start, end);
+}
+
+function buildLyricsReflectionDiagnostics(
+  expected: string,
+  actual: string,
+): LyricsReflectionDiagnostics {
+  const firstDiffIndex = findFirstDiffIndex(expected, actual);
+  return {
+    expectedLength: expected.length,
+    actualLength: actual.length,
+    firstDiffIndex,
+    expectedExcerpt: excerptAround(expected, firstDiffIndex),
+    actualExcerpt: excerptAround(actual, firstDiffIndex),
+  };
+}
+
+function formatLyricsReflectionMessage(
+  action: string,
+  diagnostics: LyricsReflectionDiagnostics,
+): string {
+  return (
+    `Lyrics 欄への ${action} 反映に失敗しました。Generate へ進まず停止します。` +
+    ` expectedLength=${diagnostics.expectedLength}, actualLength=${diagnostics.actualLength}, ` +
+    `firstDiffIndex=${diagnostics.firstDiffIndex}, expectedExcerpt=${JSON.stringify(diagnostics.expectedExcerpt)}, ` +
+    `actualExcerpt=${JSON.stringify(diagnostics.actualExcerpt)}`
+  );
+}
+
+async function selectAllLexicalLyrics(el: HTMLElement): Promise<void> {
+  el.focus();
+  const selected = document.execCommand("selectAll", false);
+  if (!selected) {
+    throw new FatalRunError(
+      "Lyrics 欄の全選択に失敗しました。Suno UI の Lexical editor 状態を確認してください。",
+    );
+  }
+  await sleep(LEXICAL_SELECTION_SYNC_MS);
+}
+
+function assertLexicalLyricsValue(
+  el: HTMLElement,
+  value: string,
+  action: string,
+): void {
+  const actual = readLexicalText(el);
+  if (normalizeLexicalText(actual) === normalizeLexicalText(value)) {
+    return;
+  }
+  const diagnostics = buildLyricsReflectionDiagnostics(value, actual);
+  if (action === "paste") {
+    throw new LyricsPasteReflectionError(
+      formatLyricsReflectionMessage(action, diagnostics),
+      diagnostics,
+    );
+  }
+  throw new FatalRunError(formatLyricsReflectionMessage(action, diagnostics));
 }
 
 /**
@@ -219,9 +380,12 @@ function normalizeLexicalText(s: string): string {
  * 新 UI (2026-07) の Lexical contenteditable div は selectAll 後、非空 lyrics を paste 合成イベントで
  * 全置換し、空 lyrics は delete command でクリアする。
  *
- * 反映確認: Lexical は paste テキストを <p class="lyrics-paragraph"> ツリーに変換するため、
- * textContent は改行なしの連結文字列になり入力値と不一致になる。各 <p> の textContent を
- * "\n" で結合して再構築した文字列と比較する。
+ * Lexical は value setter を持たず、innerText 直接代入は内部 EditorState と乖離して
+ * 次の再レンダーで巻き戻る。Lexical 自身が購読する paste イベント（DataTransfer の
+ * text/plain）に載せるのが React 互換で最も壊れにくい経路（実ページで動作検証済み）。
+ * 空の text/plain paste は Lexical 側で no-op になる可能性があるため、空 lyrics は全選択後に
+ * delete command でクリアする。
+ * 同期実行では selection が Lexical に同期されず置換に失敗するため async 必須。
  */
 export async function setLyricsValue(
   el: HTMLTextAreaElement | HTMLElement,
@@ -231,14 +395,7 @@ export async function setLyricsValue(
     setNativeValue(el, value);
     return;
   }
-  el.focus();
-  const selected = document.execCommand("selectAll", false);
-  if (!selected) {
-    throw new FatalRunError(
-      "Lyrics 欄の全選択に失敗しました。Suno UI の Lexical editor 状態を確認してください。",
-    );
-  }
-  await sleep(LEXICAL_SELECTION_SYNC_MS);
+  await selectAllLexicalLyrics(el);
   if (value === "") {
     const cleared = document.execCommand("delete", false);
     if (!cleared) {
@@ -276,13 +433,29 @@ export async function setLyricsValue(
     }),
   );
   await sleep(LEXICAL_SELECTION_SYNC_MS);
-  if (
-    normalizeLexicalText(readLexicalText(el)) !== normalizeLexicalText(value)
-  ) {
-    throw new FatalRunError(
-      "Lyrics 欄への paste 反映に失敗しました。Generate へ進まず停止します。",
-    );
+  assertLexicalLyricsValue(el, value, "paste");
+}
+
+export async function setLyricsValueViaBeforeInput(
+  el: HTMLTextAreaElement | HTMLElement,
+  value: string,
+): Promise<void> {
+  if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
+    setNativeValue(el, value);
+    return;
   }
+  await selectAllLexicalLyrics(el);
+  el.dispatchEvent(
+    new InputEvent("beforeinput", {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      data: value,
+      inputType: value === "" ? "deleteContentBackward" : "insertFromPaste",
+    }),
+  );
+  await sleep(LEXICAL_SELECTION_SYNC_MS);
+  assertLexicalLyricsValue(el, value, "beforeinput fallback");
 }
 
 /**
@@ -373,7 +546,7 @@ function pickPreferVisible<T extends HTMLElement>(els: T[]): T | null {
 }
 
 /**
- * Custom Mode > More Options の 3 フィールドを解決する（#900）。
+ * Advanced タブ > More Options の 3 フィールドを解決する（#900）。
  * visible 優先、なければ DOM 上の最初の要素を返す（collapsed 時の null 化を回避）。
  * 3 要素すべて不在でも throw しない（fail-soft）。throw / skip の非対称契約は呼び出し側
  * (injectAdvancedFields) が entry の値有無と突き合わせて判定する。
@@ -647,7 +820,7 @@ export function resolveFields(): ResolvedFields {
   ).filter(isVisible);
   if (areas.length === 0) {
     throw new FatalRunError(
-      "textarea が見つかりません。Suno の Custom Mode 画面を開いてください。",
+      `textarea が見つかりません。${diagnoseLyricsInputState()}`,
     );
   }
 

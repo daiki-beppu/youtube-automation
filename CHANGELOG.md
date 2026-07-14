@@ -7,12 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(thumbnail)`: TTP 参照画像の直近コレクション重複除外を追加（#1649）。`reference_images.dedup_recent_collections`（既定 5）が collection ごとに採用企画の参照 1 件を Reference Assignments へ保存し、全割当節から未使用参照を先頭候補として優先する。不足する候補枠だけ位置順で補うため、候補数より大きいプールは全参照が採用されるまで先頭候補を再利用しない。
+
+### Added
+
+- `docs(feedback)`: `/feedback` に、`status="recorded"` の未還流 entry を一覧・選択し、open issue の類似タイトル照合とユーザー承認を経て `daiki-beppu/youtube-automation` へ `feedback` ラベル付き issue を起票する還流モードを追加した。成功した entry は `status="filed"` と `issue_url` を記録して候補から除外し、二重起票を防ぐ。起票本文テンプレート、発生チャンネル掲載の個別確認、起票直前の機密情報再マスクも明記した（#1829）。
+- `docs(channel-research)`: サムネイルのフォント傾向・テキスト内容パターン・配置傾向を、固有名詞やコピー原文を除いた構造化プロファイル `docs/benchmarks/thumbnail-text-profile.md` として生成する契約を `/channel-research` に追加した。前回生成したプロファイルは個別ベンチマークレポートの存在判定と fallback 入力から除外する（#1906）。
+- `docs(thumbnail-research)`: `/benchmark` の収集済み JSON と競合サムネイル画像を再生数上位群 / 下位群で比較し、構図・配色・テキスト配置・視線誘導・被写体の勝ちパターンを `docs/benchmarks/thumbnail-analysis.md` に出力する `/thumbnail-research` スキルを追加した。レポートの推奨事項と参照候補を `/thumbnail` の TTP 入力として相互参照し、データ収集・チャンネル全体分析・320px 視認性比較との発動条件を分離した（#1796）。
+- `docs(channel-new)`: 入口系またはモード判別不能な発動時に既存チャンネル / 新規開設を最初に確認するゲートを追加した。既存チャンネルでは `yt-channel-seed --no-write-benchmark --json` の登録者数・動画数・直近タイトルを提示して既存踏襲 / 方向性見直しを確認し、見直し選択時も取り込み完了後に必要な TTP メモまたは分析レポートを明示して方向性検討モードへ接続する（#1897）
+- `docs(analytics)`: `/analytics-analyze` の必須 3 CLI 出力と数値 evidence を `reports/analysis_YYYYMMDD.json` に構造化保存し、Markdown とのペア生成と validator 成功を完了条件にした。`/collection-ideate` は同 validator で検証済みの固定キーから §5 / §6 / §8 相当を読み取る（#1805）。
+- `docs(thumbnail)`: YouTube Studio のサムネイル A/B テストについて、候補 2〜3 案の設計、operator 向け手動設定、watch time share・結果のコレクション別 JSON 記録を行う `/thumbnail-test` スキルを追加した。確定 Winner の構図・配色・文字量が 2 entry 以上で反復した場合に限り次回 `/thumbnail` のプロンプト方針へ還元し、`/postmortem` では対象動画のテスト結果を flop 仮説の根拠・反証として併記する（#1808）。
+- `docs(skills)`: 下流チャンネルリポジトリでスキル実行中の不具合・摩擦・改善案を `data/feedback/feedback-log.jsonl` に append-only JSONL として記録する `/feedback` スキルを追加した。entry schema は `.claude/skills/feedback/references/feedback-entry.schema.json` に単一ソース化し、`date` / `skill` / `category` / `summary` / `context` / `status` / `issue_url` の構造、`status="recorded"` の新規記録、機密情報の `***REDACTED***` マスクを SKILL.md に明記した。下流配布 CLAUDE.md テンプレにもスキル摩擦時に `/feedback` を案内する導線を追加した（#1828）。
+- `docs(setup)`: `/setup` の全 check 緑後・完了報告前に、`workflow.wf_next` の音源 / アップロード承認ゲート、手動マスタリング検出スキップ、Veo 課金を伴う loop-video の有効状態を 1 問ずつ確認する運用設定インタビューを追加した。現在値と推奨回答を提示し、変更時だけ config を更新する（#1902）
+- `feat(upload)`: collection の `workflow-state.json::title_template_check.allow_volume_patterns: true` で、そのコレクションだけ公開タイトルの `Vol.` / `Part` / `#N` / ローマ数字の巻数表記を upload preflight で許可できるようにした。未設定・`false` の既定検出、RHS 鋳型・完全重複・核語彙の検査、および `content.json::title.template_check.volume_patterns` は変更しない（#1729）
+- `docs(setup)`: `/setup` wizard の起動直後にライブ配信予定の有無を確認し、予定ありの場合は YouTube のライブ配信有効化に最大 24 時間かかる旨と YouTube Studio での有効化リクエスト手順を `[HUMAN STEP]` で案内するようにした。案内後は有効化完了を待たず通常の setup フローを続行する（#1896）
+- `feat(analytics-report)`: HTML レポートのテーマ色を `analytics-report/config.default.yaml::theme.colors` に移し、`config/skills/analytics-report.yaml` の channel override で差し替えられるようにした。未設定チャンネルでは既存パレットを維持する（#1691）
+
+### Changed
+
+- `feat(suno-helper)`: duration guard NG の同一 prompt 再生成を popup の「異常値の曲を再生成する」で切り替え可能にした。既定 ON は安全・高速モードとも最大 2 回再生成し、OFF は NG を警告表示しつつ生成済み全 clip を playlist / download 候補に維持する。選択は popup 再表示、resume、失敗分再実行、playlist 再実行へ引き継ぐ（#1733）
+- `docs(skills)`: リサーチ・戦略チェーンの 6 スキル（benchmark / discover-competitors / viewer-voice / audience-persona-design / viewing-scene / channel-research）の冒頭 60 行以内に、停止する fail と許容する fail を分離した前提成果物ガードを統一書式で整備した。必須入力が無い場合は生成元の前工程スキルを案内して停止し、後続 Step で生成・自動更新・代替できる入力欠如は停止条件から除外する（#1825）
+
+- `docs(automation-release)`: extension release の skill / checklist を Nix extensions shell 契約（Node 24 / pnpm 11.12.0）へ同期した（#1956）。両拡張の frozen install → build → zip、期待名 zip、lockfile 無差分を `verify-extensions.sh` で検証し、ambient Node / pnpm と `--ignore-workspace` を使わないことを明記。Python 本体の release flow と `release-extensions.yml` は変更なし
+
+- `docs(extensions)`: extension のローカル install / build / zip / Vitest / Playwright / 成果物確認と `/suno` の初回 build 導線を、CI と同じ Nix extensions shell（Node 24 / pnpm 11.12.0）入口へ統一した（#1957）。ambient pnpm / 旧 npx pnpm 導線の不在を文書契約テストで固定
+- `docs(suno-helper)`: Suno UI の旧「Custom Mode」および「Instrumental ON/OFF」表記を、現行の Advanced タブと Lyrics mode（Write / Instrumental）の用語へ更新した。operator 手順、拡張 description、保守用コメントを対象とし、実行時のセレクタ・エラーメッセージ・テスト期待値は変更していない（#1900）
+
+### Fixed
+
 - `fix(doctor)`: `uv tool install youtube-channels-automation` によるグローバル導入を `uv_project` / `automation_package` の bootstrap check で検出し、pyproject.toml に依存がない正常な環境を fail と誤判定しないようにした（#1724）。
+
+- `fix(api)`: playlist / benchmark / analytics / comments-reply / discover-competitors の YouTube API 呼び出しで、429・5xx・quota 系 403・network error を jitter 付き指数 backoff で最大 3 回試行し、恒久 4xx は即座にドメイン例外へ変換する共通 retry 境界を追加した（#1695）。
+
+- `fix(suno-helper)`: Download all メニューの短時間 auto-close レースに対し、More クリック直後から探索を開始し、検出失敗時は最大 3 回再クリックしてダウンロードを継続できるようにした（#1926）。
+- `fix(suno-helper)`: 拡張更新時に既存の Suno タブを自動リロードし、旧 content script の orphaned context を残さず新しい bundle を再注入するようにした（#1718）。
+- `fix(suno-helper)`: feed/v3 の active poll が `ids` フィルタ無効化後も cursor ページネーションを追跡し、最新ページ外の保存済み clip を完了確認できるようにした（#1929）。
+- `fix(thumbnail)`: `/thumbnail` SKILL.md の標準生成順序と Single-Step / TTP 章を、テキスト付き `thumbnail.jpg` 先行 → 承認済み `thumbnail.jpg` から textless `main.png/jpg` 後続再生成の契約へ統一した。`config.default.yaml` の single_step コメント、サンプルプロンプト、`short-thumbnail` の前提案内も同じ順序へ追従し、旧 textless 先行文言を回帰テストでロックした（#1901）。
+- `fix(thumbnail)`: `codex-image.sh` に codex CLI とサーバー側デフォルトモデルの互換性プリフライトを追加し、非互換時は画像生成を試みず CLI version・検出モデル・アップグレード手順を stderr に出して停止するようにした。生成失敗時の診断 dump にも codex CLI version と default model 推定値を含める（#1915）。
+- `fix(suno-helper)`: Download all ZIP の展開・音声配置・`workflow-state.json` 更新がすべて成功した後に、元 ZIP を自動削除するようにした。ZIP 削除だけが失敗した場合は、成功済みの音声と workflow-state を維持し、警告を記録する（#1890）。
+- `fix(upload)`: `yt-upload-collection` の `-c` 未指定時の自動選択を、`collections/planning/` 配下で `phase=mastered` かつ `upload.video_id=null` の未公開コレクション 1 件だけに限定した。`live/` の公開済みコレクションは候補外とし、候補が 0 件または複数件なら `-c` 明示を要求して停止する。`--plan` / `--status` / 実アップロードと日次実行に同じ選択条件を適用した（#1731）。
+- `fix(upload)`: タグ件数下限が YouTube の 500 字上限の下で到達不能な場合、upload preflight と metadata audit が件数不足ではなく、`tags.min_count` を下げるか base タグを短縮するよう案内する明示診断を返すようにした。配布する content.json テンプレートの `tags.min_count` も 26 に統一した（#1732）。
+- `fix(loop-video)`: Ctrl+C 後の Veo operation resume state に入力画像の SHA-256 を保存し、再実行時に指定モデルまたは入力画像内容が state と異なる場合は旧 operation を破棄して指定どおり新規生成するようにした（#1746）。旧形式 state は安全側で破棄する。
+- `fix(analytics)`: `yt-channel-trend` の z-score 基準から当日を除外し、min_periods 未達を `null` として明示するよう修正した。トレンド判定は直近 28 日とその前の 28 日の平均を比較し、週次前週比は完全な 7 日間の週だけで計算する（#1803）。
 
 ## [5.5.17] - 2026-07-10
 
 ### Added
 
+- `fix(loop-video)`: 通常生成時の `loop-v{n}.mp4` バックアップに保持上限（default 3、skill-config の `max_backups` で上書き可）を追加し、上限超過分を最古から削除して削除ファイル名を表示するようにした。`--skip-existing` / `--smooth` の early-exit 経路は既存バックアップを変更しない（#1654）
+- `feat(comments-reply)`: Author の返信案を別コンテキスト Reviewer が persona / NG ワード / 最大文字数 / 言語一致の 4 基準で判定する品質ゲートを追加。判定条件は候補 JSON と comments config の正規値から固定し、FAIL の `reply_text` のみ最大 2 周再生成する。上限後も FAIL の候補は dry-run 前に除外して件数と理由を承認サマリへ表示する（#1666）
 - `feat(video-description)`: skill-config に `chapters_enabled`（既定 `true`）を追加し、章運用を廃止したチャンネル（BGM / ASMR 等）向けの標準 opt-out を提供した（#1665）。`config/skills/video-description.yaml` で `chapters_enabled: false` を設定すると、タイムスタンプ列（チャプター行・テーマ見出し行）の生成・重複トラック名の LLM リネーム・`workflow-state.json` への `track_display_names` 永続化をすべて skip する（構造化メタブロック / Music Time セパレータ / playlist 名 / CTA / hashtag は変わらず生成）。未設定チャンネルは既定 `true` で挙動不変
 - `feat(skills)`: 2026-05 skills 監査の残件として、skill-config 未適用スキルの直書き値を skill-config 機構へ切り出した（#1669）。(1) analytics-collect / analytics-analyze 双方に直書きされていた鮮度判定しきい値（30 分）を `analytics-collect/config.default.yaml::freshness_minutes` に単一ソース化（`config/skills/analytics-collect.yaml` の上書きが両スキルの判定に効く）。(2) `discover-competitors`（検索フィルタ既定値・キーワード数ガイドレール）/ `live-clean`（削除対象・保護パターン）/ `postmortem`（症状判定しきい値・仮説マッピング係数）/ `video-upload`（preflight 探索パターン・誇張語 NG リスト）に `config.default.yaml` を新設し、各 SKILL.md の直書き値を config 参照へ書き換えた。`yt-discover-competitors` は CLI フラグ既定値を `load_skill_config("discover-competitors")` 経由で解決する（CLI フラグ明示指定 > チャンネル上書き > default）。(3) `analytics-report` の `#Shorts` 除外キーワードと KPI カード構成を `analytics-report/config.default.yaml::html.{exclude_title_keywords,kpi_cards}` に、`metadata-audit` の REMOTE チャプター上限（>12）を `metadata-audit/config.default.yaml::chapters.remote_max` に skill-config 化し、`metadata_audit.py::audit_remote` が実行時に読むよう変更した
 - `chore(repo)`: リポジトリルートに `.gitattributes` を追加し、画像 / 音声 / 動画 / アーカイブ / フォント / PDF（計 20 拡張子）を `binary` macro で diff 抑止指定した（#1671）。`git diff` にバイナリ差分がテキスト表示されなくなる
@@ -24,9 +67,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(doctor)`: `yt-doctor` に playlist スキル向けの `playlist_config` / `playlist_create_dry_run` チェックを追加（#1504）。`config/channel/playlists.json` の欠落・JSON 破損・`playlist_id` 未設定を channel カテゴリで診断し、`PlaylistManager.create_all_playlists(dry_run=True)` 経路で作成計画を検証する。dry-run は YouTube API への書き込みを行わず、失敗時は human next_action で設定修正手順を示す。
 - `feat(collection-serve)`: `yt-collection-serve` に unpacked Chrome 拡張名から exact origin lock を自動解決する `--allow-extension <name>` を追加（#1486）。macOS Chrome profile の `Secure Preferences`（無ければ `Preferences`）を走査し、`extensions.settings[*].path` が絶対パスかつ basename が指定名に一致する拡張 IDから `chrome-extension://<id>` を組み立て、既存の `/auth/token` / write endpoint lock にそのまま適用する。`--allow-origin` とは排他で、検出 0 件・複数 ID 競合・profile root 走査不可・Preferences 読み取り不可・Preferences JSON parse failure は `--allow-origin` fallback 案内付きの `ConfigError` で fail-loud する。`/suno-helper` / `/distrokid-helper` / `/wf-new` のサーバー起動手順と拡張 README も `--allow-extension` 基準へ更新した
 - `test(deps)`: 2020 年から未更新の `japanize-matplotlib` の font 登録が壊れたら検知する回帰テスト `tests/test_japanize_font_regression.py` を追加した（plan 024）。壊れた場合の症状（日本語ラベルの豆腐化）を matplotlib の `Glyph ... missing from font(s)` UserWarning で機械検知する
+- `feat(automation-release)`: `/automation-release` に Chrome 拡張リリース（`ext-vX.Y.Z`）の extension release phase を追加した（#1735）。`suno-helper をリリースしたい v0.2.2` / `ext-v0.2.2` 形式の依頼を Phase R（リリース種別判定）で extension release と判定して Python 本体の `pyproject.toml` bump flow から分離し、`release/ext-v<VER>` ブランチでの `extensions/<name>/package.json::version` のみの bump、`release-extensions.yml` と同一の Nix extensions shell 契約（Node 24 / pnpm 11.12.0、`pnpm install --frozen-lockfile` → `pnpm zip`）の local verify と version 以外の差分で停止する差分ガード、merge 済み PR の merge commit への `ext-v<VER>` tag push、Release Extensions workflow の成功確認と Release asset（`<name>-<VER>-chrome.zip`）の確認、worktree 環境で `gh pr merge --delete-branch` が local checkout 後処理で non-zero を返す footgun の復旧手順（remote PR state / mergeCommit を確認して merge 済みなら続行）までを手順化した。エッジケースは `references/extension-release-checklist.md` に整理。Python 本体の `vX.Y.Z` flow は変更なし
 
 ### Changed
 
+- `refactor(suno)`: ボーカルモードの `tracks_per_pattern` / `(Take N)` 展開を廃止し、1 pattern = 1 prompt entry の生成・検証契約へ単純化した（#1923）。下流の `config/skills/suno.yaml` に旧キーが残っていても読み取らず、`yt-generate-suno` / `yt-suno-verify` は展開なしの entry name と件数で処理する。
+- `docs(channel-setup)`: チャンネル初回制作前に、サムネイルと楽曲の小規模パイロット試作を行い、結果を確認してから本制作へ進む検証フェーズを channel-new / wf-new / onboarding に追加した（#1657）。
+- `docs(skills)`: analytics / benchmark 系スキルに subagent 委譲時の入力・出力契約、委譲対象、結果の統合手順を明記し、収集・分析・競合発掘・視聴者調査の各経路で委譲後の検証責務を揃えた（#1663）。
+- `feat(suno-helper)`: 投入方式の表示名を `Serial` →「安全モード」、`Queue` →「高速モード」へ改称し、各モードの説明文を速度と安定性の違いが 1 行で伝わる簡潔な文面（安全モード:「1件ずつ完了を待つ、安定性重視のモードです。」/ 高速モード:「最大10件を先行投入する、速度重視のモードです。」）に簡素化した（#1862）。変更は `shared/constants.ts` の `RUN_MODES` 表示ラベル・説明文のみで、内部識別子 `serial` / `queue`（chrome.storage.local の `sunoRunMode` 保存値・run payload・resume state）は互換性維持のため不変。`/suno-helper` SKILL.md の利用者向け `Queue mode` 表記も「高速モード（内部値: queue）」へ追従
+- `perf(videoup)`: effect なしの静止画背景を 1 GOP 分だけベイクし、`-stream_loop -1 -c:v copy -t <audio_duration> -shortest` で全尺化する経路へ統合。生成後は ffprobe で映像の読み取りと尺を検証し、1 フレーム超の差または probe 失敗を fail-loud にした（#1681）
+- `docs(extensions)`: Chrome 拡張のローカル検証を npm の現行 pnpm 11.11.0 に固定した。`suno-helper` / `distrokid-helper` 共通の pinned install / build / zip、期待 zip、lockfile 無差分の確認手順を共通・各拡張 README、開発 docs、`/suno`、`/automation-release` へ明記した（#1682）
+- `fix(distrokid-helper)`: `yt-distrokid-prepare plan` が 35 曲以下の単一 disc には `{coll_slug}` / `{Theme}` を、35 曲超の複数 disc にのみ `disc{N}-{coll_slug}-vol{N}` / `{Theme} Vol.{N}` を生成するよう修正した。build の slug 検証も単一 disc の kebab-case slug を受理する（#1734）
 - `docs(wf-new)`: Phase 2c の codex / single_step 分岐に残っていた textless 背景先行の旧フロー記述を、#1611 のテキスト付き thumbnail 先行フロー（テキスト付き `thumbnail.jpg` を先に生成・承認 → 承認済み `thumbnail.jpg` から textless `main.png/jpg` を再生成）へ更新した（#1854）。契約テスト `test_wf_new_routes_codex_and_single_step_through_thumbnail_contract` も新フロー表記をロックするよう追従
 - `refactor(repo)`: GitHub owner `daiki-beppu` のハードコード残存（fork 運営者に生成物のズレを生む固定参照）を整理した（#1653）。`yt-doctor` の `automation_package` fail 時の `next_action.cmd` を `automation_update_refs.UPSTREAM_REPO` 定数（official upstream 検証と同じ単一ソース）から組み立てるよう変更し、リテラル重複を削減。`/automation-update` に Step 1-0、`/ext-install` に Step 0 を新設し、両スキルの `gh` / `curl` コマンドの upstream 参照を導入済みパッケージの `UPSTREAM_REPO` から実行時導出する形へ置換。定数から導出できない箇所（`/setup` の bootstrap 用 `uv add`（パッケージ導入前に実行）、prose・doc リンク等）は固定のまま、`.claude/CLAUDE.template.md` に新設した「fork 運用者向け」節（§9）に残存ファイル一覧と `rg` ポインタを明記した。サプライチェーン保護の `_require_official_upstream` / `UPSTREAM_REPO` 自体は変更していない
 - `docs(skills)`: `content_model.type` の docs 表記を実装（`ContentModel.type = "release" / "collection"`、`src/youtube_automation/utils/config/youtube.py`）の正に合わせ、`single_release` を `release` に統一した（#1772）。対象は `video-upload/SKILL.md`（完了条件 / Channel Adaptation 表 / release アップロードフロー / コマンドリファレンス）、`video-upload/references/posting-checklist.md`、`channel-new/references/claude-md-template.md`。型名の初出箇所には「release 型（単曲リリース）」の補足を付与し、doc-contract テスト（`tests/test_skill_docs_consistency.py`）の見出し担保も新表記へ追従。無関係な GitHub release 集約テスト名 `test_attaches_both_zips_to_single_release` は誤検知回避のため `test_attaches_both_zips_to_one_gh_release` にリネーム
@@ -54,11 +105,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - `refactor(cleanup)`: deprecated 表明済みの単発移行スクリプト `yt-fix-timestamps`（`scripts/fix_per_theme_timestamps.py`、2026-03/04 の特定コレクションをハードコード対象とする一括補修用）を削除した（#1673）。`pyproject.toml` の entry point / `cli_entrypoints.py` / `tests/test_fix_per_theme_timestamps.py` / `tests/test_cli_stdio.py` の参照も併せて除去。masterup SKILL.md が本 CLI を現役手順として記述していた矛盾（Step 5.7 / CLI 対応表 / フォールバック手動手順 / 完了条件）も解消した。現行のタイムスタンプ生成は `metadata_generator` の `generate_timestamps()` 系が正
+- `refactor(config)`: `/Users/mba/02-yt` 配下の下流チャンネル 6/6 件が `config/channel/*.json` の v2 分割構成でロードでき、旧 `config/channel_config.json` が 0 件であることを確認したため、移行専用の `yt-config-migrate` CLI（entry point / 実装 / テスト / 移行ガイド）を撤去した。channel-new の生成後検証と `yt-automation-update apply` の config smoke check は、loader と localization title placeholder を検証する `yt-doctor` の `channel_config` check に統一した（#1672）
 - `chore(deps)`: import ゼロで宣言のみ残っていた直接依存 `seaborn` を削除した（plan 024）。transitive に必要な `pandas` / `matplotlib` は引き続き `[project] dependencies` に独立宣言済み
 - `refactor(utils)`: 旧 analytics モノリスの unreachable な残骸（`report_generator.py` / `report_renderer.py` / `analytics_analyzer.py`、計 1,016 行）を削除した（plan 023）。現行の analytics は `analytics_base.py` Protocol + `strategic_analytics.py` / `ctr_analytics.py` 等の mixin 構成に移行済みで、これら 3 ファイルはどこからも import されていなかった。`ctr_analytics.py` の docstring に残っていた `analytics_analyzer._analyze_collection_ctrs` への stale な参照も削除した
 
 ### Fixed
 
+- `fix(thumbnail)`: Codex の thumbnail prompt に設定済み composition rules を含めるよう修正した（#1727）。
+- `fix(suno-helper)`: Lyrics 欄の不在・注入失敗時に、現行 Suno UI の ARIA 選択状態を read-only で診断し、Prompt / Instrumental なら Write、Simple / Sounds なら Advanced への切り替えを案内するよう改善した。状態を特定できない場合は Advanced / Write / 英語 UI 推奨のチェックリストを表示する（#1899）。
+- `fix(comments-reply)`: 同一スレッド内で対象コメントより後に投稿されたオーナー返信を検出し、Studio 等で手動返信済みのコメントへの重複返信を防止した。オーナー返信後の視聴者フォローアップは引き続き候補に含める（#1895）
+- `fix(suno-helper)`: Lexical Lyrics 欄で paste 反映検証が失敗した場合に inject retry 後 beforeinput fallback を試し、全方式が失敗したときは entry 名・歌詞長・差分付き診断を出して停止するようにした（#1676）。
 - `fix(suno-helper)`: ユーザー操作による `stopped` を赤いエラー扱いにせず、「停止しました。再実行できます。」と通常状態で表示するようにした。
 - `fix(suno-helper)`: ダウンロード完了済み collection を popup の一覧から消さず、「完了 N/N」として再表示するように戻した。完了済み collection も選択でき、同じテストを再実行できる。
 - `fix(suno-helper)`: playlist 追加前に Lyrics editor など入力欄の focus を外し、Suno が trusted `Cmd+P` を無視して Add to Playlist dialog を開けない問題を修正した。

@@ -20,7 +20,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Dict, List
 
-from googleapiclient.errors import HttpError
+from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.retry import execute_with_retry
 
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
@@ -50,32 +51,26 @@ class CTRAnalyticsMixin:
 
         try:
             # 基本メトリクス
-            overall_response = (
-                self.analytics_service.reports()
-                .query(
-                    ids=f"channel=={self.channel_id}",
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics="views,likes,comments,shares,subscribersGained",
-                )
-                .execute()
+            request = self.analytics_service.reports().query(
+                ids=f"channel=={self.channel_id}",
+                startDate=start_date,
+                endDate=end_date,
+                metrics="views,likes,comments,shares,subscribersGained",
             )
+            overall_response = execute_with_retry(request, "YouTube Analytics API request failed")
 
             # 動画別データ（トップ30）
             video_ctr_response = self._fetch_video_ctr(start_date, end_date)
 
             # エンゲージメントデータ
-            traffic_response = (
-                self.analytics_service.reports()
-                .query(
-                    ids=f"channel=={self.channel_id}",
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics="views,estimatedMinutesWatched",
-                    dimensions="day",
-                )
-                .execute()
+            request = self.analytics_service.reports().query(
+                ids=f"channel=={self.channel_id}",
+                startDate=start_date,
+                endDate=end_date,
+                metrics="views,estimatedMinutesWatched",
+                dimensions="day",
             )
+            traffic_response = execute_with_retry(request, "YouTube Analytics API request failed")
 
             overall_data = self._process_overall_ctr(overall_response)
             video_data = self._process_video_ctr(video_ctr_response)
@@ -95,7 +90,7 @@ class CTRAnalyticsMixin:
                 "ctr_analysis": perf_analysis,
             }
 
-        except HttpError as e:
+        except YouTubeAPIError as e:
             logger.error(f"YouTube API エラー（CTR分析）: {e}")
             return {"error": str(e)}
         except Exception as e:
@@ -104,19 +99,16 @@ class CTRAnalyticsMixin:
 
     def _fetch_video_ctr(self, start_date: str, end_date: str) -> Dict:
         """動画別パフォーマンスデータを取得する（トップ30本、views 降順）"""
-        return (
-            self.analytics_service.reports()
-            .query(
-                ids=f"channel=={self.channel_id}",
-                startDate=start_date,
-                endDate=end_date,
-                metrics="views,likes,comments,estimatedMinutesWatched",
-                dimensions="video",
-                sort="-views",
-                maxResults=30,
-            )
-            .execute()
+        request = self.analytics_service.reports().query(
+            ids=f"channel=={self.channel_id}",
+            startDate=start_date,
+            endDate=end_date,
+            metrics="views,likes,comments,estimatedMinutesWatched",
+            dimensions="video",
+            sort="-views",
+            maxResults=30,
         )
+        return execute_with_retry(request, "YouTube Analytics API request failed")
 
     def get_collection_performance(self, start_date: str, end_date: str) -> Dict:
         """

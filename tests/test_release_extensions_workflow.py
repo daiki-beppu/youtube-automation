@@ -16,6 +16,8 @@ _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "release-extensions.yml"
 
 _RELEASE_TAG_GLOB = "ext-v*"
 _GH_RELEASE_ACTION = "softprops/action-gh-release@v2"
+_NIX_INSTALL_ACTION = "DeterminateSystems/nix-installer-action@main"
+_VERIFY_SCRIPT = ".claude/skills/automation-release/references/verify-extensions.sh"
 _EXTENSIONS = ("suno-helper", "distrokid-helper")
 _ZIP_GLOBS = tuple(f"extensions/{name}/.output/*.zip" for name in _EXTENSIONS)
 # order.md が要求する手順アンカー。初回インストール（URL + Load unpacked）と
@@ -89,11 +91,25 @@ def test_builds_and_zips_each_extension(name: str) -> None:
     matched = [
         step
         for step in steps
-        if step.get("working-directory") == f"extensions/{name}" and "pnpm zip" in str(step.get("run", ""))
+        if step.get("working-directory") == f"extensions/{name}" and _VERIFY_SCRIPT in str(step.get("run", ""))
     ]
     assert matched, f"{name} の build/zip ステップが存在しない"
     run_script = str(matched[0]["run"])
-    assert "pnpm install --frozen-lockfile" in run_script
+    assert run_script == f"cd ../.. && bash {_VERIFY_SCRIPT} {name}"
+    assert "--ignore-workspace" not in run_script
+
+
+def test_installs_nix_before_parallel_extension_builds() -> None:
+    """release job が checkout 後、build 前に Nix を導入する。"""
+    steps = _release_top_level_steps()
+    checkout_index = next(index for index, step in enumerate(steps) if step.get("uses") == "actions/checkout@v4")
+    nix_index = next(index for index, step in enumerate(steps) if step.get("uses") == _NIX_INSTALL_ACTION)
+    parallel_index = next(index for index, step in enumerate(steps) if "parallel" in step)
+    uses = {step.get("uses") for step in steps if "uses" in step}
+
+    assert checkout_index < nix_index < parallel_index
+    assert "pnpm/action-setup@v4" not in uses
+    assert "actions/setup-node@v4" not in uses
 
 
 def test_attaches_both_zips_to_one_gh_release() -> None:
@@ -103,8 +119,8 @@ def test_attaches_both_zips_to_one_gh_release() -> None:
     assert len(release_steps) == 1, "gh-release ステップは 1 個に集約する"
 
     files_value = str(release_steps[0].get("with", {}).get("files", ""))
-    for zip_glob in _ZIP_GLOBS:
-        assert zip_glob in files_value, f"{zip_glob} が files に含まれていない"
+    zip_globs = tuple(line.strip() for line in files_value.splitlines() if line.strip())
+    assert zip_globs == _ZIP_GLOBS
 
 
 def test_release_body_embeds_install_and_update_template() -> None:

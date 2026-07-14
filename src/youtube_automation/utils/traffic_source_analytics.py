@@ -8,7 +8,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Dict, List
 
-from googleapiclient.errors import HttpError
+from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.retry import execute_with_retry
 
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401
@@ -37,18 +38,15 @@ class TrafficSourceMixin:
         logger.info("トラフィックソース分析実行中...")
 
         try:
-            response = (
-                self.analytics_service.reports()
-                .query(
-                    ids=f"channel=={self.channel_id}",
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics="views,estimatedMinutesWatched,averageViewDuration",
-                    dimensions="insightTrafficSourceType",
-                    sort="-views",
-                )
-                .execute()
+            request = self.analytics_service.reports().query(
+                ids=f"channel=={self.channel_id}",
+                startDate=start_date,
+                endDate=end_date,
+                metrics="views,estimatedMinutesWatched,averageViewDuration",
+                dimensions="insightTrafficSourceType",
+                sort="-views",
             )
+            response = execute_with_retry(request, "YouTube Analytics API request failed")
 
             sources = {}
             if "rows" in response:
@@ -72,7 +70,7 @@ class TrafficSourceMixin:
                 "total_views": total_views,
             }
 
-        except HttpError as e:
+        except YouTubeAPIError as e:
             logger.error(f"YouTube API エラー（トラフィックソース）: {e}")
             return {"sources": {}, "total_views": 0, "error": str(e)}
         except Exception as e:
@@ -97,20 +95,17 @@ class TrafficSourceMixin:
         logger.info(f"トラフィックソース詳細取得: {source_type}")
 
         try:
-            response = (
-                self.analytics_service.reports()
-                .query(
-                    ids=f"channel=={self.channel_id}",
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics="views,estimatedMinutesWatched",
-                    dimensions="insightTrafficSourceDetail",
-                    filters=f"insightTrafficSourceType=={source_type}",
-                    sort="-views",
-                    maxResults=25,
-                )
-                .execute()
+            request = self.analytics_service.reports().query(
+                ids=f"channel=={self.channel_id}",
+                startDate=start_date,
+                endDate=end_date,
+                metrics="views,estimatedMinutesWatched",
+                dimensions="insightTrafficSourceDetail",
+                filters=f"insightTrafficSourceType=={source_type}",
+                sort="-views",
+                maxResults=25,
             )
+            response = execute_with_retry(request, "YouTube Analytics API request failed")
 
             details = []
             if "rows" in response:
@@ -126,7 +121,7 @@ class TrafficSourceMixin:
             logger.info(f"{source_type} 詳細: {len(details)} 件")
             return details
 
-        except HttpError as e:
+        except YouTubeAPIError as e:
             logger.error(f"YouTube API エラー（トラフィック詳細 {source_type}）: {e}")
             return []
         except Exception as e:

@@ -120,13 +120,7 @@ def _verify_vocal_artifacts(
         *_vocal_artifact_issues(prompts, lyrics),
     ]
 
-    tracks_per_pattern_text = "unknown"
-    if contract.tracks_per_pattern is not None:
-        tracks_per_pattern_text = str(contract.tracks_per_pattern)
-    summary = (
-        f"mode=vocal prompt_entries={len(prompts.names)} "
-        f"tracks_per_pattern={tracks_per_pattern_text} expected_entries={len(contract.expected_names)}"
-    )
+    summary = f"mode=vocal prompt_entries={len(prompts.names)} expected_entries={len(contract.expected_names)}"
     return issues, summary
 
 

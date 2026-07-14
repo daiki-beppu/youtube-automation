@@ -3,7 +3,12 @@ interface TabChangeInfo {
 }
 
 interface TabLike {
+  id?: number;
   url?: string;
+}
+
+interface InstallDetails {
+  reason: string;
 }
 
 interface ScriptResult {
@@ -19,6 +24,9 @@ interface ExecuteScriptDetails {
 
 export interface ContentScriptRecoveryDeps {
   addTabUpdatedListener(listener: (tabId: number, changeInfo: TabChangeInfo, tab: TabLike) => void): void;
+  addInstalledListener(listener: (details: InstallDetails) => void): void;
+  queryTabs(): Promise<TabLike[]>;
+  reloadTab(tabId: number): Promise<void>;
   executeScript(details: ExecuteScriptDetails): Promise<ScriptResult[]>;
   sleep(ms: number): Promise<void>;
   warn(message: string, error: unknown): void;
@@ -27,6 +35,21 @@ export interface ContentScriptRecoveryDeps {
 const SUNO_HOSTS = new Set(["suno.com", "www.suno.com"]);
 const ISOLATED_CONTENT_FILES: ScriptPublicPath[] = ["/content-scripts/content.js", "/content-scripts/overlay.js"];
 const STATIC_INJECTION_GRACE_MS = 1_000;
+
+async function injectSunoContentScripts(tabId: number, deps: ContentScriptRecoveryDeps): Promise<void> {
+  await Promise.all([
+    deps.executeScript({
+      target: { tabId },
+      files: ["/content-scripts/suno-bridge.js"],
+      world: "MAIN",
+    }),
+    deps.executeScript({
+      target: { tabId },
+      files: [...ISOLATED_CONTENT_FILES],
+      world: "ISOLATED",
+    }),
+  ]);
+}
 
 export function isSunoPageUrl(rawUrl: string | undefined): boolean {
   if (!rawUrl || !URL.canParse(rawUrl)) return false;
@@ -56,18 +79,7 @@ export async function recoverSunoContentScripts(tabId: number, deps: ContentScri
   await deps.sleep(STATIC_INJECTION_GRACE_MS);
   if (await hasOverlay()) return false;
 
-  await Promise.all([
-    deps.executeScript({
-      target: { tabId },
-      files: ["/content-scripts/suno-bridge.js"],
-      world: "MAIN",
-    }),
-    deps.executeScript({
-      target: { tabId },
-      files: [...ISOLATED_CONTENT_FILES],
-      world: "ISOLATED",
-    }),
-  ]);
+  await injectSunoContentScripts(tabId, deps);
   return true;
 }
 
@@ -77,5 +89,21 @@ export function installSunoContentScriptRecovery(deps: ContentScriptRecoveryDeps
     void recoverSunoContentScripts(tabId, deps).catch((error: unknown) => {
       deps.warn("[suno-helper] content script の自己復旧に失敗しました", error);
     });
+  });
+
+  deps.addInstalledListener((details) => {
+    if (details.reason !== "update") return;
+    void deps
+      .queryTabs()
+      .then((tabs) =>
+        Promise.all(
+          tabs
+            .filter((tab): tab is TabLike & { id: number } => typeof tab.id === "number" && isSunoPageUrl(tab.url))
+            .map((tab) => deps.reloadTab(tab.id)),
+        ),
+      )
+      .catch((error: unknown) => {
+        deps.warn("[suno-helper] 拡張更新後の Suno タブ自動リロードに失敗しました", error);
+      });
   });
 }

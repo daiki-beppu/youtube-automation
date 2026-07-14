@@ -9,7 +9,9 @@ description: "Use when 新コレクションの企画・テーマ選定をデー
 
 ## 完了条件
 
-企画候補をコレクションの `20-documentation/plan_proposals.md` に保存し、`workflow-state.json` の `planning.generated = true` へ更新（企画確定時は `planning.final_title` も記録）し、Next Step（`/thumbnail <theme>` → `/suno <theme>`）を案内した時点で完了。
+企画候補をコレクションの `20-documentation/plan_proposals.md` に保存し、`workflow-state.json` の `planning.generated = true` へ更新（企画確定時は `planning.final_title` も記録）し、Next Step（`/thumbnail <theme>` → `/suno <theme>`）を案内した時点で完了。画像生成を実施した場合は、採用企画の参照画像を `20-documentation/thumbnail-prompts.md` の `Reference Assignments` へ保存できるまで完了扱いにせず、保存失敗時は停止する。
+
+**JSON ペア検証 Hard Gate**: `references/freshness-rules.md` の鮮度判定へ進む前に、ファイル名日付が最新の `reports/analysis_*.md` と同日付の `.json` の存在を確認し、`.claude/skills/analytics-analyze/references/analysis-json-validator.md` の validator を同日付 JSON に実行する。exit 0 の場合だけ analytics mode の入力として使用する。Markdown だけが存在する、または validator が失敗した場合は必須入力不足として中断し、`/analytics-analyze` 再実行を案内する。
 
 ## Untrusted Data 境界
 
@@ -51,21 +53,19 @@ Phase 1 に入る前に入力モードを 1 回だけ判定し、以降の分析
 
 | モード | 判定条件 | 企画生成の入力 | 前提スキルの扱い |
 |---|---|---|---|
-| analytics mode | `reports/analysis_*.md` が存在し、stale ではない | 日次収集データ + ベンチマーク + config | analyze / benchmark / persona / viewing-scene を通常確認 |
+| analytics mode | 同日付の `reports/analysis_*.md` / `.json` ペアが存在し、JSON 契約を満たし、stale ではない | 日次収集データ + 同日付の構造化分析 JSON + ベンチマーク + config | analyze / benchmark / persona / viewing-scene を通常確認 |
 | benchmark fallback mode | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config | analytics 依存をスキップ。persona / viewing-scene は存在すれば使い、無ければ config と benchmark から仮説化 |
 | minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | ユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config | analytics / benchmark 依存をスキップ。persona / viewing-scene は初回仮説として扱う |
 
 analytics mode では `/analytics-analyze` と `/benchmark` を独立・並列で鮮度判定（stale 検出）し、
 `/audience-persona-design` の最終 persona chain（`persona-definition.md` と `viewing-scene-matrix.md`）は存在チェックのみ行う（更新タイミングは戦略判断のため人間が決める）。
 
-- `reports/analysis_*.md` が存在するが stale → fallback せず中断。ユーザーに `/analytics-analyze` 再実行を案内（絶対鮮度 stale では `/analytics-collect` → `/analytics-analyze` の順で必須）。**自動呼び出し不可**（AI 推論コスト発生のため）
+- Markdown / JSON ペアが stale → fallback せず中断。ユーザーに `/analytics-analyze` 再実行を案内（絶対鮮度 stale では `/analytics-collect` → `/analytics-analyze` の順で必須）。**自動呼び出し不可**（AI 推論コスト発生のため）
 - analytics mode で `/benchmark` が stale → Skill ツールで実行（内部で差分更新）
 - analytics mode で `/audience-persona-design` が未生成 → ユーザーに案内（更新タイミングは戦略判断のため人間が決める）
 - analytics mode で `viewing-scene-matrix.md` が未生成、または viewing-scene 結果が最終 `persona-definition.md` に未反映 → `/audience-persona-design` で `/viewing-scene` 実行と最終 persona 更新を行うよう案内
 
-stale 判定（相対比較・絶対鮮度の OR・既定 freshness_days）を含む鮮度・存在チェックの完全な定義（擬似コード・workflow-state との同期含む）は
-references/freshness-rules.md を正とする。analytics mode の必須入力で stale または未生成を検出したら
-Phase 1 を中断して該当スキルの実行を促すこと。
+JSON ペア検証 Hard Gate、入力モード判定、相対比較・絶対鮮度の stale 判定、既定 `freshness_days`、workflow-state との同期は `references/freshness-rules.md` を正とする。analytics mode の必須入力で validator 失敗、stale、または未生成を検出したら Phase 1 を中断して該当スキルの実行を促すこと。
 
 ## 実行フロー
 
@@ -88,17 +88,28 @@ uv run yt-channel-status
 
 #### Phase 1-2: 自チャンネル Analytics 分析
 
-analytics mode では更新時刻が最新の `reports/analysis_*.md`（`ls -t reports/analysis_*.md | head -1` で取得できるもの）を Read（Codex では同等のファイル閲覧）で読み込み、自チャンネルのパフォーマンス示唆を取り込む。
+analytics mode では `references/freshness-rules.md::latest_by_filename_date` と同じ規則でファイル名日付が最新の `reports/analysis_*.md` を選び、ファイル名の日付部分が同じ `reports/analysis_*.json` を Read（Codex では同等のファイル閲覧）で読み込み、自チャンネルのパフォーマンス示唆を取り込む。
 以下のセクションが `/collection-ideate` 企画立案の直接入力:
 
 - **§ 5 戦略的改善提案** — CTR 改善・コンテンツ最適化の方向性
 - **§ 6 推奨される次期コレクション候補** — データから導出されたテーマ候補
 - **§ 8 戦略ディスカッション** — 長期視点の示唆
 
+戦略提案・次期候補・戦略ディスカッションの正本は同日付 JSON とし、Markdown は人間向けの説明と数値引用として読む。企画立案では見出し表記や採番に依存せず、次の JSON 固定キーを直接入力とする:
+
+| Markdown の内容 | `analysis_YYYYMMDD.json` 固定キー |
+|---|---|
+| § 5 戦略的改善提案 | `strategic_improvements` |
+| § 6 推奨される次期コレクション候補 | `next_collection_candidates` |
+| § 8 戦略ディスカッション | `strategic_discussion` |
+
+JSON から読む前に、冒頭の JSON ペア検証 Hard Gate が成功済みであることを確認する。Markdown 本文から提案を再抽出したり、JSON の `statement` を Markdown 本文との曖昧な意味比較で上書きしたりしない。
+
 **エラーハンドリング**:
 
-- `reports/analysis_*.md` が存在しない → 中断せず、入力モード判定に従って benchmark fallback mode または minimal mode へ進む
-- `reports/` が stale（最新 `data/analytics_data_*.json` のファイル名日付より古い、または収集データ自体が実行日から `freshness_days` を超えて経過）→ fallback せず中断。`/analytics-analyze` 再実行を案内（絶対鮮度 stale では `/analytics-collect` を先行）
+- `reports/analysis_*.md` が存在しない → 中断せず、入力モード判定に従って benchmark fallback mode または minimal mode へ進む（対応する Markdown がない孤立 JSON は企画入力に使わない）
+- Markdown だけが存在する、または冒頭の JSON ペア検証 Hard Gate が失敗 → fallback せず中断。`/analytics-analyze` 再実行を案内
+- `reports/` の Markdown / JSON ペアが stale（最新 `data/analytics_data_*.json` のファイル名日付より古い、または収集データ自体が実行日から `freshness_days` を超えて経過）→ fallback せず中断。`/analytics-analyze` 再実行を案内（絶対鮮度 stale では `/analytics-collect` を先行）
 
 #### Phase 1-3: 競合ベンチマーク分析
 
@@ -260,23 +271,8 @@ while IFS= read -r p; do
   [ -n "$p" ] && REF_PATHS+=("$p")
 done <<< "$REFS"
 
-VALIDATED_REFS=$(printf '%s\n' "${REF_PATHS[@]}" | uv run python3 -c "
-import sys
-from pathlib import Path
-from youtube_automation.utils.config import channel_dir
-from youtube_automation.utils.thumbnail_references import plan_ttp_reference_assignments
-
-refs = [Path(line.strip()) for line in sys.stdin if line.strip()]
-candidate_count = int(sys.argv[1])
-validated = plan_ttp_reference_assignments(
-    refs,
-    candidate_count,
-    True,
-    benchmark_root=channel_dir() / 'data' / 'thumbnail_compare' / 'benchmark',
-)
-for ref in validated:
-    print(ref)
-" "$CANDIDATE_COUNT")
+VALIDATED_REFS=$(printf '%s\n' "${REF_PATHS[@]}" | uv run python3 \
+  .claude/skills/collection-ideate/references/select-ttp-references.py "$CANDIDATE_COUNT")
 mapfile -t REF_PATHS <<< "$VALIDATED_REFS"
 
 # 順次実行。candidate_count の数だけ plan-{a,b,c,...} を生成する。
@@ -284,6 +280,8 @@ LABELS=(a b c d e f g h)
 PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
+  # image_generation.gemini.composition_rules（legend_motif / allowed_actions を含む）は
+  # codex-prompt.py が自動注入するため、title にレジェンドや楽器を重複して書かない。
   # 参照画像を winning template として扱い、テキスト付き候補を先に確定する短い TTP thumbnail 先行プロンプトにする（#1611）。
   # 候補ごとに別参照画像 1 枚だけを渡す。参照不足なら生成せず設定を直す。
   if [ "${#REF_PATHS[@]}" -lt "$CANDIDATE_COUNT" ]; then
@@ -380,16 +378,17 @@ parallel モードでは Next Step で `yt-stock-archive` による不採用 (`c
 
 ```bash
 # <x> は選択された企画の番号（a/b/c）
+REF_INDEX="<選択された企画の0-based index>"
+if [ "${#REF_PATHS[@]}" -le "$REF_INDEX" ]; then
+  echo "ERROR: selected preview reference is missing: index=${REF_INDEX}" >&2
+  exit 1
+fi
 PROVIDER=$(uv run python3 -c "from youtube_automation.utils.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
   # codex は image_generation.codex.default_prompt_template を必ず使う。
+  # image_generation.gemini.composition_rules は codex-prompt.py が自動注入する。
   # 参照画像を winning template として扱い、テキスト付き候補を先に確定する短い TTP thumbnail 先行プロンプトにする（#1611）。
   # 選択した企画と同じ index の参照画像 1 枚だけを使う（a=0, b=1, c=2）。
-  REF_INDEX="<選択された企画の0-based index>"
-  if [ "${#REF_PATHS[@]}" -le "$REF_INDEX" ]; then
-    echo "ERROR: selected preview reference is missing: index=${REF_INDEX}" >&2
-    exit 1
-  fi
   # title 引数にはサムネに焼くテキスト（見出し + 短いサブタイトル）だけを渡す。
   # 動画タイトル全文を渡さない（全文が画像に焼き込まれる事故の再発防止）。
   CODEX_PROMPT=$(uv run python3 .claude/skills/thumbnail/references/codex-prompt.py "<選択された企画タイトル>")
@@ -583,7 +582,7 @@ analytics mode / benchmark fallback mode ではベンチマークデータを分
 
 ## リファレンス
 
-コレクション作成の詳細ライフサイクル（ディレクトリ構造、段階別手順、チェックリスト）は `references/collection-lifecycle.md` を参照。
+コレクション作成の詳細ライフサイクル（ディレクトリ構造、段階別手順、チェックリスト）は `references/collection-lifecycle.md` を参照。入力モード・鮮度判定の正本は `references/freshness-rules.md` とする。
 
 ## 意思決定支援
 
@@ -613,6 +612,15 @@ analytics mode / benchmark fallback mode ではベンチマークデータを分
 企画選択時にタイトルも確定する（`workflow-state.json` の `planning.final_title` に記録）。
 
 企画確定後、選択した企画のプレビュー画像は企画参照として保存し、**`main.png` にはコピーしない**。`main.png/jpg` は `/thumbnail` で承認済みのテキスト付き `thumbnail.jpg` から再生成して確定する textless 動画背景であり、文字入りサムネと同一画像にしない。`thumbnail_mode` と「画像が生成されたか」によって手順が分岐するため、ケース別に示す。
+
+画像生成を実施した場合、企画確定後かつプレビューディレクトリ削除前に、今回使用した参照割当を collection の履歴へ必ず保存する。保存に失敗した場合は処理を継続せず、エラーを解消して同じコマンドを再実行する。
+
+```bash
+REF_INDEX="<選択された企画の0-based index>"
+COLLECTION_PATH="<collection-path>"
+uv run python3 .claude/skills/collection-ideate/references/record-ttp-reference-assignments.py \
+  "$COLLECTION_PATH" "${REF_PATHS[$REF_INDEX]}"
+```
 
 ### parallel モード（デフォルト）
 

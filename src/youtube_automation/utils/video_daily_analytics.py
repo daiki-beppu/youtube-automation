@@ -6,6 +6,7 @@ import logging
 from typing import Dict, List, Optional
 
 from youtube_automation.utils.profile import section
+from youtube_automation.utils.retry import execute_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -53,14 +54,11 @@ class VideoDailyAnalyticsMixin:
             days=(start_date, end_date),
             filtered=bool(video_ids),
         ):
-            response = (
-                self.analytics_service.reports()
-                .query(
-                    metrics="views",
-                    **query_kwargs,
-                )
-                .execute()
+            request = self.analytics_service.reports().query(
+                metrics="views",
+                **query_kwargs,
             )
+            response = execute_with_retry(request, "YouTube Analytics API request failed")
         rows = self._parse_video_daily_rows(response)
         logger.debug("video_daily rows=%d", len(rows))
         return rows

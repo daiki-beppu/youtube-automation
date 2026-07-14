@@ -10,8 +10,9 @@ const DOWNLOAD_MENU_ITEM_TEXT = /download\s*all/i;
 const FORMAT_MODAL_SELECTOR = "div.modal-class.modal-overlay";
 const FORMAT_OPTION_SELECTOR = "button.flex.w-full";
 const DOWNLOAD_CONFIRM_SELECTOR = "button.hxc-btn-variant-primary";
-const MENU_APPEAR_POLL_MS = 100;
-const MENU_APPEAR_TIMEOUT_MS = 5000;
+const MENU_APPEAR_POLL_MS = 10;
+const MENU_APPEAR_TIMEOUT_MS = 1500;
+const MAX_DOWNLOAD_MENU_ATTEMPTS = 3;
 const MODAL_APPEAR_POLL_MS = 200;
 const MODAL_APPEAR_TIMEOUT_MS = 10000;
 const MODAL_CLOSE_POLL_MS = 200;
@@ -184,17 +185,28 @@ export async function triggerDownloadAll(
   format: string,
   deps: TriggerDownloadAllDeps = defaultDownloadDeps(),
 ): Promise<void> {
-  const moreBtn = deps.findMoreButton();
-  if (!moreBtn) {
-    throw new Error(
-      `More メニューボタン (${MORE_BUTTON_SELECTOR}) が見つかりませんでした。` +
-        "clip が multi-select されているか確認してください。",
-    );
+  let downloadItem: HTMLElement | undefined;
+  for (let attempt = 0; attempt < MAX_DOWNLOAD_MENU_ATTEMPTS; attempt += 1) {
+    const moreBtn = deps.findMoreButton();
+    if (!moreBtn) {
+      throw new Error(
+        `More メニューボタン (${MORE_BUTTON_SELECTOR}) が見つかりませんでした。` +
+          "clip が multi-select されているか確認してください。",
+      );
+    }
+    deps.clickElement(moreBtn);
+    try {
+      downloadItem = await deps.waitForDownloadMenuItem(MENU_APPEAR_TIMEOUT_MS, MENU_APPEAR_POLL_MS);
+      break;
+    } catch (error) {
+      if (attempt === MAX_DOWNLOAD_MENU_ATTEMPTS - 1) {
+        throw error;
+      }
+    }
   }
-  deps.clickElement(moreBtn);
-  await deps.sleep(SETTLE_AFTER_CLICK_MS);
-
-  const downloadItem = await deps.waitForDownloadMenuItem(MENU_APPEAR_TIMEOUT_MS, MENU_APPEAR_POLL_MS);
+  if (!downloadItem) {
+    throw new Error('"Download all" menu item が見つかりませんでした');
+  }
   deps.clickElement(downloadItem);
   await deps.sleep(SETTLE_AFTER_CLICK_MS);
 

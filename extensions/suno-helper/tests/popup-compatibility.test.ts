@@ -7,8 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PHASE, type ProgressPayload } from "../../shared/constants";
 import { App } from "../components/App";
+import { EXTENSION_RELOAD_REQUIRED_MESSAGE } from "../components/runner-errors";
 
 const BASE_URL = "http://localhost:7873";
+const FALLBACK_URL = "http://localhost:7877";
 const MANIFEST_VERSION = "0.1.9";
 
 const messagingMocks = vi.hoisted(() => {
@@ -35,6 +37,11 @@ const downloadFormatMocks = vi.hoisted(() => ({
   setValue: vi.fn(async () => undefined),
 }));
 
+const serverSourcesMocks = vi.hoisted(() => ({
+  readServerSources: vi.fn(),
+  rememberServerSource: vi.fn(),
+}));
+
 const resumeStateMocks = vi.hoisted(() => ({
   readResumeState: vi.fn(async () => null),
   writeResumeState: vi.fn(async () => undefined),
@@ -57,14 +64,8 @@ vi.mock("../lib/storage", () => ({
   serverUrlItem: storageMocks,
   downloadFormatItem: downloadFormatMocks,
   readDownloadFormat: vi.fn(() => downloadFormatMocks.getValue()),
-  readServerSources: vi.fn(async () => [
-    { id: "localhost-7873", label: "localhost", url: BASE_URL },
-    { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
-  ]),
-  rememberServerSource: vi.fn(async () => [
-    { id: "localhost-7873", label: "localhost", url: BASE_URL },
-    { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
-  ]),
+  readServerSources: serverSourcesMocks.readServerSources,
+  rememberServerSource: serverSourcesMocks.rememberServerSource,
 }));
 
 vi.mock("../lib/messaging", () => messagingMocks);
@@ -189,6 +190,17 @@ function radioByLabel(container: HTMLElement, text: string): HTMLInputElement {
   return input;
 }
 
+function checkboxByLabel(container: HTMLElement, text: string): HTMLInputElement {
+  const label = Array.from(container.querySelectorAll("label")).find((candidate) =>
+    candidate.textContent?.includes(text),
+  );
+  const input = label?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+  if (!input) {
+    throw new Error(`checkbox not found: ${text}`);
+  }
+  return input;
+}
+
 function expectRangeUiAbsent(container: HTMLElement): void {
   expect(container.textContent).not.toContain("実行範囲");
   expect(container.textContent).not.toContain("範囲指定");
@@ -235,6 +247,12 @@ describe("Suno popup compatibility check", () => {
     downloadFormatMocks.setValue.mockResolvedValue(undefined);
     presetStateMocks.readRunModeId.mockResolvedValue("serial");
     presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
+    serverSourcesMocks.readServerSources.mockResolvedValue([
+      { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
+      { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
+      { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
+    ]);
+    serverSourcesMocks.rememberServerSource.mockResolvedValue([]);
     messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
     messagingMocks.progressHandler = undefined;
     messagingMocks.onMessage.mockImplementation(
@@ -264,6 +282,17 @@ describe("Suno popup compatibility check", () => {
     });
   }
 
+  async function rerenderApp(): Promise<void> {
+    await act(async () => {
+      root.unmount();
+    });
+    container.innerHTML = "";
+    root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(App));
+    });
+  }
+
   afterEach(() => {
     act(() => {
       root.unmount();
@@ -277,6 +306,23 @@ describe("Suno popup compatibility check", () => {
     resumeStateMocks.writeResumeState.mockResolvedValue(undefined);
     presetStateMocks.readRunModeId.mockResolvedValue("serial");
     presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
+    serverSourcesMocks.readServerSources.mockResolvedValue([]);
+    serverSourcesMocks.rememberServerSource.mockResolvedValue([]);
+  });
+
+  it("ローカル配信元 option は URL を表示せず、URL value はデータ取得先として維持する", async () => {
+    const select = expectControl(container, "server-url") as HTMLSelectElement;
+
+    await waitFor(() => {
+      expect(select.options).toHaveLength(3);
+    });
+
+    expect(Array.from(select.options, (option) => ({ text: option.text, value: option.value }))).toEqual([
+      { text: "ABYSS MI | suno-helper", value: BASE_URL },
+      { text: "localhost fallback 7877 | suno-helper", value: FALLBACK_URL },
+      { text: "localhost changed | suno-helper", value: `${BASE_URL}/changed` },
+    ]);
+    expect(select.textContent).not.toContain("http://");
   });
 
   it("popup に投入方式 selector を表示し、Fast / Balanced / Safe の速度プリセットは表示しない", () => {
@@ -480,6 +526,9 @@ describe("Suno popup compatibility check", () => {
   it("dir mode で URL 入力後にデータ取得すると collection endpoint の entries を run payload に渡す", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     const runResponse = deferred<unknown>();
+    const outlierOption = checkboxByLabel(container, "異常値の曲を再生成する");
+    expect(outlierOption.checked).toBe(true);
+    expect(outlierOption.disabled).toBe(true);
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
@@ -507,6 +556,12 @@ describe("Suno popup compatibility check", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
+    expect(outlierOption.disabled).toBe(false);
+    await act(async () => {
+      outlierOption.click();
+    });
+    expect(outlierOption.checked).toBe(false);
+    expect(container.textContent).toContain("duration guard NG も Playlist / Download 候補に残ります");
     expectRangeUiAbsent(container);
 
     messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
@@ -524,6 +579,7 @@ describe("Suno popup compatibility check", () => {
       expect(panel?.dataset.sunoPhase).toBe("starting");
       expect(panel?.dataset.sunoRunning).toBe("true");
       expect(buttonByText(container, "停止").disabled).toBe(false);
+      expect(outlierOption.disabled).toBe(true);
     });
 
     await act(async () => {
@@ -547,14 +603,16 @@ describe("Suno popup compatibility check", () => {
       range: undefined,
       collectionId: "20260601-clm-theme-a-collection",
       runMode: "serial",
+      regenerateDurationOutliers: false,
       indices: undefined,
       submittedClipIds: undefined,
       submittedClipIdsAreDurationFiltered: undefined,
       playlistExpectedClipCount: undefined,
+      durationOutlierWarnings: undefined,
     });
   });
 
-  it("投入方式 Queue を選択して実行すると storage に保存し run payload に queue を渡す", async () => {
+  it("投入方式 高速モードを選択して実行すると storage に保存し run payload に queue を渡す", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
@@ -584,7 +642,7 @@ describe("Suno popup compatibility check", () => {
     });
 
     await act(async () => {
-      radioByLabel(container, "Queue").click();
+      radioByLabel(container, "高速モード").click();
     });
     expect(presetStateMocks.writeRunModeId).toHaveBeenCalledWith("queue");
 
@@ -599,10 +657,12 @@ describe("Suno popup compatibility check", () => {
       range: undefined,
       collectionId: "20260601-clm-theme-a-collection",
       runMode: "queue",
+      regenerateDurationOutliers: true,
       indices: undefined,
       submittedClipIds: undefined,
       submittedClipIdsAreDurationFiltered: undefined,
       playlistExpectedClipCount: undefined,
+      durationOutlierWarnings: undefined,
     });
   });
 
@@ -621,6 +681,10 @@ describe("Suno popup compatibility check", () => {
       total: 2,
       timestamp: Date.now(),
       submittedClipIds: [],
+      regenerateDurationOutliers: false,
+      durationOutlierWarnings: {
+        0: "duration guard NG (60-300s): clip-short; 再生成 OFF のため全 clip を採用候補として保持します",
+      },
     } as never);
     fetchMock.mockReset();
     fetchMock
@@ -653,6 +717,7 @@ describe("Suno popup compatibility check", () => {
 
     await waitFor(() => {
       expect(container.textContent).toContain("前回の実行が中断されました。");
+      expect(checkboxByLabel(container, "異常値の曲を再生成する").checked).toBe(false);
     });
 
     messagingMocks.sendMessage.mockClear();
@@ -666,11 +731,135 @@ describe("Suno popup compatibility check", () => {
       range: { start: 1, end: 1 },
       collectionId: "20260601-clm-theme-a-collection",
       runMode: "serial",
+      regenerateDurationOutliers: false,
       indices: undefined,
       submittedClipIds: [],
       submittedClipIdsAreDurationFiltered: false,
       playlistExpectedClipCount: 4,
+      durationOutlierWarnings: {
+        0: "duration guard NG (60-300s): clip-short; 再生成 OFF のため全 clip を採用候補として保持します",
+      },
     });
+
+    await act(async () => {
+      messagingMocks.progressHandler?.({ data: { phase: PHASE.FINISHED, total: 2 } });
+    });
+    expect(container.textContent).toContain("異常値警告");
+    expect(container.textContent).toContain("clip-short");
+  });
+
+  it("失敗分のみ再実行して FINISHED を受けても前回の異常値警告を維持する", async () => {
+    const entries = [
+      { name: "p1", style: "lofi", lyrics: "" },
+      { name: "p2", style: "ambient", lyrics: "" },
+    ];
+    const warning = "duration guard NG (60-300s): clip-short; 再生成 OFF のため全 clip を採用候補として保持します";
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    resumeStateMocks.readResumeState.mockResolvedValue({
+      collectionId: "20260601-clm-theme-a-collection",
+      failedIndex: 2,
+      total: 2,
+      timestamp: Date.now(),
+      failedIndices: [1],
+      submittedClipIds: ["clip-a", "clip-short"],
+      submittedClipIdsAreDurationFiltered: false,
+      playlistExpectedClipCount: 4,
+      regenerateDurationOutliers: false,
+      durationOutlierWarnings: { 0: warning },
+    } as never);
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a",
+            channel: "clm",
+            theme: "theme-a",
+            status: "ready",
+            pattern_count: 2,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+    messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
+
+    await act(async () => {
+      root.render(createElement(App));
+    });
+    await act(async () => {
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
+    });
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+    await waitFor(() => {
+      expect(buttonByText(container, "失敗分のみ再実行")).toBeTruthy();
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "失敗分のみ再実行").click();
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("run", {
+      entries,
+      playlistName: "clm | theme-a",
+      range: undefined,
+      collectionId: "20260601-clm-theme-a-collection",
+      runMode: "serial",
+      regenerateDurationOutliers: false,
+      indices: [1],
+      submittedClipIds: ["clip-a", "clip-short"],
+      submittedClipIdsAreDurationFiltered: false,
+      playlistExpectedClipCount: 4,
+      durationOutlierWarnings: { 0: warning },
+    });
+
+    await act(async () => {
+      messagingMocks.progressHandler?.({ data: { phase: PHASE.FINISHED, total: 2 } });
+    });
+    expect(container.textContent).toContain("異常値警告");
+    expect(container.textContent).toContain("clip-short");
+  });
+
+  it("実行中に popup を再 open して FINISHED を受けても snapshot の異常値警告を完了表示に残す", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    const warning = "duration guard NG (60-300s): clip-short; 再生成 OFF のため全 clip を採用候補として保持します";
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "queryProgress") {
+        return Promise.resolve({
+          collectionId: "20260601-clm-theme-a-collection",
+          entries,
+          itemStates: ["active"],
+          isRunning: true,
+          progress: { phase: PHASE.GENERATING, index: 0, total: 1 },
+          playlistName: "clm | theme-a",
+          regenerateDurationOutliers: false,
+          durationOutlierWarnings: { 0: warning },
+        });
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await rerenderApp();
+    await waitFor(() => {
+      expect(container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')?.dataset.sunoRunning).toBe(
+        "true",
+      );
+    });
+
+    await act(async () => {
+      messagingMocks.progressHandler?.({ data: { phase: PHASE.FINISHED, total: 1 } });
+    });
+
+    expect(container.textContent).toContain("異常値警告");
+    expect(container.textContent).toContain("clip-short");
   });
 
   it("dir mode でチェックを外した entry を除外して 0-based indices を run payload に渡す", async () => {
@@ -707,7 +896,9 @@ describe("Suno popup compatibility check", () => {
       expect(container.textContent).toContain("3 パターンを取得しました。");
     });
 
-    const checkboxes = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+    const checkboxes = Array.from(
+      container.querySelectorAll<HTMLInputElement>('[data-suno-entry-index] input[type="checkbox"]'),
+    );
     expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([true, true, true]);
 
     await act(async () => {
@@ -731,6 +922,7 @@ describe("Suno popup compatibility check", () => {
       range: undefined,
       collectionId: "20260601-clm-theme-a-collection",
       runMode: "serial",
+      regenerateDurationOutliers: true,
       indices: [0, 2],
       submittedClipIds: undefined,
       submittedClipIdsAreDurationFiltered: undefined,
@@ -738,8 +930,9 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
-  it("content snapshot 復元だけで再実行すると snapshot の collectionId を run payload に使う", async () => {
+  it("content snapshot の ERROR だけから再開して FINISHED を受けても option と異常値警告を維持する", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    const warning = "duration guard NG (60-300s): clip-short; 再生成 OFF のため全 clip を採用候補として保持します";
     act(() => {
       root.unmount();
     });
@@ -773,8 +966,11 @@ describe("Suno popup compatibility check", () => {
           entries,
           itemStates: ["idle"],
           isRunning: false,
-          progress: { phase: "stopped", total: 1 },
+          progress: { phase: PHASE.ERROR, index: 0, total: 1, message: "stopped" },
+          failedIndex: 0,
           playlistName: "clm | snapshot",
+          regenerateDurationOutliers: false,
+          durationOutlierWarnings: { 0: warning },
         });
       }
       return defaultSendMessage(message, payload);
@@ -784,25 +980,35 @@ describe("Suno popup compatibility check", () => {
       root.render(createElement(App));
     });
     await waitFor(() => {
-      expect(container.textContent).toContain("停止しました。再実行できます。");
+      expect(container.textContent).toContain("前回の実行が中断されました。");
+      expect(container.textContent).toContain("異常値警告");
+      expect(checkboxByLabel(container, "異常値の曲を再生成する").checked).toBe(false);
     });
 
     messagingMocks.sendMessage.mockClear();
     await act(async () => {
-      buttonByText(container, "全パターンを連続実行").click();
+      buttonByText(container, "再開").click();
     });
 
     expect(messagingMocks.sendMessage).toHaveBeenCalledWith("run", {
       entries,
       playlistName: "clm | snapshot",
-      range: undefined,
+      range: { start: 0, end: 0 },
       collectionId: "20260602-clm-snapshot-collection",
       runMode: "serial",
+      regenerateDurationOutliers: false,
       indices: undefined,
-      submittedClipIds: undefined,
-      submittedClipIdsAreDurationFiltered: undefined,
-      playlistExpectedClipCount: undefined,
+      submittedClipIds: [],
+      submittedClipIdsAreDurationFiltered: false,
+      playlistExpectedClipCount: 2,
+      durationOutlierWarnings: { 0: warning },
     });
+
+    await act(async () => {
+      messagingMocks.progressHandler?.({ data: { phase: PHASE.FINISHED, total: 1 } });
+    });
+    expect(container.textContent).toContain("異常値警告");
+    expect(container.textContent).toContain("clip-short");
   });
 
   it("snapshot 復元後にデータ再取得すると restored collection ではなく取得した collectionId で run する", async () => {
@@ -872,6 +1078,7 @@ describe("Suno popup compatibility check", () => {
       range: undefined,
       collectionId: "20260603-clm-fresh-collection",
       runMode: "serial",
+      regenerateDurationOutliers: true,
       indices: undefined,
       submittedClipIds: undefined,
       submittedClipIdsAreDurationFiltered: undefined,
@@ -913,7 +1120,9 @@ describe("Suno popup compatibility check", () => {
       expect(container.textContent).toContain("3 パターンを取得しました。");
     });
 
-    const checkboxes = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+    const checkboxes = Array.from(
+      container.querySelectorAll<HTMLInputElement>('[data-suno-entry-index] input[type="checkbox"]'),
+    );
     expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([true, true, true]);
 
     for (const checkbox of checkboxes) {
@@ -1300,6 +1509,115 @@ describe("Suno popup compatibility check", () => {
     expect(select.value).toBe("wav");
   });
 
+  it("DL 形式の読込が失敗すると未捕捉にせず再読み込み案内を表示する", async () => {
+    downloadFormatMocks.getValue.mockRejectedValueOnce(
+      new Error("'wxt/storage' must be loaded in a web extension environment"),
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.innerHTML = "";
+    root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(App));
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
+      expect(buttonByText(container, "タブを再読み込み")).toBeTruthy();
+    });
+  });
+
+  it.each([
+    ["server URL", () => storageMocks.getValue.mockRejectedValueOnce(new Error("Extension context invalidated."))],
+    [
+      "server sources",
+      () => serverSourcesMocks.readServerSources.mockRejectedValueOnce(new Error("Extension context invalidated.")),
+    ],
+    [
+      "run mode",
+      () => presetStateMocks.readRunModeId.mockRejectedValueOnce(new Error("Extension context invalidated.")),
+    ],
+    [
+      "resume state",
+      () => resumeStateMocks.readResumeState.mockRejectedValueOnce(new Error("Extension context invalidated.")),
+    ],
+  ])("%s の読込失敗を再読み込み案内へ集約する", async (_label, rejectRead) => {
+    rejectRead();
+    await rerenderApp();
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
+      expect(buttonByText(container, "タブを再読み込み")).toBeTruthy();
+    });
+  });
+
+  it("run mode の保存失敗を再読み込み案内へ集約する", async () => {
+    presetStateMocks.writeRunModeId.mockRejectedValueOnce(new Error("Extension context invalidated."));
+    const queueRadio = radioByLabel(container, "高速モード");
+
+    await act(async () => {
+      queueRadio.click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
+    });
+  });
+
+  it("server URL の保存失敗を再読み込み案内へ集約し、再保存しない", async () => {
+    storageMocks.setValue.mockRejectedValueOnce(new Error("Extension context invalidated."));
+    const serverSelect = expectControl(container, "server-url") as HTMLSelectElement;
+    setSelectValue(serverSelect, BASE_URL);
+
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
+    });
+    expect(storageMocks.setValue).toHaveBeenCalledOnce();
+  });
+
+  it("互換性確認の No response を未捕捉にせず再読み込み案内へ集約する", async () => {
+    messagingMocks.sendMessage.mockImplementation((message, payload) => {
+      if (message === "fetchCompatibilityWarning") {
+        return Promise.reject(new Error("No response at sendMessage"));
+      }
+      return defaultSendMessage(message, payload);
+    });
+    const serverSelect = expectControl(container, "server-url") as HTMLSelectElement;
+    setSelectValue(serverSelect, BASE_URL);
+
+    await act(async () => {
+      buttonByText(container, "データ取得").click();
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
+      expect(buttonByText(container, "タブを再読み込み")).toBeTruthy();
+    });
+  });
+
+  it("DL 形式の保存が失敗すると未捕捉にせず再読み込み案内を表示する", async () => {
+    downloadFormatMocks.setValue.mockRejectedValueOnce(new Error("Extension context invalidated."));
+    const select = Array.from(container.querySelectorAll("select")).find((candidate) =>
+      Array.from(candidate.options).some((option) => option.value === "wav"),
+    );
+    if (!select) throw new Error("download format select not found");
+
+    await act(async () => {
+      setSelectValue(select, "wav");
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
+      expect(buttonByText(container, "タブを再読み込み")).toBeTruthy();
+    });
+  });
+
   it("DL 形式 select は不正な storage 値を MP3 に戻す", async () => {
     await rerenderAppWithDownloadFormat("flac");
 
@@ -1350,7 +1668,7 @@ describe("Suno popup compatibility check", () => {
     });
 
     const checkboxStates = (): boolean[] =>
-      Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).map(
+      Array.from(container.querySelectorAll<HTMLInputElement>('[data-suno-entry-index] input[type="checkbox"]')).map(
         (checkbox) => checkbox.checked,
       );
 
@@ -1365,11 +1683,15 @@ describe("Suno popup compatibility check", () => {
       expect(checkboxStates()).toEqual([true, false, true]);
     });
     expect(
-      Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))[1]?.closest("li")?.className,
+      Array.from(
+        container.querySelectorAll<HTMLInputElement>('[data-suno-entry-index] input[type="checkbox"]'),
+      )[1]?.closest("li")?.className,
     ).toContain("line-through");
 
     await act(async () => {
-      Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))[1]?.click();
+      Array.from(
+        container.querySelectorAll<HTMLInputElement>('[data-suno-entry-index] input[type="checkbox"]'),
+      )[1]?.click();
     });
     await waitFor(() => {
       expect(checkboxStates()).toEqual([true, true, true]);
@@ -1447,6 +1769,8 @@ describe("Suno popup compatibility check", () => {
       expectedClipCount: 2,
       durationFilter: undefined,
       submittedClipIdsAreDurationFiltered: false,
+      regenerateDurationOutliers: true,
+      durationOutlierWarnings: undefined,
       shouldDownload: true,
     });
     await act(async () => {
@@ -1471,6 +1795,10 @@ describe("Suno popup compatibility check", () => {
       durationFilter: { min_sec: 75, max_sec: 180 },
       submittedClipIdsAreDurationFiltered: true,
       playlistExpectedClipCount: 2,
+      regenerateDurationOutliers: false,
+      durationOutlierWarnings: {
+        0: "duration guard NG (75-180s): clip-b; 再生成 OFF のため全 clip を採用候補として保持します",
+      },
     } as never);
     fetchMock.mockReset();
     fetchMock
@@ -1519,8 +1847,18 @@ describe("Suno popup compatibility check", () => {
       expectedClipCount: 2,
       durationFilter: { min_sec: 75, max_sec: 180 },
       submittedClipIdsAreDurationFiltered: true,
+      regenerateDurationOutliers: false,
+      durationOutlierWarnings: {
+        0: "duration guard NG (75-180s): clip-b; 再生成 OFF のため全 clip を採用候補として保持します",
+      },
       shouldDownload: true,
     });
+
+    await act(async () => {
+      messagingMocks.progressHandler?.({ data: { phase: PHASE.FINISHED, total: 0 } });
+    });
+    expect(container.textContent).toContain("異常値警告");
+    expect(container.textContent).toContain("clip-b");
   });
 
   it("persisted resume が entries 未取得の途中再開ならバナーを残して run を送らない", async () => {

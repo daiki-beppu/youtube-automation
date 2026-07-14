@@ -17,12 +17,10 @@ case ",${labels}," in
     ;;
 esac
 
+# takt workflow で自動実行するラベル（ラベル = workflow 名。takt:manual のみ対象外）
 is_takt_target=0
 case ",${labels}," in
-  *,takt:default,*) is_takt_target=1 ;;
-esac
-case ",${labels}," in
-  *,takt:lite,*) is_takt_target=1 ;;
+  *,takt:feature,*|*,takt:improve,*|*,takt:diagnose-fix,*|*,takt:fix,*|*,takt:docs,*|*,takt:lite,*) is_takt_target=1 ;;
 esac
 
 if [ "$is_takt_target" -ne 1 ]; then

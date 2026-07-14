@@ -943,10 +943,25 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
 
     from youtube_automation.utils.config import load_config
     from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.utils.metadata_generator import validate_localizations_title_templates
 
     with _temporary_channel_dir(channel_dir):
         try:
-            load_config()
+            config = load_config()
+            localization_errors = validate_localizations_title_templates(config.localizations.data)
+            if localization_errors:
+                return CheckResult(
+                    id="channel_config",
+                    status="fail",
+                    category=CHANNEL_CATEGORY,
+                    message="config/localizations.json 検証失敗: " + "\n".join(localization_errors),
+                    next_action={
+                        "kind": "human",
+                        "instructions": (
+                            "/channel-new（既存チャンネル取り込みモード）を実行して設定を修復してください"
+                        ),
+                    },
+                )
             return CheckResult(
                 id="channel_config",
                 status="ok",

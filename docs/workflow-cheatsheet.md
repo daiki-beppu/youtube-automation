@@ -73,6 +73,7 @@ Phase 3 ─ 公開（全自動）             /wf-next
 | `phase` を手で書き換える | ❌ NG | skill 側が更新するので競合する。「中断して別 phase からやり直したい」なら `/wf-next` を呼ぶ |
 | `assets.*` フラグを手で書き換える | ⚠️ NG（原則） | 冪等性の前提が崩れ、未完了ステップ判定が壊れる。誤って `true` にすると skill が当該ステップをスキップする |
 | `planning.music.*`（mood / tempo / instruments 等）を手で編集 | ⚠️ 限定 OK | `/suno` や `/lyria` 実行**前**に微調整するのは可。実行**後**に書き換えると音源との整合が崩れる |
+| `title_template_check.allow_volume_patterns: true` を追加 | ⚠️ 限定 OK | `Vol.` / `Part` / `#N` / ローマ数字による意図的なシリーズ名を公開タイトルに使うコレクションだけに記録する。未設定は既定どおり検出し、他のタイトル鋳型チェックは緩和しない |
 | `upload.video_id` を手で書き換える | ❌ NG | YouTube 側との整合が崩れる |
 | ファイル全体を **削除** する | ⚠️ 慎重に | コレクションをやり直すなら可。ただしディレクトリも一緒に消した方が安全 |
 
@@ -107,7 +108,7 @@ A. `config/channel/workflow.json` に `workflow.wf_next.skip_manual_mastering: t
 A. `phase: "publishing"` で停止していれば、`assets` フラグの状態から未完了ステップを特定し、`/wf-next` をもう一度呼ぶと未完了ステップから再開する（冪等性あり）。
 
 **Q. analytics やベンチマークが無いと `/collection-ideate` は止まる？**
-A. `reports/analysis_*.md` が無い場合は止まらず、`data/benchmark_*.json` があれば benchmark fallback mode、どちらも無ければ minimal mode で進む。minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認する。`reports/analysis_*.md` が stale（最新 `data/analytics_data_*.json` より古い、または収集データ自体が実行日から解決済み `freshness_days` を超えて経過）の場合だけ fallback せず、`/analytics-analyze` 再実行（絶対鮮度 stale では `/analytics-collect` を先行）を案内して止まる。`freshness_days` は `.claude/skills/collection-ideate/config.default.yaml` の既定 7 日を使い、`config/skills/collection-ideate.yaml` で上書きできる。
+A. `reports/analysis_*.md` が無い場合は止まらず、`data/benchmark_*.json` があれば benchmark fallback mode、どちらも無ければ minimal mode で進む。minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気を直接確認する。analytics mode へ進めるのは、ファイル名日付が最新の Markdown と同日付 JSON が揃い、analysis JSON validator が成功し、ペアが stale でない場合だけ。Markdown があるのに同日付 JSON がない、validator が失敗する、またはペアが stale（最新 `data/analytics_data_*.json` より古い、あるいは収集データ自体が実行日から解決済み `freshness_days` を超えて経過）の場合は fallback せず、`/analytics-analyze` 再実行（絶対鮮度 stale では `/analytics-collect` を先行）を案内して止まる。`yt-doctor` の入力モード表示は Markdown と stale の予備確認であり、JSON/validator の最終 Hard Gate は `/collection-ideate` が実行する。`freshness_days` は `.claude/skills/collection-ideate/config.default.yaml` の既定 7 日を使い、`config/skills/collection-ideate.yaml` で上書きできる。
 
 **Q. 「planning/」と「live/」って何**
 A. 制作中は `collections/planning/<dir>/`、`/video-upload` で公開完了すると `collections/live/<dir>/` に移動する（`/wf-next` の Phase 3 最後）。

@@ -101,5 +101,6 @@
 ## 参照
 
 - 監査対象 / 実例元: `.claude/skills/<skill>/SKILL.md`
+- subagent へ実作業を委譲する skill: [subagent 委譲オーケストレーション規約](subagent-orchestration.md)
 - 関連 ADR: [docs/skill-design/ADR-001-thumbnail-prompt-schema.md](docs/skill-design/ADR-001-thumbnail-prompt-schema.md)
 - frontmatter 記法（`description:` の double-quoted string 規約）: `CLAUDE.md` の「### skill frontmatter」小節

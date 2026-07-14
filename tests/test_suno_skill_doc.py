@@ -124,8 +124,15 @@ def test_skill_md_documents_wxt_unpacked_load_flow() -> None:
     path basename を照合する。ロードする unpacked directory は `suno-helper` basename でなければならない。
     """
     text = _read()
-    for token in ("pnpm build", ".output/chrome-mv3", "~/chrome-extensions/suno-helper"):
+    for token in (
+        "nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile",
+        "nix develop .#extensions --command pnpm -C extensions/suno-helper build",
+        "test -f extensions/suno-helper/.output/chrome-mv3/manifest.json",
+        ".output/chrome-mv3",
+        "~/chrome-extensions/suno-helper",
+    ):
         assert token in text, f"SKILL.md に WXT ロード手順の記載がない（`{token}` 不在）"
+    assert "npx -y pnpm@" not in text, "SKILL.md に Nix shell を迂回する旧 npx pnpm 導線が残っている"
 
 
 def test_skill_md_has_no_dangling_content_js_reference() -> None:
@@ -185,10 +192,9 @@ def test_skill_md_documents_tracks_per_collection_for_instrumental() -> None:
     Then インストモードが pattern モデルから `tracks_per_collection` ベースに刷新されたことが記載されている。
 
     本 PR: `/suno-helper` の登場で連続生成 + playlist 一括化が自動化されたため、`/suno` 側の
-    `patterns_per_collection × tracks_per_pattern × 2 (Suno 1 Generate = 2 clip)` 入れ子モデルを
-    インスト側だけ廃止し、フラットな `tracks_per_collection` 指定 → `ceil(N/2)` 個の独立 entry に
-    切り替えた。ボーカルモードは選曲精度のため pattern モデル維持。読み手 (AI / operator) が
-    旧モデルで yaml を書き始めないよう、新節タイトルと算出式の存在をここで機械的に担保する。
+    インストモードをフラットな `tracks_per_collection` 指定 → `ceil(N/2)` 個の独立 entry に
+    切り替えた。読み手 (AI / operator) が旧モデルで yaml を書き始めないよう、新節タイトルと
+    算出式の存在をここで機械的に担保する。
     """
     text = _read()
     # 新節タイトルの存在 (インストとボーカルが視認できるレベルで明確に分離されていること)

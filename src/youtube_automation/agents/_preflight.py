@@ -101,10 +101,22 @@ class PreflightMixin:
 
         config = load_config()
 
+        # workflow-state.json 自体は全チャンネルで必須。scene_phrases 完全性だけを
+        # 単一言語チャンネルでは不要扱いにする（populate 側と同じ判定を共有 #1470）。
+        ws_path = paths.workflow_state_path
+        if not ws_path.exists():
+            raise RuntimeError(
+                f"❌ {ws_path} が存在しません。/wf-new または /video-description の前提を確認してください。"
+            )
+        state = json.loads(ws_path.read_text(encoding="utf-8"))
+        title_template_check = state.get("title_template_check")
+
         # タイトル鋳型準拠チェック（巻数表記・RHS 重複・鋳型逸脱を機械検出）。
         # 鋳型語彙・パターンは config 駆動、` | ` 鋳型を使うチャンネルでのみ適用。
         title_cfg = config.content.title
         template_check_cfg = {**dict(title_cfg.template_check), "template": title_cfg.template}
+        if isinstance(title_template_check, dict) and title_template_check.get("allow_volume_patterns") is True:
+            template_check_cfg["volume_patterns"] = ()
         existing_titles = self._collect_live_titles(exclude_dir=collection_dir)
         msg = check_title_template_compliance(title, existing_titles, template_check_cfg)
         if msg:
@@ -126,14 +138,6 @@ class PreflightMixin:
         if msg:
             raise RuntimeError(f"❌ {msg}: 1 パターン = 1 chapter で再生成してください。")
 
-        # workflow-state.json 自体は全チャンネルで必須。scene_phrases 完全性だけを
-        # 単一言語チャンネルでは不要扱いにする（populate 側と同じ判定を共有 #1470）。
-        ws_path = paths.workflow_state_path
-        if not ws_path.exists():
-            raise RuntimeError(
-                f"❌ {ws_path} が存在しません。/wf-new または /video-description の前提を確認してください。"
-            )
-        state = json.loads(ws_path.read_text(encoding="utf-8"))
         scene_phrases = state.get("scene_phrases") or {}
 
         if requires_scene_phrases(config.localizations.supported_languages):

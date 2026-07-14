@@ -9,6 +9,7 @@ interface RunPayload {
   entries: PromptEntry[];
   playlistName: string;
   runMode?: "serial" | "queue";
+  regenerateDurationOutliers?: boolean;
   durationFilter?: { min_sec: number; max_sec: number };
   range?: RunRange;
   collectionId: string;
@@ -164,6 +165,7 @@ async function loadContentScriptWithPlaylistRows(
     CAPTCHA_WAIT_TIMEOUT_MS: 1,
     FatalRunError: class FatalRunError extends Error {},
     GENERATE_TIMEOUT_MS: 1,
+    LyricsPasteReflectionError: class LyricsPasteReflectionError extends Error {},
     POLL_INTERVAL_MS: 1,
     SETTLE_MS: 0,
     getInFlightClipCount: vi.fn(() => 0),
@@ -172,6 +174,7 @@ async function loadContentScriptWithPlaylistRows(
     resolveFields: vi.fn(() => ({ style: {} as HTMLTextAreaElement, lyrics: null, title: null })),
     resolveGenerateButton: vi.fn(() => ({ click: vi.fn() }) as unknown as HTMLButtonElement),
     setLyricsValue: vi.fn(() => Promise.resolve()),
+    setLyricsValueViaBeforeInput: vi.fn(() => Promise.resolve()),
     setNativeValue: vi.fn(),
     sleep: vi.fn(() => Promise.resolve()),
     waitForCaptchaClear: vi.fn(() => Promise.resolve()),
@@ -249,7 +252,8 @@ async function loadContentScriptWithPlaylistRows(
     scheduleRunCompleteReloadMock,
     cancelScheduledRunCompleteReloadMock,
     progressMessages,
-    runHandler: (message: { data: RunPayload }) => runHandler({ data: { runMode: "serial", ...message.data } }),
+    runHandler: (message: { data: RunPayload }) =>
+      runHandler({ data: { runMode: "serial", regenerateDurationOutliers: true, ...message.data } }),
     sentMessages,
   };
 }

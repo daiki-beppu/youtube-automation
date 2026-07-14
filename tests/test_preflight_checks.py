@@ -52,6 +52,22 @@ class TestCheckTagsCount:
         msg = check_tags_count(["a", "b"], 5)
         assert msg == "tags count: 2 (min 5)"
 
+    def test_under_min_at_character_limit_returns_existing_message(self) -> None:
+        tags = ["a" * 17] * 26 + ["b" * 26]
+
+        assert check_tags_count(tags, 30) == "tags count: 27 (min 30)"
+
+    def test_under_min_unreachable_under_character_limit_explains_resolution(self) -> None:
+        tags = ["a" * 17] * 26 + ["b" * 27]
+
+        msg = check_tags_count(tags, 30)
+
+        assert msg == (
+            "tags.min_count=30 is unreachable under YouTube's 500-character tag limit: "
+            "27 current tags use 495 characters, and adding 3 one-character tags requires at least 501. "
+            "Reduce tags.min_count or shorten base tags."
+        )
+
     def test_at_min_passes(self) -> None:
         assert check_tags_count(["a", "b", "c"], 3) is None
 
@@ -250,6 +266,46 @@ class TestInitialSetupChecks:
         issues = check_thumbnail_skill_config(tmp_path, cfg)
 
         assert any("reference_images.default" in issue and "TBD" in issue for issue in issues)
+
+    def test_thumbnail_config_applies_recent_reference_deduplication(self, tmp_path: Path) -> None:
+        refs = [f"data/thumbnail_compare/benchmark/alpha/ref-{index}.jpg" for index in range(3)]
+        for reference in refs:
+            path = tmp_path / reference
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"jpg")
+        prompt_log = (
+            tmp_path / "collections" / "planning" / "20260712-recent" / "20-documentation" / "thumbnail-prompts.md"
+        )
+        prompt_log.parent.mkdir(parents=True)
+        prompt_log.write_text(
+            "## Reference Assignments\n"
+            "| attempt | output | reference_image | benchmark_channel |\n"
+            "|---:|---|---|---|\n"
+            "| 1 | output | `data/thumbnail_compare/benchmark/alpha/ref-0.jpg` | alpha |\n"
+            "| 2 | output | `data/thumbnail_compare/benchmark/alpha/ref-1.jpg` | alpha |\n",
+            encoding="utf-8",
+        )
+        cfg = {
+            "image_generation": {
+                "gemini": {
+                    "generation_mode": "single_step",
+                    "single_step": {"max_attempts": 2, "rotate": True},
+                    "reference_images": {"default": refs, "dedup_recent_collections": 1},
+                    "composition_rules": {
+                        "environment": "desk",
+                        "character_size": "medium",
+                        "character_pose": "sitting",
+                        "allowed_actions": "reading",
+                        "ng_actions": "no text",
+                        "background": "warm room",
+                    },
+                }
+            }
+        }
+
+        issues = check_thumbnail_skill_config(tmp_path, cfg)
+
+        assert issues == []
 
     def test_thumbnail_config_detects_unexpanded_template_composition(self, tmp_path: Path) -> None:
         ref = tmp_path / "data" / "thumbnail_compare" / "benchmark" / "alpha" / "alpha.jpg"
@@ -709,6 +765,18 @@ class TestCheckTitleTemplateCompliance:
     def test_volume_notation_rejected(self) -> None:
         title = "Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves"
         msg = check_title_template_compliance(title, [], self.CFG)
+        assert msg is not None
+        assert "巻数表記" in msg
+
+    @pytest.mark.parametrize("volume_patterns", [None, []])
+    def test_null_or_empty_volume_patterns_keep_default_detection(self, volume_patterns: object) -> None:
+        cfg = {**self.CFG, "volume_patterns": volume_patterns}
+        msg = check_title_template_compliance(
+            "Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves",
+            [],
+            cfg,
+        )
+
         assert msg is not None
         assert "巻数表記" in msg
 

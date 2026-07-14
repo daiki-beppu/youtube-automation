@@ -20,3 +20,10 @@ audio:
   # 環境変数 `VIDEOUP_AUDIO_TARGET_VIDEO_DURATION_MIN` でも上書きできる
   # (env > channel override > default の優先順位)。
   # target_video_duration_min: 120
+
+video:
+  # effect=none の静止画は still_gop / still_fps 秒（1 GOP）だけベイクし、
+  # その短尺クリップを stream copy で音声尺まで繰り返す。
+  still_fps: 1
+  still_crf: 28
+  still_gop: 300

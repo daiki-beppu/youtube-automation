@@ -39,16 +39,11 @@ def _create_collection(
 def _create_stub_bin(tmp_path: Path) -> Path:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    # macOS の afinfo を スタブ化。FFPROBE_DURATION が設定されていれば
-    # `estimated duration: <sec> sec` 形式で返し、未設定なら exit 1。
+    # macOS の afinfo をスタブ化し、入力音声の duration を返す。
     _write_executable(
         bin_dir / "afinfo",
         """#!/bin/bash
-if [[ -n "${FFPROBE_DURATION:-}" ]]; then
-    printf 'File:           %s\\nestimated duration: %s sec\\n' "$1" "${FFPROBE_DURATION}"
-    exit 0
-fi
-exit 1
+printf 'File:           %s\\nestimated duration: %s sec\\n' "$1" "${FFPROBE_DURATION:-1.00}"
 """,
     )
     _write_executable(
@@ -56,8 +51,22 @@ exit 1
         """#!/bin/bash
 set -eu
 args="$*"
+input_path="${!#}"
+if [[ "${FFPROBE_OUTPUT_FAIL:-0}" == "1" && "$input_path" == *"-Master.mp4" ]]; then
+    exit 1
+fi
 if [[ "$args" == *"format=duration"* ]]; then
-    printf '%s\\n' "${FFPROBE_DURATION:-1.00}"
+    if [[ "$input_path" == *"-Master.mp4" && -n "${FFPROBE_OUTPUT_DURATION+x}" ]]; then
+        printf '%s\\n' "$FFPROBE_OUTPUT_DURATION"
+    elif [[ -f "${input_path}.duration" ]]; then
+        cat "${input_path}.duration"
+    else
+        printf '%s\\n' "${FFPROBE_DURATION:-1.00}"
+    fi
+    exit 0
+fi
+if [[ "$args" == *"stream=r_frame_rate"* ]]; then
+    printf '%s\\n' "${FFPROBE_OUTPUT_FRAME_RATE-24/1}"
     exit 0
 fi
 if [[ "$args" == *"stream=width,height,pix_fmt,r_frame_rate"* ]]; then
@@ -87,12 +96,19 @@ fi
 if [[ -n "${FFMPEG_LOG:-}" ]]; then
     printf '%s\\n' "$*" >> "${FFMPEG_LOG}"
 fi
+if [[ -n "${FFMPEG_FAIL_MATCH:-}" && "$*" == *"${FFMPEG_FAIL_MATCH}"* ]]; then
+    exit 9
+fi
 
 progress_path=""
+duration=""
 prev=""
 for arg in "$@"; do
     if [[ "$prev" == "-progress" ]]; then
         progress_path="$arg"
+    fi
+    if [[ "$prev" == "-t" ]]; then
+        duration="$arg"
     fi
     prev="$arg"
 done
@@ -104,6 +120,9 @@ fi
 output_path="${!#}"
 mkdir -p "$(dirname "$output_path")"
 printf 'stub-output' > "$output_path"
+if [[ -n "$duration" ]]; then
+    printf '%s\\n' "$duration" > "${output_path}.duration"
+fi
 """,
     )
     _write_executable(
@@ -152,7 +171,7 @@ def _run_generate_videos(
     if collection is None:
         collection = _create_collection(tmp_path, master_filename=master_filename)
     if not with_loop:
-        (collection / "10-assets" / "loop.mp4").unlink()
+        (collection / "10-assets" / "loop.mp4").unlink(missing_ok=True)
     bin_dir = _create_stub_bin(tmp_path)
     ffmpeg_log = tmp_path / "ffmpeg.log"
     env = os.environ.copy()
@@ -485,9 +504,10 @@ def test_loop_video_disabled_uses_textless_main_even_when_loop_exists(tmp_path: 
     assert result.returncode == 0, result.stderr
     assert "Loop     : disabled by config/skills/loop-video.yaml" in result.stdout
     assert "Video BG : main.png (still)" in result.stdout
-    master_cmd = _master_ffmpeg_command(ffmpeg_log)
-    assert "10-assets/main.png" in master_cmd
-    assert "10-assets/loop.mp4" not in master_cmd
+    commands = ffmpeg_log.read_text(encoding="utf-8").splitlines()
+    assert "10-assets/main.png" in commands[0]
+    assert "10-assets/loop.mp4" not in " ".join(commands)
+    assert "10-assets/still_baked.mp4" in _master_ffmpeg_command(ffmpeg_log)
 
 
 def test_static_background_prefers_textless_main_png(tmp_path: Path) -> None:
@@ -506,9 +526,231 @@ def test_static_background_prefers_textless_main_png(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "Video BG : main.png (still)" in result.stdout
     assert "Thumbnail:" not in result.stdout
-    master_cmd = _master_ffmpeg_command(ffmpeg_log)
-    assert "10-assets/main.png" in master_cmd
-    assert "10-assets/main.jpg" not in master_cmd
+    commands = ffmpeg_log.read_text(encoding="utf-8").splitlines()
+    assert "10-assets/main.png" in commands[0]
+    assert "10-assets/main.jpg" not in " ".join(commands)
+    assert "10-assets/still_baked.mp4" in _master_ffmpeg_command(ffmpeg_log)
+
+
+def test_static_effect_none_bakes_one_gop_then_stream_copies_to_audio_duration(tmp_path: Path) -> None:
+    """#1681: 静止画 + effect=none は短尺ベイク後に既存 stream-copy 経路を通る。"""
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        with_loop=False,
+        extra_env={"FFPROBE_DURATION": "7200"},
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    commands = ffmpeg_log.read_text(encoding="utf-8").splitlines()
+    assert len(commands) == 2
+    bake_cmd, master_cmd = commands
+    assert "10-assets/main.jpg" in bake_cmd
+    assert "10-assets/still_baked.mp4" in bake_cmd
+    assert " -t 300.000000 " in f" {bake_cmd} "
+    assert " -g 300 " in f" {bake_cmd} "
+    assert " -r 1 " in f" {bake_cmd} "
+    assert "-stream_loop -1" in master_cmd
+    assert "10-assets/still_baked.mp4" in master_cmd
+    assert "-c:v copy" in master_cmd
+    assert " -t 7200.00 " in f" {master_cmd} "
+    assert "-shortest" in master_cmd
+    assert "Baking still image loop" in result.stdout
+    assert "generate_videos.sh v14.2" in result.stdout
+    assert "[Step 1/2]" in result.stdout
+    assert "[Step 2/2] Generating master video (stream copy)" in result.stdout
+
+
+def test_static_bake_channel_config_reaches_ffmpeg_and_cache_stamp(tmp_path: Path) -> None:
+    """#1681: still 設定の channel override がベイク尺・encoder・stamp まで貫通する。"""
+    channel_root = tmp_path / "channel"
+    collection = channel_root / "collections" / "planning" / "001-test-ambient-collection"
+    master_dir = collection / "01-master"
+    assets_dir = collection / "10-assets"
+    master_dir.mkdir(parents=True)
+    assets_dir.mkdir(parents=True)
+    (master_dir / "master-mix.wav").write_bytes(b"fake-audio")
+    (assets_dir / "main.jpg").write_bytes(b"fake-image")
+    (assets_dir / "loop.mp4").write_bytes(b"fake-video")
+    skill_config_dir = channel_root / "config" / "skills"
+    skill_config_dir.mkdir(parents=True)
+    (skill_config_dir / "videoup.yaml").write_text(
+        "video:\n  still_fps: 2\n  still_crf: 26\n  still_gop: 10\n",
+        encoding="utf-8",
+    )
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        collection=collection,
+        with_loop=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    bake_cmd = ffmpeg_log.read_text(encoding="utf-8").splitlines()[0]
+    assert " -framerate 2 " in f" {bake_cmd} "
+    assert " -crf 26 " in f" {bake_cmd} "
+    assert " -g 10 " in f" {bake_cmd} "
+    assert " -t 5.000000 " in f" {bake_cmd} "
+    assert (assets_dir / "still_baked.params").read_text(encoding="utf-8").endswith("|2|26|10")
+
+
+def test_static_bake_cache_reuses_short_clip(tmp_path: Path) -> None:
+    """#1681: 背景と設定が同じ再実行では短尺ベイクを再利用する。"""
+    collection = _create_collection(tmp_path)
+    first_result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        collection=collection,
+        with_loop=False,
+    )
+    assert first_result.returncode == 0, first_result.stdout + first_result.stderr
+
+    shutil.rmtree(tmp_path / "bin")
+    ffmpeg_log.unlink()
+    second_result, second_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        collection=collection,
+        with_loop=False,
+    )
+
+    assert second_result.returncode == 0, second_result.stdout + second_result.stderr
+    assert "Still loop cache hit" in second_result.stdout
+    commands = second_log.read_text(encoding="utf-8").splitlines()
+    assert len(commands) == 1
+    assert "-c:v copy" in commands[0]
+
+
+def test_invalid_static_bake_period_fails_loud(tmp_path: Path) -> None:
+    """#1681: 1 GOP 周期を計算できない still 設定では full encode に逃げない。"""
+    collection = _create_collection(tmp_path)
+    skill_config_dir = tmp_path / "config" / "skills"
+    skill_config_dir.mkdir(parents=True)
+    (skill_config_dir / "videoup.yaml").write_text(
+        "video:\n  still_fps: 0\n  still_gop: 300\n",
+        encoding="utf-8",
+    )
+
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        collection=collection,
+        with_loop=False,
+    )
+
+    assert result.returncode != 0
+    assert "video.still_fps and video.still_gop must be positive numbers" in result.stdout
+
+
+def test_static_bake_ffmpeg_failure_fails_loud(tmp_path: Path) -> None:
+    """#1681: 短尺ベイク失敗時は全尺エンコードへ fallback しない。"""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        with_loop=False,
+        extra_env={"FFMPEG_FAIL_MATCH": "still_baked.mp4"},
+    )
+
+    assert result.returncode != 0
+    assert "still_baked.mp4 の生成に失敗" in result.stdout
+
+
+def test_final_output_duration_over_one_frame_fails_loud(tmp_path: Path) -> None:
+    """#1681: -shortest の既知 2.9 秒超過を生成後検証で成功扱いしない。"""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        with_loop=False,
+        extra_env={
+            "FFPROBE_DURATION": "7200",
+            "FFPROBE_OUTPUT_DURATION": "7202.9",
+            "FFPROBE_OUTPUT_FRAME_RATE": "1/1",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "final output duration mismatch" in result.stdout
+    assert "delta=2.900000s" in result.stdout
+
+
+def test_final_output_duration_exactly_one_frame_succeeds(tmp_path: Path) -> None:
+    """#1681: 期待尺との差がちょうど 1 フレームなら許容する。"""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        with_loop=False,
+        extra_env={
+            "FFPROBE_DURATION": "7200",
+            "FFPROBE_OUTPUT_DURATION": "7201",
+            "FFPROBE_OUTPUT_FRAME_RATE": "1/1",
+        },
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "final output duration mismatch" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("output_duration", "output_frame_rate"),
+    [
+        ("", "24/1"),
+        ("not-a-duration", "24/1"),
+        ("7200", ""),
+        ("7200", "not-a-frame-rate"),
+    ],
+)
+def test_final_output_invalid_duration_or_frame_rate_fails_loud(
+    tmp_path: Path,
+    output_duration: str,
+    output_frame_rate: str,
+) -> None:
+    """#1681: 尺または frame-rate が空・不正なら検証成功にしない。"""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        with_loop=False,
+        extra_env={
+            "FFPROBE_DURATION": "7200",
+            "FFPROBE_OUTPUT_DURATION": output_duration,
+            "FFPROBE_OUTPUT_FRAME_RATE": output_frame_rate,
+        },
+    )
+
+    assert result.returncode != 0
+    assert "final output duration mismatch" in result.stdout
+
+
+def test_final_output_ffprobe_failure_fails_loud(tmp_path: Path) -> None:
+    """#1681: 最終出力を ffprobe で読めなければ非 0 で停止する。"""
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        with_loop=False,
+        extra_env={"FFPROBE_OUTPUT_FAIL": "1"},
+    )
+
+    assert result.returncode != 0
+    assert "ffprobe could not decode final output" in result.stdout
+
+
+def test_missing_ffprobe_fails_before_ffmpeg(tmp_path: Path) -> None:
+    """#1681: 必須になった最終検証器が無ければ生成を開始しない。"""
+    collection = _create_collection(tmp_path)
+    bin_dir = _create_stub_bin(tmp_path)
+    (bin_dir / "ffprobe").unlink()
+    env = os.environ.copy()
+    env["PATH"] = str(bin_dir)
+    result = subprocess.run(
+        ["/bin/bash", str(_SCRIPT_PATH), str(collection)],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=_REPO_ROOT,
+    )
+
+    assert result.returncode != 0
+    assert "ERROR: ffprobe not found" in result.stdout
 
 
 def test_overlay_static_background_uses_textless_main_png(tmp_path: Path) -> None:
@@ -534,6 +776,11 @@ def test_overlay_static_background_uses_textless_main_png(tmp_path: Path) -> Non
     master_cmd = _master_ffmpeg_command(ffmpeg_log)
     assert "10-assets/main.png" in master_cmd
     assert "10-assets/thumbnail.jpg" not in master_cmd
+    assert len(ffmpeg_log.read_text(encoding="utf-8").splitlines()) == 1
+    assert "-filter_complex" in master_cmd
+    assert "-c:v libx264" in master_cmd
+    assert "still_baked.mp4" not in master_cmd
+    assert "-c:v copy" not in master_cmd
 
 
 def test_videoup_skill_documents_current_overlay_support() -> None:

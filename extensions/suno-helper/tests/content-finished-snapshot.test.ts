@@ -107,6 +107,7 @@ async function loadContentScript(
     CAPTCHA_WAIT_TIMEOUT_MS: 1,
     FatalRunError: class FatalRunError extends Error {},
     GENERATE_TIMEOUT_MS: 1,
+    LyricsPasteReflectionError: class LyricsPasteReflectionError extends Error {},
     POLL_INTERVAL_MS: 1,
     SETTLE_MS: 0,
     getInFlightClipCount: vi.fn(() => 0),
@@ -115,6 +116,7 @@ async function loadContentScript(
     resolveFields: vi.fn(() => ({ style: {} as HTMLTextAreaElement, lyrics: null, title: null })),
     resolveGenerateButton: vi.fn(() => ({ click: vi.fn() }) as unknown as HTMLButtonElement),
     setLyricsValue: vi.fn(() => Promise.resolve()),
+    setLyricsValueViaBeforeInput: vi.fn(() => Promise.resolve()),
     setNativeValue: vi.fn(),
     sleep: vi.fn(() => Promise.resolve()),
     waitForCaptchaClear: vi.fn(() => Promise.resolve()),
@@ -190,6 +192,7 @@ function partialRunPayload(): RunPayload {
     range: { start: 0, end: 0 },
     collectionId: "coll-1",
     runMode: "serial",
+    regenerateDurationOutliers: true,
   };
 }
 
@@ -247,6 +250,7 @@ describe("content.ts 完了時リロード前の FINISHED snapshot 退避", () =
         submittedClipIds: ["clip-1", "clip-2"],
         expectedClipCount: 2,
         collectionId: "coll-1",
+        regenerateDurationOutliers: true,
         shouldDownload: false,
       },
     });
@@ -278,7 +282,13 @@ describe("content.ts 実行開始時の退避 snapshot 消去", () => {
     const { handlers, clearFinishedSnapshotMock } = await loadContentScript([]);
 
     handlers.get("retryPlaylist")!({
-      data: { playlistName: "pl", submittedClipIds: ["clip-1"], expectedClipCount: 1, collectionId: "coll-1" },
+      data: {
+        playlistName: "pl",
+        submittedClipIds: ["clip-1"],
+        expectedClipCount: 1,
+        collectionId: "coll-1",
+        regenerateDurationOutliers: true,
+      },
     });
 
     // 消去は initSnapshot 直後に同期で発火する（完了を待つ必要はない）

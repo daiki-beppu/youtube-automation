@@ -42,6 +42,7 @@ from youtube_automation.utils.profile import section
 from youtube_automation.utils.thumbnail_references import (
     format_reference_assignment,
     plan_ttp_reference_assignments,
+    resolve_dedup_recent_collections,
 )
 
 # Gemini 用の解像度オプション（OpenAI provider 時は無視される）
@@ -438,11 +439,18 @@ def main():
     try:
         if args.ttp_strict_references:
             benchmark_root = _channel_root() / "data" / "thumbnail_compare" / "benchmark"
+            gemini_config = skill_cfg.get("image_generation", {}).get("gemini", {})
+            reference_config = gemini_config.get("reference_images", {})
+            dedup_recent_collections = resolve_dedup_recent_collections(
+                reference_config.get("dedup_recent_collections")
+            )
             reference_assignments = plan_ttp_reference_assignments(
                 reference_images,
                 cli_max_attempts,
                 rotate,
                 benchmark_root=benchmark_root,
+                channel_dir=_channel_root(),
+                dedup_recent_collections=dedup_recent_collections,
             )
         else:
             benchmark_root = None
