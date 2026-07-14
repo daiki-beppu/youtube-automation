@@ -13,6 +13,10 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 - **release 型（単曲リリース）**: `content_model.languages` の全言語分のアップロード・プレイリスト追加・概要欄の相互リンク更新が完了している
 - 公開タイミングを、collection 型では `--plan` の結果（即時公開 / 予約公開 / 限定・非公開）どおりにユーザーへ案内済み
 
+## Subagent Contract
+
+subagent として呼ぶ場合、メインエージェントは対象コレクション、content model、実行モード（plan / upload）、承認済み公開条件をリポジトリルート相対パスまたは値で入力に含める。実アップロード、公開時刻、メタデータの承認が必要なら、メインが承認を得るまで upload を subagent へ委譲しない。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。plan の完了報告には `status: success | failure`、検証した動画とメタデータ成果物の絶対パス一覧、エラーを含める。state や tracking を更新する実アップロード CLI は承認後にメインが実行し、`20-documentation/upload_tracking.json` と対象動画の存在を検証する。直接実行時は既存手順を変更しない。
+
 ## 設定読み込みゲート
 
 前提確認や Channel Adaptation に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。

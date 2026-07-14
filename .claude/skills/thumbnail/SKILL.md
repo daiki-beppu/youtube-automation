@@ -37,6 +37,10 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 - `20-documentation/thumbnail-prompts.md` に textless 背景用・テキスト付き用の両プロンプトを保存済み
 - `workflow-state.json` の `thumbnail.approved = true` に更新済み
 
+## Subagent Contract
+
+subagent として呼ぶ場合、メインエージェントは対象コレクションと生成対象（`thumbnail` / `main`）をリポジトリルート相対パスまたは値で入力に含める。候補画像生成前の承認が必要なら、メインが承認を得るまで subagent を起動しない。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。候補画像の完了報告には `status: success | failure`、生成した `10-assets/thumbnail-vN.jpg/png` または `10-assets/main-vN.png/jpg` と `20-documentation/thumbnail-prompts.md` の絶対パス一覧、エラーを含める。メインは報告されたファイルの存在と生成対象を検証し、候補承認後の確定コピーと state 更新を行う。直接実行時は既存の承認・state 更新手順を変更しない。
+
 ## 勝ちパターン参照ゲート
 
 プロンプト構築前に `collections/planning/*/20-documentation/thumbnail-test-history.json` と `collections/live/*/20-documentation/thumbnail-test-history.json` を列挙する。存在する各ファイルは `.claude/skills/thumbnail-test/references/history-schema.md` の `### Completed history` にある履歴構造検証コマンドだけで確認し、検証に失敗した履歴は黙って無視せず、対象パスとエラーを表示して修正を案内する。そのファイルを集計から除外してよいが、未検証値をプロンプトへ入れない。
