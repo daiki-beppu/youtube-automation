@@ -83,7 +83,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_sync.add_argument(
         "--prune",
         action="store_true",
-        help=("同梱に無い target 側 entry を削除候補として列挙する (skills asset のみ、実削除には --yes も必要)"),
+        help=(
+            "upstream 管理の既知の旧 skill を削除候補として列挙する "
+            "(skills asset のみ、未知のローカル skill は対象外、実削除には --yes も必要)"
+        ),
     )
     p_sync.add_argument(
         "--yes",
