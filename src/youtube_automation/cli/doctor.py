@@ -223,6 +223,17 @@ def _is_automation_project(project_name: Optional[str]) -> bool:
     return project_name is not None and _canonical_package_name(project_name) == AUTOMATION_PACKAGE_NAME
 
 
+def _has_automation_tool() -> bool:
+    returncode, stdout, _ = _run(["uv", "tool", "list"])
+    if returncode != 0:
+        return False
+    return any(
+        _canonical_package_name(line.split(maxsplit=1)[0]) == AUTOMATION_PACKAGE_NAME
+        for line in stdout.splitlines()
+        if line and not line[0].isspace()
+    )
+
+
 def _skills_sync_failure(message: str) -> CheckResult:
     return CheckResult(
         id="skills_synced",
@@ -333,6 +344,13 @@ def check_uv() -> CheckResult:
 def check_uv_project(channel_dir: Path) -> CheckResult:
     pyproject_path = channel_dir / PYPROJECT_FILENAME
     if not pyproject_path.exists():
+        if _has_automation_tool():
+            return CheckResult(
+                id="uv_project",
+                status="ok",
+                category=BOOTSTRAP_CATEGORY,
+                message="uv tool 導入済み（uv project 初期化不要）",
+            )
         return CheckResult(
             id="uv_project",
             status="fail",
@@ -352,6 +370,21 @@ def check_uv_project(channel_dir: Path) -> CheckResult:
 
 def check_automation_package(channel_dir: Path) -> CheckResult:
     pyproject_path = channel_dir / PYPROJECT_FILENAME
+    if not pyproject_path.exists():
+        if _has_automation_tool():
+            return CheckResult(
+                id="automation_package",
+                status="ok",
+                category=BOOTSTRAP_CATEGORY,
+                message="uv tool で automation パッケージ導入済み",
+            )
+        return CheckResult(
+            id="automation_package",
+            status="fail",
+            category=BOOTSTRAP_CATEGORY,
+            message=f"{PYPROJECT_FILENAME} が無いため automation パッケージを確認できない",
+            next_action={"kind": "ai-exec", "cmd": "uv init"},
+        )
     if not pyproject_path.is_file():
         return CheckResult(
             id="automation_package",
@@ -378,6 +411,13 @@ def check_automation_package(channel_dir: Path) -> CheckResult:
             message="automation パッケージ本体プロジェクト",
         )
     if not _has_automation_dependency(dependencies):
+        if _has_automation_tool():
+            return CheckResult(
+                id="automation_package",
+                status="ok",
+                category=BOOTSTRAP_CATEGORY,
+                message="uv tool で automation パッケージ導入済み",
+            )
         return CheckResult(
             id="automation_package",
             status="fail",
