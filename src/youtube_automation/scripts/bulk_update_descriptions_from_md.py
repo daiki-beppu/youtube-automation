@@ -30,6 +30,7 @@ from youtube_automation.utils.descriptions_md import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
 )
+from youtube_automation.utils.exceptions import YouTubeAPIError
 from youtube_automation.utils.youtube_service import get_youtube
 from youtube_automation.utils.youtube_tag import parse_youtube_tags
 
@@ -94,6 +95,14 @@ def utf16_units(s: str) -> int:
     return len(s.encode("utf-16-le")) // 2
 
 
+def _execute_youtube_request(request, context: str) -> dict:
+    """YouTube API の HttpError を呼び出し文脈付きドメイン例外へ変換する."""
+    try:
+        return request.execute()
+    except HttpError as error:
+        raise YouTubeAPIError.from_http_error(error, context) from error
+
+
 def load_collection(col: str) -> dict:
     col_dir = channel_dir() / "collections" / "live" / col
     desc_md = (col_dir / "20-documentation" / "descriptions.md").read_text(encoding="utf-8")
@@ -138,8 +147,10 @@ def main() -> None:
     for col in targets:
         try:
             payloads.append(load_collection(col))
-        except Exception as e:
-            logger.error("❌ %s: %s", col, e)
+        # 1 collection の意味的な metadata 不備は他 collection の更新を妨げない。
+        # JSON 破損や I/O error はここで捕捉せず、修復が必要な失敗として伝播させる。
+        except RuntimeError as error:
+            logger.error("❌ %s: %s", col, error)
 
     if not payloads:
         logger.info("nothing to do")
@@ -147,9 +158,13 @@ def main() -> None:
 
     yt = get_youtube()
     ids = ",".join(p["video_id"] for p in payloads)
-    current = yt.videos().list(id=ids, part="snippet").execute()
+    current = _execute_youtube_request(
+        yt.videos().list(id=ids, part="snippet"),
+        "Failed to fetch current video snippets",
+    )
     by_id = {item["id"]: item for item in current.get("items", [])}
 
+    first_update_error: YouTubeAPIError | None = None
     for p in payloads:
         item = by_id.get(p["video_id"])
         if not item:
@@ -190,11 +205,19 @@ def main() -> None:
 
         body = build_snippet_update_body(p["video_id"], old_snippet, new_title, new_desc, new_tags)
         try:
-            yt.videos().update(part="snippet", body=body).execute()
+            _execute_youtube_request(
+                yt.videos().update(part="snippet", body=body),
+                f"Failed to update video {p['video_id']}",
+            )
             logger.info("   ✅ updated")
-        except HttpError as e:
-            logger.error("   ❌ update failed: %s", e)
+        except YouTubeAPIError as error:
+            logger.error("   ❌ update failed: %s", error)
+            if first_update_error is None:
+                first_update_error = error
         time.sleep(0.4)
+
+    if first_update_error is not None:
+        raise first_update_error
 
     if args.dry_run:
         logger.info("\n🔍 dry-run; %s videos would be updated", len(payloads))

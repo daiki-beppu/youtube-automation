@@ -31,6 +31,7 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from youtube_automation.utils.config import reset
+from youtube_automation.utils.exceptions import YouTubeAPIError
 
 # ---------------------------------------------------------------------------
 # ヘルパー
@@ -493,6 +494,16 @@ class TestMainExecution:
 
             # Then
             assert yt_mock.videos.return_value.update.return_value.execute.call_count == 3
+            video_calls = yt_mock.videos.return_value.mock_calls
+            list_execute_indices = [
+                index for index, mock_call in enumerate(video_calls) if mock_call[0] == "list().execute"
+            ]
+            update_execute_indices = [
+                index for index, mock_call in enumerate(video_calls) if mock_call[0] == "update().execute"
+            ]
+            assert len(list_execute_indices) == 1
+            assert len(update_execute_indices) == 3
+            assert max(list_execute_indices) < min(update_execute_indices)
             messages = [record.message for record in caplog.records]
             assert messages.count("\n" + "─" * 60) == 3
             assert "🎬 V1  a" in messages
@@ -620,6 +631,77 @@ class TestMainExecution:
         ]
         gy.assert_not_called()
 
+    def test_should_continue_after_semantic_metadata_error(self, tmp_path, monkeypatch, caplog):
+        """意味的に不正な collection を記録し、正常な collection は更新する."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_descriptions(ch, "alpha-invalid", omit_video_id=True)
+        _make_collection_with_descriptions(ch, "beta-valid", video_id="V_VALID")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        caplog.set_level(logging.INFO, logger=mod.__name__)
+        yt_mock = _build_youtube_mock([_snippet("V_VALID")])
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod.time, "sleep"),
+        ):
+            mod.main()
+
+        assert ("ERROR", "❌ alpha-invalid: no complete_collection.video_id in alpha-invalid") in [
+            (record.levelname, record.message) for record in caplog.records
+        ]
+        assert yt_mock.videos.return_value.list.call_args.kwargs["id"] == "V_VALID"
+        assert yt_mock.videos.return_value.update.return_value.execute.call_count == 1
+
+    def test_should_fail_loud_when_tracking_json_is_corrupt(self, tmp_path, monkeypatch):
+        """公開 main 経路で破損 JSON を JSONDecodeError のまま伝播させる."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        ch = _setup_channel(tmp_path)
+        col = _make_collection_with_descriptions(ch, "alpha")
+        (col / "20-documentation" / "upload_tracking.json").write_text("{broken", encoding="utf-8")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+
+        with (
+            patch.object(mod, "get_youtube") as get_youtube_mock,
+            pytest.raises(json.JSONDecodeError),
+        ):
+            mod.main()
+
+        get_youtube_mock.assert_not_called()
+
+    def test_should_fail_loud_when_metadata_read_raises_os_error(self, tmp_path, monkeypatch):
+        """公開 main 経路で metadata の OSError を握りつぶさず伝播させる."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        ch = _setup_channel(tmp_path)
+        col = _make_collection_with_descriptions(ch, "alpha")
+        descriptions_path = col / "20-documentation" / "descriptions.md"
+        original_read_text = Path.read_text
+
+        def read_text_with_failure(path: Path, *args, **kwargs):
+            if path == descriptions_path:
+                raise OSError("metadata unavailable")
+            return original_read_text(path, *args, **kwargs)
+
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        monkeypatch.setattr(Path, "read_text", read_text_with_failure)
+
+        with (
+            patch.object(mod, "get_youtube") as get_youtube_mock,
+            pytest.raises(OSError, match="metadata unavailable"),
+        ):
+            mod.main()
+
+        get_youtube_mock.assert_not_called()
+
     def test_should_log_video_not_found_on_youtube(self, tmp_path, monkeypatch, caplog):
         """list 結果に video ID がない場合は ID と collection を ERROR に残す."""
         from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
@@ -641,7 +723,7 @@ class TestMainExecution:
         yt_mock.videos.return_value.update.assert_not_called()
 
     def test_should_log_http_error_when_update_fails(self, tmp_path, monkeypatch, caplog):
-        """videos.update の HttpError は例外詳細を ERROR に残す."""
+        """videos.update の HttpError はドメイン例外化して詳細を ERROR に残す."""
         from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
 
         ch = _setup_channel(tmp_path)
@@ -658,17 +740,158 @@ class TestMainExecution:
         with (
             patch.object(mod, "get_youtube", return_value=yt_mock),
             patch.object(mod.time, "sleep"),
+            pytest.raises(YouTubeAPIError) as exc_info,
         ):
             mod.main()
 
         error_records = [record for record in caplog.records if record.levelname == "ERROR"]
         assert len(error_records) == 1
-        assert error_records[0].message.startswith("   ❌ update failed: <HttpError 403")
+        assert error_records[0].message.startswith(
+            "   ❌ update failed: Failed to update video V_ALPHA: <HttpError 403"
+        )
         assert "quota exceeded" in error_records[0].message
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.__cause__ is http_error
+
+    def test_should_convert_list_http_error_and_fail_loud(self, tmp_path, monkeypatch):
+        """videos.list の HttpError は status/reason/cause 付き YouTubeAPIError として伝播する."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_descriptions(ch, "alpha", video_id="V_ALPHA")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        yt_mock = _build_youtube_mock([])
+        response = MagicMock(status=403, reason="Forbidden")
+        http_error = HttpError(
+            response,
+            b'{"error": {"message": "quota exceeded", "errors": [{"reason": "quotaExceeded"}]}}',
+        )
+        yt_mock.videos.return_value.list.return_value.execute.side_effect = http_error
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt_mock),
+            pytest.raises(YouTubeAPIError) as exc_info,
+        ):
+            mod.main()
+
+        assert str(exc_info.value).startswith("Failed to fetch current video snippets: <HttpError 403")
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.reason == "quotaExceeded"
+        assert exc_info.value.__cause__ is http_error
+        yt_mock.videos.return_value.update.assert_not_called()
+
+    def test_should_continue_after_domain_update_error(self, tmp_path, monkeypatch, caplog):
+        """1 件の更新 API failure を記録し、後続動画の更新と throttle を継続する."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_descriptions(ch, "alpha", video_id="V_ALPHA")
+        _make_collection_with_descriptions(ch, "beta", video_id="V_BETA")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        caplog.set_level(logging.INFO, logger=mod.__name__)
+        yt_mock = _build_youtube_mock([_snippet("V_ALPHA"), _snippet("V_BETA")])
+        response = MagicMock(status=403, reason="Forbidden")
+        http_error = HttpError(response, b'{"error": {"message": "quota exceeded"}}')
+        yt_mock.videos.return_value.update.return_value.execute.side_effect = [http_error, {"id": "V_BETA"}]
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod.time, "sleep") as sleep_mock,
+            pytest.raises(YouTubeAPIError) as exc_info,
+        ):
+            mod.main()
+
+        assert yt_mock.videos.return_value.update.return_value.execute.call_count == 2
+        assert sleep_mock.call_args_list == [call(0.4), call(0.4)]
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.__cause__ is http_error
+        messages = [record.message for record in caplog.records]
+        assert any(message.startswith("   ❌ update failed: Failed to update video V_ALPHA") for message in messages)
+        assert messages.count("   ✅ updated") == 1
+        assert "\n✅ done" not in messages
 
 
 # ---------------------------------------------------------------------------
-# 4. load_collection — COLLECTIONS_DIR 即時評価の解消
+# 4. main — snippet fallback 契約
+# ---------------------------------------------------------------------------
+
+
+class TestMainSnippetFallbacks:
+    """snippet 欠落値の既存契約を公開 main 経路で固定する."""
+
+    def test_should_preserve_remote_tags_when_markdown_tags_are_absent(self, tmp_path, monkeypatch):
+        """説明文だけの更新で既存 YouTube tags を消さない."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_descriptions(ch, "alpha", video_id="V_ALPHA", omit_sections=["タグ"])
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        item = _snippet("V_ALPHA")
+        item["snippet"]["tags"] = ["remote-tag"]
+        yt_mock = _build_youtube_mock([item])
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod.time, "sleep"),
+        ):
+            mod.main()
+
+        body = yt_mock.videos.return_value.update.call_args.kwargs["body"]
+        assert body["snippet"]["tags"] == ["remote-tag"]
+
+    def test_should_default_category_to_music_when_remote_category_is_absent(self, tmp_path, monkeypatch):
+        """remote snippet に categoryId がない場合は Music category 10 を送る."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_descriptions(ch, "alpha", video_id="V_ALPHA")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        item = _snippet("V_ALPHA")
+        del item["snippet"]["categoryId"]
+        yt_mock = _build_youtube_mock([item])
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod.time, "sleep"),
+        ):
+            mod.main()
+
+        body = yt_mock.videos.return_value.update.call_args.kwargs["body"]
+        assert body["snippet"]["categoryId"] == "10"
+
+    def test_should_omit_default_language_when_remote_value_is_absent(self, tmp_path, monkeypatch):
+        """remote 値欠落時は defaultLanguage を推測・注入しない."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_descriptions(ch, "alpha", video_id="V_ALPHA")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        item = _snippet("V_ALPHA")
+        del item["snippet"]["defaultLanguage"]
+        yt_mock = _build_youtube_mock([item])
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod.time, "sleep"),
+        ):
+            mod.main()
+
+        body = yt_mock.videos.return_value.update.call_args.kwargs["body"]
+        assert "defaultLanguage" not in body["snippet"]
+
+
+# ---------------------------------------------------------------------------
+# 5. load_collection — COLLECTIONS_DIR 即時評価の解消
 # ---------------------------------------------------------------------------
 
 
