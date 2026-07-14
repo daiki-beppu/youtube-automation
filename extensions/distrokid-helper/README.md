@@ -84,9 +84,9 @@ nix develop .#extensions --command pnpm -C extensions/distrokid-helper compile
    `--allow-extension distrokid-helper` は配信済み記録の書き込み（`POST /distrokid/releases`）に**必須**。
    未指定だと `GET /auth/token` が無効になり、フィル完了後の配信済み記録が 403 で失敗する（フィル自体は成功する）。
 2. Chrome で `distrokid.com/new` を開く。
-3. 拡張ポップアップで **ローカル配信元** を選び **データ取得**。
-4. popup に **コレクション選択** のドロップダウンが表示される。未配信の disc のみ列挙される。
-5. disc を選んで **データ取得** → レビューを確認して **フォーム一括入力**。
+3. 拡張ポップアップの登録済み **ローカル配信元** selector から対象を選ぶ。選択した配信元は自動保存され、コレクション一覧と先頭の未配信 disc の release.json が自動取得される。
+4. popup の **コレクション選択** には未配信の disc だけが表示される。別 disc を選ぶと一覧と選択 disc の release.json が自動取得される。
+5. レビューを確認して **フォーム一括入力**。最新データを再取得する場合は popup を閉じて再表示する。
 6. 目視確認 → **「続ける」を手動押下** → マスタリング選択 → 完了。
 7. フィル完了後、拡張が自動的に `POST /distrokid/releases` で配信済み記録を送信し、ドロップダウンから当該 disc が消える。
 
@@ -106,8 +106,8 @@ nix develop .#extensions --command pnpm -C extensions/distrokid-helper compile
    対象チャンネルは `config/channel/distrokid.json` を `enabled: true` + profile 付きにしておく
    （`enabled: false` / 未配置だと `/distrokid/*` が 404 になり、popup がガイダンスを表示する）。
 2. Chrome で `distrokid.com/new` を開く。
-3. 拡張ポップアップで **ローカル配信元**（既定 `http://youtube-automation.localhost:7873`）を選び **データ取得**。
-   コレクション選択 UI は表示されない（単一 mode のため）。
+3. 拡張ポップアップの登録済み **ローカル配信元** selector から対象（既定 `http://youtube-automation.localhost:7873`）を選ぶ。選択した配信元は自動保存され、release.json が自動取得される。
+   コレクション選択 UI は表示されない（単一 mode のため）。最新データを再取得する場合は popup を閉じて再表示する。
 4. レビュー表示を確認して **フォーム一括入力**。プロファイル + 動的データがフォームに注入される。
 5. 目視確認 → **「続ける」を手動押下** → マスタリング選択 → 完了。
 

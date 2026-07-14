@@ -261,7 +261,7 @@ curl -s http://localhost:7874/distrokid/collections | python3 -m json.tool | hea
 
 `--distrokid-capture-root` は distrokid-helper の配信済み記録 `POST /distrokid/releases` に必要。DistroKid dir mode では必ずチャンネルルートを指定する。`--allow-extension distrokid-helper` は Chrome の profile preferences から unpacked 拡張 ID を検出し、DistroKid page origin からの write POST を許可しない exact origin lock として使う。検出 0 件・複数 ID 競合・Preferences 読み取り不可・Preferences JSON parse failure で失敗する場合のみ、エラーに表示された候補を確認して `--allow-origin chrome-extension://<EXTENSION_ID>` を手動指定する。
 
-ユーザーには `http://localhost:7874` を distrokid-helper popup のサーバー URL として案内する。Chrome 拡張 **distrokid-helper** を使った DistroKid Web フォームへの転記・アップロード操作そのものは本スキルの範囲外。
+ユーザーには distrokid-helper popup の登録済み **ローカル配信元** selector から `http://localhost:7874` の配信元を選ぶよう案内する。選択した配信元は自動保存され、コレクション一覧と選択 disc の release.json が自動取得される。最新データの再取得は popup を閉じて再表示する。Chrome 拡張 **distrokid-helper** を使った DistroKid Web フォームへの転記・アップロード操作そのものは本スキルの範囲外。
 
 ---
 
@@ -285,7 +285,7 @@ curl -s http://localhost:7874/distrokid/collections | python3 -m json.tool | hea
 
 サーバー起動と疎通確認が完了したら:
 
-1. distrokid-helper popup のサーバー URL に `http://localhost:7874` を設定
+1. distrokid-helper popup の登録済み **ローカル配信元** selector から `http://localhost:7874` を選択する（選択内容は自動保存され、データも自動取得される。再取得は popup を閉じて再表示する）
 2. Chrome 拡張 **distrokid-helper** を使って `30-distrokid/README.md` の手順に従い DistroKid Web フォームへ転記・アップロードを行う
 
 DistroKid 申請後の DSP リンク（Spotify / Apple Music）到着は通常 1〜2 週間かかる。

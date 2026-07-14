@@ -5,11 +5,10 @@ export interface ServerUrlFieldProps {
   sources: LocalServerSource[];
   disabled: boolean;
   onChange: (value: string) => void;
-  onFetch: () => void;
 }
 
-// ローカル配信元 selector + データ取得ボタン。
-export function ServerUrlField({ value, sources, disabled, onChange, onFetch }: ServerUrlFieldProps) {
+// 登録済みローカル配信元 selector。選択変更は runner の自動取得へ接続する。
+export function ServerUrlField({ value, sources, disabled, onChange }: ServerUrlFieldProps) {
   return (
     <div className="flex flex-col gap-2">
       <label className="text-xs font-medium text-gray-600" htmlFor="server-url">
@@ -19,8 +18,8 @@ export function ServerUrlField({ value, sources, disabled, onChange, onFetch }: 
         id="server-url"
         className="rounded border border-gray-300 px-2 py-1 text-sm"
         value={value}
-        onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
       >
         {sources.map((source) => (
           <option key={source.url} value={source.url}>
@@ -28,14 +27,6 @@ export function ServerUrlField({ value, sources, disabled, onChange, onFetch }: 
           </option>
         ))}
       </select>
-      <button
-        type="button"
-        className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-        disabled={disabled}
-        onClick={onFetch}
-      >
-        データ取得
-      </button>
     </div>
   );
 }
