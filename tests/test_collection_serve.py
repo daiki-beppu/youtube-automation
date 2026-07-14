@@ -27,6 +27,7 @@ import json
 import logging
 import re
 import shutil
+import signal
 import socket
 import sys
 import threading
@@ -789,6 +790,49 @@ def test_main_resolves_allow_extension_to_allow_origin(monkeypatch, capsys, tmp_
     assert "detected extension: suno-helper -> gdjhjiphejeeclngbljhajiffhpdepee" in stdout
     assert "chrome-extension://gdjhjiphejeeclngbljhajiffhpdepee" in stdout
     assert "serve token: GET http://test-channel.localhost:7873/auth/token" in stdout
+
+
+def test_main_turns_sigterm_into_traceable_exception_and_restores_handler(monkeypatch, tmp_path):
+    """SIGTERM は理由を持つ例外として伝播し、終了後に handler を復元する。"""
+
+    class FakeServer:
+        server_address = ("localhost", 7873)
+
+        def __init__(self) -> None:
+            self.closed = False
+
+        def serve_forever(self) -> None:
+            installed_handler(signal.SIGTERM, None)
+
+        def server_close(self) -> None:
+            self.closed = True
+
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    fake_server = FakeServer()
+    installed_handler = None
+    signal_calls = []
+    previous_handler = object()
+
+    def fake_signal(signum, handler):
+        nonlocal installed_handler
+        signal_calls.append((signum, handler))
+        if handler is not previous_handler:
+            installed_handler = handler
+            return previous_handler
+        return previous_handler
+
+    monkeypatch.setattr(collection_serve_module, "signal", signal)
+    monkeypatch.setattr(signal, "signal", fake_signal)
+    monkeypatch.setattr(collection_serve_module, "create_server", lambda *args, **kwargs: fake_server)
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning)])
+
+    with pytest.raises(RuntimeError, match=r"SIGTERM \(signal 15\)"):
+        main()
+
+    assert fake_server.closed is True
+    assert signal_calls[0][0] == signal.SIGTERM
+    assert signal_calls[-1] == (signal.SIGTERM, previous_handler)
 
 
 def test_main_resolves_allow_extension_from_chrome_preferences(monkeypatch, capsys, tmp_path):
