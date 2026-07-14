@@ -74,6 +74,17 @@ Google Cloud Console の新 UI では、OAuth 関連の手動操作は **Google 
 
 手動で全工程やりたい上級者向けの 2 ルート (bootstrap.sh / Terraform) は [`auth/SETUP.md`](auth/SETUP.md) と `.claude/skills/channel-new/references/gcp-bootstrap.sh` / `infra/terraform/gcp/` を参照（submodule 利用の場合は `automation/` プレフィックスを追加）。
 
+### 2.4 初期設定後の GCP 課金確認
+
+`/setup` で Billing を紐付けたあとの実際の利用料金は、リポジトリ内の推定値ではなく **Google Cloud Billing** を正として確認する。
+
+1. 下流チャンネルリポジトリで `uv run yt-doctor --json` を実行し、`checks` 内の `id` が `gcp_project` の項目から対象の project ID を確認する。
+2. [Google Cloud Console の Billing](https://console.cloud.google.com/billing) を開き、`/setup` で対象プロジェクトに紐付けた Billing account を選ぶ。
+3. **Reports** で期間（Time range）を指定し、**Projects** を手順 1 の project ID に絞る。まず **Service**、必要に応じて **SKU** でグループ化または絞り込み、どのサービス・SKU がその期間の料金を発生させたか確認する。画面の見方は [Cloud Billing Reports の公式手順](https://cloud.google.com/billing/docs/how-to/reports) を参照する。
+4. USD を含む単価を確認する場合は、同じ Billing account の **Pricing** で対象の Service / SKU を検索し、表示時点の `List price`（契約単価がある場合は `Contract price`）を確認する。価格は選択した Billing account の通貨で表示されるため、通貨も併せて確認する。参照方法と各列の意味は [Pricing の公式手順](https://cloud.google.com/billing/docs/how-to/pricing-table) を参照する。
+
+サービスの価格や SKU は変更され得るため、**USD 単価や換算値をこのリポジトリへ固定値として転記しない**。実際の請求額は Reports、現在の SKU 単価は Pricing をその都度参照する。Billing への利用状況・料金の反映には時間差があり得るため、実行直後に表示されない場合は期間と project ID を保ったまま後で再確認する。
+
 ---
 
 ## 3. 新規チャンネル開設フロー — `/channel-new` 起点
