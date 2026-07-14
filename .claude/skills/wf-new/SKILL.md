@@ -94,7 +94,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | 4 | subagent: `/thumbnail` | テキスト付き候補生成を委譲し、メインが成果物を検証する | `10-assets/thumbnail-vN.jpg/png` |
 | 5 | user 承認 + subagent: `/thumbnail` | テキスト付き候補を承認・確定後、textless 候補生成を委譲し、承認・確定・state 更新を行う | `10-assets/thumbnail.jpg`, `10-assets/main.png/jpg` |
 | 6 | subagent: `/suno` または `/lyria` | 音楽エンジンに応じたプロンプト生成を委譲し、メインが成果物を検証する | `suno-prompts.json` または Lyria 設計 |
-| 7 | subagent: `/loop-video` または静止背景運用 | `enabled=true` なら生成を委譲しメインが検証。`enabled=false` ならメインが既存 textless 背景を検証する | `10-assets/loop.mp4` または textless `10-assets/main.png/jpg` |
+| 7 | subagent: `/loop-video` または静止背景運用 | `loop-video.enabled=true` なら生成を委譲しメインが検証。`enabled=false` なら Veo を呼ばず、メインが既存 textless `main.png/jpg` を静止背景として使う | `10-assets/loop.mp4` または textless `10-assets/main.png/jpg` |
 | 8 | subagent: `uv run yt-collection-serve`（Suno のみ） | server 起動と疎通確認を委譲し、結果をメインが検証する | `http://localhost:<PORT>` |
 
 `/suno-helper` の Chrome 操作と `/wf-next` は `/wf-new` 内では実行しない。`/wf-new` は Suno 用 server 起動までを担い、次工程として `/suno-helper` の browser use 主導フローを案内する。
@@ -203,7 +203,8 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
    - プレビューディレクトリの自セッション分を削除
 
 2. **サムネイル skill を順番に処理**:
-   - mode / provider にかかわらず、メインが対象 collection、theme、生成対象 `thumbnail` を指定して Agent ツールで `/thumbnail <theme>` の Subagent Contract を委譲する。subagent はテキスト付き候補と `20-documentation/thumbnail-prompts.md` を生成するが、承認、確定コピー、state 更新は行わない
+   - `single_step` モードまたは `image_generation.provider: codex` を含め、mode / provider にかかわらず、メインが対象 collection、theme、生成対象 `thumbnail` を指定して Agent ツールで `/thumbnail <theme>` の Subagent Contract を委譲する。subagent はテキスト付き候補と `20-documentation/thumbnail-prompts.md` を生成するが、承認、確定コピー、state 更新は行わない
+   - メインの承認・確定と 2c-2 の別 subagent 委譲を合わせ、テキスト付き `10-assets/thumbnail.jpg` を先に生成・承認し、承認済み `thumbnail.jpg` からテキストなし `10-assets/main.png` または `main.jpg` を再生成する既存 `/thumbnail` 契約を維持する
    - メインが候補ファイルと `thumbnail-prompts.md` の存在を検証する。ここでは AskUserQuestion、確定コピー、state 更新を行わず Phase 2d へ進む
 
 ##### 2c-2. サムネイル承認・確定 + 音楽素材生成
