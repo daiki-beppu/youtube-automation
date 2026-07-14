@@ -7,8 +7,8 @@ description: "Use when 新規コレクション制作を立ち上げるとき（
 
 新コレクション開始オーケストレーター。子スキルを順番に呼び、通常は企画選択 + サムネイル承認の2箇所で一時停止する。
 Suno チャンネルではプロンプト生成後、`suno-helper` 用の `uv run yt-collection-serve` 起動と疎通確認まで行い、続きは `/suno-helper` が browser use で Suno タブ上の拡張 overlay を操作できる状態にする。
-minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気の直接入力確認が追加される。
-アナリティクス未収集の新チャンネルでも、ベンチマークまたはユーザー直接入力で初回企画を開始する。
+minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気の直接入力確認が追加される既存挙動を、`ttp_mode: false` の場合だけ適用する。`true` の場合は `/benchmark` を案内して停止する。
+アナリティクス未収集の新チャンネルでも、ベンチマークから初回企画を開始する。`ttp_mode: false` の場合だけ、ベンチマークも無ければユーザー直接入力を使う。
 新規チャンネルの初回制作では、本制作 state を作る前に任意のパイロット検証を実施済みか確認し、未実施でもユーザーがスキップを選べば通常フローへ進める。
 
 > **このセッションで初めて `/wf-*` を呼ぶ場合は、先に [`docs/workflow-cheatsheet.md`](../../../docs/workflow-cheatsheet.md) の判定フローを 1 回だけユーザーに提示すること**（CLAUDE.md §6 参照）。
@@ -80,7 +80,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 
 - **順次実行**: 子スキルは必ず上から順に呼ぶ。Agent ツールで起動する subagent も一作業ずつ呼び、並列 Agent は使わない
 - **責務分離**: 子スキルの内部手順を `/wf-new` で再実装しない。必要な前提チェックだけを行い、失敗時は子スキルの障害時ガイダンスへ誘導する
-- **停止点**: user 入力で止めるのは原則として (1) 企画選択 (2) サムネイル承認。minimal mode のみ、企画前にテーマ / ジャンル / 雰囲気の直接入力確認を追加する
+- **停止点**: user 入力で止めるのは原則として (1) 企画選択 (2) サムネイル承認。`ttp_mode: false` の minimal mode のみ企画前にテーマ / ジャンル / 雰囲気の直接入力確認を追加し、`true` の minimal mode は `/benchmark` の案内で停止する
 - **状態更新**: メインが期待成果物を実ファイルで検証した後だけ `workflow-state.json` の該当 `assets` と `updated_at` を更新する。subagent とユーザーには編集させない
 - **再開性**: 途中失敗時は完了済み成果物を再生成せず、未完了ステップから再開できるように次に呼ぶ skill / CLI を明示する
 
@@ -111,14 +111,14 @@ Step 1（企画）を自動実行中...
 |---|---|---|
 | analytics mode | 同日付 report ペアの validator と鮮度判定が成功する | 日次収集データ + 構造化分析 JSON + ベンチマーク + config |
 | benchmark fallback mode | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config |
-| minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | ユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config |
+| minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は `/benchmark` を案内して停止 |
 
-入力モード、JSON ペア検証、stale 判定、stale action、コスト承認の完全な定義は `/collection-ideate` の `references/freshness-rules.md` を正とする。`.claude/skills/collection-ideate/config.default.yaml` + `config/skills/collection-ideate.yaml` の deep-merge も同 skill に委譲し、ここでは判定ロジックを再定義しない。minimal mode のテーマ / ジャンル / 雰囲気と、プレビューを生成する場合の候補・枚数・コスト承認は、subagent が選択肢を返した後にメインが確定する。
+入力モード、JSON ペア検証、stale 判定、stale action、コスト承認の完全な定義は `/collection-ideate` の `references/freshness-rules.md` を正とする。`.claude/skills/collection-ideate/config.default.yaml` + `config/skills/collection-ideate.yaml` の deep-merge も同 skill に委譲し、ここでは判定ロジックを再定義しない。`ttp_mode: false` の minimal mode ではテーマ / ジャンル / 雰囲気と、プレビューを生成する場合の候補・枚数・コスト承認を subagent が選択肢を返した後にメインが確定する。`true` の minimal mode では直接入力を確認せず、`/benchmark` を案内して停止する。
 
-2. **Agent ツールで `/collection-ideate` を委譲** — 承認済みの入力パス、入力モード、minimal mode の直接入力、プレビュー生成条件を列挙し、企画候補と承認済みプレビュー生成だけを subagent に実行させる。AskUserQuestion と state 書き込みは禁止する。途中で追加承認が必要になった場合は生成せずメインへ返す
+2. **Agent ツールで `/collection-ideate` を委譲** — 承認済みの入力パス、入力モード、`ttp_mode`、`ttp_mode: false` の minimal mode だけで使う直接入力、プレビュー生成条件を列挙し、企画候補と承認済みプレビュー生成だけを subagent に実行させる。AskUserQuestion と state 書き込みは禁止する。途中で追加承認が必要になった場合は生成せずメインへ返す
    - analytics mode: 日次収集データ + 構造化分析 JSON + ベンチマークを基に分析 + ペルソナ別候補を生成
    - benchmark fallback mode: 自チャンネル分析をスキップし、ベンチマークデータ + config から初回候補を生成
-   - minimal mode: テーマ / ジャンル / 雰囲気をユーザーに確認し、その直接入力 + config から初回候補を生成
+   - minimal mode: テーマ / ジャンル / 雰囲気をユーザーに確認し、その直接入力 + config から初回候補を生成する既存挙動は `ttp_mode: false` の場合だけ適用。`true` は候補生成せず `/benchmark` を案内して停止
 
 メインが候補文書とプレビュー画像の存在を検証した後、**ユーザーに企画選択のみ求める**:
 - 選択肢: 提示された候補のいずれか
@@ -127,7 +127,7 @@ Step 1（企画）を自動実行中...
 
 **エラーハンドリング:**
 - analytics mode で `/collection-ideate` がエラー → エラー内容を表示して中断。分析データの確認を案内
-- benchmark fallback mode / minimal mode で `/collection-ideate` がエラー → エラー内容を表示して中断。入力モードと不足データを明示して再入力または `/benchmark` を案内
+- benchmark fallback mode / minimal mode で `/collection-ideate` がエラー → エラー内容を表示して中断。入力モード、`ttp_mode`、不足データを明示する。`ttp_mode: true` の minimal mode は再入力へ進めず `/benchmark` を案内
 
 ### Phase 2: 選択後の順次オーケストレーション
 
@@ -328,7 +328,7 @@ Suno-helper server: ✅ http://<channel>.localhost:<PORT> 起動済み / ⚠️ 
 - 企画生成: `/collection-ideate` スキル
   - analytics mode: validator 成功済みの同日付 `reports/analysis_*.md` / `.json` ペア + ベンチマーク + config を使用
   - benchmark fallback mode: `data/benchmark_*.json` + config のみで初回企画を生成
-  - minimal mode: ユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config のみで初回企画を生成
+  - minimal mode: `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config のみで初回企画を生成。`true` は `/benchmark` を案内して停止
 - サムネイル生成: `/thumbnail` スキル
 - ループ動画生成: `/loop-video` スキル
 - 音楽プロンプト生成: `/suno` スキル
