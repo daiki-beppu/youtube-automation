@@ -1,3 +1,4 @@
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "wxt";
 
 import { SERVER_HOST_PERMISSIONS, SUNO_MATCHES } from "../shared/constants";
@@ -15,6 +16,9 @@ const actionTitle = isTestBuild ? "[TEST] Suno Helper" : "Suno Helper";
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
+  vite: () => ({
+    plugins: [tailwindcss()],
+  }),
   // popup 廃止 (#892 要件5): popup entrypoint を build 対象から外し manifest の default_popup を未指定化する。
   // これにより action クリックで chrome.action.onClicked が発火し overlay 表示を toggle できる。
   // popup のソース (entrypoints/popup/) はファイルとして残置し、物理削除は後続 PR に委ねる (order.md スコープ外)。

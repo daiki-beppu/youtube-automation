@@ -20,7 +20,7 @@ interface UseDraggableOptions {
   /** 初期表示位置（top-left 基準）。 */
   initial: Point;
   /** clamp の基準サイズを実測するための overlay 要素 ref。 */
-  elementRef: RefObject<HTMLElement>;
+  elementRef: RefObject<HTMLElement | null>;
   /** drag 終了 / resize clamp で確定した位置を通知する（永続化用）。 */
   onCommit: (position: Point) => void;
 }
