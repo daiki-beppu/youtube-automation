@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `chore(distrokid-helper)`: Tailwind CSS 4 の Vite plugin 構成へ移行し、`@/*` alias、CSS variable theme、`cn` utility、Button primitive を含む shadcn/ui 最小基盤を追加した（#2012）。
 - `refactor(scripts)`: `yt-bulk-update-desc` の YouTube API `HttpError` を `YouTubeAPIError` へ変換し、metadata の意味的エラーだけを collection 単位で継続するよう例外境界を限定した。更新 API 失敗時は後続動画を処理後にドメイン例外を伝播し、破損 JSON / I/O error も fail-loud とした。tags / categoryId / defaultLanguage 欠落時の既存フォールバックは公開 `main()` 経路の回帰テストで固定した（#2032）。
 - `refactor(logging)`: `yt-bulk-update-desc` の進捗・成功・失敗出力を module logger 経由に統一した（#2031）。
 - `fix(skill-config)`: `load_skill_config("postmortem")` と `load_channel_override("postmortem")` は `config/skills/flop-analysis.yaml` を優先し、旧 `config/skills/postmortem.yaml` だけがある場合は互換読み込みして `UserWarning` で移行を案内する。利用者は `postmortem.yaml` を `flop-analysis.yaml` へリネームすることで警告を解消できる（#2022）。
