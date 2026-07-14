@@ -13,6 +13,10 @@ description: "Use when ショート用 9:16 サムネ作成、または short.pn
 - `10-assets/short.png` が生成され、Step 4 のチェック項目を満たしてユーザー承認済み
 - ループ動画化まで行う場合は `10-assets/short-loop.mp4` が生成され、Step 5 のチェック項目を満たしている
 
+## Subagent Contract
+
+subagent として呼ぶ場合、メインエージェントは対象コレクション、入力 `10-assets/main.png/jpg`、生成対象（`short.png` / `short-loop.mp4`）、確定済み prompt をリポジトリルート相対パスまたは値で入力に含める。画像承認、Veo 課金、ループ品質確認が必要なら、メインが承認を得るまで該当処理を subagent へ委譲しない。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。完了報告には `status: success | failure`、生成した `10-assets/short.png` と、指定時は `10-assets/short-loop.mp4` の絶対パス一覧、エラーを含める。メインはファイル存在と生成対象を検証する。直接実行時は既存手順を変更しない。
+
 ## 前提
 
 以下を確認し、満たさなければ対応する前工程を案内して停止する:

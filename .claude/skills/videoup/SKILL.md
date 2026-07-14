@@ -14,6 +14,10 @@ description: "Use when 音声ファイルが揃い動画生成が必要なとき
 
 `01-master/` にマスター動画（例: `Theme-Name-Master.mp4`）が生成され、`workflow-state.json` の `assets.master_video` に動画ファイル名が記録されたとき完了とする（詳細は「ステップ」4-5 が正）。
 
+## Subagent Contract
+
+subagent として呼ぶ場合、メインエージェントは対象コレクション、採用するマスター音源、背景素材をリポジトリルート相対パスで入力に含める。音源や背景の選択が必要なら、メインが選択を確定するまで subagent を起動しない。subagent は入力確認と `generate_videos.sh` の実行に必要な範囲で `workflow-state.json` を読み取ってよいが、書き込まず、`AskUserQuestion` も実行しない。完了報告には `status: success | failure`、生成した `01-master/*.mp4` の絶対パス一覧、probe 検証結果、エラーを含める。メインはファイル存在と指定入力との整合を検証してから state を更新する。直接実行時は既存手順を変更しない。
+
 ## 設定読み込みゲート
 
 Quick Reference や対象コレクション確認に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
