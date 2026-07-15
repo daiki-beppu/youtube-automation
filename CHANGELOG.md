@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(test-infra)`: dev shell 統合テストのコピー対象と teardown を最適化し、pytest の成功時 tmp と強制終了された過去 run の fixture 残骸が蓄積しないようにした（#2072）。
+
 - `fix(suno-helper)`: 連続実行開始時に collection server の疎通を確認し、無応答時は Lyrics 欄エラーより先に明示的な server エラーで停止するようにした（#2003）。
 
 - `fix(suno-helper)`: server の一時的な取得失敗時に明示選択した配信元と collection を保持する（#2002）
