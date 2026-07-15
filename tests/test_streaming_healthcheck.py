@@ -78,7 +78,6 @@ _HEALTHCHECK_DOC = _REPO_ROOT / "docs" / "streaming-healthcheck.md"
 
 
 def _find_remote_exec_block(block: str, required_text: str) -> str | None:
-    """required_text を含む remote-exec provisioner の本体を返す。"""
     for match in re.finditer(
         r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
         block,

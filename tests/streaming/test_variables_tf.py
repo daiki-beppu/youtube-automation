@@ -144,6 +144,41 @@ class TestVariablesTfNullResource:
             block,
         ), 'install_root.default が "/opt/youtube-stream" でない'
 
+    def test_install_root_rejects_unsafe_or_non_absolute_paths(self):
+        """Given install_root の validation
+        When 許容文字と絶対パス制約を読む
+        Then 空・相対パス・空白・shell metacharacter を拒否する。
+        """
+        text = strip_hcl_comments(read_file(_VARIABLES_TF))
+        block = extract_block(text, r'variable\s+"install_root"')
+        assert block is not None
+        validation = extract_block(block, r"validation")
+        assert validation is not None, "install_root.validation が存在しない"
+        pattern_match = re.search(
+            r'can\(regex\("([^"]+)",\s*var\.install_root\)\)',
+            validation,
+        )
+        assert pattern_match is not None, "install_root を安全な絶対パスに制限する regex が無い"
+        pattern = pattern_match.group(1)
+        for invalid in (
+            "",
+            "opt/youtube-stream",
+            "./youtube-stream",
+            "/opt/youtube stream",
+            "/opt/youtube-stream;id",
+            "/opt/youtube-stream$(id)",
+            "/opt/youtube-stream|id",
+            "/opt/youtube-stream&id",
+        ):
+            assert re.search(pattern, invalid) is None, f"unsafe install_root を許可する: {invalid!r}"
+        assert re.search(pattern, "/opt/youtube-stream") is not None
+        assert re.search(r'!contains\(split\("/",\s*var\.install_root\),\s*"\."\)', validation), (
+            "install_root の . segment を拒否していない"
+        )
+        assert re.search(r'!contains\(split\("/",\s*var\.install_root\),\s*"\.\."\)', validation), (
+            "install_root の .. segment を拒否していない"
+        )
+
     def test_stream_hours_is_number_with_zero_default(self):
         """Given variables.tf
         When stream_hours 変数定義を読む

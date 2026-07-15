@@ -37,6 +37,15 @@ variable "install_root" {
   type        = string
   description = "VPS 上で動画・ログ・運用スクリプトを配置する root ディレクトリ"
   default     = "/opt/youtube-stream"
+
+  validation {
+    condition = (
+      can(regex("^/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$", var.install_root)) &&
+      !contains(split("/", var.install_root), ".") &&
+      !contains(split("/", var.install_root), "..")
+    )
+    error_message = "install_root は英数字・`.`・`_`・`-` のみからなる絶対パスを指定してください（例: /opt/youtube-stream）。"
+  }
 }
 
 variable "stream_hours" {

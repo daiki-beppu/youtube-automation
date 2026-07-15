@@ -32,7 +32,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 
 ## 配置 root
 
-VPS 上の動画・ログ・運用スクリプトは `var.install_root` 配下に配置する。既定値は `/opt/youtube-stream` で、`videos/current.mp4`、`logs/`、`bin/*.sh` はこの値から組み立てる。cloud-init、Terraform provisioner、systemd unit は同じ `var.install_root` を参照するため、配置先を変える場合は `install_root` だけを上書きする。作成後に `install_root` を変えると `null_resource.deploy` が再実行され、新しい配置先のディレクトリ作成、動画・スクリプト・設定の再配置、service 再起動まで行う。VPS 自体は再作成しない。
+VPS 上の動画・ログ・運用スクリプトは `var.install_root` 配下に配置する。既定値は `/opt/youtube-stream` で、`videos/current.mp4`、`logs/`、`bin/*.sh` はこの値から組み立てる。値は `/` から始まり、各 path segment が英数字・`.`・`_`・`-` のみからなる絶対パスに制限する（`.` / `..` segment は不可）。cloud-init、Terraform provisioner、systemd unit は同じ `var.install_root` を参照するため、配置先を変える場合は `install_root` だけを上書きする。作成後に `install_root` を変えると `null_resource.deploy` が再実行され、新しい配置先のディレクトリ作成、動画・スクリプト・設定の再配置、service 再起動まで行う。VPS 自体は再作成しない。
 
 ## 使い方
 
