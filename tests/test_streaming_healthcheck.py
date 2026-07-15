@@ -77,6 +77,18 @@ _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 _HEALTHCHECK_DOC = _REPO_ROOT / "docs" / "streaming-healthcheck.md"
 
 
+def _find_remote_exec_block(block: str, required_text: str) -> str | None:
+    """required_text を含む remote-exec provisioner の本体を返す。"""
+    for match in re.finditer(
+        r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
+        block,
+        flags=re.DOTALL,
+    ):
+        if required_text in match.group(1):
+            return match.group(1)
+    return None
+
+
 # ---------- bash ヘルパー ----------
 
 
@@ -973,13 +985,8 @@ class TestMainTfHealthcheckDeploy:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        remote_exec = re.search(
-            r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
-            block,
-            flags=re.DOTALL,
-        )
-        assert remote_exec is not None
-        inline = remote_exec.group(1)
+        inline = _find_remote_exec_block(block, "/tmp/youtube-stream-healthcheck.env.tmp")
+        assert inline is not None
         assert re.search(
             r"install\s+-m\s+0600\s+-o\s+root\s+-g\s+root\s+/tmp/youtube-stream-healthcheck\.env\.tmp\s+/etc/youtube-stream-healthcheck\.env",
             inline,
@@ -1005,22 +1012,19 @@ class TestMainTfHealthcheckDeploy:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        remote_exec = re.search(
-            r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
-            block,
-            flags=re.DOTALL,
-        )
-        assert remote_exec is not None
-        inline = remote_exec.group(1)
+        prepare_inline = _find_remote_exec_block(block, "${var.install_root}/bin")
+        service_inline = _find_remote_exec_block(block, "chmod 755 ${var.install_root}/bin")
+        assert prepare_inline is not None
+        assert service_inline is not None
         # ディレクトリ作成（mkdir -p または install -d）
         assert re.search(
             rf"(mkdir\s+-p|install\s+-d)[^\n]*{_INSTALL_ROOT_VAR}/bin\b",
-            inline,
+            prepare_inline,
         ), "${var.install_root}/bin の作成コマンドが無い"
         # 実行権限付与（個別 chmod 755 でも /opt/.../bin/*.sh への一括でも可）
         assert re.search(
             rf"chmod\s+(?:0?7?55|\+x)[^\n]*{_INSTALL_ROOT_VAR}/bin",
-            inline,
+            service_inline,
         ), "${var.install_root}/bin 配下のスクリプトに実行権限が付与されていない"
 
     def test_remote_exec_reloads_cron(self):
@@ -1034,13 +1038,8 @@ class TestMainTfHealthcheckDeploy:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        remote_exec = re.search(
-            r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
-            block,
-            flags=re.DOTALL,
-        )
-        assert remote_exec is not None
-        inline = remote_exec.group(1)
+        inline = _find_remote_exec_block(block, "systemctl restart cron")
+        assert inline is not None
         has_systemctl = re.search(r"systemctl\s+(?:restart|reload)\s+cron\b", inline)
         has_service = re.search(r"service\s+cron\s+(?:restart|reload)\b", inline)
         assert has_systemctl or has_service, (
