@@ -59,3 +59,51 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `auth.oauth_handler` | OAuth 2.0 トークン管理 |
 | `utils.secrets` | シークレット解決（`_SECRET_REFS` で参照定義） |
 | `cli.skills_sync` | `yt-skills` 本体 |
+| `scripts.collection_serve_discovery` | 固定 loopback endpoint の稼働 server registry、heartbeat、TTL、owner takeover |
+| `extensions/shared/server-discovery.ts` | registry schema v1 の検証と `/server-info` probe を両 helper 拡張へ提供 |
+| `extensions/shared/server-source-migration.ts` | 廃止した配信元候補履歴 storage key の共通 migration |
+
+### collection-serve discovery schema v1
+
+固定 endpoint は `http://localhost:7872/.well-known/yt-collection-serve`。`yt-collection-serve` は起動時と heartbeat ごとに `Content-Type: application/json`、`Origin` なしで次を POST する。
+
+```json
+{
+  "instance_id": "fixture-instance",
+  "server_info": {
+    "channel_name": "Fixture Channel",
+    "channel_short": "fixture",
+    "hostname": "fixture.localhost",
+    "port": 49152,
+    "base_url": "http://fixture.localhost:49152",
+    "label": "Fixture Channel"
+  }
+}
+```
+
+GET の schema v1 応答は次の完全形。`schema_version` は互換性番号、`ttl_seconds` は heartbeat が更新する生存期間、`servers` は `base_url` 順の稼働登録である。各 entry の `instance_id` はプロセス識別子、`expires_at` は Unix time の失効時刻、`server_info` はチャンネル名・短縮名・loopback host/port/base URL・selector 表示 label を表す。
+
+```json
+{
+  "schema_version": 1,
+  "ttl_seconds": 30,
+  "servers": [
+    {
+      "instance_id": "fixture-instance",
+      "expires_at": 130.0,
+      "server_info": {
+        "channel_name": "Fixture Channel",
+        "channel_short": "fixture",
+        "hostname": "fixture.localhost",
+        "port": 49152,
+        "base_url": "http://fixture.localhost:49152",
+        "label": "Fixture Channel"
+      }
+    }
+  ]
+}
+```
+
+同じ `instance_id` の POST は entry を増やさず `expires_at` を更新する。正常終了は `{"instance_id":"fixture-instance"}` を DELETE して即時削除し、異常終了した entry は TTL 境界（`expires_at` と同時刻）で失効する。最大 body は 16384 bytes、`instance_id` は最大 128 文字、同時登録は最大 128 件。POST/DELETE は JSON 以外を 415、`Origin` 付き要求を 403、不正 schema を 400、body 超過を 413、登録数超過を 429 にし、状態を変更しない。未知 path は 404、未対応 method は 405。
+
+拡張側 storage schema は Suno が `chrome.storage.local["sunoServerUrl"]`、DistroKid が `chrome.storage.local["serverUrl"]` に選択中 URL 文字列だけを保存する。共通の旧候補配列 `chrome.storage.local["ytCollectionServeSources"]` は更新時 migration で削除し、以後は再作成しない。

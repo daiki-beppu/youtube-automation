@@ -26,6 +26,7 @@ export function App() {
     url,
     setUrl,
     serverSources,
+    refreshServerSources,
     collections,
     selectedCollectionId,
     selectCollection,
@@ -55,6 +56,28 @@ export function App() {
   } = useSunoRunner();
   const previousEntriesRef = useRef(entries);
   const previousItemStatesRef = useRef(itemStates);
+  const [refreshingServerSources, setRefreshingServerSources] = useState(false);
+  const [serverSourcePickerOpen, setServerSourcePickerOpen] = useState(false);
+  const isRunningRef = useRef(isRunning);
+  useEffect(() => {
+    isRunningRef.current = isRunning;
+  }, [isRunning]);
+
+  const openServerSourcePicker = (): void => {
+    if (refreshingServerSources || isRunning) {
+      return;
+    }
+    setServerSourcePickerOpen(false);
+    setRefreshingServerSources(true);
+    void refreshServerSources().finally(() => {
+      setRefreshingServerSources(false);
+      if (!isRunningRef.current) {
+        setServerSourcePickerOpen(true);
+      }
+    });
+  };
+
+  const selectedServerSource = serverSources.find((source) => source.url === url) ?? serverSources[0];
 
   const visibleResumeBanner = resumeBanner && resumeBanner.failedIndex < resumeBanner.total ? resumeBanner : null;
 
@@ -138,6 +161,7 @@ export function App() {
     if (selectedEntryCount === 0) {
       return;
     }
+    setServerSourcePickerOpen(false);
     void run(
       buildSelectedEntriesRunOverrides({
         selectedEntries: resolvedSelectedEntries,
@@ -146,6 +170,7 @@ export function App() {
       }),
     );
   };
+  const serverSourcePickerVisible = serverSourcePickerOpen && !isRunning && !refreshingServerSources;
   if (reloadRequired || runnerReloadRequired) {
     return <ReloadRequiredNotice />;
   }
@@ -165,11 +190,29 @@ export function App() {
 
       <label className="flex flex-col gap-1 text-sm">
         ローカル配信元
+        <button
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={serverSourcePickerVisible}
+          disabled={isRunning || refreshingServerSources}
+          onClick={openServerSourcePicker}
+          data-suno-control="server-source-trigger"
+          className="rounded border border-gray-300 px-2 py-1 text-left"
+        >
+          {refreshingServerSources
+            ? "稼働中の配信元を更新中…"
+            : selectedServerSource
+              ? formatServerSourceLabel(selectedServerSource, "suno-helper")
+              : "配信元を選択"}
+        </button>
         <select
           value={url}
+          disabled={isRunning || refreshingServerSources}
           onChange={(e) => setUrl(e.target.value)}
           data-suno-control="server-url"
-          className="rounded border border-gray-300 px-2 py-1"
+          aria-hidden="true"
+          tabIndex={-1}
+          className="sr-only"
         >
           {serverSources.map((source) => (
             <option key={source.url} value={source.url}>
@@ -177,6 +220,29 @@ export function App() {
             </option>
           ))}
         </select>
+        {serverSourcePickerVisible && (
+          <div role="listbox" aria-label="ローカル配信元" className="rounded border border-gray-300 bg-white p-1">
+            {serverSources.map((source) => (
+              <button
+                key={source.url}
+                type="button"
+                role="option"
+                aria-selected={source.url === url}
+                disabled={isRunning || refreshingServerSources}
+                className="block w-full rounded px-2 py-1 text-left hover:bg-gray-100"
+                onClick={() => {
+                  if (isRunningRef.current || refreshingServerSources) {
+                    return;
+                  }
+                  setUrl(source.url);
+                  setServerSourcePickerOpen(false);
+                }}
+              >
+                {formatServerSourceLabel(source, "suno-helper")}
+              </button>
+            ))}
+          </div>
+        )}
       </label>
 
       <label className="flex flex-col gap-1 text-sm">

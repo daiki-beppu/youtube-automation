@@ -10,11 +10,13 @@ import {
   postDownloaded,
   resolveCompatibilityWarning,
 } from "../../shared/api";
+import { discoverServerSources } from "../../shared/server-discovery";
 import { describeRelayFailure } from "../components/runner-errors";
 import { installSunoContentScriptRecovery } from "../lib/content-script-recovery";
 import { installDownloadWatcher } from "../lib/download-watcher";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { relayTabId, requireRelayTab } from "../lib/overlay-relay";
+import { migrateServerSourcesStorage } from "../lib/storage";
 import { sendTrustedCmdP } from "../lib/trusted-shortcut";
 
 export default defineBackground(() => {
@@ -44,6 +46,9 @@ export default defineBackground(() => {
 
   browser.runtime.onInstalled.addListener((details) => {
     console.info(`[suno-helper] installed/updated: ${details.reason}`);
+    void migrateServerSourcesStorage().catch((error: unknown) => {
+      console.error("[suno-helper] legacy server source migration failed:", error);
+    });
   });
 
   onMessage("extensionVersionHandshake", ({ data, sender }) => {
@@ -111,6 +116,11 @@ export default defineBackground(() => {
   onMessage("fetchCompatibilityWarning", ({ data, sender }) => {
     requireRelayTab(sender, "fetchCompatibilityWarning");
     return resolveCompatibilityWarning(data.baseUrl, data.extensionVersion);
+  });
+
+  onMessage("discoverServerSources", ({ sender }) => {
+    requireRelayTab(sender, "discoverServerSources");
+    return discoverServerSources();
   });
 
   onMessage("fetchServerInfo", ({ data, sender }) => {
