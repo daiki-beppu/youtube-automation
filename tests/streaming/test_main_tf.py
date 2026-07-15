@@ -107,6 +107,23 @@ class TestMainTf:
             "cloud-init に ssh_host_public_key が渡されていない"
         )
 
+    def test_vultr_instance_ignores_user_data_changes_after_creation(self):
+        """Given vultr_instance.this
+        When lifecycle を読む
+        Then 作成後の cloud-init 差分だけでは既存 VPS を再作成しない。
+
+        Vultr provider の user_data は ForceNew のため、bootstrap 設定の更新を既存 VPS に
+        適用する場合は運用手順で反映し、Terraform には instance replacement を計画させない。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
+        assert block is not None
+        lifecycle_block = extract_block(block, r"lifecycle")
+        assert lifecycle_block is not None, "vultr_instance.this.lifecycle が存在しない"
+        assert re.search(r"ignore_changes\s*=\s*\[\s*user_data\s*\]", lifecycle_block), (
+            "user_data の変更が既存 VPS の instance replacement を引き起こす"
+        )
+
     def test_null_resource_connection_enables_host_key_verification(self):
         """Given main.tf
         When null_resource.deploy.connection を読む
@@ -623,7 +640,7 @@ class TestMainTfNullResource:
         When 1 つ目の ``provisioner "file"`` を読む
         Then source=var.video_path, destination=${var.install_root}/videos/current.mp4。
 
-        cloud-init で作成済みの ``${install_root}/videos/`` （cloud-init.yaml:14）に固定名で配置。
+        cloud-init で作成済みの ``${install_root}/videos/`` に固定名で配置。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')

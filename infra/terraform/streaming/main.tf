@@ -63,6 +63,10 @@ resource "vultr_instance" "this" {
     ssh_host_private_key = tls_private_key.ssh_host.private_key_openssh
     ssh_host_public_key  = local.ssh_host_public_key
   })
+
+  lifecycle {
+    ignore_changes = [user_data]
+  }
 }
 
 resource "null_resource" "deploy" {

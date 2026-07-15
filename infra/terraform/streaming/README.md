@@ -60,6 +60,27 @@ terraform apply
 
 `terraform.tfvars` には secret 値を書かない（`stream_key` / `vultr_api_key` は `TF_VAR_*` のみ）。
 
+## cloud-init 変更を既存 VPS へ反映する
+
+`vultr_instance.this` は作成時に最新の `cloud-init.yaml` を `user_data` として渡す。一方、Vultr provider の `user_data` は変更時に instance replacement となるため、作成後の差分は `lifecycle.ignore_changes` で無視する。これにより cloud-init の保守変更だけで稼働中 VPS が停止・再作成されることはない。
+
+既存 VPS には cloud-init が再実行されないため、今回の sshd host key 固定は次の手順で一度だけ手動反映する（障害を確認した既存 VPS には同等設定を反映済み）。
+
+```bash
+ssh root@<instance-ip>
+install -d -m 0755 -o root -g root /etc/ssh/sshd_config.d
+printf '%s\n' 'HostKey /etc/ssh/ssh_host_ed25519_key' \
+  > /etc/ssh/sshd_config.d/99-hostkey-ed25519.conf
+chown root:root /etc/ssh/sshd_config.d/99-hostkey-ed25519.conf
+chmod 0644 /etc/ssh/sshd_config.d/99-hostkey-ed25519.conf
+sshd -t
+systemctl reload ssh || systemctl reload sshd
+```
+
+反映後は別ターミナルから Ed25519 で接続できることを確認してから、元の SSH セッションを閉じる。`sshd -t` が失敗した場合は reload せず drop-in を修正または削除する。
+
+`terraform apply` の前には必ず `terraform plan` を読み、`vultr_instance.this must be replaced` や `-/+` が出ていないことを確認する。表示された場合は apply を中止する。明示的に VPS を再作成する場合だけ、配信停止を告知し、`var.video_path` の元動画がローカルに存在することを確認し、必要な `${install_root}/logs` を退避してから実行する。`/etc/youtube-stream.env` は stream key を含むため平文バックアップせず、Terraform の secret 入力から再生成する。
+
 ## 配信元動画のプリフライト
 
 `run-ffmpeg.sh` は映像を `-c:v copy`（ストリームコピー）で YouTube Live へ送るため、**ソース MP4 のエンコード品質がそのまま配信品質になる**。`terraform plan` / `apply` では `external` data source から `video_preflight.py` を呼び、ローカル `ffprobe` で次を検査する。
