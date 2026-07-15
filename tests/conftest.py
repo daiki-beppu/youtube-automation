@@ -33,9 +33,36 @@ if str(_SRC_DIR) not in sys.path:
 # テスト用フィクスチャディレクトリ（git 管理下のオリジナル）
 _FIXTURE_CHANNEL_DIR = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
 _OP_READ_DISABLED_ENV = "YOUTUBE_AUTOMATION_DISABLE_OP_READ"
+_TEST_TMP_PREFIX = "yt-automation-tests-"
 
 
 os.environ.setdefault(_OP_READ_DISABLED_ENV, "1")
+
+
+def _pid_is_running(pid: int) -> bool:
+    """Return whether a process exists without sending it a signal."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _cleanup_stale_isolated_channel_dirs() -> None:
+    """Remove leftovers from killed pytest runs without touching active runs."""
+    system_tmp = Path(tempfile.gettempdir())
+    for candidate in system_tmp.glob(f"{_TEST_TMP_PREFIX}*"):
+        if not candidate.is_dir() or candidate.is_symlink():
+            continue
+
+        suffix = candidate.name.removeprefix(_TEST_TMP_PREFIX)
+        pid_text, separator, _ = suffix.partition("-")
+        if separator and pid_text.isdigit() and _pid_is_running(int(pid_text)):
+            continue
+
+        shutil.rmtree(candidate, ignore_errors=True)
 
 
 def _prepare_isolated_channel_dir() -> None:
@@ -44,10 +71,12 @@ def _prepare_isolated_channel_dir() -> None:
     既存 env 上書きがあれば尊重する（setdefault 相当）。
     tmp dir は `atexit` で session 終了時に削除する。
     """
+    _cleanup_stale_isolated_channel_dirs()
+
     if os.environ.get("CHANNEL_DIR"):
         return
 
-    tmp_root = Path(tempfile.mkdtemp(prefix="yt-automation-tests-"))
+    tmp_root = Path(tempfile.mkdtemp(prefix=f"{_TEST_TMP_PREFIX}{os.getpid()}-"))
     atexit.register(shutil.rmtree, tmp_root, ignore_errors=True)
 
     isolated = tmp_root / "sample_channel"
