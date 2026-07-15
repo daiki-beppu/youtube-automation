@@ -32,7 +32,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 
 ## 配置 root
 
-VPS 上の動画・ログ・運用スクリプトは `var.install_root` 配下に配置する。既定値は `/opt/youtube-stream` で、`videos/current.mp4`、`logs/`、`bin/*.sh` はこの値から組み立てる。cloud-init、Terraform provisioner、systemd unit は同じ `var.install_root` を参照するため、配置先を変える場合は `install_root` だけを上書きする。
+VPS 上の動画・ログ・運用スクリプトは `var.install_root` 配下に配置する。既定値は `/opt/youtube-stream` で、`videos/current.mp4`、`logs/`、`bin/*.sh` はこの値から組み立てる。cloud-init、Terraform provisioner、systemd unit は同じ `var.install_root` を参照するため、配置先を変える場合は `install_root` だけを上書きする。作成後に `install_root` を変えると `null_resource.deploy` が再実行され、新しい配置先のディレクトリ作成、動画・スクリプト・設定の再配置、service 再起動まで行う。VPS 自体は再作成しない。
 
 ## 使い方
 
@@ -62,7 +62,7 @@ terraform apply
 
 ## cloud-init 変更を既存 VPS へ反映する
 
-`vultr_instance.this` は作成時に最新の `cloud-init.yaml` を `user_data` として渡す。一方、Vultr provider の `user_data` は変更時に instance replacement となるため、作成後の差分は `lifecycle.ignore_changes` で無視する。これにより cloud-init の保守変更だけで稼働中 VPS が停止・再作成されることはない。
+`vultr_instance.this` は作成時に最新の `cloud-init.yaml` を `user_data` として渡す。一方、Vultr provider の `user_data` は変更時に instance replacement となるため、作成後の差分は `lifecycle.ignore_changes` で無視する。これにより通常の cloud-init 保守変更だけで稼働中 VPS が停止・再作成されることはない。SSH host key が変わった場合だけは `replace_triggered_by = [tls_private_key.ssh_host]` により VPS を再作成し、VPS 上の鍵と Terraform provisioner の検証鍵を一致させる。`install_root` の変更は VPS replacement ではなく、`null_resource.deploy` の再実行で反映する。
 
 既存 VPS には cloud-init が再実行されないため、今回の sshd host key 固定は次の手順で一度だけ手動反映する（障害を確認した既存 VPS には同等設定を反映済み）。
 
@@ -140,6 +140,7 @@ systemd unit が以下の挙動を持つ:
 |---|---|
 | `instance_id` | VPS 再作成 |
 | `video_hash`（`filemd5(var.video_path)`）| 動画ファイルの差し替え |
+| `install_root` | 配置先の変更（必須ディレクトリ作成後に動画・スクリプト・設定を再配置） |
 | `stream_hours` / `break_hours` | 配信サイクルの変更 |
 | `stream_key`（`nonsensitive(sha256(var.stream_key))`）| ストリームキーの差し替え |
 | `systemd_unit`（`filemd5("${path.module}/templates/youtube-stream.service.tftpl")`）| systemd unit テンプレートの編集（VPS 再構築不要で反映） |

@@ -17,6 +17,18 @@ from tests.streaming._helpers import (
     _MAIN_TF,
 )
 
+
+def _find_remote_exec_block(block: str, required_text: str) -> str | None:
+    for match in re.finditer(
+        r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
+        block,
+        flags=re.DOTALL,
+    ):
+        if required_text in match.group(1):
+            return match.group(1)
+    return None
+
+
 # ============================================================================
 # main.tf
 # ============================================================================
@@ -107,13 +119,13 @@ class TestMainTf:
             "cloud-init に ssh_host_public_key が渡されていない"
         )
 
-    def test_vultr_instance_ignores_user_data_changes_after_creation(self):
+    def test_vultr_instance_ignores_user_data_but_replaces_for_host_key_changes(self):
         """Given vultr_instance.this
         When lifecycle を読む
-        Then 作成後の cloud-init 差分だけでは既存 VPS を再作成しない。
+        Then 通常の cloud-init 差分は無視し、SSH host key 変更時は VPS を再作成する。
 
-        Vultr provider の user_data は ForceNew のため、bootstrap 設定の更新を既存 VPS に
-        適用する場合は運用手順で反映し、Terraform には instance replacement を計画させない。
+        user_data 全体の ForceNew は抑止する一方、VPS の host identity を担う
+        tls_private_key.ssh_host の変更は replacement を維持する。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
@@ -123,6 +135,10 @@ class TestMainTf:
         assert re.search(r"ignore_changes\s*=\s*\[\s*user_data\s*\]", lifecycle_block), (
             "user_data の変更が既存 VPS の instance replacement を引き起こす"
         )
+        assert re.search(
+            r"replace_triggered_by\s*=\s*\[\s*tls_private_key\.ssh_host\s*,?\s*\]",
+            lifecycle_block,
+        ), "SSH host key 変更が vultr_instance.this の replacement に接続されていない"
 
     def test_null_resource_connection_enables_host_key_verification(self):
         """Given main.tf
@@ -434,7 +450,7 @@ class TestMainTfNullResource:
 
     triggers / connection / 複数の ``provisioner "file"``（video / env / healthcheck env /
     systemd unit / healthcheck.sh / notify.sh / logrotate.conf / cron.d）/
-    ``provisioner "remote-exec"`` の各構造を検証する。
+    複数の ``provisioner "remote-exec"`` の各構造を検証する。
     """
 
     def test_null_resource_deploy_exists(self):
@@ -453,6 +469,7 @@ class TestMainTfNullResource:
 
         - instance_id = vultr_instance.this.id（VPS 再作成時の再 deploy）
         - video_hash = filemd5(var.video_path)（動画差分での再 deploy）
+        - install_root = var.install_root（配置先変更時の再 deploy）
         - stream_hours / break_hours（配信サイクル差分での再 deploy）
         - stream_key（sha256 ハッシュ。stream key 差分での再 deploy）
         """
@@ -466,6 +483,9 @@ class TestMainTfNullResource:
         )
         assert re.search(r"video_hash\s*=\s*filemd5\(\s*var\.video_path\s*\)", triggers), (
             "triggers.video_hash が filemd5(var.video_path) でない"
+        )
+        assert re.search(r"install_root\s*=\s*var\.install_root", triggers), (
+            "triggers.install_root が var.install_root でない"
         )
         assert re.search(r"stream_hours\s*=\s*tostring\(\s*var\.stream_hours\s*\)", triggers), (
             "triggers.stream_hours が tostring(var.stream_hours) でない"
@@ -640,7 +660,7 @@ class TestMainTfNullResource:
         When 1 つ目の ``provisioner "file"`` を読む
         Then source=var.video_path, destination=${var.install_root}/videos/current.mp4。
 
-        cloud-init で作成済みの ``${install_root}/videos/`` に固定名で配置。
+        事前 remote-exec で作成済みの ``${install_root}/videos/`` に固定名で配置。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
@@ -664,6 +684,28 @@ class TestMainTfNullResource:
         assert match or match_alt, (
             'provisioner "file" で source=var.video_path → '
             "${var.install_root}/videos/current.mp4 へのアップロードが宣言されていない"
+        )
+
+    def test_remote_exec_prepares_install_root_before_file_uploads(self):
+        """Given null_resource.deploy
+        When provisioner の順序を読む
+        Then file upload より前に install_root 配下の必須ディレクトリを作成する。
+
+        install_root 変更時も null_resource.deploy だけで新しい配置先を準備し、
+        最初の file provisioner が存在しない親ディレクトリで失敗しないことを保証する。
+        """
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+        prepare = _find_remote_exec_block(block, "${var.install_root}/videos")
+        assert prepare is not None, "install_root を準備する remote-exec が存在しない"
+        for directory in ("videos", "logs", "bin"):
+            assert re.search(
+                rf"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+{_INSTALL_ROOT_VAR}/{directory}\b",
+                prepare,
+            ), f"install_root/{directory} を root:root 0755 で作成していない"
+        assert block.find('provisioner "remote-exec"') < block.find('provisioner "file"'), (
+            "install_root の準備が最初の file upload より後にある"
         )
 
     def test_provisioner_file_places_env_via_templatefile(self):
@@ -728,13 +770,8 @@ class TestMainTfNullResource:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        remote_exec = re.search(
-            r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
-            block,
-            flags=re.DOTALL,
-        )
-        assert remote_exec is not None, 'provisioner "remote-exec" ブロックが見つからない'
-        inline = remote_exec.group(1)
+        inline = _find_remote_exec_block(block, "systemctl enable --now youtube-stream")
+        assert inline is not None, 'service を反映する provisioner "remote-exec" ブロックが見つからない'
         for command, hint in [
             (r"umask\s+0077", "umask 0077 (defense-in-depth)"),
             (
@@ -1394,13 +1431,8 @@ class TestMainTfRunFfmpegProvisioner:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        remote_exec = re.search(
-            r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
-            block,
-            flags=re.DOTALL,
-        )
-        assert remote_exec is not None, 'provisioner "remote-exec" ブロックが見つからない'
-        inline = remote_exec.group(1)
+        inline = _find_remote_exec_block(block, "systemctl enable --now youtube-stream")
+        assert inline is not None, 'service を反映する provisioner "remote-exec" ブロックが見つからない'
         assert re.search(
             rf"chmod\s+755\b[^\n]*{_INSTALL_ROOT_VAR}/bin/run-ffmpeg\.sh\b",
             inline,
@@ -1420,13 +1452,8 @@ class TestMainTfRunFfmpegProvisioner:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        remote_exec = re.search(
-            r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
-            block,
-            flags=re.DOTALL,
-        )
-        assert remote_exec is not None
-        inline = remote_exec.group(1)
+        inline = _find_remote_exec_block(block, "systemctl enable --now youtube-stream")
+        assert inline is not None
 
         chmod_match = re.search(
             r"chmod\s+755\b[^\n]*run-ffmpeg\.sh\b",

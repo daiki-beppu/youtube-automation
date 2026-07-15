@@ -66,6 +66,9 @@ resource "vultr_instance" "this" {
 
   lifecycle {
     ignore_changes = [user_data]
+    replace_triggered_by = [
+      tls_private_key.ssh_host,
+    ]
   }
 }
 
@@ -74,6 +77,7 @@ resource "null_resource" "deploy" {
     instance_id  = vultr_instance.this.id
     video_hash   = filemd5(var.video_path)
     ssh_host_key = local.ssh_host_public_key_sha
+    install_root = var.install_root
     stream_hours = tostring(var.stream_hours)
     break_hours  = tostring(var.break_hours)
     # SHA256 は不可逆なので nonsensitive() で剥がし triggers map に格納する
@@ -105,6 +109,14 @@ resource "null_resource" "deploy" {
     user     = "root"
     agent    = true
     host_key = local.ssh_host_public_key
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "install -d -m 0755 -o root -g root ${var.install_root}/videos",
+      "install -d -m 0755 -o root -g root ${var.install_root}/logs",
+      "install -d -m 0755 -o root -g root ${var.install_root}/bin",
+    ]
   }
 
   provisioner "file" {
@@ -172,7 +184,6 @@ resource "null_resource" "deploy" {
       "rm -f /tmp/youtube-stream.env.tmp",
       "install -m 0600 -o root -g root /tmp/youtube-stream-healthcheck.env.tmp /etc/youtube-stream-healthcheck.env",
       "rm -f /tmp/youtube-stream-healthcheck.env.tmp",
-      "mkdir -p ${var.install_root}/bin",
       "chmod 755 ${var.install_root}/bin/healthcheck.sh ${var.install_root}/bin/notify.sh ${var.install_root}/bin/run-ffmpeg.sh",
       "chmod 0600 /etc/youtube-stream-healthcheck.env",
       "chown root:root /etc/youtube-stream-healthcheck.env",
