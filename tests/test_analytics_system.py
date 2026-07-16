@@ -5,6 +5,7 @@ AnalyticsSystem のユニットテスト
 YouTube Analytics API 呼び出しとファイル I/O を unittest.mock でモック化して検証する。
 """
 
+import json
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -49,6 +50,68 @@ def system(mock_config):
         obj = AnalyticsSystem()
         obj._mock_collector_instance = instance
         yield obj
+
+
+@pytest.fixture
+def stub_analytics_boundaries(monkeypatch, tmp_path):
+    """CLI 実経路を残したまま OAuth / YouTube API 境界だけを固定する。"""
+    from youtube_automation.scripts import analytics_system
+    from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
+
+    def authenticate(system):
+        system.authenticated = True
+        return True
+
+    monkeypatch.setattr(analytics_system, "channel_dir", lambda: tmp_path)
+    monkeypatch.setattr(analytics_system.AnalyticsSystem, "authenticate", authenticate)
+    monkeypatch.setattr(YouTubeAnalyticsCollector, "initialize", lambda self: None)
+    monkeypatch.setattr(
+        YouTubeAnalyticsCollector,
+        "get_channel_analytics",
+        lambda self, start, end: {"period": f"{start} to {end}", "daily_metrics": []},
+    )
+    monkeypatch.setattr(
+        YouTubeAnalyticsCollector,
+        "get_strategic_video_analytics",
+        lambda self, start, end, mode="efficient": {
+            "mode": mode,
+            "top_videos": [],
+            "recent_videos": [],
+            "summary": {},
+        },
+    )
+    monkeypatch.setattr(
+        YouTubeAnalyticsCollector,
+        "get_ctr_analysis",
+        lambda self, start, end: {"videos": []},
+    )
+    monkeypatch.setattr(
+        YouTubeAnalyticsCollector,
+        "get_traffic_source_analytics",
+        lambda self, start, end: {"sources": {}},
+    )
+    monkeypatch.setattr(
+        YouTubeAnalyticsCollector,
+        "get_device_analytics",
+        lambda self, start, end: {"devices": {"TV": {"views": 25}}},
+    )
+    monkeypatch.setattr(
+        YouTubeAnalyticsCollector,
+        "get_country_analytics",
+        lambda self, start, end: {"countries": {"JP": {"views": 20}}},
+    )
+    monkeypatch.setattr(
+        YouTubeAnalyticsCollector,
+        "get_retention_summary",
+        lambda self, start, end, top_n: [{"video_id": "VID_1", "average_retention": 0.62}],
+    )
+    monkeypatch.setattr(YouTubeAnalyticsCollector, "get_all_channel_videos", lambda self: [])
+    monkeypatch.setattr(
+        YouTubeAnalyticsCollector,
+        "get_video_daily_analytics",
+        lambda self, start, end, video_ids: [],
+    )
+    return tmp_path
 
 
 # ---------------------------------------------------------------------------
@@ -328,6 +391,107 @@ class TestRunDataCollection:
             ):
                 with pytest.raises(RuntimeError, match="Network error"):
                     system.run_data_collection(days=30)
+
+
+class TestMainDepth:
+    def test_full_depth_persists_retention_and_country(self, monkeypatch, stub_analytics_boundaries):
+        """--depth full は full 専用データを最終 JSON まで貫通させる。"""
+        from youtube_automation.scripts import analytics_system
+
+        monkeypatch.setattr(sys, "argv", ["yt-analytics", "--depth", "full"])
+
+        with pytest.raises(SystemExit) as exit_info:
+            analytics_system.main()
+
+        assert exit_info.value.code == 0
+        saved_files = list((stub_analytics_boundaries / "data").glob("analytics_data_*.json"))
+        assert len(saved_files) == 1
+        payload = json.loads(saved_files[0].read_text(encoding="utf-8"))
+        assert payload["collection_depth"] == "full"
+        assert payload["audience"]["by_country"] == {"countries": {"JP": {"views": 20}}}
+        assert payload["retention"] == [{"video_id": "VID_1", "average_retention": 0.62}]
+
+    def test_full_depth_country_api_error_fails_without_persisting(self, monkeypatch, stub_analytics_boundaries):
+        """full の地域 API 失敗は CLI 成功や不完全 JSON に変換しない。"""
+        from youtube_automation.scripts import analytics_system
+        from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
+
+        monkeypatch.setattr(sys, "argv", ["yt-analytics", "--depth", "full"])
+        monkeypatch.setattr(
+            YouTubeAnalyticsCollector,
+            "get_country_analytics",
+            lambda self, start, end: {"countries": {}, "error": "country API failed"},
+        )
+
+        with pytest.raises(SystemExit) as exit_info:
+            analytics_system.main()
+
+        assert exit_info.value.code == 1
+        assert not list((stub_analytics_boundaries / "data").glob("analytics_data_*.json"))
+
+    def test_full_depth_retention_api_error_fails_without_persisting(self, monkeypatch, stub_analytics_boundaries):
+        """full の動画別 retention API 失敗は不完全 JSON を保存しない。"""
+        from youtube_automation.scripts import analytics_system
+        from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
+
+        monkeypatch.setattr(sys, "argv", ["yt-analytics", "--depth", "full"])
+        monkeypatch.setattr(
+            YouTubeAnalyticsCollector,
+            "get_retention_summary",
+            lambda self, start, end, top_n: [{"video_id": "VID_1", "error": "retention API failed"}],
+        )
+
+        with pytest.raises(SystemExit) as exit_info:
+            analytics_system.main()
+
+        assert exit_info.value.code == 1
+        assert not list((stub_analytics_boundaries / "data").glob("analytics_data_*.json"))
+
+    def test_explicit_standard_depth_persists_standard_data(self, monkeypatch, stub_analytics_boundaries):
+        """--depth standard は standard データを保存する。"""
+        from youtube_automation.scripts import analytics_system
+
+        monkeypatch.setattr(sys, "argv", ["yt-analytics", "--depth", "standard"])
+
+        with pytest.raises(SystemExit) as exit_info:
+            analytics_system.main()
+
+        assert exit_info.value.code == 0
+        saved_files = list((stub_analytics_boundaries / "data").glob("analytics_data_*.json"))
+        assert len(saved_files) == 1
+        payload = json.loads(saved_files[0].read_text(encoding="utf-8"))
+        assert payload["collection_depth"] == "standard"
+        assert "by_country" not in payload["audience"]
+        assert "retention" not in payload
+
+    def test_unknown_depth_is_rejected_before_collection(self, monkeypatch, stub_analytics_boundaries):
+        """choices 外の depth は argparse が exit 2 で拒否する。"""
+        from youtube_automation.scripts import analytics_system
+
+        monkeypatch.setattr(sys, "argv", ["yt-analytics", "--depth", "unknown"])
+
+        with pytest.raises(SystemExit) as exit_info:
+            analytics_system.main()
+
+        assert exit_info.value.code == 2
+        assert not (stub_analytics_boundaries / "data").exists()
+
+    def test_omitted_depth_persists_standard_without_full_only_data(self, monkeypatch, stub_analytics_boundaries):
+        """depth 省略時は従来どおり standard JSON を保存する。"""
+        from youtube_automation.scripts import analytics_system
+
+        monkeypatch.setattr(sys, "argv", ["yt-analytics"])
+
+        with pytest.raises(SystemExit) as exit_info:
+            analytics_system.main()
+
+        assert exit_info.value.code == 0
+        saved_files = list((stub_analytics_boundaries / "data").glob("analytics_data_*.json"))
+        assert len(saved_files) == 1
+        payload = json.loads(saved_files[0].read_text(encoding="utf-8"))
+        assert payload["collection_depth"] == "standard"
+        assert payload["audience"] == {"by_device": {"devices": {"TV": {"views": 25}}}}
+        assert "retention" not in payload
 
 
 class TestReportingSubmodes:
