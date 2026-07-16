@@ -1,0 +1,10 @@
+{
+  "env": {
+    "browser": true
+  },
+  "globals": {
+    "browser": "readonly",
+    "chrome": "readonly"
+  },
+  "ignorePatterns": ["**/.wxt/**", "**/.output/**", "**/dist/**", "**/node_modules/**"]
+}
