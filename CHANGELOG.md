@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(flop-analysis)`: Phase 3 の全主仮説を承認プロンプトなしで自動検証し、全件反証時だけ副仮説へ進む orchestration へ更新した。対話必須スキルは read-only 成果物境界から起動せず、期間・比較元・閾値を固定して判定する。個別検証がデータ不足・子スキル失敗で実行不能な場合は理由付きの「未検証」として残りを続行し、検証結果から `postmortem.md` の「結論 / 反証 / 学び」まで自動記入する（#1972）。
+
 - `fix(suno)`: `yt-suno-verify` と共通 initial-setup preflight が `config/skills/suno.yaml::style_char_limit` の上書きを尊重し、長文の base `genre_line`・video analysis 由来 Style・使用中 style variant を設定上限で検証するようにした。未設定時は従来どおり 120 文字超過をエラーにする（#1938）。
 
 - `chore(extensions)`: Oxlint 1.73.0 の React plugin と、旧 severity を維持できる native React Hooks rules を共通設定で有効化し、代表的違反を実行時 fixture で検証するようにした。severity を保持できる native 代替がない14規則は、集約 React Compiler rule による warn の error 化を避けて独立 follow-up として明示した（#2019）。

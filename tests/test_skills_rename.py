@@ -317,14 +317,15 @@ def test_audience_persona_route_docs_follow_required_order() -> None:
     frequency = _markdown_section(onboarding, "### 5.1 定常タスクの推奨頻度")
     troubleshooting = _markdown_section(onboarding, "### 5.2 困ったときに参照するスキル")
     flop_analysis = _read(_FLOP_ANALYSIS)
-    verification = _markdown_section(flop_analysis, "### Phase 4: 検証ステップの案内")
+    verification = _markdown_section(flop_analysis, "### Phase 4: 検証の自律実行")
     next_step = _markdown_section(flop_analysis, "## Next Step")
 
     expected = "`/viewer-voice` → `/audience-persona-design` → `/viewing-scene`"
     expected_tokens = ("`/viewer-voice`", "`/audience-persona-design`", "`/viewing-scene`")
     assert expected in frequency
     assert expected in troubleshooting
-    _assert_tokens_in_order(verification, expected_tokens, "flop-analysis Phase 4")
+    assert "スキルとして起動しない" in verification
+    _assert_tokens_in_order(verification, expected_tokens, "flop-analysis Phase 4 の非対話境界")
     assert expected in next_step
     assert "`/audience-persona-design` → `/viewer-voice`" not in flop_analysis
 
