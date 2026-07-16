@@ -45,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(suno-helper)`: collection・投入方式・開始/停止・resume/retry controls を、既存 handler・disabled 条件・`data-suno-control` / aria 契約を維持したまま shadcn primitive へ移行した（#2067）。
+
 - `feat(distrokid-helper)`: 初回表示、コレクション選択、ローカル配信元選択の各タイミングで collection 一覧と release.json を自動取得し、手動の「データ取得」ボタンを廃止した（#1992）。
 
 - `feat(suno-helper)`: 初回表示、コレクション選択、ローカル配信元選択の各タイミングで collection prompts を自動取得し、手動の「データ取得」ボタンを廃止した（#1991）。
