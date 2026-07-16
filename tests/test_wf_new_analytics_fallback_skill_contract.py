@@ -276,35 +276,37 @@ def test_collection_ideate_benchmark_fallback_uses_only_benchmark_data_and_confi
 def test_collection_ideate_allows_missing_persona_in_fallback_modes() -> None:
     text = _read(_COLLECTION_IDEATE_SKILL_MD)
     persona = _section(text, "## ペルソナベース企画フレームワーク")
+    freshness = _read(_FRESHNESS_RULES_MD)
 
-    assert "analytics mode で存在しない場合は ideate を進めず" in persona
-    assert f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} では停止せず" in persona
-    assert "初回仮説の視聴者像" in persona
-
-    fallback_guidance = persona.split(
-        f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} では停止せず",
-        maxsplit=1,
-    )[1].split("今回のターゲットペルソナ", maxsplit=1)[0]
-    assert "/audience-persona-design" not in fallback_guidance
-    assert "チャンネル立ち上げ直後なら" not in fallback_guidance
+    assert "停止 / fallback 条件、fallback 入力は `references/freshness-rules.md` の判定結果をそのまま適用" in persona
+    assert "analytics mode でこれらが未生成の場合、`ttp_mode: false` は Phase 1 を中断" in freshness
+    assert "`true` は共通の欲求語彙選択規則による fallback で続行" in freshness
+    assert (
+        "benchmark fallback mode / `ttp_mode: false` の minimal mode では config と入力データから初回仮説" in freshness
+    )
+    assert "`ttp_mode: true` の minimal mode はこの判定前に停止" in freshness
 
 
 def test_collection_ideate_single_persona_variations_use_fallback_hypothesis() -> None:
     text = _read(_COLLECTION_IDEATE_SKILL_MD)
     variations = _section(text, "### 第一ペルソナの企画バリエーション")
+    freshness = _read(_FRESHNESS_RULES_MD)
 
-    assert "`docs/channel/personas/persona-definition.md` が存在する場合" in variations
     assert "第一ペルソナ 1 人" in variations
     assert "複数ペルソナをローテーションせず" in variations
     assert "別シーン・別感情・別利用文脈" in variations
-    assert "analytics mode で persona 文書が存在しない場合は停止" in variations
-    assert f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} で persona 文書が存在しない場合" in variations
-    assert "入力モードごとの材料から作る初回仮説の視聴者像" in variations
-    assert f"{_BENCHMARK_FALLBACK_MODE}: ベンチマークデータ + config" in variations
-    assert f"{_MINIMAL_MODE}: {_DIRECT_INPUT_LABEL}+ config" in variations
-    assert "ユーザー直接入力 + config から作る初回仮説の視聴者像" not in variations
-    assert "初回 or 不明 → `docs/channel/personas/persona-definition.md` の先頭ペルソナ" not in variations
-    assert "直近の選択ペルソナの次" not in variations
+    assert "persona / viewing-scene の判定は `references/freshness-rules.md` を適用" in variations
+    assert (
+        "analytics mode かつ `ttp_mode: false` ではユーザーに `/audience-persona-design` 実行を案内して中断"
+        in freshness
+    )
+    assert (
+        "analytics mode かつ `true` では `.claude/skills/channel-research/references/desire-vocabulary.md` の fallback"
+        in freshness
+    )
+    assert (
+        "benchmark fallback mode / `ttp_mode: false` の minimal mode では config と入力データから初回仮説" in freshness
+    )
 
 
 def test_collection_ideate_persona_framework_uses_single_persona_candidate_count() -> None:
