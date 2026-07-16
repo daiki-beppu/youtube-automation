@@ -262,7 +262,9 @@ def test_dry_run_does_not_call_insert(tmp_path):
             ]
         },
     )
-    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+    replier = CommentReplier(
+        yt, config=_make_config(), channel_dir=tmp_path, default_language="ja", sleep_fn=lambda _: None
+    )
     plan = replier.run(dry_run=True)
 
     assert len(plan.planned) == 2
@@ -728,6 +730,7 @@ def test_unparseable_timestamp_does_not_apply_owner_replied_skip(
     )
     replier = CommentReplier(
         yt,
+        sleep_fn=lambda _: None,
         config=_make_config(),
         channel_dir=tmp_path,
         default_language="ja",
@@ -856,6 +859,7 @@ def test_unanswered_viewer_reply_remains_candidate(tmp_path):
     )
     replier = CommentReplier(
         yt,
+        sleep_fn=lambda _: None,
         config=_make_config(),
         channel_dir=tmp_path,
         default_language="ja",
@@ -1331,6 +1335,7 @@ def test_max_replies_per_run_caps_planned(tmp_path):
     )
     replier = CommentReplier(
         yt,
+        sleep_fn=lambda _: None,
         config=_make_config(max_replies_per_run=2),
         channel_dir=tmp_path,
         default_language="ja",
@@ -1420,7 +1425,7 @@ def test_comments_disabled_explicit_video_id_is_skipped(tmp_path):
     ]
 
 
-def test_comment_threads_api_error_other_than_comments_disabled_is_raised(tmp_path):
+def test_comment_threads_api_error_other_than_comments_disabled_is_raised(tmp_path, no_retry_backoff):
     err = _make_http_error(403, "Forbidden", "quotaExceeded")
     yt = _mock_youtube(video_ids=["v1"], comments_by_video={"v1": err})
     replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
@@ -1727,7 +1732,9 @@ def test_llm_retry_on_error_then_plans_reply(tmp_path):
     mock_client.models.generate_content.side_effect = [first_error, retry_response]
 
     with patch(_PATCH_GENAI_CLIENT, return_value=mock_client):
-        replier = CommentReplier(yt, config=config, channel_dir=tmp_path, default_language="ja")
+        replier = CommentReplier(
+            yt, config=config, channel_dir=tmp_path, default_language="ja", sleep_fn=lambda _: None
+        )
         plan = replier.run(dry_run=True)
 
     assert len(plan.planned) == 1
@@ -1756,7 +1763,9 @@ def test_llm_skip_on_error_when_fallback_is_skip(tmp_path):
     mock_client.models.generate_content.side_effect = RuntimeError("API 失敗")
 
     with patch(_PATCH_GENAI_CLIENT, return_value=mock_client):
-        replier = CommentReplier(yt, config=config, channel_dir=tmp_path, default_language="ja")
+        replier = CommentReplier(
+            yt, config=config, channel_dir=tmp_path, default_language="ja", sleep_fn=lambda _: None
+        )
         plan = replier.run(dry_run=True)
 
     assert plan.planned == []
@@ -1783,7 +1792,9 @@ def test_llm_retry_failure_is_skipped(tmp_path):
     mock_client.models.generate_content.side_effect = RuntimeError("API 失敗")
 
     with patch(_PATCH_GENAI_CLIENT, return_value=mock_client):
-        replier = CommentReplier(yt, config=config, channel_dir=tmp_path, default_language="ja")
+        replier = CommentReplier(
+            yt, config=config, channel_dir=tmp_path, default_language="ja", sleep_fn=lambda _: None
+        )
         plan = replier.run(dry_run=True)
 
     assert plan.planned == []
@@ -1979,7 +1990,9 @@ def test_preflight_skips_status_check_for_history_recorded_video(tmp_path):
             "fresh": [{"comment_id": "c2", "text": "こんにちは！", "author": "B"}],
         },
     )
-    replier = CommentReplier(yt, config=_make_config(), channel_dir=tmp_path, default_language="ja")
+    replier = CommentReplier(
+        yt, config=_make_config(), channel_dir=tmp_path, default_language="ja", sleep_fn=lambda _: None
+    )
     replier.run(dry_run=True)
 
     # status preflight は履歴未記録の "fresh" のみを問い合わせる
@@ -2019,7 +2032,7 @@ def test_fetch_video_status_returns_none_for_missing_video(tmp_path):
     assert result["missing"] is None
 
 
-def test_fetch_video_status_wraps_http_error(tmp_path):
+def test_fetch_video_status_wraps_http_error(tmp_path, no_retry_backoff):
     """status 取得失敗は YouTubeAPIError に変換され、握りつぶされない."""
     from youtube_automation.utils.comments.replier import fetch_video_status
 
