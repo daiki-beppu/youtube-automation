@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -49,6 +53,7 @@ _EXTENSIONS_JOB_CONTRACTS = {
 }
 _NIX_EXTENSIONS_INSTALL_COMMAND = "nix develop .#extensions --command pnpm install --frozen-lockfile"
 _NIX_EXTENSIONS_E2E_COMMAND = "nix develop .#extensions --command xvfb-run -a pnpm test:e2e"
+_NIX_EXTENSIONS_AUDIT_COMMAND = "nix develop .#extensions --command pnpm run audit"
 
 _RELEASE_BUILD_PARALLEL_STEPS = {
     "Build and zip suno-helper": ("extensions/suno-helper", "verify-extensions.sh suno-helper"),
@@ -210,6 +215,137 @@ def test_extensions_jobs_preserve_working_directory_install_and_e2e_contract(job
     steps = _job_steps(workflow, job_name)
     assert _top_level_step(steps, "Install dependencies").get("run") == _NIX_EXTENSIONS_INSTALL_COMMAND
     assert _top_level_step(steps, contract["e2e_step"]).get("run") == _NIX_EXTENSIONS_E2E_COMMAND
+
+
+def test_extensions_pull_request_runs_one_fallow_audit_for_the_extensions_root() -> None:
+    """Given an extension PR, When CI runs, Then one audit checks the entire extensions tree."""
+    workflow = _load_workflow(_EXTENSIONS_WORKFLOW_PATH)
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict), "jobs セクションが存在しない"
+
+    audit_steps: list[tuple[str, dict[str, object]]] = []
+    for job_name in jobs:
+        for step in _job_steps(workflow, str(job_name)):
+            if step.get("run") == _NIX_EXTENSIONS_AUDIT_COMMAND:
+                audit_steps.append((str(job_name), step))
+            parallel_steps = step.get("parallel")
+            if isinstance(parallel_steps, list):
+                audit_steps.extend(
+                    (str(job_name), child)
+                    for child in parallel_steps
+                    if child.get("run") == _NIX_EXTENSIONS_AUDIT_COMMAND
+                )
+
+    assert audit_steps == [
+        (
+            "check",
+            {
+                "name": "Fallow audit",
+                "if": "github.event_name == 'pull_request'",
+                "env": {"FALLOW_AUDIT_BASE": "${{ github.event.pull_request.base.sha }}"},
+                "run": _NIX_EXTENSIONS_AUDIT_COMMAND,
+            },
+        )
+    ]
+
+    steps = _job_steps(workflow, "check")
+    checkout = steps[_top_level_step_index_with_uses(steps, "actions/checkout@v4")]
+    assert checkout.get("with") == {"fetch-depth": 0}
+
+    jobs_check = jobs.get("check")
+    assert isinstance(jobs_check, dict)
+    working_directory = jobs_check.get("defaults", {}).get("run", {}).get("working-directory")
+    assert working_directory == "extensions/suno-helper"
+    package_json = json.loads(_read_text(_REPO_ROOT / working_directory / "package.json"))
+    assert package_json["scripts"]["audit"] == "fallow audit --root .."
+    assert (_REPO_ROOT / working_directory / "..").resolve() == (_REPO_ROOT / "extensions").resolve()
+
+    assert (
+        _top_level_step_index(steps, "Install dependencies")
+        < _top_level_step_index(steps, "Fallow audit")
+        < _parallel_group_index_containing(steps, "Lint")
+    )
+
+
+def test_fallow_audit_fails_for_a_new_error_finding_in_a_git_diff(tmp_path: Path) -> None:
+    """Given a new error finding, When the audit package script runs, Then it exits non-zero."""
+    extensions_root = tmp_path / "extensions"
+    helper_root = extensions_root / "suno-helper"
+    helper_root.mkdir(parents=True)
+    package_json = json.loads(_read_text(_REPO_ROOT / "extensions" / "suno-helper" / "package.json"))
+    audit_package_json = {
+        "name": "fallow-audit-fixture",
+        "private": True,
+        "scripts": {"audit": package_json["scripts"]["audit"]},
+    }
+    (helper_root / "package.json").write_text(json.dumps(audit_package_json), encoding="utf-8")
+    shutil.copy2(_REPO_ROOT / "extensions" / ".fallowrc.json", extensions_root / ".fallowrc.json")
+    (extensions_root / "src").mkdir()
+    (extensions_root / "src" / "existing.ts").write_text("export const existing = 1;\n", encoding="utf-8")
+
+    subprocess.run(["git", "init", "--quiet"], cwd=tmp_path, check=True)
+    subprocess.run(
+        ["git", "add", "extensions/.fallowrc.json", "extensions/suno-helper/package.json", "extensions/src"],
+        cwd=tmp_path,
+        check=True,
+    )
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Fallow test",
+            "-c",
+            "user.email=fallow-test@example.invalid",
+            "commit",
+            "--quiet",
+            "-m",
+            "baseline",
+        ],
+        cwd=tmp_path,
+        check=True,
+    )
+    base_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=tmp_path, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    audit_command = [
+        "nix",
+        "develop",
+        f"{_REPO_ROOT}#extensions",
+        "--command",
+        "pnpm",
+        "run",
+        "audit",
+    ]
+    audit_env = {
+        **os.environ,
+        "FALLOW_AUDIT_BASE": base_sha,
+        "PATH": f"{_REPO_ROOT / 'extensions' / 'suno-helper' / 'node_modules' / '.bin'}:{os.environ['PATH']}",
+    }
+    clean_audit = subprocess.run(
+        audit_command,
+        cwd=helper_root,
+        env=audit_env,
+        capture_output=True,
+        text=True,
+    )
+    assert clean_audit.returncode == 0, clean_audit.stdout + clean_audit.stderr
+
+    (extensions_root / "src" / "unused.ts").write_text(
+        "export function unusedFunction() {\n  return 1;\n}\n", encoding="utf-8"
+    )
+    audit = subprocess.run(
+        audit_command,
+        cwd=helper_root,
+        env=audit_env,
+        capture_output=True,
+        text=True,
+    )
+
+    audit_output = audit.stdout + audit.stderr
+    print(audit_output)
+    assert audit.returncode != 0, audit_output
+    assert "Unused files (1)" in audit_output, audit_output
+    assert "src/unused.ts" in audit_output, audit_output
 
 
 def test_ci_lint_runs_ruff_checks_in_a_single_parallel_group() -> None:
