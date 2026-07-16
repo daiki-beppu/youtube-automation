@@ -2,7 +2,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { Alert, alertVariants } from "@/components/ui/alert";
 import { Button, ButtonSlot, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 const variantMarkers = {
@@ -59,5 +61,46 @@ describe("shadcn/ui foundation", () => {
     expect(html).toContain('data-variant="link"');
     for (const marker of variantMarkers.link) expect(html).toContain(marker);
     expect(html).toContain(">確認</a>");
+  });
+
+  it("Card は shell/header/content の slot と追加 props を実 DOM に反映する", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        Card,
+        { className: "w-[360px]", "aria-label": "Suno Helper" },
+        createElement(CardHeader, { className: "cursor-grab" }, "header"),
+        createElement(CardContent, { className: "p-0" }, "content"),
+      ),
+    );
+
+    expect(html.startsWith("<div ")).toBe(true);
+    expect(html).toContain('data-slot="card"');
+    expect(html).toContain('aria-label="Suno Helper"');
+    expect(html).toContain("w-[360px]");
+    expect(html).toContain('data-slot="card-header"');
+    expect(html).toContain("cursor-grab");
+    expect(html).toContain('data-slot="card-content"');
+    expect(html).toContain("p-0");
+  });
+
+  it.each([
+    ["default", ["bg-card", "text-card-foreground"]],
+    ["warning", ["border-amber-300", "bg-amber-50", "text-amber-900"]],
+    ["destructive", ["border-red-300", "bg-red-50", "text-red-900"]],
+  ] as const)("Alert variant %s は対応する class を生成する", (variant, markers) => {
+    const classes = alertVariants({ variant }).split(" ");
+    expect(classes).toEqual(expect.arrayContaining([...markers]));
+  });
+
+  it("Alert は role を暗黙追加せず、指定された semantic role と props を透過する", () => {
+    const html = renderToStaticMarkup(
+      createElement(Alert, { variant: "destructive", role: "status", "aria-live": "polite" }, "失敗"),
+    );
+
+    expect(html).toContain('data-slot="alert"');
+    expect(html).toContain('data-variant="destructive"');
+    expect(html).toContain('role="status"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain(">失敗</div>");
   });
 });
