@@ -13,6 +13,7 @@ from youtube_automation.cli import doctor
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _SETUP_SKILL = _SKILLS_DIR / "setup" / "SKILL.md"
+_FRESHNESS_RULES = _SKILLS_DIR / "collection-ideate" / "references" / "freshness-rules.md"
 _CHANNEL_NEW_SKILL = _SKILLS_DIR / "channel-new" / "SKILL.md"
 _ONBOARD_DIR = _SKILLS_DIR / "onboard"
 _CURRENT_SETUP_DOCS = [
@@ -199,3 +200,31 @@ def test_setup_skill_handles_ttp_wf_new_readiness_next_check() -> None:
     assert "`config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default`" in text
     assert "`data/thumbnail_compare/benchmark/`" in text
     assert "uv run yt-doctor --json" in text
+
+
+def test_setup_stale_report_guidance_delegates_to_collection_ideate_contract() -> None:
+    setup = _SETUP_SKILL.read_text(encoding="utf-8")
+    freshness_rules = _FRESHNESS_RULES.read_text(encoding="utf-8")
+    analytics_report_section = setup.split("#### `analytics_report`", 1)[1].split("\n#### `benchmark_data`", 1)[0]
+
+    assert ".claude/skills/collection-ideate/references/freshness-rules.md" in analytics_report_section
+    assert "後続の `/collection-ideate` が同じセッションで自動更新する" in analytics_report_section
+    assert "`[HUMAN STEP]` として `/analytics-analyze` の実行を利用者へ依頼せず" in analytics_report_section
+    assert "freshness.stale_action" not in setup
+    assert "refresh / API 失敗時の停止・再開条件は上書きしない" in analytics_report_section
+
+    assert "stale report の自動更新" in freshness_rules
+    assert "同じセッションで自動実行" in freshness_rules
+    assert "skill 呼び出し失敗または再検証失敗時" in freshness_rules
+
+    assert "stale ではない → analytics mode" in analytics_report_section
+    assert "`reports/analysis_*.md` が無く、`data/benchmark_*.json` がある → benchmark fallback mode" in (
+        analytics_report_section
+    )
+    assert (
+        "`reports/analysis_*.md` と `data/benchmark_*.json` がどちらも無い → minimal mode" in analytics_report_section
+    )
+
+    assert setup.count("`summary.next_check_id` が `null`") == 1
+    assert setup.count("`analytics_report` の stale fail だけ") == 1
+    assert setup.count("冒頭の「完了条件」に従い") == 3
