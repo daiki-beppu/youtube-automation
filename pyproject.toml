@@ -154,5 +154,8 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 # pytest.raises(match=...) の正規表現メタ文字警告はテスト可読性を優先して抑制
 "tests/**" = ["RUF043"]
 
+[tool.pytest.ini_options]
+tmp_path_retention_policy = "failed"
+
 [dependency-groups]
 dev = ["pytest>=9,<10", "ruff>=0.15,<1"]

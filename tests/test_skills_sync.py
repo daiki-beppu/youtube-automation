@@ -719,27 +719,49 @@ def test_cmd_diff_default_asset_is_all() -> None:
 def test_cmd_diff_skills_only_disk_emits_prune_hint(
     fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    # Given: target に bundled + 孤児 (only_disk) 1 件
+    # Given: target に bundled + 既知 orphan 1 件
     target = tmp_path / "out" / ".claude" / "skills"
     target.mkdir(parents=True)
     src = _asset_root("skills")
     for entry in src.iterdir():
         shutil.copytree(entry, target / entry.name)
-    (target / "legacy-skill").mkdir()
-    (target / "legacy-skill" / "SKILL.md").write_text("# legacy\n", encoding="utf-8")
+    (target / "analyze").mkdir()
+    (target / "analyze" / "SKILL.md").write_text("# legacy\n", encoding="utf-8")
 
     # When: diff を実行
     parser = build_parser()
     args = parser.parse_args(["diff", "--asset", "skills", "--target", str(target)])
     rc = args.func(args)
 
-    # Then: 孤児リスト直後に --prune の案内が出る
+    # Then: 既知 orphan のリスト直後に --prune の案内が出る
     assert rc == 0
     out = capsys.readouterr().out
-    assert "target にのみ存在" in out
-    assert "legacy-skill" in out
+    assert "upstream 管理の既知の旧 skill" in out
+    assert "analyze" in out
     assert "--prune" in out
     assert "--yes" in out
+
+
+def test_cmd_diff_skills_protects_unknown_local_entry_without_prune_hint(
+    fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # Given: target に bundled + 未知のローカル entry 1 件
+    target = tmp_path / "out" / ".claude" / "skills"
+    _seed_bundled_target(target)
+    custom = target / "suno-preflight"
+    custom.mkdir()
+
+    # When: diff を実行
+    parser = build_parser()
+    args = parser.parse_args(["diff", "--asset", "skills", "--target", str(target)])
+    rc = args.func(args)
+
+    # Then: ローカル entry として保護され、削除コマンドは案内されない
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "未知のローカル entry として prune から保護されます" in out
+    assert "suno-preflight" in out
+    assert "--prune --yes" not in out
 
 
 def test_cmd_diff_skills_no_orphans_does_not_emit_prune_hint(
@@ -816,6 +838,69 @@ def test_cmd_sync_prune_removes_orphan_dir_when_yes(fake_repo: Path, tmp_path: P
     # Then: 孤児が消える
     assert rc == 0
     assert not (target / "analyze").exists()
+
+
+@pytest.mark.parametrize(
+    "skill_name",
+    ["onboard", "distrokid-prep", "channel-import", "channel-setup", "channel-direction"],
+)
+def test_cmd_sync_prune_removes_known_removed_skill_when_yes(fake_repo: Path, tmp_path: Path, skill_name: str) -> None:
+    """upstream で削除された既知 skill は --yes で prune できる。"""
+    target = tmp_path / "out" / ".claude" / "skills"
+    _seed_bundled_target(target)
+    source_orphan = fake_repo / ".claude" / "skills" / skill_name
+    if source_orphan.exists():
+        shutil.rmtree(source_orphan)
+    orphan = target / skill_name
+    if orphan.exists():
+        shutil.rmtree(orphan)
+    orphan.mkdir()
+    (orphan / "SKILL.md").write_text("# legacy\n", encoding="utf-8")
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
+    rc = args.func(args)
+
+    assert rc == 0
+    assert not orphan.exists()
+
+
+def test_cmd_sync_prune_preserves_user_skill(fake_repo: Path, tmp_path: Path) -> None:
+    """同梱外の未知 skill はユーザー作成の可能性があるため prune しない。"""
+    target = tmp_path / "out" / ".claude" / "skills"
+    _seed_bundled_target(target)
+    custom = target / "suno-preflight"
+    custom.mkdir()
+    (custom / "SKILL.md").write_text("# local\n", encoding="utf-8")
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
+    rc = args.func(args)
+
+    assert rc == 0
+    assert (custom / "SKILL.md").read_text(encoding="utf-8") == "# local\n"
+
+
+def test_cmd_sync_prune_dry_run_distinguishes_known_orphan_and_user_skill(
+    fake_repo: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """dry-run でも既知 orphan のみを削除候補として表示する。"""
+    target = tmp_path / "out" / ".claude" / "skills"
+    _seed_bundled_target(target)
+    (target / "analyze").mkdir()
+    custom = target / "suno-preflight"
+    custom.mkdir()
+
+    parser = build_parser()
+    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune"])
+    rc = args.func(args)
+
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "would-prune: analyze" in out
+    assert "suno-preflight" not in out
+    assert (target / "analyze").exists()
+    assert custom.exists()
 
 
 def test_cmd_sync_prune_keeps_bundled_entries_when_yes(fake_repo: Path, tmp_path: Path) -> None:
@@ -926,6 +1011,23 @@ def test_build_parser_exposes_prune_and_yes() -> None:
     assert args.yes is True
 
 
+def test_build_parser_prune_help_describes_known_upstream_skills_only(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Given: yt-skills の CLI parser
+    parser = build_parser()
+
+    # When: sync のヘルプを表示する
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["sync", "--help"])
+
+    # Then: 既知の upstream 管理 skill だけが対象で、未知の local skill は保護される
+    assert exc_info.value.code == 0
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "upstream 管理の既知の旧 skill を削除候補として列挙する" in help_text
+    assert "未知のローカル skill は対象外" in help_text
+
+
 def test_build_parser_prune_defaults_false() -> None:
     # Given/When: フラグ省略
     parser = build_parser()
@@ -958,33 +1060,34 @@ def test_cmd_sync_prune_recursively_deletes_nested_files(fake_repo: Path, tmp_pa
     assert not nested.exists()
 
 
-def test_cmd_sync_prune_removes_orphan_symlink_but_keeps_link_target(fake_repo: Path, tmp_path: Path) -> None:
-    # Given: 孤児 symlink (link 先は別の場所にある実体ディレクトリ)
+def test_cmd_sync_prune_preserves_unknown_symlink_and_link_target(fake_repo: Path, tmp_path: Path) -> None:
+    # Given: 未知名の symlink (link 先は別の場所にある実体ディレクトリ)
     target = tmp_path / "out" / ".claude" / "skills"
     _seed_bundled_target(target)
     external = tmp_path / "external" / "legacy"
     external.mkdir(parents=True)
     (external / "SKILL.md").write_text("# external\n", encoding="utf-8")
-    orphan_link = target / "legacy-link"
-    orphan_link.symlink_to(external)
+    custom_link = target / "suno-preflight"
+    custom_link.symlink_to(external)
 
     # When: --prune --yes
     parser = build_parser()
     args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
     rc = args.func(args)
 
-    # Then: symlink は消えるが link 先は残る
+    # Then: symlink と link 先の両方が保護される
     assert rc == 0
-    assert not os.path.lexists(orphan_link)
+    assert os.path.lexists(custom_link)
+    assert custom_link.is_symlink()
     assert external.exists()
     assert (external / "SKILL.md").read_text(encoding="utf-8") == "# external\n"
 
 
-def test_cmd_sync_prune_removes_orphan_broken_symlink(fake_repo: Path, tmp_path: Path) -> None:
-    # Given: 孤児 broken symlink (link 先は存在しない)
+def test_cmd_sync_prune_preserves_unknown_broken_symlink(fake_repo: Path, tmp_path: Path) -> None:
+    # Given: 未知名の broken symlink (link 先は存在しない)
     target = tmp_path / "out" / ".claude" / "skills"
     _seed_bundled_target(target)
-    broken = target / "broken-link"
+    broken = target / "suno-preflight"
     broken.symlink_to(tmp_path / "does-not-exist")
     assert os.path.lexists(broken)
     assert not broken.exists()  # broken なので exists は False
@@ -994,26 +1097,26 @@ def test_cmd_sync_prune_removes_orphan_broken_symlink(fake_repo: Path, tmp_path:
     args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
     rc = args.func(args)
 
-    # Then: broken symlink も消える
+    # Then: broken symlink もローカル entry として保護される
     assert rc == 0
-    assert not os.path.lexists(broken)
+    assert os.path.lexists(broken)
 
 
-def test_cmd_sync_prune_removes_orphan_file(fake_repo: Path, tmp_path: Path) -> None:
-    # Given: 孤児が通常ファイル
+def test_cmd_sync_prune_preserves_unknown_file(fake_repo: Path, tmp_path: Path) -> None:
+    # Given: 未知名のローカル entry が通常ファイル
     target = tmp_path / "out" / ".claude" / "skills"
     _seed_bundled_target(target)
-    orphan_file = target / "analyze.txt"
-    orphan_file.write_text("legacy\n", encoding="utf-8")
+    custom_file = target / "suno-preflight"
+    custom_file.write_text("local\n", encoding="utf-8")
 
     # When: --prune --yes
     parser = build_parser()
     args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force", "--prune", "--yes"])
     rc = args.func(args)
 
-    # Then: ファイルでも削除される
+    # Then: ファイルでもローカル entry として保護される
     assert rc == 0
-    assert not orphan_file.exists()
+    assert custom_file.read_text(encoding="utf-8") == "local\n"
 
 
 def test_cmd_sync_prune_yes_with_no_orphans_is_noop(

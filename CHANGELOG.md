@@ -8,7 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `fix(streaming)`: sshd の提示 host key を Ed25519 のみに固定し、cloud-init 保守変更・host key 変更・`install_root` 変更時の Terraform plan action、OpenSSH の実ネゴシエーション、`install_root` validation 境界を実行時テストで保証した。配置ディレクトリ作成は deploy に一元化し、HCL の繰り返しブロック helper も位置情報付き共通実装へ統合した（#2033）。
+- `refactor(distrokid-helper)`: popup のローカル配信元・collection/disc selector を shadcn theme token に揃え、フォーム一括入力・停止操作を Button primitive へ移行した。既存の value・handler・disabled・accessible name と runner action は維持する（#2065）。
+
+- `docs(collection-ideate)`: stale な Analytics report を検出した際、相対 stale は `/analytics-analyze`、絶対 stale は `/analytics-collect` → `/analytics-analyze` を自動実行し、再検証成功後に同じ企画フローを継続する契約へ更新した。更新失敗時は stale report を使わず、理由と再開条件を示して停止する（#2062）。
+
+- `fix(secrets)`: 1Password CLI 2.33 が stdin を JSON item template として解釈する仕様に合わせ、stream key の edit/create を JSON template 経由に変更した。新規 PASSWORD item には必須の組み込み `password` field を含め、secret は引き続き argv や一時ファイルに露出しない（#1784）。
+
+- `feat(helper)`: `yt-collection-serve` の固定 loopback registry（heartbeat / TTL / owner takeover）と shared discovery client を追加し、suno-helper / distrokid-helper の候補履歴蓄積を廃止して、稼働中 server の動的検出と legacy storage migration に切り替えた。selector は更新完了前の古い native menu を開かず、registry の DELETE 境界と未対応 method status も公開契約どおり検証する（#1616）。
+
+- `fix(test-infra)`: dev shell 統合テストのコピー対象と teardown を最適化し、pytest の成功時 tmp と強制終了された過去 run の fixture 残骸が蓄積しないようにした（#2072）。
+
+- `fix(suno-helper)`: 連続実行開始時に collection server の疎通を確認し、無応答時は Lyrics 欄エラーより先に明示的な server エラーで停止するようにした（#2003）。
+
+- `fix(suno-helper)`: server の一時的な取得失敗時に明示選択した配信元と collection を保持する（#2002）
+
+- `fix(collection-serve)`: SIGTERM による予期せぬ停止を専用例外へ変換し、終了理由と traceback が stderr に残るようにした（#2001）。
+- `chore(suno-helper)`: React 19 と Tailwind CSS 4 の Vite plugin 構成へ移行し、`@/*` alias、Shadow DOM 対応 CSS variable theme、`cn` utility、Button primitive を含む shadcn/ui 最小基盤を追加した（#2011）。
+- `chore(distrokid-helper)`: Tailwind CSS 4 の Vite plugin 構成へ移行し、`@/*` alias、CSS variable theme、`cn` utility、Button primitive を含む shadcn/ui 最小基盤を追加した（#2012）。
+- `refactor(scripts)`: `yt-bulk-update-desc` の YouTube API `HttpError` を `YouTubeAPIError` へ変換し、metadata の意味的エラーだけを collection 単位で継続するよう例外境界を限定した。更新 API 失敗時は後続動画を処理後にドメイン例外を伝播し、破損 JSON / I/O error も fail-loud とした。tags / categoryId / defaultLanguage 欠落時の既存フォールバックは公開 `main()` 経路の回帰テストで固定した（#2032）。
+- `refactor(logging)`: `yt-bulk-update-desc` の進捗・成功・失敗出力を module logger 経由に統一した（#2031）。
 - `fix(skill-config)`: `load_skill_config("postmortem")` と `load_channel_override("postmortem")` は `config/skills/flop-analysis.yaml` を優先し、旧 `config/skills/postmortem.yaml` だけがある場合は互換読み込みして `UserWarning` で移行を案内する。利用者は `postmortem.yaml` を `flop-analysis.yaml` へリネームすることで警告を解消できる（#2022）。
+- `fix(skills)`: `yt-skills sync --prune` が upstream 管理外のローカル skill を削除しないよう、既知の旧 skill 名だけを prune 対象に限定した（#1939）。
+
 - `fix(dx)`: sandbox 化された takt worker がホーム配下（direnv allow ストア・共有 hooks）へ書込みできず direnv / lefthook セットアップが反復停滞する障害を解消した。`.takt/config.yaml` の `runtime.prepare`（`.takt/runtime-prepare.sh`）が全 worker へ `XDG_DATA_HOME=<worktree>/.takt/.runtime/data` と `YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1` を注入し、flake.nix shellHook / `.lefthook/install.sh` は同変数で lefthook install を安全にスキップ（ゲートは CI 側で担保）、`.lefthook/setup-worktree.sh` は `direnv allow` 失敗時に `nix develop` へフォールバックする（#1999）。
 - `docs(workflow)`: `/wf-new` と `/wf-next` の制作フェーズ実行を subagent 委譲契約へ統一し、親エージェントが前提確認・承認・状態更新を保持しつつ、各フェーズの成果物を絶対パス付きで受け取って検証する責務境界を明確化した。運用チートシートも同じ委譲モデルへ同期した（#1661）。
 - `docs(collection-ideate)`: stale な Analytics report 検出時に推論コスト見積もり付きの 3 択を提示し、承認時または上限内の `freshness.stale_action: auto` 時だけ `/analytics-analyze` を同一セッションで実行する導線を追加した。`/wf-new` は判定を委譲し二重ダイアログを防ぐ（#1716）。
@@ -32,6 +53,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(analytics-report)`: HTML レポートのテーマ色を `analytics-report/config.default.yaml::theme.colors` に移し、`config/skills/analytics-report.yaml` の channel override で差し替えられるようにした。未設定チャンネルでは既存パレットを維持する（#1691）
 
 ### Changed
+
+- `refactor(suno-helper)`: collection・投入方式・開始/停止・resume/retry controls を、既存 handler・disabled 条件・`data-suno-control` / aria 契約を維持したまま shadcn primitive へ移行した（#2067）。
+
+- `feat(distrokid-helper)`: 初回表示、コレクション選択、ローカル配信元選択の各タイミングで collection 一覧と release.json を自動取得し、手動の「データ取得」ボタンを廃止した（#1992）。
+
+- `feat(suno-helper)`: 初回表示、コレクション選択、ローカル配信元選択の各タイミングで collection prompts を自動取得し、手動の「データ取得」ボタンを廃止した（#1991）。
 
 - `feat(suno-helper)`: Queue mode の duration guard 全滅 entry を、全 entry の ACK 先行投入後に既存 pacing で同一 prompt から最大 2 回自動再生成する挙動を明示し、Queue mode の説明文にも自動再生成を追記した（#1775）。
 

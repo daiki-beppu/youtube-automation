@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import time
 
 from googleapiclient.errors import HttpError
@@ -29,8 +30,11 @@ from youtube_automation.utils.descriptions_md import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
 )
+from youtube_automation.utils.exceptions import YouTubeAPIError
 from youtube_automation.utils.youtube_service import get_youtube
 from youtube_automation.utils.youtube_tag import parse_youtube_tags
+
+logger = logging.getLogger(__name__)
 
 # videos.update(part="snippet") で書き込み可能な mutable フィールド。
 # videos().list(part="snippet") のレスポンスにはこれ以外に publishedAt / channelId /
@@ -91,6 +95,14 @@ def utf16_units(s: str) -> int:
     return len(s.encode("utf-16-le")) // 2
 
 
+def _execute_youtube_request(request, context: str) -> dict:
+    """YouTube API の HttpError を呼び出し文脈付きドメイン例外へ変換する."""
+    try:
+        return request.execute()
+    except HttpError as error:
+        raise YouTubeAPIError.from_http_error(error, context) from error
+
+
 def load_collection(col: str) -> dict:
     col_dir = channel_dir() / "collections" / "live" / col
     desc_md = (col_dir / "20-documentation" / "descriptions.md").read_text(encoding="utf-8")
@@ -120,6 +132,7 @@ def load_collection(col: str) -> dict:
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--only", help="comma-separated substring filter for collection names")
@@ -134,22 +147,28 @@ def main() -> None:
     for col in targets:
         try:
             payloads.append(load_collection(col))
-        except Exception as e:
-            print(f"❌ {col}: {e}")
+        # 1 collection の意味的な metadata 不備は他 collection の更新を妨げない。
+        # JSON 破損や I/O error はここで捕捉せず、修復が必要な失敗として伝播させる。
+        except RuntimeError as error:
+            logger.error("❌ %s: %s", col, error)
 
     if not payloads:
-        print("nothing to do")
+        logger.info("nothing to do")
         return
 
     yt = get_youtube()
     ids = ",".join(p["video_id"] for p in payloads)
-    current = yt.videos().list(id=ids, part="snippet").execute()
+    current = _execute_youtube_request(
+        yt.videos().list(id=ids, part="snippet"),
+        "Failed to fetch current video snippets",
+    )
     by_id = {item["id"]: item for item in current.get("items", [])}
 
+    first_update_error: YouTubeAPIError | None = None
     for p in payloads:
         item = by_id.get(p["video_id"])
         if not item:
-            print(f"❌ {p['video_id']} ({p['collection']}): not found on YouTube")
+            logger.error("❌ %s (%s): not found on YouTube", p["video_id"], p["collection"])
             continue
         old_snippet = item["snippet"]
         old_title = old_snippet.get("title", "")
@@ -161,40 +180,49 @@ def main() -> None:
 
         title_units = utf16_units(new_title)
         if title_units > 100:
-            print(
-                f"⚠️  {p['video_id']} ({p['collection']}): "
-                f"new title is {title_units} UTF-16 units (>100). "
-                f"Keeping old title; updating description only."
+            logger.warning(
+                "⚠️  %s (%s): new title is %s UTF-16 units (>100). Keeping old title; updating description only.",
+                p["video_id"],
+                p["collection"],
+                title_units,
             )
             new_title = old_title
 
-        print(f"\n{'─' * 60}")
-        print(f"🎬 {p['video_id']}  {p['collection']}")
-        print("   title (old → new):")
-        print(f"     {old_title}")
-        print(f"     {new_title}  [{title_units} units]")
-        print("   description first lines (old → new):")
+        logger.info("\n%s", "─" * 60)
+        logger.info("🎬 %s  %s", p["video_id"], p["collection"])
+        logger.info("   title (old → new):")
+        logger.info("     %s", old_title)
+        logger.info("     %s  [%s units]", new_title, title_units)
+        logger.info("   description first lines (old → new):")
         for line in old_desc.split("\n")[:6]:
-            print(f"     - {line}")
-        print("       …")
+            logger.info("     - %s", line)
+        logger.info("       …")
         for line in new_desc.split("\n")[:6]:
-            print(f"     + {line}")
+            logger.info("     + %s", line)
 
         if args.dry_run:
             continue
 
         body = build_snippet_update_body(p["video_id"], old_snippet, new_title, new_desc, new_tags)
         try:
-            yt.videos().update(part="snippet", body=body).execute()
-            print("   ✅ updated")
-        except HttpError as e:
-            print(f"   ❌ update failed: {e}")
+            _execute_youtube_request(
+                yt.videos().update(part="snippet", body=body),
+                f"Failed to update video {p['video_id']}",
+            )
+            logger.info("   ✅ updated")
+        except YouTubeAPIError as error:
+            logger.error("   ❌ update failed: %s", error)
+            if first_update_error is None:
+                first_update_error = error
         time.sleep(0.4)
 
+    if first_update_error is not None:
+        raise first_update_error
+
     if args.dry_run:
-        print(f"\n🔍 dry-run; {len(payloads)} videos would be updated")
+        logger.info("\n🔍 dry-run; %s videos would be updated", len(payloads))
     else:
-        print("\n✅ done")
+        logger.info("\n✅ done")
 
 
 if __name__ == "__main__":

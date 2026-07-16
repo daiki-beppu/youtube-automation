@@ -10,6 +10,7 @@ import { buildSelectedEntriesRunOverrides } from "../lib/run-overrides";
 import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../lib/storage";
 import { PatternList } from "./PatternList";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
+import { Button, ButtonSlot } from "./ui/button";
 import { useSunoRunner } from "./useSunoRunner";
 
 // RUN_MODES のキー集合から導出する（手書き複製だと mode 追加時に UI へ出ないまま型チェックが通る）。
@@ -26,6 +27,7 @@ export function App() {
     url,
     setUrl,
     serverSources,
+    refreshServerSources,
     collections,
     selectedCollectionId,
     selectCollection,
@@ -50,12 +52,33 @@ export function App() {
     retryPlaylist,
     retryDownload,
     adoptSelectedClips,
-    fetchData,
     run,
     stop,
   } = useSunoRunner();
   const previousEntriesRef = useRef(entries);
   const previousItemStatesRef = useRef(itemStates);
+  const [refreshingServerSources, setRefreshingServerSources] = useState(false);
+  const [serverSourcePickerOpen, setServerSourcePickerOpen] = useState(false);
+  const isRunningRef = useRef(isRunning);
+  useEffect(() => {
+    isRunningRef.current = isRunning;
+  }, [isRunning]);
+
+  const openServerSourcePicker = (): void => {
+    if (refreshingServerSources || isRunning) {
+      return;
+    }
+    setServerSourcePickerOpen(false);
+    setRefreshingServerSources(true);
+    void refreshServerSources().finally(() => {
+      setRefreshingServerSources(false);
+      if (!isRunningRef.current) {
+        setServerSourcePickerOpen(true);
+      }
+    });
+  };
+
+  const selectedServerSource = serverSources.find((source) => source.url === url) ?? serverSources[0];
 
   const visibleResumeBanner = resumeBanner && resumeBanner.failedIndex < resumeBanner.total ? resumeBanner : null;
 
@@ -139,6 +162,7 @@ export function App() {
     if (selectedEntryCount === 0) {
       return;
     }
+    setServerSourcePickerOpen(false);
     void run(
       buildSelectedEntriesRunOverrides({
         selectedEntries: resolvedSelectedEntries,
@@ -147,6 +171,7 @@ export function App() {
       }),
     );
   };
+  const serverSourcePickerVisible = serverSourcePickerOpen && !isRunning && !refreshingServerSources;
   if (reloadRequired || runnerReloadRequired) {
     return <ReloadRequiredNotice />;
   }
@@ -166,11 +191,29 @@ export function App() {
 
       <label className="flex flex-col gap-1 text-sm">
         ローカル配信元
+        <button
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={serverSourcePickerVisible}
+          disabled={isRunning || refreshingServerSources}
+          onClick={openServerSourcePicker}
+          data-suno-control="server-source-trigger"
+          className="rounded border border-gray-300 px-2 py-1 text-left"
+        >
+          {refreshingServerSources
+            ? "稼働中の配信元を更新中…"
+            : selectedServerSource
+              ? formatServerSourceLabel(selectedServerSource, "suno-helper")
+              : "配信元を選択"}
+        </button>
         <select
           value={url}
+          disabled={isRunning || refreshingServerSources}
           onChange={(e) => setUrl(e.target.value)}
           data-suno-control="server-url"
-          className="rounded border border-gray-300 px-2 py-1"
+          aria-hidden="true"
+          tabIndex={-1}
+          className="sr-only"
         >
           {serverSources.map((source) => (
             <option key={source.url} value={source.url}>
@@ -178,31 +221,55 @@ export function App() {
             </option>
           ))}
         </select>
+        {serverSourcePickerVisible && (
+          <div role="listbox" aria-label="ローカル配信元" className="rounded border border-gray-300 bg-white p-1">
+            {serverSources.map((source) => (
+              <button
+                key={source.url}
+                type="button"
+                role="option"
+                aria-selected={source.url === url}
+                disabled={isRunning || refreshingServerSources}
+                className="block w-full rounded px-2 py-1 text-left hover:bg-gray-100"
+                onClick={() => {
+                  if (isRunningRef.current || refreshingServerSources) {
+                    return;
+                  }
+                  setUrl(source.url);
+                  setServerSourcePickerOpen(false);
+                }}
+              >
+                {formatServerSourceLabel(source, "suno-helper")}
+              </button>
+            ))}
+          </div>
+        )}
       </label>
 
       <label className="flex flex-col gap-1 text-sm">
         コレクション
-        <select
-          value={selectedCollectionId}
-          onChange={(e) => selectCollection(e.target.value)}
-          data-suno-control="collection-select"
-          className="rounded border border-gray-300 px-2 py-1"
-        >
-          {collections.length === 0 && (
-            <option value="" disabled>
-              コレクションなし
-            </option>
-          )}
-          {collections.map((c) => (
-            <option key={c.id} value={c.id} disabled={c.status === "needs_prompts"}>
-              {c.status === "downloaded"
-                ? `${c.name}（完了 ${c.downloaded_count}/${c.expected_file_count ?? (c.pattern_count ?? 0) * 2}）`
-                : c.status === "ready"
-                  ? `${c.name} (${c.pattern_count})`
-                  : `${c.name}（prompts なし）`}
-            </option>
-          ))}
-        </select>
+        <ButtonSlot variant="outline" size="sm" className="w-full justify-between font-normal">
+          <select
+            value={selectedCollectionId}
+            onChange={(e) => selectCollection(e.target.value)}
+            data-suno-control="collection-select"
+          >
+            {collections.length === 0 && (
+              <option value="" disabled>
+                コレクションなし
+              </option>
+            )}
+            {collections.map((c) => (
+              <option key={c.id} value={c.id} disabled={c.status === "needs_prompts"}>
+                {c.status === "downloaded"
+                  ? `${c.name}（完了 ${c.downloaded_count}/${c.expected_file_count ?? (c.pattern_count ?? 0) * 2}）`
+                  : c.status === "ready"
+                    ? `${c.name} (${c.pattern_count})`
+                    : `${c.name}（prompts なし）`}
+              </option>
+            ))}
+          </select>
+        </ButtonSlot>
       </label>
 
       {playlistName && (
@@ -218,22 +285,18 @@ export function App() {
             <span className="font-semibold">{visibleResumeBanner.failedIndex + 1}</span> から再開しますか？
           </p>
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={acceptResume}
-              data-suno-control="resume"
-              className="rounded bg-amber-600 px-2 py-1 text-white hover:bg-amber-500"
-            >
+            <Button type="button" onClick={acceptResume} data-suno-control="resume" size="sm">
               再開
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={dismissResume}
               data-suno-control="dismiss-resume"
-              className="rounded border border-amber-400 px-2 py-1 hover:bg-amber-100"
+              variant="outline"
+              size="sm"
             >
               閉じる
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -251,13 +314,9 @@ export function App() {
             失敗してスキップされた entry:{" "}
             <span className="font-semibold">{failedEntries.map((i) => i + 1).join(", ")}</span>
           </p>
-          <button
-            type="button"
-            onClick={rerunFailed}
-            className="self-start rounded bg-red-600 px-2 py-1 text-white hover:bg-red-500"
-          >
+          <Button type="button" onClick={rerunFailed} variant="destructive" size="sm" className="self-start">
             失敗分のみ再実行
-          </button>
+          </Button>
         </div>
       )}
 
@@ -266,22 +325,29 @@ export function App() {
         {RUN_MODE_ORDER.map((id) => {
           const mode = RUN_MODES[id];
           return (
-            <label key={id} className="flex items-start gap-2">
-              <input
-                type="radio"
-                name="run-mode"
-                className="mt-1"
-                checked={runModeId === id}
-                // 実行中の切替は当該 run に効かないのに保存だけ即時反映され、次回 resume の
-                // モードを無言で変えてしまうため run 中は無効化する (#1586 review)。
-                disabled={isRunning}
-                onChange={() => setRunMode(id)}
-              />
-              <span className="flex flex-col">
-                <span className="font-medium">{mode.label}</span>
-                <span className="text-xs text-gray-500">{mode.riskNote}</span>
-              </span>
-            </label>
+            <ButtonSlot
+              key={id}
+              variant={runModeId === id ? "default" : "outline"}
+              size="sm"
+              className="h-auto w-full justify-start whitespace-normal p-2"
+            >
+              <label className="flex items-start gap-2">
+                <input
+                  type="radio"
+                  name="run-mode"
+                  className="mt-1"
+                  checked={runModeId === id}
+                  // 実行中の切替は当該 run に効かないのに保存だけ即時反映され、次回 resume の
+                  // モードを無言で変えてしまうため run 中は無効化する (#1586 review)。
+                  disabled={isRunning}
+                  onChange={() => setRunMode(id)}
+                />
+                <span className="flex flex-col">
+                  <span className="font-medium">{mode.label}</span>
+                  <span className="text-xs text-gray-500">{mode.riskNote}</span>
+                </span>
+              </label>
+            </ButtonSlot>
           );
         })}
       </fieldset>
@@ -320,32 +386,26 @@ export function App() {
       </label>
 
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => void fetchData()}
-          data-suno-control="fetch-data"
-          className="flex-1 rounded bg-gray-800 px-2 py-1 text-sm text-white hover:bg-gray-700"
-        >
-          データ取得
-        </button>
-        <button
+        <Button
           type="button"
           onClick={runSelectedEntries}
           disabled={!canRunSelectedEntries}
           data-suno-control="run"
-          className="flex-1 rounded bg-blue-600 px-2 py-1 text-sm text-white hover:bg-blue-500 disabled:opacity-40"
+          size="sm"
+          className="flex-1"
         >
           {runButtonLabel}
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={() => void stop()}
           disabled={!isRunning}
           data-suno-control="stop"
-          className="rounded bg-red-600 px-2 py-1 text-sm text-white hover:bg-red-500 disabled:opacity-40"
+          variant="destructive"
+          size="sm"
         >
           停止
-        </button>
+        </Button>
       </div>
 
       {!isRunning && selectedCollectionId && (
@@ -360,24 +420,28 @@ export function App() {
           </button>
           <div className="flex gap-2">
             {playlistName && (
-              <button
+              <Button
                 type="button"
                 onClick={() => void retryPlaylist()}
                 data-suno-control="retry-playlist"
-                className="flex-1 rounded border border-amber-500 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50"
+                variant="outline"
+                size="sm"
+                className="flex-1"
               >
                 Playlist から再開
-              </button>
+              </Button>
             )}
-            <button
+            <Button
               type="button"
               onClick={() => void retryDownload()}
               disabled={!selectedCollectionId}
               data-suno-control="retry-download"
-              className="flex-1 rounded border border-green-500 px-2 py-1 text-xs text-green-700 hover:bg-green-50 disabled:opacity-40"
+              variant="outline"
+              size="sm"
+              className="flex-1"
             >
               Download から再開
-            </button>
+            </Button>
           </div>
         </div>
       )}

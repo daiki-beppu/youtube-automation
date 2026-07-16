@@ -766,6 +766,34 @@ def test_distrokid_skill_and_example_document_single_and_multi_disc_naming() -> 
     assert example["multi_disc"]["discs"][1]["slug"] == "disc2-coding-focus-vol2"
 
 
+def test_distrokid_helper_docs_describe_dynamic_selector_fetch_contract() -> None:
+    skill = _read(".claude/skills/distrokid-helper/SKILL.md")
+    readme = _read("extensions/distrokid-helper/README.md")
+
+    for text in (skill, readme):
+        assert "ローカル配信元" in text
+        assert "selector" in text
+        assert "動的検出" in text
+        assert "候補履歴は保存しない" in text or "候補履歴は保存せず" in text
+        assert "自動取得" in text
+        assert "selector を開く" in text
+        assert "更新完了後" in text or "候補更新後" in text
+        assert "データ取得" not in text
+
+    assert "popup のサーバー URL" not in skill
+    assert "サーバー URL に `http://localhost:7874` を設定" not in skill
+
+
+def test_suno_helper_docs_use_the_visible_server_source_picker_contract() -> None:
+    skill = _read(".claude/skills/suno-helper/SKILL.md")
+    readme = _read("extensions/suno-helper/README.md")
+
+    for text in (skill, readme):
+        assert '[data-suno-control="server-source-trigger"]' in text
+        assert 'role="option"' in text
+        assert '[data-suno-control="server-url"]' not in text
+
+
 def test_community_post_declares_raw_json_loader_exception() -> None:
     text = _read(".claude/skills/community-post/SKILL.md")
 

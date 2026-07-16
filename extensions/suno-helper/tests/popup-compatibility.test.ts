@@ -38,9 +38,10 @@ const downloadFormatMocks = vi.hoisted(() => ({
 }));
 
 const serverSourcesMocks = vi.hoisted(() => ({
-  readServerSources: vi.fn(),
-  rememberServerSource: vi.fn(),
+  migrateServerSourcesStorage: vi.fn(async () => undefined),
 }));
+
+const legacySourceState = vi.hoisted(() => ({ present: true }));
 
 const resumeStateMocks = vi.hoisted(() => ({
   readResumeState: vi.fn(async () => null),
@@ -64,8 +65,7 @@ vi.mock("../lib/storage", () => ({
   serverUrlItem: storageMocks,
   downloadFormatItem: downloadFormatMocks,
   readDownloadFormat: vi.fn(() => downloadFormatMocks.getValue()),
-  readServerSources: serverSourcesMocks.readServerSources,
-  rememberServerSource: serverSourcesMocks.rememberServerSource,
+  migrateServerSourcesStorage: serverSourcesMocks.migrateServerSourcesStorage,
 }));
 
 vi.mock("../lib/messaging", () => messagingMocks);
@@ -101,9 +101,21 @@ function defaultSendMessage(message: string, payload?: Record<string, string>): 
       channel_short: "local",
       hostname: "localhost",
       port: 7873,
-      base_url: BASE_URL,
+      base_url: payload?.baseUrl ?? BASE_URL,
       label: "localhost",
     });
+  }
+  if (message === "discoverServerSources") {
+    return Promise.resolve([
+      {
+        id: "youtube-automation-localhost-7873",
+        label: "YouTube Automation (default)",
+        url: "http://youtube-automation.localhost:7873",
+      },
+      { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
+      { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
+      { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
+    ]);
   }
   if (message === "fetchCollections") {
     return readJson(`${payload?.baseUrl}/collections`);
@@ -215,6 +227,12 @@ function expectControl(container: HTMLElement, control: string): HTMLElement {
   return element!;
 }
 
+function expectShadcnControl(element: HTMLElement, variant: "default" | "destructive" | "outline"): void {
+  expect(element.dataset.slot).toBe("button");
+  expect(element.dataset.variant).toBe(variant);
+  expect(element.dataset.size).toBe("sm");
+}
+
 async function waitFor(assertion: () => void): Promise<void> {
   for (let i = 0; i < 20; i += 1) {
     try {
@@ -247,12 +265,10 @@ describe("Suno popup compatibility check", () => {
     downloadFormatMocks.setValue.mockResolvedValue(undefined);
     presetStateMocks.readRunModeId.mockResolvedValue("serial");
     presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
-    serverSourcesMocks.readServerSources.mockResolvedValue([
-      { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
-      { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
-      { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
-    ]);
-    serverSourcesMocks.rememberServerSource.mockResolvedValue([]);
+    serverSourcesMocks.migrateServerSourcesStorage.mockImplementation(async () => {
+      legacySourceState.present = false;
+    });
+    legacySourceState.present = true;
     messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
     messagingMocks.progressHandler = undefined;
     messagingMocks.onMessage.mockImplementation(
@@ -306,18 +322,21 @@ describe("Suno popup compatibility check", () => {
     resumeStateMocks.writeResumeState.mockResolvedValue(undefined);
     presetStateMocks.readRunModeId.mockResolvedValue("serial");
     presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
-    serverSourcesMocks.readServerSources.mockResolvedValue([]);
-    serverSourcesMocks.rememberServerSource.mockResolvedValue([]);
+    serverSourcesMocks.migrateServerSourcesStorage.mockResolvedValue(undefined);
   });
 
   it("ローカル配信元 option は URL を表示せず、URL value はデータ取得先として維持する", async () => {
     const select = expectControl(container, "server-url") as HTMLSelectElement;
 
     await waitFor(() => {
-      expect(select.options).toHaveLength(3);
+      expect(select.options).toHaveLength(4);
     });
 
     expect(Array.from(select.options, (option) => ({ text: option.text, value: option.value }))).toEqual([
+      {
+        text: "YouTube Automation (default) | suno-helper",
+        value: "http://youtube-automation.localhost:7873",
+      },
       { text: "ABYSS MI | suno-helper", value: BASE_URL },
       { text: "localhost fallback 7877 | suno-helper", value: FALLBACK_URL },
       { text: "localhost changed | suno-helper", value: `${BASE_URL}/changed` },
@@ -332,6 +351,24 @@ describe("Suno popup compatibility check", () => {
     expect(container.textContent).not.toContain("Balanced");
     expect(container.textContent).not.toContain("Safe");
     expect(container.querySelector('input[name="speed-preset"]')).toBeNull();
+  });
+
+  it("collection・投入方式・開始/停止 control を shadcn primitive で描画し、実操作要素の契約を維持する", () => {
+    const collectionSelect = expectControl(container, "collection-select");
+    expect(collectionSelect).toBeInstanceOf(HTMLSelectElement);
+    expectShadcnControl(collectionSelect, "outline");
+
+    const serialMode = radioByLabel(container, "安全モード");
+    const queueMode = radioByLabel(container, "高速モード");
+    expect(serialMode.name).toBe("run-mode");
+    expect(serialMode.checked).toBe(true);
+    expect(queueMode.name).toBe("run-mode");
+    expect(queueMode.checked).toBe(false);
+    expectShadcnControl(serialMode.closest<HTMLElement>('[data-slot="button"]')!, "default");
+    expectShadcnControl(queueMode.closest<HTMLElement>('[data-slot="button"]')!, "outline");
+
+    expectShadcnControl(expectControl(container, "run"), "default");
+    expectShadcnControl(expectControl(container, "stop"), "destructive");
   });
 
   it("progress handler が DONE + duration-check log を受けると live status を更新する", async () => {
@@ -374,9 +411,11 @@ describe("Suno popup compatibility check", () => {
     expect(panel?.dataset.sunoCollectionId).toBe("");
     expect(panel?.dataset.sunoEntryCount).toBe("0");
     expect(panel?.dataset.sunoSelectedEntryCount).toBe("0");
-    for (const control of ["server-url", "collection-select", "fetch-data", "run", "stop"]) {
+    for (const control of ["server-url", "collection-select", "run", "stop"]) {
       expectControl(container, control);
     }
+    expect(container.querySelector('[data-suno-control="fetch-data"]')).toBeNull();
+    expect(container.textContent).not.toContain("データ取得");
 
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
@@ -398,10 +437,6 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(expectControl(container, "server-url") as HTMLSelectElement, BASE_URL);
     });
-    await act(async () => {
-      expectControl(container, "fetch-data").click();
-    });
-
     await waitFor(() => {
       expect(container.textContent).toContain("2 パターンを取得しました。");
     });
@@ -419,7 +454,7 @@ describe("Suno popup compatibility check", () => {
     }
   });
 
-  it("データ取得中と取得失敗を root phase と status 属性で公開する", async () => {
+  it("配信元選択時の自動取得中と取得失敗を root phase と status 属性で公開し、select を操作可能に保つ", async () => {
     const versionResponse = deferred<Response>();
     const panel = container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]');
     expect(panel).not.toBeNull();
@@ -430,10 +465,6 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(expectControl(container, "server-url") as HTMLSelectElement, BASE_URL);
     });
-    await act(async () => {
-      expectControl(container, "fetch-data").click();
-    });
-
     await waitFor(() => {
       expect(panel?.dataset.sunoPhase).toBe("loading");
       expect(panel?.dataset.sunoRunning).toBe("false");
@@ -450,10 +481,12 @@ describe("Suno popup compatibility check", () => {
       expect(panel?.dataset.sunoError).toBe("true");
       expect(container.querySelector('[role="status"]')?.getAttribute("data-suno-status")).toBe("error");
       expect(container.textContent).toContain("取得失敗: HTTP 500");
+      expect(expectControl(container, "server-url").getAttribute("disabled")).toBeNull();
+      expect(expectControl(container, "collection-select").getAttribute("disabled")).toBeNull();
     });
   });
 
-  it("データ取得時に manifest version で /version を先に呼び、非互換警告を表示して prompts 取得を継続する", async () => {
+  it("配信元選択時に manifest version で /version を先に呼び、非互換警告を表示して prompts 取得を継続する", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: "0.2.0" }))
       .mockResolvedValueOnce(
@@ -471,9 +504,6 @@ describe("Suno popup compatibility check", () => {
 
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
-    });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
     });
 
     await waitFor(() => {
@@ -507,9 +537,6 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
 
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
@@ -523,7 +550,44 @@ describe("Suno popup compatibility check", () => {
     );
   });
 
-  it("dir mode で URL 入力後にデータ取得すると collection endpoint の entries を run payload に渡す", async () => {
+  it("fetchServerInfo 非対応の旧サーバーでも選択 URL のまま自動取得を継続する", async () => {
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "fetchServerInfo") {
+        return Promise.reject(new Error("HTTP 404"));
+      }
+      return defaultSendMessage(message, payload);
+    });
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(404, {}))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-legacy-collection",
+            name: "legacy-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "legacy", style: "lofi", lyrics: "" }]));
+
+    await act(async () => {
+      setSelectValue(expectControl(container, "server-url") as HTMLSelectElement, FALLBACK_URL);
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+    expect(storageMocks.setValue).toHaveBeenLastCalledWith(FALLBACK_URL);
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("fetchCollections", { baseUrl: FALLBACK_URL });
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("fetchCollectionPromptResponse", {
+      baseUrl: FALLBACK_URL,
+      collectionId: "20260601-clm-legacy-collection",
+    });
+  });
+
+  it("dir mode で配信元を選択すると collection endpoint の entries を run payload に渡す", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     const runResponse = deferred<unknown>();
     const outlierOption = checkboxByLabel(container, "異常値の曲を再生成する");
@@ -548,9 +612,6 @@ describe("Suno popup compatibility check", () => {
 
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
-    });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
     });
 
     await waitFor(() => {
@@ -634,9 +695,6 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -645,6 +703,8 @@ describe("Suno popup compatibility check", () => {
       radioByLabel(container, "高速モード").click();
     });
     expect(presetStateMocks.writeRunModeId).toHaveBeenCalledWith("queue");
+    expectShadcnControl(radioByLabel(container, "安全モード").closest<HTMLElement>('[data-slot="button"]')!, "outline");
+    expectShadcnControl(radioByLabel(container, "高速モード").closest<HTMLElement>('[data-slot="button"]')!, "default");
 
     messagingMocks.sendMessage.mockClear();
     await act(async () => {
@@ -710,9 +770,6 @@ describe("Suno popup compatibility check", () => {
     });
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
-    });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
     });
 
     await waitFor(() => {
@@ -795,12 +852,10 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
     await waitFor(() => {
       expect(buttonByText(container, "失敗分のみ再実行")).toBeTruthy();
     });
+    expectShadcnControl(buttonByText(container, "失敗分のみ再実行"), "destructive");
 
     messagingMocks.sendMessage.mockClear();
     await act(async () => {
@@ -887,9 +942,6 @@ describe("Suno popup compatibility check", () => {
 
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
-    });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
     });
 
     await waitFor(() => {
@@ -1060,9 +1112,6 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -1111,9 +1160,6 @@ describe("Suno popup compatibility check", () => {
 
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
-    });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
     });
 
     await waitFor(() => {
@@ -1165,9 +1211,6 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -1186,7 +1229,7 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
-  it("dir mode でデータ取得後に collection を変更すると再取得まで連続実行できない", async () => {
+  it("collection を変更するとフル取得を自動実行し entries と実行対象を更新する", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
@@ -1207,13 +1250,35 @@ describe("Suno popup compatibility check", () => {
           },
         ]),
       )
-      .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]))
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+          {
+            id: "20260602-clm-theme-b-collection",
+            name: "theme-b-collection",
+            status: "ready",
+            pattern_count: 2,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          { name: "b1", style: "jazz", lyrics: "" },
+          { name: "b2", style: "ambient", lyrics: "" },
+        ]),
+      );
 
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
-    });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
     });
 
     await waitFor(() => {
@@ -1222,16 +1287,142 @@ describe("Suno popup compatibility check", () => {
 
     messagingMocks.sendMessage.mockClear();
     await act(async () => {
-      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, "20260602-clm-theme-b-collection");
+      setSelectValue(
+        expectControl(container, "collection-select") as HTMLSelectElement,
+        "20260602-clm-theme-b-collection",
+      );
     });
 
-    const runButton = buttonByText(container, "全パターンを連続実行");
-    expect(runButton.disabled).toBe(true);
+    await waitFor(() => {
+      expect(container.textContent).toContain("2 パターンを取得しました。");
+      expect(container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')?.dataset.sunoCollectionId).toBe(
+        "20260602-clm-theme-b-collection",
+      );
+      expect(container.querySelectorAll("[data-suno-entry-index]")).toHaveLength(2);
+    });
+    expect(buttonByText(container, "全パターンを連続実行").disabled).toBe(false);
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("fetchServerInfo", { baseUrl: BASE_URL });
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("fetchCompatibilityWarning", {
+      baseUrl: BASE_URL,
+      extensionVersion: MANIFEST_VERSION,
+    });
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("fetchCollections", { baseUrl: BASE_URL });
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("fetchCollectionPromptResponse", {
+      baseUrl: BASE_URL,
+      collectionId: "20260602-clm-theme-b-collection",
+    });
+  });
+
+  it("collection 変更時に配信元が停止していたら起動確認を表示し、select を操作可能に保つ", async () => {
+    const collections = [
+      {
+        id: "20260601-clm-theme-a-collection",
+        name: "theme-a-collection",
+        status: "ready",
+        pattern_count: 1,
+        downloaded_count: 0,
+      },
+      {
+        id: "20260602-clm-theme-b-collection",
+        name: "theme-b-collection",
+        status: "ready",
+        pattern_count: 1,
+        downloaded_count: 0,
+      },
+    ];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(jsonResponse(200, collections))
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "a", style: "lofi", lyrics: "" }]))
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(jsonResponse(500, { error: "server down" }));
 
     await act(async () => {
-      runButton.click();
+      setSelectValue(expectControl(container, "server-url") as HTMLSelectElement, BASE_URL);
     });
-    expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("run", expect.anything());
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    await act(async () => {
+      setSelectValue(
+        expectControl(container, "collection-select") as HTMLSelectElement,
+        "20260602-clm-theme-b-collection",
+      );
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("yt-collection-serve が起動しているか確認してください。");
+      expect(expectControl(container, "server-url").getAttribute("disabled")).toBeNull();
+      expect(expectControl(container, "collection-select").getAttribute("disabled")).toBeNull();
+    });
+  });
+
+  it("連続する collection 選択では遅れて完了した旧 prompts が最新 entries を上書きしない", async () => {
+    const stalePrompts = deferred<Response>();
+    const collections = [
+      {
+        id: "20260601-clm-theme-a-collection",
+        name: "theme-a-collection",
+        status: "ready",
+        pattern_count: 1,
+        downloaded_count: 0,
+      },
+      {
+        id: "20260602-clm-theme-b-collection",
+        name: "theme-b-collection",
+        status: "ready",
+        pattern_count: 1,
+        downloaded_count: 0,
+      },
+    ];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(jsonResponse(200, collections))
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "initial-a", style: "lofi", lyrics: "" }]))
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(jsonResponse(200, collections))
+      .mockReturnValueOnce(stalePrompts.promise)
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(jsonResponse(200, collections))
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "latest-a", style: "ambient", lyrics: "" }]));
+
+    await act(async () => {
+      setSelectValue(expectControl(container, "server-url") as HTMLSelectElement, BASE_URL);
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("initial-a");
+    });
+
+    await act(async () => {
+      setSelectValue(
+        expectControl(container, "collection-select") as HTMLSelectElement,
+        "20260602-clm-theme-b-collection",
+      );
+    });
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(6);
+    });
+    await act(async () => {
+      setSelectValue(
+        expectControl(container, "collection-select") as HTMLSelectElement,
+        "20260601-clm-theme-a-collection",
+      );
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("latest-a");
+    });
+
+    await act(async () => {
+      stalePrompts.resolve(jsonResponse(200, [{ name: "stale-b", style: "jazz", lyrics: "" }]));
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("latest-a");
+      expect(container.textContent).not.toContain("stale-b");
+      expect(container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')?.dataset.sunoCollectionId).toBe(
+        "20260601-clm-theme-a-collection",
+      );
+    });
   });
 
   it("clip ID が無い再開時に Suno 上の選択中 clip を採用して resume state に保存する", async () => {
@@ -1264,9 +1455,6 @@ describe("Suno popup compatibility check", () => {
 
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
-    });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
     });
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
@@ -1338,9 +1526,6 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -1351,6 +1536,8 @@ describe("Suno popup compatibility check", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("選択中の曲 2 件を採用しました。");
     });
+    expectShadcnControl(expectControl(container, "retry-playlist"), "outline");
+    expectShadcnControl(expectControl(container, "retry-download"), "outline");
 
     messagingMocks.sendMessage.mockClear();
     await act(async () => {
@@ -1406,9 +1593,6 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -1461,9 +1645,6 @@ describe("Suno popup compatibility check", () => {
 
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
-    });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
     });
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
@@ -1532,8 +1713,11 @@ describe("Suno popup compatibility check", () => {
   it.each([
     ["server URL", () => storageMocks.getValue.mockRejectedValueOnce(new Error("Extension context invalidated."))],
     [
-      "server sources",
-      () => serverSourcesMocks.readServerSources.mockRejectedValueOnce(new Error("Extension context invalidated.")),
+      "server source migration",
+      () =>
+        serverSourcesMocks.migrateServerSourcesStorage.mockRejectedValueOnce(
+          new Error("Extension context invalidated."),
+        ),
     ],
     [
       "run mode",
@@ -1571,10 +1755,6 @@ describe("Suno popup compatibility check", () => {
     const serverSelect = expectControl(container, "server-url") as HTMLSelectElement;
     setSelectValue(serverSelect, BASE_URL);
 
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
-
     await waitFor(() => {
       expect(container.textContent).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
     });
@@ -1590,10 +1770,6 @@ describe("Suno popup compatibility check", () => {
     });
     const serverSelect = expectControl(container, "server-url") as HTMLSelectElement;
     setSelectValue(serverSelect, BASE_URL);
-
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
 
     await waitFor(() => {
       expect(container.textContent).toContain(EXTENSION_RELOAD_REQUIRED_MESSAGE);
@@ -1739,9 +1915,6 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -1824,9 +1997,6 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
 
     await waitFor(() => {
       expect(container.textContent).not.toContain("全 entry 投入済みです。playlist 追加から再開しますか？");
@@ -1896,16 +2066,13 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
 
     await waitFor(() => {
       expect(container.textContent).toContain("前回の実行が中断されました。");
       expect(container.textContent).toContain("取得失敗:");
     });
-    expectControl(container, "resume");
-    expectControl(container, "dismiss-resume");
+    expectShadcnControl(expectControl(container, "resume"), "default");
+    expectShadcnControl(expectControl(container, "dismiss-resume"), "outline");
 
     messagingMocks.sendMessage.mockClear();
     await act(async () => {
@@ -1913,7 +2080,9 @@ describe("Suno popup compatibility check", () => {
     });
 
     expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("run", expect.anything());
-    expect(container.textContent).toContain("再開に必要なパターンが未取得です。");
+    expect(container.textContent).toContain(
+      "再開に必要なパターンが未取得です。ページを再読み込みしてから再試行してください。",
+    );
     expect(container.textContent).toContain("前回の実行が中断されました。");
   });
 
@@ -1937,9 +2106,6 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -1950,7 +2116,9 @@ describe("Suno popup compatibility check", () => {
     });
 
     expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("retryPlaylist", expect.anything());
-    expect(container.textContent).toContain("playlist 再開に必要な clip ID がありません。");
+    expect(container.textContent).toContain(
+      "playlist 再開に必要な clip ID がありません。ページを再読み込みしてから再試行してください。",
+    );
   });
 
   it("Playlist から再開の送信に失敗したらエラーを表示して再試行可能にする", async () => {
@@ -1985,9 +2153,6 @@ describe("Suno popup compatibility check", () => {
 
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
-    });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
     });
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
@@ -2031,9 +2196,6 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -2044,10 +2206,46 @@ describe("Suno popup compatibility check", () => {
     });
 
     expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("retryDownload", expect.anything());
-    expect(container.textContent).toContain("ダウンロード再開に必要な clip ID がありません。");
+    expect(container.textContent).toContain(
+      "ダウンロード再開に必要な clip ID がありません。ページを再読み込みしてから再試行してください。",
+    );
   });
 
-  it("dir mode でデータ取得後に URL を変更すると再取得まで連続実行できない", async () => {
+  it("期待 clip 数を解決できない場合は採用を送らずページ再読み込みを案内する", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-empty-collection",
+            name: "empty-collection",
+            status: "ready",
+            pattern_count: 0,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, []));
+
+    await act(async () => {
+      setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("0 パターンを取得しました。");
+    });
+
+    messagingMocks.sendMessage.mockClear();
+    await act(async () => {
+      buttonByText(container, "選択中の曲を採用").click();
+    });
+
+    expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("adoptSelectedClips", expect.anything());
+    expect(container.textContent).toContain(
+      "期待 clip 数を解決できません。ページを再読み込みしてから再試行してください。",
+    );
+  });
+
+  it("ローカル配信元を変更すると新しい URL の一覧と prompts へ自動で切り替わる", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
@@ -2061,13 +2259,28 @@ describe("Suno popup compatibility check", () => {
           },
         ]),
       )
-      .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]));
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }]))
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260602-clm-new-source-collection",
+            name: "new-source-collection",
+            status: "ready",
+            pattern_count: 2,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          { name: "new-1", style: "jazz", lyrics: "" },
+          { name: "new-2", style: "ambient", lyrics: "" },
+        ]),
+      );
 
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
-    });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
     });
 
     await waitFor(() => {
@@ -2079,13 +2292,116 @@ describe("Suno popup compatibility check", () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, `${BASE_URL}/changed`);
     });
 
-    const runButton = buttonByText(container, "全パターンを連続実行");
-    expect(runButton.disabled).toBe(true);
+    await waitFor(() => {
+      expect(container.textContent).toContain("2 パターンを取得しました。");
+      expect(container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')?.dataset.sunoCollectionId).toBe(
+        "20260602-clm-new-source-collection",
+      );
+      expect(container.querySelectorAll("[data-suno-entry-index]")).toHaveLength(2);
+    });
+    expect(buttonByText(container, "全パターンを連続実行").disabled).toBe(false);
+    expect(storageMocks.setValue).toHaveBeenLastCalledWith(`${BASE_URL}/changed`);
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("fetchCollections", { baseUrl: `${BASE_URL}/changed` });
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("fetchCollectionPromptResponse", {
+      baseUrl: `${BASE_URL}/changed`,
+      collectionId: "20260602-clm-new-source-collection",
+    });
+  });
+
+  it("配信元の一時失敗では明示した配信元と collection の表示を保持する", async () => {
+    const collections = [
+      {
+        id: "20260601-clm-theme-a-collection",
+        name: "theme-a-collection",
+        status: "ready",
+        pattern_count: 1,
+        downloaded_count: 0,
+      },
+    ];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(jsonResponse(200, collections))
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "initial", style: "lofi", lyrics: "" }]))
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "fetchServerInfo" && payload?.baseUrl === FALLBACK_URL) {
+        return Promise.resolve({ base_url: "http://127.0.0.1:7877", label: "fallback" });
+      }
+      return defaultSendMessage(message, payload);
+    });
 
     await act(async () => {
-      runButton.click();
+      setSelectValue(expectControl(container, "server-url") as HTMLSelectElement, BASE_URL);
     });
-    expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith("run", expect.anything());
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    await act(async () => {
+      setSelectValue(expectControl(container, "server-url") as HTMLSelectElement, FALLBACK_URL);
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("取得失敗: Failed to fetch");
+    });
+    expect((expectControl(container, "server-url") as HTMLSelectElement).value).toBe(FALLBACK_URL);
+    expect(container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')?.dataset.sunoCollectionId).toBe(
+      "20260601-clm-theme-a-collection",
+    );
+    expect(container.textContent).toContain("initial");
+  });
+
+  it("連続する配信元変更では遅い旧保存が最新 URL・配信元一覧・entries を上書きしない", async () => {
+    const firstSave = deferred<undefined>();
+    let saveCount = 0;
+    storageMocks.setValue.mockImplementation(() => {
+      saveCount += 1;
+      if (saveCount === 1) {
+        return firstSave.promise;
+      }
+      return Promise.resolve(undefined);
+    });
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260602-clm-new-source-collection",
+            name: "new-source-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "new-source", style: "jazz", lyrics: "" }]));
+
+    const serverSelect = expectControl(container, "server-url") as HTMLSelectElement;
+    await act(async () => {
+      setSelectValue(serverSelect, BASE_URL);
+    });
+    await waitFor(() => {
+      expect(storageMocks.setValue).toHaveBeenCalledWith(BASE_URL);
+    });
+
+    await act(async () => {
+      setSelectValue(serverSelect, `${BASE_URL}/changed`);
+    });
+    await act(async () => {
+      firstSave.resolve(undefined);
+    });
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+    expect(storageMocks.setValue).toHaveBeenLastCalledWith(`${BASE_URL}/changed`);
+    expect(serverSelect.value).toBe(`${BASE_URL}/changed`);
+    expect(Array.from(serverSelect.options, (option) => option.value)).toContain(`${BASE_URL}/changed`);
+    expect(container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')?.dataset.sunoCollectionId).toBe(
+      "20260602-clm-new-source-collection",
+    );
+    expect(container.textContent).toContain("new-source");
   });
 
   it("dir mode の collection 一覧に実行可能候補が無い場合は legacy endpoint へフォールバックしない", async () => {
@@ -2095,9 +2411,6 @@ describe("Suno popup compatibility check", () => {
 
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
-    });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
     });
 
     await waitFor(() => {
@@ -2116,9 +2429,6 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
 
     await waitFor(() => {
       expect(container.textContent).toContain("取得失敗: HTTP 404");
@@ -2128,7 +2438,7 @@ describe("Suno popup compatibility check", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
   });
 
-  it("popup 起動時の collection 一覧同期は status ベースの新スキーマで動作する (#1216)", async () => {
+  it("popup 起動時に保存 URL から一覧と選択 collection の prompts まで一度だけ自動取得する", async () => {
     act(() => {
       root.unmount();
     });
@@ -2136,28 +2446,37 @@ describe("Suno popup compatibility check", () => {
     fetchMock.mockReset();
     storageMocks.getValue.mockResolvedValue(BASE_URL);
     messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(200, [
-        {
-          id: "20260601-clm-theme-a-collection",
-          name: "theme-a-collection",
-          status: "ready",
-          pattern_count: 1,
-          downloaded_count: 0,
-        },
-      ]),
-    );
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "mounted", style: "lofi", lyrics: "" }]));
 
     await act(async () => {
       root.render(createElement(App));
     });
 
     await waitFor(() => {
-      expect(container.textContent).toContain("コレクション");
+      expect(container.textContent).toContain("1 パターンを取得しました。");
     });
-    expect(container.textContent).not.toContain("コレクション一覧取得失敗");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/collections`);
+    expect(buttonByText(container, "全パターンを連続実行").disabled).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      `${BASE_URL}/collections/20260601-clm-theme-a-collection/suno/prompts.json`,
+    );
+    expect(messagingMocks.sendMessage.mock.calls.filter(([message]) => message === "fetchCollections")).toHaveLength(1);
   });
 
   it("popup 起動時の collection 一覧同期は downloaded collection を完了件数付きで表示する", async () => {
@@ -2168,24 +2487,27 @@ describe("Suno popup compatibility check", () => {
     fetchMock.mockReset();
     storageMocks.getValue.mockResolvedValue(BASE_URL);
     messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(200, [
-        {
-          id: "20260601-clm-done-collection",
-          name: "done-collection",
-          status: "downloaded",
-          pattern_count: 2,
-          downloaded_count: 4,
-        },
-        {
-          id: "20260601-clm-ready-collection",
-          name: "ready-collection",
-          status: "ready",
-          pattern_count: 1,
-          downloaded_count: 0,
-        },
-      ]),
-    );
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-done-collection",
+            name: "done-collection",
+            status: "downloaded",
+            pattern_count: 2,
+            downloaded_count: 4,
+          },
+          {
+            id: "20260601-clm-ready-collection",
+            name: "ready-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, [{ name: "done", style: "lofi", lyrics: "" }]));
 
     await act(async () => {
       root.render(createElement(App));
@@ -2209,9 +2531,6 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       setSelectValue(container.querySelector<HTMLSelectElement>("select")!, BASE_URL);
     });
-    await act(async () => {
-      buttonByText(container, "データ取得").click();
-    });
 
     await waitFor(() => {
       expect(container.textContent).toContain("取得失敗: Failed to fetch");
@@ -2219,5 +2538,281 @@ describe("Suno popup compatibility check", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
     expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
+  });
+
+  it("should migrate before initial discovery and replace stopped candidates before the selector opens", async () => {
+    const defaultSource = {
+      id: "youtube-automation-localhost-7873",
+      label: "YouTube Automation (default)",
+      url: "http://youtube-automation.localhost:7873",
+    };
+    const oldSource = { id: "old-9001", label: "Old", url: "http://old.localhost:9001" };
+    const newSource = { id: "new-49152", label: "New", url: "http://new.localhost:49152" };
+    const events: string[] = [];
+    serverSourcesMocks.migrateServerSourcesStorage.mockImplementation(async () => {
+      events.push("migration");
+    });
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "discoverServerSources") {
+        events.push("discovery");
+        const discoveryCount = events.filter((event) => event === "discovery").length;
+        return Promise.resolve(discoveryCount === 1 ? [defaultSource, oldSource] : [defaultSource, newSource]);
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await rerenderApp();
+    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    await waitFor(() => expect(Array.from(select.options, ({ value }) => value)).toContain(oldSource.url));
+    expect(events.slice(0, 2)).toEqual(["migration", "discovery"]);
+
+    await act(async () => {
+      (expectControl(container, "server-source-trigger") as HTMLButtonElement).click();
+    });
+    await waitFor(() => expect(Array.from(select.options, ({ value }) => value)).toContain(newSource.url));
+    expect(Array.from(select.options, ({ value }) => value)).toEqual([defaultSource.url, newSource.url]);
+
+    await act(async () => (expectControl(container, "server-source-trigger") as HTMLButtonElement).click());
+    await waitFor(() => expect(events.filter((event) => event === "discovery")).toHaveLength(3));
+  });
+
+  it("should run discovery once when opening an unfocused selector with the mouse", async () => {
+    await rerenderApp();
+    const initialCalls = messagingMocks.sendMessage.mock.calls.filter(
+      ([message]) => message === "discoverServerSources",
+    ).length;
+
+    await act(async () => {
+      (expectControl(container, "server-source-trigger") as HTMLButtonElement).click();
+    });
+
+    await waitFor(() =>
+      expect(
+        messagingMocks.sendMessage.mock.calls.filter(([message]) => message === "discoverServerSources"),
+      ).toHaveLength(initialCalls + 1),
+    );
+  });
+
+  it("should refresh and open the selector while the initial collection fetch is still pending", async () => {
+    const initialCollections = deferred<unknown>();
+    const defaultSource = {
+      id: "youtube-automation-localhost-7873",
+      label: "YouTube Automation (default)",
+      url: "http://youtube-automation.localhost:7873",
+    };
+    const liveSource = { id: "live", label: "Live", url: "http://live.localhost:49152" };
+    storageMocks.getValue.mockResolvedValue(defaultSource.url);
+    let discoveryCount = 0;
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "discoverServerSources") {
+        discoveryCount += 1;
+        return Promise.resolve(discoveryCount === 1 ? [defaultSource] : [defaultSource, liveSource]);
+      }
+      if (message === "fetchCompatibilityWarning") {
+        return Promise.resolve("");
+      }
+      if (message === "fetchCollections") {
+        return initialCollections.promise;
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await rerenderApp();
+    await waitFor(() =>
+      expect(messagingMocks.sendMessage).toHaveBeenCalledWith("fetchCollections", { baseUrl: defaultSource.url }),
+    );
+
+    await act(async () => {
+      (expectControl(container, "server-source-trigger") as HTMLButtonElement).click();
+    });
+
+    await waitFor(() => expect(discoveryCount).toBe(2));
+    await waitFor(() => expect(container.querySelector('[role="listbox"]')).not.toBeNull());
+    expect(container.querySelector('[role="listbox"]')?.textContent).toContain("Live");
+  });
+
+  it("should replace a restored URL removed by discovery during an early selector refresh", async () => {
+    await act(async () => root.unmount());
+    container.innerHTML = "";
+    root = createRoot(container);
+    const initialDiscovery = deferred<Array<{ id: string; label: string; url: string }>>();
+    const defaultSource = {
+      id: "youtube-automation-localhost-7873",
+      label: "YouTube Automation (default)",
+      url: "http://youtube-automation.localhost:7873",
+    };
+    const restoredSource = { id: "restored", label: "Restored", url: "http://restored.localhost:49152" };
+    storageMocks.getValue.mockResolvedValue(restoredSource.url);
+    fetchMock.mockResolvedValue(jsonResponse(404, {}));
+    let discoveryCount = 0;
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "discoverServerSources") {
+        discoveryCount += 1;
+        return discoveryCount === 1 ? initialDiscovery.promise : Promise.resolve([defaultSource]);
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await act(async () => root.render(createElement(App)));
+    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    await act(async () => {
+      (expectControl(container, "server-source-trigger") as HTMLButtonElement).click();
+      initialDiscovery.resolve([defaultSource, restoredSource]);
+      await initialDiscovery.promise;
+    });
+
+    await waitFor(() =>
+      expect(messagingMocks.sendMessage).toHaveBeenCalledWith("fetchCollections", { baseUrl: defaultSource.url }),
+    );
+    expect(select.value).toBe(defaultSource.url);
+    expect(discoveryCount).toBe(2);
+  });
+
+  it.each([
+    ["keeps a saved live URL", "http://live.localhost:49152", "http://live.localhost:49152"],
+    ["replaces a saved stopped URL", "http://stopped.localhost:9001", "http://youtube-automation.localhost:7873"],
+  ])("should %s without fetching the stopped URL", async (_label, savedUrl, expectedUrl) => {
+    const defaultSource = {
+      id: "youtube-automation-localhost-7873",
+      label: "YouTube Automation (default)",
+      url: "http://youtube-automation.localhost:7873",
+    };
+    const liveSource = { id: "live", label: "Live", url: "http://live.localhost:49152" };
+    storageMocks.getValue.mockResolvedValue(savedUrl);
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "discoverServerSources") return Promise.resolve([defaultSource, liveSource]);
+      if (payload?.baseUrl === "http://stopped.localhost:9001") {
+        throw new Error("stopped URL must not be fetched");
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await rerenderApp();
+    await waitFor(() => expect((expectControl(container, "server-url") as HTMLSelectElement).value).toBe(expectedUrl));
+
+    expect(
+      messagingMocks.sendMessage.mock.calls.some(([, payload]) => payload?.baseUrl === "http://stopped.localhost:9001"),
+    ).toBe(false);
+    if (savedUrl !== expectedUrl) expect(storageMocks.setValue).toHaveBeenCalledWith(expectedUrl);
+  });
+
+  it("should persist only the selected URL when choosing a discovered non-default source", async () => {
+    const liveSource = { id: "channel-a-49152", label: "Channel A", url: "http://channel-a.localhost:49152" };
+    fetchMock.mockResolvedValue(jsonResponse(404, {}));
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "discoverServerSources") {
+        return Promise.resolve([
+          {
+            id: "youtube-automation-localhost-7873",
+            label: "YouTube Automation (default)",
+            url: "http://youtube-automation.localhost:7873",
+          },
+          liveSource,
+        ]);
+      }
+      return defaultSendMessage(message, payload);
+    });
+    await rerenderApp();
+    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    await waitFor(() => expect(Array.from(select.options, ({ value }) => value)).toContain(liveSource.url));
+    await act(async () => (expectControl(container, "server-source-trigger") as HTMLButtonElement).click());
+    await waitFor(() => expect(container.querySelector('[role="listbox"]')).not.toBeNull());
+    await act(async () => {
+      Array.from(container.querySelectorAll<HTMLButtonElement>('[role="option"]'))
+        .find((option) => option.textContent?.includes("Channel A"))!
+        .click();
+    });
+
+    await waitFor(() => expect(storageMocks.setValue).toHaveBeenCalledWith(liveSource.url));
+    expect(container.querySelector('[role="listbox"]')).toBeNull();
+    expect(legacySourceState.present).toBe(false);
+    await waitFor(() =>
+      expect(messagingMocks.sendMessage).toHaveBeenCalledWith("fetchCollections", { baseUrl: liveSource.url }),
+    );
+
+    storageMocks.getValue.mockResolvedValue(liveSource.url);
+    await rerenderApp();
+    await waitFor(() =>
+      expect((expectControl(container, "server-url") as HTMLSelectElement).value).toBe(liveSource.url),
+    );
+  });
+
+  it("should ignore an older discovery completion", async () => {
+    const older = deferred<Array<{ id: string; label: string; url: string }>>();
+    const newer = deferred<Array<{ id: string; label: string; url: string }>>();
+    let refreshCount = 0;
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "discoverServerSources") {
+        refreshCount += 1;
+        if (refreshCount === 1) {
+          return Promise.resolve([]);
+        }
+        return refreshCount === 2 ? older.promise : newer.promise;
+      }
+      return defaultSendMessage(message, payload);
+    });
+    await rerenderApp();
+    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    await act(async () => {
+      const trigger = expectControl(container, "server-source-trigger") as HTMLButtonElement;
+      trigger.click();
+      trigger.click();
+    });
+    newer.resolve([{ id: "new", label: "New", url: "http://new.localhost:49152" }]);
+    await waitFor(() => expect(select.textContent).toContain("New"));
+    older.resolve([{ id: "old", label: "Old", url: "http://old.localhost:9001" }]);
+    await act(async () => Promise.resolve());
+    expect(select.textContent).toContain("New");
+    expect(select.textContent).not.toContain("Old");
+  });
+
+  it("should discard a deferred discovery result when a run starts", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a",
+            channel: "clm",
+            theme: "theme-a",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+    await act(async () => setSelectValue(expectControl(container, "server-url") as HTMLSelectElement, BASE_URL));
+    await waitFor(() => expect(buttonByText(container, "全パターンを連続実行").disabled).toBe(false));
+    await act(async () => (expectControl(container, "server-source-trigger") as HTMLButtonElement).click());
+    await waitFor(() => expect(container.querySelector('[role="listbox"]')).not.toBeNull());
+
+    const pendingDiscovery = deferred<Array<{ id: string; label: string; url: string }>>();
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "discoverServerSources") return pendingDiscovery.promise;
+      return defaultSendMessage(message, payload);
+    });
+    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    await act(async () => {
+      (expectControl(container, "server-source-trigger") as HTMLButtonElement).click();
+      buttonByText(container, "全パターンを連続実行").click();
+    });
+    await waitFor(() =>
+      expect(container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')?.dataset.sunoRunning).toBe(
+        "true",
+      ),
+    );
+    expect(container.querySelector('[role="listbox"]')).toBeNull();
+
+    pendingDiscovery.resolve([{ id: "new", label: "New", url: "http://new.localhost:49152" }]);
+    await act(async () => pendingDiscovery.promise);
+
+    expect(select.textContent).not.toContain("New");
+    expect(select.value).toBe(BASE_URL);
+    expect(
+      messagingMocks.sendMessage.mock.calls.some(([, payload]) => payload?.baseUrl === "http://new.localhost:49152"),
+    ).toBe(false);
   });
 });

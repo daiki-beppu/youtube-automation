@@ -1,7 +1,7 @@
 import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
-// unit テスト（tests/*.test.ts）専用。E2E（tests/e2e）は Playwright が担う。
+// unit テスト（tests/**/*.test.{ts,tsx}）専用。E2E（tests/e2e）は Playwright が担う。
 //
 // setupFiles で fakeBrowser を chrome/browser グローバルへ注入し、
 // lib/messaging.ts（webextension-polyfill のロード時チェック）と
@@ -16,7 +16,7 @@ export default defineConfig({
   },
   test: {
     setupFiles: ["./tests/setup.ts"],
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.{ts,tsx}"],
     exclude: ["tests/e2e/**"],
   },
 });

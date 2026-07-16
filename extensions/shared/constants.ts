@@ -234,18 +234,18 @@ export const DEFAULT_SERVER_PORT = 7873;
 /** ローカル配信元の既定 hostname。チャンネル別 hostname が未確定の fallback。 */
 export const DEFAULT_SERVER_HOSTNAME = "youtube-automation.localhost" as const;
 
-/** ローカル配信元の後方互換 URL。 */
-export const LEGACY_DEFAULT_URL =
-  `http://localhost:${DEFAULT_SERVER_PORT}` as const;
-
-const FALLBACK_LOCALHOST_PORTS = [7874, 7875, 7876, 7877] as const;
-
 /** ローカル配信元の既定 URL。 */
 export const DEFAULT_URL =
   `http://${DEFAULT_SERVER_HOSTNAME}:${DEFAULT_SERVER_PORT}` as const;
 
 /** yt-collection-serve が配信元情報を返すサブパス。 */
 export const SERVER_INFO_ROUTE = "/server-info" as const;
+
+/** 稼働中の yt-collection-serve を列挙する固定 loopback registry。 */
+export const DISCOVERY_REGISTRY_URL =
+  "http://localhost:7872/.well-known/yt-collection-serve" as const;
+export const DISCOVERY_SCHEMA_VERSION = 1 as const;
+export const DISCOVERY_REQUEST_TIMEOUT_MS = 2_000;
 
 export interface LocalServerSource {
   id: string;
@@ -269,16 +269,6 @@ export const DEFAULT_SERVER_SOURCES: LocalServerSource[] = [
     label: "YouTube Automation (default)",
     url: DEFAULT_URL,
   },
-  {
-    id: "localhost-7873",
-    label: "localhost fallback",
-    url: LEGACY_DEFAULT_URL,
-  },
-  ...FALLBACK_LOCALHOST_PORTS.map((port) => ({
-    id: `localhost-${port}`,
-    label: `localhost fallback ${port}`,
-    url: `http://localhost:${port}`,
-  })),
 ] as const satisfies LocalServerSource[];
 
 export function normalizeServerUrl(url: string): string {
@@ -291,16 +281,6 @@ export function serverSourceIdFromUrl(url: string): string {
     .replace(/[^a-zA-Z0-9]+/gu, "-")
     .replace(/^-|-$/gu, "")
     .toLowerCase();
-}
-
-export function labelFromServerUrl(url: string): string {
-  const normalized = normalizeServerUrl(url);
-  try {
-    const parsed = new URL(normalized);
-    return parsed.host;
-  } catch {
-    return normalized || DEFAULT_SERVER_SOURCES[0].label;
-  }
 }
 
 /** content script を注入する Suno のオリジン（manifest の matches / host_permissions と対）。 */

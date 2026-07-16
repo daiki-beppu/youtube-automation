@@ -13,7 +13,7 @@ from youtube_automation.cli.skills_sync import (
     _guard_target_with_all,
     _list_entries,
 )
-from youtube_automation.cli.skills_sync._ops import _has_diff
+from youtube_automation.cli.skills_sync._ops import _has_diff, _prunable_orphan_names
 
 
 def cmd_diff(args: argparse.Namespace) -> int:
@@ -78,18 +78,24 @@ def _diff_dir_asset(spec: dict[str, str], root: Path, target_dir: Path) -> int:
     on_disk = set(p.name for p in target_dir.iterdir())
 
     only_bundled = sorted(bundled - on_disk)
-    only_disk = sorted(on_disk - bundled)
+    only_disk = on_disk - bundled
+    prunable_orphans = sorted(_prunable_orphan_names(on_disk, bundled))
+    protected_local = sorted(only_disk - set(prunable_orphans))
     common = sorted(bundled & on_disk)
 
     if only_bundled:
         print("同梱版にのみ存在 (sync で追加されます):")
         for n in only_bundled:
             print(f"  + {n}")
-    if only_disk:
-        print("target にのみ存在 (sync では削除されません):")
-        for n in only_disk:
+    if prunable_orphans:
+        print("upstream 管理の既知の旧 skill (prune 候補):")
+        for n in prunable_orphans:
             print(f"  - {n}")
         print("  (削除するには yt-skills sync --prune --yes を使ってください)")
+    if protected_local:
+        print("target にのみ存在 (未知のローカル entry として prune から保護されます):")
+        for n in protected_local:
+            print(f"  - {n}")
 
     differing: list[str] = []
     for name in common:

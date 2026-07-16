@@ -8,7 +8,7 @@ import { fetchAsset, fetchCollectionRelease, fetchRelease, ReleaseUnavailableErr
 import { onMessage, sendMessage, PHASES } from "@/lib/messaging";
 import type { Phase } from "@/lib/messaging";
 import { runInjection } from "@/lib/inject-runner";
-import { readServerSources, rememberServerSource, serverUrlItem } from "@/lib/storage";
+import { migrateServerSourcesStorage, serverUrlItem } from "@/lib/storage";
 import type { ReleasePayload } from "@/lib/types";
 import {
   excludeReleasedDiscs,
@@ -19,6 +19,7 @@ import {
   type DistrokidReleaseRecord,
 } from "../../shared/api";
 import type { LocalServerSource } from "../../shared/constants";
+import { discoverServerSources } from "../../shared/server-discovery";
 
 // 無効チャンネル（distrokid.enabled=false / 未配置）時のガイダンス（要件 #16）。
 const UNAVAILABLE_GUIDANCE =
@@ -29,8 +30,10 @@ export interface DistrokidRunnerState {
   serverUrl: string;
   setServerUrl: (url: string) => void;
   serverSources: LocalServerSource[];
+  refreshServerSources: () => Promise<void>;
   payload: ReleasePayload | null;
   busy: boolean;
+  isInjecting: boolean;
   phase: Phase | null;
   message: string;
   compatibilityWarning: string;
@@ -41,9 +44,15 @@ export interface DistrokidRunnerState {
   // 選択中 disc の index（collections 配列の index）。-1 = 未選択（単一 mode）。
   selectedIndex: number;
   selectCollection: (index: number) => void;
-  fetchData: () => Promise<void>;
   inject: () => Promise<void>;
   stop: () => Promise<void>;
+}
+
+type DiscIdentity = Pick<DistrokidCollectionSummary, "collection_id" | "disc">;
+
+interface CollectionLoadResult {
+  list: DistrokidCollectionSummary[];
+  isDirMode: boolean;
 }
 
 async function activeTabId(): Promise<number> {
@@ -59,9 +68,11 @@ async function activeTabId(): Promise<number> {
 
 export function useDistrokidRunner(): DistrokidRunnerState {
   const [serverUrl, setServerUrl] = useState("");
+  const serverUrlRef = useRef(serverUrl);
   const [serverSources, setServerSources] = useState<LocalServerSource[]>([]);
   const [payload, setPayload] = useState<ReleasePayload | null>(null);
   const [busy, setBusy] = useState(false);
+  const [isInjecting, setIsInjecting] = useState(false);
   const [phase, setPhase] = useState<Phase | null>(null);
   const [message, setMessage] = useState("");
   const [compatibilityWarning, setCompatibilityWarning] = useState("");
@@ -72,49 +83,62 @@ export function useDistrokidRunner(): DistrokidRunnerState {
 
   // 停止要求フラグ。injection ループの境界で参照し、押下後は以降の送信を打ち切る。
   const stoppedRef = useRef(false);
+  // 注入中は取得操作を受け付けない。busy は fetch と注入で共有されるため、selector と
+  // 停止ボタンの制御には使わない。
+  const injectionActiveRef = useRef(false);
   // dir mode 判定フラグ（fetchDistrokidCollections 成功時に true）。
   const isDirModeRef = useRef(false);
   // 現在の payload を取得した disc（#934）。配信済み記録はフィルした payload の
   // 取得元に束縛する — fetch 後に select を変えても誤った disc を記録しないため。
   const payloadSourceRef = useRef<DistrokidReleaseRecord | null>(null);
+  // 自動取得は選択操作が連続しても最後の要求だけを state へ反映する。
+  const fetchRequestIdRef = useRef(0);
+  const serverSourcePersistenceRef = useRef<Promise<void>>(Promise.resolve());
+  // URL 永続化を直列化し、遅い旧 write の後に必ず最新 write が完了するようにする。
+  // 古い discovery 応答が新しい候補一覧を上書きしないための revision。
+  const serverSourcesRevisionRef = useRef(0);
+  // ユーザー選択後に遅い初期 URL 読込が開始されないようにする。
+  const initialFetchStartedRef = useRef(false);
+  const initializationRef = useRef<Promise<void> | null>(null);
 
   // サーバー URL が確定したときに DistroKid collection 一覧を試行する (#934)。
   // 成功（dir mode）: released 除外済み一覧を state にセットし、その一覧を返す。
-  // 失敗（404 等 = 単一 mode）: collections を空のままにして従来動作へ fallback。
+  // 404（単一 mode）: collections を空のままにして従来動作へ fallback。
+  // 通信障害・不正応答: 既存の一覧と選択を保持したまま caller へ失敗を伝える。
   // setState は次レンダーまで反映されないため、同一ハンドラ内で一覧を使う caller は
   // 戻り値を直接参照する（stale closure 回避、#934）。
-  const loadCollections = useCallback(async (baseUrl: string): Promise<DistrokidCollectionSummary[]> => {
-    try {
-      const fetched = await fetchDistrokidCollections(baseUrl);
-      const list = excludeReleasedDiscs(fetched);
-      setCollections(list);
-      setAllReleased(fetched.length > 0 && list.length === 0);
-      // 未配信 disc があれば先頭を初期選択する。
-      setSelectedIndex(list.length > 0 ? 0 : -1);
-      isDirModeRef.current = true;
-      return list;
-    } catch {
-      // 単一ファイル mode サーバーは /distrokid/collections が 404。
-      // ドロップダウンを出さず従来の単一 mode へ fallback する（後方互換）。
-      setCollections([]);
-      setAllReleased(false);
-      setSelectedIndex(-1);
-      isDirModeRef.current = false;
-      return [];
-    }
-  }, []);
-
-  useEffect(() => {
-    // 永続化済みサーバー URL を復元し、URL があれば collection 一覧も試行する。
-    serverUrlItem.getValue().then((stored) => {
-      setServerUrl(stored);
-      const trimmed = stored.trim();
-      if (trimmed) {
-        void loadCollections(trimmed);
+  const loadCollections = useCallback(
+    async (baseUrl: string, shouldApply: () => boolean = () => true): Promise<CollectionLoadResult | null> => {
+      try {
+        const fetched = await fetchDistrokidCollections(baseUrl);
+        if (!shouldApply()) {
+          return null;
+        }
+        const list = excludeReleasedDiscs(fetched);
+        setCollections(list);
+        setAllReleased(fetched.length > 0 && list.length === 0);
+        // 未配信 disc があれば先頭を初期選択する。
+        setSelectedIndex(list.length > 0 ? 0 : -1);
+        isDirModeRef.current = true;
+        return { list, isDirMode: true };
+      } catch (error) {
+        if (!shouldApply()) {
+          return null;
+        }
+        if (!(error instanceof Error && error.message === "HTTP 404")) {
+          throw error;
+        }
+        // 単一ファイル mode サーバーは /distrokid/collections が 404。
+        // ドロップダウンを出さず従来の単一 mode へ fallback する（後方互換）。
+        setCollections([]);
+        setAllReleased(false);
+        setSelectedIndex(-1);
+        isDirModeRef.current = false;
+        return { list: [], isDirMode: false };
       }
-    });
-    void readServerSources().then(setServerSources);
-  }, [loadCollections]);
+    },
+    [],
+  );
 
   useEffect(() => {
     const unwatch = onMessage("progress", ({ data }) => {
@@ -127,82 +151,206 @@ export function useDistrokidRunner(): DistrokidRunnerState {
     return () => unwatch();
   }, []);
 
-  // データ取得。dir mode では選択中 disc の collection-scoped release.json を fetch し、
-  // 単一 mode では従来の /distrokid/release.json を fetch する (#934)。
-  const fetchData = useCallback(async () => {
-    setBusy(true);
-    setPhase(null);
-    setMessage("");
-    let baseUrl = serverUrl.trim();
-    try {
-      const info = await fetchServerInfo(baseUrl);
-      baseUrl = info.base_url;
-      setServerUrl(baseUrl);
-      await serverUrlItem.setValue(baseUrl);
-      setServerSources(await rememberServerSource(baseUrl, info.label));
-    } catch {
-      await serverUrlItem.setValue(baseUrl);
-      setServerSources(await rememberServerSource(baseUrl));
-    }
-    const extensionVersion = browser.runtime.getManifest().version;
-    setCompatibilityWarning(await resolveCompatibilityWarning(baseUrl, extensionVersion));
+  // 対象 URL と優先 disc をイベント時点の値で受け取り、一覧最新化から release 取得まで行う。
+  // 各 await 後に request ID を検査し、古い応答が最新の state を上書きするのを防ぐ。
+  const fetchData = useCallback(
+    async (targetUrl: string, preferredDisc: DiscIdentity | null) => {
+      const requestId = ++fetchRequestIdRef.current;
+      const isLatestRequest = (): boolean => requestId === fetchRequestIdRef.current;
+      let baseUrl = targetUrl.trim();
+      if (!baseUrl) {
+        return;
+      }
 
-    // URL 変更時に collection 一覧を再取得する（blur 後の最初のデータ取得で最新化）。
-    // state の collections/selectedIndex はこのレンダーの closure では古いままなので、
-    // 戻り値の最新一覧を直接使う（stale closure 回避、#934）。
-    const list = await loadCollections(baseUrl);
+      setBusy(true);
+      setPhase(null);
+      setMessage("");
+      setPayload(null);
+      payloadSourceRef.current = null;
 
-    try {
-      let result: ReleasePayload;
-      if (isDirModeRef.current) {
-        if (list.length === 0) {
-          // dir mode で未配信 disc が無い場合は単一 mode へ fallback しない
-          // （dir mode サーバーに /distrokid/release.json は無く、誤った 404 ガイダンスになるため）。
-          setPayload(null);
-          setMessage("未配信の disc はありません。");
+      try {
+        const info = await fetchServerInfo(baseUrl);
+        if (!isLatestRequest()) {
           return;
         }
-        // 再取得後も同じ disc が残っていれば選択を維持し、消えていれば先頭にする。
-        const prev = collections[selectedIndex];
-        const keptIndex = prev
-          ? list.findIndex((item) => item.collection_id === prev.collection_id && item.disc === prev.disc)
-          : -1;
-        const effectiveIndex = keptIndex >= 0 ? keptIndex : 0;
-        setSelectedIndex(effectiveIndex);
-        const selected = list[effectiveIndex];
-        // 配信済み記録はこの payload の取得元 disc に束縛する（#934）。
-        payloadSourceRef.current = {
-          collection_id: selected.collection_id,
-          disc: selected.disc,
-          album_title: selected.album_title,
-        };
-        result = await fetchCollectionRelease(baseUrl, selected.collection_id, selected.disc);
-      } else {
-        // 単一 mode（後方互換）: 従来の /distrokid/release.json を取得する。
-        payloadSourceRef.current = null;
-        result = await fetchRelease(baseUrl);
+        baseUrl = info.base_url;
+        serverUrlRef.current = baseUrl;
+        setServerUrl(baseUrl);
+      } catch {
+        // /server-info 非対応の旧サーバーは選択 URL のまま継続する。
+        if (!isLatestRequest()) {
+          return;
+        }
       }
-      setPayload(result);
+
+      try {
+        const persistSelectedUrl = serverSourcePersistenceRef.current.then(async () => {
+          if (isLatestRequest()) await serverUrlItem.setValue(baseUrl);
+        });
+        serverSourcePersistenceRef.current = persistSelectedUrl.catch(() => undefined);
+        await persistSelectedUrl;
+        if (!isLatestRequest()) {
+          return;
+        }
+
+        const extensionVersion = browser.runtime.getManifest().version;
+        const warning = await resolveCompatibilityWarning(baseUrl, extensionVersion);
+        if (!isLatestRequest()) {
+          return;
+        }
+        setCompatibilityWarning(warning);
+
+        const loadedCollections = await loadCollections(baseUrl, isLatestRequest);
+        if (loadedCollections === null) {
+          return;
+        }
+        const { list, isDirMode } = loadedCollections;
+
+        let result: ReleasePayload;
+        if (isDirMode) {
+          if (list.length === 0) {
+            // dir mode で未配信 disc が無い場合は単一 mode へ fallback しない
+            // （dir mode サーバーに /distrokid/release.json は無く、誤った 404 ガイダンスになるため）。
+            setPayload(null);
+            setMessage("未配信の disc はありません。");
+            return;
+          }
+          // 識別子で選択を維持し、一覧から消えていれば先頭へフォールバックする。
+          const keptIndex = preferredDisc
+            ? list.findIndex(
+                (item) => item.collection_id === preferredDisc.collection_id && item.disc === preferredDisc.disc,
+              )
+            : -1;
+          const effectiveIndex = keptIndex >= 0 ? keptIndex : 0;
+          setSelectedIndex(effectiveIndex);
+          const selected = list[effectiveIndex];
+          // 配信済み記録はこの payload の取得元 disc に束縛する（#934）。
+          payloadSourceRef.current = {
+            collection_id: selected.collection_id,
+            disc: selected.disc,
+            album_title: selected.album_title,
+          };
+          result = await fetchCollectionRelease(baseUrl, selected.collection_id, selected.disc);
+        } else {
+          // 単一 mode（後方互換）: 従来の /distrokid/release.json を取得する。
+          payloadSourceRef.current = null;
+          result = await fetchRelease(baseUrl);
+        }
+        if (!isLatestRequest()) {
+          return;
+        }
+        setPayload(result);
+      } catch (error) {
+        if (!isLatestRequest()) {
+          return;
+        }
+        setPayload(null);
+        setPhase(PHASES.ERROR);
+        setMessage(
+          error instanceof ReleaseUnavailableError
+            ? UNAVAILABLE_GUIDANCE
+            : error instanceof Error
+              ? error.message
+              : String(error),
+        );
+      } finally {
+        if (isLatestRequest()) {
+          setBusy(false);
+        }
+      }
+    },
+    [loadCollections],
+  );
+
+  const updateServerUrl = useCallback(
+    (nextUrl: string) => {
+      if (injectionActiveRef.current) {
+        return;
+      }
+      initialFetchStartedRef.current = true;
+      serverUrlRef.current = nextUrl;
+      setServerUrl(nextUrl);
+      void fetchData(nextUrl, null);
+    },
+    [fetchData],
+  );
+
+  const selectCollection = useCallback(
+    (index: number) => {
+      if (injectionActiveRef.current) {
+        return;
+      }
+      const selected = collections[index];
+      if (!selected) {
+        return;
+      }
+      setSelectedIndex(index);
+      void fetchData(serverUrl, {
+        collection_id: selected.collection_id,
+        disc: selected.disc,
+      });
+    },
+    [collections, fetchData, serverUrl],
+  );
+
+  const refreshServerSources = useCallback(async () => {
+    if (injectionActiveRef.current) return;
+    await initializationRef.current;
+    if (injectionActiveRef.current) return;
+    const revision = ++serverSourcesRevisionRef.current;
+    try {
+      const sources = await discoverServerSources();
+      if (injectionActiveRef.current || revision !== serverSourcesRevisionRef.current) return;
+      setServerSources(sources);
+      const currentServerUrl = serverUrlRef.current;
+      if (currentServerUrl && sources.length > 0 && !sources.some((source) => source.url === currentServerUrl)) {
+        updateServerUrl(sources[0].url);
+      }
     } catch (error) {
-      setPayload(null);
+      if (injectionActiveRef.current || revision !== serverSourcesRevisionRef.current) return;
       setPhase(PHASES.ERROR);
-      setMessage(
-        error instanceof ReleaseUnavailableError
-          ? UNAVAILABLE_GUIDANCE
-          : error instanceof Error
-            ? error.message
-            : String(error),
-      );
-    } finally {
-      setBusy(false);
+      setMessage(error instanceof Error ? error.message : String(error));
     }
-  }, [serverUrl, collections, selectedIndex, loadCollections]);
+  }, [updateServerUrl]);
+
+  useEffect(() => {
+    const revision = ++serverSourcesRevisionRef.current;
+    const initialization = migrateServerSourcesStorage()
+      .then(() => Promise.all([serverUrlItem.getValue(), discoverServerSources()]))
+      .then(([stored, sources]) => {
+        if (initialFetchStartedRef.current || revision !== serverSourcesRevisionRef.current) return;
+        initialFetchStartedRef.current = true;
+        setServerSources(sources);
+        if (!stored.trim()) return;
+        const nextUrl = sources.some((source) => source.url === stored) ? stored : sources[0]?.url;
+        if (!nextUrl) return;
+        serverUrlRef.current = nextUrl;
+        setServerUrl(nextUrl);
+        void fetchData(nextUrl, null);
+      })
+      .catch((error: unknown) => {
+        setPhase(PHASES.ERROR);
+        setMessage(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        initializationRef.current = null;
+      });
+    initializationRef.current = initialization;
+  }, [fetchData]);
 
   const inject = useCallback(async () => {
-    if (payload === null) {
+    if (payload === null || injectionActiveRef.current) {
       return;
     }
+    // 注入と配信済み記録は、開始時に表示されていた payload と取得元へ束縛する。
+    // await 中に UI 外から state 更新が試みられても、別 disc/URL を記録しない。
+    const injectionPayload = payload;
+    const injectionBaseUrl = serverUrl.trim();
+    const injectionSource = payloadSourceRef.current;
+    const injectionIsDirMode = isDirModeRef.current;
     stoppedRef.current = false;
+    injectionActiveRef.current = true;
+    setIsInjecting(true);
     setBusy(true);
     setPhase(PHASES.INJECTING);
     setMessage("注入を開始します");
@@ -211,8 +359,8 @@ export function useDistrokidRunner(): DistrokidRunnerState {
       // ページ origin で CORS 評価され遮断されるため（asset-transfer.ts 参照）。逐次実行・
       // 停止境界の制御フローは runInjection に抽出し、ここでは transport を束ねて渡す（#871）。
       const tabId = await activeTabId();
-      await runInjection(payload, {
-        fetchAsset: (assetPath, filename) => fetchAsset(serverUrl, assetPath, filename),
+      await runInjection(injectionPayload, {
+        fetchAsset: (assetPath, filename) => fetchAsset(injectionBaseUrl, assetPath, filename),
         start: (p) => sendMessage("injectStart", { payload: p }, tabId),
         track: (trackIndex, asset) => sendMessage("injectTrack", { trackIndex, asset }, tabId),
         cover: (asset) => sendMessage("injectCover", { asset }, tabId),
@@ -227,12 +375,11 @@ export function useDistrokidRunner(): DistrokidRunnerState {
       // POST は popup から直接 fetch せず background に委譲する — serve token 必須の
       // 書き込み境界は extension origin の background で越える（#1360、ADR-0016）。
       // POST 失敗はフィル成功を覆さない（warning を添えるだけ）。
-      const source = payloadSourceRef.current;
-      if (isDirModeRef.current && source !== null) {
+      if (injectionIsDirMode && injectionSource !== null) {
         try {
-          await sendMessage("recordRelease", { baseUrl: serverUrl.trim(), record: source });
+          await sendMessage("recordRelease", { baseUrl: injectionBaseUrl, record: injectionSource });
           // 配信済み記録成功後、一覧を再取得して select から消す (#934)。
-          await loadCollections(serverUrl.trim());
+          await loadCollections(injectionBaseUrl);
         } catch (recordError) {
           // 配信記録失敗はフィル結果に影響しない補助機能のため warn 表示のみ (#934)。
           setMessage(
@@ -244,6 +391,9 @@ export function useDistrokidRunner(): DistrokidRunnerState {
       setPhase(PHASES.ERROR);
       setMessage(error instanceof Error ? error.message : String(error));
       setBusy(false);
+    } finally {
+      injectionActiveRef.current = false;
+      setIsInjecting(false);
     }
   }, [payload, serverUrl, loadCollections]);
 
@@ -261,18 +411,19 @@ export function useDistrokidRunner(): DistrokidRunnerState {
 
   return {
     serverUrl,
-    setServerUrl,
+    setServerUrl: updateServerUrl,
     serverSources,
+    refreshServerSources,
     payload,
     busy,
+    isInjecting,
     phase,
     message,
     compatibilityWarning,
     collections,
     allReleased,
     selectedIndex,
-    selectCollection: setSelectedIndex,
-    fetchData,
+    selectCollection,
     inject,
     stop,
   };
