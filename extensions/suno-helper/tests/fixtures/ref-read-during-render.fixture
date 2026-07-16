@@ -1,0 +1,8 @@
+import { useRef } from "react";
+
+export function RefReadDuringRender() {
+  const element = useRef<HTMLDivElement>(null);
+  const currentElement = element.current;
+
+  return <div ref={element}>{String(currentElement)}</div>;
+}

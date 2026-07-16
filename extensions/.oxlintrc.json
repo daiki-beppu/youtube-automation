@@ -1,10 +1,15 @@
 {
+  "plugins": ["react"],
   "env": {
     "browser": true
   },
   "globals": {
     "browser": "readonly",
     "chrome": "readonly"
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/exhaustive-deps": "warn"
   },
   "ignorePatterns": ["**/.wxt/**", "**/.output/**", "**/dist/**", "**/node_modules/**"]
 }
