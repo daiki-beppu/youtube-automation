@@ -134,7 +134,7 @@ class TestCollectChannelFailures:
         with pytest.raises(YouTubeAPIError, match="UC_MISS"):
             collector.collect_channel({"id": "UC_MISS", "name": "miss", "slug": "miss"}, {})
 
-    def test_wraps_http_error_from_playlist_items(self):
+    def test_wraps_http_error_from_playlist_items(self, no_retry_backoff):
         # Given: playlistItems 取得で HttpError（クォータ超過等）
         youtube = MagicMock()
         youtube.playlistItems.return_value.list.return_value.execute.side_effect = _http_error()
@@ -159,7 +159,7 @@ class TestCollectAllFailures:
         with pytest.raises(ConfigError, match="unknown"):
             collector.collect_all(channel_slug="unknown")
 
-    def test_wraps_http_error_from_channels_list(self):
+    def test_wraps_http_error_from_channels_list(self, no_retry_backoff):
         # Given: channels.list 自体が HttpError
         youtube = MagicMock()
         youtube.channels.return_value.list.return_value.execute.side_effect = _http_error(
