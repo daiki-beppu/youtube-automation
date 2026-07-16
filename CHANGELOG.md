@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `perf(dx)`: `.envrc` に nix-direnv 3.1.1 のブートストラップを追加し、devShell 入場コストを削減した。dev 環境を `.direnv/` にキャッシュし `flake.nix` / `flake.lock` / `.envrc` 変更時のみ再評価するため、dirty worktree でも 2 回目以降の `direnv exec` が 1 秒未満で安定する（従来は入場のたびに flake 評価が走り 7〜80 秒まで変動）。shellHook（lefthook install / uv sync）は従来どおり毎入場で実行される（#2097）。
+
 - `chore(extensions)`: Fallow audit を PR の base commit との差分に対する extensions 全体の品質ゲートとして CI へ統合した（#2076）。
 
 - `chore(test-infra)`: pytest-xdist を dev dependency に追加し、`uv run pytest -n auto` での並列実行に対応した。`tests/conftest.py` は `CHANNEL_DIR` の tmp コピーを xdist worker ごとに独立して作り直し、CI の test ジョブは `-n auto` を有効化した。ローカル既定は直列のまま（opt-in、詳細は `docs/development.md`）（#2093）。

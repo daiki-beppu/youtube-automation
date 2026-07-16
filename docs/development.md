@@ -72,7 +72,8 @@ Python 側の未使用コード検出は、追加依存なしで CI / pre-commit
 
 有効化と運用:
 
-- **有効化**: 親 checkout / 新規 worktree のどちらでも、最初に `bash .lefthook/setup-worktree.sh` を 1 回実行する。direnv があればルートの `.envrc`（`use flake`）を allow して devShell に入り、なければ `nix develop` を使う。どちらの経路でも shellHook と `.lefthook/install.sh` が hook wrapper を再生成する
+- **有効化**: 親 checkout / 新規 worktree のどちらでも、最初に `bash .lefthook/setup-worktree.sh` を 1 回実行する。direnv があればルートの `.envrc`（nix-direnv 経由の `use flake`）を allow して devShell に入り、なければ `nix develop` を使う。どちらの経路でも shellHook と `.lefthook/install.sh` が hook wrapper を再生成する
+- **devShell 入場コスト**: `.envrc` は [nix-direnv](https://github.com/nix-community/nix-direnv) をブートストラップし、評価済み dev 環境を `.direnv/` にキャッシュする。`flake.nix` / `flake.lock` / `.envrc` が変わらない限り入場時に nix を起動しないため、dirty worktree でも 2 回目以降の `direnv exec` は 1 秒未満で安定する（direnv stdlib の `use_flake` は入場のたびに `nix print-dev-env` を実行するため、flake 評価コストが毎回壁時計に乗り 7〜80 秒まで変動していた。issue #2097）。shellHook（lefthook install / `uv sync`）はキャッシュヒット時も毎入場で実行される。worktree ごとの初回入場のみキャッシュ生成（20 秒前後）が走る。nix-direnv の direnvrc 本体は初回のみ GitHub から取得しハッシュ検証のうえ `~/.cache/direnv/cas/` に永続キャッシュされる（オフライン初回のみ失敗し得る。その場合は `nix develop` 経路を使う）
 - **devShell 内での実行**: direnv の自動入室が有効な shell ではそのまま `uv run pytest` 等を実行できる。agent や非対話 shell では `bash .lefthook/setup-worktree.sh uv run pytest` のように引数を渡すと、同じ devShell 内でコマンドを実行できる
 - **診断**: 親 checkout / worktree のそれぞれで `bash .lefthook/setup-worktree.sh sh -c 'command -v lefthook && lefthook version'` を実行する。`git commit` / `git push` で `Can't find lefthook in PATH` が出る場合は `bash .lefthook/setup-worktree.sh` を再実行する。直接の Nix 診断・再生成には `nix develop --command sh -c 'command -v lefthook && lefthook version'` と `nix develop --command bash .lefthook/install.sh` も利用できる
 - **失敗時の扱い**: shellHook は `lefthook` 不在や hook 再生成失敗を `|| true` で握りつぶさない。devShell 入室時に明示的に失敗させ、commit / push 時の hook no-op を防ぐ
