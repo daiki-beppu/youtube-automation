@@ -23,9 +23,16 @@ jobs:
         working-directory: extensions/suno-helper
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: cachix/install-nix-action@v30
       - name: Install dependencies
         run: nix develop .#extensions --command pnpm install --frozen-lockfile
+      - name: Fallow audit
+        if: github.event_name == 'pull_request'
+        env:
+          FALLOW_AUDIT_BASE: ${{ github.event.pull_request.base.sha }}
+        run: nix develop .#extensions --command pnpm run audit
       - parallel:
           - name: Lint
             run: nix develop .#extensions --command pnpm lint

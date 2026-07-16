@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `chore(extensions)`: Fallow audit を PR の base commit との差分に対する extensions 全体の品質ゲートとして CI へ統合した（#2076）。
+
 - `chore(test-infra)`: pytest-xdist を dev dependency に追加し、`uv run pytest -n auto` での並列実行に対応した。`tests/conftest.py` は `CHANNEL_DIR` の tmp コピーを xdist worker ごとに独立して作り直し、CI の test ジョブは `-n auto` を有効化した。ローカル既定は直列のまま（opt-in、詳細は `docs/development.md`）（#2093）。
 
 - `feat(skills)`: `/postmortem` skill command / directory を `/flop-analysis` へ改称し、feedback・workflow・機能一覧・現役戦略文書の利用者導線を新名称へ統一した。下流の `config/skills/postmortem.yaml` は `config/skills/flop-analysis.yaml` へリネームすること。旧 override は移行 fallback として警告付きで読み込むが、旧 command alias と旧 skill directory は残さない（#2023）。
