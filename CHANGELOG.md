@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `docs(collection-ideate)`: stale な Analytics report を検出した際、相対 stale は `/analytics-analyze`、絶対 stale は `/analytics-collect` → `/analytics-analyze` を自動実行し、再検証成功後に同じ企画フローを継続する契約へ更新した。更新失敗時は stale report を使わず、理由と再開条件を示して停止する（#2062）。
 
+- `fix(secrets)`: 1Password CLI 2.33 が stdin を JSON item template として解釈する仕様に合わせ、stream key の edit/create を JSON template 経由に変更した。新規 PASSWORD item には必須の組み込み `password` field を含め、secret は引き続き argv や一時ファイルに露出しない（#1784）。
+
 - `feat(helper)`: `yt-collection-serve` の固定 loopback registry（heartbeat / TTL / owner takeover）と shared discovery client を追加し、suno-helper / distrokid-helper の候補履歴蓄積を廃止して、稼働中 server の動的検出と legacy storage migration に切り替えた。selector は更新完了前の古い native menu を開かず、registry の DELETE 境界と未対応 method status も公開契約どおり検証する（#1616）。
 
 - `fix(test-infra)`: dev shell 統合テストのコピー対象と teardown を最適化し、pytest の成功時 tmp と強制終了された過去 run の fixture 残骸が蓄積しないようにした（#2072）。
@@ -48,6 +50,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(analytics-report)`: HTML レポートのテーマ色を `analytics-report/config.default.yaml::theme.colors` に移し、`config/skills/analytics-report.yaml` の channel override で差し替えられるようにした。未設定チャンネルでは既存パレットを維持する（#1691）
 
 ### Changed
+
+- `refactor(suno-helper)`: collection・投入方式・開始/停止・resume/retry controls を、既存 handler・disabled 条件・`data-suno-control` / aria 契約を維持したまま shadcn primitive へ移行した（#2067）。
 
 - `feat(distrokid-helper)`: 初回表示、コレクション選択、ローカル配信元選択の各タイミングで collection 一覧と release.json を自動取得し、手動の「データ取得」ボタンを廃止した（#1992）。
 

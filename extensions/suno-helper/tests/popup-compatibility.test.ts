@@ -227,6 +227,12 @@ function expectControl(container: HTMLElement, control: string): HTMLElement {
   return element!;
 }
 
+function expectShadcnControl(element: HTMLElement, variant: "default" | "destructive" | "outline"): void {
+  expect(element.dataset.slot).toBe("button");
+  expect(element.dataset.variant).toBe(variant);
+  expect(element.dataset.size).toBe("sm");
+}
+
 async function waitFor(assertion: () => void): Promise<void> {
   for (let i = 0; i < 20; i += 1) {
     try {
@@ -345,6 +351,24 @@ describe("Suno popup compatibility check", () => {
     expect(container.textContent).not.toContain("Balanced");
     expect(container.textContent).not.toContain("Safe");
     expect(container.querySelector('input[name="speed-preset"]')).toBeNull();
+  });
+
+  it("collection・投入方式・開始/停止 control を shadcn primitive で描画し、実操作要素の契約を維持する", () => {
+    const collectionSelect = expectControl(container, "collection-select");
+    expect(collectionSelect).toBeInstanceOf(HTMLSelectElement);
+    expectShadcnControl(collectionSelect, "outline");
+
+    const serialMode = radioByLabel(container, "安全モード");
+    const queueMode = radioByLabel(container, "高速モード");
+    expect(serialMode.name).toBe("run-mode");
+    expect(serialMode.checked).toBe(true);
+    expect(queueMode.name).toBe("run-mode");
+    expect(queueMode.checked).toBe(false);
+    expectShadcnControl(serialMode.closest<HTMLElement>('[data-slot="button"]')!, "default");
+    expectShadcnControl(queueMode.closest<HTMLElement>('[data-slot="button"]')!, "outline");
+
+    expectShadcnControl(expectControl(container, "run"), "default");
+    expectShadcnControl(expectControl(container, "stop"), "destructive");
   });
 
   it("progress handler が DONE + duration-check log を受けると live status を更新する", async () => {
@@ -679,6 +703,8 @@ describe("Suno popup compatibility check", () => {
       radioByLabel(container, "高速モード").click();
     });
     expect(presetStateMocks.writeRunModeId).toHaveBeenCalledWith("queue");
+    expectShadcnControl(radioByLabel(container, "安全モード").closest<HTMLElement>('[data-slot="button"]')!, "outline");
+    expectShadcnControl(radioByLabel(container, "高速モード").closest<HTMLElement>('[data-slot="button"]')!, "default");
 
     messagingMocks.sendMessage.mockClear();
     await act(async () => {
@@ -829,6 +855,7 @@ describe("Suno popup compatibility check", () => {
     await waitFor(() => {
       expect(buttonByText(container, "失敗分のみ再実行")).toBeTruthy();
     });
+    expectShadcnControl(buttonByText(container, "失敗分のみ再実行"), "destructive");
 
     messagingMocks.sendMessage.mockClear();
     await act(async () => {
@@ -1509,6 +1536,8 @@ describe("Suno popup compatibility check", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("選択中の曲 2 件を採用しました。");
     });
+    expectShadcnControl(expectControl(container, "retry-playlist"), "outline");
+    expectShadcnControl(expectControl(container, "retry-download"), "outline");
 
     messagingMocks.sendMessage.mockClear();
     await act(async () => {
@@ -2042,8 +2071,8 @@ describe("Suno popup compatibility check", () => {
       expect(container.textContent).toContain("前回の実行が中断されました。");
       expect(container.textContent).toContain("取得失敗:");
     });
-    expectControl(container, "resume");
-    expectControl(container, "dismiss-resume");
+    expectShadcnControl(expectControl(container, "resume"), "default");
+    expectShadcnControl(expectControl(container, "dismiss-resume"), "outline");
 
     messagingMocks.sendMessage.mockClear();
     await act(async () => {
