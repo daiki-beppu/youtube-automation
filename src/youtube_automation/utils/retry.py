@@ -22,6 +22,11 @@ class ExecutableRequest(Protocol[T]):
 
 
 _MAX_ATTEMPTS = 3
+
+# テストから monkeypatch で差し替えられるモジュールスコープのシーム
+# （time.sleep / random.uniform をグローバルに patch せず retry 経路だけ無効化できる）
+_DEFAULT_SLEEP: Callable[[float], None] = time.sleep
+_DEFAULT_JITTER: Callable[[float, float], float] = random.uniform
 _QUOTA_REASONS = {
     "dailyLimitExceeded",
     "quotaExceeded",
@@ -47,8 +52,8 @@ def retry_youtube_api(
     jitter: Callable[[float, float], float] | None = None,
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Retry transient Google API failures and expose failures as domain errors."""
-    sleep = sleep or time.sleep
-    jitter = jitter or random.uniform
+    sleep = sleep or _DEFAULT_SLEEP
+    jitter = jitter or _DEFAULT_JITTER
 
     def decorate(operation: Callable[P, T]) -> Callable[P, T]:
         @wraps(operation)
@@ -73,7 +78,13 @@ def retry_youtube_api(
     return decorate
 
 
-def execute_with_retry(request: ExecutableRequest[T], context: str) -> T:
+def execute_with_retry(
+    request: ExecutableRequest[T],
+    context: str,
+    *,
+    sleep: Callable[[float], None] | None = None,
+    jitter: Callable[[float, float], float] | None = None,
+) -> T:
     """Execute one Google API request through the shared retry boundary."""
 
-    return retry_youtube_api(context)(request.execute)()
+    return retry_youtube_api(context, sleep=sleep, jitter=jitter)(request.execute)()
