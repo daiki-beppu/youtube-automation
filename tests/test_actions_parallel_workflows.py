@@ -273,6 +273,7 @@ def test_fallow_audit_fails_for_a_new_error_finding_in_a_git_diff(tmp_path: Path
     helper_root = extensions_root / "suno-helper"
     helper_root.mkdir(parents=True)
     package_json = json.loads(_read_text(_REPO_ROOT / "extensions" / "suno-helper" / "package.json"))
+    fallow_version = package_json["devDependencies"]["fallow"]
     audit_package_json = {
         "name": "fallow-audit-fixture",
         "private": True,
@@ -313,13 +314,15 @@ def test_fallow_audit_fails_for_a_new_error_finding_in_a_git_diff(tmp_path: Path
         f"{_REPO_ROOT}#extensions",
         "--command",
         "pnpm",
+        f"--package=fallow@{fallow_version}",
+        "dlx",
+        "pnpm",
         "run",
         "audit",
     ]
     audit_env = {
         **os.environ,
         "FALLOW_AUDIT_BASE": base_sha,
-        "PATH": f"{_REPO_ROOT / 'extensions' / 'suno-helper' / 'node_modules' / '.bin'}:{os.environ['PATH']}",
     }
     clean_audit = subprocess.run(
         audit_command,
