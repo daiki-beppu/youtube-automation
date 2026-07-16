@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: nix develop --command uv sync
       - name: Test
-        run: nix develop --command uv run pytest
+        run: nix develop --command uv run pytest -n auto
 
   windows-cost-tracker:
     runs-on: windows-latest
