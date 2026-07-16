@@ -1,6 +1,6 @@
-# postmortem skill default config
+# flop-analysis skill default config
 #
-# 症状判定・仮説マッピングのしきい値。チャンネル側では `config/skills/postmortem.yaml` に上書き値を置く。
+# 症状判定・仮説マッピングのしきい値。チャンネル側では `config/skills/flop-analysis.yaml` に上書き値を置く。
 # SKILL.md の「文脈調整可」ルール（新チャンネル等の 3 ケース限定の一時調整）は
 # この恒久上書きとは別レイヤーで、Phase 2/3 実行時に AI が適用し postmortem.md に明示する。
 

@@ -61,7 +61,7 @@ _AUDIENCE_PERSONA_DESIGN = _SKILLS_DIR / "audience-persona-design" / "SKILL.md"
 _VIEWER_VOICE = _SKILLS_DIR / "viewer-voice" / "SKILL.md"
 _VIEWING_SCENE = _SKILLS_DIR / "viewing-scene" / "SKILL.md"
 _COLLECTION_IDEATE = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
-_POSTMORTEM = _SKILLS_DIR / "postmortem" / "SKILL.md"
+_FLOP_ANALYSIS = _SKILLS_DIR / "flop-analysis" / "SKILL.md"
 _SUNO_LYRIC = _SKILLS_DIR / "suno-lyric" / "SKILL.md"
 _SUNO_LYRIC_PERSONA_DOCS = (
     _SUNO_LYRIC,
@@ -316,17 +316,53 @@ def test_audience_persona_route_docs_follow_required_order() -> None:
     onboarding = _read(_ONBOARDING)
     frequency = _markdown_section(onboarding, "### 5.1 定常タスクの推奨頻度")
     troubleshooting = _markdown_section(onboarding, "### 5.2 困ったときに参照するスキル")
-    postmortem = _read(_POSTMORTEM)
-    verification = _markdown_section(postmortem, "### Phase 4: 検証ステップの案内")
-    next_step = _markdown_section(postmortem, "## Next Step")
+    flop_analysis = _read(_FLOP_ANALYSIS)
+    verification = _markdown_section(flop_analysis, "### Phase 4: 検証ステップの案内")
+    next_step = _markdown_section(flop_analysis, "## Next Step")
 
     expected = "`/viewer-voice` → `/audience-persona-design` → `/viewing-scene`"
     expected_tokens = ("`/viewer-voice`", "`/audience-persona-design`", "`/viewing-scene`")
     assert expected in frequency
     assert expected in troubleshooting
-    _assert_tokens_in_order(verification, expected_tokens, "postmortem Phase 4")
+    _assert_tokens_in_order(verification, expected_tokens, "flop-analysis Phase 4")
     assert expected in next_step
-    assert "`/audience-persona-design` → `/viewer-voice`" not in postmortem
+    assert "`/audience-persona-design` → `/viewer-voice`" not in flop_analysis
+
+
+def test_flop_analysis_replaces_postmortem_skill_without_alias() -> None:
+    """Issue #2023: skill directory / command / frontmatter を flop-analysis へ全面移行する。"""
+    legacy_path = _SKILLS_DIR / "postmortem"
+    assert not os.path.lexists(legacy_path), "旧 skill directory .claude/skills/postmortem が残存している"
+    assert _FLOP_ANALYSIS.is_file()
+    assert _front_matter_name(_FLOP_ANALYSIS) == "flop-analysis"
+
+    text = _read(_FLOP_ANALYSIS)
+    frontmatter = text.split("---\n", 2)[1]
+    assert 'description: "' in frontmatter
+    for required in ("video_id", "collection", "--since", "postmortem.md"):
+        assert required in frontmatter
+    assert _slash_pattern("postmortem").search(text) is None
+    assert ".claude/skills/postmortem/" not in text
+    for command in (
+        "/flop-analysis dQw4w9WgXcQ",
+        "/flop-analysis rain-jazz-night",
+        "/flop-analysis --since 14",
+    ):
+        assert command in text
+
+
+def test_flop_analysis_active_routes_use_new_command() -> None:
+    """Issue #2023: 現役の利用者導線から旧 command を除去する。"""
+    route_files = (
+        _SKILLS_DIR / "feedback" / "SKILL.md",
+        _SKILLS_DIR / "wf-next" / "SKILL.md",
+        _REPO_ROOT / "docs" / "features.md",
+        _REPO_ROOT / "docs" / "strategy" / "growth-gap-analysis.md",
+    )
+    for path in route_files:
+        text = _read(path)
+        assert "/flop-analysis" in text, f"{path.relative_to(_REPO_ROOT)} に新 command 導線がない"
+        assert "/postmortem" not in text, f"{path.relative_to(_REPO_ROOT)} に旧 command 導線が残存している"
 
 
 def test_audience_persona_design_failure_guidance_covers_prerequisite_paths() -> None:

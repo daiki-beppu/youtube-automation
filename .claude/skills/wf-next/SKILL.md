@@ -25,7 +25,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 | 制作中コレクションがあり、次工程へ進める意思がある | ✅ 使う |
 | 制作中コレクションがそもそも無い | ❌ `/wf-new` を使う（または `/collection-ideate` で候補から） |
 | 「進んでる？」と読み取りだけ求められた | ❌ `/wf-status` を使う |
-| 公開済み動画の振り返り | ❌ `/analytics-analyze` または `/postmortem` |
+| 公開済み動画の振り返り | ❌ `/analytics-analyze` または `/flop-analysis` |
 
 `/wf-next` は `workflow-state.json::phase` を読み取り、対応する次工程を 1 段だけ実行して `assets` / `phase` を更新する。**冪等性あり**：途中エラーで停止しても、再実行で未完了ステップから再開する。ユーザーが `workflow-state.json` を手で編集すると冪等性の前提が崩れる（[扱い基準](../../../docs/workflow-cheatsheet.md#workflow-statejson-の扱い)）。
 
