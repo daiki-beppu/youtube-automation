@@ -55,11 +55,13 @@ async function loadBackground(opts?: {
   sessionGetDelayMs?: number;
   useRealPostDownloaded?: boolean;
   fetchImpl?: ReturnType<typeof vi.fn>;
+  migrationError?: Error;
 }) {
   vi.resetModules();
 
   const handlers = new Map<string, Handler>();
   const sentMessages: SentMessage[] = [];
+  const installedListeners: Array<(details: { reason: string }) => void> = [];
 
   // --- globals ---
   // defineBackground は WXT の auto-import。stub して即座にコールバックを実行する。
@@ -70,7 +72,9 @@ async function loadBackground(opts?: {
 
   vi.stubGlobal("browser", {
     runtime: {
-      onInstalled: { addListener: vi.fn() },
+      onInstalled: {
+        addListener: vi.fn((listener: (details: { reason: string }) => void) => installedListeners.push(listener)),
+      },
       getManifest: () => ({ version: "0.1.0" }),
     },
     action: { onClicked: { addListener: vi.fn() } },
@@ -200,6 +204,25 @@ async function loadBackground(opts?: {
       resolveCompatibilityWarning: vi.fn(() => Promise.resolve("")),
     }));
   }
+  const discoverServerSourcesMock = vi.fn(() =>
+    Promise.resolve([
+      {
+        id: "youtube-automation-localhost-7873",
+        label: "YouTube Automation (default)",
+        url: "http://youtube-automation.localhost:7873",
+      },
+      { id: "live-49152", label: "Live", url: "http://live.localhost:49152" },
+    ]),
+  );
+  vi.doMock("../../shared/server-discovery", () => ({
+    discoverServerSources: discoverServerSourcesMock,
+  }));
+  const migrateServerSourcesStorageMock = opts?.migrationError
+    ? vi.fn(() => Promise.reject(opts.migrationError))
+    : vi.fn(() => Promise.resolve());
+  vi.doMock("../lib/storage", () => ({
+    migrateServerSourcesStorage: migrateServerSourcesStorageMock,
+  }));
 
   vi.doMock("../components/runner-errors", () => ({
     describeRelayFailure: vi.fn(() => ({ level: "debug" as const, text: "test" })),
@@ -229,6 +252,9 @@ async function loadBackground(opts?: {
     chromeDownloads,
     chromeDebugger,
     postDownloadedMock,
+    discoverServerSourcesMock,
+    migrateServerSourcesStorageMock,
+    installedListeners,
     sessionStore,
   };
 }
@@ -268,6 +294,29 @@ describe('background onMessage("extensionVersionHandshake"): 拡張更新検知 
         sender: { tab: { id: 42 } },
       }),
     ).toEqual({ version: "0.1.0", matches: false });
+  });
+});
+
+describe("background onInstalled: legacy server source migration", () => {
+  it("runs migration when the extension is updated", async () => {
+    const { installedListeners, migrateServerSourcesStorageMock } = await loadBackground();
+
+    installedListeners.at(-1)!({ reason: "update" });
+    await flushPromises();
+
+    expect(migrateServerSourcesStorageMock).toHaveBeenCalledOnce();
+  });
+
+  it("logs migration failures instead of leaving an unhandled rejection", async () => {
+    const error = new Error("storage unavailable");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { installedListeners } = await loadBackground({ migrationError: error });
+
+    installedListeners.at(-1)!({ reason: "update" });
+    await flushPromises();
+
+    expect(consoleError).toHaveBeenCalledWith("[suno-helper] legacy server source migration failed:", error);
+    consoleError.mockRestore();
   });
 });
 
@@ -423,6 +472,31 @@ describe("background read API handlers: localhost read を extension origin 境�
       expect(fetchImpl).not.toHaveBeenCalled();
     },
   );
+});
+
+describe('background onMessage("discoverServerSources"): shared discovery boundary', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("should expose the shared discovery client to the overlay through a typed handler", async () => {
+    const { handlers, discoverServerSourcesMock } = await loadBackground();
+
+    await expect(handlers.get("discoverServerSources")!({ data: {}, sender: { tab: { id: 42 } } })).resolves.toEqual([
+      expect.objectContaining({ url: "http://youtube-automation.localhost:7873" }),
+      expect.objectContaining({ url: "http://live.localhost:49152" }),
+    ]);
+    expect(discoverServerSourcesMock).toHaveBeenCalledOnce();
+  });
+
+  it("should return a rejected handler promise when shared discovery fails", async () => {
+    const { handlers, discoverServerSourcesMock } = await loadBackground();
+    discoverServerSourcesMock.mockRejectedValueOnce(new Error("registry unavailable"));
+
+    await expect(handlers.get("discoverServerSources")!({ data: {}, sender: { tab: { id: 42 } } })).rejects.toThrow(
+      "registry unavailable",
+    );
+  });
 });
 
 describe('background onMessage("startDownload"): 非 .zip ダウンロードは無視する', () => {

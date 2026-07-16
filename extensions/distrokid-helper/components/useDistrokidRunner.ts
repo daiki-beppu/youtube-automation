@@ -8,7 +8,7 @@ import { fetchAsset, fetchCollectionRelease, fetchRelease, ReleaseUnavailableErr
 import { onMessage, sendMessage, PHASES } from "@/lib/messaging";
 import type { Phase } from "@/lib/messaging";
 import { runInjection } from "@/lib/inject-runner";
-import { readServerSources, rememberServerSource, serverUrlItem } from "@/lib/storage";
+import { migrateServerSourcesStorage, serverUrlItem } from "@/lib/storage";
 import type { ReleasePayload } from "@/lib/types";
 import {
   excludeReleasedDiscs,
@@ -19,6 +19,7 @@ import {
   type DistrokidReleaseRecord,
 } from "../../shared/api";
 import type { LocalServerSource } from "../../shared/constants";
+import { discoverServerSources } from "../../shared/server-discovery";
 
 // 無効チャンネル（distrokid.enabled=false / 未配置）時のガイダンス（要件 #16）。
 const UNAVAILABLE_GUIDANCE =
@@ -29,6 +30,7 @@ export interface DistrokidRunnerState {
   serverUrl: string;
   setServerUrl: (url: string) => void;
   serverSources: LocalServerSource[];
+  refreshServerSources: () => Promise<void>;
   payload: ReleasePayload | null;
   busy: boolean;
   isInjecting: boolean;
@@ -66,6 +68,7 @@ async function activeTabId(): Promise<number> {
 
 export function useDistrokidRunner(): DistrokidRunnerState {
   const [serverUrl, setServerUrl] = useState("");
+  const serverUrlRef = useRef(serverUrl);
   const [serverSources, setServerSources] = useState<LocalServerSource[]>([]);
   const [payload, setPayload] = useState<ReleasePayload | null>(null);
   const [busy, setBusy] = useState(false);
@@ -90,12 +93,13 @@ export function useDistrokidRunner(): DistrokidRunnerState {
   const payloadSourceRef = useRef<DistrokidReleaseRecord | null>(null);
   // 自動取得は選択操作が連続しても最後の要求だけを state へ反映する。
   const fetchRequestIdRef = useRef(0);
-  // URL 永続化を直列化し、遅い旧 write の後に必ず最新 write が完了するようにする。
   const serverSourcePersistenceRef = useRef<Promise<void>>(Promise.resolve());
-  // 初期 readServerSources の遅延応答が自動保存後の候補一覧を上書きしないための revision。
+  // URL 永続化を直列化し、遅い旧 write の後に必ず最新 write が完了するようにする。
+  // 古い discovery 応答が新しい候補一覧を上書きしないための revision。
   const serverSourcesRevisionRef = useRef(0);
   // ユーザー選択後に遅い初期 URL 読込が開始されないようにする。
   const initialFetchStartedRef = useRef(false);
+  const initializationRef = useRef<Promise<void> | null>(null);
 
   // サーバー URL が確定したときに DistroKid collection 一覧を試行する (#934)。
   // 成功（dir mode）: released 除外済み一覧を state にセットし、その一覧を返す。
@@ -164,15 +168,14 @@ export function useDistrokidRunner(): DistrokidRunnerState {
       setPayload(null);
       payloadSourceRef.current = null;
 
-      let serverLabel: string | undefined;
       try {
         const info = await fetchServerInfo(baseUrl);
         if (!isLatestRequest()) {
           return;
         }
         baseUrl = info.base_url;
+        serverUrlRef.current = baseUrl;
         setServerUrl(baseUrl);
-        serverLabel = info.label;
       } catch {
         // /server-info 非対応の旧サーバーは選択 URL のまま継続する。
         if (!isLatestRequest()) {
@@ -180,25 +183,12 @@ export function useDistrokidRunner(): DistrokidRunnerState {
         }
       }
 
-      const persistServerSource = serverSourcePersistenceRef.current.then(async () => {
-        if (!isLatestRequest()) {
-          return;
-        }
-        await serverUrlItem.setValue(baseUrl);
-        if (!isLatestRequest()) {
-          return;
-        }
-        const rememberedSources = await rememberServerSource(baseUrl, serverLabel);
-        if (!isLatestRequest()) {
-          return;
-        }
-        serverSourcesRevisionRef.current += 1;
-        setServerSources(rememberedSources);
-      });
-      serverSourcePersistenceRef.current = persistServerSource.catch(() => undefined);
-
       try {
-        await persistServerSource;
+        const persistSelectedUrl = serverSourcePersistenceRef.current.then(async () => {
+          if (isLatestRequest()) await serverUrlItem.setValue(baseUrl);
+        });
+        serverSourcePersistenceRef.current = persistSelectedUrl.catch(() => undefined);
+        await persistSelectedUrl;
         if (!isLatestRequest()) {
           return;
         }
@@ -278,6 +268,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
         return;
       }
       initialFetchStartedRef.current = true;
+      serverUrlRef.current = nextUrl;
       setServerUrl(nextUrl);
       void fetchData(nextUrl, null);
     },
@@ -302,24 +293,49 @@ export function useDistrokidRunner(): DistrokidRunnerState {
     [collections, fetchData, serverUrl],
   );
 
-  useEffect(() => {
-    void serverUrlItem.getValue().then((stored) => {
-      if (initialFetchStartedRef.current) {
-        return;
+  const refreshServerSources = useCallback(async () => {
+    if (injectionActiveRef.current) return;
+    await initializationRef.current;
+    if (injectionActiveRef.current) return;
+    const revision = ++serverSourcesRevisionRef.current;
+    try {
+      const sources = await discoverServerSources();
+      if (injectionActiveRef.current || revision !== serverSourcesRevisionRef.current) return;
+      setServerSources(sources);
+      const currentServerUrl = serverUrlRef.current;
+      if (currentServerUrl && sources.length > 0 && !sources.some((source) => source.url === currentServerUrl)) {
+        updateServerUrl(sources[0].url);
       }
-      initialFetchStartedRef.current = true;
-      setServerUrl(stored);
-      if (stored.trim()) {
-        void fetchData(stored, null);
-      }
-    });
+    } catch (error) {
+      if (injectionActiveRef.current || revision !== serverSourcesRevisionRef.current) return;
+      setPhase(PHASES.ERROR);
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, [updateServerUrl]);
 
-    const revisionAtStart = serverSourcesRevisionRef.current;
-    void readServerSources().then((sources) => {
-      if (revisionAtStart === serverSourcesRevisionRef.current) {
+  useEffect(() => {
+    const revision = ++serverSourcesRevisionRef.current;
+    const initialization = migrateServerSourcesStorage()
+      .then(() => Promise.all([serverUrlItem.getValue(), discoverServerSources()]))
+      .then(([stored, sources]) => {
+        if (initialFetchStartedRef.current || revision !== serverSourcesRevisionRef.current) return;
+        initialFetchStartedRef.current = true;
         setServerSources(sources);
-      }
-    });
+        if (!stored.trim()) return;
+        const nextUrl = sources.some((source) => source.url === stored) ? stored : sources[0]?.url;
+        if (!nextUrl) return;
+        serverUrlRef.current = nextUrl;
+        setServerUrl(nextUrl);
+        void fetchData(nextUrl, null);
+      })
+      .catch((error: unknown) => {
+        setPhase(PHASES.ERROR);
+        setMessage(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        initializationRef.current = null;
+      });
+    initializationRef.current = initialization;
   }, [fetchData]);
 
   const inject = useCallback(async () => {
@@ -397,6 +413,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
     serverUrl,
     setServerUrl: updateServerUrl,
     serverSources,
+    refreshServerSources,
     payload,
     busy,
     isInjecting,

@@ -24,7 +24,7 @@ WXT + React + TypeScript + Tailwind CSS + [@webext-core/messaging](https://webex
 | `lib/asset-transfer.ts`     | popup で fetch した asset を content へ渡すための base64 直列化（CORS 回避）                                |
 | `lib/distrokid-injector.ts` | React 互換ネイティブイベント注入 + `DataTransfer` ファイル注入 + セレクタ契約                               |
 | `lib/messaging.ts`          | popup ↔ content の型付き channel（`PHASES` 進捗契約）                                                      |
-| `lib/storage.ts`            | ローカル配信元候補の永続化（既定 `http://youtube-automation.localhost:7873`）                               |
+| `lib/storage.ts`            | 選択中ローカル配信元の永続化（既定 `http://youtube-automation.localhost:7873`）                             |
 | `lib/types.ts`              | `/distrokid/release.json` の JSON 契約型                                                                    |
 | `tests/`                    | Vitest unit + Playwright e2e                                                                                |
 
@@ -84,7 +84,7 @@ nix develop .#extensions --command pnpm -C extensions/distrokid-helper compile
    `--allow-extension distrokid-helper` は配信済み記録の書き込み（`POST /distrokid/releases`）に**必須**。
    未指定だと `GET /auth/token` が無効になり、フィル完了後の配信済み記録が 403 で失敗する（フィル自体は成功する）。
 2. Chrome で `distrokid.com/new` を開く。
-3. 拡張ポップアップの登録済み **ローカル配信元** selector から対象を選ぶ。選択した配信元は自動保存され、コレクション一覧と先頭の未配信 disc の release.json が自動取得される。
+3. 拡張ポップアップの **ローカル配信元** selector から動的検出された対象を選ぶ。コレクション一覧と先頭の未配信 disc の release.json が自動取得される。
 4. popup の **コレクション選択** には未配信の disc だけが表示される。別 disc を選ぶと一覧と選択 disc の release.json が自動取得される。
 5. レビューを確認して **フォーム一括入力**。最新データを再取得する場合は popup を閉じて再表示する。
 6. 目視確認 → **「続ける」を手動押下** → マスタリング選択 → 完了。
@@ -106,10 +106,43 @@ nix develop .#extensions --command pnpm -C extensions/distrokid-helper compile
    対象チャンネルは `config/channel/distrokid.json` を `enabled: true` + profile 付きにしておく
    （`enabled: false` / 未配置だと `/distrokid/*` が 404 になり、popup がガイダンスを表示する）。
 2. Chrome で `distrokid.com/new` を開く。
-3. 拡張ポップアップの登録済み **ローカル配信元** selector から対象（既定 `http://youtube-automation.localhost:7873`）を選ぶ。選択した配信元は自動保存され、release.json が自動取得される。
+3. 拡張ポップアップの **ローカル配信元** selector から対象（既定 `http://youtube-automation.localhost:7873`）を選ぶ。release.json が自動取得される。
    コレクション選択 UI は表示されない（単一 mode のため）。最新データを再取得する場合は popup を閉じて再表示する。
 4. レビュー表示を確認して **フォーム一括入力**。プロファイル + 動的データがフォームに注入される。
 5. 目視確認 → **「続ける」を手動押下** → マスタリング選択 → 完了。
+
+## ローカル配信元の動的検出
+
+`yt-collection-serve collections/planning --port 49152` のように任意 port で起動したサーバーは、固定 registry `http://localhost:7872/.well-known/yt-collection-serve` に登録される。popup は初回表示と selector を開く操作時に registry を読み、`GET /server-info` で検証できた稼働中サーバーだけを動的検出する。選択肢は更新完了後に開くため、停止済み候補を先に表示しない。既定の `http://youtube-automation.localhost:7873` は常に表示される。候補履歴は保存せず、選択中 URL だけを保存する。
+
+### discovery / storage schema v1
+
+server は `Content-Type: application/json`、`Origin` なしで `{"instance_id":"fixture-instance","server_info":{"channel_name":"Fixture Channel","channel_short":"fixture","hostname":"fixture.localhost","port":49152,"base_url":"http://fixture.localhost:49152","label":"Fixture Channel"}}` を registry へ POST する。GET の完全な schema v1 応答は次の形になる。
+
+```json
+{
+  "schema_version": 1,
+  "ttl_seconds": 30,
+  "servers": [
+    {
+      "instance_id": "fixture-instance",
+      "expires_at": 130.0,
+      "server_info": {
+        "channel_name": "Fixture Channel",
+        "channel_short": "fixture",
+        "hostname": "fixture.localhost",
+        "port": 49152,
+        "base_url": "http://fixture.localhost:49152",
+        "label": "Fixture Channel"
+      }
+    }
+  ]
+}
+```
+
+`schema_version` は互換性番号、`ttl_seconds` は生存期間、`servers` は `base_url` 順の登録配列。`instance_id` はプロセス識別子、`expires_at` は Unix time の失効時刻、`server_info` の各 field はチャンネル名・短縮名・loopback host/port/base URL・表示 label である。同一 ID の heartbeat POST は expiry を更新し、正常終了時の `{"instance_id":"fixture-instance"}` DELETE は即時削除、異常終了時は TTL 境界で失効する。
+
+POST/DELETE は JSON 以外を 415、`Origin` 付き要求を 403、不正 schema を 400、16384 bytes 超の body を 413、128 文字超の ID を 400、128 件超の登録を 429 にして状態を変更しない。未知 path は 404、未対応 method は 405。storage は `chrome.storage.local["serverUrl"]` に選択中 URL 文字列だけを保持し、旧候補配列 key `chrome.storage.local["ytCollectionServeSources"]` は更新時に削除して再作成しない。
 
 ## テスト
 

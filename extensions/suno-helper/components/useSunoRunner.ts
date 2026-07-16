@@ -38,7 +38,7 @@ import {
   type RunOverrides,
 } from "../lib/run-overrides";
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
-import { readServerSources, rememberServerSource, serverUrlItem } from "../lib/storage";
+import { migrateServerSourcesStorage, serverUrlItem } from "../lib/storage";
 import { shouldReportLiveProgressStatus } from "./live-progress-status";
 import {
   buildRestoreState,
@@ -53,6 +53,7 @@ interface RunnerState {
   url: string;
   setUrl: (url: string) => void;
   serverSources: LocalServerSource[];
+  refreshServerSources: () => Promise<void>;
   collections: CollectionSummary[];
   selectedCollectionId: string;
   selectCollection: (id: string) => void;
@@ -111,6 +112,7 @@ function maxDefined(...values: Array<number | null | undefined>): number | undef
 export function useSunoRunner(): RunnerState {
   const [reloadRequired, setReloadRequired] = useState(false);
   const [url, setUrlState] = useState("");
+  const urlRef = useRef(url);
   const [serverSources, setServerSources] = useState<LocalServerSource[]>([]);
   const [allCollections, setAllCollections] = useState<CollectionSummary[]>([]);
   const [selectedCollectionIdState, setSelectedCollectionId] = useState("");
@@ -122,6 +124,11 @@ export function useSunoRunner(): RunnerState {
   const [isError, setIsError] = useState(false);
   const [compatibilityWarning, setCompatibilityWarning] = useState("");
   const [isRunning, setIsRunning] = useState(false);
+  const isRunningRef = useRef(isRunning);
+  const setRunning = useCallback((value: boolean): void => {
+    isRunningRef.current = value;
+    setIsRunning(value);
+  }, []);
   // popup 再 open 時に content snapshot から復元する playlist 名 (#854)。
   // 選択由来 (derivedPlaylistName) が無い実行中復元ケースで display only に使う。
   const [restoredPlaylistName, setRestoredPlaylistName] = useState<string | undefined>(undefined);
@@ -159,6 +166,7 @@ export function useSunoRunner(): RunnerState {
   const serverSourcesRevisionRef = useRef(0);
   const restoredProgressRef = useRef(false);
   const initialFetchStartedRef = useRef(false);
+  const initializationRef = useRef<Promise<void> | null>(null);
 
   const resumableCollectionId = useMemo(() => {
     if (
@@ -452,11 +460,11 @@ export function useSunoRunner(): RunnerState {
         report(`${text}${terminalWarning}`, Boolean(error));
       }
       if (isTerminalPhase(data.phase)) {
-        setIsRunning(false);
+        setRunning(false);
       }
     });
     return () => unwatch();
-  }, [entries, report]);
+  }, [entries, report, setRunning]);
 
   // overlay mount / popup 再 open 時、runner content が保持する snapshot から進捗を即時復元する (#852)。
   // queryProgress は background 経由で同一タブの runner content へ中継される (#892)。runner 未注入なら
@@ -475,7 +483,7 @@ export function useSunoRunner(): RunnerState {
         restoredProgressRef.current = true;
         setEntries(restored.entries);
         setItemStates(restored.itemStates);
-        setIsRunning(restored.isRunning);
+        setRunning(restored.isRunning);
         setRestoredCollectionId(restored.collectionId);
         setSelectedCollectionId(restored.collectionId);
         setRestoredPlaylistName(restored.playlistName);
@@ -497,7 +505,7 @@ export function useSunoRunner(): RunnerState {
         // runner content 未注入（中継先不在）では queryProgress が到達しない。復元を諦め従来表示を維持する。
       }
     })();
-  }, [report]);
+  }, [report, setRunning]);
 
   const fetchData = useCallback(
     async (targetUrl: string, preferredCollectionId: string) => {
@@ -512,38 +520,24 @@ export function useSunoRunner(): RunnerState {
         return;
       }
       let baseUrl = trimmed;
-      let serverLabel: string | undefined;
       try {
         const info = await sendMessage("fetchServerInfo", { baseUrl: trimmed });
         if (!isLatestRequest()) {
           return;
         }
         baseUrl = info.base_url;
-        serverLabel = info.label;
       } catch {
         // 古い server は fetchServerInfo を提供しないため、入力 URL のまま継続する。
         if (!isLatestRequest()) {
           return;
         }
       }
-      const persistServerSource = serverSourcePersistenceRef.current.then(async () => {
-        if (!isLatestRequest()) {
-          return;
-        }
-        await serverUrlItem.setValue(trimmed);
-        if (!isLatestRequest()) {
-          return;
-        }
-        const rememberedSources = await rememberServerSource(trimmed, serverLabel);
-        if (!isLatestRequest()) {
-          return;
-        }
-        serverSourcesRevisionRef.current += 1;
-        setServerSources(rememberedSources);
-      });
-      serverSourcePersistenceRef.current = persistServerSource.catch(() => undefined);
       try {
-        await persistServerSource;
+        const persistSelectedUrl = serverSourcePersistenceRef.current.then(async () => {
+          if (isLatestRequest()) await serverUrlItem.setValue(trimmed);
+        });
+        serverSourcePersistenceRef.current = persistSelectedUrl.catch(() => undefined);
+        await persistSelectedUrl;
         if (!isLatestRequest()) {
           return;
         }
@@ -618,7 +612,11 @@ export function useSunoRunner(): RunnerState {
 
   const updateUrl = useCallback(
     (nextUrl: string) => {
+      if (isRunningRef.current) {
+        return;
+      }
       initialFetchStartedRef.current = true;
+      urlRef.current = nextUrl;
       setUrlState(nextUrl);
       restoredProgressRef.current = false;
       clearLoadedRunState();
@@ -636,36 +634,58 @@ export function useSunoRunner(): RunnerState {
     [clearLoadedRunState, fetchData, url],
   );
 
+  const discoverSources = useCallback(
+    async (): Promise<LocalServerSource[]> => sendMessage("discoverServerSources", undefined),
+    [],
+  );
+
+  const refreshServerSources = useCallback(async () => {
+    if (isRunningRef.current) return;
+    await initializationRef.current;
+    if (isRunningRef.current) return;
+    const revision = ++serverSourcesRevisionRef.current;
+    try {
+      const sources = await discoverSources();
+      if (isRunningRef.current || revision !== serverSourcesRevisionRef.current) return;
+      setServerSources(sources);
+      const currentUrl = urlRef.current;
+      if (currentUrl && sources.length > 0 && !sources.some((source) => source.url === currentUrl)) {
+        updateUrl(sources[0].url);
+      }
+    } catch (error) {
+      if (isRunningRef.current || revision !== serverSourcesRevisionRef.current) return;
+      const message = error instanceof Error ? error.message : String(error);
+      setPhase("error");
+      report(`配信元の検出に失敗しました: ${message}`, true);
+    }
+  }, [discoverSources, report, updateUrl]);
+
   useEffect(() => {
     if (resumeCheckedAt === null || initialFetchStartedRef.current) {
       return;
     }
     initialFetchStartedRef.current = true;
-    void serverUrlItem
-      .getValue()
-      .then((stored) => {
-        setUrlState(stored);
-        if (stored.trim()) {
-          void fetchData(stored, resumableCollectionId ?? "");
-        }
+    const revision = ++serverSourcesRevisionRef.current;
+    const initialization = migrateServerSourcesStorage()
+      .then(() => Promise.all([serverUrlItem.getValue(), discoverSources()]))
+      .then(([stored, sources]) => {
+        if (revision !== serverSourcesRevisionRef.current) return;
+        setServerSources(sources);
+        if (!stored.trim()) return;
+        const nextUrl = sources.some((source) => source.url === stored) ? stored : sources[0]?.url;
+        if (!nextUrl) return;
+        urlRef.current = nextUrl;
+        setUrlState(nextUrl);
+        void fetchData(nextUrl, resumableCollectionId ?? "");
       })
       .catch((err: unknown) => {
         reportStorageFailure(err);
-      });
-  }, [fetchData, reportStorageFailure, resumableCollectionId, resumeCheckedAt]);
-
-  useEffect(() => {
-    const revisionAtStart = serverSourcesRevisionRef.current;
-    void readServerSources()
-      .then((sources) => {
-        if (revisionAtStart === serverSourcesRevisionRef.current) {
-          setServerSources(sources);
-        }
       })
-      .catch((err: unknown) => {
-        reportStorageFailure(err);
+      .finally(() => {
+        initializationRef.current = null;
       });
-  }, [reportStorageFailure]);
+    initializationRef.current = initialization;
+  }, [discoverSources, fetchData, reportStorageFailure, resumableCollectionId, resumeCheckedAt]);
 
   const run = useCallback(
     async (overrides?: RunOverrides) => {
@@ -687,7 +707,7 @@ export function useSunoRunner(): RunnerState {
       const range = overrides?.range;
       durationOutlierWarningsRef.current = Object.values(overrides?.durationOutlierWarnings ?? {});
       // 二重実行ガード成立後、送信前に実行中フラグを立てる (#892 要件7: setIsRunning を sendMessage の前へ)。
-      setIsRunning(true);
+      setRunning(true);
       setPhase("starting");
       try {
         // collection mode の payload だけを送る。collectionId は resume 紐付けと download 記録に必須。
@@ -709,7 +729,7 @@ export function useSunoRunner(): RunnerState {
         report("連続実行を開始しました。");
       } catch (err) {
         // 送信失敗時はフラグを戻して再実行可能にする（実行は始まっていない）。
-        setIsRunning(false);
+        setRunning(false);
         setPhase("error");
         const message = err instanceof Error ? err.message : String(err);
         report(formatRunError(message), true);
@@ -724,6 +744,7 @@ export function useSunoRunner(): RunnerState {
       runModeId,
       regenerateDurationOutliers,
       report,
+      setRunning,
     ],
   );
 
@@ -750,7 +771,7 @@ export function useSunoRunner(): RunnerState {
       report("playlist 再開に必要な clip ID がありません。ページを再読み込みしてから再試行してください。", true);
       return;
     }
-    setIsRunning(true);
+    setRunning(true);
     setPhase("adding-to-playlist");
     durationOutlierWarningsRef.current = Object.values(durationOutlierWarningsForResume ?? {});
     try {
@@ -768,7 +789,7 @@ export function useSunoRunner(): RunnerState {
       setResumeDismissed(true);
       report("playlist 追加とダウンロードを再実行しています…");
     } catch (err) {
-      setIsRunning(false);
+      setRunning(false);
       setPhase("error");
       setResumeDismissed(false);
       const message = err instanceof Error ? err.message : String(err);
@@ -787,6 +808,7 @@ export function useSunoRunner(): RunnerState {
     resumeBanner,
     selectedCollectionId,
     report,
+    setRunning,
   ]);
 
   // バナー承認 = 1-click 自動再開 (#892 要件6)。failedIndex === total（全 entry 投入済み）のときは
@@ -842,7 +864,7 @@ export function useSunoRunner(): RunnerState {
       report("ダウンロード再開に必要な clip ID がありません。ページを再読み込みしてから再試行してください。", true);
       return;
     }
-    setIsRunning(true);
+    setRunning(true);
     setPhase("downloading");
     try {
       const payload = {
@@ -853,12 +875,19 @@ export function useSunoRunner(): RunnerState {
       await sendMessage("retryDownload", payload);
       report("ダウンロードを再実行しています…");
     } catch (err) {
-      setIsRunning(false);
+      setRunning(false);
       setPhase("error");
       const message = err instanceof Error ? err.message : String(err);
       report(formatRunError(message), true);
     }
-  }, [isRunning, selectedCollectionId, submittedClipIdsForResume, expectedClipCountForManualAdoption, report]);
+  }, [
+    isRunning,
+    selectedCollectionId,
+    submittedClipIdsForResume,
+    expectedClipCountForManualAdoption,
+    report,
+    setRunning,
+  ]);
 
   const adoptSelectedClips = useCallback(async () => {
     if (isRunning) {
@@ -872,7 +901,7 @@ export function useSunoRunner(): RunnerState {
       report("期待 clip 数を解決できません。ページを再読み込みしてから再試行してください。", true);
       return;
     }
-    setIsRunning(true);
+    setRunning(true);
     setPhase("adopting");
     try {
       const result = await sendMessage("adoptSelectedClips", {
@@ -924,7 +953,7 @@ export function useSunoRunner(): RunnerState {
       setPhase("error");
       report(formatRunError(message), true);
     } finally {
-      setIsRunning(false);
+      setRunning(false);
     }
   }, [
     isRunning,
@@ -939,6 +968,7 @@ export function useSunoRunner(): RunnerState {
     durationFilter,
     regenerateDurationOutliers,
     report,
+    setRunning,
   ]);
 
   // 失敗分のみ再実行 (#948)。failedEntries を indices として run へ渡す。
@@ -985,6 +1015,7 @@ export function useSunoRunner(): RunnerState {
     url,
     setUrl: updateUrl,
     serverSources,
+    refreshServerSources,
     collections,
     selectedCollectionId,
     selectCollection,
