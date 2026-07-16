@@ -386,7 +386,11 @@ class TestClientSecrets:
         assert r.status == "fail"
         assert str(secrets_dir / "client_secrets.json") in r.message
         assert r.next_action is not None
-        assert "fallback 状態" not in r.next_action["instructions"]
+        instructions = r.next_action["instructions"]
+        assert "fallback 状態" not in instructions
+        assert str(tmp_path / "auth" / "client_secrets.json") in instructions
+        assert str(secrets_dir / "client_secrets.json") not in instructions
+        assert "`CLIENT_SECRETS_DIR` を解除" in instructions
 
     def test_uses_submodule_fallback_path(self, tmp_path):
         self._write_valid_client_secrets(tmp_path / "automation" / "auth" / "client_secrets.json")
@@ -459,13 +463,15 @@ class TestClientSecrets:
             "Clients > Create client",
             "Desktop app",
             "Add secret",
-            "auth/client_secrets.template.json",
+            "Download JSON",
+            "uv run yt-doctor --fix-client-secrets",
         ):
             assert expected in instructions
         assert "fallback 状態: 1Password / CLIENT_SECRETS_JSON fallback 取得失敗: op read failed" in instructions
         assert "認証情報を作成 → OAuth クライアント ID" not in instructions
         assert "作成直後" not in instructions
-        assert "JSON をダウンロード" not in instructions
+        assert "auth/client_secrets.template.json" not in instructions
+        assert "転記" not in instructions
 
     def test_valid(self, tmp_path):
         self._write_valid_client_secrets(tmp_path / "auth" / "client_secrets.json")

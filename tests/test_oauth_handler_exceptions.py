@@ -399,12 +399,16 @@ class TestClientSecretsFallback:
             "Clients > Create client",
             "Desktop app",
             "Add secret",
-            "auth/client_secrets.template.json",
+            "Download JSON",
+            "yt-doctor --fix-client-secrets",
+            "<channel_dir>/auth/client_secrets.json",
+            "CLIENT_SECRETS_DIR",
+            "CLIENT_SECRETS_JSON",
         ):
             assert expected in message
         assert "OAuth 2.0 認証情報を作成" not in message
         assert "作成直後" not in message
-        assert "JSON をダウンロード" not in message
+        assert "auth/client_secrets.template.json" not in message
 
     def test_should_not_swallow_non_config_error(self, tmp_path: Path, monkeypatch):
         """Given 1Password 取得が ``RuntimeError`` を raise（想定外）

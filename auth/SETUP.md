@@ -2,7 +2,7 @@
 
 新しい YouTube チャンネル用に GCP プロジェクト + API + 認証情報を用意する手順。
 
-本リポジトリは Gemini / Veo / Lyria を **Vertex AI 経由で 1 本化** している（AI Studio モードは廃止）。スクリプト / Terraform で半自動化しているため、手動作業として残るのは **Google Auth Platform での Branding / Audience / Clients 設定と `client_secrets.json` 配置**。
+本リポジトリは Gemini / Veo / Lyria を **Vertex AI 経由で 1 本化** している（AI Studio モードは廃止）。スクリプト / Terraform で半自動化しているため、Google Auth Platform の Branding / Audience / Clients は手動設定する。推奨の `/setup` では Download JSON までを利用者が行い、配置は AI が自動化する。手動ルート A / B の配置手順は現状どおり維持する。
 
 ---
 
@@ -38,7 +38,7 @@ Claude Code 上で `/setup` を実行する。AI が `yt-doctor` でツール導
 /setup
 ```
 
-`gcloud auth login` / `gcloud auth application-default login` / Google Auth Platform の Branding・Audience Test users・Clients 設定と `client_secrets.json` 配置は PKCE / GUI 制約で AI 実行不可なため利用者が手動で行うが、それ以外は AI が gcloud を直接 Bash で実行する。内部では本書のルート A (bootstrap.sh) を呼ぶ。
+`gcloud auth login` / `gcloud auth application-default login` / Google Auth Platform の Branding・Audience Test users・Clients 設定と Download JSON は PKCE / GUI 制約で AI 実行不可なため利用者が手動で行う。Download JSON 後に `done` と返すと、AI が `uv run yt-doctor --fix-client-secrets`、続けて `uv run yt-doctor --json` を実行し、`client_secrets: ok` を確認する。それ以外は AI が gcloud を直接 Bash で実行する。内部では本書のルート A (bootstrap.sh) を呼ぶ。
 
 ### ルート A: `.claude/skills/channel-new/references/gcp-bootstrap.sh`（gcloud 半自動化・最速）
 
@@ -86,6 +86,8 @@ cd ../../..
 `terraform.tfvars` の必須キーは `project_id` / `adc_email`。新規作成時は `billing_account` も必要（既存流用なら `create_project = false` にして不要）。
 
 詳細は [`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) を参照。
+
+ルート A / B では `client_secrets.json` の手動配置を現状どおり行う。次の Step OAuth はその手動経路向けであり、推奨のルート 0 は `/setup` の Download JSON → `done` → fix → JSON 再診断を使う。
 
 ---
 
