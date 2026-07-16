@@ -791,7 +791,13 @@ def test_worktree_setup_fails_when_no_environment_loader_is_available(tmp_path: 
 
 
 def test_worktree_environment_contract_is_wired_into_lite_steps_and_docs() -> None:
-    assert _read(_ENVRC_PATH) == "use flake\n"
+    envrc = _read(_ENVRC_PATH)
+    # nix-direnv を version + SRI hash 固定でブートストラップし（issue #2097）、
+    # 最終ディレクティブは従来どおり use flake であること
+    assert 'source_url "https://raw.githubusercontent.com/nix-community/nix-direnv/' in envrc
+    assert '" "sha256-' in envrc
+    assert "nix_direnv_version" in envrc
+    assert envrc.rstrip().splitlines()[-1] == "use flake"
     workflow = _read(_LITE_WORKFLOW_PATH)
     setup_instruction = "最初に `bash .lefthook/setup-worktree.sh` を実行"
     wrapped_command_instruction = "`bash .lefthook/setup-worktree.sh <command> [args...]` 経由"
