@@ -7,7 +7,8 @@ Required setup:
 1. Google Cloud Console でプロジェクト作成
 2. YouTube Data API v3 を有効化
 3. Google Auth Platform で Desktop app client を作成
-4. Client secrets > Add secret で secret を発行して auth/client_secrets.json に配置
+4. Client secrets > Add secret で発行後に Download JSON を実行し、
+   yt-doctor --fix-client-secrets で auth/client_secrets.json へ移動
 """
 
 import json
@@ -175,8 +176,9 @@ class YouTubeOAuthHandler:
                 "   (未追加だと初回認証が 403 access_denied で止まります)\n"
                 "4. Google Auth Platform > Clients > Create client で Application type Desktop app を作成\n"
                 "5. Clients > 対象 client > Client secrets > Add secret で secret を発行\n"
-                "6. 発行した値を auth/client_secrets.template.json に転記し、"
-                "<channel_dir>/auth/client_secrets.json に配置\n"
+                "6. Download JSON を実行して Downloads に保存し、"
+                "`uv run yt-doctor --fix-client-secrets` で "
+                "<channel_dir>/auth/client_secrets.json へ自動移動\n"
                 "   または CLIENT_SECRETS_DIR 環境変数を指定 / 1Password に CLIENT_SECRETS_JSON として登録"
             )
         try:

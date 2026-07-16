@@ -930,6 +930,58 @@ def test_collection_localization_docs_use_root_localizations_contract() -> None:
     assert "`config/localizations.json`" in rules
 
 
+def test_setup_client_secrets_step_uses_download_and_automatic_move() -> None:
+    setup = _read(".claude/skills/setup/SKILL.md")
+    step = setup.split("#### `client_secrets`", 1)[1].split("#### `oauth_token`", 1)[0]
+
+    for expected in (
+        "Client secrets",
+        "Add secret",
+        "Download JSON",
+        "done",
+        "uv run yt-doctor --fix-client-secrets",
+        "uv run yt-doctor --json",
+        "client_secrets` が `ok`",
+    ):
+        assert expected in step
+    assert "client_secrets.template.json" not in step
+    assert "転記" not in step
+
+
+def test_onboarding_client_secrets_step_uses_download_and_automatic_move() -> None:
+    onboarding = _read("ONBOARDING.md")
+    oauth_setup = onboarding.split("### 2.3 OAuth セットアップ", 1)[1].split("### 2.4 初期設定後の GCP 課金確認", 1)[0]
+
+    for expected in (
+        "Client secrets > Add secret",
+        "Download JSON",
+        "done",
+        "uv run yt-doctor --fix-client-secrets",
+        "uv run yt-doctor --json",
+        "client_secrets` が `ok`",
+    ):
+        assert expected in oauth_setup
+    assert "client_secrets.template.json" not in oauth_setup
+    assert "転記" not in oauth_setup
+
+
+def test_oauth_module_and_setup_guide_distinguish_automatic_and_manual_routes() -> None:
+    oauth_handler = _read("src/youtube_automation/auth/oauth_handler.py")
+    module_docstring = oauth_handler.split('"""', 2)[1]
+    for expected in ("Download JSON", "yt-doctor --fix-client-secrets"):
+        assert expected in module_docstring
+    assert "secret を発行して auth/client_secrets.json に配置" not in module_docstring
+
+    setup_guide = _read("auth/SETUP.md")
+    route_zero = setup_guide.split("### ルート 0:", 1)[1].split("### ルート A:", 1)[0]
+    for expected in ("Download JSON", "done", "yt-doctor --fix-client-secrets", "yt-doctor --json"):
+        assert expected in route_zero
+    assert "client_secrets.json` 配置は PKCE / GUI 制約で AI 実行不可" not in route_zero
+
+    manual_routes = setup_guide.split("### ルート A:", 1)[1].split('---\n\n## <a id="step-oauth"', 1)[0]
+    assert "ルート A / B では `client_secrets.json` の手動配置を現状どおり行う" in manual_routes
+
+
 def test_channel_new_regeneration_documents_ttp_wf_new_readiness_gate() -> None:
     regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
     rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
