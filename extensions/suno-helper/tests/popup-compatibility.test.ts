@@ -38,9 +38,10 @@ const downloadFormatMocks = vi.hoisted(() => ({
 }));
 
 const serverSourcesMocks = vi.hoisted(() => ({
-  readServerSources: vi.fn(),
-  rememberServerSource: vi.fn(),
+  migrateServerSourcesStorage: vi.fn(async () => undefined),
 }));
+
+const legacySourceState = vi.hoisted(() => ({ present: true }));
 
 const resumeStateMocks = vi.hoisted(() => ({
   readResumeState: vi.fn(async () => null),
@@ -64,8 +65,7 @@ vi.mock("../lib/storage", () => ({
   serverUrlItem: storageMocks,
   downloadFormatItem: downloadFormatMocks,
   readDownloadFormat: vi.fn(() => downloadFormatMocks.getValue()),
-  readServerSources: serverSourcesMocks.readServerSources,
-  rememberServerSource: serverSourcesMocks.rememberServerSource,
+  migrateServerSourcesStorage: serverSourcesMocks.migrateServerSourcesStorage,
 }));
 
 vi.mock("../lib/messaging", () => messagingMocks);
@@ -104,6 +104,18 @@ function defaultSendMessage(message: string, payload?: Record<string, string>): 
       base_url: payload?.baseUrl ?? BASE_URL,
       label: "localhost",
     });
+  }
+  if (message === "discoverServerSources") {
+    return Promise.resolve([
+      {
+        id: "youtube-automation-localhost-7873",
+        label: "YouTube Automation (default)",
+        url: "http://youtube-automation.localhost:7873",
+      },
+      { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
+      { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
+      { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
+    ]);
   }
   if (message === "fetchCollections") {
     return readJson(`${payload?.baseUrl}/collections`);
@@ -247,12 +259,10 @@ describe("Suno popup compatibility check", () => {
     downloadFormatMocks.setValue.mockResolvedValue(undefined);
     presetStateMocks.readRunModeId.mockResolvedValue("serial");
     presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
-    serverSourcesMocks.readServerSources.mockResolvedValue([
-      { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
-      { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
-      { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
-    ]);
-    serverSourcesMocks.rememberServerSource.mockResolvedValue([]);
+    serverSourcesMocks.migrateServerSourcesStorage.mockImplementation(async () => {
+      legacySourceState.present = false;
+    });
+    legacySourceState.present = true;
     messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
     messagingMocks.progressHandler = undefined;
     messagingMocks.onMessage.mockImplementation(
@@ -306,18 +316,21 @@ describe("Suno popup compatibility check", () => {
     resumeStateMocks.writeResumeState.mockResolvedValue(undefined);
     presetStateMocks.readRunModeId.mockResolvedValue("serial");
     presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
-    serverSourcesMocks.readServerSources.mockResolvedValue([]);
-    serverSourcesMocks.rememberServerSource.mockResolvedValue([]);
+    serverSourcesMocks.migrateServerSourcesStorage.mockResolvedValue(undefined);
   });
 
   it("ローカル配信元 option は URL を表示せず、URL value はデータ取得先として維持する", async () => {
     const select = expectControl(container, "server-url") as HTMLSelectElement;
 
     await waitFor(() => {
-      expect(select.options).toHaveLength(3);
+      expect(select.options).toHaveLength(4);
     });
 
     expect(Array.from(select.options, (option) => ({ text: option.text, value: option.value }))).toEqual([
+      {
+        text: "YouTube Automation (default) | suno-helper",
+        value: "http://youtube-automation.localhost:7873",
+      },
       { text: "ABYSS MI | suno-helper", value: BASE_URL },
       { text: "localhost fallback 7877 | suno-helper", value: FALLBACK_URL },
       { text: "localhost changed | suno-helper", value: `${BASE_URL}/changed` },
@@ -1671,8 +1684,11 @@ describe("Suno popup compatibility check", () => {
   it.each([
     ["server URL", () => storageMocks.getValue.mockRejectedValueOnce(new Error("Extension context invalidated."))],
     [
-      "server sources",
-      () => serverSourcesMocks.readServerSources.mockRejectedValueOnce(new Error("Extension context invalidated.")),
+      "server source migration",
+      () =>
+        serverSourcesMocks.migrateServerSourcesStorage.mockRejectedValueOnce(
+          new Error("Extension context invalidated."),
+        ),
     ],
     [
       "run mode",
@@ -2201,10 +2217,6 @@ describe("Suno popup compatibility check", () => {
   });
 
   it("ローカル配信元を変更すると新しい URL の一覧と prompts へ自動で切り替わる", async () => {
-    serverSourcesMocks.rememberServerSource.mockResolvedValue([
-      { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
-      { id: "localhost-7873-changed", label: "localhost changed", url: `${BASE_URL}/changed` },
-    ]);
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
@@ -2283,10 +2295,6 @@ describe("Suno popup compatibility check", () => {
       .mockResolvedValueOnce(jsonResponse(200, [{ name: "initial", style: "lofi", lyrics: "" }]))
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    serverSourcesMocks.rememberServerSource.mockResolvedValue([
-      { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
-      { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
-    ]);
     messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
       if (message === "fetchServerInfo" && payload?.baseUrl === FALLBACK_URL) {
         return Promise.resolve({ base_url: "http://127.0.0.1:7877", label: "fallback" });
@@ -2325,9 +2333,6 @@ describe("Suno popup compatibility check", () => {
       }
       return Promise.resolve(undefined);
     });
-    serverSourcesMocks.rememberServerSource.mockImplementation(async (url: string) => [
-      { id: "selected-source", label: `source ${url}`, url },
-    ]);
     fetchMock
       .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
       .mockResolvedValueOnce(
@@ -2363,64 +2368,11 @@ describe("Suno popup compatibility check", () => {
     });
     expect(storageMocks.setValue).toHaveBeenLastCalledWith(`${BASE_URL}/changed`);
     expect(serverSelect.value).toBe(`${BASE_URL}/changed`);
-    expect(Array.from(serverSelect.options, (option) => option.value)).toEqual([`${BASE_URL}/changed`]);
+    expect(Array.from(serverSelect.options, (option) => option.value)).toContain(`${BASE_URL}/changed`);
     expect(container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')?.dataset.sunoCollectionId).toBe(
       "20260602-clm-new-source-collection",
     );
     expect(container.textContent).toContain("new-source");
-  });
-
-  it("遅い初期配信元一覧読込が自動取得で保存した canonical 配信元を上書きしない", async () => {
-    const initialSources = deferred<Array<{ id: string; label: string; url: string }>>();
-    act(() => {
-      root.unmount();
-    });
-    root = createRoot(container);
-    fetchMock.mockReset();
-    storageMocks.getValue.mockResolvedValue(BASE_URL);
-    serverSourcesMocks.readServerSources.mockReturnValueOnce(initialSources.promise);
-    serverSourcesMocks.rememberServerSource.mockResolvedValue([
-      { id: "selected", label: "Selected source", url: BASE_URL },
-    ]);
-    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
-      if (message === "fetchServerInfo") {
-        return Promise.resolve({
-          base_url: "http://canonical.localhost:7873",
-          label: "Canonical source",
-        });
-      }
-      return defaultSendMessage(message, payload);
-    });
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
-      .mockResolvedValueOnce(
-        jsonResponse(200, [
-          {
-            id: "20260601-clm-theme-a-collection",
-            name: "theme-a-collection",
-            status: "ready",
-            pattern_count: 1,
-            downloaded_count: 0,
-          },
-        ]),
-      )
-      .mockResolvedValueOnce(jsonResponse(200, [{ name: "mounted", style: "lofi", lyrics: "" }]));
-
-    await act(async () => {
-      root.render(createElement(App));
-    });
-    await waitFor(() => {
-      expect(container.textContent).toContain("1 パターンを取得しました。");
-    });
-
-    await act(async () => {
-      initialSources.resolve([{ id: "stale", label: "Stale source", url: FALLBACK_URL }]);
-    });
-    await waitFor(() => {
-      expect(
-        Array.from((expectControl(container, "server-url") as HTMLSelectElement).options, (option) => option.value),
-      ).toEqual([BASE_URL]);
-    });
   });
 
   it("dir mode の collection 一覧に実行可能候補が無い場合は legacy endpoint へフォールバックしない", async () => {
@@ -2557,5 +2509,281 @@ describe("Suno popup compatibility check", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
     expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
+  });
+
+  it("should migrate before initial discovery and replace stopped candidates before the selector opens", async () => {
+    const defaultSource = {
+      id: "youtube-automation-localhost-7873",
+      label: "YouTube Automation (default)",
+      url: "http://youtube-automation.localhost:7873",
+    };
+    const oldSource = { id: "old-9001", label: "Old", url: "http://old.localhost:9001" };
+    const newSource = { id: "new-49152", label: "New", url: "http://new.localhost:49152" };
+    const events: string[] = [];
+    serverSourcesMocks.migrateServerSourcesStorage.mockImplementation(async () => {
+      events.push("migration");
+    });
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "discoverServerSources") {
+        events.push("discovery");
+        const discoveryCount = events.filter((event) => event === "discovery").length;
+        return Promise.resolve(discoveryCount === 1 ? [defaultSource, oldSource] : [defaultSource, newSource]);
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await rerenderApp();
+    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    await waitFor(() => expect(Array.from(select.options, ({ value }) => value)).toContain(oldSource.url));
+    expect(events.slice(0, 2)).toEqual(["migration", "discovery"]);
+
+    await act(async () => {
+      (expectControl(container, "server-source-trigger") as HTMLButtonElement).click();
+    });
+    await waitFor(() => expect(Array.from(select.options, ({ value }) => value)).toContain(newSource.url));
+    expect(Array.from(select.options, ({ value }) => value)).toEqual([defaultSource.url, newSource.url]);
+
+    await act(async () => (expectControl(container, "server-source-trigger") as HTMLButtonElement).click());
+    await waitFor(() => expect(events.filter((event) => event === "discovery")).toHaveLength(3));
+  });
+
+  it("should run discovery once when opening an unfocused selector with the mouse", async () => {
+    await rerenderApp();
+    const initialCalls = messagingMocks.sendMessage.mock.calls.filter(
+      ([message]) => message === "discoverServerSources",
+    ).length;
+
+    await act(async () => {
+      (expectControl(container, "server-source-trigger") as HTMLButtonElement).click();
+    });
+
+    await waitFor(() =>
+      expect(
+        messagingMocks.sendMessage.mock.calls.filter(([message]) => message === "discoverServerSources"),
+      ).toHaveLength(initialCalls + 1),
+    );
+  });
+
+  it("should refresh and open the selector while the initial collection fetch is still pending", async () => {
+    const initialCollections = deferred<unknown>();
+    const defaultSource = {
+      id: "youtube-automation-localhost-7873",
+      label: "YouTube Automation (default)",
+      url: "http://youtube-automation.localhost:7873",
+    };
+    const liveSource = { id: "live", label: "Live", url: "http://live.localhost:49152" };
+    storageMocks.getValue.mockResolvedValue(defaultSource.url);
+    let discoveryCount = 0;
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "discoverServerSources") {
+        discoveryCount += 1;
+        return Promise.resolve(discoveryCount === 1 ? [defaultSource] : [defaultSource, liveSource]);
+      }
+      if (message === "fetchCompatibilityWarning") {
+        return Promise.resolve("");
+      }
+      if (message === "fetchCollections") {
+        return initialCollections.promise;
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await rerenderApp();
+    await waitFor(() =>
+      expect(messagingMocks.sendMessage).toHaveBeenCalledWith("fetchCollections", { baseUrl: defaultSource.url }),
+    );
+
+    await act(async () => {
+      (expectControl(container, "server-source-trigger") as HTMLButtonElement).click();
+    });
+
+    await waitFor(() => expect(discoveryCount).toBe(2));
+    await waitFor(() => expect(container.querySelector('[role="listbox"]')).not.toBeNull());
+    expect(container.querySelector('[role="listbox"]')?.textContent).toContain("Live");
+  });
+
+  it("should replace a restored URL removed by discovery during an early selector refresh", async () => {
+    await act(async () => root.unmount());
+    container.innerHTML = "";
+    root = createRoot(container);
+    const initialDiscovery = deferred<Array<{ id: string; label: string; url: string }>>();
+    const defaultSource = {
+      id: "youtube-automation-localhost-7873",
+      label: "YouTube Automation (default)",
+      url: "http://youtube-automation.localhost:7873",
+    };
+    const restoredSource = { id: "restored", label: "Restored", url: "http://restored.localhost:49152" };
+    storageMocks.getValue.mockResolvedValue(restoredSource.url);
+    fetchMock.mockResolvedValue(jsonResponse(404, {}));
+    let discoveryCount = 0;
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "discoverServerSources") {
+        discoveryCount += 1;
+        return discoveryCount === 1 ? initialDiscovery.promise : Promise.resolve([defaultSource]);
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await act(async () => root.render(createElement(App)));
+    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    await act(async () => {
+      (expectControl(container, "server-source-trigger") as HTMLButtonElement).click();
+      initialDiscovery.resolve([defaultSource, restoredSource]);
+      await initialDiscovery.promise;
+    });
+
+    await waitFor(() =>
+      expect(messagingMocks.sendMessage).toHaveBeenCalledWith("fetchCollections", { baseUrl: defaultSource.url }),
+    );
+    expect(select.value).toBe(defaultSource.url);
+    expect(discoveryCount).toBe(2);
+  });
+
+  it.each([
+    ["keeps a saved live URL", "http://live.localhost:49152", "http://live.localhost:49152"],
+    ["replaces a saved stopped URL", "http://stopped.localhost:9001", "http://youtube-automation.localhost:7873"],
+  ])("should %s without fetching the stopped URL", async (_label, savedUrl, expectedUrl) => {
+    const defaultSource = {
+      id: "youtube-automation-localhost-7873",
+      label: "YouTube Automation (default)",
+      url: "http://youtube-automation.localhost:7873",
+    };
+    const liveSource = { id: "live", label: "Live", url: "http://live.localhost:49152" };
+    storageMocks.getValue.mockResolvedValue(savedUrl);
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "discoverServerSources") return Promise.resolve([defaultSource, liveSource]);
+      if (payload?.baseUrl === "http://stopped.localhost:9001") {
+        throw new Error("stopped URL must not be fetched");
+      }
+      return defaultSendMessage(message, payload);
+    });
+
+    await rerenderApp();
+    await waitFor(() => expect((expectControl(container, "server-url") as HTMLSelectElement).value).toBe(expectedUrl));
+
+    expect(
+      messagingMocks.sendMessage.mock.calls.some(([, payload]) => payload?.baseUrl === "http://stopped.localhost:9001"),
+    ).toBe(false);
+    if (savedUrl !== expectedUrl) expect(storageMocks.setValue).toHaveBeenCalledWith(expectedUrl);
+  });
+
+  it("should persist only the selected URL when choosing a discovered non-default source", async () => {
+    const liveSource = { id: "channel-a-49152", label: "Channel A", url: "http://channel-a.localhost:49152" };
+    fetchMock.mockResolvedValue(jsonResponse(404, {}));
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "discoverServerSources") {
+        return Promise.resolve([
+          {
+            id: "youtube-automation-localhost-7873",
+            label: "YouTube Automation (default)",
+            url: "http://youtube-automation.localhost:7873",
+          },
+          liveSource,
+        ]);
+      }
+      return defaultSendMessage(message, payload);
+    });
+    await rerenderApp();
+    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    await waitFor(() => expect(Array.from(select.options, ({ value }) => value)).toContain(liveSource.url));
+    await act(async () => (expectControl(container, "server-source-trigger") as HTMLButtonElement).click());
+    await waitFor(() => expect(container.querySelector('[role="listbox"]')).not.toBeNull());
+    await act(async () => {
+      Array.from(container.querySelectorAll<HTMLButtonElement>('[role="option"]'))
+        .find((option) => option.textContent?.includes("Channel A"))!
+        .click();
+    });
+
+    await waitFor(() => expect(storageMocks.setValue).toHaveBeenCalledWith(liveSource.url));
+    expect(container.querySelector('[role="listbox"]')).toBeNull();
+    expect(legacySourceState.present).toBe(false);
+    await waitFor(() =>
+      expect(messagingMocks.sendMessage).toHaveBeenCalledWith("fetchCollections", { baseUrl: liveSource.url }),
+    );
+
+    storageMocks.getValue.mockResolvedValue(liveSource.url);
+    await rerenderApp();
+    await waitFor(() =>
+      expect((expectControl(container, "server-url") as HTMLSelectElement).value).toBe(liveSource.url),
+    );
+  });
+
+  it("should ignore an older discovery completion", async () => {
+    const older = deferred<Array<{ id: string; label: string; url: string }>>();
+    const newer = deferred<Array<{ id: string; label: string; url: string }>>();
+    let refreshCount = 0;
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "discoverServerSources") {
+        refreshCount += 1;
+        if (refreshCount === 1) {
+          return Promise.resolve([]);
+        }
+        return refreshCount === 2 ? older.promise : newer.promise;
+      }
+      return defaultSendMessage(message, payload);
+    });
+    await rerenderApp();
+    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    await act(async () => {
+      const trigger = expectControl(container, "server-source-trigger") as HTMLButtonElement;
+      trigger.click();
+      trigger.click();
+    });
+    newer.resolve([{ id: "new", label: "New", url: "http://new.localhost:49152" }]);
+    await waitFor(() => expect(select.textContent).toContain("New"));
+    older.resolve([{ id: "old", label: "Old", url: "http://old.localhost:9001" }]);
+    await act(async () => Promise.resolve());
+    expect(select.textContent).toContain("New");
+    expect(select.textContent).not.toContain("Old");
+  });
+
+  it("should discard a deferred discovery result when a run starts", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: MANIFEST_VERSION }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a",
+            channel: "clm",
+            theme: "theme-a",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+    await act(async () => setSelectValue(expectControl(container, "server-url") as HTMLSelectElement, BASE_URL));
+    await waitFor(() => expect(buttonByText(container, "全パターンを連続実行").disabled).toBe(false));
+    await act(async () => (expectControl(container, "server-source-trigger") as HTMLButtonElement).click());
+    await waitFor(() => expect(container.querySelector('[role="listbox"]')).not.toBeNull());
+
+    const pendingDiscovery = deferred<Array<{ id: string; label: string; url: string }>>();
+    messagingMocks.sendMessage.mockImplementation((message: string, payload?: Record<string, string>) => {
+      if (message === "discoverServerSources") return pendingDiscovery.promise;
+      return defaultSendMessage(message, payload);
+    });
+    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    await act(async () => {
+      (expectControl(container, "server-source-trigger") as HTMLButtonElement).click();
+      buttonByText(container, "全パターンを連続実行").click();
+    });
+    await waitFor(() =>
+      expect(container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')?.dataset.sunoRunning).toBe(
+        "true",
+      ),
+    );
+    expect(container.querySelector('[role="listbox"]')).toBeNull();
+
+    pendingDiscovery.resolve([{ id: "new", label: "New", url: "http://new.localhost:49152" }]);
+    await act(async () => pendingDiscovery.promise);
+
+    expect(select.textContent).not.toContain("New");
+    expect(select.value).toBe(BASE_URL);
+    expect(
+      messagingMocks.sendMessage.mock.calls.some(([, payload]) => payload?.baseUrl === "http://new.localhost:49152"),
+    ).toBe(false);
   });
 });

@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useDistrokidRunner, type DistrokidRunnerState } from "../components/useDistrokidRunner";
 import { sendMessage } from "../lib/messaging";
+import { migrateServerSourcesStorage, serverUrlItem } from "../lib/storage";
 import type { ReleasePayload } from "../lib/types";
 
 const BASE_URL = "http://localhost:7873";
@@ -83,9 +84,20 @@ vi.mock("../lib/storage", () => ({
     getValue: vi.fn(async () => ""),
     setValue: vi.fn(async () => undefined),
   },
-  readServerSources: vi.fn(async () => [{ id: "localhost-7873", label: "localhost", url: BASE_URL }]),
-  rememberServerSource: vi.fn(async () => [{ id: "localhost-7873", label: "localhost", url: BASE_URL }]),
+  migrateServerSourcesStorage: vi.fn(async () => undefined),
 }));
+
+const discoveryMocks = vi.hoisted(() => ({
+  discoverServerSources: vi.fn(async () => [
+    {
+      id: "youtube-automation-localhost-7873",
+      label: "YouTube Automation (default)",
+      url: "http://youtube-automation.localhost:7873",
+    },
+  ]),
+}));
+
+vi.mock("../../shared/server-discovery", () => discoveryMocks);
 
 vi.mock("../lib/messaging", () => ({
   onMessage: vi.fn(() => () => undefined),
@@ -173,6 +185,14 @@ describe("useDistrokidRunner", () => {
     container.remove();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    discoveryMocks.discoverServerSources.mockResolvedValue([
+      {
+        id: "youtube-automation-localhost-7873",
+        label: "YouTube Automation (default)",
+        url: "http://youtube-automation.localhost:7873",
+      },
+    ]);
+    vi.mocked(migrateServerSourcesStorage).mockResolvedValue(undefined);
   });
 
   // dir mode サーバーの URL ルーティング fetch mock。released record は background message
@@ -392,10 +412,13 @@ describe("useDistrokidRunner", () => {
       expect(current.isInjecting).toBe(true);
     });
 
+    const discoveryCalls = discoveryMocks.discoverServerSources.mock.calls.length;
     await act(async () => {
+      await current.refreshServerSources();
       current.setServerUrl("http://localhost:7999");
       current.selectCollection(1);
     });
+    expect(discoveryMocks.discoverServerSources).toHaveBeenCalledTimes(discoveryCalls);
     await act(async () => {
       resolveInjectionStart();
       await injectionPromise;
@@ -427,5 +450,122 @@ describe("useDistrokidRunner", () => {
     expect(current.message).toContain("注入完了（配信済み記録に失敗しました");
     // 記録失敗時は一覧を再取得しない（disc1 は select に残る）。
     expect(current.collections.map((c) => c.disc)).toEqual([DISC1.disc, DISC2.disc]);
+  });
+
+  it("should refresh from shared discovery and persist only the selected URL", async () => {
+    const live = { id: "channel-b-49152", label: "Channel B", url: "http://channel-b.localhost:49152" };
+    discoveryMocks.discoverServerSources.mockResolvedValueOnce([
+      {
+        id: "youtube-automation-localhost-7873",
+        label: "YouTube Automation (default)",
+        url: "http://youtube-automation.localhost:7873",
+      },
+      live,
+    ]);
+
+    await act(async () => {
+      await current.refreshServerSources();
+    });
+    await act(async () => {
+      current.setServerUrl(live.url);
+    });
+
+    expect(current.serverSources.map(({ url }) => url)).toContain(live.url);
+    expect(serverUrlItem.setValue).toHaveBeenCalledWith(live.url);
+  });
+
+  it("should ignore stale discovery completions", async () => {
+    let resolveOld!: (value: Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>) => void;
+    let resolveNew!: (value: Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>) => void;
+    const oldResult = new Promise<Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>>((resolve) => {
+      resolveOld = resolve;
+    });
+    const newResult = new Promise<Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>>((resolve) => {
+      resolveNew = resolve;
+    });
+    discoveryMocks.discoverServerSources.mockReturnValueOnce(oldResult).mockReturnValueOnce(newResult);
+
+    let oldRefresh!: Promise<void>;
+    let newRefresh!: Promise<void>;
+    await act(async () => {
+      oldRefresh = current.refreshServerSources();
+      newRefresh = current.refreshServerSources();
+    });
+    resolveNew([{ id: "new", label: "New", url: "http://new.localhost:49152" }]);
+    await act(async () => newRefresh);
+    resolveOld([{ id: "old", label: "Old", url: "http://old.localhost:9001" }]);
+    await act(async () => oldRefresh);
+
+    expect(current.serverSources.map(({ label }) => label)).toContain("New");
+    expect(current.serverSources.map(({ label }) => label)).not.toContain("Old");
+  });
+
+  it("should discard a deferred discovery result when injection starts", async () => {
+    stubDirModeServer();
+    await fetchDirModeRelease();
+    let resolveDiscovery!: (value: Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>) => void;
+    const pendingDiscovery = new Promise<Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>>(
+      (resolve) => {
+        resolveDiscovery = resolve;
+      },
+    );
+    let resolveInjectionStart!: () => void;
+    const injectionStart = new Promise<void>((resolve) => {
+      resolveInjectionStart = resolve;
+    });
+    discoveryMocks.discoverServerSources.mockReturnValueOnce(pendingDiscovery);
+    vi.mocked(sendMessage).mockImplementation(async (type) => {
+      if (type === "injectStart") await injectionStart;
+      return undefined;
+    });
+
+    let refresh!: Promise<void>;
+    let injection!: Promise<void>;
+    await act(async () => {
+      refresh = current.refreshServerSources();
+      injection = current.inject();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(current.isInjecting).toBe(true));
+    resolveDiscovery([{ id: "new", label: "New", url: "http://new.localhost:49152" }]);
+    await act(async () => refresh);
+
+    expect(current.serverSources.map(({ label }) => label)).not.toContain("New");
+    expect(current.serverUrl).toBe(BASE_URL);
+
+    resolveInjectionStart();
+    await act(async () => injection);
+  });
+
+  it("should report storage migration failures without leaving an unhandled rejection", async () => {
+    vi.mocked(migrateServerSourcesStorage).mockRejectedValueOnce(new Error("storage unavailable"));
+    await act(async () => {
+      root.unmount();
+      root = createRoot(container);
+      root.render(
+        createElement(Probe, {
+          onState: (state) => {
+            current = state;
+          },
+        }),
+      );
+    });
+    await waitFor(() => {
+      expect(current.phase).toBe("error");
+      expect(current.message).toContain("storage unavailable");
+    });
+  });
+
+  it("should report selected URL persistence failures as an explicit error phase", async () => {
+    vi.mocked(serverUrlItem.setValue).mockRejectedValueOnce(new Error("URL storage unavailable"));
+
+    await act(async () => {
+      current.setServerUrl("http://live.localhost:49152");
+    });
+
+    await waitFor(() => {
+      expect(current.phase).toBe("error");
+      expect(current.message).toContain("URL storage unavailable");
+    });
   });
 });

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "ttl_seconds": 30,
+  "servers": [
+    {
+      "instance_id": "fixture-instance",
+      "expires_at": 130.0,
+      "server_info": {
+        "channel_name": "Fixture Channel",
+        "channel_short": "fixture",
+        "hostname": "fixture.localhost",
+        "port": 49152,
+        "base_url": "http://fixture.localhost:49152",
+        "label": "Fixture Channel"
+      }
+    }
+  ]
+}

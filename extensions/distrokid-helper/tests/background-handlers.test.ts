@@ -15,15 +15,23 @@ const RECORD = {
   album_title: "Coding Focus Vol.1",
 };
 
-async function loadBackground(opts?: { recordError?: Error }) {
+async function loadBackground(opts?: { recordError?: Error; migrationError?: Error }) {
   vi.resetModules();
 
   const handlers = new Map<string, Handler>();
+  const installedListeners: Array<() => void> = [];
 
   // defineBackground は WXT の auto-import。stub して即座にコールバックを実行する。
   vi.stubGlobal("defineBackground", (fn: () => void) => {
     fn();
     return fn;
+  });
+  vi.stubGlobal("browser", {
+    runtime: {
+      onInstalled: {
+        addListener: vi.fn((listener: () => void) => installedListeners.push(listener)),
+      },
+    },
   });
 
   vi.doMock("../lib/messaging", () => ({
@@ -40,11 +48,17 @@ async function loadBackground(opts?: { recordError?: Error }) {
   vi.doMock("../../shared/api", () => ({
     recordDistrokidRelease: recordDistrokidReleaseMock,
   }));
+  const migrateServerSourcesStorageMock = opts?.migrationError
+    ? vi.fn(() => Promise.reject(opts.migrationError))
+    : vi.fn(() => Promise.resolve());
+  vi.doMock("../lib/storage", () => ({
+    migrateServerSourcesStorage: migrateServerSourcesStorageMock,
+  }));
 
   // import が defineBackground コールバックを実行し、ハンドラが登録される。
   await import("../entrypoints/background");
 
-  return { handlers, recordDistrokidReleaseMock };
+  return { handlers, installedListeners, migrateServerSourcesStorageMock, recordDistrokidReleaseMock };
 }
 
 afterEach(() => {
@@ -83,5 +97,29 @@ describe('background onMessage("recordRelease"): serve token 書き込み境界 
       }),
     ).rejects.toThrow("HTTP 403");
     expect(recordDistrokidReleaseMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("background onInstalled: legacy server source migration", () => {
+  it("runs migration when the extension is updated", async () => {
+    const { installedListeners, migrateServerSourcesStorageMock } = await loadBackground();
+
+    installedListeners.forEach((listener) => listener());
+    await Promise.resolve();
+
+    expect(migrateServerSourcesStorageMock).toHaveBeenCalledOnce();
+  });
+
+  it("logs migration failures instead of leaving an unhandled rejection", async () => {
+    const error = new Error("storage unavailable");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { installedListeners } = await loadBackground({ migrationError: error });
+
+    installedListeners.forEach((listener) => listener());
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(consoleError).toHaveBeenCalledWith("[distrokid-helper] legacy server source migration failed:", error);
+    consoleError.mockRestore();
   });
 });

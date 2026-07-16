@@ -48,7 +48,7 @@ _EXTENSIONS_JOB_CONTRACTS = {
     },
 }
 _NIX_EXTENSIONS_INSTALL_COMMAND = "nix develop .#extensions --command pnpm install --frozen-lockfile"
-_NIX_EXTENSIONS_E2E_COMMAND = "nix develop .#extensions --command pnpm test:e2e"
+_NIX_EXTENSIONS_E2E_COMMAND = "nix develop .#extensions --command xvfb-run -a pnpm test:e2e"
 
 _RELEASE_BUILD_PARALLEL_STEPS = {
     "Build and zip suno-helper": ("extensions/suno-helper", "verify-extensions.sh suno-helper"),

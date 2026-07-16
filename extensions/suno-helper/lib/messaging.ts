@@ -12,6 +12,7 @@ import type {
   ServerInfo,
 } from "../../shared/api";
 import type { ProgressPayload, RunModeId, SnapshotPayload } from "../../shared/constants";
+import type { LocalServerSource } from "../../shared/constants";
 import type { RunRange } from "./resume-state";
 
 /**
@@ -109,6 +110,7 @@ interface ProtocolMap {
    *  content script は chrome.debugger API にアクセスできないため background に委譲する。 */
   sendTrustedCmdP(payload: { isMac: boolean }): void;
   /** overlay → background: localhost read API を extension origin から取得する。 */
+  discoverServerSources(): LocalServerSource[];
   fetchCompatibilityWarning(payload: { baseUrl: string; extensionVersion: string }): string;
   /** overlay → background: `/server-info` を extension origin から取得する。 */
   fetchServerInfo(payload: { baseUrl: string }): ServerInfo;
