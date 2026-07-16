@@ -762,6 +762,25 @@ class TestCheckTitleTemplateCompliance:
         title = "Bright Funk & Soul Spirit | 3 Hours of Feel-Good Retro Grooves"
         assert check_title_template_compliance(title, self.EXISTING, self.CFG) is None
 
+    def test_three_part_template_passes(self) -> None:
+        cfg = {
+            "template": "{tagline} | Inspirational Pinoy Reggae Music {year} | {subtitle}",
+        }
+        title = "YAKAP NG PAMILYA 💛 | Inspirational Pinoy Reggae Music 2026 | Awit ng Pagmamahal"
+
+        assert check_title_template_compliance(title, [], cfg) is None
+
+    def test_three_part_template_still_rejects_volume_notation(self) -> None:
+        cfg = {
+            "template": "{tagline} | Inspirational Pinoy Reggae Music {year} | {subtitle}",
+        }
+        title = "YAKAP NG PAMILYA Vol.2 | Inspirational Pinoy Reggae Music 2026 | Awit ng Pagmamahal"
+
+        msg = check_title_template_compliance(title, [], cfg)
+
+        assert msg is not None
+        assert "巻数表記" in msg
+
     def test_volume_notation_rejected(self) -> None:
         title = "Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves"
         msg = check_title_template_compliance(title, [], self.CFG)
