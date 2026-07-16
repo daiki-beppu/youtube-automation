@@ -4,6 +4,9 @@
 draft_pr: false
 base_branch: main
 
+# 並列実行数（グローバル既定 3 の override）。open issue 一括消化ミッションで実績あり
+concurrency: 5
+
 provider: codex
 persona_providers:
   coder:
