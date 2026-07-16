@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `docs(setup)`: `yt-doctor` が stale Analytics report を表示した場合も手動の `/analytics-analyze` を HUMAN STEP として要求せず、後続の `/collection-ideate` が自動更新する契約を案内するよう統一した。更新失敗時の停止・再開条件は `freshness-rules.md` を参照し、fresh / benchmark fallback / minimal mode の既存案内は維持する（#2064）。
 
+- `refactor(distrokid-helper)`: status と release review を shadcn Alert / Card primitive へ移行し、既存の phase message・配色・props、release metadata・fallback、および error の accessible alert 契約を維持した（#2066）。
+
 - `chore(extensions)`: Fallow audit を PR の base commit との差分に対する extensions 全体の品質ゲートとして CI へ統合した（#2076）。
 
 - `chore(test-infra)`: pytest-xdist を dev dependency に追加し、`uv run pytest -n auto` での並列実行に対応した。`tests/conftest.py` は `CHANNEL_DIR` の tmp コピーを xdist worker ごとに独立して作り直し、CI の test ジョブは `-n auto` を有効化した。ローカル既定は直列のまま（opt-in、詳細は `docs/development.md`）（#2093）。

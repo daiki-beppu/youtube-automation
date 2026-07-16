@@ -335,6 +335,9 @@ describe("DistroKid popup compatibility check", () => {
       expect(container.textContent).toContain(`拡張を更新してください（拡張 ${MANIFEST_VERSION}`);
       expect(container.textContent).toContain(RELEASE_PAYLOAD.release.album_title);
     });
+    expect(container.querySelector('[data-slot="card"] [data-slot="card-title"]')?.textContent).toBe(
+      RELEASE_PAYLOAD.release.album_title,
+    );
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/server-info`);
     expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/version`);
     expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/distrokid/collections`);

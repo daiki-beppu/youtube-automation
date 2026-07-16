@@ -1,5 +1,6 @@
 import type { Phase } from "@/lib/messaging";
 import { PHASES } from "@/lib/messaging";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export interface StatusBannerProps {
   phase: Phase | null;
@@ -19,5 +20,13 @@ export function StatusBanner({ phase, message }: StatusBannerProps) {
   if (phase === null) {
     return null;
   }
-  return <div className={`rounded border px-3 py-2 text-sm ${PHASE_STYLE[phase]}`}>{message}</div>;
+  return (
+    <Alert
+      variant={phase === PHASES.ERROR ? "destructive" : "default"}
+      role={phase === PHASES.ERROR ? "alert" : "status"}
+      className={`px-3 py-2 ${PHASE_STYLE[phase]}`}
+    >
+      <AlertDescription>{message}</AlertDescription>
+    </Alert>
+  );
 }
