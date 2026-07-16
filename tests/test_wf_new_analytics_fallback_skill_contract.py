@@ -102,7 +102,7 @@ def test_wf_new_phase_1_declares_analytics_absent_input_modes() -> None:
         assert token in phase_1, f"wf-new Phase 1 に入力モード契約 `{token}` がありません"
 
     assert "/collection-ideate" in phase_1
-    assert "stale 判定、stale action、コスト承認" in phase_1
+    assert "stale 判定、自動更新、再検証" in phase_1
     assert "config/skills/collection-ideate.yaml" in phase_1
     assert "deep-merge も同 skill に委譲" in phase_1
 
@@ -188,6 +188,7 @@ def test_collection_ideate_stale_docs_have_no_manual_or_unavailable_auto_call_re
         + _read(_FRESHNESS_RULES_MD)
         + _read(_COLLECTION_LIFECYCLE_MD)
         + _read(_COLLECTION_IDEATE_DEFAULT_CONFIG)
+        + _read(_WORKFLOW_CHEATSHEET_MD)
     )
 
     for remnant in (
@@ -205,19 +206,45 @@ def test_collection_ideate_stale_docs_have_no_manual_or_unavailable_auto_call_re
 
     legacy_helper = _read(_FRESHNESS_ACTION_HELPER)
     assert 'choices=("ask", "auto", "manual")' in legacy_helper
-    assert "references/freshness_action.py" in _read(_WF_NEW_SKILL_MD)
+    assert "references/freshness_action.py" not in _read(_WF_NEW_SKILL_MD)
     assert "freshness_action.py" not in distributed_contract
 
 
-def test_wf_new_delegates_stale_gate_without_duplicate_dialog() -> None:
+def test_wf_new_delegates_stale_refresh_to_ssot_and_resumes_mode_selection() -> None:
     text = _read(_WF_NEW_SKILL_MD)
+    stale_refresh_contract = text + _read(_WORKFLOW_CHEATSHEET_MD)
     hard_gates = _section(text, "## Hard Gates")
     phase_1 = _section(text, "### Phase 1: 企画（自動実行 + 入力モードに応じた一時停止）")
 
-    assert "`/collection-ideate` に一元化" in hard_gates
-    assert "stale 判定や AskUserQuestion を先行実行せず" in hard_gates
-    assert "ダイアログを二重表示しない" in hard_gates
-    assert "stale 判定・承認は `/collection-ideate` が 1 回だけ確定" in phase_1
+    assert "`/collection-ideate` の `references/freshness-rules.md::stale report の自動更新` に一元化" in hard_gates
+    assert "stale 判定や AskUserQuestion を先行実行しない" in hard_gates
+    assert "references/freshness-rules.md::stale report の自動更新" in hard_gates
+    assert "同 SSOT が返す自動更新シーケンスを同じ subagent 作業内で順次実行" in hard_gates
+    assert "入力モード判定を先頭からやり直す" in hard_gates
+
+    assert "判定ロジックや更新シーケンスを再定義しない" in phase_1
+    assert "成功時は中断せず同じ企画フローを続ける" in phase_1
+    assert "古い report を採用せず停止" in phase_1
+    assert "`/wf-new` を再実行できる再開条件" in phase_1
+    assert "fresh / benchmark fallback mode / minimal mode" in phase_1
+    assert "stale 更新用の Analytics skill を追加で呼ばない" in phase_1
+    assert "入力候補パス" in phase_1
+    assert "入力モード判定、SSOT に従う stale 自動更新、再検証" in phase_1
+    assert "入力モードはメインが事前確定せず" in phase_1
+    assert "subagent が再検証後の値を返す" in phase_1
+    assert "承認済みの入力パス、入力モード" not in phase_1
+    assert "企画候補と承認済みプレビュー生成だけ" not in phase_1
+
+    for stale_manual_remnant in (
+        "手動で `/analytics-analyze`",
+        "`/analytics-analyze` を手動",
+        "ユーザーが `/analytics-analyze` を実行",
+        "`/analytics-analyze` の実行を案内して停止",
+    ):
+        assert stale_manual_remnant not in stale_refresh_contract
+
+    assert "相対 stale は `/analytics-analyze`" not in hard_gates + phase_1
+    assert "絶対 stale は `/analytics-collect`" not in hard_gates + phase_1
 
 
 def test_collection_ideate_no_longer_stops_when_analysis_report_is_absent() -> None:
