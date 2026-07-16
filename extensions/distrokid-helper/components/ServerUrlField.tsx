@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { formatServerSourceLabel, type LocalServerSource } from "../../shared/constants";
+import { Button } from "@/components/ui/button";
 
 export interface ServerUrlFieldProps {
   value: string;
@@ -40,20 +41,21 @@ export function ServerUrlField({ value, sources, disabled, onChange, onOpen }: S
       <label className="text-xs font-medium text-gray-600" htmlFor="server-url">
         ローカル配信元
       </label>
-      <button
+      <Button
         type="button"
+        variant="outline"
         aria-haspopup="listbox"
         aria-expanded={pickerVisible}
         disabled={disabled || refreshing}
         onClick={refreshBeforeOpen}
-        className="rounded border border-gray-300 px-2 py-1 text-left text-sm"
+        className="justify-start px-2 text-left"
       >
         {refreshing
           ? "稼働中の配信元を更新中…"
           : selectedSource
             ? formatServerSourceLabel(selectedSource, "distrokid-helper")
             : "配信元を選択"}
-      </button>
+      </Button>
       <select
         id="server-url"
         className="sr-only"
@@ -72,13 +74,15 @@ export function ServerUrlField({ value, sources, disabled, onChange, onOpen }: S
       {pickerVisible && (
         <div role="listbox" aria-label="ローカル配信元" className="rounded border border-gray-300 bg-white p-1">
           {sources.map((source) => (
-            <button
+            <Button
               key={source.url}
               type="button"
+              variant="ghost"
+              size="sm"
               role="option"
               aria-selected={source.url === value}
               disabled={disabled || refreshing}
-              className="block w-full rounded px-2 py-1 text-left text-sm hover:bg-gray-100"
+              className="w-full justify-start px-2 text-left"
               onClick={() => {
                 if (disabledRef.current || refreshing) {
                   return;
@@ -88,7 +92,7 @@ export function ServerUrlField({ value, sources, disabled, onChange, onOpen }: S
               }}
             >
               {formatServerSourceLabel(source, "distrokid-helper")}
-            </button>
+            </Button>
           ))}
         </div>
       )}

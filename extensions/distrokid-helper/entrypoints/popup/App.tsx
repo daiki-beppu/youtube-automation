@@ -1,6 +1,8 @@
 import { ServerUrlField } from "@/components/ServerUrlField";
 import { ReleaseReview } from "@/components/ReleaseReview";
 import { StatusBanner } from "@/components/StatusBanner";
+import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { useDistrokidRunner } from "@/components/useDistrokidRunner";
 
 // popup は表示とイベント接続に集中し、runner state と実行制御は useDistrokidRunner が
@@ -47,18 +49,17 @@ export function App() {
       {collections.length > 0 && (
         <label className="flex flex-col gap-1 text-sm">
           コレクション
-          <select
+          <Select
             value={selectedIndex}
             disabled={isInjecting}
             onChange={(e) => selectCollection(Number(e.target.value))}
-            className="rounded border border-gray-300 px-2 py-1"
           >
             {collections.map((item, idx) => (
               <option key={`${item.collection_id}/${item.disc}`} value={idx}>
                 {`${item.name} / ${item.disc}（${item.album_title}・${item.track_count} 曲）`}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       )}
 
@@ -68,22 +69,12 @@ export function App() {
       {payload !== null && <ReleaseReview payload={payload} />}
 
       <div className="flex gap-2">
-        <button
-          type="button"
-          className="flex-1 rounded bg-green-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-          disabled={payload === null || busy}
-          onClick={() => void inject()}
-        >
+        <Button type="button" className="flex-1" disabled={payload === null || busy} onClick={() => void inject()}>
           フォーム一括入力
-        </button>
-        <button
-          type="button"
-          className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 disabled:opacity-50"
-          disabled={!isInjecting}
-          onClick={() => void stop()}
-        >
+        </Button>
+        <Button type="button" variant="outline" disabled={!isInjecting} onClick={() => void stop()}>
           停止
-        </button>
+        </Button>
       </div>
 
       <StatusBanner phase={phase} message={message} />

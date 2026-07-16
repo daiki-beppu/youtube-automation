@@ -222,6 +222,7 @@ describe("DistroKid popup compatibility check", () => {
   it("ローカル配信元 option は URL を表示せず、URL value はデータ取得先として維持する", async () => {
     await renderApp();
     const select = container.querySelector<HTMLSelectElement>("#server-url")!;
+    const trigger = container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!;
 
     await waitFor(() => {
       expect(select.options).toHaveLength(3);
@@ -235,6 +236,12 @@ describe("DistroKid popup compatibility check", () => {
       { text: "ABYSS MI | distrokid-helper", value: BASE_URL },
       { text: "localhost fallback 7877 | distrokid-helper", value: FALLBACK_URL },
     ]);
+    expect(select.labels?.[0]?.textContent?.trim()).toBe("ローカル配信元");
+    expect(select.value).toBe("http://youtube-automation.localhost:7873");
+    expect(trigger.dataset.slot).toBe("button");
+    expect(Array.from(trigger.classList)).toEqual(
+      expect.arrayContaining(["border", "bg-background", "focus-visible:border-ring"]),
+    );
     expect(select.textContent).not.toContain("http://");
   });
 
@@ -259,11 +266,47 @@ describe("DistroKid popup compatibility check", () => {
       `${BASE_URL}/collections/${DISC1.collection_id}/distrokid/${DISC1.disc}/release.json`,
       { method: "GET" },
     );
-    expect(container.querySelector<HTMLSelectElement>("select:not(#server-url)")?.value).toBe("0");
+    const collectionSelect = container.querySelector<HTMLSelectElement>("select:not(#server-url)")!;
+    expect(collectionSelect.value).toBe("0");
+    expect(collectionSelect.labels?.[0]?.textContent).toContain("コレクション");
+    expect(collectionSelect.dataset.slot).toBe("select");
+    expect(Array.from(collectionSelect.classList)).toEqual(
+      expect.arrayContaining(["border-input", "bg-background", "focus-visible:border-ring"]),
+    );
     const injectButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent === "フォーム一括入力",
     );
     expect(injectButton?.disabled).toBe(false);
+    expect(injectButton?.dataset.slot).toBe("button");
+    expect(injectButton?.dataset.variant).toBe("default");
+    const stopButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "停止");
+    expect(stopButton?.disabled).toBe(true);
+    expect(stopButton?.dataset.slot).toBe("button");
+    expect(stopButton?.dataset.variant).toBe("outline");
+  });
+
+  it("全 disc が配信済みなら選択肢を表示せず all-released 状態を案内する", async () => {
+    vi.mocked(serverUrlItem.getValue).mockResolvedValue(BASE_URL);
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === `${BASE_URL}/server-info` || url === `${BASE_URL}/version`) {
+        return jsonResponse(404, {});
+      }
+      if (url === `${BASE_URL}/distrokid/collections`) {
+        return jsonResponse(200, [{ ...DISC1, released: true }]);
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    await renderApp();
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("未配信の disc はありません。");
+    });
+    expect(container.querySelector("select:not(#server-url)")).toBeNull();
+    const injectButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "フォーム一括入力",
+    );
+    expect(injectButton?.disabled).toBe(true);
   });
 
   it("配信元選択時に manifest version で /version を先に呼び、非互換警告を表示して release 取得を継続する", async () => {
@@ -380,9 +423,11 @@ describe("DistroKid popup compatibility check", () => {
     await waitFor(() => {
       expect(sourceSelect.disabled).toBe(true);
       expect(collectionSelect.disabled).toBe(true);
+      expect(injectButton.disabled).toBe(true);
       expect(stopButton.disabled).toBe(false);
       expect(container.querySelector('[role="listbox"]')).toBeNull();
     });
+    expect(sendMessage).toHaveBeenCalledWith("injectStart", { payload: RELEASE_PAYLOAD }, 1);
     const discoveryCountDuringInjection = discoveryMocks.discoverServerSources.mock.calls.length;
 
     await act(async () => {
