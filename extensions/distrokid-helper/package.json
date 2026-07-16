@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "audit": "fallow audit --root ..",
     "lint": "cd .. && eslint -c distrokid-helper/eslint.config.js distrokid-helper",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
@@ -37,6 +38,7 @@
     "@wxt-dev/module-react": "1.2.2",
     "eslint": "9.39.4",
     "eslint-plugin-react-hooks": "7.1.1",
+    "fallow": "3.5.0",
     "jsdom": "26.1.0",
     "prettier": "3.6.2",
     "tailwindcss": "4.2.2",
