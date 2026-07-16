@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `docs(wf-new)`: analytics mode の stale report を `/collection-ideate` の freshness SSOT に従って自動更新し、再検証後に入力モード判定と企画フローを継続する契約へ更新した。更新失敗時は古い report を使わず、理由と再開条件を示して停止する（#2063）。
 
+- `docs(skills)`: `/channel-research`・`/thumbnail-research`・`/collection-ideate` の TTP 分析に欲求レイヤーを追加した。高再生パターンを視聴者欲求へ抽象化して自チャンネルへ再具体化し、コメント / persona 由来の欲求語彙、最低 3 回の具体⇄抽象の往復、上位群 / 下位群の欲求比較、`ttp_mode` の欲求整合根拠を各成果物へ記録する（#2026）。
+
 - `chore(extensions)`: Fallow audit を PR の base commit との差分に対する extensions 全体の品質ゲートとして CI へ統合した（#2076）。
 
 - `chore(test-infra)`: pytest-xdist を dev dependency に追加し、`uv run pytest -n auto` での並列実行に対応した。`tests/conftest.py` は `CHANNEL_DIR` の tmp コピーを xdist worker ごとに独立して作り直し、CI の test ジョブは `-n auto` を有効化した。ローカル既定は直列のまま（opt-in、詳細は `docs/development.md`）（#2093）。
