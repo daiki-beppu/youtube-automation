@@ -158,4 +158,8 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 tmp_path_retention_policy = "failed"
 
 [dependency-groups]
-dev = ["pytest>=9,<10", "ruff>=0.15,<1"]
+dev = [
+    "pytest>=9,<10",
+    "pytest-xdist>=3.8,<4",
+    "ruff>=0.15,<1",
+]

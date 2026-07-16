@@ -34,6 +34,10 @@ if str(_SRC_DIR) not in sys.path:
 _FIXTURE_CHANNEL_DIR = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
 _OP_READ_DISABLED_ENV = "YOUTUBE_AUTOMATION_DISABLE_OP_READ"
 _TEST_TMP_PREFIX = "yt-automation-tests-"
+# conftest が CHANNEL_DIR を自動設定したことを示すマーカー。
+# xdist worker はこれを見て「ユーザー明示指定」と「controller の自動設定の継承」を
+# 区別し、後者なら worker 専用のコピーを作り直す（共有 tmp への並行書き込みを防ぐ）。
+_ISOLATED_MARKER_ENV = "YOUTUBE_AUTOMATION_TEST_ISOLATED_CHANNEL_DIR"
 
 
 os.environ.setdefault(_OP_READ_DISABLED_ENV, "1")
@@ -68,13 +72,18 @@ def _cleanup_stale_isolated_channel_dirs() -> None:
 def _prepare_isolated_channel_dir() -> None:
     """`CHANNEL_DIR` を tmp 配下の sample_channel コピーに向ける。
 
-    既存 env 上書きがあれば尊重する（setdefault 相当）。
-    tmp dir は `atexit` で session 終了時に削除する。
+    ユーザーの既存 env 上書きがあれば尊重する（setdefault 相当）。
+    ただし pytest-xdist の worker では、controller が自動設定した値
+    （`_ISOLATED_MARKER_ENV` 付き）を継承している場合に限り、worker 専用の
+    コピーを作り直して並行書き込みの衝突を防ぐ。
+    tmp dir は `atexit` で session（worker プロセス）終了時に削除する。
     """
     _cleanup_stale_isolated_channel_dirs()
 
     if os.environ.get("CHANNEL_DIR"):
-        return
+        inherited_from_controller = bool(os.environ.get(_ISOLATED_MARKER_ENV) and os.environ.get("PYTEST_XDIST_WORKER"))
+        if not inherited_from_controller:
+            return
 
     tmp_root = Path(tempfile.mkdtemp(prefix=f"{_TEST_TMP_PREFIX}{os.getpid()}-"))
     atexit.register(shutil.rmtree, tmp_root, ignore_errors=True)
@@ -82,6 +91,7 @@ def _prepare_isolated_channel_dir() -> None:
     isolated = tmp_root / "sample_channel"
     shutil.copytree(_FIXTURE_CHANNEL_DIR, isolated)
     os.environ["CHANNEL_DIR"] = str(isolated)
+    os.environ[_ISOLATED_MARKER_ENV] = "1"
 
 
 _prepare_isolated_channel_dir()
