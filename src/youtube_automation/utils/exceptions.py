@@ -85,6 +85,10 @@ class GeneratorError(AutomationError):
     """返信生成バックエンドの失敗（API エラー・レスポンス不正等）"""
 
 
+class DiscoveryRegistryError(AutomationError):
+    """ローカル server discovery registry の所有・容量契約エラー。"""
+
+
 def _http_error_reason(error) -> str | None:
     content = getattr(error, "content", b"")
     if isinstance(content, bytes):

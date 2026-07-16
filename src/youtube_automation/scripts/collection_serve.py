@@ -21,6 +21,7 @@ import mimetypes
 import os
 import re
 import signal
+import sys
 import tempfile
 import urllib.parse
 import uuid
@@ -29,6 +30,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from youtube_automation import __version__
+from youtube_automation.scripts.collection_serve_discovery import (
+    DISCOVERY_PORT,
+    RegistryState,
+    create_discovery_lifecycle,
+    handle_registry_request,
+)
 from youtube_automation.scripts.distrokid_release import (
     DISTROKID_ASSETS_PREFIX,
     DISTROKID_COLLECTION_ASSETS_PREFIX,
@@ -547,6 +554,7 @@ def create_server(
     collections_root: Path | None = None,
     distrokid_source: str | None = None,
     capture_root: Path | None = None,
+    discovery_registry_state: RegistryState | None = None,
 ) -> ThreadingHTTPServer:
     """サブパス分離した GET / POST / CORS preflight を返すサーバーを生成する.
 
@@ -605,12 +613,20 @@ def create_server(
                 self.wfile.write(body)
 
         def send_error(self, code: int, message: str | None = None, explain: str | None = None) -> None:
+            if (
+                code == 501
+                and discovery_registry_state is not None
+                and handle_registry_request(self, discovery_registry_state)
+            ):
+                return
             resolved_message = message
             if resolved_message is None:
                 resolved_message = self.responses.get(code, ("???", "???"))[0]
             self._send_json_error(code, resolved_message)
 
         def do_OPTIONS(self) -> None:
+            if discovery_registry_state is not None and handle_registry_request(self, discovery_registry_state):
+                return
             origin = self._allowed_origin()
             self.send_response(204)
             self._send_cors(origin)
@@ -687,6 +703,8 @@ def create_server(
 
         def do_POST(self) -> None:
             # GET と異なり POST は route ごとに書き込み可否を明示的に判定する。
+            if discovery_registry_state is not None and handle_registry_request(self, discovery_registry_state):
+                return
 
             # POST /distrokid/releases: capture 有効時のみ（#934）。
             if self.path == _DISTROKID_RELEASES_ROUTE:
@@ -761,6 +779,8 @@ def create_server(
             self.send_error(404, "Not Found")
 
         def do_GET(self) -> None:
+            if discovery_registry_state is not None and handle_registry_request(self, discovery_registry_state):
+                return
             if self.path == VERSION_ROUTE:
                 body = json.dumps(build_version_payload()).encode("utf-8")
                 self._send_bytes(body, "application/json; charset=utf-8")
@@ -793,6 +813,11 @@ def create_server(
                 self._send_json_error(404, "Not Found")
                 return
             self.send_error(404, "Not Found")
+
+        def do_DELETE(self) -> None:
+            if discovery_registry_state is not None and handle_registry_request(self, discovery_registry_state):
+                return
+            self.send_error(501, f"Unsupported method ({self.command!r})")
 
         def _serve_dir_mode(self) -> None:
             if self.path == COLLECTIONS_ROUTE:
@@ -1017,6 +1042,7 @@ def main() -> None:
 
     capture_root = _resolve_distrokid_capture_root(args.distrokid_capture_root)
     allow_origin, detected_extension = _resolve_allow_origin(args.allow_origin, args.allow_extension)
+    embedded_registry_state = RegistryState() if args.port == DISCOVERY_PORT else None
 
     # path が `*-collection/` を並べたディレクトリなら dir mode（#816）。
     collection_dirs = find_collection_dirs(args.path)
@@ -1042,6 +1068,7 @@ def main() -> None:
             distrokid=distrokid_cfg,
             collections_root=args.path,
             capture_root=capture_root,
+            discovery_registry_state=embedded_registry_state,
         )
         port = server.server_address[1]
         server_info.update(build_server_info(channel_name, channel_short, port))
@@ -1074,6 +1101,7 @@ def main() -> None:
             distrokid=distrokid,
             distrokid_source=args.distrokid_source,
             capture_root=capture_root,
+            discovery_registry_state=embedded_registry_state,
         )
         port = server.server_address[1]
         server_info.update(build_server_info(channel_name, channel_short, port))
@@ -1111,13 +1139,37 @@ def main() -> None:
         signal.SIGTERM,
         handle_sigterm,
     )
+    discovery_lifecycle = None
+    interrupted = False
     try:
+        if embedded_registry_state is None:
+            discovery_lifecycle = create_discovery_lifecycle(server_info)
+        else:
+            discovery_lifecycle = create_discovery_lifecycle(
+                server_info, embedded_registry_state=embedded_registry_state
+            )
+        discovery_lifecycle.start()
         server.serve_forever()
     except KeyboardInterrupt:
+        interrupted = True
         print("\nStopped.")
     finally:
-        signal.signal(signal.SIGTERM, previous_sigterm_handler)
-        server.server_close()
+        cleanup_error: RuntimeError | ValueError | None = None
+        try:
+            if discovery_lifecycle is not None:
+                discovery_lifecycle.stop()
+        except OSError as error:
+            print(f"Warning: discovery cleanup failed: {error}")
+        except (RuntimeError, ValueError) as error:
+            cleanup_error = error
+            print(f"Warning: discovery cleanup failed: {error}")
+        finally:
+            try:
+                signal.signal(signal.SIGTERM, previous_sigterm_handler)
+            finally:
+                server.server_close()
+        if cleanup_error is not None and not interrupted and sys.exc_info()[0] is None:
+            raise cleanup_error
 
 
 if __name__ == "__main__":

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(helper)`: `yt-collection-serve` の固定 loopback registry（heartbeat / TTL / owner takeover）と shared discovery client を追加し、suno-helper / distrokid-helper の候補履歴蓄積を廃止して、稼働中 server の動的検出と legacy storage migration に切り替えた。selector は更新完了前の古い native menu を開かず、registry の DELETE 境界と未対応 method status も公開契約どおり検証する（#1616）。
+
 - `fix(test-infra)`: dev shell 統合テストのコピー対象と teardown を最適化し、pytest の成功時 tmp と強制終了された過去 run の fixture 残骸が蓄積しないようにした（#2072）。
 
 - `fix(suno-helper)`: 連続実行開始時に collection server の疎通を確認し、無応答時は Lyrics 欄エラーより先に明示的な server エラーで停止するようにした（#2003）。

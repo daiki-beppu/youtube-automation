@@ -1,36 +1,50 @@
-// `lib/storage.ts` の候補復元契約テスト。
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const storageMocks = vi.hoisted(() => ({
-  getValue: vi.fn(),
-  setValue: vi.fn(),
-}));
+const storageItems = vi.hoisted(() => {
+  const serverUrl = { getValue: vi.fn(), setValue: vi.fn(), removeValue: vi.fn() };
+  const legacySources = { getValue: vi.fn(), setValue: vi.fn(), removeValue: vi.fn() };
+  return { serverUrl, legacySources, defineItem: vi.fn() };
+});
 
-vi.mock("wxt/utils/storage", () => ({
-  storage: {
-    defineItem: vi.fn(() => storageMocks),
-  },
-}));
+vi.mock("wxt/utils/storage", () => {
+  storageItems.defineItem.mockImplementation((key: string) =>
+    key === "local:sunoServerUrl" ? storageItems.serverUrl : storageItems.legacySources,
+  );
+  return { storage: { defineItem: storageItems.defineItem } };
+});
 
-import { readServerSources } from "../lib/storage";
+import { migrateServerSourcesStorage, serverUrlItem } from "../lib/storage";
 
-describe("local server source storage", () => {
+describe("Suno server source storage migration", () => {
   beforeEach(() => {
-    storageMocks.getValue.mockReset();
-    storageMocks.setValue.mockReset();
+    vi.clearAllMocks();
+    storageItems.serverUrl.getValue.mockResolvedValue("http://selected.localhost:49152");
+    storageItems.legacySources.getValue.mockResolvedValue(
+      Array.from({ length: 8 }, (_, port) => ({ url: `http://localhost:${7873 + port}` })),
+    );
+    storageItems.legacySources.removeValue.mockResolvedValue(undefined);
   });
 
-  it("保存済み候補の label と id が欠損しても、既存の URL を接続先として復元する", async () => {
-    storageMocks.getValue.mockResolvedValue([{ url: "http://localhost:7878" }]);
+  it("should remove only the legacy candidate key and preserve the selected URL", async () => {
+    await migrateServerSourcesStorage();
 
-    const sources = await readServerSources();
+    expect(storageItems.legacySources.removeValue).toHaveBeenCalledOnce();
+    expect(serverUrlItem.removeValue).not.toHaveBeenCalled();
+    await expect(serverUrlItem.getValue()).resolves.toBe("http://selected.localhost:49152");
+    expect(storageItems.legacySources.setValue).not.toHaveBeenCalled();
+  });
 
-    expect(sources).toContainEqual({
-      id: "localhost-7878",
-      label: "localhost:7878",
-      url: "http://localhost:7878",
-    });
-    expect(storageMocks.setValue).toHaveBeenCalledWith(sources);
+  it("should remain idempotent when the legacy candidate key is absent", async () => {
+    await migrateServerSourcesStorage();
+    await migrateServerSourcesStorage();
+
+    expect(storageItems.legacySources.removeValue).toHaveBeenCalledTimes(2);
+    expect(storageItems.legacySources.setValue).not.toHaveBeenCalled();
+  });
+
+  it("should reject when deleting the legacy candidate key fails", async () => {
+    storageItems.legacySources.removeValue.mockRejectedValueOnce(new Error("storage unavailable"));
+
+    await expect(migrateServerSourcesStorage()).rejects.toThrow("storage unavailable");
   });
 });

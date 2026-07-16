@@ -10,6 +10,7 @@ export function App() {
     serverUrl,
     setServerUrl,
     serverSources,
+    refreshServerSources,
     payload,
     busy,
     isInjecting,
@@ -28,7 +29,13 @@ export function App() {
     <main className="flex flex-col gap-3 p-4">
       <h1 className="text-base font-bold text-gray-900">DistroKid Helper</h1>
 
-      <ServerUrlField value={serverUrl} sources={serverSources} disabled={isInjecting} onChange={setServerUrl} />
+      <ServerUrlField
+        value={serverUrl}
+        sources={serverSources}
+        disabled={isInjecting}
+        onChange={setServerUrl}
+        onOpen={refreshServerSources}
+      />
 
       {compatibilityWarning && (
         <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
