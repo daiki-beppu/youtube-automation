@@ -12,6 +12,8 @@ _WF_NEW_SKILL_MD = _SKILLS_DIR / "wf-new" / "SKILL.md"
 _COLLECTION_IDEATE_SKILL_MD = _SKILLS_DIR / "collection-ideate" / "SKILL.md"
 _FRESHNESS_RULES_MD = _SKILLS_DIR / "collection-ideate" / "references" / "freshness-rules.md"
 _COLLECTION_LIFECYCLE_MD = _SKILLS_DIR / "collection-ideate" / "references" / "collection-lifecycle.md"
+_COLLECTION_IDEATE_DEFAULT_CONFIG = _SKILLS_DIR / "collection-ideate" / "config.default.yaml"
+_FRESHNESS_ACTION_HELPER = _SKILLS_DIR / "collection-ideate" / "references" / "freshness_action.py"
 _SETUP_SKILL_MD = _SKILLS_DIR / "setup" / "SKILL.md"
 _WORKFLOW_CHEATSHEET_MD = _REPO_ROOT / "docs" / "workflow-cheatsheet.md"
 
@@ -64,9 +66,6 @@ def _run_freshness_pseudo_code(
     _write_fixture(tmp_path / f"reports/analysis_{report_date}.md", "# analysis\n")
     _write_fixture(tmp_path / "docs/channel/personas/persona-definition.md", "# persona\n")
     _write_fixture(tmp_path / "docs/plans/viewing-scene-matrix.md", "# scene\n")
-    helper = tmp_path / ".claude/skills/collection-ideate/references/freshness_action.py"
-    _write_fixture(helper, _read(_REPO_ROOT / ".claude/skills/collection-ideate/references/freshness_action.py"))
-
     script = tmp_path / "freshness-check.sh"
     script.write_text(_freshness_pseudo_code(), encoding="utf-8")
     script.chmod(0o755)
@@ -74,9 +73,6 @@ def _run_freshness_pseudo_code(
     env = {
         **os.environ,
         "TODAY": today,
-        "COLLECTION_IDEATE_STALE_ACTION": "auto",
-        "COLLECTION_IDEATE_COST_ESTIMATE_RECENT_REPORTS": "3",
-        "COLLECTION_IDEATE_COST_ESTIMATE_USD_PER_KIB": "0.01",
     }
     if freshness_days is not None:
         env["COLLECTION_IDEATE_FRESHNESS_DAYS"] = str(freshness_days)
@@ -155,32 +151,62 @@ def test_collection_ideate_preflight_declares_same_input_modes() -> None:
         assert token in preflight, f"collection-ideate 前提チェックに入力モード契約 `{token}` がありません"
 
     assert "analytics 依存をスキップ" in preflight
-    assert "stale → fallback せず" in preflight
-    assert "`自動実行する` / `案内のみ（従来動作）` / `中断`" in preflight
+    assert "references/freshness-rules.md::stale report の自動更新" in preflight
+    assert "分岐、呼出順、成功条件、停止条件を再定義しない" in preflight
+    assert "相対 stale は `/analytics-analyze`" not in preflight
+    assert "絶対 stale は `/analytics-collect`" not in preflight
 
 
-def test_collection_ideate_stale_actions_cover_every_observable_branch() -> None:
-    rules = _section(_read(_FRESHNESS_RULES_MD), "## stale action とコスト承認")
+def test_collection_ideate_stale_report_refresh_covers_every_observable_branch() -> None:
+    rules = _section(_read(_FRESHNESS_RULES_MD), "## stale report の自動更新")
 
-    assert "`ask | auto | manual` 以外は設定エラーとして停止" in rules
-    assert "未設定時を含む" in rules
-    assert "自動実行する` / `案内のみ（従来動作）` / `中断" in rules
-    assert "見積不能または上限超過なら理由を表示して `ask` にフォールバック" in rules
-    assert "`manual`: 従来どおり再実行手順を案内して停止" in rules
-    assert "skill 呼び出しや成果物更新をせず終了" in rules
+    assert "相対 stale" in rules
+    assert "`/analytics-analyze` を自動実行" in rules
+    assert "絶対 stale" in rules
+    assert "`/analytics-collect`、続けて `/analytics-analyze` を順に自動実行" in rules
+    assert "`/analytics-collect` が成功するまで `/analytics-analyze` を呼ばない" in rules
+    assert "fresh" in rules
+    assert "Analytics skill を追加で呼ばず" in rules
 
 
-def test_collection_ideate_cost_estimate_runner_is_documented_as_fail_closed() -> None:
-    rules = _section(_read(_FRESHNESS_RULES_MD), "## stale action とコスト承認")
+def test_collection_ideate_stale_refresh_is_documented_as_fail_closed() -> None:
+    rules = _section(_read(_FRESHNESS_RULES_MD), "## stale report の自動更新")
 
-    assert "直近 N 件" in rules
-    assert "cost_estimate_usd_per_kib" in rules
-    assert "見積不能（安全側上限）" in rules
-    assert "provider の実課金額ではない" in rules
-    assert "freshness_action.py" in rules
-    assert "Markdown / JSON 同日付ペア、analysis JSON validator、相対・絶対鮮度を再検証" in rules
-    assert "呼び出し失敗または再検証失敗" in rules
-    assert "企画生成へ進まない" in rules
+    assert "Markdown / JSON 同日付ペア" in rules
+    assert "analysis JSON validator" in rules
+    assert "相対・絶対鮮度を再検証" in rules
+    assert "skill 呼び出し失敗または再検証失敗" in rules
+    assert "失敗理由" in rules
+    assert "再開条件" in rules
+    assert "stale report を使わず停止" in rules
+    assert "古い分析から企画生成へ進んではならない" in rules
+
+
+def test_collection_ideate_stale_docs_have_no_manual_or_unavailable_auto_call_remnants() -> None:
+    distributed_contract = (
+        _read(_COLLECTION_IDEATE_SKILL_MD)
+        + _read(_FRESHNESS_RULES_MD)
+        + _read(_COLLECTION_LIFECYCLE_MD)
+        + _read(_COLLECTION_IDEATE_DEFAULT_CONFIG)
+    )
+
+    for remnant in (
+        "stale_action",
+        "auto_run_max_cost_usd",
+        "cost_estimate_recent_reports",
+        "cost_estimate_usd_per_kib",
+        "案内のみ（従来動作）",
+        "従来どおり再実行手順を案内",
+        "自動呼び出し不可",
+        "承認済みのときだけ自動再実行",
+        "承認フローの成功時だけ続行",
+    ):
+        assert remnant not in distributed_contract
+
+    legacy_helper = _read(_FRESHNESS_ACTION_HELPER)
+    assert 'choices=("ask", "auto", "manual")' in legacy_helper
+    assert "references/freshness_action.py" in _read(_WF_NEW_SKILL_MD)
+    assert "freshness_action.py" not in distributed_contract
 
 
 def test_wf_new_delegates_stale_gate_without_duplicate_dialog() -> None:
@@ -375,10 +401,13 @@ def test_collection_lifecycle_documents_three_input_modes() -> None:
     assert _BENCHMARK_FALLBACK_MODE in planning
     assert _MINIMAL_MODE in planning
     assert "テーマ / ジャンル / 雰囲気を直接確認" in planning
-    assert "stale action とコスト承認へ分岐" in planning
-    assert "最新 `data/analytics_data_*.json` より古い" in planning
-    assert "実行日から `freshness_days`" in planning
-    assert "/analytics-collect` → `/analytics-analyze`" in planning
+    assert "`/collection-ideate` を直接実行する場合" in planning
+    assert "`freshness-rules.md::stale report の自動更新` に委譲" in planning
+    assert "`/wf-new` 経由は同 skill の Hard Gates に委譲" in planning
+    assert "本 lifecycle では上書きしない" in planning
+    assert "ここでは再定義しない" in planning
+    assert "相対 stale は `/analytics-analyze`" not in planning
+    assert "絶対 stale は `/analytics-collect`" not in planning
 
 
 def test_setup_benchmark_data_respects_analytics_mode_priority() -> None:
@@ -476,10 +505,10 @@ def test_freshness_rules_absolute_check_uses_resolved_config_value(tmp_path: Pat
     assert 'FRESHNESS_DAYS="$COLLECTION_IDEATE_FRESHNESS_DAYS"' in pseudo_code
     assert "TODAY=${TODAY:-$(date +%Y%m%d)}" in pseudo_code
 
-    assert "freshness_action.py" in pseudo_code
-    assert 'if [ -n "${STALE_ACTION_CHOICE:-}" ]; then' in pseudo_code
     assert "handle_analysis_stale relative" in pseudo_code
     assert "handle_analysis_stale absolute" in pseudo_code
+    assert "AUTO_REFRESH_SKILLS=/analytics-analyze" in pseudo_code
+    assert "AUTO_REFRESH_SKILLS=/analytics-collect,/analytics-analyze" in pseudo_code
 
     relative_stale = _run_freshness_pseudo_code(
         tmp_path / "relative-stale",
@@ -489,7 +518,7 @@ def test_freshness_rules_absolute_check_uses_resolved_config_value(tmp_path: Pat
         freshness_days=7,
     )
     assert relative_stale.returncode == 3
-    assert '"skills": ["analytics-analyze"]' in relative_stale.stdout
+    assert "AUTO_REFRESH_SKILLS=/analytics-analyze" in relative_stale.stdout
 
     absolute_stale = _run_freshness_pseudo_code(
         tmp_path / "absolute-stale",
@@ -499,7 +528,17 @@ def test_freshness_rules_absolute_check_uses_resolved_config_value(tmp_path: Pat
         freshness_days=7,
     )
     assert absolute_stale.returncode == 3
-    assert '"skills": ["analytics-collect", "analytics-analyze"]' in absolute_stale.stdout
+    assert "AUTO_REFRESH_SKILLS=/analytics-collect,/analytics-analyze" in absolute_stale.stdout
+
+    both_stale = _run_freshness_pseudo_code(
+        tmp_path / "both-stale",
+        data_date="20260622",
+        report_date="20260612",
+        today="20260702",
+        freshness_days=7,
+    )
+    assert both_stale.returncode == 3
+    assert "AUTO_REFRESH_SKILLS=/analytics-collect,/analytics-analyze" in both_stale.stdout
 
     override_fresh = _run_freshness_pseudo_code(
         tmp_path / "override-fresh",
@@ -509,6 +548,7 @@ def test_freshness_rules_absolute_check_uses_resolved_config_value(tmp_path: Pat
         freshness_days=14,
     )
     assert override_fresh.returncode == 0, override_fresh.stderr
+    assert "AUTO_REFRESH_SKILLS=" not in override_fresh.stdout
 
     boundary_fresh = _run_freshness_pseudo_code(
         tmp_path / "boundary-fresh",
@@ -518,6 +558,7 @@ def test_freshness_rules_absolute_check_uses_resolved_config_value(tmp_path: Pat
         freshness_days=7,
     )
     assert boundary_fresh.returncode == 0, boundary_fresh.stderr
+    assert "AUTO_REFRESH_SKILLS=" not in boundary_fresh.stdout
 
     missing_resolved_config = _run_freshness_pseudo_code(
         tmp_path / "missing-config",

@@ -484,37 +484,13 @@ def test_collection_ideate_freshness_days_channel_override(tmp_path):
     assert cfg.get("freshness_days") == 14
 
 
-def test_collection_ideate_stale_action_defaults_are_loaded(tmp_path):
+def test_collection_ideate_config_has_no_stale_action_contract(tmp_path):
     channel_dir = tmp_path / "ch"
     channel_dir.mkdir()
 
     cfg = skill_config.load_skill_config("collection-ideate", use_cache=False, channel_dir=channel_dir)
 
-    assert cfg["freshness"] == {
-        "stale_action": "ask",
-        "auto_run_max_cost_usd": None,
-        "cost_estimate_recent_reports": 3,
-        "cost_estimate_usd_per_kib": 0.01,
-    }
-
-
-def test_collection_ideate_nested_freshness_override_deep_merges(tmp_path):
-    channel_dir = tmp_path / "ch"
-    (channel_dir / "config" / "skills").mkdir(parents=True)
-    override = channel_dir / "config" / "skills" / "collection-ideate.yaml"
-    override.write_text(
-        yaml.safe_dump({"freshness": {"stale_action": "auto", "auto_run_max_cost_usd": 0.5}}),
-        encoding="utf-8",
-    )
-
-    cfg = skill_config.load_skill_config("collection-ideate", use_cache=False, channel_dir=channel_dir)
-
-    assert cfg["freshness"]["stale_action"] == "auto"
-    assert cfg["freshness"]["auto_run_max_cost_usd"] == 0.5
-    assert cfg["freshness"]["cost_estimate_recent_reports"] == 3
-    assert cfg["freshness"]["cost_estimate_usd_per_kib"] == 0.01
-    assert cfg["freshness_days"] == 7
-    assert cfg.get("preview", {}).get("thumbnail_mode") == "parallel"
+    assert "freshness" not in cfg
 
 
 def test_analytics_report_theme_colors_default_comes_from_skill_config(tmp_path):
