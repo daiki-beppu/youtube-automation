@@ -1,4 +1,5 @@
 import { formatServerSourceLabel, type LocalServerSource } from "../../shared/constants";
+import { Select } from "@/components/ui/select";
 
 export interface ServerUrlFieldProps {
   value: string;
@@ -14,19 +15,13 @@ export function ServerUrlField({ value, sources, disabled, onChange }: ServerUrl
       <label className="text-xs font-medium text-gray-600" htmlFor="server-url">
         ローカル配信元
       </label>
-      <select
-        id="server-url"
-        className="rounded border border-gray-300 px-2 py-1 text-sm"
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
+      <Select id="server-url" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
         {sources.map((source) => (
           <option key={source.url} value={source.url}>
             {formatServerSourceLabel(source, "distrokid-helper")}
           </option>
         ))}
-      </select>
+      </Select>
     </div>
   );
 }

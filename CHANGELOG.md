@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(distrokid-helper)`: popup のローカル配信元・collection/disc selector を shadcn theme token に揃え、フォーム一括入力・停止操作を Button primitive へ移行した。既存の value・handler・disabled・accessible name と runner action は維持する（#2065）。
+
 - `fix(test-infra)`: dev shell 統合テストのコピー対象と teardown を最適化し、pytest の成功時 tmp と強制終了された過去 run の fixture 残骸が蓄積しないようにした（#2072）。
 
 - `fix(suno-helper)`: 連続実行開始時に collection server の疎通を確認し、無応答時は Lyrics 欄エラーより先に明示的な server エラーで停止するようにした（#2003）。
