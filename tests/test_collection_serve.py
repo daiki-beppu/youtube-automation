@@ -52,6 +52,7 @@ from youtube_automation.scripts.collection_serve import (
     resolve_collection_prompts_path,
     resolve_prompts_path,
 )
+from youtube_automation.scripts.collection_serve_discovery import DISCOVERY_PATH, RegistryState
 from youtube_automation.utils.chrome_extensions import ChromeExtensionOrigin, resolve_unpacked_extension_origin
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.suno_downloaded_apply import apply_downloaded_artifacts
@@ -671,6 +672,137 @@ def test_send_error_unknown_status_returns_json_with_standard_fallback(tmp_path)
         thread.join(timeout=5)
 
 
+def test_collection_server_can_host_discovery_registry_contract(tmp_path):
+    """The fixed discovery route remains available when the collection server owns its port."""
+    json_path = tmp_path / "suno-prompts.json"
+    json_path.write_text("[]", encoding="utf-8")
+    state = RegistryState()
+    server = create_server(
+        0,
+        None,
+        prompts_path=json_path,
+        collection_dir=tmp_path,
+        distrokid=None,
+        discovery_registry_state=state,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = int(server.server_address[1])
+    base = f"http://localhost:{port}"
+    registration = {
+        "instance_id": "collection-server",
+        "server_info": {
+            "channel_name": "YouTube Automation",
+            "channel_short": "YA",
+            "hostname": "localhost",
+            "port": port,
+            "base_url": base,
+            "label": "YouTube Automation (YA)",
+        },
+    }
+
+    try:
+        request = urllib.request.Request(
+            f"{base}{DISCOVERY_PATH}",
+            data=json.dumps(registration).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request) as response:
+            assert response.status == 200
+
+        with urllib.request.urlopen(f"{base}{DISCOVERY_PATH}") as response:
+            payload = json.loads(response.read())
+        assert payload["schema_version"] == 1
+        assert payload["servers"] == [
+            {
+                **registration,
+                "expires_at": pytest.approx(payload["servers"][0]["expires_at"]),
+            }
+        ]
+
+        request = urllib.request.Request(
+            f"{base}{DISCOVERY_PATH}",
+            data=json.dumps({"instance_id": "collection-server"}).encode(),
+            method="DELETE",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request) as response:
+            assert response.status == 200
+        assert state.snapshot()["servers"] == []
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.parametrize("method", ["OPTIONS", "HEAD", "PUT", "PATCH", "CONNECT", "TRACE", "BREW"])
+def test_embedded_discovery_registry_rejects_every_unsupported_method(tmp_path, method):
+    """The embedded fixed endpoint exposes the dedicated registry's method contract."""
+    json_path = tmp_path / "suno-prompts.json"
+    json_path.write_text("[]", encoding="utf-8")
+    server = create_server(
+        0,
+        None,
+        prompts_path=json_path,
+        collection_dir=tmp_path,
+        distrokid=None,
+        discovery_registry_state=RegistryState(),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    endpoint = f"http://localhost:{server.server_address[1]}{DISCOVERY_PATH}"
+    request = urllib.request.Request(endpoint, data=b"{}", method=method)
+
+    try:
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(request)
+
+        error = exc_info.value
+        assert error.code == 405
+        assert error.headers.get_content_type() == "application/json"
+        if method == "HEAD":
+            assert error.read() == b""
+        else:
+            assert json.loads(error.read()) == {"error": "method not allowed"}
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_embedded_discovery_registry_preserves_delete_behavior_on_collection_routes(tmp_path):
+    json_path = tmp_path / "suno-prompts.json"
+    json_path.write_text("[]", encoding="utf-8")
+    server = create_server(
+        0,
+        None,
+        prompts_path=json_path,
+        collection_dir=tmp_path,
+        distrokid=None,
+        discovery_registry_state=RegistryState(),
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    request = urllib.request.Request(
+        f"http://localhost:{server.server_address[1]}/suno/prompts.json",
+        method="DELETE",
+    )
+
+    try:
+        with pytest.raises(urllib.error.HTTPError) as exc_info:
+            urllib.request.urlopen(request)
+
+        error = exc_info.value
+        assert error.code == 501
+        assert error.headers.get_content_type() == "application/json"
+        assert json.loads(error.read()) == {"error": "Unsupported method ('DELETE')"}
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -813,6 +945,14 @@ def test_main_turns_sigterm_into_traceable_exception_and_restores_handler(monkey
     installed_handler = None
     signal_calls = []
     previous_handler = object()
+    lifecycle_events: list[str] = []
+
+    class FakeDiscoveryLifecycle:
+        def start(self) -> None:
+            lifecycle_events.append("start")
+
+        def stop(self) -> None:
+            lifecycle_events.append("stop")
 
     def fake_signal(signum, handler):
         nonlocal installed_handler
@@ -825,14 +965,350 @@ def test_main_turns_sigterm_into_traceable_exception_and_restores_handler(monkey
     monkeypatch.setattr(collection_serve_module, "signal", signal)
     monkeypatch.setattr(signal, "signal", fake_signal)
     monkeypatch.setattr(collection_serve_module, "create_server", lambda *args, **kwargs: fake_server)
+    monkeypatch.setattr(
+        collection_serve_module,
+        "create_discovery_lifecycle",
+        lambda server_info: FakeDiscoveryLifecycle(),
+    )
     monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning)])
 
     with pytest.raises(RuntimeError, match=r"SIGTERM \(signal 15\)"):
         main()
 
     assert fake_server.closed is True
+    assert lifecycle_events == ["start", "stop"]
     assert signal_calls[0][0] == signal.SIGTERM
     assert signal_calls[-1] == (signal.SIGTERM, previous_handler)
+
+
+def test_main_starts_discovery_after_os_port_assignment_and_cleans_it_before_server_close(monkeypatch, tmp_path):
+    events: list[object] = []
+
+    class FakeServer:
+        server_address = ("localhost", 49152)
+
+        def serve_forever(self) -> None:
+            events.append("serve")
+            raise KeyboardInterrupt
+
+        def server_close(self) -> None:
+            events.append("server-close")
+
+    class FakeDiscoveryLifecycle:
+        def start(self) -> None:
+            events.append("discovery-start")
+
+        def stop(self) -> None:
+            events.append("discovery-stop")
+
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+
+    def create_discovery_lifecycle(server_info: dict[str, object]) -> FakeDiscoveryLifecycle:
+        events.append(server_info.copy())
+        return FakeDiscoveryLifecycle()
+
+    monkeypatch.setattr(collection_serve_module, "create_server", lambda *args, **kwargs: FakeServer())
+    monkeypatch.setattr(collection_serve_module, "create_discovery_lifecycle", create_discovery_lifecycle)
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning), "--port", "0"])
+
+    main()
+
+    discovered = next(event for event in events if isinstance(event, dict))
+    assert discovered["port"] == 49152
+    assert str(discovered["base_url"]).endswith(":49152")
+    assert events[-3:] == ["serve", "discovery-stop", "server-close"]
+
+
+def test_main_embeds_registry_in_collection_server_when_port_is_discovery_port(monkeypatch, tmp_path):
+    events: list[str] = []
+    captured_state: RegistryState | None = None
+
+    class FakeServer:
+        server_address = ("localhost", 7872)
+
+        def serve_forever(self) -> None:
+            events.append("serve")
+            raise KeyboardInterrupt
+
+        def server_close(self) -> None:
+            events.append("server-close")
+
+    class FakeDiscoveryLifecycle:
+        def start(self) -> None:
+            events.append("discovery-start")
+
+        def stop(self) -> None:
+            events.append("discovery-stop")
+
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+
+    def fake_create_server(_port: int, _allow_origin: str | None, **kwargs: object) -> FakeServer:
+        nonlocal captured_state
+        state = kwargs["discovery_registry_state"]
+        assert isinstance(state, RegistryState)
+        captured_state = state
+        return FakeServer()
+
+    def fake_create_discovery_lifecycle(
+        _server_info: dict[str, object], *, embedded_registry_state: RegistryState
+    ) -> FakeDiscoveryLifecycle:
+        assert embedded_registry_state is captured_state
+        return FakeDiscoveryLifecycle()
+
+    monkeypatch.setattr(collection_serve_module, "create_server", fake_create_server)
+    monkeypatch.setattr(collection_serve_module, "create_discovery_lifecycle", fake_create_discovery_lifecycle)
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning), "--port", "7872"])
+
+    main()
+
+    assert captured_state is not None
+    assert events == ["discovery-start", "serve", "discovery-stop", "server-close"]
+
+
+def test_main_stops_discovery_when_collection_server_returns_normally(monkeypatch, tmp_path):
+    events: list[str] = []
+
+    class FakeServer:
+        server_address = ("localhost", 49152)
+
+        def serve_forever(self) -> None:
+            events.append("serve")
+
+        def server_close(self) -> None:
+            events.append("server-close")
+
+    class FakeDiscoveryLifecycle:
+        def start(self) -> None:
+            events.append("discovery-start")
+
+        def stop(self) -> None:
+            events.append("discovery-stop")
+
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    monkeypatch.setattr(collection_serve_module, "create_server", lambda *args, **kwargs: FakeServer())
+    monkeypatch.setattr(
+        collection_serve_module,
+        "create_discovery_lifecycle",
+        lambda server_info: FakeDiscoveryLifecycle(),
+    )
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning), "--port", "0"])
+
+    main()
+
+    assert events == ["discovery-start", "serve", "discovery-stop", "server-close"]
+
+
+def test_main_discovery_cleanup_failure_does_not_skip_collection_server_close(monkeypatch, capsys, tmp_path):
+    events: list[str] = []
+
+    class FakeServer:
+        server_address = ("localhost", 49152)
+
+        def serve_forever(self) -> None:
+            raise KeyboardInterrupt
+
+        def server_close(self) -> None:
+            events.append("server-close")
+
+    class FailingDiscoveryLifecycle:
+        def start(self) -> None:
+            events.append("discovery-start")
+
+        def stop(self) -> None:
+            events.append("discovery-stop")
+            raise OSError("registry cleanup failed")
+
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    monkeypatch.setattr(collection_serve_module, "create_server", lambda *args, **kwargs: FakeServer())
+    monkeypatch.setattr(
+        collection_serve_module,
+        "create_discovery_lifecycle",
+        lambda server_info: FailingDiscoveryLifecycle(),
+    )
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning), "--port", "0"])
+
+    main()
+
+    assert events == ["discovery-start", "discovery-stop", "server-close"]
+    assert "Warning: discovery cleanup failed: registry cleanup failed" in capsys.readouterr().out
+
+
+def test_main_runtime_cleanup_failure_does_not_override_keyboard_interrupt(monkeypatch, capsys, tmp_path):
+    events: list[str] = []
+
+    class FakeServer:
+        server_address = ("localhost", 49152)
+
+        def serve_forever(self) -> None:
+            raise KeyboardInterrupt
+
+        def server_close(self) -> None:
+            events.append("server-close")
+
+    class FailingDiscoveryLifecycle:
+        def start(self) -> None:
+            events.append("discovery-start")
+
+        def stop(self) -> None:
+            events.append("discovery-stop")
+            raise RuntimeError("registry cleanup conflict")
+
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    monkeypatch.setattr(collection_serve_module, "create_server", lambda *args, **kwargs: FakeServer())
+    monkeypatch.setattr(
+        collection_serve_module,
+        "create_discovery_lifecycle",
+        lambda server_info: FailingDiscoveryLifecycle(),
+    )
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning), "--port", "0"])
+
+    main()
+
+    assert events == ["discovery-start", "discovery-stop", "server-close"]
+    assert "Warning: discovery cleanup failed: registry cleanup conflict" in capsys.readouterr().out
+
+
+def test_main_discovery_cleanup_failure_does_not_override_sigterm(monkeypatch, tmp_path):
+    events: list[str] = []
+    installed_handler = None
+    previous_handler = object()
+
+    class FakeServer:
+        server_address = ("localhost", 49152)
+
+        def serve_forever(self) -> None:
+            installed_handler(signal.SIGTERM, None)
+
+        def server_close(self) -> None:
+            events.append("server-close")
+
+    class FailingDiscoveryLifecycle:
+        def start(self) -> None:
+            events.append("discovery-start")
+
+        def stop(self) -> None:
+            events.append("discovery-stop")
+            raise OSError("registry cleanup failed")
+
+    def fake_signal(signum, handler):
+        nonlocal installed_handler
+        if handler is not previous_handler:
+            installed_handler = handler
+            return previous_handler
+        return previous_handler
+
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    monkeypatch.setattr(collection_serve_module, "signal", signal)
+    monkeypatch.setattr(signal, "signal", fake_signal)
+    monkeypatch.setattr(collection_serve_module, "create_server", lambda *args, **kwargs: FakeServer())
+    monkeypatch.setattr(
+        collection_serve_module,
+        "create_discovery_lifecycle",
+        lambda server_info: FailingDiscoveryLifecycle(),
+    )
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning), "--port", "0"])
+
+    with pytest.raises(RuntimeError, match=r"SIGTERM \(signal 15\)"):
+        main()
+
+    assert events == ["discovery-start", "discovery-stop", "server-close"]
+
+
+def test_main_discovery_start_failure_restores_handler_and_closes_server(monkeypatch, tmp_path):
+    events: list[str] = []
+    previous_handler = object()
+
+    class FakeServer:
+        server_address = ("localhost", 49152)
+
+        def serve_forever(self) -> None:
+            events.append("serve")
+
+        def server_close(self) -> None:
+            events.append("server-close")
+
+    class FailingDiscoveryLifecycle:
+        def start(self) -> None:
+            events.append("discovery-start")
+            raise RuntimeError("registry conflict")
+
+        def stop(self) -> None:
+            events.append("discovery-stop")
+
+    def fake_signal(_signum, handler):
+        events.append("handler-restored" if handler is previous_handler else "handler-installed")
+        return previous_handler
+
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    monkeypatch.setattr(collection_serve_module, "signal", signal)
+    monkeypatch.setattr(signal, "signal", fake_signal)
+    monkeypatch.setattr(collection_serve_module, "create_server", lambda *args, **kwargs: FakeServer())
+    monkeypatch.setattr(
+        collection_serve_module,
+        "create_discovery_lifecycle",
+        lambda server_info: FailingDiscoveryLifecycle(),
+    )
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning), "--port", "0"])
+
+    with pytest.raises(RuntimeError, match="registry conflict"):
+        main()
+
+    assert events == ["handler-installed", "discovery-start", "discovery-stop", "handler-restored", "server-close"]
+
+
+def test_main_non_oserror_cleanup_failure_preserves_sigterm_and_closes_server(monkeypatch, tmp_path):
+    events: list[str] = []
+    previous_handler = object()
+    installed_handler = None
+
+    class FakeServer:
+        server_address = ("localhost", 49152)
+
+        def serve_forever(self) -> None:
+            installed_handler(signal.SIGTERM, None)
+
+        def server_close(self) -> None:
+            events.append("server-close")
+
+    class FailingDiscoveryLifecycle:
+        def start(self) -> None:
+            events.append("discovery-start")
+
+        def stop(self) -> None:
+            events.append("discovery-stop")
+            raise RuntimeError("cleanup conflict")
+
+    def fake_signal(_signum, handler):
+        nonlocal installed_handler
+        if handler is not previous_handler:
+            installed_handler = handler
+            return previous_handler
+        events.append("handler-restored")
+        return previous_handler
+
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    monkeypatch.setattr(collection_serve_module, "signal", signal)
+    monkeypatch.setattr(signal, "signal", fake_signal)
+    monkeypatch.setattr(collection_serve_module, "create_server", lambda *args, **kwargs: FakeServer())
+    monkeypatch.setattr(
+        collection_serve_module,
+        "create_discovery_lifecycle",
+        lambda server_info: FailingDiscoveryLifecycle(),
+    )
+    monkeypatch.setattr(sys, "argv", ["yt-collection-serve", str(planning), "--port", "0"])
+
+    with pytest.raises(RuntimeError, match=r"SIGTERM \(signal 15\)"):
+        main()
+
+    assert events == ["discovery-start", "discovery-stop", "handler-restored", "server-close"]
 
 
 def test_main_resolves_allow_extension_from_chrome_preferences(monkeypatch, capsys, tmp_path):

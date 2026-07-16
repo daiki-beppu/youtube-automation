@@ -58,7 +58,7 @@ jobs:
             }
           '
       - name: E2E tests (Playwright)
-        run: nix develop .#extensions --command pnpm test:e2e
+        run: nix develop .#extensions --command xvfb-run -a pnpm test:e2e
 
   distrokid-helper:
     runs-on: ubuntu-latest
@@ -128,4 +128,4 @@ jobs:
             }
           '
       - name: E2E (Playwright)
-        run: nix develop .#extensions --command pnpm test:e2e
+        run: nix develop .#extensions --command xvfb-run -a pnpm test:e2e

@@ -16,7 +16,7 @@
 | `components/`                        | popup UI（`App.tsx` / `PatternList.tsx` / `useSunoRunner.ts`）                                              |
 | `lib/messaging.ts`                   | popup ⇄ content の型付き message（@webext-core/messaging）                                                  |
 | `lib/clip-tracker.ts` ほか           | bridge 観測の集計（in-flight / ACK / stall。`bridge-listener` / `ack-probe` / `entry-retry`）               |
-| `lib/storage.ts`                     | ローカル配信元候補 / resume state / overlay state の型付き storage（@wxt-dev/storage）                      |
+| `lib/storage.ts`                     | 選択中ローカル配信元 / resume state / overlay state の型付き storage（@wxt-dev/storage）                    |
 | `lib/manifest.ts`                    | 最小権限定数 `MANIFEST_PERMISSIONS`                                                                         |
 | `../shared/`                         | DOM 注入 / API client / origin allowlist / 契約定数（複数拡張で共有）                                       |
 
@@ -35,7 +35,8 @@ browser use から overlay / popup を安定して観測できるよう、操作
 | `data-suno-collection-id`                                                       | 選択中 collection id                                                                                      |
 | `data-suno-entry-count`                                                         | 読み込み済み entry 数                                                                                     |
 | `data-suno-selected-entry-count`                                                | 実行対象 entry 数                                                                                         |
-| `[data-suno-control="server-url"]`                                              | 登録済みローカル配信元の選択                                                                              |
+| `[data-suno-control="server-source-trigger"]`                                   | ローカル配信元の動的検出を開始し、候補 listbox を開く                                                     |
+| `role="option"`                                                                 | 動的検出したローカル配信元の選択                                                                          |
 | `[data-suno-control="collection-select"]`                                       | collection 選択                                                                                           |
 | `[data-suno-control="run"]` / `[data-suno-control="stop"]`                      | 主要操作ボタン                                                                                            |
 | `[data-suno-control="resume"]` / `[data-suno-control="dismiss-resume"]`         | 前回中断 resume バナーの再開 / 閉じる                                                                     |
@@ -82,7 +83,7 @@ build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helpe
    # → http://<channel>.localhost:7873/collections と /auth/token を配信
    ```
 2. Chrome で Suno の **Advanced** タブを選択する。
-3. 拡張アイコンからポップアップを開き、**ローカル配信元** でチャンネル名つき候補を選ぶ。初回表示・配信元選択・collection 選択の各タイミングで一覧と prompts が自動取得され、配信元 URL も自動保存される。手動で更新したい場合はページを再読み込みする。
+3. 拡張アイコンからポップアップを開き、**ローカル配信元** で動的検出されたチャンネル名つき候補を選ぶ。初回表示・配信元選択・collection 選択の各タイミングで一覧と prompts が自動取得される。
 4. `ready` な collection を選び、prompts の自動取得後に **異常値の曲を再生成する** を選んでから **全パターンを連続実行** を押す。既定の ON は duration guard NG の entry を最大 2 回再生成する。OFF は追加生成せず、NG を警告表示したうえで生成済み全 clip を playlist / download 候補に残す。
 5. 各パターンで Style/Lyrics を注入 → Generate 押下 → 生成完了検知 → 次へ、を自動で繰り返す。
 6. 全件完了後、対象 clip を一括選択 → playlist 追加 → More menu の **Download all** → format 選択 → ZIP ダウンロード完了監視 → `POST /collections/<id>/downloaded` で ZIP パス通知、まで実行する。サーバーは ZIP を展開し、`02-Individual-music/` と `workflow-state.json` を更新する。
@@ -108,9 +109,36 @@ build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helpe
 
 ## ローカル配信元 selector
 
-`yt-collection-serve` は起動時に `http://<channel>.localhost:<PORT>` 形式の URL と selector label を表示し、`GET /server-info` でも同じ情報を返す。拡張は初回表示・配信元選択・collection 選択による自動取得の成功時にこの label と URL を保存するため、複数チャンネルのサーバーを使い分ける場合は popup の **ローカル配信元** からチャンネル名を見て選択する。最新データを取り直す場合はページを再読み込みする。
+`yt-collection-serve` は起動時に `http://<channel>.localhost:<PORT>` 形式の URL と selector label を表示し、固定 registry `http://localhost:7872/.well-known/yt-collection-serve` へ heartbeat 登録する。拡張は初回表示と selector を開く操作時に registry を読み、`GET /server-info` で検証できた稼働中サーバーだけを動的検出する。選択肢は更新完了後に開くため、停止済み候補を先に表示しない。例: `yt-collection-serve collections/planning --port 49152`。既定の `http://youtube-automation.localhost:7873` はサーバー停止中でも常に表示される。過去の候補一覧は保存せず、選択中 URL だけを保存する。
 
-後方互換として `http://localhost:7873` も既定候補に残しているが、新規運用ではチャンネル別 hostname を使う。
+### discovery / storage schema v1
+
+server は `Content-Type: application/json`、`Origin` なしで `{"instance_id":"fixture-instance","server_info":{"channel_name":"Fixture Channel","channel_short":"fixture","hostname":"fixture.localhost","port":49152,"base_url":"http://fixture.localhost:49152","label":"Fixture Channel"}}` を registry へ POST する。GET の完全な schema v1 応答は次の形になる。
+
+```json
+{
+  "schema_version": 1,
+  "ttl_seconds": 30,
+  "servers": [
+    {
+      "instance_id": "fixture-instance",
+      "expires_at": 130.0,
+      "server_info": {
+        "channel_name": "Fixture Channel",
+        "channel_short": "fixture",
+        "hostname": "fixture.localhost",
+        "port": 49152,
+        "base_url": "http://fixture.localhost:49152",
+        "label": "Fixture Channel"
+      }
+    }
+  ]
+}
+```
+
+`schema_version` は互換性番号、`ttl_seconds` は生存期間、`servers` は `base_url` 順の登録配列。`instance_id` はプロセス識別子、`expires_at` は Unix time の失効時刻、`server_info` の各 field はチャンネル名・短縮名・loopback host/port/base URL・表示 label である。同一 ID の heartbeat POST は expiry を更新し、正常終了時の `{"instance_id":"fixture-instance"}` DELETE は即時削除、異常終了時は TTL 境界で失効する。
+
+POST/DELETE は JSON 以外を 415、`Origin` 付き要求を 403、不正 schema を 400、16384 bytes 超の body を 413、128 文字超の ID を 400、128 件超の登録を 429 にして状態を変更しない。未知 path は 404、未対応 method は 405。storage は `chrome.storage.local["sunoServerUrl"]` に選択中 URL 文字列だけを保持し、旧候補配列 key `chrome.storage.local["ytCollectionServeSources"]` は更新時に削除して再作成しない。
 
 ## スコープ外
 

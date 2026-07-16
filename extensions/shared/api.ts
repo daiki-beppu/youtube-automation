@@ -305,21 +305,28 @@ export async function fetchServerVersion(
   };
 }
 
+export function parseServerInfo(data: unknown): ServerInfo {
+  const record = assertObject(data, "server-info");
+  const port = assertNonNegativeInteger(record.port, "port");
+  if (port === 0) {
+    throw new Error("port must be positive integer");
+  }
+  return {
+    channel_name: assertString(record.channel_name, "channel_name"),
+    channel_short: assertString(record.channel_short, "channel_short"),
+    hostname: assertString(record.hostname, "hostname"),
+    port,
+    base_url: assertString(record.base_url, "base_url"),
+    label: assertString(record.label, "label"),
+  };
+}
+
 export async function fetchServerInfo(baseUrl: string): Promise<ServerInfo> {
   const resp = await fetch(`${normalizeBaseUrl(baseUrl)}${SERVER_INFO_ROUTE}`);
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
   }
-  const data: unknown = await resp.json();
-  const record = assertObject(data, "server-info");
-  return {
-    channel_name: assertString(record.channel_name, "channel_name"),
-    channel_short: assertString(record.channel_short, "channel_short"),
-    hostname: assertString(record.hostname, "hostname"),
-    port: assertNonNegativeInteger(record.port, "port"),
-    base_url: assertString(record.base_url, "base_url"),
-    label: assertString(record.label, "label"),
-  };
+  return parseServerInfo(await resp.json());
 }
 
 /** 拡張 version がサーバーの最低要求を満たすか確認する（#1023）。 */
