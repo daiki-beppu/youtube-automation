@@ -1,13 +1,13 @@
 ---
 name: viewer-voice
-description: "Use when 競合コメントの収集・分析で視聴者インサイトを抽出するとき。「視聴者の声」「コメント分析」「ユーザーリサーチ」で発動。/audience-persona-design の必須入力（viewer-voice-analysis.md）を作る前工程。実行タイミングは任意"
+description: "Use when 競合コメントの収集・分析で視聴者インサイトを抽出するとき。「視聴者の声」「コメント分析」「ユーザーリサーチ」で発動。/audience-persona-design の必須入力（viewer-voice-analysis.md）を作る前工程。新規開設では /channel-new Step 7 の必須前工程、公開後の再分析では任意"
 ---
 
 ## Overview
 
 承認済みベンチマークチャンネルの1万再生以上の動画から YouTube Data API でコメントを取得し、
 感情・利用シーン・リクエスト・キャラ愛着の4軸で分析する。
-`/channel-new` の標準フローでは実行せず、コメントを含む視聴者インサイトが必要になった時点で明示的に実行する。
+`/channel-new` の新規開設モードでは Step 7 の必須前工程として実行する。公開後の再分析では、コメントを含む視聴者インサイトが必要になった時点で明示的に実行する。
 
 ## 完了条件
 

@@ -1422,13 +1422,20 @@ def check_benchmark_data(channel_dir: Path) -> CheckResult:
 
 
 def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
+    persona_definition = channel_dir / "docs" / "channel" / "personas" / "persona-definition.md"
+    missing_persona = [] if persona_definition.is_file() else ["docs/channel/personas/persona-definition.md 未作成"]
+    missing_persona_suffix = ("; " + "; ".join(missing_persona)) if missing_persona else ""
+
     analytics_path = channel_dir / "config" / "channel" / "analytics.json"
     if not analytics_path.is_file():
         return CheckResult(
             id="ttp_wf_new_readiness",
             status="warn",
             category=DATA_CATEGORY,
-            message="config/channel/analytics.json 未生成。/wf-new 接続前に承認済み TTP 対象の保存が必要",
+            message=(
+                "config/channel/analytics.json 未生成。/wf-new 接続前に承認済み TTP 対象の保存が必要"
+                + missing_persona_suffix
+            ),
             next_action={
                 "kind": "human",
                 "instructions": (
@@ -1444,7 +1451,7 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
             id="ttp_wf_new_readiness",
             status="warn",
             category=DATA_CATEGORY,
-            message="TTP 完了条件が未充足: " + analytics_read.error,
+            message="TTP 完了条件が未充足: " + analytics_read.error + missing_persona_suffix,
             next_action={
                 "kind": "human",
                 "instructions": "config/channel/analytics.json を修正してから yt-doctor を再実行してください",
@@ -1459,7 +1466,9 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
             id="ttp_wf_new_readiness",
             status="warn",
             category=DATA_CATEGORY,
-            message="承認済み TTP 対象が 0 件。/channel-new は /wf-new 接続前に TTP 対象承認が必要",
+            message=(
+                "承認済み TTP 対象が 0 件。/channel-new は /wf-new 接続前に TTP 対象承認が必要" + missing_persona_suffix
+            ),
             next_action={
                 "kind": "human",
                 "instructions": (
@@ -1470,6 +1479,7 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
         )
 
     missing, approved_exceptions = _missing_ttp_readiness_items(channel_dir, channels)
+    missing.extend(missing_persona)
     missing.extend(channels_read.errors)
     benchmark_missing, benchmark_notes = _missing_channel_new_benchmark_items(
         channel_dir,

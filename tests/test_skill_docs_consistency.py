@@ -172,10 +172,7 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
     direction_mode_row = next(line for line in mode_routing.splitlines() if line.startswith("| 方向性検討モード |"))
     direction_mode_stub = channel_new.split("## 方向性検討モード", 1)[1].split("\n## 再生成モード", 1)[0]
     direction_mode = _read(".claude/skills/channel-new/references/direction-mode.md")
-    ttp_principles = channel_new.split("## TTP 原則", 1)[1].split(
-        "### TTP 完了条件（新規開設モード）",
-        1,
-    )[0]
+    ttp_principles = channel_new.split("## TTP 原則", 1)[1].split("## 外部データの扱い", 1)[0]
     step1 = channel_new.split("### Step 1: TTP ヒアリング", 1)[1].split(
         "### Step 2: 現在のディレクトリを repo 初期化",
         1,
@@ -184,7 +181,7 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
         "### Step 5: TTP seed fetch と承認済み対象反映",
         1,
     )[0]
-    step7 = channel_new.split("### Step 7: 簡易ペルソナ導出", 1)[1].split(
+    step7 = channel_new.split("### Step 7: 本格ペルソナ作成チェーン", 1)[1].split(
         "### Step 8: branding 初回反映",
         1,
     )[0]
@@ -240,10 +237,22 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
     assert "config を再生成・再反映する場合は `/channel-new`（再生成モード）" in direction_mode
     assert "制作に進む場合は `/wf-new`" in direction_mode
 
-    assert "TTP データだけを入力として導出し、方向性ヒアリングは追加しない" in step7
-    assert "- `config/channel/analytics.json::benchmark.channels`" in step7
-    assert "- `docs/channel/ttp-seed-confirmation.md`" in step7
-    assert "- `docs/channel/competitor-branding-snapshot.json`" in step7
+    assert "/viewer-voice` → `/audience-persona-design` → `/viewing-scene" in step7
+    assert "必須" in step7
+    assert "docs/channel/personas/persona-definition.md" in step7
+    assert "Step 8 へ進まない" in step7
+    assert "channel-new-persona.md" not in channel_new
+
+    audience_persona = _read(".claude/skills/audience-persona-design/SKILL.md")
+    assert "新規開設時" in audience_persona
+    assert "競合チャンネルのコメント" in audience_persona
+    assert "公開前" in audience_persona
+    assert "channel-new-persona.md" not in audience_persona
+
+    viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
+    assert "新規開設モードでは Step 7 の必須前工程" in viewer_voice
+    assert "公開後の再分析では" in viewer_voice
+    assert "標準フローでは実行せず" not in viewer_voice
 
     assert "旧 `/channel-direction`" not in cross_references
 
@@ -282,12 +291,156 @@ def test_channel_new_frontmatter_keeps_import_dispatch_keywords() -> None:
         assert keyword in description
 
 
+def test_channel_new_ttp_completion_condition_is_an_early_hard_gate() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    completion_heading = "## 完了条件（新規開設モード）"
+
+    assert channel_new.splitlines().index(completion_heading) < 60
+    completion = channel_new.split(completion_heading, 1)[1].split("## Overview", 1)[0]
+    assert "docs/channel/personas/persona-definition.md" in completion
+    assert "候補ごとの source、seed fetch 要約、承認 / 不採用判断" in completion
+    assert "`snippet` / `brandingSettings` / `localizations` snapshot" in completion
+    assert "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default" in completion
+    assert "data/video_analysis/<slug>/*.json::suno_preset.genre_line" in completion
+
+
+def test_channel_new_docs_distinguish_required_initial_persona_from_optional_reanalysis() -> None:
+    features = _read("docs/features.md")
+    onboarding = _read("ONBOARDING.md")
+
+    assert "/viewer-voice` → `/audience-persona-design` → `/viewing-scene`" in features
+    assert "`/viewer-voice` は公開後の再分析では任意" in features
+    assert "公開前のペルソナチェーンは既存の競合 / TTP / viewer-voice 成果物を入力に完走" in features
+    assert "公開後の `/viewing-scene` は従来どおり Analytics report を要求する" in features
+    assert "/viewer-voice         → 公開後のコメント再分析" in onboarding
+    assert "公開前チェーンは競合 / TTP / viewer-voice 成果物を入力" in onboarding
+    assert "自チャンネル Analytics report や任意の本格 benchmark 収集を要求しない" in onboarding
+    assert "公開後の見直しでは従来どおりそれらを入力にする" in onboarding
+
+
+def test_channel_new_prelaunch_persona_chain_propagates_context_without_analytics() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    audience_persona = _read(".claude/skills/audience-persona-design/SKILL.md")
+    viewing_scene = _read(".claude/skills/viewing-scene/SKILL.md")
+
+    step7 = channel_new.split("### Step 7: 本格ペルソナ作成チェーン", 1)[1].split(
+        "### Step 8: branding 初回反映",
+        1,
+    )[0]
+    assert "実行コンテキスト: 新規開設（公開前）" in step7
+    assert "`/audience-persona-design` から同じ実行コンテキストを引き継いで `/viewing-scene`" in step7
+    for path in (
+        "docs/plans/viewer-voice-analysis.md",
+        "docs/channel/ttp-seed-confirmation.md",
+        "docs/channel/competitor-branding-snapshot.json",
+    ):
+        assert path in step7
+    assert "任意の `/benchmark`" in step7
+    assert "`reports/analysis_*.md` は要求しない" in step7
+
+    entry_contract = audience_persona.split("入口で実行コンテキスト", 1)[1].split("## 完了条件", 1)[0]
+    assert "新規開設（公開前）" in entry_contract
+    assert "公開後" in entry_contract
+    assert "任意の `/benchmark` 成果物" in entry_contract
+    for path in (
+        "docs/plans/viewer-voice-analysis.md",
+        "docs/channel/ttp-seed-confirmation.md",
+        "docs/channel/competitor-branding-snapshot.json",
+    ):
+        assert path in entry_contract
+    phase5 = audience_persona.split("### Phase 5: viewing-scene 検証", 1)[1].split(
+        "### Phase 6: 最終 persona-definition.md 更新",
+        1,
+    )[0]
+    assert "新規開設（公開前）" in phase5
+    assert "公開後" in phase5
+    assert "実行コンテキストを明示して渡し" in phase5
+    audience_guidance = audience_persona.split("## 障害時ガイダンス", 1)[1].split("## 関連ファイル", 1)[0]
+    assert "公開前入力不在" in audience_guidance
+    assert "公開後入力不在" in audience_guidance
+    assert "新規開設（公開前）で競合 / TTP / viewer-voice 成果物が不足" in audience_guidance
+    assert "公開後に `data/` のベンチマーク/Analytics スナップショットが無い" in audience_guidance
+
+    audience_agent1 = audience_persona.split("**Agent 1: ベンチマークタグ分析**", 1)[1].split(
+        "**Agent 2: コミュニティ調査**",
+        1,
+    )[0]
+    audience_prelaunch = audience_agent1.split("**新規開設（公開前）**:", 1)[1].split("**公開後**:", 1)[0]
+    audience_postlaunch = audience_agent1.split("**公開後**:", 1)[1]
+    assert "記録済みの範囲だけ入力" in audience_prelaunch
+    assert "推測で補わず「動画タグ頻度は未検証」" in audience_prelaunch
+    assert "全ベンチマーク動画のタグを集計（頻度順）" not in audience_prelaunch
+    assert "全ベンチマーク動画のタグを集計（頻度順）" in audience_postlaunch
+
+    viewing_overview = viewing_scene.split("## Overview", 1)[1].split("## 完了条件", 1)[0]
+    assert "新規開設（公開前）" in viewing_overview
+    assert "公開後" in viewing_overview
+    assert "実行コンテキストが明示されない場合もこちら" in viewing_overview
+    guard = viewing_scene.split("### 停止する fail", 1)[1].split("### 許容する fail", 1)[0]
+    assert "新規開設（公開前）" in guard
+    assert "公開後に `reports/analysis_*.md` が無い" in guard
+    assert "`reports/analysis_*.md` が無い" not in guard.replace(
+        "公開後に `reports/analysis_*.md` が無い",
+        "",
+    )
+    for path in (
+        "docs/plans/viewer-voice-analysis.md",
+        "docs/channel/ttp-seed-confirmation.md",
+        "docs/channel/competitor-branding-snapshot.json",
+    ):
+        assert path in guard
+
+
+def test_viewing_scene_keeps_post_publish_inputs_and_analysis_phases() -> None:
+    viewing_scene = _read(".claude/skills/viewing-scene/SKILL.md")
+    flow = viewing_scene.split("## 実行フロー", 1)[1].split("## 障害時ガイダンス", 1)[0]
+
+    assert "**公開後**:" in flow
+    assert "`reports/` の最新分析レポートを読み込む" in flow
+    assert "`data/benchmark_YYYYMMDD.json`" in flow
+    assert "任意の `data/benchmark_YYYYMMDD.json` が無くても停止しない" in flow
+    viewing_agent1 = flow.split("**Agent 1: 自チャンネルシーン別パフォーマンス**", 1)[1].split(
+        "**Agent 2: ベンチマーク活動タグ分析**",
+        1,
+    )[0]
+    viewing_prelaunch = viewing_agent1.split("**新規開設（公開前）**:", 1)[1].split("**公開後**:", 1)[0]
+    viewing_postlaunch = viewing_agent1.split("**公開後**:", 1)[1]
+    assert "定性シーン仮説" in viewing_prelaunch
+    assert "推測で補わず「公開前のため未検証」" in viewing_prelaunch
+    for quantitative_step in (
+        "シーン × 再生数 × 平均視聴時間のマッピング表",
+        "シーン別パフォーマンスランキング",
+        "動画尺とパフォーマンスの相関分析",
+    ):
+        assert quantitative_step not in viewing_prelaunch
+        assert quantitative_step in viewing_postlaunch
+
+    viewing_agent2 = flow.split("**Agent 2: ベンチマーク活動タグ分析**", 1)[1].split(
+        "**Agent 3: 検索需要調査**",
+        1,
+    )[0]
+    benchmark_prelaunch = viewing_agent2.split("**新規開設（公開前）**:", 1)[1].split("**公開後**:", 1)[0]
+    benchmark_postlaunch = viewing_agent2.split("**公開後**:", 1)[1]
+    assert "推測で補わず「公開前のため未検証」" in benchmark_prelaunch
+    assert "活動タグ別の平均再生数を比較" not in benchmark_prelaunch
+    assert "活動タグ別の平均再生数を比較" in benchmark_postlaunch
+    for heading in (
+        "**Agent 1: 自チャンネルシーン別パフォーマンス**",
+        "**Agent 2: ベンチマーク活動タグ分析**",
+        "**Agent 3: 検索需要調査**",
+        "### Phase 2: 第一ペルソナ × シーン検証",
+        "### Phase 3: 意思決定 + レポート保存",
+    ):
+        assert heading in flow
+
+
 def test_channel_new_import_mode_contract_is_separate_from_ttp_completion() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     import_mode = _read(".claude/skills/channel-new/references/import-mode.md")
     config_rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
 
     assert "TTP 完了条件（新規開設モード）" in channel_new
+    assert "docs/channel/personas/persona-definition.md" in channel_new
     assert "既存チャンネル取り込みモードにはこの TTP 完了条件を適用しない" in channel_new
     assert "取り込み Step 8: 次ステップ案内" in channel_new
     assert "references/import-mode.md" in channel_new
@@ -607,7 +760,8 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "/viewer-voice` → 前提" in research
 
     assert "チャンネル立ち上げ・方向性見直し時に必ず使用" not in viewer_voice
-    assert "`/channel-new` の標準フローでは実行せず" in viewer_voice
+    assert "`/channel-new` の新規開設モードでは Step 7 の必須前工程として実行する" in viewer_voice
+    assert "公開後の再分析では" in viewer_voice
     assert "任意後続スキル" not in viewer_voice
     assert "/audience-persona-design の必須入力（viewer-voice-analysis.md）" in viewer_voice
 
@@ -650,7 +804,9 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "untrusted data" in onboarding
 
     assert "新規チャンネル開設 → 競合発掘 → 方向性決定 → セットアップ" not in features
-    assert "`/setup` → `/channel-new` → `/wf-new`" in features
+    assert (
+        "`/setup` → `/channel-new`（`/viewer-voice` → `/audience-persona-design` → `/viewing-scene` を含む）→ `/wf-new`"
+    ) in features
 
 
 def test_skill_frontmatter_descriptions_disambiguate_sibling_routes() -> None:

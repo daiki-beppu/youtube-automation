@@ -2352,6 +2352,9 @@ def _write_music_engine(base: Path, music_engine: str) -> None:
 def _write_ttp_readiness_files(base: Path) -> None:
     docs_channel = base / "docs" / "channel"
     docs_channel.mkdir(parents=True, exist_ok=True)
+    personas_dir = docs_channel / "personas"
+    personas_dir.mkdir(parents=True, exist_ok=True)
+    (personas_dir / "persona-definition.md").write_text("# First persona\n", encoding="utf-8")
     (docs_channel / "ttp-seed-confirmation.md").write_text(
         "\n".join(
             [
@@ -2481,6 +2484,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
         assert r.status == "warn"
         assert "analytics.json 未生成" in r.message
+        assert "docs/channel/personas/persona-definition.md 未作成" in r.message
 
     @pytest.mark.parametrize(
         ("raw_payload", "expected"),
@@ -2499,6 +2503,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
 
         assert r.status == "warn"
         assert expected in r.message
+        assert "docs/channel/personas/persona-definition.md 未作成" in r.message
         assert r.next_action is not None
         assert "analytics.json" in r.next_action["instructions"]
 
@@ -2507,6 +2512,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
         r = doctor.check_ttp_wf_new_readiness(tmp_path)
         assert r.status == "warn"
         assert "承認済み TTP 対象が 0 件" in r.message
+        assert "docs/channel/personas/persona-definition.md 未作成" in r.message
         assert r.next_action is not None
         assert "benchmark.channels" in r.next_action["instructions"]
 
@@ -2523,6 +2529,66 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert "thumbnail reference_images.default 未設定" in r.message
         assert r.next_action is not None
         assert "ユーザー承認済み例外" in r.next_action["instructions"]
+
+    def test_missing_persona_definition_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "personas" / "persona-definition.md").unlink()
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "docs/channel/personas/persona-definition.md 未作成" in r.message
+
+    def test_empty_persona_definition_is_accepted_as_existing(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "personas" / "persona-definition.md").write_text("", encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_main_json_reports_missing_persona_definition_through_public_cli(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        _write_minimal_config(tmp_path)
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        (tmp_path / "docs" / "channel" / "personas" / "persona-definition.md").unlink()
+
+        code = doctor.main(["--json", "--target", str(tmp_path)])
+
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        ttp_check = next(check for check in payload["checks"] if check["id"] == "ttp_wf_new_readiness")
+        assert ttp_check["status"] == "warn"
+        assert "docs/channel/personas/persona-definition.md 未作成" in ttp_check["message"]
+
+    def test_main_json_reports_missing_persona_when_analytics_is_also_missing(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        _write_minimal_config(tmp_path)
+
+        code = doctor.main(["--json", "--target", str(tmp_path)])
+
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        ttp_check = next(check for check in payload["checks"] if check["id"] == "ttp_wf_new_readiness")
+        assert ttp_check["status"] == "warn"
+        assert "analytics.json 未生成" in ttp_check["message"]
+        assert "docs/channel/personas/persona-definition.md 未作成" in ttp_check["message"]
+
+    def test_main_json_accepts_persona_definition_through_public_cli(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        _write_minimal_config(tmp_path)
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+
+        code = doctor.main(["--json", "--target", str(tmp_path)])
+
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        ttp_check = next(check for check in payload["checks"] if check["id"] == "ttp_wf_new_readiness")
+        assert ttp_check["status"] == "ok"
 
     def test_suno_video_analysis_preset_satisfies_music_readiness(self, tmp_path):
         _write_ttp_analytics(

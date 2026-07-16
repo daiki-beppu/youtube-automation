@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(thumbnail)`: `archive.enabled`（既定 `false`）を追加し、サムネ承認・確定直後に `thumbnail.jpg/png` を元の内容と拡張子のまま `assets/thumbnail-gallery/<collection-dir-name>.<ext>` へ原子的にコピーできるようにした。同一コレクションの再承認は最新画像へ置換し、設定不正・サムネ欠落・シンボリックリンク・コピー失敗は非 0 で停止する（#1942）。
 
+- `feat(channel-new,doctor)`: 新規チャンネルの簡易ペルソナを `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` の必須チェーンへ置換し、公開前は既存の競合 / TTP / viewer-voice 成果物を入力に Analytics report や任意の本格 benchmark なしで完走する契約を追加した。`yt-doctor` の `ttp_wf_new_readiness` は `docs/channel/personas/persona-definition.md` の欠落を警告する（#2079）。
+
 - `feat(masterup)`: `yt-suno-verify-playlist` に collection 相対の `--music-dir` を追加し、`NN{a|b}-<title>.<ext>` 形式のローカル音声ファイル名を name/title の英語 alias・apostrophe 除去名から canonical entry へ対応付け、entry + `a`/`b` variant 単位で unknown / missing / underfilled を fail-loud 検出できるようにした。`/masterup` の primary path は `02-Individual-music/` を直接突合するため、playlist URL や title list の確認なしで Step 5 前ゲートを実行する（#1898）。
 
 - `feat(doctor,setup)`: `yt-doctor --fix-client-secrets` を追加し、Downloads の構造妥当かつ GCP project 一致する最新 OAuth client JSON を `auth/client_secrets.json` へ移動できるようにした。既存ファイルは上書きせず、`/setup` の HUMAN STEP は secret 発行・Download JSON・done のみに簡素化した（#1903）。
