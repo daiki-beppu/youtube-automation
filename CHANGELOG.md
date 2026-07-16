@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `chore(extensions)`: suno-helper と distrokid-helper の lint を共通設定の Oxlint 1.73.0 へ移行し、旧 ESLint の direct dependencies と設定を削除した（#2018）。
+
 - `fix(upload)`: upload preflight が複数セパレータの `title.template` と準拠タイトルを正しく照合し、3パート以上のタイトルを誤って拒否しないようにした（#2037）。
 
 - `perf(test-infra)`: `utils/retry.py` にモジュールスコープの sleep/jitter シーム（`_DEFAULT_SLEEP` / `_DEFAULT_JITTER`）を追加し、`execute_with_retry` にも後方互換の optional `sleep` / `jitter` 引数を貫通させた。テスト側は `no_retry_backoff` fixture と `CommentReplier` への `sleep_fn` 注入で retry backoff / `delay_between_replies_sec` の実時間 sleep（計 ~33s）を排除した（#2091）。
