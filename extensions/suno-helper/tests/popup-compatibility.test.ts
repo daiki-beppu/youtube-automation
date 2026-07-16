@@ -233,6 +233,16 @@ function expectShadcnControl(element: HTMLElement, variant: "default" | "destruc
   expect(element.dataset.size).toBe("sm");
 }
 
+function alertByText(container: HTMLElement, text: string): HTMLElement {
+  const alert = Array.from(container.querySelectorAll<HTMLElement>('[data-slot="alert"]')).find((candidate) =>
+    candidate.textContent?.includes(text),
+  );
+  if (!alert) {
+    throw new Error(`alert not found: ${text}`);
+  }
+  return alert;
+}
+
 async function waitFor(assertion: () => void): Promise<void> {
   for (let i = 0; i < 20; i += 1) {
     try {
@@ -395,7 +405,11 @@ describe("Suno popup compatibility check", () => {
     });
 
     expect(container.textContent).toContain('"p2": 259s ✓');
-    expect(container.querySelector('[role="status"]')?.getAttribute("data-suno-status")).toBe("ok");
+    const status = container.querySelector<HTMLElement>('[role="status"]');
+    expect(status?.dataset.slot).toBe("alert");
+    expect(status?.dataset.variant).toBe("default");
+    expect(status?.getAttribute("aria-live")).toBe("polite");
+    expect(status?.getAttribute("data-suno-status")).toBe("ok");
   });
 
   it("agent 操作用の root 状態属性と主要 control selector を実 DOM に公開する", async () => {
@@ -484,6 +498,10 @@ describe("Suno popup compatibility check", () => {
       expect(expectControl(container, "server-url").getAttribute("disabled")).toBeNull();
       expect(expectControl(container, "collection-select").getAttribute("disabled")).toBeNull();
     });
+    const errorStatus = container.querySelector<HTMLElement>('[role="status"]')!;
+    expect(errorStatus.dataset.slot).toBe("alert");
+    expect(errorStatus.dataset.variant).toBe("destructive");
+    expect(errorStatus.getAttribute("aria-live")).toBe("polite");
   });
 
   it("配信元選択時に manifest version で /version を先に呼び、非互換警告を表示して prompts 取得を継続する", async () => {
@@ -510,6 +528,9 @@ describe("Suno popup compatibility check", () => {
       expect(container.textContent).toContain(`拡張を更新してください（拡張 ${MANIFEST_VERSION}`);
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
+    const warning = alertByText(container, "拡張を更新してください");
+    expect(warning.dataset.variant).toBe("warning");
+    expect(warning.getAttribute("role")).toBeNull();
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
     expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -855,6 +876,9 @@ describe("Suno popup compatibility check", () => {
     await waitFor(() => {
       expect(buttonByText(container, "失敗分のみ再実行")).toBeTruthy();
     });
+    const failedAlert = alertByText(container, "失敗してスキップされた entry: 2");
+    expect(failedAlert.dataset.variant).toBe("destructive");
+    expect(failedAlert.getAttribute("role")).toBeNull();
     expectShadcnControl(buttonByText(container, "失敗分のみ再実行"), "destructive");
 
     messagingMocks.sendMessage.mockClear();
@@ -2071,6 +2095,9 @@ describe("Suno popup compatibility check", () => {
       expect(container.textContent).toContain("前回の実行が中断されました。");
       expect(container.textContent).toContain("取得失敗:");
     });
+    const resumeAlert = alertByText(container, "前回の実行が中断されました。");
+    expect(resumeAlert.dataset.variant).toBe("warning");
+    expect(resumeAlert.getAttribute("role")).toBeNull();
     expectShadcnControl(expectControl(container, "resume"), "default");
     expectShadcnControl(expectControl(container, "dismiss-resume"), "outline");
 

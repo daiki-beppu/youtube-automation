@@ -15,6 +15,8 @@ import {
 } from "../lib/overlay-state";
 import { App } from "./App";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader } from "./ui/card";
 import { useDraggable } from "./useDraggable";
 
 /** overlay shell の固定幅 (px)。clamp の初期サイズと top-right 初期位置の算出に使う。 */
@@ -141,9 +143,9 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
   // hidden は unmount でなく display:none で表現する (要件1/3)。unmount すると toggleOverlay
   // リスナーが消え拡張アイコンで復帰不能になるため (#897)、DOM に残したまま CSS で隠す。
   return (
-    <div
+    <Card
       ref={containerRef}
-      className="fixed overflow-hidden rounded-lg border border-gray-300 bg-white shadow-xl"
+      className="fixed gap-0 overflow-hidden rounded-lg py-0 shadow-xl"
       style={{
         left: position.x,
         top: position.y,
@@ -153,25 +155,26 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
       }}
     >
       {/* handle: 常に pointer-events:auto。最小化中もここだけ残り再展開を受け付ける (要件4)。 */}
-      <div
+      <CardHeader
         onPointerDown={onPointerDown}
-        className="flex items-center justify-between rounded-t-lg bg-gray-800 px-3 py-2 text-sm font-semibold text-white select-none"
+        className="flex flex-row items-center justify-between gap-0 rounded-t-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground select-none"
         style={{ cursor: dragging ? "grabbing" : "grab", pointerEvents: "auto" }}
       >
         <span>Suno Helper</span>
-        <button
+        <Button
           type="button"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={toggleMinimize}
           aria-label={minimized ? "展開" : "最小化"}
-          className="rounded px-2 leading-none hover:bg-gray-700"
+          variant="ghost"
+          className="h-auto w-auto rounded px-2 py-0 leading-none text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
         >
           {minimized ? "▢" : "—"}
-        </button>
-      </div>
+        </Button>
+      </CardHeader>
       {/* 最小化中は panel を display:none + pointer-events:none で Suno UI 操作を邪魔しない (要件4)。 */}
-      <div
-        className="overflow-y-auto"
+      <CardContent
+        className="overflow-y-auto p-0"
         style={{
           pointerEvents: minimized ? "none" : "auto",
           display: minimized ? "none" : "block",
@@ -179,7 +182,7 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
         }}
       >
         <App />
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

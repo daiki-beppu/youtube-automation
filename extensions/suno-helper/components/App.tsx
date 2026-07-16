@@ -10,6 +10,7 @@ import { buildSelectedEntriesRunOverrides } from "../lib/run-overrides";
 import { downloadFormatItem, readDownloadFormat, type DownloadFormat } from "../lib/storage";
 import { PatternList } from "./PatternList";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
+import { Alert } from "./ui/alert";
 import { Button, ButtonSlot } from "./ui/button";
 import { useSunoRunner } from "./useSunoRunner";
 
@@ -279,7 +280,7 @@ export function App() {
       )}
 
       {visibleResumeBanner && (
-        <div className="flex flex-col gap-2 rounded border border-amber-300 bg-amber-50 px-2 py-2 text-xs text-amber-900">
+        <Alert variant="warning" className="flex flex-col gap-2 rounded px-2 py-2 text-xs">
           <p>
             前回の実行が中断されました。entry{" "}
             <span className="font-semibold">{visibleResumeBanner.failedIndex + 1}</span> から再開しますか？
@@ -298,18 +299,18 @@ export function App() {
               閉じる
             </Button>
           </div>
-        </div>
+        </Alert>
       )}
 
       {compatibilityWarning && (
-        <div className="rounded border border-amber-300 bg-amber-50 px-2 py-2 text-xs text-amber-900">
+        <Alert variant="warning" className="rounded px-2 py-2 text-xs">
           {compatibilityWarning}
-        </div>
+        </Alert>
       )}
 
       {/* 失敗スキップされた entry の再実行導線 (#948)。実行中は隠す。 */}
       {failedEntries.length > 0 && !isRunning && (
-        <div className="flex flex-col gap-2 rounded border border-red-300 bg-red-50 px-2 py-2 text-xs text-red-900">
+        <Alert variant="destructive" className="flex flex-col gap-2 rounded px-2 py-2 text-xs">
           <p>
             失敗してスキップされた entry:{" "}
             <span className="font-semibold">{failedEntries.map((i) => i + 1).join(", ")}</span>
@@ -317,7 +318,7 @@ export function App() {
           <Button type="button" onClick={rerunFailed} variant="destructive" size="sm" className="self-start">
             失敗分のみ再実行
           </Button>
-        </div>
+        </Alert>
       )}
 
       <fieldset className="flex flex-col gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
@@ -454,14 +455,15 @@ export function App() {
       />
 
       {status && (
-        <p
+        <Alert
+          variant={isError ? "destructive" : "default"}
           role="status"
           aria-live="polite"
           data-suno-status={isError ? "error" : "ok"}
-          className={`whitespace-pre-wrap text-xs ${isError ? "text-red-600" : "text-gray-600"}`}
+          className={`rounded-none border-0 bg-transparent p-0 whitespace-pre-wrap text-xs ${isError ? "text-red-600" : "text-gray-600"}`}
         >
           {status}
-        </p>
+        </Alert>
       )}
     </div>
   );

@@ -24,8 +24,11 @@ describe("Tailwind 4 build integration", () => {
     const overlayCss = cssFiles.map((path) => readFileSync(path, "utf8")).find((css) => css.includes("--radius"));
     expect(overlayCss).toBeDefined();
     expect(overlayCss).toContain("--background:oklch(100% 0 0)");
+    expect(overlayCss).toContain("--card:oklch(100% 0 0)");
     expect(overlayCss).toContain(":host");
     expect(overlayCss).toContain(".flex");
+    expect(overlayCss).toContain(".bg-card");
+    expect(overlayCss).toContain(".bg-primary");
     expect(overlayCss).toContain(".text-gray-900");
 
     const manifest = JSON.parse(readFileSync(`${outputDir}/manifest.json`, "utf8")) as {
