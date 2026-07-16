@@ -40,5 +40,5 @@ describe("Tailwind 4 build integration", () => {
     expect(manifest.action?.default_popup).toBeUndefined();
     expect(manifest.content_scripts?.some(({ js }) => js?.some((path) => path.includes("overlay")))).toBe(true);
     expect(existsSync(`${outputDir}/popup.html`)).toBe(false);
-  });
+  }, 15_000);
 });

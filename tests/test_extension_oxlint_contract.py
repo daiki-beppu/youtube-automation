@@ -47,8 +47,13 @@ def test_helpers_share_oxlint_dependency_script_and_config_contract() -> None:
         assert _ESLINT_DIRECT_DEPENDENCIES.isdisjoint(locked_dev_dependencies)
 
     config = _read_json(_EXTENSIONS_ROOT / ".oxlintrc.json")
+    assert config["plugins"] == ["react"]
     assert config["env"] == {"browser": True}
     assert config["globals"] == {"browser": "readonly", "chrome": "readonly"}
+    assert config["rules"] == {
+        "react/rules-of-hooks": "error",
+        "react/exhaustive-deps": "warn",
+    }
     assert config["ignorePatterns"] == [
         "**/.wxt/**",
         "**/.output/**",
