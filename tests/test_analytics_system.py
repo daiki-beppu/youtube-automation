@@ -199,6 +199,18 @@ class TestCollectAnalyticsData:
         result = system.collect_analytics_data(days=14, save_data=False)
         assert result == expected_data
 
+    def test_include_reporting_keeps_csv_summary_in_analytics_data(self, system):
+        """--include-reporting 相当の経路は Reporting API 集計結果を保持する."""
+        system.authenticated = True
+        system.collector.collect_basic_analytics.return_value = {"views": 500}
+        summary = {"aggregated_impressions": 1200, "aggregated_ctr_percentage": 4.2}
+        system.collector.get_reporting_impressions_summary.return_value = summary
+
+        result = system.collect_analytics_data(days=14, save_data=False, include_reporting=True)
+
+        assert result["reporting_api"] == {"impressions_summary": summary}
+        system.collector.get_reporting_impressions_summary.assert_called_once_with(days=14)
+
     def test_collector_domain_exception(self, system):
         """ドメイン例外（YouTubeAPIError）発生時に None を返す"""
         system.authenticated = True
@@ -316,3 +328,40 @@ class TestRunDataCollection:
             ):
                 with pytest.raises(RuntimeError, match="Network error"):
                     system.run_data_collection(days=30)
+
+
+class TestReportingSubmodes:
+    def test_dry_run_only_observes_reporting_state(self, monkeypatch, capsys):
+        from youtube_automation.scripts import analytics_system
+
+        client = MagicMock()
+        client.dry_run_inspection.return_value = {
+            "selected_report_type": "channel_reach_basic_a1",
+            "existing_job": {"id": "job-1"},
+            "recent_reports_count": 2,
+        }
+        monkeypatch.setattr(analytics_system, "_make_reporting_client", lambda: client)
+
+        code = analytics_system._run_reporting_dry_run()
+
+        assert code == 0
+        client.dry_run_inspection.assert_called_once_with()
+        client.select_report_type.assert_not_called()
+        client.ensure_job.assert_not_called()
+        assert "job-1" in capsys.readouterr().out
+
+    def test_create_job_remains_idempotent_and_reports_backfill_contract(self, monkeypatch, capsys):
+        from youtube_automation.scripts import analytics_system
+
+        client = MagicMock()
+        client.select_report_type.return_value = "channel_reach_basic_a1"
+        client.ensure_job.return_value = "job-1"
+        monkeypatch.setattr(analytics_system, "_make_reporting_client", lambda: client)
+
+        code = analytics_system._run_reporting_create_job()
+
+        assert code == 0
+        client.ensure_job.assert_called_once_with("channel_reach_basic_a1")
+        output = capsys.readouterr().out
+        assert "過去 30 日分が backfill" in output
+        assert "日次（D+2）" in output

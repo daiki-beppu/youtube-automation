@@ -28,7 +28,7 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 | カテゴリ | 内容 |
 |---------|------|
 | `bootstrap` | ffmpeg / ffprobe / uv / pyproject.toml / automation パッケージ / `yt-skills sync` / 番号付き重複ファイル検知（7 check） |
-| `api` | gcloud CLI・GCP プロジェクト・Billing・APIs・ADC・IAM・.env・OAuth 認証（11 check） |
+| `api` | gcloud CLI・GCP プロジェクト・Billing・APIs・ADC・IAM・.env・OAuth 認証・Reporting API ジョブ（12 check） |
 | `channel` | config/channel/ のロード可能性・playlists.json の妥当性・playlist 作成 dry-run（3 check: `channel_config` / `playlist_config` / `playlist_create_dry_run`）。fail 時は `/channel-new`（新規開設 / 既存チャンネル取り込み / 再生成モード）を案内するだけ |
 | `data` | `/wf-new` の入力モード判定データ + 初期セットアップ事前検査（analytics_report / benchmark_data / ttp_wf_new_readiness / initial_setup_readiness）。minimal mode / benchmark fallback mode は setup のブロッカーにしない。analytics report は最新 `data/analytics_data_*.json` との相対比較に加え、`collection-ideate` の解決済み `freshness_days` を超えた絶対鮮度 stale も検出する。承認済み TTP がある場合だけ `/channel-new`（再生成モード） benchmark 反映完了を確認する |
 | `upload` | upload 必須 scope 充足・channel_id 設定済み（1 check） |
@@ -321,6 +321,16 @@ uv run yt-channel-status
 ```
 
 初回はブラウザが開いて認証が走る。完了すると `<channel_dir>/auth/token.json` が生成される。
+
+#### `reporting_job` — Reporting API ジョブ未作成
+
+`yt-doctor` の `next_action.cmd` をそのまま Bash で実行する:
+
+```bash
+uv run yt-analytics --reporting-create-job
+```
+
+コマンドは冪等で、既存ジョブがあれば再利用する。実行後に `uv run yt-doctor --json` を再実行し、`reporting_job` が `ok` になったことを確認してから次の `next_check_id` へ進む。
 
 ### channel カテゴリ
 

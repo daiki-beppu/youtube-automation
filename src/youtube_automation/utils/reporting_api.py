@@ -164,6 +164,22 @@ class ReportingAPIClient:
     # ------------------------------------------------------------------
     # ジョブ管理（冪等化）
     # ------------------------------------------------------------------
+    def find_existing_job(self, report_type_id: str) -> dict[str, object] | None:
+        """`reportTypeId + name` が作成対象と一致する既存ジョブを返す。"""
+        try:
+            existing = self._service.jobs().list().execute()
+        except HttpError as e:
+            raise YouTubeAPIError.from_http_error(e, "reporting:jobs.list") from e
+
+        return next(
+            (
+                job
+                for job in existing.get("jobs", [])
+                if job.get("reportTypeId") == report_type_id and job.get("name") == self.JOB_NAME
+            ),
+            None,
+        )
+
     def ensure_job(self, report_type_id: str) -> str:
         """`reportTypeId + name` 一致のジョブを再利用、無ければ create。
 
@@ -176,15 +192,10 @@ class ReportingAPIClient:
         Raises:
             YouTubeAPIError: API 呼び出し失敗
         """
-        try:
-            existing = self._service.jobs().list().execute()
-        except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, "reporting:jobs.list") from e
-
-        for job in existing.get("jobs", []):
-            if job.get("reportTypeId") == report_type_id and job.get("name") == self.JOB_NAME:
-                logger.info(f"Reporting API: 既存ジョブを再利用 jobId={job['id']}")
-                return job["id"]
+        existing_job = self.find_existing_job(report_type_id)
+        if existing_job is not None:
+            logger.info(f"Reporting API: 既存ジョブを再利用 jobId={existing_job['id']}")
+            return existing_job["id"]
 
         try:
             created = (

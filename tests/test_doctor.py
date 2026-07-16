@@ -6,9 +6,13 @@ import json
 import os
 import re
 import shutil
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
+from googleapiclient.errors import HttpError
+from httplib2 import ServerNotFoundError
 from PIL import Image as PILImage
 
 from youtube_automation.cli import doctor
@@ -587,6 +591,190 @@ class TestOAuthToken:
         assert r.status == "ok"
 
 
+class TestReportingJob:
+    @staticmethod
+    def _write_token(channel_dir: Path, *, expiry: datetime | None = None) -> None:
+        auth = channel_dir / "auth"
+        auth.mkdir()
+        token = {
+            "token": "access-token",
+            "refresh_token": "refresh-token",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+            "scopes": ["youtube.readonly"],
+            "expiry": (expiry or datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        }
+        (auth / "token.json").write_text(json.dumps(token), encoding="utf-8")
+
+    @staticmethod
+    def _reporting_service(*, jobs: list[dict] | None = None) -> MagicMock:
+        service = MagicMock()
+        service.reportTypes.return_value.list.return_value.execute.return_value = {
+            "reportTypes": [{"id": "channel_reach_basic_a1"}]
+        }
+        service.jobs.return_value.list.return_value.execute.return_value = {"jobs": jobs or []}
+        return service
+
+    @staticmethod
+    def _json_check(monkeypatch, tmp_path: Path, capsys) -> dict:
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+        code = doctor.main(["--json", "--target", str(tmp_path)])
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        return next(check for check in payload["checks"] if check["id"] == "reporting_job")
+
+    def test_json_reports_missing_job_with_creation_command(self, monkeypatch, tmp_path, capsys):
+        self._write_token(tmp_path)
+        service = self._reporting_service()
+        monkeypatch.setattr(doctor, "build", lambda *args, **kwargs: service)
+
+        check = self._json_check(monkeypatch, tmp_path, capsys)
+
+        assert check["status"] == "fail"
+        assert check["category"] == "api"
+        assert check["next_action"] == {
+            "kind": "ai-exec",
+            "cmd": "uv run yt-analytics --reporting-create-job",
+        }
+
+    def test_json_reports_existing_job_as_ok(self, monkeypatch, tmp_path, capsys):
+        self._write_token(tmp_path)
+        service = self._reporting_service(
+            jobs=[
+                {
+                    "id": "job-1",
+                    "reportTypeId": "channel_reach_basic_a1",
+                    "name": "yt-automation",
+                }
+            ]
+        )
+        monkeypatch.setattr(doctor, "build", lambda *args, **kwargs: service)
+
+        check = self._json_check(monkeypatch, tmp_path, capsys)
+
+        assert check["status"] == "ok"
+        assert "1" in check["message"]
+
+    def test_json_reports_unrelated_job_as_missing(self, monkeypatch, tmp_path, capsys):
+        self._write_token(tmp_path)
+        service = self._reporting_service(
+            jobs=[
+                {
+                    "id": "job-unrelated",
+                    "reportTypeId": "channel_demographics_a1",
+                    "name": "other",
+                }
+            ]
+        )
+        monkeypatch.setattr(doctor, "build", lambda *args, **kwargs: service)
+
+        check = self._json_check(monkeypatch, tmp_path, capsys)
+
+        assert check["status"] == "fail"
+        assert check["next_action"]["cmd"] == "uv run yt-analytics --reporting-create-job"
+
+    def test_missing_oauth_token_skips_reporting_api_after_oauth_check(self, monkeypatch, tmp_path, capsys):
+        def unexpected_reporting_call(*args, **kwargs):
+            raise AssertionError("Reporting API must not be called without an OAuth token")
+
+        monkeypatch.setattr(doctor, "build", unexpected_reporting_call)
+        monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
+
+        code = doctor.main(["--json", "--target", str(tmp_path)])
+
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        checks = payload["checks"]
+        oauth_index = next(i for i, check in enumerate(checks) if check["id"] == "oauth_token")
+        reporting_index = next(i for i, check in enumerate(checks) if check["id"] == "reporting_job")
+        assert oauth_index < reporting_index
+        assert checks[oauth_index]["status"] == "fail"
+        assert checks[reporting_index]["status"] == "unknown"
+        assert "OAuth" in checks[reporting_index]["message"]
+
+    def test_json_reports_reporting_api_error_without_crashing(self, monkeypatch, tmp_path, capsys):
+        self._write_token(tmp_path)
+        service = self._reporting_service()
+        response = MagicMock(status=403, reason="Forbidden")
+        service.reportTypes.return_value.list.return_value.execute.side_effect = HttpError(
+            response,
+            b'{"error":{"message":"permission denied"}}',
+        )
+        monkeypatch.setattr(doctor, "build", lambda *args, **kwargs: service)
+
+        check = self._json_check(monkeypatch, tmp_path, capsys)
+
+        assert check["status"] == "fail"
+        assert "permission denied" in check["message"]
+
+    def test_json_reports_reporting_network_error_without_crashing(self, monkeypatch, tmp_path, capsys):
+        self._write_token(tmp_path)
+        service = self._reporting_service()
+        service.reportTypes.return_value.list.return_value.execute.side_effect = ServerNotFoundError(
+            "network unavailable"
+        )
+        monkeypatch.setattr(doctor, "build", lambda *args, **kwargs: service)
+
+        check = self._json_check(monkeypatch, tmp_path, capsys)
+
+        assert check["status"] == "fail"
+        assert "network unavailable" in check["message"]
+
+    def test_target_channel_dir_is_used_for_reporting_auth_and_restored(self, monkeypatch, tmp_path, capsys):
+        self._write_token(tmp_path)
+        original_channel_dir = tmp_path / "original"
+        monkeypatch.setenv("CHANNEL_DIR", str(original_channel_dir))
+        service = self._reporting_service(
+            jobs=[
+                {
+                    "id": "job-1",
+                    "reportTypeId": "channel_reach_basic_a1",
+                    "name": "yt-automation",
+                }
+            ]
+        )
+
+        def reporting_for_target(*args, **kwargs):
+            assert os.environ["CHANNEL_DIR"] == str(tmp_path)
+            return service
+
+        monkeypatch.setattr(doctor, "build", reporting_for_target)
+
+        check = self._json_check(monkeypatch, tmp_path, capsys)
+
+        assert check["status"] == "ok"
+        assert os.environ["CHANNEL_DIR"] == str(original_channel_dir)
+
+    def test_expired_token_is_reported_without_refresh_or_browser_auth(self, monkeypatch, tmp_path, capsys):
+        self._write_token(tmp_path, expiry=datetime.now(timezone.utc) - timedelta(hours=1))
+
+        def unexpected_reporting_call(*args, **kwargs):
+            raise AssertionError("expired credentials must not reach Reporting API")
+
+        monkeypatch.setattr(doctor, "build", unexpected_reporting_call)
+
+        check = self._json_check(monkeypatch, tmp_path, capsys)
+
+        assert check["status"] == "fail"
+        assert "期限切れ" in check["message"]
+
+    def test_invalid_token_is_reported_without_browser_auth(self, monkeypatch, tmp_path, capsys):
+        auth = tmp_path / "auth"
+        auth.mkdir()
+        (auth / "token.json").write_text(json.dumps({"scopes": ["youtube.readonly"]}), encoding="utf-8")
+
+        def unexpected_reporting_call(*args, **kwargs):
+            raise AssertionError("invalid credentials must not reach Reporting API")
+
+        monkeypatch.setattr(doctor, "build", unexpected_reporting_call)
+
+        check = self._json_check(monkeypatch, tmp_path, capsys)
+
+        assert check["status"] == "fail"
+        assert "不正" in check["message"]
+
+
 class TestSummarize:
     def test_next_check_id(self):
         results = [
@@ -650,8 +838,8 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 7 bootstrap + 11 api + 3 channel + 4 data + 1 upload = 26
-        assert len(payload["checks"]) == 26
+        # 7 bootstrap + 12 api + 3 channel + 4 data + 1 upload = 27
+        assert len(payload["checks"]) == 27
         for c in payload["checks"]:
             assert c["status"] in ("ok", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
@@ -3840,18 +4028,19 @@ class TestCheckNumberedDuplicates:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_26_checks(self, monkeypatch, tmp_path):
-        """7 bootstrap + 11 api + 3 channel + 4 data + 1 upload = 計 26 件."""
+    def test_returns_27_checks(self, monkeypatch, tmp_path):
+        """7 bootstrap + 12 api + 3 channel + 4 data + 1 upload = 計 27 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 26
+        assert len(results) == 27
 
-    def test_existing_11_api_checks_present(self, monkeypatch, tmp_path):
-        """既存 11 check が全て api カテゴリで含まれている."""
+    def test_12_api_checks_present(self, monkeypatch, tmp_path):
+        """reporting_job を含む 12 check が api カテゴリで含まれている."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         api_results = [r for r in results if r.category == "api"]
-        assert len(api_results) == 11
+        assert len(api_results) == 12
+        assert api_results[-1].id == "reporting_job"
 
     def test_new_check_ids_present(self, monkeypatch, tmp_path):
         """bootstrap / channel / data / upload の check が含まれる."""
@@ -3870,6 +4059,7 @@ class TestRunAllChecksExtended:
         assert "ttp_wf_new_readiness" in ids
         assert "initial_setup_readiness" in ids
         assert "upload_ready" in ids
+        assert "reporting_job" in ids
 
     def test_category_order_bootstrap_then_api_then_channel_then_data_then_upload(self, monkeypatch, tmp_path):
         """runway 順序: bootstrap → api → channel → data → upload."""
