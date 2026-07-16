@@ -41,8 +41,9 @@ def _default_path(skill: str) -> Path:
     wheel インストール時は youtube_automation/_skills/<skill>/config.default.yaml、
     editable install 時はソースツリーの .claude/skills/<skill>/config.default.yaml。
     """
+    default_skill = "flop-analysis" if skill == "postmortem" else skill
     try:
-        resource = files("youtube_automation").joinpath("_skills", skill, "config.default.yaml")
+        resource = files("youtube_automation").joinpath("_skills", default_skill, "config.default.yaml")
         with as_file(resource) as p:
             path = Path(p)
             if path.exists():
@@ -50,7 +51,7 @@ def _default_path(skill: str) -> Path:
     except (ModuleNotFoundError, FileNotFoundError):
         pass
 
-    src_fallback = Path(__file__).resolve().parents[3] / ".claude" / "skills" / skill / "config.default.yaml"
+    src_fallback = Path(__file__).resolve().parents[3] / ".claude" / "skills" / default_skill / "config.default.yaml"
     if src_fallback.exists():
         return src_fallback
 

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: `/postmortem` skill command / directory を `/flop-analysis` へ改称し、feedback・workflow・機能一覧・現役戦略文書の利用者導線を新名称へ統一した。下流の `config/skills/postmortem.yaml` は `config/skills/flop-analysis.yaml` へリネームすること。旧 override は移行 fallback として警告付きで読み込むが、旧 command alias と旧 skill directory は残さない（#2023）。
+
 - `chore(extensions)`: suno-helper と distrokid-helper の lint を共通設定の Oxlint 1.73.0 へ移行し、旧 ESLint の direct dependencies と設定を削除した（#2018）。
 
 - `fix(upload)`: upload preflight が複数セパレータの `title.template` と準拠タイトルを正しく照合し、3パート以上のタイトルを誤って拒否しないようにした（#2037）。
