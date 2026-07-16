@@ -6,12 +6,14 @@ on:
     paths:
       - "extensions/**"
       - ".github/workflows/extensions.yml"
+      - "tests/test_actions_parallel_workflows.py"
       - "flake.nix"
       - "flake.lock"
   pull_request:
     paths:
       - "extensions/**"
       - ".github/workflows/extensions.yml"
+      - "tests/test_actions_parallel_workflows.py"
       - "flake.nix"
       - "flake.lock"
 
