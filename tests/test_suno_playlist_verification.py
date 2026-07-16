@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import sys
+import zipfile
 from io import StringIO
+from pathlib import Path
 
 import pytest
 
 from youtube_automation.scripts import suno_verify_playlist
 from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.utils.suno_downloaded_archive import extract_and_rename_music
 from youtube_automation.utils.suno_playlist_verification import (
     format_display_text,
     format_verification_report,
@@ -236,6 +239,15 @@ def _write_prompts_json(collection_dir, names=ENTRIES):
     )
 
 
+def _write_prompt_entries(collection_dir, entries):
+    doc = collection_dir / "20-documentation"
+    doc.mkdir()
+    (doc / "suno-prompts.json").write_text(
+        json.dumps(entries, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
 def _run_cli(monkeypatch, capsys, argv, stdin=""):
     monkeypatch.setattr(sys, "argv", ["yt-suno-verify-playlist", *argv])
     monkeypatch.setattr(sys, "stdin", StringIO(stdin))
@@ -253,6 +265,18 @@ def test_cli_accepts_titles_argument(tmp_path, monkeypatch, capsys):
     code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--titles", ENTRIES[0], ENTRIES[0]])
 
     assert code == 0
+    assert "→ OK" in out
+    assert err == ""
+
+
+def test_cli_titles_keeps_legacy_prompt_names_that_are_not_valid_zip_stems(tmp_path, monkeypatch, capsys):
+    """Legacy title sources do not depend on ZIP output-stem aliases."""
+    _write_prompts_json(tmp_path, ["."])
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--titles", ".", "."])
+
+    assert code == 0
+    assert ".: 2 clip(s)" in out
     assert "→ OK" in out
     assert err == ""
 
@@ -306,6 +330,421 @@ def test_cli_accepts_stdin_titles(tmp_path, monkeypatch, capsys):
     assert code == 0
     assert "→ OK" in out
     assert err == ""
+
+
+def test_cli_accepts_music_directory_titles(tmp_path, monkeypatch, capsys):
+    """Given ZIP 展開規約の a/b 音声ファイルがある music directory
+    When --music-dir で CLI main を実行する
+    Then suffix の title を突合し、entry ごとに 2 clip として exit 0。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / f"01a-{ENTRIES[0]}.mp3").touch()
+    (music_dir / f"01b-{ENTRIES[0]}.m4a").touch()
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert code == 0
+    assert f"{ENTRIES[0]}: 2 clip(s)" in out
+    assert "→ OK" in out
+    assert err == ""
+
+
+def test_cli_music_directory_reports_invalid_zip_stem_as_validation_error(tmp_path, monkeypatch, capsys):
+    """Prompt aliases that cannot become ZIP stems fail through the CLI error contract."""
+    _write_prompts_json(tmp_path, ["."])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "01a-..mp3").touch()
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert code == 1
+    assert out == ""
+    assert "ZIP extraction output name is empty after sanitization" in err
+
+
+def test_cli_resolves_relative_music_directory_from_collection(tmp_path, monkeypatch, capsys):
+    """Given collection path と collection 相対の --music-dir
+    When リポジトリルート相当の別 CWD から公開 CLI を実行する
+    Then music directory を collection 基準で解決して exit 0。
+    """
+    collection_dir = tmp_path / "collections" / "planning" / "night"
+    collection_dir.mkdir(parents=True)
+    _write_prompts_json(collection_dir, [ENTRIES[0]])
+    music_dir = collection_dir / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / f"01a-{ENTRIES[0]}.mp3").touch()
+    (music_dir / f"01b-{ENTRIES[0]}.mp3").touch()
+    monkeypatch.chdir(tmp_path)
+
+    code, out, err = _run_cli(
+        monkeypatch,
+        capsys,
+        [str(collection_dir), "--music-dir", "02-Individual-music"],
+    )
+
+    assert code == 0
+    assert f"{ENTRIES[0]}: 2 clip(s)" in out
+    assert err == ""
+
+
+def test_cli_accepts_bilingual_names_emitted_by_zip_extraction(tmp_path, monkeypatch, capsys):
+    """Given ZIP extraction が bilingual entry の英語候補で出力した音声ファイル
+    When public CLI を --music-dir で実行する
+    Then ZIP 出力名を canonical entry に戻して 2 clip として検証する。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    archive = tmp_path / "download.zip"
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr("Dim the Lights.mp3", b"a")
+        zipped.writestr("Dim the Lights_1.mp3", b"b")
+    extract_and_rename_music(tmp_path, str(archive))
+    music_dir = tmp_path / "02-Individual-music"
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert sorted(path.name for path in music_dir.iterdir()) == [
+        "01a-Dim the Lights.mp3",
+        "01b-Dim the Lights.mp3",
+    ]
+    assert code == 0
+    assert f"{ENTRIES[0]}: 2 clip(s)" in out
+    assert "→ OK" in out
+    assert err == ""
+
+
+def test_cli_prefers_exact_zip_stems_before_normalized_aliases(tmp_path, monkeypatch, capsys):
+    """ZIP stems distinguish exact aliases even when normalization merges them."""
+    entries = [
+        {"name": "甲 — ①", "style": "s", "lyrics": "l"},
+        {"name": "乙 — 1", "style": "s", "lyrics": "l"},
+    ]
+    _write_prompt_entries(tmp_path, entries)
+    archive = tmp_path / "download.zip"
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr("①.mp3", b"a")
+        zipped.writestr("①_1.mp3", b"b")
+        zipped.writestr("1.mp3", b"a")
+        zipped.writestr("1_1.mp3", b"b")
+    extract_and_rename_music(tmp_path, str(archive))
+    music_dir = tmp_path / "02-Individual-music"
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert sorted(path.name for path in music_dir.iterdir()) == [
+        "01a-①.mp3",
+        "01b-①.mp3",
+        "02a-1.mp3",
+        "02b-1.mp3",
+    ]
+    assert code == 0
+    assert "甲 — ①: 2 clip(s)" in out
+    assert "乙 — 1: 2 clip(s)" in out
+    assert "→ OK" in out
+    assert err == ""
+
+
+def test_cli_accepts_apostrophe_removed_names_emitted_by_zip_extraction(tmp_path, monkeypatch, capsys):
+    """Given Suno ZIP が apostrophe を除去した音声ファイル
+    When ZIP 展開後の music directory を公開 CLI で検証する
+    Then canonical entry に戻して 2 clip として exit 0。
+    """
+    canonical_title = "Greed's Rhythm"
+    _write_prompts_json(tmp_path, [canonical_title])
+    archive = tmp_path / "download.zip"
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr("Greeds Rhythm.m4a", b"a")
+        zipped.writestr("Greeds Rhythm_1.m4a", b"b")
+    extract_and_rename_music(tmp_path, str(archive))
+    music_dir = tmp_path / "02-Individual-music"
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert sorted(path.name for path in music_dir.iterdir()) == [
+        "01a-Greeds Rhythm.m4a",
+        "01b-Greeds Rhythm.m4a",
+    ]
+    assert code == 0
+    assert f"{canonical_title}: 2 clip(s)" in out
+    assert err == ""
+
+
+def test_cli_accepts_name_alias_when_entry_title_differs(tmp_path, monkeypatch, capsys):
+    """Given title と name が異なり ZIP が name の英語 alias を出力する entry
+    When ZIP 展開後の music directory を公開 CLI で検証する
+    Then title を canonical entry として 2 clip に集約する。
+    """
+    canonical_title = "Display Title"
+    _write_prompt_entries(
+        tmp_path,
+        [{"name": "内部名 — Internal Name", "title": canonical_title, "style": "s", "lyrics": "l"}],
+    )
+    archive = tmp_path / "download.zip"
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr("Internal Name.mp3", b"a")
+        zipped.writestr("Internal Name_1.mp3", b"b")
+    extract_and_rename_music(tmp_path, str(archive))
+    music_dir = tmp_path / "02-Individual-music"
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert sorted(path.name for path in music_dir.iterdir()) == [
+        "01a-Internal Name.mp3",
+        "01b-Internal Name.mp3",
+    ]
+    assert code == 0
+    assert f"{canonical_title}: 2 clip(s)" in out
+    assert err == ""
+
+
+def test_cli_accepts_unique_full_names_when_entries_share_an_unused_alias(tmp_path, monkeypatch, capsys):
+    """Unused aliases shared by entries do not reject unambiguous full filenames."""
+    entries = [
+        {"name": "Alpha — Shared", "style": "s", "lyrics": "l"},
+        {"name": "Beta — Shared", "style": "s", "lyrics": "l"},
+    ]
+    _write_prompt_entries(tmp_path, entries)
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    for index, entry in enumerate(entries, 1):
+        for variant in ("a", "b"):
+            (music_dir / f"{index:02d}{variant}-{entry['name']}.mp3").touch()
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert code == 0
+    assert "Alpha — Shared: 2 clip(s)" in out
+    assert "Beta — Shared: 2 clip(s)" in out
+    assert "→ OK" in out
+    assert err == ""
+
+
+def test_cli_uses_extracted_entry_index_to_resolve_shared_alias(tmp_path, monkeypatch, capsys):
+    """The producer's numeric prefix disambiguates a ZIP alias shared by entries."""
+    entries = [
+        {"name": "Alpha — Shared", "style": "s", "lyrics": "l"},
+        {"name": "Beta — Shared", "style": "s", "lyrics": "l"},
+    ]
+    _write_prompt_entries(tmp_path, entries)
+    archive = tmp_path / "download.zip"
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr("Alpha — Shared.mp3", b"a")
+        zipped.writestr("Alpha — Shared_1.mp3", b"b")
+        zipped.writestr("Shared.mp3", b"a")
+        zipped.writestr("Shared_1.mp3", b"b")
+    extract_and_rename_music(tmp_path, str(archive))
+    music_dir = tmp_path / "02-Individual-music"
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert sorted(path.name for path in music_dir.iterdir()) == [
+        "01a-Alpha — Shared.mp3",
+        "01b-Alpha — Shared.mp3",
+        "02a-Shared.mp3",
+        "02b-Shared.mp3",
+    ]
+    assert code == 0
+    assert "Alpha — Shared: 2 clip(s)" in out
+    assert "Beta — Shared: 2 clip(s)" in out
+    assert "→ OK" in out
+    assert err == ""
+
+
+def test_cli_accepts_three_digit_entry_index_emitted_by_zip_extraction(tmp_path, monkeypatch, capsys):
+    """The producer and public CLI preserve the 100th entry's three-digit prefix."""
+    entries = [{"name": f"Track {index}", "style": "s", "lyrics": "l"} for index in range(1, 101)]
+    _write_prompt_entries(tmp_path, entries)
+    archive = tmp_path / "download.zip"
+    with zipfile.ZipFile(archive, "w") as zipped:
+        for index in range(1, 101):
+            zipped.writestr(f"Track {index}.mp3", b"a")
+            zipped.writestr(f"Track {index}_1.mp3", b"b")
+    extract_and_rename_music(tmp_path, str(archive))
+    music_dir = tmp_path / "02-Individual-music"
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert (music_dir / "100a-Track 100.mp3").is_file()
+    assert (music_dir / "100b-Track 100.mp3").is_file()
+    assert code == 0
+    assert "Track 100: 2 clip(s)" in out
+    assert "→ OK" in out
+    assert err == ""
+
+
+def test_cli_deduplicates_same_variant_across_canonical_aliases(tmp_path, monkeypatch, capsys):
+    """Given 同一 entry の full name と英語 alias が同じ a variant として ZIP に共存
+    When ZIP 展開後の music directory を公開 CLI で検証する
+    Then canonical entry + variant で重複排除し b 欠落を underfilled として報告する。
+    """
+    canonical_title = "灯りを落として — Dim the Lights"
+    _write_prompts_json(tmp_path, [canonical_title])
+    archive = tmp_path / "download.zip"
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr(f"{canonical_title}.mp3", b"full")
+        zipped.writestr("Dim the Lights.mp3", b"english")
+    extract_and_rename_music(tmp_path, str(archive))
+    music_dir = tmp_path / "02-Individual-music"
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert sorted(path.name for path in music_dir.iterdir()) == [
+        "01a-Dim the Lights.mp3",
+        f"01a-{canonical_title}.mp3",
+    ]
+    assert code == 1
+    assert f"{canonical_title}: 1 clip(s)" in out
+    assert "clip 不足" in out
+    assert err == ""
+
+
+def test_cli_music_directory_reports_unknown_and_missing(tmp_path, monkeypatch, capsys):
+    """Given 期待 entry の代わりに別 title の a/b 音声ファイルがある
+    When --music-dir で CLI main を実行する
+    Then unknown と missing をレポートし exit 1。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "01a-Foreign Song.mp3").touch()
+    (music_dir / "01b-Foreign Song.wav").touch()
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert code == 1
+    assert "Foreign Song" in out
+    assert ENTRIES[0] in out
+    assert "→ NG" in out
+    assert err == ""
+
+
+def test_cli_music_directory_reports_single_variant_as_underfilled(tmp_path, monkeypatch, capsys):
+    """Given entry の a variant だけがある music directory
+    When expected clip 数の既定値で CLI main を実行する
+    Then underfilled をレポートし exit 1。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / f"01a-{ENTRIES[0]}.mp3").touch()
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert code == 1
+    assert "clip 不足" in out
+    assert ENTRIES[0] in out
+    assert "→ NG" in out
+    assert err == ""
+
+
+def test_cli_music_directory_does_not_count_normalized_duplicate_a_files_as_two_variants(tmp_path, monkeypatch, capsys):
+    """Given 正規化後に同じ entry となる a variant が異なる拡張子で 2 ファイルあり b がない
+    When --music-dir で CLI main を実行する
+    Then ファイル総数ではなく variant 出現数を数え underfilled として exit 1。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "01a-Dim the Lights.mp3").touch()
+    (music_dir / "01a-DIM THE LIGHTS.wav").touch()
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert code == 1
+    assert "clip 不足" in out
+    assert "1 clip(s)" in out
+    assert err == ""
+
+
+def test_cli_music_directory_reports_unprefixed_audio_filename_as_unknown(tmp_path, monkeypatch, capsys):
+    """Given 2桁以上の数値{a|b}- prefix に合致しない音声ファイルが混入している
+    When --music-dir で CLI main を実行する
+    Then silent skip せず拡張子込みのファイル名を unknown として報告する。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / f"01a-{ENTRIES[0]}.mp3").touch()
+    (music_dir / f"01b-{ENTRIES[0]}.mp3").touch()
+    (music_dir / "manual-track.mp3").touch()
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert code == 1
+    assert "manual-track.mp3" in out
+    assert "→ NG" in out
+    assert err == ""
+
+
+@pytest.mark.parametrize("explicit_source", ["titles", "titles-file"])
+def test_cli_rejects_music_directory_with_explicit_title_source(tmp_path, monkeypatch, capsys, explicit_source):
+    """Given --music-dir と既存の明示 title 入力を同時指定
+    When CLI main を実行する
+    Then 複数入力元として拒否し exit 1。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / f"01a-{ENTRIES[0]}.mp3").touch()
+    titles_file = tmp_path / "titles.txt"
+    titles_file.write_text(ENTRIES[0], encoding="utf-8")
+    title_args = ["--titles", ENTRIES[0]] if explicit_source == "titles" else ["--titles-file", str(titles_file)]
+
+    code, out, err = _run_cli(
+        monkeypatch,
+        capsys,
+        [str(tmp_path), "--music-dir", str(music_dir), *title_args],
+    )
+
+    assert code == 1
+    assert out == ""
+    assert "入力元" in err
+
+
+def test_cli_rejects_music_directory_with_empty_titles_option(tmp_path, monkeypatch, capsys):
+    """Given 値なしの --titles と --music-dir を同時指定
+    When CLI main を実行する
+    Then --titles の指定自体を入力元として扱い競合を報告する。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / f"01a-{ENTRIES[0]}.mp3").touch()
+
+    code, out, err = _run_cli(
+        monkeypatch,
+        capsys,
+        [str(tmp_path), "--music-dir", str(music_dir), "--titles"],
+    )
+
+    assert code == 1
+    assert out == ""
+    assert "入力元" in err
+
+
+def test_cli_rejects_music_directory_with_stdin(tmp_path, monkeypatch, capsys):
+    """Given --music-dir と stdin title を同時指定
+    When CLI main を実行する
+    Then 複数入力元として拒否し exit 1。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / f"01a-{ENTRIES[0]}.mp3").touch()
+    (music_dir / f"01b-{ENTRIES[0]}.mp3").touch()
+
+    code, out, err = _run_cli(
+        monkeypatch,
+        capsys,
+        [str(tmp_path), "--music-dir", str(music_dir)],
+        stdin=f"{ENTRIES[0]}\n",
+    )
+
+    assert code == 1
+    assert out == ""
+    assert "入力元" in err
 
 
 def test_cli_returns_one_for_ng_result(tmp_path, monkeypatch, capsys):
@@ -409,3 +848,19 @@ def test_cli_rejects_json_titles_file_with_invalid_shape(tmp_path, monkeypatch, 
     assert code == 1
     assert out == ""
     assert "文字列の配列" in err
+
+
+def test_masterup_primary_verification_uses_music_directory_without_playlist_resolution():
+    """Given masterup の Step 1.6
+    When primary path の title 解決手順を読む
+    Then music directory が第一手段で URL WebFetch・title list 確認を要求しない。
+    """
+    skill = Path(".claude/skills/masterup/SKILL.md").read_text(encoding="utf-8")
+    step = skill.split("### Step 1.6:", 1)[1].split("### Step 2:", 1)[0]
+    primary = step.split("primary path では", 1)[1].split("fallback path", 1)[0]
+
+    assert "uv run yt-suno-verify-playlist <collection-path> --music-dir 02-Individual-music" in primary
+    assert "第一手段" in primary
+    assert "WebFetch" not in primary
+    assert "title list を提示" not in primary
+    assert "fallback path" in step

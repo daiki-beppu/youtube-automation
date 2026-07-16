@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(masterup)`: `yt-suno-verify-playlist` に collection 相対の `--music-dir` を追加し、`NN{a|b}-<title>.<ext>` 形式のローカル音声ファイル名を name/title の英語 alias・apostrophe 除去名から canonical entry へ対応付け、entry + `a`/`b` variant 単位で unknown / missing / underfilled を fail-loud 検出できるようにした。`/masterup` の primary path は `02-Individual-music/` を直接突合するため、playlist URL や title list の確認なしで Step 5 前ゲートを実行する（#1898）。
+
 - `feat(doctor,setup)`: `yt-doctor --fix-client-secrets` を追加し、Downloads の構造妥当かつ GCP project 一致する最新 OAuth client JSON を `auth/client_secrets.json` へ移動できるようにした。既存ファイルは上書きせず、`/setup` の HUMAN STEP は secret 発行・Download JSON・done のみに簡素化した（#1903）。
 
 - `feat(flop-analysis)`: Phase 3 の全主仮説を承認プロンプトなしで自動検証し、全件反証時だけ副仮説へ進む orchestration へ更新した。対話必須スキルは read-only 成果物境界から起動せず、期間・比較元・閾値を固定して判定する。個別検証がデータ不足・子スキル失敗で実行不能な場合は理由付きの「未検証」として残りを続行し、検証結果から `postmortem.md` の「結論 / 反証 / 学び」まで自動記入する（#1972）。
