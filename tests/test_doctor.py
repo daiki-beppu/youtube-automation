@@ -1428,7 +1428,10 @@ class TestCheckInitialSetupReadiness:
             ),
             encoding="utf-8",
         )
-        (skills_dir / "suno.yaml").write_text('genre_line: "lo-fi jazz, soft piano"\n', encoding="utf-8")
+        (skills_dir / "suno.yaml").write_text(
+            f'genre_line: "{"x" * 373}"\nstyle_char_limit: 373\n',
+            encoding="utf-8",
+        )
         desc = tmp_path / "collections" / "planning" / "alpha" / "20-documentation" / "descriptions.md"
         _write_valid_descriptions_md(desc)
 

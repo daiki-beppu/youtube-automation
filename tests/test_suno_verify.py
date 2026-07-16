@@ -580,6 +580,62 @@ def test_genre_line_char_limit_uses_preflight_check(channel_dir, tmp_path, monke
     assert "121 / 120" in output
 
 
+def test_configured_genre_line_char_limit_allows_long_style(channel_dir, tmp_path, monkeypatch, capsys):
+    """Given genre_line が設定した 373 文字上限ちょうど
+    When yt-suno-verify を実行する
+    Then Style 上限検証を通過して exit 0 にする。
+    """
+    write_suno_override(channel_dir, genre_line="x" * 373, style_char_limit=373)
+    collection = tmp_path / "collection"
+    docs = docs_dir(collection)
+    write_patterns(docs, mode="instrumental", scenes=["scene one"], tracks=2)
+    write_prompts(docs, prompt_names(mode="instrumental", scenes_count=1))
+
+    code = run_verify(monkeypatch, collection)
+    output = capsys.readouterr().out
+
+    assert code == 0
+    assert "OK" in output
+
+
+def test_configured_genre_line_char_limit_rejects_over_limit(channel_dir, tmp_path, monkeypatch, capsys):
+    """Given genre_line が設定した 373 文字上限を 1 文字超過
+    When yt-suno-verify を実行する
+    Then 実際の上限を診断して exit 1 にする。
+    """
+    write_suno_override(channel_dir, genre_line="x" * 374, style_char_limit=373)
+    collection = tmp_path / "collection"
+    docs = docs_dir(collection)
+    write_patterns(docs, mode="instrumental", scenes=["scene one"], tracks=2)
+    write_prompts(docs, prompt_names(mode="instrumental", scenes_count=1))
+
+    code = run_verify(monkeypatch, collection)
+    output = capsys.readouterr().out
+
+    assert code == 1
+    assert "genre_line" in output
+    assert "374 / 373" in output
+
+
+def test_video_analysis_genre_line_uses_configured_char_limit(channel_dir, tmp_path, monkeypatch, capsys):
+    """Given video analysis 由来 genre_line が設定した上限ちょうど
+    When yt-suno-verify が effective config を解決する
+    Then override の上限を保持して exit 0 にする。
+    """
+    write_suno_override(channel_dir, genre_line="", style_char_limit=373)
+    write_video_analysis_suno_preset(channel_dir, genre_line="x" * 373)
+    collection = tmp_path / "collection"
+    docs = docs_dir(collection)
+    write_patterns(docs, mode="instrumental", scenes=["scene one"], tracks=2)
+    write_prompts(docs, prompt_names(mode="instrumental", scenes_count=1))
+
+    code = run_verify(monkeypatch, collection)
+    output = capsys.readouterr().out
+
+    assert code == 0
+    assert "OK" in output
+
+
 def test_used_style_variant_genre_line_char_limit_is_reported(channel_dir, tmp_path, monkeypatch, capsys):
     """Given pattern が 121 文字 genre_line の style variant を使用する
     When yt-suno-verify を実行する
@@ -606,6 +662,34 @@ def test_used_style_variant_genre_line_char_limit_is_reported(channel_dir, tmp_p
     assert code == 1
     assert "style_variants.long.genre_line" in output
     assert "121 / 120" in output
+
+
+def test_used_style_variant_uses_configured_genre_line_char_limit(channel_dir, tmp_path, monkeypatch, capsys):
+    """Given pattern が設定上限内の長い style variant を使用する
+    When yt-suno-verify を実行する
+    Then variant にもグローバル上限を適用して exit 0 にする。
+    """
+    write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz",
+        style_char_limit=373,
+        style_variants={
+            "long": {
+                "name": "Long",
+                "genre_line": "x" * 373,
+            }
+        },
+    )
+    collection = tmp_path / "collection"
+    docs = docs_dir(collection)
+    write_patterns(docs, mode="instrumental", scenes=["scene one"], tracks=2, style="long")
+    write_prompts(docs, prompt_names(mode="instrumental", scenes_count=1))
+
+    code = run_verify(monkeypatch, collection)
+    output = capsys.readouterr().out
+
+    assert code == 0
+    assert "OK" in output
 
 
 def test_unused_style_variant_genre_line_char_limit_is_not_reported(channel_dir, tmp_path, monkeypatch, capsys):

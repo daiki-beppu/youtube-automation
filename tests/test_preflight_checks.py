@@ -212,15 +212,21 @@ class TestCheckChapterVariationSuffix:
 
 
 class TestInitialSetupChecks:
-    def test_suno_genre_line_over_fixed_style_limit_warns_even_if_config_raises_limit(self) -> None:
-        msg = check_suno_genre_line_char_limit({"genre_line": "x" * 121, "style_char_limit": 999})
+    def test_suno_genre_line_uses_default_style_limit_when_not_configured(self) -> None:
+        msg = check_suno_genre_line_char_limit({"genre_line": "x" * 121})
 
         assert msg is not None
         assert "121 / 120" in msg
         assert "config/skills/suno.yaml::genre_line" in msg
 
-    def test_suno_genre_line_at_style_limit_passes(self) -> None:
-        assert check_suno_genre_line_char_limit({"genre_line": "x" * 120, "style_char_limit": 1}) is None
+    def test_suno_genre_line_at_configured_style_limit_passes(self) -> None:
+        assert check_suno_genre_line_char_limit({"genre_line": "x" * 373, "style_char_limit": 373}) is None
+
+    def test_suno_genre_line_over_configured_style_limit_reports_configured_limit(self) -> None:
+        msg = check_suno_genre_line_char_limit({"genre_line": "x" * 374, "style_char_limit": 373})
+
+        assert msg is not None
+        assert "374 / 373" in msg
 
     def test_thumbnail_config_detects_empty_refs_and_tbd_composition(self, tmp_path: Path) -> None:
         cfg = {

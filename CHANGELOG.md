@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(suno)`: `yt-suno-verify` と共通 initial-setup preflight が `config/skills/suno.yaml::style_char_limit` の上書きを尊重し、長文の base `genre_line`・video analysis 由来 Style・使用中 style variant を設定上限で検証するようにした。未設定時は従来どおり 120 文字超過をエラーにする（#1938）。
+
 - `perf(dx)`: `.envrc` に nix-direnv 3.1.1 のブートストラップを追加し、devShell 入場コストを削減した。dev 環境を `.direnv/` にキャッシュし `flake.nix` / `flake.lock` / `.envrc` 変更時のみ再評価するため、dirty worktree でも 2 回目以降の `direnv exec` が 1 秒未満で安定する（従来は入場のたびに flake 評価が走り 7〜80 秒まで変動）。shellHook（lefthook install / uv sync）は従来どおり毎入場で実行される（#2097）。
 
 - `docs(wf-new)`: analytics mode の stale report を `/collection-ideate` の freshness SSOT に従って自動更新し、再検証後に入力モード判定と企画フローを継続する契約へ更新した。更新失敗時は古い report を使わず、理由と再開条件を示して停止する（#2063）。

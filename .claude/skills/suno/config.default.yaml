@@ -21,7 +21,7 @@ weirdness: 50
 # 歌詞構造の自動タグ付け ([Verse], [Chorus] 等を AI が自動挿入)
 auto_lyrics_structure: true
 
-# Style 欄の文字数上限 (Suno UI の制約に合わせる)
+# Style 欄の文字数上限 (チャンネル側 config/skills/suno.yaml で上書き可能)
 style_char_limit: 120
 
 # Style テキストに含めてはならないアーティスト名 (Suno ポリシー / ベストプラクティス)
