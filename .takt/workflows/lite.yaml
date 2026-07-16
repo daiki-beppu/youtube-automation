@@ -1,0 +1,121 @@
+# 00-automation repo-local override of the global lite workflow.
+# ベースは dotfiles config/.takt/workflows/lite.yaml（グローバル版）。差分は
+# 各 step（plan / implement / review）冒頭の worktree 環境契約
+# （bash .lefthook/setup-worktree.sh、issue #1999 / tests/test_lefthook_installation_contract.py で保護）のみ。
+# グローバル版を変更したら本ファイルにも同じ変更を反映すること（構造 drift 禁止）。
+#
+name: lite
+workflow_config:
+  provider_options:
+    codex:
+      network_access: true
+max_steps: 12
+initial_step: preflight
+loop_monitors:
+  - cycle:
+      - implement
+      - review
+    threshold: 3
+    judge:
+      persona: supervisor
+      instruction: |
+        implement と review の往復が続いている。直近の review feedback の推移を確認し、
+        ループが生産的かを判定すること。
+        - 指摘件数が減っている、または毎回異なる新しい指摘が解消されている → 健全（進捗あり）
+        - 同一指摘の繰り返し、修正のたびに別の箇所が壊れる、feedback と実装が噛み合っていない
+          → 非生産的（改善なし）
+      rules:
+        - condition: 健全（進捗あり）
+          next: implement
+        - condition: 非生産的（改善なし）
+          next: ABORT
+steps:
+  - name: preflight
+    persona: coder
+    provider: codex
+    edit: false
+    instruction: |
+      実装開始前の環境ゲートを実行すること。
+      `.takt/quality-gates/preflight.sh` が通常ファイルとして存在する場合だけ
+      `bash .takt/quality-gates/preflight.sh` を実行する。存在しない場合は approved、
+      feedback は空文字とする。実行時は終了ステータス 0 を approved、0 以外を blocked とし、
+      blocked の feedback にコマンド、終了ステータス、障害出力を記録する。
+      判定結果を review-verdict の structured output として返すこと。
+    structured_output:
+      schema_ref: review-verdict
+    rules:
+      - when: structured.preflight.verdict == "approved"
+        next: plan
+      - when: structured.preflight.verdict == "blocked"
+        next: ABORT
+      - when: "true"
+        next: ABORT
+  - name: plan
+    persona: planner
+    provider: codex
+    edit: false
+    instruction: |
+      最初に `bash .lefthook/setup-worktree.sh` を実行し、devShell と Git hooks をセットアップすること。
+      以降の `uv` / `ruff` コマンドは `bash .lefthook/setup-worktree.sh <command> [args...]` 経由で実行すること。
+      セットアップに失敗した場合は処理を続行せず、失敗内容を報告すること。
+
+      plan
+    rules:
+      - condition: "実装計画が確定した"
+        next: implement
+  - name: implement
+    persona: coder
+    provider: codex
+    edit: true
+    # レビュー差し戻しで再実行するたびに、coder の推論性能を段階的に上げる。
+    promotion:
+      - at: 2
+        model: gpt-5.6-terra
+      - at: 3
+        model: gpt-5.6-sol
+    pass_previous_response: true
+    policy: pre-review-checklist
+    instruction: |
+      最初に `bash .lefthook/setup-worktree.sh` を実行し、devShell と Git hooks をセットアップすること。
+      以降の `uv` / `ruff` コマンドは `bash .lefthook/setup-worktree.sh <command> [args...]` 経由で実行すること。
+      セットアップに失敗した場合は処理を続行せず、失敗内容を報告すること。
+
+      計画に従って実装・テスト追加・テスト実行を完了させたあと、ポリシー
+      「提出前セルフ監査チェックリスト」の 8 項目を根拠（ファイル:行）付きで自己監査すること。
+
+      - 項目 1 の受入条件充足表（要件の引用 / 対応する実装行 / 対応するテスト）を応答の末尾に必ず含める
+      - 未充足・未照合の項目が残る場合は完了を宣言せず、解消してから完了すること
+    rules:
+      - condition: "実装・テスト・セルフ監査 8 項目の照合がすべて完了した"
+        next: review
+  - name: review
+    persona: architecture-reviewer
+    provider: codex
+    edit: false
+    pass_previous_response: true
+    policy: pre-review-checklist
+    instruction: |
+      最初に `bash .lefthook/setup-worktree.sh` を実行し、devShell と Git hooks をセットアップすること。
+      以降の `uv` / `ruff` コマンドは `bash .lefthook/setup-worktree.sh <command> [args...]` 経由で実行すること。
+      セットアップに失敗した場合は処理を続行せず、失敗内容を報告すること。
+
+      実装者の自己監査を鵜呑みにせず、ポリシー「提出前セルフ監査チェックリスト」の
+      8 項目を diff と実コードに対して独立に照合すること。
+
+      - 各項目の判定に根拠（ファイル:行）を付ける
+      - 8 項目すべて pass の場合のみ verdict を approved にする
+      - 1 項目でも fail があれば needs_fix とし、feedback に「違反項目番号 / 該当箇所 / 必要な修正」を列挙する
+      - daemon 不達・ネットワーク・権限など、コード変更では解消できない環境障害により受け入れ基準を検証できない場合は、needs_fix ではなく blocked とし、feedback に障害内容を記録する。通常の実装不備やコード変更で解消可能な検証失敗は needs_fix とする
+      - チェックリスト外の指摘は、issue スコープ内の欠陥に限り needs_fix の理由にできる。
+        スコープ外の改善提案は feedback 末尾に follow-up 候補として記載し、verdict の判定材料にしない
+    structured_output:
+      schema_ref: review-verdict
+    rules:
+      - when: structured.review.verdict == "approved"
+        next: COMPLETE
+      - when: structured.review.verdict == "needs_fix"
+        next: implement
+      - when: structured.review.verdict == "blocked"
+        next: ABORT
+      - when: "true"
+        next: ABORT
