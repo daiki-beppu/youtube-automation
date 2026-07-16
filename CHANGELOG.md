@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `fix(streaming)`: sshd の提示 host key を Ed25519 のみに固定し、cloud-init 保守変更・host key 変更・`install_root` 変更時の Terraform plan action、OpenSSH の実ネゴシエーション、`install_root` validation 境界を実行時テストで保証した。配置ディレクトリ作成は deploy に一元化し、HCL の繰り返しブロック helper も位置情報付き共通実装へ統合した（#2033）。
+
+- `feat(doctor,setup)`: `yt-doctor` の api カテゴリに `reporting_job` check を追加し、OAuth 済み環境で YouTube Reporting API ジョブ未作成を検出して `uv run yt-analytics --reporting-create-job` を案内するようにした。`/setup` wizard はコマンド実行後に doctor を再診断し、ジョブ作成済みを確認する（#1974）。
+
 - `refactor(distrokid-helper)`: popup のローカル配信元・collection/disc selector を shadcn theme token に揃え、フォーム一括入力・停止操作を Button primitive へ移行した。既存の value・handler・disabled・accessible name と runner action は維持する（#2065）。
 
 - `docs(collection-ideate)`: stale な Analytics report を検出した際、相対 stale は `/analytics-analyze`、絶対 stale は `/analytics-collect` → `/analytics-analyze` を自動実行し、再検証成功後に同じ企画フローを継続する契約へ更新した。更新失敗時は stale report を使わず、理由と再開条件を示して停止する（#2062）。

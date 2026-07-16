@@ -20,6 +20,10 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from httplib2 import HttpLib2Error
 from PIL import Image as PILImage
 from PIL import UnidentifiedImageError
 
@@ -27,7 +31,7 @@ from youtube_automation.auth.oauth_handler import resolve_client_secrets_locatio
 from youtube_automation.cli.automation_update_refs import UPSTREAM_REPO
 from youtube_automation.cli.skills_sync import bundled_skill_names
 from youtube_automation.scripts.benchmark_collector import load_benchmark_videos, select_top_vod_benchmark_videos
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.exceptions import AutomationError, ConfigError, YouTubeAPIError
 from youtube_automation.utils.numbered_duplicates import (
     CLEANUP_GUIDE_URL,
     format_duplicate_name,
@@ -39,6 +43,7 @@ from youtube_automation.utils.preflight_checks import (
     check_suno_genre_line_char_limit,
     check_thumbnail_skill_config,
 )
+from youtube_automation.utils.reporting_api import ReportingAPIClient
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.thumbnail_references import resolve_configured_benchmark_references
 
@@ -920,6 +925,71 @@ def check_oauth_token(channel_dir: Path) -> CheckResult:
         id="oauth_token",
         status="ok",
         message=f"token.json 存在 (scopes: {len(scopes)} 件)",
+    )
+
+
+def check_reporting_job(channel_dir: Path) -> CheckResult:
+    oauth_result = check_oauth_token(channel_dir)
+    if oauth_result.status != "ok":
+        return CheckResult(
+            id="reporting_job",
+            status="unknown",
+            message="OAuth トークン未取得または不正のためスキップ",
+        )
+
+    token_path = channel_dir / "auth" / "token.json"
+    try:
+        credentials = Credentials.from_authorized_user_file(str(token_path))
+    except (OSError, ValueError) as error:
+        return CheckResult(
+            id="reporting_job",
+            status="fail",
+            message=f"Reporting API ジョブ確認失敗: OAuth トークンが不正です: {error}",
+        )
+
+    if not credentials.valid:
+        state = "期限切れ" if credentials.expired else "不正"
+        return CheckResult(
+            id="reporting_job",
+            status="fail",
+            message=f"Reporting API ジョブ確認失敗: OAuth トークンが{state}です。再認証してください",
+        )
+
+    try:
+        with _temporary_channel_dir(channel_dir), redirect_stdout(io.StringIO()):
+            service = build("youtubereporting", "v1", credentials=credentials)
+            client = ReportingAPIClient(service)
+            report_type_id = client.select_report_type()
+            existing_job = client.find_existing_job(report_type_id)
+    except HttpError as error:
+        api_error = YouTubeAPIError.from_http_error(error, "reporting:jobs.list")
+        return CheckResult(
+            id="reporting_job",
+            status="fail",
+            message=f"Reporting API ジョブ確認失敗: {api_error}",
+        )
+    except (AutomationError, FileNotFoundError, HttpLib2Error, OSError) as error:
+        return CheckResult(
+            id="reporting_job",
+            status="fail",
+            message=f"Reporting API ジョブ確認失敗: {error}",
+        )
+
+    if existing_job is None:
+        return CheckResult(
+            id="reporting_job",
+            status="fail",
+            message="Reporting API ジョブが未作成",
+            next_action={
+                "kind": "ai-exec",
+                "cmd": "uv run yt-analytics --reporting-create-job",
+            },
+        )
+
+    return CheckResult(
+        id="reporting_job",
+        status="ok",
+        message=f"Reporting API ジョブ作成済み (jobId: {existing_job['id']})",
     )
 
 
@@ -2519,6 +2589,7 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
         check_env_file(channel_dir),
         check_client_secrets(channel_dir),
         check_oauth_token(channel_dir),
+        check_reporting_job(channel_dir),
         check_channel_config(channel_dir),
         check_playlist_config(channel_dir),
         check_playlist_create_dry_run(channel_dir),
