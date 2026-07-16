@@ -70,7 +70,6 @@ def find_block_with_position(
     header_pattern: str,
     required_text: str,
 ) -> tuple[str, int] | None:
-    """繰り返しブロックから本文を識別し、ヘッダー開始位置とともに返す。"""
     for match in re.finditer(header_pattern + r"\s*=?\s*\{", text):
         start = match.end()
         depth = 1

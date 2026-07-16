@@ -70,3 +70,39 @@ run "rejects_relative_path" {
   variables { install_root = "opt/stream" }
   expect_failures = [var.install_root]
 }
+
+run "rejects_empty_string" {
+  command = plan
+  variables { install_root = "" }
+  expect_failures = [var.install_root]
+}
+
+run "rejects_whitespace_only" {
+  command = plan
+  variables { install_root = "   " }
+  expect_failures = [var.install_root]
+}
+
+run "rejects_semicolon" {
+  command = plan
+  variables { install_root = "/opt/stream;id" }
+  expect_failures = [var.install_root]
+}
+
+run "rejects_command_substitution" {
+  command = plan
+  variables { install_root = "/opt/$(id)" }
+  expect_failures = [var.install_root]
+}
+
+run "rejects_pipe" {
+  command = plan
+  variables { install_root = "/opt/stream|id" }
+  expect_failures = [var.install_root]
+}
+
+run "rejects_ampersand" {
+  command = plan
+  variables { install_root = "/opt/stream&id" }
+  expect_failures = [var.install_root]
+}

@@ -6,17 +6,27 @@ import getpass
 import shutil
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
 
+import pytest
 import yaml
 
 from tests.helpers.hcl import read_file
 from tests.streaming._helpers import _CLOUD_INIT_YAML
 
+_COMMAND_TIMEOUT_SECONDS = 10
+
 
 def _run(command: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, check=check, capture_output=True, text=True)
+    return subprocess.run(
+        command,
+        check=check,
+        capture_output=True,
+        text=True,
+        timeout=_COMMAND_TIMEOUT_SECONDS,
+    )
 
 
 def _generate_key(path: Path, algorithm: str) -> None:
@@ -70,9 +80,15 @@ def test_drop_in_enables_only_ed25519_even_when_other_host_keys_exist(tmp_path: 
     assert host_keys == [str(tmp_path / "ssh_host_ed25519_key")]
 
 
+@pytest.mark.skipif(
+    sys.platform != "linux",
+    reason="The SSH connection contract runs on Ubuntu CI; non-Linux sshd sandbox behavior differs",
+)
 def test_expected_host_key_connects_and_different_key_is_rejected(tmp_path: Path) -> None:
     sshd = shutil.which("sshd")
     assert sshd is not None, "OpenSSH server is required for the host-key contract test"
+    ssh = shutil.which("ssh")
+    assert ssh is not None, "OpenSSH client is required for the host-key contract test"
     host_key = tmp_path / "ssh_host_ed25519_key"
     wrong_host_key = tmp_path / "wrong_host_key"
     client_key = tmp_path / "client_key"
@@ -123,7 +139,7 @@ def test_expected_host_key_connects_and_different_key_is_rejected(tmp_path: Path
             encoding="utf-8",
         )
         base_command = [
-            "ssh",
+            ssh,
             "-F",
             "none",
             "-o",
@@ -155,4 +171,8 @@ def test_expected_host_key_connects_and_different_key_is_rejected(tmp_path: Path
         assert "REMOTE HOST IDENTIFICATION HAS CHANGED" in rejected.stderr
     finally:
         process.terminate()
-        process.wait(timeout=5)
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)

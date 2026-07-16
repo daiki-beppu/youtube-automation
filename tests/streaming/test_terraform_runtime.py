@@ -12,6 +12,9 @@ import pytest
 
 from tests.streaming._helpers import _STREAMING_DIR
 
+_TERRAFORM_INIT_TIMEOUT_SECONDS = 120
+_TERRAFORM_TEST_TIMEOUT_SECONDS = 300
+
 
 @pytest.fixture(scope="module")
 def terraform_dir() -> Path:
@@ -23,6 +26,7 @@ def terraform_dir() -> Path:
         text=True,
         check=False,
         env={**os.environ, "TF_IN_AUTOMATION": "1"},
+        timeout=_TERRAFORM_INIT_TIMEOUT_SECONDS,
     )
     assert result.returncode == 0, result.stderr
     return _STREAMING_DIR
@@ -36,6 +40,7 @@ def _terraform_test(terraform_dir: Path, test_file: str) -> list[dict[str, objec
         text=True,
         check=False,
         env={**os.environ, "TF_IN_AUTOMATION": "1"},
+        timeout=_TERRAFORM_TEST_TIMEOUT_SECONDS,
     )
     events = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
     if result.returncode != 0:
@@ -84,4 +89,4 @@ def test_install_root_validation_executes_all_acceptance_and_rejection_cases(ter
     events = _terraform_test(terraform_dir, "tests/install_root_validation.tftest.hcl")
     summary = next(event["test_summary"] for event in events if event.get("type") == "test_summary")
 
-    assert summary == {"status": "pass", "passed": 8, "failed": 0, "errored": 0, "skipped": 0}
+    assert summary == {"status": "pass", "passed": 14, "failed": 0, "errored": 0, "skipped": 0}
