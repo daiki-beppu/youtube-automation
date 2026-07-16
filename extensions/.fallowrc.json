@@ -1,0 +1,15 @@
+{
+  "ignorePatterns": [
+    "**/.output/**",
+    "**/.wxt/**",
+    "**/coverage/**",
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/playwright-report/**",
+    "**/test-results/**"
+  ],
+  "audit": {
+    "css": false,
+    "gate": "new-only"
+  }
+}
