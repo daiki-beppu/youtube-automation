@@ -3,6 +3,12 @@
 # チャンネル側で上書きする場合は config/skills/thumbnail.yaml に記述する。
 # deep-merge でマージされる (dict は再帰マージ、リスト・スカラは上書き)。
 
+# 承認済みサムネイルのギャラリー保存 (#1942)。
+# true の場合、確定直後に assets/thumbnail-gallery/<collection-dir-name>.<ext>
+# へ元の拡張子・内容のままコピーする。false なら従来どおり何も作らない。
+archive:
+  enabled: false
+
 image_generation:
   # provider: "gemini" | "openai" | "codex"
   # - gemini: Gemini Image (Nano Banana 系) を使用
