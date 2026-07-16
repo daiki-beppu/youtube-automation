@@ -6,18 +6,8 @@
 # 分析データの絶対鮮度 (#1427)
 # 最新 data/analytics_data_*.json のファイル名日付が実行日 (today) から
 # この日数を超えて経過していたら、reports/analysis_*.md との相対比較の結果に
-# かかわらず stale とみなし、freshness.stale_action の承認フローへ分岐する。
+# かかわらず絶対 stale とみなす。更新手順は references/freshness-rules.md を正とする。
 freshness_days: 7
-
-freshness:
-  # stale 検出時の処理: ask（3 択）/ auto（上限内なら自動分析）/ manual（従来動作）
-  stale_action: ask
-  # null は金額上限なし。ただし見積不能時は auto せず ask に戻す。
-  auto_run_max_cost_usd: null
-  # Markdown report 1 KiB あたりの保守的な見積単価。実課金額ではない。
-  cost_estimate_usd_per_kib: 0.01
-  # サイズベースの見積もりを平均する直近 report 数
-  cost_estimate_recent_reports: 3
 
 # TTP 優先モード (#1977)
 # true のとき、differentiation_axes の掛け合わせをスキップし、競合の高再生
