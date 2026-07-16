@@ -75,6 +75,18 @@ def test_setup_skill_follows_skills_synced_next_action_contract() -> None:
     assert "`.agents/skills` が `.claude/skills` を指す symlink" in text
 
 
+def test_setup_skill_handles_reporting_job_next_action_and_rechecks() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    assert "#### `reporting_job`" in text
+    assert "next_action.cmd" in text
+    assert "uv run yt-analytics --reporting-create-job" in text
+    reporting_step = text.index("#### `reporting_job`")
+    next_step = text.find("\n#### `", reporting_step + 1)
+    section = text[reporting_step : next_step if next_step != -1 else None]
+    assert "uv run yt-doctor --json" in section
+    assert "`reporting_job` が `ok`" in section
+
+
 def test_setup_skill_delegates_minimum_directory_generation_to_setup() -> None:
     text = _SETUP_SKILL.read_text(encoding="utf-8")
     assert "`/setup` は `uv run yt-setup-dirs`" in text
