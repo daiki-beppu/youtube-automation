@@ -10,8 +10,8 @@
    - 一致 stream なし → ``ValidationError``
    - 空 list → ``YouTubeAPIError``
 2. ``extract_stream_info``: ``streamName`` の抽出 / 欠落時の例外
-3. ``write_op_secret``: ``op item edit`` 成功 / ``edit`` 失敗 → ``create`` フォールバック /
-   ``op`` 不在 → ``ConfigError`` / 両方失敗 → ``ConfigError``
+3. ``write_op_secret``: ``op item edit`` 成功 / item 不在時のみ ``create`` /
+   ``op`` 不在・edit/create 失敗・timeout → ``ConfigError``
 4. ``_SECRET_REFS`` への ``YOUTUBE_STREAM_KEY`` 登録確認
 5. ``YouTubeOAuthHandler`` の ``(scopes, token_path)`` 拡張と既存 callsite との後方互換
 6. CLI ``main()`` 統合: ``--stdout`` 出力、``--vault/--item`` で ``write_op_secret`` 経由保存、
@@ -22,6 +22,7 @@ YouTube Data API / OAuth / op CLI / 1Password はすべて ``unittest.mock`` で
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -212,12 +213,12 @@ class TestWriteOpSecret:
 
             write_op_secret("Personal", "YouTube", "stream_key", "abc-key-12345")
 
-        assert mock_run.call_count >= 1
-        # 1 回目のコマンドが ``op item edit`` であること
+        assert mock_run.call_count == 1
         first_args = mock_run.call_args_list[0].args[0]
         assert "edit" in first_args, f"1st subprocess call should be 'op item edit': {first_args}"
 
-    def test_op_item_edit_fails_falls_back_to_create(self):
+    @pytest.mark.parametrize("stderr", ["item not found", "isn't an item in this vault"])
+    def test_should_fall_back_to_create_when_item_is_not_found(self, stderr: str):
         """Given ``op item edit`` が失敗（item 不存在）
         When ``write_op_secret``
         Then ``op item create`` にフォールバックして書き込みが完了する。
@@ -232,7 +233,7 @@ class TestWriteOpSecret:
                 subprocess.CalledProcessError(
                     returncode=1,
                     cmd=["op", "item", "edit"],
-                    stderr="item not found",
+                    stderr=stderr,
                 ),
                 subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
             ]
@@ -254,10 +255,10 @@ class TestWriteOpSecret:
             with pytest.raises(ConfigError):
                 write_op_secret("Personal", "YouTube", "stream_key", "abc")
 
-    def test_both_edit_and_create_fail_raises_config_error(self):
-        """Given ``op item edit`` と ``op item create`` の両方が失敗
+    def test_should_fail_without_create_when_edit_permission_is_denied(self):
+        """Given ``op item edit`` が item 不在以外で失敗
         When ``write_op_secret``
-        Then ``ConfigError``（書き込み経路がすべて失敗）。
+        Then create に進まず ``ConfigError`` で fail fast する。
         """
         from youtube_automation.utils.secrets import write_op_secret
 
@@ -271,8 +272,75 @@ class TestWriteOpSecret:
                 stderr="permission denied",
             )
 
-            with pytest.raises(ConfigError):
+            with pytest.raises(ConfigError) as exc_info:
                 write_op_secret("Personal", "YouTube", "stream_key", "abc")
+
+        message = str(exc_info.value)
+        assert "vault=Personal" in message
+        assert "item=YouTube" in message
+        assert "field=stream_key" in message
+        assert "permission denied" in message
+        assert mock_run.call_count == 1
+
+    def test_should_fail_without_create_when_edit_times_out(self):
+        """Given ``op item edit`` が timeout
+        When ``write_op_secret``
+        Then create に進まず timeout 詳細付き ``ConfigError`` で fail fast する。
+        """
+        from youtube_automation.utils.secrets import write_op_secret
+
+        with (
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = subprocess.TimeoutExpired(cmd=["op", "item", "edit"], timeout=10)
+
+            with pytest.raises(ConfigError, match="command timed out after 10 seconds"):
+                write_op_secret("Personal", "YouTube", "stream_key", "abc")
+
+        assert mock_run.call_count == 1
+
+    def test_should_raise_config_error_when_create_fails(self):
+        """Given item 不在の edit 後に create も失敗
+        When ``write_op_secret``
+        Then create の stderr 付き ``ConfigError`` で fail fast する。
+        """
+        from youtube_automation.utils.secrets import write_op_secret
+
+        with (
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [
+                subprocess.CalledProcessError(returncode=1, cmd=["op"], stderr="item not found"),
+                subprocess.CalledProcessError(returncode=1, cmd=["op"], stderr="permission denied"),
+            ]
+
+            with pytest.raises(ConfigError, match="op item create .*permission denied"):
+                write_op_secret("Personal", "YouTube", "stream_key", "abc")
+
+        assert mock_run.call_count == 2
+
+    def test_should_raise_config_error_when_create_times_out(self):
+        """Given item 不在の edit 後に create が timeout
+        When ``write_op_secret``
+        Then create の timeout 詳細付き ``ConfigError`` で fail fast する。
+        """
+        from youtube_automation.utils.secrets import write_op_secret
+
+        with (
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [
+                subprocess.CalledProcessError(returncode=1, cmd=["op"], stderr="item not found"),
+                subprocess.TimeoutExpired(cmd=["op", "item", "create"], timeout=10),
+            ]
+
+            with pytest.raises(ConfigError, match="op item create .*command timed out after 10 seconds"):
+                write_op_secret("Personal", "YouTube", "stream_key", "abc")
+
+        assert mock_run.call_count == 2
 
     def test_value_is_not_in_argv_on_edit_path(self):
         """Given 任意の secret 値
@@ -331,7 +399,7 @@ class TestWriteOpSecret:
     def test_value_is_passed_via_stdin_on_edit_path(self):
         """Given 任意の secret 値
         When ``write_op_secret`` が ``op item edit`` を呼ぶ
-        Then secret 値は ``subprocess.run(..., input=value)`` の kwargs として渡る。
+        Then item JSON は ``subprocess.run(..., input=...)`` の kwargs として渡る。
 
         argv に乗らないだけでなく、stdin 経由で確実に op プロセスに伝搬していることを独立検証する。
         """
@@ -346,14 +414,14 @@ class TestWriteOpSecret:
             write_op_secret("Personal", "YouTube", "stream_key", "secret-value-xyz")
 
         edit_kwargs = mock_run.call_args_list[0].kwargs
-        assert edit_kwargs.get("input") == "secret-value-xyz", (
-            f"secret value must be passed via subprocess.run(input=...) on edit path: kwargs={edit_kwargs}"
-        )
+        assert json.loads(edit_kwargs["input"]) == {
+            "fields": [{"id": "stream_key", "type": "CONCEALED", "value": "secret-value-xyz"}]
+        }
 
     def test_value_is_passed_via_stdin_on_create_fallback_path(self):
         """Given ``op item edit`` が失敗
         When ``write_op_secret`` が ``op item create`` にフォールバックする
-        Then create 呼び出しでも ``input=value`` で stdin 配線される。
+        Then create 呼び出しでも PASSWORD item JSON を stdin 配線する。
         """
         from youtube_automation.utils.secrets import write_op_secret
 
@@ -373,22 +441,20 @@ class TestWriteOpSecret:
             write_op_secret("Personal", "YouTube", "stream_key", "secret-value-xyz")
 
         create_kwargs = mock_run.call_args_list[1].kwargs
-        assert create_kwargs.get("input") == "secret-value-xyz", (
-            f"secret value must be passed via subprocess.run(input=...) on create fallback: kwargs={create_kwargs}"
-        )
+        template = json.loads(create_kwargs["input"])
+        assert template["category"] == "PASSWORD"
+        assert template["title"] == "YouTube"
+        assert {field["id"] for field in template["fields"]} == {"password", "stream_key"}
+        assert all(field["value"] == "secret-value-xyz" for field in template["fields"])
 
-    def test_assignment_uses_password_type_with_empty_value(self):
+    def test_should_omit_stdin_marker_when_edit_reads_json_from_stdin(self):
         """Given ``field="stream_key"``
         When ``write_op_secret`` が argv を構築する
-        Then 末尾要素は ``"stream_key[password]="`` と完全一致（末尾 ``=`` で空値）。
-
-        ``password=`` や ``stream_key=<value>`` のような旧形式・別形式への退行を境界で防ぐ。
+        Then JSON template は stdin から渡し、edit argv に stdin marker は含めない。
         """
         from youtube_automation.utils.secrets import write_op_secret
 
         field = "stream_key"
-        expected_assignment = f"{field}[password]="
-
         with (
             patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
             patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
@@ -398,17 +464,60 @@ class TestWriteOpSecret:
             write_op_secret("Personal", "YouTube", field, "secret-value-xyz")
 
         edit_argv = mock_run.call_args_list[0].args[0]
-        assert edit_argv[-1] == expected_assignment, (
-            f"assignment must be '{expected_assignment}' "
-            f"(empty-value + [password] type indicator), got: {edit_argv[-1]!r}"
-        )
+        assert edit_argv == ["op", "item", "edit", "YouTube", "--vault", "Personal"]
+
+    def test_should_include_builtin_password_field_when_creating_password_item(self):
+        """PASSWORD item の新規作成には組み込み password field が必要。"""
+        from youtube_automation.utils.secrets import write_op_secret
+
+        with (
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [
+                subprocess.CalledProcessError(returncode=1, cmd=["op"], stderr="item not found"),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+            ]
+            write_op_secret("Personal", "YouTube", "stream_key", "secret-value-xyz")
+
+        create_template = json.loads(mock_run.call_args_list[1].kwargs["input"])
+        password_field = next(field for field in create_template["fields"] if field["id"] == "password")
+        assert password_field["purpose"] == "PASSWORD"
+
+    def test_should_not_duplicate_password_field_when_target_field_is_password(self):
+        """Given 書き込み対象自体が組み込み password field
+        When PASSWORD item を新規作成する
+        Then password field は purpose 付きの 1 件だけになる。
+        """
+        from youtube_automation.utils.secrets import write_op_secret
+
+        with (
+            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+        ):
+            mock_run.side_effect = [
+                subprocess.CalledProcessError(returncode=1, cmd=["op"], stderr="item not found"),
+                subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+            ]
+
+            write_op_secret("Personal", "YouTube", "password", "secret-value-xyz")
+
+        create_template = json.loads(mock_run.call_args_list[1].kwargs["input"])
+        assert create_template["fields"] == [
+            {
+                "id": "password",
+                "type": "CONCEALED",
+                "purpose": "PASSWORD",
+                "value": "secret-value-xyz",
+            }
+        ]
 
     def test_text_true_is_preserved_for_str_based_stderr_handling(self):
         """Given ``op item edit`` を呼ぶ
         When ``write_op_secret`` が ``subprocess.run`` を呼ぶ
         Then ``text=True`` が kwargs に含まれる。
 
-        ``getattr(exc, "stderr", "") or ""`` の str 前提（``secrets.py`` の例外ハンドラ）が崩れる退行を境界で防ぐ。
+        ``_op_error_detail`` が stderr を文字列として扱う前提を境界で固定する。
         """
         from youtube_automation.utils.secrets import write_op_secret
 

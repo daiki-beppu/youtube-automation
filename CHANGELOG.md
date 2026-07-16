@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(secrets)`: 1Password CLI 2.33 が stdin を JSON item template として解釈する仕様に合わせ、stream key の edit/create を JSON template 経由に変更した。新規 PASSWORD item には必須の組み込み `password` field を含め、secret は引き続き argv や一時ファイルに露出しない（#1784）。
+
 - `fix(test-infra)`: dev shell 統合テストのコピー対象と teardown を最適化し、pytest の成功時 tmp と強制終了された過去 run の fixture 残骸が蓄積しないようにした（#2072）。
 
 - `fix(suno-helper)`: 連続実行開始時に collection server の疎通を確認し、無応答時は Lyrics 欄エラーより先に明示的な server エラーで停止するようにした（#2003）。
