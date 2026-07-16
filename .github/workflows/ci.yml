@@ -23,6 +23,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v30
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+      - name: Install OpenSSH server
+        run: sudo apt-get update && sudo apt-get install -y openssh-server
       - name: Install dependencies
         run: nix develop --command uv sync
       - name: Test

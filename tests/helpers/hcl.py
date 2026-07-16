@@ -63,3 +63,26 @@ def extract_block(text: str, header_pattern: str) -> str | None:
             if depth == 0:
                 return text[start:i]
     return None
+
+
+def find_block_with_position(
+    text: str,
+    header_pattern: str,
+    required_text: str,
+) -> tuple[str, int] | None:
+    """繰り返しブロックから本文を識別し、ヘッダー開始位置とともに返す。"""
+    for match in re.finditer(header_pattern + r"\s*=?\s*\{", text):
+        start = match.end()
+        depth = 1
+        for i in range(start, len(text)):
+            char = text[i]
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    body = text[start:i]
+                    if required_text in body:
+                        return body, match.start()
+                    break
+    return None

@@ -11,23 +11,11 @@ from __future__ import annotations
 
 import re
 
-from tests.helpers.hcl import extract_block, read_file, strip_hcl_comments
+from tests.helpers.hcl import extract_block, find_block_with_position, read_file, strip_hcl_comments
 from tests.streaming._helpers import (
     _INSTALL_ROOT_VAR,
     _MAIN_TF,
 )
-
-
-def _find_remote_exec_block(block: str, required_text: str) -> str | None:
-    for match in re.finditer(
-        r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
-        block,
-        flags=re.DOTALL,
-    ):
-        if required_text in match.group(1):
-            return match.group(1)
-    return None
-
 
 # ============================================================================
 # main.tf
@@ -393,12 +381,11 @@ class TestMainTfUserData:
     def test_user_data_template_passes_required_variables(self):
         """Given main.tf
         When vultr_instance.this.user_data の右辺を読む
-        Then ``systemd_unit = ...`` も内側 ``templatefile(...service.tftpl...)`` の
-             呼び出しも残らず、cloud-init の配置 root (``install_root``) と
+        Then deploy が所有する ``install_root`` と systemd unit は渡さず、
              host 鍵配布用の ``ssh_host_*`` 変数だけが渡されている (#212/#195)。
 
         unit 配置は ``null_resource.deploy`` の ``provisioner "file"`` に統一されたため、
-        user_data には cloud-init 用の配置 root と host 鍵配布用変数のみを渡す。
+        user_data には OS 初期化に必要な host 鍵配布用変数のみを渡す。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"vultr_instance"\s+"this"')
@@ -411,10 +398,9 @@ class TestMainTfUserData:
             r"youtube-stream\.service\.tftpl",
             block,
         ), "vultr_instance.this 内に service.tftpl への参照が残っている（user_data の内側 templatefile 撤去漏れ）"
-        assert re.search(
-            r"install_root\s*=\s*var\.install_root",
-            block,
-        ), "cloud-init templatefile に install_root = var.install_root が渡されていない"
+        assert not re.search(r"install_root\s*=", block), (
+            "deploy が所有する install_root を cloud-init に重複して渡している"
+        )
         assert re.search(r"\bssh_host_private_key\s*=", block), (
             "user_data の variables map に ssh_host_private_key が無い（host 鍵配布経路が欠落）"
         )
@@ -697,14 +683,19 @@ class TestMainTfNullResource:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        prepare = _find_remote_exec_block(block, "${var.install_root}/videos")
-        assert prepare is not None, "install_root を準備する remote-exec が存在しない"
+        prepare_match = find_block_with_position(
+            block,
+            r'provisioner\s+"remote-exec"',
+            "${var.install_root}/videos",
+        )
+        assert prepare_match is not None, "install_root を準備する remote-exec が存在しない"
+        prepare, prepare_position = prepare_match
         for directory in ("videos", "logs", "bin"):
             assert re.search(
                 rf"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+{_INSTALL_ROOT_VAR}/{directory}\b",
                 prepare,
             ), f"install_root/{directory} を root:root 0755 で作成していない"
-        assert block.find('provisioner "remote-exec"') < block.find('provisioner "file"'), (
+        assert prepare_position < block.find('provisioner "file"'), (
             "install_root の準備が最初の file upload より後にある"
         )
 
@@ -770,7 +761,8 @@ class TestMainTfNullResource:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        inline = _find_remote_exec_block(block, "systemctl enable --now youtube-stream")
+        match = find_block_with_position(block, r'provisioner\s+"remote-exec"', "systemctl enable --now youtube-stream")
+        inline = match[0] if match else None
         assert inline is not None, 'service を反映する provisioner "remote-exec" ブロックが見つからない'
         for command, hint in [
             (r"umask\s+0077", "umask 0077 (defense-in-depth)"),
@@ -1431,7 +1423,8 @@ class TestMainTfRunFfmpegProvisioner:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        inline = _find_remote_exec_block(block, "systemctl enable --now youtube-stream")
+        match = find_block_with_position(block, r'provisioner\s+"remote-exec"', "systemctl enable --now youtube-stream")
+        inline = match[0] if match else None
         assert inline is not None, 'service を反映する provisioner "remote-exec" ブロックが見つからない'
         assert re.search(
             rf"chmod\s+755\b[^\n]*{_INSTALL_ROOT_VAR}/bin/run-ffmpeg\.sh\b",
@@ -1452,7 +1445,8 @@ class TestMainTfRunFfmpegProvisioner:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        inline = _find_remote_exec_block(block, "systemctl enable --now youtube-stream")
+        match = find_block_with_position(block, r'provisioner\s+"remote-exec"', "systemctl enable --now youtube-stream")
+        inline = match[0] if match else None
         assert inline is not None
 
         chmod_match = re.search(

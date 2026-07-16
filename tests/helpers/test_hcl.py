@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.helpers.hcl import extract_block, read_file, strip_hcl_comments
+from tests.helpers.hcl import extract_block, find_block_with_position, read_file, strip_hcl_comments
 
 
 class TestStripHclComments:
@@ -67,3 +67,21 @@ class TestExtractBlock:
         body = extract_block(text, r"required_providers")
         assert body is not None
         assert 'vultr = { source = "vultr/vultr" }' in body
+
+
+class TestFindBlockWithPosition:
+    def test_returns_matching_repeated_block_and_its_header_position(self):
+        text = (
+            'provisioner "remote-exec" {\n  inline = ["first"]\n}\n'
+            'provisioner "remote-exec" {\n  inline = ["target"]\n}\n'
+        )
+
+        found = find_block_with_position(text, r'provisioner\s+"remote-exec"', "target")
+
+        assert found is not None
+        body, position = found
+        assert "target" in body
+        assert position == text.rfind('provisioner "remote-exec"')
+
+    def test_returns_none_when_no_repeated_block_contains_required_text(self):
+        assert find_block_with_position('item { value = "one" }', r"item", "two") is None

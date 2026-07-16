@@ -54,7 +54,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tests.helpers.hcl import extract_block, read_file, strip_hcl_comments
+from tests.helpers.hcl import extract_block, find_block_with_position, read_file, strip_hcl_comments
 
 # ---------- パス定数 ----------
 
@@ -75,17 +75,6 @@ _INSTALL_ROOT_VAR = r"\$\{var\.install_root\}"
 
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 _HEALTHCHECK_DOC = _REPO_ROOT / "docs" / "streaming-healthcheck.md"
-
-
-def _find_remote_exec_block(block: str, required_text: str) -> str | None:
-    for match in re.finditer(
-        r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
-        block,
-        flags=re.DOTALL,
-    ):
-        if required_text in match.group(1):
-            return match.group(1)
-    return None
 
 
 # ---------- bash ヘルパー ----------
@@ -984,7 +973,10 @@ class TestMainTfHealthcheckDeploy:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        inline = _find_remote_exec_block(block, "/tmp/youtube-stream-healthcheck.env.tmp")
+        match = find_block_with_position(
+            block, r'provisioner\s+"remote-exec"', "/tmp/youtube-stream-healthcheck.env.tmp"
+        )
+        inline = match[0] if match else None
         assert inline is not None
         assert re.search(
             r"install\s+-m\s+0600\s+-o\s+root\s+-g\s+root\s+/tmp/youtube-stream-healthcheck\.env\.tmp\s+/etc/youtube-stream-healthcheck\.env",
@@ -1011,8 +1003,14 @@ class TestMainTfHealthcheckDeploy:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        prepare_inline = _find_remote_exec_block(block, "${var.install_root}/bin")
-        service_inline = _find_remote_exec_block(block, "chmod 755 ${var.install_root}/bin")
+        prepare_match = find_block_with_position(block, r'provisioner\s+"remote-exec"', "${var.install_root}/bin")
+        service_match = find_block_with_position(
+            block,
+            r'provisioner\s+"remote-exec"',
+            "chmod 755 ${var.install_root}/bin",
+        )
+        prepare_inline = prepare_match[0] if prepare_match else None
+        service_inline = service_match[0] if service_match else None
         assert prepare_inline is not None
         assert service_inline is not None
         # ディレクトリ作成（mkdir -p または install -d）
@@ -1037,7 +1035,8 @@ class TestMainTfHealthcheckDeploy:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        inline = _find_remote_exec_block(block, "systemctl restart cron")
+        match = find_block_with_position(block, r'provisioner\s+"remote-exec"', "systemctl restart cron")
+        inline = match[0] if match else None
         assert inline is not None
         has_systemctl = re.search(r"systemctl\s+(?:restart|reload)\s+cron\b", inline)
         has_service = re.search(r"service\s+cron\s+(?:restart|reload)\b", inline)

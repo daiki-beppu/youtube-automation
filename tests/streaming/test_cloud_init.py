@@ -15,7 +15,6 @@ from tests.streaming._helpers import (
     _CLOUD_INIT_YAML,
     _DEFAULT_INSTALL_ROOT,
     _ENV_TFTPL,
-    _INSTALL_ROOT_TFTPL,
     _extract_yaml_packages_block,
 )
 
@@ -88,29 +87,9 @@ class TestCloudInitYaml:
             "packages リストに ffmpeg が含まれていない"
         )
 
-    def test_runcmd_creates_videos_dir_with_root_owner_and_0755(self):
-        """Given cloud-init.yaml
-        When runcmd を読む
-        Then ``${install_root}/videos`` を root:root, 0755 で作成するコマンドがある (R3)。
-
-        ``install -d -m 0755 -o root -g root <path>`` 形式でパーミッションと所有者を明示する。
-        """
-        text = read_file(_CLOUD_INIT_YAML)
-        assert re.search(
-            rf"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+{_INSTALL_ROOT_TFTPL}/videos\b",
-            text,
-        ), "${install_root}/videos を root:root 0755 で作成する install コマンドが無い"
-
-    def test_runcmd_creates_logs_dir_with_root_owner_and_0755(self):
-        """Given cloud-init.yaml
-        When runcmd を読む
-        Then ``${install_root}/logs`` を root:root, 0755 で作成するコマンドがある (R4)。
-        """
-        text = read_file(_CLOUD_INIT_YAML)
-        assert re.search(
-            rf"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+{_INSTALL_ROOT_TFTPL}/logs\b",
-            text,
-        ), "${install_root}/logs を root:root 0755 で作成する install コマンドが無い"
+    def test_runcmd_does_not_own_deploy_directories(self):
+        """Given cloud-init.yaml, Then deploy-owned install_root paths are absent."""
+        assert "${install_root}" not in read_file(_CLOUD_INIT_YAML)
 
     def test_cloud_init_yaml_no_longer_bakes_systemd_unit(self):
         """Given cloud-init.yaml
@@ -306,11 +285,10 @@ class TestCloudInitYaml:
             "（unattended-upgrades のアクティベートが欠落）"
         )
 
-    def test_hardening_runcmd_runs_before_install_d(self):
+    def test_hardening_runcmd_order(self):
         """Given cloud-init.yaml
         When runcmd の出現順序を読む
-        Then hardening 3 行（``sed`` / ``systemctl reload ssh`` / ``dpkg-reconfigure``）が
-             既存の ``install -d ... ${install_root}/videos`` より前に配置されている (R-172-IMP-1)。
+        Then hardening 3 行が sed → reload → reconfigure の順で配置されている。
 
         早期 hardening の意図に従い、issue 推奨形どおり 3 行を runcmd 先頭に挿入する。
         """
@@ -318,18 +296,11 @@ class TestCloudInitYaml:
         sed_idx = text.find("sed -i")
         reload_idx = text.find("systemctl reload ssh")
         reconfigure_idx = text.find("dpkg-reconfigure")
-        install_videos_idx = text.find("install -d -m 0755 -o root -g root ${install_root}/videos")
         assert sed_idx != -1, "sed -i 行が cloud-init.yaml に見つからない（前段確認）"
         assert reload_idx != -1, "systemctl reload ssh 行が cloud-init.yaml に見つからない（前段確認）"
         assert reconfigure_idx != -1, "dpkg-reconfigure 行が cloud-init.yaml に見つからない（前段確認）"
-        assert install_videos_idx != -1, (
-            "install -d ... ${install_root}/videos 行が cloud-init.yaml に見つからない（前段確認）"
-        )
-        assert sed_idx < reload_idx < reconfigure_idx < install_videos_idx, (
-            "hardening 3 行（sed → systemctl reload ssh → dpkg-reconfigure）が "
-            "install -d ... ${install_root}/videos より前に並んでいない"
-            f"（順序: sed={sed_idx}, reload={reload_idx}, "
-            f"reconfigure={reconfigure_idx}, install_videos={install_videos_idx}）"
+        assert sed_idx < reload_idx < reconfigure_idx, (
+            "hardening 3 行が sed → systemctl reload ssh → dpkg-reconfigure の順でない"
         )
 
     def test_packages_list_retains_cron(self):
@@ -360,24 +331,6 @@ class TestCloudInitYaml:
         assert not re.search(r'^\s*-\s*"sed', text, flags=re.MULTILINE), (
             'runcmd の sed 行が外側を二重引用符で囲まれている（- "sed ..." 形式）'
             "。既存慣習どおりクォートなしの裸書きにすること"
-        )
-
-    def test_runcmd_retains_install_d_bin(self):
-        """Given hardening 反映後の cloud-init.yaml
-        When runcmd を読む
-        Then 既存の ``install -d ... ${install_root}/bin`` 行が保持されている (R-172-IMP-2)。
-
-        ``${install_root}/bin`` は terraform の ``provisioner "file"`` がスクリプトを
-        upload する宛先（既存コメント参照）。新規 hardening 3 行先頭挿入時に
-        誤って削除されていないことを保証する。
-        """
-        text = read_file(_CLOUD_INIT_YAML)
-        assert re.search(
-            rf"install\s+-d\s+-m\s+0755\s+-o\s+root\s+-g\s+root\s+{_INSTALL_ROOT_TFTPL}/bin\b",
-            text,
-        ), (
-            "${install_root}/bin を root:root 0755 で作成する install コマンドが消えている"
-            '（terraform provisioner "file" のスクリプト upload 先が失われる）'
         )
 
     def test_cloud_init_yaml_is_valid_yaml(self):

@@ -59,7 +59,6 @@ resource "vultr_instance" "this" {
   ssh_key_ids = [vultr_ssh_key.this.id]
 
   user_data = templatefile("${path.module}/cloud-init.yaml", {
-    install_root         = var.install_root
     ssh_host_private_key = tls_private_key.ssh_host.private_key_openssh
     ssh_host_public_key  = local.ssh_host_public_key
   })
