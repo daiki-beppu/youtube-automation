@@ -349,6 +349,7 @@ def test_get_server_info_returns_json_body(serve):
     assert body["hostname"] == "youtube-automation.localhost"
     assert body["port"] == urllib.parse.urlparse(base).port
     assert body["base_url"] == f"http://youtube-automation.localhost:{body['port']}"
+    assert set(body) == {"channel_name", "channel_short", "hostname", "port", "base_url", "label"}
 
 
 def test_post_suno_playlists_single_mode_returns_404_without_creating_legacy_json(serve, tmp_path):
