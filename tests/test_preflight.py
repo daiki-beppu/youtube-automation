@@ -192,6 +192,30 @@ def test_en_only_channel_without_timestamps_passes(tmp_path: Path, monkeypatch: 
     _run_preflight(channel_dir, collection_dir, monkeypatch)
 
 
+def test_three_part_title_template_passes_collection_preflight(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en"])
+    content_path = channel_dir / "config" / "channel" / "content.json"
+    content = json.loads(content_path.read_text(encoding="utf-8"))
+    content["title"]["template"] = "{tagline} | Inspirational Pinoy Reggae Music {year} | {subtitle}"
+    content_path.write_text(json.dumps(content), encoding="utf-8")
+    collection_dir = _write_collection(
+        channel_dir,
+        scene_phrases={"en": "continuous focus mix"},
+        description="A continuous BGM mix without chapter markers.",
+    )
+    descriptions_path = collection_dir / "20-documentation" / "descriptions.md"
+    descriptions = descriptions_path.read_text(encoding="utf-8")
+    descriptions_path.write_text(
+        descriptions.replace(
+            "Continuous Focus Mix",
+            "YAKAP NG PAMILYA 💛 | Inspirational Pinoy Reggae Music 2026 | Awit ng Pagmamahal",
+        ),
+        encoding="utf-8",
+    )
+
+    _run_preflight(channel_dir, collection_dir, monkeypatch)
+
+
 def test_scene_phrases_require_only_supported_languages(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     channel_dir = _write_minimal_channel(tmp_path, youtube_language="ja", supported_languages=["ja"])
     collection_dir = _write_collection(

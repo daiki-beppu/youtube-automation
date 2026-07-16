@@ -62,7 +62,7 @@ async function loadContentScriptWithPlaylistRows(
   const sentMessages: Array<{ type: string; payload: unknown }> = [];
   let postDownloadedCallCount = 0;
   let lastMultiSelectIds: string[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // oxlint-disable-next-line no-unused-vars
   const scrollAndMultiSelectByIdsMock = vi.fn((ids: string[], _options: unknown) => {
     lastMultiSelectIds = ids;
     if (playlistRowsResult instanceof Error) {

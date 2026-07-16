@@ -1,6 +1,6 @@
 ---
-name: postmortem
-description: "Use when 公開済み動画が伸びなかった原因を切り分けるとき。「伸びなかった」「postmortem」「flop 分析」で発動。横断戦略は /analytics-analyze、事前監査は /alignment-check"
+name: flop-analysis
+description: "Use when 公開済み動画が伸びなかった原因を video_id、collection、または --since で切り分け、postmortem.md に出力するとき。「伸びなかった」「flop 分析」で発動。横断戦略は /analytics-analyze、事前監査は /alignment-check"
 ---
 
 ## Overview
@@ -19,10 +19,10 @@ description: "Use when 公開済み動画が伸びなかった原因を切り分
 
 前提確認や Phase 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
 
-1. `.claude/skills/postmortem/config.default.yaml`
-2. `config/skills/postmortem.yaml`（存在する場合）
+1. `.claude/skills/flop-analysis/config.default.yaml`
+2. `config/skills/flop-analysis.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("postmortem")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。Phase 2 の症状判定は `thresholds.*`、Phase 3 の仮説マッピングは `hypothesis_ratios.*` を参照する。
+新 override を正規経路として優先する。新 override がなく `config/skills/postmortem.yaml` だけが存在する場合は、移行 fallback として旧 override を読み込み、`config/skills/flop-analysis.yaml` へのリネームを案内する。読み込み後は `youtube_automation.utils.skill_config.load_skill_config("postmortem")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。Phase 2 の症状判定は `thresholds.*`、Phase 3 の仮説マッピングは `hypothesis_ratios.*` を参照する。
 
 ## 前提
 
@@ -41,9 +41,9 @@ description: "Use when 公開済み動画が伸びなかった原因を切り分
 
 | 引数 | 説明 | 例 |
 |------|------|-----|
-| `<video_id>` | YouTube 動画 ID を直接指定 | `/postmortem dQw4w9WgXcQ` |
-| `<collection>` | コレクション名を指定（`upload_tracking.json` の `complete_collection.video_id` を解決） | `/postmortem rain-jazz-night` |
-| `--since <N>` | 公開後 N 日以内に公開された動画から候補を提示 | `/postmortem --since 14` |
+| `<video_id>` | YouTube 動画 ID を直接指定 | `/flop-analysis dQw4w9WgXcQ` |
+| `<collection>` | コレクション名を指定（`upload_tracking.json` の `complete_collection.video_id` を解決） | `/flop-analysis rain-jazz-night` |
+| `--since <N>` | 公開後 N 日以内に公開された動画から候補を提示 | `/flop-analysis --since 14` |
 
 複数候補がある場合は AskUserQuestion で対象を選ばせる。
 

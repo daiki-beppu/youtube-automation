@@ -105,3 +105,17 @@ def _reset_config_singleton():
     reset_config()
     yield
     reset_config()
+
+
+@pytest.fixture
+def no_retry_backoff(monkeypatch):
+    """retry backoff の実 sleep を無効化する。
+
+    `execute_with_retry` / `retry_youtube_api` のリトライ経路を通るテストで
+    実 backoff（attempt 毎に数秒）を待たないために使う。`time.sleep` を
+    グローバルに patch せず、retry モジュールのシームだけを差し替える。
+    """
+    from youtube_automation.utils import retry as retry_module
+
+    monkeypatch.setattr(retry_module, "_DEFAULT_SLEEP", lambda _seconds: None)
+    monkeypatch.setattr(retry_module, "_DEFAULT_JITTER", lambda low, _high: low)

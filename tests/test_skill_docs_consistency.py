@@ -594,7 +594,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
         ".claude/skills/alignment-check/SKILL.md",
         ".claude/skills/collection-ideate/SKILL.md",
         ".claude/skills/lyria/SKILL.md",
-        ".claude/skills/postmortem/SKILL.md",
+        ".claude/skills/flop-analysis/SKILL.md",
         ".claude/skills/video-analyze/SKILL.md",
     ]
     for path in followup_direction_files:
@@ -828,7 +828,8 @@ def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
         assert "## 設定読み込みゲート" in text, f"{skill} missing config read gate"
         assert f".claude/skills/{skill}/config.default.yaml" in text
         assert f"config/skills/{skill}.yaml" in text
-        assert f'load_skill_config("{skill}")' in text
+        loader_key = "postmortem" if skill == "flop-analysis" else skill
+        assert f'load_skill_config("{loader_key}")' in text
         assert "SKILL.md の説明や記憶から設定値を推測しない" in text
         assert "必ず Read" in text
         assert "存在する場合" in text

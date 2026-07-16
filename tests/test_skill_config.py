@@ -92,6 +92,18 @@ def test_load_skill_config_postmortem_prefers_flop_analysis_override(tmp_path, m
     assert not warning_records
 
 
+def test_load_skill_config_postmortem_uses_flop_analysis_default_directory(tmp_path, monkeypatch):
+    """directory rename 後も既存 loader key が新 directory の default を読む。"""
+    channel_dir = tmp_path / "ch"
+    channel_dir.mkdir()
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_skill_config("postmortem", use_cache=False)
+
+    assert cfg["thresholds"]["ratio_vs_median"] == {"strong": 0.5, "moderate": 0.7, "mild": 0.9}
+    assert cfg["hypothesis_ratios"]["ctr_low"] == 0.7
+
+
 def test_load_skill_config_postmortem_warns_for_legacy_override(tmp_path, monkeypatch):
     """旧名だけなら読み込み、旧名と移行先を含む UserWarning を出す。"""
     channel_dir = tmp_path / "ch"

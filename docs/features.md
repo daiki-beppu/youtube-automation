@@ -84,7 +84,7 @@ YouTube Analytics と動画本体の解析。
 | /analytics-collect | YouTube Analytics データの収集・最新化 |
 | /analytics-analyze | 収集済みデータを詳細分析し戦略的改善提案を生成 |
 | /analytics-report | 過去レポートの表示・比較 |
-| /postmortem | 伸びなかった動画の原因を仮説 → 検証で切り分け |
+| /flop-analysis | 伸びなかった動画の原因を仮説 → 検証で切り分け |
 | /video-analyze | Gemini で YouTube 動画本体を直接解析（フック・BGM・シーン・サムネ整合性） |
 
 ## ベンチマーク

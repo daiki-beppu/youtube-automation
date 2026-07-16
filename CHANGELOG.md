@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `chore(test-infra)`: pytest-xdist を dev dependency に追加し、`uv run pytest -n auto` での並列実行に対応した。`tests/conftest.py` は `CHANNEL_DIR` の tmp コピーを xdist worker ごとに独立して作り直し、CI の test ジョブは `-n auto` を有効化した。ローカル既定は直列のまま（opt-in、詳細は `docs/development.md`）（#2093）。
 
+- `feat(skills)`: `/postmortem` skill command / directory を `/flop-analysis` へ改称し、feedback・workflow・機能一覧・現役戦略文書の利用者導線を新名称へ統一した。下流の `config/skills/postmortem.yaml` は `config/skills/flop-analysis.yaml` へリネームすること。旧 override は移行 fallback として警告付きで読み込むが、旧 command alias と旧 skill directory は残さない（#2023）。
+
+- `chore(extensions)`: suno-helper と distrokid-helper の lint を共通設定の Oxlint 1.73.0 へ移行し、旧 ESLint の direct dependencies と設定を削除した（#2018）。
+
+- `fix(upload)`: upload preflight が複数セパレータの `title.template` と準拠タイトルを正しく照合し、3パート以上のタイトルを誤って拒否しないようにした（#2037）。
+
+- `perf(test-infra)`: `utils/retry.py` にモジュールスコープの sleep/jitter シーム（`_DEFAULT_SLEEP` / `_DEFAULT_JITTER`）を追加し、`execute_with_retry` にも後方互換の optional `sleep` / `jitter` 引数を貫通させた。テスト側は `no_retry_backoff` fixture と `CommentReplier` への `sleep_fn` 注入で retry backoff / `delay_between_replies_sec` の実時間 sleep（計 ~33s）を排除した（#2091）。
+
 - `feat(doctor,setup)`: `yt-doctor` の api カテゴリに `reporting_job` check を追加し、OAuth 済み環境で YouTube Reporting API ジョブ未作成を検出して `uv run yt-analytics --reporting-create-job` を案内するようにした。`/setup` wizard はコマンド実行後に doctor を再診断し、ジョブ作成済みを確認する（#1974）。
 
 - `refactor(distrokid-helper)`: popup のローカル配信元・collection/disc selector を shadcn theme token に揃え、フォーム一括入力・停止操作を Button primitive へ移行した。既存の value・handler・disabled・accessible name と runner action は維持する（#2065）。
