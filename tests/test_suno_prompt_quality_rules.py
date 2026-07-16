@@ -348,9 +348,10 @@ def test_skill_md_has_5_element_order():
 
 
 def test_skill_md_has_120_char_limit():
-    """SKILL.md に 120 文字制限の記述があること."""
+    """SKILL.md に既定 120 文字と設定による上書きの記述があること."""
     text = _SKILL_MD.read_text(encoding="utf-8")
     assert "120" in text
+    assert "style_char_limit" in text
 
 
 def test_skill_md_has_banned_artists():

@@ -117,7 +117,10 @@ def check_suno_genre_line_char_limit(suno_cfg: Mapping[str, object]) -> str | No
     genre_line = str(suno_cfg.get("genre_line") or "").strip()
     if not genre_line:
         return None
-    limit = SUNO_DEFAULT_STYLE_CHAR_LIMIT
+    limit = _positive_int(
+        suno_cfg.get("style_char_limit"),
+        default=SUNO_DEFAULT_STYLE_CHAR_LIMIT,
+    )
     if len(genre_line) <= limit:
         return None
     return (
