@@ -159,6 +159,11 @@ class ChannelAnalyticsMixin:
                 logger.info("トラフィックソース分析収集中...")
                 basic_data["traffic_sources"] = self.get_traffic_source_analytics(start_date, end_date)
 
+                logger.info("YT_SEARCH 検索語詳細収集中...")
+                basic_data["traffic_sources"]["search_terms"] = self.get_traffic_source_detail(
+                    start_date, end_date, "YT_SEARCH"
+                )
+
                 logger.info("デバイス別分析収集中...")
                 basic_data["audience"] = {
                     "by_device": self.get_device_analytics(start_date, end_date),
