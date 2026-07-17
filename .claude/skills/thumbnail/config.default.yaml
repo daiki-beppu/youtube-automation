@@ -158,7 +158,19 @@ image_generation:
     # 差分プロンプトのテンプレ (single_step / diff_from_reference モードで使用)
     # プレースホルダ: {scene_description}, {specific_changes}, {background},
     #                {candle}, {cocktail_description}, {title_line1}, {title_line2}
-    diff_prompt_template: ""
+    # 既定値は codex の default_prompt_template と同じ TTP 方針
+    # （winning layout 維持 + 最小限の品質改善のみ。#2070）。
+    # 方針行の同期は tests/test_thumbnail_skill_assets.py で機械担保する。
+    # チャンネル側 config/skills/thumbnail.yaml の diff_prompt_template は
+    # deep-merge のスカラ置換でこの既定値より常に優先される。
+    # {title_line1} / {title_line2} に渡すのはサムネに焼くテキストだけ
+    # （動画タイトル全文を渡さない。codex の {title} 意味論と同じ）。
+    diff_prompt_template: |
+      TTP this reference thumbnail, then improve it into a stronger original thumbnail.
+      Keep the winning layout, typography feel, character scale, color mood, texture, and energy.
+      Make it cleaner, more readable on mobile, stronger face impact, no logos, no watermarks, no broken hands.
+      Use the title {title_line1} {title_line2}.
+      ${ip_safety_clause}
 
     # single_step モードで差し替えるカラーパレット (テーマごとの variation)
     # color_themes:
