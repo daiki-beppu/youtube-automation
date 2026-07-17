@@ -191,6 +191,14 @@ vi.mock("../lib/finished-snapshot", () => ({
   clearFinishedSnapshot: vi.fn(() => Promise.resolve()),
 }));
 
+// 完了時リロード。実物は 1 秒の実 setTimeout を残すため、FINISHED まで進めるテストでは
+// mock 必須（teardown 後に timer が発火すると location 参照が undefined で unhandled error になる）。
+// リロード契約そのものの検証は content-finished-snapshot.test.ts が担う。
+vi.mock("../lib/page-reload", () => ({
+  scheduleRunCompleteReload: vi.fn(),
+  cancelScheduledRunCompleteReload: vi.fn(),
+}));
+
 vi.mock("../../shared/api", async () => ({
   ...(await vi.importActual<typeof import("../../shared/api")>("../../shared/api")),
   postDownloaded: vi.fn(() => Promise.resolve()),
