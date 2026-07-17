@@ -45,10 +45,12 @@ _EXTENSIONS_JOB_CONTRACTS = {
     "check": {
         "working_directory": "extensions/suno-helper",
         "e2e_step": "E2E tests (Playwright)",
+        "lint_script": "cd .. && oxlint -c .oxlintrc.json suno-helper shared",
     },
     "distrokid-helper": {
         "working_directory": "extensions/distrokid-helper",
         "e2e_step": "E2E (Playwright)",
+        "lint_script": "cd .. && oxlint -c .oxlintrc.json distrokid-helper",
     },
 }
 _NIX_EXTENSIONS_INSTALL_COMMAND = "nix develop .#extensions --command pnpm install --frozen-lockfile"
@@ -179,7 +181,13 @@ def test_extensions_pull_request_trigger_keeps_path_filter() -> None:
     pull_request = _on_section(workflow).get("pull_request")
 
     assert isinstance(pull_request, dict), "pull_request トリガーが存在しない"
-    expected_paths = ["extensions/**", ".github/workflows/extensions.yml", "flake.nix", "flake.lock"]
+    expected_paths = [
+        "extensions/**",
+        ".github/workflows/extensions.yml",
+        "tests/test_actions_parallel_workflows.py",
+        "flake.nix",
+        "flake.lock",
+    ]
     assert pull_request.get("paths") == expected_paths
     assert _on_section(workflow).get("push", {}).get("paths") == expected_paths
 
@@ -215,6 +223,25 @@ def test_extensions_jobs_preserve_working_directory_install_and_e2e_contract(job
     steps = _job_steps(workflow, job_name)
     assert _top_level_step(steps, "Install dependencies").get("run") == _NIX_EXTENSIONS_INSTALL_COMMAND
     assert _top_level_step(steps, contract["e2e_step"]).get("run") == _NIX_EXTENSIONS_E2E_COMMAND
+
+
+@pytest.mark.parametrize("job_name", ["check", "distrokid-helper"])
+def test_extensions_jobs_run_oxlint_through_the_package_lint_entrypoint(job_name: str) -> None:
+    """Given Extensions CI, When lint runs, Then each package's pnpm lint entrypoint invokes Oxlint."""
+    workflow = _load_workflow(_EXTENSIONS_WORKFLOW_PATH)
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict), "jobs セクションが存在しない"
+    job = jobs.get(job_name)
+    assert isinstance(job, dict), f"{job_name} job が存在しない"
+    contract = _EXTENSIONS_JOB_CONTRACTS[job_name]
+
+    expected_steps = _SUNO_FAST_PARALLEL_STEPS if job_name == "check" else _DISTROKID_FAST_PARALLEL_STEPS
+    lint_group = _parallel_group_with_names(_job_steps(workflow, job_name), set(expected_steps))
+    lint_step = next(step for step in lint_group if step.get("name") == "Lint")
+    assert lint_step.get("run") == "nix develop .#extensions --command pnpm lint"
+
+    package = json.loads(_read_text(_REPO_ROOT / str(contract["working_directory"]) / "package.json"))
+    assert package["scripts"]["lint"] == contract["lint_script"]
 
 
 def test_extensions_pull_request_runs_one_fallow_audit_for_the_extensions_root() -> None:
