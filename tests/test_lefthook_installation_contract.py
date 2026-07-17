@@ -23,11 +23,21 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _subprocess_env(**overrides: str) -> dict[str, str]:
+    # 契約テストの前提となる環境変数はテスト自身が固定する。takt runtime が全 worker へ
+    # 注入する YOUTUBE_AUTOMATION_SKIP_LEFTHOOK が subprocess へリークすると install 実行を
+    # 期待するテストが skip 分岐に入って失敗するため、必ず除去する（issue #2101）。
+    # skip 挙動を検証するテストは overrides で明示的に設定する
+    env = {key: value for key, value in os.environ.items() if key != "YOUTUBE_AUTOMATION_SKIP_LEFTHOOK"}
+    env.update(overrides)
+    return env
+
+
 def _run_install_script(workdir: Path, path: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["bash", str(_LEFTHOOK_INSTALL_SCRIPT_PATH)],
         cwd=workdir,
-        env={**os.environ, "PATH": path},
+        env=_subprocess_env(PATH=path),
         text=True,
         capture_output=True,
         check=False,
@@ -42,7 +52,7 @@ def _run_shell_hook_install_entrypoint(workdir: Path, path: str) -> subprocess.C
             f'git rev-parse --git-dir >/dev/null 2>&1 && bash "{_LEFTHOOK_INSTALL_SCRIPT_PATH}"',
         ],
         cwd=workdir,
-        env={**os.environ, "PATH": path},
+        env=_subprocess_env(PATH=path),
         text=True,
         capture_output=True,
         check=False,
@@ -58,7 +68,7 @@ def _run_worktree_setup(workdir: Path, path: str, *args: str) -> subprocess.Comp
     return subprocess.run(
         ["bash", str(_WORKTREE_SETUP_SCRIPT_PATH), *args],
         cwd=workdir,
-        env={**os.environ, "PATH": path},
+        env=_subprocess_env(PATH=path),
         text=True,
         capture_output=True,
         check=False,
@@ -160,7 +170,7 @@ def _push_head(repo: Path, path: str, *, extra_env: dict[str, str] | None = None
     return subprocess.run(
         ["git", "push", "origin", "HEAD:main"],
         cwd=repo,
-        env={**os.environ, "PATH": path, **(extra_env or {})},
+        env=_subprocess_env(PATH=path, **(extra_env or {})),
         text=True,
         capture_output=True,
         check=False,
@@ -192,7 +202,7 @@ def test_lefthook_install_script_skips_when_skip_env_is_set(tmp_path: Path) -> N
     result = subprocess.run(
         ["bash", str(_LEFTHOOK_INSTALL_SCRIPT_PATH)],
         cwd=tmp_path,
-        env={**os.environ, "PATH": "/usr/bin:/bin", "YOUTUBE_AUTOMATION_SKIP_LEFTHOOK": "1"},
+        env=_subprocess_env(PATH="/usr/bin:/bin", YOUTUBE_AUTOMATION_SKIP_LEFTHOOK="1"),
         text=True,
         capture_output=True,
         check=False,
@@ -214,7 +224,7 @@ def test_takt_runtime_prepare_injects_sandbox_safe_environment(tmp_path: Path) -
     runtime_root = tmp_path / "runtime"
     result = subprocess.run(
         ["bash", str(_REPO_ROOT / ".takt" / "runtime-prepare.sh")],
-        env={**os.environ, "TAKT_RUNTIME_ROOT": str(runtime_root)},
+        env=_subprocess_env(TAKT_RUNTIME_ROOT=str(runtime_root)),
         text=True,
         capture_output=True,
         check=False,
@@ -337,7 +347,7 @@ def test_generated_pre_commit_hook_fails_closed_when_lefthook_path_is_stale(tmp_
     commit_result = subprocess.run(
         ["git", "commit", "-m", "test commit"],
         cwd=tmp_path,
-        env={**os.environ, "PATH": "/usr/bin:/bin"},
+        env=_subprocess_env(PATH="/usr/bin:/bin"),
         text=True,
         capture_output=True,
         check=False,
@@ -386,7 +396,7 @@ def test_generated_pre_commit_hook_uses_path_fallback_when_installed_path_is_sta
     commit_result = subprocess.run(
         ["git", "commit", "--allow-empty", "-m", "fallback commit"],
         cwd=tmp_path,
-        env={**os.environ, "PATH": f"{fallback_bin_dir}:/usr/bin:/bin"},
+        env=_subprocess_env(PATH=f"{fallback_bin_dir}:/usr/bin:/bin"),
         text=True,
         capture_output=True,
         check=False,
@@ -415,7 +425,7 @@ def test_generated_pre_commit_hook_honors_lefthook_zero_when_lefthook_path_is_st
     commit_result = subprocess.run(
         ["git", "commit", "-m", "skip hooks"],
         cwd=tmp_path,
-        env={**os.environ, "PATH": "/usr/bin:/bin", "LEFTHOOK": "0"},
+        env=_subprocess_env(PATH="/usr/bin:/bin", LEFTHOOK="0"),
         text=True,
         capture_output=True,
         check=False,
@@ -443,7 +453,7 @@ def test_generated_pre_commit_hook_fails_closed_in_linked_worktree_when_lefthook
     commit_result = subprocess.run(
         ["git", "commit", "-m", "test commit"],
         cwd=worktree,
-        env={**os.environ, "PATH": "/usr/bin:/bin"},
+        env=_subprocess_env(PATH="/usr/bin:/bin"),
         text=True,
         capture_output=True,
         check=False,
