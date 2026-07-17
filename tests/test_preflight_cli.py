@@ -17,13 +17,17 @@ from youtube_automation.cli.preflight import (
     KEY_HOOK_POLICY,
     KEY_LOCK_DRIFT,
     KEY_NIX_EVAL,
+    KEY_RUNTIME_PATH,
+    RUNTIME_PATH_ENV_VARS,
     SKIP_LEFTHOOK_ENV,
+    TAKT_RUNTIME_ROOT_ENV,
     CheckResult,
     check_checkout_kind,
     check_git_commit_identity,
     check_hook_policy,
     check_lock_drift,
     check_nix_eval,
+    check_runtime_path,
     format_report,
     run_checks,
 )
@@ -311,6 +315,129 @@ exit 1
     assert not result.ok
 
 
+# --- runtime_path ---
+
+
+def _runtime_env(runtime_root: Path) -> dict[str, str]:
+    """runtime-prepare.sh と同じ規則で runtime path 変数一式を組み立てる。"""
+    paths = {
+        "TMPDIR": runtime_root / "tmp",
+        "XDG_CACHE_HOME": runtime_root / "cache",
+        "XDG_CONFIG_HOME": runtime_root / "config",
+        "XDG_DATA_HOME": runtime_root / "data",
+        "XDG_STATE_HOME": runtime_root / "state",
+        "UV_CACHE_DIR": runtime_root / "cache" / "uv",
+    }
+    for path in paths.values():
+        path.mkdir(parents=True, exist_ok=True)
+    env = {var: str(path) for var, path in paths.items()}
+    env[TAKT_RUNTIME_ROOT_ENV] = str(runtime_root)
+    return env
+
+
+def test_runtime_path_is_skipped_outside_takt_runtime(tmp_path: Path) -> None:
+    env = _isolated_env(tmp_path)
+    repo = _init_repo(tmp_path, env)
+
+    result = check_runtime_path(repo, env)
+
+    assert result.key == KEY_RUNTIME_PATH
+    assert result.ok
+    assert "検査対象外" in result.detail
+
+
+def test_runtime_path_passes_when_all_vars_are_under_current_root(tmp_path: Path) -> None:
+    env = _isolated_env(tmp_path)
+    repo = _init_repo(tmp_path, env)
+    env.update(_runtime_env(tmp_path / "current" / ".takt" / ".runtime"))
+
+    result = check_runtime_path(repo, env)
+
+    assert result.ok
+
+
+def test_runtime_path_fails_on_sibling_worktree_value_without_leaking_it(tmp_path: Path) -> None:
+    env = _isolated_env(tmp_path)
+    repo = _init_repo(tmp_path, env)
+    env.update(_runtime_env(tmp_path / "current" / ".takt" / ".runtime"))
+    sibling_uv_cache = tmp_path / "sibling-secret-worktree" / ".takt" / ".runtime" / "cache" / "uv"
+    sibling_uv_cache.mkdir(parents=True)
+    env["UV_CACHE_DIR"] = str(sibling_uv_cache)
+
+    result = check_runtime_path(repo, env)
+
+    assert result.key == KEY_RUNTIME_PATH
+    assert not result.ok
+    assert "UV_CACHE_DIR" in result.detail
+    # path の実値（sibling worktree の場所）を detail / report へ漏らさない
+    report = format_report([result])
+    assert "sibling-secret-worktree" not in report
+
+
+def test_runtime_path_fails_when_var_is_missing(tmp_path: Path) -> None:
+    env = _isolated_env(tmp_path)
+    repo = _init_repo(tmp_path, env)
+    env.update(_runtime_env(tmp_path / "current" / ".takt" / ".runtime"))
+    del env["TMPDIR"]
+
+    result = check_runtime_path(repo, env)
+
+    assert not result.ok
+    assert "TMPDIR" in result.detail
+
+
+def test_runtime_path_fails_on_relative_value(tmp_path: Path) -> None:
+    env = _isolated_env(tmp_path)
+    repo = _init_repo(tmp_path, env)
+    env.update(_runtime_env(tmp_path / "current" / ".takt" / ".runtime"))
+    env["XDG_STATE_HOME"] = ".takt/.runtime/state"
+
+    result = check_runtime_path(repo, env)
+
+    assert not result.ok
+    assert "XDG_STATE_HOME" in result.detail
+
+
+def test_runtime_path_fails_when_directory_is_missing(tmp_path: Path) -> None:
+    env = _isolated_env(tmp_path)
+    repo = _init_repo(tmp_path, env)
+    runtime_root = tmp_path / "current" / ".takt" / ".runtime"
+    env.update(_runtime_env(runtime_root))
+    env["XDG_CACHE_HOME"] = str(runtime_root / "not-created")
+
+    result = check_runtime_path(repo, env)
+
+    assert not result.ok
+    assert "XDG_CACHE_HOME" in result.detail
+
+
+def test_runtime_path_fails_when_directory_is_not_writable(tmp_path: Path) -> None:
+    env = _isolated_env(tmp_path)
+    repo = _init_repo(tmp_path, env)
+    runtime_root = tmp_path / "current" / ".takt" / ".runtime"
+    env.update(_runtime_env(runtime_root))
+    read_only_tmp = runtime_root / "tmp"
+    read_only_tmp.chmod(0o500)
+    try:
+        result = check_runtime_path(repo, env)
+    finally:
+        read_only_tmp.chmod(0o700)
+
+    assert not result.ok
+    assert "TMPDIR" in result.detail
+
+
+def test_runtime_path_covers_all_prepared_vars() -> None:
+    assert RUNTIME_PATH_ENV_VARS == (
+        "TMPDIR",
+        "XDG_CACHE_HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_STATE_HOME",
+        "UV_CACHE_DIR",
+    )
+
+
 # --- run_checks / read-only 保証 ---
 
 
@@ -346,6 +473,7 @@ def test_run_checks_reports_all_classification_keys(tmp_path: Path) -> None:
 
     assert [r.key for r in results] == [
         KEY_CHECKOUT_KIND,
+        KEY_RUNTIME_PATH,
         KEY_NIX_EVAL,
         KEY_LOCK_DRIFT,
         KEY_GIT_COMMIT_IDENTITY,
