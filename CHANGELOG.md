@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(analytics)`: `yt-thumbnail-correlate` に有意性検定（両側 p 値）・Benjamini-Hochberg 多重比較補正・`significant` 判定を追加し、最小サンプル数の既定を 10 に引き上げた（n<10 は「サンプル不足で判定不能」を明示）。有意でない相関には断定的な解釈文を出さない。`--metric` 未指定で CTR が欠測のチャンネルでは views に自動フォールバックし、出力 JSON の `metric_fallback` に理由を残す。`/analytics-analyze` に `significant: false` の相関を方針根拠に使わない注記を追加した（#1801）。
+
 - `feat(thumbnail)`: Gemini API 経路の既定 prompt を Codex と同じ TTP 方針（winning layout 維持・最小限の品質改善のみ）へ揃えた。`config.default.yaml` の `image_generation.gemini.diff_prompt_template` 既定値を codex 既定テンプレートと方針行を同期した TTP テンプレート（`{title_line1}` / `{title_line2}` + `${ip_safety_clause}`）にし、チャンネル側 `diff_prompt_template` override の優先（deep-merge スカラ置換）と方針同期をテストで機械担保した。SKILL.md / prompting.md に provider 差のない TTP 方針を明記した（#2070）。
 
 - `feat(thumbnail)`: gemini_cli 経路が #2070 と同じ TTP 方針（codex と同期した既定 `diff_prompt_template`）を provider 切替でも損なわないことを contract test で機械担保した。CLI ラッパー `_build_prompt` はプロンプトをそのまま透過し方針文言を独自に持たないことを検証し、SKILL.md に gemini_cli が同じ `diff_prompt_template` と構築手順を共有する旨を明記した。model / timeout / CLI protocol は変更なし（#2071）。
