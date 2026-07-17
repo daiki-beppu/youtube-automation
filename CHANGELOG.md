@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(analytics)`: 成長 KPI 定点ビュー CLI `yt-kpi-dashboard` を追加した。`data/analytics_data_*.json` 全スナップショットを日付後勝ちで横断マージし、レバー別 KPI（views / インプレッション / CTR / 平均視聴維持率 / 登録者純増）の週次推移を前週比付きの構造化 JSON と Markdown テーブルで出力する（`--save` で `reports/kpi_weekly_YYYYMMDD.{json,md}` 保存）。Reporting API の保持期間（60 日）を超えた過去の Imp / CTR も `reporting_api.impressions_summary.per_day` から復元して時系列に含め、欠測週は補間せず欠測として明示する。スナップショット 1 件以下ではエラーではなく複数スナップショットが必要な旨の案内を出す。`/analytics-analyze` の CLI 一覧にも定点ビュー参照の導線を追加した（#1819）。
 
+- `chore(extensions)`: suno-helper / distrokid-helper の TypeScript を 7.0.2 に固定し、pnpm 11.12.0（Nix extensions shell 契約）で両 lockfile を正規再生成した。TS 7 で削除された `baseUrl` を両 tsconfig から除去し（`paths` は相対形式のまま）、suno-helper は `types: ["chrome"]` で chrome グローバル型を明示 include。TypeScript 7.0.2 固定・lockfile 整合・削除済みオプション不使用は契約テスト（tests/test_extension_typescript_contract.py）で機械担保する（#2014）。
+
 - `fix(collection-serve)`: `POST /collections/<id>/downloaded` が期待数未満の部分 ZIP（Suno が一部 entry で 1 clip しか生成しないケース）を 500 で拒否せず、配置済みファイルを受理して warning 付き 200 を返すようにした。workflow-state には `planning.music.actual_file_count` / `missing_file_count` を機械可読に記録し、`assets.music_downloaded=true` と collections index の `status=downloaded` へ貫通させる。suno-helper は warning を progress 通知に表示する。0 件配置・壊れた ZIP の 500 契約は維持（#1913）。
 
 - `feat(analytics)`: `yt-thumbnail-correlate` に有意性検定（両側 p 値）・Benjamini-Hochberg 多重比較補正・`significant` 判定を追加し、最小サンプル数の既定を 10 に引き上げた（n<10 は「サンプル不足で判定不能」を明示）。有意でない相関には断定的な解釈文を出さない。`--metric` 未指定で CTR が欠測のチャンネルでは views に自動フォールバックし、出力 JSON の `metric_fallback` に理由を残す。`/analytics-analyze` に `significant: false` の相関を方針根拠に使わない注記を追加した（#1801）。
