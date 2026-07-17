@@ -60,6 +60,7 @@ yt_pinned_comment = _make_entrypoint("youtube_automation.scripts.pinned_comment"
 yt_playlist_manager = _make_entrypoint("youtube_automation.scripts.playlist_manager")
 yt_playlist_status = _make_entrypoint("youtube_automation.scripts.playlist_status")
 yt_populate_scene_phrases = _make_entrypoint("youtube_automation.scripts.populate_scene_phrases")
+yt_preflight = _make_entrypoint("youtube_automation.cli.preflight")
 yt_stock_archive = _make_entrypoint("youtube_automation.scripts.stock_archive")
 yt_stock_list = _make_entrypoint("youtube_automation.scripts.stock_list")
 yt_stock_preview = _make_entrypoint("youtube_automation.scripts.stock_preview")
