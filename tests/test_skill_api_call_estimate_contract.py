@@ -83,6 +83,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-generate-master": "ローカル ffmpeg クロスフェード結合のみ",
     "yt-generate-suno": "ローカルの Suno プロンプト生成のみ",
     "yt-init-collection": "ローカルの collection 雛形生成のみ",
+    "yt-kpi-dashboard": "収集済みデータのローカル KPI 集計のみ",
     "yt-launch-curve": "収集済み analytics_data_*.json のローカル分析のみ",
     "yt-populate-scene-phrases": "翻訳 JSON は外部エージェント生成を受け取るのみ",
     "yt-preflight": "ローカルの事前チェックのみ",
