@@ -160,6 +160,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(loop-video)`: Ctrl+C 後の Veo operation resume state に入力画像の SHA-256 を保存し、再実行時に指定モデルまたは入力画像内容が state と異なる場合は旧 operation を破棄して指定どおり新規生成するようにした（#1746）。旧形式 state は安全側で破棄する。
 - `fix(analytics)`: `yt-channel-trend` の z-score 基準から当日を除外し、min_periods 未達を `null` として明示するよう修正した。トレンド判定は直近 28 日とその前の 28 日の平均を比較し、週次前週比は完全な 7 日間の週だけで計算する（#1803）。
 
+- `fix(suno-helper)`: Queue mode の生成完了待ちが stall タイムアウトした際、ラン全体を ERROR で中断せず graceful degradation するようにした。`waitForSubmittedClipsComplete` は throw の代わりに `{ timedOut, stalledClipIds }` を返し、停滞 clip を entry 単位で失敗記録（ENTRY_FAILED）したうえで、完了済み clip の duration yield guard・playlist 追加・ダウンロードを続行する。stalled entry は resume state の failedIndices として保持され「失敗分のみ再実行」導線で回収できる。全 entry が stall した場合は従来の失敗保留（playlist 追加を再実行後に委ねる）とし、serial mode・retryPlaylist・resume 由来 clip の stall は従来どおり中断する（#1994）。
+
 ## [5.5.17] - 2026-07-10
 
 ### Added
