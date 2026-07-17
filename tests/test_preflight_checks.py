@@ -7,6 +7,12 @@ from typing import ClassVar
 
 import pytest
 
+from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.image_provider.composition import (
+    find_forbidden_keywords,
+    resolve_forbid_keywords,
+    validate_forbid_keywords,
+)
 from youtube_automation.utils.preflight_checks import (
     check_chapter_count,
     check_chapter_variation_suffix,
@@ -923,3 +929,56 @@ class TestCheckTitleDuplicateWarnings:
     def test_short_suffix_overlap_is_ignored(self) -> None:
         warnings = check_title_duplicate_warnings("Rain Jazz BGM", ["Cafe Jazz BGM"], {}, min_suffix_chars=16)
         assert warnings == []
+
+
+class TestForbidKeywords:
+    """forbid_keywords の生成前検査 (#1664)。未設定は no-op、ヒット時は ConfigError."""
+
+    def test_unset_returns_empty_and_noop(self) -> None:
+        """forbid_keywords 未設定の既存チャンネル config は従来どおり素通しする."""
+        cfg: dict = {"image_generation": {"gemini": {"model": "gemini-x"}}}
+        assert resolve_forbid_keywords(cfg) == []
+        validate_forbid_keywords("a sunglassed drummer on stage", cfg)
+
+    def test_empty_list_is_noop(self) -> None:
+        cfg: dict = {"image_generation": {"gemini": {"forbid_keywords": []}}}
+        assert resolve_forbid_keywords(cfg) == []
+        validate_forbid_keywords("a sunglassed drummer on stage", cfg)
+
+    def test_missing_sections_are_noop(self) -> None:
+        assert resolve_forbid_keywords({}) == []
+        assert resolve_forbid_keywords({"image_generation": "broken"}) == []
+        assert resolve_forbid_keywords({"image_generation": {"gemini": None}}) == []
+
+    def test_non_list_value_raises_config_error(self) -> None:
+        cfg: dict = {"image_generation": {"gemini": {"forbid_keywords": "sunglasses"}}}
+        with pytest.raises(ConfigError, match="list"):
+            resolve_forbid_keywords(cfg)
+
+    def test_non_string_item_raises_config_error(self) -> None:
+        cfg: dict = {"image_generation": {"gemini": {"forbid_keywords": ["sunglasses", 42]}}}
+        with pytest.raises(ConfigError, match="文字列"):
+            resolve_forbid_keywords(cfg)
+
+    def test_blank_items_are_dropped(self) -> None:
+        cfg: dict = {"image_generation": {"gemini": {"forbid_keywords": ["  ", "sunglasses  "]}}}
+        assert resolve_forbid_keywords(cfg) == ["sunglasses"]
+
+    def test_find_matches_case_insensitive_substring(self) -> None:
+        hits = find_forbidden_keywords(
+            "A Sunglassed drummer with SUNGLASSES",
+            ["sunglasses", "drummer", "trumpet"],
+        )
+        assert hits == ["sunglasses", "drummer"]
+
+    def test_find_without_match_returns_empty(self) -> None:
+        assert find_forbidden_keywords("cozy cafe morning coffee", ["sunglasses"]) == []
+
+    def test_validate_hit_raises_with_keyword_listed(self) -> None:
+        cfg: dict = {"image_generation": {"gemini": {"forbid_keywords": ["sunglasses"]}}}
+        with pytest.raises(ConfigError, match="sunglasses"):
+            validate_forbid_keywords("a drummer wearing sunglasses at night", cfg)
+
+    def test_validate_pass_without_hit(self) -> None:
+        cfg: dict = {"image_generation": {"gemini": {"forbid_keywords": ["sunglasses"]}}}
+        validate_forbid_keywords("cozy cafe morning coffee", cfg)

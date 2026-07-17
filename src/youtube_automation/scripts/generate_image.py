@@ -34,6 +34,7 @@ from youtube_automation.utils.image_provider.composition import (
     resolve_cost_per_image,
     resolve_reference_paths,
     select_reference,
+    validate_forbid_keywords,
     validate_single_step_references,
     validate_single_step_request_references,
 )
@@ -371,6 +372,14 @@ def main():
         prompt = expand_thumbnail_prompt_clauses(prompt, skill_cfg)
     except ConfigError as e:
         print(f"[ERROR] {e}")
+        sys.exit(1)
+
+    # NG ワード事前検査 (#1664): 最終プロンプト確定直後・生成 API 呼び出し前に実施。
+    # ヒットしたキーワードは要件どおり標準エラーへ列挙する。
+    try:
+        validate_forbid_keywords(prompt, skill_cfg)
+    except ConfigError as e:
+        print(f"[ERROR] {e}", file=sys.stderr)
         sys.exit(1)
 
     output_path = Path(args.output)
