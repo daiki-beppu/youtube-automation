@@ -98,6 +98,16 @@ export interface SubmittedClipCompletionOptions {
   now?: () => number;
 }
 
+export interface SubmittedClipCompletionResult {
+  /** stall タイムアウトで待機を打ち切ったか (#1994)。true のとき stalledClipIds に停滞 clip を保持する。 */
+  timedOut: boolean;
+  submittedIds: string[];
+  /** 非終端 status のまま停滞した clip ID。timedOut=false のときは常に空。 */
+  stalledClipIds: string[];
+  /** timedOut 時のユーザー向けメッセージ。 */
+  message?: string;
+}
+
 export interface QueueEntriesYieldOptions {
   entries: PromptEntry[];
   order: number[];
@@ -572,7 +582,7 @@ export async function submitQueueEntries(
 
 export async function waitForSubmittedClipsComplete(
   options: SubmittedClipCompletionOptions
-): Promise<string[]> {
+): Promise<SubmittedClipCompletionResult> {
   const now = options.now ?? Date.now;
   let lastProgressAt = now();
   let deadline = lastProgressAt + INFLIGHT_STALL_TIMEOUT_MS;
@@ -593,7 +603,7 @@ export async function waitForSubmittedClipsComplete(
       observedSubmittedCount >= options.expectedClipCount &&
       pendingSubmittedIds.length === 0
     ) {
-      return submittedIds;
+      return { timedOut: false, submittedIds, stalledClipIds: [] };
     }
     if (pendingSubmittedIds.length === 0) {
       throw new Error(
@@ -615,12 +625,48 @@ export async function waitForSubmittedClipsComplete(
     }
     lastPendingCount = pendingSubmittedIds.length;
     if (currentNow >= deadline) {
-      throw new Error(
-        `生成完了待ちがタイムアウトしました: submitted=${observedSubmittedCount}/${options.expectedClipCount}, pending=${pendingSubmittedIds.length}, 最後の進捗からの経過時間=${currentNow - lastProgressAt}ms`
-      );
+      // stall タイムアウトは throw せず結果で返す (#1994)。呼び出し元が完了済み clip での
+      // graceful degradation（playlist 追加 / download の続行）を判断できるようにする。
+      return {
+        timedOut: true,
+        submittedIds,
+        stalledClipIds: pendingSubmittedIds,
+        message: `生成完了待ちがタイムアウトしました: submitted=${observedSubmittedCount}/${options.expectedClipCount}, pending=${pendingSubmittedIds.length}, 最後の進捗からの経過時間=${currentNow - lastProgressAt}ms`,
+      };
     }
     await options.requestFeedPoll(pendingSubmittedIds);
     await options.abortableSleep(POLL_INTERVAL_MS, options.isAborted);
   }
-  return options.getSubmittedIds();
+  return {
+    timedOut: false,
+    submittedIds: options.getSubmittedIds(),
+    stalledClipIds: [],
+  };
+}
+
+/** stall した clip ID を queue mode の entry index へ対応付ける (#1994)。
+ * clipIdsByEntry に載らない stalled ID（resume 由来の previousSubmittedClipIds 等）は
+ * unmappedStalledClipIds に分離し、呼び出し元が graceful degradation の可否を判定する。 */
+export function resolveStalledQueueEntries(
+  stalledClipIds: string[],
+  clipIdsByEntry: Map<number, string[]>
+): { stalledEntryIndices: number[]; unmappedStalledClipIds: string[] } {
+  const stalledSet = new Set(stalledClipIds);
+  const stalledEntryIndices: number[] = [];
+  const mappedIds = new Set<string>();
+  for (const [index, clipIds] of clipIdsByEntry) {
+    const stalledInEntry = clipIds.filter((id) => stalledSet.has(id));
+    if (stalledInEntry.length === 0) {
+      continue;
+    }
+    stalledEntryIndices.push(index);
+    for (const id of stalledInEntry) {
+      mappedIds.add(id);
+    }
+  }
+  stalledEntryIndices.sort((a, b) => a - b);
+  const unmappedStalledClipIds = stalledClipIds.filter(
+    (id) => !mappedIds.has(id)
+  );
+  return { stalledEntryIndices, unmappedStalledClipIds };
 }

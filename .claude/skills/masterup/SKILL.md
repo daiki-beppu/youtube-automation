@@ -136,7 +136,7 @@ Lyria で音源を生成するチャンネルでは `/lyria` が `01-master/mast
 2. アクティブコレクションの `02-Individual-music/` に配置し、ファイル名を連番 + タイトルで揃える（例: `01-pattern-a-arrival.mp3`）
 3. `uv run yt-generate-master`（または `--target-duration` / `--shuffle` などのオプション付き）を **直接実行**
 4. 必要に応じて `uv run yt-finalize-master`（雨音レイヤー）→ Step 6 の `rsync` 同期を **手動で順番に実行**
-5. `workflow-state.json` の `assets.raw_master`（マスターファイル名）/ `updated_at` を手動更新（または `/masterup` の「完了時の更新」を別途呼ぶ）
+5. `uv run yt-raw-master-check <コレクションディレクトリ> --apply` で `workflow-state.json` の `assets.raw_master` / `updated_at` を更新する（手動編集は不要。更新し忘れても次回の `/masterup` / `/wf-status` 起動時に Step 1.4 の突合チェックが不整合を検知・警告する）
 
 このフォールバックは **`/masterup` が壊れていても master.mp3 を生成できる最小経路**であり、Suno 公式 API 公開までの暫定運用として機能する。
 
@@ -174,6 +174,20 @@ $ARGUMENTS
 2. `assets.music_prompts = true` かつ `assets.raw_master = null` のコレクションを対象
 3. 複数ある場合はユーザーに選択を促す
 
+#### Step 1.4: raw_master 実ファイル突合チェック（不整合検知 / #1668）
+
+対象コレクションを確定したら、生成に進む前に `assets.raw_master` と `01-master/` の実ファイルを突合する。フォールバック運用（`yt-generate-master` 直接実行）では `01-master/master.mp3` が生成済みでも `assets.raw_master` が `null` のまま残ることがあり、放置すると後続スキルが古い状態を前提に進行する:
+
+```bash
+uv run yt-raw-master-check <コレクションディレクトリ>
+```
+
+- **exit 0（整合）**: そのまま Step 1.5 へ進む
+- **exit 2（不整合検知）**: CLI が出力した警告（例:「assets.raw_master が実ファイルと一致しません。更新しますか」）をユーザーに提示し、AskUserQuestion で更新可否を確認する
+  - **承認** → `uv run yt-raw-master-check <dir> --apply` を実行し、`assets.raw_master` / `updated_at` が更新されたことを確認してから Step 1.5 へ進む。raw master が既に揃っている場合は Step 2〜5 の再生成は不要（Step 6 / 完了時の更新のみ確認）
+  - **非承認** → `workflow-state.json` は変更しない。**警告を無視して silent に続行するのは禁止** — 不整合が残ったままである旨を明示してから、ユーザーの指示（再生成 or 中断）を仰ぐ。次回起動時も同じ警告が再表示される
+- **exit 1（エラー）**: `workflow-state.json` の破損等。内容を報告して停止する
+
 ### Step 1.5: DL 完全性チェック（部分ダウンロード検知）
 
 `02-Individual-music/` の実ファイル数を期待曲数と突合する。**`assets.music_downloaded` が `true` でも本チェックはスキップしない**（フラグと実ファイル数が食い違う部分ダウンロード — 例: 10 曲中 5 曲失敗 — を見逃さないため）。
@@ -210,7 +224,7 @@ print(f'pattern_count={pattern_count} expected={expected} actual={actual}')
 
 > **Step 5 前の共通ゲート**: この突合は Step 2 fallback 専用ではない。`02-Individual-music/` に音源があり Step 2-3 をスキップする primary path でも、Step 5 に進む前に必ず完了させる。
 
-primary path では `02-Individual-music/` のローカルファイル名を第一手段とし、下記 CLI を実行する。`--music-dir` の相対パスは `<collection-path>` 基準で解決する。外部の title list 解決や対話確認は行わない。
+primary path では `02-Individual-music/` のローカルファイル名を第一手段とし、下記 CLI を実行する。`--music-dir` の相対パスは `<collection-path>` 基準で解決する。外部の title list 解決や対話確認は行わない。非正準形ファイル（Suno UI 手動 DL 由来の `Title.mp3` / `Title (1).mp3` / `Title_1.mp3` 等）は CLI が suno-prompts.json と照合して正準形 `NN{a|b}-Title.ext` へ自動リネームしてから突合する。照合できないファイルはリネームされず unknown として報告される。**playlist URL の記録有無に依らず本ゲートは完走できる** — 「Suno playlist URL がないため suno-prompts.json との突合ができません」型の停止は誤り。title list 提示 / 混入込み続行の 2 択分岐は `02-Individual-music/` に音声ファイルが 1 件も無い場合の最終 fallback に限る。
 
 ```bash
 # primary path: 02-Individual-music/ の <2桁以上のentry index>{a|b}-<title>.<ext> を直接突合

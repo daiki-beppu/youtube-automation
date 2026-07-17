@@ -22,6 +22,17 @@ YouTube Data API v3 の `commentThreads.list` / `comments.insert` を使い、
 
 Phase 6 の apply が完了し、`実返信` が期待件数・`errors` が 0 である時点で完了。dry-run のみの依頼では、Phase 5 の確認ポイント提示までで完了。承認ゲートでキャンセルされた場合は apply を実行せず、dry-run 結果の報告で終了する。
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| channels.list（1 unit） | 1 | — |
+| playlistItems.list / videos.list（各 1 unit） | 各 ceil(全動画数 / 50) | チャンネルの動画数 |
+| commentThreads.list（1 unit） | 対象動画ごとに ceil(per-video limit / 100) | 対象動画数・動画あたり取得上限 |
+| comments.insert（50 units / 返信、`--apply` のみ） | 返信件数 | フィルタ通過コメント数 |
+
+- 上限 / 承認: `--dry-run` / `--apply` の明示指定が必須で、dry-run は書き込み API を一切呼ばない。`--limit` と `max_replies_per_run` で件数上限を制御し、履歴 JSON が二重返信を防止する（返信文生成は Claude subagent で課金 API なし）。
+
 ## 実行フロー
 
 ### Phase 1: 基本フィルタ / provider の確認

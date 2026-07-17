@@ -2267,8 +2267,8 @@ describe("readSelectedClipIds: 手動選択済み clip ID の採用", () => {
       scrollEvents += 1;
     });
 
-    // expectedClipCount 無し（ガード用途）: 既定は 3 pass × (top reset + step) = 6 dispatch
-    // + 走査後の restoreClipListHead で 1 dispatch = 計 7
+    // expectedClipCount 無し（ガード用途）: 既定は 3 pass × 1 dispatch（#2043 で top reset を
+    // pos=0 ステップに統合）+ 走査後の restoreClipListHead で 1 dispatch = 計 4
     const defaultRun = readSelectedClipIds({
       isAborted: () => false,
       renderWaitMs: 10,
@@ -2286,8 +2286,8 @@ describe("readSelectedClipIds: 手動選択済み clip ID の採用", () => {
     await vi.runAllTimersAsync();
     await expect(limitedRun).resolves.toEqual([idA]);
 
-    expect(defaultEvents).toBe(7);
-    expect(scrollEvents).toBe(3); // 1 pass × 2 + restore 1
+    expect(defaultEvents).toBe(4);
+    expect(scrollEvents).toBe(2); // 1 pass × 1 + restore 1
   });
 
   it("Given stopAboveCount 超過 When readSelectedClipIds Then 走査を即打ち切って超過分を返す (#1411)", async () => {
@@ -2337,5 +2337,245 @@ describe("readSelectedClipIds: 手動選択済み clip ID の採用", () => {
     // → 追加スクロールせず打ち切り（+ restoreClipListHead の 1 dispatch のみ）
     expect(result).toEqual(ids);
     expect(scrollEvents).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 新 Create UI (2026-07, #2043): clip-row コンテナ復活 + 仮想ウィンドウ空シェル
+//
+// 実機 DOM capture（匿名化済み、issue #2043）で確認した構造:
+//   .clip-browser-list-scroller > [role="rowgroup"] > ... >
+//     div.clip-row[data-testid="clip-row"][role="group"][aria-label=<曲名>][data-clip-status="complete"]
+//       > div (content)
+//         > .multi-select-button > div.not-hover-only + button.hover-only[aria-label="Select clip"]（opacity:0）
+//         > div.clip-image-container[role="button"][aria-label="Play <曲名>"] > img[src*="cdn2.suno.ai/image_<UUID>"]
+//         > div.clip-title-wrapper > a[href="/song/<UUID>"]（text=<曲名>）
+//   仮想ウィンドウ外の row は `<div class="clip-row" aria-label="Untitled">`（子要素なしの空シェル）。
+//   スクロール中にページネーションで scrollHeight が成長する（観測: 2358 → 4578 → 6798px）。
+// ---------------------------------------------------------------------------
+
+/** 新 Create UI の仮想ウィンドウ外 row（空シェル）。ボタンも ID ソースも持たない。 */
+function addCreateUiShellRow(): HTMLElement {
+  const list = getOrCreateClipList();
+  const shell = document.createElement("div");
+  shell.className = "clip-row css-1camti e151r5gb0";
+  shell.setAttribute("role", "group");
+  shell.setAttribute("aria-label", "Untitled");
+  list.appendChild(shell);
+  markBbox(shell, 200, 110);
+  return shell;
+}
+
+/** 新 Create UI の描画済み clip row（実機 capture を忠実に再現した最小 fixture）。 */
+function addCreateUiClipRow(
+  clipId: string,
+  title: string,
+  opts: { selectLabel?: string } = {}
+): { row: HTMLElement; btn: HTMLButtonElement } {
+  const { selectLabel = "Select clip" } = opts;
+  const list = getOrCreateClipList();
+
+  const row = document.createElement("div");
+  row.className = "clip-row css-1camti e151r5gb0";
+  row.setAttribute("data-testid", "clip-row");
+  row.setAttribute("role", "group");
+  row.setAttribute("aria-label", title);
+  row.setAttribute("data-clip-status", "complete");
+
+  const content = document.createElement("div");
+  content.className = "css-8yp4m0 e151r5gb5";
+
+  const multiSelect = document.createElement("div");
+  multiSelect.className = "multi-select-button css-jl7z3p e151r5gb7";
+  const notHoverOnly = document.createElement("div");
+  notHoverOnly.className = "not-hover-only h-4 w-4";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.setAttribute("aria-label", selectLabel);
+  btn.className = "hxc-btn-base hxc-btn-icon-only hover-only";
+  btn.style.opacity = "0"; // hover 前は不可視（strict isVisible の対象は row 側なので検出に影響しない）
+  multiSelect.append(notHoverOnly, btn);
+
+  const imageContainer = document.createElement("div");
+  imageContainer.className = "clip-image-container cursor-pointer";
+  imageContainer.setAttribute("role", "button");
+  imageContainer.setAttribute("aria-label", `Play ${title}`);
+  const img = document.createElement("img");
+  img.src = `https://cdn2.suno.ai/image_${clipId}.jpeg?width=100`;
+  img.dataset.src = `https://cdn2.suno.ai/image_large_${clipId}.jpeg`;
+  imageContainer.appendChild(img);
+
+  const titleWrapper = document.createElement("div");
+  titleWrapper.className = "clip-title-wrapper";
+  const songLink = document.createElement("a");
+  songLink.href = `/song/${clipId}`;
+  songLink.textContent = title;
+  titleWrapper.appendChild(songLink);
+
+  content.append(multiSelect, imageContainer, titleWrapper);
+  row.appendChild(content);
+  list.appendChild(row);
+  markBbox(row, 200, 110);
+  markBbox(btn, 28, 28);
+  return { row, btn };
+}
+
+describe("新 Create UI (#2043): clip-row 検出・タイトル抽出・仮想ウィンドウ走査", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function stubScrollerMetrics(
+    scroller: HTMLElement,
+    opts: { scrollHeight?: () => number; clientHeight?: number } = {}
+  ): void {
+    const { scrollHeight = () => 200, clientHeight = 200 } = opts;
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: scrollHeight,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => clientHeight,
+    });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
+  }
+
+  it("Given 新 UI row When collectClipRowTitle Then div 再生ボタンの aria-label から曲名を抽出する", () => {
+    const { row } = addCreateUiClipRow(
+      "aaaaaaaa-1111-2222-3333-444444444444",
+      "浴衣の糸泡"
+    );
+
+    expect(collectClipRowTitle(row)).toBe("浴衣の糸泡");
+  });
+
+  it("Given 再生ボタンの無い新 UI row When collectClipRowTitle Then row 自身の aria-label へフォールバックする", () => {
+    const { row } = addCreateUiClipRow(
+      "bbbbbbbb-1111-2222-3333-444444444444",
+      "コンビニ白灯"
+    );
+    row.querySelector(".clip-image-container")?.remove();
+
+    expect(collectClipRowTitle(row)).toBe("コンビニ白灯");
+  });
+
+  it("Given 新 UI row 2 件 + 空シェル When scrollAndMultiSelectByIds Then シェルを無視して per-clip row を全件選択する", async () => {
+    const idA = "cccccccc-1111-2222-3333-444444444444";
+    const idB = "dddddddd-1111-2222-3333-444444444444";
+    addCreateUiShellRow();
+    const a = addCreateUiClipRow(idA, "浴衣夏祭り");
+    const b = addCreateUiClipRow(idB, "今笑う君");
+    addCreateUiShellRow();
+    selectOnClick(a.btn);
+    selectOnClick(b.btn);
+    const scroller = getOrCreateScroller();
+    stubScrollerMetrics(scroller);
+
+    const pending = scrollAndMultiSelectByIds([idA, idB], {
+      isAborted: () => false,
+      renderWaitMs: 10,
+      hydrationWaitMs: 100,
+    });
+    await vi.runAllTimersAsync();
+    const count = await pending;
+
+    expect(count).toBe(2);
+    // per-clip 粒度: 両 row の Select ボタンがそれぞれ Deselect へ遷移している
+    expect(a.btn.getAttribute("aria-label")).toBe("Deselect clip");
+    expect(b.btn.getAttribute("aria-label")).toBe("Deselect clip");
+  });
+
+  it("Given 初期ロード直後の全シェル状態 When scrollAndMultiSelectByIds Then hydration を待って選択する", async () => {
+    const idA = "eeeeeeee-1111-2222-3333-444444444444";
+    addCreateUiShellRow();
+    addCreateUiShellRow();
+    const scroller = getOrCreateScroller();
+    stubScrollerMetrics(scroller);
+    // 実 DOM 観測: 初期ロード直後は全 row が空シェルで、数百 ms〜数秒後に描画される
+    setTimeout(() => {
+      const { btn } = addCreateUiClipRow(idA, "海月");
+      selectOnClick(btn);
+    }, 100);
+
+    const pending = scrollAndMultiSelectByIds([idA], {
+      isAborted: () => false,
+      renderWaitMs: 10,
+      hydrationWaitMs: 500,
+    });
+    await vi.runAllTimersAsync();
+    const count = await pending;
+
+    expect(count).toBe(1);
+  });
+
+  it("Given 走査中に scrollHeight が成長するページネーション When scrollAndMultiSelectByIds Then 成長後の末尾も探索する", async () => {
+    const knownId = "f0f0f0f0-1111-2222-3333-444444444444";
+    const lateId = "f1f1f1f1-1111-2222-3333-444444444444";
+    const known = addCreateUiClipRow(knownId, "月と猫");
+    selectOnClick(known.btn);
+    const scroller = getOrCreateScroller();
+    let grown = false;
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => (grown ? 800 : 400),
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+        // 下方向へ進んだ時点で次ページがロードされ、末尾に row が追加される
+        if (v >= 200 && !grown) {
+          grown = true;
+          const late = addCreateUiClipRow(lateId, "戦士たち");
+          selectOnClick(late.btn);
+        }
+      },
+    });
+
+    const pending = scrollAndMultiSelectByIds([knownId, lateId], {
+      isAborted: () => false,
+      renderWaitMs: 10,
+      hydrationWaitMs: 100,
+    });
+    await vi.runAllTimersAsync();
+    const count = await pending;
+
+    expect(count).toBe(2);
+  });
+
+  it("Given 選択済みの新 UI row When readSelectedClipIds Then song link から UUID を読み取る", async () => {
+    const idA = "f2f2f2f2-1111-2222-3333-444444444444";
+    addCreateUiShellRow();
+    addCreateUiClipRow(idA, "誰が歌う", { selectLabel: "Deselect clip" });
+    const scroller = getOrCreateScroller();
+    stubScrollerMetrics(scroller);
+
+    const pending = readSelectedClipIds({
+      isAborted: () => false,
+      renderWaitMs: 10,
+      hydrationWaitMs: 100,
+      expectedClipCount: 1,
+    });
+    await vi.runAllTimersAsync();
+
+    await expect(pending).resolves.toEqual([idA]);
   });
 });

@@ -425,7 +425,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       /const rawSubmittedIds = resolvePlaylistClipIds\(\s*previousSubmittedClipIds,\s*currentSubmittedIds,\s*expectedClipCount,?\s*\);[\s\S]*?const plan = buildPlaylistClipPlan\([\s\S]*?scrollAndMultiSelectByIds\(plan\.clipIds,/
     );
     expect(contentSource).toMatch(
-      /verifiedPlaylistClipCount = await addClipsToPlaylist\([\s\S]*?previousSubmittedClipIds,[\s\S]*?expectedPlaylistClipCount,[\s\S]*?entries,/
+      /verifiedPlaylistClipCount = await addClipsToPlaylist\([\s\S]*?previousSubmittedClipIds,[\s\S]*?playlistTargetClipCount,[\s\S]*?entries,/
     );
   });
 
