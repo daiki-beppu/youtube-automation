@@ -266,14 +266,14 @@ def test_thumbnail_skill_documents_thumbnail_compare_and_alignment_check_roles()
     assert "公開**後**" in role_block
 
 
-def test_thumbnail_skill_documents_text_included_to_textless_background_flow() -> None:
-    """#1901: /thumbnail は文字入り thumbnail 承認後に textless main を再生成する。"""
+def test_thumbnail_skill_documents_textless_first_deterministic_flow() -> None:
+    """#1907: 標準フローは textless 背景を先に確定し yt-thumbnail-text で実フォント合成する。"""
     skill = _read_thumbnail_skill()
 
     standard_block = _slice_between(
         skill,
         "### 標準生成順序とファイル契約",
-        "### Single-Step / TTP モード",
+        "### thumbnail-text-profile 適用（#1907）",
     )
     single_step_block = _slice_between(
         skill,
@@ -282,20 +282,33 @@ def test_thumbnail_skill_documents_text_included_to_textless_background_flow() -
     )
 
     for required in (
-        "テキスト付き YouTube サムネ → 承認済みサムネから textless 動画背景",
+        "textless 動画背景の生成 → `yt-thumbnail-text` による実フォント合成",
         "ベンチマーク先サムネを参照画像",
         "10-assets/thumbnail.jpg",
         "10-assets/main.png",
         "10-assets/main.jpg",
-        "承認済み `thumbnail.jpg` を参照画像",
+        "uv run yt-thumbnail-text",
+        "--background <collection-path>/10-assets/main.png",
+        "text_strip_clause",
+        "uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
+        "cp main-v1.png main.png",
+        "cp thumbnail-v1.jpg thumbnail.jpg",
         "/thumbnail-compare",
         "config/skills/loop-video.yaml::enabled: true",
         "config/skills/loop-video.yaml::enabled: false",
         "静止画背景",
         "両者を同一画像で代用しない",
+        "AI 焼き込み経路（fallback・非既定）",
     ):
         assert required in standard_block
 
+    # textless 背景の確定が実フォント合成より先
+    assert standard_block.find("cp main-v1.png main.png") < standard_block.find("uv run yt-thumbnail-text")
+    # AI 焼き込みは運用者の明示選択のみ
+    assert "運用者が明示的に選んだときだけ" in standard_block
+
+    # AI 焼き込み経路（Single-Step 章）は fallback として従来契約のまま残す（#1901 の順序を維持）
+    assert "AI 焼き込み経路（fallback・非既定）**の手順" in single_step_block
     for required in (
         "/thumbnail-compare",
         "cp thumbnail-v1.jpg thumbnail.jpg",
@@ -316,6 +329,47 @@ def test_thumbnail_skill_documents_text_included_to_textless_background_flow() -
     assert "テキストなし版の先行確定" not in single_step_block
 
 
+def test_thumbnail_skill_applies_thumbnail_text_profile_with_default_fallback() -> None:
+    """#1907: thumbnail-text-profile の 3 セクションを適用し、不在時はデフォルト値で続行する。"""
+    skill = _read_thumbnail_skill()
+    profile_block = _slice_between(
+        skill,
+        "### thumbnail-text-profile 適用（#1907）",
+        "### 承認済みサムネイルのアーカイブ",
+    )
+
+    for required in (
+        "docs/benchmarks/thumbnail-text-profile.md",
+        "`schema_version: 1`",
+        ".claude/skills/channel-research/SKILL.md",
+        "## font_tendency",
+        "## text_content_pattern",
+        "## placement_tendency",
+        "image_generation.gemini.thumbnail_text.overlay.font.title",
+        "`overlay.layout.anchor` / `margin_x` / `margin_y`",
+        "typeface_classification",
+        "line_count_range",
+        "languages",
+        "character_count_range",
+        "copy_pattern",
+        "anchor_position",
+        "日本語対応 .ttf/.otf/.ttc",
+        "競合のチャンネル名・コレクション名・シリーズ名・コピー原文",
+    ):
+        assert required in profile_block
+
+    # profile 不在は前提ガードにしない（現行デフォルト値で続行）
+    assert "前提ガードではない" in profile_block
+    assert "エラーで停止しない" in profile_block
+    assert "unknown" in profile_block
+    # フォントはローカル既存ファイルのみ（同梱・自動ダウンロードはスコープ外）
+    assert "同梱・自動ダウンロードはしない" in profile_block
+    # profile 不在かつフォント未設定でもローカル選定でフォント揺れを解消する
+    assert "profile 不在でも `overlay.font.title` が未設定の場合" in profile_block
+    # config への書き込みはユーザー承認つきの明示更新
+    assert "承認を得てから書き込む" in profile_block
+
+
 def test_thumbnail_archive_is_opt_in_and_wired_after_every_approval_path() -> None:
     config = _load_thumbnail_default_config()
     skill = _read_thumbnail_skill()
@@ -326,7 +380,8 @@ def test_thumbnail_archive_is_opt_in_and_wired_after_every_approval_path() -> No
     assert config["archive"] == {"enabled": False}
     assert "archive.enabled: false" in skill
     assert "assets/thumbnail-gallery/<collection-dir-name>.<ext>" in skill
-    assert skill.count(archive_command) == 6
+    # 標準（決定的合成）/ codex / Single-Step / Two-Phase の確定直後 + アーカイブ節本文 = 5
+    assert skill.count(archive_command) == 5
 
     approval_block = _slice_between(skill, "### 承認済みサムネイルのアーカイブ", "### Single-Step / TTP モード")
     for approval_path in ("手動承認", "codex", "Two-Phase", "フォント固定", "自動選択"):
@@ -340,6 +395,11 @@ def test_thumbnail_archive_is_opt_in_and_wired_after_every_approval_path() -> No
     assert "後工程へ進まず停止" in opening_gate
 
     codex_block = _slice_between(skill, "## codex 経由の生成", "## Channel Adaptation")
+    standard_block = _slice_between(
+        skill,
+        "### 標準生成順序とファイル契約",
+        "### thumbnail-text-profile 適用（#1907）",
+    )
     single_step_block = _slice_between(
         skill,
         "### Single-Step / TTP モード",
@@ -350,10 +410,9 @@ def test_thumbnail_archive_is_opt_in_and_wired_after_every_approval_path() -> No
         "### Two-Phase モード（従来方式・フォールバック）",
         "## フォント安定化",
     )
-    font_block = _slice_between(skill, "## フォント安定化", "## 自動選択")
     auto_selection_block = _slice_between(skill, "## 自動選択", "## 品質チェック")
 
-    for wired_block in (codex_block, single_step_block, two_phase_block, font_block):
+    for wired_block in (codex_block, standard_block, single_step_block, two_phase_block):
         assert wired_block.find("thumbnail.jpg") < wired_block.find(archive_command)
     assert "uv run yt-thumbnail-auto-select <collection-path> --apply" in auto_selection_block
     assert "--apply &&" not in auto_selection_block
@@ -372,7 +431,7 @@ def test_thumbnail_skill_frontmatter_names_thumbnail_as_primary_output() -> None
     frontmatter = _slice_between(skill, "---", "---\n\n## Overview")
 
     assert "YouTube サムネイル（thumbnail.jpg）" in frontmatter
-    assert "textless main.png/jpg を後続生成" in frontmatter
+    assert "textless main.png/jpg を先行生成して実フォント合成" in frontmatter
     assert "サムネイル（main.png）" not in frontmatter
 
 
@@ -505,22 +564,34 @@ def test_thumbnail_skill_two_phase_keeps_thumbnail_and_main_separate() -> None:
     assert "既に存在する場合は Phase 1 をスキップ" not in two_phase_block
 
 
-def test_thumbnail_skill_deterministic_text_path_keeps_textless_regeneration() -> None:
-    """#1611: フォント固定経路でも承認済み thumbnail から textless main を後続生成する。"""
+def test_thumbnail_skill_deterministic_text_path_is_standard_default() -> None:
+    """#1907: 決定的合成経路が標準の既定で、textless 背景を先に確定してから合成する。"""
     skill = _read_thumbnail_skill()
+    font_block = _slice_between(skill, "## フォント安定化", "## 自動選択")
     deterministic_block = _slice_between(
         skill,
-        "### 決定的合成経路（yt-thumbnail-text）",
+        "### 決定的合成経路（yt-thumbnail-text・標準）",
         "### フォント指定に失敗した場合",
     )
 
-    assert "最初にテキスト付き `thumbnail-v*.jpg` を生成・承認して `thumbnail.jpg` を確定" in deterministic_block
-    assert "承認済み `thumbnail.jpg` から textless `main-v*.png/jpg` を AI 再生成" in deterministic_block
-    assert "cp main-v1.png main.png" in deterministic_block
-    assert "フォント安定化だけを担う" in deterministic_block
-    assert "旧順序には戻さず" in deterministic_block
-    assert "承認済み thumbnail.jpg から textless 版を AI 再生成する」工程は不要" not in deterministic_block
-    assert "背景がそのまま `main.png` になる" not in deterministic_block
+    # 経路表の既定は決定的合成、AI プロンプト経路は fallback
+    assert "**決定的合成経路**（`yt-thumbnail-text`・**既定**）" in font_block
+    assert "**AI プロンプト経路**（fallback・非既定）" in font_block
+    assert "**AI プロンプト経路**（既定）" not in font_block
+
+    assert "既定テキスト描画経路（#1907）" in deterministic_block
+    assert "「標準生成順序とファイル契約」に従う" in deterministic_block
+    assert "「thumbnail-text-profile 適用」節に従う" in deterministic_block
+    assert "決定的合成はテキスト描画だけを担う" in deterministic_block
+    # 文字入り画像を背景に流用しない（過去コレクションの作り直しでも textless を先に用意する）
+    assert (
+        "承認済み `thumbnail.jpg` から textless `main-v*.png/jpg` を AI 再生成・承認してから合成する"
+        in deterministic_block
+    )
+    assert "文字入り画像を `--background` に流用しない" in deterministic_block
+    # 旧契約（テキスト付き先行）の手順は標準から撤去済み
+    assert "最初にテキスト付き `thumbnail-v*.jpg` を生成・承認して" not in deterministic_block
+    assert "標準 `/thumbnail` フローから自動分岐しない" not in deterministic_block
 
 
 def test_loop_video_skill_uses_textless_main_image_and_respects_disabled_channels() -> None:
