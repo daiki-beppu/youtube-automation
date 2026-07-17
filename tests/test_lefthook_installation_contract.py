@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -230,25 +231,112 @@ def test_lefthook_install_script_skips_when_skip_env_is_set(tmp_path: Path) -> N
     assert not (hooks_dir / "pre-push").exists()
 
 
-def test_takt_runtime_prepare_injects_sandbox_safe_environment(tmp_path: Path) -> None:
-    # takt の runtime.prepare が全 worker へ worktree ローカルの XDG_DATA_HOME と
-    # lefthook skip を注入する配線契約（issue #1999）
-    takt_config = _read(_REPO_ROOT / ".takt" / "config.yaml")
-    assert ".takt/runtime-prepare.sh" in takt_config
-
-    runtime_root = tmp_path / "runtime"
-    result = subprocess.run(
+def _run_runtime_prepare(runtime_root: Path, **extra_env: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         ["bash", str(_REPO_ROOT / ".takt" / "runtime-prepare.sh")],
-        env=_subprocess_env(TAKT_RUNTIME_ROOT=str(runtime_root)),
+        env=_subprocess_env(TAKT_RUNTIME_ROOT=str(runtime_root), **extra_env),
         text=True,
         capture_output=True,
         check=False,
     )
 
+
+def _prepared_env(result: subprocess.CompletedProcess[str]) -> dict[str, str]:
+    return dict(line.split("=", 1) for line in result.stdout.splitlines())
+
+
+def test_takt_runtime_prepare_injects_sandbox_safe_environment(tmp_path: Path) -> None:
+    # takt の runtime.prepare が全 worker へ current runtime root 配下の
+    # TMPDIR / XDG_* / UV_CACHE_DIR と lefthook skip を注入する配線契約
+    # （issue #1999 / #2163）
+    takt_config = _read(_REPO_ROOT / ".takt" / "config.yaml")
+    assert ".takt/runtime-prepare.sh" in takt_config
+
+    runtime_root = tmp_path / "runtime"
+    result = _run_runtime_prepare(runtime_root)
+
     assert result.returncode == 0
     lines = result.stdout.splitlines()
+    assert f"TMPDIR={runtime_root}/tmp" in lines
+    assert f"XDG_CACHE_HOME={runtime_root}/cache" in lines
+    assert f"XDG_CONFIG_HOME={runtime_root}/config" in lines
     assert f"XDG_DATA_HOME={runtime_root}/data" in lines
+    assert f"XDG_STATE_HOME={runtime_root}/state" in lines
+    assert f"UV_CACHE_DIR={runtime_root}/cache/uv" in lines
     assert "YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1" in lines
+    # 注入先ディレクトリは prepare 時点で作成済み（worker の初回書込みを保証）
+    for relative in ("tmp", "cache", "config", "data", "state", "cache/uv"):
+        assert (runtime_root / relative).is_dir()
+
+
+def test_takt_runtime_prepare_overrides_sibling_worktree_paths(tmp_path: Path) -> None:
+    # 親 process が sibling worktree の runtime path を持っていても、stdout の
+    # KEY=VALUE は current root 配下を指す（takt は stdout を worker env へ上書き
+    # 注入するため、sibling 値は worker へ届かない）（issue #2163）
+    sibling_root = tmp_path / "sibling" / ".takt" / ".runtime"
+    sibling_root.mkdir(parents=True)
+    current_root = tmp_path / "current" / ".takt" / ".runtime"
+
+    result = _run_runtime_prepare(
+        current_root,
+        TMPDIR=f"{sibling_root}/tmp",
+        XDG_CACHE_HOME=f"{sibling_root}/cache",
+        XDG_CONFIG_HOME=f"{sibling_root}/config",
+        XDG_DATA_HOME=f"{sibling_root}/data",
+        XDG_STATE_HOME=f"{sibling_root}/state",
+        UV_CACHE_DIR=f"{sibling_root}/cache/uv",
+    )
+
+    assert result.returncode == 0
+    prepared = _prepared_env(result)
+    for var in ("TMPDIR", "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "UV_CACHE_DIR"):
+        value = Path(prepared[var])
+        assert value.is_relative_to(current_root), f"{var} が current runtime root 配下を指していない"
+        assert not value.is_relative_to(sibling_root), f"{var} が sibling worktree を参照している"
+
+
+def test_takt_runtime_prepare_parallel_roots_do_not_intersect(tmp_path: Path) -> None:
+    # 2 worktree の並行起動で runtime path 集合が交差しない（issue #2163 要件 4）
+    root_a = tmp_path / "worktree-a" / ".takt" / ".runtime"
+    root_b = tmp_path / "worktree-b" / ".takt" / ".runtime"
+
+    paths_a = set(_prepared_env(_run_runtime_prepare(root_a)).values())
+    paths_b = set(_prepared_env(_run_runtime_prepare(root_b)).values())
+    paths_a.discard("1")  # YOUTUBE_AUTOMATION_SKIP_LEFTHOOK は path ではない
+    paths_b.discard("1")
+
+    assert paths_a
+    assert paths_a.isdisjoint(paths_b)
+
+
+def test_takt_runtime_prepare_survives_sibling_cleanup(tmp_path: Path) -> None:
+    # 一方の runtime を cleanup しても、他方の TMPDIR への書込みが成功する
+    # （issue #2163 要件 5 の縮約: 相互隔離により sibling の消滅が波及しない）
+    root_a = tmp_path / "worktree-a" / ".takt" / ".runtime"
+    root_b = tmp_path / "worktree-b" / ".takt" / ".runtime"
+    env_a = _prepared_env(_run_runtime_prepare(root_a))
+    _prepared_env(_run_runtime_prepare(root_b))
+
+    shutil.rmtree(root_b)
+
+    probe = Path(env_a["TMPDIR"]) / "probe.txt"
+    probe.write_text("still writable\n", encoding="utf-8")
+    assert probe.read_text(encoding="utf-8") == "still writable\n"
+
+
+def test_takt_runtime_prepare_fails_without_runtime_root(tmp_path: Path) -> None:
+    env = _subprocess_env()
+    env.pop("TAKT_RUNTIME_ROOT", None)
+    result = subprocess.run(
+        ["bash", str(_REPO_ROOT / ".takt" / "runtime-prepare.sh")],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "TAKT_RUNTIME_ROOT" in result.stderr
 
 
 def test_lefthook_install_script_noops_outside_git_repo(tmp_path: Path) -> None:
