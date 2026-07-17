@@ -65,11 +65,16 @@ def _create_fake_executable(path: Path, content: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
-def _run_worktree_setup(workdir: Path, path: str, *args: str) -> subprocess.CompletedProcess[str]:
+def _run_worktree_setup(
+    workdir: Path,
+    path: str,
+    *args: str,
+    env_overrides: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["bash", str(_WORKTREE_SETUP_SCRIPT_PATH), *args],
         cwd=workdir,
-        env=_subprocess_env(PATH=path),
+        env=_subprocess_env(PATH=path, **(env_overrides or {})),
         text=True,
         capture_output=True,
         check=False,
@@ -131,6 +136,15 @@ def _write_sync_deps_script(checkout: Path) -> None:
     lefthook_dir = checkout / ".lefthook"
     lefthook_dir.mkdir(exist_ok=True)
     (lefthook_dir / "sync-deps.sh").write_text(_read(_SYNC_DEPS_SCRIPT_PATH), encoding="utf-8")
+
+
+def _write_worktree_tmpdir_script(checkout: Path) -> None:
+    lefthook_dir = checkout / ".lefthook"
+    lefthook_dir.mkdir(exist_ok=True)
+    (lefthook_dir / "worktree-tmpdir.sh").write_text(
+        _read(_WORKTREE_TMPDIR_SCRIPT_PATH),
+        encoding="utf-8",
+    )
 
 
 def _run_sync_deps(workdir: Path, path: str, *args: str) -> subprocess.CompletedProcess[str]:
@@ -1037,6 +1051,29 @@ def test_worktree_tmpdir_script_is_idempotent_across_reentry(tmp_path: Path) -> 
     assert second.stdout == first.stdout
 
 
+def test_worktree_tmpdir_script_normalizes_reentry_from_scratch_subdirectory(tmp_path: Path) -> None:
+    # nix develop / nix print-dev-env は TMPDIR 配下にランダム名のスクラッチ
+    # （nix-shell.XXXXXX）を切るため、shellHook からの再入場時に TMPDIR が
+    # 「自分の分離ディレクトリ/スクラッチ」を指すことがある。そのまま入れ子を
+    # 作ると出力が評価のたびに変わり、これを基底にする NIX_CACHE_HOME
+    # （issue #2089）の分離先が毎回リセットされるため、自分の分離ディレクトリへ
+    # 正規化して出力する
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    shared_tmpdir = tmp_path.parent / "shared-tmp"
+    shared_tmpdir.mkdir(exist_ok=True)
+
+    isolated = _run_worktree_tmpdir_script(tmp_path, str(shared_tmpdir))
+    assert isolated.returncode == 0
+    isolated_dir = Path(isolated.stdout.strip())
+    scratch = isolated_dir / "nix-shell.AbC123"
+    scratch.mkdir()
+
+    from_scratch = _run_worktree_tmpdir_script(tmp_path, str(scratch))
+
+    assert from_scratch.returncode == 0
+    assert from_scratch.stdout == isolated.stdout
+
+
 def test_worktree_tmpdir_script_respects_checkout_local_tmpdir(tmp_path: Path) -> None:
     # takt core が注入する <clone>/.takt/.runtime/tmp のような checkout 内の
     # 隔離済み TMPDIR は上書きせず、そのまま出力する（issue #2088）
@@ -1113,6 +1150,105 @@ def test_dev_shell_exports_worktree_isolated_tmpdir() -> None:
     assert '"${./.}/.lefthook/worktree-tmpdir.sh"' in flake
     assert 'export TMPDIR="$worktree_tmpdir"' in flake
     assert "共有 TMPDIR のまま続行します" in flake
+
+
+def test_nix_cache_isolation_is_wired_into_all_devshell_entrypoints() -> None:
+    # 並列 worktree が同一 fingerprint の flake を同時評価すると、ユーザーグローバルの
+    # $XDG_CACHE_HOME/nix/eval-cache-*/<fingerprint>.sqlite への同時書込みが競合して
+    # 「error (ignored): SQLite database ... is busy」を出し続ける（issue #2089）。
+    # Nix 専用の NIX_CACHE_HOME を worktree 分離 TMPDIR（issue #2088）配下へ向け、
+    # 3 つの入口（direnv .envrc / setup-worktree.sh の nix develop フォールバック /
+    # flake.nix shellHook）すべてで各 worktree が自分の評価結果だけを参照する
+    export_line = 'export NIX_CACHE_HOME="$worktree_tmpdir/nix-cache"'
+
+    envrc = _read(_ENVRC_PATH)
+    assert export_line in envrc
+    # flake 評価（use flake）より前に export されていなければ分離が効かない
+    assert envrc.index(export_line) < envrc.index("use flake")
+
+    setup = _read(_WORKTREE_SETUP_SCRIPT_PATH)
+    assert export_line in setup
+    # nix develop フォールバック経路は .envrc を通らないため、direnv 分岐より前の
+    # export が唯一の分離点になる
+    assert setup.index(export_line) < setup.index("command -v direnv")
+
+    flake = _read(_FLAKE_PATH)
+    assert export_line in flake
+
+    development = _read(_DEVELOPMENT_DOC_PATH)
+    assert "NIX_CACHE_HOME" in development
+
+
+def test_worktree_setup_exports_isolated_nix_cache_for_nix_develop_fallback(tmp_path: Path) -> None:
+    # nix develop フォールバック経路（direnv allow 失敗時）で、flake 評価より前に
+    # NIX_CACHE_HOME が worktree 固有の決定値へ上書きされること。継承値（別 worktree の
+    # 値がシェル経由でリークしたケース）を尊重しないことも同時に固定する
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    _write_sync_deps_script(tmp_path)
+    _write_worktree_tmpdir_script(tmp_path)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _create_fake_executable(bin_dir / "direnv", "#!/usr/bin/env bash\nexit 23\n")
+    nix_cache_log = tmp_path / "nix-cache-home.txt"
+    _create_fake_executable(
+        bin_dir / "nix",
+        f"""#!/usr/bin/env bash
+printf '%s\n' "${{NIX_CACHE_HOME:-unset}}" > "{nix_cache_log}"
+shift 3
+exec "$@"
+""",
+    )
+
+    result = _run_worktree_setup(
+        tmp_path,
+        f"{bin_dir}:/usr/bin:/bin",
+        "sh",
+        "-c",
+        "printf ran",
+        env_overrides={"NIX_CACHE_HOME": "/somewhere/else/nix-cache"},
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "ran"
+    recorded = nix_cache_log.read_text(encoding="utf-8").strip()
+    assert recorded.endswith("/nix-cache")
+    # worktree-tmpdir.sh の slug 仕様（許可文字のみ・先頭 32 文字）に一致する分離先であること
+    slug = "".join(ch for ch in tmp_path.name if ch.isalnum() or ch in "._-")[:32]
+    assert f"yt-automation-tmp-{slug}" in recorded
+    assert recorded != "/somewhere/else/nix-cache"
+
+
+def test_worktree_setup_continues_with_shared_nix_cache_when_isolation_fails(tmp_path: Path) -> None:
+    # worktree-tmpdir.sh が存在しない・失敗する場合は共有キャッシュのまま fail-open で
+    # 続行する（分離は品質ゲートではなく干渉回避のため）
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    _write_sync_deps_script(tmp_path)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _create_fake_executable(bin_dir / "direnv", "#!/usr/bin/env bash\nexit 23\n")
+    nix_cache_log = tmp_path / "nix-cache-home.txt"
+    _create_fake_executable(
+        bin_dir / "nix",
+        f"""#!/usr/bin/env bash
+printf '%s\n' "${{NIX_CACHE_HOME:-unset}}" > "{nix_cache_log}"
+shift 3
+exec "$@"
+""",
+    )
+
+    result = _run_worktree_setup(
+        tmp_path,
+        f"{bin_dir}:/usr/bin:/bin",
+        "sh",
+        "-c",
+        "printf ran",
+        env_overrides={"NIX_CACHE_HOME": "/inherited/nix-cache"},
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "ran"
+    # 分離に失敗しても NIX_CACHE_HOME は書き換えず、コマンド実行も止めない
+    assert nix_cache_log.read_text(encoding="utf-8").strip() == "/inherited/nix-cache"
 
 
 def test_direnv_cache_is_gitignored() -> None:
