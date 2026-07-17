@@ -1122,3 +1122,55 @@ def test_thumbnail_skill_codex_section_documents_prompt_length_caveat() -> None:
     assert "短く" in section, "prompt を短く保つ運用ルールが明文化されていない（要件 #5）"
     assert "skip" in section, "長い prompt で agent が tool を skip する failure mode の言及が無い（要件 #5）"
     assert "cp" in section, "agent が cp する設計の言及が無い（要件 #5）"
+
+
+def test_codex_image_script_blocks_forbidden_keyword_before_codex_exec(tmp_path: Path) -> None:
+    """Given CODEX_IMAGE_FORBID_KEYWORDS にヒットする prompt (#1664)
+    When codex-image.sh を実行する
+    Then codex CLI を一切起動せず、ヒットしたキーワードを stderr に列挙して非 0 終了する。
+    """
+    if not _CODEX_IMAGE_SH.exists():
+        pytest.fail(f"{_CODEX_IMAGE_SH.relative_to(_REPO_ROOT)} が存在しない")
+
+    env, log_file = _prepare_fake_codex_env(tmp_path)
+    env["CODEX_IMAGE_FORBID_KEYWORDS"] = "sunglasses\ntrumpet"
+    output_path = tmp_path / "output.png"
+    ref_path = _write_reference_file(tmp_path)
+
+    result = _run_script(
+        _CODEX_IMAGE_SH,
+        "A Sunglassed drummer wearing SUNGLASSES on stage",
+        str(output_path),
+        str(ref_path),
+        env=env,
+    )
+
+    assert result.returncode != 0, "forbid_keywords ヒット時に非 0 終了していない"
+    assert "sunglasses" in result.stderr, f"ヒットしたキーワードが stderr に列挙されていない: {result.stderr!r}"
+    assert "forbid_keywords" in result.stderr, f"forbid_keywords 由来の停止だと分かる文言が無い: {result.stderr!r}"
+    assert not log_file.exists() or not log_file.read_text(encoding="utf-8"), (
+        "forbid_keywords ヒット時は codex CLI を起動してはならない"
+    )
+    assert not output_path.exists(), "forbid_keywords ヒット時に出力ファイルを作ってはならない"
+
+
+def test_codex_image_script_passes_when_forbid_keywords_do_not_match(tmp_path: Path) -> None:
+    """Given CODEX_IMAGE_FORBID_KEYWORDS にヒットしない prompt (#1664)
+    When codex-image.sh を実行する
+    Then 従来どおり codex exec まで進んで正常終了する。
+    """
+    if not _CODEX_IMAGE_SH.exists():
+        pytest.fail(f"{_CODEX_IMAGE_SH.relative_to(_REPO_ROOT)} が存在しない")
+
+    env, log_file = _prepare_fake_codex_env(tmp_path)
+    env["CODEX_IMAGE_FORBID_KEYWORDS"] = "sunglasses\ntrumpet"
+    output_path = tmp_path / "output.png"
+    ref_path = _write_reference_file(tmp_path)
+
+    result = _run_script(_CODEX_IMAGE_SH, "cozy cafe morning coffee", str(output_path), str(ref_path), env=env)
+
+    assert result.returncode == 0, result.stderr
+    invocations = _parse_invocations(log_file.read_text(encoding="utf-8"))
+    assert any(args and args[0] == "exec" for args in invocations), (
+        "forbid_keywords 非ヒット時は codex exec まで進む必要がある"
+    )

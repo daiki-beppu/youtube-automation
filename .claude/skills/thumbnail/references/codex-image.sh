@@ -23,6 +23,43 @@ if [ "$require_reference" = true ] && [ "$#" -ne 1 ]; then
   exit 1
 fi
 
+# NG ワード事前検査 (#1664): 最終 prompt が forbid_keywords にヒットしたら
+# codex CLI を一切起動せず即エラー終了する (yt-generate-image 側と同等の検査)。
+# キーワードの解決順:
+#   1. $CODEX_IMAGE_FORBID_KEYWORDS (改行区切り) が非空ならそれを使う (明示指定)
+#   2. 未設定なら uv run python で merged skill-config
+#      (config/skills/thumbnail.yaml::image_generation.gemini.forbid_keywords) から読む
+# チャンネル config 文脈が無い実行 (uv 不在・config 未解決) は従来どおり no-op。
+forbid_keywords="${CODEX_IMAGE_FORBID_KEYWORDS:-}"
+if [ -z "$forbid_keywords" ] && command -v uv >/dev/null 2>&1; then
+  forbid_keywords=$(uv run --no-sync python - 2>/dev/null <<'PY' || true
+from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.image_provider.composition import resolve_forbid_keywords
+from youtube_automation.utils.skill_config import load_skill_config
+
+try:
+    for keyword in resolve_forbid_keywords(load_skill_config("thumbnail")):
+        print(keyword)
+except ConfigError:
+    pass
+PY
+)
+fi
+if [ -n "$forbid_keywords" ]; then
+  forbid_hits=()
+  while IFS= read -r kw; do
+    [ -z "$kw" ] && continue
+    if printf '%s' "$prompt" | grep -iqF -- "$kw"; then
+      forbid_hits+=("$kw")
+    fi
+  done <<< "$forbid_keywords"
+  if [ "${#forbid_hits[@]}" -gt 0 ]; then
+    echo "ERROR: prompt が forbid_keywords に一致したため生成を中止しました: ${forbid_hits[*]}" >&2
+    echo "ヒント: config/skills/thumbnail.yaml の image_generation.gemini.forbid_keywords を確認し、prompt から該当表現を除いて再実行してください" >&2
+    exit 1
+  fi
+fi
+
 if ! command -v codex >/dev/null 2>&1; then
   echo "ERROR: codex CLI が PATH にありません" >&2
   exit 1
