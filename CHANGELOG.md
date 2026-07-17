@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(thumbnail)`: `/thumbnail` のテキスト描画既定を AI 焼き込みから決定的合成経路（`yt-thumbnail-text`）へ標準化した。標準フローは「textless 背景 `main.png/jpg` の生成・承認 → 実フォント（Pillow）合成で `thumbnail.jpg` 確定」の 2 段構成になり、書体の揺れが発生しない。`/channel-research` の `docs/benchmarks/thumbnail-text-profile.md` が存在する場合はフォント傾向 → ローカル日本語フォント選定（`overlay.font.title`）、テキスト内容パターン → コピー生成制約（行数・言語・文字数レンジ。競合固有文言は不使用）、配置傾向 → `overlay.layout.anchor` / margin へ変換して適用し、不在時はエラーにせず現行デフォルト値で続行する。AI 焼き込み経路は運用者が明示選択したときだけ使う fallback として残し改修しない（#1907）。
 
+- `feat(analytics)`: 成長 KPI 定点ビュー CLI `yt-kpi-dashboard` を追加した。`data/analytics_data_*.json` 全スナップショットを日付後勝ちで横断マージし、レバー別 KPI（views / インプレッション / CTR / 平均視聴維持率 / 登録者純増）の週次推移を前週比付きの構造化 JSON と Markdown テーブルで出力する（`--save` で `reports/kpi_weekly_YYYYMMDD.{json,md}` 保存）。Reporting API の保持期間（60 日）を超えた過去の Imp / CTR も `reporting_api.impressions_summary.per_day` から復元して時系列に含め、欠測週は補間せず欠測として明示する。スナップショット 1 件以下ではエラーではなく複数スナップショットが必要な旨の案内を出す。`/analytics-analyze` の CLI 一覧にも定点ビュー参照の導線を追加した（#1819）。
+
 - `feat(auth)`: OAuth 新規ブラウザ認証の `run_local_server()` にチャンネル名（`meta.channel_short`）入りの `authorization_prompt_message` / `success_message` を渡し、複数チャンネル並列運用でトークン失効が重なった際にターミナルログと認証完了ページのどちらからも対象チャンネルを判別できるようにした。prompt には認証 URL（redirect 先ポート入り）も含め、config 読込不可時はディレクトリ名へフォールバックする（#1966）。
 
 - `chore(extensions)`: TypeScript 7.0.2 固定後の suno-helper / distrokid-helper を実経路（lint / format:check / compile / unit / build / Playwright e2e / CI Typecheck 契約テスト）で回帰検証した。TS 7 起因の互換修正は不要で、唯一再現した失敗は suno-helper の overlay e2e が開発マシンで稼働中の yt-collection-serve（port 7873/7872）を発見して「ローカル配信元なし」前提が破れる分離不足だったため、`--host-resolver-rules` で discovery 先ホストを遮断して環境非依存にした（#2015）。
