@@ -68,6 +68,9 @@ def extract_downloaded_archive(coll_dir: Path, download_path: str, expected_coun
     return placed_count
 
 
+_CANONICAL_MUSIC_FILENAME_RE = re.compile(r"^(?P<index>\d{2,})(?P<variant>[ab])-(?P<title>.+)$")
+# ブラウザ手動 DL の重複ベース名（`Title (1).mp3`）と Suno ZIP 由来の `Title_1.mp3` を同一 entry の別 clip とみなす
+_DUP_SUFFIX_RE = re.compile(r"^(?P<base>.+?)(?:\s*\((?P<paren>\d+)\)|_(?P<underscore>\d+))$")
 _SUNO_TRACK_PREFIX_RE = re.compile(r"^Track\s+\d+\s+(.+)$", re.IGNORECASE)
 _LATIN_TITLE_TAIL_RE = re.compile(r"([A-Za-z][A-Za-z0-9 &'(),.!?:/-]*)$")
 # Suno はダウンロード ZIP 内のファイル名からアポストロフィを除去する（例: Greed's Rhythm → Greeds Rhythm.m4a）。
@@ -162,6 +165,75 @@ def _build_name_to_index(coll_dir: Path) -> dict[str, int]:
         if stripped and stripped != key:
             name_to_index.setdefault(stripped, track_index)
     return name_to_index
+
+
+def _music_stem_lookup_candidates(stem: str) -> list[tuple[str, int]]:
+    """非正準形 stem から (照合候補, 重複連番) を列挙する。重複連番 0 は suffix なしの基準ファイル。"""
+    candidates: list[tuple[str, int]] = []
+    for candidate in _suno_name_lookup_candidates(stem):
+        candidates.append((candidate, 0))
+    dup_match = _DUP_SUFFIX_RE.fullmatch(stem.strip())
+    if dup_match is not None:
+        dup_no = int(dup_match.group("paren") or dup_match.group("underscore"))
+        for candidate in _suno_name_lookup_candidates(dup_match.group("base")):
+            item = (candidate, dup_no)
+            if item not in candidates:
+                candidates.append(item)
+    return candidates
+
+
+def canonicalize_noncanonical_music_files(coll_dir: Path, music_dir: Path) -> list[tuple[str, str]]:
+    """music_dir 内の非正準形音声ファイルを suno-prompts.json と照合し `NN{a|b}-Title.ext` へリネームする。
+
+    どの entry とも照合できないファイルはリネームせず残す（呼び出し側の突合で unknown として fail-loud）。
+    同一 entry へ照合されたファイルは重複連番順に、既存の正準形が占有していない variant へ割り当てる。
+    variant（a/b）に収まらない場合と リネーム先衝突は ValueError で停止し、部分リネームを行わない。
+    戻り値はリネームした (旧ファイル名, 新ファイル名) の一覧。
+    """
+    if not music_dir.is_dir():
+        return []
+    name_to_index = _build_name_to_index(coll_dir)
+    if not name_to_index:
+        return []
+
+    occupied_variants: dict[int, set[str]] = {}
+    matched_files: dict[int, list[tuple[int, str, Path, str]]] = {}
+    for audio_path in sorted(music_dir.iterdir()):
+        if not audio_path.is_file() or audio_path.suffix.lower() not in _AUDIO_EXTENSIONS:
+            continue
+        canonical_match = _CANONICAL_MUSIC_FILENAME_RE.fullmatch(audio_path.stem)
+        if canonical_match is not None:
+            occupied_variants.setdefault(int(canonical_match.group("index")), set()).add(
+                canonical_match.group("variant")
+            )
+            continue
+        for candidate, dup_no in _music_stem_lookup_candidates(audio_path.stem):
+            track_num = name_to_index.get(candidate)
+            if track_num is not None:
+                matched_files.setdefault(track_num, []).append((dup_no, audio_path.name, audio_path, candidate))
+                break
+
+    renames: list[tuple[Path, Path]] = []
+    planned_dests: set[str] = set()
+    for track_num, files in sorted(matched_files.items()):
+        files.sort()
+        free_variants = [v for v in ("a", "b") if v not in occupied_variants.get(track_num, set())]
+        if len(files) > len(free_variants):
+            names = ", ".join(name for _, name, _, _ in files)
+            raise ValueError(
+                f"entry {track_num:02d} へ照合されたファイルが variant (a/b) の空きを超えています: {names}"
+            )
+        for (_, _, audio_path, lookup), variant in zip(files, free_variants, strict=False):
+            new_name = f"{track_num:02d}{variant}-{_sanitize_output_stem(lookup)}{audio_path.suffix.lower()}"
+            dest = music_dir / new_name
+            if dest.exists() or new_name in planned_dests:
+                raise ValueError(f"リネーム先が既に存在します: {new_name}")
+            planned_dests.add(new_name)
+            renames.append((audio_path, dest))
+
+    for src, dest in renames:
+        src.rename(dest)
+    return [(src.name, dest.name) for src, dest in renames]
 
 
 def _is_safe_zip_member(filename: str) -> bool:
