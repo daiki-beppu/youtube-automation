@@ -10,6 +10,7 @@ _FLAKE_PATH = _REPO_ROOT / "flake.nix"
 _LEFTHOOK_INSTALL_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "install.sh"
 _WORKTREE_SETUP_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "setup-worktree.sh"
 _WORKTREE_TMPDIR_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "worktree-tmpdir.sh"
+_SYNC_DEPS_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "sync-deps.sh"
 _ENVRC_PATH = _REPO_ROOT / ".envrc"
 _LITE_WORKFLOW_PATH = _REPO_ROOT / ".takt" / "workflows" / "lite.yaml"
 _LEFTHOOK_CONFIG_PATH = _REPO_ROOT / "lefthook.yml"
@@ -92,6 +93,10 @@ def _create_linked_worktree_with_hook_files(tmp_path: Path) -> Path:
         _read(_LEFTHOOK_INSTALL_SCRIPT_PATH),
         encoding="utf-8",
     )
+    (worktree / ".lefthook" / "sync-deps.sh").write_text(
+        _read(_SYNC_DEPS_SCRIPT_PATH),
+        encoding="utf-8",
+    )
     (worktree / "lefthook.yml").write_text(_read(_LEFTHOOK_CONFIG_PATH), encoding="utf-8")
     return worktree
 
@@ -104,8 +109,29 @@ def _create_parent_checkout_with_hook_files(tmp_path: Path) -> Path:
         _read(_LEFTHOOK_INSTALL_SCRIPT_PATH),
         encoding="utf-8",
     )
+    (parent / ".lefthook" / "sync-deps.sh").write_text(
+        _read(_SYNC_DEPS_SCRIPT_PATH),
+        encoding="utf-8",
+    )
     (parent / "lefthook.yml").write_text(_read(_LEFTHOOK_CONFIG_PATH), encoding="utf-8")
     return parent
+
+
+def _write_sync_deps_script(checkout: Path) -> None:
+    lefthook_dir = checkout / ".lefthook"
+    lefthook_dir.mkdir(exist_ok=True)
+    (lefthook_dir / "sync-deps.sh").write_text(_read(_SYNC_DEPS_SCRIPT_PATH), encoding="utf-8")
+
+
+def _run_sync_deps(workdir: Path, path: str, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash", str(_SYNC_DEPS_SCRIPT_PATH), *args],
+        cwd=workdir,
+        env={**os.environ, "PATH": path},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
 
 
 def _commit_file(repo: Path, name: str = "tracked.txt", *, verify: bool = True) -> subprocess.CompletedProcess[str]:
@@ -607,6 +633,7 @@ def test_lefthook_install_script_fails_when_force_install_fails(tmp_path: Path) 
 
 def test_worktree_setup_uses_direnv_allow_and_exec_with_forwarded_arguments(tmp_path: Path) -> None:
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    _write_sync_deps_script(tmp_path)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     call_log = tmp_path / "direnv-calls.txt"
@@ -634,7 +661,7 @@ exec "$@"
     assert result.stdout == "forwarded"
     assert call_log.read_text(encoding="utf-8").splitlines() == [
         f"allow {tmp_path}",
-        f"exec {tmp_path} sh -c printf forwarded",
+        f"exec {tmp_path} bash {tmp_path}/.lefthook/sync-deps.sh sh -c printf forwarded",
     ]
 
 
@@ -655,13 +682,13 @@ def test_worktree_setup_resolves_checkout_root_from_subdirectory(tmp_path: Path)
     assert result.returncode == 0
     assert call_log.read_text(encoding="utf-8").splitlines() == [
         f"allow {tmp_path}",
-        f"exec {tmp_path} bash {tmp_path}/.lefthook/install.sh",
+        f"exec {tmp_path} bash {tmp_path}/.lefthook/sync-deps.sh bash {tmp_path}/.lefthook/install.sh",
     ]
 
 
 def test_worktree_setup_falls_back_to_nix_and_runs_default_install(tmp_path: Path) -> None:
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
-    (tmp_path / ".lefthook").mkdir()
+    _write_sync_deps_script(tmp_path)
     install_log = tmp_path / "install-ran.txt"
     _create_fake_executable(
         tmp_path / ".lefthook" / "install.sh",
@@ -683,7 +710,7 @@ exec "$@"
 
     assert result.returncode == 0
     assert nix_log.read_text(encoding="utf-8") == (
-        f"develop {tmp_path} --command bash {tmp_path}/.lefthook/install.sh\n"
+        f"develop {tmp_path} --command bash {tmp_path}/.lefthook/sync-deps.sh bash {tmp_path}/.lefthook/install.sh\n"
     )
     assert install_log.read_text(encoding="utf-8") == "installed"
 
@@ -741,6 +768,7 @@ def test_worktree_setup_falls_back_to_nix_when_direnv_allow_fails(tmp_path: Path
     # 書込みできず direnv allow が失敗する。hard fail で反復停滞せず nix develop へ
     # フォールバックする契約（issue #1999）
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    _write_sync_deps_script(tmp_path)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _create_fake_executable(bin_dir / "direnv", "#!/usr/bin/env bash\nexit 23\n")
@@ -759,7 +787,9 @@ exec "$@"
     assert result.returncode == 0
     assert result.stdout == "ran"
     assert "direnv allow に失敗しました" in result.stderr
-    assert nix_log.read_text(encoding="utf-8") == (f"develop {tmp_path} --command sh -c printf ran\n")
+    assert nix_log.read_text(encoding="utf-8") == (
+        f"develop {tmp_path} --command bash {tmp_path}/.lefthook/sync-deps.sh sh -c printf ran\n"
+    )
 
 
 def test_worktree_setup_fails_when_direnv_allow_fails_without_nix(tmp_path: Path) -> None:
@@ -789,6 +819,116 @@ def test_worktree_setup_fails_when_no_environment_loader_is_available(tmp_path: 
 
     assert result.returncode == 1
     assert result.stderr == "error: neither direnv nor nix is available in PATH.\n"
+
+
+def test_worktree_setup_wraps_commands_with_fail_closed_dependency_sync() -> None:
+    # explicit setup 経路は sync-deps.sh 経由で依存同期を fail-closed 実行する
+    # （issue #2125）。対話 shell（shellHook）の warning 継続とは経路分離
+    setup = _read(_WORKTREE_SETUP_SCRIPT_PATH)
+
+    assert ".lefthook/sync-deps.sh" in setup
+
+
+def test_interactive_shell_hook_keeps_dependency_sync_warning_open() -> None:
+    # 対話入場（direnv / nix develop）は sync 失敗でも入場を継続する方針を維持
+    # （issue #2125 のスコープは explicit setup 経路のみ）
+    flake = _read(_FLAKE_PATH)
+
+    assert 'uv sync --quiet || echo "warning: uv sync failed' in flake
+
+
+def test_sync_deps_fails_closed_when_uv_sync_fails(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "0"\n', encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _create_fake_executable(bin_dir / "uv", "#!/usr/bin/env bash\nexit 1\n")
+    marker = tmp_path / "command-ran.txt"
+
+    result = _run_sync_deps(
+        tmp_path,
+        f"{bin_dir}:/usr/bin:/bin",
+        "sh",
+        "-c",
+        f"printf ran > {marker}",
+    )
+
+    assert result.returncode != 0
+    assert not marker.exists()
+    assert "error: uv sync failed" in result.stderr
+
+
+def test_sync_deps_runs_command_after_successful_sync(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "0"\n', encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    uv_log = tmp_path / "uv-args.txt"
+    _create_fake_executable(
+        bin_dir / "uv",
+        f"#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> {uv_log}\nexit 0\n",
+    )
+
+    result = _run_sync_deps(tmp_path, f"{bin_dir}:/usr/bin:/bin", "sh", "-c", "printf forwarded")
+
+    assert result.returncode == 0
+    assert result.stdout == "forwarded"
+    assert uv_log.read_text(encoding="utf-8") == "sync --quiet\n"
+
+
+def test_sync_deps_skips_sync_when_pyproject_is_missing(tmp_path: Path) -> None:
+    # pyproject.toml の無い checkout（fixture 等）では同期対象が無いため、
+    # uv が PATH に無くてもコマンドをそのまま実行する
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+
+    result = _run_sync_deps(tmp_path, "/usr/bin:/bin", "sh", "-c", "printf forwarded")
+
+    assert result.returncode == 0
+    assert result.stdout == "forwarded"
+
+
+def test_sync_deps_fails_when_uv_is_missing_with_pyproject(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "0"\n', encoding="utf-8")
+
+    result = _run_sync_deps(tmp_path, "/usr/bin:/bin", "sh", "-c", "printf forwarded")
+
+    assert result.returncode == 1
+    assert "error: uv is not available in PATH; enter via nix develop or direnv." in result.stderr
+
+
+def test_worktree_setup_fails_closed_when_dependency_sync_fails(tmp_path: Path) -> None:
+    # issue #2125 要件 1: 失敗する uv で explicit setup 経路を通すと全体が exit 非 0
+    # になり、後続コマンドは実行されない
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    _write_sync_deps_script(tmp_path)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "0"\n', encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _create_fake_executable(
+        bin_dir / "direnv",
+        """#!/usr/bin/env bash
+if [ "$1" = "allow" ]; then
+  exit 0
+fi
+shift 2
+exec "$@"
+""",
+    )
+    _create_fake_executable(bin_dir / "uv", "#!/usr/bin/env bash\nexit 1\n")
+    marker = tmp_path / "command-ran.txt"
+
+    result = _run_worktree_setup(
+        tmp_path,
+        f"{bin_dir}:/usr/bin:/bin",
+        "sh",
+        "-c",
+        f"printf ran > {marker}",
+    )
+
+    assert result.returncode != 0
+    assert not marker.exists()
+    assert "error: uv sync failed" in result.stderr
 
 
 def test_worktree_environment_contract_is_wired_into_lite_steps_and_docs() -> None:

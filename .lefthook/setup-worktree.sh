@@ -12,6 +12,11 @@ else
   command=("$@")
 fi
 
+# explicit setup 経路は fail-closed: devShell 入場後にまず依存同期を行い、失敗したら
+# 後続コマンドを実行せず exit 非 0 で停止する（issue #2125）。対話 shell（direnv
+# .envrc → flake.nix shellHook）の warning 継続方針とは意図的に分離している
+command=(bash "$checkout_root/.lefthook/sync-deps.sh" "${command[@]}")
+
 # direnv allow は allow ストア（$XDG_DATA_HOME/direnv/allow、既定 ~/.local/share）への
 # 書込みを要する。sandbox 化された環境ではホーム配下へ書込みできず失敗するため、
 # 失敗時は hard fail せず nix develop 経路へフォールバックする（issue #1999）

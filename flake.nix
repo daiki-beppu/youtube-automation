@@ -90,6 +90,9 @@
                 bash "${./.}/.lefthook/install.sh" || exit 1
               fi
             fi
+            # 対話入場（direnv / nix develop）は依存同期失敗でも warning で継続する
+            # （入場をブロックしない）。explicit setup 経路（.lefthook/setup-worktree.sh）
+            # は .lefthook/sync-deps.sh により fail-closed（issue #2125）
             uv sync --quiet || echo "warning: uv sync failed; dependencies may be out of date." >&2
           '';
         };
