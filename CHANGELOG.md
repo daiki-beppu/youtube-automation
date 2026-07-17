@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `docs(skills)`: 課金 API（Vertex AI Gemini / Veo / Lyria、OpenAI Images、YouTube Data / Analytics API）を呼ぶ 26 project skill の SKILL.md に、実行前見積もり可能な「想定 API call 数」セクション（API 別の call 数 / 算出式・変動要因・上限 / 承認の安全弁）を追加した。対象は契約テスト `tests/test_skill_api_call_estimate_contract.py` が機械抽出（pyproject 全 CLI の課金分類 × skill の CLI 参照走査）で導出し、非対象理由・追加対象理由・新規 CLI の分類漏れ・記載漏れを CI で検出する（#2010）。
 
+- `chore(extensions)`: TypeScript 7.0.2 固定後の suno-helper / distrokid-helper を実経路（lint / format:check / compile / unit / build / Playwright e2e / CI Typecheck 契約テスト）で回帰検証した。TS 7 起因の互換修正は不要で、唯一再現した失敗は suno-helper の overlay e2e が開発マシンで稼働中の yt-collection-serve（port 7873/7872）を発見して「ローカル配信元なし」前提が破れる分離不足だったため、`--host-resolver-rules` で discovery 先ホストを遮断して環境非依存にした（#2015）。
+
 - `feat(analytics)`: 収集済みの traffic_sources / audience.by_device / YT_SEARCH 検索語を分析経路に接続した。`yt-analytics` の standard 以上で `get_traffic_source_detail("YT_SEARCH")` を呼び検索語トップ N を `traffic_sources.search_terms` へ保存し、スナップショット横断の流入源シェア推移・デバイス別集計・検索語トップ N を JSON で返す `yt-traffic-trend` CLI（`--top-search` / `--text`）を追加した。`/analytics-analyze` は `yt-traffic-trend` を 4 番目の必須 CLI とし、分析項目 6「流入源・デバイス分析」と validator の 4 CLI evidence 契約を追加した（#1804）。
 
 - `chore(extensions)`: suno-helper / distrokid-helper の TypeScript を 7.0.2 に固定し、pnpm 11.12.0（Nix extensions shell 契約）で両 lockfile を正規再生成した。TS 7 で削除された `baseUrl` を両 tsconfig から除去し（`paths` は相対形式のまま）、suno-helper は `types: ["chrome"]` で chrome グローバル型を明示 include。TypeScript 7.0.2 固定・lockfile 整合・削除済みオプション不使用は契約テスト（tests/test_extension_typescript_contract.py）で機械担保する（#2014）。
