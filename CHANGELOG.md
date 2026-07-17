@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(thumbnail)`: 画像 prompt への NG ワード / 他ドメイン値混入を生成前に止める検査を追加した。`config/skills/thumbnail.yaml::image_generation.gemini.forbid_keywords`（未設定時 no-op の list[str]）を新設し、`yt-generate-image` は最終プロンプト（大小文字無視の部分一致）にヒットすると生成 API を呼ばず終了コード非 0 で停止し、該当キーワードを標準エラーへ列挙する。`codex-image.sh` も codex 起動前に同等の検査を行う（`CODEX_IMAGE_FORBID_KEYWORDS` 明示指定を優先し、未指定なら merged skill-config から自動解決。config 文脈が無い実行は no-op）。SKILL.md の TTP プリフライト・チェックリストに `workflow-state.json::planning.music.*`（音楽用フィールド）を image prompt に転写しない項目を追加した（#1664）。
+
 - `chore(extensions)`: suno-helper / distrokid-helper の TypeScript を 7.0.2 に固定し、pnpm 11.12.0（Nix extensions shell 契約）で両 lockfile を正規再生成した。TS 7 で削除された `baseUrl` を両 tsconfig から除去し（`paths` は相対形式のまま）、suno-helper は `types: ["chrome"]` で chrome グローバル型を明示 include。TypeScript 7.0.2 固定・lockfile 整合・削除済みオプション不使用は契約テスト（tests/test_extension_typescript_contract.py）で機械担保する（#2014）。
 - `fix(collection-serve)`: `POST /collections/<id>/downloaded` が期待数未満の部分 ZIP（Suno が一部 entry で 1 clip しか生成しないケース）を 500 で拒否せず、配置済みファイルを受理して warning 付き 200 を返すようにした。workflow-state には `planning.music.actual_file_count` / `missing_file_count` を機械可読に記録し、`assets.music_downloaded=true` と collections index の `status=downloaded` へ貫通させる。suno-helper は warning を progress 通知に表示する。0 件配置・壊れた ZIP の 500 契約は維持（#1913）。
 

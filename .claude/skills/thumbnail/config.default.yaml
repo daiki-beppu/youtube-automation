@@ -111,6 +111,17 @@ image_generation:
         Keep the same letterforms, weight, and style across the whole title.
         Do not mix multiple typefaces in the title.
 
+    # NG ワードの事前検査 (#1664): 最終プロンプト文字列に大小文字無視の部分一致で
+    # ヒットするキーワードがあれば、生成 API / codex exec を呼ばずエラー停止する。
+    # workflow-state.json::planning.music.* (音楽用フィールド) の値がチャンネル規約
+    # 違反のまま画像 prompt に転写される事故 (例: "a sunglassed drummer") を機械的に
+    # 弾く用途。未設定・空リストなら検査しない (no-op)。
+    # キーは gemini namespace に置くが、検査は provider 非依存
+    # (Gemini / OpenAI / gemini_cli / codex の全入口で共通)。
+    # forbid_keywords:
+    #   - "sunglasses"
+    forbid_keywords: []
+
     # スタイル説明文 (生成時のスタイル意図、ドキュメンテーション用)
     style: ""
 
