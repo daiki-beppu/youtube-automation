@@ -87,6 +87,7 @@ yt-thumbnail-compare = "youtube_automation.cli_entrypoints:yt_thumbnail_compare"
 yt-thumbnail-correlate = "youtube_automation.cli_entrypoints:yt_thumbnail_correlate"
 yt-thumbnail-text = "youtube_automation.cli_entrypoints:yt_thumbnail_text"
 yt-title-duplicate-check = "youtube_automation.cli_entrypoints:yt_title_duplicate_check"
+yt-traffic-trend = "youtube_automation.cli_entrypoints:yt_traffic_trend"
 yt-video-analyze = "youtube_automation.cli_entrypoints:yt_video_analyze"
 yt-vote-log = "youtube_automation.cli_entrypoints:yt_vote_log"
 
