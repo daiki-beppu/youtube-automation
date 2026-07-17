@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `chore(extensions)`: suno-helper と distrokid-helper の full gate / Playwright e2e を維持し、Extensions CI が各 package の既存 `pnpm lint` 入口から共通設定の Oxlint を実行する接続契約を追加した。契約テスト自体の変更でも Extensions CI が起動するよう path filter を接続した（#2020）。
 
+- `feat(analytics)`: `/analytics-analyze` と `/flop-analysis`（postmortem）の学びを下流の `data/insights.jsonl`（append-only）へ機械可読に蓄積し、次サイクルの `/wf-new` → `/collection-ideate` が open エントリを企画根拠として消費・status 反映（adopted / dismissed）し、`/thumbnail` が lever=thumbnail の学びを制作前に参照する接続を追加した。エントリ形式は `insights-entry.schema.json` を単一ソースとし、schema 駆動の `validate_insights.py` で検証する。insights 不在の初回チャンネルでは既存の analytics / benchmark fallback / minimal mode を阻害しない（#1830）。
+
 - `feat(analytics)`: `yt-analytics` に既定 `standard` の `--depth {standard,full}` を追加し、`full` 指定時に視聴維持率と地域別データを収集・保存できるようにした。full 専用 API の明示エラーは不完全な成果物として保存せず失敗終了する。`/analytics-collect full` の導線と、`/analytics-analyze` が full データの維持率を数値根拠として扱う分析契約も追加した（#1799）。
 
 - `feat(collection-serve)`: port 別 PID ファイル、同一構成の既存 server の liveness check と再利用、`--stop --port` による明示停止、既定 60 分の idle timeout を追加し、suno-helper / distrokid-helper の完了手順で server を停止するようにした（#1725）。
