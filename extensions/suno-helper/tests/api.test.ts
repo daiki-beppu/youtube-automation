@@ -827,7 +827,7 @@ function mockFetchForDownloaded(postResponse: () => Partial<Response>) {
 }
 
 describe("shared/api postDownloaded: 正常系", () => {
-  it("Given 200 応答 When postDownloaded Then resolve する", async () => {
+  it("Given 200 応答 When postDownloaded Then warning なしで resolve する", async () => {
     const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
 
     await expect(
@@ -836,13 +836,52 @@ describe("shared/api postDownloaded: 正常系", () => {
         format: "mp3",
         suno_playlist_url: "https://suno.com/playlist/test",
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ warning: null });
 
     expect(fetchFn).toHaveBeenCalledTimes(2);
     expect(fetchFn).toHaveBeenCalledWith(
       `${BASE_URL}/collections/20260601-clm-aaa-collection/downloaded`,
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  it("Given 部分完了の warning 付き 200 応答 When postDownloaded Then warning を返す (#1913)", async () => {
+    mockFetchForDownloaded(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        placed_count: 10,
+        warning: "placed 10 files, expected 12 (2 missing)",
+      }),
+    }));
+
+    await expect(
+      postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+        file_count: 12,
+        expected_file_count: 12,
+        format: "mp3",
+        download_path: "/Users/test/Downloads/test.zip",
+      }),
+    ).resolves.toEqual({ warning: "placed 10 files, expected 12 (2 missing)" });
+  });
+
+  it("Given JSON でない 200 応答 When postDownloaded Then warning なしとして resolve する (#1913)", async () => {
+    mockFetchForDownloaded(() => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError("not json");
+      },
+    }));
+
+    await expect(
+      postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+        file_count: 0,
+        format: "mp3",
+        suno_playlist_url: "https://suno.com/playlist/test",
+      }),
+    ).resolves.toEqual({ warning: null });
   });
 
   it("Given download_path 付き payload When postDownloaded Then request body に download_path が含まれる", async () => {
@@ -1016,7 +1055,7 @@ describe("shared/api postDownloaded: 403 retry (#1217 ARCH-1217-002)", () => {
         format: "mp3",
         suno_playlist_url: "https://suno.com/playlist/test",
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ warning: null });
 
     // token fetch 2 回 + POST 2 回 = 4 回
     expect(fn).toHaveBeenCalledTimes(4);
