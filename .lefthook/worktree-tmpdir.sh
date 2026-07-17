@@ -41,6 +41,15 @@ case "${TMPDIR:-}" in
   printf '%s\n' "$TMPDIR"
   exit 0
   ;;
+*/"$isolated_name"/*)
+  # 自分の分離ディレクトリ配下のスクラッチ（nix develop / print-dev-env が切る
+  # nix-shell.XXXXXX 等）から呼ばれた再入場。スクラッチはランダム名のため、その
+  # 配下へ入れ子を作ると出力が評価のたびに変わり、これを基底にする NIX_CACHE_HOME
+  # （issue #2089）等の分離先が毎回リセットされてしまう。決定性を保つため自分の
+  # 分離ディレクトリへ正規化して出力する
+  printf '%s\n' "${TMPDIR%%/"$isolated_name"/*}/$isolated_name"
+  exit 0
+  ;;
 esac
 
 shared_root="${TMPDIR:-/tmp}"

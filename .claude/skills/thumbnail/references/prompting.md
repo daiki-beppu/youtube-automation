@@ -2,6 +2,10 @@
 
 SKILL.md「プロンプト構築」セクションから移植（内容改変なし・移動のみ）。具体的なプロンプトテンプレート例は `sample-prompts.md` を参照。
 
+## 0. TTP 方針は provider 共通（#2070）
+
+参照サムネを winning template として扱い、winning layout を維持したまま品質改善のみを指示する TTP 方針は gemini / codex で共通。正（SSOT）は SKILL.md codex 節の「既定テンプレート」と `config.default.yaml` の `image_generation.codex.default_prompt_template`。gemini 側の既定 `diff_prompt_template` はこの方針行と同期されており、チャンネル側 override（`config/skills/thumbnail.yaml`）が常に優先される。
+
 ## 1. prompt_prefix を取得
 
 `image_generation.gemini.prompt_prefix` をプロンプト冒頭に配置。
