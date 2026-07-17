@@ -321,7 +321,7 @@ config 側のデフォルトは `image_generation.gemini.single_step.{max_attemp
 
 #### プロンプト構築
 
-TTP 生成方針は provider によらず共通: 参照サムネを winning template として扱い、winning layout を維持したまま品質改善（mobile readability / face impact / no logos / no watermarks / no broken hands）だけを指示する（codex 節の「既定テンプレート」と同じ方針。#2070）。`config.default.yaml` の `image_generation.gemini.diff_prompt_template` 既定値はこの方針行を codex 既定テンプレートと同期しており、チャンネル側 `config/skills/thumbnail.yaml` の `diff_prompt_template` があればそちらが常に優先される。
+TTP 生成方針は provider によらず共通: 参照サムネを winning template として扱い、winning layout を維持したまま品質改善（mobile readability / face impact / no logos / no watermarks / no broken hands）だけを指示する（codex 節の「既定テンプレート」と同じ方針。#2070）。`config.default.yaml` の `image_generation.gemini.diff_prompt_template` 既定値はこの方針行を codex 既定テンプレートと同期しており、チャンネル側 `config/skills/thumbnail.yaml` の `diff_prompt_template` があればそちらが常に優先される。`provider: gemini_cli`（サブスク認証の gemini CLI 経由）も同じ `diff_prompt_template` とこの構築手順を共有し、CLI ラッパーはプロンプトを方針を変えずそのまま透過する（model / CLI protocol のみ異なる。#2071、`tests/test_image_provider_gemini_cli.py` の contract test で機械担保）。
 
 1. `image_generation.gemini.color_themes` からテーマのカラー設定を取得
 2. `image_generation.gemini.diff_prompt_template` のプレースホルダーを置換してプロンプト構築:
