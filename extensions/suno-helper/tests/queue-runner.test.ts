@@ -9,7 +9,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PromptEntry } from "../../shared/api";
 import { CLIPS_PER_REQUEST, INFLIGHT_STALL_TIMEOUT_MS, MAX_INFLIGHT_REQUESTS, PHASE } from "../../shared/constants";
-import { finalizeQueueEntriesYield, submitQueueEntries, waitForSubmittedClipsComplete } from "../lib/queue-runner";
+import {
+  finalizeQueueEntriesYield,
+  resolveStalledQueueEntries,
+  submitQueueEntries,
+  waitForSubmittedClipsComplete,
+} from "../lib/queue-runner";
 import type { QueueSubmissionOptions, SubmittedClipCompletionOptions } from "../lib/queue-runner";
 import { buildRunPayload } from "../lib/run-overrides";
 
@@ -652,9 +657,10 @@ describe("queue-runner: production ロジック (#1586)", () => {
       now: () => currentTime,
     };
 
-    await expect(waitForSubmittedClipsComplete(options)).rejects.toThrow(
-      `最後の進捗からの経過時間=${INFLIGHT_STALL_TIMEOUT_MS}ms`,
-    );
+    const result = await waitForSubmittedClipsComplete(options);
+    expect(result.timedOut).toBe(true);
+    expect(result.stalledClipIds).toEqual(["clip-b"]);
+    expect(result.message).toContain(`最後の進捗からの経過時間=${INFLIGHT_STALL_TIMEOUT_MS}ms`);
     expect(pollCount).toBe(2);
   });
 
@@ -679,9 +685,55 @@ describe("queue-runner: production ロジック (#1586)", () => {
       now: () => currentTime,
     };
 
-    await expect(waitForSubmittedClipsComplete(options)).rejects.toThrow(
-      `最後の進捗からの経過時間=${INFLIGHT_STALL_TIMEOUT_MS}ms`,
-    );
+    const result = await waitForSubmittedClipsComplete(options);
+    expect(result.timedOut).toBe(true);
+    expect(result.stalledClipIds).toEqual(["clip-a", "clip-b", "clip-c"]);
+    expect(result.message).toContain(`最後の進捗からの経過時間=${INFLIGHT_STALL_TIMEOUT_MS}ms`);
     expect(pollCount).toBe(1);
+  });
+
+  it("Given 全 clip が完了済み When 完了待ちする Then timedOut=false で stalledClipIds が空の結果を返す", async () => {
+    const options: SubmittedClipCompletionOptions = {
+      expectedClipCount: 2,
+      previousSubmittedClipIds: [],
+      isAborted: () => false,
+      getSubmittedIds: () => ["clip-a", "clip-b"],
+      getPendingIdsByIds: () => [],
+      getPendingSubmittedIds: () => [],
+      requestFeedPoll: async () => [],
+      abortableSleep: async () => {},
+    };
+
+    const result = await waitForSubmittedClipsComplete(options);
+    expect(result).toEqual({ timedOut: false, submittedIds: ["clip-a", "clip-b"], stalledClipIds: [] });
+  });
+});
+
+describe("resolveStalledQueueEntries", () => {
+  const clipIdsByEntry = new Map<number, string[]>([
+    [0, ["clip-0a", "clip-0b"]],
+    [1, ["clip-1a", "clip-1b"]],
+    [2, ["clip-2a", "clip-2b"]],
+  ]);
+
+  it("Given 一部 entry の clip だけが stall When 対応付ける Then 該当 entry index のみ返す", () => {
+    const result = resolveStalledQueueEntries(["clip-1b"], clipIdsByEntry);
+    expect(result).toEqual({ stalledEntryIndices: [1], unmappedStalledClipIds: [] });
+  });
+
+  it("Given 複数 entry にまたがる stall When 対応付ける Then 昇順の entry index を返す", () => {
+    const result = resolveStalledQueueEntries(["clip-2a", "clip-0b", "clip-2b"], clipIdsByEntry);
+    expect(result).toEqual({ stalledEntryIndices: [0, 2], unmappedStalledClipIds: [] });
+  });
+
+  it("Given 全 entry の clip が stall When 対応付ける Then 全 entry index を返す", () => {
+    const allClipIds = Array.from(clipIdsByEntry.values()).flat();
+    const result = resolveStalledQueueEntries(allClipIds, clipIdsByEntry);
+    expect(result).toEqual({ stalledEntryIndices: [0, 1, 2], unmappedStalledClipIds: [] });
+  });
+
+  it("Given entry へ対応付けられない stalled clip が混在 When 対応付ける Then unmappedStalledClipIds に分離する", () => {
+    const result = resolveStalledQueueEntries(["clip-1a", "previous-clip-x"], clipIdsByEntry);
+    expect(result).toEqual({ stalledEntryIndices: [1], unmappedStalledClipIds: ["previous-clip-x"] });
   });
 });
