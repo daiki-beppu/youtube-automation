@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `docs(skills)`: 課金 API（Vertex AI Gemini / Veo / Lyria、OpenAI Images、YouTube Data / Analytics API）を呼ぶ 26 project skill の SKILL.md に、実行前見積もり可能な「想定 API call 数」セクション（API 別の call 数 / 算出式・変動要因・上限 / 承認の安全弁）を追加した。対象は契約テスト `tests/test_skill_api_call_estimate_contract.py` が機械抽出（pyproject 全 CLI の課金分類 × skill の CLI 参照走査）で導出し、非対象理由・追加対象理由・新規 CLI の分類漏れ・記載漏れを CI で検出する（#2010）。
+- `feat(auth)`: OAuth 新規ブラウザ認証の `run_local_server()` にチャンネル名（`meta.channel_short`）入りの `authorization_prompt_message` / `success_message` を渡し、複数チャンネル並列運用でトークン失効が重なった際にターミナルログと認証完了ページのどちらからも対象チャンネルを判別できるようにした。prompt には認証 URL（redirect 先ポート入り）も含め、config 読込不可時はディレクトリ名へフォールバックする（#1966）。
 
 - `chore(extensions)`: TypeScript 7.0.2 固定後の suno-helper / distrokid-helper を実経路（lint / format:check / compile / unit / build / Playwright e2e / CI Typecheck 契約テスト）で回帰検証した。TS 7 起因の互換修正は不要で、唯一再現した失敗は suno-helper の overlay e2e が開発マシンで稼働中の yt-collection-serve（port 7873/7872）を発見して「ローカル配信元なし」前提が破れる分離不足だったため、`--host-resolver-rules` で discovery 先ホストを遮断して環境非依存にした（#2015）。
 
