@@ -176,6 +176,19 @@ class YouTubeOAuthHandler:
             self.token_file = self.auth_dir / "token.json"
         self.credentials = None
 
+    def _channel_label(self) -> str:
+        """認証メッセージに埋め込むチャンネル識別ラベルを返す。
+
+        config 読み込みに失敗しても認証自体は継続できるよう、
+        ``ConfigError`` 時は auth ディレクトリの親ディレクトリ名へフォールバックする。
+        """
+        try:
+            from youtube_automation.utils.config import load_config
+
+            return load_config().meta.channel_short
+        except ConfigError:
+            return self.auth_dir.resolve().parent.name
+
     def _validate_client_secrets(self):
         """client_secrets.json の存在確認"""
         if self.client_secrets_file.exists() and not self.client_secrets_file.is_file():
@@ -253,12 +266,28 @@ class YouTubeOAuthHandler:
 
         # 新規認証が必要な場合
         if not self.credentials or not self.credentials.valid:
-            print("🌐 ブラウザで認証を実行します...")
+            channel_label = self._channel_label()
+            print(f"🌐 [{channel_label}] ブラウザで認証を実行します...")
             print("📝 注意: 初回認証時はブラウザが開き、Googleアカウントでのログインが必要です")
 
             try:
                 flow = InstalledAppFlow.from_client_secrets_file(str(self.client_secrets_file), self._scopes)
-                self.credentials = flow.run_local_server(port=0)
+                # authorization_prompt_message は run_local_server() 内で
+                # ``.format(url=...)`` される。`{url}` placeholder を壊さないよう
+                # ラベル側の brace は escape する（success_message は format されない）
+                escaped_label = channel_label.replace("{", "{{").replace("}", "}}")
+                self.credentials = flow.run_local_server(
+                    port=0,
+                    authorization_prompt_message=(
+                        f"🔐 [{escaped_label}] チャンネルの OAuth 認証です。"
+                        "ブラウザが開かない場合は以下の URL を開いてください"
+                        "（URL 内 redirect_uri のポート番号がこのターミナルに対応するタブの目印です）: {url}"
+                    ),
+                    success_message=(
+                        f"[{channel_label}] チャンネルの OAuth 認証が完了しました。"
+                        "このタブを閉じてターミナルに戻ってください。"
+                    ),
+                )
                 print("✅ OAuth 2.0 認証成功")
                 self._save_credentials()
             except (ValueError, OSError, google.auth.exceptions.GoogleAuthError) as e:
