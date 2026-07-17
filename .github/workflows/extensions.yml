@@ -17,6 +17,11 @@ on:
       - "flake.nix"
       - "flake.lock"
 
+# main への push は cancel-in-progress の対象外（デプロイ相当の run を途中で殺さない）
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   check:
     runs-on: ubuntu-latest
