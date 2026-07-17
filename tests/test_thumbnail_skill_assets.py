@@ -622,9 +622,10 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     assert "承認済み thumbnail から textless main を後続再生成" in config
     assert "背景 → テキストオーバーレイ" not in config
     assert "rotate: true" in config
-    assert "variation_clause: |" in config
-    assert "style_lock_clause: |" in config
-    assert "text_strip_clause: |" in config
+    # #1702: opt-in clause は既定空文字（キーは後方互換のため残す）
+    assert 'variation_clause: ""' in config
+    assert 'style_lock_clause: ""' in config
+    assert 'text_strip_clause: ""' in config
     # #569: TTP 参照画像の署名・透かし・ロゴが焼き込まれる IP / 版権リスク防止
     assert "ip_safety_clause: |" in config
     assert "signature" in config
@@ -660,9 +661,10 @@ def test_thumbnail_default_config_keeps_font_stabilization_contract() -> None:
     assert "承認済み thumbnail から作る textless 再生成プロンプトには展開しない" in config_text
     assert "diff_prompt_template に ${typography_clause} として展開する" not in config_text
 
-    typography_clause = gemini_config["single_step"]["typography_clause"]
-    assert "consistent {font_description} typeface" in typography_clause
-    assert "Do not mix multiple typefaces" in typography_clause
+    # #1702: typography_clause は既定空文字の opt-in。推奨文面はコメントとして残す
+    assert gemini_config["single_step"]["typography_clause"] == ""
+    assert "consistent {font_description} typeface" in config_text
+    assert "Do not mix multiple typefaces" in config_text
 
     overlay = gemini_config["thumbnail_text"]["overlay"]
     assert overlay["font"]["title"] == ""
@@ -1258,15 +1260,62 @@ def test_codex_prompt_helper_cli_rejects_invalid_template(tmp_path: Path) -> Non
 
 
 def test_thumbnail_default_config_provides_anatomy_clause() -> None:
-    """#570: キャラ + 手構図向け anatomy-correctness clause が default config に同梱されている。"""
-    config = _read_thumbnail_default_config()
+    """#570 / #1702: anatomy clause は opt-in（既定空文字）だが推奨文面はコメントで同梱する。"""
+    config_text = _read_thumbnail_default_config()
+    config = _load_thumbnail_default_config()
 
-    assert "anatomy_clause: |" in config
-    # 解剖学品質ゲート core terms (issue #570 の修正要件 2)
-    assert "five fingers" in config
-    assert "fused" in config
-    assert "extra" in config
-    assert "melted" in config
+    assert config["image_generation"]["gemini"]["single_step"]["anatomy_clause"] == ""
+    # 解剖学品質ゲート core terms (issue #570 の修正要件 2) は推奨文面コメントとして残す
+    assert "five fingers" in config_text
+    assert "fused" in config_text
+    assert "extra" in config_text
+    assert "melted" in config_text
+
+
+def test_thumbnail_default_config_injects_only_ip_safety_clause_by_default() -> None:
+    """#1702: 既定で注入される clause は ip_safety_clause の 1 つだけに集約する。"""
+    config = _load_thumbnail_default_config()
+    single_step = config["image_generation"]["gemini"]["single_step"]
+
+    clause_keys = [key for key in single_step if key.endswith("_clause")]
+    non_empty = [key for key in clause_keys if single_step[key]]
+    assert non_empty == ["ip_safety_clause"]
+
+    template = _gemini_diff_prompt_template(config)
+    assert re.findall(r"\$\{(\w+)\}", template) == ["ip_safety_clause"]
+
+
+def test_thumbnail_default_config_slims_composition_rules_and_thumbnail_text() -> None:
+    """#1702: composition_rules は text_lines のみ、thumbnail_text は text_overlay_prompt を単一入口にする。"""
+    config_text = _read_thumbnail_default_config()
+    config = _load_thumbnail_default_config()
+    gemini = config["image_generation"]["gemini"]
+
+    assert gemini["composition_rules"] == {"text_lines": "タイトルは 2 行以内"}
+    assert set(gemini["thumbnail_text"]) == {"channel_name", "font", "text_overlay_prompt", "overlay"}
+    # 段階的廃止方針（deprecated キーと移行ガイド）が明記されている
+    assert "deprecated" in config_text
+    assert "DeprecationWarning" in config_text
+    assert "移行ガイド" in config_text
+
+
+def test_thumbnail_skill_prompt_section_is_single_source_with_final_prompt_example() -> None:
+    """#1702: プロンプト指示解説は 1 セクション + モード別差分に集約し、最終プロンプト例を 1 例掲載する。"""
+    skill = _read_thumbnail_skill()
+    prompt_section = _slice_between(skill, "## プロンプト構築", "## ワークフロー")
+
+    assert "最小限のキーワード" in prompt_section
+    assert "参照画像主導" in prompt_section
+    assert "モード別差分" in prompt_section
+    # 実際にプロバイダーへ渡る最終プロンプト例（既定 config の全文）
+    assert "```text" in prompt_section
+    assert "Use the title" in prompt_section
+    assert "Do not reproduce any signature" in prompt_section
+    # 既定 clause は ip_safety のみ。多重 clause の同時展開指示は解消済み
+    assert "${ip_safety_clause}` の 1 つだけ" in prompt_section
+    single_step_prompt_block = _slice_between(skill, "#### プロンプト構築", "#### 生成コマンド")
+    assert "共通ガイダンス clause（`single_step.variation_clause` / `style_lock_clause`" not in single_step_prompt_block
+    assert "opt-in clause" in single_step_prompt_block
 
 
 def test_thumbnail_skill_quality_check_covers_hand_anatomy() -> None:

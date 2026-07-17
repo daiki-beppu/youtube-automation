@@ -1,6 +1,6 @@
 # Thumbnail プロンプト構築の原則
 
-SKILL.md「プロンプト構築」セクションから移植（内容改変なし・移動のみ）。具体的なプロンプトテンプレート例は `sample-prompts.md` を参照。
+SKILL.md「プロンプト構築」セクションの補足。具体的なプロンプトテンプレート例は `sample-prompts.md` を参照。
 
 ## 0. TTP 方針は provider 共通（#2070）
 
@@ -17,9 +17,11 @@ SKILL.md「プロンプト構築」セクションから移植（内容改変な
 - `instrument`: 楽器（テーマに応じて持ち替え可なら変更）
 - `face`: 顔の向き指示
 
-## 3. composition_rules から環境・制約を適用
+## 3. composition_rules から制約を適用
 
-- `environment`: 許可される環境
-- `allowed_actions`: 使える活動
-- `ng_actions`: 禁止パターン
-- `brightness`: 明るさルール
+既定で残る実効キーは `text_lines`（タイトル行数の制約）のみ (#1702)。旧個別キー
+（`environment` / `character_size` / `character_pose` / `allowed_actions` /
+`ng_actions` / `background` / `channel_branding`）は deprecated で、構図・環境の
+意図はチャンネル側 override の `diff_prompt_template` 本文に短い文で直接書く。
+override に残っている deprecated キーは当面 deep-merge され続けるが、config
+ロード時に DeprecationWarning が出る。
