@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `docs(suno,suno-helper)`: 長尺 BGM チャンネル向けに `config/skills/suno.yaml::duration_filter`（`min_sec` / `max_sec`、部分指定は既定値と deep-merge）の override 手順を `/suno` Step 2 と `/suno-helper` の duration guard 節へ文書化した。override が `suno-prompts.json` へ反映される契約は回帰テストで pin し（機能自体は #1269 で実装済み・既定 60〜300 秒は不変）、閾値変更後は `yt-generate-suno` の再生成が必要なことと、resume が run 開始時点の閾値を保持するため新規 run で効かせる注意も明記した（#1937）。
 
+- `feat(thumbnail)`: Gemini API 経路の既定 prompt を Codex と同じ TTP 方針（winning layout 維持・最小限の品質改善のみ）へ揃えた。`config.default.yaml` の `image_generation.gemini.diff_prompt_template` 既定値を codex 既定テンプレートと方針行を同期した TTP テンプレート（`{title_line1}` / `{title_line2}` + `${ip_safety_clause}`）にし、チャンネル側 `diff_prompt_template` override の優先（deep-merge スカラ置換）と方針同期をテストで機械担保した。SKILL.md / prompting.md に provider 差のない TTP 方針を明記した（#2070）。
+
+- `feat(thumbnail)`: gemini_cli 経路が #2070 と同じ TTP 方針（codex と同期した既定 `diff_prompt_template`）を provider 切替でも損なわないことを contract test で機械担保した。CLI ラッパー `_build_prompt` はプロンプトをそのまま透過し方針文言を独自に持たないことを検証し、SKILL.md に gemini_cli が同じ `diff_prompt_template` と構築手順を共有する旨を明記した。model / timeout / CLI protocol は変更なし（#2071）。
+
 - `feat(auth)`: git worktree 上で gitignore された `auth/` が複製されず OAuth 認証が `FileNotFoundError` になる問題に対応した。`.git` pointer ファイルと `commondir` から git コマンド非依存で main 作業ツリーを検知する `utils/worktree.py::main_worktree_root()` を追加し、worktree では `client_secrets.json` の候補列末尾に main 側 `auth/` を追加、ローカル `token.json` が無い場合は token の読み書きを main 側 `auth/token.json` に集約する（refresh 結果の分岐防止）。`CLIENT_SECRETS_DIR` 最優先・非 worktree 環境の解決順序は不変で、未検出時のエラーには探索した全候補パスを表示する（#1721）。
 
 - `fix(devshell)`: 並列 worktree の Nix キャッシュ競合（同一 fingerprint の flake を複数 worktree が同時評価すると、ユーザーグローバルな `~/.cache/nix` の eval-cache SQLite への同時書込みが「error (ignored): SQLite database ... is busy」で破棄され続け、レビュー step の遅延・再試行を誘発する問題）を診断し、`.envrc` / `.lefthook/setup-worktree.sh` / shellHook が Nix 専用の `NIX_CACHE_HOME` を worktree 分離 TMPDIR 配下へ export して各 worktree が自分の評価結果だけを参照するようにした。`XDG_CACHE_HOME` は変更せず、解決失敗時は共有キャッシュのまま fail-open で続行する（#2089）。

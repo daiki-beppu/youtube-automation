@@ -565,7 +565,9 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     assert "enabled: false" in config
     assert 'source_role: "thumbnail_candidate"' in config
     assert "fallback_when_empty: true" in config
-    assert 'diff_prompt_template: ""' in config
+    # #2070: gemini 既定 diff_prompt_template は空文字ではなく TTP 既定テンプレートを持つ
+    assert 'diff_prompt_template: ""' not in config
+    assert "diff_prompt_template: |" in config
 
 
 def test_thumbnail_design_report_uses_current_two_phase_contract() -> None:
@@ -1013,6 +1015,74 @@ def test_thumbnail_default_config_provides_codex_thumbnail_first_prompt() -> Non
         "Do not add any title text yet",
     ):
         assert forbidden not in template
+
+
+def _gemini_diff_prompt_template(config: dict) -> str:
+    template = config["image_generation"]["gemini"]["diff_prompt_template"]
+    assert isinstance(template, str)
+    return template
+
+
+def _codex_policy_lines(template: str) -> list[str]:
+    """codex 既定テンプレートから title 行を除いた TTP 方針行（winning layout 維持・最小改善）を返す。"""
+    policy = [line for line in template.strip().splitlines() if line and "{title}" not in line]
+    assert policy, "codex 既定テンプレートから方針行を抽出できません"
+    return policy
+
+
+def test_thumbnail_default_config_gemini_diff_template_syncs_codex_ttp_policy() -> None:
+    """#2070: gemini 既定 diff_prompt_template は codex 既定テンプレート（SSOT）と同じ TTP 方針行を持つ。"""
+    config = _load_thumbnail_default_config()
+    codex_template = _codex_prompt_template(config)
+    gemini_template = _gemini_diff_prompt_template(config)
+
+    for policy_line in _codex_policy_lines(codex_template):
+        assert policy_line in gemini_template
+
+    # title は codex の {title} 意味論と同じく「サムネに焼くテキスト」を行単位で渡す
+    assert gemini_template.count("{title_line1}") == 1
+    assert gemini_template.count("{title_line2}") == 1
+    # TTP モード常時挿入必須の ip_safety_clause (#569) を既定で展開対象にする
+    assert "${ip_safety_clause}" in gemini_template
+    for forbidden in (
+        "textless background",
+        "Remove all text",
+        "Do not add any title text yet",
+    ):
+        assert forbidden not in gemini_template
+
+
+def test_thumbnail_gemini_diff_template_channel_override_takes_priority(tmp_path, monkeypatch) -> None:
+    """#2070: channel 側 diff_prompt_template は deep-merge のスカラ置換で既定値より常に優先される。"""
+    from youtube_automation.utils import skill_config
+
+    override_dir = tmp_path / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / "thumbnail.yaml").write_text(
+        'image_generation:\n  gemini:\n    diff_prompt_template: "channel custom prompt {title_line1}"\n',
+        encoding="utf-8",
+    )
+
+    merged = skill_config.load_skill_config("thumbnail", use_cache=False, channel_dir=tmp_path)
+
+    assert merged["image_generation"]["gemini"]["diff_prompt_template"] == "channel custom prompt {title_line1}"
+    # dict 部分は default が残る (deep-merge 検証)
+    assert "ip_safety_clause" in merged["image_generation"]["gemini"]["single_step"]
+
+
+def test_thumbnail_docs_state_provider_agnostic_ttp_policy() -> None:
+    """#2070: SKILL.md / prompting.md が provider 差なく同じ TTP 方針を明示する。"""
+    skill = _read_thumbnail_skill()
+    prompting = (_repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "prompting.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "TTP 生成方針は provider によらず共通" in skill
+    assert "TTP 方針は provider 共通" in prompting
+    assert "チャンネル側 override" in prompting
+    # #2071: gemini_cli 経路も同じ diff_prompt_template と構築手順を共有することを明示
+    assert "`provider: gemini_cli`" in skill
+    assert "同じ `diff_prompt_template` とこの構築手順を共有" in skill
 
 
 def test_thumbnail_default_config_codex_template_matches_skill_md_block() -> None:
