@@ -106,17 +106,19 @@ def _assert_codex_ttp_prompt_policy(block: str) -> None:
     assert "動画タイトル全文" in block
 
 
-def test_thumbnail_standard_contract_is_thumbnail_first() -> None:
-    """Given /thumbnail standard docs
-    Then text-included thumbnail is approved before textless main regeneration.
+def test_thumbnail_standard_contract_is_textless_first_deterministic() -> None:
+    """Given /thumbnail standard docs (#1907)
+    Then textless main is approved first and thumbnail.jpg is composed via yt-thumbnail-text.
     """
     block = _thumbnail_standard_contract_block(_read(_THUMBNAIL_SKILL_MD))
 
-    assert "テキスト付き YouTube サムネ → 承認済みサムネから textless 動画背景" in block
+    assert "textless 動画背景の生成 → `yt-thumbnail-text` による実フォント合成" in block
+    assert "uv run yt-thumbnail-text" in block
     assert "テキスト付き最終サムネを `10-assets/thumbnail.jpg` として確定" in block
-    assert "承認済み `thumbnail.jpg` を参照画像にして" in block
     assert "テキストなし `main.png/jpg`" in block
-    assert "テキストなし動画背景 → テキスト付き YouTube サムネ" not in block
+    assert block.find("cp main-v1.png main.png") < block.find("uv run yt-thumbnail-text")
+    # 旧標準（テキスト付き先行）は明示 fallback としてだけ残る
+    assert "AI 焼き込み経路（fallback・非既定）" in block
     assert "承認済み `main.png/jpg` を参照画像にして" not in block
 
 
@@ -151,18 +153,16 @@ def test_thumbnail_default_config_comments_match_thumbnail_first_single_step() -
     assert "初回 textless 背景用" not in config
 
 
-def test_thumbnail_skill_dir_has_no_textless_first_wording() -> None:
-    """Given distributed thumbnail docs
-    Then old textless-first wording is absent from the skill directory.
+def test_thumbnail_skill_does_not_present_text_included_first_as_standard() -> None:
+    """Given distributed thumbnail docs (#1907)
+    Then text-included-first wording appears only as the explicit AI-bake fallback,
+    never as the standard order.
     """
-    offenders: list[str] = []
-    for path in _THUMBNAIL_DIR.rglob("*"):
-        if path.is_file():
-            text = _read(path)
-            if re.search(r"textless.*先に|テキストなし.*先行", text):
-                offenders.append(str(path.relative_to(_REPO_ROOT)))
+    skill = _read(_THUMBNAIL_SKILL_MD)
 
-    assert offenders == []
+    assert "標準手順は、**textless 動画背景の生成" in skill
+    assert "標準手順は、**テキスト付き YouTube サムネ" not in skill
+    assert "テキスト付き YouTube サムネ → 承認済みサムネから textless 動画背景」の順で" in skill
 
 
 def test_collection_ideate_parallel_generation_branches_to_codex_image_script() -> None:
