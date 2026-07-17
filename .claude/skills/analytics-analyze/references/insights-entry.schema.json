@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "insights-entry.schema.json",
+  "title": "Insights entry",
+  "description": "下流チャンネルリポジトリの data/insights.jsonl に 1 行 1 エントリで蓄積する『学び』の契約。書き手は /analytics-analyze（source=analysis）と /flop-analysis（source=postmortem）、読み手は /wf-new・/collection-ideate・/thumbnail。エントリの追加は append-only（既存行の削除・並べ替え・finding 等の書き換え禁止）とし、status / status_note の in-place 更新だけを企画確定時の status 反映（/collection-ideate の規則）に許可する。検証は同ディレクトリの validate_insights.py を使う。",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "date",
+    "source",
+    "lever",
+    "finding",
+    "recommended_action",
+    "evidence",
+    "status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "description": "エントリ形式のバージョン。#1805 の分析生出力 JSON とはファイル・責務を分ける"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "ファイル内で一意な識別子。推奨形式: <YYYYMMDD>-<source>-<slug>（例: 20260717-analysis-thumbnail-text-size）。status 更新時の行特定に使う"
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "学びを記録した日付（YYYY-MM-DD）"
+    },
+    "source": {
+      "enum": ["analysis", "postmortem"],
+      "description": "analysis: /analytics-analyze のレポート由来。postmortem: /flop-analysis の検証済み postmortem.md 由来"
+    },
+    "source_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "根拠成果物のリポジトリ相対パス（例: reports/analysis_20260717.json、collections/live/<collection>/20-documentation/postmortem.md）"
+    },
+    "lever": {
+      "enum": ["thumbnail", "title", "topic", "bgm", "metadata", "other"],
+      "description": "学びが効く制作レバー。/thumbnail は lever=thumbnail の open エントリだけを参照する"
+    },
+    "finding": {
+      "type": "string",
+      "minLength": 1,
+      "description": "検証・分析で得た事実ベースの学び"
+    },
+    "recommended_action": {
+      "type": "string",
+      "minLength": 1,
+      "description": "次サイクルの企画・制作で取るべき具体アクション"
+    },
+    "evidence": {
+      "type": "string",
+      "minLength": 1,
+      "description": "数値根拠。analysis 由来は JSON path 付き数値引用、postmortem 由来は target_value / baseline_value / threshold 等を含める"
+    },
+    "status": {
+      "enum": ["open", "adopted", "dismissed"],
+      "description": "open: 未消費。adopted: 企画根拠として採用。dismissed: 検討の上見送り。追記時は必ず open"
+    },
+    "status_note": {
+      "type": "string",
+      "minLength": 1,
+      "description": "adopted / dismissed へ更新した理由（任意）"
+    }
+  }
+}
