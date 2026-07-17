@@ -132,6 +132,7 @@ agent が優先して使う DOM signal:
 - 全 checkbox OFF では実行できない。少なくとも 1 件を選ぶ
 - entry phase の ERROR / STOPPED から再開する場合は resume バナーの "再開" を押す。playlist / download phase の中断は **Playlist から再開** / **Download から再開** を使う
 - prompts の自動取得後に **異常値の曲を再生成する** を選ぶ。通常は既定 ON（duration guard NG の entry を最大 2 回再生成）。追加生成を避ける運用では OFF にし、NG を含む生成済み全 clip が playlist / download 候補に残ることを了承して進む
+- duration guard の閾値は `suno-prompts.json` の `duration_filter`（既定 60〜300 秒）を使う。長尺 BGM チャンネル等で範囲を変える場合はチャンネル側 `config/skills/suno.yaml::duration_filter` を override して `uv run yt-generate-suno` で再生成する（`/suno` SKILL.md Step 2 参照）。resume は run 開始時点の閾値を保持するため、閾値変更を効かせるには再開ではなく新規 run で実行する
 
 ### Step 4. "連続実行" を押す
 

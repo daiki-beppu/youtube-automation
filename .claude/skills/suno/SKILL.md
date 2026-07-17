@@ -446,6 +446,15 @@ uv run yt-generate-suno <collection-path>
 
 `config/skills/suno.yaml` の `genre_line` + `exclude_styles` + `style_influence` をパターンに自動付加して `suno-prompts.md` と `suno-prompts.json` を生成する。ボーカルモードでは entry `name` を使い、同階層の `suno-lyrics.json` から同名 lyrics を Style とマージする。保存後、`workflow-state.json` の `assets.music_prompts = true` に更新する。
 
+`suno-prompts.json` には suno-helper 拡張が playlist 採用判定に使う `duration_filter`（既定 `min_sec: 60` / `max_sec: 300`）も書き出される。1 曲 5 分超が常態の長尺 BGM チャンネルでは既定 `max_sec: 300` で大半の clip が duration guard NG になり Queue モード + 一括 DL が完走しないため、チャンネル側 `config/skills/suno.yaml` で override する（部分指定可。未指定キーは既定値と deep-merge）:
+
+```yaml
+duration_filter:
+  max_sec: 480  # 例: 1 曲 5〜8 分のチャンネル
+```
+
+override 後は `uv run yt-generate-suno` を再実行して `suno-prompts.json` へ反映すること（拡張は JSON の値を読むため、config 変更だけでは効かない）。
+
 生成後に成果物を検証する:
 
 ```bash

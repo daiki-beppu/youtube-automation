@@ -2,8 +2,8 @@
   // WXT が .wxt/tsconfig.json を生成する (auto-imports / globals の型を含む)。
   "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "jsx": "react-jsx",
+    "types": ["chrome"],
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "paths": {
