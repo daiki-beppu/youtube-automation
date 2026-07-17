@@ -17,12 +17,12 @@
 
 ## チャンネル立ち上げ
 
-標準フローは `/setup` → `/channel-new` → `/wf-new`。追加競合発掘、benchmark、viewer voice、方向性再検討、branding 再反映は必要なときだけ任意後続として実行する。
+標準フローは `/setup` → `/channel-new`（`/viewer-voice` → `/audience-persona-design` → `/viewing-scene` を含む）→ `/wf-new`。公開前のペルソナチェーンは既存の競合 / TTP / viewer-voice 成果物を入力に完走し、自チャンネル Analytics report や任意の本格 benchmark 収集を要求しない。追加競合発掘、benchmark、方向性再検討、branding 再反映は必要なときだけ任意後続として実行する。`/viewer-voice` は公開後の再分析では任意で、公開後の `/viewing-scene` は従来どおり Analytics report を要求する。
 
 | Skill | なにができるか |
 |---|---|
 | /setup | ツール導入と GCP / OAuth 設定を wizard 形式で診断・セットアップ |
-| /channel-new | TTP 対象確認、seed confirmation artifacts、config、簡易ペルソナ、初回 branding まで進める。方向性検討、既存チャンネル取り込み、再生成モード（config 再生成）、設定 push モード（branding / status / localizations の push/pull）も担当 |
+| /channel-new | TTP 対象確認、seed confirmation artifacts、config、本格ペルソナ作成チェーン、初回 branding まで進める。方向性検討、既存チャンネル取り込み、再生成モード（config 再生成）、設定 push モード（branding / status / localizations の push/pull）も担当 |
 | /discover-competitors | 任意: ニッチキーワードから追加競合候補を YouTube Data API で自動発掘 |
 | /channel-research | 任意: benchmark / viewer-voice 済みデータを徹底分析 |
 | /channel-status | 登録者数・総再生回数・動画別パフォーマンスを YouTube API から取得 |
