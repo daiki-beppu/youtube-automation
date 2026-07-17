@@ -56,6 +56,10 @@ def _codex_prompt_script_path() -> Path:
     return _repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "codex-prompt.py"
 
 
+def _thumbnail_archive_script_path() -> Path:
+    return _repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "archive-approved-thumbnail.py"
+
+
 def _load_thumbnail_default_config() -> dict:
     return yaml.safe_load(_read_thumbnail_default_config()) or {}
 
@@ -310,6 +314,56 @@ def test_thumbnail_skill_documents_text_included_to_textless_background_flow() -
 
     assert "承認済み `main.png/jpg` を参照画像にして" not in single_step_block
     assert "テキストなし版の先行確定" not in single_step_block
+
+
+def test_thumbnail_archive_is_opt_in_and_wired_after_every_approval_path() -> None:
+    config = _load_thumbnail_default_config()
+    skill = _read_thumbnail_skill()
+    archive_command = (
+        "uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>"
+    )
+
+    assert config["archive"] == {"enabled": False}
+    assert "archive.enabled: false" in skill
+    assert "assets/thumbnail-gallery/<collection-dir-name>.<ext>" in skill
+    assert skill.count(archive_command) == 6
+
+    approval_block = _slice_between(skill, "### 承認済みサムネイルのアーカイブ", "### Single-Step / TTP モード")
+    for approval_path in ("手動承認", "codex", "Two-Phase", "フォント固定", "自動選択"):
+        assert approval_path in approval_block
+    assert "確定直後" in approval_block
+    assert "既存の検証・承認順序を変えず" in approval_block
+
+    opening_gate = "\n".join(skill.splitlines()[:60])
+    assert "**Hard Gate**" in opening_gate
+    assert "アーカイブ" in opening_gate
+    assert "後工程へ進まず停止" in opening_gate
+
+    codex_block = _slice_between(skill, "## codex 経由の生成", "## Channel Adaptation")
+    single_step_block = _slice_between(
+        skill,
+        "### Single-Step / TTP モード",
+        "### Two-Phase モード（従来方式・フォールバック）",
+    )
+    two_phase_block = _slice_between(
+        skill,
+        "### Two-Phase モード（従来方式・フォールバック）",
+        "## フォント安定化",
+    )
+    font_block = _slice_between(skill, "## フォント安定化", "## 自動選択")
+    auto_selection_block = _slice_between(skill, "## 自動選択", "## 品質チェック")
+
+    for wired_block in (codex_block, single_step_block, two_phase_block, font_block):
+        assert wired_block.find("thumbnail.jpg") < wired_block.find(archive_command)
+    assert "uv run yt-thumbnail-auto-select <collection-path> --apply" in auto_selection_block
+    assert "--apply &&" not in auto_selection_block
+    assert "候補生成後のユーザー承認を省略" in auto_selection_block
+    assert auto_selection_block.find("--apply") < auto_selection_block.find("自動確定後も `/thumbnail-compare`")
+    assert "内部で実行" in approval_block
+
+
+def test_thumbnail_skill_distributes_archive_script() -> None:
+    assert _thumbnail_archive_script_path().is_file()
 
 
 def test_thumbnail_skill_frontmatter_names_thumbnail_as_primary_output() -> None:
