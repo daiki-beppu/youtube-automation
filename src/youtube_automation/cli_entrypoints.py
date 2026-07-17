@@ -57,6 +57,7 @@ yt_init_collection = _make_entrypoint("youtube_automation.scripts.init_collectio
 yt_kpi_dashboard = _make_entrypoint("youtube_automation.scripts.kpi_dashboard")
 yt_launch_curve = _make_entrypoint("youtube_automation.scripts.launch_curve")
 yt_metadata_audit = _make_entrypoint("youtube_automation.scripts.metadata_audit")
+yt_oauth = _make_entrypoint("youtube_automation.auth.oauth_handler")
 yt_pinned_comment = _make_entrypoint("youtube_automation.scripts.pinned_comment")
 yt_playlist_manager = _make_entrypoint("youtube_automation.scripts.playlist_manager")
 yt_playlist_status = _make_entrypoint("youtube_automation.scripts.playlist_status")

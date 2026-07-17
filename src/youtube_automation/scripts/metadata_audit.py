@@ -160,9 +160,9 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
 
 def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
     """Fetch all videos from YouTube and check live state."""
-    from youtube_automation.utils.youtube_service import get_youtube
+    from youtube_automation.utils.youtube_service import get_youtube_readonly
 
-    yt = get_youtube()
+    yt = get_youtube_readonly()
     issues: dict[str, list[str]] = {vid: [] for vid in video_ids}
     remote_chapter_max = _remote_chapter_max()
 
