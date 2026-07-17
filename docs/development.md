@@ -143,3 +143,11 @@ Python 側の未使用コード検出は、追加依存なしで CI / pre-commit
 - **CHANGELOG ゲートのみ省く**: `SKIP_CHANGELOG=1 git push`（CI 側は PR の `skip-changelog` ラベル）
 - **テスト差分警告のみ省く**: `SKIP_TEST_DIFF=1 git push`
 - refactor / fix でも src を触れば CHANGELOG 追記が要る。tests / docs だけの変更はゲート対象外（hook も CI も自動 skip）
+
+### CHANGELOG.md の union merge（conflict 緩和）
+
+CHANGELOG ゲートにより並行 PR が `[Unreleased]` 先頭へ同時に追記するため、`.gitattributes` で `CHANGELOG.md merge=union` を指定している（issue #2155）。両側の追記行を conflict にせず機械的に取り込むが、union merge には以下の副作用があるため merge 後は `[Unreleased]` を目視確認すること:
+
+- **重複行**: 両ブランチが同一内容の行を追記した場合、その行が 2 回残ることがある
+- **順序非保証**: 追記行の並び順は merge 順に依存し、時系列と一致しない場合がある
+- **削除・編集に非対応**: 行の追加以外（既存行の削除・書き換え）が絡む変更は正しく解決されない可能性がある。リリース時の `[Unreleased]` → バージョン節への移動のような大規模編集を含む PR は、merge 結果を必ず確認する
