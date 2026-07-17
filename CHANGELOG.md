@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(analytics)`: 成長 KPI 定点ビュー CLI `yt-kpi-dashboard` を追加した。`data/analytics_data_*.json` 全スナップショットを日付後勝ちで横断マージし、レバー別 KPI（views / インプレッション / CTR / 平均視聴維持率 / 登録者純増）の週次推移を前週比付きの構造化 JSON と Markdown テーブルで出力する（`--save` で `reports/kpi_weekly_YYYYMMDD.{json,md}` 保存）。Reporting API の保持期間（60 日）を超えた過去の Imp / CTR も `reporting_api.impressions_summary.per_day` から復元して時系列に含め、欠測週は補間せず欠測として明示する。スナップショット 1 件以下ではエラーではなく複数スナップショットが必要な旨の案内を出す。`/analytics-analyze` の CLI 一覧にも定点ビュー参照の導線を追加した（#1819）。
 
+- `feat(analytics)`: `yt-thumbnail-correlate` に有意性検定（両側 p 値）・Benjamini-Hochberg 多重比較補正・`significant` 判定を追加し、最小サンプル数の既定を 10 に引き上げた（n<10 は「サンプル不足で判定不能」を明示）。有意でない相関には断定的な解釈文を出さない。`--metric` 未指定で CTR が欠測のチャンネルでは views に自動フォールバックし、出力 JSON の `metric_fallback` に理由を残す。`/analytics-analyze` に `significant: false` の相関を方針根拠に使わない注記を追加した（#1801）。
+
 - `feat(thumbnail)`: Gemini API 経路の既定 prompt を Codex と同じ TTP 方針（winning layout 維持・最小限の品質改善のみ）へ揃えた。`config.default.yaml` の `image_generation.gemini.diff_prompt_template` 既定値を codex 既定テンプレートと方針行を同期した TTP テンプレート（`{title_line1}` / `{title_line2}` + `${ip_safety_clause}`）にし、チャンネル側 `diff_prompt_template` override の優先（deep-merge スカラ置換）と方針同期をテストで機械担保した。SKILL.md / prompting.md に provider 差のない TTP 方針を明記した（#2070）。
+
+- `feat(thumbnail)`: gemini_cli 経路が #2070 と同じ TTP 方針（codex と同期した既定 `diff_prompt_template`）を provider 切替でも損なわないことを contract test で機械担保した。CLI ラッパー `_build_prompt` はプロンプトをそのまま透過し方針文言を独自に持たないことを検証し、SKILL.md に gemini_cli が同じ `diff_prompt_template` と構築手順を共有する旨を明記した。model / timeout / CLI protocol は変更なし（#2071）。
 
 - `feat(auth)`: git worktree 上で gitignore された `auth/` が複製されず OAuth 認証が `FileNotFoundError` になる問題に対応した。`.git` pointer ファイルと `commondir` から git コマンド非依存で main 作業ツリーを検知する `utils/worktree.py::main_worktree_root()` を追加し、worktree では `client_secrets.json` の候補列末尾に main 側 `auth/` を追加、ローカル `token.json` が無い場合は token の読み書きを main 側 `auth/token.json` に集約する（refresh 結果の分岐防止）。`CLIENT_SECRETS_DIR` 最優先・非 worktree 環境の解決順序は不変で、未検出時のエラーには探索した全候補パスを表示する（#1721）。
 
