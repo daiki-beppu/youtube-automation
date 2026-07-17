@@ -73,6 +73,10 @@
             if git rev-parse --git-dir >/dev/null 2>&1; then
               if worktree_tmpdir="$(bash "${./.}/.lefthook/worktree-tmpdir.sh" 2>/dev/null)"; then
                 export TMPDIR="$worktree_tmpdir"
+                # shell 内で以後実行される nix コマンドの flake 評価キャッシュも
+                # worktree 単位に分離する（issue #2089）。今回の入場自体の評価は
+                # .envrc / setup-worktree.sh 側の export が分離を担う
+                export NIX_CACHE_HOME="$worktree_tmpdir/nix-cache"
               else
                 echo "warning: worktree 分離 TMPDIR の初期化に失敗しました。共有 TMPDIR のまま続行します。" >&2
               fi
