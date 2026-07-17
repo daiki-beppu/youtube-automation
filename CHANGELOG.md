@@ -162,6 +162,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `fix(suno-helper)`: Queue mode の生成完了待ちが stall タイムアウトした際、ラン全体を ERROR で中断せず graceful degradation するようにした。`waitForSubmittedClipsComplete` は throw の代わりに `{ timedOut, stalledClipIds }` を返し、停滞 clip を entry 単位で失敗記録（ENTRY_FAILED）したうえで、完了済み clip の duration yield guard・playlist 追加・ダウンロードを続行する。stalled entry は resume state の failedIndices として保持され「失敗分のみ再実行」導線で回収できる。全 entry が stall した場合は従来の失敗保留（playlist 追加を再実行後に委ねる）とし、serial mode・retryPlaylist・resume 由来 clip の stall は従来どおり中断する（#1994）。
 
+- `docs(suno,suno-helper)`: 長尺 BGM チャンネル向けに `config/skills/suno.yaml::duration_filter`（`min_sec` / `max_sec`、部分指定は既定値と deep-merge）の override 手順を `/suno` Step 2 と `/suno-helper` の duration guard 節へ文書化した。override が `suno-prompts.json` へ反映される契約は回帰テストで pin し（機能自体は #1269 で実装済み・既定 60〜300 秒は不変）、閾値変更後は `yt-generate-suno` の再生成が必要なことと、resume が run 開始時点の閾値を保持するため新規 run で効かせる注意も明記した（#1937）。
+
 ## [5.5.17] - 2026-07-10
 
 ### Added
