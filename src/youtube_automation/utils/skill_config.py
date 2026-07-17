@@ -34,6 +34,56 @@ from youtube_automation.utils.exceptions import ConfigError
 
 _cache: dict[str, dict[str, Any]] = {}
 
+# #1702: 基底 config から縮小済みのキー。channel override は引き続き deep-merge で
+# 有効（挙動は壊さない）だが、後続リリースでの物理削除に先立ち DeprecationWarning で
+# 移行を促す。移行先は diff_prompt_template / thumbnail_text.text_overlay_prompt の本文。
+_DEPRECATED_OVERRIDE_KEYS: dict[str, tuple[tuple[str, ...], ...]] = {
+    "thumbnail": (
+        ("image_generation", "gemini", "composition_rules", "environment"),
+        ("image_generation", "gemini", "composition_rules", "character_size"),
+        ("image_generation", "gemini", "composition_rules", "character_pose"),
+        ("image_generation", "gemini", "composition_rules", "allowed_actions"),
+        ("image_generation", "gemini", "composition_rules", "ng_actions"),
+        ("image_generation", "gemini", "composition_rules", "background"),
+        ("image_generation", "gemini", "composition_rules", "channel_branding"),
+        ("image_generation", "gemini", "thumbnail_text", "channel_name_style"),
+        ("image_generation", "gemini", "thumbnail_text", "title_format"),
+        ("image_generation", "gemini", "thumbnail_text", "title_prefix"),
+        ("image_generation", "gemini", "thumbnail_text", "copy_position"),
+        ("image_generation", "gemini", "thumbnail_text", "color"),
+        ("image_generation", "gemini", "thumbnail_text", "decoration"),
+    ),
+}
+
+
+def _collect_deprecated_override_keys(skill: str, override: dict[str, object]) -> list[str]:
+    """override に含まれる deprecated キーを dotted path のリストで返す。"""
+    found: list[str] = []
+    for key_path in _DEPRECATED_OVERRIDE_KEYS.get(skill, ()):
+        node: object = override
+        for key in key_path:
+            if not isinstance(node, dict) or key not in node:
+                break
+            node = node[key]
+        else:
+            found.append(".".join(key_path))
+    return found
+
+
+def _warn_deprecated_override_keys(skill: str, override: dict[str, object], override_path: Path) -> None:
+    deprecated_keys = _collect_deprecated_override_keys(skill, override)
+    if not deprecated_keys:
+        return
+    warnings.warn(
+        f"skill-config {override_path} の deprecated キーを検出しました: "
+        f"{', '.join(deprecated_keys)}。これらは基底 config から縮小済みで、"
+        "後続リリースで削除予定です（現時点では従来どおり deep-merge されます）。"
+        "意図は diff_prompt_template / thumbnail_text.text_overlay_prompt の本文へ"
+        "移行してください (#1702)。",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
 
 def _default_path(skill: str) -> Path:
     """パッケージ同梱の default.yaml を解決する。
@@ -188,6 +238,7 @@ def load_skill_config(
     override_path = _resolve_channel_override(skill, channel_dir)
     if override_path is not None:
         override = _load_override(override_path)
+        _warn_deprecated_override_keys(skill, override, override_path)
         merged = _deep_merge(defaults, override)
     else:
         merged = defaults

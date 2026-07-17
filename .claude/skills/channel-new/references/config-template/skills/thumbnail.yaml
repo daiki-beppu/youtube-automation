@@ -8,7 +8,9 @@
 #   - image_generation.gemini.reference_images.default
 #   - image_generation.gemini.reference_images.channel_branding
 #   - image_generation.gemini.brand_background
-#   - image_generation.gemini.composition_rules.* （channel-direction で確定したもの）
+#   - image_generation.gemini.diff_prompt_template
+#     （channel-direction で確定した構図・環境の意図はここへ短い文で直接書く。
+#       旧 composition_rules.* の個別キーは deprecated、#1702）
 #
 # `reference_images.default` は `/benchmark` 取得済みの TTP 競合サムネを
 # `data/thumbnail_compare/benchmark/<channel>-<vid>.jpg` 形式で並べる。
@@ -56,17 +58,11 @@ image_generation:
       notes: "{{TTP_NOTES}}"
 
     # 差分プロンプトのテンプレ（コレクション側 prompts/<theme>.md からの
-    # 差分指示はここを起点に組み立てる）
+    # 差分指示はここを起点に組み立てる。channel-direction の
+    # 「ビジュアルアイデンティティ」/「サムネイル方針」の意図は
+    # 個別キーではなくこの本文へ短い文で直接書く、#1702）
     diff_prompt_template: "{{DIFF_PROMPT_TEMPLATE}}"
 
-    # 構図・環境のルール（channel-direction の「ビジュアルアイデンティティ」
-    # / 「サムネイル方針」を転写。空欄は不可）
+    # 構図ルール（既定で残る実効キーは text_lines のみ）
     composition_rules:
-      environment: "{{ENVIRONMENT}}"
-      character_size: "{{CHARACTER_SIZE}}"
-      character_pose: "{{CHARACTER_POSE}}"
-      allowed_actions: "{{ALLOWED_ACTIONS}}"
-      ng_actions: "{{NG_ACTIONS}}"
-      background: "{{BACKGROUND}}"
       text_lines: "タイトルは 2 行以内"
-      channel_branding: "{{CHANNEL_BRANDING}}"
