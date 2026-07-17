@@ -1290,6 +1290,146 @@ def test_channel_new_regeneration_does_not_recopy_youtube_json_after_config_comp
     assert "`config/channel/youtube.json`" not in step_r5
 
 
+_INSIGHTS_VALIDATOR = ROOT / ".claude/skills/analytics-analyze/references/validate_insights.py"
+_INSIGHTS_SCHEMA_PATH = ".claude/skills/analytics-analyze/references/insights-entry.schema.json"
+
+
+def _insights_entry(**overrides: object) -> dict:
+    entry: dict = {
+        "schema_version": 1,
+        "id": "20260717-analysis-thumbnail-text-size",
+        "date": "2026-07-17",
+        "source": "analysis",
+        "source_path": "reports/analysis_20260717.json",
+        "lever": "thumbnail",
+        "finding": "サムネの文字が 320px で読めない",
+        "recommended_action": "タイトル文字サイズを 1.5 倍にする",
+        "evidence": "analysis_20260717.json#$.cli_outputs.launch_curve.target.ratio_vs_median = 0.42",
+        "status": "open",
+    }
+    entry.update(overrides)
+    return entry
+
+
+def _run_insights_validator(path: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(_INSIGHTS_VALIDATOR), str(path)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_insights_entry_schema_is_single_source_for_writers_and_readers() -> None:
+    schema = json.loads(_read(_INSIGHTS_SCHEMA_PATH))
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == {
+        "schema_version",
+        "id",
+        "date",
+        "source",
+        "lever",
+        "finding",
+        "recommended_action",
+        "evidence",
+        "status",
+    }
+    properties = schema["properties"]
+    assert properties["schema_version"]["const"] == 1
+    assert properties["source"]["enum"] == ["analysis", "postmortem"]
+    assert properties["lever"]["enum"] == ["thumbnail", "title", "topic", "bgm", "metadata", "other"]
+    assert properties["status"]["enum"] == ["open", "adopted", "dismissed"]
+
+    analytics_analyze = _read(".claude/skills/analytics-analyze/SKILL.md")
+    flop_analysis = _read(".claude/skills/flop-analysis/SKILL.md")
+    wf_new = _read(".claude/skills/wf-new/SKILL.md")
+    collection_ideate = _read(".claude/skills/collection-ideate/SKILL.md")
+    thumbnail = _read(".claude/skills/thumbnail/SKILL.md")
+
+    assert "references/insights-entry.schema.json" in analytics_analyze
+    for text in (flop_analysis, wf_new, collection_ideate, thumbnail):
+        assert _INSIGHTS_SCHEMA_PATH in text
+    for text in (analytics_analyze, flop_analysis, wf_new, collection_ideate, thumbnail):
+        assert "data/insights.jsonl" in text
+
+    validator_command = (
+        "uv run python3 .claude/skills/analytics-analyze/references/validate_insights.py data/insights.jsonl"
+    )
+    for text in (analytics_analyze, flop_analysis, wf_new, collection_ideate):
+        assert validator_command in text
+
+    # 書き手 2 本: 追記契約（source 値 / append-only / schema 再定義禁止）
+    for writer in (analytics_analyze, flop_analysis):
+        assert "append-only" in writer
+        assert "本文で必須キーや enum を再定義しない" in writer
+    assert 'source: "analysis"' in analytics_analyze
+    assert '`status: "open"`' in analytics_analyze
+    assert "重複追記しない" in analytics_analyze
+    assert 'source: "postmortem"' in flop_analysis
+    assert "「結論 / 反証 / 学び」の 3 項目がすべて記入済み" in flop_analysis
+    assert "`未検証` の仮説だけを根拠にした学びは還元しない" in flop_analysis
+
+    # 読み手 3 本: 消費契約（open 選別 / status 反映 / lever=thumbnail）
+    assert "jq -c 'select(.status == \"open\")' data/insights.jsonl" in wf_new
+    assert "open insights の消費と status 反映" in collection_ideate
+    assert "`adopted`" in collection_ideate
+    assert "`dismissed`" in collection_ideate
+    assert "行の削除・並べ替え・他フィールドの書き換えはしない" in collection_ideate
+    assert 'select(.status == "open" and .lever == "thumbnail")' in thumbnail
+    assert "`status` を含むエントリの書き換え・追記はしない" in thumbnail
+
+
+def test_insights_validator_enforces_schema_and_id_uniqueness(tmp_path: Path) -> None:
+    missing = _run_insights_validator(tmp_path / "insights.jsonl")
+    assert missing.returncode == 0, missing.stderr
+
+    valid_path = tmp_path / "valid.jsonl"
+    valid_lines = [
+        json.dumps(_insights_entry(), ensure_ascii=False),
+        json.dumps(
+            _insights_entry(
+                id="20260717-postmortem-title-appeal",
+                source="postmortem",
+                source_path="collections/live/sample/20-documentation/postmortem.md",
+                lever="title",
+            ),
+            ensure_ascii=False,
+        ),
+    ]
+    valid_path.write_text("\n".join(valid_lines) + "\n", encoding="utf-8")
+    ok = _run_insights_validator(valid_path)
+    assert ok.returncode == 0, ok.stderr
+
+    invalid_path = tmp_path / "invalid.jsonl"
+    invalid_entries = [
+        _insights_entry(id="bad-lever", lever="color"),
+        _insights_entry(id="bad-status", status="todo"),
+        {k: v for k, v in _insights_entry(id="missing-evidence").items() if k != "evidence"},
+        _insights_entry(id="unknown-key", unknown_key="x"),
+        _insights_entry(id="bad-date", date="2026/07/17"),
+    ]
+    invalid_path.write_text(
+        "\n".join(json.dumps(entry, ensure_ascii=False) for entry in invalid_entries) + "\n",
+        encoding="utf-8",
+    )
+    invalid = _run_insights_validator(invalid_path)
+    assert invalid.returncode == 1
+    for fragment in ("lever", "status", "evidence", "unknown_key", "date"):
+        assert fragment in invalid.stderr
+
+    duplicate_path = tmp_path / "duplicate.jsonl"
+    duplicate_path.write_text(
+        json.dumps(_insights_entry(), ensure_ascii=False)
+        + "\n"
+        + json.dumps(_insights_entry(lever="title"), ensure_ascii=False)
+        + "\n",
+        encoding="utf-8",
+    )
+    duplicate = _run_insights_validator(duplicate_path)
+    assert duplicate.returncode == 1
+    assert "重複" in duplicate.stderr
+
+
 def test_theme_compare_missing_themes_error_uses_current_config_path(monkeypatch, caplog) -> None:
     from youtube_automation.scripts import theme_compare
 
