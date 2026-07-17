@@ -3,7 +3,9 @@
 
 各動画のサムネを YouTube から取得 (ローカルキャッシュ) し、
 brightness/contrast/saturation/dominant_hue/colorfulness を抽出。
-impression_ctr との Pearson 相関を AI 消費向け JSON で出力する。
+impression_ctr との Pearson 相関を p 値・BH 多重比較補正・significant 判定つきの
+AI 消費向け JSON で出力する。CTR 欠測時は views に自動フォールバックし
+metric_fallback に理由を残す。
 """
 
 from __future__ import annotations
@@ -19,7 +21,10 @@ from PIL import Image
 
 from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.thumbnail_correlation import compute_correlations
+from youtube_automation.utils.thumbnail_correlation import (
+    MIN_SAMPLES_DEFAULT,
+    compute_correlations,
+)
 from youtube_automation.utils.thumbnail_features import extract_features
 
 logger = logging.getLogger(__name__)
@@ -115,6 +120,9 @@ def _collect_video_features(
 def _print_text_summary(analysis: dict) -> None:
     metric = analysis.get("metric", "ctr")
     print(f"🖼️  サムネ × {metric} 相関分析 (n={analysis['video_count']})")
+    fallback = analysis.get("metric_fallback")
+    if fallback:
+        print(f"   ⚠️  {fallback['reason']}")
     print()
     # 絶対値で降順
     corrs = analysis["correlations"]
@@ -129,7 +137,9 @@ def _print_text_summary(analysis: dict) -> None:
         if r is None:
             print(f"   {key:<30} r=   n/a  ({note})")
         else:
-            print(f"   {key:<30} r={r:+.3f}  n={c['n']}  {note}")
+            p_adj = c.get("p_value_adjusted")
+            sig = "✅" if c.get("significant") else "❌"
+            print(f"   {key:<30} r={r:+.3f}  p_adj={p_adj:.4f} {sig}  n={c['n']}  {note}")
 
 
 def main() -> int:
@@ -140,15 +150,15 @@ def main() -> int:
     parser.add_argument(
         "--metric",
         choices=["ctr", "views", "engagement"],
-        default="ctr",
-        help="相関対象 (ctr: 優先だがチャンネルが閾値未達だと空、"
-        "views: 視聴回数, engagement: (likes+comments+shares)/views)",
+        default=None,
+        help="相関対象 (未指定: ctr を試み、CTR 欠測時は views に自動フォールバック。"
+        "ctr: CTR 固定, views: 視聴回数, engagement: (likes+comments+shares)/views)",
     )
     parser.add_argument(
         "--min-samples",
         type=int,
-        default=5,
-        help="相関計算に必要な最小サンプル数 (default: 5)",
+        default=MIN_SAMPLES_DEFAULT,
+        help=f"相関計算に必要な最小サンプル数 (default: {MIN_SAMPLES_DEFAULT})",
     )
 
     args = parser.parse_args()
@@ -158,11 +168,24 @@ def main() -> int:
         analytics = _load_analytics(channel_dir)
         cache_dir = channel_dir / "data" / "analytics" / "thumbnails"
 
-        videos = _collect_video_features(analytics, cache_dir, args.metric)
+        metric = args.metric or "ctr"
+        metric_fallback = None
+        videos = _collect_video_features(analytics, cache_dir, metric)
+        if not videos and args.metric is None:
+            # 既定の ctr は impressions API 閾値未達チャンネルで通常欠測になるため
+            # 明示指定がなければ views に自動フォールバックする
+            metric = "views"
+            videos = _collect_video_features(analytics, cache_dir, metric)
+            metric_fallback = {
+                "from": "ctr",
+                "to": "views",
+                "reason": "CTR データ欠測のため views に自動フォールバック",
+            }
         corrs = compute_correlations(videos, min_samples=args.min_samples)
 
         result = {
-            "metric": args.metric,
+            "metric": metric,
+            "metric_fallback": metric_fallback,
             "video_count": len(videos),
             "correlations": corrs,
             "videos": videos,
