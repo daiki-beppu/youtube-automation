@@ -23,7 +23,9 @@ interface ExecuteScriptDetails {
 }
 
 export interface ContentScriptRecoveryDeps {
-  addTabUpdatedListener(listener: (tabId: number, changeInfo: TabChangeInfo, tab: TabLike) => void): void;
+  addTabUpdatedListener(
+    listener: (tabId: number, changeInfo: TabChangeInfo, tab: TabLike) => void
+  ): void;
   addInstalledListener(listener: (details: InstallDetails) => void): void;
   queryTabs(): Promise<TabLike[]>;
   reloadTab(tabId: number): Promise<void>;
@@ -33,10 +35,16 @@ export interface ContentScriptRecoveryDeps {
 }
 
 const SUNO_HOSTS = new Set(["suno.com", "www.suno.com"]);
-const ISOLATED_CONTENT_FILES: ScriptPublicPath[] = ["/content-scripts/content.js", "/content-scripts/overlay.js"];
+const ISOLATED_CONTENT_FILES: ScriptPublicPath[] = [
+  "/content-scripts/content.js",
+  "/content-scripts/overlay.js",
+];
 const STATIC_INJECTION_GRACE_MS = 1_000;
 
-async function injectSunoContentScripts(tabId: number, deps: ContentScriptRecoveryDeps): Promise<void> {
+async function injectSunoContentScripts(
+  tabId: number,
+  deps: ContentScriptRecoveryDeps
+): Promise<void> {
   await Promise.all([
     deps.executeScript({
       target: { tabId },
@@ -66,9 +74,15 @@ function hasOverlayHost(): boolean {
  * WXT の content-script wrapper は同名 script の新しい起動を検出して古い context を invalidate するため、
  * 静的注入とのレースでも listener / React root が二重に残らない。
  */
-export async function recoverSunoContentScripts(tabId: number, deps: ContentScriptRecoveryDeps): Promise<boolean> {
+export async function recoverSunoContentScripts(
+  tabId: number,
+  deps: ContentScriptRecoveryDeps
+): Promise<boolean> {
   const hasOverlay = async (): Promise<boolean> => {
-    const probe = await deps.executeScript({ target: { tabId }, func: hasOverlayHost });
+    const probe = await deps.executeScript({
+      target: { tabId },
+      func: hasOverlayHost,
+    });
     return probe.some(({ result }) => result === true);
   };
 
@@ -83,7 +97,9 @@ export async function recoverSunoContentScripts(tabId: number, deps: ContentScri
   return true;
 }
 
-export function installSunoContentScriptRecovery(deps: ContentScriptRecoveryDeps): void {
+export function installSunoContentScriptRecovery(
+  deps: ContentScriptRecoveryDeps
+): void {
   deps.addTabUpdatedListener((tabId, changeInfo, tab) => {
     if (changeInfo.status !== "complete" || !isSunoPageUrl(tab.url)) return;
     void recoverSunoContentScripts(tabId, deps).catch((error: unknown) => {
@@ -98,12 +114,18 @@ export function installSunoContentScriptRecovery(deps: ContentScriptRecoveryDeps
       .then((tabs) =>
         Promise.all(
           tabs
-            .filter((tab): tab is TabLike & { id: number } => typeof tab.id === "number" && isSunoPageUrl(tab.url))
-            .map((tab) => deps.reloadTab(tab.id)),
-        ),
+            .filter(
+              (tab): tab is TabLike & { id: number } =>
+                typeof tab.id === "number" && isSunoPageUrl(tab.url)
+            )
+            .map((tab) => deps.reloadTab(tab.id))
+        )
       )
       .catch((error: unknown) => {
-        deps.warn("[suno-helper] 拡張更新後の Suno タブ自動リロードに失敗しました", error);
+        deps.warn(
+          "[suno-helper] 拡張更新後の Suno タブ自動リロードに失敗しました",
+          error
+        );
       });
   });
 }

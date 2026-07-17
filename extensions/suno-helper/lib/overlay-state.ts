@@ -49,7 +49,11 @@ export function clampPosition(pos: Point, viewport: Size, size: Size): Point {
 
 /** 初期表示位置（右上、マージン込み）を算出する (#892 要件1)。 */
 export function topRightPosition(viewport: Size, size: Size): Point {
-  return clampPosition({ x: viewport.width - size.width - OVERLAY_MARGIN, y: OVERLAY_MARGIN }, viewport, size);
+  return clampPosition(
+    { x: viewport.width - size.width - OVERLAY_MARGIN, y: OVERLAY_MARGIN },
+    viewport,
+    size
+  );
 }
 
 /**
@@ -71,11 +75,16 @@ export function hiddenStyle(hidden: boolean): { display: "none" | "block" } {
 
 // --- chrome.storage.local I/O（storage item は遅延生成。理由はファイル冒頭コメント参照） ---
 
-let cachedItem: ReturnType<typeof storage.defineItem<OverlayState | null>> | null = null;
+let cachedItem: ReturnType<
+  typeof storage.defineItem<OverlayState | null>
+> | null = null;
 
 function overlayStateItem() {
   if (!cachedItem) {
-    cachedItem = storage.defineItem<OverlayState | null>(`local:${OVERLAY_STATE_KEY}`, { fallback: null });
+    cachedItem = storage.defineItem<OverlayState | null>(
+      `local:${OVERLAY_STATE_KEY}`,
+      { fallback: null }
+    );
   }
   return cachedItem;
 }

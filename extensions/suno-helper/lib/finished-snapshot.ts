@@ -14,7 +14,10 @@
 // ときに副作用を起こさないため）。
 import { storage } from "wxt/utils/storage";
 
-import { FINISHED_SNAPSHOT_KEY, type SnapshotPayload } from "../../shared/constants";
+import {
+  FINISHED_SNAPSHOT_KEY,
+  type SnapshotPayload,
+} from "../../shared/constants";
 
 /** 退避する直近完了 run の snapshot と stale 判定メタ情報。 */
 export interface FinishedSnapshotState {
@@ -31,7 +34,10 @@ export const FINISHED_SNAPSHOT_STALE_MS = 24 * 60 * 60 * 1000;
  * 退避 snapshot が復元表示に足る鮮度かを判定する。境界はちょうど閾値まで inclusive
  * （shouldShowResumeBanner と同じ規約）。now を注入可能にし、純関数として時刻依存を排してテストする。
  */
-export function isFinishedSnapshotFresh(state: FinishedSnapshotState | null, now: number): boolean {
+export function isFinishedSnapshotFresh(
+  state: FinishedSnapshotState | null,
+  now: number
+): boolean {
   if (!state) {
     return false;
   }
@@ -40,19 +46,26 @@ export function isFinishedSnapshotFresh(state: FinishedSnapshotState | null, now
 
 // --- chrome.storage.local I/O（storage item は遅延生成。理由はファイル冒頭コメント参照） ---
 
-let cachedItem: ReturnType<typeof storage.defineItem<FinishedSnapshotState | null>> | null = null;
+let cachedItem: ReturnType<
+  typeof storage.defineItem<FinishedSnapshotState | null>
+> | null = null;
 
 function finishedSnapshotItem() {
   if (!cachedItem) {
-    cachedItem = storage.defineItem<FinishedSnapshotState | null>(`local:${FINISHED_SNAPSHOT_KEY}`, {
-      fallback: null,
-    });
+    cachedItem = storage.defineItem<FinishedSnapshotState | null>(
+      `local:${FINISHED_SNAPSHOT_KEY}`,
+      {
+        fallback: null,
+      }
+    );
   }
   return cachedItem;
 }
 
 /** FINISHED snapshot を退避する（既存があれば上書き）。リロード予約の直前に await で呼ぶこと。 */
-export async function writeFinishedSnapshot(state: FinishedSnapshotState): Promise<void> {
+export async function writeFinishedSnapshot(
+  state: FinishedSnapshotState
+): Promise<void> {
   await finishedSnapshotItem().setValue(state);
 }
 
@@ -61,7 +74,9 @@ export async function writeFinishedSnapshot(state: FinishedSnapshotState): Promi
  * stale 分は読み捨てず消去する（次回以降の read で毎回 stale 判定するのを避ける衛生処理。
  * 消去失敗しても戻り値には影響しないため fire-and-forget）。
  */
-export async function readFreshFinishedSnapshot(now: number): Promise<SnapshotPayload | null> {
+export async function readFreshFinishedSnapshot(
+  now: number
+): Promise<SnapshotPayload | null> {
   const state = await finishedSnapshotItem().getValue();
   if (!state) {
     return null;

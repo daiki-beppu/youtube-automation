@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `chore(extensions)`: extensions（suno-helper / distrokid-helper / shared）の lint / format を ultracite の Oxlint + Oxfmt toolchain へ移行した。lint は `extensions/.oxlintrc.json` を廃止して `ultracite/oxlint/core` + `ultracite/oxlint/react` preset を extends する `extensions/oxlint.config.ts` に、formatter は Prettier を `ultracite/oxfmt` preset の oxfmt（`extensions/oxfmt.config.ts`）に置き換え、scripts / CI を `pnpm check` / `pnpm fix` に統一して全ソースを oxfmt で一括再フォーマットした。旧構成のルール水準（`react/rules-of-hooks`=error / `react/exhaustive-deps`=warn / react-compiler 無効 / browser・chrome globals）は維持し、preset 導入時点で既存コードに違反が残るルールは off として段階的有効化を別 issue に委ねる（#2154）。
+
 - `fix(collection-serve)`: `POST /collections/<id>/downloaded` が期待数未満の部分 ZIP（Suno が一部 entry で 1 clip しか生成しないケース）を 500 で拒否せず、配置済みファイルを受理して warning 付き 200 を返すようにした。workflow-state には `planning.music.actual_file_count` / `missing_file_count` を機械可読に記録し、`assets.music_downloaded=true` と collections index の `status=downloaded` へ貫通させる。suno-helper は warning を progress 通知に表示する。0 件配置・壊れた ZIP の 500 契約は維持（#1913）。
 
 - `feat(analytics)`: `yt-thumbnail-correlate` に有意性検定（両側 p 値）・Benjamini-Hochberg 多重比較補正・`significant` 判定を追加し、最小サンプル数の既定を 10 に引き上げた（n<10 は「サンプル不足で判定不能」を明示）。有意でない相関には断定的な解釈文を出さない。`--metric` 未指定で CTR が欠測のチャンネルでは views に自動フォールバックし、出力 JSON の `metric_fallback` に理由を残す。`/analytics-analyze` に `significant: false` の相関を方針根拠に使わない注記を追加した（#1801）。

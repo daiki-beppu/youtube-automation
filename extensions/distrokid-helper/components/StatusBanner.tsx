@@ -1,6 +1,6 @@
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { Phase } from "@/lib/messaging";
 import { PHASES } from "@/lib/messaging";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export interface StatusBannerProps {
   phase: Phase | null;

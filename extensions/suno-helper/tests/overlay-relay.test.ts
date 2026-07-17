@@ -52,7 +52,7 @@ describe("requireRelayTab: 応答必須の中継は中継先タブを fail-loud 
 
   it("Given tab.id 欠落 sender When requireRelayTab Then throw する", () => {
     expect(() => requireRelayTab({ tab: {} }, "stop")).toThrow(
-      "stop の中継先タブを特定できません（content script 起源ではありません）。",
+      "stop の中継先タブを特定できません（content script 起源ではありません）。"
     );
   });
 });

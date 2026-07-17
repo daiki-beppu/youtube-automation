@@ -10,14 +10,21 @@ import { isOriginAllowed } from "../../shared/origin";
 
 describe("shared/origin: allowOrigin 未指定 (chrome-extension:// scheme + helper サイト origin 許可)", () => {
   it("Given 拡張オリジン When 判定する Then 許可する", () => {
-    expect(isOriginAllowed("chrome-extension://abcdefghijklmnop", null)).toBe(true);
+    expect(isOriginAllowed("chrome-extension://abcdefghijklmnop", null)).toBe(
+      true
+    );
   });
 
-  it.each(["https://suno.com", "https://www.suno.com", "https://distrokid.com", "https://www.distrokid.com"])(
+  it.each([
+    "https://suno.com",
+    "https://www.suno.com",
+    "https://distrokid.com",
+    "https://www.distrokid.com",
+  ])(
     "Given helper サイト origin %s When 判定する Then デフォルトで許可する（#896）",
     (origin) => {
       expect(isOriginAllowed(origin, null)).toBe(true);
-    },
+    }
   );
 
   it("Given 許可リスト外の web origin When 判定する Then 拒否する", () => {
@@ -25,7 +32,9 @@ describe("shared/origin: allowOrigin 未指定 (chrome-extension:// scheme + hel
   });
 
   it("Given scheme だけ似せた偽装オリジン When 判定する Then 拒否する", () => {
-    expect(isOriginAllowed("https://chrome-extension.evil.com", null)).toBe(false);
+    expect(isOriginAllowed("https://chrome-extension.evil.com", null)).toBe(
+      false
+    );
   });
 
   it("Given helper origin を前方一致で偽装した origin When 判定する Then 完全一致集合なので拒否する", () => {
@@ -44,11 +53,18 @@ describe("shared/origin: allowOrigin 指定時 (完全一致のみ)", () => {
   });
 
   it("Given allowOrigin と不一致の拡張オリジン When 判定する Then 拒否する", () => {
-    expect(isOriginAllowed("chrome-extension://zzzzzzzzzzzzzzzz", "chrome-extension://abcdefghijklmnop")).toBe(false);
+    expect(
+      isOriginAllowed(
+        "chrome-extension://zzzzzzzzzzzzzzzz",
+        "chrome-extension://abcdefghijklmnop"
+      )
+    ).toBe(false);
   });
 
   it("Given allowOrigin が非拡張 URL で完全一致 When 判定する Then 許可する (scheme 不問)", () => {
-    expect(isOriginAllowed("https://example.com", "https://example.com")).toBe(true);
+    expect(isOriginAllowed("https://example.com", "https://example.com")).toBe(
+      true
+    );
   });
 });
 

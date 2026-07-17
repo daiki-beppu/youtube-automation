@@ -31,7 +31,7 @@ const MOCK_HTML = `<!doctype html>
               `<div class="multi-select-button">` +
               `<button aria-label="Select clip" style="width:20px;height:20px"></button>` +
               `</div>` +
-              `</div>`,
+              `</div>`
           )
           .join("\n")}
       </div>
@@ -68,7 +68,9 @@ const MOCK_HTML = `<!doctype html>
   </body>
 </html>`;
 
-test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → dialog 消滅 (#854, #881)", async ({ page }) => {
+test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → dialog 消滅 (#854, #881)", async ({
+  page,
+}) => {
   await page.setContent(MOCK_HTML);
 
   const result = await page.evaluate(async () => {
@@ -79,7 +81,11 @@ test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → d
       let node: HTMLElement | null = el;
       while (node) {
         const style = getComputedStyle(node);
-        if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
+        if (
+          style.display === "none" ||
+          style.visibility === "hidden" ||
+          style.opacity === "0"
+        ) {
           return false;
         }
         node = node.parentElement;
@@ -88,8 +94,11 @@ test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → d
     };
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-    const resolveClipRowFromSelectButton = (button: HTMLElement): HTMLElement | null => {
-      const multiSelectRow = button.closest(".multi-select-button")?.parentElement as HTMLElement | null;
+    const resolveClipRowFromSelectButton = (
+      button: HTMLElement
+    ): HTMLElement | null => {
+      const multiSelectRow = button.closest(".multi-select-button")
+        ?.parentElement as HTMLElement | null;
       return multiSelectRow ?? button.closest<HTMLElement>("article");
     };
 
@@ -97,30 +106,42 @@ test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → d
       const ids = new Set<string>();
       if (row.dataset.songId) ids.add(row.dataset.songId);
       if (row.dataset.clipId) ids.add(row.dataset.clipId);
-      for (const link of Array.from(row.querySelectorAll<HTMLAnchorElement>('a[href*="/song/"]'))) {
+      for (const link of Array.from(
+        row.querySelectorAll<HTMLAnchorElement>('a[href*="/song/"]')
+      )) {
         const id = /\/song\/([^/?#]+)/.exec(link.href)?.[1];
         if (id) ids.add(id);
       }
       return ids;
     };
 
-    const findRowsByTargetIds = (rows: HTMLElement[], targetIds: string[]): HTMLElement[] => {
+    const findRowsByTargetIds = (
+      rows: HTMLElement[],
+      targetIds: string[]
+    ): HTMLElement[] => {
       const rowById = new Map<string, HTMLElement>();
       for (const row of rows) {
         for (const id of collectRowIds(row)) {
           if (!rowById.has(id)) rowById.set(id, row);
         }
       }
-      return targetIds.map((id) => rowById.get(id)).filter((row): row is HTMLElement => row !== undefined);
+      return targetIds
+        .map((id) => rowById.get(id))
+        .filter((row): row is HTMLElement => row !== undefined);
     };
 
     const loadRowsByTargetIdsForE2E = (targetIds: string[]): HTMLElement[] => {
-      const scroller = document.querySelector<HTMLElement>(".clip-browser-list-scroller");
-      if (!scroller) throw new Error("clip row が見つかりません。Suno の UI 変更の可能性があります。");
+      const scroller = document.querySelector<HTMLElement>(
+        ".clip-browser-list-scroller"
+      );
+      if (!scroller)
+        throw new Error(
+          "clip row が見つかりません。Suno の UI 変更の可能性があります。"
+        );
       // ボタン基点で per-clip row（closest('.multi-select-button').parentElement）を DOM 順に重複排除収集。
       // 中間ラッパで `:scope > div` が 1 row に collapse する問題を避ける（本番 row loader と同手法）。
       const buttons = scroller.querySelectorAll<HTMLElement>(
-        'button[aria-label="Select clip"], button[aria-label="Deselect clip"]',
+        'button[aria-label="Select clip"], button[aria-label="Deselect clip"]'
       );
       const seen = new Set<HTMLElement>();
       const rows: HTMLElement[] = [];
@@ -130,7 +151,10 @@ test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → d
         seen.add(row);
         if (isVisible(row)) rows.push(row);
       }
-      if (rows.length === 0) throw new Error("clip row が見つかりません。Suno の UI 変更の可能性があります。");
+      if (rows.length === 0)
+        throw new Error(
+          "clip row が見つかりません。Suno の UI 変更の可能性があります。"
+        );
       const foundRows = findRowsByTargetIds(rows, targetIds);
       if (foundRows.length !== targetIds.length) {
         throw new Error("target clip row が揃いませんでした。");
@@ -141,16 +165,22 @@ test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → d
     const multiSelectClips = async (rows: HTMLElement[]): Promise<void> => {
       for (const row of rows) {
         if (row.querySelector('button[aria-label="Deselect clip"]')) continue;
-        const button = row.querySelector<HTMLButtonElement>('button[aria-label="Select clip"]');
+        const button = row.querySelector<HTMLButtonElement>(
+          'button[aria-label="Select clip"]'
+        );
         if (!button) throw new Error("Select clip button が見つかりません。");
         button.click();
       }
       const deadline = Date.now() + 2000;
       for (;;) {
-        const selected = rows.filter((row) => row.querySelector('button[aria-label="Deselect clip"]')).length;
+        const selected = rows.filter((row) =>
+          row.querySelector('button[aria-label="Deselect clip"]')
+        ).length;
         if (selected >= rows.length) return;
         if (Date.now() >= deadline) {
-          throw new Error(`Clip multi-select verification failed: expected ${rows.length} selected, got ${selected}`);
+          throw new Error(
+            `Clip multi-select verification failed: expected ${rows.length} selected, got ${selected}`
+          );
         }
         await sleep(20);
       }
@@ -158,7 +188,9 @@ test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → d
 
     // cookie 除外フィルタ込みの Add to Playlist dialog 判定。
     const findPlaylistDialog = (): HTMLElement | null =>
-      Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).find((d) => {
+      Array.from(
+        document.querySelectorAll<HTMLElement>('[role="dialog"]')
+      ).find((d) => {
         if (!isVisible(d)) return false;
         if (d.id.startsWith("ot-")) return false;
         if (/privacy/i.test(d.getAttribute("aria-label") ?? "")) return false;
@@ -168,7 +200,12 @@ test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → d
     const openAddToPlaylistDialogViaCmdP = async (): Promise<HTMLElement> => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
       document.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "p", metaKey: isMac, ctrlKey: !isMac, bubbles: true }),
+        new KeyboardEvent("keydown", {
+          key: "p",
+          metaKey: isMac,
+          ctrlKey: !isMac,
+          bubbles: true,
+        })
       );
       const deadline = Date.now() + 2000;
       while (Date.now() < deadline) {
@@ -179,15 +216,25 @@ test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → d
       throw new Error("Add to Playlist dialog を検出できませんでした。");
     };
 
-    const fillPlaylistNameAndCreate = async (dialog: HTMLElement, name: string): Promise<void> => {
-      const input = dialog.querySelector<HTMLInputElement>('input[placeholder="Playlist Name"]');
+    const fillPlaylistNameAndCreate = async (
+      dialog: HTMLElement,
+      name: string
+    ): Promise<void> => {
+      const input = dialog.querySelector<HTMLInputElement>(
+        'input[placeholder="Playlist Name"]'
+      );
       if (!input) throw new Error("Playlist Name input が見つかりません。");
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value"
+      )?.set;
       setter?.call(input, name);
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
-      const create = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button")).find((b) =>
-        (b.textContent ?? "").toLowerCase().includes("create playlist"),
+      const create = Array.from(
+        dialog.querySelectorAll<HTMLButtonElement>("button")
+      ).find((b) =>
+        (b.textContent ?? "").toLowerCase().includes("create playlist")
       );
       if (!create) throw new Error("Create Playlist ボタンが見つかりません。");
       create.click();
@@ -205,17 +252,28 @@ test("clip を multi-select し Cmd+P → 名前入力 → Create Playlist → d
     // --- フロー実行 ---
     const rows = loadRowsByTargetIdsForE2E(["fresh-a", "fresh-b"]);
     await multiSelectClips(rows);
-    const selectedCount = document.querySelectorAll('.multi-select-button > button[aria-label="Deselect clip"]').length;
+    const selectedCount = document.querySelectorAll(
+      '.multi-select-button > button[aria-label="Deselect clip"]'
+    ).length;
     const selectedClipIds = Array.from(
-      document.querySelectorAll<HTMLElement>('.multi-select-button > button[aria-label="Deselect clip"]'),
-    ).map((button) => button.closest(".multi-select-button")?.parentElement?.dataset.songId);
+      document.querySelectorAll<HTMLElement>(
+        '.multi-select-button > button[aria-label="Deselect clip"]'
+      )
+    ).map(
+      (button) =>
+        button.closest(".multi-select-button")?.parentElement?.dataset.songId
+    );
 
     const dialog = await openAddToPlaylistDialogViaCmdP();
     const dialogIsReal = dialog.id === "playlist-dialog";
-    const cookieStillPresent = document.getElementById("ot-sdk-container") !== null;
+    const cookieStillPresent =
+      document.getElementById("ot-sdk-container") !== null;
 
     await fillPlaylistNameAndCreate(dialog, "rjn-dawn-cloud-fold");
-    const inputValue = dialog.querySelector<HTMLInputElement>('input[placeholder="Playlist Name"]')?.value ?? "";
+    const inputValue =
+      dialog.querySelector<HTMLInputElement>(
+        'input[placeholder="Playlist Name"]'
+      )?.value ?? "";
 
     await waitForPlaylistDialogClose();
     const dialogClosed = document.getElementById("playlist-dialog") === null;
@@ -256,7 +314,7 @@ const LAZY_LOAD_MOCK_HTML = `<!doctype html>
               `<div class="multi-select-button">` +
               `<button aria-label="Select clip" style="width:20px;height:20px"></button>` +
               `</div>` +
-              `</div>`,
+              `</div>`
           )
           .join("\n")}
       </div>
@@ -332,7 +390,11 @@ test("遅延ロード: 初期 old 4 row → scroll で target 4 row → target �
       let node: HTMLElement | null = el;
       while (node) {
         const style = getComputedStyle(node);
-        if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
+        if (
+          style.display === "none" ||
+          style.visibility === "hidden" ||
+          style.opacity === "0"
+        ) {
           return false;
         }
         node = node.parentElement;
@@ -341,14 +403,17 @@ test("遅延ロード: 初期 old 4 row → scroll で target 4 row → target �
     };
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-    const resolveClipRowFromSelectButton = (button: HTMLElement): HTMLElement | null => {
-      const multiSelectRow = button.closest(".multi-select-button")?.parentElement as HTMLElement | null;
+    const resolveClipRowFromSelectButton = (
+      button: HTMLElement
+    ): HTMLElement | null => {
+      const multiSelectRow = button.closest(".multi-select-button")
+        ?.parentElement as HTMLElement | null;
       return multiSelectRow ?? button.closest<HTMLElement>("article");
     };
 
     const collectRows = (scroller: HTMLElement): HTMLElement[] => {
       const buttons = scroller.querySelectorAll<HTMLElement>(
-        'button[aria-label="Select clip"], button[aria-label="Deselect clip"]',
+        'button[aria-label="Select clip"], button[aria-label="Deselect clip"]'
       );
       const seen = new Set<HTMLElement>();
       const rows: HTMLElement[] = [];
@@ -365,26 +430,37 @@ test("遅延ロード: 初期 old 4 row → scroll で target 4 row → target �
       const ids = new Set<string>();
       if (row.dataset.songId) ids.add(row.dataset.songId);
       if (row.dataset.clipId) ids.add(row.dataset.clipId);
-      for (const link of Array.from(row.querySelectorAll<HTMLAnchorElement>('a[href*="/song/"]'))) {
+      for (const link of Array.from(
+        row.querySelectorAll<HTMLAnchorElement>('a[href*="/song/"]')
+      )) {
         const id = /\/song\/([^/?#]+)/.exec(link.href)?.[1];
         if (id) ids.add(id);
       }
       return ids;
     };
 
-    const findRowsByTargetIds = (rows: HTMLElement[], targetIds: string[]): HTMLElement[] => {
+    const findRowsByTargetIds = (
+      rows: HTMLElement[],
+      targetIds: string[]
+    ): HTMLElement[] => {
       const rowById = new Map<string, HTMLElement>();
       for (const row of rows) {
         for (const id of collectRowIds(row)) {
           if (!rowById.has(id)) rowById.set(id, row);
         }
       }
-      return targetIds.map((id) => rowById.get(id)).filter((row): row is HTMLElement => row !== undefined);
+      return targetIds
+        .map((id) => rowById.get(id))
+        .filter((row): row is HTMLElement => row !== undefined);
     };
 
     // 遅延ロード対応の inline 再現
-    const loadRowsByTargetIdsForE2E = async (targetIds: string[]): Promise<HTMLElement[]> => {
-      const scroller = document.querySelector<HTMLElement>(".clip-browser-list-scroller");
+    const loadRowsByTargetIdsForE2E = async (
+      targetIds: string[]
+    ): Promise<HTMLElement[]> => {
+      const scroller = document.querySelector<HTMLElement>(
+        ".clip-browser-list-scroller"
+      );
       if (!scroller) throw new Error("scroller not found");
       let rows = collectRows(scroller);
       if (rows.length === 0) throw new Error("no rows");
@@ -407,7 +483,7 @@ test("遅延ロード: 初期 old 4 row → scroll で target 4 row → target �
           if (rows.length > prevCount) break;
           if (Date.now() >= deadline) {
             throw new Error(
-              `target clip row が ${foundRows.length}/${targetIds.length} 件しかロードできませんでした。`,
+              `target clip row が ${foundRows.length}/${targetIds.length} 件しかロードできませんでした。`
             );
           }
         }
@@ -417,23 +493,31 @@ test("遅延ロード: 初期 old 4 row → scroll で target 4 row → target �
     const multiSelectClips = async (rows: HTMLElement[]): Promise<void> => {
       for (const row of rows) {
         if (row.querySelector('button[aria-label="Deselect clip"]')) continue;
-        const button = row.querySelector<HTMLButtonElement>('button[aria-label="Select clip"]');
+        const button = row.querySelector<HTMLButtonElement>(
+          'button[aria-label="Select clip"]'
+        );
         if (!button) throw new Error("Select clip button が見つかりません。");
         button.click();
       }
       const deadline = Date.now() + 2000;
       for (;;) {
-        const selected = rows.filter((row) => row.querySelector('button[aria-label="Deselect clip"]')).length;
+        const selected = rows.filter((row) =>
+          row.querySelector('button[aria-label="Deselect clip"]')
+        ).length;
         if (selected >= rows.length) return;
         if (Date.now() >= deadline) {
-          throw new Error(`Clip multi-select verification failed: expected ${rows.length} selected, got ${selected}`);
+          throw new Error(
+            `Clip multi-select verification failed: expected ${rows.length} selected, got ${selected}`
+          );
         }
         await sleep(20);
       }
     };
 
     const findPlaylistDialog = (): HTMLElement | null =>
-      Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).find((d) => {
+      Array.from(
+        document.querySelectorAll<HTMLElement>('[role="dialog"]')
+      ).find((d) => {
         if (!isVisible(d)) return false;
         return (d.textContent ?? "").includes("Add to Playlist");
       }) ?? null;
@@ -441,7 +525,12 @@ test("遅延ロード: 初期 old 4 row → scroll で target 4 row → target �
     const openAddToPlaylistDialogViaCmdP = async (): Promise<HTMLElement> => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
       document.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "p", metaKey: isMac, ctrlKey: !isMac, bubbles: true }),
+        new KeyboardEvent("keydown", {
+          key: "p",
+          metaKey: isMac,
+          ctrlKey: !isMac,
+          bubbles: true,
+        })
       );
       const deadline = Date.now() + 2000;
       while (Date.now() < deadline) {
@@ -462,23 +551,42 @@ test("遅延ロード: 初期 old 4 row → scroll で target 4 row → target �
     };
 
     // --- フロー実行 ---
-    const initialRowCount = collectRows(document.querySelector<HTMLElement>(".clip-browser-list-scroller")!).length;
-    const rows = await loadRowsByTargetIdsForE2E(["fresh-4", "fresh-5", "fresh-6", "fresh-7"]);
+    const initialRowCount = collectRows(
+      document.querySelector<HTMLElement>(".clip-browser-list-scroller")!
+    ).length;
+    const rows = await loadRowsByTargetIdsForE2E([
+      "fresh-4",
+      "fresh-5",
+      "fresh-6",
+      "fresh-7",
+    ]);
     const loadedRowCount = rows.length;
 
     await multiSelectClips(rows);
-    const selectedCount = document.querySelectorAll('.multi-select-button > button[aria-label="Deselect clip"]').length;
+    const selectedCount = document.querySelectorAll(
+      '.multi-select-button > button[aria-label="Deselect clip"]'
+    ).length;
     const selectedClipIds = Array.from(
-      document.querySelectorAll<HTMLElement>('.multi-select-button > button[aria-label="Deselect clip"]'),
-    ).map((button) => button.closest(".multi-select-button")?.parentElement?.dataset.songId);
+      document.querySelectorAll<HTMLElement>(
+        '.multi-select-button > button[aria-label="Deselect clip"]'
+      )
+    ).map(
+      (button) =>
+        button.closest(".multi-select-button")?.parentElement?.dataset.songId
+    );
 
     const dialog = await openAddToPlaylistDialogViaCmdP();
     const dialogFound = dialog.id === "playlist-dialog";
 
     // name 注入 + Create click
-    const input = dialog.querySelector<HTMLInputElement>('input[placeholder="Playlist Name"]');
+    const input = dialog.querySelector<HTMLInputElement>(
+      'input[placeholder="Playlist Name"]'
+    );
     if (input) {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value"
+      )?.set;
       setter?.call(input, "test-lazy-load-playlist");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     }
@@ -487,12 +595,24 @@ test("遅延ロード: 初期 old 4 row → scroll で target 4 row → target �
     await waitForDialogClose();
     const dialogClosed = document.getElementById("playlist-dialog") === null;
 
-    return { initialRowCount, loadedRowCount, selectedClipIds, selectedCount, dialogFound, dialogClosed };
+    return {
+      initialRowCount,
+      loadedRowCount,
+      selectedClipIds,
+      selectedCount,
+      dialogFound,
+      dialogClosed,
+    };
   });
 
   expect(result.initialRowCount).toBe(4); // 初期は 4 row のみ
   expect(result.loadedRowCount).toBe(4); // scroll で target ID の 4 件が揃う
-  expect(result.selectedClipIds).toEqual(["fresh-4", "fresh-5", "fresh-6", "fresh-7"]);
+  expect(result.selectedClipIds).toEqual([
+    "fresh-4",
+    "fresh-5",
+    "fresh-6",
+    "fresh-7",
+  ]);
   expect(result.selectedCount).toBe(4);
   expect(result.dialogFound).toBe(true); // Cmd+P で dialog が開いた
   expect(result.dialogClosed).toBe(true); // Create で dialog が消えた
@@ -509,7 +629,7 @@ const ALT_VIEW_LAZY_LOAD_MOCK_HTML = `<!doctype html>
             (_, i) =>
               `<article id="clip-${i}" style="width:200px;height:60px">` +
               `<button aria-label="Select clip" style="width:20px;height:20px"></button>` +
-              `</article>`,
+              `</article>`
           )
           .join("\n")}
     </section>
@@ -575,7 +695,11 @@ test("alternate view 遅延ロード: 初期 4 article row → scroll で +4 row
       let node: HTMLElement | null = el;
       while (node) {
         const style = getComputedStyle(node);
-        if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
+        if (
+          style.display === "none" ||
+          style.visibility === "hidden" ||
+          style.opacity === "0"
+        ) {
           return false;
         }
         node = node.parentElement;
@@ -584,12 +708,16 @@ test("alternate view 遅延ロード: 初期 4 article row → scroll で +4 row
     };
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-    const resolveClipRowFromSelectButton = (button: HTMLElement): HTMLElement | null => {
-      const multiSelectRow = button.closest(".multi-select-button")?.parentElement as HTMLElement | null;
+    const resolveClipRowFromSelectButton = (
+      button: HTMLElement
+    ): HTMLElement | null => {
+      const multiSelectRow = button.closest(".multi-select-button")
+        ?.parentElement as HTMLElement | null;
       return multiSelectRow ?? button.closest<HTMLElement>("article");
     };
     const isScrollableClipContainer = (element: HTMLElement): boolean => {
-      if (element === document.body || element === document.documentElement) return false;
+      if (element === document.body || element === document.documentElement)
+        return false;
       const overflowY = getComputedStyle(element).overflowY;
       return (
         overflowY === "auto" ||
@@ -598,7 +726,9 @@ test("alternate view 遅延ロード: 初期 4 article row → scroll で +4 row
         element.scrollHeight > element.clientHeight
       );
     };
-    const resolveScrollableAncestor = (element: HTMLElement): HTMLElement | null => {
+    const resolveScrollableAncestor = (
+      element: HTMLElement
+    ): HTMLElement | null => {
       let current = element.parentElement;
       while (current) {
         if (isScrollableClipContainer(current)) return current;
@@ -607,10 +737,12 @@ test("alternate view 遅延ロード: 初期 4 article row → scroll で +4 row
       return null;
     };
     const resolveClipListScroller = (): HTMLElement | null => {
-      const explicit = document.querySelector<HTMLElement>(".clip-browser-list-scroller");
+      const explicit = document.querySelector<HTMLElement>(
+        ".clip-browser-list-scroller"
+      );
       if (explicit) return explicit;
       const buttons = document.querySelectorAll<HTMLElement>(
-        'button[aria-label="Select clip"], button[aria-label="Deselect clip"]',
+        'button[aria-label="Select clip"], button[aria-label="Deselect clip"]'
       );
       for (const button of Array.from(buttons)) {
         const row = resolveClipRowFromSelectButton(button);
@@ -622,7 +754,7 @@ test("alternate view 遅延ロード: 初期 4 article row → scroll で +4 row
     };
     const collectRows = (scroller: HTMLElement): HTMLElement[] => {
       const buttons = scroller.querySelectorAll<HTMLElement>(
-        'button[aria-label="Select clip"], button[aria-label="Deselect clip"]',
+        'button[aria-label="Select clip"], button[aria-label="Deselect clip"]'
       );
       const seen = new Set<HTMLElement>();
       const rows: HTMLElement[] = [];
@@ -636,7 +768,9 @@ test("alternate view 遅延ロード: 初期 4 article row → scroll で +4 row
     };
 
     // ensureClipRowsLoaded の inline 再現: 遅延ロード対応
-    const ensureClipRowsLoaded = async (count: number): Promise<HTMLElement[]> => {
+    const ensureClipRowsLoaded = async (
+      count: number
+    ): Promise<HTMLElement[]> => {
       const scroller = resolveClipListScroller();
       if (!scroller) throw new Error("scroller not found");
       let rows = collectRows(scroller);
@@ -658,7 +792,9 @@ test("alternate view 遅延ロード: 初期 4 article row → scroll で +4 row
           rows = collectRows(scroller);
           if (rows.length > prevCount) break;
           if (Date.now() >= deadline) {
-            throw new Error(`clip row が ${rows.length}/${count} 件しかロードできませんでした。`);
+            throw new Error(
+              `clip row が ${rows.length}/${count} 件しかロードできませんでした。`
+            );
           }
         }
       }
@@ -667,23 +803,31 @@ test("alternate view 遅延ロード: 初期 4 article row → scroll で +4 row
     const multiSelectClips = async (rows: HTMLElement[]): Promise<void> => {
       for (const row of rows) {
         if (row.querySelector('button[aria-label="Deselect clip"]')) continue;
-        const button = row.querySelector<HTMLButtonElement>('button[aria-label="Select clip"]');
+        const button = row.querySelector<HTMLButtonElement>(
+          'button[aria-label="Select clip"]'
+        );
         if (!button) throw new Error("Select clip button が見つかりません。");
         button.click();
       }
       const deadline = Date.now() + 2000;
       for (;;) {
-        const selected = rows.filter((row) => row.querySelector('button[aria-label="Deselect clip"]')).length;
+        const selected = rows.filter((row) =>
+          row.querySelector('button[aria-label="Deselect clip"]')
+        ).length;
         if (selected >= rows.length) return;
         if (Date.now() >= deadline) {
-          throw new Error(`Clip multi-select verification failed: expected ${rows.length} selected, got ${selected}`);
+          throw new Error(
+            `Clip multi-select verification failed: expected ${rows.length} selected, got ${selected}`
+          );
         }
         await sleep(20);
       }
     };
 
     const findPlaylistDialog = (): HTMLElement | null =>
-      Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).find((d) => {
+      Array.from(
+        document.querySelectorAll<HTMLElement>('[role="dialog"]')
+      ).find((d) => {
         if (!isVisible(d)) return false;
         return (d.textContent ?? "").includes("Add to Playlist");
       }) ?? null;
@@ -691,7 +835,12 @@ test("alternate view 遅延ロード: 初期 4 article row → scroll で +4 row
     const openAddToPlaylistDialogViaCmdP = async (): Promise<HTMLElement> => {
       const isMac = navigator.platform.toLowerCase().includes("mac");
       document.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "p", metaKey: isMac, ctrlKey: !isMac, bubbles: true }),
+        new KeyboardEvent("keydown", {
+          key: "p",
+          metaKey: isMac,
+          ctrlKey: !isMac,
+          bubbles: true,
+        })
       );
       const deadline = Date.now() + 2000;
       while (Date.now() < deadline) {
@@ -719,15 +868,22 @@ test("alternate view 遅延ロード: 初期 4 article row → scroll で +4 row
     const loadedRowCount = rows.length;
 
     await multiSelectClips(rows);
-    const selectedCount = document.querySelectorAll('button[aria-label="Deselect clip"]').length;
+    const selectedCount = document.querySelectorAll(
+      'button[aria-label="Deselect clip"]'
+    ).length;
 
     const dialog = await openAddToPlaylistDialogViaCmdP();
     const dialogFound = dialog.id === "playlist-dialog";
 
     // name 注入 + Create click
-    const input = dialog.querySelector<HTMLInputElement>('input[placeholder="Playlist Name"]');
+    const input = dialog.querySelector<HTMLInputElement>(
+      'input[placeholder="Playlist Name"]'
+    );
     if (input) {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value"
+      )?.set;
       setter?.call(input, "test-lazy-load-playlist");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     }
@@ -736,7 +892,13 @@ test("alternate view 遅延ロード: 初期 4 article row → scroll で +4 row
     await waitForDialogClose();
     const dialogClosed = document.getElementById("playlist-dialog") === null;
 
-    return { initialRowCount, loadedRowCount, selectedCount, dialogFound, dialogClosed };
+    return {
+      initialRowCount,
+      loadedRowCount,
+      selectedCount,
+      dialogFound,
+      dialogClosed,
+    };
   });
 
   expect(result.initialRowCount).toBe(4); // 初期は 4 row のみ

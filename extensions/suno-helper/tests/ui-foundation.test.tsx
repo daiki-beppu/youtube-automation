@@ -25,21 +25,35 @@ const sizeMarkers = {
 
 describe("shadcn/ui foundation", () => {
   it("cn は条件付き class を連結し、競合する Tailwind class は後勝ちで統合する", () => {
-    expect(cn("px-2", { hidden: false }, ["font-medium", { block: true }], "px-4")).toBe("font-medium block px-4");
+    expect(
+      cn("px-2", { hidden: false }, ["font-medium", { block: true }], "px-4")
+    ).toBe("font-medium block px-4");
   });
 
-  it.each(Object.entries(variantMarkers))("Button variant %s は対応する class を生成する", (variant, markers) => {
-    const classes = buttonVariants({ variant: variant as keyof typeof variantMarkers }).split(" ");
-    expect(classes).toEqual(expect.arrayContaining([...markers]));
-  });
+  it.each(Object.entries(variantMarkers))(
+    "Button variant %s は対応する class を生成する",
+    (variant, markers) => {
+      const classes = buttonVariants({
+        variant: variant as keyof typeof variantMarkers,
+      }).split(" ");
+      expect(classes).toEqual(expect.arrayContaining([...markers]));
+    }
+  );
 
-  it.each(Object.entries(sizeMarkers))("Button size %s は対応する class を生成する", (size, markers) => {
-    const classes = buttonVariants({ size: size as keyof typeof sizeMarkers }).split(" ");
-    expect(classes).toEqual(expect.arrayContaining([...markers]));
-  });
+  it.each(Object.entries(sizeMarkers))(
+    "Button size %s は対応する class を生成する",
+    (size, markers) => {
+      const classes = buttonVariants({
+        size: size as keyof typeof sizeMarkers,
+      }).split(" ");
+      expect(classes).toEqual(expect.arrayContaining([...markers]));
+    }
+  );
 
   it("Button は default variant/size と追加 class・button props を反映する", () => {
-    const html = renderToStaticMarkup(createElement(Button, { className: "w-full", disabled: true }, "保存"));
+    const html = renderToStaticMarkup(
+      createElement(Button, { className: "w-full", disabled: true }, "保存")
+    );
 
     expect(html).toContain('data-slot="button"');
     expect(html).toContain('data-variant="default"');
@@ -53,7 +67,11 @@ describe("shadcn/ui foundation", () => {
 
   it("ButtonSlot は Radix Slot 経由で子要素を描画する", () => {
     const html = renderToStaticMarkup(
-      createElement(ButtonSlot, { variant: "link" }, createElement("a", { href: "#review" }, "確認")),
+      createElement(
+        ButtonSlot,
+        { variant: "link" },
+        createElement("a", { href: "#review" }, "確認")
+      )
     );
 
     expect(html.startsWith("<a ")).toBe(true);
@@ -69,8 +87,8 @@ describe("shadcn/ui foundation", () => {
         Card,
         { className: "w-[360px]", "aria-label": "Suno Helper" },
         createElement(CardHeader, { className: "cursor-grab" }, "header"),
-        createElement(CardContent, { className: "p-0" }, "content"),
-      ),
+        createElement(CardContent, { className: "p-0" }, "content")
+      )
     );
 
     expect(html.startsWith("<div ")).toBe(true);
@@ -87,14 +105,21 @@ describe("shadcn/ui foundation", () => {
     ["default", ["bg-card", "text-card-foreground"]],
     ["warning", ["border-amber-300", "bg-amber-50", "text-amber-900"]],
     ["destructive", ["border-red-300", "bg-red-50", "text-red-900"]],
-  ] as const)("Alert variant %s は対応する class を生成する", (variant, markers) => {
-    const classes = alertVariants({ variant }).split(" ");
-    expect(classes).toEqual(expect.arrayContaining([...markers]));
-  });
+  ] as const)(
+    "Alert variant %s は対応する class を生成する",
+    (variant, markers) => {
+      const classes = alertVariants({ variant }).split(" ");
+      expect(classes).toEqual(expect.arrayContaining([...markers]));
+    }
+  );
 
   it("Alert は role を暗黙追加せず、指定された semantic role と props を透過する", () => {
     const html = renderToStaticMarkup(
-      createElement(Alert, { variant: "destructive", role: "status", "aria-live": "polite" }, "失敗"),
+      createElement(
+        Alert,
+        { variant: "destructive", role: "status", "aria-live": "polite" },
+        "失敗"
+      )
     );
 
     expect(html).toContain('data-slot="alert"');

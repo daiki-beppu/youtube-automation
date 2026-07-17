@@ -1,10 +1,9 @@
 {
   "name": "distrokid-helper",
-  "description": "DistroKid 登録フォーム自動入力 Chrome 拡張 (WXT + React)",
-  "private": true,
   "version": "0.2.1",
+  "private": true,
+  "description": "DistroKid 登録フォーム自動入力 Chrome 拡張 (WXT + React)",
   "type": "module",
-  "packageManager": "pnpm@11.12.0",
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",
@@ -43,5 +42,6 @@
     "ultracite": "7.9.4",
     "vitest": "4.1.8",
     "wxt": "0.20.26"
-  }
+  },
+  "packageManager": "pnpm@11.12.0"
 }

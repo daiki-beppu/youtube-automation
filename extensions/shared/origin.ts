@@ -30,7 +30,7 @@ const DEFAULT_ALLOWED_WEB_ORIGINS = new Set([
  */
 export function isOriginAllowed(
   origin: string | null | undefined,
-  allowOrigin: string | null,
+  allowOrigin: string | null
 ): boolean {
   if (!origin) {
     return false;

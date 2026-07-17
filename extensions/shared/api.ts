@@ -105,7 +105,7 @@ export type CompatibilityResult =
     };
 
 export function formatCompatibilityWarning(
-  compatibility: CompatibilityResult,
+  compatibility: CompatibilityResult
 ): string {
   if (compatibility.status !== "incompatible") {
     return "";
@@ -115,11 +115,11 @@ export function formatCompatibilityWarning(
 
 export async function resolveCompatibilityWarning(
   baseUrl: string,
-  extensionVersion: string,
+  extensionVersion: string
 ): Promise<string> {
   const compatibility = await checkServerCompatibility(
     baseUrl,
-    extensionVersion,
+    extensionVersion
   );
   return formatCompatibilityWarning(compatibility);
 }
@@ -178,7 +178,7 @@ function assertCollectionId(value: unknown, field = "collectionId"): string {
 
 function assertOptionalString(
   value: unknown,
-  field: string,
+  field: string
 ): string | undefined {
   if (value === undefined) {
     return undefined;
@@ -202,7 +202,7 @@ function assertNonNegativeNumber(value: unknown, field: string): number {
 
 function assertOptionalNonNegativeInteger(
   value: unknown,
-  field: string,
+  field: string
 ): number | null | undefined {
   if (value === undefined || value === null) {
     return value;
@@ -212,7 +212,7 @@ function assertOptionalNonNegativeInteger(
 
 function assertCollectionStatus(
   value: unknown,
-  field: string,
+  field: string
 ): CollectionStatus {
   if (
     typeof value !== "string" ||
@@ -234,7 +234,7 @@ function assertDurationFilter(value: unknown, field: string): DurationFilter {
 }
 
 function durationFilterOrDefault(
-  durationFilter?: DurationFilter,
+  durationFilter?: DurationFilter
 ): DurationFilter {
   return durationFilter ?? { ...DEFAULT_DURATION_FILTER };
 }
@@ -284,7 +284,7 @@ async function fetchPromptArray(url: string): Promise<PromptEntry[]> {
 
 /** サーバー version envelope を取得する（#1023）。404 は caller が旧サーバー判定に使う。 */
 export async function fetchServerVersion(
-  baseUrl: string,
+  baseUrl: string
 ): Promise<ServerVersionInfo> {
   const resp = await fetch(`${normalizeBaseUrl(baseUrl)}${VERSION_ROUTE}`);
   if (!resp.ok) {
@@ -297,7 +297,7 @@ export async function fetchServerVersion(
   const record = data as Record<string, unknown>;
   const minExtensionVersion = assertSemver(
     record.min_extension_version,
-    "min_extension_version",
+    "min_extension_version"
   );
   return {
     version: assertSemver(record.version, "version"),
@@ -332,7 +332,7 @@ export async function fetchServerInfo(baseUrl: string): Promise<ServerInfo> {
 /** 拡張 version がサーバーの最低要求を満たすか確認する（#1023）。 */
 export async function checkServerCompatibility(
   baseUrl: string,
-  extensionVersion: string,
+  extensionVersion: string
 ): Promise<CompatibilityResult> {
   try {
     const info = await fetchServerVersion(baseUrl);
@@ -360,7 +360,7 @@ export async function checkServerCompatibility(
  * 空配列は throw せず返し、caller が「選択可能な collection なし」として扱う。
  */
 export async function fetchCollections(
-  baseUrl: string,
+  baseUrl: string
 ): Promise<CollectionSummary[]> {
   const resp = await fetch(`${baseUrl}${COLLECTIONS_ROUTE}`);
   if (!resp.ok) {
@@ -375,7 +375,7 @@ export async function fetchCollections(
 
 function normalizeCollectionSummary(
   item: unknown,
-  index: number,
+  index: number
 ): CollectionSummary {
   const record = assertObject(item, `collections[${index}]`);
   const summary: CollectionSummary = {
@@ -383,42 +383,42 @@ function normalizeCollectionSummary(
     name: assertString(record.name, `collections[${index}].name`),
     status: assertCollectionStatus(
       record.status,
-      `collections[${index}].status`,
+      `collections[${index}].status`
     ),
     pattern_count:
       assertOptionalNonNegativeInteger(
         record.pattern_count,
-        `collections[${index}].pattern_count`,
+        `collections[${index}].pattern_count`
       ) ?? null,
     downloaded_count: assertNonNegativeInteger(
       record.downloaded_count,
-      `collections[${index}].downloaded_count`,
+      `collections[${index}].downloaded_count`
     ),
   };
   const channel = assertOptionalString(
     record.channel,
-    `collections[${index}].channel`,
+    `collections[${index}].channel`
   );
   if (channel !== undefined) {
     summary.channel = channel;
   }
   const theme = assertOptionalString(
     record.theme,
-    `collections[${index}].theme`,
+    `collections[${index}].theme`
   );
   if (theme !== undefined) {
     summary.theme = theme;
   }
   const expectedFileCount = assertOptionalNonNegativeInteger(
     record.expected_file_count,
-    `collections[${index}].expected_file_count`,
+    `collections[${index}].expected_file_count`
   );
   if (expectedFileCount !== undefined) {
     summary.expected_file_count = expectedFileCount;
   }
   const sunoPlaylistUrl = assertOptionalString(
     record.suno_playlist_url,
-    `collections[${index}].suno_playlist_url`,
+    `collections[${index}].suno_playlist_url`
   );
   if (sunoPlaylistUrl !== undefined) {
     summary.suno_playlist_url = sunoPlaylistUrl;
@@ -432,26 +432,26 @@ function normalizeCollectionSummary(
  */
 export async function fetchCollectionPrompts(
   baseUrl: string,
-  id: string,
+  id: string
 ): Promise<PromptEntry[]> {
   return fetchPromptArray(
-    `${baseUrl}${collectionPromptsRoute(assertCollectionId(id))}`,
+    `${baseUrl}${collectionPromptsRoute(assertCollectionId(id))}`
   );
 }
 
 /** 指定 collection の prompts.json を PromptResponse として取得する (#1259)。 */
 export async function fetchCollectionPromptResponse(
   baseUrl: string,
-  id: string,
+  id: string
 ): Promise<PromptResponse> {
   return fetchPromptResponseBody(
-    `${baseUrl}${collectionPromptsRoute(assertCollectionId(id))}`,
+    `${baseUrl}${collectionPromptsRoute(assertCollectionId(id))}`
   );
 }
 
 /** popup に表示する collection。完了済みも結果確認のため一覧に残す。 */
 export function visiblePromptCollections(
-  collections: CollectionSummary[],
+  collections: CollectionSummary[]
 ): CollectionSummary[] {
   return collections;
 }
@@ -467,7 +467,7 @@ export function collectionHasPrompts(collection: CollectionSummary): boolean {
  * #1216: has_prompts → status ベースに移行。
  */
 export function pickInitialCollectionId(
-  collections: CollectionSummary[],
+  collections: CollectionSummary[]
 ): string | null {
   return (
     collections.find((c) => collectionHasPrompts(c) && c.status === "ready")
@@ -478,7 +478,7 @@ export function pickInitialCollectionId(
 export function resolvePromptCollectionId(
   collections: CollectionSummary[],
   selectedId: string,
-  allowDownloadedSelected = false,
+  allowDownloadedSelected = false
 ): string | null {
   const selected = collections.find((c) => c.id === selectedId);
   if (
@@ -511,7 +511,7 @@ const COLLECTION_SUFFIX = "-collection";
  */
 export function extractPlaylistName(
   collectionId: string,
-  theme: string,
+  theme: string
 ): string {
   if (!theme) {
     throw new Error(`theme が空: id=${collectionId}`);
@@ -522,7 +522,7 @@ export function extractPlaylistName(
   const themeSuffix = `-${theme}`;
   if (!stripped.endsWith(themeSuffix)) {
     throw new Error(
-      `theme と collection id が不整合: id=${collectionId} theme=${theme}`,
+      `theme と collection id が不整合: id=${collectionId} theme=${theme}`
     );
   }
   const datePlusChannel = stripped.slice(0, -themeSuffix.length);
@@ -560,7 +560,7 @@ export interface DistrokidReleaseRecord {
  * 空配列は throw せず返す（0 件 = 未配信 disc なしの正常ケース）。
  */
 export async function fetchDistrokidCollections(
-  baseUrl: string,
+  baseUrl: string
 ): Promise<DistrokidCollectionSummary[]> {
   const resp = await fetch(`${baseUrl}${DISTROKID_COLLECTIONS_ROUTE}`);
   if (!resp.ok) {
@@ -578,7 +578,7 @@ export async function fetchDistrokidCollections(
  * fetchDistrokidCollections の結果から popup のドロップダウンに出す候補を絞る。
  */
 export function excludeReleasedDiscs(
-  list: DistrokidCollectionSummary[],
+  list: DistrokidCollectionSummary[]
 ): DistrokidCollectionSummary[] {
   return list.filter((item) => item.released !== true);
 }
@@ -591,12 +591,12 @@ export function excludeReleasedDiscs(
  */
 export async function recordDistrokidRelease(
   baseUrl: string,
-  record: DistrokidReleaseRecord,
+  record: DistrokidReleaseRecord
 ): Promise<void> {
   const resp = await postJsonWithServeToken(
     baseUrl,
     DISTROKID_RELEASES_ROUTE,
-    record,
+    record
   );
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
@@ -642,7 +642,7 @@ async function fetchServeToken(baseUrl: string): Promise<string> {
 async function postJsonWithServeToken(
   baseUrl: string,
   route: string,
-  body: unknown,
+  body: unknown
 ): Promise<Response> {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
   const url = `${normalizedBaseUrl}${route}`;
@@ -667,7 +667,7 @@ export interface PostDownloadedResult {
 export async function postDownloaded(
   baseUrl: string,
   collectionId: string,
-  payload: DownloadedPayload,
+  payload: DownloadedPayload
 ): Promise<PostDownloadedResult> {
   if (payload.file_count > 0 && !payload.download_path) {
     throw new Error("file_count が正数の場合は download_path が必要です");
@@ -675,7 +675,7 @@ export async function postDownloaded(
   const res = await postJsonWithServeToken(
     baseUrl,
     collectionDownloadedRoute(collectionId),
-    payload,
+    payload
   );
   if (!res.ok) {
     throw new Error(`POST downloaded failed: ${res.status} ${res.statusText}`);

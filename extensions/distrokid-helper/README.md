@@ -23,7 +23,7 @@ WXT + React + TypeScript + Tailwind CSS + [@webext-core/messaging](https://webex
 | `lib/api.ts`                | `/distrokid/release.json` / assets の fetch client（`ReleaseUnavailableError`）                             |
 | `lib/asset-transfer.ts`     | popup で fetch した asset を content へ渡すための base64 直列化（CORS 回避）                                |
 | `lib/distrokid-injector.ts` | React 互換ネイティブイベント注入 + `DataTransfer` ファイル注入 + セレクタ契約                               |
-| `lib/messaging.ts`          | popup ↔ content の型付き channel（`PHASES` 進捗契約）                                                      |
+| `lib/messaging.ts`          | popup ↔ content の型付き channel（`PHASES` 進捗契約）                                                       |
 | `lib/storage.ts`            | 選択中ローカル配信元の永続化（既定 `http://youtube-automation.localhost:7873`）                             |
 | `lib/types.ts`              | `/distrokid/release.json` の JSON 契約型                                                                    |
 | `tests/`                    | Vitest unit + Playwright e2e                                                                                |

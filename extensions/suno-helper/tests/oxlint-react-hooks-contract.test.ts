@@ -1,18 +1,26 @@
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+
 import { afterEach, describe, expect, test } from "vitest";
 
-const oxlint = fileURLToPath(new URL("../node_modules/.bin/oxlint", import.meta.url));
-const config = fileURLToPath(new URL("../../.oxlintrc.json", import.meta.url));
+const oxlint = fileURLToPath(
+  new URL("../node_modules/.bin/oxlint", import.meta.url)
+);
+const config = fileURLToPath(
+  new URL("../../oxlint.config.ts", import.meta.url)
+);
 const temporaryDirectories: string[] = [];
 
 function lintFixture(name: string) {
   const directory = mkdtempSync(join(tmpdir(), "oxlint-react-hooks-"));
   temporaryDirectories.push(directory);
-  const source = readFileSync(new URL(`./fixtures/${name}.fixture`, import.meta.url), "utf8");
+  const source = readFileSync(
+    new URL(`./fixtures/${name}.fixture`, import.meta.url),
+    "utf8"
+  );
   const sourcePath = join(directory, `${name}.tsx`);
   writeFileSync(sourcePath, source);
 

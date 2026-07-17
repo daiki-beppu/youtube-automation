@@ -8,9 +8,10 @@
 //   - sendMessage / onMessage: @webext-core/messaging の型付き API を re-export
 
 import { describe, it, expect } from "vitest";
+
+import type { SerializedAsset } from "../lib/asset-transfer";
 import { PHASES, sendMessage, onMessage } from "../lib/messaging";
 import type { InjectTrackRequest } from "../lib/messaging";
-import type { SerializedAsset } from "../lib/asset-transfer";
 
 // #871 per-track 分割（コンパイル時契約）:
 // asset は injectTrack で 1 件ずつ送る。fetchAsset は取得失敗時に throw する（null を返さない）
@@ -22,7 +23,9 @@ void _trackAssetIsNonNull;
 describe("PHASES（PROGRESS フェーズ契約）", () => {
   it("注入フローのフェーズを過不足なく定義する", () => {
     // Given / When / Then: content と popup が解釈を共有するフェーズ集合
-    expect(new Set(Object.keys(PHASES))).toEqual(new Set(["INJECTING", "DONE", "ERROR", "STOPPED"]));
+    expect(new Set(Object.keys(PHASES))).toEqual(
+      new Set(["INJECTING", "DONE", "ERROR", "STOPPED"])
+    );
   });
 
   it("フェーズ値はすべて一意な文字列である", () => {

@@ -51,7 +51,9 @@ import { markBbox } from "./_helpers";
  * clip list の scroll container `.clip-browser-list-scroller` を取得（無ければ作成）する (#881)。
  */
 function getOrCreateScroller(): HTMLElement {
-  const existing = document.querySelector<HTMLElement>(".clip-browser-list-scroller");
+  const existing = document.querySelector<HTMLElement>(
+    ".clip-browser-list-scroller"
+  );
   if (existing) {
     return existing;
   }
@@ -73,7 +75,9 @@ function getOrCreateScroller(): HTMLElement {
  */
 function getOrCreateClipList(): HTMLElement {
   const scroller = getOrCreateScroller();
-  const existing = scroller.querySelector<HTMLElement>(":scope > div.clip-list-wrapper");
+  const existing = scroller.querySelector<HTMLElement>(
+    ":scope > div.clip-list-wrapper"
+  );
   if (existing) {
     return existing;
   }
@@ -105,12 +109,17 @@ function addClipRow(
     visible?: boolean;
     songId?: string;
     idSource?: "href" | "data-song-id" | "data-clip-id" | "image";
-  } = {},
+  } = {}
 ): {
   row: HTMLElement;
   btn: HTMLButtonElement;
 } {
-  const { selectLabel = "Select clip", visible = true, songId, idSource = "href" } = opts;
+  const {
+    selectLabel = "Select clip",
+    visible = true,
+    songId,
+    idSource = "href",
+  } = opts;
   const list = getOrCreateClipList();
 
   const row = document.createElement("div"); // clip card（返り値 row）
@@ -158,7 +167,7 @@ function addClipRow(
 
 function addAlternateViewRows(
   count: number,
-  opts: { selectLabel?: string } = {},
+  opts: { selectLabel?: string } = {}
 ): {
   viewport: HTMLElement;
   rows: HTMLElement[];
@@ -189,7 +198,7 @@ function addAlternateViewRows(
 
 function addAlternateViewRow(
   viewport: HTMLElement,
-  index: number,
+  index: number
 ): {
   row: HTMLElement;
   btn: HTMLButtonElement;
@@ -215,7 +224,7 @@ function addAlternateViewRow(
 function addGridViewCard(
   gridContainer: HTMLElement,
   clipId: string,
-  opts: { selectLabel?: string; visible?: boolean } = {},
+  opts: { selectLabel?: string; visible?: boolean } = {}
 ): { row: HTMLElement; btn: HTMLButtonElement } {
   const { selectLabel = "Select clip", visible = true } = opts;
   const card = document.createElement("div");
@@ -250,7 +259,7 @@ function addGridViewCard(
 
 function addGridViewRows(
   count: number,
-  opts: { selectLabel?: string } = {},
+  opts: { selectLabel?: string } = {}
 ): {
   scroller: HTMLElement;
   gridContainer: HTMLElement;
@@ -266,9 +275,13 @@ function addGridViewRows(
   const buttons: HTMLButtonElement[] = [];
   for (let i = 0; i < count; i++) {
     const padded = String(i).padStart(8, "0");
-    const { row, btn } = addGridViewCard(gridContainer, `${padded}-0000-0000-0000-000000000000`, {
-      selectLabel: opts.selectLabel,
-    });
+    const { row, btn } = addGridViewCard(
+      gridContainer,
+      `${padded}-0000-0000-0000-000000000000`,
+      {
+        selectLabel: opts.selectLabel,
+      }
+    );
     rows.push(row);
     buttons.push(btn);
   }
@@ -282,7 +295,12 @@ function addGridViewRows(
  *   - visible=false: display:none + bbox 0×0（strict isVisible で除外される残骸）
  */
 function addPlaylistDialog(
-  opts: { text?: string; ariaLabel?: string; id?: string; visible?: boolean } = {},
+  opts: {
+    text?: string;
+    ariaLabel?: string;
+    id?: string;
+    visible?: boolean;
+  } = {}
 ): HTMLElement {
   const { text = "Add to Playlist", ariaLabel, id, visible = true } = opts;
   const dialog = document.createElement("div");
@@ -344,15 +362,21 @@ describe("playlist-dom セレクタ定数: 実機 DOM 検証で確定した安�
   });
 
   it("Given SELECT_CLIP_BUTTON_SELECTOR When 読む Then 未選択の Select clip ボタンセレクタである", () => {
-    expect(SELECT_CLIP_BUTTON_SELECTOR).toBe('.multi-select-button > button[aria-label="Select clip"]');
+    expect(SELECT_CLIP_BUTTON_SELECTOR).toBe(
+      '.multi-select-button > button[aria-label="Select clip"]'
+    );
   });
 
   it("Given DESELECT_CLIP_BUTTON_SELECTOR When 読む Then 選択済みを示す Deselect clip ボタンセレクタである（Select と対称）", () => {
-    expect(DESELECT_CLIP_BUTTON_SELECTOR).toBe('.multi-select-button > button[aria-label="Deselect clip"]');
+    expect(DESELECT_CLIP_BUTTON_SELECTOR).toBe(
+      '.multi-select-button > button[aria-label="Deselect clip"]'
+    );
   });
 
   it("Given PLAYLIST_NAME_INPUT_SELECTOR When 読む Then Playlist Name input セレクタである", () => {
-    expect(PLAYLIST_NAME_INPUT_SELECTOR).toBe('input[placeholder="Playlist Name"]');
+    expect(PLAYLIST_NAME_INPUT_SELECTOR).toBe(
+      'input[placeholder="Playlist Name"]'
+    );
   });
 
   it("Given PLAYLIST_ROW_LABEL_SELECTOR When 読む Then dialog 内 row の label を識別する Tailwind class セレクタである", () => {
@@ -367,7 +391,11 @@ describe("playlist-dom セレクタ定数: 実機 DOM 検証で確定した安�
  * scroller の scroll イベントが発火するたびに追加 row を batchSize 件 append する。
  * これにより「scrollTop 代入 + scroll event dispatch → +N row」の遅延ロードを写像する。
  */
-function setupLazyLoader(scroller: HTMLElement, batchSize: number, opts: { initialScrollHeight?: number } = {}): void {
+function setupLazyLoader(
+  scroller: HTMLElement,
+  batchSize: number,
+  opts: { initialScrollHeight?: number } = {}
+): void {
   // scrollHeight stub（初期値を与えないと 0 のまま）
   let _scrollHeight = opts.initialScrollHeight ?? 1000;
   Object.defineProperty(scroller, "scrollHeight", {
@@ -395,7 +423,10 @@ function setupLazyLoader(scroller: HTMLElement, batchSize: number, opts: { initi
   });
 }
 
-function setupAlternateLazyLoader(viewport: HTMLElement, batchSize: number): void {
+function setupAlternateLazyLoader(
+  viewport: HTMLElement,
+  batchSize: number
+): void {
   let _scrollHeight = 1000;
   Object.defineProperty(viewport, "scrollHeight", {
     configurable: true,
@@ -424,7 +455,7 @@ function setupStepwiseLazyLoader(
   scroller: HTMLElement,
   batchSize: number,
   dimensions: { scrollHeight: number; clientHeight: number },
-  opts: { maxBatches?: number } = {},
+  opts: { maxBatches?: number } = {}
 ): { scrollPositions: number[] } {
   let scrollHeight = dimensions.scrollHeight;
   let scrollTop = 0;
@@ -452,7 +483,11 @@ function setupStepwiseLazyLoader(
   scroller.addEventListener("scroll", () => {
     scrollPositions.push(scrollTop);
     const maxScrollTop = scrollHeight - clientHeight;
-    if (loadedBatches >= maxBatches || scrollTop <= 0 || scrollTop >= maxScrollTop) {
+    if (
+      loadedBatches >= maxBatches ||
+      scrollTop <= 0 ||
+      scrollTop >= maxScrollTop
+    ) {
       return;
     }
     loadedBatches += 1;
@@ -467,7 +502,7 @@ function setupStepwiseLazyLoader(
 function setupBottomAfterIntermediateLazyLoader(
   scroller: HTMLElement,
   batchSize: number,
-  dimensions: { scrollHeight: number; clientHeight: number },
+  dimensions: { scrollHeight: number; clientHeight: number }
 ): { scrollPositions: number[] } {
   let scrollHeight = dimensions.scrollHeight;
   let scrollTop = 0;
@@ -524,9 +559,12 @@ describe("ensureClipRowsLoadedByIds: 生成 run の submitted ID による clip 
     const scroller = getOrCreateScroller();
     expect(scroller.querySelectorAll(":scope > div").length).toBe(1);
 
-    const pending = ensureClipRowsLoadedByIds(["fresh-a", "fresh-b", "fresh-c"], {
-      isAborted: () => false,
-    });
+    const pending = ensureClipRowsLoadedByIds(
+      ["fresh-a", "fresh-b", "fresh-c"],
+      {
+        isAborted: () => false,
+      }
+    );
     await vi.runAllTimersAsync();
     const result = await pending;
 
@@ -551,12 +589,21 @@ describe("ensureClipRowsLoadedByIds: 生成 run の submitted ID による clip 
   });
 
   it("Given row が明示 data 属性で song ID を持つ When target ID で取得する Then 該当 row を返す", async () => {
-    const bySongId = addClipRow({ songId: "fresh-data-song", idSource: "data-song-id" }).row;
-    const byClipId = addClipRow({ songId: "fresh-data-clip", idSource: "data-clip-id" }).row;
+    const bySongId = addClipRow({
+      songId: "fresh-data-song",
+      idSource: "data-song-id",
+    }).row;
+    const byClipId = addClipRow({
+      songId: "fresh-data-clip",
+      idSource: "data-clip-id",
+    }).row;
 
-    const pending = ensureClipRowsLoadedByIds(["fresh-data-song", "fresh-data-clip"], {
-      isAborted: () => false,
-    });
+    const pending = ensureClipRowsLoadedByIds(
+      ["fresh-data-song", "fresh-data-clip"],
+      {
+        isAborted: () => false,
+      }
+    );
     await vi.runAllTimersAsync();
     const result = await pending;
 
@@ -592,7 +639,9 @@ describe("ensureClipRowsLoadedByIds: 生成 run の submitted ID による clip 
     const result = await pending;
 
     expect(result).toHaveLength(1);
-    expect(result[0].querySelector<HTMLAnchorElement>('a[href="/song/fresh-late"]')).not.toBeNull();
+    expect(
+      result[0].querySelector<HTMLAnchorElement>('a[href="/song/fresh-late"]')
+    ).not.toBeNull();
   });
 
   it("Given target ID が揃った後 When target ID で取得する Then scrollTop が 0 に戻る", async () => {
@@ -607,7 +656,9 @@ describe("ensureClipRowsLoadedByIds: 生成 run の submitted ID による clip 
       },
     });
 
-    const pending = ensureClipRowsLoadedByIds(["fresh-a"], { isAborted: () => false });
+    const pending = ensureClipRowsLoadedByIds(["fresh-a"], {
+      isAborted: () => false,
+    });
     await vi.runAllTimersAsync();
     await pending;
 
@@ -628,17 +679,17 @@ describe("ensureClipRowsLoadedByIds: 生成 run の submitted ID による clip 
   });
 
   it("Given .clip-browser-list-scroller が存在しない When target ID で取得する Then fail-loud で throw する", async () => {
-    await expect(ensureClipRowsLoadedByIds(["fresh-a"], { isAborted: () => false })).rejects.toThrow(
-      /clip row が見つかりません/,
-    );
+    await expect(
+      ensureClipRowsLoadedByIds(["fresh-a"], { isAborted: () => false })
+    ).rejects.toThrow(/clip row が見つかりません/);
   });
 
   it("Given scroller はあるが clip row が 0 件 When target ID で取得する Then fail-loud で throw する", async () => {
     getOrCreateScroller();
 
-    await expect(ensureClipRowsLoadedByIds(["fresh-a"], { isAborted: () => false })).rejects.toThrow(
-      /clip row が見つかりません/,
-    );
+    await expect(
+      ensureClipRowsLoadedByIds(["fresh-a"], { isAborted: () => false })
+    ).rejects.toThrow(/clip row が見つかりません/);
   });
 
   it("Given isAborted=true When target ID で取得する Then 見つかった row だけを返して throw しない", async () => {
@@ -663,12 +714,21 @@ describe("ensureClipRowsLoadedByIds: image URL からの clip ID 抽出", () => 
   });
 
   it("Given 新 Suno DOM (image URL のみ) When target ID で取得する Then img src から UUID を抽出して該当 row を返す", async () => {
-    const freshA = addClipRow({ songId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", idSource: "image" }).row;
-    const freshB = addClipRow({ songId: "11111111-2222-3333-4444-555555555555", idSource: "image" }).row;
+    const freshA = addClipRow({
+      songId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      idSource: "image",
+    }).row;
+    const freshB = addClipRow({
+      songId: "11111111-2222-3333-4444-555555555555",
+      idSource: "image",
+    }).row;
 
     const pending = ensureClipRowsLoadedByIds(
-      ["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "11111111-2222-3333-4444-555555555555"],
-      { isAborted: () => false },
+      [
+        "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        "11111111-2222-3333-4444-555555555555",
+      ],
+      { isAborted: () => false }
     );
     await vi.runAllTimersAsync();
     const result = await pending;
@@ -702,14 +762,18 @@ describe("ensureClipRowsLoadedByIds: image URL からの clip ID 抽出", () => 
     const contentDiv = document.createElement("div");
     const img = document.createElement("img");
     img.src = "data:image/gif;base64,placeholder";
-    img.dataset.src = "https://cdn2.suno.ai/image_large_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jpeg";
+    img.dataset.src =
+      "https://cdn2.suno.ai/image_large_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jpeg";
     contentDiv.appendChild(img);
     row.appendChild(contentDiv);
     wrapper.appendChild(row);
     markBbox(row, 200, 60);
     markBbox(btn, 20, 20);
 
-    const pending = ensureClipRowsLoadedByIds(["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"], { isAborted: () => false });
+    const pending = ensureClipRowsLoadedByIds(
+      ["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"],
+      { isAborted: () => false }
+    );
     await vi.runAllTimersAsync();
     const result = await pending;
 
@@ -746,7 +810,8 @@ describe("ensureClipRowsLoadedByIds: image URL からの clip ID 抽出", () => 
     // image 経路
     const contentDiv = document.createElement("div");
     const img = document.createElement("img");
-    img.src = "https://cdn2.suno.ai/image_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jpeg";
+    img.src =
+      "https://cdn2.suno.ai/image_aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.jpeg";
     contentDiv.appendChild(img);
     row.appendChild(contentDiv);
     wrapper.appendChild(row);
@@ -754,7 +819,9 @@ describe("ensureClipRowsLoadedByIds: image URL からの clip ID 抽出", () => 
     markBbox(btn, 20, 20);
 
     // href-id で見つかる（href 経路が先に評価される）
-    const pending = ensureClipRowsLoadedByIds(["href-id"], { isAborted: () => false });
+    const pending = ensureClipRowsLoadedByIds(["href-id"], {
+      isAborted: () => false,
+    });
     await vi.runAllTimersAsync();
     const result = await pending;
 
@@ -828,14 +895,18 @@ describe("ensureClipRowsLoaded: 遅延ロード対応 clip row 収集 (#924)", (
   it("Given .clip-browser-list-scroller が無い Grid 風 container When 取得する Then Select clip button から row を解決する", async () => {
     const { rows } = addAlternateViewRows(3);
 
-    await expect(ensureClipRowsLoaded(3, { isAborted: () => false })).resolves.toEqual(rows);
+    await expect(
+      ensureClipRowsLoaded(3, { isAborted: () => false })
+    ).resolves.toEqual(rows);
   });
 
   it("Given 非表示 row だけの .clip-browser-list-scroller と Grid 風 container When 取得する Then visible な Grid 側 rows を返す", async () => {
     addClipRow({ visible: false });
     const { rows } = addAlternateViewRows(3);
 
-    await expect(ensureClipRowsLoaded(3, { isAborted: () => false })).resolves.toEqual(rows);
+    await expect(
+      ensureClipRowsLoaded(3, { isAborted: () => false })
+    ).resolves.toEqual(rows);
   });
 
   it("Given .clip-browser-list-scroller が無い Grid 風 container で初期不足 When 取得する Then 代替 scroller を scroll して count 件を返す", async () => {
@@ -863,7 +934,9 @@ describe("ensureClipRowsLoaded: 遅延ロード対応 clip row 収集 (#924)", (
     markBbox(parent, 200, 60);
     markBbox(btn, 20, 20);
 
-    await expect(ensureClipRowsLoaded(1, { isAborted: () => false })).rejects.toThrow(/clip row が見つかりません/);
+    await expect(
+      ensureClipRowsLoaded(1, { isAborted: () => false })
+    ).rejects.toThrow(/clip row が見つかりません/);
   });
 
   it("Given 初期不足 → 1 回の追加ロードで揃う When ensureClipRowsLoaded Then scroll イベントで row が増えてから返す", async () => {
@@ -911,7 +984,7 @@ describe("ensureClipRowsLoaded: 遅延ロード対応 clip row 収集 (#924)", (
         scrollHeight: 1000,
         clientHeight: 200,
       },
-      { maxBatches: 2 },
+      { maxBatches: 2 }
     );
 
     const pending = ensureClipRowsLoaded(30, {
@@ -950,10 +1023,14 @@ describe("ensureClipRowsLoaded: 遅延ロード対応 clip row 収集 (#924)", (
   it("Given 初回中間では増えず末尾で増える loader When ensureClipRowsLoaded Then 2 回目以降に末尾へ到達してロードする", async () => {
     Array.from({ length: 23 }, () => addClipRow().row);
     const scroller = getOrCreateScroller();
-    const { scrollPositions } = setupBottomAfterIntermediateLazyLoader(scroller, 5, {
-      scrollHeight: 700,
-      clientHeight: 200,
-    });
+    const { scrollPositions } = setupBottomAfterIntermediateLazyLoader(
+      scroller,
+      5,
+      {
+        scrollHeight: 700,
+        clientHeight: 200,
+      }
+    );
 
     const pending = ensureClipRowsLoaded(28, {
       isAborted: () => false,
@@ -996,7 +1073,9 @@ describe("ensureClipRowsLoaded: 遅延ロード対応 clip row 収集 (#924)", (
     await vi.runAllTimersAsync();
     const rows = await pendingRows;
     for (const row of rows) {
-      const button = row.querySelector<HTMLButtonElement>(SELECT_CLIP_BUTTON_SELECTOR);
+      const button = row.querySelector<HTMLButtonElement>(
+        SELECT_CLIP_BUTTON_SELECTOR
+      );
       if (!button) {
         throw new Error("test fixture must include Select clip button");
       }
@@ -1013,7 +1092,9 @@ describe("ensureClipRowsLoaded: 遅延ロード対応 clip row 収集 (#924)", (
     });
 
     expect(rows).toHaveLength(8);
-    expect(document.querySelectorAll(DESELECT_CLIP_BUTTON_SELECTOR)).toHaveLength(8);
+    expect(
+      document.querySelectorAll(DESELECT_CLIP_BUTTON_SELECTOR)
+    ).toHaveLength(8);
     expect(submittedPlaylistName).toBe("test-lazy-load-playlist");
     expect(scrollPositions[0]).toBeGreaterThan(0);
     expect(scrollPositions[0]).toBeLessThan(40);
@@ -1071,14 +1152,18 @@ describe("ensureClipRowsLoaded: 遅延ロード対応 clip row 収集 (#924)", (
 
   it("Given .clip-browser-list-scroller が存在しない When ensureClipRowsLoaded Then fail-loud で throw する", async () => {
     // scroller 不在 = Suno の clip list コンテナ自体が変わった（#881）
-    await expect(ensureClipRowsLoaded(1, { isAborted: () => false })).rejects.toThrow(/clip row が見つかりません/);
+    await expect(
+      ensureClipRowsLoaded(1, { isAborted: () => false })
+    ).rejects.toThrow(/clip row が見つかりません/);
   });
 
   it("Given scroller はあるが clip row が 0 件 When ensureClipRowsLoaded Then fail-loud で throw する（#881 維持）", async () => {
     // scroller は健在だが multi-select を持つ row が 1 件も無い = selector 廃止等の UI 変更
     getOrCreateScroller();
 
-    await expect(ensureClipRowsLoaded(1, { isAborted: () => false })).rejects.toThrow(/clip row が見つかりません/);
+    await expect(
+      ensureClipRowsLoaded(1, { isAborted: () => false })
+    ).rejects.toThrow(/clip row が見つかりません/);
   });
 });
 
@@ -1172,7 +1257,9 @@ describe("multiSelectClips: click + selected 状態への遷移を verify", () =
       const a = addClipRow();
 
       const pending = multiSelectClips([a.row]);
-      const expectation = expect(pending).rejects.toThrow(/verification failed: expected 1 selected, got 0/);
+      const expectation = expect(pending).rejects.toThrow(
+        /verification failed: expected 1 selected, got 0/
+      );
       await vi.advanceTimersByTimeAsync(1100);
       await expectation;
     });
@@ -1183,7 +1270,9 @@ describe("multiSelectClips: click + selected 状態への遷移を verify", () =
       selectOnClick(ok.btn); // ok だけ遷移、fail は未選択のまま
 
       const pending = multiSelectClips([ok.row, fail.row]);
-      const expectation = expect(pending).rejects.toThrow(/verification failed: expected 2 selected, got 1/);
+      const expectation = expect(pending).rejects.toThrow(
+        /verification failed: expected 2 selected, got 1/
+      );
       await vi.advanceTimersByTimeAsync(1100);
       await expectation;
     });
@@ -1238,7 +1327,9 @@ describe("openAddToPlaylistDialogViaCmdP: Cmd+P で Add to Playlist dialog を�
 
     await openAddToPlaylistDialogViaCmdP();
 
-    const keydown = dispatch.mock.calls.map((c) => c[0]).find((e) => e.type === "keydown") as KeyboardEvent | undefined;
+    const keydown = dispatch.mock.calls
+      .map((c) => c[0])
+      .find((e) => e.type === "keydown") as KeyboardEvent | undefined;
     expect(keydown).toBeDefined();
     expect(keydown?.key).toBe("p");
     expect(keydown?.metaKey || keydown?.ctrlKey).toBe(true); // Mac=metaKey / 他=ctrlKey のいずれか
@@ -1253,7 +1344,11 @@ describe("openAddToPlaylistDialogViaCmdP: Cmd+P で Add to Playlist dialog を�
 
   it("Given cookie dialog (aria-label=Privacy) が先に在り該当テキストを含む When 実行する Then 除外し real dialog を返す", async () => {
     // 除外フィルタが無ければ DOM 先頭の cookie dialog を誤って拾う配置にする（受け入れ条件 11）。
-    addPlaylistDialog({ text: "Add to Playlist", ariaLabel: "Privacy Preference Center", id: "ot-sdk-container" });
+    addPlaylistDialog({
+      text: "Add to Playlist",
+      ariaLabel: "Privacy Preference Center",
+      id: "ot-sdk-container",
+    });
     const real = addPlaylistDialog({ text: "Add to Playlist" });
 
     await expect(openAddToPlaylistDialogViaCmdP()).resolves.toBe(real);
@@ -1323,7 +1418,9 @@ describe("openAddToPlaylistDialogViaCmdP: Cmd+P で Add to Playlist dialog を�
       });
 
       const pending = openAddToPlaylistDialogViaCmdP();
-      const expectation = expect(pending).rejects.toThrow(/3 回試行しても検出できませんでした/);
+      const expectation = expect(pending).rejects.toThrow(
+        /3 回試行しても検出できませんでした/
+      );
       await vi.runAllTimersAsync();
       await expectation;
 
@@ -1398,7 +1495,10 @@ describe("waitForPlaylistDialogClose: dialog 消滅まで待機", () => {
   });
 
   it("Given dialog が初めから無い When 待機する Then 即 resolve する", async () => {
-    const pending = waitForPlaylistDialogClose({ isAborted: () => false, ...FAST });
+    const pending = waitForPlaylistDialogClose({
+      isAborted: () => false,
+      ...FAST,
+    });
     await vi.advanceTimersByTimeAsync(0);
 
     await expect(pending).resolves.toBeUndefined();
@@ -1407,7 +1507,10 @@ describe("waitForPlaylistDialogClose: dialog 消滅まで待機", () => {
   it("Given dialog 表示中 → 途中で消滅 When 待機する Then 消滅検知で resolve する", async () => {
     const dialog = addPlaylistDialog();
 
-    const pending = waitForPlaylistDialogClose({ isAborted: () => false, ...FAST });
+    const pending = waitForPlaylistDialogClose({
+      isAborted: () => false,
+      ...FAST,
+    });
     let settled = false;
     void pending.then(() => {
       settled = true;
@@ -1425,16 +1528,24 @@ describe("waitForPlaylistDialogClose: dialog 消滅まで待機", () => {
   it("Given dialog が残り続ける When deadline 超過 Then timeout throw する", async () => {
     addPlaylistDialog();
 
-    const pending = waitForPlaylistDialogClose({ isAborted: () => false, ...FAST });
+    const pending = waitForPlaylistDialogClose({
+      isAborted: () => false,
+      ...FAST,
+    });
     const expectation = expect(pending).rejects.toThrow();
-    await vi.advanceTimersByTimeAsync(FAST.timeoutMs + FAST.pollIntervalMs + 50);
+    await vi.advanceTimersByTimeAsync(
+      FAST.timeoutMs + FAST.pollIntervalMs + 50
+    );
     await expectation;
   });
 
   it("Given dialog 表示中でも isAborted=true When 待機する Then 即 resolve する（throw しない、停止対応）", async () => {
     addPlaylistDialog();
 
-    const pending = waitForPlaylistDialogClose({ isAborted: () => true, ...FAST });
+    const pending = waitForPlaylistDialogClose({
+      isAborted: () => true,
+      ...FAST,
+    });
     await vi.advanceTimersByTimeAsync(0);
 
     await expect(pending).resolves.toBeUndefined();
@@ -1599,13 +1710,17 @@ describe("grid view (#1237): .multi-select-button / a[href*='/song/'] 不在の 
   describe("ensureClipRowsLoaded: grid view per-card 解決", () => {
     it("Given grid view DOM When ensureClipRowsLoaded Then sibling cardinality heuristic で per-card を row として返す", async () => {
       const { rows } = addGridViewRows(3);
-      await expect(ensureClipRowsLoaded(3, { isAborted: () => false })).resolves.toEqual(rows);
+      await expect(
+        ensureClipRowsLoaded(3, { isAborted: () => false })
+      ).resolves.toEqual(rows);
     });
 
     it("Given grid view で一部 card が非表示 When ensureClipRowsLoaded Then strict isVisible で除外する", async () => {
       const { gridContainer, rows } = addGridViewRows(2);
       addGridViewCard(gridContainer, "hidden-uuid", { visible: false });
-      await expect(ensureClipRowsLoaded(2, { isAborted: () => false })).resolves.toEqual(rows);
+      await expect(
+        ensureClipRowsLoaded(2, { isAborted: () => false })
+      ).resolves.toEqual(rows);
     });
   });
 
@@ -1642,7 +1757,10 @@ describe("grid view (#1237): .multi-select-button / a[href*='/song/'] 不在の 
       const wrapper = getOrCreateClipList();
       const gridContainer = document.createElement("div");
       wrapper.appendChild(gridContainer);
-      const card0 = addGridViewCard(gridContainer, "a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+      const card0 = addGridViewCard(
+        gridContainer,
+        "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+      );
       addGridViewCard(gridContainer, "b2c3d4e5-f6a7-8901-bcde-f12345678901");
       card0.row.dataset.songId = "primary-id";
 
@@ -1717,8 +1835,14 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
     selectOnClick(b.btn);
     const scroller = getOrCreateScroller();
     // scrollHeight / clientHeight stub
-    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
-    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
     let st = 0;
     Object.defineProperty(scroller, "scrollTop", {
       configurable: true,
@@ -1742,8 +1866,14 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
     const idA = "abababab-1111-2222-3333-444444444444";
     addClipRow({ songId: idA, idSource: "image" });
     const scroller = getOrCreateScroller();
-    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
-    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
     let st = 0;
     Object.defineProperty(scroller, "scrollTop", {
       configurable: true,
@@ -1757,7 +1887,9 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
       isAborted: () => false,
       renderWaitMs: 10,
     });
-    const expectation = expect(pending).rejects.toThrow(/selection verification failed/);
+    const expectation = expect(pending).rejects.toThrow(
+      /selection verification failed/
+    );
     await vi.runAllTimersAsync();
     await expectation;
   });
@@ -1770,8 +1902,14 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
     appendTitle(row.row, "Dawn Cloud");
     selectOnClick(row.btn);
     const scroller = getOrCreateScroller();
-    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
-    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
     let st = 0;
     Object.defineProperty(scroller, "scrollTop", {
       configurable: true,
@@ -1800,8 +1938,14 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
     appendTitle(row.row, "Dawn Cloud");
     selectOnClick(row.btn);
     const scroller = getOrCreateScroller();
-    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
-    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
     let st = 0;
     Object.defineProperty(scroller, "scrollTop", {
       configurable: true,
@@ -1820,7 +1964,9 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
       titleFallbackMap,
       renderWaitMs: 10,
     });
-    const expectation = expect(pending).rejects.toThrow(/missing clip ID: .*eeeeeeee/);
+    const expectation = expect(pending).rejects.toThrow(
+      /missing clip ID: .*eeeeeeee/
+    );
     await vi.runAllTimersAsync();
     await expectation;
   });
@@ -1835,8 +1981,14 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
     selectOnClick(rowA.btn);
     selectOnClick(rowB.btn);
     const scroller = getOrCreateScroller();
-    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
-    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
     let st = 0;
     Object.defineProperty(scroller, "scrollTop", {
       configurable: true,
@@ -1864,8 +2016,14 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
     const idA = "eeeeeeee-1111-2222-3333-444444444444";
     addClipRow({ songId: idA, idSource: "image" });
     const scroller = getOrCreateScroller();
-    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
-    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
     let st = 0;
     Object.defineProperty(scroller, "scrollTop", {
       configurable: true,
@@ -1875,10 +2033,13 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
       },
     });
 
-    const pending = scrollAndMultiSelectByIds([idA, "ffffffff-1111-2222-3333-444444444444"], {
-      isAborted: () => true,
-      renderWaitMs: 10,
-    });
+    const pending = scrollAndMultiSelectByIds(
+      [idA, "ffffffff-1111-2222-3333-444444444444"],
+      {
+        isAborted: () => true,
+        renderWaitMs: 10,
+      }
+    );
     await vi.runAllTimersAsync();
     const count = await pending;
 
@@ -1889,9 +2050,9 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
   it("Given 空の targetIds When scrollAndMultiSelectByIds Then throw する", async () => {
     getOrCreateScroller();
 
-    await expect(scrollAndMultiSelectByIds([], { isAborted: () => false })).rejects.toThrow(
-      /playlist 対象の clip ID がありません/,
-    );
+    await expect(
+      scrollAndMultiSelectByIds([], { isAborted: () => false })
+    ).rejects.toThrow(/playlist 対象の clip ID がありません/);
   });
 
   it("Given ID が見つからない When scrollAndMultiSelectByIds Then missing ID を含むエラーで throw する", async () => {
@@ -1899,8 +2060,14 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
     const missingId = "22222222-aaaa-bbbb-cccc-dddddddddddd";
     addClipRow({ songId: otherId, idSource: "image" });
     const scroller = getOrCreateScroller();
-    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
-    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
     let st = 0;
     Object.defineProperty(scroller, "scrollTop", {
       configurable: true,
@@ -1936,11 +2103,25 @@ describe("readSelectedClipIds: 手動選択済み clip ID の採用", () => {
   it("Given 選択済み row が期待件数分ある When readSelectedClipIds Then ID を返す", async () => {
     const idA = "aaaaaaaa-1111-2222-3333-444444444444";
     const idB = "bbbbbbbb-1111-2222-3333-444444444444";
-    addClipRow({ songId: idA, idSource: "image", selectLabel: "Deselect clip" });
-    addClipRow({ songId: idB, idSource: "image", selectLabel: "Deselect clip" });
+    addClipRow({
+      songId: idA,
+      idSource: "image",
+      selectLabel: "Deselect clip",
+    });
+    addClipRow({
+      songId: idB,
+      idSource: "image",
+      selectLabel: "Deselect clip",
+    });
     const scroller = getOrCreateScroller();
-    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
-    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
     let st = 0;
     Object.defineProperty(scroller, "scrollTop", {
       configurable: true,
@@ -1962,10 +2143,20 @@ describe("readSelectedClipIds: 手動選択済み clip ID の採用", () => {
 
   it("Given 選択済み row 数が期待件数と違う When readSelectedClipIds Then 件数不一致で throw する", async () => {
     const idA = "cccccccc-1111-2222-3333-444444444444";
-    addClipRow({ songId: idA, idSource: "image", selectLabel: "Deselect clip" });
+    addClipRow({
+      songId: idA,
+      idSource: "image",
+      selectLabel: "Deselect clip",
+    });
     const scroller = getOrCreateScroller();
-    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
-    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
     let st = 0;
     Object.defineProperty(scroller, "scrollTop", {
       configurable: true,
@@ -1980,7 +2171,9 @@ describe("readSelectedClipIds: 手動選択済み clip ID の採用", () => {
       expectedClipCount: 2,
       renderWaitMs: 10,
     });
-    const expectation = expect(pending).rejects.toThrow("選択中 clip 数が一致しません: expected 2, got 1");
+    const expectation = expect(pending).rejects.toThrow(
+      "選択中 clip 数が一致しません: expected 2, got 1"
+    );
     await vi.runAllTimersAsync();
     await expectation;
   });
@@ -1988,20 +2181,35 @@ describe("readSelectedClipIds: 手動選択済み clip ID の採用", () => {
   it("Given 選択済み row が無い When readSelectedClipIds Then 手動選択を促すエラーで throw する", async () => {
     getOrCreateScroller();
 
-    const pending = readSelectedClipIds({ isAborted: () => false, renderWaitMs: 10 });
-    const expectation = expect(pending).rejects.toThrow("選択中の clip がありません");
+    const pending = readSelectedClipIds({
+      isAborted: () => false,
+      renderWaitMs: 10,
+    });
+    const expectation = expect(pending).rejects.toThrow(
+      "選択中の clip がありません"
+    );
     await vi.runAllTimersAsync();
     await expectation;
   });
 
   it("Given ID 解決不能な選択済み row When skipUnresolvedIds なし Then throw / あり Then skip して解決分のみ返す (#1411)", async () => {
     const idA = "dddddddd-1111-2222-3333-444444444444";
-    addClipRow({ songId: idA, idSource: "image", selectLabel: "Deselect clip" });
+    addClipRow({
+      songId: idA,
+      idSource: "image",
+      selectLabel: "Deselect clip",
+    });
     // songId 省略 = data 属性 / song href / UUID img のいずれも持たない ID 劣化 row
     addClipRow({ selectLabel: "Deselect clip" });
     const scroller = getOrCreateScroller();
-    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
-    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
     let st = 0;
     Object.defineProperty(scroller, "scrollTop", {
       configurable: true,
@@ -2011,8 +2219,13 @@ describe("readSelectedClipIds: 手動選択済み clip ID の採用", () => {
       },
     });
 
-    const failing = readSelectedClipIds({ isAborted: () => false, renderWaitMs: 10 });
-    const failExpectation = expect(failing).rejects.toThrow("選択中 clip の ID を解決できません");
+    const failing = readSelectedClipIds({
+      isAborted: () => false,
+      renderWaitMs: 10,
+    });
+    const failExpectation = expect(failing).rejects.toThrow(
+      "選択中 clip の ID を解決できません"
+    );
     await vi.runAllTimersAsync();
     await failExpectation;
 
@@ -2027,10 +2240,20 @@ describe("readSelectedClipIds: 手動選択済み clip ID の採用", () => {
 
   it("Given maxScanPasses=1 When readSelectedClipIds Then 全 3 pass ではなく 1 pass で走査を終える (#1411)", async () => {
     const idA = "eeeeeeee-1111-2222-3333-444444444444";
-    addClipRow({ songId: idA, idSource: "image", selectLabel: "Deselect clip" });
+    addClipRow({
+      songId: idA,
+      idSource: "image",
+      selectLabel: "Deselect clip",
+    });
     const scroller = getOrCreateScroller();
-    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
-    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
     let st = 0;
     Object.defineProperty(scroller, "scrollTop", {
       configurable: true,
@@ -2046,7 +2269,10 @@ describe("readSelectedClipIds: 手動選択済み clip ID の採用", () => {
 
     // expectedClipCount 無し（ガード用途）: 既定は 3 pass × (top reset + step) = 6 dispatch
     // + 走査後の restoreClipListHead で 1 dispatch = 計 7
-    const defaultRun = readSelectedClipIds({ isAborted: () => false, renderWaitMs: 10 });
+    const defaultRun = readSelectedClipIds({
+      isAborted: () => false,
+      renderWaitMs: 10,
+    });
     await vi.runAllTimersAsync();
     await expect(defaultRun).resolves.toEqual([idA]);
     const defaultEvents = scrollEvents;
@@ -2071,11 +2297,21 @@ describe("readSelectedClipIds: 手動選択済み clip ID の採用", () => {
       "f3f3f3f3-1111-2222-3333-444444444444",
     ];
     for (const id of ids) {
-      addClipRow({ songId: id, idSource: "image", selectLabel: "Deselect clip" });
+      addClipRow({
+        songId: id,
+        idSource: "image",
+        selectLabel: "Deselect clip",
+      });
     }
     const scroller = getOrCreateScroller();
-    Object.defineProperty(scroller, "scrollHeight", { configurable: true, get: () => 200 });
-    Object.defineProperty(scroller, "clientHeight", { configurable: true, get: () => 200 });
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
     let st = 0;
     Object.defineProperty(scroller, "scrollTop", {
       configurable: true,

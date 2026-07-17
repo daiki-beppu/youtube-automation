@@ -14,7 +14,8 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_URL } from "../../shared/constants";
 import { sleep } from "../../shared/dom";
 
-const read = (rel: string): string => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+const read = (rel: string): string =>
+  readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 
 describe("ssot-drift: ローカル配信元 selector は候補 state を参照する", () => {
   const appSource = read("../components/App.tsx");

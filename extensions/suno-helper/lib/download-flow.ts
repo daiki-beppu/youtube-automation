@@ -4,7 +4,9 @@ import { PHASE } from "../../shared/constants";
 import { triggerDownloadAll } from "./download";
 import { onMessage, sendMessage } from "./messaging";
 
-type DownloadResult = { ok: true; filename: string } | { ok: false; message: string };
+type DownloadResult =
+  | { ok: true; filename: string }
+  | { ok: false; message: string };
 
 export interface DownloadFlow {
   installMessageHandlers: () => void;
@@ -12,15 +14,17 @@ export interface DownloadFlow {
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
-    expectedFileCount: number,
+    expectedFileCount: number
   ) => Promise<void>;
   downloadBestEffort: (
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
-    expectedFileCount: number,
+    expectedFileCount: number
   ) => Promise<string | null>;
-  retryDownload: (options: RetryDownloadOptions) => Promise<RetryDownloadResult>;
+  retryDownload: (
+    options: RetryDownloadOptions
+  ) => Promise<RetryDownloadResult>;
 }
 
 export interface RetryDownloadResult {
@@ -51,7 +55,9 @@ export interface DownloadContext {
 const DOWNLOAD_COMPLETE_TIMEOUT_MS = 660000;
 
 export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
-  let downloadCompleteResolver: ((value: DownloadResult | null) => void) | null = null;
+  let downloadCompleteResolver:
+    | ((value: DownloadResult | null) => void)
+    | null = null;
   let handlersInstalled = false;
 
   function waitForDownloadComplete(): Promise<DownloadResult | null> {
@@ -98,7 +104,7 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
-    expectedFileCount: number,
+    expectedFileCount: number
   ): Promise<void> {
     if (deps.isAborted()) return;
 
@@ -107,9 +113,13 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       total: progressTotal,
       message: `${context.format.toUpperCase()} 形式`,
     });
-    const startResult = await sendMessage("startDownload", { format: context.format });
+    const startResult = await sendMessage("startDownload", {
+      format: context.format,
+    });
     if (!startResult?.ok) {
-      throw new Error(startResult?.message ?? "Download all 監視を開始できませんでした");
+      throw new Error(
+        startResult?.message ?? "Download all 監視を開始できませんでした"
+      );
     }
     const downloadPromise = waitForDownloadComplete();
     let watcherActive = true;
@@ -151,9 +161,11 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     } finally {
       if (watcherActive) {
         downloadCompleteResolver = null;
-        await sendMessage("cancelDownload", undefined).catch((cancelErr: unknown) => {
-          console.warn("[suno-helper] cancelDownload 中継失敗:", cancelErr);
-        });
+        await sendMessage("cancelDownload", undefined).catch(
+          (cancelErr: unknown) => {
+            console.warn("[suno-helper] cancelDownload 中継失敗:", cancelErr);
+          }
+        );
       }
     }
   }
@@ -162,10 +174,15 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
-    expectedFileCount: number,
+    expectedFileCount: number
   ): Promise<string | null> {
     try {
-      await performDownload(context, collectionId, progressTotal, expectedFileCount);
+      await performDownload(
+        context,
+        collectionId,
+        progressTotal,
+        expectedFileCount
+      );
       return null;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -179,18 +196,29 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     }
   }
 
-  async function retryDownload(options: RetryDownloadOptions): Promise<RetryDownloadResult> {
+  async function retryDownload(
+    options: RetryDownloadOptions
+  ): Promise<RetryDownloadResult> {
     const total = options.submittedClipIds.length;
     if (options.submittedClipIds.length === 0) {
       throw new Error("retryDownload に必要な clip ID がありません");
     }
-    deps.emitProgress({ phase: PHASE.ADDING_TO_PLAYLIST, total, message: "clip を選択中…" });
+    deps.emitProgress({
+      phase: PHASE.ADDING_TO_PLAYLIST,
+      total,
+      message: "clip を選択中…",
+    });
     await options.selectClipIds(options.submittedClipIds);
     if (deps.isAborted()) {
       deps.emitProgress({ phase: PHASE.STOPPED, total: 0 });
       return { completedAndCleared: false };
     }
-    await performDownload(options.context, options.collectionId, total, options.expectedClipCount ?? total);
+    await performDownload(
+      options.context,
+      options.collectionId,
+      total,
+      options.expectedClipCount ?? total
+    );
     if (deps.isAborted()) {
       deps.emitProgress({ phase: PHASE.STOPPED, total: 0 });
       return { completedAndCleared: false };
@@ -202,7 +230,10 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       await options.clearResumeState(options.collectionId);
     } catch (err) {
       resumeStateCleared = false;
-      console.warn("[suno-helper] resume state の消去に失敗しました。完了時リロードを見送ります:", err);
+      console.warn(
+        "[suno-helper] resume state の消去に失敗しました。完了時リロードを見送ります:",
+        err
+      );
     }
     deps.emitProgress({ phase: PHASE.FINISHED, total: 0 });
     return { completedAndCleared: resumeStateCleared };
