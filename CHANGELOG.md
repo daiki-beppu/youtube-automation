@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(audio-gen)`: `yt-generate-master` 手動実行（/masterup フォールバック運用）後に `workflow-state.json::assets.raw_master` が未更新のまま残る不整合を検知する CLI `yt-raw-master-check` を追加した。既定は読み取り専用の突合チェック（exit 0=整合 / 2=不整合 / 1=エラー）で、`--apply` 時のみ `assets.raw_master` / `updated_at` を一時ファイル + rename の原子的更新で修復する。`/masterup` Step 1.4 と `/wf-status` に AskUserQuestion 承認ゲート付きのチェック導線を追加し、非承認時は state を変更せず次回起動時に同じ警告を再表示する（silent 続行の禁止）。`assets.master_audio` の確定は従来どおり `/wf-next` の責務のまま変更しない（#1668）。
+
 - `fix(collection-serve)`: `POST /collections/<id>/downloaded` が期待数未満の部分 ZIP（Suno が一部 entry で 1 clip しか生成しないケース）を 500 で拒否せず、配置済みファイルを受理して warning 付き 200 を返すようにした。workflow-state には `planning.music.actual_file_count` / `missing_file_count` を機械可読に記録し、`assets.music_downloaded=true` と collections index の `status=downloaded` へ貫通させる。suno-helper は warning を progress 通知に表示する。0 件配置・壊れた ZIP の 500 契約は維持（#1913）。
 
 - `feat(analytics)`: `yt-thumbnail-correlate` に有意性検定（両側 p 値）・Benjamini-Hochberg 多重比較補正・`significant` 判定を追加し、最小サンプル数の既定を 10 に引き上げた（n<10 は「サンプル不足で判定不能」を明示）。有意でない相関には断定的な解釈文を出さない。`--metric` 未指定で CTR が欠測のチャンネルでは views に自動フォールバックし、出力 JSON の `metric_fallback` に理由を残す。`/analytics-analyze` に `significant: false` の相関を方針根拠に使わない注記を追加した（#1801）。

@@ -61,6 +61,7 @@ yt_playlist_manager = _make_entrypoint("youtube_automation.scripts.playlist_mana
 yt_playlist_status = _make_entrypoint("youtube_automation.scripts.playlist_status")
 yt_populate_scene_phrases = _make_entrypoint("youtube_automation.scripts.populate_scene_phrases")
 yt_preflight = _make_entrypoint("youtube_automation.cli.preflight")
+yt_raw_master_check = _make_entrypoint("youtube_automation.scripts.check_raw_master")
 yt_stock_archive = _make_entrypoint("youtube_automation.scripts.stock_archive")
 yt_stock_list = _make_entrypoint("youtube_automation.scripts.stock_list")
 yt_stock_preview = _make_entrypoint("youtube_automation.scripts.stock_preview")
