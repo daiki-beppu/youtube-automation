@@ -228,6 +228,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="--source benchmark 用: 上位何件を解析するか (default: 5)",
     )
     parser.add_argument("--collection", help="--source own 用: コレクション名")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="既存の解析 JSON があっても Gemini で再解析して上書きする (default: 既存結果を再利用)",
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="詳細ログ")
     return parser
 
@@ -262,8 +267,13 @@ def _analysis_window_sec_from_config(cfg: dict) -> int:
     return value
 
 
-def _run_analysis(*, analyzer: VideoAnalyzer, targets: list[VideoTarget]) -> tuple[list[dict], list[dict]]:
+def _run_analysis(
+    *, analyzer: VideoAnalyzer, targets: list[VideoTarget], force: bool = False
+) -> tuple[list[dict], list[dict]]:
     """targets を順に Gemini で解析し、(成功 results, 失敗 failures) を返す。
+
+    既存の有効な解析 JSON がある target は Gemini を呼ばず再利用する (#1693)。
+    `force=True` のときのみキャッシュを無視して再解析・上書きする。
 
     plan「失敗動画はログ + JSON 保存せず次へ」の方針に従い、ValidationError
     （JSON パース失敗）と Gemini SDK の APIError（rate limit / private 動画 /
@@ -272,6 +282,15 @@ def _run_analysis(*, analyzer: VideoAnalyzer, targets: list[VideoTarget]) -> tup
     results: list[dict] = []
     failures: list[dict] = []
     for target in targets:
+        if not force:
+            cached = analyzer.load_cached_json(target)
+            if cached is not None:
+                logger.info(
+                    "既存の解析結果を再利用 (Gemini 呼び出しなし。再解析は --force): %s",
+                    analyzer.json_path(target),
+                )
+                results.append(cached)
+                continue
         try:
             payload = analyzer.analyze_url(target)
         except (ValidationError, genai_errors.APIError) as err:
@@ -312,7 +331,7 @@ def main():
         analysis_window_sec=analysis_window_sec,
     )
 
-    results, failures = _run_analysis(analyzer=analyzer, targets=targets)
+    results, failures = _run_analysis(analyzer=analyzer, targets=targets, force=args.force)
 
     md = VideoAnalysisReport.render(slug=slug, results=results, failures=failures)
     VideoAnalysisReport.write(reports_dir=reports_dir, slug=slug, content=md)
