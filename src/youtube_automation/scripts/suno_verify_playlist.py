@@ -13,7 +13,13 @@ from typing import Mapping
 
 from youtube_automation.utils.collection_paths import resolve_collection_dir
 from youtube_automation.utils.exceptions import ValidationError
-from youtube_automation.utils.suno_downloaded_archive import _sanitize_output_stem, _suno_name_lookup_candidates
+from youtube_automation.utils.suno_downloaded_archive import (
+    _AUDIO_EXTENSIONS,
+    _CANONICAL_MUSIC_FILENAME_RE,
+    _sanitize_output_stem,
+    _suno_name_lookup_candidates,
+    canonicalize_noncanonical_music_files,
+)
 from youtube_automation.utils.suno_playlist_verification import (
     format_verification_report,
     load_entry_names,
@@ -22,8 +28,6 @@ from youtube_automation.utils.suno_playlist_verification import (
 )
 from youtube_automation.utils.suno_prompts_json import read_suno_prompt_entries
 
-_AUDIO_EXTENSIONS = frozenset({".mp3", ".m4a", ".wav"})
-_MUSIC_FILENAME_RE = re.compile(r"^(?P<index>\d{2,})(?P<variant>[ab])-(?P<title>.+)$")
 _APOSTROPHE_RE = re.compile(r"['’]")
 _TITLE_SOURCE_ERROR = (
     "playlist 曲名の入力元は --titles / --titles-file / --music-dir / stdin のいずれか 1 つにしてください"
@@ -101,13 +105,19 @@ def _read_music_dir_titles(
         path = collection_dir / path
     if not path.is_dir():
         raise ValidationError(f"--music-dir が見つかりません: {path}")
+    try:
+        renamed = canonicalize_noncanonical_music_files(collection_dir, path)
+    except (OSError, ValueError) as exc:
+        raise ValidationError(str(exc)) from exc
+    for old_name, new_name in renamed:
+        print(f"RENAMED: {old_name} -> {new_name}", file=sys.stderr)
     titles: list[str] = []
     seen_variants: set[tuple[str, str]] = set()
     exact_title_lookup, normalized_title_lookup = _build_music_dir_title_lookups(identities)
     for audio_path in sorted(path.iterdir()):
         if not audio_path.is_file() or audio_path.suffix.lower() not in _AUDIO_EXTENSIONS:
             continue
-        match = _MUSIC_FILENAME_RE.fullmatch(audio_path.stem)
+        match = _CANONICAL_MUSIC_FILENAME_RE.fullmatch(audio_path.stem)
         if match is None:
             titles.append(audio_path.name)
             continue
@@ -186,7 +196,10 @@ def main() -> int:
     parser.add_argument("--titles-file", help="曲名リストのファイル（1行1曲、または JSON 配列）")
     parser.add_argument(
         "--music-dir",
-        help=("数字2桁以上{a|b}-<title>.<ext> 形式の音声ファイルがあるディレクトリ（相対パスは collection 基準）"),
+        help=(
+            "数字2桁以上{a|b}-<title>.<ext> 形式の音声ファイルがあるディレクトリ（相対パスは collection 基準）。"
+            "非正準形ファイルは suno-prompts.json と照合して正準形へ自動リネームしてから突合する"
+        ),
     )
     parser.add_argument(
         "--expected-clips-per-entry",

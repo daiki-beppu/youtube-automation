@@ -110,6 +110,14 @@ uv run python -c "from youtube_automation.utils.skill_config import load_skill_c
 
 **duration の制約**: Lyria 3 Pro は 1 リクエスト ~184 秒が上限。長さはプロンプトのヒント扱いでぴったり一致せず、レスポンス全体をそのままクロスフェード結合する運用になる。N セグメント生成 → 結合は `yt-generate-lyria-master` が自動化する（後述 Step 4）。
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| Vertex AI Lyria 3（yt-generate-lyria-master） | N call、N = ceil((audio.target_duration_min + duration_padding_min) × 60 / 184)（上限 60） | `audio.target_duration_min` / `--target-duration` / `--padding-min`。失敗時は `--max-retries`（既定 3）で最悪 N×4。既存セグメントは skip（resume）され再課金なし |
+
+- 上限 / 承認: CLI 側に y/N プロンプトはないが、セグメント数は hard cap 60 で clamp + WARNING される。実行前に Step 3 のユーザー確認（承認ゲート）を必ず経る。
+
 ## Instructions
 
 あなたは Lyria 3 音源生成のオーケストレーターです。

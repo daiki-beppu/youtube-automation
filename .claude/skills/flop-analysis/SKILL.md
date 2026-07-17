@@ -47,6 +47,15 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 
 複数候補がある場合は AskUserQuestion で対象を選ばせる。
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| 直接実行 CLI（yt-launch-curve / yt-theme-compare / yt-thumbnail-correlate） | 0 call（ローカル処理のみ） | — |
+| Vertex AI Gemini（Phase 4 で /video-analyze を自律実行する場合） | 対象 1 動画 = 1 call | 仮説検証で /video-analyze を実行するかどうか |
+
+- 上限 / 承認: /video-analyze は承認プロンプトなしで自律実行されうるが、対象は当該 video_id 1 本に限定される。見積もりの詳細は /video-analyze の「想定 API call 数」を参照。
+
 ## 実行フロー
 
 ### Phase 1: 対象動画の解決

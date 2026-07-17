@@ -23,6 +23,15 @@ description: "Use when 自チャンネルの生成済みサムネイルを競合
 - 自チャンネルのサムネイル `collections/live/*/10-assets/thumbnail.jpg` が 1 件以上存在すること。無ければ比較対象なしとして `/thumbnail` → `/video-upload` の前工程を案内する
 - ベンチマーク更新は YouTube Data API を使うため `auth/token.json` の OAuth 認証が必要。未認証なら `/setup` を案内する
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| YouTube Data API v3（直接呼び出し） | 0（ローカル比較 + CDN 画像 DL のみ） | — |
+| YouTube Data API v3（ベンチマーク自動再収集） | ベンチマークが鮮度切れの場合のみ /benchmark 相当（1 チャンネルあたり数 units） | ベンチマークデータの鮮度 |
+
+- 上限 / 承認: 事前に `/benchmark` でデータを最新化しておけば API call 0 で完結する（サムネイル DL は CDN 直取得で quota を消費しない）。
+
 ## 実行フロー
 
 ### Phase 1: サムネイル収集（スクリプト実行）

@@ -48,6 +48,14 @@ Quick Reference や Step 1 に入る前に、以下を必ず Read（Codex では
 | `uv run yt-metadata-audit --remote` | YouTube API 側 snippet/localizations のみ |
 | `uv run yt-metadata-audit --strict` | 1 件でも issue が見つかれば exit 1（CI 用途） |
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| YouTube Data API v3 videos.list（1 unit/call） | remote 監査（既定および `--remote`）で 1 call = 1 unit | `--local` 指定時は 0 |
+
+- 上限 / 承認: 読み取り専用の監査で書き込みは範囲外（修正は `/video-description` の責務）。API を使いたくない場合は `--local` で API call 0 の監査に切り替えられる。
+
 ## Instructions
 
 ### Step 1: 監査の実行
