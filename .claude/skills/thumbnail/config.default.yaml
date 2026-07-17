@@ -55,6 +55,9 @@ image_generation:
     #   single_step   : ベンチマーク模倣 (TTP) の推奨実装。テキスト付き参照画像から
     #                   差分のみ指示して text-included thumbnail 候補を生成する。
     #                   reference_images.default が必須。
+    #                   #1907 以降の標準フローは同じ TTP 機構を textless 背景候補の
+    #                   生成に流用し、テキストは yt-thumbnail-text で決定的に合成する
+    #                   (text-included 候補の直接生成は AI 焼き込み fallback)。
     #   two_phase     : 既存参照から text-included thumbnail を先に確定し、
     #                   承認済み thumbnail から textless main を後続再生成するフォールバック
     #   diff_from_reference : 既存キャラ画像を参照に差分のみ指示
@@ -226,11 +229,16 @@ image_generation:
       # Phase 2 のオーバーレイプロンプト (プレースホルダ: {title_line1}, {title_line2}, {channel_name})
       text_overlay_prompt: ""
 
-      # 決定的フォント合成 (#1332):
+      # 決定的フォント合成 (#1332。#1907 で標準テキスト描画経路化):
       # image_generation.gemini.thumbnail_text.overlay に置く yt-thumbnail-text の設定。
       # textless 背景に実フォントファイルを Pillow で描画する。AI 生成と違い、
       # 同一の背景・テキスト・設定なら常に同一の出力になる (フォントが安定再現される)。
       # フォント未設定・ファイル不在時は理由と代替手順つきの ConfigError になる。
+      # /channel-research の docs/benchmarks/thumbnail-text-profile.md がある場合、
+      # /thumbnail はフォント傾向 → font.title (+ title.stroke_*)、配置傾向 →
+      # layout.anchor / margin_x / margin_y へ変換してチャンネル側
+      # config/skills/thumbnail.yaml に設定する (適用手順は SKILL.md の
+      # 「thumbnail-text-profile 適用」節)。profile 不在時はこのデフォルト値のまま。
       overlay:
         font:
           # タイトル行のフォントファイル (.ttf / .otf / .ttc)。
