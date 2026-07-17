@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(dx)`: explicit setup 経路（`bash .lefthook/setup-worktree.sh [<command>...]`）の依存同期を fail-closed 化した。devShell 入場後に新設の `.lefthook/sync-deps.sh` が `uv sync` を明示実行し、失敗時は後続コマンドを実行せず exit 非 0 で停止する。対話 shell（direnv / `nix develop` の shellHook）は従来どおり warning 継続で入場をブロックしない（#2125）。
+
 - `chore(extensions)`: suno-helper と distrokid-helper の full gate / Playwright e2e を維持し、Extensions CI が各 package の既存 `pnpm lint` 入口から共通設定の Oxlint を実行する接続契約を追加した。契約テスト自体の変更でも Extensions CI が起動するよう path filter を接続した（#2020）。
 
 - `feat(analytics)`: `yt-analytics` に既定 `standard` の `--depth {standard,full}` を追加し、`full` 指定時に視聴維持率と地域別データを収集・保存できるようにした。full 専用 API の明示エラーは不完全な成果物として保存せず失敗終了する。`/analytics-collect full` の導線と、`/analytics-analyze` が full データの維持率を数値根拠として扱う分析契約も追加した（#1799）。
