@@ -65,11 +65,13 @@ def _write_fixture(
             "launch_curve": "uv run yt-launch-curve --latest",
             "channel_trend": "uv run yt-channel-trend",
             "theme_compare": "uv run yt-theme-compare",
+            "traffic_trend": "uv run yt-traffic-trend",
         },
         "cli_outputs": {
             "launch_curve": {"target": {"ratio_vs_median": 1.42}},
             "channel_trend": {"summary": {"wow_growth_rate": 8.5}},
             "theme_compare": {"themes": [{"day7_mean": 1234.0}]},
+            "traffic_trend": {"summary": {"top_source_share_percent": 45.2}},
         },
         "ctr_strategy": [],
         "channel_performance": [],
@@ -84,7 +86,18 @@ def _write_fixture(
                     }
                 ],
                 "confidence": "high",
-            }
+            },
+            {
+                "statement": "流入源改善",
+                "evidence": [
+                    {
+                        "source": "traffic_trend",
+                        "json_path": "$.cli_outputs.traffic_trend.summary.top_source_share_percent",
+                        "value": 45.2,
+                    }
+                ],
+                "confidence": "medium",
+            },
         ],
         "next_collection_candidates": [
             {
@@ -137,6 +150,7 @@ def _write_fixture(
         "analysis_20260717.json#$.cli_outputs.launch_curve.target.ratio_vs_median = 1.42",
         "analysis_20260717.json#$.cli_outputs.channel_trend.summary.wow_growth_rate = 8.5",
         "analysis_20260717.json#$.cli_outputs.theme_compare.themes[0].day7_mean = 1234.0",
+        "analysis_20260717.json#$.cli_outputs.traffic_trend.summary.top_source_share_percent = 45.2",
     ]
     citations.extend(extra_citations)
     markdown_path.write_text("\n".join(citations) + "\n", encoding="utf-8")
@@ -327,6 +341,33 @@ def test_full_report_must_analyze_every_valid_retention_video(tmp_path: Path) ->
         }
     )
     analytics_path.write_text(json.dumps(analytics), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_report_without_traffic_trend_output_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    del report["commands"]["traffic_trend"]
+    del report["cli_outputs"]["traffic_trend"]
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_report_without_traffic_trend_evidence_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["strategic_improvements"] = [
+        item
+        for item in report["strategic_improvements"]
+        if all(evidence["source"] != "traffic_trend" for evidence in item["evidence"])
+    ]
+    report_path.write_text(json.dumps(report), encoding="utf-8")
 
     assert _run_validator(tmp_path).returncode != 0
 
