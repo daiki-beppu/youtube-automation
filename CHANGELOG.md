@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- `feat(analytics)`: `/analytics-analyze` と `/flop-analysis`（postmortem）の学びを下流の `data/insights.jsonl`（append-only）へ機械可読に蓄積し、次サイクルの `/wf-new` → `/collection-ideate` が open エントリを企画根拠として消費・status 反映（adopted / dismissed）し、`/thumbnail` が lever=thumbnail の学びを制作前に参照する接続を追加した。エントリ形式は `insights-entry.schema.json` を単一ソースとし、schema 駆動の `validate_insights.py` で検証する。insights 不在の初回チャンネルでは既存の analytics / benchmark fallback / minimal mode を阻害しない（#1830）。
+- `feat(thumbnail)`: Gemini API 経路の既定 prompt を Codex と同じ TTP 方針（winning layout 維持・最小限の品質改善のみ）へ揃えた。`config.default.yaml` の `image_generation.gemini.diff_prompt_template` 既定値を codex 既定テンプレートと方針行を同期した TTP テンプレート（`{title_line1}` / `{title_line2}` + `${ip_safety_clause}`）にし、チャンネル側 `diff_prompt_template` override の優先（deep-merge スカラ置換）と方針同期をテストで機械担保した。SKILL.md / prompting.md に provider 差のない TTP 方針を明記した（#2070）。
 
 - `feat(auth)`: git worktree 上で gitignore された `auth/` が複製されず OAuth 認証が `FileNotFoundError` になる問題に対応した。`.git` pointer ファイルと `commondir` から git コマンド非依存で main 作業ツリーを検知する `utils/worktree.py::main_worktree_root()` を追加し、worktree では `client_secrets.json` の候補列末尾に main 側 `auth/` を追加、ローカル `token.json` が無い場合は token の読み書きを main 側 `auth/token.json` に集約する（refresh 結果の分岐防止）。`CLIENT_SECRETS_DIR` 最優先・非 worktree 環境の解決順序は不変で、未検出時のエラーには探索した全候補パスを表示する（#1721）。
 
@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(preflight)`: worktree / takt clone の環境不備（checkout 種別・Nix eval・lock drift・Git identity・lefthook policy）を実装着手前に read-only で検査し、`git_commit_identity` / `nix_eval` / `lock_drift` / `hook_policy` の分類キー付きで報告する CLI `yt-preflight` を追加した。identity の値は出力に含めず、lefthook は `YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1` の明示 skip のみ合格として曖昧な未導入を不合格にする（#2124）。
 
 - `chore(extensions)`: suno-helper と distrokid-helper の full gate / Playwright e2e を維持し、Extensions CI が各 package の既存 `pnpm lint` 入口から共通設定の Oxlint を実行する接続契約を追加した。契約テスト自体の変更でも Extensions CI が起動するよう path filter を接続した（#2020）。
+
+- `feat(analytics)`: `/analytics-analyze` と `/flop-analysis`（postmortem）の学びを下流の `data/insights.jsonl`（append-only）へ機械可読に蓄積し、次サイクルの `/wf-new` → `/collection-ideate` が open エントリを企画根拠として消費・status 反映（adopted / dismissed）し、`/thumbnail` が lever=thumbnail の学びを制作前に参照する接続を追加した。エントリ形式は `insights-entry.schema.json` を単一ソースとし、schema 駆動の `validate_insights.py` で検証する。insights 不在の初回チャンネルでは既存の analytics / benchmark fallback / minimal mode を阻害しない（#1830）。
 
 - `feat(analytics)`: `yt-analytics` に既定 `standard` の `--depth {standard,full}` を追加し、`full` 指定時に視聴維持率と地域別データを収集・保存できるようにした。full 専用 API の明示エラーは不完全な成果物として保存せず失敗終了する。`/analytics-collect full` の導線と、`/analytics-analyze` が full データの維持率を数値根拠として扱う分析契約も追加した（#1799）。
 
