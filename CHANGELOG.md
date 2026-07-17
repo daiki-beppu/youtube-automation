@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(thumbnail)`: Gemini API 経路の既定 prompt を Codex と同じ TTP 方針（winning layout 維持・最小限の品質改善のみ）へ揃えた。`config.default.yaml` の `image_generation.gemini.diff_prompt_template` 既定値を codex 既定テンプレートと方針行を同期した TTP テンプレート（`{title_line1}` / `{title_line2}` + `${ip_safety_clause}`）にし、チャンネル側 `diff_prompt_template` override の優先（deep-merge スカラ置換）と方針同期をテストで機械担保した。SKILL.md / prompting.md に provider 差のない TTP 方針を明記した（#2070）。
 
+- `fix(devshell)`: 並列 worktree の Nix キャッシュ競合（同一 fingerprint の flake を複数 worktree が同時評価すると、ユーザーグローバルな `~/.cache/nix` の eval-cache SQLite への同時書込みが「error (ignored): SQLite database ... is busy」で破棄され続け、レビュー step の遅延・再試行を誘発する問題）を診断し、`.envrc` / `.lefthook/setup-worktree.sh` / shellHook が Nix 専用の `NIX_CACHE_HOME` を worktree 分離 TMPDIR 配下へ export して各 worktree が自分の評価結果だけを参照するようにした。`XDG_CACHE_HOME` は変更せず、解決失敗時は共有キャッシュのまま fail-open で続行する（#2089）。
+
 - `feat(dx)`: `yt-skills lint [<skill>...]` を追加し、SKILL.md frontmatter の検証（strict YAML パース / name・description 非空 / description の double-quote）を pytest 全体実行なしで秒単位で回せるようにした。検証ロジックは CLI 側を単一ソースとし、既存の回帰テスト（tests/test_skill_frontmatter_yaml.py）は同ロジックを呼ぶ形に寄せた（#2096）。
 
 - `fix(devshell)`: 並列 run 間の共有 TMPDIR 競合（macOS の per-user TMPDIR を複数 worktree の並行 pytest が奪い合い、conftest の stale cleanup 等が run 間で干渉しうる問題）を診断し、devShell 入場時に `.lefthook/worktree-tmpdir.sh` が共有 TMPDIR 配下の worktree ごとの決定的サブディレクトリへ `TMPDIR` を分離するようにした。takt core が注入する checkout 内 TMPDIR は尊重し、解決失敗時は共有 TMPDIR のまま fail-open で続行する（#2088）。
