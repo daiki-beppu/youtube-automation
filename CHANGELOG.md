@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `feat(audio-gen)`: `yt-generate-master` 手動実行（/masterup フォールバック運用）後に `workflow-state.json::assets.raw_master` が未更新のまま残る不整合を検知する CLI `yt-raw-master-check` を追加した。既定は読み取り専用の突合チェック（exit 0=整合 / 2=不整合 / 1=エラー）で、`--apply` 時のみ `assets.raw_master` / `updated_at` を一時ファイル + rename の原子的更新で修復する。`/masterup` Step 1.4 と `/wf-status` に AskUserQuestion 承認ゲート付きのチェック導線を追加し、非承認時は state を変更せず次回起動時に同じ警告を再表示する（silent 続行の禁止）。`assets.master_audio` の確定は従来どおり `/wf-next` の責務のまま変更しない（#1668）。
+- `feat(auth)`: OAuth 新規ブラウザ認証の `run_local_server()` にチャンネル名（`meta.channel_short`）入りの `authorization_prompt_message` / `success_message` を渡し、複数チャンネル並列運用でトークン失効が重なった際にターミナルログと認証完了ページのどちらからも対象チャンネルを判別できるようにした。prompt には認証 URL（redirect 先ポート入り）も含め、config 読込不可時はディレクトリ名へフォールバックする（#1966）。
 
 - `chore(extensions)`: TypeScript 7.0.2 固定後の suno-helper / distrokid-helper を実経路（lint / format:check / compile / unit / build / Playwright e2e / CI Typecheck 契約テスト）で回帰検証した。TS 7 起因の互換修正は不要で、唯一再現した失敗は suno-helper の overlay e2e が開発マシンで稼働中の yt-collection-serve（port 7873/7872）を発見して「ローカル配信元なし」前提が破れる分離不足だったため、`--host-resolver-rules` で discovery 先ホストを遮断して環境非依存にした（#2015）。
 
