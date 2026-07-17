@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(suno-helper)`: 新 Create UI（2026-07）で playlist の clip row 検出が全件 missing になる問題を実 DOM capture（匿名化 fixture）に基づき修正した。復活した `.clip-row` コンテナを row 導出の最優先アンカーにし、`div` 化した再生ボタン（`[role="button"][aria-label^="Play "]`）と row 自身の `aria-label` を曲名フォールバックに追加。仮想ウィンドウ走査（`scrollAndMultiSelectByIds` / `readSelectedClipIds`）は共通ヘルパへ抽出し、ウィンドウ外 row の空シェル化・再描画遅延に対して描画 signature 変化の poll（上限 3s）で hydration を待ち、ページネーションで走査中に成長する scrollHeight へ maxScroll 毎ステップ再計算で追従する。旧 DOM / grid view の検出経路と fixture は不変（#2043）。
+
 - `chore(extensions)`: suno-helper / distrokid-helper の TypeScript を 7.0.2 に固定し、pnpm 11.12.0（Nix extensions shell 契約）で両 lockfile を正規再生成した。TS 7 で削除された `baseUrl` を両 tsconfig から除去し（`paths` は相対形式のまま）、suno-helper は `types: ["chrome"]` で chrome グローバル型を明示 include。TypeScript 7.0.2 固定・lockfile 整合・削除済みオプション不使用は契約テスト（tests/test_extension_typescript_contract.py）で機械担保する（#2014）。
 - `fix(collection-serve)`: `POST /collections/<id>/downloaded` が期待数未満の部分 ZIP（Suno が一部 entry で 1 clip しか生成しないケース）を 500 で拒否せず、配置済みファイルを受理して warning 付き 200 を返すようにした。workflow-state には `planning.music.actual_file_count` / `missing_file_count` を機械可読に記録し、`assets.music_downloaded=true` と collections index の `status=downloaded` へ貫通させる。suno-helper は warning を progress 通知に表示する。0 件配置・壊れた ZIP の 500 契約は維持（#1913）。
 

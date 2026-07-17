@@ -22,6 +22,14 @@ const DESELECT_CLIP_BUTTON_ANY_SELECTOR = 'button[aria-label="Deselect clip"]';
 export const SELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Select clip"]`;
 /** 選択済みの clip ボタン。click 後にこの aria-label へ遷移したことを verify するシグナル（SELECT_CLIP_BUTTON_SELECTOR と対称）。 */
 export const DESELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Deselect clip"]`;
+/**
+ * 新 Create UI (2026-07, #2043) の per-clip row コンテナ。実 DOM 検証で確認:
+ *   `div.clip-row[data-testid="clip-row"][role="group"][aria-label=<曲名>][data-clip-status]`
+ * 仮想ウィンドウ外の row は `<div class="clip-row" aria-label="Untitled">`（子要素なしの空シェル）
+ * になり、ボタンも ID ソースも持たない。シェルは Select ボタン基点の row 導出に一切かからないため、
+ * このセレクタは「ボタンから最寄りの実 row を特定する」用途にのみ使う（シェルを row として拾わない）。
+ */
+const CLIP_ROW_CONTAINER_SELECTOR = ".clip-row";
 const CLIP_ROW_SONG_ID_DATA_KEY = "songId";
 const CLIP_ROW_CLIP_ID_DATA_KEY = "clipId";
 const CLIP_ROW_SONG_LINK_SELECTOR = 'a[href*="/song/"]';
@@ -56,14 +64,28 @@ const CLIP_SELECT_VERIFY_TIMEOUT_MS = 1000;
 const CLIP_SELECT_VERIFY_MS_PER_ROW = 100;
 /** Cmd+P 発火の最大リトライ回数 (#1050)。dialog が開かない場合に再発火する。 */
 const CMD_P_MAX_RETRIES = 3;
-/** clip row 内の曲タイトル表示要素。実機 DOM 調査 (2026-06-23) で確認済み。 */
+/** clip row 内の曲タイトル表示要素（旧 DOM、実機調査 2026-06-23）。 */
 const CLIP_ROW_TITLE_SELECTOR = 'span[role="button"][aria-label^="Play "]';
+/**
+ * 新 Create UI (#2043) の再生ボタン。`span` ではなく
+ * `div.clip-image-container[role="button"][aria-label="Play <曲名>"]` に変わったため、
+ * タグ非依存で aria-label から曲名を取り出す（textContent は画像コンテナのため空）。
+ */
+const CLIP_ROW_PLAY_LABEL_SELECTOR = '[role="button"][aria-label^="Play "]';
+const CLIP_ROW_PLAY_LABEL_PREFIX = "Play ";
 /** clip list の遅延ロードを bottom jump に依存させないための段階スクロール量。 */
 const CLIP_LIST_LOAD_SCROLL_STEP_PX = 600;
 /** scrollAndMultiSelectByIds: 各スクロールステップ後に仮想 DOM が描画されるのを待つ猶予 (ms)。 */
 const VIRTUAL_SCROLL_RENDER_WAIT_MS = 200;
 /** scrollAndMultiSelectByIds: 全スクロール後に未発見 ID がある場合の再スキャン上限回数。 */
 const VIRTUAL_SCROLL_RETRY_PASSES = 2;
+/**
+ * 各スクロール位置で仮想ウィンドウの再描画（hydration）を待つ上限 (ms) (#2043)。
+ * 新 Create UI はウィンドウ外 row を空シェル化し、scrollTop 変更への再描画追従が
+ * 数百 ms〜数秒遅延することがある。固定 renderWaitMs だけでは古いウィンドウを
+ * 見続けて全 target を missing にするため、描画 signature の変化を poll で検知する。
+ */
+const VIRTUAL_WINDOW_HYDRATION_WAIT_MS = 3000;
 /** loadSettleTimeoutMs のデフォルト基準値 (ms)。 */
 const SETTLE_BASE_MS = 3000;
 /** loadSettleTimeoutMs を targetIds.length でスケールする係数 (ms/clip)。 */
@@ -112,6 +134,15 @@ function hasClipContent(el: HTMLElement): boolean {
 function resolveClipRowFromSelectButton(
   button: HTMLElement,
 ): HTMLElement | null {
+  // 新 Create UI (#2043): row 自体が `.clip-row` コンテナとして復活した。コンテンツを持つ
+  // `.clip-row` 祖先があればそれを row とする（空シェルは hasClipContent で除外され、
+  // そもそもボタンを内包しないためここへ到達しない）。旧 DOM / grid view は従来経路で解決する。
+  const clipRowContainer = button.closest<HTMLElement>(
+    CLIP_ROW_CONTAINER_SELECTOR,
+  );
+  if (clipRowContainer && hasClipContent(clipRowContainer)) {
+    return clipRowContainer;
+  }
   const multiSelectWrapper = button.closest(MULTI_SELECT_BUTTON_SELECTOR);
   if (!multiSelectWrapper) {
     const articleRow = button.closest<HTMLElement>("article");
@@ -305,9 +336,28 @@ function collectClipRowIds(row: HTMLElement): Set<string> {
 }
 
 export function collectClipRowTitle(row: HTMLElement): string | null {
-  return (
-    row.querySelector(CLIP_ROW_TITLE_SELECTOR)?.textContent?.trim() || null
-  );
+  const legacyTitle = row
+    .querySelector(CLIP_ROW_TITLE_SELECTOR)
+    ?.textContent?.trim();
+  if (legacyTitle) {
+    return legacyTitle;
+  }
+  // 新 Create UI (#2043): 再生ボタンが div 化し textContent を持たないため aria-label から取る。
+  const playLabel = row
+    .querySelector(CLIP_ROW_PLAY_LABEL_SELECTOR)
+    ?.getAttribute("aria-label");
+  if (playLabel && playLabel.startsWith(CLIP_ROW_PLAY_LABEL_PREFIX)) {
+    const title = playLabel.slice(CLIP_ROW_PLAY_LABEL_PREFIX.length).trim();
+    if (title) {
+      return title;
+    }
+  }
+  // 新 Create UI の row コンテナは aria-label に曲名を持つ（closest は self を含む）。
+  const rowLabel = row
+    .closest<HTMLElement>(CLIP_ROW_CONTAINER_SELECTOR)
+    ?.getAttribute("aria-label")
+    ?.trim();
+  return rowLabel || null;
 }
 
 function findRowsByClipIds(
@@ -657,10 +707,105 @@ export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
   }
 }
 
+/**
+ * 現在描画中の仮想ウィンドウの signature (#2043)。
+ * scrollHeight（ページネーションでの成長検知）と、検出できた row の先頭 ID 集合
+ * （ウィンドウ移動・シェル hydration の検知）で構成する。選択操作（Select→Deselect 遷移）
+ * では変化しないため、選択の進行を再描画と誤認しない。
+ */
+function computeClipWindowSignature(scroller: HTMLElement): {
+  signature: string;
+  rowCount: number;
+} {
+  const rows = collectClipRowsFromSelectButtons(scroller);
+  const parts: string[] = [String(scroller.scrollHeight)];
+  for (const row of rows) {
+    const firstId = collectClipRowIds(row).values().next().value as
+      | string
+      | undefined;
+    parts.push(firstId ?? "?");
+  }
+  return { signature: parts.join("|"), rowCount: rows.length };
+}
+
+interface VirtualWindowScanOptions {
+  isAborted: () => boolean;
+  renderWaitMs: number;
+  hydrationWaitMs: number;
+}
+
+/**
+ * scroller を top → bottom へ段階スクロールし、各仮想ウィンドウで onWindow を呼ぶ (#2043)。
+ *
+ * 旧実装からの変更点 2 つ（いずれも新 Create UI の実 DOM 観測に基づく）:
+ *   1. maxScroll を毎ステップ再計算する。ページネーションで scrollHeight が走査中に
+ *      成長する（観測: 2358 → 4578 → 6798px）ため、ループ開始時の値に固定すると
+ *      末尾が未探索のまま終わる。
+ *   2. スクロール後は固定待ちではなく、描画 signature の変化を hydrationWaitMs 上限で
+ *      poll する。再描画がまだなら同じウィンドウを見ているだけなので待ち、変化した時点で
+ *      次の位置へ進む（変化しないまま上限に達したら stalled とみなして前進する）。
+ *
+ * onWindow が true を返すか isAborted() が true になったら走査を打ち切る。
+ */
+async function scanVirtualClipWindows(
+  scroller: HTMLElement,
+  options: VirtualWindowScanOptions,
+  onWindow: () => Promise<boolean> | boolean,
+): Promise<void> {
+  const { isAborted, renderWaitMs, hydrationWaitMs } = options;
+  let prevSignature: string | null = null;
+  let pos = 0;
+  for (;;) {
+    if (isAborted()) {
+      return;
+    }
+    const maxScrollBefore = Math.max(
+      0,
+      scroller.scrollHeight - scroller.clientHeight,
+    );
+    scroller.scrollTop = Math.min(pos, maxScrollBefore);
+    scroller.dispatchEvent(new Event("scroll"));
+
+    const hydrationDeadline = Date.now() + hydrationWaitMs;
+    for (;;) {
+      await sleep(renderWaitMs);
+      if (isAborted()) {
+        return;
+      }
+      if (await onWindow()) {
+        return;
+      }
+      const { signature, rowCount } = computeClipWindowSignature(scroller);
+      // rowCount 0 = ウィンドウ全体が未 hydration の空シェル（実 DOM 観測: 初期ロード直後は
+      // 全 row が空シェルで数秒後に描画される）。signature 変化だけで前進すると全 pass を
+      // 一瞬で消費して全件 missing になるため、row が検出できるまで deadline 内は poll し続ける。
+      if (signature !== prevSignature && rowCount > 0) {
+        prevSignature = signature;
+        break;
+      }
+      if (Date.now() >= hydrationDeadline) {
+        break;
+      }
+    }
+
+    // ページネーション成長 (#2043): maxScroll はここで再計算する（ループ不変にしない）。
+    const maxScroll = Math.max(
+      0,
+      scroller.scrollHeight - scroller.clientHeight,
+    );
+    if (pos >= maxScroll) {
+      return;
+    }
+    pos += Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
+  }
+}
+
 export interface ScrollAndMultiSelectOptions {
   isAborted: () => boolean;
   titleFallbackMap?: Map<string, string>;
   renderWaitMs?: number;
+  /** 各スクロール位置で仮想ウィンドウ再描画を待つ上限 (ms)。既定 VIRTUAL_WINDOW_HYDRATION_WAIT_MS (#2043)。 */
+  hydrationWaitMs?: number;
 }
 
 /**
@@ -687,6 +832,7 @@ export async function scrollAndMultiSelectByIds(
     isAborted,
     titleFallbackMap,
     renderWaitMs = VIRTUAL_SCROLL_RENDER_WAIT_MS,
+    hydrationWaitMs = VIRTUAL_WINDOW_HYDRATION_WAIT_MS,
   } = options;
 
   const scroller = document.querySelector<HTMLElement>(
@@ -780,26 +926,20 @@ export async function scrollAndMultiSelectByIds(
     foundIds.size + titleMatchedIds.size >= uniqueTargetIds.size;
 
   for (let pass = 0; pass <= VIRTUAL_SCROLL_RETRY_PASSES; pass++) {
-    scroller.scrollTop = 0;
-    scroller.dispatchEvent(new Event("scroll"));
-    await sleep(renderWaitMs);
+    await scanVirtualClipWindows(
+      scroller,
+      { isAborted, renderWaitMs, hydrationWaitMs },
+      async () => {
+        await selectMatchingRows();
+        return allFound();
+      },
+    );
+    if (isAborted() || allFound()) break;
+  }
 
-    const step = Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
-    const maxScroll = scroller.scrollHeight - scroller.clientHeight;
-
-    for (let pos = 0; pos <= maxScroll; pos += step) {
-      if (isAborted()) return foundIds.size + titleMatchedIds.size;
-
-      scroller.scrollTop = Math.min(pos, maxScroll);
-      scroller.dispatchEvent(new Event("scroll"));
-      await sleep(renderWaitMs);
-
-      await selectMatchingRows();
-
-      if (allFound()) break;
-    }
-
-    if (allFound()) break;
+  // 中断時は従来どおり throw せず、見つかった分の件数を即返す。
+  if (isAborted()) {
+    return foundIds.size + titleMatchedIds.size;
   }
 
   restoreClipListHead(scroller);
@@ -820,6 +960,8 @@ export interface ReadSelectedClipIdsOptions {
   isAborted: () => boolean;
   expectedClipCount?: number;
   renderWaitMs?: number;
+  /** 各スクロール位置で仮想ウィンドウ再描画を待つ上限 (ms)。既定 VIRTUAL_WINDOW_HYDRATION_WAIT_MS (#2043)。 */
+  hydrationWaitMs?: number;
   /** 走査 pass 数の上限（既定: VIRTUAL_SCROLL_RETRY_PASSES + 1 = 3）。
    * 余剰選択ガードのような best-effort 用途では 1 に絞り、毎 run の全 3 pass コストを避ける (#1411)。 */
   maxScanPasses?: number;
@@ -846,6 +988,7 @@ export async function readSelectedClipIds(
     isAborted,
     expectedClipCount,
     renderWaitMs = VIRTUAL_SCROLL_RENDER_WAIT_MS,
+    hydrationWaitMs = VIRTUAL_WINDOW_HYDRATION_WAIT_MS,
     maxScanPasses = VIRTUAL_SCROLL_RETRY_PASSES + 1,
     stopAboveCount,
     skipUnresolvedIds = false,
@@ -893,23 +1036,14 @@ export async function readSelectedClipIds(
   const scanDone = () => isAborted() || enoughSelected() || exceededStopCount();
 
   for (let pass = 0; pass < maxScanPasses; pass++) {
-    scroller.scrollTop = 0;
-    scroller.dispatchEvent(new Event("scroll"));
-    await sleep(renderWaitMs);
-    collectVisibleSelectedRows();
-    if (scanDone()) break;
-
-    const step = Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
-    const maxScroll = scroller.scrollHeight - scroller.clientHeight;
-
-    for (let pos = 0; pos <= maxScroll; pos += step) {
-      if (scanDone()) break;
-      scroller.scrollTop = Math.min(pos, maxScroll);
-      scroller.dispatchEvent(new Event("scroll"));
-      await sleep(renderWaitMs);
-      collectVisibleSelectedRows();
-    }
-
+    await scanVirtualClipWindows(
+      scroller,
+      { isAborted, renderWaitMs, hydrationWaitMs },
+      () => {
+        collectVisibleSelectedRows();
+        return scanDone();
+      },
+    );
     if (scanDone()) break;
   }
 
