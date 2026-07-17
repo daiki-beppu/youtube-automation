@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `fix(suno-helper)`: 新 Create UI（2026-07）で playlist の clip row 検出が全件 missing になる問題を実 DOM capture（匿名化 fixture）に基づき修正した。復活した `.clip-row` コンテナを row 導出の最優先アンカーにし、`div` 化した再生ボタン（`[role="button"][aria-label^="Play "]`）と row 自身の `aria-label` を曲名フォールバックに追加。仮想ウィンドウ走査（`scrollAndMultiSelectByIds` / `readSelectedClipIds`）は共通ヘルパへ抽出し、ウィンドウ外 row の空シェル化・再描画遅延に対して描画 signature 変化の poll（上限 3s）で hydration を待ち、ページネーションで走査中に成長する scrollHeight へ maxScroll 毎ステップ再計算で追従する。旧 DOM / grid view の検出経路と fixture は不変（#2043）。
+- `feat(auth)`: OAuth 新規ブラウザ認証の `run_local_server()` にチャンネル名（`meta.channel_short`）入りの `authorization_prompt_message` / `success_message` を渡し、複数チャンネル並列運用でトークン失効が重なった際にターミナルログと認証完了ページのどちらからも対象チャンネルを判別できるようにした。prompt には認証 URL（redirect 先ポート入り）も含め、config 読込不可時はディレクトリ名へフォールバックする（#1966）。
 
 - `chore(extensions)`: TypeScript 7.0.2 固定後の suno-helper / distrokid-helper を実経路（lint / format:check / compile / unit / build / Playwright e2e / CI Typecheck 契約テスト）で回帰検証した。TS 7 起因の互換修正は不要で、唯一再現した失敗は suno-helper の overlay e2e が開発マシンで稼働中の yt-collection-serve（port 7873/7872）を発見して「ローカル配信元なし」前提が破れる分離不足だったため、`--host-resolver-rules` で discovery 先ホストを遮断して環境非依存にした（#2015）。
 
