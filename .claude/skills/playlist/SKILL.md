@@ -36,6 +36,17 @@ description: "Use when プレイリストの作成・割り当て・確認をす
 
 実行したモードのコマンドが exit 0 で終了した時点で完了。init モードでは加えて `playlists.json` の全エントリに `playlist_id` が書き戻され、`uv run yt-playlist-status` で `(未作成)` が残っていないことを確認する。status モードは一覧表示のみで完了。
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| playlistItems.list（1 unit、--status / yt-playlist-status） | Σ ceil(各プレイリスト項目数 / 50) | プレイリスト数・項目数 |
+| playlists.insert（50 units、--init） | 新規作成プレイリスト数 | 未作成エントリ数 |
+| playlistItems.insert（50 units、--init / --assign） | 割当動画本数（+ 重複確認の list 数件） | 割当対象の動画数 |
+| playlistItems.delete（50 units、--clean-deleted） | 削除エントリ数 | 削除済み / 非公開動画数 |
+
+- 上限 / 承認: 全モードに `--dry-run` があり、書き込み前にプレビューで確認できる。status モードは read のみで書き込み API を呼ばない。
+
 ## Instructions
 
 ### Step 1: 状態確認（必ず最初に実行）

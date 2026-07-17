@@ -71,6 +71,16 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 `approval_gates.audio` とは独立した設定であることに注意。`approval_gates.audio` は「候補を採用する前に確認プロンプトを出すかどうか」だけを制御し、候補そのものの自動採用／スキップ判断には関与しない。`skip_manual_mastering: true` かつ `approval_gates.audio: true` の場合は、raw master を採用する前に承認を取る。
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| videos.insert（1,600 units / 本、mastered フェーズの yt-upload-collection / yt-upload-auto） | アップロード本数 | collection / release 型・進行フェーズ |
+| playlists.insert / playlistItems.insert（各 50 units、yt-playlist-manager --init） | 新規プレイリスト数 + 割当本数 | プレイリスト構成 |
+| Vertex AI Lyria（subagent /lyria 委譲時） | /lyria の「想定 API call 数」を参照 | Lyria パス採否 |
+
+- 上限 / 承認: upload 前に `--plan` で事前確認し、playlist 系は `--dry-run` を使う。/videoup /masterup /video-description はローカル処理で API 0。委譲先 skill の見積もりは各 skill の「想定 API call 数」を参照。
+
 ## Instructions
 
 ### 1. アクティブなコレクションの特定

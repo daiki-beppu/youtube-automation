@@ -65,6 +65,15 @@ find "$HOME/02-yt" "$HOME/01-yt" "$HOME" -maxdepth 4 -type f -name pyproject.tom
 
 利用者が "yes" を返すまで、AI は次の Bash ツール呼び出しをしない。
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| YouTube Data + Analytics API（smoke の `yt-channel-status` 1 回分） | 約 3 + P units（P = playlist 数）+ Analytics reports.query 1 call | チャンネルの playlist 数 |
+| YouTube Reporting API（`yt-doctor` 診断、無料枠） | 数 call（quota 課金なし） | — |
+
+- 上限 / 承認: smoke 検証はいずれも読み取り専用で、YouTube への書き込み API は呼ばない。破壊的操作（`--force-sync` / push 等）はすべて `[HUMAN STEP]` で人間判断を取る。
+
 ## Phase 1: 現状把握
 
 ### Step 1-0. upstream リポジトリの解決
