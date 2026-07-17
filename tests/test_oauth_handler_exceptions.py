@@ -970,3 +970,106 @@ class TestTestConnection:
         handler = self._setup(tmp_path, monkeypatch, items=[])
 
         assert handler.test_connection() is False
+
+
+class TestChannelIdentityInAuthMessages:
+    """issue #1966: 並列認証時にチャンネルを判別できるメッセージ検証。
+
+    fixture チャンネル（``tests/fixtures/sample_channel``）の
+    ``meta.json::short`` は ``"TC"``。
+    """
+
+    def _run_new_auth(self, tmp_path: Path, monkeypatch) -> MagicMock:
+        """token 不在 → 新規認証パスを走らせ、mock flow を返す。"""
+        handler = _make_handler(tmp_path)
+
+        new_creds = _make_credentials(valid=True, expired=False)
+        flow = MagicMock()
+        flow.run_local_server.return_value = new_creds
+        monkeypatch.setattr(
+            "youtube_automation.auth.oauth_handler.InstalledAppFlow.from_client_secrets_file",
+            MagicMock(return_value=flow),
+        )
+        monkeypatch.setattr(handler, "_save_credentials", MagicMock())
+        handler.authenticate()
+        return flow
+
+    def test_should_include_channel_short_and_url_placeholder_in_prompt(self, tmp_path: Path, monkeypatch):
+        """Given 新規ブラウザ認証
+        When ``authenticate``
+        Then ``authorization_prompt_message`` にチャンネル名と ``{url}`` placeholder が含まれる（R1 / R2）。
+        """
+        flow = self._run_new_auth(tmp_path, monkeypatch)
+
+        kwargs = flow.run_local_server.call_args.kwargs
+        prompt = kwargs["authorization_prompt_message"]
+        assert "[TC]" in prompt
+        assert "{url}" in prompt
+
+    def test_should_include_channel_short_in_success_message(self, tmp_path: Path, monkeypatch):
+        """Given 新規ブラウザ認証
+        When ``authenticate``
+        Then ``success_message`` にチャンネル名が含まれる（R3）。
+        """
+        flow = self._run_new_auth(tmp_path, monkeypatch)
+
+        kwargs = flow.run_local_server.call_args.kwargs
+        assert "[TC]" in kwargs["success_message"]
+
+    def test_should_keep_port_zero_and_return_new_credentials(self, tmp_path: Path, monkeypatch):
+        """Given 新規ブラウザ認証
+        When ``authenticate``
+        Then ``port=0``（動的ポート）は維持され、既存の認証成功パスは不変（R4）。
+        """
+        handler = _make_handler(tmp_path)
+        new_creds = _make_credentials(valid=True, expired=False)
+        flow = MagicMock()
+        flow.run_local_server.return_value = new_creds
+        monkeypatch.setattr(
+            "youtube_automation.auth.oauth_handler.InstalledAppFlow.from_client_secrets_file",
+            MagicMock(return_value=flow),
+        )
+        monkeypatch.setattr(handler, "_save_credentials", MagicMock())
+
+        result = handler.authenticate()
+
+        assert result is new_creds
+        assert flow.run_local_server.call_args.kwargs["port"] == 0
+
+    def test_should_fall_back_to_dir_name_when_config_error(self, tmp_path: Path, monkeypatch):
+        """Given config 読み込みが ``ConfigError``
+        When ``_channel_label``
+        Then auth ディレクトリの親ディレクトリ名にフォールバックし、認証を阻害しない。
+        """
+        handler = _make_handler(tmp_path)
+
+        def _raise_config_error():
+            raise ConfigError("config broken")
+
+        monkeypatch.setattr("youtube_automation.utils.config.load_config", _raise_config_error)
+
+        assert handler._channel_label() == handler.auth_dir.resolve().parent.name
+
+    def test_should_escape_braces_in_label_for_prompt_format(self, tmp_path: Path, monkeypatch):
+        """Given チャンネル名に brace が含まれる
+        When ``authenticate``
+        Then ``authorization_prompt_message`` の ``.format(url=...)`` が壊れない
+        （ライブラリ内部の format 互換保護）。
+        """
+        handler = _make_handler(tmp_path)
+        monkeypatch.setattr(handler, "_channel_label", lambda: "TC{x}")
+        new_creds = _make_credentials(valid=True, expired=False)
+        flow = MagicMock()
+        flow.run_local_server.return_value = new_creds
+        monkeypatch.setattr(
+            "youtube_automation.auth.oauth_handler.InstalledAppFlow.from_client_secrets_file",
+            MagicMock(return_value=flow),
+        )
+        monkeypatch.setattr(handler, "_save_credentials", MagicMock())
+
+        handler.authenticate()
+
+        prompt = flow.run_local_server.call_args.kwargs["authorization_prompt_message"]
+        formatted = prompt.format(url="http://localhost:12345/auth")
+        assert "TC{x}" in formatted
+        assert "http://localhost:12345/auth" in formatted

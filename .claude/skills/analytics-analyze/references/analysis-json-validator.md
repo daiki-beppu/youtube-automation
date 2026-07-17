@@ -20,12 +20,14 @@
   "commands": {
     "launch_curve": "uv run yt-launch-curve --latest",
     "channel_trend": "uv run yt-channel-trend",
-    "theme_compare": "uv run yt-theme-compare"
+    "theme_compare": "uv run yt-theme-compare",
+    "traffic_trend": "uv run yt-traffic-trend"
   },
   "cli_outputs": {
     "launch_curve": {"target": {"ratio_vs_median": 1.42}},
     "channel_trend": {"summary": {"wow_growth_rate": 8.5}},
-    "theme_compare": {"themes": [{"day7_mean": 1234.0}]}
+    "theme_compare": {"themes": [{"day7_mean": 1234.0}]},
+    "traffic_trend": {"summary": {"top_source_share_percent": 45.2}}
   },
   "retention_analysis": {
     "source": "data/analytics_data_YYYYMMDD_HHMMSS.json",
@@ -76,12 +78,12 @@
 }
 ```
 
-- `cli_outputs` の 3 キーには各 CLI の stdout JSON object を変更せず保存する
+- `cli_outputs` の 4 キーには各 CLI の stdout JSON object を変更せず保存する
 - 戦略提案・次期候補・戦略ディスカッションの正本は `strategic_improvements` / `next_collection_candidates` / `strategic_discussion` とする。Markdown は人間向けの説明と数値引用を担う派生成果物であり、後続スキルはこの 3 固定キーから提案を読む
 - 固定キーの各要素は、空でない `statement`、1 件以上の `evidence`、`high` / `medium` / `low` の `confidence` を持つ
 - `generated_at` は UTC の `YYYY-MM-DDTHH:MM:SSZ` 形式で保存する
 - `inputs.analysis_target` / `inputs.supplemental` には分析本文が実際に読み込んだファイルの相対パスを保存する
-- `inputs.cli_selected` は、3 CLI が直接選択する分析入力 3 件（最新 `data/analytics_data_*.json`、最新 `data/analytics/daily_per_video/*.json`、テーマ定義元 `config/channel/content.json`）だけを保存する。`yt-theme-compare` の `load_config()` が間接的にロードする他の `config/channel/*.json` や `config/localizations.json` は含めない
+- `inputs.cli_selected` は、必須 4 CLI が直接選択する分析入力 3 件（最新 `data/analytics_data_*.json`、最新 `data/analytics/daily_per_video/*.json`、テーマ定義元 `config/channel/content.json`）だけを保存する。`yt-theme-compare` の `load_config()` が間接的にロードする他の `config/channel/*.json` や `config/localizations.json`、`yt-traffic-trend` がシェア推移のために読む過去の `data/analytics_data_*.json` スナップショット群は含めない
 - `inputs.analysis_target` の `collection_depth` が `full` の場合、`retention_analysis` を必須とする。`source` は `inputs.analysis_target` と一致させ、単位は入力値と同じ `ratio`、仮説評価は `supported` / `not_supported` / `inconclusive` のいずれかとする
 - `retention_analysis.videos[]` は `error` がなく、`data_points > 0` かつ空でない `retention_curve` を持つ実測データだけを対象にする。対象 index、video_id、average / midpoint、curve 低下点の index と値は入力 JSON の実値に一致させる
 - Markdown の「視聴維持率分析」には入力パス、単位、仮説評価、対象動画、動画間比較（有効データが 1 本なら比較不可の明記）、average / midpoint / curve 低下点の数値を JSON path 付きで記載する
@@ -124,9 +126,9 @@ jq -e '
   def evidence_ok($root):
     . as $e
     | (type == "object")
-      and ($e.source | IN("launch_curve", "channel_trend", "theme_compare"))
+      and ($e.source | IN("launch_curve", "channel_trend", "theme_compare", "traffic_trend"))
       and ($e.json_path | type == "string")
-      and ($e.json_path | test("^\\$\\.cli_outputs\\.(launch_curve|channel_trend|theme_compare)(\\.[A-Za-z0-9_-]+|\\[[0-9]+\\])+$"))
+      and ($e.json_path | test("^\\$\\.cli_outputs\\.(launch_curve|channel_trend|theme_compare|traffic_trend)(\\.[A-Za-z0-9_-]+|\\[[0-9]+\\])+$"))
       and ($e.json_path | startswith("$.cli_outputs.\($e.source)."))
       and ($e.value | type == "number")
       and (($e.json_path | path_parts) as $parts
@@ -164,18 +166,20 @@ jq -e '
     and (.commands == {
       "launch_curve": "uv run yt-launch-curve --latest",
       "channel_trend": "uv run yt-channel-trend",
-      "theme_compare": "uv run yt-theme-compare"
+      "theme_compare": "uv run yt-theme-compare",
+      "traffic_trend": "uv run yt-traffic-trend"
     })
     and (.cli_outputs | type == "object")
     and (.cli_outputs.launch_curve | nonempty_object)
     and (.cli_outputs.channel_trend | nonempty_object)
     and (.cli_outputs.theme_compare | nonempty_object)
+    and (.cli_outputs.traffic_trend | nonempty_object)
     and (["strategic_improvements", "next_collection_candidates", "strategic_discussion"]
          | all(.[];
              . as $key
              | (($root[$key] | type == "array" and length > 0)
                 and ($root[$key] | all(.[]; fixed_item_ok($root))))))
-    and (["launch_curve", "channel_trend", "theme_compare"]
+    and (["launch_curve", "channel_trend", "theme_compare", "traffic_trend"]
          | all(.[];
              . as $source
              | (all_evidence($root) | any(.[]; .source == $source))))
@@ -271,7 +275,7 @@ else
   grep -Fqx '状態: full 収集が必要' "$analysis_md"
 fi
 
-for source in launch_curve channel_trend theme_compare; do
+for source in launch_curve channel_trend theme_compare traffic_trend; do
   found=false
   while IFS= read -r citation; do
     if grep -Fqx "$citation" "$analysis_md"; then
@@ -293,14 +297,14 @@ done
 
 ## 検証する evidence 契約
 
-- `source` は `launch_curve` / `channel_trend` / `theme_compare` のいずれか
+- `source` は `launch_curve` / `channel_trend` / `theme_compare` / `traffic_trend` のいずれか
 - `json_path` は `$.cli_outputs.<source>` から始まり、object key は `.key`、array index は `[0]` 形式で表す
 - `json_path` の `<source>` は `source` と一致する
 - `json_path` が指す値は実在する number で、`value` と一致する
 
-CLI 出力 3 件はそれぞれ非空 object でなければならない。固定キーの配列・要素形状、`confidence`、evidence のいずれかが不正な場合も validator は失敗する。
+CLI 出力 4 件はそれぞれ非空 object でなければならない。固定キーの配列・要素形状、`confidence`、evidence のいずれかが不正な場合も validator は失敗する。
 
-Markdown の数値引用は `<JSON ファイル名>#<json_path> = <value>` の形式に統一する。上の手順は、検証済み evidence と一致する引用が 3 CLI それぞれについて Markdown に 1 件以上あることも確認する。
+Markdown の数値引用は `<JSON ファイル名>#<json_path> = <value>` の形式に統一する。上の手順は、検証済み evidence と一致する引用が 4 CLI それぞれについて Markdown に 1 件以上あることも確認する。
 
 各引用は Markdown の単独行に記載する。行全体を固定文字列として照合するため、次の負例のように evidence が `1.42` なのに Markdown が `1.421` の場合は一致しない。
 
