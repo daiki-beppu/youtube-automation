@@ -51,17 +51,15 @@ def commit_staged_music_files(coll_dir: Path, staging_dir: Path) -> None:
             shutil.rmtree(backup_dir, ignore_errors=True)
 
 
-def extract_downloaded_archive(coll_dir: Path, download_path: str, expected_count: int | None) -> int:
+def extract_downloaded_archive(coll_dir: Path, download_path: str) -> int:
+    # 期待数未満の部分 ZIP も受け入れて配置する（#1913）。不足の記録と警告は
+    # workflow-state（actual/missing_file_count）と downloaded API response が担う
     resolved_dp = Path(download_path).resolve()
     staging_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-"))
     try:
         placed_count = extract_and_rename_music(coll_dir, str(resolved_dp), target_dir=staging_dir)
         if placed_count == 0:
             raise DownloadedArtifactError("ZIP extraction failed: 0 audio files placed")
-        if expected_count is not None and placed_count < expected_count:
-            raise DownloadedArtifactError(
-                f"ZIP extraction incomplete: expected at least {expected_count} audio files, placed {placed_count}"
-            )
         commit_staged_music_files(coll_dir, staging_dir)
     finally:
         shutil.rmtree(staging_dir, ignore_errors=True)
