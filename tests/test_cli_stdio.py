@@ -40,6 +40,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-generate-master": "youtube_automation.scripts.generate_master",
     "yt-generate-suno": "youtube_automation.scripts.generate_suno_prompts",
     "yt-init-collection": "youtube_automation.scripts.init_collection",
+    "yt-kpi-dashboard": "youtube_automation.scripts.kpi_dashboard",
     "yt-launch-curve": "youtube_automation.scripts.launch_curve",
     "yt-metadata-audit": "youtube_automation.scripts.metadata_audit",
     "yt-pinned-comment": "youtube_automation.scripts.pinned_comment",
