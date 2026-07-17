@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(audio-gen)`: `yt-generate-master` 手動実行（/masterup フォールバック運用）後に `workflow-state.json::assets.raw_master` が未更新のまま残る不整合を検知する CLI `yt-raw-master-check` を追加した。既定は読み取り専用の突合チェック（exit 0=整合 / 2=不整合 / 1=エラー）で、`--apply` 時のみ `assets.raw_master` / `updated_at` を一時ファイル + rename の原子的更新で修復する。`/masterup` Step 1.4 と `/wf-status` に AskUserQuestion 承認ゲート付きのチェック導線を追加し、非承認時は state を変更せず次回起動時に同じ警告を再表示する（silent 続行の禁止）。`assets.master_audio` の確定は従来どおり `/wf-next` の責務のまま変更しない（#1668）。
 
+- `feat(analytics)`: 収集済みの traffic_sources / audience.by_device / YT_SEARCH 検索語を分析経路に接続した。`yt-analytics` の standard 以上で `get_traffic_source_detail("YT_SEARCH")` を呼び検索語トップ N を `traffic_sources.search_terms` へ保存し、スナップショット横断の流入源シェア推移・デバイス別集計・検索語トップ N を JSON で返す `yt-traffic-trend` CLI（`--top-search` / `--text`）を追加した。`/analytics-analyze` は `yt-traffic-trend` を 4 番目の必須 CLI とし、分析項目 6「流入源・デバイス分析」と validator の 4 CLI evidence 契約を追加した（#1804）。
+
+- `chore(extensions)`: suno-helper / distrokid-helper の TypeScript を 7.0.2 に固定し、pnpm 11.12.0（Nix extensions shell 契約）で両 lockfile を正規再生成した。TS 7 で削除された `baseUrl` を両 tsconfig から除去し（`paths` は相対形式のまま）、suno-helper は `types: ["chrome"]` で chrome グローバル型を明示 include。TypeScript 7.0.2 固定・lockfile 整合・削除済みオプション不使用は契約テスト（tests/test_extension_typescript_contract.py）で機械担保する（#2014）。
+
 - `fix(collection-serve)`: `POST /collections/<id>/downloaded` が期待数未満の部分 ZIP（Suno が一部 entry で 1 clip しか生成しないケース）を 500 で拒否せず、配置済みファイルを受理して warning 付き 200 を返すようにした。workflow-state には `planning.music.actual_file_count` / `missing_file_count` を機械可読に記録し、`assets.music_downloaded=true` と collections index の `status=downloaded` へ貫通させる。suno-helper は warning を progress 通知に表示する。0 件配置・壊れた ZIP の 500 契約は維持（#1913）。
 
 - `feat(analytics)`: `yt-thumbnail-correlate` に有意性検定（両側 p 値）・Benjamini-Hochberg 多重比較補正・`significant` 判定を追加し、最小サンプル数の既定を 10 に引き上げた（n<10 は「サンプル不足で判定不能」を明示）。有意でない相関には断定的な解釈文を出さない。`--metric` 未指定で CTR が欠測のチャンネルでは views に自動フォールバックし、出力 JSON の `metric_fallback` に理由を残す。`/analytics-analyze` に `significant: false` の相関を方針根拠に使わない注記を追加した（#1801）。
@@ -160,6 +164,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(upload)`: タグ件数下限が YouTube の 500 字上限の下で到達不能な場合、upload preflight と metadata audit が件数不足ではなく、`tags.min_count` を下げるか base タグを短縮するよう案内する明示診断を返すようにした。配布する content.json テンプレートの `tags.min_count` も 26 に統一した（#1732）。
 - `fix(loop-video)`: Ctrl+C 後の Veo operation resume state に入力画像の SHA-256 を保存し、再実行時に指定モデルまたは入力画像内容が state と異なる場合は旧 operation を破棄して指定どおり新規生成するようにした（#1746）。旧形式 state は安全側で破棄する。
 - `fix(analytics)`: `yt-channel-trend` の z-score 基準から当日を除外し、min_periods 未達を `null` として明示するよう修正した。トレンド判定は直近 28 日とその前の 28 日の平均を比較し、週次前週比は完全な 7 日間の週だけで計算する（#1803）。
+
+- `fix(suno-helper)`: Queue mode の生成完了待ちが stall タイムアウトした際、ラン全体を ERROR で中断せず graceful degradation するようにした。`waitForSubmittedClipsComplete` は throw の代わりに `{ timedOut, stalledClipIds }` を返し、停滞 clip を entry 単位で失敗記録（ENTRY_FAILED）したうえで、完了済み clip の duration yield guard・playlist 追加・ダウンロードを続行する。stalled entry は resume state の failedIndices として保持され「失敗分のみ再実行」導線で回収できる。全 entry が stall した場合は従来の失敗保留（playlist 追加を再実行後に委ねる）とし、serial mode・retryPlaylist・resume 由来 clip の stall は従来どおり中断する（#1994）。
+
+- `docs(suno,suno-helper)`: 長尺 BGM チャンネル向けに `config/skills/suno.yaml::duration_filter`（`min_sec` / `max_sec`、部分指定は既定値と deep-merge）の override 手順を `/suno` Step 2 と `/suno-helper` の duration guard 節へ文書化した。override が `suno-prompts.json` へ反映される契約は回帰テストで pin し（機能自体は #1269 で実装済み・既定 60〜300 秒は不変）、閾値変更後は `yt-generate-suno` の再生成が必要なことと、resume が run 開始時点の閾値を保持するため新規 run で効かせる注意も明記した（#1937）。
 
 ## [5.5.17] - 2026-07-10
 
