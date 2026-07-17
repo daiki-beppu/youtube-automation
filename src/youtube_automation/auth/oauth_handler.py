@@ -27,6 +27,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from youtube_automation.utils.exceptions import AuthError, ConfigError, ValidationError, YouTubeAPIError
+from youtube_automation.utils.worktree import main_worktree_root
 
 logger = logging.getLogger(__name__)
 
@@ -68,10 +69,16 @@ def client_secrets_file_candidates(channel_dir: Path) -> list[Path]:
     client_secrets_dir = os.environ.get("CLIENT_SECRETS_DIR")
     if client_secrets_dir:
         return [Path(client_secrets_dir) / "client_secrets.json"]
-    return [
+    candidates = [
         channel_dir / "auth" / "client_secrets.json",
         channel_dir / "automation" / "auth" / "client_secrets.json",
     ]
+    # git worktree では gitignore された auth/ が複製されないため、
+    # main 作業ツリー側の実体を最後のフォールバックとして参照する（#1721）
+    main_root = main_worktree_root(channel_dir)
+    if main_root is not None:
+        candidates.append(main_root / "auth" / "client_secrets.json")
+    return candidates
 
 
 def resolve_client_secrets_location(channel_dir: Path) -> tuple[str, Path]:
@@ -141,6 +148,7 @@ class YouTubeOAuthHandler:
         from youtube_automation.utils.config import channel_dir as _channel_dir
 
         channel_dir = _channel_dir()
+        self._channel_dir = channel_dir
 
         self.client_secrets_file = resolve_client_secrets_path(channel_dir)
 
@@ -148,8 +156,14 @@ class YouTubeOAuthHandler:
         self._scopes = list(scopes) if scopes is not None else self.SCOPES
 
         # auth_dir は従来挙動を維持。未指定なら channel_dir/"auth"
+        # ただし worktree でローカル token.json が無い場合は main 側 auth/ を
+        # 読み書き対象にする（refresh 結果を main に集約し分岐を防ぐ。#1721）
         if auth_dir is None:
             auth_dir = channel_dir / "auth"
+            if not (auth_dir / "token.json").exists():
+                main_root = main_worktree_root(channel_dir)
+                if main_root is not None:
+                    auth_dir = main_root / "auth"
         else:
             auth_dir = Path(auth_dir)
         self.auth_dir = auth_dir
@@ -180,8 +194,10 @@ class YouTubeOAuthHandler:
         if self.client_secrets_file.exists() and not self.client_secrets_file.is_file():
             raise ValidationError(f"client_secrets.json は通常ファイルである必要があります: {self.client_secrets_file}")
         if not self.client_secrets_file.is_file():
+            searched = "\n".join(f"  - {p}" for p in client_secrets_file_candidates(self._channel_dir))
             raise FileNotFoundError(
                 f"❌ client_secrets.json が見つかりません: {self.client_secrets_file}\n"
+                f"探索したパス:\n{searched}\n"
                 "設定手順:\n"
                 "1. Google Cloud Console で YouTube Data API v3 を有効化\n"
                 "2. Google Auth Platform > Branding でアプリ情報を保存\n"
