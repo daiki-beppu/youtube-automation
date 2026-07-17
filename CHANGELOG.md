@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(thumbnail)`: 過密なプロンプト指示を簡素化し、TTP を参照画像主導へ戻した。`config.default.yaml` の single_step clause 6 種のうち既定で注入されるものを `ip_safety_clause` の 1 つに集約（variation / style_lock / text_strip / anatomy / typography は既定空文字の opt-in、推奨文面はコメントに残置）、`composition_rules` は実効キー `text_lines` のみに縮小、`thumbnail_text` は `text_overlay_prompt` を単一入口として旧個別フィールド 6 種を段階的廃止（deprecated）にした。deprecated キーの channel override は従来どおり deep-merge で有効のまま、`load_skill_config` が DeprecationWarning で移行を促す（物理削除は後続リリース）。SKILL.md のプロンプト指示解説を「プロンプト構築」1 セクション + モード別差分に再編し、既定 config でプロバイダーへ渡る最終プロンプト全文の例を掲載した。channel-new / channel-init の scaffold からも deprecated キーを除去した（#1702）。
+
 - `chore(extensions)`: suno-helper / distrokid-helper の TypeScript を 7.0.2 に固定し、pnpm 11.12.0（Nix extensions shell 契約）で両 lockfile を正規再生成した。TS 7 で削除された `baseUrl` を両 tsconfig から除去し（`paths` は相対形式のまま）、suno-helper は `types: ["chrome"]` で chrome グローバル型を明示 include。TypeScript 7.0.2 固定・lockfile 整合・削除済みオプション不使用は契約テスト（tests/test_extension_typescript_contract.py）で機械担保する（#2014）。
 - `fix(collection-serve)`: `POST /collections/<id>/downloaded` が期待数未満の部分 ZIP（Suno が一部 entry で 1 clip しか生成しないケース）を 500 で拒否せず、配置済みファイルを受理して warning 付き 200 を返すようにした。workflow-state には `planning.music.actual_file_count` / `missing_file_count` を機械可読に記録し、`assets.music_downloaded=true` と collections index の `status=downloaded` へ貫通させる。suno-helper は warning を progress 通知に表示する。0 件配置・壊れた ZIP の 500 契約は維持（#1913）。
 

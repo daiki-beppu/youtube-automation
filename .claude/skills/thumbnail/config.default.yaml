@@ -69,47 +69,55 @@ image_generation:
       # 複数参照画像のとき attempt 毎に切り替えるか。
       # single_step TTP で max_attempts > 1 の場合、false は同一参照の再利用になるためエラー。
       rotate: true
-      # diff_prompt_template または textless 再生成プロンプトに挿入できる共通ガイダンス clause。
-      # チャンネル側で diff_prompt_template を組み立てる際に必要に応じて
-      # ${variation_clause} のように展開する想定。空文字に上書きで無効化可。
-      variation_clause: |
-        The reference image is a style guide — produce a variation, not a copy.
-        Vary specific objects, framing details, and decorative elements while
-        preserving the overall aesthetic. The output must clearly differ from
-        the reference in subject details, not be a near-duplicate.
-      style_lock_clause: |
-        Match the lighting direction, color temperature, and overall mood of
-        the reference image.
-      text_strip_clause: |
-        Do not include any text, captions, watermarks, logos, or typography
-        from the reference unless explicitly described in the diff prompt.
-      # anatomy_clause (#570): キャラ + 手が写る構図で diff_prompt_template に
-      # ${anatomy_clause} として展開する。Gemini は楽器持ち・指を伸ばす/握るポーズで
-      # 指の融合・本数異常・溶融を起こしやすい。空文字に上書きで無効化可。
-      anatomy_clause: |
-        Hands must be anatomically correct: five fingers on each hand, clearly
-        separated, no fused fingers, no extra fingers, no melted or distorted
-        fingers, natural proportions. Body proportions must be realistic with
-        no distorted limbs, joints, or facial features.
+      # ---- ガイダンス clause の方針 (#1702) ----
+      # TTP は参照画像主導で生成する。プロンプトに指示を積むほど参照画像の支配力が
+      # 薄れるため、既定で注入される clause は ip_safety_clause の 1 つだけに集約した。
+      # 以下の opt-in clause 群は既定空文字（展開しても no-op）。必要なチャンネルだけ
+      # config/skills/thumbnail.yaml で本文を設定し、自前の diff_prompt_template で
+      # ${<clause 名>} として展開する。推奨文面は各 clause のコメントを参照。
+      #
+      # variation_clause (opt-in): 参照の near-duplicate が続くチャンネル向け。推奨文面:
+      #   The reference image is a style guide — produce a variation, not a copy.
+      #   Vary specific objects, framing details, and decorative elements while
+      #   preserving the overall aesthetic.
+      variation_clause: ""
+      # style_lock_clause (opt-in): 参照とライティング・色温度が揃わないとき。推奨文面:
+      #   Match the lighting direction, color temperature, and overall mood of
+      #   the reference image.
+      style_lock_clause: ""
+      # text_strip_clause (opt-in): textless main 再生成プロンプト専用（テキスト付き
+      # thumbnail 生成には展開しない）。未設定時は SKILL.md の「Remove all text」相当の
+      # 除去指示をそのまま書く。推奨文面:
+      #   Do not include any text, captions, watermarks, logos, or typography
+      #   from the reference unless explicitly described in the diff prompt.
+      text_strip_clause: ""
+      # anatomy_clause (#570, opt-in): キャラ + 手が写る構図で指の破綻（融合・本数異常・
+      # 溶融）が出るチャンネルだけ本文を設定し、diff_prompt_template で
+      # ${anatomy_clause} を展開する。推奨文面:
+      #   Hands must be anatomically correct: five fingers on each hand, clearly
+      #   separated, no fused fingers, no extra fingers, no melted or distorted
+      #   fingers, natural proportions. Body proportions must be realistic with
+      #   no distorted limbs, joints, or facial features.
+      anatomy_clause: ""
       # IP / 版権セーフティ clause (#569)。参照元の署名・サイン・透かし・ロゴ等の
       # 識別マークが TTP 経由で焼き込まれる事故を抑止するため、TTP / single_step
-      # / diff プロンプト構築時には常時末尾に挿入することを推奨する。
+      # / diff プロンプト構築時には常時末尾に挿入する（**唯一の既定 clause**）。
       # 空文字で無効化可だが、ベンチマーク模倣を行う以上は維持を強く推奨。
       ip_safety_clause: |
         Do not reproduce any signature, autograph, handwritten name, watermark,
         logo, brand mark, channel badge, copyright notice, or identifying mark
         from the reference image. Keep all corners clean and free of such marks.
-      # typography_clause (#1332): タイトル文字の書体をテキスト付き
+      # typography_clause (#1332, opt-in): タイトル文字の書体をテキスト付き
       # thumbnail prompt で指示する clause。
       # 承認済み thumbnail から作る textless 再生成プロンプトには展開しない。
-      # {font_description} は thumbnail_text.font.copy の値で置換して使う。
+      # {font_description} は thumbnail_text.font.copy の値で置換して使う。推奨文面:
+      #   Render the title text in a consistent {font_description} typeface.
+      #   Keep the same letterforms, weight, and style across the whole title.
+      #   Do not mix multiple typefaces in the title.
       # 注意: AI 画像生成はフォント名の厳密な再現を保証しない。書体をピクセル単位で
       # 固定したい場合は image_generation.gemini.thumbnail_text.overlay
       # (yt-thumbnail-text) を使うこと。
-      typography_clause: |
-        Render the title text in a consistent {font_description} typeface.
-        Keep the same letterforms, weight, and style across the whole title.
-        Do not mix multiple typefaces in the title.
+      typography_clause: ""
 
     # スタイル説明文 (生成時のスタイル意図、ドキュメンテーション用)
     style: ""
@@ -188,30 +196,32 @@ image_generation:
     #   expression: ""
     #   pose: ""
 
-    # 構図・環境のルール
+    # 構図・環境のルール (#1702 で縮小)
+    # TTP モードで実効性を確認できた text_lines だけを既定に残す。
+    # 以下の旧キーは deprecated（override は引き続き deep-merge されるが、
+    # config ロード時に DeprecationWarning が出る。物理削除は後続リリース）:
+    #   environment / character_size / character_pose / allowed_actions /
+    #   ng_actions / background / channel_branding
+    # 移行ガイド: 構図・環境の意図は個別キーではなく、チャンネル側
+    # diff_prompt_template の本文（差分指示）に短い文で直接書く。
     composition_rules:
-      environment: ""
-      character_size: ""
-      character_pose: ""
-      allowed_actions: ""
-      ng_actions: ""
-      background: ""
       text_lines: "タイトルは 2 行以内"
-      channel_branding: ""
 
-    # テキストオーバーレイ設定 (two_phase モードで使用)
+    # テキストオーバーレイ設定 (two_phase モードで使用。#1702 で縮小)
+    # text_overlay_prompt を実質単一の入口とする。旧個別フィールドは deprecated
+    # （override は引き続き deep-merge されるが、config ロード時に
+    # DeprecationWarning が出る。物理削除は後続リリース）:
+    #   channel_name_style / title_format / title_prefix / copy_position /
+    #   color / decoration
+    # 移行ガイド: 位置・色・装飾・書式の意図は text_overlay_prompt の本文に
+    # 直接書く。書体の雰囲気指示だけ font.* を残す（typography_clause /
+    # two_phase フォールバックが参照）。
     thumbnail_text:
       channel_name: ""
-      channel_name_style: ""
-      title_format: ""
-      title_prefix: ""
-      copy_position: "right of character"
       # AI プロンプト用のフォント記述 (雰囲気の指示。厳密な書体再現は保証されない)
       font:
         copy: "classic serif"
         genre_tag: "sans-serif bold"
-      color: ""
-      decoration: "none"
       # Phase 2 のオーバーレイプロンプト (プレースホルダ: {title_line1}, {title_line2}, {channel_name})
       text_overlay_prompt: ""
 
