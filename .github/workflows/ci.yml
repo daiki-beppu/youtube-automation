@@ -28,6 +28,24 @@ jobs:
       - name: Test
         run: nix develop --command uv run pytest -n auto
 
+  build-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+      - name: Frozen sync (lock drift check)
+        run: nix develop --command uv sync --frozen
+      - name: Build wheel and sdist
+        run: nix develop --command uv build
+      - name: Smoke test installed wheel
+        run: |
+          nix develop --command bash -euo pipefail -c '
+            venv=$(mktemp -d)/venv
+            uv venv "$venv"
+            uv pip install --python "$venv/bin/python" dist/*.whl
+            "$venv/bin/yt-skills" list
+          '
+
   windows-cost-tracker:
     runs-on: windows-latest
     steps:
