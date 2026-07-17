@@ -14,9 +14,11 @@ persona_providers:
   planner:
     provider: codex
 
-# sandbox 化された worker の direnv / lefthook セットアップ停滞対策（issue #1999）。
+# sandbox 化された worker の direnv / lefthook セットアップ停滞対策（issue #1999）と、
+# sibling worktree 由来 path の持ち込み遮断（issue #2163）。
 # runtime-prepare.sh の stdout（KEY=VALUE）が全 worker の環境へ注入され、
-# XDG_DATA_HOME を worktree ローカルへ向けて direnv allow を通し、
+# TMPDIR / XDG_CACHE_HOME / XDG_CONFIG_HOME / XDG_DATA_HOME / XDG_STATE_HOME /
+# UV_CACHE_DIR を current TAKT_RUNTIME_ROOT 配下へ再構成して direnv allow を通し、
 # lefthook install はスキップさせる（ゲートは CI 側で担保）。
 runtime:
   prepare:
