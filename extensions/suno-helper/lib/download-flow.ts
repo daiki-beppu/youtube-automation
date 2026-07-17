@@ -128,7 +128,7 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
         throw new Error(downloadResult.message);
       }
 
-      await sendMessage("postDownloaded", {
+      const postResult = await sendMessage("postDownloaded", {
         baseUrl: context.baseUrl,
         collectionId,
         body: {
@@ -138,6 +138,16 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
           download_path: downloadResult.filename,
         },
       });
+      // 部分完了（Suno の生成数不足）はサーバーが warning 付き 200 で受理する (#1913)。
+      // フローは止めず、不足をユーザーへ通知するだけに留める
+      if (postResult?.warning) {
+        console.warn(`[suno-helper] 部分ダウンロード: ${postResult.warning}`);
+        deps.emitProgress({
+          phase: PHASE.DOWNLOADING,
+          total: progressTotal,
+          message: `部分ダウンロード（不足あり）: ${postResult.warning}`,
+        });
+      }
     } finally {
       if (watcherActive) {
         downloadCompleteResolver = null;

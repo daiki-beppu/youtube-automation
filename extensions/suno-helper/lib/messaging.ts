@@ -120,8 +120,11 @@ interface ProtocolMap {
   fetchCollectionPrompts(payload: { baseUrl: string; collectionId: string }): PromptEntry[];
   /** overlay → background: collection prompts と metadata を extension origin から取得する。 */
   fetchCollectionPromptResponse(payload: { baseUrl: string; collectionId: string }): PromptResponse;
-  /** runner → background: token 取得と POST /downloaded を privileged boundary に委譲する (#1217)。 */
-  postDownloaded(payload: { baseUrl: string; collectionId: string; body: DownloadedPayload }): void;
+  /** runner → background: token 取得と POST /downloaded を privileged boundary に委譲する (#1217)。
+   *  部分完了時はサーバーの warning を返す (#1913)。 */
+  postDownloaded(payload: { baseUrl: string; collectionId: string; body: DownloadedPayload }): {
+    warning: string | null;
+  };
   /** overlay → background → runner: ダウンロードのみ再実行する (#1251)。 */
   retryDownload(payload: RetryDownloadPayload): { ok: true };
 }

@@ -101,6 +101,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-thumbnail-correlate": "CDN 画像 DL + ローカル相関計算のみ",
     "yt-thumbnail-text": "ローカル PIL テキスト描画のみ",
     "yt-title-duplicate-check": "ローカルのタイトル照合のみ",
+    "yt-traffic-trend": "収集済み analytics_data_*.json のローカル分析のみ",
     "yt-vote-log": "ローカルの投票ログ記録のみ",
 }
 
@@ -108,6 +109,11 @@ NON_BILLED_CLIS: dict[str, str] = {
 
 # 課金 CLI 名を参照するが、skill 自身の手順としては実行しない skill（非対象理由）。
 NON_TARGET_SKILLS: dict[str, str] = {
+    "analytics-analyze": (
+        "収集済み analytics_data_*.json のローカル分析のみ。yt-analytics への言及は"
+        "search_terms 欠測時に再収集（/analytics-collect の責務）を案内する"
+        " cross-reference で、手順として実行しない"
+    ),
     "automation-release": (
         "本リポジトリのリリース作業のみ。yt-upload-collection への言及は"
         "リリースノート内の例示参照で、手順として実行しない"

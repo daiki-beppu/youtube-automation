@@ -13,7 +13,7 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 
 ## 完了条件
 
-`collections/live/<collection>/20-documentation/postmortem.md` に、Phase 4 の検証の実行結果と「結論 / 反証 / 学び」をすべて記入して保存した時点で完了。検証手段の案内だけ、または結論欄が空の状態では完了としない。
+`collections/live/<collection>/20-documentation/postmortem.md` に、Phase 4 の検証の実行結果と「結論 / 反証 / 学び」をすべて記入して保存し、Phase 6 の insights 還元（還元対象なしの場合はその明示）まで実行した時点で完了。検証手段の案内だけ、または結論欄が空の状態では完了としない。
 
 ## 設定読み込みゲート
 
@@ -258,6 +258,31 @@ uv run python .claude/skills/flop-analysis/references/verification.py --operatio
 - 反証: <反証された仮説と根拠。該当なしの場合は「反証なし」と理由>
 - 学び: <次回の企画・制作・公開へ反映する具体的な学び。断定できない場合は追加で必要なデータ>
 ```
+
+### Phase 6: insights への還元
+
+Phase 5 で保存した postmortem.md の「結論 / 反証 / 学び」から、次サイクルの企画・制作に効く学びを `data/insights.jsonl` へ還元する。エントリ形式は `.claude/skills/analytics-analyze/references/insights-entry.schema.json` を単一ソースとし、本文で必須キーや enum を再定義しない。
+
+**還元ゲート**: 次をすべて満たす postmortem セクションだけを還元対象にする。満たさない場合は追記せず、「insights 還元なし（理由: <空欄 / 全主仮説が未検証>）」と明示して完了する。
+
+- 「結論 / 反証 / 学び」の 3 項目がすべて記入済みである
+- 「学び」が `支持` または `反証` の検証結果に基づいている（`未検証` の仮説だけを根拠にした学びは還元しない）
+
+還元するエントリの規則:
+
+- `source: "postmortem"`、`source_path` に対象 `collections/live/<collection>/20-documentation/postmortem.md`、`status: "open"` で追記する
+- `lever` は支持された主仮説カテゴリから対応付ける: サムネ訴求弱 → `thumbnail` / タイトル訴求弱 → `title` / テーマ自体の市場性不足・競合過密ジャンル → `topic` / 中身の弱さ（音源 / 編集 / テーマ） → `bgm` / タイトル・タグ SEO 弱 → `metadata` / それ以外 → `other`
+- `evidence` には検証ステップ欄の `target_value` / `baseline_value` / `threshold` など数値根拠を含める
+- 追記は append-only とする。既存行の削除・並べ替え・書き換えをしない（`status` / `status_note` の更新は `/collection-ideate` の責務）
+- 既存エントリと同旨の `finding` は重複追記しない（同じ postmortem を再実行しても二重還元しない）
+
+追記後（追記 0 件の場合も含め）、次の検証が exit 0 になることを確認してから完了を報告する:
+
+```bash
+uv run python3 .claude/skills/analytics-analyze/references/validate_insights.py data/insights.jsonl
+```
+
+還元された学びは次サイクルで `/wf-new` が open エントリとして収集し、`/collection-ideate` の企画入力・`/thumbnail`（lever=thumbnail）の制作前参照に使われる。本スキルを `/wf-new` から自動実行することはない（公開済み動画の分析・検証は本スキルの既存責務に残る）。
 
 ## 障害時ガイダンス
 

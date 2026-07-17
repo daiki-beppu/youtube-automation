@@ -73,6 +73,7 @@ import type { DownloadContext } from "../lib/download-flow";
 import {
   entryDisplayName,
   finalizeQueueEntriesYield,
+  resolveStalledQueueEntries,
   submitQueueEntries,
   waitForSubmittedClipsComplete,
 } from "../lib/queue-runner";
@@ -848,6 +849,10 @@ export default defineContentScript({
       // リトライ上限まで失敗しスキップした entry の 0-based index (#948)。終了時に resume state へ
       // 永続化し、popup の「失敗分のみ再実行」導線が消費する。
       const failedIndices: number[] = [];
+      // stall タイムアウトで生成停滞と判定した entry の 0-based index (#1994)。failedIndices にも
+      // 追加して resume/retry 導線へ渡すが、stall のみの失敗では完了済み clip で playlist 追加・
+      // download を続行するため、finishWithFailedEntriesIfNeeded の保留判定からは除外する。
+      const stalledEntryIndices: number[] = [];
       let queueClipIdsByEntry: Map<number, string[]> | null = null;
       let keepResumeStateForDownloadRetry = false;
       let playlistPersistInfo: PlaylistClipPersistInfo | null = null;
@@ -915,10 +920,7 @@ export default defineContentScript({
         });
       }
 
-      function finishWithFailedEntriesIfNeeded(): boolean {
-        if (failedIndices.length === 0) {
-          return false;
-        }
+      function finishDeferringPlaylistForFailedEntries(): void {
         persistInterruptState(total);
         const list = failedIndices.map((i) => i + 1).join(", ");
         emitProgress({
@@ -926,6 +928,16 @@ export default defineContentScript({
           total,
           message: `${failedIndices.length} 件の entry が失敗しました (entry ${list})。「失敗分のみ再実行」で完走後に playlist 追加が実行されます。`,
         });
+      }
+
+      function finishWithFailedEntriesIfNeeded(): boolean {
+        // stall 由来の失敗だけなら playlist 追加を保留しない (#1994)。完了済み clip での
+        // graceful degradation（playlist 追加 / download の続行）を優先する。
+        const stalledSet = new Set(stalledEntryIndices);
+        if (failedIndices.every((i) => stalledSet.has(i))) {
+          return false;
+        }
+        finishDeferringPlaylistForFailedEntries();
         return true;
       }
 
@@ -1189,13 +1201,14 @@ export default defineContentScript({
           ? countQueuePlaylistClipIds(previousSubmittedClipIds, queueClipIdsByEntry)
           : expectedRawPlaylistClipCount;
       let verifiedPlaylistClipCount = playlistExpectedClipCount ?? expectedPlaylistClipCount;
+      let playlistTargetClipCount = expectedPlaylistClipCount;
       if (aborted) {
         persistInterruptState(total);
         emitProgress({ phase: PHASE.STOPPED, total });
         return;
       }
       try {
-        await waitForSubmittedClipsComplete({
+        const completion = await waitForSubmittedClipsComplete({
           expectedClipCount: expectedPlaylistClipCount,
           previousSubmittedClipIds,
           isAborted: () => aborted,
@@ -1205,12 +1218,58 @@ export default defineContentScript({
           requestFeedPoll,
           abortableSleep,
         });
+        if (completion.timedOut) {
+          const stallMessage = completion.message ?? "生成完了待ちがタイムアウトしました";
+          const degraded =
+            options.runMode === "queue" && queueClipIdsByEntry !== null
+              ? resolveStalledQueueEntries(completion.stalledClipIds, queueClipIdsByEntry)
+              : null;
+          if (degraded === null || degraded.unmappedStalledClipIds.length > 0 || queueClipIdsByEntry === null) {
+            // serial mode / resume 由来 clip の stall は entry へ対応付けられず「失敗分のみ再実行」で
+            // 回収できないため、従来どおりラン全体を中断する (#1994)。
+            persistInterruptState(total);
+            emitProgress({ phase: PHASE.ERROR, index: total, total, message: stallMessage });
+            return;
+          }
+          // queue mode の graceful degradation (#1994): stall した entry を失敗として記録し、
+          // 完了済み clip で duration yield guard / playlist 追加 / download を続行する。
+          // entry は clip 単位でなく丸ごと落とす（片割れだけ残すと「失敗分のみ再実行」の
+          // entry 単位再生成で完了済み clip が重複するため）。
+          for (const index of degraded.stalledEntryIndices) {
+            const entryClipIds = queueClipIdsByEntry.get(index) ?? [];
+            tracker.dropSubmittedIds(entryClipIds);
+            queueClipIdsByEntry.delete(index);
+            stalledEntryIndices.push(index);
+            failedIndices.push(index);
+            console.warn(`[suno-helper] entry ${index} は生成停滞のためスキップします: ${stallMessage}`);
+            emitProgress({
+              phase: PHASE.ENTRY_FAILED,
+              index,
+              total,
+              message: "生成が停滞したためスキップしました (stall timeout)",
+              yieldRetryCount: 0,
+              log: { kind: "skip", entryName: entryDisplayName(entries[index]) },
+            });
+          }
+          playlistTargetClipCount = countQueuePlaylistClipIds(previousSubmittedClipIds, queueClipIdsByEntry);
+          verifiedPlaylistClipCount = playlistTargetClipCount;
+          if (playlistTargetClipCount === 0) {
+            // 完了済み clip が 1 件も無い（全 entry stall）。playlist 追加対象が無いため
+            // 従来の失敗保留と同じく「失敗分のみ再実行」導線へ委ねる。
+            finishDeferringPlaylistForFailedEntries();
+            return;
+          }
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         persistInterruptState(total);
         emitProgress({ phase: PHASE.ERROR, index: total, total, message });
         return;
       }
+      // stall でスキップした entry は生成物が無いため、yield finalize と playlist の title fallback
+      // （order と clip ID の位置対応）から除外する (#1994)。
+      const stalledEntrySet = new Set(stalledEntryIndices);
+      const completedOrder = stalledEntryIndices.length > 0 ? order.filter((i) => !stalledEntrySet.has(i)) : order;
       if (aborted) {
         persistInterruptState(total);
         emitProgress({ phase: PHASE.STOPPED, total });
@@ -1261,7 +1320,7 @@ export default defineContentScript({
               };
         const yieldResult = await finalizeQueueEntriesYield({
           entries,
-          order,
+          order: completedOrder,
           total,
           clipIdsByEntry: queueClipIdsByEntry,
           durationFilter: options.durationFilter,
@@ -1295,9 +1354,9 @@ export default defineContentScript({
           total,
           playlistName,
           previousSubmittedClipIds,
-          expectedPlaylistClipCount,
+          playlistTargetClipCount,
           entries,
-          order,
+          completedOrder,
           options.durationFilter,
           options.submittedClipIdsAreDurationFiltered === true,
           options.durationOutlierPolicy,
@@ -1350,6 +1409,19 @@ export default defineContentScript({
       if (aborted) {
         persistInterruptState(total);
         emitProgress({ phase: PHASE.STOPPED, total });
+        return;
+      }
+      // stall でスキップした entry が残る partial complete (#1994)。完了分の playlist 追加・
+      // download は実行済み。stalled entry を「失敗分のみ再実行」導線へ渡すため resume state を
+      // 保持し、消去も完了時リロードも行わない。
+      if (stalledEntryIndices.length > 0) {
+        persistInterruptState(total);
+        const list = stalledEntryIndices.map((i) => i + 1).join(", ");
+        emitProgress({
+          phase: PHASE.FINISHED,
+          total,
+          message: `${stalledEntryIndices.length} 件の entry が生成停滞のため失敗しました (entry ${list})。完了分の playlist 追加とダウンロードは実行済みです。「失敗分のみ再実行」で残りを生成できます。`,
+        });
         return;
       }
       // 全 entry 完了。この collection の resume state を消去する (#872 要件5)。
@@ -1494,7 +1566,7 @@ export default defineContentScript({
           // 完了待ちは feed poll の状況次第で分単位かかりうる。popup 再 open 時に initSnapshot の
           // INJECTING が表示され続けないよう、待機中であることを先に明示する（#1586 review）。
           emitProgress({ phase: PHASE.GENERATING, total: 0, message: "保存済み clip の生成完了を確認中" });
-          await waitForSubmittedClipsComplete({
+          const completion = await waitForSubmittedClipsComplete({
             expectedClipCount,
             previousSubmittedClipIds: submittedClipIds,
             isAborted: () => aborted,
@@ -1504,6 +1576,10 @@ export default defineContentScript({
             requestFeedPoll,
             abortableSleep,
           });
+          if (completion.timedOut) {
+            // retryPlaylist は entry 情報を持たず graceful degradation できないため従来どおり中断する (#1994)。
+            throw new Error(completion.message ?? "生成完了待ちがタイムアウトしました");
+          }
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
