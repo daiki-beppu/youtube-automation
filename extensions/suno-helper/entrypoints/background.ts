@@ -153,7 +153,7 @@ export default defineBackground(() => {
   // token fetch と POST /downloaded は background の extension origin から実行する。
   onMessage("postDownloaded", async ({ data, sender }) => {
     requireRelayTab(sender, "postDownloaded");
-    await postDownloaded(data.baseUrl, data.collectionId, data.body);
+    return await postDownloaded(data.baseUrl, data.collectionId, data.body);
   });
 
   // runner → overlay 中継 (#892)。runner content が emit する progress 通知を送信元と同一タブへ転送する
