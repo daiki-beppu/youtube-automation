@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `refactor(thumbnail)`: 過密なプロンプト指示を簡素化し、TTP を参照画像主導へ戻した。`config.default.yaml` の single_step clause 6 種のうち既定で注入されるものを `ip_safety_clause` の 1 つに集約（variation / style_lock / text_strip / anatomy / typography は既定空文字の opt-in、推奨文面はコメントに残置）、`composition_rules` は実効キー `text_lines` のみに縮小、`thumbnail_text` は `text_overlay_prompt` を単一入口として旧個別フィールド 6 種を段階的廃止（deprecated）にした。deprecated キーの channel override は従来どおり deep-merge で有効のまま、`load_skill_config` が DeprecationWarning で移行を促す（物理削除は後続リリース）。SKILL.md のプロンプト指示解説を「プロンプト構築」1 セクション + モード別差分に再編し、既定 config でプロバイダーへ渡る最終プロンプト全文の例を掲載した。channel-new / channel-init の scaffold からも deprecated キーを除去した（#1702）。
+- `docs(skills)`: 課金 API（Vertex AI Gemini / Veo / Lyria、OpenAI Images、YouTube Data / Analytics API）を呼ぶ 26 project skill の SKILL.md に、実行前見積もり可能な「想定 API call 数」セクション（API 別の call 数 / 算出式・変動要因・上限 / 承認の安全弁）を追加した。対象は契約テスト `tests/test_skill_api_call_estimate_contract.py` が機械抽出（pyproject 全 CLI の課金分類 × skill の CLI 参照走査）で導出し、非対象理由・追加対象理由・新規 CLI の分類漏れ・記載漏れを CI で検出する（#2010）。
 - `feat(analytics)`: 成長 KPI 定点ビュー CLI `yt-kpi-dashboard` を追加した。`data/analytics_data_*.json` 全スナップショットを日付後勝ちで横断マージし、レバー別 KPI（views / インプレッション / CTR / 平均視聴維持率 / 登録者純増）の週次推移を前週比付きの構造化 JSON と Markdown テーブルで出力する（`--save` で `reports/kpi_weekly_YYYYMMDD.{json,md}` 保存）。Reporting API の保持期間（60 日）を超えた過去の Imp / CTR も `reporting_api.impressions_summary.per_day` から復元して時系列に含め、欠測週は補間せず欠測として明示する。スナップショット 1 件以下ではエラーではなく複数スナップショットが必要な旨の案内を出す。`/analytics-analyze` の CLI 一覧にも定点ビュー参照の導線を追加した（#1819）。
 - `feat(auth)`: OAuth 新規ブラウザ認証の `run_local_server()` にチャンネル名（`meta.channel_short`）入りの `authorization_prompt_message` / `success_message` を渡し、複数チャンネル並列運用でトークン失効が重なった際にターミナルログと認証完了ページのどちらからも対象チャンネルを判別できるようにした。prompt には認証 URL（redirect 先ポート入り）も含め、config 読込不可時はディレクトリ名へフォールバックする（#1966）。
 
@@ -172,6 +173,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(suno-helper)`: Queue mode の生成完了待ちが stall タイムアウトした際、ラン全体を ERROR で中断せず graceful degradation するようにした。`waitForSubmittedClipsComplete` は throw の代わりに `{ timedOut, stalledClipIds }` を返し、停滞 clip を entry 単位で失敗記録（ENTRY_FAILED）したうえで、完了済み clip の duration yield guard・playlist 追加・ダウンロードを続行する。stalled entry は resume state の failedIndices として保持され「失敗分のみ再実行」導線で回収できる。全 entry が stall した場合は従来の失敗保留（playlist 追加を再実行後に委ねる）とし、serial mode・retryPlaylist・resume 由来 clip の stall は従来どおり中断する（#1994）。
 
 - `docs(suno,suno-helper)`: 長尺 BGM チャンネル向けに `config/skills/suno.yaml::duration_filter`（`min_sec` / `max_sec`、部分指定は既定値と deep-merge）の override 手順を `/suno` Step 2 と `/suno-helper` の duration guard 節へ文書化した。override が `suno-prompts.json` へ反映される契約は回帰テストで pin し（機能自体は #1269 で実装済み・既定 60〜300 秒は不変）、閾値変更後は `yt-generate-suno` の再生成が必要なことと、resume が run 開始時点の閾値を保持するため新規 run で効かせる注意も明記した（#1937）。
+
+- `fix(suno-helper)`: 新 Create UI（2026-07）で playlist の clip row 検出が全件 missing になる問題を実 DOM capture（匿名化 fixture）に基づき修正した。復活した `.clip-row` コンテナを row 導出の最優先アンカーにし、`div` 化した再生ボタン（`[role="button"][aria-label^="Play "]`）と row 自身の `aria-label` を曲名フォールバックに追加。仮想ウィンドウ走査（`scrollAndMultiSelectByIds` / `readSelectedClipIds`）は共通ヘルパへ抽出し、ウィンドウ外 row の空シェル化・再描画遅延に対して描画 signature 変化の poll（上限 3s）で hydration を待ち、ページネーションで走査中に成長する scrollHeight へ maxScroll 毎ステップ再計算で追従する。旧 DOM / grid view の検出経路と fixture は不変（#2043）。
 
 ## [5.5.17] - 2026-07-10
 
