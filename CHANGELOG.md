@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(analytics)`: `yt-analytics` に既定 `standard` の `--depth {standard,full}` を追加し、`full` 指定時に視聴維持率と地域別データを収集・保存できるようにした。full 専用 API の明示エラーは不完全な成果物として保存せず失敗終了する。`/analytics-collect full` の導線と、`/analytics-analyze` が full データの維持率を数値根拠として扱う分析契約も追加した（#1799）。
 
+- `feat(collection-serve)`: port 別 PID ファイル、同一構成の既存 server の liveness check と再利用、`--stop --port` による明示停止、既定 60 分の idle timeout を追加し、suno-helper / distrokid-helper の完了手順で server を停止するようにした（#1725）。
+
 - `feat(masterup)`: `yt-suno-verify-playlist` に collection 相対の `--music-dir` を追加し、`NN{a|b}-<title>.<ext>` 形式のローカル音声ファイル名を name/title の英語 alias・apostrophe 除去名から canonical entry へ対応付け、entry + `a`/`b` variant 単位で unknown / missing / underfilled を fail-loud 検出できるようにした。`/masterup` の primary path は `02-Individual-music/` を直接突合するため、playlist URL や title list の確認なしで Step 5 前ゲートを実行する（#1898）。
 
 - `feat(doctor,setup)`: `yt-doctor --fix-client-secrets` を追加し、Downloads の構造妥当かつ GCP project 一致する最新 OAuth client JSON を `auth/client_secrets.json` へ移動できるようにした。既存ファイルは上書きせず、`/setup` の HUMAN STEP は secret 発行・Download JSON・done のみに簡素化した（#1903）。
