@@ -747,46 +747,66 @@ interface VirtualWindowScanOptions {
  *
  * onWindow が true を返すか isAborted() が true になったら走査を打ち切る。
  */
+/**
+ * スクロール 1 ステップ分の仮想ウィンドウ hydration 待ち (#2043)。
+ * 各 poll で onWindow を呼び、true が返るか中断されたら done=true で走査全体を打ち切る。
+ * 描画 signature が変化し（= 再描画された）かつ row を 1 件以上検出できたら次の位置へ進む。
+ * rowCount 0 = ウィンドウ全体が未 hydration の空シェル（実 DOM 観測: 初期ロード直後は
+ * 全 row が空シェルで数秒後に描画される）。signature 変化だけで前進すると全 pass を
+ * 一瞬で消費して全件 missing になるため、row が検出できるまで deadline 内は poll し続ける。
+ */
+async function settleVirtualClipWindow(
+  scroller: HTMLElement,
+  options: VirtualWindowScanOptions,
+  prevSignature: string | null,
+  onWindow: () => Promise<boolean> | boolean,
+): Promise<{ done: boolean; signature: string | null }> {
+  const deadline = Date.now() + options.hydrationWaitMs;
+  for (;;) {
+    await sleep(options.renderWaitMs);
+    if (options.isAborted()) {
+      return { done: true, signature: prevSignature };
+    }
+    if (await onWindow()) {
+      return { done: true, signature: prevSignature };
+    }
+    const { signature, rowCount } = computeClipWindowSignature(scroller);
+    if (signature !== prevSignature && rowCount > 0) {
+      return { done: false, signature };
+    }
+    if (Date.now() >= deadline) {
+      return { done: false, signature: prevSignature };
+    }
+  }
+}
+
 async function scanVirtualClipWindows(
   scroller: HTMLElement,
   options: VirtualWindowScanOptions,
   onWindow: () => Promise<boolean> | boolean,
 ): Promise<void> {
-  const { isAborted, renderWaitMs, hydrationWaitMs } = options;
   let prevSignature: string | null = null;
   let pos = 0;
   for (;;) {
-    if (isAborted()) {
+    if (options.isAborted()) {
       return;
     }
-    const maxScrollBefore = Math.max(
-      0,
-      scroller.scrollHeight - scroller.clientHeight,
+    scroller.scrollTop = Math.min(
+      pos,
+      Math.max(0, scroller.scrollHeight - scroller.clientHeight),
     );
-    scroller.scrollTop = Math.min(pos, maxScrollBefore);
     scroller.dispatchEvent(new Event("scroll"));
 
-    const hydrationDeadline = Date.now() + hydrationWaitMs;
-    for (;;) {
-      await sleep(renderWaitMs);
-      if (isAborted()) {
-        return;
-      }
-      if (await onWindow()) {
-        return;
-      }
-      const { signature, rowCount } = computeClipWindowSignature(scroller);
-      // rowCount 0 = ウィンドウ全体が未 hydration の空シェル（実 DOM 観測: 初期ロード直後は
-      // 全 row が空シェルで数秒後に描画される）。signature 変化だけで前進すると全 pass を
-      // 一瞬で消費して全件 missing になるため、row が検出できるまで deadline 内は poll し続ける。
-      if (signature !== prevSignature && rowCount > 0) {
-        prevSignature = signature;
-        break;
-      }
-      if (Date.now() >= hydrationDeadline) {
-        break;
-      }
+    const settled = await settleVirtualClipWindow(
+      scroller,
+      options,
+      prevSignature,
+      onWindow,
+    );
+    if (settled.done) {
+      return;
     }
+    prevSignature = settled.signature;
 
     // ページネーション成長 (#2043): maxScroll はここで再計算する（ループ不変にしない）。
     const maxScroll = Math.max(
