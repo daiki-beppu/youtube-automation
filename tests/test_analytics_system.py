@@ -92,6 +92,11 @@ def stub_analytics_boundaries(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         YouTubeAnalyticsCollector,
+        "get_traffic_source_detail",
+        lambda self, start, end, source_type: [{"detail": "lofi music", "views": 30, "watch_time_minutes": 90}],
+    )
+    monkeypatch.setattr(
+        YouTubeAnalyticsCollector,
         "get_device_analytics",
         lambda self, start, end: {"devices": {"TV": {"views": 25}}},
     )
@@ -463,6 +468,9 @@ class TestMainDepth:
         assert payload["collection_depth"] == "standard"
         assert "by_country" not in payload["audience"]
         assert "retention" not in payload
+        assert payload["traffic_sources"]["search_terms"] == [
+            {"detail": "lofi music", "views": 30, "watch_time_minutes": 90}
+        ]
 
     def test_unknown_depth_is_rejected_before_collection(self, monkeypatch, stub_analytics_boundaries):
         """choices 外の depth は argparse が exit 2 で拒否する。"""

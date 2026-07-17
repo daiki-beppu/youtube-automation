@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(analytics)`: 収集済みの traffic_sources / audience.by_device / YT_SEARCH 検索語を分析経路に接続した。`yt-analytics` の standard 以上で `get_traffic_source_detail("YT_SEARCH")` を呼び検索語トップ N を `traffic_sources.search_terms` へ保存し、スナップショット横断の流入源シェア推移・デバイス別集計・検索語トップ N を JSON で返す `yt-traffic-trend` CLI（`--top-search` / `--text`）を追加した。`/analytics-analyze` は `yt-traffic-trend` を 4 番目の必須 CLI とし、分析項目 6「流入源・デバイス分析」と validator の 4 CLI evidence 契約を追加した（#1804）。
+
 - `chore(extensions)`: suno-helper / distrokid-helper の TypeScript を 7.0.2 に固定し、pnpm 11.12.0（Nix extensions shell 契約）で両 lockfile を正規再生成した。TS 7 で削除された `baseUrl` を両 tsconfig から除去し（`paths` は相対形式のまま）、suno-helper は `types: ["chrome"]` で chrome グローバル型を明示 include。TypeScript 7.0.2 固定・lockfile 整合・削除済みオプション不使用は契約テスト（tests/test_extension_typescript_contract.py）で機械担保する（#2014）。
+
 - `fix(collection-serve)`: `POST /collections/<id>/downloaded` が期待数未満の部分 ZIP（Suno が一部 entry で 1 clip しか生成しないケース）を 500 で拒否せず、配置済みファイルを受理して warning 付き 200 を返すようにした。workflow-state には `planning.music.actual_file_count` / `missing_file_count` を機械可読に記録し、`assets.music_downloaded=true` と collections index の `status=downloaded` へ貫通させる。suno-helper は warning を progress 通知に表示する。0 件配置・壊れた ZIP の 500 契約は維持（#1913）。
 
 - `feat(analytics)`: `yt-thumbnail-correlate` に有意性検定（両側 p 値）・Benjamini-Hochberg 多重比較補正・`significant` 判定を追加し、最小サンプル数の既定を 10 に引き上げた（n<10 は「サンプル不足で判定不能」を明示）。有意でない相関には断定的な解釈文を出さない。`--metric` 未指定で CTR が欠測のチャンネルでは views に自動フォールバックし、出力 JSON の `metric_fallback` に理由を残す。`/analytics-analyze` に `significant: false` の相関を方針根拠に使わない注記を追加した（#1801）。
