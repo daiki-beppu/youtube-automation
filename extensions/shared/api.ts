@@ -659,11 +659,16 @@ async function postJsonWithServeToken(
   return res;
 }
 
+/** POST /collections/:id/downloaded の応答 (#1913)。部分完了時のみ warning が入る。 */
+export interface PostDownloadedResult {
+  warning: string | null;
+}
+
 export async function postDownloaded(
   baseUrl: string,
   collectionId: string,
   payload: DownloadedPayload,
-): Promise<void> {
+): Promise<PostDownloadedResult> {
   if (payload.file_count > 0 && !payload.download_path) {
     throw new Error("file_count が正数の場合は download_path が必要です");
   }
@@ -675,4 +680,21 @@ export async function postDownloaded(
   if (!res.ok) {
     throw new Error(`POST downloaded failed: ${res.status} ${res.statusText}`);
   }
+  // サーバーは部分完了（期待数未満の配置）を warning 付き 200 で返す (#1913)。
+  // body が JSON でない・warning が無い場合は完全成功として扱う
+  let warning: string | null = null;
+  try {
+    const data: unknown = await res.json();
+    if (
+      data &&
+      typeof data === "object" &&
+      "warning" in data &&
+      typeof (data as Record<string, unknown>).warning === "string"
+    ) {
+      warning = (data as Record<string, string>).warning;
+    }
+  } catch {
+    warning = null;
+  }
+  return { warning };
 }
