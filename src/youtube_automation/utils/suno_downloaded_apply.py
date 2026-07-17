@@ -66,7 +66,7 @@ def apply_downloaded_artifacts(
                 music_backup_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-apply-backup-"))
                 shutil.copytree(music_dir, music_backup_dir / "02-Individual-music")
             restore_music_on_error = True
-            placed_count = extract_downloaded_archive(coll_dir, payload.download_path, expected_count)
+            placed_count = extract_downloaded_archive(coll_dir, payload.download_path)
             placed_count_for_response = placed_count
             file_count = placed_count
 
