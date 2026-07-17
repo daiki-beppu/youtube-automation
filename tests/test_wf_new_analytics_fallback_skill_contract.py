@@ -331,6 +331,30 @@ def test_wf_new_overview_declares_minimal_mode_extra_pause() -> None:
     assert "minimal mode: テーマ / ジャンル / 雰囲気をユーザーに確認" in phase_1
 
 
+def test_wf_new_passes_open_insights_without_blocking_fallback_modes() -> None:
+    text = _read(_WF_NEW_SKILL_MD)
+    phase_1 = _section(text, "### Phase 1: 企画（自動実行 + 入力モードに応じた一時停止）")
+    phase_2 = _section(text, "### Phase 2: 選択後の順次オーケストレーション")
+    cross_references = _section(text, "## Cross References")
+
+    assert "data/insights.jsonl" in phase_1
+    assert "jq -c 'select(.status == \"open\")' data/insights.jsonl" in phase_1
+    assert "validate_insights.py" in phase_1
+    assert "前提ガードにしない" in phase_1
+    assert "蓄積済み insights の選別と受け渡しだけ" in phase_1
+    assert "analytics / benchmark fallback / minimal mode のフローを阻害せず継続" in phase_1
+    assert "`/flop-analysis`（postmortem 生成・検証）を自動実行しない" in phase_1
+    assert "1-b で選別した open insights" in phase_1
+
+    assert "open insights の消費と status 反映" in phase_2
+    assert "`adopted`" in phase_2
+    assert "`dismissed`" in phase_2
+    assert "判定規則を `/wf-new` 側で再定義しない" in phase_2
+
+    assert "data/insights.jsonl" in cross_references
+    assert "insights-entry.schema.json" in cross_references
+
+
 def test_wf_new_declares_sequential_child_skill_orchestration() -> None:
     text = _read(_WF_NEW_SKILL_MD)
     rules = _section(text, "### 呼び出しルール")
