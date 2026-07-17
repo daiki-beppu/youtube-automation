@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `chore(extensions)`: suno-helper / distrokid-helper の TypeScript を 7.0.2 に固定し、pnpm 11.12.0（Nix extensions shell 契約）で両 lockfile を正規再生成した。TS 7 で削除された `baseUrl` を両 tsconfig から除去し（`paths` は相対形式のまま）、suno-helper は `types: ["chrome"]` で chrome グローバル型を明示 include。TypeScript 7.0.2 固定・lockfile 整合・削除済みオプション不使用は契約テスト（tests/test_extension_typescript_contract.py）で機械担保する（#2014）。
+
 - `feat(dx)`: `yt-skills lint [<skill>...]` を追加し、SKILL.md frontmatter の検証（strict YAML パース / name・description 非空 / description の double-quote）を pytest 全体実行なしで秒単位で回せるようにした。検証ロジックは CLI 側を単一ソースとし、既存の回帰テスト（tests/test_skill_frontmatter_yaml.py）は同ロジックを呼ぶ形に寄せた（#2096）。
 
 - `fix(devshell)`: 並列 run 間の共有 TMPDIR 競合（macOS の per-user TMPDIR を複数 worktree の並行 pytest が奪い合い、conftest の stale cleanup 等が run 間で干渉しうる問題）を診断し、devShell 入場時に `.lefthook/worktree-tmpdir.sh` が共有 TMPDIR 配下の worktree ごとの決定的サブディレクトリへ `TMPDIR` を分離するようにした。takt core が注入する checkout 内 TMPDIR は尊重し、解決失敗時は共有 TMPDIR のまま fail-open で続行する（#2088）。
