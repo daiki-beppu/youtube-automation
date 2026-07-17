@@ -113,9 +113,14 @@ Step 1（企画）を自動実行中...
 | benchmark fallback mode | `reports/analysis_*.md` が存在せず、`data/benchmark_*.json` が存在する | ベンチマークデータ + config |
 | minimal mode | `reports/analysis_*.md` と `data/benchmark_*.json` がどちらも存在しない | `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config。`true` は `/benchmark` を案内して停止 |
 
+1-b. **蓄積 insights の収集（open エントリ、gate ではない）** — 入力モードの予備確認と合わせて、メインは `data/insights.jsonl` の存在を確認する。存在する場合は `uv run python3 .claude/skills/analytics-analyze/references/validate_insights.py data/insights.jsonl` が exit 0 であることを確認し、`jq -c 'select(.status == "open")' data/insights.jsonl` で open エントリだけを選別して Step 2 の `/collection-ideate` 委譲プロンプトへ企画入力として渡す。`/wf-new` が担うのは蓄積済み insights の選別と受け渡しだけで、学びの生成・検証（`/flop-analysis` の分析ロジック）や企画生成（`/collection-ideate` のロジック）を再実装しない。
+
+   - `data/insights.jsonl` が存在しない、validator が失敗する、または open エントリが 0 件の場合は、insights なしとして既存の analytics / benchmark fallback / minimal mode のフローを阻害せず継続する（前提ガードにしない。validator 失敗時は失敗内容を警告表示だけする）
+   - `/wf-new` は `/flop-analysis`（postmortem 生成・検証）を自動実行しない。公開済み動画の分析・検証は `/flop-analysis` の既存責務に残り、ここでは還元済みエントリを読むだけとする
+
 入力モード、JSON ペア検証、stale 判定、自動更新、再検証の完全な定義は `/collection-ideate` の `references/freshness-rules.md::stale report の自動更新` を正とする。`.claude/skills/collection-ideate/config.default.yaml` + `config/skills/collection-ideate.yaml` の deep-merge も同 skill に委譲し、ここでは判定ロジックや更新シーケンスを再定義しない。subagent が stale を検出した場合は SSOT の自動更新シーケンスを完了してから同日付ペア、validator、鮮度、入力モードを再判定し、成功時は中断せず同じ企画フローを続ける。skill 呼び出しまたは再検証に失敗した場合は、失敗した skill / 検証項目、理由、`/wf-new` を再実行できる再開条件を表示し、古い report を採用せず停止する。fresh / benchmark fallback mode / minimal mode では stale 更新用の Analytics skill を追加で呼ばない。`ttp_mode: false` の minimal mode ではテーマ / ジャンル / 雰囲気と、プレビューを生成する場合の候補・枚数・コスト承認を subagent が選択肢を返した後にメインが確定する。`true` の minimal mode では直接入力を確認せず、`/benchmark` を案内して停止する。
 
-2. **Agent ツールで `/collection-ideate` を委譲** — 入力候補パス、`ttp_mode`、プレビュー生成条件を列挙し、入力モード判定、SSOT に従う stale 自動更新、再検証、企画候補と承認済みプレビュー生成を同じ subagent 作業に実行させる。入力モードはメインが事前確定せず、subagent が再検証後の値を返す。`ttp_mode: false` の minimal mode だけで使う直接入力は、subagent が同 mode を返した後にメインが確認し、再開入力として渡す。AskUserQuestion と state 書き込みは禁止する。途中で追加承認が必要になった場合は生成せずメインへ返す
+2. **Agent ツールで `/collection-ideate` を委譲** — 入力候補パス、`ttp_mode`、プレビュー生成条件、1-b で選別した open insights（存在する場合）を列挙し、入力モード判定、SSOT に従う stale 自動更新、再検証、企画候補と承認済みプレビュー生成を同じ subagent 作業に実行させる。入力モードはメインが事前確定せず、subagent が再検証後の値を返す。`ttp_mode: false` の minimal mode だけで使う直接入力は、subagent が同 mode を返した後にメインが確認し、再開入力として渡す。AskUserQuestion と state 書き込みは禁止する。途中で追加承認が必要になった場合は生成せずメインへ返す
    - analytics mode: 日次収集データ + 構造化分析 JSON + ベンチマークを基に分析 + ペルソナ別候補を生成
    - benchmark fallback mode: 自チャンネル分析をスキップし、ベンチマークデータ + config から初回候補を生成
    - minimal mode: テーマ / ジャンル / 雰囲気をユーザーに確認し、その直接入力 + config から初回候補を生成する既存挙動は `ttp_mode: false` の場合だけ適用。`true` は候補生成せず `/benchmark` を案内して停止
@@ -132,6 +137,8 @@ Step 1（企画）を自動実行中...
 ### Phase 2: 選択後の順次オーケストレーション
 
 ユーザーが企画を選択したら、以下を上から順に実行する。途中で失敗したら、失敗したステップの次アクションを表示して停止する。
+
+Phase 1 で open insights を渡していた場合は、企画選択の直後にメインが `/collection-ideate` の「open insights の消費と status 反映」の規則に従って `data/insights.jsonl` の該当エントリの `status` を更新する（採用企画の根拠に引用 → `adopted`、検討の上見送り → `dismissed`、未検討は `open` のまま）。判定規則を `/wf-new` 側で再定義しない。
 
 #### 2a. コレクション初期化（ディレクトリ + workflow-state.json）
 
@@ -326,6 +333,7 @@ Suno-helper server: ✅ http://<channel>.localhost:<PORT> 起動済み / ⚠️ 
 ## Cross References
 
 - 企画生成: `/collection-ideate` スキル
+  - 蓄積 insights: `data/insights.jsonl` の open エントリ（書き手は `/analytics-analyze` と `/flop-analysis`、schema は `.claude/skills/analytics-analyze/references/insights-entry.schema.json` が単一ソース）を Phase 1 で選別して渡す。無ければ渡さずに続行
   - analytics mode: validator 成功済みの同日付 `reports/analysis_*.md` / `.json` ペア + ベンチマーク + config を使用
   - benchmark fallback mode: `data/benchmark_*.json` + config のみで初回企画を生成
   - minimal mode: `ttp_mode: false` はユーザー直接入力（テーマ / ジャンル / 雰囲気）+ config のみで初回企画を生成。`true` は `/benchmark` を案内して停止
