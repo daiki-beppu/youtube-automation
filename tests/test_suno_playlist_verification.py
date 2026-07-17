@@ -678,6 +678,92 @@ def test_cli_music_directory_reports_unprefixed_audio_filename_as_unknown(tmp_pa
     assert err == ""
 
 
+@pytest.mark.parametrize("duplicate_name", ["Dim the Lights (1).mp3", "Dim the Lights_1.mp3"])
+def test_cli_renames_noncanonical_duplicate_basenames_before_verification(
+    tmp_path, monkeypatch, capsys, duplicate_name
+):
+    """Given Suno UI 手動 DL 由来の重複ベース名ファイル（`Title.mp3` + `Title (1).mp3` / `Title_1.mp3`）
+    When --music-dir で CLI main を実行する
+    Then suno-prompts.json と照合して正準形 `NN{a|b}-Title.ext` へリネームしてから突合し exit 0。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "Dim the Lights.mp3").touch()
+    (music_dir / duplicate_name).touch()
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert code == 0
+    assert f"{ENTRIES[0]}: 2 clip(s)" in out
+    assert "→ OK" in out
+    assert (music_dir / "01a-Dim the Lights.mp3").is_file()
+    assert (music_dir / "01b-Dim the Lights.mp3").is_file()
+    assert "RENAMED: Dim the Lights.mp3 -> 01a-Dim the Lights.mp3" in err
+    assert f"RENAMED: {duplicate_name} -> 01b-Dim the Lights.mp3" in err
+
+
+def test_cli_renames_noncanonical_file_into_free_variant_next_to_canonical_clip(tmp_path, monkeypatch, capsys):
+    """Given 正準形 a variant が既にあり、同一 entry の非正準形ファイルが 1 件ある
+    When --music-dir で CLI main を実行する
+    Then 空いている b variant へリネームして 2 clip として exit 0。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / f"01a-{ENTRIES[0]}.mp3").touch()
+    (music_dir / "Dim the Lights.mp3").touch()
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert code == 0
+    assert f"{ENTRIES[0]}: 2 clip(s)" in out
+    assert (music_dir / "01b-Dim the Lights.mp3").is_file()
+    assert "RENAMED: Dim the Lights.mp3 -> 01b-Dim the Lights.mp3" in err
+
+
+def test_cli_does_not_rename_unmatched_noncanonical_file_and_reports_unknown(tmp_path, monkeypatch, capsys):
+    """Given どの entry とも照合できない非正準形ファイルが混入している
+    When --music-dir で CLI main を実行する
+    Then silent にリネームせず unknown として報告し exit 1、ファイル名は元のまま残る。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / f"01a-{ENTRIES[0]}.mp3").touch()
+    (music_dir / f"01b-{ENTRIES[0]}.mp3").touch()
+    (music_dir / "ゆるやかな午後.mp3").touch()
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert code == 1
+    assert "ゆるやかな午後.mp3" in out
+    assert "→ NG" in out
+    assert (music_dir / "ゆるやかな午後.mp3").is_file()
+    assert "RENAMED" not in err
+
+
+def test_cli_fails_without_partial_rename_when_matched_files_exceed_variants(tmp_path, monkeypatch, capsys):
+    """Given 同一 entry へ照合される非正準形ファイルが variant (a/b) の空きを超えて 3 件ある
+    When --music-dir で CLI main を実行する
+    Then 部分リネームせずエラーで exit 1、全ファイルが元の名前のまま残る。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    originals = ["Dim the Lights.mp3", "Dim the Lights (1).mp3", "Dim the Lights (2).mp3"]
+    for name in originals:
+        (music_dir / name).touch()
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert code == 1
+    assert out == ""
+    assert "variant (a/b) の空きを超えています" in err
+    for name in originals:
+        assert (music_dir / name).is_file()
+
+
 @pytest.mark.parametrize("explicit_source", ["titles", "titles-file"])
 def test_cli_rejects_music_directory_with_explicit_title_source(tmp_path, monkeypatch, capsys, explicit_source):
     """Given --music-dir と既存の明示 title 入力を同時指定
