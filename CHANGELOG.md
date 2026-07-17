@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(dx)`: explicit setup 経路（`bash .lefthook/setup-worktree.sh [<command>...]`）の依存同期を fail-closed 化した。devShell 入場後に新設の `.lefthook/sync-deps.sh` が `uv sync` を明示実行し、失敗時は後続コマンドを実行せず exit 非 0 で停止する。対話 shell（direnv / `nix develop` の shellHook）は従来どおり warning 継続で入場をブロックしない（#2125）。
+
 - `feat(preflight)`: worktree / takt clone の環境不備（checkout 種別・Nix eval・lock drift・Git identity・lefthook policy）を実装着手前に read-only で検査し、`git_commit_identity` / `nix_eval` / `lock_drift` / `hook_policy` の分類キー付きで報告する CLI `yt-preflight` を追加した。identity の値は出力に含めず、lefthook は `YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1` の明示 skip のみ合格として曖昧な未導入を不合格にする（#2124）。
 
 - `chore(extensions)`: suno-helper と distrokid-helper の full gate / Playwright e2e を維持し、Extensions CI が各 package の既存 `pnpm lint` 入口から共通設定の Oxlint を実行する接続契約を追加した。契約テスト自体の変更でも Extensions CI が起動するよう path filter を接続した（#2020）。
