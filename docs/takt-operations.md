@@ -57,6 +57,7 @@ observability:
 - **手動 `git worktree add`**: `$REPO_ROOT/.worktrees/<slug>/`（リポジトリ内・gitignore 済み・`parallel` スキルと共通）
 - `<repo-parent>/automation-worktrees/` 等のリポジトリ外手動置き場は非推奨（過去の残骸のみ）
 - 親 checkout / worktree の初回は `bash .lefthook/setup-worktree.sh` を実行する。direnv があれば `.envrc` を allow し、なければ `nix develop` を使って、shellHook と `.lefthook/install.sh` により fail-closed hook wrapper まで再生成する。takt agent / 非対話 shell のコマンドは `bash .lefthook/setup-worktree.sh uv run pytest` のようにラッパー経由で実行する。診断は `bash .lefthook/setup-worktree.sh sh -c 'command -v lefthook && lefthook version'`、直接の Nix 再生成は `nix develop --command bash .lefthook/install.sh`。
+- devShell 入場時に shellHook が `.lefthook/worktree-tmpdir.sh` で `TMPDIR` を worktree ごとに分離するため、concurrency 5 の並列 run が共有 TMPDIR で干渉しない（issue #2088）。takt worker は takt core が注入する `<worktree>/.takt/.runtime/tmp` が優先され、そのまま尊重される。詳細は `docs/development.md` の「TMPDIR の worktree 分離」。
 
 ## takt 設定の継承構造
 

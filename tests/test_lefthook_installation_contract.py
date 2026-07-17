@@ -9,6 +9,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _FLAKE_PATH = _REPO_ROOT / "flake.nix"
 _LEFTHOOK_INSTALL_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "install.sh"
 _WORKTREE_SETUP_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "setup-worktree.sh"
+_WORKTREE_TMPDIR_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "worktree-tmpdir.sh"
 _ENVRC_PATH = _REPO_ROOT / ".envrc"
 _LITE_WORKFLOW_PATH = _REPO_ROOT / ".takt" / "workflows" / "lite.yaml"
 _LEFTHOOK_CONFIG_PATH = _REPO_ROOT / "lefthook.yml"
@@ -798,6 +799,11 @@ def test_worktree_environment_contract_is_wired_into_lite_steps_and_docs() -> No
     assert '" "sha256-' in envrc
     assert "nix_direnv_version" in envrc
     assert envrc.rstrip().splitlines()[-1] == "use flake"
+    # nix-direnv は cached dev-env 適用時に TMPDIR を無視リストで除外するため、
+    # direnv 経路の TMPDIR 分離は .envrc 側で export する（issue #2088）
+    assert 'bash "$PWD/.lefthook/worktree-tmpdir.sh"' in envrc
+    assert 'export TMPDIR="$worktree_tmpdir"' in envrc
+    assert envrc.index("worktree-tmpdir.sh") < envrc.index("use flake")
     workflow = _read(_LITE_WORKFLOW_PATH)
     setup_instruction = "最初に `bash .lefthook/setup-worktree.sh` を実行"
     wrapped_command_instruction = "`bash .lefthook/setup-worktree.sh <command> [args...]` 経由"
@@ -808,6 +814,155 @@ def test_worktree_environment_contract_is_wired_into_lite_steps_and_docs() -> No
         content = _read(document)
         assert "bash .lefthook/setup-worktree.sh" in content
         assert ".envrc" in content
+
+
+def _run_worktree_tmpdir_script(workdir: Path, tmpdir: str | None) -> subprocess.CompletedProcess[str]:
+    env = {**os.environ}
+    env.pop("TMPDIR", None)
+    if tmpdir is not None:
+        env["TMPDIR"] = tmpdir
+    return subprocess.run(
+        ["bash", str(_WORKTREE_TMPDIR_SCRIPT_PATH)],
+        cwd=workdir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_worktree_tmpdir_script_creates_deterministic_per_worktree_subdirectory(tmp_path: Path) -> None:
+    # 共有の per-user TMPDIR（macOS の /var/folders 等）を指している場合は
+    # 共有 TMPDIR 配下に worktree ごとの決定的なサブディレクトリを作成して出力する
+    # （issue #2088）。checkout 内へ置くと pytest tmp_path が git checkout 内部に
+    # 着地し「git checkout の外」前提の契約テストが壊れるため、checkout 外に切る
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    shared_tmpdir = tmp_path.parent / "shared-tmp"
+    shared_tmpdir.mkdir(exist_ok=True)
+
+    result = _run_worktree_tmpdir_script(tmp_path, str(shared_tmpdir))
+
+    assert result.returncode == 0
+    isolated = Path(result.stdout.strip())
+    assert isolated.parent == shared_tmpdir
+    assert isolated.name.startswith("yt-automation-tmp-")
+    assert tmp_path.name[:32] in isolated.name
+    assert isolated.is_dir()
+    assert stat.S_IMODE(isolated.stat().st_mode) == 0o700
+    assert not isolated.is_relative_to(tmp_path)
+
+
+def test_worktree_tmpdir_script_separates_two_worktrees_under_shared_tmpdir(tmp_path: Path) -> None:
+    # 並列 run の干渉源は「複数 worktree が同一 TMPDIR を共有すること」なので、
+    # 同じ共有 TMPDIR から解決しても worktree ごとに別ディレクトリへ分かれること
+    shared_tmpdir = tmp_path / "shared-tmp"
+    shared_tmpdir.mkdir()
+    first = tmp_path / "worktree-a"
+    second = tmp_path / "worktree-b"
+    for checkout in (first, second):
+        subprocess.run(["git", "init", str(checkout)], check=True, capture_output=True, text=True)
+
+    first_result = _run_worktree_tmpdir_script(first, str(shared_tmpdir))
+    second_result = _run_worktree_tmpdir_script(second, str(shared_tmpdir))
+
+    assert first_result.returncode == 0
+    assert second_result.returncode == 0
+    assert first_result.stdout != second_result.stdout
+    assert Path(first_result.stdout.strip()).parent == shared_tmpdir
+    assert Path(second_result.stdout.strip()).parent == shared_tmpdir
+
+
+def test_worktree_tmpdir_script_is_idempotent_across_reentry(tmp_path: Path) -> None:
+    # shellHook は devShell 入場のたびに実行される。前回出力を TMPDIR に持った
+    # まま再入場してもネストせず同じパスを返すこと（issue #2088）
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    shared_tmpdir = tmp_path.parent / "shared-tmp"
+    shared_tmpdir.mkdir(exist_ok=True)
+
+    first = _run_worktree_tmpdir_script(tmp_path, str(shared_tmpdir))
+    assert first.returncode == 0
+    second = _run_worktree_tmpdir_script(tmp_path, first.stdout.strip())
+
+    assert second.returncode == 0
+    assert second.stdout == first.stdout
+
+
+def test_worktree_tmpdir_script_respects_checkout_local_tmpdir(tmp_path: Path) -> None:
+    # takt core が注入する <clone>/.takt/.runtime/tmp のような checkout 内の
+    # 隔離済み TMPDIR は上書きせず、そのまま出力する（issue #2088）
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    takt_runtime_tmpdir = tmp_path / ".takt" / ".runtime" / "tmp"
+    takt_runtime_tmpdir.mkdir(parents=True)
+
+    result = _run_worktree_tmpdir_script(tmp_path, str(takt_runtime_tmpdir))
+
+    assert result.returncode == 0
+    assert result.stdout == f"{takt_runtime_tmpdir}\n"
+
+
+def test_worktree_tmpdir_script_resolves_root_from_subdirectory(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    subdirectory = tmp_path / "src" / "nested"
+    subdirectory.mkdir(parents=True)
+    shared_tmpdir = tmp_path.parent / "shared-tmp"
+    shared_tmpdir.mkdir(exist_ok=True)
+
+    from_root = _run_worktree_tmpdir_script(tmp_path, str(shared_tmpdir))
+    from_subdirectory = _run_worktree_tmpdir_script(subdirectory, str(shared_tmpdir))
+
+    assert from_root.returncode == 0
+    assert from_subdirectory.returncode == 0
+    assert from_subdirectory.stdout == from_root.stdout
+
+
+def test_worktree_tmpdir_script_isolates_linked_worktree_from_parent(tmp_path: Path) -> None:
+    # linked worktree では親 checkout と同じディレクトリへ合流せず、worktree 自身の
+    # root から導出した別ディレクトリへ分かれる（worktree ごとの分離が本 issue の
+    # 目的。issue #2088）
+    parent = tmp_path / "parent-checkout"
+    worktree = tmp_path / "linked-worktree"
+    subprocess.run(["git", "init", str(parent)], check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "-C", str(parent), "worktree", "add", "--orphan", str(worktree)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    shared_tmpdir = tmp_path / "shared-tmp"
+    shared_tmpdir.mkdir()
+
+    parent_result = _run_worktree_tmpdir_script(parent, str(shared_tmpdir))
+    worktree_result = _run_worktree_tmpdir_script(worktree, str(shared_tmpdir))
+
+    assert parent_result.returncode == 0
+    assert worktree_result.returncode == 0
+    assert worktree_result.stdout != parent_result.stdout
+    assert "linked-worktree" in worktree_result.stdout
+
+
+def test_worktree_tmpdir_script_fails_outside_git_checkout(tmp_path: Path) -> None:
+    result = subprocess.run(
+        ["bash", str(_WORKTREE_TMPDIR_SCRIPT_PATH)],
+        cwd=tmp_path,
+        env={**os.environ, "GIT_CEILING_DIRECTORIES": str(tmp_path.parent)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert "error: run this script from a Git checkout or worktree." in result.stderr
+
+
+def test_dev_shell_exports_worktree_isolated_tmpdir() -> None:
+    # shellHook（direnv / nix develop 両入口の収束点）が worktree-tmpdir.sh を配線し、
+    # 失敗時は共有 TMPDIR のまま fail-open で続行する（issue #2088）
+    flake = _read(_FLAKE_PATH)
+
+    assert '"${./.}/.lefthook/worktree-tmpdir.sh"' in flake
+    assert 'export TMPDIR="$worktree_tmpdir"' in flake
+    assert "共有 TMPDIR のまま続行します" in flake
 
 
 def test_direnv_cache_is_gitignored() -> None:
