@@ -82,6 +82,16 @@ jq -c 'select(.status == "open" and .lever == "thumbnail")' data/insights.jsonl
 | `$ARGUMENTS` | テーマ・活動指定（省略可） | `/thumbnail fiddle playing` |
 | 未指定 | デフォルト活動で生成 | `/thumbnail` |
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| 画像生成（Gemini / OpenAI、`image_generation.provider` で切替） | 候補 1 枚あたり max_attempts × 1 call（既定 1、失敗時の内部リトライで最大 ×3） | max_attempts / 候補枚数 / 再生成回数。provider が codex / gemini_cli は API 経路外で課金なし |
+| 画像生成（textless 背景 main.png/jpg） | 承認後の再生成で +1 call | 再生成回数 |
+| Vertex AI Gemini Vision（yt-thumbnail-check） | 画像 1 枚 = 1 call | `self_check.enabled: false` なら 0 |
+
+- 上限 / 承認: 生成前に `confirm_cost()` が `cost_per_image_usd × attempts` を提示して y/N 確認する（`-y` でスキップ）。`self_check.enabled: false` で check をスキップできる。
+
 ## プロバイダー切り替え
 
 `config/skills/thumbnail.yaml` の `image_generation.provider` で選択する:
