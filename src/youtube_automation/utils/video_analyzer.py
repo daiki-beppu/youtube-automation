@@ -120,7 +120,7 @@ class VideoAnalyzer:
         """解析結果 JSON の保存先 `data_dir/video_analysis/<slug>/<video_id>.json` を返す。"""
         return self.data_dir / VIDEO_ANALYSIS_DIRNAME / target.slug / f"{target.video_id}.json"
 
-    def load_cached_json(self, target: VideoTarget) -> dict[str, Any] | None:
+    def load_cached_json(self, target: VideoTarget) -> dict | None:
         """既存の解析結果 JSON を読み込む。有効な結果がなければ None を返す。
 
         再実行時の Gemini 再課金を防ぐキャッシュ判定 (#1693)。以下はすべて
