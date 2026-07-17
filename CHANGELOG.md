@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(thumbnail)`: `/thumbnail` のテキスト描画既定を AI 焼き込みから決定的合成経路（`yt-thumbnail-text`）へ標準化した。標準フローは「textless 背景 `main.png/jpg` の生成・承認 → 実フォント（Pillow）合成で `thumbnail.jpg` 確定」の 2 段構成になり、書体の揺れが発生しない。`/channel-research` の `docs/benchmarks/thumbnail-text-profile.md` が存在する場合はフォント傾向 → ローカル日本語フォント選定（`overlay.font.title`）、テキスト内容パターン → コピー生成制約（行数・言語・文字数レンジ。競合固有文言は不使用）、配置傾向 → `overlay.layout.anchor` / margin へ変換して適用し、不在時はエラーにせず現行デフォルト値で続行する。AI 焼き込み経路は運用者が明示選択したときだけ使う fallback として残し改修しない（#1907）。
 
+- `feat(auth)`: OAuth 新規ブラウザ認証の `run_local_server()` にチャンネル名（`meta.channel_short`）入りの `authorization_prompt_message` / `success_message` を渡し、複数チャンネル並列運用でトークン失効が重なった際にターミナルログと認証完了ページのどちらからも対象チャンネルを判別できるようにした。prompt には認証 URL（redirect 先ポート入り）も含め、config 読込不可時はディレクトリ名へフォールバックする（#1966）。
+
 - `chore(extensions)`: TypeScript 7.0.2 固定後の suno-helper / distrokid-helper を実経路（lint / format:check / compile / unit / build / Playwright e2e / CI Typecheck 契約テスト）で回帰検証した。TS 7 起因の互換修正は不要で、唯一再現した失敗は suno-helper の overlay e2e が開発マシンで稼働中の yt-collection-serve（port 7873/7872）を発見して「ローカル配信元なし」前提が破れる分離不足だったため、`--host-resolver-rules` で discovery 先ホストを遮断して環境非依存にした（#2015）。
 
 - `feat(analytics)`: 収集済みの traffic_sources / audience.by_device / YT_SEARCH 検索語を分析経路に接続した。`yt-analytics` の standard 以上で `get_traffic_source_detail("YT_SEARCH")` を呼び検索語トップ N を `traffic_sources.search_terms` へ保存し、スナップショット横断の流入源シェア推移・デバイス別集計・検索語トップ N を JSON で返す `yt-traffic-trend` CLI（`--top-search` / `--text`）を追加した。`/analytics-analyze` は `yt-traffic-trend` を 4 番目の必須 CLI とし、分析項目 6「流入源・デバイス分析」と validator の 4 CLI evidence 契約を追加した（#1804）。
