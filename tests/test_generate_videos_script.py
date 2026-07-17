@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -158,6 +159,29 @@ esac
     return bin_dir
 
 
+_SHARED_STUB_BIN: Path | None = None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _shared_stub_bin(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
+    """stub 実行ファイル群を session で 1 回だけ作成して全テストで共有する。
+
+    #2092: macOS では新規作成した実行ファイルの初回 exec に Gatekeeper 検査で
+    数百 ms かかるため、テストごとに stub を作り直すと 1 テストあたり
+    0.5〜0.8s のオーバーヘッドになる。stub は環境変数と引数だけで挙動が決まり
+    bin ディレクトリ側に状態を持たないので、session 全体で安全に共有できる。
+    """
+    global _SHARED_STUB_BIN
+    _SHARED_STUB_BIN = _create_stub_bin(tmp_path_factory.mktemp("shared-stub"))
+    yield _SHARED_STUB_BIN
+    _SHARED_STUB_BIN = None
+
+
+def _shared_stub_bin_dir() -> Path:
+    assert _SHARED_STUB_BIN is not None, "_shared_stub_bin session fixture must provision the stub bin"
+    return _SHARED_STUB_BIN
+
+
 def _run_generate_videos(
     tmp_path: Path,
     stream_output: str,
@@ -172,7 +196,7 @@ def _run_generate_videos(
         collection = _create_collection(tmp_path, master_filename=master_filename)
     if not with_loop:
         (collection / "10-assets" / "loop.mp4").unlink(missing_ok=True)
-    bin_dir = _create_stub_bin(tmp_path)
+    bin_dir = _shared_stub_bin_dir()
     ffmpeg_log = tmp_path / "ffmpeg.log"
     env = os.environ.copy()
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
@@ -606,7 +630,6 @@ def test_static_bake_cache_reuses_short_clip(tmp_path: Path) -> None:
     )
     assert first_result.returncode == 0, first_result.stdout + first_result.stderr
 
-    shutil.rmtree(tmp_path / "bin")
     ffmpeg_log.unlink()
     second_result, second_log = _run_generate_videos(
         tmp_path,
@@ -1016,7 +1039,7 @@ def test_master_mix_takes_precedence_over_master(tmp_path: Path) -> None:
     # `master.mp3` も追加で配置 → `master-mix.wav` が優先されることを検証
     (collection / "01-master" / "master.mp3").write_bytes(b"fake-audio-mp3")
 
-    bin_dir = _create_stub_bin(tmp_path)
+    bin_dir = _shared_stub_bin_dir()
     ffmpeg_log = tmp_path / "ffmpeg.log"
     env = os.environ.copy()
     env["PATH"] = f"{bin_dir}:{env['PATH']}"
