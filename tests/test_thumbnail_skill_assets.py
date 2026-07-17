@@ -1080,6 +1080,9 @@ def test_thumbnail_docs_state_provider_agnostic_ttp_policy() -> None:
     assert "TTP 生成方針は provider によらず共通" in skill
     assert "TTP 方針は provider 共通" in prompting
     assert "チャンネル側 override" in prompting
+    # #2071: gemini_cli 経路も同じ diff_prompt_template と構築手順を共有することを明示
+    assert "`provider: gemini_cli`" in skill
+    assert "同じ `diff_prompt_template` とこの構築手順を共有" in skill
 
 
 def test_thumbnail_default_config_codex_template_matches_skill_md_block() -> None:
