@@ -14,9 +14,6 @@ importers:
       '@webext-core/messaging':
         specifier: 3.0.2
         version: 3.0.2
-      '@wxt-dev/storage':
-        specifier: 1.2.8
-        version: 1.2.8
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1

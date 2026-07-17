@@ -6,8 +6,11 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, test } from "vitest";
 
-const oxlint = fileURLToPath(
-  new URL("../node_modules/.bin/oxlint", import.meta.url)
+// ".bin" を含む specifier 風文字列は fallow が依存 import と誤認するため join で組み立てる。
+const oxlint = join(
+  fileURLToPath(new URL("../node_modules", import.meta.url)),
+  ".bin",
+  "oxlint"
 );
 const config = fileURLToPath(
   new URL("../../oxlint.config.ts", import.meta.url)

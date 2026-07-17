@@ -6,10 +6,13 @@
     "**/dist/**",
     "**/node_modules/**",
     "**/playwright-report/**",
-    "**/test-results/**"
+    "**/test-results/**",
+    "oxfmt.config.ts",
+    "oxlint.config.ts"
   ],
   "audit": {
     "css": false,
-    "gate": "new-only"
+    "gate": "new-only",
+    "dupesBaseline": ".fallow-dupes-baseline.json"
   }
 }
