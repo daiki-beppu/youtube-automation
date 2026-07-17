@@ -42,6 +42,7 @@ bash .claude/skills/automation-release/references/verify-extensions.sh [<name>]
 | 目的 | コマンド |
 |---|---|
 | 依存インストール | `nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile` |
+| 共有 lint toolchain インストール（check / fix の前提） | `nix develop .#extensions --command pnpm -C extensions install --frozen-lockfile`（`oxlint.config.ts` / `oxfmt.config.ts` の ultracite import を `extensions/node_modules` で解決する） |
 | 開発（HMR） | `nix develop .#extensions --command pnpm -C extensions/suno-helper dev` |
 | 本番ビルド | `nix develop .#extensions --command pnpm -C extensions/suno-helper build`（`.output/chrome-mv3/` に MV3 拡張を生成） |
 | 型チェック | `nix develop .#extensions --command pnpm -C extensions/suno-helper compile` |

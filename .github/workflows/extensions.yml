@@ -35,6 +35,9 @@ jobs:
       - uses: cachix/install-nix-action@v30
       - name: Install dependencies
         run: nix develop .#extensions --command pnpm install --frozen-lockfile
+      - name: Install shared lint toolchain
+        working-directory: extensions
+        run: nix develop .#extensions --command pnpm install --frozen-lockfile
       - name: Fallow audit
         if: github.event_name == 'pull_request'
         env:
@@ -81,6 +84,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v30
       - name: Install dependencies
+        run: nix develop .#extensions --command pnpm install --frozen-lockfile
+      - name: Install shared lint toolchain
+        working-directory: extensions
         run: nix develop .#extensions --command pnpm install --frozen-lockfile
       - parallel:
           - name: Check (Oxlint + Oxfmt)

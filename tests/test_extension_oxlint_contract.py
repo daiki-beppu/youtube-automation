@@ -66,6 +66,17 @@ def test_helpers_share_ultracite_dependency_script_and_config_contract() -> None
 
     assert not (_EXTENSIONS_ROOT / ".oxlintrc.json").exists()
 
+    # 共有 config（oxlint.config.ts / oxfmt.config.ts）の ultracite import は
+    # extensions/node_modules で解決する（helper の node_modules へは届かないため必須）。
+    toolchain_package = _read_json(_EXTENSIONS_ROOT / "package.json")
+    toolchain_dev_dependencies = toolchain_package["devDependencies"]
+    assert isinstance(toolchain_dev_dependencies, dict)
+    assert toolchain_dev_dependencies == _TOOLCHAIN_VERSIONS
+    toolchain_lockfile = yaml.safe_load((_EXTENSIONS_ROOT / "pnpm-lock.yaml").read_text(encoding="utf-8"))
+    toolchain_locked = toolchain_lockfile["importers"]["."]["devDependencies"]
+    for tool, version in _TOOLCHAIN_VERSIONS.items():
+        assert toolchain_locked[tool]["specifier"] == version
+
     oxlint_config = (_EXTENSIONS_ROOT / "oxlint.config.ts").read_text(encoding="utf-8")
     assert 'import core from "ultracite/oxlint/core";' in oxlint_config
     assert 'import react from "ultracite/oxlint/react";' in oxlint_config

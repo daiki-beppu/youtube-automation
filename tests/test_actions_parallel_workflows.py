@@ -220,6 +220,15 @@ def test_extensions_jobs_preserve_working_directory_install_and_e2e_contract(job
     assert job.get("defaults") == {"run": {"working-directory": contract["working_directory"]}}
     steps = _job_steps(workflow, job_name)
     assert _top_level_step(steps, "Install dependencies").get("run") == _NIX_EXTENSIONS_INSTALL_COMMAND
+    # 共有 config の ultracite import を extensions/node_modules で解決するための install（#2154）。
+    toolchain_install = _top_level_step(steps, "Install shared lint toolchain")
+    assert toolchain_install.get("run") == _NIX_EXTENSIONS_INSTALL_COMMAND
+    assert toolchain_install.get("working-directory") == "extensions"
+    assert (
+        _top_level_step_index(steps, "Install dependencies")
+        < _top_level_step_index(steps, "Install shared lint toolchain")
+        < _parallel_group_index_containing(steps, "Check (Oxlint + Oxfmt)")
+    )
     assert _top_level_step(steps, contract["e2e_step"]).get("run") == _NIX_EXTENSIONS_E2E_COMMAND
 
 

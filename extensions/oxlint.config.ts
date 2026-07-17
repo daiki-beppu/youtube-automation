@@ -43,6 +43,7 @@ export default defineConfig({
     "no-plusplus": "off",
     "no-promise-executor-return": "off",
     "no-shadow": "off",
+    "no-unreachable-loop": "off",
     "no-use-before-define": "off",
     "no-useless-concat": "off",
     "prefer-destructuring": "off",
@@ -52,6 +53,11 @@ export default defineConfig({
     "require-await": "off",
     "require-unicode-regexp": "off",
     "sort-keys": "off",
+    // react / jsx-a11y
+    "react/button-has-type": "off",
+    "react/hook-use-state": "off",
+    "jsx-a11y/label-has-associated-control": "off",
+    "jsx-a11y/prefer-tag-over-role": "off",
     // import
     "import/consistent-type-specifier-style": "off",
     "import/first": "off",
@@ -96,6 +102,7 @@ export default defineConfig({
     "unicorn/prefer-at": "off",
     "unicorn/prefer-code-point": "off",
     "unicorn/prefer-dom-node-append": "off",
+    "unicorn/prefer-export-from": "off",
     "unicorn/prefer-dom-node-dataset": "off",
     "unicorn/prefer-import-meta-properties": "off",
     "unicorn/prefer-math-min-max": "off",
