@@ -49,6 +49,15 @@ DistroKid Web への転記・アップロードは Chrome 拡張（`/ext-install
 | `uv run yt-distrokid-prepare verify <collection>` | cover サイズ / タイトルユニーク / ≤35 曲 を最終検証（release_date 未設定は warning） |
 | `uv run yt-collection-serve <collections-root> --distrokid-capture-root <channel-root> --allow-extension distrokid-helper --port 7874` | distrokid-helper 拡張向けに DistroKid dir mode サーバーを起動し、配信済み記録の POST も有効化 |
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| 画像生成（yt-generate-image、Vertex AI Gemini） | ジャケット cover-src.png 1 枚 = 1 call | 既存 cover 再利用時は 0。provider=codex は API 経路外で課金なし |
+| yt-distrokid-prepare / yt-collection-serve | 0 call（ローカル処理のみ） | — |
+
+- 上限 / 承認: 画像生成前に confirm_cost の y/N 確認あり（`-y` でスキップ）。既存ジャケットを再利用すれば課金 call は 0。
+
 ## Instructions
 
 ### 前提チェック

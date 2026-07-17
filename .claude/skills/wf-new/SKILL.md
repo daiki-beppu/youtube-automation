@@ -70,6 +70,17 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 
 `/wf-new` は `workflow-state.json` を **新規作成し自動更新する**。ユーザーが手で編集してはいけない（[扱い基準](../../../docs/workflow-cheatsheet.md#workflow-statejson-の扱い)）。
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| 直接実行 CLI（yt-init-collection / yt-populate-scene-phrases / yt-collection-preflight / yt-collection-serve） | 0 call（ローカル処理のみ） | — |
+| 委譲先 /collection-ideate（YouTube Data 数 units + Analytics、任意で Gemini） | 1 回分 | 企画プレビュー画像の実施有無 |
+| 委譲先 /thumbnail（Gemini 画像生成 + Vision） | 1 回分 | 候補枚数 / 再生成回数 |
+| 委譲先 /loop-video（Veo 3.1） | 1 call | `enabled: true` のチャンネルのみ。/lyria は本スキルでは設計のみで実行は /wf-next |
+
+- 上限 / 承認: 課金はすべて subagent 委譲先で発生するため、各委譲先 skill の「想定 API call 数」と承認ゲート（confirm_cost / y/N）に従う。
+
 ## Instructions
 
 `/wf-new` は「順番にスキルを呼ぶ」ための薄いオーケストレーターである。各工程の詳細ロジックは子スキルへ寄せ、ここでは呼び出し順、停止点、成果物確認、`workflow-state.json` 更新だけを持つ。

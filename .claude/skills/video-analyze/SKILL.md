@@ -35,6 +35,14 @@ Step 1 のスクリプトが exit 0 で終了して `data/video_analysis/<slug>/
 - Vertex AI ADC 初期化済み (`gcloud auth application-default login` + `set-quota-project`)。project_id は ADC quota project から自動解決（`GOOGLE_CLOUD_PROJECT` は任意で上書き可）
 - 解析対象動画が **Public または Unlisted** であること (Gemini API は Private 動画を取得できない)
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| Vertex AI Gemini（yt-video-analyze の generate_content） | 対象動画数 × 1 call（`--source benchmark`: `--top` 既定 5 / `own`: complete_collection + videos[] の合計 / `url`: 1） | `--source` / `--top` / 対象動画数。1 call あたりのコストは `analysis_window_sec`（既定 900 秒）に比例。`delay_sec` は間隔制御のみで課金には無影響 |
+
+- 上限 / 承認: y/N プロンプトはない。`--source` と `--top` で対象数を絞り、`analysis_window_sec` で 1 call あたりの解析コストを制御する。
+
 ## 実行フロー
 
 ### Step 1: スクリプト実行

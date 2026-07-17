@@ -51,6 +51,16 @@ Step 1 のスクリプトが exit 0 で終了して `docs/benchmarks/*.md` と `
 | タイトル・タグ・説明文 | エンゲージメント率 (ER%) | テキスト配置 |
 | 尺・公開日・サムネイルURL | 投稿間隔トレンド | キャラ活動・雰囲気 |
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| YouTube Data API v3（channels.list、1 unit/call） | ceil(チャンネル数/50) units | ベンチマークチャンネル数 |
+| YouTube Data API v3（playlistItems.list + videos.list、各 1 unit） | 鮮度切れチャンネルあたり各 1 call（1 チャンネルあたり計約 4 units） | 鮮度切れチャンネル数、`scan_recent`（既定 50） |
+| Vertex AI Gemini（サムネイル分析） | 既定 OFF で 0。有効時はサムネイル枚数分 | `gemini_thumbnail_analysis: true` の場合のみ |
+
+- 上限 / 承認: `freshness_days` 以内のチャンネルは再収集せず、サムネイル DL は CDN 直取得で quota を消費しない。`-y` / `--force` なしの実行では収集前に `[Y/n]` 確認プロンプトで停止する。
+
 ## 実行フロー
 
 ### Step 1: データ収集

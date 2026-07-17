@@ -37,6 +37,16 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 
 `uv run yt-doctor --json` の `summary.next_check_id` が `null`（全 check 緑）になり、ツール、API 認証、アップロード前提が揃った状態が完了（報告文面は「完了時」セクションを参照）。例外として `analytics_report` の stale fail だけは後続スキルが自動解消するため setup のブロッカーにせず、`checks` 配列のほかの check がすべて `ok` なら同じ完了状態として扱う。`data` カテゴリは `/wf-new` の入力モード確認用で、stale analytics report、minimal mode、benchmark fallback mode のいずれも新規チャンネル初回制作を止めない。新規チャンネル作成は次に `/channel-new` を実行する。
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| YouTube Data + Analytics API（oauth_token 手順の `uv run yt-channel-status` smoke） | 約 3 + P units（P = playlist 数）+ Analytics reports.query 1 call | チャンネルの playlist 数、smoke 実行有無 |
+| YouTube Reporting API（`uv run yt-doctor` 診断 + `uv run yt-analytics --reporting-create-job`、無料枠） | 数 call（quota 課金なし） | Reporting job の作成有無 |
+| Vertex AI（Gemini / Veo / Lyria） | 0（`gcloud services enable` は API 有効化のみで生成呼び出しなし） | — |
+
+- 上限 / 承認: 診断（`yt-doctor`）は読み取り専用で、書き込み系チェック（playlist_create_dry_run 等）はすべて dry-run のため YouTube 側への変更は発生しない。
+
 ## 起動時のチェック
 
 空フォルダでは `yt-doctor` がまだ存在しないため、最初にライブ配信予定を確認してから automation CLI を導入する:

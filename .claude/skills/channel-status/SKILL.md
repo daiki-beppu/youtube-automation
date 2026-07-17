@@ -19,6 +19,15 @@ description: "Use when チャンネルの YouTube 統計（登録者・再生回
 - **新規チャンネル** → `/channel-new` を案内
 - **既存チャンネル**（YouTube で既に運営中）→ `/channel-new`（既存チャンネル取り込みモード）を案内
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| YouTube Data API v3（channels.list ×2 + playlists.list ×1 + playlistItems.list × playlist 数、各 1 unit） | 約 3 + P units（P = 対象 playlist 数） | チャンネルの playlist 数 |
+| YouTube Analytics API（reports.query。Data API と別枠 quota） | 1 call | — |
+
+- 上限 / 承認: 読み取り専用（書き込み API は一切呼ばない）ため確認プロンプトなしで実行できる。
+
 ## Instructions
 
 以下のコマンドを実行:

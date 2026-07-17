@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `docs(skills)`: 課金 API（Vertex AI Gemini / Veo / Lyria、OpenAI Images、YouTube Data / Analytics API）を呼ぶ 26 project skill の SKILL.md に、実行前見積もり可能な「想定 API call 数」セクション（API 別の call 数 / 算出式・変動要因・上限 / 承認の安全弁）を追加した。対象は契約テスト `tests/test_skill_api_call_estimate_contract.py` が機械抽出（pyproject 全 CLI の課金分類 × skill の CLI 参照走査）で導出し、非対象理由・追加対象理由・新規 CLI の分類漏れ・記載漏れを CI で検出する（#2010）。
+
 - `feat(auth)`: git worktree 上で gitignore された `auth/` が複製されず OAuth 認証が `FileNotFoundError` になる問題に対応した。`.git` pointer ファイルと `commondir` から git コマンド非依存で main 作業ツリーを検知する `utils/worktree.py::main_worktree_root()` を追加し、worktree では `client_secrets.json` の候補列末尾に main 側 `auth/` を追加、ローカル `token.json` が無い場合は token の読み書きを main 側 `auth/token.json` に集約する（refresh 結果の分岐防止）。`CLIENT_SECRETS_DIR` 最優先・非 worktree 環境の解決順序は不変で、未検出時のエラーには探索した全候補パスを表示する（#1721）。
 
 - `fix(devshell)`: 並列 worktree の Nix キャッシュ競合（同一 fingerprint の flake を複数 worktree が同時評価すると、ユーザーグローバルな `~/.cache/nix` の eval-cache SQLite への同時書込みが「error (ignored): SQLite database ... is busy」で破棄され続け、レビュー step の遅延・再試行を誘発する問題）を診断し、`.envrc` / `.lefthook/setup-worktree.sh` / shellHook が Nix 専用の `NIX_CACHE_HOME` を worktree 分離 TMPDIR 配下へ export して各 worktree が自分の評価結果だけを参照するようにした。`XDG_CACHE_HOME` は変更せず、解決失敗時は共有キャッシュのまま fail-open で続行する（#2089）。
