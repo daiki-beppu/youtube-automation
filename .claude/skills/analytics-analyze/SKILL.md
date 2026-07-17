@@ -113,6 +113,7 @@ subagent へは次を具体値で渡す:
 - **`yt-theme-compare`**: `config/channel/content.json::tags.themes`（コードからは `load_config().content.tags.themes`）のキーワードでタイトル分類し、各テーマの平均 launch curve・ピーク日齢平均・初速最強/ロングテール最強テーマを返す。テーマ選定の根拠データ。
 - **`yt-traffic-trend`**: `data/analytics_data_*.json` スナップショット横断の流入源シェア推移（前スナップショット比の `share_delta` 含む）、最新のデバイス別集計、YT_SEARCH 検索語トップ N（`--top-search N`、default 10）を返す。流入構成の変化検知・SEO キーワード判断に必須。
 - **`yt-thumbnail-correlate`**: サムネ画像の特徴量 (brightness/contrast/saturation/dominant_hue/colorfulness) と CTR/views/engagement の Pearson 相関。`--metric` 未指定なら CTR 欠測時に views へ自動フォールバックし、出力 JSON の `metric_fallback` に理由が残る。各相関には `p_value` / `p_value_adjusted`（Benjamini-Hochberg 補正）/ `significant` が付く。**`significant: false` の相関を方針の根拠に使わないこと**（引用時は「有意でない」と明記）。`note: "サンプル不足で判定不能"`（n<10）は判断材料にしない。次回サムネ制作の方向性。
+- **`yt-kpi-dashboard`**: 成長 KPI 定点ビュー。`data/analytics_data_*.json` 全スナップショットを横断し、レバー別 KPI（views / Imp / CTR / 平均視聴維持率 / 登録者純増）の週次推移を前週比付きで返す。Reporting API の保持期間（60 日）を超えた過去の Imp / CTR も時系列に含まれ、欠測週は補間せず明示される。週次運用ループの冒頭で「どのレバーが先週動いたか」を 1 枚で確認し、深掘り対象の選定に使う（`--markdown` でテーブル表示、`--save` で `reports/kpi_weekly_YYYYMMDD.{json,md}` 保存）。`yt-channel-trend` が最新スナップショット 1 件の日次系列を見るのに対し、こちらはスナップショット横断の週次俯瞰。
 
 subagent はこれらの出力 JSON を分析の根拠として使い、「数値 (例: 中央値比 6.3倍)」を含む主張を行うこと。Markdown の数値引用は `references/analysis-json-validator.md` の形式に従う。ただしメインエージェントへ返す完了報告には JSON 全文を含めず、レポートパスと主要数値の要約に絞る。
 
