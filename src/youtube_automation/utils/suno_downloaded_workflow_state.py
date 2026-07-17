@@ -77,12 +77,12 @@ def update_workflow_state_downloaded(
         assets = {}
         data["assets"] = assets
     if file_count > 0:
-        if effective_expected_count is not None and file_count >= effective_expected_count:
-            assets["music_downloaded"] = True
-        elif effective_expected_count is None:
-            assets["music_downloaded"] = True
-        elif "music_downloaded" in assets:
-            del assets["music_downloaded"]
+        # 部分完了（file_count < expected）も受け入れて downloaded 扱いにする（#1913）。
+        # 不足は actual/missing_file_count で機械可読に残し、後続工程が観測する
+        music["actual_file_count"] = file_count
+        if effective_expected_count is not None:
+            music["missing_file_count"] = max(0, effective_expected_count - file_count)
+        assets["music_downloaded"] = True
 
     ws_path.parent.mkdir(parents=True, exist_ok=True)
     atomic_json_write(ws_path, data, prefix=".workflow-state-")

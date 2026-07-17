@@ -391,6 +391,23 @@ def _determine_status(
     return "ready"
 
 
+def _read_music_downloaded_flag(coll_dir: Path) -> bool:
+    """workflow-state.json の assets.music_downloaded を読む（#1913 部分完了の貫通契約）."""
+    ws_path = CollectionPaths(coll_dir).workflow_state_path
+    if not ws_path.is_file():
+        return False
+    try:
+        data = json.loads(ws_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    assets = data.get("assets")
+    if not isinstance(assets, dict):
+        return False
+    return assets.get("music_downloaded") is True
+
+
 def _read_music_expected_file_count(coll_dir: Path) -> int | None:
     """workflow-state.json から full playlist download の期待ファイル数を読む."""
     ws_path = CollectionPaths(coll_dir).workflow_state_path
@@ -505,6 +522,10 @@ def build_collections_index(root: Path) -> list[dict]:
         expected_count = expected_download_count(pattern_count, expected_file_count)
         suno_playlist_url = _read_music_suno_playlist_url(coll)
         status = _determine_status(has_prompts, pattern_count, downloaded_count, expected_file_count)
+        # 部分完了を受理済み（assets.music_downloaded=true）の collection はファイル数が
+        # 期待数未満でも downloaded として扱い、拡張が再ダウンロードを提示しないようにする（#1913）
+        if status == "ready" and _read_music_downloaded_flag(coll):
+            status = "downloaded"
         theme = _theme_from_collection_dir(coll)
         channel = _channel_from_collection_id(coll.name, theme)
         entry = {
@@ -1056,9 +1077,21 @@ def create_server(
             except DownloadedArtifactError as exc:
                 self._send_json_error(500, str(exc))
                 return
-            resp_body = json.dumps(
-                {"ok": True, "collection_id": cid, "placed_count": placed_count_for_response}
-            ).encode("utf-8")
+            resp: dict = {"ok": True, "collection_id": cid, "placed_count": placed_count_for_response}
+            # 部分完了（Suno が期待数未満しか生成しないケース）は 500 にせず warning で返す（#1913）
+            expected_count = expected_download_count(
+                read_pattern_count(coll_dir, default=0), downloaded.expected_file_count
+            )
+            if (
+                downloaded.download_path
+                and expected_count is not None
+                and 0 < placed_count_for_response < expected_count
+            ):
+                missing = expected_count - placed_count_for_response
+                resp["warning"] = (
+                    f"placed {placed_count_for_response} files, expected {expected_count} ({missing} missing)"
+                )
+            resp_body = json.dumps(resp).encode("utf-8")
             self._send_bytes(resp_body, "application/json; charset=utf-8")
 
         def _read_limited_post_body(self, *, max_bytes: int = _MAX_POST_BODY_BYTES) -> bytes | None:
