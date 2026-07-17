@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(masterup)`: `yt-suno-verify-playlist --music-dir` が非正準形ファイル（Suno UI 手動 DL 由来の `Title.mp3` / `Title (1).mp3` / `Title_1.mp3` 等）を suno-prompts.json と照合して正準形 `NN{a|b}-Title.ext` へ自動リネームしてから突合するようにした。照合は ZIP 展開（`suno_downloaded_archive.py`）の既存ロジックを単一ソースとして再利用し、照合できないファイルはリネームせず unknown として fail-loud 報告する。`/masterup` Step 1.6 と `/wf-next` は playlist URL の記録有無に依らずローカルファイル名から突合ゲートを完走する（#1998）。
+
 - `docs(skills)`: 課金 API（Vertex AI Gemini / Veo / Lyria、OpenAI Images、YouTube Data / Analytics API）を呼ぶ 26 project skill の SKILL.md に、実行前見積もり可能な「想定 API call 数」セクション（API 別の call 数 / 算出式・変動要因・上限 / 承認の安全弁）を追加した。対象は契約テスト `tests/test_skill_api_call_estimate_contract.py` が機械抽出（pyproject 全 CLI の課金分類 × skill の CLI 参照走査）で導出し、非対象理由・追加対象理由・新規 CLI の分類漏れ・記載漏れを CI で検出する（#2010）。
 - `feat(analytics)`: 成長 KPI 定点ビュー CLI `yt-kpi-dashboard` を追加した。`data/analytics_data_*.json` 全スナップショットを日付後勝ちで横断マージし、レバー別 KPI（views / インプレッション / CTR / 平均視聴維持率 / 登録者純増）の週次推移を前週比付きの構造化 JSON と Markdown テーブルで出力する（`--save` で `reports/kpi_weekly_YYYYMMDD.{json,md}` 保存）。Reporting API の保持期間（60 日）を超えた過去の Imp / CTR も `reporting_api.impressions_summary.per_day` から復元して時系列に含め、欠測週は補間せず欠測として明示する。スナップショット 1 件以下ではエラーではなく複数スナップショットが必要な旨の案内を出す。`/analytics-analyze` の CLI 一覧にも定点ビュー参照の導線を追加した（#1819）。
 - `feat(auth)`: OAuth 新規ブラウザ認証の `run_local_server()` にチャンネル名（`meta.channel_short`）入りの `authorization_prompt_message` / `success_message` を渡し、複数チャンネル並列運用でトークン失効が重なった際にターミナルログと認証完了ページのどちらからも対象チャンネルを判別できるようにした。prompt には認証 URL（redirect 先ポート入り）も含め、config 読込不可時はディレクトリ名へフォールバックする（#1966）。
