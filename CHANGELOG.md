@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `docs(suno,suno-helper)`: 長尺 BGM チャンネル向けに `config/skills/suno.yaml::duration_filter`（`min_sec` / `max_sec`、部分指定は既定値と deep-merge）の override 手順を `/suno` Step 2 と `/suno-helper` の duration guard 節へ文書化した。override が `suno-prompts.json` へ反映される契約は回帰テストで pin し（機能自体は #1269 で実装済み・既定 60〜300 秒は不変）、閾値変更後は `yt-generate-suno` の再生成が必要なことと、resume が run 開始時点の閾値を保持するため新規 run で効かせる注意も明記した（#1937）。
+
 - `feat(dx)`: `yt-skills lint [<skill>...]` を追加し、SKILL.md frontmatter の検証（strict YAML パース / name・description 非空 / description の double-quote）を pytest 全体実行なしで秒単位で回せるようにした。検証ロジックは CLI 側を単一ソースとし、既存の回帰テスト（tests/test_skill_frontmatter_yaml.py）は同ロジックを呼ぶ形に寄せた（#2096）。
 
 - `fix(devshell)`: 並列 run 間の共有 TMPDIR 競合（macOS の per-user TMPDIR を複数 worktree の並行 pytest が奪い合い、conftest の stale cleanup 等が run 間で干渉しうる問題）を診断し、devShell 入場時に `.lefthook/worktree-tmpdir.sh` が共有 TMPDIR 配下の worktree ごとの決定的サブディレクトリへ `TMPDIR` を分離するようにした。takt core が注入する checkout 内 TMPDIR は尊重し、解決失敗時は共有 TMPDIR のまま fail-open で続行する（#2088）。
