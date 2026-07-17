@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+<<<<<<< HEAD
+- `fix(devshell)`: 並列 run 間の共有 TMPDIR 競合（macOS の per-user TMPDIR を複数 worktree の並行 pytest が奪い合い、conftest の stale cleanup 等が run 間で干渉しうる問題）を診断し、devShell 入場時に `.lefthook/worktree-tmpdir.sh` が共有 TMPDIR 配下の worktree ごとの決定的サブディレクトリへ `TMPDIR` を分離するようにした。takt core が注入する checkout 内 TMPDIR は尊重し、解決失敗時は共有 TMPDIR のまま fail-open で続行する（#2088）。
+=======
 - `fix(dx)`: explicit setup 経路（`bash .lefthook/setup-worktree.sh [<command>...]`）の依存同期を fail-closed 化した。devShell 入場後に新設の `.lefthook/sync-deps.sh` が `uv sync` を明示実行し、失敗時は後続コマンドを実行せず exit 非 0 で停止する。対話 shell（direnv / `nix develop` の shellHook）は従来どおり warning 継続で入場をブロックしない（#2125）。
+>>>>>>> origin/main
 
 - `feat(preflight)`: worktree / takt clone の環境不備（checkout 種別・Nix eval・lock drift・Git identity・lefthook policy）を実装着手前に read-only で検査し、`git_commit_identity` / `nix_eval` / `lock_drift` / `hook_policy` の分類キー付きで報告する CLI `yt-preflight` を追加した。identity の値は出力に含めず、lefthook は `YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1` の明示 skip のみ合格として曖昧な未導入を不合格にする（#2124）。
 
