@@ -410,6 +410,43 @@ def test_analytics_collect_documents_reporting_api_preflight() -> None:
     assert "youtubereporting.googleapis.com" in analytics_collect
 
 
+def test_analytics_collect_documents_full_depth_collection_path() -> None:
+    analytics_collect = _read(".claude/skills/analytics-collect/SKILL.md")
+
+    assert "`/analytics-collect full`" in analytics_collect
+    assert "uv run yt-analytics --depth full" in analytics_collect
+    assert "references/validate-depth.sh" in analytics_collect
+    assert "retention" in analytics_collect
+    assert "by_country" in analytics_collect
+
+
+def test_analytics_analyze_requires_numeric_retention_evidence_for_full_data() -> None:
+    analytics_analyze = _read(".claude/skills/analytics-analyze/SKILL.md")
+    validator = _read(".claude/skills/analytics-analyze/references/analysis-json-validator.md")
+
+    assert "視聴維持率分析" in analytics_analyze
+    assert "references/analysis-json-validator.md" in analytics_analyze
+    assert "retention_analysis" in validator
+    assert "data_points > 0" in validator
+    assert "空でない `retention_curve`" in validator
+
+
+@pytest.mark.parametrize(
+    "skill_path",
+    [
+        ".claude/skills/analytics-collect/SKILL.md",
+        ".claude/skills/analytics-analyze/SKILL.md",
+    ],
+)
+def test_revised_analytics_skills_stop_when_channel_config_is_invalid(skill_path: str) -> None:
+    skill = _read(skill_path)
+    prerequisite = skill.split("## 前提", 1)[1].split("\n## ", 1)[0]
+
+    assert "`load_config()` でロード可能" in prerequisite
+    assert "ここで停止" in prerequisite
+    assert "後続手順へ進まない" in prerequisite
+
+
 @pytest.mark.parametrize(
     "secret_path",
     [".env", "auth/client_secrets.json", "auth/token.json", "auth/token_streaming.json"],

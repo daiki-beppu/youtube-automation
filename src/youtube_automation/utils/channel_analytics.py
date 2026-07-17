@@ -167,10 +167,17 @@ class ChannelAnalyticsMixin:
             # full: + retention + country
             if depth == "full":
                 logger.info("地域別分析収集中...")
-                basic_data["audience"]["by_country"] = self.get_country_analytics(start_date, end_date)
+                by_country = self.get_country_analytics(start_date, end_date)
+                if "error" in by_country:
+                    raise YouTubeAPIError(f"地域別分析収集失敗: {by_country['error']}")
+                basic_data["audience"]["by_country"] = by_country
 
                 logger.info("視聴維持率分析収集中...")
-                basic_data["retention"] = self.get_retention_summary(start_date, end_date, top_n=10)
+                retention = self.get_retention_summary(start_date, end_date, top_n=10)
+                retention_errors = [item["error"] for item in retention if "error" in item]
+                if retention_errors:
+                    raise YouTubeAPIError(f"視聴維持率分析収集失敗: {retention_errors[0]}")
+                basic_data["retention"] = retention
 
             # サマリー
             basic_data["summary"] = {

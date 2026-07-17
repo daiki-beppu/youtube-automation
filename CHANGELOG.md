@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `chore(extensions)`: suno-helper と distrokid-helper の full gate / Playwright e2e を維持し、Extensions CI が各 package の既存 `pnpm lint` 入口から共通設定の Oxlint を実行する接続契約を追加した。契約テスト自体の変更でも Extensions CI が起動するよう path filter を接続した（#2020）。
 
+- `feat(analytics)`: `yt-analytics` に既定 `standard` の `--depth {standard,full}` を追加し、`full` 指定時に視聴維持率と地域別データを収集・保存できるようにした。full 専用 API の明示エラーは不完全な成果物として保存せず失敗終了する。`/analytics-collect full` の導線と、`/analytics-analyze` が full データの維持率を数値根拠として扱う分析契約も追加した（#1799）。
+
 - `feat(masterup)`: `yt-suno-verify-playlist` に collection 相対の `--music-dir` を追加し、`NN{a|b}-<title>.<ext>` 形式のローカル音声ファイル名を name/title の英語 alias・apostrophe 除去名から canonical entry へ対応付け、entry + `a`/`b` variant 単位で unknown / missing / underfilled を fail-loud 検出できるようにした。`/masterup` の primary path は `02-Individual-music/` を直接突合するため、playlist URL や title list の確認なしで Step 5 前ゲートを実行する（#1898）。
 
 - `feat(doctor,setup)`: `yt-doctor --fix-client-secrets` を追加し、Downloads の構造妥当かつ GCP project 一致する最新 OAuth client JSON を `auth/client_secrets.json` へ移動できるようにした。既存ファイルは上書きせず、`/setup` の HUMAN STEP は secret 発行・Download JSON・done のみに簡素化した（#1903）。

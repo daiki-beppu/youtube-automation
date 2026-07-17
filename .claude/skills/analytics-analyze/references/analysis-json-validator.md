@@ -27,6 +27,22 @@
     "channel_trend": {"summary": {"wow_growth_rate": 8.5}},
     "theme_compare": {"themes": [{"day7_mean": 1234.0}]}
   },
+  "retention_analysis": {
+    "source": "data/analytics_data_YYYYMMDD_HHMMSS.json",
+    "unit": "ratio",
+    "hypothesis_evaluation": "supported",
+    "summary": "中盤の低下が中身の弱さ仮説を支持する。",
+    "videos": [
+      {
+        "retention_index": 0,
+        "video_id": "VIDEO_ID",
+        "average_retention": 0.62,
+        "midpoint_retention": 0.55,
+        "drop_point_index": 4,
+        "drop_point": {"elapsed_ratio": 0.5, "watch_ratio": 0.55}
+      }
+    ]
+  },
   "ctr_strategy": [],
   "channel_performance": [],
   "strategic_improvements": [
@@ -66,6 +82,10 @@
 - `generated_at` は UTC の `YYYY-MM-DDTHH:MM:SSZ` 形式で保存する
 - `inputs.analysis_target` / `inputs.supplemental` には分析本文が実際に読み込んだファイルの相対パスを保存する
 - `inputs.cli_selected` は、3 CLI が直接選択する分析入力 3 件（最新 `data/analytics_data_*.json`、最新 `data/analytics/daily_per_video/*.json`、テーマ定義元 `config/channel/content.json`）だけを保存する。`yt-theme-compare` の `load_config()` が間接的にロードする他の `config/channel/*.json` や `config/localizations.json` は含めない
+- `inputs.analysis_target` の `collection_depth` が `full` の場合、`retention_analysis` を必須とする。`source` は `inputs.analysis_target` と一致させ、単位は入力値と同じ `ratio`、仮説評価は `supported` / `not_supported` / `inconclusive` のいずれかとする
+- `retention_analysis.videos[]` は `error` がなく、`data_points > 0` かつ空でない `retention_curve` を持つ実測データだけを対象にする。対象 index、video_id、average / midpoint、curve 低下点の index と値は入力 JSON の実値に一致させる
+- Markdown の「視聴維持率分析」には入力パス、単位、仮説評価、対象動画、動画間比較（有効データが 1 本なら比較不可の明記）、average / midpoint / curve 低下点の数値を JSON path 付きで記載する
+- `inputs.analysis_target` の `collection_depth` が `standard` の場合も Markdown に「視聴維持率分析」見出しを設け、`状態: full 収集が必要` と単独行で明記する
 
 ## 実行
 
@@ -164,6 +184,92 @@ jq -e '
 while IFS= read -r input_path; do
   test -f "$input_path"
 done < <(jq -er '.inputs | [.analysis_target, .cli_selected[], .supplemental[]] | .[]' "$analysis_json")
+
+analysis_target=$(jq -er '.inputs.analysis_target' "$analysis_json")
+if jq -e '.collection_depth == "full"' "$analysis_target" >/dev/null; then
+  grep -Eq '^#{1,6}[[:space:]]+視聴維持率分析' "$analysis_md"
+
+  jq -e --arg source "$analysis_target" --slurpfile targets "$analysis_target" '
+    def nonempty_string:
+      type == "string" and length > 0;
+
+    def nonnegative_integer:
+      type == "number" and . >= 0 and . == floor;
+
+    def retention_item_ok($target):
+      . as $item
+      | ($item.retention_index | nonnegative_integer)
+        and ($item.drop_point_index | nonnegative_integer)
+        and ($target.retention[$item.retention_index] as $actual
+             | ($actual | type == "object")
+               and ($actual | has("error") | not)
+               and ($actual.data_points | type == "number" and . > 0)
+               and ($actual.retention_curve | type == "array" and length > 0)
+               and ($actual.video_id | type == "string" and length > 0)
+               and ($item.video_id == $actual.video_id)
+               and ($item.average_retention | type == "number" and . == $actual.average_retention)
+               and ($item.midpoint_retention | type == "number" and . == $actual.midpoint_retention)
+               and ($actual.retention_curve[$item.drop_point_index] as $point
+                    | ($point | type == "object")
+                      and ($item.drop_point | type == "object")
+                      and ($item.drop_point.elapsed_ratio | type == "number" and . == $point.elapsed_ratio)
+                      and ($item.drop_point.watch_ratio | type == "number" and . == $point.watch_ratio)));
+
+    def valid_retention_indices($target):
+      [$target.retention
+       | to_entries[]
+       | select((.value | type == "object")
+                and (.value | has("error") | not)
+                and (.value.data_points | type == "number" and . > 0)
+                and (.value.retention_curve | type == "array" and length > 0)
+                and (.value.video_id | type == "string" and length > 0)
+                and (.value.average_retention | type == "number")
+                and (.value.midpoint_retention | type == "number"))
+       | .key];
+
+    $targets[0] as $target
+    | valid_retention_indices($target) as $valid_indices
+    | ($valid_indices | length > 0)
+      and (.retention_analysis | type == "object")
+      and (.retention_analysis.source == $source)
+      and (.retention_analysis.unit == "ratio")
+      and (.retention_analysis.hypothesis_evaluation
+           | IN("supported", "not_supported", "inconclusive"))
+      and (.retention_analysis.summary | nonempty_string)
+      and (.retention_analysis.videos | type == "array" and length > 0)
+      and ((.retention_analysis.videos | map(.retention_index) | sort) == $valid_indices)
+      and (.retention_analysis.videos | all(.[]; retention_item_ok($target)))
+  ' "$analysis_json" >/dev/null
+
+  retention_unit=$(jq -er '.retention_analysis.unit' "$analysis_json")
+  hypothesis_evaluation=$(jq -er '.retention_analysis.hypothesis_evaluation' "$analysis_json")
+  grep -Fqx "入力: $analysis_target" "$analysis_md"
+  grep -Fqx "単位: $retention_unit" "$analysis_md"
+  grep -Fqx "仮説評価: $hypothesis_evaluation" "$analysis_md"
+  grep -Eq '^動画間比較: .+' "$analysis_md"
+
+  while IFS= read -r evidence_line; do
+    grep -Fqx "$evidence_line" "$analysis_md"
+  done < <(
+    jq -r --arg file "$(basename "$analysis_target")" --slurpfile targets "$analysis_target" '
+      $targets[0] as $target
+      | .retention_analysis.videos[]
+      | . as $item
+      | ($item.retention_index | tostring) as $retention_index
+      | ($item.drop_point_index | tostring) as $drop_point_index
+      | $target.retention[$item.retention_index] as $actual
+      | $actual.retention_curve[$item.drop_point_index] as $point
+      | "対象動画: \($actual.video_id)",
+        "\($file)#$.retention[\($retention_index)].average_retention = \($actual.average_retention)",
+        "\($file)#$.retention[\($retention_index)].midpoint_retention = \($actual.midpoint_retention)",
+        "\($file)#$.retention[\($retention_index)].retention_curve[\($drop_point_index)].elapsed_ratio = \($point.elapsed_ratio)",
+        "\($file)#$.retention[\($retention_index)].retention_curve[\($drop_point_index)].watch_ratio = \($point.watch_ratio)"
+    ' "$analysis_json"
+  )
+else
+  grep -Eq '^#{1,6}[[:space:]]+視聴維持率分析' "$analysis_md"
+  grep -Fqx '状態: full 収集が必要' "$analysis_md"
+fi
 
 for source in launch_curve channel_trend theme_compare; do
   found=false
