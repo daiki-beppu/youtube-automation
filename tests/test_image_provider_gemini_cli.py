@@ -259,3 +259,49 @@ class TestRetryAndFailure:
 
         assert result.success is True
         assert runner.call_count == 2
+
+
+# ---------- TTP 方針の透過 (#2071) ----------
+
+
+def _shipped_thumbnail_default_config() -> dict:
+    import yaml
+
+    path = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "thumbnail" / "config.default.yaml"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+class TestTtpPolicyPassthrough:
+    """#2071: gemini_cli 経路は #2070 の TTP 方針（codex と同期した既定 prompt）を損なわず透過する。"""
+
+    def test_build_prompt_embeds_request_prompt_verbatim(self, cli_config, request_factory):
+        provider = GeminiCliImageProvider(cli_config)
+        req = request_factory(prompt="TTP policy line A.\nTTP policy line B.")
+
+        built = provider._build_prompt(req, image_size="2K")
+
+        assert "Description: TTP policy line A.\nTTP policy line B." in built
+
+    def test_provider_switch_keeps_codex_synced_ttp_policy_lines(self, cli_config, request_factory):
+        """provider を gemini_cli に切り替えても、既定 diff_prompt_template の TTP 方針行が CLI プロンプトに残る。"""
+        config = _shipped_thumbnail_default_config()
+        codex_template = config["image_generation"]["codex"]["default_prompt_template"]
+        gemini_template = config["image_generation"]["gemini"]["diff_prompt_template"]
+        rendered = gemini_template.replace("{title_line1}", "Cozy Jazz").replace("{title_line2}", "Rainy Night")
+
+        provider = GeminiCliImageProvider(cli_config)
+        built = provider._build_prompt(request_factory(prompt=rendered), image_size="2K")
+
+        policy_lines = [line for line in codex_template.strip().splitlines() if line and "{title}" not in line]
+        assert policy_lines, "codex 既定テンプレートから方針行を抽出できません"
+        for line in policy_lines:
+            assert line in built
+
+    def test_build_prompt_wrapper_adds_no_divergent_ttp_wording(self, cli_config, request_factory):
+        """CLI ラッパー自体は TTP 方針を上書き・複製する文言を持たない（方針の SSOT は skill-config 側）。"""
+        provider = GeminiCliImageProvider(cli_config)
+
+        built = provider._build_prompt(request_factory(prompt="plain description"), image_size="2K")
+
+        for phrase in ("TTP", "winning layout", "mood reference"):
+            assert phrase not in built
