@@ -14,7 +14,7 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 
 責務は「automation ツールが動き、API 認証とアップロード前提が通る状態」まで。新規チャンネルの TTP 対象確認、config 生成、ペルソナ、branding は `/channel-new` が担当する。
 
-利用者は GCP / OAuth に不慣れな前提。AI が実行できる安全なコマンドは `yt-doctor --apply` が実行し、ブラウザや利用者のターミナルが必要な操作だけ `[HUMAN STEP]` として依頼する。
+利用者は GCP / OAuth に不慣れな前提。**すべてのコマンドの起動・実行・再診断は AI または setup スクリプトが担当する。** 利用者には、ブラウザ上のログイン・アカウント選択・OAuth 同意・秘密情報入力など、認証本人にしか行えない操作だけを `[HUMAN STEP]` として依頼する。
 
 ## 前提
 
@@ -22,7 +22,7 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 
 - 実行場所がチャンネル用ディレクトリであること（空フォルダ可。automation CLI の導入から「起動時のチェック」の手順で行う）
 - `uv` が利用可能であること。無ければ最初の step（bootstrap カテゴリの `uv` check）でインストールを案内する
-- 利用者が Google アカウントを持ち、GCP プロジェクト作成・OAuth 同意画面設定・`gcloud auth login` を自分のブラウザ / ターミナルで実行できること（AI が代行できない `[HUMAN STEP]` として依頼する）
+- 利用者が Google アカウントを持ち、AI / setup が起動した認証フローに対して、自分のブラウザでログイン・OAuth 同意・Google Auth Platform 設定を行えること（認証本人にしかできない `[HUMAN STEP]` として依頼する）
 
 `config/channel/*.json` の存在は前提にしない（channel カテゴリの check が fail でも `/channel-new` を案内するだけで setup 自体は完了できる）。
 
@@ -73,7 +73,7 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 > 有効化完了は待たずに、/setup wizard はこのまま続行します。
 ```
 
-2. `uv` が無ければ `uv` step を案内する
+2. `uv` が無ければ `uv` step の公式コマンドを AI が実行する
 3. `pyproject.toml` が無ければ `uv init` を Bash で実行する
 4. `pyproject.toml` に `youtube-channels-automation` 依存が無ければ `uv add git+https://github.com/daiki-beppu/youtube-automation.git` を Bash で実行する
 5. `uv run yt-skills sync --asset skills --force` / `uv run yt-skills sync --asset claude-md` / `uv run yt-skills sync --asset auth-template` を Bash で実行する
@@ -81,9 +81,9 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 7. 初回のみ `uv run yt-doctor --json` を読み取り preflight として実行し、`checks[].next_action` から現時点の変更対象・コマンドを表示する。project ID がすでに解決できる場合は、後述の「GCP 変更 plan の承認」に従って連続実行で新たに到達し得る変更も全件表示する。`skills_synced` が prune を求める場合は、実在する managed legacy skill の削除対象パスを 1 件ずつ列挙する。その上で AskUserQuestion により「表示した変更を実行」/「中止」の明示 2 択を提示し、「GCP 変更は外部反映され、prune は列挙したファイルを削除する」と警告する。承認されなければここで停止する
 8. 承認後、収集済み決定 flag を保持する `apply_flags` を空で初期化し、`uv run yt-doctor --apply --json <apply_flags>` を 1 回実行して JSON の `apply.stop_reason` を読む。初回は flag 無しの `uv run yt-doctor --apply --json` となる
 9. `completed`: 冒頭の「完了条件」を確認し、「運用設定インタビュー」後に「完了時」を報告する
-10. `human_required`: `apply.check_id` の §Steps を参照し、`apply.next_action` と対応する `[HUMAN STEP]` を 1 つだけ依頼して停止する。利用者が `done` と返したら必要な後処理を行い、現在の `apply_flags` をすべて付けて手順 8 を再実行する。`analytics_report` stale の例外は「完了条件」に従う
+10. `human_required`: `apply.check_id` の §Steps を参照する。`apply.next_action.reason == "authentication"` なら `apply.next_action.cmd` を AI が対話 session で起動してから、ブラウザ認証だけを `[HUMAN STEP]` として依頼する。その他は対応する `[HUMAN STEP]` を 1 つだけ依頼して停止する。認証コマンドまたは人間操作の完了後、必要な後処理と現在の `apply_flags` をすべて付けた手順 8 の再診断は AI が行う。`analytics_report` stale の例外は「完了条件」に従う
 11. `decision_required`: `apply.check_id` が `gcp_project` なら project ID、`billing_linked` なら billing account ID を利用者に 1 問で確認する。値を `apply_flags` へ仮追加または同名 flag の値を仮置換し、後述の「GCP 変更 plan の承認」で、その flag により新たに実行可能になる全コマンドと正確な project / account を再表示する。AskUserQuestion の「表示した GCP 変更を実行」/「中止」の 2 択で承認された後だけ flag を確定して再実行する。以後 `completed` まで全 flag を毎回付け、値を変更するたびに plan を再表示・再承認する。project と billing が両方決定済みなら `uv run yt-doctor --apply --json --project-id <project-id> --billing-account <billing-id>` となる
-12. `command_failed`: `apply.check_id` / `apply.cmd` / `apply.stderr` を利用者に示し、§Steps のトラブルシュートで原因を解消してから、現在の `apply_flags` をすべて付けて手順 8 を再実行する
+12. `command_failed`: `apply.check_id` / `apply.cmd` / `apply.stderr` を利用者に示し、AI が §Steps に沿って原因を診断・解消してから、現在の `apply_flags` をすべて付けて手順 8 を再実行する。認証・承認入力以外のコマンドを利用者へ委ねない
 
 `--apply` は `ai-exec` を診断順に連続実行し、各コマンド後に再診断する。AI は `apply.executed` を実行済み履歴として読み、§Steps に残る同じ `ai-exec` コマンドを重複実行してはならない。`stop_reason` が上記 4 値以外、または JSON が読めない場合は安全側に停止し、CLI 出力を示す。
 
@@ -95,41 +95,41 @@ project ID が解決済み、または `apply_flags` へ `--project-id` / `--bil
 
 `/setup` は `uv run yt-setup-dirs` で `auth/`, `branding/`, `collections/`, `data/`, `docs/channel/personas/`, `docs/benchmarks/`, `research/` を冪等に作成する。`/setup` では `config/channel/*.json` を生成しない。新規チャンネルの config、TTP メモ、ペルソナ、branding は引き続き `/channel-new` の責務。
 
-## AI が絶対に Bash で叩かないコマンド
+## 認証コマンドと人間操作の責務
 
-以下は PKCE フローが Claude Code (非対話セッション) では完結しないため、AI が直接実行してはならない。必ず **[HUMAN STEP]** として利用者に依頼する:
+以下の認証コマンドも、利用者へ実行を依頼してはならない。AI が PTY 付きの対話 session、または setup スクリプトの inherited stdio で起動し、プロセスを維持する:
 
 - `gcloud auth login`
 - `gcloud auth application-default login`
+- `uv run yt-channel-status`
 
-これらを AI が呼ぶと「認可コードを渡しても新しい URL が出る」無限ループに陥る (詳細: PKCE の `code_verifier` が同一プロセスでしか保持できないため)。
+人間は開いたブラウザでログイン・アカウント選択・OAuth 同意だけを行う。認可コード、password、token、client secret をチャットへ貼らせない。PKCE の `code_verifier` を保持するため、AI は認証開始時と同じプロセスを完了まで維持し、別プロセスでコマンドを再実行しない。認証プロセスが exit 0 になったら AI が `yt-doctor --apply` を再実行する。exit 非 0 なら stderr を確認して再試行条件を案内する。
 
-加えて、**Google Auth Platform の Branding / Audience / Clients 設定と client secret の Download JSON** (Google Cloud Console GUI 操作) は gcloud / Terraform に該当 API が存在しないため、これも `[HUMAN STEP]` で依頼する。ダウンロード後の `client_secrets.json` 配置は AI が `yt-doctor --fix-client-secrets` で行う。
+**Google Auth Platform の Branding / Audience / Clients 設定と client secret の Download JSON** (Google Cloud Console GUI 操作) は gcloud / Terraform に該当 API が存在しないため、これも `[HUMAN STEP]` で依頼する。ダウンロード後の `client_secrets.json` 配置と再診断は AI が `yt-doctor --fix-client-secrets` で行う。
 
 ## [HUMAN STEP] の書き方
 
-利用者に手動操作を依頼するときは、必ず以下の形式で投げて停止する:
+利用者に認証操作を依頼するときは、先に AI が認証コマンドを対話 session で起動し、必ず以下の形式でブラウザ操作だけを依頼する:
 
 ```
 > [HUMAN STEP]
-> あなたのターミナルで以下を実行してください:
->   gcloud auth login
-> 完了したら "done" と返してください。
+> 認証コマンドは setup が起動済みです。開いたブラウザで Google ログインと同意を完了してください。
+> password・認可コード・token はチャットへ貼らないでください。
 ```
 
-利用者が "done" と返すまで、次の Bash ツール呼び出しはしない。返ってきたら該当 step に後処理があれば先に実行し、現在の `apply_flags` をすべて付けた `uv run yt-doctor --apply --json <apply_flags>` を再実行して新しい `apply.stop_reason` を確認する（`client_secrets` は `yt-doctor --fix-client-secrets` を先に実行する）。
+認証プロセスの終了を session で待ち、待機中は 60 秒以内の間隔で進捗を伝える。exit 0 後は該当 step の後処理と、現在の `apply_flags` をすべて付けた `uv run yt-doctor --apply --json <apply_flags>` を AI が実行して新しい `apply.stop_reason` を確認する（`client_secrets` は `yt-doctor --fix-client-secrets` を先に実行する）。認証以外のコマンドも利用者へ実行依頼せず、AI / setup が実行する。
 
 例外: 「起動時のチェック」のライブ配信有効化リクエスト案内は、リードタイム確保のための早期注意喚起である。`[HUMAN STEP]` 書式で案内するが、完了待ちはせず wizard を通常どおり続行する。
 
 ## Steps (check id ごとの対応手順)
 
-各 step は `yt-doctor` の check id にマップする。AI は `apply.check_id` の値を見て該当 step に飛ぶ。`--apply` 導入後、`ai-exec` と明記した個別コマンドは `command_failed` の原因確認用であり、通常ループでは `--apply` が自動実行する。例外は automation 導入前の `uv_project` / `automation_package` と、明示的に `[HUMAN STEP]` または利用者の決定として記載した手順だけである。
+各 step は `yt-doctor` の check id にマップする。AI は `apply.check_id` の値を見て該当 step に飛ぶ。`--apply` 導入後、`ai-exec` と明記した個別コマンドは `command_failed` の原因確認用であり、通常ループでは `--apply` が自動実行する。automation 導入前の `uv_project` / `automation_package` と認証コマンドは AI が直接実行する。`[HUMAN STEP]` はブラウザ認証・GUI 操作・利用者の決定だけを指し、コマンド実行を含めない。
 
 ### bootstrap カテゴリ
 
 #### `ffmpeg` / `ffprobe` — 動画生成ツール未インストール
 
-`yt-doctor` の `next_action.instructions` をそのまま案内する。macOS なら以下を案内してよい:
+`yt-doctor` の `next_action.instructions` から OS に合う手順を選び、AI がインストールコマンドを実行する。macOS なら以下を実行する:
 
 ```bash
 brew install ffmpeg
@@ -137,7 +137,7 @@ brew install ffmpeg
 
 #### `uv` — uv 未インストール
 
-利用者の OS に合わせて uv のインストール手順を案内する。公式手順は https://docs.astral.sh/uv/getting-started/installation/ を参照する。
+利用者の OS に合わせ、https://docs.astral.sh/uv/getting-started/installation/ の公式コマンドを AI が実行する。認証情報や管理者承認が求められた場合だけ、その入力を `[HUMAN STEP]` として依頼する。
 
 #### `uv_project` — `pyproject.toml` 未作成
 
@@ -159,7 +159,7 @@ uv add git+https://github.com/daiki-beppu/youtube-automation.git
 
 #### `skills_synced` — スキル未展開
 
-`apply.next_action.kind == "human"` の場合だけ、`instructions` を **[HUMAN STEP]** として利用者に依頼する。`ai-exec` の sync / prune は「起動時のチェック」手順 7 で実行対象と削除パスを示し、利用者が実行を承認した場合だけ `--apply` が自動実行する。
+`apply.next_action.kind == "human"` でもコマンドは利用者へ依頼しない。`reason == "authentication"` なら `cmd` を AI が起動し、人間にはブラウザ認証だけを依頼する。それ以外は `apply.next_action.instructions` から GUI 操作・判断だけを **[HUMAN STEP]** として依頼し、必要なコマンドは AI が実行する。`ai-exec` の sync / prune は「起動時のチェック」手順 7 で実行対象と削除パスを示し、利用者が実行を承認した場合だけ `--apply` が自動実行する。
 
 初回展開や同梱 skill 不足時は以下を実行する:
 
@@ -176,7 +176,7 @@ uv run yt-setup-dirs
 uv run yt-skills sync --asset skills --force --prune --yes
 ```
 
-`.agents/skills` が `.claude/skills` を指す symlink になっていない warning の場合は、`apply.next_action.instructions` の内容を手動手順として案内する。手動作業の完了後は、必ず `uv run yt-doctor --apply --json <apply_flags>` を再実行する。
+`.agents/skills` が `.claude/skills` を指す symlink になっていない warning の場合は、実体と既存パスを確認し、変更対象を表示して承認を得た後に AI が symlink を作成する。完了後は AI が `uv run yt-doctor --apply --json <apply_flags>` を再実行する。
 
 #### `numbered_duplicates` — 番号付き重複ファイル検出
 
@@ -186,22 +186,28 @@ iCloud Drive 等のクラウド同期コンフリクトで `.venv/bin/` や `.cl
 
 #### `gcloud` — gcloud CLI 未インストール
 
-macOS なら以下を案内 (AI が Bash で叩いてもよい):
+macOS なら AI が以下を実行する:
 
 ```bash
 brew install --cask google-cloud-sdk
 ```
 
-その他 OS は https://cloud.google.com/sdk/docs/install を案内。
+その他 OS は https://cloud.google.com/sdk/docs/install の公式手順を確認し、AI が該当コマンドを実行する。管理者認証だけを利用者へ依頼する。
 
 #### `gcloud_account` — gcloud 未ログイン
 
-**[HUMAN STEP]** で依頼:
+AI が PTY 付き対話 session で次を起動する:
+
+```bash
+gcloud auth login
+```
+
+プロセスを維持したまま、利用者にはブラウザ認証だけを **[HUMAN STEP]** で依頼する:
 
 ```
-> あなたのターミナルで以下を実行してください:
->   gcloud auth login
-> ブラウザでログインしてください。完了したら "done" と返してください。
+> [HUMAN STEP]
+> 認証コマンドは setup が起動済みです。開いたブラウザで Google ログインと同意を完了してください。
+> password・認可コード・token はチャットへ貼らないでください。
 ```
 
 #### `gcp_project` — GCP プロジェクト未確定
@@ -261,12 +267,18 @@ billing 未紐付けで失敗する場合は `billing_linked` に戻る。
 
 #### `adc` — Application Default Credentials 未設定
 
-**[HUMAN STEP]** で依頼:
+AI が PTY 付き対話 session で次を起動する:
+
+```bash
+gcloud auth application-default login
+```
+
+プロセスを維持したまま、利用者にはブラウザ認証だけを **[HUMAN STEP]** で依頼する:
 
 ```
-> あなたのターミナルで以下を実行してください:
->   gcloud auth application-default login
-> ブラウザでログインしてください。完了したら "done" と返してください。
+> [HUMAN STEP]
+> ADC 認証コマンドは setup が起動済みです。開いたブラウザで Google ログインと同意を完了してください。
+> password・認可コード・token はチャットへ貼らないでください。
 ```
 
 #### `adc_quota_project` — ADC quota project 不一致
@@ -346,13 +358,18 @@ uv run yt-doctor --apply --json <apply_flags>
 
 #### `oauth_token` — OAuth トークン未取得
 
-`--apply` はブラウザ認証を自動実行しない。利用者に以下を **[HUMAN STEP]** として依頼する:
+`--apply` はブラウザ認証を無人実行しない。AI が PTY 付き対話 session で次を起動する:
+
+```bash
+uv run yt-channel-status
+```
+
+プロセスを維持したまま、利用者にはブラウザ認証だけを **[HUMAN STEP]** として依頼する:
 
 ```
 > [HUMAN STEP]
-> あなたのターミナルで以下を実行し、ブラウザで認証してください:
->   uv run yt-channel-status
-> 完了したら "done" と返してください。
+> OAuth 認証コマンドは setup が起動済みです。開いたブラウザで対象アカウントを選び、同意を完了してください。
+> password・認可コード・token はチャットへ貼らないでください。
 ```
 
 初回はブラウザが開いて認証が走る。完了すると `<channel_dir>/auth/token.json` が生成される。
@@ -463,7 +480,7 @@ uv run yt-doctor --apply --json <apply_flags>
 `data.reason == "channel_id_mismatch"` の場合は `data.local_channel_id` と `data.remote_channel_id` を並べて示し、**自動上書きしない**。どちらが意図したチャンネルかを利用者に確認し、次の 2 択から選んでもらう。
 
 - remote ID 側が正しい: まず `uv run yt-channel-settings pull --channel-id-only` で dry-run を表示する。利用者が反映を承認した場合だけ `uv run yt-channel-settings pull --channel-id-only --apply` を実行する
-- local ID 側が正しい: `<channel_dir>/auth/token.json` を削除し、`uv run yt-channel-status` で意図した Google アカウントを再認証する **[HUMAN STEP]** を案内する
+- local ID 側が正しい: 削除対象を表示して承認を得た後、AI が `<channel_dir>/auth/token.json` を削除して `uv run yt-channel-status` を対話 session で起動し、利用者には意図した Google アカウントでのブラウザ認証だけを **[HUMAN STEP]** として依頼する
 
 選択した対処の完了後に `uv run yt-doctor --apply --json <apply_flags>` を再実行し、ID 一致を確認する。
 
@@ -472,25 +489,23 @@ uv run yt-doctor --apply --json <apply_flags>
 `data.reason == "api_error"` の場合は、理由にかかわらずチャンネル未作成として扱わない。doctor の `next_action.instructions` に従って次の対処を案内する。
 
 - quota / 5xx: quota リセットまたはサービス復旧を待つ
-- auth: `<channel_dir>/auth/token.json` を削除し、`uv run yt-channel-status` で意図したアカウントを再認証する **[HUMAN STEP]** を案内する
+- auth: 削除対象を表示して承認を得た後、AI が `<channel_dir>/auth/token.json` を削除して `uv run yt-channel-status` を対話 session で起動し、利用者には意図したアカウントでのブラウザ認証だけを **[HUMAN STEP]** として依頼する
 - network / その他一時失敗: ネットワーク接続と Google API の稼働状況を確認する
 
 再試行条件が整った後だけ `uv run yt-doctor --apply --json <apply_flags>` を再実行する。
 
 ##### ローカル前提の不備
 
-scope 不足の場合は **[HUMAN STEP]** で依頼:
+scope 不足の場合は、削除対象を表示して承認を得た後、AI が `<channel_dir>/auth/token.json` を削除し、`uv run yt-channel-status` を PTY 付き対話 session で起動する。利用者には **[HUMAN STEP]** でブラウザ同意だけを依頼する:
 
 ```
 > [HUMAN STEP]
-> OAuth token に upload 必須 scope が不足しています。以下の手順で再認証してください:
->   1. <channel_dir>/auth/token.json を削除
->   2. uv run yt-channel-status を実行してブラウザ認証
->   3. OAuth 同意画面で youtube / youtube.force-ssl scope を含むアカウントを選択
-> 完了したら "done" と返してください。
+> OAuth token に upload 必須 scope が不足しています。再認証コマンドは setup が起動済みです。
+> ブラウザの OAuth 同意画面で youtube / youtube.force-ssl scope を含むアカウントを選択してください。
+> password・認可コード・token はチャットへ貼らないでください。
 ```
 
-remote ID がまだ取得できていない channel_id 未設定は、`uv run yt-channel-status` で認証対象を確認した後、上の「remote channel ID のローカル反映」に戻る。手書きで `meta.json` を更新しない。
+remote ID がまだ取得できていない channel_id 未設定は、AI が `uv run yt-channel-status` を起動し、利用者がブラウザで認証対象を選んだ後、上の「remote channel ID のローカル反映」に戻る。手書きで `meta.json` を更新しない。
 
 ## 運用設定インタビュー
 

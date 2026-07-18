@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(doctor,setup)`: setup の全コマンド起動・実行・再診断を AI / setup 側へ統一し、認証時の人間の責務をブラウザ上のログイン・アカウント選択・OAuth 同意・秘密情報入力だけに限定した。認証 action は実行主体・人間の役割・起動コマンドを構造化して返し、`--apply` の無人認証拒否は維持する（#2262）。
 - `refactor(extensions)`: 3 helper の shadcn/ui Button・Card・Alert・Select、`cn()`、Tailwind theme contract を workspace package `@youtube-automation/ui` へ集約し、各 helper の単体 install / test / build / zip 契約を維持した（#2246）。
 - `refactor(community-helper)`: Popup を shadcn/ui の Button・Alert・Card primitive と共通 theme token へ移行し、既存の server URL、互換性確認、3 投稿進捗、エラー表示の挙動を維持した（#2245）。
 - `docs(setup)`: `/setup` wizard の automation 導入後ループを `yt-doctor --apply --json` に統一し、`completed` / `human_required` / `decision_required` / `command_failed` の停止理由ごとに対話・再実行する手順へ更新した。変更前の明示承認と project・billing flag の累積保持を定め、automation 導入前の bootstrap、HUMAN STEP、トラブルシュートは維持した（#2226）。

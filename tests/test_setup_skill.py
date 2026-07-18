@@ -93,7 +93,7 @@ def test_setup_skill_handles_reporting_job_next_action_and_rechecks() -> None:
 
 def test_setup_skill_branches_on_all_apply_stop_reasons() -> None:
     text = _SETUP_SKILL.read_text(encoding="utf-8")
-    startup = text.split("## 起動時のチェック", 1)[1].split("## AI が絶対に", 1)[0]
+    startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
 
     for stop_reason in ("completed", "human_required", "decision_required", "command_failed"):
         assert f"`{stop_reason}`:" in startup
@@ -107,7 +107,7 @@ def test_setup_skill_branches_on_all_apply_stop_reasons() -> None:
 
 def test_setup_skill_requires_approval_before_apply_mutations() -> None:
     text = _SETUP_SKILL.read_text(encoding="utf-8")
-    startup = text.split("## 起動時のチェック", 1)[1].split("## AI が絶対に", 1)[0]
+    startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
 
     assert "uv run yt-doctor --json" in startup
     assert "AskUserQuestion" in startup
@@ -119,7 +119,7 @@ def test_setup_skill_requires_approval_before_apply_mutations() -> None:
 
 def test_setup_skill_reapproves_project_scoped_plan_after_decisions() -> None:
     text = _SETUP_SKILL.read_text(encoding="utf-8")
-    startup = text.split("## 起動時のチェック", 1)[1].split("## AI が絶対に", 1)[0]
+    startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
     plan = startup.split("### GCP 変更 plan の承認", 1)[1]
 
     assert "`--project-id` / `--billing-account` を追加・変更するたび" in plan
@@ -143,12 +143,29 @@ def test_setup_skill_gates_numbered_duplicate_deletion() -> None:
 
 def test_setup_skill_keeps_pre_doctor_bootstrap_in_skill() -> None:
     text = _SETUP_SKILL.read_text(encoding="utf-8")
-    startup = text.split("## 起動時のチェック", 1)[1].split("## AI が絶対に", 1)[0]
+    startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
 
     assert "`pyproject.toml` が無ければ `uv init`" in startup
     assert "uv add git+https://github.com/daiki-beppu/youtube-automation.git" in startup
     assert "uv run yt-skills sync --asset skills --force" in startup
     assert startup.index("uv run yt-skills sync") < startup.index("uv run yt-doctor --apply --json")
+
+
+def test_setup_skill_keeps_command_execution_out_of_human_role() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    responsibility = text.split("## 認証コマンドと人間操作の責務", 1)[1].split("## [HUMAN STEP]", 1)[0]
+
+    assert "すべてのコマンドの起動・実行・再診断は AI または setup スクリプトが担当" in text
+    assert "利用者へ実行を依頼してはならない" in responsibility
+    assert "PTY 付きの対話 session" in responsibility
+    assert "人間は開いたブラウザでログイン・アカウント選択・OAuth 同意だけ" in responsibility
+    assert "あなたのターミナル" not in text
+    for command in (
+        "gcloud auth login",
+        "gcloud auth application-default login",
+        "uv run yt-channel-status",
+    ):
+        assert command in responsibility
 
 
 def test_setup_skill_delegates_minimum_directory_generation_to_setup() -> None:

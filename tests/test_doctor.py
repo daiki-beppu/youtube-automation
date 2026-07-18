@@ -27,6 +27,8 @@ def _clear_secret_cache() -> None:
 
 
 def _assert_no_bare_yt_channel_status(value: object) -> None:
+    if isinstance(value, dict):
+        value = {key: item for key, item in value.items() if key != "argv"}
     text = json.dumps(value, ensure_ascii=False)
     for match in re.finditer("yt-channel-status", text):
         prefix = text[max(0, match.start() - len("uv run ")) : match.start()]
@@ -252,12 +254,37 @@ class TestCheckGcloudAccount:
         stub_run((0, "[]", ""))
         r = doctor.check_gcloud_account()
         assert r.status == "fail"
-        assert r.next_action["kind"] == "human"
+        assert r.next_action == {
+            "kind": "human",
+            "reason": "authentication",
+            "cmd": "gcloud auth login",
+            "argv": ["gcloud", "auth", "login"],
+            "execution_owner": "ai-or-setup",
+            "human_role": "browser-authentication",
+            "instructions": (
+                "AI または setup が `gcloud auth login` を対話 session で起動し、"
+                "利用者はブラウザで Google ログインと同意を完了してください。"
+            ),
+        }
 
     def test_command_error(self, stub_run):
         stub_run((1, "", "boom"))
         r = doctor.check_gcloud_account()
         assert r.status == "unknown"
+
+
+class TestCheckADC:
+    def test_missing_delegates_command_to_setup_and_browser_auth_to_human(self, stub_run):
+        stub_run((1, "", "missing"))
+
+        r = doctor.check_adc()
+
+        assert r.status == "fail"
+        assert r.next_action["kind"] == "human"
+        assert r.next_action["reason"] == "authentication"
+        assert r.next_action["cmd"] == "gcloud auth application-default login"
+        assert r.next_action["execution_owner"] == "ai-or-setup"
+        assert r.next_action["human_role"] == "browser-authentication"
 
 
 class TestEnvFile:
@@ -596,6 +623,10 @@ class TestOAuthToken:
         r = doctor.check_oauth_token(tmp_path)
         assert r.status == "fail"
         assert r.next_action["kind"] == "human"
+        assert r.next_action["reason"] == "authentication"
+        assert r.next_action["cmd"] == "uv run yt-channel-status"
+        assert r.next_action["execution_owner"] == "ai-or-setup"
+        assert r.next_action["human_role"] == "browser-authentication"
         assert "uv run yt-channel-status" in r.next_action["instructions"]
         _assert_no_bare_yt_channel_status(r.next_action)
 
