@@ -139,6 +139,12 @@ class ChannelAnalyticsMixin:
                 entry["scheduled_publish_at"] = publish_at_map.get(vid)
 
             # 基本データ構築
+            logger.info("収益メトリクス収集中...")
+            revenue_analytics = self.get_revenue_analytics(start_date, end_date)
+            for video_id, revenue in revenue_analytics["by_video"].items():
+                if video_id in video_data:
+                    video_data[video_id].update(revenue)
+
             basic_data = {
                 "collection_period": {
                     "start_date": start_date,
@@ -148,6 +154,7 @@ class ChannelAnalyticsMixin:
                 "collection_depth": depth,
                 "channel_analytics": channel_analytics,
                 "video_analytics": video_data,
+                "revenue_analytics": revenue_analytics,
                 "strategic_analysis": strategic_analytics,
             }
 

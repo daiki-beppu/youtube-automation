@@ -82,6 +82,16 @@ def stub_analytics_boundaries(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         YouTubeAnalyticsCollector,
+        "get_revenue_analytics",
+        lambda self, start, end: {
+            "status": "available",
+            "daily_metrics": [],
+            "by_video": {},
+            "summary": {"estimated_revenue": 0, "views": 0, "rpm": 0.0},
+        },
+    )
+    monkeypatch.setattr(
+        YouTubeAnalyticsCollector,
         "get_ctr_analysis",
         lambda self, start, end: {"videos": []},
     )

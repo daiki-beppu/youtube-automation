@@ -150,5 +150,16 @@ subagent へは次を具体値で渡す:
 
 ## Next Step
 
+### 収益メトリクス
+
+`yt-analytics` は基本メトリクスとは別クエリで
+`estimatedRevenue` / `monetizedPlaybacks` / `cpm` / `playbackBasedCpm` を収集する。
+成果物では `revenue_analytics.daily_metrics` と `revenue_analytics.by_video` に保存し、
+各行の `rpm` は `estimated_revenue / views * 1000` で算出する。
+
+収益化未承認または monetary data へのアクセス不可の場合は、警告ログを出して
+`revenue_analytics.status: "unavailable"` と空の収益データを保存する。これは許容する fail であり、
+views / CTR / retention など既存メトリクスの収集は継続する。
+
 データ収集完了後:
 → `/analytics-analyze` で収集データの詳細分析を実行
