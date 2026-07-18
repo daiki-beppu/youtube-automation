@@ -6,7 +6,7 @@
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "generated_at": "2026-07-13T03:34:56Z",
   "inputs": {
     "analysis_target": "data/analytics_data_YYYYMMDD_HHMMSS.json",
@@ -28,6 +28,26 @@
     "channel_trend": {"summary": {"wow_growth_rate": 8.5}},
     "theme_compare": {"themes": [{"day7_mean": 1234.0}]},
     "traffic_trend": {"summary": {"top_source_share_percent": 45.2}}
+  },
+  "ttp_health": {
+    "status": "ok",
+    "source": "benchmark_20260715.json",
+    "reference_date": "2026-07-15",
+    "thresholds": {"stale_days": 60, "decline_ratio": 0.5, "window_days": 90},
+    "channels": [
+      {
+        "slug": "rival-channel",
+        "name": "Rival Channel",
+        "channel_id": "UC123",
+        "status": "alert",
+        "last_upload_at": "2026-04-20",
+        "days_since_last_upload": 86,
+        "recent_window": {"start": "2026-04-16", "end": "2026-07-15", "video_count": 0, "avg_views": null},
+        "prior_window": {"start": "2026-01-16", "end": "2026-04-15", "video_count": 8, "avg_views": 42000},
+        "alerts": [{"type": "stale_posting", "reason": "最終投稿から 86 日経過（閾値 60 日）"}],
+        "insufficiencies": []
+      }
+    ]
   },
   "retention_analysis": {
     "source": "data/analytics_data_YYYYMMDD_HHMMSS.json",
@@ -79,6 +99,7 @@
 ```
 
 - `cli_outputs` の 4 キーには各 CLI の stdout JSON object を変更せず保存する
+- `ttp_health` には `uv run yt-ttp-health` の stdout JSON object を変更せず保存する。benchmark 入力がない場合もキーを省略せず、CLI が返す `{"status":"unavailable", ...}` を保存する
 - 戦略提案・次期候補・戦略ディスカッションの正本は `strategic_improvements` / `next_collection_candidates` / `strategic_discussion` とする。Markdown は人間向けの説明と数値引用を担う派生成果物であり、後続スキルはこの 3 固定キーから提案を読む
 - 固定キーの各要素は、空でない `statement`、1 件以上の `evidence`、`high` / `medium` / `low` の `confidence` を持つ
 - `generated_at` は UTC の `YYYY-MM-DDTHH:MM:SSZ` 形式で保存する
@@ -143,6 +164,32 @@ jq -e '
       and ($item.evidence | type == "array" and length > 0)
       and ($item.evidence | all(.[]; evidence_ok($root)));
 
+  def ttp_alert_ok:
+    (type == "object")
+    and (.type | IN("stale_posting", "views_decline"))
+    and (.reason | nonempty_string);
+
+  def ttp_channel_ok:
+    (type == "object")
+    and (.status | IN("healthy", "alert", "insufficient_data", "missing_data"))
+    and (.alerts | type == "array")
+    and (.insufficiencies | type == "array")
+    and (if .status == "alert" then (.alerts | length > 0) else true end)
+    and (.alerts | all(.[]; ttp_alert_ok));
+
+  def ttp_health_ok:
+    (type == "object")
+    and (.status | IN("ok", "unavailable"))
+    and (.channels | type == "array")
+    and (if .status == "unavailable" then
+           (.reason | nonempty_string)
+         else
+           (.source | nonempty_string)
+           and (.reference_date | nonempty_string)
+           and (.thresholds | type == "object")
+           and (.channels | all(.[]; ttp_channel_ok))
+         end);
+
   def all_evidence($root):
     [(($root.strategic_improvements[],
        $root.next_collection_candidates[],
@@ -150,7 +197,7 @@ jq -e '
 
   . as $root
   | (type == "object")
-    and (.schema_version == 1)
+    and (.schema_version == 2)
     and (.generated_at | type == "string")
     and (.generated_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
     and (.generated_at
@@ -174,6 +221,7 @@ jq -e '
     and (.cli_outputs.channel_trend | nonempty_object)
     and (.cli_outputs.theme_compare | nonempty_object)
     and (.cli_outputs.traffic_trend | nonempty_object)
+    and (.ttp_health | ttp_health_ok)
     and (["strategic_improvements", "next_collection_candidates", "strategic_discussion"]
          | all(.[];
              . as $key

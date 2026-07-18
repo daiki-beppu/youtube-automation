@@ -50,7 +50,7 @@ def _write_fixture(
     content_path.write_text("{}", encoding="utf-8")
 
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": "2026-07-17T03:00:00Z",
         "inputs": {
             "analysis_target": str(analytics_path.relative_to(tmp_path)),
@@ -72,6 +72,36 @@ def _write_fixture(
             "channel_trend": {"summary": {"wow_growth_rate": 8.5}},
             "theme_compare": {"themes": [{"day7_mean": 1234.0}]},
             "traffic_trend": {"summary": {"top_source_share_percent": 45.2}},
+        },
+        "ttp_health": {
+            "status": "ok",
+            "source": "benchmark_20260715.json",
+            "reference_date": "2026-07-15",
+            "thresholds": {"stale_days": 60, "decline_ratio": 0.5, "window_days": 90},
+            "channels": [
+                {
+                    "slug": "rival",
+                    "name": "Rival",
+                    "channel_id": "UC_RIVAL",
+                    "status": "healthy",
+                    "last_upload_at": "2026-07-01",
+                    "days_since_last_upload": 14,
+                    "recent_window": {
+                        "start": "2026-04-16",
+                        "end": "2026-07-15",
+                        "video_count": 2,
+                        "avg_views": 20000,
+                    },
+                    "prior_window": {
+                        "start": "2026-01-16",
+                        "end": "2026-04-15",
+                        "video_count": 2,
+                        "avg_views": 18000,
+                    },
+                    "alerts": [],
+                    "insufficiencies": [],
+                }
+            ],
         },
         "ctr_strategy": [],
         "channel_performance": [],
@@ -385,3 +415,48 @@ def test_standard_report_with_full_collection_guidance_passes(tmp_path: Path) ->
     result = _run_validator(tmp_path)
 
     assert result.returncode == 0, result.stderr
+
+
+def test_schema_version_one_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["schema_version"] = 1
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_missing_ttp_health_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    del report["ttp_health"]
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_invalid_ttp_channel_status_fails(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["ttp_health"]["channels"][0]["status"] = "unknown"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0
+
+
+def test_alert_ttp_channel_requires_nonempty_valid_alerts(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["ttp_health"]["channels"][0]["status"] = "alert"
+    report["ttp_health"]["channels"][0]["alerts"] = []
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+    assert _run_validator(tmp_path).returncode != 0

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(analytics)`: `benchmark.channels` の pre-filter 投稿走査を `upload_scan` として保存し、60 日以上の投稿停滞と直近 90 日平均再生数の前期比 50% 以下を判定する `yt-ttp-health` を追加した。`/analytics-analyze` の analysis JSON を schema v2 に更新し、健全・アラート・データ不足・入力欠損を区別する `ttp_health` を必須化した（#2050）。
+
 - `feat(auth)`: OAuth token の scope 分離を導入し、read-only skill が write scope の token を共用しない設計にした。`YouTubeOAuthHandler` に `READONLY_SCOPES`（`youtube.readonly` + `yt-analytics(.monetary)?.readonly`、write scope なし）と用途別 token `auth/token.readonly.json` の発行・解決（`create_readonly` / `readonly_token_path`。探索順は #1721 と同じ channel 側 → main worktree 側）を追加し、新 CLI `yt-oauth`（`--readonly` で readonly token 発行）を登録した。`ServiceRegistry` の read 系（`analytics` / `reporting` / 新設の `youtube_readonly` / `credentials_readonly` / `get_readonly_handler`）は readonly token を優先し、未発行時は warning ログで発行手順を案内した上で `token.json` へフォールバックする（サイレント失敗しない。既存運用は無変更で動作）。read-only 系呼び出し元（analytics 収集 / benchmark / channel-status / metadata-audit / playlist-status / discover-competitors / stream-bandwidth）を readonly 経路へ移行し、write 系（upload / playlist 管理 / bulk update / コメント投稿）は従来どおり `token.json` を使う。skill × 実効 scope の対応表と運用手順を `docs/oauth-scopes.md` に新設した（#1699）。
 
 - `feat(cost)`: 動画 metadata 一括更新 3 CLI（`yt-bulk-update-desc` / `yt-shorts-bulk-update-loc` / `yt-bulk-update-synthetic-media`）に YouTube Data API quota 記録（`cost_tracker.log_quota`）を配線した。read-before-write を含む発行済みリクエスト 1 回につき 1 エントリ（`videos.list` / `channels.list` / `playlistItems.list` = 1 unit、`videos.update` = 50 units）を記録し、dry-run は実際に発行した read のみ、batch / pagination はリクエスト回数と記録件数が一致する。quota はリクエスト失敗時も消費されるため、update 失敗時も記録した上で従来の例外・部分進捗契約（continue / exit code / 最初の失敗の再 raise）を維持する（#2058）。
