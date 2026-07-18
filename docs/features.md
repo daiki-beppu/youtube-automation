@@ -1,6 +1,6 @@
 # 全 skill カタログ
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **49 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **50 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
@@ -85,6 +85,7 @@ YouTube Analytics と動画本体の解析。
 | /analytics-collect | YouTube Analytics データの収集・最新化 |
 | /analytics-analyze | 収集済みデータを詳細分析し戦略的改善提案を生成 |
 | /analytics-report | 過去レポートの表示・比較 |
+| /analytics-run | 収集 → 分析 → 最新レポート表示を鮮度判定付きで一括実行・途中再開 |
 | /flop-analysis | 伸びなかった動画の原因を仮説 → 検証で切り分け |
 | /video-analyze | Gemini で YouTube 動画本体を直接解析（フック・BGM・シーン・サムネ整合性） |
 

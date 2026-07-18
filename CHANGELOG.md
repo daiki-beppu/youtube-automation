@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **skills**: `/analytics-run` を追加し、Analytics の収集・分析・最新レポート表示を成果物鮮度に基づいて一括実行・途中再開できるようにした (#1823)
 - `feat(strategy)`: 状態を持たず任意実行できる `/market-research` skill を追加した。TTP 入替候補とニッチ仮説を根拠・不確実性付きで会話内に返し、明示依頼時だけ日付付き Markdown を保存する。`/channel-new` から `/discover-competitors` と用途を分けて案内し、config や TTP は自動変更しない（#2051）。
 - `docs(skills)`: 全 48 SKILL.md の frontmatter 直後に機械抽出可能な `前工程` / `後工程` ブロックを追加し、散文・矢印形式の依存一覧を統一した。`skill-authoring-guidelines.md` に書式、`なし` / 共通基盤の表現、`rg` 抽出方法、実在例を規定した（#1821）。
 - `feat(videoup)`: `overlays.audio_visualizer.style: "heart"` を追加した。cardioid の角度と法線距離へ `showfreqs` を再マッピングし、実行時生成する離散バー mask で、音楽スペクトラムがハート輪郭上を内外へ波打つ。既存の `fill` / `rounding` / `glow` と組み合わせられ、外部 asset は不要（#1689）。
