@@ -3,6 +3,11 @@ name: flop-analysis
 description: "Use when 公開済み動画が伸びなかった原因を video_id、collection、または --since で切り分け、postmortem.md に出力するとき。「伸びなかった」「flop 分析」で発動。横断戦略は /analytics-analyze、事前監査は /alignment-check"
 ---
 
+## 前後工程
+
+- `前工程`: `/analytics-analyze`, `/alignment-check`
+- `後工程`: `/collection-ideate`
+
 ## Overview
 
 公開後「思ったより伸びなかった」動画について、Analytics（CTR / 平均視聴時間 / インプレッション）を

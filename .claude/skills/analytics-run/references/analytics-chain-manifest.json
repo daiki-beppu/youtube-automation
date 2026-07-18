@@ -1,0 +1,44 @@
+{
+  "chainId": "analytics",
+  "steps": [
+    {
+      "id": "collect",
+      "skill": "analytics-collect",
+      "prerequisiteArtifacts": [],
+      "outputArtifacts": ["data/analytics_data_*.json"],
+      "approvalGate": {
+        "enabled": false,
+        "configPath": "workflow.analytics.approval_gates.collect"
+      },
+      "idempotency": {
+        "script": "references/analytics-chain-state.py"
+      }
+    },
+    {
+      "id": "analyze",
+      "skill": "analytics-analyze",
+      "prerequisiteArtifacts": ["data/analytics_data_*.json"],
+      "outputArtifacts": ["reports/analysis_*.md", "reports/analysis_*.json"],
+      "approvalGate": {
+        "enabled": false,
+        "configPath": "workflow.analytics.approval_gates.analyze"
+      },
+      "idempotency": {
+        "script": "references/analytics-chain-state.py"
+      }
+    },
+    {
+      "id": "report",
+      "skill": "analytics-report",
+      "prerequisiteArtifacts": ["reports/analysis_*.md"],
+      "outputArtifacts": [],
+      "approvalGate": {
+        "enabled": false,
+        "configPath": "workflow.analytics.approval_gates.report"
+      },
+      "idempotency": {
+        "script": "references/analytics-chain-state.py"
+      }
+    }
+  ]
+}

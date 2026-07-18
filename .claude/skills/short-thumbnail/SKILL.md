@@ -3,6 +3,11 @@ name: short-thumbnail
 description: "Use when ショート用 9:16 サムネ作成、または short.png のループ動画化をするとき。「ショートサムネ」「short.png」「short-loop」「9:16 画像」で発動"
 ---
 
+## 前後工程
+
+- `前工程`: `/short`, `/short-release`
+- `後工程`: `なし`
+
 ## Overview
 
 `/short` Mode A の素材として `10-assets/short.png`（9:16 縦型サムネ）と
@@ -174,4 +179,4 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 ## Next Step
 
 `short.png` または `short-loop.mp4` が揃ったら:
-→ `/short <collection-path>` でショート動画本体を生成・投稿
+- `/short <collection-path>` でショート動画本体を生成・投稿

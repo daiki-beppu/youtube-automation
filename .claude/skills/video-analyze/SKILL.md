@@ -3,6 +3,11 @@ name: video-analyze
 description: "Use when 動画本体の中身（フック構造・シーン・BGM 展開）を Gemini で解析するとき。「冒頭 30 秒解析」「retention drop」「BGM のピーク位置」で発動"
 ---
 
+## 前後工程
+
+- `前工程`: `なし`
+- `後工程`: `/collection-ideate`, `/suno`, `/alignment-check`
+
 ## Overview
 
 `yt-video-analyze` で YouTube 動画を Gemini に直接渡し、以下の構造化データを抽出する。

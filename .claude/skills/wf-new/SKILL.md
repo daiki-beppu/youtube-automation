@@ -3,6 +3,11 @@ name: wf-new
 description: "Use when 新規コレクション制作を立ち上げるとき（ディレクトリ未作成）。「新しいコレクション始めたい」「制作開始」で発動。既存の進行は /wf-next"
 ---
 
+## 前後工程
+
+- `前工程`: `/channel-new`, `/setup`, `/collection-ideate`
+- `後工程`: `/wf-next`, `/suno-helper`
+
 ## Overview
 
 新コレクション開始オーケストレーター。子スキルを順番に呼び、通常は企画選択 + サムネイル承認の2箇所で一時停止する。

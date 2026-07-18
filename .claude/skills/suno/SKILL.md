@@ -1,7 +1,12 @@
 ---
 name: suno
-description: "Use when Suno UI 投入用の音楽プロンプトを生成するとき。「Suno プロンプト」「Style 文」で発動。歌詞は前工程 /suno-lyric、後工程 /suno-helper → /masterup。Lyria チャンネルは /lyria"
+description: "Use when Suno UI 投入用の音楽プロンプトを生成するとき。「Suno プロンプト」「Style 文」で発動。歌詞生成は /suno-lyric、UI 投入は /suno-helper、マスター化は /masterup。Lyria チャンネルは /lyria"
 ---
+
+## 前後工程
+
+- `前工程`: `/suno-lyric`
+- `後工程`: `/suno-helper`, `/masterup`
 
 ## Overview
 
@@ -502,22 +507,22 @@ UI 変更で注入先セレクタが外れた場合は `extensions/shared/dom.ts
 ## Next Step
 
 ### インストゥルメンタル
-→ `/suno-helper` で SunoAI の Advanced タブ（Lyrics mode = **Instrumental**）に自動投入して連続生成 + playlist 一括追加
-→ `/masterup <playlist-url>` でダウンロード + マスター音源生成
+- `/suno-helper` で SunoAI の Advanced タブ（Lyrics mode = **Instrumental**）に自動投入して連続生成 + playlist 一括追加
+- `/masterup <playlist-url>` でダウンロード + マスター音源生成
 
 ### ボーカル（歌詞あり）
-→ `/suno` で `suno-patterns.yaml` の pattern draft を保存
-→ `/suno-lyric` で同じ entry name の歌詞を生成・レビュー
-→ `/suno` を再実行して Style + Lyrics の `suno-prompts.json` を生成
-→ `/suno-helper` で SunoAI の Advanced タブ（Lyrics mode = **Write**）に Style + Lyrics を自動投入して連続生成 + playlist 一括追加
-→ 歌唱の発音・ピッチが破綻していないか必ず試聴チェック
-→ `/masterup <playlist-url>` でダウンロード + マスター音源生成
+- `/suno` で `suno-patterns.yaml` の pattern draft を保存
+- `/suno-lyric` で同じ entry name の歌詞を生成・レビュー
+- `/suno` を再実行して Style + Lyrics の `suno-prompts.json` を生成
+- `/suno-helper` で SunoAI の Advanced タブ（Lyrics mode = **Write**）に Style + Lyrics を自動投入して連続生成 + playlist 一括追加
+- 歌唱の発音・ピッチが破綻していないか必ず試聴チェック
+- `/masterup <playlist-url>` でダウンロード + マスター音源生成
 
 ## Cross References
 
-- 前工程（テーマ確定 + 制作開始）: `/wf-new`
+- テーマ確定 + 制作開始: `/wf-new`
 - 歌詞生成（ボーカルのみ）: `/suno-lyric`
-- 次工程（ブラウザ自動生成 + playlist 一括追加）: `/suno-helper`
-- 後工程（DL + マスター化）: `/masterup`
+- ブラウザ自動生成 + playlist 一括追加: `/suno-helper`
+- DL + マスター化: `/masterup`
 - 拡張本体のコード: `extensions/suno-helper/` / `extensions/shared/`
 - サーバー CLI: `src/youtube_automation/scripts/collection_serve.py`
