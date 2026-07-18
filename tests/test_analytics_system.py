@@ -102,6 +102,17 @@ def stub_analytics_boundaries(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         YouTubeAnalyticsCollector,
+        "get_subscribed_status_analytics",
+        lambda self, start, end: {
+            "statuses": {
+                "SUBSCRIBED": {"views": 10, "view_share_percent": 25.0},
+                "UNSUBSCRIBED": {"views": 30, "view_share_percent": 75.0},
+            },
+            "total_views": 40,
+        },
+    )
+    monkeypatch.setattr(
+        YouTubeAnalyticsCollector,
         "get_country_analytics",
         lambda self, start, end: {"countries": {"JP": {"views": 20}}},
     )
@@ -228,7 +239,16 @@ class TestCollectAnalyticsData:
     def test_success_with_save(self, system, tmp_path):
         """認証済みでデータ保存ありの場合"""
         system.authenticated = True
-        expected_data = {"views": 1000, "subscribers": 50}
+        expected_data = {
+            "views": 1000,
+            "subscribers": 50,
+            "audience": {
+                "by_subscribed_status": {
+                    "statuses": {"UNSUBSCRIBED": {"views": 750, "view_share_percent": 75.0}},
+                    "total_views": 1000,
+                }
+            },
+        }
         system.collector.collect_basic_analytics.return_value = expected_data
         system.collector.get_all_channel_videos.return_value = [{"video_id": "vid_A"}]
         system.collector.get_video_daily_analytics.return_value = [
@@ -257,6 +277,12 @@ class TestCollectAnalyticsData:
         }
         assert "impressions" not in daily_payload["rows"][0]
         assert "impression_ctr" not in daily_payload["rows"][0]
+
+        with open(saved_files[0], encoding="utf-8") as f:
+            analytics_payload = json.load(f)
+        assert (
+            analytics_payload["audience"]["by_subscribed_status"] == expected_data["audience"]["by_subscribed_status"]
+        )
 
     def test_success_without_save(self, system):
         """認証済みでデータ保存なしの場合"""
@@ -498,7 +524,16 @@ class TestMainDepth:
         assert len(saved_files) == 1
         payload = json.loads(saved_files[0].read_text(encoding="utf-8"))
         assert payload["collection_depth"] == "standard"
-        assert payload["audience"] == {"by_device": {"devices": {"TV": {"views": 25}}}}
+        assert payload["audience"] == {
+            "by_device": {"devices": {"TV": {"views": 25}}},
+            "by_subscribed_status": {
+                "statuses": {
+                    "SUBSCRIBED": {"views": 10, "view_share_percent": 25.0},
+                    "UNSUBSCRIBED": {"views": 30, "view_share_percent": 75.0},
+                },
+                "total_views": 40,
+            },
+        }
         assert "retention" not in payload
 
 

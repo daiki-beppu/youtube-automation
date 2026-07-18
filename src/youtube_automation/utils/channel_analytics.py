@@ -104,7 +104,7 @@ class ChannelAnalyticsMixin:
             end_date (str): 終了日 (YYYY-MM-DD)
             depth (str): 収集深度
                 - "basic": 既存メトリクスのみ（クォータ節約、後方互換）
-                - "standard": + impressions/CTR + traffic source + device（推奨）
+                - "standard": + impressions/CTR + traffic source + audience（推奨）
                 - "full": + retention + country（全メトリクス）
 
         Returns:
@@ -151,7 +151,7 @@ class ChannelAnalyticsMixin:
                 "strategic_analysis": strategic_analytics,
             }
 
-            # standard 以上: impressions/CTR + traffic source + device
+            # standard 以上: impressions/CTR + traffic source + audience
             if depth in ("standard", "full"):
                 logger.info("CTR 詳細分析収集中...")
                 basic_data["ctr_analysis"] = self.get_ctr_analysis(start_date, end_date)
@@ -164,9 +164,13 @@ class ChannelAnalyticsMixin:
                     start_date, end_date, "YT_SEARCH"
                 )
 
-                logger.info("デバイス別分析収集中...")
+                logger.info("オーディエンス分析収集中...")
+                subscribed_status = self.get_subscribed_status_analytics(start_date, end_date)
+                if "error" in subscribed_status:
+                    raise YouTubeAPIError(f"登録ステータス分析取得失敗: {subscribed_status['error']}")
                 basic_data["audience"] = {
                     "by_device": self.get_device_analytics(start_date, end_date),
+                    "by_subscribed_status": subscribed_status,
                 }
 
             # full: + retention + country
