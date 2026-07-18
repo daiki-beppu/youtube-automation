@@ -8,11 +8,13 @@
     select_channel()                 # CLI の明示 channel slug を初回解決へ渡す
     reset() -> None                  # シングルトン state をリセット（テスト用）
     ChannelConfig                    # 合成ルート dataclass（型ヒント用）
+    CommunityDraft                   # `community_draft` セクション（型ヒント用）
     Shorts                           # `shorts` セクション（型ヒント用）
     PinnedComment                    # `pinned_comment` セクション（型ヒント用）
     Distrokid                        # `distrokid` セクション（型ヒント用）
 """
 
+from youtube_automation.utils.config.community_draft import CommunityDraft
 from youtube_automation.utils.config.config import ChannelConfig
 from youtube_automation.utils.config.distrokid import Distrokid
 from youtube_automation.utils.config.loader import (
@@ -28,6 +30,7 @@ from youtube_automation.utils.config.shorts import Shorts
 
 __all__ = [
     "ChannelConfig",
+    "CommunityDraft",
     "Distrokid",
     "PinnedComment",
     "Shorts",

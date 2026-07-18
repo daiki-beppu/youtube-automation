@@ -26,7 +26,7 @@ uv run yt-skills lint [<skill>..] # SKILL.md frontmatter の軽量検証（stric
 - `src/youtube_automation/{utils,agents,scripts,cli,templates}/` — コアライブラリ / アップロードエージェント / `yt-*` CLI 本体 / ユーザー向け CLI / 説明文テンプレート
 - `.claude/skills/` — 自動化スキル群（Claude Code / Codex 共用）。wheel に同梱され `yt-skills sync` で各チャンネルへ展開。`.agents/skills` は Codex CLI 探索パス用の symlink（実体は常に `.claude/skills/` 側を編集）
 - `auth/` — submodule 利用者向け後方互換 shim（OAuth 認証情報のみ）
-- 下流チャンネルリポジトリ（`CHANNEL_DIR`）: `config/channel/*.json`（責務別分割。meta / content / youtube / analytics / playlists / workflow / audio + optional の shorts.json / comments.json / pinned-comment.json / distrokid.json）、`config/localizations.json`、`auth/`、`.claude/skills/`、`collections/`、`assets/stock/`
+- 下流チャンネルリポジトリ（`CHANNEL_DIR`）: `config/channel/*.json`（責務別分割。meta / content / youtube / analytics / playlists / workflow / audio + optional の shorts.json / comments.json / pinned-comment.json / distrokid.json / community-draft.json）、`config/localizations.json`、`auth/`、`.claude/skills/`、`collections/`、`assets/stock/`
 
 ## 開発規約
 

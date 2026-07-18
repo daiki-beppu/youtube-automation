@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from youtube_automation.utils.config.analytics import Analytics
 from youtube_automation.utils.config.audio import Audio
 from youtube_automation.utils.config.comments import Comments
+from youtube_automation.utils.config.community_draft import CommunityDraft
 from youtube_automation.utils.config.content import Content
 from youtube_automation.utils.config.distrokid import Distrokid
 from youtube_automation.utils.config.localizations import Localizations
@@ -32,5 +33,6 @@ class ChannelConfig:
     audio: Audio
     localizations: Localizations
     comments: Comments
+    community_draft: CommunityDraft
     pinned_comment: PinnedComment
     distrokid: Distrokid
