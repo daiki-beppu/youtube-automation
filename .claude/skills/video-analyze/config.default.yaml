@@ -41,7 +41,15 @@ prompt: |
       "intro": "timestamp range (e.g. 0:00-0:15)",
       "peak": "timestamp of the highest-energy moment within the clip window (e.g. 1:30)",
       "outro": "timestamp range of the final section within the clip window (e.g. 13:30-end of clip)",
-      "energy_curve": "brief description of dynamics within the clip window"
+      "energy_curve": "brief description of dynamics within the clip window",
+      "segments": [
+        {
+          "start": "M:SS",
+          "end": "M:SS",
+          "track": "visible title if known, otherwise track N",
+          "description": "instruments, mood, and energy in this segment"
+        }
+      ]
     },
     "scene_timeline": [
       {"start": "0:00", "summary": "one-line description of what changes (clip window only)"}
