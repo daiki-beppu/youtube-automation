@@ -3,6 +3,9 @@
 # Veo 3.1 ループ動画生成の設定。
 # チャンネル側では config/skills/loop-video.yaml に上書き値を置く。
 
+# 動画の構成タイプ。現行 generator は loop のみを実装する。
+video_type: loop
+
 # このチャンネルでループ動画化を行うか。false にすると yt-generate-loop-video は
 # fail-loud で停止し（Veo 課金を防ぐ）、/videoup は静止画背景に切り替える。
 # サムネが完成しておりループ動画のリターンが Veo コストに見合わないチャンネルで false にする。

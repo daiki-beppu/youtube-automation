@@ -1192,3 +1192,42 @@ class TestMainOmniEngine:
                 mod.main()
             assert excinfo.value.code == 0
             assert mocks["generate_loop_video"].call_count == 1
+
+
+class TestMainVideoType:
+    """Issue #1723: video_type の明示設定と観測可能性。"""
+
+    def test_explicit_loop_is_logged_and_keeps_existing_generation(self, tmp_path, monkeypatch, capsys):
+        from youtube_automation.scripts import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_image(col, MAIN_PNG)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "-y"])
+
+        with _patch_main_boundaries() as mocks:
+            _set_default_mocks(mocks)
+            mocks["load_config"].return_value = {"video_type": "loop", "veo": {}}
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+
+        assert excinfo.value.code == 0
+        assert "video_type=loop" in capsys.readouterr().out
+        assert mocks["generate_loop_video"].call_count == 1
+
+    @pytest.mark.parametrize("video_type", ["static", "multi_scene"])
+    def test_non_loop_type_fails_before_creating_client(self, tmp_path, monkeypatch, video_type):
+        from youtube_automation.scripts import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_image(col, MAIN_PNG)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "-y"])
+
+        with _patch_main_boundaries() as mocks:
+            _set_default_mocks(mocks)
+            mocks["load_config"].return_value = {"video_type": video_type}
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+
+        assert excinfo.value.code == 1
+        assert mocks["create_genai_client"].call_count == 0
+        assert mocks["generate_loop_video"].call_count == 0
