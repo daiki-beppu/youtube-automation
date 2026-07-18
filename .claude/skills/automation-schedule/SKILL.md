@@ -3,6 +3,11 @@ name: automation-schedule
 description: "Use when チャンネルの定期制作スケジュール（workflow.json の scheduled_automation）を設定し、Claude Code / Codex の定期実行ジョブを作成・更新・確認・停止するとき。「定期実行」「スケジュール設定」「自動で回して」「automation-schedule」で発動。automation のリリース追従は /automation-update、本体リリースは /automation-release、制作を手動で一段進めるのは /wf-next"
 ---
 
+## 前後工程
+
+- `前工程`: `/channel-new`, `/setup`
+- `後工程`: `/wf-next`
+
 ## Overview
 
 チャンネルごとの定期制作設定（`config/channel/workflow.json` の `scheduled_automation`）を単一入口で管理する。前提診断 → config 生成（dry-run 差分）→ スケジューラージョブの作成・更新 → 状態確認・停止までを一度の対話で行う。スケジュール実装は実行環境別アダプタ（macOS: launchd / その他: cron）に分離し、実行環境は Claude Code（`claude -p`）または Codex（`codex exec`）を使う。

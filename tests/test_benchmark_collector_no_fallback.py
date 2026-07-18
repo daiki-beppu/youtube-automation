@@ -97,6 +97,19 @@ class TestLoadBenchmarkVideos:
 
         assert [v["video_id"] for v in result] == ["v1", "v2"]
 
+    def test_filters_videos_by_competitor_slug(self, tmp_path):
+        _write_benchmark_json(
+            tmp_path,
+            [
+                {"name": "A", "slug": "a", "videos": [{"video_id": "a1", "views": 50000}]},
+                {"name": "B", "slug": "b", "videos": [{"video_id": "b1", "views": 40000}]},
+            ],
+        )
+
+        result = load_benchmark_videos(tmp_path, competitor_slug="b")
+
+        assert [(video["video_id"], video["channel_slug"]) for video in result] == [("b1", "b")]
+
     def test_passes_through_duration_iso_for_live_detection(self, tmp_path):
         # Given: live 配信 (P0D) と VOD が混在。duration_iso 無しの旧形式は "" になる
         _write_benchmark_json(
@@ -157,7 +170,7 @@ class TestCollectAllFailures:
 
         # When / Then: 空辞書を返さず ConfigError
         with pytest.raises(ConfigError, match="unknown"):
-            collector.collect_all(channel_slug="unknown")
+            collector.collect_all(competitor_slug="unknown")
 
     def test_wraps_http_error_from_channels_list(self, no_retry_backoff):
         # Given: channels.list 自体が HttpError

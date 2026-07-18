@@ -3,6 +3,11 @@ name: channel-status
 description: "Use when チャンネルの YouTube 統計（登録者・再生回数）を取得するとき。「登録者数は？」「YouTube の数字」で発動。制作進捗は /wf-status"
 ---
 
+## 前後工程
+
+- `前工程`: `/channel-new`
+- `後工程`: `なし`
+
 ## Overview
 
 チャンネルの最新統計 + 個別動画パフォーマンスを YouTube API から取得する。

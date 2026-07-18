@@ -3,6 +3,11 @@ name: benchmark
 description: "Use when 競合チャンネルのベンチマークデータを最新化するとき。「競合データ収集」「ベンチマーク更新」で発動。docs/benchmarks/*.md を更新。収集済みデータの分析は /channel-research、サムネイルだけの深掘りは /thumbnail-research"
 ---
 
+## 前後工程
+
+- `前工程`: `なし`
+- `後工程`: `/channel-research`, `/viewer-voice`, `/collection-ideate`, `/thumbnail-research`
+
 ## Overview
 
 `benchmark_collector.py` で競合チャンネルの**直近投稿のうち再生数しきい値（既定 10,000）以上**の動画だけを収集し、`docs/benchmarks/*.md` を自動更新する。
@@ -75,7 +80,7 @@ uv run yt-benchmark-collect -y
 uv run yt-benchmark-collect --force -y       # 全チャンネル強制更新
 uv run yt-benchmark-collect --no-thumbnails  # サムネイルDLスキップ（高速）
 uv run yt-benchmark-collect --json-only      # JSON のみ（Markdown スキップ）
-uv run yt-benchmark-collect --channel <slug> # 単一チャンネル指定
+uv run yt-benchmark-collect --competitor <slug> # 単一競合指定
 uv run yt-benchmark-collect -v               # 詳細ログ
 ```
 

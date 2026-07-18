@@ -3,6 +3,11 @@ name: thumbnail
 description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき。「サムネイル生成」「画像生成」「アイキャッチ」で発動。競合の勝ちパターン分析は /thumbnail-research、320px 視認性比較は /thumbnail-compare、Studio の A/B テスト設計・結果記録は /thumbnail-test、SVG・汎用画像生成には使わない"
 ---
 
+## 前後工程
+
+- `前工程`: `/collection-ideate`, `/wf-new`
+- `後工程`: `/loop-video`, `/thumbnail-compare`, `/alignment-check`, `/thumbnail-test`
+
 ## Overview
 
 コレクション用サムネイルを `config/skills/thumbnail.yaml`（skill-config）に基づいて生成する。
@@ -848,5 +853,5 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 ## Next Step
 
 サムネイル確定後:
-→ Suno チャンネル: `/suno <theme>` で音楽プロンプト生成
-→ Lyria チャンネル: `/lyria <theme>` でマスター音源生成（`/suno` 系工程は不要）
+- Suno チャンネル: `/suno <theme>` で音楽プロンプト生成
+- Lyria チャンネル: `/lyria <theme>` でマスター音源生成（`/suno` 系工程は不要）

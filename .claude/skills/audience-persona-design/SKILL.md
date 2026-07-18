@@ -3,6 +3,11 @@ name: audience-persona-design
 description: "Use when ターゲット視聴者を第一ペルソナとして設計・見直しするとき。「ペルソナ設定」「視聴者像」「ターゲット層」で発動。/viewer-voice の viewer-voice-analysis.md を必須入力に persona-definition.md を確定"
 ---
 
+## 前後工程
+
+- `前工程`: `/viewer-voice`
+- `後工程`: `/viewing-scene`, `/collection-ideate`
+
 ## Overview
 
 `/viewer-voice` のコメント分析、ベンチマークタグ分析、Web 調査、`/viewing-scene` の視聴シーン検証を束ね、チャンネル判断軸になる **1 人の第一ペルソナ** を設計する。
