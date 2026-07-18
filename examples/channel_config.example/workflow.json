@@ -4,6 +4,18 @@
       "skip_audio_approval": true,
       "skip_upload_approval": true,
       "skip_manual_mastering": false
+    },
+    "scheduled_automation": {
+      "enabled": false,
+      "timezone": "Asia/Tokyo",
+      "run_time": "09:00",
+      "cadence": ["mon", "wed", "fri"],
+      "target_workflow": "wf-next",
+      "max_retries": 1,
+      "retry_delay_seconds": 300,
+      "prevent_concurrent_runs": true,
+      "notification": "terminal",
+      "allow_external_publish": false
     }
   }
 }
