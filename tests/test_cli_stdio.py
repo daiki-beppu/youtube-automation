@@ -19,6 +19,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-benchmark-comments": "youtube_automation.scripts.fetch_benchmark_comments",
     "yt-bulk-update-desc": "youtube_automation.scripts.bulk_update_descriptions_from_md",
     "yt-bulk-update-synthetic-media": "youtube_automation.scripts.bulk_update_synthetic_media",
+    "yt-captions-upload": "youtube_automation.scripts.captions_upload",
     "yt-channel-init": "youtube_automation.cli.channel_init",
     "yt-channel-seed": "youtube_automation.scripts.channel_seed",
     "yt-channel-settings": "youtube_automation.scripts.channel_settings_cli",
