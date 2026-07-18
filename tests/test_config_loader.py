@@ -2064,3 +2064,128 @@ def test_audio_visualizer_invalid_fill_raises(tmp_path, monkeypatch, fill, messa
 
     with pytest.raises(ConfigError, match=message):
         load_config()
+
+
+# ----- workflow.scheduled_automation (#1892) --------------------------------
+
+
+def test_scheduled_automation_absent_uses_disabled_defaults(tmp_path, monkeypatch):
+    """#1892: `scheduled_automation` 未設定は全 default（enabled=False）で挙動不変."""
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+    sa = config.workflow.scheduled_automation
+
+    assert sa.enabled is False
+    assert sa.timezone == "Asia/Tokyo"
+    assert sa.run_time == "09:00"
+    assert sa.cadence == ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+    assert sa.target_workflow == "wf-next"
+    assert sa.max_retries == 0
+    assert sa.retry_delay_seconds == 300
+    assert sa.prevent_concurrent_runs is True
+    assert sa.notification == "terminal"
+    assert sa.allow_external_publish is False
+
+
+def test_scheduled_automation_explicit_full(tmp_path, monkeypatch):
+    """#1892: 全キーを明示指定でき、dataclass に反映される."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "scheduled_automation": {
+                "enabled": True,
+                "timezone": "America/New_York",
+                "run_time": "20:30",
+                "cadence": ["mon", "wed", "fri"],
+                "target_workflow": "wf-next",
+                "max_retries": 2,
+                "retry_delay_seconds": 60,
+                "prevent_concurrent_runs": False,
+                "notification": "none",
+                "allow_external_publish": True,
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    sa = load_config().workflow.scheduled_automation
+
+    assert sa.enabled is True
+    assert sa.timezone == "America/New_York"
+    assert sa.run_time == "20:30"
+    assert sa.cadence == ("mon", "wed", "fri")
+    assert sa.max_retries == 2
+    assert sa.retry_delay_seconds == 60
+    assert sa.prevent_concurrent_runs is False
+    assert sa.notification == "none"
+    assert sa.allow_external_publish is True
+
+
+def test_scheduled_automation_partial_keeps_other_defaults(tmp_path, monkeypatch):
+    """#1892: 一部キーのみ指定した場合、残りは default のまま（falsy を潰さない）."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "scheduled_automation": {"enabled": True, "max_retries": 0},
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    sa = load_config().workflow.scheduled_automation
+
+    assert sa.enabled is True
+    assert sa.max_retries == 0
+    assert sa.allow_external_publish is False
+    assert sa.prevent_concurrent_runs is True
+
+
+def test_scheduled_automation_coexists_with_wf_next(tmp_path, monkeypatch):
+    """#1892: 既存 `wf_next` 設定と同居できる."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {"skip_upload_approval": False},
+            "scheduled_automation": {"enabled": True},
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.wf_next.skip_upload_approval is False
+    assert config.workflow.scheduled_automation.enabled is True
+
+
+@pytest.mark.parametrize(
+    ("scheduled", "message"),
+    [
+        ("not-an-object", "workflow.scheduled_automation は object"),
+        ({"enabled": "yes"}, "scheduled_automation.enabled は boolean"),
+        ({"allow_external_publish": 1}, "scheduled_automation.allow_external_publish は boolean"),
+        ({"timezone": ""}, "scheduled_automation.timezone は空でない string"),
+        ({"run_time": "9:00"}, "run_time は HH:MM"),
+        ({"run_time": "24:00"}, "run_time は HH:MM"),
+        ({"run_time": "09:60"}, "run_time は HH:MM"),
+        ({"cadence": []}, "cadence は空でない曜日の array"),
+        ({"cadence": ["monday"]}, "cadence の要素は"),
+        ({"cadence": ["mon", "mon"]}, "cadence に重複した曜日"),
+        ({"max_retries": -1}, "max_retries は 0 以上"),
+        ({"max_retries": True}, "max_retries は integer"),
+        ({"retry_delay_seconds": "300"}, "retry_delay_seconds は integer"),
+        ({"notification": "discord"}, "scheduled_automation.notification は"),
+    ],
+)
+def test_scheduled_automation_invalid_raises(tmp_path, monkeypatch, scheduled, message):
+    """#1892: invalid な `scheduled_automation` は具体的な ConfigError で弾く."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"scheduled_automation": scheduled}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=message):
+        load_config()
