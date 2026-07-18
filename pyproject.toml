@@ -33,6 +33,7 @@ Repository = "https://github.com/daiki-beppu/youtube-automation"
 veo = []  # google-genai, Pillow moved to main dependencies
 
 [project.scripts]
+yt-audio-visualizer-fill = "youtube_automation.cli_entrypoints:yt_audio_visualizer_fill"
 # CLI script entry points (yt-* prefix)
 yt-analytics = "youtube_automation.cli_entrypoints:yt_analytics"
 yt-apply-rain-layers = "youtube_automation.cli_entrypoints:yt_apply_rain_layers"
@@ -85,6 +86,7 @@ yt-suno-verify-playlist = "youtube_automation.cli_entrypoints:yt_suno_verify_pla
 yt-stream-archive-check = "youtube_automation.cli_entrypoints:yt_stream_archive_check"
 yt-stream-bandwidth = "youtube_automation.cli_entrypoints:yt_stream_bandwidth"
 yt-theme-compare = "youtube_automation.cli_entrypoints:yt_theme_compare"
+yt-ttp-health = "youtube_automation.cli_entrypoints:yt_ttp_health"
 yt-thumbnail-auto-select = "youtube_automation.cli_entrypoints:yt_thumbnail_auto_select"
 yt-thumbnail-check = "youtube_automation.cli_entrypoints:yt_thumbnail_check"
 yt-thumbnail-compare = "youtube_automation.cli_entrypoints:yt_thumbnail_compare"

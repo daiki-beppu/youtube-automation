@@ -73,6 +73,7 @@ BILLED_CLIS: dict[str, str] = {
 # 課金 API を呼ばない CLI（ローカル処理・無料 API のみ）。
 NON_BILLED_CLIS: dict[str, str] = {
     "yt-apply-rain-layers": "ローカル ffmpeg 合成のみ",
+    "yt-audio-visualizer-fill": "ローカルの Pillow 画像生成のみ",
     "yt-automation-update": "バージョン pin bump / git 操作のみ",
     "yt-channel-init": "ローカルの config 雛形生成のみ",
     "yt-channel-trend": "収集済み analytics_data_*.json のローカル分析のみ",
@@ -103,6 +104,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-suno-verify": "ローカル成果物検証のみ",
     "yt-suno-verify-playlist": "ローカル成果物検証のみ",
     "yt-theme-compare": "収集済みデータのローカル分析のみ",
+    "yt-ttp-health": "収集済み benchmark_*.json のローカル分析のみ",
     "yt-thumbnail-auto-select": "ローカルのサムネイル採点・選定のみ",
     "yt-thumbnail-correlate": "CDN 画像 DL + ローカル相関計算のみ",
     "yt-thumbnail-text": "ローカル PIL テキスト描画のみ",

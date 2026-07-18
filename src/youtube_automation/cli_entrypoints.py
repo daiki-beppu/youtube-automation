@@ -27,6 +27,7 @@ def _make_entrypoint(module_path: str, function_name: str = "main") -> Callable[
 
 
 yt_analytics = _make_entrypoint("youtube_automation.scripts.analytics_system")
+yt_audio_visualizer_fill = _make_entrypoint("youtube_automation.utils.audio_visualizer_fill")
 yt_apply_rain_layers = _make_entrypoint("youtube_automation.scripts.apply_rain_layers")
 yt_automation_update = _make_entrypoint("youtube_automation.cli.automation_update")
 yt_benchmark_collect = _make_entrypoint("youtube_automation.scripts.benchmark_collector")
@@ -77,6 +78,7 @@ yt_suno_verify_playlist = _make_entrypoint("youtube_automation.scripts.suno_veri
 yt_stream_archive_check = _make_entrypoint("youtube_automation.scripts.streaming_archive_check")
 yt_stream_bandwidth = _make_entrypoint("youtube_automation.cli.stream_bandwidth")
 yt_theme_compare = _make_entrypoint("youtube_automation.scripts.theme_compare")
+yt_ttp_health = _make_entrypoint("youtube_automation.scripts.ttp_health_cli")
 yt_thumbnail_auto_select = _make_entrypoint("youtube_automation.scripts.auto_select_thumbnail")
 yt_traffic_trend = _make_entrypoint("youtube_automation.scripts.traffic_trend")
 yt_thumbnail_check = _make_entrypoint("youtube_automation.scripts.thumbnail_check")

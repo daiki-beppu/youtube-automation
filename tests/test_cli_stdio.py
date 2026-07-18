@@ -14,6 +14,7 @@ import pytest
 EXPECTED_ENTRYPOINT_MODULES = {
     "yt-analytics": "youtube_automation.scripts.analytics_system",
     "yt-apply-rain-layers": "youtube_automation.scripts.apply_rain_layers",
+    "yt-audio-visualizer-fill": "youtube_automation.utils.audio_visualizer_fill",
     "yt-automation-update": "youtube_automation.cli.automation_update",
     "yt-benchmark-collect": "youtube_automation.scripts.benchmark_collector",
     "yt-benchmark-comments": "youtube_automation.scripts.fetch_benchmark_comments",
@@ -63,6 +64,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-stream-archive-check": "youtube_automation.scripts.streaming_archive_check",
     "yt-stream-bandwidth": "youtube_automation.cli.stream_bandwidth",
     "yt-theme-compare": "youtube_automation.scripts.theme_compare",
+    "yt-ttp-health": "youtube_automation.scripts.ttp_health_cli",
     "yt-thumbnail-auto-select": "youtube_automation.scripts.auto_select_thumbnail",
     "yt-thumbnail-check": "youtube_automation.scripts.thumbnail_check",
     "yt-thumbnail-compare": "youtube_automation.scripts.compare_thumbnails",

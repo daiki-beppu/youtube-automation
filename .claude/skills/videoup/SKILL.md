@@ -190,6 +190,8 @@ effect:
     "enabled": true,
     "audio_visualizer": {
       "enabled": true,
+      "style": "bar",
+      "bars": 16,
       "mode": "bar",
       "size": "1280x180",
       "rate": "24",
@@ -199,7 +201,12 @@ effect:
       "opacity": 0.85,
       "glow_enabled": true,
       "glow_sigma": 12.0,
-      "glow_opacity": 0.45
+      "glow_opacity": 0.45,
+      "ring": {
+        "inner_r": 120,
+        "length": 160,
+        "arc_deg": [30, 330]
+      }
     },
     "subscribe_popup": {
       "enabled": true,
@@ -227,10 +234,25 @@ effect:
 - **popup 画像探索順**: 絶対パス → `10-assets/<image>` → `<collection-dir>/<image>`。見つからない場合は popup のみスキップして visualizer は実行する。
 - **再エンコード固定**: overlays 経路は `-c:v copy` 不可。`encoder.crf` / `maxrate` / `bufsize` で品質とサイズを制御する（DeepFocus365 で 70 分マスター = 約 1.0 GB / 2 Mbps 実績）。
 
+### Audio visualizer style（#1684）
+
+`audio_visualizer.style` は次の 4 preset から選ぶ。未指定時は `bar` になり、従来の `showfreqs=mode=bar` filtergraph をそのまま使う。
+
+| style | 表示 | 主な追加設定 |
+|---|---|---|
+| `bar` | 従来の横並びバー | `mode` / `size` |
+| `mirror-mountain` | 低音を中央に寄せた左右鏡像 + 上下対称バー | `bars` / 偶数の `size` |
+| `ring` | 円弧上の角丸カプセル | `bars` / `ring.inner_r` / `ring.length` / `ring.arc_deg` |
+| `ring-line` | 細線のギザギザリング | `bars` / `ring.*` |
+
+例: `"style": "mirror-mountain", "bars": 16, "size": "300x110"`。ring 系は `"style": "ring", "bars": 24, "ring": {"inner_r": 120, "length": 160, "arc_deg": [30, 330]}` のように指定する。`position` は全 style 共通で最終レイヤーの配置に適用される。
+
+`mirror-mountain` / ring 系で使うバー間隔・円弧マスク PNG は、`generate_videos.sh` が同梱 Python helper で一時領域へ実行時生成する。外部の `make_bars_mask.py`、`build_spectrum_video.sh`、事前生成 PNG は不要。
+
 ### 動作実証メモ
 
 - DeepFocus365 で実装済み: 70 分マスター動画を約 2 分弱で生成、visualizer + popup ともに正常合成（#511 背景）。
-- visualizer は `showfreqs=mode=bar` + `gblur` の 2 パス glow で淡い発光を演出。`glow_enabled: false` で 1 パスに減らせる。
+- visualizer は style ごとの `showfreqs` filtergraph + `gblur` の 2 パス glow で淡い発光を演出。`glow_enabled: false` で 1 パスに減らせる。
 - popup は `fade=in` / `enable='between(t,start,end)'` / `fade=out` を組み合わせて時間窓制御している。
 
 ## 長時間処理の取り扱い

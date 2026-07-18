@@ -17,16 +17,39 @@
     "enabled": false,
     "audio_visualizer": {
       "enabled": true,
+      "style": "bar",
+      "bars": 16,
       "mode": "bar",
       "size": "1280x180",
       "rate": "24",
       "fscale": "log",
       "colors": "white",
+      "fill": {
+        "type": "gradient",
+        "top": "0xA9CBF0",
+        "bottom": "0x3A5696"
+      },
+      "mirror_center": false,
+      "symmetric_vertical": false,
+      "rounding": {
+        "blur": 2.3,
+        "contrast": 3.2
+      },
       "position": "(W-w)/2:H-h-40",
       "opacity": 0.85,
       "glow_enabled": true,
       "glow_sigma": 12.0,
-      "glow_opacity": 0.45
+      "glow_opacity": 0.45,
+      "ring": {
+        "inner_r": 120,
+        "length": 160,
+        "arc_deg": [30, 330]
+      },
+      "glow": {
+        "enabled": true,
+        "sigma": 6.0,
+        "opacity": 0.4
+      }
     },
     "subscribe_popup": {
       "enabled": true,
