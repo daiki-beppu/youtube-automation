@@ -77,21 +77,21 @@ export interface RetryPlaylistPayload {
 }
 
 /** overlay → runner: Suno UI でユーザーが手動選択した clip を resume 用 ID として採用する。 */
-export interface AdoptSelectedClipsPayload {
+interface AdoptSelectedClipsPayload {
   expectedClipCount: number;
 }
 
 /** runner → background: ダウンロード完了を通知するペイロード (#1146)。 */
-export interface DownloadCompletePayload {
+interface DownloadCompletePayload {
   filename: string;
 }
 
 /** background → runner: ダウンロード失敗を通知するペイロード (#1217)。 */
-export interface DownloadFailedPayload {
+interface DownloadFailedPayload {
   message: string;
 }
 
-export type StartDownloadResult = { ok: true } | { ok: false; message: string };
+type StartDownloadResult = { ok: true } | { ok: false; message: string };
 
 /** overlay → runner: ダウンロードのみ再実行するペイロード (#1251)。 */
 export interface RetryDownloadPayload {

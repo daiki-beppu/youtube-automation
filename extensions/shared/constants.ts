@@ -28,7 +28,7 @@ export const FINISHED_SNAPSHOT_KEY = "sunoFinishedSnapshot";
 
 /** yt-collection-serve の download 完了通知サブパス (#1215、POST)。
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py collection_downloaded_route。 */
-export const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
+const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
 
 /** Suno ダウンロード形式を保存する chrome.storage.local の key (#1215)。
  * popup（書込）と content（読込）が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
@@ -253,10 +253,10 @@ export function distrokidReleaseRoute(
 }
 
 /** yt-collection-serve の既定 port。 */
-export const DEFAULT_SERVER_PORT = 7873;
+const DEFAULT_SERVER_PORT = 7873;
 
 /** ローカル配信元の既定 hostname。チャンネル別 hostname が未確定の fallback。 */
-export const DEFAULT_SERVER_HOSTNAME = "youtube-automation.localhost" as const;
+const DEFAULT_SERVER_HOSTNAME = "youtube-automation.localhost" as const;
 
 /** ローカル配信元の既定 URL。 */
 export const DEFAULT_URL =

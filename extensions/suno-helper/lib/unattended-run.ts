@@ -263,6 +263,7 @@ function requestedIndices(
   return indices;
 }
 
+// fallow-ignore-next-line complexity
 export function planUnattendedRun(options: {
   request: UnattendedRunRequest;
   collection: CollectionSummary;
@@ -394,7 +395,7 @@ export function classifyUnattendedStop(message: string): UnattendedStopReason {
   return "run-error";
 }
 
-export function requiredActionFor(reason: UnattendedStopReason): string {
+function requiredActionFor(reason: UnattendedStopReason): string {
   switch (reason) {
     case "login-required":
       return "Suno に手動でログインしてから再開してください。";

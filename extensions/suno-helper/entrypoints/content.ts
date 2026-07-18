@@ -325,6 +325,7 @@ function assertOptionalIndices(
   });
 }
 
+// fallow-ignore-next-line complexity
 function assertRunPayload(value: unknown): RunPayload {
   const record = assertRecord(value, "run payload");
   if (!Array.isArray(record.entries)) {
@@ -1019,6 +1020,7 @@ export default defineContentScript({
      * 全 clip を multi-select → Cmd+P で Add to Playlist dialog → 名前注入 → Create Playlist の一連を実行する (#854)。
      * 各ステップ間に abortableSleep を挟み、停止押下に素早く反応する。
      */
+    // fallow-ignore-next-line complexity
     async function addClipsToPlaylist(
       progressTotal: number,
       playlistName: string,
@@ -2560,6 +2562,7 @@ export default defineContentScript({
       }).then((clipIds) => ({ ok: true as const, clipIds }));
     });
 
+    // fallow-ignore-next-line complexity
     async function startUnattendedFromLaunchHash(): Promise<void> {
       if (typeof location === "undefined" || !location.hash) return;
       let envelope;
