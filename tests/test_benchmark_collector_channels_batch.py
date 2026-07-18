@@ -63,13 +63,14 @@ def _video_item(
     description: str = "",
     view_count: str = "20000",
     duration: str = "PT1H30M",
+    published_at: str = "2026-05-01T12:00:00Z",
     thumbnails: dict | None = None,
 ) -> dict:
     return {
         "id": video_id,
         "snippet": {
             "title": title,
-            "publishedAt": "2026-05-01T12:00:00Z",
+            "publishedAt": published_at,
             "description": description,
             "tags": ["ambient", "study"],
             "thumbnails": thumbnails
@@ -242,6 +243,54 @@ class TestCollectChannelWithPrefetchedItem:
         assert video["description"] == description
         assert "description_keywords" in video
         assert "ambientstudy" in video["description_keywords"]
+
+    def test_upload_scan_keeps_pre_filter_videos_and_marks_exhausted_playlist_complete(self):
+        youtube = MagicMock()
+        youtube.playlistItems.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"contentDetails": {"videoId": "VID_LOW"}},
+                {"contentDetails": {"videoId": "VID_HIGH"}},
+            ],
+            "nextPageToken": None,
+        }
+        youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [
+                _video_item("VID_LOW", view_count="3200", published_at="2026-07-10T12:00:00Z"),
+                _video_item("VID_HIGH", view_count="20000", published_at="2026-01-02T12:00:00Z"),
+            ],
+        }
+        collector = _make_collector(youtube)
+        collector.benchmark_config = {"scan_recent": 50, "min_views": 10000}
+
+        result = collector.collect_channel({"id": "UC_OK", "name": "ok", "slug": "ok"}, _ch_item("UC_OK"))
+
+        assert [video["video_id"] for video in result["videos"]] == ["VID_HIGH"]
+        assert result["upload_scan"] == {
+            "scanned_count": 2,
+            "complete": True,
+            "latest_upload_at": "2026-07-10",
+            "oldest_upload_at": "2026-01-02",
+            "videos": [
+                {"published_at": "2026-07-10", "views": 3200},
+                {"published_at": "2026-01-02", "views": 20000},
+            ],
+        }
+
+    def test_upload_scan_is_incomplete_when_scan_limit_stops_pagination(self):
+        youtube = MagicMock()
+        youtube.playlistItems.return_value.list.return_value.execute.return_value = {
+            "items": [{"contentDetails": {"videoId": "VID_1"}}],
+            "nextPageToken": "MORE",
+        }
+        youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [_video_item("VID_1")],
+        }
+        collector = _make_collector(youtube)
+        collector.benchmark_config = {"scan_recent": 1, "min_views": 10000}
+
+        result = collector.collect_channel({"id": "UC_OK", "name": "ok", "slug": "ok"}, _ch_item("UC_OK"))
+
+        assert result["upload_scan"]["complete"] is False
 
     @pytest.mark.parametrize(
         ("wide_thumbnails", "expected_url"),

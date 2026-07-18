@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `docs(setup)`: `yt-doctor` の upload 診断を `/setup` の利用者導線へ接続し、YouTube チャンネル未作成時の HUMAN STEP、remote channel ID の `yt-channel-settings pull --channel-id-only` 反映、local / remote ID 不一致時の非自動選択、quota / auth / network 失敗時の再試行・再認証導線を明記した（#2054）。
+- `feat(analytics)`: `benchmark.channels` の pre-filter 投稿走査を `upload_scan` として保存し、60 日以上の投稿停滞と直近 90 日平均再生数の前期比 50% 以下を判定する `yt-ttp-health` を追加した。`/analytics-analyze` の analysis JSON を schema v2 に更新し、健全・アラート・データ不足・入力欠損を区別する `ttp_health` を必須化した（#2050）。
+
 - `feat(videoup)`: `overlays.audio_visualizer.style` に後方互換の `bar` と `mirror-mountain` / `ring` / `ring-line` preset を追加した。`bars` / `size` / `position` / `ring.inner_r` / `ring.length` / `ring.arc_deg` を config から filtergraph へ反映し、不正 style は ffmpeg 起動前に有効値付きで拒否する。追加 style のバー間隔・円弧マスク PNG は同梱 Python helper が一時領域へ実行時生成するため、外部素材・補助スクリプトは不要（#1684）。
 - `feat(videoup)`: `overlays.audio_visualizer` に `fill`（solid / gradient / rainbow）、中央鏡像、上下対称、角丸、nested glow を追加した。gradient / rainbow 素材は `yt-audio-visualizer-fill` が実行時生成し、不正な配色は FFmpeg 起動前に拒否する。既存の fill 未指定・フラット glow config は従来挙動を維持する（#1686）。
 - `feat(thumbnail)`: `auto_selection.mode`（`selection_only` / `full`）を追加し、CLI 結果と workflow-state 監査ログへの mode 記録、監査値の strict 検証、`full` で適格候補ゼロ時の手動フロー切替ガイダンスを実装した（#2166）。
