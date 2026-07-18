@@ -113,7 +113,7 @@ generator は pattern draft、設定、benchmark analysis、必要な References
 2. `config/channel/analytics.json` の `benchmark.channels[].slug` を列挙
 3. 各 slug について `data/video_analysis/<slug>/*.json` の存在を確認
 
-`benchmark.channels[].slug` は自動実行と出力パスに使うため、列挙直後に `^[A-Za-z0-9][A-Za-z0-9_-]*$` で検証する。不一致の slug が 1 件でもあれば自動準備を停止し、該当 slug を修正してから再実行する。slug を shell 文字列へ直埋めしてはいけない。実行する場合は `["uv", "run", "yt-video-analyze", "--source", "benchmark", "--channel", slug, "--top", "5"]` のような argv 配列で渡す。shell 経由が避けられない環境では `shlex.quote(slug)` 相当で quote する。
+`benchmark.channels[].slug` は自動実行と出力パスに使うため、列挙直後に `^[A-Za-z0-9][A-Za-z0-9_-]*$` で検証する。不一致の slug が 1 件でもあれば自動準備を停止し、該当 slug を修正してから再実行する。slug を shell 文字列へ直埋めしてはいけない。実行する場合は `["uv", "run", "yt-video-analyze", "--source", "benchmark", "--competitor", slug, "--top", "5"]` のような argv 配列で渡す。shell 経由が避けられない環境では `shlex.quote(slug)` 相当で quote する。
 
 | 状態 | 判定 | アクション |
 |---|---|---|
@@ -124,7 +124,7 @@ generator は pattern draft、設定、benchmark analysis、必要な References
 自動準備の手順:
 
 1. `data/benchmark_*.json` が無ければ `/benchmark` 相当の収集を先行実行
-2. `data/benchmark_*.json` 取得済みなら、上記 validation 済み slug だけを対象に `uv run yt-video-analyze --source benchmark --channel <slug> --top 5` 相当を argv 配列で全 benchmark slug に実行
+2. `data/benchmark_*.json` 取得済みなら、上記 validation 済み slug だけを対象に `uv run yt-video-analyze --source benchmark --competitor <slug> --top 5` 相当を argv 配列で全 benchmark slug に実行
 3. 生成された `data/video_analysis/<slug>/*.json` の `suno_preset` を fallback として採用
 4. そのまま `/suno` のパターン設計へ進む
 
