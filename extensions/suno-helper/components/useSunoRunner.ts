@@ -22,7 +22,11 @@ import {
   type RunModeId,
 } from "../../shared/constants";
 import { onMessage, sendMessage } from "../lib/messaging";
-import { DEFAULT_RUN_MODE_ID, readRunModeId, writeRunModeId } from "../lib/preset-state";
+import {
+  DEFAULT_RUN_MODE_ID,
+  readRunModeId,
+  writeRunModeId,
+} from "../lib/preset-state";
 import {
   readResumeState,
   resolvePlaylistExpectedClipCountForResume,
@@ -89,14 +93,19 @@ interface RunnerState {
   stop: () => Promise<void>;
 }
 
-function normalizePromptResponseMessage(response: PromptResponse | PromptEntry[]): PromptResponse {
+function normalizePromptResponseMessage(
+  response: PromptResponse | PromptEntry[]
+): PromptResponse {
   if (Array.isArray(response)) {
     return { entries: response };
   }
   return response;
 }
 
-async function fetchCollectionPromptResponse(baseUrl: string, collectionId: string): Promise<PromptResponse> {
+async function fetchCollectionPromptResponse(
+  baseUrl: string,
+  collectionId: string
+): Promise<PromptResponse> {
   const response = (await sendMessage("fetchCollectionPromptResponse", {
     baseUrl,
     collectionId,
@@ -104,8 +113,12 @@ async function fetchCollectionPromptResponse(baseUrl: string, collectionId: stri
   return normalizePromptResponseMessage(response);
 }
 
-function maxDefined(...values: Array<number | null | undefined>): number | undefined {
-  const candidates = values.filter((value): value is number => typeof value === "number" && value > 0);
+function maxDefined(
+  ...values: Array<number | null | undefined>
+): number | undefined {
+  const candidates = values.filter(
+    (value): value is number => typeof value === "number" && value > 0
+  );
   return candidates.length > 0 ? Math.max(...candidates) : undefined;
 }
 
@@ -117,7 +130,9 @@ export function useSunoRunner(): RunnerState {
   const [allCollections, setAllCollections] = useState<CollectionSummary[]>([]);
   const [selectedCollectionIdState, setSelectedCollectionId] = useState("");
   const [entries, setEntries] = useState<PromptEntry[]>([]);
-  const [durationFilter, setDurationFilter] = useState<DurationFilter | undefined>(undefined);
+  const [durationFilter, setDurationFilter] = useState<
+    DurationFilter | undefined
+  >(undefined);
   const [itemStates, setItemStates] = useState<ItemState[]>([]);
   const [status, setStatus] = useState("");
   const [phase, setPhase] = useState("idle");
@@ -131,30 +146,50 @@ export function useSunoRunner(): RunnerState {
   }, []);
   // popup 再 open 時に content snapshot から復元する playlist 名 (#854)。
   // 選択由来 (derivedPlaylistName) が無い実行中復元ケースで display only に使う。
-  const [restoredPlaylistName, setRestoredPlaylistName] = useState<string | undefined>(undefined);
-  const [restoredCollectionId, setRestoredCollectionId] = useState<string | undefined>(undefined);
+  const [restoredPlaylistName, setRestoredPlaylistName] = useState<
+    string | undefined
+  >(undefined);
+  const [restoredCollectionId, setRestoredCollectionId] = useState<
+    string | undefined
+  >(undefined);
   // content snapshot 由来の失敗 index (#872 要件3)。chrome.storage の resume state が失われても、
   // 現在タブの live snapshot が ERROR phase で保持する failedIndex を再開バナーの冗長ソースにする。
-  const [restoredFailedIndex, setRestoredFailedIndex] = useState<number | undefined>(undefined);
+  const [restoredFailedIndex, setRestoredFailedIndex] = useState<
+    number | undefined
+  >(undefined);
   // content snapshot 由来のスキップ済み失敗 index 一覧 (#948)。chrome.storage と二重化する。
-  const [restoredFailedIndices, setRestoredFailedIndices] = useState<number[] | undefined>(undefined);
-  const [restoredRemainingIndices, setRestoredRemainingIndices] = useState<number[] | undefined>(undefined);
-  const [restoredSubmittedClipIds, setRestoredSubmittedClipIds] = useState<string[] | undefined>(undefined);
-  const [restoredSubmittedClipIdsAreDurationFiltered, setRestoredSubmittedClipIdsAreDurationFiltered] = useState(false);
-  const [restoredPlaylistExpectedClipCount, setRestoredPlaylistExpectedClipCount] = useState<number | undefined>(
-    undefined,
-  );
+  const [restoredFailedIndices, setRestoredFailedIndices] = useState<
+    number[] | undefined
+  >(undefined);
+  const [restoredRemainingIndices, setRestoredRemainingIndices] = useState<
+    number[] | undefined
+  >(undefined);
+  const [restoredSubmittedClipIds, setRestoredSubmittedClipIds] = useState<
+    string[] | undefined
+  >(undefined);
+  const [
+    restoredSubmittedClipIdsAreDurationFiltered,
+    setRestoredSubmittedClipIdsAreDurationFiltered,
+  ] = useState(false);
+  const [
+    restoredPlaylistExpectedClipCount,
+    setRestoredPlaylistExpectedClipCount,
+  ] = useState<number | undefined>(undefined);
   // 投入方式 (#1586)。マウント時に storage から復元し、選択時に永続化する。
   const [runModeId, setRunModeId] = useState<RunModeId>(DEFAULT_RUN_MODE_ID);
-  const [regenerateDurationOutliers, setRegenerateDurationOutliers] = useState(DEFAULT_REGENERATE_DURATION_OUTLIERS);
-  const [restoredRegenerateDurationOutliers, setRestoredRegenerateDurationOutliers] = useState<boolean | undefined>(
-    undefined,
+  const [regenerateDurationOutliers, setRegenerateDurationOutliers] = useState(
+    DEFAULT_REGENERATE_DURATION_OUTLIERS
   );
-  const [restoredDurationOutlierWarnings, setRestoredDurationOutlierWarnings] = useState<
-    Record<number, string> | undefined
-  >(undefined);
+  const [
+    restoredRegenerateDurationOutliers,
+    setRestoredRegenerateDurationOutliers,
+  ] = useState<boolean | undefined>(undefined);
+  const [restoredDurationOutlierWarnings, setRestoredDurationOutlierWarnings] =
+    useState<Record<number, string> | undefined>(undefined);
   // chrome.storage から読んだ前回の ERROR 停止 state (#872)。表示可否は selectedCollectionId と時刻で判定する。
-  const [persistedResume, setPersistedResume] = useState<ResumeState | null>(null);
+  const [persistedResume, setPersistedResume] = useState<ResumeState | null>(
+    null
+  );
   // resume state を読んだ popup 起動時刻 (#872)。stale 判定の基準 now をここで一度だけ確定し、
   // render 中の Date.now()（非純粋）を避ける。
   const [resumeCheckedAt, setResumeCheckedAt] = useState<number | null>(null);
@@ -172,7 +207,11 @@ export function useSunoRunner(): RunnerState {
     if (
       resumeCheckedAt !== null &&
       persistedResume &&
-      shouldShowResumeBanner(persistedResume, persistedResume.collectionId, resumeCheckedAt)
+      shouldShowResumeBanner(
+        persistedResume,
+        persistedResume.collectionId,
+        resumeCheckedAt
+      )
     ) {
       return persistedResume.collectionId;
     }
@@ -182,23 +221,28 @@ export function useSunoRunner(): RunnerState {
   const resolveVisibleCollections = useCallback(
     (source: CollectionSummary[], currentSelectedId: string) => {
       const visibleCollections = visiblePromptCollections(source);
-      const preferredSelectedId = currentSelectedId || resumableCollectionId || "";
-      const nextSelectedId = resolvePromptCollectionId(visibleCollections, preferredSelectedId, true);
+      const preferredSelectedId =
+        currentSelectedId || resumableCollectionId || "";
+      const nextSelectedId = resolvePromptCollectionId(
+        visibleCollections,
+        preferredSelectedId,
+        true
+      );
       return { visibleCollections, nextSelectedId };
     },
-    [resumableCollectionId],
+    [resumableCollectionId]
   );
 
   const { visibleCollections: collections, nextSelectedId } = useMemo(
     () => resolveVisibleCollections(allCollections, selectedCollectionIdState),
-    [allCollections, resolveVisibleCollections, selectedCollectionIdState],
+    [allCollections, resolveVisibleCollections, selectedCollectionIdState]
   );
   const selectedCollectionId = restoredCollectionId ?? nextSelectedId ?? "";
 
   // collection 選択から導出する playlist 名 (#854)。
   const selectedCollection = useMemo(
     () => collections.find((c) => c.id === selectedCollectionId),
-    [collections, selectedCollectionId],
+    [collections, selectedCollectionId]
   );
 
   const derivedPlaylistName = useMemo(() => {
@@ -225,7 +269,11 @@ export function useSunoRunner(): RunnerState {
     if (
       resumeCheckedAt !== null &&
       persistedResume &&
-      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+      shouldShowResumeBanner(
+        persistedResume,
+        selectedCollectionId,
+        resumeCheckedAt
+      )
     ) {
       return {
         failedIndex: persistedResume.failedIndex,
@@ -236,8 +284,16 @@ export function useSunoRunner(): RunnerState {
     // 2) content snapshot 由来 (要件3 二重化)。chrome.storage 書込が失われても、現在タブの
     //    実行セッションが ERROR phase で保持する failedIndex から同じ再開導線を出す。
     //    snapshot の collectionId が現在選択と一致するときだけ消費する。
-    if (restoredCollectionId === selectedCollectionId && restoredFailedIndex !== undefined && entries.length > 0) {
-      return { failedIndex: restoredFailedIndex, total: entries.length, remainingIndices: restoredRemainingIndices };
+    if (
+      restoredCollectionId === selectedCollectionId &&
+      restoredFailedIndex !== undefined &&
+      entries.length > 0
+    ) {
+      return {
+        failedIndex: restoredFailedIndex,
+        total: entries.length,
+        remainingIndices: restoredRemainingIndices,
+      };
     }
     return null;
   }, [
@@ -257,33 +313,63 @@ export function useSunoRunner(): RunnerState {
     if (
       resumeCheckedAt !== null &&
       persistedResume?.failedIndices?.length &&
-      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+      shouldShowResumeBanner(
+        persistedResume,
+        selectedCollectionId,
+        resumeCheckedAt
+      )
     ) {
       return persistedResume.failedIndices;
     }
-    return restoredCollectionId === selectedCollectionId ? (restoredFailedIndices ?? []) : [];
-  }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredCollectionId, restoredFailedIndices]);
+    return restoredCollectionId === selectedCollectionId
+      ? (restoredFailedIndices ?? [])
+      : [];
+  }, [
+    persistedResume,
+    selectedCollectionId,
+    resumeCheckedAt,
+    restoredCollectionId,
+    restoredFailedIndices,
+  ]);
 
   const submittedClipIdsForResume = useMemo<string[]>(() => {
     if (
       resumeCheckedAt !== null &&
       persistedResume &&
-      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+      shouldShowResumeBanner(
+        persistedResume,
+        selectedCollectionId,
+        resumeCheckedAt
+      )
     ) {
       return persistedResume.submittedClipIds ?? [];
     }
-    return restoredCollectionId === selectedCollectionId ? (restoredSubmittedClipIds ?? []) : [];
-  }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredCollectionId, restoredSubmittedClipIds]);
+    return restoredCollectionId === selectedCollectionId
+      ? (restoredSubmittedClipIds ?? [])
+      : [];
+  }, [
+    persistedResume,
+    selectedCollectionId,
+    resumeCheckedAt,
+    restoredCollectionId,
+    restoredSubmittedClipIds,
+  ]);
 
   const submittedClipIdsAreDurationFilteredForResume = useMemo<boolean>(() => {
     if (
       resumeCheckedAt !== null &&
       persistedResume &&
-      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+      shouldShowResumeBanner(
+        persistedResume,
+        selectedCollectionId,
+        resumeCheckedAt
+      )
     ) {
       return persistedResume.submittedClipIdsAreDurationFiltered === true;
     }
-    return restoredCollectionId === selectedCollectionId ? restoredSubmittedClipIdsAreDurationFiltered : false;
+    return restoredCollectionId === selectedCollectionId
+      ? restoredSubmittedClipIdsAreDurationFiltered
+      : false;
   }, [
     persistedResume,
     selectedCollectionId,
@@ -296,7 +382,11 @@ export function useSunoRunner(): RunnerState {
     if (
       resumeCheckedAt !== null &&
       persistedResume &&
-      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+      shouldShowResumeBanner(
+        persistedResume,
+        selectedCollectionId,
+        resumeCheckedAt
+      )
     ) {
       return persistedResume.durationFilter ?? durationFilter;
     }
@@ -309,18 +399,28 @@ export function useSunoRunner(): RunnerState {
     if (
       resumeCheckedAt !== null &&
       persistedResume &&
-      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+      shouldShowResumeBanner(
+        persistedResume,
+        selectedCollectionId,
+        resumeCheckedAt
+      )
     ) {
       return persistedResume.runMode;
     }
     return undefined;
   }, [persistedResume, selectedCollectionId, resumeCheckedAt]);
 
-  const regenerateDurationOutliersForResume = useMemo<boolean | undefined>(() => {
+  const regenerateDurationOutliersForResume = useMemo<
+    boolean | undefined
+  >(() => {
     if (
       resumeCheckedAt !== null &&
       persistedResume &&
-      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+      shouldShowResumeBanner(
+        persistedResume,
+        selectedCollectionId,
+        resumeCheckedAt
+      )
     ) {
       return persistedResume.regenerateDurationOutliers;
     }
@@ -335,11 +435,17 @@ export function useSunoRunner(): RunnerState {
     restoredCollectionId,
     restoredRegenerateDurationOutliers,
   ]);
-  const durationOutlierWarningsForResume = useMemo<Record<number, string> | undefined>(() => {
+  const durationOutlierWarningsForResume = useMemo<
+    Record<number, string> | undefined
+  >(() => {
     if (
       resumeCheckedAt !== null &&
       persistedResume &&
-      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+      shouldShowResumeBanner(
+        persistedResume,
+        selectedCollectionId,
+        resumeCheckedAt
+      )
     ) {
       return persistedResume.durationOutlierWarnings;
     }
@@ -347,21 +453,38 @@ export function useSunoRunner(): RunnerState {
       return restoredDurationOutlierWarnings;
     }
     return undefined;
-  }, [persistedResume, selectedCollectionId, resumeCheckedAt, restoredCollectionId, restoredDurationOutlierWarnings]);
+  }, [
+    persistedResume,
+    selectedCollectionId,
+    resumeCheckedAt,
+    restoredCollectionId,
+    restoredDurationOutlierWarnings,
+  ]);
 
   const playlistExpectedClipCountForResume = useMemo<number | undefined>(() => {
     if (
       resumeCheckedAt !== null &&
       persistedResume &&
-      shouldShowResumeBanner(persistedResume, selectedCollectionId, resumeCheckedAt)
+      shouldShowResumeBanner(
+        persistedResume,
+        selectedCollectionId,
+        resumeCheckedAt
+      )
     ) {
       return resolvePlaylistExpectedClipCountForResume(
         persistedResume.playlistExpectedClipCount,
-        persistedResume.total,
+        persistedResume.total
       );
     }
-    if (restoredCollectionId === selectedCollectionId && restoredFailedIndex !== undefined && entries.length > 0) {
-      return resolvePlaylistExpectedClipCountForResume(restoredPlaylistExpectedClipCount, entries.length);
+    if (
+      restoredCollectionId === selectedCollectionId &&
+      restoredFailedIndex !== undefined &&
+      entries.length > 0
+    ) {
+      return resolvePlaylistExpectedClipCountForResume(
+        restoredPlaylistExpectedClipCount,
+        entries.length
+      );
     }
     return undefined;
   }, [
@@ -379,7 +502,9 @@ export function useSunoRunner(): RunnerState {
       playlistExpectedClipCountForResume,
       selectedCollection?.expected_file_count,
       entries.length > 0 ? entries.length * CLIPS_PER_REQUEST : undefined,
-      selectedCollection?.pattern_count ? selectedCollection.pattern_count * CLIPS_PER_REQUEST : undefined,
+      selectedCollection?.pattern_count
+        ? selectedCollection.pattern_count * CLIPS_PER_REQUEST
+        : undefined
     );
   }, [playlistExpectedClipCountForResume, entries.length, selectedCollection]);
 
@@ -389,7 +514,10 @@ export function useSunoRunner(): RunnerState {
   }, []);
 
   const reportStorageFailure = useCallback((error: unknown) => {
-    console.warn("[suno-helper] storage 操作に失敗しました（拡張更新後はタブを再読み込みしてください）:", error);
+    console.warn(
+      "[suno-helper] storage 操作に失敗しました（拡張更新後はタブを再読み込みしてください）:",
+      error
+    );
     setReloadRequired(true);
   }, []);
 
@@ -423,7 +551,7 @@ export function useSunoRunner(): RunnerState {
       setRunModeId(id);
       void writeRunModeId(id).catch(reportStorageFailure);
     },
-    [reportStorageFailure],
+    [reportStorageFailure]
   );
 
   const dismissResume = useCallback(() => {
@@ -454,7 +582,8 @@ export function useSunoRunner(): RunnerState {
       if (shouldReportLiveProgressStatus(data)) {
         const { text, error } = phaseToStatus(data, entries);
         const terminalWarning =
-          data.phase === "finished" && durationOutlierWarningsRef.current.length > 0
+          data.phase === "finished" &&
+          durationOutlierWarningsRef.current.length > 0
             ? ` / 異常値警告: ${durationOutlierWarningsRef.current.join("; ")}`
             : "";
         report(`${text}${terminalWarning}`, Boolean(error));
@@ -493,12 +622,20 @@ export function useSunoRunner(): RunnerState {
         setRestoredFailedIndices(restored.failedIndices);
         setRestoredRemainingIndices(restored.remainingIndices);
         setRestoredSubmittedClipIds(restored.submittedClipIds);
-        setRestoredSubmittedClipIdsAreDurationFiltered(restored.submittedClipIdsAreDurationFiltered === true);
-        setRestoredPlaylistExpectedClipCount(restored.playlistExpectedClipCount);
-        setRestoredRegenerateDurationOutliers(restored.regenerateDurationOutliers);
+        setRestoredSubmittedClipIdsAreDurationFiltered(
+          restored.submittedClipIdsAreDurationFiltered === true
+        );
+        setRestoredPlaylistExpectedClipCount(
+          restored.playlistExpectedClipCount
+        );
+        setRestoredRegenerateDurationOutliers(
+          restored.regenerateDurationOutliers
+        );
         setRestoredDurationOutlierWarnings(restored.durationOutlierWarnings);
         setRegenerateDurationOutliers(restored.regenerateDurationOutliers);
-        durationOutlierWarningsRef.current = Object.values(restored.durationOutlierWarnings);
+        durationOutlierWarningsRef.current = Object.values(
+          restored.durationOutlierWarnings
+        );
         setPhase(snapshot.progress.phase);
         report(restored.status, restored.isError);
       } catch {
@@ -510,8 +647,10 @@ export function useSunoRunner(): RunnerState {
   const fetchData = useCallback(
     async (targetUrl: string, preferredCollectionId: string) => {
       const requestId = ++fetchRequestIdRef.current;
-      const isLatestRequest = (): boolean => requestId === fetchRequestIdRef.current;
-      const isRestoreFetch = (): boolean => restoredProgressRef.current || resumableCollectionId !== undefined;
+      const isLatestRequest = (): boolean =>
+        requestId === fetchRequestIdRef.current;
+      const isRestoreFetch = (): boolean =>
+        restoredProgressRef.current || resumableCollectionId !== undefined;
       const trimmed = targetUrl.trim();
       if (!trimmed) {
         if (isLatestRequest()) {
@@ -533,10 +672,14 @@ export function useSunoRunner(): RunnerState {
         }
       }
       try {
-        const persistSelectedUrl = serverSourcePersistenceRef.current.then(async () => {
-          if (isLatestRequest()) await serverUrlItem.setValue(trimmed);
-        });
-        serverSourcePersistenceRef.current = persistSelectedUrl.catch(() => undefined);
+        const persistSelectedUrl = serverSourcePersistenceRef.current.then(
+          async () => {
+            if (isLatestRequest()) await serverUrlItem.setValue(trimmed);
+          }
+        );
+        serverSourcePersistenceRef.current = persistSelectedUrl.catch(
+          () => undefined
+        );
         await persistSelectedUrl;
         if (!isLatestRequest()) {
           return;
@@ -553,7 +696,10 @@ export function useSunoRunner(): RunnerState {
       }
       try {
         const extensionVersion = browser.runtime.getManifest().version;
-        const warning = await sendMessage("fetchCompatibilityWarning", { baseUrl, extensionVersion });
+        const warning = await sendMessage("fetchCompatibilityWarning", {
+          baseUrl,
+          extensionVersion,
+        });
         if (!isLatestRequest()) {
           return;
         }
@@ -576,7 +722,10 @@ export function useSunoRunner(): RunnerState {
         if (!isLatestRequest()) {
           return;
         }
-        const { nextSelectedId: collectionId } = resolveVisibleCollections(fetched, preferredCollectionId);
+        const { nextSelectedId: collectionId } = resolveVisibleCollections(
+          fetched,
+          preferredCollectionId
+        );
         if (collectionId === null) {
           throw new Error("prompts を取得できる collection がありません。");
         }
@@ -604,10 +753,18 @@ export function useSunoRunner(): RunnerState {
         }
         const message = err instanceof Error ? err.message : String(err);
         setPhase("error");
-        report(`取得失敗: ${message}\nyt-collection-serve が起動しているか確認してください。`, true);
+        report(
+          `取得失敗: ${message}\nyt-collection-serve が起動しているか確認してください。`,
+          true
+        );
       }
     },
-    [report, reportStorageFailure, resolveVisibleCollections, resumableCollectionId],
+    [
+      report,
+      reportStorageFailure,
+      resolveVisibleCollections,
+      resumableCollectionId,
+    ]
   );
 
   const updateUrl = useCallback(
@@ -622,7 +779,7 @@ export function useSunoRunner(): RunnerState {
       clearLoadedRunState();
       void fetchData(nextUrl, selectedCollectionId);
     },
-    [clearLoadedRunState, fetchData, selectedCollectionId],
+    [clearLoadedRunState, fetchData, selectedCollectionId]
   );
 
   const selectCollection = useCallback(
@@ -631,12 +788,13 @@ export function useSunoRunner(): RunnerState {
       clearLoadedRunState();
       void fetchData(url, id);
     },
-    [clearLoadedRunState, fetchData, url],
+    [clearLoadedRunState, fetchData, url]
   );
 
   const discoverSources = useCallback(
-    async (): Promise<LocalServerSource[]> => sendMessage("discoverServerSources", undefined),
-    [],
+    async (): Promise<LocalServerSource[]> =>
+      sendMessage("discoverServerSources", undefined),
+    []
   );
 
   const refreshServerSources = useCallback(async () => {
@@ -646,14 +804,20 @@ export function useSunoRunner(): RunnerState {
     const revision = ++serverSourcesRevisionRef.current;
     try {
       const sources = await discoverSources();
-      if (isRunningRef.current || revision !== serverSourcesRevisionRef.current) return;
+      if (isRunningRef.current || revision !== serverSourcesRevisionRef.current)
+        return;
       setServerSources(sources);
       const currentUrl = urlRef.current;
-      if (currentUrl && sources.length > 0 && !sources.some((source) => source.url === currentUrl)) {
+      if (
+        currentUrl &&
+        sources.length > 0 &&
+        !sources.some((source) => source.url === currentUrl)
+      ) {
         updateUrl(sources[0].url);
       }
     } catch (error) {
-      if (isRunningRef.current || revision !== serverSourcesRevisionRef.current) return;
+      if (isRunningRef.current || revision !== serverSourcesRevisionRef.current)
+        return;
       const message = error instanceof Error ? error.message : String(error);
       setPhase("error");
       report(`配信元の検出に失敗しました: ${message}`, true);
@@ -672,7 +836,9 @@ export function useSunoRunner(): RunnerState {
         if (revision !== serverSourcesRevisionRef.current) return;
         setServerSources(sources);
         if (!stored.trim()) return;
-        const nextUrl = sources.some((source) => source.url === stored) ? stored : sources[0]?.url;
+        const nextUrl = sources.some((source) => source.url === stored)
+          ? stored
+          : sources[0]?.url;
         if (!nextUrl) return;
         urlRef.current = nextUrl;
         setUrlState(nextUrl);
@@ -685,7 +851,13 @@ export function useSunoRunner(): RunnerState {
         initializationRef.current = null;
       });
     initializationRef.current = initialization;
-  }, [discoverSources, fetchData, reportStorageFailure, resumableCollectionId, resumeCheckedAt]);
+  }, [
+    discoverSources,
+    fetchData,
+    reportStorageFailure,
+    resumableCollectionId,
+    resumeCheckedAt,
+  ]);
 
   const run = useCallback(
     async (overrides?: RunOverrides) => {
@@ -701,11 +873,16 @@ export function useSunoRunner(): RunnerState {
         return;
       }
       if (!playlistName) {
-        report("playlist 名を解決できません。コレクションを選択し直してください。", true);
+        report(
+          "playlist 名を解決できません。コレクションを選択し直してください。",
+          true
+        );
         return;
       }
       const range = overrides?.range;
-      durationOutlierWarningsRef.current = Object.values(overrides?.durationOutlierWarnings ?? {});
+      durationOutlierWarningsRef.current = Object.values(
+        overrides?.durationOutlierWarnings ?? {}
+      );
       // 二重実行ガード成立後、送信前に実行中フラグを立てる (#892 要件7: setIsRunning を sendMessage の前へ)。
       setRunning(true);
       setPhase("starting");
@@ -724,7 +901,7 @@ export function useSunoRunner(): RunnerState {
             regenerateDurationOutliers,
             durationOutlierWarnings: overrides?.durationOutlierWarnings,
             overrides,
-          }),
+          })
         );
         report("連続実行を開始しました。");
       } catch (err) {
@@ -745,7 +922,7 @@ export function useSunoRunner(): RunnerState {
       regenerateDurationOutliers,
       report,
       setRunning,
-    ],
+    ]
   );
 
   // playlist 追加のみ再実行。entries 不要のため retryPlaylist 専用メッセージを送る。
@@ -754,26 +931,37 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     if (!selectedCollectionId) {
-      report("コレクションを選択してから、playlist 追加を再開してください。", true);
+      report(
+        "コレクションを選択してから、playlist 追加を再開してください。",
+        true
+      );
       return;
     }
     if (!playlistName) {
       report(
         "playlist 名を解決できないため、playlist 追加を再開できません。コレクションを選択し直してください。",
-        true,
+        true
       );
       return;
     }
-    const expectedClipCount = playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length;
+    const expectedClipCount =
+      playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length;
     const shouldDownload =
-      resumeBanner !== null && resumeBanner.failedIndex >= resumeBanner.total && !resumeBanner.remainingIndices?.length;
+      resumeBanner !== null &&
+      resumeBanner.failedIndex >= resumeBanner.total &&
+      !resumeBanner.remainingIndices?.length;
     if (submittedClipIdsForResume.length === 0 || expectedClipCount <= 0) {
-      report("playlist 再開に必要な clip ID がありません。ページを再読み込みしてから再試行してください。", true);
+      report(
+        "playlist 再開に必要な clip ID がありません。ページを再読み込みしてから再試行してください。",
+        true
+      );
       return;
     }
     setRunning(true);
     setPhase("adding-to-playlist");
-    durationOutlierWarningsRef.current = Object.values(durationOutlierWarningsForResume ?? {});
+    durationOutlierWarningsRef.current = Object.values(
+      durationOutlierWarningsForResume ?? {}
+    );
     try {
       await sendMessage("retryPlaylist", {
         playlistName,
@@ -781,9 +969,11 @@ export function useSunoRunner(): RunnerState {
         expectedClipCount,
         collectionId: selectedCollectionId,
         durationFilter: durationFilterForResume,
-        regenerateDurationOutliers: regenerateDurationOutliersForResume ?? regenerateDurationOutliers,
+        regenerateDurationOutliers:
+          regenerateDurationOutliersForResume ?? regenerateDurationOutliers,
         durationOutlierWarnings: durationOutlierWarningsForResume,
-        submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,
+        submittedClipIdsAreDurationFiltered:
+          submittedClipIdsAreDurationFilteredForResume,
         shouldDownload,
       });
       setResumeDismissed(true);
@@ -818,19 +1008,26 @@ export function useSunoRunner(): RunnerState {
     if (!resumeBanner) {
       return;
     }
-    if (resumeBanner.failedIndex >= resumeBanner.total && !resumeBanner.remainingIndices?.length) {
+    if (
+      resumeBanner.failedIndex >= resumeBanner.total &&
+      !resumeBanner.remainingIndices?.length
+    ) {
       void retryPlaylist();
       return;
     }
     if (entries.length === 0) {
-      report("再開に必要なパターンが未取得です。ページを再読み込みしてから再試行してください。", true);
+      report(
+        "再開に必要なパターンが未取得です。ページを再読み込みしてから再試行してください。",
+        true
+      );
       return;
     }
     setResumeDismissed(true);
     void run({
       ...buildResumeRunOverrides(resumeBanner, {
         submittedClipIds: submittedClipIdsForResume,
-        submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,
+        submittedClipIdsAreDurationFiltered:
+          submittedClipIdsAreDurationFilteredForResume,
         playlistExpectedClipCount: playlistExpectedClipCountForResume,
       }),
       runMode: runModeForResume,
@@ -857,11 +1054,17 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     if (!selectedCollectionId) {
-      report("コレクションを選択してから、ダウンロードを再開してください。", true);
+      report(
+        "コレクションを選択してから、ダウンロードを再開してください。",
+        true
+      );
       return;
     }
     if (submittedClipIdsForResume.length === 0) {
-      report("ダウンロード再開に必要な clip ID がありません。ページを再読み込みしてから再試行してください。", true);
+      report(
+        "ダウンロード再開に必要な clip ID がありません。ページを再読み込みしてから再試行してください。",
+        true
+      );
       return;
     }
     setRunning(true);
@@ -894,11 +1097,20 @@ export function useSunoRunner(): RunnerState {
       return;
     }
     if (!selectedCollectionId) {
-      report("コレクションを選択してから、選択中の曲を採用してください。", true);
+      report(
+        "コレクションを選択してから、選択中の曲を採用してください。",
+        true
+      );
       return;
     }
-    if (expectedClipCountForManualAdoption === undefined || expectedClipCountForManualAdoption <= 0) {
-      report("期待 clip 数を解決できません。ページを再読み込みしてから再試行してください。", true);
+    if (
+      expectedClipCountForManualAdoption === undefined ||
+      expectedClipCountForManualAdoption <= 0
+    ) {
+      report(
+        "期待 clip 数を解決できません。ページを再読み込みしてから再試行してください。",
+        true
+      );
       return;
     }
     setRunning(true);
@@ -910,9 +1122,13 @@ export function useSunoRunner(): RunnerState {
       const totalEntries =
         persistedResume?.collectionId === selectedCollectionId
           ? persistedResume.total
-          : entries.length || selectedCollection?.pattern_count || Math.ceil(result.clipIds.length / CLIPS_PER_REQUEST);
+          : entries.length ||
+            selectedCollection?.pattern_count ||
+            Math.ceil(result.clipIds.length / CLIPS_PER_REQUEST);
       const failedIndex =
-        persistedResume?.collectionId === selectedCollectionId ? persistedResume.failedIndex : totalEntries;
+        persistedResume?.collectionId === selectedCollectionId
+          ? persistedResume.failedIndex
+          : totalEntries;
       const nextResume: ResumeState = {
         collectionId: selectedCollectionId,
         failedIndex,
@@ -932,7 +1148,8 @@ export function useSunoRunner(): RunnerState {
         playlistExpectedClipCount: result.clipIds.length,
         regenerateDurationOutliers:
           persistedResume?.collectionId === selectedCollectionId
-            ? (persistedResume.regenerateDurationOutliers ?? regenerateDurationOutliers)
+            ? (persistedResume.regenerateDurationOutliers ??
+              regenerateDurationOutliers)
             : regenerateDurationOutliers,
         durationOutlierWarnings:
           persistedResume?.collectionId === selectedCollectionId
@@ -947,7 +1164,9 @@ export function useSunoRunner(): RunnerState {
       setRestoredPlaylistExpectedClipCount(result.clipIds.length);
       setResumeDismissed(false);
       setPhase("idle");
-      report(`選択中の曲 ${result.clipIds.length} 件を採用しました。Playlist / Download から再開できます。`);
+      report(
+        `選択中の曲 ${result.clipIds.length} 件を採用しました。Playlist / Download から再開できます。`
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setPhase("error");
@@ -982,7 +1201,8 @@ export function useSunoRunner(): RunnerState {
     void run({
       ...buildFailedEntriesRunOverrides(failedEntries, {
         submittedClipIds: submittedClipIdsForResume,
-        submittedClipIdsAreDurationFiltered: submittedClipIdsAreDurationFilteredForResume,
+        submittedClipIdsAreDurationFiltered:
+          submittedClipIdsAreDurationFilteredForResume,
         playlistExpectedClipCount: playlistExpectedClipCountForResume,
       }),
       runMode: runModeForResume,

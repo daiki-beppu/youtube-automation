@@ -42,7 +42,9 @@ export interface RunEntryWithRetryOptions {
   describeEntry: () => string;
 }
 
-export async function runEntryWithRetry(options: RunEntryWithRetryOptions): Promise<EntryRunResult> {
+export async function runEntryWithRetry(
+  options: RunEntryWithRetryOptions
+): Promise<EntryRunResult> {
   for (let attempt = 0; ; attempt++) {
     try {
       await options.attempt();
@@ -63,7 +65,9 @@ export async function runEntryWithRetry(options: RunEntryWithRetryOptions): Prom
       }
       if (attempt < options.maxRetry) {
         const message = error instanceof Error ? error.message : String(error);
-        console.warn(`${options.describeEntry()} が失敗、entry retry (${attempt + 1}/${options.maxRetry}): ${message}`);
+        console.warn(
+          `${options.describeEntry()} が失敗、entry retry (${attempt + 1}/${options.maxRetry}): ${message}`
+        );
         options.onRetry?.(attempt + 1, options.maxRetry, error);
         await options.sleep(options.retryDelayMs(), options.isAborted);
         if (options.isAborted()) {

@@ -23,8 +23,7 @@ _CI_LINT_PARALLEL_STEPS = {
 }
 
 _SUNO_FAST_PARALLEL_STEPS = {
-    "Lint": "nix develop .#extensions --command pnpm lint",
-    "Format check": "nix develop .#extensions --command pnpm format:check",
+    "Check (Oxlint + Oxfmt)": "nix develop .#extensions --command pnpm check",
     "Type check": "nix develop .#extensions --command pnpm compile",
     "Unit tests (Vitest)": "nix develop .#extensions --command pnpm test",
 }
@@ -35,8 +34,7 @@ _SUNO_BUILD_PARALLEL_STEPS = {
     ),
 }
 _DISTROKID_FAST_PARALLEL_STEPS = {
-    "Lint": "nix develop .#extensions --command pnpm lint",
-    "Format check": "nix develop .#extensions --command pnpm format:check",
+    "Check (Oxlint + Oxfmt)": "nix develop .#extensions --command pnpm check",
     "Typecheck": "nix develop .#extensions --command pnpm compile",
     "Unit tests (Vitest)": "nix develop .#extensions --command pnpm test",
 }
@@ -45,12 +43,12 @@ _EXTENSIONS_JOB_CONTRACTS = {
     "check": {
         "working_directory": "extensions/suno-helper",
         "e2e_step": "E2E tests (Playwright)",
-        "lint_script": "cd .. && oxlint -c .oxlintrc.json suno-helper shared",
+        "check_script": "cd .. && ultracite check suno-helper shared",
     },
     "distrokid-helper": {
         "working_directory": "extensions/distrokid-helper",
         "e2e_step": "E2E (Playwright)",
-        "lint_script": "cd .. && oxlint -c .oxlintrc.json distrokid-helper",
+        "check_script": "cd .. && ultracite check distrokid-helper",
     },
 }
 _NIX_EXTENSIONS_INSTALL_COMMAND = "nix develop .#extensions --command pnpm install --frozen-lockfile"
@@ -222,12 +220,21 @@ def test_extensions_jobs_preserve_working_directory_install_and_e2e_contract(job
     assert job.get("defaults") == {"run": {"working-directory": contract["working_directory"]}}
     steps = _job_steps(workflow, job_name)
     assert _top_level_step(steps, "Install dependencies").get("run") == _NIX_EXTENSIONS_INSTALL_COMMAND
+    # 共有 config の ultracite import を extensions/node_modules で解決するための install（#2154）。
+    toolchain_install = _top_level_step(steps, "Install shared lint toolchain")
+    assert toolchain_install.get("run") == _NIX_EXTENSIONS_INSTALL_COMMAND
+    assert toolchain_install.get("working-directory") == "extensions"
+    assert (
+        _top_level_step_index(steps, "Install dependencies")
+        < _top_level_step_index(steps, "Install shared lint toolchain")
+        < _parallel_group_index_containing(steps, "Check (Oxlint + Oxfmt)")
+    )
     assert _top_level_step(steps, contract["e2e_step"]).get("run") == _NIX_EXTENSIONS_E2E_COMMAND
 
 
 @pytest.mark.parametrize("job_name", ["check", "distrokid-helper"])
-def test_extensions_jobs_run_oxlint_through_the_package_lint_entrypoint(job_name: str) -> None:
-    """Given Extensions CI, When lint runs, Then each package's pnpm lint entrypoint invokes Oxlint."""
+def test_extensions_jobs_run_ultracite_through_the_package_check_entrypoint(job_name: str) -> None:
+    """Given Extensions CI, When check runs, Then each package's pnpm check entrypoint invokes ultracite."""
     workflow = _load_workflow(_EXTENSIONS_WORKFLOW_PATH)
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict), "jobs セクションが存在しない"
@@ -236,12 +243,12 @@ def test_extensions_jobs_run_oxlint_through_the_package_lint_entrypoint(job_name
     contract = _EXTENSIONS_JOB_CONTRACTS[job_name]
 
     expected_steps = _SUNO_FAST_PARALLEL_STEPS if job_name == "check" else _DISTROKID_FAST_PARALLEL_STEPS
-    lint_group = _parallel_group_with_names(_job_steps(workflow, job_name), set(expected_steps))
-    lint_step = next(step for step in lint_group if step.get("name") == "Lint")
-    assert lint_step.get("run") == "nix develop .#extensions --command pnpm lint"
+    check_group = _parallel_group_with_names(_job_steps(workflow, job_name), set(expected_steps))
+    check_step = next(step for step in check_group if step.get("name") == "Check (Oxlint + Oxfmt)")
+    assert check_step.get("run") == "nix develop .#extensions --command pnpm check"
 
     package = json.loads(_read_text(_REPO_ROOT / str(contract["working_directory"]) / "package.json"))
-    assert package["scripts"]["lint"] == contract["lint_script"]
+    assert package["scripts"]["check"] == contract["check_script"]
 
 
 def test_extensions_pull_request_runs_one_fallow_audit_for_the_extensions_root() -> None:
@@ -290,7 +297,7 @@ def test_extensions_pull_request_runs_one_fallow_audit_for_the_extensions_root()
     assert (
         _top_level_step_index(steps, "Install dependencies")
         < _top_level_step_index(steps, "Fallow audit")
-        < _parallel_group_index_containing(steps, "Lint")
+        < _parallel_group_index_containing(steps, "Check (Oxlint + Oxfmt)")
     )
 
 
@@ -308,12 +315,24 @@ def test_fallow_audit_fails_for_a_new_error_finding_in_a_git_diff(tmp_path: Path
     }
     (helper_root / "package.json").write_text(json.dumps(audit_package_json), encoding="utf-8")
     shutil.copy2(_REPO_ROOT / "extensions" / ".fallowrc.json", extensions_root / ".fallowrc.json")
+    # .fallowrc.json の audit.dupesBaseline が参照する baseline も同梱する（#2154）。
+    shutil.copy2(
+        _REPO_ROOT / "extensions" / ".fallow-dupes-baseline.json",
+        extensions_root / ".fallow-dupes-baseline.json",
+    )
     (extensions_root / "src").mkdir()
     (extensions_root / "src" / "existing.ts").write_text("export const existing = 1;\n", encoding="utf-8")
 
     subprocess.run(["git", "init", "--quiet"], cwd=tmp_path, check=True)
     subprocess.run(
-        ["git", "add", "extensions/.fallowrc.json", "extensions/suno-helper/package.json", "extensions/src"],
+        [
+            "git",
+            "add",
+            "extensions/.fallowrc.json",
+            "extensions/.fallow-dupes-baseline.json",
+            "extensions/suno-helper/package.json",
+            "extensions/src",
+        ],
         cwd=tmp_path,
         check=True,
     )
@@ -415,7 +434,7 @@ def test_suno_helper_checks_use_dependency_safe_parallel_groups() -> None:
     _assert_named_parallel_commands(steps, _SUNO_FAST_PARALLEL_STEPS)
     _assert_named_parallel_commands(steps, _SUNO_BUILD_PARALLEL_STEPS)
     install_index = _top_level_step_index(steps, "Install dependencies")
-    fast_parallel_index = _parallel_group_index_containing(steps, "Lint")
+    fast_parallel_index = _parallel_group_index_containing(steps, "Check (Oxlint + Oxfmt)")
     build_parallel_index = _parallel_group_index_containing(steps, "Build")
 
     assert install_index < fast_parallel_index < build_parallel_index
@@ -448,7 +467,7 @@ def test_distrokid_helper_checks_use_dependency_safe_parallel_groups() -> None:
     _assert_named_parallel_commands(steps, _DISTROKID_FAST_PARALLEL_STEPS)
     _assert_named_parallel_commands(steps, _DISTROKID_BUILD_PARALLEL_STEPS)
     install_index = _top_level_step_index(steps, "Install dependencies")
-    fast_parallel_index = _parallel_group_index_containing(steps, "Lint")
+    fast_parallel_index = _parallel_group_index_containing(steps, "Check (Oxlint + Oxfmt)")
     build_parallel_index = _parallel_group_index_containing(steps, "Build")
 
     assert install_index < fast_parallel_index < build_parallel_index

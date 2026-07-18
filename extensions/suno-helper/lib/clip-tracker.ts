@@ -8,7 +8,10 @@
 //
 // passive 合流: feed 観測で現れた未終端 clip は、この run の投入でなくても集計に加える。
 // 前 run の残留 in-flight や手動投入分もキュー slot を占有するため、数えないと過剰投入になる。
-import { TERMINAL_CLIP_STATUSES, type ObservedClip } from "../../shared/constants";
+import {
+  TERMINAL_CLIP_STATUSES,
+  type ObservedClip,
+} from "../../shared/constants";
 
 const TERMINAL = new Set<string>(TERMINAL_CLIP_STATUSES);
 
@@ -66,7 +69,9 @@ export function createClipTracker(now: () => number = Date.now): ClipTracker {
   let changeAt = 0;
 
   function isValidDuration(duration: unknown): duration is number {
-    return typeof duration === "number" && Number.isFinite(duration) && duration >= 0;
+    return (
+      typeof duration === "number" && Number.isFinite(duration) && duration >= 0
+    );
   }
 
   function recordDuration(clip: ObservedClip): void {

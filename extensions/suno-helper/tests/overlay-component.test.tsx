@@ -6,7 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Overlay } from "../components/Overlay";
 
-const INITIAL_STATE = { position: { x: 40, y: 50 }, minimized: false, hidden: false };
+const INITIAL_STATE = {
+  position: { x: 40, y: 50 },
+  minimized: false,
+  hidden: false,
+};
 
 const messagingMocks = vi.hoisted(() => ({
   onMessage: vi.fn(() => () => undefined),
@@ -54,7 +58,9 @@ const runner = vi.hoisted(() => ({
 
 vi.mock("../lib/messaging", () => messagingMocks);
 vi.mock("../lib/overlay-state", async () => {
-  const actual = await vi.importActual<typeof import("../lib/overlay-state")>("../lib/overlay-state");
+  const actual = await vi.importActual<typeof import("../lib/overlay-state")>(
+    "../lib/overlay-state"
+  );
   return {
     ...actual,
     readOverlayState: overlayStateMocks.readOverlayState,
@@ -100,7 +106,9 @@ describe("Overlay shell", () => {
     await act(async () => {
       root.render(createElement(Overlay));
     });
-    await waitFor(() => expect(container.querySelector('[data-slot="card"]')).not.toBeNull());
+    await waitFor(() =>
+      expect(container.querySelector('[data-slot="card"]')).not.toBeNull()
+    );
   });
 
   afterEach(() => {
@@ -111,9 +119,15 @@ describe("Overlay shell", () => {
 
   it("Card shell を最小化・復元し、同じ visibility/control 状態を永続化する", async () => {
     const card = container.querySelector<HTMLElement>('[data-slot="card"]')!;
-    const header = container.querySelector<HTMLElement>('[data-slot="card-header"]')!;
-    const content = container.querySelector<HTMLElement>('[data-slot="card-content"]')!;
-    const minimize = container.querySelector<HTMLButtonElement>('button[aria-label="最小化"]')!;
+    const header = container.querySelector<HTMLElement>(
+      '[data-slot="card-header"]'
+    )!;
+    const content = container.querySelector<HTMLElement>(
+      '[data-slot="card-content"]'
+    )!;
+    const minimize = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="最小化"]'
+    )!;
 
     expect(card.style.left).toBe("40px");
     expect(card.style.top).toBe("50px");
@@ -123,7 +137,9 @@ describe("Overlay shell", () => {
     expect(content.style.display).toBe("block");
     expect(minimize.dataset.slot).toBe("button");
     expect(minimize.className.split(" ")).not.toContain("size-9");
-    const panel = content.querySelector<HTMLElement>(':scope > [data-suno-helper="control-panel"]')!;
+    const panel = content.querySelector<HTMLElement>(
+      ':scope > [data-suno-helper="control-panel"]'
+    )!;
     expect(panel.dataset.sunoPhase).toBe("idle");
     expect(panel.dataset.sunoRunning).toBe("false");
     expect(panel.dataset.sunoError).toBe("false");
@@ -144,11 +160,17 @@ describe("Overlay shell", () => {
       hidden: false,
     });
 
-    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="展開"]')!.click());
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="展開"]')!
+        .click()
+    );
 
     expect(content.style.pointerEvents).toBe("auto");
     expect(content.style.display).toBe("block");
-    expect(container.querySelector('button[aria-label="最小化"]')).not.toBeNull();
+    expect(
+      container.querySelector('button[aria-label="最小化"]')
+    ).not.toBeNull();
     expect(overlayStateMocks.writeOverlayState).toHaveBeenLastCalledWith({
       position: { x: 40, y: 50 },
       minimized: false,
@@ -157,16 +179,30 @@ describe("Overlay shell", () => {
   });
 
   it("drag handle の pointer 操作で位置を更新し pointerup 時に永続化する", async () => {
-    const header = container.querySelector<HTMLElement>('[data-slot="card-header"]')!;
+    const header = container.querySelector<HTMLElement>(
+      '[data-slot="card-header"]'
+    )!;
     const card = container.querySelector<HTMLElement>('[data-slot="card"]')!;
 
     await act(async () => {
-      header.dispatchEvent(new MouseEvent("pointerdown", { clientX: 10, clientY: 20, bubbles: true }));
+      header.dispatchEvent(
+        new MouseEvent("pointerdown", {
+          clientX: 10,
+          clientY: 20,
+          bubbles: true,
+        })
+      );
     });
     expect(header.style.cursor).toBe("grabbing");
 
     await act(async () => {
-      window.dispatchEvent(new MouseEvent("pointermove", { clientX: 50, clientY: 60, bubbles: true }));
+      window.dispatchEvent(
+        new MouseEvent("pointermove", {
+          clientX: 50,
+          clientY: 60,
+          bubbles: true,
+        })
+      );
     });
     expect(card.style.left).toBe("80px");
     expect(card.style.top).toBe("90px");

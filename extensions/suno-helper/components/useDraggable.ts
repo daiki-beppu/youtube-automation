@@ -36,14 +36,21 @@ function isInteractive(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
     return false;
   }
-  return target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable;
+  return (
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.isContentEditable
+  );
 }
 
 function viewportSize(): { width: number; height: number } {
   return { width: window.innerWidth, height: window.innerHeight };
 }
 
-function elementSize(element: HTMLElement | null): { width: number; height: number } {
+function elementSize(element: HTMLElement | null): {
+  width: number;
+  height: number;
+} {
   if (!element) {
     return { width: 0, height: 0 };
   }
@@ -51,7 +58,11 @@ function elementSize(element: HTMLElement | null): { width: number; height: numb
   return { width: rect.width, height: rect.height };
 }
 
-export function useDraggable({ initial, elementRef, onCommit }: UseDraggableOptions): UseDraggableResult {
+export function useDraggable({
+  initial,
+  elementRef,
+  onCommit,
+}: UseDraggableOptions): UseDraggableResult {
   const [position, setPosition] = useState<Point>(initial);
   const [dragging, setDragging] = useState(false);
 
@@ -82,7 +93,9 @@ export function useDraggable({ initial, elementRef, onCommit }: UseDraggableOpti
         x: start.current.x + (event.clientX - origin.current.x),
         y: start.current.y + (event.clientY - origin.current.y),
       };
-      setPosition(clampPosition(next, viewportSize(), elementSize(elementRef.current)));
+      setPosition(
+        clampPosition(next, viewportSize(), elementSize(elementRef.current))
+      );
     };
     const handleUp = () => {
       setDragging(false);
@@ -99,8 +112,15 @@ export function useDraggable({ initial, elementRef, onCommit }: UseDraggableOpti
   // viewport が縮んだとき、現在位置を内側へ再 clamp して確定する (要件2)。
   useEffect(() => {
     const handleResize = () => {
-      const clamped = clampPosition(positionRef.current, viewportSize(), elementSize(elementRef.current));
-      if (clamped.x !== positionRef.current.x || clamped.y !== positionRef.current.y) {
+      const clamped = clampPosition(
+        positionRef.current,
+        viewportSize(),
+        elementSize(elementRef.current)
+      );
+      if (
+        clamped.x !== positionRef.current.x ||
+        clamped.y !== positionRef.current.y
+      ) {
         setPosition(clamped);
         onCommit(clamped);
       }

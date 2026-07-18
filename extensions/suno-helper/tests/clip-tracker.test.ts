@@ -85,7 +85,9 @@ describe("createClipTracker: status ベースの in-flight 集計", () => {
     // getPendingIdsByIds が永遠に pending を返し、完了待ちが stall timeout まで空回りする。
     const tracker = createClipTracker();
     const previousClipIds = ["old-1", "old-2"];
-    expect(tracker.getPendingIdsByIds(previousClipIds)).toEqual(previousClipIds);
+    expect(tracker.getPendingIdsByIds(previousClipIds)).toEqual(
+      previousClipIds
+    );
 
     tracker.applyRequestedStatuses([
       { id: "old-1", status: "complete", duration: 187.25 },
@@ -154,7 +156,11 @@ describe("createClipTracker: playlist 対象 submitted ID 管理", () => {
       { id: "fresh-c", status: "submitted" },
     ]);
 
-    expect(tracker.getSubmittedIds()).toEqual(["fresh-a", "fresh-b", "fresh-c"]);
+    expect(tracker.getSubmittedIds()).toEqual([
+      "fresh-a",
+      "fresh-b",
+      "fresh-c",
+    ]);
   });
 
   it("Given feed の passive unknown clip When 読む Then submitted ID には含めない", () => {
@@ -182,7 +188,9 @@ describe("createClipTracker: playlist 対象 submitted ID 管理", () => {
     const tracker = createClipTracker();
 
     tracker.registerSubmitted([{ id: "fresh-a", status: "submitted" }]);
-    tracker.applyFeedStatuses([{ id: "fresh-a", status: "complete", duration: 119.8 }]);
+    tracker.applyFeedStatuses([
+      { id: "fresh-a", status: "complete", duration: 119.8 },
+    ]);
 
     expect(tracker.getDuration("fresh-a")).toBe(119.8);
     expect(tracker.getDuration("missing")).toBeUndefined();
@@ -205,7 +213,9 @@ describe("createClipTracker: playlist 対象 submitted ID 管理", () => {
     const tracker = createClipTracker();
 
     tracker.registerSubmitted([{ id: "fresh-a", status: "submitted" }]);
-    tracker.applyFeedStatuses([{ id: "fresh-a", status: "complete", durationSec: 123.4 }]);
+    tracker.applyFeedStatuses([
+      { id: "fresh-a", status: "complete", durationSec: 123.4 },
+    ]);
 
     expect(tracker.getDuration("fresh-a")).toBe(123.4);
     expect(tracker.getPendingIdsByIds(["fresh-a"])).toEqual([]);

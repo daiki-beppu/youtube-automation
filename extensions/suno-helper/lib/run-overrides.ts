@@ -1,8 +1,18 @@
 import type { DurationFilter, PromptEntry } from "../../shared/api";
-import { DEFAULT_REGENERATE_DURATION_OUTLIERS, type RunModeId } from "../../shared/constants";
+import {
+  DEFAULT_REGENERATE_DURATION_OUTLIERS,
+  type RunModeId,
+} from "../../shared/constants";
 import type { RunPayload } from "./messaging";
-import { selectedEntryIndices, type PatternSelectionInput } from "./pattern-selection";
-import { resumeRunRange, type ResumeBanner, type RunRange } from "./resume-state";
+import {
+  selectedEntryIndices,
+  type PatternSelectionInput,
+} from "./pattern-selection";
+import {
+  resumeRunRange,
+  type ResumeBanner,
+  type RunRange,
+} from "./resume-state";
 
 export interface RunOverrides {
   range?: RunRange;
@@ -49,40 +59,48 @@ export function buildRunPayload(input: RunPayloadInput): RunPayload {
       DEFAULT_REGENERATE_DURATION_OUTLIERS,
     indices: input.overrides?.indices,
     submittedClipIds: input.overrides?.submittedClipIds,
-    submittedClipIdsAreDurationFiltered: input.overrides?.submittedClipIdsAreDurationFiltered,
+    submittedClipIdsAreDurationFiltered:
+      input.overrides?.submittedClipIdsAreDurationFiltered,
     playlistExpectedClipCount: input.overrides?.playlistExpectedClipCount,
-    durationOutlierWarnings: input.overrides?.durationOutlierWarnings ?? input.durationOutlierWarnings,
+    durationOutlierWarnings:
+      input.overrides?.durationOutlierWarnings ?? input.durationOutlierWarnings,
   };
 }
 
 export function buildResumeRunOverrides(
   resumeBanner: ResumeBanner,
-  playlistResume: PlaylistResumePayload,
+  playlistResume: PlaylistResumePayload
 ): RunOverrides {
-  if (resumeBanner.remainingIndices && resumeBanner.remainingIndices.length > 0) {
+  if (
+    resumeBanner.remainingIndices &&
+    resumeBanner.remainingIndices.length > 0
+  ) {
     return {
       indices: [...resumeBanner.remainingIndices],
       submittedClipIds: [...playlistResume.submittedClipIds],
-      submittedClipIdsAreDurationFiltered: playlistResume.submittedClipIdsAreDurationFiltered,
+      submittedClipIdsAreDurationFiltered:
+        playlistResume.submittedClipIdsAreDurationFiltered,
       playlistExpectedClipCount: playlistResume.playlistExpectedClipCount,
     };
   }
   return {
     range: resumeRunRange(resumeBanner),
     submittedClipIds: [...playlistResume.submittedClipIds],
-    submittedClipIdsAreDurationFiltered: playlistResume.submittedClipIdsAreDurationFiltered,
+    submittedClipIdsAreDurationFiltered:
+      playlistResume.submittedClipIdsAreDurationFiltered,
     playlistExpectedClipCount: playlistResume.playlistExpectedClipCount,
   };
 }
 
 export function buildFailedEntriesRunOverrides(
   failedEntries: number[],
-  playlistResume: PlaylistResumePayload,
+  playlistResume: PlaylistResumePayload
 ): RunOverrides {
   return {
     indices: [...failedEntries],
     submittedClipIds: [...playlistResume.submittedClipIds],
-    submittedClipIdsAreDurationFiltered: playlistResume.submittedClipIdsAreDurationFiltered,
+    submittedClipIdsAreDurationFiltered:
+      playlistResume.submittedClipIdsAreDurationFiltered,
     playlistExpectedClipCount: playlistResume.playlistExpectedClipCount,
   };
 }

@@ -7,7 +7,10 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-type Handler = (msg: { data: Record<string, unknown>; sender: Record<string, unknown> }) => unknown;
+type Handler = (msg: {
+  data: Record<string, unknown>;
+  sender: Record<string, unknown>;
+}) => unknown;
 
 const RECORD = {
   collection_id: "20260526-soulful-grooves-coding-focus-collection",
@@ -15,7 +18,10 @@ const RECORD = {
   album_title: "Coding Focus Vol.1",
 };
 
-async function loadBackground(opts?: { recordError?: Error; migrationError?: Error }) {
+async function loadBackground(opts?: {
+  recordError?: Error;
+  migrationError?: Error;
+}) {
   vi.resetModules();
 
   const handlers = new Map<string, Handler>();
@@ -29,7 +35,9 @@ async function loadBackground(opts?: { recordError?: Error; migrationError?: Err
   vi.stubGlobal("browser", {
     runtime: {
       onInstalled: {
-        addListener: vi.fn((listener: () => void) => installedListeners.push(listener)),
+        addListener: vi.fn((listener: () => void) =>
+          installedListeners.push(listener)
+        ),
       },
     },
   });
@@ -58,7 +66,12 @@ async function loadBackground(opts?: { recordError?: Error; migrationError?: Err
   // import が defineBackground コールバックを実行し、ハンドラが登録される。
   await import("../entrypoints/background");
 
-  return { handlers, installedListeners, migrateServerSourcesStorageMock, recordDistrokidReleaseMock };
+  return {
+    handlers,
+    installedListeners,
+    migrateServerSourcesStorageMock,
+    recordDistrokidReleaseMock,
+  };
 }
 
 afterEach(() => {
@@ -82,7 +95,10 @@ describe('background onMessage("recordRelease"): serve token 書き込み境界 
       sender: {},
     });
 
-    expect(recordDistrokidReleaseMock).toHaveBeenCalledWith("http://localhost:7873", RECORD);
+    expect(recordDistrokidReleaseMock).toHaveBeenCalledWith(
+      "http://localhost:7873",
+      RECORD
+    );
   });
 
   it("Given shared/api が reject When handler 実行 Then reject を伝播する（popup が warn 表示する）", async () => {
@@ -94,7 +110,7 @@ describe('background onMessage("recordRelease"): serve token 書き込み境界 
       handlers.get("recordRelease")!({
         data: { baseUrl: "http://localhost:7873", record: RECORD },
         sender: {},
-      }),
+      })
     ).rejects.toThrow("HTTP 403");
     expect(recordDistrokidReleaseMock).toHaveBeenCalledTimes(1);
   });
@@ -102,7 +118,8 @@ describe('background onMessage("recordRelease"): serve token 書き込み境界 
 
 describe("background onInstalled: legacy server source migration", () => {
   it("runs migration when the extension is updated", async () => {
-    const { installedListeners, migrateServerSourcesStorageMock } = await loadBackground();
+    const { installedListeners, migrateServerSourcesStorageMock } =
+      await loadBackground();
 
     installedListeners.forEach((listener) => listener());
     await Promise.resolve();
@@ -112,14 +129,21 @@ describe("background onInstalled: legacy server source migration", () => {
 
   it("logs migration failures instead of leaving an unhandled rejection", async () => {
     const error = new Error("storage unavailable");
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const { installedListeners } = await loadBackground({ migrationError: error });
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const { installedListeners } = await loadBackground({
+      migrationError: error,
+    });
 
     installedListeners.forEach((listener) => listener());
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(consoleError).toHaveBeenCalledWith("[distrokid-helper] legacy server source migration failed:", error);
+    expect(consoleError).toHaveBeenCalledWith(
+      "[distrokid-helper] legacy server source migration failed:",
+      error
+    );
     consoleError.mockRestore();
   });
 });

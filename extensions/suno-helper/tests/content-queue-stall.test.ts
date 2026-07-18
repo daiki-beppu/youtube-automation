@@ -3,10 +3,10 @@
 // 一部 stall / 全 stall / serial stall / 全完了 の各経路で期待どおり分岐することを検証する。
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PHASE } from "../../shared/constants";
 import type { PromptEntry } from "../../shared/api";
-import type { ResumeState } from "../lib/resume-state";
+import { PHASE } from "../../shared/constants";
 import type { SubmittedClipCompletionResult } from "../lib/queue-runner";
+import type { ResumeState } from "../lib/resume-state";
 
 interface RunPayload {
   entries: PromptEntry[];
@@ -34,18 +34,25 @@ async function loadContentScriptWithStalledCompletion(options: {
   completionResult: SubmittedClipCompletionResult;
 }) {
   vi.resetModules();
-  vi.stubGlobal("defineContentScript", (definition: { main: () => void }) => definition);
+  vi.stubGlobal(
+    "defineContentScript",
+    (definition: { main: () => void }) => definition
+  );
 
   const handlers = new Map<string, Handler>();
   const progressMessages: ProgressMessage[] = [];
   const sentMessages: Array<{ type: string; payload: unknown }> = [];
   let lastMultiSelectIds: string[] = [];
   // oxlint-disable-next-line no-unused-vars
-  const scrollAndMultiSelectByIdsMock = vi.fn((ids: string[], _options: unknown) => {
-    lastMultiSelectIds = ids;
-    return Promise.resolve(ids.length);
-  });
-  const readSelectedClipIdsMock = vi.fn(() => Promise.resolve(lastMultiSelectIds));
+  const scrollAndMultiSelectByIdsMock = vi.fn(
+    (ids: string[], _options: unknown) => {
+      lastMultiSelectIds = ids;
+      return Promise.resolve(ids.length);
+    }
+  );
+  const readSelectedClipIdsMock = vi.fn(() =>
+    Promise.resolve(lastMultiSelectIds)
+  );
   const scheduleRunCompleteReloadMock = vi.fn();
 
   vi.doMock("../lib/messaging", () => ({
@@ -60,7 +67,9 @@ async function loadContentScriptWithStalledCompletion(options: {
       if (type === "startDownload") {
         // download watcher の完了イベントを模擬する（実物は background からの downloadComplete 中継）。
         setTimeout(() => {
-          handlers.get("downloadComplete")?.({ data: { filename: "collection.zip" } });
+          handlers.get("downloadComplete")?.({
+            data: { filename: "collection.zip" },
+          });
         }, 0);
         return Promise.resolve({ ok: true });
       }
@@ -82,15 +91,23 @@ async function loadContentScriptWithStalledCompletion(options: {
   }));
 
   vi.doMock("../lib/snapshot", () => ({
-    initSnapshot: vi.fn((entries: PromptEntry[], initOptions: { collectionId: string; playlistName?: string }) => ({
-      collectionId: initOptions.collectionId,
-      entries,
-      playlistName: initOptions.playlistName,
-      itemStates: entries.map(() => "pending"),
-      isRunning: true,
-      submittedClipIds: [],
+    initSnapshot: vi.fn(
+      (
+        entries: PromptEntry[],
+        initOptions: { collectionId: string; playlistName?: string }
+      ) => ({
+        collectionId: initOptions.collectionId,
+        entries,
+        playlistName: initOptions.playlistName,
+        itemStates: entries.map(() => "pending"),
+        isRunning: true,
+        submittedClipIds: [],
+      })
+    ),
+    applyProgress: vi.fn((snapshot: object, payload: object) => ({
+      ...snapshot,
+      progress: payload,
     })),
-    applyProgress: vi.fn((snapshot: object, payload: object) => ({ ...snapshot, progress: payload })),
   }));
 
   vi.doMock("../lib/bridge-listener", () => ({
@@ -135,8 +152,14 @@ async function loadContentScriptWithStalledCompletion(options: {
     getInFlightClipCount: vi.fn(() => 0),
     injectAdvancedFields: vi.fn(() => Promise.resolve()),
     resolveAdvancedFields: vi.fn(() => ({})),
-    resolveFields: vi.fn(() => ({ style: {} as HTMLTextAreaElement, lyrics: null, title: null })),
-    resolveGenerateButton: vi.fn(() => ({ click: vi.fn() }) as unknown as HTMLButtonElement),
+    resolveFields: vi.fn(() => ({
+      style: {} as HTMLTextAreaElement,
+      lyrics: null,
+      title: null,
+    })),
+    resolveGenerateButton: vi.fn(
+      () => ({ click: vi.fn() }) as unknown as HTMLButtonElement
+    ),
     setLyricsValue: vi.fn(() => Promise.resolve()),
     setLyricsValueViaBeforeInput: vi.fn(() => Promise.resolve()),
     setNativeValue: vi.fn(),
@@ -150,7 +173,9 @@ async function loadContentScriptWithStalledCompletion(options: {
   vi.doMock("../../shared/playlist-dom", () => ({
     clickPlaylistRowByName: vi.fn(() => Promise.resolve()),
     fillPlaylistNameAndCreate: vi.fn(() => Promise.resolve()),
-    openAddToPlaylistDialogViaCmdP: vi.fn(() => Promise.resolve({} as HTMLElement)),
+    openAddToPlaylistDialogViaCmdP: vi.fn(() =>
+      Promise.resolve({} as HTMLElement)
+    ),
     readSelectedClipIds: readSelectedClipIdsMock,
     scrollAndMultiSelectByIds: scrollAndMultiSelectByIdsMock,
     waitForPlaylistDialogClose: vi.fn(() => Promise.resolve()),
@@ -182,7 +207,9 @@ async function loadContentScriptWithStalledCompletion(options: {
   }));
 
   vi.doMock("../lib/storage", () => ({
-    serverUrlItem: { getValue: vi.fn(() => Promise.resolve("http://localhost:8787")) },
+    serverUrlItem: {
+      getValue: vi.fn(() => Promise.resolve("http://localhost:8787")),
+    },
     downloadFormatItem: { getValue: vi.fn(() => Promise.resolve("mp3")) },
     readDownloadFormat: vi.fn(() => Promise.resolve("mp3")),
   }));
@@ -192,7 +219,9 @@ async function loadContentScriptWithStalledCompletion(options: {
   }));
 
   vi.doMock("../../shared/api", async () => ({
-    ...(await vi.importActual<typeof import("../../shared/api")>("../../shared/api")),
+    ...(await vi.importActual<typeof import("../../shared/api")>(
+      "../../shared/api"
+    )),
     postDownloaded: vi.fn(() => Promise.resolve()),
   }));
 
@@ -203,14 +232,22 @@ async function loadContentScriptWithStalledCompletion(options: {
     return {
       ...actual,
       submitQueueEntries: vi.fn(() =>
-        Promise.resolve({ completed: true, failedIndices: [], clipIdsByEntry: options.clipIdsByEntry }),
+        Promise.resolve({
+          completed: true,
+          failedIndices: [],
+          clipIdsByEntry: options.clipIdsByEntry,
+        })
       ),
-      waitForSubmittedClipsComplete: vi.fn(() => Promise.resolve(options.completionResult)),
+      waitForSubmittedClipsComplete: vi.fn(() =>
+        Promise.resolve(options.completionResult)
+      ),
     };
   });
 
   const content = await import("../entrypoints/content");
-  content.default.main({} as NonNullable<Parameters<typeof content.default.main>[0]>);
+  content.default.main(
+    {} as NonNullable<Parameters<typeof content.default.main>[0]>
+  );
 
   const runHandler = handlers.get("run") as RunHandler | undefined;
   if (!runHandler) {
@@ -239,7 +276,10 @@ const clipIdsByEntry = new Map<number, string[]>([
 
 const allClipIds = Array.from(clipIdsByEntry.values()).flat();
 
-function runQueue(runHandler: RunHandler, runMode: "serial" | "queue" = "queue"): void {
+function runQueue(
+  runHandler: RunHandler,
+  runMode: "serial" | "queue" = "queue"
+): void {
   runHandler({
     data: {
       entries,
@@ -258,33 +298,51 @@ describe("content.ts queue mode stall graceful degradation (#1994)", () => {
   });
 
   it("Given 一部 entry の clip が stall When queue run Then 停滞 entry を失敗記録し完了分で playlist 追加とダウンロードを続行する", async () => {
-    const { progressMessages, sentMessages, scrollAndMultiSelectByIdsMock, scheduleRunCompleteReloadMock, runHandler } =
-      await loadContentScriptWithStalledCompletion({
-        initialSubmittedIds: allClipIds,
-        clipIdsByEntry: new Map(clipIdsByEntry),
-        completionResult: {
-          timedOut: true,
-          submittedIds: allClipIds,
-          stalledClipIds: ["clip-1b"],
-          message: "生成完了待ちがタイムアウトしました: submitted=6/6, pending=1, 最後の進捗からの経過時間=600000ms",
-        },
-      });
+    const {
+      progressMessages,
+      sentMessages,
+      scrollAndMultiSelectByIdsMock,
+      scheduleRunCompleteReloadMock,
+      runHandler,
+    } = await loadContentScriptWithStalledCompletion({
+      initialSubmittedIds: allClipIds,
+      clipIdsByEntry: new Map(clipIdsByEntry),
+      completionResult: {
+        timedOut: true,
+        submittedIds: allClipIds,
+        stalledClipIds: ["clip-1b"],
+        message:
+          "生成完了待ちがタイムアウトしました: submitted=6/6, pending=1, 最後の進捗からの経過時間=600000ms",
+      },
+    });
 
     runQueue(runHandler);
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
 
     // stall した entry 1 は ENTRY_FAILED として明示され、playlist 追加は完了分のみで実行される。
-    expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.ENTRY_FAILED, index: 1 }));
+    expect(progressMessages).toContainEqual(
+      expect.objectContaining({ phase: PHASE.ENTRY_FAILED, index: 1 })
+    );
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       ["clip-0a", "clip-0b", "clip-2a", "clip-2b"],
-      expect.anything(),
+      expect.anything()
     );
-    expect(sentMessages).toContainEqual(expect.objectContaining({ type: "startDownload" }));
-    const finished = progressMessages.find((message) => message.phase === PHASE.FINISHED);
+    expect(sentMessages).toContainEqual(
+      expect.objectContaining({ type: "startDownload" })
+    );
+    const finished = progressMessages.find(
+      (message) => message.phase === PHASE.FINISHED
+    );
     expect(finished?.message).toContain("生成停滞");
     expect(finished?.message).toContain("失敗分のみ再実行");
     // stalled entry は resume/retry 導線の入力として保持され、resume state は消去されない。
-    expect(writeResumeStateMock).toHaveBeenCalledWith(expect.objectContaining({ failedIndices: [1] }));
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ failedIndices: [1] })
+    );
     expect(clearResumeStateForCollectionMock).not.toHaveBeenCalled();
     expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
   });
@@ -298,17 +356,28 @@ describe("content.ts queue mode stall graceful degradation (#1994)", () => {
           timedOut: true,
           submittedIds: allClipIds,
           stalledClipIds: allClipIds,
-          message: "生成完了待ちがタイムアウトしました: submitted=6/6, pending=6, 最後の進捗からの経過時間=600000ms",
+          message:
+            "生成完了待ちがタイムアウトしました: submitted=6/6, pending=6, 最後の進捗からの経過時間=600000ms",
         },
       });
 
     runQueue(runHandler);
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
 
     expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
-    const finished = progressMessages.find((message) => message.phase === PHASE.FINISHED);
-    expect(finished?.message).toContain("「失敗分のみ再実行」で完走後に playlist 追加が実行されます");
-    expect(writeResumeStateMock).toHaveBeenCalledWith(expect.objectContaining({ failedIndices: [0, 1, 2] }));
+    const finished = progressMessages.find(
+      (message) => message.phase === PHASE.FINISHED
+    );
+    expect(finished?.message).toContain(
+      "「失敗分のみ再実行」で完走後に playlist 追加が実行されます"
+    );
+    expect(writeResumeStateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ failedIndices: [0, 1, 2] })
+    );
   });
 
   it("Given serial run で完了待ちが stall When run Then 従来どおり ERROR で中断する", async () => {
@@ -327,10 +396,18 @@ describe("content.ts queue mode stall graceful degradation (#1994)", () => {
       });
 
     runQueue(runHandler, "serial");
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.ERROR })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.ERROR })
+      )
+    );
 
     expect(progressMessages).toContainEqual(
-      expect.objectContaining({ phase: PHASE.ERROR, index: entries.length, message: stallMessage }),
+      expect.objectContaining({
+        phase: PHASE.ERROR,
+        index: entries.length,
+        message: stallMessage,
+      })
     );
     expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
   });
@@ -340,14 +417,27 @@ describe("content.ts queue mode stall graceful degradation (#1994)", () => {
       await loadContentScriptWithStalledCompletion({
         initialSubmittedIds: allClipIds,
         clipIdsByEntry: new Map(clipIdsByEntry),
-        completionResult: { timedOut: false, submittedIds: allClipIds, stalledClipIds: [] },
+        completionResult: {
+          timedOut: false,
+          submittedIds: allClipIds,
+          stalledClipIds: [],
+        },
       });
 
     runQueue(runHandler);
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
 
-    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(allClipIds, expect.anything());
-    expect(progressMessages).not.toContainEqual(expect.objectContaining({ phase: PHASE.ENTRY_FAILED }));
+    expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+      allClipIds,
+      expect.anything()
+    );
+    expect(progressMessages).not.toContainEqual(
+      expect.objectContaining({ phase: PHASE.ENTRY_FAILED })
+    );
     expect(clearResumeStateForCollectionMock).toHaveBeenCalled();
   });
 });

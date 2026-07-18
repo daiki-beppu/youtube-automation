@@ -29,8 +29,16 @@ const payload: ReleasePayload = {
   release: {
     album_title: "Neon Skyline",
     tracks: [
-      { title: "First Light", filename: "01-first-light.mp3", asset_path: "/distrokid/assets/01-first-light.mp3" },
-      { title: "Night Drive", filename: "02-night-drive.mp3", asset_path: "/distrokid/assets/02-night-drive.mp3" },
+      {
+        title: "First Light",
+        filename: "01-first-light.mp3",
+        asset_path: "/distrokid/assets/01-first-light.mp3",
+      },
+      {
+        title: "Night Drive",
+        filename: "02-night-drive.mp3",
+        asset_path: "/distrokid/assets/02-night-drive.mp3",
+      },
     ],
     cover: { filename: "cover.jpg", asset_path: "/distrokid/assets/cover.jpg" },
     release_date: "2026-08-01",
@@ -51,44 +59,57 @@ describe("StatusBanner", () => {
     [PHASES.STOPPED, "入力を停止しました", "bg-yellow-50"],
   ];
 
-  it.each(cases)("%s phase は message と意味を表す role・配色を維持する", (phase, message, colorClass) => {
-    const container = parseMarkup(renderToStaticMarkup(<StatusBanner phase={phase} message={message} />));
-    const banner = container.firstElementChild;
+  it.each(cases)(
+    "%s phase は message と意味を表す role・配色を維持する",
+    (phase, message, colorClass) => {
+      const container = parseMarkup(
+        renderToStaticMarkup(<StatusBanner phase={phase} message={message} />)
+      );
+      const banner = container.firstElementChild;
 
-    expect(banner?.textContent).toBe(message);
-    expect(banner?.getAttribute("role")).toBe(phase === PHASES.ERROR ? "alert" : "status");
-    expect(banner?.classList.contains(colorClass)).toBe(true);
-    expect(banner?.getAttribute("data-slot")).toBe("alert");
-    expect(banner?.querySelector('[data-slot="alert-description"]')?.textContent).toBe(message);
-  });
+      expect(banner?.textContent).toBe(message);
+      expect(banner?.getAttribute("role")).toBe(
+        phase === PHASES.ERROR ? "alert" : "status"
+      );
+      expect(banner?.classList.contains(colorClass)).toBe(true);
+      expect(banner?.getAttribute("data-slot")).toBe("alert");
+      expect(
+        banner?.querySelector('[data-slot="alert-description"]')?.textContent
+      ).toBe(message);
+    }
+  );
 
   it("phase が null なら表示しない", () => {
-    expect(renderToStaticMarkup(<StatusBanner phase={null} message="表示しない" />)).toBe("");
+    expect(
+      renderToStaticMarkup(<StatusBanner phase={null} message="表示しない" />)
+    ).toBe("");
   });
 });
 
 describe("ReleaseReview", () => {
   it("Card 内に release metadata のラベルと値を表示する", () => {
-    const container = parseMarkup(renderToStaticMarkup(<ReleaseReview payload={payload} />));
+    const container = parseMarkup(
+      renderToStaticMarkup(<ReleaseReview payload={payload} />)
+    );
     const card = container.querySelector('[data-slot="card"]');
     const metadata = card?.querySelector("dl");
 
-    expect(card?.querySelector('[data-slot="card-title"]')?.textContent).toBe("Neon Skyline");
+    expect(card?.querySelector('[data-slot="card-title"]')?.textContent).toBe(
+      "Neon Skyline"
+    );
     expect(card?.querySelector('[data-slot="card-content"]')).not.toBeNull();
-    expect(Array.from(metadata?.querySelectorAll("dt") ?? [], (item) => item.textContent)).toEqual([
-      "言語",
-      "ジャンル",
-      "リリース日",
-      "曲数",
-      "ジャケット",
-    ]);
-    expect(Array.from(metadata?.querySelectorAll("dd") ?? [], (item) => item.textContent)).toEqual([
-      "Japanese",
-      "Electronic",
-      "2026-08-01",
-      "2",
-      "cover.jpg",
-    ]);
+    expect(
+      Array.from(
+        metadata?.querySelectorAll("dt") ?? [],
+        (item) => item.textContent
+      )
+    ).toEqual(["言語", "ジャンル", "リリース日", "曲数", "ジャケット"]);
+    expect(
+      Array.from(
+        metadata?.querySelectorAll("dd") ?? [],
+        (item) => item.textContent
+      )
+    ).toEqual(["Japanese", "Electronic", "2026-08-01", "2", "cover.jpg"]);
   });
 
   it("未確定の release date と cover は従来の fallback を表示する", () => {
@@ -96,8 +117,13 @@ describe("ReleaseReview", () => {
       ...payload,
       release: { ...payload.release, release_date: null, cover: null },
     };
-    const container = parseMarkup(renderToStaticMarkup(<ReleaseReview payload={fallbackPayload} />));
-    const values = Array.from(container.querySelectorAll("dd"), (item) => item.textContent);
+    const container = parseMarkup(
+      renderToStaticMarkup(<ReleaseReview payload={fallbackPayload} />)
+    );
+    const values = Array.from(
+      container.querySelectorAll("dd"),
+      (item) => item.textContent
+    );
 
     expect(values).toContain("未定");
     expect(values).toContain("なし");

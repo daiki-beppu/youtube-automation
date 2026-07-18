@@ -1,5 +1,5 @@
-import type { ReleasePayload } from "@/lib/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { ReleasePayload } from "@/lib/types";
 
 export interface ReleaseReviewProps {
   payload: ReleasePayload;

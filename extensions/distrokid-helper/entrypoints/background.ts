@@ -11,7 +11,10 @@ export default defineBackground(() => {
 
   browser.runtime.onInstalled.addListener(() => {
     void migrateServerSourcesStorage().catch((error: unknown) => {
-      console.error("[distrokid-helper] legacy server source migration failed:", error);
+      console.error(
+        "[distrokid-helper] legacy server source migration failed:",
+        error
+      );
     });
   });
 

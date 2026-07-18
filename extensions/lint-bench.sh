@@ -27,7 +27,7 @@ targets=("$helper")
 
 if [[ -x "${bin_dir}/oxlint" ]]; then
   linter="oxlint"
-  cmd=("${bin_dir}/oxlint" -c .oxlintrc.json "${targets[@]}")
+  cmd=("${bin_dir}/oxlint" -c oxlint.config.ts "${targets[@]}")
 elif [[ -x "${bin_dir}/eslint" ]]; then
   linter="eslint"
   cmd=("${bin_dir}/eslint" -c "${helper}/eslint.config.js" "${targets[@]}")
