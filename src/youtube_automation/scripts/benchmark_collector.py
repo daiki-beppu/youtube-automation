@@ -42,7 +42,7 @@ from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
 from youtube_automation.utils.profile import section
 from youtube_automation.utils.retry import execute_with_retry
 from youtube_automation.utils.skill_config import load_skill_config
-from youtube_automation.utils.youtube_service import get_youtube
+from youtube_automation.utils.youtube_service import get_youtube_readonly
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ class BenchmarkCollector:
     def initialize(self):
         """YouTube API 認証を実行する。"""
         logger.info("YouTube API 認証中...")
-        self.youtube = get_youtube()
+        self.youtube = get_youtube_readonly()
         logger.info("認証完了")
 
     def check_freshness(self) -> list[dict]:

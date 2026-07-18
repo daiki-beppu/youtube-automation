@@ -135,6 +135,19 @@ class YouTubeOAuthHandler:
         "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
     ]
 
+    # read-only skill（analytics-collect / benchmark / channel-status 等）用の
+    # 最小権限スコープ。write 系（youtube / youtube.force-ssl）を含めない。
+    # token 漏洩時の blast radius を読み取りに限定する（#1699）。
+    READONLY_SCOPES: ClassVar[list[str]] = [
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly",
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+    ]
+
+    # read-only token のファイル名。全 scope の token.json・stream 専用の
+    # token_streaming.json（#135）と並ぶ第 3 の用途別 token（#1699）
+    READONLY_TOKEN_FILENAME: ClassVar[str] = "token.readonly.json"
+
     def __init__(self, auth_dir=None, scopes=None, token_path=None):
         """
         初期化
@@ -175,6 +188,47 @@ class YouTubeOAuthHandler:
         else:
             self.token_file = self.auth_dir / "token.json"
         self.credentials = None
+
+    @classmethod
+    def readonly_token_path(cls) -> Path | None:
+        """発行済み ``token.readonly.json`` の実体パスを返す（未発行なら None）。
+
+        検索順は ``token.json`` の worktree フォールバック（#1721）と同じ:
+        channel 側 ``auth/`` → main worktree 側 ``auth/``。
+        handler を生成せずファイル存在だけで判定できるよう classmethod にしている
+        （client_secrets 解決や 1Password 参照を発行チェックの副作用にしない）。
+        """
+        from youtube_automation.utils.config import channel_dir as _channel_dir
+
+        channel = _channel_dir()
+        local = channel / "auth" / cls.READONLY_TOKEN_FILENAME
+        if local.exists():
+            return local
+        main_root = main_worktree_root(channel)
+        if main_root is not None:
+            candidate = main_root / "auth" / cls.READONLY_TOKEN_FILENAME
+            if candidate.exists():
+                return candidate
+        return None
+
+    @classmethod
+    def create_readonly(cls) -> "YouTubeOAuthHandler":
+        """read-only スコープ + ``token.readonly.json`` のハンドラーを生成する。
+
+        未発行時の保存先は ``token.json`` と同じ規則で解決する
+        （worktree にローカル token が無ければ main 側 ``auth/`` に集約。#1721）。
+        """
+        token_path = cls.readonly_token_path()
+        if token_path is None:
+            from youtube_automation.utils.config import channel_dir as _channel_dir
+
+            channel = _channel_dir()
+            auth_dir = channel / "auth"
+            main_root = main_worktree_root(channel)
+            if main_root is not None:
+                auth_dir = main_root / "auth"
+            token_path = auth_dir / cls.READONLY_TOKEN_FILENAME
+        return cls(scopes=cls.READONLY_SCOPES, token_path=token_path)
 
     def _channel_label(self) -> str:
         """認証メッセージに埋め込むチャンネル識別ラベルを返す。
@@ -368,15 +422,37 @@ class YouTubeOAuthHandler:
             return False
 
 
-def main():
-    """メイン関数 - スタンドアロン実行用"""
-    print("🎵 YouTube OAuth 2.0 認証テスト")
+def main(argv=None):
+    """メイン関数 - スタンドアロン実行用（``yt-oauth``）
+
+    Args:
+        argv (list[str] | None): CLI 引数。None なら ``sys.argv[1:]``。
+            テストから直接呼ぶ場合は ``main([])`` のように明示する
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="yt-oauth",
+        description="YouTube OAuth 2.0 認証（token 発行・接続テスト）",
+    )
+    parser.add_argument(
+        "--readonly",
+        action="store_true",
+        help="read-only スコープの token.readonly.json を発行する（write scope を含まない。#1699）",
+    )
+    args = parser.parse_args(argv)
+
+    mode_label = "read-only" if args.readonly else "full access"
+    print(f"🎵 YouTube OAuth 2.0 認証テスト（{mode_label}）")
     print("=" * 60)
 
     auth_handler = None
     try:
         # OAuth ハンドラー初期化
-        auth_handler = YouTubeOAuthHandler()
+        if args.readonly:
+            auth_handler = YouTubeOAuthHandler.create_readonly()
+        else:
+            auth_handler = YouTubeOAuthHandler()
 
         # 認証実行
         auth_handler.authenticate()
