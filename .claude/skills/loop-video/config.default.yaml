@@ -65,6 +65,21 @@ veo:
   # FFmpeg ループ補正のクロスフェード秒数
   crossfade_sec: 0.5
 
+# Gemini Developer API の Interactions API を使う代替エンジン。
+# `yt-generate-loop-video <path> --engine omni -y` で選択する。
+omni:
+  model: "gemini-omni-flash-preview"
+  timeout_seconds: 600
+  poll_interval_seconds: 5
+
+  # 未指定時も Veo と同じ fallback prompt を使う。チャンネル固有の一発生成
+  # prompt に差し替える場合は config/skills/loop-video.yaml で上書きする。
+  default_prompt: |
+    Static scene with only natural subtle movements: gentle flickering of candle flames,
+    slight sway of character breathing, soft light shifts on surfaces.
+    No smoke, no magical effects, no particles, no falling objects.
+    Keep the scene calm and grounded, like a living painting.
+
 # Veo 出力直後に libx264 で再エンコードして容量削減（Issue #175）。
 # YouTube は受信動画を VP9/AV1 に再 transcoding するため CRF 22 程度では視聴品質に影響しない。
 # `--smooth` 経路でも同じ crf/preset が適用され、圧縮効果が維持される。

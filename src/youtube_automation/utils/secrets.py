@@ -28,6 +28,7 @@ from youtube_automation.utils.exceptions import ConfigError
 _SECRET_REFS: dict[str, str] = {
     "CLIENT_SECRETS_JSON": "op://Personal/YouTube_OAuth_Client_Secrets/credential",
     "OPENAI_API_KEY": "op://Personal/OpenAI_API_Key/credential",
+    "GEMINI_API_KEY": "op://Personal/Gemini_API_Key/credential",
     "YOUTUBE_STREAM_KEY": "op://Personal/YouTube/stream_key",
     "VULTR_API_KEY": "op://Personal/Vultr/api_key",
     "STREAM_WEBHOOK_URL": "op://Personal/Stream_Notification_Webhook/url",
