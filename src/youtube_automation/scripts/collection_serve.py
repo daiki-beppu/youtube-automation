@@ -6,6 +6,8 @@ issue #698: #692 の `yt-suno-serve` を一般化し、エンドポイントを�
 - `GET /suno/prompts.json` … suno-prompts.json 配列 JSON（#692 契約不変）
 - `GET /distrokid/release.json` … profile + collection 動的データのマージ JSON
 - `GET /distrokid/assets/<path>` … 曲・ジャケットファイルの binary 配信
+- `GET /community/posts.json` … community-posts.json の投稿配列
+- `GET /community/posts/<index>/image` … 投稿画像の binary 配信
 
 起動中は port 別 PID ファイルを記録し、`--stop --port <PORT>` または HTTP request の
 idle timeout（既定 60 分）で終了する。同一 port かつ同一構成の生存 server は再利用する。
@@ -88,7 +90,7 @@ _LIFECYCLE_ROUTE_PREFIX = "/.well-known/yt-collection-serve-lifecycle/"
 MIN_EXTENSION_VERSION = "0.2.0"
 _EXTENSION_ORIGIN_SCHEME = "chrome-extension://"
 # overlay 化（#892/#895）で content script の fetch が page origin になったため、
-# helper 拡張がホストされる web origin をデフォルト許可する（#896）。完全一致のみ。
+# helper 拡張がホストされる web origin をデフォルト許可する（#896/#1710）。完全一致のみ。
 _DEFAULT_ALLOWED_WEB_ORIGINS = frozenset(
     {
         "https://suno.com",
@@ -112,6 +114,13 @@ _DISTROKID_METADATA_FILENAME = "metadata.md"
 # distrokid-helper 拡張と対の契約（extensions/shared/constants.ts に追加予定）。
 _DISTROKID_COLLECTIONS_ROUTE = "/distrokid/collections"
 _DISTROKID_RELEASES_ROUTE = "/distrokid/releases"
+
+# community-helper と対の公開 HTTP 契約。extensions/shared/constants.ts に同値を置く。
+COMMUNITY_POSTS_ROUTE = "/community/posts.json"
+COMMUNITY_IMAGE_ROUTE = "/community/posts"
+_COMMUNITY_POSTS_RELPATH = Path("30-promo") / "community-posts.json"
+_COMMUNITY_IMAGE_ROUTE_PATTERN = re.compile(r"^/community/posts/(?P<index>\d+)/image$")
+_YOUTUBE_STUDIO_ORIGIN = "https://studio.youtube.com"
 
 # POST body upper bound for helper write endpoints. The expected payloads are
 # small JSON objects/lists; larger bodies are rejected before reading from rfile.
@@ -559,6 +568,59 @@ def resolve_collection_prompts_path(root: Path, cid: str) -> Path | None:
     return root / cid / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
 
 
+def _resolve_single_mode_prompts_path(path: Path) -> Path | None:
+    """Suno または community の成果物を持つ single collection を受理する。"""
+    try:
+        return resolve_prompts_path(path)
+    except ConfigError:
+        if path.is_dir() and (path / _COMMUNITY_POSTS_RELPATH).is_file():
+            return None
+        raise
+
+
+def _read_community_posts(collection_dir: Path) -> list[dict] | None:
+    """community-draft の envelope を外部 API の CommunityPost[] に正規化する。"""
+    posts_path = collection_dir / _COMMUNITY_POSTS_RELPATH
+    if not posts_path.is_file():
+        return None
+    try:
+        payload = json.loads(posts_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ConfigError(f"community-posts.json を読み込めません: {posts_path}: {exc}") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("posts"), list):
+        raise ConfigError(f"community-posts.json::posts は配列でなければなりません: {posts_path}")
+    posts = payload["posts"]
+    if not all(isinstance(post, dict) for post in posts):
+        raise ConfigError(f"community-posts.json::posts[] は object でなければなりません: {posts_path}")
+    return posts
+
+
+def _resolve_community_image(
+    collection_dir: Path,
+    community_asset_root: Path,
+    index: int,
+) -> Path | None:
+    """投稿 index の画像を channel root 内だけに解決する。画像なし・不在は None。"""
+    posts = _read_community_posts(collection_dir)
+    if posts is None or index >= len(posts):
+        return None
+    image_path = posts[index].get("image_path")
+    if image_path is None:
+        return None
+    if not isinstance(image_path, str) or not image_path:
+        raise ConfigError("community-posts.json::posts[].image_path は string または null でなければなりません")
+    root = community_asset_root.resolve()
+    collection_root = collection_dir.resolve()
+    resolved = (root / image_path).resolve()
+    try:
+        resolved.relative_to(root)
+        resolved.relative_to(collection_root)
+    except ValueError:
+        return None
+    content_type = mimetypes.guess_type(resolved.name)[0]
+    return resolved if resolved.is_file() and content_type is not None and content_type.startswith("image/") else None
+
+
 def is_origin_allowed(origin: str | None, allow_origin: str | None) -> bool:
     """CORS 判定.
 
@@ -575,12 +637,19 @@ def is_origin_allowed(origin: str | None, allow_origin: str | None) -> bool:
     return origin in _DEFAULT_ALLOWED_WEB_ORIGINS
 
 
-def _is_read_origin_allowed(origin: str | None, allow_origin: str | None) -> bool:
+def _is_community_route(path: str) -> bool:
+    return path == COMMUNITY_POSTS_ROUTE or _COMMUNITY_IMAGE_ROUTE_PATTERN.fullmatch(path) is not None
+
+
+def _is_read_origin_allowed(origin: str | None, allow_origin: str | None, path: str) -> bool:
     """Read-only GET/OPTIONS CORS 判定.
 
     `--allow-origin` 指定時は read-only も exact lock に従う。Suno overlay から
-    必要な read API は background script が extension origin で取得する。
+    必要な read API は background script が extension origin で取得する。既定の
+    YouTube Studio page origin は community route だけに許可し、他成果物へ波及させない。
     """
+    if allow_origin is None and origin == _YOUTUBE_STUDIO_ORIGIN:
+        return _is_community_route(path)
     return is_origin_allowed(origin, allow_origin)
 
 
@@ -943,6 +1012,7 @@ def create_server(
     prompts_path: Path | None,
     collection_dir: Path | None,
     distrokid: Distrokid | None,
+    community_asset_root: Path | None = None,
     collections_root: Path | None = None,
     distrokid_source: str | None = None,
     capture_root: Path | None = None,
@@ -968,6 +1038,7 @@ def create_server(
     resolved_server_info = (
         server_info if server_info is not None else build_server_info("YouTube Automation", "YA", port)
     )
+    resolved_community_asset_root = community_asset_root if community_asset_root is not None else collection_dir
 
     class _Handler(BaseHTTPRequestHandler):
         def _allowed_origin(self) -> str | None:
@@ -976,7 +1047,7 @@ def create_server(
                 return None
             origin = headers.get("Origin")
             if self.command in {"GET", "HEAD", "OPTIONS"}:
-                return origin if _is_read_origin_allowed(origin, allow_origin) else None
+                return origin if _is_read_origin_allowed(origin, allow_origin, self.path) else None
             return origin if is_origin_allowed(origin, allow_origin) else None
 
         def _send_cors(self, origin: str | None) -> None:
@@ -1244,7 +1315,42 @@ def create_server(
             if dir_mode:
                 self._serve_dir_mode()
                 return
+            if self.path == COMMUNITY_POSTS_ROUTE:
+                assert collection_dir is not None
+                try:
+                    posts = _read_community_posts(collection_dir)
+                except ConfigError as exc:
+                    self._send_json_error(500, str(exc))
+                    return
+                if posts is None:
+                    self.send_error(404, "Not Found")
+                    return
+                body = json.dumps(posts, ensure_ascii=False).encode("utf-8")
+                self._send_bytes(body, "application/json; charset=utf-8")
+                return
+            community_image_match = _COMMUNITY_IMAGE_ROUTE_PATTERN.fullmatch(self.path)
+            if community_image_match is not None:
+                assert collection_dir is not None
+                assert resolved_community_asset_root is not None
+                try:
+                    image = _resolve_community_image(
+                        collection_dir,
+                        resolved_community_asset_root,
+                        int(community_image_match.group("index")),
+                    )
+                except ConfigError as exc:
+                    self._send_json_error(500, str(exc))
+                    return
+                if image is None:
+                    self.send_error(404, "Not Found")
+                    return
+                content_type = mimetypes.guess_type(image.name)[0] or "application/octet-stream"
+                self._send_bytes(image.read_bytes(), content_type)
+                return
             if self.path == SUNO_PROMPTS_ROUTE:
+                if prompts_path is None:
+                    self.send_error(404, "Not Found")
+                    return
                 self._send_bytes(prompts_path.read_bytes(), "application/json; charset=utf-8")
                 return
             if self.path == DISTROKID_RELEASE_ROUTE:
@@ -1431,8 +1537,8 @@ def _resolve_allow_origin(
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Serve collection artifacts over localhost HTTP for the suno-helper / "
-            "distrokid-helper Chrome extensions (subpaths: /suno/*, /distrokid/*)."
+            "Serve collection artifacts over localhost HTTP for the suno-helper / distrokid-helper / "
+            "community-helper Chrome extensions (subpaths: /suno/*, /distrokid/*, /community/*)."
         ),
     )
     parser.add_argument(
@@ -1541,7 +1647,8 @@ def main() -> None:
             channel_short = "YA"
         distrokid_capture_active = distrokid_cfg is not None and distrokid_cfg.enabled
     else:
-        prompts_path = resolve_prompts_path(args.path)
+        # community-draft だけを使う collection は suno-prompts.json を持たなくても起動可能。
+        prompts_path = _resolve_single_mode_prompts_path(args.path)
         # collection dir: dir 引数はそのまま、json ファイル引数なら <collection>/20-documentation/x.json から 2 階層上。
         collection_dir = args.path if args.path.is_dir() else args.path.parent.parent
         config = load_config()
@@ -1581,6 +1688,7 @@ def main() -> None:
                 server_info=server_info,
                 prompts_path=prompts_path,
                 collection_dir=collection_dir,
+                community_asset_root=channel_dir(),
                 distrokid=distrokid,
                 distrokid_source=args.distrokid_source,
                 capture_root=capture_root,
@@ -1632,7 +1740,10 @@ def main() -> None:
                 f"{COLLECTIONS_ROUTE}/<id>/distrokid/<disc>/release.json"
             )
     else:
-        print(f"Serving {collection_dir} at {canonical_url}{SUNO_PROMPTS_ROUTE}")
+        print(f"Serving {collection_dir} at {canonical_url}")
+        if prompts_path is not None:
+            print(f"  suno endpoint: {SUNO_PROMPTS_ROUTE}")
+        print(f"  community endpoints: {COMMUNITY_POSTS_ROUTE}, {COMMUNITY_IMAGE_ROUTE}/<index>/image")
         print(f"  legacy URL: http://localhost:{port}{SUNO_PROMPTS_ROUTE}")
         print(f"  selector label: {server_info['label']}")
         if distrokid.enabled:
