@@ -41,6 +41,13 @@ image_generation:
     # `yt-thumbnail-auto-select <collection-path> --apply` で自動確定できる。
     # false / 未設定のチャンネルは従来どおり手動承認フロー (挙動は変わらない)。
     enabled: false
+    # 自動化の範囲 (#2166。親 #1679 の全自動モード):
+    #   selection_only : 候補選択の自動確定のみ (#1370 相当。既定・未設定時もこれ)
+    #   full           : skill 層 (/thumbnail) が承認ゲートを省略する全自動モード。
+    #                    Python CLI 側は mode を結果 JSON / workflow-state に記録し、
+    #                    適格候補ゼロ時に手動フロー切替ガイダンス付きで停止する。
+    #                    テーマ自動決定など skill 側の挙動は SKILL.md を参照 (#2167)。
+    mode: selection_only
     # 候補が満たすべき最小解像度 (YouTube 推奨 1280x720)
     min_width: 1280
     min_height: 720
