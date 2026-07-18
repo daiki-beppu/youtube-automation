@@ -33,6 +33,7 @@ Repository = "https://github.com/daiki-beppu/youtube-automation"
 veo = []  # google-genai, Pillow moved to main dependencies
 
 [project.scripts]
+yt-audio-visualizer-fill = "youtube_automation.cli_entrypoints:yt_audio_visualizer_fill"
 # CLI script entry points (yt-* prefix)
 yt-analytics = "youtube_automation.cli_entrypoints:yt_analytics"
 yt-apply-rain-layers = "youtube_automation.cli_entrypoints:yt_apply_rain_layers"

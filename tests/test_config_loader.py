@@ -1890,11 +1890,16 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
             "win_size": 4096,
             "win_func": "hann",
             "colors": "0xff66ccff",
+            "fill": {"type": "gradient", "top": "0xFF8800", "bottom": "0x4400AA"},
+            "mirror_center": True,
+            "symmetric_vertical": True,
+            "rounding": {"blur": 2.3, "contrast": 3.2},
             "position": "(W-w)/2:H-h-80",
             "opacity": 0.9,
             "glow_enabled": True,
             "glow_sigma": 14.0,
             "glow_opacity": 0.5,
+            "glow": {"enabled": False, "sigma": 6.0, "opacity": 0.4},
         },
         "subscribe_popup": {
             "enabled": True,
@@ -1932,6 +1937,16 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
     assert ov.audio_visualizer.position == "(W-w)/2:H-h-80"
     assert ov.audio_visualizer.glow_sigma == 14.0
     assert ov.audio_visualizer.glow_opacity == 0.5
+    assert ov.audio_visualizer.fill is not None
+    assert ov.audio_visualizer.fill.type == "gradient"
+    assert ov.audio_visualizer.fill.bottom == "0x4400AA"
+    assert ov.audio_visualizer.mirror_center is True
+    assert ov.audio_visualizer.symmetric_vertical is True
+    assert ov.audio_visualizer.rounding is not None
+    assert ov.audio_visualizer.rounding.blur == 2.3
+    assert ov.audio_visualizer.glow is not None
+    assert ov.audio_visualizer.glow.enabled is False
+    assert ov.audio_visualizer.glow.sigma == 6.0
 
     assert ov.subscribe_popup.enabled is True
     assert ov.subscribe_popup.image == "popup.png"
@@ -1981,4 +1996,22 @@ def test_overlays_audio_visualizer_non_object_raises(tmp_path, monkeypatch):
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
     with pytest.raises(ConfigError, match="overlays.audio_visualizer"):
+        load_config()
+
+
+@pytest.mark.parametrize(
+    ("fill", "message"),
+    [
+        ({"type": "plasma"}, "fill.type"),
+        ({"type": "solid", "color": "not-a-color"}, "色指定"),
+        ({"type": "gradient", "top": "sunset", "bottom": "0x000000"}, "色指定"),
+    ],
+)
+def test_audio_visualizer_invalid_fill_raises(tmp_path, monkeypatch, fill, message):
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {"audio_visualizer": {"fill": fill}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=message):
         load_config()
