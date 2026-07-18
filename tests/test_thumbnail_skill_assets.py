@@ -428,7 +428,7 @@ def test_thumbnail_skill_distributes_archive_script() -> None:
 def test_thumbnail_skill_frontmatter_names_thumbnail_as_primary_output() -> None:
     """#1611: skill dispatch は main.png ではなく text-included thumbnail.jpg を主成果物として説明する。"""
     skill = _read_thumbnail_skill()
-    frontmatter = _slice_between(skill, "---", "---\n\n## Overview")
+    frontmatter = skill.split("---\n", 2)[1]
 
     assert "YouTube サムネイル（thumbnail.jpg）" in frontmatter
     assert "textless main.png/jpg を先行生成して実フォント合成" in frontmatter

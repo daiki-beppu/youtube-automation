@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -12,6 +13,45 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_all_skills_use_machine_readable_chain_block() -> None:
+    skill_paths = sorted((ROOT / ".claude" / "skills").glob("*/SKILL.md"))
+    chain_block = re.compile(
+        r"\A---\n.*?\n---\n\n## 前後工程\n\n"
+        r"- `前工程`: (?P<upstream>[^\n]+)\n"
+        r"- `後工程`: (?P<downstream>[^\n]+)\n",
+        re.DOTALL,
+    )
+    chain_value = re.compile(
+        r"^(?:`なし`|`\*`（共通基盤としてほぼ全スキル）|"
+        r"`/[a-z0-9-]+`(?:, `/[a-z0-9-]+`)*)$"
+    )
+    known_skills = {path.parent.name for path in skill_paths}
+
+    assert skill_paths
+    for path in skill_paths:
+        text = path.read_text(encoding="utf-8")
+        match = chain_block.match(text)
+        assert match is not None, f"{path}: frontmatter 直後の前後工程ブロックが不正"
+        for direction in ("upstream", "downstream"):
+            value = match.group(direction)
+            assert chain_value.fullmatch(value), f"{path}: {direction} の書式が不正: {value}"
+            for reference in re.findall(r"`/([a-z0-9-]+)`", value):
+                assert reference in known_skills, f"{path}: 存在しない skill 参照 /{reference}"
+
+
+def test_skill_chain_legacy_summary_formats_are_absent() -> None:
+    legacy_summary = re.compile(
+        r"^\*\*(?:前|後)工程|^(?:前|後)工程は|^次工程は|^→ |"
+        r"^- `/[^\n]+` → (?:前|後)工程|"
+        r"^description:.*(?:前|後|次)工程[ :：]/",
+        re.MULTILINE,
+    )
+
+    for path in sorted((ROOT / ".claude" / "skills").glob("*/SKILL.md")):
+        text = path.read_text(encoding="utf-8")
+        assert legacy_summary.search(text) is None, f"{path}: 旧形式の前後工程一覧が残存"
 
 
 def _read(path: str) -> str:
