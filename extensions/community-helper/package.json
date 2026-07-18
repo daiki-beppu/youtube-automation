@@ -2,7 +2,7 @@
   "name": "community-helper",
   "version": "0.1.0",
   "private": true,
-  "description": "YouTube Studio コミュニティ投稿スケジュール Chrome 拡張 (WXT + React)",
+  "description": "YouTube コミュニティ投稿スケジュール Chrome 拡張 (WXT + React)",
   "type": "module",
   "scripts": {
     "dev": "wxt",

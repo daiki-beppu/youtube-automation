@@ -10,6 +10,7 @@ extensions/
     constants.ts          # storage key / 配信ルート / phase 値（サーバー契約 SSOT。メッセージ種別は各拡張の lib/messaging.ts）
     origin.ts             # CORS origin allowlist（collection_serve.py と対の契約）
     api.ts                # yt-collection-serve client + PromptEntry 型
+    asset-transfer.ts     # runtime messaging 用 Blob/File base64 wire（複数拡張で共用）
     dom.ts                # Suno UI 注入の純関数群（注入 / 完了検知 / reCAPTCHA 検知）
     community-dom.ts      # YouTube チャンネル投稿 UI の DOM 操作（本文 / 画像 / 予約日時 / 投稿）
   suno-helper/            # Suno Advanced タブ自動投入拡張（WXT プロジェクト）
@@ -19,9 +20,9 @@ extensions/
     lib/                  # messaging / storage / manifest schema
     tests/                # Vitest unit + Playwright e2e
   community-helper/       # YouTube チャンネル投稿ページ用コミュニティ投稿拡張
-    entrypoints/          # Popup / background relay / content runner stub
-    lib/                  # manifest 最小権限 / typed messaging
-    tests/                # Vitest contract / Popup unit tests
+    entrypoints/          # Popup / extension-context fetch relay / content runner
+    lib/                  # runner / manifest 最小権限 / typed messaging
+    tests/                # Vitest runner contract / DOM / Popup unit tests
 ```
 
 `shared/` は各拡張から相対 import（例: `../../shared/dom`）で参照する。各拡張は自己完結した `package.json` を持ち、`extensions/<name>/` 単体で install / build / zip を実行できる。

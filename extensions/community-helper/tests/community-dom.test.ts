@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   attachImage,
+  cancelCommunityPostForm,
   clickPost,
+  openCommunityPostForm,
   openSchedulePicker,
   resolveCommunityTextField,
   resolveImageUploadInput,
@@ -143,6 +145,81 @@ describe("community DOM text seam", () => {
 
     expect(inputType).toBe("deleteContentBackward");
     expect(submit.disabled).toBe(true);
+  });
+
+  it("opens a collapsed post form and waits for its editor", async () => {
+    document.body.innerHTML = `
+      <ytd-backstage-post-dialog-renderer>
+        <div id="commentbox-placeholder" role="button">投稿を作成</div>
+        <ytd-commentbox id="commentbox" style="display: none">
+          <div id="contenteditable-root" contenteditable="true"></div>
+        </ytd-commentbox>
+      </ytd-backstage-post-dialog-renderer>`;
+    const form = document.querySelector("ytd-backstage-post-dialog-renderer");
+    const placeholder = document.querySelector<HTMLElement>(
+      "#commentbox-placeholder"
+    );
+    const commentbox = document.querySelector<HTMLElement>(
+      "ytd-commentbox#commentbox"
+    );
+    const editor = document.querySelector<HTMLElement>("#contenteditable-root");
+    if (!(form && placeholder && commentbox && editor)) {
+      throw new Error("collapsed fixture の構築に失敗しました");
+    }
+    for (const element of [form, placeholder, editor]) {
+      markVisible(element);
+    }
+    placeholder.addEventListener("click", () => {
+      setTimeout(() => {
+        commentbox.style.display = "block";
+        markVisible(commentbox);
+      }, 0);
+    });
+
+    await openCommunityPostForm();
+
+    expect(resolveCommunityTextField()).toBe(editor);
+  });
+
+  it("cancels and resets a dirty composer before a safe retry", async () => {
+    document.body.innerHTML = `
+      <ytd-backstage-post-dialog-renderer>
+        <ytd-commentbox id="commentbox">
+          <div id="contenteditable-root" contenteditable="true">dirty draft</div>
+          <div id="thumbnail-images-container">
+            <ytd-backstage-multi-image-thumbnail-renderer selected>
+              <img class="thumbnail-image" src="data:image/png;base64,b2xk">
+            </ytd-backstage-multi-image-thumbnail-renderer>
+          </div>
+          <div id="footer"><div id="cancel-button"><button>取消</button></div></div>
+        </ytd-commentbox>
+      </ytd-backstage-post-dialog-renderer>`;
+    const form = document.querySelector("ytd-backstage-post-dialog-renderer");
+    const commentbox = document.querySelector<HTMLElement>(
+      "ytd-commentbox#commentbox"
+    );
+    const editor = document.querySelector<HTMLElement>("#contenteditable-root");
+    const cancel = document.querySelector<HTMLButtonElement>(
+      "#footer #cancel-button button"
+    );
+    if (!(form && commentbox && editor && cancel)) {
+      throw new Error("cancel fixture の構築に失敗しました");
+    }
+    for (const element of [form, commentbox, editor, cancel]) {
+      markVisible(element);
+    }
+    cancel.addEventListener("click", () => {
+      setTimeout(() => {
+        editor.textContent = "";
+        commentbox.querySelector("#thumbnail-images-container")?.remove();
+        commentbox.style.display = "none";
+      }, 0);
+    });
+
+    await cancelCommunityPostForm();
+
+    expect(editor.textContent).toBe("");
+    expect(document.querySelector("img.thumbnail-image[src]")).toBeNull();
   });
 });
 

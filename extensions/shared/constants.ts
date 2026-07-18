@@ -50,6 +50,7 @@ export const COMMUNITY_PHASE = {
   INJECTING: "injecting",
   SCHEDULING: "scheduling",
   UPLOADING_IMAGE: "uploading-image",
+  POSTING: "posting",
   DONE: "done",
   ERROR: "error",
 } as const;
