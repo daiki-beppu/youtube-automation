@@ -150,7 +150,22 @@ case "$expr" in
             printf 'false\\n'
         fi
         ;;
-    *".overlays.audio_visualizer.enabled"*) printf '%s\\n' "${OVERLAY_AV_ENABLED:-${JQ_AV_ENABLED:-false}}" ;;
+    *".overlays.audio_visualizer.enabled"*)
+        if [[ -n "${OVERLAY_AV_ENABLED+x}" ]]; then
+            printf '%s\\n' "$OVERLAY_AV_ENABLED"
+        elif [[ -n "${JQ_AV_ENABLED+x}" ]]; then
+            printf '%s\\n' "$JQ_AV_ENABLED"
+        else
+            python3 - "$file" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    data = json.load(f)
+print(str(data.get("overlays", {}).get("audio_visualizer", {}).get("enabled", False)).lower())
+PY
+        fi
+        ;;
     *".overlays.audio_visualizer.style"*) printf '%s\\n' "${OVERLAY_AV_STYLE:-}" ;;
     *".overlays.audio_visualizer.bars"*) printf '%s\\n' "${OVERLAY_AV_BARS:-}" ;;
     *".overlays.audio_visualizer.size"*) printf '%s\\n' "${OVERLAY_AV_SIZE:-}" ;;
@@ -175,7 +190,16 @@ case "$expr" in
     *".overlays.audio_visualizer.glow.enabled"*) printf '%s\\n' "${JQ_AV_GLOW_ENABLED:-}" ;;
     *".overlays.audio_visualizer.glow.sigma"*) printf '%s\\n' "${JQ_AV_GLOW_SIGMA:-}" ;;
     *".overlays.audio_visualizer.glow.opacity"*) printf '%s\\n' "${JQ_AV_GLOW_OPACITY:-}" ;;
-    *".overlays.subscribe_popup.enabled"*) printf 'false\\n' ;;
+    *".overlays.subscribe_popup.enabled"*)
+        python3 - "$file" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as f:
+    data = json.load(f)
+print(str(data.get("overlays", {}).get("subscribe_popup", {}).get("enabled", False)).lower())
+PY
+        ;;
     *) printf '\\n' ;;
 esac
 """,
@@ -230,6 +254,7 @@ def _run_generate_videos(
     *,
     stream_bitrate_output: str = "",
     extra_env: dict[str, str] | None = None,
+    extra_args: list[str] | None = None,
     collection: Path | None = None,
     master_filename: str = "master-mix.wav",
     with_loop: bool = True,
@@ -247,8 +272,9 @@ def _run_generate_videos(
     env["FFMPEG_LOG"] = str(ffmpeg_log)
     if extra_env:
         env.update(extra_env)
+    script_args = extra_args or []
     result = subprocess.run(
-        ["bash", str(_SCRIPT_PATH), str(collection)],
+        ["bash", str(_SCRIPT_PATH), *script_args, str(collection)],
         capture_output=True,
         text=True,
         env=env,
@@ -1293,11 +1319,16 @@ def test_non_24fps_loop_runs_normalization_with_fixed_24fps(tmp_path: Path) -> N
 
 def _master_ffmpeg_command(ffmpeg_log: Path) -> str:
     """正規化コマンドを除いた master 動画生成コマンドを返す."""
+    return _output_ffmpeg_command(ffmpeg_log, "Master.mp4")
+
+
+def _output_ffmpeg_command(ffmpeg_log: Path, output_name: str) -> str:
+    """指定した出力名を生成する ffmpeg コマンドを返す."""
     commands = ffmpeg_log.read_text(encoding="utf-8").splitlines()
     for cmd in commands:
-        if "Master.mp4" in cmd:
+        if output_name in cmd:
             return cmd
-    raise AssertionError(f"master ffmpeg command not found: {commands}")
+    raise AssertionError(f"ffmpeg command for {output_name} not found: {commands}")
 
 
 def test_target_video_duration_unset_keeps_legacy_behavior(tmp_path: Path) -> None:
@@ -1659,6 +1690,185 @@ def test_static_image_with_effect_uses_textless_main_not_thumbnail(tmp_path: Pat
     final_cmd = ffmpeg_log.read_text(encoding="utf-8").splitlines()[-1]
     assert "10-assets/main.png" in final_cmd
     assert "10-assets/thumbnail.jpg" not in final_cmd
+
+
+# ─── Effect / overlay preview (#1749) ─────────────────────
+
+
+def test_effect_preview_creates_short_sample_without_master_or_workflow_state(tmp_path: Path) -> None:
+    """#1749: 公開 CLI の --preview は effect 付き短尺サンプルだけを生成する。"""
+    collection = _create_collection(tmp_path)
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"VIDEOUP_EFFECT": "particles", "FFPROBE_DURATION": "120"},
+        extra_args=["--preview", "20"],
+        collection=collection,
+        with_loop=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    preview_path = collection / "01-master" / "Ambient-Preview.mp4"
+    master_path = collection / "01-master" / "Ambient-Master.mp4"
+    assert preview_path.is_file()
+    assert not master_path.exists()
+    assert not (collection / "workflow-state.json").exists()
+    preview_cmd = _output_ffmpeg_command(ffmpeg_log, "Preview.mp4")
+    assert " -t 20 " in f" {preview_cmd} "
+    assert "-stream_loop -1" in preview_cmd
+    assert "Full output outlook:" in result.stdout
+    assert "Route   : effect bake + stream copy" in result.stdout
+
+
+def test_effect_preview_reuses_existing_baked_loop(tmp_path: Path) -> None:
+    """#1749: effect preview は既存の fx_baked.mp4 を再利用して短尺化する。"""
+    collection = _create_collection(tmp_path)
+    env = {"VIDEOUP_EFFECT": "particles", "FFPROBE_DURATION": "120"}
+
+    first_result, first_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env=env,
+        collection=collection,
+        with_loop=False,
+    )
+    assert first_result.returncode == 0, first_result.stderr
+    assert (collection / "10-assets" / "fx_baked.mp4").is_file()
+    assert "Baking particles effect loop" in first_result.stdout
+    first_command_count = len(first_log.read_text(encoding="utf-8").splitlines())
+
+    preview_result, preview_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env=env,
+        extra_args=["--preview"],
+        collection=collection,
+        with_loop=False,
+    )
+
+    assert preview_result.returncode == 0, preview_result.stderr
+    assert "Effect loop cache hit" in preview_result.stdout
+    commands = preview_log.read_text(encoding="utf-8").splitlines()
+    assert len(commands) == first_command_count + 1
+    preview_cmd = _output_ffmpeg_command(preview_log, "Preview.mp4")
+    assert "10-assets/fx_baked.mp4" in preview_cmd
+    assert " -t 20 " in f" {preview_cmd} "
+
+
+def test_preview_skips_final_only_shrink_pass(tmp_path: Path) -> None:
+    """#1749: 確認用サンプルでは全尺専用の shrink 再エンコードを実行しない。"""
+    config_dir = tmp_path / "config" / "skills"
+    config_dir.mkdir(parents=True)
+    (config_dir / "videoup.yaml").write_text(
+        "shrink:\n  enabled: true\n  crf: 23\n",
+        encoding="utf-8",
+    )
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_args=["--preview", "20"],
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "[shrink]" not in result.stdout
+    assert len(ffmpeg_log.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_preview_overlay_filter_includes_effect_visualizer_and_popup(tmp_path: Path) -> None:
+    """#1749: preview の overlay 経路は effect → visualizer → popup を同じ graph で合成する。"""
+    collection = _create_collection(tmp_path)
+    (collection / "10-assets" / "subscribe-popup.png").write_bytes(b"fake-popup")
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text(
+        json.dumps(
+            {
+                "overlays": {
+                    "enabled": True,
+                    "audio_visualizer": {"enabled": True},
+                    "subscribe_popup": {"enabled": True},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"VIDEOUP_EFFECT": "particles", "OVERLAYS_CONFIG": str(overlays_config)},
+        extra_args=["--preview", "25"],
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    preview_cmd = _filter_complex_command(ffmpeg_log)
+    assert "noise=alls=80:allf=t+u" in preview_cmd
+    assert "showfreqs=mode=bar" in preview_cmd
+    assert "fade=t=in" in preview_cmd
+    assert preview_cmd.index("noise=alls=80:allf=t+u") < preview_cmd.index("showfreqs=mode=bar")
+    assert preview_cmd.index("showfreqs=mode=bar") < preview_cmd.index("fade=t=in")
+    assert " -t 25 " in f" {preview_cmd} "
+    assert "Route   : overlays + particles effect/full encode" in result.stdout
+
+
+def test_no_preview_keeps_master_output_contract(tmp_path: Path) -> None:
+    """#1749: --preview 無しの既存 CLI は Master 出力を維持する。"""
+    collection = _create_collection(tmp_path)
+
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (collection / "01-master" / "Ambient-Master.mp4").is_file()
+    assert not (collection / "01-master" / "Ambient-Preview.mp4").exists()
+    assert "Full output outlook:" not in result.stdout
+
+
+@pytest.mark.parametrize("preview_args", [["--preview", "14"], ["--preview", "31"], ["--preview", "abc"]])
+def test_preview_duration_outside_supported_range_fails_before_ffmpeg(
+    tmp_path: Path,
+    preview_args: list[str],
+) -> None:
+    """#1749: 15〜30 秒以外の preview 指定は生成を開始しない。"""
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_args=preview_args,
+    )
+
+    assert result.returncode != 0
+    assert "--preview duration must be an integer from 15 to 30 seconds" in result.stdout
+    assert not ffmpeg_log.exists()
+
+
+def test_unknown_option_fails_before_ffmpeg(tmp_path: Path) -> None:
+    """#1749: 新しい CLI parser は未定義 option で入力を曖昧に解釈しない。"""
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_args=["--unknown"],
+    )
+
+    assert result.returncode != 0
+    assert "ERROR: Unknown option: --unknown" in result.stdout
+    assert not ffmpeg_log.exists()
+
+
+def test_videoup_skill_requires_preview_acceptance_before_full_generation() -> None:
+    """#1749: skill は visual 設定時の preview と明示承認ゲートを文書化する。"""
+    skill = _VIDEOUP_SKILL_PATH.read_text(encoding="utf-8")
+
+    assert "generate_videos.sh --preview 20 <collection-path>" in skill
+    assert "明示承認" in skill
+    assert "全尺エンコードと `assets.master_video` の更新を開始しない" in skill
+    assert "プレビューのみでは更新しない" in skill
 
 
 # ─── Loop artifact warning (#868) ────────────────────────
