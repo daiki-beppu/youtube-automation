@@ -37,7 +37,7 @@ import {
 
 /** 既定値を持つ options を作り、test ごとに必要な mock だけ override する。 */
 function makeOptions(
-  overrides: Partial<InjectWithVerificationOptions<number>> = {},
+  overrides: Partial<InjectWithVerificationOptions<number>> = {}
 ): InjectWithVerificationOptions<number> {
   return {
     inject: vi.fn().mockResolvedValue(undefined),
@@ -66,7 +66,7 @@ describe("retryInjectStepWithFallback: inject step retry + fallback", () => {
         isRetryable: (error) => error === retryableError,
         maxRetry: 2,
         describeStep: () => "entry 0 Lyrics paste",
-      }),
+      })
     ).resolves.toBeUndefined();
 
     expect(run).toHaveBeenCalledTimes(3);
@@ -91,7 +91,7 @@ describe("retryInjectStepWithFallback: inject step retry + fallback", () => {
         isRetryable: (error) => error === retryableError,
         maxRetry: 0,
         describeStep: () => "entry 0 Lyrics paste",
-      }),
+      })
     ).rejects.toBe(fallbackError);
 
     warn.mockRestore();
@@ -108,7 +108,7 @@ describe("retryInjectStepWithFallback: inject step retry + fallback", () => {
         isRetryable: () => false,
         maxRetry: 2,
         describeStep: () => "entry 0 Lyrics paste",
-      }),
+      })
     ).rejects.toBe(error);
 
     expect(fallback).not.toHaveBeenCalled();
@@ -121,7 +121,9 @@ describe("injectWithVerification: inject 受理検証 + retry (#864/#948)", () =
     const waitForAck = vi.fn().mockResolvedValue(true);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    await expect(injectWithVerification(makeOptions({ inject, waitForAck }))).resolves.toBeUndefined();
+    await expect(
+      injectWithVerification(makeOptions({ inject, waitForAck }))
+    ).resolves.toBeUndefined();
 
     expect(inject).toHaveBeenCalledTimes(1);
     expect(waitForAck).toHaveBeenCalledTimes(1);
@@ -141,7 +143,7 @@ describe("injectWithVerification: inject 受理検証 + retry (#864/#948)", () =
         waitForAck,
         ackTimeoutMs: 30000,
         pollIntervalMs: 500,
-      }),
+      })
     );
 
     expect(waitForAck).toHaveBeenCalledWith(4, {
@@ -154,8 +156,14 @@ describe("injectWithVerification: inject 受理検証 + retry (#864/#948)", () =
   it("Given retry When 各 attempt Then markBeforeInject を attempt ごとに取り直す（前 attempt の marker を使い回さない）", async () => {
     // 1 回目の inject 自体が in-flight / submission を進めている可能性があるため、
     // retry では基準 marker を再採取しないと誤 NACK / 誤 ACK の両方が起きうる。
-    const markBeforeInject = vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(1);
-    const waitForAck = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const markBeforeInject = vi
+      .fn()
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(1);
+    const waitForAck = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     await injectWithVerification(makeOptions({ markBeforeInject, waitForAck }));
@@ -174,7 +182,9 @@ describe("injectWithVerification: inject 受理検証 + retry (#864/#948)", () =
       .mockResolvedValueOnce(true); // 2 回目: 受理
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    await expect(injectWithVerification(makeOptions({ inject, waitForAck }))).resolves.toBeUndefined();
+    await expect(
+      injectWithVerification(makeOptions({ inject, waitForAck }))
+    ).resolves.toBeUndefined();
 
     expect(inject).toHaveBeenCalledTimes(2);
     expect(waitForAck).toHaveBeenCalledTimes(2);
@@ -194,8 +204,8 @@ describe("injectWithVerification: inject 受理検証 + retry (#864/#948)", () =
           waitForAck,
           maxRetry: 2,
           describeEntry: () => "entry 10 (queue-test-11)",
-        }),
-      ),
+        })
+      )
     ).rejects.toThrow(/queue-test-11/); // entry 特定情報を fail-loud メッセージに含む
 
     expect(inject).toHaveBeenCalledTimes(3); // 初回 + retry 2
@@ -203,8 +213,13 @@ describe("injectWithVerification: inject 受理検証 + retry (#864/#948)", () =
     // 予告せず throw が終端を伝えるため、論理破綻ログ `retry (3/2)` を出さない。
     expect(warn).toHaveBeenCalledTimes(2);
     const warnMessages = warn.mock.calls.map((call) => String(call[0]));
-    expect(warnMessages).toEqual([expect.stringContaining("retry (1/2)"), expect.stringContaining("retry (2/2)")]);
-    expect(warnMessages.some((message) => message.includes("retry (3/2)"))).toBe(false);
+    expect(warnMessages).toEqual([
+      expect.stringContaining("retry (1/2)"),
+      expect.stringContaining("retry (2/2)"),
+    ]);
+    expect(
+      warnMessages.some((message) => message.includes("retry (3/2)"))
+    ).toBe(false);
     warn.mockRestore();
   });
 
@@ -217,7 +232,9 @@ describe("injectWithVerification: inject 受理検証 + retry (#864/#948)", () =
     const waitForAck = vi.fn().mockResolvedValue(false);
 
     await expect(
-      injectWithVerification(makeOptions({ inject, waitForAck, isAborted: () => aborted })),
+      injectWithVerification(
+        makeOptions({ inject, waitForAck, isAborted: () => aborted })
+      )
     ).resolves.toBeUndefined();
 
     expect(inject).toHaveBeenCalledTimes(1);
@@ -253,7 +270,9 @@ describe("InjectNotAcknowledgedError: 全 attempt 未受理の終端エラー (#
 
     let caughtError: unknown;
     try {
-      await injectWithVerification(makeOptions({ waitForAck, maxRetry: 0, describeEntry }));
+      await injectWithVerification(
+        makeOptions({ waitForAck, maxRetry: 0, describeEntry })
+      );
     } catch (err) {
       caughtError = err;
     }
@@ -261,7 +280,7 @@ describe("InjectNotAcknowledgedError: 全 attempt 未受理の終端エラー (#
 
     expect(caughtError).toBeInstanceOf(InjectNotAcknowledgedError);
     expect((caughtError as InjectNotAcknowledgedError).message).toBe(
-      "entry 3 (silent-drop-test) の inject が 1 回 silent drop されました",
+      "entry 3 (silent-drop-test) の inject が 1 回 silent drop されました"
     );
   });
 });

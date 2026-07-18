@@ -1,5 +1,11 @@
 import { PHASE, type ProgressPayload } from "../../shared/constants";
 
-export function shouldReportLiveProgressStatus(progress: ProgressPayload): boolean {
-  return progress.phase !== PHASE.DONE || Boolean(progress.log) || Boolean(progress.message);
+export function shouldReportLiveProgressStatus(
+  progress: ProgressPayload
+): boolean {
+  return (
+    progress.phase !== PHASE.DONE ||
+    Boolean(progress.log) ||
+    Boolean(progress.message)
+  );
 }

@@ -33,14 +33,18 @@ interface Point {
  */
 export function Overlay() {
   // undefined=読み込み中 / null=未保存 / OverlayState=復元。
-  const [initial, setInitial] = useState<OverlayState | null | undefined>(undefined);
+  const [initial, setInitial] = useState<OverlayState | null | undefined>(
+    undefined
+  );
   const [reloadRequired, setReloadRequired] = useState(false);
 
   useEffect(() => {
     void (async () => {
       try {
         const version = browser.runtime.getManifest().version;
-        const handshake = await sendMessage("extensionVersionHandshake", { version });
+        const handshake = await sendMessage("extensionVersionHandshake", {
+          version,
+        });
         if (!handshake.matches) {
           setReloadRequired(true);
           return;
@@ -49,7 +53,7 @@ export function Overlay() {
       } catch (error) {
         console.warn(
           "[suno-helper] overlay の初期化に失敗しました（拡張更新後はタブを再読み込みしてください）:",
-          error,
+          error
         );
         setReloadRequired(true);
       }
@@ -70,7 +74,9 @@ function initialPosition(initial: OverlayState | null): Point {
   // 高さは mount 後に getBoundingClientRect で実測されるため、初期 clamp は幅のみ厳密に効かせる。
   const size = { width: OVERLAY_WIDTH, height: 0 };
   // 復元時は保存位置を現在 viewport へ clamp する (要件2)。未保存は右上に出す (要件1)。
-  return initial ? clampPosition(initial.position, viewport, size) : topRightPosition(viewport, size);
+  return initial
+    ? clampPosition(initial.position, viewport, size)
+    : topRightPosition(viewport, size);
 }
 
 function OverlayShell({ initial }: { initial: OverlayState | null }) {
@@ -83,7 +89,7 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
     void writeOverlayState(state).catch((error: unknown) => {
       console.warn(
         "[suno-helper] overlay state の保存に失敗しました（拡張更新後はタブを再読み込みしてください）:",
-        error,
+        error
       );
       setReloadRequired(true);
     });
@@ -99,8 +105,13 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
   }, [minimized, hidden]);
 
   const onCommit = useCallback(
-    (position: Point) => persist({ position, minimized: minimizedRef.current, hidden: hiddenRef.current }),
-    [persist],
+    (position: Point) =>
+      persist({
+        position,
+        minimized: minimizedRef.current,
+        hidden: hiddenRef.current,
+      }),
+    [persist]
   );
 
   const { position, dragging, onPointerDown } = useDraggable({
@@ -120,7 +131,11 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
   useEffect(() => {
     const unwatch = onMessage("toggleOverlay", () => {
       setHidden((prev) => {
-        const next = toggleHidden({ position: positionRef.current, minimized: minimizedRef.current, hidden: prev });
+        const next = toggleHidden({
+          position: positionRef.current,
+          minimized: minimizedRef.current,
+          hidden: prev,
+        });
         persist(next);
         return next.hidden;
       });
@@ -131,7 +146,11 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
   const toggleMinimize = useCallback(() => {
     setMinimized((prev) => {
       const next = !prev;
-      persist({ position: positionRef.current, minimized: next, hidden: hiddenRef.current });
+      persist({
+        position: positionRef.current,
+        minimized: next,
+        hidden: hiddenRef.current,
+      });
       return next;
     });
   }, [persist]);
@@ -158,7 +177,10 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
       <CardHeader
         onPointerDown={onPointerDown}
         className="flex flex-row items-center justify-between gap-0 rounded-t-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground select-none"
-        style={{ cursor: dragging ? "grabbing" : "grab", pointerEvents: "auto" }}
+        style={{
+          cursor: dragging ? "grabbing" : "grab",
+          pointerEvents: "auto",
+        }}
       >
         <span>Suno Helper</span>
         <Button

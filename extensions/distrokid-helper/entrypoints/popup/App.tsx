@@ -1,5 +1,5 @@
-import { ServerUrlField } from "@/components/ServerUrlField";
 import { ReleaseReview } from "@/components/ReleaseReview";
+import { ServerUrlField } from "@/components/ServerUrlField";
 import { StatusBanner } from "@/components/StatusBanner";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
@@ -64,15 +64,27 @@ export function App() {
       )}
 
       {/* dir mode で全 disc が配信済みの場合（#934）。suno-helper の allMapped パターンを踏襲。 */}
-      {allReleased && <p className="text-xs text-gray-600">未配信の disc はありません。</p>}
+      {allReleased && (
+        <p className="text-xs text-gray-600">未配信の disc はありません。</p>
+      )}
 
       {payload !== null && <ReleaseReview payload={payload} />}
 
       <div className="flex gap-2">
-        <Button type="button" className="flex-1" disabled={payload === null || busy} onClick={() => void inject()}>
+        <Button
+          type="button"
+          className="flex-1"
+          disabled={payload === null || busy}
+          onClick={() => void inject()}
+        >
           フォーム一括入力
         </Button>
-        <Button type="button" variant="outline" disabled={!isInjecting} onClick={() => void stop()}>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!isInjecting}
+          onClick={() => void stop()}
+        >
           停止
         </Button>
       </div>

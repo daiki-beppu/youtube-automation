@@ -4,9 +4,14 @@
 // DOM 非依存の fake Injector で検証する。実 DOM へのファイル注入は Playwright e2e が担う。
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { InjectSession, type Injector, type Reporter } from "../lib/inject-session";
-import { PHASES, type Phase } from "../lib/messaging";
+
 import type { SerializedAsset } from "../lib/asset-transfer";
+import {
+  InjectSession,
+  type Injector,
+  type Reporter,
+} from "../lib/inject-session";
+import { PHASES, type Phase } from "../lib/messaging";
 import type { ReleasePayload } from "../lib/types";
 
 function makePayload(trackCount: number): ReleasePayload {
@@ -60,7 +65,8 @@ function makeInjector(): { injector: Injector; calls: InjectorCall[] } {
     injectStaticFields: async () => {
       calls.push({ kind: "static" });
     },
-    injectTrackFile: (trackIndex, file) => calls.push({ kind: "trackFile", trackIndex, fileName: file.name }),
+    injectTrackFile: (trackIndex, file) =>
+      calls.push({ kind: "trackFile", trackIndex, fileName: file.name }),
     injectCover: (file) => calls.push({ kind: "cover", fileName: file.name }),
     injectAiDisclosure: async () => {
       calls.push({ kind: "ai" });
@@ -78,7 +84,8 @@ describe("InjectSession", () => {
     const made = makeInjector();
     calls = made.calls;
     reports = [];
-    const report: Reporter = (phase, message) => reports.push({ phase, message });
+    const report: Reporter = (phase, message) =>
+      reports.push({ phase, message });
     session = new InjectSession(made.injector, report);
   });
 
@@ -97,7 +104,9 @@ describe("InjectSession", () => {
   it("injectStart 先行なしの track は順序違反として throw する", () => {
     // Given: 開始していないセッション
     // When / Then: track 注入は fail-loud
-    expect(() => session.track(0, makeAsset("track-01.mp3"))).toThrow(/injectStart/);
+    expect(() => session.track(0, makeAsset("track-01.mp3"))).toThrow(
+      /injectStart/
+    );
     expect(calls).toEqual([]);
   });
 
@@ -133,7 +142,9 @@ describe("InjectSession", () => {
 
     // When / Then: 範囲外 index は fail-loud
     expect(() => session.track(2, makeAsset("track-03.mp3"))).toThrow(/範囲外/);
-    expect(() => session.track(-1, makeAsset("track-00.mp3"))).toThrow(/範囲外/);
+    expect(() => session.track(-1, makeAsset("track-00.mp3"))).toThrow(
+      /範囲外/
+    );
   });
 
   it("cover はジャケット File を注入する", async () => {
@@ -162,7 +173,9 @@ describe("InjectSession", () => {
     });
 
     // Then: セッションは終了済み（以降の track は順序違反）
-    expect(() => session.track(0, makeAsset("track-01.mp3"))).toThrow(/injectStart/);
+    expect(() => session.track(0, makeAsset("track-01.mp3"))).toThrow(
+      /injectStart/
+    );
   });
 
   it("stop は STOPPED を報告してセッションを破棄する", async () => {
@@ -173,7 +186,12 @@ describe("InjectSession", () => {
     session.stop();
 
     // Then: STOPPED 報告 + 以降の asset 注入は順序違反
-    expect(reports.at(-1)).toEqual({ phase: PHASES.STOPPED, message: "停止しました" });
-    expect(() => session.track(0, makeAsset("track-01.mp3"))).toThrow(/injectStart/);
+    expect(reports.at(-1)).toEqual({
+      phase: PHASES.STOPPED,
+      message: "停止しました",
+    });
+    expect(() => session.track(0, makeAsset("track-01.mp3"))).toThrow(
+      /injectStart/
+    );
   });
 });

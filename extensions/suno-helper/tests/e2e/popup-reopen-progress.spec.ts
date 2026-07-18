@@ -45,11 +45,16 @@ test("popup を閉じて再 open すると content の snapshot から itemState
       };
 
       // --- 本番 lib/snapshot.ts と同手法を inline 再現 ---
-      const nextItemStates = (prev: ItemState[], payload: ProgressPayload): ItemState[] => {
+      const nextItemStates = (
+        prev: ItemState[],
+        payload: ProgressPayload
+      ): ItemState[] => {
         const { phase, index } = payload;
 
         if (phase === PHASE.INJECTING) {
-          return prev.map((s, i) => (i === index ? "active" : s === "active" ? "idle" : s));
+          return prev.map((s, i) =>
+            i === index ? "active" : s === "active" ? "idle" : s
+          );
         }
         if (phase === PHASE.DONE) {
           if (payload.log?.kind === "duration-check" && !payload.log.ok) {
@@ -59,15 +64,22 @@ test("popup を閉じて再 open すると content の snapshot から itemState
         }
         return prev;
       };
-      const initSnapshot = (entries: Entry[], collectionId: string): Snapshot => ({
+      const initSnapshot = (
+        entries: Entry[],
+        collectionId: string
+      ): Snapshot => ({
         collectionId,
         entries,
         itemStates: entries.map(() => "idle"),
         isRunning: true,
         progress: { phase: PHASE.INJECTING, total: entries.length },
       });
-      const isTerminal = (p: Phase) => p === PHASE.FINISHED || p === PHASE.STOPPED || p === PHASE.ERROR;
-      const applyProgress = (snap: Snapshot, payload: ProgressPayload): Snapshot => ({
+      const isTerminal = (p: Phase) =>
+        p === PHASE.FINISHED || p === PHASE.STOPPED || p === PHASE.ERROR;
+      const applyProgress = (
+        snap: Snapshot,
+        payload: ProgressPayload
+      ): Snapshot => ({
         ...snap,
         itemStates: nextItemStates(snap.itemStates, payload),
         progress: payload,
@@ -75,12 +87,16 @@ test("popup を閉じて再 open すると content の snapshot から itemState
       });
 
       // --- 本番 components/runner-errors.ts と同手法を inline 再現 ---
-      const phaseToStatus = (snap: Snapshot): { text: string; error?: boolean } => {
+      const phaseToStatus = (
+        snap: Snapshot
+      ): { text: string; error?: boolean } => {
         const { phase, index, total, message } = snap.progress;
         const n = (index ?? 0) + 1;
         switch (phase) {
           case PHASE.INJECTING:
-            return { text: `[${n}/${total}] 注入中: ${snap.entries[index ?? 0]?.name ?? ""}` };
+            return {
+              text: `[${n}/${total}] 注入中: ${snap.entries[index ?? 0]?.name ?? ""}`,
+            };
           case PHASE.WAITING_SLOT:
             return { text: `[${n}/${total}] 生成キューの空き待ち…` };
           case PHASE.GENERATING:
@@ -114,10 +130,25 @@ test("popup を閉じて再 open すると content の snapshot から itemState
         { name: "pattern-2", style: "s2", lyrics: "l2" },
         { name: "pattern-3", style: "s3", lyrics: "l3" },
       ];
-      let contentSnapshot: Snapshot | null = initSnapshot(entries, "20260601-clm-popup-reopen-collection");
-      contentSnapshot = applyProgress(contentSnapshot, { phase: PHASE.DONE, index: 0, total: 3 });
-      contentSnapshot = applyProgress(contentSnapshot, { phase: PHASE.DONE, index: 1, total: 3 });
-      contentSnapshot = applyProgress(contentSnapshot, { phase: PHASE.INJECTING, index: 2, total: 3 });
+      let contentSnapshot: Snapshot | null = initSnapshot(
+        entries,
+        "20260601-clm-popup-reopen-collection"
+      );
+      contentSnapshot = applyProgress(contentSnapshot, {
+        phase: PHASE.DONE,
+        index: 0,
+        total: 3,
+      });
+      contentSnapshot = applyProgress(contentSnapshot, {
+        phase: PHASE.DONE,
+        index: 1,
+        total: 3,
+      });
+      contentSnapshot = applyProgress(contentSnapshot, {
+        phase: PHASE.INJECTING,
+        index: 2,
+        total: 3,
+      });
 
       // popup を閉じる = React state 破棄。再 open は fresh state から始まる。
       const freshPopup = {
@@ -133,12 +164,15 @@ test("popup を閉じて再 open すると content の snapshot から itemState
       const reopened = restored ? { ...restored } : freshPopup;
 
       // === 比較用: 終了 (FINISHED) 後に再 open した場合 ===
-      const finishedSnapshot = applyProgress(contentSnapshot, { phase: PHASE.FINISHED, total: 3 });
+      const finishedSnapshot = applyProgress(contentSnapshot, {
+        phase: PHASE.FINISHED,
+        total: 3,
+      });
       const reopenedAfterFinish = buildRestoreState(finishedSnapshot);
 
       return { freshPopup, reopened, reopenedAfterFinish };
     },
-    { PHASE },
+    { PHASE }
   );
 
   // 復元前の fresh popup は空（state が破棄されていることの確認）。
@@ -153,6 +187,12 @@ test("popup を閉じて再 open すると content の snapshot から itemState
 
   // 完了後の再 open でも完了情報が復元される。
   expect(result.reopenedAfterFinish?.isRunning).toBe(false);
-  expect(result.reopenedAfterFinish?.status).toBe("完了: 3 パターンを実行しました。");
-  expect(result.reopenedAfterFinish?.itemStates).toEqual(["done", "done", "active"]);
+  expect(result.reopenedAfterFinish?.status).toBe(
+    "完了: 3 パターンを実行しました。"
+  );
+  expect(result.reopenedAfterFinish?.itemStates).toEqual([
+    "done",
+    "done",
+    "active",
+  ]);
 });

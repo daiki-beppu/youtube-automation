@@ -29,53 +29,86 @@ const MAX_Y = VIEWPORT.height - SIZE.height; // 650
 
 describe("clampPosition: viewport 内に収まる位置 (no-op)", () => {
   it("Given 完全に内側の位置 When clamp Then そのまま返す（移動しない）", () => {
-    expect(clampPosition({ x: 300, y: 400 }, VIEWPORT, SIZE)).toEqual({ x: 300, y: 400 });
+    expect(clampPosition({ x: 300, y: 400 }, VIEWPORT, SIZE)).toEqual({
+      x: 300,
+      y: 400,
+    });
   });
 
   it("Given 左上端 (0,0) When clamp Then そのまま返す（境界 inclusive）", () => {
-    expect(clampPosition({ x: 0, y: 0 }, VIEWPORT, SIZE)).toEqual({ x: 0, y: 0 });
+    expect(clampPosition({ x: 0, y: 0 }, VIEWPORT, SIZE)).toEqual({
+      x: 0,
+      y: 0,
+    });
   });
 
   it("Given 右下端ちょうど (maxX,maxY) When clamp Then そのまま返す（境界 inclusive）", () => {
-    expect(clampPosition({ x: MAX_X, y: MAX_Y }, VIEWPORT, SIZE)).toEqual({ x: MAX_X, y: MAX_Y });
+    expect(clampPosition({ x: MAX_X, y: MAX_Y }, VIEWPORT, SIZE)).toEqual({
+      x: MAX_X,
+      y: MAX_Y,
+    });
   });
 });
 
 describe("clampPosition: viewport 外の位置を内側へ clamp (要件2 復元)", () => {
   it("Given x が負 When clamp Then x=0 へ寄せる（左にはみ出さない）", () => {
-    expect(clampPosition({ x: -50, y: 400 }, VIEWPORT, SIZE)).toEqual({ x: 0, y: 400 });
+    expect(clampPosition({ x: -50, y: 400 }, VIEWPORT, SIZE)).toEqual({
+      x: 0,
+      y: 400,
+    });
   });
 
   it("Given y が負 When clamp Then y=0 へ寄せる（上にはみ出さない）", () => {
-    expect(clampPosition({ x: 300, y: -120 }, VIEWPORT, SIZE)).toEqual({ x: 300, y: 0 });
+    expect(clampPosition({ x: 300, y: -120 }, VIEWPORT, SIZE)).toEqual({
+      x: 300,
+      y: 0,
+    });
   });
 
   it("Given x が右端超過 When clamp Then x=maxX へ寄せる（右にはみ出さない）", () => {
-    expect(clampPosition({ x: 5000, y: 400 }, VIEWPORT, SIZE)).toEqual({ x: MAX_X, y: 400 });
+    expect(clampPosition({ x: 5000, y: 400 }, VIEWPORT, SIZE)).toEqual({
+      x: MAX_X,
+      y: 400,
+    });
   });
 
   it("Given y が下端超過 When clamp Then y=maxY へ寄せる（下にはみ出さない）", () => {
-    expect(clampPosition({ x: 300, y: 5000 }, VIEWPORT, SIZE)).toEqual({ x: 300, y: MAX_Y });
+    expect(clampPosition({ x: 300, y: 5000 }, VIEWPORT, SIZE)).toEqual({
+      x: 300,
+      y: MAX_Y,
+    });
   });
 
   it("Given 左上方向に両軸はみ出し When clamp Then (0,0) へ寄せる", () => {
-    expect(clampPosition({ x: -999, y: -999 }, VIEWPORT, SIZE)).toEqual({ x: 0, y: 0 });
+    expect(clampPosition({ x: -999, y: -999 }, VIEWPORT, SIZE)).toEqual({
+      x: 0,
+      y: 0,
+    });
   });
 
   it("Given 右下方向に両軸はみ出し When clamp Then (maxX,maxY) へ寄せる", () => {
-    expect(clampPosition({ x: 9999, y: 9999 }, VIEWPORT, SIZE)).toEqual({ x: MAX_X, y: MAX_Y });
+    expect(clampPosition({ x: 9999, y: 9999 }, VIEWPORT, SIZE)).toEqual({
+      x: MAX_X,
+      y: MAX_Y,
+    });
   });
 });
 
 describe("clampPosition: overlay が viewport より大きい退化ケース", () => {
   it("Given overlay 幅 > viewport 幅 When clamp Then x=0（負の上限へ吸い込まれない＝max(0,...)）", () => {
     const bigWidth = { width: 1200, height: 150 };
-    expect(clampPosition({ x: 300, y: 100 }, VIEWPORT, bigWidth)).toEqual({ x: 0, y: 100 });
+    expect(clampPosition({ x: 300, y: 100 }, VIEWPORT, bigWidth)).toEqual({
+      x: 0,
+      y: 100,
+    });
   });
 
   it("Given overlay 高さ > viewport 高さ When clamp Then y=0", () => {
     const bigHeight = { width: 200, height: 1200 };
-    expect(clampPosition({ x: 100, y: 300 }, VIEWPORT, bigHeight)).toEqual({ x: 100, y: 0 });
+    expect(clampPosition({ x: 100, y: 300 }, VIEWPORT, bigHeight)).toEqual({
+      x: 100,
+      y: 0,
+    });
   });
 });
 
@@ -92,7 +125,11 @@ describe("clampPosition: viewport 縮小（resize）後の再 clamp", () => {
 
 describe("OverlayState: 永続化する状態の形 (要件2)", () => {
   it("Given position/minimized/hidden を持つ state When position を clamp Then OverlayState の position 形と互換である", () => {
-    const state: OverlayState = { position: { x: -10, y: 5000 }, minimized: true, hidden: false };
+    const state: OverlayState = {
+      position: { x: -10, y: 5000 },
+      minimized: true,
+      hidden: false,
+    };
 
     const clamped = clampPosition(state.position, VIEWPORT, SIZE);
 
@@ -117,14 +154,22 @@ describe("writeOverlayState: storage 書き込み失敗を UI へ伝播する", 
       storage: {
         defineItem: () => ({
           getValue: vi.fn(() => Promise.resolve(null)),
-          setValue: vi.fn(() => Promise.reject(new Error("Extension context invalidated"))),
+          setValue: vi.fn(() =>
+            Promise.reject(new Error("Extension context invalidated"))
+          ),
         }),
       },
     }));
 
     const { writeOverlayState } = await import("../lib/overlay-state");
-    const state: OverlayState = { position: { x: 100, y: 200 }, minimized: false, hidden: false };
+    const state: OverlayState = {
+      position: { x: 100, y: 200 },
+      minimized: false,
+      hidden: false,
+    };
 
-    await expect(writeOverlayState(state)).rejects.toThrow("Extension context invalidated");
+    await expect(writeOverlayState(state)).rejects.toThrow(
+      "Extension context invalidated"
+    );
   });
 });

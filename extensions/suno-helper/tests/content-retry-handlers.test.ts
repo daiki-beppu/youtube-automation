@@ -19,13 +19,18 @@ const clearResumeStateMock = vi.fn(() => Promise.resolve());
 const scheduleRunCompleteReloadMock = vi.fn();
 const cancelScheduledRunCompleteReloadMock = vi.fn();
 
-function expectPostDownloadedBody(payload: unknown, expectedBody: Record<string, unknown>): void {
+function expectPostDownloadedBody(
+  payload: unknown,
+  expectedBody: Record<string, unknown>
+): void {
   expect(payload).toMatchObject({ body: expectedBody });
   const body = (payload as { body?: Record<string, unknown> }).body;
   expect(body).not.toHaveProperty("suno_playlist_url");
 }
 
-function retryPlaylistMessage(overrides: Partial<RetryPlaylistPayload> = {}): { data: RetryPlaylistPayload } {
+function retryPlaylistMessage(overrides: Partial<RetryPlaylistPayload> = {}): {
+  data: RetryPlaylistPayload;
+} {
   return {
     data: {
       playlistName: "test-playlist",
@@ -50,7 +55,10 @@ async function loadContentScript(overrides?: {
   downloadFormatValue?: unknown;
 }) {
   vi.resetModules();
-  vi.stubGlobal("defineContentScript", (definition: { main: () => void }) => definition);
+  vi.stubGlobal(
+    "defineContentScript",
+    (definition: { main: () => void }) => definition
+  );
   scheduleRunCompleteReloadMock.mockReset();
   cancelScheduledRunCompleteReloadMock.mockReset();
 
@@ -74,7 +82,10 @@ async function loadContentScript(overrides?: {
       }
       if (type === "postDownloaded" && overrides?.postDownloadedError) {
         postDownloadedCallCount += 1;
-        if ((overrides.postDownloadedRejectOnCall ?? 1) === postDownloadedCallCount) {
+        if (
+          (overrides.postDownloadedRejectOnCall ?? 1) ===
+          postDownloadedCallCount
+        ) {
           return Promise.reject(overrides.postDownloadedError);
         }
       }
@@ -96,14 +107,22 @@ async function loadContentScript(overrides?: {
   }));
 
   vi.doMock("../lib/snapshot", () => ({
-    initSnapshot: vi.fn((_entries: unknown[], options: { collectionId: string; playlistName?: string }) => ({
-      collectionId: options.collectionId,
-      playlistName: options.playlistName,
-      entries: [],
-      itemStates: [],
-      isRunning: true,
+    initSnapshot: vi.fn(
+      (
+        _entries: unknown[],
+        options: { collectionId: string; playlistName?: string }
+      ) => ({
+        collectionId: options.collectionId,
+        playlistName: options.playlistName,
+        entries: [],
+        itemStates: [],
+        isRunning: true,
+      })
+    ),
+    applyProgress: vi.fn((snapshot: object, payload: object) => ({
+      ...snapshot,
+      progress: payload,
     })),
-    applyProgress: vi.fn((snapshot: object, payload: object) => ({ ...snapshot, progress: payload })),
   }));
 
   vi.doMock("../lib/bridge-listener", () => ({
@@ -120,9 +139,10 @@ async function loadContentScript(overrides?: {
       getPendingSubmittedIds: vi.fn(() => []),
       getPendingIdsByIds: vi.fn(() => []),
       getDuration: vi.fn((clipId: string) =>
-        overrides?.durationsById && Object.prototype.hasOwnProperty.call(overrides.durationsById, clipId)
+        overrides?.durationsById &&
+        Object.prototype.hasOwnProperty.call(overrides.durationsById, clipId)
           ? overrides.durationsById[clipId]
-          : 120,
+          : 120
       ),
       getInFlightCount: vi.fn(() => 0),
       hasObservedAnyTraffic: vi.fn(() => true),
@@ -142,8 +162,14 @@ async function loadContentScript(overrides?: {
     getInFlightClipCount: vi.fn(() => 0),
     injectAdvancedFields: vi.fn(() => Promise.resolve()),
     resolveAdvancedFields: vi.fn(() => ({})),
-    resolveFields: vi.fn(() => ({ style: {} as HTMLTextAreaElement, lyrics: null, title: null })),
-    resolveGenerateButton: vi.fn(() => ({ click: vi.fn() }) as unknown as HTMLButtonElement),
+    resolveFields: vi.fn(() => ({
+      style: {} as HTMLTextAreaElement,
+      lyrics: null,
+      title: null,
+    })),
+    resolveGenerateButton: vi.fn(
+      () => ({ click: vi.fn() }) as unknown as HTMLButtonElement
+    ),
     setLyricsValue: vi.fn(() => Promise.resolve()),
     setLyricsValueViaBeforeInput: vi.fn(() => Promise.resolve()),
     setNativeValue: vi.fn(),
@@ -154,16 +180,24 @@ async function loadContentScript(overrides?: {
     detectSunoViewMode: vi.fn(() => "list"),
   }));
 
-  const scrollAndMultiSelectByIdsMock = vi.fn((ids: string[]) => Promise.resolve(ids.length));
+  const scrollAndMultiSelectByIdsMock = vi.fn((ids: string[]) =>
+    Promise.resolve(ids.length)
+  );
   vi.doMock("../../shared/playlist-dom", () => ({
     clickPlaylistRowByName: overrides?.addClipsToPlaylistError
       ? vi.fn(() => Promise.reject(overrides.addClipsToPlaylistError))
       : vi.fn(() => Promise.resolve()),
     fillPlaylistNameAndCreate: vi.fn(() => Promise.resolve()),
-    openAddToPlaylistDialogViaCmdP: vi.fn(() => Promise.resolve({} as HTMLElement)),
+    openAddToPlaylistDialogViaCmdP: vi.fn(() =>
+      Promise.resolve({} as HTMLElement)
+    ),
     readSelectedClipIds: overrides?.readSelectedClipIdsError
       ? vi.fn(() => Promise.reject(overrides.readSelectedClipIdsError))
-      : vi.fn(() => Promise.resolve(overrides?.guardSelectedClipIds ?? ["clip-1", "clip-2"])),
+      : vi.fn(() =>
+          Promise.resolve(
+            overrides?.guardSelectedClipIds ?? ["clip-1", "clip-2"]
+          )
+        ),
     scrollAndMultiSelectByIds: scrollAndMultiSelectByIdsMock,
     waitForPlaylistDialogClose: vi.fn(() => Promise.resolve()),
   }));
@@ -198,9 +232,19 @@ async function loadContentScript(overrides?: {
   const normalizeDownloadFormat = (value: unknown): "mp3" | "m4a" | "wav" =>
     value === "mp3" || value === "m4a" || value === "wav" ? value : "mp3";
   vi.doMock("../lib/storage", () => ({
-    serverUrlItem: { getValue: vi.fn(() => Promise.resolve("http://localhost:8787")) },
-    downloadFormatItem: { getValue: vi.fn(() => Promise.resolve(overrides?.downloadFormatValue ?? "mp3")) },
-    readDownloadFormat: vi.fn(() => Promise.resolve(normalizeDownloadFormat(overrides?.downloadFormatValue ?? "mp3"))),
+    serverUrlItem: {
+      getValue: vi.fn(() => Promise.resolve("http://localhost:8787")),
+    },
+    downloadFormatItem: {
+      getValue: vi.fn(() =>
+        Promise.resolve(overrides?.downloadFormatValue ?? "mp3")
+      ),
+    },
+    readDownloadFormat: vi.fn(() =>
+      Promise.resolve(
+        normalizeDownloadFormat(overrides?.downloadFormatValue ?? "mp3")
+      )
+    ),
   }));
 
   const triggerDownloadAllMock = overrides?.triggerDownloadAllError
@@ -211,11 +255,15 @@ async function loadContentScript(overrides?: {
   }));
 
   vi.doMock("../../shared/api", async () => ({
-    ...(await vi.importActual<typeof import("../../shared/api")>("../../shared/api")),
+    ...(await vi.importActual<typeof import("../../shared/api")>(
+      "../../shared/api"
+    )),
   }));
 
   const content = await import("../entrypoints/content");
-  content.default.main({} as NonNullable<Parameters<typeof content.default.main>[0]>);
+  content.default.main(
+    {} as NonNullable<Parameters<typeof content.default.main>[0]>
+  );
 
   return {
     handlers,
@@ -246,7 +294,9 @@ describe('content onMessage("retryPlaylist"): running ガード', () => {
     retryHandler(retryPlaylistMessage({ playlistName: "test" }));
 
     // running=true の間に再度呼ぶ → running ガードで即 ok
-    const result = retryHandler(retryPlaylistMessage({ playlistName: "test2" }));
+    const result = retryHandler(
+      retryPlaylistMessage({ playlistName: "test2" })
+    );
     expect(result).toEqual({ ok: true });
   });
 });
@@ -261,9 +311,21 @@ describe('content onMessage("retryPlaylist"): payload contract', () => {
   });
 
   it.each([
-    ["collectionId 欠落", { collectionId: undefined }, /retryPlaylist\.collectionId/],
-    ["playlistName 欠落", { playlistName: undefined }, /retryPlaylist\.playlistName/],
-    ["durationFilter が不正", { durationFilter: { min_sec: true, max_sec: 300 } }, /retryPlaylist\.durationFilter/],
+    [
+      "collectionId 欠落",
+      { collectionId: undefined },
+      /retryPlaylist\.collectionId/,
+    ],
+    [
+      "playlistName 欠落",
+      { playlistName: undefined },
+      /retryPlaylist\.playlistName/,
+    ],
+    [
+      "durationFilter が不正",
+      { durationFilter: { min_sec: true, max_sec: 300 } },
+      /retryPlaylist\.durationFilter/,
+    ],
     [
       "durationFilter が min > max",
       { durationFilter: { min_sec: 301, max_sec: 300 } },
@@ -282,29 +344,46 @@ describe('content onMessage("retryPlaylist"): payload contract', () => {
   ] as const)(
     "Given %s payload When retryPlaylist Then fail-loud し副作用を起こさない",
     async (_label, override, message) => {
-      const { handlers, progressMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
+      const { handlers, progressMessages, scheduleRunCompleteReloadMock } =
+        await loadContentScript();
       const retryHandler = handlers.get("retryPlaylist")!;
 
       expect(() =>
         retryHandler({
-          data: { ...retryPlaylistMessage({ submittedClipIds: ["clip-1"], expectedClipCount: 1 }).data, ...override },
-        }),
+          data: {
+            ...retryPlaylistMessage({
+              submittedClipIds: ["clip-1"],
+              expectedClipCount: 1,
+            }).data,
+            ...override,
+          },
+        })
       ).toThrow(message);
       expect(progressMessages).toHaveLength(0);
       expect(clearResumeStateMock).not.toHaveBeenCalled();
       expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
-    },
+    }
   );
 
   it("Given option 欠落の旧 retryPlaylist payload When retry する Then 既定 ON でplaylist処理する", async () => {
-    const { handlers, scrollAndMultiSelectByIdsMock } = await loadContentScript();
+    const { handlers, scrollAndMultiSelectByIdsMock } =
+      await loadContentScript();
     const retryHandler = handlers.get("retryPlaylist")!;
-    const message = retryPlaylistMessage({ submittedClipIds: ["clip-1"], expectedClipCount: 1 });
-    delete (message.data as Partial<RetryPlaylistPayload>).regenerateDurationOutliers;
+    const message = retryPlaylistMessage({
+      submittedClipIds: ["clip-1"],
+      expectedClipCount: 1,
+    });
+    delete (message.data as Partial<RetryPlaylistPayload>)
+      .regenerateDurationOutliers;
 
     expect(retryHandler(message)).toEqual({ ok: true });
 
-    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(["clip-1"], expect.any(Object)));
+    await vi.waitFor(() =>
+      expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
+        ["clip-1"],
+        expect.any(Object)
+      )
+    );
   });
 });
 
@@ -318,7 +397,12 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
   });
 
   it("Given collectionId 付き When retryPlaylist Then playlist 追加後に download まで進めて resume state を消去する", async () => {
-    const { handlers, progressMessages, sentMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
+    const {
+      handlers,
+      progressMessages,
+      sentMessages,
+      scheduleRunCompleteReloadMock,
+    } = await loadContentScript();
 
     // submittedClipIds を指定し resolvePlaylistClipIds が正常に返るようにする
     const clipIds = ["clip-1", "clip-2"];
@@ -329,7 +413,7 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
         expectedClipCount: clipIds.length,
         collectionId: "coll-1",
         shouldDownload: true,
-      }),
+      })
     );
 
     await new Promise((r) => setTimeout(r, 0));
@@ -337,14 +421,20 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
       data: { filename: "/Users/test/Downloads/test-playlist.zip" },
     });
 
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
     expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
     // 完了時リロード (#1411): resume state 消去の後に予約される（再開誤判定の防止）
     expect(scheduleRunCompleteReloadMock).toHaveBeenCalledTimes(1);
     expect(clearResumeStateMock.mock.invocationCallOrder[0]).toBeLessThan(
-      scheduleRunCompleteReloadMock.mock.invocationCallOrder[0],
+      scheduleRunCompleteReloadMock.mock.invocationCallOrder[0]
     );
-    const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
+    const downloadedPosts = sentMessages.filter(
+      (m) => m.type === "postDownloaded"
+    );
     expect(downloadedPosts).toHaveLength(1);
     expectPostDownloadedBody(downloadedPosts[0].payload, {
       file_count: clipIds.length,
@@ -354,7 +444,8 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
   });
 
   it("Given partial collection retryPlaylist When playlist 追加 Then download/post は実行しない", async () => {
-    const { handlers, progressMessages, sentMessages } = await loadContentScript();
+    const { handlers, progressMessages, sentMessages } =
+      await loadContentScript();
     const clipIds = ["clip-1", "clip-2"];
 
     handlers.get("retryPlaylist")!(
@@ -364,24 +455,33 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
         expectedClipCount: clipIds.length,
         collectionId: "coll-1",
         shouldDownload: false,
-      }),
+      })
     );
 
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
     expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
-    expect(sentMessages.filter((m) => m.type === "startDownload")).toHaveLength(0);
-    expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(0);
+    expect(sentMessages.filter((m) => m.type === "startDownload")).toHaveLength(
+      0
+    );
+    expect(
+      sentMessages.filter((m) => m.type === "postDownloaded")
+    ).toHaveLength(0);
   });
 
   it("Given retryPlaylist に duration NG clip が混在 When 未正規化 payload Then OK clip IDs のみを multi-select する", async () => {
-    const { handlers, progressMessages, scrollAndMultiSelectByIdsMock } = await loadContentScript({
-      durationsById: {
-        "clip-ok": 120,
-        "clip-short": 30,
-        "clip-unknown": undefined,
-      },
-      guardSelectedClipIds: ["clip-ok"],
-    });
+    const { handlers, progressMessages, scrollAndMultiSelectByIdsMock } =
+      await loadContentScript({
+        durationsById: {
+          "clip-ok": 120,
+          "clip-short": 30,
+          "clip-unknown": undefined,
+        },
+        guardSelectedClipIds: ["clip-ok"],
+      });
 
     handlers.get("retryPlaylist")!(
       retryPlaylistMessage({
@@ -392,21 +492,30 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
         durationFilter: { min_sec: 60, max_sec: 300 },
         submittedClipIdsAreDurationFiltered: false,
         shouldDownload: false,
-      }),
+      })
     );
 
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       ["clip-ok"],
-      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) })
     );
   });
 
   it("Given 再生成 OFF の retryPlaylist に duration NG clip が混在 When 未正規化 payload Then 全 clip IDs を multi-select する", async () => {
-    const { handlers, progressMessages, scrollAndMultiSelectByIdsMock } = await loadContentScript({
-      durationsById: { "clip-ok": 120, "clip-short": 30, "clip-unknown": undefined },
-      guardSelectedClipIds: ["clip-ok", "clip-short", "clip-unknown"],
-    });
+    const { handlers, progressMessages, scrollAndMultiSelectByIdsMock } =
+      await loadContentScript({
+        durationsById: {
+          "clip-ok": 120,
+          "clip-short": 30,
+          "clip-unknown": undefined,
+        },
+        guardSelectedClipIds: ["clip-ok", "clip-short", "clip-unknown"],
+      });
 
     handlers.get("retryPlaylist")!(
       retryPlaylistMessage({
@@ -418,18 +527,23 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
         submittedClipIdsAreDurationFiltered: false,
         regenerateDurationOutliers: false,
         shouldDownload: false,
-      }),
+      })
     );
 
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       ["clip-ok", "clip-short", "clip-unknown"],
-      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) })
     );
   });
 
   it("Given retryPlaylist の完了待ち直後に stop 済み When async flow が再開する Then playlist 追加に進まない", async () => {
-    const { handlers, progressMessages, scrollAndMultiSelectByIdsMock } = await loadContentScript();
+    const { handlers, progressMessages, scrollAndMultiSelectByIdsMock } =
+      await loadContentScript();
     const clipIds = ["clip-1"];
 
     handlers.get("retryPlaylist")!(
@@ -439,11 +553,15 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
         expectedClipCount: clipIds.length,
         collectionId: "coll-1",
         shouldDownload: false,
-      }),
+      })
     );
     handlers.get("stop")!({ data: undefined });
 
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.STOPPED })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.STOPPED })
+      )
+    );
     expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
   });
 
@@ -452,7 +570,8 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
     // playlist 追加自体は成功しているため FINISHED を維持し、再開バナー誤判定を避けるため
     // リロードだけ見送る (#1411)。
     clearResumeStateMock.mockRejectedValueOnce(new Error("storage down"));
-    const { handlers, progressMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
+    const { handlers, progressMessages, scheduleRunCompleteReloadMock } =
+      await loadContentScript();
     const clipIds = ["clip-1", "clip-2"];
 
     handlers.get("retryPlaylist")!(
@@ -462,11 +581,17 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
         expectedClipCount: clipIds.length,
         collectionId: "coll-1",
         shouldDownload: false,
-      }),
+      })
     );
 
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
-    expect(progressMessages).not.toContainEqual(expect.objectContaining({ phase: PHASE.ERROR }));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
+    expect(progressMessages).not.toContainEqual(
+      expect.objectContaining({ phase: PHASE.ERROR })
+    );
     expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
   });
 });
@@ -483,14 +608,18 @@ describe('content onMessage("retryPlaylist"): throw→ERROR', () => {
   it("Given addClipsToPlaylist 内部で throw When retryPlaylist Then ERROR phase を emit する", async () => {
     // submittedClipIds=[] + expectedClipCount=0 の場合、addClipsToPlaylist 内の
     // resolvePlaylistClipIds が「clip ID が 0 件」で throw する（自然なエラー経路）。
-    const { handlers, progressMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
+    const { handlers, progressMessages, scheduleRunCompleteReloadMock } =
+      await loadContentScript();
 
     handlers.get("retryPlaylist")!(retryPlaylistMessage());
 
     await vi.waitFor(() =>
       expect(progressMessages).toContainEqual(
-        expect.objectContaining({ phase: PHASE.ERROR, message: expect.stringContaining("clip ID") }),
-      ),
+        expect.objectContaining({
+          phase: PHASE.ERROR,
+          message: expect.stringContaining("clip ID"),
+        })
+      )
     );
     // ERROR 終了時は完了時リロードを走らせない (#1411)
     expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
@@ -509,11 +638,20 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
   });
 
   it("Given collectionId 付き When retryDownload Then FINISHED phase を emit し resume state を消去する", async () => {
-    const { handlers, progressMessages, sentMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
+    const {
+      handlers,
+      progressMessages,
+      sentMessages,
+      scheduleRunCompleteReloadMock,
+    } = await loadContentScript();
 
     const clipIds = ["clip-1", "clip-2"];
     handlers.get("retryDownload")!({
-      data: { collectionId: "coll-1", submittedClipIds: clipIds, expectedClipCount: 4 },
+      data: {
+        collectionId: "coll-1",
+        submittedClipIds: clipIds,
+        expectedClipCount: 4,
+      },
     });
 
     // async フロー（scrollAndMultiSelectByIds → performDownload → waitForDownloadComplete）
@@ -525,15 +663,21 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
       data: { filename: "/Users/test/Downloads/test-playlist.zip" },
     });
 
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
     expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
     // retryDownload も selectClipIds で multi-select 状態を作るため、完了時リロードを予約する (#1411)。
     // 順序は resume state 消去 → FINISHED → リロード（再開バナー誤判定の防止）。
     expect(scheduleRunCompleteReloadMock).toHaveBeenCalledTimes(1);
     expect(clearResumeStateMock.mock.invocationCallOrder[0]).toBeLessThan(
-      scheduleRunCompleteReloadMock.mock.invocationCallOrder[0],
+      scheduleRunCompleteReloadMock.mock.invocationCallOrder[0]
     );
-    const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
+    const downloadedPosts = sentMessages.filter(
+      (m) => m.type === "postDownloaded"
+    );
     expect(downloadedPosts).toHaveLength(1);
     expectPostDownloadedBody(downloadedPosts[0].payload, {
       file_count: 4,
@@ -543,13 +687,18 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
   });
 
   it("Given 不正な保存済み download format When retryDownload Then mp3 に正規化して実行する", async () => {
-    const { handlers, sentMessages, triggerDownloadAllMock } = await loadContentScript({
-      downloadFormatValue: "flac",
-    });
+    const { handlers, sentMessages, triggerDownloadAllMock } =
+      await loadContentScript({
+        downloadFormatValue: "flac",
+      });
 
     const clipIds = ["clip-1", "clip-2"];
     handlers.get("retryDownload")!({
-      data: { collectionId: "coll-1", submittedClipIds: clipIds, expectedClipCount: 4 },
+      data: {
+        collectionId: "coll-1",
+        submittedClipIds: clipIds,
+        expectedClipCount: 4,
+      },
     });
 
     await new Promise((r) => setTimeout(r, 0));
@@ -557,10 +706,20 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
       data: { filename: "/Users/test/Downloads/test-playlist.zip" },
     });
 
-    await vi.waitFor(() => expect(triggerDownloadAllMock).toHaveBeenCalledWith("mp3"));
-    expect(sentMessages.find((m) => m.type === "startDownload")?.payload).toMatchObject({ format: "mp3" });
-    await vi.waitFor(() => expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(1));
-    const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
+    await vi.waitFor(() =>
+      expect(triggerDownloadAllMock).toHaveBeenCalledWith("mp3")
+    );
+    expect(
+      sentMessages.find((m) => m.type === "startDownload")?.payload
+    ).toMatchObject({ format: "mp3" });
+    await vi.waitFor(() =>
+      expect(
+        sentMessages.filter((m) => m.type === "postDownloaded")
+      ).toHaveLength(1)
+    );
+    const downloadedPosts = sentMessages.filter(
+      (m) => m.type === "postDownloaded"
+    );
     expectPostDownloadedBody(downloadedPosts[0].payload, { format: "mp3" });
   });
 });
@@ -575,12 +734,21 @@ describe('content onMessage("retryDownload"): payload contract', () => {
   });
 
   it.each([
-    ["collectionId 欠落", { collectionId: undefined }, /retryDownload\.collectionId/],
-    ["submittedClipIds 欠落", { submittedClipIds: undefined }, /retryDownload\.submittedClipIds/],
+    [
+      "collectionId 欠落",
+      { collectionId: undefined },
+      /retryDownload\.collectionId/,
+    ],
+    [
+      "submittedClipIds 欠落",
+      { submittedClipIds: undefined },
+      /retryDownload\.submittedClipIds/,
+    ],
   ] as const)(
     "Given %s payload When retryDownload Then fail-loud し副作用を起こさない",
     async (_label, override, message) => {
-      const { handlers, progressMessages, scheduleRunCompleteReloadMock } = await loadContentScript();
+      const { handlers, progressMessages, scheduleRunCompleteReloadMock } =
+        await loadContentScript();
       const retryHandler = handlers.get("retryDownload")!;
 
       expect(() =>
@@ -590,12 +758,12 @@ describe('content onMessage("retryDownload"): payload contract', () => {
             submittedClipIds: ["clip-1"],
             ...override,
           },
-        }),
+        })
       ).toThrow(message);
       expect(progressMessages).toHaveLength(0);
       expect(clearResumeStateMock).not.toHaveBeenCalled();
       expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
-    },
+    }
   );
 });
 
@@ -638,9 +806,10 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
   });
 
   it("Given triggerDownloadAll が throw When retryDownload Then ERROR phase を emit する", async () => {
-    const { handlers, progressMessages, sentMessages } = await loadContentScript({
-      triggerDownloadAllError: new Error("download trigger failed"),
-    });
+    const { handlers, progressMessages, sentMessages } =
+      await loadContentScript({
+        triggerDownloadAllError: new Error("download trigger failed"),
+      });
 
     handlers.get("retryDownload")!({
       data: { collectionId: "coll-1", submittedClipIds: ["clip-1"] },
@@ -651,16 +820,20 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
         expect.objectContaining({
           phase: PHASE.ERROR,
           message: expect.stringContaining("download trigger failed"),
-        }),
-      ),
+        })
+      )
     );
     expect(sentMessages.some((m) => m.type === "cancelDownload")).toBe(true);
   });
 
   it("Given startDownload が拒否された When retryDownload Then Download all を押さず ERROR phase を emit する", async () => {
-    const { handlers, progressMessages, sentMessages, triggerDownloadAllMock } = await loadContentScript({
-      startDownloadResult: { ok: false, message: "別の Download all 監視が進行中です" },
-    });
+    const { handlers, progressMessages, sentMessages, triggerDownloadAllMock } =
+      await loadContentScript({
+        startDownloadResult: {
+          ok: false,
+          message: "別の Download all 監視が進行中です",
+        },
+      });
 
     handlers.get("retryDownload")!({
       data: { collectionId: "coll-1", submittedClipIds: ["clip-1"] },
@@ -670,9 +843,11 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
       expect(progressMessages).toContainEqual(
         expect.objectContaining({
           phase: PHASE.ERROR,
-          message: expect.stringContaining("別の Download all 監視が進行中です"),
-        }),
-      ),
+          message: expect.stringContaining(
+            "別の Download all 監視が進行中です"
+          ),
+        })
+      )
     );
     expect(triggerDownloadAllMock).not.toHaveBeenCalled();
     expect(sentMessages.some((m) => m.type === "cancelDownload")).toBe(false);
@@ -685,12 +860,20 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
       data: { collectionId: "coll-1", submittedClipIds: ["clip-1"] },
     });
 
-    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+    await vi.waitFor(() =>
+      expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true)
+    );
     handlers.get("stop")!({ data: {} });
 
-    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "cancelDownload")).toBe(true), {
-      timeout: 1500,
-    });
+    await vi.waitFor(
+      () =>
+        expect(sentMessages.some((m) => m.type === "cancelDownload")).toBe(
+          true
+        ),
+      {
+        timeout: 1500,
+      }
+    );
     expect(sentMessages.some((m) => m.type === "postDownloaded")).toBe(false);
   });
 });
@@ -718,13 +901,15 @@ describe('content onMessage("adoptSelectedClips"): 手動選択 clip 採用', ()
 
   it("Given 選択済み clip が不足 When adoptSelectedClips Then caller にエラーを返す", async () => {
     const { handlers } = await loadContentScript({
-      readSelectedClipIdsError: new Error("選択中 clip 数が一致しません: expected 2, got 1"),
+      readSelectedClipIdsError: new Error(
+        "選択中 clip 数が一致しません: expected 2, got 1"
+      ),
     });
 
     await expect(
       handlers.get("adoptSelectedClips")!({
         data: { expectedClipCount: 2 },
-      }) as Promise<unknown>,
+      }) as Promise<unknown>
     ).rejects.toThrow("選択中 clip 数が一致しません");
   });
 });
@@ -763,8 +948,8 @@ describe('content onMessage("retryDownload"): postDownloaded 失敗→ERROR (#12
         expect.objectContaining({
           phase: PHASE.ERROR,
           message: expect.stringContaining("403"),
-        }),
-      ),
+        })
+      )
     );
     expect(clearResumeStateMock).not.toHaveBeenCalled();
   });

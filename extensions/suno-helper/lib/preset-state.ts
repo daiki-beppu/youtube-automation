@@ -14,7 +14,11 @@ export const DEFAULT_RUN_MODE_ID: RunModeId = "serial";
  * `baseMs + (random()*2-1)*jitterMs` で [base-jitter, base+jitter] に分布させる。
  * random は DI 可能（テストで min/max を pin する）。production の content からは省略呼び出しで Math.random を使う。
  */
-export function applyJitter(baseMs: number, jitterMs: number, random: () => number = Math.random): number {
+export function applyJitter(
+  baseMs: number,
+  jitterMs: number,
+  random: () => number = Math.random
+): number {
   return baseMs + (random() * 2 - 1) * jitterMs;
 }
 

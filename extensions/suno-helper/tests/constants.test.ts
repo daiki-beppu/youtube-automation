@@ -52,20 +52,26 @@ describe("shared/constants: サーバー互換の契約値", () => {
   });
 
   it("should expose only the canonical default source when no server is discovered", () => {
-    expect(DEFAULT_SERVER_SOURCES.map((source) => source.url)).toEqual(["http://youtube-automation.localhost:7873"]);
+    expect(DEFAULT_SERVER_SOURCES.map((source) => source.url)).toEqual([
+      "http://youtube-automation.localhost:7873",
+    ]);
     expect(DEFAULT_SERVER_SOURCES).toHaveLength(1);
   });
 
   it("Given server selector When helper ごとの option 表示名を組み立てる Then URL を含めずプロセスを識別できる", () => {
     expect(
       formatServerSourceLabel(
-        { id: "abyss-mi", label: "ABYSS MI", url: "http://abyss-mi.localhost:7873" },
-        "distrokid-helper",
-      ),
+        {
+          id: "abyss-mi",
+          label: "ABYSS MI",
+          url: "http://abyss-mi.localhost:7873",
+        },
+        "distrokid-helper"
+      )
     ).toBe("ABYSS MI | distrokid-helper");
-    expect(formatServerSourceLabel(DEFAULT_SERVER_SOURCES[0], "suno-helper")).toBe(
-      "YouTube Automation (default) | suno-helper",
-    );
+    expect(
+      formatServerSourceLabel(DEFAULT_SERVER_SOURCES[0], "suno-helper")
+    ).toBe("YouTube Automation (default) | suno-helper");
   });
 
   it("Given server selector When host permissions を読む Then *.localhost を許可する", () => {
@@ -80,7 +86,9 @@ describe("shared/constants: サーバー互換の契約値", () => {
 
   it("Given storage key 群 When OVERLAY_STATE_KEY を他 key と比較 Then 既存 key と衝突しない", () => {
     // 同一 chrome.storage.local 名前空間で resume / server URL state と key が被らないこと。
-    expect(new Set([STORAGE_KEY, "sunoResumeState", OVERLAY_STATE_KEY]).size).toBe(3);
+    expect(
+      new Set([STORAGE_KEY, "sunoResumeState", OVERLAY_STATE_KEY]).size
+    ).toBe(3);
   });
 });
 
@@ -115,13 +123,13 @@ describe("shared/constants: collection 列挙ルート (#816 dir mode)", () => {
 
   it("Given collectionPromptsRoute(id) When 組み立てる Then `/collections/<id>/suno/prompts.json` を返す", () => {
     expect(collectionPromptsRoute("20260601-clm-aaa-collection")).toBe(
-      "/collections/20260601-clm-aaa-collection/suno/prompts.json",
+      "/collections/20260601-clm-aaa-collection/suno/prompts.json"
     );
   });
 
   it("Given スペース入り collection id When collectionPromptsRoute(id) Then id を path segment encode する", () => {
     expect(collectionPromptsRoute("20260526-rainy jazz-collection")).toBe(
-      "/collections/20260526-rainy%20jazz-collection/suno/prompts.json",
+      "/collections/20260526-rainy%20jazz-collection/suno/prompts.json"
     );
   });
 
@@ -161,8 +169,15 @@ describe("shared/constants: Suno feed bridge 契約 (#1258)", () => {
   });
 
   it("Given ObservedClip When duration を持つ clip / 持たない clip を扱う Then optional field として型付けできる", () => {
-    const withDuration = { id: "clip-1", status: "complete", duration: 241.2 } satisfies ObservedClip;
-    const withoutDuration = { id: "clip-2", status: "queued" } satisfies ObservedClip;
+    const withDuration = {
+      id: "clip-1",
+      status: "complete",
+      duration: 241.2,
+    } satisfies ObservedClip;
+    const withoutDuration = {
+      id: "clip-2",
+      status: "queued",
+    } satisfies ObservedClip;
 
     expect(withDuration.duration).toBe(241.2);
     expect("duration" in withoutDuration).toBe(false);
@@ -225,7 +240,9 @@ describe("shared/constants: Balanced 固定ペーシング (#1573)", () => {
   });
 
   it("Given BALANCED_RUN_PACING When INTER_CREATE_DELAY_MS と比較 Then 旧 Fast 固定値ではない", () => {
-    expect(BALANCED_RUN_PACING.interCreateDelayMs).not.toBe(INTER_CREATE_DELAY_MS);
+    expect(BALANCED_RUN_PACING.interCreateDelayMs).not.toBe(
+      INTER_CREATE_DELAY_MS
+    );
   });
 });
 
@@ -245,18 +262,20 @@ describe("shared/constants: 投入方式 run mode (#1586)", () => {
       expect(RUN_MODES[id].label.length).toBeGreaterThan(0);
       expect(typeof RUN_MODES[id].riskNote).toBe("string");
       expect(RUN_MODES[id].riskNote.length).toBeGreaterThan(0);
-    },
+    }
   );
 
   it("Given serial mode When label / riskNote を読む Then 安全モードとして安定性重視の説明を表示する (#1862)", () => {
     expect(RUN_MODES.serial.label).toBe("安全モード");
-    expect(RUN_MODES.serial.riskNote).toBe("1件ずつ完了を待つ、安定性重視のモードです。");
+    expect(RUN_MODES.serial.riskNote).toBe(
+      "1件ずつ完了を待つ、安定性重視のモードです。"
+    );
   });
 
   it("Given queue mode When label / riskNote を読む Then 先行投入と duration NG 時の自動再生成を表示する (#1775)", () => {
     expect(RUN_MODES.queue.label).toBe("高速モード");
     expect(RUN_MODES.queue.riskNote).toBe(
-      "最大10件を先行投入し、duration guard NG 時は自動再生成する速度重視のモードです。",
+      "最大10件を先行投入し、duration guard NG 時は自動再生成する速度重視のモードです。"
     );
   });
 });

@@ -22,7 +22,9 @@ const CHUNK_SIZE = 0x8000;
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   for (let offset = 0; offset < bytes.length; offset += CHUNK_SIZE) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + CHUNK_SIZE));
+    binary += String.fromCharCode(
+      ...bytes.subarray(offset, offset + CHUNK_SIZE)
+    );
   }
   return btoa(binary);
 }
@@ -40,7 +42,10 @@ function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
 }
 
 // 取得済み blob を転送用に直列化する（popup 側で実行）。
-export async function encodeAsset(filename: string, blob: Blob): Promise<SerializedAsset> {
+export async function encodeAsset(
+  filename: string,
+  blob: Blob
+): Promise<SerializedAsset> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   return { filename, mimeType: blob.type, base64: bytesToBase64(bytes) };
 }

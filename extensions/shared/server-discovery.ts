@@ -36,7 +36,7 @@ function nonEmptyString(value: unknown, name: string): string {
     throw new Error(`${name} must be non-empty string`);
   if (value.length > MAX_INSTANCE_ID_LENGTH)
     throw new Error(
-      `${name} must be at most ${MAX_INSTANCE_ID_LENGTH} characters`,
+      `${name} must be at most ${MAX_INSTANCE_ID_LENGTH} characters`
     );
   return value;
 }
@@ -76,7 +76,7 @@ export function parseDiscoveryResponse(value: unknown): DiscoveryResponse {
   if (!Array.isArray(source.servers)) throw new Error("servers must be array");
   if (source.servers.length > MAX_REGISTRY_ENTRIES)
     throw new Error(
-      `servers must contain at most ${MAX_REGISTRY_ENTRIES} entries`,
+      `servers must contain at most ${MAX_REGISTRY_ENTRIES} entries`
     );
   const servers = source.servers.map((value, index) => {
     const entry = record(value, `servers[${index}]`);
@@ -101,7 +101,7 @@ export function parseDiscoveryResponse(value: unknown): DiscoveryResponse {
     return {
       instance_id: nonEmptyString(
         entry.instance_id,
-        `servers[${index}].instance_id`,
+        `servers[${index}].instance_id`
       ),
       expires_at: entry.expires_at,
       server_info: info,
@@ -116,12 +116,12 @@ export function parseDiscoveryResponse(value: unknown): DiscoveryResponse {
 
 type Fetch = (
   input: string | URL | Request,
-  init?: RequestInit,
+  init?: RequestInit
 ) => Promise<Response>;
 
 async function fetchJsonWithTimeout(
   fetcher: Fetch,
-  url: string,
+  url: string
 ): Promise<{ response: Response; body: unknown }> {
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -146,13 +146,13 @@ async function fetchJsonWithTimeout(
 
 async function validatedSource(
   fetcher: Fetch,
-  entry: DiscoveryEntry,
+  entry: DiscoveryEntry
 ): Promise<LocalServerSource | undefined> {
   const registeredUrl = normalizeServerUrl(entry.server_info.base_url);
   try {
     const { response, body } = await fetchJsonWithTimeout(
       fetcher,
-      `${registeredUrl}${SERVER_INFO_ROUTE}`,
+      `${registeredUrl}${SERVER_INFO_ROUTE}`
     );
     if (!response.ok) return undefined;
     const info = parseServerInfo(body);
@@ -168,27 +168,27 @@ async function validatedSource(
 }
 
 export async function discoverServerSources(
-  options: { fetch?: Fetch } = {},
+  options: { fetch?: Fetch } = {}
 ): Promise<LocalServerSource[]> {
   const fetcher = options.fetch ?? globalThis.fetch.bind(globalThis);
   try {
     const { response, body } = await fetchJsonWithTimeout(
       fetcher,
-      DISCOVERY_REGISTRY_URL,
+      DISCOVERY_REGISTRY_URL
     );
     if (!response.ok) return [...DEFAULT_SERVER_SOURCES];
     const registry = parseDiscoveryResponse(body);
     const probed = await Promise.all(
-      registry.servers.map((entry) => validatedSource(fetcher, entry)),
+      registry.servers.map((entry) => validatedSource(fetcher, entry))
     );
     const byUrl = new Map(
       DEFAULT_SERVER_SOURCES.map((source) => [
         normalizeServerUrl(source.url),
         source,
-      ]),
+      ])
     );
     for (const source of probed.filter(
-      (source): source is LocalServerSource => source !== undefined,
+      (source): source is LocalServerSource => source !== undefined
     )) {
       byUrl.set(source.url, source);
     }

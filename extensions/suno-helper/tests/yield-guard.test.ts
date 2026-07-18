@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { MAX_YIELD_RETRY } from "../../shared/constants";
-import { checkDuration, decideDurationAttempt, evaluateClips, shouldRetryDurationOutlier } from "../lib/yield-guard";
 import type { DurationFilter } from "../../shared/api";
+import { MAX_YIELD_RETRY } from "../../shared/constants";
+import {
+  checkDuration,
+  decideDurationAttempt,
+  evaluateClips,
+  shouldRetryDurationOutlier,
+} from "../lib/yield-guard";
 
 const FILTER: DurationFilter = { min_sec: 120, max_sec: 300 };
 
@@ -26,7 +31,9 @@ describe("yield-guard: duration 判定", () => {
 
 describe("yield-guard: clips 分類", () => {
   it("Given duration undefined When evaluateClips Then feed 未取得として NG に分類する", () => {
-    expect(evaluateClips([{ id: "clip-a" }, { id: "clip-b", duration: 180 }], FILTER)).toEqual({
+    expect(
+      evaluateClips([{ id: "clip-a" }, { id: "clip-b", duration: 180 }], FILTER)
+    ).toEqual({
       ok: ["clip-b"],
       ng: ["clip-a"],
     });
@@ -39,8 +46,8 @@ describe("yield-guard: clips 分類", () => {
           { id: "clip-a", duration: 180 },
           { id: "clip-b", duration: 240 },
         ],
-        FILTER,
-      ),
+        FILTER
+      )
     ).toEqual({
       ok: ["clip-a", "clip-b"],
       ng: [],
@@ -54,8 +61,8 @@ describe("yield-guard: clips 分類", () => {
           { id: "clip-a", duration: 90 },
           { id: "clip-b", duration: 360 },
         ],
-        FILTER,
-      ),
+        FILTER
+      )
     ).toEqual({
       ok: [],
       ng: ["clip-a", "clip-b"],
@@ -69,8 +76,8 @@ describe("yield-guard: clips 分類", () => {
           { id: "clip-a", duration: 180 },
           { id: "clip-b", duration: 360 },
         ],
-        FILTER,
-      ),
+        FILTER
+      )
     ).toEqual({
       ok: ["clip-a"],
       ng: ["clip-b"],
@@ -87,8 +94,12 @@ describe("yield-guard: retry 上限判定", () => {
   });
 
   it("Given custom max retry When retry 判定 Then 上限到達で false を返す", () => {
-    expect(shouldRetryDurationOutlier({ attemptCount: 2, maxRetry: 3 })).toBe(true);
-    expect(shouldRetryDurationOutlier({ attemptCount: 3, maxRetry: 3 })).toBe(false);
+    expect(shouldRetryDurationOutlier({ attemptCount: 2, maxRetry: 3 })).toBe(
+      true
+    );
+    expect(shouldRetryDurationOutlier({ attemptCount: 3, maxRetry: 3 })).toBe(
+      false
+    );
   });
 });
 
@@ -97,22 +108,29 @@ describe("yield-guard: attempt 状態決定", () => {
     expect(
       decideDurationAttempt({
         clipIds: ["clip-ok", "clip-ng"],
-        result: { kind: "evaluated", evaluation: { ok: ["clip-ok"], ng: ["clip-ng"] } },
+        result: {
+          kind: "evaluated",
+          evaluation: { ok: ["clip-ok"], ng: ["clip-ng"] },
+        },
         filter: FILTER,
         policy: { kind: "retain" },
         attemptCount: 0,
-      }),
+      })
     ).toEqual({
       kind: "accept",
       acceptedClipIds: ["clip-ok", "clip-ng"],
-      warning: "duration guard NG (120-300s): clip-ng; 再生成 OFF のため全 clip を採用候補として保持します",
+      warning:
+        "duration guard NG (120-300s): clip-ng; 再生成 OFF のため全 clip を採用候補として保持します",
     });
   });
 
   it("Given ON と全NG When retry上限前後 Then retryからfailへ遷移する", () => {
     const base = {
       clipIds: ["clip-ng"],
-      result: { kind: "evaluated" as const, evaluation: { ok: [], ng: ["clip-ng"] } },
+      result: {
+        kind: "evaluated" as const,
+        evaluation: { ok: [], ng: ["clip-ng"] },
+      },
       filter: FILTER,
       policy: { kind: "regenerate" as const },
     };
@@ -130,15 +148,22 @@ describe("yield-guard: attempt 状態決定", () => {
   it("Given duration評価失敗 When decide Then ONはretryしOFFはfailする", () => {
     const base = {
       clipIds: ["clip-a"],
-      result: { kind: "evaluation-failed" as const, message: "feed unavailable" },
+      result: {
+        kind: "evaluation-failed" as const,
+        message: "feed unavailable",
+      },
       filter: FILTER,
       attemptCount: 0,
     };
-    expect(decideDurationAttempt({ ...base, policy: { kind: "regenerate" } })).toEqual({
+    expect(
+      decideDurationAttempt({ ...base, policy: { kind: "regenerate" } })
+    ).toEqual({
       kind: "retry",
       message: "feed unavailable",
     });
-    expect(decideDurationAttempt({ ...base, policy: { kind: "retain" } })).toEqual({
+    expect(
+      decideDurationAttempt({ ...base, policy: { kind: "retain" } })
+    ).toEqual({
       kind: "fail",
       message: "feed unavailable",
       reason: "evaluation",

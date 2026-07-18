@@ -33,7 +33,10 @@ import {
   resolveRequestMethod,
   resolveRequestUrl,
 } from "../lib/fetch-bridge";
-import { findSliderElement, setSliderValueViaReact } from "../lib/slider-bridge";
+import {
+  findSliderElement,
+  setSliderValueViaReact,
+} from "../lib/slider-bridge";
 
 export default defineContentScript({
   matches: [...SUNO_MATCHES],
@@ -45,7 +48,10 @@ export default defineContentScript({
     let authHeader: string | null = null;
 
     function post(type: string, payload: Record<string, unknown>): void {
-      window.postMessage({ source: BRIDGE_SOURCE, type, ...payload }, window.location.origin);
+      window.postMessage(
+        { source: BRIDGE_SOURCE, type, ...payload },
+        window.location.origin
+      );
     }
 
     function postClips(type: string, clips: ObservedClip[] | null): void {
@@ -59,22 +65,35 @@ export default defineContentScript({
     }
 
     /** レスポンス clone を非同期で観測する。fetch の戻りを遅延させない・失敗を漏らさない。 */
-    async function observe(url: string, method: string, res: Response): Promise<void> {
+    async function observe(
+      url: string,
+      method: string,
+      res: Response
+    ): Promise<void> {
       try {
         if (!res.ok) {
           return;
         }
         if (isGenerateRequest(url)) {
-          postClips(BRIDGE_MSG.GENERATE_CLIPS, parseClipsFromGenerateResponse(await res.json()));
+          postClips(
+            BRIDGE_MSG.GENERATE_CLIPS,
+            parseClipsFromGenerateResponse(await res.json())
+          );
         } else if (isFeedRequest(url, method)) {
-          postClips(BRIDGE_MSG.FEED_CLIPS, parseClipsFromFeedResponse(await res.json()));
+          postClips(
+            BRIDGE_MSG.FEED_CLIPS,
+            parseClipsFromFeedResponse(await res.json())
+          );
         }
       } catch {
         // 観測のみの経路。解析失敗でページにも runner にも影響させない。
       }
     }
 
-    const observedFetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const observedFetch = async (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
       let url = "";
       let method = "GET";
       try {
@@ -99,7 +118,10 @@ export default defineContentScript({
     window.fetch = observedFetch as typeof fetch;
 
     /** content script からの active feed poll 要求に応える。token 未捕捉・失敗は clips: null。 */
-    async function handleFeedPoll(requestId: number, ids: string[]): Promise<void> {
+    async function handleFeedPoll(
+      requestId: number,
+      ids: string[]
+    ): Promise<void> {
       const respond = (clips: ObservedClip[] | null): void =>
         post(BRIDGE_MSG.FEED_V3_POLL_RESPONSE, { requestId, clips });
       if (!authHeader || ids.length === 0) {
@@ -112,8 +134,13 @@ export default defineContentScript({
         for (let page = 0; page < FEED_V3_MAX_PAGES; page++) {
           const res = await originalFetch(`${SUNO_API_ORIGIN}${FEED_V3_PATH}`, {
             method: FEED_V3_METHOD,
-            headers: { authorization: authHeader, "content-type": "application/json" },
-            body: JSON.stringify(cursor === undefined ? { ids } : { ids, cursor }),
+            headers: {
+              authorization: authHeader,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(
+              cursor === undefined ? { ids } : { ids, cursor }
+            ),
           });
           if (res.status === 401) {
             // token 失効。破棄してページの次リクエストでの再捕捉に委ねる。
@@ -162,7 +189,11 @@ export default defineContentScript({
      * isTrusted: true の疑似イベントで直接呼び、Suno の bot 検知を通過させる。
      * 失敗（plain DOM / ハンドラ無効）は ok: false で返し、content 側が合成イベント経路へ縮退する。
      */
-    async function handleSliderSet(requestId: number, ariaLabel: string, target: number): Promise<void> {
+    async function handleSliderSet(
+      requestId: number,
+      ariaLabel: string,
+      target: number
+    ): Promise<void> {
       const respond = (ok: boolean, actual: number | null): void =>
         post(BRIDGE_MSG.SLIDER_SET_RESPONSE, { requestId, ok, actual });
       try {
@@ -191,10 +222,17 @@ export default defineContentScript({
         ariaLabel?: string;
         target?: number;
       } | null;
-      if (!data || data.source !== BRIDGE_SOURCE || typeof data.requestId !== "number") {
+      if (
+        !data ||
+        data.source !== BRIDGE_SOURCE ||
+        typeof data.requestId !== "number"
+      ) {
         return;
       }
-      if (data.type === BRIDGE_MSG.FEED_V3_POLL_REQUEST && Array.isArray(data.ids)) {
+      if (
+        data.type === BRIDGE_MSG.FEED_V3_POLL_REQUEST &&
+        Array.isArray(data.ids)
+      ) {
         void handleFeedPoll(data.requestId, data.ids);
       } else if (
         data.type === BRIDGE_MSG.SLIDER_SET_REQUEST &&

@@ -32,7 +32,11 @@ export interface InjectWithVerificationOptions<M> {
   /** marker 基準で受理を確認する。受理 true / timeout false を返す（= ack-probe の waiter）。 */
   waitForAck: (
     marker: M,
-    opts: { isAborted: () => boolean; pollIntervalMs: number; timeoutMs: number },
+    opts: {
+      isAborted: () => boolean;
+      pollIntervalMs: number;
+      timeoutMs: number;
+    }
   ) => Promise<boolean>;
   /** 中断フラグ。inject 直後に true なら受理確認も retry もせず静かに return する。 */
   isAborted: () => boolean;
@@ -58,7 +62,9 @@ export interface RetryInjectStepWithFallbackOptions {
   describeStep: () => string;
 }
 
-export async function retryInjectStepWithFallback(options: RetryInjectStepWithFallbackOptions): Promise<void> {
+export async function retryInjectStepWithFallback(
+  options: RetryInjectStepWithFallbackOptions
+): Promise<void> {
   let lastError: unknown;
   for (let attempt = 0; attempt <= options.maxRetry; attempt++) {
     try {
@@ -71,12 +77,14 @@ export async function retryInjectStepWithFallback(options: RetryInjectStepWithFa
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
       if (attempt < options.maxRetry) {
-        console.warn(`${options.describeStep()} が失敗、inject retry (${attempt + 1}/${options.maxRetry}): ${message}`);
+        console.warn(
+          `${options.describeStep()} が失敗、inject retry (${attempt + 1}/${options.maxRetry}): ${message}`
+        );
         continue;
       }
       console.warn(
         `${options.describeStep()} が ${options.maxRetry + 1} 回失敗したため ` +
-          `beforeinput fallback を試します: ${message}`,
+          `beforeinput fallback を試します: ${message}`
       );
     }
   }
@@ -89,7 +97,9 @@ export async function retryInjectStepWithFallback(options: RetryInjectStepWithFa
  *   - 受理 (true) で return / 未受理 (false) で同じ entry を最大 maxRetry 回 retry
  *   - 全 attempt で未受理なら throw（fail-loud。describeEntry をメッセージに含め ERROR phase へ落とす）
  */
-export async function injectWithVerification<M>(options: InjectWithVerificationOptions<M>): Promise<void> {
+export async function injectWithVerification<M>(
+  options: InjectWithVerificationOptions<M>
+): Promise<void> {
   for (let attempt = 0; attempt <= options.maxRetry; attempt++) {
     const marker = options.markBeforeInject();
     await options.inject();
@@ -108,11 +118,11 @@ export async function injectWithVerification<M>(options: InjectWithVerificationO
     // 直後の throw が終端を伝えるため、`retry (3/2)` のような論理破綻ログを出さない。
     if (attempt < options.maxRetry) {
       console.warn(
-        `${options.describeEntry()} inject が acknowledge されず retry (${attempt + 1}/${options.maxRetry})`,
+        `${options.describeEntry()} inject が acknowledge されず retry (${attempt + 1}/${options.maxRetry})`
       );
     }
   }
   throw new InjectNotAcknowledgedError(
-    `${options.describeEntry()} の inject が ${options.maxRetry + 1} 回 silent drop されました`,
+    `${options.describeEntry()} の inject が ${options.maxRetry + 1} 回 silent drop されました`
   );
 }
