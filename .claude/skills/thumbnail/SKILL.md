@@ -172,6 +172,16 @@ bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \
 
 複数候補を作る場合でも、1 回の `codex-image.sh --require-reference` 呼び出しには候補に対応する参照画像 1 枚だけを渡す。TTP 生成では参照画像 0 件で停止する。DistroKid cover などの汎用 codex 生成は `--require-reference` を付けない。
 
+2 件以上の候補を同時生成する場合は、`id` / `prompt` / `output` / 任意の `reference` を持つ JSON 配列を manifest に保存し、batch launcher を使う。互換 preflight は batch 全体で 1 回だけ実行され、各 job は独立した出力先で単発 `codex-image.sh` の stale-artifact / PNG / MD5 gate を通る。一部失敗時も残りを完走し、最後に失敗一覧と非 0 exit を返す。
+
+```bash
+bash .claude/skills/thumbnail/references/codex-image-batch.sh \
+  --manifest /tmp/codex-thumbnail-jobs.json
+# 実行単位で上書きする場合だけ: --max-parallel 2
+```
+
+同時起動数は `image_generation.codex.max_parallel`（default `2`）で制御する。ChatGPT サブスクの fair-use 上限は非公開なので大量生成には使わない。通常は default `2` を維持し、rate limit / 利用制限を示す失敗時は `1` に下げる。`3` 以上はユーザーが今回の実行について明示した場合だけ使う。
+
 TTP 参照画像から上位互換サムネを作る場合は、長い個別指定ではなく
 `image_generation.codex.default_prompt_template` を使う。参照画像は mood reference
 ではなく winning template として扱い、変える要素は `{title}` と品質改善

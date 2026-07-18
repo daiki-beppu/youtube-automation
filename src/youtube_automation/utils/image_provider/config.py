@@ -36,6 +36,7 @@ _DEFAULT_GEMINI_CLI_TIMEOUT = 300
 # OpenAI provider の既定 quality。high は単価が数倍高いため既定にしない
 # （provider 切替時の無自覚な高単価課金を防ぐ。high は明示 opt-in のみ、#1697）
 _DEFAULT_OPENAI_QUALITY = "medium"
+_DEFAULT_CODEX_MAX_PARALLEL = 2
 
 
 @dataclass(frozen=True)
@@ -106,6 +107,7 @@ class CodexConfig:
 
     default_prompt_template: str = ""
     composition_rules: dict[str, object] | None = None
+    max_parallel: int = _DEFAULT_CODEX_MAX_PARALLEL
 
 
 @dataclass(frozen=True)
@@ -236,7 +238,14 @@ def _build_codex(d: object, *, composition_rules: dict[str, object] | None) -> C
         raise ConfigError("image_generation.codex.default_prompt_template は文字列で指定してください")
     if template:
         template = _validate_codex_prompt_template(template)
-    return CodexConfig(default_prompt_template=template, composition_rules=composition_rules)
+    max_parallel = d.get("max_parallel", _DEFAULT_CODEX_MAX_PARALLEL)
+    if isinstance(max_parallel, bool) or not isinstance(max_parallel, int) or max_parallel < 1:
+        raise ConfigError("image_generation.codex.max_parallel は 1 以上の整数で指定してください")
+    return CodexConfig(
+        default_prompt_template=template,
+        composition_rules=composition_rules,
+        max_parallel=max_parallel,
+    )
 
 
 def _composition_rules_from_gemini(section: object) -> dict[str, object] | None:
