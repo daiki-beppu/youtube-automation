@@ -22,10 +22,13 @@ import sys
 from datetime import date, datetime
 
 from youtube_automation.scripts.benchmark_collector import (
+    _QUOTA_SERVICE,
+    _READ_QUOTA_UNITS,
     ensure_benchmark_fresh,
     load_benchmark_videos,
 )
 from youtube_automation.utils.config import channel_dir as _channel_dir
+from youtube_automation.utils.cost_tracker import log_quota
 from youtube_automation.utils.youtube_service import get_youtube_readonly
 
 logger = logging.getLogger(__name__)
@@ -47,20 +50,25 @@ class BenchmarkCommentCollector:
 
     def _fetch_comments(self, video_id: str) -> list[dict]:
         """1動画のコメントを取得"""
+        request = self.youtube.commentThreads().list(
+            videoId=video_id,
+            part="snippet",
+            order="relevance",
+            maxResults=self.max_comments,
+        )
         try:
-            response = (
-                self.youtube.commentThreads()
-                .list(
-                    videoId=video_id,
-                    part="snippet",
-                    order="relevance",
-                    maxResults=self.max_comments,
-                )
-                .execute()
-            )
+            response = request.execute()
         except Exception as e:
             logger.warning("コメント取得失敗 %s: %s", video_id, e)
             return []
+        finally:
+            # quota は失敗した request でも消費されるため成否に関わらず記録する
+            log_quota(
+                _QUOTA_SERVICE,
+                "commentThreads.list",
+                _READ_QUOTA_UNITS,
+                metadata={"context": "benchmark_comments.comment_threads", "video_id": video_id},
+            )
 
         comments = []
         for item in response.get("items", []):
