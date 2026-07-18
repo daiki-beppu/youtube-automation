@@ -163,6 +163,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs(thumbnail)`: `image_generation.auto_selection.mode: full` の `/thumbnail` 手順を追加し、テーマを config → collection metadata の順で自動決定して、生成可否・textless 背景・候補の承認を含む 4 ゲートを省略し `yt-thumbnail-auto-select --apply` まで無人で進めるよう明文化した。`selection_only` の既存挙動は維持し、生成・適格候補ゼロ時の手動切替と `/wf-new` Phase 2c の追随分岐も追加した（#2167）。
+
 - `refactor(suno-helper)`: PatternList の entry 選択表示を、selection semantics・accessible name・`data-suno-entry-*` 契約を維持したまま shadcn variant と Tailwind semantic token へ移行した（#2068）。
 
 - `refactor(suno-helper)`: Overlay header・shell と status / warning / error 表示を、drag・minimize・位置永続化・semantic role・`data-suno-*` 契約を維持したまま shadcn primitive へ移行した（#2069）。
