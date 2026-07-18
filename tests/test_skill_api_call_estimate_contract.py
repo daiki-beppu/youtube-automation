@@ -90,6 +90,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-populate-scene-phrases": "翻訳 JSON は外部エージェント生成を受け取るのみ",
     "yt-preflight": "ローカルの事前チェックのみ",
     "yt-raw-master-check": "workflow-state.json と 01-master/ 実ファイルのローカル突合のみ",
+    "yt-retention-timeline": "収集済み retention / video_analysis JSON のローカル照合のみ",
     "yt-setup-dirs": "ローカルのディレクトリ雛形生成のみ",
     "yt-skills": "ローカルの skill 同期のみ",
     "yt-stock-archive": "ローカルの stock アセット管理のみ",
