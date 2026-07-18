@@ -35,6 +35,7 @@ from youtube_automation.utils.veo_generator import (
     generate_loop_video,
     smooth_loop,
 )
+from youtube_automation.utils.video_type import VideoType, VideoTypeConfig
 
 
 def _channel_root() -> Path:
@@ -340,6 +341,21 @@ def main():
     args = parser.parse_args()
 
     skill_config = load_config()
+    try:
+        video_type = VideoTypeConfig.from_mapping(
+            skill_config,
+            config_path="config/skills/loop-video.yaml::video_type",
+        ).video_type
+    except ConfigError as e:
+        print(f"[ERROR] {e}", file=sys.stderr)
+        sys.exit(1)
+    if video_type is not VideoType.LOOP:
+        print(
+            f"[ERROR] yt-generate-loop-video does not generate video_type={video_type.value!r}; use video_type='loop'",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print(f"  [Config] video_type={video_type.value}")
     if not skill_config.get("enabled", True):
         print(
             "ループ動画化はチャンネル設定で無効化されています。"
