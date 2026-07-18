@@ -125,6 +125,12 @@ class TestCollectBasicAnalyticsIntegration:
             "recent_videos": [],
             "summary": {},
         }
+        mixin.get_revenue_analytics = lambda s, e: {
+            "status": "available",
+            "daily_metrics": [],
+            "by_video": {},
+            "summary": {},
+        }
         mixin.get_ctr_analysis = lambda s, e: {"videos": []}
         mixin.get_traffic_source_analytics = lambda s, e: {"sources": {}}
         mixin.get_traffic_source_detail = lambda s, e, source_type: []
@@ -154,6 +160,12 @@ class TestCollectBasicAnalyticsIntegration:
             "recent_videos": [],
             "summary": {},
         }
+        mixin.get_revenue_analytics = lambda s, e: {
+            "status": "available",
+            "daily_metrics": [],
+            "by_video": {"ABC123": {"estimated_revenue": 12.0, "rpm": 6.0}},
+            "summary": {},
+        }
 
         with patch("youtube_automation.utils.channel_analytics.channel_dir", return_value=live_dir):
             result = mixin.collect_basic_analytics("2026-03-14", "2026-04-13", depth="basic")
@@ -161,5 +173,7 @@ class TestCollectBasicAnalyticsIntegration:
             video_data = result["video_analytics"]
             # マッチする動画: publish_at が入る
             assert video_data["ABC123"]["scheduled_publish_at"] == "2026-03-26T11:00:00+09:00"
+            assert video_data["ABC123"]["estimated_revenue"] == 12.0
+            assert video_data["ABC123"]["rpm"] == 6.0
             # マッチしない動画: None
             assert video_data["XYZ789"]["scheduled_publish_at"] is None
