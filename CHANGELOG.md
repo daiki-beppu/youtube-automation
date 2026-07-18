@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(suno-helper)`: collection 選択を shadcn ベースの checkbox 一覧へ拡張し、選択順ではなく server 一覧順で生成・playlist 追加・ZIP download を直列実行する永続 queue を追加した。collection 間はページ reload で clip tracker / multi-select を分離し、部分失敗後も後続を継続して成功・失敗 summary と失敗分再実行を提供する（#2029）。
 - `feat(thumbnail)`: 単発 `codex-image.sh` を変更せず、config/CLI で同時起動数を制御し、preflight を 1 回だけ行って複数候補を並列生成する `codex-image-batch.sh` を追加した。部分失敗時も残りを完走して失敗一覧を返す（#2028）。
 - `refactor(channel-new)`: standalone `/channel-research` を `/channel-new` の第 6 モード「分析モード」へ挙動不変で統合し、既存の入力 gate、subagent 委譲、TTP 分析、成果物パスを維持したまま skill と導線を集約した（#2027）。
 - `feat(thumbnail)`: 伸びた動画の CTR と流入構成からサムネ寄与を gate し、勝因を 1 要素ずつ Studio 比較して検証済み champion を次回 `/thumbnail` の internal TTP へ還元する `/thumbnail-iterate` を追加した。複数要素が独立して勝った場合は機械的に合成せず、一貫した再生成と最終比較を要求する（#1969）。

@@ -1,10 +1,9 @@
 // Suno の Advanced タブへの Style / Lyrics 注入と Generate 連続実行 (content script)。
 // DOM 操作は shared/dom の純関数へ委譲し、本ファイルは連続実行のフロー制御に専念する。
 import {
-  type CollectionSummary,
   DEFAULT_DURATION_FILTER,
   type DurationFilter,
-  extractPlaylistName,
+  playlistNameForCollection,
   type PromptEntry,
   type PromptResponse,
 } from "../../shared/api";
@@ -15,6 +14,7 @@ import {
   INFLIGHT_STALL_TIMEOUT_MS,
   MAX_YIELD_RETRY,
   PHASE,
+  type Phase,
   type ProgressPayload,
   QUEUE_ERROR_WAIT_MS,
   QUEUE_SLOT_WAIT_TIMEOUT_MS,
@@ -65,6 +65,7 @@ import {
   requestSliderSet,
 } from "../lib/bridge-listener";
 import { createClipTracker } from "../lib/clip-tracker";
+import { settleStoredCollectionQueueRun } from "../lib/collection-queue-state";
 import { acquireDomRunLock, releaseDomRunLock } from "../lib/dom-run-lock";
 import { createDownloadFlow } from "../lib/download-flow";
 import type { DownloadContext } from "../lib/download-flow";
@@ -386,6 +387,13 @@ function assertRunPayload(value: unknown): RunPayload {
     durationOutlierWarnings: assertOptionalDurationOutlierWarnings(
       record.durationOutlierWarnings
     ),
+    collectionQueueId:
+      record.collectionQueueId === undefined
+        ? undefined
+        : assertNonEmptyString(
+            record.collectionQueueId,
+            "run.collectionQueueId"
+          ),
     unattended,
   };
   if (unattended) {
@@ -631,15 +639,45 @@ function detectUnattendedPreflightBlocker(): {
   return null;
 }
 
-function playlistNameForCollection(collection: CollectionSummary): string {
-  if (collection.channel && collection.theme) {
-    return `${collection.channel} | ${collection.theme}`;
+const COLLECTION_QUEUE_TERMINAL_PHASES = new Set<string>([
+  PHASE.FINISHED,
+  PHASE.ERROR,
+  PHASE.STOPPED,
+]);
+
+function isCollectionQueueTerminalPhase(
+  phase: Phase
+): phase is "finished" | "error" | "stopped" {
+  return COLLECTION_QUEUE_TERMINAL_PHASES.has(phase);
+}
+
+async function finalizeCollectionQueueBoundary(options: {
+  queueId: string;
+  collectionId: string;
+  snapshot: SnapshotPayload | null;
+}): Promise<void> {
+  if (!options.snapshot) {
+    return;
   }
-  const theme = (collection.theme ?? collection.name).replace(
-    /-collection$/,
-    ""
-  );
-  return extractPlaylistName(collection.id, theme);
+  const terminal = options.snapshot.progress;
+  if (!isCollectionQueueTerminalPhase(terminal.phase)) {
+    return;
+  }
+  const failedEntryCount = options.snapshot.failedIndices?.length ?? 0;
+  const transition = await settleStoredCollectionQueueRun(options.queueId, {
+    collectionId: options.collectionId,
+    phase: terminal.phase,
+    failedEntryCount,
+    message: terminal.message,
+    now: Date.now(),
+  });
+  if (terminal.phase === PHASE.STOPPED || !transition) {
+    return;
+  }
+  if (terminal.phase === PHASE.ERROR || failedEntryCount > 0) {
+    await clearResumeStateForCollection(options.collectionId);
+  }
+  scheduleRunCompleteReload();
 }
 
 export default defineContentScript({
@@ -1353,6 +1391,7 @@ export default defineContentScript({
       // duration filter 後に playlist 追加・download へ採用する OK clip 件数。
       playlistExpectedClipCount?: number;
       durationOutlierPolicy: DurationOutlierPolicy;
+      collectionQueueId?: string;
       unattended?: RunPayload["unattended"];
     }
 
@@ -2255,6 +2294,7 @@ export default defineContentScript({
       if (
         playlistName &&
         resumeStateCleared &&
+        !options.collectionQueueId &&
         (await persistFinishedSnapshotForReload())
       ) {
         scheduleRunCompleteReload();
@@ -2279,6 +2319,7 @@ export default defineContentScript({
         submittedClipIds,
         submittedClipIdsAreDurationFiltered,
         playlistExpectedClipCount,
+        collectionQueueId,
         unattended,
       } = assertRunPayload(data);
       // 手動 run では過去の定期実行 state を更新しない。定期実行だけが明示的に
@@ -2338,10 +2379,25 @@ export default defineContentScript({
         submittedClipIds,
         submittedClipIdsAreDurationFiltered,
         playlistExpectedClipCount,
+        collectionQueueId,
         unattended,
       }).finally(async () => {
         running = false;
+        // queue failure で resume state を消す場合、最後の checkpoint write より後に
+        // clear しないと reload 後に前 collection の state が復活する。
         await Promise.all([resumeStateWrite, unattendedStateWrite]);
+        if (collectionQueueId) {
+          await finalizeCollectionQueueBoundary({
+            queueId: collectionQueueId,
+            collectionId,
+            snapshot: currentSnapshot,
+          }).catch((error: unknown) => {
+            console.error(
+              "[suno-helper] collection queue state の更新に失敗したため次 collection へ進みません:",
+              error
+            );
+          });
+        }
         await releaseExecutionLease(unattended);
         activeUnattended = undefined;
         feedPoller.stop();

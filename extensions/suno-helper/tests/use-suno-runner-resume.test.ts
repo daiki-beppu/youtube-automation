@@ -492,3 +492,19 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
     );
   });
 });
+
+describe("collection queue の fresh start / run ACK 境界 (#2029)", () => {
+  const runnerSource = read("../components/useSunoRunner.ts");
+
+  it("新規 queue は保存済み単発 resume を消去してから永続化する", () => {
+    expect(runnerSource).toMatch(
+      /const staleResume = persistedResumeRef\.current;[\s\S]*?await clearResumeStateForCollection\(staleResume\.collectionId\);[\s\S]*?persistedResumeRef\.current = null;[\s\S]*?await writeCollectionQueue\(queue\)/
+    );
+  });
+
+  it("run の negative ACK は current item を failed settlement して後続 reload へ進める", () => {
+    expect(runnerSource).toMatch(
+      /const settleRejectedCollectionQueueStart = useCallback\([\s\S]*?settleStoredCollectionQueueRun\([\s\S]*?phase: "error"[\s\S]*?scheduleRunCompleteReload\(\)[\s\S]*?const acknowledgement = await sendMessage\([\s\S]*?if \(!acknowledgement\.ok\) \{[\s\S]*?await settleRejectedCollectionQueueStart\(/
+    );
+  });
+});

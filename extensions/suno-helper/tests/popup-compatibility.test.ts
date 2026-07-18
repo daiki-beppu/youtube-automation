@@ -50,6 +50,13 @@ const legacySourceState = vi.hoisted(() => ({ present: true }));
 const resumeStateMocks = vi.hoisted(() => ({
   readResumeState: vi.fn(async () => null),
   writeResumeState: vi.fn(async () => undefined),
+  clearResumeStateForCollection: vi.fn(async () => undefined),
+}));
+
+const collectionQueueMocks = vi.hoisted(() => ({
+  readCollectionQueue: vi.fn(async () => null),
+  writeCollectionQueue: vi.fn(async () => undefined),
+  settleStoredCollectionQueueRun: vi.fn(async () => null),
 }));
 
 const presetStateMocks = vi.hoisted(() => ({
@@ -170,6 +177,21 @@ vi.mock("../lib/resume-state", async () => {
     ...actual,
     readResumeState: resumeStateMocks.readResumeState,
     writeResumeState: resumeStateMocks.writeResumeState,
+    clearResumeStateForCollection:
+      resumeStateMocks.clearResumeStateForCollection,
+  };
+});
+
+vi.mock("../lib/collection-queue-state", async () => {
+  const actual = await vi.importActual<
+    typeof import("../lib/collection-queue-state")
+  >("../lib/collection-queue-state");
+  return {
+    ...actual,
+    readCollectionQueue: collectionQueueMocks.readCollectionQueue,
+    writeCollectionQueue: collectionQueueMocks.writeCollectionQueue,
+    settleStoredCollectionQueueRun:
+      collectionQueueMocks.settleStoredCollectionQueueRun,
   };
 });
 
@@ -310,6 +332,8 @@ describe("Suno popup compatibility check", () => {
     downloadFormatMocks.setValue.mockResolvedValue(undefined);
     presetStateMocks.readRunModeId.mockResolvedValue("serial");
     presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
+    collectionQueueMocks.readCollectionQueue.mockResolvedValue(null);
+    collectionQueueMocks.writeCollectionQueue.mockResolvedValue(undefined);
     serverSourcesMocks.migrateServerSourcesStorage.mockImplementation(
       async () => {
         legacySourceState.present = false;
@@ -367,6 +391,7 @@ describe("Suno popup compatibility check", () => {
     storageMocks.setValue.mockResolvedValue(undefined);
     resumeStateMocks.readResumeState.mockResolvedValue(null);
     resumeStateMocks.writeResumeState.mockResolvedValue(undefined);
+    resumeStateMocks.clearResumeStateForCollection.mockResolvedValue(undefined);
     presetStateMocks.readRunModeId.mockResolvedValue("serial");
     presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
     serverSourcesMocks.migrateServerSourcesStorage.mockResolvedValue(undefined);
@@ -910,6 +935,171 @@ describe("Suno popup compatibility check", () => {
       playlistExpectedClipCount: undefined,
       durationOutlierWarnings: undefined,
     });
+  });
+
+  it("queue の互換性 preflight が失敗すると current collection を failed settlement する", async () => {
+    const queue = {
+      version: 1 as const,
+      queueId: "queue-preflight",
+      baseUrl: BASE_URL,
+      items: [
+        {
+          collectionId: "20260601-clm-theme-a-collection",
+          status: "pending" as const,
+        },
+      ],
+      currentIndex: 0,
+      status: "running" as const,
+      runMode: "serial" as const,
+      regenerateDurationOutliers: true,
+      createdAt: 100,
+      updatedAt: 100,
+    };
+    const completed = {
+      ...queue,
+      items: [{ ...queue.items[0], status: "failed" as const }],
+      currentIndex: 1,
+      status: "completed" as const,
+      updatedAt: 200,
+    };
+    collectionQueueMocks.readCollectionQueue.mockResolvedValue(queue as never);
+    collectionQueueMocks.settleStoredCollectionQueueRun.mockResolvedValue({
+      state: completed,
+      requiresPageReload: false,
+    } as never);
+    messagingMocks.sendMessage.mockImplementation(
+      (message: string, payload?: Record<string, string>) => {
+        if (message === "fetchCompatibilityWarning") {
+          return Promise.reject(new Error("version endpoint unavailable"));
+        }
+        return defaultSendMessage(message, payload);
+      }
+    );
+
+    await rerenderApp();
+
+    await waitFor(() => {
+      expect(
+        collectionQueueMocks.settleStoredCollectionQueueRun
+      ).toHaveBeenCalledWith("queue-preflight", {
+        collectionId: "20260601-clm-theme-a-collection",
+        phase: "error",
+        failedEntryCount: 0,
+        message: "互換性確認失敗: version endpoint unavailable",
+        now: expect.any(Number),
+      });
+    });
+    expect(container.textContent).toContain("version endpoint unavailable");
+  });
+
+  it("queue の拡張再読み込み必須 preflight は current collection を失敗確定せず pause する", async () => {
+    const queue = {
+      version: 1 as const,
+      queueId: "queue-reload-required",
+      baseUrl: BASE_URL,
+      items: [
+        {
+          collectionId: "20260601-clm-theme-a-collection",
+          status: "pending" as const,
+        },
+      ],
+      currentIndex: 0,
+      status: "running" as const,
+      runMode: "serial" as const,
+      regenerateDurationOutliers: true,
+      createdAt: 100,
+      updatedAt: 100,
+    };
+    collectionQueueMocks.readCollectionQueue.mockResolvedValue(queue as never);
+    messagingMocks.sendMessage.mockImplementation(
+      (message: string, payload?: Record<string, string>) => {
+        if (message === "fetchCompatibilityWarning") {
+          return Promise.reject(new Error("Extension context invalidated."));
+        }
+        return defaultSendMessage(message, payload);
+      }
+    );
+
+    await rerenderApp();
+
+    await waitFor(() => {
+      expect(container.textContent).toContain(
+        EXTENSION_RELOAD_REQUIRED_MESSAGE
+      );
+    });
+    expect(
+      collectionQueueMocks.settleStoredCollectionQueueRun
+    ).not.toHaveBeenCalled();
+    expect(collectionQueueMocks.writeCollectionQueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queueId: "queue-reload-required",
+        currentIndex: 0,
+        status: "paused",
+        items: [
+          expect.objectContaining({
+            collectionId: "20260601-clm-theme-a-collection",
+            status: "pending",
+          }),
+        ],
+      })
+    );
+  });
+
+  it("queue run の negative ACK で保存済み queue が消えていても in-memory queue を durable pause する", async () => {
+    const collectionId = "20260601-clm-theme-a-collection";
+    const queue = {
+      version: 1 as const,
+      queueId: "queue-negative-ack-missing",
+      baseUrl: BASE_URL,
+      items: [{ collectionId, status: "pending" as const }],
+      currentIndex: 0,
+      status: "running" as const,
+      runMode: "serial" as const,
+      regenerateDurationOutliers: true,
+      createdAt: 100,
+      updatedAt: 100,
+    };
+    collectionQueueMocks.readCollectionQueue.mockResolvedValue(queue as never);
+    collectionQueueMocks.settleStoredCollectionQueueRun.mockResolvedValue(null);
+    messagingMocks.sendMessage.mockImplementation(
+      (message: string, payload?: Record<string, string>) => {
+        if (message === "fetchCompatibilityWarning") return Promise.resolve("");
+        if (message === "fetchCollections") {
+          return Promise.resolve([
+            {
+              id: collectionId,
+              name: "theme-a",
+              channel: "clm",
+              theme: "theme-a",
+              status: "ready",
+              pattern_count: 1,
+              downloaded_count: 0,
+            },
+          ]);
+        }
+        if (message === "fetchCollectionPromptResponse") {
+          return Promise.resolve({
+            entries: [{ name: "p1", style: "lofi", lyrics: "" }],
+          });
+        }
+        if (message === "run")
+          return Promise.resolve({ ok: false, busy: true });
+        return defaultSendMessage(message, payload);
+      }
+    );
+
+    await rerenderApp();
+
+    await waitFor(() => {
+      expect(collectionQueueMocks.writeCollectionQueue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          queueId: "queue-negative-ack-missing",
+          currentIndex: 0,
+          status: "paused",
+        })
+      );
+    });
+    expect(container.textContent).toContain("queue を一時停止しました");
   });
 
   it("ACK 済み clip ID 未観測の resume state から再開しても同じ entry を再投入しない", async () => {

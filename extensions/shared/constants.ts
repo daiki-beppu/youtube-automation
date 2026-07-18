@@ -17,6 +17,9 @@ export const RESUME_STATE_KEY = "sunoResumeState";
 /** 定期無人実行の checkpoint / 手動介入理由を保存する chrome.storage.local key (#1893)。 */
 export const UNATTENDED_RUN_STATE_KEY = "sunoUnattendedRunState";
 
+/** 手動の複数 collection queue と成功/失敗 summary を保存する chrome.storage.local key (#2029)。 */
+export const COLLECTION_QUEUE_STATE_KEY = "sunoCollectionQueueState";
+
 /** overlay の position/minimized/hidden を保存する chrome.storage.local の単一 key (#892)。
  * Suno は 1 タブ運用前提のため global 単一 key とする。lib/overlay-state.ts が SSOT として参照する。 */
 export const OVERLAY_STATE_KEY = "sunoOverlayState";

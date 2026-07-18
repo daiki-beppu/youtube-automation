@@ -39,6 +39,7 @@ export interface RunPayloadInput {
   durationFilter?: DurationFilter;
   range: RunRange | undefined;
   collectionId: string;
+  collectionQueueId?: string;
   runMode: RunModeId;
   regenerateDurationOutliers?: boolean;
   durationOutlierWarnings?: Record<number, string>;
@@ -52,6 +53,9 @@ export function buildRunPayload(input: RunPayloadInput): RunPayload {
     ...(input.durationFilter ? { durationFilter: input.durationFilter } : {}),
     range: input.range,
     collectionId: input.collectionId,
+    ...(input.collectionQueueId
+      ? { collectionQueueId: input.collectionQueueId }
+      : {}),
     runMode: input.overrides?.runMode ?? input.runMode,
     regenerateDurationOutliers:
       input.overrides?.regenerateDurationOutliers ??

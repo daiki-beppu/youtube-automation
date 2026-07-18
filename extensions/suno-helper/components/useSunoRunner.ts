@@ -8,7 +8,7 @@ import { browser } from "wxt/browser";
 import {
   type CollectionSummary,
   type DurationFilter,
-  extractPlaylistName,
+  playlistNameForCollection,
   type PromptEntry,
   type PromptResponse,
   resolvePromptCollectionId,
@@ -21,13 +21,26 @@ import {
   type LocalServerSource,
   type RunModeId,
 } from "../../shared/constants";
+import {
+  createCollectionQueue,
+  currentCollectionId,
+  orderSelectedCollectionIds,
+  pauseCollectionQueue,
+  readCollectionQueue,
+  resumeCollectionQueue,
+  settleStoredCollectionQueueRun,
+  type CollectionQueueState,
+  writeCollectionQueue,
+} from "../lib/collection-queue-state";
 import { onMessage, sendMessage } from "../lib/messaging";
+import { scheduleRunCompleteReload } from "../lib/page-reload";
 import {
   DEFAULT_RUN_MODE_ID,
   readRunModeId,
   writeRunModeId,
 } from "../lib/preset-state";
 import {
+  clearResumeStateForCollection,
   readResumeState,
   resolvePlaylistExpectedClipCountForResume,
   type ResumeBanner,
@@ -61,6 +74,9 @@ interface RunnerState {
   collections: CollectionSummary[];
   selectedCollectionId: string;
   selectCollection: (id: string) => void;
+  collectionQueue: CollectionQueueState | null;
+  runCollectionQueue: (collectionIds: string[]) => Promise<void>;
+  resumeCollectionQueue: () => Promise<void>;
   entries: PromptEntry[];
   itemStates: ItemState[];
   status: string;
@@ -93,6 +109,10 @@ interface RunnerState {
   stop: () => Promise<void>;
 }
 
+type RejectedRunAcknowledgement =
+  | { ok: false; busy: true }
+  | { ok: false; error: string };
+
 function normalizePromptResponseMessage(
   response: PromptResponse | PromptEntry[]
 ): PromptResponse {
@@ -122,6 +142,47 @@ function maxDefined(
   return candidates.length > 0 ? Math.max(...candidates) : undefined;
 }
 
+function queueResumeOverrides(
+  resume: ResumeState | null,
+  collectionId: string
+): RunOverrides | undefined {
+  if (resume?.collectionId !== collectionId) {
+    return undefined;
+  }
+  return {
+    ...buildResumeRunOverrides(
+      {
+        failedIndex: resume.failedIndex,
+        total: resume.total,
+        remainingIndices: resume.remainingIndices,
+      },
+      {
+        submittedClipIds: resume.submittedClipIds ?? [],
+        submittedClipIdsAreDurationFiltered:
+          resume.submittedClipIdsAreDurationFiltered === true,
+        playlistExpectedClipCount: resume.playlistExpectedClipCount,
+      }
+    ),
+    durationOutlierWarnings: resume.durationOutlierWarnings,
+  };
+}
+
+function resolveInitialServerUrl(
+  storedUrl: string,
+  sources: LocalServerSource[],
+  queue: CollectionQueueState | null
+): string | undefined {
+  if (queue && queue.status !== "completed") {
+    return queue.baseUrl;
+  }
+  if (!storedUrl.trim()) {
+    return undefined;
+  }
+  return (
+    sources.find((source) => source.url === storedUrl)?.url ?? sources[0]?.url
+  );
+}
+
 export function useSunoRunner(): RunnerState {
   const [reloadRequired, setReloadRequired] = useState(false);
   const [url, setUrlState] = useState("");
@@ -129,6 +190,10 @@ export function useSunoRunner(): RunnerState {
   const [serverSources, setServerSources] = useState<LocalServerSource[]>([]);
   const [allCollections, setAllCollections] = useState<CollectionSummary[]>([]);
   const [selectedCollectionIdState, setSelectedCollectionId] = useState("");
+  const [collectionQueue, setCollectionQueue] =
+    useState<CollectionQueueState | null>(null);
+  const collectionQueueRef = useRef<CollectionQueueState | null>(null);
+  const [collectionQueueChecked, setCollectionQueueChecked] = useState(false);
   const [entries, setEntries] = useState<PromptEntry[]>([]);
   const [durationFilter, setDurationFilter] = useState<
     DurationFilter | undefined
@@ -190,6 +255,7 @@ export function useSunoRunner(): RunnerState {
   const [persistedResume, setPersistedResume] = useState<ResumeState | null>(
     null
   );
+  const persistedResumeRef = useRef<ResumeState | null>(null);
   // resume state を読んだ popup 起動時刻 (#872)。stale 判定の基準 now をここで一度だけ確定し、
   // render 中の Date.now()（非純粋）を避ける。
   const [resumeCheckedAt, setResumeCheckedAt] = useState<number | null>(null);
@@ -204,6 +270,16 @@ export function useSunoRunner(): RunnerState {
   const initializationRef = useRef<Promise<void> | null>(null);
 
   const resumableCollectionId = useMemo(() => {
+    const queuedCollectionId = collectionQueue
+      ? currentCollectionId(collectionQueue)
+      : null;
+    if (
+      queuedCollectionId &&
+      collectionQueue &&
+      collectionQueue.status !== "completed"
+    ) {
+      return queuedCollectionId;
+    }
     if (
       resumeCheckedAt !== null &&
       persistedResume &&
@@ -216,7 +292,7 @@ export function useSunoRunner(): RunnerState {
       return persistedResume.collectionId;
     }
     return undefined;
-  }, [persistedResume, resumeCheckedAt]);
+  }, [collectionQueue, persistedResume, resumeCheckedAt]);
 
   const resolveVisibleCollections = useCallback(
     (source: CollectionSummary[], currentSelectedId: string) => {
@@ -250,11 +326,7 @@ export function useSunoRunner(): RunnerState {
     if (!selected) {
       return undefined;
     }
-    if (selected.channel && selected.theme) {
-      return `${selected.channel} | ${selected.theme}`;
-    }
-    const theme = (selected.theme ?? selected.name).replace(/-collection$/, "");
-    return extractPlaylistName(selected.id, theme);
+    return playlistNameForCollection(selected);
   }, [selectedCollection]);
   const playlistName = derivedPlaylistName ?? restoredPlaylistName;
 
@@ -513,6 +585,16 @@ export function useSunoRunner(): RunnerState {
     setIsError(error);
   }, []);
 
+  const reportRunDispatchFailure = useCallback(
+    (error: unknown): void => {
+      setRunning(false);
+      setPhase("error");
+      const message = error instanceof Error ? error.message : String(error);
+      report(formatRunError(message), true);
+    },
+    [report, setRunning]
+  );
+
   const reportStorageFailure = useCallback((error: unknown) => {
     console.warn(
       "[suno-helper] storage 操作に失敗しました（拡張更新後はタブを再読み込みしてください）:",
@@ -527,6 +609,7 @@ export function useSunoRunner(): RunnerState {
     void readResumeState()
       .then((state) => {
         const checkedAt = Date.now();
+        persistedResumeRef.current = state;
         setPersistedResume(state);
         setResumeCheckedAt(checkedAt);
         if (
@@ -540,6 +623,16 @@ export function useSunoRunner(): RunnerState {
       .catch((err: unknown) => {
         reportStorageFailure(err);
       });
+  }, [reportStorageFailure]);
+
+  useEffect(() => {
+    void readCollectionQueue()
+      .then((state) => {
+        collectionQueueRef.current = state;
+        setCollectionQueue(state);
+      })
+      .catch(reportStorageFailure)
+      .finally(() => setCollectionQueueChecked(true));
   }, [reportStorageFailure]);
 
   useEffect(() => {
@@ -571,6 +664,206 @@ export function useSunoRunner(): RunnerState {
     setRestoredPlaylistExpectedClipCount(undefined);
     setRestoredDurationOutlierWarnings(undefined);
   }, []);
+
+  const writePausedCollectionQueue = useCallback(
+    async (queue: CollectionQueueState): Promise<void> => {
+      const paused = pauseCollectionQueue(queue, Date.now());
+      collectionQueueRef.current = paused;
+      setCollectionQueue(paused);
+      await writeCollectionQueue(paused);
+    },
+    []
+  );
+
+  const persistPausedCollectionQueue = useCallback(
+    async (
+      queue: CollectionQueueState,
+      message: string,
+      settlementError?: unknown
+    ): Promise<void> => {
+      try {
+        await writePausedCollectionQueue(queue);
+      } catch (error) {
+        reportStorageFailure(error);
+        return;
+      }
+      if (settlementError !== undefined) {
+        console.warn(
+          "[suno-helper] collection queue の失敗確定に失敗したため一時停止しました:",
+          settlementError
+        );
+      }
+      report(`${message} / queue を一時停止しました。`, true);
+    },
+    [report, reportStorageFailure, writePausedCollectionQueue]
+  );
+
+  const settleRejectedCollectionQueueStart = useCallback(
+    async (
+      queue: CollectionQueueState,
+      collectionId: string,
+      collectionName: string,
+      acknowledgement: RejectedRunAcknowledgement
+    ): Promise<void> => {
+      const message =
+        "busy" in acknowledgement
+          ? "Suno runner が別の実行で使用中です。"
+          : acknowledgement.error;
+      const transition = await settleStoredCollectionQueueRun(queue.queueId, {
+        collectionId,
+        phase: "error",
+        failedEntryCount: 0,
+        message,
+        now: Date.now(),
+      });
+      setRunning(false);
+      setPhase("error");
+      if (!transition) {
+        await persistPausedCollectionQueue(
+          queue,
+          "collection queue の保存状態が見つかりません。"
+        );
+        return;
+      }
+      collectionQueueRef.current = transition.state;
+      setCollectionQueue(transition.state);
+      report(`${collectionName}: ${message}`, true);
+      if (transition.requiresPageReload) {
+        scheduleRunCompleteReload();
+      }
+    },
+    [persistPausedCollectionQueue, report, setRunning]
+  );
+
+  const settleCollectionQueuePreflightFailure = useCallback(
+    async (
+      preferredCollectionId: string,
+      message: string
+    ): Promise<boolean> => {
+      const activeQueue = collectionQueueRef.current;
+      const activeCollectionId = activeQueue
+        ? currentCollectionId(activeQueue)
+        : null;
+      if (
+        activeQueue?.status !== "running" ||
+        !activeCollectionId ||
+        activeCollectionId !== preferredCollectionId
+      ) {
+        return false;
+      }
+      try {
+        const transition = await settleStoredCollectionQueueRun(
+          activeQueue.queueId,
+          {
+            collectionId: activeCollectionId,
+            phase: "error",
+            failedEntryCount: 0,
+            message,
+            now: Date.now(),
+          }
+        );
+        if (!transition) {
+          await persistPausedCollectionQueue(activeQueue, message);
+          return true;
+        }
+        collectionQueueRef.current = transition.state;
+        setCollectionQueue(transition.state);
+        report(message, true);
+        if (transition.requiresPageReload) {
+          scheduleRunCompleteReload();
+        }
+      } catch (error) {
+        await persistPausedCollectionQueue(activeQueue, message, error);
+      }
+      return true;
+    },
+    [persistPausedCollectionQueue, report]
+  );
+
+  const pauseCollectionQueueForReload = useCallback(
+    async (preferredCollectionId: string): Promise<void> => {
+      const activeQueue = collectionQueueRef.current;
+      if (
+        activeQueue?.status !== "running" ||
+        currentCollectionId(activeQueue) !== preferredCollectionId
+      ) {
+        return;
+      }
+      try {
+        await writePausedCollectionQueue(activeQueue);
+      } catch (error) {
+        reportStorageFailure(error);
+      }
+    },
+    [reportStorageFailure, writePausedCollectionQueue]
+  );
+
+  const startCollectionQueueItem = useCallback(
+    async (
+      queue: CollectionQueueState,
+      collection: CollectionSummary,
+      response: PromptResponse
+    ): Promise<void> => {
+      if (isRunningRef.current || queue.status !== "running") {
+        return;
+      }
+      const activeCollectionId = currentCollectionId(queue);
+      if (!activeCollectionId || activeCollectionId !== collection.id) {
+        return;
+      }
+      const overrides = queueResumeOverrides(
+        persistedResumeRef.current,
+        activeCollectionId
+      );
+      setSelectedCollectionId(activeCollectionId);
+      setEntries(response.entries);
+      setDurationFilter(response.duration_filter);
+      setItemStates(response.entries.map(() => "idle"));
+      setRunning(true);
+      setPhase("starting");
+      try {
+        const acknowledgement = await sendMessage(
+          "run",
+          buildRunPayload({
+            entries: response.entries,
+            playlistName: playlistNameForCollection(collection),
+            durationFilter: response.duration_filter,
+            range: overrides?.range,
+            collectionId: activeCollectionId,
+            collectionQueueId: queue.queueId,
+            runMode: queue.runMode,
+            regenerateDurationOutliers: queue.regenerateDurationOutliers,
+            durationOutlierWarnings: overrides?.durationOutlierWarnings,
+            overrides,
+          })
+        );
+        if (!acknowledgement.ok) {
+          await settleRejectedCollectionQueueStart(
+            queue,
+            activeCollectionId,
+            collection.name,
+            acknowledgement
+          );
+          return;
+        }
+        report(
+          `collection queue ${queue.currentIndex + 1}/${queue.items.length}: ${collection.name} を開始しました。`
+        );
+      } catch (error) {
+        await writePausedCollectionQueue(queue).catch(reportStorageFailure);
+        setRunning(false);
+        setPhase("error");
+        report(formatRunError(String(error)), true);
+      }
+    },
+    [
+      report,
+      reportStorageFailure,
+      setRunning,
+      settleRejectedCollectionQueueStart,
+      writePausedCollectionQueue,
+    ]
+  );
 
   useEffect(() => {
     const unwatch = onMessage("progress", ({ data }) => {
@@ -686,7 +979,15 @@ export function useSunoRunner(): RunnerState {
         }
       } catch (error) {
         if (isLatestRequest()) {
-          reportStorageFailure(error);
+          const message =
+            error instanceof Error ? error.message : String(error);
+          const settledQueue = await settleCollectionQueuePreflightFailure(
+            preferredCollectionId,
+            `配信元保存失敗: ${message}`
+          );
+          if (!settledQueue) {
+            reportStorageFailure(error);
+          }
         }
         return;
       }
@@ -710,7 +1011,15 @@ export function useSunoRunner(): RunnerState {
         }
         const message = error instanceof Error ? error.message : String(error);
         if (isExtensionReloadRequiredError(message)) {
+          await pauseCollectionQueueForReload(preferredCollectionId);
           setReloadRequired(true);
+          return;
+        }
+        const settledQueue = await settleCollectionQueuePreflightFailure(
+          preferredCollectionId,
+          `互換性確認失敗: ${message}`
+        );
+        if (settledQueue) {
           return;
         }
         setPhase("error");
@@ -747,11 +1056,30 @@ export function useSunoRunner(): RunnerState {
         setItemStates(data.entries.map(() => "idle"));
         setPhase("idle");
         report(`${data.entries.length} パターンを取得しました。`);
+        const activeQueue = collectionQueueRef.current;
+        const queuedCollection = fetched.find(
+          (candidate) => candidate.id === collectionId
+        );
+        if (
+          activeQueue?.status === "running" &&
+          currentCollectionId(activeQueue) === collectionId &&
+          queuedCollection
+        ) {
+          await startCollectionQueueItem(activeQueue, queuedCollection, data);
+        }
       } catch (err) {
         if (!isLatestRequest() || restoredProgressRef.current) {
           return;
         }
         const message = err instanceof Error ? err.message : String(err);
+        if (
+          await settleCollectionQueuePreflightFailure(
+            preferredCollectionId,
+            `prompts 取得失敗: ${message}`
+          )
+        ) {
+          return;
+        }
         setPhase("error");
         report(
           `取得失敗: ${message}\nyt-collection-serve が起動しているか確認してください。`,
@@ -762,8 +1090,11 @@ export function useSunoRunner(): RunnerState {
     [
       report,
       reportStorageFailure,
+      pauseCollectionQueueForReload,
       resolveVisibleCollections,
       resumableCollectionId,
+      settleCollectionQueuePreflightFailure,
+      startCollectionQueueItem,
     ]
   );
 
@@ -825,7 +1156,11 @@ export function useSunoRunner(): RunnerState {
   }, [discoverSources, report, updateUrl]);
 
   useEffect(() => {
-    if (resumeCheckedAt === null || initialFetchStartedRef.current) {
+    if (
+      resumeCheckedAt === null ||
+      !collectionQueueChecked ||
+      initialFetchStartedRef.current
+    ) {
       return;
     }
     initialFetchStartedRef.current = true;
@@ -835,10 +1170,11 @@ export function useSunoRunner(): RunnerState {
       .then(([stored, sources]) => {
         if (revision !== serverSourcesRevisionRef.current) return;
         setServerSources(sources);
-        if (!stored.trim()) return;
-        const nextUrl = sources.some((source) => source.url === stored)
-          ? stored
-          : sources[0]?.url;
+        const nextUrl = resolveInitialServerUrl(
+          stored,
+          sources,
+          collectionQueueRef.current
+        );
         if (!nextUrl) return;
         urlRef.current = nextUrl;
         setUrlState(nextUrl);
@@ -854,10 +1190,84 @@ export function useSunoRunner(): RunnerState {
   }, [
     discoverSources,
     fetchData,
+    collectionQueueChecked,
     reportStorageFailure,
     resumableCollectionId,
     resumeCheckedAt,
   ]);
+
+  const runCollectionQueue = useCallback(
+    async (collectionIds: string[]): Promise<void> => {
+      if (isRunningRef.current) {
+        return;
+      }
+      const orderedIds = orderSelectedCollectionIds(
+        collections,
+        new Set(collectionIds)
+      );
+      if (orderedIds.length === 0) {
+        report("実行するコレクションを選択してください。", true);
+        return;
+      }
+      const queue = createCollectionQueue({
+        queueId: globalThis.crypto.randomUUID(),
+        baseUrl: url,
+        collectionIds: orderedIds,
+        runMode: runModeId,
+        regenerateDurationOutliers,
+        now: Date.now(),
+      });
+      try {
+        const staleResume = persistedResumeRef.current;
+        if (staleResume) {
+          await clearResumeStateForCollection(staleResume.collectionId);
+        }
+        persistedResumeRef.current = null;
+        setPersistedResume(null);
+        setResumeDismissed(true);
+        await writeCollectionQueue(queue);
+        collectionQueueRef.current = queue;
+        setCollectionQueue(queue);
+        restoredProgressRef.current = false;
+        clearLoadedRunState();
+        await fetchData(queue.baseUrl, orderedIds[0]);
+      } catch (error) {
+        reportStorageFailure(error);
+      }
+    },
+    [
+      clearLoadedRunState,
+      collections,
+      fetchData,
+      regenerateDurationOutliers,
+      report,
+      reportStorageFailure,
+      runModeId,
+      url,
+    ]
+  );
+
+  const resumePersistedCollectionQueue =
+    useCallback(async (): Promise<void> => {
+      const current = collectionQueueRef.current;
+      if (!current || current.status !== "paused" || isRunningRef.current) {
+        return;
+      }
+      const resumed = resumeCollectionQueue(current, Date.now());
+      try {
+        await writeCollectionQueue(resumed);
+        collectionQueueRef.current = resumed;
+        setCollectionQueue(resumed);
+        const collectionId = currentCollectionId(resumed);
+        if (collectionId) {
+          restoredProgressRef.current = false;
+          clearLoadedRunState();
+          await fetchData(resumed.baseUrl, collectionId);
+        }
+      } catch (error) {
+        reportStorageFailure(error);
+      }
+    }, [clearLoadedRunState, fetchData, reportStorageFailure]);
 
   const run = useCallback(
     async (overrides?: RunOverrides) => {
@@ -906,10 +1316,7 @@ export function useSunoRunner(): RunnerState {
         report("連続実行を開始しました。");
       } catch (err) {
         // 送信失敗時はフラグを戻して再実行可能にする（実行は始まっていない）。
-        setRunning(false);
-        setPhase("error");
-        const message = err instanceof Error ? err.message : String(err);
-        report(formatRunError(message), true);
+        reportRunDispatchFailure(err);
       }
     },
     [
@@ -921,6 +1328,7 @@ export function useSunoRunner(): RunnerState {
       runModeId,
       regenerateDurationOutliers,
       report,
+      reportRunDispatchFailure,
       setRunning,
     ]
   );
@@ -1078,10 +1486,7 @@ export function useSunoRunner(): RunnerState {
       await sendMessage("retryDownload", payload);
       report("ダウンロードを再実行しています…");
     } catch (err) {
-      setRunning(false);
-      setPhase("error");
-      const message = err instanceof Error ? err.message : String(err);
-      report(formatRunError(message), true);
+      reportRunDispatchFailure(err);
     }
   }, [
     isRunning,
@@ -1089,6 +1494,7 @@ export function useSunoRunner(): RunnerState {
     submittedClipIdsForResume,
     expectedClipCountForManualAdoption,
     report,
+    reportRunDispatchFailure,
     setRunning,
   ]);
 
@@ -1221,6 +1627,15 @@ export function useSunoRunner(): RunnerState {
   ]);
 
   const stop = useCallback(async () => {
+    const queue = collectionQueueRef.current;
+    if (queue?.status === "running") {
+      try {
+        await writePausedCollectionQueue(queue);
+      } catch (error) {
+        // Stop 自体は安全操作なので、queue checkpoint 失敗でも runner への停止通知は続行する。
+        reportStorageFailure(error);
+      }
+    }
     try {
       // tabId は指定せず background 宛に送り、同一タブの runner content へ中継させる (#892)。
       await sendMessage("stop", undefined);
@@ -1228,7 +1643,7 @@ export function useSunoRunner(): RunnerState {
       const message = err instanceof Error ? err.message : String(err);
       report(formatStopError(message), true);
     }
-  }, [report]);
+  }, [report, reportStorageFailure, writePausedCollectionQueue]);
 
   return {
     reloadRequired,
@@ -1239,6 +1654,9 @@ export function useSunoRunner(): RunnerState {
     collections,
     selectedCollectionId,
     selectCollection,
+    collectionQueue,
+    runCollectionQueue,
+    resumeCollectionQueue: resumePersistedCollectionQueue,
     entries,
     itemStates,
     status,

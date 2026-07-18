@@ -47,6 +47,8 @@ export interface RunPayload {
   submittedClipIdsAreDurationFiltered?: boolean;
   /** duration filter 後に playlist 追加・download へ採用する OK clip 件数。 */
   playlistExpectedClipCount?: number;
+  /** 手動の複数 collection queue から起動した run の永続 queue 識別子 (#2029)。 */
+  collectionQueueId?: string;
   /** 定期実行だけが付与する上限・checkpoint 契約。未指定の手動 run は従来挙動。 */
   unattended?: {
     request: UnattendedRunRequest;
