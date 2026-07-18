@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(extensions)`: `community-helper` の WXT + React + TypeScript スキャフォールドを追加し、YouTube Studio 限定の MV3 最小権限、Studio origin に限定した `/version` CORS 互換チェック、Popup の 3 投稿進捗、型付き background/content relay を実装した（#1712）。
 - `feat(extensions)`: community-helper 共通層に `CommunityPost` wire 型、投稿 JSON／画像の fail-loud API client、runner フェーズ定数を追加した（#1711）。
 - `feat(collection-serve)`: community-helper 向けに `GET /community/posts.json` と投稿画像ルートを追加し、channel root 内の画像だけを Content-Type 付きで配信する。Chrome 拡張と YouTube Studio origin の CORS、および共有 route 定数を同時に追加した（#1710）。
 - `feat(community)`: `/community-draft` を `--batch` 専用の決定的 JSON generator へ移行し、旧 type 別 Markdown／clipboard フローを撤去した（#1709）。

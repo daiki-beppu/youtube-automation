@@ -17,6 +17,10 @@ extensions/
     components/           # popup の React UI
     lib/                  # messaging / storage / manifest schema
     tests/                # Vitest unit + Playwright e2e
+  community-helper/       # YouTube Studio コミュニティ投稿拡張
+    entrypoints/          # Popup / background relay / content runner stub
+    lib/                  # manifest 最小権限 / typed messaging
+    tests/                # Vitest contract / Popup unit tests
 ```
 
 `shared/` は各拡張から相対 import（例: `../../shared/dom`）で参照する。各拡張は自己完結した `package.json` を持ち、`extensions/<name>/` 単体で install / build / zip を実行できる。
