@@ -40,6 +40,14 @@ export const DOWNLOAD_FORMAT_KEY = "sunoDownloadFormat" as const;
 /** Suno ダウンロード形式のデフォルト値 (#1215)。 */
 export const DOWNLOAD_FORMAT_DEFAULT = "mp3" as const;
 
+/** Suno 完了音の ON/OFF と preset を保存する chrome.storage.local key (#2077)。 */
+export const COMPLETION_SOUND_SETTINGS_KEY =
+  "sunoCompletionSoundSettings" as const;
+
+/** 完了音の初回設定 (#2077)。 */
+export const COMPLETION_SOUND_ENABLED_DEFAULT = true as const;
+export const COMPLETION_SOUND_PRESET_DEFAULT = "chime" as const;
+
 /** yt-collection-serve が prompts を配信するサブパス (#698 で `/prompts.json` から分離)。 */
 export const PROMPTS_ROUTE = "/suno/prompts.json";
 

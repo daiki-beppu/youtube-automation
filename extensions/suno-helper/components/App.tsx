@@ -17,6 +17,7 @@ import {
   readDownloadFormat,
   type DownloadFormat,
 } from "../lib/storage";
+import { CompletionSoundControls } from "./CompletionSoundControls";
 import { PatternList } from "./PatternList";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
 import { Alert } from "./ui/alert";
@@ -55,6 +56,11 @@ export function App() {
     compatibilityWarning,
     canRun,
     isRunning,
+    completionSoundSettings,
+    completionSoundSettingsLoaded,
+    setCompletionSoundEnabled,
+    setCompletionSoundPreset,
+    previewCompletionSound,
     playlistName,
     runModeId,
     setRunMode,
@@ -568,6 +574,14 @@ export function App() {
           )}
         </span>
       </label>
+
+      <CompletionSoundControls
+        settings={completionSoundSettings}
+        disabled={!completionSoundSettingsLoaded}
+        onEnabledChange={setCompletionSoundEnabled}
+        onPresetChange={setCompletionSoundPreset}
+        onPreview={previewCompletionSound}
+      />
 
       <label className="flex flex-col gap-1 text-sm">
         DL 形式
