@@ -207,6 +207,7 @@ class BenchmarkCollector:
         video_ids: list[str] = []
         page_token: str | None = None
         remaining = scan_recent
+        upload_scan_complete = False
         while remaining > 0:
             with section("benchmark.playlist_items", page_size=min(50, remaining)):
                 try:
@@ -229,12 +230,20 @@ class BenchmarkCollector:
             page_token = playlist_resp.get("nextPageToken")
             remaining -= len(batch_ids)
             if not page_token or not batch_ids:
+                upload_scan_complete = True
                 break
 
         channel_data["scanned_count"] = len(video_ids)
 
         if not video_ids:
             logger.warning("動画が見つかりません: %s", channel_info["name"])
+            channel_data["upload_scan"] = {
+                "scanned_count": 0,
+                "complete": upload_scan_complete,
+                "latest_upload_at": None,
+                "oldest_upload_at": None,
+                "videos": [],
+            }
             channel_data["videos"] = []
             channel_data["avg_views"] = 0
             channel_data["avg_daily_views"] = 0
@@ -297,6 +306,15 @@ class BenchmarkCollector:
                 v["daily_views"] = compute_daily_views(v, self.today)
                 v["engagement_rate"] = compute_engagement_rate(v)
                 raw_videos.append(v)
+
+        upload_dates = [video["published_at"] for video in raw_videos]
+        channel_data["upload_scan"] = {
+            "scanned_count": len(raw_videos),
+            "complete": upload_scan_complete,
+            "latest_upload_at": max(upload_dates) if upload_dates else None,
+            "oldest_upload_at": min(upload_dates) if upload_dates else None,
+            "videos": [{"published_at": video["published_at"], "views": video["views"]} for video in raw_videos],
+        }
 
         # 視聴数フィルタ（min_views 以上のみベンチマーク対象）
         videos = [v for v in raw_videos if v["views"] >= min_views]

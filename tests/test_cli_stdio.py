@@ -64,6 +64,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-stream-archive-check": "youtube_automation.scripts.streaming_archive_check",
     "yt-stream-bandwidth": "youtube_automation.cli.stream_bandwidth",
     "yt-theme-compare": "youtube_automation.scripts.theme_compare",
+    "yt-ttp-health": "youtube_automation.scripts.ttp_health_cli",
     "yt-thumbnail-auto-select": "youtube_automation.scripts.auto_select_thumbnail",
     "yt-thumbnail-check": "youtube_automation.scripts.thumbnail_check",
     "yt-thumbnail-compare": "youtube_automation.scripts.compare_thumbnails",

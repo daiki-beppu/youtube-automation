@@ -86,6 +86,7 @@ yt-suno-verify-playlist = "youtube_automation.cli_entrypoints:yt_suno_verify_pla
 yt-stream-archive-check = "youtube_automation.cli_entrypoints:yt_stream_archive_check"
 yt-stream-bandwidth = "youtube_automation.cli_entrypoints:yt_stream_bandwidth"
 yt-theme-compare = "youtube_automation.cli_entrypoints:yt_theme_compare"
+yt-ttp-health = "youtube_automation.cli_entrypoints:yt_ttp_health"
 yt-thumbnail-auto-select = "youtube_automation.cli_entrypoints:yt_thumbnail_auto_select"
 yt-thumbnail-check = "youtube_automation.cli_entrypoints:yt_thumbnail_check"
 yt-thumbnail-compare = "youtube_automation.cli_entrypoints:yt_thumbnail_compare"
