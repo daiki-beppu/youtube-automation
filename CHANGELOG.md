@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(community-helper)`: Popup を shadcn/ui の Button・Alert・Card primitive と共通 theme token へ移行し、既存の server URL、互換性確認、3 投稿進捗、エラー表示の挙動を維持した（#2245）。
 - `docs(setup)`: `/setup` wizard の automation 導入後ループを `yt-doctor --apply --json` に統一し、`completed` / `human_required` / `decision_required` / `command_failed` の停止理由ごとに対話・再実行する手順へ更新した。変更前の明示承認と project・billing flag の累積保持を定め、automation 導入前の bootstrap、HUMAN STEP、トラブルシュートは維持した（#2226）。
 - `feat(doctor)`: `yt-doctor --apply` を追加し、`next_action.kind=ai-exec` の診断・実行・再診断を human／project・billing 決定待ち／完了まで連続化した。停止理由と実行履歴は JSON で返し、対話 OAuth は実行せず、失敗・無進捗時は check・command・stderr を保持して停止する（#2225）。
 - `feat(suno-helper)`: `FINISHED` と `ERROR` を区別する Web Audio 合成音を追加し、shadcn/ui の完了音 ON/OFF・3 preset・試聴 UI と永続設定を overlay に追加した。手動 `STOPPED` では鳴らさない（#2077）。
