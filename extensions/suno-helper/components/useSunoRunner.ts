@@ -32,6 +32,11 @@ import {
   type CollectionQueueState,
   writeCollectionQueue,
 } from "../lib/collection-queue-state";
+import { shouldNotifyCompletionSound } from "../lib/completion-sound";
+import type {
+  CompletionSoundPresetId,
+  CompletionSoundSettings,
+} from "../lib/completion-sound";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { scheduleRunCompleteReload } from "../lib/page-reload";
 import {
@@ -64,6 +69,7 @@ import {
   isExtensionReloadRequiredError,
   phaseToStatus,
 } from "./runner-errors";
+import { useCompletionSound } from "./useCompletionSound";
 
 interface RunnerState {
   reloadRequired: boolean;
@@ -85,6 +91,11 @@ interface RunnerState {
   compatibilityWarning: string;
   canRun: boolean;
   isRunning: boolean;
+  completionSoundSettings: CompletionSoundSettings;
+  completionSoundSettingsLoaded: boolean;
+  setCompletionSoundEnabled: (enabled: boolean) => void;
+  setCompletionSoundPreset: (preset: CompletionSoundPresetId) => void;
+  previewCompletionSound: () => Promise<void>;
   // collection 選択時の playlist 名 (#854)。display only。
   playlistName: string | undefined;
   runModeId: RunModeId;
@@ -603,6 +614,24 @@ export function useSunoRunner(): RunnerState {
     setReloadRequired(true);
   }, []);
 
+  const reportCompletionSoundPreviewFailure = useCallback(
+    (message: string): void => {
+      report(`完了音の試聴に失敗しました: ${message}`, true);
+    },
+    [report]
+  );
+  const {
+    completionSoundSettings,
+    completionSoundSettingsLoaded,
+    setCompletionSoundEnabled,
+    setCompletionSoundPreset,
+    previewCompletionSound,
+    notifyCompletionSoundPhase,
+  } = useCompletionSound({
+    onStorageError: reportStorageFailure,
+    onPreviewError: reportCompletionSoundPreviewFailure,
+  });
+
   // popup 起動時に前回の ERROR 停止 state を読む (#872 要件4)。表示可否は resumeBanner 側で判定する。
   // 基準 now は読み込み完了時に確定する（render 中の Date.now() を避けるため effect 内で取得）。
   useEffect(() => {
@@ -884,9 +913,12 @@ export function useSunoRunner(): RunnerState {
       if (isTerminalPhase(data.phase)) {
         setRunning(false);
       }
+      if (shouldNotifyCompletionSound(data.phase, collectionQueueRef.current)) {
+        notifyCompletionSoundPhase(data.phase);
+      }
     });
     return () => unwatch();
-  }, [entries, report, setRunning]);
+  }, [entries, notifyCompletionSoundPhase, report, setRunning]);
 
   // overlay mount / popup 再 open 時、runner content が保持する snapshot から進捗を即時復元する (#852)。
   // queryProgress は background 経由で同一タブの runner content へ中継される (#892)。runner 未注入なら
@@ -1665,6 +1697,11 @@ export function useSunoRunner(): RunnerState {
     compatibilityWarning,
     canRun: entries.length > 0 && !isRunning,
     isRunning,
+    completionSoundSettings,
+    completionSoundSettingsLoaded,
+    setCompletionSoundEnabled,
+    setCompletionSoundPreset,
+    previewCompletionSound,
     playlistName,
     runModeId,
     setRunMode,

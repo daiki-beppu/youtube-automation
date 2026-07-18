@@ -41,6 +41,12 @@ const downloadFormatMocks = vi.hoisted(() => ({
   setValue: vi.fn(async () => undefined),
 }));
 
+const completionSoundMocks = vi.hoisted(() => ({
+  getValue: vi.fn(async () => ({ enabled: true, preset: "chime" })),
+  setValue: vi.fn(async () => undefined),
+  play: vi.fn(async () => undefined),
+}));
+
 const serverSourcesMocks = vi.hoisted(() => ({
   migrateServerSourcesStorage: vi.fn(async () => undefined),
 }));
@@ -76,8 +82,17 @@ vi.mock("../lib/storage", () => ({
   serverUrlItem: storageMocks,
   downloadFormatItem: downloadFormatMocks,
   readDownloadFormat: vi.fn(() => downloadFormatMocks.getValue()),
+  completionSoundSettingsItem: completionSoundMocks,
+  readCompletionSoundSettings: vi.fn(() => completionSoundMocks.getValue()),
   migrateServerSourcesStorage: serverSourcesMocks.migrateServerSourcesStorage,
 }));
+
+vi.mock("../lib/completion-sound", async () => {
+  const actual = await vi.importActual<
+    typeof import("../lib/completion-sound")
+  >("../lib/completion-sound");
+  return { ...actual, playCompletionSound: completionSoundMocks.play };
+});
 
 vi.mock("../lib/messaging", () => messagingMocks);
 
@@ -330,6 +345,12 @@ describe("Suno popup compatibility check", () => {
     storageMocks.setValue.mockResolvedValue(undefined);
     downloadFormatMocks.getValue.mockResolvedValue("mp3");
     downloadFormatMocks.setValue.mockResolvedValue(undefined);
+    completionSoundMocks.getValue.mockResolvedValue({
+      enabled: true,
+      preset: "chime",
+    });
+    completionSoundMocks.setValue.mockResolvedValue(undefined);
+    completionSoundMocks.play.mockResolvedValue(undefined);
     presetStateMocks.readRunModeId.mockResolvedValue("serial");
     presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
     collectionQueueMocks.readCollectionQueue.mockResolvedValue(null);
@@ -395,6 +416,12 @@ describe("Suno popup compatibility check", () => {
     presetStateMocks.readRunModeId.mockResolvedValue("serial");
     presetStateMocks.writeRunModeId.mockResolvedValue(undefined);
     serverSourcesMocks.migrateServerSourcesStorage.mockResolvedValue(undefined);
+    completionSoundMocks.getValue.mockResolvedValue({
+      enabled: true,
+      preset: "chime",
+    });
+    completionSoundMocks.setValue.mockResolvedValue(undefined);
+    completionSoundMocks.play.mockResolvedValue(undefined);
   });
 
   it("ローカル配信元 option は URL を表示せず、URL value はデータ取得先として維持する", async () => {
@@ -493,6 +520,127 @@ describe("Suno popup compatibility check", () => {
     expect(status?.dataset.variant).toBe("default");
     expect(status?.getAttribute("aria-live")).toBe("polite");
     expect(status?.getAttribute("data-suno-status")).toBe("ok");
+  });
+
+  it("FINISHED/ERROR だけを区別して鳴らし、STOPPED と同一終端の重複通知は鳴らさない", async () => {
+    await act(async () => {
+      messagingMocks.progressHandler?.({
+        data: { phase: PHASE.FINISHED, total: 1 },
+      });
+      messagingMocks.progressHandler?.({
+        data: { phase: PHASE.FINISHED, total: 1 },
+      });
+    });
+    expect(completionSoundMocks.play).toHaveBeenCalledTimes(1);
+    expect(completionSoundMocks.play).toHaveBeenLastCalledWith(
+      "chime",
+      "success"
+    );
+
+    await act(async () => {
+      messagingMocks.progressHandler?.({
+        data: { phase: PHASE.INJECTING, index: 0, total: 1 },
+      });
+      messagingMocks.progressHandler?.({
+        data: { phase: PHASE.ERROR, index: 0, total: 1, message: "failed" },
+      });
+      messagingMocks.progressHandler?.({
+        data: { phase: PHASE.STOPPED, total: 1 },
+      });
+    });
+    expect(completionSoundMocks.play).toHaveBeenCalledTimes(2);
+    expect(completionSoundMocks.play).toHaveBeenLastCalledWith(
+      "chime",
+      "error"
+    );
+  });
+
+  it("設定読込前の終端通知を保留し、保存済み OFF なら鳴らさない", async () => {
+    const settings = deferred<{ enabled: boolean; preset: "bell" }>();
+    completionSoundMocks.getValue.mockReturnValueOnce(settings.promise);
+    await rerenderApp();
+    const enabled = expectControl(container, "completion-sound-enabled");
+    expect(enabled.getAttribute("data-disabled")).not.toBeNull();
+    await act(async () => enabled.click());
+    expect(completionSoundMocks.setValue).not.toHaveBeenCalled();
+
+    await act(async () => {
+      messagingMocks.progressHandler?.({
+        data: { phase: PHASE.FINISHED, total: 1 },
+      });
+    });
+    expect(completionSoundMocks.play).not.toHaveBeenCalled();
+
+    await act(async () => {
+      settings.resolve({ enabled: false, preset: "bell" });
+      await settings.promise;
+    });
+    expect(completionSoundMocks.play).not.toHaveBeenCalled();
+    expect(enabled.getAttribute("data-disabled")).toBeNull();
+  });
+
+  it("設定読込前の終端通知を保留し、初期 ON 設定の確定後に一度だけ鳴らす", async () => {
+    const settings = deferred<{ enabled: boolean; preset: "chime" }>();
+    completionSoundMocks.getValue.mockReturnValueOnce(settings.promise);
+    await rerenderApp();
+
+    await act(async () => {
+      messagingMocks.progressHandler?.({
+        data: { phase: PHASE.FINISHED, total: 1 },
+      });
+      messagingMocks.progressHandler?.({
+        data: { phase: PHASE.FINISHED, total: 1 },
+      });
+    });
+    expect(completionSoundMocks.play).not.toHaveBeenCalled();
+
+    await act(async () => {
+      settings.resolve({ enabled: true, preset: "chime" });
+      await settings.promise;
+    });
+    expect(completionSoundMocks.play).toHaveBeenCalledOnce();
+    expect(completionSoundMocks.play).toHaveBeenCalledWith("chime", "success");
+  });
+
+  it("shadcn 完了音 UI で OFF・preset 保存と試聴を行う", async () => {
+    const enabled = expectControl(container, "completion-sound-enabled");
+    expect(enabled.dataset.slot).toBe("checkbox");
+    await act(async () => enabled.click());
+    expect(completionSoundMocks.setValue).toHaveBeenCalledWith({
+      enabled: false,
+      preset: "chime",
+    });
+
+    const soft = container.querySelector<HTMLButtonElement>(
+      '[data-suno-control="completion-sound-preset"][data-suno-preset="soft"]'
+    )!;
+    expect(soft.dataset.slot).toBe("button");
+    await act(async () => soft.click());
+    expect(completionSoundMocks.setValue).toHaveBeenLastCalledWith({
+      enabled: false,
+      preset: "soft",
+    });
+
+    await act(async () => {
+      (
+        expectControl(
+          container,
+          "completion-sound-preview"
+        ) as HTMLButtonElement
+      ).click();
+    });
+    expect(completionSoundMocks.play).toHaveBeenCalledWith("soft", "success");
+
+    completionSoundMocks.play.mockClear();
+    await act(async () => {
+      messagingMocks.progressHandler?.({
+        data: { phase: PHASE.INJECTING, index: 0, total: 1 },
+      });
+      messagingMocks.progressHandler?.({
+        data: { phase: PHASE.FINISHED, total: 1 },
+      });
+    });
+    expect(completionSoundMocks.play).not.toHaveBeenCalled();
   });
 
   it("agent 操作用の root 状態属性と主要 control selector を実 DOM に公開する", async () => {

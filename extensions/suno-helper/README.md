@@ -41,6 +41,8 @@ browser use から overlay / popup を安定して観測できるよう、操作
 | `[data-suno-control="collection-select"]` | 旧 agent/E2E 用の非表示単一選択 compatibility seam |
 | `[data-suno-control="collection-queue-summary"]` | collection ごとの成功 / 失敗と再実行導線 |
 | `[data-suno-control="run"]` / `[data-suno-control="stop"]` | 主要操作ボタン |
+| `[data-suno-control="completion-sound-enabled"]` | 完了音 ON/OFF の shadcn Checkbox |
+| `[data-suno-control="completion-sound-preset"]` / `[data-suno-control="completion-sound-preview"]` | 合成音 preset の選択 / 試聴 |
 | `[data-suno-control="resume"]` / `[data-suno-control="dismiss-resume"]` | 前回中断 resume バナーの再開 / 閉じる |
 | `[data-suno-control="adopt-selected-clips"]` | Suno 上の選択中 clip を採用 |
 | `[data-suno-control="retry-playlist"]` / `[data-suno-control="retry-download"]` | playlist / download phase から再開 |
@@ -92,6 +94,8 @@ build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helpe
 5. 各パターンで Style/Lyrics を注入 → Generate 押下 → 生成完了検知 → 次へ、を自動で繰り返す。
 6. 全件完了後、対象 clip を一括選択 → playlist 追加 → More menu の **Download all** → format 選択 → ZIP ダウンロード完了監視 → `POST /collections/<id>/downloaded` で ZIP パス通知、まで実行する。サーバーは ZIP を展開し、`02-Individual-music/` と `workflow-state.json` を更新する。
 7. captcha challenge は waiting-captcha 表示で解消（多くは自動 verify）を待って続行する。entry 単位の一時的な失敗は Balanced 固定の上限で自動リトライし、上限超過分はスキップして完走する（#948）。スキップされた entry は一覧表示され、**失敗分のみ再実行** で再投入できる。
+
+完了音は初期状態で ON。`FINISHED` は選択した preset の上昇音、`ERROR` は区別できる下降音を鳴らし、手動 `STOPPED` では鳴らさない。**チャイム / ベル / ソフト**から選んで **試聴**でき、設定はページ再読み込み後も維持される。音源ファイルや追加 permission は使わない。Suno タブを閉じている場合やブラウザの autoplay policy が Web Audio を拒否した場合は鳴らない。
 
 複数 collection queue は各 collection の `/downloaded` 完了または失敗結果を extension storage へ保存してから Suno タブを再読み込みする。この境界処理が clip tracker と Suno 内部 multi-select を collection 間で破棄し、次の collection は保存済み index から自動開始する。タブ再読み込みや Stop で中断した queue は同じ current collection から再開でき、全件終了後は summary の **失敗したコレクションだけ再実行** を使う。
 
