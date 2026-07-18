@@ -1883,6 +1883,8 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
         "enabled": True,
         "audio_visualizer": {
             "enabled": True,
+            "style": "ring-line",
+            "bars": 24,
             "mode": "bar",
             "size": "1920x240",
             "rate": "30",
@@ -1895,6 +1897,7 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
             "glow_enabled": True,
             "glow_sigma": 14.0,
             "glow_opacity": 0.5,
+            "ring": {"inner_r": 90, "length": 70, "arc_deg": [30, 330]},
         },
         "subscribe_popup": {
             "enabled": True,
@@ -1925,6 +1928,8 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
     assert ov.enabled is True
 
     assert ov.audio_visualizer.enabled is True
+    assert ov.audio_visualizer.style == "ring-line"
+    assert ov.audio_visualizer.bars == 24
     assert ov.audio_visualizer.size == "1920x240"
     assert ov.audio_visualizer.rate == "30"
     assert ov.audio_visualizer.win_size == 4096
@@ -1932,6 +1937,9 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
     assert ov.audio_visualizer.position == "(W-w)/2:H-h-80"
     assert ov.audio_visualizer.glow_sigma == 14.0
     assert ov.audio_visualizer.glow_opacity == 0.5
+    assert ov.audio_visualizer.ring.inner_r == 90
+    assert ov.audio_visualizer.ring.length == 70
+    assert ov.audio_visualizer.ring.arc_deg == (30.0, 330.0)
 
     assert ov.subscribe_popup.enabled is True
     assert ov.subscribe_popup.image == "popup.png"
@@ -1981,4 +1989,35 @@ def test_overlays_audio_visualizer_non_object_raises(tmp_path, monkeypatch):
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
     with pytest.raises(ConfigError, match="overlays.audio_visualizer"):
+        load_config()
+
+
+def test_overlays_audio_visualizer_invalid_style_raises(tmp_path, monkeypatch):
+    """#1684: style は公開済み 4 preset 以外を fail-loud に拒否する."""
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {"audio_visualizer": {"style": "heart"}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="bar, mirror-mountain, ring, ring-line"):
+        load_config()
+
+
+@pytest.mark.parametrize(
+    "ring",
+    [
+        {"inner_r": -1},
+        {"length": 0},
+        {"arc_deg": [330, 30]},
+        {"arc_deg": [0]},
+    ],
+)
+def test_overlays_audio_visualizer_invalid_ring_raises(tmp_path, monkeypatch, ring):
+    """#1684: ring geometry の不正値は loader 境界で拒否する."""
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {"audio_visualizer": {"style": "ring", "ring": ring}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="overlays.audio_visualizer.ring"):
         load_config()

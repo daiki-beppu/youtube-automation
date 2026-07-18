@@ -39,6 +39,7 @@ from youtube_automation.utils.config.workflow import ApprovalGates, WfNext, Work
 from youtube_automation.utils.config.youtube import (
     ContentModel,
     OverlayAudioVisualizer,
+    OverlayAudioVisualizerRing,
     OverlayEncoder,
     Overlays,
     OverlaySubscribePopup,
@@ -312,8 +313,42 @@ def _build_overlays(raw: object) -> Overlays:
     av_raw = raw.get("audio_visualizer") or {}
     if not isinstance(av_raw, dict):
         raise ConfigError(f"overlays.audio_visualizer は object でなければなりません（got {type(av_raw).__name__}）")
+    av_style = str(av_raw.get("style", "bar"))
+    valid_av_styles = ("bar", "mirror-mountain", "ring", "ring-line")
+    if av_style not in valid_av_styles:
+        raise ConfigError(
+            f"overlays.audio_visualizer.style='{av_style}' は不正です（有効値: {', '.join(valid_av_styles)}）"
+        )
+    try:
+        av_bars = int(av_raw.get("bars", 16))
+    except (TypeError, ValueError) as exc:
+        raise ConfigError("overlays.audio_visualizer.bars は整数でなければなりません") from exc
+    if av_bars <= 0:
+        raise ConfigError("overlays.audio_visualizer.bars は 1 以上でなければなりません")
+    av_ring_raw = av_raw.get("ring") or {}
+    if not isinstance(av_ring_raw, dict):
+        raise ConfigError(
+            f"overlays.audio_visualizer.ring は object でなければなりません（got {type(av_ring_raw).__name__}）"
+        )
+    av_arc_raw = av_ring_raw.get("arc_deg", [0, 360])
+    if not isinstance(av_arc_raw, (list, tuple)) or len(av_arc_raw) != 2:
+        raise ConfigError("overlays.audio_visualizer.ring.arc_deg は [start, end] の 2 要素配列でなければなりません")
+    try:
+        av_ring = OverlayAudioVisualizerRing(
+            inner_r=int(av_ring_raw.get("inner_r", 120)),
+            length=int(av_ring_raw.get("length", 160)),
+            arc_deg=(float(av_arc_raw[0]), float(av_arc_raw[1])),
+        )
+    except (TypeError, ValueError) as exc:
+        raise ConfigError("overlays.audio_visualizer.ring の値は数値でなければなりません") from exc
+    if av_ring.inner_r < 0 or av_ring.length <= 0:
+        raise ConfigError("overlays.audio_visualizer.ring の inner_r は 0 以上、length は 1 以上でなければなりません")
+    if not 0 <= av_ring.arc_deg[0] < av_ring.arc_deg[1] <= 360:
+        raise ConfigError("overlays.audio_visualizer.ring.arc_deg は 0 <= start < end <= 360 でなければなりません")
     audio_visualizer = OverlayAudioVisualizer(
         enabled=bool(av_raw.get("enabled", False)),
+        style=av_style,
+        bars=av_bars,
         mode=str(av_raw.get("mode", "bar")),
         size=str(av_raw.get("size", "1280x180")),
         rate=str(av_raw.get("rate", "24")),
@@ -326,6 +361,7 @@ def _build_overlays(raw: object) -> Overlays:
         glow_enabled=bool(av_raw.get("glow_enabled", True)),
         glow_sigma=float(av_raw.get("glow_sigma", 12.0)),
         glow_opacity=float(av_raw.get("glow_opacity", 0.45)),
+        ring=av_ring,
     )
 
     sp_raw = raw.get("subscribe_popup") or {}

@@ -17,6 +17,8 @@
     "enabled": false,
     "audio_visualizer": {
       "enabled": true,
+      "style": "bar",
+      "bars": 16,
       "mode": "bar",
       "size": "1280x180",
       "rate": "24",
@@ -26,7 +28,12 @@
       "opacity": 0.85,
       "glow_enabled": true,
       "glow_sigma": 12.0,
-      "glow_opacity": 0.45
+      "glow_opacity": 0.45,
+      "ring": {
+        "inner_r": 120,
+        "length": 160,
+        "arc_deg": [30, 330]
+      }
     },
     "subscribe_popup": {
       "enabled": true,

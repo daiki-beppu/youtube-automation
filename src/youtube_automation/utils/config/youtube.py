@@ -37,12 +37,21 @@ class ContentModel:
 
 
 @dataclass(frozen=True)
+class OverlayAudioVisualizerRing:
+    """円形 visualizer 固有の幾何設定（optional, #1684）."""
+
+    inner_r: int = 120
+    length: int = 160
+    arc_deg: tuple[float, float] = (0.0, 360.0)
+
+
+@dataclass(frozen=True)
 class OverlayAudioVisualizer:
     """`overlays.audio_visualizer` セクション（optional, #511）.
 
-    `generate_videos.sh` の `filter_complex` 経路で `showfreqs=mode=bar` ベースの
-    オーディオビジュアライザを背景の上に合成する設定。`enabled: false` または
-    overlays 自体が無効化されているときは無視される。
+    `style` は既存互換の `bar` を既定とし、`mirror-mountain` / `ring` /
+    `ring-line` を選択できる。`enabled: false` または overlays 自体が
+    無効化されているときは無視される。
 
     フィールドはすべて FFmpeg フィルタの引数にそのまま流し込めるよう文字列で保持する。
     `position` は `overlay` フィルタの `x:y` 式（例 `(W-w)/2:H-h-40`）。
@@ -50,6 +59,8 @@ class OverlayAudioVisualizer:
     """
 
     enabled: bool = False
+    style: str = "bar"
+    bars: int = 16
     mode: str = "bar"
     size: str = "1280x180"
     rate: str = "24"
@@ -62,6 +73,7 @@ class OverlayAudioVisualizer:
     glow_enabled: bool = True
     glow_sigma: float = 12.0
     glow_opacity: float = 0.45
+    ring: OverlayAudioVisualizerRing = field(default_factory=OverlayAudioVisualizerRing)
 
 
 @dataclass(frozen=True)

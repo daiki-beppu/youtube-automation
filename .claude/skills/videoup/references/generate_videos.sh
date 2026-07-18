@@ -21,6 +21,7 @@
 #        - shrink.enabled で生成後の容量最適化 re-encode を opt-in 追加
 # v14.1: workflow-state.json::assets.master_audio があれば固定名探索より優先 (#1449)
 # v14.2: effect=none の静止画も 1 GOP 分だけベイクして stream copy で全尺化 (#1681)
+# v15:   audio_visualizer style presets + runtime-generated masks (#1684)
 #
 # Usage:
 #   bash .claude/skills/videoup/references/generate_videos.sh <collection-path>
@@ -604,7 +605,14 @@ echo "  Duration : $(format_duration "$video_duration")"
 echo ""
 start=$SECONDS
 PROGRESS_FILE="$(mktemp)"
-trap 'rm -f "$PROGRESS_FILE"' EXIT
+AV_MASK_DIR=""
+cleanup_runtime_files() {
+    rm -f "$PROGRESS_FILE"
+    if [[ -n "$AV_MASK_DIR" && -d "$AV_MASK_DIR" ]]; then
+        rm -rf "$AV_MASK_DIR"
+    fi
+}
+trap cleanup_runtime_files EXIT
 
 # ─── Step 表示 (Issue #641) ──────────────────────────────
 # Veo / ffmpeg 双方で「生成中 → 保存 → 後処理」のステップ感を共通化する。
@@ -624,6 +632,8 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     av_enabled="$(ov_get '.overlays.audio_visualizer.enabled' 'false')"
     sp_enabled="$(ov_get '.overlays.subscribe_popup.enabled' 'false')"
 
+    av_style="$(ov_get '.overlays.audio_visualizer.style' 'bar')"
+    av_bars="$(ov_get '.overlays.audio_visualizer.bars' '16')"
     av_mode="$(ov_get '.overlays.audio_visualizer.mode' 'bar')"
     av_size="$(ov_get '.overlays.audio_visualizer.size' '1280x180')"
     av_rate="$(ov_get '.overlays.audio_visualizer.rate' '24')"
@@ -636,6 +646,44 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     av_glow_enabled="$(ov_get '.overlays.audio_visualizer.glow_enabled' 'true')"
     av_glow_sigma="$(ov_get '.overlays.audio_visualizer.glow_sigma' '12')"
     av_glow_opacity="$(ov_get '.overlays.audio_visualizer.glow_opacity' '0.45')"
+    av_ring_inner_r="$(ov_get '.overlays.audio_visualizer.ring.inner_r' '120')"
+    av_ring_length="$(ov_get '.overlays.audio_visualizer.ring.length' '160')"
+    av_ring_arc_start="$(ov_get '.overlays.audio_visualizer.ring.arc_deg[0]' '0')"
+    av_ring_arc_end="$(ov_get '.overlays.audio_visualizer.ring.arc_deg[1]' '360')"
+
+    if [[ "$av_enabled" == "true" ]]; then
+        case "$av_style" in
+            bar|mirror-mountain|ring|ring-line) ;;
+            *)
+                echo "ERROR: overlays.audio_visualizer.style='${av_style}' is invalid (allowed: bar, mirror-mountain, ring, ring-line)"
+                exit 1
+                ;;
+        esac
+        if [[ ! "$av_bars" =~ ^[1-9][0-9]*$ ]]; then
+            echo "ERROR: overlays.audio_visualizer.bars must be a positive integer (got: ${av_bars})"
+            exit 1
+        fi
+        if [[ ! "$av_size" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]]; then
+            echo "ERROR: overlays.audio_visualizer.size must be WIDTHxHEIGHT (got: ${av_size})"
+            exit 1
+        fi
+        if [[ "$av_style" != "bar" ]]; then
+            AV_MASK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/yt-audio-visualizer-mask.XXXXXX")"
+            AV_MASK_PATH="${AV_MASK_DIR}/mask.png"
+            if ! python3 -m youtube_automation.utils.audio_visualizer_mask \
+                --output "$AV_MASK_PATH" \
+                --style "$av_style" \
+                --size "$av_size" \
+                --bars "$av_bars" \
+                --inner-r "$av_ring_inner_r" \
+                --length "$av_ring_length" \
+                --arc-start "$av_ring_arc_start" \
+                --arc-end "$av_ring_arc_end"; then
+                echo "ERROR: failed to generate runtime audio visualizer mask for style '${av_style}'"
+                exit 1
+            fi
+        fi
+    fi
 
     sp_image="$(ov_get '.overlays.subscribe_popup.image' 'subscribe-popup.png')"
     sp_start="$(ov_get '.overlays.subscribe_popup.start_sec' '5')"
@@ -652,7 +700,7 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     enc_profile="$(ov_get '.overlays.encoder.profile' 'high')"
     enc_framerate="$(ov_get '.overlays.encoder.framerate' '24')"
 
-    # 入力配列: [0]=背景 (loop or textless main image), [1]=master audio, [2]=popup PNG (任意)
+    # 入力配列: [0]=背景, [1]=master audio, [2+]=runtime mask / popup PNG (任意)
     INPUTS=()
     if [[ -n "$LOOP_VIDEO" ]]; then
         INPUTS+=(-stream_loop -1 -i "$LOOP_VIDEO")
@@ -660,6 +708,14 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
         INPUTS+=(-framerate "$enc_framerate" -loop 1 -i "$VIDEO_BACKGROUND")
     fi
     INPUTS+=("${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO")
+
+    next_input_idx=2
+    av_mask_input_idx=""
+    if [[ "$av_enabled" == "true" && "$av_style" != "bar" ]]; then
+        INPUTS+=(-loop 1 -i "$AV_MASK_PATH")
+        av_mask_input_idx="$next_input_idx"
+        next_input_idx=$((next_input_idx + 1))
+    fi
 
     sp_input_idx=""
     if [[ "$sp_enabled" == "true" ]]; then
@@ -676,7 +732,8 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
             sp_enabled="false"
         else
             INPUTS+=(-loop 1 -i "$sp_path")
-            sp_input_idx=2
+            sp_input_idx="$next_input_idx"
+            next_input_idx=$((next_input_idx + 1))
         fi
     fi
 
@@ -686,9 +743,38 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     CURRENT_LABEL="bg"
 
     if [[ "$av_enabled" == "true" ]]; then
-        # showfreqs ベースの bar visualizer (透過 RGBA) を生成
+        # bar は v13 の filtergraph をそのまま維持し、style 未指定時の視覚差分を防ぐ。
         FILTER+="[1:a]asplit=2[avis_in][a_out];"
-        FILTER+="[avis_in]showfreqs=mode=${av_mode}:s=${av_size}:rate=${av_rate}:fscale=${av_fscale}:win_size=${av_win_size}:win_func=${av_win_func}:colors=${av_colors},format=rgba,colorchannelmixer=aa=${av_opacity}[avis];"
+        case "$av_style" in
+            bar)
+                FILTER+="[avis_in]showfreqs=mode=${av_mode}:s=${av_size}:rate=${av_rate}:fscale=${av_fscale}:win_size=${av_win_size}:win_func=${av_win_func}:colors=${av_colors},format=rgba,colorchannelmixer=aa=${av_opacity}[avis];"
+                ;;
+            mirror-mountain)
+                av_width="${av_size%x*}"
+                av_height="${av_size#*x}"
+                av_half_width=$((av_width / 2))
+                av_half_height=$((av_height / 2))
+                FILTER+="[avis_in]showfreqs=mode=bar:s=${av_half_width}x${av_half_height}:rate=${av_rate}:fscale=${av_fscale}:win_size=${av_win_size}:win_func=${av_win_func}:colors=${av_colors},format=rgba[avis_quarter];"
+                FILTER+="[avis_quarter]split=2[avis_q_left][avis_q_right];[avis_q_left]hflip[avis_left];[avis_left][avis_q_right]hstack=inputs=2[avis_top];"
+                FILTER+="[avis_top]split=2[avis_top_core][avis_bottom_src];[avis_bottom_src]vflip[avis_bottom];[avis_top_core][avis_bottom]vstack=inputs=2[avis_shape];"
+                FILTER+="[${av_mask_input_idx}:v]format=gray[avis_mask];[avis_shape][avis_mask]alphamerge,colorkey=black:0.1:0,colorchannelmixer=aa=${av_opacity}[avis];"
+                ;;
+            ring|ring-line)
+                av_width="${av_size%x*}"
+                av_height="${av_size#*x}"
+                av_ring_diameter=$((2 * (av_ring_inner_r + av_ring_length)))
+                if [[ "$av_style" == "ring-line" ]]; then
+                    av_ring_mode="line"
+                else
+                    av_ring_mode="bar"
+                fi
+                av_ring_x="mod(atan2(Y-H/2,X-W/2)*W/(2*PI)+W,W-1)"
+                av_ring_y="clip(H-(hypot(X-W/2,Y-H/2)-${av_ring_inner_r})*H/${av_ring_length},0,H-1)"
+                FILTER+="[avis_in]showfreqs=mode=${av_ring_mode}:s=${av_width}x${av_height}:rate=${av_rate}:fscale=${av_fscale}:win_size=${av_win_size}:win_func=${av_win_func}:colors=${av_colors},scale=${av_bars}:${av_height}:flags=neighbor,scale=${av_ring_diameter}:${av_ring_diameter}:flags=neighbor,format=rgba[avis_rect];"
+                FILTER+="[avis_rect]geq=r='r(${av_ring_x},${av_ring_y})':g='g(${av_ring_x},${av_ring_y})':b='b(${av_ring_x},${av_ring_y})':a=255[avis_shape];"
+                FILTER+="[${av_mask_input_idx}:v]format=gray[avis_mask];[avis_shape][avis_mask]alphamerge,colorkey=black:0.1:0,colorchannelmixer=aa=${av_opacity}[avis];"
+                ;;
+        esac
         if [[ "$av_glow_enabled" == "true" ]]; then
             FILTER+="[avis]split=2[avis_core][avis_glow_src];"
             FILTER+="[avis_glow_src]gblur=sigma=${av_glow_sigma},colorchannelmixer=aa=${av_glow_opacity}[avis_glow];"
