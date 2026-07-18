@@ -1,3 +1,10 @@
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+} from "@youtube-automation/ui";
 import { useEffect, useState } from "react";
 import { browser } from "wxt/browser";
 
@@ -87,28 +94,30 @@ export function App() {
           value={serverUrl}
         />
       </label>
-      <button
-        className="w-full rounded bg-red-600 px-3 py-2 font-medium text-white disabled:opacity-50"
+      <Button
+        className="w-full"
         disabled={busy}
         onClick={() => void start()}
         type="button"
       >
         {busy ? "Checking…" : "Start"}
-      </button>
+      </Button>
       {error ? (
-        <p className="text-sm text-red-700" role="alert">
-          {error}
-        </p>
+        <Alert role="alert" variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
       <ol className="space-y-2" aria-label="投稿進捗">
         {progress.map((item) => (
-          <li
-            className="rounded border p-2 text-sm"
-            data-testid="progress-row"
-            key={item.index}
-          >
-            <span className="font-medium">投稿 {item.index + 1}</span>
-            <span className="ml-2 text-neutral-600">{item.message}</span>
+          <li data-testid="progress-row" key={item.index}>
+            <Card>
+              <CardContent className="p-2 text-sm">
+                <span className="font-medium">投稿 {item.index + 1}</span>
+                <span className="text-muted-foreground ml-2">
+                  {item.message}
+                </span>
+              </CardContent>
+            </Card>
           </li>
         ))}
       </ol>

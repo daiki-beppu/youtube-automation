@@ -37,10 +37,13 @@ describe("community-helper popup scaffold", () => {
 
   it("renders server URL, Start and exactly three progress rows", () => {
     expect(container.querySelector('input[name="serverUrl"]')).not.toBeNull();
-    expect(container.querySelector("button")?.textContent).toBe("Start");
+    expect(container.querySelector('[data-slot="button"]')?.textContent).toBe(
+      "Start"
+    );
     expect(
       container.querySelectorAll('[data-testid="progress-row"]')
     ).toHaveLength(3);
+    expect(container.querySelectorAll('[data-slot="card"]')).toHaveLength(3);
   });
 
   it("checks /version before relaying run", async () => {
@@ -81,6 +84,9 @@ describe("community-helper popup scaffold", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
       "Failed to fetch"
     );
+    expect(
+      container.querySelector('[role="alert"]')?.getAttribute("data-variant")
+    ).toBe("destructive");
     expect(sendMessage).not.toHaveBeenCalledWith("run", expect.anything());
   });
 

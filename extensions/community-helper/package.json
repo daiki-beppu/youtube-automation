@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@webext-core/messaging": "2.3.0",
+    "@youtube-automation/ui": "workspace:*",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },

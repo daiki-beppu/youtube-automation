@@ -35,6 +35,12 @@ jobs:
       - uses: cachix/install-nix-action@v30
       - name: Install dependencies
         run: nix develop .#extensions --command pnpm install --frozen-lockfile
+      - name: Install DistroKid helper dependencies for cross-extension audit
+        working-directory: extensions/distrokid-helper
+        run: nix develop .#extensions --command pnpm install --frozen-lockfile
+      - name: Install community helper dependencies for cross-extension audit
+        working-directory: extensions/community-helper
+        run: nix develop .#extensions --command pnpm install --frozen-lockfile
       - name: Install shared lint toolchain
         working-directory: extensions
         run: nix develop .#extensions --command pnpm install --frozen-lockfile

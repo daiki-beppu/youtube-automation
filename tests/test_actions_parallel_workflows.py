@@ -48,7 +48,7 @@ _EXTENSIONS_JOB_CONTRACTS = {
     "check": {
         "working_directory": "extensions/suno-helper",
         "e2e_step": "E2E tests (Playwright)",
-        "check_script": "cd .. && ultracite check suno-helper shared",
+        "check_script": "cd .. && ultracite check suno-helper shared shared-ui",
     },
     "distrokid-helper": {
         "working_directory": "extensions/distrokid-helper",

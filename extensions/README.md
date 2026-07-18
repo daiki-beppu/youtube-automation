@@ -6,6 +6,8 @@
 
 ```
 extensions/
+  shared-ui/              # 3拡張共通の shadcn/ui workspace package
+    src/                  # Button / Card / Alert / Select / cn / theme CSS
   shared/                 # 複数拡張で再利用する共通コード（relative import）
     constants.ts          # storage key / 配信ルート / phase 値（サーバー契約 SSOT。メッセージ種別は各拡張の lib/messaging.ts）
     origin.ts             # CORS origin allowlist（collection_serve.py と対の契約）
@@ -25,7 +27,17 @@ extensions/
     tests/                # Vitest runner contract / DOM / Popup unit tests
 ```
 
-`shared/` は各拡張から相対 import（例: `../../shared/dom`）で参照する。各拡張は自己完結した `package.json` を持ち、`extensions/<name>/` 単体で install / build / zip を実行できる。
+`shared/` は各拡張から相対 import（例: `../../shared/dom`）で参照する。UI は `shared-ui/` の workspace package `@youtube-automation/ui` から import し、Button / Card / Alert / Select、`cn()`、theme CSS の実装を単一ソースに保つ。各 helper の `pnpm-workspace.yaml` は `../shared-ui` を workspace member として明示するため、従来どおり `extensions/<name>/` 単体で frozen install / build / zip を実行できる。
+
+shared UI 自体の型検査は次で行う:
+
+```bash
+nix develop .#extensions --command pnpm -C extensions/shared-ui install --frozen-lockfile
+nix develop .#extensions --command pnpm -C extensions/shared-ui compile
+nix develop .#extensions --command pnpm -C extensions/shared-ui check
+```
+
+各 helper は独立した frozen lockfile と workspace root を維持する。このため、WXT の既知 advisory を解消する `pnpm-workspace.yaml::overrides` は 3 workspace に同じ値を明示する。pin を更新するときは 3 ファイルと 3 lockfile を同時に更新し、各 workspace の `pnpm audit --audit-level low` と release 前検証をすべて実行する。
 
 ## pnpm バージョン契約
 

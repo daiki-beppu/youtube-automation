@@ -1,4 +1,5 @@
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@youtube-automation/ui";
+
 import type { Phase } from "@/lib/messaging";
 import { PHASES } from "@/lib/messaging";
 

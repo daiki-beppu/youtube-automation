@@ -1,11 +1,18 @@
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  ButtonSlot,
+  buttonVariants,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  cn,
+} from "@youtube-automation/ui";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button, ButtonSlot, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 
 const variantMarkers = {
   default: ["bg-primary", "text-primary-foreground"],
@@ -97,6 +104,7 @@ describe("shadcn/ui foundation", () => {
 
     expect(html).toContain('data-slot="alert"');
     expect(html).toContain('data-variant="destructive"');
+    expect(html).toContain('data-appearance="subtle"');
     expect(html).toContain('role="alert"');
     expect(html).toContain('aria-label="失敗"');
     expect(html).toContain("text-destructive");
@@ -123,6 +131,7 @@ describe("shadcn/ui foundation", () => {
     expect(html).toContain('id="release-review"');
     expect(html).toContain("gap-2");
     expect(html).toContain('data-slot="card-header"');
+    expect(html).toContain('data-layout="grid"');
     expect(html).toContain('data-slot="card-title"');
     expect(html).toContain('data-slot="card-content"');
     expect(html).toContain("アルバム");

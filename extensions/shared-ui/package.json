@@ -1,0 +1,33 @@
+{
+  "name": "@youtube-automation/ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "3 Chrome extension が共有する shadcn/ui primitives と theme contract",
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./theme.css": "./src/theme.css"
+  },
+  "scripts": {
+    "compile": "tsc --noEmit",
+    "check": "pnpm --dir .. exec ultracite check shared-ui",
+    "fix": "pnpm --dir .. exec ultracite fix shared-ui"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "1.2.4",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "tailwind-merge": "3.5.0",
+    "tailwindcss": "4.2.2"
+  },
+  "devDependencies": {
+    "@types/react": "19.0.2",
+    "react": "19.2.7",
+    "typescript": "7.0.2"
+  },
+  "peerDependencies": {
+    "react": "^19.2.7"
+  },
+  "packageManager": "pnpm@11.12.0"
+}

@@ -5,17 +5,17 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "entrypoints/popup/style.css",
+    "css": "src/theme.css",
     "baseColor": "neutral",
     "cssVariables": true,
     "prefix": ""
   },
   "iconLibrary": "lucide",
   "aliases": {
-    "components": "@/components",
-    "ui": "@youtube-automation/ui",
-    "lib": "@/lib",
-    "utils": "@youtube-automation/ui",
-    "hooks": "@/hooks"
+    "components": "@/src",
+    "ui": "@/src",
+    "lib": "@/src",
+    "utils": "@/src/utils",
+    "hooks": "@/src/hooks"
   }
 }

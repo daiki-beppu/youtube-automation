@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import "@youtube-automation/ui/theme.css";
 
 body {
   width: 360px;

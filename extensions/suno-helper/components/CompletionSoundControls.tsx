@@ -1,9 +1,10 @@
+import { Button } from "@youtube-automation/ui";
+
 import {
   COMPLETION_SOUND_PRESETS,
   type CompletionSoundPresetId,
   type CompletionSoundSettings,
 } from "../lib/completion-sound";
-import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 
 const PRESET_IDS = Object.keys(

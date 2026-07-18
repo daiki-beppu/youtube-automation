@@ -1,4 +1,10 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@youtube-automation/ui";
+
 import type { ReleasePayload } from "@/lib/types";
 
 export interface ReleaseReviewProps {

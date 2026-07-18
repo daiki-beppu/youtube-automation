@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { cn } from "@/lib/utils";
+import { cn } from "./utils";
 
 function Card({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -15,11 +15,19 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
+function CardHeader({
+  className,
+  layout = "grid",
+  ...props
+}: React.ComponentProps<"div"> & { layout?: "grid" | "stack" }) {
   return (
     <div
       data-slot="card-header"
-      className={cn("grid gap-2 px-6", className)}
+      data-layout={layout}
+      className={cn(
+        layout === "stack" ? "flex flex-col gap-1.5 px-6" : "grid gap-2 px-6",
+        className
+      )}
       {...props}
     />
   );

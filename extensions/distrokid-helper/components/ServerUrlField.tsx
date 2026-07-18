@@ -1,6 +1,5 @@
+import { Button } from "@youtube-automation/ui";
 import { useEffect, useRef, useState } from "react";
-
-import { Button } from "@/components/ui/button";
 
 import {
   formatServerSourceLabel,
