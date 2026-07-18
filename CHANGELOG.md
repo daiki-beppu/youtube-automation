@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(doctor)`: `yt-doctor --apply` を追加し、`next_action.kind=ai-exec` の診断・実行・再診断を human／project・billing 決定待ち／完了まで連続化した。停止理由と実行履歴は JSON で返し、対話 OAuth は実行せず、失敗・無進捗時は check・command・stderr を保持して停止する（#2225）。
 - `feat(suno-helper)`: `FINISHED` と `ERROR` を区別する Web Audio 合成音を追加し、shadcn/ui の完了音 ON/OFF・3 preset・試聴 UI と永続設定を overlay に追加した。手動 `STOPPED` では鳴らさない（#2077）。
 - `feat(suno-helper)`: collection 選択を shadcn ベースの checkbox 一覧へ拡張し、選択順ではなく server 一覧順で生成・playlist 追加・ZIP download を直列実行する永続 queue を追加した。collection 間はページ reload で clip tracker / multi-select を分離し、部分失敗後も後続を継続して成功・失敗 summary と失敗分再実行を提供する（#2029）。
 - `feat(thumbnail)`: 単発 `codex-image.sh` を変更せず、config/CLI で同時起動数を制御し、preflight を 1 回だけ行って複数候補を並列生成する `codex-image-batch.sh` を追加した。部分失敗時も残りを完走して失敗一覧を返す（#2028）。

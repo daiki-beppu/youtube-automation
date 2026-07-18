@@ -595,8 +595,8 @@ class TestOAuthToken:
     def test_missing(self, tmp_path):
         r = doctor.check_oauth_token(tmp_path)
         assert r.status == "fail"
-        assert r.next_action["kind"] == "ai-exec"
-        assert "uv run yt-channel-status" in r.next_action["cmd"]
+        assert r.next_action["kind"] == "human"
+        assert "uv run yt-channel-status" in r.next_action["instructions"]
         _assert_no_bare_yt_channel_status(r.next_action)
 
     def test_valid(self, tmp_path):
@@ -1672,9 +1672,14 @@ class TestBootstrapChecks:
         automation_package = doctor.check_automation_package(tmp_path)
 
         assert uv_project.status == "fail"
-        assert uv_project.next_action == {"kind": "ai-exec", "cmd": "uv init"}
+        assert uv_project.next_action == {
+            "kind": "ai-exec",
+            "cmd": "uv init",
+            "argv": ["uv", "init"],
+            "auto_apply": False,
+        }
         assert automation_package.status == "fail"
-        assert automation_package.next_action == {"kind": "ai-exec", "cmd": "uv init"}
+        assert automation_package.next_action == uv_project.next_action
 
     def test_automation_package_git_dependency_is_ok(self, tmp_path):
         (tmp_path / "pyproject.toml").write_text(
@@ -3928,13 +3933,13 @@ class TestCheckUploadReady:
         assert r.id == "upload_ready"
         assert r.category == "upload"
 
-    def test_token_missing_is_fail_with_ai_exec(self, tmp_path):
-        """token.json が存在しない: fail + ai-exec (最優先事由)."""
+    def test_token_missing_is_fail_with_human_oauth_step(self, tmp_path):
+        """token.json が存在しない: fail + human OAuth (最優先事由)."""
         r = doctor.check_upload_ready(tmp_path)
         assert r.status == "fail"
         assert r.next_action is not None
-        assert r.next_action["kind"] == "ai-exec"
-        assert "uv run yt-channel-status" in r.next_action["cmd"]
+        assert r.next_action["kind"] == "human"
+        assert "uv run yt-channel-status" in r.next_action["instructions"]
         _assert_no_bare_yt_channel_status(r.next_action)
 
     def test_token_parse_error_is_fail(self, tmp_path):
