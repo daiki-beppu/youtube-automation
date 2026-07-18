@@ -315,12 +315,24 @@ def test_fallow_audit_fails_for_a_new_error_finding_in_a_git_diff(tmp_path: Path
     }
     (helper_root / "package.json").write_text(json.dumps(audit_package_json), encoding="utf-8")
     shutil.copy2(_REPO_ROOT / "extensions" / ".fallowrc.json", extensions_root / ".fallowrc.json")
+    # .fallowrc.json の audit.dupesBaseline が参照する baseline も同梱する（#2154）。
+    shutil.copy2(
+        _REPO_ROOT / "extensions" / ".fallow-dupes-baseline.json",
+        extensions_root / ".fallow-dupes-baseline.json",
+    )
     (extensions_root / "src").mkdir()
     (extensions_root / "src" / "existing.ts").write_text("export const existing = 1;\n", encoding="utf-8")
 
     subprocess.run(["git", "init", "--quiet"], cwd=tmp_path, check=True)
     subprocess.run(
-        ["git", "add", "extensions/.fallowrc.json", "extensions/suno-helper/package.json", "extensions/src"],
+        [
+            "git",
+            "add",
+            "extensions/.fallowrc.json",
+            "extensions/.fallow-dupes-baseline.json",
+            "extensions/suno-helper/package.json",
+            "extensions/src",
+        ],
         cwd=tmp_path,
         check=True,
     )
