@@ -154,6 +154,7 @@ case "$expr" in
     *".overlays.audio_visualizer.style"*) printf '%s\\n' "${OVERLAY_AV_STYLE:-}" ;;
     *".overlays.audio_visualizer.bars"*) printf '%s\\n' "${OVERLAY_AV_BARS:-}" ;;
     *".overlays.audio_visualizer.size"*) printf '%s\\n' "${OVERLAY_AV_SIZE:-}" ;;
+    *".overlays.audio_visualizer.colors"*) printf '%s\\n' "${OVERLAY_AV_COLORS:-}" ;;
     *".overlays.audio_visualizer.position"*) printf '%s\\n' "${OVERLAY_AV_POSITION:-}" ;;
     *".overlays.audio_visualizer.glow.enabled // .overlays.audio_visualizer.glow_enabled"*)
         printf '%s\\n' "${JQ_AV_GLOW_ENABLED:-}"
@@ -1098,8 +1099,39 @@ def test_audio_visualizer_ring_styles_build_polar_filtergraph(tmp_path: Path, st
     assert "overlay=(W-w)/2:412" in command
 
 
-def test_audio_visualizer_invalid_style_fails_before_ffmpeg(tmp_path: Path) -> None:
-    """#1684: 不正 style は有効値を表示し ffmpeg 起動前に停止する."""
+def test_audio_visualizer_heart_builds_cardioid_filtergraph(tmp_path: Path) -> None:
+    """#1689: heart は周波数帯を cardioid の角度と法線距離へ写像する."""
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays":{"enabled":true}}', encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env={
+            "OVERLAYS_CONFIG": str(overlays_config),
+            **_audio_visualizer_env(
+                "heart",
+                OVERLAY_AV_SIZE="300x240",
+                OVERLAY_AV_BARS="24",
+                OVERLAY_AV_COLORS="0xff69b4",
+                OVERLAY_AV_POSITION="(W-w)/2:300",
+            ),
+        },
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    command = _filter_complex_command(ffmpeg_log)
+    assert "showfreqs=mode=bar:s=300x240" in command
+    assert "scale=24:240:flags=neighbor,scale=300:240:flags=neighbor" in command
+    assert "atan2(Y-H*0.66,X-W/2)" in command
+    assert "min(W*0.24,H*0.30)*(1-sin(" in command
+    assert "alphamerge" in command
+    assert "overlay=(W-w)/2:300" in command
+
+
+def test_audio_visualizer_heart_one_line_uses_heart_defaults(tmp_path: Path) -> None:
+    """#1689: style 1 行だけで heart 向け縦横比とピンク色を選ぶ."""
     overlays_config = tmp_path / "youtube.json"
     overlays_config.write_text('{"overlays":{"enabled":true}}', encoding="utf-8")
 
@@ -1110,13 +1142,31 @@ def test_audio_visualizer_invalid_style_fails_before_ffmpeg(tmp_path: Path) -> N
         extra_env={"OVERLAYS_CONFIG": str(overlays_config), **_audio_visualizer_env("heart")},
     )
 
+    assert result.returncode == 0, result.stdout + result.stderr
+    command = _filter_complex_command(ffmpeg_log)
+    assert "showfreqs=mode=bar:s=600x480" in command
+    assert "color=c=0xff69b4:s=600x480" in command
+
+
+def test_audio_visualizer_invalid_style_fails_before_ffmpeg(tmp_path: Path) -> None:
+    """#1684: 不正 style は有効値を表示し ffmpeg 起動前に停止する."""
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays":{"enabled":true}}', encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env={"OVERLAYS_CONFIG": str(overlays_config), **_audio_visualizer_env("star")},
+    )
+
     output = result.stdout + result.stderr
     assert result.returncode != 0
-    assert "allowed: bar, mirror-mountain, ring, ring-line" in output
+    assert "allowed: bar, mirror-mountain, ring, ring-line, heart" in output
     assert not ffmpeg_log.exists()
 
 
-@pytest.mark.parametrize("style", ["mirror-mountain", "ring", "ring-line"])
+@pytest.mark.parametrize("style", ["mirror-mountain", "ring", "ring-line", "heart"])
 def test_audio_visualizer_new_styles_render_minimal_video_with_real_ffmpeg(tmp_path: Path, style: str) -> None:
     """#1684: 追加 preset は外部素材なしで最小動画を最後まで生成できる."""
     if any(shutil.which(command) is None for command in ("ffmpeg", "ffprobe", "jq")):
@@ -1156,21 +1206,24 @@ def test_audio_visualizer_new_styles_render_minimal_video_with_real_ffmpeg(tmp_p
         ],
         check=True,
     )
+    visualizer_config: dict[str, object] = {
+        "enabled": True,
+        "style": style,
+        "bars": 12,
+        "position": "(W-w)/2:(H-h)/2",
+        "glow_enabled": False,
+        "ring": {"inner_r": 30, "length": 20, "arc_deg": [30, 330]},
+    }
+    if style != "heart":
+        visualizer_config["size"] = "300x110"
+
     overlays_config = tmp_path / "youtube.json"
     overlays_config.write_text(
         json.dumps(
             {
                 "overlays": {
                     "enabled": True,
-                    "audio_visualizer": {
-                        "enabled": True,
-                        "style": style,
-                        "bars": 12,
-                        "size": "300x110",
-                        "position": "(W-w)/2:(H-h)/2",
-                        "glow_enabled": False,
-                        "ring": {"inner_r": 30, "length": 20, "arc_deg": [30, 330]},
-                    },
+                    "audio_visualizer": visualizer_config,
                     "encoder": {"preset": "ultrafast", "crf": 30},
                 }
             }

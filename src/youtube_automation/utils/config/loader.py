@@ -325,7 +325,7 @@ def _build_overlays(raw: object) -> Overlays:
     if not isinstance(av_raw, dict):
         raise ConfigError(f"overlays.audio_visualizer は object でなければなりません（got {type(av_raw).__name__}）")
     av_style = str(av_raw.get("style", "bar"))
-    valid_av_styles = ("bar", "mirror-mountain", "ring", "ring-line")
+    valid_av_styles = ("bar", "mirror-mountain", "ring", "ring-line", "heart")
     if av_style not in valid_av_styles:
         raise ConfigError(
             f"overlays.audio_visualizer.style='{av_style}' は不正です（有効値: {', '.join(valid_av_styles)}）"

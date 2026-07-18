@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `feat(workflow)`: チャンネルごとの定期制作設定 `workflow.scheduled_automation`（有効化 / timezone / run_time / cadence / 対象 workflow / 再試行 / 並行実行禁止 / 通知 / 外部公開許可）を optional で追加し、未設定チャンネルは全 default（`enabled: false`）で従来挙動を維持する。新規スキル `/automation-schedule` を単一入口として、前提診断（`detect_runtime.sh`）→ config 生成・差分更新（`schedule_config.py`、loader と同一検証）→ Claude Code（`claude -p`）/ Codex（`codex exec`）向け定期実行ジョブの作成・更新・確認・停止（`scheduler_job.sh`、launchd / cron へ同一 label で冪等反映）を行えるようにした。実行ラッパー `run_scheduled.sh` は lock による実行排他・再試行・`allow_external_publish: false` 時の外部反映禁止プロンプト注入を担い、外部公開の有効化には skill の明示承認ゲートを必須とする（#1892）。
+- `feat(videoup)`: `overlays.audio_visualizer.style: "heart"` を追加した。cardioid の角度と法線距離へ `showfreqs` を再マッピングし、実行時生成する離散バー mask で、音楽スペクトラムがハート輪郭上を内外へ波打つ。既存の `fill` / `rounding` / `glow` と組み合わせられ、外部 asset は不要（#1689）。
+
 - `docs(setup)`: `yt-doctor` の upload 診断を `/setup` の利用者導線へ接続し、YouTube チャンネル未作成時の HUMAN STEP、remote channel ID の `yt-channel-settings pull --channel-id-only` 反映、local / remote ID 不一致時の非自動選択、quota / auth / network 失敗時の再試行・再認証導線を明記した（#2054）。
 - `fix(takt)`: repo-local `.takt/config.yaml` から provider / model routing と concurrency の重複指定を除去し、グローバル設定を正しく継承するようにした。`persona_providers` が deep merge されず project 側の辞書で丸ごと置換される takt 0.51 の解決契約をテストで固定し、グローバルの Luna / Sol / Terra 割当が失われる回帰を防止する。repo-local `lite` は worktree 環境契約だけを差分として残し、グローバル版の `max_steps: 18` / loop threshold 5 へ同期した。project facet には takt 0.51 builtin の Knowledge / Policy 確認と最新の CI 委譲ルールを取り込んだ。
 
@@ -170,6 +172,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(analytics-report)`: HTML レポートのテーマ色を `analytics-report/config.default.yaml::theme.colors` に移し、`config/skills/analytics-report.yaml` の channel override で差し替えられるようにした。未設定チャンネルでは既存パレットを維持する（#1691）
 
 ### Changed
+
+- `docs(thumbnail)`: `image_generation.auto_selection.mode: full` の `/thumbnail` 手順を追加し、テーマを config → collection metadata の順で自動決定して、生成可否・textless 背景・候補の承認を含む 4 ゲートを省略し `yt-thumbnail-auto-select --apply` まで無人で進めるよう明文化した。`selection_only` の既存挙動は維持し、生成・適格候補ゼロ時の手動切替と `/wf-new` Phase 2c の追随分岐も追加した（#2167）。
 
 - `refactor(suno-helper)`: PatternList の entry 選択表示を、selection semantics・accessible name・`data-suno-entry-*` 契約を維持したまま shadcn variant と Tailwind semantic token へ移行した（#2068）。
 

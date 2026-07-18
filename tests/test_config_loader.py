@@ -2008,14 +2008,24 @@ def test_overlays_audio_visualizer_non_object_raises(tmp_path, monkeypatch):
 
 
 def test_overlays_audio_visualizer_invalid_style_raises(tmp_path, monkeypatch):
-    """#1684: style は公開済み 4 preset 以外を fail-loud に拒否する."""
+    """#1684/#1689: style は公開済み 5 preset 以外を fail-loud に拒否する."""
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {"audio_visualizer": {"style": "star"}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="bar, mirror-mountain, ring, ring-line, heart"):
+        load_config()
+
+
+def test_overlays_audio_visualizer_accepts_heart_style(tmp_path, monkeypatch):
+    """#1689: heart は公開 preset として loader を貫通する."""
     sections = _minimal_sections()
     sections["youtube.json"]["overlays"] = {"audio_visualizer": {"style": "heart"}}
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    with pytest.raises(ConfigError, match="bar, mirror-mountain, ring, ring-line"):
-        load_config()
+    assert load_config().youtube.overlays.audio_visualizer.style == "heart"
 
 
 @pytest.mark.parametrize(
