@@ -164,12 +164,23 @@ def test_community_routes_allow_required_cors_origins(serve_community, origin: s
         assert response.headers.get("Access-Control-Allow-Origin") == origin
 
 
-def test_studio_origin_is_not_allowed_to_read_non_community_routes(serve_community):
+def test_studio_origin_can_read_public_version_for_extension_preflight(serve_community):
     base = serve_community([])
     request = urllib.request.Request(f"{base}/version", headers={"Origin": _STUDIO_ORIGIN})
 
     with urllib.request.urlopen(request) as response:
-        assert response.headers.get("Access-Control-Allow-Origin") is None
+        assert response.headers.get("Access-Control-Allow-Origin") == _STUDIO_ORIGIN
+
+
+def test_studio_origin_is_not_allowed_to_read_other_non_community_routes(serve_community):
+    base = serve_community([])
+    request = urllib.request.Request(f"{base}/suno/prompts.json", headers={"Origin": _STUDIO_ORIGIN})
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(request)
+
+    assert exc_info.value.code == 404
+    assert exc_info.value.headers.get("Access-Control-Allow-Origin") is None
 
 
 def test_shared_route_constants_match_server_contract():

@@ -646,10 +646,11 @@ def _is_read_origin_allowed(origin: str | None, allow_origin: str | None, path: 
 
     `--allow-origin` 指定時は read-only も exact lock に従う。Suno overlay から
     必要な read API は background script が extension origin で取得する。既定の
-    YouTube Studio page origin は community route だけに許可し、他成果物へ波及させない。
+    YouTube Studio page origin は community route と公開 version envelope だけに許可し、
+    他成果物へ波及させない。
     """
     if allow_origin is None and origin == _YOUTUBE_STUDIO_ORIGIN:
-        return _is_community_route(path)
+        return path == VERSION_ROUTE or _is_community_route(path)
     return is_origin_allowed(origin, allow_origin)
 
 
