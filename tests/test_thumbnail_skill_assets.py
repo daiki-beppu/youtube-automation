@@ -435,6 +435,27 @@ def test_thumbnail_skill_frontmatter_names_thumbnail_as_primary_output() -> None
     assert "サムネイル（main.png）" not in frontmatter
 
 
+def test_thumbnail_skill_documents_full_auto_selection_gate_contract() -> None:
+    """#2167: full は 4 ゲートを省略し、selection_only の既存範囲を変えない。"""
+    skill = _read_thumbnail_skill()
+    opening_gate = "\n".join(skill.splitlines()[:60])
+    auto_selection = _slice_between(skill, "## 自動選択", "## 品質チェック")
+
+    for gate in ("テーマ確認", "生成可否", "textless 背景承認", "テキスト付き候補承認"):
+        assert gate in opening_gate
+    assert "mode: full" in opening_gate
+    assert "残り 3 ゲートは従来どおり実行" in opening_gate
+
+    assert "config のテーマ設定" in auto_selection
+    assert "collection metadata" in auto_selection
+    assert auto_selection.find("config のテーマ設定") < auto_selection.find("collection metadata")
+    assert "workflow-state.json::theme" in auto_selection
+    assert "生成 CLI に `-y`" in auto_selection
+    assert "yt-thumbnail-auto-select <collection-path> --apply" in auto_selection
+    assert "full モード失敗時の手動切替" in auto_selection
+    assert "`selection_only` に変更" in auto_selection
+
+
 def test_thumbnail_skill_initial_generation_examples_output_text_included_candidates() -> None:
     """#1310: 標準入口の初回生成例は main ではなく thumbnail 候補を出す。"""
     skill = _read_thumbnail_skill()
