@@ -5,7 +5,7 @@ description: "Use when Suno UI で生成した曲のプレイリストを一括 
 
 ## 前後工程
 
-- `前工程`: `/suno`, `/suno-helper`
+- `前工程`: `/automation-run`, `/suno`, `/suno-helper`
 - `後工程`: `/videoup`
 
 ## Overview

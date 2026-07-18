@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(workflow)`: `/automation-run` を追加し、active collection 1 件を durable lease 下で選択して、Lyria / Suno の音源生成、masterup、動画・metadata 生成、公開許可付き YouTube upload、post-publish まで既存 skill へ状態駆動で委譲できるようにした。工程ごとに成果物を再評価し、失敗・手動介入・公開未許可では停止理由と再開地点を履歴へ記録する。定期実行の既定 target は `automation-run` とし、未設定チャンネルの `enabled: false` / `allow_external_publish: false` は維持する（#1894）。
 - `feat(suno-helper)`: 定期実行用の loopback 限定 launch URL 契約と CLI を追加し、collection / entry / DL 形式 / entry・concurrency・retry 上限を指定可能にした。既存 resume state から entry / playlist / download を重複なしで再開し、上限超過は checkpoint、ログイン・CAPTCHA・課金確認・UI 非互換は手動介入理由として保存する。手動 overlay flow は従来挙動を維持する（#1893）。
 - `feat(extensions)`: `community-helper` を統一 `ext-v*` Release の build / zip / asset / インストール案内へ追加し、Extensions CI で Oxlint + Oxfmt、TypeScript、Vitest、WXT build を必須化した。release 前の単一検証スクリプトと automation-release の asset 完了条件も3拡張へ同期した（#1715）。
 - `feat(extensions)`: `community-helper` の content runner を実装し、3 投稿の本文・画像・予約日時・確定を逐次処理する。localhost fetch と画像の base64 wire 転送を background の extension context へ移し、途中失敗時の composer cleanup と重複再実行ロックを追加した。content injection は YouTube チャンネル投稿ページに限定し、Studio page-origin CORS 例外を撤去した（#1714）。
