@@ -875,7 +875,7 @@ def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
         "uv run yt-upload-collection [-c NAME]",
     )
 
-    wf_next_gate = wf_next[wf_next.index("approval_gates.upload = true") :]
+    wf_next_gate = wf_next[wf_next.index("skip_upload_approval = false") :]
     _assert_appears_before(wf_next_gate, "uv run yt-upload-collection --plan", "AskUserQuestion")
     _assert_appears_before(wf_next_gate, "uv run yt-upload-collection --plan", "/video-upload")
 
@@ -909,8 +909,8 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
 
     assert "`collection` 型では `collection_uploader` 内部の `assign_video()`" in video_upload
     assert "プレイリストへの動画追加は後続のアップロード経路が担う" in video_upload
-    assert "`approval_gates.upload` とは別の playlist 作成ゲート" in wf_next
-    assert "`approval_gates.upload = false` でも" in wf_next
+    assert "`skip_upload_approval` とは別の playlist 作成ゲート" in wf_next
+    assert "`skip_upload_approval = true` でも" in wf_next
     assert "確認を省略しない" in wf_next
     assert "ユーザーが playlist 初期化を却下した場合" in wf_next
     assert "`/video-upload` を実行せず停止" in wf_next
@@ -919,6 +919,33 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
     assert "初投稿プレイリスト初期化ゲート" in wf_next
     assert "`upload.video_id = null`" in wf_next
     assert "初回動画の追加は `/video-upload` 内部の自動 assign に任せる" in checklist
+
+
+def test_wf_next_skip_approval_keys_are_documented_consistently() -> None:
+    """#1744: wf_next の boolean は「true = 手動工程を省く」向きで example / docs が一致する."""
+    wf_next = _read(".claude/skills/wf-next/SKILL.md")
+    wf_status = _read(".claude/skills/wf-status/SKILL.md")
+    schema = _read(".claude/skills/wf-new/references/schema.md")
+    example = _read("examples/channel_config.example/workflow.json")
+
+    # example は新キーのみ（既定値どおり true = 承認省略）で、旧キーを含まない
+    assert '"skip_audio_approval": true' in example
+    assert '"skip_upload_approval": true' in example
+    assert "approval_gates" not in example
+
+    # wf-next は新キーを正として記述し、旧キーは後方互換 alias + 同時指定エラーとして言及する
+    for key in ("skip_audio_approval", "skip_upload_approval"):
+        assert key in wf_next
+    assert "後方互換 alias" in wf_next
+    assert "同時指定すると `ConfigError`" in wf_next
+    # ゲート発動条件は常に「skip_* = false のとき承認」の向きで書く（旧向きの記述を残さない）
+    assert "approval_gates.upload = true" not in wf_next
+    assert "approval_gates.audio = true" not in wf_next
+
+    # wf-status / wf-new schema も同じ向きで参照する
+    assert "skip_audio_approval" in wf_status
+    assert "skip_upload_approval" in wf_status
+    assert "skip_audio_approval" in schema
 
 
 def test_common_docs_list_optional_channel_config_files() -> None:
