@@ -26,6 +26,7 @@ import time
 from googleapiclient.errors import HttpError
 
 from youtube_automation.utils.config import channel_dir
+from youtube_automation.utils.cost_tracker import log_quota
 from youtube_automation.utils.descriptions_md import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
@@ -40,6 +41,14 @@ logger = logging.getLogger(__name__)
 # videos().list(part="snippet") のレスポンスにはこれ以外に publishedAt / channelId /
 # thumbnails / channelTitle / localized / liveBroadcastContent 等の read-only
 # フィールドが混ざるため、丸ごとコピーせず whitelist で保持する。
+# YouTube Data API quota 記録（Issue #2058）。units は公式 quota 表に従う
+# （https://developers.google.com/youtube/v3/determine_quota_cost）。
+QUOTA_SERVICE = "youtube-data-api"
+QUOTA_UNITS = {
+    "videos.list": 1,
+    "videos.update": 50,
+}
+
 MUTABLE_SNIPPET_KEYS = (
     "title",
     "description",
@@ -95,12 +104,24 @@ def utf16_units(s: str) -> int:
     return len(s.encode("utf-16-le")) // 2
 
 
-def _execute_youtube_request(request, context: str) -> dict:
-    """YouTube API の HttpError を呼び出し文脈付きドメイン例外へ変換する."""
+def _execute_youtube_request(
+    request,
+    context: str,
+    *,
+    quota_bucket: str,
+    quota_metadata: dict | None = None,
+) -> dict:
+    """YouTube API の HttpError を呼び出し文脈付きドメイン例外へ変換する.
+
+    quota はリクエストの成否に関わらず消費されるため、失敗時も記録してから
+    例外を伝播させる（Issue #2058）。
+    """
     try:
         return request.execute()
     except HttpError as error:
         raise YouTubeAPIError.from_http_error(error, context) from error
+    finally:
+        log_quota(QUOTA_SERVICE, quota_bucket, QUOTA_UNITS[quota_bucket], metadata=quota_metadata)
 
 
 def load_collection(col: str) -> dict:
@@ -161,6 +182,8 @@ def main() -> None:
     current = _execute_youtube_request(
         yt.videos().list(id=ids, part="snippet"),
         "Failed to fetch current video snippets",
+        quota_bucket="videos.list",
+        quota_metadata={"video_count": len(payloads)},
     )
     by_id = {item["id"]: item for item in current.get("items", [])}
 
@@ -208,6 +231,8 @@ def main() -> None:
             _execute_youtube_request(
                 yt.videos().update(part="snippet", body=body),
                 f"Failed to update video {p['video_id']}",
+                quota_bucket="videos.update",
+                quota_metadata={"video_id": p["video_id"]},
             )
             logger.info("   ✅ updated")
         except YouTubeAPIError as error:

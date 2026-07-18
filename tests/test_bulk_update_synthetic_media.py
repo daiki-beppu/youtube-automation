@@ -190,3 +190,118 @@ class TestMain:
         # 1 件失敗しても両方 attempt し、最終的に exit 1
         assert exc.value.code == 1
         assert yt.videos.return_value.update.return_value.execute.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# quota 記録（Issue #2058）
+# ---------------------------------------------------------------------------
+
+
+def _quota_calls(quota_mock) -> list[tuple[str, str, float]]:
+    return [(c.args[0], c.args[1], c.args[2]) for c in quota_mock.call_args_list]
+
+
+class TestQuotaLogging:
+    """dry-run / apply / pagination / failure で quota 記録が固定されること（Issue #2058）."""
+
+    def test_dry_run_records_only_issued_read_requests(self, monkeypatch):
+        """dry-run では実際に発行した read（channels/playlistItems/videos.list）だけが記録される."""
+        yt = _youtube_mock([_video("V1", False)])
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-synthetic-media"])
+        with (
+            patch.object(mod, "get_youtube", return_value=yt),
+            patch.object(mod, "log_quota") as quota_mock,
+            patch.object(mod.time, "sleep"),
+        ):
+            mod.main()
+
+        assert _quota_calls(quota_mock) == [
+            ("youtube-data-api", "channels.list", 1),
+            ("youtube-data-api", "playlistItems.list", 1),
+            ("youtube-data-api", "videos.list", 1),
+        ]
+
+    def test_apply_records_read_and_update_as_separate_operations(self, monkeypatch):
+        """apply では read と videos.update が別 operation として記録される."""
+        yt = _youtube_mock([_video("V1", False), _video("V2", None)])
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-synthetic-media", "--apply"])
+        with (
+            patch.object(mod, "get_youtube", return_value=yt),
+            patch.object(mod, "log_quota") as quota_mock,
+            patch.object(mod.time, "sleep"),
+        ):
+            mod.main()
+
+        assert _quota_calls(quota_mock) == [
+            ("youtube-data-api", "channels.list", 1),
+            ("youtube-data-api", "playlistItems.list", 1),
+            ("youtube-data-api", "videos.list", 1),
+            ("youtube-data-api", "videos.update", 50),
+            ("youtube-data-api", "videos.update", 50),
+        ]
+        update_metadata = [c.kwargs["metadata"] for c in quota_mock.call_args_list[3:]]
+        assert update_metadata == [{"video_id": "V1"}, {"video_id": "V2"}]
+
+    def test_pagination_and_batch_record_one_entry_per_request(self, monkeypatch):
+        """playlistItems のページングと videos.list の 50 件バッチで、リクエスト回数と記録件数が一致する."""
+        # Given: 51 本（playlistItems 2 ページ / videos.list 2 バッチ）
+        videos = [_video(f"V{i:02d}", True) for i in range(51)]
+        yt = MagicMock()
+        yt.channels.return_value.list.return_value.execute.return_value = {
+            "items": [{"contentDetails": {"relatedPlaylists": {"uploads": "UU_test"}}}]
+        }
+        yt.playlistItems.return_value.list.return_value.execute.side_effect = [
+            {
+                "items": [{"contentDetails": {"videoId": v["id"]}} for v in videos[:50]],
+                "nextPageToken": "PAGE2",
+            },
+            {"items": [{"contentDetails": {"videoId": v["id"]}} for v in videos[50:]]},
+        ]
+        yt.videos.return_value.list.return_value.execute.side_effect = [
+            {"items": videos[:50]},
+            {"items": videos[50:]},
+        ]
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-synthetic-media"])
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt),
+            patch.object(mod, "log_quota") as quota_mock,
+            patch.object(mod.time, "sleep"),
+        ):
+            mod.main()
+
+        assert _quota_calls(quota_mock) == [
+            ("youtube-data-api", "channels.list", 1),
+            ("youtube-data-api", "playlistItems.list", 1),
+            ("youtube-data-api", "playlistItems.list", 1),
+            ("youtube-data-api", "videos.list", 1),
+            ("youtube-data-api", "videos.list", 1),
+        ]
+
+    def test_update_failure_still_records_quota_and_exits_1(self, monkeypatch):
+        """update 失敗時も quota を記録した上で、continue + exit 1 の既存契約が維持される."""
+        from googleapiclient.errors import HttpError
+
+        yt = _youtube_mock([_video("V1", False), _video("V2", False)])
+        resp = MagicMock()
+        resp.status = 403
+        http_err = HttpError(resp=resp, content=b'{"error": {"errors": [{"reason": "forbidden"}]}}')
+        yt.videos.return_value.update.return_value.execute.side_effect = [http_err, {"id": "ok"}]
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-synthetic-media", "--apply"])
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt),
+            patch.object(mod, "log_quota") as quota_mock,
+            patch.object(mod.time, "sleep"),
+        ):
+            with pytest.raises(SystemExit) as exc:
+                mod.main()
+
+        assert exc.value.code == 1
+        assert _quota_calls(quota_mock) == [
+            ("youtube-data-api", "channels.list", 1),
+            ("youtube-data-api", "playlistItems.list", 1),
+            ("youtube-data-api", "videos.list", 1),
+            ("youtube-data-api", "videos.update", 50),
+            ("youtube-data-api", "videos.update", 50),
+        ]
