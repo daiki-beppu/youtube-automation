@@ -19,7 +19,50 @@ logger = logging.getLogger(__name__)
 
 
 class AudienceAnalyticsMixin:
-    """デバイス別・地域別のオーディエンス分析"""
+    """登録ステータス・デバイス別・地域別のオーディエンス分析。"""
+
+    def get_subscribed_status_analytics(self, start_date: str, end_date: str) -> Dict:
+        """登録済み・未登録視聴者別の視聴データを取得する。"""
+        if not self.analytics_service:
+            self.initialize()
+
+        logger.info("登録ステータス別分析実行中...")
+
+        try:
+            request = self.analytics_service.reports().query(
+                ids=f"channel=={self.channel_id}",
+                startDate=start_date,
+                endDate=end_date,
+                metrics="views,estimatedMinutesWatched,averageViewDuration",
+                dimensions="subscribedStatus",
+                sort="-views",
+            )
+            response = execute_with_retry(request, "YouTube Analytics API request failed")
+
+            statuses = {}
+            if "rows" in response:
+                for row in response["rows"]:
+                    statuses[row[0]] = {
+                        "views": row[1],
+                        "watch_time_minutes": row[2],
+                        "avg_view_duration": row[3],
+                    }
+
+            total_views = sum(status["views"] for status in statuses.values())
+            for status_data in statuses.values():
+                status_data["view_share_percent"] = (
+                    round((status_data["views"] / total_views) * 100, 1) if total_views > 0 else 0
+                )
+
+            logger.info(f"登録ステータス別: {len(statuses)} 区分検出")
+            return {"statuses": statuses, "total_views": total_views}
+
+        except YouTubeAPIError as e:
+            logger.error(f"YouTube API エラー（登録ステータス分析）: {e}")
+            return {"statuses": {}, "total_views": 0, "error": str(e)}
+        except Exception as e:
+            logger.error(f"登録ステータス分析エラー: {e}")
+            return {"statuses": {}, "total_views": 0, "error": str(e)}
 
     def get_device_analytics(self, start_date: str, end_date: str) -> Dict:
         """

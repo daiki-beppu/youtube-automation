@@ -25,7 +25,7 @@
 | L2 | CTR | `/thumbnail`（TTP ベース生成）、`/thumbnail-compare`（320px 視認性）、`yt-thumbnail-correlate`（特徴量×CTR 相関）、`/alignment-check`（サムネ×タイトル×ムード整合）、`/flop-analysis`（CTR 閾値ルーブリック） | Reporting API v1 + サムネ画像特徴量 | ◎ 最厚のレバー |
 | L3 | 視聴維持 | retention 収集（`audienceWatchRatio` / `relativeRetentionPerformance`）、`/video-analyze`（Gemini によるフック・BGM 展開解析）、`/viewing-scene`（シーン別の最適尺設計） | Analytics API v2 / Vertex AI | ◯ 計測◎、原因照合が手動 |
 | L4 | 回遊・セッション | `/playlist`（`yt-playlist-manager`）、`/video-description`（Complete Collection 導線）、カード指標収集（`cardImpressions/Clicks/ClickRate`）、`/pinned-comment` `/comments-reply` `/community-post` | Analytics API v2 / Data API v3 | △ 導線は張れるが効果測定が薄い |
-| L5 | 登録転換 | `subscribersGained/Lost` の day・video 単位収集、`yt-channel-trend`（日次 subs 移動平均・z-score 異常検知） | Analytics API v2 | △ データ有り、転換分析なし |
+| L5 | 登録転換 | `subscribersGained/Lost` の day・video 単位収集、`subscribedStatus` 別視聴データ収集、動画別転換率ランキングを含む `/analytics-analyze`、`yt-channel-trend`（日次 subs 移動平均・z-score 異常検知） | Analytics API v2 | ◯ 動画別転換率と視聴者の登録状態を分析可 |
 | L6 | SEO・メタデータ | `/video-description`（SEO 最適化概要欄）、`/metadata-audit`、`yt-title-duplicate-check`、localizations 同期（`/channel-new` 設定 push、`yt-shorts-bulk-update-loc`） | ローカル config / Data API v3 | ◯ 生成◎、検索流入との突合なし |
 | L7 | 投稿頻度・タイミング | `/benchmark`（競合の投稿間隔）、`yt-launch-curve`（投稿後 N 日の初速比較）、`yt-theme-compare`（テーマ別初速・ロングテール） | Data API v3 / 自チャンネル履歴 | △ 頻度の観測のみ、時刻・曜日分析なし |
 
@@ -65,9 +65,10 @@
 ### L5: 登録転換
 
 - **足りないもの**
-  - 動画別の登録転換率（subscribersGained / views）の定点レポート: データは `strategic_analytics.py` で取得済みなのに、どの動画が登録を生むかのランキング・傾向分析がない → **新規開発**（G1。既存データのみで完結、最も安い）
-  - `subscribedStatus` dimension（登録済み/未登録視聴者の比率）の未収集: 「未登録者に見られているのに転換しない」のか「登録者しか見ていない」のかを切り分けられない → **新規開発**（G1 に含める）
   - チャンネルページ・トレーラー最適化: 支援機能なし → **手動補完**（優先度低）
+
+- **実装済み**
+  - 動画別の登録転換率（subscribersGained / views）のランキング・傾向分析と、`subscribedStatus` dimension（登録済み/未登録視聴者の視聴データ）の収集を #1813 で追加済み。`/analytics-analyze` の「登録を生む動画の型」断面で、転換率と視聴者の登録状態を合わせて確認できる
 
 ### L6: SEO・メタデータ
 
@@ -132,7 +133,7 @@
 
 | ID | ギャップ | レバー | 種別 | 効果 | コスト | 優先度 | 起票 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| G1 | 登録転換分析（動画別転換率 + subscribedStatus） | L5 | 新規開発 | 中〜高 | **低** | ★★★ | #1816 |
+| G1 | 登録転換分析（動画別転換率 + subscribedStatus） | L5 | 実装済み | 中〜高 | **低** | 完了 | #1813 |
 | G2 | retention drop × シーン/BGM 自動照合 | L3 | 新規開発 | 高 | 中 | ★★★ | #1817 |
 | G3 | サムネ A/B（Test & Compare）手動運用の手順化 | L2 | 手動補完 | 高 | **低** | ★★★ | #1808 |
 | G4 | プレイリスト単位 analytics 収集 | L4 | 新規開発 | 中 | 低 | ★★ | #1818 |
@@ -143,7 +144,7 @@
 
 ### 上位ギャップの起票粒度メモ
 
-- **G1 登録転換分析**: `strategic_analytics.py` の video 単位 `subscribersGained` と views から転換率ランキングを算出し `/analytics-analyze` のレポート断面に追加する。あわせて `subscribedStatus` dimension の収集 Mixin を追加。期待効果: 「登録を生む動画の型」が特定でき、企画選定（`/collection-ideate`）の入力になる。既存データで完結するため最安
+- **G1 登録転換分析（#1813 で実装済み）**: `strategic_analytics.py` の video 単位 `subscribersGained` と views から転換率ランキングを算出し、`/analytics-analyze` の「登録を生む動画の型」断面に出力する。`subscribedStatus` dimension の収集 Mixin も追加済み。これにより、転換率と登録済み/未登録視聴者の状態を合わせて確認し、企画選定（`/collection-ideate`）へ反映できる
 - **G2 retention × シーン照合**: `retention_analytics.py` の `audienceWatchRatio`（elapsedVideoTimeRatio）と `data/video_analysis/<slug>/<id>.json` の scene_timeline / bgm_arc を突合し、drop 地点のシーン・曲を特定するレポートを `/flop-analysis` または `/video-analyze` に追加。期待効果: 視聴維持の改善が「どの曲・どの展開を変えるか」の具体アクションに変わる
 - **G3 サムネ A/B 手順化**: Studio の Test & Compare 設定手順・対象選定基準（flop analysis で CTR 起因と判定された動画を優先）・結果記録テンプレ（`docs/plans/` 配下）をスキル or ドキュメント化。期待効果: CTR レバーに API 制約を回避した実験経路が通る。実装は文書のみで最安
 - **G4 プレイリスト analytics**: Analytics API の `playlist` dimension で views / 平均視聴時間を収集する Mixin を追加し、Complete Collection 戦略の効果を可視化。期待効果: 回遊レバー（L4）に初めて計測が通る

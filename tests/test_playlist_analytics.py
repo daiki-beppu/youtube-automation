@@ -112,6 +112,7 @@ class TestPlaylistCollectionIntegration:
         collector.get_revenue_analytics = MagicMock(
             return_value={"status": "available", "daily_metrics": [], "by_video": {}, "summary": {}}
         )
+        collector.get_subscribed_status_analytics = MagicMock(return_value={"statuses": {}, "total_views": 0})
         collector._build_publish_at_map = MagicMock(return_value={})
         collector.get_ctr_analysis = MagicMock(return_value={})
         collector.get_traffic_source_analytics = MagicMock(return_value={})
