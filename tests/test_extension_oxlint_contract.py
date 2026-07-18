@@ -30,11 +30,11 @@ def _read_json(path: Path) -> dict[str, object]:
 
 def test_helpers_share_ultracite_dependency_script_and_config_contract() -> None:
     expected_check_scripts = {
-        "suno-helper": "cd .. && ultracite check suno-helper shared",
+        "suno-helper": "cd .. && ultracite check suno-helper shared shared-ui",
         "distrokid-helper": "cd .. && ultracite check distrokid-helper",
     }
     expected_fix_scripts = {
-        "suno-helper": "cd .. && ultracite fix suno-helper shared",
+        "suno-helper": "cd .. && ultracite fix suno-helper shared shared-ui",
         "distrokid-helper": "cd .. && ultracite fix distrokid-helper",
     }
 
