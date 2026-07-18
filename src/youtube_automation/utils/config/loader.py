@@ -7,6 +7,7 @@ import logging
 import os
 from pathlib import Path
 
+from youtube_automation.utils.audio_visualizer_fill import normalize_ffmpeg_color, parse_color
 from youtube_automation.utils.config.analytics import Analytics, Benchmark
 from youtube_automation.utils.config.audio import Audio
 from youtube_automation.utils.config.comments import (
@@ -37,6 +38,9 @@ from youtube_automation.utils.config.playlists import Playlists
 from youtube_automation.utils.config.shorts import Shorts, ShortsCollection, ShortsRelease
 from youtube_automation.utils.config.workflow import ApprovalGates, WfNext, Workflow
 from youtube_automation.utils.config.youtube import (
+    AudioVisualizerFill,
+    AudioVisualizerGlow,
+    AudioVisualizerRounding,
     ContentModel,
     OverlayAudioVisualizer,
     OverlayAudioVisualizerRing,
@@ -345,6 +349,61 @@ def _build_overlays(raw: object) -> Overlays:
         raise ConfigError("overlays.audio_visualizer.ring の inner_r は 0 以上、length は 1 以上でなければなりません")
     if not 0 <= av_ring.arc_deg[0] < av_ring.arc_deg[1] <= 360:
         raise ConfigError("overlays.audio_visualizer.ring.arc_deg は 0 <= start < end <= 360 でなければなりません")
+
+    fill_raw = av_raw.get("fill")
+    if fill_raw is not None and not isinstance(fill_raw, dict):
+        raise ConfigError("overlays.audio_visualizer.fill は object でなければなりません")
+    fill = None
+    if fill_raw is not None:
+        fill_type = str(fill_raw.get("type", "solid"))
+        if fill_type not in {"solid", "gradient", "rainbow"}:
+            raise ConfigError("overlays.audio_visualizer.fill.type は solid / gradient / rainbow のいずれかです")
+        fill_color = str(fill_raw.get("color", av_raw.get("colors", "white")))
+        fill_top = str(fill_raw.get("top", "0xA9CBF0"))
+        fill_bottom = str(fill_raw.get("bottom", fill_raw.get("bot", "0x3A5696")))
+        try:
+            if fill_type == "solid":
+                normalize_ffmpeg_color(fill_color)
+            elif fill_type == "gradient":
+                parse_color(fill_top)
+                parse_color(fill_bottom)
+        except ValueError as exc:
+            raise ConfigError(f"overlays.audio_visualizer.fill の色指定が不正です: {exc}") from exc
+        fill = AudioVisualizerFill(
+            type=fill_type,
+            color=fill_color,
+            top=fill_top,
+            bottom=fill_bottom,
+        )
+
+    rounding_raw = av_raw.get("rounding")
+    if rounding_raw is not None and not isinstance(rounding_raw, dict):
+        raise ConfigError("overlays.audio_visualizer.rounding は object でなければなりません")
+    rounding = (
+        AudioVisualizerRounding(
+            blur=float(rounding_raw.get("blur", 2.3)),
+            contrast=float(rounding_raw.get("contrast", 3.2)),
+        )
+        if rounding_raw is not None
+        else None
+    )
+    if rounding is not None and (rounding.blur < 0 or rounding.contrast <= 0):
+        raise ConfigError("overlays.audio_visualizer.rounding の blur は 0 以上、contrast は 0 より大きい値です")
+
+    glow_raw = av_raw.get("glow")
+    if glow_raw is not None and not isinstance(glow_raw, dict):
+        raise ConfigError("overlays.audio_visualizer.glow は object でなければなりません")
+    glow = (
+        AudioVisualizerGlow(
+            enabled=bool(glow_raw.get("enabled", True)),
+            sigma=float(glow_raw.get("sigma", av_raw.get("glow_sigma", 12.0))),
+            opacity=float(glow_raw.get("opacity", av_raw.get("glow_opacity", 0.45))),
+        )
+        if glow_raw is not None
+        else None
+    )
+    if glow is not None and (glow.sigma < 0 or not 0 <= glow.opacity <= 1):
+        raise ConfigError("overlays.audio_visualizer.glow の sigma は 0 以上、opacity は 0〜1 の値です")
     audio_visualizer = OverlayAudioVisualizer(
         enabled=bool(av_raw.get("enabled", False)),
         style=av_style,
@@ -362,6 +421,11 @@ def _build_overlays(raw: object) -> Overlays:
         glow_sigma=float(av_raw.get("glow_sigma", 12.0)),
         glow_opacity=float(av_raw.get("glow_opacity", 0.45)),
         ring=av_ring,
+        fill=fill,
+        mirror_center=bool(av_raw.get("mirror_center", False)),
+        symmetric_vertical=bool(av_raw.get("symmetric_vertical", False)),
+        rounding=rounding,
+        glow=glow,
     )
 
     sp_raw = raw.get("subscribe_popup") or {}

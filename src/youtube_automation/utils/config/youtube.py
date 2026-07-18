@@ -46,6 +46,33 @@ class OverlayAudioVisualizerRing:
 
 
 @dataclass(frozen=True)
+class AudioVisualizerFill:
+    """Visualizer の配色。未指定時は従来の ``colors`` 経路を使う。"""
+
+    type: str = "solid"
+    color: str = "white"
+    top: str = "0xA9CBF0"
+    bottom: str = "0x3A5696"
+
+
+@dataclass(frozen=True)
+class AudioVisualizerRounding:
+    """Alpha mask に適用する角丸化パラメータ。"""
+
+    blur: float = 2.3
+    contrast: float = 3.2
+
+
+@dataclass(frozen=True)
+class AudioVisualizerGlow:
+    """コアの下に合成する glow。``enabled`` で個別に無効化できる。"""
+
+    enabled: bool = True
+    sigma: float = 12.0
+    opacity: float = 0.45
+
+
+@dataclass(frozen=True)
 class OverlayAudioVisualizer:
     """`overlays.audio_visualizer` セクション（optional, #511）.
 
@@ -74,6 +101,11 @@ class OverlayAudioVisualizer:
     glow_sigma: float = 12.0
     glow_opacity: float = 0.45
     ring: OverlayAudioVisualizerRing = field(default_factory=OverlayAudioVisualizerRing)
+    fill: AudioVisualizerFill | None = None
+    mirror_center: bool = False
+    symmetric_vertical: bool = False
+    rounding: AudioVisualizerRounding | None = None
+    glow: AudioVisualizerGlow | None = None
 
 
 @dataclass(frozen=True)

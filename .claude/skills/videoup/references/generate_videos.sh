@@ -1,5 +1,5 @@
 #!/bin/bash
-# generate_videos.sh v14.2 — Master video generator
+# generate_videos.sh v14.3 — Master video generator
 # Static image + master audio → MP4 (macOS optimized)
 # v12.1: ループモードの高ビットレート入力を上限付き正規化に退避
 # v12.2: 短尺 master を音声側 stream_loop で動画尺に伸ばす opt-in 経路を追加 (#545)
@@ -22,6 +22,7 @@
 # v14.1: workflow-state.json::assets.master_audio があれば固定名探索より優先 (#1449)
 # v14.2: effect=none の静止画も 1 GOP 分だけベイクして stream copy で全尺化 (#1681)
 # v15:   audio_visualizer style presets + runtime-generated masks (#1684)
+# v14.3: audio visualizer の runtime fill と共通 effect を追加 (#1686)
 #
 # Usage:
 #   bash .claude/skills/videoup/references/generate_videos.sh <collection-path>
@@ -606,8 +607,9 @@ echo ""
 start=$SECONDS
 PROGRESS_FILE="$(mktemp)"
 AV_MASK_DIR=""
+AV_FILL_ASSET="${PROGRESS_FILE}.visualizer-fill.png"
 cleanup_runtime_files() {
-    rm -f "$PROGRESS_FILE"
+    rm -f "$PROGRESS_FILE" "$AV_FILL_ASSET"
     if [[ -n "$AV_MASK_DIR" && -d "$AV_MASK_DIR" ]]; then
         rm -rf "$AV_MASK_DIR"
     fi
@@ -643,9 +645,9 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     av_colors="$(ov_get '.overlays.audio_visualizer.colors' 'white')"
     av_position="$(ov_get '.overlays.audio_visualizer.position' '(W-w)/2:H-h-40')"
     av_opacity="$(ov_get '.overlays.audio_visualizer.opacity' '0.85')"
-    av_glow_enabled="$(ov_get '.overlays.audio_visualizer.glow_enabled' 'true')"
-    av_glow_sigma="$(ov_get '.overlays.audio_visualizer.glow_sigma' '12')"
-    av_glow_opacity="$(ov_get '.overlays.audio_visualizer.glow_opacity' '0.45')"
+    av_glow_enabled="$(ov_get '.overlays.audio_visualizer.glow.enabled // .overlays.audio_visualizer.glow_enabled' 'true')"
+    av_glow_sigma="$(ov_get '.overlays.audio_visualizer.glow.sigma // .overlays.audio_visualizer.glow_sigma' '12')"
+    av_glow_opacity="$(ov_get '.overlays.audio_visualizer.glow.opacity // .overlays.audio_visualizer.glow_opacity' '0.45')"
     av_ring_inner_r="$(ov_get '.overlays.audio_visualizer.ring.inner_r' '120')"
     av_ring_length="$(ov_get '.overlays.audio_visualizer.ring.length' '160')"
     av_ring_arc_start="$(ov_get '.overlays.audio_visualizer.ring.arc_deg[0]' '0')"
@@ -684,6 +686,14 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
             fi
         fi
     fi
+    av_fill_type="$(ov_get '.overlays.audio_visualizer.fill.type' '')"
+    av_fill_color="$(ov_get '.overlays.audio_visualizer.fill.color' "$av_colors")"
+    av_fill_top="$(ov_get '.overlays.audio_visualizer.fill.top' '0xA9CBF0')"
+    av_fill_bottom="$(ov_get '.overlays.audio_visualizer.fill.bottom // .overlays.audio_visualizer.fill.bot' '0x3A5696')"
+    av_mirror_center="$(ov_get '.overlays.audio_visualizer.mirror_center' 'false')"
+    av_symmetric_vertical="$(ov_get '.overlays.audio_visualizer.symmetric_vertical' 'false')"
+    av_rounding_blur="$(ov_get '.overlays.audio_visualizer.rounding.blur' '')"
+    av_rounding_contrast="$(ov_get '.overlays.audio_visualizer.rounding.contrast' '3.2')"
 
     sp_image="$(ov_get '.overlays.subscribe_popup.image' 'subscribe-popup.png')"
     sp_start="$(ov_get '.overlays.subscribe_popup.start_sec' '5')"
@@ -700,7 +710,32 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     enc_profile="$(ov_get '.overlays.encoder.profile' 'high')"
     enc_framerate="$(ov_get '.overlays.encoder.framerate' '24')"
 
-    # 入力配列: [0]=背景, [1]=master audio, [2+]=runtime mask / popup PNG (任意)
+    # fill 指定時は production CLI で色素材を検証・生成する。未指定なら v13 の
+    # colors 経路をそのまま使い、既存 filtergraph を完全に維持する。
+    if [[ "$av_enabled" == "true" && -n "$av_fill_type" ]]; then
+        av_fill_requested_type="$av_fill_type"
+        if command -v yt-audio-visualizer-fill &>/dev/null; then
+            AV_FILL_COMMAND=(yt-audio-visualizer-fill)
+        elif command -v uv &>/dev/null; then
+            AV_FILL_COMMAND=(uv run --no-sync yt-audio-visualizer-fill)
+        elif command -v python3 &>/dev/null; then
+            AV_FILL_COMMAND=(python3 -m youtube_automation.utils.audio_visualizer_fill)
+        else
+            echo "ERROR: yt-audio-visualizer-fill is required when audio_visualizer.fill is configured" >&2
+            exit 1
+        fi
+        if ! av_fill_type="$("${AV_FILL_COMMAND[@]}" --type "$av_fill_type" --size "$av_size" \
+            --color "$av_fill_color" --top "$av_fill_top" --bottom "$av_fill_bottom" --output "$AV_FILL_ASSET")"; then
+            echo "ERROR: invalid overlays.audio_visualizer.fill config" >&2
+            exit 1
+        fi
+        # gradient の同色指定は helper が solid に縮退する。
+        if [[ "$av_fill_requested_type" == "gradient" && "$av_fill_type" == "solid" ]]; then
+            av_fill_color="$av_fill_top"
+        fi
+    fi
+
+    # 入力配列: [0]=背景, [1]=master audio, [2+]=fill / runtime mask / popup PNG (任意)
     INPUTS=()
     if [[ -n "$LOOP_VIDEO" ]]; then
         INPUTS+=(-stream_loop -1 -i "$LOOP_VIDEO")
@@ -710,6 +745,13 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     INPUTS+=("${AUDIO_INPUT_OPTS[@]}" -i "$MASTER_AUDIO")
 
     next_input_idx=2
+    av_fill_input_idx=""
+    if [[ "$av_fill_type" == "gradient" || "$av_fill_type" == "rainbow" ]]; then
+        INPUTS+=(-loop 1 -framerate "$av_rate" -i "$AV_FILL_ASSET")
+        av_fill_input_idx="$next_input_idx"
+        next_input_idx=$((next_input_idx + 1))
+    fi
+
     av_mask_input_idx=""
     if [[ "$av_enabled" == "true" && "$av_style" != "bar" ]]; then
         INPUTS+=(-loop 1 -i "$AV_MASK_PATH")
@@ -743,11 +785,50 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     CURRENT_LABEL="bg"
 
     if [[ "$av_enabled" == "true" ]]; then
-        # bar は v13 の filtergraph をそのまま維持し、style 未指定時の視覚差分を防ぐ。
+        # bar は fill / mirror / rounding を適用でき、他 preset は runtime mask を使う。
         FILTER+="[1:a]asplit=2[avis_in][a_out];"
         case "$av_style" in
             bar)
-                FILTER+="[avis_in]showfreqs=mode=${av_mode}:s=${av_size}:rate=${av_rate}:fscale=${av_fscale}:win_size=${av_win_size}:win_func=${av_win_func}:colors=${av_colors},format=rgba,colorchannelmixer=aa=${av_opacity}[avis];"
+                if [[ -z "$av_fill_type" && "$av_mirror_center" != "true" && "$av_symmetric_vertical" != "true" && -z "$av_rounding_blur" ]]; then
+                    FILTER+="[avis_in]showfreqs=mode=${av_mode}:s=${av_size}:rate=${av_rate}:fscale=${av_fscale}:win_size=${av_win_size}:win_func=${av_win_func}:colors=${av_colors},format=rgba,colorchannelmixer=aa=${av_opacity}[avis];"
+                else
+                    if [[ ! "$av_size" =~ ^([1-9][0-9]*)x([1-9][0-9]*)$ ]]; then
+                        echo "ERROR: invalid overlays.audio_visualizer.size: ${av_size}" >&2; exit 1
+                    fi
+                    av_width="${BASH_REMATCH[1]}"; av_height="${BASH_REMATCH[2]}"
+                    av_source_width="$av_width"; av_source_height="$av_height"
+                    if [[ "$av_mirror_center" == "true" ]]; then
+                        if (( av_width % 2 != 0 )); then echo "ERROR: mirror_center requires an even visualizer width" >&2; exit 1; fi
+                        av_source_width=$((av_width / 2))
+                    fi
+                    if [[ "$av_symmetric_vertical" == "true" ]]; then
+                        if (( av_height % 2 != 0 )); then echo "ERROR: symmetric_vertical requires an even visualizer height" >&2; exit 1; fi
+                        av_source_height=$((av_height / 2))
+                    fi
+                    FILTER+="[avis_in]showfreqs=mode=${av_mode}:s=${av_source_width}x${av_source_height}:rate=${av_rate}:fscale=${av_fscale}:win_size=${av_win_size}:win_func=${av_win_func}:colors=white,format=gray,lut=y='val*${av_opacity}'[avis_shape];"
+                    av_shape_label="avis_shape"
+                    if [[ "$av_mirror_center" == "true" ]]; then
+                        FILTER+="[${av_shape_label}]split=2[avis_half][avis_half_flip_src];[avis_half_flip_src]hflip[avis_half_flip];[avis_half_flip][avis_half]hstack=inputs=2[avis_mirror];"
+                        av_shape_label="avis_mirror"
+                    fi
+                    if [[ "$av_symmetric_vertical" == "true" ]]; then
+                        FILTER+="[${av_shape_label}]split=2[avis_top][avis_bottom_src];[avis_bottom_src]vflip[avis_bottom];[avis_top][avis_bottom]vstack=inputs=2[avis_symmetric];"
+                        av_shape_label="avis_symmetric"
+                    fi
+                    FILTER+="[${av_shape_label}]null"
+                    if [[ -n "$av_rounding_blur" ]]; then
+                        FILTER+=",gblur=sigma=${av_rounding_blur},eq=contrast=${av_rounding_contrast}"
+                    fi
+                    FILTER+="[avis_alpha];"
+                    if [[ "$av_fill_type" == "gradient" || "$av_fill_type" == "rainbow" ]]; then
+                        FILTER+="[${av_fill_input_idx}:v]format=rgb24[avis_fill];"
+                    else
+                        av_effective_color="$av_colors"
+                        [[ -n "$av_fill_type" ]] && av_effective_color="$av_fill_color"
+                        FILTER+="color=c=${av_effective_color}:s=${av_size}:r=${av_rate},format=rgb24[avis_fill];"
+                    fi
+                    FILTER+="[avis_fill][avis_alpha]alphamerge[avis];"
+                fi
                 ;;
             mirror-mountain)
                 av_width="${av_size%x*}"

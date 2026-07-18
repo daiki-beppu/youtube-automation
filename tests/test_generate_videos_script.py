@@ -150,19 +150,51 @@ case "$expr" in
             printf 'false\\n'
         fi
         ;;
-    *".overlays.audio_visualizer.enabled"*) printf '%s\\n' "${OVERLAY_AV_ENABLED:-false}" ;;
+    *".overlays.audio_visualizer.enabled"*) printf '%s\\n' "${OVERLAY_AV_ENABLED:-${JQ_AV_ENABLED:-false}}" ;;
     *".overlays.audio_visualizer.style"*) printf '%s\\n' "${OVERLAY_AV_STYLE:-}" ;;
     *".overlays.audio_visualizer.bars"*) printf '%s\\n' "${OVERLAY_AV_BARS:-}" ;;
     *".overlays.audio_visualizer.size"*) printf '%s\\n' "${OVERLAY_AV_SIZE:-}" ;;
     *".overlays.audio_visualizer.position"*) printf '%s\\n' "${OVERLAY_AV_POSITION:-}" ;;
+    *".overlays.audio_visualizer.glow.enabled // .overlays.audio_visualizer.glow_enabled"*)
+        printf '%s\\n' "${JQ_AV_GLOW_ENABLED:-}"
+        ;;
     *".overlays.audio_visualizer.glow_enabled"*) printf '%s\\n' "${OVERLAY_AV_GLOW_ENABLED:-}" ;;
     *".overlays.audio_visualizer.ring.inner_r"*) printf '%s\\n' "${OVERLAY_AV_RING_INNER_R:-}" ;;
     *".overlays.audio_visualizer.ring.length"*) printf '%s\\n' "${OVERLAY_AV_RING_LENGTH:-}" ;;
     *".overlays.audio_visualizer.ring.arc_deg[0]"*) printf '%s\\n' "${OVERLAY_AV_ARC_START:-}" ;;
     *".overlays.audio_visualizer.ring.arc_deg[1]"*) printf '%s\\n' "${OVERLAY_AV_ARC_END:-}" ;;
+    *".overlays.audio_visualizer.fill.type"*) printf '%s\\n' "${JQ_AV_FILL_TYPE:-}" ;;
+    *".overlays.audio_visualizer.fill.color"*) printf '%s\\n' "${JQ_AV_FILL_COLOR:-}" ;;
+    *".overlays.audio_visualizer.fill.top"*) printf '%s\\n' "${JQ_AV_FILL_TOP:-}" ;;
+    *".overlays.audio_visualizer.fill.bottom"*) printf '%s\\n' "${JQ_AV_FILL_BOTTOM:-}" ;;
+    *".overlays.audio_visualizer.mirror_center"*) printf '%s\\n' "${JQ_AV_MIRROR_CENTER:-}" ;;
+    *".overlays.audio_visualizer.symmetric_vertical"*) printf '%s\\n' "${JQ_AV_SYMMETRIC_VERTICAL:-}" ;;
+    *".overlays.audio_visualizer.rounding.blur"*) printf '%s\\n' "${JQ_AV_ROUNDING_BLUR:-}" ;;
+    *".overlays.audio_visualizer.rounding.contrast"*) printf '%s\\n' "${JQ_AV_ROUNDING_CONTRAST:-}" ;;
+    *".overlays.audio_visualizer.glow.enabled"*) printf '%s\\n' "${JQ_AV_GLOW_ENABLED:-}" ;;
+    *".overlays.audio_visualizer.glow.sigma"*) printf '%s\\n' "${JQ_AV_GLOW_SIGMA:-}" ;;
+    *".overlays.audio_visualizer.glow.opacity"*) printf '%s\\n' "${JQ_AV_GLOW_OPACITY:-}" ;;
     *".overlays.subscribe_popup.enabled"*) printf 'false\\n' ;;
     *) printf '\\n' ;;
 esac
+""",
+    )
+    _write_executable(
+        bin_dir / "yt-audio-visualizer-fill",
+        """#!/bin/bash
+set -eu
+if [[ "${FILL_HELPER_FAIL:-0}" == "1" ]]; then
+    printf 'invalid fill config\\n' >&2
+    exit 2
+fi
+output=""
+prev=""
+for arg in "$@"; do
+    if [[ "$prev" == "--output" ]]; then output="$arg"; fi
+    prev="$arg"
+done
+if [[ "${FILL_EFFECTIVE_TYPE:-gradient}" != "solid" ]]; then printf 'png' > "$output"; fi
+printf '%s\\n' "${FILL_EFFECTIVE_TYPE:-gradient}"
 """,
     )
     return bin_dir
@@ -813,6 +845,152 @@ def test_overlay_static_background_uses_textless_main_png(tmp_path: Path) -> Non
     assert "-c:v libx264" in master_cmd
     assert "still_baked.mp4" not in master_cmd
     assert "-c:v copy" not in master_cmd
+
+
+def test_audio_visualizer_legacy_config_keeps_original_filtergraph(tmp_path: Path) -> None:
+    """#1686: 新キー未指定なら既存 colors + glow filtergraph を維持する。"""
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays": {"enabled": true}}', encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env={"OVERLAYS_CONFIG": str(overlays_config), "JQ_AV_ENABLED": "true"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    command = _filter_complex_command(ffmpeg_log)
+    assert "showfreqs=mode=bar:s=1280x180:rate=24:fscale=log:win_size=2048:win_func=hann:colors=white" in command
+    assert "alphaextract" not in command
+    assert "alphamerge" not in command
+
+
+def test_audio_visualizer_combines_fill_mirror_symmetry_rounding_and_nested_glow(tmp_path: Path) -> None:
+    """#1686: 各 effect を組み合わせた b2 相当の filtergraph を構築する。"""
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays": {"enabled": true}}', encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env={
+            "OVERLAYS_CONFIG": str(overlays_config),
+            "JQ_AV_ENABLED": "true",
+            "JQ_AV_FILL_TYPE": "gradient",
+            "JQ_AV_FILL_TOP": "0xFF8800",
+            "JQ_AV_FILL_BOTTOM": "0x4400AA",
+            "JQ_AV_MIRROR_CENTER": "true",
+            "JQ_AV_SYMMETRIC_VERTICAL": "true",
+            "JQ_AV_ROUNDING_BLUR": "2.3",
+            "JQ_AV_ROUNDING_CONTRAST": "3.2",
+            "JQ_AV_GLOW_ENABLED": "true",
+            "JQ_AV_GLOW_SIGMA": "6",
+            "JQ_AV_GLOW_OPACITY": "0.40",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    command = _filter_complex_command(ffmpeg_log)
+    assert "showfreqs=mode=bar:s=640x90" in command
+    assert "hflip[avis_half_flip]" in command
+    assert "hstack=inputs=2[avis_mirror]" in command
+    assert "vflip[avis_bottom]" in command
+    assert "vstack=inputs=2[avis_symmetric]" in command
+    assert "format=gray,lut=y='val*0.85'[avis_shape]" in command
+    assert "null,gblur=sigma=2.3,eq=contrast=3.2[avis_alpha]" in command
+    assert "format=rgb24[avis_fill]" in command
+    assert "[avis_fill][avis_alpha]alphamerge[avis]" in command
+    assert "gblur=sigma=6,colorchannelmixer=aa=0.40" in command
+
+
+def test_audio_visualizer_solid_fill_uses_color_source(tmp_path: Path) -> None:
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays": {"enabled": true}}', encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env={
+            "OVERLAYS_CONFIG": str(overlays_config),
+            "JQ_AV_ENABLED": "true",
+            "JQ_AV_FILL_TYPE": "solid",
+            "JQ_AV_FILL_COLOR": "0x12ABEF",
+            "FILL_EFFECTIVE_TYPE": "solid",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    command = _filter_complex_command(ffmpeg_log)
+    assert "color=c=0x12ABEF:s=1280x180:r=24,format=rgb24[avis_fill]" in command
+    assert "alphamerge[avis]" in command
+
+
+@pytest.mark.parametrize(
+    ("env_key", "enabled", "fragment"),
+    [
+        ("JQ_AV_MIRROR_CENTER", True, "hflip[avis_half_flip]"),
+        ("JQ_AV_MIRROR_CENTER", False, "hflip[avis_half_flip]"),
+        ("JQ_AV_SYMMETRIC_VERTICAL", True, "vflip[avis_bottom]"),
+        ("JQ_AV_SYMMETRIC_VERTICAL", False, "vflip[avis_bottom]"),
+        ("JQ_AV_ROUNDING_BLUR", True, "null,gblur=sigma=2.3,eq=contrast=3.2"),
+        ("JQ_AV_ROUNDING_BLUR", False, "null,gblur=sigma=2.3,eq=contrast=3.2"),
+        ("JQ_AV_GLOW_ENABLED", True, "[avis]split=2[avis_core][avis_glow_src]"),
+        ("JQ_AV_GLOW_ENABLED", False, "[avis]split=2[avis_core][avis_glow_src]"),
+    ],
+)
+def test_audio_visualizer_effect_flags_are_independent(
+    tmp_path: Path, env_key: str, enabled: bool, fragment: str
+) -> None:
+    """#1686: 各 effect の ON/OFF が他フラグに依存せず filtergraph へ反映される。"""
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays": {"enabled": true}}', encoding="utf-8")
+    extra_env = {
+        "OVERLAYS_CONFIG": str(overlays_config),
+        "JQ_AV_ENABLED": "true",
+        "JQ_AV_FILL_TYPE": "solid",
+        "JQ_AV_FILL_COLOR": "0x12ABEF",
+        "FILL_EFFECTIVE_TYPE": "solid",
+        "JQ_AV_GLOW_ENABLED": "false",
+    }
+    if env_key == "JQ_AV_ROUNDING_BLUR":
+        extra_env[env_key] = "2.3" if enabled else ""
+    else:
+        extra_env[env_key] = "true" if enabled else "false"
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env=extra_env,
+    )
+
+    assert result.returncode == 0, result.stderr
+    command = _filter_complex_command(ffmpeg_log)
+    assert (fragment in command) is enabled
+
+
+def test_audio_visualizer_invalid_fill_stops_before_render(tmp_path: Path) -> None:
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays": {"enabled": true}}', encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env={
+            "OVERLAYS_CONFIG": str(overlays_config),
+            "JQ_AV_ENABLED": "true",
+            "JQ_AV_FILL_TYPE": "gradient",
+            "FILL_HELPER_FAIL": "1",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "invalid overlays.audio_visualizer.fill config" in result.stdout + result.stderr
+    assert not ffmpeg_log.exists()
 
 
 def test_videoup_skill_documents_current_overlay_support() -> None:

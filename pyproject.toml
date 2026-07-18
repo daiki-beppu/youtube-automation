@@ -33,6 +33,7 @@ Repository = "https://github.com/daiki-beppu/youtube-automation"
 veo = []  # google-genai, Pillow moved to main dependencies
 
 [project.scripts]
+yt-audio-visualizer-fill = "youtube_automation.cli_entrypoints:yt_audio_visualizer_fill"
 # CLI script entry points (yt-* prefix)
 yt-analytics = "youtube_automation.cli_entrypoints:yt_analytics"
 yt-apply-rain-layers = "youtube_automation.cli_entrypoints:yt_apply_rain_layers"
@@ -41,6 +42,7 @@ yt-benchmark-collect = "youtube_automation.cli_entrypoints:yt_benchmark_collect"
 yt-benchmark-comments = "youtube_automation.cli_entrypoints:yt_benchmark_comments"
 yt-bulk-update-desc = "youtube_automation.cli_entrypoints:yt_bulk_update_desc"
 yt-bulk-update-synthetic-media = "youtube_automation.cli_entrypoints:yt_bulk_update_synthetic_media"
+yt-captions-upload = "youtube_automation.cli_entrypoints:yt_captions_upload"
 yt-channel-init = "youtube_automation.cli_entrypoints:yt_channel_init"
 yt-channel-seed = "youtube_automation.cli_entrypoints:yt_channel_seed"
 yt-channel-settings = "youtube_automation.cli_entrypoints:yt_channel_settings"
@@ -72,6 +74,7 @@ yt-playlist-status = "youtube_automation.cli_entrypoints:yt_playlist_status"
 yt-populate-scene-phrases = "youtube_automation.cli_entrypoints:yt_populate_scene_phrases"
 yt-preflight = "youtube_automation.cli_entrypoints:yt_preflight"
 yt-raw-master-check = "youtube_automation.cli_entrypoints:yt_raw_master_check"
+yt-retention-timeline = "youtube_automation.cli_entrypoints:yt_retention_timeline"
 yt-stock-archive = "youtube_automation.cli_entrypoints:yt_stock_archive"
 yt-stock-list = "youtube_automation.cli_entrypoints:yt_stock_list"
 yt-stock-preview = "youtube_automation.cli_entrypoints:yt_stock_preview"
