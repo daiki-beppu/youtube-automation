@@ -3,6 +3,11 @@ name: distrokid-helper
 description: "Use when コレクションの楽曲を DistroKid 配信用に準備し、distrokid-helper Chrome 拡張へ渡すローカルサーバーを起動したいとき（30-distrokid 生成 / disc 分割 / metadata.md / ジャケット 3000×3000 新規生成 / uv run yt-collection-serve 起動）。『DistroKid 準備』『配信準備』『アルバム化』『distrokid-helper』で発動。DistroKid Web への転記・アップロード操作そのものは Chrome 拡張側の責務"
 ---
 
+## 前後工程
+
+- `前工程`: `/masterup`, `/lyria`, `/thumbnail`, `/ext-install`
+- `後工程`: `なし`
+
 ## Overview
 
 コレクションの楽曲（`02-Individual-music/*.mp3`）を DistroKid 配信向けに整備し、`30-distrokid/` 以下に成果物一式を生成します。

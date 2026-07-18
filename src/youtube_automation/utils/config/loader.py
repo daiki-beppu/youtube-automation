@@ -36,7 +36,14 @@ from youtube_automation.utils.config.meta import Branding, ChannelMeta
 from youtube_automation.utils.config.pinned_comment import PinnedComment
 from youtube_automation.utils.config.playlists import Playlists
 from youtube_automation.utils.config.shorts import Shorts, ShortsCollection, ShortsRelease
-from youtube_automation.utils.config.workflow import ApprovalGates, WfNext, Workflow
+from youtube_automation.utils.config.workflow import (
+    SCHEDULED_AUTOMATION_CADENCE_DAYS,
+    SCHEDULED_AUTOMATION_NOTIFICATIONS,
+    ApprovalGates,
+    ScheduledAutomation,
+    WfNext,
+    Workflow,
+)
 from youtube_automation.utils.config.youtube import (
     AudioVisualizerFill,
     AudioVisualizerGlow,
@@ -620,7 +627,107 @@ def _build_workflow(merged: dict) -> Workflow:
                 "workflow.wf_next.skip_manual_mastering",
             ),
         ),
+        scheduled_automation=_build_scheduled_automation(wf),
     )
+
+
+def _build_scheduled_automation(wf: dict) -> ScheduledAutomation:
+    """`workflow.scheduled_automation`（optional）を組み立てる（#1892）.
+
+    未設定なら全 default（`enabled = False`）で、既存チャンネルの挙動を変えない。
+    指定された値は falsy を default に潰さず strict に検証する（#1449 と同方針）。
+    """
+    if "scheduled_automation" not in wf:
+        return ScheduledAutomation()
+    raw = wf["scheduled_automation"]
+    if not isinstance(raw, dict):
+        raise ConfigError(f"workflow.scheduled_automation は object でなければなりません（got {type(raw).__name__}）")
+
+    prefix = "workflow.scheduled_automation"
+    defaults = ScheduledAutomation()
+    return ScheduledAutomation(
+        enabled=_scheduled_bool(raw, "enabled", prefix, defaults.enabled),
+        timezone=_scheduled_str(raw, "timezone", prefix, defaults.timezone),
+        run_time=_scheduled_run_time(raw, prefix, defaults.run_time),
+        cadence=_scheduled_cadence(raw, prefix, defaults.cadence),
+        target_workflow=_scheduled_str(raw, "target_workflow", prefix, defaults.target_workflow),
+        max_retries=_scheduled_int(raw, "max_retries", prefix, defaults.max_retries),
+        retry_delay_seconds=_scheduled_int(raw, "retry_delay_seconds", prefix, defaults.retry_delay_seconds),
+        prevent_concurrent_runs=_scheduled_bool(
+            raw, "prevent_concurrent_runs", prefix, defaults.prevent_concurrent_runs
+        ),
+        notification=_scheduled_notification(raw, prefix, defaults.notification),
+        allow_external_publish=_scheduled_bool(raw, "allow_external_publish", prefix, defaults.allow_external_publish),
+    )
+
+
+def _scheduled_bool(raw: dict, key: str, prefix: str, default: bool) -> bool:
+    if key not in raw:
+        return default
+    value = raw[key]
+    if not isinstance(value, bool):
+        raise ConfigError(f"{prefix}.{key} は boolean でなければなりません（got {type(value).__name__}）")
+    return value
+
+
+def _scheduled_int(raw: dict, key: str, prefix: str, default: int) -> int:
+    if key not in raw:
+        return default
+    value = raw[key]
+    # bool は int の subclass のため明示的に弾く
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigError(f"{prefix}.{key} は integer でなければなりません（got {type(value).__name__}）")
+    if value < 0:
+        raise ConfigError(f"{prefix}.{key} は 0 以上でなければなりません（got {value}）")
+    return value
+
+
+def _scheduled_str(raw: dict, key: str, prefix: str, default: str) -> str:
+    if key not in raw:
+        return default
+    value = raw[key]
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"{prefix}.{key} は空でない string でなければなりません（got {value!r}）")
+    return value
+
+
+def _scheduled_run_time(raw: dict, prefix: str, default: str) -> str:
+    value = _scheduled_str(raw, "run_time", prefix, default)
+    parts = value.split(":")
+    if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+        hour, minute = int(parts[0]), int(parts[1])
+        if len(parts[0]) == 2 and len(parts[1]) == 2 and hour <= 23 and minute <= 59:
+            return value
+    raise ConfigError(f"{prefix}.run_time は HH:MM（24 時間表記）でなければなりません（got {value!r}）")
+
+
+def _scheduled_cadence(raw: dict, prefix: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    if "cadence" not in raw:
+        return default
+    value = raw["cadence"]
+    if not isinstance(value, list) or not value:
+        raise ConfigError(f"{prefix}.cadence は空でない曜日の array でなければなりません（got {value!r}）")
+    seen: list[str] = []
+    for day in value:
+        if not isinstance(day, str) or day not in SCHEDULED_AUTOMATION_CADENCE_DAYS:
+            raise ConfigError(
+                f"{prefix}.cadence の要素は {list(SCHEDULED_AUTOMATION_CADENCE_DAYS)} の"
+                f"いずれかでなければなりません（got {day!r}）"
+            )
+        if day in seen:
+            raise ConfigError(f"{prefix}.cadence に重複した曜日があります（{day!r}）")
+        seen.append(day)
+    return tuple(seen)
+
+
+def _scheduled_notification(raw: dict, prefix: str, default: str) -> str:
+    value = _scheduled_str(raw, "notification", prefix, default)
+    if value not in SCHEDULED_AUTOMATION_NOTIFICATIONS:
+        raise ConfigError(
+            f"{prefix}.notification は {list(SCHEDULED_AUTOMATION_NOTIFICATIONS)} の"
+            f"いずれかでなければなりません（got {value!r}）"
+        )
+    return value
 
 
 def _resolve_skip_approval(wf_next_raw: dict, gates_raw: dict, new_key: str, legacy_key: str) -> bool:

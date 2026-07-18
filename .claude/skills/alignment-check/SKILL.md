@@ -3,6 +3,11 @@ name: alignment-check
 description: "Use when 音楽ムード × サムネ × タイトルの整合性を監査するとき。「整合性チェック」「タイトル見直し」「CTR改善」で発動。方向性見直し時に必須"
 ---
 
+## 前後工程
+
+- `前工程`: `/thumbnail`, `/suno`, `/lyria`
+- `後工程`: `/flop-analysis`
+
 ## Overview
 
 公開済み全コレクションの音楽プロンプト・サムネイル・タイトルを横断的に監査し、

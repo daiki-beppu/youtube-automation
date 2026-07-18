@@ -3,6 +3,11 @@ name: thumbnail-compare
 description: "Use when 自チャンネルの生成済みサムネイルを競合と並べて 320px 視認性を比較検証するとき。「サムネ比較」「目立ってるか確認」「モバイル表示テスト」「320px」で発動。競合だけの勝ちパターン分析は /thumbnail-research、生成は /thumbnail、Studio の A/B テスト設計・結果記録は /thumbnail-test"
 ---
 
+## 前後工程
+
+- `前工程`: `/thumbnail`, `/benchmark`
+- `後工程`: `なし`
+
 ## Overview
 
 自チャンネルの全サムネイルとベンチマーク3チャンネルの1万再生以上の動画サムネイルを

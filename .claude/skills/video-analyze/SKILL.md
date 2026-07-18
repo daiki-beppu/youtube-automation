@@ -3,6 +3,11 @@ name: video-analyze
 description: "Use when 動画本体の中身（フック構造・シーン・BGM 展開）を Gemini で解析するとき。「冒頭 30 秒解析」「retention drop」「BGM のピーク位置」で発動"
 ---
 
+## 前後工程
+
+- `前工程`: `なし`
+- `後工程`: `/collection-ideate`, `/suno`, `/alignment-check`
+
 ## Overview
 
 `yt-video-analyze` で YouTube 動画を Gemini に直接渡し、以下の構造化データを抽出する。
@@ -50,7 +55,7 @@ Step 1 のスクリプトが exit 0 で終了して `data/video_analysis/<slug>/
 
 ```bash
 # ベンチマーク競合の上位動画を解析
-uv run yt-video-analyze --source benchmark --channel <slug> --top 5
+uv run yt-video-analyze --source benchmark --competitor <slug> --top 5
 
 # 自チャンネル live コレクションを解析
 uv run yt-video-analyze --source own --collection <name>
@@ -61,7 +66,7 @@ uv run yt-video-analyze --url <youtube_url>
 
 | オプション | 説明 |
 |---|---|
-| `--source benchmark` | `data/benchmark_*.json` から `--channel` slug でフィルタし `--top` 件 (default 5) を解析 |
+| `--source benchmark` | `data/benchmark_*.json` から `--competitor` slug でフィルタし `--top` 件 (default 5) を解析 |
 | `--source own` | `collections/live/<name>/20-documentation/upload_tracking.json` の `complete_collection.video_id` (および `videos[]`) を解析 |
 | `--url` | 任意 YouTube URL を直接解析 (slug は固定 `url`) |
 | `--force` | 既存の `data/video_analysis/<slug>/<video_id>.json` があっても Gemini で再解析して上書きする |
