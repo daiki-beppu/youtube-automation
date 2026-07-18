@@ -1,18 +1,10 @@
 # automation リポジトリの takt 設定
-# provider / model / language はグローバル設定 (~/.takt/config.yaml) を継承する。
-# takt は全 persona codex で運用する（レビュー系も codex。lite workflow は step 直指定でも codex を明示）。
+# provider / model / language / concurrency / persona_providers は
+# グローバル設定 (~/.takt/config.yaml) を継承する。
+# repo-local で再宣言すると persona_providers は辞書全体が置換され、グローバルの
+# provider / model routing が失われるため、ここでは上書きしない。
 draft_pr: false
 base_branch: main
-
-# 並列実行数（グローバル既定 3 の override）。open issue 一括消化ミッションで実績あり
-concurrency: 5
-
-provider: codex
-persona_providers:
-  coder:
-    provider: codex
-  planner:
-    provider: codex
 
 # sandbox 化された worker の direnv / lefthook セットアップ停滞対策（issue #1999）と、
 # sibling worktree 由来 path の持ち込み遮断（issue #2163）。
