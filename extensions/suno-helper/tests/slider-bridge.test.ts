@@ -35,7 +35,7 @@ function makeReactSlider(
     propsOn?: "self" | "parent" | "none";
     handlerThrows?: boolean;
     ariaLabel?: string;
-  } = {},
+  } = {}
 ): HTMLElement {
   const parent = document.createElement("div");
   const slider = document.createElement("div");
@@ -55,15 +55,21 @@ function makeReactSlider(
       return; // Suno の bot 検知を模す
     }
     const cur = Number(slider.getAttribute("aria-valuenow"));
-    if (e.key === "ArrowRight") slider.setAttribute("aria-valuenow", String(cur + 1));
-    else if (e.key === "ArrowLeft") slider.setAttribute("aria-valuenow", String(cur - 1));
+    if (e.key === "ArrowRight")
+      slider.setAttribute("aria-valuenow", String(cur + 1));
+    else if (e.key === "ArrowLeft")
+      slider.setAttribute("aria-valuenow", String(cur - 1));
   };
 
   const propsOn = opts.propsOn ?? "self";
   if (propsOn === "self") {
-    (slider as unknown as Record<string, unknown>).__reactProps$abc123 = { onKeyDown };
+    (slider as unknown as Record<string, unknown>).__reactProps$abc123 = {
+      onKeyDown,
+    };
   } else if (propsOn === "parent") {
-    (parent as unknown as Record<string, unknown>).__reactProps$abc123 = { onKeyDown };
+    (parent as unknown as Record<string, unknown>).__reactProps$abc123 = {
+      onKeyDown,
+    };
   }
   return slider;
 }
@@ -98,7 +104,9 @@ describe("findReactKeyDownTarget: __reactProps$ expando の探索", () => {
 
   it("Given props はあるが onKeyDown 無し When 探索 Then 祖先へ遡って探す", () => {
     const slider = makeReactSlider(50, { propsOn: "parent" });
-    (slider as unknown as Record<string, unknown>).__reactProps$xyz = { onClick: () => {} };
+    (slider as unknown as Record<string, unknown>).__reactProps$xyz = {
+      onClick: () => {},
+    };
     const found = findReactKeyDownTarget(slider);
     expect(found?.owner).toBe(slider.parentElement);
   });
@@ -125,7 +133,9 @@ describe("setSliderValueViaReact: React onKeyDown 直接呼び出しによる注
   it("Given isTrusted チェック付き slider When dispatchEvent Then 動かない（実機の再現）", () => {
     const slider = makeReactSlider(50);
     // 合成イベントの dispatch では __reactProps$ のハンドラは呼ばれず、仮に呼ばれても isTrusted=false で弾かれる
-    slider.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    slider.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })
+    );
     expect(slider.getAttribute("aria-valuenow")).toBe("50");
   });
 
@@ -155,7 +165,9 @@ describe("setSliderValueViaReact: React onKeyDown 直接呼び出しによる注
   it("Given ハンドラを呼んでも値が動かない When 注入 Then false（無限ループしない）", async () => {
     const slider = makeReactSlider(50);
     // ハンドラはあるが値を動かさないケース（UI 改装等）
-    (slider as unknown as Record<string, unknown>).__reactProps$abc123 = { onKeyDown: () => {} };
+    (slider as unknown as Record<string, unknown>).__reactProps$abc123 = {
+      onKeyDown: () => {},
+    };
     await expect(setSliderValueViaReact(slider, 60)).resolves.toBe(false);
   });
 
@@ -187,11 +199,18 @@ function makeRerenderingReactSlider(value: number): HTMLElement {
       if (e.isTrusted !== true) {
         return;
       }
-      const next = e.key === "ArrowRight" ? current + 1 : e.key === "ArrowLeft" ? current - 1 : current;
+      const next =
+        e.key === "ArrowRight"
+          ? current + 1
+          : e.key === "ArrowLeft"
+            ? current - 1
+            : current;
       slider.setAttribute("aria-valuenow", String(next));
       render(next); // setState → 再レンダー: props を新 closure に差し替え
     };
-    (slider as unknown as Record<string, unknown>).__reactProps$abc123 = { onKeyDown };
+    (slider as unknown as Record<string, unknown>).__reactProps$abc123 = {
+      onKeyDown,
+    };
   };
   render(value);
   return slider;

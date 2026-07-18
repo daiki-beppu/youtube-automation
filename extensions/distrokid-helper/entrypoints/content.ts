@@ -21,13 +21,15 @@ export default defineContentScript({
   matches: [...MANIFEST_CONTENT_SCRIPT_MATCHES],
   main() {
     const session = new InjectSession(documentInjector, (phase, message) =>
-      sendMessage("progress", { phase, message }),
+      sendMessage("progress", { phase, message })
     );
 
     // 各メッセージ handler は例外を握りつぶさず伝播させる。@webext-core/messaging が
     // popup 側 sendMessage を reject し、popup が ERROR フェーズへ一元変換する（fail-loud）。
     onMessage("injectStart", ({ data }) => session.start(data.payload));
-    onMessage("injectTrack", ({ data }) => session.track(data.trackIndex, data.asset));
+    onMessage("injectTrack", ({ data }) =>
+      session.track(data.trackIndex, data.asset)
+    );
     onMessage("injectCover", ({ data }) => session.cover(data.asset));
     onMessage("injectFinish", () => session.finish());
     onMessage("stop", () => session.stop());

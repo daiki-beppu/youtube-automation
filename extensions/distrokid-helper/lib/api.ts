@@ -33,10 +33,18 @@ function normalizeReleasePayload(raw: unknown): ReleasePayload {
     throw new Error("release.json payload must be an object");
   }
   const payload = raw as { profile?: unknown; release?: unknown };
-  if (payload.profile === null || typeof payload.profile !== "object" || Array.isArray(payload.profile)) {
+  if (
+    payload.profile === null ||
+    typeof payload.profile !== "object" ||
+    Array.isArray(payload.profile)
+  ) {
     throw new Error("release.json profile must be an object");
   }
-  if (payload.release === null || typeof payload.release !== "object" || Array.isArray(payload.release)) {
+  if (
+    payload.release === null ||
+    typeof payload.release !== "object" ||
+    Array.isArray(payload.release)
+  ) {
     throw new Error("release.json release must be an object");
   }
   const profile = payload.profile as Record<string, unknown>;
@@ -73,7 +81,7 @@ export async function fetchRelease(baseUrl: string): Promise<ReleasePayload> {
 export async function fetchCollectionRelease(
   baseUrl: string,
   collectionId: string,
-  disc: string,
+  disc: string
 ): Promise<ReleasePayload> {
   const route = distrokidReleaseRoute(collectionId, disc);
   const url = `${normalizeBaseUrl(baseUrl)}${route}`;
@@ -93,12 +101,18 @@ export async function fetchCollectionRelease(
 // fetch は popup（chrome-extension:// origin）で行う必要がある（asset-transfer.ts 参照）。
 // assetPath は接頭辞 "/distrokid/assets/" または "/collections/<id>/distrokid/assets/" 込みのため
 // baseUrl と連結するだけでよい（dir mode の collection-scoped asset_path も同形式）。
-export async function fetchAsset(baseUrl: string, assetPath: string, filename: string): Promise<SerializedAsset> {
+export async function fetchAsset(
+  baseUrl: string,
+  assetPath: string,
+  filename: string
+): Promise<SerializedAsset> {
   const url = `${normalizeBaseUrl(baseUrl)}${assetPath}`;
   const response = await fetch(url, { method: "GET" });
 
   if (!response.ok) {
-    throw new Error(`asset fetch failed (${assetPath}): HTTP ${response.status}`);
+    throw new Error(
+      `asset fetch failed (${assetPath}): HTTP ${response.status}`
+    );
   }
 
   return encodeAsset(filename, await response.blob());

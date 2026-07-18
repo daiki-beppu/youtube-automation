@@ -1,4 +1,4 @@
-"""Chrome helper extensions の共有 Oxlint 契約テスト。"""
+"""Chrome helper extensions の共有 Oxlint + Oxfmt（ultracite）契約テスト。"""
 
 from __future__ import annotations
 
@@ -16,19 +16,29 @@ _ESLINT_DIRECT_DEPENDENCIES: Final[set[str]] = {
     "eslint-plugin-react-hooks",
     "typescript-eslint",
 }
+_REPLACED_FORMATTER_DEPENDENCIES: Final[set[str]] = {"prettier"}
+_TOOLCHAIN_VERSIONS: Final[dict[str, str]] = {
+    "oxlint": "1.73.0",
+    "oxfmt": "0.59.0",
+    "ultracite": "7.9.4",
+}
 
 
 def _read_json(path: Path) -> dict[str, object]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def test_helpers_share_oxlint_dependency_script_and_config_contract() -> None:
-    expected_lint_scripts = {
-        "suno-helper": "cd .. && oxlint -c .oxlintrc.json suno-helper shared",
-        "distrokid-helper": "cd .. && oxlint -c .oxlintrc.json distrokid-helper",
+def test_helpers_share_ultracite_dependency_script_and_config_contract() -> None:
+    expected_check_scripts = {
+        "suno-helper": "cd .. && ultracite check suno-helper shared",
+        "distrokid-helper": "cd .. && ultracite check distrokid-helper",
+    }
+    expected_fix_scripts = {
+        "suno-helper": "cd .. && ultracite fix suno-helper shared",
+        "distrokid-helper": "cd .. && ultracite fix distrokid-helper",
     }
 
-    for helper, expected_lint_script in expected_lint_scripts.items():
+    for helper, expected_check_script in expected_check_scripts.items():
         helper_root = _EXTENSIONS_ROOT / helper
         package = _read_json(helper_root / "package.json")
         dev_dependencies = package["devDependencies"]
@@ -36,30 +46,52 @@ def test_helpers_share_oxlint_dependency_script_and_config_contract() -> None:
 
         assert isinstance(dev_dependencies, dict)
         assert isinstance(scripts, dict)
-        assert dev_dependencies["oxlint"] == "1.73.0"
+        for tool, version in _TOOLCHAIN_VERSIONS.items():
+            assert dev_dependencies[tool] == version
         assert _ESLINT_DIRECT_DEPENDENCIES.isdisjoint(dev_dependencies)
-        assert scripts["lint"] == expected_lint_script
+        assert _REPLACED_FORMATTER_DEPENDENCIES.isdisjoint(dev_dependencies)
+        assert scripts["check"] == expected_check_script
+        assert scripts["fix"] == expected_fix_scripts[helper]
+        assert "lint" not in scripts
+        assert "format" not in scripts
+        assert "format:check" not in scripts
         assert not (helper_root / "eslint.config.js").exists()
 
         lockfile = yaml.safe_load((helper_root / "pnpm-lock.yaml").read_text(encoding="utf-8"))
         locked_dev_dependencies = lockfile["importers"]["."]["devDependencies"]
-        assert locked_dev_dependencies["oxlint"] == {"specifier": "1.73.0", "version": "1.73.0"}
+        for tool, version in _TOOLCHAIN_VERSIONS.items():
+            assert locked_dev_dependencies[tool]["specifier"] == version
         assert _ESLINT_DIRECT_DEPENDENCIES.isdisjoint(locked_dev_dependencies)
+        assert _REPLACED_FORMATTER_DEPENDENCIES.isdisjoint(locked_dev_dependencies)
 
-    config = _read_json(_EXTENSIONS_ROOT / ".oxlintrc.json")
-    assert config["plugins"] == ["react"]
-    assert config["env"] == {"browser": True}
-    assert config["globals"] == {"browser": "readonly", "chrome": "readonly"}
-    assert config["rules"] == {
-        "react/rules-of-hooks": "error",
-        "react/exhaustive-deps": "warn",
-    }
-    assert config["ignorePatterns"] == [
-        "**/.wxt/**",
-        "**/.output/**",
-        "**/dist/**",
-        "**/node_modules/**",
-    ]
+    assert not (_EXTENSIONS_ROOT / ".oxlintrc.json").exists()
+
+    # 共有 config（oxlint.config.ts / oxfmt.config.ts）の ultracite import は
+    # extensions/node_modules で解決する（helper の node_modules へは届かないため必須）。
+    toolchain_package = _read_json(_EXTENSIONS_ROOT / "package.json")
+    toolchain_dev_dependencies = toolchain_package["devDependencies"]
+    assert isinstance(toolchain_dev_dependencies, dict)
+    assert toolchain_dev_dependencies == _TOOLCHAIN_VERSIONS
+    toolchain_lockfile = yaml.safe_load((_EXTENSIONS_ROOT / "pnpm-lock.yaml").read_text(encoding="utf-8"))
+    toolchain_locked = toolchain_lockfile["importers"]["."]["devDependencies"]
+    for tool, version in _TOOLCHAIN_VERSIONS.items():
+        assert toolchain_locked[tool]["specifier"] == version
+
+    oxlint_config = (_EXTENSIONS_ROOT / "oxlint.config.ts").read_text(encoding="utf-8")
+    assert 'import core from "ultracite/oxlint/core";' in oxlint_config
+    assert 'import react from "ultracite/oxlint/react";' in oxlint_config
+    assert "extends: [core, react]" in oxlint_config
+    # 旧 .oxlintrc.json のルール水準を維持する（globals / react-hooks 契約）。
+    assert '"react/rules-of-hooks": "error"' in oxlint_config
+    assert '"react/exhaustive-deps": "warn"' in oxlint_config
+    assert '"react/react-compiler": "off"' in oxlint_config
+    assert 'browser: "readonly"' in oxlint_config
+    assert 'chrome: "readonly"' in oxlint_config
+    assert '"**/.wxt/**"' in oxlint_config
+
+    oxfmt_config = (_EXTENSIONS_ROOT / "oxfmt.config.ts").read_text(encoding="utf-8")
+    assert 'import ultracite from "ultracite/oxfmt";' in oxfmt_config
+    assert "...ultracite," in oxfmt_config
 
     playlist_error_test = (_EXTENSIONS_ROOT / "suno-helper" / "tests" / "content-playlist-error.test.ts").read_text(
         encoding="utf-8"

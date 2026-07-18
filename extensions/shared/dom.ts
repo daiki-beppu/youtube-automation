@@ -145,33 +145,33 @@ function selectedModeName(
   groupRole: "radiogroup" | "tablist",
   controlRole: "radio" | "tab",
   selectedAttribute: "aria-checked" | "aria-selected",
-  modeNames: readonly string[],
+  modeNames: readonly string[]
 ): string | null {
   const expectedNames = new Map(
-    modeNames.map((name) => [name.toLowerCase(), name]),
+    modeNames.map((name) => [name.toLowerCase(), name])
   );
   const candidates = Array.from(
-    document.querySelectorAll(`[role="${groupRole}"]`),
+    document.querySelectorAll(`[role="${groupRole}"]`)
   ).flatMap((group) => {
     const controls = Array.from(
-      group.querySelectorAll(`[role="${controlRole}"]`),
+      group.querySelectorAll(`[role="${controlRole}"]`)
     );
     const names = controls.map(controlName);
     if (
       !modeNames.every((modeName) =>
-        names.some((name) => name.toLowerCase() === modeName.toLowerCase()),
+        names.some((name) => name.toLowerCase() === modeName.toLowerCase())
       )
     ) {
       return [];
     }
     const selected = controls.filter(
-      (control) => control.getAttribute(selectedAttribute) === "true",
+      (control) => control.getAttribute(selectedAttribute) === "true"
     );
     if (selected.length !== 1) {
       return [];
     }
     const canonicalName = expectedNames.get(
-      controlName(selected[0]).toLowerCase(),
+      controlName(selected[0]).toLowerCase()
     );
     return canonicalName ? [canonicalName] : [];
   });
@@ -184,7 +184,7 @@ export function diagnoseLyricsInputState(): string {
     "radiogroup",
     "radio",
     "aria-checked",
-    LYRICS_MODE_NAMES,
+    LYRICS_MODE_NAMES
   );
   if (lyricsMode === "Prompt" || lyricsMode === "Instrumental") {
     return `Lyrics mode が ${lyricsMode} になっています。Write に切り替えてください。`;
@@ -194,7 +194,7 @@ export function diagnoseLyricsInputState(): string {
     "tablist",
     "tab",
     "aria-selected",
-    CREATE_FORM_MODE_NAMES,
+    CREATE_FORM_MODE_NAMES
   );
   if (createFormMode === "Simple" || createFormMode === "Sounds") {
     return `Create form mode が ${createFormMode} になっています。Advanced タブを選択してください。`;
@@ -235,7 +235,7 @@ const ABORTABLE_SLEEP_POLL_MS = 250;
  */
 export function abortableSleep(
   ms: number,
-  isAborted: () => boolean,
+  isAborted: () => boolean
 ): Promise<void> {
   return new Promise((resolve) => {
     const deadline = Date.now() + ms;
@@ -247,7 +247,7 @@ export function abortableSleep(
       // 残り時間と poll 間隔の短い方を待つ（最終 tick が deadline をオーバーランしないように）。
       setTimeout(
         tick,
-        Math.min(ABORTABLE_SLEEP_POLL_MS, deadline - Date.now()),
+        Math.min(ABORTABLE_SLEEP_POLL_MS, deadline - Date.now())
       );
     };
     tick();
@@ -257,7 +257,7 @@ export function abortableSleep(
 /** React 互換のネイティブ値セット + input/change イベント発火。 */
 export function setNativeValue(
   el: HTMLTextAreaElement | HTMLInputElement,
-  value: string,
+  value: string
 ): void {
   const proto =
     el instanceof HTMLTextAreaElement
@@ -284,7 +284,7 @@ const LYRICS_DIFF_EXCERPT_RADIUS = 24;
 function readLexicalText(el: HTMLElement): string {
   const paragraphs = Array.from(el.children).filter(
     (child): child is HTMLElement =>
-      child instanceof HTMLElement && child.tagName === "P",
+      child instanceof HTMLElement && child.tagName === "P"
   );
   if (paragraphs.length > 0) {
     return paragraphs.map((child) => child.textContent ?? "").join("\n");
@@ -321,7 +321,7 @@ function excerptAround(text: string, index: number): string {
 
 function buildLyricsReflectionDiagnostics(
   expected: string,
-  actual: string,
+  actual: string
 ): LyricsReflectionDiagnostics {
   const firstDiffIndex = findFirstDiffIndex(expected, actual);
   return {
@@ -335,7 +335,7 @@ function buildLyricsReflectionDiagnostics(
 
 function formatLyricsReflectionMessage(
   action: string,
-  diagnostics: LyricsReflectionDiagnostics,
+  diagnostics: LyricsReflectionDiagnostics
 ): string {
   return (
     `Lyrics 欄への ${action} 反映に失敗しました。Generate へ進まず停止します。` +
@@ -350,7 +350,7 @@ async function selectAllLexicalLyrics(el: HTMLElement): Promise<void> {
   const selected = document.execCommand("selectAll", false);
   if (!selected) {
     throw new FatalRunError(
-      "Lyrics 欄の全選択に失敗しました。Suno UI の Lexical editor 状態を確認してください。",
+      "Lyrics 欄の全選択に失敗しました。Suno UI の Lexical editor 状態を確認してください。"
     );
   }
   await sleep(LEXICAL_SELECTION_SYNC_MS);
@@ -359,7 +359,7 @@ async function selectAllLexicalLyrics(el: HTMLElement): Promise<void> {
 function assertLexicalLyricsValue(
   el: HTMLElement,
   value: string,
-  action: string,
+  action: string
 ): void {
   const actual = readLexicalText(el);
   if (normalizeLexicalText(actual) === normalizeLexicalText(value)) {
@@ -369,7 +369,7 @@ function assertLexicalLyricsValue(
   if (action === "paste") {
     throw new LyricsPasteReflectionError(
       formatLyricsReflectionMessage(action, diagnostics),
-      diagnostics,
+      diagnostics
     );
   }
   throw new FatalRunError(formatLyricsReflectionMessage(action, diagnostics));
@@ -389,7 +389,7 @@ function assertLexicalLyricsValue(
  */
 export async function setLyricsValue(
   el: HTMLTextAreaElement | HTMLElement,
-  value: string,
+  value: string
 ): Promise<void> {
   if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
     setNativeValue(el, value);
@@ -400,7 +400,7 @@ export async function setLyricsValue(
     const cleared = document.execCommand("delete", false);
     if (!cleared) {
       throw new FatalRunError(
-        "Lyrics 欄のクリアに失敗しました。Suno UI の Lexical editor 状態を確認してください。",
+        "Lyrics 欄のクリアに失敗しました。Suno UI の Lexical editor 状態を確認してください。"
       );
     }
     await sleep(LEXICAL_SELECTION_SYNC_MS);
@@ -412,12 +412,12 @@ export async function setLyricsValue(
           composed: true,
           data: null,
           inputType: "deleteContentBackward",
-        }),
+        })
       );
       await sleep(LEXICAL_SELECTION_SYNC_MS);
       if (readLexicalText(el) !== "") {
         throw new FatalRunError(
-          "Lyrics 欄のクリア反映に失敗しました。Generate へ進まず停止します。",
+          "Lyrics 欄のクリア反映に失敗しました。Generate へ進まず停止します。"
         );
       }
     }
@@ -430,7 +430,7 @@ export async function setLyricsValue(
       clipboardData: data,
       bubbles: true,
       cancelable: true,
-    }),
+    })
   );
   await sleep(LEXICAL_SELECTION_SYNC_MS);
   assertLexicalLyricsValue(el, value, "paste");
@@ -438,7 +438,7 @@ export async function setLyricsValue(
 
 export async function setLyricsValueViaBeforeInput(
   el: HTMLTextAreaElement | HTMLElement,
-  value: string,
+  value: string
 ): Promise<void> {
   if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
     setNativeValue(el, value);
@@ -452,7 +452,7 @@ export async function setLyricsValueViaBeforeInput(
       composed: true,
       data: value,
       inputType: value === "" ? "deleteContentBackward" : "insertFromPaste",
-    }),
+    })
   );
   await sleep(LEXICAL_SELECTION_SYNC_MS);
   assertLexicalLyricsValue(el, value, "beforeinput fallback");
@@ -475,7 +475,7 @@ export async function setLyricsValueViaBeforeInput(
  */
 export async function setSliderValue(
   slider: HTMLElement,
-  target: number,
+  target: number
 ): Promise<void> {
   slider.focus();
   const read = (): number => Number(slider.getAttribute("aria-valuenow"));
@@ -483,7 +483,7 @@ export async function setSliderValue(
     throw new Error(
       `slider 値の注入に失敗しました（target=${target}, actual=${slider.getAttribute("aria-valuenow")}, ` +
         `aria-label=${slider.getAttribute("aria-label") ?? "?"}）。` +
-        "keydown 後も aria-valuenow が変化しませんでした。Suno の UI 変更の可能性があります。",
+        "keydown 後も aria-valuenow が変化しませんでした。Suno の UI 変更の可能性があります。"
     );
   };
   for (let step = 0; step < SLIDER_MAX_STEPS; step++) {
@@ -493,7 +493,7 @@ export async function setSliderValue(
     }
     const key = target > current ? "ArrowRight" : "ArrowLeft";
     slider.dispatchEvent(
-      new KeyboardEvent("keydown", { key, bubbles: true, composed: true }),
+      new KeyboardEvent("keydown", { key, bubbles: true, composed: true })
     );
     // 同期反映ならそのまま次 step へ。非同期 re-render は poll で変化を待つ。
     let changed = read() !== current;
@@ -555,17 +555,15 @@ export function resolveAdvancedFields(): ResolvedAdvancedFields {
   const excludeStyles = pickPreferVisible(
     Array.from(
       document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
-        SELECTORS.excludeStyles,
-      ),
-    ),
+        SELECTORS.excludeStyles
+      )
+    )
   );
   const weirdness = pickPreferVisible(
-    Array.from(document.querySelectorAll<HTMLElement>(SELECTORS.weirdness)),
+    Array.from(document.querySelectorAll<HTMLElement>(SELECTORS.weirdness))
   );
   const styleInfluence = pickPreferVisible(
-    Array.from(
-      document.querySelectorAll<HTMLElement>(SELECTORS.styleInfluence),
-    ),
+    Array.from(document.querySelectorAll<HTMLElement>(SELECTORS.styleInfluence))
   );
   return {
     excludeStyles,
@@ -586,11 +584,11 @@ function resolveVocalGenderButtons(): {
   female: HTMLButtonElement | null;
 } {
   const candidates = Array.from(
-    document.querySelectorAll<HTMLButtonElement>(SELECTORS.vocalGenderButtons),
+    document.querySelectorAll<HTMLButtonElement>(SELECTORS.vocalGenderButtons)
   );
   const findByLabel = (label: "Male" | "Female"): HTMLButtonElement | null =>
     pickPreferVisible(
-      candidates.filter((b) => b.textContent?.trim() === label),
+      candidates.filter((b) => b.textContent?.trim() === label)
     );
   return { male: findByLabel("Male"), female: findByLabel("Female") };
 }
@@ -634,7 +632,7 @@ export interface AdvancedInjectOptions {
 async function injectSliderValue(
   slider: HTMLElement,
   target: number,
-  bridgeSetSlider?: (ariaLabel: string, target: number) => Promise<boolean>,
+  bridgeSetSlider?: (ariaLabel: string, target: number) => Promise<boolean>
 ): Promise<void> {
   if (bridgeSetSlider) {
     const label = slider.getAttribute("aria-label");
@@ -654,12 +652,12 @@ async function injectSliderValue(
 export async function injectAdvancedFields(
   entry: AdvancedFieldValues,
   fields: ResolvedAdvancedFields,
-  options: AdvancedInjectOptions = {},
+  options: AdvancedInjectOptions = {}
 ): Promise<void> {
   if (entry.exclude_styles !== undefined) {
     if (!fields.excludeStyles) {
       throw new FatalRunError(
-        "Exclude styles 欄が見つかりません。Suno の「書く」モードでその他のオプションを開いてから再実行してください。",
+        "Exclude styles 欄が見つかりません。Suno の「書く」モードでその他のオプションを開いてから再実行してください。"
       );
     }
     setNativeValue(fields.excludeStyles, entry.exclude_styles);
@@ -671,7 +669,7 @@ export async function injectAdvancedFields(
         : fields.vocalGender.female;
     if (!target) {
       throw new FatalRunError(
-        `Vocal gender button (${entry.vocal_gender}) が見つかりません。Suno の UI 変更の可能性があります。`,
+        `Vocal gender button (${entry.vocal_gender}) が見つかりません。Suno の UI 変更の可能性があります。`
       );
     }
     if (target.getAttribute("data-selected") !== "true") {
@@ -683,7 +681,7 @@ export async function injectAdvancedFields(
     // 永続するため、Suno のリネーム / UI 改装で run 全体を中断しない。
     if (!fields.weirdness) {
       console.warn(
-        "[suno-helper] Weirdness slider が見つかりません（Suno の UI 変更の可能性）。注入を skip して続行します。",
+        "[suno-helper] Weirdness slider が見つかりません（Suno の UI 変更の可能性）。注入を skip して続行します。"
       );
       options.onSliderSkip?.("Weirdness");
     } else {
@@ -691,7 +689,7 @@ export async function injectAdvancedFields(
         await injectSliderValue(
           fields.weirdness,
           entry.weirdness,
-          options.bridgeSetSlider,
+          options.bridgeSetSlider
         );
       } catch (e) {
         console.warn("[suno-helper] Weirdness slider 注入を skip:", e);
@@ -702,7 +700,7 @@ export async function injectAdvancedFields(
   if (entry.style_influence !== undefined) {
     if (!fields.styleInfluence) {
       console.warn(
-        "[suno-helper] Style Influence slider が見つかりません（Suno の UI 変更の可能性）。注入を skip して続行します。",
+        "[suno-helper] Style Influence slider が見つかりません（Suno の UI 変更の可能性）。注入を skip して続行します。"
       );
       options.onSliderSkip?.("Style Influence");
     } else {
@@ -710,7 +708,7 @@ export async function injectAdvancedFields(
         await injectSliderValue(
           fields.styleInfluence,
           entry.style_influence,
-          options.bridgeSetSlider,
+          options.bridgeSetSlider
         );
       } catch (e) {
         console.warn("[suno-helper] Style Influence slider 注入を skip:", e);
@@ -748,7 +746,7 @@ function isChallengeFrame(src: string): boolean {
  */
 export function detectRecaptcha(): boolean {
   const iframes = document.querySelectorAll<HTMLIFrameElement>(
-    SELECTORS.recaptcha,
+    SELECTORS.recaptcha
   );
   return Array.from(iframes).some((f) => {
     // bbox 0 のプリロード iframe は title を持っていても active ではない（title 判定より優先）。
@@ -789,12 +787,12 @@ export function detectRecaptcha(): boolean {
  */
 export function isQueueLimitErrorVisible(): boolean {
   const dialogs = document.querySelectorAll<HTMLElement>(
-    QUEUE_LIMIT_ERROR_SELECTOR,
+    QUEUE_LIMIT_ERROR_SELECTOR
   );
   return Array.from(dialogs).some(
     (el) =>
       isVisible(el) &&
-      (el.textContent ?? "").toLowerCase().includes(QUEUE_LIMIT_ERROR_TEXT),
+      (el.textContent ?? "").toLowerCase().includes(QUEUE_LIMIT_ERROR_TEXT)
   );
 }
 
@@ -816,18 +814,18 @@ export function isQueueLimitErrorVisible(): boolean {
  */
 export function resolveFields(): ResolvedFields {
   const areas = Array.from(
-    document.querySelectorAll<HTMLTextAreaElement>(SELECTORS.textareas),
+    document.querySelectorAll<HTMLTextAreaElement>(SELECTORS.textareas)
   ).filter(isVisible);
   if (areas.length === 0) {
     throw new FatalRunError(
-      `textarea が見つかりません。${diagnoseLyricsInputState()}`,
+      `textarea が見つかりません。${diagnoseLyricsInputState()}`
     );
   }
 
   const lyrics: HTMLTextAreaElement | HTMLElement | null =
     areas.find((el) => el.matches(SELECTORS.lyrics)) ??
     Array.from(
-      document.querySelectorAll<HTMLElement>(SELECTORS.lyricsLexical),
+      document.querySelectorAll<HTMLElement>(SELECTORS.lyricsLexical)
     ).find((el) => el.getBoundingClientRect().width > 0) ??
     null;
   // Style は wrapper 構造を一次識別、無ければ「Lyrics でない可視 textarea」。
@@ -836,13 +834,13 @@ export function resolveFields(): ResolvedFields {
     areas.find((el) => el !== lyrics);
   if (!style) {
     throw new FatalRunError(
-      "Style 欄が見つかりません。Lyrics 以外の可視 textarea を検出できませんでした。",
+      "Style 欄が見つかりません。Lyrics 以外の可視 textarea を検出できませんでした。"
     );
   }
 
   // Title は style/lyrics と別クエリ（<input>）。不在でも throw しない fail-soft で undefined を返す。
   const title = Array.from(
-    document.querySelectorAll<HTMLInputElement>(SELECTORS.title),
+    document.querySelectorAll<HTMLInputElement>(SELECTORS.title)
   ).find(isVisible);
 
   return { style, lyrics, title };
@@ -851,14 +849,14 @@ export function resolveFields(): ResolvedFields {
 /** Generate ボタンを解決する。可視ボタンに該当ラベルが無ければ throw。 */
 export function resolveGenerateButton(): HTMLButtonElement {
   const buttons = Array.from(
-    document.querySelectorAll<HTMLButtonElement>("button"),
+    document.querySelectorAll<HTMLButtonElement>("button")
   ).filter(isVisible);
   const btn = buttons.find((el) =>
-    SELECTORS.generateLabel.test((el.textContent || "").trim()),
+    SELECTORS.generateLabel.test((el.textContent || "").trim())
   );
   if (!btn) {
     throw new FatalRunError(
-      "生成ボタン（Create / Generate / 作成）が見つかりません。Suno の UI 変更または UI 言語ラベル変更の可能性があります。",
+      "生成ボタン（Create / Generate / 作成）が見つかりません。Suno の UI 変更または UI 言語ラベル変更の可能性があります。"
     );
   }
   return btn;
@@ -884,7 +882,7 @@ export interface WaitForCaptchaClearOptions {
  *   - 中断 (isAborted) で即 return
  */
 export async function waitForCaptchaClear(
-  options: WaitForCaptchaClearOptions,
+  options: WaitForCaptchaClearOptions
 ): Promise<void> {
   if (!detectRecaptcha()) {
     return;
@@ -901,7 +899,7 @@ export async function waitForCaptchaClear(
     await sleep(options.pollIntervalMs);
   }
   throw new FatalRunError(
-    `captcha challenge が ${Math.round(options.timeoutMs / 60000)} 分以内に解消されませんでした。画面の challenge を手動で解決してから再開してください。`,
+    `captcha challenge が ${Math.round(options.timeoutMs / 60000)} 分以内に解消されませんでした。画面の challenge を手動で解決してから再開してください。`
   );
 }
 
@@ -915,7 +913,7 @@ export async function waitForCaptchaClear(
  */
 export async function waitForGeneration(
   button: HTMLButtonElement,
-  options: WaitForGenerationOptions,
+  options: WaitForGenerationOptions
 ): Promise<void> {
   let deadline = Date.now() + options.timeoutMs;
   // disabled に変わるのを少し待つ（生成開始の検知）
@@ -967,8 +965,8 @@ export interface WaitForQueueSlotOptions {
 export function detectSunoViewMode(): SunoViewMode {
   const selectedModes = collectViewModesFromElements(
     document.querySelectorAll<HTMLElement>(
-      '[aria-selected="true"], [aria-current="true"], [data-state="checked"]',
-    ),
+      '[aria-selected="true"], [aria-current="true"], [data-state="checked"]'
+    )
   );
   const selected = singleModeOrUnknown(selectedModes);
   if (selected !== "unknown") {
@@ -981,7 +979,7 @@ export function detectSunoViewMode(): SunoViewMode {
   // Suno 2026-06: ビューモードボタンが data-context-menu-trigger 属性のみのプレーンボタンに変更。
   // 現在選択中のビューモードボタンだけがこの属性を持ち、テキストがモード名と一致する。
   const contextMenuModes = collectViewModesFromElements(
-    document.querySelectorAll<HTMLElement>("button[data-context-menu-trigger]"),
+    document.querySelectorAll<HTMLElement>("button[data-context-menu-trigger]")
   );
   const contextMenu = singleModeOrUnknown(contextMenuModes);
   if (contextMenu !== "unknown") {
@@ -993,8 +991,8 @@ export function detectSunoViewMode(): SunoViewMode {
 
   const triggerModes = collectViewModesFromElements(
     document.querySelectorAll<HTMLElement>(
-      'button[aria-haspopup], button[aria-expanded], [role="button"][aria-haspopup], [role="button"][aria-expanded]',
-    ),
+      'button[aria-haspopup], button[aria-expanded], [role="button"][aria-haspopup], [role="button"][aria-expanded]'
+    )
   );
   const trigger = singleModeOrUnknown(triggerModes);
   if (trigger !== "unknown") {
@@ -1007,7 +1005,7 @@ export function detectSunoViewMode(): SunoViewMode {
   // Suno 2025-06 以降: ビューモードボタンが ARIA 属性を持たないプレーンボタンに変更された。
   // visible な button 要素のテキストから view mode ラベルを探す fallback。
   const plainBtnModes = collectViewModesFromElements(
-    document.querySelectorAll<HTMLElement>("button"),
+    document.querySelectorAll<HTMLElement>("button")
   );
   const plain = singleModeOrUnknown(plainBtnModes);
   if (plain !== "unknown") {
@@ -1037,7 +1035,7 @@ function normalizeViewModeLabel(text: string): SunoViewMode {
 }
 
 function collectViewModesFromElements(
-  elements: Iterable<HTMLElement>,
+  elements: Iterable<HTMLElement>
 ): Set<SunoViewMode> {
   const modes = new Set<SunoViewMode>();
   for (const element of elements) {
@@ -1126,7 +1124,7 @@ export function findCardRoot(anchor: HTMLElement): HTMLElement {
     return hiddenCandidate;
   }
   throw new Error(
-    "clip card root を解決できません。現在の Suno ビューで card root と判断できる祖先が見つかりませんでした（Suno の DOM 変更の可能性）。",
+    "clip card root を解決できません。現在の Suno ビューで card root と判断できる祖先が見つかりませんでした（Suno の DOM 変更の可能性）。"
   );
 }
 
@@ -1143,7 +1141,7 @@ function hasAlternateInFlightSignal(card: HTMLElement): boolean {
 function hasClipIdentity(card: HTMLElement): boolean {
   return (
     card.querySelector(
-      `${SELECT_CLIP_BTN_SELECTOR}, ${DESELECT_CLIP_BTN_SELECTOR}, ${REMIX_BTN_SELECTOR}, ${EDIT_TITLE_BTN_SELECTOR}`,
+      `${SELECT_CLIP_BTN_SELECTOR}, ${DESELECT_CLIP_BTN_SELECTOR}, ${REMIX_BTN_SELECTOR}, ${EDIT_TITLE_BTN_SELECTOR}`
     ) !== null
   );
 }
@@ -1182,7 +1180,7 @@ interface InFlightCandidates {
 
 function collectInFlightCandidates(): InFlightCandidates {
   const anchors = document.querySelectorAll<HTMLElement>(
-    `${SELECT_CLIP_BTN_SELECTOR}, ${DESELECT_CLIP_BTN_SELECTOR}, ${REMIX_BTN_SELECTOR}, ${EDIT_TITLE_BTN_SELECTOR}, [aria-busy="true"], [role="progressbar"]`,
+    `${SELECT_CLIP_BTN_SELECTOR}, ${DESELECT_CLIP_BTN_SELECTOR}, ${REMIX_BTN_SELECTOR}, ${EDIT_TITLE_BTN_SELECTOR}, [aria-busy="true"], [role="progressbar"]`
   );
   const inFlightCards = new Set<HTMLElement>();
   const clipCandidates = new Set<HTMLElement>();
@@ -1215,7 +1213,7 @@ export function isClipGenerating(card: HTMLElement): boolean {
   const remix = card.querySelector<HTMLButtonElement>(REMIX_BTN_SELECTOR);
   if (!remix) {
     throw new Error(
-      "clip card 内に Remix btn がありません。card root の解決が誤っているか Suno の DOM 変更の可能性があります。",
+      "clip card 内に Remix btn がありません。card root の解決が誤っているか Suno の DOM 変更の可能性があります。"
     );
   }
   return (
@@ -1244,7 +1242,7 @@ export function getInFlightClipCount(): number {
   const candidates = collectInFlightCandidates();
   if (candidates.uncountableCandidates.size > 0) {
     throw new Error(
-      "clip 候補に Remix btn も代替の生成中シグナルも見つかりません。in-flight 検知が不能です（Suno の DOM 変更の可能性）。",
+      "clip 候補に Remix btn も代替の生成中シグナルも見つかりません。in-flight 検知が不能です（Suno の DOM 変更の可能性）。"
     );
   }
   for (const card of candidates.inFlightCards) {
@@ -1258,7 +1256,7 @@ export function getInFlightClipCount(): number {
       return 0;
     }
     throw new Error(
-      "Remix btn が 1 件も見つからず、clip 候補に代替の生成中シグナルも見つかりません。in-flight 検知が不能です（Suno の DOM 変更の可能性）。",
+      "Remix btn が 1 件も見つからず、clip 候補に代替の生成中シグナルも見つかりません。in-flight 検知が不能です（Suno の DOM 変更の可能性）。"
     );
   }
   return cards.size;
@@ -1281,7 +1279,7 @@ export function getInFlightClipCount(): number {
  */
 export async function waitForQueueSlot(
   maxClips: number,
-  options: WaitForQueueSlotOptions,
+  options: WaitForQueueSlotOptions
 ): Promise<void> {
   const getCount = options.getCount ?? getInFlightClipCount;
   const startAt = Date.now();
@@ -1299,12 +1297,12 @@ export async function waitForQueueSlot(
       const lastActivity = Math.max(startAt, options.getLastChangeAt());
       if (Date.now() - lastActivity >= stallTimeoutMs) {
         throw new FatalRunError(
-          `生成キューの空き待ち中、in-flight の状態が ${Math.round(stallTimeoutMs / 60000)} 分間変化しませんでした。Suno 側で生成が停滞している可能性があります。`,
+          `生成キューの空き待ち中、in-flight の状態が ${Math.round(stallTimeoutMs / 60000)} 分間変化しませんでした。Suno 側で生成が停滞している可能性があります。`
         );
       }
     } else if (Date.now() >= deadline) {
       throw new FatalRunError(
-        "生成キューの空きスロット待ちがタイムアウトしました。",
+        "生成キューの空きスロット待ちがタイムアウトしました。"
       );
     }
     if (isQueueLimitErrorVisible()) {
@@ -1344,7 +1342,7 @@ export function simulateClick(el: HTMLElement): void {
     button: 0,
   };
   el.dispatchEvent(
-    new PointerEvent("pointerdown", { ...shared, pointerId: 1 }),
+    new PointerEvent("pointerdown", { ...shared, pointerId: 1 })
   );
   el.dispatchEvent(new MouseEvent("mousedown", shared));
   el.dispatchEvent(new PointerEvent("pointerup", { ...shared, pointerId: 1 }));

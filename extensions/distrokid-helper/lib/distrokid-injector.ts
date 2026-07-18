@@ -30,7 +30,12 @@
 //       profile.artist 未設定・旧 payload で欠落時は #artistName（アカウント登録名）に fallback する。
 
 import { isVisible } from "../../shared/visibility";
-import type { AiDisclosure, DistrokidProfile, DistrokidProfileCredits, SongwriterName } from "./types";
+import type {
+  AiDisclosure,
+  DistrokidProfile,
+  DistrokidProfileCredits,
+  SongwriterName,
+} from "./types";
 
 // 静的プロファイルの注入先。
 export const PROFILE_SELECTORS = {
@@ -101,7 +106,8 @@ export const AI_MODAL_SELECTORS = {
   partialAudioTypeByUuid: (uuid: string, type: "vocals" | "instruments") =>
     `[name="ai_partial_audio_type_${uuid}"][value="${type}"]`,
   // アーティスト種別 radio（value="0"=人間 / "1"=AI ペルソナ）。full check 後に dynamic inject。
-  artistPersonaByUuid: (uuid: string, value: "0" | "1") => `[name="ai_artist_persona_${uuid}_0"][value="${value}"]`,
+  artistPersonaByUuid: (uuid: string, value: "0" | "1") =>
+    `[name="ai_artist_persona_${uuid}_0"][value="${value}"]`,
   // 「Apply these selections to all songs on this release」checkbox（album mode のみ存在）。
   applyAll: "#ai-apply-all-1",
   // 「保存する」ボタン（送信系ではない・modal を閉じるだけ）。
@@ -170,7 +176,8 @@ export const UPSELL_SELECTORS = {
 } as const;
 
 // 新規リリース前提の assert 対象（previouslyReleased「いいえ(value=0)」）。
-export const NEW_RELEASE_RADIO_SELECTOR = '[name^="previouslyReleased_"][value="0"]';
+export const NEW_RELEASE_RADIO_SELECTOR =
+  '[name^="previouslyReleased_"][value="0"]';
 
 // track タイトル input の name 接頭辞（DOM order で uuid を列挙する基点）。
 const TITLE_NAME_PREFIX = "title_";
@@ -178,7 +185,8 @@ const TITLE_NAME_SELECTOR = `[name^="${TITLE_NAME_PREFIX}"]`;
 
 // リロードで直るエラーへのリロード案内（#923）。VisibilityTimeoutError / ModalTimeoutError /
 // TrackCountTimeoutError の message 末尾に付加し、ユーザーがリロードで再試行できるようにする。
-export const RELOAD_GUIDANCE = "ページをリロードして最初からやり直してください。";
+export const RELOAD_GUIDANCE =
+  "ページをリロードして最初からやり直してください。";
 
 // 注入先フィールドが見つからないことを表す専用エラー。
 // silent skip せず fail-loud にすることで DistroKid の UI 変更を即座に検知する。
@@ -195,12 +203,18 @@ export class FieldNotFoundError extends Error {
 // `.trim()` で crash するため、silent skip せず fail-loud にして config と実機 UI の不整合を
 // 即座に検知する（#888 第2回 retest で判明）。
 export class OptionNotFoundError extends Error {
-  constructor(selector: string, payloadValue: string, optionLabels?: readonly string[]) {
+  constructor(
+    selector: string,
+    payloadValue: string,
+    optionLabels?: readonly string[]
+  ) {
     const options =
       optionLabels === undefined
         ? ""
         : ` / options=[${optionLabels.length === 0 ? "(empty)" : optionLabels.join(" / ")}]`;
-    super(`<select> に該当 option がありません: ${selector} / payload="${payloadValue}"${options}`);
+    super(
+      `<select> に該当 option がありません: ${selector} / payload="${payloadValue}"${options}`
+    );
     this.name = "OptionNotFoundError";
   }
 }
@@ -209,7 +223,9 @@ export class OptionNotFoundError extends Error {
 // silent skip せず fail-loud にすることで DistroKid の UI 変更を即座に検知する。
 export class ModalTimeoutError extends Error {
   constructor(selector: string) {
-    super(`AI 開示 modal の状態変化を待てませんでした: ${selector}。${RELOAD_GUIDANCE}`);
+    super(
+      `AI 開示 modal の状態変化を待てませんでした: ${selector}。${RELOAD_GUIDANCE}`
+    );
     this.name = "ModalTimeoutError";
   }
 }
@@ -218,7 +234,9 @@ export class ModalTimeoutError extends Error {
 // silent skip せず fail-loud にすることで DistroKid の UI 変更を即座に検知する。
 export class TrackCountTimeoutError extends Error {
   constructor(selector: string, expected: number) {
-    super(`track 行の生成を待てませんでした: ${selector}（期待数=${expected}）。${RELOAD_GUIDANCE}`);
+    super(
+      `track 行の生成を待てませんでした: ${selector}（期待数=${expected}）。${RELOAD_GUIDANCE}`
+    );
     this.name = "TrackCountTimeoutError";
   }
 }
@@ -276,12 +294,17 @@ function selectSelector(el: HTMLSelectElement): string {
 }
 
 function selectOptionLabels(el: HTMLSelectElement): string[] {
-  return Array.from(el.options).map((o) => o.text.trim() || o.value || "(blank)");
+  return Array.from(el.options).map(
+    (o) => o.text.trim() || o.value || "(blank)"
+  );
 }
 
 // 優先順: option.value 完全一致 → option.text 完全一致（normalize）→ option.text 部分一致
 // （normalize、placeholder value="" は除外）。一致無しなら OptionNotFoundError で fail-loud。
-function findSelectOptionIndex(el: HTMLSelectElement, payloadValue: string): number {
+function findSelectOptionIndex(
+  el: HTMLSelectElement,
+  payloadValue: string
+): number {
   const target = normalizeOptionText(payloadValue);
   const opts = Array.from(el.options);
   let idx = findExactSelectOptionIndex(el, payloadValue);
@@ -298,7 +321,10 @@ function findSelectOptionIndex(el: HTMLSelectElement, payloadValue: string): num
 // 依存 dropdown の readiness 判定は曖昧な部分一致を使わない。
 // "テクノ" を待っている途中に "ハードコア／ハードテクノ" が先に出ても、完全一致の
 // option が現れるまで待つ必要がある。
-function findExactSelectOptionIndex(el: HTMLSelectElement, payloadValue: string): number {
+function findExactSelectOptionIndex(
+  el: HTMLSelectElement,
+  payloadValue: string
+): number {
   const target = normalizeOptionText(payloadValue);
   const opts = Array.from(el.options);
   let idx = opts.findIndex((o) => o.value === payloadValue);
@@ -308,19 +334,29 @@ function findExactSelectOptionIndex(el: HTMLSelectElement, payloadValue: string)
   return idx;
 }
 
-function selectSelectedOptionMatches(el: HTMLSelectElement, payloadValue: string): boolean {
+function selectSelectedOptionMatches(
+  el: HTMLSelectElement,
+  payloadValue: string
+): boolean {
   const selected = el.options[el.selectedIndex];
   if (selected === undefined) {
     return false;
   }
-  return selected.value === payloadValue || normalizeOptionText(selected.text) === normalizeOptionText(payloadValue);
+  return (
+    selected.value === payloadValue ||
+    normalizeOptionText(selected.text) === normalizeOptionText(payloadValue)
+  );
 }
 
 // <select> に対して payload 値で option を選ぶ。
 function setSelectValue(el: HTMLSelectElement, payloadValue: string): void {
   const idx = findSelectOptionIndex(el, payloadValue);
   if (idx === -1) {
-    throw new OptionNotFoundError(selectSelector(el), payloadValue, selectOptionLabels(el));
+    throw new OptionNotFoundError(
+      selectSelector(el),
+      payloadValue,
+      selectOptionLabels(el)
+    );
   }
   el.selectedIndex = idx;
   el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -329,8 +365,15 @@ function setSelectValue(el: HTMLSelectElement, payloadValue: string): void {
 
 // セレクタに一致する可視のテキスト/SELECT 要素を返す（無ければ null）。
 // type=hidden や祖先 display:none の隠し要素を isVisible で排除する。
-function findVisibleField(root: ParentNode, selector: string): ValueElement | null {
-  return Array.from(root.querySelectorAll<ValueElement>(selector)).filter(isVisible)[0] ?? null;
+function findVisibleField(
+  root: ParentNode,
+  selector: string
+): ValueElement | null {
+  return (
+    Array.from(root.querySelectorAll<ValueElement>(selector)).filter(
+      isVisible
+    )[0] ?? null
+  );
 }
 
 // 可視要素を要求する。未検出（または隠し要素のみ）なら fail-loud。
@@ -345,7 +388,7 @@ function requireVisibleField(root: ParentNode, selector: string): ValueElement {
 function findVisibleSelectWithOption(
   root: ParentNode,
   selector: string,
-  payloadValue: string,
+  payloadValue: string
 ): HTMLSelectElement | null {
   const el = findVisibleField(root, selector);
   if (!(el instanceof HTMLSelectElement)) {
@@ -354,9 +397,16 @@ function findVisibleSelectWithOption(
   return findExactSelectOptionIndex(el, payloadValue) === -1 ? null : el;
 }
 
-function mutationTouchesSelector(mutation: MutationRecord, selector: string, current: Element | null): boolean {
+function mutationTouchesSelector(
+  mutation: MutationRecord,
+  selector: string,
+  current: Element | null
+): boolean {
   const target = mutation.target;
-  if (current !== null && (target === current || current.contains(target) || target.contains(current))) {
+  if (
+    current !== null &&
+    (target === current || current.contains(target) || target.contains(current))
+  ) {
     return true;
   }
   for (const node of [...mutation.addedNodes, ...mutation.removedNodes]) {
@@ -366,7 +416,10 @@ function mutationTouchesSelector(mutation: MutationRecord, selector: string, cur
     if (node.matches(selector) || node.querySelector(selector) !== null) {
       return true;
     }
-    if (current !== null && (node === current || node.contains(current) || current.contains(node))) {
+    if (
+      current !== null &&
+      (node === current || node.contains(current) || current.contains(node))
+    ) {
       return true;
     }
   }
@@ -381,7 +434,10 @@ function waitForSelectOption(
   selector: string,
   payloadValue: string,
   timeoutMs: number,
-  options: { allowExistingAfterQuietMs?: number; requireSelectorMutation?: boolean } = {},
+  options: {
+    allowExistingAfterQuietMs?: number;
+    requireSelectorMutation?: boolean;
+  } = {}
 ): Promise<HTMLSelectElement> {
   const currentSelect = (): HTMLSelectElement | null => {
     const current = findVisibleField(root, selector);
@@ -414,12 +470,20 @@ function waitForSelectOption(
         reject(new FieldNotFoundError(selector));
         return;
       }
-      reject(new OptionNotFoundError(selector, payloadValue, selectOptionLabels(current)));
+      reject(
+        new OptionNotFoundError(
+          selector,
+          payloadValue,
+          selectOptionLabels(current)
+        )
+      );
     }, timeoutMs);
     const observer = new MutationObserver((mutations) => {
       if (
         options.requireSelectorMutation === true &&
-        !mutations.some((mutation) => mutationTouchesSelector(mutation, selector, currentSelect()))
+        !mutations.some((mutation) =>
+          mutationTouchesSelector(mutation, selector, currentSelect())
+        )
       ) {
         return;
       }
@@ -428,10 +492,19 @@ function waitForSelectOption(
         finish(found);
       }
     });
-    observer.observe(observeRoot, { childList: true, subtree: true, characterData: true, attributes: true });
+    observer.observe(observeRoot, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+    });
     if (options.allowExistingAfterQuietMs !== undefined) {
       quietTimer = setTimeout(() => {
-        const existing = findVisibleSelectWithOption(root, selector, payloadValue);
+        const existing = findVisibleSelectWithOption(
+          root,
+          selector,
+          payloadValue
+        );
         if (existing !== null) {
           finish(existing);
         }
@@ -441,14 +514,24 @@ function waitForSelectOption(
 }
 
 // 静的プロファイル（artist / sub_genre は任意、language / main_genre は必須）を注入する。
-export async function injectProfile(root: ParentNode, profile: DistrokidProfile): Promise<void> {
+export async function injectProfile(
+  root: ParentNode,
+  profile: DistrokidProfile
+): Promise<void> {
   if (profile.artist.trim() !== "") {
-    setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.artist), profile.artist.trim());
+    setNativeValue(
+      requireVisibleField(root, PROFILE_SELECTORS.artist),
+      profile.artist.trim()
+    );
   }
-  setNativeValue(requireVisibleField(root, PROFILE_SELECTORS.language), profile.language);
+  setNativeValue(
+    requireVisibleField(root, PROFILE_SELECTORS.language),
+    profile.language
+  );
   const mainGenre = requireVisibleField(root, PROFILE_SELECTORS.main_genre);
   const mainGenreAlreadySelected =
-    mainGenre instanceof HTMLSelectElement && selectSelectedOptionMatches(mainGenre, profile.main_genre);
+    mainGenre instanceof HTMLSelectElement &&
+    selectSelectedOptionMatches(mainGenre, profile.main_genre);
   setNativeValue(mainGenre, profile.main_genre);
   if (profile.sub_genre !== null) {
     const subGenre = await waitForSelectOption(
@@ -457,9 +540,11 @@ export async function injectProfile(root: ParentNode, profile: DistrokidProfile)
       profile.sub_genre,
       GENRE_SECONDARY_OPTION_WAIT_TIMEOUT_MS,
       {
-        allowExistingAfterQuietMs: mainGenreAlreadySelected ? GENRE_SECONDARY_EXISTING_OPTION_FALLBACK_MS : undefined,
+        allowExistingAfterQuietMs: mainGenreAlreadySelected
+          ? GENRE_SECONDARY_EXISTING_OPTION_FALLBACK_MS
+          : undefined,
         requireSelectorMutation: true,
-      },
+      }
     );
     setNativeValue(subGenre, profile.sub_genre);
   }
@@ -484,7 +569,10 @@ export function injectAlbumTitle(root: ParentNode, albumTitle: string): void {
 //
 // DistroKid の契約プランによってはリリース日指定 UI 自体が出ない場合があるため、
 // 値ありで要素不在のときは FieldNotFoundError を投げずに warn + skip してフィルを続行する（#932）。
-export function injectReleaseDate(root: ParentNode, releaseDate: string | null): void {
+export function injectReleaseDate(
+  root: ParentNode,
+  releaseDate: string | null
+): void {
   if (releaseDate === null) {
     return;
   }
@@ -493,7 +581,7 @@ export function injectReleaseDate(root: ParentNode, releaseDate: string | null):
     // リリース日指定は DistroKid の契約プランによって UI 自体が出ないため、
     // 不在はプラン非対応とみなし warn + skip する（フィル全体は止めない）（#932）。
     console.warn(
-      `[distrokid-helper] リリース日フィールドが見つからないため skip します（プラン非対応の可能性）: ${RELEASE_DATE_SELECTOR}（#932）`,
+      `[distrokid-helper] リリース日フィールドが見つからないため skip します（プラン非対応の可能性）: ${RELEASE_DATE_SELECTOR}（#932）`
     );
     return;
   }
@@ -514,7 +602,8 @@ const IMPORTANT_TERMS_OPTIONAL_DIRECT_IDS = [
 ] as const;
 
 // 条件付き重要事項 checkbox のセレクタ（ストア選択に連動して可視化）（#923）。
-const IMPORTANT_TERMS_CONDITIONAL_SELECTOR = 'input[type="checkbox"].areyousure';
+const IMPORTANT_TERMS_CONDITIONAL_SELECTOR =
+  'input[type="checkbox"].areyousure';
 
 // 重要事項 checkbox（重要事項・利用規約等）を check する（#923）。
 // required 4 個は id 直接取得（isVisible 非依存）で確実に check する（bbox 0 レース回避）。
@@ -533,11 +622,16 @@ export function acceptImportantTerms(root: ParentNode): void {
   }
   // conditional: .areyousure を列挙し、required id を除外した上で可視のもののみ check
   const requiredIds = new Set(
-    [...IMPORTANT_TERMS_REQUIRED_IDS, ...IMPORTANT_TERMS_OPTIONAL_DIRECT_IDS].map((id) => id.slice(1)),
+    [
+      ...IMPORTANT_TERMS_REQUIRED_IDS,
+      ...IMPORTANT_TERMS_OPTIONAL_DIRECT_IDS,
+    ].map((id) => id.slice(1))
   );
-  const conditionals = Array.from(root.querySelectorAll<HTMLInputElement>(IMPORTANT_TERMS_CONDITIONAL_SELECTOR)).filter(
-    (cb) => !requiredIds.has(cb.id) && isVisible(cb),
-  );
+  const conditionals = Array.from(
+    root.querySelectorAll<HTMLInputElement>(
+      IMPORTANT_TERMS_CONDITIONAL_SELECTOR
+    )
+  ).filter((cb) => !requiredIds.has(cb.id) && isVisible(cb));
   for (const cb of conditionals) {
     setChecked(cb, true);
   }
@@ -562,8 +656,12 @@ export function scrollToDoneButton(root: ParentNode): void {
 // 将来 config 化（`profile.upsells.legacy_pack` 等で opt-in）する想定だが、現状は全強制 uncheck。
 export function uncheckUpsells(root: ParentNode): void {
   const all = [
-    ...Array.from(root.querySelectorAll<HTMLInputElement>(UPSELL_SELECTORS.store)),
-    ...Array.from(root.querySelectorAll<HTMLInputElement>(UPSELL_SELECTORS.extras)),
+    ...Array.from(
+      root.querySelectorAll<HTMLInputElement>(UPSELL_SELECTORS.store)
+    ),
+    ...Array.from(
+      root.querySelectorAll<HTMLInputElement>(UPSELL_SELECTORS.extras)
+    ),
   ];
   for (const cb of all) {
     setChecked(cb, false);
@@ -583,7 +681,9 @@ export function uncheckUpsells(root: ParentNode): void {
 // #areyousuresnap は不可視のまま残り、acceptImportantTerms の isVisible フィルタで
 // 自然にスキップされる（実装変更不要）。
 export function checkAllStores(root: ParentNode): void {
-  const checkboxes = Array.from(root.querySelectorAll<HTMLInputElement>(STORE_SELECTORS.distribution));
+  const checkboxes = Array.from(
+    root.querySelectorAll<HTMLInputElement>(STORE_SELECTORS.distribution)
+  );
   if (checkboxes.length === 0) {
     throw new FieldNotFoundError(STORE_SELECTORS.distribution);
   }
@@ -600,18 +700,29 @@ export function checkAllStores(root: ParentNode): void {
 // track タイトル input を DOM order で列挙し uuid 一覧を返す（track の解決基点）。
 // セレクタが name^="title_" を保証するため el.name は常に接頭辞付きの非空文字列。
 export function resolveTrackUuids(root: ParentNode): string[] {
-  return Array.from(root.querySelectorAll<HTMLInputElement>(TITLE_NAME_SELECTOR)).map((el) =>
-    el.name.slice(TITLE_NAME_PREFIX.length),
-  );
+  return Array.from(
+    root.querySelectorAll<HTMLInputElement>(TITLE_NAME_SELECTOR)
+  ).map((el) => el.name.slice(TITLE_NAME_PREFIX.length));
 }
 
 // 指定 uuid の track タイトルを注入する。
-export function injectTrackTitle(root: ParentNode, uuid: string, title: string): void {
-  setNativeValue(requireVisibleField(root, TRACK_FIELD_SELECTORS.titleByUuid(uuid)), title);
+export function injectTrackTitle(
+  root: ParentNode,
+  uuid: string,
+  title: string
+): void {
+  setNativeValue(
+    requireVisibleField(root, TRACK_FIELD_SELECTORS.titleByUuid(uuid)),
+    title
+  );
 }
 
 // 指定 track（1-indexed）に songwriter（3 分割）を注入する。middle は null なら skip。
-export function injectSongwriter(root: ParentNode, index1: number, songwriter: SongwriterName): void {
+export function injectSongwriter(
+  root: ParentNode,
+  index1: number,
+  songwriter: SongwriterName
+): void {
   const sel = TRACK_FIELD_SELECTORS.songwriterByIndex(index1);
   setNativeValue(requireVisibleField(root, sel.first), songwriter.first);
   setNativeValue(requireVisibleField(root, sel.last), songwriter.last);
@@ -630,7 +741,10 @@ export function injectFile(input: HTMLInputElement, file: File): void {
 }
 
 // file input は hidden（#artwork / pre-mount track input）のため isVisible は適用しない。
-function requireFileInput(root: ParentNode, selector: string): HTMLInputElement {
+function requireFileInput(
+  root: ParentNode,
+  selector: string
+): HTMLInputElement {
   const input = root.querySelector<HTMLInputElement>(selector);
   if (input === null) {
     throw new FieldNotFoundError(selector);
@@ -639,7 +753,11 @@ function requireFileInput(root: ParentNode, selector: string): HTMLInputElement 
 }
 
 // 指定 track（1-indexed）に曲ファイルを注入する。
-export function injectTrackFile(root: ParentNode, index1: number, file: File): void {
+export function injectTrackFile(
+  root: ParentNode,
+  index1: number,
+  file: File
+): void {
   injectFile(requireFileInput(root, FILE_SELECTORS.trackByIndex(index1)), file);
 }
 
@@ -651,12 +769,16 @@ export function injectCover(root: ParentNode, file: File): void {
 // 新規リリース前提（previouslyReleased が「いいえ(value=0)」で checked）を assert する。
 // 過去公開リリースへの対応はスコープ外（別 issue）のため、想定外なら fail-loud。
 export function assertNewRelease(root: ParentNode): void {
-  const noRadios = Array.from(root.querySelectorAll<HTMLInputElement>(NEW_RELEASE_RADIO_SELECTOR));
+  const noRadios = Array.from(
+    root.querySelectorAll<HTMLInputElement>(NEW_RELEASE_RADIO_SELECTOR)
+  );
   if (noRadios.length === 0) {
     throw new FieldNotFoundError(NEW_RELEASE_RADIO_SELECTOR);
   }
   if (!noRadios.every((radio) => radio.checked)) {
-    throw new Error("previouslyReleased が「いいえ(新規)」で checked ではありません（過去公開対応はスコープ外）");
+    throw new Error(
+      "previouslyReleased が「いいえ(新規)」で checked ではありません（過去公開対応はスコープ外）"
+    );
   }
 }
 
@@ -667,7 +789,11 @@ export function assertNewRelease(root: ParentNode): void {
 // modal 内 input（#888）は dispatchChange=true を渡す。DistroKid 側の段階的 trigger（persona
 // inject / partial 種別 visible 化）は bubbles:true の change を要求するため、click のネイティブ
 // change に加えて明示 dispatch して確実に発火させる。
-function setChecked(el: HTMLInputElement, checked: boolean, dispatchChange = false): void {
+function setChecked(
+  el: HTMLInputElement,
+  checked: boolean,
+  dispatchChange = false
+): void {
   if (el.checked !== checked) {
     el.click();
   }
@@ -681,7 +807,10 @@ function requireInput(root: ParentNode, selector: string): HTMLInputElement {
 }
 
 // セレクタに一致する要素を要求する。未検出なら fail-loud。
-function requireElement<T extends Element>(root: ParentNode, selector: string): T {
+function requireElement<T extends Element>(
+  root: ParentNode,
+  selector: string
+): T {
   const el = root.querySelector<T>(selector);
   if (el === null) {
     throw new FieldNotFoundError(selector);
@@ -702,7 +831,11 @@ function ownerDocumentOf(root: ParentNode): Document {
 }
 
 // selector に一致する要素の出現を待つ（既に在れば即解決）。制限時間超過で ModalTimeoutError。
-export function waitForElement(root: ParentNode, selector: string, timeoutMs: number): Promise<HTMLElement> {
+export function waitForElement(
+  root: ParentNode,
+  selector: string,
+  timeoutMs: number
+): Promise<HTMLElement> {
   const existing = root.querySelector<HTMLElement>(selector);
   if (existing !== null) {
     return Promise.resolve(existing);
@@ -753,7 +886,7 @@ export function waitForElementCount(
   root: ParentNode,
   selector: string,
   count: number,
-  timeoutMs: number,
+  timeoutMs: number
 ): Promise<void> {
   const reached = () => root.querySelectorAll(selector).length >= count;
   if (reached()) {
@@ -778,7 +911,10 @@ export function waitForElementCount(
 
 // 指定要素が可視になるのを待つ（既に可視なら即解決）。制限時間超過で VisibilityTimeoutError。
 // checkAllStores() 後に credit trigger が visible 化するまでの待機に使用する（#923）。
-export function waitForElementVisible(el: HTMLElement, timeoutMs: number): Promise<void> {
+export function waitForElementVisible(
+  el: HTMLElement,
+  timeoutMs: number
+): Promise<void> {
   if (isVisible(el)) {
     return Promise.resolve();
   }
@@ -786,7 +922,11 @@ export function waitForElementVisible(el: HTMLElement, timeoutMs: number): Promi
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       observer.disconnect();
-      reject(new VisibilityTimeoutError(el.id ? `#${el.id}` : el.tagName.toLowerCase()));
+      reject(
+        new VisibilityTimeoutError(
+          el.id ? `#${el.id}` : el.tagName.toLowerCase()
+        )
+      );
     }, timeoutMs);
     const observer = new MutationObserver(() => {
       if (isVisible(el)) {
@@ -807,9 +947,20 @@ export function waitForElementVisible(el: HTMLElement, timeoutMs: number): Promi
 // トラック数 select に曲数を set し、track 行（title_<uuid>）の生成完了を待つ（#888）。
 // value 変更だけでは onchange handler が動かないため change を bubbles:true で発火する。
 // 行生成を待ってから後続の注入（プロファイル / タイトル / credit）へ進む（順序保証）。
-export async function setTrackCount(root: ParentNode, count: number): Promise<void> {
-  setNativeValue(requireElement<HTMLSelectElement>(root, TRACK_COUNT_SELECTOR), String(count));
-  await waitForElementCount(root, TITLE_NAME_SELECTOR, count, TRACK_ROW_WAIT_TIMEOUT_MS);
+export async function setTrackCount(
+  root: ParentNode,
+  count: number
+): Promise<void> {
+  setNativeValue(
+    requireElement<HTMLSelectElement>(root, TRACK_COUNT_SELECTOR),
+    String(count)
+  );
+  await waitForElementCount(
+    root,
+    TITLE_NAME_SELECTOR,
+    count,
+    TRACK_ROW_WAIT_TIMEOUT_MS
+  );
 }
 
 // アカウント登録のアーティスト名（#artistName hidden）を解決する。未登録なら fail-loud。
@@ -820,12 +971,17 @@ function requireArtistName(root: ParentNode): string {
   }
   const name = el.value.trim();
   if (name === "") {
-    throw new Error(`${ARTIST_NAME_SELECTOR} の値が空です（アーティスト名が未登録）`);
+    throw new Error(
+      `${ARTIST_NAME_SELECTOR} の値が空です（アーティスト名が未登録）`
+    );
   }
   return name;
 }
 
-function resolveCreditArtistName(root: ParentNode, profileArtist: string): string {
+function resolveCreditArtistName(
+  root: ParentNode,
+  profileArtist: string
+): string {
   const configured = profileArtist.trim();
   if (configured !== "") {
     return configured;
@@ -836,12 +992,14 @@ function resolveCreditArtistName(root: ParentNode, profileArtist: string): strin
 // Apple Music クレジット展開トリガー（「クレジットを追加」）を解決する。
 // .requirements-item-title は複数あり得るため textContent で絞り込む（fail-loud）。
 function requireCreditTrigger(root: ParentNode): HTMLElement {
-  const trigger = Array.from(root.querySelectorAll<HTMLElement>(APPLE_CREDIT_SELECTORS.addTrigger)).find((el) =>
-    el.textContent?.includes(APPLE_CREDIT_SELECTORS.addTriggerText),
+  const trigger = Array.from(
+    root.querySelectorAll<HTMLElement>(APPLE_CREDIT_SELECTORS.addTrigger)
+  ).find((el) =>
+    el.textContent?.includes(APPLE_CREDIT_SELECTORS.addTriggerText)
   );
   if (trigger === undefined) {
     throw new FieldNotFoundError(
-      `${APPLE_CREDIT_SELECTORS.addTrigger}（text: ${APPLE_CREDIT_SELECTORS.addTriggerText}）`,
+      `${APPLE_CREDIT_SELECTORS.addTrigger}（text: ${APPLE_CREDIT_SELECTORS.addTriggerText}）`
     );
   }
   return trigger;
@@ -862,7 +1020,7 @@ export async function injectAppleMusicCredits(
   root: ParentNode,
   trackCount: number,
   artist: string,
-  credits: DistrokidProfileCredits,
+  credits: DistrokidProfileCredits
 ): Promise<void> {
   const artistName = resolveCreditArtistName(root, artist);
   const trigger = requireCreditTrigger(root);
@@ -870,15 +1028,27 @@ export async function injectAppleMusicCredits(
   await waitForElementVisible(trigger, CREDIT_TRIGGER_WAIT_TIMEOUT_MS);
   trigger.click();
   for (let track1 = 1; track1 <= trackCount; track1 += 1) {
-    setNativeValue(requireInput(root, APPLE_CREDIT_SELECTORS.performerNameByTrack(track1)), artistName);
-    setSelectValue(
-      requireElement<HTMLSelectElement>(root, APPLE_CREDIT_SELECTORS.performerRoleByTrack(track1)),
-      credits.performer_role,
+    setNativeValue(
+      requireInput(root, APPLE_CREDIT_SELECTORS.performerNameByTrack(track1)),
+      artistName
     );
-    setNativeValue(requireInput(root, APPLE_CREDIT_SELECTORS.producerNameByTrack(track1)), artistName);
     setSelectValue(
-      requireElement<HTMLSelectElement>(root, APPLE_CREDIT_SELECTORS.producerRoleByTrack(track1)),
-      credits.producer_role,
+      requireElement<HTMLSelectElement>(
+        root,
+        APPLE_CREDIT_SELECTORS.performerRoleByTrack(track1)
+      ),
+      credits.performer_role
+    );
+    setNativeValue(
+      requireInput(root, APPLE_CREDIT_SELECTORS.producerNameByTrack(track1)),
+      artistName
+    );
+    setSelectValue(
+      requireElement<HTMLSelectElement>(
+        root,
+        APPLE_CREDIT_SELECTORS.producerRoleByTrack(track1)
+      ),
+      credits.producer_role
     );
   }
 }
@@ -892,29 +1062,62 @@ export async function injectAppleMusicCredits(
 //   - recording_scope='partial' → partial radio を check すると種別 radio が visible 化するため、
 //     partial_audio_type が非 null のときのみ設定する（undefined を loose equality で skip #877）
 //   - apply-all は album mode のみ存在するため、不在なら skip（single mode 許容）
-async function applyModalSelections(modal: ParentNode, uuid: string, ai: AiDisclosure): Promise<void> {
-  await waitForElement(modal, AI_MODAL_SELECTORS.lyricsByUuid(uuid), AI_MODAL_WAIT_TIMEOUT_MS);
-  setChecked(requireInput(modal, AI_MODAL_SELECTORS.lyricsByUuid(uuid)), ai.lyrics, true);
-  setChecked(requireInput(modal, AI_MODAL_SELECTORS.musicByUuid(uuid)), ai.music, true);
+async function applyModalSelections(
+  modal: ParentNode,
+  uuid: string,
+  ai: AiDisclosure
+): Promise<void> {
+  await waitForElement(
+    modal,
+    AI_MODAL_SELECTORS.lyricsByUuid(uuid),
+    AI_MODAL_WAIT_TIMEOUT_MS
+  );
   setChecked(
-    requireInput(modal, AI_MODAL_SELECTORS.recordingScopeByTrack(MODAL_TRACK, ai.recording_scope)),
+    requireInput(modal, AI_MODAL_SELECTORS.lyricsByUuid(uuid)),
+    ai.lyrics,
+    true
+  );
+  setChecked(
+    requireInput(modal, AI_MODAL_SELECTORS.musicByUuid(uuid)),
+    ai.music,
+    true
+  );
+  setChecked(
+    requireInput(
+      modal,
+      AI_MODAL_SELECTORS.recordingScopeByTrack(MODAL_TRACK, ai.recording_scope)
+    ),
     true,
-    true,
+    true
   );
 
   if (ai.recording_scope === "full") {
     return applyFullScopeSelections(modal, uuid, ai);
   }
   if (ai.partial_audio_type != null) {
-    setChecked(requireInput(modal, AI_MODAL_SELECTORS.partialAudioTypeByUuid(uuid, ai.partial_audio_type)), true, true);
+    setChecked(
+      requireInput(
+        modal,
+        AI_MODAL_SELECTORS.partialAudioTypeByUuid(uuid, ai.partial_audio_type)
+      ),
+      true,
+      true
+    );
   }
   applyAllSelection(modal, ai);
   return Promise.resolve();
 }
 
 // full check 後に dynamic inject される persona radio の出現を待ってから設定する。
-async function applyFullScopeSelections(modal: ParentNode, uuid: string, ai: AiDisclosure): Promise<void> {
-  const personaSelector = AI_MODAL_SELECTORS.artistPersonaByUuid(uuid, ai.artist_persona ? "1" : "0");
+async function applyFullScopeSelections(
+  modal: ParentNode,
+  uuid: string,
+  ai: AiDisclosure
+): Promise<void> {
+  const personaSelector = AI_MODAL_SELECTORS.artistPersonaByUuid(
+    uuid,
+    ai.artist_persona ? "1" : "0"
+  );
   await waitForElement(modal, personaSelector, AI_MODAL_WAIT_TIMEOUT_MS);
   setChecked(requireInput(modal, personaSelector), true, true);
   applyAllSelection(modal, ai);
@@ -922,7 +1125,9 @@ async function applyFullScopeSelections(modal: ParentNode, uuid: string, ai: AiD
 
 // apply-all checkbox を設定する。album mode のみ存在するため不在なら skip（single mode 許容 #888）。
 function applyAllSelection(modal: ParentNode, ai: AiDisclosure): void {
-  const applyAll = modal.querySelector<HTMLInputElement>(AI_MODAL_SELECTORS.applyAll);
+  const applyAll = modal.querySelector<HTMLInputElement>(
+    AI_MODAL_SELECTORS.applyAll
+  );
   if (applyAll !== null) {
     setChecked(applyAll, ai.apply_to_all, true);
   }
@@ -934,7 +1139,10 @@ function applyAllSelection(modal: ParentNode, ai: AiDisclosure): void {
 //   3. enabled=true: 1st track の「はい」radio を click → modal mount を待つ
 //      → modal 内で各設定 + apply-all → 保存 button → modal unmount を待つ
 // apply-all により 25 track 全部へ DistroKid 側が伝播するため、track ごとの inline 注入はしない。
-export async function injectAiDisclosure(root: ParentNode, ai: AiDisclosure): Promise<void> {
+export async function injectAiDisclosure(
+  root: ParentNode,
+  ai: AiDisclosure
+): Promise<void> {
   const uuids = resolveTrackUuids(root);
   if (uuids.length === 0) {
     throw new FieldNotFoundError(TITLE_NAME_SELECTOR);
@@ -943,15 +1151,28 @@ export async function injectAiDisclosure(root: ParentNode, ai: AiDisclosure): Pr
   if (!ai.enabled) {
     // 人手 default に頼らず、各 track の「いいえ」を明示確定する（modal は開かない）。
     for (const uuid of uuids) {
-      setChecked(requireInput(root, AI_DISCLOSURE_SELECTORS.gateByUuid(uuid).no), true);
+      setChecked(
+        requireInput(root, AI_DISCLOSURE_SELECTORS.gateByUuid(uuid).no),
+        true
+      );
     }
     return;
   }
 
   const firstUuid = uuids[0];
-  setChecked(requireInput(root, AI_DISCLOSURE_SELECTORS.gateByUuid(firstUuid).yes), true);
-  const modal = await waitForElement(root, AI_MODAL_SELECTORS.modal, AI_MODAL_WAIT_TIMEOUT_MS);
+  setChecked(
+    requireInput(root, AI_DISCLOSURE_SELECTORS.gateByUuid(firstUuid).yes),
+    true
+  );
+  const modal = await waitForElement(
+    root,
+    AI_MODAL_SELECTORS.modal,
+    AI_MODAL_WAIT_TIMEOUT_MS
+  );
   await applyModalSelections(modal, firstUuid, ai);
-  requireElement<HTMLButtonElement>(modal, AI_MODAL_SELECTORS.saveButton).click();
+  requireElement<HTMLButtonElement>(
+    modal,
+    AI_MODAL_SELECTORS.saveButton
+  ).click();
   await waitForRemoval(modal, AI_MODAL_WAIT_TIMEOUT_MS);
 }

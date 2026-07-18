@@ -32,7 +32,9 @@ afterEach(() => {
 
 describe("markAck: inject 前の基準 marker 採取", () => {
   it("Given 両シグナル取得可 When 採取する Then submission / DOM の両基準値を持つ", () => {
-    const marker = markAck(makeDeps({ getSubmissionCount: () => 3, getDomInFlightCount: () => 5 }));
+    const marker = markAck(
+      makeDeps({ getSubmissionCount: () => 3, getDomInFlightCount: () => 5 })
+    );
     expect(marker).toEqual({ submissionMarker: 3, domBefore: 5 });
   });
 
@@ -43,7 +45,7 @@ describe("markAck: inject 前の基準 marker 採取", () => {
         getDomInFlightCount: () => {
           throw new Error("Remix btn が 1 件も見つかりません。");
         },
-      }),
+      })
     );
     expect(marker).toEqual({ submissionMarker: 3, domBefore: null });
   });
@@ -52,15 +54,23 @@ describe("markAck: inject 前の基準 marker 採取", () => {
 describe("createAckWaiter: bridge シグナル経路", () => {
   it("Given submissionCount が marker を超えている When 待機する Then 即 resolve true（速い経路）", async () => {
     const wait = createAckWaiter(makeDeps({ getSubmissionCount: () => 4 }));
-    const pending = wait({ submissionMarker: 3, domBefore: 0 }, { isAborted: () => false, ...FAST });
+    const pending = wait(
+      { submissionMarker: 3, domBefore: 0 },
+      { isAborted: () => false, ...FAST }
+    );
     await vi.advanceTimersByTimeAsync(0);
     await expect(pending).resolves.toBe(true);
   });
 
   it("Given poll 中に generate レスポンスを観測 When submissionCount が増える Then resolve true", async () => {
     let submissions = 1;
-    const wait = createAckWaiter(makeDeps({ getSubmissionCount: () => submissions }));
-    const pending = wait({ submissionMarker: 1, domBefore: 0 }, { isAborted: () => false, ...FAST });
+    const wait = createAckWaiter(
+      makeDeps({ getSubmissionCount: () => submissions })
+    );
+    const pending = wait(
+      { submissionMarker: 1, domBefore: 0 },
+      { isAborted: () => false, ...FAST }
+    );
     let settled: boolean | undefined;
     void pending.then((v) => {
       settled = v;
@@ -78,8 +88,13 @@ describe("createAckWaiter: bridge シグナル経路", () => {
 describe("createAckWaiter: DOM 増分経路（bridge 不調時の従来互換）", () => {
   it("Given submission は動かず DOM が before+delta まで増える When 待機する Then resolve true", async () => {
     let inflight = 4;
-    const wait = createAckWaiter(makeDeps({ getDomInFlightCount: () => inflight }));
-    const pending = wait({ submissionMarker: 0, domBefore: 4 }, { isAborted: () => false, ...FAST });
+    const wait = createAckWaiter(
+      makeDeps({ getDomInFlightCount: () => inflight })
+    );
+    const pending = wait(
+      { submissionMarker: 0, domBefore: 4 },
+      { isAborted: () => false, ...FAST }
+    );
     let settled: boolean | undefined;
     void pending.then((v) => {
       settled = v;
@@ -96,8 +111,13 @@ describe("createAckWaiter: DOM 増分経路（bridge 不調時の従来互換）
 
   it("Given domBefore=null（採取時に DOM 不能） When DOM だけが増えても Then 受理にしない（bridge のみ判定）", async () => {
     const wait = createAckWaiter(makeDeps({ getDomInFlightCount: () => 100 }));
-    const pending = wait({ submissionMarker: 0, domBefore: null }, { isAborted: () => false, ...FAST });
-    await vi.advanceTimersByTimeAsync(FAST.timeoutMs + FAST.pollIntervalMs + 50);
+    const pending = wait(
+      { submissionMarker: 0, domBefore: null },
+      { isAborted: () => false, ...FAST }
+    );
+    await vi.advanceTimersByTimeAsync(
+      FAST.timeoutMs + FAST.pollIntervalMs + 50
+    );
     await expect(pending).resolves.toBe(false);
   });
 
@@ -111,9 +131,12 @@ describe("createAckWaiter: DOM 増分経路（bridge 不調時の従来互換）
           if (domBroken) throw new Error("DOM 崩れ");
           return 0;
         },
-      }),
+      })
     );
-    const pending = wait({ submissionMarker: 0, domBefore: 0 }, { isAborted: () => false, ...FAST });
+    const pending = wait(
+      { submissionMarker: 0, domBefore: 0 },
+      { isAborted: () => false, ...FAST }
+    );
     let settled: boolean | undefined;
     void pending.then((v) => {
       settled = v;
@@ -133,15 +156,23 @@ describe("createAckWaiter: DOM 増分経路（bridge 不調時の従来互換）
 describe("createAckWaiter: 中断と timeout", () => {
   it("Given isAborted=true When 未受理でも待機する Then 即 resolve true（停止優先、retry させない）", async () => {
     const wait = createAckWaiter(makeDeps());
-    const pending = wait({ submissionMarker: 0, domBefore: 0 }, { isAborted: () => true, ...FAST });
+    const pending = wait(
+      { submissionMarker: 0, domBefore: 0 },
+      { isAborted: () => true, ...FAST }
+    );
     await vi.advanceTimersByTimeAsync(0);
     await expect(pending).resolves.toBe(true);
   });
 
   it("Given どちらのシグナルも達しない When deadline 超過 Then resolve false（throw しない）", async () => {
     const wait = createAckWaiter(makeDeps());
-    const pending = wait({ submissionMarker: 0, domBefore: 0 }, { isAborted: () => false, ...FAST });
-    await vi.advanceTimersByTimeAsync(FAST.timeoutMs + FAST.pollIntervalMs + 50);
+    const pending = wait(
+      { submissionMarker: 0, domBefore: 0 },
+      { isAborted: () => false, ...FAST }
+    );
+    await vi.advanceTimersByTimeAsync(
+      FAST.timeoutMs + FAST.pollIntervalMs + 50
+    );
     await expect(pending).resolves.toBe(false);
   });
 });

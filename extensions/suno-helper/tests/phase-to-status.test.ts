@@ -14,7 +14,10 @@ import { makePromptEntries, snapshotOptions } from "./_helpers";
 
 /** 指定 progress を適用した snapshot を作る（phaseToStatus は progress / entries を読む）。 */
 function snapWith(payload: ProgressPayload) {
-  return applyProgress(initSnapshot(makePromptEntries(3), snapshotOptions()), payload);
+  return applyProgress(
+    initSnapshot(makePromptEntries(3), snapshotOptions()),
+    payload
+  );
 }
 
 /** snapshot を phaseToStatus の (progress, entries) 引数へ展開して呼ぶ。 */
@@ -25,22 +28,41 @@ function statusOf(payload: ProgressPayload) {
 
 describe("phaseToStatus: 非終了 phase の進捗文言（live と同一）", () => {
   it.each<[string, ProgressPayload, string]>([
-    ["INJECTING", { phase: PHASE.INJECTING, index: 0, total: 3 }, "[1/3] 注入中: pattern-1"],
-    ["WAITING_SLOT", { phase: PHASE.WAITING_SLOT, index: 1, total: 3 }, "[2/3] 生成キューの空き待ち…"],
+    [
+      "INJECTING",
+      { phase: PHASE.INJECTING, index: 0, total: 3 },
+      "[1/3] 注入中: pattern-1",
+    ],
+    [
+      "WAITING_SLOT",
+      { phase: PHASE.WAITING_SLOT, index: 1, total: 3 },
+      "[2/3] 生成キューの空き待ち…",
+    ],
     [
       "WAITING_CAPTCHA",
       { phase: PHASE.WAITING_CAPTCHA, index: 1, total: 3 },
       "[2/3] captcha 解消待ち…（多くは自動で解消します）",
     ],
-    ["GENERATING", { phase: PHASE.GENERATING, index: 2, total: 3 }, "[3/3] 生成待ち…"],
-    ["SUBMITTED", { phase: PHASE.SUBMITTED, index: 0, total: 3 }, "[1/3] 投入済み（生成完了待ち）"],
+    [
+      "GENERATING",
+      { phase: PHASE.GENERATING, index: 2, total: 3 },
+      "[3/3] 生成待ち…",
+    ],
+    [
+      "SUBMITTED",
+      { phase: PHASE.SUBMITTED, index: 0, total: 3 },
+      "[1/3] 投入済み（生成完了待ち）",
+    ],
     ["DONE", { phase: PHASE.DONE, index: 0, total: 3 }, "[1/3] 完了"],
-  ])("Given phase=%s When phaseToStatus Then text=%j・error は falsy", (_label, payload, expected) => {
-    const result = statusOf(payload);
+  ])(
+    "Given phase=%s When phaseToStatus Then text=%j・error は falsy",
+    (_label, payload, expected) => {
+      const result = statusOf(payload);
 
-    expect(result.text).toBe(expected);
-    expect(result.error).toBeFalsy();
-  });
+      expect(result.text).toBe(expected);
+      expect(result.error).toBeFalsy();
+    }
+  );
 });
 
 describe("phaseToStatus: 終了 phase の文言と error フラグ", () => {
@@ -59,7 +81,12 @@ describe("phaseToStatus: 終了 phase の文言と error フラグ", () => {
   });
 
   it("Given ERROR (message 付き) When phaseToStatus Then 中断文言に message を含み error=true", () => {
-    const result = statusOf({ phase: PHASE.ERROR, index: 1, total: 3, message: "reCAPTCHA を検知しました。" });
+    const result = statusOf({
+      phase: PHASE.ERROR,
+      index: 1,
+      total: 3,
+      message: "reCAPTCHA を検知しました。",
+    });
 
     expect(result.text).toBe("中断: reCAPTCHA を検知しました。");
     expect(result.error).toBe(true);
@@ -76,7 +103,11 @@ describe("phaseToStatus: 終了 phase の文言と error フラグ", () => {
 describe("phaseToStatus: ADDING_TO_PLAYLIST の進捗文言 (#854)", () => {
   it("Given ADDING_TO_PLAYLIST (message=playlist 名) When phaseToStatus Then playlist 名入りの追加中文言・error は falsy", () => {
     // playlist 名は ProgressPayload.message で運ぶ（専用フィールドを足さず既存経路で表示する）。
-    const result = statusOf({ phase: PHASE.ADDING_TO_PLAYLIST, total: 3, message: "rjn-dawn-cloud-fold" });
+    const result = statusOf({
+      phase: PHASE.ADDING_TO_PLAYLIST,
+      total: 3,
+      message: "rjn-dawn-cloud-fold",
+    });
 
     expect(result.text).toBe("Playlist 'rjn-dawn-cloud-fold' へ追加中…");
     expect(result.error).toBeFalsy();
@@ -94,8 +125,13 @@ describe("phaseToStatus: INJECTING の entry 名解決", () => {
 describe("phaseToStatus: ENTRY_FAILED / 失敗付き FINISHED (#948)", () => {
   it("Given ENTRY_FAILED When 変換する Then スキップ文言を返し error フラグは立てない（run 継続中）", () => {
     const { text, error } = phaseToStatus(
-      { phase: PHASE.ENTRY_FAILED, index: 2, total: 55, message: "生成キューの空き待ちが失敗" },
-      [],
+      {
+        phase: PHASE.ENTRY_FAILED,
+        index: 2,
+        total: 55,
+        message: "生成キューの空き待ちが失敗",
+      },
+      []
     );
     expect(text).toContain("[3/55]");
     expect(text).toContain("スキップ");
@@ -104,8 +140,12 @@ describe("phaseToStatus: ENTRY_FAILED / 失敗付き FINISHED (#948)", () => {
 
   it("Given message 付き FINISHED（失敗スキップあり） When 変換する Then 一部失敗を明示し error フラグを立てる", () => {
     const { text, error } = phaseToStatus(
-      { phase: PHASE.FINISHED, total: 55, message: "2 件の entry が失敗しました (entry 3, 7)" },
-      [],
+      {
+        phase: PHASE.FINISHED,
+        total: 55,
+        message: "2 件の entry が失敗しました (entry 3, 7)",
+      },
+      []
     );
     expect(text).toContain("一部失敗");
     expect(text).toContain("entry 3, 7");
@@ -113,7 +153,10 @@ describe("phaseToStatus: ENTRY_FAILED / 失敗付き FINISHED (#948)", () => {
   });
 
   it("Given message 無し FINISHED When 変換する Then 従来文言のまま（後方互換）", () => {
-    const { text, error } = phaseToStatus({ phase: PHASE.FINISHED, total: 10 }, []);
+    const { text, error } = phaseToStatus(
+      { phase: PHASE.FINISHED, total: 10 },
+      []
+    );
     expect(text).toBe("完了: 10 パターンを実行しました。");
     expect(error).toBeFalsy();
   });
@@ -125,7 +168,13 @@ describe("phaseToStatus: duration guard ログ (#1270)", () => {
       phase: PHASE.DONE,
       index: 0,
       total: 3,
-      log: { kind: "duration-check", entryName: "Night Groove", durationSec: 259, ok: true, maxSec: 300 },
+      log: {
+        kind: "duration-check",
+        entryName: "Night Groove",
+        durationSec: 259,
+        ok: true,
+        maxSec: 300,
+      },
     });
 
     expect(text).toBe('"Night Groove": 259s ✓');
@@ -137,7 +186,13 @@ describe("phaseToStatus: duration guard ログ (#1270)", () => {
       phase: PHASE.DONE,
       index: 0,
       total: 3,
-      log: { kind: "duration-check", entryName: "Night Groove", durationSec: 312, ok: false, maxSec: 300 },
+      log: {
+        kind: "duration-check",
+        entryName: "Night Groove",
+        durationSec: 312,
+        ok: false,
+        maxSec: 300,
+      },
     });
 
     expect(text).toBe('"Night Groove": 312s ✗ (max 300s)');
@@ -149,7 +204,13 @@ describe("phaseToStatus: duration guard ログ (#1270)", () => {
       phase: PHASE.DONE,
       index: 0,
       total: 3,
-      log: { kind: "duration-check", entryName: "Night Groove", durationSec: 58, ok: false, minSec: 60 },
+      log: {
+        kind: "duration-check",
+        entryName: "Night Groove",
+        durationSec: 58,
+        ok: false,
+        minSec: 60,
+      },
     });
 
     expect(text).toBe('"Night Groove": 58s ✗ (min 60s)');
@@ -202,7 +263,9 @@ describe("phaseToStatus: duration guard ログ (#1270)", () => {
       log: { kind: "skip", entryName: "Night Groove" },
     });
 
-    expect(text).toBe('"Night Groove": 全滅 — スキップ: 生成キューの空き待ちが失敗');
+    expect(text).toBe(
+      '"Night Groove": 全滅 — スキップ: 生成キューの空き待ちが失敗'
+    );
     expect(error).toBeFalsy();
   });
 });

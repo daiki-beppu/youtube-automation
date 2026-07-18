@@ -19,7 +19,9 @@ describe("shared legacy server source migration", () => {
 
   it("should propagate removal failures to its caller", async () => {
     const failure = new Error("extension context invalidated");
-    const legacyItem = { removeValue: vi.fn(async () => Promise.reject(failure)) };
+    const legacyItem = {
+      removeValue: vi.fn(async () => Promise.reject(failure)),
+    };
 
     await expect(migrateLegacyServerSources(legacyItem)).rejects.toBe(failure);
   });

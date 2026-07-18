@@ -35,16 +35,17 @@ jobs:
       - uses: cachix/install-nix-action@v30
       - name: Install dependencies
         run: nix develop .#extensions --command pnpm install --frozen-lockfile
+      - name: Install shared lint toolchain
+        working-directory: extensions
+        run: nix develop .#extensions --command pnpm install --frozen-lockfile
       - name: Fallow audit
         if: github.event_name == 'pull_request'
         env:
           FALLOW_AUDIT_BASE: ${{ github.event.pull_request.base.sha }}
         run: nix develop .#extensions --command pnpm run audit
       - parallel:
-          - name: Lint
-            run: nix develop .#extensions --command pnpm lint
-          - name: Format check
-            run: nix develop .#extensions --command pnpm format:check
+          - name: Check (Oxlint + Oxfmt)
+            run: nix develop .#extensions --command pnpm check
           - name: Type check
             run: nix develop .#extensions --command pnpm compile
           - name: Unit tests (Vitest)
@@ -84,11 +85,12 @@ jobs:
       - uses: cachix/install-nix-action@v30
       - name: Install dependencies
         run: nix develop .#extensions --command pnpm install --frozen-lockfile
+      - name: Install shared lint toolchain
+        working-directory: extensions
+        run: nix develop .#extensions --command pnpm install --frozen-lockfile
       - parallel:
-          - name: Lint
-            run: nix develop .#extensions --command pnpm lint
-          - name: Format check
-            run: nix develop .#extensions --command pnpm format:check
+          - name: Check (Oxlint + Oxfmt)
+            run: nix develop .#extensions --command pnpm check
           - name: Typecheck
             run: nix develop .#extensions --command pnpm compile
           - name: Unit tests (Vitest)

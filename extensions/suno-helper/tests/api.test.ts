@@ -77,7 +77,10 @@ describe("shared/api fetchCollectionPrompts: 正常系", () => {
     mockFetch(() => ({
       ok: true,
       status: 200,
-      json: async () => ({ entries, duration_filter: { min_sec: 75, max_sec: 240 } }),
+      json: async () => ({
+        entries,
+        duration_filter: { min_sec: 75, max_sec: 240 },
+      }),
     }));
 
     const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
@@ -88,7 +91,14 @@ describe("shared/api fetchCollectionPrompts: 正常系", () => {
 
 describe("shared/api PromptEntry.title: optional 契約 (#844, 後方互換)", () => {
   it("Given title 付き entry When fetch する Then title を保持して返す", async () => {
-    const entries = [{ name: "夜更けのカフェ", title: "Midnight Cafe", style: "lofi, jazzy", lyrics: "la la la" }];
+    const entries = [
+      {
+        name: "夜更けのカフェ",
+        title: "Midnight Cafe",
+        style: "lofi, jazzy",
+        lyrics: "la la la",
+      },
+    ];
     mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
 
     const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
@@ -97,7 +107,9 @@ describe("shared/api PromptEntry.title: optional 契約 (#844, 後方互換)", (
   });
 
   it("Given title 無し entry When fetch する Then title は undefined（optional なので throw しない）", async () => {
-    const entries = [{ name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" }];
+    const entries = [
+      { name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" },
+    ];
     mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
 
     const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
@@ -107,9 +119,22 @@ describe("shared/api PromptEntry.title: optional 契約 (#844, 後方互換)", (
 
   it("Given title あり/なし混在の配列 When fetch する Then 双方が PromptEntry[] として通る", async () => {
     // 後方互換: 既存の title 無し entry と新 title 付き entry が同一配列に共存できる。
-    const withTitle: PromptEntry = { name: "p1", title: "Custom One", style: "ambient", lyrics: "" };
-    const withoutTitle: PromptEntry = { name: "p2", style: "cinematic", lyrics: "" };
-    mockFetch(() => ({ ok: true, status: 200, json: async () => [withTitle, withoutTitle] }));
+    const withTitle: PromptEntry = {
+      name: "p1",
+      title: "Custom One",
+      style: "ambient",
+      lyrics: "",
+    };
+    const withoutTitle: PromptEntry = {
+      name: "p2",
+      style: "cinematic",
+      lyrics: "",
+    };
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => [withTitle, withoutTitle],
+    }));
 
     const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
 
@@ -128,7 +153,14 @@ describe("shared/api PromptEntry: More Options 3 フィールドの optional 契
 
   it("Given 3 フィールド付き entry When fetch する Then 各値を保持して返す", async () => {
     const entries = [
-      { name: "p1", style: "lofi", lyrics: "", style_influence: 85, weirdness: 30, exclude_styles: "hyperpop, edm" },
+      {
+        name: "p1",
+        style: "lofi",
+        lyrics: "",
+        style_influence: 85,
+        weirdness: 30,
+        exclude_styles: "hyperpop, edm",
+      },
     ];
     mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
 
@@ -161,7 +193,11 @@ describe("shared/api PromptEntry: More Options 3 フィールドの optional 契
       exclude_styles: "hyperpop, edm",
     };
     const without: PromptEntry = { name: "p2", style: "ambient", lyrics: "" };
-    mockFetch(() => ({ ok: true, status: 200, json: async () => [withAdvanced, without] }));
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => [withAdvanced, without],
+    }));
 
     const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
 
@@ -171,7 +207,15 @@ describe("shared/api PromptEntry: More Options 3 フィールドの optional 契
   });
 
   it("Given weirdness=0 / style_influence=0 entry When fetch する Then 0 を保持する（falsy だが有効値）", async () => {
-    const entries = [{ name: "p1", style: "lofi", lyrics: "", style_influence: 0, weirdness: 0 }];
+    const entries = [
+      {
+        name: "p1",
+        style: "lofi",
+        lyrics: "",
+        style_influence: 0,
+        weirdness: 0,
+      },
+    ];
     mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
 
     const result = await fetchCollectionPrompts(BASE_URL, COLLECTION_ID);
@@ -199,7 +243,11 @@ describe("shared/api PromptResponse.duration_filter: collection 単位 duration 
 
   it("Given duration_filter 省略 When fetchCollectionPromptResponse する Then 既定値を補う", async () => {
     const entries: PromptEntry[] = [{ name: "p1", style: "lofi", lyrics: "" }];
-    mockFetch(() => ({ ok: true, status: 200, json: async () => ({ entries }) }));
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ entries }),
+    }));
 
     const result = await fetchCollectionPromptResponse(BASE_URL, COLLECTION_ID);
 
@@ -212,7 +260,10 @@ describe("shared/api PromptResponse.duration_filter: collection 単位 duration 
 
     const result = await fetchCollectionPromptResponse(BASE_URL, COLLECTION_ID);
 
-    expect(result).toEqual({ entries, duration_filter: DEFAULT_DURATION_FILTER });
+    expect(result).toEqual({
+      entries,
+      duration_filter: DEFAULT_DURATION_FILTER,
+    });
   });
 
   it.each([
@@ -236,8 +287,10 @@ describe("shared/api PromptResponse.duration_filter: collection 単位 duration 
         }),
       }));
 
-      await expect(fetchCollectionPromptResponse(BASE_URL, COLLECTION_ID)).rejects.toThrow();
-    },
+      await expect(
+        fetchCollectionPromptResponse(BASE_URL, COLLECTION_ID)
+      ).rejects.toThrow();
+    }
   );
 });
 
@@ -245,19 +298,29 @@ describe("shared/api fetchCollectionPrompts: 異常系 (fail-loud)", () => {
   it("Given HTTP 500 When fetch する Then ステータスを含めて throw する", async () => {
     mockFetch(() => ({ ok: false, status: 500, json: async () => ({}) }));
 
-    await expect(fetchCollectionPrompts(BASE_URL, COLLECTION_ID)).rejects.toThrow(/500/);
+    await expect(
+      fetchCollectionPrompts(BASE_URL, COLLECTION_ID)
+    ).rejects.toThrow(/500/);
   });
 
   it("Given 配列でない JSON (オブジェクト) When fetch する Then throw する", async () => {
-    mockFetch(() => ({ ok: true, status: 200, json: async () => ({ name: "x" }) }));
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ name: "x" }),
+    }));
 
-    await expect(fetchCollectionPrompts(BASE_URL, COLLECTION_ID)).rejects.toThrow();
+    await expect(
+      fetchCollectionPrompts(BASE_URL, COLLECTION_ID)
+    ).rejects.toThrow();
   });
 
   it("Given 空配列 When fetch する Then throw する", async () => {
     mockFetch(() => ({ ok: true, status: 200, json: async () => [] }));
 
-    await expect(fetchCollectionPrompts(BASE_URL, COLLECTION_ID)).rejects.toThrow();
+    await expect(
+      fetchCollectionPrompts(BASE_URL, COLLECTION_ID)
+    ).rejects.toThrow();
   });
 });
 
@@ -287,7 +350,11 @@ const SAMPLE_COLLECTIONS: CollectionSummary[] = [
 
 describe("shared/api fetchCollections: 配信元 URL の組み立て", () => {
   it("Given baseUrl When fetch する Then `/collections` サブパスへ要求する", async () => {
-    const fetchFn = mockFetch(() => ({ ok: true, status: 200, json: async () => [] }));
+    const fetchFn = mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => [],
+    }));
 
     await fetchCollections(BASE_URL);
 
@@ -297,7 +364,11 @@ describe("shared/api fetchCollections: 配信元 URL の組み立て", () => {
 
 describe("shared/api fetchCollections: 正常系", () => {
   it("Given collection 配列 When fetch する Then CollectionSummary[] を返す", async () => {
-    mockFetch(() => ({ ok: true, status: 200, json: async () => SAMPLE_COLLECTIONS }));
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => SAMPLE_COLLECTIONS,
+    }));
 
     const result = await fetchCollections(BASE_URL);
 
@@ -326,7 +397,12 @@ describe("shared/api fetchCollections: 正常系", () => {
   });
 
   it("Given suno_playlist_url がある When fetch する Then 値を保持する", async () => {
-    const rows = [{ ...SAMPLE_COLLECTIONS[0], suno_playlist_url: "https://suno.com/playlist/saved" }];
+    const rows = [
+      {
+        ...SAMPLE_COLLECTIONS[0],
+        suno_playlist_url: "https://suno.com/playlist/saved",
+      },
+    ];
     mockFetch(() => ({ ok: true, status: 200, json: async () => rows }));
 
     await expect(fetchCollections(BASE_URL)).resolves.toEqual(rows);
@@ -341,7 +417,11 @@ describe("shared/api fetchCollections: 異常系 (fail-loud)", () => {
   });
 
   it("Given 配列でない JSON When fetch する Then throw する", async () => {
-    mockFetch(() => ({ ok: true, status: 200, json: async () => ({ id: "x" }) }));
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "x" }),
+    }));
 
     await expect(fetchCollections(BASE_URL)).rejects.toThrow();
   });
@@ -357,11 +437,19 @@ describe("shared/api fetchCollections: 異常系 (fail-loud)", () => {
   });
 
   it("Given downloaded_count 欠落 When fetch する Then fail-loud に throw する", async () => {
-    const withoutDownloadedCount: Record<string, unknown> = { ...SAMPLE_COLLECTIONS[0] };
+    const withoutDownloadedCount: Record<string, unknown> = {
+      ...SAMPLE_COLLECTIONS[0],
+    };
     delete withoutDownloadedCount.downloaded_count;
-    mockFetch(() => ({ ok: true, status: 200, json: async () => [withoutDownloadedCount] }));
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => [withoutDownloadedCount],
+    }));
 
-    await expect(fetchCollections(BASE_URL)).rejects.toThrow(/downloaded_count/);
+    await expect(fetchCollections(BASE_URL)).rejects.toThrow(
+      /downloaded_count/
+    );
   });
 
   it("Given pattern_count 型不正 When fetch する Then fail-loud に throw する", async () => {
@@ -380,21 +468,32 @@ describe("shared/api fetchCollections: 異常系 (fail-loud)", () => {
       mockFetch(() => ({
         ok: true,
         status: 200,
-        json: async () => [{ ...SAMPLE_COLLECTIONS[0], expected_file_count: expectedFileCount }],
+        json: async () => [
+          { ...SAMPLE_COLLECTIONS[0], expected_file_count: expectedFileCount },
+        ],
       }));
 
-      await expect(fetchCollections(BASE_URL)).rejects.toThrow(/expected_file_count/);
-    },
+      await expect(fetchCollections(BASE_URL)).rejects.toThrow(
+        /expected_file_count/
+      );
+    }
   );
 
   it("Given suno_playlist_url 型不正 When fetch する Then fail-loud に throw する", async () => {
     mockFetch(() => ({
       ok: true,
       status: 200,
-      json: async () => [{ ...SAMPLE_COLLECTIONS[0], suno_playlist_url: ["https://suno.com/playlist/saved"] }],
+      json: async () => [
+        {
+          ...SAMPLE_COLLECTIONS[0],
+          suno_playlist_url: ["https://suno.com/playlist/saved"],
+        },
+      ],
     }));
 
-    await expect(fetchCollections(BASE_URL)).rejects.toThrow(/suno_playlist_url/);
+    await expect(fetchCollections(BASE_URL)).rejects.toThrow(
+      /suno_playlist_url/
+    );
   });
 });
 
@@ -414,7 +513,9 @@ describe("shared/api fetchCollectionPrompts: 配信元 URL の組み立て", () 
 
     await fetchCollectionPrompts(BASE_URL, "20260601-clm-aaa-collection");
 
-    expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/collections/20260601-clm-aaa-collection/suno/prompts.json`);
+    expect(fetchFn).toHaveBeenCalledWith(
+      `${BASE_URL}/collections/20260601-clm-aaa-collection/suno/prompts.json`
+    );
   });
 
   it("Given スペース入り id When fetch する Then id を path segment encode して要求する", async () => {
@@ -426,7 +527,9 @@ describe("shared/api fetchCollectionPrompts: 配信元 URL の組み立て", () 
 
     await fetchCollectionPrompts(BASE_URL, "20260526-rainy jazz-collection");
 
-    expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/collections/20260526-rainy%20jazz-collection/suno/prompts.json`);
+    expect(fetchFn).toHaveBeenCalledWith(
+      `${BASE_URL}/collections/20260526-rainy%20jazz-collection/suno/prompts.json`
+    );
   });
 
   it("Given スペース入り id When fetchCollectionPromptResponse する Then id を path segment encode して要求する", async () => {
@@ -436,37 +539,57 @@ describe("shared/api fetchCollectionPrompts: 配信元 URL の組み立て", () 
       json: async () => [{ name: "p1", style: "lofi", lyrics: "" }],
     }));
 
-    await fetchCollectionPromptResponse(BASE_URL, "20260526-rainy jazz-collection");
+    await fetchCollectionPromptResponse(
+      BASE_URL,
+      "20260526-rainy jazz-collection"
+    );
 
-    expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/collections/20260526-rainy%20jazz-collection/suno/prompts.json`);
+    expect(fetchFn).toHaveBeenCalledWith(
+      `${BASE_URL}/collections/20260526-rainy%20jazz-collection/suno/prompts.json`
+    );
   });
 });
 
 describe("shared/api fetchCollectionPrompts: 正常系", () => {
   it("Given 配列 JSON When fetch する Then PromptEntry[] を返す", async () => {
-    const entries = [{ name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" }];
+    const entries = [
+      { name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" },
+    ];
     mockFetch(() => ({ ok: true, status: 200, json: async () => entries }));
 
-    const result = await fetchCollectionPrompts(BASE_URL, "20260601-clm-aaa-collection");
+    const result = await fetchCollectionPrompts(
+      BASE_URL,
+      "20260601-clm-aaa-collection"
+    );
 
     expect(result).toEqual(entries);
   });
 
   it("Given envelope JSON When fetchCollectionPrompts する Then entries だけを返す（既存 API 互換）", async () => {
-    const entries: PromptEntry[] = [{ name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" }];
+    const entries: PromptEntry[] = [
+      { name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" },
+    ];
     mockFetch(() => ({
       ok: true,
       status: 200,
-      json: async () => ({ entries, duration_filter: { min_sec: 90, max_sec: 260 } }),
+      json: async () => ({
+        entries,
+        duration_filter: { min_sec: 90, max_sec: 260 },
+      }),
     }));
 
-    const result = await fetchCollectionPrompts(BASE_URL, "20260601-clm-aaa-collection");
+    const result = await fetchCollectionPrompts(
+      BASE_URL,
+      "20260601-clm-aaa-collection"
+    );
 
     expect(result).toEqual(entries);
   });
 
   it("Given envelope JSON When fetchCollectionPromptResponse する Then duration_filter を保持する", async () => {
-    const entries: PromptEntry[] = [{ name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" }];
+    const entries: PromptEntry[] = [
+      { name: "夜更けのカフェ", style: "lofi, jazzy", lyrics: "la la la" },
+    ];
     const durationFilter: DurationFilter = { min_sec: 90, max_sec: 260 };
     mockFetch(() => ({
       ok: true,
@@ -474,7 +597,10 @@ describe("shared/api fetchCollectionPrompts: 正常系", () => {
       json: async () => ({ entries, duration_filter: durationFilter }),
     }));
 
-    const result = await fetchCollectionPromptResponse(BASE_URL, "20260601-clm-aaa-collection");
+    const result = await fetchCollectionPromptResponse(
+      BASE_URL,
+      "20260601-clm-aaa-collection"
+    );
 
     expect(result).toEqual({ entries, duration_filter: durationFilter });
   });
@@ -485,24 +611,33 @@ describe("shared/api fetchCollectionPrompts: 異常系 (fail-loud)", () => {
     ["空文字", ""],
     ["欠落", undefined],
     ["非 string", 123],
-  ] as const)("Given collectionId が%s When fetch する Then path を組み立てず throw する", async (_label, id) => {
-    const fetchFn = vi.fn();
-    vi.stubGlobal("fetch", fetchFn);
+  ] as const)(
+    "Given collectionId が%s When fetch する Then path を組み立てず throw する",
+    async (_label, id) => {
+      const fetchFn = vi.fn();
+      vi.stubGlobal("fetch", fetchFn);
 
-    await expect(fetchCollectionPrompts(BASE_URL, id as never)).rejects.toThrow(/collectionId/);
-    expect(fetchFn).not.toHaveBeenCalled();
-  });
+      await expect(
+        fetchCollectionPrompts(BASE_URL, id as never)
+      ).rejects.toThrow(/collectionId/);
+      expect(fetchFn).not.toHaveBeenCalled();
+    }
+  );
 
   it("Given HTTP 404 (未知 id) When fetch する Then throw する", async () => {
     mockFetch(() => ({ ok: false, status: 404, json: async () => ({}) }));
 
-    await expect(fetchCollectionPrompts(BASE_URL, "nope")).rejects.toThrow(/404/);
+    await expect(fetchCollectionPrompts(BASE_URL, "nope")).rejects.toThrow(
+      /404/
+    );
   });
 
   it("Given 空配列 When fetch する Then throw する (空 collection は silent 続行しない)", async () => {
     mockFetch(() => ({ ok: true, status: 200, json: async () => [] }));
 
-    await expect(fetchCollectionPrompts(BASE_URL, "20260601-clm-aaa-collection")).rejects.toThrow();
+    await expect(
+      fetchCollectionPrompts(BASE_URL, "20260601-clm-aaa-collection")
+    ).rejects.toThrow();
   });
 });
 
@@ -516,22 +651,66 @@ describe("shared/api fetchCollectionPrompts: 異常系 (fail-loud)", () => {
 describe("shared/api visiblePromptCollections: popup 表示対象", () => {
   it("Given ready/needs_prompts/downloaded When 表示対象を作る Then 完了済みも結果確認用に残す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
-      { id: "c2", name: "c2", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
-      { id: "c3", name: "c3", status: "downloaded", pattern_count: 2, downloaded_count: 4 },
+      {
+        id: "c1",
+        name: "c1",
+        status: "ready",
+        pattern_count: 1,
+        downloaded_count: 0,
+      },
+      {
+        id: "c2",
+        name: "c2",
+        status: "needs_prompts",
+        pattern_count: null,
+        downloaded_count: 0,
+      },
+      {
+        id: "c3",
+        name: "c3",
+        status: "downloaded",
+        pattern_count: 2,
+        downloaded_count: 4,
+      },
     ];
 
-    expect(visiblePromptCollections(collections).map((c) => c.id)).toEqual(["c1", "c2", "c3"]);
+    expect(visiblePromptCollections(collections).map((c) => c.id)).toEqual([
+      "c1",
+      "c2",
+      "c3",
+    ]);
   });
 
   it("Given downloaded が複数ある When 表示対象を作る Then 完了済みをすべて残す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
-      { id: "c2", name: "c2", status: "downloaded", pattern_count: 2, downloaded_count: 4 },
-      { id: "c3", name: "c3", status: "downloaded", pattern_count: 2, downloaded_count: 4 },
+      {
+        id: "c1",
+        name: "c1",
+        status: "ready",
+        pattern_count: 1,
+        downloaded_count: 0,
+      },
+      {
+        id: "c2",
+        name: "c2",
+        status: "downloaded",
+        pattern_count: 2,
+        downloaded_count: 4,
+      },
+      {
+        id: "c3",
+        name: "c3",
+        status: "downloaded",
+        pattern_count: 2,
+        downloaded_count: 4,
+      },
     ];
 
-    expect(visiblePromptCollections(collections).map((c) => c.id)).toEqual(["c1", "c2", "c3"]);
+    expect(visiblePromptCollections(collections).map((c) => c.id)).toEqual([
+      "c1",
+      "c2",
+      "c3",
+    ]);
   });
 });
 
@@ -540,24 +719,39 @@ describe("shared/api collectionHasPrompts: status ベースの prompts 判定", 
     ["ready", true],
     ["downloaded", true],
     ["needs_prompts", false],
-  ] as const)("Given status=%s When 判定 Then %s を返す", (status, expected) => {
-    expect(
-      collectionHasPrompts({
-        id: "c1",
-        name: "c1",
-        status,
-        pattern_count: status === "needs_prompts" ? null : 1,
-        downloaded_count: 0,
-      }),
-    ).toBe(expected);
-  });
+  ] as const)(
+    "Given status=%s When 判定 Then %s を返す",
+    (status, expected) => {
+      expect(
+        collectionHasPrompts({
+          id: "c1",
+          name: "c1",
+          status,
+          pattern_count: status === "needs_prompts" ? null : 1,
+          downloaded_count: 0,
+        })
+      ).toBe(expected);
+    }
+  );
 });
 
 describe("shared/api pickInitialCollectionId: 初期選択ルール", () => {
   it("Given ready/downloaded When 初期値を選ぶ Then ready の id を返す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
-      { id: "c2", name: "c2", status: "downloaded", pattern_count: 2, downloaded_count: 2 },
+      {
+        id: "c1",
+        name: "c1",
+        status: "ready",
+        pattern_count: 1,
+        downloaded_count: 0,
+      },
+      {
+        id: "c2",
+        name: "c2",
+        status: "downloaded",
+        pattern_count: 2,
+        downloaded_count: 2,
+      },
     ];
 
     expect(pickInitialCollectionId(collections)).toBe("c1");
@@ -565,8 +759,20 @@ describe("shared/api pickInitialCollectionId: 初期選択ルール", () => {
 
   it("Given 先頭が needs_prompts When 初期値を選ぶ Then 最初の ready id を返す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
-      { id: "c2", name: "c2", status: "ready", pattern_count: 2, downloaded_count: 0 },
+      {
+        id: "c1",
+        name: "c1",
+        status: "needs_prompts",
+        pattern_count: null,
+        downloaded_count: 0,
+      },
+      {
+        id: "c2",
+        name: "c2",
+        status: "ready",
+        pattern_count: 2,
+        downloaded_count: 0,
+      },
     ];
 
     expect(pickInitialCollectionId(collections)).toBe("c2");
@@ -574,8 +780,20 @@ describe("shared/api pickInitialCollectionId: 初期選択ルール", () => {
 
   it("Given 全て needs_prompts/downloaded When 初期値を選ぶ Then null を返す (実行可能な選択肢なし)", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
-      { id: "c2", name: "c2", status: "downloaded", pattern_count: 2, downloaded_count: 4 },
+      {
+        id: "c1",
+        name: "c1",
+        status: "needs_prompts",
+        pattern_count: null,
+        downloaded_count: 0,
+      },
+      {
+        id: "c2",
+        name: "c2",
+        status: "downloaded",
+        pattern_count: 2,
+        downloaded_count: 4,
+      },
     ];
 
     expect(pickInitialCollectionId(collections)).toBeNull();
@@ -589,8 +807,20 @@ describe("shared/api pickInitialCollectionId: 初期選択ルール", () => {
 describe("shared/api resolvePromptCollectionId: prompts 取得対象 collection の解決", () => {
   it("Given 選択中 id が最新一覧に存在し prompts あり When 解決 Then 選択中 id を返す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
-      { id: "c2", name: "c2", status: "ready", pattern_count: 2, downloaded_count: 0 },
+      {
+        id: "c1",
+        name: "c1",
+        status: "ready",
+        pattern_count: 1,
+        downloaded_count: 0,
+      },
+      {
+        id: "c2",
+        name: "c2",
+        status: "ready",
+        pattern_count: 2,
+        downloaded_count: 0,
+      },
     ];
 
     expect(resolvePromptCollectionId(collections, "c2")).toBe("c2");
@@ -598,8 +828,20 @@ describe("shared/api resolvePromptCollectionId: prompts 取得対象 collection 
 
   it("Given 選択中 id が最新一覧に無い When 解決 Then 初期選択 id を返す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", status: "ready", pattern_count: 1, downloaded_count: 0 },
-      { id: "c2", name: "c2", status: "ready", pattern_count: 2, downloaded_count: 0 },
+      {
+        id: "c1",
+        name: "c1",
+        status: "ready",
+        pattern_count: 1,
+        downloaded_count: 0,
+      },
+      {
+        id: "c2",
+        name: "c2",
+        status: "ready",
+        pattern_count: 2,
+        downloaded_count: 0,
+      },
     ];
 
     expect(resolvePromptCollectionId(collections, "old-url-c9")).toBe("c1");
@@ -607,8 +849,20 @@ describe("shared/api resolvePromptCollectionId: prompts 取得対象 collection 
 
   it("Given 選択中 id が needs_prompts When 解決 Then 最初の ready id を返す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
-      { id: "c2", name: "c2", status: "ready", pattern_count: 2, downloaded_count: 0 },
+      {
+        id: "c1",
+        name: "c1",
+        status: "needs_prompts",
+        pattern_count: null,
+        downloaded_count: 0,
+      },
+      {
+        id: "c2",
+        name: "c2",
+        status: "ready",
+        pattern_count: 2,
+        downloaded_count: 0,
+      },
     ];
 
     expect(resolvePromptCollectionId(collections, "c1")).toBe("c2");
@@ -616,8 +870,20 @@ describe("shared/api resolvePromptCollectionId: prompts 取得対象 collection 
 
   it("Given 選択中 id が downloaded When 解決 Then 最初の ready id を返す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", status: "downloaded", pattern_count: 1, downloaded_count: 2 },
-      { id: "c2", name: "c2", status: "ready", pattern_count: 2, downloaded_count: 0 },
+      {
+        id: "c1",
+        name: "c1",
+        status: "downloaded",
+        pattern_count: 1,
+        downloaded_count: 2,
+      },
+      {
+        id: "c2",
+        name: "c2",
+        status: "ready",
+        pattern_count: 2,
+        downloaded_count: 0,
+      },
     ];
 
     expect(resolvePromptCollectionId(collections, "c1")).toBe("c2");
@@ -625,8 +891,20 @@ describe("shared/api resolvePromptCollectionId: prompts 取得対象 collection 
 
   it("Given 選択中 id が downloaded かつ resume 対象 When 解決 Then 選択中 id を返す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", status: "downloaded", pattern_count: 1, downloaded_count: 2 },
-      { id: "c2", name: "c2", status: "ready", pattern_count: 2, downloaded_count: 0 },
+      {
+        id: "c1",
+        name: "c1",
+        status: "downloaded",
+        pattern_count: 1,
+        downloaded_count: 2,
+      },
+      {
+        id: "c2",
+        name: "c2",
+        status: "ready",
+        pattern_count: 2,
+        downloaded_count: 0,
+      },
     ];
 
     expect(resolvePromptCollectionId(collections, "c1", true)).toBe("c1");
@@ -634,7 +912,13 @@ describe("shared/api resolvePromptCollectionId: prompts 取得対象 collection 
 
   it("Given prompts あり collection が無い When 解決 Then null を返す", () => {
     const collections: CollectionSummary[] = [
-      { id: "c1", name: "c1", status: "needs_prompts", pattern_count: null, downloaded_count: 0 },
+      {
+        id: "c1",
+        name: "c1",
+        status: "needs_prompts",
+        pattern_count: null,
+        downloaded_count: 0,
+      },
     ];
 
     expect(resolvePromptCollectionId(collections, "c1")).toBeNull();
@@ -682,9 +966,15 @@ describe("shared/api fetchServerVersion: 配信元 URL とレスポンス契約"
   });
 
   it("Given response envelope の流用で min_extension_version が無い When fetch する Then throw する", async () => {
-    mockFetch(() => ({ ok: true, status: 200, json: async () => ({ data: { version: "5.5.7" } }) }));
+    mockFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: { version: "5.5.7" } }),
+    }));
 
-    await expect(fetchServerVersion(BASE_URL)).rejects.toThrow(/min_extension_version/);
+    await expect(fetchServerVersion(BASE_URL)).rejects.toThrow(
+      /min_extension_version/
+    );
   });
 });
 
@@ -711,7 +1001,9 @@ describe("shared/api checkServerCompatibility: semver 判定", () => {
       json: async () => ({ version: "5.5.7", min_extension_version: "0.1.0" }),
     }));
 
-    await expect(checkServerCompatibility(BASE_URL, "0.1.1")).resolves.toMatchObject({ status: "compatible" });
+    await expect(
+      checkServerCompatibility(BASE_URL, "0.1.1")
+    ).resolves.toMatchObject({ status: "compatible" });
   });
 
   it("Given 拡張 version が最低要求より古い When check Then incompatible を返す", async () => {
@@ -736,7 +1028,9 @@ describe("shared/api checkServerCompatibility: semver 判定", () => {
       json: async () => ({ version: "5.5.7", min_extension_version: "0.9.9" }),
     }));
 
-    await expect(checkServerCompatibility(BASE_URL, "1.0.0")).resolves.toMatchObject({ status: "compatible" });
+    await expect(
+      checkServerCompatibility(BASE_URL, "1.0.0")
+    ).resolves.toMatchObject({ status: "compatible" });
   });
 
   it("Given 旧サーバーが 404 を返す When check Then skipped を返してデータ取得を妨げない", async () => {
@@ -767,7 +1061,9 @@ describe("shared/api formatCompatibilityWarning: popup 表示文", () => {
       extensionVersion: "0.1.9",
     });
 
-    expect(result).toBe("拡張を更新してください（拡張 0.1.9 / 必要 0.2.0 / サーバー 5.5.7）。");
+    expect(result).toBe(
+      "拡張を更新してください（拡張 0.1.9 / 必要 0.2.0 / サーバー 5.5.7）。"
+    );
   });
 
   it("Given incompatible 以外の result When format Then バナーを表示しない空文字を返す", () => {
@@ -777,10 +1073,17 @@ describe("shared/api formatCompatibilityWarning: popup 表示文", () => {
         serverVersion: "5.5.7",
         minExtensionVersion: "0.1.0",
         extensionVersion: "0.1.0",
-      }),
+      })
     ).toBe("");
-    expect(formatCompatibilityWarning({ status: "skipped", reason: "version-endpoint-unavailable" })).toBe("");
-    expect(formatCompatibilityWarning({ status: "error", message: "HTTP 500" })).toBe("");
+    expect(
+      formatCompatibilityWarning({
+        status: "skipped",
+        reason: "version-endpoint-unavailable",
+      })
+    ).toBe("");
+    expect(
+      formatCompatibilityWarning({ status: "error", message: "HTTP 500" })
+    ).toBe("");
   });
 });
 
@@ -793,7 +1096,7 @@ describe("shared/api resolveCompatibilityWarning: popup warning state", () => {
     }));
 
     await expect(resolveCompatibilityWarning(BASE_URL, "0.1.9")).resolves.toBe(
-      "拡張を更新してください（拡張 0.1.9 / 必要 0.2.0 / サーバー 5.5.7）。",
+      "拡張を更新してください（拡張 0.1.9 / 必要 0.2.0 / サーバー 5.5.7）。"
     );
   });
 
@@ -804,7 +1107,9 @@ describe("shared/api resolveCompatibilityWarning: popup warning state", () => {
       json: async () => ({ version: "5.5.7", min_extension_version: "0.1.0" }),
     }));
 
-    await expect(resolveCompatibilityWarning(BASE_URL, "0.1.0")).resolves.toBe("");
+    await expect(resolveCompatibilityWarning(BASE_URL, "0.1.0")).resolves.toBe(
+      ""
+    );
   });
 });
 
@@ -818,7 +1123,11 @@ describe("shared/api resolveCompatibilityWarning: popup warning state", () => {
 function mockFetchForDownloaded(postResponse: () => Partial<Response>) {
   const fn = vi.fn(async (url: string) => {
     if (typeof url === "string" && url.includes("/auth/token")) {
-      return { ok: true, status: 200, json: async () => ({ token: "test-token" }) } as Response;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ token: "test-token" }),
+      } as Response;
     }
     return postResponse() as Response;
   });
@@ -828,20 +1137,24 @@ function mockFetchForDownloaded(postResponse: () => Partial<Response>) {
 
 describe("shared/api postDownloaded: 正常系", () => {
   it("Given 200 応答 When postDownloaded Then warning なしで resolve する", async () => {
-    const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
+    const fetchFn = mockFetchForDownloaded(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    }));
 
     await expect(
       postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
         file_count: 0,
         format: "mp3",
         suno_playlist_url: "https://suno.com/playlist/test",
-      }),
+      })
     ).resolves.toEqual({ warning: null });
 
     expect(fetchFn).toHaveBeenCalledTimes(2);
     expect(fetchFn).toHaveBeenCalledWith(
       `${BASE_URL}/collections/20260601-clm-aaa-collection/downloaded`,
-      expect.objectContaining({ method: "POST" }),
+      expect.objectContaining({ method: "POST" })
     );
   });
 
@@ -862,7 +1175,7 @@ describe("shared/api postDownloaded: 正常系", () => {
         expected_file_count: 12,
         format: "mp3",
         download_path: "/Users/test/Downloads/test.zip",
-      }),
+      })
     ).resolves.toEqual({ warning: "placed 10 files, expected 12 (2 missing)" });
   });
 
@@ -880,12 +1193,16 @@ describe("shared/api postDownloaded: 正常系", () => {
         file_count: 0,
         format: "mp3",
         suno_playlist_url: "https://suno.com/playlist/test",
-      }),
+      })
     ).resolves.toEqual({ warning: null });
   });
 
   it("Given download_path 付き payload When postDownloaded Then request body に download_path が含まれる", async () => {
-    const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
+    const fetchFn = mockFetchForDownloaded(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    }));
 
     await postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
       file_count: 0,
@@ -896,7 +1213,7 @@ describe("shared/api postDownloaded: 正常系", () => {
     });
 
     const postCall = fetchFn.mock.calls.find(
-      (c) => typeof c[0] === "string" && c[0].includes("/downloaded"),
+      (c) => typeof c[0] === "string" && c[0].includes("/downloaded")
     ) as unknown as [string, RequestInit];
     const body = JSON.parse(postCall[1].body as string);
     expect(body.download_path).toBe("/Users/test/Downloads/test.zip");
@@ -905,7 +1222,11 @@ describe("shared/api postDownloaded: 正常系", () => {
   });
 
   it("Given download_path 付きで playlist URL が無い payload When postDownloaded Then request body に playlist URL を含めず送る", async () => {
-    const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
+    const fetchFn = mockFetchForDownloaded(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    }));
 
     await postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
       file_count: 5,
@@ -915,7 +1236,7 @@ describe("shared/api postDownloaded: 正常系", () => {
     });
 
     const postCall = fetchFn.mock.calls.find(
-      (c) => typeof c[0] === "string" && c[0].includes("/downloaded"),
+      (c) => typeof c[0] === "string" && c[0].includes("/downloaded")
     ) as unknown as [string, RequestInit];
     const body = JSON.parse(postCall[1].body as string);
     expect(body.download_path).toBe("/Users/test/Downloads/test.zip");
@@ -923,21 +1244,29 @@ describe("shared/api postDownloaded: 正常系", () => {
   });
 
   it("Given file_count 正数で download_path が無い payload When postDownloaded Then fetch 前に throw する", async () => {
-    const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
+    const fetchFn = mockFetchForDownloaded(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    }));
 
     await expect(
       postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
         file_count: 5,
         format: "mp3",
         suno_playlist_url: "https://suno.com/playlist/test",
-      }),
+      })
     ).rejects.toThrow(/download_path/);
 
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
   it("Given postDownloaded When ヘッダーを確認 Then X-Serve-Token が含まれる", async () => {
-    const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
+    const fetchFn = mockFetchForDownloaded(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    }));
 
     await postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
       file_count: 0,
@@ -946,14 +1275,18 @@ describe("shared/api postDownloaded: 正常系", () => {
     });
 
     const postCall = fetchFn.mock.calls.find(
-      (c) => typeof c[0] === "string" && c[0].includes("/downloaded"),
+      (c) => typeof c[0] === "string" && c[0].includes("/downloaded")
     ) as unknown as [string, RequestInit];
     const headers = postCall[1].headers as Record<string, string>;
     expect(headers["X-Serve-Token"]).toBe("test-token");
   });
 
   it("Given baseUrl 末尾 slash When postDownloaded Then token と POST URL を正規化する", async () => {
-    const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
+    const fetchFn = mockFetchForDownloaded(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    }));
 
     await postDownloaded(`${BASE_URL}/`, "20260601-clm-aaa-collection", {
       file_count: 0,
@@ -964,7 +1297,7 @@ describe("shared/api postDownloaded: 正常系", () => {
     expect(fetchFn).toHaveBeenCalledWith(`${BASE_URL}/auth/token`);
     expect(fetchFn).toHaveBeenCalledWith(
       `${BASE_URL}/collections/20260601-clm-aaa-collection/downloaded`,
-      expect.objectContaining({ method: "POST" }),
+      expect.objectContaining({ method: "POST" })
     );
   });
 });
@@ -973,7 +1306,12 @@ describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
   it("Given /auth/token が非 2xx When postDownloaded Then downloaded POST に進まず throw する", async () => {
     const fetchFn = vi.fn(async (url: string) => {
       if (typeof url === "string" && url.includes("/auth/token")) {
-        return { ok: false, status: 403, statusText: "Forbidden", json: async () => ({}) } as Response;
+        return {
+          ok: false,
+          status: 403,
+          statusText: "Forbidden",
+          json: async () => ({}),
+        } as Response;
       }
       return { ok: true, status: 200, json: async () => ({}) } as Response;
     });
@@ -984,7 +1322,7 @@ describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
         file_count: 0,
         format: "mp3",
         suno_playlist_url: "https://suno.com/playlist/test",
-      }),
+      })
     ).rejects.toThrow(/GET \/auth\/token failed: 403/);
 
     expect(fetchFn).toHaveBeenCalledTimes(1);
@@ -993,7 +1331,11 @@ describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
   it("Given /auth/token が invalid body When postDownloaded Then downloaded POST に進まず throw する", async () => {
     const fetchFn = vi.fn(async (url: string) => {
       if (typeof url === "string" && url.includes("/auth/token")) {
-        return { ok: true, status: 200, json: async () => ({ token: "" }) } as Response;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ token: "" }),
+        } as Response;
       }
       return { ok: true, status: 200, json: async () => ({}) } as Response;
     });
@@ -1004,7 +1346,7 @@ describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
         file_count: 0,
         format: "mp3",
         suno_playlist_url: "https://suno.com/playlist/test",
-      }),
+      })
     ).rejects.toThrow(/invalid response/);
 
     expect(fetchFn).toHaveBeenCalledTimes(1);
@@ -1023,7 +1365,7 @@ describe("shared/api postDownloaded: 異常系 (fail-loud)", () => {
         file_count: 0,
         format: "mp3",
         suno_playlist_url: "https://suno.com/playlist/test",
-      }),
+      })
     ).rejects.toThrow(/POST downloaded failed: 500/);
   });
 });
@@ -1035,15 +1377,25 @@ describe("shared/api postDownloaded: 403 retry (#1217 ARCH-1217-002)", () => {
       if (typeof url === "string" && url.includes("/auth/token")) {
         // 2 回目の token fetch は別のトークンを返す
         const callIndex = fn.mock.calls.filter(
-          (c) => typeof c[0] === "string" && (c[0] as string).includes("/auth/token"),
+          (c) =>
+            typeof c[0] === "string" && (c[0] as string).includes("/auth/token")
         ).length;
         const token = callIndex <= 1 ? "stale-token" : "fresh-token";
-        return { ok: true, status: 200, json: async () => ({ token }) } as Response;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ token }),
+        } as Response;
       }
       // POST: 1 回目は 403, 2 回目は 200
       postCallCount++;
       if (postCallCount === 1) {
-        return { ok: false, status: 403, statusText: "Forbidden", json: async () => ({}) } as Response;
+        return {
+          ok: false,
+          status: 403,
+          statusText: "Forbidden",
+          json: async () => ({}),
+        } as Response;
       }
       return { ok: true, status: 200, json: async () => ({}) } as Response;
     });
@@ -1054,14 +1406,15 @@ describe("shared/api postDownloaded: 403 retry (#1217 ARCH-1217-002)", () => {
         file_count: 0,
         format: "mp3",
         suno_playlist_url: "https://suno.com/playlist/test",
-      }),
+      })
     ).resolves.toEqual({ warning: null });
 
     // token fetch 2 回 + POST 2 回 = 4 回
     expect(fn).toHaveBeenCalledTimes(4);
     // 2 回目の POST は fresh-token を使用
     const postCalls = fn.mock.calls.filter(
-      (c) => typeof c[0] === "string" && (c[0] as string).includes("/downloaded"),
+      (c) =>
+        typeof c[0] === "string" && (c[0] as string).includes("/downloaded")
     ) as unknown as Array<[string, RequestInit]>;
     expect(postCalls).toHaveLength(2);
     const retryHeaders = postCalls[1][1].headers as Record<string, string>;
@@ -1071,7 +1424,11 @@ describe("shared/api postDownloaded: 403 retry (#1217 ARCH-1217-002)", () => {
 
 describe("shared/api postDownloaded: collectionId の URL エンコード", () => {
   it("Given 特殊文字を含む collectionId When postDownloaded Then URL エンコードされる", async () => {
-    const fetchFn = mockFetchForDownloaded(() => ({ ok: true, status: 200, json: async () => ({}) }));
+    const fetchFn = mockFetchForDownloaded(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    }));
 
     await postDownloaded(BASE_URL, "coll with spaces/slash", {
       file_count: 0,
@@ -1081,7 +1438,7 @@ describe("shared/api postDownloaded: collectionId の URL エンコード", () =
 
     expect(fetchFn).toHaveBeenCalledWith(
       `${BASE_URL}/collections/coll%20with%20spaces%2Fslash/downloaded`,
-      expect.anything(),
+      expect.anything()
     );
   });
 });

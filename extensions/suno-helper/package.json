@@ -2,9 +2,8 @@
   "name": "suno-helper",
   "version": "0.2.5",
   "private": true,
-  "type": "module",
-  "packageManager": "pnpm@11.12.0",
   "description": "/suno が生成した Style/Lyrics を Suno の Advanced タブに順次注入し Generate を連続実行する補助拡張 (WXT + React + TS)。",
+  "type": "module",
   "scripts": {
     "postinstall": "wxt prepare",
     "dev": "wxt",
@@ -15,13 +14,12 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "audit": "fallow audit --root ..",
-    "lint": "cd .. && oxlint -c .oxlintrc.json suno-helper shared",
-    "format:check": "prettier --check . ../shared"
+    "check": "cd .. && ultracite check suno-helper shared",
+    "fix": "cd .. && ultracite fix suno-helper shared"
   },
   "dependencies": {
     "@radix-ui/react-slot": "1.2.4",
     "@webext-core/messaging": "3.0.2",
-    "@wxt-dev/storage": "1.2.8",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "react": "19.2.7",
@@ -37,11 +35,13 @@
     "@wxt-dev/module-react": "1.2.2",
     "fallow": "3.5.0",
     "jsdom": "26.1.0",
+    "oxfmt": "0.59.0",
     "oxlint": "1.73.0",
-    "prettier": "3.6.2",
     "tailwindcss": "4.2.2",
     "typescript": "7.0.2",
+    "ultracite": "7.9.4",
     "vitest": "4.1.8",
     "wxt": "0.20.26"
-  }
+  },
+  "packageManager": "pnpm@11.12.0"
 }

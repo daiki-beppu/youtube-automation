@@ -52,7 +52,9 @@ export function markAck(deps: AckWaiterDeps): AckMarker {
  *   - bridge: submissionCount が marker を超えたら受理（generate レスポンス観測 = Suno が受理）
  *   - DOM:    in-flight が domBefore + clipsPerRequest 以上に増えたら受理（従来互換 fallback）
  */
-export function createAckWaiter(deps: AckWaiterDeps): (marker: AckMarker, options: AckWaitOptions) => Promise<boolean> {
+export function createAckWaiter(
+  deps: AckWaiterDeps
+): (marker: AckMarker, options: AckWaitOptions) => Promise<boolean> {
   const clipsPerRequest = deps.clipsPerRequest ?? CLIPS_PER_REQUEST;
   const now = deps.now ?? Date.now;
   return async (marker, options) => {
@@ -66,7 +68,10 @@ export function createAckWaiter(deps: AckWaiterDeps): (marker: AckMarker, option
       }
       if (marker.domBefore !== null) {
         try {
-          if (deps.getDomInFlightCount() >= marker.domBefore + clipsPerRequest) {
+          if (
+            deps.getDomInFlightCount() >=
+            marker.domBefore + clipsPerRequest
+          ) {
             return true;
           }
         } catch {

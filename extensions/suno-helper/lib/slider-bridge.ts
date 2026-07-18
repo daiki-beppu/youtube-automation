@@ -35,14 +35,19 @@ export interface ReactKeyDownTarget {
 export function findReactKeyDownTarget(el: Element): ReactKeyDownTarget | null {
   let node: Element | null = el;
   for (let depth = 0; node !== null && depth < MAX_ANCESTOR_DEPTH; depth++) {
-    const propsKey = Object.keys(node).find((k) => k.startsWith("__reactProps$"));
+    const propsKey = Object.keys(node).find((k) =>
+      k.startsWith("__reactProps$")
+    );
     if (propsKey) {
       const props = (node as unknown as Record<string, unknown>)[propsKey] as
         | { onKeyDown?: unknown }
         | null
         | undefined;
       if (props && typeof props.onKeyDown === "function") {
-        return { handler: props.onKeyDown as (event: unknown) => void, owner: node };
+        return {
+          handler: props.onKeyDown as (event: unknown) => void,
+          owner: node,
+        };
       }
     }
     node = node.parentElement;
@@ -60,7 +65,7 @@ export function findReactKeyDownTarget(el: Element): ReactKeyDownTarget | null {
 export function buildSyntheticKeydown(
   key: "ArrowRight" | "ArrowLeft",
   owner: Element,
-  target: Element,
+  target: Element
 ): Record<string, unknown> {
   const event: Record<string, unknown> = {
     type: "keydown",
@@ -111,7 +116,10 @@ function sleep(ms: number): Promise<void> {
  * 1 step 動いた時点で stale になり、捕捉済みの古い値を再セットするだけの空振りになる
  * （実機検証: 使い回しは 1 step で停止、毎 step 再取得で target まで完走）。
  */
-export async function setSliderValueViaReact(slider: HTMLElement, target: number): Promise<boolean> {
+export async function setSliderValueViaReact(
+  slider: HTMLElement,
+  target: number
+): Promise<boolean> {
   if (!findReactKeyDownTarget(slider)) {
     return false;
   }
@@ -135,7 +143,9 @@ export async function setSliderValueViaReact(slider: HTMLElement, target: number
     }
     const key = target > current ? "ArrowRight" : "ArrowLeft";
     try {
-      reactTarget.handler(buildSyntheticKeydown(key, reactTarget.owner, slider));
+      reactTarget.handler(
+        buildSyntheticKeydown(key, reactTarget.owner, slider)
+      );
     } catch {
       return false;
     }
@@ -157,6 +167,14 @@ export async function setSliderValueViaReact(slider: HTMLElement, target: number
  * （shared/dom.ts の pickPreferVisible と同じ方針。More Options collapsed 時も DOM 上の要素を掴む）。
  */
 export function findSliderElement(ariaLabel: string): HTMLElement | null {
-  const candidates = Array.from(document.querySelectorAll<HTMLElement>(`[role="slider"][aria-label="${ariaLabel}"]`));
-  return candidates.find((el) => el.getClientRects().length > 0) ?? candidates[0] ?? null;
+  const candidates = Array.from(
+    document.querySelectorAll<HTMLElement>(
+      `[role="slider"][aria-label="${ariaLabel}"]`
+    )
+  );
+  return (
+    candidates.find((el) => el.getClientRects().length > 0) ??
+    candidates[0] ??
+    null
+  );
 }

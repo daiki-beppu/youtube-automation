@@ -6,8 +6,9 @@
 // 上書きするため、「停止後は send しない」が回帰検出の要点。
 
 import { describe, it, expect } from "vitest";
-import { runInjection, type InjectChannel } from "../lib/inject-runner";
+
 import type { SerializedAsset } from "../lib/asset-transfer";
+import { runInjection, type InjectChannel } from "../lib/inject-runner";
 import type { ReleasePayload } from "../lib/types";
 
 function makePayload(trackCount: number, withCover: boolean): ReleasePayload {
@@ -39,7 +40,9 @@ function makePayload(trackCount: number, withCover: boolean): ReleasePayload {
         filename: `track-0${i + 1}.mp3`,
         asset_path: `/distrokid/assets/track-0${i + 1}.mp3`,
       })),
-      cover: withCover ? { filename: "main.png", asset_path: "/distrokid/assets/main.png" } : null,
+      cover: withCover
+        ? { filename: "main.png", asset_path: "/distrokid/assets/main.png" }
+        : null,
       release_date: "2026-07-01",
     },
   };

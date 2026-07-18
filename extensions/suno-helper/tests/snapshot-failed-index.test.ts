@@ -23,12 +23,15 @@ describe("snapshot.failedIndex: ERROR 停止 index の二重化 (#872)", () => {
   });
 
   it("Given ERROR phase (index=1) When applyProgress Then failedIndex=1 を確定する", () => {
-    const snap = applyProgress(initSnapshot(makePromptEntries(3), snapshotOptions()), {
-      phase: PHASE.ERROR,
-      index: 1,
-      total: 3,
-      message: "entry 1 の inject が silent drop されました。",
-    });
+    const snap = applyProgress(
+      initSnapshot(makePromptEntries(3), snapshotOptions()),
+      {
+        phase: PHASE.ERROR,
+        index: 1,
+        total: 3,
+        message: "entry 1 の inject が silent drop されました。",
+      }
+    );
     expect(snap.failedIndex).toBe(1);
   });
 
@@ -36,7 +39,12 @@ describe("snapshot.failedIndex: ERROR 停止 index の二重化 (#872)", () => {
     let snap = initSnapshot(makePromptEntries(3), snapshotOptions());
     snap = applyProgress(snap, { phase: PHASE.DONE, index: 0, total: 3 });
     snap = applyProgress(snap, { phase: PHASE.DONE, index: 1, total: 3 });
-    snap = applyProgress(snap, { phase: PHASE.ERROR, index: 2, total: 3, message: "stop" });
+    snap = applyProgress(snap, {
+      phase: PHASE.ERROR,
+      index: 2,
+      total: 3,
+      message: "stop",
+    });
     expect(snap.failedIndex).toBe(2);
   });
 });
@@ -50,9 +58,19 @@ describe("applyProgress: ENTRY_FAILED で failedIndices を蓄積する (#948)",
     ] as Parameters<typeof initSnapshot>[0];
     let snap = initSnapshot(entries, snapshotOptions());
 
-    snap = applyProgress(snap, { phase: PHASE.ENTRY_FAILED, index: 0, total: 3, message: "x" });
+    snap = applyProgress(snap, {
+      phase: PHASE.ENTRY_FAILED,
+      index: 0,
+      total: 3,
+      message: "x",
+    });
     snap = applyProgress(snap, { phase: PHASE.DONE, index: 1, total: 3 });
-    snap = applyProgress(snap, { phase: PHASE.ENTRY_FAILED, index: 2, total: 3, message: "y" });
+    snap = applyProgress(snap, {
+      phase: PHASE.ENTRY_FAILED,
+      index: 2,
+      total: 3,
+      message: "y",
+    });
 
     expect(snap.failedIndices).toEqual([0, 2]);
     expect(snap.itemStates).toEqual(["failed", "done", "failed"]);
@@ -60,10 +78,21 @@ describe("applyProgress: ENTRY_FAILED で failedIndices を蓄積する (#948)",
   });
 
   it("Given FINISHED（失敗付き完走） When 適用する Then failedIndices を保持したまま isRunning=false", () => {
-    const entries = [{ name: "p1", style: "s" }] as Parameters<typeof initSnapshot>[0];
+    const entries = [{ name: "p1", style: "s" }] as Parameters<
+      typeof initSnapshot
+    >[0];
     let snap = initSnapshot(entries, snapshotOptions());
-    snap = applyProgress(snap, { phase: PHASE.ENTRY_FAILED, index: 0, total: 1, message: "x" });
-    snap = applyProgress(snap, { phase: PHASE.FINISHED, total: 1, message: "1 件失敗" });
+    snap = applyProgress(snap, {
+      phase: PHASE.ENTRY_FAILED,
+      index: 0,
+      total: 1,
+      message: "x",
+    });
+    snap = applyProgress(snap, {
+      phase: PHASE.FINISHED,
+      total: 1,
+      message: "1 件失敗",
+    });
 
     expect(snap.failedIndices).toEqual([0]);
     expect(snap.isRunning).toBe(false);
@@ -84,8 +113,18 @@ describe("applyProgress: yield guard retry / accepted clip の snapshot 反映 (
 
   it("Given acceptedClipIds 付き DONE を複数回受信 When 適用する Then 重複排除して蓄積する", () => {
     let snap = initSnapshot(makePromptEntries(2));
-    snap = applyProgress(snap, { phase: PHASE.DONE, index: 0, total: 2, acceptedClipIds: ["a", "b"] });
-    snap = applyProgress(snap, { phase: PHASE.DONE, index: 1, total: 2, acceptedClipIds: ["b", "c"] });
+    snap = applyProgress(snap, {
+      phase: PHASE.DONE,
+      index: 0,
+      total: 2,
+      acceptedClipIds: ["a", "b"],
+    });
+    snap = applyProgress(snap, {
+      phase: PHASE.DONE,
+      index: 1,
+      total: 2,
+      acceptedClipIds: ["b", "c"],
+    });
 
     expect(snap.yieldAcceptedClipIds).toEqual(["a", "b", "c"]);
   });

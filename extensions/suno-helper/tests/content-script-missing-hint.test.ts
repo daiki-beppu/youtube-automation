@@ -4,7 +4,11 @@
 // 対処法（⌘+Shift+R）を popup のメッセージに含めるロジックの担保。
 import { describe, expect, it } from "vitest";
 
-import { formatRunError, formatStopError, isContentScriptMissingError } from "../components/runner-errors";
+import {
+  formatRunError,
+  formatStopError,
+  isContentScriptMissingError,
+} from "../components/runner-errors";
 
 describe("isContentScriptMissingError", () => {
   it.each([
@@ -22,7 +26,9 @@ describe("isContentScriptMissingError", () => {
 
 describe("formatRunError", () => {
   it("Given content-script-missing error When formatRunError Then ハードリロード案内を含む", () => {
-    const text = formatRunError("Could not establish connection. Receiving end does not exist.");
+    const text = formatRunError(
+      "Could not establish connection. Receiving end does not exist."
+    );
     expect(text).toMatch(/ハードリロード/);
     expect(text).toMatch(/⌘\+Shift\+R/);
   });

@@ -1,8 +1,9 @@
-import { expect, test, chromium, type BrowserContext } from "@playwright/test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { expect, test, chromium, type BrowserContext } from "@playwright/test";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const extensionPath = join(here, "..", "..", ".output", "chrome-mv3");
@@ -28,7 +29,11 @@ test("実ビルドした overlay は drag・最小化・automation selector 契�
     expect(worker.url()).toContain("chrome-extension://");
 
     await context.route("https://suno.com/create", (route) =>
-      route.fulfill({ status: 200, contentType: "text/html", body: "<!doctype html><title>Suno fixture</title>" }),
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><title>Suno fixture</title>",
+      })
     );
     const page = await context.newPage();
     await page.goto("https://suno.com/create");
@@ -39,12 +44,26 @@ test("実ビルドした overlay は drag・最小化・automation selector 契�
     await expect(card).toBeVisible();
     await expect(header).toHaveClass(/flex-row/);
 
-    const before = await card.evaluate((element) => ({ left: element.style.left, top: element.style.top }));
+    const before = await card.evaluate((element) => ({
+      left: element.style.left,
+      top: element.style.top,
+    }));
     await header.dispatchEvent("pointerdown", { clientX: 100, clientY: 100 });
-    await page.evaluate(() => window.dispatchEvent(new PointerEvent("pointermove", { clientX: 160, clientY: 140 })));
-    await page.evaluate(() => window.dispatchEvent(new PointerEvent("pointerup")));
+    await page.evaluate(() =>
+      window.dispatchEvent(
+        new PointerEvent("pointermove", { clientX: 160, clientY: 140 })
+      )
+    );
+    await page.evaluate(() =>
+      window.dispatchEvent(new PointerEvent("pointerup"))
+    );
     await expect
-      .poll(() => card.evaluate((element) => ({ left: element.style.left, top: element.style.top })))
+      .poll(() =>
+        card.evaluate((element) => ({
+          left: element.style.left,
+          top: element.style.top,
+        }))
+      )
       .not.toEqual(before);
 
     await card.getByRole("button", { name: "最小化" }).click();
@@ -53,7 +72,9 @@ test("実ビルドした overlay は drag・最小化・automation selector 契�
     await card.getByRole("button", { name: "展開" }).click();
     await expect(content).toHaveCSS("display", "block");
 
-    const panel = content.locator(':scope > [data-suno-helper="control-panel"]');
+    const panel = content.locator(
+      ':scope > [data-suno-helper="control-panel"]'
+    );
     // 実拡張はローカル配信元が無い fixture では fail-loud に error 状態へ遷移する。
     await expect(panel).toHaveAttribute("data-suno-phase", "error");
     await expect(panel).toHaveAttribute("data-suno-running", "false");

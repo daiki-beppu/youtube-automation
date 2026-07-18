@@ -12,13 +12,26 @@ import { describe, expect, it } from "vitest";
 import { MANIFEST_PERMISSIONS } from "../lib/manifest";
 import wxtConfig from "../wxt.config";
 
-const EXPECTED_PERMISSIONS = ["storage", "activeTab", "downloads", "debugger", "scripting"];
+const EXPECTED_PERMISSIONS = [
+  "storage",
+  "activeTab",
+  "downloads",
+  "debugger",
+  "scripting",
+];
 // Download all / trusted Cmd+P 追加後も混入させたくない広域権限（過剰権限 creep の回帰検知）。
-const FORBIDDEN_PERMISSIONS = ["history", "bookmarks", "cookies", "webNavigation"];
+const FORBIDDEN_PERMISSIONS = [
+  "history",
+  "bookmarks",
+  "cookies",
+  "webNavigation",
+];
 
 describe("lib/manifest: 最小権限契約", () => {
   it("Given MANIFEST_PERMISSIONS When 中身を読む Then自己復旧に必要な scripting を含む", () => {
-    expect(new Set(MANIFEST_PERMISSIONS)).toEqual(new Set(EXPECTED_PERMISSIONS));
+    expect(new Set(MANIFEST_PERMISSIONS)).toEqual(
+      new Set(EXPECTED_PERMISSIONS)
+    );
   });
 
   it("Given MANIFEST_PERMISSIONS When 重複の有無を見る Then EXPECTED_PERMISSIONS と同数である", () => {
@@ -52,7 +65,9 @@ describe("wxt.config: manifest 権限の SSOT 一致", () => {
   it("Given wxt.config の manifest When permissions を読む Then MANIFEST_PERMISSIONS と一致する", () => {
     const manifest = wxtConfig.manifest;
     expect(typeof manifest).toBe("object");
-    expect((manifest as { permissions?: string[] }).permissions).toEqual([...MANIFEST_PERMISSIONS]);
+    expect((manifest as { permissions?: string[] }).permissions).toEqual([
+      ...MANIFEST_PERMISSIONS,
+    ]);
   });
 
   it("Given wxt.config の manifest When 過剰権限を探す Then 広域権限を含まない", () => {

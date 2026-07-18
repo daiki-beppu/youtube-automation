@@ -23,8 +23,10 @@ export default defineBackground(() => {
   const downloadWatcher = installDownloadWatcher({ sendMessage });
 
   installSunoContentScriptRecovery({
-    addTabUpdatedListener: (listener) => browser.tabs.onUpdated.addListener(listener),
-    addInstalledListener: (listener) => browser.runtime.onInstalled.addListener(listener),
+    addTabUpdatedListener: (listener) =>
+      browser.tabs.onUpdated.addListener(listener),
+    addInstalledListener: (listener) =>
+      browser.runtime.onInstalled.addListener(listener),
     queryTabs: () => browser.tabs.query({}),
     reloadTab: (tabId) => browser.tabs.reload(tabId),
     executeScript: (details) => {
@@ -36,7 +38,10 @@ export default defineBackground(() => {
         });
       }
       if (details.func) {
-        return chrome.scripting.executeScript({ target: details.target, func: details.func });
+        return chrome.scripting.executeScript({
+          target: details.target,
+          func: details.func,
+        });
       }
       return Promise.reject(new Error("executeScript requires files or func"));
     },
@@ -47,7 +52,10 @@ export default defineBackground(() => {
   browser.runtime.onInstalled.addListener((details) => {
     console.info(`[suno-helper] installed/updated: ${details.reason}`);
     void migrateServerSourcesStorage().catch((error: unknown) => {
-      console.error("[suno-helper] legacy server source migration failed:", error);
+      console.error(
+        "[suno-helper] legacy server source migration failed:",
+        error
+      );
     });
   });
 
@@ -67,7 +75,10 @@ export default defineBackground(() => {
     // overlay 未注入のタブ（suno.com 以外 / 拡張リロード後の stale タブ）では必ず reject するため
     // catch して消費する。放置すると未処理 rejection としてエラーバッジに記録される（#937）。
     sendMessage("toggleOverlay", undefined, tab.id).catch((err: unknown) => {
-      const { level, text } = describeRelayFailure("toggleOverlay", err instanceof Error ? err.message : String(err));
+      const { level, text } = describeRelayFailure(
+        "toggleOverlay",
+        err instanceof Error ? err.message : String(err)
+      );
       console[level](text);
     });
   });
@@ -75,31 +86,48 @@ export default defineBackground(() => {
   // overlay → runner 中継 (#892)。overlay が送る run / stop / queryProgress を送信元と同一タブの
   // runner content へ転送し、runner の応答をそのまま overlay へ返す。tab を持たない送信元は中継不能
   // のため requireRelayTab が fail-loud で throw する（握りつぶさない）。
-  onMessage("run", ({ data, sender }) => sendMessage("run", data, requireRelayTab(sender, "run")));
-  onMessage("stop", ({ sender }) => sendMessage("stop", undefined, requireRelayTab(sender, "stop")));
+  onMessage("run", ({ data, sender }) =>
+    sendMessage("run", data, requireRelayTab(sender, "run"))
+  );
+  onMessage("stop", ({ sender }) =>
+    sendMessage("stop", undefined, requireRelayTab(sender, "stop"))
+  );
   onMessage("retryPlaylist", ({ data, sender }) =>
-    sendMessage("retryPlaylist", data, requireRelayTab(sender, "retryPlaylist")),
+    sendMessage("retryPlaylist", data, requireRelayTab(sender, "retryPlaylist"))
   );
   onMessage("retryDownload", ({ data, sender }) =>
-    sendMessage("retryDownload", data, requireRelayTab(sender, "retryDownload")),
+    sendMessage("retryDownload", data, requireRelayTab(sender, "retryDownload"))
   );
   onMessage("adoptSelectedClips", ({ data, sender }) =>
-    sendMessage("adoptSelectedClips", data, requireRelayTab(sender, "adoptSelectedClips")),
+    sendMessage(
+      "adoptSelectedClips",
+      data,
+      requireRelayTab(sender, "adoptSelectedClips")
+    )
   );
   onMessage("queryProgress", ({ sender }) =>
-    sendMessage("queryProgress", undefined, requireRelayTab(sender, "queryProgress")),
+    sendMessage(
+      "queryProgress",
+      undefined,
+      requireRelayTab(sender, "queryProgress")
+    )
   );
   onMessage("startDownload", async ({ data, sender }) => {
     const tabId = relayTabId(sender);
     if (tabId === null) {
       console.warn("[suno-helper] startDownload: 送信元タブが特定できません");
-      return { ok: false, message: "startDownload: 送信元タブが特定できません" } as const;
+      return {
+        ok: false,
+        message: "startDownload: 送信元タブが特定できません",
+      } as const;
     }
     return downloadWatcher.start(tabId, data.format);
   });
 
   onMessage("cancelDownload", async ({ sender }) => {
-    await downloadWatcher.cancelForTab(requireRelayTab(sender, "cancelDownload"));
+    await downloadWatcher.cancelForTab(
+      requireRelayTab(sender, "cancelDownload")
+    );
   });
 
   // content → background: chrome.debugger で trusted Cmd+P を dispatch する (#1251)。
@@ -135,16 +163,26 @@ export default defineBackground(() => {
 
   onMessage("fetchCollectionPrompts", ({ data, sender }) => {
     requireRelayTab(sender, "fetchCollectionPrompts");
-    if (typeof data.collectionId !== "string" || data.collectionId.length === 0) {
-      throw new Error("fetchCollectionPrompts.collectionId must be non-empty string");
+    if (
+      typeof data.collectionId !== "string" ||
+      data.collectionId.length === 0
+    ) {
+      throw new Error(
+        "fetchCollectionPrompts.collectionId must be non-empty string"
+      );
     }
     return fetchCollectionPrompts(data.baseUrl, data.collectionId);
   });
 
   onMessage("fetchCollectionPromptResponse", ({ data, sender }) => {
     requireRelayTab(sender, "fetchCollectionPromptResponse");
-    if (typeof data.collectionId !== "string" || data.collectionId.length === 0) {
-      throw new Error("fetchCollectionPromptResponse.collectionId must be non-empty string");
+    if (
+      typeof data.collectionId !== "string" ||
+      data.collectionId.length === 0
+    ) {
+      throw new Error(
+        "fetchCollectionPromptResponse.collectionId must be non-empty string"
+      );
     }
     return fetchCollectionPromptResponse(data.baseUrl, data.collectionId);
   });
@@ -166,7 +204,10 @@ export default defineBackground(() => {
     // ページ遷移・タブ閉鎖のレースで overlay 側リスナーが消えていると reject する。progress は
     // 高頻度かつ取りこぼしても次の通知で追いつくため、debug ログのみ残して握りつぶす（#937）。
     sendMessage("progress", data, tabId).catch((err: unknown) => {
-      console.debug("[suno-helper] progress 中継先なし（overlay 消滅レース）:", err);
+      console.debug(
+        "[suno-helper] progress 中継先なし（overlay 消滅レース）:",
+        err
+      );
     });
   });
 });

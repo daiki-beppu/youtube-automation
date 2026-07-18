@@ -47,7 +47,10 @@ describe("toggleHidden: toggleOverlay 受信時の hidden 反転 (要件2/5)", (
 
 describe("toggleHidden: hidden 以外のフィールド保持 (要件4 回帰防止)", () => {
   it("Given position/minimized を持つ state When toggle Then position は保持される（位置永続化に回帰なし）", () => {
-    const state = makeOverlayState({ position: { x: 230, y: 2 }, hidden: true });
+    const state = makeOverlayState({
+      position: { x: 230, y: 2 },
+      hidden: true,
+    });
     expect(toggleHidden(state).position).toEqual({ x: 230, y: 2 });
   });
 
@@ -57,8 +60,16 @@ describe("toggleHidden: hidden 以外のフィールド保持 (要件4 回帰防
   });
 
   it("Given hidden=true 以外フル指定 When toggle Then hidden だけが反転し他は完全一致", () => {
-    const state = makeOverlayState({ position: { x: 11, y: 22 }, minimized: true, hidden: true });
-    expect(toggleHidden(state)).toEqual({ position: { x: 11, y: 22 }, minimized: true, hidden: false });
+    const state = makeOverlayState({
+      position: { x: 11, y: 22 },
+      minimized: true,
+      hidden: true,
+    });
+    expect(toggleHidden(state)).toEqual({
+      position: { x: 11, y: 22 },
+      minimized: true,
+      hidden: false,
+    });
   });
 });
 

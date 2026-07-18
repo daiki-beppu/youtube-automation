@@ -7,6 +7,7 @@ import { createRoot, type Root } from "react-dom/client";
 
 import { SUNO_MATCHES } from "../../shared/constants";
 import { Overlay } from "../components/Overlay";
+
 import "../components/overlay.css";
 
 export default defineContentScript({

@@ -3,17 +3,20 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-const alertVariants = cva("relative w-full rounded-lg border px-4 py-3 text-sm", {
-  variants: {
-    variant: {
-      default: "bg-card text-card-foreground",
-      destructive: "text-destructive bg-card",
+const alertVariants = cva(
+  "relative w-full rounded-lg border px-4 py-3 text-sm",
+  {
+    variants: {
+      variant: {
+        default: "bg-card text-card-foreground",
+        destructive: "text-destructive bg-card",
+      },
     },
-  },
-  defaultVariants: {
-    variant: "default",
-  },
-});
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+);
 
 function Alert({
   className,
@@ -31,8 +34,17 @@ function Alert({
   );
 }
 
-function AlertDescription({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="alert-description" className={cn("text-sm", className)} {...props} />;
+function AlertDescription({
+  className,
+  ...props
+}: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="alert-description"
+      className={cn("text-sm", className)}
+      {...props}
+    />
+  );
 }
 
 export { Alert, AlertDescription };
