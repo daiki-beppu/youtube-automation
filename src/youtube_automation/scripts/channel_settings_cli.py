@@ -20,12 +20,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import logging
 import sys
 from pathlib import Path
 from typing import Any
 
+from youtube_automation.utils import cost_tracker
 from youtube_automation.utils.channel_settings import (
     build_update_body,
     diff_settings,
@@ -39,6 +41,26 @@ from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
 from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
+
+_QUOTA_SERVICE = "youtube-data-api"
+# channels().update() は part 数に関わらず 1 call = 50 units
+# https://developers.google.com/youtube/v3/determine_quota_cost
+_CHANNELS_UPDATE_QUOTA_UNITS = 50
+
+
+def _record_update_quota(part: str, channel_id: str) -> None:
+    """channels().update() 1 リクエスト分の quota 消費を記録する。記録失敗で push は止めない。"""
+    try:
+        # tracker 内部の警告 print が CLI の stdout を汚さないよう stderr へ逃がす
+        with contextlib.redirect_stdout(sys.stderr):
+            cost_tracker.log_quota(
+                _QUOTA_SERVICE,
+                "channels.update",
+                _CHANNELS_UPDATE_QUOTA_UNITS,
+                metadata={"part": part, "channel_id": channel_id},
+            )
+    except Exception:
+        logger.debug("quota 記録失敗 (bucket=channels.update, part=%s)", part)
 
 
 def _load_local(config: ChannelConfig, include_localizations: bool) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -126,6 +148,9 @@ def _cmd_push(args: argparse.Namespace) -> int:
             ).execute()
         except Exception as e:
             raise YouTubeAPIError(f"channels().update(part={part}) failed: {e}") from e
+        finally:
+            # 実 request を発行した時点で quota は消費されるため、成功・失敗どちらでも記録する
+            _record_update_quota(part, channel_id)
     print(f"✅ pushed {len(lines) // 3} change(s) to YouTube ({len(parts)} API call(s)).")
     return 0
 

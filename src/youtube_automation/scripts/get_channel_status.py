@@ -4,15 +4,39 @@ Channel Status Getter - Claude Code用シンプル情報取得
 分析なしで、Claude Codeが理解しやすい最新情報を取得
 """
 
+import contextlib
 import json
 import logging
 import sys
 from datetime import datetime, timedelta
 
+from youtube_automation.utils import cost_tracker
 from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
 from youtube_automation.utils.config import load_config
 
 logger = logging.getLogger(__name__)
+
+_QUOTA_SERVICE = "youtube-data-api"
+_ANALYTICS_QUOTA_SERVICE = "youtube-analytics-api"
+_READ_QUOTA_UNITS = 1
+
+
+def _record_read_quota(bucket: str, *, service: str = _QUOTA_SERVICE) -> None:
+    """read 1 リクエスト分の quota 消費を記録する。記録失敗で元の処理は止めない。"""
+    try:
+        # tracker 内部の警告 print が stdout 契約（--json 等）を汚さないよう stderr へ逃がす
+        with contextlib.redirect_stdout(sys.stderr):
+            cost_tracker.log_quota(service, bucket, _READ_QUOTA_UNITS)
+    except Exception:
+        logger.debug("quota 記録失敗 (bucket=%s)", bucket)
+
+
+def _execute_and_record(request, bucket: str, *, service: str = _QUOTA_SERVICE):
+    """API request を実行し、成功・失敗どちらでも quota を 1 回記録する。"""
+    try:
+        return request.execute()
+    finally:
+        _record_read_quota(bucket, service=service)
 
 
 def get_channel_latest_status():
@@ -25,7 +49,10 @@ def get_channel_latest_status():
         collector.initialize()
 
         # 基本チャンネル情報
-        channel_response = collector.youtube_service.channels().list(part="snippet,statistics", mine=True).execute()
+        channel_response = _execute_and_record(
+            collector.youtube_service.channels().list(part="snippet,statistics", mine=True),
+            "channels.list",
+        )
 
         if not channel_response["items"]:
             return {"error": "チャンネル情報取得失敗"}
@@ -34,8 +61,9 @@ def get_channel_latest_status():
         stats = channel["statistics"]
 
         # 最新コレクション情報（Complete Collection形式の動画を抽出）
-        uploads_response = (
-            collector.youtube_service.channels().list(part="contentDetails", id=collector.channel_id).execute()
+        uploads_response = _execute_and_record(
+            collector.youtube_service.channels().list(part="contentDetails", id=collector.channel_id),
+            "channels.list",
         )
 
         uploads_playlist_id = uploads_response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
@@ -45,10 +73,9 @@ def get_channel_latest_status():
         collections = []
 
         # チャンネルの全再生リストを取得
-        playlists_response = (
-            collector.youtube_service.playlists()
-            .list(part="snippet", channelId=collector.channel_id, maxResults=50)
-            .execute()
+        playlists_response = _execute_and_record(
+            collector.youtube_service.playlists().list(part="snippet", channelId=collector.channel_id, maxResults=50),
+            "playlists.list",
         )
 
         # config からフィルタキーワードを取得
@@ -65,10 +92,11 @@ def get_channel_latest_status():
         for playlist in target_playlists:
             logger.info(f"🎵 {playlist['title']} から動画取得中...")
 
-            playlist_items_response = (
-                collector.youtube_service.playlistItems()
-                .list(part="snippet", playlistId=playlist["id"], maxResults=50)
-                .execute()
+            playlist_items_response = _execute_and_record(
+                collector.youtube_service.playlistItems().list(
+                    part="snippet", playlistId=playlist["id"], maxResults=50
+                ),
+                "playlistItems.list",
             )
 
             for item in playlist_items_response["items"]:
@@ -91,10 +119,11 @@ def get_channel_latest_status():
 
         # もしコレクションが見つからない場合は、uploadsプレイリストから最新動画を表示
         if not collections:
-            recent_videos_response = (
-                collector.youtube_service.playlistItems()
-                .list(part="snippet", playlistId=uploads_playlist_id, maxResults=10)
-                .execute()
+            recent_videos_response = _execute_and_record(
+                collector.youtube_service.playlistItems().list(
+                    part="snippet", playlistId=uploads_playlist_id, maxResults=10
+                ),
+                "playlistItems.list",
             )
             for item in recent_videos_response.get("items", []):
                 collections.append(
@@ -114,9 +143,8 @@ def get_channel_latest_status():
             end_date = datetime.now().strftime("%Y-%m-%d")
             start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
             try:
-                response = (
-                    collector.analytics_service.reports()
-                    .query(
+                response = _execute_and_record(
+                    collector.analytics_service.reports().query(
                         ids=f"channel=={collector.channel_id}",
                         startDate=start_date,
                         endDate=end_date,
@@ -124,8 +152,9 @@ def get_channel_latest_status():
                         dimensions="video",
                         filters=f"video=={','.join(video_ids)}",
                         sort="-views",
-                    )
-                    .execute()
+                    ),
+                    "reports.query",
+                    service=_ANALYTICS_QUOTA_SERVICE,
                 )
                 for row in response.get("rows", []):
                     stats_map[row[0]] = {
