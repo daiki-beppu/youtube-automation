@@ -51,6 +51,56 @@ class WfNext:
     skip_manual_mastering: bool = False
 
 
+#: `scheduled_automation.cadence` に指定できる曜日キー（月曜起点）。
+SCHEDULED_AUTOMATION_CADENCE_DAYS: tuple[str, ...] = (
+    "mon",
+    "tue",
+    "wed",
+    "thu",
+    "fri",
+    "sat",
+    "sun",
+)
+
+#: `scheduled_automation.notification` に指定できる通知先。
+SCHEDULED_AUTOMATION_NOTIFICATIONS: tuple[str, ...] = ("terminal", "none")
+
+
+@dataclass(frozen=True)
+class ScheduledAutomation:
+    """定期制作の宣言設定（`workflow.scheduled_automation` セクション、optional）（#1892）.
+
+    Claude Code / Codex の定期実行アダプタ（`/automation-schedule`）が参照する
+    実行環境非依存の宣言。未設定チャンネルは全 default（`enabled = False`）で
+    ロードされ、手動制作・公開フローの挙動を一切変えない。
+
+    - `enabled`: 定期実行の有効化。`False`（既定）ではスケジューラー設定を作成しない。
+    - `timezone`: IANA タイムゾーン名（例 `Asia/Tokyo`）。スケジュール時刻の解釈に使う。
+    - `run_time`: 定期起動時刻（`HH:MM`、24 時間表記）。
+    - `cadence`: 起動する曜日の配列。`SCHEDULED_AUTOMATION_CADENCE_DAYS` の部分集合。
+    - `target_workflow`: 起動する skill 名（既定 `wf-next`。先頭 `/` なし）。
+    - `max_retries`: 実行失敗時の再試行回数（0 = 再試行なし）。
+    - `retry_delay_seconds`: 再試行までの待機秒数。
+    - `prevent_concurrent_runs`: `True`（既定）のとき、前回実行が生存中なら
+      次回スケジュールをスキップする（ロックによる実行排他）。
+    - `notification`: 実行結果の通知先。`terminal`（既定） / `none`。
+    - `allow_external_publish`: `True` のときのみ、定期実行内で YouTube への
+      書き込み（アップロード・公開）を許可する。`False`（既定）では外部反映
+      直前で停止する。有効化には `/automation-schedule` の明示確認が必要。
+    """
+
+    enabled: bool = False
+    timezone: str = "Asia/Tokyo"
+    run_time: str = "09:00"
+    cadence: tuple[str, ...] = SCHEDULED_AUTOMATION_CADENCE_DAYS
+    target_workflow: str = "wf-next"
+    max_retries: int = 0
+    retry_delay_seconds: int = 300
+    prevent_concurrent_runs: bool = True
+    notification: str = "terminal"
+    allow_external_publish: bool = False
+
+
 @dataclass(frozen=True)
 class PostPublishApprovalGates:
     """`/post-publish` の各 step 直前に置く承認ゲート."""
@@ -82,3 +132,4 @@ class Workflow:
 
     wf_next: WfNext = field(default_factory=WfNext)
     post_publish: PostPublish = field(default_factory=PostPublish)
+    scheduled_automation: ScheduledAutomation = field(default_factory=ScheduledAutomation)

@@ -14,8 +14,8 @@ def _run_main_with_fake_collector(monkeypatch, argv: list[str], input_func=None)
     calls: list[dict] = []
 
     class FakeCollector:
-        def __init__(self, *, min_views: int, max_comments: int):
-            calls.append({"min_views": min_views, "max_comments": max_comments})
+        def __init__(self, *, min_views: int, max_comments: int, competitor_slug: str | None):
+            calls.append({"min_views": min_views, "max_comments": max_comments, "competitor_slug": competitor_slug})
 
         def collect(self, *, force: bool = False):
             calls.append({"force": force})
@@ -44,7 +44,7 @@ def test_main_accepts_short_yes_and_skips_prompt(monkeypatch):
     )
 
     assert calls == [
-        {"min_views": 5000, "max_comments": 50},
+        {"min_views": 5000, "max_comments": 50, "competitor_slug": None},
         {"force": False},
     ]
 
@@ -58,7 +58,7 @@ def test_main_accepts_long_yes_and_skips_prompt(monkeypatch):
     calls = _run_main_with_fake_collector(monkeypatch, ["yt-benchmark-comments", "--yes"], fail_on_prompt)
 
     assert calls == [
-        {"min_views": mod.DEFAULT_MIN_VIEWS, "max_comments": mod.DEFAULT_MAX_COMMENTS},
+        {"min_views": mod.DEFAULT_MIN_VIEWS, "max_comments": mod.DEFAULT_MAX_COMMENTS, "competitor_slug": None},
         {"force": False},
     ]
 
@@ -69,7 +69,7 @@ def test_main_continues_when_prompt_is_accepted(monkeypatch, answer):
     calls = _run_main_with_fake_collector(monkeypatch, ["yt-benchmark-comments"], lambda *_args: answer)
 
     assert calls == [
-        {"min_views": mod.DEFAULT_MIN_VIEWS, "max_comments": mod.DEFAULT_MAX_COMMENTS},
+        {"min_views": mod.DEFAULT_MIN_VIEWS, "max_comments": mod.DEFAULT_MAX_COMMENTS, "competitor_slug": None},
         {"force": False},
     ]
 
@@ -93,8 +93,8 @@ def test_main_cancels_when_prompt_is_rejected(monkeypatch, capsys):
     calls: list[dict] = []
 
     class FakeCollector:
-        def __init__(self, *, min_views: int, max_comments: int):
-            calls.append({"min_views": min_views, "max_comments": max_comments})
+        def __init__(self, *, min_views: int, max_comments: int, competitor_slug: str | None):
+            calls.append({"min_views": min_views, "max_comments": max_comments, "competitor_slug": competitor_slug})
 
         def collect(self, *, force: bool = False):
             calls.append({"force": force})
@@ -108,7 +108,9 @@ def test_main_cancels_when_prompt_is_rejected(monkeypatch, capsys):
         mod.main()
 
     assert exc_info.value.code == 0
-    assert calls == [{"min_views": mod.DEFAULT_MIN_VIEWS, "max_comments": mod.DEFAULT_MAX_COMMENTS}]
+    assert calls == [
+        {"min_views": mod.DEFAULT_MIN_VIEWS, "max_comments": mod.DEFAULT_MAX_COMMENTS, "competitor_slug": None}
+    ]
     assert "キャンセルしました" in capsys.readouterr().out
 
 
@@ -118,8 +120,8 @@ def test_main_cancels_on_prompt_interrupt(monkeypatch, capsys, error):
     calls: list[dict] = []
 
     class FakeCollector:
-        def __init__(self, *, min_views: int, max_comments: int):
-            calls.append({"min_views": min_views, "max_comments": max_comments})
+        def __init__(self, *, min_views: int, max_comments: int, competitor_slug: str | None):
+            calls.append({"min_views": min_views, "max_comments": max_comments, "competitor_slug": competitor_slug})
 
         def collect(self, *, force: bool = False):
             calls.append({"force": force})
@@ -136,7 +138,9 @@ def test_main_cancels_on_prompt_interrupt(monkeypatch, capsys, error):
         mod.main()
 
     assert exc_info.value.code == 0
-    assert calls == [{"min_views": mod.DEFAULT_MIN_VIEWS, "max_comments": mod.DEFAULT_MAX_COMMENTS}]
+    assert calls == [
+        {"min_views": mod.DEFAULT_MIN_VIEWS, "max_comments": mod.DEFAULT_MAX_COMMENTS, "competitor_slug": None}
+    ]
     assert "キャンセルしました" in capsys.readouterr().out
 
 
@@ -149,7 +153,7 @@ def test_main_force_skips_prompt(monkeypatch):
     calls = _run_main_with_fake_collector(monkeypatch, ["yt-benchmark-comments", "--force"], fail_on_prompt)
 
     assert calls == [
-        {"min_views": mod.DEFAULT_MIN_VIEWS, "max_comments": mod.DEFAULT_MAX_COMMENTS},
+        {"min_views": mod.DEFAULT_MIN_VIEWS, "max_comments": mod.DEFAULT_MAX_COMMENTS, "competitor_slug": None},
         {"force": True},
     ]
 
@@ -167,6 +171,23 @@ def test_help_includes_yes_option(monkeypatch, capsys):
     assert "確認プロンプトをスキップ" in out
 
 
+def test_main_passes_competitor_to_collector(monkeypatch):
+    calls = _run_main_with_fake_collector(
+        monkeypatch,
+        ["yt-benchmark-comments", "--yes", "--competitor", "benchmark-channel"],
+    )
+
+    assert calls[0]["competitor_slug"] == "benchmark-channel"
+
+
+def test_removed_channel_flag_names_competitor_replacement(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        mod._build_parser().parse_args(["--channel", "benchmark-channel"])
+
+    assert exc_info.value.code == 2
+    assert "--channel は --competitor に変わりました" in capsys.readouterr().err
+
+
 def test_collect_checks_benchmark_freshness(monkeypatch, tmp_path):
     """collect() は fresh 更新経路を確認してから対象動画を読む。"""
     collector = mod.BenchmarkCommentCollector.__new__(mod.BenchmarkCommentCollector)
@@ -174,6 +195,7 @@ def test_collect_checks_benchmark_freshness(monkeypatch, tmp_path):
     collector.today = mod.date(2026, 6, 30)
     collector.min_views = 10000
     collector.max_comments = 100
+    collector.competitor_slug = None
     collector.youtube = None
 
     calls: list[tuple] = []
@@ -197,8 +219,8 @@ def test_collect_checks_benchmark_freshness(monkeypatch, tmp_path):
     def fake_ensure_benchmark_fresh(data_dir):
         calls.append(("fresh", data_dir))
 
-    def fake_load_benchmark_videos(data_dir, *, min_views: int):
-        calls.append(("load", data_dir, min_views))
+    def fake_load_benchmark_videos(data_dir, *, min_views: int, competitor_slug: str | None):
+        calls.append(("load", data_dir, min_views, competitor_slug))
         return [target]
 
     def fake_get_youtube():
@@ -218,7 +240,7 @@ def test_collect_checks_benchmark_freshness(monkeypatch, tmp_path):
 
     assert calls == [
         ("fresh", collector.data_dir),
-        ("load", collector.data_dir, 10000),
+        ("load", collector.data_dir, 10000, None),
         ("youtube",),
         ("fetch", "video-1"),
     ]

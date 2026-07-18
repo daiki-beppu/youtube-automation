@@ -598,7 +598,7 @@ def test_wf_new_fail_fast_contract_points_to_channel_new_and_doctor_readiness() 
     assert "存在しない場合は `/channel-new`" in hard_gates
     assert "ロード失敗の場合は `/channel-new`（既存チャンネル取り込みモード）" in hard_gates
     assert "Suno readiness gate" in hard_gates
-    assert "uv run yt-video-analyze --source benchmark --channel <slug> --top 5" in hard_gates
+    assert "uv run yt-video-analyze --source benchmark --competitor <slug> --top 5" in hard_gates
 
     assert "既存チャンネル取り込みモード" in channel_new
     assert "ttp_wf_new_readiness" in channel_new
@@ -1534,3 +1534,34 @@ def test_theme_compare_missing_themes_error_uses_current_config_path(monkeypatch
 
     assert theme_compare.main() == 2
     assert "config/channel/content.json::tags.themes" in caplog.text
+
+
+def test_automation_schedule_skill_contract() -> None:
+    """#1892: /automation-schedule の SKILL.md と references が整合している."""
+    skill_path = ".claude/skills/automation-schedule/SKILL.md"
+    skill = _read(skill_path)
+
+    # references 単一ソース化: 本文で参照するスクリプトが実在する
+    for ref in ("detect_runtime.sh", "schedule_config.py", "scheduler_job.sh", "run_scheduled.sh"):
+        assert ref in skill
+        assert (ROOT / ".claude/skills/automation-schedule/references" / ref).exists()
+
+    # Hard Gates は冒頭 60 行以内（skill-authoring-guidelines ルール⑥）
+    head = "\n".join(skill.splitlines()[:60])
+    assert "## Hard Gates" in head
+    assert "allow_external_publish" in head
+
+    # 兄弟スキルとの相互排他（ルール①）
+    fm = _frontmatter(skill_path)
+    assert "/automation-update" in fm["description"]
+    assert "/wf-next" in fm["description"]
+
+    # 設定スキーマの正へのポインタ
+    assert "ScheduledAutomation" in skill
+
+
+def test_channel_new_points_scheduled_automation_to_automation_schedule() -> None:
+    """#1892: channel-new は scheduled_automation を生成せず /automation-schedule へ誘導する."""
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    assert "`scheduled_automation`" in channel_new
+    assert "/automation-schedule" in channel_new

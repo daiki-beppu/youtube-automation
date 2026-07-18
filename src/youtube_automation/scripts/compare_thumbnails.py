@@ -10,6 +10,7 @@ Usage:
 
     python3 ../../automation/compare_thumbnails.py                    # DL + 縮小 + open
     python3 ../../automation/compare_thumbnails.py --min-views 5000   # 閾値変更
+    python3 ../../automation/compare_thumbnails.py --competitor <slug>  # 単一競合
     python3 ../../automation/compare_thumbnails.py --no-open          # open しない
     python3 ../../automation/compare_thumbnails.py --small-only       # 縮小版のみ表示
 """
@@ -25,6 +26,7 @@ from youtube_automation.scripts.benchmark_collector import (
     ensure_benchmark_fresh,
     load_benchmark_videos,
 )
+from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
 from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.config import load_config
 
@@ -38,13 +40,14 @@ SMALL_HEIGHT = 180
 class ThumbnailComparer:
     """サムネイル比較検証"""
 
-    def __init__(self, min_views: int = DEFAULT_MIN_VIEWS):
+    def __init__(self, min_views: int = DEFAULT_MIN_VIEWS, competitor_slug: str | None = None):
         self.config = load_config()
         self.channel_dir = _channel_dir()
         self.data_dir = self.channel_dir / "data"
         self.min_views = min_views
+        self.competitor_slug = competitor_slug
 
-        self.channel_slug = self.config.meta.channel_short.lower()
+        self.channel_slug = self.config.meta.channel_short.lower()  # 自チャンネル slug
         self.compare_dir = self.data_dir / "thumbnail_compare"
         self.benchmark_dir = self.compare_dir / "benchmark"
         self.channel_thumb_dir = self.compare_dir / self.channel_slug
@@ -90,7 +93,12 @@ class ThumbnailComparer:
             d.mkdir(parents=True, exist_ok=True)
 
         # ベンチマークサムネイルをダウンロード
-        bench_videos = load_benchmark_videos(self.data_dir, min_views=self.min_views, require_thumbnail=True)
+        bench_videos = load_benchmark_videos(
+            self.data_dir,
+            min_views=self.min_views,
+            require_thumbnail=True,
+            competitor_slug=self.competitor_slug,
+        )
         logger.info("ベンチマーク対象: %d本（%s再生以上）", len(bench_videos), f"{self.min_views:,}")
 
         downloaded_bench = []
@@ -141,9 +149,8 @@ class ThumbnailComparer:
             subprocess.run(["open", str(self.small_dir if small_only else self.compare_dir)])
 
 
-def main():
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    parser = argparse.ArgumentParser(description="サムネイル比較検証")
+def _build_parser() -> argparse.ArgumentParser:
+    parser = CompetitorArgumentParser(description="サムネイル比較検証")
     parser.add_argument(
         "--min-views",
         type=int,
@@ -152,9 +159,15 @@ def main():
     )
     parser.add_argument("--no-open", action="store_true", help="ディレクトリを open しない")
     parser.add_argument("--small-only", action="store_true", help="縮小版のみ表示")
-    args = parser.parse_args()
+    parser.add_argument("--competitor", help="比較対象を単一の競合 slug に絞り込む")
+    return parser
 
-    comparer = ThumbnailComparer(min_views=args.min_views)
+
+def main():
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    args = _build_parser().parse_args()
+
+    comparer = ThumbnailComparer(min_views=args.min_views, competitor_slug=args.competitor)
     comparer.collect_and_compare(no_open=args.no_open, small_only=args.small_only)
 
 

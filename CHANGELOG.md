@@ -8,10 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - **skills**: `/video-upload` 後続を config opt-in の `/post-publish` チェーン（community-post → pinned-comment → metadata-audit）へ委譲し、step ごとの承認ゲートと video ID 単位の再開可能な実行履歴を追加した。`workflow.post-publish` 未設定時は従来の community-post 単独案内を維持する (#1824)
+- `feat(thumbnail)`: `ab_test.enabled` と最大 3 件の pattern（name / variation）を skill-config に追加し、`yt-generate-image --ab-pattern` が pattern 別 clause を最終プロンプトへ合成できるようにした。`/thumbnail` は全 pattern を個別承認して `thumbnail-<name>.jpg` を確定し、先頭 pattern と同一内容の `thumbnail.jpg` を維持する（#1904）。
+- `feat(workflow)`: チャンネルごとの定期制作設定 `workflow.scheduled_automation`（有効化 / timezone / run_time / cadence / 対象 workflow / 再試行 / 並行実行禁止 / 通知 / 外部公開許可）を optional で追加し、未設定チャンネルは全 default（`enabled: false`）で従来挙動を維持する。新規スキル `/automation-schedule` を単一入口として、前提診断（`detect_runtime.sh`）→ config 生成・差分更新（`schedule_config.py`、loader と同一検証）→ Claude Code（`claude -p`）/ Codex（`codex exec`）向け定期実行ジョブの作成・更新・確認・停止（`scheduler_job.sh`、launchd / cron へ同一 label で冪等反映）を行えるようにした。実行ラッパー `run_scheduled.sh` は lock による実行排他・再試行・`allow_external_publish: false` 時の外部反映禁止プロンプト注入を担い、外部公開の有効化には skill の明示承認ゲートを必須とする（#1892）。
+- **Breaking:** benchmark 系 CLI の競合 slug 指定を `--channel` から `--competitor` へ即時リネームした。対象は `yt-benchmark-collect` / `yt-video-analyze` / `yt-thumbnail-compare` / `yt-benchmark-comments` で、旧 `--channel` は alias として受理せず移行先を明示して終了する（#1948）。
 - **skills**: `/analytics-run` を追加し、Analytics の収集・分析・最新レポート表示を成果物鮮度に基づいて一括実行・途中再開できるようにした (#1823)
 - `feat(strategy)`: 状態を持たず任意実行できる `/market-research` skill を追加した。TTP 入替候補とニッチ仮説を根拠・不確実性付きで会話内に返し、明示依頼時だけ日付付き Markdown を保存する。`/channel-new` から `/discover-competitors` と用途を分けて案内し、config や TTP は自動変更しない（#2051）。
 - `docs(skills)`: 全 48 SKILL.md の frontmatter 直後に機械抽出可能な `前工程` / `後工程` ブロックを追加し、散文・矢印形式の依存一覧を統一した。`skill-authoring-guidelines.md` に書式、`なし` / 共通基盤の表現、`rg` 抽出方法、実在例を規定した（#1821）。
 - `feat(videoup)`: `overlays.audio_visualizer.style: "heart"` を追加した。cardioid の角度と法線距離へ `showfreqs` を再マッピングし、実行時生成する離散バー mask で、音楽スペクトラムがハート輪郭上を内外へ波打つ。既存の `fill` / `rounding` / `glow` と組み合わせられ、外部 asset は不要（#1689）。
+- 対応する `yt-*` CLI に共通の `--channel <slug>` 選択を追加し、`CHANNEL` / `CHANNEL_DIR` / cwd から multi-channel workspace の対象チャンネルを安全に解決できるようにした (#2049)
 
 - `docs(setup)`: `yt-doctor` の upload 診断を `/setup` の利用者導線へ接続し、YouTube チャンネル未作成時の HUMAN STEP、remote channel ID の `yt-channel-settings pull --channel-id-only` 反映、local / remote ID 不一致時の非自動選択、quota / auth / network 失敗時の再試行・再認証導線を明記した（#2054）。
 - `fix(takt)`: repo-local `.takt/config.yaml` から provider / model routing と concurrency の重複指定を除去し、グローバル設定を正しく継承するようにした。`persona_providers` が deep merge されず project 側の辞書で丸ごと置換される takt 0.51 の解決契約をテストで固定し、グローバルの Luna / Sol / Terra 割当が失われる回帰を防止する。repo-local `lite` は worktree 環境契約だけを差分として残し、グローバル版の `max_steps: 18` / loop threshold 5 へ同期した。project facet には takt 0.51 builtin の Knowledge / Policy 確認と最新の CI 委譲ルールを取り込んだ。
