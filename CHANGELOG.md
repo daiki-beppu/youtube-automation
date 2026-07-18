@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **Breaking:** benchmark 系 CLI の競合 slug 指定を `--channel` から `--competitor` へ即時リネームした。対象は `yt-benchmark-collect` / `yt-video-analyze` / `yt-thumbnail-compare` / `yt-benchmark-comments` で、旧 `--channel` は alias として受理せず移行先を明示して終了する（#1948）。
+
 - `docs(setup)`: `yt-doctor` の upload 診断を `/setup` の利用者導線へ接続し、YouTube チャンネル未作成時の HUMAN STEP、remote channel ID の `yt-channel-settings pull --channel-id-only` 反映、local / remote ID 不一致時の非自動選択、quota / auth / network 失敗時の再試行・再認証導線を明記した（#2054）。
 - `fix(takt)`: repo-local `.takt/config.yaml` から provider / model routing と concurrency の重複指定を除去し、グローバル設定を正しく継承するようにした。`persona_providers` が deep merge されず project 側の辞書で丸ごと置換される takt 0.51 の解決契約をテストで固定し、グローバルの Luna / Sol / Terra 割当が失われる回帰を防止する。repo-local `lite` は worktree 環境契約だけを差分として残し、グローバル版の `max_steps: 18` / loop threshold 5 へ同期した。project facet には takt 0.51 builtin の Knowledge / Policy 確認と最新の CI 委譲ルールを取り込んだ。
 

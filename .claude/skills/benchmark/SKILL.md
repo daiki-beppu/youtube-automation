@@ -75,7 +75,7 @@ uv run yt-benchmark-collect -y
 uv run yt-benchmark-collect --force -y       # 全チャンネル強制更新
 uv run yt-benchmark-collect --no-thumbnails  # サムネイルDLスキップ（高速）
 uv run yt-benchmark-collect --json-only      # JSON のみ（Markdown スキップ）
-uv run yt-benchmark-collect --channel <slug> # 単一チャンネル指定
+uv run yt-benchmark-collect --competitor <slug> # 単一競合指定
 uv run yt-benchmark-collect -v               # 詳細ログ
 ```
 
