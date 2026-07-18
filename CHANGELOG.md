@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(strategy)`: 状態を持たず任意実行できる `/market-research` skill を追加した。TTP 入替候補とニッチ仮説を根拠・不確実性付きで会話内に返し、明示依頼時だけ日付付き Markdown を保存する。`/channel-new` から `/discover-competitors` と用途を分けて案内し、config や TTP は自動変更しない（#2051）。
+
 - `feat(analytics)`: `benchmark.channels` の pre-filter 投稿走査を `upload_scan` として保存し、60 日以上の投稿停滞と直近 90 日平均再生数の前期比 50% 以下を判定する `yt-ttp-health` を追加した。`/analytics-analyze` の analysis JSON を schema v2 に更新し、健全・アラート・データ不足・入力欠損を区別する `ttp_health` を必須化した（#2050）。
 
 - `feat(videoup)`: `overlays.audio_visualizer.style` に後方互換の `bar` と `mirror-mountain` / `ring` / `ring-line` preset を追加した。`bars` / `size` / `position` / `ring.inner_r` / `ring.length` / `ring.arc_deg` を config から filtergraph へ反映し、不正 style は ffmpeg 起動前に有効値付きで拒否する。追加 style のバー間隔・円弧マスク PNG は同梱 Python helper が一時領域へ実行時生成するため、外部素材・補助スクリプトは不要（#1684）。

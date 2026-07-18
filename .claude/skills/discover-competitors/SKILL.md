@@ -1,6 +1,6 @@
 ---
 name: discover-competitors
-description: "Use when 追加競合候補の自動発掘やニッチ仮説の並行検証をするとき。「競合候補」「競合発掘」「ニッチ検証」「discover-competitors」で発動"
+description: "Use when YouTube Data API で追加競合候補を自動発掘・ランキング化するとき。「競合候補」「競合発掘」「discover-competitors」で発動。TTP 入替候補やニッチ仮説を複数根拠で横断比較する調査は /market-research を使う"
 ---
 
 ## Overview
