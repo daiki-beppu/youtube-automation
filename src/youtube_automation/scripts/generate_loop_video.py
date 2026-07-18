@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""コレクション用ループ動画背景を Veo 3.1 API で生成する。
+"""コレクション用ループ動画背景を Veo 3.1 / Gemini Omni Flash で生成する。
 
 main.png を開始・終了フレーム両方に指定し、微細なアニメーション付きの
 シームレスなループ動画を生成する。
@@ -28,6 +28,15 @@ from dotenv import find_dotenv, load_dotenv
 
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.genai_client import create_genai_client
+from youtube_automation.utils.omni_generator import (
+    DEFAULT_MODEL as DEFAULT_OMNI_MODEL,
+)
+from youtube_automation.utils.omni_generator import (
+    create_omni_client,
+)
+from youtube_automation.utils.omni_generator import (
+    generate_loop_video as generate_omni_loop_video,
+)
 from youtube_automation.utils.veo_generator import (
     DEFAULT_MODEL,
     DEFAULT_PROMPT,
@@ -163,10 +172,16 @@ def _build_parser() -> argparse.ArgumentParser:
     # RawTextHelpFormatter: help 文字列にハイフン入りモデル名が連なるため、
     # 80 桁折り返しで `veo-3.1-lite-` / `generate-preview` のように分断されないようにする。
     parser = argparse.ArgumentParser(
-        description="Veo 3.1 コレクションループ動画生成",
+        description="Veo 3.1 / Gemini Omni Flash コレクションループ動画生成",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("collection", nargs="?", help="コレクションパス")
+    parser.add_argument(
+        "--engine",
+        choices=("veo", "omni"),
+        default="veo",
+        help="動画生成エンジン (default: veo)",
+    )
     parser.add_argument(
         "--prompt",
         help="動画生成プロンプト（全文上書き、最強）。指定時は --motion-targets / --static-targets は無視される",
@@ -190,7 +205,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model",
         help=(
-            "Veo モデル名 (default: skill-config の veo.model, fallback: veo-3.1-fast-generate-001)。"
+            "モデル名 (default: 選択 engine の skill-config model)。"
             " 例: veo-3.1-fast-generate-001 / veo-3.1-generate-001 / veo-3.1-lite-generate-preview"
         ),
     )
@@ -203,7 +218,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--skip-existing",
         action="store_true",
-        help="既存 loop.mp4 があれば Veo を叩かず skip して終了 (再課金回避)",
+        help="既存 loop.mp4 があれば生成 API を叩かず skip して終了 (再課金回避)",
     )
     parser.add_argument("-y", "--yes", action="store_true", help="確認をスキップ")
     return parser
@@ -265,7 +280,7 @@ def _run_skip_existing(output_path: Path) -> None:
     print("  ループ動画生成: skip (--skip-existing)")
     print("===========================================")
     print(f"  既存ファイル: {output_path}")
-    print("  既存 loop.mp4 が存在するため Veo を呼ばずに終了します。")
+    print("  既存 loop.mp4 が存在するため生成 API を呼ばずに終了します。")
     print("===========================================")
     print()
     sys.exit(0)
@@ -277,18 +292,20 @@ def _run_generate(
     model: str,
     prompt: str,
     *,
+    engine: str = "veo",
+    engine_config: dict | None = None,
     assume_yes: bool,
     max_backups: int = DEFAULT_MAX_BACKUPS,
     compression: dict | None = None,
 ) -> None:
-    """通常経路: image 検証 → confirm → backup → Veo 生成 → report。"""
+    """通常経路: image 検証 → confirm → backup → 選択 engine 生成 → report。"""
     if not image_path.exists():
         print(f"[ERROR] 入力画像が見つかりません: {image_path}")
         sys.exit(1)
 
     print()
     print("===========================================")
-    print("  Veo 3.1 ループ動画生成")
+    print(f"  {engine} ループ動画生成")
     print("===========================================")
     print(f"  入力:   {image_path}")
     print(f"  出力:   {output_path}")
@@ -306,13 +323,26 @@ def _run_generate(
         _backup_existing_loop(output_path, max_backups=max_backups)
 
     try:
-        client = create_genai_client(location="us-central1")
+        client = create_omni_client() if engine == "omni" else create_genai_client(location="us-central1")
     except ConfigError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)
 
     start_time = time.monotonic()
-    success = generate_loop_video(client, image_path, output_path, model, prompt, compression=compression)
+    if engine == "omni":
+        omni_config = engine_config or {}
+        success = generate_omni_loop_video(
+            client,
+            image_path,
+            output_path,
+            model,
+            prompt,
+            timeout_sec=float(omni_config.get("timeout_seconds", 600)),
+            poll_interval_sec=float(omni_config.get("poll_interval_seconds", 5)),
+            compression=compression,
+        )
+    else:
+        success = generate_loop_video(client, image_path, output_path, model, prompt, compression=compression)
     elapsed = time.monotonic() - start_time
 
     print()
@@ -326,7 +356,7 @@ def _run_generate(
         print(f"  時間:     {elapsed:.1f}秒")
     else:
         print("  ループ動画生成: 失敗")
-        print("  --prompt でプロンプトを変えて再試行してください。")
+        print("  --prompt または engine 設定を確認して再試行してください。")
     print("===========================================")
     print()
 
@@ -347,11 +377,12 @@ def main():
             file=sys.stderr,
         )
         sys.exit(1)
-    veo_config = skill_config.get("veo", {})
+    engine_config = skill_config.get(args.engine, {})
     compression_config = skill_config.get("compression", {})
     max_backups = int(skill_config.get("max_backups", DEFAULT_MAX_BACKUPS))
-    model = args.model or veo_config.get("model", DEFAULT_MODEL)
-    prompt = resolve_prompt(args, veo_config)
+    default_model = DEFAULT_OMNI_MODEL if args.engine == "omni" else DEFAULT_MODEL
+    model = args.model or engine_config.get("model", default_model)
+    prompt = resolve_prompt(args, engine_config)
 
     collection_path = _resolve_collection_path(args, parser)
     image_path, output_path = resolve_collection_paths(collection_path)
@@ -368,6 +399,8 @@ def main():
         output_path,
         model,
         prompt,
+        engine=args.engine,
+        engine_config=engine_config,
         assume_yes=args.yes,
         max_backups=max_backups,
         compression=compression_config,

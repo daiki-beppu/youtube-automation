@@ -254,6 +254,12 @@ class TestBuildParser:
         # Then
         assert args.skip_existing is False
 
+    def test_parser_engine_defaults_to_veo(self):
+        assert _build_parser().parse_args([]).engine == "veo"
+
+    def test_parser_accepts_omni_engine(self):
+        assert _build_parser().parse_args(["--engine", "omni"]).engine == "omni"
+
 
 # ---------- resolve_prompt (Issue #358) ----------
 
@@ -1071,6 +1077,103 @@ class TestMainEnabledGate:
                 mod.main()
             assert excinfo.value.code == 0
             assert mocks["generate_loop_video"].call_count == 1
+
+
+class TestMainOmniEngine:
+    def test_omni_uses_default_model_when_config_is_absent(self, tmp_path, monkeypatch):
+        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.utils.omni_generator import DEFAULT_MODEL as DEFAULT_OMNI_MODEL
+
+        col = _make_collection(tmp_path)
+        _write_image(col, MAIN_PNG)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "--engine", "omni", "-y"])
+
+        with (
+            _patch_main_boundaries() as mocks,
+            patch.object(mod, "create_omni_client", return_value="omni-client"),
+            patch.object(mod, "generate_omni_loop_video", return_value=True) as generate_omni,
+        ):
+            _set_default_mocks(mocks)
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+
+        assert excinfo.value.code == 0
+        assert generate_omni.call_args.args[3] == DEFAULT_OMNI_MODEL
+
+    def test_omni_uses_configured_model_and_runtime_settings(self, tmp_path, monkeypatch):
+        from youtube_automation.scripts import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        image = _write_image(col, MAIN_PNG)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "--engine", "omni", "-y"])
+        omni_config = {
+            "model": "gemini-omni-test",
+            "default_prompt": "omni prompt",
+            "timeout_seconds": 42,
+            "poll_interval_seconds": 0.25,
+        }
+
+        with (
+            _patch_main_boundaries() as mocks,
+            patch.object(mod, "create_omni_client", return_value="omni-client") as create_client,
+            patch.object(mod, "generate_omni_loop_video", return_value=True) as generate_omni,
+        ):
+            _set_default_mocks(mocks)
+            mocks["load_config"].return_value = {"omni": omni_config}
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+
+        assert excinfo.value.code == 0
+        create_client.assert_called_once_with()
+        mocks["create_genai_client"].assert_not_called()
+        args = generate_omni.call_args
+        assert args.args[:5] == ("omni-client", image, col / ASSETS_DIR / LOOP_MP4, "gemini-omni-test", "omni prompt")
+        assert args.kwargs["timeout_sec"] == 42.0
+        assert args.kwargs["poll_interval_sec"] == 0.25
+
+    def test_omni_missing_api_key_fails_loud(self, tmp_path, monkeypatch):
+        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.utils.exceptions import ConfigError
+
+        col = _make_collection(tmp_path)
+        _write_image(col, MAIN_PNG)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "--engine", "omni", "-y"])
+
+        with (
+            _patch_main_boundaries() as mocks,
+            patch.object(mod, "create_omni_client", side_effect=ConfigError("GEMINI_API_KEY missing")),
+            patch.object(mod, "generate_omni_loop_video") as generate_omni,
+        ):
+            _set_default_mocks(mocks)
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+
+        assert excinfo.value.code == 1
+        generate_omni.assert_not_called()
+
+    def test_skip_existing_omni_does_not_create_client(self, tmp_path, monkeypatch):
+        from youtube_automation.scripts import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_loop_mp4(col)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["yt-generate-loop-video", str(col), "--engine", "omni", "--skip-existing", "-y"],
+        )
+
+        with (
+            _patch_main_boundaries() as mocks,
+            patch.object(mod, "create_omni_client") as create_client,
+            patch.object(mod, "generate_omni_loop_video") as generate_omni,
+        ):
+            _set_default_mocks(mocks)
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+
+        assert excinfo.value.code == 0
+        create_client.assert_not_called()
+        generate_omni.assert_not_called()
 
     def test_enabled_true_runs_normally(self, tmp_path, monkeypatch):
         # Given: enabled: true 明示

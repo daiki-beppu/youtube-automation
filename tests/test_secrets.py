@@ -30,7 +30,7 @@ from youtube_automation.utils.secrets import (
 )
 
 _TEST_SECRET = "CLIENT_SECRETS_JSON"
-_MANAGED_SECRETS = ("CLIENT_SECRETS_JSON", "OPENAI_API_KEY")
+_MANAGED_SECRETS = ("CLIENT_SECRETS_JSON", "OPENAI_API_KEY", "GEMINI_API_KEY")
 _OP_READ_DISABLED_ENV = secrets_module._OP_READ_DISABLED_ENV
 
 
@@ -200,6 +200,20 @@ class TestOpenAIApiKeyRegistered:
         ):
             with pytest.raises(ConfigError, match="OPENAI_API_KEY"):
                 get_secret("OPENAI_API_KEY")
+
+
+class TestGeminiApiKeyRegistered:
+    def test_gemini_api_key_uses_expected_op_reference(self):
+        assert _SECRET_REFS["GEMINI_API_KEY"] == "op://Personal/Gemini_API_Key/credential"
+
+    def test_gemini_api_key_returns_from_environ(self):
+        os.environ["GEMINI_API_KEY"] = "gemini-from-env"
+        assert get_secret("GEMINI_API_KEY") == "gemini-from-env"
+
+    def test_gemini_api_key_fails_loud_when_unavailable(self):
+        with patch.dict(os.environ, {_OP_READ_DISABLED_ENV: "1"}):
+            with pytest.raises(ConfigError, match="GEMINI_API_KEY"):
+                get_secret("GEMINI_API_KEY")
 
 
 # ---------- Issue #110: 帯域モニタリング用シークレット ----------
