@@ -111,12 +111,13 @@ describe("COMMUNITY_PHASE", () => {
   it("community runner の全フェーズを import 可能な定数として公開する", () => {
     expect(COMMUNITY_PHASE).toEqual({
       INJECTING: "injecting",
+      POSTING: "posting",
       SCHEDULING: "scheduling",
       UPLOADING_IMAGE: "uploading-image",
       DONE: "done",
       ERROR: "error",
     });
     const phases: CommunityPhase[] = Object.values(COMMUNITY_PHASE);
-    expect(phases).toHaveLength(5);
+    expect(phases).toHaveLength(6);
   });
 });
