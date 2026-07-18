@@ -23,10 +23,11 @@
 # v14.2: effect=none の静止画も 1 GOP 分だけベイクして stream copy で全尺化 (#1681)
 # v15:   audio_visualizer style presets + runtime-generated masks (#1684)
 # v14.3: audio visualizer の runtime fill と共通 effect を追加 (#1686)
+# v15.1: effect / overlays の短尺プレビューを追加 (#1749)
 #
 # Usage:
-#   bash .claude/skills/videoup/references/generate_videos.sh <collection-path>
-#   cd <collection-dir> && bash <repo-root>/.claude/skills/videoup/references/generate_videos.sh
+#   bash .claude/skills/videoup/references/generate_videos.sh [--preview [15-30]] <collection-path>
+#   cd <collection-dir> && bash <repo-root>/.claude/skills/videoup/references/generate_videos.sh [--preview [15-30]]
 #
 # Opt-in env vars (#545):
 #   VIDEOUP_AUDIO_TARGET_VIDEO_DURATION_MIN
@@ -52,14 +53,55 @@
 #                    CHANNEL_DIR or COLLECTION_DIR から自動探索)
 #   CHANNEL_DIR      チャンネルリポジトリのルート (Python loader と同じ規約)
 
+# ─── Command line arguments ──────────────────────────────
+PREVIEW_MODE=0
+PREVIEW_DURATION=20
+COLLECTION_DIR=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --preview)
+            PREVIEW_MODE=1
+            if [[ -n "${2:-}" && "$2" != --* && ! -d "$2" ]]; then
+                PREVIEW_DURATION="$2"
+                shift 2
+            else
+                shift
+            fi
+            ;;
+        --help|-h)
+            echo "Usage: $0 [--preview [15-30]] [collection-path]"
+            exit 0
+            ;;
+        --*)
+            echo "ERROR: Unknown option: $1"
+            exit 1
+            ;;
+        *)
+            if [[ -n "$COLLECTION_DIR" ]]; then
+                echo "ERROR: Only one collection path may be specified"
+                exit 1
+            fi
+            COLLECTION_DIR="$1"
+            shift
+            ;;
+    esac
+done
+
+if [[ "$PREVIEW_MODE" -eq 1 ]]; then
+    if ! [[ "$PREVIEW_DURATION" =~ ^[0-9]+$ ]] || [[ "$PREVIEW_DURATION" -lt 15 || "$PREVIEW_DURATION" -gt 30 ]]; then
+        echo "ERROR: --preview duration must be an integer from 15 to 30 seconds"
+        exit 1
+    fi
+fi
+
 # ─── Collection Path Resolution ──────────────────────────
-COLLECTION_DIR="${1:-}"
 
 if [[ -z "$COLLECTION_DIR" ]]; then
     if [[ -d "01-master" && -d "10-assets" ]]; then
         COLLECTION_DIR="$(pwd)"
     else
-        echo "Usage: $0 <collection-path>"
+        echo "Usage: $0 [--preview [15-30]] [collection-path]"
         exit 1
     fi
 fi
@@ -287,7 +329,11 @@ else
     done
 fi
 
-MASTER_OUTPUT="${MASTER_DIR}/${COLLECTION_NAME}-Master.mp4"
+if [[ "$PREVIEW_MODE" -eq 1 ]]; then
+    MASTER_OUTPUT="${MASTER_DIR}/${COLLECTION_NAME}-Preview.mp4"
+else
+    MASTER_OUTPUT="${MASTER_DIR}/${COLLECTION_NAME}-Master.mp4"
+fi
 LOOP_TARGET_WIDTH="1920"
 LOOP_TARGET_HEIGHT="1080"
 LOOP_TARGET_PIX_FMT="yuv420p"
@@ -337,53 +383,56 @@ esac
 
 # 1920x1080 / 24fps を前提とした filtergraph を組み立てる
 # 第 1 引数 = 入力ビデオストリームのラベル（例: "0:v" や "scaled"）
-# 出力は [vout] 固定
+# 第 2 引数 = 出力ビデオストリームのラベル
 build_effect_filter() {
     local input_label="$1"
+    local output_label="$2"
+    local background_label="${output_label}_bg"
+    local effect_label="${output_label}_fx"
     case "$EFFECT" in
         none)
             echo ""
             ;;
         particles)
             # 光の粒子: ランダムドットを生成 → 上下に slow scroll → 元映像へオーバーレイ
-            echo "[${input_label}]format=yuv420p,setsar=1[bg];\
+            echo "[${input_label}]format=yuv420p,setsar=1[${background_label}];\
 color=c=black:s=1920x2160:r=24:d=1,format=yuv420p,\
 noise=alls=80:allf=t+u,\
 format=yuva420p,\
 geq=lum='if(gt(lum(X,Y),230),255,0)':cb=128:cr=128:a='if(gt(lum(X,Y),230),${EFFECT_ALPHA}*255,0)',\
 loop=loop=-1:size=1:start=0,\
-crop=1920:1080:0:'mod(t*30,1080)'[fx];\
-[bg][fx]overlay=0:0:format=auto,format=yuv420p[vout]"
+crop=1920:1080:0:'mod(t*30,1080)'[${effect_label}];\
+[${background_label}][${effect_label}]overlay=0:0:format=auto,format=yuv420p[${output_label}]"
             ;;
         bokeh)
             # ボケ: 色付きドットを巨大スケール + gblur で円形ぼかし → 60s 周期でゆっくり揺れる
             # overlay の sin/cos は 2*PI*t/60 で x/y とも 60s 周期に揃え、ベイクの継ぎ目をシームレスにする
             # noise alls は 0-100 範囲制約があるため上限内に収める
-            echo "[${input_label}]format=yuv420p,setsar=1[bg];\
+            echo "[${input_label}]format=yuv420p,setsar=1[${background_label}];\
 color=c=0xffe8b0:s=240x135:r=24:d=1,format=yuv420p,\
 noise=alls=100:allf=t+u,\
 format=yuva420p,\
 geq=lum='if(gt(lum(X,Y),240),255,0)':cb='cb(X,Y)':cr='cr(X,Y)':a='if(gt(lum(X,Y),240),${EFFECT_ALPHA}*255,0)',\
 loop=loop=-1:size=1:start=0,\
 scale=1920:1080:flags=lanczos,\
-gblur=sigma=18[fx];\
-[bg][fx]overlay='40*sin(2*PI*t/60)':'30*cos(2*PI*t/60)':format=auto,format=yuv420p[vout]"
+gblur=sigma=18[${effect_label}];\
+[${background_label}][${effect_label}]overlay='40*sin(2*PI*t/60)':'30*cos(2*PI*t/60)':format=auto,format=yuv420p[${output_label}]"
             ;;
         gradient)
             # グラデーション流れ: 静的グラデーション(speed=0)を crop で上下に流す → 72s 周期でシームレス
             # speed=0 で色回転を止めて motion を crop の mod(t*15,1080)=72s 周期だけに限定し、ベイクの継ぎ目を消す
-            echo "[${input_label}]format=yuv420p,setsar=1[bg];\
+            echo "[${input_label}]format=yuv420p,setsar=1[${background_label}];\
 gradients=s=1920x2160:c0=0x1a3a8a:c1=0xff8a3a:r=24:speed=0:type=linear,\
 crop=1920:1080:0:'mod(t*15,1080)',\
 format=yuva420p,\
-geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='${EFFECT_ALPHA}*255'[fx];\
-[bg][fx]overlay=0:0:format=auto,format=yuv420p[vout]"
+geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='${EFFECT_ALPHA}*255'[${effect_label}];\
+[${background_label}][${effect_label}]overlay=0:0:format=auto,format=yuv420p[${output_label}]"
             ;;
     esac
 }
 
-EFFECT_FILTER_LOOP="$(build_effect_filter "0:v")"
-EFFECT_FILTER_STATIC="scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2[scaled];$(build_effect_filter "scaled")"
+EFFECT_FILTER_LOOP="$(build_effect_filter "0:v" "vout")"
+EFFECT_FILTER_STATIC="scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2[scaled];$(build_effect_filter "scaled" "vout")"
 
 # ─── Audio encoder 自動選択 (macOS は AudioToolbox 優先) ─
 if ffmpeg -hide_banner -encoders 2>&1 | grep -q '^ A..... aac_at '; then
@@ -548,7 +597,11 @@ else
     echo "  Video BG : $(basename "$VIDEO_BACKGROUND") (still)"
 fi
 echo "  Audio    : $(basename "$MASTER_AUDIO")"
-echo "  Output   : $(basename "$MASTER_OUTPUT")"
+if [[ "$PREVIEW_MODE" -eq 1 ]]; then
+    echo "  Preview  : $(basename "$MASTER_OUTPUT") (${PREVIEW_DURATION}s sample)"
+else
+    echo "  Output   : $(basename "$MASTER_OUTPUT")"
+fi
 if [[ "$EFFECT" != "none" ]]; then
     echo "  Effect   : $EFFECT (intensity=$EFFECT_INTENSITY, alpha=$EFFECT_ALPHA)"
 fi
@@ -592,6 +645,16 @@ if [[ -n "$TARGET_VIDEO_DURATION_MIN" ]]; then
     fi
 fi
 
+FULL_VIDEO_DURATION="$video_duration"
+if [[ "$PREVIEW_MODE" -eq 1 ]]; then
+    video_duration="$PREVIEW_DURATION"
+    if [[ "$AUDIO_LOOP_ACTIVE" -eq 0 ]] && awk -v preview="$video_duration" -v master="${duration:-0}" 'BEGIN{exit !(preview > master)}'; then
+        AUDIO_INPUT_OPTS=(-stream_loop -1)
+        AUDIO_LOOP_ACTIVE=1
+        echo "  Preview  : audio loop enabled to fill ${PREVIEW_DURATION}s sample"
+    fi
+fi
+
 # 音声ループ時は再エンコード必須 + loudnorm で音割れ防止 (#1057)
 # loudnorm は AUDIO_OUT_OPTS ではなく別変数に保持する。
 # overlay 経路では filter_complex に統合し、非 overlay 経路では -af で適用する。
@@ -603,6 +666,9 @@ if [[ "$AUDIO_LOOP_ACTIVE" -eq 1 ]]; then
 fi
 
 echo "  Duration : $(format_duration "$video_duration")"
+if [[ "$PREVIEW_MODE" -eq 1 ]]; then
+    echo "  Full     : $(format_duration "$FULL_VIDEO_DURATION") (not generated)"
+fi
 echo ""
 start=$SECONDS
 PROGRESS_FILE="$(mktemp)"
@@ -615,6 +681,16 @@ cleanup_runtime_files() {
     fi
 }
 trap cleanup_runtime_files EXIT
+
+print_full_output_outlook() {
+    local route="$1"
+    local estimate="$2"
+    [[ "$PREVIEW_MODE" -eq 1 ]] || return
+    echo "  Full output outlook:"
+    echo "    Route   : ${route}"
+    echo "    Estimate: ${estimate}"
+    echo "    Full file is not generated by --preview."
+}
 
 # ─── Step 表示 (Issue #641) ──────────────────────────────
 # Veo / ffmpeg 双方で「生成中 → 保存 → 後処理」のステップ感を共通化する。
@@ -793,6 +869,11 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     FILTER="[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p,fps=${enc_framerate}[bg];"
     CURRENT_LABEL="bg"
 
+    if [[ "$EFFECT" != "none" ]]; then
+        FILTER+="$(build_effect_filter "$CURRENT_LABEL" "bg_effect");"
+        CURRENT_LABEL="bg_effect"
+    fi
+
     if [[ "$av_enabled" == "true" ]]; then
         # bar は fill / mirror / rounding を適用でき、他 preset は runtime mask を使う。
         FILTER+="[1:a]asplit=2[avis_in][a_out];"
@@ -929,6 +1010,15 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
         AUDIO_OUT_OPTS=(-c:a "$AUDIO_ENCODER" -b:a 384k -ar 48000)
     fi
 
+    if [[ "$EFFECT" != "none" ]]; then
+        OVERLAY_ROUTE="overlays + ${EFFECT} effect/full encode"
+    else
+        OVERLAY_ROUTE="overlays/full encode"
+    fi
+    print_full_output_outlook \
+        "$OVERLAY_ROUTE" \
+        "full-length re-encode; duration-dependent (typically several to tens of minutes)"
+
     # 末尾ラベル統一: 最終 video ラベルが CURRENT_LABEL
     ffmpeg -y "${INPUTS[@]}" \
         -filter_complex "$FILTER" \
@@ -1018,7 +1108,7 @@ else
             bake_crf="$STILL_EFFECT_CRF"
             bake_src_file="$VIDEO_BACKGROUND"
         fi
-        if [[ "${bake_len:-0}" -le 0 ]] || awk "BEGIN{exit !(${bake_len:-0} >= ${video_duration:-0})}" || [[ "${bake_len:-0}" -gt "$BAKE_MAX_LEN" ]]; then
+        if [[ "${bake_len:-0}" -le 0 ]] || { [[ "$PREVIEW_MODE" -eq 0 ]] && awk "BEGIN{exit !(${bake_len:-0} >= ${video_duration:-0})}"; } || [[ "${bake_len:-0}" -gt "$BAKE_MAX_LEN" ]]; then
             echo "  Effect bake skip (bake_len=${bake_len}s, video=${video_duration%.*}s) — 全尺再エンコードにフォールバック"
         else
             FX_BAKED="${ASSETS_DIR}/fx_baked.mp4"
@@ -1086,6 +1176,15 @@ else
     if [[ -n "$STREAM_SOURCE" ]]; then
         # Stream copy 経路（effect ベイク / loop 背景 共通）: ビデオは完全無損失（ビット単位コピー）。
         # AUDIO_INPUT_OPTS は target_video_duration_min 設定時のみ -stream_loop -1 を持つ (#545)
+        if [[ "$EFFECT" != "none" ]]; then
+            print_full_output_outlook \
+                "effect bake + stream copy" \
+                "roughly 1–2 minutes (first bake: about 10–40 seconds)"
+        else
+            print_full_output_outlook \
+                "loop stream copy" \
+                "roughly 1–2 minutes"
+        fi
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (stream copy)"
         AUDIO_AF_ARGS=()
         [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
@@ -1102,6 +1201,9 @@ else
             "$MASTER_OUTPUT" &
     elif [[ "$EFFECT" != "none" && -n "$LOOP_SOURCE" ]]; then
         # フォールバック: loop + effect を全尺再エンコード（従来 mode C）
+        print_full_output_outlook \
+            "effect/full encode fallback" \
+            "full-length re-encode; duration-dependent (typically several to tens of minutes)"
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (loop + ${EFFECT} effect, full encode fallback)"
         AUDIO_AF_ARGS=()
         [[ -n "$AUDIO_LOUDNORM" ]] && AUDIO_AF_ARGS=(-af "$AUDIO_LOUDNORM")
@@ -1120,6 +1222,9 @@ else
             "$MASTER_OUTPUT" &
     elif [[ "$EFFECT" != "none" ]]; then
         # フォールバック: 静止画 + effect を全尺再エンコード（従来 mode D）
+        print_full_output_outlook \
+            "effect/full encode fallback" \
+            "full-length re-encode; duration-dependent (typically several to tens of minutes)"
         echo "  ℹ️  ループ動画なし → 静止画 + ${EFFECT} effect で出力 (loop.mp4 を配置すればループ動画になります)"
         echo "  [Step ${FF_TOTAL_STEPS}/${FF_TOTAL_STEPS}] Generating master video (still image + ${EFFECT} effect, full encode fallback)"
         AUDIO_AF_ARGS=()
@@ -1208,7 +1313,7 @@ fi
 SHRINK_ENABLED="$(yaml_get shrink enabled false)"
 SHRINK_MAXRATE="$(yaml_get shrink maxrate "")"
 SHRINK_CRF="$(yaml_get shrink crf "")"
-if [[ "$SHRINK_ENABLED" == "true" && ( -n "$SHRINK_MAXRATE" || -n "$SHRINK_CRF" ) ]]; then
+if [[ "$PREVIEW_MODE" -eq 0 && "$SHRINK_ENABLED" == "true" && ( -n "$SHRINK_MAXRATE" || -n "$SHRINK_CRF" ) ]]; then
     echo ""
     echo "  [shrink] 生成後の容量最適化パスを実行します（全尺を再エンコード: 長尺は数分〜十数分）"
     echo "           ※ stream copy の速度メリットは相殺されます。容量最小化したい最終版向け。"

@@ -41,6 +41,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-generate-loop-video": "youtube_automation.scripts.generate_loop_video",
     "yt-generate-lyria-master": "youtube_automation.scripts.generate_lyria_master",
     "yt-generate-master": "youtube_automation.scripts.generate_master",
+    "yt-generate-videos-batch": "youtube_automation.scripts.generate_videos_batch",
     "yt-generate-suno": "youtube_automation.scripts.generate_suno_prompts",
     "yt-init-collection": "youtube_automation.scripts.init_collection",
     "yt-kpi-dashboard": "youtube_automation.scripts.kpi_dashboard",

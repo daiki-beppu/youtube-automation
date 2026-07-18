@@ -101,6 +101,7 @@ yt_generate_image = _make_entrypoint("youtube_automation.scripts.generate_image"
 yt_generate_loop_video = _make_entrypoint("youtube_automation.scripts.generate_loop_video")
 yt_generate_lyria_master = _make_entrypoint("youtube_automation.scripts.generate_lyria_master")
 yt_generate_master = _make_entrypoint("youtube_automation.scripts.generate_master")
+yt_generate_videos_batch = _make_entrypoint("youtube_automation.scripts.generate_videos_batch")
 yt_generate_suno = _make_entrypoint("youtube_automation.scripts.generate_suno_prompts")
 yt_init_collection = _make_entrypoint("youtube_automation.scripts.init_collection")
 yt_kpi_dashboard = _make_entrypoint("youtube_automation.scripts.kpi_dashboard")
