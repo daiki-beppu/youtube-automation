@@ -60,10 +60,13 @@ build 後は `extensions/suno-helper/.output/chrome-mv3/manifest.json`、zip 後
 | ゲート | 責務 |
 |---|---|
 | Oxlint + Oxfmt（`pnpm check`） | ultracite preset を extends した共通の `extensions/oxlint.config.ts` / `extensions/oxfmt.config.ts` に基づき lint とフォーマットを一括検査する（自動修正は `pnpm fix`） |
-| TypeScript（`pnpm compile`） | 型エラーがなく、WXT の型生成を含む compile が成功することを検査する |
+| TypeScript 7（`pnpm compile`） | `wxt prepare` で WXT の型を生成した後、固定版 TypeScript 7.0.2 の `tsc --noEmit` で型エラーがないことを検査する。成果物は生成しない |
+| WXT（`pnpm build` / `pnpm zip`） | `wxt build` で実行可能な拡張を生成し、`wxt zip` で配布用 archive を生成する。TypeScript の型検査とは別レーン |
 | Fallow（`pnpm run audit`） | `extensions/` 全体を静的解析し、既存 baseline との差分 finding を検査する |
 
 Fallow のローカル実行は上表のコマンドを使う。Extensions CI では pull request の base commit SHA を比較元として `pnpm run audit` を1回だけ実行する。共通設定の `audit.gate: new-only` により、base にない新規 error-severity finding がある場合だけ品質ゲートが失敗し、既存 finding や warn-severity finding だけなら成功する。
+
+Extensions CI でも `pnpm compile` と `pnpm build` は独立した step として実行する。TypeScript 5.9.3 と 7.0.2 の比較では、`wxt prepare` を事前実行して除外した `tsc --noEmit` の型検査部分だけが、同一環境・同一依存条件・warm cache の中央値で suno-helper は 6.7〜8.3 倍、distrokid-helper は 11.0〜12.7 倍高速だった。この結果は WXT の `build` / `zip` 全体の性能を示すものではない。条件と生値は [TypeScript 5.9.3 と 7.0.2 の compile 性能比較](../docs/investigations/2026-07-18-2016-typescript7-compile-benchmark.md) を参照する。
 
 Oxlint はコード単体の lint rule 違反を検出し、Fallow は未使用ファイルなどリポジトリ差分に増えた finding を検出する。Extensions CI では両者を独立した品質ゲートとして実行する。
 

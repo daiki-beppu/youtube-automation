@@ -104,7 +104,7 @@ class ChannelAnalyticsMixin:
             end_date (str): 終了日 (YYYY-MM-DD)
             depth (str): 収集深度
                 - "basic": 既存メトリクスのみ（クォータ節約、後方互換）
-                - "standard": + impressions/CTR + traffic source + device（推奨）
+                - "standard": + impressions/CTR + traffic source + playlist + device + audience（推奨）
                 - "full": + retention + country（全メトリクス）
 
         Returns:
@@ -139,6 +139,12 @@ class ChannelAnalyticsMixin:
                 entry["scheduled_publish_at"] = publish_at_map.get(vid)
 
             # 基本データ構築
+            logger.info("収益メトリクス収集中...")
+            revenue_analytics = self.get_revenue_analytics(start_date, end_date)
+            for video_id, revenue in revenue_analytics["by_video"].items():
+                if video_id in video_data:
+                    video_data[video_id].update(revenue)
+
             basic_data = {
                 "collection_period": {
                     "start_date": start_date,
@@ -148,10 +154,11 @@ class ChannelAnalyticsMixin:
                 "collection_depth": depth,
                 "channel_analytics": channel_analytics,
                 "video_analytics": video_data,
+                "revenue_analytics": revenue_analytics,
                 "strategic_analysis": strategic_analytics,
             }
 
-            # standard 以上: impressions/CTR + traffic source + device
+            # standard 以上: impressions/CTR + traffic source + playlist + device + audience
             if depth in ("standard", "full"):
                 logger.info("CTR 詳細分析収集中...")
                 basic_data["ctr_analysis"] = self.get_ctr_analysis(start_date, end_date)
@@ -164,9 +171,16 @@ class ChannelAnalyticsMixin:
                     start_date, end_date, "YT_SEARCH"
                 )
 
-                logger.info("デバイス別分析収集中...")
+                logger.info("プレイリスト別分析収集中...")
+                basic_data["playlist_analytics"] = self.get_playlist_analytics(start_date, end_date)
+
+                logger.info("オーディエンス分析収集中...")
+                subscribed_status = self.get_subscribed_status_analytics(start_date, end_date)
+                if "error" in subscribed_status:
+                    raise YouTubeAPIError(f"登録ステータス分析取得失敗: {subscribed_status['error']}")
                 basic_data["audience"] = {
                     "by_device": self.get_device_analytics(start_date, end_date),
+                    "by_subscribed_status": subscribed_status,
                 }
 
             # full: + retention + country
