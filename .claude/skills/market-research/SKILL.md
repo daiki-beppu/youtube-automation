@@ -3,6 +3,11 @@ name: market-research
 description: "Use when 既存チャンネルから任意に市場を調べ、TTP 入替候補やニッチ仮説を根拠付きで比較するとき。「市場調査」「market research」「TTP 入替候補」「ニッチ仮説を調べて」で発動。未発見チャンネルを API でランキング化するだけなら /discover-competitors、収集済み benchmark / comments の徹底分析なら /channel-research を使う"
 ---
 
+## 前後工程
+
+- `前工程`: `なし`
+- `後工程`: `/benchmark`, `/discover-competitors`
+
 ## Hard Gates
 
 - このスキルは **状態を持たない読み取り専用の調査**である。`config/channel/analytics.json::benchmark.channels` を含む config schema、既存 TTP、調査入力を変更しない。TTP の自動入替は行わない。
