@@ -30,8 +30,22 @@ KEY_NIX_EVAL = "nix_eval"
 KEY_LOCK_DRIFT = "lock_drift"
 KEY_GIT_COMMIT_IDENTITY = "git_commit_identity"
 KEY_HOOK_POLICY = "hook_policy"
+KEY_RUNTIME_PATH = "runtime_path"
 
 SKIP_LEFTHOOK_ENV = "YOUTUBE_AUTOMATION_SKIP_LEFTHOOK"
+TAKT_RUNTIME_ROOT_ENV = "TAKT_RUNTIME_ROOT"
+
+# takt runtime.prepare（.takt/runtime-prepare.sh）が current runtime root 配下へ
+# 再構成する runtime path 変数（issue #2163）。sibling worktree の値が残ると
+# 別 worktree の cleanup・権限変更に巻き込まれて test 開始前に停止する
+RUNTIME_PATH_ENV_VARS = (
+    "TMPDIR",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "UV_CACHE_DIR",
+)
 
 # default 実行 60 秒未満の要件を守るための per-check タイムアウト
 _GIT_TIMEOUT_SECONDS = 10
@@ -232,10 +246,70 @@ def check_nix_eval(cwd: Path, env: Mapping[str, str]) -> CheckResult:
     return CheckResult(KEY_NIX_EVAL, ok=True, detail=f"devShells.{system}.default を評価できる")
 
 
+def _runtime_path_violation(value: str | None, runtime_root: Path) -> str | None:
+    """runtime path 変数 1 件の違反種別を返す。違反なしなら None。
+
+    返り値は違反の分類のみで、path の実値を含めない（detail への値漏出防止）。
+    """
+    if value is None or value == "":
+        return "未設定"
+    path = Path(value)
+    if not path.is_absolute():
+        return "絶対 path ではない"
+    try:
+        resolved = path.resolve()
+        if not resolved.is_relative_to(runtime_root.resolve()):
+            return "current runtime root 配下ではない"
+        if not resolved.is_dir():
+            return "ディレクトリが存在しない"
+        if not os.access(resolved, os.W_OK):
+            return "書込みできない"
+    except OSError:
+        return "path を検査できない"
+    return None
+
+
+def check_runtime_path(cwd: Path, env: Mapping[str, str]) -> CheckResult:
+    """takt worker の runtime path が current runtime root へ隔離されているか検査する。
+
+    sibling worktree の TMPDIR / XDG_* / UV_CACHE_DIR が残ると、別 worktree の
+    cleanup・権限変更に巻き込まれて test 開始前に停止する（issue #2163）。
+    detail には変数名と違反種別のみを含め、path の実値は出力しない。
+    """
+    runtime_root_value = env.get(TAKT_RUNTIME_ROOT_ENV, "")
+    if not runtime_root_value:
+        return CheckResult(KEY_RUNTIME_PATH, ok=True, detail="takt runtime 外のため検査対象外")
+
+    runtime_root = Path(runtime_root_value)
+    if not runtime_root.is_absolute():
+        return CheckResult(KEY_RUNTIME_PATH, ok=False, detail=f"{TAKT_RUNTIME_ROOT_ENV} が絶対 path ではない")
+
+    violations = []
+    for var in RUNTIME_PATH_ENV_VARS:
+        violation = _runtime_path_violation(env.get(var), runtime_root)
+        if violation is not None:
+            violations.append(f"{var}（{violation}）")
+    if violations:
+        return CheckResult(
+            KEY_RUNTIME_PATH,
+            ok=False,
+            detail=(
+                f"runtime path が current runtime root へ隔離されていない: {', '.join(violations)}。"
+                ".takt/runtime-prepare.sh 経由で worker を起動しているか確認する"
+            ),
+        )
+    return CheckResult(
+        KEY_RUNTIME_PATH,
+        ok=True,
+        detail=f"全 {len(RUNTIME_PATH_ENV_VARS)} 変数が current runtime root 配下で書込み可能",
+    )
+
+
 def run_checks(cwd: Path, env: Mapping[str, str]) -> list[CheckResult]:
     """全検査項目を実行する。すべて read-only。"""
     return [
         check_checkout_kind(cwd, env),
+        check_runtime_path(cwd, env),
         check_nix_eval(cwd, env),
         check_lock_drift(cwd, env),
         check_git_commit_identity(cwd, env),
