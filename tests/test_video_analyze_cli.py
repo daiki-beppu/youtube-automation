@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -29,12 +30,13 @@ from youtube_automation.scripts.video_analyze import (
     _resolve_benchmark_targets,
     _resolve_own_targets,
     _resolve_url_target,
+    _run_analysis,
     main,
 )
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.skill_config import reset as reset_skill_config
-from youtube_automation.utils.video_analyzer import VideoTarget
+from youtube_automation.utils.video_analyzer import VideoAnalyzer, VideoTarget
 
 # ----------------------------------------------------------------------------
 # _extract_video_id_from_url
@@ -572,6 +574,97 @@ class TestMainAnalysisWindowFlow:
 # ----------------------------------------------------------------------------
 
 
+class TestRunAnalysisCache:
+    """#1693: 既存解析 JSON があれば Gemini を呼ばない / --force で再解析"""
+
+    _PAYLOAD: ClassVar[dict] = {"hook_structure": {"intro_sec": 5}}
+
+    def _make_analyzer(self, tmp_path, response_text: str) -> VideoAnalyzer:
+        client = MagicMock()
+        response = MagicMock()
+        response.text = response_text
+        client.models.generate_content.return_value = response
+        return VideoAnalyzer(
+            client=client,
+            model="gemini-3.5-flash",
+            prompt="analyze",
+            delay_sec=0,
+            data_dir=tmp_path,
+            analysis_window_sec=900,
+        )
+
+    def _make_target(self) -> VideoTarget:
+        return VideoTarget(
+            video_id="CACHED000ID",
+            slug="rain-jazz-night",
+            url="https://www.youtube.com/watch?v=CACHED000ID",
+            title="Cached",
+        )
+
+    def test_cache_hit_skips_gemini_call(self, tmp_path):
+        # Given: 有効な解析 JSON が既存
+        analyzer = self._make_analyzer(tmp_path, json.dumps(self._PAYLOAD))
+        target = self._make_target()
+        analyzer.save_json(target, {"hook_structure": {"intro_sec": 99}, "video_id": target.video_id})
+        analyzer.client.models.generate_content.reset_mock()
+
+        # When: force なしで実行
+        results, failures = _run_analysis(analyzer=analyzer, targets=[target])
+
+        # Then: Gemini は呼ばれず既存結果が使われる (要件 1)
+        assert analyzer.client.models.generate_content.call_count == 0
+        assert failures == []
+        assert len(results) == 1
+        assert results[0]["hook_structure"]["intro_sec"] == 99
+
+    def test_force_reanalyzes_and_overwrites(self, tmp_path):
+        # Given: 既存 JSON あり + 新レスポンスを返す Gemini
+        analyzer = self._make_analyzer(tmp_path, json.dumps(self._PAYLOAD))
+        target = self._make_target()
+        analyzer.save_json(target, {"hook_structure": {"intro_sec": 99}, "video_id": target.video_id})
+
+        # When: --force 相当で実行
+        results, failures = _run_analysis(analyzer=analyzer, targets=[target], force=True)
+
+        # Then: Gemini が呼ばれ、JSON が上書きされる (要件 2)
+        assert analyzer.client.models.generate_content.call_count == 1
+        assert failures == []
+        assert results[0]["hook_structure"]["intro_sec"] == 5
+        saved = json.loads(analyzer.json_path(target).read_text(encoding="utf-8"))
+        assert saved["hook_structure"]["intro_sec"] == 5
+
+    def test_broken_cache_triggers_reanalysis(self, tmp_path):
+        # Given: 部分書き込みで壊れた既存 JSON
+        analyzer = self._make_analyzer(tmp_path, json.dumps(self._PAYLOAD))
+        target = self._make_target()
+        path = analyzer.json_path(target)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"hook_structure": {"intro', encoding="utf-8")
+
+        # When: force なしで実行
+        results, failures = _run_analysis(analyzer=analyzer, targets=[target])
+
+        # Then: 破損キャッシュは再利用されず Gemini で再解析される (要件 3)
+        assert analyzer.client.models.generate_content.call_count == 1
+        assert failures == []
+        assert results[0]["hook_structure"]["intro_sec"] == 5
+        saved = json.loads(path.read_text(encoding="utf-8"))
+        assert saved["hook_structure"]["intro_sec"] == 5
+
+    def test_missing_cache_analyzes_and_saves(self, tmp_path):
+        # Given: キャッシュなし
+        analyzer = self._make_analyzer(tmp_path, json.dumps(self._PAYLOAD))
+        target = self._make_target()
+
+        # When
+        _results, failures = _run_analysis(analyzer=analyzer, targets=[target])
+
+        # Then: 通常どおり解析・保存される (キャッシュ導入によるデグレなし)
+        assert analyzer.client.models.generate_content.call_count == 1
+        assert failures == []
+        assert analyzer.json_path(target).exists()
+
+
 class TestBuildParser:
     def test_benchmark_path_requires_channel(self):
         # Given: parser
@@ -646,6 +739,26 @@ class TestBuildParser:
                     "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
                 ]
             )
+
+    def test_force_defaults_to_false(self):
+        # Given
+        parser = _build_parser()
+
+        # When: --force を付けない
+        args = parser.parse_args(["--url", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"])
+
+        # Then: 既定はキャッシュ再利用 (force=False)
+        assert args.force is False
+
+    def test_force_flag_parses(self):
+        # Given
+        parser = _build_parser()
+
+        # When
+        args = parser.parse_args(["--url", "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "--force"])
+
+        # Then
+        assert args.force is True
 
     def test_no_arguments_raises(self):
         # Given: 何も指定しない
