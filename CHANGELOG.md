@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `fix(streaming)`: sshd の提示 host key を Ed25519 のみに固定し、cloud-init 保守変更・host key 変更・`install_root` 変更時の Terraform plan action、OpenSSH の実ネゴシエーション、`install_root` validation 境界を実行時テストで保証した。配置ディレクトリ作成は deploy に一元化し、HCL の繰り返しブロック helper も位置情報付き共通実装へ統合した（#2033）。
+- `feat(videoup)`: `workflow-state.json` v2 の `assets.master_audio` / `assets.master_video` を基準に未動画化コレクションを検出し、既存 `generate_videos.sh` を collection 単位で並列実行する `yt-generate-videos-batch` CLI を追加した。成功時の `assets.master_video` 更新はファイルロック下で直列化し、`--include-live` と CLI / env / skill-config による並列度指定を提供する（#1658）。
 - `docs(loop-video)`: `loop.mp4` の生成・リトライ・継ぎ目補正後に動画プレイヤーを開き、静止画 fallback・動き・ループ継ぎ目を目視確認する必須承認ゲートを追加した。不受理時は `--smooth` または課金再承認付き Veo 再生成へ戻し、再プレビューで承認されるまで `/videoup` へ進まない（#1717）。
 
 - `feat(thumbnail)`: `ab_test.enabled` と最大 3 件の pattern（name / variation）を skill-config に追加し、`yt-generate-image --ab-pattern` が pattern 別 clause を最終プロンプトへ合成できるようにした。`/thumbnail` は全 pattern を個別承認して `thumbnail-<name>.jpg` を確定し、先頭 pattern と同一内容の `thumbnail.jpg` を維持する（#1904）。
