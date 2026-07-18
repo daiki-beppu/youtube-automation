@@ -77,7 +77,7 @@ class OverlayAudioVisualizer:
     """`overlays.audio_visualizer` セクション（optional, #511）.
 
     `style` は既存互換の `bar` を既定とし、`mirror-mountain` / `ring` /
-    `ring-line` を選択できる。`enabled: false` または overlays 自体が
+    `ring-line` / `heart` を選択できる。`enabled: false` または overlays 自体が
     無効化されているときは無視される。
 
     フィールドはすべて FFmpeg フィルタの引数にそのまま流し込めるよう文字列で保持する。
