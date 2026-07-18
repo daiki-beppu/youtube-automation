@@ -9,13 +9,13 @@ workflow_config:
   provider_options:
     codex:
       network_access: true
-max_steps: 12
+max_steps: 18
 initial_step: preflight
 loop_monitors:
   - cycle:
       - implement
       - review
-    threshold: 3
+    threshold: 5
     judge:
       persona: supervisor
       instruction: |
