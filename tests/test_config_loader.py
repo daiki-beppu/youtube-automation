@@ -7,6 +7,7 @@ sample_channel の新構造化は S3（コミット 3）で実施する予定。
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -14,8 +15,11 @@ import pytest
 from youtube_automation.utils.config import (
     ChannelConfig,
     channel_dir,
+    find_workspace_root,
     load_config,
     reset,
+    select_channel,
+    workspace_channels,
 )
 from youtube_automation.utils.exceptions import ConfigError
 
@@ -79,6 +83,15 @@ def _setup_channel(
     return ch
 
 
+def _setup_workspace(tmp_path: Path, *slugs: str) -> Path:
+    workspace = tmp_path / "workspace"
+    for slug in slugs:
+        channel = workspace / "channels" / slug
+        for filename, data in _minimal_sections().items():
+            _write_json(channel / "config" / "channel" / filename, data)
+    return workspace
+
+
 @pytest.fixture(autouse=True)
 def _auto_reset(monkeypatch):
     """新 API のシングルトン state をテスト毎にリセットし、CHANNEL_DIR も初期化する.
@@ -87,6 +100,7 @@ def _auto_reset(monkeypatch):
     指している前提を剥がし、各テストが tmp_path で独立できるようにする。
     """
     monkeypatch.delenv("CHANNEL_DIR", raising=False)
+    monkeypatch.delenv("CHANNEL", raising=False)
     reset()
     yield
     reset()
@@ -1448,6 +1462,115 @@ def test_channel_dir_ancestor_search(tmp_path, monkeypatch):
 
     assert channel_dir().resolve() == ch.resolve()
     assert channel_dir().resolve() != (ch / "config" / "channel").resolve()
+
+
+def test_workspace_detection_and_channel_listing(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "beta", "alpha")
+    nested = workspace / "channels" / "alpha" / "collections" / "planning"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(nested)
+
+    assert find_workspace_root() == workspace.resolve()
+    assert list(workspace_channels(workspace)) == ["alpha", "beta"]
+
+
+def test_explicit_channel_selects_workspace_slug(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    monkeypatch.chdir(workspace)
+    select_channel("beta")
+
+    assert channel_dir() == (workspace / "channels" / "beta").resolve()
+
+
+def test_config_reset_can_preserve_explicit_channel_selection(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    monkeypatch.chdir(workspace)
+    select_channel("beta")
+    assert channel_dir() == (workspace / "channels" / "beta").resolve()
+
+    reset(preserve_channel_selection=True)
+
+    assert channel_dir() == (workspace / "channels" / "beta").resolve()
+
+
+def test_channel_env_selects_workspace_slug(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("CHANNEL", "alpha")
+
+    assert channel_dir() == (workspace / "channels" / "alpha").resolve()
+
+
+def test_explicit_channel_takes_priority_over_channel_env(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("CHANNEL", "missing")
+    select_channel("beta")
+
+    assert channel_dir() == (workspace / "channels" / "beta").resolve()
+
+
+def test_matching_channel_and_channel_dir_are_accepted(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    alpha = workspace / "channels" / "alpha"
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("CHANNEL", "alpha")
+    monkeypatch.setenv("CHANNEL_DIR", str(alpha))
+
+    assert channel_dir() == alpha.resolve()
+
+
+def test_cwd_inside_workspace_channel_resolves_without_explicit_selection(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    nested = workspace / "channels" / "alpha" / "collections" / "planning"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(nested)
+
+    assert channel_dir() == (workspace / "channels" / "alpha").resolve()
+
+
+def test_channel_and_channel_dir_conflict_lists_both_targets(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    alpha = workspace / "channels" / "alpha"
+    beta = workspace / "channels" / "beta"
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("CHANNEL", "alpha")
+    monkeypatch.setenv("CHANNEL_DIR", str(beta))
+
+    with pytest.raises(ConfigError) as error:
+        channel_dir()
+
+    assert str(alpha.resolve()) in str(error.value)
+    assert str(beta.resolve()) in str(error.value)
+
+
+def test_explicit_channel_warns_when_cwd_points_to_another_channel(tmp_path, monkeypatch, caplog):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    monkeypatch.chdir(workspace / "channels" / "alpha")
+    select_channel("beta")
+
+    with caplog.at_level(logging.WARNING):
+        resolved = channel_dir()
+
+    assert resolved == (workspace / "channels" / "beta").resolve()
+    assert "cwd は別チャンネル" in caplog.text
+
+
+def test_unknown_channel_slug_lists_candidates(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("CHANNEL", "missing")
+
+    with pytest.raises(ConfigError, match=r"候補: alpha, beta"):
+        channel_dir()
+
+
+def test_workspace_root_requires_channel_selection(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    monkeypatch.chdir(workspace)
+
+    with pytest.raises(ConfigError, match=r"--channel.*候補: alpha, beta"):
+        channel_dir()
 
 
 # ----- comments.generator section -------------------------------------------

@@ -146,6 +146,44 @@ def test_cli_entrypoint_configures_utf8_before_importing_target(monkeypatch):
     assert stderr_buffer.getvalue().decode("utf-8") == "import 時エラー — 続行\n"
 
 
+def test_cli_entrypoint_consumes_channel_before_importing_target(monkeypatch):
+    from youtube_automation import cli_entrypoints
+    from youtube_automation.utils.config import loader
+
+    monkeypatch.setattr(sys, "argv", ["yt-dummy", "--channel", "alpha", "--dry-run"])
+
+    def fake_import_module(_module_name: str) -> object:
+        assert loader._explicit_channel == "alpha"
+        assert sys.argv == ["yt-dummy", "--dry-run"]
+
+        class TargetModule:
+            @staticmethod
+            def main() -> int:
+                return 0
+
+        return TargetModule()
+
+    monkeypatch.setattr(cli_entrypoints, "import_module", fake_import_module)
+
+    assert cli_entrypoints._run("dummy_cli_module") == 0
+
+
+def test_cli_entrypoint_preserves_legacy_benchmark_channel_option(monkeypatch):
+    from youtube_automation import cli_entrypoints
+
+    monkeypatch.setattr(sys, "argv", ["yt-benchmark-collect", "--channel", "competitor"])
+
+    class TargetModule:
+        @staticmethod
+        def main() -> int:
+            assert sys.argv == ["yt-benchmark-collect", "--channel", "competitor"]
+            return 0
+
+    monkeypatch.setattr(cli_entrypoints, "import_module", lambda _module_name: TargetModule())
+
+    assert cli_entrypoints._run("youtube_automation.scripts.benchmark_collector") == 0
+
+
 def test_configure_utf8_stdio_reconfigures_cp932_stdin_stdout_and_stderr(monkeypatch):
     from youtube_automation.cli_stdio import configure_utf8_stdio
 

@@ -63,6 +63,7 @@ logger = logging.getLogger(__name__)
 
 _instance: ChannelConfig | None = None
 _channel_dir: Path | None = None
+_explicit_channel: str | None = None
 
 # 必須キー（ドット区切り）。分割前の channel_config.py::_REQUIRED_KEYS を新構造へ分配。
 _REQUIRED_KEYS_BY_SECTION: dict[str, list[str]] = {
@@ -91,17 +92,99 @@ _REQUIRED_KEYS_BY_SECTION: dict[str, list[str]] = {
 }
 
 
-def _resolve_channel_dir() -> Path:
-    """`config/channel/` を含むプロジェクトルートを解決する.
+def workspace_channels(workspace_root: Path) -> dict[str, Path]:
+    """workspace 直下の有効な channel slug とディレクトリを返す."""
+    channels_root = workspace_root / "channels"
+    if not channels_root.is_dir():
+        return {}
+    return {
+        path.name: path
+        for path in sorted(channels_root.iterdir(), key=lambda candidate: candidate.name)
+        if path.is_dir() and (path / "config" / "channel").is_dir()
+    }
 
-    優先順: `CHANNEL_DIR` 環境変数 → CWD 祖先探索で `config/channel/` を持つ祖先ディレクトリ.
-    """
-    env = os.environ.get("CHANNEL_DIR")
-    if env:
-        return Path(env)
-    for parent in [Path.cwd(), *list(Path.cwd().parents)]:
+
+def find_workspace_root(start: Path | None = None) -> Path | None:
+    """start から祖先を遡り、最初の multi-channel workspace を返す."""
+    current = (start or Path.cwd()).expanduser().resolve()
+    for parent in [current, *current.parents]:
+        if workspace_channels(parent):
+            return parent
+    return None
+
+
+def select_channel(slug: str | None) -> None:
+    """CLI の明示的な ``--channel`` 選択を初回 config 解決へ渡す."""
+    global _explicit_channel, _instance, _channel_dir
+    if _instance is not None or _channel_dir is not None:
+        raise ConfigError("チャンネル設定の解決後に --channel を変更することはできません")
+    if slug is not None and not slug.strip():
+        raise ConfigError("--channel には空でない channel slug を指定してください")
+    _explicit_channel = slug
+
+
+def _find_channel_ancestor(start: Path) -> Path | None:
+    current = start.expanduser().resolve()
+    for parent in [current, *current.parents]:
         if (parent / "config" / "channel").is_dir():
             return parent
+    return None
+
+
+def _resolve_slug(slug: str, workspace_root: Path | None, *, source: str) -> Path:
+    if workspace_root is None:
+        raise ConfigError(f"{source}={slug!r} を解決できる workspace が見つかりません")
+    candidates = workspace_channels(workspace_root)
+    if slug not in candidates:
+        available = ", ".join(candidates) or "(なし)"
+        raise ConfigError(
+            f"{source}={slug!r} に対応するチャンネルが見つかりません: {workspace_root / 'channels'}. 候補: {available}"
+        )
+    return candidates[slug]
+
+
+def _resolve_channel_dir() -> Path:
+    """設定ルートを ``--channel`` → env → cwd の優先順で安全に解決する."""
+    cwd = Path.cwd()
+    cwd_channel = _find_channel_ancestor(cwd)
+    env_dir_raw = os.environ.get("CHANNEL_DIR")
+    env_dir = Path(env_dir_raw).expanduser() if env_dir_raw else None
+    workspace_root = find_workspace_root(cwd)
+    if workspace_root is None and env_dir is not None:
+        workspace_root = find_workspace_root(env_dir)
+
+    env_slug = os.environ.get("CHANNEL")
+    validate_env_channel = _explicit_channel is None or env_dir is not None
+    env_channel = (
+        _resolve_slug(env_slug, workspace_root, source="CHANNEL") if env_slug and validate_env_channel else None
+    )
+    if env_channel is not None and env_dir is not None and env_channel.resolve() != env_dir.resolve():
+        raise ConfigError(
+            "CHANNEL と CHANNEL_DIR が異なるチャンネルを指しています: "
+            f"CHANNEL={env_slug!r} -> {env_channel.resolve()}, CHANNEL_DIR={env_dir_raw!r} -> {env_dir.resolve()}"
+        )
+
+    if _explicit_channel is not None:
+        explicit_channel = _resolve_slug(_explicit_channel, workspace_root, source="--channel")
+        if cwd_channel is not None and cwd_channel.resolve() != explicit_channel.resolve():
+            logger.warning(
+                "--channel=%s (%s) を採用します。cwd は別チャンネル %s を指しています",
+                _explicit_channel,
+                explicit_channel,
+                cwd_channel,
+            )
+        return explicit_channel
+    if env_channel is not None:
+        return env_channel
+    if env_dir is not None:
+        return env_dir
+    if cwd_channel is not None:
+        return cwd_channel
+    if workspace_root is not None:
+        available = ", ".join(workspace_channels(workspace_root))
+        raise ConfigError(
+            f"workspace ルートでは --channel <slug> または CHANNEL=<slug> を指定してください. 候補: {available}"
+        )
     raise ConfigError("CHANNEL_DIR 環境変数を設定するか、config/channel/ を持つディレクトリ配下で実行してください")
 
 
@@ -113,11 +196,13 @@ def channel_dir() -> Path:
     return _channel_dir
 
 
-def reset() -> None:
-    """シングルトン state をリセット（テスト用）."""
-    global _instance, _channel_dir
+def reset(*, preserve_channel_selection: bool = False) -> None:
+    """シングルトン state をリセットし、必要なら CLI の明示選択を保持する."""
+    global _explicit_channel, _instance, _channel_dir
     _instance = None
     _channel_dir = None
+    if not preserve_channel_selection:
+        _explicit_channel = None
 
 
 def load_config() -> ChannelConfig:
