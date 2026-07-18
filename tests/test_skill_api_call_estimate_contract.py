@@ -85,6 +85,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-doctor": "gcloud subprocess + YouTube Reporting API（無料枠）のみ",
     "yt-finalize-master": "ローカル ffmpeg 処理のみ",
     "yt-generate-master": "ローカル ffmpeg クロスフェード結合のみ",
+    "yt-generate-videos-batch": "ローカル generate_videos.sh の並列 ffmpeg 処理のみ",
     "yt-generate-suno": "ローカルの Suno プロンプト生成のみ",
     "yt-init-collection": "ローカルの collection 雛形生成のみ",
     "yt-kpi-dashboard": "収集済みデータのローカル KPI 集計のみ",
