@@ -11,11 +11,18 @@ import logging
 from datetime import datetime, timedelta
 from typing import ClassVar
 
+from youtube_automation.utils import cost_tracker
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.publish_schedule import resolve_default_publish_at
 from youtube_automation.utils.schedule import get_schedule_timezone
 
 logger = logging.getLogger(__name__)
+
+_QUOTA_SERVICE = "youtube-data-api"
+# YouTube Data API v3 の公式 quota cost（search.list=100 / videos.list=1）
+_SEARCH_LIST_UNITS = 100
+_VIDEOS_LIST_UNITS = 1
+_QUOTA_CONTEXT = "published_dates_lookup"
 
 
 def _scheduling_enabled(schedule_cfg: dict) -> bool:
@@ -130,20 +137,35 @@ class PublishedDatesMixin:
 
         try:
             # 動画IDを取得（part='id' でクォータ節約）
-            response = (
-                self.youtube_service.search()
-                .list(forMine=True, type="video", order="date", maxResults=50, part="id")
-                .execute()
+            search_request = self.youtube_service.search().list(
+                forMine=True, type="video", order="date", maxResults=50, part="id"
             )
+            # 失敗 request も quota を消費するため、成否によらず記録してから既存の fail-safe に委ねる
+            try:
+                response = search_request.execute()
+            finally:
+                cost_tracker.log_quota(
+                    _QUOTA_SERVICE,
+                    "search.list",
+                    _SEARCH_LIST_UNITS,
+                    metadata={"context": _QUOTA_CONTEXT},
+                )
 
             video_ids = [item["id"]["videoId"] for item in response.get("items", [])]
             if not video_ids:
                 return dates
 
             # status.publishAt（公開予約）と snippet.publishedAt（公開済み）を取得
-            videos_response = (
-                self.youtube_service.videos().list(id=",".join(video_ids), part="status,snippet").execute()
-            )
+            videos_request = self.youtube_service.videos().list(id=",".join(video_ids), part="status,snippet")
+            try:
+                videos_response = videos_request.execute()
+            finally:
+                cost_tracker.log_quota(
+                    _QUOTA_SERVICE,
+                    "videos.list",
+                    _VIDEOS_LIST_UNITS,
+                    metadata={"context": _QUOTA_CONTEXT},
+                )
 
             for video in videos_response.get("items", []):
                 # 公開予約日時を優先、なければ公開日時を使用
