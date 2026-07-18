@@ -341,6 +341,7 @@ image_generation:
 以下は必要になった時点で、ユーザーに目的を確認してから後続スキルとして実行する。`/viewer-voice` はこの任意の追加調査には含めず、Step 7 の必須前工程として実行する:
 
 - 追加の競合候補を広げたい → `/discover-competitors`
+- 現行 TTP の入替候補やニッチ仮説を、外部根拠と同じ評価軸で比較したい → `/market-research`（会話内レポートが既定。TTP / config は変更しない）
 - 承認済み TTP 対象の動画データやサムネイルを本格収集したい → `/benchmark`
 - 収集済みデータから方向性を深掘りしたい → `/channel-research`
 
@@ -553,6 +554,7 @@ YouTube 側で手動編集した設定をローカルに取り込みたいとき
 
 - `/setup` → 前提: automation ツール導入 + GCP / OAuth / ADC 準備
 - `/discover-competitors` → TTP 対象外の追加競合発掘
+- `/market-research` → 現行 TTP の入替候補・ニッチ仮説を読み取り専用で横断比較
 - `/benchmark` → 承認済み TTP 対象の本格ベンチマーク収集
 - `/viewer-voice` → コメント収集と視聴者インサイト分析
 - `/audience-persona-design` → 競合コメント分析を入力に第一ペルソナを設計・更新
