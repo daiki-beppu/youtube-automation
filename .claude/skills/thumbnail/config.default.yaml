@@ -259,7 +259,7 @@ image_generation:
       # textless 背景に実フォントファイルを Pillow で描画する。AI 生成と違い、
       # 同一の背景・テキスト・設定なら常に同一の出力になる (フォントが安定再現される)。
       # フォント未設定・ファイル不在時は理由と代替手順つきの ConfigError になる。
-      # /channel-research の docs/benchmarks/thumbnail-text-profile.md がある場合、
+      # /channel-new 分析モードの docs/benchmarks/thumbnail-text-profile.md がある場合、
       # /thumbnail はフォント傾向 → font.title (+ title.stroke_*)、配置傾向 →
       # layout.anchor / margin_x / margin_y へ変換してチャンネル側
       # config/skills/thumbnail.yaml に設定する (適用手順は SKILL.md の

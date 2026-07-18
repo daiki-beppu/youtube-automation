@@ -794,7 +794,7 @@ def test_channel_new_initial_save_success_path_commits_and_cleans_worktree(tmp_p
 
 def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     discover = _read(".claude/skills/discover-competitors/SKILL.md")
-    research = _read(".claude/skills/channel-research/SKILL.md")
+    research = _read(".claude/skills/channel-new/references/analysis-mode.md")
     viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
     setup = _read(".claude/skills/setup/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
@@ -810,9 +810,8 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "target_scene" not in discover
     assert "config/channel/content.json::genre.{primary,style,context}" in discover
 
-    assert "`/channel-new` で収集したベンチマークデータ + コメントデータ" not in research
     assert "/benchmark` と `/viewer-voice` で収集した" in research
-    assert "TTP 対象確認 / 初回 config / persona / branding" in research
+    assert "docs/channel-research.md" in research
     assert "/viewer-voice` → 前提" in research
 
     assert "チャンネル立ち上げ・方向性見直し時に必ず使用" not in viewer_voice
@@ -867,15 +866,16 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
 
 def test_skill_frontmatter_descriptions_disambiguate_sibling_routes() -> None:
     benchmark_desc = _frontmatter(".claude/skills/benchmark/SKILL.md")["description"]
-    channel_research_desc = _frontmatter(".claude/skills/channel-research/SKILL.md")["description"]
+    channel_new_desc = _frontmatter(".claude/skills/channel-new/SKILL.md")["description"]
     videoup_desc = _frontmatter(".claude/skills/videoup/SKILL.md")["description"]
     video_upload_desc = _frontmatter(".claude/skills/video-upload/SKILL.md")["description"]
 
     assert "「競合分析」" not in benchmark_desc
     assert "「競合データ収集」" in benchmark_desc
-    assert "収集済みデータの分析は /channel-research" in benchmark_desc
-    assert "「競合分析」" in channel_research_desc
-    assert "データ収集・更新は /benchmark（未実行なら先に案内）" in channel_research_desc
+    assert "収集済みデータのチャンネル全体分析は /channel-new 分析モード" in benchmark_desc
+    assert "「競合分析」" in channel_new_desc
+    assert "データ収集・更新だけなら /benchmark" in channel_new_desc
+    assert "サムネイルだけの深掘りは /thumbnail-research" in channel_new_desc
 
     assert "YouTube への投稿は /video-upload" in videoup_desc
     assert "動画ファイルの生成（MP3→MP4）は /videoup" in video_upload_desc

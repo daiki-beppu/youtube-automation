@@ -1,6 +1,6 @@
 # 欲求語彙の選択規則
 
-`/channel-research`、`/thumbnail-research`、`/collection-ideate` の欲求分析は、この規則を共通で使う。
+`/channel-new` 分析モード、`/thumbnail-research`、`/collection-ideate` の欲求分析は、この規則を共通で使う。
 
 ## ソース選択
 

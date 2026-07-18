@@ -1,11 +1,11 @@
 ---
 name: discover-competitors
-description: "Use when YouTube Data API で追加競合候補を自動発掘・ランキング化するとき。「競合候補」「競合発掘」「discover-competitors」で発動。TTP 入替候補やニッチ仮説を複数根拠で横断比較する調査は /market-research を使う"
+description: "Use when YouTube Data API で追加競合候補を自動発掘・ランキング化するとき。「競合候補」「競合発掘」「discover-competitors」で発動。収集済み benchmark / comments のチャンネル全体分析は /channel-new 分析モード、TTP 入替候補やニッチ仮説を複数根拠で横断比較する調査は /market-research を使う"
 ---
 
 ## 前後工程
 
-- `前工程`: `/benchmark`, `/channel-research`
+- `前工程`: `/benchmark`, `/channel-new`
 - `後工程`: `/viewer-voice`, `/benchmark`
 
 ## Overview
@@ -208,4 +208,4 @@ subagent へは次を具体値で渡す:
 
 - `/channel-new`: TTP 対象確認と初期 config 生成。追加競合発掘が必要な場合に本スキルへ委譲
 - `/benchmark`: 発掘済みチャンネルのベンチマークデータ収集
-- `/channel-research`: 収集データの徹底分析
+- `/channel-new` 分析モード: 収集データの徹底分析

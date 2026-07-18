@@ -1,6 +1,6 @@
 ---
 name: thumbnail-research
-description: "Use when 収集済み競合サムネイルだけを再生数上位群 vs 下位群で深掘りし、勝ちパターンを抽出するとき。「サムネイル徹底分析」「競合サムネ分析」「サムネ勝ちパターン」で発動。データ収集は /benchmark、チャンネル全体の TTP 分析は /channel-research、生成は /thumbnail、320px 視認性比較は /thumbnail-compare"
+description: "Use when 収集済み競合サムネイルだけを再生数上位群 vs 下位群で深掘りし、勝ちパターンを抽出するとき。「サムネイル徹底分析」「競合サムネ分析」「サムネ勝ちパターン」で発動。データ収集は /benchmark、チャンネル全体の TTP 分析は /channel-new 分析モード、生成は /thumbnail、320px 視認性比較は /thumbnail-compare"
 ---
 
 ## 前後工程
@@ -74,7 +74,7 @@ find docs/benchmarks/thumbnails data/thumbnail_compare/benchmark \
 
 上位群と下位群の全動画を、次のカテゴリで同じ粒度に分類する。観察できない項目を推測せず `判定不能` とする。
 
-欲求語彙の選択、欠落時の継続条件、`推定` と根拠の記録は `.claude/skills/channel-research/references/desire-vocabulary.md` をそのまま適用する。
+欲求語彙の選択、欠落時の継続条件、`推定` と根拠の記録は `.claude/skills/channel-new/references/desire-vocabulary.md` をそのまま適用する。
 
 | カテゴリ | 記録する項目 |
 |---|---|
@@ -162,4 +162,4 @@ find docs/benchmarks/thumbnails data/thumbnail_compare/benchmark \
 - `/benchmark`: 競合動画データとサムネイル画像の収集・更新
 - `/thumbnail`: `docs/benchmarks/thumbnail-analysis.md` の勝ちパターンと参照候補を TTP 入力として生成
 - `/thumbnail-compare` → 生成候補と競合を並べた 320px 視認性比較
-- `/channel-research` → タイトル・動画尺・投稿・コメントを含むチャンネル全体の TTP 分析
+- `/channel-new` 分析モード → タイトル・動画尺・投稿・コメントを含むチャンネル全体の TTP 分析
