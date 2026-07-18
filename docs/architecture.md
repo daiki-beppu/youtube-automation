@@ -33,7 +33,7 @@ config/channel/         # 責務別分割設定（v2.0.0 以降）
   pinned-comment.json   # pinned_comment (optional)
   distrokid.json        # distrokid (optional)
 config/localizations.json
-auth/{client_secrets,token}.json
+auth/{client_secrets,token}.json  # + 任意の token.readonly.json（read-only 系用。docs/oauth-scopes.md）
 .claude/skills/         # yt-skills sync で展開
 .agents/skills          # → ../.claude/skills の symlink。skills sync が併設（Codex 探索パス）
 collections/            # コンテンツ成果物

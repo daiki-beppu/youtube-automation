@@ -87,7 +87,7 @@ class TestMainSuccessPath:
         # sys.exit が呼ばれたらテストを fail させるための sentinel
         monkeypatch.setattr(oauth_handler.sys, "exit", MagicMock(side_effect=AssertionError("sys.exit が呼ばれた")))
 
-        oauth_handler.main()  # 例外を投げずに完走すれば OK
+        oauth_handler.main([])  # 例外を投げずに完走すれば OK
 
     def test_should_not_call_sys_exit_when_test_connection_returns_false(self, monkeypatch):
         """Given ``test_connection`` が ``False`` を返す（bool 経路）
@@ -97,7 +97,7 @@ class TestMainSuccessPath:
         _install_fake_handler(monkeypatch, test_connection_return=False)
         monkeypatch.setattr(oauth_handler.sys, "exit", MagicMock(side_effect=AssertionError("sys.exit が呼ばれた")))
 
-        oauth_handler.main()
+        oauth_handler.main([])
 
 
 # ===========================================================================
@@ -116,7 +116,7 @@ class TestMainKeyboardInterrupt:
         _install_fake_handler(monkeypatch, authenticate_side_effect=KeyboardInterrupt())
 
         with pytest.raises(SystemExit) as exc_info:
-            oauth_handler.main()
+            oauth_handler.main([])
 
         assert exc_info.value.code == 130
 
@@ -128,7 +128,7 @@ class TestMainKeyboardInterrupt:
         _install_fake_handler(monkeypatch, init_side_effect=KeyboardInterrupt())
 
         with pytest.raises(SystemExit) as exc_info:
-            oauth_handler.main()
+            oauth_handler.main([])
 
         assert exc_info.value.code == 130
 
@@ -160,7 +160,7 @@ class TestMainDomainExceptions:
         _install_fake_handler(monkeypatch, authenticate_side_effect=exc)
 
         with pytest.raises(SystemExit) as exc_info:
-            oauth_handler.main()
+            oauth_handler.main([])
 
         assert exc_info.value.code == 1
 
@@ -175,7 +175,7 @@ class TestMainDomainExceptions:
         caplog.set_level(logging.DEBUG, logger=_LOGGER_NAME)
 
         with pytest.raises(SystemExit):
-            oauth_handler.main()
+            oauth_handler.main([])
 
         errors = [r for r in caplog.records if r.levelno == logging.ERROR]
         assert any("CLI 実行失敗" in r.getMessage() for r in errors), "narrow catch の error ログが出ていない"
@@ -194,7 +194,7 @@ class TestMainDomainExceptions:
         caplog.set_level(logging.DEBUG, logger=_LOGGER_NAME)
 
         with pytest.raises(SystemExit):
-            oauth_handler.main()
+            oauth_handler.main([])
 
         for record in caplog.records:
             assert _LEAKY_TOKEN_PATH not in record.getMessage(), (
@@ -217,7 +217,7 @@ class TestMainDomainExceptions:
         caplog.set_level(logging.DEBUG, logger=_LOGGER_NAME)
 
         with pytest.raises(SystemExit) as exc_info:
-            oauth_handler.main()
+            oauth_handler.main([])
 
         assert exc_info.value.code == 1
         errors = [r for r in caplog.records if r.levelno == logging.ERROR]
@@ -236,7 +236,7 @@ class TestMainDomainExceptions:
         _install_fake_handler(monkeypatch, init_side_effect=ConfigError("op read failed"))
 
         with pytest.raises(SystemExit) as exc_info:
-            oauth_handler.main()
+            oauth_handler.main([])
 
         assert exc_info.value.code == 1
 
@@ -249,7 +249,7 @@ class TestMainDomainExceptions:
         caplog.set_level(logging.DEBUG, logger=_LOGGER_NAME)
 
         with pytest.raises(SystemExit) as exc_info:
-            oauth_handler.main()
+            oauth_handler.main([])
 
         assert exc_info.value.code == 1
         assert any("CLI 実行失敗" in r.getMessage() for r in caplog.records)
@@ -272,7 +272,7 @@ class TestMainFallbackException:
         _install_fake_handler(monkeypatch, authenticate_side_effect=RuntimeError("unexpected"))
 
         with pytest.raises(SystemExit) as exc_info:
-            oauth_handler.main()
+            oauth_handler.main([])
 
         assert exc_info.value.code == 1
 
@@ -286,7 +286,7 @@ class TestMainFallbackException:
         caplog.set_level(logging.DEBUG, logger=_LOGGER_NAME)
 
         with pytest.raises(SystemExit):
-            oauth_handler.main()
+            oauth_handler.main([])
 
         errors = [r for r in caplog.records if r.levelno == logging.ERROR]
         assert any("CLI 実行中に想定外のエラー" in r.getMessage() for r in errors), "fallback の error ログが出ていない"
