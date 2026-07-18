@@ -1,3 +1,4 @@
+import { Button, Card, CardContent, CardHeader } from "@youtube-automation/ui";
 // Suno UI 上に注入する draggable overlay の shell (#892)。
 // 既存 <App /> をそのまま埋め込み、drag handle・最小化・表示 toggle・位置永続化だけを足す。
 // overlay の実マウント（Shadow DOM）は entrypoints/overlay.content.ts が担う。
@@ -15,8 +16,6 @@ import {
 } from "../lib/overlay-state";
 import { App } from "./App";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
-import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader } from "./ui/card";
 import { useDraggable } from "./useDraggable";
 
 /** overlay shell の固定幅 (px)。clamp の初期サイズと top-right 初期位置の算出に使う。 */

@@ -15,27 +15,18 @@ importers:
 
   .:
     dependencies:
-      '@radix-ui/react-slot':
-        specifier: 1.2.4
-        version: 1.2.4(@types/react@19.0.2)(react@19.2.7)
       '@webext-core/messaging':
         specifier: 2.3.0
         version: 2.3.0
-      class-variance-authority:
-        specifier: 0.7.1
-        version: 0.7.1
-      clsx:
-        specifier: 2.1.1
-        version: 2.1.1
+      '@youtube-automation/ui':
+        specifier: workspace:*
+        version: link:../shared-ui
       react:
         specifier: 19.2.7
         version: 19.2.7
       react-dom:
         specifier: 19.2.7
         version: 19.2.7(react@19.2.7)
-      tailwind-merge:
-        specifier: 3.5.0
-        version: 3.5.0
     devDependencies:
       '@tailwindcss/vite':
         specifier: 4.2.2
@@ -76,6 +67,34 @@ importers:
       wxt:
         specifier: 0.20.26
         version: 0.20.26(@types/node@26.1.1)(eslint@10.7.0(jiti@2.7.0))(jiti@2.7.0)(rolldown@1.1.5)(yaml@2.9.0)
+
+  ../shared-ui:
+    dependencies:
+      '@radix-ui/react-slot':
+        specifier: 1.2.4
+        version: 1.2.4(@types/react@19.0.2)(react@19.2.7)
+      class-variance-authority:
+        specifier: 0.7.1
+        version: 0.7.1
+      clsx:
+        specifier: 2.1.1
+        version: 2.1.1
+      tailwind-merge:
+        specifier: 3.5.0
+        version: 3.5.0
+      tailwindcss:
+        specifier: 4.2.2
+        version: 4.2.2
+    devDependencies:
+      '@types/react':
+        specifier: 19.0.2
+        version: 19.0.2
+      react:
+        specifier: 19.2.7
+        version: 19.2.7
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
 
 packages:
 

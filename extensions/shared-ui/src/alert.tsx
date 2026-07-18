@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 
-import { cn } from "@/lib/utils";
+import { cn } from "./utils";
 
 const alertVariants = cva(
   "relative w-full rounded-lg border px-4 py-3 text-sm",
@@ -9,7 +9,8 @@ const alertVariants = cva(
     variants: {
       variant: {
         default: "bg-card text-card-foreground",
-        destructive: "text-destructive bg-card",
+        warning: "border-amber-300 bg-amber-50 text-amber-900",
+        destructive: "border-red-300 bg-red-50 text-red-900",
       },
     },
     defaultVariants: {
@@ -27,7 +28,6 @@ function Alert({
     <div
       data-slot="alert"
       data-variant={variant}
-      role="alert"
       className={cn(alertVariants({ variant }), className)}
       {...props}
     />
@@ -47,4 +47,4 @@ function AlertDescription({
   );
 }
 
-export { Alert, AlertDescription };
+export { Alert, AlertDescription, alertVariants };

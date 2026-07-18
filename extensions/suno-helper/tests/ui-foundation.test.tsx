@@ -1,11 +1,17 @@
+import {
+  Alert,
+  alertVariants,
+  Button,
+  ButtonSlot,
+  buttonVariants,
+  Card,
+  CardContent,
+  CardHeader,
+  cn,
+} from "@youtube-automation/ui";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-
-import { Alert, alertVariants } from "@/components/ui/alert";
-import { Button, ButtonSlot, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
 
 const variantMarkers = {
   default: ["bg-primary", "text-primary-foreground"],

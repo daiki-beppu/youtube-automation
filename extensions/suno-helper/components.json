@@ -5,7 +5,7 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "components/theme.css",
+    "css": "components/overlay.css",
     "baseColor": "neutral",
     "cssVariables": true,
     "prefix": ""
@@ -13,9 +13,9 @@
   "iconLibrary": "lucide",
   "aliases": {
     "components": "@/components",
-    "ui": "@/components/ui",
+    "ui": "@youtube-automation/ui",
     "lib": "@/lib",
-    "utils": "@/lib/utils",
+    "utils": "@youtube-automation/ui",
     "hooks": "@/hooks"
   }
 }

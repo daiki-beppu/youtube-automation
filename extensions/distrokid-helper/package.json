@@ -18,14 +18,11 @@
     "fix": "cd .. && ultracite fix distrokid-helper"
   },
   "dependencies": {
-    "@radix-ui/react-slot": "1.2.4",
     "@webext-core/messaging": "2.3.0",
     "@wxt-dev/storage": "1.2.8",
-    "class-variance-authority": "0.7.1",
-    "clsx": "2.1.1",
+    "@youtube-automation/ui": "workspace:*",
     "react": "19.2.7",
-    "react-dom": "19.2.7",
-    "tailwind-merge": "3.5.0"
+    "react-dom": "19.2.7"
   },
   "devDependencies": {
     "@playwright/test": "1.60.0",

@@ -1,3 +1,4 @@
+import { Alert, Button, ButtonSlot } from "@youtube-automation/ui";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -20,8 +21,6 @@ import {
 import { CompletionSoundControls } from "./CompletionSoundControls";
 import { PatternList } from "./PatternList";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
-import { Alert } from "./ui/alert";
-import { Button, ButtonSlot } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { useSunoRunner } from "./useSunoRunner";
 

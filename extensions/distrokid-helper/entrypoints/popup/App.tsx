@@ -1,8 +1,8 @@
+import { Button, Select } from "@youtube-automation/ui";
+
 import { ReleaseReview } from "@/components/ReleaseReview";
 import { ServerUrlField } from "@/components/ServerUrlField";
 import { StatusBanner } from "@/components/StatusBanner";
-import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
 import { useDistrokidRunner } from "@/components/useDistrokidRunner";
 
 // popup は表示とイベント接続に集中し、runner state と実行制御は useDistrokidRunner が

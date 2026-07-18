@@ -1,9 +1,12 @@
+import {
+  Alert,
+  AlertDescription,
+  Button,
+  Card,
+  CardContent,
+} from "@youtube-automation/ui";
 import { useEffect, useState } from "react";
 import { browser } from "wxt/browser";
-
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 
 import { COMMUNITY_PHASE, DEFAULT_URL } from "../../../shared/constants";
 import {
@@ -100,7 +103,7 @@ export function App() {
         {busy ? "Checking…" : "Start"}
       </Button>
       {error ? (
-        <Alert variant="destructive">
+        <Alert role="alert" variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}

@@ -46,7 +46,7 @@ describe("Tailwind 4 build integration", () => {
     expect(declarationBlocks(css, ".bg-background")).toContainEqual(
       new Map([["background-color", "var(--background)"]])
     );
-    expect(declarationBlocks(css, ":root")).toContainEqual(
+    expect(declarationBlocks(css, ":root,:host")).toContainEqual(
       expect.objectContaining(
         new Map([
           ["--radius", ".625rem"],
