@@ -174,6 +174,7 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
     >
       {/* handle: 常に pointer-events:auto。最小化中もここだけ残り再展開を受け付ける (要件4)。 */}
       <CardHeader
+        layout="stack"
         onPointerDown={onPointerDown}
         className="flex flex-row items-center justify-between gap-0 rounded-t-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground select-none"
         style={{

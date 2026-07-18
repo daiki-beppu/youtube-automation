@@ -501,6 +501,7 @@ export function App() {
       {failedEntries.length > 0 && !controlsLocked && (
         <Alert
           variant="destructive"
+          appearance="filled"
           className="flex flex-col gap-2 rounded px-2 py-2 text-xs"
         >
           <p>
@@ -672,6 +673,7 @@ export function App() {
       {status && (
         <Alert
           variant={isError ? "destructive" : "default"}
+          appearance={isError ? "filled" : "subtle"}
           role="status"
           aria-live="polite"
           data-suno-status={isError ? "error" : "ok"}

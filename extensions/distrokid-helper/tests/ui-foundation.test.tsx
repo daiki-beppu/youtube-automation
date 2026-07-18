@@ -104,9 +104,10 @@ describe("shadcn/ui foundation", () => {
 
     expect(html).toContain('data-slot="alert"');
     expect(html).toContain('data-variant="destructive"');
+    expect(html).toContain('data-appearance="subtle"');
     expect(html).toContain('role="alert"');
     expect(html).toContain('aria-label="失敗"');
-    expect(html).toContain("text-red-900");
+    expect(html).toContain("text-destructive");
     expect(html).toContain("border-red-200");
     expect(html).toContain('data-slot="alert-description"');
     expect(html).toContain("処理に失敗しました");
@@ -130,6 +131,7 @@ describe("shadcn/ui foundation", () => {
     expect(html).toContain('id="release-review"');
     expect(html).toContain("gap-2");
     expect(html).toContain('data-slot="card-header"');
+    expect(html).toContain('data-layout="grid"');
     expect(html).toContain('data-slot="card-title"');
     expect(html).toContain('data-slot="card-content"');
     expect(html).toContain("アルバム");

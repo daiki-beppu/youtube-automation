@@ -56,3 +56,11 @@ def test_helpers_import_the_shared_theme_contract() -> None:
 
     for style in styles:
         assert '@import "@youtube-automation/ui/theme.css";' in style.read_text()
+
+
+def test_shared_ui_is_in_the_extension_lint_gate() -> None:
+    shared_package = json.loads((EXTENSIONS / "shared-ui/package.json").read_text())
+    suno_package = json.loads((EXTENSIONS / "suno-helper/package.json").read_text())
+
+    assert shared_package["scripts"]["check"] == ("pnpm --dir .. exec ultracite check shared-ui")
+    assert "shared-ui" in suno_package["scripts"]["check"]

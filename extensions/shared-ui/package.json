@@ -10,7 +10,9 @@
     "./theme.css": "./src/theme.css"
   },
   "scripts": {
-    "compile": "tsc --noEmit"
+    "compile": "tsc --noEmit",
+    "check": "pnpm --dir .. exec ultracite check shared-ui",
+    "fix": "pnpm --dir .. exec ultracite fix shared-ui"
   },
   "dependencies": {
     "@radix-ui/react-slot": "1.2.4",

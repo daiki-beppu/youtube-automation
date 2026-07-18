@@ -34,7 +34,10 @@ shared UI 自体の型検査は次で行う:
 ```bash
 nix develop .#extensions --command pnpm -C extensions/shared-ui install --frozen-lockfile
 nix develop .#extensions --command pnpm -C extensions/shared-ui compile
+nix develop .#extensions --command pnpm -C extensions/shared-ui check
 ```
+
+各 helper は独立した frozen lockfile と workspace root を維持する。このため、WXT の既知 advisory を解消する `pnpm-workspace.yaml::overrides` は 3 workspace に同じ値を明示する。pin を更新するときは 3 ファイルと 3 lockfile を同時に更新し、各 workspace の `pnpm audit --audit-level low` と release 前検証をすべて実行する。
 
 ## pnpm バージョン契約
 

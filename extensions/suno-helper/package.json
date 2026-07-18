@@ -14,8 +14,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "audit": "fallow audit --root ..",
-    "check": "cd .. && ultracite check suno-helper shared",
-    "fix": "cd .. && ultracite fix suno-helper shared"
+    "check": "cd .. && ultracite check suno-helper shared shared-ui",
+    "fix": "cd .. && ultracite fix suno-helper shared shared-ui"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "1.3.7",

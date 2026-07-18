@@ -92,7 +92,11 @@ describe("shadcn/ui foundation", () => {
       createElement(
         Card,
         { className: "w-[360px]", "aria-label": "Suno Helper" },
-        createElement(CardHeader, { className: "cursor-grab" }, "header"),
+        createElement(
+          CardHeader,
+          { className: "cursor-grab", layout: "stack" },
+          "header"
+        ),
         createElement(CardContent, { className: "p-0" }, "content")
       )
     );
@@ -102,6 +106,7 @@ describe("shadcn/ui foundation", () => {
     expect(html).toContain('aria-label="Suno Helper"');
     expect(html).toContain("w-[360px]");
     expect(html).toContain('data-slot="card-header"');
+    expect(html).toContain('data-layout="stack"');
     expect(html).toContain("cursor-grab");
     expect(html).toContain('data-slot="card-content"');
     expect(html).toContain("p-0");
@@ -114,7 +119,10 @@ describe("shadcn/ui foundation", () => {
   ] as const)(
     "Alert variant %s は対応する class を生成する",
     (variant, markers) => {
-      const classes = alertVariants({ variant }).split(" ");
+      const classes = alertVariants({
+        variant,
+        appearance: variant === "destructive" ? "filled" : "subtle",
+      }).split(" ");
       expect(classes).toEqual(expect.arrayContaining([...markers]));
     }
   );
@@ -123,13 +131,19 @@ describe("shadcn/ui foundation", () => {
     const html = renderToStaticMarkup(
       createElement(
         Alert,
-        { variant: "destructive", role: "status", "aria-live": "polite" },
+        {
+          variant: "destructive",
+          appearance: "filled",
+          role: "status",
+          "aria-live": "polite",
+        },
         "失敗"
       )
     );
 
     expect(html).toContain('data-slot="alert"');
     expect(html).toContain('data-variant="destructive"');
+    expect(html).toContain('data-appearance="filled"');
     expect(html).toContain('role="status"');
     expect(html).toContain('aria-live="polite"');
     expect(html).toContain(">失敗</div>");
