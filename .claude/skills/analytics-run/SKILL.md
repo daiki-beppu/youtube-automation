@@ -3,6 +3,11 @@ name: analytics-run
 description: "Use when YouTube Analytics の収集→分析→最新レポート表示を 1 回で完了・再開したいとき。「Analytics 一括実行」「データ更新からレポートまで」「analytics run」で発動。収集・分析・表示の一段だけを実行する場合は /analytics-collect、/analytics-analyze、/analytics-report を使う"
 ---
 
+## 前後工程
+
+- `前工程`: `/setup`
+- `後工程`: `/collection-ideate`, `/flop-analysis`
+
 ## Hard Gates
 
 - `config/channel/` が存在し、`load_config()` でロード可能であること。満たさない場合は `/channel-new` を案内して停止する。
@@ -50,4 +55,3 @@ exit code は次の固定契約とする。
 
 - `references/analytics-chain-manifest.json`: step 順、成果物、gate、判定 script の単一ソース
 - `references/analytics-chain-state.py`: 成果物タイムスタンプ、依存関係、設定値を評価する単一ソース
-
