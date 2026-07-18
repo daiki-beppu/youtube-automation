@@ -70,6 +70,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-traffic-trend": "youtube_automation.scripts.traffic_trend",
     "yt-video-analyze": "youtube_automation.scripts.video_analyze",
     "yt-vote-log": "youtube_automation.scripts.vote_log",
+    "yt-wf-batch": "youtube_automation.scripts.wf_batch",
     "yt-upload-auto": "youtube_automation.agents.youtube_auto_uploader",
     "yt-upload-collection": "youtube_automation.agents.collection_uploader",
     "yt-upload-shorts": "youtube_automation.agents.short_uploader",

@@ -84,6 +84,7 @@ yt_thumbnail_text = _make_entrypoint("youtube_automation.scripts.thumbnail_text"
 yt_title_duplicate_check = _make_entrypoint("youtube_automation.scripts.title_duplicate_check")
 yt_video_analyze = _make_entrypoint("youtube_automation.scripts.video_analyze")
 yt_vote_log = _make_entrypoint("youtube_automation.scripts.vote_log")
+yt_wf_batch = _make_entrypoint("youtube_automation.scripts.wf_batch")
 yt_upload_auto = _make_entrypoint("youtube_automation.agents.youtube_auto_uploader")
 yt_upload_collection = _make_entrypoint("youtube_automation.agents.collection_uploader")
 yt_upload_shorts = _make_entrypoint("youtube_automation.agents.short_uploader")

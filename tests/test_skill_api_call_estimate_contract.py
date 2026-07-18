@@ -66,6 +66,7 @@ BILLED_CLIS: dict[str, str] = {
     "yt-upload-collection": "YouTube Data API (videos.insert)",
     "yt-upload-shorts": "YouTube Data API (videos.insert)",
     "yt-video-analyze": "Vertex AI Gemini",
+    "yt-wf-batch": "YouTube Data API (videos.insert。内部で yt-upload-collection を実行)",
 }
 
 # 課金 API を呼ばない CLI（ローカル処理・無料 API のみ）。
