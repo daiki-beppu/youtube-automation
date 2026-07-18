@@ -32,12 +32,18 @@ function isObservedClipArray(value: unknown): value is ObservedClip[] {
       if (typeof item !== "object" || item === null) {
         return false;
       }
-      const clip = item as { duration?: unknown; id?: unknown; status?: unknown };
+      const clip = item as {
+        duration?: unknown;
+        id?: unknown;
+        status?: unknown;
+      };
       return (
         typeof clip.id === "string" &&
         typeof clip.status === "string" &&
         (clip.duration === undefined ||
-          (typeof clip.duration === "number" && Number.isFinite(clip.duration) && clip.duration >= 0))
+          (typeof clip.duration === "number" &&
+            Number.isFinite(clip.duration) &&
+            clip.duration >= 0))
       );
     })
   );
@@ -53,7 +59,11 @@ export function attachBridgeListener(tracker: ClipTracker): () => void {
       return;
     }
     const data = event.data as BridgeMessage | null;
-    if (!data || data.source !== BRIDGE_SOURCE || !isObservedClipArray(data.clips)) {
+    if (
+      !data ||
+      data.source !== BRIDGE_SOURCE ||
+      !isObservedClipArray(data.clips)
+    ) {
       return;
     }
     if (data.type === BRIDGE_MSG.GENERATE_CLIPS) {
@@ -80,7 +90,7 @@ let nextRequestId = 1;
  */
 export function requestFeedPoll(
   ids: string[],
-  timeoutMs: number = FEED_V3_POLL_RESPONSE_TIMEOUT_MS,
+  timeoutMs: number = FEED_V3_POLL_RESPONSE_TIMEOUT_MS
 ): Promise<ObservedClip[] | null> {
   return new Promise((resolve) => {
     const requestId = nextRequestId++;
@@ -107,8 +117,13 @@ export function requestFeedPoll(
     const timer = setTimeout(() => cleanup(null), timeoutMs);
     window.addEventListener("message", handler);
     window.postMessage(
-      { source: BRIDGE_SOURCE, type: BRIDGE_MSG.FEED_V3_POLL_REQUEST, requestId, ids },
-      window.location.origin,
+      {
+        source: BRIDGE_SOURCE,
+        type: BRIDGE_MSG.FEED_V3_POLL_REQUEST,
+        requestId,
+        ids,
+      },
+      window.location.origin
     );
   });
 }
@@ -122,7 +137,7 @@ export function requestFeedPoll(
 export function requestSliderSet(
   ariaLabel: string,
   target: number,
-  timeoutMs: number = SLIDER_SET_RESPONSE_TIMEOUT_MS,
+  timeoutMs: number = SLIDER_SET_RESPONSE_TIMEOUT_MS
 ): Promise<boolean> {
   return new Promise((resolve) => {
     const requestId = nextRequestId++;
@@ -149,8 +164,14 @@ export function requestSliderSet(
     const timer = setTimeout(() => cleanup(false), timeoutMs);
     window.addEventListener("message", handler);
     window.postMessage(
-      { source: BRIDGE_SOURCE, type: BRIDGE_MSG.SLIDER_SET_REQUEST, requestId, ariaLabel, target },
-      window.location.origin,
+      {
+        source: BRIDGE_SOURCE,
+        type: BRIDGE_MSG.SLIDER_SET_REQUEST,
+        requestId,
+        ariaLabel,
+        target,
+      },
+      window.location.origin
     );
   });
 }
@@ -174,7 +195,7 @@ export function createFeedPoller(
     now?: () => number;
     /** poll 実体の DI（テスト用）。省略時は requestFeedPoll。 */
     poll?: (ids: string[]) => Promise<unknown>;
-  } = {},
+  } = {}
 ): FeedPoller {
   const intervalMs = options.intervalMs ?? FEED_POLL_INTERVAL_MS;
   const staleMs = options.staleMs ?? FEED_STALE_MS;

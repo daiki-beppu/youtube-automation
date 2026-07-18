@@ -5,12 +5,24 @@ on:
     branches: [main, feat/1143-suno-bulk-download]
   pull_request: {}
 
+# main への push は cancel-in-progress の対象外（デプロイ相当の run を途中で殺さない）
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v30
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
       - run: nix develop --command uv sync
       - parallel:
           - name: Ruff check
@@ -29,10 +41,54 @@ jobs:
           terraform_wrapper: false
       - name: Install OpenSSH server
         run: sudo apt-get update && sudo apt-get install -y openssh-server
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
       - name: Install dependencies
         run: nix develop --command uv sync
       - name: Test
-        run: nix develop --command uv run pytest
+        run: nix develop --command uv run pytest -n auto
+
+  build-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+      - name: Frozen sync (lock drift check)
+        run: nix develop --command uv sync --frozen
+      - name: Build wheel and sdist
+        run: nix develop --command uv build
+      - name: Smoke test installed wheel
+        run: |
+          nix develop --command bash -euo pipefail -c '
+            venv=$(mktemp -d)/venv
+            uv venv "$venv"
+            uv pip install --python "$venv/bin/python" dist/*.whl
+            "$venv/bin/yt-skills" list
+          '
+
+  takt-workflow-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v6
+      # takt は CI 再現性のため pin する。takt を upgrade したらこの pin も bump し、
+      # contract テストの red/green で lite workflow との drift を検出する
+      - name: Install takt (pinned)
+        run: npm install -g takt@0.51.0
+      - name: Install dependencies
+        run: uv sync
+      - name: Workflow doctor (lite)
+        run: TAKT_CONFIG_DIR="$PWD/tests/fixtures/takt_global" takt workflow doctor lite
+      - name: Lite workflow contract tests
+        run: TAKT_LITE_CONTRACT_REQUIRED=1 uv run pytest tests/test_takt_lite_workflow_contract.py -q
 
   windows-cost-tracker:
     runs-on: windows-latest

@@ -1,4 +1,7 @@
-const TRUSTED_DOWNLOAD_HOSTS = ["suno.com", "suno-ai--bulk-download-prod-web.modal.run"];
+const TRUSTED_DOWNLOAD_HOSTS = [
+  "suno.com",
+  "suno-ai--bulk-download-prod-web.modal.run",
+];
 const TRUSTED_DOWNLOAD_HOST_SUFFIXES = [".suno.com", ".suno.ai"];
 const DOWNLOAD_WATCHER_SESSION_KEY = "suno-helper:downloadWatcher";
 const DOWNLOAD_COMPLETE_POLL_MS = 3000;
@@ -7,7 +10,7 @@ const DOWNLOAD_WATCH_TIMEOUT_MS = 600000;
 type DownloadMessageSender = (
   type: "downloadComplete" | "downloadFailed",
   data: { filename: string } | { message: string },
-  tabId: number,
+  tabId: number
 ) => Promise<unknown>;
 
 interface DownloadWatcherState {
@@ -17,11 +20,16 @@ interface DownloadWatcherState {
 }
 
 export interface DownloadWatcherController {
-  start: (tabId: number, format: string) => Promise<{ ok: true } | { ok: false; message: string }>;
+  start: (
+    tabId: number,
+    format: string
+  ) => Promise<{ ok: true } | { ok: false; message: string }>;
   cancelForTab: (tabId: number) => Promise<void>;
 }
 
-export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSender }): DownloadWatcherController {
+export function installDownloadWatcher(deps: {
+  sendMessage: DownloadMessageSender;
+}): DownloadWatcherController {
   let activeDownloadWatcher: DownloadWatcherState | null = null;
   const watchTimeout: { id?: ReturnType<typeof setTimeout> } = {};
   const completedPoll: { id?: ReturnType<typeof setInterval> } = {};
@@ -40,10 +48,16 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
     );
   };
 
-  const isTrustedSunoDownload = (item: chrome.downloads.DownloadItem): boolean =>
-    isTrustedSunoDownloadUrl(item.url) || isTrustedSunoDownloadUrl(item.finalUrl);
+  const isTrustedSunoDownload = (
+    item: chrome.downloads.DownloadItem
+  ): boolean =>
+    isTrustedSunoDownloadUrl(item.url) ||
+    isTrustedSunoDownloadUrl(item.finalUrl);
 
-  const isZipStartedAfterMonitor = (item: chrome.downloads.DownloadItem, monitorStartedAt: number): boolean => {
+  const isZipStartedAfterMonitor = (
+    item: chrome.downloads.DownloadItem,
+    monitorStartedAt: number
+  ): boolean => {
     const filename = item.filename ?? "";
     if (!filename.toLowerCase().endsWith(".zip")) {
       return false;
@@ -52,19 +66,30 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
       return false;
     }
     const downloadStartMs = new Date(item.startTime).getTime();
-    return Number.isFinite(downloadStartMs) && downloadStartMs >= monitorStartedAt - 5000;
+    return (
+      Number.isFinite(downloadStartMs) &&
+      downloadStartMs >= monitorStartedAt - 5000
+    );
   };
 
-  const normalizeWatcherState = (value: unknown): DownloadWatcherState | null => {
+  const normalizeWatcherState = (
+    value: unknown
+  ): DownloadWatcherState | null => {
     if (typeof value !== "object" || value === null) {
       return null;
     }
     const record = value as Record<string, unknown>;
-    if (typeof record.tabId !== "number" || typeof record.monitorStartedAt !== "number") {
+    if (
+      typeof record.tabId !== "number" ||
+      typeof record.monitorStartedAt !== "number"
+    ) {
       return null;
     }
     const targetDownloadId =
-      typeof record.targetDownloadId === "number" || record.targetDownloadId === null ? record.targetDownloadId : null;
+      typeof record.targetDownloadId === "number" ||
+      record.targetDownloadId === null
+        ? record.targetDownloadId
+        : null;
     return {
       tabId: record.tabId,
       monitorStartedAt: record.monitorStartedAt,
@@ -106,10 +131,17 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
     }
     completedPoll.id = setInterval(() => {
       findTargetDownload(watcher, (item) => {
-        if (item && item.state === "complete" && isZipStartedAfterMonitor(item, watcher.monitorStartedAt)) {
+        if (
+          item &&
+          item.state === "complete" &&
+          isZipStartedAfterMonitor(item, watcher.monitorStartedAt)
+        ) {
           const currentWatcher =
             watcher.targetDownloadId === null
-              ? replaceActiveDownloadWatcher(watcher, { ...watcher, targetDownloadId: item.id })
+              ? replaceActiveDownloadWatcher(watcher, {
+                  ...watcher,
+                  targetDownloadId: item.id,
+                })
               : watcher;
           notifyDownloadComplete(currentWatcher, item.filename ?? "", item.id);
         }
@@ -120,21 +152,33 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
     watchTimeout.id = setTimeout(
       () => {
         findTargetDownload(watcher, (item) => {
-          if (item && item.state === "complete" && isZipStartedAfterMonitor(item, watcher.monitorStartedAt)) {
+          if (
+            item &&
+            item.state === "complete" &&
+            isZipStartedAfterMonitor(item, watcher.monitorStartedAt)
+          ) {
             const currentWatcher =
               watcher.targetDownloadId === null
-                ? replaceActiveDownloadWatcher(watcher, { ...watcher, targetDownloadId: item.id })
+                ? replaceActiveDownloadWatcher(watcher, {
+                    ...watcher,
+                    targetDownloadId: item.id,
+                  })
                 : watcher;
-            notifyDownloadComplete(currentWatcher, item.filename ?? "", item.id);
+            notifyDownloadComplete(
+              currentWatcher,
+              item.filename ?? "",
+              item.id
+            );
             return;
           }
-          const message = "Download all 監視タイムアウト（10 分）。listener を解除しました。";
+          const message =
+            "Download all 監視タイムアウト（10 分）。listener を解除しました。";
           console.warn(`[suno-helper] ${message}`);
           cleanupWatcher(watcher);
           notifyDownloadFailed(watcher, message);
         });
       },
-      Math.max(0, DOWNLOAD_WATCH_TIMEOUT_MS - elapsedMs),
+      Math.max(0, DOWNLOAD_WATCH_TIMEOUT_MS - elapsedMs)
     );
   }
 
@@ -146,7 +190,7 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
 
   const replaceActiveDownloadWatcher = (
     current: DownloadWatcherState,
-    next: DownloadWatcherState,
+    next: DownloadWatcherState
   ): DownloadWatcherState => {
     if (activeDownloadWatcher !== current) {
       return current;
@@ -173,31 +217,51 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
     clearStoredWatcherState();
   };
 
-  const notifyDownloadFailed = (watcher: DownloadWatcherState, message: string): void => {
-    deps.sendMessage("downloadFailed", { message }, watcher.tabId).catch((err: unknown) => {
-      console.warn("[suno-helper] downloadFailed 中継失敗:", err);
-    });
+  const notifyDownloadFailed = (
+    watcher: DownloadWatcherState,
+    message: string
+  ): void => {
+    deps
+      .sendMessage("downloadFailed", { message }, watcher.tabId)
+      .catch((err: unknown) => {
+        console.warn("[suno-helper] downloadFailed 中継失敗:", err);
+      });
   };
 
-  const notifyDownloadComplete = (watcher: DownloadWatcherState, filename: string, id?: number): void => {
+  const notifyDownloadComplete = (
+    watcher: DownloadWatcherState,
+    filename: string,
+    id?: number
+  ): void => {
     if (activeDownloadWatcher !== watcher) {
       return;
     }
-    console.info(`[suno-helper] ZIP ダウンロード完了: ${filename}${id === undefined ? "" : ` (id=${id})`}`);
+    console.info(
+      `[suno-helper] ZIP ダウンロード完了: ${filename}${id === undefined ? "" : ` (id=${id})`}`
+    );
     cleanupWatcher(watcher);
-    deps.sendMessage("downloadComplete", { filename }, watcher.tabId).catch((err: unknown) => {
-      console.warn("[suno-helper] downloadComplete 中継失敗:", err);
-    });
+    deps
+      .sendMessage("downloadComplete", { filename }, watcher.tabId)
+      .catch((err: unknown) => {
+        console.warn("[suno-helper] downloadComplete 中継失敗:", err);
+      });
   };
 
   const findTargetDownload = (
     watcher: DownloadWatcherState,
-    callback: (item: chrome.downloads.DownloadItem | null) => void,
+    callback: (item: chrome.downloads.DownloadItem | null) => void
   ): void => {
     if (watcher.targetDownloadId === null) {
-      chrome.downloads.search({ state: "complete", limit: 50, orderBy: ["-startTime"] }, (results) => {
-        callback(results.find((item) => isZipStartedAfterMonitor(item, watcher.monitorStartedAt)) ?? null);
-      });
+      chrome.downloads.search(
+        { state: "complete", limit: 50, orderBy: ["-startTime"] },
+        (results) => {
+          callback(
+            results.find((item) =>
+              isZipStartedAfterMonitor(item, watcher.monitorStartedAt)
+            ) ?? null
+          );
+        }
+      );
       return;
     }
     chrome.downloads.search({ id: watcher.targetDownloadId }, (results) => {
@@ -212,7 +276,9 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
     }
   });
 
-  const withWatcherState = (fn: (watcher: DownloadWatcherState) => void): void => {
+  const withWatcherState = (
+    fn: (watcher: DownloadWatcherState) => void
+  ): void => {
     void hydration.then(() => {
       if (activeDownloadWatcher !== null) {
         fn(activeDownloadWatcher);
@@ -222,31 +288,43 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
 
   const createdListener = (item: chrome.downloads.DownloadItem): void => {
     withWatcherState((watcher) => {
-      if (watcher.targetDownloadId !== null || !isZipStartedAfterMonitor(item, watcher.monitorStartedAt)) {
+      if (
+        watcher.targetDownloadId !== null ||
+        !isZipStartedAfterMonitor(item, watcher.monitorStartedAt)
+      ) {
         return;
       }
-      replaceActiveDownloadWatcher(watcher, { ...watcher, targetDownloadId: item.id });
+      replaceActiveDownloadWatcher(watcher, {
+        ...watcher,
+        targetDownloadId: item.id,
+      });
     });
   };
 
   const handleDownloadState = (
     watcher: DownloadWatcherState,
     item: chrome.downloads.DownloadItem,
-    state: "complete" | "interrupted",
+    state: "complete" | "interrupted"
   ): void => {
     const filename = item.filename ?? "";
     if (!isZipStartedAfterMonitor(item, watcher.monitorStartedAt)) {
-      console.debug("[suno-helper] Download all 監視対象外の download event を無視:", {
-        filename,
-        url: item.url,
-        startTime: item.startTime,
-        state,
-      });
+      console.debug(
+        "[suno-helper] Download all 監視対象外の download event を無視:",
+        {
+          filename,
+          url: item.url,
+          startTime: item.startTime,
+          state,
+        }
+      );
       return;
     }
     const currentWatcher =
       watcher.targetDownloadId === null
-        ? replaceActiveDownloadWatcher(watcher, { ...watcher, targetDownloadId: item.id })
+        ? replaceActiveDownloadWatcher(watcher, {
+            ...watcher,
+            targetDownloadId: item.id,
+          })
         : watcher;
     if (state === "interrupted") {
       const message = `ZIP ダウンロードが中断されました: ${filename} (id=${item.id})`;
@@ -264,7 +342,10 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
       return;
     }
     withWatcherState((watcher) => {
-      if (watcher.targetDownloadId !== null && watcher.targetDownloadId !== delta.id) {
+      if (
+        watcher.targetDownloadId !== null &&
+        watcher.targetDownloadId !== delta.id
+      ) {
         return;
       }
       chrome.downloads.search({ id: delta.id }, (results) => {
@@ -283,18 +364,37 @@ export function installDownloadWatcher(deps: { sendMessage: DownloadMessageSende
     start: async (tabId, format) => {
       await hydration;
       if (activeDownloadWatcher !== null) {
-        if (activeDownloadWatcher.tabId === tabId && activeDownloadWatcher.targetDownloadId === null) {
-          console.warn("[suno-helper] 未確定の Download all 監視を同一タブの再実行で解除します。");
+        if (
+          activeDownloadWatcher.tabId === tabId &&
+          activeDownloadWatcher.targetDownloadId === null
+        ) {
+          console.warn(
+            "[suno-helper] 未確定の Download all 監視を同一タブの再実行で解除します。"
+          );
           cleanupWatcher(activeDownloadWatcher);
         } else {
-          return { ok: false, message: "別の Download all 監視が進行中です。完了後に再実行してください。" } as const;
+          return {
+            ok: false,
+            message:
+              "別の Download all 監視が進行中です。完了後に再実行してください。",
+          } as const;
         }
       }
       if (activeDownloadWatcher !== null) {
-        return { ok: false, message: "別の Download all 監視が進行中です。完了後に再実行してください。" } as const;
+        return {
+          ok: false,
+          message:
+            "別の Download all 監視が進行中です。完了後に再実行してください。",
+        } as const;
       }
-      console.info(`[suno-helper] Download all 監視を開始します (format=${format})`);
-      setActiveDownloadWatcher({ tabId, monitorStartedAt: Date.now(), targetDownloadId: null });
+      console.info(
+        `[suno-helper] Download all 監視を開始します (format=${format})`
+      );
+      setActiveDownloadWatcher({
+        tabId,
+        monitorStartedAt: Date.now(),
+        targetDownloadId: null,
+      });
       return { ok: true } as const;
     },
     cancelForTab: async (tabId) => {

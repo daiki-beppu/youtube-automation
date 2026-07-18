@@ -1127,3 +1127,102 @@ class TestExtractMdSection:
 
         # Then
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# quota 記録（Issue #2058）
+# ---------------------------------------------------------------------------
+
+
+class TestQuotaLogging:
+    """dry-run / apply / failure で quota 記録が固定されること（Issue #2058）."""
+
+    @staticmethod
+    def _quota_calls(quota_mock) -> list[tuple[str, str, float]]:
+        return [(c.args[0], c.args[1], c.args[2]) for c in quota_mock.call_args_list]
+
+    def test_dry_run_records_only_issued_read_request(self, tmp_path, monkeypatch):
+        """dry-run では実際に発行した videos.list だけが記録される."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        # Given
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_descriptions(ch, "alpha", video_id="V_ALPHA")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc", "--dry-run"])
+        yt_mock = _build_youtube_mock([_snippet("V_ALPHA")])
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "log_quota") as quota_mock,
+            patch.object(mod.time, "sleep"),
+        ):
+            # When
+            mod.main()
+
+        # Then: videos.list 1 件のみ（update は発行されないので記録されない）
+        assert self._quota_calls(quota_mock) == [("youtube-data-api", "videos.list", 1)]
+
+    def test_apply_records_read_and_update_as_separate_operations(self, tmp_path, monkeypatch):
+        """apply では read（videos.list）と videos.update が別 operation として記録される."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        # Given: 2 件
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_descriptions(ch, "a", video_id="V1")
+        _make_collection_with_descriptions(ch, "b", video_id="V2")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        yt_mock = _build_youtube_mock([_snippet("V1"), _snippet("V2")])
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "log_quota") as quota_mock,
+            patch.object(mod.time, "sleep"),
+        ):
+            # When
+            mod.main()
+
+        # Then: リクエスト回数と記録件数が一致（videos.list ×1 + videos.update ×2）
+        assert self._quota_calls(quota_mock) == [
+            ("youtube-data-api", "videos.list", 1),
+            ("youtube-data-api", "videos.update", 50),
+            ("youtube-data-api", "videos.update", 50),
+        ]
+        update_metadata = [c.kwargs["metadata"] for c in quota_mock.call_args_list[1:]]
+        assert update_metadata == [{"video_id": "V1"}, {"video_id": "V2"}]
+
+    def test_update_failure_records_quota_then_raises_original_error(self, tmp_path, monkeypatch):
+        """update 失敗時も quota を記録した上で、元のドメイン例外契約が維持される."""
+        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+
+        # Given: V1 失敗 / V2 成功
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_descriptions(ch, "a", video_id="V1")
+        _make_collection_with_descriptions(ch, "b", video_id="V2")
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
+        yt_mock = _build_youtube_mock([_snippet("V1"), _snippet("V2")])
+        resp = MagicMock()
+        resp.status = 403
+        http_err = HttpError(resp=resp, content=b'{"error": {"errors": [{"reason": "forbidden"}]}}')
+        yt_mock.videos.return_value.update.return_value.execute.side_effect = [http_err, {"id": "ok"}]
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "log_quota") as quota_mock,
+            patch.object(mod.time, "sleep"),
+        ):
+            # When/Then: 部分進捗（V2 は更新）後に最初の失敗が raise される
+            with pytest.raises(YouTubeAPIError):
+                mod.main()
+
+        # Then: 失敗した update も含め全リクエストが記録される
+        assert self._quota_calls(quota_mock) == [
+            ("youtube-data-api", "videos.list", 1),
+            ("youtube-data-api", "videos.update", 50),
+            ("youtube-data-api", "videos.update", 50),
+        ]

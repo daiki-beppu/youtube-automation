@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from youtube_automation.utils.exceptions import YouTubeAPIError
 from youtube_automation.utils.retention_analytics import RetentionAnalyticsMixin
 from youtube_automation.utils.video_analytics import VideoAnalyticsMixin
 
@@ -58,6 +59,17 @@ class TestGetAudienceRetention:
 
 
 class TestGetRetentionSummary:
+    def test_top_video_api_failure_is_propagated(self, collector, monkeypatch):
+        """上位動画一覧の API 失敗を「対象動画なし」に変換しない。"""
+
+        def fail_request(request, message):
+            raise YouTubeAPIError(message)
+
+        monkeypatch.setattr("youtube_automation.utils.retention_analytics.execute_with_retry", fail_request)
+
+        with pytest.raises(YouTubeAPIError, match="YouTube Analytics API request failed"):
+            collector.get_retention_summary("2026-01-01", "2026-04-01", top_n=2)
+
     def test_returns_sorted_by_retention(self, collector):
         """上位動画の維持率がソートされて返る"""
         # 上位動画リスト取得用のモック

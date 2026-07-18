@@ -8,4 +8,10 @@
 //   - downloads: Suno playlist の ZIP 一括ダウンロード完了を chrome.downloads API で監視する (#1146)
 //   - debugger: Suno の isTrusted チェックを通す trusted Cmd+P dispatch (#1251)
 //   - scripting: Chrome が静的 content script 登録を取りこぼしたときの Suno タブへの明示再注入
-export const MANIFEST_PERMISSIONS = ["storage", "activeTab", "downloads", "debugger", "scripting"] as const;
+export const MANIFEST_PERMISSIONS = [
+  "storage",
+  "activeTab",
+  "downloads",
+  "debugger",
+  "scripting",
+] as const;

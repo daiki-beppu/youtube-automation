@@ -20,6 +20,8 @@ description: "Use when コレクション制作の進捗を読むだけで確認
 
 `/wf-status` は読み取り専用で `workflow-state.json` を一切更新しない。`/wf-next` を呼んだら何が起きるか **事前に確認するための skill**。
 
+**唯一の例外**: raw_master 突合チェック（後述）が不整合を検知し、**ユーザーが明示承認した場合のみ** `yt-raw-master-check --apply` で `assets.raw_master` / `updated_at` を修復する（#1668）。承認なしの書き込みは一切行わない。
+
 ## 前提
 
 `config/channel/` が存在すること（`load_config()` でロード可能）。
@@ -35,6 +37,11 @@ description: "Use when コレクション制作の進捗を読むだけで確認
 1. `collections/planning/` を Glob で探索
 2. 各コレクションの `workflow-state.json` を読み込み
 3. スキーマ判別: `steps` キーがあれば旧スキーマ（v1）、なければ新スキーマ（v2）
+4. 新スキーマ（v2）のコレクションには `uv run yt-raw-master-check <dir>` で `assets.raw_master` と `01-master/` 実ファイルの突合チェックを実行（読み取り専用 / #1668）
+   - **exit 2（不整合）**: 進捗表示に ⚠️ を添えて CLI の警告（例:「assets.raw_master が実ファイルと一致しません。更新しますか」）を提示し、AskUserQuestion で更新可否を確認する
+     - 承認 → `uv run yt-raw-master-check <dir> --apply` で修復し、修復後の状態で進捗を表示する
+     - 非承認 → 何も書き込まず、不整合が残っている旨を表示に含める（次回起動時も同じ警告が再表示される）。**警告を出さずに silent 続行するのは禁止**
+   - **exit 1（エラー）**: workflow-state.json 破損等として「障害時ガイダンス」に従う
 
 ### 新スキーマ（v2）の表示
 
@@ -59,6 +66,7 @@ phase 値と日本語ラベル:
 - `assets.raw_master = null` + `music_engine = lyria` → 「Lyria 生成待ち（/wf-next で開始）」
 - `assets.raw_master != null` + `assets.master_audio = null` + `load_config().workflow.wf_next.skip_manual_mastering = true` → 「raw master 直採用待ち（/wf-next で mastered へ進行）」
 - `assets.raw_master != null` + `assets.master_audio = null` + `load_config().workflow.wf_next.skip_manual_mastering = false` → 「ミキシング+マスタリング待ち」
+- `workflow.wf_next` の boolean は全て「`true` = 手動工程（承認）を省いて自動進行」の向き（#1744）。`skip_audio_approval = false` のチャンネルは音源確定前、`skip_upload_approval = false` のチャンネルはアップロード前に `/wf-next` が承認を取るため、該当フェーズは承認待ちで停止していることがある
 
 詳細表示（コレクション1つの場合 or ユーザーが指定した場合）:
 ```

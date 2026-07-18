@@ -286,14 +286,7 @@ def _render_thumbnail_skill(ctx: ChannelInitContext) -> str:
         f"      notes: {_yaml_scalar(reference_notes)}\n"
         '    diff_prompt_template: "Apply this channel visual direction to the collection theme."\n'
         "    composition_rules:\n"
-        '      environment: "TBD"\n'
-        '      character_size: "TBD"\n'
-        '      character_pose: "TBD"\n'
-        '      allowed_actions: "TBD"\n'
-        '      ng_actions: "TBD"\n'
-        '      background: "TBD"\n'
         '      text_lines: "タイトルは 2 行以内"\n'
-        f"      channel_branding: {_yaml_scalar(ctx.name)}\n"
     )
 
 

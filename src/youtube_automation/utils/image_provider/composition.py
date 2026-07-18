@@ -335,6 +335,57 @@ def validate_single_step_request_references(generation_mode: object, references:
     )
 
 
+def resolve_forbid_keywords(skill_cfg: dict[str, object]) -> list[str]:
+    """``image_generation.gemini.forbid_keywords`` を ``list[str]`` に正規化して返す。
+
+    未設定・空リストは ``[]``（no-op）。list 以外や非文字列要素は ``ConfigError``。
+    空白のみの要素は除外する。キーは gemini namespace に置くが、検査自体は
+    provider 非依存（Gemini / OpenAI / gemini_cli / codex の全入口で共通）。
+    """
+    image_gen = skill_cfg.get("image_generation")
+    if not isinstance(image_gen, dict):
+        return []
+    gemini = image_gen.get("gemini")
+    if not isinstance(gemini, dict):
+        return []
+    raw = gemini.get("forbid_keywords")
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ConfigError("image_generation.gemini.forbid_keywords は list[str] で指定してください")
+    keywords: list[str] = []
+    for item in raw:
+        if not isinstance(item, str):
+            raise ConfigError(f"image_generation.gemini.forbid_keywords の要素は文字列で指定してください: {item!r}")
+        stripped = item.strip()
+        if stripped:
+            keywords.append(stripped)
+    return keywords
+
+
+def find_forbidden_keywords(prompt: str, keywords: list[str]) -> list[str]:
+    """プロンプトに含まれる NG キーワードを検出して返す（大小文字無視の部分一致）。"""
+    lower = prompt.lower()
+    return [kw for kw in keywords if kw.lower() in lower]
+
+
+def validate_forbid_keywords(prompt: str, skill_cfg: dict[str, object]) -> None:
+    """最終プロンプトが forbid_keywords にヒットしたら ``ConfigError`` を送出する。
+
+    workflow-state.json::planning.music.* 等の他ドメイン値がチャンネル規約違反の
+    まま画像 prompt に転写される事故（#1664）を生成 API 呼び出し前に止める。
+    forbid_keywords 未設定時は何もしない（no-op）。
+    """
+    hits = find_forbidden_keywords(prompt, resolve_forbid_keywords(skill_cfg))
+    if hits:
+        raise ConfigError(
+            "プロンプトが forbid_keywords に一致したため生成を中止しました: "
+            + ", ".join(hits)
+            + "（config/skills/thumbnail.yaml の image_generation.gemini.forbid_keywords を確認し、"
+            "プロンプトから該当表現を除いて再実行してください）"
+        )
+
+
 def normalize_reference_default(default: str | list[str] | None) -> list[str]:
     """``reference_images.default`` を ``list[str]`` に正規化する。
 

@@ -56,6 +56,10 @@ def _codex_prompt_script_path() -> Path:
     return _repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "codex-prompt.py"
 
 
+def _thumbnail_archive_script_path() -> Path:
+    return _repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "archive-approved-thumbnail.py"
+
+
 def _load_thumbnail_default_config() -> dict:
     return yaml.safe_load(_read_thumbnail_default_config()) or {}
 
@@ -262,14 +266,14 @@ def test_thumbnail_skill_documents_thumbnail_compare_and_alignment_check_roles()
     assert "公開**後**" in role_block
 
 
-def test_thumbnail_skill_documents_text_included_to_textless_background_flow() -> None:
-    """#1901: /thumbnail は文字入り thumbnail 承認後に textless main を再生成する。"""
+def test_thumbnail_skill_documents_textless_first_deterministic_flow() -> None:
+    """#1907: 標準フローは textless 背景を先に確定し yt-thumbnail-text で実フォント合成する。"""
     skill = _read_thumbnail_skill()
 
     standard_block = _slice_between(
         skill,
         "### 標準生成順序とファイル契約",
-        "### Single-Step / TTP モード",
+        "### thumbnail-text-profile 適用（#1907）",
     )
     single_step_block = _slice_between(
         skill,
@@ -278,20 +282,33 @@ def test_thumbnail_skill_documents_text_included_to_textless_background_flow() -
     )
 
     for required in (
-        "テキスト付き YouTube サムネ → 承認済みサムネから textless 動画背景",
+        "textless 動画背景の生成 → `yt-thumbnail-text` による実フォント合成",
         "ベンチマーク先サムネを参照画像",
         "10-assets/thumbnail.jpg",
         "10-assets/main.png",
         "10-assets/main.jpg",
-        "承認済み `thumbnail.jpg` を参照画像",
+        "uv run yt-thumbnail-text",
+        "--background <collection-path>/10-assets/main.png",
+        "text_strip_clause",
+        "uv run yt-thumbnail-check <collection-path>/10-assets/main-v1.png --json",
+        "cp main-v1.png main.png",
+        "cp thumbnail-v1.jpg thumbnail.jpg",
         "/thumbnail-compare",
         "config/skills/loop-video.yaml::enabled: true",
         "config/skills/loop-video.yaml::enabled: false",
         "静止画背景",
         "両者を同一画像で代用しない",
+        "AI 焼き込み経路（fallback・非既定）",
     ):
         assert required in standard_block
 
+    # textless 背景の確定が実フォント合成より先
+    assert standard_block.find("cp main-v1.png main.png") < standard_block.find("uv run yt-thumbnail-text")
+    # AI 焼き込みは運用者の明示選択のみ
+    assert "運用者が明示的に選んだときだけ" in standard_block
+
+    # AI 焼き込み経路（Single-Step 章）は fallback として従来契約のまま残す（#1901 の順序を維持）
+    assert "AI 焼き込み経路（fallback・非既定）**の手順" in single_step_block
     for required in (
         "/thumbnail-compare",
         "cp thumbnail-v1.jpg thumbnail.jpg",
@@ -312,13 +329,109 @@ def test_thumbnail_skill_documents_text_included_to_textless_background_flow() -
     assert "テキストなし版の先行確定" not in single_step_block
 
 
+def test_thumbnail_skill_applies_thumbnail_text_profile_with_default_fallback() -> None:
+    """#1907: thumbnail-text-profile の 3 セクションを適用し、不在時はデフォルト値で続行する。"""
+    skill = _read_thumbnail_skill()
+    profile_block = _slice_between(
+        skill,
+        "### thumbnail-text-profile 適用（#1907）",
+        "### 承認済みサムネイルのアーカイブ",
+    )
+
+    for required in (
+        "docs/benchmarks/thumbnail-text-profile.md",
+        "`schema_version: 1`",
+        ".claude/skills/channel-research/SKILL.md",
+        "## font_tendency",
+        "## text_content_pattern",
+        "## placement_tendency",
+        "image_generation.gemini.thumbnail_text.overlay.font.title",
+        "`overlay.layout.anchor` / `margin_x` / `margin_y`",
+        "typeface_classification",
+        "line_count_range",
+        "languages",
+        "character_count_range",
+        "copy_pattern",
+        "anchor_position",
+        "日本語対応 .ttf/.otf/.ttc",
+        "競合のチャンネル名・コレクション名・シリーズ名・コピー原文",
+    ):
+        assert required in profile_block
+
+    # profile 不在は前提ガードにしない（現行デフォルト値で続行）
+    assert "前提ガードではない" in profile_block
+    assert "エラーで停止しない" in profile_block
+    assert "unknown" in profile_block
+    # フォントはローカル既存ファイルのみ（同梱・自動ダウンロードはスコープ外）
+    assert "同梱・自動ダウンロードはしない" in profile_block
+    # profile 不在かつフォント未設定でもローカル選定でフォント揺れを解消する
+    assert "profile 不在でも `overlay.font.title` が未設定の場合" in profile_block
+    # config への書き込みはユーザー承認つきの明示更新
+    assert "承認を得てから書き込む" in profile_block
+
+
+def test_thumbnail_archive_is_opt_in_and_wired_after_every_approval_path() -> None:
+    config = _load_thumbnail_default_config()
+    skill = _read_thumbnail_skill()
+    archive_command = (
+        "uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py <collection-path>"
+    )
+
+    assert config["archive"] == {"enabled": False}
+    assert "archive.enabled: false" in skill
+    assert "assets/thumbnail-gallery/<collection-dir-name>.<ext>" in skill
+    # 標準（決定的合成）/ codex / Single-Step / Two-Phase の確定直後 + アーカイブ節本文 = 5
+    assert skill.count(archive_command) == 5
+
+    approval_block = _slice_between(skill, "### 承認済みサムネイルのアーカイブ", "### Single-Step / TTP モード")
+    for approval_path in ("手動承認", "codex", "Two-Phase", "フォント固定", "自動選択"):
+        assert approval_path in approval_block
+    assert "確定直後" in approval_block
+    assert "既存の検証・承認順序を変えず" in approval_block
+
+    opening_gate = "\n".join(skill.splitlines()[:60])
+    assert "**Hard Gate**" in opening_gate
+    assert "アーカイブ" in opening_gate
+    assert "後工程へ進まず停止" in opening_gate
+
+    codex_block = _slice_between(skill, "## codex 経由の生成", "## Channel Adaptation")
+    standard_block = _slice_between(
+        skill,
+        "### 標準生成順序とファイル契約",
+        "### thumbnail-text-profile 適用（#1907）",
+    )
+    single_step_block = _slice_between(
+        skill,
+        "### Single-Step / TTP モード",
+        "### Two-Phase モード（従来方式・フォールバック）",
+    )
+    two_phase_block = _slice_between(
+        skill,
+        "### Two-Phase モード（従来方式・フォールバック）",
+        "## フォント安定化",
+    )
+    auto_selection_block = _slice_between(skill, "## 自動選択", "## 品質チェック")
+
+    for wired_block in (codex_block, standard_block, single_step_block, two_phase_block):
+        assert wired_block.find("thumbnail.jpg") < wired_block.find(archive_command)
+    assert "uv run yt-thumbnail-auto-select <collection-path> --apply" in auto_selection_block
+    assert "--apply &&" not in auto_selection_block
+    assert "候補生成後のユーザー承認を省略" in auto_selection_block
+    assert auto_selection_block.find("--apply") < auto_selection_block.find("自動確定後も `/thumbnail-compare`")
+    assert "内部で実行" in approval_block
+
+
+def test_thumbnail_skill_distributes_archive_script() -> None:
+    assert _thumbnail_archive_script_path().is_file()
+
+
 def test_thumbnail_skill_frontmatter_names_thumbnail_as_primary_output() -> None:
     """#1611: skill dispatch は main.png ではなく text-included thumbnail.jpg を主成果物として説明する。"""
     skill = _read_thumbnail_skill()
     frontmatter = _slice_between(skill, "---", "---\n\n## Overview")
 
     assert "YouTube サムネイル（thumbnail.jpg）" in frontmatter
-    assert "textless main.png/jpg を後続生成" in frontmatter
+    assert "textless main.png/jpg を先行生成して実フォント合成" in frontmatter
     assert "サムネイル（main.png）" not in frontmatter
 
 
@@ -451,22 +564,34 @@ def test_thumbnail_skill_two_phase_keeps_thumbnail_and_main_separate() -> None:
     assert "既に存在する場合は Phase 1 をスキップ" not in two_phase_block
 
 
-def test_thumbnail_skill_deterministic_text_path_keeps_textless_regeneration() -> None:
-    """#1611: フォント固定経路でも承認済み thumbnail から textless main を後続生成する。"""
+def test_thumbnail_skill_deterministic_text_path_is_standard_default() -> None:
+    """#1907: 決定的合成経路が標準の既定で、textless 背景を先に確定してから合成する。"""
     skill = _read_thumbnail_skill()
+    font_block = _slice_between(skill, "## フォント安定化", "## 自動選択")
     deterministic_block = _slice_between(
         skill,
-        "### 決定的合成経路（yt-thumbnail-text）",
+        "### 決定的合成経路（yt-thumbnail-text・標準）",
         "### フォント指定に失敗した場合",
     )
 
-    assert "最初にテキスト付き `thumbnail-v*.jpg` を生成・承認して `thumbnail.jpg` を確定" in deterministic_block
-    assert "承認済み `thumbnail.jpg` から textless `main-v*.png/jpg` を AI 再生成" in deterministic_block
-    assert "cp main-v1.png main.png" in deterministic_block
-    assert "フォント安定化だけを担う" in deterministic_block
-    assert "旧順序には戻さず" in deterministic_block
-    assert "承認済み thumbnail.jpg から textless 版を AI 再生成する」工程は不要" not in deterministic_block
-    assert "背景がそのまま `main.png` になる" not in deterministic_block
+    # 経路表の既定は決定的合成、AI プロンプト経路は fallback
+    assert "**決定的合成経路**（`yt-thumbnail-text`・**既定**）" in font_block
+    assert "**AI プロンプト経路**（fallback・非既定）" in font_block
+    assert "**AI プロンプト経路**（既定）" not in font_block
+
+    assert "既定テキスト描画経路（#1907）" in deterministic_block
+    assert "「標準生成順序とファイル契約」に従う" in deterministic_block
+    assert "「thumbnail-text-profile 適用」節に従う" in deterministic_block
+    assert "決定的合成はテキスト描画だけを担う" in deterministic_block
+    # 文字入り画像を背景に流用しない（過去コレクションの作り直しでも textless を先に用意する）
+    assert (
+        "承認済み `thumbnail.jpg` から textless `main-v*.png/jpg` を AI 再生成・承認してから合成する"
+        in deterministic_block
+    )
+    assert "文字入り画像を `--background` に流用しない" in deterministic_block
+    # 旧契約（テキスト付き先行）の手順は標準から撤去済み
+    assert "最初にテキスト付き `thumbnail-v*.jpg` を生成・承認して" not in deterministic_block
+    assert "標準 `/thumbnail` フローから自動分岐しない" not in deterministic_block
 
 
 def test_loop_video_skill_uses_textless_main_image_and_respects_disabled_channels() -> None:
@@ -497,9 +622,10 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     assert "承認済み thumbnail から textless main を後続再生成" in config
     assert "背景 → テキストオーバーレイ" not in config
     assert "rotate: true" in config
-    assert "variation_clause: |" in config
-    assert "style_lock_clause: |" in config
-    assert "text_strip_clause: |" in config
+    # #1702: opt-in clause は既定空文字（キーは後方互換のため残す）
+    assert 'variation_clause: ""' in config
+    assert 'style_lock_clause: ""' in config
+    assert 'text_strip_clause: ""' in config
     # #569: TTP 参照画像の署名・透かし・ロゴが焼き込まれる IP / 版権リスク防止
     assert "ip_safety_clause: |" in config
     assert "signature" in config
@@ -511,7 +637,9 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     assert "enabled: false" in config
     assert 'source_role: "thumbnail_candidate"' in config
     assert "fallback_when_empty: true" in config
-    assert 'diff_prompt_template: ""' in config
+    # #2070: gemini 既定 diff_prompt_template は空文字ではなく TTP 既定テンプレートを持つ
+    assert 'diff_prompt_template: ""' not in config
+    assert "diff_prompt_template: |" in config
 
 
 def test_thumbnail_design_report_uses_current_two_phase_contract() -> None:
@@ -533,9 +661,10 @@ def test_thumbnail_default_config_keeps_font_stabilization_contract() -> None:
     assert "承認済み thumbnail から作る textless 再生成プロンプトには展開しない" in config_text
     assert "diff_prompt_template に ${typography_clause} として展開する" not in config_text
 
-    typography_clause = gemini_config["single_step"]["typography_clause"]
-    assert "consistent {font_description} typeface" in typography_clause
-    assert "Do not mix multiple typefaces" in typography_clause
+    # #1702: typography_clause は既定空文字の opt-in。推奨文面はコメントとして残す
+    assert gemini_config["single_step"]["typography_clause"] == ""
+    assert "consistent {font_description} typeface" in config_text
+    assert "Do not mix multiple typefaces" in config_text
 
     overlay = gemini_config["thumbnail_text"]["overlay"]
     assert overlay["font"]["title"] == ""
@@ -961,6 +1090,74 @@ def test_thumbnail_default_config_provides_codex_thumbnail_first_prompt() -> Non
         assert forbidden not in template
 
 
+def _gemini_diff_prompt_template(config: dict) -> str:
+    template = config["image_generation"]["gemini"]["diff_prompt_template"]
+    assert isinstance(template, str)
+    return template
+
+
+def _codex_policy_lines(template: str) -> list[str]:
+    """codex 既定テンプレートから title 行を除いた TTP 方針行（winning layout 維持・最小改善）を返す。"""
+    policy = [line for line in template.strip().splitlines() if line and "{title}" not in line]
+    assert policy, "codex 既定テンプレートから方針行を抽出できません"
+    return policy
+
+
+def test_thumbnail_default_config_gemini_diff_template_syncs_codex_ttp_policy() -> None:
+    """#2070: gemini 既定 diff_prompt_template は codex 既定テンプレート（SSOT）と同じ TTP 方針行を持つ。"""
+    config = _load_thumbnail_default_config()
+    codex_template = _codex_prompt_template(config)
+    gemini_template = _gemini_diff_prompt_template(config)
+
+    for policy_line in _codex_policy_lines(codex_template):
+        assert policy_line in gemini_template
+
+    # title は codex の {title} 意味論と同じく「サムネに焼くテキスト」を行単位で渡す
+    assert gemini_template.count("{title_line1}") == 1
+    assert gemini_template.count("{title_line2}") == 1
+    # TTP モード常時挿入必須の ip_safety_clause (#569) を既定で展開対象にする
+    assert "${ip_safety_clause}" in gemini_template
+    for forbidden in (
+        "textless background",
+        "Remove all text",
+        "Do not add any title text yet",
+    ):
+        assert forbidden not in gemini_template
+
+
+def test_thumbnail_gemini_diff_template_channel_override_takes_priority(tmp_path, monkeypatch) -> None:
+    """#2070: channel 側 diff_prompt_template は deep-merge のスカラ置換で既定値より常に優先される。"""
+    from youtube_automation.utils import skill_config
+
+    override_dir = tmp_path / "config" / "skills"
+    override_dir.mkdir(parents=True)
+    (override_dir / "thumbnail.yaml").write_text(
+        'image_generation:\n  gemini:\n    diff_prompt_template: "channel custom prompt {title_line1}"\n',
+        encoding="utf-8",
+    )
+
+    merged = skill_config.load_skill_config("thumbnail", use_cache=False, channel_dir=tmp_path)
+
+    assert merged["image_generation"]["gemini"]["diff_prompt_template"] == "channel custom prompt {title_line1}"
+    # dict 部分は default が残る (deep-merge 検証)
+    assert "ip_safety_clause" in merged["image_generation"]["gemini"]["single_step"]
+
+
+def test_thumbnail_docs_state_provider_agnostic_ttp_policy() -> None:
+    """#2070: SKILL.md / prompting.md が provider 差なく同じ TTP 方針を明示する。"""
+    skill = _read_thumbnail_skill()
+    prompting = (_repo_root() / ".claude" / "skills" / "thumbnail" / "references" / "prompting.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "TTP 生成方針は provider によらず共通" in skill
+    assert "TTP 方針は provider 共通" in prompting
+    assert "チャンネル側 override" in prompting
+    # #2071: gemini_cli 経路も同じ diff_prompt_template と構築手順を共有することを明示
+    assert "`provider: gemini_cli`" in skill
+    assert "同じ `diff_prompt_template` とこの構築手順を共有" in skill
+
+
 def test_thumbnail_default_config_codex_template_matches_skill_md_block() -> None:
     """#1680: SKILL.md「既定テンプレート」ブロックと config.default.yaml を完全一致で機械担保する。"""
     config_template = _codex_prompt_template(_load_thumbnail_default_config())
@@ -1063,15 +1260,62 @@ def test_codex_prompt_helper_cli_rejects_invalid_template(tmp_path: Path) -> Non
 
 
 def test_thumbnail_default_config_provides_anatomy_clause() -> None:
-    """#570: キャラ + 手構図向け anatomy-correctness clause が default config に同梱されている。"""
-    config = _read_thumbnail_default_config()
+    """#570 / #1702: anatomy clause は opt-in（既定空文字）だが推奨文面はコメントで同梱する。"""
+    config_text = _read_thumbnail_default_config()
+    config = _load_thumbnail_default_config()
 
-    assert "anatomy_clause: |" in config
-    # 解剖学品質ゲート core terms (issue #570 の修正要件 2)
-    assert "five fingers" in config
-    assert "fused" in config
-    assert "extra" in config
-    assert "melted" in config
+    assert config["image_generation"]["gemini"]["single_step"]["anatomy_clause"] == ""
+    # 解剖学品質ゲート core terms (issue #570 の修正要件 2) は推奨文面コメントとして残す
+    assert "five fingers" in config_text
+    assert "fused" in config_text
+    assert "extra" in config_text
+    assert "melted" in config_text
+
+
+def test_thumbnail_default_config_injects_only_ip_safety_clause_by_default() -> None:
+    """#1702: 既定で注入される clause は ip_safety_clause の 1 つだけに集約する。"""
+    config = _load_thumbnail_default_config()
+    single_step = config["image_generation"]["gemini"]["single_step"]
+
+    clause_keys = [key for key in single_step if key.endswith("_clause")]
+    non_empty = [key for key in clause_keys if single_step[key]]
+    assert non_empty == ["ip_safety_clause"]
+
+    template = _gemini_diff_prompt_template(config)
+    assert re.findall(r"\$\{(\w+)\}", template) == ["ip_safety_clause"]
+
+
+def test_thumbnail_default_config_slims_composition_rules_and_thumbnail_text() -> None:
+    """#1702: composition_rules は text_lines のみ、thumbnail_text は text_overlay_prompt を単一入口にする。"""
+    config_text = _read_thumbnail_default_config()
+    config = _load_thumbnail_default_config()
+    gemini = config["image_generation"]["gemini"]
+
+    assert gemini["composition_rules"] == {"text_lines": "タイトルは 2 行以内"}
+    assert set(gemini["thumbnail_text"]) == {"channel_name", "font", "text_overlay_prompt", "overlay"}
+    # 段階的廃止方針（deprecated キーと移行ガイド）が明記されている
+    assert "deprecated" in config_text
+    assert "DeprecationWarning" in config_text
+    assert "移行ガイド" in config_text
+
+
+def test_thumbnail_skill_prompt_section_is_single_source_with_final_prompt_example() -> None:
+    """#1702: プロンプト指示解説は 1 セクション + モード別差分に集約し、最終プロンプト例を 1 例掲載する。"""
+    skill = _read_thumbnail_skill()
+    prompt_section = _slice_between(skill, "## プロンプト構築", "## ワークフロー")
+
+    assert "最小限のキーワード" in prompt_section
+    assert "参照画像主導" in prompt_section
+    assert "モード別差分" in prompt_section
+    # 実際にプロバイダーへ渡る最終プロンプト例（既定 config の全文）
+    assert "```text" in prompt_section
+    assert "Use the title" in prompt_section
+    assert "Do not reproduce any signature" in prompt_section
+    # 既定 clause は ip_safety のみ。多重 clause の同時展開指示は解消済み
+    assert "${ip_safety_clause}` の 1 つだけ" in prompt_section
+    single_step_prompt_block = _slice_between(skill, "#### プロンプト構築", "#### 生成コマンド")
+    assert "共通ガイダンス clause（`single_step.variation_clause` / `style_lock_clause`" not in single_step_prompt_block
+    assert "opt-in clause" in single_step_prompt_block
 
 
 def test_thumbnail_skill_quality_check_covers_hand_anatomy() -> None:

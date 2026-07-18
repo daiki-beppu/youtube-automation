@@ -1,5 +1,6 @@
-import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
+
+import { defineConfig } from "vitest/config";
 
 // content script / API client / origin allowlist の unit テスト (要件8)。
 // jsdom が必要なテストはファイル先頭の `// @vitest-environment jsdom` で個別指定する。

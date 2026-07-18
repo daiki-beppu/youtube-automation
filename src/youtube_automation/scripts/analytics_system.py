@@ -60,9 +60,10 @@ class AnalyticsSystem:
         logger.info("🔐 YouTube API認証中...")
 
         try:
-            from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
+            # Analytics 収集は read-only で足りるため token.readonly.json を優先する（#1699）
+            from youtube_automation.utils.youtube_service import get_readonly_handler
 
-            handler = YouTubeOAuthHandler()
+            handler = get_readonly_handler()
             handler.authenticate(force_reauth=force_reauth)
 
             if handler.test_connection():
@@ -77,7 +78,7 @@ class AnalyticsSystem:
             logger.error("❌ 認証エラー: %s", e)
             return False
 
-    def collect_analytics_data(self, days=30, save_data=True, include_reporting=False):
+    def collect_analytics_data(self, days=30, save_data=True, include_reporting=False, depth="standard"):
         """
         アナリティクスデータ収集
 
@@ -85,6 +86,7 @@ class AnalyticsSystem:
             days (int): 収集期間（日数）
             save_data (bool): データ保存フラグ
             include_reporting (bool): YouTube Reporting API による thumbnail impressions / CTR を含めるか
+            depth (str): 収集深度（standard または full）
 
         Returns:
             Dict: 収集されたアナリティクスデータ
@@ -100,7 +102,9 @@ class AnalyticsSystem:
             start_date = end_date - timedelta(days=days)
 
             analytics_data = self.collector.collect_basic_analytics(
-                start_date=start_date.strftime("%Y-%m-%d"), end_date=end_date.strftime("%Y-%m-%d")
+                start_date=start_date.strftime("%Y-%m-%d"),
+                end_date=end_date.strftime("%Y-%m-%d"),
+                depth=depth,
             )
 
             if include_reporting:
@@ -171,12 +175,14 @@ class AnalyticsSystem:
             logger.exception("❌ データ収集エラー: %s", e)
             return None
 
-    def run_data_collection(self, days=30, include_reporting=False):
+    def run_data_collection(self, days=30, include_reporting=False, depth="standard"):
         """
         データ収集実行 (認証 → データ収集 → JSONデータ保存)
 
         Args:
             days (int): データ収集期間
+            include_reporting (bool): YouTube Reporting API の集計を含めるか
+            depth (str): 収集深度（standard または full）
 
         Returns:
             Dict: 実行結果
@@ -191,7 +197,11 @@ class AnalyticsSystem:
             results["error"] = "Authentication failed"
             return results
 
-        analytics_data = self.collect_analytics_data(days=days, include_reporting=include_reporting)
+        analytics_data = self.collect_analytics_data(
+            days=days,
+            include_reporting=include_reporting,
+            depth=depth,
+        )
         if not analytics_data:
             results["error"] = "Data collection failed"
             logger.error("🛑 データ収集に失敗したため処理を終了します")
@@ -209,9 +219,9 @@ class AnalyticsSystem:
 
 def _make_reporting_client():
     from youtube_automation.utils.reporting_api import ReportingAPIClient
-    from youtube_automation.utils.youtube_service import get_credentials, get_reporting
+    from youtube_automation.utils.youtube_service import get_credentials_readonly, get_reporting
 
-    return ReportingAPIClient(get_reporting(), credentials=get_credentials())
+    return ReportingAPIClient(get_reporting(), credentials=get_credentials_readonly())
 
 
 def _run_reporting_dry_run() -> int:
@@ -276,6 +286,12 @@ def main():
     parser.add_argument("--days", type=int, default=30, help="データ収集期間（日数）")
     parser.add_argument("--all-time", action="store_true", help="全期間データを取得（チャンネル開設から現在まで）")
     parser.add_argument(
+        "--depth",
+        choices=("standard", "full"),
+        default="standard",
+        help="収集深度（standard: 通常収集、full: 通常収集 + retention / country）",
+    )
+    parser.add_argument(
         "--include-reporting",
         action="store_true",
         help="YouTube Reporting API v1 経由で thumbnail impressions / CTR を取得（初回最大 48h、以降 D+2 ラグ）",
@@ -313,6 +329,7 @@ def main():
     results = system.run_data_collection(
         days=collection_days,
         include_reporting=args.include_reporting,
+        depth=args.depth,
     )
 
     if not results["success"]:

@@ -6,6 +6,7 @@
 - data/video_costs.json      動画生成（Veo 系）
 - data/audio_costs.json      音楽生成（Lyria 系）
 - data/analysis_costs.json   分析（Gemini サムネイル分析等）
+- data/quota_costs.json      YouTube Data API quota 消費（Issue #2006、スキーマは後述）
 
 エントリ共通スキーマ（Issue #132 で `estimated_cost_usd` は新規エントリで
 `null` 固定。実コストは GCP Cloud Console > Billing で確認する）:
@@ -364,4 +365,138 @@ def print_summary(category: Category | None = None) -> None:
     print("  ログ:")
     for cat in ("image", "video", "audio", "analysis"):
         print(f"    {cat}: {_log_path(cat)}")
+    print()
+
+
+# ============================================================
+# YouTube Data API quota 記録（Issue #2006）
+# ============================================================
+#
+# 生成コストと同じ保存境界（CHANNEL_DIR/data/ + file lock + JSON list）で
+# quota event を永続化する。USD 単価は保持しない（スコープ外）。
+#
+# エントリスキーマ:
+#
+#     {
+#       "timestamp": "2026-07-18T12:34:56+00:00",
+#       "service":   "youtube-data-api",
+#       "bucket":    "videos.insert",     # quota bucket（API メソッド単位）
+#       "units":     1600,                # 消費 quota units
+#       "metadata":  { 任意の補足情報 }
+#     }
+
+_QUOTA_LOG_FILENAME = "quota_costs.json"
+
+
+def _quota_log_path() -> Path:
+    return _channel_dir() / "data" / _QUOTA_LOG_FILENAME
+
+
+def log_quota(
+    service: str,
+    bucket: str,
+    units: float,
+    *,
+    metadata: dict | None = None,
+) -> dict | None:
+    """1 件分の API quota 消費イベントをログに追記する。
+
+    `service` / `bucket` は必須（空で `ValueError`）、`units` は正の値のみ受理。
+    書き込み失敗は警告のみ（呼び出し元の処理を失敗させない）。戻り値は
+    書き込んだエントリ（失敗時 `None`）。
+    """
+    if not service:
+        raise ValueError("service is required for log_quota")
+    if not bucket:
+        raise ValueError(f"bucket is required for log_quota (service={service})")
+    if units <= 0:
+        raise ValueError(f"units must be positive for log_quota (service={service}, bucket={bucket}, units={units})")
+
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "service": service,
+        "bucket": bucket,
+        "units": units,
+        "metadata": dict(metadata or {}),
+    }
+
+    try:
+        path = _quota_log_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with _file_lock(path):
+            with section("cost_tracker.read", category="quota"):
+                entries = _read_entries(path)
+            entries.append(entry)
+            with section("cost_tracker.write", category="quota", count=len(entries)):
+                path.write_text(
+                    json.dumps(entries, indent=2, ensure_ascii=False) + "\n",
+                    encoding="utf-8",
+                )
+    except Exception as e:
+        print(f"  [Warn]   quota ログ書き込み失敗: {e}")
+        return None
+
+    return entry
+
+
+def _normalize_quota_entry(entry: dict) -> dict:
+    """キー欠落・型不正のエントリを読み出し時に吸収する。"""
+    metadata = entry.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    units = entry.get("units")
+    if not isinstance(units, (int, float)):
+        units = 0
+    return {
+        "timestamp": entry.get("timestamp", ""),
+        "service": entry.get("service") or "unknown",
+        "bucket": entry.get("bucket") or "unknown",
+        "units": units,
+        "metadata": metadata,
+    }
+
+
+def read_quota_log() -> list[dict]:
+    """quota ログを正規化済みエントリのリストとして返す（ファイル無しは空リスト）。"""
+    raw = _read_entries(_quota_log_path())
+    return [_normalize_quota_entry(e) for e in raw]
+
+
+def _format_units(value: float) -> str:
+    return str(int(value)) if float(value).is_integer() else str(value)
+
+
+def print_quota_summary() -> None:
+    """API quota 消費のサマリ（service 別 / 月別 / bucket 別）を表示する。"""
+    entries = read_quota_log()
+    if not entries:
+        print("\nquota 履歴がまだありません。")
+        return
+
+    total_units = sum(e["units"] for e in entries)
+    by_service: dict[str, float] = defaultdict(float)
+    by_month: dict[str, float] = defaultdict(float)
+    by_bucket: dict[str, float] = defaultdict(float)
+    for e in entries:
+        by_service[e["service"]] += e["units"]
+        by_month[_month_key(e["timestamp"])] += e["units"]
+        by_bucket[e["bucket"]] += e["units"]
+
+    print()
+    print("=== API Quota Summary ===")
+    print(f"  総消費:   {_format_units(total_units)} units / {len(entries)} 件")
+    print()
+    print("  サービス別:")
+    for s in sorted(by_service.keys()):
+        print(f"    {s}: {_format_units(by_service[s])} units")
+    print()
+    print("  月別:")
+    for m in sorted(by_month.keys()):
+        print(f"    {m}: {_format_units(by_month[m])} units")
+    print()
+    print("  bucket 別:")
+    for b in sorted(by_bucket.keys()):
+        print(f"    {b}: {_format_units(by_bucket[b])} units")
+    print()
+    print(f"  ログ: {_quota_log_path()}")
     print()

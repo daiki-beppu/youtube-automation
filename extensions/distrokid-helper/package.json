@@ -1,10 +1,9 @@
 {
   "name": "distrokid-helper",
-  "description": "DistroKid 登録フォーム自動入力 Chrome 拡張 (WXT + React)",
-  "private": true,
   "version": "0.2.1",
+  "private": true,
+  "description": "DistroKid 登録フォーム自動入力 Chrome 拡張 (WXT + React)",
   "type": "module",
-  "packageManager": "pnpm@11.12.0",
   "scripts": {
     "dev": "wxt",
     "build": "wxt build",
@@ -15,9 +14,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "audit": "fallow audit --root ..",
-    "lint": "cd .. && eslint -c distrokid-helper/eslint.config.js distrokid-helper",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "check": "cd .. && ultracite check distrokid-helper",
+    "fix": "cd .. && ultracite fix distrokid-helper"
   },
   "dependencies": {
     "@radix-ui/react-slot": "1.2.4",
@@ -30,21 +28,20 @@
     "tailwind-merge": "3.5.0"
   },
   "devDependencies": {
-    "@eslint/js": "9.39.4",
     "@playwright/test": "1.60.0",
     "@tailwindcss/vite": "4.2.2",
     "@types/react": "19.0.2",
     "@types/react-dom": "19.0.2",
     "@wxt-dev/module-react": "1.2.2",
-    "eslint": "9.39.4",
-    "eslint-plugin-react-hooks": "7.1.1",
     "fallow": "3.5.0",
     "jsdom": "26.1.0",
-    "prettier": "3.6.2",
+    "oxfmt": "0.59.0",
+    "oxlint": "1.73.0",
     "tailwindcss": "4.2.2",
-    "typescript": "5.9.3",
-    "typescript-eslint": "8.60.1",
+    "typescript": "7.0.2",
+    "ultracite": "7.9.4",
     "vitest": "4.1.8",
     "wxt": "0.20.26"
-  }
+  },
+  "packageManager": "pnpm@11.12.0"
 }

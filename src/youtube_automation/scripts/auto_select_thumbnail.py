@@ -40,6 +40,7 @@ from PIL import Image, UnidentifiedImageError
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.skill_config import load_skill_config
+from youtube_automation.utils.thumbnail_archive import archive_approved_thumbnail_transaction
 from youtube_automation.utils.thumbnail_features import (
     extract_features_from_path,
     feature_centroid,
@@ -248,6 +249,30 @@ def apply_selection(best: CandidateScore, paths: CollectionPaths, *, force: bool
     return target
 
 
+@dataclass(frozen=True)
+class _FileSnapshot:
+    existed: bool
+    content: bytes | None
+
+
+def _capture_file(path: Path) -> _FileSnapshot:
+    try:
+        existed = path.exists()
+        return _FileSnapshot(existed, path.read_bytes() if existed else None)
+    except OSError as exc:
+        raise ValidationError(f"ロールバック用バックアップを読み込めません: {path}: {exc}") from exc
+
+
+def _restore_file(path: Path, snapshot: _FileSnapshot) -> None:
+    try:
+        if snapshot.existed and snapshot.content is not None:
+            path.write_bytes(snapshot.content)
+        else:
+            path.unlink(missing_ok=True)
+    except OSError as exc:
+        raise ValidationError(f"ファイルを元の状態へ復元できません: {path}: {exc}") from exc
+
+
 def load_workflow_state(ws_path: Path) -> dict[str, Any] | None:
     """`workflow-state.json` を検証つきで読み込む。
 
@@ -294,7 +319,12 @@ def record_workflow_state(
             fh.write("\n")
         os.replace(tmp_path, ws_path)
     except OSError as exc:
-        tmp_path.unlink(missing_ok=True)
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError as cleanup_exc:
+            raise ValidationError(
+                f"workflow-state.json を更新できず、一時ファイルも削除できません: {ws_path}: {exc}; {cleanup_exc}"
+            ) from cleanup_exc
         raise ValidationError(f"workflow-state.json を更新できません: {ws_path}: {exc}") from exc
 
 
@@ -453,10 +483,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.apply:
             # 壊れた workflow-state はコピー前に検出し、部分適用状態を残さない
             state = load_workflow_state(paths.workflow_state_path)
-            target_existed = target.exists()
-            target_backup = target.read_bytes() if target_existed else None
+            target_snapshot = _capture_file(target)
+            state_snapshot = _capture_file(paths.workflow_state_path) if state is not None else None
+            archive_update = None
             try:
                 target = apply_selection(best, paths, force=args.force)
+                archive_update = archive_approved_thumbnail_transaction(paths.root)
                 if state is not None:
                     record_workflow_state(
                         paths.workflow_state_path,
@@ -467,12 +499,27 @@ def main(argv: list[str] | None = None) -> int:
                         channel_root=channel_root,
                         executed_at=datetime.now(timezone.utc).isoformat(),
                     )
-            except (ConfigError, ValidationError):
-                if target.exists():
-                    if target_existed and target_backup is not None:
-                        target.write_bytes(target_backup)
-                    else:
-                        target.unlink()
+            except (ConfigError, ValidationError) as exc:
+                rollback_errors = []
+                if archive_update is not None:
+                    try:
+                        archive_update.rollback()
+                    except ValidationError as rollback_exc:
+                        rollback_errors.append(rollback_exc)
+                try:
+                    _restore_file(target, target_snapshot)
+                except ValidationError as rollback_exc:
+                    rollback_errors.append(rollback_exc)
+                if state_snapshot is not None:
+                    try:
+                        _restore_file(paths.workflow_state_path, state_snapshot)
+                    except ValidationError as rollback_exc:
+                        rollback_errors.append(rollback_exc)
+                if rollback_errors:
+                    rollback_detail = "; ".join(str(error) for error in rollback_errors)
+                    raise ValidationError(
+                        f"自動選択の確定に失敗し、一部の状態も復元できません: {exc}; {rollback_detail}"
+                    ) from rollback_errors[0]
                 raise
             workflow_state_updated = state is not None
     except (ConfigError, ValidationError) as exc:

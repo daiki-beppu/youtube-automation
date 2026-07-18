@@ -14,6 +14,7 @@
 // getBoundingClientRect の width/height と親要素の display/visibility/opacity を見る）。
 
 import { beforeEach, describe, expect, it } from "vitest";
+
 import { isVisible } from "../../shared/visibility";
 
 const VISIBLE_RECT = {

@@ -7,6 +7,7 @@ import sys
 
 from youtube_automation.cli.skills_sync import _ASSET_SPECS, _guard_target_with_all, cmd_list
 from youtube_automation.cli.skills_sync._diff import cmd_diff
+from youtube_automation.cli.skills_sync._lint import cmd_lint
 from youtube_automation.cli.skills_sync._sync import cmd_sync
 
 
@@ -103,5 +104,19 @@ def build_parser() -> argparse.ArgumentParser:
         help=("比較先パス (default: --asset の default_target に従う、kind='file' の場合はファイルパス)"),
     )
     p_diff.set_defaults(func=cmd_diff)
+
+    p_lint = sub.add_parser(
+        "lint",
+        help="SKILL.md frontmatter を検証 (strict YAML / name・description 非空 / double-quote)",
+    )
+    p_lint.add_argument(
+        "skills",
+        nargs="*",
+        metavar="SKILL",
+        help="検証する skill 名 (省略時は全 skill)",
+    )
+    # lint は skills asset 固定 (--asset/--target は取らない)。
+    # _resolve_default_target が args.asset を参照するため default を埋めておく。
+    p_lint.set_defaults(func=cmd_lint, asset="skills")
 
     return parser

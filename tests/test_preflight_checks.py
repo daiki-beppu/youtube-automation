@@ -7,6 +7,12 @@ from typing import ClassVar
 
 import pytest
 
+from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.image_provider.composition import (
+    find_forbidden_keywords,
+    resolve_forbid_keywords,
+    validate_forbid_keywords,
+)
 from youtube_automation.utils.preflight_checks import (
     check_chapter_count,
     check_chapter_variation_suffix,
@@ -212,15 +218,21 @@ class TestCheckChapterVariationSuffix:
 
 
 class TestInitialSetupChecks:
-    def test_suno_genre_line_over_fixed_style_limit_warns_even_if_config_raises_limit(self) -> None:
-        msg = check_suno_genre_line_char_limit({"genre_line": "x" * 121, "style_char_limit": 999})
+    def test_suno_genre_line_uses_default_style_limit_when_not_configured(self) -> None:
+        msg = check_suno_genre_line_char_limit({"genre_line": "x" * 121})
 
         assert msg is not None
         assert "121 / 120" in msg
         assert "config/skills/suno.yaml::genre_line" in msg
 
-    def test_suno_genre_line_at_style_limit_passes(self) -> None:
-        assert check_suno_genre_line_char_limit({"genre_line": "x" * 120, "style_char_limit": 1}) is None
+    def test_suno_genre_line_at_configured_style_limit_passes(self) -> None:
+        assert check_suno_genre_line_char_limit({"genre_line": "x" * 373, "style_char_limit": 373}) is None
+
+    def test_suno_genre_line_over_configured_style_limit_reports_configured_limit(self) -> None:
+        msg = check_suno_genre_line_char_limit({"genre_line": "x" * 374, "style_char_limit": 373})
+
+        assert msg is not None
+        assert "374 / 373" in msg
 
     def test_thumbnail_config_detects_empty_refs_and_tbd_composition(self, tmp_path: Path) -> None:
         cfg = {
@@ -762,6 +774,25 @@ class TestCheckTitleTemplateCompliance:
         title = "Bright Funk & Soul Spirit | 3 Hours of Feel-Good Retro Grooves"
         assert check_title_template_compliance(title, self.EXISTING, self.CFG) is None
 
+    def test_three_part_template_passes(self) -> None:
+        cfg = {
+            "template": "{tagline} | Inspirational Pinoy Reggae Music {year} | {subtitle}",
+        }
+        title = "YAKAP NG PAMILYA 💛 | Inspirational Pinoy Reggae Music 2026 | Awit ng Pagmamahal"
+
+        assert check_title_template_compliance(title, [], cfg) is None
+
+    def test_three_part_template_still_rejects_volume_notation(self) -> None:
+        cfg = {
+            "template": "{tagline} | Inspirational Pinoy Reggae Music {year} | {subtitle}",
+        }
+        title = "YAKAP NG PAMILYA Vol.2 | Inspirational Pinoy Reggae Music 2026 | Awit ng Pagmamahal"
+
+        msg = check_title_template_compliance(title, [], cfg)
+
+        assert msg is not None
+        assert "巻数表記" in msg
+
     def test_volume_notation_rejected(self) -> None:
         title = "Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves"
         msg = check_title_template_compliance(title, [], self.CFG)
@@ -898,3 +929,56 @@ class TestCheckTitleDuplicateWarnings:
     def test_short_suffix_overlap_is_ignored(self) -> None:
         warnings = check_title_duplicate_warnings("Rain Jazz BGM", ["Cafe Jazz BGM"], {}, min_suffix_chars=16)
         assert warnings == []
+
+
+class TestForbidKeywords:
+    """forbid_keywords の生成前検査 (#1664)。未設定は no-op、ヒット時は ConfigError."""
+
+    def test_unset_returns_empty_and_noop(self) -> None:
+        """forbid_keywords 未設定の既存チャンネル config は従来どおり素通しする."""
+        cfg: dict = {"image_generation": {"gemini": {"model": "gemini-x"}}}
+        assert resolve_forbid_keywords(cfg) == []
+        validate_forbid_keywords("a sunglassed drummer on stage", cfg)
+
+    def test_empty_list_is_noop(self) -> None:
+        cfg: dict = {"image_generation": {"gemini": {"forbid_keywords": []}}}
+        assert resolve_forbid_keywords(cfg) == []
+        validate_forbid_keywords("a sunglassed drummer on stage", cfg)
+
+    def test_missing_sections_are_noop(self) -> None:
+        assert resolve_forbid_keywords({}) == []
+        assert resolve_forbid_keywords({"image_generation": "broken"}) == []
+        assert resolve_forbid_keywords({"image_generation": {"gemini": None}}) == []
+
+    def test_non_list_value_raises_config_error(self) -> None:
+        cfg: dict = {"image_generation": {"gemini": {"forbid_keywords": "sunglasses"}}}
+        with pytest.raises(ConfigError, match="list"):
+            resolve_forbid_keywords(cfg)
+
+    def test_non_string_item_raises_config_error(self) -> None:
+        cfg: dict = {"image_generation": {"gemini": {"forbid_keywords": ["sunglasses", 42]}}}
+        with pytest.raises(ConfigError, match="文字列"):
+            resolve_forbid_keywords(cfg)
+
+    def test_blank_items_are_dropped(self) -> None:
+        cfg: dict = {"image_generation": {"gemini": {"forbid_keywords": ["  ", "sunglasses  "]}}}
+        assert resolve_forbid_keywords(cfg) == ["sunglasses"]
+
+    def test_find_matches_case_insensitive_substring(self) -> None:
+        hits = find_forbidden_keywords(
+            "A Sunglassed drummer with SUNGLASSES",
+            ["sunglasses", "drummer", "trumpet"],
+        )
+        assert hits == ["sunglasses", "drummer"]
+
+    def test_find_without_match_returns_empty(self) -> None:
+        assert find_forbidden_keywords("cozy cafe morning coffee", ["sunglasses"]) == []
+
+    def test_validate_hit_raises_with_keyword_listed(self) -> None:
+        cfg: dict = {"image_generation": {"gemini": {"forbid_keywords": ["sunglasses"]}}}
+        with pytest.raises(ConfigError, match="sunglasses"):
+            validate_forbid_keywords("a drummer wearing sunglasses at night", cfg)
+
+    def test_validate_pass_without_hit(self) -> None:
+        cfg: dict = {"image_generation": {"gemini": {"forbid_keywords": ["sunglasses"]}}}
+        validate_forbid_keywords("cozy cafe morning coffee", cfg)

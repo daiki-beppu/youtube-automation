@@ -1,4 +1,4 @@
-"""yt-doctor: ツール・API 設定の状態診断 CLI (read-only)"""
+"""yt-doctor: ツール・API 設定の診断と限定的な client secret 配置 CLI。"""
 
 from __future__ import annotations
 
@@ -8,8 +8,10 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 import tomllib
 import unicodedata
 from collections.abc import Iterator
@@ -852,6 +854,10 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
         )
     if data is None:
         project_id = _project_id_for(channel_dir) or ""
+        fix_destination = channel_dir / "auth" / "client_secrets.json"
+        override_instructions = (
+            " `CLIENT_SECRETS_DIR` を解除してから fix と再診断を実行してください。" if path != fix_destination else ""
+        )
         return CheckResult(
             id="client_secrets",
             status="fail",
@@ -869,9 +875,11 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
                     "(未追加だと初回認証が 403 access_denied で止まります)。"
                     "その後 Clients > Create client で Application type Desktop app を選び、"
                     "Clients > 対象 client > Client secrets > Add secret で secret を発行してください。"
-                    "発行した `client_id` / `project_id` / `client_secret` を "
-                    "`auth/client_secrets.template.json` へ転記し、"
-                    f"`{path}` に配置してください。" + (f" fallback 状態: {fallback_error}" if fallback_error else "")
+                    "続けて Download JSON を実行して Downloads に保存し、"
+                    "`uv run yt-doctor --fix-client-secrets` で "
+                    f"`{fix_destination}` へ自動移動してください。"
+                    + override_instructions
+                    + (f" fallback 状態: {fallback_error}" if fallback_error else "")
                 ),
             },
         )
@@ -1414,13 +1422,20 @@ def check_benchmark_data(channel_dir: Path) -> CheckResult:
 
 
 def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
+    persona_definition = channel_dir / "docs" / "channel" / "personas" / "persona-definition.md"
+    missing_persona = [] if persona_definition.is_file() else ["docs/channel/personas/persona-definition.md 未作成"]
+    missing_persona_suffix = ("; " + "; ".join(missing_persona)) if missing_persona else ""
+
     analytics_path = channel_dir / "config" / "channel" / "analytics.json"
     if not analytics_path.is_file():
         return CheckResult(
             id="ttp_wf_new_readiness",
             status="warn",
             category=DATA_CATEGORY,
-            message="config/channel/analytics.json 未生成。/wf-new 接続前に承認済み TTP 対象の保存が必要",
+            message=(
+                "config/channel/analytics.json 未生成。/wf-new 接続前に承認済み TTP 対象の保存が必要"
+                + missing_persona_suffix
+            ),
             next_action={
                 "kind": "human",
                 "instructions": (
@@ -1436,7 +1451,7 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
             id="ttp_wf_new_readiness",
             status="warn",
             category=DATA_CATEGORY,
-            message="TTP 完了条件が未充足: " + analytics_read.error,
+            message="TTP 完了条件が未充足: " + analytics_read.error + missing_persona_suffix,
             next_action={
                 "kind": "human",
                 "instructions": "config/channel/analytics.json を修正してから yt-doctor を再実行してください",
@@ -1451,7 +1466,9 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
             id="ttp_wf_new_readiness",
             status="warn",
             category=DATA_CATEGORY,
-            message="承認済み TTP 対象が 0 件。/channel-new は /wf-new 接続前に TTP 対象承認が必要",
+            message=(
+                "承認済み TTP 対象が 0 件。/channel-new は /wf-new 接続前に TTP 対象承認が必要" + missing_persona_suffix
+            ),
             next_action={
                 "kind": "human",
                 "instructions": (
@@ -1462,6 +1479,7 @@ def check_ttp_wf_new_readiness(channel_dir: Path) -> CheckResult:
         )
 
     missing, approved_exceptions = _missing_ttp_readiness_items(channel_dir, channels)
+    missing.extend(missing_persona)
     missing.extend(channels_read.errors)
     benchmark_missing, benchmark_notes = _missing_channel_new_benchmark_items(
         channel_dir,
@@ -2620,6 +2638,226 @@ def resolve_channel_dir(target: Optional[str]) -> Path:
     return Path.cwd().resolve()
 
 
+@dataclass(frozen=True)
+class _FileIdentity:
+    device: int
+    inode: int
+    size: int
+    modified_ns: int
+
+    @classmethod
+    def from_stat(cls, metadata: os.stat_result) -> _FileIdentity:
+        return cls(metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns)
+
+
+@dataclass(frozen=True)
+class _ClientSecretCandidate:
+    path: Path
+    identity: _FileIdentity
+    raw_data: bytes
+
+
+def _restore_staged_source(staged: Path, original: Path) -> None:
+    os.link(staged, original, follow_symlinks=False)
+    staged.unlink()
+    staged.parent.rmdir()
+
+
+def _remove_created_destination(destination: Path, expected_identity: tuple[int, int]) -> None:
+    metadata = destination.lstat()
+    if expected_identity != (metadata.st_dev, metadata.st_ino):
+        raise OSError("作成した移動先が置き換えられたため削除しません")
+    destination.unlink()
+
+
+def _rollback_client_secret_install(
+    destination: Path,
+    destination_identity: tuple[int, int] | None,
+    staged_source: Path,
+    original_source: Path,
+) -> list[str]:
+    errors: list[str] = []
+    if destination_identity is not None:
+        try:
+            _remove_created_destination(destination, destination_identity)
+        except OSError as error:
+            errors.append(f"destination rollback 失敗: {error}")
+    try:
+        _restore_staged_source(staged_source, original_source)
+    except OSError as error:
+        errors.append(f"source rollback 失敗: {error}")
+    return errors
+
+
+def fix_client_secrets(channel_dir: Path) -> int:
+    """Downloads の対象 OAuth client secret をチャンネルの auth へ移動する。"""
+    destination = channel_dir / "auth" / "client_secrets.json"
+    if destination.exists() or destination.is_symlink():
+        if destination.is_file() and not destination.is_symlink():
+            print(f"{destination} は既に存在するためスキップしました")
+            return 0
+        print(f"{destination} は通常ファイルではないため移動できません")
+        return 1
+
+    project_id = _project_id_for(channel_dir)
+    if not project_id:
+        print("対象チャンネルの GCP project_id を特定できません。GOOGLE_CLOUD_PROJECT または ADC を確認してください。")
+        return 1
+
+    matching: list[_ClientSecretCandidate] = []
+    errors: list[str] = []
+    candidates = list((Path.home() / "Downloads").glob("client_secret*.json"))
+    if not candidates:
+        print(
+            "Downloads に client_secret*.json が見つかりません。"
+            "Google Cloud Console で対象 OAuth client の Download JSON を実行してください。"
+        )
+        return 1
+
+    for candidate in candidates:
+        if candidate.is_symlink():
+            errors.append(f"{candidate}: 通常ファイルではありません")
+            continue
+        descriptor: int | None = None
+        try:
+            descriptor = os.open(candidate, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        except OSError as error:
+            errors.append(f"{candidate}: ファイル読み込み失敗: {error}")
+            continue
+        try:
+            metadata = os.fstat(descriptor)
+        except OSError as error:
+            errors.append(f"{candidate}: 更新時刻の取得に失敗: {error}")
+            os.close(descriptor)
+            continue
+        try:
+            if not stat.S_ISREG(metadata.st_mode):
+                errors.append(f"{candidate}: 通常ファイルではありません")
+                continue
+            with os.fdopen(descriptor, "rb") as source_file:
+                descriptor = None
+                raw_data = source_file.read()
+            data = json.loads(raw_data)
+        except json.JSONDecodeError as error:
+            errors.append(f"{candidate}: JSON 読み込み失敗: {error}")
+            continue
+        except OSError as error:
+            errors.append(f"{candidate}: ファイル読み込み失敗: {error}")
+            continue
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+        if not isinstance(data, dict):
+            errors.append(f"{candidate}: JSON object ではありません")
+            continue
+        installed = data.get("installed")
+        if not isinstance(installed, dict):
+            errors.append(f"{candidate}: installed セクションがありません")
+            continue
+        missing = [key for key in ("client_id", "client_secret", "redirect_uris") if key not in installed]
+        if missing:
+            errors.append(f"{candidate}: 必須キー不足: {','.join(missing)}")
+            continue
+        if installed.get("project_id") == project_id:
+            matching.append(_ClientSecretCandidate(candidate, _FileIdentity.from_stat(metadata), raw_data))
+        else:
+            errors.append(f"{candidate}: project_id が不一致 ({installed.get('project_id')} != {project_id})")
+
+    if not matching:
+        print("移動できる client secret が見つかりません:")
+        for error in errors:
+            print(f"- {error}")
+        return 1
+
+    selected = max(matching, key=lambda match: match.identity.modified_ns)
+    try:
+        staging_dir = Path(tempfile.mkdtemp(prefix=".yt-doctor-client-secret-", dir=selected.path.parent))
+    except OSError as error:
+        print(f"{selected.path} の固定準備に失敗: {error}")
+        return 1
+    staged_source = staging_dir / "client_secrets.json"
+    try:
+        os.rename(selected.path, staged_source)
+        staged_metadata = staged_source.lstat()
+        if _FileIdentity.from_stat(staged_metadata) != selected.identity:
+            raise OSError("検査後に変更されたため移動できません")
+    except OSError as error:
+        if staged_source.exists() or staged_source.is_symlink():
+            try:
+                _restore_staged_source(staged_source, selected.path)
+            except OSError as rollback_error:
+                print(f"{selected.path} の固定に失敗: {error}; rollback 失敗: {rollback_error}")
+                return 1
+        else:
+            try:
+                staging_dir.rmdir()
+            except OSError as cleanup_error:
+                print(f"{selected.path} の固定に失敗: {error}; cleanup 失敗: {cleanup_error}")
+                return 1
+        print(f"{selected.path} の固定に失敗: {error}")
+        return 1
+
+    destination_descriptor: int | None = None
+    destination_created = False
+    destination_identity: tuple[int, int] | None = None
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination_descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        destination_created = True
+        try:
+            destination_metadata = os.fstat(destination_descriptor)
+        except OSError:
+            destination_metadata = os.stat(destination_descriptor)
+            destination_identity = (destination_metadata.st_dev, destination_metadata.st_ino)
+            raise
+        destination_identity = (destination_metadata.st_dev, destination_metadata.st_ino)
+        with os.fdopen(destination_descriptor, "wb") as destination_file:
+            destination_descriptor = None
+            destination_file.write(selected.raw_data)
+            destination_file.flush()
+            os.fsync(destination_file.fileno())
+    except FileExistsError:
+        try:
+            _restore_staged_source(staged_source, selected.path)
+        except OSError as rollback_error:
+            print(f"{destination} は既に存在します; source rollback 失敗: {rollback_error}")
+            return 1
+        print(f"{destination} は既に存在するため移動できません")
+        return 1
+    except OSError as error:
+        if destination_descriptor is not None:
+            os.close(destination_descriptor)
+        rollback_identity = destination_identity if destination_created else None
+        rollback_errors = _rollback_client_secret_install(destination, rollback_identity, staged_source, selected.path)
+        rollback_details = "; " + "; ".join(rollback_errors) if rollback_errors else ""
+        print(f"{destination} への移動に失敗: {error}{rollback_details}")
+        return 1
+
+    try:
+        installed_metadata = destination.lstat()
+        source_metadata = staged_source.lstat()
+        installed_identity = (installed_metadata.st_dev, installed_metadata.st_ino)
+        if installed_identity != destination_identity:
+            raise OSError("作成した移動先が置き換えられたため移動できません")
+        if _FileIdentity.from_stat(source_metadata) != selected.identity:
+            raise OSError("検査後に変更されたため移動できません")
+        staged_source.unlink()
+    except OSError as error:
+        rollback_errors = _rollback_client_secret_install(
+            destination, destination_identity, staged_source, selected.path
+        )
+        rollback_details = "; " + "; ".join(rollback_errors) if rollback_errors else ""
+        print(f"{destination} への移動に失敗: {error}{rollback_details}")
+        return 1
+    try:
+        staging_dir.rmdir()
+    except OSError as error:
+        print(f"{selected.path} を {destination} へ移動しました (staging cleanup 失敗: {error})")
+        return 0
+    print(f"{selected.path} を {destination} へ移動しました")
+    return 0
+
+
 _COLORS = {
     "ok": "\033[0;32m",
     "warn": "\033[0;33m",
@@ -2740,6 +2978,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     # default (no subcommand): 従来の診断
     parser.add_argument("--json", action="store_true", help="JSON 出力 (AI 用)")
     parser.add_argument("--target", help="対象 channel dir (既定: CHANNEL_DIR env → CWD)")
+    parser.add_argument(
+        "--fix-client-secrets",
+        action="store_true",
+        help="Downloads の OAuth client secret を auth/client_secrets.json へ移動",
+    )
 
     # accounts subcommand
     accounts_parser = sub.add_parser("accounts", help="全チャンネルの GCP/OAuth 対応表")
@@ -2760,6 +3003,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         return run_accounts(root, args.json)
 
     channel_dir = resolve_channel_dir(args.target)
+    if args.fix_client_secrets:
+        return fix_client_secrets(channel_dir)
     results = run_all_checks(channel_dir)
     summary = summarize(results)
 

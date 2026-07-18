@@ -1,12 +1,44 @@
-import { expect, test, chromium, type BrowserContext } from "@playwright/test";
-import { createServer, type Server } from "node:http";
 import { mkdtemp } from "node:fs/promises";
+import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { expect, test, chromium, type BrowserContext } from "@playwright/test";
+
 const here = dirname(fileURLToPath(import.meta.url));
 const extensionPath = join(here, "..", "..", ".output", "chrome-mv3");
+const releasePayload = {
+  profile: {
+    artist: "Midnight Echoes",
+    language: "Japanese",
+    main_genre: "Electronic",
+    sub_genre: null,
+    songwriter: null,
+    ai_disclosure: {
+      enabled: false,
+      lyrics: false,
+      music: false,
+      recording_scope: "full",
+      partial_audio_type: null,
+      artist_persona: false,
+      apply_to_all: true,
+    },
+    credits: { performer_role: "Synthesizer", producer_role: "Producer" },
+  },
+  release: {
+    album_title: "Neon Skyline",
+    tracks: [
+      {
+        title: "First Light",
+        filename: "01-first-light.mp3",
+        asset_path: "/distrokid/assets/track",
+      },
+    ],
+    cover: { filename: "cover.jpg", asset_path: "/distrokid/assets/cover" },
+    release_date: "2026-08-01",
+  },
+};
 
 function listen(server: Server, port = 0): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -14,26 +46,49 @@ function listen(server: Server, port = 0): Promise<number> {
     server.listen(port, "127.0.0.1", () => {
       server.removeListener("error", reject);
       const address = server.address();
-      if (address === null || typeof address === "string") throw new Error("HTTP test server has no TCP port");
+      if (address === null || typeof address === "string")
+        throw new Error("HTTP test server has no TCP port");
       resolve(address.port);
     });
   });
 }
 
 function close(server: Server): Promise<void> {
-  return new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  return new Promise((resolve, reject) =>
+    server.close((error) => (error ? reject(error) : resolve()))
+  );
 }
 
 test("最初の開操作では停止済み menu を開かず、検出完了後に更新済み候補を提示する", async () => {
   const liveServers: Server[] = [];
   let context: BrowserContext | undefined;
   let registry: Server | undefined;
+  let releaseFails = false;
   try {
-    const makeLiveServer = async (label: string): Promise<{ url: string; info: Record<string, unknown> }> => {
+    const makeLiveServer = async (
+      label: string
+    ): Promise<{ url: string; info: Record<string, unknown> }> => {
       const server = createServer((request, response) => {
         response.setHeader("Content-Type", "application/json");
         if (request.url === "/server-info") {
           response.end(JSON.stringify(info));
+          return;
+        }
+        if (
+          request.url === "/version" ||
+          request.url === "/distrokid/collections"
+        ) {
+          response.statusCode = 404;
+          response.end("{}");
+          return;
+        }
+        if (request.url === "/distrokid/release.json") {
+          response.statusCode = releaseFails ? 500 : 200;
+          response.end(
+            JSON.stringify(
+              releaseFails ? { error: "release unavailable" } : releasePayload
+            )
+          );
           return;
         }
         response.statusCode = 404;
@@ -68,8 +123,14 @@ test("最初の開操作では停止済み menu を開かず、検出完了後�
           JSON.stringify({
             schema_version: 1,
             ttl_seconds: 30,
-            servers: [{ instance_id: active.info.label, expires_at: Date.now() / 1000 + 30, server_info: active.info }],
-          }),
+            servers: [
+              {
+                instance_id: active.info.label,
+                expires_at: Date.now() / 1000 + 30,
+                server_info: active.info,
+              },
+            ],
+          })
         );
       };
       if (delayNextResponse) {
@@ -85,7 +146,10 @@ test("最初の開操作では停止済み menu を開かず、検出完了後�
     context = await chromium.launchPersistentContext(profile, {
       channel: "chromium",
       headless: false,
-      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
+      args: [
+        `--disable-extensions-except=${extensionPath}`,
+        `--load-extension=${extensionPath}`,
+      ],
     });
     let worker = context.serviceWorkers()[0];
     worker ??= await context.waitForEvent("serviceworker");
@@ -94,22 +158,47 @@ test("最初の開操作では停止済み menu を開かず、検出完了後�
     await page.goto(`chrome-extension://${extensionId}/popup.html`);
     const select = page.locator("#server-url");
     const trigger = page.locator('button[aria-haspopup="listbox"]');
-    await expect(select.locator("option")).toContainText(["YouTube Automation (default)", "Old"]);
+    await expect(select.locator("option")).toContainText([
+      "YouTube Automation (default)",
+      "Old",
+    ]);
+    await select.selectOption(oldServer.url);
+    await expect(page.locator('[data-slot="card-title"]')).toHaveText(
+      releasePayload.release.album_title
+    );
+    await expect(page.locator('[data-slot="card-content"]')).toContainText(
+      "Japanese"
+    );
+    await expect(page.locator('[data-slot="card-content"]')).toContainText(
+      "cover.jpg"
+    );
 
     active = newServer;
     delayNextResponse = true;
     await trigger.click();
     await expect(trigger).toBeDisabled();
-    await expect(select.locator("option")).toContainText(["YouTube Automation (default)", "Old"]);
+    await expect(select.locator("option")).toContainText([
+      "YouTube Automation (default)",
+      "Old",
+    ]);
     await expect(trigger).toHaveText("稼働中の配信元を更新中…");
 
     await expect(trigger).toBeEnabled();
     const options = page.getByRole("option");
-    await expect(options).toContainText(["YouTube Automation (default)", "New"]);
+    await expect(options).toContainText([
+      "YouTube Automation (default)",
+      "New",
+    ]);
     await expect(options.filter({ hasText: "Old" })).toHaveCount(0);
+
+    releaseFails = true;
+    await select.selectOption(newServer.url);
+    await expect(page.getByRole("alert")).toHaveText(/HTTP 500/);
   } finally {
     await context?.close();
     if (registry?.listening) await close(registry);
-    await Promise.all(liveServers.filter((server) => server.listening).map(close));
+    await Promise.all(
+      liveServers.filter((server) => server.listening).map(close)
+    );
   }
 });

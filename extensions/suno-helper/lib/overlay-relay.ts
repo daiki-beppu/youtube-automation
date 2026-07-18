@@ -32,7 +32,9 @@ export function relayTabId(sender: RelaySender): number | null {
 export function requireRelayTab(sender: RelaySender, action: string): number {
   const tabId = relayTabId(sender);
   if (tabId === null) {
-    throw new Error(`${action} の中継先タブを特定できません（content script 起源ではありません）。`);
+    throw new Error(
+      `${action} の中継先タブを特定できません（content script 起源ではありません）。`
+    );
   }
   return tabId;
 }

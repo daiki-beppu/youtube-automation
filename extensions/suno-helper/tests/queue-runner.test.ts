@@ -8,9 +8,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { PromptEntry } from "../../shared/api";
-import { CLIPS_PER_REQUEST, INFLIGHT_STALL_TIMEOUT_MS, MAX_INFLIGHT_REQUESTS, PHASE } from "../../shared/constants";
-import { finalizeQueueEntriesYield, submitQueueEntries, waitForSubmittedClipsComplete } from "../lib/queue-runner";
-import type { QueueSubmissionOptions, SubmittedClipCompletionOptions } from "../lib/queue-runner";
+import {
+  CLIPS_PER_REQUEST,
+  INFLIGHT_STALL_TIMEOUT_MS,
+  MAX_INFLIGHT_REQUESTS,
+  PHASE,
+} from "../../shared/constants";
+import {
+  finalizeQueueEntriesYield,
+  resolveStalledQueueEntries,
+  submitQueueEntries,
+  waitForSubmittedClipsComplete,
+} from "../lib/queue-runner";
+import type {
+  QueueSubmissionOptions,
+  SubmittedClipCompletionOptions,
+} from "../lib/queue-runner";
 import { buildRunPayload } from "../lib/run-overrides";
 
 function makePromptEntries(count: number): PromptEntry[] {
@@ -64,7 +77,9 @@ function makeQueueSubmissionOptions(input: {
     waitForAck: async () => true,
     waitForQueueSlot,
     persistInterruptState: () => {
-      throw new Error("interrupt state should not be persisted in the happy-path test");
+      throw new Error(
+        "interrupt state should not be persisted in the happy-path test"
+      );
     },
     applyJitter: (baseMs) => baseMs,
     abortableSleep: async () => {},
@@ -94,7 +109,11 @@ describe("queue-runner: production ロジック (#1586)", () => {
     const submittedIndexes: number[] = [];
     const submittedClipIds: string[] = [];
     const progress: string[] = [];
-    const options = makeQueueSubmissionOptions({ entries, submittedIndexes, submittedClipIds });
+    const options = makeQueueSubmissionOptions({
+      entries,
+      submittedIndexes,
+      submittedClipIds,
+    });
     options.emitProgress = (value) => {
       if (value.phase === PHASE.SUBMITTED) {
         progress.push(`${value.phase}:${value.index}`);
@@ -111,7 +130,12 @@ describe("queue-runner: production ロジック (#1586)", () => {
       [1, ["clip-1-a", "clip-1-b"]],
     ]);
     expect(submittedIndexes).toEqual([0, 1]);
-    expect(submittedClipIds).toEqual(["clip-0-a", "clip-0-b", "clip-1-a", "clip-1-b"]);
+    expect(submittedClipIds).toEqual([
+      "clip-0-a",
+      "clip-0-b",
+      "clip-1-a",
+      "clip-1-b",
+    ]);
     expect(progress).toEqual([`${PHASE.SUBMITTED}:0`, `${PHASE.SUBMITTED}:1`]);
   });
 
@@ -119,7 +143,11 @@ describe("queue-runner: production ロジック (#1586)", () => {
     const entries = makePromptEntries(2);
     const submittedIndexes: number[] = [];
     const submittedClipIds: string[] = [];
-    const options = makeQueueSubmissionOptions({ entries, submittedIndexes, submittedClipIds });
+    const options = makeQueueSubmissionOptions({
+      entries,
+      submittedIndexes,
+      submittedClipIds,
+    });
     options.getSubmittedIds = () => [...submittedClipIds].sort();
     options.submitEntryToQueue = async (_entry, index) => {
       submittedIndexes.push(index);
@@ -144,7 +172,11 @@ describe("queue-runner: production ロジック (#1586)", () => {
     const entries = makePromptEntries(1);
     const submittedIndexes: number[] = [];
     const submittedClipIds: string[] = [];
-    const options = makeQueueSubmissionOptions({ entries, submittedIndexes, submittedClipIds });
+    const options = makeQueueSubmissionOptions({
+      entries,
+      submittedIndexes,
+      submittedClipIds,
+    });
     options.preset = { ...options.preset, maxEntryRetry: 1 };
     options.waitForAck = vi
       .fn<QueueSubmissionOptions["waitForAck"]>()
@@ -176,7 +208,9 @@ describe("queue-runner: production ロジック (#1586)", () => {
     const submittedClipIds: string[] = [];
     const eleventhSlot = deferred();
     const maxGeneratingClipArgs: number[] = [];
-    const waitForQueueSlot: QueueSubmissionOptions["waitForQueueSlot"] = async (maxGeneratingClips) => {
+    const waitForQueueSlot: QueueSubmissionOptions["waitForQueueSlot"] = async (
+      maxGeneratingClips
+    ) => {
       maxGeneratingClipArgs.push(maxGeneratingClips);
       if (maxGeneratingClipArgs.length === MAX_INFLIGHT_REQUESTS + 1) {
         await eleventhSlot.promise;
@@ -191,20 +225,32 @@ describe("queue-runner: production ロジック (#1586)", () => {
 
     const pending = submitQueueEntries(options);
 
-    await vi.waitFor(() => expect(maxGeneratingClipArgs.length).toBe(MAX_INFLIGHT_REQUESTS + 1));
-    expect(maxGeneratingClipArgs).toEqual(
-      Array.from({ length: MAX_INFLIGHT_REQUESTS + 1 }, () => MAX_INFLIGHT_REQUESTS * CLIPS_PER_REQUEST),
+    await vi.waitFor(() =>
+      expect(maxGeneratingClipArgs.length).toBe(MAX_INFLIGHT_REQUESTS + 1)
     );
-    expect(submittedIndexes).toEqual(Array.from({ length: MAX_INFLIGHT_REQUESTS }, (_, i) => i));
+    expect(maxGeneratingClipArgs).toEqual(
+      Array.from(
+        { length: MAX_INFLIGHT_REQUESTS + 1 },
+        () => MAX_INFLIGHT_REQUESTS * CLIPS_PER_REQUEST
+      )
+    );
+    expect(submittedIndexes).toEqual(
+      Array.from({ length: MAX_INFLIGHT_REQUESTS }, (_, i) => i)
+    );
 
     eleventhSlot.resolve();
     const result = await pending;
     expect(result.completed).toBe(true);
     expect(result.failedIndices).toEqual([]);
     expect(mapEntries(result.clipIdsByEntry)).toEqual(
-      Array.from({ length: MAX_INFLIGHT_REQUESTS + 1 }, (_, i) => [i, [`clip-${i}-a`, `clip-${i}-b`]]),
+      Array.from({ length: MAX_INFLIGHT_REQUESTS + 1 }, (_, i) => [
+        i,
+        [`clip-${i}-a`, `clip-${i}-b`],
+      ])
     );
-    expect(submittedIndexes).toEqual(Array.from({ length: MAX_INFLIGHT_REQUESTS + 1 }, (_, i) => i));
+    expect(submittedIndexes).toEqual(
+      Array.from({ length: MAX_INFLIGHT_REQUESTS + 1 }, (_, i) => i)
+    );
   });
 
   it("Given queue finalizer と全 clip が duration filter 内 When entry を確定する Then acceptedClipIds 付き DONE を emit する", async () => {
@@ -225,7 +271,10 @@ describe("queue-runner: production ロジック (#1586)", () => {
         waitForRegeneratedClips: vi.fn(async () => {}),
       },
       getDuration: (clipId: string) => {
-        const durations: Record<string, number> = { "clip-ok-a": 120, "clip-ok-b": 180 };
+        const durations: Record<string, number> = {
+          "clip-ok-a": 120,
+          "clip-ok-b": 180,
+        };
         return durations[clipId];
       },
       markAccepted,
@@ -260,9 +309,16 @@ describe("queue-runner: production ロジック (#1586)", () => {
       total: entries.length,
       clipIdsByEntry: new Map([[1, ["clip-ng-a", "clip-ng-b"]]]),
       durationFilter: { min_sec: 75, max_sec: 240 },
-      durationOutlierStrategy: { kind: "regenerate", regenerateEntry, waitForRegeneratedClips: vi.fn(async () => {}) },
+      durationOutlierStrategy: {
+        kind: "regenerate",
+        regenerateEntry,
+        waitForRegeneratedClips: vi.fn(async () => {}),
+      },
       getDuration: (clipId: string) => {
-        const durations: Record<string, number> = { "clip-ng-a": 45, "clip-ng-b": 360 };
+        const durations: Record<string, number> = {
+          "clip-ng-a": 45,
+          "clip-ng-b": 360,
+        };
         return durations[clipId];
       },
       markAccepted,
@@ -302,7 +358,11 @@ describe("queue-runner: production ロジック (#1586)", () => {
       total: 1,
       clipIdsByEntry: new Map([[0, ["clip-ng-a", "clip-ng-b"]]]),
       durationFilter: { min_sec: 75, max_sec: 240 },
-      durationOutlierStrategy: { kind: "regenerate", regenerateEntry, waitForRegeneratedClips: vi.fn(async () => {}) },
+      durationOutlierStrategy: {
+        kind: "regenerate",
+        regenerateEntry,
+        waitForRegeneratedClips: vi.fn(async () => {}),
+      },
       getDuration: (id) => durations[id],
       markAccepted,
       dropSubmittedIds,
@@ -315,7 +375,11 @@ describe("queue-runner: production ロジック (#1586)", () => {
     expect(dropSubmittedIds).toHaveBeenCalledWith(["clip-ng-a", "clip-ng-b"]);
     expect(markAccepted).toHaveBeenCalledWith(["clip-retry-a", "clip-retry-b"]);
     expect(emitProgress).toHaveBeenCalledWith(
-      expect.objectContaining({ phase: PHASE.WAITING_SLOT, index: 0, yieldRetryCount: 1 }),
+      expect.objectContaining({
+        phase: PHASE.WAITING_SLOT,
+        index: 0,
+        yieldRetryCount: 1,
+      })
     );
   });
 
@@ -333,7 +397,11 @@ describe("queue-runner: production ロジック (#1586)", () => {
       total: 1,
       clipIdsByEntry: new Map([[0, ["clip-ng-0-a", "clip-ng-0-b"]]]),
       durationFilter: { min_sec: 75, max_sec: 240 },
-      durationOutlierStrategy: { kind: "regenerate", regenerateEntry, waitForRegeneratedClips: vi.fn(async () => {}) },
+      durationOutlierStrategy: {
+        kind: "regenerate",
+        regenerateEntry,
+        waitForRegeneratedClips: vi.fn(async () => {}),
+      },
       getDuration: () => 45,
       markAccepted: vi.fn(),
       dropSubmittedIds: vi.fn(),
@@ -343,7 +411,11 @@ describe("queue-runner: production ロジック (#1586)", () => {
     expect(result).toEqual({ failedIndices: [0] });
     expect(regenerateEntry).toHaveBeenCalledTimes(2);
     expect(emitProgress).toHaveBeenLastCalledWith(
-      expect.objectContaining({ phase: PHASE.ENTRY_FAILED, index: 0, yieldRetryCount: 2 }),
+      expect.objectContaining({
+        phase: PHASE.ENTRY_FAILED,
+        index: 0,
+        yieldRetryCount: 2,
+      })
     );
   });
 
@@ -406,7 +478,7 @@ describe("queue-runner: production ロジック (#1586)", () => {
         acceptedClipIds: ["clip-ng-a", "clip-ng-b"],
         message: expect.stringContaining("再生成 OFF"),
         durationOutlierWarning: expect.stringContaining("再生成 OFF"),
-      }),
+      })
     );
   });
 
@@ -434,7 +506,10 @@ describe("queue-runner: production ロジック (#1586)", () => {
 
     expect(result).toEqual({ failedIndices: [], abortedIndex: 0 });
     expect(dropSubmittedIds).toHaveBeenCalledOnce();
-    expect(dropSubmittedIds).toHaveBeenCalledWith(["clip-retry-a", "clip-retry-b"]);
+    expect(dropSubmittedIds).toHaveBeenCalledWith([
+      "clip-retry-a",
+      "clip-retry-b",
+    ]);
   });
 
   it("Given option OFF とOK/NG混在 When entryを確定する Then NGをdropせず全clipを採用候補に残す", async () => {
@@ -469,7 +544,11 @@ describe("queue-runner: production ロジック (#1586)", () => {
       total: 1,
       clipIdsByEntry: new Map([[0, ["clip-original"]]]),
       durationFilter: { min_sec: 75, max_sec: 240 },
-      durationOutlierStrategy: { kind: "regenerate", regenerateEntry, waitForRegeneratedClips: vi.fn(async () => {}) },
+      durationOutlierStrategy: {
+        kind: "regenerate",
+        regenerateEntry,
+        waitForRegeneratedClips: vi.fn(async () => {}),
+      },
       getDuration: () => {
         throw new Error("feed unavailable");
       },
@@ -481,7 +560,11 @@ describe("queue-runner: production ロジック (#1586)", () => {
     expect(result).toEqual({ failedIndices: [0] });
     expect(regenerateEntry).toHaveBeenCalledTimes(2);
     expect(emitProgress).toHaveBeenLastCalledWith(
-      expect.objectContaining({ phase: PHASE.ENTRY_FAILED, message: "feed unavailable", yieldRetryCount: 2 }),
+      expect.objectContaining({
+        phase: PHASE.ENTRY_FAILED,
+        message: "feed unavailable",
+        yieldRetryCount: 2,
+      })
     );
   });
 
@@ -503,7 +586,10 @@ describe("queue-runner: production ロジック (#1586)", () => {
         waitForRegeneratedClips: vi.fn(async () => {}),
       },
       getDuration: (clipId: string) => {
-        const durations: Record<string, number> = { "clip-partial-ok": 180, "clip-partial-ng": 45 };
+        const durations: Record<string, number> = {
+          "clip-partial-ok": 180,
+          "clip-partial-ng": 45,
+        };
         return durations[clipId];
       },
       markAccepted,
@@ -553,7 +639,7 @@ describe("queue-runner: production ロジック (#1586)", () => {
     expect(markAccepted).not.toHaveBeenCalled();
     expect(dropSubmittedIds).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledWith(
-      "[suno-helper] entry 0 の clip ID を bridge で観測できなかったため duration guard を skip します。",
+      "[suno-helper] entry 0 の clip ID を bridge で観測できなかったため duration guard を skip します。"
     );
     expect(emitProgress).toHaveBeenCalledWith({
       phase: PHASE.DONE,
@@ -589,7 +675,7 @@ describe("queue-runner: production ロジック (#1586)", () => {
         phase: PHASE.ENTRY_FAILED,
         index: 0,
         message: "duration guard NG (60-300s): clip-short",
-      }),
+      })
     );
   });
 
@@ -616,9 +702,11 @@ describe("queue-runner: production ロジック (#1586)", () => {
       abortableSleep: async () => {},
     };
 
-    const pendingCompletion = waitForSubmittedClipsComplete(options).then(() => {
-      playlistReached = true;
-    });
+    const pendingCompletion = waitForSubmittedClipsComplete(options).then(
+      () => {
+        playlistReached = true;
+      }
+    );
 
     await feedPollStarted.promise;
     expect(feedPollRequests).toEqual([previousSubmittedClipIds]);
@@ -652,8 +740,11 @@ describe("queue-runner: production ロジック (#1586)", () => {
       now: () => currentTime,
     };
 
-    await expect(waitForSubmittedClipsComplete(options)).rejects.toThrow(
-      `最後の進捗からの経過時間=${INFLIGHT_STALL_TIMEOUT_MS}ms`,
+    const result = await waitForSubmittedClipsComplete(options);
+    expect(result.timedOut).toBe(true);
+    expect(result.stalledClipIds).toEqual(["clip-b"]);
+    expect(result.message).toContain(
+      `最後の進捗からの経過時間=${INFLIGHT_STALL_TIMEOUT_MS}ms`
     );
     expect(pollCount).toBe(2);
   });
@@ -679,9 +770,79 @@ describe("queue-runner: production ロジック (#1586)", () => {
       now: () => currentTime,
     };
 
-    await expect(waitForSubmittedClipsComplete(options)).rejects.toThrow(
-      `最後の進捗からの経過時間=${INFLIGHT_STALL_TIMEOUT_MS}ms`,
+    const result = await waitForSubmittedClipsComplete(options);
+    expect(result.timedOut).toBe(true);
+    expect(result.stalledClipIds).toEqual(["clip-a", "clip-b", "clip-c"]);
+    expect(result.message).toContain(
+      `最後の進捗からの経過時間=${INFLIGHT_STALL_TIMEOUT_MS}ms`
     );
     expect(pollCount).toBe(1);
+  });
+
+  it("Given 全 clip が完了済み When 完了待ちする Then timedOut=false で stalledClipIds が空の結果を返す", async () => {
+    const options: SubmittedClipCompletionOptions = {
+      expectedClipCount: 2,
+      previousSubmittedClipIds: [],
+      isAborted: () => false,
+      getSubmittedIds: () => ["clip-a", "clip-b"],
+      getPendingIdsByIds: () => [],
+      getPendingSubmittedIds: () => [],
+      requestFeedPoll: async () => [],
+      abortableSleep: async () => {},
+    };
+
+    const result = await waitForSubmittedClipsComplete(options);
+    expect(result).toEqual({
+      timedOut: false,
+      submittedIds: ["clip-a", "clip-b"],
+      stalledClipIds: [],
+    });
+  });
+});
+
+describe("resolveStalledQueueEntries", () => {
+  const clipIdsByEntry = new Map<number, string[]>([
+    [0, ["clip-0a", "clip-0b"]],
+    [1, ["clip-1a", "clip-1b"]],
+    [2, ["clip-2a", "clip-2b"]],
+  ]);
+
+  it("Given 一部 entry の clip だけが stall When 対応付ける Then 該当 entry index のみ返す", () => {
+    const result = resolveStalledQueueEntries(["clip-1b"], clipIdsByEntry);
+    expect(result).toEqual({
+      stalledEntryIndices: [1],
+      unmappedStalledClipIds: [],
+    });
+  });
+
+  it("Given 複数 entry にまたがる stall When 対応付ける Then 昇順の entry index を返す", () => {
+    const result = resolveStalledQueueEntries(
+      ["clip-2a", "clip-0b", "clip-2b"],
+      clipIdsByEntry
+    );
+    expect(result).toEqual({
+      stalledEntryIndices: [0, 2],
+      unmappedStalledClipIds: [],
+    });
+  });
+
+  it("Given 全 entry の clip が stall When 対応付ける Then 全 entry index を返す", () => {
+    const allClipIds = Array.from(clipIdsByEntry.values()).flat();
+    const result = resolveStalledQueueEntries(allClipIds, clipIdsByEntry);
+    expect(result).toEqual({
+      stalledEntryIndices: [0, 1, 2],
+      unmappedStalledClipIds: [],
+    });
+  });
+
+  it("Given entry へ対応付けられない stalled clip が混在 When 対応付ける Then unmappedStalledClipIds に分離する", () => {
+    const result = resolveStalledQueueEntries(
+      ["clip-1a", "previous-clip-x"],
+      clipIdsByEntry
+    );
+    expect(result).toEqual({
+      stalledEntryIndices: [1],
+      unmappedStalledClipIds: ["previous-clip-x"],
+    });
   });
 });

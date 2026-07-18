@@ -349,6 +349,7 @@ def test_get_server_info_returns_json_body(serve):
     assert body["hostname"] == "youtube-automation.localhost"
     assert body["port"] == urllib.parse.urlparse(base).port
     assert body["base_url"] == f"http://youtube-automation.localhost:{body['port']}"
+    assert set(body) == {"channel_name", "channel_short", "hostname", "port", "base_url", "label"}
 
 
 def test_post_suno_playlists_single_mode_returns_404_without_creating_legacy_json(serve, tmp_path):
@@ -3701,10 +3702,10 @@ def test_post_downloaded_empty_zip_returns_500(serve_dir, tmp_path):
     assert zip_path.exists()
 
 
-def test_post_downloaded_partial_zip_returns_500_and_does_not_set_music_downloaded(serve_dir, tmp_path):
-    """Given prompts 2 件に対して ZIP 内の音声が 1 件
+def test_post_downloaded_partial_zip_succeeds_with_warning(serve_dir, tmp_path):
+    """Given prompts 2 件（期待 4 clips）に対して ZIP 内の音声が 2 件
     When POST /collections/<id>/downloaded を送る
-    Then 500 を返し assets.music_downloaded を設定しない。
+    Then 200 で受理してファイルを配置し、warning と expected/actual/missing を記録する（#1913）。
     """
     planning = tmp_path / "planning"
     _make_collection(
@@ -3715,28 +3716,131 @@ def test_post_downloaded_partial_zip_returns_500_and_does_not_set_music_download
             {"name": "曲B — Song B", "style": "s", "lyrics": ""},
         ],
     )
-    zip_path = _make_zip(tmp_path / "partial.zip", {"Song A.mp3": b"audio1"})
+    zip_path = _make_zip(tmp_path / "partial.zip", {"Song A.mp3": b"audio1", "Song A_1.mp3": b"audio2"})
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
     payload = {
-        "file_count": 2,
+        "file_count": 4,
         "format": "mp3",
         "suno_playlist_url": "https://suno.com/playlist/abc",
         "download_path": str(zip_path),
     }
 
-    with pytest.raises(urllib.error.HTTPError) as exc_info:
-        _post(
-            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
-            payload,
-            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
-        )
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+        result = json.loads(resp.read().decode("utf-8"))
 
-    assert exc_info.value.code == 500
-    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
-    assert not ws_path.exists()
+    assert result["ok"] is True
+    assert result["placed_count"] == 2
+    assert result["warning"] == "placed 2 files, expected 4 (2 missing)"
     music_dir = planning / "20260601-clm-aaa-collection" / "02-Individual-music"
-    assert not music_dir.exists() or list(music_dir.iterdir()) == []
+    assert len(list(music_dir.glob("*.mp3"))) == 2
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    workflow_state = json.loads(ws_path.read_text(encoding="utf-8"))
+    music = workflow_state["planning"]["music"]
+    assert music["expected_file_count"] == 4
+    assert music["actual_file_count"] == 2
+    assert music["missing_file_count"] == 2
+    assert workflow_state["assets"]["music_downloaded"] is True
+
+
+def test_post_downloaded_partial_zip_marks_collections_index_downloaded(serve_dir, tmp_path):
+    """Given 部分完了で受理済みの collection（音声 2 件 < 期待 4 件）
+    When build_collections_index を評価する
+    Then assets.music_downloaded=true により status=downloaded になる（#1913 貫通契約）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[
+            {"name": "曲A — Song A", "style": "s", "lyrics": ""},
+            {"name": "曲B — Song B", "style": "s", "lyrics": ""},
+        ],
+    )
+    zip_path = _make_zip(tmp_path / "partial.zip", {"Song A.mp3": b"audio1", "Song A_1.mp3": b"audio2"})
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 4,
+        "format": "mp3",
+        "suno_playlist_url": "https://suno.com/playlist/abc",
+        "download_path": str(zip_path),
+    }
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+
+    row = build_collections_index(planning)[0]
+    assert row["status"] == "downloaded"
+    assert row["downloaded_count"] == 2
+    assert row["expected_file_count"] == 4
+
+
+def test_post_downloaded_full_redownload_resets_missing_file_count(serve_dir, tmp_path):
+    """Given 部分完了（missing=2）を記録済みの collection
+    When 完全数の ZIP で再度 POST /collections/<id>/downloaded を送る
+    Then missing_file_count=0 に更新され warning を返さない（#1913）。
+    """
+    planning = tmp_path / "planning"
+    _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[
+            {"name": "曲A — Song A", "style": "s", "lyrics": ""},
+            {"name": "曲B — Song B", "style": "s", "lyrics": ""},
+        ],
+    )
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    partial_zip = _make_zip(tmp_path / "partial.zip", {"Song A.mp3": b"audio1", "Song A_1.mp3": b"audio2"})
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        {
+            "file_count": 4,
+            "format": "mp3",
+            "suno_playlist_url": "https://suno.com/playlist/abc",
+            "download_path": str(partial_zip),
+        },
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert json.loads(resp.read().decode("utf-8"))["warning"]
+
+    full_zip = _make_zip(
+        tmp_path / "full.zip",
+        {
+            "Song A.mp3": b"audio1",
+            "Song A_1.mp3": b"audio2",
+            "Song B.mp3": b"audio3",
+            "Song B_1.mp3": b"audio4",
+        },
+    )
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        {
+            "file_count": 4,
+            "format": "mp3",
+            "suno_playlist_url": "https://suno.com/playlist/abc",
+            "download_path": str(full_zip),
+        },
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        result = json.loads(resp.read().decode("utf-8"))
+
+    assert result["placed_count"] == 4
+    assert "warning" not in result
+    ws_path = planning / "20260601-clm-aaa-collection" / "workflow-state.json"
+    music = json.loads(ws_path.read_text(encoding="utf-8"))["planning"]["music"]
+    assert music["actual_file_count"] == 4
+    assert music["missing_file_count"] == 0
 
 
 def test_post_downloaded_unmatched_zip_returns_500_and_does_not_set_music_downloaded(serve_dir, tmp_path):
@@ -3934,8 +4038,8 @@ def test_post_downloaded_invalid_workflow_state_rolls_back_zip_music(serve_dir, 
     assert ws_path.read_bytes() == bad_state
 
 
-def test_post_downloaded_partial_zip_keeps_download_archive(serve_dir, tmp_path):
-    """ZIP が期待数未満なら元 ZIP を残し、再取得や調査ができるようにする。"""
+def test_post_downloaded_partial_zip_cleans_up_download_archive(serve_dir, tmp_path):
+    """部分完了は成功として受理するため、完全成功と同様に元 ZIP を後始末する（#1913）。"""
     planning = tmp_path / "planning"
     _make_collection(
         planning,
@@ -3949,20 +4053,21 @@ def test_post_downloaded_partial_zip_keeps_download_archive(serve_dir, tmp_path)
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
 
-    with pytest.raises(urllib.error.HTTPError) as exc_info:
-        _post(
-            f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
-            {
-                "file_count": 1,
-                "format": "mp3",
-                "suno_playlist_url": "https://suno.com/playlist/abc",
-                "download_path": str(zip_path),
-            },
-            headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
-        )
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        {
+            "file_count": 1,
+            "format": "mp3",
+            "suno_playlist_url": "https://suno.com/playlist/abc",
+            "download_path": str(zip_path),
+        },
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+        result = json.loads(resp.read().decode("utf-8"))
 
-    assert exc_info.value.code == 500
-    assert zip_path.exists()
+    assert result["warning"] == "placed 1 files, expected 4 (3 missing)"
+    assert not zip_path.exists()
 
 
 def test_post_downloaded_partial_zip_with_filtered_expected_count_succeeds(serve_dir, tmp_path):

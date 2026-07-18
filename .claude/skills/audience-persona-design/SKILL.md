@@ -7,8 +7,12 @@ description: "Use when ターゲット視聴者を第一ペルソナとして設
 
 `/viewer-voice` のコメント分析、ベンチマークタグ分析、Web 調査、`/viewing-scene` の視聴シーン検証を束ね、チャンネル判断軸になる **1 人の第一ペルソナ** を設計する。
 
-新チャンネル立ち上げ時の軽量ペルソナは `/channel-new` が `docs/channel/personas/channel-new-persona.md` として作成する。
-本スキルは、公開後に `/viewer-voice` の実コメント分析を加え、方向性見直しや `/collection-ideate` の判断軸として使う本格版として扱う。
+新規開設時は、公開前でも競合チャンネルのコメントを `/viewer-voice` で分析し、その結果を入力に本スキルで本格ペルソナを作成する。公開後は自チャンネルの実コメント分析を加えて見直し、方向性検討や `/collection-ideate` の判断軸として更新する。
+
+入口で実行コンテキストを次のどちらかに確定し、Phase 5 の `/viewing-scene` まで同じ値を引き継ぐ。
+
+- **新規開設（公開前）**: `/channel-new` Step 7 から呼ばれた経路。`docs/plans/viewer-voice-analysis.md`、`docs/channel/ttp-seed-confirmation.md`、`docs/channel/competitor-branding-snapshot.json` を競合 / TTP 入力として扱う。任意の `/benchmark` 成果物や、自チャンネル公開後の `reports/analysis_*.md` は前提にしない
+- **公開後**: 通常の見直し経路。従来どおり viewer-voice、benchmark、Web 調査、自チャンネル Analytics を入力にする
 
 ## 完了条件
 
@@ -47,10 +51,6 @@ description: "Use when ターゲット視聴者を第一ペルソナとして設
 - `config/channel/` が存在しない、または `load_config()` でロードできない → 新規チャンネルは `/channel-new`、既存チャンネルは `/channel-new`（既存チャンネル取り込みモード）を案内して停止する
 - `docs/plans/viewer-voice-analysis.md` が無い → 前工程 `/viewer-voice` を案内して停止する
 
-### 許容する fail
-
-- `docs/channel/personas/channel-new-persona.md` が無い → 公開後データから本格版を設計できるため停止しない。存在する場合だけ初期仮説として読み込む
-
 ## 実行フロー
 
 ### Phase 1: データ収集（サブエージェント並列）
@@ -58,7 +58,14 @@ description: "Use when ターゲット視聴者を第一ペルソナとして設
 **2つのサブエージェントを並列起動**（Agent ツール。Codex では同等のエージェント機能に読み替え）:
 
 **Agent 1: ベンチマークタグ分析**
-- `data/benchmark_YYYYMMDD.json`（更新時刻が最新のファイル。`ls -t data/benchmark_*.json | head -1` で取得できるもの）を読み込み
+
+**新規開設（公開前）**:
+- `docs/plans/viewer-voice-analysis.md` のコメント語彙・利用シーン、`docs/channel/ttp-seed-confirmation.md` の relationship、`docs/channel/competitor-branding-snapshot.json` の description / keywords を、記録済みの範囲だけ入力にする。任意の `data/benchmark_YYYYMMDD.json` が無くても停止しない
+- 入力に実在する語彙から検索キーワード仮説と転写する型を整理し、各仮説に出典ファイルを付ける
+- 動画タグや頻度の根拠が入力に無ければ推測で補わず「動画タグ頻度は未検証」と記録する
+
+**公開後**:
+- `data/benchmark_YYYYMMDD.json`（更新時刻が最新のファイル。`ls -t data/benchmark_*.json | head -1` で取得できるもの）を読み込む
 - 全ベンチマーク動画のタグを集計（頻度順）
 - チャンネルごとのタグ戦略の違いを分析
 - 視聴者が使う検索キーワードの傾向を抽出
@@ -127,7 +134,7 @@ options:
 
 ### Phase 5: viewing-scene 検証
 
-暫定 `persona-definition.md` を保存したら `/viewing-scene` を実行する。
+暫定 `persona-definition.md` を保存したら `/viewing-scene` を実行する。入口で確定した **新規開設（公開前）** / **公開後** の実行コンテキストを明示して渡し、`/viewing-scene` 側で推測によるモード切り替えをさせない。
 `/viewing-scene` が `docs/plans/viewing-scene-matrix.md` を生成したら、以下を確認する:
 
 - 第一ペルソナが実際に聴く時間帯
@@ -153,13 +160,14 @@ options:
 | WebSearch 不可 | 検索結果が取得できない | 手動入力で代替するか、当該分析をスキップする |
 | viewer-voice 未実施 | `docs/plans/viewer-voice-analysis.md` が無い | `/viewer-voice` を先に実行するよう案内して停止する |
 | viewing-scene 未反映 | `docs/plans/viewing-scene-matrix.md` が無い | 暫定 `persona-definition.md` 保存後に `/viewing-scene` を実行し、結果を反映して最終化する |
-| 入力データ不在 | `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics-collect` 等を実行して入力を用意 |
+| 公開前入力不在 | 新規開設（公開前）で競合 / TTP / viewer-voice 成果物が不足 | `/channel-new` Step 5 または Step 7 の該当前工程へ戻る |
+| 公開後入力不在 | 公開後に `data/` のベンチマーク/Analytics スナップショットが無い | 先に `/benchmark`・`/analytics-collect` 等を実行して入力を用意 |
 
 ## 関連ファイル
 
 - `docs/plans/viewer-voice-analysis.md` — コメント分析結果（入力）
+- `docs/channel/ttp-seed-confirmation.md` / `docs/channel/competitor-branding-snapshot.json` — 新規開設（公開前）の TTP 入力
 - `docs/plans/viewing-scene-matrix.md` — 視聴シーン検証結果（最終反映）
-- `docs/channel/personas/channel-new-persona.md` — channel-new が作る初期ペルソナ仮説
 - `docs/channel/personas/persona-definition.md` — 第一ペルソナ定義（暫定保存 + 最終更新）
-- `data/benchmark_YYYYMMDD.json` — タグデータ
+- `data/benchmark_YYYYMMDD.json` — 公開後のタグデータ
 - `config/channel/content.json` — 現在のタグ設定

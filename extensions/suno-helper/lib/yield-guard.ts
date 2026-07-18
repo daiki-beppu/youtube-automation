@@ -1,5 +1,5 @@
-import { MAX_YIELD_RETRY } from "../../shared/constants";
 import type { DurationFilter } from "../../shared/api";
+import { MAX_YIELD_RETRY } from "../../shared/constants";
 
 export interface DurationClip {
   id: string;
@@ -22,7 +22,10 @@ export type DurationAttemptDecision =
   | { kind: "retry"; message: string }
   | { kind: "fail"; message: string; reason: "evaluation" | "outlier" };
 
-export function checkDuration(duration: number, filter: DurationFilter): boolean {
+export function checkDuration(
+  duration: number,
+  filter: DurationFilter
+): boolean {
   if (!Number.isFinite(duration)) {
     return false;
   }
@@ -35,18 +38,30 @@ export function checkDuration(duration: number, filter: DurationFilter): boolean
   return true;
 }
 
-export function evaluateClips(clips: DurationClip[], filter: DurationFilter): DurationEvaluation {
+export function evaluateClips(
+  clips: DurationClip[],
+  filter: DurationFilter
+): DurationEvaluation {
   return {
     ok: clips
-      .filter((clip) => clip.duration !== undefined && checkDuration(clip.duration, filter))
+      .filter(
+        (clip) =>
+          clip.duration !== undefined && checkDuration(clip.duration, filter)
+      )
       .map((clip) => clip.id),
     ng: clips
-      .filter((clip) => clip.duration === undefined || !checkDuration(clip.duration, filter))
+      .filter(
+        (clip) =>
+          clip.duration === undefined || !checkDuration(clip.duration, filter)
+      )
       .map((clip) => clip.id),
   };
 }
 
-export function shouldRetryDurationOutlier(options: { attemptCount: number; maxRetry?: number }): boolean {
+export function shouldRetryDurationOutlier(options: {
+  attemptCount: number;
+  maxRetry?: number;
+}): boolean {
   return options.attemptCount < (options.maxRetry ?? MAX_YIELD_RETRY);
 }
 
@@ -61,11 +76,18 @@ export function decideDurationAttempt(options: {
   if (options.result.kind === "evaluation-failed") {
     if (
       options.policy.kind === "regenerate" &&
-      shouldRetryDurationOutlier({ attemptCount: options.attemptCount, maxRetry: options.maxRetry })
+      shouldRetryDurationOutlier({
+        attemptCount: options.attemptCount,
+        maxRetry: options.maxRetry,
+      })
     ) {
       return { kind: "retry", message: options.result.message };
     }
-    return { kind: "fail", message: options.result.message, reason: "evaluation" };
+    return {
+      kind: "fail",
+      message: options.result.message,
+      reason: "evaluation",
+    };
   }
 
   const { evaluation } = options.result;
@@ -88,14 +110,23 @@ export function decideDurationAttempt(options: {
       warning: `${message}; 再生成 OFF のため全 clip を採用候補として保持します`,
     };
   }
-  if (shouldRetryDurationOutlier({ attemptCount: options.attemptCount, maxRetry: options.maxRetry })) {
+  if (
+    shouldRetryDurationOutlier({
+      attemptCount: options.attemptCount,
+      maxRetry: options.maxRetry,
+    })
+  ) {
     return { kind: "retry", message };
   }
   return { kind: "fail", message, reason: "outlier" };
 }
 
-export function formatYieldFailure(evaluation: DurationEvaluation, filter: DurationFilter): string {
+export function formatYieldFailure(
+  evaluation: DurationEvaluation,
+  filter: DurationFilter
+): string {
   const range = `${filter.min_sec}-${filter.max_sec}s`;
-  const rejected = evaluation.ng.length === 0 ? "none" : evaluation.ng.join(", ");
+  const rejected =
+    evaluation.ng.length === 0 ? "none" : evaluation.ng.join(", ");
   return `duration guard NG (${range}): ${rejected}`;
 }

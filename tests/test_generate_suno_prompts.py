@@ -1001,6 +1001,37 @@ def test_main_json_output_is_loadable_array_of_entries(channel_dir, tmp_path, mo
 @pytest.mark.parametrize(
     ("duration_filter", "expected"),
     [
+        # 部分 override: max_sec のみ指定で min_sec は default (60) と deep-merge (#1937)。
+        ({"max_sec": 480}, {"min_sec": 60, "max_sec": 480}),
+        # 全量 override: 長尺 BGM チャンネル想定の min/max 同時変更 (#1937)。
+        ({"min_sec": 90, "max_sec": 600}, {"min_sec": 90, "max_sec": 600}),
+    ],
+)
+def test_main_json_duration_filter_honors_channel_override(
+    channel_dir,
+    tmp_path,
+    monkeypatch,
+    duration_filter,
+    expected,
+):
+    """config/skills/suno.yaml::duration_filter の override が suno-prompts.json へ反映される (#1937)."""
+    _write_suno_override(
+        channel_dir,
+        genre_line="lo-fi jazz, soft piano",
+        duration_filter=duration_filter,
+    )
+    patterns_path = _write_minimal_patterns(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["yt-generate-suno", str(patterns_path)])
+
+    main()
+
+    data = json.loads((patterns_path.parent / "suno-prompts.json").read_text(encoding="utf-8"))
+    assert data["duration_filter"] == expected
+
+
+@pytest.mark.parametrize(
+    ("duration_filter", "expected"),
+    [
         (False, "must be a mapping"),
         ({"min_sec": "60", "max_sec": 300}, "finite numeric"),
         ({"min_sec": True, "max_sec": 300}, "finite numeric"),

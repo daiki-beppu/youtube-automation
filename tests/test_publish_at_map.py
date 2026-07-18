@@ -114,6 +114,32 @@ class TestBuildPublishAtMap:
 class TestCollectBasicAnalyticsIntegration:
     """collect_basic_analytics() が scheduled_publish_at を注入することを検証"""
 
+    def test_default_depth_remains_standard_without_full_only_data(self, tmp_path):
+        """depth 未指定時は standard データだけを返す。"""
+        mixin = _make_mixin()
+        mixin.initialize = lambda: None
+        mixin.get_channel_analytics = lambda s, e: {"period": "test", "daily_metrics": []}
+        mixin.get_strategic_video_analytics = lambda s, e, mode="efficient": {
+            "mode": "efficient",
+            "top_videos": [],
+            "recent_videos": [],
+            "summary": {},
+        }
+        mixin.get_ctr_analysis = lambda s, e: {"videos": []}
+        mixin.get_traffic_source_analytics = lambda s, e: {"sources": {}}
+        mixin.get_traffic_source_detail = lambda s, e, source_type: []
+        mixin.get_device_analytics = lambda s, e: {"devices": {}}
+        mixin.get_country_analytics = lambda s, e: pytest.fail("country should require full depth")
+        mixin.get_retention_summary = lambda s, e, top_n: pytest.fail("retention should require full depth")
+
+        with patch("youtube_automation.utils.channel_analytics.channel_dir", return_value=tmp_path):
+            result = mixin.collect_basic_analytics("2026-03-14", "2026-04-13")
+
+        assert result["collection_depth"] == "standard"
+        assert result["summary"]["depth"] == "standard"
+        assert result["audience"] == {"by_device": {"devices": {}}}
+        assert "retention" not in result
+
     def test_injects_scheduled_publish_at(self, live_dir):
         """video_data に scheduled_publish_at が追加される"""
         mixin = _make_mixin()

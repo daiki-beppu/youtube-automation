@@ -22,6 +22,14 @@ const DESELECT_CLIP_BUTTON_ANY_SELECTOR = 'button[aria-label="Deselect clip"]';
 export const SELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Select clip"]`;
 /** 選択済みの clip ボタン。click 後にこの aria-label へ遷移したことを verify するシグナル（SELECT_CLIP_BUTTON_SELECTOR と対称）。 */
 export const DESELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Deselect clip"]`;
+/**
+ * 新 Create UI (2026-07, #2043) の per-clip row コンテナ。実 DOM 検証で確認:
+ *   `div.clip-row[data-testid="clip-row"][role="group"][aria-label=<曲名>][data-clip-status]`
+ * 仮想ウィンドウ外の row は `<div class="clip-row" aria-label="Untitled">`（子要素なしの空シェル）
+ * になり、ボタンも ID ソースも持たない。シェルは Select ボタン基点の row 導出に一切かからないため、
+ * このセレクタは「ボタンから最寄りの実 row を特定する」用途にのみ使う（シェルを row として拾わない）。
+ */
+const CLIP_ROW_CONTAINER_SELECTOR = ".clip-row";
 const CLIP_ROW_SONG_ID_DATA_KEY = "songId";
 const CLIP_ROW_CLIP_ID_DATA_KEY = "clipId";
 const CLIP_ROW_SONG_LINK_SELECTOR = 'a[href*="/song/"]';
@@ -56,14 +64,28 @@ const CLIP_SELECT_VERIFY_TIMEOUT_MS = 1000;
 const CLIP_SELECT_VERIFY_MS_PER_ROW = 100;
 /** Cmd+P 発火の最大リトライ回数 (#1050)。dialog が開かない場合に再発火する。 */
 const CMD_P_MAX_RETRIES = 3;
-/** clip row 内の曲タイトル表示要素。実機 DOM 調査 (2026-06-23) で確認済み。 */
+/** clip row 内の曲タイトル表示要素（旧 DOM、実機調査 2026-06-23）。 */
 const CLIP_ROW_TITLE_SELECTOR = 'span[role="button"][aria-label^="Play "]';
+/**
+ * 新 Create UI (#2043) の再生ボタン。`span` ではなく
+ * `div.clip-image-container[role="button"][aria-label="Play <曲名>"]` に変わったため、
+ * タグ非依存で aria-label から曲名を取り出す（textContent は画像コンテナのため空）。
+ */
+const CLIP_ROW_PLAY_LABEL_SELECTOR = '[role="button"][aria-label^="Play "]';
+const CLIP_ROW_PLAY_LABEL_PREFIX = "Play ";
 /** clip list の遅延ロードを bottom jump に依存させないための段階スクロール量。 */
 const CLIP_LIST_LOAD_SCROLL_STEP_PX = 600;
 /** scrollAndMultiSelectByIds: 各スクロールステップ後に仮想 DOM が描画されるのを待つ猶予 (ms)。 */
 const VIRTUAL_SCROLL_RENDER_WAIT_MS = 200;
 /** scrollAndMultiSelectByIds: 全スクロール後に未発見 ID がある場合の再スキャン上限回数。 */
 const VIRTUAL_SCROLL_RETRY_PASSES = 2;
+/**
+ * 各スクロール位置で仮想ウィンドウの再描画（hydration）を待つ上限 (ms) (#2043)。
+ * 新 Create UI はウィンドウ外 row を空シェル化し、scrollTop 変更への再描画追従が
+ * 数百 ms〜数秒遅延することがある。固定 renderWaitMs だけでは古いウィンドウを
+ * 見続けて全 target を missing にするため、描画 signature の変化を poll で検知する。
+ */
+const VIRTUAL_WINDOW_HYDRATION_WAIT_MS = 3000;
 /** loadSettleTimeoutMs のデフォルト基準値 (ms)。 */
 const SETTLE_BASE_MS = 3000;
 /** loadSettleTimeoutMs を targetIds.length でスケールする係数 (ms/clip)。 */
@@ -76,7 +98,7 @@ type ClipListScrollIntent = "probe-intermediate" | "settle-bottom";
  */
 function findPlaylistDialog(): HTMLElement | null {
   const dialogs = Array.from(
-    document.querySelectorAll<HTMLElement>('[role="dialog"]'),
+    document.querySelectorAll<HTMLElement>('[role="dialog"]')
   );
   return (
     dialogs.find((dialog) => {
@@ -110,8 +132,17 @@ function hasClipContent(el: HTMLElement): boolean {
 }
 
 function resolveClipRowFromSelectButton(
-  button: HTMLElement,
+  button: HTMLElement
 ): HTMLElement | null {
+  // 新 Create UI (#2043): row 自体が `.clip-row` コンテナとして復活した。コンテンツを持つ
+  // `.clip-row` 祖先があればそれを row とする（空シェルは hasClipContent で除外され、
+  // そもそもボタンを内包しないためここへ到達しない）。旧 DOM / grid view は従来経路で解決する。
+  const clipRowContainer = button.closest<HTMLElement>(
+    CLIP_ROW_CONTAINER_SELECTOR
+  );
+  if (clipRowContainer && hasClipContent(clipRowContainer)) {
+    return clipRowContainer;
+  }
   const multiSelectWrapper = button.closest(MULTI_SELECT_BUTTON_SELECTOR);
   if (!multiSelectWrapper) {
     const articleRow = button.closest<HTMLElement>("article");
@@ -137,7 +168,7 @@ function resolveClipRowFromSelectButton(
 }
 
 function resolveGridCardFromSelectButton(
-  button: HTMLElement,
+  button: HTMLElement
 ): HTMLElement | null {
   let candidate: HTMLElement | null = button.parentElement;
   for (
@@ -157,7 +188,7 @@ function resolveGridCardFromSelectButton(
           sibling.querySelectorAll(SELECT_CLIP_BUTTON_ANY_SELECTOR).length +
             sibling.querySelectorAll(DESELECT_CLIP_BUTTON_ANY_SELECTOR)
               .length ===
-          1,
+          1
       )
     ) {
       return candidate;
@@ -195,14 +226,14 @@ function resolveScrollableAncestor(element: HTMLElement): HTMLElement | null {
 
 function resolveClipListScroller(): HTMLElement | null {
   const explicit = document.querySelector<HTMLElement>(
-    CLIP_LIST_SCROLLER_SELECTOR,
+    CLIP_LIST_SCROLLER_SELECTOR
   );
   if (explicit && collectClipRowsFromSelectButtons(explicit).length > 0) {
     return explicit;
   }
 
   const buttons = document.querySelectorAll<HTMLElement>(
-    `${SELECT_CLIP_BUTTON_ANY_SELECTOR}, ${DESELECT_CLIP_BUTTON_ANY_SELECTOR}`,
+    `${SELECT_CLIP_BUTTON_ANY_SELECTOR}, ${DESELECT_CLIP_BUTTON_ANY_SELECTOR}`
   );
   for (const button of buttons) {
     const row = resolveClipRowFromSelectButton(button);
@@ -219,7 +250,7 @@ function resolveClipListScroller(): HTMLElement | null {
 
 function collectClipRowsFromSelectButtons(root: ParentNode): HTMLElement[] {
   const buttons = root.querySelectorAll<HTMLElement>(
-    `${SELECT_CLIP_BUTTON_ANY_SELECTOR}, ${DESELECT_CLIP_BUTTON_ANY_SELECTOR}`,
+    `${SELECT_CLIP_BUTTON_ANY_SELECTOR}, ${DESELECT_CLIP_BUTTON_ANY_SELECTOR}`
   );
   const seen = new Set<HTMLElement>();
   const rows: HTMLElement[] = [];
@@ -281,7 +312,7 @@ function collectClipRowIds(row: HTMLElement): Set<string> {
     ids.add(clipId);
   }
   for (const link of row.querySelectorAll<HTMLAnchorElement>(
-    CLIP_ROW_SONG_LINK_SELECTOR,
+    CLIP_ROW_SONG_LINK_SELECTOR
   )) {
     const id = extractSongIdFromHref(link.href);
     if (id) {
@@ -305,15 +336,34 @@ function collectClipRowIds(row: HTMLElement): Set<string> {
 }
 
 export function collectClipRowTitle(row: HTMLElement): string | null {
-  return (
-    row.querySelector(CLIP_ROW_TITLE_SELECTOR)?.textContent?.trim() || null
-  );
+  const legacyTitle = row
+    .querySelector(CLIP_ROW_TITLE_SELECTOR)
+    ?.textContent?.trim();
+  if (legacyTitle) {
+    return legacyTitle;
+  }
+  // 新 Create UI (#2043): 再生ボタンが div 化し textContent を持たないため aria-label から取る。
+  const playLabel = row
+    .querySelector(CLIP_ROW_PLAY_LABEL_SELECTOR)
+    ?.getAttribute("aria-label");
+  if (playLabel && playLabel.startsWith(CLIP_ROW_PLAY_LABEL_PREFIX)) {
+    const title = playLabel.slice(CLIP_ROW_PLAY_LABEL_PREFIX.length).trim();
+    if (title) {
+      return title;
+    }
+  }
+  // 新 Create UI の row コンテナは aria-label に曲名を持つ（closest は self を含む）。
+  const rowLabel = row
+    .closest<HTMLElement>(CLIP_ROW_CONTAINER_SELECTOR)
+    ?.getAttribute("aria-label")
+    ?.trim();
+  return rowLabel || null;
 }
 
 function findRowsByClipIds(
   rows: HTMLElement[],
   targetIds: string[],
-  titleFallbackMap?: Map<string, string>,
+  titleFallbackMap?: Map<string, string>
 ): HTMLElement[] {
   const rowById = new Map<string, HTMLElement>();
   for (const row of rows) {
@@ -373,7 +423,7 @@ function findRowsByClipIds(
 function listMissingClipIds(
   rows: HTMLElement[],
   targetIds: string[],
-  titleFallbackMap?: Map<string, string>,
+  titleFallbackMap?: Map<string, string>
 ): string[] {
   const foundIds = new Set<string>();
   for (const row of rows) {
@@ -402,15 +452,15 @@ function listMissingClipIds(
 
 function scrollClipListTowardBottom(
   scroller: HTMLElement,
-  intent: ClipListScrollIntent,
+  intent: ClipListScrollIntent
 ): void {
   const maxScrollTop = Math.max(
     0,
-    scroller.scrollHeight - scroller.clientHeight,
+    scroller.scrollHeight - scroller.clientHeight
   );
   const currentScrollTop = Math.max(
     0,
-    Math.min(scroller.scrollTop, maxScrollTop),
+    Math.min(scroller.scrollTop, maxScrollTop)
   );
   const step = Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
   const nextScrollTop = currentScrollTop + step;
@@ -445,7 +495,7 @@ export interface EnsureClipRowsLoadedOptions {
 
 export async function ensureClipRowsLoadedByIds(
   targetIds: string[],
-  options: EnsureClipRowsLoadedOptions,
+  options: EnsureClipRowsLoadedOptions
 ): Promise<HTMLElement[]> {
   const uniqueTargetIds = Array.from(new Set(targetIds));
   if (uniqueTargetIds.length === 0) {
@@ -461,7 +511,7 @@ export async function ensureClipRowsLoadedByIds(
   } = options;
 
   const scroller = document.querySelector<HTMLElement>(
-    CLIP_LIST_SCROLLER_SELECTOR,
+    CLIP_LIST_SCROLLER_SELECTOR
   );
   if (!scroller) {
     throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
@@ -476,7 +526,7 @@ export async function ensureClipRowsLoadedByIds(
     const foundRows = findRowsByClipIds(
       rows,
       uniqueTargetIds,
-      titleFallbackMap,
+      titleFallbackMap
     );
     if (isAborted()) {
       return foundRows;
@@ -496,7 +546,7 @@ export async function ensureClipRowsLoadedByIds(
       const nextFoundRows = findRowsByClipIds(
         rows,
         uniqueTargetIds,
-        titleFallbackMap,
+        titleFallbackMap
       );
       if (isAborted()) {
         return nextFoundRows;
@@ -511,10 +561,10 @@ export async function ensureClipRowsLoadedByIds(
         const missing = listMissingClipIds(
           rows,
           uniqueTargetIds,
-          titleFallbackMap,
+          titleFallbackMap
         ).join(", ");
         throw new Error(
-          `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}`,
+          `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}`
         );
       }
       scrollClipListTowardBottom(scroller, "settle-bottom");
@@ -538,7 +588,7 @@ export async function ensureClipRowsLoadedByIds(
  */
 export async function ensureClipRowsLoaded(
   count: number,
-  options: EnsureClipRowsLoadedOptions,
+  options: EnsureClipRowsLoadedOptions
 ): Promise<HTMLElement[]> {
   const {
     isAborted,
@@ -587,7 +637,7 @@ export async function ensureClipRowsLoaded(
       if (Date.now() >= settleDeadline) {
         // リスト末尾到達（追加ロードが止まった）のに不足
         throw new Error(
-          `clip row が ${rows.length}/${count} 件しかロードできませんでした。生成済み clip が不足しているか、Suno の UI 変更の可能性があります。`,
+          `clip row が ${rows.length}/${count} 件しかロードできませんでした。生成済み clip が不足しているか、Suno の UI 変更の可能性があります。`
         );
       }
       scrollClipListTowardBottom(scroller, "settle-bottom");
@@ -615,7 +665,7 @@ export async function ensureClipRowsLoaded(
 export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
   if (rows.length === 0) {
     throw new Error(
-      "multiSelectClips に空の rows が渡されました（内部不変条件違反）。",
+      "multiSelectClips に空の rows が渡されました（内部不変条件違反）。"
     );
   }
   for (const row of rows) {
@@ -623,11 +673,11 @@ export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
       continue;
     }
     const button = row.querySelector<HTMLButtonElement>(
-      SELECT_CLIP_BUTTON_ANY_SELECTOR,
+      SELECT_CLIP_BUTTON_ANY_SELECTOR
     );
     if (!button) {
       throw new Error(
-        "Select clip button が見つかりません。Suno の UI 変更の可能性があります。",
+        "Select clip button が見つかりません。Suno の UI 変更の可能性があります。"
       );
     }
     button.click();
@@ -639,21 +689,134 @@ export async function multiSelectClips(rows: HTMLElement[]): Promise<void> {
     Date.now() +
     Math.max(
       CLIP_SELECT_VERIFY_TIMEOUT_MS,
-      rows.length * CLIP_SELECT_VERIFY_MS_PER_ROW,
+      rows.length * CLIP_SELECT_VERIFY_MS_PER_ROW
     );
   for (;;) {
     const selected = rows.filter((row) =>
-      row.querySelector(DESELECT_CLIP_BUTTON_ANY_SELECTOR),
+      row.querySelector(DESELECT_CLIP_BUTTON_ANY_SELECTOR)
     ).length;
     if (selected >= rows.length) {
       return;
     }
     if (Date.now() >= deadline) {
       throw new Error(
-        `Clip multi-select verification failed: expected ${rows.length} selected, got ${selected}`,
+        `Clip multi-select verification failed: expected ${rows.length} selected, got ${selected}`
       );
     }
     await sleep(CLIP_SELECT_VERIFY_POLL_MS);
+  }
+}
+
+/**
+ * 現在描画中の仮想ウィンドウの signature (#2043)。
+ * scrollHeight（ページネーションでの成長検知）と、検出できた row の先頭 ID 集合
+ * （ウィンドウ移動・シェル hydration の検知）で構成する。選択操作（Select→Deselect 遷移）
+ * では変化しないため、選択の進行を再描画と誤認しない。
+ */
+function computeClipWindowSignature(scroller: HTMLElement): {
+  signature: string;
+  rowCount: number;
+} {
+  const rows = collectClipRowsFromSelectButtons(scroller);
+  const parts: string[] = [String(scroller.scrollHeight)];
+  for (const row of rows) {
+    const firstId = collectClipRowIds(row).values().next().value as
+      | string
+      | undefined;
+    parts.push(firstId ?? "?");
+  }
+  return { signature: parts.join("|"), rowCount: rows.length };
+}
+
+interface VirtualWindowScanOptions {
+  isAborted: () => boolean;
+  renderWaitMs: number;
+  hydrationWaitMs: number;
+}
+
+/**
+ * scroller を top → bottom へ段階スクロールし、各仮想ウィンドウで onWindow を呼ぶ (#2043)。
+ *
+ * 旧実装からの変更点 2 つ（いずれも新 Create UI の実 DOM 観測に基づく）:
+ *   1. maxScroll を毎ステップ再計算する。ページネーションで scrollHeight が走査中に
+ *      成長する（観測: 2358 → 4578 → 6798px）ため、ループ開始時の値に固定すると
+ *      末尾が未探索のまま終わる。
+ *   2. スクロール後は固定待ちではなく、描画 signature の変化を hydrationWaitMs 上限で
+ *      poll する。再描画がまだなら同じウィンドウを見ているだけなので待ち、変化した時点で
+ *      次の位置へ進む（変化しないまま上限に達したら stalled とみなして前進する）。
+ *
+ * onWindow が true を返すか isAborted() が true になったら走査を打ち切る。
+ */
+/**
+ * スクロール 1 ステップ分の仮想ウィンドウ hydration 待ち (#2043)。
+ * 各 poll で onWindow を呼び、true が返るか中断されたら done=true で走査全体を打ち切る。
+ * 描画 signature が変化し（= 再描画された）かつ row を 1 件以上検出できたら次の位置へ進む。
+ * rowCount 0 = ウィンドウ全体が未 hydration の空シェル（実 DOM 観測: 初期ロード直後は
+ * 全 row が空シェルで数秒後に描画される）。signature 変化だけで前進すると全 pass を
+ * 一瞬で消費して全件 missing になるため、row が検出できるまで deadline 内は poll し続ける。
+ */
+async function settleVirtualClipWindow(
+  scroller: HTMLElement,
+  options: VirtualWindowScanOptions,
+  prevSignature: string | null,
+  onWindow: () => Promise<boolean> | boolean
+): Promise<{ done: boolean; signature: string | null }> {
+  const deadline = Date.now() + options.hydrationWaitMs;
+  for (;;) {
+    await sleep(options.renderWaitMs);
+    if (options.isAborted()) {
+      return { done: true, signature: prevSignature };
+    }
+    if (await onWindow()) {
+      return { done: true, signature: prevSignature };
+    }
+    const { signature, rowCount } = computeClipWindowSignature(scroller);
+    if (signature !== prevSignature && rowCount > 0) {
+      return { done: false, signature };
+    }
+    if (Date.now() >= deadline) {
+      return { done: false, signature: prevSignature };
+    }
+  }
+}
+
+async function scanVirtualClipWindows(
+  scroller: HTMLElement,
+  options: VirtualWindowScanOptions,
+  onWindow: () => Promise<boolean> | boolean
+): Promise<void> {
+  let prevSignature: string | null = null;
+  let pos = 0;
+  for (;;) {
+    if (options.isAborted()) {
+      return;
+    }
+    scroller.scrollTop = Math.min(
+      pos,
+      Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+    );
+    scroller.dispatchEvent(new Event("scroll"));
+
+    const settled = await settleVirtualClipWindow(
+      scroller,
+      options,
+      prevSignature,
+      onWindow
+    );
+    if (settled.done) {
+      return;
+    }
+    prevSignature = settled.signature;
+
+    // ページネーション成長 (#2043): maxScroll はここで再計算する（ループ不変にしない）。
+    const maxScroll = Math.max(
+      0,
+      scroller.scrollHeight - scroller.clientHeight
+    );
+    if (pos >= maxScroll) {
+      return;
+    }
+    pos += Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
   }
 }
 
@@ -661,6 +824,8 @@ export interface ScrollAndMultiSelectOptions {
   isAborted: () => boolean;
   titleFallbackMap?: Map<string, string>;
   renderWaitMs?: number;
+  /** 各スクロール位置で仮想ウィンドウ再描画を待つ上限 (ms)。既定 VIRTUAL_WINDOW_HYDRATION_WAIT_MS (#2043)。 */
+  hydrationWaitMs?: number;
 }
 
 /**
@@ -676,7 +841,7 @@ export interface ScrollAndMultiSelectOptions {
  */
 export async function scrollAndMultiSelectByIds(
   targetIds: string[],
-  options: ScrollAndMultiSelectOptions,
+  options: ScrollAndMultiSelectOptions
 ): Promise<number> {
   const uniqueTargetIds = new Set(targetIds);
   if (uniqueTargetIds.size === 0) {
@@ -687,10 +852,11 @@ export async function scrollAndMultiSelectByIds(
     isAborted,
     titleFallbackMap,
     renderWaitMs = VIRTUAL_SCROLL_RENDER_WAIT_MS,
+    hydrationWaitMs = VIRTUAL_WINDOW_HYDRATION_WAIT_MS,
   } = options;
 
   const scroller = document.querySelector<HTMLElement>(
-    CLIP_LIST_SCROLLER_SELECTOR,
+    CLIP_LIST_SCROLLER_SELECTOR
   );
   if (!scroller) {
     throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
@@ -702,7 +868,7 @@ export async function scrollAndMultiSelectByIds(
 
   async function selectMatchingRows(): Promise<void> {
     const buttons = scroller!.querySelectorAll<HTMLElement>(
-      `${SELECT_CLIP_BUTTON_ANY_SELECTOR}, ${DESELECT_CLIP_BUTTON_ANY_SELECTOR}`,
+      `${SELECT_CLIP_BUTTON_ANY_SELECTOR}, ${DESELECT_CLIP_BUTTON_ANY_SELECTOR}`
     );
     const seen = new Set<HTMLElement>();
     for (const button of buttons) {
@@ -755,7 +921,7 @@ export async function scrollAndMultiSelectByIds(
         continue;
       }
       const selectBtn = row.querySelector<HTMLButtonElement>(
-        SELECT_CLIP_BUTTON_ANY_SELECTOR,
+        SELECT_CLIP_BUTTON_ANY_SELECTOR
       );
       if (selectBtn) {
         selectBtn.click();
@@ -780,26 +946,20 @@ export async function scrollAndMultiSelectByIds(
     foundIds.size + titleMatchedIds.size >= uniqueTargetIds.size;
 
   for (let pass = 0; pass <= VIRTUAL_SCROLL_RETRY_PASSES; pass++) {
-    scroller.scrollTop = 0;
-    scroller.dispatchEvent(new Event("scroll"));
-    await sleep(renderWaitMs);
+    await scanVirtualClipWindows(
+      scroller,
+      { isAborted, renderWaitMs, hydrationWaitMs },
+      async () => {
+        await selectMatchingRows();
+        return allFound();
+      }
+    );
+    if (isAborted() || allFound()) break;
+  }
 
-    const step = Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
-    const maxScroll = scroller.scrollHeight - scroller.clientHeight;
-
-    for (let pos = 0; pos <= maxScroll; pos += step) {
-      if (isAborted()) return foundIds.size + titleMatchedIds.size;
-
-      scroller.scrollTop = Math.min(pos, maxScroll);
-      scroller.dispatchEvent(new Event("scroll"));
-      await sleep(renderWaitMs);
-
-      await selectMatchingRows();
-
-      if (allFound()) break;
-    }
-
-    if (allFound()) break;
+  // 中断時は従来どおり throw せず、見つかった分の件数を即返す。
+  if (isAborted()) {
+    return foundIds.size + titleMatchedIds.size;
   }
 
   restoreClipListHead(scroller);
@@ -809,7 +969,7 @@ export async function scrollAndMultiSelectByIds(
       .filter((id) => !foundIds.has(id) && !titleMatchedIds.has(id))
       .join(", ");
     throw new Error(
-      `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}`,
+      `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}`
     );
   }
 
@@ -820,6 +980,8 @@ export interface ReadSelectedClipIdsOptions {
   isAborted: () => boolean;
   expectedClipCount?: number;
   renderWaitMs?: number;
+  /** 各スクロール位置で仮想ウィンドウ再描画を待つ上限 (ms)。既定 VIRTUAL_WINDOW_HYDRATION_WAIT_MS (#2043)。 */
+  hydrationWaitMs?: number;
   /** 走査 pass 数の上限（既定: VIRTUAL_SCROLL_RETRY_PASSES + 1 = 3）。
    * 余剰選択ガードのような best-effort 用途では 1 に絞り、毎 run の全 3 pass コストを避ける (#1411)。 */
   maxScanPasses?: number;
@@ -840,19 +1002,20 @@ export interface ReadSelectedClipIdsOptions {
  * 既存抽出ロジックを使う。
  */
 export async function readSelectedClipIds(
-  options: ReadSelectedClipIdsOptions,
+  options: ReadSelectedClipIdsOptions
 ): Promise<string[]> {
   const {
     isAborted,
     expectedClipCount,
     renderWaitMs = VIRTUAL_SCROLL_RENDER_WAIT_MS,
+    hydrationWaitMs = VIRTUAL_WINDOW_HYDRATION_WAIT_MS,
     maxScanPasses = VIRTUAL_SCROLL_RETRY_PASSES + 1,
     stopAboveCount,
     skipUnresolvedIds = false,
   } = options;
 
   const scroller = document.querySelector<HTMLElement>(
-    CLIP_LIST_SCROLLER_SELECTOR,
+    CLIP_LIST_SCROLLER_SELECTOR
   );
   if (!scroller) {
     throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
@@ -862,7 +1025,7 @@ export async function readSelectedClipIds(
 
   function collectVisibleSelectedRows(): void {
     const buttons = scroller!.querySelectorAll<HTMLElement>(
-      DESELECT_CLIP_BUTTON_ANY_SELECTOR,
+      DESELECT_CLIP_BUTTON_ANY_SELECTOR
     );
     const seenRows = new Set<HTMLElement>();
     for (const button of buttons) {
@@ -879,7 +1042,7 @@ export async function readSelectedClipIds(
           continue;
         }
         throw new Error(
-          "選択中 clip の ID を解決できません。Suno の UI 変更の可能性があります。",
+          "選択中 clip の ID を解決できません。Suno の UI 変更の可能性があります。"
         );
       }
       selectedIds.add(firstId);
@@ -893,23 +1056,14 @@ export async function readSelectedClipIds(
   const scanDone = () => isAborted() || enoughSelected() || exceededStopCount();
 
   for (let pass = 0; pass < maxScanPasses; pass++) {
-    scroller.scrollTop = 0;
-    scroller.dispatchEvent(new Event("scroll"));
-    await sleep(renderWaitMs);
-    collectVisibleSelectedRows();
-    if (scanDone()) break;
-
-    const step = Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
-    const maxScroll = scroller.scrollHeight - scroller.clientHeight;
-
-    for (let pos = 0; pos <= maxScroll; pos += step) {
-      if (scanDone()) break;
-      scroller.scrollTop = Math.min(pos, maxScroll);
-      scroller.dispatchEvent(new Event("scroll"));
-      await sleep(renderWaitMs);
-      collectVisibleSelectedRows();
-    }
-
+    await scanVirtualClipWindows(
+      scroller,
+      { isAborted, renderWaitMs, hydrationWaitMs },
+      () => {
+        collectVisibleSelectedRows();
+        return scanDone();
+      }
+    );
     if (scanDone()) break;
   }
 
@@ -918,12 +1072,12 @@ export async function readSelectedClipIds(
   const ids = Array.from(selectedIds);
   if (ids.length === 0) {
     throw new Error(
-      "選択中の clip がありません。Suno で対象曲を選択してから再実行してください。",
+      "選択中の clip がありません。Suno で対象曲を選択してから再実行してください。"
     );
   }
   if (expectedClipCount !== undefined && ids.length !== expectedClipCount) {
     throw new Error(
-      `選択中 clip 数が一致しません: expected ${expectedClipCount}, got ${ids.length}`,
+      `選択中 clip 数が一致しません: expected ${expectedClipCount}, got ${ids.length}`
     );
   }
   return ids;
@@ -935,7 +1089,7 @@ export async function readSelectedClipIds(
  * 上限まで待っても出なければ throw（silent に続行しない）。
  */
 export async function openAddToPlaylistDialogViaCmdP(
-  dispatchCmdP?: () => Promise<void>,
+  dispatchCmdP?: () => Promise<void>
 ): Promise<HTMLElement> {
   for (let attempt = 0; attempt < CMD_P_MAX_RETRIES; attempt++) {
     // Suno は Lyrics の Lexical editor など入力欄に focus が残っていると、
@@ -959,7 +1113,7 @@ export async function openAddToPlaylistDialogViaCmdP(
           metaKey: isMac,
           ctrlKey: !isMac,
           bubbles: true,
-        }),
+        })
       );
     }
 
@@ -977,14 +1131,14 @@ export async function openAddToPlaylistDialogViaCmdP(
 
     if (attempt < CMD_P_MAX_RETRIES - 1) {
       console.warn(
-        `[suno-helper] Cmd+P attempt ${attempt + 1}/${CMD_P_MAX_RETRIES} failed — retrying after 500ms`,
+        `[suno-helper] Cmd+P attempt ${attempt + 1}/${CMD_P_MAX_RETRIES} failed — retrying after 500ms`
       );
       await sleep(500);
     }
   }
 
   throw new Error(
-    `Add to Playlist dialog を ${CMD_P_MAX_RETRIES} 回試行しても検出できませんでした。clip が selected 状態であることを確認してください。Suno の UI 変更の可能性があります。`,
+    `Add to Playlist dialog を ${CMD_P_MAX_RETRIES} 回試行しても検出できませんでした。clip が selected 状態であることを確認してください。Suno の UI 変更の可能性があります。`
   );
 }
 
@@ -994,10 +1148,10 @@ export async function openAddToPlaylistDialogViaCmdP(
  */
 export async function fillPlaylistNameAndCreate(
   dialog: HTMLElement,
-  name: string,
+  name: string
 ): Promise<void> {
   const input = dialog.querySelector<HTMLInputElement>(
-    PLAYLIST_NAME_INPUT_SELECTOR,
+    PLAYLIST_NAME_INPUT_SELECTOR
   );
   if (!input) {
     throw new Error("Playlist Name 入力欄が dialog 内に見つかりません。");
@@ -1005,9 +1159,9 @@ export async function fillPlaylistNameAndCreate(
   setNativeValue(input, name);
 
   const create = Array.from(
-    dialog.querySelectorAll<HTMLButtonElement>("button"),
+    dialog.querySelectorAll<HTMLButtonElement>("button")
   ).find((btn) =>
-    (btn.textContent ?? "").toLowerCase().includes(CREATE_PLAYLIST_BUTTON_TEXT),
+    (btn.textContent ?? "").toLowerCase().includes(CREATE_PLAYLIST_BUTTON_TEXT)
   );
   if (!create) {
     throw new Error("Create Playlist ボタンが dialog 内に見つかりません。");
@@ -1040,10 +1194,10 @@ export const PLAYLIST_ROW_LABEL_SELECTOR = "div.ml-4.font-sans";
  */
 function findPlaylistRowsByName(
   dialog: HTMLElement,
-  name: string,
+  name: string
 ): HTMLElement[] {
   return Array.from(
-    dialog.querySelectorAll<HTMLElement>(PLAYLIST_ROW_LABEL_SELECTOR),
+    dialog.querySelectorAll<HTMLElement>(PLAYLIST_ROW_LABEL_SELECTOR)
   ).filter((el) => (el.textContent ?? "").trim() === name);
 }
 
@@ -1062,7 +1216,7 @@ function findPlaylistRowsByName(
  */
 export async function clickPlaylistRowByName(
   dialog: HTMLElement,
-  name: string,
+  name: string
 ): Promise<void> {
   const deadline = Date.now() + PLAYLIST_ROW_APPEAR_TIMEOUT_MS;
   for (;;) {
@@ -1073,7 +1227,7 @@ export async function clickPlaylistRowByName(
     }
     if (Date.now() >= deadline) {
       throw new Error(
-        `Playlist "${name}" 行が dialog 内 list に出現しませんでした。Suno の UI 変更の可能性があります。`,
+        `Playlist "${name}" 行が dialog 内 list に出現しませんでした。Suno の UI 変更の可能性があります。`
       );
     }
     await sleep(PLAYLIST_ROW_APPEAR_POLL_MS);
@@ -1094,7 +1248,7 @@ export interface WaitForPlaylistDialogCloseOptions {
  *   - deadline 超過で timeout throw
  */
 export async function waitForPlaylistDialogClose(
-  options: WaitForPlaylistDialogCloseOptions,
+  options: WaitForPlaylistDialogCloseOptions
 ): Promise<void> {
   const deadline = Date.now() + options.timeoutMs;
   for (;;) {

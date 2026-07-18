@@ -7,6 +7,9 @@ issue #698: #692 の `yt-suno-serve` を一般化し、エンドポイントを�
 - `GET /distrokid/release.json` … profile + collection 動的データのマージ JSON
 - `GET /distrokid/assets/<path>` … 曲・ジャケットファイルの binary 配信
 
+起動中は port 別 PID ファイルを記録し、`--stop --port <PORT>` または HTTP request の
+idle timeout（既定 60 分）で終了する。同一 port かつ同一構成の生存 server は再利用する。
+
 `distrokid` が None または `enabled == False` のとき `/distrokid/*` は 404。
 CORS はデフォルトで Chrome 拡張オリジン (`chrome-extension://...`) と helper サイト
 web origin (`https://suno.com` / `https://distrokid.com` 系) を許可し、全ルートで
@@ -16,15 +19,24 @@ web origin (`https://suno.com` / `https://distrokid.com` 系) を許可し、全
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
+import hashlib
+import http.client
 import json
+import math
 import mimetypes
 import os
 import re
+import select
 import signal
+import subprocess
 import sys
 import tempfile
+import time
 import urllib.parse
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -54,7 +66,7 @@ from youtube_automation.scripts.suno_artifacts import (
 )
 from youtube_automation.utils.chrome_extensions import ChromeExtensionOrigin, resolve_unpacked_extension_origin
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.config import Distrokid, load_config
+from youtube_automation.utils.config import Distrokid, channel_dir, load_config
 from youtube_automation.utils.distrokid_metadata import parse_album_metadata
 from youtube_automation.utils.distrokid_spec import find_disc_entry, read_collection_spec
 from youtube_automation.utils.exceptions import ConfigError
@@ -69,8 +81,10 @@ from youtube_automation.utils.suno_downloaded_artifacts import (
 )
 
 DEFAULT_PORT = 7873
+DEFAULT_IDLE_TIMEOUT_SECONDS = 60 * 60
 VERSION_ROUTE = "/version"
 SERVER_INFO_ROUTE = "/server-info"
+_LIFECYCLE_ROUTE_PREFIX = "/.well-known/yt-collection-serve-lifecycle/"
 MIN_EXTENSION_VERSION = "0.2.0"
 _EXTENSION_ORIGIN_SCHEME = "chrome-extension://"
 # overlay 化（#892/#895）で content script の fetch が page origin になったため、
@@ -106,11 +120,44 @@ _MAX_DOWNLOADED_POST_BODY_BYTES = 10 * 1024
 
 
 class _ServerTerminationSignal(RuntimeError):
-    """SIGTERM を未捕捉例外として記録可能にする。"""
+    """予期しない SIGTERM を未捕捉例外として記録可能にする。"""
 
     def __init__(self, signum: int) -> None:
         signal_name = signal.Signals(signum).name
         super().__init__(f"{signal_name} (signal {signum}) requested server termination")
+
+
+class _IdleTimeout(RuntimeError):
+    """HTTP request の無通信時間が上限に達したことを表す。"""
+
+    def __init__(self, seconds: float) -> None:
+        self.seconds = seconds
+        super().__init__(f"no HTTP requests received for {seconds:g} seconds")
+
+
+@dataclass(frozen=True)
+class _LifecycleRecord:
+    pid: int
+    token: str
+    configuration: str
+
+
+class _IdleTrackingHTTPServer(ThreadingHTTPServer):
+    """request の受付時刻を追跡し、serve loop から idle 終了する HTTP server。"""
+
+    def __init__(self, server_address: tuple[str, int], handler_class: type[BaseHTTPRequestHandler], seconds: float):
+        self._idle_timeout_seconds = seconds
+        self._last_request_at = time.monotonic()
+        super().__init__(server_address, handler_class)
+
+    def finish_request(self, request: object, client_address: tuple[str, int]) -> None:
+        self._last_request_at = time.monotonic()
+        super().finish_request(request, client_address)
+
+    def service_actions(self) -> None:
+        super().service_actions()
+        if time.monotonic() - self._last_request_at >= self._idle_timeout_seconds:
+            raise _IdleTimeout(self._idle_timeout_seconds)
 
 
 def _hostname_slug(text: str) -> str:
@@ -344,6 +391,23 @@ def _determine_status(
     return "ready"
 
 
+def _read_music_downloaded_flag(coll_dir: Path) -> bool:
+    """workflow-state.json の assets.music_downloaded を読む（#1913 部分完了の貫通契約）."""
+    ws_path = CollectionPaths(coll_dir).workflow_state_path
+    if not ws_path.is_file():
+        return False
+    try:
+        data = json.loads(ws_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    assets = data.get("assets")
+    if not isinstance(assets, dict):
+        return False
+    return assets.get("music_downloaded") is True
+
+
 def _read_music_expected_file_count(coll_dir: Path) -> int | None:
     """workflow-state.json から full playlist download の期待ファイル数を読む."""
     ws_path = CollectionPaths(coll_dir).workflow_state_path
@@ -458,6 +522,10 @@ def build_collections_index(root: Path) -> list[dict]:
         expected_count = expected_download_count(pattern_count, expected_file_count)
         suno_playlist_url = _read_music_suno_playlist_url(coll)
         status = _determine_status(has_prompts, pattern_count, downloaded_count, expected_file_count)
+        # 部分完了を受理済み（assets.music_downloaded=true）の collection はファイル数が
+        # 期待数未満でも downloaded として扱い、拡張が再ダウンロードを提示しないようにする（#1913）
+        if status == "ready" and _read_music_downloaded_flag(coll):
+            status = "downloaded"
         theme = _theme_from_collection_dir(coll)
         channel = _channel_from_collection_id(coll.name, theme)
         entry = {
@@ -543,6 +611,330 @@ def _encode_collection_id_path_segment(cid: str) -> str:
     return urllib.parse.quote(cid, safe="")
 
 
+def _lifecycle_root(path: Path) -> Path:
+    """起動 path から PID ファイルを置く collections/planning 相当を返す。"""
+    if path.is_file():
+        collection = path.parent.parent
+    else:
+        collection = path
+    if collection.name.endswith(_COLLECTION_DIR_SUFFIX):
+        return collection.parent
+    return collection
+
+
+def _pid_file_path(root: Path, port: int) -> Path:
+    return root / f".collection-serve-{port}.pid"
+
+
+def _stop_request_path(root: Path, port: int) -> Path:
+    return root / f".collection-serve-{port}.stop"
+
+
+def _lifecycle_stop_path(record: _LifecycleRecord, attempt_token: str) -> str:
+    return f"{_LIFECYCLE_ROUTE_PREFIX}{record.token}/stop/{attempt_token}"
+
+
+def _startup_lock_path(root: Path, port: int) -> Path:
+    return root / f".collection-serve-{port}.lock"
+
+
+@contextlib.contextmanager
+def _startup_lock(path: Path):
+    """同じ lifecycle record に対する check→bind→publish を直列化する。"""
+    descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+
+def _read_pid_file(path: Path) -> _LifecycleRecord | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ConfigError(f"PID file を読み取れません: {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ConfigError(f"PID file が不正です: {path}")
+    pid = payload.get("pid")
+    token = payload.get("token")
+    configuration = payload.get("configuration")
+    if (
+        not isinstance(pid, int)
+        or isinstance(pid, bool)
+        or pid <= 0
+        or not isinstance(token, str)
+        or not token
+        or not isinstance(configuration, str)
+        or not configuration
+    ):
+        raise ConfigError(f"PID file が不正です: {path}")
+    return _LifecycleRecord(pid=pid, token=token, configuration=configuration)
+
+
+def _pid_is_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    # kill(pid, 0) also succeeds for an exited child until its parent reaps it.
+    # A zombie has completed server/discovery cleanup and no longer executes.
+    try:
+        status = subprocess.run(
+            ["ps", "-o", "stat=", "-p", str(pid)],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+    except OSError:
+        return True
+    return not (status.returncode == 0 and status.stdout.lstrip().startswith("Z"))
+
+
+@contextlib.contextmanager
+def _process_exit_watcher(pid: int):
+    """元の process instance の終了を待つ callable を返す。"""
+    pidfd_open = getattr(os, "pidfd_open", None)
+    if callable(pidfd_open):
+        try:
+            descriptor = pidfd_open(pid)
+        except OSError:
+            pass
+        else:
+            try:
+                yield lambda timeout: bool(select.select([descriptor], [], [], timeout)[0])
+            finally:
+                os.close(descriptor)
+            return
+
+    if hasattr(select, "kqueue") and hasattr(select, "KQ_NOTE_EXIT"):
+        queue = select.kqueue()
+        try:
+            event = select.kevent(
+                pid,
+                filter=select.KQ_FILTER_PROC,
+                flags=select.KQ_EV_ADD | select.KQ_EV_ENABLE,
+                fflags=select.KQ_NOTE_EXIT,
+            )
+            queue.control([event], 0, 0)
+        except OSError:
+            queue.close()
+        else:
+            try:
+                yield lambda timeout: bool(queue.control(None, 1, timeout))
+            finally:
+                queue.close()
+            return
+
+    yield None
+
+
+def _server_process_id(port: int, record: _LifecycleRecord, expected_configuration: str | None = None) -> int | None:
+    connection = http.client.HTTPConnection("localhost", port, timeout=0.5)
+    try:
+        connection.request("GET", f"{_LIFECYCLE_ROUTE_PREFIX}{record.token}")
+        response = connection.getresponse()
+        payload = json.loads(response.read().decode("utf-8"))
+        process_id = payload.get("process_id") if isinstance(payload, dict) else None
+        configuration = payload.get("configuration") if isinstance(payload, dict) else None
+        required_configuration = expected_configuration or record.configuration
+        return (
+            process_id
+            if response.status == 200
+            and isinstance(process_id, int)
+            and process_id == record.pid
+            and configuration == record.configuration
+            and configuration == required_configuration
+            else None
+        )
+    except (ConnectionError, OSError, UnicodeDecodeError, json.JSONDecodeError, http.client.HTTPException):
+        return None
+    finally:
+        connection.close()
+
+
+def _request_server_stop(port: int, record: _LifecycleRecord, attempt_token: str) -> bool:
+    """Token で識別した server owner 自身へ停止要求を渡す。"""
+    connection = http.client.HTTPConnection("localhost", port, timeout=0.5)
+    try:
+        connection.request("POST", _lifecycle_stop_path(record, attempt_token))
+        response = connection.getresponse()
+        payload = json.loads(response.read().decode("utf-8"))
+        process_id = payload.get("process_id") if isinstance(payload, dict) else None
+        configuration = payload.get("configuration") if isinstance(payload, dict) else None
+        return response.status == 200 and process_id == record.pid and configuration == record.configuration
+    except (ConnectionError, OSError, UnicodeDecodeError, json.JSONDecodeError, http.client.HTTPException):
+        return False
+    finally:
+        connection.close()
+
+
+def _remove_owned_pid_file(path: Path, pid: int) -> None:
+    try:
+        record = _read_pid_file(path)
+        if record is not None and record.pid == pid:
+            path.unlink()
+    except FileNotFoundError:
+        return
+
+
+def _remove_matching_record(path: Path, expected: _LifecycleRecord) -> None:
+    try:
+        if _read_pid_file(path) == expected:
+            path.unlink()
+    except FileNotFoundError:
+        return
+
+
+def _consume_stop_request(path: Path, pid: int) -> bool:
+    try:
+        request = _read_pid_file(path)
+    except ConfigError:
+        return False
+    if request is None or request.pid != pid:
+        return False
+    path.unlink(missing_ok=True)
+    return True
+
+
+def _existing_server_pid(path: Path, port: int, expected_configuration: str) -> int | None:
+    try:
+        record = _read_pid_file(path)
+    except ConfigError:
+        path.unlink(missing_ok=True)
+        return None
+    if record is None:
+        return None
+    if not _pid_is_running(record.pid):
+        _remove_owned_pid_file(path, record.pid)
+        return None
+    server_pid = _server_process_id(port, record, expected_configuration)
+    if server_pid is not None:
+        return server_pid
+    running_server_pid = _server_process_id(port, record)
+    if running_server_pid is not None:
+        raise ConfigError(
+            f"collection server on port {port} is running with a different configuration; use another port"
+        )
+    raise ConfigError(
+        f"collection server PID {record.pid} is running, but its identity on port {port} could not be verified"
+    )
+
+
+def _write_pid_file(path: Path, record: _LifecycleRecord) -> None:
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            delete=False,
+        ) as stream:
+            temporary_path = Path(stream.name)
+            json.dump(
+                {"pid": record.pid, "token": record.token, "configuration": record.configuration},
+                stream,
+            )
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(temporary_path, path)
+        except FileExistsError as exc:
+            raise ConfigError(f"PID file already exists: {path}") from exc
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def _configuration_fingerprint(
+    *,
+    path: Path,
+    mode: str,
+    allow_origin: str | None,
+    capture_root: Path | None,
+    distrokid_source: str | None,
+    idle_timeout_seconds: float,
+) -> str:
+    payload = json.dumps(
+        {
+            "path": str(path.resolve()),
+            "mode": mode,
+            "allow_origin": allow_origin,
+            "capture_root": str(capture_root.resolve()) if capture_root is not None else None,
+            "distrokid_source": distrokid_source,
+            "idle_timeout_seconds": idle_timeout_seconds,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _stop_server(port: int) -> None:
+    lifecycle_root = channel_dir() / "collections" / "planning"
+    pid_path = _pid_file_path(lifecycle_root, port)
+    stop_request_path = _stop_request_path(lifecycle_root, port)
+    record = _read_pid_file(pid_path)
+    if record is None:
+        print(f"No collection server PID file for port {port}.")
+        return
+    pid = record.pid
+    if not _pid_is_running(pid):
+        _remove_owned_pid_file(pid_path, record.pid)
+        print(f"Removed stale collection server PID file for port {port}.")
+        return
+    with _process_exit_watcher(pid) as wait_for_exit:
+        stop_request_path.unlink(missing_ok=True)
+        stop_request = _LifecycleRecord(pid=pid, token=uuid.uuid4().hex, configuration=record.configuration)
+        _write_pid_file(stop_request_path, stop_request)
+        stop_accepted = _request_server_stop(port, record, stop_request.token)
+        if not stop_accepted:
+            try:
+                active_request = _read_pid_file(stop_request_path)
+            except ConfigError:
+                active_request = stop_request
+            # The owner consumes this exact marker before self-signalling. Its
+            # disappearance therefore proves acceptance even if the HTTP response
+            # is cut off by process shutdown.
+            stop_accepted = active_request is None
+        if not stop_accepted:
+            _remove_matching_record(stop_request_path, stop_request)
+            if not _pid_is_running(pid):
+                _remove_owned_pid_file(pid_path, pid)
+                print(f"Removed stale collection server PID file for port {port}.")
+                return
+            raise ConfigError(
+                f"collection server PID {pid} is running, but its identity on port {port} could not be verified"
+            )
+        if wait_for_exit is not None:
+            stopped = wait_for_exit(5.0)
+        else:
+            deadline = time.monotonic() + 5.0
+            while _pid_is_running(pid) and time.monotonic() < deadline:
+                time.sleep(0.05)
+            stopped = not _pid_is_running(pid)
+    if not stopped:
+        _remove_matching_record(stop_request_path, stop_request)
+        raise ConfigError(f"collection server PID {pid} did not stop within 5 seconds")
+    _remove_matching_record(stop_request_path, stop_request)
+    _remove_owned_pid_file(pid_path, pid)
+    print(f"Stopped collection server on port {port} (PID {pid}).")
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise argparse.ArgumentTypeError("must be a finite number greater than zero")
+    return parsed
+
+
 def create_server(
     port: int,
     allow_origin: str | None,
@@ -555,6 +947,9 @@ def create_server(
     distrokid_source: str | None = None,
     capture_root: Path | None = None,
     discovery_registry_state: RegistryState | None = None,
+    idle_timeout_seconds: float = DEFAULT_IDLE_TIMEOUT_SECONDS,
+    lifecycle_record: _LifecycleRecord | None = None,
+    lifecycle_root: Path | None = None,
 ) -> ThreadingHTTPServer:
     """サブパス分離した GET / POST / CORS preflight を返すサーバーを生成する.
 
@@ -682,9 +1077,21 @@ def create_server(
             except DownloadedArtifactError as exc:
                 self._send_json_error(500, str(exc))
                 return
-            resp_body = json.dumps(
-                {"ok": True, "collection_id": cid, "placed_count": placed_count_for_response}
-            ).encode("utf-8")
+            resp: dict = {"ok": True, "collection_id": cid, "placed_count": placed_count_for_response}
+            # 部分完了（Suno が期待数未満しか生成しないケース）は 500 にせず warning で返す（#1913）
+            expected_count = expected_download_count(
+                read_pattern_count(coll_dir, default=0), downloaded.expected_file_count
+            )
+            if (
+                downloaded.download_path
+                and expected_count is not None
+                and 0 < placed_count_for_response < expected_count
+            ):
+                missing = expected_count - placed_count_for_response
+                resp["warning"] = (
+                    f"placed {placed_count_for_response} files, expected {expected_count} ({missing} missing)"
+                )
+            resp_body = json.dumps(resp).encode("utf-8")
             self._send_bytes(resp_body, "application/json; charset=utf-8")
 
         def _read_limited_post_body(self, *, max_bytes: int = _MAX_POST_BODY_BYTES) -> bytes | None:
@@ -703,6 +1110,37 @@ def create_server(
 
         def do_POST(self) -> None:
             # GET と異なり POST は route ごとに書き込み可否を明示的に判定する。
+            lifecycle_stop_prefix = (
+                f"{_LIFECYCLE_ROUTE_PREFIX}{lifecycle_record.token}/stop/" if lifecycle_record is not None else None
+            )
+            if (
+                lifecycle_record is not None
+                and lifecycle_stop_prefix is not None
+                and self.path.startswith(lifecycle_stop_prefix)
+            ):
+                if lifecycle_root is None:
+                    self.send_error(404, "Not Found")
+                    return
+                marker_path = _stop_request_path(lifecycle_root, self.server.server_address[1])
+                try:
+                    marker = _read_pid_file(marker_path)
+                except ConfigError:
+                    marker = None
+                marker_matches_owner = (
+                    marker is not None
+                    and marker.pid == lifecycle_record.pid
+                    and marker.configuration == lifecycle_record.configuration
+                )
+                if not marker_matches_owner or self.path != _lifecycle_stop_path(lifecycle_record, marker.token):
+                    self.send_error(409, "Stop request is no longer active")
+                    return
+                body = json.dumps(
+                    {"process_id": lifecycle_record.pid, "configuration": lifecycle_record.configuration}
+                ).encode("utf-8")
+                self._send_bytes(body, "application/json; charset=utf-8")
+                self.wfile.flush()
+                os.kill(os.getpid(), signal.SIGTERM)
+                return
             if discovery_registry_state is not None and handle_registry_request(self, discovery_registry_state):
                 return
 
@@ -787,6 +1225,12 @@ def create_server(
                 return
             if self.path == SERVER_INFO_ROUTE:
                 body = json.dumps(resolved_server_info, ensure_ascii=False).encode("utf-8")
+                self._send_bytes(body, "application/json; charset=utf-8")
+                return
+            if lifecycle_record is not None and self.path == f"{_LIFECYCLE_ROUTE_PREFIX}{lifecycle_record.token}":
+                body = json.dumps({"process_id": os.getpid(), "configuration": lifecycle_record.configuration}).encode(
+                    "utf-8"
+                )
                 self._send_bytes(body, "application/json; charset=utf-8")
                 return
             if self.path == "/auth/token":
@@ -963,7 +1407,7 @@ def create_server(
         def log_message(self, *args) -> None:  # サーバーログを抑制
             pass
 
-    server = ThreadingHTTPServer(("localhost", port), _Handler)
+    server = _IdleTrackingHTTPServer(("localhost", port), _Handler, idle_timeout_seconds)
     if server_info is None:
         resolved_server_info.update(build_server_info("YouTube Automation", "YA", server.server_address[1]))
     return server
@@ -993,6 +1437,7 @@ def main() -> None:
     )
     parser.add_argument(
         "path",
+        nargs="?",
         type=Path,
         help="collection dir or suno-prompts.json path",
     )
@@ -1001,6 +1446,18 @@ def main() -> None:
         type=int,
         default=DEFAULT_PORT,
         help=f"port to listen on (default: {DEFAULT_PORT})",
+    )
+    parser.add_argument(
+        "--stop",
+        action="store_true",
+        help="stop the server recorded for --port and remove its PID file",
+    )
+    parser.add_argument(
+        "--idle-timeout",
+        type=_positive_float,
+        default=DEFAULT_IDLE_TIMEOUT_SECONDS,
+        metavar="SECONDS",
+        help=f"stop after this many seconds without an HTTP request (default: {DEFAULT_IDLE_TIMEOUT_SECONDS})",
     )
     allow_origin_group = parser.add_mutually_exclusive_group()
     allow_origin_group.add_argument(
@@ -1040,12 +1497,36 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.stop:
+        if args.path is not None:
+            parser.error("path cannot be used with --stop")
+        _stop_server(args.port)
+        return
+    if args.path is None:
+        parser.error("the following arguments are required: path")
+
     capture_root = _resolve_distrokid_capture_root(args.distrokid_capture_root)
     allow_origin, detected_extension = _resolve_allow_origin(args.allow_origin, args.allow_extension)
     embedded_registry_state = RegistryState() if args.port == DISCOVERY_PORT else None
 
     # path が `*-collection/` を並べたディレクトリなら dir mode（#816）。
     collection_dirs = find_collection_dirs(args.path)
+    lifecycle_root = _lifecycle_root(args.path)
+    lifecycle_configuration = _configuration_fingerprint(
+        path=args.path,
+        mode="dir" if collection_dirs else "single",
+        allow_origin=allow_origin,
+        capture_root=capture_root,
+        distrokid_source=args.distrokid_source,
+        idle_timeout_seconds=args.idle_timeout,
+    )
+    requested_pid_path = _pid_file_path(lifecycle_root, args.port)
+    lifecycle_record = _LifecycleRecord(
+        pid=os.getpid(),
+        token=uuid.uuid4().hex,
+        configuration=lifecycle_configuration,
+    )
+
     if collection_dirs:
         # dir mode でも distrokid エンドポイントを有効化するため load_config() を試みる（#934）。
         # distrokid 設定が無いチャンネルでは None のままにして 404 にフォールバックする。
@@ -1058,29 +1539,6 @@ def main() -> None:
             distrokid_cfg = None
             channel_name = "YouTube Automation"
             channel_short = "YA"
-        server_info = build_server_info(channel_name, channel_short, args.port)
-        server = create_server(
-            args.port,
-            allow_origin,
-            server_info=server_info,
-            prompts_path=None,
-            collection_dir=None,
-            distrokid=distrokid_cfg,
-            collections_root=args.path,
-            capture_root=capture_root,
-            discovery_registry_state=embedded_registry_state,
-        )
-        port = server.server_address[1]
-        server_info.update(build_server_info(channel_name, channel_short, port))
-        canonical_url = str(server_info["base_url"])
-        print(f"Serving {len(collection_dirs)} collections from {args.path} at {canonical_url}{COLLECTIONS_ROUTE}")
-        print(f"  legacy URL: http://localhost:{port}{COLLECTIONS_ROUTE}")
-        print(f"  selector label: {server_info['label']}")
-        if distrokid_cfg is not None and distrokid_cfg.enabled:
-            print(
-                f"  distrokid dir mode enabled: {_DISTROKID_COLLECTIONS_ROUTE}, "
-                f"{COLLECTIONS_ROUTE}/<id>/distrokid/<disc>/release.json"
-            )
         distrokid_capture_active = distrokid_cfg is not None and distrokid_cfg.enabled
     else:
         prompts_path = resolve_prompts_path(args.path)
@@ -1090,28 +1548,95 @@ def main() -> None:
         distrokid = config.distrokid
         channel_name = config.meta.channel_name
         channel_short = config.meta.channel_short
-        server_info = build_server_info(channel_name, channel_short, args.port)
 
-        server = create_server(
-            args.port,
-            allow_origin,
-            server_info=server_info,
-            prompts_path=prompts_path,
-            collection_dir=collection_dir,
-            distrokid=distrokid,
-            distrokid_source=args.distrokid_source,
-            capture_root=capture_root,
-            discovery_registry_state=embedded_registry_state,
-        )
+        distrokid_capture_active = distrokid.enabled
+
+    server_info = build_server_info(channel_name, channel_short, args.port)
+    lock = _startup_lock(_startup_lock_path(lifecycle_root, args.port)) if args.port != 0 else contextlib.nullcontext()
+    with lock:
+        if args.port != 0:
+            existing_pid = _existing_server_pid(requested_pid_path, args.port, lifecycle_configuration)
+            if existing_pid is not None:
+                print(f"Reusing collection server on port {args.port} (PID {existing_pid}).")
+                return
+        if collection_dirs:
+            server = create_server(
+                args.port,
+                allow_origin,
+                server_info=server_info,
+                prompts_path=None,
+                collection_dir=None,
+                distrokid=distrokid_cfg,
+                collections_root=args.path,
+                capture_root=capture_root,
+                discovery_registry_state=embedded_registry_state,
+                idle_timeout_seconds=args.idle_timeout,
+                lifecycle_record=lifecycle_record,
+                lifecycle_root=lifecycle_root,
+            )
+        else:
+            server = create_server(
+                args.port,
+                allow_origin,
+                server_info=server_info,
+                prompts_path=prompts_path,
+                collection_dir=collection_dir,
+                distrokid=distrokid,
+                distrokid_source=args.distrokid_source,
+                capture_root=capture_root,
+                discovery_registry_state=embedded_registry_state,
+                idle_timeout_seconds=args.idle_timeout,
+                lifecycle_record=lifecycle_record,
+                lifecycle_root=lifecycle_root,
+            )
         port = server.server_address[1]
-        server_info.update(build_server_info(channel_name, channel_short, port))
-        canonical_url = str(server_info["base_url"])
+        pid = lifecycle_record.pid
+        pid_path = _pid_file_path(lifecycle_root, port)
+        stop_request_path = _stop_request_path(lifecycle_root, port)
+        stop_request_path.unlink(missing_ok=True)
+        cleanup_managed = False
+        previous_sigterm_handler = signal.SIG_DFL
+
+        def handle_sigterm(signum: int, _frame: object) -> None:
+            explicit_stop = _consume_stop_request(stop_request_path, pid)
+            if explicit_stop:
+                signal.signal(signal.SIGTERM, previous_sigterm_handler)
+                server.server_close()
+                _remove_owned_pid_file(pid_path, pid)
+                _remove_owned_pid_file(stop_request_path, pid)
+                raise SystemExit(0)
+            if not cleanup_managed:
+                signal.signal(signal.SIGTERM, previous_sigterm_handler)
+                server.server_close()
+                _remove_owned_pid_file(pid_path, pid)
+                _remove_owned_pid_file(stop_request_path, pid)
+            raise _ServerTerminationSignal(signum)
+
+        previous_sigterm_handler = signal.signal(signal.SIGTERM, handle_sigterm)
+        try:
+            _write_pid_file(pid_path, lifecycle_record)
+        except (ConfigError, OSError):
+            signal.signal(signal.SIGTERM, previous_sigterm_handler)
+            server.server_close()
+            raise
+
+    server_info.update(build_server_info(channel_name, channel_short, port))
+    canonical_url = str(server_info["base_url"])
+    if collection_dirs:
+        print(f"Serving {len(collection_dirs)} collections from {args.path} at {canonical_url}{COLLECTIONS_ROUTE}")
+        print(f"  legacy URL: http://localhost:{port}{COLLECTIONS_ROUTE}")
+        print(f"  selector label: {server_info['label']}")
+        if distrokid_cfg is not None and distrokid_cfg.enabled:
+            print(
+                f"  distrokid dir mode enabled: {_DISTROKID_COLLECTIONS_ROUTE}, "
+                f"{COLLECTIONS_ROUTE}/<id>/distrokid/<disc>/release.json"
+            )
+    else:
         print(f"Serving {collection_dir} at {canonical_url}{SUNO_PROMPTS_ROUTE}")
         print(f"  legacy URL: http://localhost:{port}{SUNO_PROMPTS_ROUTE}")
         print(f"  selector label: {server_info['label']}")
         if distrokid.enabled:
             print(f"  distrokid endpoints enabled: {DISTROKID_RELEASE_ROUTE}, {DISTROKID_ASSETS_PREFIX}<path>")
-        distrokid_capture_active = distrokid.enabled
     if capture_root is not None and distrokid_capture_active:
         print(
             f"  distrokid releases enabled: POST {_DISTROKID_RELEASES_ROUTE} "
@@ -1132,15 +1657,9 @@ def main() -> None:
         )
     print("Press Ctrl-C to stop.")
 
-    def handle_sigterm(signum: int, _frame: object) -> None:
-        raise _ServerTerminationSignal(signum)
-
-    previous_sigterm_handler = signal.signal(
-        signal.SIGTERM,
-        handle_sigterm,
-    )
     discovery_lifecycle = None
     interrupted = False
+    cleanup_managed = True
     try:
         if embedded_registry_state is None:
             discovery_lifecycle = create_discovery_lifecycle(server_info)
@@ -1153,6 +1672,8 @@ def main() -> None:
     except KeyboardInterrupt:
         interrupted = True
         print("\nStopped.")
+    except _IdleTimeout as error:
+        print(f"Idle timeout reached: {error}. Stopping.")
     finally:
         cleanup_error: RuntimeError | ValueError | None = None
         try:
@@ -1167,7 +1688,13 @@ def main() -> None:
             try:
                 signal.signal(signal.SIGTERM, previous_sigterm_handler)
             finally:
-                server.server_close()
+                try:
+                    server.server_close()
+                finally:
+                    try:
+                        _remove_owned_pid_file(pid_path, pid)
+                    finally:
+                        _remove_owned_pid_file(stop_request_path, pid)
         if cleanup_error is not None and not interrupted and sys.exc_info()[0] is None:
             raise cleanup_error
 

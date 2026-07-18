@@ -172,10 +172,7 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
     direction_mode_row = next(line for line in mode_routing.splitlines() if line.startswith("| 方向性検討モード |"))
     direction_mode_stub = channel_new.split("## 方向性検討モード", 1)[1].split("\n## 再生成モード", 1)[0]
     direction_mode = _read(".claude/skills/channel-new/references/direction-mode.md")
-    ttp_principles = channel_new.split("## TTP 原則", 1)[1].split(
-        "### TTP 完了条件（新規開設モード）",
-        1,
-    )[0]
+    ttp_principles = channel_new.split("## TTP 原則", 1)[1].split("## 外部データの扱い", 1)[0]
     step1 = channel_new.split("### Step 1: TTP ヒアリング", 1)[1].split(
         "### Step 2: 現在のディレクトリを repo 初期化",
         1,
@@ -184,7 +181,7 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
         "### Step 5: TTP seed fetch と承認済み対象反映",
         1,
     )[0]
-    step7 = channel_new.split("### Step 7: 簡易ペルソナ導出", 1)[1].split(
+    step7 = channel_new.split("### Step 7: 本格ペルソナ作成チェーン", 1)[1].split(
         "### Step 8: branding 初回反映",
         1,
     )[0]
@@ -240,10 +237,22 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
     assert "config を再生成・再反映する場合は `/channel-new`（再生成モード）" in direction_mode
     assert "制作に進む場合は `/wf-new`" in direction_mode
 
-    assert "TTP データだけを入力として導出し、方向性ヒアリングは追加しない" in step7
-    assert "- `config/channel/analytics.json::benchmark.channels`" in step7
-    assert "- `docs/channel/ttp-seed-confirmation.md`" in step7
-    assert "- `docs/channel/competitor-branding-snapshot.json`" in step7
+    assert "/viewer-voice` → `/audience-persona-design` → `/viewing-scene" in step7
+    assert "必須" in step7
+    assert "docs/channel/personas/persona-definition.md" in step7
+    assert "Step 8 へ進まない" in step7
+    assert "channel-new-persona.md" not in channel_new
+
+    audience_persona = _read(".claude/skills/audience-persona-design/SKILL.md")
+    assert "新規開設時" in audience_persona
+    assert "競合チャンネルのコメント" in audience_persona
+    assert "公開前" in audience_persona
+    assert "channel-new-persona.md" not in audience_persona
+
+    viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
+    assert "新規開設モードでは Step 7 の必須前工程" in viewer_voice
+    assert "公開後の再分析では" in viewer_voice
+    assert "標準フローでは実行せず" not in viewer_voice
 
     assert "旧 `/channel-direction`" not in cross_references
 
@@ -282,12 +291,156 @@ def test_channel_new_frontmatter_keeps_import_dispatch_keywords() -> None:
         assert keyword in description
 
 
+def test_channel_new_ttp_completion_condition_is_an_early_hard_gate() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    completion_heading = "## 完了条件（新規開設モード）"
+
+    assert channel_new.splitlines().index(completion_heading) < 60
+    completion = channel_new.split(completion_heading, 1)[1].split("## Overview", 1)[0]
+    assert "docs/channel/personas/persona-definition.md" in completion
+    assert "候補ごとの source、seed fetch 要約、承認 / 不採用判断" in completion
+    assert "`snippet` / `brandingSettings` / `localizations` snapshot" in completion
+    assert "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default" in completion
+    assert "data/video_analysis/<slug>/*.json::suno_preset.genre_line" in completion
+
+
+def test_channel_new_docs_distinguish_required_initial_persona_from_optional_reanalysis() -> None:
+    features = _read("docs/features.md")
+    onboarding = _read("ONBOARDING.md")
+
+    assert "/viewer-voice` → `/audience-persona-design` → `/viewing-scene`" in features
+    assert "`/viewer-voice` は公開後の再分析では任意" in features
+    assert "公開前のペルソナチェーンは既存の競合 / TTP / viewer-voice 成果物を入力に完走" in features
+    assert "公開後の `/viewing-scene` は従来どおり Analytics report を要求する" in features
+    assert "/viewer-voice         → 公開後のコメント再分析" in onboarding
+    assert "公開前チェーンは競合 / TTP / viewer-voice 成果物を入力" in onboarding
+    assert "自チャンネル Analytics report や任意の本格 benchmark 収集を要求しない" in onboarding
+    assert "公開後の見直しでは従来どおりそれらを入力にする" in onboarding
+
+
+def test_channel_new_prelaunch_persona_chain_propagates_context_without_analytics() -> None:
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    audience_persona = _read(".claude/skills/audience-persona-design/SKILL.md")
+    viewing_scene = _read(".claude/skills/viewing-scene/SKILL.md")
+
+    step7 = channel_new.split("### Step 7: 本格ペルソナ作成チェーン", 1)[1].split(
+        "### Step 8: branding 初回反映",
+        1,
+    )[0]
+    assert "実行コンテキスト: 新規開設（公開前）" in step7
+    assert "`/audience-persona-design` から同じ実行コンテキストを引き継いで `/viewing-scene`" in step7
+    for path in (
+        "docs/plans/viewer-voice-analysis.md",
+        "docs/channel/ttp-seed-confirmation.md",
+        "docs/channel/competitor-branding-snapshot.json",
+    ):
+        assert path in step7
+    assert "任意の `/benchmark`" in step7
+    assert "`reports/analysis_*.md` は要求しない" in step7
+
+    entry_contract = audience_persona.split("入口で実行コンテキスト", 1)[1].split("## 完了条件", 1)[0]
+    assert "新規開設（公開前）" in entry_contract
+    assert "公開後" in entry_contract
+    assert "任意の `/benchmark` 成果物" in entry_contract
+    for path in (
+        "docs/plans/viewer-voice-analysis.md",
+        "docs/channel/ttp-seed-confirmation.md",
+        "docs/channel/competitor-branding-snapshot.json",
+    ):
+        assert path in entry_contract
+    phase5 = audience_persona.split("### Phase 5: viewing-scene 検証", 1)[1].split(
+        "### Phase 6: 最終 persona-definition.md 更新",
+        1,
+    )[0]
+    assert "新規開設（公開前）" in phase5
+    assert "公開後" in phase5
+    assert "実行コンテキストを明示して渡し" in phase5
+    audience_guidance = audience_persona.split("## 障害時ガイダンス", 1)[1].split("## 関連ファイル", 1)[0]
+    assert "公開前入力不在" in audience_guidance
+    assert "公開後入力不在" in audience_guidance
+    assert "新規開設（公開前）で競合 / TTP / viewer-voice 成果物が不足" in audience_guidance
+    assert "公開後に `data/` のベンチマーク/Analytics スナップショットが無い" in audience_guidance
+
+    audience_agent1 = audience_persona.split("**Agent 1: ベンチマークタグ分析**", 1)[1].split(
+        "**Agent 2: コミュニティ調査**",
+        1,
+    )[0]
+    audience_prelaunch = audience_agent1.split("**新規開設（公開前）**:", 1)[1].split("**公開後**:", 1)[0]
+    audience_postlaunch = audience_agent1.split("**公開後**:", 1)[1]
+    assert "記録済みの範囲だけ入力" in audience_prelaunch
+    assert "推測で補わず「動画タグ頻度は未検証」" in audience_prelaunch
+    assert "全ベンチマーク動画のタグを集計（頻度順）" not in audience_prelaunch
+    assert "全ベンチマーク動画のタグを集計（頻度順）" in audience_postlaunch
+
+    viewing_overview = viewing_scene.split("## Overview", 1)[1].split("## 完了条件", 1)[0]
+    assert "新規開設（公開前）" in viewing_overview
+    assert "公開後" in viewing_overview
+    assert "実行コンテキストが明示されない場合もこちら" in viewing_overview
+    guard = viewing_scene.split("### 停止する fail", 1)[1].split("### 許容する fail", 1)[0]
+    assert "新規開設（公開前）" in guard
+    assert "公開後に `reports/analysis_*.md` が無い" in guard
+    assert "`reports/analysis_*.md` が無い" not in guard.replace(
+        "公開後に `reports/analysis_*.md` が無い",
+        "",
+    )
+    for path in (
+        "docs/plans/viewer-voice-analysis.md",
+        "docs/channel/ttp-seed-confirmation.md",
+        "docs/channel/competitor-branding-snapshot.json",
+    ):
+        assert path in guard
+
+
+def test_viewing_scene_keeps_post_publish_inputs_and_analysis_phases() -> None:
+    viewing_scene = _read(".claude/skills/viewing-scene/SKILL.md")
+    flow = viewing_scene.split("## 実行フロー", 1)[1].split("## 障害時ガイダンス", 1)[0]
+
+    assert "**公開後**:" in flow
+    assert "`reports/` の最新分析レポートを読み込む" in flow
+    assert "`data/benchmark_YYYYMMDD.json`" in flow
+    assert "任意の `data/benchmark_YYYYMMDD.json` が無くても停止しない" in flow
+    viewing_agent1 = flow.split("**Agent 1: 自チャンネルシーン別パフォーマンス**", 1)[1].split(
+        "**Agent 2: ベンチマーク活動タグ分析**",
+        1,
+    )[0]
+    viewing_prelaunch = viewing_agent1.split("**新規開設（公開前）**:", 1)[1].split("**公開後**:", 1)[0]
+    viewing_postlaunch = viewing_agent1.split("**公開後**:", 1)[1]
+    assert "定性シーン仮説" in viewing_prelaunch
+    assert "推測で補わず「公開前のため未検証」" in viewing_prelaunch
+    for quantitative_step in (
+        "シーン × 再生数 × 平均視聴時間のマッピング表",
+        "シーン別パフォーマンスランキング",
+        "動画尺とパフォーマンスの相関分析",
+    ):
+        assert quantitative_step not in viewing_prelaunch
+        assert quantitative_step in viewing_postlaunch
+
+    viewing_agent2 = flow.split("**Agent 2: ベンチマーク活動タグ分析**", 1)[1].split(
+        "**Agent 3: 検索需要調査**",
+        1,
+    )[0]
+    benchmark_prelaunch = viewing_agent2.split("**新規開設（公開前）**:", 1)[1].split("**公開後**:", 1)[0]
+    benchmark_postlaunch = viewing_agent2.split("**公開後**:", 1)[1]
+    assert "推測で補わず「公開前のため未検証」" in benchmark_prelaunch
+    assert "活動タグ別の平均再生数を比較" not in benchmark_prelaunch
+    assert "活動タグ別の平均再生数を比較" in benchmark_postlaunch
+    for heading in (
+        "**Agent 1: 自チャンネルシーン別パフォーマンス**",
+        "**Agent 2: ベンチマーク活動タグ分析**",
+        "**Agent 3: 検索需要調査**",
+        "### Phase 2: 第一ペルソナ × シーン検証",
+        "### Phase 3: 意思決定 + レポート保存",
+    ):
+        assert heading in flow
+
+
 def test_channel_new_import_mode_contract_is_separate_from_ttp_completion() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     import_mode = _read(".claude/skills/channel-new/references/import-mode.md")
     config_rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
 
     assert "TTP 完了条件（新規開設モード）" in channel_new
+    assert "docs/channel/personas/persona-definition.md" in channel_new
     assert "既存チャンネル取り込みモードにはこの TTP 完了条件を適用しない" in channel_new
     assert "取り込み Step 8: 次ステップ案内" in channel_new
     assert "references/import-mode.md" in channel_new
@@ -408,6 +561,43 @@ def test_analytics_collect_documents_reporting_api_preflight() -> None:
     assert "uv run yt-analytics --include-reporting" in analytics_collect
     assert "最大 48 時間" in analytics_collect
     assert "youtubereporting.googleapis.com" in analytics_collect
+
+
+def test_analytics_collect_documents_full_depth_collection_path() -> None:
+    analytics_collect = _read(".claude/skills/analytics-collect/SKILL.md")
+
+    assert "`/analytics-collect full`" in analytics_collect
+    assert "uv run yt-analytics --depth full" in analytics_collect
+    assert "references/validate-depth.sh" in analytics_collect
+    assert "retention" in analytics_collect
+    assert "by_country" in analytics_collect
+
+
+def test_analytics_analyze_requires_numeric_retention_evidence_for_full_data() -> None:
+    analytics_analyze = _read(".claude/skills/analytics-analyze/SKILL.md")
+    validator = _read(".claude/skills/analytics-analyze/references/analysis-json-validator.md")
+
+    assert "視聴維持率分析" in analytics_analyze
+    assert "references/analysis-json-validator.md" in analytics_analyze
+    assert "retention_analysis" in validator
+    assert "data_points > 0" in validator
+    assert "空でない `retention_curve`" in validator
+
+
+@pytest.mark.parametrize(
+    "skill_path",
+    [
+        ".claude/skills/analytics-collect/SKILL.md",
+        ".claude/skills/analytics-analyze/SKILL.md",
+    ],
+)
+def test_revised_analytics_skills_stop_when_channel_config_is_invalid(skill_path: str) -> None:
+    skill = _read(skill_path)
+    prerequisite = skill.split("## 前提", 1)[1].split("\n## ", 1)[0]
+
+    assert "`load_config()` でロード可能" in prerequisite
+    assert "ここで停止" in prerequisite
+    assert "後続手順へ進まない" in prerequisite
 
 
 @pytest.mark.parametrize(
@@ -570,7 +760,8 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "/viewer-voice` → 前提" in research
 
     assert "チャンネル立ち上げ・方向性見直し時に必ず使用" not in viewer_voice
-    assert "`/channel-new` の標準フローでは実行せず" in viewer_voice
+    assert "`/channel-new` の新規開設モードでは Step 7 の必須前工程として実行する" in viewer_voice
+    assert "公開後の再分析では" in viewer_voice
     assert "任意後続スキル" not in viewer_voice
     assert "/audience-persona-design の必須入力（viewer-voice-analysis.md）" in viewer_voice
 
@@ -594,7 +785,7 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
         ".claude/skills/alignment-check/SKILL.md",
         ".claude/skills/collection-ideate/SKILL.md",
         ".claude/skills/lyria/SKILL.md",
-        ".claude/skills/postmortem/SKILL.md",
+        ".claude/skills/flop-analysis/SKILL.md",
         ".claude/skills/video-analyze/SKILL.md",
     ]
     for path in followup_direction_files:
@@ -613,7 +804,9 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "untrusted data" in onboarding
 
     assert "新規チャンネル開設 → 競合発掘 → 方向性決定 → セットアップ" not in features
-    assert "`/setup` → `/channel-new` → `/wf-new`" in features
+    assert (
+        "`/setup` → `/channel-new`（`/viewer-voice` → `/audience-persona-design` → `/viewing-scene` を含む）→ `/wf-new`"
+    ) in features
 
 
 def test_skill_frontmatter_descriptions_disambiguate_sibling_routes() -> None:
@@ -682,7 +875,7 @@ def test_upload_schedule_plan_must_precede_publish_guidance() -> None:
         "uv run yt-upload-collection [-c NAME]",
     )
 
-    wf_next_gate = wf_next[wf_next.index("approval_gates.upload = true") :]
+    wf_next_gate = wf_next[wf_next.index("skip_upload_approval = false") :]
     _assert_appears_before(wf_next_gate, "uv run yt-upload-collection --plan", "AskUserQuestion")
     _assert_appears_before(wf_next_gate, "uv run yt-upload-collection --plan", "/video-upload")
 
@@ -716,8 +909,8 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
 
     assert "`collection` 型では `collection_uploader` 内部の `assign_video()`" in video_upload
     assert "プレイリストへの動画追加は後続のアップロード経路が担う" in video_upload
-    assert "`approval_gates.upload` とは別の playlist 作成ゲート" in wf_next
-    assert "`approval_gates.upload = false` でも" in wf_next
+    assert "`skip_upload_approval` とは別の playlist 作成ゲート" in wf_next
+    assert "`skip_upload_approval = true` でも" in wf_next
     assert "確認を省略しない" in wf_next
     assert "ユーザーが playlist 初期化を却下した場合" in wf_next
     assert "`/video-upload` を実行せず停止" in wf_next
@@ -726,6 +919,33 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
     assert "初投稿プレイリスト初期化ゲート" in wf_next
     assert "`upload.video_id = null`" in wf_next
     assert "初回動画の追加は `/video-upload` 内部の自動 assign に任せる" in checklist
+
+
+def test_wf_next_skip_approval_keys_are_documented_consistently() -> None:
+    """#1744: wf_next の boolean は「true = 手動工程を省く」向きで example / docs が一致する."""
+    wf_next = _read(".claude/skills/wf-next/SKILL.md")
+    wf_status = _read(".claude/skills/wf-status/SKILL.md")
+    schema = _read(".claude/skills/wf-new/references/schema.md")
+    example = _read("examples/channel_config.example/workflow.json")
+
+    # example は新キーのみ（既定値どおり true = 承認省略）で、旧キーを含まない
+    assert '"skip_audio_approval": true' in example
+    assert '"skip_upload_approval": true' in example
+    assert "approval_gates" not in example
+
+    # wf-next は新キーを正として記述し、旧キーは後方互換 alias + 同時指定エラーとして言及する
+    for key in ("skip_audio_approval", "skip_upload_approval"):
+        assert key in wf_next
+    assert "後方互換 alias" in wf_next
+    assert "同時指定すると `ConfigError`" in wf_next
+    # ゲート発動条件は常に「skip_* = false のとき承認」の向きで書く（旧向きの記述を残さない）
+    assert "approval_gates.upload = true" not in wf_next
+    assert "approval_gates.audio = true" not in wf_next
+
+    # wf-status / wf-new schema も同じ向きで参照する
+    assert "skip_audio_approval" in wf_status
+    assert "skip_upload_approval" in wf_status
+    assert "skip_audio_approval" in schema
 
 
 def test_common_docs_list_optional_channel_config_files() -> None:
@@ -828,7 +1048,8 @@ def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
         assert "## 設定読み込みゲート" in text, f"{skill} missing config read gate"
         assert f".claude/skills/{skill}/config.default.yaml" in text
         assert f"config/skills/{skill}.yaml" in text
-        assert f'load_skill_config("{skill}")' in text
+        loader_key = "postmortem" if skill == "flop-analysis" else skill
+        assert f'load_skill_config("{loader_key}")' in text
         assert "SKILL.md の説明や記憶から設定値を推測しない" in text
         assert "必ず Read" in text
         assert "存在する場合" in text
@@ -927,6 +1148,58 @@ def test_collection_localization_docs_use_root_localizations_contract() -> None:
     )[0]
     assert "`localizations`" not in required_sections
     assert "`config/localizations.json`" in rules
+
+
+def test_setup_client_secrets_step_uses_download_and_automatic_move() -> None:
+    setup = _read(".claude/skills/setup/SKILL.md")
+    step = setup.split("#### `client_secrets`", 1)[1].split("#### `oauth_token`", 1)[0]
+
+    for expected in (
+        "Client secrets",
+        "Add secret",
+        "Download JSON",
+        "done",
+        "uv run yt-doctor --fix-client-secrets",
+        "uv run yt-doctor --json",
+        "client_secrets` が `ok`",
+    ):
+        assert expected in step
+    assert "client_secrets.template.json" not in step
+    assert "転記" not in step
+
+
+def test_onboarding_client_secrets_step_uses_download_and_automatic_move() -> None:
+    onboarding = _read("ONBOARDING.md")
+    oauth_setup = onboarding.split("### 2.3 OAuth セットアップ", 1)[1].split("### 2.4 初期設定後の GCP 課金確認", 1)[0]
+
+    for expected in (
+        "Client secrets > Add secret",
+        "Download JSON",
+        "done",
+        "uv run yt-doctor --fix-client-secrets",
+        "uv run yt-doctor --json",
+        "client_secrets` が `ok`",
+    ):
+        assert expected in oauth_setup
+    assert "client_secrets.template.json" not in oauth_setup
+    assert "転記" not in oauth_setup
+
+
+def test_oauth_module_and_setup_guide_distinguish_automatic_and_manual_routes() -> None:
+    oauth_handler = _read("src/youtube_automation/auth/oauth_handler.py")
+    module_docstring = oauth_handler.split('"""', 2)[1]
+    for expected in ("Download JSON", "yt-doctor --fix-client-secrets"):
+        assert expected in module_docstring
+    assert "secret を発行して auth/client_secrets.json に配置" not in module_docstring
+
+    setup_guide = _read("auth/SETUP.md")
+    route_zero = setup_guide.split("### ルート 0:", 1)[1].split("### ルート A:", 1)[0]
+    for expected in ("Download JSON", "done", "yt-doctor --fix-client-secrets", "yt-doctor --json"):
+        assert expected in route_zero
+    assert "client_secrets.json` 配置は PKCE / GUI 制約で AI 実行不可" not in route_zero
+
+    manual_routes = setup_guide.split("### ルート A:", 1)[1].split('---\n\n## <a id="step-oauth"', 1)[0]
+    assert "ルート A / B では `client_secrets.json` の手動配置を現状どおり行う" in manual_routes
 
 
 def test_channel_new_regeneration_documents_ttp_wf_new_readiness_gate() -> None:
@@ -1042,6 +1315,146 @@ def test_channel_new_regeneration_does_not_recopy_youtube_json_after_config_comp
 
     step_r5 = regeneration_mode.split("## Step R5: 残りファイル生成", 1)[1].split("## Step R6:", 1)[0]
     assert "`config/channel/youtube.json`" not in step_r5
+
+
+_INSIGHTS_VALIDATOR = ROOT / ".claude/skills/analytics-analyze/references/validate_insights.py"
+_INSIGHTS_SCHEMA_PATH = ".claude/skills/analytics-analyze/references/insights-entry.schema.json"
+
+
+def _insights_entry(**overrides: object) -> dict:
+    entry: dict = {
+        "schema_version": 1,
+        "id": "20260717-analysis-thumbnail-text-size",
+        "date": "2026-07-17",
+        "source": "analysis",
+        "source_path": "reports/analysis_20260717.json",
+        "lever": "thumbnail",
+        "finding": "サムネの文字が 320px で読めない",
+        "recommended_action": "タイトル文字サイズを 1.5 倍にする",
+        "evidence": "analysis_20260717.json#$.cli_outputs.launch_curve.target.ratio_vs_median = 0.42",
+        "status": "open",
+    }
+    entry.update(overrides)
+    return entry
+
+
+def _run_insights_validator(path: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(_INSIGHTS_VALIDATOR), str(path)],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_insights_entry_schema_is_single_source_for_writers_and_readers() -> None:
+    schema = json.loads(_read(_INSIGHTS_SCHEMA_PATH))
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == {
+        "schema_version",
+        "id",
+        "date",
+        "source",
+        "lever",
+        "finding",
+        "recommended_action",
+        "evidence",
+        "status",
+    }
+    properties = schema["properties"]
+    assert properties["schema_version"]["const"] == 1
+    assert properties["source"]["enum"] == ["analysis", "postmortem"]
+    assert properties["lever"]["enum"] == ["thumbnail", "title", "topic", "bgm", "metadata", "other"]
+    assert properties["status"]["enum"] == ["open", "adopted", "dismissed"]
+
+    analytics_analyze = _read(".claude/skills/analytics-analyze/SKILL.md")
+    flop_analysis = _read(".claude/skills/flop-analysis/SKILL.md")
+    wf_new = _read(".claude/skills/wf-new/SKILL.md")
+    collection_ideate = _read(".claude/skills/collection-ideate/SKILL.md")
+    thumbnail = _read(".claude/skills/thumbnail/SKILL.md")
+
+    assert "references/insights-entry.schema.json" in analytics_analyze
+    for text in (flop_analysis, wf_new, collection_ideate, thumbnail):
+        assert _INSIGHTS_SCHEMA_PATH in text
+    for text in (analytics_analyze, flop_analysis, wf_new, collection_ideate, thumbnail):
+        assert "data/insights.jsonl" in text
+
+    validator_command = (
+        "uv run python3 .claude/skills/analytics-analyze/references/validate_insights.py data/insights.jsonl"
+    )
+    for text in (analytics_analyze, flop_analysis, wf_new, collection_ideate):
+        assert validator_command in text
+
+    # 書き手 2 本: 追記契約（source 値 / append-only / schema 再定義禁止）
+    for writer in (analytics_analyze, flop_analysis):
+        assert "append-only" in writer
+        assert "本文で必須キーや enum を再定義しない" in writer
+    assert 'source: "analysis"' in analytics_analyze
+    assert '`status: "open"`' in analytics_analyze
+    assert "重複追記しない" in analytics_analyze
+    assert 'source: "postmortem"' in flop_analysis
+    assert "「結論 / 反証 / 学び」の 3 項目がすべて記入済み" in flop_analysis
+    assert "`未検証` の仮説だけを根拠にした学びは還元しない" in flop_analysis
+
+    # 読み手 3 本: 消費契約（open 選別 / status 反映 / lever=thumbnail）
+    assert "jq -c 'select(.status == \"open\")' data/insights.jsonl" in wf_new
+    assert "open insights の消費と status 反映" in collection_ideate
+    assert "`adopted`" in collection_ideate
+    assert "`dismissed`" in collection_ideate
+    assert "行の削除・並べ替え・他フィールドの書き換えはしない" in collection_ideate
+    assert 'select(.status == "open" and .lever == "thumbnail")' in thumbnail
+    assert "`status` を含むエントリの書き換え・追記はしない" in thumbnail
+
+
+def test_insights_validator_enforces_schema_and_id_uniqueness(tmp_path: Path) -> None:
+    missing = _run_insights_validator(tmp_path / "insights.jsonl")
+    assert missing.returncode == 0, missing.stderr
+
+    valid_path = tmp_path / "valid.jsonl"
+    valid_lines = [
+        json.dumps(_insights_entry(), ensure_ascii=False),
+        json.dumps(
+            _insights_entry(
+                id="20260717-postmortem-title-appeal",
+                source="postmortem",
+                source_path="collections/live/sample/20-documentation/postmortem.md",
+                lever="title",
+            ),
+            ensure_ascii=False,
+        ),
+    ]
+    valid_path.write_text("\n".join(valid_lines) + "\n", encoding="utf-8")
+    ok = _run_insights_validator(valid_path)
+    assert ok.returncode == 0, ok.stderr
+
+    invalid_path = tmp_path / "invalid.jsonl"
+    invalid_entries = [
+        _insights_entry(id="bad-lever", lever="color"),
+        _insights_entry(id="bad-status", status="todo"),
+        {k: v for k, v in _insights_entry(id="missing-evidence").items() if k != "evidence"},
+        _insights_entry(id="unknown-key", unknown_key="x"),
+        _insights_entry(id="bad-date", date="2026/07/17"),
+    ]
+    invalid_path.write_text(
+        "\n".join(json.dumps(entry, ensure_ascii=False) for entry in invalid_entries) + "\n",
+        encoding="utf-8",
+    )
+    invalid = _run_insights_validator(invalid_path)
+    assert invalid.returncode == 1
+    for fragment in ("lever", "status", "evidence", "unknown_key", "date"):
+        assert fragment in invalid.stderr
+
+    duplicate_path = tmp_path / "duplicate.jsonl"
+    duplicate_path.write_text(
+        json.dumps(_insights_entry(), ensure_ascii=False)
+        + "\n"
+        + json.dumps(_insights_entry(lever="title"), ensure_ascii=False)
+        + "\n",
+        encoding="utf-8",
+    )
+    duplicate = _run_insights_validator(duplicate_path)
+    assert duplicate.returncode == 1
+    assert "重複" in duplicate.stderr
 
 
 def test_theme_compare_missing_themes_error_uses_current_config_path(monkeypatch, caplog) -> None:

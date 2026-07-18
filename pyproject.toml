@@ -62,12 +62,16 @@ yt-generate-lyria-master = "youtube_automation.cli_entrypoints:yt_generate_lyria
 yt-generate-master = "youtube_automation.cli_entrypoints:yt_generate_master"
 yt-generate-suno = "youtube_automation.cli_entrypoints:yt_generate_suno"
 yt-init-collection = "youtube_automation.cli_entrypoints:yt_init_collection"
+yt-kpi-dashboard = "youtube_automation.cli_entrypoints:yt_kpi_dashboard"
 yt-launch-curve = "youtube_automation.cli_entrypoints:yt_launch_curve"
 yt-metadata-audit = "youtube_automation.cli_entrypoints:yt_metadata_audit"
+yt-oauth = "youtube_automation.cli_entrypoints:yt_oauth"
 yt-pinned-comment = "youtube_automation.cli_entrypoints:yt_pinned_comment"
 yt-playlist-manager = "youtube_automation.cli_entrypoints:yt_playlist_manager"
 yt-playlist-status = "youtube_automation.cli_entrypoints:yt_playlist_status"
 yt-populate-scene-phrases = "youtube_automation.cli_entrypoints:yt_populate_scene_phrases"
+yt-preflight = "youtube_automation.cli_entrypoints:yt_preflight"
+yt-raw-master-check = "youtube_automation.cli_entrypoints:yt_raw_master_check"
 yt-stock-archive = "youtube_automation.cli_entrypoints:yt_stock_archive"
 yt-stock-list = "youtube_automation.cli_entrypoints:yt_stock_list"
 yt-stock-preview = "youtube_automation.cli_entrypoints:yt_stock_preview"
@@ -85,8 +89,10 @@ yt-thumbnail-compare = "youtube_automation.cli_entrypoints:yt_thumbnail_compare"
 yt-thumbnail-correlate = "youtube_automation.cli_entrypoints:yt_thumbnail_correlate"
 yt-thumbnail-text = "youtube_automation.cli_entrypoints:yt_thumbnail_text"
 yt-title-duplicate-check = "youtube_automation.cli_entrypoints:yt_title_duplicate_check"
+yt-traffic-trend = "youtube_automation.cli_entrypoints:yt_traffic_trend"
 yt-video-analyze = "youtube_automation.cli_entrypoints:yt_video_analyze"
 yt-vote-log = "youtube_automation.cli_entrypoints:yt_vote_log"
+yt-wf-batch = "youtube_automation.cli_entrypoints:yt_wf_batch"
 
 # Agent entry points
 yt-upload-auto = "youtube_automation.cli_entrypoints:yt_upload_auto"
@@ -158,4 +164,8 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 tmp_path_retention_policy = "failed"
 
 [dependency-groups]
-dev = ["pytest>=9,<10", "ruff>=0.15,<1"]
+dev = [
+    "pytest>=9,<10",
+    "pytest-xdist>=3.8,<4",
+    "ruff>=0.15,<1",
+]

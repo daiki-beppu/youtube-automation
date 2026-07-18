@@ -6,10 +6,12 @@
 // #896 のスコープ外のため popup fetch 構成を維持する。
 // ここでは「転送往復でバイト列が壊れないこと」と「fetch 経路が content に残っていないこと」を固定する。
 
-import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { describe, it, expect } from "vitest";
+
 import { encodeAsset, decodeAsset } from "../lib/asset-transfer";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -57,7 +59,10 @@ describe("fetch 経路の境界（CORS 回帰防止）", () => {
   // content script は asset を直接 fetch してはならない（ページ origin で CORS 遮断されるため）。
   // popup 側で fetch した直列化 asset を受け取るだけにする。
   it("content.ts は API client を import せず fetch も呼ばない", () => {
-    const source = readFileSync(join(here, "..", "entrypoints", "content.ts"), "utf8");
+    const source = readFileSync(
+      join(here, "..", "entrypoints", "content.ts"),
+      "utf8"
+    );
     expect(source).not.toContain("@/lib/api");
     expect(source).not.toContain("fetchAsset");
     expect(source).not.toMatch(/\bfetch\s*\(/);

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -9,6 +10,8 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _FLAKE_PATH = _REPO_ROOT / "flake.nix"
 _LEFTHOOK_INSTALL_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "install.sh"
 _WORKTREE_SETUP_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "setup-worktree.sh"
+_WORKTREE_TMPDIR_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "worktree-tmpdir.sh"
+_SYNC_DEPS_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "sync-deps.sh"
 _ENVRC_PATH = _REPO_ROOT / ".envrc"
 _LITE_WORKFLOW_PATH = _REPO_ROOT / ".takt" / "workflows" / "lite.yaml"
 _LEFTHOOK_CONFIG_PATH = _REPO_ROOT / "lefthook.yml"
@@ -22,11 +25,21 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _subprocess_env(**overrides: str) -> dict[str, str]:
+    # 契約テストの前提となる環境変数はテスト自身が固定する。takt runtime が全 worker へ
+    # 注入する YOUTUBE_AUTOMATION_SKIP_LEFTHOOK が subprocess へリークすると install 実行を
+    # 期待するテストが skip 分岐に入って失敗するため、必ず除去する（issue #2101）。
+    # skip 挙動を検証するテストは overrides で明示的に設定する
+    env = {key: value for key, value in os.environ.items() if key != "YOUTUBE_AUTOMATION_SKIP_LEFTHOOK"}
+    env.update(overrides)
+    return env
+
+
 def _run_install_script(workdir: Path, path: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["bash", str(_LEFTHOOK_INSTALL_SCRIPT_PATH)],
         cwd=workdir,
-        env={**os.environ, "PATH": path},
+        env=_subprocess_env(PATH=path),
         text=True,
         capture_output=True,
         check=False,
@@ -41,7 +54,7 @@ def _run_shell_hook_install_entrypoint(workdir: Path, path: str) -> subprocess.C
             f'git rev-parse --git-dir >/dev/null 2>&1 && bash "{_LEFTHOOK_INSTALL_SCRIPT_PATH}"',
         ],
         cwd=workdir,
-        env={**os.environ, "PATH": path},
+        env=_subprocess_env(PATH=path),
         text=True,
         capture_output=True,
         check=False,
@@ -53,11 +66,16 @@ def _create_fake_executable(path: Path, content: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
-def _run_worktree_setup(workdir: Path, path: str, *args: str) -> subprocess.CompletedProcess[str]:
+def _run_worktree_setup(
+    workdir: Path,
+    path: str,
+    *args: str,
+    env_overrides: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["bash", str(_WORKTREE_SETUP_SCRIPT_PATH), *args],
         cwd=workdir,
-        env={**os.environ, "PATH": path},
+        env=_subprocess_env(PATH=path, **(env_overrides or {})),
         text=True,
         capture_output=True,
         check=False,
@@ -91,6 +109,10 @@ def _create_linked_worktree_with_hook_files(tmp_path: Path) -> Path:
         _read(_LEFTHOOK_INSTALL_SCRIPT_PATH),
         encoding="utf-8",
     )
+    (worktree / ".lefthook" / "sync-deps.sh").write_text(
+        _read(_SYNC_DEPS_SCRIPT_PATH),
+        encoding="utf-8",
+    )
     (worktree / "lefthook.yml").write_text(_read(_LEFTHOOK_CONFIG_PATH), encoding="utf-8")
     return worktree
 
@@ -103,8 +125,38 @@ def _create_parent_checkout_with_hook_files(tmp_path: Path) -> Path:
         _read(_LEFTHOOK_INSTALL_SCRIPT_PATH),
         encoding="utf-8",
     )
+    (parent / ".lefthook" / "sync-deps.sh").write_text(
+        _read(_SYNC_DEPS_SCRIPT_PATH),
+        encoding="utf-8",
+    )
     (parent / "lefthook.yml").write_text(_read(_LEFTHOOK_CONFIG_PATH), encoding="utf-8")
     return parent
+
+
+def _write_sync_deps_script(checkout: Path) -> None:
+    lefthook_dir = checkout / ".lefthook"
+    lefthook_dir.mkdir(exist_ok=True)
+    (lefthook_dir / "sync-deps.sh").write_text(_read(_SYNC_DEPS_SCRIPT_PATH), encoding="utf-8")
+
+
+def _write_worktree_tmpdir_script(checkout: Path) -> None:
+    lefthook_dir = checkout / ".lefthook"
+    lefthook_dir.mkdir(exist_ok=True)
+    (lefthook_dir / "worktree-tmpdir.sh").write_text(
+        _read(_WORKTREE_TMPDIR_SCRIPT_PATH),
+        encoding="utf-8",
+    )
+
+
+def _run_sync_deps(workdir: Path, path: str, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["bash", str(_SYNC_DEPS_SCRIPT_PATH), *args],
+        cwd=workdir,
+        env={**os.environ, "PATH": path},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
 
 
 def _commit_file(repo: Path, name: str = "tracked.txt", *, verify: bool = True) -> subprocess.CompletedProcess[str]:
@@ -134,7 +186,7 @@ def _push_head(repo: Path, path: str, *, extra_env: dict[str, str] | None = None
     return subprocess.run(
         ["git", "push", "origin", "HEAD:main"],
         cwd=repo,
-        env={**os.environ, "PATH": path, **(extra_env or {})},
+        env=_subprocess_env(PATH=path, **(extra_env or {})),
         text=True,
         capture_output=True,
         check=False,
@@ -166,7 +218,7 @@ def test_lefthook_install_script_skips_when_skip_env_is_set(tmp_path: Path) -> N
     result = subprocess.run(
         ["bash", str(_LEFTHOOK_INSTALL_SCRIPT_PATH)],
         cwd=tmp_path,
-        env={**os.environ, "PATH": "/usr/bin:/bin", "YOUTUBE_AUTOMATION_SKIP_LEFTHOOK": "1"},
+        env=_subprocess_env(PATH="/usr/bin:/bin", YOUTUBE_AUTOMATION_SKIP_LEFTHOOK="1"),
         text=True,
         capture_output=True,
         check=False,
@@ -179,25 +231,112 @@ def test_lefthook_install_script_skips_when_skip_env_is_set(tmp_path: Path) -> N
     assert not (hooks_dir / "pre-push").exists()
 
 
-def test_takt_runtime_prepare_injects_sandbox_safe_environment(tmp_path: Path) -> None:
-    # takt の runtime.prepare が全 worker へ worktree ローカルの XDG_DATA_HOME と
-    # lefthook skip を注入する配線契約（issue #1999）
-    takt_config = _read(_REPO_ROOT / ".takt" / "config.yaml")
-    assert ".takt/runtime-prepare.sh" in takt_config
-
-    runtime_root = tmp_path / "runtime"
-    result = subprocess.run(
+def _run_runtime_prepare(runtime_root: Path, **extra_env: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
         ["bash", str(_REPO_ROOT / ".takt" / "runtime-prepare.sh")],
-        env={**os.environ, "TAKT_RUNTIME_ROOT": str(runtime_root)},
+        env=_subprocess_env(TAKT_RUNTIME_ROOT=str(runtime_root), **extra_env),
         text=True,
         capture_output=True,
         check=False,
     )
 
+
+def _prepared_env(result: subprocess.CompletedProcess[str]) -> dict[str, str]:
+    return dict(line.split("=", 1) for line in result.stdout.splitlines())
+
+
+def test_takt_runtime_prepare_injects_sandbox_safe_environment(tmp_path: Path) -> None:
+    # takt の runtime.prepare が全 worker へ current runtime root 配下の
+    # TMPDIR / XDG_* / UV_CACHE_DIR と lefthook skip を注入する配線契約
+    # （issue #1999 / #2163）
+    takt_config = _read(_REPO_ROOT / ".takt" / "config.yaml")
+    assert ".takt/runtime-prepare.sh" in takt_config
+
+    runtime_root = tmp_path / "runtime"
+    result = _run_runtime_prepare(runtime_root)
+
     assert result.returncode == 0
     lines = result.stdout.splitlines()
+    assert f"TMPDIR={runtime_root}/tmp" in lines
+    assert f"XDG_CACHE_HOME={runtime_root}/cache" in lines
+    assert f"XDG_CONFIG_HOME={runtime_root}/config" in lines
     assert f"XDG_DATA_HOME={runtime_root}/data" in lines
+    assert f"XDG_STATE_HOME={runtime_root}/state" in lines
+    assert f"UV_CACHE_DIR={runtime_root}/cache/uv" in lines
     assert "YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1" in lines
+    # 注入先ディレクトリは prepare 時点で作成済み（worker の初回書込みを保証）
+    for relative in ("tmp", "cache", "config", "data", "state", "cache/uv"):
+        assert (runtime_root / relative).is_dir()
+
+
+def test_takt_runtime_prepare_overrides_sibling_worktree_paths(tmp_path: Path) -> None:
+    # 親 process が sibling worktree の runtime path を持っていても、stdout の
+    # KEY=VALUE は current root 配下を指す（takt は stdout を worker env へ上書き
+    # 注入するため、sibling 値は worker へ届かない）（issue #2163）
+    sibling_root = tmp_path / "sibling" / ".takt" / ".runtime"
+    sibling_root.mkdir(parents=True)
+    current_root = tmp_path / "current" / ".takt" / ".runtime"
+
+    result = _run_runtime_prepare(
+        current_root,
+        TMPDIR=f"{sibling_root}/tmp",
+        XDG_CACHE_HOME=f"{sibling_root}/cache",
+        XDG_CONFIG_HOME=f"{sibling_root}/config",
+        XDG_DATA_HOME=f"{sibling_root}/data",
+        XDG_STATE_HOME=f"{sibling_root}/state",
+        UV_CACHE_DIR=f"{sibling_root}/cache/uv",
+    )
+
+    assert result.returncode == 0
+    prepared = _prepared_env(result)
+    for var in ("TMPDIR", "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "UV_CACHE_DIR"):
+        value = Path(prepared[var])
+        assert value.is_relative_to(current_root), f"{var} が current runtime root 配下を指していない"
+        assert not value.is_relative_to(sibling_root), f"{var} が sibling worktree を参照している"
+
+
+def test_takt_runtime_prepare_parallel_roots_do_not_intersect(tmp_path: Path) -> None:
+    # 2 worktree の並行起動で runtime path 集合が交差しない（issue #2163 要件 4）
+    root_a = tmp_path / "worktree-a" / ".takt" / ".runtime"
+    root_b = tmp_path / "worktree-b" / ".takt" / ".runtime"
+
+    paths_a = set(_prepared_env(_run_runtime_prepare(root_a)).values())
+    paths_b = set(_prepared_env(_run_runtime_prepare(root_b)).values())
+    paths_a.discard("1")  # YOUTUBE_AUTOMATION_SKIP_LEFTHOOK は path ではない
+    paths_b.discard("1")
+
+    assert paths_a
+    assert paths_a.isdisjoint(paths_b)
+
+
+def test_takt_runtime_prepare_survives_sibling_cleanup(tmp_path: Path) -> None:
+    # 一方の runtime を cleanup しても、他方の TMPDIR への書込みが成功する
+    # （issue #2163 要件 5 の縮約: 相互隔離により sibling の消滅が波及しない）
+    root_a = tmp_path / "worktree-a" / ".takt" / ".runtime"
+    root_b = tmp_path / "worktree-b" / ".takt" / ".runtime"
+    env_a = _prepared_env(_run_runtime_prepare(root_a))
+    _prepared_env(_run_runtime_prepare(root_b))
+
+    shutil.rmtree(root_b)
+
+    probe = Path(env_a["TMPDIR"]) / "probe.txt"
+    probe.write_text("still writable\n", encoding="utf-8")
+    assert probe.read_text(encoding="utf-8") == "still writable\n"
+
+
+def test_takt_runtime_prepare_fails_without_runtime_root(tmp_path: Path) -> None:
+    env = _subprocess_env()
+    env.pop("TAKT_RUNTIME_ROOT", None)
+    result = subprocess.run(
+        ["bash", str(_REPO_ROOT / ".takt" / "runtime-prepare.sh")],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "TAKT_RUNTIME_ROOT" in result.stderr
 
 
 def test_lefthook_install_script_noops_outside_git_repo(tmp_path: Path) -> None:
@@ -311,7 +450,7 @@ def test_generated_pre_commit_hook_fails_closed_when_lefthook_path_is_stale(tmp_
     commit_result = subprocess.run(
         ["git", "commit", "-m", "test commit"],
         cwd=tmp_path,
-        env={**os.environ, "PATH": "/usr/bin:/bin"},
+        env=_subprocess_env(PATH="/usr/bin:/bin"),
         text=True,
         capture_output=True,
         check=False,
@@ -360,7 +499,7 @@ def test_generated_pre_commit_hook_uses_path_fallback_when_installed_path_is_sta
     commit_result = subprocess.run(
         ["git", "commit", "--allow-empty", "-m", "fallback commit"],
         cwd=tmp_path,
-        env={**os.environ, "PATH": f"{fallback_bin_dir}:/usr/bin:/bin"},
+        env=_subprocess_env(PATH=f"{fallback_bin_dir}:/usr/bin:/bin"),
         text=True,
         capture_output=True,
         check=False,
@@ -389,7 +528,7 @@ def test_generated_pre_commit_hook_honors_lefthook_zero_when_lefthook_path_is_st
     commit_result = subprocess.run(
         ["git", "commit", "-m", "skip hooks"],
         cwd=tmp_path,
-        env={**os.environ, "PATH": "/usr/bin:/bin", "LEFTHOOK": "0"},
+        env=_subprocess_env(PATH="/usr/bin:/bin", LEFTHOOK="0"),
         text=True,
         capture_output=True,
         check=False,
@@ -417,7 +556,7 @@ def test_generated_pre_commit_hook_fails_closed_in_linked_worktree_when_lefthook
     commit_result = subprocess.run(
         ["git", "commit", "-m", "test commit"],
         cwd=worktree,
-        env={**os.environ, "PATH": "/usr/bin:/bin"},
+        env=_subprocess_env(PATH="/usr/bin:/bin"),
         text=True,
         capture_output=True,
         check=False,
@@ -606,6 +745,7 @@ def test_lefthook_install_script_fails_when_force_install_fails(tmp_path: Path) 
 
 def test_worktree_setup_uses_direnv_allow_and_exec_with_forwarded_arguments(tmp_path: Path) -> None:
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    _write_sync_deps_script(tmp_path)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     call_log = tmp_path / "direnv-calls.txt"
@@ -633,7 +773,7 @@ exec "$@"
     assert result.stdout == "forwarded"
     assert call_log.read_text(encoding="utf-8").splitlines() == [
         f"allow {tmp_path}",
-        f"exec {tmp_path} sh -c printf forwarded",
+        f"exec {tmp_path} bash {tmp_path}/.lefthook/sync-deps.sh sh -c printf forwarded",
     ]
 
 
@@ -654,13 +794,13 @@ def test_worktree_setup_resolves_checkout_root_from_subdirectory(tmp_path: Path)
     assert result.returncode == 0
     assert call_log.read_text(encoding="utf-8").splitlines() == [
         f"allow {tmp_path}",
-        f"exec {tmp_path} bash {tmp_path}/.lefthook/install.sh",
+        f"exec {tmp_path} bash {tmp_path}/.lefthook/sync-deps.sh bash {tmp_path}/.lefthook/install.sh",
     ]
 
 
 def test_worktree_setup_falls_back_to_nix_and_runs_default_install(tmp_path: Path) -> None:
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
-    (tmp_path / ".lefthook").mkdir()
+    _write_sync_deps_script(tmp_path)
     install_log = tmp_path / "install-ran.txt"
     _create_fake_executable(
         tmp_path / ".lefthook" / "install.sh",
@@ -682,7 +822,7 @@ exec "$@"
 
     assert result.returncode == 0
     assert nix_log.read_text(encoding="utf-8") == (
-        f"develop {tmp_path} --command bash {tmp_path}/.lefthook/install.sh\n"
+        f"develop {tmp_path} --command bash {tmp_path}/.lefthook/sync-deps.sh bash {tmp_path}/.lefthook/install.sh\n"
     )
     assert install_log.read_text(encoding="utf-8") == "installed"
 
@@ -740,6 +880,7 @@ def test_worktree_setup_falls_back_to_nix_when_direnv_allow_fails(tmp_path: Path
     # 書込みできず direnv allow が失敗する。hard fail で反復停滞せず nix develop へ
     # フォールバックする契約（issue #1999）
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    _write_sync_deps_script(tmp_path)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _create_fake_executable(bin_dir / "direnv", "#!/usr/bin/env bash\nexit 23\n")
@@ -758,7 +899,9 @@ exec "$@"
     assert result.returncode == 0
     assert result.stdout == "ran"
     assert "direnv allow に失敗しました" in result.stderr
-    assert nix_log.read_text(encoding="utf-8") == (f"develop {tmp_path} --command sh -c printf ran\n")
+    assert nix_log.read_text(encoding="utf-8") == (
+        f"develop {tmp_path} --command bash {tmp_path}/.lefthook/sync-deps.sh sh -c printf ran\n"
+    )
 
 
 def test_worktree_setup_fails_when_direnv_allow_fails_without_nix(tmp_path: Path) -> None:
@@ -790,8 +933,129 @@ def test_worktree_setup_fails_when_no_environment_loader_is_available(tmp_path: 
     assert result.stderr == "error: neither direnv nor nix is available in PATH.\n"
 
 
+def test_worktree_setup_wraps_commands_with_fail_closed_dependency_sync() -> None:
+    # explicit setup 経路は sync-deps.sh 経由で依存同期を fail-closed 実行する
+    # （issue #2125）。対話 shell（shellHook）の warning 継続とは経路分離
+    setup = _read(_WORKTREE_SETUP_SCRIPT_PATH)
+
+    assert ".lefthook/sync-deps.sh" in setup
+
+
+def test_interactive_shell_hook_keeps_dependency_sync_warning_open() -> None:
+    # 対話入場（direnv / nix develop）は sync 失敗でも入場を継続する方針を維持
+    # （issue #2125 のスコープは explicit setup 経路のみ）
+    flake = _read(_FLAKE_PATH)
+
+    assert 'uv sync --quiet || echo "warning: uv sync failed' in flake
+
+
+def test_sync_deps_fails_closed_when_uv_sync_fails(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "0"\n', encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _create_fake_executable(bin_dir / "uv", "#!/usr/bin/env bash\nexit 1\n")
+    marker = tmp_path / "command-ran.txt"
+
+    result = _run_sync_deps(
+        tmp_path,
+        f"{bin_dir}:/usr/bin:/bin",
+        "sh",
+        "-c",
+        f"printf ran > {marker}",
+    )
+
+    assert result.returncode != 0
+    assert not marker.exists()
+    assert "error: uv sync failed" in result.stderr
+
+
+def test_sync_deps_runs_command_after_successful_sync(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "0"\n', encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    uv_log = tmp_path / "uv-args.txt"
+    _create_fake_executable(
+        bin_dir / "uv",
+        f"#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> {uv_log}\nexit 0\n",
+    )
+
+    result = _run_sync_deps(tmp_path, f"{bin_dir}:/usr/bin:/bin", "sh", "-c", "printf forwarded")
+
+    assert result.returncode == 0
+    assert result.stdout == "forwarded"
+    assert uv_log.read_text(encoding="utf-8") == "sync --quiet\n"
+
+
+def test_sync_deps_skips_sync_when_pyproject_is_missing(tmp_path: Path) -> None:
+    # pyproject.toml の無い checkout（fixture 等）では同期対象が無いため、
+    # uv が PATH に無くてもコマンドをそのまま実行する
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+
+    result = _run_sync_deps(tmp_path, "/usr/bin:/bin", "sh", "-c", "printf forwarded")
+
+    assert result.returncode == 0
+    assert result.stdout == "forwarded"
+
+
+def test_sync_deps_fails_when_uv_is_missing_with_pyproject(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "0"\n', encoding="utf-8")
+
+    result = _run_sync_deps(tmp_path, "/usr/bin:/bin", "sh", "-c", "printf forwarded")
+
+    assert result.returncode == 1
+    assert "error: uv is not available in PATH; enter via nix develop or direnv." in result.stderr
+
+
+def test_worktree_setup_fails_closed_when_dependency_sync_fails(tmp_path: Path) -> None:
+    # issue #2125 要件 1: 失敗する uv で explicit setup 経路を通すと全体が exit 非 0
+    # になり、後続コマンドは実行されない
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    _write_sync_deps_script(tmp_path)
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "0"\n', encoding="utf-8")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _create_fake_executable(
+        bin_dir / "direnv",
+        """#!/usr/bin/env bash
+if [ "$1" = "allow" ]; then
+  exit 0
+fi
+shift 2
+exec "$@"
+""",
+    )
+    _create_fake_executable(bin_dir / "uv", "#!/usr/bin/env bash\nexit 1\n")
+    marker = tmp_path / "command-ran.txt"
+
+    result = _run_worktree_setup(
+        tmp_path,
+        f"{bin_dir}:/usr/bin:/bin",
+        "sh",
+        "-c",
+        f"printf ran > {marker}",
+    )
+
+    assert result.returncode != 0
+    assert not marker.exists()
+    assert "error: uv sync failed" in result.stderr
+
+
 def test_worktree_environment_contract_is_wired_into_lite_steps_and_docs() -> None:
-    assert _read(_ENVRC_PATH) == "use flake\n"
+    envrc = _read(_ENVRC_PATH)
+    # nix-direnv を version + SRI hash 固定でブートストラップし（issue #2097）、
+    # 最終ディレクティブは従来どおり use flake であること
+    assert 'source_url "https://raw.githubusercontent.com/nix-community/nix-direnv/' in envrc
+    assert '" "sha256-' in envrc
+    assert "nix_direnv_version" in envrc
+    assert envrc.rstrip().splitlines()[-1] == "use flake"
+    # nix-direnv は cached dev-env 適用時に TMPDIR を無視リストで除外するため、
+    # direnv 経路の TMPDIR 分離は .envrc 側で export する（issue #2088）
+    assert 'bash "$PWD/.lefthook/worktree-tmpdir.sh"' in envrc
+    assert 'export TMPDIR="$worktree_tmpdir"' in envrc
+    assert envrc.index("worktree-tmpdir.sh") < envrc.index("use flake")
     workflow = _read(_LITE_WORKFLOW_PATH)
     setup_instruction = "最初に `bash .lefthook/setup-worktree.sh` を実行"
     wrapped_command_instruction = "`bash .lefthook/setup-worktree.sh <command> [args...]` 経由"
@@ -802,6 +1066,277 @@ def test_worktree_environment_contract_is_wired_into_lite_steps_and_docs() -> No
         content = _read(document)
         assert "bash .lefthook/setup-worktree.sh" in content
         assert ".envrc" in content
+
+
+def _run_worktree_tmpdir_script(workdir: Path, tmpdir: str | None) -> subprocess.CompletedProcess[str]:
+    env = {**os.environ}
+    env.pop("TMPDIR", None)
+    if tmpdir is not None:
+        env["TMPDIR"] = tmpdir
+    return subprocess.run(
+        ["bash", str(_WORKTREE_TMPDIR_SCRIPT_PATH)],
+        cwd=workdir,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_worktree_tmpdir_script_creates_deterministic_per_worktree_subdirectory(tmp_path: Path) -> None:
+    # 共有の per-user TMPDIR（macOS の /var/folders 等）を指している場合は
+    # 共有 TMPDIR 配下に worktree ごとの決定的なサブディレクトリを作成して出力する
+    # （issue #2088）。checkout 内へ置くと pytest tmp_path が git checkout 内部に
+    # 着地し「git checkout の外」前提の契約テストが壊れるため、checkout 外に切る
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    shared_tmpdir = tmp_path.parent / "shared-tmp"
+    shared_tmpdir.mkdir(exist_ok=True)
+
+    result = _run_worktree_tmpdir_script(tmp_path, str(shared_tmpdir))
+
+    assert result.returncode == 0
+    isolated = Path(result.stdout.strip())
+    assert isolated.parent == shared_tmpdir
+    assert isolated.name.startswith("yt-automation-tmp-")
+    assert tmp_path.name[:32] in isolated.name
+    assert isolated.is_dir()
+    assert stat.S_IMODE(isolated.stat().st_mode) == 0o700
+    assert not isolated.is_relative_to(tmp_path)
+
+
+def test_worktree_tmpdir_script_separates_two_worktrees_under_shared_tmpdir(tmp_path: Path) -> None:
+    # 並列 run の干渉源は「複数 worktree が同一 TMPDIR を共有すること」なので、
+    # 同じ共有 TMPDIR から解決しても worktree ごとに別ディレクトリへ分かれること
+    shared_tmpdir = tmp_path / "shared-tmp"
+    shared_tmpdir.mkdir()
+    first = tmp_path / "worktree-a"
+    second = tmp_path / "worktree-b"
+    for checkout in (first, second):
+        subprocess.run(["git", "init", str(checkout)], check=True, capture_output=True, text=True)
+
+    first_result = _run_worktree_tmpdir_script(first, str(shared_tmpdir))
+    second_result = _run_worktree_tmpdir_script(second, str(shared_tmpdir))
+
+    assert first_result.returncode == 0
+    assert second_result.returncode == 0
+    assert first_result.stdout != second_result.stdout
+    assert Path(first_result.stdout.strip()).parent == shared_tmpdir
+    assert Path(second_result.stdout.strip()).parent == shared_tmpdir
+
+
+def test_worktree_tmpdir_script_is_idempotent_across_reentry(tmp_path: Path) -> None:
+    # shellHook は devShell 入場のたびに実行される。前回出力を TMPDIR に持った
+    # まま再入場してもネストせず同じパスを返すこと（issue #2088）
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    shared_tmpdir = tmp_path.parent / "shared-tmp"
+    shared_tmpdir.mkdir(exist_ok=True)
+
+    first = _run_worktree_tmpdir_script(tmp_path, str(shared_tmpdir))
+    assert first.returncode == 0
+    second = _run_worktree_tmpdir_script(tmp_path, first.stdout.strip())
+
+    assert second.returncode == 0
+    assert second.stdout == first.stdout
+
+
+def test_worktree_tmpdir_script_normalizes_reentry_from_scratch_subdirectory(tmp_path: Path) -> None:
+    # nix develop / nix print-dev-env は TMPDIR 配下にランダム名のスクラッチ
+    # （nix-shell.XXXXXX）を切るため、shellHook からの再入場時に TMPDIR が
+    # 「自分の分離ディレクトリ/スクラッチ」を指すことがある。そのまま入れ子を
+    # 作ると出力が評価のたびに変わり、これを基底にする NIX_CACHE_HOME
+    # （issue #2089）の分離先が毎回リセットされるため、自分の分離ディレクトリへ
+    # 正規化して出力する
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    shared_tmpdir = tmp_path.parent / "shared-tmp"
+    shared_tmpdir.mkdir(exist_ok=True)
+
+    isolated = _run_worktree_tmpdir_script(tmp_path, str(shared_tmpdir))
+    assert isolated.returncode == 0
+    isolated_dir = Path(isolated.stdout.strip())
+    scratch = isolated_dir / "nix-shell.AbC123"
+    scratch.mkdir()
+
+    from_scratch = _run_worktree_tmpdir_script(tmp_path, str(scratch))
+
+    assert from_scratch.returncode == 0
+    assert from_scratch.stdout == isolated.stdout
+
+
+def test_worktree_tmpdir_script_respects_checkout_local_tmpdir(tmp_path: Path) -> None:
+    # takt core が注入する <clone>/.takt/.runtime/tmp のような checkout 内の
+    # 隔離済み TMPDIR は上書きせず、そのまま出力する（issue #2088）
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    takt_runtime_tmpdir = tmp_path / ".takt" / ".runtime" / "tmp"
+    takt_runtime_tmpdir.mkdir(parents=True)
+
+    result = _run_worktree_tmpdir_script(tmp_path, str(takt_runtime_tmpdir))
+
+    assert result.returncode == 0
+    assert result.stdout == f"{takt_runtime_tmpdir}\n"
+
+
+def test_worktree_tmpdir_script_resolves_root_from_subdirectory(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    subdirectory = tmp_path / "src" / "nested"
+    subdirectory.mkdir(parents=True)
+    shared_tmpdir = tmp_path.parent / "shared-tmp"
+    shared_tmpdir.mkdir(exist_ok=True)
+
+    from_root = _run_worktree_tmpdir_script(tmp_path, str(shared_tmpdir))
+    from_subdirectory = _run_worktree_tmpdir_script(subdirectory, str(shared_tmpdir))
+
+    assert from_root.returncode == 0
+    assert from_subdirectory.returncode == 0
+    assert from_subdirectory.stdout == from_root.stdout
+
+
+def test_worktree_tmpdir_script_isolates_linked_worktree_from_parent(tmp_path: Path) -> None:
+    # linked worktree では親 checkout と同じディレクトリへ合流せず、worktree 自身の
+    # root から導出した別ディレクトリへ分かれる（worktree ごとの分離が本 issue の
+    # 目的。issue #2088）
+    parent = tmp_path / "parent-checkout"
+    worktree = tmp_path / "linked-worktree"
+    subprocess.run(["git", "init", str(parent)], check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "-C", str(parent), "worktree", "add", "--orphan", str(worktree)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    shared_tmpdir = tmp_path / "shared-tmp"
+    shared_tmpdir.mkdir()
+
+    parent_result = _run_worktree_tmpdir_script(parent, str(shared_tmpdir))
+    worktree_result = _run_worktree_tmpdir_script(worktree, str(shared_tmpdir))
+
+    assert parent_result.returncode == 0
+    assert worktree_result.returncode == 0
+    assert worktree_result.stdout != parent_result.stdout
+    assert "linked-worktree" in worktree_result.stdout
+
+
+def test_worktree_tmpdir_script_fails_outside_git_checkout(tmp_path: Path) -> None:
+    result = subprocess.run(
+        ["bash", str(_WORKTREE_TMPDIR_SCRIPT_PATH)],
+        cwd=tmp_path,
+        env={**os.environ, "GIT_CEILING_DIRECTORIES": str(tmp_path.parent)},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    assert result.stdout == ""
+    assert "error: run this script from a Git checkout or worktree." in result.stderr
+
+
+def test_dev_shell_exports_worktree_isolated_tmpdir() -> None:
+    # shellHook（direnv / nix develop 両入口の収束点）が worktree-tmpdir.sh を配線し、
+    # 失敗時は共有 TMPDIR のまま fail-open で続行する（issue #2088）
+    flake = _read(_FLAKE_PATH)
+
+    assert '"${./.}/.lefthook/worktree-tmpdir.sh"' in flake
+    assert 'export TMPDIR="$worktree_tmpdir"' in flake
+    assert "共有 TMPDIR のまま続行します" in flake
+
+
+def test_nix_cache_isolation_is_wired_into_all_devshell_entrypoints() -> None:
+    # 並列 worktree が同一 fingerprint の flake を同時評価すると、ユーザーグローバルの
+    # $XDG_CACHE_HOME/nix/eval-cache-*/<fingerprint>.sqlite への同時書込みが競合して
+    # 「error (ignored): SQLite database ... is busy」を出し続ける（issue #2089）。
+    # Nix 専用の NIX_CACHE_HOME を worktree 分離 TMPDIR（issue #2088）配下へ向け、
+    # 3 つの入口（direnv .envrc / setup-worktree.sh の nix develop フォールバック /
+    # flake.nix shellHook）すべてで各 worktree が自分の評価結果だけを参照する
+    export_line = 'export NIX_CACHE_HOME="$worktree_tmpdir/nix-cache"'
+
+    envrc = _read(_ENVRC_PATH)
+    assert export_line in envrc
+    # flake 評価（use flake）より前に export されていなければ分離が効かない
+    assert envrc.index(export_line) < envrc.index("use flake")
+
+    setup = _read(_WORKTREE_SETUP_SCRIPT_PATH)
+    assert export_line in setup
+    # nix develop フォールバック経路は .envrc を通らないため、direnv 分岐より前の
+    # export が唯一の分離点になる
+    assert setup.index(export_line) < setup.index("command -v direnv")
+
+    flake = _read(_FLAKE_PATH)
+    assert export_line in flake
+
+    development = _read(_DEVELOPMENT_DOC_PATH)
+    assert "NIX_CACHE_HOME" in development
+
+
+def test_worktree_setup_exports_isolated_nix_cache_for_nix_develop_fallback(tmp_path: Path) -> None:
+    # nix develop フォールバック経路（direnv allow 失敗時）で、flake 評価より前に
+    # NIX_CACHE_HOME が worktree 固有の決定値へ上書きされること。継承値（別 worktree の
+    # 値がシェル経由でリークしたケース）を尊重しないことも同時に固定する
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    _write_sync_deps_script(tmp_path)
+    _write_worktree_tmpdir_script(tmp_path)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _create_fake_executable(bin_dir / "direnv", "#!/usr/bin/env bash\nexit 23\n")
+    nix_cache_log = tmp_path / "nix-cache-home.txt"
+    _create_fake_executable(
+        bin_dir / "nix",
+        f"""#!/usr/bin/env bash
+printf '%s\n' "${{NIX_CACHE_HOME:-unset}}" > "{nix_cache_log}"
+shift 3
+exec "$@"
+""",
+    )
+
+    result = _run_worktree_setup(
+        tmp_path,
+        f"{bin_dir}:/usr/bin:/bin",
+        "sh",
+        "-c",
+        "printf ran",
+        env_overrides={"NIX_CACHE_HOME": "/somewhere/else/nix-cache"},
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "ran"
+    recorded = nix_cache_log.read_text(encoding="utf-8").strip()
+    assert recorded.endswith("/nix-cache")
+    # worktree-tmpdir.sh の slug 仕様（許可文字のみ・先頭 32 文字）に一致する分離先であること
+    slug = "".join(ch for ch in tmp_path.name if ch.isalnum() or ch in "._-")[:32]
+    assert f"yt-automation-tmp-{slug}" in recorded
+    assert recorded != "/somewhere/else/nix-cache"
+
+
+def test_worktree_setup_continues_with_shared_nix_cache_when_isolation_fails(tmp_path: Path) -> None:
+    # worktree-tmpdir.sh が存在しない・失敗する場合は共有キャッシュのまま fail-open で
+    # 続行する（分離は品質ゲートではなく干渉回避のため）
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True, text=True)
+    _write_sync_deps_script(tmp_path)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _create_fake_executable(bin_dir / "direnv", "#!/usr/bin/env bash\nexit 23\n")
+    nix_cache_log = tmp_path / "nix-cache-home.txt"
+    _create_fake_executable(
+        bin_dir / "nix",
+        f"""#!/usr/bin/env bash
+printf '%s\n' "${{NIX_CACHE_HOME:-unset}}" > "{nix_cache_log}"
+shift 3
+exec "$@"
+""",
+    )
+
+    result = _run_worktree_setup(
+        tmp_path,
+        f"{bin_dir}:/usr/bin:/bin",
+        "sh",
+        "-c",
+        "printf ran",
+        env_overrides={"NIX_CACHE_HOME": "/inherited/nix-cache"},
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == "ran"
+    # 分離に失敗しても NIX_CACHE_HOME は書き換えず、コマンド実行も止めない
+    assert nix_cache_log.read_text(encoding="utf-8").strip() == "/inherited/nix-cache"
 
 
 def test_direnv_cache_is_gitignored() -> None:

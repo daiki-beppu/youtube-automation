@@ -36,7 +36,13 @@ const RELEASE_PAYLOAD: ReleasePayload = {
   },
   release: {
     album_title: "Summer Vibes",
-    tracks: [{ title: "track-01", filename: "track-01.mp3", asset_path: "/distrokid/assets/track-01.mp3" }],
+    tracks: [
+      {
+        title: "track-01",
+        filename: "track-01.mp3",
+        asset_path: "/distrokid/assets/track-01.mp3",
+      },
+    ],
     cover: { filename: "main.png", asset_path: "/distrokid/assets/main.png" },
     release_date: "2026-07-01",
   },
@@ -96,7 +102,11 @@ const discoveryMocks = vi.hoisted(() => ({
       url: "http://youtube-automation.localhost:7873",
     },
     { id: "abyss-mi", label: "ABYSS MI", url: "http://localhost:7873" },
-    { id: "localhost-7877", label: "localhost fallback 7877", url: "http://localhost:7877" },
+    {
+      id: "localhost-7877",
+      label: "localhost fallback 7877",
+      url: "http://localhost:7877",
+    },
   ]),
 }));
 
@@ -131,7 +141,10 @@ function deferred<T>(): {
 }
 
 function setSelectValue(select: HTMLSelectElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLSelectElement.prototype,
+    "value"
+  )?.set;
   if (!setter) {
     throw new Error("HTMLSelectElement.value setter is unavailable");
   }
@@ -175,7 +188,11 @@ describe("DistroKid popup compatibility check", () => {
         url: "http://youtube-automation.localhost:7873",
       },
       { id: "abyss-mi", label: "ABYSS MI", url: BASE_URL },
-      { id: "localhost-7877", label: "localhost fallback 7877", url: FALLBACK_URL },
+      {
+        id: "localhost-7877",
+        label: "localhost fallback 7877",
+        url: FALLBACK_URL,
+      },
     ]);
     legacySourceState.present = true;
     vi.mocked(migrateServerSourcesStorage).mockImplementation(async () => {
@@ -222,25 +239,39 @@ describe("DistroKid popup compatibility check", () => {
   it("ローカル配信元 option は URL を表示せず、URL value はデータ取得先として維持する", async () => {
     await renderApp();
     const select = container.querySelector<HTMLSelectElement>("#server-url")!;
-    const trigger = container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!;
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-haspopup="listbox"]'
+    )!;
 
     await waitFor(() => {
       expect(select.options).toHaveLength(3);
     });
 
-    expect(Array.from(select.options, (option) => ({ text: option.text, value: option.value }))).toEqual([
+    expect(
+      Array.from(select.options, (option) => ({
+        text: option.text,
+        value: option.value,
+      }))
+    ).toEqual([
       {
         text: "YouTube Automation (default) | distrokid-helper",
         value: "http://youtube-automation.localhost:7873",
       },
       { text: "ABYSS MI | distrokid-helper", value: BASE_URL },
-      { text: "localhost fallback 7877 | distrokid-helper", value: FALLBACK_URL },
+      {
+        text: "localhost fallback 7877 | distrokid-helper",
+        value: FALLBACK_URL,
+      },
     ]);
     expect(select.labels?.[0]?.textContent?.trim()).toBe("ローカル配信元");
     expect(select.value).toBe("http://youtube-automation.localhost:7873");
     expect(trigger.dataset.slot).toBe("button");
     expect(Array.from(trigger.classList)).toEqual(
-      expect.arrayContaining(["border", "bg-background", "focus-visible:border-ring"]),
+      expect.arrayContaining([
+        "border",
+        "bg-background",
+        "focus-visible:border-ring",
+      ])
     );
     expect(select.textContent).not.toContain("http://");
   });
@@ -256,30 +287,45 @@ describe("DistroKid popup compatibility check", () => {
     await renderApp();
 
     await waitFor(() => {
-      expect(container.textContent).toContain(RELEASE_PAYLOAD.release.album_title);
-      expect(container.textContent).toContain(RELEASE_PAYLOAD.release.cover?.filename);
+      expect(container.textContent).toContain(
+        RELEASE_PAYLOAD.release.album_title
+      );
+      expect(container.textContent).toContain(
+        RELEASE_PAYLOAD.release.cover?.filename
+      );
     });
     expect(container.textContent).not.toContain("データ取得");
-    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/distrokid/collections`);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      `${BASE_URL}/distrokid/collections`
+    );
     expect(fetchMock).toHaveBeenNthCalledWith(
       4,
       `${BASE_URL}/collections/${DISC1.collection_id}/distrokid/${DISC1.disc}/release.json`,
-      { method: "GET" },
+      { method: "GET" }
     );
-    const collectionSelect = container.querySelector<HTMLSelectElement>("select:not(#server-url)")!;
+    const collectionSelect = container.querySelector<HTMLSelectElement>(
+      "select:not(#server-url)"
+    )!;
     expect(collectionSelect.value).toBe("0");
     expect(collectionSelect.labels?.[0]?.textContent).toContain("コレクション");
     expect(collectionSelect.dataset.slot).toBe("select");
     expect(Array.from(collectionSelect.classList)).toEqual(
-      expect.arrayContaining(["border-input", "bg-background", "focus-visible:border-ring"]),
+      expect.arrayContaining([
+        "border-input",
+        "bg-background",
+        "focus-visible:border-ring",
+      ])
     );
     const injectButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent === "フォーム一括入力",
+      (button) => button.textContent === "フォーム一括入力"
     );
     expect(injectButton?.disabled).toBe(false);
     expect(injectButton?.dataset.slot).toBe("button");
     expect(injectButton?.dataset.variant).toBe("default");
-    const stopButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "停止");
+    const stopButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "停止"
+    );
     expect(stopButton?.disabled).toBe(true);
     expect(stopButton?.dataset.slot).toBe("button");
     expect(stopButton?.dataset.variant).toBe("outline");
@@ -304,7 +350,7 @@ describe("DistroKid popup compatibility check", () => {
     });
     expect(container.querySelector("select:not(#server-url)")).toBeNull();
     const injectButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent === "フォーム一括入力",
+      (button) => button.textContent === "フォーム一括入力"
     );
     expect(injectButton?.disabled).toBe(true);
   });
@@ -319,26 +365,46 @@ describe("DistroKid popup compatibility check", () => {
           port: 7873,
           base_url: BASE_URL,
           label: "localhost",
-        }),
+        })
       )
-      .mockResolvedValueOnce(jsonResponse(200, { version: "5.5.7", min_extension_version: "0.2.0" }))
+      .mockResolvedValueOnce(
+        jsonResponse(200, { version: "5.5.7", min_extension_version: "0.2.0" })
+      )
       .mockResolvedValueOnce(jsonResponse(404, {}))
       .mockResolvedValueOnce(jsonResponse(200, RELEASE_PAYLOAD));
 
     await renderApp();
 
     await act(async () => {
-      setSelectValue(container.querySelector<HTMLSelectElement>("#server-url")!, BASE_URL);
+      setSelectValue(
+        container.querySelector<HTMLSelectElement>("#server-url")!,
+        BASE_URL
+      );
     });
 
     await waitFor(() => {
-      expect(container.textContent).toContain(`拡張を更新してください（拡張 ${MANIFEST_VERSION}`);
-      expect(container.textContent).toContain(RELEASE_PAYLOAD.release.album_title);
+      expect(container.textContent).toContain(
+        `拡張を更新してください（拡張 ${MANIFEST_VERSION}`
+      );
+      expect(container.textContent).toContain(
+        RELEASE_PAYLOAD.release.album_title
+      );
     });
+    expect(
+      container.querySelector('[data-slot="card"] [data-slot="card-title"]')
+        ?.textContent
+    ).toBe(RELEASE_PAYLOAD.release.album_title);
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/server-info`);
     expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/version`);
-    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/distrokid/collections`);
-    expect(fetchMock).toHaveBeenNthCalledWith(4, `${BASE_URL}/distrokid/release.json`, { method: "GET" });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      `${BASE_URL}/distrokid/collections`
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      `${BASE_URL}/distrokid/release.json`,
+      { method: "GET" }
+    );
     expect(serverUrlItem.setValue).toHaveBeenCalledWith(BASE_URL);
   });
 
@@ -352,17 +418,29 @@ describe("DistroKid popup compatibility check", () => {
     await renderApp();
 
     await act(async () => {
-      setSelectValue(container.querySelector<HTMLSelectElement>("#server-url")!, BASE_URL);
+      setSelectValue(
+        container.querySelector<HTMLSelectElement>("#server-url")!,
+        BASE_URL
+      );
     });
 
     await waitFor(() => {
-      expect(container.textContent).toContain(RELEASE_PAYLOAD.release.album_title);
+      expect(container.textContent).toContain(
+        RELEASE_PAYLOAD.release.album_title
+      );
     });
     expect(container.textContent).not.toContain("拡張を更新してください");
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/server-info`);
     expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/version`);
-    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/distrokid/collections`);
-    expect(fetchMock).toHaveBeenNthCalledWith(4, `${BASE_URL}/distrokid/release.json`, { method: "GET" });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      `${BASE_URL}/distrokid/collections`
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      `${BASE_URL}/distrokid/release.json`,
+      { method: "GET" }
+    );
   });
 
   it("collection 選択時に一覧を最新化し、選択 disc の release へ自動更新する", async () => {
@@ -371,20 +449,30 @@ describe("DistroKid popup compatibility check", () => {
     await renderApp();
 
     await waitFor(() => {
-      expect(container.textContent).toContain(RELEASE_PAYLOAD.release.album_title);
+      expect(container.textContent).toContain(
+        RELEASE_PAYLOAD.release.album_title
+      );
     });
-    const collectionSelect = container.querySelector<HTMLSelectElement>("select:not(#server-url)")!;
+    const collectionSelect = container.querySelector<HTMLSelectElement>(
+      "select:not(#server-url)"
+    )!;
     await act(async () => {
       setSelectValue(collectionSelect, "1");
     });
 
     await waitFor(() => {
-      expect(container.textContent).toContain(SECOND_RELEASE_PAYLOAD.release.album_title);
+      expect(container.textContent).toContain(
+        SECOND_RELEASE_PAYLOAD.release.album_title
+      );
     });
-    expect(fetchMock.mock.calls.filter(([url]) => url === `${BASE_URL}/distrokid/collections`)).toHaveLength(2);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url]) => url === `${BASE_URL}/distrokid/collections`
+      )
+    ).toHaveLength(2);
     expect(fetchMock).toHaveBeenCalledWith(
       `${BASE_URL}/collections/${DISC2.collection_id}/distrokid/${DISC2.disc}/release.json`,
-      { method: "GET" },
+      { method: "GET" }
     );
     expect(collectionSelect.value).toBe("1");
   });
@@ -402,19 +490,28 @@ describe("DistroKid popup compatibility check", () => {
     await renderApp();
 
     await waitFor(() => {
-      expect(container.textContent).toContain(RELEASE_PAYLOAD.release.album_title);
+      expect(container.textContent).toContain(
+        RELEASE_PAYLOAD.release.album_title
+      );
     });
-    const sourceSelect = container.querySelector<HTMLSelectElement>("#server-url")!;
-    const collectionSelect = container.querySelector<HTMLSelectElement>("select:not(#server-url)")!;
+    const sourceSelect =
+      container.querySelector<HTMLSelectElement>("#server-url")!;
+    const collectionSelect = container.querySelector<HTMLSelectElement>(
+      "select:not(#server-url)"
+    )!;
     const injectButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent === "フォーム一括入力",
+      (button) => button.textContent === "フォーム一括入力"
     )!;
     const stopButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent === "停止",
+      (button) => button.textContent === "停止"
     )!;
-    const sourceTrigger = container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!;
+    const sourceTrigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-haspopup="listbox"]'
+    )!;
     await act(async () => sourceTrigger.click());
-    await waitFor(() => expect(container.querySelector('[role="listbox"]')).not.toBeNull());
+    await waitFor(() =>
+      expect(container.querySelector('[role="listbox"]')).not.toBeNull()
+    );
     const requestCountBeforeChange = fetchMock.mock.calls.length;
 
     await act(async () => {
@@ -427,16 +524,25 @@ describe("DistroKid popup compatibility check", () => {
       expect(stopButton.disabled).toBe(false);
       expect(container.querySelector('[role="listbox"]')).toBeNull();
     });
-    expect(sendMessage).toHaveBeenCalledWith("injectStart", { payload: RELEASE_PAYLOAD }, 1);
-    const discoveryCountDuringInjection = discoveryMocks.discoverServerSources.mock.calls.length;
+    expect(sendMessage).toHaveBeenCalledWith(
+      "injectStart",
+      { payload: RELEASE_PAYLOAD },
+      1
+    );
+    const discoveryCountDuringInjection =
+      discoveryMocks.discoverServerSources.mock.calls.length;
 
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!.click();
+      container
+        .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
+        .click();
       setSelectValue(sourceSelect, FALLBACK_URL);
       setSelectValue(collectionSelect, "1");
     });
     expect(fetchMock).toHaveBeenCalledTimes(requestCountBeforeChange);
-    expect(discoveryMocks.discoverServerSources).toHaveBeenCalledTimes(discoveryCountDuringInjection);
+    expect(discoveryMocks.discoverServerSources).toHaveBeenCalledTimes(
+      discoveryCountDuringInjection
+    );
 
     await act(async () => {
       stopButton.click();
@@ -472,15 +578,21 @@ describe("DistroKid popup compatibility check", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("server stopped");
     });
-    const sourceSelect = container.querySelector<HTMLSelectElement>("#server-url")!;
+    const sourceSelect =
+      container.querySelector<HTMLSelectElement>("#server-url")!;
     expect(sourceSelect.disabled).toBe(false);
 
     await act(async () => {
       setSelectValue(sourceSelect, FALLBACK_URL);
     });
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(`${FALLBACK_URL}/distrokid/release.json`, { method: "GET" });
-      expect(container.textContent).toContain(SECOND_RELEASE_PAYLOAD.release.album_title);
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${FALLBACK_URL}/distrokid/release.json`,
+        { method: "GET" }
+      );
+      expect(container.textContent).toContain(
+        SECOND_RELEASE_PAYLOAD.release.album_title
+      );
     });
     expect(sourceSelect.disabled).toBe(false);
   });
@@ -507,14 +619,18 @@ describe("DistroKid popup compatibility check", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("disc1 server stopped");
     });
-    const collectionSelect = container.querySelector<HTMLSelectElement>("select:not(#server-url)")!;
+    const collectionSelect = container.querySelector<HTMLSelectElement>(
+      "select:not(#server-url)"
+    )!;
     expect(collectionSelect.disabled).toBe(false);
 
     await act(async () => {
       setSelectValue(collectionSelect, "1");
     });
     await waitFor(() => {
-      expect(container.textContent).toContain(SECOND_RELEASE_PAYLOAD.release.album_title);
+      expect(container.textContent).toContain(
+        SECOND_RELEASE_PAYLOAD.release.album_title
+      );
     });
     expect(collectionSelect.disabled).toBe(false);
   });
@@ -541,10 +657,15 @@ describe("DistroKid popup compatibility check", () => {
     await renderApp();
 
     await waitFor(() => {
-      expect(container.textContent).toContain(RELEASE_PAYLOAD.release.album_title);
+      expect(container.textContent).toContain(
+        RELEASE_PAYLOAD.release.album_title
+      );
     });
-    const sourceSelect = container.querySelector<HTMLSelectElement>("#server-url")!;
-    const collectionSelect = container.querySelector<HTMLSelectElement>("select:not(#server-url)")!;
+    const sourceSelect =
+      container.querySelector<HTMLSelectElement>("#server-url")!;
+    const collectionSelect = container.querySelector<HTMLSelectElement>(
+      "select:not(#server-url)"
+    )!;
 
     await act(async () => {
       setSelectValue(collectionSelect, "1");
@@ -553,7 +674,9 @@ describe("DistroKid popup compatibility check", () => {
       expect(container.textContent).toContain("collections server stopped");
     });
 
-    expect(container.querySelector<HTMLSelectElement>("select:not(#server-url)")).toBe(collectionSelect);
+    expect(
+      container.querySelector<HTMLSelectElement>("select:not(#server-url)")
+    ).toBe(collectionSelect);
     expect(collectionSelect.options).toHaveLength(2);
     expect(collectionSelect.value).toBe("1");
     expect(collectionSelect.disabled).toBe(false);
@@ -584,19 +707,31 @@ describe("DistroKid popup compatibility check", () => {
       expect(container.querySelector("select:not(#server-url)")).not.toBeNull();
     });
     await act(async () => {
-      setSelectValue(container.querySelector<HTMLSelectElement>("select:not(#server-url)")!, "1");
+      setSelectValue(
+        container.querySelector<HTMLSelectElement>("select:not(#server-url)")!,
+        "1"
+      );
     });
     await waitFor(() => {
-      expect(container.textContent).toContain(SECOND_RELEASE_PAYLOAD.release.album_title);
+      expect(container.textContent).toContain(
+        SECOND_RELEASE_PAYLOAD.release.album_title
+      );
     });
 
     await act(async () => {
       firstRelease.resolve(jsonResponse(200, RELEASE_PAYLOAD));
       await firstRelease.promise;
     });
-    expect(container.textContent).toContain(SECOND_RELEASE_PAYLOAD.release.album_title);
-    expect(container.textContent).not.toContain(`アルバム名${RELEASE_PAYLOAD.release.album_title}`);
-    expect(container.querySelector<HTMLSelectElement>("select:not(#server-url)")!.value).toBe("1");
+    expect(container.textContent).toContain(
+      SECOND_RELEASE_PAYLOAD.release.album_title
+    );
+    expect(container.textContent).not.toContain(
+      `アルバム名${RELEASE_PAYLOAD.release.album_title}`
+    );
+    expect(
+      container.querySelector<HTMLSelectElement>("select:not(#server-url)")!
+        .value
+    ).toBe("1");
   });
 
   it("遅い初期一覧が後から完了しても最新配信元の URL・payload・DOM を維持する", async () => {
@@ -609,7 +744,10 @@ describe("DistroKid popup compatibility check", () => {
       if (url === `${BASE_URL}/distrokid/collections`) {
         return initialCollections.promise;
       }
-      if (url === `${FALLBACK_URL}/server-info` || url === `${FALLBACK_URL}/version`) {
+      if (
+        url === `${FALLBACK_URL}/server-info` ||
+        url === `${FALLBACK_URL}/version`
+      ) {
         return jsonResponse(404, {});
       }
       if (url === `${FALLBACK_URL}/distrokid/collections`) {
@@ -622,15 +760,20 @@ describe("DistroKid popup compatibility check", () => {
     });
     await renderApp();
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/distrokid/collections`);
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BASE_URL}/distrokid/collections`
+      );
     });
 
-    const sourceSelect = container.querySelector<HTMLSelectElement>("#server-url")!;
+    const sourceSelect =
+      container.querySelector<HTMLSelectElement>("#server-url")!;
     await act(async () => {
       setSelectValue(sourceSelect, FALLBACK_URL);
     });
     await waitFor(() => {
-      expect(container.textContent).toContain(SECOND_RELEASE_PAYLOAD.release.album_title);
+      expect(container.textContent).toContain(
+        SECOND_RELEASE_PAYLOAD.release.album_title
+      );
     });
 
     await act(async () => {
@@ -638,7 +781,9 @@ describe("DistroKid popup compatibility check", () => {
       await initialCollections.promise;
     });
     expect(sourceSelect.value).toBe(FALLBACK_URL);
-    expect(container.textContent).toContain(SECOND_RELEASE_PAYLOAD.release.album_title);
+    expect(container.textContent).toContain(
+      SECOND_RELEASE_PAYLOAD.release.album_title
+    );
     expect(container.querySelector("select:not(#server-url)")).toBeNull();
   });
 
@@ -653,7 +798,11 @@ describe("DistroKid popup compatibility check", () => {
       persistedUrl = url;
     });
     fetchMock.mockImplementation(async (url: string) => {
-      if (url.endsWith("/server-info") || url.endsWith("/version") || url.endsWith("/distrokid/collections")) {
+      if (
+        url.endsWith("/server-info") ||
+        url.endsWith("/version") ||
+        url.endsWith("/distrokid/collections")
+      ) {
         return jsonResponse(404, {});
       }
       if (url === `${FALLBACK_URL}/distrokid/release.json`) {
@@ -670,7 +819,10 @@ describe("DistroKid popup compatibility check", () => {
     });
 
     await act(async () => {
-      setSelectValue(container.querySelector<HTMLSelectElement>("#server-url")!, FALLBACK_URL);
+      setSelectValue(
+        container.querySelector<HTMLSelectElement>("#server-url")!,
+        FALLBACK_URL
+      );
     });
     await act(async () => {
       firstWrite.resolve();
@@ -678,7 +830,9 @@ describe("DistroKid popup compatibility check", () => {
     });
     await waitFor(() => {
       expect(persistedUrl).toBe(FALLBACK_URL);
-      expect(container.textContent).toContain(SECOND_RELEASE_PAYLOAD.release.album_title);
+      expect(container.textContent).toContain(
+        SECOND_RELEASE_PAYLOAD.release.album_title
+      );
     });
   });
 
@@ -689,13 +843,24 @@ describe("DistroKid popup compatibility check", () => {
       url: "http://youtube-automation.localhost:7873",
     };
     discoveryMocks.discoverServerSources
-      .mockResolvedValueOnce([defaultSource, { id: "old", label: "Old", url: "http://old.localhost:9001" }])
-      .mockResolvedValueOnce([defaultSource, { id: "new", label: "New", url: "http://new.localhost:49152" }])
-      .mockResolvedValueOnce([defaultSource, { id: "new", label: "New", url: "http://new.localhost:49152" }]);
+      .mockResolvedValueOnce([
+        defaultSource,
+        { id: "old", label: "Old", url: "http://old.localhost:9001" },
+      ])
+      .mockResolvedValueOnce([
+        defaultSource,
+        { id: "new", label: "New", url: "http://new.localhost:49152" },
+      ])
+      .mockResolvedValueOnce([
+        defaultSource,
+        { id: "new", label: "New", url: "http://new.localhost:49152" },
+      ]);
 
     await renderApp();
     const select = container.querySelector<HTMLSelectElement>("#server-url")!;
-    const trigger = container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!;
+    const trigger = container.querySelector<HTMLButtonElement>(
+      'button[aria-haspopup="listbox"]'
+    )!;
     await waitFor(() => expect(select.textContent).toContain("Old"));
     await act(async () => {
       trigger.click();
@@ -703,12 +868,17 @@ describe("DistroKid popup compatibility check", () => {
 
     await waitFor(() => expect(select.textContent).toContain("New"));
     expect(select.textContent).not.toContain("Old");
-    expect(Array.from(select.options, ({ value }) => value)).toEqual([defaultSource.url, "http://new.localhost:49152"]);
+    expect(Array.from(select.options, ({ value }) => value)).toEqual([
+      defaultSource.url,
+      "http://new.localhost:49152",
+    ]);
 
     await act(async () => {
       trigger.click();
     });
-    await waitFor(() => expect(discoveryMocks.discoverServerSources).toHaveBeenCalledTimes(3));
+    await waitFor(() =>
+      expect(discoveryMocks.discoverServerSources).toHaveBeenCalledTimes(3)
+    );
   });
 
   it("should run discovery once when opening an unfocused selector with the mouse", async () => {
@@ -716,20 +886,31 @@ describe("DistroKid popup compatibility check", () => {
     const initialCalls = discoveryMocks.discoverServerSources.mock.calls.length;
 
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!.click();
+      container
+        .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
+        .click();
     });
 
-    await waitFor(() => expect(discoveryMocks.discoverServerSources).toHaveBeenCalledTimes(initialCalls + 1));
+    await waitFor(() =>
+      expect(discoveryMocks.discoverServerSources).toHaveBeenCalledTimes(
+        initialCalls + 1
+      )
+    );
   });
 
   it("should replace a restored URL removed by discovery during an early selector refresh", async () => {
-    const initialDiscovery = deferred<Array<{ id: string; label: string; url: string }>>();
+    const initialDiscovery =
+      deferred<Array<{ id: string; label: string; url: string }>>();
     const defaultSource = {
       id: "youtube-automation-localhost-7873",
       label: "YouTube Automation (default)",
       url: "http://youtube-automation.localhost:7873",
     };
-    const restoredSource = { id: "restored", label: "Restored", url: "http://restored.localhost:49152" };
+    const restoredSource = {
+      id: "restored",
+      label: "Restored",
+      url: "http://restored.localhost:49152",
+    };
     vi.mocked(serverUrlItem.getValue).mockResolvedValue(restoredSource.url);
     discoveryMocks.discoverServerSources
       .mockReturnValueOnce(initialDiscovery.promise)
@@ -738,47 +919,80 @@ describe("DistroKid popup compatibility check", () => {
     await renderApp();
     const select = container.querySelector<HTMLSelectElement>("#server-url")!;
     await act(async () => {
-      container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!.click();
+      container
+        .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
+        .click();
       initialDiscovery.resolve([defaultSource, restoredSource]);
       await initialDiscovery.promise;
     });
 
     await waitFor(() =>
-      expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith(defaultSource.url))).toBe(true),
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          String(url).startsWith(defaultSource.url)
+        )
+      ).toBe(true)
     );
     expect(select.value).toBe(defaultSource.url);
     expect(discoveryMocks.discoverServerSources).toHaveBeenCalledTimes(2);
   });
 
   it.each([
-    ["keeps a saved live URL", "http://live.localhost:49152", "http://live.localhost:49152"],
-    ["replaces a saved stopped URL", "http://stopped.localhost:9001", "http://youtube-automation.localhost:7873"],
-  ])("should %s without fetching the stopped URL", async (_label, savedUrl, expectedUrl) => {
-    const defaultSource = {
-      id: "youtube-automation-localhost-7873",
-      label: "YouTube Automation (default)",
-      url: "http://youtube-automation.localhost:7873",
-    };
-    const liveSource = { id: "live", label: "Live", url: "http://live.localhost:49152" };
-    vi.mocked(serverUrlItem.getValue).mockResolvedValue(savedUrl);
-    discoveryMocks.discoverServerSources.mockResolvedValueOnce([defaultSource, liveSource]);
-    fetchMock.mockImplementation(async (url: string) => {
-      if (url.startsWith("http://stopped.localhost:9001")) {
-        throw new Error("stopped URL must not be fetched");
-      }
-      return jsonResponse(404, {});
-    });
+    [
+      "keeps a saved live URL",
+      "http://live.localhost:49152",
+      "http://live.localhost:49152",
+    ],
+    [
+      "replaces a saved stopped URL",
+      "http://stopped.localhost:9001",
+      "http://youtube-automation.localhost:7873",
+    ],
+  ])(
+    "should %s without fetching the stopped URL",
+    async (_label, savedUrl, expectedUrl) => {
+      const defaultSource = {
+        id: "youtube-automation-localhost-7873",
+        label: "YouTube Automation (default)",
+        url: "http://youtube-automation.localhost:7873",
+      };
+      const liveSource = {
+        id: "live",
+        label: "Live",
+        url: "http://live.localhost:49152",
+      };
+      vi.mocked(serverUrlItem.getValue).mockResolvedValue(savedUrl);
+      discoveryMocks.discoverServerSources.mockResolvedValueOnce([
+        defaultSource,
+        liveSource,
+      ]);
+      fetchMock.mockImplementation(async (url: string) => {
+        if (url.startsWith("http://stopped.localhost:9001")) {
+          throw new Error("stopped URL must not be fetched");
+        }
+        return jsonResponse(404, {});
+      });
 
-    await renderApp();
-    const select = container.querySelector<HTMLSelectElement>("#server-url")!;
-    await waitFor(() => expect(select.value).toBe(expectedUrl));
+      await renderApp();
+      const select = container.querySelector<HTMLSelectElement>("#server-url")!;
+      await waitFor(() => expect(select.value).toBe(expectedUrl));
 
-    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith("http://stopped.localhost:9001"))).toBe(false);
-    if (savedUrl !== expectedUrl) expect(serverUrlItem.setValue).toHaveBeenCalledWith(expectedUrl);
-  });
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          String(url).startsWith("http://stopped.localhost:9001")
+        )
+      ).toBe(false);
+      if (savedUrl !== expectedUrl)
+        expect(serverUrlItem.setValue).toHaveBeenCalledWith(expectedUrl);
+    }
+  );
 
   it("should select a discovered non-default URL without recreating candidate history", async () => {
-    const live = { id: "channel-b", label: "Channel B", url: "http://channel-b.localhost:49152" };
+    const live = {
+      id: "channel-b",
+      label: "Channel B",
+      url: "http://channel-b.localhost:49152",
+    };
     const liveSources = [
       {
         id: "youtube-automation-localhost-7873",
@@ -790,26 +1004,46 @@ describe("DistroKid popup compatibility check", () => {
     discoveryMocks.discoverServerSources.mockResolvedValue(liveSources);
     await renderApp();
     const select = container.querySelector<HTMLSelectElement>("#server-url")!;
-    await waitFor(() => expect(Array.from(select.options, ({ value }) => value)).toContain(live.url));
-    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!.click());
-    await waitFor(() => expect(container.querySelector('[role="listbox"]')).not.toBeNull());
+    await waitFor(() =>
+      expect(Array.from(select.options, ({ value }) => value)).toContain(
+        live.url
+      )
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
+        .click()
+    );
+    await waitFor(() =>
+      expect(container.querySelector('[role="listbox"]')).not.toBeNull()
+    );
     await act(async () => {
-      Array.from(container.querySelectorAll<HTMLButtonElement>('[role="option"]'))
+      Array.from(
+        container.querySelectorAll<HTMLButtonElement>('[role="option"]')
+      )
         .find((option) => option.textContent?.includes("Channel B"))!
         .click();
     });
 
-    await waitFor(() => expect(serverUrlItem.setValue).toHaveBeenCalledWith(live.url));
+    await waitFor(() =>
+      expect(serverUrlItem.setValue).toHaveBeenCalledWith(live.url)
+    );
     expect(container.querySelector('[role="listbox"]')).toBeNull();
     expect(migrateServerSourcesStorage).toHaveBeenCalled();
     expect(legacySourceState.present).toBe(false);
-    expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith(live.url))).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).startsWith(live.url))
+    ).toBe(true);
 
     act(() => root.unmount());
     container.innerHTML = "";
     root = createRoot(container);
     vi.mocked(serverUrlItem.getValue).mockResolvedValue(live.url);
     await renderApp();
-    await waitFor(() => expect(container.querySelector<HTMLSelectElement>("#server-url")?.value).toBe(live.url));
+    await waitFor(() =>
+      expect(
+        container.querySelector<HTMLSelectElement>("#server-url")?.value
+      ).toBe(live.url)
+    );
   });
 });

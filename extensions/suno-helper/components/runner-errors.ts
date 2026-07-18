@@ -43,7 +43,9 @@ function formatSeconds(value: number): string {
   return `${Math.round(value)}s`;
 }
 
-function formatDurationLimit(log: Extract<ProgressLog, { kind: "duration-check" }>): string {
+function formatDurationLimit(
+  log: Extract<ProgressLog, { kind: "duration-check" }>
+): string {
   if (log.ok) {
     return "";
   }
@@ -62,7 +64,10 @@ function formatDurationLimit(log: Extract<ProgressLog, { kind: "duration-check" 
   return "";
 }
 
-function formatProgressLog(log: ProgressLog): { text: string; error?: boolean } {
+function formatProgressLog(log: ProgressLog): {
+  text: string;
+  error?: boolean;
+} {
   switch (log.kind) {
     case "duration-check": {
       const mark = log.ok ? "✓" : "✗";
@@ -81,21 +86,29 @@ function formatProgressLog(log: ProgressLog): { text: string; error?: boolean } 
   }
 }
 
-function formatAllowedProgressLog(progress: SnapshotPayload["progress"]): { text: string; error?: boolean } | null {
+function formatAllowedProgressLog(
+  progress: SnapshotPayload["progress"]
+): { text: string; error?: boolean } | null {
   if (!progress.log) {
     return null;
   }
   switch (progress.phase) {
     case PHASE.DONE:
-      return progress.log.kind === "duration-check" ? formatProgressLog(progress.log) : null;
+      return progress.log.kind === "duration-check"
+        ? formatProgressLog(progress.log)
+        : null;
     case PHASE.WAITING_SLOT:
-      return progress.log.kind === "retry" ? formatProgressLog(progress.log) : null;
+      return progress.log.kind === "retry"
+        ? formatProgressLog(progress.log)
+        : null;
     case PHASE.ENTRY_FAILED: {
       if (progress.log.kind !== "skip") {
         return null;
       }
       const status = formatProgressLog(progress.log);
-      return progress.message ? { ...status, text: `${status.text}: ${progress.message}` } : status;
+      return progress.message
+        ? { ...status, text: `${status.text}: ${progress.message}` }
+        : status;
     }
     default:
       return null;
@@ -109,7 +122,7 @@ function formatAllowedProgressLog(progress: SnapshotPayload["progress"]): { text
  */
 export function phaseToStatus(
   progress: SnapshotPayload["progress"],
-  entries: SnapshotPayload["entries"],
+  entries: SnapshotPayload["entries"]
 ): { text: string; error?: boolean } {
   const logStatus = formatAllowedProgressLog(progress);
   if (logStatus) {
@@ -120,18 +133,28 @@ export function phaseToStatus(
   const n = (index ?? 0) + 1;
   switch (phase) {
     case PHASE.INJECTING:
-      return { text: `[${n}/${total}] 注入中: ${entries[index ?? 0]?.name ?? ""}` };
+      return {
+        text: `[${n}/${total}] 注入中: ${entries[index ?? 0]?.name ?? ""}`,
+      };
     case PHASE.WAITING_SLOT:
       // message は bridge 縮退の明示 (#948)。通常時は undefined で従来文言のまま。
-      return { text: `[${n}/${total}] 生成キューの空き待ち…${message ? `（${message}）` : ""}` };
+      return {
+        text: `[${n}/${total}] 生成キューの空き待ち…${message ? `（${message}）` : ""}`,
+      };
     case PHASE.WAITING_CAPTCHA:
-      return { text: `[${n}/${total}] captcha 解消待ち…（多くは自動で解消します）` };
+      return {
+        text: `[${n}/${total}] captcha 解消待ち…（多くは自動で解消します）`,
+      };
     case PHASE.GENERATING:
-      return { text: `[${n}/${total}] 生成待ち…${message ? `（${message}）` : ""}` };
+      return {
+        text: `[${n}/${total}] 生成待ち…${message ? `（${message}）` : ""}`,
+      };
     case PHASE.SUBMITTED:
       return { text: `[${n}/${total}] 投入済み（生成完了待ち）` };
     case PHASE.DONE:
-      return { text: `[${n}/${total}] 完了${message ? `（警告: ${message}）` : ""}` };
+      return {
+        text: `[${n}/${total}] 完了${message ? `（警告: ${message}）` : ""}`,
+      };
     case PHASE.ENTRY_FAILED:
       // entry 単位の失敗スキップ (#948)。run 全体は継続するため error フラグは立てない（status は黄信号扱い）。
       return { text: `[${n}/${total}] 失敗のためスキップ: ${message ?? ""}` };
@@ -161,18 +184,25 @@ export function phaseToStatus(
  * content の snapshot を popup の復元 state へ変換する。
  * snapshot 無し (null) は復元せず従来表示へフォールバックするため null を返す（silent fallback の根拠）。
  */
-export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | null {
+export function buildRestoreState(
+  snap: SnapshotPayload | null
+): RestoreState | null {
   if (!snap) {
     return null;
   }
   const { text, error } = phaseToStatus(snap.progress, snap.entries);
-  const durationWarnings = Object.entries(snap.durationOutlierWarnings ?? {}).map(([index, warning]) => {
+  const durationWarnings = Object.entries(
+    snap.durationOutlierWarnings ?? {}
+  ).map(([index, warning]) => {
     const entryIndex = Number(index);
-    const entryName = snap.entries[entryIndex]?.name ?? `entry ${entryIndex + 1}`;
+    const entryName =
+      snap.entries[entryIndex]?.name ?? `entry ${entryIndex + 1}`;
     return `"${entryName}": ${warning}`;
   });
   const restoredStatus =
-    !snap.isRunning && durationWarnings.length > 0 ? `${text} / 異常値警告: ${durationWarnings.join("; ")}` : text;
+    !snap.isRunning && durationWarnings.length > 0
+      ? `${text} / 異常値警告: ${durationWarnings.join("; ")}`
+      : text;
   return {
     collectionId: snap.collectionId,
     entries: snap.entries,
@@ -186,9 +216,11 @@ export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | 
     failedIndices: snap.failedIndices,
     remainingIndices: snap.remainingIndices,
     submittedClipIds: snap.submittedClipIds,
-    submittedClipIdsAreDurationFiltered: snap.submittedClipIdsAreDurationFiltered,
+    submittedClipIdsAreDurationFiltered:
+      snap.submittedClipIdsAreDurationFiltered,
     playlistExpectedClipCount: snap.playlistExpectedClipCount,
-    regenerateDurationOutliers: snap.regenerateDurationOutliers ?? DEFAULT_REGENERATE_DURATION_OUTLIERS,
+    regenerateDurationOutliers:
+      snap.regenerateDurationOutliers ?? DEFAULT_REGENERATE_DURATION_OUTLIERS,
     durationOutlierWarnings: snap.durationOutlierWarnings ?? {},
   };
 }
@@ -200,12 +232,14 @@ export function buildRestoreState(snap: SnapshotPayload | null): RestoreState | 
  * `Could not establish connection. Receiving end does not exist.` で失敗する。
  */
 export function isContentScriptMissingError(message: string): boolean {
-  return /receiving end does not exist|could not establish connection/i.test(message);
+  return /receiving end does not exist|could not establish connection/i.test(
+    message
+  );
 }
 
 export function isExtensionContextInvalidatedError(message: string): boolean {
   return /extension context invalidated|no response at sendmessage|wxt\/storage.*web extension environment/i.test(
-    message,
+    message
   );
 }
 
@@ -213,7 +247,10 @@ export const EXTENSION_RELOAD_REQUIRED_MESSAGE =
   "拡張が更新されました。Suno タブをハードリロードしてから操作してください。";
 
 export function isExtensionReloadRequiredError(message: string): boolean {
-  return isContentScriptMissingError(message) || isExtensionContextInvalidatedError(message);
+  return (
+    isContentScriptMissingError(message) ||
+    isExtensionContextInvalidatedError(message)
+  );
 }
 
 export function formatRunError(message: string): string {
@@ -236,12 +273,18 @@ export function formatStopError(message: string): string {
  * info に落とし、それ以外は warn で残す。catch せず放置すると未処理 rejection として
  * chrome://extensions のエラーバッジを汚染するため、必ず本関数経由で消費する（#937）。
  */
-export function describeRelayFailure(action: string, message: string): { level: "info" | "warn"; text: string } {
+export function describeRelayFailure(
+  action: string,
+  message: string
+): { level: "info" | "warn"; text: string } {
   if (isContentScriptMissingError(message)) {
     return {
       level: "info",
       text: `[suno-helper] ${action} の中継先がありません（Suno タブ以外、または拡張リロード後はタブをハードリロードしてください）: ${message}`,
     };
   }
-  return { level: "warn", text: `[suno-helper] ${action} の中継に失敗しました: ${message}` };
+  return {
+    level: "warn",
+    text: `[suno-helper] ${action} の中継に失敗しました: ${message}`,
+  };
 }

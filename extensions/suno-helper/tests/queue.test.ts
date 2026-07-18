@@ -35,12 +35,18 @@ import {
   isClipGenerating,
   waitForQueueSlot,
 } from "../../shared/dom";
-import { addClipCard, addQueueErrorDialog, buildClipCard, markBbox } from "./_helpers";
+import {
+  addClipCard,
+  addQueueErrorDialog,
+  buildClipCard,
+  markBbox,
+} from "./_helpers";
 
 /** card 内の Remix btn (findCardRoot の anchor) を取り出す。 */
 function remixBtnOf(card: HTMLElement): HTMLButtonElement {
   const btn = card.querySelector<HTMLButtonElement>(REMIX_BTN_SELECTOR);
-  if (!btn) throw new Error("test fixture 不整合: card に Remix btn がありません。");
+  if (!btn)
+    throw new Error("test fixture 不整合: card に Remix btn がありません。");
   return btn;
 }
 
@@ -64,7 +70,11 @@ function makeViewContextMenuTrigger(label: string): HTMLButtonElement {
   return btn;
 }
 
-function addViewVariantCard(opts: { view: "waveform" | "grid"; generating: boolean; visible?: boolean }): HTMLElement {
+function addViewVariantCard(opts: {
+  view: "waveform" | "grid";
+  generating: boolean;
+  visible?: boolean;
+}): HTMLElement {
   const card = document.createElement("article");
   card.dataset.view = opts.view;
 
@@ -92,7 +102,11 @@ function addViewVariantCard(opts: { view: "waveform" | "grid"; generating: boole
   return card;
 }
 
-function addStatusOnlyCard(opts: { ariaBusy?: boolean; progressbar?: boolean; visible?: boolean }): HTMLElement {
+function addStatusOnlyCard(opts: {
+  ariaBusy?: boolean;
+  progressbar?: boolean;
+  visible?: boolean;
+}): HTMLElement {
   const card = document.createElement("article");
   const select = document.createElement("button");
   select.setAttribute("aria-label", "Select clip");
@@ -142,7 +156,11 @@ function addNonClipBusyArticle(): HTMLElement {
 }
 
 // queueErrorWaitMs は poll (10ms) と明確に分離して buffer 待機の途中経過を pin できるよう 200ms。
-const FAST_OPTIONS = { pollIntervalMs: 10, timeoutMs: 1000, queueErrorWaitMs: 200 } as const;
+const FAST_OPTIONS = {
+  pollIntervalMs: 10,
+  timeoutMs: 1000,
+  queueErrorWaitMs: 200,
+} as const;
 
 beforeEach(() => {
   document.body.innerHTML = "";
@@ -278,14 +296,18 @@ describe("findCardRoot: Remix btn から clip card root を構造的に解決す
     const card = addViewVariantCard({ view: "grid", generating: true });
 
     expect(findCardRoot(remixBtnOf(card))).toBe(card);
-    expect(findCardRoot(remixBtnOf(card))).not.toBe(remixBtnOf(card).parentElement);
+    expect(findCardRoot(remixBtnOf(card))).not.toBe(
+      remixBtnOf(card).parentElement
+    );
   });
 
   it("Given Waveform 風 card の可視 action wrapper が Select/Remix を持つ When 解決する Then wrapper ではなく article root を返す", () => {
     const card = addViewVariantCard({ view: "waveform", generating: true });
 
     expect(findCardRoot(remixBtnOf(card))).toBe(card);
-    expect(findCardRoot(remixBtnOf(card))).not.toBe(remixBtnOf(card).parentElement);
+    expect(findCardRoot(remixBtnOf(card))).not.toBe(
+      remixBtnOf(card).parentElement
+    );
   });
 
   it("Given anchor から祖先を辿っても 3 ボタンが揃う card root が無い When 解決する Then throw する (fail-loud)", () => {
@@ -305,7 +327,10 @@ describe("isClipGenerating: 1 card の生成中判定 (Remix btn disabled)", () 
   });
 
   it("Given 可視 card の Remix btn が aria-disabled=true When 判定する Then true (生成中)", () => {
-    const card = addClipCard({ generating: true, generatingVia: "aria-disabled" });
+    const card = addClipCard({
+      generating: true,
+      generatingVia: "aria-disabled",
+    });
     expect(isClipGenerating(card)).toBe(true);
   });
 
@@ -423,7 +448,7 @@ describe("getInFlightClipCount: in-flight な distinct card 数", () => {
       addStatusOnlyCard({});
 
       expect(() => getInFlightClipCount()).toThrow();
-    },
+    }
   );
 });
 
@@ -438,7 +463,10 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
 
   it("Given in-flight が既に上限未満 When 待機する Then 即 resolve する", async () => {
     addClipCard({ generating: true }); // in-flight 1 < 20
-    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+    });
     await vi.advanceTimersByTimeAsync(0);
 
     await expect(pending).resolves.toBeUndefined();
@@ -448,7 +476,11 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
     let inFlightCount = 20;
     const getCount = vi.fn(() => inFlightCount);
 
-    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS, getCount });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+      getCount,
+    });
 
     // 上限のままでは resolve しない（poll しても 20 >= 20）。
     let settled = false;
@@ -469,7 +501,10 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
   it("Given isAborted が true When 待機する Then 上限超でも即 resolve する (throw しない)", async () => {
     Array.from({ length: 20 }, () => addClipCard({ generating: true }));
 
-    const pending = waitForQueueSlot(20, { isAborted: () => true, ...FAST_OPTIONS });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => true,
+      ...FAST_OPTIONS,
+    });
     await vi.advanceTimersByTimeAsync(0);
 
     await expect(pending).resolves.toBeUndefined();
@@ -478,14 +513,20 @@ describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
   it("Given 上限のまま空かない When deadline 超過 Then timeout throw する", async () => {
     const getCount = vi.fn(() => 20);
 
-    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS, getCount });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+      getCount,
+    });
     const rejection = pending.then(
       () => {
         throw new Error("waitForQueueSlot should reject");
       },
-      (err: unknown) => err,
+      (err: unknown) => err
     );
-    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.timeoutMs + FAST_OPTIONS.pollIntervalMs + 50);
+    await vi.advanceTimersByTimeAsync(
+      FAST_OPTIONS.timeoutMs + FAST_OPTIONS.pollIntervalMs + 50
+    );
     expect(await rejection).toBeInstanceOf(Error);
     expect(getCount).toHaveBeenCalled();
   }, 15_000);
@@ -507,7 +548,10 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
     addClipCard({ generating: true }); // in-flight 1 < 20（スロットは空いている）
     const toast = addQueueErrorDialog(); // だが queue 上限 toast が出ている
 
-    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+    });
     let settled = false;
     void pending.then(() => {
       settled = true;
@@ -518,7 +562,9 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
 
     // 後始末: toast を消し buffer を経過させて未解決 promise を残さない。
     toast.remove();
-    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.queueErrorWaitMs + FAST_OPTIONS.pollIntervalMs * 2);
+    await vi.advanceTimersByTimeAsync(
+      FAST_OPTIONS.queueErrorWaitMs + FAST_OPTIONS.pollIntervalMs * 2
+    );
     await expect(pending).resolves.toBeUndefined();
   });
 
@@ -526,7 +572,10 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
     addClipCard({ generating: true }); // slot は空き
     const toast = addQueueErrorDialog();
 
-    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+    });
     let settled = false;
     void pending.then(() => {
       settled = true;
@@ -537,7 +586,9 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs); // 消失検知 → buffer 開始
 
     // buffer の途中まで（残り 2 poll 分を残す）では再開しない = 安全マージンが効いている。
-    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.queueErrorWaitMs - FAST_OPTIONS.pollIntervalMs * 2);
+    await vi.advanceTimersByTimeAsync(
+      FAST_OPTIONS.queueErrorWaitMs - FAST_OPTIONS.pollIntervalMs * 2
+    );
     expect(settled).toBe(false);
 
     // buffer 完了で resolve。
@@ -549,7 +600,10 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
   it("Given toast が一度も出ない When 空きスロットあり Then 即 resolve する (toast 無し経路は挙動不変)", async () => {
     addClipCard({ generating: true }); // in-flight 1 < 20、toast なし
 
-    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+    });
     await vi.advanceTimersByTimeAsync(0);
 
     await expect(pending).resolves.toBeUndefined();
@@ -559,7 +613,10 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
     addClipCard({ generating: true });
     addQueueErrorDialog();
 
-    const pending = waitForQueueSlot(20, { isAborted: () => true, ...FAST_OPTIONS });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => true,
+      ...FAST_OPTIONS,
+    });
     await vi.advanceTimersByTimeAsync(0);
 
     await expect(pending).resolves.toBeUndefined();
@@ -569,12 +626,19 @@ describe("waitForQueueSlot: queue 上限エラー toast 検知 (#847)", () => {
     // 本番 queueErrorWaitMs=30000ms。buffer 待機を中断不可の sleep にすると停止が最大 30 秒遅延し、
     // 受け入れ条件「停止後 3 秒以内」を満たさない。abortableSleep の poll(250ms)で中断検知されることを、
     // poll 粒度より十分長い buffer(1000ms)を与え、満了前の停止で resolve することで確認する。
-    const SLOW_BUFFER = { pollIntervalMs: 10, timeoutMs: 5000, queueErrorWaitMs: 1000 } as const;
+    const SLOW_BUFFER = {
+      pollIntervalMs: 10,
+      timeoutMs: 5000,
+      queueErrorWaitMs: 1000,
+    } as const;
     addClipCard({ generating: true }); // slot は空き（待機要因は buffer のみ）
     const toast = addQueueErrorDialog();
 
     let aborted = false;
-    const pending = waitForQueueSlot(20, { isAborted: () => aborted, ...SLOW_BUFFER });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => aborted,
+      ...SLOW_BUFFER,
+    });
     let settled = false;
     void pending.then(() => {
       settled = true;
@@ -612,7 +676,11 @@ describe("waitForQueueSlot: getCount DI (#948)", () => {
     Array.from({ length: 20 }, () => addClipCard({ generating: true }));
 
     const getCount = vi.fn().mockReturnValue(4);
-    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS, getCount });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+      getCount,
+    });
     await vi.advanceTimersByTimeAsync(0);
 
     await expect(pending).resolves.toBeUndefined(); // 4 < 20 で即 resolve（プロキシの 20 では待たされる）
@@ -623,7 +691,11 @@ describe("waitForQueueSlot: getCount DI (#948)", () => {
     addClipCard({ generating: false }); // DOM 側は完了 card のみ（プロキシなら 0 で即素通し）
 
     const getCount = vi.fn().mockReturnValue(20);
-    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS, getCount });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+      getCount,
+    });
     let settled = false;
     void pending.then(() => {
       settled = true;
@@ -640,7 +712,10 @@ describe("waitForQueueSlot: getCount DI (#948)", () => {
   it("Given getCount 未指定 When 待機する Then 従来どおり DOM プロキシで判定する（後方互換）", async () => {
     addClipCard({ generating: true }); // in-flight 1 < 20
 
-    const pending = waitForQueueSlot(20, { isAborted: () => false, ...FAST_OPTIONS });
+    const pending = waitForQueueSlot(20, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+    });
     await vi.advanceTimersByTimeAsync(0);
 
     await expect(pending).resolves.toBeUndefined();
@@ -659,7 +734,12 @@ describe("waitForQueueSlot: stall ベース判定 (#948)", () => {
     vi.useRealTimers();
   });
 
-  const STALL = { pollIntervalMs: 10, timeoutMs: 100, queueErrorWaitMs: 200, stallTimeoutMs: 1000 } as const;
+  const STALL = {
+    pollIntervalMs: 10,
+    timeoutMs: 100,
+    queueErrorWaitMs: 200,
+    stallTimeoutMs: 1000,
+  } as const;
 
   it("Given status 遷移が続く（lastChangeAt が更新され続ける） When timeoutMs を超えて待つ Then throw せず待機を継続する", async () => {
     addClipCard({ generating: false }); // DOM fallback の throw 回避用 seed（getCount 注入で参照されない）
@@ -678,7 +758,7 @@ describe("waitForQueueSlot: stall ベース判定 (#948)", () => {
       },
       () => {
         outcome = "rejected";
-      },
+      }
     );
 
     // 固定 deadline (timeoutMs=100) を大きく超えても、変化が続く限り throw しない。
@@ -703,7 +783,9 @@ describe("waitForQueueSlot: stall ベース判定 (#948)", () => {
       getLastChangeAt: () => 0, // 一度も変化しない
     });
     const expectation = expect(pending).rejects.toThrow(/変化しませんでした/);
-    await vi.advanceTimersByTimeAsync(STALL.stallTimeoutMs + STALL.pollIntervalMs + 50);
+    await vi.advanceTimersByTimeAsync(
+      STALL.stallTimeoutMs + STALL.pollIntervalMs + 50
+    );
     await expectation;
   });
 
@@ -752,11 +834,19 @@ describe("waitForQueueSlot × clip-tracker 統合: 実測シナリオの回帰 (
     expect(getInFlightClipCount()).toBe(20);
 
     const tracker = createClipTracker();
-    const clips = Array.from({ length: 20 }, (_, i) => ({ id: `c${i}`, status: "submitted" }));
+    const clips = Array.from({ length: 20 }, (_, i) => ({
+      id: `c${i}`,
+      status: "submitted",
+    }));
     for (let i = 0; i < 10; i++) {
       tracker.registerSubmitted(clips.slice(i * 2, i * 2 + 2));
     }
-    tracker.applyFeedStatuses(clips.map((c, i) => ({ id: c.id, status: i < 16 ? "complete" : "streaming" })));
+    tracker.applyFeedStatuses(
+      clips.map((c, i) => ({
+        id: c.id,
+        status: i < 16 ? "complete" : "streaming",
+      }))
+    );
     expect(tracker.getInFlightCount()).toBe(4);
 
     const pending = waitForQueueSlot(10, {

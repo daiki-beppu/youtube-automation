@@ -15,6 +15,8 @@ import {
 } from "../lib/overlay-state";
 import { App } from "./App";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader } from "./ui/card";
 import { useDraggable } from "./useDraggable";
 
 /** overlay shell の固定幅 (px)。clamp の初期サイズと top-right 初期位置の算出に使う。 */
@@ -31,14 +33,18 @@ interface Point {
  */
 export function Overlay() {
   // undefined=読み込み中 / null=未保存 / OverlayState=復元。
-  const [initial, setInitial] = useState<OverlayState | null | undefined>(undefined);
+  const [initial, setInitial] = useState<OverlayState | null | undefined>(
+    undefined
+  );
   const [reloadRequired, setReloadRequired] = useState(false);
 
   useEffect(() => {
     void (async () => {
       try {
         const version = browser.runtime.getManifest().version;
-        const handshake = await sendMessage("extensionVersionHandshake", { version });
+        const handshake = await sendMessage("extensionVersionHandshake", {
+          version,
+        });
         if (!handshake.matches) {
           setReloadRequired(true);
           return;
@@ -47,7 +53,7 @@ export function Overlay() {
       } catch (error) {
         console.warn(
           "[suno-helper] overlay の初期化に失敗しました（拡張更新後はタブを再読み込みしてください）:",
-          error,
+          error
         );
         setReloadRequired(true);
       }
@@ -68,7 +74,9 @@ function initialPosition(initial: OverlayState | null): Point {
   // 高さは mount 後に getBoundingClientRect で実測されるため、初期 clamp は幅のみ厳密に効かせる。
   const size = { width: OVERLAY_WIDTH, height: 0 };
   // 復元時は保存位置を現在 viewport へ clamp する (要件2)。未保存は右上に出す (要件1)。
-  return initial ? clampPosition(initial.position, viewport, size) : topRightPosition(viewport, size);
+  return initial
+    ? clampPosition(initial.position, viewport, size)
+    : topRightPosition(viewport, size);
 }
 
 function OverlayShell({ initial }: { initial: OverlayState | null }) {
@@ -81,7 +89,7 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
     void writeOverlayState(state).catch((error: unknown) => {
       console.warn(
         "[suno-helper] overlay state の保存に失敗しました（拡張更新後はタブを再読み込みしてください）:",
-        error,
+        error
       );
       setReloadRequired(true);
     });
@@ -97,8 +105,13 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
   }, [minimized, hidden]);
 
   const onCommit = useCallback(
-    (position: Point) => persist({ position, minimized: minimizedRef.current, hidden: hiddenRef.current }),
-    [persist],
+    (position: Point) =>
+      persist({
+        position,
+        minimized: minimizedRef.current,
+        hidden: hiddenRef.current,
+      }),
+    [persist]
   );
 
   const { position, dragging, onPointerDown } = useDraggable({
@@ -118,7 +131,11 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
   useEffect(() => {
     const unwatch = onMessage("toggleOverlay", () => {
       setHidden((prev) => {
-        const next = toggleHidden({ position: positionRef.current, minimized: minimizedRef.current, hidden: prev });
+        const next = toggleHidden({
+          position: positionRef.current,
+          minimized: minimizedRef.current,
+          hidden: prev,
+        });
         persist(next);
         return next.hidden;
       });
@@ -129,7 +146,11 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
   const toggleMinimize = useCallback(() => {
     setMinimized((prev) => {
       const next = !prev;
-      persist({ position: positionRef.current, minimized: next, hidden: hiddenRef.current });
+      persist({
+        position: positionRef.current,
+        minimized: next,
+        hidden: hiddenRef.current,
+      });
       return next;
     });
   }, [persist]);
@@ -141,9 +162,9 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
   // hidden は unmount でなく display:none で表現する (要件1/3)。unmount すると toggleOverlay
   // リスナーが消え拡張アイコンで復帰不能になるため (#897)、DOM に残したまま CSS で隠す。
   return (
-    <div
+    <Card
       ref={containerRef}
-      className="fixed overflow-hidden rounded-lg border border-gray-300 bg-white shadow-xl"
+      className="fixed gap-0 overflow-hidden rounded-lg py-0 shadow-xl"
       style={{
         left: position.x,
         top: position.y,
@@ -153,25 +174,29 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
       }}
     >
       {/* handle: 常に pointer-events:auto。最小化中もここだけ残り再展開を受け付ける (要件4)。 */}
-      <div
+      <CardHeader
         onPointerDown={onPointerDown}
-        className="flex items-center justify-between rounded-t-lg bg-gray-800 px-3 py-2 text-sm font-semibold text-white select-none"
-        style={{ cursor: dragging ? "grabbing" : "grab", pointerEvents: "auto" }}
+        className="flex flex-row items-center justify-between gap-0 rounded-t-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground select-none"
+        style={{
+          cursor: dragging ? "grabbing" : "grab",
+          pointerEvents: "auto",
+        }}
       >
         <span>Suno Helper</span>
-        <button
+        <Button
           type="button"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={toggleMinimize}
           aria-label={minimized ? "展開" : "最小化"}
-          className="rounded px-2 leading-none hover:bg-gray-700"
+          variant="ghost"
+          className="h-auto w-auto rounded px-2 py-0 leading-none text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
         >
           {minimized ? "▢" : "—"}
-        </button>
-      </div>
+        </Button>
+      </CardHeader>
       {/* 最小化中は panel を display:none + pointer-events:none で Suno UI 操作を邪魔しない (要件4)。 */}
-      <div
-        className="overflow-y-auto"
+      <CardContent
+        className="overflow-y-auto p-0"
         style={{
           pointerEvents: minimized ? "none" : "auto",
           display: minimized ? "none" : "block",
@@ -179,7 +204,7 @@ function OverlayShell({ initial }: { initial: OverlayState | null }) {
         }}
       >
         <App />
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

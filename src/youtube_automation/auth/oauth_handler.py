@@ -7,7 +7,8 @@ Required setup:
 1. Google Cloud Console でプロジェクト作成
 2. YouTube Data API v3 を有効化
 3. Google Auth Platform で Desktop app client を作成
-4. Client secrets > Add secret で secret を発行して auth/client_secrets.json に配置
+4. Client secrets > Add secret で発行後に Download JSON を実行し、
+   yt-doctor --fix-client-secrets で auth/client_secrets.json へ移動
 """
 
 import json
@@ -26,6 +27,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from youtube_automation.utils.exceptions import AuthError, ConfigError, ValidationError, YouTubeAPIError
+from youtube_automation.utils.worktree import main_worktree_root
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +69,16 @@ def client_secrets_file_candidates(channel_dir: Path) -> list[Path]:
     client_secrets_dir = os.environ.get("CLIENT_SECRETS_DIR")
     if client_secrets_dir:
         return [Path(client_secrets_dir) / "client_secrets.json"]
-    return [
+    candidates = [
         channel_dir / "auth" / "client_secrets.json",
         channel_dir / "automation" / "auth" / "client_secrets.json",
     ]
+    # git worktree では gitignore された auth/ が複製されないため、
+    # main 作業ツリー側の実体を最後のフォールバックとして参照する（#1721）
+    main_root = main_worktree_root(channel_dir)
+    if main_root is not None:
+        candidates.append(main_root / "auth" / "client_secrets.json")
+    return candidates
 
 
 def resolve_client_secrets_location(channel_dir: Path) -> tuple[str, Path]:
@@ -127,6 +135,19 @@ class YouTubeOAuthHandler:
         "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
     ]
 
+    # read-only skill（analytics-collect / benchmark / channel-status 等）用の
+    # 最小権限スコープ。write 系（youtube / youtube.force-ssl）を含めない。
+    # token 漏洩時の blast radius を読み取りに限定する（#1699）。
+    READONLY_SCOPES: ClassVar[list[str]] = [
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly",
+        "https://www.googleapis.com/auth/yt-analytics-monetary.readonly",
+    ]
+
+    # read-only token のファイル名。全 scope の token.json・stream 専用の
+    # token_streaming.json（#135）と並ぶ第 3 の用途別 token（#1699）
+    READONLY_TOKEN_FILENAME: ClassVar[str] = "token.readonly.json"
+
     def __init__(self, auth_dir=None, scopes=None, token_path=None):
         """
         初期化
@@ -140,6 +161,7 @@ class YouTubeOAuthHandler:
         from youtube_automation.utils.config import channel_dir as _channel_dir
 
         channel_dir = _channel_dir()
+        self._channel_dir = channel_dir
 
         self.client_secrets_file = resolve_client_secrets_path(channel_dir)
 
@@ -147,8 +169,14 @@ class YouTubeOAuthHandler:
         self._scopes = list(scopes) if scopes is not None else self.SCOPES
 
         # auth_dir は従来挙動を維持。未指定なら channel_dir/"auth"
+        # ただし worktree でローカル token.json が無い場合は main 側 auth/ を
+        # 読み書き対象にする（refresh 結果を main に集約し分岐を防ぐ。#1721）
         if auth_dir is None:
             auth_dir = channel_dir / "auth"
+            if not (auth_dir / "token.json").exists():
+                main_root = main_worktree_root(channel_dir)
+                if main_root is not None:
+                    auth_dir = main_root / "auth"
         else:
             auth_dir = Path(auth_dir)
         self.auth_dir = auth_dir
@@ -161,13 +189,69 @@ class YouTubeOAuthHandler:
             self.token_file = self.auth_dir / "token.json"
         self.credentials = None
 
+    @classmethod
+    def readonly_token_path(cls) -> Path | None:
+        """発行済み ``token.readonly.json`` の実体パスを返す（未発行なら None）。
+
+        検索順は ``token.json`` の worktree フォールバック（#1721）と同じ:
+        channel 側 ``auth/`` → main worktree 側 ``auth/``。
+        handler を生成せずファイル存在だけで判定できるよう classmethod にしている
+        （client_secrets 解決や 1Password 参照を発行チェックの副作用にしない）。
+        """
+        from youtube_automation.utils.config import channel_dir as _channel_dir
+
+        channel = _channel_dir()
+        local = channel / "auth" / cls.READONLY_TOKEN_FILENAME
+        if local.exists():
+            return local
+        main_root = main_worktree_root(channel)
+        if main_root is not None:
+            candidate = main_root / "auth" / cls.READONLY_TOKEN_FILENAME
+            if candidate.exists():
+                return candidate
+        return None
+
+    @classmethod
+    def create_readonly(cls) -> "YouTubeOAuthHandler":
+        """read-only スコープ + ``token.readonly.json`` のハンドラーを生成する。
+
+        未発行時の保存先は ``token.json`` と同じ規則で解決する
+        （worktree にローカル token が無ければ main 側 ``auth/`` に集約。#1721）。
+        """
+        token_path = cls.readonly_token_path()
+        if token_path is None:
+            from youtube_automation.utils.config import channel_dir as _channel_dir
+
+            channel = _channel_dir()
+            auth_dir = channel / "auth"
+            main_root = main_worktree_root(channel)
+            if main_root is not None:
+                auth_dir = main_root / "auth"
+            token_path = auth_dir / cls.READONLY_TOKEN_FILENAME
+        return cls(scopes=cls.READONLY_SCOPES, token_path=token_path)
+
+    def _channel_label(self) -> str:
+        """認証メッセージに埋め込むチャンネル識別ラベルを返す。
+
+        config 読み込みに失敗しても認証自体は継続できるよう、
+        ``ConfigError`` 時は auth ディレクトリの親ディレクトリ名へフォールバックする。
+        """
+        try:
+            from youtube_automation.utils.config import load_config
+
+            return load_config().meta.channel_short
+        except ConfigError:
+            return self.auth_dir.resolve().parent.name
+
     def _validate_client_secrets(self):
         """client_secrets.json の存在確認"""
         if self.client_secrets_file.exists() and not self.client_secrets_file.is_file():
             raise ValidationError(f"client_secrets.json は通常ファイルである必要があります: {self.client_secrets_file}")
         if not self.client_secrets_file.is_file():
+            searched = "\n".join(f"  - {p}" for p in client_secrets_file_candidates(self._channel_dir))
             raise FileNotFoundError(
                 f"❌ client_secrets.json が見つかりません: {self.client_secrets_file}\n"
+                f"探索したパス:\n{searched}\n"
                 "設定手順:\n"
                 "1. Google Cloud Console で YouTube Data API v3 を有効化\n"
                 "2. Google Auth Platform > Branding でアプリ情報を保存\n"
@@ -175,8 +259,9 @@ class YouTubeOAuthHandler:
                 "   (未追加だと初回認証が 403 access_denied で止まります)\n"
                 "4. Google Auth Platform > Clients > Create client で Application type Desktop app を作成\n"
                 "5. Clients > 対象 client > Client secrets > Add secret で secret を発行\n"
-                "6. 発行した値を auth/client_secrets.template.json に転記し、"
-                "<channel_dir>/auth/client_secrets.json に配置\n"
+                "6. Download JSON を実行して Downloads に保存し、"
+                "`uv run yt-doctor --fix-client-secrets` で "
+                "<channel_dir>/auth/client_secrets.json へ自動移動\n"
                 "   または CLIENT_SECRETS_DIR 環境変数を指定 / 1Password に CLIENT_SECRETS_JSON として登録"
             )
         try:
@@ -235,12 +320,28 @@ class YouTubeOAuthHandler:
 
         # 新規認証が必要な場合
         if not self.credentials or not self.credentials.valid:
-            print("🌐 ブラウザで認証を実行します...")
+            channel_label = self._channel_label()
+            print(f"🌐 [{channel_label}] ブラウザで認証を実行します...")
             print("📝 注意: 初回認証時はブラウザが開き、Googleアカウントでのログインが必要です")
 
             try:
                 flow = InstalledAppFlow.from_client_secrets_file(str(self.client_secrets_file), self._scopes)
-                self.credentials = flow.run_local_server(port=0)
+                # authorization_prompt_message は run_local_server() 内で
+                # ``.format(url=...)`` される。`{url}` placeholder を壊さないよう
+                # ラベル側の brace は escape する（success_message は format されない）
+                escaped_label = channel_label.replace("{", "{{").replace("}", "}}")
+                self.credentials = flow.run_local_server(
+                    port=0,
+                    authorization_prompt_message=(
+                        f"🔐 [{escaped_label}] チャンネルの OAuth 認証です。"
+                        "ブラウザが開かない場合は以下の URL を開いてください"
+                        "（URL 内 redirect_uri のポート番号がこのターミナルに対応するタブの目印です）: {url}"
+                    ),
+                    success_message=(
+                        f"[{channel_label}] チャンネルの OAuth 認証が完了しました。"
+                        "このタブを閉じてターミナルに戻ってください。"
+                    ),
+                )
                 print("✅ OAuth 2.0 認証成功")
                 self._save_credentials()
             except (ValueError, OSError, google.auth.exceptions.GoogleAuthError) as e:
@@ -321,15 +422,37 @@ class YouTubeOAuthHandler:
             return False
 
 
-def main():
-    """メイン関数 - スタンドアロン実行用"""
-    print("🎵 YouTube OAuth 2.0 認証テスト")
+def main(argv=None):
+    """メイン関数 - スタンドアロン実行用（``yt-oauth``）
+
+    Args:
+        argv (list[str] | None): CLI 引数。None なら ``sys.argv[1:]``。
+            テストから直接呼ぶ場合は ``main([])`` のように明示する
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="yt-oauth",
+        description="YouTube OAuth 2.0 認証（token 発行・接続テスト）",
+    )
+    parser.add_argument(
+        "--readonly",
+        action="store_true",
+        help="read-only スコープの token.readonly.json を発行する（write scope を含まない。#1699）",
+    )
+    args = parser.parse_args(argv)
+
+    mode_label = "read-only" if args.readonly else "full access"
+    print(f"🎵 YouTube OAuth 2.0 認証テスト（{mode_label}）")
     print("=" * 60)
 
     auth_handler = None
     try:
         # OAuth ハンドラー初期化
-        auth_handler = YouTubeOAuthHandler()
+        if args.readonly:
+            auth_handler = YouTubeOAuthHandler.create_readonly()
+        else:
+            auth_handler = YouTubeOAuthHandler()
 
         # 認証実行
         auth_handler.authenticate()

@@ -102,7 +102,7 @@ def test_wf_new_phase_1_declares_analytics_absent_input_modes() -> None:
         assert token in phase_1, f"wf-new Phase 1 に入力モード契約 `{token}` がありません"
 
     assert "/collection-ideate" in phase_1
-    assert "stale 判定、stale action、コスト承認" in phase_1
+    assert "stale 判定、自動更新、再検証" in phase_1
     assert "config/skills/collection-ideate.yaml" in phase_1
     assert "deep-merge も同 skill に委譲" in phase_1
 
@@ -188,6 +188,7 @@ def test_collection_ideate_stale_docs_have_no_manual_or_unavailable_auto_call_re
         + _read(_FRESHNESS_RULES_MD)
         + _read(_COLLECTION_LIFECYCLE_MD)
         + _read(_COLLECTION_IDEATE_DEFAULT_CONFIG)
+        + _read(_WORKFLOW_CHEATSHEET_MD)
     )
 
     for remnant in (
@@ -205,19 +206,45 @@ def test_collection_ideate_stale_docs_have_no_manual_or_unavailable_auto_call_re
 
     legacy_helper = _read(_FRESHNESS_ACTION_HELPER)
     assert 'choices=("ask", "auto", "manual")' in legacy_helper
-    assert "references/freshness_action.py" in _read(_WF_NEW_SKILL_MD)
+    assert "references/freshness_action.py" not in _read(_WF_NEW_SKILL_MD)
     assert "freshness_action.py" not in distributed_contract
 
 
-def test_wf_new_delegates_stale_gate_without_duplicate_dialog() -> None:
+def test_wf_new_delegates_stale_refresh_to_ssot_and_resumes_mode_selection() -> None:
     text = _read(_WF_NEW_SKILL_MD)
+    stale_refresh_contract = text + _read(_WORKFLOW_CHEATSHEET_MD)
     hard_gates = _section(text, "## Hard Gates")
     phase_1 = _section(text, "### Phase 1: 企画（自動実行 + 入力モードに応じた一時停止）")
 
-    assert "`/collection-ideate` に一元化" in hard_gates
-    assert "stale 判定や AskUserQuestion を先行実行せず" in hard_gates
-    assert "ダイアログを二重表示しない" in hard_gates
-    assert "stale 判定・承認は `/collection-ideate` が 1 回だけ確定" in phase_1
+    assert "`/collection-ideate` の `references/freshness-rules.md::stale report の自動更新` に一元化" in hard_gates
+    assert "stale 判定や AskUserQuestion を先行実行しない" in hard_gates
+    assert "references/freshness-rules.md::stale report の自動更新" in hard_gates
+    assert "同 SSOT が返す自動更新シーケンスを同じ subagent 作業内で順次実行" in hard_gates
+    assert "入力モード判定を先頭からやり直す" in hard_gates
+
+    assert "判定ロジックや更新シーケンスを再定義しない" in phase_1
+    assert "成功時は中断せず同じ企画フローを続ける" in phase_1
+    assert "古い report を採用せず停止" in phase_1
+    assert "`/wf-new` を再実行できる再開条件" in phase_1
+    assert "fresh / benchmark fallback mode / minimal mode" in phase_1
+    assert "stale 更新用の Analytics skill を追加で呼ばない" in phase_1
+    assert "入力候補パス" in phase_1
+    assert "入力モード判定、SSOT に従う stale 自動更新、再検証" in phase_1
+    assert "入力モードはメインが事前確定せず" in phase_1
+    assert "subagent が再検証後の値を返す" in phase_1
+    assert "承認済みの入力パス、入力モード" not in phase_1
+    assert "企画候補と承認済みプレビュー生成だけ" not in phase_1
+
+    for stale_manual_remnant in (
+        "手動で `/analytics-analyze`",
+        "`/analytics-analyze` を手動",
+        "ユーザーが `/analytics-analyze` を実行",
+        "`/analytics-analyze` の実行を案内して停止",
+    ):
+        assert stale_manual_remnant not in stale_refresh_contract
+
+    assert "相対 stale は `/analytics-analyze`" not in hard_gates + phase_1
+    assert "絶対 stale は `/analytics-collect`" not in hard_gates + phase_1
 
 
 def test_collection_ideate_no_longer_stops_when_analysis_report_is_absent() -> None:
@@ -249,35 +276,37 @@ def test_collection_ideate_benchmark_fallback_uses_only_benchmark_data_and_confi
 def test_collection_ideate_allows_missing_persona_in_fallback_modes() -> None:
     text = _read(_COLLECTION_IDEATE_SKILL_MD)
     persona = _section(text, "## ペルソナベース企画フレームワーク")
+    freshness = _read(_FRESHNESS_RULES_MD)
 
-    assert "analytics mode で存在しない場合は ideate を進めず" in persona
-    assert f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} では停止せず" in persona
-    assert "初回仮説の視聴者像" in persona
-
-    fallback_guidance = persona.split(
-        f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} では停止せず",
-        maxsplit=1,
-    )[1].split("今回のターゲットペルソナ", maxsplit=1)[0]
-    assert "/audience-persona-design" not in fallback_guidance
-    assert "チャンネル立ち上げ直後なら" not in fallback_guidance
+    assert "停止 / fallback 条件、fallback 入力は `references/freshness-rules.md` の判定結果をそのまま適用" in persona
+    assert "analytics mode でこれらが未生成の場合、`ttp_mode: false` は Phase 1 を中断" in freshness
+    assert "`true` は共通の欲求語彙選択規則による fallback で続行" in freshness
+    assert (
+        "benchmark fallback mode / `ttp_mode: false` の minimal mode では config と入力データから初回仮説" in freshness
+    )
+    assert "`ttp_mode: true` の minimal mode はこの判定前に停止" in freshness
 
 
 def test_collection_ideate_single_persona_variations_use_fallback_hypothesis() -> None:
     text = _read(_COLLECTION_IDEATE_SKILL_MD)
     variations = _section(text, "### 第一ペルソナの企画バリエーション")
+    freshness = _read(_FRESHNESS_RULES_MD)
 
-    assert "`docs/channel/personas/persona-definition.md` が存在する場合" in variations
     assert "第一ペルソナ 1 人" in variations
     assert "複数ペルソナをローテーションせず" in variations
     assert "別シーン・別感情・別利用文脈" in variations
-    assert "analytics mode で persona 文書が存在しない場合は停止" in variations
-    assert f"{_BENCHMARK_FALLBACK_MODE} / {_MINIMAL_MODE} で persona 文書が存在しない場合" in variations
-    assert "入力モードごとの材料から作る初回仮説の視聴者像" in variations
-    assert f"{_BENCHMARK_FALLBACK_MODE}: ベンチマークデータ + config" in variations
-    assert f"{_MINIMAL_MODE}: {_DIRECT_INPUT_LABEL}+ config" in variations
-    assert "ユーザー直接入力 + config から作る初回仮説の視聴者像" not in variations
-    assert "初回 or 不明 → `docs/channel/personas/persona-definition.md` の先頭ペルソナ" not in variations
-    assert "直近の選択ペルソナの次" not in variations
+    assert "persona / viewing-scene の判定は `references/freshness-rules.md` を適用" in variations
+    assert (
+        "analytics mode かつ `ttp_mode: false` ではユーザーに `/audience-persona-design` 実行を案内して中断"
+        in freshness
+    )
+    assert (
+        "analytics mode かつ `true` では `.claude/skills/channel-research/references/desire-vocabulary.md` の fallback"
+        in freshness
+    )
+    assert (
+        "benchmark fallback mode / `ttp_mode: false` の minimal mode では config と入力データから初回仮説" in freshness
+    )
 
 
 def test_collection_ideate_persona_framework_uses_single_persona_candidate_count() -> None:
@@ -300,6 +329,30 @@ def test_wf_new_overview_declares_minimal_mode_extra_pause() -> None:
     assert "通常は企画選択 + サムネイル承認の2箇所" in overview
     assert "minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気の直接入力確認が追加" in overview
     assert "minimal mode: テーマ / ジャンル / 雰囲気をユーザーに確認" in phase_1
+
+
+def test_wf_new_passes_open_insights_without_blocking_fallback_modes() -> None:
+    text = _read(_WF_NEW_SKILL_MD)
+    phase_1 = _section(text, "### Phase 1: 企画（自動実行 + 入力モードに応じた一時停止）")
+    phase_2 = _section(text, "### Phase 2: 選択後の順次オーケストレーション")
+    cross_references = _section(text, "## Cross References")
+
+    assert "data/insights.jsonl" in phase_1
+    assert "jq -c 'select(.status == \"open\")' data/insights.jsonl" in phase_1
+    assert "validate_insights.py" in phase_1
+    assert "前提ガードにしない" in phase_1
+    assert "蓄積済み insights の選別と受け渡しだけ" in phase_1
+    assert "analytics / benchmark fallback / minimal mode のフローを阻害せず継続" in phase_1
+    assert "`/flop-analysis`（postmortem 生成・検証）を自動実行しない" in phase_1
+    assert "1-b で選別した open insights" in phase_1
+
+    assert "open insights の消費と status 反映" in phase_2
+    assert "`adopted`" in phase_2
+    assert "`dismissed`" in phase_2
+    assert "判定規則を `/wf-new` 側で再定義しない" in phase_2
+
+    assert "data/insights.jsonl" in cross_references
+    assert "insights-entry.schema.json" in cross_references
 
 
 def test_wf_new_declares_sequential_child_skill_orchestration() -> None:

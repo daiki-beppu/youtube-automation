@@ -63,7 +63,7 @@ def verify_suno_collection(collection_dir: Path) -> tuple[list[str], str]:
 
 
 def _preflight_issues(suno_cfg: ResolvedSunoConfig) -> list[str]:
-    genre_line_issue = check_suno_genre_line_char_limit({"genre_line": suno_cfg.genre_line})
+    genre_line_issue = check_suno_genre_line_char_limit({**suno_cfg.raw, "genre_line": suno_cfg.genre_line})
     return [] if genre_line_issue is None else [genre_line_issue]
 
 
@@ -80,7 +80,7 @@ def _style_variant_genre_line_issues(suno_cfg: ResolvedSunoConfig, contract: Pat
         genre_line = variant.get("genre_line")
         if not isinstance(genre_line, str):
             continue
-        issue = check_suno_genre_line_char_limit({"genre_line": genre_line})
+        issue = check_suno_genre_line_char_limit({**suno_cfg.raw, "genre_line": genre_line})
         if issue is not None:
             issues.append(
                 issue.replace(

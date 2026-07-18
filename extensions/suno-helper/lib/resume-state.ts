@@ -8,8 +8,12 @@
 // 起こさないよう遅延生成する（純関数テスト resume-state.test.ts を壊さないため）。
 import { storage } from "wxt/utils/storage";
 
-import { CLIPS_PER_REQUEST, RESUME_STATE_KEY, type RunModeId } from "../../shared/constants";
 import type { DurationFilter } from "../../shared/api";
+import {
+  CLIPS_PER_REQUEST,
+  RESUME_STATE_KEY,
+  type RunModeId,
+} from "../../shared/constants";
 
 /** ERROR 停止時に永続化する再開メタ情報 (#872)。 */
 export interface ResumeState {
@@ -75,7 +79,11 @@ export const RESUME_STALE_MS = 24 * 60 * 60 * 1000;
  *   - timestamp が RESUME_STALE_MS より古い → 表示しない（stale）。境界はちょうど閾値まで inclusive
  * now を注入可能にし、純関数として時刻依存を排してテストする。
  */
-export function shouldShowResumeBanner(state: ResumeState | null, selectedCollectionId: string, now: number): boolean {
+export function shouldShowResumeBanner(
+  state: ResumeState | null,
+  selectedCollectionId: string,
+  now: number
+): boolean {
   if (!state) {
     return false;
   }
@@ -101,7 +109,11 @@ export function resumeRunRange(banner: ResumeBanner): RunRange {
  * currentIndex + 1 === total のケースは playlist-phase persist (failedIndex=total) と同義になり、
  * resumeRunRange → {start: total, end: total-1} → runAll 0 回ループ → playlist 追加のみ実行となる。
  */
-export function resolveInterruptIndex(currentIndex: number, submitted: boolean, isNotAcknowledged: boolean): number {
+export function resolveInterruptIndex(
+  currentIndex: number,
+  submitted: boolean,
+  isNotAcknowledged: boolean
+): number {
   return submitted && !isNotAcknowledged ? currentIndex + 1 : currentIndex;
 }
 
@@ -109,14 +121,20 @@ export function resolveInterruptIndex(currentIndex: number, submitted: boolean, 
 export function resolvePlaylistClipIds(
   previousSubmittedClipIds: string[],
   currentSubmittedClipIds: string[],
-  expectedClipCount: number,
+  expectedClipCount: number
 ): string[] {
-  const clipIds = Array.from(new Set([...previousSubmittedClipIds, ...currentSubmittedClipIds]));
+  const clipIds = Array.from(
+    new Set([...previousSubmittedClipIds, ...currentSubmittedClipIds])
+  );
   if (clipIds.length === 0) {
-    throw new Error("playlist 対象の clip ID が 0 件です。bridge が clip を観測できなかった可能性があります。");
+    throw new Error(
+      "playlist 対象の clip ID が 0 件です。bridge が clip を観測できなかった可能性があります。"
+    );
   }
   if (clipIds.length !== expectedClipCount) {
-    throw new Error(`playlist 対象の clip ID 数が不足しています: expected ${expectedClipCount}, got ${clipIds.length}`);
+    throw new Error(
+      `playlist 対象の clip ID 数が不足しています: expected ${expectedClipCount}, got ${clipIds.length}`
+    );
   }
   return clipIds;
 }
@@ -124,18 +142,23 @@ export function resolvePlaylistClipIds(
 /** 旧 ResumeState には期待件数が無いため、collection 全体の entry 数から復元して部分 playlist を防ぐ。 */
 export function resolvePlaylistExpectedClipCountForResume(
   savedExpectedClipCount: number | undefined,
-  totalEntries: number,
+  totalEntries: number
 ): number {
   return savedExpectedClipCount ?? totalEntries * CLIPS_PER_REQUEST;
 }
 
 // --- chrome.storage.local I/O（storage item は遅延生成。理由はファイル冒頭コメント参照） ---
 
-let cachedItem: ReturnType<typeof storage.defineItem<ResumeState | null>> | null = null;
+let cachedItem: ReturnType<
+  typeof storage.defineItem<ResumeState | null>
+> | null = null;
 
 function resumeStateItem() {
   if (!cachedItem) {
-    cachedItem = storage.defineItem<ResumeState | null>(`local:${RESUME_STATE_KEY}`, { fallback: null });
+    cachedItem = storage.defineItem<ResumeState | null>(
+      `local:${RESUME_STATE_KEY}`,
+      { fallback: null }
+    );
   }
   return cachedItem;
 }
@@ -154,7 +177,9 @@ export async function writeResumeState(state: ResumeState): Promise<void> {
  * 指定 collection の resume state を消去する (要件5)。
  * 保存中の state が別 collection のものなら触らない（取り違え消去を防ぐ）。
  */
-export async function clearResumeStateForCollection(collectionId: string): Promise<void> {
+export async function clearResumeStateForCollection(
+  collectionId: string
+): Promise<void> {
   const current = await resumeStateItem().getValue();
   if (current && current.collectionId === collectionId) {
     await resumeStateItem().setValue(null);

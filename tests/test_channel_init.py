@@ -627,7 +627,8 @@ def test_localizations_and_skill_configs_reflect_channel_init_args(tmp_path):
         "output_icon": "branding/icon.png",
         "output_banner": "branding/banner.png",
     }
-    assert thumbnail["image_generation"]["gemini"]["composition_rules"]["channel_branding"] == "Focus Atlas"
+    # #1702: scaffold は deprecated な composition_rules 個別キーを含まない（text_lines のみ）
+    assert thumbnail["image_generation"]["gemini"]["composition_rules"] == {"text_lines": "タイトルは 2 行以内"}
 
 
 def test_channel_init_does_not_generate_legacy_upload_settings_file(tmp_path):

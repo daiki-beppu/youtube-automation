@@ -22,7 +22,11 @@ import {
 } from "../../shared/dom";
 import { addCaptchaIframe } from "./_helpers";
 
-const FAST_OPTIONS = { timeoutMs: 1000, pollIntervalMs: 10, settleMs: 10 } as const;
+const FAST_OPTIONS = {
+  timeoutMs: 1000,
+  pollIntervalMs: 10,
+  settleMs: 10,
+} as const;
 
 function disabledButton(): HTMLButtonElement {
   const btn = document.createElement("button");
@@ -44,7 +48,10 @@ describe("waitForGeneration: 完了検知", () => {
   it("Given button が enabled に戻る When 待機する Then resolve する", async () => {
     const btn = disabledButton();
 
-    const pending = waitForGeneration(btn, { isAborted: () => false, ...FAST_OPTIONS });
+    const pending = waitForGeneration(btn, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+    });
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.settleMs); // SETTLE 経過、まだ disabled
     btn.disabled = false; // 生成完了 = enabled 復帰
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs); // 次の poll で検知
@@ -57,9 +64,14 @@ describe("waitForGeneration: 完了検知", () => {
     btn.disabled = false;
     btn.setAttribute("aria-disabled", "true"); // 見た目 enabled でも生成中
 
-    const pending = waitForGeneration(btn, { isAborted: () => false, ...FAST_OPTIONS });
+    const pending = waitForGeneration(btn, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+    });
     const expectation = expect(pending).rejects.toThrow(/タイムアウト/);
-    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.timeoutMs + FAST_OPTIONS.settleMs + 50);
+    await vi.advanceTimersByTimeAsync(
+      FAST_OPTIONS.timeoutMs + FAST_OPTIONS.settleMs + 50
+    );
     await expectation;
   });
 });
@@ -67,7 +79,9 @@ describe("waitForGeneration: 完了検知", () => {
 describe("waitForGeneration: captcha 検知で待機し解消後に続行する", () => {
   it("Given 待機中に可視 captcha 出現 → 自動 verify で消滅 When poll する Then throw せず生成完了まで待って resolve する", async () => {
     const btn = disabledButton();
-    const captcha = addCaptchaIframe({ src: "https://www.google.com/recaptcha/api2/anchor" });
+    const captcha = addCaptchaIframe({
+      src: "https://www.google.com/recaptcha/api2/anchor",
+    });
     const phases: boolean[] = [];
 
     const pending = waitForGeneration(btn, {
@@ -76,7 +90,9 @@ describe("waitForGeneration: captcha 検知で待機し解消後に続行する"
       captchaWaitTimeoutMs: 500,
       onCaptchaWait: (waiting) => phases.push(waiting),
     });
-    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.settleMs + FAST_OPTIONS.pollIntervalMs);
+    await vi.advanceTimersByTimeAsync(
+      FAST_OPTIONS.settleMs + FAST_OPTIONS.pollIntervalMs
+    );
     captcha.remove(); // 自動 verify で challenge が閉じた
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs * 2);
     btn.disabled = false; // 生成完了 = enabled 復帰
@@ -88,7 +104,9 @@ describe("waitForGeneration: captcha 検知で待機し解消後に続行する"
 
   it("Given captcha の解消待ち中 When 生成 deadline 相当の時間が経過する Then 待機分は deadline を消費しない (延長される)", async () => {
     const btn = disabledButton();
-    const captcha = addCaptchaIframe({ src: "https://www.google.com/recaptcha/api2/anchor" });
+    const captcha = addCaptchaIframe({
+      src: "https://www.google.com/recaptcha/api2/anchor",
+    });
 
     const pending = waitForGeneration(btn, {
       isAborted: () => false,
@@ -115,7 +133,9 @@ describe("waitForGeneration: captcha 検知で待機し解消後に続行する"
       captchaWaitTimeoutMs: 300,
     });
     const expectation = expect(pending).rejects.toThrow(/captcha challenge/);
-    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.settleMs + 300 + FAST_OPTIONS.pollIntervalMs * 2);
+    await vi.advanceTimersByTimeAsync(
+      FAST_OPTIONS.settleMs + 300 + FAST_OPTIONS.pollIntervalMs * 2
+    );
     await expectation;
   });
 });
@@ -135,7 +155,9 @@ describe("waitForCaptchaClear", () => {
   });
 
   it("Given captcha が後から消える When 待つ Then onWaitStart を 1 回呼んで resolve する", async () => {
-    const captcha = addCaptchaIframe({ src: "https://www.google.com/recaptcha/api2/anchor" });
+    const captcha = addCaptchaIframe({
+      src: "https://www.google.com/recaptcha/api2/anchor",
+    });
     const onWaitStart = vi.fn();
 
     const pending = waitForCaptchaClear({
@@ -160,7 +182,9 @@ describe("waitForCaptchaClear", () => {
       pollIntervalMs: 10,
       timeoutMs: 100,
     });
-    const expectation = expect(pending).rejects.toThrow(/手動で解決してから再開/);
+    const expectation = expect(pending).rejects.toThrow(
+      /手動で解決してから再開/
+    );
     await vi.advanceTimersByTimeAsync(200);
     await expectation;
   });
@@ -194,7 +218,10 @@ describe("waitForGeneration: プリロード hCaptcha 誤検知の回帰ガー�
       height: 150,
     });
 
-    const pending = waitForGeneration(btn, { isAborted: () => false, ...FAST_OPTIONS });
+    const pending = waitForGeneration(btn, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+    });
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.settleMs);
     btn.disabled = false; // 生成完了 = enabled 復帰
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs);
@@ -207,9 +234,14 @@ describe("waitForGeneration: タイムアウト", () => {
   it("Given button が disabled のまま When deadline 超過 Then timeout throw する", async () => {
     const btn = disabledButton(); // 永遠に disabled
 
-    const pending = waitForGeneration(btn, { isAborted: () => false, ...FAST_OPTIONS });
+    const pending = waitForGeneration(btn, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+    });
     const expectation = expect(pending).rejects.toThrow(/タイムアウト/);
-    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.timeoutMs + FAST_OPTIONS.settleMs + 50);
+    await vi.advanceTimersByTimeAsync(
+      FAST_OPTIONS.timeoutMs + FAST_OPTIONS.settleMs + 50
+    );
     await expectation;
   });
 });
@@ -218,7 +250,10 @@ describe("waitForGeneration: 中断", () => {
   it("Given isAborted が true When 待機する Then throw せず即 return する", async () => {
     const btn = disabledButton(); // disabled のままでも中断優先で return
 
-    const pending = waitForGeneration(btn, { isAborted: () => true, ...FAST_OPTIONS });
+    const pending = waitForGeneration(btn, {
+      isAborted: () => true,
+      ...FAST_OPTIONS,
+    });
     await vi.advanceTimersByTimeAsync(FAST_OPTIONS.settleMs);
 
     await expect(pending).resolves.toBeUndefined();

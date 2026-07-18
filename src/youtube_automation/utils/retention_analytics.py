@@ -132,7 +132,7 @@ class RetentionAnalyticsMixin:
             response = execute_with_retry(request, "YouTube Analytics API request failed")
         except YouTubeAPIError as e:
             logger.error(f"上位動画リスト取得エラー: {e}")
-            return []
+            raise
 
         if "rows" not in response:
             return []

@@ -11,7 +11,11 @@ import type {
   PromptResponse,
   ServerInfo,
 } from "../../shared/api";
-import type { ProgressPayload, RunModeId, SnapshotPayload } from "../../shared/constants";
+import type {
+  ProgressPayload,
+  RunModeId,
+  SnapshotPayload,
+} from "../../shared/constants";
 import type { LocalServerSource } from "../../shared/constants";
 import type { RunRange } from "./resume-state";
 
@@ -82,7 +86,10 @@ export interface RetryDownloadPayload {
 
 interface ProtocolMap {
   /** content / overlay → background: 拡張更新後の実行コンテキストを確認する。 */
-  extensionVersionHandshake(payload: { version: string }): { version: string; matches: boolean };
+  extensionVersionHandshake(payload: { version: string }): {
+    version: string;
+    matches: boolean;
+  };
   /** overlay → background → runner: 連続実行を開始する。 */
   run(payload: RunPayload): { ok: true };
   /** overlay → background → runner: 連続実行を中断する。 */
@@ -90,7 +97,10 @@ interface ProtocolMap {
   /** overlay → background → runner: playlist 追加のみ再実行する。entries 不要。 */
   retryPlaylist(payload: RetryPlaylistPayload): { ok: true };
   /** overlay → background → runner: 手動選択中の clip ID を読む。 */
-  adoptSelectedClips(payload: AdoptSelectedClipsPayload): { ok: true; clipIds: string[] };
+  adoptSelectedClips(payload: AdoptSelectedClipsPayload): {
+    ok: true;
+    clipIds: string[];
+  };
   /** runner → background → overlay: 進捗を通知する。 */
   progress(payload: ProgressPayload): void;
   /** overlay → background → runner: 現在の進捗スナップショットを問い合わせる (#852)。未実行は null。 */
@@ -111,19 +121,36 @@ interface ProtocolMap {
   sendTrustedCmdP(payload: { isMac: boolean }): void;
   /** overlay → background: localhost read API を extension origin から取得する。 */
   discoverServerSources(): LocalServerSource[];
-  fetchCompatibilityWarning(payload: { baseUrl: string; extensionVersion: string }): string;
+  fetchCompatibilityWarning(payload: {
+    baseUrl: string;
+    extensionVersion: string;
+  }): string;
   /** overlay → background: `/server-info` を extension origin から取得する。 */
   fetchServerInfo(payload: { baseUrl: string }): ServerInfo;
   /** overlay → background: `/collections` を extension origin から取得する。 */
   fetchCollections(payload: { baseUrl: string }): CollectionSummary[];
   /** overlay → background: collection prompts を extension origin から取得する。 */
-  fetchCollectionPrompts(payload: { baseUrl: string; collectionId: string }): PromptEntry[];
+  fetchCollectionPrompts(payload: {
+    baseUrl: string;
+    collectionId: string;
+  }): PromptEntry[];
   /** overlay → background: collection prompts と metadata を extension origin から取得する。 */
-  fetchCollectionPromptResponse(payload: { baseUrl: string; collectionId: string }): PromptResponse;
-  /** runner → background: token 取得と POST /downloaded を privileged boundary に委譲する (#1217)。 */
-  postDownloaded(payload: { baseUrl: string; collectionId: string; body: DownloadedPayload }): void;
+  fetchCollectionPromptResponse(payload: {
+    baseUrl: string;
+    collectionId: string;
+  }): PromptResponse;
+  /** runner → background: token 取得と POST /downloaded を privileged boundary に委譲する (#1217)。
+   *  部分完了時はサーバーの warning を返す (#1913)。 */
+  postDownloaded(payload: {
+    baseUrl: string;
+    collectionId: string;
+    body: DownloadedPayload;
+  }): {
+    warning: string | null;
+  };
   /** overlay → background → runner: ダウンロードのみ再実行する (#1251)。 */
   retryDownload(payload: RetryDownloadPayload): { ok: true };
 }
 
-export const { sendMessage, onMessage } = defineExtensionMessaging<ProtocolMap>();
+export const { sendMessage, onMessage } =
+  defineExtensionMessaging<ProtocolMap>();

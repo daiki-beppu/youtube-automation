@@ -9,6 +9,7 @@ Subcommands:
     list   : 同梱アセット一覧を表示
     sync   : --target に展開 (--symlink でシンボリックリンク, --force で上書き)
     diff   : 同梱版と target の差分を表示
+    lint   : SKILL.md frontmatter を検証 (strict YAML / name・description 非空 / double-quote)
 
 Asset 種別 (`--asset`):
     all                 : デフォルト。下記すべての asset を一括処理する
@@ -190,6 +191,9 @@ from youtube_automation.cli.skills_sync._ops import _prune_orphans as _prune_orp
 from youtube_automation.cli.skills_sync._ops import _symlink_entry as _symlink_entry  # noqa: E402
 from youtube_automation.cli.skills_sync._sync import cmd_sync as cmd_sync  # noqa: E402
 from youtube_automation.cli.skills_sync._diff import cmd_diff as cmd_diff  # noqa: E402
+from youtube_automation.cli.skills_sync._lint import cmd_lint as cmd_lint  # noqa: E402
+from youtube_automation.cli.skills_sync._lint import lint_frontmatter_text as lint_frontmatter_text  # noqa: E402
+from youtube_automation.cli.skills_sync._lint import lint_skill as lint_skill  # noqa: E402
 from youtube_automation.cli.skills_sync._parser import _resolve_default_target as _resolve_default_target  # noqa: E402
 from youtube_automation.cli.skills_sync._parser import build_parser as build_parser  # noqa: E402
 

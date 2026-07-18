@@ -72,6 +72,65 @@ def test_channel_override_merged(tmp_path, monkeypatch):
     assert "model" in gemini_block
 
 
+def test_thumbnail_deprecated_override_keys_warn_but_still_merge(tmp_path, monkeypatch):
+    """#1702: 縮小済みキーの override は壊さず deep-merge しつつ DeprecationWarning を出す。"""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "image_generation": {
+                    "gemini": {
+                        "composition_rules": {"environment": "cozy tavern", "text_lines": "1 行"},
+                        "thumbnail_text": {"copy_position": "left of character"},
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with pytest.warns(DeprecationWarning) as records:
+        cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
+
+    message = str(records[0].message)
+    assert "image_generation.gemini.composition_rules.environment" in message
+    assert "image_generation.gemini.thumbnail_text.copy_position" in message
+    assert "#1702" in message
+    # override は従来どおり有効（後方互換 no-op を維持）
+    gemini = cfg["image_generation"]["gemini"]
+    assert gemini["composition_rules"]["environment"] == "cozy tavern"
+    assert gemini["composition_rules"]["text_lines"] == "1 行"
+    assert gemini["thumbnail_text"]["copy_position"] == "left of character"
+
+
+def test_thumbnail_override_without_deprecated_keys_does_not_warn(tmp_path, monkeypatch):
+    """#1702: 縮小後の実効キーだけの override では DeprecationWarning を出さない。"""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    (channel_dir / "config" / "skills" / "thumbnail.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "image_generation": {
+                    "gemini": {
+                        "composition_rules": {"text_lines": "1 行"},
+                        "thumbnail_text": {"channel_name": "Focus", "text_overlay_prompt": "Add {title_line1}."},
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
+
+    assert cfg["image_generation"]["gemini"]["thumbnail_text"]["channel_name"] == "Focus"
+
+
 def test_load_skill_config_postmortem_prefers_flop_analysis_override(tmp_path, monkeypatch):
     """postmortem は新名 flop-analysis override を default にマージする。"""
     channel_dir = tmp_path / "ch"
@@ -90,6 +149,18 @@ def test_load_skill_config_postmortem_prefers_flop_analysis_override(tmp_path, m
     assert cfg["thresholds"]["min_impressions"] == 321
     assert "ctr_low" in cfg["hypothesis_ratios"]
     assert not warning_records
+
+
+def test_load_skill_config_postmortem_uses_flop_analysis_default_directory(tmp_path, monkeypatch):
+    """directory rename 後も既存 loader key が新 directory の default を読む。"""
+    channel_dir = tmp_path / "ch"
+    channel_dir.mkdir()
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_skill_config("postmortem", use_cache=False)
+
+    assert cfg["thresholds"]["ratio_vs_median"] == {"strong": 0.5, "moderate": 0.7, "mild": 0.9}
+    assert cfg["hypothesis_ratios"]["ctr_low"] == 0.7
 
 
 def test_load_skill_config_postmortem_warns_for_legacy_override(tmp_path, monkeypatch):

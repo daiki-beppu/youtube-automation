@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CLIPS_PER_REQUEST, PHASE } from "../../shared/constants";
 import type { PromptEntry } from "../../shared/api";
+import { CLIPS_PER_REQUEST, PHASE } from "../../shared/constants";
 import type { ResumeState, RunRange } from "../lib/resume-state";
 import { makePromptEntries } from "./_helpers";
 
@@ -31,7 +31,10 @@ interface ProgressMessage {
   message?: string;
 }
 
-function expectPostDownloadedBody(payload: unknown, expectedBody: Record<string, unknown>): void {
+function expectPostDownloadedBody(
+  payload: unknown,
+  expectedBody: Record<string, unknown>
+): void {
   expect(payload).toMatchObject({ body: expectedBody });
   const body = (payload as { body?: Record<string, unknown> }).body;
   expect(body).not.toHaveProperty("suno_playlist_url");
@@ -52,34 +55,47 @@ async function loadContentScriptWithPlaylistRows(
     guardReadError?: Error;
     pendingPreviousClipIds?: string[];
     releasePreviousCompletion?: Promise<void>;
-  },
+  }
 ) {
   vi.resetModules();
-  vi.stubGlobal("defineContentScript", (definition: { main: () => void }) => definition);
+  vi.stubGlobal(
+    "defineContentScript",
+    (definition: { main: () => void }) => definition
+  );
 
   const handlers = new Map<string, Handler>();
   const progressMessages: ProgressMessage[] = [];
   const sentMessages: Array<{ type: string; payload: unknown }> = [];
   let postDownloadedCallCount = 0;
   let lastMultiSelectIds: string[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const scrollAndMultiSelectByIdsMock = vi.fn((ids: string[], _options: unknown) => {
-    lastMultiSelectIds = ids;
-    if (playlistRowsResult instanceof Error) {
-      return Promise.reject(playlistRowsResult);
+  // oxlint-disable-next-line no-unused-vars
+  const scrollAndMultiSelectByIdsMock = vi.fn(
+    (ids: string[], _options: unknown) => {
+      lastMultiSelectIds = ids;
+      if (playlistRowsResult instanceof Error) {
+        return Promise.reject(playlistRowsResult);
+      }
+      return Promise.resolve(
+        playlistRowsResult instanceof Array ? playlistRowsResult.length : 0
+      );
     }
-    return Promise.resolve(playlistRowsResult instanceof Array ? playlistRowsResult.length : 0);
-  });
+  );
   const readSelectedClipIdsMock = vi.fn(() => {
     if (overrides?.guardReadError) {
       return Promise.reject(overrides.guardReadError);
     }
-    return Promise.resolve(overrides?.guardSelectedClipIds ?? lastMultiSelectIds);
+    return Promise.resolve(
+      overrides?.guardSelectedClipIds ?? lastMultiSelectIds
+    );
   });
-  const openAddToPlaylistDialogViaCmdPMock = vi.fn(() => Promise.resolve({} as HTMLElement));
+  const openAddToPlaylistDialogViaCmdPMock = vi.fn(() =>
+    Promise.resolve({} as HTMLElement)
+  );
   const scheduleRunCompleteReloadMock = vi.fn();
   const cancelScheduledRunCompleteReloadMock = vi.fn();
-  let pendingPreviousClipIds = overrides?.pendingPreviousClipIds ? [...overrides.pendingPreviousClipIds] : [];
+  let pendingPreviousClipIds = overrides?.pendingPreviousClipIds
+    ? [...overrides.pendingPreviousClipIds]
+    : [];
   const requestFeedPollMock = vi.fn(async () => {
     if (overrides?.releasePreviousCompletion) {
       await overrides.releasePreviousCompletion;
@@ -102,7 +118,10 @@ async function loadContentScriptWithPlaylistRows(
       }
       if (type === "postDownloaded" && overrides?.postDownloadedError) {
         postDownloadedCallCount += 1;
-        if ((overrides.postDownloadedRejectOnCall ?? 1) === postDownloadedCallCount) {
+        if (
+          (overrides.postDownloadedRejectOnCall ?? 1) ===
+          postDownloadedCallCount
+        ) {
           return Promise.reject(overrides.postDownloadedError);
         }
       }
@@ -124,15 +143,23 @@ async function loadContentScriptWithPlaylistRows(
   }));
 
   vi.doMock("../lib/snapshot", () => ({
-    initSnapshot: vi.fn((entries: PromptEntry[], options: { collectionId: string; playlistName?: string }) => ({
-      collectionId: options.collectionId,
-      entries,
-      playlistName: options.playlistName,
-      itemStates: entries.map(() => "pending"),
-      isRunning: true,
-      submittedClipIds: [],
+    initSnapshot: vi.fn(
+      (
+        entries: PromptEntry[],
+        options: { collectionId: string; playlistName?: string }
+      ) => ({
+        collectionId: options.collectionId,
+        entries,
+        playlistName: options.playlistName,
+        itemStates: entries.map(() => "pending"),
+        isRunning: true,
+        submittedClipIds: [],
+      })
+    ),
+    applyProgress: vi.fn((snapshot: object, payload: object) => ({
+      ...snapshot,
+      progress: payload,
     })),
-    applyProgress: vi.fn((snapshot: object, payload: object) => ({ ...snapshot, progress: payload })),
   }));
 
   vi.doMock("../lib/bridge-listener", () => ({
@@ -148,11 +175,14 @@ async function loadContentScriptWithPlaylistRows(
       getSubmittedIds: vi.fn(() => submittedIdsFromTracker),
       getPendingSubmittedIds: vi.fn(() => []),
       getDuration: vi.fn((id: string) =>
-        overrides?.durationsById && Object.prototype.hasOwnProperty.call(overrides.durationsById, id)
+        overrides?.durationsById &&
+        Object.prototype.hasOwnProperty.call(overrides.durationsById, id)
           ? overrides.durationsById[id]
-          : 120,
+          : 120
       ),
-      getPendingIdsByIds: vi.fn((ids: string[]) => ids.filter((id) => pendingPreviousClipIds.includes(id))),
+      getPendingIdsByIds: vi.fn((ids: string[]) =>
+        ids.filter((id) => pendingPreviousClipIds.includes(id))
+      ),
       getInFlightCount: vi.fn(() => 0),
       hasObservedAnyTraffic: vi.fn(() => true),
       lastChangeAt: vi.fn(() => Date.now()),
@@ -171,8 +201,14 @@ async function loadContentScriptWithPlaylistRows(
     getInFlightClipCount: vi.fn(() => 0),
     injectAdvancedFields: vi.fn(() => Promise.resolve()),
     resolveAdvancedFields: vi.fn(() => ({})),
-    resolveFields: vi.fn(() => ({ style: {} as HTMLTextAreaElement, lyrics: null, title: null })),
-    resolveGenerateButton: vi.fn(() => ({ click: vi.fn() }) as unknown as HTMLButtonElement),
+    resolveFields: vi.fn(() => ({
+      style: {} as HTMLTextAreaElement,
+      lyrics: null,
+      title: null,
+    })),
+    resolveGenerateButton: vi.fn(
+      () => ({ click: vi.fn() }) as unknown as HTMLButtonElement
+    ),
     setLyricsValue: vi.fn(() => Promise.resolve()),
     setLyricsValueViaBeforeInput: vi.fn(() => Promise.resolve()),
     setNativeValue: vi.fn(),
@@ -222,9 +258,19 @@ async function loadContentScriptWithPlaylistRows(
   const normalizeDownloadFormat = (value: unknown): "mp3" | "m4a" | "wav" =>
     value === "mp3" || value === "m4a" || value === "wav" ? value : "mp3";
   vi.doMock("../lib/storage", () => ({
-    serverUrlItem: { getValue: vi.fn(() => Promise.resolve("http://localhost:8787")) },
-    downloadFormatItem: { getValue: vi.fn(() => Promise.resolve(overrides?.downloadFormatValue ?? "mp3")) },
-    readDownloadFormat: vi.fn(() => Promise.resolve(normalizeDownloadFormat(overrides?.downloadFormatValue ?? "mp3"))),
+    serverUrlItem: {
+      getValue: vi.fn(() => Promise.resolve("http://localhost:8787")),
+    },
+    downloadFormatItem: {
+      getValue: vi.fn(() =>
+        Promise.resolve(overrides?.downloadFormatValue ?? "mp3")
+      ),
+    },
+    readDownloadFormat: vi.fn(() =>
+      Promise.resolve(
+        normalizeDownloadFormat(overrides?.downloadFormatValue ?? "mp3")
+      )
+    ),
   }));
 
   vi.doMock("../lib/download", () => ({
@@ -232,12 +278,16 @@ async function loadContentScriptWithPlaylistRows(
   }));
 
   vi.doMock("../../shared/api", async () => ({
-    ...(await vi.importActual<typeof import("../../shared/api")>("../../shared/api")),
+    ...(await vi.importActual<typeof import("../../shared/api")>(
+      "../../shared/api"
+    )),
     postDownloaded: vi.fn(() => Promise.resolve()),
   }));
 
   const content = await import("../entrypoints/content");
-  content.default.main({} as NonNullable<Parameters<typeof content.default.main>[0]>);
+  content.default.main(
+    {} as NonNullable<Parameters<typeof content.default.main>[0]>
+  );
 
   const runHandler = handlers.get("run") as RunHandler | undefined;
   if (!runHandler) {
@@ -253,7 +303,13 @@ async function loadContentScriptWithPlaylistRows(
     cancelScheduledRunCompleteReloadMock,
     progressMessages,
     runHandler: (message: { data: RunPayload }) =>
-      runHandler({ data: { runMode: "serial", regenerateDurationOutliers: true, ...message.data } }),
+      runHandler({
+        data: {
+          runMode: "serial",
+          regenerateDurationOutliers: true,
+          ...message.data,
+        },
+      }),
     sentMessages,
   };
 }
@@ -271,12 +327,13 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     ];
     const currentSubmittedClipIds = Array.from(
       { length: entries.length * CLIPS_PER_REQUEST },
-      (_, index) => `current-clip-${index + 1}`,
+      (_, index) => `current-clip-${index + 1}`
     );
-    const { progressMessages, runHandler } = await loadContentScriptWithPlaylistRows(
-      currentSubmittedClipIds,
-      new Error("playlist rows missing"),
-    );
+    const { progressMessages, runHandler } =
+      await loadContentScriptWithPlaylistRows(
+        currentSubmittedClipIds,
+        new Error("playlist rows missing")
+      );
 
     runHandler({
       data: {
@@ -285,7 +342,9 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         collectionId: "collection-a",
       },
     });
-    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(writeResumeStateMock).toHaveBeenCalledTimes(1)
+    );
 
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -294,13 +353,13 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         total: entries.length,
         submittedClipIds: currentSubmittedClipIds,
         playlistExpectedClipCount: entries.length * CLIPS_PER_REQUEST,
-      }),
+      })
     );
     expect(progressMessages).toContainEqual(
       expect.objectContaining({
         phase: PHASE.ERROR,
         index: entries.length,
-      }),
+      })
     );
   });
 
@@ -311,9 +370,12 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     ];
     const submittedClipIds = Array.from(
       { length: entries.length * CLIPS_PER_REQUEST },
-      (_, index) => `clip-${index + 1}`,
+      (_, index) => `clip-${index + 1}`
     );
-    const { runHandler } = await loadContentScriptWithPlaylistRows([], new Error("playlist rows missing"));
+    const { runHandler } = await loadContentScriptWithPlaylistRows(
+      [],
+      new Error("playlist rows missing")
+    );
 
     runHandler({
       data: {
@@ -324,7 +386,9 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         submittedClipIds,
       },
     });
-    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(writeResumeStateMock).toHaveBeenCalledTimes(1)
+    );
 
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -333,7 +397,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         total: entries.length,
         submittedClipIds,
         playlistExpectedClipCount: entries.length * CLIPS_PER_REQUEST,
-      }),
+      })
     );
   });
 
@@ -343,10 +407,8 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       { name: "track-2", style: "style 2", lyrics: "" },
     ];
     const submittedClipIds = ["clip-1", "clip-2", "clip-3"];
-    const { progressMessages, scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
-      [],
-      [],
-    );
+    const { progressMessages, scrollAndMultiSelectByIdsMock, runHandler } =
+      await loadContentScriptWithPlaylistRows([], []);
 
     runHandler({
       data: {
@@ -364,8 +426,8 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
           phase: PHASE.ERROR,
           index: entries.length,
           message: expect.stringContaining("expected 4, got 3"),
-        }),
-      ),
+        })
+      )
     );
 
     expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
@@ -376,19 +438,25 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       { name: "track-1", style: "style 1", lyrics: "" },
       { name: "track-2", style: "style 2", lyrics: "" },
     ];
-    const previousSubmittedClipIds = ["old-clip-1", "old-clip-2", "old-clip-3", "old-clip-4"];
+    const previousSubmittedClipIds = [
+      "old-clip-1",
+      "old-clip-2",
+      "old-clip-3",
+      "old-clip-4",
+    ];
     let releasePreviousCompletion!: () => void;
     const releasePreviousCompletionPromise = new Promise<void>((resolve) => {
       releasePreviousCompletion = resolve;
     });
-    const { requestFeedPollMock, scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
-      [],
-      previousSubmittedClipIds.map(() => ({}) as HTMLElement),
-      {
-        pendingPreviousClipIds: previousSubmittedClipIds,
-        releasePreviousCompletion: releasePreviousCompletionPromise,
-      },
-    );
+    const { requestFeedPollMock, scrollAndMultiSelectByIdsMock, runHandler } =
+      await loadContentScriptWithPlaylistRows(
+        [],
+        previousSubmittedClipIds.map(() => ({}) as HTMLElement),
+        {
+          pendingPreviousClipIds: previousSubmittedClipIds,
+          releasePreviousCompletion: releasePreviousCompletionPromise,
+        }
+      );
 
     runHandler({
       data: {
@@ -403,14 +471,18 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       },
     });
 
-    await vi.waitFor(() => expect(requestFeedPollMock).toHaveBeenCalledWith(previousSubmittedClipIds));
+    await vi.waitFor(() =>
+      expect(requestFeedPollMock).toHaveBeenCalledWith(previousSubmittedClipIds)
+    );
     expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
 
     releasePreviousCompletion();
-    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1)
+    );
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       previousSubmittedClipIds,
-      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) })
     );
   });
 
@@ -421,11 +493,11 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     ];
     const previousSubmittedClipIds = ["old-clip-1", "old-clip-2"];
     const currentSubmittedClipIds = ["new-clip-1", "new-clip-2"];
-    const rows = [...previousSubmittedClipIds, ...currentSubmittedClipIds].map(() => ({}) as HTMLElement);
-    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
-      currentSubmittedClipIds,
-      rows,
+    const rows = [...previousSubmittedClipIds, ...currentSubmittedClipIds].map(
+      () => ({}) as HTMLElement
     );
+    const { scrollAndMultiSelectByIdsMock, runHandler } =
+      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows);
 
     runHandler({
       data: {
@@ -437,13 +509,18 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         playlistExpectedClipCount: 4,
       },
     });
-    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1)
+    );
 
     const [ids, options] = scrollAndMultiSelectByIdsMock.mock.calls[0] as [
       string[],
       { titleFallbackMap: Map<string, string> },
     ];
-    expect(ids).toEqual([...previousSubmittedClipIds, ...currentSubmittedClipIds]);
+    expect(ids).toEqual([
+      ...previousSubmittedClipIds,
+      ...currentSubmittedClipIds,
+    ]);
     expect(options.titleFallbackMap.get("old-clip-1")).toBe("Track One");
     expect(options.titleFallbackMap.get("old-clip-2")).toBe("Track One");
     expect(options.titleFallbackMap.get("new-clip-1")).toBe("Track Two");
@@ -457,19 +534,18 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     ];
     const previousSubmittedClipIds = ["old-ok-1", "old-ok-2"];
     const currentSubmittedClipIds = ["new-ok-1", "new-short"];
-    const rows = ["old-ok-1", "old-ok-2", "new-ok-1"].map(() => ({}) as HTMLElement);
-    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
-      currentSubmittedClipIds,
-      rows,
-      {
+    const rows = ["old-ok-1", "old-ok-2", "new-ok-1"].map(
+      () => ({}) as HTMLElement
+    );
+    const { scrollAndMultiSelectByIdsMock, runHandler } =
+      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows, {
         durationsById: {
           "old-ok-1": undefined,
           "old-ok-2": undefined,
           "new-ok-1": 120,
           "new-short": 30,
         },
-      },
-    );
+      });
 
     runHandler({
       data: {
@@ -484,17 +560,21 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       },
     });
 
-    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1)
+    );
+    await vi.waitFor(() =>
+      expect(writeResumeStateMock).toHaveBeenCalledTimes(1)
+    );
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       ["old-ok-1", "old-ok-2", "new-ok-1"],
-      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) })
     );
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         submittedClipIds: ["old-ok-1", "old-ok-2", "new-ok-1"],
         playlistExpectedClipCount: 3,
-      }),
+      })
     );
   });
 
@@ -513,19 +593,25 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         lyrics: "",
       },
     ];
-    const currentSubmittedClipIds = ["clip-ok-1", "clip-short", "clip-long", "clip-ok-2"];
-    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
-      currentSubmittedClipIds,
-      new Error("playlist rows missing"),
-      {
-        durationsById: {
-          "clip-ok-1": 120,
-          "clip-short": 30,
-          "clip-long": 420,
-          "clip-ok-2": 180,
-        },
-      },
-    );
+    const currentSubmittedClipIds = [
+      "clip-ok-1",
+      "clip-short",
+      "clip-long",
+      "clip-ok-2",
+    ];
+    const { scrollAndMultiSelectByIdsMock, runHandler } =
+      await loadContentScriptWithPlaylistRows(
+        currentSubmittedClipIds,
+        new Error("playlist rows missing"),
+        {
+          durationsById: {
+            "clip-ok-1": 120,
+            "clip-short": 30,
+            "clip-long": 420,
+            "clip-ok-2": 180,
+          },
+        }
+      );
 
     runHandler({
       data: {
@@ -535,19 +621,23 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         durationFilter: { min_sec: 60, max_sec: 300 },
       },
     });
-    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1)
+    );
+    await vi.waitFor(() =>
+      expect(writeResumeStateMock).toHaveBeenCalledTimes(1)
+    );
 
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       ["clip-ok-1", "clip-ok-2"],
-      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) })
     );
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         submittedClipIds: ["clip-ok-1", "clip-ok-2"],
         durationFilter: { min_sec: 60, max_sec: 300 },
         playlistExpectedClipCount: 2,
-      }),
+      })
     );
   });
 
@@ -556,17 +646,26 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       { name: "track-1", title: "Track One", style: "style 1", lyrics: "" },
       { name: "track-2", title: "Track Two", style: "style 2", lyrics: "" },
     ];
-    const currentSubmittedClipIds = ["clip-59", "clip-60", "clip-300", "clip-301"];
+    const currentSubmittedClipIds = [
+      "clip-59",
+      "clip-60",
+      "clip-300",
+      "clip-301",
+    ];
     const rows = ["clip-60", "clip-300"].map(() => ({}) as HTMLElement);
-    const { handlers, scrollAndMultiSelectByIdsMock, runHandler, sentMessages } =
-      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows, {
-        durationsById: {
-          "clip-59": 59,
-          "clip-60": 60,
-          "clip-300": 300,
-          "clip-301": 301,
-        },
-      });
+    const {
+      handlers,
+      scrollAndMultiSelectByIdsMock,
+      runHandler,
+      sentMessages,
+    } = await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows, {
+      durationsById: {
+        "clip-59": 59,
+        "clip-60": 60,
+        "clip-300": 300,
+        "clip-301": 301,
+      },
+    });
 
     runHandler({
       data: {
@@ -575,45 +674,59 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         collectionId: "collection-a",
       },
     });
-    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+    await vi.waitFor(() =>
+      expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1)
+    );
+    await vi.waitFor(() =>
+      expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true)
+    );
 
     handlers.get("downloadComplete")!({
       data: { filename: "/Users/test/Downloads/default-filter.zip" },
     });
 
-    await vi.waitFor(() => expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(1));
+    await vi.waitFor(() =>
+      expect(
+        sentMessages.filter((m) => m.type === "postDownloaded")
+      ).toHaveLength(1)
+    );
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       ["clip-60", "clip-300"],
-      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) })
     );
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         submittedClipIds: ["clip-60", "clip-300"],
         playlistExpectedClipCount: 2,
-      }),
+      })
     );
-    expectPostDownloadedBody(sentMessages.find((m) => m.type === "postDownloaded")?.payload, {
-      file_count: 2,
-      expected_file_count: 2,
-      format: "mp3",
-      download_path: "/Users/test/Downloads/default-filter.zip",
-    });
+    expectPostDownloadedBody(
+      sentMessages.find((m) => m.type === "postDownloaded")?.payload,
+      {
+        file_count: 2,
+        expected_file_count: 2,
+        format: "mp3",
+        download_path: "/Users/test/Downloads/default-filter.zip",
+      }
+    );
   });
 
   it("Given duration 未観測 clip が混在 When playlist 追加 Then 未観測 ID は multi-select しない", async () => {
-    const entries: PromptEntry[] = [{ name: "track-1", title: "Track One", style: "style 1", lyrics: "" }];
+    const entries: PromptEntry[] = [
+      { name: "track-1", title: "Track One", style: "style 1", lyrics: "" },
+    ];
     const currentSubmittedClipIds = ["clip-ok", "clip-unknown"];
-    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
-      currentSubmittedClipIds,
-      new Error("playlist rows missing"),
-      {
-        durationsById: {
-          "clip-ok": 120,
-          "clip-unknown": undefined,
-        },
-      },
-    );
+    const { scrollAndMultiSelectByIdsMock, runHandler } =
+      await loadContentScriptWithPlaylistRows(
+        currentSubmittedClipIds,
+        new Error("playlist rows missing"),
+        {
+          durationsById: {
+            "clip-ok": 120,
+            "clip-unknown": undefined,
+          },
+        }
+      );
 
     runHandler({
       data: {
@@ -624,33 +737,40 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       },
     });
 
-    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1)
+    );
+    await vi.waitFor(() =>
+      expect(writeResumeStateMock).toHaveBeenCalledTimes(1)
+    );
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       ["clip-ok"],
-      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) })
     );
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         submittedClipIds: ["clip-ok"],
         durationFilter: { min_sec: 60, max_sec: 300 },
         playlistExpectedClipCount: 1,
-      }),
+      })
     );
   });
 
   it("Given resume の保存済み ID に duration NG が混在 When playlist 追加 Then OK clip IDs のみに正規化する", async () => {
-    const entries: PromptEntry[] = [{ name: "track-1", title: "Track One", style: "style 1", lyrics: "" }];
-    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
-      [],
-      new Error("playlist rows missing"),
-      {
-        durationsById: {
-          "old-ok": 120,
-          "old-short": 30,
-        },
-      },
-    );
+    const entries: PromptEntry[] = [
+      { name: "track-1", title: "Track One", style: "style 1", lyrics: "" },
+    ];
+    const { scrollAndMultiSelectByIdsMock, runHandler } =
+      await loadContentScriptWithPlaylistRows(
+        [],
+        new Error("playlist rows missing"),
+        {
+          durationsById: {
+            "old-ok": 120,
+            "old-short": 30,
+          },
+        }
+      );
 
     runHandler({
       data: {
@@ -664,32 +784,39 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       },
     });
 
-    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1)
+    );
+    await vi.waitFor(() =>
+      expect(writeResumeStateMock).toHaveBeenCalledTimes(1)
+    );
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       ["old-ok"],
-      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) })
     );
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         submittedClipIds: ["old-ok"],
         durationFilter: { min_sec: 60, max_sec: 300 },
         playlistExpectedClipCount: 1,
-      }),
+      })
     );
   });
 
   it("Given resume の保存済み ID が正規化済み When duration 再観測前でも playlist 対象に残す", async () => {
-    const entries: PromptEntry[] = [{ name: "track-1", title: "Track One", style: "style 1", lyrics: "" }];
-    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
-      [],
-      new Error("playlist rows missing"),
-      {
-        durationsById: {
-          "old-ok": undefined,
-        },
-      },
-    );
+    const entries: PromptEntry[] = [
+      { name: "track-1", title: "Track One", style: "style 1", lyrics: "" },
+    ];
+    const { scrollAndMultiSelectByIdsMock, runHandler } =
+      await loadContentScriptWithPlaylistRows(
+        [],
+        new Error("playlist rows missing"),
+        {
+          durationsById: {
+            "old-ok": undefined,
+          },
+        }
+      );
 
     runHandler({
       data: {
@@ -704,10 +831,12 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       },
     });
 
-    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1)
+    );
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       ["old-ok"],
-      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) })
     );
   });
 
@@ -716,19 +845,21 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       { name: "track-1", title: "Track One", style: "style 1", lyrics: "" },
       { name: "track-2", title: "Track Two", style: "style 2", lyrics: "" },
     ];
-    const currentSubmittedClipIds = ["clip-short-1", "clip-short-2", "clip-long-1", "clip-long-2"];
-    const { progressMessages, scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
-      currentSubmittedClipIds,
-      [],
-      {
+    const currentSubmittedClipIds = [
+      "clip-short-1",
+      "clip-short-2",
+      "clip-long-1",
+      "clip-long-2",
+    ];
+    const { progressMessages, scrollAndMultiSelectByIdsMock, runHandler } =
+      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, [], {
         durationsById: {
           "clip-short-1": 30,
           "clip-short-2": 40,
           "clip-long-1": 420,
           "clip-long-2": 480,
         },
-      },
-    );
+      });
 
     runHandler({
       data: {
@@ -744,9 +875,11 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         expect.objectContaining({
           phase: PHASE.ERROR,
           index: entries.length,
-          message: expect.stringContaining("playlist 対象の OK clip ID が 0 件"),
-        }),
-      ),
+          message: expect.stringContaining(
+            "playlist 対象の OK clip ID が 0 件"
+          ),
+        })
+      )
     );
     expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
     expect(writeResumeStateMock).toHaveBeenCalledWith(
@@ -754,7 +887,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         submittedClipIds: [],
         durationFilter: { min_sec: 60, max_sec: 300 },
         playlistExpectedClipCount: 0,
-      }),
+      })
     );
   });
 
@@ -765,18 +898,15 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     ];
     const currentSubmittedClipIds = ["ng-1", "ng-2", "ok-1", "ok-2"];
     const rows = ["ok-1", "ok-2"].map(() => ({}) as HTMLElement);
-    const { scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
-      currentSubmittedClipIds,
-      rows,
-      {
+    const { scrollAndMultiSelectByIdsMock, runHandler } =
+      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows, {
         durationsById: {
           "ng-1": 30,
           "ng-2": 45,
           "ok-1": 120,
           "ok-2": 180,
         },
-      },
-    );
+      });
 
     runHandler({
       data: {
@@ -787,18 +917,22 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       },
     });
 
-    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(writeResumeStateMock).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1)
+    );
+    await vi.waitFor(() =>
+      expect(writeResumeStateMock).toHaveBeenCalledTimes(1)
+    );
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       ["ok-1", "ok-2"],
-      expect.objectContaining({ titleFallbackMap: expect.any(Map) }),
+      expect.objectContaining({ titleFallbackMap: expect.any(Map) })
     );
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         submittedClipIds: ["ok-1", "ok-2"],
         durationFilter: { min_sec: 60, max_sec: 300 },
         playlistExpectedClipCount: 2,
-      }),
+      })
     );
   });
 
@@ -808,10 +942,8 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       { name: "track-2", style: "style 2", lyrics: "" },
     ];
     const submittedClipIds = ["clip-1", "clip-2", "clip-3"];
-    const { progressMessages, scrollAndMultiSelectByIdsMock, runHandler } = await loadContentScriptWithPlaylistRows(
-      [],
-      [],
-    );
+    const { progressMessages, scrollAndMultiSelectByIdsMock, runHandler } =
+      await loadContentScriptWithPlaylistRows([], []);
 
     runHandler({
       data: {
@@ -828,8 +960,8 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
           phase: PHASE.ERROR,
           index: entries.length,
           message: expect.stringContaining("expected 4, got 3"),
-        }),
-      ),
+        })
+      )
     );
 
     expect(scrollAndMultiSelectByIdsMock).not.toHaveBeenCalled();
@@ -842,18 +974,16 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         name: `track-${index + 1}`,
         style: `style ${index + 1}`,
         lyrics: "",
-      }),
+      })
     );
     const range = { start: 4, end: 7 };
     const currentSubmittedClipIds = Array.from(
       { length: (range.end - range.start + 1) * CLIPS_PER_REQUEST },
-      (_, index) => `range-clip-${index + 1}`,
+      (_, index) => `range-clip-${index + 1}`
     );
     const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
-    const { scrollAndMultiSelectByIdsMock, runHandler, sentMessages } = await loadContentScriptWithPlaylistRows(
-      currentSubmittedClipIds,
-      rows,
-    );
+    const { scrollAndMultiSelectByIdsMock, runHandler, sentMessages } =
+      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows);
 
     runHandler({
       data: {
@@ -863,26 +993,34 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         range,
       },
     });
-    await vi.waitFor(() => expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1));
-    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "progress")).toBe(true));
+    await vi.waitFor(() =>
+      expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledTimes(1)
+    );
+    await vi.waitFor(() =>
+      expect(sentMessages.some((m) => m.type === "progress")).toBe(true)
+    );
 
     expect(scrollAndMultiSelectByIdsMock).toHaveBeenCalledWith(
       currentSubmittedClipIds,
-      expect.objectContaining({ isAborted: expect.any(Function) }),
+      expect.objectContaining({ isAborted: expect.any(Function) })
     );
     expect(writeResumeStateMock).not.toHaveBeenCalled();
-    expect(sentMessages.filter((m) => m.type === "startDownload")).toHaveLength(0);
-    expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(0);
+    expect(sentMessages.filter((m) => m.type === "startDownload")).toHaveLength(
+      0
+    );
+    expect(
+      sentMessages.filter((m) => m.type === "postDownloaded")
+    ).toHaveLength(0);
   });
 
   it("Given full collection run When Download all completes Then playlist URL と ZIP 完了を POST して FINISHED になる", async () => {
-    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+    const entries: PromptEntry[] = [
+      { name: "track-1", style: "style 1", lyrics: "" },
+    ];
     const currentSubmittedClipIds = ["clip-1", "clip-2"];
     const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
-    const { handlers, progressMessages, runHandler, sentMessages } = await loadContentScriptWithPlaylistRows(
-      currentSubmittedClipIds,
-      rows,
-    );
+    const { handlers, progressMessages, runHandler, sentMessages } =
+      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows);
 
     runHandler({
       data: {
@@ -891,16 +1029,26 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         collectionId: "collection-a",
       },
     });
-    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+    await vi.waitFor(() =>
+      expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true)
+    );
 
     handlers.get("downloadComplete")!({
       data: { filename: "/Users/test/Downloads/regression.zip" },
     });
 
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
-    expect(clearResumeStateForCollectionMock).toHaveBeenCalledWith("collection-a");
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
+    expect(clearResumeStateForCollectionMock).toHaveBeenCalledWith(
+      "collection-a"
+    );
 
-    const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
+    const downloadedPosts = sentMessages.filter(
+      (m) => m.type === "postDownloaded"
+    );
     expect(downloadedPosts).toHaveLength(1);
     expectPostDownloadedBody(downloadedPosts[0].payload, {
       file_count: 2,
@@ -913,14 +1061,15 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
   it.each(["m4a", "wav"] as const)(
     "Given download format=%s When full collection run completes Then startDownload と postDownloaded に同じ形式を渡す",
     async (format) => {
-      const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+      const entries: PromptEntry[] = [
+        { name: "track-1", style: "style 1", lyrics: "" },
+      ];
       const currentSubmittedClipIds = ["clip-1", "clip-2"];
       const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
-      const { handlers, progressMessages, runHandler, sentMessages } = await loadContentScriptWithPlaylistRows(
-        currentSubmittedClipIds,
-        rows,
-        { downloadFormatValue: format },
-      );
+      const { handlers, progressMessages, runHandler, sentMessages } =
+        await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows, {
+          downloadFormatValue: format,
+        });
 
       runHandler({
         data: {
@@ -929,34 +1078,43 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
           collectionId: "collection-a",
         },
       });
-      await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+      await vi.waitFor(() =>
+        expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true)
+      );
 
       handlers.get("downloadComplete")!({
         data: { filename: "/Users/test/Downloads/regression.zip" },
       });
 
       await vi.waitFor(() =>
-        expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })),
+        expect(progressMessages).toContainEqual(
+          expect.objectContaining({ phase: PHASE.FINISHED })
+        )
       );
-      expect(sentMessages.find((m) => m.type === "startDownload")?.payload).toMatchObject({ format });
-      const downloadedPosts = sentMessages.filter((m) => m.type === "postDownloaded");
+      expect(
+        sentMessages.find((m) => m.type === "startDownload")?.payload
+      ).toMatchObject({ format });
+      const downloadedPosts = sentMessages.filter(
+        (m) => m.type === "postDownloaded"
+      );
       expect(downloadedPosts).toHaveLength(1);
       expectPostDownloadedBody(downloadedPosts[0].payload, { format });
-    },
+    }
   );
 
   it("Given full collection run When ZIP 完了後の postDownloaded が失敗 Then ERROR で止めて resume state を保持する", async () => {
-    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+    const entries: PromptEntry[] = [
+      { name: "track-1", style: "style 1", lyrics: "" },
+    ];
     const currentSubmittedClipIds = ["clip-1", "clip-2"];
     const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
-    const { handlers, progressMessages, runHandler, sentMessages } = await loadContentScriptWithPlaylistRows(
-      currentSubmittedClipIds,
-      rows,
-      {
-        postDownloadedError: new Error("POST downloaded failed: 500 Internal Server Error"),
+    const { handlers, progressMessages, runHandler, sentMessages } =
+      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows, {
+        postDownloadedError: new Error(
+          "POST downloaded failed: 500 Internal Server Error"
+        ),
         postDownloadedRejectOnCall: 1,
-      },
-    );
+      });
 
     runHandler({
       data: {
@@ -965,7 +1123,9 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         collectionId: "collection-a",
       },
     });
-    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+    await vi.waitFor(() =>
+      expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true)
+    );
 
     handlers.get("downloadComplete")!({
       data: { filename: "/Users/test/Downloads/regression.zip" },
@@ -977,10 +1137,12 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
           phase: PHASE.ERROR,
           index: entries.length,
           message: expect.stringContaining("POST downloaded failed"),
-        }),
-      ),
+        })
+      )
     );
-    expect(sentMessages.filter((m) => m.type === "postDownloaded")).toHaveLength(1);
+    expect(
+      sentMessages.filter((m) => m.type === "postDownloaded")
+    ).toHaveLength(1);
     expect(writeResumeStateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         collectionId: "collection-a",
@@ -988,17 +1150,20 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         total: entries.length,
         submittedClipIds: currentSubmittedClipIds,
         playlistExpectedClipCount: currentSubmittedClipIds.length,
-      }),
+      })
     );
     expect(clearResumeStateForCollectionMock).not.toHaveBeenCalled();
   });
 
   it("Given 通常 run で playlist row 解決が失敗 When ERROR 終了 Then 完了時リロードは走らない", async () => {
-    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
-    const { progressMessages, scheduleRunCompleteReloadMock, runHandler } = await loadContentScriptWithPlaylistRows(
-      ["clip-1", "clip-2"],
-      new Error("playlist rows missing"),
-    );
+    const entries: PromptEntry[] = [
+      { name: "track-1", style: "style 1", lyrics: "" },
+    ];
+    const { progressMessages, scheduleRunCompleteReloadMock, runHandler } =
+      await loadContentScriptWithPlaylistRows(
+        ["clip-1", "clip-2"],
+        new Error("playlist rows missing")
+      );
 
     runHandler({
       data: {
@@ -1007,19 +1172,23 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         collectionId: "collection-a",
       },
     });
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.ERROR })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.ERROR })
+      )
+    );
 
     expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
   });
 
   it("Given full collection run の Download all が失敗 When run Then ERROR のまま終了する", async () => {
-    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+    const entries: PromptEntry[] = [
+      { name: "track-1", style: "style 1", lyrics: "" },
+    ];
     const currentSubmittedClipIds = ["clip-1", "clip-2"];
     const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
-    const { handlers, progressMessages, runHandler, sentMessages } = await loadContentScriptWithPlaylistRows(
-      currentSubmittedClipIds,
-      rows,
-    );
+    const { handlers, progressMessages, runHandler, sentMessages } =
+      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows);
 
     runHandler({
       data: {
@@ -1028,7 +1197,9 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         collectionId: "collection-a",
       },
     });
-    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+    await vi.waitFor(() =>
+      expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true)
+    );
 
     handlers.get("downloadFailed")!({
       data: { message: "ZIP ダウンロードが中断されました" },
@@ -1040,8 +1211,8 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
           phase: PHASE.ERROR,
           index: entries.length,
           message: expect.stringContaining("ZIP ダウンロードが中断されました"),
-        }),
-      ),
+        })
+      )
     );
     const lastProgress = progressMessages.at(-1);
     expect(lastProgress).toMatchObject({ phase: PHASE.ERROR });
@@ -1052,7 +1223,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
         total: entries.length,
         submittedClipIds: currentSubmittedClipIds,
         playlistExpectedClipCount: currentSubmittedClipIds.length,
-      }),
+      })
     );
     expect(clearResumeStateForCollectionMock).not.toHaveBeenCalled();
   });
@@ -1066,7 +1237,9 @@ describe("content.ts run 一式完了時のページリロード (#1411)", () =>
   });
 
   it("Given full collection run が完走 When FINISHED Then resume state 消去の後にリロードが予約される", async () => {
-    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+    const entries: PromptEntry[] = [
+      { name: "track-1", style: "style 1", lyrics: "" },
+    ];
     const currentSubmittedClipIds = ["clip-1", "clip-2"];
     const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
     const {
@@ -1086,12 +1259,18 @@ describe("content.ts run 一式完了時のページリロード (#1411)", () =>
         collectionId: "collection-a",
       },
     });
-    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+    await vi.waitFor(() =>
+      expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true)
+    );
     handlers.get("downloadComplete")!({
       data: { filename: "/Users/test/Downloads/regression.zip" },
     });
 
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
     // ガード通過（余剰なし）で Cmd+P まで進んでいる。走査は軽量モード
     //（1 pass + 超過即打ち切り + ID 劣化 row skip）で呼ばれる (#1411)
     expect(readSelectedClipIdsMock).toHaveBeenCalledWith(
@@ -1099,15 +1278,17 @@ describe("content.ts run 一式完了時のページリロード (#1411)", () =>
         maxScanPasses: 1,
         stopAboveCount: currentSubmittedClipIds.length,
         skipUnresolvedIds: true,
-      }),
+      })
     );
     expect(openAddToPlaylistDialogViaCmdPMock).toHaveBeenCalledTimes(1);
     // リロードは resume state 消去の後（#1321 の再開フローと衝突しない順序保証）
     expect(scheduleRunCompleteReloadMock).toHaveBeenCalledTimes(1);
-    expect(clearResumeStateForCollectionMock).toHaveBeenCalledWith("collection-a");
-    expect(clearResumeStateForCollectionMock.mock.invocationCallOrder[0]).toBeLessThan(
-      scheduleRunCompleteReloadMock.mock.invocationCallOrder[0],
+    expect(clearResumeStateForCollectionMock).toHaveBeenCalledWith(
+      "collection-a"
     );
+    expect(
+      clearResumeStateForCollectionMock.mock.invocationCallOrder[0]
+    ).toBeLessThan(scheduleRunCompleteReloadMock.mock.invocationCallOrder[0]);
   });
 
   it("Given manual range run（download なし）が完走 When FINISHED Then リロードが予約される", async () => {
@@ -1115,13 +1296,11 @@ describe("content.ts run 一式完了時のページリロード (#1411)", () =>
     const range = { start: 4, end: 7 };
     const currentSubmittedClipIds = Array.from(
       { length: (range.end - range.start + 1) * CLIPS_PER_REQUEST },
-      (_, index) => `range-clip-${index + 1}`,
+      (_, index) => `range-clip-${index + 1}`
     );
     const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
-    const { progressMessages, runHandler, scheduleRunCompleteReloadMock } = await loadContentScriptWithPlaylistRows(
-      currentSubmittedClipIds,
-      rows,
-    );
+    const { progressMessages, runHandler, scheduleRunCompleteReloadMock } =
+      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows);
 
     runHandler({
       data: {
@@ -1131,7 +1310,11 @@ describe("content.ts run 一式完了時のページリロード (#1411)", () =>
         range,
       },
     });
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
 
     expect(scheduleRunCompleteReloadMock).toHaveBeenCalledTimes(1);
   });
@@ -1139,12 +1322,21 @@ describe("content.ts run 一式完了時のページリロード (#1411)", () =>
   it("Given resume state 消去が失敗 When run 完走 Then FINISHED は維持しリロードのみ見送る", async () => {
     // 消去失敗のままリロードすると ResumeBanner が「中断からの再開」と誤判定するため、
     // FINISHED（終端 phase の不変条件）は守りつつリロードだけ見送る (#1411)。
-    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+    const entries: PromptEntry[] = [
+      { name: "track-1", style: "style 1", lyrics: "" },
+    ];
     const currentSubmittedClipIds = ["clip-1", "clip-2"];
     const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
-    clearResumeStateForCollectionMock.mockRejectedValueOnce(new Error("storage down"));
-    const { handlers, progressMessages, runHandler, sentMessages, scheduleRunCompleteReloadMock } =
-      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows);
+    clearResumeStateForCollectionMock.mockRejectedValueOnce(
+      new Error("storage down")
+    );
+    const {
+      handlers,
+      progressMessages,
+      runHandler,
+      sentMessages,
+      scheduleRunCompleteReloadMock,
+    } = await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows);
 
     runHandler({
       data: {
@@ -1153,12 +1345,18 @@ describe("content.ts run 一式完了時のページリロード (#1411)", () =>
         collectionId: "collection-a",
       },
     });
-    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+    await vi.waitFor(() =>
+      expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true)
+    );
     handlers.get("downloadComplete")!({
       data: { filename: "/Users/test/Downloads/regression.zip" },
     });
 
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
     expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
   });
 });
@@ -1170,14 +1368,20 @@ describe("content.ts Cmd+P 前の stale selection ガード (#1411)", () => {
   });
 
   it("Given 前回 run の選択が残っている When playlist 追加 Then Cmd+P 前に fail-loud で ERROR にする", async () => {
-    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+    const entries: PromptEntry[] = [
+      { name: "track-1", style: "style 1", lyrics: "" },
+    ];
     const currentSubmittedClipIds = ["clip-1", "clip-2"];
     const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
-    const { progressMessages, runHandler, openAddToPlaylistDialogViaCmdPMock, scheduleRunCompleteReloadMock } =
-      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows, {
-        // 完了時リロードが走らなかった経路の再現: target 2 件 + 前回 run の残り 2 件が選択中
-        guardSelectedClipIds: ["clip-1", "clip-2", "stale-1", "stale-2"],
-      });
+    const {
+      progressMessages,
+      runHandler,
+      openAddToPlaylistDialogViaCmdPMock,
+      scheduleRunCompleteReloadMock,
+    } = await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows, {
+      // 完了時リロードが走らなかった経路の再現: target 2 件 + 前回 run の残り 2 件が選択中
+      guardSelectedClipIds: ["clip-1", "clip-2", "stale-1", "stale-2"],
+    });
 
     runHandler({
       data: {
@@ -1192,15 +1396,16 @@ describe("content.ts Cmd+P 前の stale selection ガード (#1411)", () => {
           phase: PHASE.ERROR,
           index: entries.length,
           message: expect.stringContaining("ページをリロード"),
-        }),
-      ),
+        })
+      )
     );
 
     // 汚染された playlist を作らない: Cmd+P まで到達しない
     expect(openAddToPlaylistDialogViaCmdPMock).not.toHaveBeenCalled();
     expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
     // ERROR メッセージに余剰 ID を含め、運用者が混入源を特定できるようにする
-    const errorMessage = progressMessages.find((m) => m.phase === PHASE.ERROR)?.message ?? "";
+    const errorMessage =
+      progressMessages.find((m) => m.phase === PHASE.ERROR)?.message ?? "";
     expect(errorMessage).toContain("stale-1");
     expect(errorMessage).toContain("stale-2");
     // resume state は保持され、リロード後に playlist-only 再開できる
@@ -1209,7 +1414,7 @@ describe("content.ts Cmd+P 前の stale selection ガード (#1411)", () => {
         collectionId: "collection-a",
         failedIndex: entries.length,
         submittedClipIds: currentSubmittedClipIds,
-      }),
+      })
     );
     expect(clearResumeStateForCollectionMock).not.toHaveBeenCalled();
   });
@@ -1217,13 +1422,22 @@ describe("content.ts Cmd+P 前の stale selection ガード (#1411)", () => {
   it("Given ガード走査自体が失敗（render flake 等） When playlist 追加 Then fail-open でスキップし run を完走させる", async () => {
     // ガードは保険であり、走査失敗（0 件 throw / scroller 不在）で生成完了済みの run を
     // 巻き添えに ERROR 化しない。警告のみで Cmd+P へ続行する (#1411)。
-    const entries: PromptEntry[] = [{ name: "track-1", style: "style 1", lyrics: "" }];
+    const entries: PromptEntry[] = [
+      { name: "track-1", style: "style 1", lyrics: "" },
+    ];
     const currentSubmittedClipIds = ["clip-1", "clip-2"];
     const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
-    const { handlers, progressMessages, runHandler, sentMessages, openAddToPlaylistDialogViaCmdPMock } =
-      await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows, {
-        guardReadError: new Error("選択中の clip がありません。Suno で対象曲を選択してから再実行してください。"),
-      });
+    const {
+      handlers,
+      progressMessages,
+      runHandler,
+      sentMessages,
+      openAddToPlaylistDialogViaCmdPMock,
+    } = await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows, {
+      guardReadError: new Error(
+        "選択中の clip がありません。Suno で対象曲を選択してから再実行してください。"
+      ),
+    });
 
     runHandler({
       data: {
@@ -1232,13 +1446,21 @@ describe("content.ts Cmd+P 前の stale selection ガード (#1411)", () => {
         collectionId: "collection-a",
       },
     });
-    await vi.waitFor(() => expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true));
+    await vi.waitFor(() =>
+      expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true)
+    );
     handlers.get("downloadComplete")!({
       data: { filename: "/Users/test/Downloads/regression.zip" },
     });
 
-    await vi.waitFor(() => expect(progressMessages).toContainEqual(expect.objectContaining({ phase: PHASE.FINISHED })));
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
     expect(openAddToPlaylistDialogViaCmdPMock).toHaveBeenCalledTimes(1);
-    expect(progressMessages).not.toContainEqual(expect.objectContaining({ phase: PHASE.ERROR }));
+    expect(progressMessages).not.toContainEqual(
+      expect.objectContaining({ phase: PHASE.ERROR })
+    );
   });
 });

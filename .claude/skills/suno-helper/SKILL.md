@@ -12,7 +12,7 @@ description: "Use when Suno UI に投入する曲をブラウザで連続生成 
 
 ## 完了条件
 
-overlay の phase が `finished` に到達し、Step 6 の 6 点（playlist 紐付け / clip 数 = entry 数 × 2 / `02-Individual-music/` への音声配置 / `status = downloaded` / `suno_playlist_url` 記録 / `assets.music_downloaded = true`）がすべて確認できたとき完了とする（詳細は Step 6 が正）。異常値再生成を OFF にした run は、さらに duration guard NG の clip を試聴し、NG clip が ZIP に含まれることを確認してから完了とする。`entry-failed` や clip 数不足が残る場合は完了扱いにせず、失敗分の再実行を提案する。
+overlay の phase が `finished` に到達し、Step 6 の 6 点（playlist 紐付け / clip 数 = entry 数 × 2 / `02-Individual-music/` への音声配置 / `status = downloaded` / `suno_playlist_url` 記録 / `assets.music_downloaded = true`）を確認後、collection server を停止してプロセスが残っていないとき完了とする（詳細は Step 6 が正）。異常値再生成を OFF にした run は、さらに duration guard NG の clip を試聴し、NG clip が ZIP に含まれることを確認してから完了とする。`entry-failed`、clip 数不足、server プロセス残留のいずれかがある場合は完了扱いにしない。
 
 ## When to Use
 
@@ -132,6 +132,7 @@ agent が優先して使う DOM signal:
 - 全 checkbox OFF では実行できない。少なくとも 1 件を選ぶ
 - entry phase の ERROR / STOPPED から再開する場合は resume バナーの "再開" を押す。playlist / download phase の中断は **Playlist から再開** / **Download から再開** を使う
 - prompts の自動取得後に **異常値の曲を再生成する** を選ぶ。通常は既定 ON（duration guard NG の entry を最大 2 回再生成）。追加生成を避ける運用では OFF にし、NG を含む生成済み全 clip が playlist / download 候補に残ることを了承して進む
+- duration guard の閾値は `suno-prompts.json` の `duration_filter`（既定 60〜300 秒）を使う。長尺 BGM チャンネル等で範囲を変える場合はチャンネル側 `config/skills/suno.yaml::duration_filter` を override して `uv run yt-generate-suno` で再生成する（`/suno` SKILL.md Step 2 参照）。resume は run 開始時点の閾値を保持するため、閾値変更を効かせるには再開ではなく新規 run で実行する
 
 ### Step 4. "連続実行" を押す
 
@@ -197,6 +198,15 @@ handoff 条件（agent は自動突破しない）:
 **異常値の曲を再生成する** を OFF にした場合は、上記に加えて status / console warning で記録された duration guard NG の clip を playlist 上で試聴し、手動採否を確認する。NG clip も意図どおり ZIP に含まれていることを確認してから完了とする。
 
 音声配置と `workflow-state.json` 更新の両方に成功した後、ユーザーの Downloads 配下にある Suno ZIP は自動削除される。削除に失敗しても配置済み音声と workflow-state は維持され、警告が記録される。完了判定は ZIP の存在ではなく、展開済み音声ファイルと `workflow-state.json` を見る。
+
+上記 6 点を確認したら、起動時と同じ port のサーバーを停止し、プロセスが残っていないことを確認する（既定 port は 7873）。
+
+```bash
+uv run yt-collection-serve --stop --port 7873
+ps aux | grep '[y]t-collection-serve'
+```
+
+別 port で起動した場合は `7873` をその port に置き換える。`ps aux` に対象プロセスが表示される場合は完了扱いにしない。
 
 ### Step 7. 中断時
 

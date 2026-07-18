@@ -42,16 +42,55 @@ bash .claude/skills/automation-release/references/verify-extensions.sh [<name>]
 | 目的 | コマンド |
 |---|---|
 | 依存インストール | `nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile` |
+| 共有 lint toolchain インストール（check / fix の前提） | `nix develop .#extensions --command pnpm -C extensions install --frozen-lockfile`（`oxlint.config.ts` / `oxfmt.config.ts` の ultracite import を `extensions/node_modules` で解決する） |
 | 開発（HMR） | `nix develop .#extensions --command pnpm -C extensions/suno-helper dev` |
 | 本番ビルド | `nix develop .#extensions --command pnpm -C extensions/suno-helper build`（`.output/chrome-mv3/` に MV3 拡張を生成） |
 | 型チェック | `nix develop .#extensions --command pnpm -C extensions/suno-helper compile` |
 | unit テスト（Vitest） | `nix develop .#extensions --command pnpm -C extensions/suno-helper test` |
 | Playwright browser（初回） | `nix develop .#extensions --command pnpm -C extensions/suno-helper exec playwright install --with-deps chromium` |
 | e2e テスト（Playwright） | `nix develop .#extensions --command pnpm -C extensions/suno-helper test:e2e` |
-| lint / format | `nix develop .#extensions --command pnpm -C extensions/suno-helper lint` / `nix develop .#extensions --command pnpm -C extensions/suno-helper format:check` |
+| lint + format 検査 / 自動修正 | `nix develop .#extensions --command pnpm -C extensions/suno-helper check` / `nix develop .#extensions --command pnpm -C extensions/suno-helper fix` |
+| Fallow audit | `nix develop .#extensions --command pnpm -C extensions/suno-helper run audit` |
 | 配布 zip | `nix develop .#extensions --command pnpm -C extensions/suno-helper zip` |
 
 build 後は `extensions/suno-helper/.output/chrome-mv3/manifest.json`、zip 後は `extensions/suno-helper/.output/suno-helper-<package.json の version>-chrome.zip` が生成される。build / zip と期待名 zip が唯一の 1 件であることまで一括検証する場合は、前節の `verify-extensions.sh suno-helper` を使う。
+
+## 品質ゲートの責務
+
+| ゲート | 責務 |
+|---|---|
+| Oxlint + Oxfmt（`pnpm check`） | ultracite preset を extends した共通の `extensions/oxlint.config.ts` / `extensions/oxfmt.config.ts` に基づき lint とフォーマットを一括検査する（自動修正は `pnpm fix`） |
+| TypeScript（`pnpm compile`） | 型エラーがなく、WXT の型生成を含む compile が成功することを検査する |
+| Fallow（`pnpm run audit`） | `extensions/` 全体を静的解析し、既存 baseline との差分 finding を検査する |
+
+Fallow のローカル実行は上表のコマンドを使う。Extensions CI では pull request の base commit SHA を比較元として `pnpm run audit` を1回だけ実行する。共通設定の `audit.gate: new-only` により、base にない新規 error-severity finding がある場合だけ品質ゲートが失敗し、既存 finding や warn-severity finding だけなら成功する。
+
+Oxlint はコード単体の lint rule 違反を検出し、Fallow は未使用ファイルなどリポジトリ差分に増えた finding を検出する。Extensions CI では両者を独立した品質ゲートとして実行する。
+
+### React Hooks lint 契約
+
+旧 `eslint-plugin-react-hooks@7.1.1` の `recommended` で有効だった規則は、Oxlint 1.73.0 では次のように扱う。旧 severity をそのまま保てる native rule だけを共通設定で有効化する。
+
+| 旧規則 | 旧 severity | Oxlint 1.73.0 での扱い |
+|---|---:|---|
+| `rules-of-hooks` | error | `react/rules-of-hooks: error` |
+| `exhaustive-deps` | warn | `react/exhaustive-deps: warn` |
+| `static-components` | error | native rule なし。独立 follow-up |
+| `use-memo` | error | native rule なし。独立 follow-up |
+| `preserve-manual-memoization` | error | native rule なし。独立 follow-up |
+| `immutability` | error | native rule なし。独立 follow-up |
+| `globals` | error | native rule なし。独立 follow-up |
+| `refs` | error | native rule なし。独立 follow-up |
+| `set-state-in-effect` | error | native rule なし。独立 follow-up |
+| `error-boundaries` | error | native rule なし。独立 follow-up |
+| `purity` | error | native rule なし。独立 follow-up |
+| `set-state-in-render` | error | native rule なし。独立 follow-up |
+| `incompatible-library` | warn | native rule なし。独立 follow-up |
+| `unsupported-syntax` | warn | native rule なし。独立 follow-up |
+| `config` | error | native rule なし。独立 follow-up |
+| `gating` | error | native rule なし。独立 follow-up |
+
+非対応の14規則は黙って削除せず、同 severity の native 対応または個別 rule が利用可能になった時点で独立 follow-up として扱う。Oxlint 1.73.0 の `react/react-compiler` はこれらを個別には設定できず、旧 warn の `incompatible-library` まで error として報告する。そのため同規則を有効化して旧 warn 契約を意図せず強化しない。`reportAllBailouts` も同じ理由で有効化しない。
 
 ## unpacked ロード手順
 

@@ -37,16 +37,20 @@ from youtube_automation.utils.benchmark_analyzer import (
 )
 from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.config import load_config
+from youtube_automation.utils.cost_tracker import log_quota
 from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
 from youtube_automation.utils.profile import section
 from youtube_automation.utils.retry import execute_with_retry
 from youtube_automation.utils.skill_config import load_skill_config
-from youtube_automation.utils.youtube_service import get_youtube
+from youtube_automation.utils.youtube_service import get_youtube_readonly
 
 logger = logging.getLogger(__name__)
 
 # channels.list バッチ単位（YouTube Data API 上限）
 _CHANNELS_BATCH_SIZE = 50
+# quota 記録（Issue #2056）: read 系 list operation は 1 request = 1 unit
+_QUOTA_SERVICE = "youtube-data-api"
+_READ_QUOTA_UNITS = 1
 _VIDEO_DESCRIPTION_FIELD = "description"
 _DESCRIPTION_TTP_SECTION_TITLE = "概要欄TTPサンプル"
 _DESCRIPTION_TTP_SAMPLE_LIMIT = 3
@@ -72,6 +76,18 @@ def _markdown_code_fence(content: str) -> str:
     return "`" * max(3, max_backticks + 1)
 
 
+def _execute_read_with_quota(request, context: str, bucket: str, *, metadata: dict | None = None):
+    """read API request を実行し、成否に関わらず 1 request 分の quota を記録する。
+
+    quota は失敗した request でも消費されるため `finally` で記録し、
+    元例外はそのまま伝播させる。
+    """
+    try:
+        return execute_with_retry(request, context)
+    finally:
+        log_quota(_QUOTA_SERVICE, bucket, _READ_QUOTA_UNITS, metadata=metadata)
+
+
 class BenchmarkCollector:
     """競合チャンネルのベンチマークデータ収集（YouTube Data API）"""
 
@@ -87,7 +103,7 @@ class BenchmarkCollector:
     def initialize(self):
         """YouTube API 認証を実行する。"""
         logger.info("YouTube API 認証中...")
-        self.youtube = get_youtube()
+        self.youtube = get_youtube_readonly()
         logger.info("認証完了")
 
     def check_freshness(self) -> list[dict]:
@@ -136,7 +152,12 @@ class BenchmarkCollector:
                         part="snippet,statistics,contentDetails",
                         id=",".join(batch),
                     )
-                    resp = execute_with_retry(request, f"benchmark.channels_list (id={','.join(batch)})")
+                    resp = _execute_read_with_quota(
+                        request,
+                        f"benchmark.channels_list (id={','.join(batch)})",
+                        "channels.list",
+                        metadata={"context": "benchmark.channels_list", "batch_size": len(batch)},
+                    )
                 except YouTubeAPIError:
                     raise
             for item in resp.get("items", []):
@@ -195,7 +216,12 @@ class BenchmarkCollector:
                         maxResults=min(50, remaining),
                         pageToken=page_token,
                     )
-                    playlist_resp = execute_with_retry(request, "benchmark.playlist_items")
+                    playlist_resp = _execute_read_with_quota(
+                        request,
+                        "benchmark.playlist_items",
+                        "playlistItems.list",
+                        metadata={"context": "benchmark.playlist_items"},
+                    )
                 except YouTubeAPIError:
                     raise
             batch_ids = [item["contentDetails"]["videoId"] for item in playlist_resp.get("items", [])]
@@ -227,7 +253,12 @@ class BenchmarkCollector:
                         part="snippet,statistics,contentDetails",
                         id=",".join(batch),
                     )
-                    videos_resp = execute_with_retry(request, "benchmark.videos_list")
+                    videos_resp = _execute_read_with_quota(
+                        request,
+                        "benchmark.videos_list",
+                        "videos.list",
+                        metadata={"context": "benchmark.videos_list", "batch_size": len(batch)},
+                    )
                 except YouTubeAPIError:
                     raise
 
@@ -382,7 +413,12 @@ class BenchmarkCollector:
                 maxResults=50,
                 pageToken=page_token,
             )
-            resp = execute_with_retry(request, "benchmark.playlists_list")
+            resp = _execute_read_with_quota(
+                request,
+                "benchmark.playlists_list",
+                "playlists.list",
+                metadata={"context": "benchmark.playlists_list"},
+            )
             playlists_raw.extend(resp.get("items", []))
             page_token = resp.get("nextPageToken")
             if not page_token:
@@ -407,7 +443,12 @@ class BenchmarkCollector:
                     maxResults=50,
                     pageToken=item_page_token,
                 )
-                items_resp = execute_with_retry(request, "benchmark.playlist_items")
+                items_resp = _execute_read_with_quota(
+                    request,
+                    "benchmark.playlist_items",
+                    "playlistItems.list",
+                    metadata={"context": "benchmark.playlists_playlist_items"},
+                )
                 for item in items_resp.get("items", []):
                     item_snip = item["snippet"]
                     video_id = item["contentDetails"]["videoId"]
@@ -443,7 +484,12 @@ class BenchmarkCollector:
                 part="statistics,contentDetails",
                 id=",".join(batch),
             )
-            videos_resp = execute_with_retry(request, "benchmark.videos_list")
+            videos_resp = _execute_read_with_quota(
+                request,
+                "benchmark.videos_list",
+                "videos.list",
+                metadata={"context": "benchmark.playlists_videos_list", "batch_size": len(batch)},
+            )
             for v in videos_resp.get("items", []):
                 stats = v.get("statistics", {})
                 content = v.get("contentDetails", {})

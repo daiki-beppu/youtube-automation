@@ -18,11 +18,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import re
 import sys
 from pathlib import Path
 
+from youtube_automation.utils import cost_tracker
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import channel_dir, load_config
 from youtube_automation.utils.config.config import ChannelConfig
@@ -49,6 +51,18 @@ TS_RE = re.compile(r"^\d{1,2}:\d{2}")
 
 # skill-config に chapters.remote_max が無い場合の最終フォールバック
 _FALLBACK_REMOTE_CHAPTER_MAX = 12
+
+_QUOTA_SERVICE = "youtube-data-api"
+_READ_QUOTA_UNITS = 1
+
+
+def _record_read_quota(bucket: str) -> None:
+    """read 1 リクエスト分の quota 消費を記録する。記録失敗で元の処理は止めない。"""
+    try:
+        with contextlib.redirect_stdout(sys.stderr):
+            cost_tracker.log_quota(_QUOTA_SERVICE, bucket, _READ_QUOTA_UNITS)
+    except Exception:
+        pass
 
 
 def _remote_chapter_max() -> int:
@@ -160,14 +174,18 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
 
 def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
     """Fetch all videos from YouTube and check live state."""
-    from youtube_automation.utils.youtube_service import get_youtube
+    from youtube_automation.utils.youtube_service import get_youtube_readonly
 
-    yt = get_youtube()
+    yt = get_youtube_readonly()
     issues: dict[str, list[str]] = {vid: [] for vid in video_ids}
     remote_chapter_max = _remote_chapter_max()
 
     ids_csv = ",".join(video_ids.keys())
-    resp = yt.videos().list(id=ids_csv, part="snippet,localizations").execute()
+    try:
+        resp = yt.videos().list(id=ids_csv, part="snippet,localizations").execute()
+    finally:
+        # 失敗リクエストにも quota は課金されるため、成功・失敗どちらでも記録する
+        _record_read_quota("videos.list")
     by_id = {it["id"]: it for it in resp.get("items", [])}
 
     for vid, _name in video_ids.items():

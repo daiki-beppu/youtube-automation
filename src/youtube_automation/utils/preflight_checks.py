@@ -117,7 +117,10 @@ def check_suno_genre_line_char_limit(suno_cfg: Mapping[str, object]) -> str | No
     genre_line = str(suno_cfg.get("genre_line") or "").strip()
     if not genre_line:
         return None
-    limit = SUNO_DEFAULT_STYLE_CHAR_LIMIT
+    limit = _positive_int(
+        suno_cfg.get("style_char_limit"),
+        default=SUNO_DEFAULT_STYLE_CHAR_LIMIT,
+    )
     if len(genre_line) <= limit:
         return None
     return (
@@ -225,7 +228,8 @@ def check_title_template_compliance(
     検出した逸脱を `; ` で連結した理由文字列を返し、問題なければ None を返す:
 
     - **鋳型形式**: セパレータ（既定 ` | `）で LHS/RHS に分割でき、RHS が
-      チャンネル鋳型（既定 `N Hours of ...`）に一致するか
+      チャンネル鋳型（既定 `N Hours of ...`）に一致するか。複数セパレータを持つ
+      鋳型は、template 全体の固定部分と変数部分に一致するか検証する
     - **巻数表記**: LHS に `Vol.` / `Vol N` / `Part N` / ローマ数字巻数 / `#N` を
       含まないか（コレクション名＝内部管理ラベルの公開タイトル流用事故を検出）
     - **RHS 重複**: 既存 live タイトル群と RHS（セパレータ以降）が完全一致しないか
@@ -255,14 +259,21 @@ def check_title_template_compliance(
         return None
 
     normalized = title.strip()
-    parts = normalized.split(separator)
-    if len(parts) != 2:
-        return f"鋳型形式逸脱: '{separator.strip()}' で LHS/RHS に分割できません: {normalized!r}"
+    template_parts = template.split(separator) if template else []
+    is_multi_part_template = len(template_parts) > 2
+    if is_multi_part_template:
+        if not _matches_title_template(normalized, template):
+            return f"鋳型形式逸脱: 鋳型に一致しません: {normalized!r}"
+        parts = normalized.split(separator, maxsplit=1)
+    else:
+        parts = normalized.split(separator)
+        if len(parts) != 2:
+            return f"鋳型形式逸脱: '{separator.strip()}' で LHS/RHS に分割できません: {normalized!r}"
     lhs, rhs = parts[0].strip(), parts[1].strip()
 
     issues: list[str] = []
 
-    if not re.match(rhs_pattern, rhs):
+    if not is_multi_part_template and not re.match(rhs_pattern, rhs):
         issues.append(f"RHS が鋳型に一致しません（要 /{rhs_pattern}/）: {rhs!r}")
 
     vol_hit = _first_pattern_hit(lhs, volume_patterns)
@@ -276,6 +287,15 @@ def check_title_template_compliance(
         issues.append(f"LHS に鋳型語彙 {list(core_vocabulary)} が含まれません: {lhs!r}")
 
     return "; ".join(issues) if issues else None
+
+
+def _matches_title_template(title: str, template: str) -> bool:
+    """複数セパレータを持つ title.template と公開タイトルを照合する."""
+    pattern_parts = re.split(r"(\{[^{}]+\})", template)
+    pattern = "".join(
+        ".+?" if part.startswith("{") and part.endswith("}") else re.escape(part) for part in pattern_parts
+    )
+    return re.fullmatch(pattern, title) is not None
 
 
 def check_title_duplicate_warnings(

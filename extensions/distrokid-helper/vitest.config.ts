@@ -1,5 +1,6 @@
-import { defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
+
+import { defineConfig } from "vitest/config";
 
 // unit テスト（tests/**/*.test.{ts,tsx}）専用。E2E（tests/e2e）は Playwright が担う。
 //

@@ -9,7 +9,10 @@ import type { PromptEntry } from "../../shared/api";
 
 export const TEST_COLLECTION_ID = "20260601-clm-test-collection";
 
-export function snapshotOptions(playlistName?: string): { collectionId: string; playlistName?: string } {
+export function snapshotOptions(playlistName?: string): {
+  collectionId: string;
+  playlistName?: string;
+} {
   return playlistName === undefined
     ? { collectionId: TEST_COLLECTION_ID }
     : { collectionId: TEST_COLLECTION_ID, playlistName };
@@ -29,7 +32,12 @@ export function makePromptEntries(count: number): PromptEntry[] {
 }
 
 /** strict 可視判定用に getBoundingClientRect を擬似的に与える (jsdom は常に 0×0 を返すため)。 */
-export function markBbox(el: HTMLElement, width: number, height: number, y = 0): void {
+export function markBbox(
+  el: HTMLElement,
+  width: number,
+  height: number,
+  y = 0
+): void {
   Object.defineProperty(el, "getBoundingClientRect", {
     configurable: true,
     value: () => ({
@@ -75,7 +83,10 @@ export function addCaptchaIframe(opts: {
 }
 
 /** aria-label 付き <button> を生成する。findCardRoot の構造判定 (Select/Remix/Edit) に使う。 */
-function makeAriaButton(label: string, opts: { disabled?: boolean; ariaDisabled?: boolean } = {}): HTMLButtonElement {
+function makeAriaButton(
+  label: string,
+  opts: { disabled?: boolean; ariaDisabled?: boolean } = {}
+): HTMLButtonElement {
   const btn = document.createElement("button");
   btn.setAttribute("aria-label", label);
   if (opts.disabled) btn.disabled = true;
@@ -98,7 +109,7 @@ export function buildClipCard(
     generating?: boolean;
     visible?: boolean;
     generatingVia?: "disabled" | "aria-disabled";
-  } = {},
+  } = {}
 ): HTMLElement {
   const via = opts.generatingVia ?? "disabled";
   const card = document.createElement("div");
@@ -108,10 +119,12 @@ export function buildClipCard(
       disabled: opts.generating === true && via === "disabled",
       ariaDisabled: opts.generating === true && via === "aria-disabled",
     }),
-    makeAriaButton("Edit title"),
+    makeAriaButton("Edit title")
   );
   const title = document.createElement("span");
-  title.textContent = opts.generating ? "Untitled" : "Orchestral Test Verification";
+  title.textContent = opts.generating
+    ? "Untitled"
+    : "Orchestral Test Verification";
   card.appendChild(title);
 
   if (opts.visible === false) {
@@ -129,7 +142,7 @@ export function addClipCard(
     generating?: boolean;
     visible?: boolean;
     generatingVia?: "disabled" | "aria-disabled";
-  } = {},
+  } = {}
 ): HTMLElement {
   const card = buildClipCard(opts);
   document.body.appendChild(card);
@@ -138,7 +151,9 @@ export function addClipCard(
 
 /** generating な card の Remix btn を enabled に戻し「完了」状態にする（poll 中に slot が空く状況を作る）。 */
 export function completeClipCard(card: HTMLElement): void {
-  const remix = card.querySelector<HTMLButtonElement>('button[aria-label="Remix clip"]');
+  const remix = card.querySelector<HTMLButtonElement>(
+    'button[aria-label="Remix clip"]'
+  );
   if (!remix) {
     throw new Error("test fixture 不整合: card 内に Remix btn がありません。");
   }
@@ -154,7 +169,9 @@ export function completeClipCard(card: HTMLElement): void {
  * だけ定義して両者から import する (DRY)。
  *   - visible=false: display:none + bbox 0×0（strict isVisible で除外される toast を作る）
  */
-export function addQueueErrorDialog(opts: { text?: string; japanese?: string; visible?: boolean } = {}): HTMLElement {
+export function addQueueErrorDialog(
+  opts: { text?: string; japanese?: string; visible?: boolean } = {}
+): HTMLElement {
   const dialog = document.createElement("div");
   dialog.setAttribute("role", "dialog");
 
@@ -167,7 +184,9 @@ export function addQueueErrorDialog(opts: { text?: string; japanese?: string; vi
   h3.textContent = opts.text ?? "Generation in progress";
   const span = document.createElement("span");
   span.className = "text-sm opacity-70";
-  span.textContent = opts.japanese ?? "他の曲の生成が完了するまでお待ちいただき、その後もう一度お試しください。";
+  span.textContent =
+    opts.japanese ??
+    "他の曲の生成が完了するまでお待ちいただき、その後もう一度お試しください。";
   dialog.append(srH2, srP, h3, span);
 
   document.body.appendChild(dialog);

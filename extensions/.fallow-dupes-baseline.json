@@ -1,0 +1,14 @@
+{
+  "clone_groups": [
+    "distrokid-helper/components/ui/button.tsx:7-72|suno-helper/components/ui/button.tsx:7-72",
+    "distrokid-helper/components/ui/card.tsx:5-22|suno-helper/components/ui/card.tsx:5-22",
+    "distrokid-helper/components/useDistrokidRunner.ts:370-375|suno-helper/components/useSunoRunner.ts:837-842",
+    "distrokid-helper/entrypoints/popup/style.css:5-27|suno-helper/components/theme.css:6-28",
+    "distrokid-helper/entrypoints/popup/style.css:27-81|suno-helper/components/theme.css:29-83",
+    "distrokid-helper/lib/distrokid-injector.ts:863-870|distrokid-helper/lib/distrokid-injector.ts:918-928",
+    "shared/api.ts:365-373|shared/api.ts:565-573",
+    "suno-helper/components/useSunoRunner.ts:1079-1087|suno-helper/components/useSunoRunner.ts:906-916",
+    "suno-helper/lib/bridge-listener.ts:144-157|suno-helper/lib/bridge-listener.ts:97-110",
+    "suno-helper/lib/download-watcher.ts:132-146|suno-helper/lib/download-watcher.ts:152-171"
+  ]
+}

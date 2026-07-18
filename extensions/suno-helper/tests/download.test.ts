@@ -12,7 +12,9 @@ function stubElement(): HTMLElement {
   return { click: vi.fn() } as unknown as HTMLElement;
 }
 
-function createMockDeps(overrides?: Partial<TriggerDownloadAllDeps>): TriggerDownloadAllDeps {
+function createMockDeps(
+  overrides?: Partial<TriggerDownloadAllDeps>
+): TriggerDownloadAllDeps {
   const moreButton = stubElement();
   const downloadMenuItem = stubElement();
   const formatModal = stubElement();
@@ -66,7 +68,11 @@ describe("triggerDownloadAll", () => {
 
     // Step 5: 確認ボタンを click
     expect(deps.clickConfirm).toHaveBeenCalledWith(formatModal);
-    expect(deps.waitForModalClose).toHaveBeenCalledWith(formatModal, expect.any(Number), expect.any(Number));
+    expect(deps.waitForModalClose).toHaveBeenCalledWith(
+      formatModal,
+      expect.any(Number),
+      expect.any(Number)
+    );
 
     expect(deps.sleep).toHaveBeenCalled();
   });
@@ -79,7 +85,11 @@ describe("triggerDownloadAll", () => {
 
     await triggerDownloadAll("mp3", deps);
 
-    expect(deps.waitForModalClose).toHaveBeenCalledWith(formatModal, expect.any(Number), expect.any(Number));
+    expect(deps.waitForModalClose).toHaveBeenCalledWith(
+      formatModal,
+      expect.any(Number),
+      expect.any(Number)
+    );
     const [, timeoutMs] = vi.mocked(deps.waitForModalClose).mock.calls[0];
     expect(timeoutMs).toBeGreaterThan(10_000);
   });
@@ -89,7 +99,9 @@ describe("triggerDownloadAll", () => {
       findMoreButton: vi.fn(() => null),
     });
 
-    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(/More メニューボタン.*見つかりませんでした/);
+    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(
+      /More メニューボタン.*見つかりませんでした/
+    );
   });
 
   it("format 引数が selectFormat に正しく渡される (wav)", async () => {
@@ -109,7 +121,9 @@ describe("triggerDownloadAll", () => {
     const deps = createMockDeps({
       waitForDownloadMenuItem: vi
         .fn()
-        .mockRejectedValueOnce(new Error("Download all menu item が見つかりませんでした"))
+        .mockRejectedValueOnce(
+          new Error("Download all menu item が見つかりませんでした")
+        )
         .mockResolvedValueOnce(stubElement()),
       waitForFormatModal: vi.fn(async () => formatModal),
     });
@@ -129,7 +143,9 @@ describe("triggerDownloadAll", () => {
       }),
     });
 
-    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(/Download all menu item/);
+    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(
+      /Download all menu item/
+    );
     expect(deps.findMoreButton).toHaveBeenCalledTimes(3);
     expect(deps.waitForDownloadMenuItem).toHaveBeenCalledTimes(3);
     // selectFormat / clickConfirm は呼ばれない
@@ -160,7 +176,9 @@ describe("triggerDownloadAll", () => {
       }),
     });
 
-    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(/format modal timed out/);
+    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(
+      /format modal timed out/
+    );
     expect(deps.waitForFormatModal).toHaveBeenCalledTimes(2);
     expect(deps.selectFormat).not.toHaveBeenCalled();
   });
@@ -168,11 +186,15 @@ describe("triggerDownloadAll", () => {
   it("selectFormat が throw した場合はそのまま伝播する", async () => {
     const deps = createMockDeps({
       selectFormat: vi.fn(() => {
-        throw new Error('形式 "flac" に対応するオプションがモーダル内に見つかりませんでした');
+        throw new Error(
+          '形式 "flac" に対応するオプションがモーダル内に見つかりませんでした'
+        );
       }),
     });
 
-    await expect(triggerDownloadAll("flac", deps)).rejects.toThrow(/形式 "flac"/);
+    await expect(triggerDownloadAll("flac", deps)).rejects.toThrow(
+      /形式 "flac"/
+    );
     expect(deps.clickConfirm).not.toHaveBeenCalled();
   });
 
@@ -183,7 +205,9 @@ describe("triggerDownloadAll", () => {
       }),
     });
 
-    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(/形式選択モーダル/);
+    await expect(triggerDownloadAll("mp3", deps)).rejects.toThrow(
+      /形式選択モーダル/
+    );
     expect(deps.clickConfirm).toHaveBeenCalled();
   });
 
@@ -208,12 +232,18 @@ describe("triggerDownloadAll", () => {
         <button class="hxc-btn-variant-primary">Download</button>
       </div>
     `;
-    const more = document.querySelector<HTMLButtonElement>('button[aria-label="More options"]')!;
-    const downloadAll = document.querySelector<HTMLButtonElement>('button[aria-label="Download all"]')!;
-    const mp3 = Array.from(document.querySelectorAll<HTMLButtonElement>("button.flex.w-full")).find(
-      (button) => button.textContent?.trim() === "MP3",
+    const more = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="More options"]'
     )!;
-    const confirm = document.querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!;
+    const downloadAll = document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Download all"]'
+    )!;
+    const mp3 = Array.from(
+      document.querySelectorAll<HTMLButtonElement>("button.flex.w-full")
+    ).find((button) => button.textContent?.trim() === "MP3")!;
+    const confirm = document.querySelector<HTMLButtonElement>(
+      "button.hxc-btn-variant-primary"
+    )!;
     more.addEventListener("click", () => clicked.push("more"));
     downloadAll.addEventListener("click", () => clicked.push("download-all"));
     mp3.addEventListener("click", () => clicked.push("mp3"));
@@ -253,12 +283,14 @@ describe("triggerDownloadAll", () => {
     document
       .querySelector<HTMLButtonElement>("button.flex.w-full")!
       .addEventListener("click", () => clicked.push("mp3"));
-    document.querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!.addEventListener("click", () => {
-      clicked.push("confirm");
-      setTimeout(() => {
-        document.querySelector(".modal-class.modal-overlay")?.remove();
-      }, 11_000);
-    });
+    document
+      .querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!
+      .addEventListener("click", () => {
+        clicked.push("confirm");
+        setTimeout(() => {
+          document.querySelector(".modal-class.modal-overlay")?.remove();
+        }, 11_000);
+      });
 
     const result = triggerDownloadAll("mp3");
     await vi.advanceTimersByTimeAsync(20_000);
@@ -299,14 +331,21 @@ describe("triggerDownloadAll", () => {
     document
       .querySelector<HTMLButtonElement>("button.flex.w-full")!
       .addEventListener("click", () => clicked.push("mp3"));
-    document.querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!.addEventListener("click", () => {
-      clicked.push("confirm");
-      document.querySelector(".modal-class.modal-overlay")?.remove();
-    });
+    document
+      .querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!
+      .addEventListener("click", () => {
+        clicked.push("confirm");
+        document.querySelector(".modal-class.modal-overlay")?.remove();
+      });
 
     await triggerDownloadAll("mp3");
 
-    expect(clicked).toEqual(["selected-row-more", "download-all", "mp3", "confirm"]);
+    expect(clicked).toEqual([
+      "selected-row-more",
+      "download-all",
+      "mp3",
+      "confirm",
+    ]);
   });
 
   it("DOM fixture: list view の clip-row 配下にある More を押す", async () => {
@@ -341,14 +380,21 @@ describe("triggerDownloadAll", () => {
     document
       .querySelector<HTMLButtonElement>("button.flex.w-full")!
       .addEventListener("click", () => clicked.push("m4a"));
-    document.querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!.addEventListener("click", () => {
-      clicked.push("confirm");
-      document.querySelector(".modal-class.modal-overlay")?.remove();
-    });
+    document
+      .querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!
+      .addEventListener("click", () => {
+        clicked.push("confirm");
+        document.querySelector(".modal-class.modal-overlay")?.remove();
+      });
 
     await triggerDownloadAll("m4a");
 
-    expect(clicked).toEqual(["list-row-more", "download-all", "m4a", "confirm"]);
+    expect(clicked).toEqual([
+      "list-row-more",
+      "download-all",
+      "m4a",
+      "confirm",
+    ]);
   });
 
   it('DOM fixture: aria-label="More menu contents" の More を押す', async () => {
@@ -379,14 +425,21 @@ describe("triggerDownloadAll", () => {
     document
       .querySelector<HTMLButtonElement>("button.flex.w-full")!
       .addEventListener("click", () => clicked.push("mp3"));
-    document.querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!.addEventListener("click", () => {
-      clicked.push("confirm");
-      document.querySelector(".modal-class.modal-overlay")?.remove();
-    });
+    document
+      .querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!
+      .addEventListener("click", () => {
+        clicked.push("confirm");
+        document.querySelector(".modal-class.modal-overlay")?.remove();
+      });
 
     await triggerDownloadAll("mp3");
 
-    expect(clicked).toEqual(["selected-row-more", "download-all", "mp3", "confirm"]);
+    expect(clicked).toEqual([
+      "selected-row-more",
+      "download-all",
+      "mp3",
+      "confirm",
+    ]);
   });
 
   it("DOM fixture: selected clip row に More が無ければ未選択 row の More を押さず throw する", async () => {
@@ -409,7 +462,9 @@ describe("triggerDownloadAll", () => {
       .querySelector<HTMLButtonElement>('[data-testid="unselected-more"]')!
       .addEventListener("click", () => clicked.push("unselected-more"));
 
-    await expect(triggerDownloadAll("mp3")).rejects.toThrow(/More メニューボタン.*見つかりませんでした/);
+    await expect(triggerDownloadAll("mp3")).rejects.toThrow(
+      /More メニューボタン.*見つかりませんでした/
+    );
     expect(clicked).toEqual([]);
   });
 
@@ -432,14 +487,16 @@ describe("triggerDownloadAll", () => {
         <button class="hxc-btn-variant-primary">Download</button>
       </div>
     `;
-    const downloadAll = Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find(
-      (button) => button.textContent?.trim() === "Download all",
-    )!;
+    const downloadAll = Array.from(
+      document.querySelectorAll<HTMLButtonElement>("button")
+    ).find((button) => button.textContent?.trim() === "Download all")!;
     downloadAll.addEventListener("click", () => clicked.push("download-all"));
-    document.querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!.addEventListener("click", () => {
-      clicked.push("confirm");
-      document.querySelector(".modal-class.modal-overlay")?.remove();
-    });
+    document
+      .querySelector<HTMLButtonElement>("button.hxc-btn-variant-primary")!
+      .addEventListener("click", () => {
+        clicked.push("confirm");
+        document.querySelector(".modal-class.modal-overlay")?.remove();
+      });
 
     await triggerDownloadAll("mp3");
 
@@ -502,6 +559,8 @@ describe("triggerDownloadAll", () => {
       </div>
     `;
 
-    await expect(triggerDownloadAll("mp3")).rejects.toThrow(/ダウンロード確認ボタン/);
+    await expect(triggerDownloadAll("mp3")).rejects.toThrow(
+      /ダウンロード確認ボタン/
+    );
   });
 });

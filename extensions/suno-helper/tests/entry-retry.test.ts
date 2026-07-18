@@ -9,9 +9,14 @@
 //   - 中断 → "aborted"
 import { describe, expect, it, vi } from "vitest";
 
-import { runEntryWithRetry, type RunEntryWithRetryOptions } from "../lib/entry-retry";
+import {
+  runEntryWithRetry,
+  type RunEntryWithRetryOptions,
+} from "../lib/entry-retry";
 
-function makeOptions(overrides: Partial<RunEntryWithRetryOptions> = {}): RunEntryWithRetryOptions {
+function makeOptions(
+  overrides: Partial<RunEntryWithRetryOptions> = {}
+): RunEntryWithRetryOptions {
   return {
     attempt: vi.fn().mockResolvedValue(undefined),
     isAborted: () => false,
@@ -34,12 +39,17 @@ describe("runEntryWithRetry: 失敗分類と再試行", () => {
   });
 
   it("Given 1 回目失敗 → 2 回目成功 When 実行 Then outcome=ok・retry 間に sleep を挟む", async () => {
-    const attempt = vi.fn().mockRejectedValueOnce(new Error("一時的失敗")).mockResolvedValueOnce(undefined);
+    const attempt = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("一時的失敗"))
+      .mockResolvedValueOnce(undefined);
     const sleep = vi.fn().mockResolvedValue(undefined);
     const onRetry = vi.fn();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const result = await runEntryWithRetry(makeOptions({ attempt, sleep, retryDelayMs: () => 1234, onRetry }));
+    const result = await runEntryWithRetry(
+      makeOptions({ attempt, sleep, retryDelayMs: () => 1234, onRetry })
+    );
 
     expect(result).toEqual({ outcome: "ok" });
     expect(attempt).toHaveBeenCalledTimes(2);
@@ -55,7 +65,9 @@ describe("runEntryWithRetry: 失敗分類と再試行", () => {
     const onRetry = vi.fn();
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const result = await runEntryWithRetry(makeOptions({ attempt, maxRetry: 2, onRetry }));
+    const result = await runEntryWithRetry(
+      makeOptions({ attempt, maxRetry: 2, onRetry })
+    );
 
     expect(result).toEqual({ outcome: "failed", error });
     expect(attempt).toHaveBeenCalledTimes(3); // 初回 + retry 2
@@ -69,7 +81,9 @@ describe("runEntryWithRetry: 失敗分類と再試行", () => {
   it("Given fatal エラー When 実行 Then 即 outcome=fatal（retry しない）", async () => {
     const error = new Error("DOM 不在");
     const attempt = vi.fn().mockRejectedValue(error);
-    const result = await runEntryWithRetry(makeOptions({ attempt, isFatal: (e) => e === error }));
+    const result = await runEntryWithRetry(
+      makeOptions({ attempt, isFatal: (e) => e === error })
+    );
     expect(result).toEqual({ outcome: "fatal", error });
     expect(attempt).toHaveBeenCalledTimes(1);
   });
@@ -77,7 +91,9 @@ describe("runEntryWithRetry: 失敗分類と再試行", () => {
   it("Given 投入済みエラー（wasSubmitted=true） When 実行 Then outcome=presumed-done（retry せず重複生成を防ぐ）", async () => {
     const error = new Error("生成完了の検知がタイムアウトしました。");
     const attempt = vi.fn().mockRejectedValue(error);
-    const result = await runEntryWithRetry(makeOptions({ attempt, wasSubmitted: (e) => e === error }));
+    const result = await runEntryWithRetry(
+      makeOptions({ attempt, wasSubmitted: (e) => e === error })
+    );
     expect(result).toEqual({ outcome: "presumed-done", error });
     expect(attempt).toHaveBeenCalledTimes(1);
   });
@@ -88,7 +104,9 @@ describe("runEntryWithRetry: 失敗分類と再試行", () => {
       aborted = true;
       throw new Error("中断と同時の失敗");
     });
-    const result = await runEntryWithRetry(makeOptions({ attempt, isAborted: () => aborted }));
+    const result = await runEntryWithRetry(
+      makeOptions({ attempt, isAborted: () => aborted })
+    );
     expect(result).toEqual({ outcome: "aborted" });
     expect(attempt).toHaveBeenCalledTimes(1);
   });
@@ -101,7 +119,9 @@ describe("runEntryWithRetry: 失敗分類と再試行", () => {
     });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const result = await runEntryWithRetry(makeOptions({ attempt, sleep, isAborted: () => aborted }));
+    const result = await runEntryWithRetry(
+      makeOptions({ attempt, sleep, isAborted: () => aborted })
+    );
 
     expect(result).toEqual({ outcome: "aborted" });
     expect(attempt).toHaveBeenCalledTimes(1);
@@ -112,7 +132,11 @@ describe("runEntryWithRetry: 失敗分類と再試行", () => {
     const error = new Error("fatal");
     const attempt = vi.fn().mockRejectedValue(error);
     const result = await runEntryWithRetry(
-      makeOptions({ attempt, isAborted: () => true, isFatal: (e) => e === error }),
+      makeOptions({
+        attempt,
+        isAborted: () => true,
+        isFatal: (e) => e === error,
+      })
     );
     expect(result).toEqual({ outcome: "fatal", error });
   });

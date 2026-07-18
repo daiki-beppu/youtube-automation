@@ -32,3 +32,8 @@
 
 # ドキュメント
 *.pdf binary
+
+# CHANGELOG は並行 PR が [Unreleased] 先頭へ同時追記して conflict しやすいため
+# union merge で両側の追記行を機械的に取り込む（issue #2155）
+# 副作用（重複行・順序非保証）は docs/development.md の CHANGELOG ゲート節を参照
+CHANGELOG.md merge=union

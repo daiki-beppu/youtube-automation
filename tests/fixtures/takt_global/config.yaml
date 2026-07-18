@@ -1,0 +1,3 @@
+# lite workflow contract test 用の擬似グローバル takt 設定（TAKT_CONFIG_DIR で注入）
+provider: mock
+language: ja

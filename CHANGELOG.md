@@ -8,6 +8,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `fix(streaming)`: sshd の提示 host key を Ed25519 のみに固定し、cloud-init 保守変更・host key 変更・`install_root` 変更時の Terraform plan action、OpenSSH の実ネゴシエーション、`install_root` validation 境界を実行時テストで保証した。配置ディレクトリ作成は deploy に一元化し、HCL の繰り返しブロック helper も位置情報付き共通実装へ統合した（#2033）。
+- `feat(auth)`: OAuth token の scope 分離を導入し、read-only skill が write scope の token を共用しない設計にした。`YouTubeOAuthHandler` に `READONLY_SCOPES`（`youtube.readonly` + `yt-analytics(.monetary)?.readonly`、write scope なし）と用途別 token `auth/token.readonly.json` の発行・解決（`create_readonly` / `readonly_token_path`。探索順は #1721 と同じ channel 側 → main worktree 側）を追加し、新 CLI `yt-oauth`（`--readonly` で readonly token 発行）を登録した。`ServiceRegistry` の read 系（`analytics` / `reporting` / 新設の `youtube_readonly` / `credentials_readonly` / `get_readonly_handler`）は readonly token を優先し、未発行時は warning ログで発行手順を案内した上で `token.json` へフォールバックする（サイレント失敗しない。既存運用は無変更で動作）。read-only 系呼び出し元（analytics 収集 / benchmark / channel-status / metadata-audit / playlist-status / discover-competitors / stream-bandwidth）を readonly 経路へ移行し、write 系（upload / playlist 管理 / bulk update / コメント投稿）は従来どおり `token.json` を使う。skill × 実効 scope の対応表と運用手順を `docs/oauth-scopes.md` に新設した（#1699）。
+
+- `feat(cost)`: 動画 metadata 一括更新 3 CLI（`yt-bulk-update-desc` / `yt-shorts-bulk-update-loc` / `yt-bulk-update-synthetic-media`）に YouTube Data API quota 記録（`cost_tracker.log_quota`）を配線した。read-before-write を含む発行済みリクエスト 1 回につき 1 エントリ（`videos.list` / `channels.list` / `playlistItems.list` = 1 unit、`videos.update` = 50 units）を記録し、dry-run は実際に発行した read のみ、batch / pagination はリクエスト回数と記録件数が一致する。quota はリクエスト失敗時も消費されるため、update 失敗時も記録した上で従来の例外・部分進捗契約（continue / exit code / 最初の失敗の再 raise）を維持する（#2058）。
+- `feat(cost)`: channel status・stream key・metadata audit・playlist status の read API 呼び出しに quota 記録を配線した。`yt-*` 4 CLI（`get_channel_status` / `yt-fetch-stream-key` / `metadata_audit` / `playlist_status`）の各 read リクエスト（`channels.list` / `playlists.list` / `playlistItems.list` / `liveStreams.list` / `videos.list`、Analytics は `reports.query` を `youtube-analytics-api` として別 service で記録）が、成功・失敗のどちらでもリクエスト 1 回につき `cost_tracker.log_quota` を 1 回だけ呼ぶ（pagination はページ = リクエスト単位で記録）。tracker が書き込み不能・例外を吐く場合も従来の出力と終了状態を変えない（`--stdout` の pipe 契約保護のため警告は stderr へ逃がす）。benchmark / upload agent の read API と write API は兄弟 issue のスコープ（#2055）。
+- `feat(cost)`: benchmark read API の quota 記録を配線した。`benchmark_collector` の channels / playlists / playlistItems / videos 各 list request と `fetch_benchmark_comments` の commentThreads.list が、page / バッチ単位の request ごとに `cost_tracker.log_quota("youtube-data-api", "<method>.list", 1)` を記録する。quota は失敗した request でも消費されるため記録は成否に関わらず行い（try/finally）、元例外の伝播・既存のエラーハンドリング・benchmark JSON / CLI 出力は変更しない（#2056）。
+- `feat(cost)`: pinned comment workflow（`yt-pinned-comment`）に YouTube Data API quota 記録を配線した。preflight の `videos.list(part="status")` は 50 件 chunk の request ごとに 1 unit、`--video-id` 経路のタイトル取得 `videos.list(part="snippet")` も request ごとに 1 unit、`commentThreads.insert` は投稿 1 回ごとに 50 units を `cost_tracker.log_quota` で記録する。HttpError 時（API 処理済み = quota 消費済み）も記録した上で元の例外ハンドリングを維持し、dry-run / skip（already_posted / private / not_found）では未実行の write quota を記録しない（#2061）。
+- `feat(cost)`: `yt-channel-settings push --apply` の `channels().update()` 経路に YouTube Data API quota 記録を配線した。part（brandingSettings / localizations / status）ごとの実 request 1 回につき `cost_tracker.log_quota("youtube-data-api", "channels.update", 50, metadata={part, channel_id})` を 1 件記録し、実 request を発行した時点で quota は消費されるため update 失敗時も記録してから既存の `YouTubeAPIError` を維持する。dry-run では write quota を記録せず、記録自体の失敗は debug ログのみで push を止めない（#2060）。
+- `feat(cost)`: upload agent の read preflight（publish 直前 dedup 検索と公開日一覧取得）が YouTube Data API quota を `cost_tracker.log_quota` へ記録するようにした。`_find_existing_video_by_title` と `_get_published_dates` の `search.list`（100 units）/ `videos.list`（1 unit）実 request ごとに `service="youtube-data-api"` で 1 件記録し、API failure 時も記録後に既存の fail-open / fail-safe をそのまま維持する（失敗 request も quota を消費するため）。dedup 候補ゼロ等で videos.list を実行しない場合はその分を記録しない。upload write API の quota 記録は別 issue（#2057）。
+- `feat(cost)`: playlist mutation 経路（`playlist_manager.py`）に YouTube Data API quota 記録を配線した。playlist create（`playlists.insert` 50 units）・item add（`playlistItems.insert` 50 units / request）・削除済みエントリ cleanup（`playlistItems.list` 1 unit / page と `playlistItems.delete` 50 units / 件を別 operation で記録）に加え、assign 時の重複チェック（read-before-write の `playlistItems.list`）もページ単位で記録する。記録は try/finally で行い、mutation 失敗時も quota を記録した上で元の例外ハンドリングを維持する。dry-run では delete request を発行しないため delete の quota 記録も発生しない（#2059）。
+- `feat(wf-next)`: 複数 collection を直列自動進行させる batch orchestrator CLI `yt-wf-batch` を追加した。`collections/planning/` を走査して `phase=prepared` / `assets.music_prompts=true` / `assets.raw_master=null` / `planning.music.suno_playlist_url` 記録済み / `02-Individual-music/` ダウンロード済みの collection を対象に、/wf-next 相当の CLI チェーン（preflight → 選曲 → raw master 生成 → `yt-raw-master-check --apply` → `master_audio_transition.py` → `generate_videos.sh` → `yt-upload-collection`）を非対話で 1 件ずつ実行する。1 件の失敗（空 playlist / preflight validation error / ffmpeg error 等）では停止せず後続 collection を継続し、`reports/wf-batch-<timestamp>/summary.json`（total / success / failed / elapsed と成功 entry の video_id / video_url / live_path）と per-collection の `<slug>.log` を出力する。`--dry-run` / `--only <slug,slug>` / `--from <slug>` / `--limit N` で対象確認・絞り込み・再開・試運転件数制限ができる。`workflow.wf_next.approval_gates` が有効なチャンネルでは非対話で承認を処理できないため fail-loud で停止する（#1667）。
+- `feat(config)`: `workflow.wf_next` の boolean 設定を「true = 手動工程（承認）を省いて自動進行」の向きに統一する新キー `skip_audio_approval` / `skip_upload_approval`（既定 true = 従来どおり承認ゲートなし）を導入した。旧キー `approval_gates.audio` / `approval_gates.upload`（true=承認する）は後方互換 alias として読み続け、既存チャンネルの設定は挙動を変えない。同一ゲートへ新旧キーを同時指定した場合は silent な優先解決をせず `ConfigError` にする。`WfNext.approval_gates` は既存 consumer 向けの derived view として残し、常に `skip_*` の否定と整合させる。example / wf-next / wf-status / wf-new schema の記述も新キー主体へ更新した（#1744）。
+
+- `feat(cost)`: YouTube Data API quota の記録 schema と `yt-cost-report` 集計を追加した。`cost_tracker.log_quota(service, bucket, units)` が生成コストと同じ保存境界（`CHANNEL_DIR/data/quota_costs.json` + file lock）で quota event を永続化し（USD 単価は保持しない）、`read_quota_log()` はキー欠落エントリをデフォルト値で吸収して読む。`yt-cost-report` は既定サマリに quota 記録がある場合のみ「API Quota Summary」（service 別 / 月別 / bucket 別 units 集計）を併記し、`--quota` で quota のみ・`--quota --detail` で個別エントリを表示する。quota 未記録の既存データでは従来表示のまま後方互換。実 API 呼び出しへの instrumentation は別 issue（#2006）。
+- `test(takt)`: repo-local lite workflow（`.takt/workflows/lite.yaml`）の状態遷移契約を fake provider で保護する contract テスト `tests/test_takt_lite_workflow_contract.py` を追加した。takt の mock provider + `TAKT_MOCK_SCENARIO` で preflight / review の verdict 分岐（approved / needs_fix / blocked / 未知値）、needs_fix 差し戻し時の feedback 注入、implement↔review 3 周での loop monitor judge 起動、`max_steps: 12` 到達 ABORT、global schema（`review-verdict`）欠損時の fail-closed を LLM なしで決定的に検証する。CI には takt を pin した `takt-workflow-contract` job（`workflow doctor lite` + contract suite、skip 不許可）を追加し、takt upgrade / schema drift を実 run 前に検出する（#2164）。
+- `chore(extensions)`: extensions（suno-helper / distrokid-helper / shared）の lint / format を ultracite の Oxlint + Oxfmt toolchain へ移行した。lint は `extensions/.oxlintrc.json` を廃止して `ultracite/oxlint/core` + `ultracite/oxlint/react` preset を extends する `extensions/oxlint.config.ts` に、formatter は Prettier を `ultracite/oxfmt` preset の oxfmt（`extensions/oxfmt.config.ts`）に置き換え、scripts / CI を `pnpm check` / `pnpm fix` に統一して全ソースを oxfmt で一括再フォーマットした。旧構成のルール水準（`react/rules-of-hooks`=error / `react/exhaustive-deps`=warn / react-compiler 無効 / browser・chrome globals）は維持し、preset 導入時点で既存コードに違反が残るルールは off として段階的有効化を別 issue に委ねる（#2154）。
+- `fix(video-analyze)`: `yt-video-analyze` に解析結果キャッシュを追加し、既存の有効な `data/video_analysis/<slug>/<video_id>.json` がある動画は Gemini を呼ばず既存結果を再利用するようにした（再実行時の再課金防止）。明示的に再解析したい場合のみ新設の `--force` で既存 JSON を無視して上書きする。部分書き込み等で壊れた JSON（パース不能 / object でない）は警告の上で破損扱いとし再解析する（サイレントな壊れ結果の再利用防止）。SKILL.md にキャッシュ挙動と `--force` を追記した（#1693）。
+- `fix(dx)`: takt worker の runtime path を current worktree へ隔離した。`.takt/runtime-prepare.sh` が `TAKT_RUNTIME_ROOT` から `TMPDIR` / `XDG_CACHE_HOME` / `XDG_CONFIG_HOME` / `XDG_DATA_HOME` / `XDG_STATE_HOME` / `UV_CACHE_DIR` を導出・ディレクトリ作成して stdout（KEY=VALUE）で注入し、親 process から継承した sibling worktree の path（別 worktree の uv cache 参照による test 開始前 exit 2 の原因）を上書きする。`yt-preflight` に `runtime_path` 分類を追加し、takt runtime 内（`TAKT_RUNTIME_ROOT` 設定時）は上記 6 変数それぞれの絶対 path / current runtime root 配下 / ディレクトリ存在 / 書込み可否を検査する（違反 detail は変数名と違反種別のみで path 実値は出力しない。非 takt 環境は検査対象外として合格）（#2163）。
+
+- `feat(thumbnail)`: 画像 prompt への NG ワード / 他ドメイン値混入を生成前に止める検査を追加した。`config/skills/thumbnail.yaml::image_generation.gemini.forbid_keywords`（未設定時 no-op の list[str]）を新設し、`yt-generate-image` は最終プロンプト（大小文字無視の部分一致）にヒットすると生成 API を呼ばず終了コード非 0 で停止し、該当キーワードを標準エラーへ列挙する。`codex-image.sh` も codex 起動前に同等の検査を行う（`CODEX_IMAGE_FORBID_KEYWORDS` 明示指定を優先し、未指定なら merged skill-config から自動解決。config 文脈が無い実行は no-op）。SKILL.md の TTP プリフライト・チェックリストに `workflow-state.json::planning.music.*`（音楽用フィールド）を image prompt に転写しない項目を追加した（#1664）。
+- `refactor(thumbnail)`: 過密なプロンプト指示を簡素化し、TTP を参照画像主導へ戻した。`config.default.yaml` の single_step clause 6 種のうち既定で注入されるものを `ip_safety_clause` の 1 つに集約（variation / style_lock / text_strip / anatomy / typography は既定空文字の opt-in、推奨文面はコメントに残置）、`composition_rules` は実効キー `text_lines` のみに縮小、`thumbnail_text` は `text_overlay_prompt` を単一入口として旧個別フィールド 6 種を段階的廃止（deprecated）にした。deprecated キーの channel override は従来どおり deep-merge で有効のまま、`load_skill_config` が DeprecationWarning で移行を促す（物理削除は後続リリース）。SKILL.md のプロンプト指示解説を「プロンプト構築」1 セクション + モード別差分に再編し、既定 config でプロバイダーへ渡る最終プロンプト全文の例を掲載した。channel-new / channel-init の scaffold からも deprecated キーを除去した（#1702）。
+- `feat(audio-gen)`: `yt-generate-master` 手動実行（/masterup フォールバック運用）後に `workflow-state.json::assets.raw_master` が未更新のまま残る不整合を検知する CLI `yt-raw-master-check` を追加した。既定は読み取り専用の突合チェック（exit 0=整合 / 2=不整合 / 1=エラー）で、`--apply` 時のみ `assets.raw_master` / `updated_at` を一時ファイル + rename の原子的更新で修復する。`/masterup` Step 1.4 と `/wf-status` に AskUserQuestion 承認ゲート付きのチェック導線を追加し、非承認時は state を変更せず次回起動時に同じ警告を再表示する（silent 続行の禁止）。`assets.master_audio` の確定は従来どおり `/wf-next` の責務のまま変更しない（#1668）。
+- `feat(thumbnail)`: `/thumbnail` のテキスト描画既定を AI 焼き込みから決定的合成経路（`yt-thumbnail-text`）へ標準化した。標準フローは「textless 背景 `main.png/jpg` の生成・承認 → 実フォント（Pillow）合成で `thumbnail.jpg` 確定」の 2 段構成になり、書体の揺れが発生しない。`/channel-research` の `docs/benchmarks/thumbnail-text-profile.md` が存在する場合はフォント傾向 → ローカル日本語フォント選定（`overlay.font.title`）、テキスト内容パターン → コピー生成制約（行数・言語・文字数レンジ。競合固有文言は不使用）、配置傾向 → `overlay.layout.anchor` / margin へ変換して適用し、不在時はエラーにせず現行デフォルト値で続行する。AI 焼き込み経路は運用者が明示選択したときだけ使う fallback として残し改修しない（#1907）。
+
+- `feat(masterup)`: `yt-suno-verify-playlist --music-dir` が非正準形ファイル（Suno UI 手動 DL 由来の `Title.mp3` / `Title (1).mp3` / `Title_1.mp3` 等）を suno-prompts.json と照合して正準形 `NN{a|b}-Title.ext` へ自動リネームしてから突合するようにした。照合は ZIP 展開（`suno_downloaded_archive.py`）の既存ロジックを単一ソースとして再利用し、照合できないファイルはリネームせず unknown として fail-loud 報告する。`/masterup` Step 1.6 と `/wf-next` は playlist URL の記録有無に依らずローカルファイル名から突合ゲートを完走する（#1998）。
+
+- `docs(skills)`: 課金 API（Vertex AI Gemini / Veo / Lyria、OpenAI Images、YouTube Data / Analytics API）を呼ぶ 26 project skill の SKILL.md に、実行前見積もり可能な「想定 API call 数」セクション（API 別の call 数 / 算出式・変動要因・上限 / 承認の安全弁）を追加した。対象は契約テスト `tests/test_skill_api_call_estimate_contract.py` が機械抽出（pyproject 全 CLI の課金分類 × skill の CLI 参照走査）で導出し、非対象理由・追加対象理由・新規 CLI の分類漏れ・記載漏れを CI で検出する（#2010）。
+- `feat(analytics)`: 成長 KPI 定点ビュー CLI `yt-kpi-dashboard` を追加した。`data/analytics_data_*.json` 全スナップショットを日付後勝ちで横断マージし、レバー別 KPI（views / インプレッション / CTR / 平均視聴維持率 / 登録者純増）の週次推移を前週比付きの構造化 JSON と Markdown テーブルで出力する（`--save` で `reports/kpi_weekly_YYYYMMDD.{json,md}` 保存）。Reporting API の保持期間（60 日）を超えた過去の Imp / CTR も `reporting_api.impressions_summary.per_day` から復元して時系列に含め、欠測週は補間せず欠測として明示する。スナップショット 1 件以下ではエラーではなく複数スナップショットが必要な旨の案内を出す。`/analytics-analyze` の CLI 一覧にも定点ビュー参照の導線を追加した（#1819）。
+
+- `feat(auth)`: OAuth 新規ブラウザ認証の `run_local_server()` にチャンネル名（`meta.channel_short`）入りの `authorization_prompt_message` / `success_message` を渡し、複数チャンネル並列運用でトークン失効が重なった際にターミナルログと認証完了ページのどちらからも対象チャンネルを判別できるようにした。prompt には認証 URL（redirect 先ポート入り）も含め、config 読込不可時はディレクトリ名へフォールバックする（#1966）。
+
+- `chore(extensions)`: TypeScript 7.0.2 固定後の suno-helper / distrokid-helper を実経路（lint / format:check / compile / unit / build / Playwright e2e / CI Typecheck 契約テスト）で回帰検証した。TS 7 起因の互換修正は不要で、唯一再現した失敗は suno-helper の overlay e2e が開発マシンで稼働中の yt-collection-serve（port 7873/7872）を発見して「ローカル配信元なし」前提が破れる分離不足だったため、`--host-resolver-rules` で discovery 先ホストを遮断して環境非依存にした（#2015）。
+
+- `feat(analytics)`: 収集済みの traffic_sources / audience.by_device / YT_SEARCH 検索語を分析経路に接続した。`yt-analytics` の standard 以上で `get_traffic_source_detail("YT_SEARCH")` を呼び検索語トップ N を `traffic_sources.search_terms` へ保存し、スナップショット横断の流入源シェア推移・デバイス別集計・検索語トップ N を JSON で返す `yt-traffic-trend` CLI（`--top-search` / `--text`）を追加した。`/analytics-analyze` は `yt-traffic-trend` を 4 番目の必須 CLI とし、分析項目 6「流入源・デバイス分析」と validator の 4 CLI evidence 契約を追加した（#1804）。
+
+- `chore(extensions)`: suno-helper / distrokid-helper の TypeScript を 7.0.2 に固定し、pnpm 11.12.0（Nix extensions shell 契約）で両 lockfile を正規再生成した。TS 7 で削除された `baseUrl` を両 tsconfig から除去し（`paths` は相対形式のまま）、suno-helper は `types: ["chrome"]` で chrome グローバル型を明示 include。TypeScript 7.0.2 固定・lockfile 整合・削除済みオプション不使用は契約テスト（tests/test_extension_typescript_contract.py）で機械担保する（#2014）。
+
+- `fix(collection-serve)`: `POST /collections/<id>/downloaded` が期待数未満の部分 ZIP（Suno が一部 entry で 1 clip しか生成しないケース）を 500 で拒否せず、配置済みファイルを受理して warning 付き 200 を返すようにした。workflow-state には `planning.music.actual_file_count` / `missing_file_count` を機械可読に記録し、`assets.music_downloaded=true` と collections index の `status=downloaded` へ貫通させる。suno-helper は warning を progress 通知に表示する。0 件配置・壊れた ZIP の 500 契約は維持（#1913）。
+
+- `feat(analytics)`: `yt-thumbnail-correlate` に有意性検定（両側 p 値）・Benjamini-Hochberg 多重比較補正・`significant` 判定を追加し、最小サンプル数の既定を 10 に引き上げた（n<10 は「サンプル不足で判定不能」を明示）。有意でない相関には断定的な解釈文を出さない。`--metric` 未指定で CTR が欠測のチャンネルでは views に自動フォールバックし、出力 JSON の `metric_fallback` に理由を残す。`/analytics-analyze` に `significant: false` の相関を方針根拠に使わない注記を追加した（#1801）。
+
+- `feat(thumbnail)`: Gemini API 経路の既定 prompt を Codex と同じ TTP 方針（winning layout 維持・最小限の品質改善のみ）へ揃えた。`config.default.yaml` の `image_generation.gemini.diff_prompt_template` 既定値を codex 既定テンプレートと方針行を同期した TTP テンプレート（`{title_line1}` / `{title_line2}` + `${ip_safety_clause}`）にし、チャンネル側 `diff_prompt_template` override の優先（deep-merge スカラ置換）と方針同期をテストで機械担保した。SKILL.md / prompting.md に provider 差のない TTP 方針を明記した（#2070）。
+
+- `feat(thumbnail)`: gemini_cli 経路が #2070 と同じ TTP 方針（codex と同期した既定 `diff_prompt_template`）を provider 切替でも損なわないことを contract test で機械担保した。CLI ラッパー `_build_prompt` はプロンプトをそのまま透過し方針文言を独自に持たないことを検証し、SKILL.md に gemini_cli が同じ `diff_prompt_template` と構築手順を共有する旨を明記した。model / timeout / CLI protocol は変更なし（#2071）。
+
+- `feat(auth)`: git worktree 上で gitignore された `auth/` が複製されず OAuth 認証が `FileNotFoundError` になる問題に対応した。`.git` pointer ファイルと `commondir` から git コマンド非依存で main 作業ツリーを検知する `utils/worktree.py::main_worktree_root()` を追加し、worktree では `client_secrets.json` の候補列末尾に main 側 `auth/` を追加、ローカル `token.json` が無い場合は token の読み書きを main 側 `auth/token.json` に集約する（refresh 結果の分岐防止）。`CLIENT_SECRETS_DIR` 最優先・非 worktree 環境の解決順序は不変で、未検出時のエラーには探索した全候補パスを表示する（#1721）。
+
+- `fix(devshell)`: 並列 worktree の Nix キャッシュ競合（同一 fingerprint の flake を複数 worktree が同時評価すると、ユーザーグローバルな `~/.cache/nix` の eval-cache SQLite への同時書込みが「error (ignored): SQLite database ... is busy」で破棄され続け、レビュー step の遅延・再試行を誘発する問題）を診断し、`.envrc` / `.lefthook/setup-worktree.sh` / shellHook が Nix 専用の `NIX_CACHE_HOME` を worktree 分離 TMPDIR 配下へ export して各 worktree が自分の評価結果だけを参照するようにした。`XDG_CACHE_HOME` は変更せず、解決失敗時は共有キャッシュのまま fail-open で続行する（#2089）。
+
+- `feat(dx)`: `yt-skills lint [<skill>...]` を追加し、SKILL.md frontmatter の検証（strict YAML パース / name・description 非空 / description の double-quote）を pytest 全体実行なしで秒単位で回せるようにした。検証ロジックは CLI 側を単一ソースとし、既存の回帰テスト（tests/test_skill_frontmatter_yaml.py）は同ロジックを呼ぶ形に寄せた（#2096）。
+
+- `fix(devshell)`: 並列 run 間の共有 TMPDIR 競合（macOS の per-user TMPDIR を複数 worktree の並行 pytest が奪い合い、conftest の stale cleanup 等が run 間で干渉しうる問題）を診断し、devShell 入場時に `.lefthook/worktree-tmpdir.sh` が共有 TMPDIR 配下の worktree ごとの決定的サブディレクトリへ `TMPDIR` を分離するようにした。takt core が注入する checkout 内 TMPDIR は尊重し、解決失敗時は共有 TMPDIR のまま fail-open で続行する（#2088）。
+
+- `fix(dx)`: explicit setup 経路（`bash .lefthook/setup-worktree.sh [<command>...]`）の依存同期を fail-closed 化した。devShell 入場後に新設の `.lefthook/sync-deps.sh` が `uv sync` を明示実行し、失敗時は後続コマンドを実行せず exit 非 0 で停止する。対話 shell（direnv / `nix develop` の shellHook）は従来どおり warning 継続で入場をブロックしない（#2125）。
+
+- `feat(preflight)`: worktree / takt clone の環境不備（checkout 種別・Nix eval・lock drift・Git identity・lefthook policy）を実装着手前に read-only で検査し、`git_commit_identity` / `nix_eval` / `lock_drift` / `hook_policy` の分類キー付きで報告する CLI `yt-preflight` を追加した。identity の値は出力に含めず、lefthook は `YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1` の明示 skip のみ合格として曖昧な未導入を不合格にする（#2124）。
+
+- `chore(extensions)`: suno-helper と distrokid-helper の full gate / Playwright e2e を維持し、Extensions CI が各 package の既存 `pnpm lint` 入口から共通設定の Oxlint を実行する接続契約を追加した。契約テスト自体の変更でも Extensions CI が起動するよう path filter を接続した（#2020）。
+
+- `feat(analytics)`: `/analytics-analyze` と `/flop-analysis`（postmortem）の学びを下流の `data/insights.jsonl`（append-only）へ機械可読に蓄積し、次サイクルの `/wf-new` → `/collection-ideate` が open エントリを企画根拠として消費・status 反映（adopted / dismissed）し、`/thumbnail` が lever=thumbnail の学びを制作前に参照する接続を追加した。エントリ形式は `insights-entry.schema.json` を単一ソースとし、schema 駆動の `validate_insights.py` で検証する。insights 不在の初回チャンネルでは既存の analytics / benchmark fallback / minimal mode を阻害しない（#1830）。
+
+- `feat(analytics)`: `yt-analytics` に既定 `standard` の `--depth {standard,full}` を追加し、`full` 指定時に視聴維持率と地域別データを収集・保存できるようにした。full 専用 API の明示エラーは不完全な成果物として保存せず失敗終了する。`/analytics-collect full` の導線と、`/analytics-analyze` が full データの維持率を数値根拠として扱う分析契約も追加した（#1799）。
+
+- `feat(collection-serve)`: port 別 PID ファイル、同一構成の既存 server の liveness check と再利用、`--stop --port` による明示停止、既定 60 分の idle timeout を追加し、suno-helper / distrokid-helper の完了手順で server を停止するようにした（#1725）。
+
+- `feat(thumbnail)`: `archive.enabled`（既定 `false`）を追加し、サムネ承認・確定直後に `thumbnail.jpg/png` を元の内容と拡張子のまま `assets/thumbnail-gallery/<collection-dir-name>.<ext>` へ原子的にコピーできるようにした。同一コレクションの再承認は最新画像へ置換し、設定不正・サムネ欠落・シンボリックリンク・コピー失敗は非 0 で停止する（#1942）。
+
+- `feat(channel-new,doctor)`: 新規チャンネルの簡易ペルソナを `/viewer-voice` → `/audience-persona-design` → `/viewing-scene` の必須チェーンへ置換し、公開前は既存の競合 / TTP / viewer-voice 成果物を入力に Analytics report や任意の本格 benchmark なしで完走する契約を追加した。`yt-doctor` の `ttp_wf_new_readiness` は `docs/channel/personas/persona-definition.md` の欠落を警告する（#2079）。
+
+- `feat(masterup)`: `yt-suno-verify-playlist` に collection 相対の `--music-dir` を追加し、`NN{a|b}-<title>.<ext>` 形式のローカル音声ファイル名を name/title の英語 alias・apostrophe 除去名から canonical entry へ対応付け、entry + `a`/`b` variant 単位で unknown / missing / underfilled を fail-loud 検出できるようにした。`/masterup` の primary path は `02-Individual-music/` を直接突合するため、playlist URL や title list の確認なしで Step 5 前ゲートを実行する（#1898）。
+
+- `feat(doctor,setup)`: `yt-doctor --fix-client-secrets` を追加し、Downloads の構造妥当かつ GCP project 一致する最新 OAuth client JSON を `auth/client_secrets.json` へ移動できるようにした。既存ファイルは上書きせず、`/setup` の HUMAN STEP は secret 発行・Download JSON・done のみに簡素化した（#1903）。
+
+- `feat(flop-analysis)`: Phase 3 の全主仮説を承認プロンプトなしで自動検証し、全件反証時だけ副仮説へ進む orchestration へ更新した。対話必須スキルは read-only 成果物境界から起動せず、期間・比較元・閾値を固定して判定する。個別検証がデータ不足・子スキル失敗で実行不能な場合は理由付きの「未検証」として残りを続行し、検証結果から `postmortem.md` の「結論 / 反証 / 学び」まで自動記入する（#1972）。
+
+- `fix(suno)`: `yt-suno-verify` と共通 initial-setup preflight が `config/skills/suno.yaml::style_char_limit` の上書きを尊重し、長文の base `genre_line`・video analysis 由来 Style・使用中 style variant を設定上限で検証するようにした。未設定時は従来どおり 120 文字超過をエラーにする（#1938）。
+
+- `chore(extensions)`: Oxlint 1.73.0 の React plugin と、旧 severity を維持できる native React Hooks rules を共通設定で有効化し、代表的違反を実行時 fixture で検証するようにした。severity を保持できる native 代替がない14規則は、集約 React Compiler rule による warn の error 化を避けて独立 follow-up として明示した（#2019）。
+
+- `perf(dx)`: `.envrc` に nix-direnv 3.1.1 のブートストラップを追加し、devShell 入場コストを削減した。dev 環境を `.direnv/` にキャッシュし `flake.nix` / `flake.lock` / `.envrc` 変更時のみ再評価するため、dirty worktree でも 2 回目以降の `direnv exec` が 1 秒未満で安定する（従来は入場のたびに flake 評価が走り 7〜80 秒まで変動）。shellHook（lefthook install / uv sync）は従来どおり毎入場で実行される（#2097）。
+
+- `docs(wf-new)`: analytics mode の stale report を `/collection-ideate` の freshness SSOT に従って自動更新し、再検証後に入力モード判定と企画フローを継続する契約へ更新した。更新失敗時は古い report を使わず、理由と再開条件を示して停止する（#2063）。
+
+- `docs(skills)`: `/channel-research`・`/thumbnail-research`・`/collection-ideate` の TTP 分析に欲求レイヤーを追加した。高再生パターンを視聴者欲求へ抽象化して自チャンネルへ再具体化し、コメント / persona 由来の欲求語彙、最低 3 回の具体⇄抽象の往復、上位群 / 下位群の欲求比較、`ttp_mode` の欲求整合根拠を各成果物へ記録する（#2026）。
+
+- `docs(setup)`: `yt-doctor` が stale Analytics report を表示した場合も手動の `/analytics-analyze` を HUMAN STEP として要求せず、後続の `/collection-ideate` が自動更新する契約を案内するよう統一した。更新失敗時の停止・再開条件は `freshness-rules.md` を参照し、fresh / benchmark fallback / minimal mode の既存案内は維持する（#2064）。
+
+- `refactor(distrokid-helper)`: status と release review を shadcn Alert / Card primitive へ移行し、既存の phase message・配色・props、release metadata・fallback、および error の accessible alert 契約を維持した（#2066）。
+
+- `chore(extensions)`: Fallow audit を PR の base commit との差分に対する extensions 全体の品質ゲートとして CI へ統合した（#2076）。
+
+- `chore(test-infra)`: pytest-xdist を dev dependency に追加し、`uv run pytest -n auto` での並列実行に対応した。`tests/conftest.py` は `CHANNEL_DIR` の tmp コピーを xdist worker ごとに独立して作り直し、CI の test ジョブは `-n auto` を有効化した。ローカル既定は直列のまま（opt-in、詳細は `docs/development.md`）（#2093）。
+
+- `feat(skills)`: `/postmortem` skill command / directory を `/flop-analysis` へ改称し、feedback・workflow・機能一覧・現役戦略文書の利用者導線を新名称へ統一した。下流の `config/skills/postmortem.yaml` は `config/skills/flop-analysis.yaml` へリネームすること。旧 override は移行 fallback として警告付きで読み込むが、旧 command alias と旧 skill directory は残さない（#2023）。
+
+- `chore(extensions)`: suno-helper と distrokid-helper の lint を共通設定の Oxlint 1.73.0 へ移行し、旧 ESLint の direct dependencies と設定を削除した（#2018）。
+
+- `fix(upload)`: upload preflight が複数セパレータの `title.template` と準拠タイトルを正しく照合し、3パート以上のタイトルを誤って拒否しないようにした（#2037）。
 
 - `perf(test-infra)`: `utils/retry.py` にモジュールスコープの sleep/jitter シーム（`_DEFAULT_SLEEP` / `_DEFAULT_JITTER`）を追加し、`execute_with_retry` にも後方互換の optional `sleep` / `jitter` 引数を貫通させた。テスト側は `no_retry_backoff` fixture と `CommentReplier` への `sleep_fn` 注入で retry backoff / `delay_between_replies_sec` の実時間 sleep（計 ~33s）を排除した（#2091）。
 
@@ -59,6 +156,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `refactor(suno-helper)`: PatternList の entry 選択表示を、selection semantics・accessible name・`data-suno-entry-*` 契約を維持したまま shadcn variant と Tailwind semantic token へ移行した（#2068）。
+
+- `refactor(suno-helper)`: Overlay header・shell と status / warning / error 表示を、drag・minimize・位置永続化・semantic role・`data-suno-*` 契約を維持したまま shadcn primitive へ移行した（#2069）。
+
 - `refactor(suno-helper)`: collection・投入方式・開始/停止・resume/retry controls を、既存 handler・disabled 条件・`data-suno-control` / aria 契約を維持したまま shadcn primitive へ移行した（#2067）。
 
 - `feat(distrokid-helper)`: 初回表示、コレクション選択、ローカル配信元選択の各タイミングで collection 一覧と release.json を自動取得し、手動の「データ取得」ボタンを廃止した（#1992）。
@@ -94,6 +195,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(upload)`: タグ件数下限が YouTube の 500 字上限の下で到達不能な場合、upload preflight と metadata audit が件数不足ではなく、`tags.min_count` を下げるか base タグを短縮するよう案内する明示診断を返すようにした。配布する content.json テンプレートの `tags.min_count` も 26 に統一した（#1732）。
 - `fix(loop-video)`: Ctrl+C 後の Veo operation resume state に入力画像の SHA-256 を保存し、再実行時に指定モデルまたは入力画像内容が state と異なる場合は旧 operation を破棄して指定どおり新規生成するようにした（#1746）。旧形式 state は安全側で破棄する。
 - `fix(analytics)`: `yt-channel-trend` の z-score 基準から当日を除外し、min_periods 未達を `null` として明示するよう修正した。トレンド判定は直近 28 日とその前の 28 日の平均を比較し、週次前週比は完全な 7 日間の週だけで計算する（#1803）。
+
+- `fix(suno-helper)`: Queue mode の生成完了待ちが stall タイムアウトした際、ラン全体を ERROR で中断せず graceful degradation するようにした。`waitForSubmittedClipsComplete` は throw の代わりに `{ timedOut, stalledClipIds }` を返し、停滞 clip を entry 単位で失敗記録（ENTRY_FAILED）したうえで、完了済み clip の duration yield guard・playlist 追加・ダウンロードを続行する。stalled entry は resume state の failedIndices として保持され「失敗分のみ再実行」導線で回収できる。全 entry が stall した場合は従来の失敗保留（playlist 追加を再実行後に委ねる）とし、serial mode・retryPlaylist・resume 由来 clip の stall は従来どおり中断する（#1994）。
+
+- `docs(suno,suno-helper)`: 長尺 BGM チャンネル向けに `config/skills/suno.yaml::duration_filter`（`min_sec` / `max_sec`、部分指定は既定値と deep-merge）の override 手順を `/suno` Step 2 と `/suno-helper` の duration guard 節へ文書化した。override が `suno-prompts.json` へ反映される契約は回帰テストで pin し（機能自体は #1269 で実装済み・既定 60〜300 秒は不変）、閾値変更後は `yt-generate-suno` の再生成が必要なことと、resume が run 開始時点の閾値を保持するため新規 run で効かせる注意も明記した（#1937）。
+
+- `fix(suno-helper)`: 新 Create UI（2026-07）で playlist の clip row 検出が全件 missing になる問題を実 DOM capture（匿名化 fixture）に基づき修正した。復活した `.clip-row` コンテナを row 導出の最優先アンカーにし、`div` 化した再生ボタン（`[role="button"][aria-label^="Play "]`）と row 自身の `aria-label` を曲名フォールバックに追加。仮想ウィンドウ走査（`scrollAndMultiSelectByIds` / `readSelectedClipIds`）は共通ヘルパへ抽出し、ウィンドウ外 row の空シェル化・再描画遅延に対して描画 signature 変化の poll（上限 3s）で hydration を待ち、ページネーションで走査中に成長する scrollHeight へ maxScroll 毎ステップ再計算で追従する。旧 DOM / grid view の検出経路と fixture は不変（#2043）。
 
 ## [5.5.17] - 2026-07-10
 

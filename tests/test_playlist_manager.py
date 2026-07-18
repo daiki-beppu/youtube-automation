@@ -410,6 +410,127 @@ class TestAddVideoToPlaylist:
         assert body["snippet"]["position"] == 0
 
 
+# ---------------------------------------------------------------------------
+# quota 記録（#2059: mutation 経路の log_quota 配線）
+# ---------------------------------------------------------------------------
+
+
+class TestQuotaLogging:
+    @pytest.fixture
+    def quota_log(self):
+        """playlist_manager 名前空間の log_quota をモック化して記録を検証する"""
+        with patch("youtube_automation.scripts.playlist_manager.log_quota") as mock_log:
+            yield mock_log
+
+    def test_create_playlist_records_playlists_insert_once(self, manager, mock_youtube, quota_log):
+        """playlist create で playlists.insert (50 units) が 1 回記録される"""
+        mock_youtube.playlists.return_value.insert.return_value.execute.return_value = {"id": "PL_Q1"}
+
+        manager._create_playlist("Quota Playlist", "Desc")
+
+        quota_log.assert_called_once()
+        args, kwargs = quota_log.call_args
+        assert args == ("youtube-data-api", "playlists.insert", 50)
+        assert kwargs["metadata"] == {"title": "Quota Playlist"}
+
+    def test_add_video_records_playlist_items_insert_per_request(self, manager, mock_youtube, quota_log):
+        """item add で playlistItems.insert (50 units) が request 数だけ記録される"""
+        mock_youtube.playlistItems.return_value.insert.return_value.execute.return_value = {}
+
+        manager._add_video_to_playlist("PL_Q", "VID_1", position=0)
+        manager._add_video_to_playlist("PL_Q", "VID_2", position=0)
+
+        insert_calls = [c for c in quota_log.call_args_list if c.args[1] == "playlistItems.insert"]
+        assert len(insert_calls) == 2
+        for call in insert_calls:
+            assert call.args == ("youtube-data-api", "playlistItems.insert", 50)
+        assert insert_calls[0].kwargs["metadata"] == {"playlist_id": "PL_Q", "video_id": "VID_1"}
+
+    def test_list_playlist_video_ids_records_list_per_page(self, manager, mock_youtube, quota_log):
+        """read-before-write の playlistItems.list (1 unit) がページ単位で記録される"""
+        page1 = {"items": [{"contentDetails": {"videoId": "VID_A"}}]}
+        page2 = {"items": [{"contentDetails": {"videoId": "VID_B"}}]}
+        mock_items = mock_youtube.playlistItems.return_value
+        mock_items.list.return_value.execute.return_value = page1
+        next_request = MagicMock()
+        next_request.execute.return_value = page2
+        mock_items.list_next.side_effect = [next_request, None]
+
+        result = manager._list_playlist_video_ids("PL_PAGED")
+
+        assert result == {"VID_A", "VID_B"}
+        list_calls = [c for c in quota_log.call_args_list if c.args[1] == "playlistItems.list"]
+        assert len(list_calls) == 2
+        for call in list_calls:
+            assert call.args == ("youtube-data-api", "playlistItems.list", 1)
+
+    def test_clean_deleted_entries_records_list_and_delete_separately(self, manager, mock_youtube, quota_log):
+        """cleanup で playlistItems.list と playlistItems.delete が別 operation で記録される"""
+        mock_items = mock_youtube.playlistItems.return_value
+        mock_items.list.return_value.execute.return_value = {
+            "items": [
+                {
+                    "id": "ITEM_DEL",
+                    "snippet": {"title": "Deleted video", "resourceId": {"videoId": "VID_GONE"}},
+                },
+                {
+                    "id": "ITEM_OK",
+                    "snippet": {"title": "Alive video", "resourceId": {"videoId": "VID_OK"}},
+                },
+            ]
+        }
+        mock_items.delete.return_value.execute.return_value = ""
+
+        manager.clean_deleted_entries(dry_run=False)
+
+        buckets = [c.args[1] for c in quota_log.call_args_list]
+        # playlist_id 設定済みの 3 プレイリスト分の list + delete 1 件 × 3
+        assert buckets.count("playlistItems.list") == 3
+        assert buckets.count("playlistItems.delete") == 3
+        delete_calls = [c for c in quota_log.call_args_list if c.args[1] == "playlistItems.delete"]
+        assert delete_calls[0].args == ("youtube-data-api", "playlistItems.delete", 50)
+        assert delete_calls[0].kwargs["metadata"]["video_id"] == "VID_GONE"
+
+    def test_clean_deleted_entries_dry_run_records_list_only(self, manager, mock_youtube, quota_log):
+        """dry-run では list のみ記録され delete は記録されない"""
+        mock_items = mock_youtube.playlistItems.return_value
+        mock_items.list.return_value.execute.return_value = {
+            "items": [
+                {
+                    "id": "ITEM_DEL",
+                    "snippet": {"title": "Deleted video", "resourceId": {"videoId": "VID_GONE"}},
+                },
+            ]
+        }
+
+        manager.clean_deleted_entries(dry_run=True)
+
+        buckets = [c.args[1] for c in quota_log.call_args_list]
+        assert buckets.count("playlistItems.list") == 3
+        assert buckets.count("playlistItems.delete") == 0
+
+    def test_create_playlist_failure_still_records_quota_and_keeps_error(self, manager, mock_youtube, quota_log):
+        """create 失敗時も quota が記録され、元のエラーハンドリング（failed dict）が維持される"""
+        mock_youtube.playlists.return_value.insert.return_value.execute.side_effect = Exception("Quota exceeded")
+
+        result = manager._create_playlist("Fail PL", "Desc")
+
+        assert result["status"] == "failed"
+        assert "Quota exceeded" in result["error"]
+        quota_log.assert_called_once()
+        assert quota_log.call_args.args == ("youtube-data-api", "playlists.insert", 50)
+
+    def test_add_video_failure_still_records_quota_and_keeps_error(self, manager, mock_youtube, quota_log):
+        """add 失敗時も quota が記録され、元のエラーハンドリング（False 返却）が維持される"""
+        mock_youtube.playlistItems.return_value.insert.return_value.execute.side_effect = Exception("API Error")
+
+        result = manager._add_video_to_playlist("PL_F", "VID_F")
+
+        assert result is False
+        quota_log.assert_called_once()
+        assert quota_log.call_args.args == ("youtube-data-api", "playlistItems.insert", 50)
+
+
 PLAYLIST_ID_STRING_SHAPE = "PL_test_string_275"
 
 

@@ -35,6 +35,14 @@ Step 1 のスクリプトが exit 0 で終了して `data/video_analysis/<slug>/
 - Vertex AI ADC 初期化済み (`gcloud auth application-default login` + `set-quota-project`)。project_id は ADC quota project から自動解決（`GOOGLE_CLOUD_PROJECT` は任意で上書き可）
 - 解析対象動画が **Public または Unlisted** であること (Gemini API は Private 動画を取得できない)
 
+## 想定 API call 数
+
+| API | call 数 / 実行 | 変動要因 |
+|---|---|---|
+| Vertex AI Gemini（yt-video-analyze の generate_content） | 未解析の対象動画数 × 1 call（`--source benchmark`: `--top` 既定 5 / `own`: complete_collection + videos[] の合計 / `url`: 1。既存の有効な `<video_id>.json` がある動画は 0 call） | `--source` / `--top` / 対象動画数 / `--force`（キャッシュ無視で全件再解析）。1 call あたりのコストは `analysis_window_sec`（既定 900 秒）に比例。`delay_sec` は間隔制御のみで課金には無影響 |
+
+- 上限 / 承認: y/N プロンプトはない。`--source` と `--top` で対象数を絞り、`analysis_window_sec` で 1 call あたりの解析コストを制御する。
+
 ## 実行フロー
 
 ### Step 1: スクリプト実行
@@ -55,6 +63,9 @@ uv run yt-video-analyze --url <youtube_url>
 | `--source benchmark` | `data/benchmark_*.json` から `--channel` slug でフィルタし `--top` 件 (default 5) を解析 |
 | `--source own` | `collections/live/<name>/20-documentation/upload_tracking.json` の `complete_collection.video_id` (および `videos[]`) を解析 |
 | `--url` | 任意 YouTube URL を直接解析 (slug は固定 `url`) |
+| `--force` | 既存の `data/video_analysis/<slug>/<video_id>.json` があっても Gemini で再解析して上書きする |
+
+**解析結果キャッシュ**: 既存の有効な `<video_id>.json` がある動画は Gemini を呼ばず既存結果を再利用する（再課金なし）。破損した JSON（不正 JSON / object でない）は警告の上で再解析される。明示的に再解析したいときのみ `--force` を付ける。
 
 ### Step 2: 出力確認
 

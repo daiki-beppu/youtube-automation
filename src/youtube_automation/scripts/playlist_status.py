@@ -9,12 +9,27 @@ Usage:
     python3 automation/playlist_status.py
 """
 
+import contextlib
 import logging
+import sys
 
+from youtube_automation.utils import cost_tracker
 from youtube_automation.utils.config import load_config
-from youtube_automation.utils.youtube_service import get_youtube
+from youtube_automation.utils.youtube_service import get_youtube_readonly
 
 logger = logging.getLogger(__name__)
+
+_QUOTA_SERVICE = "youtube-data-api"
+_READ_QUOTA_UNITS = 1
+
+
+def _record_read_quota(bucket: str) -> None:
+    """read 1 リクエスト分の quota 消費を記録する。記録失敗で元の処理は止めない。"""
+    try:
+        with contextlib.redirect_stdout(sys.stderr):
+            cost_tracker.log_quota(_QUOTA_SERVICE, bucket, _READ_QUOTA_UNITS)
+    except Exception:
+        logger.debug("quota 記録失敗 (bucket=%s)", bucket)
 
 
 class PlaylistStatusViewer:
@@ -26,7 +41,7 @@ class PlaylistStatusViewer:
 
     def _get_youtube(self):
         if self._youtube is None:
-            self._youtube = get_youtube()
+            self._youtube = get_youtube_readonly()
         return self._youtube
 
     def _list_playlist_video_ids(self, playlist_id: str) -> set[str]:
@@ -37,7 +52,11 @@ class PlaylistStatusViewer:
         try:
             request = youtube.playlistItems().list(playlistId=playlist_id, part="contentDetails", maxResults=50)
             while request:
-                response = request.execute()
+                try:
+                    # pagination の 1 ページ = 1 リクエストごとに quota を記録する
+                    response = request.execute()
+                finally:
+                    _record_read_quota("playlistItems.list")
                 for item in response.get("items", []):
                     video_ids.add(item["contentDetails"]["videoId"])
                 request = youtube.playlistItems().list_next(request, response)
