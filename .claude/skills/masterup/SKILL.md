@@ -1,7 +1,12 @@
 ---
 name: masterup
-description: "Use when Suno UI で生成した曲のプレイリストを一括 DL + マスター化するとき（前工程 /suno、次工程 /videoup）。Lyria チャンネルでは不要"
+description: "Use when Suno UI で生成した曲のプレイリストを一括 DL + マスター化するとき。Lyria チャンネルでは不要"
 ---
+
+## 前後工程
+
+- `前工程`: `/suno`, `/suno-helper`
+- `後工程`: `/videoup`
 
 ## Overview
 
@@ -73,8 +78,6 @@ TS CLI `uv run yt-generate-master` は `audio` の実行時既定値を組み込
 マスター音源生成は `uv run yt-generate-master` CLI がチャンネル側 `audio.crossfade_duration` override を読み、未指定時の組み込み default は同梱 `config.default.yaml` と同期テストで固定する。そのため実音声のクロスフェードと metadata_generator のタイムスタンプ計算は同じ既定値・同じチャンネル上書き値を使う。
 
 ## When to Use
-
-**前工程:** `/suno-helper`（Suno UI での連続生成 + playlist 追加 + 一括ダウンロード）
 
 - `/suno-helper` で楽曲生成・ダウンロードが完了し、マスター音源を生成したいとき
 - `02-Individual-music/` に MP3 / M4A / WAV ファイルが揃っている状態でマスター結合を実行したいとき
@@ -699,4 +702,4 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 
 ## Next Step
 
-→ `/videoup` で動画生成を実行
+- `/videoup` で動画生成を実行

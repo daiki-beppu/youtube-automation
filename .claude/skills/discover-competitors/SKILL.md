@@ -3,6 +3,11 @@ name: discover-competitors
 description: "Use when 追加競合候補の自動発掘やニッチ仮説の並行検証をするとき。「競合候補」「競合発掘」「ニッチ検証」「discover-competitors」で発動"
 ---
 
+## 前後工程
+
+- `前工程`: `/benchmark`, `/channel-research`
+- `後工程`: `/viewer-voice`, `/benchmark`
+
 ## Overview
 
 ニッチキーワード（複数可）を渡すと、登録者数レンジ・最終投稿日でフィルタしたうえで

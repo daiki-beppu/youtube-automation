@@ -3,6 +3,11 @@ name: community-draft
 description: "Use when コミュニティ投稿の下書きを --type 別に生成するとき。「コミュニティ投稿作って」「day-of reminder」「weekly feedback」で発動"
 ---
 
+## 前後工程
+
+- `前工程`: `/collection-ideate`
+- `後工程`: `/community-post`
+
 ## Overview
 
 YouTube コミュニティ投稿の **下書き** を生成するスキル。

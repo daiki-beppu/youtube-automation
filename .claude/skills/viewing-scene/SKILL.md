@@ -3,6 +3,11 @@ name: viewing-scene
 description: "Use when 視聴シーン（いつ・どこで・なぜ聴くか）を検証・定義するとき。「視聴シーン」「利用シーン」「シーン分析」で発動。/audience-persona-design の結果を踏まえる"
 ---
 
+## 前後工程
+
+- `前工程`: `/audience-persona-design`
+- `後工程`: `/collection-ideate`
+
 ## Overview
 
 自チャンネル既存データのシーン別パフォーマンス + ベンチマーク競合の活動タグ分析 +

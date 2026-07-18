@@ -3,6 +3,11 @@ name: automation-update
 description: "Use when 下流リポジトリで automation を最新リリースへ追従させるとき。「追従」「アップグレード」「automation-update」で発動。pin bump から yt-skills sync・コミットまで一括の wizard"
 ---
 
+## 前後工程
+
+- `前工程`: `/automation-release`
+- `後工程`: `なし`
+
 ## Overview
 
 このスキルは **AI 主導の追従 wizard** である。下流チャンネルリポジトリ（bobble / deepfocus365 / rjn 等）で発動し、自リポの `pyproject.toml` を official upstream（`automation_update_refs.UPSTREAM_REPO` が単一ソース。既定: `daiki-beppu/youtube-automation`）の最新 tag まで bump して、`.claude/skills/` の同期、動作確認、コミットまでを 1 コマンドで回す。

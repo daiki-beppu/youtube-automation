@@ -3,6 +3,11 @@ name: metadata-audit
 description: "Use when ローカル descriptions.md と YouTube メタデータの整合を監査するとき。「メタデータ監査」「説明欄ずれてない？」で発動。修正は /video-description の責務"
 ---
 
+## 前後工程
+
+- `前工程`: `/video-upload`
+- `後工程`: `/video-description`
+
 ## Overview
 
 `yt-metadata-audit` のラッパー。`collections/live/<col>/20-documentation/descriptions.md` と `workflow-state.json` の整合性、および YouTube API 側 snippet/localizations の整合性を読み取り専用で監査する。

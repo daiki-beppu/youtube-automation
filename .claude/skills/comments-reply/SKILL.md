@@ -3,6 +3,11 @@ name: comments-reply
 description: "Use when YouTube コメントへ自動返信するとき。「コメント返信」「自動返信」「リプライ」で発動。dry-run 監査後 apply、履歴で二重返信防止"
 ---
 
+## 前後工程
+
+- `前工程`: `なし`
+- `後工程`: `なし`
+
 ## Overview
 
 YouTube Data API v3 の `commentThreads.list` / `comments.insert` を使い、

@@ -3,6 +3,11 @@ name: channel-research
 description: "Use when /benchmark と /viewer-voice のデータからタイトル・動画尺・投稿・コメントを含むチャンネル全体を徹底分析するとき。「競合分析」「チャンネルリサーチ」「TTP 対象抽出」で発動。サムネイルだけの深掘りは /thumbnail-research。データ収集・更新は /benchmark（未実行なら先に案内）"
 ---
 
+## 前後工程
+
+- `前工程`: `/benchmark`, `/viewer-voice`
+- `後工程`: `/collection-ideate`, `/wf-new`
+
 ## Overview
 
 `/benchmark` と `/viewer-voice` で収集したベンチマークデータ + コメントデータを読み込み、徹底的に分析してレポートを生成する。
