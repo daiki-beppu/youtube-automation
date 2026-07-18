@@ -1,6 +1,6 @@
 ---
 name: analytics-collect
-description: "Use when YouTube Analytics データの収集・最新化が必要なとき。「データ更新」「統計を取得」「分析の準備」で発動。収集済みデータの分析のみは /analytics-analyze を使う"
+description: "Use when YouTube Analytics データの収集・最新化だけが必要なとき。「データ更新」「統計を取得」「分析の準備」で発動。収集済みデータの分析のみは /analytics-analyze、収集→分析→表示の一括実行は /analytics-run を使う"
 ---
 
 ## 前後工程

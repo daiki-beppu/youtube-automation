@@ -250,6 +250,8 @@ TTP 対象がこの時点で channel ID まで分かっている場合も、Step
 - `.gitignore`
 - `auth/client_secrets.template.json`
 
+定期制作の自動起動（`workflow.json` の `scheduled_automation`）は本スキルでは生成しない（既定は未設定 = 無効）。運用開始後に定期実行したくなったら `/automation-schedule` で有効化する。
+
 冪等性: 既存ファイルは `--force` がない限り上書きしない。差分がある場合は unified diff を確認してから `--force` を判断する。初期ディレクトリ生成は `/setup` の責務であり、`yt-channel-init` は setup が作成済みのディレクトリを削除・再生成しない。
 
 ### Step 5: TTP seed fetch と承認済み対象反映
@@ -341,6 +343,7 @@ image_generation:
 以下は必要になった時点で、ユーザーに目的を確認してから後続スキルとして実行する。`/viewer-voice` はこの任意の追加調査には含めず、Step 7 の必須前工程として実行する:
 
 - 追加の競合候補を広げたい → `/discover-competitors`
+- 現行 TTP の入替候補やニッチ仮説を、外部根拠と同じ評価軸で比較したい → `/market-research`（会話内レポートが既定。TTP / config は変更しない）
 - 承認済み TTP 対象の動画データやサムネイルを本格収集したい → `/benchmark`
 - 収集済みデータから方向性を深掘りしたい → `/channel-research`
 
@@ -553,6 +556,7 @@ YouTube 側で手動編集した設定をローカルに取り込みたいとき
 
 - `/setup` → 前提: automation ツール導入 + GCP / OAuth / ADC 準備
 - `/discover-competitors` → TTP 対象外の追加競合発掘
+- `/market-research` → 現行 TTP の入替候補・ニッチ仮説を読み取り専用で横断比較
 - `/benchmark` → 承認済み TTP 対象の本格ベンチマーク収集
 - `/viewer-voice` → コメント収集と視聴者インサイト分析
 - `/audience-persona-design` → 競合コメント分析を入力に第一ペルソナを設計・更新

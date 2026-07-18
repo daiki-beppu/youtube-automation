@@ -1,6 +1,6 @@
 ---
 name: analytics-report
-description: "Use when 既存の Analytics レポートを表示・比較したいとき。「レポート見せて」「過去データ確認」「前回の分析結果」で発動"
+description: "Use when 既存の Analytics レポートの表示・比較だけを行いたいとき。「レポート見せて」「過去データ確認」「前回の分析結果」で発動。収集→分析→表示の一括実行は /analytics-run を使う"
 ---
 
 ## 前後工程
