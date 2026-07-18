@@ -198,6 +198,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs(suno,suno-helper)`: 長尺 BGM チャンネル向けに `config/skills/suno.yaml::duration_filter`（`min_sec` / `max_sec`、部分指定は既定値と deep-merge）の override 手順を `/suno` Step 2 と `/suno-helper` の duration guard 節へ文書化した。override が `suno-prompts.json` へ反映される契約は回帰テストで pin し（機能自体は #1269 で実装済み・既定 60〜300 秒は不変）、閾値変更後は `yt-generate-suno` の再生成が必要なことと、resume が run 開始時点の閾値を保持するため新規 run で効かせる注意も明記した（#1937）。
 
 - `fix(suno-helper)`: 新 Create UI（2026-07）で playlist の clip row 検出が全件 missing になる問題を実 DOM capture（匿名化 fixture）に基づき修正した。復活した `.clip-row` コンテナを row 導出の最優先アンカーにし、`div` 化した再生ボタン（`[role="button"][aria-label^="Play "]`）と row 自身の `aria-label` を曲名フォールバックに追加。仮想ウィンドウ走査（`scrollAndMultiSelectByIds` / `readSelectedClipIds`）は共通ヘルパへ抽出し、ウィンドウ外 row の空シェル化・再描画遅延に対して描画 signature 変化の poll（上限 3s）で hydration を待ち、ページネーションで走査中に成長する scrollHeight へ maxScroll 毎ステップ再計算で追従する。旧 DOM / grid view の検出経路と fixture は不変（#2043）。
+### Added
+
+- `feat(analytics)`: standard / full depth の Analytics 収集に、視聴数上位 200 件の playlist dimension における views・平均視聴時間・上位 200 件内の視聴シェアを追加し、`/analytics-analyze` が Complete Collection を含むプレイリスト内視聴をレポートできるようにした（#1815）。
 
 ## [5.5.17] - 2026-07-10
 

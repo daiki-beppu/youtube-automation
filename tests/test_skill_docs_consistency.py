@@ -79,6 +79,22 @@ def test_theme_compare_docs_and_error_use_content_tags_themes() -> None:
     assert "load_config().content.tags.themes" in _read(".claude/skills/analytics-analyze/SKILL.md")
 
 
+def test_analytics_analyze_documents_playlist_effect_section() -> None:
+    analytics_analyze = _read(".claude/skills/analytics-analyze/SKILL.md")
+    analytics_collect = _read(".claude/skills/analytics-collect/SKILL.md")
+
+    assert "分析項目」の 7 項目" in analytics_analyze
+    assert "**プレイリスト効果分析**" in analytics_analyze
+    assert "`playlist_analytics.playlists`" in analytics_analyze
+    assert "`view_share_percent`" in analytics_analyze
+    assert "`average_view_duration`" in analytics_analyze
+    assert "`config/channel/playlists.json`" in analytics_analyze
+    assert "原因であるとは断定しない" in analytics_analyze
+    assert "上位 200 件内のシェア" in analytics_analyze
+    assert "チャンネル全体に対するシェアとして扱わない" in analytics_analyze
+    assert "視聴数上位 200 件のプレイリスト別 views・平均視聴時間・上位 200 件内の視聴シェア" in analytics_collect
+
+
 def test_localizations_docs_use_root_localizations_file() -> None:
     for path in (
         ".claude/skills/wf-new/references/scene_phrases.md",

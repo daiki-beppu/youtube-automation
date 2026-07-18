@@ -104,7 +104,7 @@ class ChannelAnalyticsMixin:
             end_date (str): 終了日 (YYYY-MM-DD)
             depth (str): 収集深度
                 - "basic": 既存メトリクスのみ（クォータ節約、後方互換）
-                - "standard": + impressions/CTR + traffic source + device（推奨）
+                - "standard": + impressions/CTR + traffic source + playlist + device（推奨）
                 - "full": + retention + country（全メトリクス）
 
         Returns:
@@ -151,7 +151,7 @@ class ChannelAnalyticsMixin:
                 "strategic_analysis": strategic_analytics,
             }
 
-            # standard 以上: impressions/CTR + traffic source + device
+            # standard 以上: impressions/CTR + traffic source + playlist + device
             if depth in ("standard", "full"):
                 logger.info("CTR 詳細分析収集中...")
                 basic_data["ctr_analysis"] = self.get_ctr_analysis(start_date, end_date)
@@ -163,6 +163,9 @@ class ChannelAnalyticsMixin:
                 basic_data["traffic_sources"]["search_terms"] = self.get_traffic_source_detail(
                     start_date, end_date, "YT_SEARCH"
                 )
+
+                logger.info("プレイリスト別分析収集中...")
+                basic_data["playlist_analytics"] = self.get_playlist_analytics(start_date, end_date)
 
                 logger.info("デバイス別分析収集中...")
                 basic_data["audience"] = {

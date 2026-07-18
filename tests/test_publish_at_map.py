@@ -128,6 +128,7 @@ class TestCollectBasicAnalyticsIntegration:
         mixin.get_ctr_analysis = lambda s, e: {"videos": []}
         mixin.get_traffic_source_analytics = lambda s, e: {"sources": {}}
         mixin.get_traffic_source_detail = lambda s, e, source_type: []
+        mixin.get_playlist_analytics = lambda s, e: {"playlists": {}, "total_views": 0}
         mixin.get_device_analytics = lambda s, e: {"devices": {}}
         mixin.get_country_analytics = lambda s, e: pytest.fail("country should require full depth")
         mixin.get_retention_summary = lambda s, e, top_n: pytest.fail("retention should require full depth")
