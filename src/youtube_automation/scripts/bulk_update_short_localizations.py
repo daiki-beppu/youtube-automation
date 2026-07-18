@@ -20,6 +20,7 @@ import time
 
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import channel_dir, load_config
+from youtube_automation.utils.cost_tracker import log_quota
 from youtube_automation.utils.metadata_generator import build_short_localizations
 from youtube_automation.utils.youtube_service import get_youtube
 
@@ -28,6 +29,11 @@ logger = logging.getLogger(__name__)
 
 # per-video スリープ。quota 急上昇防止（plan アンチパターン #8）
 SLEEP_SEC_PER_VIDEO = 0.5
+
+# YouTube Data API quota 記録（Issue #2058）。units は公式 quota 表に従う
+# （https://developers.google.com/youtube/v3/determine_quota_cost）。
+QUOTA_SERVICE = "youtube-data-api"
+VIDEOS_UPDATE_QUOTA_UNITS = 50
 
 
 def collect_short_videos() -> list[dict]:
@@ -133,12 +139,21 @@ def main() -> None:
             "id": v["video_id"],
             "localizations": localizations,
         }
+        request = youtube.videos().update(part="localizations", body=body)
         try:
-            youtube.videos().update(part="localizations", body=body).execute()
+            request.execute()
             print(f"  ✅ {v['video_id']} ({v['collection_name']}) updated: {list(localizations.keys())}")
         except Exception as e:
             print(f"  ❌ {v['video_id']} ({v['collection_name']}) failed: {e}")
             continue
+        finally:
+            # quota はリクエストの成否に関わらず消費されるため、失敗時も記録する
+            log_quota(
+                QUOTA_SERVICE,
+                "videos.update",
+                VIDEOS_UPDATE_QUOTA_UNITS,
+                metadata={"video_id": v["video_id"], "part": "localizations"},
+            )
 
         # quota 急上昇防止（plan アンチパターン #8）
         time.sleep(SLEEP_SEC_PER_VIDEO)
