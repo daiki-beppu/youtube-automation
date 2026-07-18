@@ -23,10 +23,12 @@ import pytest
 
 import youtube_automation.scripts.generate_image as generate_image_module
 from youtube_automation.scripts.generate_image import (
+    apply_ab_test_pattern,
     build_requests,
     expand_thumbnail_prompt_clauses,
     plan_output_paths,
     plan_reference_assignments,
+    resolve_ab_test_patterns,
     run_requests_parallel,
 )
 from youtube_automation.scripts.generate_image import (
@@ -139,6 +141,72 @@ class TestExpandThumbnailPromptClauses:
     def test_rejects_malformed_typography_config(self, skill_cfg: dict, message: str) -> None:
         with pytest.raises(ConfigError, match=message):
             expand_thumbnail_prompt_clauses("Text-included thumbnail prompt. ${typography_clause}", skill_cfg)
+
+
+class TestAbTestPatterns:
+    def test_disabled_or_missing_preserves_single_thumbnail_flow(self) -> None:
+        assert resolve_ab_test_patterns({}) == []
+        assert resolve_ab_test_patterns({"ab_test": {"enabled": False, "patterns": []}}) == []
+        assert apply_ab_test_pattern("base prompt", [], None) == "base prompt"
+
+    def test_resolves_three_patterns_and_appends_selected_variation(self) -> None:
+        patterns = resolve_ab_test_patterns(
+            {
+                "ab_test": {
+                    "enabled": True,
+                    "patterns": [
+                        {"name": "a", "variation": "Use a close-up composition."},
+                        {"name": "b", "variation": "Use a cool blue palette."},
+                        {"name": "copy", "variation": "Use a shorter title copy."},
+                    ],
+                }
+            }
+        )
+
+        assert [pattern["name"] for pattern in patterns] == ["a", "b", "copy"]
+        assert apply_ab_test_pattern("base prompt\n", patterns, "b") == "base prompt\nUse a cool blue palette."
+
+    @pytest.mark.parametrize(
+        "ab_test, message",
+        [
+            ({"enabled": True, "patterns": []}, "1 件以上"),
+            (
+                {
+                    "enabled": True,
+                    "patterns": [
+                        {"name": "a", "variation": "A"},
+                        {"name": "b", "variation": "B"},
+                        {"name": "c", "variation": "C"},
+                        {"name": "d", "variation": "D"},
+                    ],
+                },
+                "3 件以内",
+            ),
+            ({"enabled": True, "patterns": [{"name": "../a", "variation": "A"}]}, "英小文字"),
+            ({"enabled": True, "patterns": [{"name": "a", "variation": ""}]}, "variation"),
+            (
+                {
+                    "enabled": True,
+                    "patterns": [
+                        {"name": "a", "variation": "A"},
+                        {"name": "a", "variation": "B"},
+                    ],
+                },
+                "重複",
+            ),
+        ],
+    )
+    def test_rejects_invalid_enabled_config(self, ab_test: dict, message: str) -> None:
+        with pytest.raises(ConfigError, match=message):
+            resolve_ab_test_patterns({"ab_test": ab_test})
+
+    def test_rejects_unknown_or_disabled_pattern_selection(self) -> None:
+        with pytest.raises(ConfigError, match="enabled=true"):
+            apply_ab_test_pattern("base", [], "a")
+
+        patterns = [{"name": "a", "variation": "A"}]
+        with pytest.raises(ConfigError, match="有効値: a"):
+            apply_ab_test_pattern("base", patterns, "b")
 
 
 class TestPlanOutputPaths:
@@ -693,6 +761,78 @@ def _benchmark_refs(tmp_path: Path, count: int) -> list[Path]:
     for ref in refs:
         ref.write_bytes(b"fake image")
     return refs
+
+
+def test_generate_image_cli_applies_ab_pattern_before_provider_call(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _FakeProvider()
+    reference = tmp_path / "reference.jpg"
+    reference.write_bytes(b"fake image")
+    skill_cfg = {
+        "ab_test": {
+            "enabled": True,
+            "patterns": [
+                {"name": "a", "variation": "Use a close-up composition."},
+                {"name": "b", "variation": "Use a cool blue palette."},
+            ],
+        },
+        "image_generation": {
+            "gemini": {
+                "generation_mode": "single_step",
+                "single_step": {"max_attempts": 1, "rotate": True},
+            }
+        },
+    }
+    _patch_generate_image_cli(
+        monkeypatch,
+        [
+            "--prompt",
+            "base prompt",
+            "--output",
+            str(tmp_path / "thumbnail-b-v1.jpg"),
+            "--reference",
+            str(reference),
+            "--ab-pattern",
+            "b",
+            "-y",
+        ],
+        provider=provider,
+        channel_root=tmp_path,
+        skill_cfg_override=skill_cfg,
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        generate_image_main()
+
+    assert exc_info.value.code == 0
+    assert len(provider.requests) == 1
+    assert provider.requests[0].prompt == "base prompt\nUse a cool blue palette."
+
+
+def test_generate_image_cli_rejects_invalid_ab_config_before_provider_call(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = _FakeProvider()
+    skill_cfg = {
+        "ab_test": {"enabled": True, "patterns": []},
+        "image_generation": {"gemini": {"generation_mode": "two_phase"}},
+    }
+    _patch_generate_image_cli(
+        monkeypatch,
+        ["--prompt", "base prompt", "--output", str(tmp_path / "thumbnail.jpg"), "-y"],
+        provider=provider,
+        channel_root=tmp_path,
+        skill_cfg_override=skill_cfg,
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        generate_image_main()
+
+    assert exc_info.value.code == 1
+    assert provider.calls == []
 
 
 def _write_reference_assignments(tmp_path: Path, collection: str, references: list[str]) -> Path:
