@@ -313,7 +313,7 @@ def test_mixin_fail_open_returns_none_on_exception(monkeypatch):
 
     monkeypatch.setattr(reporting_analytics, "ReportingAPIClient", _BoomClient)
     monkeypatch.setattr(reporting_analytics, "get_reporting", lambda: MagicMock())
-    monkeypatch.setattr(reporting_analytics, "get_credentials", lambda: MagicMock())
+    monkeypatch.setattr(reporting_analytics, "get_credentials_readonly", lambda: MagicMock())
 
     class _C(reporting_analytics.ReportingAPIMixin):
         pass
@@ -333,7 +333,7 @@ def test_mixin_returns_summary_on_success(monkeypatch):
 
     monkeypatch.setattr(reporting_analytics, "ReportingAPIClient", _OkClient)
     monkeypatch.setattr(reporting_analytics, "get_reporting", lambda: MagicMock())
-    monkeypatch.setattr(reporting_analytics, "get_credentials", lambda: MagicMock())
+    monkeypatch.setattr(reporting_analytics, "get_credentials_readonly", lambda: MagicMock())
 
     class _C(reporting_analytics.ReportingAPIMixin):
         pass

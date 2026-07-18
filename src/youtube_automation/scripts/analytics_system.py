@@ -60,9 +60,10 @@ class AnalyticsSystem:
         logger.info("🔐 YouTube API認証中...")
 
         try:
-            from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
+            # Analytics 収集は read-only で足りるため token.readonly.json を優先する（#1699）
+            from youtube_automation.utils.youtube_service import get_readonly_handler
 
-            handler = YouTubeOAuthHandler()
+            handler = get_readonly_handler()
             handler.authenticate(force_reauth=force_reauth)
 
             if handler.test_connection():
@@ -218,9 +219,9 @@ class AnalyticsSystem:
 
 def _make_reporting_client():
     from youtube_automation.utils.reporting_api import ReportingAPIClient
-    from youtube_automation.utils.youtube_service import get_credentials, get_reporting
+    from youtube_automation.utils.youtube_service import get_credentials_readonly, get_reporting
 
-    return ReportingAPIClient(get_reporting(), credentials=get_credentials())
+    return ReportingAPIClient(get_reporting(), credentials=get_credentials_readonly())
 
 
 def _run_reporting_dry_run() -> int:
