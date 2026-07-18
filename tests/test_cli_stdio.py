@@ -44,6 +44,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-kpi-dashboard": "youtube_automation.scripts.kpi_dashboard",
     "yt-launch-curve": "youtube_automation.scripts.launch_curve",
     "yt-metadata-audit": "youtube_automation.scripts.metadata_audit",
+    "yt-oauth": "youtube_automation.auth.oauth_handler",
     "yt-pinned-comment": "youtube_automation.scripts.pinned_comment",
     "yt-playlist-manager": "youtube_automation.scripts.playlist_manager",
     "yt-playlist-status": "youtube_automation.scripts.playlist_status",

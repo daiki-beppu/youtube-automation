@@ -15,7 +15,7 @@ import sys
 
 from youtube_automation.utils import cost_tracker
 from youtube_automation.utils.config import load_config
-from youtube_automation.utils.youtube_service import get_youtube
+from youtube_automation.utils.youtube_service import get_youtube_readonly
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class PlaylistStatusViewer:
 
     def _get_youtube(self):
         if self._youtube is None:
-            self._youtube = get_youtube()
+            self._youtube = get_youtube_readonly()
         return self._youtube
 
     def _list_playlist_video_ids(self, playlist_id: str) -> set[str]:

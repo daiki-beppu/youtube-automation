@@ -29,7 +29,7 @@ from youtube_automation.scripts.benchmark_collector import (
 )
 from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.cost_tracker import log_quota
-from youtube_automation.utils.youtube_service import get_youtube
+from youtube_automation.utils.youtube_service import get_youtube_readonly
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +103,7 @@ class BenchmarkCommentCollector:
         logger.info("対象動画: %d本（%s再生以上）", len(targets), f"{self.min_views:,}")
 
         logger.info("YouTube API 認証中...")
-        self.youtube = get_youtube()
+        self.youtube = get_youtube_readonly()
         logger.info("認証完了")
 
         result = {

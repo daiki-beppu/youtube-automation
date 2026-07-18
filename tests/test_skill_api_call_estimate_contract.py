@@ -45,6 +45,7 @@ BILLED_CLIS: dict[str, str] = {
     "yt-channel-seed": "YouTube Data API",
     "yt-channel-settings": "YouTube Data API (channels.update)",
     "yt-channel-status": "YouTube Data + Analytics API",
+    "yt-oauth": "YouTube Data API (channels.list による接続テストのみ)",
     "yt-comments-reply": "YouTube Data API (comments.insert)",
     "yt-discover-competitors": "YouTube Data API (search.list)",
     "yt-fetch-stream-key": "YouTube Data API (liveStreams.list)",
