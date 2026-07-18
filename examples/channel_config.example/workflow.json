@@ -1,10 +1,8 @@
 {
   "workflow": {
     "wf_next": {
-      "approval_gates": {
-        "audio": false,
-        "upload": false
-      },
+      "skip_audio_approval": true,
+      "skip_upload_approval": true,
       "skip_manual_mastering": false
     }
   }
