@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import sys
 
@@ -27,6 +28,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
+from youtube_automation.utils import cost_tracker
 from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.exceptions import ValidationError, YouTubeAPIError
 from youtube_automation.utils.secrets import write_op_secret
@@ -37,6 +39,21 @@ _VARIABLE_FRAMERATE = "variable"
 _STREAMING_SCOPE = "https://www.googleapis.com/auth/youtube"
 _STREAMING_TOKEN_FILENAME = "token_streaming.json"
 _DEFAULT_FIELD = "stream_key"
+_QUOTA_SERVICE = "youtube-data-api"
+_READ_QUOTA_UNITS = 1
+
+
+def _record_read_quota(bucket: str) -> None:
+    """read 1 リクエスト分の quota 消費を記録する。記録失敗で元の処理は止めない。
+
+    ``--stdout`` はストリームキーを pipe で受ける契約のため、tracker 内部の
+    警告 print が stdout を汚さないよう stderr へ逃がす。
+    """
+    try:
+        with contextlib.redirect_stdout(sys.stderr):
+            cost_tracker.log_quota(_QUOTA_SERVICE, bucket, _READ_QUOTA_UNITS)
+    except Exception:
+        pass
 
 
 # ----------------------------------------------------------------------------
@@ -116,6 +133,9 @@ def list_live_streams(credentials) -> list[dict]:
         response = service.liveStreams().list(part="cdn,snippet", mine=True).execute()
     except HttpError as err:
         raise YouTubeAPIError.from_http_error(err, "liveStreams.list の呼び出しに失敗しました") from err
+    finally:
+        # 失敗リクエストにも quota は課金されるため、成功・失敗どちらでも記録する
+        _record_read_quota("liveStreams.list")
     return response.get("items", [])
 
 
