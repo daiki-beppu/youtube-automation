@@ -2,7 +2,7 @@
 
 ## Status
 
-accepted (2026-07-13)。実装は未着手（issue #1945 とその実装 issue 群から着手）。
+accepted (2026-07-13)。workspace 解決と `yt-channel list` は #1947、コピー移行 CLI と移行ガイドは #1949 で実装。
 
 複数チャンネルを `channels/<slug>/` として 1 リポジトリに同居させる **workspace** 構造を Python 版（本リポ）に導入する。単一チャンネルリポ構成は恒久サポートであり、workspace は opt-in。
 
