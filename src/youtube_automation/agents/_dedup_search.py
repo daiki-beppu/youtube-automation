@@ -16,8 +16,15 @@ from youtube_automation.agents._uploader_constants import (
     _REUSABLE_UPLOAD_STATUSES,
     YOUTUBE_VIDEO_URL_PREFIX,
 )
+from youtube_automation.utils import cost_tracker
 
 logger = logging.getLogger(__name__)
+
+_QUOTA_SERVICE = "youtube-data-api"
+# YouTube Data API v3 の公式 quota cost（search.list=100 / videos.list=1）
+_SEARCH_LIST_UNITS = 100
+_VIDEOS_LIST_UNITS = 1
+_QUOTA_CONTEXT = "upload_dedup_search"
 
 
 class DedupSearchMixin:
@@ -38,14 +45,33 @@ class DedupSearchMixin:
         """
         self._ensure_service()
         try:
-            resp = (
-                self.youtube.search().list(forMine=True, type="video", q=title, maxResults=10, part="snippet").execute()
+            search_request = self.youtube.search().list(
+                forMine=True, type="video", q=title, maxResults=10, part="snippet"
             )
+            # 失敗 request も quota を消費するため、成否によらず記録してから既存の fail-open に委ねる
+            try:
+                resp = search_request.execute()
+            finally:
+                cost_tracker.log_quota(
+                    _QUOTA_SERVICE,
+                    "search.list",
+                    _SEARCH_LIST_UNITS,
+                    metadata={"context": _QUOTA_CONTEXT},
+                )
             candidate_ids = self._exact_title_video_ids(resp.get("items", []), title)
             if not candidate_ids:
                 return None
 
-            videos_response = self.youtube.videos().list(id=",".join(candidate_ids), part="status,snippet").execute()
+            videos_request = self.youtube.videos().list(id=",".join(candidate_ids), part="status,snippet")
+            try:
+                videos_response = videos_request.execute()
+            finally:
+                cost_tracker.log_quota(
+                    _QUOTA_SERVICE,
+                    "videos.list",
+                    _VIDEOS_LIST_UNITS,
+                    metadata={"context": _QUOTA_CONTEXT},
+                )
             return self._first_reusable_video(videos_response.get("items", []), title)
         except HttpError as e:
             # fail-open: 安全網のエラーは upload を block しない(一次対策は session URI 持ち越し)
