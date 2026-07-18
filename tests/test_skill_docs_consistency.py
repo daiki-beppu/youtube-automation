@@ -983,11 +983,13 @@ def test_wf_next_skip_approval_keys_are_documented_consistently() -> None:
     wf_status = _read(".claude/skills/wf-status/SKILL.md")
     schema = _read(".claude/skills/wf-new/references/schema.md")
     example = _read("examples/channel_config.example/workflow.json")
+    example_config = json.loads(example)
+    wf_next_example = example_config["workflow"]["wf_next"]
 
     # example は新キーのみ（既定値どおり true = 承認省略）で、旧キーを含まない
     assert '"skip_audio_approval": true' in example
     assert '"skip_upload_approval": true' in example
-    assert "approval_gates" not in example
+    assert "approval_gates" not in wf_next_example
 
     # wf-next は新キーを正として記述し、旧キーは後方互換 alias + 同時指定エラーとして言及する
     for key in ("skip_audio_approval", "skip_upload_approval"):

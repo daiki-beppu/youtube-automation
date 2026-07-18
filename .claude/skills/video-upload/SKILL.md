@@ -6,7 +6,7 @@ description: "Use when コレクションの動画または release 型（単曲
 ## 前後工程
 
 - `前工程`: `/videoup`, `/video-description`, `/playlist`, `/thumbnail`
-- `後工程`: `/community-post`, `/metadata-audit`, `/pinned-comment`, `/live-clean`
+- `後工程`: `/post-publish`, `/community-post`, `/metadata-audit`, `/pinned-comment`, `/live-clean`
 
 ## Overview
 
@@ -113,7 +113,7 @@ $ARGUMENTS
 0. **公開タイミング確定（必須）** — ユーザーに公開方法を案内・確認する前に必ず `uv run yt-upload-collection --plan [-c NAME]` を実行し、実際の公開挙動を確定する。`config/schedule_config.json` の予約設定や `config/channel/youtube.json` の既定時刻により、`privacy=public` でも `status.publishAt` が設定される場合があるため、plan 結果なしに「即時公開」と案内しない
 1. **Complete Collection アップロード** — マスター動画、メタデータ（descriptions.md から読み込み）、サムネイル設定
 2. **live 移動** — `collections/planning/` → `collections/live/`
-3. **コミュニティ投稿準備** — `config/channel/community.json` が存在する場合、`/community-post` を呼び出してテンプレ展開 → pbcopy → YouTube Studio 起動まで自動で行う（投稿ボタン押下は Studio 上で手動）。`community.json` が無いチャンネルではスキップ
+3. **公開後処理** — `load_config().workflow.post_publish.configured` が `true` なら、live 移動後のコレクションパスを `/post-publish` に引き継ぎ、manifest 順の `community-post → pinned-comment → metadata-audit` を実行する。チェーン側の承認・履歴・再開契約に委ね、ここで子スキルを個別に再実装しない。未設定（`false`）なら後方互換として、`config/channel/community.json` が存在する場合だけ従来どおり `/community-post` を案内し、後続 2 スキルは手動実行のままとする
 
 メタデータは `descriptions.md` から title / description / tags を優先使用。存在しない場合は `BAHMetadataGenerator` で自動生成にフォールバック。
 
@@ -203,4 +203,5 @@ uv run yt-upload-collection --plan -c <NAME>
 - `/video-description` — アップロード前に descriptions.md を生成
 - `/playlist` — 初投稿前のプレイリスト初期化、状態確認、手動 assign、クリーンアップ（アップロード時の自動 assign は本スキル内で実行される）
 - `/metadata-audit` — アップロード後のローカル ↔ YouTube 整合性監査
-- `/community-post` — アップロード完了後にコミュニティ投稿テンプレを展開して Studio を起動（`config/channel/community.json` がある場合のみ）
+- `/post-publish` — `workflow.post-publish` 設定時、アップロード完了後の 3 段チェーンを承認・履歴付きで実行
+- `/community-post` — `workflow.post-publish` 未設定時の後方互換。コミュニティ投稿テンプレを展開して Studio を起動（`config/channel/community.json` がある場合のみ）

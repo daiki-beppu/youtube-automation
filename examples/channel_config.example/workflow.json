@@ -4,6 +4,13 @@
       "skip_audio_approval": true,
       "skip_upload_approval": true,
       "skip_manual_mastering": false
+    },
+    "post-publish": {
+      "approval_gates": {
+        "community-post": true,
+        "pinned-comment": true,
+        "metadata-audit": true
+      }
     }
   }
 }
