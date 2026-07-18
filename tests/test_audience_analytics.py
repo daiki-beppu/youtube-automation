@@ -84,3 +84,72 @@ class TestGetCountryAnalytics:
         assert result["total_views"] == 350
         assert result["countries"]["JP"]["subscribers_gained"] == 3
         assert result["countries"]["US"]["view_share_percent"] == pytest.approx(57.1, abs=0.1)
+
+
+class TestGetSubscribedStatusAnalytics:
+    def test_mixin_docstring_includes_subscribed_status_analysis(self) -> None:
+        """公開 Mixin の責務が登録ステータス分析を含む。"""
+        assert AudienceAnalyticsMixin.__doc__ is not None
+        assert "登録ステータス" in AudienceAnalyticsMixin.__doc__
+
+    def test_returns_statuses_with_share_and_uses_subscribed_status_dimension(self, collector):
+        """登録済み／未登録のデータ、比率、API dimension を正しく扱う"""
+        collector.analytics_service.reports().query().execute.return_value = {
+            "rows": [
+                ["SUBSCRIBED", 300, 1200, 240],
+                ["UNSUBSCRIBED", 700, 2800, 180],
+            ]
+        }
+
+        result = collector.get_subscribed_status_analytics("2026-01-01", "2026-04-01")
+
+        assert result == {
+            "statuses": {
+                "SUBSCRIBED": {
+                    "views": 300,
+                    "watch_time_minutes": 1200,
+                    "avg_view_duration": 240,
+                    "view_share_percent": 30.0,
+                },
+                "UNSUBSCRIBED": {
+                    "views": 700,
+                    "watch_time_minutes": 2800,
+                    "avg_view_duration": 180,
+                    "view_share_percent": 70.0,
+                },
+            },
+            "total_views": 1000,
+        }
+        query_kwargs = collector.analytics_service.reports().query.call_args.kwargs
+        assert query_kwargs["dimensions"] == "subscribedStatus"
+        assert query_kwargs["metrics"] == "views,estimatedMinutesWatched,averageViewDuration"
+
+    def test_retries_transient_api_failure(self, collector, monkeypatch):
+        monkeypatch.setattr("youtube_automation.utils.retry.time.sleep", lambda _: None)
+        transient = HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}')
+        request = collector.analytics_service.reports().query()
+        request.execute.side_effect = [transient, {"rows": [["SUBSCRIBED", 1, 2, 3]]}]
+
+        result = collector.get_subscribed_status_analytics("2026-01-01", "2026-04-01")
+
+        assert result["statuses"]["SUBSCRIBED"]["views"] == 1
+        assert request.execute.call_count == 2
+
+    def test_returns_empty_statuses_when_api_returns_no_rows(self, collector):
+        """行がない API 応答は空のステータス集計として保存可能にする"""
+        collector.analytics_service.reports().query().execute.return_value = {}
+
+        result = collector.get_subscribed_status_analytics("2026-01-01", "2026-04-01")
+
+        assert result == {"statuses": {}, "total_views": 0}
+
+    def test_returns_error_shape_for_http_error(self, collector):
+        """API エラーは既存 audience 集計と同じ error 付きの空データにする"""
+        error = HttpError(MagicMock(status=500), b"backendError")
+        collector.analytics_service.reports().query().execute.side_effect = error
+
+        result = collector.get_subscribed_status_analytics("2026-01-01", "2026-04-01")
+
+        assert result["statuses"] == {}
+        assert result["total_views"] == 0
+        assert str(error) in result["error"]

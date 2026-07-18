@@ -28,6 +28,30 @@ _MAX_WORKERS = 8
 class StrategicAnalyticsMixin:
     """戦略的分析の Mixin"""
 
+    @staticmethod
+    def _add_subscriber_conversion_rates(videos: List[Dict]) -> None:
+        """各動画に再生あたりの登録転換率（%）を付与する。"""
+        for video in videos:
+            views = video.get("views", 0)
+            subscribers_gained = video.get("subscribers_gained", 0)
+            video["subscriber_conversion_rate"] = round((subscribers_gained / views) * 100, 2) if views > 0 else 0
+
+    @staticmethod
+    def _build_subscriber_conversion_ranking(videos: List[Dict]) -> List[Dict]:
+        """登録転換率順の動画ランキングを、レポート用の必要項目だけで構築する。"""
+        ranking = [
+            {
+                "video_id": video.get("video_id"),
+                "title": video.get("title", "Unknown"),
+                "duration": video.get("duration", ""),
+                "views": video.get("views", 0),
+                "subscribers_gained": video.get("subscribers_gained", 0),
+                "subscriber_conversion_rate": video.get("subscriber_conversion_rate", 0),
+            }
+            for video in videos
+        ]
+        return sorted(ranking, key=lambda video: video["subscriber_conversion_rate"], reverse=True)
+
     def get_combined_analytics(
         self, start_date: str, end_date: str, top_count: int = 50, recent_days: int = 30
     ) -> Dict:
@@ -148,6 +172,8 @@ class StrategicAnalyticsMixin:
 
         # 再生回数で降順ソート
         recent_videos_data.sort(key=lambda x: x.get("views", 0), reverse=True)
+        self._add_subscriber_conversion_rates(top_videos_data)
+        self._add_subscriber_conversion_rates(recent_videos_data)
 
         # 結果
         result = {
@@ -221,12 +247,15 @@ class StrategicAnalyticsMixin:
 
         # 統計情報を追加
         total_videos = len(result["top_videos"]) + len(result["recent_videos"]) + len(result["all_videos"])
+        all_videos = result["top_videos"] + result["recent_videos"] + result["all_videos"]
+        self._add_subscriber_conversion_rates(all_videos)
         result["summary"] = {
             "total_videos_analyzed": total_videos,
             "top_videos_count": len(result["top_videos"]),
             "recent_videos_count": len(result["recent_videos"]),
             "all_videos_count": len(result["all_videos"]),
         }
+        result["subscriber_conversion_ranking"] = self._build_subscriber_conversion_ranking(all_videos)
 
         logger.info(f"戦略的分析データ取得完了: 総計{total_videos}本")
         return result
@@ -259,6 +288,7 @@ class StrategicAnalyticsMixin:
 
         # 再生回数で降順ソート
         videos_data.sort(key=lambda x: x.get("views", 0), reverse=True)
+        self._add_subscriber_conversion_rates(videos_data)
 
         logger.info(f"全動画Analytics取得完了: {len(videos_data)}本")
         return videos_data
@@ -345,6 +375,7 @@ class StrategicAnalyticsMixin:
                 break
 
         logger.info(f"上位動画Analytics取得完了: {len(videos_data)}本")
+        self._add_subscriber_conversion_rates(videos_data)
         return videos_data
 
     def get_recent_video_analytics(self, start_date: str, end_date: str, days: int = 30) -> List[Dict]:
@@ -376,6 +407,7 @@ class StrategicAnalyticsMixin:
 
         # 再生回数で降順ソート
         videos_data.sort(key=lambda x: x.get("views", 0), reverse=True)
+        self._add_subscriber_conversion_rates(videos_data)
 
         logger.info(f"直近動画Analytics取得完了: {len(videos_data)}本")
         return videos_data
@@ -425,7 +457,9 @@ class StrategicAnalyticsMixin:
                         logger.error(f"動画 {video['video_id']} の analytics 取得に失敗: {e}")
                         continue
 
-                    videos_data.append({**video, **analytics_data})
+                    combined_data = {**video, **analytics_data}
+                    self._add_subscriber_conversion_rates([combined_data])
+                    videos_data.append(combined_data)
 
                     # 進行状況表示（10件ごと）
                     if completed % 10 == 0:

@@ -42,6 +42,7 @@ BILLED_CLIS: dict[str, str] = {
     "yt-benchmark-comments": "YouTube Data API (commentThreads.list)",
     "yt-bulk-update-desc": "YouTube Data API (videos.update)",
     "yt-bulk-update-synthetic-media": "YouTube Data API (videos.update)",
+    "yt-captions-upload": "YouTube Data API (captions.list/insert/update)",
     "yt-channel-seed": "YouTube Data API",
     "yt-channel-settings": "YouTube Data API (channels.update)",
     "yt-channel-status": "YouTube Data + Analytics API",

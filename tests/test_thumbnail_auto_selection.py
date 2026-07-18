@@ -5,6 +5,8 @@
 """
 
 import json
+import math
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -12,7 +14,7 @@ import yaml
 from PIL import Image
 
 import youtube_automation.scripts.auto_select_thumbnail as auto_select_thumbnail
-from youtube_automation.scripts.auto_select_thumbnail import main
+from youtube_automation.scripts.auto_select_thumbnail import main, validate_audit_record
 from youtube_automation.utils import skill_config
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.thumbnail_features import feature_centroid, feature_distance
@@ -43,7 +45,7 @@ def _solid_image(path, color, size=_SIZE_16_9):
     Image.new("RGB", size, color).save(path)
 
 
-def _write_channel_config(channel_dir, *, enabled=True, refs=_REF_RELPATHS, archive_config=None):
+def _write_channel_config(channel_dir, *, enabled=True, mode=None, refs=_REF_RELPATHS, archive_config=None):
     skills_dir = channel_dir / "config" / "skills"
     skills_dir.mkdir(parents=True, exist_ok=True)
     cfg = {
@@ -58,18 +60,27 @@ def _write_channel_config(channel_dir, *, enabled=True, refs=_REF_RELPATHS, arch
             "gemini": {"reference_images": {"default": list(refs)}},
         },
     }
+    if mode is not None:
+        cfg["image_generation"]["auto_selection"]["mode"] = mode
     (skills_dir / "thumbnail.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
 
 
 def _setup_channel(
-    tmp_path, monkeypatch, *, enabled=True, refs=_REF_RELPATHS, ref_colors=_REF_COLORS, archive_config=None
+    tmp_path,
+    monkeypatch,
+    *,
+    enabled=True,
+    mode=None,
+    refs=_REF_RELPATHS,
+    ref_colors=_REF_COLORS,
+    archive_config=None,
 ):
     channel_dir = tmp_path / "channel"
     # refs は空タプルで渡されるケース（test_no_reference_images_errors）があり、
     # ref_colors とは意図的に非同長になり得るため strict=False（zip 既定 = 挙動保存）
     for relpath, color in zip(refs, ref_colors, strict=False):
         _solid_image(channel_dir / relpath, color)
-    _write_channel_config(channel_dir, enabled=enabled, refs=refs, archive_config=archive_config)
+    _write_channel_config(channel_dir, enabled=enabled, mode=mode, refs=refs, archive_config=archive_config)
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
     return channel_dir
 
@@ -83,6 +94,178 @@ def _setup_collection(tmp_path):
 def _run_json(argv, capsys):
     code = main(argv)
     return code, capsys.readouterr()
+
+
+def _valid_audit_record():
+    return {
+        "selected": "thumbnail-v1.jpg",
+        "distance": 0.25,
+        "ranking": [
+            {
+                "candidate": "thumbnail-v1.jpg",
+                "distance": 0.25,
+                "width": _MIN_WIDTH,
+                "height": _MIN_HEIGHT,
+                "eligible": True,
+                "reasons": [],
+            }
+        ],
+        "executed_at": "2026-07-18T12:34:56+00:00",
+    }
+
+
+def test_mode_full_reflected_in_dry_run_json(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch, mode="full")
+    collection = _setup_collection(tmp_path)
+    _solid_image(collection / "10-assets" / "thumbnail-v1.jpg", _NEAR_COLOR)
+
+    code, captured = _run_json([str(collection), "--dry-run", "--json"], capsys)
+
+    assert code == 0
+    payload = json.loads(captured.out)
+    assert payload["status"] == "ok"
+    assert payload["auto_selection_mode"] == "full"
+
+
+def test_mode_selection_only_explicit(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch, mode="selection_only")
+    collection = _setup_collection(tmp_path)
+    _solid_image(collection / "10-assets" / "thumbnail-v1.jpg", _NEAR_COLOR)
+
+    code, captured = _run_json([str(collection), "--dry-run", "--json"], capsys)
+
+    assert code == 0
+    payload = json.loads(captured.out)
+    assert payload["selected"]["candidate"] == "thumbnail-v1.jpg"
+    assert payload["auto_selection_mode"] == "selection_only"
+
+
+def test_invalid_mode_errors_non_zero_exit(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch, mode="manual")
+    collection = _setup_collection(tmp_path)
+
+    code, captured = _run_json([str(collection), "--dry-run", "--json"], capsys)
+
+    assert code == 1
+    assert "auto_selection.mode" in captured.err
+    payload = json.loads(captured.out)
+    assert payload["status"] == "error"
+    assert "auto_selection.mode" in payload["error"]
+
+
+@pytest.mark.parametrize("mode", [True, 1])
+def test_mode_non_string_errors(tmp_path, monkeypatch, capsys, mode):
+    _setup_channel(tmp_path, monkeypatch, mode=mode)
+    collection = _setup_collection(tmp_path)
+
+    code, captured = _run_json([str(collection), "--dry-run", "--json"], capsys)
+
+    assert code == 1
+    assert "auto_selection.mode" in captured.err
+    assert json.loads(captured.out)["status"] == "error"
+
+
+def test_missing_mode_defaults_to_selection_only(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch)
+    collection = _setup_collection(tmp_path)
+    assets = collection / "10-assets"
+    _solid_image(assets / "thumbnail-v1.jpg", _NEAR_COLOR)
+    ws_path = collection / "workflow-state.json"
+    ws_path.write_text(json.dumps({"stage": "planning"}), encoding="utf-8")
+
+    dry_code, dry_captured = _run_json([str(collection), "--dry-run", "--json"], capsys)
+    apply_code, apply_captured = _run_json([str(collection), "--apply", "--json"], capsys)
+
+    assert dry_code == apply_code == 0
+    assert json.loads(dry_captured.out)["auto_selection_mode"] == "selection_only"
+    assert json.loads(apply_captured.out)["auto_selection_mode"] == "selection_only"
+    audit = json.loads(ws_path.read_text(encoding="utf-8"))["thumbnail_auto_selection"]
+    assert audit["mode"] == "selection_only"
+    assert audit["selected"] == "thumbnail-v1.jpg"
+
+
+def test_mode_full_apply_records_audit_values(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch, mode="full")
+    collection = _setup_collection(tmp_path)
+    _solid_image(collection / "10-assets" / "thumbnail-v1.jpg", _NEAR_COLOR)
+    ws_path = collection / "workflow-state.json"
+    ws_path.write_text(json.dumps({"stage": "planning"}), encoding="utf-8")
+
+    code, _captured = _run_json([str(collection), "--apply", "--json"], capsys)
+
+    assert code == 0
+    audit = json.loads(ws_path.read_text(encoding="utf-8"))["thumbnail_auto_selection"]
+    assert audit["mode"] == "full"
+    assert isinstance(audit["selected"], str) and audit["selected"]
+    assert isinstance(audit["distance"], float) and math.isfinite(audit["distance"])
+    datetime.fromisoformat(audit["executed_at"])
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected_key"),
+    [
+        (lambda record: record.update(selected=""), "selected"),
+        (lambda record: record.update(distance=float("nan")), "distance"),
+        (lambda record: record.update(distance=float("inf")), "distance"),
+        (lambda record: record.update(ranking=[]), "ranking"),
+        (lambda record: record.update(ranking=["invalid"]), "ranking[0]"),
+        (lambda record: record.update(executed_at="not-a-date"), "executed_at"),
+        (lambda record: record.update(executed_at=None), "executed_at"),
+    ],
+)
+def test_audit_validation_rejects_invalid_values(mutate, expected_key):
+    record = _valid_audit_record()
+    mutate(record)
+
+    with pytest.raises(ValidationError) as exc_info:
+        validate_audit_record(record)
+    assert f"thumbnail_auto_selection.{expected_key}" in str(exc_info.value)
+
+
+def test_audit_validation_failure_rolls_back_and_reports_error(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch, mode="full")
+    collection = _setup_collection(tmp_path)
+    assets = collection / "10-assets"
+    _solid_image(assets / "thumbnail-v1.jpg", _NEAR_COLOR)
+    ws_path = collection / "workflow-state.json"
+    original_state = json.dumps({"stage": "planning"})
+    ws_path.write_text(original_state, encoding="utf-8")
+    monkeypatch.setattr(auto_select_thumbnail, "_ranking_payload", lambda _scores: [])
+
+    code, captured = _run_json([str(collection), "--apply", "--json"], capsys)
+
+    assert code == 1
+    assert "thumbnail_auto_selection.ranking" in captured.err
+    assert json.loads(captured.out)["status"] == "error"
+    assert not (assets / "thumbnail.jpg").exists()
+    assert ws_path.read_text(encoding="utf-8") == original_state
+
+
+def test_mode_full_zero_eligible_candidates_shows_manual_guidance(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch, mode="full")
+    collection = _setup_collection(tmp_path)
+    _solid_image(collection / "10-assets" / "thumbnail-v1.jpg", _NEAR_COLOR, size=(100, 100))
+
+    code, captured = _run_json([str(collection), "--apply"], capsys)
+
+    assert code == 1
+    assert "適格候補がありません" in captured.err
+    assert "selection_only" in captured.err
+    assert "手動フロー" in captured.err
+    assert not (collection / "10-assets" / "thumbnail.jpg").exists()
+
+
+def test_mode_selection_only_zero_eligible_message_unchanged(tmp_path, monkeypatch, capsys):
+    _setup_channel(tmp_path, monkeypatch, mode="selection_only")
+    collection = _setup_collection(tmp_path)
+    _solid_image(collection / "10-assets" / "thumbnail-v1.jpg", _NEAR_COLOR, size=(100, 100))
+
+    code, captured = _run_json([str(collection), "--apply"], capsys)
+
+    assert code == 1
+    assert "適格候補がありません" in captured.err
+    assert "selection_only" not in captured.err
+    assert "手動フロー" not in captured.err
 
 
 def test_dry_run_selects_nearest_candidate_without_side_effects(tmp_path, monkeypatch, capsys):
