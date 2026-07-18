@@ -34,6 +34,7 @@ from googleapiclient.errors import HttpError
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.config import load_config
+from youtube_automation.utils.cost_tracker import log_quota
 from youtube_automation.utils.exceptions import AutomationError, ValidationError, YouTubeAPIError
 from youtube_automation.utils.youtube_service import get_youtube
 
@@ -41,6 +42,11 @@ logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 _STATUS_CHUNK_SIZE = 50
+
+# YouTube Data API v3 の quota 消費（https://developers.google.com/youtube/v3/determine_quota_cost）
+_QUOTA_SERVICE = "youtube-data-api"
+_QUOTA_UNITS_VIDEOS_LIST = 1
+_QUOTA_UNITS_COMMENT_THREADS_INSERT = 50
 
 
 def load_history(path: Path) -> dict:
@@ -129,7 +135,20 @@ def fetch_video_status(youtube, video_ids: list[str]) -> dict[str, dict | None]:
         try:
             resp = youtube.videos().list(part="status", id=",".join(chunk)).execute()
         except HttpError as e:
+            # HttpError = API がリクエストを処理済み（quota 消費済み）なので記録してから変換する
+            log_quota(
+                _QUOTA_SERVICE,
+                "videos.list",
+                _QUOTA_UNITS_VIDEOS_LIST,
+                metadata={"context": "pinned_comment.preflight", "video_count": len(chunk), "error": True},
+            )
             raise YouTubeAPIError.from_http_error(e, "videos.list (preflight status check)") from e
+        log_quota(
+            _QUOTA_SERVICE,
+            "videos.list",
+            _QUOTA_UNITS_VIDEOS_LIST,
+            metadata={"context": "pinned_comment.preflight", "video_count": len(chunk)},
+        )
         for item in resp.get("items", []):
             result[item["id"]] = item.get("status", {})
     return result
@@ -140,7 +159,19 @@ def fetch_video_title(youtube, video_id: str) -> str:
     try:
         resp = youtube.videos().list(part="snippet", id=video_id).execute()
     except HttpError as e:
+        log_quota(
+            _QUOTA_SERVICE,
+            "videos.list",
+            _QUOTA_UNITS_VIDEOS_LIST,
+            metadata={"context": "pinned_comment.title", "video_id": video_id, "error": True},
+        )
         raise YouTubeAPIError.from_http_error(e, f"videos.list (video_id={video_id})") from e
+    log_quota(
+        _QUOTA_SERVICE,
+        "videos.list",
+        _QUOTA_UNITS_VIDEOS_LIST,
+        metadata={"context": "pinned_comment.title", "video_id": video_id},
+    )
     items = resp.get("items") or []
     if not items:
         return ""
@@ -149,18 +180,31 @@ def fetch_video_title(youtube, video_id: str) -> str:
 
 def post_top_level_comment(youtube, video_id: str, text: str) -> str:
     """``commentThreads.insert`` でオーナーコメントを投稿し comment_id を返す."""
-    resp = (
-        youtube.commentThreads()
-        .insert(
-            part="snippet",
-            body={
-                "snippet": {
-                    "videoId": video_id,
-                    "topLevelComment": {"snippet": {"textOriginal": text}},
-                }
-            },
+    request = youtube.commentThreads().insert(
+        part="snippet",
+        body={
+            "snippet": {
+                "videoId": video_id,
+                "topLevelComment": {"snippet": {"textOriginal": text}},
+            }
+        },
+    )
+    try:
+        resp = request.execute()
+    except HttpError:
+        # 失敗しても API がリクエストを処理した時点で quota は消費済み。記録してから元例外を維持する
+        log_quota(
+            _QUOTA_SERVICE,
+            "commentThreads.insert",
+            _QUOTA_UNITS_COMMENT_THREADS_INSERT,
+            metadata={"context": "pinned_comment.insert", "video_id": video_id, "error": True},
         )
-        .execute()
+        raise
+    log_quota(
+        _QUOTA_SERVICE,
+        "commentThreads.insert",
+        _QUOTA_UNITS_COMMENT_THREADS_INSERT,
+        metadata={"context": "pinned_comment.insert", "video_id": video_id},
     )
     return resp["snippet"]["topLevelComment"]["id"]
 

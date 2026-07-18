@@ -765,6 +765,93 @@ class TestFindExistingVideoByTitle:
 
 
 # ---------------------------------------------------------------------------
+# Issue #2057: dedup search の read preflight quota 記録
+# ---------------------------------------------------------------------------
+
+
+class TestDedupSearchQuotaRecording:
+    """`_find_existing_video_by_title` が実 request ごとに quota を記録すること."""
+
+    def _make_uploader_with_mock_youtube(self, tmp_path):
+        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        mock_youtube = MagicMock()
+        uploader.youtube = mock_youtube
+        return uploader, mock_youtube
+
+    def _quota_calls(self, mock_log_quota) -> list[tuple[str, str, float]]:
+        return [(c.args[0], c.args[1], c.args[2]) for c in mock_log_quota.call_args_list]
+
+    def test_should_record_search_and_videos_quota_on_duplicate_hit(self, tmp_path):
+        """要件 1: search.list と videos.list の実 request ごとに quota が記録される."""
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [{"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}}]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [{"id": "v9", "snippet": {"title": "Rainy Jazz"}, "status": {"uploadStatus": "processed"}}]
+        }
+
+        with patch("youtube_automation.agents._dedup_search.cost_tracker.log_quota") as mock_log_quota:
+            result = uploader._find_existing_video_by_title("Rainy Jazz")
+
+        assert result is not None
+        assert self._quota_calls(mock_log_quota) == [
+            ("youtube-data-api", "search.list", 100),
+            ("youtube-data-api", "videos.list", 1),
+        ]
+
+    def test_should_record_only_search_quota_when_no_exact_candidates(self, tmp_path):
+        """要件 4: 実行した read quota だけが記録される（videos.list 未実行なら未記録）."""
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {"items": []}
+
+        with patch("youtube_automation.agents._dedup_search.cost_tracker.log_quota") as mock_log_quota:
+            result = uploader._find_existing_video_by_title("Rainy Jazz")
+
+        assert result is None
+        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 100)]
+        mock_youtube.videos.return_value.list.assert_not_called()
+
+    def test_should_record_search_quota_and_fail_open_on_search_http_error(self, tmp_path, caplog):
+        """要件 3: API failure でも quota 記録後に既存 fail-open（None 返却）を維持する."""
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.side_effect = _make_http_error(500)
+
+        with (
+            patch("youtube_automation.agents._dedup_search.cost_tracker.log_quota") as mock_log_quota,
+            caplog.at_level(logging.WARNING),
+        ):
+            result = uploader._find_existing_video_by_title("Rainy Jazz")
+
+        assert result is None
+        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 100)]
+        assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+
+    def test_should_record_both_quotas_and_fail_open_on_videos_list_http_error(self, tmp_path, caplog):
+        """要件 3: videos.list 失敗時も両 request の quota 記録後に fail-open を維持する."""
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [{"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}}]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.side_effect = _make_http_error(500)
+
+        with (
+            patch("youtube_automation.agents._dedup_search.cost_tracker.log_quota") as mock_log_quota,
+            caplog.at_level(logging.WARNING),
+        ):
+            result = uploader._find_existing_video_by_title("Rainy Jazz")
+
+        assert result is None
+        assert self._quota_calls(mock_log_quota) == [
+            ("youtube-data-api", "search.list", 100),
+            ("youtube-data-api", "videos.list", 1),
+        ]
+        assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+
+
+# ---------------------------------------------------------------------------
 # L3b: `_upload_complete_collection` の dedup 配線
 # ---------------------------------------------------------------------------
 

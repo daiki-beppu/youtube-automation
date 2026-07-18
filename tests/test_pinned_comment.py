@@ -12,9 +12,11 @@ from pathlib import Path
 import pytest
 from googleapiclient.errors import HttpError
 
+from youtube_automation.scripts import pinned_comment
 from youtube_automation.scripts.pinned_comment import (
     build_plan,
     fetch_video_status,
+    fetch_video_title,
     load_history,
     render_template,
     resolve_targets_from_collection,
@@ -357,3 +359,124 @@ def test_resolve_raises_when_no_video_id(tmp_path):
     col = _make_collection(tmp_path, workflow={"scene_phrases": {"en": "x"}})
     with pytest.raises(ValidationError, match="video_id を解決できません"):
         resolve_targets_from_collection(col)
+
+
+# ----- quota 記録の配線 (Issue #2061) ---------------------------------------
+
+
+@pytest.fixture
+def quota_calls(monkeypatch) -> list[dict]:
+    """log_quota をレコーダに差し替え、配線（bucket / units / 回数）を検証する。"""
+    calls: list[dict] = []
+
+    def _record(service, bucket, units, *, metadata=None):
+        entry = {"service": service, "bucket": bucket, "units": units, "metadata": dict(metadata or {})}
+        calls.append(entry)
+        return entry
+
+    monkeypatch.setattr(pinned_comment, "log_quota", _record)
+    return calls
+
+
+def test_fetch_video_status_records_quota_per_request(quota_calls):
+    """要件 1: videos.list の request（chunk）ごとに quota が 1 unit 記録される。"""
+    yt = FakeYouTube(status_items={f"v{i}": {"privacyStatus": "public"} for i in range(120)})
+    fetch_video_status(yt, [f"v{i}" for i in range(120)])
+    # 120 件 → 50/50/20 の 3 リクエスト → 3 記録
+    assert [(c["service"], c["bucket"], c["units"]) for c in quota_calls] == [
+        ("youtube-data-api", "videos.list", 1)
+    ] * 3
+    assert [c["metadata"]["video_count"] for c in quota_calls] == [50, 50, 20]
+
+
+def test_fetch_video_status_records_quota_on_http_error(quota_calls):
+    """HttpError（API 処理済み = quota 消費済み）でも記録した上で例外変換される。"""
+
+    class _Boom(FakeYouTube):
+        def videos(self):
+            class _V:
+                def list(self, part, id):
+                    return _FakeRequest(error=_http_error(500))
+
+            return _V()
+
+    with pytest.raises(YouTubeAPIError):
+        fetch_video_status(_Boom(), ["a"])
+    assert len(quota_calls) == 1
+    assert quota_calls[0]["bucket"] == "videos.list"
+    assert quota_calls[0]["metadata"]["error"] is True
+
+
+def test_fetch_video_title_records_quota(quota_calls):
+    """--video-id 経路のタイトル取得（videos.list）も記録される。"""
+    yt = FakeYouTube(snippet_titles={"v9": "Fetched Title"})
+    fetch_video_title(yt, "v9")
+    assert [(c["bucket"], c["units"]) for c in quota_calls] == [("videos.list", 1)]
+    assert quota_calls[0]["metadata"]["video_id"] == "v9"
+
+
+def test_build_plan_apply_records_insert_quota_once(quota_calls):
+    """要件 2: comment 作成 → commentThreads.insert quota が 1 回（50 units）記録される。"""
+    yt = FakeYouTube()
+    build_plan(
+        [("v1", _state())],
+        history=_empty_history(),
+        status_map={"v1": {"privacyStatus": "public"}},
+        template=_TEMPLATE,
+        lang="en",
+        dry_run=False,
+        youtube=yt,
+    )
+    inserts = [c for c in quota_calls if c["bucket"] == "commentThreads.insert"]
+    assert [(c["service"], c["units"]) for c in inserts] == [("youtube-data-api", 50)]
+    assert inserts[0]["metadata"] == {"context": "pinned_comment.insert", "video_id": "v1"}
+
+
+def test_build_plan_dry_run_records_no_insert_quota(quota_calls):
+    """要件 3: dry-run では write（insert）quota は記録されない。"""
+    yt = FakeYouTube()
+    build_plan(
+        [("v1", _state())],
+        history=_empty_history(),
+        status_map={"v1": {"privacyStatus": "public"}},
+        template=_TEMPLATE,
+        lang="en",
+        dry_run=True,
+        youtube=yt,
+    )
+    assert [c for c in quota_calls if c["bucket"] == "commentThreads.insert"] == []
+
+
+def test_build_plan_skip_records_no_insert_quota(quota_calls):
+    """要件 3: skip（already_posted / private / not_found）では insert quota は記録されない。"""
+    yt = FakeYouTube()
+    build_plan(
+        [("done", _state()), ("priv", _state()), ("gone", _state())],
+        history={"schema_version": 1, "posted": {"done": {"comment_id": "old"}}},
+        status_map={"priv": {"privacyStatus": "private"}, "gone": None},
+        template=_TEMPLATE,
+        lang="en",
+        dry_run=False,
+        youtube=yt,
+    )
+    assert quota_calls == []
+
+
+def test_build_plan_insert_failure_records_quota_and_keeps_error(quota_calls):
+    """要件 4: insert failure でも quota 記録後に元のエラーハンドリングが維持される。"""
+    yt = FakeYouTube(insert_error=403)
+    plan = build_plan(
+        [("v1", _state())],
+        history=_empty_history(),
+        status_map={"v1": {"privacyStatus": "public"}},
+        template=_TEMPLATE,
+        lang="en",
+        dry_run=False,
+        youtube=yt,
+    )
+    inserts = [c for c in quota_calls if c["bucket"] == "commentThreads.insert"]
+    assert [(c["units"], c["metadata"]["error"]) for c in inserts] == [(50, True)]
+    # 元例外の扱い（errors への記録）が維持されている
+    assert plan["posted"] == []
+    assert len(plan["errors"]) == 1
+    assert "status=403" in plan["errors"][0]["error"]
