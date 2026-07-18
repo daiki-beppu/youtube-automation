@@ -2,9 +2,13 @@
 
 ## Status
 
-accepted (2026-06-25)。実装は未着手 (#1192、cutover 後の 2026-09 レーン — ADR-0015)。
+accepted (2026-06-25)。#1712 で拡張の scaffold / messaging 基盤まで実装済み。#1708 の実 DOM
+調査で判明した origin と fetch 境界への移行は #1713 / #1714 で行う。
 
 2026-07-02 の ADR 監査で 0013 から番号振り直し（並行 PR による番号レースの解消、先着優先ルール）。旧文書中の「ADR-0013」は文脈により本 ADR を指す。
+
+2026-07-18 の実 DOM 調査 (#1708) で対象 origin と fetch 境界を改訂。調査根拠とセレクタは
+`docs/research/community-helper-dom-map.md` を正とする。
 
 ## Context
 
@@ -12,14 +16,15 @@ YouTube コミュニティ投稿のスケジュール投稿は、`/community-dra
 
 ## Decision
 
-1. **suno-helper のアーキテクチャを踏襲するが、大幅に簡素化する。** `yt-collection-serve` がデータ配信、拡張が DOM 注入に徹する 3 層分離 (skill → server → extension) は同じだが、3 件の逐次処理のため resume state / fetch bridge / speed presets / in-flight tracking は持ち込まない
-2. **持ち込む機構は type-safe messaging (`@webext-core/messaging`) と `/version` 互換チェックのみ。** 拡張ファミリ共通の品質ベースラインとして維持する
+1. **suno-helper のアーキテクチャを踏襲するが、大幅に簡素化する。** `yt-collection-serve` がデータ配信、拡張が DOM 注入に徹する 3 層分離 (skill → server → extension) は同じだが、3 件の逐次処理のため resume state / speed presets / in-flight tracking は持ち込まない。page-origin fetch は使わず、community 専用の extension-context fetch relay を持つ
+2. **type-safe messaging (`@webext-core/messaging`) と `/version` 互換チェックを品質ベースラインとして維持する。** messaging は Popup → background → content の制御・進捗に加え、background が取得した投稿 JSON・画像を content へ渡す境界にも使う
 3. **UI は Popup のみ (オーバーレイなし)。** 3 件の処理に React Shadow DOM オーバーレイは過剰。WXT 標準の Popup でサーバー URL 入力 + Start + 進捗表示を収める
 4. **サーバールートは `GET /community/posts.json` + `GET /community/posts/{index}/image`。** dir モード (コレクション一覧選択) は初期スコープ外
 5. **投稿データは `/community-draft` スキルが `<collection>/30-promo/community-posts.json` に生成する。** 既存の markdown 出力は廃止し JSON 一本化。LLM 生成もやめ、チャンネル config のテンプレート + 変数展開で決定的な出力を得る
 6. **投稿テンプレートと schedule offset はチャンネル config (`config/channel/community-draft.json`) で宣言する。** `schedule_offset_days` の基準は `workflow-state.json` の `publish_target_at`。チャンネルごとに投稿タイプ・件数・内容を自由に設定できる
-7. **DOM セレクタは `extensions/shared/community-dom.ts` に集約する。** YouTube Studio の Polymer/Shadow DOM 構造は実装時に Chrome DevTools で調査し、locale-independent なクエリで変更耐性を持たせる
-8. **対象ページは YouTube Studio Web (`studio.youtube.com`) のみ。** `youtube.com` 本体のコミュニティタブは対象外
+7. **DOM セレクタは `extensions/shared/community-dom.ts` に集約する。** YouTube の Polymer/ShadyDOM 構造は Chrome DevTools で実地調査し、locale-independent なクエリで変更耐性を持たせる
+8. **対象 UI は YouTube 本体のチャンネル投稿ページ (`https://www.youtube.com/channel/*/posts*`) のみ。** Studio の投稿導線はこのページへ遷移し、`studio.youtube.com/channel/*/posts` には作成 UI が存在しないことを #1708 で確認した。content script の match は投稿ページに限定する
+9. **localhost の投稿 JSON・画像は extension origin の background/popup が取得し、typed messaging で content script へ relay する。** `www.youtube.com` をサーバー CORS allowlist に加えると任意の YouTube ページから下書きを読めるため、page-origin fetch は採用しない。ページ権限は activeTab + 動的注入を優先し、静的注入が必要な場合も対象 URL を投稿ページへ限定する
 
 ## Considered Options
 
@@ -34,7 +39,9 @@ YouTube コミュニティ投稿のスケジュール投稿は、`/community-dra
 - `yt-collection-serve` に `/community/posts.json` と `/community/posts/{index}/image` を追加する
 - `/community-draft` スキルを改修: markdown 廃止、JSON バッチ出力、テンプレート + 変数方式への移行
 - `release-extensions.yml` に community-helper の zip 化ステップを追加する (ADR-0011 の統一タグ `ext-v*` に従う)
-- YouTube Studio の DOM 構造変更に追従するコストが発生する (suno-helper の Suno DOM 追従と同種のリスク)
+- YouTube 本体の投稿 UI の DOM 構造変更に追従するコストが発生する (suno-helper の Suno DOM 追従と同種のリスク)
+- localhost の community route は YouTube page origin へ CORS 公開せず、extension context からのみ取得する
+- #1710/#1712 時点の Studio page-origin `/version` / community route CORS と Studio-only manifest/content routing は移行前の暫定実装であり、#1713/#1714 で撤去・置換する
 
 ## `community-draft.json` schema contract
 
