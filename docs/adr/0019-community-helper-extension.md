@@ -35,3 +35,47 @@ YouTube コミュニティ投稿のスケジュール投稿は、`/community-dra
 - `/community-draft` スキルを改修: markdown 廃止、JSON バッチ出力、テンプレート + 変数方式への移行
 - `release-extensions.yml` に community-helper の zip 化ステップを追加する (ADR-0011 の統一タグ `ext-v*` に従う)
 - YouTube Studio の DOM 構造変更に追従するコストが発生する (suno-helper の Suno DOM 追従と同種のリスク)
+
+## `community-draft.json` schema contract
+
+`config/channel/community-draft.json` is optional for channels that do not use the
+community batch workflow. When `/community-draft --batch` is explicitly requested,
+however, a missing file is an error: the command must stop before producing
+`community-posts.json` and identify the missing config path. It must not silently
+fall back to the legacy markdown templates.
+
+The canonical example is
+`examples/channel_config.example/community-draft.example.json`. Its top-level
+contract is:
+
+- `community_draft.posts`: a non-empty array. Every item has a non-empty `label` and `template`, an
+  integer `schedule_offset_days`, a zero-padded 24-hour `schedule_time` (`HH:MM`),
+  and an `image` path relative to the collection directory. Absolute paths and
+  paths containing `..` are invalid.
+- `community_draft.variables`: channel-owned literal values used by templates. The initial schema
+  defines `custom_message` here so batch generation remains deterministic.
+
+The initial template vocabulary is deliberately closed:
+
+| Variable | Single source | Rendering |
+|---|---|---|
+| `{title}` | `<collection>/workflow-state.json::planning.final_title` | string as stored |
+| `{date}` | `<collection>/workflow-state.json::planning.publish_target_at` | calendar date after conversion to `config/channel/youtube.json::youtube.default_publish_timezone` |
+| `{custom_message}` | `config/channel/community-draft.json::community_draft.variables.custom_message` | string as stored |
+
+Unknown variables or missing source values are errors. User input must be persisted
+to `community_draft.variables.custom_message` before batch generation; the batch command does not
+prompt for an ephemeral replacement.
+
+For each post, `scheduled_at` is calculated deterministically as follows:
+
+1. Parse `planning.publish_target_at` as ISO 8601. A date-only value is interpreted
+   in `config/channel/youtube.json::youtube.default_publish_timezone`; an instant with an offset
+   is first converted to that timezone.
+2. Take that local calendar date and add `schedule_offset_days` calendar days.
+3. Combine the resulting date with `schedule_time` in the same IANA timezone and
+   serialize it as an ISO 8601 datetime including its UTC offset.
+
+Missing or invalid `publish_target_at`, timezone, or schedule values stop generation
+with an error naming the invalid field. These rules are the input contract for
+#1709; JSON output and the removal of the markdown flow remain that issue's scope.

@@ -21,6 +21,7 @@ from youtube_automation.utils.config.comments import (
     Comments,
     GeneratorConfig,
 )
+from youtube_automation.utils.config.community_draft import CommunityDraft, CommunityDraftPost
 from youtube_automation.utils.config.config import ChannelConfig
 from youtube_automation.utils.config.content import Content, Descriptions, Genre, Tags, Title
 from youtube_automation.utils.config.distrokid import (
@@ -291,6 +292,7 @@ def _assemble(merged: dict, channel_dir_path: Path) -> ChannelConfig:
     audio = _build_audio(merged)
     localizations = _load_localizations(channel_dir_path, youtube.api.language)
     comments = _build_comments(merged)
+    community_draft = _build_community_draft(merged)
     pinned_comment = _build_pinned_comment(merged)
     distrokid = _build_distrokid(merged)
 
@@ -307,6 +309,7 @@ def _assemble(merged: dict, channel_dir_path: Path) -> ChannelConfig:
         audio=audio,
         localizations=localizations,
         comments=comments,
+        community_draft=community_draft,
         pinned_comment=pinned_comment,
         distrokid=distrokid,
     )
@@ -863,6 +866,50 @@ def _build_generator_config(raw: dict) -> GeneratorConfig:
         fallback_on_error=fallback,
         requests_per_minute=int(raw.get("requests_per_minute", REQUESTS_PER_MINUTE_DEFAULT)),
     )
+
+
+def _build_community_draft(merged: dict) -> CommunityDraft:
+    raw = merged.get("community_draft")
+    if raw is None:
+        return CommunityDraft()
+    if not isinstance(raw, dict):
+        raise ConfigError("community_draft セクションは object でなければなりません")
+
+    variables_raw = raw.get("variables", {})
+    if not isinstance(variables_raw, dict) or any(
+        not isinstance(key, str) or not isinstance(value, str) for key, value in variables_raw.items()
+    ):
+        raise ConfigError("community_draft.variables は string 値の object でなければなりません")
+
+    posts_raw = raw.get("posts")
+    if not isinstance(posts_raw, list) or not posts_raw:
+        raise ConfigError("community_draft.posts は空でない array でなければなりません")
+
+    required_fields = {"label", "template", "schedule_offset_days", "schedule_time", "image"}
+    posts: list[CommunityDraftPost] = []
+    for index, post_raw in enumerate(posts_raw):
+        prefix = f"community_draft.posts[{index}]"
+        if not isinstance(post_raw, dict):
+            raise ConfigError(f"{prefix} は object でなければなりません")
+        missing = required_fields - post_raw.keys()
+        unexpected = post_raw.keys() - required_fields
+        if missing:
+            raise ConfigError(f"{prefix} に必須キーがありません: {', '.join(sorted(missing))}")
+        if unexpected:
+            raise ConfigError(f"{prefix} に未知のキーがあります: {', '.join(sorted(unexpected))}")
+        if not all(isinstance(post_raw[key], str) for key in ("label", "template", "schedule_time", "image")):
+            raise ConfigError(f"{prefix} の label/template/schedule_time/image は string でなければなりません")
+        posts.append(
+            CommunityDraftPost(
+                label=post_raw["label"],
+                template=post_raw["template"],
+                schedule_offset_days=post_raw["schedule_offset_days"],
+                schedule_time=post_raw["schedule_time"],
+                image=post_raw["image"],
+            )
+        )
+
+    return CommunityDraft(variables=dict(variables_raw), posts=tuple(posts))
 
 
 def _build_comments(merged: dict) -> Comments:

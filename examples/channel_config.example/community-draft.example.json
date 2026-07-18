@@ -1,0 +1,23 @@
+{
+  "community_draft": {
+    "variables": {
+      "custom_message": "Turn on notifications so you do not miss the premiere."
+    },
+    "posts": [
+      {
+        "label": "公開前ティーザー",
+        "template": "🎵 {title} が {date} に公開予定！\n{custom_message}",
+        "schedule_offset_days": -1,
+        "schedule_time": "18:00",
+        "image": "main.png"
+      },
+      {
+        "label": "公開当日リマインダー",
+        "template": "{title} is out {date}.\n{custom_message}",
+        "schedule_offset_days": 0,
+        "schedule_time": "09:00",
+        "image": "thumbnail.jpg"
+      }
+    ]
+  }
+}
