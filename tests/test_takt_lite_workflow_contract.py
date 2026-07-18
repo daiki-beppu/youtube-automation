@@ -241,7 +241,7 @@ def test_review_non_verdict_aborts(tmp_path: Path, verdict: str) -> None:
     assert _terminal_event(trace)["type"] == "workflow_abort"
 
 
-# --- 要件 6: implement↔review 3 周で loop monitor judge が実行される ---
+# --- 要件 6: implement↔review 5 周で loop monitor judge が実行される ---
 
 
 def test_loop_judge_unproductive_aborts(tmp_path: Path) -> None:
@@ -250,14 +250,16 @@ def test_loop_judge_unproductive_aborts(tmp_path: Path) -> None:
         _review("needs_fix", content="round 1"),
         _review("needs_fix", content="round 2"),
         _review("needs_fix", content="round 3"),
+        _review("needs_fix", content="round 4"),
+        _review("needs_fix", content="round 5"),
         *_loop_judge(2),
     ]
     proc, trace = _run_lite(tmp_path, scenario)
     assert proc.returncode != 0
     steps = _step_sequence(trace)
-    assert steps.count("implement") == 3
-    assert steps.count("review") == 3
-    assert steps[-1] == _LOOP_JUDGE_STEP, "3 周目の review 完了後に loop judge が実行されていない"
+    assert steps.count("implement") == 5
+    assert steps.count("review") == 5
+    assert steps[-1] == _LOOP_JUDGE_STEP, "5 周目の review 完了後に loop judge が実行されていない"
     assert _terminal_event(trace)["type"] == "workflow_abort"
 
 
@@ -267,6 +269,8 @@ def test_loop_judge_healthy_continues_to_complete(tmp_path: Path) -> None:
         _review("needs_fix", content="round 1"),
         _review("needs_fix", content="round 2"),
         _review("needs_fix", content="round 3"),
+        _review("needs_fix", content="round 4"),
+        _review("needs_fix", content="round 5"),
         *_loop_judge(1),
         _review("approved"),
     ]
@@ -284,9 +288,7 @@ def test_loop_judge_healthy_continues_to_complete(tmp_path: Path) -> None:
 def test_max_steps_aborts(tmp_path: Path) -> None:
     scenario = [
         _preflight("approved"),
-        *[_review("needs_fix", content=f"round {i}") for i in range(1, 7)],
-        *_loop_judge(1),
-        *_loop_judge(1),
+        *[_review("needs_fix", content=f"round {i}") for i in range(1, 10)],
         *_loop_judge(1),
     ]
     proc, trace = _run_lite(tmp_path, scenario)
@@ -294,7 +296,7 @@ def test_max_steps_aborts(tmp_path: Path) -> None:
     terminal = _terminal_event(trace)
     assert terminal["type"] == "workflow_abort"
     assert "Max steps" in terminal.get("reason", "")
-    assert terminal.get("iterations") == 12, "lite.yaml の max_steps: 12 と一致しない"
+    assert terminal.get("iterations") == 18, "lite.yaml の max_steps: 18 と一致しない"
 
 
 # --- 要件 7: global schema 欠損の fail-closed ---
