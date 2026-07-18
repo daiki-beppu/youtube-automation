@@ -142,8 +142,13 @@ uv run yt-generate-image --prompt "a gentle watercolor forest" --output /tmp/tes
 ├── .env                            # GOOGLE_CLOUD_LOCATION / GOOGLE_GENAI_USE_VERTEXAI (スクリプトが書き出す)
 └── auth/
     ├── client_secrets.json          # OAuth 2.0 認証情報（要作成・gitignore）
-    └── token.json                   # 認証トークン（自動生成・gitignore）
+    ├── token.json                   # 認証トークン（自動生成・gitignore）
+    └── token.readonly.json          # read-only 系用トークン（任意。`uv run yt-oauth --readonly` で発行・gitignore）
 ```
+
+read-only 系 skill（analytics / benchmark / channel-status 等）は `token.readonly.json`
+（write scope を含まない）を優先使用し、未発行時は warning 付きで `token.json` に
+フォールバックする。詳細と skill × scope 対応表は `docs/oauth-scopes.md`。
 
 ---
 
@@ -176,7 +181,7 @@ Vertex AI で以下を利用する。`aiplatform.googleapis.com` が有効化さ
 ## ⚠️ セキュリティ注意事項
 
 - `auth/client_secrets.json`: **絶対に公開しない**（gitignore 済み）
-- `auth/token.json`: **絶対に公開しない**（gitignore 済み）
+- `auth/token.json` / `auth/token.readonly.json`: **絶対に公開しない**（gitignore 済み）
 - `infra/terraform/gcp/terraform.tfvars`: **絶対に公開しない**（gitignore 済み）
 - `.env`: **絶対に公開しない**（gitignore 済み）
 

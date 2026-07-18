@@ -83,6 +83,16 @@ def stub_analytics_boundaries(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         YouTubeAnalyticsCollector,
+        "get_revenue_analytics",
+        lambda self, start, end: {
+            "status": "available",
+            "daily_metrics": [],
+            "by_video": {},
+            "summary": {"estimated_revenue": 0, "views": 0, "rpm": 0.0},
+        },
+    )
+    monkeypatch.setattr(
+        YouTubeAnalyticsCollector,
         "get_ctr_analysis",
         lambda self, start, end: {"videos": []},
     )
@@ -144,6 +154,9 @@ def _collector_with_playlist_response(response):
     collector.get_strategic_video_analytics = MagicMock(
         return_value={"top_videos": [], "recent_videos": [], "mode": "efficient", "summary": {}}
     )
+    collector.get_revenue_analytics = MagicMock(
+        return_value={"status": "available", "daily_metrics": [], "by_video": {}, "summary": {}}
+    )
     collector._build_publish_at_map = MagicMock(return_value={})
     collector.get_ctr_analysis = MagicMock(return_value={})
     collector.get_traffic_source_analytics = MagicMock(return_value={})
@@ -185,37 +198,31 @@ class TestInit:
 
 
 class TestAuthenticate:
+    """authenticate() は youtube_service.get_readonly_handler() 経由で
+    read-only 優先の handler を取得する（#1699）。"""
+
     def test_authenticate_success(self, system):
         """認証成功時に True を返し authenticated を True にする"""
         mock_handler = MagicMock()
         mock_handler.test_connection.return_value = True
 
-        mock_oauth_module = MagicMock()
-        mock_oauth_module.YouTubeOAuthHandler.return_value = mock_handler
-
-        with patch.dict(
-            "sys.modules",
-            {
-                "youtube_automation.auth": MagicMock(),
-                "youtube_automation.auth.oauth_handler": mock_oauth_module,
-            },
+        with patch(
+            "youtube_automation.utils.youtube_service.get_readonly_handler",
+            return_value=mock_handler,
         ):
             result = system.authenticate()
             assert result is True
             assert system.authenticated is True
+            mock_handler.authenticate.assert_called_once_with(force_reauth=False)
 
     def test_authenticate_failure_connection_test(self, system):
         """接続テスト失敗時に False を返す"""
         mock_handler = MagicMock()
         mock_handler.test_connection.return_value = False
 
-        oauth_module = MagicMock(YouTubeOAuthHandler=MagicMock(return_value=mock_handler))
-        with patch.dict(
-            "sys.modules",
-            {
-                "youtube_automation.auth": MagicMock(),
-                "youtube_automation.auth.oauth_handler": oauth_module,
-            },
+        with patch(
+            "youtube_automation.utils.youtube_service.get_readonly_handler",
+            return_value=mock_handler,
         ):
             result = system.authenticate()
             assert result is False
@@ -223,28 +230,18 @@ class TestAuthenticate:
 
     def test_authenticate_exception(self, system):
         """認証中にドメイン例外（AuthError）が発生した場合 False を返す"""
-        with patch.dict(
-            "sys.modules",
-            {
-                "youtube_automation.auth": MagicMock(),
-                "youtube_automation.auth.oauth_handler": MagicMock(
-                    YouTubeOAuthHandler=MagicMock(side_effect=AuthError("Token expired"))
-                ),
-            },
+        with patch(
+            "youtube_automation.utils.youtube_service.get_readonly_handler",
+            side_effect=AuthError("Token expired"),
         ):
             result = system.authenticate()
             assert result is False
 
     def test_authenticate_unexpected_exception_propagates(self, system):
         """narrow catch 範囲外の例外は伝播する（fail-fast）"""
-        with patch.dict(
-            "sys.modules",
-            {
-                "youtube_automation.auth": MagicMock(),
-                "youtube_automation.auth.oauth_handler": MagicMock(
-                    YouTubeOAuthHandler=MagicMock(side_effect=RuntimeError("unexpected"))
-                ),
-            },
+        with patch(
+            "youtube_automation.utils.youtube_service.get_readonly_handler",
+            side_effect=RuntimeError("unexpected"),
         ):
             with pytest.raises(RuntimeError, match="unexpected"):
                 system.authenticate()

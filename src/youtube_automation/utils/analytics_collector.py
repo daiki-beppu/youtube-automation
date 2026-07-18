@@ -33,12 +33,13 @@ from youtube_automation.utils.playlist_analytics import PlaylistAnalyticsMixin
 from youtube_automation.utils.reporting_analytics import ReportingAPIMixin
 from youtube_automation.utils.retention_analytics import RetentionAnalyticsMixin
 from youtube_automation.utils.retry import execute_with_retry
+from youtube_automation.utils.revenue_analytics import RevenueAnalyticsMixin
 from youtube_automation.utils.strategic_analytics import StrategicAnalyticsMixin
 from youtube_automation.utils.traffic_source_analytics import TrafficSourceMixin
 from youtube_automation.utils.video_analytics import VideoAnalyticsMixin
 from youtube_automation.utils.video_daily_analytics import VideoDailyAnalyticsMixin
 from youtube_automation.utils.video_listing import VideoListingMixin
-from youtube_automation.utils.youtube_service import get_analytics, get_youtube
+from youtube_automation.utils.youtube_service import get_analytics, get_youtube_readonly
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ class YouTubeAnalyticsCollector(
     PlaylistAnalyticsMixin,
     AudienceAnalyticsMixin,
     RetentionAnalyticsMixin,
+    RevenueAnalyticsMixin,
     ReportingAPIMixin,
 ):
     """YouTube Analytics データ収集クラス"""
@@ -68,7 +70,7 @@ class YouTubeAnalyticsCollector(
         """YouTube API 初期化"""
         logger.info("YouTube Analytics API 認証中...")
 
-        self.youtube_service = get_youtube()
+        self.youtube_service = get_youtube_readonly()
         self.analytics_service = get_analytics()
 
         # チャンネルID取得

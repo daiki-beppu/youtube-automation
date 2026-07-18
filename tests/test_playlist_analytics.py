@@ -109,6 +109,9 @@ class TestPlaylistCollectionIntegration:
         collector.get_strategic_video_analytics = MagicMock(
             return_value={"top_videos": [], "recent_videos": [], "mode": "efficient", "summary": {}}
         )
+        collector.get_revenue_analytics = MagicMock(
+            return_value={"status": "available", "daily_metrics": [], "by_video": {}, "summary": {}}
+        )
         collector._build_publish_at_map = MagicMock(return_value={})
         collector.get_ctr_analysis = MagicMock(return_value={})
         collector.get_traffic_source_analytics = MagicMock(return_value={})
@@ -136,6 +139,9 @@ class TestPlaylistCollectionIntegration:
         collector.get_channel_analytics = MagicMock(return_value={"summary": {}})
         collector.get_strategic_video_analytics = MagicMock(
             return_value={"top_videos": [], "recent_videos": [], "mode": "efficient", "summary": {}}
+        )
+        collector.get_revenue_analytics = MagicMock(
+            return_value={"status": "available", "daily_metrics": [], "by_video": {}, "summary": {}}
         )
         collector._build_publish_at_map = MagicMock(return_value={})
         collector.get_playlist_analytics = MagicMock()

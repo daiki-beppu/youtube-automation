@@ -46,6 +46,7 @@ from youtube_automation.utils.preflight_checks import (
     check_thumbnail_skill_config,
 )
 from youtube_automation.utils.reporting_api import ReportingAPIClient
+from youtube_automation.utils.retry import QUOTA_REASONS
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.thumbnail_references import resolve_configured_benchmark_references
 
@@ -106,6 +107,7 @@ class CheckResult:
     message: str
     category: str = API_CATEGORY  # bootstrap / api / channel / data / upload
     next_action: Optional[dict] = None
+    data: Optional[dict] = None
 
 
 @dataclass(frozen=True)
@@ -2495,6 +2497,37 @@ def _planning_descriptions_md_paths(channel_dir: Path) -> list[Path]:
     return sorted(planning_root.glob("*/20-documentation/descriptions.md"))
 
 
+def _upload_ready_api_error_result(error: YouTubeAPIError) -> CheckResult:
+    status_code = error.status_code
+    is_quota_or_server_error = (
+        status_code == 429
+        or (status_code is not None and 500 <= status_code < 600)
+        or (status_code == 403 and error.reason in QUOTA_REASONS)
+    )
+    is_auth_error = status_code == 401 or (status_code == 403 and error.reason not in QUOTA_REASONS)
+
+    if is_auth_error:
+        status = "fail"
+        instructions = (
+            "auth/token.json を削除し、`uv run yt-channel-status` で意図した YouTube アカウントを再認証してください"
+        )
+    elif is_quota_or_server_error:
+        status = "warn"
+        instructions = "クォータのリセットまたはサービス復旧を待ってから `uv run yt-doctor` を再実行してください"
+    else:
+        status = "warn"
+        instructions = "時間をおいて `uv run yt-doctor` を再実行してください"
+
+    return CheckResult(
+        id="upload_ready",
+        status=status,
+        category=UPLOAD_CATEGORY,
+        message=(f"チャンネル存在確認の API 呼び出しに失敗しました（チャンネル未作成とは判定していません）: {error}"),
+        next_action={"kind": "human", "instructions": instructions},
+        data={"reason": "api_error", "api_context": str(error)},
+    )
+
+
 def check_upload_ready(channel_dir: Path) -> CheckResult:
     token_path = channel_dir / "auth" / "token.json"
 
@@ -2548,14 +2581,6 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
     if meta_issue:
         issues.append(meta_issue)
 
-    if not issues:
-        return CheckResult(
-            id="upload_ready",
-            status="ok",
-            category=UPLOAD_CATEGORY,
-            message=f"upload 必須 scope 充足, channel_id 設定済み ({channel_id})",
-        )
-
     # scope 不足が最優先事由: 再認証が必要
     if missing_scopes:
         return CheckResult(
@@ -2572,18 +2597,103 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
             },
         )
 
+    if meta_issue:
+        return CheckResult(
+            id="upload_ready",
+            status="fail",
+            category=UPLOAD_CATEGORY,
+            message="; ".join(issues),
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "config/channel/meta.json の channel.channel_id に YouTube チャンネル ID を設定してください。"
+                    "`uv run yt-channel-status` でチャンネル ID を確認できます。"
+                ),
+            },
+        )
+
+    try:
+        credentials = Credentials.from_authorized_user_file(str(token_path))
+    except (OSError, ValueError) as error:
+        return CheckResult(
+            id="upload_ready",
+            status="fail",
+            category=UPLOAD_CATEGORY,
+            message=f"token.json から credentials を構築できません: {error}",
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "auth/token.json を削除し、`uv run yt-channel-status` で OAuth 認証をやり直してください"
+                ),
+            },
+        )
+
+    try:
+        service = build("youtube", "v3", credentials=credentials)
+        response = service.channels().list(part="id,snippet", mine=True).execute()
+    except HttpError as error:
+        return _upload_ready_api_error_result(YouTubeAPIError.from_http_error(error, "doctor:channels.list"))
+    except (AutomationError, HttpLib2Error, OSError) as error:
+        return CheckResult(
+            id="upload_ready",
+            status="warn",
+            category=UPLOAD_CATEGORY,
+            message=(
+                f"チャンネル存在確認の API 呼び出しに失敗しました（チャンネル未作成とは判定していません）: {error}"
+            ),
+            next_action={
+                "kind": "human",
+                "instructions": "ネットワーク接続を確認して `uv run yt-doctor` を再実行してください",
+            },
+            data={"reason": "api_error", "api_context": str(error)},
+        )
+
+    items = response.get("items") or []
+    if not items:
+        return CheckResult(
+            id="upload_ready",
+            status="fail",
+            category=UPLOAD_CATEGORY,
+            message="認証済みアカウントに YouTube チャンネルが存在しません",
+            next_action={
+                "kind": "human",
+                "instructions": ("YouTube に該当アカウントでログインし、チャンネルを作成してから再実行してください"),
+                "url": "https://www.youtube.com/create_channel",
+            },
+            data={"reason": "channel_not_found"},
+        )
+
+    remote_channel_id = items[0].get("id", "")
+    if remote_channel_id != channel_id:
+        return CheckResult(
+            id="upload_ready",
+            status="fail",
+            category=UPLOAD_CATEGORY,
+            message=(
+                f"ローカル channel ID ({channel_id}) と認証済みアカウントのチャンネル ID "
+                f"({remote_channel_id}) が一致しません。token と meta.json の取り違えの可能性があります"
+            ),
+            next_action={
+                "kind": "human",
+                "instructions": (
+                    "意図したアカウントの token なら `uv run yt-channel-settings pull "
+                    "--channel-id-only --apply` で meta.json を更新し、別アカウントの token なら "
+                    "auth/token.json を削除して `uv run yt-channel-status` で再認証してください"
+                ),
+            },
+            data={
+                "reason": "channel_id_mismatch",
+                "remote_channel_id": remote_channel_id,
+                "local_channel_id": channel_id,
+            },
+        )
+
     return CheckResult(
         id="upload_ready",
-        status="fail",
+        status="ok",
         category=UPLOAD_CATEGORY,
-        message="; ".join(issues),
-        next_action={
-            "kind": "human",
-            "instructions": (
-                "config/channel/meta.json の channel.channel_id に YouTube チャンネル ID を設定してください。"
-                "`uv run yt-channel-status` でチャンネル ID を確認できます。"
-            ),
-        },
+        message="アップロード前提を満たしています（チャンネル存在 + ID 一致を API で確認済み）",
+        data={"remote_channel_id": remote_channel_id},
     )
 
 
