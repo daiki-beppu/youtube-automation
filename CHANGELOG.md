@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(videoup)`: `workflow-state.json` v2 の `assets.master_audio` / `assets.master_video` を基準に未動画化コレクションを検出し、既存 `generate_videos.sh` を collection 単位で並列実行する `yt-generate-videos-batch` CLI を追加した。成功時の `assets.master_video` 更新はファイルロック下で直列化し、`--include-live` と CLI / env / skill-config による並列度指定を提供する（#1658）。
 - `feat(workflow)`: チャンネルごとの定期制作設定 `workflow.scheduled_automation`（有効化 / timezone / run_time / cadence / 対象 workflow / 再試行 / 並行実行禁止 / 通知 / 外部公開許可）を optional で追加し、未設定チャンネルは全 default（`enabled: false`）で従来挙動を維持する。新規スキル `/automation-schedule` を単一入口として、前提診断（`detect_runtime.sh`）→ config 生成・差分更新（`schedule_config.py`、loader と同一検証）→ Claude Code（`claude -p`）/ Codex（`codex exec`）向け定期実行ジョブの作成・更新・確認・停止（`scheduler_job.sh`、launchd / cron へ同一 label で冪等反映）を行えるようにした。実行ラッパー `run_scheduled.sh` は lock による実行排他・再試行・`allow_external_publish: false` 時の外部反映禁止プロンプト注入を担い、外部公開の有効化には skill の明示承認ゲートを必須とする（#1892）。
 - **Breaking:** benchmark 系 CLI の競合 slug 指定を `--channel` から `--competitor` へ即時リネームした。対象は `yt-benchmark-collect` / `yt-video-analyze` / `yt-thumbnail-compare` / `yt-benchmark-comments` で、旧 `--channel` は alias として受理せず移行先を明示して終了する（#1948）。
 - **skills**: `/analytics-run` を追加し、Analytics の収集・分析・最新レポート表示を成果物鮮度に基づいて一括実行・途中再開できるようにした (#1823)
