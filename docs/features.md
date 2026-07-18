@@ -72,7 +72,7 @@ YouTube への公開、視聴者対応、容量整理、コミュニティ投稿
 | /pinned-comment | オーナー固定コメント自動投稿（preflight で削除済み/private を skip、dry-run → apply、二重投稿防止） |
 | /metadata-audit | ローカル descriptions.md と YouTube 上メタデータの整合性監査 |
 | /live-clean | live コレクションの大容量メディアを削除してディスク回復 |
-| /community-draft | コミュニティ投稿の下書きを type 別に生成 + クリップボードコピー |
+| /community-draft | コミュニティ投稿を config テンプレートから JSON バッチ生成 |
 | /community-post | 動画公開と連動した固定テンプレ投稿（Studio 起動まで） |
 | /short | BGM テイスター（collection 型）チャンネル用 9:16 ショートを生成・投稿 |
 | /short-release | 楽曲リリース（release 型）チャンネル用 JP+EN クリップショート生成 |

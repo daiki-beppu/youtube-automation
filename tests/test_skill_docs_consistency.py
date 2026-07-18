@@ -1082,16 +1082,14 @@ def test_community_post_declares_raw_json_loader_exception() -> None:
     assert "fallback や merge 元にしない" in text
 
 
-def test_community_draft_documents_skill_config_merge_before_channel_json() -> None:
+def test_community_draft_documents_typed_batch_generator_contract() -> None:
     text = _read(".claude/skills/community-draft/SKILL.md")
 
-    assert 'load_skill_config("community-draft")' in text
-    assert ".claude/skills/community-draft/config.default.yaml" in text
-    assert "config/skills/community-draft.yaml" in text
-    assert "config/channel/community-draft.json" in text
-    assert (
-        "config.default.yaml` < `config/skills/community-draft.yaml` < `config/channel/community-draft.json"
-    ) in text
+    assert "load_config().community_draft.posts" in text
+    assert "references/generate_batch.py" in text
+    assert "planning.publish_target_at" in text
+    assert "docs/adr/0019-community-helper-extension.md" in text
+    assert "community-posts.json" in text
 
 
 def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:

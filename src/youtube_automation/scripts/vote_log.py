@@ -1,6 +1,6 @@
 """``yt-vote-log`` — ``data/community/weekly-vote-log.json`` の読み書き CLI.
 
-``/community-draft --type weekly-feedback`` の投票結果を週次で記録し、
+YouTube Studio の投票結果を ``yt-vote-log append`` で週次記録し、
 ``/collection-ideate`` の theme weight hook が直近 N 週分を参照する。
 
 Subcommands:
