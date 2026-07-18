@@ -13,6 +13,7 @@ const INITIAL_PROGRESS: ProgressMessage[] = ([0, 1, 2] as const).map(
     index,
     phase: COMMUNITY_PHASE.SCHEDULING,
     message: "待機中",
+    total: 3,
   })
 );
 
@@ -32,7 +33,14 @@ export function App() {
         current.map((item) => (item.index === data.index ? data : item))
       );
     });
-    return () => unwatch();
+    const unwatchError = onMessage("error", ({ data }) => {
+      setError(data.message);
+      setBusy(false);
+    });
+    return () => {
+      unwatch();
+      unwatchError();
+    };
   }, []);
 
   const start = async () => {

@@ -11,7 +11,7 @@ export default defineConfig({
   vite: () => ({ plugins: [tailwindcss()] }),
   manifest: {
     name: "Community Helper",
-    description: "YouTube Studio のコミュニティ投稿をスケジュールする",
+    description: "YouTube のコミュニティ投稿をスケジュールする",
     action: { default_title: "Community Helper" },
     permissions: [...MANIFEST_PERMISSIONS],
     host_permissions: [...MANIFEST_HOST_PERMISSIONS],

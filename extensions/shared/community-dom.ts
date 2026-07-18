@@ -4,6 +4,8 @@
 import { isVisible } from "./visibility";
 
 const FORM_SELECTOR = "ytd-backstage-post-dialog-renderer";
+const FORM_PLACEHOLDER_SELECTOR = '#commentbox-placeholder[role="button"]';
+const FORM_CANCEL_BUTTON_SELECTOR = "#footer #cancel-button button";
 const TEXT_FIELD_SELECTOR =
   '#contenteditable-root[contenteditable="true"], textarea, input:not([type="file"])';
 const IMAGE_INPUT_SELECTOR =
@@ -59,6 +61,13 @@ class CommunityDomError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "CommunityDomError";
+  }
+}
+
+export class CommunitySubmissionUncertainError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "CommunitySubmissionUncertainError";
   }
 }
 
@@ -363,6 +372,103 @@ export function resolveCommunityTextField(
     TEXT_FIELD_SELECTOR,
     "コミュニティ投稿本文"
   );
+}
+
+export async function openCommunityPostForm(
+  root: ParentNode = document
+): Promise<void> {
+  const form = resolveForm(root);
+  const visibleCommentboxes = queryAll<HTMLElement>(
+    form,
+    "ytd-commentbox#commentbox"
+  ).filter(isVisible);
+  if (visibleCommentboxes.length > 1) {
+    throw new CommunityDomError(
+      `コミュニティ投稿 commentboxを一意に解決できません: count=${visibleCommentboxes.length}`
+    );
+  }
+  if (visibleCommentboxes.length === 1) {
+    resolveUniqueVisible(
+      visibleCommentboxes[0],
+      TEXT_FIELD_SELECTOR,
+      "コミュニティ投稿本文"
+    );
+    return;
+  }
+  resolveUniqueVisible<HTMLElement>(
+    form,
+    FORM_PLACEHOLDER_SELECTOR,
+    "コミュニティ投稿フォーム起動要素"
+  ).click();
+  const commentbox = await waitForUniqueVisible<HTMLElement>(
+    form,
+    "ytd-commentbox#commentbox",
+    "コミュニティ投稿 commentbox"
+  );
+  await waitForUniqueVisible(
+    commentbox,
+    TEXT_FIELD_SELECTOR,
+    "コミュニティ投稿本文"
+  );
+}
+
+export async function cancelCommunityPostForm(
+  root: ParentNode = document,
+  timeoutMs = DEFAULT_WAIT_TIMEOUT_MS
+): Promise<void> {
+  const forms = queryAll<HTMLElement>(root, FORM_SELECTOR).filter(isVisible);
+  if (forms.length > 1) {
+    throw new CommunityDomError(
+      `コミュニティ投稿フォームを一意に解決できません: count=${forms.length}`
+    );
+  }
+  const form = forms[0];
+  if (!form) {
+    return;
+  }
+  const commentboxes = queryAll<HTMLElement>(
+    form,
+    "ytd-commentbox#commentbox"
+  ).filter(isVisible);
+  if (commentboxes.length === 0) {
+    verifiedImages.delete(form);
+    verifiedSchedules.delete(form);
+    return;
+  }
+  if (commentboxes.length > 1) {
+    throw new CommunityDomError(
+      `コミュニティ投稿 commentboxを一意に解決できません: count=${commentboxes.length}`
+    );
+  }
+  const commentbox = commentboxes[0];
+  const editor = resolveUniqueVisible<HTMLElement>(
+    commentbox,
+    TEXT_FIELD_SELECTOR,
+    "コミュニティ投稿本文"
+  );
+  resolveUniqueVisible<HTMLElement>(
+    commentbox,
+    FORM_CANCEL_BUTTON_SELECTOR,
+    "コミュニティ投稿キャンセルボタン"
+  ).click();
+  await waitForCondition(
+    form,
+    () => {
+      const collapsed =
+        !isVisible(commentbox) || commentbox.hasAttribute("hidden");
+      const thumbnails = queryAll<HTMLImageElement>(
+        commentbox,
+        IMAGE_THUMBNAIL_SELECTOR
+      );
+      return (
+        collapsed && readEditorText(editor) === "" && thumbnails.length === 0
+      );
+    },
+    "投稿フォームの cancel reset",
+    timeoutMs
+  );
+  verifiedImages.delete(form);
+  verifiedSchedules.delete(form);
 }
 
 function readEditorText(editor: HTMLElement): string {
@@ -717,7 +823,8 @@ function assertImageReadback(
     ? verified?.filename === expectedFilename &&
       verified.thumbnail.isConnected &&
       verified.thumbnail.src === verified.src &&
-      thumbnails.includes(verified.thumbnail)
+      thumbnails.length === 1 &&
+      thumbnails[0] === verified.thumbnail
     : !verified && thumbnails.length === 0;
   if (!matches) {
     throw new CommunityDomError(
@@ -770,11 +877,20 @@ export async function clickPost(
   if (button.disabled || button.getAttribute("aria-disabled") === "true") {
     throw new CommunityDomError("投稿確定ボタンが無効です");
   }
-  button.click();
-  await waitForCondition(
-    root,
-    () => isCompletedReset(form, commentbox, button, editor),
-    "投稿フォームの reset",
-    timeoutMs
-  );
+  try {
+    button.click();
+    await waitForCondition(
+      root,
+      () => isCompletedReset(form, commentbox, button, editor),
+      "投稿フォームの reset",
+      timeoutMs
+    );
+  } catch (error) {
+    throw new CommunitySubmissionUncertainError(
+      error instanceof Error ? error.message : String(error),
+      { cause: error }
+    );
+  }
+  verifiedImages.delete(form);
+  verifiedSchedules.delete(form);
 }

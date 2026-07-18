@@ -7,16 +7,20 @@ import {
 } from "../lib/manifest";
 import wxtConfig from "../wxt.config";
 
-const STUDIO_MATCH = "*://studio.youtube.com/*";
+const POSTS_MATCH = "https://www.youtube.com/channel/*/posts*";
 
 describe("community-helper manifest minimum permissions", () => {
   it("keeps runtime permissions limited to activeTab", () => {
     expect([...MANIFEST_PERMISSIONS]).toEqual(["activeTab"]);
   });
 
-  it("keeps host permissions and content matches limited to YouTube Studio", () => {
-    expect([...MANIFEST_HOST_PERMISSIONS]).toEqual([STUDIO_MATCH]);
-    expect([...MANIFEST_CONTENT_SCRIPT_MATCHES]).toEqual([STUDIO_MATCH]);
+  it("limits content injection to channel posts and host access to loopback servers", () => {
+    expect([...MANIFEST_CONTENT_SCRIPT_MATCHES]).toEqual([POSTS_MATCH]);
+    expect([...MANIFEST_HOST_PERMISSIONS]).toEqual([
+      "http://*.localhost/*",
+      "http://localhost/*",
+      "http://127.0.0.1/*",
+    ]);
   });
 
   it("uses the manifest constants as the WXT single source of truth", () => {

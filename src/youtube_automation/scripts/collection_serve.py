@@ -120,7 +120,6 @@ COMMUNITY_POSTS_ROUTE = "/community/posts.json"
 COMMUNITY_IMAGE_ROUTE = "/community/posts"
 _COMMUNITY_POSTS_RELPATH = Path("30-promo") / "community-posts.json"
 _COMMUNITY_IMAGE_ROUTE_PATTERN = re.compile(r"^/community/posts/(?P<index>\d+)/image$")
-_YOUTUBE_STUDIO_ORIGIN = "https://studio.youtube.com"
 
 # POST body upper bound for helper write endpoints. The expected payloads are
 # small JSON objects/lists; larger bodies are rejected before reading from rfile.
@@ -637,20 +636,13 @@ def is_origin_allowed(origin: str | None, allow_origin: str | None) -> bool:
     return origin in _DEFAULT_ALLOWED_WEB_ORIGINS
 
 
-def _is_community_route(path: str) -> bool:
-    return path == COMMUNITY_POSTS_ROUTE or _COMMUNITY_IMAGE_ROUTE_PATTERN.fullmatch(path) is not None
-
-
-def _is_read_origin_allowed(origin: str | None, allow_origin: str | None, path: str) -> bool:
+def _is_read_origin_allowed(origin: str | None, allow_origin: str | None, _path: str) -> bool:
     """Read-only GET/OPTIONS CORS 判定.
 
     `--allow-origin` 指定時は read-only も exact lock に従う。Suno overlay から
-    必要な read API は background script が extension origin で取得する。既定の
-    YouTube Studio page origin は community route と公開 version envelope だけに許可し、
-    他成果物へ波及させない。
+    必要な read API は background script が extension origin で取得する。YouTube の
+    page origin には localhost の下書きや画像を公開しない。
     """
-    if allow_origin is None and origin == _YOUTUBE_STUDIO_ORIGIN:
-        return path == VERSION_ROUTE or _is_community_route(path)
     return is_origin_allowed(origin, allow_origin)
 
 

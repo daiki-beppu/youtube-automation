@@ -155,21 +155,26 @@ def test_get_community_image_rejects_non_image_file(serve_community):
     assert exc_info.value.code == 404
 
 
-@pytest.mark.parametrize("origin", [_EXTENSION_ORIGIN, _STUDIO_ORIGIN])
-def test_community_routes_allow_required_cors_origins(serve_community, origin: str):
+def test_community_routes_allow_extension_origin(serve_community):
     base = serve_community([])
-    request = urllib.request.Request(f"{base}{_COMMUNITY_POSTS_ROUTE}", headers={"Origin": origin})
+    request = urllib.request.Request(f"{base}{_COMMUNITY_POSTS_ROUTE}", headers={"Origin": _EXTENSION_ORIGIN})
 
     with urllib.request.urlopen(request) as response:
-        assert response.headers.get("Access-Control-Allow-Origin") == origin
+        assert response.headers.get("Access-Control-Allow-Origin") == _EXTENSION_ORIGIN
 
 
-def test_studio_origin_can_read_public_version_for_extension_preflight(serve_community):
+@pytest.mark.parametrize("path", [_COMMUNITY_POSTS_ROUTE, "/community/posts/0/image", "/version"])
+def test_studio_origin_cannot_read_extension_relay_routes(serve_community, path: str):
     base = serve_community([])
-    request = urllib.request.Request(f"{base}/version", headers={"Origin": _STUDIO_ORIGIN})
+    request = urllib.request.Request(f"{base}{path}", headers={"Origin": _STUDIO_ORIGIN})
 
-    with urllib.request.urlopen(request) as response:
-        assert response.headers.get("Access-Control-Allow-Origin") == _STUDIO_ORIGIN
+    try:
+        response = urllib.request.urlopen(request)
+    except urllib.error.HTTPError as error:
+        assert error.headers.get("Access-Control-Allow-Origin") is None
+    else:
+        with response:
+            assert response.headers.get("Access-Control-Allow-Origin") is None
 
 
 def test_studio_origin_is_not_allowed_to_read_other_non_community_routes(serve_community):

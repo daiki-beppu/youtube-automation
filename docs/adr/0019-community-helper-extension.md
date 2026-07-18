@@ -2,8 +2,8 @@
 
 ## Status
 
-accepted (2026-06-25)。#1712 で拡張の scaffold / messaging 基盤まで実装済み。#1708 の実 DOM
-調査で判明した origin と fetch 境界への移行は #1713 / #1714 で行う。
+accepted (2026-06-25)。#1712 で拡張の scaffold / messaging 基盤、#1713 で実 DOM seam、#1714 で
+3 投稿 runner と extension-context fetch relay まで実装済み。
 
 2026-07-02 の ADR 監査で 0013 から番号振り直し（並行 PR による番号レースの解消、先着優先ルール）。旧文書中の「ADR-0013」は文脈により本 ADR を指す。
 
@@ -41,7 +41,7 @@ YouTube コミュニティ投稿のスケジュール投稿は、`/community-dra
 - `release-extensions.yml` に community-helper の zip 化ステップを追加する (ADR-0011 の統一タグ `ext-v*` に従う)
 - YouTube 本体の投稿 UI の DOM 構造変更に追従するコストが発生する (suno-helper の Suno DOM 追従と同種のリスク)
 - localhost の community route は YouTube page origin へ CORS 公開せず、extension context からのみ取得する
-- #1710/#1712 時点の Studio page-origin `/version` / community route CORS と Studio-only manifest/content routing は移行前の暫定実装であり、#1713/#1714 で撤去・置換する
+- #1710/#1712 時点の Studio page-origin `/version` / community route CORS と Studio-only manifest/content routing は #1714 で撤去し、YouTube 投稿ページ限定注入 + extension-context fetch relay へ置換した
 
 ## `community-draft.json` schema contract
 

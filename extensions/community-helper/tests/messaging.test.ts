@@ -2,6 +2,7 @@ import { describe, expectTypeOf, it } from "vitest";
 
 import type {
   CompatibilityRequest,
+  ErrorMessage,
   ProgressMessage,
   ProtocolMap,
   RunRequest,
@@ -16,6 +17,9 @@ describe("community-helper messaging contract", () => {
     expectTypeOf<ProtocolMap["stop"]>().parameters.toEqualTypeOf<[]>();
     expectTypeOf<ProtocolMap["progress"]>().parameters.toEqualTypeOf<
       [ProgressMessage]
+    >();
+    expectTypeOf<ProtocolMap["error"]>().parameters.toEqualTypeOf<
+      [ErrorMessage]
     >();
   });
 });
