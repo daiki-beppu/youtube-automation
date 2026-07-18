@@ -228,3 +228,49 @@ def test_setup_stale_report_guidance_delegates_to_collection_ideate_contract() -
     assert setup.count("`summary.next_check_id` が `null`") == 1
     assert setup.count("`analytics_report` の stale fail だけ") == 1
     assert setup.count("冒頭の「完了条件」に従い") == 3
+
+
+def test_setup_skill_handles_upload_ready_channel_not_found() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    section = text.split("#### `upload_ready`", 1)[1].split("## 運用設定インタビュー", 1)[0]
+
+    assert '`data.reason == "channel_not_found"`' in section
+    assert "YouTube Studio" in section
+    assert "https://studio.youtube.com" in section
+    assert "チャンネルを作成" in section
+    assert "uv run yt-doctor --json" in section
+    assert "[HUMAN STEP]" in section
+
+
+def test_setup_skill_routes_remote_id_into_meta_via_existing_command() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    section = text.split("#### `upload_ready`", 1)[1].split("## 運用設定インタビュー", 1)[0]
+
+    assert "`data.remote_channel_id`" in section
+    assert "`channel.channel_id が未設定`" in section
+    assert "uv run yt-channel-settings pull --channel-id-only --apply" in section
+    assert "取得した ID を `config/channel/meta.json`" not in section
+
+
+def test_setup_skill_does_not_auto_overwrite_mismatched_channel_id() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    section = text.split("#### `upload_ready`", 1)[1].split("## 運用設定インタビュー", 1)[0]
+
+    assert '`data.reason == "channel_id_mismatch"`' in section
+    assert "自動上書きしない" in section
+    assert "uv run yt-channel-settings pull --channel-id-only` で dry-run" in section
+    assert "uv run yt-channel-settings pull --channel-id-only --apply" in section
+    assert "auth/token.json" in section
+    assert "uv run yt-channel-status" in section
+
+
+def test_setup_skill_keeps_api_errors_distinct_from_missing_channel() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    section = text.split("#### `upload_ready`", 1)[1].split("## 運用設定インタビュー", 1)[0]
+
+    assert '`data.reason == "api_error"`' in section
+    assert "チャンネル未作成として扱わない" in section
+    assert "quota" in section
+    assert "auth" in section
+    assert "network" in section
+    assert "uv run yt-doctor --json" in section
