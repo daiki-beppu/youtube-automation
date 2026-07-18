@@ -104,6 +104,7 @@ subagent へは次を具体値で渡す:
 5. **視聴維持率分析**: full 収集データでは `references/analysis-json-validator.md` の retention 契約に従って全有効動画を比較し、「中身の弱さ」仮説を数値根拠で評価する。standard データでは推測で補わず、full 収集が必要と明記する
 6. **流入源・デバイス分析**: `yt-traffic-trend` の出力から流入源シェア（ブラウズ / 検索 / 外部等）の構成と推移、デバイス別視聴傾向、YT_SEARCH 検索語トップ N を数値根拠付きで分析する — SEO 施策・企画判断と `/collection-ideate` / `/video-description` への接続データ。`search_terms` が空の場合は推測で補わず、`yt-analytics` での再収集が必要と明記する
 7. **収益・RPM 分析**: `revenue_analytics.status == "available"` の場合、`video_analytics` のタイトルと `config/channel/content.json::tags.themes` を使ってテーマ別・コレクション別に `estimated_revenue` と `views` を合計し、加重 RPM（`収益合計 / 再生合計 * 1000`）を算出する。動画別 RPM の単純平均は使わない。各グループの収益・再生・RPM・対象動画数を Markdown の「収益・RPM 分析」へ JSON path 付きで記載し、企画判断へ接続する。`status == "unavailable"` または旧データで `revenue_analytics` が無い場合は推測せず、それぞれ「収益データ利用不可」「収益メトリクスの再収集が必要」と明記する
+8. **プレイリスト効果分析**: JSON の `playlist_analytics.playlists` から、視聴数上位 200 件のプレイリスト別の views・`view_share_percent`・`average_view_duration` を表で報告する。`view_share_percent` は上位 200 件内のシェアであり、チャンネル全体に対するシェアとして扱わない。`config/channel/playlists.json` と照合できる ID は名前／キーを併記し、Complete Collection を識別する。未登録 ID は ID のまま明記する。views とシェアはプレイリスト内視聴の多寡を示す観測値であり、概要欄・固定コメントなどの導線施策が原因であるとは断定しない。データ欠損・0件時はその旨を記載し、再収集を案内する。
 
 ### pandas ベースの詳細分析 CLI (v1.3+)
 

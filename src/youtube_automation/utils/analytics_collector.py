@@ -16,6 +16,7 @@ Note:
     - video_analytics.py: 動画別分析（コア）
     - strategic_analytics.py: 戦略的統合分析
     - ctr_analytics.py: CTR・コレクション分析
+    - playlist_analytics.py: プレイリスト内視聴分析
 """
 
 import json
@@ -28,6 +29,7 @@ from youtube_automation.utils.audience_analytics import AudienceAnalyticsMixin
 from youtube_automation.utils.channel_analytics import ChannelAnalyticsMixin
 from youtube_automation.utils.ctr_analytics import CTRAnalyticsMixin
 from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.utils.playlist_analytics import PlaylistAnalyticsMixin
 from youtube_automation.utils.reporting_analytics import ReportingAPIMixin
 from youtube_automation.utils.retention_analytics import RetentionAnalyticsMixin
 from youtube_automation.utils.retry import execute_with_retry
@@ -50,6 +52,7 @@ class YouTubeAnalyticsCollector(
     StrategicAnalyticsMixin,
     CTRAnalyticsMixin,
     TrafficSourceMixin,
+    PlaylistAnalyticsMixin,
     AudienceAnalyticsMixin,
     RetentionAnalyticsMixin,
     RevenueAnalyticsMixin,
