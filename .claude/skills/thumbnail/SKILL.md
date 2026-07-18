@@ -1,11 +1,11 @@
 ---
 name: thumbnail
-description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき。「サムネイル生成」「画像生成」「アイキャッチ」で発動。競合の勝ちパターン分析は /thumbnail-research、320px 視認性比較は /thumbnail-compare、Studio の A/B テスト設計・結果記録は /thumbnail-test、SVG・汎用画像生成には使わない"
+description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、textless main.png/jpg を先行生成して実フォント合成するとき。「サムネイル生成」「画像生成」「アイキャッチ」で発動。伸びた動画起点の改善ループは /thumbnail-iterate、競合の勝ちパターン分析は /thumbnail-research、320px 視認性比較は /thumbnail-compare、単独の Studio A/B 設計・結果記録は /thumbnail-test、SVG・汎用画像生成には使わない"
 ---
 
 ## 前後工程
 
-- `前工程`: `/collection-ideate`, `/wf-new`
+- `前工程`: `/collection-ideate`, `/wf-new`, `/thumbnail-iterate`
 - `後工程`: `/loop-video`, `/thumbnail-compare`, `/alignment-check`, `/thumbnail-test`
 
 ## Overview
@@ -52,6 +52,8 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 subagent として呼ぶ場合、メインエージェントは対象コレクションと生成対象（`thumbnail` / `main`）をリポジトリルート相対パスまたは値で入力に含める。候補画像生成前の承認が必要なら、メインが承認を得るまで subagent を起動しない。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。候補画像の完了報告には `status: success | failure`、生成した `10-assets/thumbnail-vN.jpg/png` または `10-assets/main-vN.png/jpg` と `20-documentation/thumbnail-prompts.md` の絶対パス一覧、エラーを含める。メインは報告されたファイルの存在と生成対象を検証し、候補承認後の確定コピーと state 更新を行う。直接実行時は既存の承認・state 更新手順を変更しない。
 
 ## 勝ちパターン参照ゲート
+
+最初に `data/thumbnail-iterate/champion.json` の有無を確認する。存在する場合は `.claude/skills/thumbnail-iterate/references/state-contract.md` を読み、`file` が repository 内の実ファイル（symlink 不可）で、現在の SHA-256 が `sha256` と一致することを検証する。失敗時は黙って external TTP へ fallback せず対象と不一致を表示して停止する。検証済み champion は **internal TTP** として external benchmark より先に参照画像と `validated_elements` をプロンプトへ反映する。このスキルから champion JSON を作成・更新しない。
 
 プロンプト構築前に `collections/planning/*/20-documentation/thumbnail-test-history.json` と `collections/live/*/20-documentation/thumbnail-test-history.json` を列挙する。存在する各ファイルは `.claude/skills/thumbnail-test/references/history-schema.md` の `### Completed history` にある履歴構造検証コマンドだけで確認し、検証に失敗した履歴は黙って無視せず、対象パスとエラーを表示して修正を案内する。そのファイルを集計から除外してよいが、未検証値をプロンプトへ入れない。
 

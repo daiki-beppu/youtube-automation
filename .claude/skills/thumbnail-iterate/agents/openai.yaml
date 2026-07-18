@@ -1,0 +1,4 @@
+interface:
+  display_name: "Thumbnail Iterate"
+  short_description: "伸びた動画の勝因を検証し次のサムネ比較と生成へつなぐ"
+  default_prompt: "Use $thumbnail-iterate to validate a winning thumbnail hypothesis and plan the next controlled comparison."
