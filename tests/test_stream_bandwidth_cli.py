@@ -66,7 +66,7 @@ def _patch_all(
             "youtube_automation.cli.stream_bandwidth.notify",
         ),
         patch(
-            "youtube_automation.cli.stream_bandwidth.get_youtube",
+            "youtube_automation.cli.stream_bandwidth.get_youtube_readonly",
             return_value=object(),
         ),
     ]

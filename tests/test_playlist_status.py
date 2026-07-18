@@ -66,7 +66,7 @@ class TestShowStatusStringShape:
         ch = _string_shape_channel(tmp_path)
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-        with patch.object(_playlist_status_module, "get_youtube", return_value=MagicMock()):
+        with patch.object(_playlist_status_module, "get_youtube_readonly", return_value=MagicMock()):
             viewer = _playlist_status_module.PlaylistStatusViewer()
 
             with patch.object(viewer, "_list_playlist_video_ids", return_value=set()):
@@ -146,7 +146,7 @@ class TestShowStatusContractDrift:
         ch = self._dict_shape_channel(tmp_path)
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-        with patch.object(_playlist_status_module, "get_youtube", return_value=MagicMock()):
+        with patch.object(_playlist_status_module, "get_youtube_readonly", return_value=MagicMock()):
             viewer = _playlist_status_module.PlaylistStatusViewer()
             with patch.object(viewer, "_list_playlist_video_ids", return_value=set()):
                 viewer.show_status()
@@ -160,7 +160,7 @@ class TestShowStatusContractDrift:
         ch = self._dict_shape_channel(tmp_path)
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-        with patch.object(_playlist_status_module, "get_youtube", return_value=MagicMock()):
+        with patch.object(_playlist_status_module, "get_youtube_readonly", return_value=MagicMock()):
             viewer = _playlist_status_module.PlaylistStatusViewer()
             with patch.object(viewer, "_list_playlist_video_ids", return_value=set()):
                 viewer.show_status()

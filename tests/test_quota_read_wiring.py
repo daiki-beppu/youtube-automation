@@ -170,7 +170,7 @@ class TestMetadataAuditQuota:
 
     def test_success_records_videos_list_once(self, quota_recorder):
         yt = self._yt({"items": []})
-        with patch("youtube_automation.utils.youtube_service.get_youtube", return_value=yt):
+        with patch("youtube_automation.utils.youtube_service.get_youtube_readonly", return_value=yt):
             issues = metadata_audit_module.audit_remote({"vid1": "col-a"})
 
         assert issues["vid1"] == ["not found on YouTube"]
@@ -179,7 +179,7 @@ class TestMetadataAuditQuota:
     def test_api_failure_records_quota_and_propagates(self, quota_recorder):
         yt = self._yt({})
         yt.videos.return_value.list.return_value.execute.side_effect = _http_error()
-        with patch("youtube_automation.utils.youtube_service.get_youtube", return_value=yt):
+        with patch("youtube_automation.utils.youtube_service.get_youtube_readonly", return_value=yt):
             with pytest.raises(HttpError):
                 metadata_audit_module.audit_remote({"vid1": "col-a"})
 
@@ -187,7 +187,7 @@ class TestMetadataAuditQuota:
 
     def test_broken_tracker_keeps_result(self, broken_tracker):
         yt = self._yt({"items": []})
-        with patch("youtube_automation.utils.youtube_service.get_youtube", return_value=yt):
+        with patch("youtube_automation.utils.youtube_service.get_youtube_readonly", return_value=yt):
             issues = metadata_audit_module.audit_remote({"vid1": "col-a"})
 
         assert issues["vid1"] == ["not found on YouTube"]
