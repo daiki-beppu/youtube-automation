@@ -369,3 +369,120 @@ class TestMain:
             assert excinfo.value.code == 1
             # API は触らない
             yt_mock.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# 4. quota 記録（Issue #2058）
+# ---------------------------------------------------------------------------
+
+
+class TestQuotaLogging:
+    """dry-run / apply / failure で quota 記録が固定されること（Issue #2058）."""
+
+    @staticmethod
+    def _quota_calls(quota_mock) -> list[tuple[str, str, float]]:
+        return [(c.args[0], c.args[1], c.args[2]) for c in quota_mock.call_args_list]
+
+    def _build_youtube_mock(self) -> MagicMock:
+        yt = MagicMock()
+        yt.videos.return_value.update.return_value.execute.return_value = {"id": "ok"}
+        return yt
+
+    def test_dry_run_records_no_quota(self, tmp_path, monkeypatch):
+        """dry-run は API を一切発行しないため quota も記録されない."""
+        from youtube_automation.scripts import bulk_update_short_localizations as mod
+
+        # Given
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_shorts(ch, "20250101-live-foo", shorts=[{"short_num": 1, "video_id": "V1"}])
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-shorts-bulk-update-loc", "--dry-run"])
+        yt_mock = self._build_youtube_mock()
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "log_quota") as quota_mock,
+            patch.object(mod.time, "sleep"),
+        ):
+            # When
+            mod.main()
+
+        # Then
+        quota_mock.assert_not_called()
+
+    def test_apply_records_videos_update_per_video(self, tmp_path, monkeypatch):
+        """apply では発行した videos.update と同数の quota が記録される."""
+        from youtube_automation.scripts import bulk_update_short_localizations as mod
+
+        # Given: 2 本の short
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_shorts(
+            ch,
+            "20250101-live-foo",
+            shorts=[
+                {"short_num": 1, "video_id": "V1"},
+                {"short_num": 2, "video_id": "V2"},
+            ],
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-shorts-bulk-update-loc"])
+        yt_mock = self._build_youtube_mock()
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "log_quota") as quota_mock,
+            patch.object(mod.time, "sleep"),
+        ):
+            # When
+            mod.main()
+
+        # Then
+        assert self._quota_calls(quota_mock) == [
+            ("youtube-data-api", "videos.update", 50),
+            ("youtube-data-api", "videos.update", 50),
+        ]
+        metadata = [c.kwargs["metadata"] for c in quota_mock.call_args_list]
+        assert metadata == [
+            {"video_id": "V1", "part": "localizations"},
+            {"video_id": "V2", "part": "localizations"},
+        ]
+
+    def test_update_failure_still_records_quota_and_continues(self, tmp_path, monkeypatch):
+        """update 失敗時も quota を記録し、per-video continue の部分進捗契約を維持する."""
+        from youtube_automation.scripts import bulk_update_short_localizations as mod
+
+        # Given: V1 失敗 / V2 成功
+        ch = _setup_channel(tmp_path)
+        _make_collection_with_shorts(
+            ch,
+            "20250101-live-foo",
+            shorts=[
+                {"short_num": 1, "video_id": "V1"},
+                {"short_num": 2, "video_id": "V2"},
+            ],
+        )
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        reset()
+        monkeypatch.setattr(sys, "argv", ["yt-shorts-bulk-update-loc"])
+        yt_mock = self._build_youtube_mock()
+        yt_mock.videos.return_value.update.return_value.execute.side_effect = [
+            RuntimeError("boom"),
+            {"id": "ok"},
+        ]
+
+        with (
+            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "log_quota") as quota_mock,
+            patch.object(mod.time, "sleep"),
+        ):
+            # When: 失敗しても例外にならず走り切る（既存契約）
+            mod.main()
+
+        # Then: 失敗分も含め 2 件記録、V2 は更新試行される
+        assert yt_mock.videos.return_value.update.return_value.execute.call_count == 2
+        assert self._quota_calls(quota_mock) == [
+            ("youtube-data-api", "videos.update", 50),
+            ("youtube-data-api", "videos.update", 50),
+        ]

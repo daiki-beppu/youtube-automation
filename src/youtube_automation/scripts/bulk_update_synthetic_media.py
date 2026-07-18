@@ -29,6 +29,7 @@ import time
 
 from googleapiclient.errors import HttpError
 
+from youtube_automation.utils.cost_tracker import log_quota
 from youtube_automation.utils.exceptions import YouTubeAPIError
 from youtube_automation.utils.youtube_service import get_youtube
 
@@ -52,6 +53,28 @@ READONLY_STATUS_KEYS = {
 # デフォルトで対象とする公開状態（issue #606 は「公開済み動画」が主眼）
 PUBLIC_PRIVACY = {"public", "unlisted"}
 
+# YouTube Data API quota 記録（Issue #2058）。units は公式 quota 表に従う
+# （https://developers.google.com/youtube/v3/determine_quota_cost）。
+QUOTA_SERVICE = "youtube-data-api"
+QUOTA_UNITS = {
+    "channels.list": 1,
+    "playlistItems.list": 1,
+    "videos.list": 1,
+    "videos.update": 50,
+}
+
+
+def _execute_with_quota(request, bucket: str, metadata: dict | None = None) -> dict:
+    """request を実行しつつ quota を記録する.
+
+    quota はリクエストの成否に関わらず消費されるため、失敗時も記録してから
+    例外を伝播させる（Issue #2058）。
+    """
+    try:
+        return request.execute()
+    finally:
+        log_quota(QUOTA_SERVICE, bucket, QUOTA_UNITS[bucket], metadata=metadata)
+
 
 def list_uploads_video_ids(youtube) -> list[str]:
     """認証チャンネルの uploads playlist から全 video_id を列挙する.
@@ -60,7 +83,10 @@ def list_uploads_video_ids(youtube) -> list[str]:
     をページング全走査する（``utils/video_listing.py`` のロジックを踏襲）。
     """
     try:
-        channel_response = youtube.channels().list(part="contentDetails", mine=True).execute()
+        channel_response = _execute_with_quota(
+            youtube.channels().list(part="contentDetails", mine=True),
+            "channels.list",
+        )
         items = channel_response.get("items") or []
         if not items:
             raise YouTubeAPIError("認証チャンネルが取得できませんでした（items 空）")
@@ -69,15 +95,14 @@ def list_uploads_video_ids(youtube) -> list[str]:
         video_ids: list[str] = []
         next_page_token = None
         while True:
-            playlist_response = (
-                youtube.playlistItems()
-                .list(
+            playlist_response = _execute_with_quota(
+                youtube.playlistItems().list(
                     part="contentDetails",
                     playlistId=uploads_playlist_id,
                     maxResults=BATCH_SIZE,
                     pageToken=next_page_token,
-                )
-                .execute()
+                ),
+                "playlistItems.list",
             )
             for item in playlist_response.get("items") or []:
                 video_id = item.get("contentDetails", {}).get("videoId")
@@ -101,7 +126,11 @@ def fetch_status_batch(youtube, video_ids: list[str]) -> list[dict]:
     try:
         for start in range(0, len(video_ids), BATCH_SIZE):
             batch = video_ids[start : start + BATCH_SIZE]
-            response = youtube.videos().list(part="status,snippet", id=",".join(batch)).execute()
+            response = _execute_with_quota(
+                youtube.videos().list(part="status,snippet", id=",".join(batch)),
+                "videos.list",
+                metadata={"video_count": len(batch)},
+            )
             for item in response.get("items") or []:
                 results.append(
                     {
@@ -206,7 +235,11 @@ def main() -> None:
     for t in targets:
         body = build_update_body(t["video_id"], t["status"])
         try:
-            youtube.videos().update(part="status", body=body).execute()
+            _execute_with_quota(
+                youtube.videos().update(part="status", body=body),
+                "videos.update",
+                metadata={"video_id": t["video_id"]},
+            )
             updated += 1
             print(f"  ✅ {t['video_id']} updated")
         except HttpError as e:
