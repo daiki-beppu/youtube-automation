@@ -8,6 +8,7 @@ CollectionUploader のユニットテスト
 """
 
 import json
+import logging
 import shutil
 import sys
 from datetime import datetime, timedelta
@@ -524,6 +525,66 @@ class TestDefaultPublishTimeFallback:
 
         assert result is None
         assert not mock_resolve.called
+
+
+class TestPublishedDatesQuotaRecording:
+    """Issue #2057: `_get_published_dates` が batch 回数と一致する quota を記録すること."""
+
+    def _make_uploader_with_mock_service(self, tmp_path: Path):
+        uploader, _ = _make_uploader_with_schedule_config(
+            tmp_path,
+            {"schedule": {"timezone": "Asia/Tokyo"}},
+        )
+        mock_service = MagicMock()
+        uploader.youtube_service = mock_service
+        return uploader, mock_service
+
+    def _quota_calls(self, mock_log_quota) -> list[tuple[str, str, float]]:
+        return [(c.args[0], c.args[1], c.args[2]) for c in mock_log_quota.call_args_list]
+
+    def test_should_record_one_quota_entry_per_batch_request(self, tmp_path):
+        """要件 2: batch 回数（search 1 + videos 1）と記録件数が一致する."""
+        uploader, mock_service = self._make_uploader_with_mock_service(tmp_path)
+        mock_service.search.return_value.list.return_value.execute.return_value = {"items": [{"id": {"videoId": "v1"}}]}
+        mock_service.videos.return_value.list.return_value.execute.return_value = {
+            "items": [{"id": "v1", "snippet": {"publishedAt": "2025-01-01T10:00:00Z"}, "status": {}}]
+        }
+
+        with patch("youtube_automation.agents._published_dates.cost_tracker.log_quota") as mock_log_quota:
+            dates = uploader._get_published_dates()
+
+        assert len(dates) == 1
+        assert self._quota_calls(mock_log_quota) == [
+            ("youtube-data-api", "search.list", 100),
+            ("youtube-data-api", "videos.list", 1),
+        ]
+
+    def test_should_record_only_search_quota_when_channel_has_no_videos(self, tmp_path):
+        """要件 4 相当: videos.list を実行しない場合はその quota を記録しない."""
+        uploader, mock_service = self._make_uploader_with_mock_service(tmp_path)
+        mock_service.search.return_value.list.return_value.execute.return_value = {"items": []}
+
+        with patch("youtube_automation.agents._published_dates.cost_tracker.log_quota") as mock_log_quota:
+            dates = uploader._get_published_dates()
+
+        assert dates == set()
+        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 100)]
+        mock_service.videos.return_value.list.assert_not_called()
+
+    def test_should_record_quota_and_keep_fail_safe_on_api_error(self, tmp_path, caplog):
+        """要件 3: API failure でも quota 記録後に既存 fail-safe（空 set + warning）を維持する."""
+        uploader, mock_service = self._make_uploader_with_mock_service(tmp_path)
+        mock_service.search.return_value.list.return_value.execute.side_effect = RuntimeError("boom")
+
+        with (
+            patch("youtube_automation.agents._published_dates.cost_tracker.log_quota") as mock_log_quota,
+            caplog.at_level(logging.WARNING),
+        ):
+            dates = uploader._get_published_dates()
+
+        assert dates == set()
+        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 100)]
+        assert any(rec.levelno == logging.WARNING for rec in caplog.records)
 
 
 class TestExecuteCompleteCollectionResume:

@@ -19,10 +19,36 @@ from pathlib import Path
 
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import channel_dir, load_config, reset
+from youtube_automation.utils.cost_tracker import log_quota
 from youtube_automation.utils.retry import execute_with_retry
 from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
+
+_QUOTA_SERVICE = "youtube-data-api"
+
+# YouTube Data API v3 の quota 単価（units/request）。
+# https://developers.google.com/youtube/v3/determine_quota_cost
+_QUOTA_UNITS_BY_BUCKET = {
+    "playlists.insert": 50,
+    "playlistItems.insert": 50,
+    "playlistItems.delete": 50,
+    "playlistItems.list": 1,
+}
+
+
+def _log_playlist_quota(bucket: str, **metadata) -> None:
+    """playlist mutation 経路の quota 消費を 1 request 単位で記録する。
+
+    失敗 request も quota を消費するため、呼び出し側は try/finally で
+    成功・失敗の両方から呼ぶ（元例外のフローは変えない）。
+    """
+    log_quota(
+        _QUOTA_SERVICE,
+        bucket,
+        _QUOTA_UNITS_BY_BUCKET[bucket],
+        metadata=metadata or None,
+    )
 
 
 class PlaylistManager:
@@ -60,7 +86,10 @@ class PlaylistManager:
                 "status": {"privacyStatus": privacy_status},
             }
             request = youtube.playlists().insert(part="snippet,status", body=body)
-            response = execute_with_retry(request, "playlists.insert failed")
+            try:
+                response = execute_with_retry(request, "playlists.insert failed")
+            finally:
+                _log_playlist_quota("playlists.insert", title=title)
             playlist_id = response["id"]
             playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
             logger.info(f"✅ Playlist created: {playlist_id} ({playlist_url})")
@@ -92,7 +121,10 @@ class PlaylistManager:
             if position is not None:
                 snippet["position"] = position
             request = youtube.playlistItems().insert(part="snippet", body={"snippet": snippet})
-            execute_with_retry(request, "playlistItems.insert failed")
+            try:
+                execute_with_retry(request, "playlistItems.insert failed")
+            finally:
+                _log_playlist_quota("playlistItems.insert", playlist_id=playlist_id, video_id=video_id)
             logger.info(f"✅ Video added to playlist ({where})")
             return True
         except Exception as e:
@@ -212,7 +244,10 @@ class PlaylistManager:
         try:
             request = youtube.playlistItems().list(playlistId=playlist_id, part="contentDetails", maxResults=50)
             while request:
-                response = execute_with_retry(request, "playlistItems.list failed")
+                try:
+                    response = execute_with_retry(request, "playlistItems.list failed")
+                finally:
+                    _log_playlist_quota("playlistItems.list", playlist_id=playlist_id)
                 for item in response.get("items", []):
                     video_ids.add(item["contentDetails"]["videoId"])
                 request = youtube.playlistItems().list_next(request, response)
@@ -375,7 +410,10 @@ class PlaylistManager:
                     maxResults=50,
                     pageToken=page_token,
                 )
-                resp = execute_with_retry(request, "playlistItems.list failed")
+                try:
+                    resp = execute_with_retry(request, "playlistItems.list failed")
+                finally:
+                    _log_playlist_quota("playlistItems.list", playlist_id=playlist_id)
 
                 for item in resp.get("items", []):
                     title = item["snippet"].get("title", "")
@@ -386,7 +424,10 @@ class PlaylistManager:
                             print(f"  [DRY-RUN] {key}: 除去予定 {video_id} ({title})")
                         else:
                             request = youtube.playlistItems().delete(id=item_id)
-                            execute_with_retry(request, "playlistItems.delete failed")
+                            try:
+                                execute_with_retry(request, "playlistItems.delete failed")
+                            finally:
+                                _log_playlist_quota("playlistItems.delete", playlist_id=playlist_id, video_id=video_id)
                             logger.info(f"  {key}: 除去 {video_id} ({title})")
                         removed += 1
 
