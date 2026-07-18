@@ -10,6 +10,7 @@ from typing import cast
 from youtube_automation.cli_stdio import configure_utf8_stdio
 
 _CHANNEL_OPTION_CONFLICTS = {
+    "youtube_automation.cli.channel",
     "youtube_automation.scripts.benchmark_collector",
     "youtube_automation.scripts.video_analyze",
 }
@@ -80,6 +81,7 @@ yt_benchmark_comments = _make_entrypoint("youtube_automation.scripts.fetch_bench
 yt_bulk_update_desc = _make_entrypoint("youtube_automation.scripts.bulk_update_descriptions_from_md")
 yt_bulk_update_synthetic_media = _make_entrypoint("youtube_automation.scripts.bulk_update_synthetic_media")
 yt_captions_upload = _make_entrypoint("youtube_automation.scripts.captions_upload")
+yt_channel = _make_entrypoint("youtube_automation.cli.channel")
 yt_channel_init = _make_entrypoint("youtube_automation.cli.channel_init")
 yt_channel_seed = _make_entrypoint("youtube_automation.scripts.channel_seed")
 yt_channel_settings = _make_entrypoint("youtube_automation.scripts.channel_settings_cli")
