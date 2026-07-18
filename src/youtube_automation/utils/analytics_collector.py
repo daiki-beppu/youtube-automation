@@ -31,6 +31,7 @@ from youtube_automation.utils.exceptions import YouTubeAPIError
 from youtube_automation.utils.reporting_analytics import ReportingAPIMixin
 from youtube_automation.utils.retention_analytics import RetentionAnalyticsMixin
 from youtube_automation.utils.retry import execute_with_retry
+from youtube_automation.utils.revenue_analytics import RevenueAnalyticsMixin
 from youtube_automation.utils.strategic_analytics import StrategicAnalyticsMixin
 from youtube_automation.utils.traffic_source_analytics import TrafficSourceMixin
 from youtube_automation.utils.video_analytics import VideoAnalyticsMixin
@@ -51,6 +52,7 @@ class YouTubeAnalyticsCollector(
     TrafficSourceMixin,
     AudienceAnalyticsMixin,
     RetentionAnalyticsMixin,
+    RevenueAnalyticsMixin,
     ReportingAPIMixin,
 ):
     """YouTube Analytics データ収集クラス"""

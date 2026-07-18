@@ -143,6 +143,11 @@ def _write_fixture(
             }
         ],
         "action_plan": [],
+        "revenue_analysis": {
+            "status": "not_collected",
+            "themes": [],
+            "collections": [],
+        },
         "strategic_discussion": [
             {
                 "statement": "示唆",
@@ -183,7 +188,7 @@ def _write_fixture(
         "analysis_20260717.json#$.cli_outputs.traffic_trend.summary.top_source_share_percent = 45.2",
     ]
     citations.extend(extra_citations)
-    markdown_path.write_text("\n".join(citations) + "\n", encoding="utf-8")
+    markdown_path.write_text("\n".join(citations) + "\n\n## 収益・RPM 分析\n", encoding="utf-8")
 
 
 def _append_retention_section(tmp_path: Path) -> None:
@@ -226,6 +231,49 @@ def _run_validator(tmp_path: Path) -> subprocess.CompletedProcess[str]:
         stderr=subprocess.PIPE,
         check=False,
     )
+
+
+def _set_available_revenue(tmp_path: Path, *, rpm: float) -> None:
+    analytics_path = tmp_path / "data/analytics_data_20260717_120000.json"
+    analytics = json.loads(analytics_path.read_text(encoding="utf-8"))
+    analytics["revenue_analytics"] = {"status": "available", "currency": "USD"}
+    analytics_path.write_text(json.dumps(analytics), encoding="utf-8")
+
+    report_path = tmp_path / "reports/analysis_20260717.json"
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    report["revenue_analysis"] = {
+        "status": "available",
+        "currency": "USD",
+        "themes": [
+            {
+                "name": "Fantasy",
+                "estimated_revenue": 31.0,
+                "views": 5000,
+                "rpm": rpm,
+                "video_count": 2,
+            }
+        ],
+        "collections": [],
+    }
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+
+
+def test_available_revenue_with_weighted_rpm_passes(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    _set_available_revenue(tmp_path, rpm=6.2)
+
+    result = _run_validator(tmp_path)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_available_revenue_rejects_unweighted_rpm(tmp_path: Path) -> None:
+    _write_fixture(tmp_path, depth="standard")
+    _append_standard_retention_section(tmp_path)
+    _set_available_revenue(tmp_path, rpm=7.5)
+
+    assert _run_validator(tmp_path).returncode != 0
 
 
 def test_full_report_without_numeric_retention_citation_fails(tmp_path: Path) -> None:

@@ -65,6 +65,16 @@
       }
     ]
   },
+  "revenue_analysis": {
+    "status": "available",
+    "currency": "USD",
+    "themes": [
+      {"name": "Fantasy", "estimated_revenue": 31.0, "views": 5000, "rpm": 6.2, "video_count": 2}
+    ],
+    "collections": [
+      {"name": "Complete Collection", "estimated_revenue": 31.0, "views": 5000, "rpm": 6.2, "video_count": 2}
+    ]
+  },
   "ctr_strategy": [],
   "channel_performance": [],
   "strategic_improvements": [
@@ -109,6 +119,9 @@
 - `retention_analysis.videos[]` は `error` がなく、`data_points > 0` かつ空でない `retention_curve` を持つ実測データだけを対象にする。対象 index、video_id、average / midpoint、curve 低下点の index と値は入力 JSON の実値に一致させる
 - Markdown の「視聴維持率分析」には入力パス、単位、仮説評価、対象動画、動画間比較（有効データが 1 本なら比較不可の明記）、average / midpoint / curve 低下点の数値を JSON path 付きで記載する
 - `inputs.analysis_target` の `collection_depth` が `standard` の場合も Markdown に「視聴維持率分析」見出しを設け、`状態: full 収集が必要` と単独行で明記する
+- `inputs.analysis_target.revenue_analytics.status` が `available` の場合は `revenue_analysis.status` も `available` とし、`themes` / `collections` の各行に `name` / `estimated_revenue` / `views` / `rpm` / `video_count` を保存する。RPM は各グループの `estimated_revenue / views * 1000` で算出し、動画別 RPM の単純平均は使わない
+- 収益データが `unavailable` の場合は `revenue_analysis.status: "unavailable"`、旧スナップショットで収益キーが無い場合は `revenue_analysis.status: "not_collected"` とする。どちらも `themes` / `collections` は空配列にし、推測値を保存しない
+- Markdown には常に「収益・RPM 分析」見出しを設ける。利用可能ならテーマ別・コレクション別集計と入力 JSON path を記載し、利用不可なら状態を明記する
 
 ## 実行
 
@@ -322,6 +335,37 @@ else
   grep -Eq '^#{1,6}[[:space:]]+視聴維持率分析' "$analysis_md"
   grep -Fqx '状態: full 収集が必要' "$analysis_md"
 fi
+
+grep -Eq '^#{1,6}[[:space:]]+収益・RPM 分析' "$analysis_md"
+jq -e --slurpfile targets "$analysis_target" '
+  def revenue_group_ok:
+    (type == "object")
+    and (.name | type == "string" and length > 0)
+    and (.estimated_revenue | type == "number")
+    and (.views | type == "number" and . >= 0)
+    and (.rpm | type == "number")
+    and (.video_count | type == "number" and . >= 0 and . == floor)
+    and (if .views == 0 then .rpm == 0 else ((.estimated_revenue / .views * 1000) - .rpm | fabs) < 0.000001 end);
+
+  $targets[0] as $target
+  | (.revenue_analysis | type == "object")
+    and (.revenue_analysis.themes | type == "array")
+    and (.revenue_analysis.collections | type == "array")
+    and (if ($target | has("revenue_analytics") | not) then
+           (.revenue_analysis.status == "not_collected")
+           and (.revenue_analysis.themes == [])
+           and (.revenue_analysis.collections == [])
+         elif $target.revenue_analytics.status == "unavailable" then
+           (.revenue_analysis.status == "unavailable")
+           and (.revenue_analysis.themes == [])
+           and (.revenue_analysis.collections == [])
+         else
+           (.revenue_analysis.status == "available")
+           and (.revenue_analysis.currency == $target.revenue_analytics.currency)
+           and (.revenue_analysis.themes | all(.[]; revenue_group_ok))
+           and (.revenue_analysis.collections | all(.[]; revenue_group_ok))
+         end)
+' "$analysis_json" >/dev/null
 
 for source in launch_curve channel_trend theme_compare traffic_trend; do
   found=false
