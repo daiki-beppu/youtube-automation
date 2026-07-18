@@ -39,13 +39,23 @@ export const PROMPTS_ROUTE = "/suno/prompts.json";
 
 /** community-helper が投稿 JSON を取得するサブパス (#1710)。
  * SSOT 対応: collection_serve.py COMMUNITY_POSTS_ROUTE。 */
-// fallow-ignore-next-line unused-export -- community-helper API client (#1711) が後続で参照する公開契約。
 export const COMMUNITY_POSTS_ROUTE = "/community/posts.json";
 
 /** community-helper が投稿画像を取得するサブパスの prefix (#1710)。
  * `${COMMUNITY_IMAGE_ROUTE}/${index}/image` として使う。 */
-// fallow-ignore-next-line unused-export -- community-helper API client (#1711) が後続で参照する公開契約。
 export const COMMUNITY_IMAGE_ROUTE = "/community/posts";
+
+/** community-helper runner の進捗フェーズ (#1711)。 */
+export const COMMUNITY_PHASE = {
+  INJECTING: "injecting",
+  SCHEDULING: "scheduling",
+  UPLOADING_IMAGE: "uploading-image",
+  DONE: "done",
+  ERROR: "error",
+} as const;
+
+export type CommunityPhase =
+  (typeof COMMUNITY_PHASE)[keyof typeof COMMUNITY_PHASE];
 
 /** yt-collection-serve dir mode の collection 列挙サブパス (#816)。
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py COLLECTIONS_ROUTE。 */
