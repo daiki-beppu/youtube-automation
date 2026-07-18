@@ -11,13 +11,14 @@ extensions/
     origin.ts             # CORS origin allowlist（collection_serve.py と対の契約）
     api.ts                # yt-collection-serve client + PromptEntry 型
     dom.ts                # Suno UI 注入の純関数群（注入 / 完了検知 / reCAPTCHA 検知）
+    community-dom.ts      # YouTube チャンネル投稿 UI の DOM 操作（本文 / 画像 / 予約日時 / 投稿）
   suno-helper/            # Suno Advanced タブ自動投入拡張（WXT プロジェクト）
     wxt.config.ts         # manifest 自動生成（最小権限は lib/manifest.ts が SSOT）
     entrypoints/          # background / content / popup
     components/           # popup の React UI
     lib/                  # messaging / storage / manifest schema
     tests/                # Vitest unit + Playwright e2e
-  community-helper/       # YouTube Studio コミュニティ投稿拡張
+  community-helper/       # YouTube チャンネル投稿ページ用コミュニティ投稿拡張
     entrypoints/          # Popup / background relay / content runner stub
     lib/                  # manifest 最小権限 / typed messaging
     tests/                # Vitest contract / Popup unit tests
