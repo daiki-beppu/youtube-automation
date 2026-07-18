@@ -32,6 +32,7 @@ config/channel/         # 責務別分割設定（v2.0.0 以降）
   comments.json         # comments (optional)
   pinned-comment.json   # pinned_comment (optional)
   distrokid.json        # distrokid (optional)
+  community-draft.json  # community_draft (optional)
 config/localizations.json
 auth/{client_secrets,token}.json  # + 任意の token.readonly.json（read-only 系用。docs/oauth-scopes.md）
 .claude/skills/         # yt-skills sync で展開
@@ -45,7 +46,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | モジュール | 責務 |
 |---|---|
 | `utils.config` | `config/channel/*.json` の glob ロード／バリデーション。`load_config()` / `channel_dir()` / `reset()` / `ChannelConfig` を export |
-| `utils.config.{meta,content,youtube,analytics,playlists,workflow,shorts,audio,localizations,comments,pinned_comment,distrokid}` | 責務別 dataclass |
+| `utils.config.{meta,content,youtube,analytics,playlists,workflow,shorts,audio,localizations,comments,pinned_comment,distrokid,community_draft}` | 責務別 dataclass |
 | `utils.youtube_service` | YouTube API サービスファクトリ（ServiceRegistry） |
 | `utils.upload_core` | 再開可能アップロード・サムネイル圧縮の共通コア |
 | `utils.exceptions` | ドメイン例外（`AutomationError` 基底、`ConfigError` / `YouTubeAPIError` / `ValidationError` / `UploadError`） |

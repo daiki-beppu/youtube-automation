@@ -28,7 +28,7 @@ This file provides guidance to Codex CLI (developers.openai.com/codex) when work
 
 ### 下流チャンネルリポジトリの config
 
-- `config/channel/*.json` は責務別分割。必須ファイルに加え optional として `shorts.json` / `comments.json` / `pinned-comment.json` / `distrokid.json` がある。一覧と構造は `CLAUDE.md`・`docs/architecture.md` を参照
+- `config/channel/*.json` は責務別分割。必須ファイルに加え optional として `shorts.json` / `comments.json` / `pinned-comment.json` / `distrokid.json` / `community-draft.json` がある。一覧と構造は `CLAUDE.md`・`docs/architecture.md` を参照
 
 ### lefthook と worktree
 

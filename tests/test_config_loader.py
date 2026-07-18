@@ -136,11 +136,89 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     assert config.comments.rules == []
     assert config.comments.generator.provider == "codex"
     assert config.comments.max_replies_per_run == 20
+    assert config.community_draft.posts == ()
+    assert config.community_draft.variables == {}
     # pinned_comment も optional、欠如時は enabled=False のデフォルト
     assert config.pinned_comment.enabled is False
     assert config.pinned_comment.templates == {}
     assert config.pinned_comment.history_file == "pinned_comment_history.json"
     assert config.pinned_comment.default_language == "en"
+
+
+def test_community_draft_section_loads_typed_posts(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["community-draft.json"] = {
+        "community_draft": {
+            "variables": {"custom_message": "Do not miss it."},
+            "posts": [
+                {
+                    "label": "teaser",
+                    "template": "{title}: {custom_message}",
+                    "schedule_offset_days": -1,
+                    "schedule_time": "18:00",
+                    "image": "main.png",
+                }
+            ],
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.community_draft.variables == {"custom_message": "Do not miss it."}
+    assert len(config.community_draft.posts) == 1
+    post = config.community_draft.posts[0]
+    assert post.label == "teaser"
+    assert post.schedule_offset_days == -1
+    assert post.schedule_time == "18:00"
+    assert post.image == "main.png"
+
+
+@pytest.mark.parametrize("schedule_time", ["9:00", "24:00", "12:60", 900])
+def test_community_draft_rejects_invalid_schedule_time(tmp_path, monkeypatch, schedule_time):
+    sections = _minimal_sections()
+    sections["community-draft.json"] = {
+        "community_draft": {
+            "posts": [
+                {
+                    "label": "teaser",
+                    "template": "{title}",
+                    "schedule_offset_days": 0,
+                    "schedule_time": schedule_time,
+                    "image": "main.png",
+                }
+            ]
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="schedule_time"):
+        load_config()
+
+
+@pytest.mark.parametrize("image", ["/tmp/main.png", "../main.png", "assets/../../secret"])
+def test_community_draft_rejects_unsafe_image_paths(tmp_path, monkeypatch, image):
+    sections = _minimal_sections()
+    sections["community-draft.json"] = {
+        "community_draft": {
+            "posts": [
+                {
+                    "label": "teaser",
+                    "template": "{title}",
+                    "schedule_offset_days": 0,
+                    "schedule_time": "18:00",
+                    "image": image,
+                }
+            ]
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="image"):
+        load_config()
 
 
 def test_synthetic_media_flags_default(tmp_path, monkeypatch):
