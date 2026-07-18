@@ -8,14 +8,14 @@ if [[ ${PWD} != "${repo_root}" ]]; then
 fi
 
 if [[ $# -eq 0 ]]; then
-  extension_names=(suno-helper distrokid-helper)
+  extension_names=(suno-helper distrokid-helper community-helper)
 else
   extension_names=("$@")
 fi
 
 for name in "${extension_names[@]}"; do
   case "${name}" in
-    suno-helper | distrokid-helper) ;;
+    suno-helper | distrokid-helper | community-helper) ;;
     *)
       echo "ERROR: unsupported extension: ${name}" >&2
       exit 1

@@ -10,7 +10,7 @@
 
 ```bash
 ls extensions/<name>/package.json
-# → 存在すること（現行の対象: suno-helper / distrokid-helper）
+# → 存在すること（現行の対象: suno-helper / distrokid-helper / community-helper）
 ```
 
 依頼された拡張名が `extensions/` 配下に無ければ、拡張名の誤りか未対応拡張。ユーザーに確認して abort。
@@ -99,11 +99,11 @@ worktree 環境では remote merge 成功後の local checkout 後処理（`git 
 
 **対応**: `gh run view <run_id> --log-failed` で原因を確認。ビルド失敗なら修正 PR を main にマージ後、`git push origin ":refs/tags/ext-v${VER}"` で remote tag を削除 → `git tag -d "ext-v${VER}"` → 新しい merge commit へ再 tag。transient エラー（ネットワーク等）なら `gh run rerun <run_id>` で再実行できる。
 
-### ケース E: Release に片方の拡張の zip しか無い / 版数が想定と違う
+### ケース E: Release に一部拡張の zip しか無い / 版数が想定と違う
 
-workflow は tag push 時点の main で **両拡張** を zip して添付する。bump していない側の拡張は現行版数の zip が付く（例: `ext-v0.2.4` に `suno-helper-0.2.4-chrome.zip` + `distrokid-helper-0.2.1-chrome.zip`）。
+workflow は tag push 時点の main で **3拡張** を zip して添付する。bump していない拡張はそれぞれの現行版数の zip が付く。
 
-**対応**: SKILL.md E2-4の検証を実行する。zip assetが合計2件かつ両拡張が各1件でなければ失敗。tagが正しいmerge commitを指すか（`git rev-parse "ext-v${VER}^{commit}"` と `mergeCommit.oid` の一致）を確認する。
+**対応**: SKILL.md E2-4の検証を実行する。zip assetが合計3件かつ3拡張が各1件でなければ失敗。tagが正しいmerge commitを指すか（`git rev-parse "ext-v${VER}^{commit}"` と `mergeCommit.oid` の一致）を確認する。
 
 ---
 
@@ -116,7 +116,7 @@ extension publish 完了直後にユーザーへ提示するサマリ:
 
 Tag: ext-v${VER}（merge commit に push 済み）
 GitHub Release: https://github.com/daiki-beppu/youtube-automation/releases/tag/ext-v${VER}
-Asset: <name>-<VER>-chrome.zip（+ もう一方の拡張の現行版数 zip）
+Asset: <name>-<VER>-chrome.zip（+ 他2拡張の現行版数 zip）
 リリースブランチ: release/ext-v${VER}（削除済み）
 
 次のステップ:

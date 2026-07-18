@@ -29,11 +29,11 @@ extensions/
 
 ## pnpm バージョン契約
 
-両拡張（`suno-helper` / `distrokid-helper`）のローカル検証には Nix extensions shell の **Node 24 / pnpm 11.12.0** を使う。各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` による依存 build script の承認、および CI を同じ契約に保つためである。
+3拡張（`suno-helper` / `distrokid-helper` / `community-helper`）のローカル検証には Nix extensions shell の **Node 24 / pnpm 11.12.0** を使う。各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` による依存 build script の承認、および CI を同じ契約に保つためである。
 
 ambient `node` / `pnpm` の版は各環境で異なり得るため、再現可能な検証では必ず `nix develop .#extensions --command` 経由で実行する。`--ignore-workspace` は `pnpm-workspace.yaml::allowBuilds` を無効化するため使用しない。
 
-release 前検証は単一ソースのスクリプトをリポジトリ root から実行する。引数を省略すると両拡張、`<name>`（`suno-helper` または `distrokid-helper`）を渡すと対象だけを検証する:
+release 前検証は単一ソースのスクリプトをリポジトリ root から実行する。引数を省略すると3拡張、`<name>`（`suno-helper` / `distrokid-helper` / `community-helper`）を渡すと対象だけを検証する:
 
 ```bash
 bash .claude/skills/automation-release/references/verify-extensions.sh [<name>]

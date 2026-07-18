@@ -145,3 +145,68 @@ jobs:
           '
       - name: E2E (Playwright)
         run: nix develop .#extensions --command xvfb-run -a pnpm test:e2e
+
+  community-helper:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extensions/community-helper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+      - name: Install dependencies
+        run: nix develop .#extensions --command pnpm install --frozen-lockfile
+      - name: Install shared lint toolchain
+        working-directory: extensions
+        run: nix develop .#extensions --command pnpm install --frozen-lockfile
+      - parallel:
+          - name: Check (Oxlint + Oxfmt)
+            run: nix develop .#extensions --command pnpm check
+          - name: Typecheck
+            run: nix develop .#extensions --command pnpm compile
+          - name: Unit tests (Vitest)
+            run: nix develop .#extensions --command pnpm test
+      - name: Build
+        run: nix develop .#extensions --command pnpm build
+      - name: Verify generated manifest permissions (least-privilege)
+        run: |
+          nix develop .#extensions --command node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const manifest = JSON.parse(
+              readFileSync(".output/chrome-mv3/manifest.json", "utf8"),
+            );
+            const expected = ["activeTab"];
+            const actual = manifest.permissions ?? [];
+            const same =
+              actual.length === expected.length &&
+              expected.every((p) => actual.includes(p));
+            if (!same) {
+              console.error("生成 manifest の permissions が最小権限と不一致:", actual);
+              process.exit(1);
+            }
+            const expectedHosts = [
+              "http://*.localhost/*",
+              "http://localhost/*",
+              "http://127.0.0.1/*",
+            ];
+            const actualHosts = manifest.host_permissions ?? [];
+            const sameHosts =
+              actualHosts.length === expectedHosts.length &&
+              expectedHosts.every((p) => actualHosts.includes(p));
+            if (!sameHosts) {
+              console.error("生成 manifest の host_permissions がローカル配信元限定と不一致:", actualHosts);
+              process.exit(1);
+            }
+            const expectedContentScriptMatches = ["https://www.youtube.com/channel/*/posts*"];
+            const contentScripts = manifest.content_scripts ?? [];
+            const actualContentScriptMatches = contentScripts.flatMap(
+              (script) => script.matches ?? [],
+            );
+            const sameContentScriptMatches =
+              actualContentScriptMatches.length === expectedContentScriptMatches.length &&
+              expectedContentScriptMatches.every((p) => actualContentScriptMatches.includes(p));
+            if (!sameContentScriptMatches) {
+              console.error("生成 manifest の content_scripts.matches が YouTube 投稿ページ限定と不一致:", actualContentScriptMatches);
+              process.exit(1);
+            }
+          '
