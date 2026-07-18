@@ -1216,7 +1216,7 @@ def test_setup_client_secrets_step_uses_download_and_automatic_move() -> None:
         "Download JSON",
         "done",
         "uv run yt-doctor --fix-client-secrets",
-        "uv run yt-doctor --json",
+        "uv run yt-doctor --apply --json",
         "client_secrets` が `ok`",
     ):
         assert expected in step
