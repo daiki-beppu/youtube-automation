@@ -33,6 +33,7 @@ from youtube_automation.auth.oauth_handler import resolve_client_secrets_locatio
 from youtube_automation.cli.automation_update_refs import UPSTREAM_REPO
 from youtube_automation.cli.skills_sync import bundled_skill_names
 from youtube_automation.scripts.benchmark_collector import load_benchmark_videos, select_top_vod_benchmark_videos
+from youtube_automation.utils.config import find_workspace_root, workspace_channels
 from youtube_automation.utils.exceptions import AutomationError, ConfigError, YouTubeAPIError
 from youtube_automation.utils.numbered_duplicates import (
     CLEANUP_GUIDE_URL,
@@ -103,7 +104,7 @@ MAX_DISPLAY_VALUE_LEN = 120
 @dataclass
 class CheckResult:
     id: str
-    status: str  # ok / warn / fail / unknown
+    status: str  # ok / info / warn / fail / unknown
     message: str
     category: str = API_CATEGORY  # bootstrap / api / channel / data / upload
     next_action: Optional[dict] = None
@@ -908,6 +909,34 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
             message=f"client_secrets.json に必須キー不足: {','.join(missing)}",
         )
     return CheckResult(id="client_secrets", status="ok", message="client_secrets.json 構造妥当")
+
+
+def check_oauth_client_sharing(channel_dir: Path) -> CheckResult:
+    """per-channel OAuth client を workspace ルートで共有できる場合に案内する。"""
+    workspace_root = find_workspace_root(channel_dir)
+    channels = workspace_channels(workspace_root) if workspace_root is not None else {}
+    if workspace_root is None or channel_dir.resolve() not in {path.resolve() for path in channels.values()}:
+        return CheckResult(
+            id="oauth_client_sharing",
+            status="ok",
+            message="単一チャンネル構成のため OAuth クライアント共有診断は対象外",
+        )
+
+    per_channel_secrets = [slug for slug, path in channels.items() if (path / "auth" / "client_secrets.json").is_file()]
+    if len(per_channel_secrets) < 2:
+        return CheckResult(
+            id="oauth_client_sharing",
+            status="ok",
+            message="個別 OAuth クライアントを持つ workspace チャンネルは複数ありません",
+        )
+
+    shared_path = workspace_root / "auth" / "client_secrets.json"
+    return CheckResult(
+        id="oauth_client_sharing",
+        status="info",
+        message=(f"OAuth クライアントをルート共有（{shared_path}）へ統合可能。統合には全チャンネルの再認証が必要"),
+        data={"channels": per_channel_secrets, "shared_path": str(shared_path)},
+    )
 
 
 def check_oauth_token(channel_dir: Path) -> CheckResult:
@@ -2716,6 +2745,7 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
         check_iam_aiplatform_user(channel_dir),
         check_env_file(channel_dir),
         check_client_secrets(channel_dir),
+        check_oauth_client_sharing(channel_dir),
         check_oauth_token(channel_dir),
         check_reporting_job(channel_dir),
         check_channel_config(channel_dir),
@@ -2730,7 +2760,7 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
 
 
 def summarize(results: list[CheckResult]) -> dict:
-    counts = {"ok": 0, "warn": 0, "fail": 0, "unknown": 0}
+    counts = {"ok": 0, "info": 0, "warn": 0, "fail": 0, "unknown": 0}
     next_check_id: Optional[str] = None
     for r in results:
         counts[r.status] = counts.get(r.status, 0) + 1
@@ -2970,12 +3000,13 @@ def fix_client_secrets(channel_dir: Path) -> int:
 
 _COLORS = {
     "ok": "\033[0;32m",
+    "info": "\033[0;36m",
     "warn": "\033[0;33m",
     "fail": "\033[0;31m",
     "unknown": "\033[0;90m",
 }
 _RESET = "\033[0m"
-_STATUS_ICONS = {"ok": "✓", "warn": "!", "fail": "✗", "unknown": "?"}
+_STATUS_ICONS = {"ok": "✓", "info": "i", "warn": "!", "fail": "✗", "unknown": "?"}
 
 
 def render_table(results: list[CheckResult], summary: dict, channel_dir: Path) -> str:
@@ -3005,7 +3036,8 @@ def render_table(results: list[CheckResult], summary: dict, channel_dir: Path) -
 
     lines.append("")
     lines.append(
-        f"summary: ok={summary['ok']} warn={summary['warn']} fail={summary['fail']} unknown={summary.get('unknown', 0)}"
+        f"summary: ok={summary['ok']} info={summary.get('info', 0)} "
+        f"warn={summary['warn']} fail={summary['fail']} unknown={summary.get('unknown', 0)}"
     )
     if summary.get("next_check_id"):
         lines.append(f"next: {summary['next_check_id']}")

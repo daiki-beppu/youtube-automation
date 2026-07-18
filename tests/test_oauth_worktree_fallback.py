@@ -92,6 +92,52 @@ class TestMainWorktreeRoot:
 
 
 class TestClientSecretsCandidates:
+    def test_workspace_root_auth_is_fallback_after_channel_candidates(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
+        workspace = tmp_path / "workspace"
+        channel = workspace / "channels" / "alpha"
+        (channel / "config" / "channel").mkdir(parents=True)
+
+        assert client_secrets_file_candidates(channel) == [
+            channel / "auth" / "client_secrets.json",
+            channel / "automation" / "auth" / "client_secrets.json",
+            workspace / "auth" / "client_secrets.json",
+        ]
+
+    def test_resolve_prefers_channel_file_over_workspace_fallback(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
+        workspace = tmp_path / "workspace"
+        channel = workspace / "channels" / "alpha"
+        (channel / "config" / "channel").mkdir(parents=True)
+        for root in (workspace, channel):
+            (root / "auth").mkdir(parents=True, exist_ok=True)
+            (root / "auth" / "client_secrets.json").write_text(json.dumps(_CLIENT_SECRETS), encoding="utf-8")
+
+        assert resolve_client_secrets_path(channel) == channel / "auth" / "client_secrets.json"
+
+    def test_resolve_falls_back_to_workspace_file(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
+        workspace = tmp_path / "workspace"
+        channel = workspace / "channels" / "alpha"
+        (channel / "config" / "channel").mkdir(parents=True)
+        (workspace / "auth").mkdir()
+        (workspace / "auth" / "client_secrets.json").write_text(json.dumps(_CLIENT_SECRETS), encoding="utf-8")
+
+        assert resolve_client_secrets_path(channel) == workspace / "auth" / "client_secrets.json"
+
+    def test_nested_standalone_repo_does_not_use_workspace_fallback(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
+        workspace = tmp_path / "workspace"
+        workspace_channel = workspace / "channels" / "alpha"
+        (workspace_channel / "config" / "channel").mkdir(parents=True)
+        standalone = workspace / "standalone"
+        standalone.mkdir()
+
+        assert client_secrets_file_candidates(standalone) == [
+            standalone / "auth" / "client_secrets.json",
+            standalone / "automation" / "auth" / "client_secrets.json",
+        ]
+
     def test_worktree_appends_main_auth_fallback_last(self, worktree_pair):
         main_root, worktree = worktree_pair
         candidates = client_secrets_file_candidates(worktree)
