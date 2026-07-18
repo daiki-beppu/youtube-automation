@@ -24,9 +24,9 @@ from youtube_automation.utils.strategic_analytics import (
 
 # get_video_analytics_by_id が返す Analytics 結果（views を視聴回数として差別化）
 _ANALYTICS_BY_ID: Dict[str, Dict] = {
-    "VID_A": {"video_id": "VID_A", "views": 100, "likes": 10},
-    "VID_B": {"video_id": "VID_B", "views": 300, "likes": 30},
-    "VID_C": {"video_id": "VID_C", "views": 200, "likes": 20},
+    "VID_A": {"video_id": "VID_A", "views": 100, "likes": 10, "subscribers_gained": 1},
+    "VID_B": {"video_id": "VID_B", "views": 300, "likes": 30, "subscribers_gained": 3},
+    "VID_C": {"video_id": "VID_C", "views": 200, "likes": 20, "subscribers_gained": 2},
 }
 
 
@@ -94,6 +94,7 @@ class TestFetchVideosAnalyticsParallel:
         assert result[0]["title"] == "Title A"
         assert result[0]["views"] == 100
         assert result[0]["likes"] == 10
+        assert result[0]["subscriber_conversion_rate"] == 1.0
 
     def test_all_videos_returned_regardless_of_completion_order(self, collector: _StubCollector) -> None:
         """worker の完了順に関わらず全動画が結果に含まれる"""
@@ -145,6 +146,7 @@ class TestGetAllVideoAnalyticsParallel:
         result = collector.get_all_video_analytics("2026-01-01", "2026-04-01")
 
         assert [r["video_id"] for r in result] == ["VID_B", "VID_C", "VID_A"]
+        assert [r["subscriber_conversion_rate"] for r in result] == [1.0, 1.0, 1.0]
 
     def test_empty_all_videos_returns_empty(self, collector: _StubCollector) -> None:
         """`get_all_channel_videos` が空なら早期リターン"""
@@ -167,6 +169,7 @@ class TestGetRecentVideoAnalyticsParallel:
         result = collector.get_recent_video_analytics("2026-01-01", "2026-04-01", days=30)
 
         assert [r["video_id"] for r in result] == ["VID_B", "VID_A"]
+        assert [r["subscriber_conversion_rate"] for r in result] == [1.0, 1.0]
 
     def test_empty_recent_videos_returns_empty(self, collector: _StubCollector) -> None:
         """`get_recent_videos` が空なら早期リターン"""
@@ -176,3 +179,86 @@ class TestGetRecentVideoAnalyticsParallel:
 
         assert result == []
         assert collector._call_log == []
+
+
+class TestSubscriberConversionRanking:
+    def test_combined_analytics_adds_conversion_rate(self, collector: _StubCollector) -> None:
+        """統合取得の公開メソッドが上位動画へ転換率を付与する。"""
+        collector._all_videos = [_video_meta("VID_A", "A")]
+        collector.analytics_service.reports().query().execute.return_value = {
+            "rows": [["VID_A", 200, 1000, 120, 10, 0, 1, 2, 6]]
+        }
+
+        result = collector.get_combined_analytics("2026-01-01", "2026-04-01")
+
+        assert result["top_videos"][0]["subscriber_conversion_rate"] == 3.0
+
+    def test_top_video_analytics_adds_conversion_rate(self, collector: _StubCollector) -> None:
+        """上位動画取得の公開メソッドが転換率を付与する。"""
+        collector.analytics_service.reports().query().execute.return_value = {
+            "rows": [["VID_A", 200, 1000, 120, 10, 0, 1, 2, 6]]
+        }
+
+        result = collector.get_top_video_analytics("2026-01-01", "2026-04-01")
+
+        assert result[0]["subscriber_conversion_rate"] == 3.0
+
+    @pytest.mark.parametrize(
+        ("mode", "method_name", "result_key"),
+        [
+            ("efficient", "get_combined_analytics", "top_videos"),
+            ("comprehensive", "get_all_video_analytics", "all_videos"),
+            ("top_only", "get_top_video_analytics", "top_videos"),
+            ("recent_only", "get_recent_video_analytics", "recent_videos"),
+        ],
+    )
+    def test_all_modes_add_conversion_rate_and_ranking(
+        self, collector: _StubCollector, monkeypatch: pytest.MonkeyPatch, mode: str, method_name: str, result_key: str
+    ) -> None:
+        """各取得モードが転換率を動画へ付与し、率降順ランキングを返す"""
+        videos = [
+            {"video_id": "VID_HIGH", "title": "High", "duration": "PT2M", "views": 50, "subscribers_gained": 5},
+            {"video_id": "VID_ZERO", "title": "Zero", "duration": "PT3M", "views": 0, "subscribers_gained": 10},
+            {"video_id": "VID_LOW", "title": "Low", "duration": "PT4M", "views": 100, "subscribers_gained": 1},
+        ]
+
+        if mode == "efficient":
+            monkeypatch.setattr(
+                collector,
+                method_name,
+                lambda start_date, end_date, top_count, recent_days: {
+                    "top_videos": videos,
+                    "recent_videos": [],
+                },
+            )
+        elif mode == "top_only":
+            monkeypatch.setattr(
+                collector,
+                method_name,
+                lambda start_date, end_date, top_count: videos,
+            )
+        elif mode == "recent_only":
+            monkeypatch.setattr(
+                collector,
+                method_name,
+                lambda start_date, end_date, days: videos,
+            )
+        else:
+            monkeypatch.setattr(collector, method_name, lambda start_date, end_date: videos)
+
+        result = collector.get_strategic_video_analytics("2026-01-01", "2026-04-01", mode=mode)
+
+        assert [video["subscriber_conversion_rate"] for video in result[result_key]] == [10.0, 0, 1.0]
+        assert [video["video_id"] for video in result["subscriber_conversion_ranking"]] == [
+            "VID_HIGH",
+            "VID_LOW",
+            "VID_ZERO",
+        ]
+        assert result["subscriber_conversion_ranking"][0] == {
+            "video_id": "VID_HIGH",
+            "title": "High",
+            "duration": "PT2M",
+            "views": 50,
+            "subscribers_gained": 5,
+            "subscriber_conversion_rate": 10.0,
+        }

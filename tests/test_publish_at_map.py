@@ -134,7 +134,9 @@ class TestCollectBasicAnalyticsIntegration:
         mixin.get_ctr_analysis = lambda s, e: {"videos": []}
         mixin.get_traffic_source_analytics = lambda s, e: {"sources": {}}
         mixin.get_traffic_source_detail = lambda s, e, source_type: []
+        mixin.get_playlist_analytics = lambda s, e: {"playlists": {}, "total_views": 0}
         mixin.get_device_analytics = lambda s, e: {"devices": {}}
+        mixin.get_subscribed_status_analytics = lambda s, e: {"statuses": {}, "total_views": 0}
         mixin.get_country_analytics = lambda s, e: pytest.fail("country should require full depth")
         mixin.get_retention_summary = lambda s, e, top_n: pytest.fail("retention should require full depth")
 
@@ -143,7 +145,10 @@ class TestCollectBasicAnalyticsIntegration:
 
         assert result["collection_depth"] == "standard"
         assert result["summary"]["depth"] == "standard"
-        assert result["audience"] == {"by_device": {"devices": {}}}
+        assert result["audience"] == {
+            "by_device": {"devices": {}},
+            "by_subscribed_status": {"statuses": {}, "total_views": 0},
+        }
         assert "retention" not in result
 
     def test_injects_scheduled_publish_at(self, live_dir):

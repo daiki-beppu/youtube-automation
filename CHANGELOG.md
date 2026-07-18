@@ -9,8 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(analytics)`: `benchmark.channels` の pre-filter 投稿走査を `upload_scan` として保存し、60 日以上の投稿停滞と直近 90 日平均再生数の前期比 50% 以下を判定する `yt-ttp-health` を追加した。`/analytics-analyze` の analysis JSON を schema v2 に更新し、健全・アラート・データ不足・入力欠損を区別する `ttp_health` を必須化した（#2050）。
 
+- `feat(videoup)`: `overlays.audio_visualizer.style` に後方互換の `bar` と `mirror-mountain` / `ring` / `ring-line` preset を追加した。`bars` / `size` / `position` / `ring.inner_r` / `ring.length` / `ring.arc_deg` を config から filtergraph へ反映し、不正 style は ffmpeg 起動前に有効値付きで拒否する。追加 style のバー間隔・円弧マスク PNG は同梱 Python helper が一時領域へ実行時生成するため、外部素材・補助スクリプトは不要（#1684）。
+- `feat(videoup)`: `overlays.audio_visualizer` に `fill`（solid / gradient / rainbow）、中央鏡像、上下対称、角丸、nested glow を追加した。gradient / rainbow 素材は `yt-audio-visualizer-fill` が実行時生成し、不正な配色は FFmpeg 起動前に拒否する。既存の fill 未指定・フラット glow config は従来挙動を維持する（#1686）。
+- `feat(thumbnail)`: `auto_selection.mode`（`selection_only` / `full`）を追加し、CLI 結果と workflow-state 監査ログへの mode 記録、監査値の strict 検証、`full` で適格候補ゼロ時の手動フロー切替ガイダンスを実装した（#2166）。
+- `feat(captions)`: `suno-lyrics.json` と `descriptions.md` のトラック開始時刻・総時間から、各トラック区間へ歌詞行を均等配置した重複なし SRT を生成する `yt-captions-upload` を追加した。`--apply` では YouTube Data API の captions resource を使い、同一言語の既存字幕を対話確認または `--existing update|skip` で更新・スキップして二重追加を防ぐ。captions list / insert / update の quota も発行 request 単位で記録する（#1809）。
 - `feat(doctor)`: `yt-doctor` の upload preflight が認証済み YouTube アカウントの実チャンネルを `channels.list(mine=true)` で確認し、チャンネル未作成・ローカル ID 不一致・認証 / quota / network 起因の API 失敗を区別して案内するようにした。成功時と不一致時は `--json` の `data` に remote channel ID を含め、ローカル設定だけでは検出できなかった token / meta.json の取り違えを upload 前に停止する（#2053）。
 - `feat(auth)`: OAuth token の scope 分離を導入し、read-only skill が write scope の token を共用しない設計にした。`YouTubeOAuthHandler` に `READONLY_SCOPES`（`youtube.readonly` + `yt-analytics(.monetary)?.readonly`、write scope なし）と用途別 token `auth/token.readonly.json` の発行・解決（`create_readonly` / `readonly_token_path`。探索順は #1721 と同じ channel 側 → main worktree 側）を追加し、新 CLI `yt-oauth`（`--readonly` で readonly token 発行）を登録した。`ServiceRegistry` の read 系（`analytics` / `reporting` / 新設の `youtube_readonly` / `credentials_readonly` / `get_readonly_handler`）は readonly token を優先し、未発行時は warning ログで発行手順を案内した上で `token.json` へフォールバックする（サイレント失敗しない。既存運用は無変更で動作）。read-only 系呼び出し元（analytics 収集 / benchmark / channel-status / metadata-audit / playlist-status / discover-competitors / stream-bandwidth）を readonly 経路へ移行し、write 系（upload / playlist 管理 / bulk update / コメント投稿）は従来どおり `token.json` を使う。skill × 実効 scope の対応表と運用手順を `docs/oauth-scopes.md` に新設した（#1699）。
+### Added
+
+- `yt-retention-timeline` を追加し、収集済み retention drop を `/video-analyze` の scene / BGM 区間へ自動照合して JSON / Markdown レポートを生成できるようにした (#1814)
 
 - `feat(cost)`: 動画 metadata 一括更新 3 CLI（`yt-bulk-update-desc` / `yt-shorts-bulk-update-loc` / `yt-bulk-update-synthetic-media`）に YouTube Data API quota 記録（`cost_tracker.log_quota`）を配線した。read-before-write を含む発行済みリクエスト 1 回につき 1 エントリ（`videos.list` / `channels.list` / `playlistItems.list` = 1 unit、`videos.update` = 50 units）を記録し、dry-run は実際に発行した read のみ、batch / pagination はリクエスト回数と記録件数が一致する。quota はリクエスト失敗時も消費されるため、update 失敗時も記録した上で従来の例外・部分進捗契約（continue / exit code / 最初の失敗の再 raise）を維持する（#2058）。
 - `feat(cost)`: channel status・stream key・metadata audit・playlist status の read API 呼び出しに quota 記録を配線した。`yt-*` 4 CLI（`get_channel_status` / `yt-fetch-stream-key` / `metadata_audit` / `playlist_status`）の各 read リクエスト（`channels.list` / `playlists.list` / `playlistItems.list` / `liveStreams.list` / `videos.list`、Analytics は `reports.query` を `youtube-analytics-api` として別 service で記録）が、成功・失敗のどちらでもリクエスト 1 回につき `cost_tracker.log_quota` を 1 回だけ呼ぶ（pagination はページ = リクエスト単位で記録）。tracker が書き込み不能・例外を吐く場合も従来の出力と終了状態を変えない（`--stdout` の pipe 契約保護のため警告は stderr へ逃がす）。benchmark / upload agent の read API と write API は兄弟 issue のスコープ（#2055）。
@@ -205,6 +212,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs(suno,suno-helper)`: 長尺 BGM チャンネル向けに `config/skills/suno.yaml::duration_filter`（`min_sec` / `max_sec`、部分指定は既定値と deep-merge）の override 手順を `/suno` Step 2 と `/suno-helper` の duration guard 節へ文書化した。override が `suno-prompts.json` へ反映される契約は回帰テストで pin し（機能自体は #1269 で実装済み・既定 60〜300 秒は不変）、閾値変更後は `yt-generate-suno` の再生成が必要なことと、resume が run 開始時点の閾値を保持するため新規 run で効かせる注意も明記した（#1937）。
 
 - `fix(suno-helper)`: 新 Create UI（2026-07）で playlist の clip row 検出が全件 missing になる問題を実 DOM capture（匿名化 fixture）に基づき修正した。復活した `.clip-row` コンテナを row 導出の最優先アンカーにし、`div` 化した再生ボタン（`[role="button"][aria-label^="Play "]`）と row 自身の `aria-label` を曲名フォールバックに追加。仮想ウィンドウ走査（`scrollAndMultiSelectByIds` / `readSelectedClipIds`）は共通ヘルパへ抽出し、ウィンドウ外 row の空シェル化・再描画遅延に対して描画 signature 変化の poll（上限 3s）で hydration を待ち、ページネーションで走査中に成長する scrollHeight へ maxScroll 毎ステップ再計算で追従する。旧 DOM / grid view の検出経路と fixture は不変（#2043）。
+### Added
+
+- `feat(analytics)`: 動画別の `subscribersGained ÷ views × 100` による登録転換率ランキングと、登録済み／未登録視聴者別の `subscribedStatus` 集計を analytics スナップショットへ追加した。`/analytics-analyze` は両データを組み合わせて「登録を生む動画の型」を分析し、チャンネル全体の subscribedStatus を動画個別の因果として断定しない（#1813）。
+- `feat(analytics)`: standard / full depth の Analytics 収集に、視聴数上位 200 件の playlist dimension における views・平均視聴時間・上位 200 件内の視聴シェアを追加し、`/analytics-analyze` が Complete Collection を含むプレイリスト内視聴をレポートできるようにした（#1815）。
 
 ## [5.5.17] - 2026-07-10
 
