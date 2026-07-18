@@ -14,6 +14,9 @@ export const SERVER_SOURCES_STORAGE_KEY = "ytCollectionServeSources" as const;
  * overlay と content が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
 export const RESUME_STATE_KEY = "sunoResumeState";
 
+/** 定期無人実行の checkpoint / 手動介入理由を保存する chrome.storage.local key (#1893)。 */
+export const UNATTENDED_RUN_STATE_KEY = "sunoUnattendedRunState";
+
 /** overlay の position/minimized/hidden を保存する chrome.storage.local の単一 key (#892)。
  * Suno は 1 タブ運用前提のため global 単一 key とする。lib/overlay-state.ts が SSOT として参照する。 */
 export const OVERLAY_STATE_KEY = "sunoOverlayState";
@@ -25,7 +28,7 @@ export const FINISHED_SNAPSHOT_KEY = "sunoFinishedSnapshot";
 
 /** yt-collection-serve の download 完了通知サブパス (#1215、POST)。
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py collection_downloaded_route。 */
-export const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
+const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
 
 /** Suno ダウンロード形式を保存する chrome.storage.local の key (#1215)。
  * popup（書込）と content（読込）が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
@@ -250,10 +253,10 @@ export function distrokidReleaseRoute(
 }
 
 /** yt-collection-serve の既定 port。 */
-export const DEFAULT_SERVER_PORT = 7873;
+const DEFAULT_SERVER_PORT = 7873;
 
 /** ローカル配信元の既定 hostname。チャンネル別 hostname が未確定の fallback。 */
-export const DEFAULT_SERVER_HOSTNAME = "youtube-automation.localhost" as const;
+const DEFAULT_SERVER_HOSTNAME = "youtube-automation.localhost" as const;
 
 /** ローカル配信元の既定 URL。 */
 export const DEFAULT_URL =

@@ -36,6 +36,8 @@ export interface RetryDownloadResult {
 export interface DownloadFlowDeps {
   emitProgress: (payload: ProgressPayload) => void;
   isAborted: () => boolean;
+  /** Persist the irreversible browser-download result before localhost POST. */
+  onDownloadComplete?: (filename: string) => Promise<void>;
 }
 
 export interface RetryDownloadOptions {
@@ -137,6 +139,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       if (!downloadResult.ok) {
         throw new Error(downloadResult.message);
       }
+
+      await deps.onDownloadComplete?.(downloadResult.filename);
 
       const postResult = await sendMessage("postDownloaded", {
         baseUrl: context.baseUrl,

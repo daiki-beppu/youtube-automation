@@ -79,6 +79,8 @@ export interface CollectionSummary {
   status: CollectionStatus;
   pattern_count: number | null;
   downloaded_count: number;
+  /** workflow-state.json の assets.music_downloaded。部分完了と厳格完了を区別する。 */
+  music_downloaded?: boolean;
   channel?: string;
   theme?: string;
   expected_file_count?: number | null;
@@ -536,6 +538,12 @@ function normalizeCollectionSummary(
       `collections[${index}].downloaded_count`
     ),
   };
+  if (record.music_downloaded !== undefined) {
+    if (typeof record.music_downloaded !== "boolean") {
+      throw new Error(`collections[${index}].music_downloaded must be boolean`);
+    }
+    summary.music_downloaded = record.music_downloaded;
+  }
   const channel = assertOptionalString(
     record.channel,
     `collections[${index}].channel`
@@ -831,4 +839,17 @@ export async function postDownloaded(
     warning = null;
   }
   return { warning };
+}
+
+/** Atomically consume a server-issued unattended request nonce. */
+export async function consumeUnattendedRequest(
+  baseUrl: string,
+  nonce: string
+): Promise<unknown> {
+  const route = `/unattended/requests/${encodeURIComponent(nonce)}/consume`;
+  const res = await postJsonWithServeToken(baseUrl, route, {});
+  if (!res.ok) {
+    throw new Error(`unattended request consume failed: HTTP ${res.status}`);
+  }
+  return res.json();
 }

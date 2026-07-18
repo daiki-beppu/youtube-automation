@@ -93,6 +93,20 @@ build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helpe
 
 **異常値の曲を再生成する** を OFF にした run は、duration guard の閾値外 clip も歯抜けにせず playlist と ZIP に含める。popup の status / console warning で NG を確認し、完了後に対象 playlist を試聴して採否を手動判断する。popup を閉じて再表示した場合も選択は復元される。entry phase の ERROR / STOPPED は resume バナー、playlist / download phase の中断は **Playlist から再開** / **Download から再開** を使い、いずれも元 run の選択と警告を引き継ぐ。
 
+### 定期実行 launch 契約
+
+`yt-suno-unattended-request` は、対象 collection・任意の entry index・DL 形式・1 run の entry / concurrency / retry 上限を起動中の localhost server に短時間だけ登録し、`baseUrl` と一度だけ消費できる nonce だけを含む `https://suno.com/create#suno-helper-unattended=...` を出力する。課金操作の完全な要求は URL や Suno page に公開しない。拡張 background は extension lock と serve token を通して nonce を原子的に消費し、fragment を直ちに URL から除去する。`baseUrl` は認証情報なしの loopback HTTP（`localhost` / `127.0.0.1` / `*.localhost`）だけを受理する。
+
+```bash
+uv run yt-suno-unattended-request \
+  --base-url http://rjn.localhost:7873 \
+  --collection-id 20260718-rjn-night-drive-collection \
+  --download-format wav --max-entries 10 \
+  --max-concurrent-generations 3 --max-retries 2
+```
+
+既ログイン Chrome で出力 URL を開くと、download 済みは no-op、途中 state は未完了 entry または playlist/download から再開する。collection 単位の background lease は別タブ・別要求の重複生成を防ぎ、タブ crash 後は期限切れ lease を回収する。playlist URL と browser download 完了は不可逆操作の直後に checkpoint されるため、再開時に同名 playlist や ZIP を作り直さない。上限を超えた entry は checkpoint に残し、次回 URL 起動で続行する。既存 playlist があるのに clip ID が復元できない場合は重複生成せず停止する。ログイン、可視 CAPTCHA、料金・credit 確認、互換性のない UI も自動突破せず `local:sunoUnattendedRunState` に `manual-intervention` と必要操作を記録する。`completed` は localhost readback で音源、playlist URL、downloaded 状態をすべて確認した場合だけ通知する。同じ情報を Suno ページ root の `data-suno-unattended-request-id` / `-collection-id` / `-status` / `-checkpoint` / `-stop-reason` / `-required-action` に通知し、完了 reload 後も storage から復元するため、scheduler agent は storage API なしで観測できる。手動 overlay からの run はこの契約を付けないため従来挙動のまま。
+
 ### in-flight 検知と停止判断（#948）
 
 - **in-flight カウント**: MAIN world bridge（`suno-bridge.content.ts`）が Suno API（`POST /api/generate/v2-web/` / `POST /api/feed/v3`）のレスポンスを観測し、clip status（complete/error 以外 = in-flight）で数える。「Remix ボタン disabled = 生成中」の旧 DOM プロキシは生成完了後も disabled が残り過大カウントするため fallback 専用（縮退中は popup に「bridge 未観測: DOM 計数で待機中」と表示される）

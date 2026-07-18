@@ -60,6 +60,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-stock-preview": "youtube_automation.scripts.stock_preview",
     "yt-stock-prune": "youtube_automation.scripts.stock_prune",
     "yt-suno-audio-cleanup": "youtube_automation.scripts.suno_audio_cleanup",
+    "yt-suno-unattended-request": "youtube_automation.scripts.suno_unattended_request",
     "yt-suno-select-tracks": "youtube_automation.scripts.suno_select_tracks",
     "yt-suno-verify": "youtube_automation.scripts.suno_verify",
     "yt-suno-verify-playlist": "youtube_automation.scripts.suno_verify_playlist",

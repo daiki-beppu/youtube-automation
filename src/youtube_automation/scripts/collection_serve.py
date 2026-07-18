@@ -30,11 +30,13 @@ import math
 import mimetypes
 import os
 import re
+import secrets
 import select
 import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.parse
 import uuid
@@ -125,6 +127,9 @@ _COMMUNITY_IMAGE_ROUTE_PATTERN = re.compile(r"^/community/posts/(?P<index>\d+)/i
 # small JSON objects/lists; larger bodies are rejected before reading from rfile.
 _MAX_POST_BODY_BYTES = 1024 * 1024
 _MAX_DOWNLOADED_POST_BODY_BYTES = 10 * 1024
+_MAX_UNATTENDED_REQUEST_BODY_BYTES = 32 * 1024
+_UNATTENDED_REQUESTS_ROUTE = "/unattended/requests"
+_UNATTENDED_REQUEST_TTL_SECONDS = 5 * 60
 
 
 class _ServerTerminationSignal(RuntimeError):
@@ -529,10 +534,11 @@ def build_collections_index(root: Path) -> list[dict]:
         expected_file_count = _read_music_expected_file_count(coll)
         expected_count = expected_download_count(pattern_count, expected_file_count)
         suno_playlist_url = _read_music_suno_playlist_url(coll)
+        music_downloaded = _read_music_downloaded_flag(coll)
         status = _determine_status(has_prompts, pattern_count, downloaded_count, expected_file_count)
         # 部分完了を受理済み（assets.music_downloaded=true）の collection はファイル数が
         # 期待数未満でも downloaded として扱い、拡張が再ダウンロードを提示しないようにする（#1913）
-        if status == "ready" and _read_music_downloaded_flag(coll):
+        if status == "ready" and music_downloaded:
             status = "downloaded"
         theme = _theme_from_collection_dir(coll)
         channel = _channel_from_collection_id(coll.name, theme)
@@ -548,6 +554,8 @@ def build_collections_index(root: Path) -> list[dict]:
             entry["channel"] = channel
         if expected_count is not None:
             entry["expected_file_count"] = expected_count
+        if music_downloaded:
+            entry["music_downloaded"] = True
         if suno_playlist_url is not None:
             entry["suno_playlist_url"] = suno_playlist_url
         index.append(entry)
@@ -1028,6 +1036,8 @@ def create_server(
     dir_mode = collections_root is not None
     distrokid_enabled = distrokid is not None and distrokid.enabled
     serve_token = str(uuid.uuid4())
+    unattended_requests: dict[str, tuple[float, dict[str, object]]] = {}
+    unattended_requests_lock = threading.Lock()
     resolved_server_info = (
         server_info if server_info is not None else build_server_info("YouTube Automation", "YA", port)
     )
@@ -1206,6 +1216,62 @@ def create_server(
                 os.kill(os.getpid(), signal.SIGTERM)
                 return
             if discovery_registry_state is not None and handle_registry_request(self, discovery_registry_state):
+                return
+
+            # Local scheduler only: register the paid-operation request outside the
+            # browser, then expose only a short-lived nonce in the Suno URL. Browser
+            # requests always carry Origin, so rejecting it here prevents a Suno page
+            # from minting its own unattended command.
+            if dir_mode and self.path == _UNATTENDED_REQUESTS_ROUTE:
+                if self.headers.get("Origin") is not None:
+                    self.send_error(403, "Forbidden")
+                    return
+                content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+                if content_type != "application/json":
+                    self.send_error(415, "Unsupported Media Type")
+                    return
+                raw = self._read_limited_post_body(max_bytes=_MAX_UNATTENDED_REQUEST_BODY_BYTES)
+                if raw is None:
+                    return
+                try:
+                    payload = json.loads(raw.decode("utf-8"))
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    self.send_error(400, "Bad Request")
+                    return
+                if not isinstance(payload, dict):
+                    self.send_error(400, "Bad Request")
+                    return
+                nonce = secrets.token_urlsafe(32)
+                expires_at = time.monotonic() + _UNATTENDED_REQUEST_TTL_SECONDS
+                with unattended_requests_lock:
+                    unattended_requests[nonce] = (expires_at, payload)
+                body = json.dumps({"nonce": nonce, "expires_in": _UNATTENDED_REQUEST_TTL_SECONDS}).encode()
+                self._send_bytes(body, "application/json; charset=utf-8")
+                return
+
+            consume_prefix = f"{_UNATTENDED_REQUESTS_ROUTE}/"
+            if dir_mode and self.path.startswith(consume_prefix) and self.path.endswith("/consume"):
+                raw_origin = self.headers.get("Origin")
+                if not _is_locked_extension_request(raw_origin, allow_origin):
+                    self.send_error(403, "Forbidden")
+                    return
+                if self.headers.get("X-Serve-Token") != serve_token:
+                    self.send_error(403, "Forbidden")
+                    return
+                nonce = self.path[len(consume_prefix) : -len("/consume")]
+                if not nonce or "/" in nonce or urllib.parse.quote(nonce, safe="") != nonce:
+                    self.send_error(404, "Not Found")
+                    return
+                with unattended_requests_lock:
+                    record = unattended_requests.pop(nonce, None)
+                if record is None:
+                    self.send_error(404, "Unattended request not found or already consumed")
+                    return
+                expires_at, payload = record
+                if expires_at < time.monotonic():
+                    self.send_error(410, "Unattended request expired")
+                    return
+                self._send_bytes(json.dumps(payload, ensure_ascii=False).encode(), "application/json; charset=utf-8")
                 return
 
             # POST /distrokid/releases: capture 有効時のみ（#934）。

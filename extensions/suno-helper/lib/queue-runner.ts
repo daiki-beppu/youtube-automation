@@ -126,6 +126,8 @@ export interface QueueEntriesYieldOptions {
         waitForRegeneratedClips: (clipIds: string[]) => Promise<void>;
       };
   isAborted?: () => boolean;
+  /** Retry cap for duration-triggered regeneration. Defaults to the manual-flow preset. */
+  maxYieldRetries?: number;
 }
 
 export interface QueueEntriesYieldResult {
@@ -209,6 +211,7 @@ export async function finalizeQueueEntriesYield(
   options: QueueEntriesYieldOptions
 ): Promise<QueueEntriesYieldResult> {
   const failedIndices: number[] = [];
+  const maxYieldRetries = options.maxYieldRetries ?? MAX_YIELD_RETRY;
   const durationFilter = options.durationFilter ?? DEFAULT_DURATION_FILTER;
   const pendingEntries = new Map<
     number,
@@ -268,7 +271,7 @@ export async function finalizeQueueEntriesYield(
         filter: durationFilter,
         policy: options.durationOutlierStrategy,
         attemptCount: yieldRetryCount,
-        maxRetry: MAX_YIELD_RETRY,
+        maxRetry: maxYieldRetries,
       });
       if (decision.kind === "accept") {
         options.markAccepted(decision.acceptedClipIds);
@@ -297,19 +300,19 @@ export async function finalizeQueueEntriesYield(
         }
         const nextYieldRetryCount = yieldRetryCount + 1;
         console.warn(
-          `[suno-helper] entry ${index} duration guard NG、同一 prompt で再生成します (${nextYieldRetryCount}/${MAX_YIELD_RETRY}): ${decision.message}`
+          `[suno-helper] entry ${index} duration guard NG、同一 prompt で再生成します (${nextYieldRetryCount}/${maxYieldRetries}): ${decision.message}`
         );
         options.emitProgress({
           phase: PHASE.WAITING_SLOT,
           index,
           total: options.total,
-          message: `${decision.message}; retry ${nextYieldRetryCount}/${MAX_YIELD_RETRY}`,
+          message: `${decision.message}; retry ${nextYieldRetryCount}/${maxYieldRetries}`,
           yieldRetryCount: nextYieldRetryCount,
           log: {
             kind: "retry",
             entryName: entryDisplayName(options.entries[index]),
             attempt: nextYieldRetryCount,
-            max: MAX_YIELD_RETRY,
+            max: maxYieldRetries,
           },
         });
         retries.push({

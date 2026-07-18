@@ -3,6 +3,7 @@
 // overlay (content script) は `browser.tabs.*` を呼べないため、overlay の no-tabId メッセージを受けて
 // 送信元と同一タブの runner content へ tabs.sendMessage で転送する（#892, 詳細は lib/overlay-relay.ts）。
 import {
+  consumeUnattendedRequest,
   fetchCollectionPromptResponse,
   fetchCollectionPrompts,
   fetchCollections,
@@ -18,8 +19,30 @@ import { onMessage, sendMessage } from "../lib/messaging";
 import { relayTabId, requireRelayTab } from "../lib/overlay-relay";
 import { migrateServerSourcesStorage } from "../lib/storage";
 import { sendTrustedCmdP } from "../lib/trusted-shortcut";
+import {
+  acquireUnattendedLease,
+  releaseUnattendedLease,
+  renewUnattendedLease,
+  type UnattendedLease,
+} from "../lib/unattended-lease";
 
 export default defineBackground(() => {
+  const leaseStorageKey = "sunoUnattendedLeases";
+  let leaseMutation: Promise<unknown> = Promise.resolve();
+  const mutateLeases = <T>(
+    mutation: (leases: Record<string, UnattendedLease>) => Promise<T> | T
+  ): Promise<T> => {
+    const next = leaseMutation.then(async () => {
+      const stored = await browser.storage.session.get(leaseStorageKey);
+      const leases = (stored[leaseStorageKey] ?? {}) as Record<
+        string,
+        UnattendedLease
+      >;
+      return mutation(leases);
+    });
+    leaseMutation = next.catch(() => undefined);
+    return next;
+  };
   const downloadWatcher = installDownloadWatcher({ sendMessage });
 
   installSunoContentScriptRecovery({
@@ -112,6 +135,13 @@ export default defineBackground(() => {
       requireRelayTab(sender, "queryProgress")
     )
   );
+  onMessage("queryUnattendedState", ({ sender }) =>
+    sendMessage(
+      "queryUnattendedState",
+      undefined,
+      requireRelayTab(sender, "queryUnattendedState")
+    )
+  );
   onMessage("startDownload", async ({ data, sender }) => {
     const tabId = relayTabId(sender);
     if (tabId === null) {
@@ -192,6 +222,54 @@ export default defineBackground(() => {
   onMessage("postDownloaded", async ({ data, sender }) => {
     requireRelayTab(sender, "postDownloaded");
     return await postDownloaded(data.baseUrl, data.collectionId, data.body);
+  });
+
+  onMessage("consumeUnattendedRequest", async ({ data, sender }) => {
+    requireRelayTab(sender, "consumeUnattendedRequest");
+    return await consumeUnattendedRequest(data.baseUrl, data.nonce);
+  });
+
+  onMessage("acquireUnattendedLease", ({ data, sender }) => {
+    const tabId = requireRelayTab(sender, "acquireUnattendedLease");
+    return mutateLeases(async (leases) => {
+      const result = acquireUnattendedLease(
+        leases,
+        { ...data, tabId },
+        Date.now(),
+        crypto.randomUUID()
+      );
+      if (result.acquired) {
+        await browser.storage.session.set({ [leaseStorageKey]: result.leases });
+      }
+      return { acquired: result.acquired, token: result.lease?.token };
+    });
+  });
+
+  onMessage("heartbeatUnattendedLease", ({ data, sender }) => {
+    requireRelayTab(sender, "heartbeatUnattendedLease");
+    return mutateLeases(async (leases) => {
+      const next = renewUnattendedLease(
+        leases,
+        data.collectionId,
+        data.token,
+        Date.now()
+      );
+      if (next !== leases)
+        await browser.storage.session.set({ [leaseStorageKey]: next });
+    });
+  });
+
+  onMessage("releaseUnattendedLease", ({ data, sender }) => {
+    requireRelayTab(sender, "releaseUnattendedLease");
+    return mutateLeases(async (leases) => {
+      const next = releaseUnattendedLease(
+        leases,
+        data.collectionId,
+        data.token
+      );
+      if (next !== leases)
+        await browser.storage.session.set({ [leaseStorageKey]: next });
+    });
   });
 
   // runner → overlay 中継 (#892)。runner content が emit する progress 通知を送信元と同一タブへ転送する

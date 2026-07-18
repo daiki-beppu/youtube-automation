@@ -1217,13 +1217,21 @@ function findPlaylistRowsByName(
 export async function clickPlaylistRowByName(
   dialog: HTMLElement,
   name: string
-): Promise<void> {
+): Promise<string | null> {
   const deadline = Date.now() + PLAYLIST_ROW_APPEAR_TIMEOUT_MS;
   for (;;) {
     const rows = findPlaylistRowsByName(dialog, name);
     if (rows.length > 0) {
-      rows[rows.length - 1].click();
-      return;
+      const row = rows[rows.length - 1];
+      const anchor =
+        row.closest<HTMLAnchorElement>('a[href*="/playlist/"]') ??
+        row.parentElement?.querySelector<HTMLAnchorElement>(
+          'a[href*="/playlist/"]'
+        ) ??
+        null;
+      const playlistUrl = anchor ? normalizeSunoPlaylistUrl(anchor.href) : null;
+      row.click();
+      return playlistUrl;
     }
     if (Date.now() >= deadline) {
       throw new Error(
@@ -1231,6 +1239,58 @@ export async function clickPlaylistRowByName(
       );
     }
     await sleep(PLAYLIST_ROW_APPEAR_POLL_MS);
+  }
+}
+
+function normalizeSunoPlaylistUrl(value: string): string | null {
+  try {
+    const url = new URL(value, location.href);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      !/(^|\.)suno\.com$/i.test(url.hostname) ||
+      !/^\/playlist\/[^/]+/.test(url.pathname)
+    ) {
+      return null;
+    }
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+/** playlist 名と一致する Suno playlist link を現在の DOM から列挙する。 */
+export function findPlaylistUrlsByName(
+  root: ParentNode,
+  name: string
+): string[] {
+  const urls = new Set<string>();
+  for (const anchor of root.querySelectorAll<HTMLAnchorElement>(
+    'a[href*="/playlist/"]'
+  )) {
+    const hasExactLabel = Array.from(
+      anchor.querySelectorAll<HTMLElement>(PLAYLIST_ROW_LABEL_SELECTOR)
+    ).some((label) => (label.textContent ?? "").trim() === name);
+    if ((anchor.textContent ?? "").trim() !== name && !hasExactLabel) continue;
+    const url = normalizeSunoPlaylistUrl(anchor.href);
+    if (url) urls.add(url);
+  }
+  return [...urls];
+}
+
+export async function waitForNewPlaylistUrlByName(
+  name: string,
+  previousUrls: ReadonlySet<string>,
+  options: { pollIntervalMs: number; timeoutMs: number }
+): Promise<string | null> {
+  const deadline = Date.now() + options.timeoutMs;
+  for (;;) {
+    const urls = findPlaylistUrlsByName(document, name);
+    const created = urls.find((url) => !previousUrls.has(url));
+    if (created) return created;
+    if (Date.now() >= deadline) return null;
+    await sleep(options.pollIntervalMs);
   }
 }
 

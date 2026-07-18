@@ -102,6 +102,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-stock-preview": "ローカルの stock アセット管理のみ",
     "yt-stock-prune": "ローカルの stock アセット管理のみ",
     "yt-suno-audio-cleanup": "ローカル音声ファイル整理のみ",
+    "yt-suno-unattended-request": "ローカルの Chrome 拡張 launch URL 生成のみ",
     "yt-suno-select-tracks": "ローカルのトラック選定のみ",
     "yt-suno-verify": "ローカル成果物検証のみ",
     "yt-suno-verify-playlist": "ローカル成果物検証のみ",
