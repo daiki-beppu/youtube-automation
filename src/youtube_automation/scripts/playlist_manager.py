@@ -450,7 +450,7 @@ class PlaylistManager:
 
         # dry_run でなければ config を再読み込み（書き戻し後の playlist_id を反映）
         if not dry_run:
-            reset()
+            reset(preserve_channel_selection=True)
             self.config = load_config()
 
         print("\n=== Step 2: 既存動画の割り当て ===")
