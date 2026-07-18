@@ -2324,6 +2324,22 @@ def _write_meta_channel_id(base: Path, channel_id: str | None) -> None:
     (meta_dir / "meta.json").write_text(json.dumps({"channel": ch}), encoding="utf-8")
 
 
+def _mock_upload_channel_api(monkeypatch, *, items=None, error: BaseException | None = None) -> MagicMock:
+    service = MagicMock()
+    execute = service.channels.return_value.list.return_value.execute
+    if error is not None:
+        execute.side_effect = error
+    else:
+        execute.return_value = {"items": items if items is not None else [{"id": _CHANNEL_ID}]}
+    monkeypatch.setattr(
+        doctor.Credentials,
+        "from_authorized_user_file",
+        lambda _path: MagicMock(),
+    )
+    monkeypatch.setattr(doctor, "build", lambda *_args, **_kwargs: service)
+    return service
+
+
 def _write_ttp_analytics(base: Path, channels: list[dict] | None = None) -> None:
     config_dir = base / "config" / "channel"
     config_dir.mkdir(parents=True, exist_ok=True)
@@ -3855,12 +3871,122 @@ class TestCheckUploadReady:
         r = doctor.check_upload_ready(tmp_path)
         assert r.status == "fail"
 
-    def test_all_conditions_met_is_ok(self, tmp_path):
-        """必須 scope 充足 + channel_id 設定済み: ok."""
+    def test_all_conditions_met_is_ok(self, tmp_path, monkeypatch):
+        """必須 scope 充足 + API 上の channel_id 一致: ok + remote ID."""
         _write_token(tmp_path, _FULL_SCOPES)
         _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        service = _mock_upload_channel_api(monkeypatch)
         r = doctor.check_upload_ready(tmp_path)
         assert r.status == "ok"
+        assert r.data == {"remote_channel_id": _CHANNEL_ID}
+        service.channels.return_value.list.assert_called_once_with(part="id,snippet", mine=True)
+
+    def test_channel_not_created_is_distinct_fail(self, tmp_path, monkeypatch):
+        _write_token(tmp_path, _FULL_SCOPES)
+        _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        _mock_upload_channel_api(monkeypatch, items=[])
+
+        r = doctor.check_upload_ready(tmp_path)
+
+        assert r.status == "fail"
+        assert r.data == {"reason": "channel_not_found"}
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+
+    def test_remote_channel_id_mismatch_is_fail(self, tmp_path, monkeypatch):
+        remote_channel_id = "UCyyyyyyyyyyyyyyyyyyyyyyyy"
+        _write_token(tmp_path, _FULL_SCOPES)
+        _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        _mock_upload_channel_api(monkeypatch, items=[{"id": remote_channel_id}])
+
+        r = doctor.check_upload_ready(tmp_path)
+
+        assert r.status == "fail"
+        assert r.data == {
+            "reason": "channel_id_mismatch",
+            "remote_channel_id": remote_channel_id,
+            "local_channel_id": _CHANNEL_ID,
+        }
+        assert r.next_action is not None
+        assert "yt-channel-settings pull --channel-id-only --apply" in r.next_action["instructions"]
+        assert "uv run yt-channel-status" in r.next_action["instructions"]
+
+    def test_quota_error_is_warn_not_channel_not_found(self, tmp_path, monkeypatch):
+        _write_token(tmp_path, _FULL_SCOPES)
+        _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        response = MagicMock(status=403, reason="Forbidden")
+        error = HttpError(
+            response,
+            b'{"error": {"errors": [{"reason": "quotaExceeded"}]}}',
+        )
+        _mock_upload_channel_api(monkeypatch, error=error)
+
+        r = doctor.check_upload_ready(tmp_path)
+
+        assert r.status == "warn"
+        assert r.data is not None
+        assert r.data["reason"] == "api_error"
+        assert "未作成とは判定していません" in r.message
+
+    @pytest.mark.parametrize("status_code", [401, 403])
+    def test_auth_error_is_fail_with_reauthentication(self, tmp_path, monkeypatch, status_code):
+        _write_token(tmp_path, _FULL_SCOPES)
+        _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        response = MagicMock(status=status_code, reason="Unauthorized")
+        error = HttpError(
+            response,
+            b'{"error": {"errors": [{"reason": "authError"}]}}',
+        )
+        _mock_upload_channel_api(monkeypatch, error=error)
+
+        r = doctor.check_upload_ready(tmp_path)
+
+        assert r.status == "fail"
+        assert r.data is not None
+        assert r.data["reason"] == "api_error"
+        assert r.next_action is not None
+        assert "uv run yt-channel-status" in r.next_action["instructions"]
+
+    def test_network_error_is_warn_not_channel_not_found(self, tmp_path, monkeypatch):
+        _write_token(tmp_path, _FULL_SCOPES)
+        _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        _mock_upload_channel_api(monkeypatch, error=ServerNotFoundError("offline"))
+
+        r = doctor.check_upload_ready(tmp_path)
+
+        assert r.status == "warn"
+        assert r.data is not None
+        assert r.data["reason"] == "api_error"
+        assert "未作成とは判定していません" in r.message
+
+    def test_local_failure_does_not_call_api(self, tmp_path, monkeypatch):
+        _write_token(tmp_path, [_SCOPE_FORCE_SSL])
+        _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        monkeypatch.setattr(
+            doctor,
+            "build",
+            lambda *_args, **_kwargs: pytest.fail("API must not be called"),
+        )
+
+        r = doctor.check_upload_ready(tmp_path)
+
+        assert r.status == "fail"
+        assert r.data is None
+
+    def test_json_output_serializes_remote_channel_id(self, tmp_path, monkeypatch, capsys):
+        result = doctor.CheckResult(
+            id="upload_ready",
+            status="ok",
+            category="upload",
+            message="ok",
+            data={"remote_channel_id": _CHANNEL_ID},
+        )
+        monkeypatch.setattr(doctor, "run_all_checks", lambda _channel_dir: [result])
+
+        assert doctor.main(["--json", "--target", str(tmp_path)]) == 0
+
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["checks"][0]["data"]["remote_channel_id"] == _CHANNEL_ID
 
     def test_missing_youtube_scope_is_fail(self, tmp_path):
         """youtube scope (フル URL) が欠けている: fail."""
