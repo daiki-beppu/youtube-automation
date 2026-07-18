@@ -37,6 +37,16 @@ export const DOWNLOAD_FORMAT_DEFAULT = "mp3" as const;
 /** yt-collection-serve が prompts を配信するサブパス (#698 で `/prompts.json` から分離)。 */
 export const PROMPTS_ROUTE = "/suno/prompts.json";
 
+/** community-helper が投稿 JSON を取得するサブパス (#1710)。
+ * SSOT 対応: collection_serve.py COMMUNITY_POSTS_ROUTE。 */
+// fallow-ignore-next-line unused-export -- community-helper API client (#1711) が後続で参照する公開契約。
+export const COMMUNITY_POSTS_ROUTE = "/community/posts.json";
+
+/** community-helper が投稿画像を取得するサブパスの prefix (#1710)。
+ * `${COMMUNITY_IMAGE_ROUTE}/${index}/image` として使う。 */
+// fallow-ignore-next-line unused-export -- community-helper API client (#1711) が後続で参照する公開契約。
+export const COMMUNITY_IMAGE_ROUTE = "/community/posts";
+
 /** yt-collection-serve dir mode の collection 列挙サブパス (#816)。
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py COLLECTIONS_ROUTE。 */
 export const COLLECTIONS_ROUTE = "/collections";

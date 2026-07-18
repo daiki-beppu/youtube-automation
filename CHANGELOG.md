@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(collection-serve)`: community-helper 向けに `GET /community/posts.json` と投稿画像ルートを追加し、channel root 内の画像だけを Content-Type 付きで配信する。Chrome 拡張と YouTube Studio origin の CORS、および共有 route 定数を同時に追加した（#1710）。
 - `feat(community)`: `/community-draft` を `--batch` 専用の決定的 JSON generator へ移行し、旧 type 別 Markdown／clipboard フローを撤去した（#1709）。
 
 ### Added
