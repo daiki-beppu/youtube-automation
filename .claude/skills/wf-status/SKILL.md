@@ -66,6 +66,7 @@ phase 値と日本語ラベル:
 - `assets.raw_master = null` + `music_engine = lyria` → 「Lyria 生成待ち（/wf-next で開始）」
 - `assets.raw_master != null` + `assets.master_audio = null` + `load_config().workflow.wf_next.skip_manual_mastering = true` → 「raw master 直採用待ち（/wf-next で mastered へ進行）」
 - `assets.raw_master != null` + `assets.master_audio = null` + `load_config().workflow.wf_next.skip_manual_mastering = false` → 「ミキシング+マスタリング待ち」
+- `workflow.wf_next` の boolean は全て「`true` = 手動工程（承認）を省いて自動進行」の向き（#1744）。`skip_audio_approval = false` のチャンネルは音源確定前、`skip_upload_approval = false` のチャンネルはアップロード前に `/wf-next` が承認を取るため、該当フェーズは承認待ちで停止していることがある
 
 詳細表示（コレクション1つの場合 or ユーザーが指定した場合）:
 ```
