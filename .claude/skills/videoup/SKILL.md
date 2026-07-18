@@ -15,6 +15,8 @@ description: "Use when 音声ファイルが揃い動画生成が必要なとき
 
 Suno 系チャンネルは `/masterup`、Lyria 系チャンネルは `/lyria`（`/masterup` 不要）でマスター音源を生成してから本スキルを実行する。
 
+背景構成は `config/skills/videoup.yaml::video_type`（`loop` / `static`、既定 `loop`）で明示する。新しいタイプを追加する実装箇所は `references/video-type-extension.md` を参照する。
+
 ## 完了条件
 
 `01-master/` にマスター動画（例: `Theme-Name-Master.mp4`）が生成され、`workflow-state.json` の `assets.master_video` に動画ファイル名が記録されたとき完了とする（詳細は「ステップ」4-7 が正）。

@@ -379,6 +379,7 @@ def test_loop_video_background_does_not_require_main_image(tmp_path: Path) -> No
     )
 
     assert result.returncode == 0, result.stderr
+    assert "Type     : loop" in result.stdout
     assert "Video BG : loop.mp4 (loop)" in result.stdout
     assert "Thumbnail:" not in result.stdout
     master_cmd = _master_ffmpeg_command(ffmpeg_log)
@@ -622,6 +623,45 @@ def test_static_background_prefers_textless_main_png(tmp_path: Path) -> None:
     assert "10-assets/main.png" in commands[0]
     assert "10-assets/main.jpg" not in " ".join(commands)
     assert "10-assets/still_baked.mp4" in _master_ffmpeg_command(ffmpeg_log)
+
+
+def test_explicit_static_video_type_ignores_existing_loop(tmp_path: Path) -> None:
+    """#1723: video_type=static は loop.mp4 の存在より優先される。"""
+    collection = _create_collection(tmp_path)
+    config_dir = tmp_path / "config" / "skills"
+    config_dir.mkdir(parents=True)
+    (config_dir / "videoup.yaml").write_text("video_type: static\n", encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        collection=collection,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ignored because video_type=static" in result.stdout
+    assert "Type     : static" in result.stdout
+    assert "Video BG : main.jpg (still)" in result.stdout
+    assert "10-assets/loop.mp4" not in ffmpeg_log.read_text(encoding="utf-8")
+
+
+def test_unknown_video_type_fails_before_ffmpeg(tmp_path: Path) -> None:
+    """#1723: 未実装タイプを暗黙 fallback せず設定エラーにする。"""
+    collection = _create_collection(tmp_path)
+    config_dir = tmp_path / "config" / "skills"
+    config_dir.mkdir(parents=True)
+    (config_dir / "videoup.yaml").write_text("video_type: multi_scene\n", encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        collection=collection,
+    )
+
+    assert result.returncode != 0
+    assert "Unknown video_type='multi_scene'" in result.stdout + result.stderr
+    assert not ffmpeg_log.exists()
 
 
 def test_static_effect_none_bakes_one_gop_then_stream_copies_to_audio_duration(tmp_path: Path) -> None:

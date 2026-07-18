@@ -217,13 +217,25 @@ COLLECTION_NAME="$(echo "$dir_basename" \
 
 # ─── Auto-detect Assets ─────────────────────────────────
 LOOP_VIDEO_ENABLED="$(yaml_top_get "$LOOP_VIDEO_YAML" enabled true)"
+VIDEO_TYPE="$(yaml_top_get "$VIDEOUP_YAML" video_type loop)"
+case "$VIDEO_TYPE" in
+    loop|static) ;;
+    *)
+        echo "ERROR: Unknown video_type='$VIDEO_TYPE' in config/skills/videoup.yaml (allowed: loop, static)"
+        exit 1
+        ;;
+esac
 LOOP_VIDEO=""
 if [[ "$LOOP_VIDEO_ENABLED" == "false" ]]; then
+    VIDEO_TYPE="static"
     echo "  Loop     : disabled by config/skills/loop-video.yaml — 静止画モードで出力します"
+elif [[ "$VIDEO_TYPE" == "static" ]]; then
+    echo "  Loop     : ignored because video_type=static — 静止画モードで出力します"
 elif [[ -f "${ASSETS_DIR}/loop.mp4" ]]; then
     LOOP_VIDEO="${ASSETS_DIR}/loop.mp4"
     echo "  Loop     : $(basename "${LOOP_VIDEO}") (detected)"
 else
+    VIDEO_TYPE="static"
     echo "  Loop     : not found — 静止画モードで出力します"
     loop_artifacts=()
     for f in "${ASSETS_DIR}"/loop_raw.mp4 "${ASSETS_DIR}"/loop-v*.mp4; do
@@ -591,6 +603,7 @@ echo ""
 echo "  generate_videos.sh v14.2 — ${COLLECTION_NAME}"
 echo "  ──────────────────────────────────────────"
 echo ""
+echo "  Type     : ${VIDEO_TYPE}"
 if [[ -n "$LOOP_VIDEO" ]]; then
     echo "  Video BG : $(basename "$LOOP_VIDEO") (loop)"
 else
