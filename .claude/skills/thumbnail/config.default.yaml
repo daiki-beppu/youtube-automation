@@ -317,6 +317,8 @@ image_generation:
   codex:
     # codex-image.sh 経路は API provider ではないため model / quality は持たない。
     # ChatGPT サブスクの fair-use 上限内で使い、大量生成には使わない。
+    # バッチ候補生成の同時起動上限。CLI --max-parallel で実行単位に上書きできる。
+    max_parallel: 2
     # cost_per_image_usd: null
     # 参照サムネを mood reference ではなく winning template として扱い、
     # テキスト付き thumbnail 候補を先に確定する短い TTP プロンプト（#1611 の thumbnail 先行フロー）。
