@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(doctor)`: `yt-doctor` の upload preflight が認証済み YouTube アカウントの実チャンネルを `channels.list(mine=true)` で確認し、チャンネル未作成・ローカル ID 不一致・認証 / quota / network 起因の API 失敗を区別して案内するようにした。成功時と不一致時は `--json` の `data` に remote channel ID を含め、ローカル設定だけでは検出できなかった token / meta.json の取り違えを upload 前に停止する（#2053）。
+- `feat(auth)`: OAuth token の scope 分離を導入し、read-only skill が write scope の token を共用しない設計にした。`YouTubeOAuthHandler` に `READONLY_SCOPES`（`youtube.readonly` + `yt-analytics(.monetary)?.readonly`、write scope なし）と用途別 token `auth/token.readonly.json` の発行・解決（`create_readonly` / `readonly_token_path`。探索順は #1721 と同じ channel 側 → main worktree 側）を追加し、新 CLI `yt-oauth`（`--readonly` で readonly token 発行）を登録した。`ServiceRegistry` の read 系（`analytics` / `reporting` / 新設の `youtube_readonly` / `credentials_readonly` / `get_readonly_handler`）は readonly token を優先し、未発行時は warning ログで発行手順を案内した上で `token.json` へフォールバックする（サイレント失敗しない。既存運用は無変更で動作）。read-only 系呼び出し元（analytics 収集 / benchmark / channel-status / metadata-audit / playlist-status / discover-competitors / stream-bandwidth）を readonly 経路へ移行し、write 系（upload / playlist 管理 / bulk update / コメント投稿）は従来どおり `token.json` を使う。skill × 実効 scope の対応表と運用手順を `docs/oauth-scopes.md` に新設した（#1699）。
+
 - `feat(cost)`: 動画 metadata 一括更新 3 CLI（`yt-bulk-update-desc` / `yt-shorts-bulk-update-loc` / `yt-bulk-update-synthetic-media`）に YouTube Data API quota 記録（`cost_tracker.log_quota`）を配線した。read-before-write を含む発行済みリクエスト 1 回につき 1 エントリ（`videos.list` / `channels.list` / `playlistItems.list` = 1 unit、`videos.update` = 50 units）を記録し、dry-run は実際に発行した read のみ、batch / pagination はリクエスト回数と記録件数が一致する。quota はリクエスト失敗時も消費されるため、update 失敗時も記録した上で従来の例外・部分進捗契約（continue / exit code / 最初の失敗の再 raise）を維持する（#2058）。
 - `feat(cost)`: channel status・stream key・metadata audit・playlist status の read API 呼び出しに quota 記録を配線した。`yt-*` 4 CLI（`get_channel_status` / `yt-fetch-stream-key` / `metadata_audit` / `playlist_status`）の各 read リクエスト（`channels.list` / `playlists.list` / `playlistItems.list` / `liveStreams.list` / `videos.list`、Analytics は `reports.query` を `youtube-analytics-api` として別 service で記録）が、成功・失敗のどちらでもリクエスト 1 回につき `cost_tracker.log_quota` を 1 回だけ呼ぶ（pagination はページ = リクエスト単位で記録）。tracker が書き込み不能・例外を吐く場合も従来の出力と終了状態を変えない（`--stdout` の pipe 契約保護のため警告は stderr へ逃がす）。benchmark / upload agent の read API と write API は兄弟 issue のスコープ（#2055）。
 - `feat(cost)`: benchmark read API の quota 記録を配線した。`benchmark_collector` の channels / playlists / playlistItems / videos 各 list request と `fetch_benchmark_comments` の commentThreads.list が、page / バッチ単位の request ごとに `cost_tracker.log_quota("youtube-data-api", "<method>.list", 1)` を記録する。quota は失敗した request でも消費されるため記録は成否に関わらず行い（try/finally）、元例外の伝播・既存のエラーハンドリング・benchmark JSON / CLI 出力は変更しない（#2056）。
@@ -138,6 +141,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `feat(analytics)`: Analytics API の収益メトリクス（estimated revenue / monetized playbacks / CPM）を日別・動画別に収集し、テーマ・コレクション別の加重 RPM 分析契約を追加した。収益化未承認時は収益データだけを警告付きで skip し、既存メトリクス収集を継続する（#1807）。
+
 - `feat(collection-ideate)`: skill-config に `ttp_mode`（既定 `false`）を追加した。`config/skills/collection-ideate.yaml` で `true` にすると差別化軸の掛け合わせと競合カバー済みテーマの回避をスキップし、競合の高再生コレクションから抽出した構造・パターン・型を転写元付きで企画候補へ反映する。転写元が無い minimal mode では `/benchmark` を案内して停止する（#1977）
 - `docs(feedback)`: `/feedback` に、`status="recorded"` の未還流 entry を一覧・選択し、open issue の類似タイトル照合とユーザー承認を経て `daiki-beppu/youtube-automation` へ `feedback` ラベル付き issue を起票する還流モードを追加した。成功した entry は `status="filed"` と `issue_url` を記録して候補から除外し、二重起票を防ぐ。起票本文テンプレート、発生チャンネル掲載の個別確認、起票直前の機密情報再マスクも明記した（#1829）。
 - `docs(channel-research)`: サムネイルのフォント傾向・テキスト内容パターン・配置傾向を、固有名詞やコピー原文を除いた構造化プロファイル `docs/benchmarks/thumbnail-text-profile.md` として生成する契約を `/channel-research` に追加した。前回生成したプロファイルは個別ベンチマークレポートの存在判定と fallback 入力から除外する（#1906）。
@@ -201,6 +206,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `feat(analytics)`: 動画別の `subscribersGained ÷ views × 100` による登録転換率ランキングと、登録済み／未登録視聴者別の `subscribedStatus` 集計を analytics スナップショットへ追加した。`/analytics-analyze` は両データを組み合わせて「登録を生む動画の型」を分析し、チャンネル全体の subscribedStatus を動画個別の因果として断定しない（#1813）。
+- `feat(analytics)`: standard / full depth の Analytics 収集に、視聴数上位 200 件の playlist dimension における views・平均視聴時間・上位 200 件内の視聴シェアを追加し、`/analytics-analyze` が Complete Collection を含むプレイリスト内視聴をレポートできるようにした（#1815）。
 
 ## [5.5.17] - 2026-07-10
 

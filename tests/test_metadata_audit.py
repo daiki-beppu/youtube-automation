@@ -207,7 +207,7 @@ class TestAuditRemoteZhCodes:
     def test_zh_codes(self, locs: dict[str, dict], expected_count: int, must_contain: list[str]) -> None:
         video_id = "VID"
         with patch(
-            "youtube_automation.utils.youtube_service.get_youtube",
+            "youtube_automation.utils.youtube_service.get_youtube_readonly",
             return_value=_patched_yt(_yt_response(video_id, locs)),
         ):
             result = audit_remote({video_id: "test-collection"})
@@ -258,7 +258,7 @@ class TestRemoteChapterMaxSkillConfig:
             ]
         }
         with patch(
-            "youtube_automation.utils.youtube_service.get_youtube",
+            "youtube_automation.utils.youtube_service.get_youtube_readonly",
             return_value=_patched_yt(response),
         ):
             result = audit_remote({video_id: "test-collection"})

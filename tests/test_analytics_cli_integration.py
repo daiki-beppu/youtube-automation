@@ -41,6 +41,8 @@ class _AnalyticsReports:
         if dimensions == "video,day":
             return _Request({"rows": [["VIDEO_1", "2026-04-01", 100]]})
         if dimensions == "video":
+            if "estimatedRevenue" in metrics:
+                return _Request({"rows": [["VIDEO_1", 100, 2.5, 80, 4.0, 5.0]]})
             if metrics.startswith("views,estimatedMinutesWatched"):
                 return _Request({"rows": [["VIDEO_1", 100, 500, 120, 5, 0, 1, 2, 4]]})
             return _Request({"rows": [["VIDEO_1", 100, 5, 1, 500]]})
@@ -50,6 +52,8 @@ class _AnalyticsReports:
             return _Request({"rows": [["MOBILE", 100, 500, 120]]})
         if dimensions == "day" and metrics.startswith("views,estimatedMinutesWatched,averageViewDuration"):
             return _Request({"rows": [["2026-04-01", 100, 500, 120, 4, 0, 5, 0, 1, 2, 50, 0, 0, 0]]})
+        if dimensions == "day" and "estimatedRevenue" in metrics:
+            return _Request({"rows": [["2026-04-01", 100, 2.5, 80, 4.0, 5.0]]})
         if dimensions == "day":
             return _Request({"rows": [["2026-04-01", 100, 500]]})
         return _Request({"rows": [[100, 5, 1, 2, 4]]})

@@ -26,6 +26,9 @@ class StubCollector(ChannelAnalyticsMixin):
     def _build_publish_at_map(self) -> dict[str, str]:
         return {}
 
+    def get_revenue_analytics(self, start_date: str, end_date: str) -> dict:
+        return {"status": "available", "daily_metrics": [], "by_video": {}, "summary": {}}
+
     def get_ctr_analysis(self, start_date: str, end_date: str) -> dict:
         self.called.append("ctr")
         return {"source": "ctr"}
@@ -41,6 +44,10 @@ class StubCollector(ChannelAnalyticsMixin):
     def get_device_analytics(self, start_date: str, end_date: str) -> dict:
         self.called.append("device")
         return {"source": "device"}
+
+    def get_playlist_analytics(self, start_date: str, end_date: str) -> dict:
+        self.called.append("playlist")
+        return {"playlists": {}, "total_views": 0}
 
     def get_subscribed_status_analytics(self, start_date: str, end_date: str) -> dict:
         self.called.append("subscribed_status")

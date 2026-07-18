@@ -60,6 +60,8 @@ nix develop .#extensions --command pnpm -C extensions/suno-helper exec playwrigh
 nix develop .#extensions --command pnpm -C extensions/suno-helper test:e2e                    # Playwright e2e
 ```
 
+`compile` は `wxt prepare` の後に固定版 TypeScript 7.0.2 の `tsc --noEmit` を実行する型検査レーンで、成果物を生成する WXT の `build` / `zip` とは別である。TypeScript 5.9.3 との比較で確認した 6.7〜8.3 倍の高速化は `wxt prepare` を除外した型検査部分だけの結果であり、build / zip 全体の性能を示さない。計測条件と生値は [共通の性能比較記録](../../docs/investigations/2026-07-18-2016-typescript7-compile-benchmark.md) を参照する。
+
 build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helper-<package.json の version>-chrome.zip` を確認する。期待名 zip が唯一の 1 件であることを含む release 前検証は、リポジトリ root で `bash .claude/skills/automation-release/references/verify-extensions.sh suno-helper` を実行する。
 
 ## インストール（unpacked）
