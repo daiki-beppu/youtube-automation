@@ -33,7 +33,7 @@ from youtube_automation.utils.competitor_scoring import (
 )
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.skill_config import load_skill_config
-from youtube_automation.utils.youtube_service import get_youtube
+from youtube_automation.utils.youtube_service import get_youtube_readonly
 
 logger = logging.getLogger(__name__)
 
@@ -276,7 +276,7 @@ def main() -> None:
 
     params = _build_params(args)
 
-    youtube = get_youtube()
+    youtube = get_youtube_readonly()
     cache_mode = SearchCacheMode.REFRESH if args.refresh else SearchCacheMode.USE
     scored = discover_competitors(youtube, params, cache_mode)
 

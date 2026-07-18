@@ -39,7 +39,7 @@ from youtube_automation.utils.streaming.vultr_bandwidth import (
     fetch_bandwidth,
     monthly_total_gb,
 )
-from youtube_automation.utils.youtube_service import get_youtube
+from youtube_automation.utils.youtube_service import get_youtube_readonly
 
 
 def today() -> datetime.date:
@@ -126,7 +126,7 @@ def _resolve_report_archives(args: argparse.Namespace, *, year: int, month: int)
     """レポート用のアーカイブ実測値を取得する。"""
     if not ARCHIVES_EXPECTED:
         return None
-    return count_archives(get_youtube(), channel_id=args.channel_id, year=year, month=month)
+    return count_archives(get_youtube_readonly(), channel_id=args.channel_id, year=year, month=month)
 
 
 def _run_report(args: argparse.Namespace) -> int:

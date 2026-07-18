@@ -495,7 +495,7 @@ class TestMain:
                 return_value=[],
             ) as discover,
             patch(
-                "youtube_automation.scripts.discover_competitors.get_youtube",
+                "youtube_automation.scripts.discover_competitors.get_youtube_readonly",
                 return_value=MagicMock(),
             ) as get_youtube_mock,
         ):
@@ -520,7 +520,7 @@ class TestMain:
                 return_value=[],
             ) as discover,
             patch(
-                "youtube_automation.scripts.discover_competitors.get_youtube",
+                "youtube_automation.scripts.discover_competitors.get_youtube_readonly",
                 return_value=MagicMock(),
             ) as get_youtube_mock,
         ):
@@ -563,7 +563,7 @@ class TestMain:
                 return_value=scored,
             ),
             patch(
-                "youtube_automation.scripts.discover_competitors.get_youtube",
+                "youtube_automation.scripts.discover_competitors.get_youtube_readonly",
                 return_value=MagicMock(),
             ),
         ):
@@ -592,7 +592,7 @@ class TestMain:
                 return_value=[_make_scored()],
             ),
             patch(
-                "youtube_automation.scripts.discover_competitors.get_youtube",
+                "youtube_automation.scripts.discover_competitors.get_youtube_readonly",
                 return_value=MagicMock(),
             ),
         ):
@@ -621,7 +621,7 @@ class TestMain:
                 return_value=[],
             ),
             patch(
-                "youtube_automation.scripts.discover_competitors.get_youtube",
+                "youtube_automation.scripts.discover_competitors.get_youtube_readonly",
                 return_value=MagicMock(),
             ),
         ):
