@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-VALID_STYLES = ("mirror-mountain", "ring", "ring-line")
+VALID_STYLES = ("mirror-mountain", "ring", "ring-line", "heart")
 _SIZE_PATTERN = re.compile(r"^(?P<width>[1-9][0-9]*)x(?P<height>[1-9][0-9]*)$")
 
 
@@ -84,6 +84,39 @@ def _ring_mask(style: str, bars: int, inner_r: int, length: int, arc_deg: tuple[
     return mask
 
 
+def _heart_mask(size: tuple[int, int], bars: int) -> Image.Image:
+    """Draw rounded radial bars centred on ``r = a(1 - sin(theta))``.
+
+    The constants are shared with the FFmpeg ``geq`` mapping in
+    ``generate_videos.sh``. Keeping the cardioid and normal span identical
+    makes the mask clip each frequency band to one rounded heart-curve bar.
+    """
+
+    width, height = size
+    mask = Image.new("L", size, 0)
+    draw = ImageDraw.Draw(mask)
+    center_x = width / 2
+    center_y = height * 0.66
+    cardioid_scale = min(width * 0.24, height * 0.30)
+    half_span = min(width, height) * 0.12
+    bar_width = max(2, round(min(width, height) * 0.60 / bars))
+    cap_radius = bar_width / 2
+
+    for index in range(bars):
+        theta = index * math.tau / bars
+        curve_radius = cardioid_scale * (1 - math.sin(theta))
+        inner_radius = max(0.0, curve_radius - half_span)
+        outer_radius = curve_radius + half_span
+        cosine = math.cos(theta)
+        sine = math.sin(theta)
+        inner = (center_x + inner_radius * cosine, center_y + inner_radius * sine)
+        outer = (center_x + outer_radius * cosine, center_y + outer_radius * sine)
+        draw.line((*inner, *outer), fill=255, width=bar_width)
+        for x, y in (inner, outer):
+            draw.ellipse((x - cap_radius, y - cap_radius, x + cap_radius, y + cap_radius), fill=255)
+    return mask
+
+
 def generate_mask(
     output: Path,
     *,
@@ -99,6 +132,8 @@ def generate_mask(
     _validate(style, size, bars, inner_r, length, arc_deg)
     if style == "mirror-mountain":
         image = _mirror_mask(parse_size(size), bars)
+    elif style == "heart":
+        image = _heart_mask(parse_size(size), bars)
     else:
         image = _ring_mask(style, bars, inner_r, length, arc_deg)
     output.parent.mkdir(parents=True, exist_ok=True)

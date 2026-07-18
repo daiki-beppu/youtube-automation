@@ -637,12 +637,12 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     av_style="$(ov_get '.overlays.audio_visualizer.style' 'bar')"
     av_bars="$(ov_get '.overlays.audio_visualizer.bars' '16')"
     av_mode="$(ov_get '.overlays.audio_visualizer.mode' 'bar')"
-    av_size="$(ov_get '.overlays.audio_visualizer.size' '1280x180')"
+    av_size="$(ov_get '.overlays.audio_visualizer.size' '')"
     av_rate="$(ov_get '.overlays.audio_visualizer.rate' '24')"
     av_fscale="$(ov_get '.overlays.audio_visualizer.fscale' 'log')"
     av_win_size="$(ov_get '.overlays.audio_visualizer.win_size' '2048')"
     av_win_func="$(ov_get '.overlays.audio_visualizer.win_func' 'hann')"
-    av_colors="$(ov_get '.overlays.audio_visualizer.colors' 'white')"
+    av_colors="$(ov_get '.overlays.audio_visualizer.colors' '')"
     av_position="$(ov_get '.overlays.audio_visualizer.position' '(W-w)/2:H-h-40')"
     av_opacity="$(ov_get '.overlays.audio_visualizer.opacity' '0.85')"
     av_glow_enabled="$(ov_get '.overlays.audio_visualizer.glow.enabled // .overlays.audio_visualizer.glow_enabled' 'true')"
@@ -653,11 +653,20 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     av_ring_arc_start="$(ov_get '.overlays.audio_visualizer.ring.arc_deg[0]' '0')"
     av_ring_arc_end="$(ov_get '.overlays.audio_visualizer.ring.arc_deg[1]' '360')"
 
+    # `style: heart` の 1 行だけで縦横比とピンク色が適切になる preset default。
+    # size / colors を明示した場合は他 style と同様にその値を優先する。
+    if [[ -z "$av_size" ]]; then
+        [[ "$av_style" == "heart" ]] && av_size="600x480" || av_size="1280x180"
+    fi
+    if [[ -z "$av_colors" ]]; then
+        [[ "$av_style" == "heart" ]] && av_colors="0xff69b4" || av_colors="white"
+    fi
+
     if [[ "$av_enabled" == "true" ]]; then
         case "$av_style" in
-            bar|mirror-mountain|ring|ring-line) ;;
+            bar|mirror-mountain|ring|ring-line|heart) ;;
             *)
-                echo "ERROR: overlays.audio_visualizer.style='${av_style}' is invalid (allowed: bar, mirror-mountain, ring, ring-line)"
+                echo "ERROR: overlays.audio_visualizer.style='${av_style}' is invalid (allowed: bar, mirror-mountain, ring, ring-line, heart)"
                 exit 1
                 ;;
         esac
@@ -854,6 +863,29 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
                 FILTER+="[avis_in]showfreqs=mode=${av_ring_mode}:s=${av_width}x${av_height}:rate=${av_rate}:fscale=${av_fscale}:win_size=${av_win_size}:win_func=${av_win_func}:colors=${av_colors},scale=${av_bars}:${av_height}:flags=neighbor,scale=${av_ring_diameter}:${av_ring_diameter}:flags=neighbor,format=rgba[avis_rect];"
                 FILTER+="[avis_rect]geq=r='r(${av_ring_x},${av_ring_y})':g='g(${av_ring_x},${av_ring_y})':b='b(${av_ring_x},${av_ring_y})':a=255[avis_shape];"
                 FILTER+="[${av_mask_input_idx}:v]format=gray[avis_mask];[avis_shape][avis_mask]alphamerge,colorkey=black:0.1:0,colorchannelmixer=aa=${av_opacity}[avis];"
+                ;;
+            heart)
+                av_width="${av_size%x*}"
+                av_height="${av_size#*x}"
+                av_heart_theta="atan2(Y-H*0.66,X-W/2)"
+                av_heart_x="mod(${av_heart_theta}+2*PI,2*PI)*(W-1)/(2*PI)"
+                av_heart_radius="min(W*0.24,H*0.30)*(1-sin(${av_heart_theta}))"
+                av_heart_y="clip(H-1-abs(hypot(X-W/2,Y-H*0.66)-${av_heart_radius})*(H-1)/(min(W,H)*0.12),0,H-1)"
+                FILTER+="[avis_in]showfreqs=mode=bar:s=${av_width}x${av_height}:rate=${av_rate}:fscale=${av_fscale}:win_size=${av_win_size}:win_func=${av_win_func}:colors=white,scale=${av_bars}:${av_height}:flags=neighbor,scale=${av_width}:${av_height}:flags=neighbor,format=gray[avis_rect];"
+                FILTER+="[avis_rect]geq=lum='lum(${av_heart_x},${av_heart_y})'[avis_shape];"
+                FILTER+="[${av_mask_input_idx}:v]format=gray[avis_mask];[avis_shape][avis_mask]blend=all_mode=multiply"
+                if [[ -n "$av_rounding_blur" ]]; then
+                    FILTER+=",gblur=sigma=${av_rounding_blur},eq=contrast=${av_rounding_contrast}"
+                fi
+                FILTER+=",lut=y='val*${av_opacity}'[avis_alpha];"
+                if [[ "$av_fill_type" == "gradient" || "$av_fill_type" == "rainbow" ]]; then
+                    FILTER+="[${av_fill_input_idx}:v]format=rgb24[avis_fill];"
+                else
+                    av_effective_color="$av_colors"
+                    [[ -n "$av_fill_type" ]] && av_effective_color="$av_fill_color"
+                    FILTER+="color=c=${av_effective_color}:s=${av_size}:r=${av_rate},format=rgb24[avis_fill];"
+                fi
+                FILTER+="[avis_fill][avis_alpha]alphamerge[avis];"
                 ;;
         esac
         if [[ "$av_glow_enabled" == "true" ]]; then
