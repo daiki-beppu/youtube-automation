@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -16,6 +17,7 @@ import tomllib
 import unicodedata
 from collections.abc import Iterator
 from contextlib import contextmanager, redirect_stdout
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -56,11 +58,9 @@ CLAUDE_SKILLS_DIR = Path(".claude") / "skills"
 AGENTS_SKILLS_LINK = Path(".agents") / "skills"
 SKILL_FILENAME = "SKILL.md"
 AUTOMATION_PACKAGE_NAME = "youtube-channels-automation"
-# fork 運用時に suggested command が official upstream 検証とズレないよう、
-# automation_update_refs.UPSTREAM_REPO（単一ソース）から組み立てる
-AUTOMATION_PACKAGE_INSTALL_CMD = f"uv add git+https://github.com/{UPSTREAM_REPO}.git"
-SKILLS_SYNC_CMD = "uv run yt-skills sync --asset skills --force"
-SKILLS_SYNC_PRUNE_CMD = "uv run yt-skills sync --asset skills --force --prune --yes"
+SKILLS_SYNC_ARGV = ("uv", "run", "yt-skills", "sync", "--asset", "skills", "--force")
+SKILLS_SYNC_PRUNE_ARGV = (*SKILLS_SYNC_ARGV, "--prune", "--yes")
+SKILLS_SYNC_CMD = shlex.join(SKILLS_SYNC_ARGV)
 LEGACY_BUNDLED_SKILLS = (
     "onboard",
     "distrokid-prep",
@@ -99,6 +99,9 @@ UNSUPPORTED_VIDEO_ANALYZE_MODELS = {
 
 TTP_VIDEO_ANALYZE_TOP_N = 5
 MAX_DISPLAY_VALUE_LEN = 120
+GCP_PROJECT_ID_RE = re.compile(r"[a-z][a-z0-9-]{4,28}[a-z0-9]\Z")
+BILLING_ACCOUNT_ID_RE = re.compile(r"[A-Za-z0-9]{6}-[A-Za-z0-9]{6}-[A-Za-z0-9]{6}\Z")
+_APPLY_PROJECT_ID: ContextVar[str | None] = ContextVar("doctor_apply_project_id", default=None)
 
 
 @dataclass
@@ -109,6 +112,22 @@ class CheckResult:
     category: str = API_CATEGORY  # bootstrap / api / channel / data / upload
     next_action: Optional[dict] = None
     data: Optional[dict] = None
+
+
+def _ai_exec_action(
+    argv: list[str] | tuple[str, ...],
+    *,
+    auto_apply: bool = True,
+    display_cmd: str | None = None,
+) -> dict:
+    action: dict = {
+        "kind": "ai-exec",
+        "cmd": display_cmd or shlex.join(argv),
+        "argv": list(argv),
+    }
+    if not auto_apply:
+        action["auto_apply"] = False
+    return action
 
 
 @dataclass(frozen=True)
@@ -132,14 +151,26 @@ class _BenchmarkChannelsRead:
     errors: list[str]
 
 
-def _run(cmd: list[str], timeout: int = 30) -> tuple[int, str, str]:
+def _run(cmd: list[str], timeout: int = 30, *, cwd: Path | None = None) -> tuple[int, str, str]:
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, check=False)
         return r.returncode, r.stdout, r.stderr
     except FileNotFoundError:
         return 127, "", f"command not found: {cmd[0]}"
     except subprocess.TimeoutExpired:
         return 124, "", f"timeout: {' '.join(cmd)}"
+
+
+def _parse_project_id(value: str) -> str:
+    if not GCP_PROJECT_ID_RE.fullmatch(value):
+        raise argparse.ArgumentTypeError("project ID は GCP の 6-30 文字形式で指定してください")
+    return value
+
+
+def _parse_billing_account_id(value: str) -> str:
+    if not BILLING_ACCOUNT_ID_RE.fullmatch(value):
+        raise argparse.ArgumentTypeError("billing account ID は XXXXXX-XXXXXX-XXXXXX 形式で指定してください")
+    return value
 
 
 def _format_external_display_value(value: object) -> str:
@@ -186,6 +217,9 @@ def _adc_quota_project() -> Optional[str]:
 
 
 def _project_id_for(channel_dir: Path) -> Optional[str]:
+    apply_project_id = _APPLY_PROJECT_ID.get()
+    if apply_project_id:
+        return apply_project_id
     env = _read_env_file(channel_dir / ".env")
     return env.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or _adc_quota_project()
 
@@ -250,7 +284,7 @@ def _skills_sync_failure(message: str) -> CheckResult:
         status="fail",
         category=BOOTSTRAP_CATEGORY,
         message=message,
-        next_action={"kind": "ai-exec", "cmd": SKILLS_SYNC_CMD},
+        next_action=_ai_exec_action(SKILLS_SYNC_ARGV),
     )
 
 
@@ -260,7 +294,7 @@ def _skills_sync_prune_failure(message: str) -> CheckResult:
         status="fail",
         category=BOOTSTRAP_CATEGORY,
         message=message,
-        next_action={"kind": "ai-exec", "cmd": SKILLS_SYNC_PRUNE_CMD},
+        next_action=_ai_exec_action(SKILLS_SYNC_PRUNE_ARGV),
     )
 
 
@@ -366,7 +400,7 @@ def check_uv_project(channel_dir: Path) -> CheckResult:
             status="fail",
             category=BOOTSTRAP_CATEGORY,
             message=f"{PYPROJECT_FILENAME} が無い",
-            next_action={"kind": "ai-exec", "cmd": "uv init"},
+            next_action=_ai_exec_action(["uv", "init"], auto_apply=False),
         )
     if not pyproject_path.is_file():
         return CheckResult(
@@ -393,7 +427,7 @@ def check_automation_package(channel_dir: Path) -> CheckResult:
             status="fail",
             category=BOOTSTRAP_CATEGORY,
             message=f"{PYPROJECT_FILENAME} が無いため automation パッケージを確認できない",
-            next_action={"kind": "ai-exec", "cmd": "uv init"},
+            next_action=_ai_exec_action(["uv", "init"], auto_apply=False),
         )
     if not pyproject_path.is_file():
         return CheckResult(
@@ -401,7 +435,7 @@ def check_automation_package(channel_dir: Path) -> CheckResult:
             status="fail",
             category=BOOTSTRAP_CATEGORY,
             message=f"{PYPROJECT_FILENAME} が無いため automation パッケージを確認できない",
-            next_action={"kind": "ai-exec", "cmd": "uv init"},
+            next_action=_ai_exec_action(["uv", "init"], auto_apply=False),
         )
     try:
         project = _project_table(pyproject_path)
@@ -433,10 +467,10 @@ def check_automation_package(channel_dir: Path) -> CheckResult:
             status="fail",
             category=BOOTSTRAP_CATEGORY,
             message="automation パッケージが pyproject.toml の dependencies に無い",
-            next_action={
-                "kind": "ai-exec",
-                "cmd": AUTOMATION_PACKAGE_INSTALL_CMD,
-            },
+            next_action=_ai_exec_action(
+                ["uv", "add", f"git+https://github.com/{UPSTREAM_REPO}.git"],
+                auto_apply=False,
+            ),
         )
     return CheckResult(
         id="automation_package",
@@ -660,10 +694,7 @@ def check_apis_enabled(channel_dir: Path) -> CheckResult:
             id="apis_enabled",
             status="fail",
             message=f"未有効 API: {', '.join(missing)}",
-            next_action={
-                "kind": "ai-exec",
-                "cmd": f"gcloud services enable {' '.join(missing)} --project={project_id}",
-            },
+            next_action=_ai_exec_action(["gcloud", "services", "enable", *missing, f"--project={project_id}"]),
         )
     return CheckResult(
         id="apis_enabled",
@@ -722,10 +753,7 @@ def check_adc_quota_project(channel_dir: Path) -> CheckResult:
             id="adc_quota_project",
             status="warn",
             message=(f"ADC quota project ({quota}) が project_id ({project_id}) と不一致"),
-            next_action={
-                "kind": "ai-exec",
-                "cmd": f"gcloud auth application-default set-quota-project {project_id}",
-            },
+            next_action=_ai_exec_action(["gcloud", "auth", "application-default", "set-quota-project", project_id]),
         )
     return CheckResult(
         id="adc_quota_project",
@@ -772,14 +800,18 @@ def check_iam_aiplatform_user(channel_dir: Path) -> CheckResult:
             id="iam_aiplatform_user",
             status="fail",
             message=f"user:{account} に roles/aiplatform.user 未付与",
-            next_action={
-                "kind": "ai-exec",
-                "cmd": (
-                    f"gcloud projects add-iam-policy-binding {project_id} "
-                    f"--member=user:{account} --role=roles/aiplatform.user "
-                    f"--condition=None --quiet"
-                ),
-            },
+            next_action=_ai_exec_action(
+                [
+                    "gcloud",
+                    "projects",
+                    "add-iam-policy-binding",
+                    project_id,
+                    f"--member=user:{account}",
+                    "--role=roles/aiplatform.user",
+                    "--condition=None",
+                    "--quiet",
+                ]
+            ),
         )
     return CheckResult(
         id="iam_aiplatform_user",
@@ -795,12 +827,12 @@ def check_env_file(channel_dir: Path) -> CheckResult:
             id="env_file",
             status="fail",
             message=f"{env_path} が無い",
-            next_action={
-                "kind": "ai-exec",
-                "cmd": (
+            next_action=_ai_exec_action(
+                ["uv", "run", "yt-doctor", "--write-env-defaults", "--target", "."],
+                display_cmd=(
                     ".claude/skills/channel-new/references/gcp-bootstrap.sh <project-id> を実行して .env を書き出す"
                 ),
-            },
+            ),
         )
     env = _read_env_file(env_path)
     missing = [k for k in REQUIRED_ENV_KEYS if k not in env]
@@ -815,6 +847,47 @@ def check_env_file(channel_dir: Path) -> CheckResult:
         status="ok",
         message=f".env 必須キー揃い済み ({', '.join(REQUIRED_ENV_KEYS)})",
     )
+
+
+def write_env_defaults(channel_dir: Path) -> int:
+    """非対話 setup 用の安全な既定値だけを .env へ追記する。"""
+    env_path = channel_dir / ".env"
+    if env_path.is_symlink() or (env_path.exists() and not env_path.is_file()):
+        print(f"{env_path} は通常ファイルである必要があります", file=sys.stderr)
+        return 1
+    existing = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+    values = _read_env_file(env_path)
+    additions = []
+    if "GOOGLE_CLOUD_LOCATION" not in values:
+        additions.append("GOOGLE_CLOUD_LOCATION=us-central1")
+    if "GOOGLE_GENAI_USE_VERTEXAI" not in values:
+        additions.append("GOOGLE_GENAI_USE_VERTEXAI=true")
+    if not additions:
+        return 0
+    prefix = existing
+    if prefix and not prefix.endswith("\n"):
+        prefix += "\n"
+    content = prefix + "\n".join(additions) + "\n"
+    existing_mode = stat.S_IMODE(env_path.stat().st_mode) if env_path.exists() else 0o600
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=channel_dir,
+            prefix=".env.",
+            delete=False,
+        ) as temporary:
+            temporary.write(content)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+            temporary_path = Path(temporary.name)
+        temporary_path.chmod(existing_mode)
+        os.replace(temporary_path, env_path)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+    return 0
 
 
 def _load_client_secrets_data(channel_dir: Path) -> tuple[Path | str, object | None, str | None, str | None]:
@@ -947,8 +1020,11 @@ def check_oauth_token(channel_dir: Path) -> CheckResult:
             status="fail",
             message=f"{path} が無い",
             next_action={
-                "kind": "ai-exec",
-                "cmd": "uv run yt-channel-status を 1 回叩くと初回認証フロー (loopback redirect) が発火する",
+                "kind": "human",
+                "instructions": (
+                    "あなたのターミナルで `uv run yt-channel-status` を実行し、"
+                    "ブラウザの初回 OAuth 認証を完了してください"
+                ),
             },
         )
     try:
@@ -1019,10 +1095,7 @@ def check_reporting_job(channel_dir: Path) -> CheckResult:
             id="reporting_job",
             status="fail",
             message="Reporting API ジョブが未作成",
-            next_action={
-                "kind": "ai-exec",
-                "cmd": "uv run yt-analytics --reporting-create-job",
-            },
+            next_action=_ai_exec_action(["uv", "run", "yt-analytics", "--reporting-create-job"]),
         )
 
     return CheckResult(
@@ -2567,8 +2640,10 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
             category=UPLOAD_CATEGORY,
             message="auth/token.json が存在しない",
             next_action={
-                "kind": "ai-exec",
-                "cmd": "uv run yt-channel-status を実行して OAuth 認証を完了してください",
+                "kind": "human",
+                "instructions": (
+                    "あなたのターミナルで `uv run yt-channel-status` を実行し、ブラウザの OAuth 認証を完了してください"
+                ),
             },
         )
 
@@ -2767,6 +2842,257 @@ def summarize(results: list[CheckResult]) -> dict:
         if next_check_id is None and r.status in ("fail", "warn", "unknown"):
             next_check_id = r.id
     return {**counts, "next_check_id": next_check_id}
+
+
+def _first_unresolved_check(results: list[CheckResult]) -> CheckResult | None:
+    return next((result for result in results if result.status in ("fail", "warn", "unknown")), None)
+
+
+@dataclass(frozen=True)
+class ExecutedStep:
+    check_id: str
+    cmd: str
+    returncode: int
+
+
+@dataclass(frozen=True)
+class ApplySummary:
+    stop_reason: str
+    check_id: str | None
+    next_action: dict | None
+    executed: tuple[ExecutedStep, ...]
+    cmd: str | None = None
+    stderr: str | None = None
+
+    def to_dict(self) -> dict:
+        payload: dict = {
+            "stop_reason": self.stop_reason,
+            "check_id": self.check_id,
+            "next_action": _public_next_action(self.next_action),
+            "executed": [asdict(step) for step in self.executed],
+        }
+        if self.cmd is not None:
+            payload["cmd"] = self.cmd
+        if self.stderr is not None:
+            payload["stderr"] = self.stderr
+        return payload
+
+
+@dataclass(frozen=True)
+class ApplyOutcome:
+    results: list[CheckResult]
+    summary: ApplySummary
+    exit_code: int
+
+
+def _public_next_action(action: dict | None) -> dict | None:
+    if action is None:
+        return None
+    return {key: value for key, value in action.items() if key not in {"argv", "auto_apply"}}
+
+
+def _check_result_to_dict(result: CheckResult) -> dict:
+    payload = asdict(result)
+    payload["next_action"] = _public_next_action(result.next_action)
+    return payload
+
+
+def _apply_outcome(
+    results: list[CheckResult],
+    stop_reason: str,
+    executed: list[ExecutedStep],
+    *,
+    check: CheckResult | None = None,
+    next_action: dict | None = None,
+    cmd: str | None = None,
+    stderr: str | None = None,
+    exit_code: int = 0,
+) -> ApplyOutcome:
+    return ApplyOutcome(
+        results=results,
+        summary=ApplySummary(
+            stop_reason=stop_reason,
+            check_id=check.id if check else None,
+            next_action=next_action,
+            executed=tuple(executed),
+            cmd=cmd,
+            stderr=stderr,
+        ),
+        exit_code=exit_code,
+    )
+
+
+def _run_apply_command(argv: list[str], cwd: Path) -> tuple[int, str, str]:
+    return _run(argv, timeout=300, cwd=cwd)
+
+
+def _is_interactive_auth_command(argv: list[str]) -> bool:
+    return argv[:3] == ["gcloud", "auth", "login"] or argv[:4] == [
+        "gcloud",
+        "auth",
+        "application-default",
+        "login",
+    ]
+
+
+def _validated_action_argv(action: dict) -> list[str] | None:
+    raw_argv = action.get("argv")
+    if not isinstance(raw_argv, list) or not raw_argv:
+        return None
+    if not all(isinstance(value, str) and value for value in raw_argv):
+        return None
+    return raw_argv
+
+
+def _forced_project_check(
+    results: list[CheckResult],
+    project_id: str | None,
+    current_project_id: str | None,
+) -> CheckResult | None:
+    if project_id is None or current_project_id == project_id:
+        return None
+    gcp_index = next((index for index, result in enumerate(results) if result.id == "gcp_project"), None)
+    unresolved_index = next(
+        (index for index, result in enumerate(results) if result.status in ("fail", "warn", "unknown")),
+        None,
+    )
+    if gcp_index is None or (unresolved_index is not None and unresolved_index < gcp_index):
+        return None
+    return CheckResult(id="gcp_project", status="fail", message=f"project {project_id} を選択")
+
+
+def _run_apply_loop(
+    channel_dir: Path,
+    project_id: str | None,
+    billing_account: str | None,
+    executed: list[ExecutedStep],
+) -> ApplyOutcome:
+    attempted_steps = {(item.check_id, item.cmd) for item in executed}
+    while True:
+        results = run_all_checks(channel_dir)
+        current_project_id = _project_id_for(channel_dir)
+        unresolved = _forced_project_check(results, project_id, current_project_id) or _first_unresolved_check(results)
+        if unresolved is None:
+            return _apply_outcome(results, "completed", executed)
+        if unresolved.id == "gcp_project" and project_id is None:
+            return _apply_outcome(
+                results,
+                "decision_required",
+                executed,
+                check=unresolved,
+                next_action={"kind": "decision", "flag": "--project-id"},
+            )
+        if (
+            unresolved.id == "billing_linked"
+            and billing_account is None
+            and unresolved.next_action
+            and unresolved.next_action.get("kind") == "ai-exec"
+        ):
+            return _apply_outcome(
+                results,
+                "decision_required",
+                executed,
+                check=unresolved,
+                next_action={"kind": "decision", "flag": "--billing-account"},
+            )
+        action = unresolved.next_action
+        if unresolved.id == "gcp_project" and project_id is not None:
+            action = _ai_exec_action(["gcloud", "config", "set", "project", project_id])
+        elif unresolved.id == "billing_linked" and billing_account is not None:
+            active_project_id = _project_id_for(channel_dir)
+            if not active_project_id:
+                return _apply_outcome(
+                    results,
+                    "decision_required",
+                    executed,
+                    check=CheckResult(id="gcp_project", status="fail", message="project ID が必要"),
+                    next_action={"kind": "decision", "flag": "--project-id"},
+                )
+            action = _ai_exec_action(
+                [
+                    "gcloud",
+                    "beta",
+                    "billing",
+                    "projects",
+                    "link",
+                    active_project_id,
+                    f"--billing-account={billing_account}",
+                ]
+            )
+        if not action or action.get("kind") != "ai-exec" or action.get("auto_apply") is False:
+            return _apply_outcome(
+                results,
+                "human_required",
+                executed,
+                check=unresolved,
+                next_action=action,
+            )
+        argv = _validated_action_argv(action)
+        if argv is None:
+            return _apply_outcome(
+                results,
+                "human_required",
+                executed,
+                check=unresolved,
+                next_action=action,
+            )
+        command = shlex.join(argv)
+        if _is_interactive_auth_command(argv):
+            return _apply_outcome(
+                results,
+                "human_required",
+                executed,
+                check=unresolved,
+                next_action=action,
+            )
+        step_key = (unresolved.id, command)
+        if step_key in attempted_steps:
+            return _apply_outcome(
+                results,
+                "command_failed",
+                executed,
+                check=unresolved,
+                next_action=action,
+                cmd=command,
+                stderr="コマンド成功後の再診断後も未解決です（同じ check が継続）",
+                exit_code=1,
+            )
+        attempted_steps.add(step_key)
+        returncode, _stdout, stderr = _run_apply_command(argv, channel_dir)
+        executed.append(ExecutedStep(unresolved.id, command, returncode))
+        if returncode != 0:
+            return _apply_outcome(
+                results,
+                "command_failed",
+                executed,
+                check=unresolved,
+                next_action=action,
+                cmd=command,
+                stderr=stderr,
+                exit_code=1,
+            )
+        if unresolved.id == "gcp_project" and project_id is not None:
+            _APPLY_PROJECT_ID.set(project_id)
+            os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
+
+
+def run_apply(
+    channel_dir: Path,
+    project_id: str | None = None,
+    billing_account: str | None = None,
+) -> ApplyOutcome:
+    """診断と ai-exec を human / 決定待ち / 完了まで連続実行する。"""
+    executed: list[ExecutedStep] = []
+    previous_project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
+    project_id_token = _APPLY_PROJECT_ID.set(None)
+    try:
+        return _run_apply_loop(channel_dir, project_id, billing_account, executed)
+    finally:
+        _APPLY_PROJECT_ID.reset(project_id_token)
+        if previous_project_id is None:
+            os.environ.pop("GOOGLE_CLOUD_PROJECT", None)
+        else:
+            os.environ["GOOGLE_CLOUD_PROJECT"] = previous_project_id
 
 
 def resolve_channel_dir(target: Optional[str]) -> Path:
@@ -3121,10 +3447,26 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--json", action="store_true", help="JSON 出力 (AI 用)")
     parser.add_argument("--target", help="対象 channel dir (既定: CHANNEL_DIR env → CWD)")
     parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="ai-exec の診断 step を human / 決定待ちまで自動実行",
+    )
+    parser.add_argument(
+        "--project-id",
+        type=_parse_project_id,
+        help="--apply の gcp_project step で使う project ID",
+    )
+    parser.add_argument(
+        "--billing-account",
+        type=_parse_billing_account_id,
+        help="--apply の billing_linked step で使う billing account ID",
+    )
+    parser.add_argument(
         "--fix-client-secrets",
         action="store_true",
         help="Downloads の OAuth client secret を auth/client_secrets.json へ移動",
     )
+    parser.add_argument("--write-env-defaults", action="store_true", help=argparse.SUPPRESS)
 
     # accounts subcommand
     accounts_parser = sub.add_parser("accounts", help="全チャンネルの GCP/OAuth 対応表")
@@ -3145,22 +3487,38 @@ def main(argv: Optional[list[str]] = None) -> int:
         return run_accounts(root, args.json)
 
     channel_dir = resolve_channel_dir(args.target)
+    if args.write_env_defaults:
+        return write_env_defaults(channel_dir)
     if args.fix_client_secrets:
         return fix_client_secrets(channel_dir)
-    results = run_all_checks(channel_dir)
+    apply_summary: ApplySummary | None = None
+    exit_code = 0
+    if args.apply:
+        outcome = run_apply(
+            channel_dir,
+            project_id=args.project_id,
+            billing_account=args.billing_account,
+        )
+        results = outcome.results
+        apply_summary = outcome.summary
+        exit_code = outcome.exit_code
+    else:
+        results = run_all_checks(channel_dir)
     summary = summarize(results)
 
-    if args.json:
+    if args.json or args.apply:
         payload = {
             "channel_dir": str(channel_dir),
             "summary": summary,
-            "checks": [asdict(r) for r in results],
+            "checks": [_check_result_to_dict(result) for result in results],
         }
+        if apply_summary is not None:
+            payload["apply"] = apply_summary.to_dict()
         print(json.dumps(payload, ensure_ascii=False, indent=2))
     else:
         print(render_table(results, summary, channel_dir))
 
-    return 0
+    return exit_code
 
 
 if __name__ == "__main__":
