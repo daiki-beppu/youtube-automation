@@ -10,6 +10,7 @@ description: "Use when 動画本体の中身（フック構造・シーン・BGM
 
 - `hook_structure` — 0-30 秒のカット割り・テキスト出現タイミング・signature 要素
 - `bgm_arc` — イントロ尺・ピーク位置・クリップ窓内終盤のタイムスタンプ（窓内スコープ）
+  - `segments[]` — 曲 / BGM 区間の `start` / `end` / `track` / `description`。曲名が映像・説明から確認できない場合は `track N` とし、推測した固有名を付けない
 - `scene_timeline` — シーン境界 + 一言要約（窓内のみ）
 - `thumbnail_alignment` — サムネで提示した要素が本編（窓内）に映っているかの整合性
 - `editing_metrics` — 平均カット長・テキスト出現頻度（窓内平均）
@@ -73,6 +74,11 @@ uv run yt-video-analyze --url <youtube_url>
 |---|---|
 | `data/video_analysis/<slug>/<video_id>.json` | 構造化データ (1 動画 1 ファイル) |
 | `reports/video_analysis/<slug>.md` | 人間向けサマリー (slug 単位で集約) |
+
+保存済み retention と scene / BGM を照合するときは、解析後に
+`yt-retention-timeline --video <video_id> [--slug <slug>]` を実行する。結果は
+`reports/retention_analysis/<video_id>.{json,md}` に保存される。retention 未収集なら
+先に `yt-analytics --depth full` を実行する。
 
 ### Step 3: レポート検証
 
