@@ -478,6 +478,16 @@ class TestClientSecrets:
         r = doctor.check_client_secrets(tmp_path)
         assert r.status == "ok"
 
+    def test_uses_workspace_root_fallback(self, tmp_path):
+        workspace = tmp_path / "workspace"
+        channel = workspace / "channels" / "alpha"
+        (channel / "config" / "channel").mkdir(parents=True)
+        self._write_valid_client_secrets(workspace / "auth" / "client_secrets.json")
+
+        r = doctor.check_client_secrets(channel)
+
+        assert r.status == "ok"
+
     def test_rejects_client_secrets_directory(self, tmp_path):
         (tmp_path / "auth" / "client_secrets.json").mkdir(parents=True)
 
@@ -798,6 +808,70 @@ class TestSummarize:
         s = doctor.summarize(results)
         assert s["next_check_id"] is None
 
+    def test_info_is_counted_without_becoming_next_action(self):
+        results = [doctor.CheckResult(id="a", status="info", message="")]
+        s = doctor.summarize(results)
+        assert s["info"] == 1
+        assert s["next_check_id"] is None
+
+
+class TestOAuthClientSharingRecommendation:
+    @staticmethod
+    def _make_channel(workspace: Path, slug: str, *, with_secret: bool = False) -> Path:
+        channel = workspace / "channels" / slug
+        (channel / "config" / "channel").mkdir(parents=True)
+        if with_secret:
+            secret = channel / "auth" / "client_secrets.json"
+            secret.parent.mkdir()
+            secret.write_text("{}", encoding="utf-8")
+        return channel
+
+    def test_info_when_multiple_workspace_channels_have_per_channel_secrets(self, tmp_path):
+        workspace = tmp_path / "workspace"
+        alpha = self._make_channel(workspace, "alpha", with_secret=True)
+        self._make_channel(workspace, "beta", with_secret=True)
+
+        result = doctor.check_oauth_client_sharing(alpha)
+
+        assert result.status == "info"
+        assert result.id == "oauth_client_sharing"
+        assert str(workspace / "auth" / "client_secrets.json") in result.message
+        assert "全チャンネルの再認証が必要" in result.message
+        assert result.data == {
+            "channels": ["alpha", "beta"],
+            "shared_path": str(workspace / "auth/client_secrets.json"),
+        }
+
+    def test_ok_when_only_one_workspace_channel_has_per_channel_secret(self, tmp_path):
+        workspace = tmp_path / "workspace"
+        alpha = self._make_channel(workspace, "alpha", with_secret=True)
+        self._make_channel(workspace, "beta")
+
+        result = doctor.check_oauth_client_sharing(alpha)
+
+        assert result.status == "ok"
+
+    def test_ok_outside_workspace(self, tmp_path):
+        channel = tmp_path / "standalone"
+        (channel / "auth").mkdir(parents=True)
+        (channel / "auth" / "client_secrets.json").write_text("{}", encoding="utf-8")
+
+        result = doctor.check_oauth_client_sharing(channel)
+
+        assert result.status == "ok"
+
+    def test_nested_standalone_repo_is_not_treated_as_workspace_channel(self, tmp_path):
+        workspace = tmp_path / "workspace"
+        alpha = self._make_channel(workspace, "alpha", with_secret=True)
+        self._make_channel(workspace, "beta", with_secret=True)
+        standalone = workspace / "standalone"
+        standalone.mkdir()
+
+        result = doctor.check_oauth_client_sharing(standalone)
+
+        assert alpha != standalone
+        assert result.status == "ok"
+
 
 class TestResolveChannelDir:
     def test_target_explicit(self, tmp_path):
@@ -844,10 +918,10 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 7 bootstrap + 12 api + 3 channel + 4 data + 1 upload = 27
-        assert len(payload["checks"]) == 27
+        # 7 bootstrap + 13 api + 3 channel + 4 data + 1 upload = 28
+        assert len(payload["checks"]) == 28
         for c in payload["checks"]:
-            assert c["status"] in ("ok", "warn", "fail", "unknown")
+            assert c["status"] in ("ok", "info", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
             assert "category" in c
             assert c["category"] in ("bootstrap", "api", "channel", "data", "upload")
@@ -4229,19 +4303,20 @@ class TestCheckNumberedDuplicates:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_27_checks(self, monkeypatch, tmp_path):
-        """7 bootstrap + 12 api + 3 channel + 4 data + 1 upload = 計 27 件."""
+    def test_returns_28_checks(self, monkeypatch, tmp_path):
+        """7 bootstrap + 13 api + 3 channel + 4 data + 1 upload = 計 28 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 27
+        assert len(results) == 28
 
-    def test_12_api_checks_present(self, monkeypatch, tmp_path):
-        """reporting_job を含む 12 check が api カテゴリで含まれている."""
+    def test_13_api_checks_present(self, monkeypatch, tmp_path):
+        """oauth_client_sharing を含む 13 check が api カテゴリで含まれている."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         api_results = [r for r in results if r.category == "api"]
-        assert len(api_results) == 12
+        assert len(api_results) == 13
         assert api_results[-1].id == "reporting_job"
+        assert any(r.id == "oauth_client_sharing" for r in api_results)
 
     def test_new_check_ids_present(self, monkeypatch, tmp_path):
         """bootstrap / channel / data / upload の check が含まれる."""
