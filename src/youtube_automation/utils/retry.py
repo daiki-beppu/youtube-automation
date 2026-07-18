@@ -27,12 +27,14 @@ _MAX_ATTEMPTS = 3
 # （time.sleep / random.uniform をグローバルに patch せず retry 経路だけ無効化できる）
 _DEFAULT_SLEEP: Callable[[float], None] = time.sleep
 _DEFAULT_JITTER: Callable[[float, float], float] = random.uniform
-_QUOTA_REASONS = {
+QUOTA_REASONS = {
     "dailyLimitExceeded",
     "quotaExceeded",
     "rateLimitExceeded",
     "userRateLimitExceeded",
 }
+# 後方互換: モジュール内の旧 private 名を参照するコードを壊さない。
+_QUOTA_REASONS = QUOTA_REASONS
 
 
 def _is_retryable(error: HttpError) -> bool:
@@ -41,7 +43,7 @@ def _is_retryable(error: HttpError) -> bool:
     return (
         status == 429
         or (status is not None and 500 <= status < 600)
-        or (status == 403 and converted.reason in _QUOTA_REASONS)
+        or (status == 403 and converted.reason in QUOTA_REASONS)
     )
 
 
