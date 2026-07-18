@@ -40,6 +40,8 @@ from youtube_automation.utils.config.workflow import (
     SCHEDULED_AUTOMATION_CADENCE_DAYS,
     SCHEDULED_AUTOMATION_NOTIFICATIONS,
     ApprovalGates,
+    PostPublish,
+    PostPublishApprovalGates,
     ScheduledAutomation,
     WfNext,
     Workflow,
@@ -616,6 +618,28 @@ def _build_workflow(merged: dict) -> Workflow:
     skip_audio = _resolve_skip_approval(wf_next_raw, gates_raw, "skip_audio_approval", "audio")
     skip_upload = _resolve_skip_approval(wf_next_raw, gates_raw, "skip_upload_approval", "upload")
 
+    post_publish_configured = "post-publish" in wf
+    post_publish_raw = wf.get("post-publish", {})
+    if not isinstance(post_publish_raw, dict):
+        raise ConfigError(
+            f"workflow.post-publish は object でなければなりません（got {type(post_publish_raw).__name__}）"
+        )
+    unexpected = set(post_publish_raw) - {"approval_gates"}
+    if unexpected:
+        names = ", ".join(sorted(unexpected))
+        raise ConfigError(f"workflow.post-publish に未知のキーがあります: {names}")
+    post_publish_gates_raw = post_publish_raw.get("approval_gates", {})
+    if not isinstance(post_publish_gates_raw, dict):
+        raise ConfigError(
+            "workflow.post-publish.approval_gates は object でなければなりません"
+            f"（got {type(post_publish_gates_raw).__name__}）"
+        )
+    post_publish_steps = {"community-post", "pinned-comment", "metadata-audit"}
+    unknown_steps = set(post_publish_gates_raw) - post_publish_steps
+    if unknown_steps:
+        names = ", ".join(sorted(unknown_steps))
+        raise ConfigError(f"workflow.post-publish.approval_gates に未知の step があります: {names}")
+
     return Workflow(
         wf_next=WfNext(
             approval_gates=ApprovalGates(audio=not skip_audio, upload=not skip_upload),
@@ -625,6 +649,26 @@ def _build_workflow(merged: dict) -> Workflow:
                 wf_next_raw,
                 "skip_manual_mastering",
                 "workflow.wf_next.skip_manual_mastering",
+            ),
+        ),
+        post_publish=PostPublish(
+            configured=post_publish_configured,
+            approval_gates=PostPublishApprovalGates(
+                community_post=_workflow_bool(
+                    post_publish_gates_raw,
+                    "community-post",
+                    "workflow.post-publish.approval_gates.community-post",
+                ),
+                pinned_comment=_workflow_bool(
+                    post_publish_gates_raw,
+                    "pinned-comment",
+                    "workflow.post-publish.approval_gates.pinned-comment",
+                ),
+                metadata_audit=_workflow_bool(
+                    post_publish_gates_raw,
+                    "metadata-audit",
+                    "workflow.post-publish.approval_gates.metadata-audit",
+                ),
             ),
         ),
         scheduled_automation=_build_scheduled_automation(wf),

@@ -26,7 +26,7 @@ config/channel/         # 責務別分割設定（v2.0.0 以降）
   youtube.json          # youtube / music_engine / content_model
   analytics.json        # analytics / benchmark
   playlists.json        # playlists
-  workflow.json         # (v4.0.0 で short / community 撤去、後方互換で素通し)
+  workflow.json         # wf_next / post-publish の optional workflow 設定
   audio.json            # audio
   shorts.json           # shorts (optional)
   comments.json         # comments (optional)

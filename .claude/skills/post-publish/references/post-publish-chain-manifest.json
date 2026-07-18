@@ -1,0 +1,38 @@
+{
+  "chainId": "post-publish",
+  "steps": [
+    {
+      "id": "community-post",
+      "skill": "community-post",
+      "prerequisiteArtifacts": ["collections/live/*/workflow-state.json"],
+      "outputArtifacts": ["collections/live/*/20-documentation/community-post.txt"],
+      "approvalGate": {
+        "enabled": false,
+        "configPath": "workflow.post-publish.approval_gates.community-post"
+      },
+      "idempotency": {"script": "references/post-publish-chain-state.py"}
+    },
+    {
+      "id": "pinned-comment",
+      "skill": "pinned-comment",
+      "prerequisiteArtifacts": ["collections/live/*/workflow-state.json"],
+      "outputArtifacts": ["post_publish_history.json"],
+      "approvalGate": {
+        "enabled": false,
+        "configPath": "workflow.post-publish.approval_gates.pinned-comment"
+      },
+      "idempotency": {"script": "references/post-publish-chain-state.py"}
+    },
+    {
+      "id": "metadata-audit",
+      "skill": "metadata-audit",
+      "prerequisiteArtifacts": ["collections/live/*/20-documentation/descriptions.md"],
+      "outputArtifacts": ["post_publish_history.json"],
+      "approvalGate": {
+        "enabled": false,
+        "configPath": "workflow.post-publish.approval_gates.metadata-audit"
+      },
+      "idempotency": {"script": "references/post-publish-chain-state.py"}
+    }
+  ]
+}

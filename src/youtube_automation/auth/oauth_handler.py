@@ -26,6 +26,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from youtube_automation.utils.config import find_workspace_root, workspace_channels
 from youtube_automation.utils.exceptions import AuthError, ConfigError, ValidationError, YouTubeAPIError
 from youtube_automation.utils.worktree import main_worktree_root
 
@@ -73,6 +74,11 @@ def client_secrets_file_candidates(channel_dir: Path) -> list[Path]:
         channel_dir / "auth" / "client_secrets.json",
         channel_dir / "automation" / "auth" / "client_secrets.json",
     ]
+    workspace_root = find_workspace_root(channel_dir)
+    if workspace_root is not None and channel_dir.resolve() in {
+        path.resolve() for path in workspace_channels(workspace_root).values()
+    }:
+        candidates.append(workspace_root / "auth" / "client_secrets.json")
     # git worktree では gitignore された auth/ が複製されないため、
     # main 作業ツリー側の実体を最後のフォールバックとして参照する（#1721）
     main_root = main_worktree_root(channel_dir)

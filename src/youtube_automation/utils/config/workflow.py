@@ -102,6 +102,27 @@ class ScheduledAutomation:
 
 
 @dataclass(frozen=True)
+class PostPublishApprovalGates:
+    """`/post-publish` の各 step 直前に置く承認ゲート."""
+
+    community_post: bool = False
+    pinned_comment: bool = False
+    metadata_audit: bool = False
+
+
+@dataclass(frozen=True)
+class PostPublish:
+    """公開後チェーン設定.
+
+    `configured` は `workflow.json` に `workflow.post-publish` が明示されたかを示す。
+    未設定時は従来の `/community-post` 案内だけを維持する。
+    """
+
+    configured: bool = False
+    approval_gates: PostPublishApprovalGates = field(default_factory=PostPublishApprovalGates)
+
+
+@dataclass(frozen=True)
 class Workflow:
     """ワークフロー責務の合成（`workflow` セクション）.
 
@@ -110,4 +131,5 @@ class Workflow:
     """
 
     wf_next: WfNext = field(default_factory=WfNext)
+    post_publish: PostPublish = field(default_factory=PostPublish)
     scheduled_automation: ScheduledAutomation = field(default_factory=ScheduledAutomation)
