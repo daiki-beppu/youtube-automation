@@ -728,6 +728,144 @@ def test_workflow_wf_next_approval_gates_partial(tmp_path, monkeypatch):
     assert config.workflow.wf_next.approval_gates.upload is False
 
 
+def test_workflow_wf_next_skip_approval_default(tmp_path, monkeypatch):
+    """#1744: 未設定なら `skip_*_approval` は両方 `True`（従来既定 = 承認ゲートなし）."""
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.wf_next.skip_audio_approval is True
+    assert config.workflow.wf_next.skip_upload_approval is True
+    assert config.workflow.wf_next.approval_gates.audio is False
+    assert config.workflow.wf_next.approval_gates.upload is False
+
+
+def test_workflow_wf_next_skip_approval_explicit(tmp_path, monkeypatch):
+    """#1744: `skip_*_approval: false` で承認ゲートを有効化できる（true=省く の向き）."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {
+                "skip_audio_approval": False,
+                "skip_upload_approval": False,
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.wf_next.skip_audio_approval is False
+    assert config.workflow.wf_next.skip_upload_approval is False
+    # 互換ビュー approval_gates は常に skip_* の否定と整合する
+    assert config.workflow.wf_next.approval_gates.audio is True
+    assert config.workflow.wf_next.approval_gates.upload is True
+
+
+def test_workflow_wf_next_legacy_approval_gates_alias_regression(tmp_path, monkeypatch):
+    """#1744: 旧 `approval_gates.upload: false` のみの JSON は従来どおり承認なしで進む."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {
+                "approval_gates": {"upload": False},
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.wf_next.skip_upload_approval is True
+    assert config.workflow.wf_next.approval_gates.upload is False
+
+
+def test_workflow_wf_next_legacy_approval_gates_maps_to_skip(tmp_path, monkeypatch):
+    """#1744: 旧 `approval_gates.*: true` は `skip_*_approval = False` に写像される."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {
+                "approval_gates": {"audio": True, "upload": True},
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.wf_next.skip_audio_approval is False
+    assert config.workflow.wf_next.skip_upload_approval is False
+
+
+@pytest.mark.parametrize(
+    ("new_key", "legacy_key"),
+    [("skip_audio_approval", "audio"), ("skip_upload_approval", "upload")],
+)
+def test_workflow_wf_next_skip_approval_conflicts_with_legacy(tmp_path, monkeypatch, new_key, legacy_key):
+    """#1744: 同一ゲートへの新旧キー同時指定は値が一致していても ConfigError."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {
+                new_key: True,
+                "approval_gates": {legacy_key: False},
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    expected = f"workflow.wf_next.{new_key} と workflow.wf_next.approval_gates.{legacy_key} は"
+    with pytest.raises(ConfigError, match=expected):
+        load_config()
+
+
+def test_workflow_wf_next_skip_approval_mixed_gates_are_independent(tmp_path, monkeypatch):
+    """#1744: ゲートが異なれば新旧キーの混在は衝突しない（audio=旧 / upload=新）."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {
+                "skip_upload_approval": False,
+                "approval_gates": {"audio": True},
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.wf_next.skip_audio_approval is False
+    assert config.workflow.wf_next.skip_upload_approval is False
+    assert config.workflow.wf_next.approval_gates.audio is True
+    assert config.workflow.wf_next.approval_gates.upload is True
+
+
+@pytest.mark.parametrize("new_key", ["skip_audio_approval", "skip_upload_approval"])
+@pytest.mark.parametrize("invalid", ["false", "true", 1, 0, None, {}, []])
+def test_workflow_wf_next_skip_approval_must_be_boolean(tmp_path, monkeypatch, new_key, invalid):
+    """#1744: `skip_*_approval` の非 boolean は ConfigError."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {
+                new_key: invalid,
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=f"workflow.wf_next.{new_key} は boolean"):
+        load_config()
+
+
 def test_workflow_wf_next_skip_manual_mastering_default(tmp_path, monkeypatch):
     """#1449: `skip_manual_mastering` 未設定なら `False`（従来通り最終マスター配置待ち）."""
     ch = _setup_channel(tmp_path, _minimal_sections())
