@@ -642,6 +642,46 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     assert "diff_prompt_template: |" in config
 
 
+def test_thumbnail_default_config_disables_ab_test_by_default() -> None:
+    config = _load_thumbnail_default_config()
+
+    assert config["ab_test"] == {"enabled": False, "patterns": []}
+
+
+def test_thumbnail_skill_documents_ab_test_outputs_prompts_and_approval_contract() -> None:
+    skill = _read_thumbnail_skill()
+    block = _slice_between(
+        skill,
+        "### Test & compare 用 A/B pattern（opt-in）",
+        "### thumbnail-text-profile 適用（#1907）",
+    )
+
+    for required in (
+        "`ab_test` 未設定または `enabled: false`",
+        "1〜3 件",
+        "`variation`",
+        "`ConfigError`",
+        "--ab-pattern <name>",
+        "thumbnail-<name>.jpg",
+        "先頭 pattern",
+        "thumbnail.jpg",
+        "A/B Test Pattern Prompts",
+        "全 pattern の承認が揃うまでは `thumbnail.approved` を `true` にしない",
+        "Test & compare",
+        "公式 API はない",
+    ):
+        assert required in block
+
+    prompt_block = _slice_between(skill, "## プロンプト保存", "## ファイル命名ルール（上書き禁止）")
+    assert "## A/B Test Pattern Prompts" in prompt_block
+    assert "Pattern a Final Prompt" in prompt_block
+    assert "Pattern b Final Prompt" in prompt_block
+
+    state_block = _slice_between(skill, "### `workflow-state.json` 更新", "## stock 退避と再利用")
+    assert "全 pattern" in state_block
+    assert "先頭 pattern と同一内容" in state_block
+
+
 def test_thumbnail_design_report_uses_current_two_phase_contract() -> None:
     report = _read_thumbnail_diff_report()
     two_phase_section = _slice_between(report, "### 3-8. Two-Phase モード", "### 3-9. 視認性検証")

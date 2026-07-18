@@ -34,7 +34,7 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 
 ## 完了条件
 
-- `10-assets/thumbnail.jpg`（テキスト付き YouTube サムネ）と `10-assets/main.png`（または `main.jpg`、textless 動画背景）が**別成果物として**それぞれユーザー承認・確定済み
+- `10-assets/thumbnail.jpg`（テキスト付き YouTube サムネ）と `10-assets/main.png`（または `main.jpg`、textless 動画背景）が**別成果物として**それぞれユーザー承認・確定済み。`ab_test.enabled: true` の場合は全 `thumbnail-<name>.jpg` も個別承認・確定済みで、`thumbnail.jpg` が先頭 pattern と同一内容
 - テキスト付きサムネは承認前に `/thumbnail-compare` の 320px 視認性検証を通過している
 - `20-documentation/thumbnail-prompts.md` に textless 背景用プロンプトと、テキスト付きサムネの生成記録（標準: `yt-thumbnail-text` の合成パラメータ、AI 焼き込み fallback: テキスト付き生成プロンプト）を保存済み
 - `workflow-state.json` の `thumbnail.approved = true` に更新済み
@@ -241,6 +241,7 @@ Use the title {title}.
 11. `image_generation.gemini.color_themes` → テーマ別カラーパレット（single_step モードで差し替え）
 12. `archive.enabled` → 承認済みサムネイルのギャラリー保存（既定 `false`）
 13. `image_generation.gemini.forbid_keywords` → NG ワードリスト（最終プロンプトに大小文字無視で部分一致すると生成前にエラー停止。未設定・空リストなら no-op。provider 非依存で Gemini / codex の両入口に効く）
+14. `ab_test.enabled` / `ab_test.patterns` → Studio Test & compare 用 pattern（既定 `false`。有効時は 1〜3 件の `name` / `variation`）
 
 ## 生成モード判定
 
@@ -334,6 +335,42 @@ uv run yt-thumbnail-text \
 `thumbnail.jpg` はアップロード用の文字入りサムネイル、`main.png/jpg` は動画背景・loop-video 入力用の文字なし素材として扱う。両者を同一画像で代用しない。決定的合成では同一の textless 背景がテキスト合成の入力と動画背景を兼ねるが、成果物としては別ファイルで確定する。
 
 **AI 焼き込み経路（fallback・非既定）**: 手書き風タイポグラフィなど実フォントで再現できない表現を運用者が明示的に選んだときだけ、従来の「テキスト付き YouTube サムネ → 承認済みサムネから textless 動画背景」の順で Single-Step / Two-Phase / codex 章のテキスト付き候補生成手順を使う（経路は残すが #1907 では改修しない）。この場合、書体の厳密な再現は保証されないことをユーザーに伝える。
+
+### Test & compare 用 A/B pattern（opt-in）
+
+`ab_test` 未設定または `enabled: false` では、この節を実行せず標準の `thumbnail.jpg` 1 枚だけを確定する。既存コマンド・ファイル・承認・state 契約は変えない。
+
+有効化はチャンネル側 `config/skills/thumbnail.yaml` で行う。`patterns` は YouTube Studio の上限に合わせて 1〜3 件、`name` は英小文字・数字・ハイフン・アンダースコアの一意な名前、`variation` は空でない pattern 固有 clause とする。0 件・4 件以上・不正 name・重複 name・空 variation は、画像生成 API を呼ぶ前に `ConfigError` で理由付き停止する。
+
+```yaml
+ab_test:
+  enabled: true
+  patterns:
+    - name: a
+      variation: "Use a close-up composition with a larger subject."
+    - name: b
+      variation: "Keep the composition and use a cool blue color palette."
+    - name: c
+      variation: "Keep the visual treatment and use a shorter title copy."
+```
+
+有効時は次の順序で進める。
+
+1. 各 pattern の base prompt は同じ `image_generation.gemini.diff_prompt_template` 合成結果を使う。`yt-generate-image --ab-pattern <name>` が対応する `variation` をその最終プロンプト末尾へ追加する。pattern 間で base prompt、TTP / anatomy / IP safety clause を削除・変更しない。
+2. pattern ごとに候補を別名で生成する。AI 焼き込み経路の例:
+
+```bash
+uv run yt-generate-image \
+  --ttp-strict-references \
+  --reference <ref-a> --prompt "<diff_prompt_template 展開済み base prompt>" \
+  --ab-pattern a --output <collection-path>/10-assets/thumbnail-a-v1.jpg -y
+```
+
+   決定的合成経路では `variation` の構図・配色を textless 背景候補の生成へ反映し、コピー差分は pattern ごとの `yt-thumbnail-text --title ... --output thumbnail-<name>-v1.jpg` に反映する。各 pattern で `/thumbnail-compare` と目視確認を行い、個別にユーザー承認を得る。
+3. 承認済み候補だけを `10-assets/thumbnail-<name>.jpg` へ確定する。全 pattern の承認が揃うまでは `thumbnail.approved` を `true` にしない。
+4. 全 pattern 確定後、先頭 pattern を互換出力へコピーする（例: `cmp thumbnail-a.jpg thumbnail.jpg` が成功する内容にする）。`/video-upload` は従来どおり `thumbnail.jpg` を使うため変更不要。
+5. `20-documentation/thumbnail-prompts.md` の `A/B Test Pattern Prompts` に、全 pattern の name / final output / variation / API へ渡した最終プロンプトを保存する。
+6. YouTube Studio で対象動画のサムネイル編集を開き、**Test & compare** から最大 3 枚の `thumbnail-<name>.jpg` を手動登録する。公式 API はないため、このスキルから自動登録しない。
 
 ### thumbnail-text-profile 適用（#1907）
 
@@ -691,6 +728,25 @@ textless main 候補生成後（`main-v1.png` / `main-v1.jpg`）:
 \```
 <承認済み thumbnail.jpg からテキストなし背景を生成したプロンプト>
 \```
+
+## A/B Test Pattern Prompts
+
+| pattern | final output | variation |
+|---|---|---|
+| `a` | `10-assets/thumbnail-a.jpg` | `<pattern a variation>` |
+| `b` | `10-assets/thumbnail-b.jpg` | `<pattern b variation>` |
+
+### Pattern a Final Prompt
+
+\```
+<diff_prompt_template 展開結果 + pattern a variation>
+\```
+
+### Pattern b Final Prompt
+
+\```
+<diff_prompt_template 展開結果 + pattern b variation>
+\```
 ```
 
 ## ファイル命名ルール（上書き禁止）
@@ -698,6 +754,8 @@ textless main 候補生成後（`main-v1.png` / `main-v1.jpg`）:
 | ファイル | 用途 |
 |---------|------|
 | `thumbnail.jpg` | YouTube アップロード用のテキスト付き最終サムネ |
+| `thumbnail-<name>.jpg` | `ab_test.enabled: true` の Test & compare 用最終サムネ（最大 3 枚） |
+| `thumbnail-<name>-v{N}.jpg` / `.png` | pattern 別の承認前候補 |
 | `thumbnail-v{N}.jpg` / `thumbnail-v{N}.png` / `thumbnail-codex-v{N}.png` | テキスト付き候補 |
 | `main.png` / `main.jpg` | 動画背景・`/loop-video` 入力用のテキストなし最終画像 |
 | `main-v{N}.png` / `main-v{N}.jpg` | テキストなし背景候補 |
@@ -730,7 +788,7 @@ JSON
 
 ### `workflow-state.json` 更新
 
-画像確認・承認後、`thumbnail.approved = true` を更新する。
+画像確認・承認後、`thumbnail.approved = true` を更新する。`ab_test.enabled: true` の場合は、設定された全 pattern の `thumbnail-<name>.jpg` が存在し、各 pattern の承認が完了し、`thumbnail.jpg` が先頭 pattern と同一内容であることを確認してからだけ更新する。一部 pattern の承認・確定に失敗した状態では `false` のままにする。
 
 `yt-thumbnail-auto-select --apply` で確定した場合は、選択候補・distance・ランキング・実行時刻が `thumbnail_auto_selection` キーに監査ログとして自動記録される（#1370）。
 
