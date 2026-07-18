@@ -24,6 +24,7 @@
 | /setup | ツール導入と GCP / OAuth 設定を wizard 形式で診断・セットアップ |
 | /channel-new | TTP 対象確認、seed confirmation artifacts、config、本格ペルソナ作成チェーン、初回 branding まで進める。方向性検討、既存チャンネル取り込み、再生成モード（config 再生成）、設定 push モード（branding / status / localizations の push/pull）も担当 |
 | /discover-competitors | 任意: ニッチキーワードから追加競合候補を YouTube Data API で自動発掘 |
+| /market-research | 任意: TTP 入替候補とニッチ仮説を複数根拠で横断比較し、既定は会話内だけに提示 |
 | /channel-research | 任意: benchmark / viewer-voice 済みデータを徹底分析 |
 | /channel-status | 登録者数・総再生回数・動画別パフォーマンスを YouTube API から取得 |
 

@@ -3,6 +3,11 @@ name: thumbnail-research
 description: "Use when 収集済み競合サムネイルだけを再生数上位群 vs 下位群で深掘りし、勝ちパターンを抽出するとき。「サムネイル徹底分析」「競合サムネ分析」「サムネ勝ちパターン」で発動。データ収集は /benchmark、チャンネル全体の TTP 分析は /channel-research、生成は /thumbnail、320px 視認性比較は /thumbnail-compare"
 ---
 
+## 前後工程
+
+- `前工程`: `/benchmark`
+- `後工程`: `/thumbnail`
+
 ## Hard Gates
 
 - `data/benchmark_*.json` と、次のいずれかの視覚情報が必要:
@@ -154,7 +159,7 @@ find docs/benchmarks/thumbnails data/thumbnail_compare/benchmark \
 
 ## Cross References
 
-- `/benchmark` → 前工程: 競合動画データとサムネイル画像の収集・更新
-- `/thumbnail` → 後工程: `docs/benchmarks/thumbnail-analysis.md` の勝ちパターンと参照候補を TTP 入力として生成
+- `/benchmark`: 競合動画データとサムネイル画像の収集・更新
+- `/thumbnail`: `docs/benchmarks/thumbnail-analysis.md` の勝ちパターンと参照候補を TTP 入力として生成
 - `/thumbnail-compare` → 生成候補と競合を並べた 320px 視認性比較
 - `/channel-research` → タイトル・動画尺・投稿・コメントを含むチャンネル全体の TTP 分析

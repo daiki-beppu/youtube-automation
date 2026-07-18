@@ -3,6 +3,11 @@ name: live-clean
 description: "Use when live コレクションの大容量メディアを削除して容量回復するとき、または collections 配下の tmp/ 残骸を掃除するとき。「容量」「クリーンアップ」「live 整理」「でかいファイル」「tmp 掃除」「残骸」で発動"
 ---
 
+## 前後工程
+
+- `前工程`: `/video-upload`, `/videoup`
+- `後工程`: `なし`
+
 ## Overview
 
 `collections/live/` 配下の公開済みコレクションから、YouTube にアップロード済み or 再生成可能な大容量メディアファイルを安全に削除し、ディスク容量を回復する。あわせて、`collections/` 配下（live に限らず planning 等も含む）に残った `tmp/` ディレクトリ残骸の掃除モードを持つ。

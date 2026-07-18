@@ -3,6 +3,11 @@ name: setup
 description: "Use when ツール導入と GCP / OAuth の API 設定をセットアップ・再診断するとき。「セットアップして」「環境構築」「/setup」「旧 /onboard」で発動。yt-doctor 診断 wizard"
 ---
 
+## 前後工程
+
+- `前工程`: `なし`
+- `後工程`: `*`（共通基盤としてほぼ全スキル）
+
 ## Overview
 
 このスキルは **AI が指揮を取るツール・API 設定 wizard** である。automation CLI 導入後は `uv run yt-doctor --json` を都度叩いて状態を取得し、`summary.next_check_id` が指す未完了 check に対して **1 ステップだけ** 進行する。

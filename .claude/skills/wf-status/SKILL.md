@@ -3,6 +3,11 @@ name: wf-status
 description: "Use when コレクション制作の進捗を読むだけで確認するとき（実行しない）。「どこまで進んだ？」「制作中コレクション一覧」で発動。YouTube 統計は /channel-status"
 ---
 
+## 前後工程
+
+- `前工程`: `/wf-new`
+- `後工程`: `/wf-next`
+
 ## Overview
 
 アクティブなコレクションの進捗一覧・詳細を表示する。新旧スキーマ両対応。

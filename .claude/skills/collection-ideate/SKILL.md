@@ -3,6 +3,11 @@ name: collection-ideate
 description: "Use when 新コレクションの企画・テーマ選定をデータドリブンに行うとき。「次何作る？」「テーマ選び」「企画提案」で発動"
 ---
 
+## 前後工程
+
+- `前工程`: `/analytics-analyze`, `/benchmark`, `/audience-persona-design`
+- `後工程`: `/wf-new`, `/community-draft`
+
 ## Overview
 
 最新の分析データ + 競合ベンチマークを基に、第一ペルソナ向けの企画提案を自動生成する。
@@ -727,5 +732,5 @@ rm -rf collections/planning/_plan-previews/<session-dir>/
 > stock 側の保守は `uv run yt-stock-prune --dry-run` で候補確認 →（必要なら）本実行。
 
 企画選択後:
-→ `/thumbnail <theme>` で、テキスト付き `thumbnail.jpg` を先に確定し、承認済み `thumbnail.jpg` から textless `main.png/jpg` を別成果物として再生成・確定する。企画プレビューは参照素材であり、`main.png` として動画背景に流用しない
-→ サムネイル確定後に `/suno <theme>` で SunoAI 音楽プロンプト生成（テーマ確定後に初めて実行）
+- `/thumbnail <theme>` で、テキスト付き `thumbnail.jpg` を先に確定し、承認済み `thumbnail.jpg` から textless `main.png/jpg` を別成果物として再生成・確定する。企画プレビューは参照素材であり、`main.png` として動画背景に流用しない
+- サムネイル確定後に `/suno <theme>` で SunoAI 音楽プロンプト生成（テーマ確定後に初めて実行）

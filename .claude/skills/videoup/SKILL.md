@@ -3,12 +3,17 @@ name: videoup
 description: "Use when 音声ファイルが揃い動画生成が必要なとき。「動画変換」「MP3→MP4」「generate_videos」「videoup」で発動。マスター音源・マスター動画生成を案内。YouTube への投稿は /video-upload"
 ---
 
+## 前後工程
+
+- `前工程`: `/masterup`, `/lyria`, `/loop-video`
+- `後工程`: `/video-upload`, `/video-description`
+
 ## Overview
 
 `.claude/skills/` 配下の共有スクリプト（`yt-skills sync` で配布）を使ってマスター音源と動画を生成します。
 スクリプトは毎回生成せず、既存の汎用スクリプトを実行します。
 
-前工程はマスター音源の用意: Suno 系チャンネルは `/masterup`、Lyria 系チャンネルは `/lyria`（`/masterup` 不要）でマスター音源を生成してから本スキルを実行する。
+Suno 系チャンネルは `/masterup`、Lyria 系チャンネルは `/lyria`（`/masterup` 不要）でマスター音源を生成してから本スキルを実行する。
 
 ## 完了条件
 
@@ -236,7 +241,7 @@ effect:
 
 ### Audio visualizer style（#1684）
 
-`audio_visualizer.style` は次の 4 preset から選ぶ。未指定時は `bar` になり、従来の `showfreqs=mode=bar` filtergraph をそのまま使う。
+`audio_visualizer.style` は次の 5 preset から選ぶ。未指定時は `bar` になり、従来の `showfreqs=mode=bar` filtergraph をそのまま使う。
 
 | style | 表示 | 主な追加設定 |
 |---|---|---|
@@ -244,10 +249,11 @@ effect:
 | `mirror-mountain` | 低音を中央に寄せた左右鏡像 + 上下対称バー | `bars` / 偶数の `size` |
 | `ring` | 円弧上の角丸カプセル | `bars` / `ring.inner_r` / `ring.length` / `ring.arc_deg` |
 | `ring-line` | 細線のギザギザリング | `bars` / `ring.*` |
+| `heart` | ハート曲線上で内外へ波打つスペクトラムバー | `bars` / `size` |
 
-例: `"style": "mirror-mountain", "bars": 16, "size": "300x110"`。ring 系は `"style": "ring", "bars": 24, "ring": {"inner_r": 120, "length": 160, "arc_deg": [30, 330]}` のように指定する。`position` は全 style 共通で最終レイヤーの配置に適用される。
+例: `"style": "mirror-mountain", "bars": 16, "size": "300x110"`。ring 系は `"style": "ring", "bars": 24, "ring": {"inner_r": 120, "length": 160, "arc_deg": [30, 330]}` のように指定する。heart は `"style": "heart"` の 1 行で `size: "600x480"` / `colors: "0xff69b4"`（ピンク）が既定になり、必要なら `bars` / `size` / `colors` を明示して上書きできる。`position` は全 style 共通で最終レイヤーの配置に適用される。heart は `fill`（solid / gradient / rainbow）、`rounding`、`glow` を利用でき、形状自体が左右対称のため `mirror_center` / `symmetric_vertical` は適用しない。
 
-`mirror-mountain` / ring 系で使うバー間隔・円弧マスク PNG は、`generate_videos.sh` が同梱 Python helper で一時領域へ実行時生成する。外部の `make_bars_mask.py`、`build_spectrum_video.sh`、事前生成 PNG は不要。
+`mirror-mountain` / ring / heart で使うバー間隔・形状マスク PNG は、`generate_videos.sh` が同梱 Python helper で一時領域へ実行時生成する。外部の `make_bars_mask.py`、`build_spectrum_video.sh`、事前生成 PNG は不要。
 
 ### 動作実証メモ
 
@@ -320,4 +326,4 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 ## Next Step
 
 動画生成後:
-→ `/video-description <collection-path>` でYouTube概要欄を生成
+- `/video-description <collection-path>` でYouTube概要欄を生成
