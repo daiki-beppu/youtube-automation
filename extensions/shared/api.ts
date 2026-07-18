@@ -686,6 +686,20 @@ export function extractPlaylistName(
   return `${channel} | ${theme}`;
 }
 
+/** collection metadata から playlist 表示名を解決する共通入口。 */
+export function playlistNameForCollection(
+  collection: CollectionSummary
+): string {
+  if (collection.channel && collection.theme) {
+    return `${collection.channel} | ${collection.theme}`;
+  }
+  const theme = (collection.theme ?? collection.name).replace(
+    /-collection$/,
+    ""
+  );
+  return extractPlaylistName(collection.id, theme);
+}
+
 /** DistroKid `/distrokid/collections` が返す 1 disc のスキーマ (#934 dir mode サーバー契約)。 */
 export interface DistrokidCollectionSummary {
   collection_id: string;
