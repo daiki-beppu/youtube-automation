@@ -9,6 +9,14 @@
 archive:
   enabled: false
 
+# YouTube Studio の Test & compare に投入する最終サムネイル群。
+# false / 未設定なら従来どおり thumbnail.jpg 1 枚だけを確定する。
+# true の場合は 1〜3 件の pattern を定義し、variation を既存の
+# diff_prompt_template 展開後のプロンプト末尾へ pattern ごとに合成する。
+ab_test:
+  enabled: false
+  patterns: []
+
 image_generation:
   # provider: "gemini" | "openai" | "codex"
   # - gemini: Gemini Image (Nano Banana 系) を使用
