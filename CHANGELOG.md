@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(channel-new)`: standalone `/channel-research` を `/channel-new` の第 6 モード「分析モード」へ挙動不変で統合し、既存の入力 gate、subagent 委譲、TTP 分析、成果物パスを維持したまま skill と導線を集約した（#2027）。
 - `feat(thumbnail)`: 伸びた動画の CTR と流入構成からサムネ寄与を gate し、勝因を 1 要素ずつ Studio 比較して検証済み champion を次回 `/thumbnail` の internal TTP へ還元する `/thumbnail-iterate` を追加した。複数要素が独立して勝った場合は機械的に合成せず、一貫した再生成と最終比較を要求する（#1969）。
 - `feat(workspace)`: `yt-channel-import` を追加し、既存の単一 channel repository から channel 固有データだけを `channels/<slug>/` へ transaction copy できるようにした。meta 由来 slug の確認、必須 config と実 load の検証、auth 所在報告、symlink / 上書き拒否、生成 media を除外する workspace `.gitignore` scaffold、`.env` / `CHANNEL_DIR` 警告、共通 `yt-skills sync` 案内と external user 向け移行・rollback・archive ガイドを追加した（#1949）。
 - `feat(workflow)`: `/automation-run` を追加し、active collection 1 件を durable lease 下で選択して、Lyria / Suno の音源生成、masterup、動画・metadata 生成、公開許可付き YouTube upload、post-publish まで既存 skill へ状態駆動で委譲できるようにした。工程ごとに成果物を再評価し、失敗・手動介入・公開未許可では停止理由と再開地点を履歴へ記録する。定期実行の既定 target は `automation-run` とし、未設定チャンネルの `enabled: false` / `allow_external_publish: false` は維持する（#1894）。

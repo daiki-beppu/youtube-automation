@@ -42,8 +42,8 @@ uv run python .claude/skills/channel-new/references/fetch_branding_snapshot.py \
 - [ ] `brandingSettings.channel.country` / `snippet.country`
 - [ ] `brandingSettings.channel.defaultLanguage` / `snippet.defaultLanguage`
 - [ ] `localizations` 全エントリ（言語別 title / description）
-- [ ] 投稿時刻・投稿頻度（`/channel-research` で既に取得済みなら `docs/channel-research.md` を参照）
-- [ ] サムネテンプレ・タイトルテンプレ（既存の `/channel-research` 成果物 + 競合 uploads playlist のサンプル）
+- [ ] 投稿時刻・投稿頻度（分析モードで既に取得済みなら `docs/channel-research.md` を参照）
+- [ ] サムネテンプレ・タイトルテンプレ（既存の分析モード成果物 + 競合 uploads playlist のサンプル）
 
 **「TTP 完全コピー路線」をユーザーが選択している場合の運用ルール**:
 

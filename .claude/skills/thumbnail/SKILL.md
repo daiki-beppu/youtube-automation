@@ -384,7 +384,7 @@ uv run yt-generate-image \
 
 ### thumbnail-text-profile 適用（#1907）
 
-`/channel-research` が生成する `docs/benchmarks/thumbnail-text-profile.md`（`schema_version: 1`。見出し・キーの単一ソースは `.claude/skills/channel-research/SKILL.md` の Step 4）を読み、決定的合成の入力へ変換する。
+`/channel-new` 分析モードが生成する `docs/benchmarks/thumbnail-text-profile.md`（`schema_version: 1`。見出し・キーの単一ソースは `.claude/skills/channel-new/references/analysis-mode.md` の Step 4）を読み、決定的合成の入力へ変換する。
 
 これは前提ガードではない。ファイルが存在しない、またはスキーマの見出し・必須キーを満たさない場合は「thumbnail-text-profile なし」と表示し、`config.default.yaml` の現行デフォルト値（チャンネル上書きがあれば deep-merge 後の実効値)のまま標準フローを続行する。エラーで停止しない。
 
@@ -398,7 +398,7 @@ profile が存在する場合、3 セクションを次のとおり適用する:
 
 - 値が `unknown` のキーは適用せず、該当項目は実効デフォルト値のまま進む
 - フォント選定は**ローカルに既にあるファイルだけ**を対象にする（`fc-list :lang=ja file family style`、`/System/Library/Fonts/`・`~/Library/Fonts/`・`<channel_dir>/assets/fonts/` の列挙など）。フォントファイルの同梱・自動ダウンロードはしない。日本語対応の候補が見つからない場合は入手先（Google Fonts 等）と配置先 `<channel_dir>/assets/fonts/` を案内し、配置を待つか AI 焼き込み経路へ fallback するかをユーザーに確認する
-- profile 不在でも `overlay.font.title` が未設定の場合は、同じローカルフォント選定手順で日本語対応フォントを 1 つ選んで設定してから合成に進む（profile 由来の傾向は適用しない。これにより /channel-research 未実行チャンネルでもフォントの揺れだけは解消される）
+- profile 不在でも `overlay.font.title` が未設定の場合は、同じローカルフォント選定手順で日本語対応フォントを 1 つ選んで設定してから合成に進む（profile 由来の傾向は適用しない。これにより分析モード未実行チャンネルでもフォントの揺れだけは解消される）
 - 変換した値は `config/skills/thumbnail.yaml` の該当キーへ、設定内容と根拠（profile のどの傾向か）をユーザーへ提示し承認を得てから書き込む。「設定読み込みゲート」の「勝手に作成しない」は読み取り時の原則であり、この手順は承認を得た明示的な更新として扱う。書き込み後は deep-merge 後の実効値を再確認してから合成に進む
 
 ### 承認済みサムネイルのアーカイブ

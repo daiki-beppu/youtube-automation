@@ -301,7 +301,7 @@ def test_collection_ideate_single_persona_variations_use_fallback_hypothesis() -
         in freshness
     )
     assert (
-        "analytics mode かつ `true` では `.claude/skills/channel-research/references/desire-vocabulary.md` の fallback"
+        "analytics mode かつ `true` では `.claude/skills/channel-new/references/desire-vocabulary.md` の fallback"
         in freshness
     )
     assert (
