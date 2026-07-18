@@ -3,6 +3,11 @@ name: short-release
 description: "Use when release 型（楽曲リリース）チャンネルで JP+EN の 9:16 クリップを生成するとき。「リリースショート」「サビ抽出」で発動。collection 型は /short"
 ---
 
+## 前後工程
+
+- `前工程`: `なし`
+- `後工程`: `/short-thumbnail`
+
 ## Overview
 
 `config.youtube.content_model.type == "release"` のチャンネル向けに、本編リリース動画

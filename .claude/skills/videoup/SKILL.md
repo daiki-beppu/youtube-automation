@@ -3,12 +3,17 @@ name: videoup
 description: "Use when 音声ファイルが揃い動画生成が必要なとき。「動画変換」「MP3→MP4」「generate_videos」「videoup」で発動。マスター音源・マスター動画生成を案内。YouTube への投稿は /video-upload"
 ---
 
+## 前後工程
+
+- `前工程`: `/masterup`, `/lyria`, `/loop-video`
+- `後工程`: `/video-upload`, `/video-description`
+
 ## Overview
 
 `.claude/skills/` 配下の共有スクリプト（`yt-skills sync` で配布）を使ってマスター音源と動画を生成します。
 スクリプトは毎回生成せず、既存の汎用スクリプトを実行します。
 
-前工程はマスター音源の用意: Suno 系チャンネルは `/masterup`、Lyria 系チャンネルは `/lyria`（`/masterup` 不要）でマスター音源を生成してから本スキルを実行する。
+Suno 系チャンネルは `/masterup`、Lyria 系チャンネルは `/lyria`（`/masterup` 不要）でマスター音源を生成してから本スキルを実行する。
 
 ## 完了条件
 
@@ -320,4 +325,4 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 ## Next Step
 
 動画生成後:
-→ `/video-description <collection-path>` でYouTube概要欄を生成
+- `/video-description <collection-path>` でYouTube概要欄を生成

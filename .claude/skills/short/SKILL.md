@@ -3,6 +3,11 @@ name: short
 description: "Use when collection 型（BGM テイスター）チャンネルでショートを生成・投稿するとき。「ショート作って」「shorts」「BGM 切り抜き」で発動。release 型は /short-release"
 ---
 
+## 前後工程
+
+- `前工程`: `/setup`
+- `後工程`: `/short-thumbnail`, `/video-upload`
+
 ## Overview
 
 `config.youtube.content_model.type == "collection"` のチャンネル向けに、CC（Complete Collection）動画の公開後にショート動画を 3 本前後生成し、`localizations.json` の全 supported language にローカライズして投稿する。

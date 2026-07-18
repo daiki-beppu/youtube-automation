@@ -3,6 +3,11 @@ name: loop-video
 description: "Use when テキストなし main.png/jpg から Veo でループ動画背景を生成するとき。「ループ動画」「背景動画」「loop.mp4」で発動"
 ---
 
+## 前後工程
+
+- `前工程`: `/thumbnail`
+- `後工程`: `/videoup`
+
 ## Overview
 
 Veo 3.1 API を使い、コレクションのテキストなし `main.png/jpg` から 8秒のシームレスループ動画を生成します。
@@ -351,7 +356,7 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 ## Next Step
 
 ループ動画生成後:
-→ `/videoup <collection-path>` でマスター動画を生成
+- `/videoup <collection-path>` でマスター動画を生成
 
 ## 参考リンク
 

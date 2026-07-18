@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `docs(skills)`: 全 48 SKILL.md の frontmatter 直後に機械抽出可能な `前工程` / `後工程` ブロックを追加し、散文・矢印形式の依存一覧を統一した。`skill-authoring-guidelines.md` に書式、`なし` / 共通基盤の表現、`rg` 抽出方法、実在例を規定した（#1821）。
+
 - `fix(takt)`: repo-local `.takt/config.yaml` から provider / model routing と concurrency の重複指定を除去し、グローバル設定を正しく継承するようにした。`persona_providers` が deep merge されず project 側の辞書で丸ごと置換される takt 0.51 の解決契約をテストで固定し、グローバルの Luna / Sol / Terra 割当が失われる回帰を防止する。repo-local `lite` は worktree 環境契約だけを差分として残し、グローバル版の `max_steps: 18` / loop threshold 5 へ同期した。project facet には takt 0.51 builtin の Knowledge / Policy 確認と最新の CI 委譲ルールを取り込んだ。
 
 - `feat(analytics)`: `benchmark.channels` の pre-filter 投稿走査を `upload_scan` として保存し、60 日以上の投稿停滞と直近 90 日平均再生数の前期比 50% 以下を判定する `yt-ttp-health` を追加した。`/analytics-analyze` の analysis JSON を schema v2 に更新し、健全・アラート・データ不足・入力欠損を区別する `ttp_health` を必須化した（#2050）。

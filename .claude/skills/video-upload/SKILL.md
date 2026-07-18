@@ -3,6 +3,11 @@ name: video-upload
 description: "Use when コレクションの動画または release 型（単曲リリース）の楽曲リリース動画が完成し、YouTubeへのアップロード自動化が必要なとき。「楽曲リリースをアップロード」「リリース動画を公開」で発動。collection 型は Complete Collection のアップロードと live 移行、release 型は言語別アップロードを実行。動画ファイルの生成（MP3→MP4）は /videoup、リリースショート生成は /short-release"
 ---
 
+## 前後工程
+
+- `前工程`: `/videoup`, `/video-description`, `/playlist`, `/thumbnail`
+- `後工程`: `/community-post`, `/metadata-audit`, `/pinned-comment`, `/live-clean`
+
 ## Overview
 
 Complete Collection を YouTube にアップロードし、`planning/` → `live/` へ自動移行します。`/video-description` スキルで事前生成した概要欄・タイトル・タグを使用します。

@@ -3,6 +3,11 @@ name: analytics-collect
 description: "Use when YouTube Analytics データの収集・最新化が必要なとき。「データ更新」「統計を取得」「分析の準備」で発動。収集済みデータの分析のみは /analytics-analyze を使う"
 ---
 
+## 前後工程
+
+- `前工程`: `/setup`
+- `後工程`: `/analytics-analyze`
+
 ## Overview
 
 `analytics_system.py` を実行し、チャンネルの YouTube Analytics データを収集します。
@@ -163,4 +168,4 @@ subagent へは次を具体値で渡す:
 views / CTR / retention など既存メトリクスの収集は継続する。
 
 データ収集完了後:
-→ `/analytics-analyze` で収集データの詳細分析を実行
+- `/analytics-analyze` で収集データの詳細分析を実行
