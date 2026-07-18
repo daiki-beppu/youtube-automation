@@ -3,6 +3,11 @@ name: wf-next
 description: "Use when 既存コレクション（collections/planning/）を一段進めるとき。「次どうする？」「続き進めて」で発動。進捗閲覧のみは /wf-status、新規は /wf-new"
 ---
 
+## 前後工程
+
+- `前工程`: `/wf-new`
+- `後工程`: `/analytics-analyze`, `/flop-analysis`
+
 ## Overview
 
 既存コレクションを次工程へ進めるオーケストレーター。完了済みの素材を自動検出し、未完了のステップから再開する。
@@ -192,7 +197,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 ```
 全工程完了済みです。
-→ `/analytics-analyze` で初週パフォーマンスを確認してください（T+7日後推奨）
+- `/analytics-analyze` で初週パフォーマンスを確認してください（T+7日後推奨）
 ```
 
 ### 3. state ファイルの更新ルール
@@ -201,7 +206,7 @@ state を更新するのはメインエージェントだけとし、検証 PASS
 
 ## 障害時ガイダンス
 
-次工程は子スキルへ委譲する orchestration。失敗時は委譲先の障害が表面化する。
+各ステップは子スキルへ委譲する orchestration。失敗時は委譲先の障害が表面化する。
 
 | 状況 | 兆候 | 対処 |
 |---|---|---|

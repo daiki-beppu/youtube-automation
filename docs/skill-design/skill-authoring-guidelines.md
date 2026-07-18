@@ -28,6 +28,25 @@
 
 ---
 
+## 前後工程表記の統一書式
+
+- **狙い**: スキル間の依存関係を散文から分離し、`rg` で全スキルを機械抽出・比較できるようにする。
+- **配置**: frontmatter の直後に `## 前後工程` を置く。前工程・後工程がない独立スキルも省略しない。
+- **標準型**: 次の 2 行だけを使い、実在するスキル名を `/skill-name` 形式の inline code で列挙する。依存がなければ `` `なし` ``、`setup` / `channel-new` のような全体共通基盤だけは `` `*`（共通基盤としてほぼ全スキル） `` と書く。
+
+```markdown
+## 前後工程
+
+- `前工程`: `/analytics-collect`
+- `後工程`: `/collection-ideate`, `/analytics-report`, `/flop-analysis`
+```
+
+- **禁止する旧表記**: 依存関係の正データを `前工程は /xxx`、`**前工程:** /xxx`、`次工程は /xxx`、行頭の `→ /xxx`、`Cross References` の `→ 前工程:` / `→ 後工程:` だけで表現しない。実行手順内で前提未達時に前工程を案内する記述や、完了後の具体的な次アクションは残してよいが、依存関係の一覧は必ず統一ブロックを正とする。
+- **抽出**: `rg -n '^- `前工程`:|^- `後工程`:' .claude/skills/*/SKILL.md` で、各 SKILL.md から必ず 2 行ずつ取得できることを確認する。
+- **良い実例**:
+  - [.claude/skills/analytics-analyze/SKILL.md](.claude/skills/analytics-analyze/SKILL.md) — 単一の前工程と複数の後工程
+  - [.claude/skills/streaming/SKILL.md](.claude/skills/streaming/SKILL.md) — 前後工程を持たない独立スキル
+
 ## ① 発動キーワードの兄弟スキル間相互排他・否定トリガー
 
 - **狙い**: 発動語が兄弟スキルと被ると、実行者は誤ったスキルを起動する。`description` に「このスキルを使わない条件」と「代わりに使う兄弟スキル」を否定トリガーとして書き、相互排他を成立させる。
