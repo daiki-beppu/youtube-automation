@@ -1,6 +1,6 @@
 """`release-extensions.yml` の配布契約を静的に検証する（Issue #1022）。
 
-統一タグ `ext-v*` で suno-helper / distrokid-helper の両 zip を単一 Release に
+統一タグ `ext-v*` で3拡張の zip を単一 Release に
 添付し、Release 本文にインストール/更新手順テンプレが埋め込まれていることを担保する。
 """
 
@@ -18,7 +18,7 @@ _RELEASE_TAG_GLOB = "ext-v*"
 _GH_RELEASE_ACTION = "softprops/action-gh-release@v2"
 _NIX_INSTALL_ACTION = "DeterminateSystems/nix-installer-action@main"
 _VERIFY_SCRIPT = ".claude/skills/automation-release/references/verify-extensions.sh"
-_EXTENSIONS = ("suno-helper", "distrokid-helper")
+_EXTENSIONS = ("suno-helper", "distrokid-helper", "community-helper")
 _ZIP_GLOBS = tuple(f"extensions/{name}/.output/*.zip" for name in _EXTENSIONS)
 # order.md が要求する手順アンカー。初回インストール（URL + Load unpacked）と
 # 更新（リロード）の両セクションが本文に埋め込まれていることを最小限で担保する。
@@ -86,7 +86,7 @@ def test_grants_contents_write_permission() -> None:
 
 @pytest.mark.parametrize("name", _EXTENSIONS)
 def test_builds_and_zips_each_extension(name: str) -> None:
-    """両拡張がそれぞれの作業ディレクトリで install → zip される。"""
+    """3拡張がそれぞれの作業ディレクトリで install → zip される。"""
     steps = _release_steps_including_parallel()
     matched = [
         step
@@ -112,8 +112,8 @@ def test_installs_nix_before_parallel_extension_builds() -> None:
     assert "actions/setup-node@v4" not in uses
 
 
-def test_attaches_both_zips_to_one_gh_release() -> None:
-    """単一の gh-release ステップで両拡張の zip を添付する。"""
+def test_attaches_all_zips_to_one_gh_release() -> None:
+    """単一の gh-release ステップで3拡張の zip を添付する。"""
     steps = _release_top_level_steps()
     release_steps = [step for step in steps if str(step.get("uses", "")).startswith(_GH_RELEASE_ACTION)]
     assert len(release_steps) == 1, "gh-release ステップは 1 個に集約する"
@@ -131,3 +131,6 @@ def test_release_body_embeds_install_and_update_template() -> None:
     assert body, "Release 本文テンプレ (body) が未設定"
     for phrase in _BODY_REQUIRED_PHRASES:
         assert phrase in body, f"Release 本文テンプレに必須フレーズが欠落: {phrase}"
+
+    for name in _EXTENSIONS:
+        assert f"`{name}-*.zip`" in body

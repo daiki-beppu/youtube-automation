@@ -8,7 +8,7 @@ import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _VERIFY_SCRIPT = _REPO_ROOT / ".claude/skills/automation-release/references/verify-extensions.sh"
-_EXTENSIONS = ("suno-helper", "distrokid-helper")
+_EXTENSIONS = ("suno-helper", "distrokid-helper", "community-helper")
 
 
 @pytest.fixture
@@ -90,7 +90,7 @@ def _run_verify(
     )
 
 
-def test_default_verification_runs_both_extensions_in_order(
+def test_default_verification_runs_all_extensions_in_order(
     verify_environment: tuple[Path, dict[str, str], Path],
 ) -> None:
     result = _run_verify(verify_environment)
@@ -122,6 +122,7 @@ def test_single_extension_verification_does_not_run_sibling(
     assert result.returncode == 0, result.stderr
     assert "extensions/suno-helper" in log
     assert "extensions/distrokid-helper" not in log
+    assert "extensions/community-helper" not in log
 
 
 def test_verification_rejects_non_root_working_directory(

@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(extensions)`: `community-helper` を統一 `ext-v*` Release の build / zip / asset / インストール案内へ追加し、Extensions CI で Oxlint + Oxfmt、TypeScript、Vitest、WXT build を必須化した。release 前の単一検証スクリプトと automation-release の asset 完了条件も3拡張へ同期した（#1715）。
 - `feat(extensions)`: `community-helper` の content runner を実装し、3 投稿の本文・画像・予約日時・確定を逐次処理する。localhost fetch と画像の base64 wire 転送を background の extension context へ移し、途中失敗時の composer cleanup と重複再実行ロックを追加した。content injection は YouTube チャンネル投稿ページに限定し、Studio page-origin CORS 例外を撤去した（#1714）。
 - `feat(extensions)`: 実機 DOM map に基づく `shared/community-dom.ts` を追加し、community-helper の本文注入、画像添付、予約日時設定、投稿完了待機を locale-independent な selector と open Shadow DOM fallback で fail-loud に実装した（#1713）。
 - `feat(extensions)`: `community-helper` の WXT + React + TypeScript スキャフォールドを追加し、YouTube Studio 限定の MV3 最小権限、Studio origin に限定した `/version` CORS 互換チェック、Popup の 3 投稿進捗、型付き background/content relay を実装した（#1712）。
