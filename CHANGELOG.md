@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `fix(streaming)`: sshd の提示 host key を Ed25519 のみに固定し、cloud-init 保守変更・host key 変更・`install_root` 変更時の Terraform plan action、OpenSSH の実ネゴシエーション、`install_root` validation 境界を実行時テストで保証した。配置ディレクトリ作成は deploy に一元化し、HCL の繰り返しブロック helper も位置情報付き共通実装へ統合した（#2033）。
+- 動画構成を明示する `video_type` 契約を追加し、loop/static の背景選択と将来の生成 hook 拡張ポイントを整備 (#1723)
 - `feat(videoup)`: `workflow-state.json` v2 の `assets.master_audio` / `assets.master_video` を基準に未動画化コレクションを検出し、既存 `generate_videos.sh` を collection 単位で並列実行する `yt-generate-videos-batch` CLI を追加した。成功時の `assets.master_video` 更新はファイルロック下で直列化し、`--include-live` と CLI / env / skill-config による並列度指定を提供する（#1658）。
 - `docs(loop-video)`: `loop.mp4` の生成・リトライ・継ぎ目補正後に動画プレイヤーを開き、静止画 fallback・動き・ループ継ぎ目を目視確認する必須承認ゲートを追加した。不受理時は `--smooth` または課金再承認付き Veo 再生成へ戻し、再プレビューで承認されるまで `/videoup` へ進まない（#1717）。
 
@@ -32,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(doctor)`: `yt-doctor` の upload preflight が認証済み YouTube アカウントの実チャンネルを `channels.list(mine=true)` で確認し、チャンネル未作成・ローカル ID 不一致・認証 / quota / network 起因の API 失敗を区別して案内するようにした。成功時と不一致時は `--json` の `data` に remote channel ID を含め、ローカル設定だけでは検出できなかった token / meta.json の取り違えを upload 前に停止する（#2053）。
 - `feat(auth)`: OAuth token の scope 分離を導入し、read-only skill が write scope の token を共用しない設計にした。`YouTubeOAuthHandler` に `READONLY_SCOPES`（`youtube.readonly` + `yt-analytics(.monetary)?.readonly`、write scope なし）と用途別 token `auth/token.readonly.json` の発行・解決（`create_readonly` / `readonly_token_path`。探索順は #1721 と同じ channel 側 → main worktree 側）を追加し、新 CLI `yt-oauth`（`--readonly` で readonly token 発行）を登録した。`ServiceRegistry` の read 系（`analytics` / `reporting` / 新設の `youtube_readonly` / `credentials_readonly` / `get_readonly_handler`）は readonly token を優先し、未発行時は warning ログで発行手順を案内した上で `token.json` へフォールバックする（サイレント失敗しない。既存運用は無変更で動作）。read-only 系呼び出し元（analytics 収集 / benchmark / channel-status / metadata-audit / playlist-status / discover-competitors / stream-bandwidth）を readonly 経路へ移行し、write 系（upload / playlist 管理 / bulk update / コメント投稿）は従来どおり `token.json` を使う。skill × 実効 scope の対応表と運用手順を `docs/oauth-scopes.md` に新設した（#1699）。
 ### Added
+
+- `feat(videoup)`: `generate_videos.sh --preview [15-30]` で effect / audio visualizer / subscribe popup を反映した短尺 MP4 を `01-master/<Collection>-Preview.mp4` として生成できるようにした。プレビューは全尺 Master と workflow state を更新せず、全尺の経路種別・時間見通しを表示する。`/videoup` は visual 設定が有効な場合、プレビューの明示受理前に全尺エンコードへ進まない（#1749）
 
 - `yt-retention-timeline` を追加し、収集済み retention drop を `/video-analyze` の scene / BGM 区間へ自動照合して JSON / Markdown レポートを生成できるようにした (#1814)
 
@@ -234,7 +237,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(analytics)`: 動画別の `subscribersGained ÷ views × 100` による登録転換率ランキングと、登録済み／未登録視聴者別の `subscribedStatus` 集計を analytics スナップショットへ追加した。`/analytics-analyze` は両データを組み合わせて「登録を生む動画の型」を分析し、チャンネル全体の subscribedStatus を動画個別の因果として断定しない（#1813）。
 - `feat(analytics)`: standard / full depth の Analytics 収集に、視聴数上位 200 件の playlist dimension における views・平均視聴時間・上位 200 件内の視聴シェアを追加し、`/analytics-analyze` が Complete Collection を含むプレイリスト内視聴をレポートできるようにした（#1815）。
-
 ## [5.5.17] - 2026-07-10
 
 ### Added

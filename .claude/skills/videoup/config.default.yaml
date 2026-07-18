@@ -3,6 +3,10 @@
 # `generate_videos.sh` の挙動を制御する設定。
 # チャンネル側では `config/skills/videoup.yaml` に上書き値を置く。
 
+# 背景として優先する動画タイプ。loop は loop.mp4 を使い、不在時は後方互換の
+# static fallback に切り替わる。static は loop.mp4 が存在しても main.png/jpg を使う。
+video_type: loop
+
 audio:
   # 動画長を音声尺と分離したいときの「動画側ターゲット尺 (分)」。
   #
