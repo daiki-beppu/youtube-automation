@@ -30,6 +30,7 @@ import {
   RUN_MODES,
   SERVER_HOST_PERMISSIONS,
   STORAGE_KEY,
+  UNATTENDED_RUN_STATE_KEY,
   type ObservedClip,
   type RunModeId,
 } from "../../shared/constants";
@@ -87,8 +88,14 @@ describe("shared/constants: サーバー互換の契約値", () => {
   it("Given storage key 群 When OVERLAY_STATE_KEY を他 key と比較 Then 既存 key と衝突しない", () => {
     // 同一 chrome.storage.local 名前空間で resume / server URL state と key が被らないこと。
     expect(
-      new Set([STORAGE_KEY, "sunoResumeState", OVERLAY_STATE_KEY]).size
-    ).toBe(3);
+      new Set([
+        STORAGE_KEY,
+        "sunoResumeState",
+        OVERLAY_STATE_KEY,
+        UNATTENDED_RUN_STATE_KEY,
+      ]).size
+    ).toBe(4);
+    expect(UNATTENDED_RUN_STATE_KEY).toBe("sunoUnattendedRunState");
   });
 });
 

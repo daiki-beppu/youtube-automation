@@ -7,12 +7,16 @@ import {
   INFLIGHT_STALL_TIMEOUT_MS,
   PHASE,
 } from "../../shared/constants";
-import { scrollAndMultiSelectByIds } from "../../shared/playlist-dom";
+import {
+  findPlaylistUrlsByName,
+  fillPlaylistNameAndCreate,
+  scrollAndMultiSelectByIds,
+} from "../../shared/playlist-dom";
 import type {
   EntryRunResult,
   RunEntryWithRetryOptions,
 } from "../lib/entry-retry";
-import { writeResumeState } from "../lib/resume-state";
+import { type ResumeState, writeResumeState } from "../lib/resume-state";
 import { makePromptEntries, markBbox } from "./_helpers";
 
 const harness = vi.hoisted(() => {
@@ -54,6 +58,13 @@ const harness = vi.hoisted(() => {
     runEntryWithRetry,
     legacyReadSpeedPresetId,
     legacyResolveSpeedPreset,
+    serverUrlSet: vi.fn(() => Promise.resolve()),
+    downloadFormatSet: vi.fn(() => Promise.resolve()),
+    readResumeState: vi.fn<() => Promise<ResumeState | null>>(() =>
+      Promise.resolve(null)
+    ),
+    writeUnattendedRunState: vi.fn(() => Promise.resolve()),
+    readUnattendedRunState: vi.fn(() => Promise.resolve(null)),
     requestSliderSet: vi.fn(),
     submittedClipIds: [] as string[],
     acceptedClipIds: [] as string[],
@@ -62,6 +73,7 @@ const harness = vi.hoisted(() => {
     durationErrorsById: {} as Record<string, Error | undefined>,
     pendingClipIds: [] as string[],
     requestFeedPollError: undefined as Error | undefined,
+    unattendedRequest: null as Record<string, unknown> | null,
     abortOnRequestFeedPoll: false,
     requestFeedPoll: vi.fn(async (ids: string[]) => {
       if (harness.abortOnRequestFeedPoll) {
@@ -191,8 +203,12 @@ vi.mock("../lib/clip-tracker", () => ({
 vi.mock("../lib/storage", () => ({
   serverUrlItem: {
     getValue: vi.fn(() => Promise.resolve("http://localhost:8787")),
+    setValue: harness.serverUrlSet,
   },
-  downloadFormatItem: { getValue: vi.fn(() => Promise.resolve("mp3")) },
+  downloadFormatItem: {
+    getValue: vi.fn(() => Promise.resolve("mp3")),
+    setValue: harness.downloadFormatSet,
+  },
   readDownloadFormat: vi.fn(() => Promise.resolve("mp3")),
 }));
 
@@ -203,9 +219,15 @@ vi.mock("../lib/resume-state", async () => {
   return {
     ...actual,
     clearResumeStateForCollection: vi.fn(() => Promise.resolve()),
+    readResumeState: harness.readResumeState,
     writeResumeState: vi.fn(() => Promise.resolve()),
   };
 });
+
+vi.mock("../lib/unattended-state", () => ({
+  readUnattendedRunState: harness.readUnattendedRunState,
+  writeUnattendedRunState: harness.writeUnattendedRunState,
+}));
 
 vi.mock("../lib/download", () => ({
   triggerDownloadAll: vi.fn(() => Promise.resolve()),
@@ -245,6 +267,7 @@ vi.mock("../../shared/api", async () => ({
 
 vi.mock("../../shared/playlist-dom", () => ({
   clickPlaylistRowByName: vi.fn(() => Promise.resolve()),
+  findPlaylistUrlsByName: vi.fn(() => []),
   fillPlaylistNameAndCreate: vi.fn(() => Promise.resolve()),
   openAddToPlaylistDialogViaCmdP: vi.fn(() =>
     Promise.resolve(document.createElement("div"))
@@ -254,6 +277,9 @@ vi.mock("../../shared/playlist-dom", () => ({
     Promise.resolve(clipIds.length)
   ),
   waitForPlaylistDialogClose: vi.fn(() => Promise.resolve()),
+  waitForNewPlaylistUrlByName: vi.fn(() =>
+    Promise.resolve("https://suno.com/playlist/test")
+  ),
 }));
 
 async function loadContentScript(): Promise<void> {
@@ -511,7 +537,15 @@ beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
   harness.sendMessage.mockReset();
-  harness.sendMessage.mockImplementation(() => undefined);
+  harness.sendMessage.mockImplementation((type: string) => {
+    if (type === "consumeUnattendedRequest") {
+      return Promise.resolve(harness.unattendedRequest);
+    }
+    if (type === "acquireUnattendedLease") {
+      return Promise.resolve({ acquired: true, token: "lease-token" });
+    }
+    return undefined;
+  });
   vi.stubGlobal("DataTransfer", DataTransferStub);
   vi.stubGlobal("ClipboardEvent", ClipboardEventStub);
   (
@@ -554,11 +588,230 @@ beforeEach(() => {
     harness.actualWaitForQueueSlot!(maxGeneratingClips, options)
   );
   harness.handlers.clear();
+  harness.readResumeState.mockReset();
+  harness.readResumeState.mockResolvedValue(null);
+  harness.writeUnattendedRunState.mockReset();
+  harness.writeUnattendedRunState.mockResolvedValue(undefined);
   document.body.innerHTML = "";
+  history.replaceState(null, "", "/create");
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+function setUnattendedLaunchHash(
+  overrides: Record<string, unknown> = {}
+): void {
+  const request = {
+    version: 1,
+    requestId: "scheduled-20260718T120000Z",
+    baseUrl: "http://localhost:8787",
+    collectionId: "20260718-rjn-night-drive-collection",
+    downloadFormat: "wav",
+    limits: {
+      maxEntries: 2,
+      maxConcurrentGenerations: 2,
+      maxRetries: 1,
+    },
+    ...overrides,
+  };
+  harness.unattendedRequest = request;
+  const encoded = Buffer.from(
+    JSON.stringify({
+      version: 1,
+      baseUrl: request.baseUrl,
+      nonce: "abcdefghijklmnopqrstuvwxyzABCDEFGH_1234567890",
+    }),
+    "utf8"
+  ).toString("base64url");
+  history.replaceState(null, "", `/create#suno-helper-unattended=${encoded}`);
+}
+
+describe("content unattended launch", () => {
+  it("loads the scheduled collection, applies limits, and relays a resumable run", async () => {
+    setUnattendedLaunchHash();
+    const entries = makePromptEntries(3);
+    harness.sendMessage.mockImplementation((type: string) => {
+      if (type === "consumeUnattendedRequest") {
+        return Promise.resolve(harness.unattendedRequest);
+      }
+      if (type === "acquireUnattendedLease") {
+        return Promise.resolve({ acquired: true, token: "lease-token" });
+      }
+      if (type === "extensionVersionHandshake") {
+        return Promise.resolve({ version: "0.2.5", matches: true });
+      }
+      if (type === "fetchCollections") {
+        return Promise.resolve([
+          {
+            id: "20260718-rjn-night-drive-collection",
+            name: "night-drive",
+            theme: "night-drive",
+            status: "ready",
+            pattern_count: 3,
+            downloaded_count: 0,
+          },
+        ]);
+      }
+      if (type === "fetchCollectionPromptResponse") {
+        return Promise.resolve({
+          entries,
+          duration_filter: { min_sec: 60, max_sec: 300 },
+        });
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    await loadContentScript();
+
+    await vi.waitFor(() =>
+      expect(harness.sendMessage).toHaveBeenCalledWith(
+        "run",
+        expect.objectContaining({
+          collectionId: "20260718-rjn-night-drive-collection",
+          indices: [0, 1],
+          unattended: expect.objectContaining({ deferredIndices: [2] }),
+        })
+      )
+    );
+    expect(harness.serverUrlSet).toHaveBeenCalledWith("http://localhost:8787");
+    expect(harness.downloadFormatSet).toHaveBeenCalledWith("wav");
+    expect(location.hash).toBe("");
+  });
+
+  it("stops before generation when an existing playlist has no recovery clip ids", async () => {
+    setUnattendedLaunchHash();
+    harness.sendMessage.mockImplementation((type: string) => {
+      if (type === "consumeUnattendedRequest") {
+        return Promise.resolve(harness.unattendedRequest);
+      }
+      if (type === "acquireUnattendedLease") {
+        return Promise.resolve({ acquired: true, token: "lease-token" });
+      }
+      if (type === "extensionVersionHandshake") {
+        return Promise.resolve({ version: "0.2.5", matches: true });
+      }
+      if (type === "fetchCollections") {
+        return Promise.resolve([
+          {
+            id: "20260718-rjn-night-drive-collection",
+            name: "night-drive",
+            theme: "night-drive",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+            suno_playlist_url: "https://suno.com/playlist/existing",
+          },
+        ]);
+      }
+      if (type === "fetchCollectionPromptResponse") {
+        return Promise.resolve({ entries: makePromptEntries(1) });
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    await loadContentScript();
+
+    await vi.waitFor(() =>
+      expect(harness.writeUnattendedRunState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "manual-intervention",
+          stopReason: "existing-playlist",
+          checkpoint: "download",
+        })
+      )
+    );
+    expect(harness.sendMessage).not.toHaveBeenCalledWith(
+      "run",
+      expect.anything()
+    );
+  });
+
+  it("stops before playlist creation when a generation-complete legacy checkpoint has no durable baseline", async () => {
+    setUnattendedLaunchHash();
+    const entries = makePromptEntries(1);
+    harness.readResumeState.mockResolvedValue({
+      collectionId: "20260718-rjn-night-drive-collection",
+      failedIndex: entries.length,
+      total: entries.length,
+      timestamp: Date.now(),
+      submittedClipIds: ["clip-1", "clip-2"],
+      submittedClipIdsAreDurationFiltered: true,
+      playlistExpectedClipCount: 2,
+      runMode: "queue",
+      regenerateDurationOutliers: true,
+    });
+    vi.mocked(findPlaylistUrlsByName).mockReturnValue([
+      "https://suno.com/playlist/unrelated-existing",
+    ]);
+    harness.sendMessage.mockImplementation((type: string) => {
+      if (type === "consumeUnattendedRequest") {
+        return Promise.resolve(harness.unattendedRequest);
+      }
+      if (type === "acquireUnattendedLease") {
+        return Promise.resolve({ acquired: true, token: "lease-token" });
+      }
+      if (type === "extensionVersionHandshake") {
+        return Promise.resolve({ version: "0.2.5", matches: true });
+      }
+      if (type === "fetchCollections") {
+        return Promise.resolve([
+          {
+            id: "20260718-rjn-night-drive-collection",
+            name: "night-drive",
+            theme: "night-drive",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]);
+      }
+      if (type === "fetchCollectionPromptResponse") {
+        return Promise.resolve({ entries });
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    await loadContentScript();
+
+    await vi.waitFor(() =>
+      expect(harness.writeUnattendedRunState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "manual-intervention",
+          stopReason: "existing-playlist",
+        })
+      )
+    );
+    expect(findPlaylistUrlsByName).not.toHaveBeenCalled();
+    expect(harness.sendMessage).not.toHaveBeenCalledWith(
+      "retryPlaylist",
+      expect.anything()
+    );
+  });
+
+  it("records login intervention without fetching or generating", async () => {
+    setUnattendedLaunchHash();
+    makeGenericButton("Sign in");
+    await loadContentScript();
+
+    await vi.waitFor(() =>
+      expect(harness.writeUnattendedRunState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "manual-intervention",
+          stopReason: "login-required",
+        })
+      )
+    );
+    expect(harness.sendMessage).not.toHaveBeenCalledWith(
+      "fetchCollections",
+      expect.anything()
+    );
+    expect(harness.sendMessage).not.toHaveBeenCalledWith(
+      "run",
+      expect.anything()
+    );
+  });
 });
 
 describe('content onMessage("run"): Run 開始前の Suno view preflight', () => {
@@ -764,7 +1017,10 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
 
     const result = runHandler({ data: makeRunPayload(entries) });
 
-    expect(result).toEqual({ ok: true });
+    await expect(result).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringContaining("表示ビューを検出できません"),
+    });
     expect(harness.sendMessage).toHaveBeenCalledOnce();
     expect(harness.sendMessage).toHaveBeenCalledWith(
       "progress",
@@ -786,7 +1042,10 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
 
     const result = runHandler({ data: makeRunPayload(entries) });
 
-    expect(result).toEqual({ ok: true });
+    await expect(result).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringContaining("表示ビューを検出できません"),
+    });
     expect(harness.sendMessage).toHaveBeenCalledWith(
       "progress",
       expect.objectContaining({
@@ -1051,6 +1310,12 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     makeViewButton("Grid");
     makeTextarea(null);
     harness.sendMessage.mockImplementation((type: string) => {
+      if (type === "consumeUnattendedRequest") {
+        return Promise.resolve(harness.unattendedRequest);
+      }
+      if (type === "acquireUnattendedLease") {
+        return Promise.resolve({ acquired: true, token: "lease-token" });
+      }
       if (type === "fetchCollectionPromptResponse") {
         return Promise.reject(new Error("fetch failed"));
       }
@@ -1630,6 +1895,64 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
         expect.objectContaining({ phase: PHASE.FINISHED }),
       ])
     );
+  });
+
+  it("Given unattended の playlist 前 checkpoint 書込み失敗 When 実行する Then playlist を作成せず停止する", async () => {
+    makeViewButton("Grid");
+    makeTextarea(null);
+    makeTextarea("lyrics-textarea");
+    makeGenerateButtonWithClickObserver(() =>
+      appendSubmittedClipIdsForRequest("durable-checkpoint-clip")
+    );
+    addCompletedRemixCard();
+    await loadContentScript();
+    const entries = makePromptEntries(1);
+    const payload = makeRunPayload(entries);
+    harness.submittedClipIds = [];
+    harness.sendMessage.mockImplementation((type: string) =>
+      type === "releaseUnattendedLease"
+        ? Promise.resolve({ released: true })
+        : undefined
+    );
+    vi.mocked(writeResumeState).mockRejectedValueOnce(
+      new Error("storage unavailable")
+    );
+
+    expect(
+      getRunHandler()({
+        data: {
+          ...payload,
+          unattended: {
+            request: {
+              version: 1,
+              requestId: "scheduled-durable-checkpoint",
+              baseUrl: "http://localhost:8787",
+              collectionId: "20260601-clm-preflight-collection",
+              downloadFormat: "wav",
+              limits: {
+                maxEntries: 1,
+                maxConcurrentGenerations: 1,
+                maxRetries: 1,
+              },
+            },
+            deferredIndices: [],
+            leaseToken: "lease-token",
+          },
+        },
+      })
+    ).toEqual({ ok: true });
+
+    await vi.waitFor(() =>
+      expect(progressPayloads()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            phase: PHASE.ERROR,
+            message: expect.stringContaining("storage unavailable"),
+          }),
+        ])
+      )
+    );
+    expect(fillPlaylistNameAndCreate).not.toHaveBeenCalled();
   });
 
   it("Given serial mode と再生成 ON で初回2回が全NG When 3回目がOK Then retry 2回をprogress表示して採用する", async () => {

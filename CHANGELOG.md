@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(suno-helper)`: 定期実行用の loopback 限定 launch URL 契約と CLI を追加し、collection / entry / DL 形式 / entry・concurrency・retry 上限を指定可能にした。既存 resume state から entry / playlist / download を重複なしで再開し、上限超過は checkpoint、ログイン・CAPTCHA・課金確認・UI 非互換は手動介入理由として保存する。手動 overlay flow は従来挙動を維持する（#1893）。
 - `feat(extensions)`: `community-helper` を統一 `ext-v*` Release の build / zip / asset / インストール案内へ追加し、Extensions CI で Oxlint + Oxfmt、TypeScript、Vitest、WXT build を必須化した。release 前の単一検証スクリプトと automation-release の asset 完了条件も3拡張へ同期した（#1715）。
 - `feat(extensions)`: `community-helper` の content runner を実装し、3 投稿の本文・画像・予約日時・確定を逐次処理する。localhost fetch と画像の base64 wire 転送を background の extension context へ移し、途中失敗時の composer cleanup と重複再実行ロックを追加した。content injection は YouTube チャンネル投稿ページに限定し、Studio page-origin CORS 例外を撤去した（#1714）。
 - `feat(extensions)`: 実機 DOM map に基づく `shared/community-dom.ts` を追加し、community-helper の本文注入、画像添付、予約日時設定、投稿完了待機を locale-independent な selector と open Shadow DOM fallback で fail-loud に実装した（#1713）。

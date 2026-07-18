@@ -1,9 +1,12 @@
 // Suno の Advanced タブへの Style / Lyrics 注入と Generate 連続実行 (content script)。
 // DOM 操作は shared/dom の純関数へ委譲し、本ファイルは連続実行のフロー制御に専念する。
 import {
+  type CollectionSummary,
   DEFAULT_DURATION_FILTER,
   type DurationFilter,
+  extractPlaylistName,
   type PromptEntry,
+  type PromptResponse,
 } from "../../shared/api";
 import {
   BALANCED_RUN_PACING,
@@ -23,6 +26,7 @@ import {
 import {
   abortableSleep,
   CAPTCHA_WAIT_TIMEOUT_MS,
+  detectRecaptcha,
   diagnoseLyricsInputState,
   FatalRunError,
   GENERATE_TIMEOUT_MS,
@@ -45,11 +49,13 @@ import {
 } from "../../shared/dom";
 import {
   clickPlaylistRowByName,
+  findPlaylistUrlsByName,
   fillPlaylistNameAndCreate,
   openAddToPlaylistDialogViaCmdP,
   readSelectedClipIds,
   scrollAndMultiSelectByIds,
   waitForPlaylistDialogClose,
+  waitForNewPlaylistUrlByName,
 } from "../../shared/playlist-dom";
 import { createAckWaiter, markAck } from "../lib/ack-probe";
 import {
@@ -93,13 +99,32 @@ import {
 } from "../lib/queue-runner";
 import {
   clearResumeStateForCollection,
+  readResumeState,
   resolvePlaylistClipIds,
   resolveInterruptIndex,
   type RunRange,
   writeResumeState,
 } from "../lib/resume-state";
 import { applyProgress, initSnapshot } from "../lib/snapshot";
-import { readDownloadFormat, serverUrlItem } from "../lib/storage";
+import {
+  downloadFormatItem,
+  readDownloadFormat,
+  serverUrlItem,
+} from "../lib/storage";
+import {
+  assertUnattendedRunRequest,
+  createUnattendedManualState,
+  hasCompleteUnattendedArtifacts,
+  nextUnattendedRunState,
+  parseUnattendedLaunchHash,
+  planUnattendedRun,
+  type UnattendedRunRequest,
+} from "../lib/unattended-run";
+import {
+  exposeUnattendedRunState,
+  readUnattendedRunState,
+  writeUnattendedRunState,
+} from "../lib/unattended-state";
 import {
   decideDurationAttempt,
   evaluateClips,
@@ -272,7 +297,8 @@ function assertRunMode(value: unknown, field: string): RunModeId {
 function assertOptionalIndices(
   value: unknown,
   field: string,
-  entryCount: number
+  entryCount: number,
+  allowEmpty = false
 ): number[] | undefined {
   if (value === undefined) {
     return undefined;
@@ -280,7 +306,7 @@ function assertOptionalIndices(
   if (!Array.isArray(value)) {
     throw new Error(`${field} must be number array`);
   }
-  if (value.length === 0) {
+  if (value.length === 0 && !allowEmpty) {
     throw new Error(`${field} must not be empty`);
   }
   const seen = new Set<number>();
@@ -304,7 +330,27 @@ function assertRunPayload(value: unknown): RunPayload {
   if (!Array.isArray(record.entries)) {
     throw new Error("run.entries must be array");
   }
-  return {
+  const unattendedRecord =
+    record.unattended === undefined
+      ? undefined
+      : assertRecord(record.unattended, "run.unattended");
+  const unattended = unattendedRecord
+    ? {
+        request: assertUnattendedRunRequest(unattendedRecord.request),
+        deferredIndices:
+          assertOptionalIndices(
+            unattendedRecord.deferredIndices,
+            "run.unattended.deferredIndices",
+            record.entries.length,
+            true
+          ) ?? [],
+        leaseToken: assertNonEmptyString(
+          unattendedRecord.leaseToken,
+          "run.unattended.leaseToken"
+        ),
+      }
+    : undefined;
+  const payload = {
     ...(record as unknown as RunPayload),
     entries: record.entries as PromptEntry[],
     playlistName: assertNonEmptyString(record.playlistName, "run.playlistName"),
@@ -339,7 +385,20 @@ function assertRunPayload(value: unknown): RunPayload {
     durationOutlierWarnings: assertOptionalDurationOutlierWarnings(
       record.durationOutlierWarnings
     ),
+    unattended,
   };
+  if (unattended) {
+    if (unattended.request.collectionId !== payload.collectionId) {
+      throw new Error(
+        "run.unattended request collection must match run.collectionId"
+      );
+    }
+    const selectedCount = payload.indices?.length ?? payload.entries.length;
+    if (selectedCount > unattended.request.limits.maxEntries) {
+      throw new Error("run.indices exceeds unattended maxEntries");
+    }
+  }
+  return payload;
 }
 
 function assertOptionalDurationOutlierWarnings(
@@ -363,6 +422,35 @@ function assertOptionalDurationOutlierWarnings(
 
 function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload {
   const record = assertRecord(value, "retryPlaylist payload");
+  const unattendedRecord =
+    record.unattended === undefined
+      ? undefined
+      : assertRecord(record.unattended, "retryPlaylist.unattended");
+  const unattended = unattendedRecord
+    ? {
+        request: assertUnattendedRunRequest(unattendedRecord.request),
+        deferredIndices:
+          assertOptionalIndices(
+            unattendedRecord.deferredIndices,
+            "retryPlaylist.unattended.deferredIndices",
+            0,
+            true
+          ) ?? [],
+        leaseToken: assertNonEmptyString(
+          unattendedRecord.leaseToken,
+          "retryPlaylist.unattended.leaseToken"
+        ),
+      }
+    : undefined;
+  const collectionId = assertNonEmptyString(
+    record.collectionId,
+    "retryPlaylist.collectionId"
+  );
+  if (unattended && unattended.request.collectionId !== collectionId) {
+    throw new Error(
+      "retryPlaylist.unattended request collection must match collectionId"
+    );
+  }
   return {
     playlistName: assertNonEmptyString(
       record.playlistName,
@@ -377,10 +465,7 @@ function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload {
         record.expectedClipCount,
         "retryPlaylist.expectedClipCount"
       ) ?? 0,
-    collectionId: assertNonEmptyString(
-      record.collectionId,
-      "retryPlaylist.collectionId"
-    ),
+    collectionId,
     durationFilter: assertOptionalDurationFilter(
       record.durationFilter,
       "retryPlaylist.durationFilter"
@@ -401,16 +486,43 @@ function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload {
       record.shouldDownload,
       "retryPlaylist.shouldDownload"
     ),
+    unattended,
   };
 }
 
 function assertRetryDownloadPayload(value: unknown): RetryDownloadPayload {
   const record = assertRecord(value, "retryDownload payload");
+  const collectionId = assertNonEmptyString(
+    record.collectionId,
+    "retryDownload.collectionId"
+  );
+  const unattendedRecord =
+    record.unattended === undefined
+      ? undefined
+      : assertRecord(record.unattended, "retryDownload.unattended");
+  const unattended = unattendedRecord
+    ? {
+        request: assertUnattendedRunRequest(unattendedRecord.request),
+        deferredIndices:
+          assertOptionalIndices(
+            unattendedRecord.deferredIndices,
+            "retryDownload.unattended.deferredIndices",
+            0,
+            true
+          ) ?? [],
+        leaseToken: assertNonEmptyString(
+          unattendedRecord.leaseToken,
+          "retryDownload.unattended.leaseToken"
+        ),
+      }
+    : undefined;
+  if (unattended && unattended.request.collectionId !== collectionId) {
+    throw new Error(
+      "retryDownload.unattended request collection must match collectionId"
+    );
+  }
   return {
-    collectionId: assertNonEmptyString(
-      record.collectionId,
-      "retryDownload.collectionId"
-    ),
+    collectionId,
     submittedClipIds: assertStringArray(
       record.submittedClipIds,
       "retryDownload.submittedClipIds"
@@ -419,6 +531,7 @@ function assertRetryDownloadPayload(value: unknown): RetryDownloadPayload {
       record.expectedClipCount,
       "retryDownload.expectedClipCount"
     ),
+    unattended,
   };
 }
 
@@ -453,13 +566,79 @@ interface PlaylistClipPersistInfo {
   submittedClipIds: string[];
   submittedClipIdsAreDurationFiltered: boolean;
   playlistExpectedClipCount: number;
+  playlistUrlsBeforeCreate?: string[];
 }
 
-async function resolveDownloadContext(): Promise<DownloadContext> {
+async function resolveDownloadContext(
+  formatOverride?: DownloadContext["format"]
+): Promise<DownloadContext> {
   return {
     baseUrl: (await serverUrlItem.getValue()).trim(),
-    format: await readDownloadFormat(),
+    format: formatOverride ?? (await readDownloadFormat()),
   };
+}
+
+function isVisibleElement(element: Element): boolean {
+  if (!(element instanceof HTMLElement) || element.hidden) return false;
+  if (element.getAttribute("aria-hidden") === "true") return false;
+  const style = getComputedStyle(element);
+  if (style.display === "none" || style.visibility === "hidden") return false;
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function detectUnattendedPreflightBlocker(): {
+  reason: "login-required" | "captcha-required" | "cost-confirmation-required";
+  message: string;
+} | null {
+  if (detectRecaptcha()) {
+    return {
+      reason: "captcha-required",
+      message: "Suno に未解決の CAPTCHA challenge が表示されています。",
+    };
+  }
+  const loginElement = Array.from(
+    document.querySelectorAll('a[href*="/login" i], button, [role="button"]')
+  ).find(
+    (element) =>
+      isVisibleElement(element) &&
+      /^(sign[ -]?in|log[ -]?in|ログイン)$/i.test(
+        element.textContent?.trim() ?? ""
+      )
+  );
+  if (loginElement) {
+    return {
+      reason: "login-required",
+      message: "Suno のログイン操作が必要です。",
+    };
+  }
+  const costDialog = Array.from(
+    document.querySelectorAll('[role="dialog"], [aria-modal="true"]')
+  ).find((element) => {
+    if (!isVisibleElement(element)) return false;
+    const text = element.textContent?.toLowerCase() ?? "";
+    return /credit|payment|purchase|subscribe|upgrade|課金|料金|購入/.test(
+      text
+    );
+  });
+  if (costDialog) {
+    return {
+      reason: "cost-confirmation-required",
+      message: "Suno に料金または credit 消費の確認画面が表示されています。",
+    };
+  }
+  return null;
+}
+
+function playlistNameForCollection(collection: CollectionSummary): string {
+  if (collection.channel && collection.theme) {
+    return `${collection.channel} | ${collection.theme}`;
+  }
+  const theme = (collection.theme ?? collection.name).replace(
+    /-collection$/,
+    ""
+  );
+  return extractPlaylistName(collection.id, theme);
 }
 
 export default defineContentScript({
@@ -513,6 +692,12 @@ export default defineContentScript({
     // popup を閉じても進捗を維持・復元するための SSOT (#852)。run 開始で initSnapshot、
     // 以降は emitProgress が sendMessage より前に同期更新する（queryProgress と race しないため）。
     let currentSnapshot: SnapshotPayload | null = null;
+    let activeUnattended: RunPayload["unattended"];
+    // progress は高頻度で到着するため、storage 書き込みを直列化して古い phase が
+    // FINISHED / manual-intervention を後から上書きする race を防ぐ。
+    let unattendedStateWrite: Promise<void> = Promise.resolve();
+    let resumeStateWrite: Promise<void> = Promise.resolve();
+    const verifiedUnattendedRequests = new Set<string>();
 
     // bridge（MAIN world）の観測を集約する in-flight の SSOT (#948)。run の外でも常時受信し、
     // run 前のページ操作（手動投入等）や前 run の残留 in-flight も passive 合流で数える。
@@ -550,7 +735,78 @@ export default defineContentScript({
         throw new Error("progress emit before run initialization");
       }
       currentSnapshot = applyProgress(currentSnapshot, payload);
+      if (activeUnattended) {
+        const state = nextUnattendedRunState({
+          request: activeUnattended.request,
+          progress: payload,
+          deferredIndices: activeUnattended.deferredIndices,
+          now: Date.now(),
+          verifiedComplete: verifiedUnattendedRequests.has(
+            activeUnattended.request.requestId
+          ),
+        });
+        unattendedStateWrite = Promise.all([
+          unattendedStateWrite,
+          resumeStateWrite,
+        ])
+          .then(() => writeUnattendedRunState(state))
+          .catch((error: unknown) => {
+            console.warn(
+              "[suno-helper] 定期実行 state の永続化に失敗しました:",
+              error
+            );
+          });
+      }
       void sendMessage("progress", payload);
+    }
+
+    async function releaseExecutionLease(
+      unattended: RunPayload["unattended"] | undefined
+    ): Promise<void> {
+      if (!unattended) return;
+      await sendMessage("releaseUnattendedLease", {
+        collectionId: unattended.request.collectionId,
+        token: unattended.leaseToken,
+      }).catch((error: unknown) => {
+        console.warn("[suno-helper] 定期実行 lease を解放できません:", error);
+      });
+    }
+
+    function assertUnattendedUiIsSafe(): void {
+      if (!activeUnattended) return;
+      const blocker = detectUnattendedPreflightBlocker();
+      if (blocker) throw new FatalRunError(blocker.message);
+    }
+
+    async function verifyUnattendedCompletion(
+      unattended: RunPayload["unattended"]
+    ): Promise<void> {
+      if (!unattended) return;
+      const collections = await sendMessage("fetchCollections", {
+        baseUrl: unattended.request.baseUrl,
+      });
+      const collection = collections.find(
+        (candidate) => candidate.id === unattended.request.collectionId
+      );
+      const promptResponse = await sendMessage(
+        "fetchCollectionPromptResponse",
+        {
+          baseUrl: unattended.request.baseUrl,
+          collectionId: unattended.request.collectionId,
+        }
+      );
+      if (
+        !collection ||
+        !hasCompleteUnattendedArtifacts(
+          collection,
+          promptResponse.entries.length * CLIPS_PER_REQUEST
+        )
+      ) {
+        throw new Error(
+          "server readback で音源ファイル・playlist URL・downloaded 状態を確認できません。"
+        );
+      }
+      verifiedUnattendedRequests.add(unattended.request.requestId);
     }
 
     /**
@@ -584,6 +840,24 @@ export default defineContentScript({
     const downloadFlow = createDownloadFlow({
       emitProgress,
       isAborted: () => aborted,
+      onDownloadComplete: async (filename) => {
+        if (!activeUnattended) return;
+        const collectionId = activeUnattended.request.collectionId;
+        resumeStateWrite = resumeStateWrite.then(async () => {
+          const state = await readResumeState();
+          if (state?.collectionId !== collectionId) {
+            throw new Error(
+              "download checkpoint に対応する resume state がありません"
+            );
+          }
+          await writeResumeState({
+            ...state,
+            timestamp: Date.now(),
+            downloadCompletedFilename: filename,
+          });
+        });
+        await resumeStateWrite;
+      },
     });
     downloadFlow.installMessageHandlers();
 
@@ -673,6 +947,8 @@ export default defineContentScript({
         return null; // 停止押下後は Generate を押さない（未投入のまま STOPPED 経路へ）
       }
 
+      assertUnattendedUiIsSafe();
+
       // captcha が出ていても即停止しない。多くは passive 検証で数秒以内に自動 verify されて閉じるため、
       // waiting-captcha phase で解消を待って自動続行する。解消されない場合のみ throw（fail-loud は維持）。
       await waitForCaptchaClear({
@@ -728,7 +1004,7 @@ export default defineContentScript({
         timeoutMs: GENERATE_TIMEOUT_MS,
         pollIntervalMs: POLL_INTERVAL_MS,
         settleMs: SETTLE_MS,
-        captchaWaitTimeoutMs: CAPTCHA_WAIT_TIMEOUT_MS,
+        captchaWaitTimeoutMs: activeUnattended ? 0 : CAPTCHA_WAIT_TIMEOUT_MS,
         // 生成完了待ち中に captcha が出たら waiting-captcha 表示へ切り替え、解消後 generating へ戻す。
         onCaptchaWait: (waiting) =>
           emitProgress({
@@ -753,8 +1029,14 @@ export default defineContentScript({
       durationFilter: DurationFilter | undefined,
       previousSubmittedClipIdsAreDurationFiltered = false,
       durationOutlierPolicy: DurationOutlierPolicy = { kind: "regenerate" },
-      onResolvedPlaylistClipIds?: (info: PlaylistClipPersistInfo) => void
+      onResolvedPlaylistClipIds?: (
+        info: PlaylistClipPersistInfo
+      ) => void | Promise<void>
     ): Promise<number> {
+      assertUnattendedUiIsSafe();
+      const previousPlaylistUrls = activeUnattended
+        ? new Set(findPlaylistUrlsByName(document, playlistName))
+        : new Set<string>();
       emitProgress({
         phase: PHASE.ADDING_TO_PLAYLIST,
         total: progressTotal,
@@ -805,11 +1087,14 @@ export default defineContentScript({
         allowUnknownDurationIds,
         durationOutlierPolicy
       );
-      onResolvedPlaylistClipIds?.({
+      await onResolvedPlaylistClipIds?.({
         submittedClipIds: plan.clipIds,
         submittedClipIdsAreDurationFiltered:
           durationOutlierPolicy.kind === "regenerate",
         playlistExpectedClipCount: plan.expectedClipCount,
+        ...(activeUnattended
+          ? { playlistUrlsBeforeCreate: [...previousPlaylistUrls] }
+          : {}),
       });
       const selectedCount = await scrollAndMultiSelectByIds(plan.clipIds, {
         isAborted: () => aborted,
@@ -880,12 +1165,42 @@ export default defineContentScript({
       // 選択中 clip は追加されない。dialog 内 list に出現した新規 row を改めて click して
       // clip を紐付ける（同名 row が複数並ぶ場合は DOM 順で最後 = 直前作成分を選ぶ）。
       await abortableSleep(SETTLE_MS, () => aborted);
-      await clickPlaylistRowByName(dialog, playlistName);
+      const clickedPlaylistUrl = await clickPlaylistRowByName(
+        dialog,
+        playlistName
+      );
       await waitForPlaylistDialogClose({
         isAborted: () => aborted,
         pollIntervalMs: POLL_INTERVAL_MS,
         timeoutMs: GENERATE_TIMEOUT_MS,
       });
+      if (activeUnattended) {
+        const playlistUrl =
+          clickedPlaylistUrl ??
+          (await waitForNewPlaylistUrlByName(
+            playlistName,
+            previousPlaylistUrls,
+            {
+              pollIntervalMs: POLL_INTERVAL_MS,
+              timeoutMs: GENERATE_TIMEOUT_MS,
+            }
+          ));
+        if (!playlistUrl) {
+          throw new Error(
+            "作成した Suno playlist URL を確認できないため、download を開始しません。"
+          );
+        }
+        await sendMessage("postDownloaded", {
+          baseUrl: activeUnattended.request.baseUrl,
+          collectionId: activeUnattended.request.collectionId,
+          body: {
+            file_count: 0,
+            expected_file_count: expectedClipCount,
+            format: activeUnattended.request.downloadFormat,
+            suno_playlist_url: playlistUrl,
+          },
+        });
+      }
       return selectedCount;
     }
 
@@ -1036,6 +1351,7 @@ export default defineContentScript({
       // duration filter 後に playlist 追加・download へ採用する OK clip 件数。
       playlistExpectedClipCount?: number;
       durationOutlierPolicy: DurationOutlierPolicy;
+      unattended?: RunPayload["unattended"];
     }
 
     async function runAll(
@@ -1048,6 +1364,7 @@ export default defineContentScript({
         playlistName,
         submittedClipIds,
         playlistExpectedClipCount,
+        unattended,
       } = options;
       const previousSubmittedClipIds = submittedClipIds ?? [];
       const pacing = BALANCED_RUN_PACING;
@@ -1068,7 +1385,18 @@ export default defineContentScript({
         return;
       }
       // Suno 同時生成キューに積める clip 数の上限（Balanced の並列リクエスト数 × 2 clip）。
-      const maxGeneratingClips = pacing.maxInflightRequests * CLIPS_PER_REQUEST;
+      const maxGeneratingClips =
+        Math.min(
+          pacing.maxInflightRequests,
+          unattended?.request.limits.maxConcurrentGenerations ??
+            pacing.maxInflightRequests
+        ) * CLIPS_PER_REQUEST;
+      const retryLimit = unattended?.request.limits.maxRetries;
+      const injectRetryLimit =
+        retryLimit === undefined
+          ? pacing.maxInjectRetry
+          : Math.min(pacing.maxInjectRetry, retryLimit);
+      const yieldRetryLimit = retryLimit ?? MAX_YIELD_RETRY;
       const total = entries.length;
       if (total === 0) {
         emitProgress({ phase: PHASE.FINISHED, total });
@@ -1108,7 +1436,8 @@ export default defineContentScript({
       function persistInterruptState(
         interruptedIndex: number,
         orderPosition?: number,
-        explicitRemainingIndices?: number[]
+        explicitRemainingIndices?: number[],
+        propagateWriteError = false
       ): void {
         const remainingIndices =
           explicitRemainingIndices ??
@@ -1162,22 +1491,34 @@ export default defineContentScript({
                 durationOutlierWarnings:
                   currentSnapshot.durationOutlierWarnings,
               };
-        void writeResumeState({
-          collectionId,
-          failedIndex: interruptedIndex,
-          total,
-          timestamp: Date.now(),
-          failedIndices:
-            failedIndices.length > 0 ? [...failedIndices] : undefined,
-          remainingIndices,
-          submittedClipIds: playlistSubmittedClipIds,
-          durationFilter: options.durationFilter,
-          submittedClipIdsAreDurationFiltered,
-          playlistExpectedClipCount: playlistExpectedCount,
-          runMode: options.runMode,
-          regenerateDurationOutliers,
-          durationOutlierWarnings: currentSnapshot?.durationOutlierWarnings,
-        });
+        resumeStateWrite = resumeStateWrite.then(() =>
+          writeResumeState({
+            collectionId,
+            failedIndex: interruptedIndex,
+            total,
+            timestamp: Date.now(),
+            failedIndices:
+              failedIndices.length > 0 ? [...failedIndices] : undefined,
+            remainingIndices,
+            submittedClipIds: playlistSubmittedClipIds,
+            durationFilter: options.durationFilter,
+            submittedClipIdsAreDurationFiltered,
+            playlistExpectedClipCount: playlistExpectedCount,
+            runMode: options.runMode,
+            regenerateDurationOutliers,
+            durationOutlierWarnings: currentSnapshot?.durationOutlierWarnings,
+            playlistUrlsBeforeCreate:
+              playlistPersistInfo?.playlistUrlsBeforeCreate,
+          })
+        );
+        if (!propagateWriteError) {
+          resumeStateWrite = resumeStateWrite.catch((error: unknown) => {
+            console.warn(
+              "[suno-helper] resume checkpoint の永続化に失敗しました:",
+              error
+            );
+          });
+        }
       }
 
       function finishDeferringPlaylistForFailedEntries(): void {
@@ -1191,6 +1532,11 @@ export default defineContentScript({
       }
 
       function finishWithFailedEntriesIfNeeded(): boolean {
+        if (failedIndices.length === 0) return false;
+        if (unattended) {
+          finishDeferringPlaylistForFailedEntries();
+          return true;
+        }
         // stall 由来の失敗だけなら playlist 追加を保留しない (#1994)。完了済み clip での
         // graceful degradation（playlist 追加 / download の続行）を優先する。
         const stalledSet = new Set(stalledEntryIndices);
@@ -1231,7 +1577,11 @@ export default defineContentScript({
           order,
           total,
           maxGeneratingClips,
-          preset: pacing,
+          preset: {
+            ...pacing,
+            maxInjectRetry: injectRetryLimit,
+            maxEntryRetry: retryLimit ?? pacing.maxEntryRetry,
+          },
           isAborted: () => aborted,
           isEntrySubmitted: (index) => lastSubmittedEntryIndex === index,
           getSubmittedIds: () => tracker.getSubmittedIds(),
@@ -1295,7 +1645,7 @@ export default defineContentScript({
                     }),
                   waitForAck,
                   isAborted: () => aborted,
-                  maxRetry: pacing.maxInjectRetry,
+                  maxRetry: injectRetryLimit,
                   ackTimeoutMs: pacing.injectAckTimeoutMs,
                   pollIntervalMs: POLL_INTERVAL_MS,
                   describeEntry: () =>
@@ -1309,7 +1659,8 @@ export default defineContentScript({
                 lastSubmittedEntryIndex === i &&
                 !(err instanceof InjectNotAcknowledgedError),
               isFatal: (err) => err instanceof FatalRunError,
-              maxRetry: pacing.maxEntryRetry,
+              maxRetry:
+                unattended?.request.limits.maxRetries ?? pacing.maxEntryRetry,
               retryDelayMs: () =>
                 applyJitter(pacing.interCreateDelayMs, pacing.jitterMs),
               onRetry: (attempt, max) =>
@@ -1342,13 +1693,14 @@ export default defineContentScript({
                 lastSubmittedEntryIndex === i,
                 result.error instanceof InjectNotAcknowledgedError
               );
+              persistInterruptState(interruptIndex, orderPosition);
+              await resumeStateWrite;
               emitProgress({
                 phase: PHASE.ERROR,
                 index: interruptIndex,
                 total,
                 message,
               });
-              persistInterruptState(interruptIndex, orderPosition);
               return;
             }
             if (result.outcome === "aborted" || aborted) {
@@ -1469,7 +1821,7 @@ export default defineContentScript({
               filter: durationFilter,
               policy: options.durationOutlierPolicy,
               attemptCount: yieldRetryCount,
-              maxRetry: MAX_YIELD_RETRY,
+              maxRetry: yieldRetryLimit,
             });
             if (decision.kind === "accept") {
               tracker.markAccepted(decision.acceptedClipIds);
@@ -1493,19 +1845,19 @@ export default defineContentScript({
               tracker.dropSubmittedIds(attemptClipIds);
               yieldRetryCount += 1;
               console.warn(
-                `[suno-helper] entry ${i} duration guard NG、同一 prompt で再生成します (${yieldRetryCount}/${MAX_YIELD_RETRY}): ${decision.message}`
+                `[suno-helper] entry ${i} duration guard NG、同一 prompt で再生成します (${yieldRetryCount}/${yieldRetryLimit}): ${decision.message}`
               );
               emitProgress({
                 phase: PHASE.WAITING_SLOT,
                 index: i,
                 total,
-                message: `${decision.message}; retry ${yieldRetryCount}/${MAX_YIELD_RETRY}`,
+                message: `${decision.message}; retry ${yieldRetryCount}/${yieldRetryLimit}`,
                 yieldRetryCount,
                 log: {
                   kind: "retry",
                   entryName: entryDisplayName(entries[i]),
                   attempt: yieldRetryCount,
-                  max: MAX_YIELD_RETRY,
+                  max: yieldRetryLimit,
                 },
               });
               await abortableSleep(
@@ -1537,10 +1889,37 @@ export default defineContentScript({
           );
         }
       }
+      if (unattended && unattended.deferredIndices.length > 0) {
+        persistInterruptState(
+          unattended.deferredIndices[0],
+          undefined,
+          unattended.deferredIndices
+        );
+        emitProgress({
+          phase: PHASE.STOPPED,
+          index: unattended.deferredIndices[0],
+          total,
+          message: `定期実行の entry 上限 ${unattended.request.limits.maxEntries} 件に到達しました`,
+        });
+        return;
+      }
       // スキップした失敗 entry が残っている場合は playlist 追加を保留して終了する (#948)。
       // 失敗分のみ再実行して完走した run が playlist 追加を実行する（同名 playlist の重複作成と
       // 歯抜け playlist を防ぐ）。failedIndex=total で persist し、failedIndices を再実行導線へ渡す。
       if (finishWithFailedEntriesIfNeeded()) {
+        return;
+      }
+      if (
+        unattended &&
+        expectedRawPlaylistClipCount < total * CLIPS_PER_REQUEST
+      ) {
+        persistInterruptState(total);
+        emitProgress({
+          phase: PHASE.STOPPED,
+          total,
+          message:
+            "選択 entry の生成は完了しました。collection 全 entry が揃うまで playlist/download を開始しません。",
+        });
         return;
       }
       const expectedPlaylistClipCount =
@@ -1684,7 +2063,7 @@ export default defineContentScript({
                       }),
                     waitForAck,
                     isAborted: () => aborted,
-                    maxRetry: pacing.maxInjectRetry,
+                    maxRetry: injectRetryLimit,
                     ackTimeoutMs: pacing.injectAckTimeoutMs,
                     pollIntervalMs: POLL_INTERVAL_MS,
                     describeEntry: () =>
@@ -1719,6 +2098,7 @@ export default defineContentScript({
           dropSubmittedIds: (ids) => tracker.dropSubmittedIds(ids),
           emitProgress,
           isAborted: () => aborted,
+          maxYieldRetries: yieldRetryLimit,
         });
         if (yieldResult.abortedIndex !== undefined) {
           const abortedOrderPosition = order.indexOf(yieldResult.abortedIndex);
@@ -1759,8 +2139,14 @@ export default defineContentScript({
           options.durationFilter,
           options.submittedClipIdsAreDurationFiltered === true,
           options.durationOutlierPolicy,
-          (info) => {
+          async (info) => {
             playlistPersistInfo = info;
+            if (unattended) {
+              // playlist create は不可逆。定期実行では clip IDs と作成前 URL baseline の
+              // durable checkpoint が成功した場合だけ先へ進む。
+              persistInterruptState(total, undefined, undefined, true);
+              await resumeStateWrite;
+            }
           }
         );
       } catch (err) {
@@ -1786,7 +2172,10 @@ export default defineContentScript({
       if (shouldRunDownloadAfterPlaylist) {
         persistInterruptState(total);
         try {
-          const downloadContext = await resolveDownloadContext();
+          const downloadContext = await resolveDownloadContext(
+            unattended?.request.downloadFormat
+          );
+          assertUnattendedUiIsSafe();
           const downloadError = await downloadFlow.downloadBestEffort(
             downloadContext,
             collectionId,
@@ -1833,6 +2222,17 @@ export default defineContentScript({
       // ResumeBanner が「中断からの再開」と誤判定する。消去に失敗しても FINISHED は
       // 維持し（void 時代からの不変条件: 終端 phase を必ず出す）、誤判定を避けるため
       // リロードのみ見送る。残る stale selection は次 run の Cmd+P 前ガードが検知する。
+      try {
+        await verifyUnattendedCompletion(unattended);
+      } catch (error) {
+        persistInterruptState(total);
+        emitProgress({
+          phase: PHASE.ERROR,
+          total,
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return;
+      }
       let resumeStateCleared = true;
       if (!keepResumeStateForDownloadRetry) {
         try {
@@ -1862,7 +2262,7 @@ export default defineContentScript({
     onMessage("run", ({ data }) => {
       // 二重実行ガード (#892 要件7)。実行中の run 再着信は no-op で ack のみ返す（再開連打対策）。
       if (running) {
-        return { ok: true } as const;
+        return { ok: false, busy: true } as const;
       }
       const {
         entries,
@@ -1877,7 +2277,11 @@ export default defineContentScript({
         submittedClipIds,
         submittedClipIdsAreDurationFiltered,
         playlistExpectedClipCount,
+        unattended,
       } = assertRunPayload(data);
+      // 手動 run では過去の定期実行 state を更新しない。定期実行だけが明示的に
+      // active context を設定し、以降の progress を checkpoint へ反映する。
+      activeUnattended = unattended;
       const durationOutlierPolicy: DurationOutlierPolicy =
         regenerateDurationOutliers
           ? { kind: "regenerate" }
@@ -1897,16 +2301,22 @@ export default defineContentScript({
       // in-memory の currentSnapshot が queryProgress で優先されるため fire-and-forget でよい。
       void clearFinishedSnapshot();
       if (detectSunoViewMode() === "unknown") {
+        const message =
+          "Suno の表示ビューを検出できません。List / Waveform / Grid のいずれかに切り替えてから再実行してください。";
         emitProgress({
           phase: PHASE.ERROR,
           total: entries.length,
-          message:
-            "Suno の表示ビューを検出できません。List / Waveform / Grid のいずれかに切り替えてから再実行してください。",
+          message,
         });
-        return { ok: true } as const;
+        return (async () => {
+          await Promise.all([resumeStateWrite, unattendedStateWrite]);
+          await releaseExecutionLease(unattended);
+          activeUnattended = undefined;
+          return { ok: false, error: message } as const;
+        })();
       }
       if (!acquireRunLock()) {
-        return { ok: true } as const;
+        return { ok: false, busy: true } as const;
       }
       running = true;
       aborted = false;
@@ -1926,8 +2336,12 @@ export default defineContentScript({
         submittedClipIds,
         submittedClipIdsAreDurationFiltered,
         playlistExpectedClipCount,
-      }).finally(() => {
+        unattended,
+      }).finally(async () => {
         running = false;
+        await Promise.all([resumeStateWrite, unattendedStateWrite]);
+        await releaseExecutionLease(unattended);
+        activeUnattended = undefined;
         feedPoller.stop();
         releaseRunLock();
       });
@@ -1941,7 +2355,7 @@ export default defineContentScript({
 
     onMessage("retryPlaylist", ({ data }) => {
       if (running) {
-        return { ok: true } as const;
+        return { ok: false, busy: true } as const;
       }
       const {
         playlistName,
@@ -1953,14 +2367,16 @@ export default defineContentScript({
         durationOutlierWarnings,
         submittedClipIdsAreDurationFiltered,
         shouldDownload,
+        unattended,
       } = assertRetryPlaylistPayload(data);
       const durationOutlierPolicy: DurationOutlierPolicy =
         regenerateDurationOutliers
           ? { kind: "regenerate" }
           : { kind: "retain" };
       if (!acquireRunLock()) {
-        return { ok: true } as const;
+        return { ok: false, busy: true } as const;
       }
+      activeUnattended = unattended;
       currentSnapshot = initSnapshot([], {
         collectionId,
         playlistName,
@@ -2019,7 +2435,10 @@ export default defineContentScript({
             return;
           }
           if (shouldDownload) {
-            const downloadContext = await resolveDownloadContext();
+            const downloadContext = await resolveDownloadContext(
+              unattended?.request.downloadFormat
+            );
+            assertUnattendedUiIsSafe();
             await downloadFlow.performDownload(
               downloadContext,
               collectionId,
@@ -2035,6 +2454,7 @@ export default defineContentScript({
           // 消去失敗はここまでの成功（playlist 追加 + download）を ERROR に変えない:
           // catch へ流すと再試行を誘い、同名 playlist の重複作成につながるため、
           // FINISHED を維持してリロードのみ見送る。
+          await verifyUnattendedCompletion(unattended);
           let resumeStateCleared = true;
           try {
             await clearResumeStateForCollection(collectionId);
@@ -2058,8 +2478,11 @@ export default defineContentScript({
           const message = err instanceof Error ? err.message : String(err);
           emitProgress({ phase: PHASE.ERROR, total: 0, message });
         }
-      })().finally(() => {
+      })().finally(async () => {
         running = false;
+        await Promise.all([resumeStateWrite, unattendedStateWrite]);
+        await releaseExecutionLease(unattended);
+        activeUnattended = undefined;
         releaseRunLock();
       });
       return { ok: true } as const;
@@ -2067,13 +2490,14 @@ export default defineContentScript({
 
     onMessage("retryDownload", ({ data }) => {
       if (running) {
-        return { ok: true } as const;
+        return { ok: false, busy: true } as const;
       }
-      const { collectionId, submittedClipIds, expectedClipCount } =
+      const { collectionId, submittedClipIds, expectedClipCount, unattended } =
         assertRetryDownloadPayload(data);
       if (!acquireRunLock()) {
-        return { ok: true } as const;
+        return { ok: false, busy: true } as const;
       }
+      activeUnattended = unattended;
       currentSnapshot = initSnapshot([], { collectionId });
       // 新しい実行の開始なので直近完了 run の退避 snapshot を消去する（run handler と同じ）。
       void clearFinishedSnapshot();
@@ -2083,7 +2507,10 @@ export default defineContentScript({
       aborted = false;
       void (async () => {
         try {
-          const downloadContext = await resolveDownloadContext();
+          const downloadContext = await resolveDownloadContext(
+            unattended?.request.downloadFormat
+          );
+          assertUnattendedUiIsSafe();
           const result = await downloadFlow.retryDownload({
             context: downloadContext,
             collectionId,
@@ -2100,18 +2527,22 @@ export default defineContentScript({
           // ページごと破棄する (#1411)。この経路だけリロードが無いと、次 run が
           // 確実に Cmd+P 前ガードで止まり手動リロードを強いられる。
           // リロード前に FINISHED snapshot を退避する（runAll の完了経路と同じ）。
-          if (
-            result.completedAndCleared &&
-            (await persistFinishedSnapshotForReload())
-          ) {
-            scheduleRunCompleteReload();
+          if (result.completedAndCleared) {
+            await verifyUnattendedCompletion(unattended);
+            emitProgress({ phase: PHASE.FINISHED, total: 0 });
+            if (await persistFinishedSnapshotForReload()) {
+              scheduleRunCompleteReload();
+            }
           }
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           emitProgress({ phase: PHASE.ERROR, total: 0, message });
         }
-      })().finally(() => {
+      })().finally(async () => {
         running = false;
+        await Promise.all([resumeStateWrite, unattendedStateWrite]);
+        await releaseExecutionLease(unattended);
+        activeUnattended = undefined;
         releaseRunLock();
       });
       return { ok: true } as const;
@@ -2129,6 +2560,342 @@ export default defineContentScript({
       }).then((clipIds) => ({ ok: true as const, clipIds }));
     });
 
+    async function startUnattendedFromLaunchHash(): Promise<void> {
+      if (typeof location === "undefined" || !location.hash) return;
+      let envelope;
+      try {
+        envelope = parseUnattendedLaunchHash(location.hash);
+      } catch (error) {
+        console.error(
+          "[suno-helper] 定期実行 launch payload を検証できません:",
+          error
+        );
+        return;
+      }
+      if (!envelope) return;
+
+      // 同じ fragment を SPA reload 後に再消費して二重起動しない。
+      try {
+        history.replaceState(
+          history.state,
+          "",
+          `${location.pathname}${location.search}`
+        );
+      } catch (error) {
+        console.warn(
+          "[suno-helper] 定期実行 fragment を消去できません:",
+          error
+        );
+      }
+
+      let request: UnattendedRunRequest;
+      try {
+        request = assertUnattendedRunRequest(
+          await sendMessage("consumeUnattendedRequest", envelope)
+        );
+      } catch (error) {
+        console.error("[suno-helper] 定期実行 nonce を消費できません:", error);
+        return;
+      }
+      if (request.baseUrl !== envelope.baseUrl) {
+        console.error(
+          "[suno-helper] 定期実行 request の baseUrl が envelope と一致しません"
+        );
+        return;
+      }
+      const lease = await sendMessage("acquireUnattendedLease", {
+        collectionId: request.collectionId,
+        requestId: request.requestId,
+      });
+      if (!lease.acquired || !lease.token) {
+        exposeUnattendedRunState(
+          document.documentElement,
+          createUnattendedManualState({
+            request,
+            reason: "run-error",
+            message: "別の定期実行が進行中です。完了後に再起動してください。",
+            now: Date.now(),
+          })
+        );
+        return;
+      }
+      const leaseToken = lease.token;
+      const leaseHeartbeat = setInterval(() => {
+        if (
+          leaseHandedOff &&
+          activeUnattended?.request.requestId !== request.requestId
+        ) {
+          clearInterval(leaseHeartbeat);
+          void sendMessage("releaseUnattendedLease", {
+            collectionId: request.collectionId,
+            token: leaseToken,
+          });
+          return;
+        }
+        void sendMessage("heartbeatUnattendedLease", {
+          collectionId: request.collectionId,
+          token: leaseToken,
+        });
+      }, 30_000);
+      let leaseHandedOff = false;
+      const releaseLaunchLease = async (): Promise<void> => {
+        clearInterval(leaseHeartbeat);
+        await sendMessage("releaseUnattendedLease", {
+          collectionId: request.collectionId,
+          token: leaseToken,
+        });
+      };
+
+      const pendingEntryIndices = [...(request.entryIndices ?? [])];
+      const writeFailure = async (message: string): Promise<void> => {
+        await writeUnattendedRunState(
+          nextUnattendedRunState({
+            request,
+            progress: { phase: PHASE.ERROR, total: 0, message },
+            deferredIndices: pendingEntryIndices,
+            now: Date.now(),
+          })
+        );
+      };
+
+      try {
+        const blocker = detectUnattendedPreflightBlocker();
+        if (blocker) {
+          await writeUnattendedRunState(
+            createUnattendedManualState({
+              request,
+              reason: blocker.reason,
+              message: blocker.message,
+              pendingEntryIndices,
+              now: Date.now(),
+            })
+          );
+          return;
+        }
+
+        await serverUrlItem.setValue(request.baseUrl);
+        await downloadFormatItem.setValue(request.downloadFormat);
+        const collections = await sendMessage("fetchCollections", {
+          baseUrl: request.baseUrl,
+        });
+        const collection = collections.find(
+          (candidate) => candidate.id === request.collectionId
+        );
+        if (!collection) {
+          throw new Error(
+            `collection ${request.collectionId} が server にありません`
+          );
+        }
+        const promptResponse = (await sendMessage(
+          "fetchCollectionPromptResponse",
+          {
+            baseUrl: request.baseUrl,
+            collectionId: request.collectionId,
+          }
+        )) as PromptResponse;
+        if (promptResponse.entries.length === 0) {
+          throw new Error("collection の Suno entry が 0 件です");
+        }
+        const resumeState = await readResumeState();
+        const playlistName = playlistNameForCollection(collection);
+        const canReconcileCreatedPlaylist =
+          resumeState?.collectionId === request.collectionId &&
+          resumeState.failedIndex === promptResponse.entries.length &&
+          (resumeState.submittedClipIds?.length ?? 0) > 0 &&
+          resumeState.playlistExpectedClipCount !== undefined &&
+          Array.isArray(resumeState.playlistUrlsBeforeCreate);
+        if (!collection.suno_playlist_url && canReconcileCreatedPlaylist) {
+          const baselineUrls = new Set(resumeState.playlistUrlsBeforeCreate);
+          const existingPlaylistUrls = findPlaylistUrlsByName(
+            document,
+            playlistName
+          ).filter((url) => !baselineUrls.has(url));
+          if (existingPlaylistUrls.length === 1) {
+            await writeUnattendedRunState(
+              createUnattendedManualState({
+                request,
+                reason: "existing-playlist",
+                message:
+                  `作成途中の playlist ${existingPlaylistUrls[0]} を検出しました。` +
+                  "clip 追加済みか確認できないため自動 download は開始しません。",
+                checkpoint: "playlist",
+                now: Date.now(),
+              })
+            );
+            return;
+          } else if (existingPlaylistUrls.length > 1) {
+            await writeUnattendedRunState(
+              createUnattendedManualState({
+                request,
+                reason: "existing-playlist",
+                message: "同名 playlist が複数あるため自動再開できません。",
+                checkpoint: "playlist",
+                now: Date.now(),
+              })
+            );
+            return;
+          }
+        }
+        const plan = planUnattendedRun({
+          request,
+          collection,
+          entryCount: promptResponse.entries.length,
+          resumeState,
+        });
+        if (plan.kind === "complete") {
+          await writeUnattendedRunState(
+            nextUnattendedRunState({
+              request,
+              progress: {
+                phase: PHASE.FINISHED,
+                total: promptResponse.entries.length,
+                message: "音源は既に download 済みです。",
+              },
+              deferredIndices: [],
+              now: Date.now(),
+              verifiedComplete: true,
+            })
+          );
+          return;
+        }
+        if (plan.kind === "manual-intervention") {
+          await writeUnattendedRunState({
+            ...createUnattendedManualState({
+              request,
+              reason: plan.reason,
+              message: plan.requiredAction,
+              checkpoint:
+                plan.reason === "existing-playlist" ? "download" : "entries",
+              pendingEntryIndices,
+              now: Date.now(),
+            }),
+            requiredAction: plan.requiredAction,
+          });
+          return;
+        }
+
+        if (plan.kind === "retry-playlist") {
+          const result = await sendMessage("retryPlaylist", {
+            playlistName,
+            submittedClipIds: plan.submittedClipIds,
+            expectedClipCount: plan.expectedClipCount,
+            collectionId: request.collectionId,
+            durationFilter:
+              resumeState?.durationFilter ?? promptResponse.duration_filter,
+            regenerateDurationOutliers:
+              resumeState?.regenerateDurationOutliers ?? true,
+            durationOutlierWarnings: resumeState?.durationOutlierWarnings,
+            submittedClipIdsAreDurationFiltered:
+              resumeState?.submittedClipIdsAreDurationFiltered,
+            shouldDownload: true,
+            unattended: { request, deferredIndices: [], leaseToken },
+          });
+          if (!result.ok) throw new Error("suno-helper runner is busy");
+          leaseHandedOff = true;
+          return;
+        }
+        if (plan.kind === "retry-download") {
+          if (resumeState?.downloadCompletedFilename) {
+            await sendMessage("postDownloaded", {
+              baseUrl: request.baseUrl,
+              collectionId: request.collectionId,
+              body: {
+                file_count: plan.expectedClipCount,
+                expected_file_count: plan.expectedClipCount,
+                format: request.downloadFormat,
+                download_path: resumeState.downloadCompletedFilename,
+                ...(collection.suno_playlist_url
+                  ? { suno_playlist_url: collection.suno_playlist_url }
+                  : {}),
+              },
+            });
+            const refreshed = await sendMessage("fetchCollections", {
+              baseUrl: request.baseUrl,
+            });
+            const completed = refreshed.find(
+              (candidate) => candidate.id === request.collectionId
+            );
+            if (
+              !completed ||
+              !hasCompleteUnattendedArtifacts(
+                completed,
+                promptResponse.entries.length * CLIPS_PER_REQUEST
+              )
+            ) {
+              throw new Error(
+                "download checkpoint の server readback に失敗しました"
+              );
+            }
+            await clearResumeStateForCollection(request.collectionId);
+            await writeUnattendedRunState(
+              nextUnattendedRunState({
+                request,
+                progress: {
+                  phase: PHASE.FINISHED,
+                  total: plan.expectedClipCount,
+                },
+                deferredIndices: [],
+                now: Date.now(),
+                verifiedComplete: true,
+              })
+            );
+            return;
+          }
+          const result = await sendMessage("retryDownload", {
+            collectionId: request.collectionId,
+            submittedClipIds: plan.submittedClipIds,
+            expectedClipCount: plan.expectedClipCount,
+            unattended: { request, deferredIndices: [], leaseToken },
+          });
+          if (!result.ok) throw new Error("suno-helper runner is busy");
+          leaseHandedOff = true;
+          return;
+        }
+
+        await writeUnattendedRunState({
+          requestId: request.requestId,
+          collectionId: request.collectionId,
+          status: "running",
+          checkpoint: "entries",
+          pendingEntryIndices: [...plan.deferredIndices],
+          updatedAt: Date.now(),
+        });
+        const result = await sendMessage("run", {
+          entries: promptResponse.entries,
+          playlistName,
+          durationFilter:
+            resumeState?.durationFilter ?? promptResponse.duration_filter,
+          collectionId: request.collectionId,
+          runMode: resumeState?.runMode ?? "queue",
+          regenerateDurationOutliers:
+            resumeState?.regenerateDurationOutliers ?? true,
+          durationOutlierWarnings: resumeState?.durationOutlierWarnings,
+          indices: plan.indices,
+          submittedClipIds: plan.previousSubmittedClipIds,
+          submittedClipIdsAreDurationFiltered:
+            resumeState?.submittedClipIdsAreDurationFiltered,
+          playlistExpectedClipCount: plan.playlistExpectedClipCount,
+          unattended: {
+            request,
+            deferredIndices: plan.deferredIndices,
+            leaseToken,
+          },
+        });
+        if (!result.ok) {
+          throw new Error(
+            "error" in result ? result.error : "suno-helper runner is busy"
+          );
+        }
+        leaseHandedOff = true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error("[suno-helper] 定期実行を開始できません:", error);
+        await writeFailure(message);
+      } finally {
+        if (!leaseHandedOff) await releaseLaunchLease();
+      }
+    }
+
     // popup 再 open 時の進捗復元 (#852)。in-memory snapshot が SSOT。完了時リロード (#1411) で
     // in-memory が破棄された後は、リロード直前に退避した直近完了 run の snapshot を fallback で返す
     // （stale 判定込み、次 run 開始で消去）。どちらも無ければ null（buildRestoreState が従来表示へ）。
@@ -2137,5 +2904,24 @@ export default defineContentScript({
       async () =>
         currentSnapshot ?? (await readFreshFinishedSnapshot(Date.now()))
     );
+    onMessage("queryUnattendedState", async () => {
+      await unattendedStateWrite;
+      return readUnattendedRunState();
+    });
+    const restoreAndLaunch = async (): Promise<void> => {
+      // Unit-test harnesses intentionally have no extension runtime/storage.
+      // Launch parsing remains testable, while storage restore is browser-only.
+      if (typeof browser !== "undefined" && browser.runtime) {
+        const state = await readUnattendedRunState();
+        if (state) exposeUnattendedRunState(document.documentElement, state);
+      }
+      await startUnattendedFromLaunchHash();
+    };
+    void restoreAndLaunch().catch((error: unknown) => {
+      console.warn(
+        "[suno-helper] 定期実行 state の復元または起動に失敗しました:",
+        error
+      );
+    });
   },
 });

@@ -477,6 +477,8 @@ uv run yt-suno-verify <collection-path>
 3. **Suno を開く**: Chrome で Advanced タブを選択（ボーカルは Lyrics mode = **Write**）
 4. **自動取得 → 連続実行**: 拡張ポップアップで配信元と collection を選ぶと prompts と配信元 URL が自動取得・保存される。最新データを取り直す場合はページを再読み込みし、取得完了後に全パターンを連続実行する。スキップされた entry は再実行ボタンで再投入可能
 
+定期 `/wf-next` からは `/suno-helper` の定期実行 flow を使い、`yt-suno-unattended-request` の URL を既ログイン Chrome で開く。entry / concurrency / retry 上限を超えた残りは checkpoint へ繰り越し、ログイン・CAPTCHA・課金確認・UI 非互換は自動突破せず handoff する。
+
 `--allow-extension suno-helper` は Chrome の profile preferences から unpacked 拡張 ID を検出し、`chrome-extension://<id>` の exact origin lock として使う。起動ログの `detected extension: suno-helper -> <id> (chrome-extension://<id>)` を確認し、検出 0 件・複数 ID 競合・Preferences 読み取り不可・Preferences JSON parse failure で失敗した場合のみ `--allow-origin "chrome-extension://<EXTENSION_ID>"` を fallback として手動指定する。`GET /auth/token` と `POST /collections/<id>/downloaded` は exact origin lock がないと 403 になる。
 
 UI 変更で注入先セレクタが外れた場合は `extensions/shared/dom.ts` の `SELECTORS` を保守する。

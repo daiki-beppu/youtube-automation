@@ -219,6 +219,7 @@ print(f'pattern_count={pattern_count} expected={expected} actual={actual}')
 判定:
 - **`actual == 0`**: `/suno-helper` 未実行として「`/suno-helper` を実行してダウンロードを完了してください」を案内して停止
 - **`0 < actual < expected`**: 部分ダウンロードとして扱う。`assets.music_downloaded` が `true` であっても揃っているとはみなさない。不足曲数（`expected - actual`）を提示し、「`/suno-helper` を再実行して不足分を DL するか、Suno UI から手動で不足曲をダウンロードして `02-Individual-music/` に配置してください」を案内して停止
+- 定期実行の extension state が `checkpoint` / `manual-intervention` / `running` の場合も、実ファイル数・`planning.music.suno_playlist_url`・`assets.music_downloaded` が揃うまでは停止する。extension state の `completed` は補助情報であり、この実ファイル突合を代替しない
 - **`actual >= expected`**: チェック OK として Step 1.6 へ進む
 
 `pattern_count` が `None`（`suno-prompts.json` が存在しない）の場合は期待曲数が算出不能なため本チェックをスキップし、以降の既存フローに委ねる。

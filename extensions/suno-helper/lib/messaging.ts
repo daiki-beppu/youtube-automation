@@ -18,6 +18,10 @@ import type {
 } from "../../shared/constants";
 import type { LocalServerSource } from "../../shared/constants";
 import type { RunRange } from "./resume-state";
+import type {
+  UnattendedRunRequest,
+  UnattendedRunState,
+} from "./unattended-run";
 
 /**
  * run メッセージの payload (#854, #872)。
@@ -43,6 +47,12 @@ export interface RunPayload {
   submittedClipIdsAreDurationFiltered?: boolean;
   /** duration filter 後に playlist 追加・download へ採用する OK clip 件数。 */
   playlistExpectedClipCount?: number;
+  /** 定期実行だけが付与する上限・checkpoint 契約。未指定の手動 run は従来挙動。 */
+  unattended?: {
+    request: UnattendedRunRequest;
+    deferredIndices: number[];
+    leaseToken: string;
+  };
 }
 
 export interface RetryPlaylistPayload {
@@ -58,6 +68,12 @@ export interface RetryPlaylistPayload {
   /** true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。 */
   submittedClipIdsAreDurationFiltered?: boolean;
   shouldDownload?: boolean;
+  /** 定期実行の playlist/download 再開時だけ付与する checkpoint 契約。 */
+  unattended?: {
+    request: UnattendedRunRequest;
+    deferredIndices: number[];
+    leaseToken: string;
+  };
 }
 
 /** overlay → runner: Suno UI でユーザーが手動選択した clip を resume 用 ID として採用する。 */
@@ -82,6 +98,12 @@ export interface RetryDownloadPayload {
   collectionId: string;
   submittedClipIds: string[];
   expectedClipCount?: number;
+  /** 定期実行の download 再開時だけ付与する checkpoint 契約。 */
+  unattended?: {
+    request: UnattendedRunRequest;
+    deferredIndices: number[];
+    leaseToken: string;
+  };
 }
 
 interface ProtocolMap {
@@ -91,11 +113,15 @@ interface ProtocolMap {
     matches: boolean;
   };
   /** overlay → background → runner: 連続実行を開始する。 */
-  run(payload: RunPayload): { ok: true };
+  run(
+    payload: RunPayload
+  ): { ok: true } | { ok: false; busy: true } | { ok: false; error: string };
   /** overlay → background → runner: 連続実行を中断する。 */
   stop(): { ok: true };
   /** overlay → background → runner: playlist 追加のみ再実行する。entries 不要。 */
-  retryPlaylist(payload: RetryPlaylistPayload): { ok: true };
+  retryPlaylist(
+    payload: RetryPlaylistPayload
+  ): { ok: true } | { ok: false; busy: true };
   /** overlay → background → runner: 手動選択中の clip ID を読む。 */
   adoptSelectedClips(payload: AdoptSelectedClipsPayload): {
     ok: true;
@@ -105,6 +131,8 @@ interface ProtocolMap {
   progress(payload: ProgressPayload): void;
   /** overlay → background → runner: 現在の進捗スナップショットを問い合わせる (#852)。未実行は null。 */
   queryProgress(): SnapshotPayload | null;
+  /** scheduler / overlay → runner: 直近の定期実行 checkpoint・手動介入理由を読む。 */
+  queryUnattendedState(): UnattendedRunState | null;
   /** background → overlay content: action クリックで overlay 表示を toggle する (#892)。 */
   toggleOverlay(): void;
   /** runner → background: Download all 開始を通知し、background の chrome.downloads 監視を起動する (#1146)。
@@ -139,6 +167,26 @@ interface ProtocolMap {
     baseUrl: string;
     collectionId: string;
   }): PromptResponse;
+  /** runner -> background: consume a short-lived server-side command once. */
+  consumeUnattendedRequest(payload: {
+    baseUrl: string;
+    nonce: string;
+  }): unknown;
+  acquireUnattendedLease(payload: {
+    collectionId: string;
+    requestId: string;
+  }): {
+    acquired: boolean;
+    token?: string;
+  };
+  heartbeatUnattendedLease(payload: {
+    collectionId: string;
+    token: string;
+  }): void;
+  releaseUnattendedLease(payload: {
+    collectionId: string;
+    token: string;
+  }): void;
   /** runner → background: token 取得と POST /downloaded を privileged boundary に委譲する (#1217)。
    *  部分完了時はサーバーの warning を返す (#1913)。 */
   postDownloaded(payload: {
@@ -149,7 +197,9 @@ interface ProtocolMap {
     warning: string | null;
   };
   /** overlay → background → runner: ダウンロードのみ再実行する (#1251)。 */
-  retryDownload(payload: RetryDownloadPayload): { ok: true };
+  retryDownload(
+    payload: RetryDownloadPayload
+  ): { ok: true } | { ok: false; busy: true };
 }
 
 export const { sendMessage, onMessage } =
