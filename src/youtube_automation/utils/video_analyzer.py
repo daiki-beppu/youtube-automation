@@ -116,11 +116,41 @@ class VideoAnalyzer:
             analysis_window_sec=self.analysis_window_sec,
         )
 
+    def json_path(self, target: VideoTarget) -> Path:
+        """解析結果 JSON の保存先 `data_dir/video_analysis/<slug>/<video_id>.json` を返す。"""
+        return self.data_dir / VIDEO_ANALYSIS_DIRNAME / target.slug / f"{target.video_id}.json"
+
+    def load_cached_json(self, target: VideoTarget) -> dict | None:
+        """既存の解析結果 JSON を読み込む。有効な結果がなければ None を返す。
+
+        再実行時の Gemini 再課金を防ぐキャッシュ判定 (#1693)。以下はすべて
+        「キャッシュなし」として None を返し、呼び出し側で再解析させる:
+
+        - ファイルが存在しない
+        - JSON としてパースできない (部分書き込み等の破損)
+        - パース結果が dict でない (null / 配列など。壊れた結果のサイレント再利用を防ぐ)
+        """
+        cache_path = self.json_path(target)
+        if not cache_path.exists():
+            return None
+        try:
+            payload = json.loads(cache_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as err:
+            logger.warning("既存の解析 JSON が破損しているため再解析します: %s (%s)", cache_path, err)
+            return None
+        if not isinstance(payload, dict):
+            logger.warning(
+                "既存の解析 JSON が object ではないため再解析します: %s (type=%s)",
+                cache_path,
+                type(payload).__name__,
+            )
+            return None
+        return payload
+
     def save_json(self, target: VideoTarget, payload: dict[str, Any]) -> Path:
         """`data_dir/video_analysis/<slug>/<video_id>.json` に書き出す。"""
-        out_dir = self.data_dir / VIDEO_ANALYSIS_DIRNAME / target.slug
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / f"{target.video_id}.json"
+        out_path = self.json_path(target)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         logger.info("動画分析 JSON 保存: %s", out_path)
         return out_path

@@ -18,6 +18,7 @@ Issue #103 で追加する VideoAnalyzer / VideoAnalysisReport / VideoTarget の
 from __future__ import annotations
 
 import json
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -303,6 +304,94 @@ class TestVideoAnalyzerSaveJson:
         # Then: 中間ディレクトリが自動作成され、ファイルが書かれる
         assert out_path.exists()
         assert out_path.parent.is_dir()
+
+
+class TestVideoAnalyzerLoadCachedJson:
+    """#1693: 既存解析 JSON のキャッシュ判定 (再実行時の Gemini 再課金防止)"""
+
+    def _make_analyzer(self, tmp_path) -> VideoAnalyzer:
+        return VideoAnalyzer(
+            client=MagicMock(),
+            model="gemini-3.5-flash",
+            prompt="analyze",
+            delay_sec=0,
+            data_dir=tmp_path,
+            analysis_window_sec=900,
+        )
+
+    def test_json_path_matches_save_location(self, tmp_path):
+        # Given: save_json で書き出したファイル
+        analyzer = self._make_analyzer(tmp_path)
+        target = _make_target()
+
+        # When
+        saved = analyzer.save_json(target, dict(_VALID_PAYLOAD))
+
+        # Then: json_path が保存先と一致する
+        assert analyzer.json_path(target) == saved
+
+    def test_returns_payload_when_valid_cache_exists(self, tmp_path):
+        # Given: 有効な解析 JSON が既存
+        analyzer = self._make_analyzer(tmp_path)
+        target = _make_target()
+        analyzer.save_json(target, dict(_VALID_PAYLOAD))
+
+        # When
+        cached = analyzer.load_cached_json(target)
+
+        # Then: 既存 payload がそのまま返る
+        assert cached is not None
+        assert cached["hook_structure"]["intro_sec"] == 5
+
+    def test_returns_none_when_no_cache(self, tmp_path):
+        # Given: ファイルなし
+        analyzer = self._make_analyzer(tmp_path)
+
+        # When/Then
+        assert analyzer.load_cached_json(_make_target()) is None
+
+    def test_returns_none_on_broken_json(self, tmp_path, caplog):
+        # Given: 部分書き込み等で壊れた JSON
+        analyzer = self._make_analyzer(tmp_path)
+        target = _make_target()
+        path = analyzer.json_path(target)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"hook_structure": {"intro', encoding="utf-8")
+
+        # When
+        with caplog.at_level(logging.WARNING):
+            cached = analyzer.load_cached_json(target)
+
+        # Then: 破損扱いで None + 警告 (サイレント再利用しない)
+        assert cached is None
+        assert "破損" in caplog.text
+
+    def test_returns_none_on_json_null(self, tmp_path, caplog):
+        # Given: JSON としては valid だが object ではない null
+        analyzer = self._make_analyzer(tmp_path)
+        target = _make_target()
+        path = analyzer.json_path(target)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("null", encoding="utf-8")
+
+        # When
+        with caplog.at_level(logging.WARNING):
+            cached = analyzer.load_cached_json(target)
+
+        # Then
+        assert cached is None
+        assert "object ではない" in caplog.text
+
+    def test_returns_none_on_json_array(self, tmp_path):
+        # Given: 配列トップレベル (解析結果の形ではない)
+        analyzer = self._make_analyzer(tmp_path)
+        target = _make_target()
+        path = analyzer.json_path(target)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('[{"hook_structure": {}}]', encoding="utf-8")
+
+        # When/Then
+        assert analyzer.load_cached_json(target) is None
 
 
 class TestVideoAnalysisReport:
