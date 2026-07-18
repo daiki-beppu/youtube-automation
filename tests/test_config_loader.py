@@ -2331,7 +2331,7 @@ def test_scheduled_automation_absent_uses_disabled_defaults(tmp_path, monkeypatc
     assert sa.timezone == "Asia/Tokyo"
     assert sa.run_time == "09:00"
     assert sa.cadence == ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
-    assert sa.target_workflow == "wf-next"
+    assert sa.target_workflow == "automation-run"
     assert sa.max_retries == 0
     assert sa.retry_delay_seconds == 300
     assert sa.prevent_concurrent_runs is True

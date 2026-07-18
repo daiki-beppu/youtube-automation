@@ -5,12 +5,13 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 ## 前後工程
 
-- `前工程`: `/wf-new`
+- `前工程`: `/automation-run`, `/wf-new`
 - `後工程`: `/analytics-analyze`, `/flop-analysis`
 
 ## Overview
 
 既存コレクションを次工程へ進めるオーケストレーター。完了済みの素材を自動検出し、未完了のステップから再開する。
+`/automation-run` から委譲された場合も本スキルが state 更新の単一責務を持つ。統合 runner の `allow_external_publish = false` 制約ではローカル動画・metadata 生成まで進め、YouTube 書き込み直前で停止する。
 
 ## Hard Gates: subagent 委譲境界
 
@@ -192,6 +193,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 メインが `assets` フラグと実ファイルを突合して未完了ステップを特定し、同じ subagent 委譲から再実行する。
 - `assets.master_video = null` → 並列 A から
 - `upload.video_id = null` → 初投稿プレイリスト初期化ゲート（`uv run yt-playlist-status` → 必要なら `--init --dry-run` → 確認後 `--init`）を通してから `/video-upload` へ進む
+- `upload.video_id != null` かつ phase / stage / live 移動が未完了 → `20-documentation/upload_tracking.json` が schema v3、全体と Complete Collection の status が `completed`、video ID が state と完全一致する場合だけ、remote upload と playlist assign を skip する。planning 側 collection を同名の `collections/live/` へ移動（同名 live が既にあれば停止）し、移動先 state の `stage: "live"`、`phase: "complete"`、`updated_at` だけを atomic write で補完する。tracking 欠落・不一致なら `upload_state_inconsistent` で停止し、upload を再実行しない
 
 #### `complete` → 完了案内
 
