@@ -3,6 +3,11 @@ name: playlist
 description: "Use when プレイリストの作成・割り当て・確認をするとき。「プレイリスト作って」「初投稿」「初回投稿」「初回公開前にプレイリスト初期化」「/playlist」で発動"
 ---
 
+## 前後工程
+
+- `前工程`: `/wf-next`
+- `後工程`: `/video-upload`
+
 ## Overview
 
 `uv run yt-playlist-status` と `uv run yt-playlist-manager` を 1 スキルに統合し、プレイリストの状態確認・作成・動画割り当て・クリーンアップを案内する。

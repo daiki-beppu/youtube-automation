@@ -428,11 +428,32 @@ def test_thumbnail_skill_distributes_archive_script() -> None:
 def test_thumbnail_skill_frontmatter_names_thumbnail_as_primary_output() -> None:
     """#1611: skill dispatch は main.png ではなく text-included thumbnail.jpg を主成果物として説明する。"""
     skill = _read_thumbnail_skill()
-    frontmatter = _slice_between(skill, "---", "---\n\n## Overview")
+    frontmatter = skill.split("---\n", 2)[1]
 
     assert "YouTube サムネイル（thumbnail.jpg）" in frontmatter
     assert "textless main.png/jpg を先行生成して実フォント合成" in frontmatter
     assert "サムネイル（main.png）" not in frontmatter
+
+
+def test_thumbnail_skill_documents_full_auto_selection_gate_contract() -> None:
+    """#2167: full は 4 ゲートを省略し、selection_only の既存範囲を変えない。"""
+    skill = _read_thumbnail_skill()
+    opening_gate = "\n".join(skill.splitlines()[:60])
+    auto_selection = _slice_between(skill, "## 自動選択", "## 品質チェック")
+
+    for gate in ("テーマ確認", "生成可否", "textless 背景承認", "テキスト付き候補承認"):
+        assert gate in opening_gate
+    assert "mode: full" in opening_gate
+    assert "残り 3 ゲートは従来どおり実行" in opening_gate
+
+    assert "config のテーマ設定" in auto_selection
+    assert "collection metadata" in auto_selection
+    assert auto_selection.find("config のテーマ設定") < auto_selection.find("collection metadata")
+    assert "workflow-state.json::theme" in auto_selection
+    assert "生成 CLI に `-y`" in auto_selection
+    assert "yt-thumbnail-auto-select <collection-path> --apply" in auto_selection
+    assert "full モード失敗時の手動切替" in auto_selection
+    assert "`selection_only` に変更" in auto_selection
 
 
 def test_thumbnail_skill_initial_generation_examples_output_text_included_candidates() -> None:
@@ -640,6 +661,46 @@ def test_thumbnail_default_config_remains_ttp_aligned() -> None:
     # #2070: gemini 既定 diff_prompt_template は空文字ではなく TTP 既定テンプレートを持つ
     assert 'diff_prompt_template: ""' not in config
     assert "diff_prompt_template: |" in config
+
+
+def test_thumbnail_default_config_disables_ab_test_by_default() -> None:
+    config = _load_thumbnail_default_config()
+
+    assert config["ab_test"] == {"enabled": False, "patterns": []}
+
+
+def test_thumbnail_skill_documents_ab_test_outputs_prompts_and_approval_contract() -> None:
+    skill = _read_thumbnail_skill()
+    block = _slice_between(
+        skill,
+        "### Test & compare 用 A/B pattern（opt-in）",
+        "### thumbnail-text-profile 適用（#1907）",
+    )
+
+    for required in (
+        "`ab_test` 未設定または `enabled: false`",
+        "1〜3 件",
+        "`variation`",
+        "`ConfigError`",
+        "--ab-pattern <name>",
+        "thumbnail-<name>.jpg",
+        "先頭 pattern",
+        "thumbnail.jpg",
+        "A/B Test Pattern Prompts",
+        "全 pattern の承認が揃うまでは `thumbnail.approved` を `true` にしない",
+        "Test & compare",
+        "公式 API はない",
+    ):
+        assert required in block
+
+    prompt_block = _slice_between(skill, "## プロンプト保存", "## ファイル命名ルール（上書き禁止）")
+    assert "## A/B Test Pattern Prompts" in prompt_block
+    assert "Pattern a Final Prompt" in prompt_block
+    assert "Pattern b Final Prompt" in prompt_block
+
+    state_block = _slice_between(skill, "### `workflow-state.json` 更新", "## stock 退避と再利用")
+    assert "全 pattern" in state_block
+    assert "先頭 pattern と同一内容" in state_block
 
 
 def test_thumbnail_design_report_uses_current_two_phase_contract() -> None:

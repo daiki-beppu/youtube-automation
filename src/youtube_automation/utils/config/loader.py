@@ -7,6 +7,7 @@ import logging
 import os
 from pathlib import Path
 
+from youtube_automation.utils.audio_visualizer_fill import normalize_ffmpeg_color, parse_color
 from youtube_automation.utils.config.analytics import Analytics, Benchmark
 from youtube_automation.utils.config.audio import Audio
 from youtube_automation.utils.config.comments import (
@@ -35,10 +36,21 @@ from youtube_automation.utils.config.meta import Branding, ChannelMeta
 from youtube_automation.utils.config.pinned_comment import PinnedComment
 from youtube_automation.utils.config.playlists import Playlists
 from youtube_automation.utils.config.shorts import Shorts, ShortsCollection, ShortsRelease
-from youtube_automation.utils.config.workflow import ApprovalGates, WfNext, Workflow
+from youtube_automation.utils.config.workflow import (
+    SCHEDULED_AUTOMATION_CADENCE_DAYS,
+    SCHEDULED_AUTOMATION_NOTIFICATIONS,
+    ApprovalGates,
+    ScheduledAutomation,
+    WfNext,
+    Workflow,
+)
 from youtube_automation.utils.config.youtube import (
+    AudioVisualizerFill,
+    AudioVisualizerGlow,
+    AudioVisualizerRounding,
     ContentModel,
     OverlayAudioVisualizer,
+    OverlayAudioVisualizerRing,
     OverlayEncoder,
     Overlays,
     OverlaySubscribePopup,
@@ -51,6 +63,7 @@ logger = logging.getLogger(__name__)
 
 _instance: ChannelConfig | None = None
 _channel_dir: Path | None = None
+_explicit_channel: str | None = None
 
 # 必須キー（ドット区切り）。分割前の channel_config.py::_REQUIRED_KEYS を新構造へ分配。
 _REQUIRED_KEYS_BY_SECTION: dict[str, list[str]] = {
@@ -79,17 +92,99 @@ _REQUIRED_KEYS_BY_SECTION: dict[str, list[str]] = {
 }
 
 
-def _resolve_channel_dir() -> Path:
-    """`config/channel/` を含むプロジェクトルートを解決する.
+def workspace_channels(workspace_root: Path) -> dict[str, Path]:
+    """workspace 直下の有効な channel slug とディレクトリを返す."""
+    channels_root = workspace_root / "channels"
+    if not channels_root.is_dir():
+        return {}
+    return {
+        path.name: path
+        for path in sorted(channels_root.iterdir(), key=lambda candidate: candidate.name)
+        if path.is_dir() and (path / "config" / "channel").is_dir()
+    }
 
-    優先順: `CHANNEL_DIR` 環境変数 → CWD 祖先探索で `config/channel/` を持つ祖先ディレクトリ.
-    """
-    env = os.environ.get("CHANNEL_DIR")
-    if env:
-        return Path(env)
-    for parent in [Path.cwd(), *list(Path.cwd().parents)]:
+
+def find_workspace_root(start: Path | None = None) -> Path | None:
+    """start から祖先を遡り、最初の multi-channel workspace を返す."""
+    current = (start or Path.cwd()).expanduser().resolve()
+    for parent in [current, *current.parents]:
+        if workspace_channels(parent):
+            return parent
+    return None
+
+
+def select_channel(slug: str | None) -> None:
+    """CLI の明示的な ``--channel`` 選択を初回 config 解決へ渡す."""
+    global _explicit_channel, _instance, _channel_dir
+    if _instance is not None or _channel_dir is not None:
+        raise ConfigError("チャンネル設定の解決後に --channel を変更することはできません")
+    if slug is not None and not slug.strip():
+        raise ConfigError("--channel には空でない channel slug を指定してください")
+    _explicit_channel = slug
+
+
+def _find_channel_ancestor(start: Path) -> Path | None:
+    current = start.expanduser().resolve()
+    for parent in [current, *current.parents]:
         if (parent / "config" / "channel").is_dir():
             return parent
+    return None
+
+
+def _resolve_slug(slug: str, workspace_root: Path | None, *, source: str) -> Path:
+    if workspace_root is None:
+        raise ConfigError(f"{source}={slug!r} を解決できる workspace が見つかりません")
+    candidates = workspace_channels(workspace_root)
+    if slug not in candidates:
+        available = ", ".join(candidates) or "(なし)"
+        raise ConfigError(
+            f"{source}={slug!r} に対応するチャンネルが見つかりません: {workspace_root / 'channels'}. 候補: {available}"
+        )
+    return candidates[slug]
+
+
+def _resolve_channel_dir() -> Path:
+    """設定ルートを ``--channel`` → env → cwd の優先順で安全に解決する."""
+    cwd = Path.cwd()
+    cwd_channel = _find_channel_ancestor(cwd)
+    env_dir_raw = os.environ.get("CHANNEL_DIR")
+    env_dir = Path(env_dir_raw).expanduser() if env_dir_raw else None
+    workspace_root = find_workspace_root(cwd)
+    if workspace_root is None and env_dir is not None:
+        workspace_root = find_workspace_root(env_dir)
+
+    env_slug = os.environ.get("CHANNEL")
+    validate_env_channel = _explicit_channel is None or env_dir is not None
+    env_channel = (
+        _resolve_slug(env_slug, workspace_root, source="CHANNEL") if env_slug and validate_env_channel else None
+    )
+    if env_channel is not None and env_dir is not None and env_channel.resolve() != env_dir.resolve():
+        raise ConfigError(
+            "CHANNEL と CHANNEL_DIR が異なるチャンネルを指しています: "
+            f"CHANNEL={env_slug!r} -> {env_channel.resolve()}, CHANNEL_DIR={env_dir_raw!r} -> {env_dir.resolve()}"
+        )
+
+    if _explicit_channel is not None:
+        explicit_channel = _resolve_slug(_explicit_channel, workspace_root, source="--channel")
+        if cwd_channel is not None and cwd_channel.resolve() != explicit_channel.resolve():
+            logger.warning(
+                "--channel=%s (%s) を採用します。cwd は別チャンネル %s を指しています",
+                _explicit_channel,
+                explicit_channel,
+                cwd_channel,
+            )
+        return explicit_channel
+    if env_channel is not None:
+        return env_channel
+    if env_dir is not None:
+        return env_dir
+    if cwd_channel is not None:
+        return cwd_channel
+    if workspace_root is not None:
+        available = ", ".join(workspace_channels(workspace_root))
+        raise ConfigError(
+            f"workspace ルートでは --channel <slug> または CHANNEL=<slug> を指定してください. 候補: {available}"
+        )
     raise ConfigError("CHANNEL_DIR 環境変数を設定するか、config/channel/ を持つディレクトリ配下で実行してください")
 
 
@@ -101,11 +196,13 @@ def channel_dir() -> Path:
     return _channel_dir
 
 
-def reset() -> None:
-    """シングルトン state をリセット（テスト用）."""
-    global _instance, _channel_dir
+def reset(*, preserve_channel_selection: bool = False) -> None:
+    """シングルトン state をリセットし、必要なら CLI の明示選択を保持する."""
+    global _explicit_channel, _instance, _channel_dir
     _instance = None
     _channel_dir = None
+    if not preserve_channel_selection:
+        _explicit_channel = None
 
 
 def load_config() -> ChannelConfig:
@@ -312,8 +409,97 @@ def _build_overlays(raw: object) -> Overlays:
     av_raw = raw.get("audio_visualizer") or {}
     if not isinstance(av_raw, dict):
         raise ConfigError(f"overlays.audio_visualizer は object でなければなりません（got {type(av_raw).__name__}）")
+    av_style = str(av_raw.get("style", "bar"))
+    valid_av_styles = ("bar", "mirror-mountain", "ring", "ring-line", "heart")
+    if av_style not in valid_av_styles:
+        raise ConfigError(
+            f"overlays.audio_visualizer.style='{av_style}' は不正です（有効値: {', '.join(valid_av_styles)}）"
+        )
+    try:
+        av_bars = int(av_raw.get("bars", 16))
+    except (TypeError, ValueError) as exc:
+        raise ConfigError("overlays.audio_visualizer.bars は整数でなければなりません") from exc
+    if av_bars <= 0:
+        raise ConfigError("overlays.audio_visualizer.bars は 1 以上でなければなりません")
+    av_ring_raw = av_raw.get("ring") or {}
+    if not isinstance(av_ring_raw, dict):
+        raise ConfigError(
+            f"overlays.audio_visualizer.ring は object でなければなりません（got {type(av_ring_raw).__name__}）"
+        )
+    av_arc_raw = av_ring_raw.get("arc_deg", [0, 360])
+    if not isinstance(av_arc_raw, (list, tuple)) or len(av_arc_raw) != 2:
+        raise ConfigError("overlays.audio_visualizer.ring.arc_deg は [start, end] の 2 要素配列でなければなりません")
+    try:
+        av_ring = OverlayAudioVisualizerRing(
+            inner_r=int(av_ring_raw.get("inner_r", 120)),
+            length=int(av_ring_raw.get("length", 160)),
+            arc_deg=(float(av_arc_raw[0]), float(av_arc_raw[1])),
+        )
+    except (TypeError, ValueError) as exc:
+        raise ConfigError("overlays.audio_visualizer.ring の値は数値でなければなりません") from exc
+    if av_ring.inner_r < 0 or av_ring.length <= 0:
+        raise ConfigError("overlays.audio_visualizer.ring の inner_r は 0 以上、length は 1 以上でなければなりません")
+    if not 0 <= av_ring.arc_deg[0] < av_ring.arc_deg[1] <= 360:
+        raise ConfigError("overlays.audio_visualizer.ring.arc_deg は 0 <= start < end <= 360 でなければなりません")
+
+    fill_raw = av_raw.get("fill")
+    if fill_raw is not None and not isinstance(fill_raw, dict):
+        raise ConfigError("overlays.audio_visualizer.fill は object でなければなりません")
+    fill = None
+    if fill_raw is not None:
+        fill_type = str(fill_raw.get("type", "solid"))
+        if fill_type not in {"solid", "gradient", "rainbow"}:
+            raise ConfigError("overlays.audio_visualizer.fill.type は solid / gradient / rainbow のいずれかです")
+        fill_color = str(fill_raw.get("color", av_raw.get("colors", "white")))
+        fill_top = str(fill_raw.get("top", "0xA9CBF0"))
+        fill_bottom = str(fill_raw.get("bottom", fill_raw.get("bot", "0x3A5696")))
+        try:
+            if fill_type == "solid":
+                normalize_ffmpeg_color(fill_color)
+            elif fill_type == "gradient":
+                parse_color(fill_top)
+                parse_color(fill_bottom)
+        except ValueError as exc:
+            raise ConfigError(f"overlays.audio_visualizer.fill の色指定が不正です: {exc}") from exc
+        fill = AudioVisualizerFill(
+            type=fill_type,
+            color=fill_color,
+            top=fill_top,
+            bottom=fill_bottom,
+        )
+
+    rounding_raw = av_raw.get("rounding")
+    if rounding_raw is not None and not isinstance(rounding_raw, dict):
+        raise ConfigError("overlays.audio_visualizer.rounding は object でなければなりません")
+    rounding = (
+        AudioVisualizerRounding(
+            blur=float(rounding_raw.get("blur", 2.3)),
+            contrast=float(rounding_raw.get("contrast", 3.2)),
+        )
+        if rounding_raw is not None
+        else None
+    )
+    if rounding is not None and (rounding.blur < 0 or rounding.contrast <= 0):
+        raise ConfigError("overlays.audio_visualizer.rounding の blur は 0 以上、contrast は 0 より大きい値です")
+
+    glow_raw = av_raw.get("glow")
+    if glow_raw is not None and not isinstance(glow_raw, dict):
+        raise ConfigError("overlays.audio_visualizer.glow は object でなければなりません")
+    glow = (
+        AudioVisualizerGlow(
+            enabled=bool(glow_raw.get("enabled", True)),
+            sigma=float(glow_raw.get("sigma", av_raw.get("glow_sigma", 12.0))),
+            opacity=float(glow_raw.get("opacity", av_raw.get("glow_opacity", 0.45))),
+        )
+        if glow_raw is not None
+        else None
+    )
+    if glow is not None and (glow.sigma < 0 or not 0 <= glow.opacity <= 1):
+        raise ConfigError("overlays.audio_visualizer.glow の sigma は 0 以上、opacity は 0〜1 の値です")
     audio_visualizer = OverlayAudioVisualizer(
         enabled=bool(av_raw.get("enabled", False)),
+        style=av_style,
+        bars=av_bars,
         mode=str(av_raw.get("mode", "bar")),
         size=str(av_raw.get("size", "1280x180")),
         rate=str(av_raw.get("rate", "24")),
@@ -326,6 +512,12 @@ def _build_overlays(raw: object) -> Overlays:
         glow_enabled=bool(av_raw.get("glow_enabled", True)),
         glow_sigma=float(av_raw.get("glow_sigma", 12.0)),
         glow_opacity=float(av_raw.get("glow_opacity", 0.45)),
+        ring=av_ring,
+        fill=fill,
+        mirror_center=bool(av_raw.get("mirror_center", False)),
+        symmetric_vertical=bool(av_raw.get("symmetric_vertical", False)),
+        rounding=rounding,
+        glow=glow,
     )
 
     sp_raw = raw.get("subscribe_popup") or {}
@@ -435,7 +627,107 @@ def _build_workflow(merged: dict) -> Workflow:
                 "workflow.wf_next.skip_manual_mastering",
             ),
         ),
+        scheduled_automation=_build_scheduled_automation(wf),
     )
+
+
+def _build_scheduled_automation(wf: dict) -> ScheduledAutomation:
+    """`workflow.scheduled_automation`（optional）を組み立てる（#1892）.
+
+    未設定なら全 default（`enabled = False`）で、既存チャンネルの挙動を変えない。
+    指定された値は falsy を default に潰さず strict に検証する（#1449 と同方針）。
+    """
+    if "scheduled_automation" not in wf:
+        return ScheduledAutomation()
+    raw = wf["scheduled_automation"]
+    if not isinstance(raw, dict):
+        raise ConfigError(f"workflow.scheduled_automation は object でなければなりません（got {type(raw).__name__}）")
+
+    prefix = "workflow.scheduled_automation"
+    defaults = ScheduledAutomation()
+    return ScheduledAutomation(
+        enabled=_scheduled_bool(raw, "enabled", prefix, defaults.enabled),
+        timezone=_scheduled_str(raw, "timezone", prefix, defaults.timezone),
+        run_time=_scheduled_run_time(raw, prefix, defaults.run_time),
+        cadence=_scheduled_cadence(raw, prefix, defaults.cadence),
+        target_workflow=_scheduled_str(raw, "target_workflow", prefix, defaults.target_workflow),
+        max_retries=_scheduled_int(raw, "max_retries", prefix, defaults.max_retries),
+        retry_delay_seconds=_scheduled_int(raw, "retry_delay_seconds", prefix, defaults.retry_delay_seconds),
+        prevent_concurrent_runs=_scheduled_bool(
+            raw, "prevent_concurrent_runs", prefix, defaults.prevent_concurrent_runs
+        ),
+        notification=_scheduled_notification(raw, prefix, defaults.notification),
+        allow_external_publish=_scheduled_bool(raw, "allow_external_publish", prefix, defaults.allow_external_publish),
+    )
+
+
+def _scheduled_bool(raw: dict, key: str, prefix: str, default: bool) -> bool:
+    if key not in raw:
+        return default
+    value = raw[key]
+    if not isinstance(value, bool):
+        raise ConfigError(f"{prefix}.{key} は boolean でなければなりません（got {type(value).__name__}）")
+    return value
+
+
+def _scheduled_int(raw: dict, key: str, prefix: str, default: int) -> int:
+    if key not in raw:
+        return default
+    value = raw[key]
+    # bool は int の subclass のため明示的に弾く
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigError(f"{prefix}.{key} は integer でなければなりません（got {type(value).__name__}）")
+    if value < 0:
+        raise ConfigError(f"{prefix}.{key} は 0 以上でなければなりません（got {value}）")
+    return value
+
+
+def _scheduled_str(raw: dict, key: str, prefix: str, default: str) -> str:
+    if key not in raw:
+        return default
+    value = raw[key]
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"{prefix}.{key} は空でない string でなければなりません（got {value!r}）")
+    return value
+
+
+def _scheduled_run_time(raw: dict, prefix: str, default: str) -> str:
+    value = _scheduled_str(raw, "run_time", prefix, default)
+    parts = value.split(":")
+    if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+        hour, minute = int(parts[0]), int(parts[1])
+        if len(parts[0]) == 2 and len(parts[1]) == 2 and hour <= 23 and minute <= 59:
+            return value
+    raise ConfigError(f"{prefix}.run_time は HH:MM（24 時間表記）でなければなりません（got {value!r}）")
+
+
+def _scheduled_cadence(raw: dict, prefix: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    if "cadence" not in raw:
+        return default
+    value = raw["cadence"]
+    if not isinstance(value, list) or not value:
+        raise ConfigError(f"{prefix}.cadence は空でない曜日の array でなければなりません（got {value!r}）")
+    seen: list[str] = []
+    for day in value:
+        if not isinstance(day, str) or day not in SCHEDULED_AUTOMATION_CADENCE_DAYS:
+            raise ConfigError(
+                f"{prefix}.cadence の要素は {list(SCHEDULED_AUTOMATION_CADENCE_DAYS)} の"
+                f"いずれかでなければなりません（got {day!r}）"
+            )
+        if day in seen:
+            raise ConfigError(f"{prefix}.cadence に重複した曜日があります（{day!r}）")
+        seen.append(day)
+    return tuple(seen)
+
+
+def _scheduled_notification(raw: dict, prefix: str, default: str) -> str:
+    value = _scheduled_str(raw, "notification", prefix, default)
+    if value not in SCHEDULED_AUTOMATION_NOTIFICATIONS:
+        raise ConfigError(
+            f"{prefix}.notification は {list(SCHEDULED_AUTOMATION_NOTIFICATIONS)} の"
+            f"いずれかでなければなりません（got {value!r}）"
+        )
+    return value
 
 
 def _resolve_skip_approval(wf_next_raw: dict, gates_raw: dict, new_key: str, legacy_key: str) -> bool:

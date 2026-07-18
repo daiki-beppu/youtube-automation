@@ -268,6 +268,15 @@ def test_flop_analysis_uses_video_analyze_output_schema_for_content_verdicts() -
     assert "入力 JSON のキー・閾値" in phase_4
 
 
+def test_flop_analysis_references_retention_timeline_report() -> None:
+    phase_4 = _section(_skill_text(), "### Phase 4: 検証の自律実行")
+
+    assert "yt-retention-timeline --video <video_id>" in phase_4
+    assert "reports/retention_analysis/<video_id>.md" in phase_4
+    assert "/video-analyze 未実行" in phase_4
+    assert "outside_analysis_window" in phase_4
+
+
 def test_flop_analysis_delegates_thumbnail_verdict_to_executable_reference() -> None:
     """サムネ verdict を Markdown 内で再実装せず公開 reference へ委譲する。"""
     phase_4 = _section(_skill_text(), "### Phase 4: 検証の自律実行")

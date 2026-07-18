@@ -2,17 +2,62 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from importlib import import_module
 from typing import cast
 
 from youtube_automation.cli_stdio import configure_utf8_stdio
 
+_CHANNEL_OPTION_CONFLICTS = {
+    "youtube_automation.scripts.benchmark_collector",
+    "youtube_automation.scripts.video_analyze",
+}
+
+
+def _consume_channel_option(argv: list[str]) -> str | None:
+    """共通 ``--channel`` を argv から除去し、指定 slug を返す."""
+    slug: str | None = None
+    index = 1
+    while index < len(argv):
+        argument = argv[index]
+        if argument == "--":
+            break
+        if argument == "--channel":
+            if index + 1 >= len(argv) or argv[index + 1].startswith("-"):
+                from youtube_automation.utils.exceptions import ConfigError
+
+                raise ConfigError("--channel には channel slug が必要です")
+            value = argv[index + 1]
+            del argv[index : index + 2]
+        elif argument.startswith("--channel="):
+            value = argument.partition("=")[2]
+            del argv[index]
+        else:
+            index += 1
+            continue
+        if not value:
+            from youtube_automation.utils.exceptions import ConfigError
+
+            raise ConfigError("--channel には空でない channel slug を指定してください")
+        if slug is not None:
+            from youtube_automation.utils.exceptions import ConfigError
+
+            raise ConfigError("--channel は複数回指定できません")
+        slug = value
+    return slug
+
 
 def _run(module_path: str, function_name: str = "main") -> object:
     """Configure CLI stdio before importing and running the real command."""
 
     configure_utf8_stdio()
+    if module_path not in _CHANNEL_OPTION_CONFLICTS:
+        channel = _consume_channel_option(sys.argv)
+        if channel is not None:
+            from youtube_automation.utils.config import select_channel
+
+            select_channel(channel)
     target = getattr(import_module(module_path), function_name)
     if not callable(target):
         raise TypeError(f"{module_path}:{function_name} is not callable")
@@ -27,12 +72,14 @@ def _make_entrypoint(module_path: str, function_name: str = "main") -> Callable[
 
 
 yt_analytics = _make_entrypoint("youtube_automation.scripts.analytics_system")
+yt_audio_visualizer_fill = _make_entrypoint("youtube_automation.utils.audio_visualizer_fill")
 yt_apply_rain_layers = _make_entrypoint("youtube_automation.scripts.apply_rain_layers")
 yt_automation_update = _make_entrypoint("youtube_automation.cli.automation_update")
 yt_benchmark_collect = _make_entrypoint("youtube_automation.scripts.benchmark_collector")
 yt_benchmark_comments = _make_entrypoint("youtube_automation.scripts.fetch_benchmark_comments")
 yt_bulk_update_desc = _make_entrypoint("youtube_automation.scripts.bulk_update_descriptions_from_md")
 yt_bulk_update_synthetic_media = _make_entrypoint("youtube_automation.scripts.bulk_update_synthetic_media")
+yt_captions_upload = _make_entrypoint("youtube_automation.scripts.captions_upload")
 yt_channel_init = _make_entrypoint("youtube_automation.cli.channel_init")
 yt_channel_seed = _make_entrypoint("youtube_automation.scripts.channel_seed")
 yt_channel_settings = _make_entrypoint("youtube_automation.scripts.channel_settings_cli")
@@ -64,6 +111,7 @@ yt_playlist_status = _make_entrypoint("youtube_automation.scripts.playlist_statu
 yt_populate_scene_phrases = _make_entrypoint("youtube_automation.scripts.populate_scene_phrases")
 yt_preflight = _make_entrypoint("youtube_automation.cli.preflight")
 yt_raw_master_check = _make_entrypoint("youtube_automation.scripts.check_raw_master")
+yt_retention_timeline = _make_entrypoint("youtube_automation.scripts.retention_timeline")
 yt_stock_archive = _make_entrypoint("youtube_automation.scripts.stock_archive")
 yt_stock_list = _make_entrypoint("youtube_automation.scripts.stock_list")
 yt_stock_preview = _make_entrypoint("youtube_automation.scripts.stock_preview")
@@ -75,6 +123,7 @@ yt_suno_verify_playlist = _make_entrypoint("youtube_automation.scripts.suno_veri
 yt_stream_archive_check = _make_entrypoint("youtube_automation.scripts.streaming_archive_check")
 yt_stream_bandwidth = _make_entrypoint("youtube_automation.cli.stream_bandwidth")
 yt_theme_compare = _make_entrypoint("youtube_automation.scripts.theme_compare")
+yt_ttp_health = _make_entrypoint("youtube_automation.scripts.ttp_health_cli")
 yt_thumbnail_auto_select = _make_entrypoint("youtube_automation.scripts.auto_select_thumbnail")
 yt_traffic_trend = _make_entrypoint("youtube_automation.scripts.traffic_trend")
 yt_thumbnail_check = _make_entrypoint("youtube_automation.scripts.thumbnail_check")

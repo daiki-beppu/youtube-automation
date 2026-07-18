@@ -57,6 +57,8 @@ nix develop .#extensions --command pnpm -C extensions/distrokid-helper zip    # 
 nix develop .#extensions --command pnpm -C extensions/distrokid-helper compile
 ```
 
+`compile` は `wxt prepare` の後に固定版 TypeScript 7.0.2 の `tsc --noEmit` を実行する型検査レーンで、成果物を生成する WXT の `build` / `zip` とは別である。TypeScript 5.9.3 との比較で確認した 11.0〜12.7 倍の高速化は `wxt prepare` を除外した型検査部分だけの結果であり、build / zip 全体の性能を示さない。計測条件と生値は [共通の性能比較記録](../../docs/investigations/2026-07-18-2016-typescript7-compile-benchmark.md) を参照する。
+
 ## unpacked ロード
 
 1. リポジトリ root で `nix develop .#extensions --command pnpm -C extensions/distrokid-helper build` を実行し、`.output/chrome-mv3/` を生成する。

@@ -3,6 +3,11 @@ name: pinned-comment
 description: "Use when 新規動画へオーナー固定コメントを自動投稿するとき。「固定コメント」「ピンコメント」で発動。dry-run 後 apply、ピン留めは Studio で手動"
 ---
 
+## 前後工程
+
+- `前工程`: `/video-upload`
+- `後工程`: `なし`
+
 ## Overview
 
 YouTube Data API v3 の `commentThreads.insert` で、自チャンネルの動画にトップレベルコメント（オーナーコメント）を自動投稿する。`comments-reply` と同じ dry-run / apply / history パターンを踏襲し、`yt-pinned-comment` CLI から実行する。

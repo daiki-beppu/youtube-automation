@@ -4,7 +4,8 @@
 TTP 参照画像プール (`image_generation.gemini.reference_images.default`) の
 特徴量 centroid に最も近い thumbnail 候補を採点し、`10-assets/thumbnail.jpg`
 として自動確定する。`image_generation.auto_selection.enabled: true` の
-チャンネルだけが対象の opt-in 機能。
+チャンネルだけが対象の opt-in 機能。`auto_selection.mode` は
+`selection_only`（既定）または `full` を受け付ける。
 
 Usage:
     yt-thumbnail-auto-select <collection-path> --dry-run [--json]
@@ -26,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import sys
@@ -62,12 +64,17 @@ _DEFAULT_MIN_WIDTH = 1280
 _DEFAULT_MIN_HEIGHT = 720
 _DEFAULT_ASPECT_TOLERANCE = 0.01
 
+_MODE_SELECTION_ONLY = "selection_only"
+_MODE_FULL = "full"
+_ALLOWED_MODES = (_MODE_SELECTION_ONLY, _MODE_FULL)
+
 
 @dataclass(frozen=True)
 class AutoSelectionSettings:
     """`image_generation.auto_selection` の解決済み設定。"""
 
     enabled: bool
+    mode: str
     min_width: int
     min_height: int
     aspect_tolerance: float
@@ -117,8 +124,17 @@ def resolve_auto_selection_settings(cfg: dict[str, Any]) -> AutoSelectionSetting
     if not isinstance(enabled, bool):
         raise ConfigError(f"auto_selection.enabled は boolean である必要があります: {enabled!r}")
 
+    mode = raw.get("mode", _MODE_SELECTION_ONLY)
+    if mode is None:
+        mode = _MODE_SELECTION_ONLY
+    if not isinstance(mode, str) or mode not in _ALLOWED_MODES:
+        raise ConfigError(
+            f"auto_selection.mode は {_MODE_SELECTION_ONLY!r} または {_MODE_FULL!r} である必要があります: {mode!r}"
+        )
+
     return AutoSelectionSettings(
         enabled=enabled,
+        mode=mode,
         min_width=_positive_int("min_width", _DEFAULT_MIN_WIDTH),
         min_height=_positive_int("min_height", _DEFAULT_MIN_HEIGHT),
         aspect_tolerance=float(tolerance),
@@ -203,13 +219,21 @@ def score_candidates(
     return sorted(scores, key=lambda s: (s.distance, s.path.name))
 
 
-def select_best(scores: list[CandidateScore]) -> CandidateScore:
+def select_best(scores: list[CandidateScore], *, mode: str) -> CandidateScore:
     """適格候補の中から distance 最小の 1 件を返す。適格ゼロは明示エラー。"""
     for score in scores:
         if score.eligible:
             return score
     detail = " / ".join(f"{s.path.name}: {'; '.join(s.reasons)}" for s in scores)
-    raise ValidationError(f"16:9・最小解像度を満たす適格候補がありません: {detail}")
+    message = f"16:9・最小解像度を満たす適格候補がありません: {detail}"
+    if mode == _MODE_FULL:
+        message += (
+            "\nmode: full のため自動処理を停止しました。手動フローへ切り替えるには:"
+            "\n  1. config/skills/thumbnail.yaml の auto_selection.mode を selection_only に変更"
+            "（または削除）する"
+            "\n  2. /thumbnail の手動承認フローで候補を再生成・確定する"
+        )
+    raise ValidationError(message)
 
 
 # ---------------------------------------------------------------------------
@@ -301,16 +325,20 @@ def record_workflow_state(
     reference_images: list[Path],
     channel_root: Path,
     executed_at: str,
+    mode: str,
 ) -> None:
     """検証済みの workflow-state に選択の監査ログを記録して書き戻す。"""
-    state[_WORKFLOW_STATE_KEY] = {
+    record: dict[str, object] = {
         "schema_version": 1,
+        "mode": mode,
         "selected": best.path.name,
         "distance": round(best.distance, 4),
         "ranking": _ranking_payload(scores),
         "reference_images": [_relative_to_channel(path, channel_root) for path in reference_images],
         "executed_at": executed_at,
     }
+    validate_audit_record(record)
+    state[_WORKFLOW_STATE_KEY] = record
     fd, tmp_name = tempfile.mkstemp(prefix=".workflow-state-", suffix=".json", dir=ws_path.parent)
     tmp_path = Path(tmp_name)
     try:
@@ -326,6 +354,61 @@ def record_workflow_state(
                 f"workflow-state.json を更新できず、一時ファイルも削除できません: {ws_path}: {exc}; {cleanup_exc}"
             ) from cleanup_exc
         raise ValidationError(f"workflow-state.json を更新できません: {ws_path}: {exc}") from exc
+
+
+def validate_audit_record(record: dict[str, object]) -> None:
+    """workflow-state に書き込む自動選択監査値を strict に検証する。"""
+
+    def _finite_number(value: object) -> bool:
+        if isinstance(value, bool):
+            return False
+        if isinstance(value, int):
+            return True
+        return isinstance(value, float) and math.isfinite(value)
+
+    selected = record.get("selected")
+    if not isinstance(selected, str) or not selected.strip():
+        raise ValidationError(f"thumbnail_auto_selection.selected は非空文字列である必要があります: {selected!r}")
+
+    distance = record.get("distance")
+    if not _finite_number(distance):
+        raise ValidationError(f"thumbnail_auto_selection.distance は有限数値である必要があります: {distance!r}")
+
+    ranking = record.get("ranking")
+    if not isinstance(ranking, list) or not ranking:
+        raise ValidationError(f"thumbnail_auto_selection.ranking は非空 list である必要があります: {ranking!r}")
+    for index, entry in enumerate(ranking):
+        key = f"thumbnail_auto_selection.ranking[{index}]"
+        if not isinstance(entry, dict):
+            raise ValidationError(f"{key} は object である必要があります: {entry!r}")
+        candidate = entry.get("candidate")
+        if not isinstance(candidate, str) or not candidate.strip():
+            raise ValidationError(f"{key}.candidate は非空文字列である必要があります: {candidate!r}")
+        entry_distance = entry.get("distance")
+        if not _finite_number(entry_distance):
+            raise ValidationError(f"{key}.distance は有限数値である必要があります: {entry_distance!r}")
+        for dimension in ("width", "height"):
+            value = entry.get(dimension)
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ValidationError(f"{key}.{dimension} は正の整数である必要があります: {value!r}")
+        eligible = entry.get("eligible")
+        if not isinstance(eligible, bool):
+            raise ValidationError(f"{key}.eligible は boolean である必要があります: {eligible!r}")
+        reasons = entry.get("reasons")
+        if not isinstance(reasons, list) or any(not isinstance(reason, str) for reason in reasons):
+            raise ValidationError(f"{key}.reasons は文字列の list である必要があります: {reasons!r}")
+
+    executed_at = record.get("executed_at")
+    if not isinstance(executed_at, str):
+        raise ValidationError(
+            f"thumbnail_auto_selection.executed_at は有効な ISO 日時文字列である必要があります: {executed_at!r}"
+        )
+    try:
+        datetime.fromisoformat(executed_at)
+    except ValueError as exc:
+        raise ValidationError(
+            f"thumbnail_auto_selection.executed_at は有効な ISO 日時文字列である必要があります: {executed_at!r}"
+        ) from exc
 
 
 def _relative_to_channel(path: Path, channel_root: Path) -> str:
@@ -391,10 +474,13 @@ def _render_json(
     reference_images: list[Path],
     channel_root: Path,
     workflow_state_updated: bool | None,
+    auto_selection_mode: str,
 ) -> str:
     return json.dumps(
         {
+            "status": "ok",
             "mode": mode,
+            "auto_selection_mode": auto_selection_mode,
             "collection": str(collection),
             "selected": {
                 "candidate": best.path.name,
@@ -476,7 +562,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ValidationError(f"thumbnail 候補が見つかりません: {paths.assets_dir} (対象: {patterns})")
 
         scores = score_candidates(candidates, centroid, settings)
-        best = select_best(scores)
+        best = select_best(scores, mode=settings.mode)
 
         target = paths.assets_dir / _TARGET_FILENAME
         workflow_state_updated: bool | None = None
@@ -498,6 +584,7 @@ def main(argv: list[str] | None = None) -> int:
                         reference_images=reference_images,
                         channel_root=channel_root,
                         executed_at=datetime.now(timezone.utc).isoformat(),
+                        mode=settings.mode,
                     )
             except (ConfigError, ValidationError) as exc:
                 rollback_errors = []
@@ -524,6 +611,8 @@ def main(argv: list[str] | None = None) -> int:
             workflow_state_updated = state is not None
     except (ConfigError, ValidationError) as exc:
         print(f"error: {exc}", file=sys.stderr)
+        if args.json:
+            print(json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False))
         return 1
 
     mode = "apply" if args.apply else "dry-run"
@@ -538,6 +627,7 @@ def main(argv: list[str] | None = None) -> int:
                 reference_images=reference_images,
                 channel_root=channel_root,
                 workflow_state_updated=workflow_state_updated,
+                auto_selection_mode=settings.mode,
             )
         )
     else:

@@ -266,7 +266,7 @@ class TestResolveBenchmarkTargets:
             },
         ]
 
-    def test_filters_by_channel_slug_and_takes_top_n(self, tmp_path):
+    def test_filters_by_competitor_slug_and_takes_top_n(self, tmp_path):
         # Given: load_benchmark_videos が複数チャンネルの動画を返す
         with patch(
             "youtube_automation.scripts.video_analyze.load_benchmark_videos",
@@ -275,7 +275,7 @@ class TestResolveBenchmarkTargets:
             # When: celtic-music で top=2
             targets = _resolve_benchmark_targets(
                 data_dir=tmp_path,
-                channel_slug="celtic-music",
+                competitor_slug="celtic-music",
                 top=2,
             )
 
@@ -294,7 +294,7 @@ class TestResolveBenchmarkTargets:
         ):
             targets = _resolve_benchmark_targets(
                 data_dir=tmp_path,
-                channel_slug="celtic-music",
+                competitor_slug="celtic-music",
                 top=99,
             )
 
@@ -310,7 +310,7 @@ class TestResolveBenchmarkTargets:
             with pytest.raises(ValidationError):
                 _resolve_benchmark_targets(
                     data_dir=tmp_path,
-                    channel_slug="nonexistent",
+                    competitor_slug="nonexistent",
                     top=5,
                 )
 
@@ -337,7 +337,7 @@ class TestResolveBenchmarkTargets:
         ):
             targets = _resolve_benchmark_targets(
                 data_dir=tmp_path,
-                channel_slug="celtic-music",
+                competitor_slug="celtic-music",
                 top=2,
             )
 
@@ -369,7 +369,7 @@ class TestResolveBenchmarkTargets:
         ):
             targets = _resolve_benchmark_targets(
                 data_dir=tmp_path,
-                channel_slug="celtic-music",
+                competitor_slug="celtic-music",
                 top=2,
             )
 
@@ -398,7 +398,7 @@ class TestResolveBenchmarkTargets:
             with pytest.raises(ValidationError, match="live 配信のみ"):
                 _resolve_benchmark_targets(
                     data_dir=tmp_path,
-                    channel_slug="live-only",
+                    competitor_slug="live-only",
                     top=5,
                 )
 
@@ -411,7 +411,7 @@ class TestResolveBenchmarkTargets:
             with pytest.raises(ValidationError):
                 _resolve_benchmark_targets(
                     data_dir=tmp_path,
-                    channel_slug="celtic-music",
+                    competitor_slug="celtic-music",
                     top=0,
                 )
 
@@ -666,25 +666,34 @@ class TestRunAnalysisCache:
 
 
 class TestBuildParser:
-    def test_benchmark_path_requires_channel(self):
+    def test_benchmark_path_requires_competitor(self):
         # Given: parser
         parser = _build_parser()
 
-        # When/Then: --source benchmark で --channel 未指定は SystemExit (parser.error)
+        # When/Then: --source benchmark で --competitor 未指定は SystemExit (parser.error)
         with pytest.raises(SystemExit):
             parser.parse_args(["--source", "benchmark", "--top", "5"])
 
-    def test_benchmark_path_parses_with_channel_and_top(self):
+    def test_benchmark_path_parses_with_competitor_and_top(self):
         # Given
         parser = _build_parser()
 
         # When
-        args = parser.parse_args(["--source", "benchmark", "--channel", "celtic-music", "--top", "3"])
+        args = parser.parse_args(["--source", "benchmark", "--competitor", "celtic-music", "--top", "3"])
 
         # Then
         assert args.source == "benchmark"
-        assert args.channel == "celtic-music"
+        assert args.competitor == "celtic-music"
         assert args.top == 3
+
+    def test_removed_channel_flag_names_competitor_replacement(self, capsys):
+        parser = _build_parser()
+
+        with pytest.raises(SystemExit) as exc_info:
+            parser.parse_args(["--source", "benchmark", "--channel", "celtic-music"])
+
+        assert exc_info.value.code == 2
+        assert "--channel は --competitor に変わりました" in capsys.readouterr().err
 
     def test_own_path_requires_collection(self):
         # Given

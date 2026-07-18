@@ -3,6 +3,11 @@ name: flop-analysis
 description: "Use when 公開済み動画が伸びなかった原因を video_id、collection、または --since で切り分け、postmortem.md に出力するとき。「伸びなかった」「flop 分析」で発動。横断戦略は /analytics-analyze、事前監査は /alignment-check"
 ---
 
+## 前後工程
+
+- `前工程`: `/analytics-analyze`, `/alignment-check`
+- `後工程`: `/collection-ideate`
+
 ## Overview
 
 公開後「思ったより伸びなかった」動画について、Analytics（CTR / 平均視聴時間 / インプレッション）を
@@ -183,7 +188,7 @@ uv run python .claude/skills/flop-analysis/references/verification.py --operatio
 | タイトル訴求弱 | 対象タイトル、全コレクション由来の語彙候補、対象の workflow-state・音楽prompt・実動画尺、現在サムネ候補の `composition.scene`。collection 型なので `actual_content_type=collection` | `title-alignment` |
 | ターゲット層ミスマッチ | `viewer-voice-analysis.md`、`persona-definition.md`、`viewing-scene-matrix.md` の主対象一致件数 | `hypothesis: target-mismatch` |
 | 差別化不足 | 最新 benchmark 上位10本と `term-classification` の出力 | `hypothesis: differentiation` |
-| 中身の弱さ（音源 / 編集 / テーマ） | 対象と同じ冒頭クリップ窓で保存済みの `/video-analyze` 成果物: 対象の `hook_structure.intro_sec` / `bgm_arc.peak` / `scene_timeline` / `editing_metrics.avg_cut_sec`、同ジャンル競合3本以上の `editing_metrics.avg_cut_sec` 中央値 `competitor_avg_cut_median` | `content-signals` |
+| 中身の弱さ（音源 / 編集 / テーマ） | 対象と同じ冒頭クリップ窓で保存済みの `/video-analyze` 成果物: 対象の `hook_structure.intro_sec` / `bgm_arc.peak` / `scene_timeline` / `editing_metrics.avg_cut_sec`、同ジャンル競合3本以上の `editing_metrics.avg_cut_sec` 中央値 `competitor_avg_cut_median`。retention 収集済みなら `yt-retention-timeline --video <video_id>` の `reports/retention_analysis/<video_id>.md` も引用 | `content-signals` |
 | サムネと中身の不一致 | `/video-analyze` の `thumbnail_alignment.signature_present` | `hypothesis: thumbnail-content-alignment` |
 | タイトル / タグ SEO 弱 | 同期間の per-video / channel Analytics API 結果と `term-classification` の出力 | `hypothesis: seo` |
 | 初動エンゲージメント低 | `commentThreads.list` と `yt-launch-curve` の day 0〜6 | `hypothesis: engagement` |
@@ -197,6 +202,13 @@ uv run python .claude/skills/flop-analysis/references/verification.py --operatio
 `/video-analyze` の各出力は動画全尺ではなく冒頭クリップ窓（既定 900 秒、JSON の
 `analysis_window_sec`）内の分析結果として扱う。`bgm_arc.peak` は実スキーマの `M:SS` / `H:MM:SS` 文字列を reference が秒へ変換する。競合の `competitor_avg_cut_median` は対象と同じ `analysis_window_sec` の既存 `/video-analyze` 成果物が3本以上ある場合だけその `editing_metrics.avg_cut_sec` の中央値を使い、不足時は推定せず `未検証` とする。`bgm_arc.outro` や `editing_metrics`
 を動画全体の終盤・全尺平均として読まない。
+
+対象動画の retention が最新 `data/analytics_data_*.json::retention[]` にある場合は、
+`yt-retention-timeline --video <video_id>` を実行し、drop 地点に対応する scene / BGM を
+検証結果へ引用する。`status=skipped` で `/video-analyze 未実行` と返った場合は、既存の
+Phase 4 規則どおり対象 1 動画だけ `/video-analyze` してから再実行する。retention 未収集なら
+この照合だけを `未検証（理由: retention 未収集。/analytics-collect の full 収集が必要）` とし、
+他の content-signals 検証は続行する。`outside_analysis_window` の scene / BGM は推測しない。
 
 ### Phase 5: postmortem.md の生成
 

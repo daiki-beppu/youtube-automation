@@ -1,7 +1,12 @@
 ---
 name: suno-lyric
-description: "Use when Suno ボーカル曲の歌詞を生成するとき。「歌詞生成」「vocal」「rap」「suno-lyric」で発動。/suno の前工程。Style / UI 投入は /suno と /suno-helper の責務"
+description: "Use when Suno ボーカル曲の歌詞を生成するとき。「歌詞生成」「vocal」「rap」「suno-lyric」で発動。Style / UI 投入は /suno と /suno-helper の責務"
 ---
+
+## 前後工程
+
+- `前工程`: `なし`
+- `後工程`: `/suno`
 
 ## Overview
 

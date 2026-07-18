@@ -14,11 +14,13 @@ import pytest
 EXPECTED_ENTRYPOINT_MODULES = {
     "yt-analytics": "youtube_automation.scripts.analytics_system",
     "yt-apply-rain-layers": "youtube_automation.scripts.apply_rain_layers",
+    "yt-audio-visualizer-fill": "youtube_automation.utils.audio_visualizer_fill",
     "yt-automation-update": "youtube_automation.cli.automation_update",
     "yt-benchmark-collect": "youtube_automation.scripts.benchmark_collector",
     "yt-benchmark-comments": "youtube_automation.scripts.fetch_benchmark_comments",
     "yt-bulk-update-desc": "youtube_automation.scripts.bulk_update_descriptions_from_md",
     "yt-bulk-update-synthetic-media": "youtube_automation.scripts.bulk_update_synthetic_media",
+    "yt-captions-upload": "youtube_automation.scripts.captions_upload",
     "yt-channel-init": "youtube_automation.cli.channel_init",
     "yt-channel-seed": "youtube_automation.scripts.channel_seed",
     "yt-channel-settings": "youtube_automation.scripts.channel_settings_cli",
@@ -50,6 +52,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-populate-scene-phrases": "youtube_automation.scripts.populate_scene_phrases",
     "yt-preflight": "youtube_automation.cli.preflight",
     "yt-raw-master-check": "youtube_automation.scripts.check_raw_master",
+    "yt-retention-timeline": "youtube_automation.scripts.retention_timeline",
     "yt-stock-archive": "youtube_automation.scripts.stock_archive",
     "yt-stock-list": "youtube_automation.scripts.stock_list",
     "yt-stock-preview": "youtube_automation.scripts.stock_preview",
@@ -61,6 +64,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-stream-archive-check": "youtube_automation.scripts.streaming_archive_check",
     "yt-stream-bandwidth": "youtube_automation.cli.stream_bandwidth",
     "yt-theme-compare": "youtube_automation.scripts.theme_compare",
+    "yt-ttp-health": "youtube_automation.scripts.ttp_health_cli",
     "yt-thumbnail-auto-select": "youtube_automation.scripts.auto_select_thumbnail",
     "yt-thumbnail-check": "youtube_automation.scripts.thumbnail_check",
     "yt-thumbnail-compare": "youtube_automation.scripts.compare_thumbnails",
@@ -140,6 +144,44 @@ def test_cli_entrypoint_configures_utf8_before_importing_target(monkeypatch):
 
     assert stdout_buffer.getvalue().decode("utf-8") == "import 時出力 — 完了\n"
     assert stderr_buffer.getvalue().decode("utf-8") == "import 時エラー — 続行\n"
+
+
+def test_cli_entrypoint_consumes_channel_before_importing_target(monkeypatch):
+    from youtube_automation import cli_entrypoints
+    from youtube_automation.utils.config import loader
+
+    monkeypatch.setattr(sys, "argv", ["yt-dummy", "--channel", "alpha", "--dry-run"])
+
+    def fake_import_module(_module_name: str) -> object:
+        assert loader._explicit_channel == "alpha"
+        assert sys.argv == ["yt-dummy", "--dry-run"]
+
+        class TargetModule:
+            @staticmethod
+            def main() -> int:
+                return 0
+
+        return TargetModule()
+
+    monkeypatch.setattr(cli_entrypoints, "import_module", fake_import_module)
+
+    assert cli_entrypoints._run("dummy_cli_module") == 0
+
+
+def test_cli_entrypoint_preserves_legacy_benchmark_channel_option(monkeypatch):
+    from youtube_automation import cli_entrypoints
+
+    monkeypatch.setattr(sys, "argv", ["yt-benchmark-collect", "--channel", "competitor"])
+
+    class TargetModule:
+        @staticmethod
+        def main() -> int:
+            assert sys.argv == ["yt-benchmark-collect", "--channel", "competitor"]
+            return 0
+
+    monkeypatch.setattr(cli_entrypoints, "import_module", lambda _module_name: TargetModule())
+
+    assert cli_entrypoints._run("youtube_automation.scripts.benchmark_collector") == 0
 
 
 def test_configure_utf8_stdio_reconfigures_cp932_stdin_stdout_and_stderr(monkeypatch):

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -12,6 +13,45 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_all_skills_use_machine_readable_chain_block() -> None:
+    skill_paths = sorted((ROOT / ".claude" / "skills").glob("*/SKILL.md"))
+    chain_block = re.compile(
+        r"\A---\n.*?\n---\n\n## 前後工程\n\n"
+        r"- `前工程`: (?P<upstream>[^\n]+)\n"
+        r"- `後工程`: (?P<downstream>[^\n]+)\n",
+        re.DOTALL,
+    )
+    chain_value = re.compile(
+        r"^(?:`なし`|`\*`（共通基盤としてほぼ全スキル）|"
+        r"`/[a-z0-9-]+`(?:, `/[a-z0-9-]+`)*)$"
+    )
+    known_skills = {path.parent.name for path in skill_paths}
+
+    assert skill_paths
+    for path in skill_paths:
+        text = path.read_text(encoding="utf-8")
+        match = chain_block.match(text)
+        assert match is not None, f"{path}: frontmatter 直後の前後工程ブロックが不正"
+        for direction in ("upstream", "downstream"):
+            value = match.group(direction)
+            assert chain_value.fullmatch(value), f"{path}: {direction} の書式が不正: {value}"
+            for reference in re.findall(r"`/([a-z0-9-]+)`", value):
+                assert reference in known_skills, f"{path}: 存在しない skill 参照 /{reference}"
+
+
+def test_skill_chain_legacy_summary_formats_are_absent() -> None:
+    legacy_summary = re.compile(
+        r"^\*\*(?:前|後)工程|^(?:前|後)工程は|^次工程は|^→ |"
+        r"^- `/[^\n]+` → (?:前|後)工程|"
+        r"^description:.*(?:前|後|次)工程[ :：]/",
+        re.MULTILINE,
+    )
+
+    for path in sorted((ROOT / ".claude" / "skills").glob("*/SKILL.md")):
+        text = path.read_text(encoding="utf-8")
+        assert legacy_summary.search(text) is None, f"{path}: 旧形式の前後工程一覧が残存"
 
 
 def _read(path: str) -> str:
@@ -77,6 +117,22 @@ def test_theme_compare_docs_and_error_use_content_tags_themes() -> None:
         assert "config/channel/content.json::tags.themes" in text
 
     assert "load_config().content.tags.themes" in _read(".claude/skills/analytics-analyze/SKILL.md")
+
+
+def test_analytics_analyze_documents_playlist_effect_section() -> None:
+    analytics_analyze = _read(".claude/skills/analytics-analyze/SKILL.md")
+    analytics_collect = _read(".claude/skills/analytics-collect/SKILL.md")
+
+    assert "分析項目」の 7 項目" in analytics_analyze
+    assert "**プレイリスト効果分析**" in analytics_analyze
+    assert "`playlist_analytics.playlists`" in analytics_analyze
+    assert "`view_share_percent`" in analytics_analyze
+    assert "`average_view_duration`" in analytics_analyze
+    assert "`config/channel/playlists.json`" in analytics_analyze
+    assert "原因であるとは断定しない" in analytics_analyze
+    assert "上位 200 件内のシェア" in analytics_analyze
+    assert "チャンネル全体に対するシェアとして扱わない" in analytics_analyze
+    assert "視聴数上位 200 件のプレイリスト別 views・平均視聴時間・上位 200 件内の視聴シェア" in analytics_collect
 
 
 def test_localizations_docs_use_root_localizations_file() -> None:
@@ -542,7 +598,7 @@ def test_wf_new_fail_fast_contract_points_to_channel_new_and_doctor_readiness() 
     assert "存在しない場合は `/channel-new`" in hard_gates
     assert "ロード失敗の場合は `/channel-new`（既存チャンネル取り込みモード）" in hard_gates
     assert "Suno readiness gate" in hard_gates
-    assert "uv run yt-video-analyze --source benchmark --channel <slug> --top 5" in hard_gates
+    assert "uv run yt-video-analyze --source benchmark --competitor <slug> --top 5" in hard_gates
 
     assert "既存チャンネル取り込みモード" in channel_new
     assert "ttp_wf_new_readiness" in channel_new
@@ -1476,3 +1532,34 @@ def test_theme_compare_missing_themes_error_uses_current_config_path(monkeypatch
 
     assert theme_compare.main() == 2
     assert "config/channel/content.json::tags.themes" in caplog.text
+
+
+def test_automation_schedule_skill_contract() -> None:
+    """#1892: /automation-schedule の SKILL.md と references が整合している."""
+    skill_path = ".claude/skills/automation-schedule/SKILL.md"
+    skill = _read(skill_path)
+
+    # references 単一ソース化: 本文で参照するスクリプトが実在する
+    for ref in ("detect_runtime.sh", "schedule_config.py", "scheduler_job.sh", "run_scheduled.sh"):
+        assert ref in skill
+        assert (ROOT / ".claude/skills/automation-schedule/references" / ref).exists()
+
+    # Hard Gates は冒頭 60 行以内（skill-authoring-guidelines ルール⑥）
+    head = "\n".join(skill.splitlines()[:60])
+    assert "## Hard Gates" in head
+    assert "allow_external_publish" in head
+
+    # 兄弟スキルとの相互排他（ルール①）
+    fm = _frontmatter(skill_path)
+    assert "/automation-update" in fm["description"]
+    assert "/wf-next" in fm["description"]
+
+    # 設定スキーマの正へのポインタ
+    assert "ScheduledAutomation" in skill
+
+
+def test_channel_new_points_scheduled_automation_to_automation_schedule() -> None:
+    """#1892: channel-new は scheduled_automation を生成せず /automation-schedule へ誘導する."""
+    channel_new = _read(".claude/skills/channel-new/SKILL.md")
+    assert "`scheduled_automation`" in channel_new
+    assert "/automation-schedule" in channel_new

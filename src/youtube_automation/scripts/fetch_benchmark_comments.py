@@ -11,6 +11,7 @@ Usage:
     python3 ../../automation/fetch_benchmark_comments.py                    # 1万再生以上の動画のコメント取得
     python3 ../../automation/fetch_benchmark_comments.py --min-views 5000   # 閾値変更
     python3 ../../automation/fetch_benchmark_comments.py --max-comments 50  # 動画あたりの取得数変更
+    python3 ../../automation/fetch_benchmark_comments.py --competitor <slug>  # 単一競合
     python3 ../../automation/fetch_benchmark_comments.py --force            # 既存データがあっても再取得
     python3 ../../automation/fetch_benchmark_comments.py -y                 # 確認スキップ
 """
@@ -27,6 +28,7 @@ from youtube_automation.scripts.benchmark_collector import (
     ensure_benchmark_fresh,
     load_benchmark_videos,
 )
+from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
 from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.cost_tracker import log_quota
 from youtube_automation.utils.youtube_service import get_youtube_readonly
@@ -40,11 +42,17 @@ DEFAULT_MAX_COMMENTS = 100
 class BenchmarkCommentCollector:
     """ベンチマーク動画のコメント収集"""
 
-    def __init__(self, min_views: int = DEFAULT_MIN_VIEWS, max_comments: int = DEFAULT_MAX_COMMENTS):
+    def __init__(
+        self,
+        min_views: int = DEFAULT_MIN_VIEWS,
+        max_comments: int = DEFAULT_MAX_COMMENTS,
+        competitor_slug: str | None = None,
+    ):
         self.channel_dir = _channel_dir()
         self.data_dir = self.channel_dir / "data"
         self.min_views = min_views
         self.max_comments = max_comments
+        self.competitor_slug = competitor_slug
         self.youtube = None
         self.today = date.today()
 
@@ -95,7 +103,11 @@ class BenchmarkCommentCollector:
 
         ensure_benchmark_fresh(self.data_dir)
 
-        targets = load_benchmark_videos(self.data_dir, min_views=self.min_views)
+        targets = load_benchmark_videos(
+            self.data_dir,
+            min_views=self.min_views,
+            competitor_slug=self.competitor_slug,
+        )
         if not targets:
             logger.error("対象動画が見つかりません。先に /benchmark を実行してください。")
             return {}
@@ -134,15 +146,15 @@ class BenchmarkCommentCollector:
 
             result["videos"].append({**target, "comments": comments, "comment_count": len(comments)})
 
-            ch_slug = target["channel_slug"]
-            if ch_slug not in result["summary"]["by_channel"]:
-                result["summary"]["by_channel"][ch_slug] = {
+            competitor_slug = target["channel_slug"]
+            if competitor_slug not in result["summary"]["by_channel"]:
+                result["summary"]["by_channel"][competitor_slug] = {
                     "name": target["channel_name"],
                     "video_count": 0,
                     "comment_count": 0,
                 }
-            result["summary"]["by_channel"][ch_slug]["video_count"] += 1
-            result["summary"]["by_channel"][ch_slug]["comment_count"] += len(comments)
+            result["summary"]["by_channel"][competitor_slug]["video_count"] += 1
+            result["summary"]["by_channel"][competitor_slug]["comment_count"] += len(comments)
             result["summary"]["total_comments"] += len(comments)
 
         result["summary"]["total_videos"] = len(result["videos"])
@@ -174,9 +186,8 @@ def print_summary(data: dict):
         print(f"   {v['views']:>7,} views | {v['comment_count']:>3}件 | {v['title'][:55]}")
 
 
-def main():
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    parser = argparse.ArgumentParser(description="ベンチマーク動画のコメント収集")
+def _build_parser() -> argparse.ArgumentParser:
+    parser = CompetitorArgumentParser(description="ベンチマーク動画のコメント収集")
     parser.add_argument(
         "--min-views",
         type=int,
@@ -191,9 +202,19 @@ def main():
     )
     parser.add_argument("--force", action="store_true", help="既存データがあっても再取得")
     parser.add_argument("-y", "--yes", action="store_true", help="確認プロンプトをスキップ")
-    args = parser.parse_args()
+    parser.add_argument("--competitor", help="コメント収集対象を単一の競合 slug に絞り込む")
+    return parser
 
-    collector = BenchmarkCommentCollector(min_views=args.min_views, max_comments=args.max_comments)
+
+def main():
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    args = _build_parser().parse_args()
+
+    collector = BenchmarkCommentCollector(
+        min_views=args.min_views,
+        max_comments=args.max_comments,
+        competitor_slug=args.competitor,
+    )
 
     if not args.yes and not args.force:
         try:

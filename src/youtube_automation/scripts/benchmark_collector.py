@@ -13,7 +13,7 @@ Usage:
     python3 ../../automation/benchmark_collector.py --json-only           # JSON のみ出力
     python3 ../../automation/benchmark_collector.py --no-thumbnails       # サムネイル分析スキップ
     python3 ../../automation/benchmark_collector.py --keep-thumbnails     # サムネイル画像を保持
-    python3 ../../automation/benchmark_collector.py --channel world-fantasia  # 単一チャンネル
+    python3 ../../automation/benchmark_collector.py --competitor world-fantasia  # 単一競合
 """
 
 import argparse
@@ -35,6 +35,7 @@ from youtube_automation.utils.benchmark_analyzer import (
     extract_description_keywords,
     parse_iso_duration,
 )
+from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
 from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.cost_tracker import log_quota
@@ -207,6 +208,7 @@ class BenchmarkCollector:
         video_ids: list[str] = []
         page_token: str | None = None
         remaining = scan_recent
+        upload_scan_complete = False
         while remaining > 0:
             with section("benchmark.playlist_items", page_size=min(50, remaining)):
                 try:
@@ -229,12 +231,20 @@ class BenchmarkCollector:
             page_token = playlist_resp.get("nextPageToken")
             remaining -= len(batch_ids)
             if not page_token or not batch_ids:
+                upload_scan_complete = True
                 break
 
         channel_data["scanned_count"] = len(video_ids)
 
         if not video_ids:
             logger.warning("動画が見つかりません: %s", channel_info["name"])
+            channel_data["upload_scan"] = {
+                "scanned_count": 0,
+                "complete": upload_scan_complete,
+                "latest_upload_at": None,
+                "oldest_upload_at": None,
+                "videos": [],
+            }
             channel_data["videos"] = []
             channel_data["avg_views"] = 0
             channel_data["avg_daily_views"] = 0
@@ -298,6 +308,15 @@ class BenchmarkCollector:
                 v["engagement_rate"] = compute_engagement_rate(v)
                 raw_videos.append(v)
 
+        upload_dates = [video["published_at"] for video in raw_videos]
+        channel_data["upload_scan"] = {
+            "scanned_count": len(raw_videos),
+            "complete": upload_scan_complete,
+            "latest_upload_at": max(upload_dates) if upload_dates else None,
+            "oldest_upload_at": min(upload_dates) if upload_dates else None,
+            "videos": [{"published_at": video["published_at"], "views": video["views"]} for video in raw_videos],
+        }
+
         # 視聴数フィルタ（min_views 以上のみベンチマーク対象）
         videos = [v for v in raw_videos if v["views"] >= min_views]
         # 視聴数降順で並べ替え（レポートの可読性向上）
@@ -336,25 +355,25 @@ class BenchmarkCollector:
 
         return channel_data
 
-    def collect_all(self, force: bool = False, channel_slug: str | None = None) -> dict:
+    def collect_all(self, force: bool = False, competitor_slug: str | None = None) -> dict:
         """全チャンネル（または指定チャンネル）のデータを収集する。
 
         Args:
             force: True なら鮮度に関わらず全更新
-            channel_slug: 指定時はそのチャンネルのみ
+            competitor_slug: 指定時はその競合のみ
 
         Returns:
             全チャンネルの収集結果
 
         Raises:
-            ConfigError: 指定 `channel_slug` が benchmark.channels に存在しないとき
+            ConfigError: 指定 `competitor_slug` が benchmark.channels に存在しないとき
             YouTubeAPIError: 収集対象の一部が API レスポンスに存在しない（欠落）とき
         """
-        if channel_slug:
-            targets = [ch for ch in self.config.analytics.benchmark.channels if ch["slug"] == channel_slug]
+        if competitor_slug:
+            targets = [ch for ch in self.config.analytics.benchmark.channels if ch["slug"] == competitor_slug]
             if not targets:
                 raise ConfigError(
-                    f"指定されたチャンネルが見つかりません: {channel_slug}。"
+                    f"指定された競合が見つかりません: {competitor_slug}。"
                     "config/channel/analytics.json の benchmark.channels に slug を登録してください。"
                 )
         elif force:
@@ -1218,7 +1237,12 @@ def select_top_vod_benchmark_videos(videos: list[dict], top: int) -> tuple[list[
     return selected, skipped_live
 
 
-def load_benchmark_videos(data_dir: Path, min_views: int = 10000, require_thumbnail: bool = False) -> list[dict]:
+def load_benchmark_videos(
+    data_dir: Path,
+    min_views: int = 10000,
+    require_thumbnail: bool = False,
+    competitor_slug: str | None = None,
+) -> list[dict]:
     """最新ベンチマーク JSON から min_views 以上の動画を抽出する。
 
     Returns:
@@ -1242,8 +1266,10 @@ def load_benchmark_videos(data_dir: Path, min_views: int = 10000, require_thumbn
     targets = []
     seen_ids: set[str] = set()
     for ch in data.get("channels", []):
-        channel_name = ch.get("name", "Unknown")
-        channel_slug = ch.get("slug", "unknown")
+        competitor_name = ch.get("name", "Unknown")
+        current_competitor_slug = ch.get("slug", "unknown")
+        if competitor_slug and current_competitor_slug != competitor_slug:
+            continue
         for v in ch.get("videos", []):
             vid = v.get("video_id", "")
             if vid in seen_ids:
@@ -1260,8 +1286,8 @@ def load_benchmark_videos(data_dir: Path, min_views: int = 10000, require_thumbn
                     "video_id": vid,
                     "title": v.get("title", ""),
                     "views": views,
-                    "channel_name": channel_name,
-                    "channel_slug": channel_slug,
+                    "channel_name": competitor_name,
+                    "channel_slug": current_competitor_slug,
                     "published_at": v.get("published_at", ""),
                     "duration_iso": v.get("duration_iso", ""),
                     "thumbnail_url": thumb_url,
@@ -1349,21 +1375,25 @@ def ensure_benchmark_fresh(data_dir: Path | None = None):
     logger.info("ベンチマーク更新完了")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="競合チャンネルのベンチマークデータ収集・分析")
+def _build_parser() -> argparse.ArgumentParser:
+    parser = CompetitorArgumentParser(description="競合チャンネルのベンチマークデータ収集・分析")
     parser.add_argument("--force", action="store_true", help="鮮度に関わらず全チャンネル更新")
     parser.add_argument("--json-only", action="store_true", help="JSON のみ出力（Markdown 生成スキップ）")
     parser.add_argument("--no-thumbnails", action="store_true", help="サムネイルDL・分析をスキップ")
     parser.add_argument("--keep-thumbnails", action="store_true", help="（非推奨: サムネイルは常に保持されます）")
     parser.add_argument("-y", "--yes", action="store_true", help="確認プロンプトをスキップ")
-    parser.add_argument("--channel", type=str, default=None, help="単一チャンネルの slug を指定")
+    parser.add_argument("--competitor", type=str, default=None, help="単一競合の slug を指定")
     parser.add_argument(
         "--playlists",
         action="store_true",
-        help="再生リスト構成のみ収集（既存動画ベンチマークはスキップ）。--channel 必須",
+        help="再生リスト構成のみ収集（既存動画ベンチマークはスキップ）。--competitor 必須",
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="詳細ログ出力")
-    args = parser.parse_args()
+    return parser
+
+
+def main():
+    args = _build_parser().parse_args()
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -1379,18 +1409,18 @@ def main():
 
     # --- 再生リスト収集モード ---
     if args.playlists:
-        if not args.channel:
-            print("[ERROR] --playlists には --channel <slug> の指定が必須です")
+        if not args.competitor:
+            print("[ERROR] --playlists には --competitor <slug> の指定が必須です")
             print("        （誤って全チャンネル分の API クォータを消費しないため）")
             sys.exit(1)
 
-        targets = [ch for ch in collector.config.analytics.benchmark.channels if ch["slug"] == args.channel]
+        targets = [ch for ch in collector.config.analytics.benchmark.channels if ch["slug"] == args.competitor]
         if not targets:
-            print(f"[ERROR] チャンネルが見つかりません: {args.channel}")
+            print(f"[ERROR] 競合が見つかりません: {args.competitor}")
             sys.exit(1)
 
         print("\n=== Benchmark Playlists Collector ===")
-        print(f"対象: {targets[0]['name']} ({args.channel})")
+        print(f"対象: {targets[0]['name']} ({args.competitor})")
         print()
 
         collector.initialize()
@@ -1457,7 +1487,7 @@ def main():
 
     # 収集
     try:
-        data = collector.collect_all(force=args.force, channel_slug=args.channel)
+        data = collector.collect_all(force=args.force, competitor_slug=args.competitor)
     except (ConfigError, YouTubeAPIError) as e:
         print(f"[ERROR] ベンチマーク収集に失敗しました: {e}")
         sys.exit(1)

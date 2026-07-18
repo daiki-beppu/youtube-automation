@@ -4,7 +4,7 @@
 Issue #103: ベンチマーク競合・自チャンネル動画・任意 URL を Gemini で動画解析する。
 
 Usage:
-    yt-video-analyze --source benchmark --channel <slug> --top 5
+    yt-video-analyze --source benchmark --competitor <slug> --top 5
     yt-video-analyze --source own --collection <name>
     yt-video-analyze --url <youtube_url>
 
@@ -29,6 +29,7 @@ from urllib.parse import parse_qs, urlparse
 from google.genai import errors as genai_errors
 
 from youtube_automation.scripts.benchmark_collector import load_benchmark_videos, select_top_vod_benchmark_videos
+from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
 from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.genai_client import create_genai_client
@@ -154,15 +155,15 @@ def _resolve_own_targets(*, channel_dir: Path, collection_name: str) -> list[Vid
     return targets
 
 
-def _resolve_benchmark_targets(*, data_dir: Path, channel_slug: str, top: int) -> list[VideoTarget]:
+def _resolve_benchmark_targets(*, data_dir: Path, competitor_slug: str, top: int) -> list[VideoTarget]:
     """ベンチマーク JSON から slug でフィルタし、上位 `top` 件を VideoTarget に変換する。"""
     if top <= 0:
         raise ValidationError(f"--top は 1 以上を指定してください (received: {top})")
 
     videos = load_benchmark_videos(data_dir)
-    matched = [v for v in videos if v.get("channel_slug") == channel_slug]
+    matched = [v for v in videos if v.get("channel_slug") == competitor_slug]
     if not matched:
-        raise ValidationError(f"benchmark JSON に slug='{channel_slug}' の動画がありません")
+        raise ValidationError(f"benchmark JSON に競合 slug='{competitor_slug}' の動画がありません")
 
     # live 配信（duration_iso == "P0D"）は Gemini が URL を取り込めず 403 になるため
     # スキップして次点の VOD を繰り上げる (#1462)。yt-doctor の readiness 判定と同じ選定。
@@ -175,12 +176,14 @@ def _resolve_benchmark_targets(*, data_dir: Path, channel_slug: str, top: int) -
             ", ".join(str(v.get("video_id")) for v in skipped_live),
         )
     if not selected:
-        raise ValidationError(f"slug='{channel_slug}' の benchmark 動画は live 配信のみで、解析可能な VOD がありません")
+        raise ValidationError(
+            f"競合 slug='{competitor_slug}' の benchmark 動画は live 配信のみで、解析可能な VOD がありません"
+        )
 
     return [
         VideoTarget(
             video_id=v["video_id"],
-            slug=channel_slug,
+            slug=competitor_slug,
             url=WATCH_URL_TEMPLATE.format(video_id=v["video_id"]),
             title=v.get("title", ""),
         )
@@ -193,13 +196,13 @@ def _resolve_benchmark_targets(*, data_dir: Path, channel_slug: str, top: int) -
 # ---------------------------------------------------------------------------
 
 
-class _VideoAnalyzeParser(argparse.ArgumentParser):
+class _VideoAnalyzeParser(CompetitorArgumentParser):
     """`--source` の値ごとに必須引数の有無を post-parse で検証する parser。"""
 
     def parse_args(self, args=None, namespace=None):  # type: ignore[override]
         ns = super().parse_args(args=args, namespace=namespace)
-        if ns.source == SOURCE_BENCHMARK and not ns.channel:
-            self.error("--source benchmark には --channel が必須です")
+        if ns.source == SOURCE_BENCHMARK and not ns.competitor:
+            self.error("--source benchmark には --competitor が必須です")
         if ns.source == SOURCE_OWN and not ns.collection:
             self.error("--source own には --collection が必須です")
         return ns
@@ -209,7 +212,7 @@ def _build_parser() -> argparse.ArgumentParser:
     """yt-video-analyze の argparse を構築する。
 
     - `--source` と `--url` は相互排他 (どちらか必須)
-    - `--source benchmark` は `--channel` 必須、`--source own` は `--collection` 必須
+    - `--source benchmark` は `--competitor` 必須、`--source own` は `--collection` 必須
     """
     parser = _VideoAnalyzeParser(description="Gemini で YouTube 動画を解析 (benchmark / own / url の 3 経路)")
     entry = parser.add_mutually_exclusive_group(required=True)
@@ -220,7 +223,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     entry.add_argument("--url", help="単発動画の YouTube URL")
 
-    parser.add_argument("--channel", help="--source benchmark 用: チャンネル slug")
+    parser.add_argument("--competitor", help="--source benchmark 用: 競合 slug")
     parser.add_argument(
         "--top",
         type=int,
@@ -252,7 +255,11 @@ def _resolve_targets(args: argparse.Namespace, *, channel_dir: Path, data_dir: P
         target = _resolve_url_target(args.url)
         return target.slug, [target]
     if args.source == SOURCE_BENCHMARK:
-        return args.channel, _resolve_benchmark_targets(data_dir=data_dir, channel_slug=args.channel, top=args.top)
+        return args.competitor, _resolve_benchmark_targets(
+            data_dir=data_dir,
+            competitor_slug=args.competitor,
+            top=args.top,
+        )
     # SOURCE_OWN: choices と排他制約で他値は到達不能
     return args.collection, _resolve_own_targets(channel_dir=channel_dir, collection_name=args.collection)
 

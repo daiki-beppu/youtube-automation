@@ -1,7 +1,12 @@
 ---
 name: lyria
-description: "Use when Vertex AI Lyria 3 でマスター音源を自動生成するとき（/masterup 不要、次工程 /videoup）。Suno 人手生成チャンネルは /suno を使う"
+description: "Use when Vertex AI Lyria 3 でマスター音源を自動生成するとき。/masterup は不要。Suno 人手生成チャンネルは /suno を使う"
 ---
+
+## 前後工程
+
+- `前工程`: `/wf-next`
+- `後工程`: `/videoup`
 
 ## Overview
 
@@ -330,4 +335,4 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 
 ## Next Step
 
-→ `/videoup` で動画生成を実行（WAV → MP4 変換は既存の generate_videos.sh を使用）
+- `/videoup` で動画生成を実行（WAV → MP4 変換は既存の generate_videos.sh を使用）

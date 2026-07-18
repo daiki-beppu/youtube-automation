@@ -7,6 +7,7 @@ sample_channel の新構造化は S3（コミット 3）で実施する予定。
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -14,8 +15,11 @@ import pytest
 from youtube_automation.utils.config import (
     ChannelConfig,
     channel_dir,
+    find_workspace_root,
     load_config,
     reset,
+    select_channel,
+    workspace_channels,
 )
 from youtube_automation.utils.exceptions import ConfigError
 
@@ -79,6 +83,15 @@ def _setup_channel(
     return ch
 
 
+def _setup_workspace(tmp_path: Path, *slugs: str) -> Path:
+    workspace = tmp_path / "workspace"
+    for slug in slugs:
+        channel = workspace / "channels" / slug
+        for filename, data in _minimal_sections().items():
+            _write_json(channel / "config" / "channel" / filename, data)
+    return workspace
+
+
 @pytest.fixture(autouse=True)
 def _auto_reset(monkeypatch):
     """新 API のシングルトン state をテスト毎にリセットし、CHANNEL_DIR も初期化する.
@@ -87,6 +100,7 @@ def _auto_reset(monkeypatch):
     指している前提を剥がし、各テストが tmp_path で独立できるようにする。
     """
     monkeypatch.delenv("CHANNEL_DIR", raising=False)
+    monkeypatch.delenv("CHANNEL", raising=False)
     reset()
     yield
     reset()
@@ -1450,6 +1464,115 @@ def test_channel_dir_ancestor_search(tmp_path, monkeypatch):
     assert channel_dir().resolve() != (ch / "config" / "channel").resolve()
 
 
+def test_workspace_detection_and_channel_listing(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "beta", "alpha")
+    nested = workspace / "channels" / "alpha" / "collections" / "planning"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(nested)
+
+    assert find_workspace_root() == workspace.resolve()
+    assert list(workspace_channels(workspace)) == ["alpha", "beta"]
+
+
+def test_explicit_channel_selects_workspace_slug(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    monkeypatch.chdir(workspace)
+    select_channel("beta")
+
+    assert channel_dir() == (workspace / "channels" / "beta").resolve()
+
+
+def test_config_reset_can_preserve_explicit_channel_selection(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    monkeypatch.chdir(workspace)
+    select_channel("beta")
+    assert channel_dir() == (workspace / "channels" / "beta").resolve()
+
+    reset(preserve_channel_selection=True)
+
+    assert channel_dir() == (workspace / "channels" / "beta").resolve()
+
+
+def test_channel_env_selects_workspace_slug(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("CHANNEL", "alpha")
+
+    assert channel_dir() == (workspace / "channels" / "alpha").resolve()
+
+
+def test_explicit_channel_takes_priority_over_channel_env(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("CHANNEL", "missing")
+    select_channel("beta")
+
+    assert channel_dir() == (workspace / "channels" / "beta").resolve()
+
+
+def test_matching_channel_and_channel_dir_are_accepted(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    alpha = workspace / "channels" / "alpha"
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("CHANNEL", "alpha")
+    monkeypatch.setenv("CHANNEL_DIR", str(alpha))
+
+    assert channel_dir() == alpha.resolve()
+
+
+def test_cwd_inside_workspace_channel_resolves_without_explicit_selection(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    nested = workspace / "channels" / "alpha" / "collections" / "planning"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(nested)
+
+    assert channel_dir() == (workspace / "channels" / "alpha").resolve()
+
+
+def test_channel_and_channel_dir_conflict_lists_both_targets(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    alpha = workspace / "channels" / "alpha"
+    beta = workspace / "channels" / "beta"
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("CHANNEL", "alpha")
+    monkeypatch.setenv("CHANNEL_DIR", str(beta))
+
+    with pytest.raises(ConfigError) as error:
+        channel_dir()
+
+    assert str(alpha.resolve()) in str(error.value)
+    assert str(beta.resolve()) in str(error.value)
+
+
+def test_explicit_channel_warns_when_cwd_points_to_another_channel(tmp_path, monkeypatch, caplog):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    monkeypatch.chdir(workspace / "channels" / "alpha")
+    select_channel("beta")
+
+    with caplog.at_level(logging.WARNING):
+        resolved = channel_dir()
+
+    assert resolved == (workspace / "channels" / "beta").resolve()
+    assert "cwd は別チャンネル" in caplog.text
+
+
+def test_unknown_channel_slug_lists_candidates(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("CHANNEL", "missing")
+
+    with pytest.raises(ConfigError, match=r"候補: alpha, beta"):
+        channel_dir()
+
+
+def test_workspace_root_requires_channel_selection(tmp_path, monkeypatch):
+    workspace = _setup_workspace(tmp_path, "alpha", "beta")
+    monkeypatch.chdir(workspace)
+
+    with pytest.raises(ConfigError, match=r"--channel.*候補: alpha, beta"):
+        channel_dir()
+
+
 # ----- comments.generator section -------------------------------------------
 
 
@@ -1883,6 +2006,8 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
         "enabled": True,
         "audio_visualizer": {
             "enabled": True,
+            "style": "ring-line",
+            "bars": 24,
             "mode": "bar",
             "size": "1920x240",
             "rate": "30",
@@ -1890,11 +2015,17 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
             "win_size": 4096,
             "win_func": "hann",
             "colors": "0xff66ccff",
+            "fill": {"type": "gradient", "top": "0xFF8800", "bottom": "0x4400AA"},
+            "mirror_center": True,
+            "symmetric_vertical": True,
+            "rounding": {"blur": 2.3, "contrast": 3.2},
             "position": "(W-w)/2:H-h-80",
             "opacity": 0.9,
             "glow_enabled": True,
             "glow_sigma": 14.0,
             "glow_opacity": 0.5,
+            "ring": {"inner_r": 90, "length": 70, "arc_deg": [30, 330]},
+            "glow": {"enabled": False, "sigma": 6.0, "opacity": 0.4},
         },
         "subscribe_popup": {
             "enabled": True,
@@ -1925,6 +2056,8 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
     assert ov.enabled is True
 
     assert ov.audio_visualizer.enabled is True
+    assert ov.audio_visualizer.style == "ring-line"
+    assert ov.audio_visualizer.bars == 24
     assert ov.audio_visualizer.size == "1920x240"
     assert ov.audio_visualizer.rate == "30"
     assert ov.audio_visualizer.win_size == 4096
@@ -1932,6 +2065,19 @@ def test_overlays_section_full_override(tmp_path, monkeypatch):
     assert ov.audio_visualizer.position == "(W-w)/2:H-h-80"
     assert ov.audio_visualizer.glow_sigma == 14.0
     assert ov.audio_visualizer.glow_opacity == 0.5
+    assert ov.audio_visualizer.ring.inner_r == 90
+    assert ov.audio_visualizer.ring.length == 70
+    assert ov.audio_visualizer.ring.arc_deg == (30.0, 330.0)
+    assert ov.audio_visualizer.fill is not None
+    assert ov.audio_visualizer.fill.type == "gradient"
+    assert ov.audio_visualizer.fill.bottom == "0x4400AA"
+    assert ov.audio_visualizer.mirror_center is True
+    assert ov.audio_visualizer.symmetric_vertical is True
+    assert ov.audio_visualizer.rounding is not None
+    assert ov.audio_visualizer.rounding.blur == 2.3
+    assert ov.audio_visualizer.glow is not None
+    assert ov.audio_visualizer.glow.enabled is False
+    assert ov.audio_visualizer.glow.sigma == 6.0
 
     assert ov.subscribe_popup.enabled is True
     assert ov.subscribe_popup.image == "popup.png"
@@ -1981,4 +2127,188 @@ def test_overlays_audio_visualizer_non_object_raises(tmp_path, monkeypatch):
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
     with pytest.raises(ConfigError, match="overlays.audio_visualizer"):
+        load_config()
+
+
+def test_overlays_audio_visualizer_invalid_style_raises(tmp_path, monkeypatch):
+    """#1684/#1689: style は公開済み 5 preset 以外を fail-loud に拒否する."""
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {"audio_visualizer": {"style": "star"}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="bar, mirror-mountain, ring, ring-line, heart"):
+        load_config()
+
+
+def test_overlays_audio_visualizer_accepts_heart_style(tmp_path, monkeypatch):
+    """#1689: heart は公開 preset として loader を貫通する."""
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {"audio_visualizer": {"style": "heart"}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    assert load_config().youtube.overlays.audio_visualizer.style == "heart"
+
+
+@pytest.mark.parametrize(
+    "ring",
+    [
+        {"inner_r": -1},
+        {"length": 0},
+        {"arc_deg": [330, 30]},
+        {"arc_deg": [0]},
+    ],
+)
+def test_overlays_audio_visualizer_invalid_ring_raises(tmp_path, monkeypatch, ring):
+    """#1684: ring geometry の不正値は loader 境界で拒否する."""
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {"audio_visualizer": {"style": "ring", "ring": ring}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="overlays.audio_visualizer.ring"):
+        load_config()
+
+
+@pytest.mark.parametrize(
+    ("fill", "message"),
+    [
+        ({"type": "plasma"}, "fill.type"),
+        ({"type": "solid", "color": "not-a-color"}, "色指定"),
+        ({"type": "gradient", "top": "sunset", "bottom": "0x000000"}, "色指定"),
+    ],
+)
+def test_audio_visualizer_invalid_fill_raises(tmp_path, monkeypatch, fill, message):
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {"audio_visualizer": {"fill": fill}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=message):
+        load_config()
+
+
+# ----- workflow.scheduled_automation (#1892) --------------------------------
+
+
+def test_scheduled_automation_absent_uses_disabled_defaults(tmp_path, monkeypatch):
+    """#1892: `scheduled_automation` 未設定は全 default（enabled=False）で挙動不変."""
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+    sa = config.workflow.scheduled_automation
+
+    assert sa.enabled is False
+    assert sa.timezone == "Asia/Tokyo"
+    assert sa.run_time == "09:00"
+    assert sa.cadence == ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+    assert sa.target_workflow == "wf-next"
+    assert sa.max_retries == 0
+    assert sa.retry_delay_seconds == 300
+    assert sa.prevent_concurrent_runs is True
+    assert sa.notification == "terminal"
+    assert sa.allow_external_publish is False
+
+
+def test_scheduled_automation_explicit_full(tmp_path, monkeypatch):
+    """#1892: 全キーを明示指定でき、dataclass に反映される."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "scheduled_automation": {
+                "enabled": True,
+                "timezone": "America/New_York",
+                "run_time": "20:30",
+                "cadence": ["mon", "wed", "fri"],
+                "target_workflow": "wf-next",
+                "max_retries": 2,
+                "retry_delay_seconds": 60,
+                "prevent_concurrent_runs": False,
+                "notification": "none",
+                "allow_external_publish": True,
+            },
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    sa = load_config().workflow.scheduled_automation
+
+    assert sa.enabled is True
+    assert sa.timezone == "America/New_York"
+    assert sa.run_time == "20:30"
+    assert sa.cadence == ("mon", "wed", "fri")
+    assert sa.max_retries == 2
+    assert sa.retry_delay_seconds == 60
+    assert sa.prevent_concurrent_runs is False
+    assert sa.notification == "none"
+    assert sa.allow_external_publish is True
+
+
+def test_scheduled_automation_partial_keeps_other_defaults(tmp_path, monkeypatch):
+    """#1892: 一部キーのみ指定した場合、残りは default のまま（falsy を潰さない）."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "scheduled_automation": {"enabled": True, "max_retries": 0},
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    sa = load_config().workflow.scheduled_automation
+
+    assert sa.enabled is True
+    assert sa.max_retries == 0
+    assert sa.allow_external_publish is False
+    assert sa.prevent_concurrent_runs is True
+
+
+def test_scheduled_automation_coexists_with_wf_next(tmp_path, monkeypatch):
+    """#1892: 既存 `wf_next` 設定と同居できる."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "wf_next": {"skip_upload_approval": False},
+            "scheduled_automation": {"enabled": True},
+        },
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.wf_next.skip_upload_approval is False
+    assert config.workflow.scheduled_automation.enabled is True
+
+
+@pytest.mark.parametrize(
+    ("scheduled", "message"),
+    [
+        ("not-an-object", "workflow.scheduled_automation は object"),
+        ({"enabled": "yes"}, "scheduled_automation.enabled は boolean"),
+        ({"allow_external_publish": 1}, "scheduled_automation.allow_external_publish は boolean"),
+        ({"timezone": ""}, "scheduled_automation.timezone は空でない string"),
+        ({"run_time": "9:00"}, "run_time は HH:MM"),
+        ({"run_time": "24:00"}, "run_time は HH:MM"),
+        ({"run_time": "09:60"}, "run_time は HH:MM"),
+        ({"cadence": []}, "cadence は空でない曜日の array"),
+        ({"cadence": ["monday"]}, "cadence の要素は"),
+        ({"cadence": ["mon", "mon"]}, "cadence に重複した曜日"),
+        ({"max_retries": -1}, "max_retries は 0 以上"),
+        ({"max_retries": True}, "max_retries は integer"),
+        ({"retry_delay_seconds": "300"}, "retry_delay_seconds は integer"),
+        ({"notification": "discord"}, "scheduled_automation.notification は"),
+    ],
+)
+def test_scheduled_automation_invalid_raises(tmp_path, monkeypatch, scheduled, message):
+    """#1892: invalid な `scheduled_automation` は具体的な ConfigError で弾く."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"scheduled_automation": scheduled}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=message):
         load_config()

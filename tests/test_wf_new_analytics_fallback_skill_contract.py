@@ -131,7 +131,7 @@ def test_wf_new_hard_gates_stop_before_suno_when_music_readiness_is_missing() ->
     for section in (hard_gates, phase_2c):
         assert "`config/skills/suno.yaml::genre_line` または `data/video_analysis/<slug>/*.json`" in section
         assert "`/suno` を呼ばず" in section or "`/suno` を起動せず" in section
-        assert "`uv run yt-video-analyze --source benchmark --channel <slug> --top 5`" in section
+        assert "`uv run yt-video-analyze --source benchmark --competitor <slug> --top 5`" in section
         assert "AI が `genre_line` を手書き" in section
         assert "`assets.music_prompts = true` に更新することは禁止" in section
 

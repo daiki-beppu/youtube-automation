@@ -3,12 +3,17 @@ name: videoup
 description: "Use when 音声ファイルが揃い動画生成が必要なとき。「動画変換」「MP3→MP4」「generate_videos」「videoup」で発動。マスター音源・マスター動画生成を案内。YouTube への投稿は /video-upload"
 ---
 
+## 前後工程
+
+- `前工程`: `/masterup`, `/lyria`, `/loop-video`
+- `後工程`: `/video-upload`, `/video-description`
+
 ## Overview
 
 `.claude/skills/` 配下の共有スクリプト（`yt-skills sync` で配布）を使ってマスター音源と動画を生成します。
 スクリプトは毎回生成せず、既存の汎用スクリプトを実行します。
 
-前工程はマスター音源の用意: Suno 系チャンネルは `/masterup`、Lyria 系チャンネルは `/lyria`（`/masterup` 不要）でマスター音源を生成してから本スキルを実行する。
+Suno 系チャンネルは `/masterup`、Lyria 系チャンネルは `/lyria`（`/masterup` 不要）でマスター音源を生成してから本スキルを実行する。
 
 ## 完了条件
 
@@ -190,6 +195,8 @@ effect:
     "enabled": true,
     "audio_visualizer": {
       "enabled": true,
+      "style": "bar",
+      "bars": 16,
       "mode": "bar",
       "size": "1280x180",
       "rate": "24",
@@ -199,7 +206,12 @@ effect:
       "opacity": 0.85,
       "glow_enabled": true,
       "glow_sigma": 12.0,
-      "glow_opacity": 0.45
+      "glow_opacity": 0.45,
+      "ring": {
+        "inner_r": 120,
+        "length": 160,
+        "arc_deg": [30, 330]
+      }
     },
     "subscribe_popup": {
       "enabled": true,
@@ -227,10 +239,26 @@ effect:
 - **popup 画像探索順**: 絶対パス → `10-assets/<image>` → `<collection-dir>/<image>`。見つからない場合は popup のみスキップして visualizer は実行する。
 - **再エンコード固定**: overlays 経路は `-c:v copy` 不可。`encoder.crf` / `maxrate` / `bufsize` で品質とサイズを制御する（DeepFocus365 で 70 分マスター = 約 1.0 GB / 2 Mbps 実績）。
 
+### Audio visualizer style（#1684）
+
+`audio_visualizer.style` は次の 5 preset から選ぶ。未指定時は `bar` になり、従来の `showfreqs=mode=bar` filtergraph をそのまま使う。
+
+| style | 表示 | 主な追加設定 |
+|---|---|---|
+| `bar` | 従来の横並びバー | `mode` / `size` |
+| `mirror-mountain` | 低音を中央に寄せた左右鏡像 + 上下対称バー | `bars` / 偶数の `size` |
+| `ring` | 円弧上の角丸カプセル | `bars` / `ring.inner_r` / `ring.length` / `ring.arc_deg` |
+| `ring-line` | 細線のギザギザリング | `bars` / `ring.*` |
+| `heart` | ハート曲線上で内外へ波打つスペクトラムバー | `bars` / `size` |
+
+例: `"style": "mirror-mountain", "bars": 16, "size": "300x110"`。ring 系は `"style": "ring", "bars": 24, "ring": {"inner_r": 120, "length": 160, "arc_deg": [30, 330]}` のように指定する。heart は `"style": "heart"` の 1 行で `size: "600x480"` / `colors: "0xff69b4"`（ピンク）が既定になり、必要なら `bars` / `size` / `colors` を明示して上書きできる。`position` は全 style 共通で最終レイヤーの配置に適用される。heart は `fill`（solid / gradient / rainbow）、`rounding`、`glow` を利用でき、形状自体が左右対称のため `mirror_center` / `symmetric_vertical` は適用しない。
+
+`mirror-mountain` / ring / heart で使うバー間隔・形状マスク PNG は、`generate_videos.sh` が同梱 Python helper で一時領域へ実行時生成する。外部の `make_bars_mask.py`、`build_spectrum_video.sh`、事前生成 PNG は不要。
+
 ### 動作実証メモ
 
 - DeepFocus365 で実装済み: 70 分マスター動画を約 2 分弱で生成、visualizer + popup ともに正常合成（#511 背景）。
-- visualizer は `showfreqs=mode=bar` + `gblur` の 2 パス glow で淡い発光を演出。`glow_enabled: false` で 1 パスに減らせる。
+- visualizer は style ごとの `showfreqs` filtergraph + `gblur` の 2 パス glow で淡い発光を演出。`glow_enabled: false` で 1 パスに減らせる。
 - popup は `fade=in` / `enable='between(t,start,end)'` / `fade=out` を組み合わせて時間窓制御している。
 
 ## 長時間処理の取り扱い
@@ -298,4 +326,4 @@ cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-s
 ## Next Step
 
 動画生成後:
-→ `/video-description <collection-path>` でYouTube概要欄を生成
+- `/video-description <collection-path>` でYouTube概要欄を生成
