@@ -667,6 +667,97 @@ class TestCLIPushDryRun:
         youtube.channels().update.assert_not_called()
 
 
+class TestCLIPushQuota:
+    """#2060: push の apply 経路が channels.update quota を part ごとに記録する。"""
+
+    def _patch_youtube(self, youtube):
+        return patch(
+            "youtube_automation.scripts.channel_settings_cli.get_youtube",
+            return_value=youtube,
+        )
+
+    def test_dry_run_does_not_record_quota(self, capsys):
+        """Given diff あり When push（dry-run） Then channels.update quota は記録されない。"""
+        youtube = MagicMock()
+        youtube.channels().list().execute.return_value = {"items": [_mock_remote_response(description="old remote")]}
+        with (
+            self._patch_youtube(youtube),
+            patch("youtube_automation.utils.cost_tracker.log_quota") as log_quota,
+        ):
+            rc = channel_settings_cli.main(["push"])
+        assert rc == 0
+        assert "dry-run" in capsys.readouterr().out
+        log_quota.assert_not_called()
+
+    def test_apply_records_quota_once_per_part(self, capsys):
+        """Given diff あり When push --apply Then 実 request ごとに 50 units が 1 回記録される。"""
+        youtube = MagicMock()
+        youtube.channels().list().execute.return_value = {"items": [_mock_remote_response(description="old remote")]}
+        with (
+            self._patch_youtube(youtube),
+            patch("youtube_automation.utils.cost_tracker.log_quota") as log_quota,
+        ):
+            rc = channel_settings_cli.main(["push", "--apply"])
+        assert rc == 0
+        update_calls = youtube.channels().update.call_args_list
+        assert len(update_calls) >= 1
+        assert log_quota.call_count == len(update_calls)
+        parts_called = [call.kwargs["part"] for call in update_calls]
+        for quota_call, part in zip(log_quota.call_args_list, parts_called, strict=True):
+            assert quota_call.args == ("youtube-data-api", "channels.update", 50)
+            assert quota_call.kwargs["metadata"] == {"part": part, "channel_id": "UCfixture"}
+
+    def test_apply_multiple_parts_records_match_request_count(self, capsys):
+        """Given brandingSettings + status の複数 part When push --apply Then request 数と記録件数が一致する。"""
+        youtube = MagicMock()
+        remote = _mock_remote_response(description="old remote")
+        remote["status"] = {"selfDeclaredMadeForKids": True}  # local fixture は False
+        youtube.channels().list().execute.return_value = {"items": [remote]}
+        with (
+            self._patch_youtube(youtube),
+            patch("youtube_automation.utils.cost_tracker.log_quota") as log_quota,
+        ):
+            rc = channel_settings_cli.main(["push", "--apply", "--no-localizations"])
+        assert rc == 0
+        update_calls = youtube.channels().update.call_args_list
+        parts_called = [call.kwargs["part"] for call in update_calls]
+        assert {"brandingSettings", "status"} <= set(parts_called)
+        assert log_quota.call_count == len(update_calls)
+        recorded_parts = [call.kwargs["metadata"]["part"] for call in log_quota.call_args_list]
+        assert recorded_parts == parts_called
+
+    def test_update_failure_records_quota_then_raises_api_error(self, capsys):
+        """Given update が失敗 When push --apply Then quota 記録後に YouTubeAPIError（rc=1）が維持される。"""
+        youtube = MagicMock()
+        youtube.channels().list().execute.return_value = {"items": [_mock_remote_response(description="old remote")]}
+        youtube.channels().update().execute.side_effect = RuntimeError("boom")
+        with (
+            self._patch_youtube(youtube),
+            patch("youtube_automation.utils.cost_tracker.log_quota") as log_quota,
+        ):
+            rc = channel_settings_cli.main(["push", "--apply"])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "channels().update" in err and "failed" in err
+        # 実 request を発行済みのため、失敗した call の分も quota が記録される
+        assert log_quota.call_count == 1
+
+    def test_quota_record_failure_does_not_break_push(self, capsys):
+        """Given log_quota が例外を投げる When push --apply Then push は成功のまま完了する。"""
+        youtube = MagicMock()
+        youtube.channels().list().execute.return_value = {"items": [_mock_remote_response(description="old remote")]}
+        with (
+            self._patch_youtube(youtube),
+            patch(
+                "youtube_automation.utils.cost_tracker.log_quota",
+                side_effect=RuntimeError("tracker down"),
+            ),
+        ):
+            rc = channel_settings_cli.main(["push", "--apply"])
+        assert rc == 0
+        assert "pushed" in capsys.readouterr().out
+
+
 def _fake_config(channel_id: str):
     """channel_id 照合テスト用の軽量 config スタブ（_cmd_push が触る属性のみ）。"""
     branding = SimpleNamespace(as_api_dict=lambda: {})
