@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(workspace)`: `yt-channel-import` を追加し、既存の単一 channel repository から channel 固有データだけを `channels/<slug>/` へ transaction copy できるようにした。meta 由来 slug の確認、必須 config と実 load の検証、auth 所在報告、symlink / 上書き拒否、生成 media を除外する workspace `.gitignore` scaffold、`.env` / `CHANNEL_DIR` 警告、共通 `yt-skills sync` 案内と external user 向け移行・rollback・archive ガイドを追加した（#1949）。
 - `feat(workflow)`: `/automation-run` を追加し、active collection 1 件を durable lease 下で選択して、Lyria / Suno の音源生成、masterup、動画・metadata 生成、公開許可付き YouTube upload、post-publish まで既存 skill へ状態駆動で委譲できるようにした。工程ごとに成果物を再評価し、失敗・手動介入・公開未許可では停止理由と再開地点を履歴へ記録する。定期実行の既定 target は `automation-run` とし、未設定チャンネルの `enabled: false` / `allow_external_publish: false` は維持する（#1894）。
 - `feat(suno-helper)`: 定期実行用の loopback 限定 launch URL 契約と CLI を追加し、collection / entry / DL 形式 / entry・concurrency・retry 上限を指定可能にした。既存 resume state から entry / playlist / download を重複なしで再開し、上限超過は checkpoint、ログイン・CAPTCHA・課金確認・UI 非互換は手動介入理由として保存する。手動 overlay flow は従来挙動を維持する（#1893）。
 - `feat(extensions)`: `community-helper` を統一 `ext-v*` Release の build / zip / asset / インストール案内へ追加し、Extensions CI で Oxlint + Oxfmt、TypeScript、Vitest、WXT build を必須化した。release 前の単一検証スクリプトと automation-release の asset 完了条件も3拡張へ同期した（#1715）。

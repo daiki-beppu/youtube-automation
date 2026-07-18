@@ -22,6 +22,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-bulk-update-synthetic-media": "youtube_automation.scripts.bulk_update_synthetic_media",
     "yt-captions-upload": "youtube_automation.scripts.captions_upload",
     "yt-channel": "youtube_automation.cli.channel",
+    "yt-channel-import": "youtube_automation.cli.channel_import",
     "yt-channel-init": "youtube_automation.cli.channel_init",
     "yt-channel-seed": "youtube_automation.scripts.channel_seed",
     "yt-channel-settings": "youtube_automation.scripts.channel_settings_cli",

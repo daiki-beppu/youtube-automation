@@ -255,6 +255,7 @@ uv run ruff check .
 | `yt-thumbnail-compare` | サムネイル比較検証 |
 | `yt-video-analyze` | Gemini で YouTube 動画を直接解析（フック構造・BGM 展開・シーン・サムネ整合性・編集指標） |
 | `yt-channel-status` | チャンネル最新状況 |
+| `yt-channel` / `yt-channel-import` | workspace の channel 一覧 / 既存単一 channel repository のコピー移行（[ガイド](docs/channel-workspace-migration.md)） |
 | `yt-upload-collection` / `yt-upload-auto` | YouTube アップロード |
 
 完全な一覧は `pyproject.toml` の `[project.scripts]` を参照してください。
