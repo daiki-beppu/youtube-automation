@@ -56,6 +56,7 @@ _DEFAULT_MAX_WORKERS = 3
 
 # resolve_unique_path と同じ -vN 採番規則を事前計画でも使うための正規表現。
 _VERSION_RE = re.compile(r"^(.+)-v(\d+)$")
+_AB_PATTERN_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
 def _channel_root() -> Path:
@@ -74,6 +75,60 @@ def _required_non_empty_string(value: object, key: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ConfigError(f"{key} は空でない文字列で指定してください")
     return value
+
+
+def resolve_ab_test_patterns(skill_cfg: dict) -> list[dict[str, str]]:
+    """A/B テストの pattern 定義を検証して返す。
+
+    無効・未設定なら空リストを返し、従来の単一サムネイル経路を維持する。
+    有効時は YouTube Test & compare の上限に合わせて 1〜3 件に制限する。
+    """
+    ab_test = skill_cfg.get("ab_test")
+    if ab_test is None:
+        return []
+    ab_test = _required_mapping(ab_test, "ab_test")
+
+    enabled = ab_test.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ConfigError("ab_test.enabled は boolean で指定してください")
+    if not enabled:
+        return []
+
+    patterns = ab_test.get("patterns")
+    if not isinstance(patterns, list):
+        raise ConfigError("ab_test.enabled=true の場合、ab_test.patterns は list で指定してください")
+    if not patterns:
+        raise ConfigError("ab_test.enabled=true の場合、ab_test.patterns を 1 件以上指定してください")
+    if len(patterns) > 3:
+        raise ConfigError("ab_test.patterns は YouTube Test & compare の上限である 3 件以内にしてください")
+
+    resolved: list[dict[str, str]] = []
+    seen_names: set[str] = set()
+    for index, raw_pattern in enumerate(patterns):
+        key = f"ab_test.patterns[{index}]"
+        pattern = _required_mapping(raw_pattern, key)
+        name = _required_non_empty_string(pattern.get("name"), f"{key}.name").strip()
+        if not _AB_PATTERN_NAME_RE.fullmatch(name):
+            raise ConfigError(f"{key}.name は英小文字・数字・ハイフン・アンダースコアで指定してください")
+        if name in seen_names:
+            raise ConfigError(f"ab_test.patterns の name={name!r} が重複しています")
+        variation = _required_non_empty_string(pattern.get("variation"), f"{key}.variation").strip()
+        resolved.append({"name": name, "variation": variation})
+        seen_names.add(name)
+    return resolved
+
+
+def apply_ab_test_pattern(prompt: str, patterns: list[dict[str, str]], pattern_name: str | None) -> str:
+    """選択 pattern の variation clause をプロンプト末尾へ合成する。"""
+    if pattern_name is None:
+        return prompt
+    if not patterns:
+        raise ConfigError("--ab-pattern は ab_test.enabled=true の場合だけ指定できます")
+    pattern = next((item for item in patterns if item["name"] == pattern_name), None)
+    if pattern is None:
+        available = ", ".join(item["name"] for item in patterns)
+        raise ConfigError(f"--ab-pattern={pattern_name!r} は未定義です（有効値: {available}）")
+    return f"{prompt.rstrip()}\n{pattern['variation']}"
 
 
 def expand_thumbnail_prompt_clauses(prompt: str, skill_cfg: dict) -> str:
@@ -279,6 +334,12 @@ def main():
     )
     parser.add_argument("--no-composition", action="store_true", help="composition_prefix の自動付加をスキップ")
     parser.add_argument(
+        "--ab-pattern",
+        type=str,
+        default=None,
+        help="ab_test.patterns の name。対応する variation clause を最終プロンプトへ追加する",
+    )
+    parser.add_argument(
         "--max-attempts",
         type=int,
         default=None,
@@ -356,6 +417,7 @@ def main():
     try:
         skill_cfg = load_skill_config("thumbnail")
         composition_source = resolve_composition_source(skill_cfg, cfg.provider)
+        ab_test_patterns = resolve_ab_test_patterns(skill_cfg)
     except ConfigError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)
@@ -370,6 +432,7 @@ def main():
         prompt = apply_composition_rules(args.prompt, composition_source)
     try:
         prompt = expand_thumbnail_prompt_clauses(prompt, skill_cfg)
+        prompt = apply_ab_test_pattern(prompt, ab_test_patterns, args.ab_pattern)
     except ConfigError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)
