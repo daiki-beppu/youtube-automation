@@ -75,6 +75,20 @@ def _wf_new_phase_2e_block(text: str) -> str:
     return match.group(1)
 
 
+def test_wf_new_skips_thumbnail_approval_only_in_full_mode() -> None:
+    """#2167: wf-new は full だけを無人確定へ分岐し、失敗時は state を更新しない。"""
+    text = _read(_WF_NEW_SKILL_MD)
+    phase_2c = _wf_new_phase_2c_block(text)
+
+    assert "thumbnail full-mode gate" in text
+    assert "mode 未設定は `selection_only`" in text
+    assert "AskUserQuestion と `open` を実行せず" in phase_2c
+    assert "yt-thumbnail-auto-select <collection-path> --apply" in phase_2c
+    assert 'thumbnail_auto_selection.mode == "full"' in phase_2c
+    assert "textless 背景承認は質問せず" in phase_2c
+    assert "state を更新せず停止" in phase_2c
+
+
 def _collection_ideate_next_step_block(text: str) -> str:
     match = re.search(r"^## Next Step(.*?)(?:^## |\Z)", text, flags=re.DOTALL | re.MULTILINE)
     if not match:
