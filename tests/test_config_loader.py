@@ -755,6 +755,55 @@ def test_workflow_wf_next_skip_approval_default(tmp_path, monkeypatch):
     assert config.workflow.wf_next.approval_gates.upload is False
 
 
+def test_workflow_post_publish_unset_preserves_legacy_mode(tmp_path, monkeypatch):
+    """#1824: section 未設定では従来の community-post 単独案内を維持する."""
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.post_publish.configured is False
+    assert config.workflow.post_publish.approval_gates.community_post is False
+    assert config.workflow.post_publish.approval_gates.pinned_comment is False
+    assert config.workflow.post_publish.approval_gates.metadata_audit is False
+
+
+def test_workflow_post_publish_gate_overrides_are_observable(tmp_path, monkeypatch):
+    """#1824: section の存在で chain を opt-in し、step ごとの boolean を貫通する."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "post-publish": {
+                "approval_gates": {
+                    "community-post": True,
+                    "pinned-comment": False,
+                    "metadata-audit": True,
+                }
+            }
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.post_publish.configured is True
+    assert config.workflow.post_publish.approval_gates.community_post is True
+    assert config.workflow.post_publish.approval_gates.pinned_comment is False
+    assert config.workflow.post_publish.approval_gates.metadata_audit is True
+
+
+@pytest.mark.parametrize("invalid", ["true", 1, None, {}, []])
+def test_workflow_post_publish_gate_must_be_boolean(tmp_path, monkeypatch, invalid):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"post-publish": {"approval_gates": {"pinned-comment": invalid}}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="workflow.post-publish.approval_gates.pinned-comment は boolean"):
+        load_config()
+
+
 def test_workflow_wf_next_skip_approval_explicit(tmp_path, monkeypatch):
     """#1744: `skip_*_approval: false` で承認ゲートを有効化できる（true=省く の向き）."""
     sections = _minimal_sections()
