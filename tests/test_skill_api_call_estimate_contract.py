@@ -175,6 +175,7 @@ TARGET_SKILLS: frozenset[str] = frozenset(
         "streaming",
         "thumbnail",
         "thumbnail-compare",
+        "thumbnail-iterate",
         "video-analyze",
         "video-upload",
         "viewer-voice",
