@@ -25,7 +25,7 @@ interface InitSnapshotOptions {
  */
 export function initSnapshot(
   entries: PromptEntry[],
-  options: InitSnapshotOptions = { collectionId: "" },
+  options: InitSnapshotOptions = { collectionId: "" }
 ): SnapshotPayload {
   return {
     collectionId: options.collectionId,
@@ -34,18 +34,29 @@ export function initSnapshot(
     isRunning: true,
     progress: { phase: PHASE.INJECTING, total: entries.length },
     playlistName: options.playlistName,
-    regenerateDurationOutliers: options.regenerateDurationOutliers ?? DEFAULT_REGENERATE_DURATION_OUTLIERS,
-    ...(options.durationOutlierWarnings ? { durationOutlierWarnings: options.durationOutlierWarnings } : {}),
-    ...(options.durationFilter ? { durationFilter: options.durationFilter } : {}),
+    regenerateDurationOutliers:
+      options.regenerateDurationOutliers ??
+      DEFAULT_REGENERATE_DURATION_OUTLIERS,
+    ...(options.durationOutlierWarnings
+      ? { durationOutlierWarnings: options.durationOutlierWarnings }
+      : {}),
+    ...(options.durationFilter
+      ? { durationFilter: options.durationFilter }
+      : {}),
   };
 }
 
 /** itemStates を phase に応じて遷移させる（INJECTING / SUBMITTED / DONE / ENTRY_FAILED のみ、他 phase は不変）。非破壊で新配列を返す。 */
-export function nextItemStates(prev: ItemState[], payload: ProgressPayload): ItemState[] {
+export function nextItemStates(
+  prev: ItemState[],
+  payload: ProgressPayload
+): ItemState[] {
   const { phase, index } = payload;
 
   if (phase === PHASE.INJECTING) {
-    return prev.map((s, i) => (i === index ? "active" : s === "active" ? "idle" : s));
+    return prev.map((s, i) =>
+      i === index ? "active" : s === "active" ? "idle" : s
+    );
   }
   if (phase === PHASE.SUBMITTED) {
     return prev.map((s, i) => (i === index ? "submitted" : s));
@@ -67,22 +78,38 @@ export function nextItemStates(prev: ItemState[], payload: ProgressPayload): Ite
  * ただし run 一式完了時リロード (#1411) は in-memory snapshot ごと content script を破棄するため、
  * FINISHED の再 open 表示はリロード直前に chrome.storage へ退避した分 (lib/finished-snapshot.ts) が引き継ぐ。 */
 export function isTerminalPhase(phase: Phase): boolean {
-  return phase === PHASE.FINISHED || phase === PHASE.STOPPED || phase === PHASE.ERROR;
+  return (
+    phase === PHASE.FINISHED || phase === PHASE.STOPPED || phase === PHASE.ERROR
+  );
 }
 
 /** progress 受信でスナップショットを更新する。終了 phase で isRunning=false（entries/itemStates は保持）。 */
-export function applyProgress(snap: SnapshotPayload, payload: ProgressPayload): SnapshotPayload {
+export function applyProgress(
+  snap: SnapshotPayload,
+  payload: ProgressPayload
+): SnapshotPayload {
   const nextAcceptedClipIds =
     payload.acceptedClipIds && payload.acceptedClipIds.length > 0
-      ? Array.from(new Set([...(snap.yieldAcceptedClipIds ?? []), ...payload.acceptedClipIds]))
+      ? Array.from(
+          new Set([
+            ...(snap.yieldAcceptedClipIds ?? []),
+            ...payload.acceptedClipIds,
+          ])
+        )
       : snap.yieldAcceptedClipIds;
   const nextYieldRetryCounts =
     payload.index !== undefined && payload.yieldRetryCount !== undefined
-      ? { ...(snap.yieldRetryCounts ?? {}), [payload.index]: payload.yieldRetryCount }
+      ? {
+          ...(snap.yieldRetryCounts ?? {}),
+          [payload.index]: payload.yieldRetryCount,
+        }
       : snap.yieldRetryCounts;
   const nextDurationOutlierWarnings =
     payload.index !== undefined && payload.durationOutlierWarning
-      ? { ...(snap.durationOutlierWarnings ?? {}), [payload.index]: payload.durationOutlierWarning }
+      ? {
+          ...(snap.durationOutlierWarnings ?? {}),
+          [payload.index]: payload.durationOutlierWarning,
+        }
       : snap.durationOutlierWarnings;
   return {
     ...snap,
@@ -93,7 +120,8 @@ export function applyProgress(snap: SnapshotPayload, payload: ProgressPayload): 
     // 非 ERROR phase では既存値を保つ。ERROR が index 無し（playlist phase 等）なら undefined のまま。
     // #924: payload.index は resolveInterruptIndex で「次に実行する index」に補正済みのため、
     // ここで受け取った値をそのまま failedIndex として記録すれば chrome.storage 側と意味が一致する。
-    failedIndex: payload.phase === PHASE.ERROR ? payload.index : snap.failedIndex,
+    failedIndex:
+      payload.phase === PHASE.ERROR ? payload.index : snap.failedIndex,
     // ENTRY_FAILED の受信ごとにスキップ済み index を蓄積する (#948)。popup の「失敗分のみ再実行」が消費。
     failedIndices:
       payload.phase === PHASE.ENTRY_FAILED && payload.index !== undefined

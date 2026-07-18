@@ -19,12 +19,20 @@ const STATE_CLASS: Record<ItemState, string> = {
   failed: "bg-destructive/10 font-medium text-destructive",
 };
 
-export function PatternList({ entries, itemStates, selectedEntries, onToggleEntry }: PatternListProps) {
+export function PatternList({
+  entries,
+  itemStates,
+  selectedEntries,
+  onToggleEntry,
+}: PatternListProps) {
   if (entries.length === 0) {
     return null;
   }
   return (
-    <ul className="max-h-48 overflow-y-auto rounded border border-border" data-suno-entry-list="true">
+    <ul
+      className="max-h-48 overflow-y-auto rounded border border-border"
+      data-suno-entry-list="true"
+    >
       {entries.map((entry, index) => {
         const itemState = itemStates[index] ?? "idle";
         const selected = isEntrySelected(selectedEntries, itemStates, index);
@@ -45,11 +53,17 @@ export function PatternList({ entries, itemStates, selectedEntries, onToggleEntr
                 <input
                   type="checkbox"
                   checked={selected}
-                  onChange={(event) => onToggleEntry(index, event.currentTarget.checked)}
+                  onChange={(event) =>
+                    onToggleEntry(index, event.currentTarget.checked)
+                  }
                   aria-label={`entry ${index + 1}: ${entry.name}`}
                   className="size-4 shrink-0 accent-primary"
                 />
-                <span className={`min-w-0 flex-1 text-left ${STATE_CLASS[itemState]}`}>{entry.name}</span>
+                <span
+                  className={`min-w-0 flex-1 text-left ${STATE_CLASS[itemState]}`}
+                >
+                  {entry.name}
+                </span>
               </label>
             </ButtonSlot>
           </li>

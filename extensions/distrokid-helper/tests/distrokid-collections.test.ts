@@ -8,6 +8,7 @@
 // および shared/constants の distrokidReleaseRoute（契約文字列の固定テスト）。
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
 import {
   fetchDistrokidCollections,
   excludeReleasedDiscs,
@@ -61,20 +62,27 @@ afterEach(() => {
 describe("distrokidReleaseRoute", () => {
   it("Given collection_id と disc When 組み立てる Then 正しいパスを返す", () => {
     // ルートの形式は `/collections/<id>/distrokid/<disc>/release.json` (#934 契約)。
-    expect(distrokidReleaseRoute("20260526-soulful-grooves-coding-focus-collection", "disc1-coding-focus-vol1")).toBe(
-      "/collections/20260526-soulful-grooves-coding-focus-collection/distrokid/disc1-coding-focus-vol1/release.json",
+    expect(
+      distrokidReleaseRoute(
+        "20260526-soulful-grooves-coding-focus-collection",
+        "disc1-coding-focus-vol1"
+      )
+    ).toBe(
+      "/collections/20260526-soulful-grooves-coding-focus-collection/distrokid/disc1-coding-focus-vol1/release.json"
     );
   });
 
   it("別の collection_id / disc でも同じパターンを返す", () => {
     expect(distrokidReleaseRoute("20261001-rjn-dawn-collection", "disc1")).toBe(
-      "/collections/20261001-rjn-dawn-collection/distrokid/disc1/release.json",
+      "/collections/20261001-rjn-dawn-collection/distrokid/disc1/release.json"
     );
   });
 
   it("スペース入り collection_id は path segment encode する", () => {
-    expect(distrokidReleaseRoute("20260526-rainy jazz-collection", "disc1")).toBe(
-      "/collections/20260526-rainy%20jazz-collection/distrokid/disc1/release.json",
+    expect(
+      distrokidReleaseRoute("20260526-rainy jazz-collection", "disc1")
+    ).toBe(
+      "/collections/20260526-rainy%20jazz-collection/distrokid/disc1/release.json"
     );
   });
 });
@@ -84,7 +92,9 @@ describe("distrokidReleaseRoute", () => {
 describe("fetchDistrokidCollections", () => {
   it("200 のとき DistrokidCollectionSummary[] を返す", async () => {
     // Given
-    fetchMock.mockResolvedValue(jsonResponse(200, [DISC_UNRELEASED, DISC_RELEASED]));
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, [DISC_UNRELEASED, DISC_RELEASED])
+    );
 
     // When
     const result = await fetchDistrokidCollections(BASE_URL);
@@ -119,7 +129,9 @@ describe("fetchDistrokidCollections", () => {
     fetchMock.mockResolvedValue(jsonResponse(500, {}));
 
     // When / Then
-    await expect(fetchDistrokidCollections(BASE_URL)).rejects.toThrow("HTTP 500");
+    await expect(fetchDistrokidCollections(BASE_URL)).rejects.toThrow(
+      "HTTP 500"
+    );
   });
 
   it("配列でない JSON のとき throw する", async () => {
@@ -127,7 +139,9 @@ describe("fetchDistrokidCollections", () => {
     fetchMock.mockResolvedValue(jsonResponse(200, { error: "not an array" }));
 
     // When / Then
-    await expect(fetchDistrokidCollections(BASE_URL)).rejects.toThrow("配列ではない JSON が返りました。");
+    await expect(fetchDistrokidCollections(BASE_URL)).rejects.toThrow(
+      "配列ではない JSON が返りました。"
+    );
   });
 });
 
@@ -191,7 +205,10 @@ const RELEASE_RECORD = {
 };
 
 /** /auth/token は 200 + token を返し、POST には指定応答を返す fetch mock。 */
-function mockFetchWithToken(postResponse: () => Response, token = "test-token"): void {
+function mockFetchWithToken(
+  postResponse: () => Response,
+  token = "test-token"
+): void {
   fetchMock.mockImplementation(async (url: string) => {
     if (typeof url === "string" && url.includes("/auth/token")) {
       return jsonResponse(200, { token });
@@ -202,7 +219,9 @@ function mockFetchWithToken(postResponse: () => Response, token = "test-token"):
 
 function postCalls(): Array<[string, RequestInit]> {
   return fetchMock.mock.calls.filter(
-    (c) => typeof c[0] === "string" && (c[0] as string).includes("/distrokid/releases"),
+    (c) =>
+      typeof c[0] === "string" &&
+      (c[0] as string).includes("/distrokid/releases")
   ) as unknown as Array<[string, RequestInit]>;
 }
 
@@ -221,9 +240,12 @@ describe("recordDistrokidRelease", () => {
       `${BASE_URL}/distrokid/releases`,
       expect.objectContaining({
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Serve-Token": "test-token" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Serve-Token": "test-token",
+        },
         body: JSON.stringify(RELEASE_RECORD),
-      }),
+      })
     );
   });
 
@@ -236,7 +258,10 @@ describe("recordDistrokidRelease", () => {
 
     // Then
     expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/auth/token`);
-    expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/distrokid/releases`, expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${BASE_URL}/distrokid/releases`,
+      expect.anything()
+    );
   });
 
   it("/auth/token が非 2xx のとき POST に進まず throw する", async () => {
@@ -244,7 +269,9 @@ describe("recordDistrokidRelease", () => {
     fetchMock.mockResolvedValue(jsonResponse(403, {}));
 
     // When / Then
-    await expect(recordDistrokidRelease(BASE_URL, RELEASE_RECORD)).rejects.toThrow(/GET \/auth\/token failed: 403/);
+    await expect(
+      recordDistrokidRelease(BASE_URL, RELEASE_RECORD)
+    ).rejects.toThrow(/GET \/auth\/token failed: 403/);
     expect(postCalls()).toHaveLength(0);
   });
 
@@ -255,20 +282,28 @@ describe("recordDistrokidRelease", () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (typeof url === "string" && url.includes("/auth/token")) {
         tokenCallCount += 1;
-        return jsonResponse(200, { token: tokenCallCount === 1 ? "stale-token" : "fresh-token" });
+        return jsonResponse(200, {
+          token: tokenCallCount === 1 ? "stale-token" : "fresh-token",
+        });
       }
       postCallCount += 1;
-      return postCallCount === 1 ? jsonResponse(403, {}) : jsonResponse(200, {});
+      return postCallCount === 1
+        ? jsonResponse(403, {})
+        : jsonResponse(200, {});
     });
 
     // When / Then
-    await expect(recordDistrokidRelease(BASE_URL, RELEASE_RECORD)).resolves.toBeUndefined();
+    await expect(
+      recordDistrokidRelease(BASE_URL, RELEASE_RECORD)
+    ).resolves.toBeUndefined();
 
     // token 2 回 + POST 2 回 = 4 回。retry は再取得した fresh token を使う。
     expect(fetchMock).toHaveBeenCalledTimes(4);
     const posts = postCalls();
     expect(posts).toHaveLength(2);
-    expect((posts[1][1].headers as Record<string, string>)["X-Serve-Token"]).toBe("fresh-token");
+    expect(
+      (posts[1][1].headers as Record<string, string>)["X-Serve-Token"]
+    ).toBe("fresh-token");
   });
 
   it("retry 後も 403 のとき throw する（無限 retry しない）", async () => {
@@ -276,7 +311,9 @@ describe("recordDistrokidRelease", () => {
     mockFetchWithToken(() => jsonResponse(403, {}));
 
     // When / Then: retry は 1 回まで（token 2 回 + POST 2 回）。
-    await expect(recordDistrokidRelease(BASE_URL, RELEASE_RECORD)).rejects.toThrow("HTTP 403");
+    await expect(
+      recordDistrokidRelease(BASE_URL, RELEASE_RECORD)
+    ).rejects.toThrow("HTTP 403");
     expect(postCalls()).toHaveLength(2);
   });
 
@@ -285,7 +322,9 @@ describe("recordDistrokidRelease", () => {
     mockFetchWithToken(() => jsonResponse(500, {}));
 
     // When / Then
-    await expect(recordDistrokidRelease(BASE_URL, RELEASE_RECORD)).rejects.toThrow("HTTP 500");
+    await expect(
+      recordDistrokidRelease(BASE_URL, RELEASE_RECORD)
+    ).rejects.toThrow("HTTP 500");
   });
 
   it("204 でも成功とみなす（No Content レスポンス対応）", async () => {
@@ -293,6 +332,8 @@ describe("recordDistrokidRelease", () => {
     mockFetchWithToken(() => jsonResponse(204, null));
 
     // When / Then: throw しない。
-    await expect(recordDistrokidRelease(BASE_URL, RELEASE_RECORD)).resolves.toBeUndefined();
+    await expect(
+      recordDistrokidRelease(BASE_URL, RELEASE_RECORD)
+    ).resolves.toBeUndefined();
   });
 });

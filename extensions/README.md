@@ -42,13 +42,14 @@ bash .claude/skills/automation-release/references/verify-extensions.sh [<name>]
 | 目的 | コマンド |
 |---|---|
 | 依存インストール | `nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile` |
+| 共有 lint toolchain インストール（check / fix の前提） | `nix develop .#extensions --command pnpm -C extensions install --frozen-lockfile`（`oxlint.config.ts` / `oxfmt.config.ts` の ultracite import を `extensions/node_modules` で解決する） |
 | 開発（HMR） | `nix develop .#extensions --command pnpm -C extensions/suno-helper dev` |
 | 本番ビルド | `nix develop .#extensions --command pnpm -C extensions/suno-helper build`（`.output/chrome-mv3/` に MV3 拡張を生成） |
 | 型チェック | `nix develop .#extensions --command pnpm -C extensions/suno-helper compile` |
 | unit テスト（Vitest） | `nix develop .#extensions --command pnpm -C extensions/suno-helper test` |
 | Playwright browser（初回） | `nix develop .#extensions --command pnpm -C extensions/suno-helper exec playwright install --with-deps chromium` |
 | e2e テスト（Playwright） | `nix develop .#extensions --command pnpm -C extensions/suno-helper test:e2e` |
-| lint / format | `nix develop .#extensions --command pnpm -C extensions/suno-helper lint` / `nix develop .#extensions --command pnpm -C extensions/suno-helper format:check` |
+| lint + format 検査 / 自動修正 | `nix develop .#extensions --command pnpm -C extensions/suno-helper check` / `nix develop .#extensions --command pnpm -C extensions/suno-helper fix` |
 | Fallow audit | `nix develop .#extensions --command pnpm -C extensions/suno-helper run audit` |
 | 配布 zip | `nix develop .#extensions --command pnpm -C extensions/suno-helper zip` |
 
@@ -58,8 +59,7 @@ build 後は `extensions/suno-helper/.output/chrome-mv3/manifest.json`、zip 後
 
 | ゲート | 責務 |
 |---|---|
-| Oxlint（`pnpm lint`） | 共通の `extensions/.oxlintrc.json` に基づき TypeScript / React コードを検査する |
-| Prettier（`pnpm format:check`） | ソースのフォーマットが統一されていることを検査する |
+| Oxlint + Oxfmt（`pnpm check`） | ultracite preset を extends した共通の `extensions/oxlint.config.ts` / `extensions/oxfmt.config.ts` に基づき lint とフォーマットを一括検査する（自動修正は `pnpm fix`） |
 | TypeScript（`pnpm compile`） | 型エラーがなく、WXT の型生成を含む compile が成功することを検査する |
 | Fallow（`pnpm run audit`） | `extensions/` 全体を静的解析し、既存 baseline との差分 finding を検査する |
 

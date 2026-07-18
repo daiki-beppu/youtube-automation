@@ -35,7 +35,7 @@ export class InjectSession {
 
   constructor(
     private readonly injector: Injector,
-    private readonly report: Reporter,
+    private readonly report: Reporter
   ) {}
 
   async start(payload: ReleasePayload): Promise<void> {
@@ -47,7 +47,9 @@ export class InjectSession {
   track(trackIndex: number, asset: SerializedAsset): void {
     const { tracks } = this.requirePayload().release;
     if (trackIndex < 0 || trackIndex >= tracks.length) {
-      throw new Error(`trackIndex が範囲外です: ${trackIndex}（tracks=${tracks.length}）`);
+      throw new Error(
+        `trackIndex が範囲外です: ${trackIndex}（tracks=${tracks.length}）`
+      );
     }
     this.report(PHASES.INJECTING, `曲ファイルを注入中: ${asset.filename}`);
     this.injector.injectTrackFile(trackIndex, decodeAsset(asset));
@@ -64,7 +66,10 @@ export class InjectSession {
     this.report(PHASES.INJECTING, "AI 開示を注入中");
     await this.injector.injectAiDisclosure(payload);
     this.payload = null;
-    this.report(PHASES.DONE, "注入が完了しました。内容を確認して手動で続行してください");
+    this.report(
+      PHASES.DONE,
+      "注入が完了しました。内容を確認して手動で続行してください"
+    );
   }
 
   stop(): void {

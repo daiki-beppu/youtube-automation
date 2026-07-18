@@ -1,0 +1,12 @@
+{
+  "name": "@youtube-automation/extensions-toolchain",
+  "private": true,
+  "description": "oxlint.config.ts / oxfmt.config.ts の ultracite preset import を extensions/node_modules で解決するための共有 lint / format toolchain。各 helper の check / fix スクリプト（cd .. && ultracite ...）が参照する。",
+  "type": "module",
+  "devDependencies": {
+    "oxfmt": "0.59.0",
+    "oxlint": "1.73.0",
+    "ultracite": "7.9.4"
+  },
+  "packageManager": "pnpm@11.12.0"
+}

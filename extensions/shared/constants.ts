@@ -223,7 +223,7 @@ export const DISTROKID_RELEASES_ROUTE = "/distrokid/releases";
  * asset_path は `/collections/<id>/distrokid/assets/<rel>` 形式のため baseUrl 連結で取得できる。 */
 export function distrokidReleaseRoute(
   collectionId: string,
-  disc: string,
+  disc: string
 ): string {
   return `/collections/${encodeURIComponent(collectionId)}/distrokid/${disc}/release.json`;
 }
@@ -257,7 +257,7 @@ export type HelperProcessName = "distrokid-helper" | "suno-helper";
 
 export function formatServerSourceLabel(
   source: LocalServerSource,
-  helper: HelperProcessName,
+  helper: HelperProcessName
 ): string {
   return `${source.label} | ${helper}`;
 }

@@ -8,8 +8,12 @@ import {
 } from "../lib/content-script-recovery";
 
 function createDeps(results: Array<Array<{ result?: unknown }>> = []) {
-  let updatedListener: Parameters<ContentScriptRecoveryDeps["addTabUpdatedListener"]>[0] | undefined;
-  let installedListener: Parameters<ContentScriptRecoveryDeps["addInstalledListener"]>[0] | undefined;
+  let updatedListener:
+    | Parameters<ContentScriptRecoveryDeps["addTabUpdatedListener"]>[0]
+    | undefined;
+  let installedListener:
+    | Parameters<ContentScriptRecoveryDeps["addInstalledListener"]>[0]
+    | undefined;
   const executeScript = vi.fn(async () => results.shift() ?? []);
   const sleep = vi.fn(() => Promise.resolve());
   const warn = vi.fn();
@@ -41,16 +45,21 @@ function createDeps(results: Array<Array<{ result?: unknown }>> = []) {
 }
 
 describe("isSunoPageUrl", () => {
-  it.each(["https://suno.com/create", "https://www.suno.com/create?x=1"])("Suno URL を許可する: %s", (url) => {
-    expect(isSunoPageUrl(url)).toBe(true);
-  });
-
-  it.each([undefined, "http://suno.com/create", "https://suno.com.evil.example/create", "not a url"])(
-    "Suno 以外を拒否する: %s",
+  it.each(["https://suno.com/create", "https://www.suno.com/create?x=1"])(
+    "Suno URL を許可する: %s",
     (url) => {
-      expect(isSunoPageUrl(url)).toBe(false);
-    },
+      expect(isSunoPageUrl(url)).toBe(true);
+    }
   );
+
+  it.each([
+    undefined,
+    "http://suno.com/create",
+    "https://suno.com.evil.example/create",
+    "not a url",
+  ])("Suno 以外を拒否する: %s", (url) => {
+    expect(isSunoPageUrl(url)).toBe(false);
+  });
 });
 
 describe("recoverSunoContentScripts", () => {
@@ -61,12 +70,20 @@ describe("recoverSunoContentScripts", () => {
 
     expect(executeScript).toHaveBeenCalledOnce();
     expect(executeScript).toHaveBeenCalledWith(
-      expect.objectContaining({ target: { tabId: 42 }, func: expect.any(Function) }),
+      expect.objectContaining({
+        target: { tabId: 42 },
+        func: expect.any(Function),
+      })
     );
   });
 
   it("overlay が無ければ MAIN bridge と ISOLATED bundles を再注入する", async () => {
-    const { deps, executeScript, sleep } = createDeps([[{ result: false }], [{ result: false }], [], []]);
+    const { deps, executeScript, sleep } = createDeps([
+      [{ result: false }],
+      [{ result: false }],
+      [],
+      [],
+    ]);
 
     await expect(recoverSunoContentScripts(42, deps)).resolves.toBe(true);
 
@@ -85,19 +102,26 @@ describe("recoverSunoContentScripts", () => {
   });
 
   it("初回 probe 後に静的 overlay が現れたら再注入しない", async () => {
-    const { deps, executeScript, sleep } = createDeps([[{ result: false }], [{ result: true }]]);
+    const { deps, executeScript, sleep } = createDeps([
+      [{ result: false }],
+      [{ result: true }],
+    ]);
 
     await expect(recoverSunoContentScripts(42, deps)).resolves.toBe(false);
 
     expect(sleep).toHaveBeenCalledWith(1_000);
     expect(executeScript).toHaveBeenCalledTimes(2);
-    expect(executeScript).not.toHaveBeenCalledWith(expect.objectContaining({ files: expect.any(Array) }));
+    expect(executeScript).not.toHaveBeenCalledWith(
+      expect.objectContaining({ files: expect.any(Array) })
+    );
   });
 });
 
 describe("installSunoContentScriptRecovery", () => {
   it("Suno の complete 更新だけを復旧対象にする", async () => {
-    const { deps, executeScript, getUpdatedListener } = createDeps([[{ result: true }]]);
+    const { deps, executeScript, getUpdatedListener } = createDeps([
+      [{ result: true }],
+    ]);
     installSunoContentScriptRecovery(deps);
     const listener = getUpdatedListener();
     expect(listener).toBeTypeOf("function");
@@ -106,7 +130,9 @@ describe("installSunoContentScriptRecovery", () => {
     listener!(2, { status: "complete" }, { url: "https://example.com/" });
     listener!(3, { status: "complete" }, { url: "https://suno.com/create" });
     await vi.waitFor(() => expect(executeScript).toHaveBeenCalledOnce());
-    expect(executeScript).toHaveBeenCalledWith(expect.objectContaining({ target: { tabId: 3 } }));
+    expect(executeScript).toHaveBeenCalledWith(
+      expect.objectContaining({ target: { tabId: 3 } })
+    );
   });
 
   it("復旧失敗を未処理 rejection にせず warn する", async () => {
@@ -114,18 +140,26 @@ describe("installSunoContentScriptRecovery", () => {
     executeScript.mockRejectedValueOnce(new Error("blocked"));
     installSunoContentScriptRecovery(deps);
 
-    getUpdatedListener()!(3, { status: "complete" }, { url: "https://suno.com/create" });
+    getUpdatedListener()!(
+      3,
+      { status: "complete" },
+      { url: "https://suno.com/create" }
+    );
 
     await vi.waitFor(() => expect(warn).toHaveBeenCalledOnce());
-    expect(warn).toHaveBeenCalledWith("[suno-helper] content script の自己復旧に失敗しました", expect.any(Error));
+    expect(warn).toHaveBeenCalledWith(
+      "[suno-helper] content script の自己復旧に失敗しました",
+      expect.any(Error)
+    );
   });
 
   it("拡張更新時は既存の Suno タブを自動リロードする", async () => {
-    const { deps, executeScript, tabs, reloadTab, getInstalledListener } = createDeps();
+    const { deps, executeScript, tabs, reloadTab, getInstalledListener } =
+      createDeps();
     tabs.push(
       { id: 3, url: "https://suno.com/create" },
       { id: 4, url: "https://example.com/" },
-      { url: "https://suno.com/create" },
+      { url: "https://suno.com/create" }
     );
     installSunoContentScriptRecovery(deps);
 
@@ -147,7 +181,7 @@ describe("installSunoContentScriptRecovery", () => {
     await vi.waitFor(() => expect(warn).toHaveBeenCalledOnce());
     expect(warn).toHaveBeenCalledWith(
       "[suno-helper] 拡張更新後の Suno タブ自動リロードに失敗しました",
-      expect.any(Error),
+      expect.any(Error)
     );
   });
 });

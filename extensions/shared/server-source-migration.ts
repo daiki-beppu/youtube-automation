@@ -3,7 +3,7 @@ interface RemovableStorageItem {
 }
 
 export async function migrateLegacyServerSources(
-  item: RemovableStorageItem,
+  item: RemovableStorageItem
 ): Promise<void> {
   await item.removeValue();
 }

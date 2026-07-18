@@ -13,7 +13,10 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useDistrokidRunner, type DistrokidRunnerState } from "../components/useDistrokidRunner";
+import {
+  useDistrokidRunner,
+  type DistrokidRunnerState,
+} from "../components/useDistrokidRunner";
 import { sendMessage } from "../lib/messaging";
 import { migrateServerSourcesStorage, serverUrlItem } from "../lib/storage";
 import type { ReleasePayload } from "../lib/types";
@@ -44,7 +47,13 @@ const RELEASE_PAYLOAD: ReleasePayload = {
   },
   release: {
     album_title: "Coding Focus Vol.1",
-    tracks: [{ title: "track-01", filename: "track-01.mp3", asset_path: "/distrokid/assets/track-01.mp3" }],
+    tracks: [
+      {
+        title: "track-01",
+        filename: "track-01.mp3",
+        asset_path: "/distrokid/assets/track-01.mp3",
+      },
+    ],
     cover: null,
     release_date: "2026-07-01",
   },
@@ -149,7 +158,11 @@ async function waitFor(assertion: () => void): Promise<void> {
 
 // hook を直接マウントする probe。render のたびに最新の runner state を onState 経由で捕捉する
 // （component 内からモジュール変数へ直接代入すると react-hooks/globals に抵触するため）。
-function Probe({ onState }: { onState: (state: DistrokidRunnerState) => void }): null {
+function Probe({
+  onState,
+}: {
+  onState: (state: DistrokidRunnerState) => void;
+}): null {
   onState(useDistrokidRunner());
   return null;
 }
@@ -173,7 +186,7 @@ describe("useDistrokidRunner", () => {
           onState: (state) => {
             current = state;
           },
-        }),
+        })
       );
     });
   });
@@ -198,22 +211,36 @@ describe("useDistrokidRunner", () => {
   // dir mode サーバーの URL ルーティング fetch mock。released record は background message
   // に委譲されるため、recordRelease message を受けると以降の /distrokid/collections で
   // 該当 disc を released:true にする（サーバー挙動の再現）。
-  function stubDirModeServer({ recordStatus = 200 }: { recordStatus?: number } = {}) {
+  function stubDirModeServer({
+    recordStatus = 200,
+  }: { recordStatus?: number } = {}) {
     let disc1Released = false;
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === `${BASE_URL}/version`) {
         return jsonResponse(404, {});
       }
       if (url === `${BASE_URL}/distrokid/collections`) {
-        return jsonResponse(200, [{ ...DISC1, released: disc1Released }, DISC2]);
+        return jsonResponse(200, [
+          { ...DISC1, released: disc1Released },
+          DISC2,
+        ]);
       }
-      if (url === `${BASE_URL}/collections/${DISC1.collection_id}/distrokid/${DISC1.disc}/release.json`) {
+      if (
+        url ===
+        `${BASE_URL}/collections/${DISC1.collection_id}/distrokid/${DISC1.disc}/release.json`
+      ) {
         return jsonResponse(200, RELEASE_PAYLOAD);
       }
-      if (url === `${BASE_URL}/collections/${DISC2.collection_id}/distrokid/${DISC2.disc}/release.json`) {
+      if (
+        url ===
+        `${BASE_URL}/collections/${DISC2.collection_id}/distrokid/${DISC2.disc}/release.json`
+      ) {
         return jsonResponse(200, {
           ...RELEASE_PAYLOAD,
-          release: { ...RELEASE_PAYLOAD.release, album_title: DISC2.album_title },
+          release: {
+            ...RELEASE_PAYLOAD.release,
+            album_title: DISC2.album_title,
+          },
         });
       }
       if (url === `${BASE_URL}/distrokid/assets/track-01.mp3`) {
@@ -255,7 +282,9 @@ describe("useDistrokidRunner", () => {
 
     expect(current.collections).toHaveLength(2);
     expect(current.selectedIndex).toBe(0);
-    expect(current.payload?.release.album_title).toBe(RELEASE_PAYLOAD.release.album_title);
+    expect(current.payload?.release.album_title).toBe(
+      RELEASE_PAYLOAD.release.album_title
+    );
     expect(current.busy).toBe(false);
     expect(current.allReleased).toBe(false);
   });
@@ -285,7 +314,10 @@ describe("useDistrokidRunner", () => {
 
   it("単一 mode: release が利用不可なら既存ガイダンスを表示して payload を返さない", async () => {
     fetchMock.mockImplementation(async (url: string) => {
-      if (url === `${BASE_URL}/version` || url === `${BASE_URL}/distrokid/collections`) {
+      if (
+        url === `${BASE_URL}/version` ||
+        url === `${BASE_URL}/distrokid/collections`
+      ) {
         return jsonResponse(404, {});
       }
       if (url === `${BASE_URL}/distrokid/release.json`) {
@@ -308,7 +340,10 @@ describe("useDistrokidRunner", () => {
     expect(current.payload).not.toBeNull();
 
     fetchMock.mockImplementation(async (url: string) => {
-      if (url === `${BASE_URL}/version` || url === `${BASE_URL}/distrokid/collections`) {
+      if (
+        url === `${BASE_URL}/version` ||
+        url === `${BASE_URL}/distrokid/collections`
+      ) {
         return jsonResponse(404, {});
       }
       if (url === `${BASE_URL}/distrokid/release.json`) {
@@ -348,8 +383,16 @@ describe("useDistrokidRunner", () => {
     });
 
     // injectStart → injectTrack → injectFinish（cover なし）を tab 1 へ送る。
-    expect(sendMessage).toHaveBeenCalledWith("injectStart", expect.anything(), 1);
-    expect(sendMessage).toHaveBeenCalledWith("injectTrack", expect.objectContaining({ trackIndex: 0 }), 1);
+    expect(sendMessage).toHaveBeenCalledWith(
+      "injectStart",
+      expect.anything(),
+      1
+    );
+    expect(sendMessage).toHaveBeenCalledWith(
+      "injectTrack",
+      expect.objectContaining({ trackIndex: 0 }),
+      1
+    );
     expect(sendMessage).toHaveBeenCalledWith("injectFinish", undefined, 1);
     // 配信済み記録は background に委譲し、その成功後の再取得で disc1 が select から消える。
     expect(sendMessage).toHaveBeenCalledWith("recordRelease", {
@@ -408,23 +451,33 @@ describe("useDistrokidRunner", () => {
       await Promise.resolve();
     });
     await waitFor(() => {
-      expect(sendMessage).toHaveBeenCalledWith("injectStart", { payload: RELEASE_PAYLOAD }, 1);
+      expect(sendMessage).toHaveBeenCalledWith(
+        "injectStart",
+        { payload: RELEASE_PAYLOAD },
+        1
+      );
       expect(current.isInjecting).toBe(true);
     });
 
-    const discoveryCalls = discoveryMocks.discoverServerSources.mock.calls.length;
+    const discoveryCalls =
+      discoveryMocks.discoverServerSources.mock.calls.length;
     await act(async () => {
       await current.refreshServerSources();
       current.setServerUrl("http://localhost:7999");
       current.selectCollection(1);
     });
-    expect(discoveryMocks.discoverServerSources).toHaveBeenCalledTimes(discoveryCalls);
+    expect(discoveryMocks.discoverServerSources).toHaveBeenCalledTimes(
+      discoveryCalls
+    );
     await act(async () => {
       resolveInjectionStart();
       await injectionPromise;
     });
 
-    expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/distrokid/assets/track-01.mp3`, { method: "GET" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${BASE_URL}/distrokid/assets/track-01.mp3`,
+      { method: "GET" }
+    );
     expect(sendMessage).toHaveBeenCalledWith("recordRelease", {
       baseUrl: BASE_URL,
       record: {
@@ -449,11 +502,18 @@ describe("useDistrokidRunner", () => {
     expect(current.phase).not.toBe("error");
     expect(current.message).toContain("注入完了（配信済み記録に失敗しました");
     // 記録失敗時は一覧を再取得しない（disc1 は select に残る）。
-    expect(current.collections.map((c) => c.disc)).toEqual([DISC1.disc, DISC2.disc]);
+    expect(current.collections.map((c) => c.disc)).toEqual([
+      DISC1.disc,
+      DISC2.disc,
+    ]);
   });
 
   it("should refresh from shared discovery and persist only the selected URL", async () => {
-    const live = { id: "channel-b-49152", label: "Channel B", url: "http://channel-b.localhost:49152" };
+    const live = {
+      id: "channel-b-49152",
+      label: "Channel B",
+      url: "http://channel-b.localhost:49152",
+    };
     discoveryMocks.discoverServerSources.mockResolvedValueOnce([
       {
         id: "youtube-automation-localhost-7873",
@@ -475,15 +535,25 @@ describe("useDistrokidRunner", () => {
   });
 
   it("should ignore stale discovery completions", async () => {
-    let resolveOld!: (value: Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>) => void;
-    let resolveNew!: (value: Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>) => void;
-    const oldResult = new Promise<Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>>((resolve) => {
+    let resolveOld!: (
+      value: Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>
+    ) => void;
+    let resolveNew!: (
+      value: Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>
+    ) => void;
+    const oldResult = new Promise<
+      Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>
+    >((resolve) => {
       resolveOld = resolve;
     });
-    const newResult = new Promise<Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>>((resolve) => {
+    const newResult = new Promise<
+      Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>
+    >((resolve) => {
       resolveNew = resolve;
     });
-    discoveryMocks.discoverServerSources.mockReturnValueOnce(oldResult).mockReturnValueOnce(newResult);
+    discoveryMocks.discoverServerSources
+      .mockReturnValueOnce(oldResult)
+      .mockReturnValueOnce(newResult);
 
     let oldRefresh!: Promise<void>;
     let newRefresh!: Promise<void>;
@@ -491,24 +561,30 @@ describe("useDistrokidRunner", () => {
       oldRefresh = current.refreshServerSources();
       newRefresh = current.refreshServerSources();
     });
-    resolveNew([{ id: "new", label: "New", url: "http://new.localhost:49152" }]);
+    resolveNew([
+      { id: "new", label: "New", url: "http://new.localhost:49152" },
+    ]);
     await act(async () => newRefresh);
     resolveOld([{ id: "old", label: "Old", url: "http://old.localhost:9001" }]);
     await act(async () => oldRefresh);
 
     expect(current.serverSources.map(({ label }) => label)).toContain("New");
-    expect(current.serverSources.map(({ label }) => label)).not.toContain("Old");
+    expect(current.serverSources.map(({ label }) => label)).not.toContain(
+      "Old"
+    );
   });
 
   it("should discard a deferred discovery result when injection starts", async () => {
     stubDirModeServer();
     await fetchDirModeRelease();
-    let resolveDiscovery!: (value: Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>) => void;
-    const pendingDiscovery = new Promise<Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>>(
-      (resolve) => {
-        resolveDiscovery = resolve;
-      },
-    );
+    let resolveDiscovery!: (
+      value: Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>
+    ) => void;
+    const pendingDiscovery = new Promise<
+      Awaited<ReturnType<typeof discoveryMocks.discoverServerSources>>
+    >((resolve) => {
+      resolveDiscovery = resolve;
+    });
     let resolveInjectionStart!: () => void;
     const injectionStart = new Promise<void>((resolve) => {
       resolveInjectionStart = resolve;
@@ -527,10 +603,14 @@ describe("useDistrokidRunner", () => {
       await Promise.resolve();
     });
     await waitFor(() => expect(current.isInjecting).toBe(true));
-    resolveDiscovery([{ id: "new", label: "New", url: "http://new.localhost:49152" }]);
+    resolveDiscovery([
+      { id: "new", label: "New", url: "http://new.localhost:49152" },
+    ]);
     await act(async () => refresh);
 
-    expect(current.serverSources.map(({ label }) => label)).not.toContain("New");
+    expect(current.serverSources.map(({ label }) => label)).not.toContain(
+      "New"
+    );
     expect(current.serverUrl).toBe(BASE_URL);
 
     resolveInjectionStart();
@@ -538,7 +618,9 @@ describe("useDistrokidRunner", () => {
   });
 
   it("should report storage migration failures without leaving an unhandled rejection", async () => {
-    vi.mocked(migrateServerSourcesStorage).mockRejectedValueOnce(new Error("storage unavailable"));
+    vi.mocked(migrateServerSourcesStorage).mockRejectedValueOnce(
+      new Error("storage unavailable")
+    );
     await act(async () => {
       root.unmount();
       root = createRoot(container);
@@ -547,7 +629,7 @@ describe("useDistrokidRunner", () => {
           onState: (state) => {
             current = state;
           },
-        }),
+        })
       );
     });
     await waitFor(() => {
@@ -557,7 +639,9 @@ describe("useDistrokidRunner", () => {
   });
 
   it("should report selected URL persistence failures as an explicit error phase", async () => {
-    vi.mocked(serverUrlItem.setValue).mockRejectedValueOnce(new Error("URL storage unavailable"));
+    vi.mocked(serverUrlItem.setValue).mockRejectedValueOnce(
+      new Error("URL storage unavailable")
+    );
 
     await act(async () => {
       current.setServerUrl("http://live.localhost:49152");

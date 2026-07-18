@@ -7,12 +7,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BRIDGE_MSG, BRIDGE_SOURCE } from "../../shared/constants";
-import { attachBridgeListener, createFeedPoller, requestFeedPoll, requestSliderSet } from "../lib/bridge-listener";
+import {
+  attachBridgeListener,
+  createFeedPoller,
+  requestFeedPoll,
+  requestSliderSet,
+} from "../lib/bridge-listener";
 import { createClipTracker } from "../lib/clip-tracker";
 
 /** bridge からの postMessage を模した MessageEvent を同期 dispatch する。 */
-function dispatchBridgeMessage(data: unknown, source: Window | null = window): void {
-  window.dispatchEvent(new MessageEvent("message", { data, source: source as WindowProxy | null }));
+function dispatchBridgeMessage(
+  data: unknown,
+  source: Window | null = window
+): void {
+  window.dispatchEvent(
+    new MessageEvent("message", { data, source: source as WindowProxy | null })
+  );
 }
 
 describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
@@ -72,7 +82,9 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
       type: BRIDGE_MSG.FEED_CLIPS,
       clips: [{ id: "c1", status: "streaming", duration: 187.25 }],
     });
-    expect(applyFeedStatuses).toHaveBeenLastCalledWith([{ id: "c1", status: "streaming", duration: 187.25 }]);
+    expect(applyFeedStatuses).toHaveBeenLastCalledWith([
+      { id: "c1", status: "streaming", duration: 187.25 },
+    ]);
     expect(tracker.getInFlightCount()).toBe(1);
 
     dispatchBridgeMessage({
@@ -81,7 +93,9 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
       requestId: 1,
       clips: [{ id: "c1", status: "complete", duration: 187.25 }],
     });
-    expect(applyRequestedStatuses).toHaveBeenLastCalledWith([{ id: "c1", status: "complete", duration: 187.25 }]);
+    expect(applyRequestedStatuses).toHaveBeenLastCalledWith([
+      { id: "c1", status: "complete", duration: 187.25 },
+    ]);
     expect(tracker.getInFlightCount()).toBe(0); // active poll の応答も観測として合流する
     detach();
   });
@@ -93,7 +107,9 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
     const tracker = createClipTracker();
     const detach = attachBridgeListener(tracker);
     const previousClipIds = ["old-1", "old-2"];
-    expect(tracker.getPendingIdsByIds(previousClipIds)).toEqual(previousClipIds);
+    expect(tracker.getPendingIdsByIds(previousClipIds)).toEqual(
+      previousClipIds
+    );
 
     dispatchBridgeMessage({
       source: BRIDGE_SOURCE,
@@ -134,20 +150,35 @@ describe("attachBridgeListener: 観測イベントの tracker 配線", () => {
     const detach = attachBridgeListener(tracker);
 
     // source マーカー不一致（ページ本体や他拡張の message）
-    dispatchBridgeMessage({ source: "other", type: BRIDGE_MSG.GENERATE_CLIPS, clips: [{ id: "x", status: "s" }] });
+    dispatchBridgeMessage({
+      source: "other",
+      type: BRIDGE_MSG.GENERATE_CLIPS,
+      clips: [{ id: "x", status: "s" }],
+    });
     // event.source が window でない（cross-window message）
     dispatchBridgeMessage(
-      { source: BRIDGE_SOURCE, type: BRIDGE_MSG.GENERATE_CLIPS, clips: [{ id: "x", status: "s" }] },
-      null,
+      {
+        source: BRIDGE_SOURCE,
+        type: BRIDGE_MSG.GENERATE_CLIPS,
+        clips: [{ id: "x", status: "s" }],
+      },
+      null
     );
     // clips の形崩れ
-    dispatchBridgeMessage({ source: BRIDGE_SOURCE, type: BRIDGE_MSG.GENERATE_CLIPS, clips: [{ id: 1 }] });
+    dispatchBridgeMessage({
+      source: BRIDGE_SOURCE,
+      type: BRIDGE_MSG.GENERATE_CLIPS,
+      clips: [{ id: 1 }],
+    });
     dispatchBridgeMessage({
       source: BRIDGE_SOURCE,
       type: BRIDGE_MSG.GENERATE_CLIPS,
       clips: [{ id: "x", status: "s", duration: "bad" }],
     });
-    dispatchBridgeMessage({ source: BRIDGE_SOURCE, type: BRIDGE_MSG.GENERATE_CLIPS });
+    dispatchBridgeMessage({
+      source: BRIDGE_SOURCE,
+      type: BRIDGE_MSG.GENERATE_CLIPS,
+    });
     // duration は optional だが、存在する場合は finite non-negative number のみ受け入れる
     for (const duration of ["241.2", Number.NaN, Infinity, -1]) {
       dispatchBridgeMessage({
@@ -181,7 +212,10 @@ describe("requestFeedPoll: active poll 応答の ObservedClip 境界検証", () 
     return new Promise<number>((resolve) => {
       const probe = (event: MessageEvent): void => {
         const data = event.data as { requestId?: number; type?: string };
-        if (data?.type === BRIDGE_MSG.FEED_V3_POLL_REQUEST && typeof data.requestId === "number") {
+        if (
+          data?.type === BRIDGE_MSG.FEED_V3_POLL_REQUEST &&
+          typeof data.requestId === "number"
+        ) {
           window.removeEventListener("message", probe);
           resolve(data.requestId);
         }
@@ -215,19 +249,22 @@ describe("requestFeedPoll: active poll 応答の ObservedClip 境界検証", () 
     ["NaN", Number.NaN],
     ["Infinity", Infinity],
     ["negative", -1],
-  ])("Given duration が %s の poll 応答 When 受信する Then null で resolve する", async (_label, duration) => {
-    const pending = requestFeedPoll(["c1"]);
-    const requestId = await captureFeedPollRequestId();
+  ])(
+    "Given duration が %s の poll 応答 When 受信する Then null で resolve する",
+    async (_label, duration) => {
+      const pending = requestFeedPoll(["c1"]);
+      const requestId = await captureFeedPollRequestId();
 
-    dispatchBridgeMessage({
-      source: BRIDGE_SOURCE,
-      type: BRIDGE_MSG.FEED_V3_POLL_RESPONSE,
-      requestId,
-      clips: [{ id: "c1", status: "streaming", duration }],
-    });
+      dispatchBridgeMessage({
+        source: BRIDGE_SOURCE,
+        type: BRIDGE_MSG.FEED_V3_POLL_RESPONSE,
+        requestId,
+        clips: [{ id: "c1", status: "streaming", duration }],
+      });
 
-    await expect(pending).resolves.toBeNull();
-  });
+      await expect(pending).resolves.toBeNull();
+    }
+  );
 });
 
 describe("createFeedPoller: stale 時のみ active poll", () => {
@@ -243,7 +280,12 @@ describe("createFeedPoller: stale 時のみ active poll", () => {
     const tracker = createClipTracker(() => 0); // lastFeedAt = 0 のまま（観測なし = stale）
     tracker.registerSubmitted([{ id: "c1", status: "submitted" }]);
     const poll = vi.fn().mockResolvedValue(null);
-    const poller = createFeedPoller(tracker, { intervalMs: 100, staleMs: 50, now: () => 1000, poll });
+    const poller = createFeedPoller(tracker, {
+      intervalMs: 100,
+      staleMs: 50,
+      now: () => 1000,
+      poll,
+    });
 
     poller.start();
     await vi.advanceTimersByTimeAsync(100);
@@ -255,7 +297,12 @@ describe("createFeedPoller: stale 時のみ active poll", () => {
   it("Given 未終端 clip なし When tick する Then poll しない", async () => {
     const tracker = createClipTracker();
     const poll = vi.fn().mockResolvedValue(null);
-    const poller = createFeedPoller(tracker, { intervalMs: 100, staleMs: 50, now: () => 1000, poll });
+    const poller = createFeedPoller(tracker, {
+      intervalMs: 100,
+      staleMs: 50,
+      now: () => 1000,
+      poll,
+    });
 
     poller.start();
     await vi.advanceTimersByTimeAsync(300);
@@ -271,7 +318,12 @@ describe("createFeedPoller: stale 時のみ active poll", () => {
     t = 990;
     tracker.applyFeedStatuses([{ id: "c1", status: "streaming" }]); // lastFeedAt = 990
     const poll = vi.fn().mockResolvedValue(null);
-    const poller = createFeedPoller(tracker, { intervalMs: 100, staleMs: 50, now: () => 1000, poll });
+    const poller = createFeedPoller(tracker, {
+      intervalMs: 100,
+      staleMs: 50,
+      now: () => 1000,
+      poll,
+    });
 
     poller.start();
     await vi.advanceTimersByTimeAsync(100); // now=1000, lastFeedAt=990 → 経過 10 < staleMs 50
@@ -284,7 +336,12 @@ describe("createFeedPoller: stale 時のみ active poll", () => {
     const tracker = createClipTracker(() => 0);
     tracker.registerSubmitted([{ id: "c1", status: "submitted" }]);
     const poll = vi.fn().mockResolvedValue(null);
-    const poller = createFeedPoller(tracker, { intervalMs: 100, staleMs: 50, now: () => 1000, poll });
+    const poller = createFeedPoller(tracker, {
+      intervalMs: 100,
+      staleMs: 50,
+      now: () => 1000,
+      poll,
+    });
 
     poller.start();
     poller.stop();
@@ -301,9 +358,14 @@ describe("createFeedPoller: stale 時のみ active poll", () => {
       () =>
         new Promise<null>((resolve) => {
           resolvePoll = () => resolve(null);
-        }),
+        })
     );
-    const poller = createFeedPoller(tracker, { intervalMs: 100, staleMs: 50, now: () => 1000, poll });
+    const poller = createFeedPoller(tracker, {
+      intervalMs: 100,
+      staleMs: 50,
+      now: () => 1000,
+      poll,
+    });
 
     poller.start();
     await vi.advanceTimersByTimeAsync(350); // 3 tick 分進めても応答待ちの間は 1 回だけ
@@ -321,7 +383,10 @@ describe("requestSliderSet: slider 注入 RPC の応答処理 (#973)", () => {
     const requestId = await new Promise<number>((resolve) => {
       const probe = (event: MessageEvent): void => {
         const data = event.data as { type?: string; requestId?: number };
-        if (data?.type === BRIDGE_MSG.SLIDER_SET_REQUEST && typeof data.requestId === "number") {
+        if (
+          data?.type === BRIDGE_MSG.SLIDER_SET_REQUEST &&
+          typeof data.requestId === "number"
+        ) {
           window.removeEventListener("message", probe);
           resolve(data.requestId);
         }
@@ -344,7 +409,10 @@ describe("requestSliderSet: slider 注入 RPC の応答処理 (#973)", () => {
     const requestId = await new Promise<number>((resolve) => {
       const probe = (event: MessageEvent): void => {
         const data = event.data as { type?: string; requestId?: number };
-        if (data?.type === BRIDGE_MSG.SLIDER_SET_REQUEST && typeof data.requestId === "number") {
+        if (
+          data?.type === BRIDGE_MSG.SLIDER_SET_REQUEST &&
+          typeof data.requestId === "number"
+        ) {
           window.removeEventListener("message", probe);
           resolve(data.requestId);
         }

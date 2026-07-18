@@ -43,7 +43,7 @@ export function createDocumentInjector(doc: Document): Injector {
       const uuids = resolveTrackUuids(doc);
       if (uuids.length !== release.tracks.length) {
         throw new Error(
-          `track 数が DOM と一致しません: DOM=${uuids.length}, payload=${release.tracks.length}。${RELOAD_GUIDANCE}`,
+          `track 数が DOM と一致しません: DOM=${uuids.length}, payload=${release.tracks.length}。${RELOAD_GUIDANCE}`
         );
       }
       release.tracks.forEach((track, i) => {
@@ -58,7 +58,12 @@ export function createDocumentInjector(doc: Document): Injector {
       // chk* 除外済みなので配信先は巻き込まない（#923）。
       uncheckUpsells(doc);
       // ストア check 後に可視化されるため await（#923）。
-      await injectAppleMusicCredits(doc, release.tracks.length, profile.artist, profile.credits);
+      await injectAppleMusicCredits(
+        doc,
+        release.tracks.length,
+        profile.artist,
+        profile.credits
+      );
       // ストア check 後でないと条件付き areyousure が不可視のため、ストア check 後に実行（#923）。
       acceptImportantTerms(doc);
     },

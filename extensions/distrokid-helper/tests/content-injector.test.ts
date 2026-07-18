@@ -5,6 +5,7 @@
 // profile.artist が Apple Music credits まで届くことを固定する。
 
 import { beforeEach, describe, expect, it } from "vitest";
+
 import { createDocumentInjector } from "../lib/content-injector";
 import type { DistrokidProfile, ReleasePayload } from "../lib/types";
 
@@ -85,7 +86,12 @@ function mountCreditRoleSelect(id: string, values: string[]): void {
 
 function mountStaticForm(trackCount: number, fallbackArtist: string): void {
   mountSelect("howManySongsOnThisAlbum", ["1", "2", "3"]);
-  mountInput({ name: "previouslyReleased_0", type: "radio", value: "0", checked: true });
+  mountInput({
+    name: "previouslyReleased_0",
+    type: "radio",
+    value: "0",
+    checked: true,
+  });
   mountInput({ name: "bandname" });
   mountSelect("language", ["English", "Japanese"]);
   mountSelect("genrePrimary", ["Electronic", "Jazz"]);
@@ -108,15 +114,24 @@ function mountStaticForm(trackCount: number, fallbackArtist: string): void {
   for (let i = 1; i <= trackCount; i += 1) {
     mountInput({ name: `title_${String.fromCharCode(96 + i)}` });
     mountInput({ id: `track-${i}-performer-1-name`, name: "performer-name" });
-    mountCreditRoleSelect(`track-${i}-performer-1-role`, ["Audio", "Synthesizer"]);
+    mountCreditRoleSelect(`track-${i}-performer-1-role`, [
+      "Audio",
+      "Synthesizer",
+    ]);
     mountInput({ id: `track-${i}-producer-1-name`, name: "producer-name" });
-    mountCreditRoleSelect(`track-${i}-producer-1-role`, ["Producer", "Executive producer"]);
+    mountCreditRoleSelect(`track-${i}-producer-1-role`, [
+      "Producer",
+      "Executive producer",
+    ]);
   }
 }
 
-function wireGenreSecondaryPopulate(options: ReadonlyArray<{ value: string; text: string }>): void {
+function wireGenreSecondaryPopulate(
+  options: ReadonlyArray<{ value: string; text: string }>
+): void {
   const genre = document.querySelector<HTMLSelectElement>("#genrePrimary")!;
-  const subGenre = document.querySelector<HTMLSelectElement>("#subGenrePrimary")!;
+  const subGenre =
+    document.querySelector<HTMLSelectElement>("#subGenrePrimary")!;
   genre.addEventListener("change", () => {
     setTimeout(() => {
       subGenre.innerHTML = "";
@@ -159,18 +174,29 @@ describe("createDocumentInjector", () => {
     wireGenreSecondaryPopulate([{ value: "Ambient", text: "Ambient" }]);
 
     // When
-    await createDocumentInjector(document).injectStaticFields(payload(BASE_PROFILE));
+    await createDocumentInjector(document).injectStaticFields(
+      payload(BASE_PROFILE)
+    );
 
     // Then
-    expect(document.querySelector<HTMLInputElement>('input[name="bandname"]')!.value).toBe("ABYSS MI");
-    expect(document.querySelector<HTMLInputElement>("#track-1-performer-1-name")!.value).toBe("ABYSS MI");
-    expect(document.querySelector<HTMLInputElement>("#track-1-producer-1-name")!.value).toBe("ABYSS MI");
+    expect(
+      document.querySelector<HTMLInputElement>('input[name="bandname"]')!.value
+    ).toBe("ABYSS MI");
+    expect(
+      document.querySelector<HTMLInputElement>("#track-1-performer-1-name")!
+        .value
+    ).toBe("ABYSS MI");
+    expect(
+      document.querySelector<HTMLInputElement>("#track-1-producer-1-name")!
+        .value
+    ).toBe("ABYSS MI");
   });
 
   it("injectStaticFields が main_genre change 後の非同期 sub_genre populate を待ってから後続注入する", async () => {
     // Given
     mountStaticForm(1, "Soulful Grooves");
-    const subGenre = document.querySelector<HTMLSelectElement>("#subGenrePrimary")!;
+    const subGenre =
+      document.querySelector<HTMLSelectElement>("#subGenrePrimary")!;
     subGenre.innerHTML = "";
     const staleOption = document.createElement("option");
     staleOption.value = "old-ambient";
@@ -178,12 +204,16 @@ describe("createDocumentInjector", () => {
     subGenre.appendChild(staleOption);
     wireGenreSecondaryPopulate([{ value: "Ambient", text: "Ambient" }]);
     let subGenreAtAlbumTitleInjection: string | null = null;
-    document.querySelector<HTMLInputElement>("#albumTitleInput")!.addEventListener("input", () => {
-      subGenreAtAlbumTitleInjection = subGenre.value;
-    });
+    document
+      .querySelector<HTMLInputElement>("#albumTitleInput")!
+      .addEventListener("input", () => {
+        subGenreAtAlbumTitleInjection = subGenre.value;
+      });
 
     // When
-    await createDocumentInjector(document).injectStaticFields(payload(BASE_PROFILE));
+    await createDocumentInjector(document).injectStaticFields(
+      payload(BASE_PROFILE)
+    );
 
     // Then: await が外れると album title 注入時点では stale option のままになる。
     expect(subGenre.value).toBe("Ambient");
@@ -200,12 +230,20 @@ describe("createDocumentInjector", () => {
       payload({
         ...BASE_PROFILE,
         artist: "",
-      }),
+      })
     );
 
     // Then
-    expect(document.querySelector<HTMLInputElement>('input[name="bandname"]')!.value).toBe("");
-    expect(document.querySelector<HTMLInputElement>("#track-1-performer-1-name")!.value).toBe("Soulful Grooves");
-    expect(document.querySelector<HTMLInputElement>("#track-1-producer-1-name")!.value).toBe("Soulful Grooves");
+    expect(
+      document.querySelector<HTMLInputElement>('input[name="bandname"]')!.value
+    ).toBe("");
+    expect(
+      document.querySelector<HTMLInputElement>("#track-1-performer-1-name")!
+        .value
+    ).toBe("Soulful Grooves");
+    expect(
+      document.querySelector<HTMLInputElement>("#track-1-producer-1-name")!
+        .value
+    ).toBe("Soulful Grooves");
   });
 });

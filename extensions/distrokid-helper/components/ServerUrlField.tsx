@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 
-import { formatServerSourceLabel, type LocalServerSource } from "../../shared/constants";
 import { Button } from "@/components/ui/button";
+
+import {
+  formatServerSourceLabel,
+  type LocalServerSource,
+} from "../../shared/constants";
 
 export interface ServerUrlFieldProps {
   value: string;
@@ -11,7 +15,13 @@ export interface ServerUrlFieldProps {
   onOpen: () => Promise<void>;
 }
 
-export function ServerUrlField({ value, sources, disabled, onChange, onOpen }: ServerUrlFieldProps) {
+export function ServerUrlField({
+  value,
+  sources,
+  disabled,
+  onChange,
+  onOpen,
+}: ServerUrlFieldProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState(false);
   const disabledRef = useRef(disabled);
@@ -33,7 +43,8 @@ export function ServerUrlField({ value, sources, disabled, onChange, onOpen }: S
     });
   };
 
-  const selectedSource = sources.find((source) => source.url === value) ?? sources[0];
+  const selectedSource =
+    sources.find((source) => source.url === value) ?? sources[0];
   const pickerVisible = open && !disabled && !refreshing;
 
   return (
@@ -72,7 +83,11 @@ export function ServerUrlField({ value, sources, disabled, onChange, onOpen }: S
         ))}
       </select>
       {pickerVisible && (
-        <div role="listbox" aria-label="ローカル配信元" className="rounded border border-gray-300 bg-white p-1">
+        <div
+          role="listbox"
+          aria-label="ローカル配信元"
+          className="rounded border border-gray-300 bg-white p-1"
+        >
           {sources.map((source) => (
             <Button
               key={source.url}

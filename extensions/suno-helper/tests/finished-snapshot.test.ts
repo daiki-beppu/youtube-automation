@@ -16,10 +16,13 @@ import { applyProgress, initSnapshot } from "../lib/snapshot";
 import { makePromptEntries, snapshotOptions } from "./_helpers";
 
 function makeFinishedState(timestamp: number): FinishedSnapshotState {
-  const snapshot = applyProgress(initSnapshot(makePromptEntries(2), snapshotOptions("pl")), {
-    phase: PHASE.FINISHED,
-    total: 2,
-  });
+  const snapshot = applyProgress(
+    initSnapshot(makePromptEntries(2), snapshotOptions("pl")),
+    {
+      phase: PHASE.FINISHED,
+      total: 2,
+    }
+  );
   return { snapshot, timestamp };
 }
 
@@ -35,10 +38,20 @@ describe("isFinishedSnapshotFresh: 退避 snapshot の鮮度判定", () => {
   });
 
   it("Given ちょうど閾値経過の state When 判定 Then true（境界は inclusive、shouldShowResumeBanner と同じ規約）", () => {
-    expect(isFinishedSnapshotFresh(makeFinishedState(NOW - FINISHED_SNAPSHOT_STALE_MS), NOW)).toBe(true);
+    expect(
+      isFinishedSnapshotFresh(
+        makeFinishedState(NOW - FINISHED_SNAPSHOT_STALE_MS),
+        NOW
+      )
+    ).toBe(true);
   });
 
   it("Given 閾値を 1ms 超えた state When 判定 Then false（stale）", () => {
-    expect(isFinishedSnapshotFresh(makeFinishedState(NOW - FINISHED_SNAPSHOT_STALE_MS - 1), NOW)).toBe(false);
+    expect(
+      isFinishedSnapshotFresh(
+        makeFinishedState(NOW - FINISHED_SNAPSHOT_STALE_MS - 1),
+        NOW
+      )
+    ).toBe(false);
   });
 });

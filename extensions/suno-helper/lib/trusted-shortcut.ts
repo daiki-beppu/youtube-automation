@@ -1,4 +1,7 @@
-export async function sendTrustedCmdP(tabId: number, isMac: boolean): Promise<void> {
+export async function sendTrustedCmdP(
+  tabId: number,
+  isMac: boolean
+): Promise<void> {
   const modifiers = isMac ? 4 : 2; // 4=Meta, 2=Ctrl
   const target: chrome.debugger.Debuggee = { tabId };
   try {

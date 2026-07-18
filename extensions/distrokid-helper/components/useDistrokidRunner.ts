@@ -4,12 +4,19 @@
 // 「注入後にユーザーが目視確認して手動で続行する」安全境界は変えない。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
-import { fetchAsset, fetchCollectionRelease, fetchRelease, ReleaseUnavailableError } from "@/lib/api";
+
+import {
+  fetchAsset,
+  fetchCollectionRelease,
+  fetchRelease,
+  ReleaseUnavailableError,
+} from "@/lib/api";
+import { runInjection } from "@/lib/inject-runner";
 import { onMessage, sendMessage, PHASES } from "@/lib/messaging";
 import type { Phase } from "@/lib/messaging";
-import { runInjection } from "@/lib/inject-runner";
 import { migrateServerSourcesStorage, serverUrlItem } from "@/lib/storage";
 import type { ReleasePayload } from "@/lib/types";
+
 import {
   excludeReleasedDiscs,
   fetchDistrokidCollections,
@@ -77,7 +84,9 @@ export function useDistrokidRunner(): DistrokidRunnerState {
   const [message, setMessage] = useState("");
   const [compatibilityWarning, setCompatibilityWarning] = useState("");
 
-  const [collections, setCollections] = useState<DistrokidCollectionSummary[]>([]);
+  const [collections, setCollections] = useState<DistrokidCollectionSummary[]>(
+    []
+  );
   const [allReleased, setAllReleased] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
 
@@ -108,7 +117,10 @@ export function useDistrokidRunner(): DistrokidRunnerState {
   // setState は次レンダーまで反映されないため、同一ハンドラ内で一覧を使う caller は
   // 戻り値を直接参照する（stale closure 回避、#934）。
   const loadCollections = useCallback(
-    async (baseUrl: string, shouldApply: () => boolean = () => true): Promise<CollectionLoadResult | null> => {
+    async (
+      baseUrl: string,
+      shouldApply: () => boolean = () => true
+    ): Promise<CollectionLoadResult | null> => {
       try {
         const fetched = await fetchDistrokidCollections(baseUrl);
         if (!shouldApply()) {
@@ -137,7 +149,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
         return { list: [], isDirMode: false };
       }
     },
-    [],
+    []
   );
 
   useEffect(() => {
@@ -156,7 +168,8 @@ export function useDistrokidRunner(): DistrokidRunnerState {
   const fetchData = useCallback(
     async (targetUrl: string, preferredDisc: DiscIdentity | null) => {
       const requestId = ++fetchRequestIdRef.current;
-      const isLatestRequest = (): boolean => requestId === fetchRequestIdRef.current;
+      const isLatestRequest = (): boolean =>
+        requestId === fetchRequestIdRef.current;
       let baseUrl = targetUrl.trim();
       if (!baseUrl) {
         return;
@@ -184,23 +197,33 @@ export function useDistrokidRunner(): DistrokidRunnerState {
       }
 
       try {
-        const persistSelectedUrl = serverSourcePersistenceRef.current.then(async () => {
-          if (isLatestRequest()) await serverUrlItem.setValue(baseUrl);
-        });
-        serverSourcePersistenceRef.current = persistSelectedUrl.catch(() => undefined);
+        const persistSelectedUrl = serverSourcePersistenceRef.current.then(
+          async () => {
+            if (isLatestRequest()) await serverUrlItem.setValue(baseUrl);
+          }
+        );
+        serverSourcePersistenceRef.current = persistSelectedUrl.catch(
+          () => undefined
+        );
         await persistSelectedUrl;
         if (!isLatestRequest()) {
           return;
         }
 
         const extensionVersion = browser.runtime.getManifest().version;
-        const warning = await resolveCompatibilityWarning(baseUrl, extensionVersion);
+        const warning = await resolveCompatibilityWarning(
+          baseUrl,
+          extensionVersion
+        );
         if (!isLatestRequest()) {
           return;
         }
         setCompatibilityWarning(warning);
 
-        const loadedCollections = await loadCollections(baseUrl, isLatestRequest);
+        const loadedCollections = await loadCollections(
+          baseUrl,
+          isLatestRequest
+        );
         if (loadedCollections === null) {
           return;
         }
@@ -218,7 +241,9 @@ export function useDistrokidRunner(): DistrokidRunnerState {
           // 識別子で選択を維持し、一覧から消えていれば先頭へフォールバックする。
           const keptIndex = preferredDisc
             ? list.findIndex(
-                (item) => item.collection_id === preferredDisc.collection_id && item.disc === preferredDisc.disc,
+                (item) =>
+                  item.collection_id === preferredDisc.collection_id &&
+                  item.disc === preferredDisc.disc
               )
             : -1;
           const effectiveIndex = keptIndex >= 0 ? keptIndex : 0;
@@ -230,7 +255,11 @@ export function useDistrokidRunner(): DistrokidRunnerState {
             disc: selected.disc,
             album_title: selected.album_title,
           };
-          result = await fetchCollectionRelease(baseUrl, selected.collection_id, selected.disc);
+          result = await fetchCollectionRelease(
+            baseUrl,
+            selected.collection_id,
+            selected.disc
+          );
         } else {
           // 単一 mode（後方互換）: 従来の /distrokid/release.json を取得する。
           payloadSourceRef.current = null;
@@ -251,7 +280,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
             ? UNAVAILABLE_GUIDANCE
             : error instanceof Error
               ? error.message
-              : String(error),
+              : String(error)
         );
       } finally {
         if (isLatestRequest()) {
@@ -259,7 +288,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
         }
       }
     },
-    [loadCollections],
+    [loadCollections]
   );
 
   const updateServerUrl = useCallback(
@@ -272,7 +301,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
       setServerUrl(nextUrl);
       void fetchData(nextUrl, null);
     },
-    [fetchData],
+    [fetchData]
   );
 
   const selectCollection = useCallback(
@@ -290,7 +319,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
         disc: selected.disc,
       });
     },
-    [collections, fetchData, serverUrl],
+    [collections, fetchData, serverUrl]
   );
 
   const refreshServerSources = useCallback(async () => {
@@ -300,14 +329,26 @@ export function useDistrokidRunner(): DistrokidRunnerState {
     const revision = ++serverSourcesRevisionRef.current;
     try {
       const sources = await discoverServerSources();
-      if (injectionActiveRef.current || revision !== serverSourcesRevisionRef.current) return;
+      if (
+        injectionActiveRef.current ||
+        revision !== serverSourcesRevisionRef.current
+      )
+        return;
       setServerSources(sources);
       const currentServerUrl = serverUrlRef.current;
-      if (currentServerUrl && sources.length > 0 && !sources.some((source) => source.url === currentServerUrl)) {
+      if (
+        currentServerUrl &&
+        sources.length > 0 &&
+        !sources.some((source) => source.url === currentServerUrl)
+      ) {
         updateServerUrl(sources[0].url);
       }
     } catch (error) {
-      if (injectionActiveRef.current || revision !== serverSourcesRevisionRef.current) return;
+      if (
+        injectionActiveRef.current ||
+        revision !== serverSourcesRevisionRef.current
+      )
+        return;
       setPhase(PHASES.ERROR);
       setMessage(error instanceof Error ? error.message : String(error));
     }
@@ -316,13 +357,21 @@ export function useDistrokidRunner(): DistrokidRunnerState {
   useEffect(() => {
     const revision = ++serverSourcesRevisionRef.current;
     const initialization = migrateServerSourcesStorage()
-      .then(() => Promise.all([serverUrlItem.getValue(), discoverServerSources()]))
+      .then(() =>
+        Promise.all([serverUrlItem.getValue(), discoverServerSources()])
+      )
       .then(([stored, sources]) => {
-        if (initialFetchStartedRef.current || revision !== serverSourcesRevisionRef.current) return;
+        if (
+          initialFetchStartedRef.current ||
+          revision !== serverSourcesRevisionRef.current
+        )
+          return;
         initialFetchStartedRef.current = true;
         setServerSources(sources);
         if (!stored.trim()) return;
-        const nextUrl = sources.some((source) => source.url === stored) ? stored : sources[0]?.url;
+        const nextUrl = sources.some((source) => source.url === stored)
+          ? stored
+          : sources[0]?.url;
         if (!nextUrl) return;
         serverUrlRef.current = nextUrl;
         setServerUrl(nextUrl);
@@ -360,9 +409,11 @@ export function useDistrokidRunner(): DistrokidRunnerState {
       // 停止境界の制御フローは runInjection に抽出し、ここでは transport を束ねて渡す（#871）。
       const tabId = await activeTabId();
       await runInjection(injectionPayload, {
-        fetchAsset: (assetPath, filename) => fetchAsset(injectionBaseUrl, assetPath, filename),
+        fetchAsset: (assetPath, filename) =>
+          fetchAsset(injectionBaseUrl, assetPath, filename),
         start: (p) => sendMessage("injectStart", { payload: p }, tabId),
-        track: (trackIndex, asset) => sendMessage("injectTrack", { trackIndex, asset }, tabId),
+        track: (trackIndex, asset) =>
+          sendMessage("injectTrack", { trackIndex, asset }, tabId),
         cover: (asset) => sendMessage("injectCover", { asset }, tabId),
         finish: () => sendMessage("injectFinish", undefined, tabId),
         setMessage,
@@ -377,13 +428,16 @@ export function useDistrokidRunner(): DistrokidRunnerState {
       // POST 失敗はフィル成功を覆さない（warning を添えるだけ）。
       if (injectionIsDirMode && injectionSource !== null) {
         try {
-          await sendMessage("recordRelease", { baseUrl: injectionBaseUrl, record: injectionSource });
+          await sendMessage("recordRelease", {
+            baseUrl: injectionBaseUrl,
+            record: injectionSource,
+          });
           // 配信済み記録成功後、一覧を再取得して select から消す (#934)。
           await loadCollections(injectionBaseUrl);
         } catch (recordError) {
           // 配信記録失敗はフィル結果に影響しない補助機能のため warn 表示のみ (#934)。
           setMessage(
-            `注入完了（配信済み記録に失敗しました: ${recordError instanceof Error ? recordError.message : String(recordError)}）`,
+            `注入完了（配信済み記録に失敗しました: ${recordError instanceof Error ? recordError.message : String(recordError)}）`
           );
         }
       }

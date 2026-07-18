@@ -3,8 +3,15 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_SERVER_SOURCES, DISCOVERY_REGISTRY_URL, DISCOVERY_REQUEST_TIMEOUT_MS } from "../../shared/constants";
-import { discoverServerSources, parseDiscoveryResponse } from "../../shared/server-discovery";
+import {
+  DEFAULT_SERVER_SOURCES,
+  DISCOVERY_REGISTRY_URL,
+  DISCOVERY_REQUEST_TIMEOUT_MS,
+} from "../../shared/constants";
+import {
+  discoverServerSources,
+  parseDiscoveryResponse,
+} from "../../shared/server-discovery";
 
 const DEFAULT_URL = "http://youtube-automation.localhost:7873";
 const LIVE_URL = "http://live.localhost:49152";
@@ -45,7 +52,10 @@ function registry(servers: unknown[]) {
 describe("discovery schema v1", () => {
   it("should accept the Python producer golden fixture without mutating it", () => {
     const fixturePath = fileURLToPath(
-      new URL("../../../tests/fixtures/collection_serve_discovery_v1.json", import.meta.url),
+      new URL(
+        "../../../tests/fixtures/collection_serve_discovery_v1.json",
+        import.meta.url
+      )
     );
     const input: unknown = JSON.parse(readFileSync(fixturePath, "utf8"));
     const before = structuredClone(input);
@@ -63,17 +73,29 @@ describe("discovery schema v1", () => {
     registry([{ instance_id: "x", expires_at: 130 }]),
     registry([{ ...registryEntry(LIVE_URL, "x"), expires_at: "130" }]),
     registry([{ ...registryEntry(LIVE_URL, "x"), expires_at: -1 }]),
-    registry([{ ...registryEntry(LIVE_URL, "x"), server_info: { ...serverInfo(LIVE_URL, "x"), port: 0 } }]),
     registry([
       {
         ...registryEntry(LIVE_URL, "x"),
-        server_info: { ...serverInfo(LIVE_URL, "x"), hostname: "other.localhost" },
+        server_info: { ...serverInfo(LIVE_URL, "x"), port: 0 },
+      },
+    ]),
+    registry([
+      {
+        ...registryEntry(LIVE_URL, "x"),
+        server_info: {
+          ...serverInfo(LIVE_URL, "x"),
+          hostname: "other.localhost",
+        },
       },
     ]),
     registry([registryEntry("https://live.localhost:49152", "x")]),
     registry([registryEntry("http://example.com:49152", "x")]),
     registry([registryEntry(LIVE_URL, "x".repeat(129))]),
-    registry(Array.from({ length: 129 }, (_, index) => registryEntry(LIVE_URL, `instance-${index}`))),
+    registry(
+      Array.from({ length: 129 }, (_, index) =>
+        registryEntry(LIVE_URL, `instance-${index}`)
+      )
+    ),
   ])("should reject unsupported or malformed producer shapes", (input) => {
     expect(() => parseDiscoveryResponse(input)).toThrow();
   });
@@ -96,7 +118,7 @@ describe("shared live server discovery", () => {
             registryEntry(LIVE_URL, "live"),
             registryEntry(mismatchUrl, "mismatch"),
             registryEntry(`${DEFAULT_URL}/`, "default-duplicate"),
-          ]),
+          ])
         );
       }
       if (url === `${LIVE_URL}/server-info`) {
@@ -107,7 +129,10 @@ describe("shared live server discovery", () => {
         return response(503, {});
       }
       if (url === `${mismatchUrl}/server-info`) {
-        return response(200, serverInfo("http://other.localhost:49155", "Other"));
+        return response(
+          200,
+          serverInfo("http://other.localhost:49155", "Other")
+        );
       }
       if (url === `${DEFAULT_URL}/server-info`) {
         return response(200, serverInfo(DEFAULT_URL, "Default"));
@@ -117,7 +142,10 @@ describe("shared live server discovery", () => {
 
     const sources = await discoverServerSources({ fetch: fetchMock });
 
-    expect(sources.map(({ url }: { url: string }) => url)).toEqual([DEFAULT_URL, LIVE_URL]);
+    expect(sources.map(({ url }: { url: string }) => url)).toEqual([
+      DEFAULT_URL,
+      LIVE_URL,
+    ]);
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
       DISCOVERY_REGISTRY_URL,
       `${DEAD_URL}/server-info`,
@@ -129,26 +157,43 @@ describe("shared live server discovery", () => {
 
   it.each([
     ["HTTP failure", () => Promise.resolve(response(503, {}))],
-    ["network failure", () => Promise.reject(new TypeError("connection refused"))],
-    ["invalid schema", () => Promise.resolve(response(200, { schema_version: 1, servers: {} }))],
-  ])("should return only the permanent default after a registry %s", async (_label, registryFetch) => {
-    const fetchMock = vi.fn(registryFetch);
+    [
+      "network failure",
+      () => Promise.reject(new TypeError("connection refused")),
+    ],
+    [
+      "invalid schema",
+      () => Promise.resolve(response(200, { schema_version: 1, servers: {} })),
+    ],
+  ])(
+    "should return only the permanent default after a registry %s",
+    async (_label, registryFetch) => {
+      const fetchMock = vi.fn(registryFetch);
 
-    await expect(discoverServerSources({ fetch: fetchMock })).resolves.toEqual(DEFAULT_SERVER_SOURCES);
-    expect(fetchMock).toHaveBeenCalledOnce();
-  });
+      await expect(
+        discoverServerSources({ fetch: fetchMock })
+      ).resolves.toEqual(DEFAULT_SERVER_SOURCES);
+      expect(fetchMock).toHaveBeenCalledOnce();
+    }
+  );
 
   it("should fall back without probing when the registry exceeds its entry limit", async () => {
     const fetchMock = vi.fn(() =>
       Promise.resolve(
         response(
           200,
-          registry(Array.from({ length: 129 }, (_, index) => registryEntry(LIVE_URL, `instance-${index}`))),
-        ),
-      ),
+          registry(
+            Array.from({ length: 129 }, (_, index) =>
+              registryEntry(LIVE_URL, `instance-${index}`)
+            )
+          )
+        )
+      )
     );
 
-    await expect(discoverServerSources({ fetch: fetchMock })).resolves.toEqual(DEFAULT_SERVER_SOURCES);
+    await expect(discoverServerSources({ fetch: fetchMock })).resolves.toEqual(
+      DEFAULT_SERVER_SOURCES
+    );
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
@@ -167,7 +212,13 @@ describe("shared live server discovery", () => {
       const url = String(input);
       if (url === DISCOVERY_REGISTRY_URL) {
         return Promise.resolve(
-          response(200, registry([registryEntry(firstUrl, "alpha"), registryEntry(secondUrl, "zeta")])),
+          response(
+            200,
+            registry([
+              registryEntry(firstUrl, "alpha"),
+              registryEntry(secondUrl, "zeta"),
+            ])
+          )
         );
       }
       if (url === `${firstUrl}/server-info`) return firstProbe;
@@ -192,32 +243,34 @@ describe("shared live server discovery", () => {
     const malformedUrl = "http://malformed.localhost:49154";
     const hangingUrl = "http://hanging.localhost:49155";
     const signals: AbortSignal[] = [];
-    const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
-      const url = String(input);
-      if (url === DISCOVERY_REGISTRY_URL) {
-        return Promise.resolve(
-          response(
-            200,
-            registry([
-              registryEntry(DEAD_URL, "dead"),
-              registryEntry(malformedUrl, "malformed"),
-              registryEntry(hangingUrl, "hanging"),
-            ]),
-          ),
-        );
+    const fetchMock = vi.fn(
+      (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url === DISCOVERY_REGISTRY_URL) {
+          return Promise.resolve(
+            response(
+              200,
+              registry([
+                registryEntry(DEAD_URL, "dead"),
+                registryEntry(malformedUrl, "malformed"),
+                registryEntry(hangingUrl, "hanging"),
+              ])
+            )
+          );
+        }
+        if (url === `${DEAD_URL}/server-info`) {
+          return Promise.reject(new TypeError("connection refused"));
+        }
+        if (url === `${malformedUrl}/server-info`) {
+          return Promise.resolve(response(200, { base_url: malformedUrl }));
+        }
+        if (url === `${hangingUrl}/server-info`) {
+          if (init?.signal) signals.push(init.signal);
+          return new Promise<Response>(() => undefined);
+        }
+        throw new Error(`unexpected fetch: ${url}`);
       }
-      if (url === `${DEAD_URL}/server-info`) {
-        return Promise.reject(new TypeError("connection refused"));
-      }
-      if (url === `${malformedUrl}/server-info`) {
-        return Promise.resolve(response(200, { base_url: malformedUrl }));
-      }
-      if (url === `${hangingUrl}/server-info`) {
-        if (init?.signal) signals.push(init.signal);
-        return new Promise<Response>(() => undefined);
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
+    );
 
     const pending = discoverServerSources({ fetch: fetchMock });
     await vi.advanceTimersByTimeAsync(DISCOVERY_REQUEST_TIMEOUT_MS);
@@ -235,13 +288,15 @@ describe("shared live server discovery", () => {
       resolveRegistry = resolve;
     });
     let registrySignal: AbortSignal | undefined;
-    const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
-      if (String(input) !== DISCOVERY_REGISTRY_URL) {
-        throw new Error("late registry response started a probe");
+    const fetchMock = vi.fn(
+      (input: string | URL | Request, init?: RequestInit) => {
+        if (String(input) !== DISCOVERY_REGISTRY_URL) {
+          throw new Error("late registry response started a probe");
+        }
+        registrySignal = init?.signal ?? undefined;
+        return registryPromise;
       }
-      registrySignal = init?.signal ?? undefined;
-      return registryPromise;
-    });
+    );
 
     const pending = discoverServerSources({ fetch: fetchMock });
     await vi.advanceTimersByTimeAsync(DISCOVERY_REQUEST_TIMEOUT_MS);
@@ -257,14 +312,16 @@ describe("shared live server discovery", () => {
   it("should abort a response whose JSON body never arrives", async () => {
     vi.useFakeTimers();
     let signal: AbortSignal | undefined;
-    const fetchMock = vi.fn((_input: string | URL | Request, init?: RequestInit) => {
-      signal = init?.signal ?? undefined;
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: () => new Promise<unknown>(() => undefined),
-      } as Response);
-    });
+    const fetchMock = vi.fn(
+      (_input: string | URL | Request, init?: RequestInit) => {
+        signal = init?.signal ?? undefined;
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => new Promise<unknown>(() => undefined),
+        } as Response);
+      }
+    );
 
     const pending = discoverServerSources({ fetch: fetchMock });
     await vi.advanceTimersByTimeAsync(DISCOVERY_REQUEST_TIMEOUT_MS);

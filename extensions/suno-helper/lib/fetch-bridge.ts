@@ -29,7 +29,10 @@ export function resolveRequestUrl(input: RequestInfo | URL): string {
 }
 
 /** fetch の実効 method を解決する。init.method > Request.method > GET の順で扱う。 */
-export function resolveRequestMethod(input: RequestInfo | URL, init?: RequestInit): string {
+export function resolveRequestMethod(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): string {
   if (typeof init?.method === "string" && init.method.length > 0) {
     return init.method.toUpperCase();
   }
@@ -64,7 +67,9 @@ export function isGenerateRequest(url: string): boolean {
 
 /** clip status 照会（feed）endpoint へのリクエストか。Suno 現行の `POST /api/feed/v3` のみ観測する。 */
 export function isFeedRequest(url: string, method: string): boolean {
-  return isSunoApiPath(url, FEED_V3_PATH) && method.toUpperCase() === FEED_V3_METHOD;
+  return (
+    isSunoApiPath(url, FEED_V3_PATH) && method.toUpperCase() === FEED_V3_METHOD
+  );
 }
 
 /**
@@ -72,7 +77,10 @@ export function isFeedRequest(url: string, method: string): boolean {
  * いずれの形でも拾う（Suno は record 形式だが、ライブラリ経由の将来変化に耐える）。
  * 見つからなければ null。
  */
-export function extractAuthHeader(input: RequestInfo | URL, init?: RequestInit): string | null {
+export function extractAuthHeader(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): string | null {
   const fromHeaders = (headers: HeadersInit | undefined): string | null => {
     if (!headers) {
       return null;
@@ -81,11 +89,15 @@ export function extractAuthHeader(input: RequestInfo | URL, init?: RequestInit):
       return headers.get("authorization");
     }
     if (Array.isArray(headers)) {
-      const hit = headers.find(([name]) => name.toLowerCase() === "authorization");
+      const hit = headers.find(
+        ([name]) => name.toLowerCase() === "authorization"
+      );
       return hit ? hit[1] : null;
     }
     const record = headers as Record<string, string>;
-    const key = Object.keys(record).find((name) => name.toLowerCase() === "authorization");
+    const key = Object.keys(record).find(
+      (name) => name.toLowerCase() === "authorization"
+    );
     return key ? record[key] : null;
   };
   const fromInit = fromHeaders(init?.headers);
@@ -110,17 +122,24 @@ function toRawObservedClip(item: unknown): RawObservedClip | null {
     return null;
   }
   const clip = item as RawObservedClip;
-  return typeof clip.id === "string" && typeof clip.status === "string" ? clip : null;
+  return typeof clip.id === "string" && typeof clip.status === "string"
+    ? clip
+    : null;
 }
 
-function withDuration(clip: RawObservedClip, duration: number | undefined): ObservedClip {
+function withDuration(
+  clip: RawObservedClip,
+  duration: number | undefined
+): ObservedClip {
   return duration === undefined
     ? { id: clip.id as string, status: clip.status as string }
     : { id: clip.id as string, status: clip.status as string, duration };
 }
 
 function isValidDuration(duration: unknown): duration is number {
-  return typeof duration === "number" && Number.isFinite(duration) && duration >= 0;
+  return (
+    typeof duration === "number" && Number.isFinite(duration) && duration >= 0
+  );
 }
 
 function parseDuration(clip: RawObservedClip): number | null | undefined {
@@ -147,7 +166,10 @@ function parseClipArray(value: unknown): ObservedClip[] | null {
     }
     return withDuration(clip, duration);
   });
-  return clips.length > 0 && clips.every((clip): clip is ObservedClip => clip !== null) ? clips : null;
+  return clips.length > 0 &&
+    clips.every((clip): clip is ObservedClip => clip !== null)
+    ? clips
+    : null;
 }
 
 /**
@@ -155,7 +177,9 @@ function parseClipArray(value: unknown): ObservedClip[] | null {
  * 形: `{ id: <batch>, clips: [{id, status: "submitted", ...}, ...] }`（chrome-devtools 実機観測）。
  * 形が崩れていたら null（fail-soft）。
  */
-export function parseClipsFromGenerateResponse(json: unknown): ObservedClip[] | null {
+export function parseClipsFromGenerateResponse(
+  json: unknown
+): ObservedClip[] | null {
   if (typeof json !== "object" || json === null) {
     return null;
   }
@@ -167,7 +191,9 @@ export function parseClipsFromGenerateResponse(json: unknown): ObservedClip[] | 
  * 形は `{ clips: [...] }` と素の配列の両方を観測しているため両対応する。
  * 形が崩れていたら null（fail-soft）。
  */
-export function parseClipsFromFeedResponse(json: unknown): ObservedClip[] | null {
+export function parseClipsFromFeedResponse(
+  json: unknown
+): ObservedClip[] | null {
   if (Array.isArray(json)) {
     return parseClipArray(json);
   }
