@@ -1,6 +1,6 @@
 ---
 name: analytics-analyze
-description: "Use when 収集済み Analytics データの分析と戦略提案が必要なとき。「パフォーマンス分析」「戦略検討」「振り返り」で発動。データ収集・最新化は /analytics-collect を使う"
+description: "Use when 収集済み Analytics データの分析と戦略提案だけが必要なとき。「パフォーマンス分析」「戦略検討」「振り返り」で発動。データ収集・最新化だけは /analytics-collect、収集→分析→表示の一括実行は /analytics-run を使う"
 ---
 
 ## Overview
