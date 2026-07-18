@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(community)`: `/community-draft` を `--batch` 専用の決定的 JSON generator へ移行し、旧 type 別 Markdown／clipboard フローを撤去した（#1709）。
+
 ### Added
 
 - `yt-channel list` を追加し、workspace 内の利用可能な channel slug を副作用なく一覧表示できるようにした (#2052)

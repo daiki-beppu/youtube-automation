@@ -405,7 +405,8 @@ def test_load_weekly_vote_log_schema_returns_dict():
 def test_poll_deprecation_message_is_actionable():
     msg = poll_deprecation_message()
     assert "DEPRECATED" in msg
-    assert "weekly-feedback" in msg
+    assert "/community-draft --batch" in msg
+    assert "yt-vote-log append" in msg
 
 
 def test_warn_poll_deprecated_emits_warning(caplog):

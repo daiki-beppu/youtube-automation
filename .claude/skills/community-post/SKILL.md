@@ -1,6 +1,6 @@
 ---
 name: community-post
-description: "Use when コミュニティ投稿テキスト生成から Studio 起動まで単独実行するとき。「コミュニティ投稿」「投稿準備」で発動。公開後 3 処理を一括実行する場合は /post-publish を使う"
+description: "Use when コミュニティ投稿テキスト生成から Studio 起動まで単独実行するとき。「コミュニティ投稿」「投稿準備」で発動。公開後 3 処理を一括実行する場合は /post-publish、JSON バッチ生成は /community-draft を使う"
 ---
 
 ## 前後工程

@@ -1,6 +1,6 @@
 """``data/community/weekly-vote-log.json`` の loader / validator / append utility。
 
-`/community-draft --type weekly-feedback` で運用する Sunday Vote の投票結果を
+YouTube Studio の Sunday Vote 結果を ``yt-vote-log append`` で
 週次で記録するログファイルを扱う。``/collection-ideate`` の theme weight 計算では
 直近 N 週の ``top_axis`` を hook 経由で取り込み、
 
@@ -434,13 +434,13 @@ def compute_vote_log_weights(
 
 _POLL_DEPRECATION_MESSAGE = (
     "community-draft type='poll' は DEPRECATED です。"
-    "新規利用は --type weekly-feedback に移行してください "
-    "(/community-draft の SKILL.md 参照)."
+    "新規投稿は /community-draft --batch、既存 poll 結果の記録は "
+    "yt-vote-log append を使用してください."
 )
 
 
 def warn_poll_deprecated() -> None:
-    """``--type poll`` 利用時に呼び出すと warning ログを残す."""
+    """旧 ``type=poll`` 利用時に呼び出すと warning ログを残す."""
     logger.warning(_POLL_DEPRECATION_MESSAGE)
 
 
