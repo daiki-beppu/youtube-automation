@@ -421,12 +421,14 @@ def _build_workflow(merged: dict) -> Workflow:
             f"workflow.wf_next.approval_gates は object でなければなりません（got {type(gates_raw).__name__}）"
         )
 
+    skip_audio = _resolve_skip_approval(wf_next_raw, gates_raw, "skip_audio_approval", "audio")
+    skip_upload = _resolve_skip_approval(wf_next_raw, gates_raw, "skip_upload_approval", "upload")
+
     return Workflow(
         wf_next=WfNext(
-            approval_gates=ApprovalGates(
-                audio=_workflow_bool(gates_raw, "audio", "workflow.wf_next.approval_gates.audio"),
-                upload=_workflow_bool(gates_raw, "upload", "workflow.wf_next.approval_gates.upload"),
-            ),
+            approval_gates=ApprovalGates(audio=not skip_audio, upload=not skip_upload),
+            skip_audio_approval=skip_audio,
+            skip_upload_approval=skip_upload,
             skip_manual_mastering=_workflow_bool(
                 wf_next_raw,
                 "skip_manual_mastering",
@@ -434,6 +436,27 @@ def _build_workflow(merged: dict) -> Workflow:
             ),
         ),
     )
+
+
+def _resolve_skip_approval(wf_next_raw: dict, gates_raw: dict, new_key: str, legacy_key: str) -> bool:
+    """`skip_*_approval`（正キー、true=承認省略）と旧 `approval_gates.*`（true=承認する）を解決する.
+
+    同一ゲートに新旧キーを同時指定した場合は、silent な優先解決で片方を潰さず
+    `ConfigError` にする（#1744。falsy を default に潰さない #1449 と同じ strict 方針）。
+    どちらも未指定なら従来既定（承認ゲートなし = skip True）。
+    """
+    new_specified = new_key in wf_next_raw
+    legacy_specified = legacy_key in gates_raw
+    if new_specified and legacy_specified:
+        raise ConfigError(
+            f"workflow.wf_next.{new_key} と workflow.wf_next.approval_gates.{legacy_key} は"
+            "同時指定できません（新キー skip_* 側へ移行してください）"
+        )
+    if new_specified:
+        return _workflow_bool(wf_next_raw, new_key, f"workflow.wf_next.{new_key}")
+    if legacy_specified:
+        return not _workflow_bool(gates_raw, legacy_key, f"workflow.wf_next.approval_gates.{legacy_key}")
+    return True
 
 
 def _workflow_bool(raw: dict, key: str, path: str) -> bool:
