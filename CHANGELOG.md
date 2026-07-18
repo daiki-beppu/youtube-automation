@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(videoup)`: `overlays.audio_visualizer` に `fill`（solid / gradient / rainbow）、中央鏡像、上下対称、角丸、nested glow を追加した。gradient / rainbow 素材は `yt-audio-visualizer-fill` が実行時生成し、不正な配色は FFmpeg 起動前に拒否する。既存の fill 未指定・フラット glow config は従来挙動を維持する（#1686）。
 - `feat(thumbnail)`: `auto_selection.mode`（`selection_only` / `full`）を追加し、CLI 結果と workflow-state 監査ログへの mode 記録、監査値の strict 検証、`full` で適格候補ゼロ時の手動フロー切替ガイダンスを実装した（#2166）。
 - `feat(captions)`: `suno-lyrics.json` と `descriptions.md` のトラック開始時刻・総時間から、各トラック区間へ歌詞行を均等配置した重複なし SRT を生成する `yt-captions-upload` を追加した。`--apply` では YouTube Data API の captions resource を使い、同一言語の既存字幕を対話確認または `--existing update|skip` で更新・スキップして二重追加を防ぐ。captions list / insert / update の quota も発行 request 単位で記録する（#1809）。
 - `feat(doctor)`: `yt-doctor` の upload preflight が認証済み YouTube アカウントの実チャンネルを `channels.list(mine=true)` で確認し、チャンネル未作成・ローカル ID 不一致・認証 / quota / network 起因の API 失敗を区別して案内するようにした。成功時と不一致時は `--json` の `data` に remote channel ID を含め、ローカル設定だけでは検出できなかった token / meta.json の取り違えを upload 前に停止する（#2053）。
