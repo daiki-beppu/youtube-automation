@@ -3,6 +3,11 @@ name: ext-install
 description: "Use when Chrome 拡張（suno-helper / distrokid-helper）のインストール・更新をするとき。「拡張入れて」「extension インストール」で発動"
 ---
 
+## 前後工程
+
+- `前工程`: `なし`
+- `後工程`: `/suno-helper`, `/distrokid-helper`
+
 ## Overview
 
 automation リポジトリの GitHub Release (`ext-v*` タグ) に添付された Chrome 拡張 zip をダウンロードし、Chrome にインストール（または更新）する operator ガイドスキル。

@@ -3,6 +3,11 @@ name: thumbnail-test
 description: "Use when 長尺動画で YouTube Studio のサムネイル A/B テストを設計し、結果を記録するとき。「サムネ A/B テスト」「Test & Compare」「サムネテスト結果」で発動。公開前の競合・320px 視認性比較は /thumbnail-compare、候補生成は /thumbnail を使う"
 ---
 
+## 前後工程
+
+- `前工程`: `/thumbnail`, `/video-upload`
+- `後工程`: `/thumbnail`, `/flop-analysis`
+
 ## Overview
 
 テキスト付きサムネイル候補を 2〜3 案に絞り、YouTube Studio で operator が行う A/B テストを設計する。完了後は watch time share と結果をコレクションの履歴 JSON に記録し、次回 `/thumbnail` が参照できる勝ちパターンを残す。

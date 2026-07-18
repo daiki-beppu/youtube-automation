@@ -3,6 +3,11 @@ name: discover-competitors
 description: "Use when YouTube Data API で追加競合候補を自動発掘・ランキング化するとき。「競合候補」「競合発掘」「discover-competitors」で発動。TTP 入替候補やニッチ仮説を複数根拠で横断比較する調査は /market-research を使う"
 ---
 
+## 前後工程
+
+- `前工程`: `/benchmark`, `/channel-research`
+- `後工程`: `/viewer-voice`, `/benchmark`
+
 ## Overview
 
 ニッチキーワード（複数可）を渡すと、登録者数レンジ・最終投稿日でフィルタしたうえで
