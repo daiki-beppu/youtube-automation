@@ -209,12 +209,14 @@ nix develop
 
 ## Development
 
-### Editable install
+### Developer bootstrap
+
+開発環境の正規入口と worktree / 対話・非対話 shell の区別は [`docs/development.md`](docs/development.md#開発者-bootstrap正規入口) を単一ソースとします。親 checkout は初期化だけに使い、変更は linked worktree 上で行ってください。
 
 ```bash
 git clone git@github.com:daiki-beppu/youtube-automation.git
 cd youtube-automation
-uv sync
+bash .lefthook/setup-worktree.sh
 ```
 
 ### テスト実行
@@ -223,7 +225,7 @@ uv sync
 uv run pytest
 ```
 
-`uv sync` 単独で `uv run pytest tests/` が collection error 0 件で走るために必要な依存がすべて揃います。
+正規 bootstrap wrapper 内の `uv sync` で、`uv run pytest tests/` が collection error 0 件で走るために必要な依存がすべて揃います。非対話 shell は `bash .lefthook/setup-worktree.sh uv run pytest` のように command を渡します。
 
 - テスト用ツール (`pytest` / `ruff`) は `[dependency-groups].dev` 経由で導入されます。
 - テストが間接的に require する `Pillow` / `pandas` / `pyyaml` / `matplotlib` / `japanize-matplotlib` / `google-api-python-client` / `google-auth-oauthlib` などは `[project] dependencies`（main deps）に同梱されています。

@@ -280,10 +280,12 @@ uv run yt-skills sync --asset claude-md --force
 
 ### 6.1 セットアップ
 
+開発者 bootstrap の正規入口は [`docs/development.md`](docs/development.md#開発者-bootstrap正規入口)。親 checkout は初期化だけに使い、変更は issue 用 linked worktree 上で行う。
+
 ```bash
-git clone git@github.com:daiki-beppu/youtube-channels-automation.git
-cd youtube-channels-automation
-nix develop  # shellHook が uv sync を自動実行する
+git clone git@github.com:daiki-beppu/youtube-automation.git
+cd youtube-automation
+bash .lefthook/setup-worktree.sh
 ```
 
 ### 6.2 開発フロー
@@ -293,7 +295,7 @@ nix develop  # shellHook が uv sync を自動実行する
 - **設定アクセス**: チャンネル固有値は `from youtube_automation.utils.config import load_config` 経由で取得する。ハードコーディング禁止。詳細は [`CLAUDE.md`](CLAUDE.md) の「開発規約」節
 - **新規 CLI**: `yt-*` プレフィックスを必ず付け、`pyproject.toml` の `[project.scripts]` に entry point を登録する
 - **テストフィクスチャ**: `tests/conftest.py` が `CHANNEL_DIR` を `tests/fixtures/sample_channel/` に向ける。新スキーマ（`config/channel/*.json`）で配置する
-- **takt + GitHub issue 経由の開発フロー**: ブランチ手作業ではなく、`takt-issue` スキルで issue → worktree → PR を統一手順化する（`CLAUDE.md` の「開発ワークフロー」節）
+- **issue / worktree 開発フロー**: worktree の生成・命名・PR 運用は [`docs/takt-operations.md`](docs/takt-operations.md) を参照する
 
 ### 6.3 配布アセット（`yt-skills sync`）
 
