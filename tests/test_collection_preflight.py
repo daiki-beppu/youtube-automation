@@ -142,6 +142,24 @@ class TestCheckCollection:
         assert "ja" in line
         assert "ko" in line
 
+    def test_single_language_does_not_require_scene_phrases(self, tmp_path):
+        collection = _make_collection(tmp_path, "20260702-tc-single-language-collection")
+        (collection / "workflow-state.json").write_text(json.dumps({"theme": "focus"}), encoding="utf-8")
+
+        ok, line = check_collection(collection, fix=False, supported_languages=["en"])
+
+        assert ok
+        assert line.startswith("[OK]")
+
+    def test_single_language_still_rejects_malformed_workflow_state(self, tmp_path):
+        collection = _make_collection(tmp_path, "20260702-tc-malformed-state-collection")
+        (collection / "workflow-state.json").write_text("{broken", encoding="utf-8")
+
+        ok, line = check_collection(collection, fix=False, supported_languages=["en"])
+
+        assert not ok
+        assert "JSON が不正" in line
+
 
 # ---------------------------------------------------------------------------
 # main の exit code 契約
