@@ -144,6 +144,25 @@ def _human_auth_action(argv: list[str] | tuple[str, ...], instructions: str) -> 
     }
 
 
+def _youtube_oauth_action(instructions: str) -> dict:
+    """Return the agent-driven YouTube OAuth hand-off contract."""
+    action = _human_auth_action(
+        ["uv", "run", "yt-oauth"],
+        "AI または setup が `uv run yt-oauth` を background session で起動し、stdout の同意 URL を利用者へ中継します。"
+        "利用者はブラウザで OAuth 同意だけを完了してください。AI は同じ process の exit 0 を待ち、"
+        f"`uv run yt-doctor --json` で再検証します。{instructions}",
+    )
+    action.update(
+        {
+            "execution_mode": "background",
+            "url_source": "stdout",
+            "completion_signal": "process-exit",
+            "post_check_cmd": "uv run yt-doctor --json",
+        }
+    )
+    return action
+
+
 @dataclass(frozen=True)
 class _WfNewInputMode:
     mode: str
@@ -1029,11 +1048,7 @@ def check_oauth_token(channel_dir: Path) -> CheckResult:
             id="oauth_token",
             status="fail",
             message=f"{path} が無い",
-            next_action=_human_auth_action(
-                ["uv", "run", "yt-channel-status"],
-                "AI または setup が `uv run yt-channel-status` を対話 session で起動し、"
-                "利用者はブラウザで初回 OAuth 認証を完了してください。",
-            ),
+            next_action=_youtube_oauth_action("初回 OAuth 認証として対象アカウントを選択してください。"),
         )
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -2618,10 +2633,7 @@ def _upload_ready_api_error_result(error: YouTubeAPIError) -> CheckResult:
 
     if is_auth_error:
         status = "fail"
-        instructions = (
-            "承認後に AI が auth/token.json を削除して `uv run yt-channel-status` を起動し、"
-            "利用者はブラウザで意図した YouTube アカウントを再認証してください"
-        )
+        instructions = "承認後に AI が auth/token.json を削除してから、意図したアカウントで再認証してください。"
     elif is_quota_or_server_error:
         status = "warn"
         instructions = "クォータのリセットまたはサービス復旧を待ってから `uv run yt-doctor` を再実行してください"
@@ -2630,9 +2642,7 @@ def _upload_ready_api_error_result(error: YouTubeAPIError) -> CheckResult:
         instructions = "時間をおいて `uv run yt-doctor` を再実行してください"
 
     next_action = (
-        _human_auth_action(["uv", "run", "yt-channel-status"], instructions)
-        if is_auth_error
-        else {"kind": "human", "instructions": instructions}
+        _youtube_oauth_action(instructions) if is_auth_error else {"kind": "human", "instructions": instructions}
     )
     return CheckResult(
         id="upload_ready",
@@ -2653,11 +2663,7 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
             status="fail",
             category=UPLOAD_CATEGORY,
             message="auth/token.json が存在しない",
-            next_action=_human_auth_action(
-                ["uv", "run", "yt-channel-status"],
-                "AI または setup が `uv run yt-channel-status` を対話 session で起動し、"
-                "利用者はブラウザで OAuth 認証を完了してください。",
-            ),
+            next_action=_youtube_oauth_action("対象アカウントを選択してください。"),
         )
 
     try:
@@ -2705,10 +2711,9 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
             status="fail",
             category=UPLOAD_CATEGORY,
             message="; ".join(issues),
-            next_action=_human_auth_action(
-                ["uv", "run", "yt-channel-status"],
-                "承認後に AI が token.json を削除して `uv run yt-channel-status` を起動し、"
-                "利用者はブラウザで youtube / youtube.force-ssl scope を含む OAuth 同意を完了してください。",
+            next_action=_youtube_oauth_action(
+                "承認後に AI が token.json を削除します。"
+                "youtube / youtube.force-ssl scope を含む同意を完了してください。"
             ),
         )
 
@@ -2735,11 +2740,7 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
             status="fail",
             category=UPLOAD_CATEGORY,
             message=f"token.json から credentials を構築できません: {error}",
-            next_action=_human_auth_action(
-                ["uv", "run", "yt-channel-status"],
-                "承認後に AI が auth/token.json を削除して `uv run yt-channel-status` を起動し、"
-                "利用者はブラウザで OAuth 認証をやり直してください。",
-            ),
+            next_action=_youtube_oauth_action("承認後に AI が auth/token.json を削除してから再認証します。"),
         )
 
     try:
@@ -2751,11 +2752,7 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
             status="fail",
             category=UPLOAD_CATEGORY,
             message="OAuth token の更新に失敗しました。token が期限切れまたは失効しています",
-            next_action=_human_auth_action(
-                ["uv", "run", "yt-channel-status"],
-                "承認後に AI が auth/token.json を削除して `uv run yt-channel-status` を起動し、"
-                "利用者はブラウザで OAuth 認証をやり直してください。",
-            ),
+            next_action=_youtube_oauth_action("承認後に AI が auth/token.json を削除してから再認証します。"),
             data={"reason": "oauth_refresh_failed"},
         )
     except HttpError as error:
@@ -2805,7 +2802,8 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
                 "instructions": (
                     "意図したアカウントの token なら `uv run yt-channel-settings pull "
                     "--channel-id-only --apply` で meta.json を更新し、別アカウントの token なら "
-                    "auth/token.json を削除して `uv run yt-channel-status` で再認証してください"
+                    "auth/token.json を削除し、AI が `uv run yt-oauth` を background 起動して再認証した後、"
+                    "`uv run yt-doctor --json` で検証してください"
                 ),
             },
             data={
