@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
+from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -2744,6 +2745,19 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
     try:
         service = build("youtube", "v3", credentials=credentials)
         response = service.channels().list(part="id,snippet", mine=True).execute()
+    except RefreshError:
+        return CheckResult(
+            id="upload_ready",
+            status="fail",
+            category=UPLOAD_CATEGORY,
+            message="OAuth token の更新に失敗しました。token が期限切れまたは失効しています",
+            next_action=_human_auth_action(
+                ["uv", "run", "yt-channel-status"],
+                "承認後に AI が auth/token.json を削除して `uv run yt-channel-status` を起動し、"
+                "利用者はブラウザで OAuth 認証をやり直してください。",
+            ),
+            data={"reason": "oauth_refresh_failed"},
+        )
     except HttpError as error:
         return _upload_ready_api_error_result(YouTubeAPIError.from_http_error(error, "doctor:channels.list"))
     except (AutomationError, HttpLib2Error, OSError) as error:

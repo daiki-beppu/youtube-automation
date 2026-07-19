@@ -1003,6 +1003,27 @@ def test_apply_returns_nonzero_when_target_channel_config_is_invalid(
     assert commands[-1] == ["uv", "run", "yt-skills", "list"]
 
 
+def test_channel_config_check_ignores_nonzero_exit_when_channel_config_is_ok(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    payload = {
+        "checks": [
+            {"id": "channel_config", "status": "ok", "message": "config/channel/ ロード成功"},
+            {"id": "upload_ready", "status": "fail", "message": "OAuth token が失効しています"},
+        ]
+    }
+    completed = automation_update.subprocess.CompletedProcess([], 1, json.dumps(payload), "")
+    monkeypatch.setattr(automation_update.subprocess, "run", lambda *args, **kwargs: completed)
+
+    result = automation_update._check_channel_config(repo)
+
+    assert result.startswith("config/channel/ ロード成功")
+    assert "warning" in result
+    assert "exit code 1" in result
+
+
 @pytest.mark.parametrize(
     ("completed", "expected"),
     [

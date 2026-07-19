@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
 from httplib2 import ServerNotFoundError
 from PIL import Image as PILImage
@@ -4056,6 +4057,20 @@ class TestCheckUploadReady:
         assert r.data["reason"] == "api_error"
         assert r.next_action is not None
         assert "uv run yt-channel-status" in r.next_action["instructions"]
+
+    def test_refresh_error_is_fail_with_reauthentication(self, tmp_path, monkeypatch):
+        _write_token(tmp_path, _FULL_SCOPES)
+        _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        _mock_upload_channel_api(monkeypatch, error=RefreshError("invalid_grant: token expired"))
+
+        r = doctor.check_upload_ready(tmp_path)
+
+        assert r.status == "fail"
+        assert r.data == {"reason": "oauth_refresh_failed"}
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+        assert "uv run yt-channel-status" in r.next_action["instructions"]
+        assert "invalid_grant" not in r.message
 
     def test_network_error_is_warn_not_channel_not_found(self, tmp_path, monkeypatch):
         _write_token(tmp_path, _FULL_SCOPES)
