@@ -453,8 +453,10 @@ def _build_overlays(raw: object) -> Overlays:
     fill = None
     if fill_raw is not None:
         fill_type = str(fill_raw.get("type", "solid"))
-        if fill_type not in {"solid", "gradient", "rainbow"}:
-            raise ConfigError("overlays.audio_visualizer.fill.type は solid / gradient / rainbow のいずれかです")
+        if fill_type not in {"solid", "gradient", "rainbow", "conical"}:
+            raise ConfigError(
+                "overlays.audio_visualizer.fill.type は solid / gradient / rainbow / conical のいずれかです"
+            )
         fill_color = str(fill_raw.get("color", av_raw.get("colors", "white")))
         fill_top = str(fill_raw.get("top", "0xA9CBF0"))
         fill_bottom = str(fill_raw.get("bottom", fill_raw.get("bot", "0x3A5696")))

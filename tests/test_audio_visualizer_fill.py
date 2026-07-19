@@ -39,6 +39,16 @@ def test_rainbow_asset_contains_multiple_hues(tmp_path: Path) -> None:
     assert len({image.getpixel((0, 4)), image.getpixel((8, 4)), image.getpixel((4, 0))}) == 3
 
 
+def test_conical_asset_maps_angle_to_hue(tmp_path: Path) -> None:
+    output = tmp_path / "conical.png"
+
+    effective = create_fill_asset("conical", "9x9", output)
+
+    image = Image.open(output)
+    assert effective == "conical"
+    assert len({image.getpixel((0, 4)), image.getpixel((8, 4)), image.getpixel((4, 0))}) == 3
+
+
 @pytest.mark.parametrize(("fill_type", "color"), [("plasma", "white"), ("solid", "oops")])
 def test_invalid_fill_fails_loudly(tmp_path: Path, fill_type: str, color: str) -> None:
     with pytest.raises(ValueError, match="invalid fill"):
