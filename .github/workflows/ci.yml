@@ -56,14 +56,12 @@ jobs:
         run: nix develop --command uv sync --frozen
       - name: Build wheel and sdist
         run: nix develop --command uv build
-      - name: Smoke test installed wheel
+      - name: Smoke test installed wheel downstream sync
         run: |
-          nix develop --command bash -euo pipefail -c '
-            venv=$(mktemp -d)/venv
-            uv venv "$venv"
-            uv pip install --python "$venv/bin/python" dist/*.whl
-            "$venv/bin/yt-skills" list
-          '
+          candidate_wheel=$(find dist -maxdepth 1 -name '*.whl' -print -quit)
+          test -n "$candidate_wheel"
+          YTA_CANDIDATE_WHEEL="$candidate_wheel" \
+            nix develop --command uv run pytest tests/test_skills_sync_installed_wheel.py -q
 
   takt-workflow-contract:
     runs-on: ubuntu-latest

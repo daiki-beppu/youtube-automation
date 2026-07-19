@@ -62,6 +62,9 @@ rg -l '<skill-name>' tests/
 
 # 配布経路（sync / packaging）を触った場合のみ:
 uv run pytest tests/test_skills_sync.py tests/test_skills_sync_package.py tests/test_skills_sync_claude_md.py -n auto
+
+# candidate wheel を隔離 venv へ installし、擬似下流への全 asset sync / diff を貫通確認:
+uv run pytest tests/test_skills_sync_installed_wheel.py -q
 ```
 
 最終的な担保は CI の全体 pytest。上記はローカルの高速フィードバック用で、全体スイートの代替ではない。
@@ -70,7 +73,9 @@ uv run pytest tests/test_skills_sync.py tests/test_skills_sync_package.py tests/
 
 - **upstream（本リポジトリ内）**: `uv run yt-skills list/diff/sync` は editable fallback によりリポジトリ直下の `.claude/skills/` を直接読む（wheel ビルド不要。編集が即反映される）
 - **下流（チャンネルリポジトリ）**: pin されたリリース版 wheel に焼き込まれた `_skills/` を読む。**upstream で編集しただけでは下流の `yt-skills diff/sync` には一切反映されない**
-- この差のため「下流視点の diff」を upstream の手元で完全再現する手段は無い。下流での見え方はリリース後に `/automation-update` を回して確認する
+- release前の packaged-resource 経路は `uv run pytest tests/test_skills_sync_installed_wheel.py -q` で再現できる。testはcandidate wheelをrepository外の一時directoryへbuildし、隔離venvへ非editable installしてから、空の擬似下流へ全assetをsyncする。同期後のtreeをsourceとbyte単位で比較し、`.agents/skills` symlinkとinstalled `yt-skills diff` の差分なしも確認する
+- CI `build-smoke` も同じpytest targetへbuild済みwheelを `YTA_CANDIDATE_WHEEL` で渡すため、ローカルとCIで判定ロジックを二重管理しない。環境変数未指定のローカル実行ではtest自身が一時領域へwheelをbuildする
+- このsmokeが保証するのは、candidate wheelから資格情報を持たない標準layoutの擬似下流への配布内容と冪等性まで。実チャンネル固有差分、release作成、pin更新、認証を含む `/automation-update` の運用確認は引き続きリリース後に行う
 
 ### 4. 配布（下流反映はリリース一巡に律速される）
 
