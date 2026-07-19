@@ -92,7 +92,18 @@ then
 fi
 
 if [ -z "$max_parallel" ]; then
-  if ! max_parallel=$(uv run --no-sync python - <<'PY'
+  # 通常の `uv run` で worktree-local .venv を lockfile へ同期する。環境を
+  # 準備できない失敗と、準備後の thumbnail config 不備を別の診断にする。
+  if ! uv run python - <<'PY'
+from youtube_automation.utils.image_provider.config import parse_image_generation_config  # noqa: F401
+from youtube_automation.utils.skill_config import load_skill_config  # noqa: F401
+PY
+  then
+    echo "ERROR: thumbnail config を読む project 環境を準備できません" >&2
+    echo "復旧: bash .lefthook/setup-worktree.sh <command> [args...]" >&2
+    exit 1
+  fi
+  if ! max_parallel=$(uv run python - <<'PY'
 import os
 from pathlib import Path
 
@@ -108,7 +119,7 @@ if config.codex is None:
 print(config.codex.max_parallel)
 PY
   ); then
-    echo "ERROR: image_generation.codex.max_parallel を解決できません" >&2
+    echo "ERROR: project 環境は準備済みですが image_generation.codex.max_parallel の設定を解決できません" >&2
     exit 1
   fi
 fi

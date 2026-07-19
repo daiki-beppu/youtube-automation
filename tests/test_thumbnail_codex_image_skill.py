@@ -1154,6 +1154,38 @@ def test_codex_image_script_blocks_forbidden_keyword_before_codex_exec(tmp_path:
     assert not output_path.exists(), "forbid_keywords ヒット時に出力ファイルを作ってはならない"
 
 
+def test_codex_image_script_fails_closed_when_config_environment_cannot_be_prepared(tmp_path: Path) -> None:
+    """config import 失敗は「禁止語なし」にせず、Codex より前に復旧手順付きで止める。"""
+    env, log_file = _prepare_fake_codex_env(tmp_path)
+    fake_uv = tmp_path / "bin" / "uv"
+    fake_uv.write_text("#!/usr/bin/env bash\nexit 42\n", encoding="utf-8")
+    fake_uv.chmod(0o755)
+    env.pop("CODEX_IMAGE_FORBID_KEYWORDS", None)
+    output_path = tmp_path / "output.png"
+
+    result = _run_script(_CODEX_IMAGE_SH, "prompt", str(output_path), env=env)
+
+    assert result.returncode != 0
+    assert "forbid_keywords の設定読込を完了できない" in result.stderr
+    assert "bash .lefthook/setup-worktree.sh <command> [args...]" in result.stderr
+    assert "ModuleNotFoundError" not in result.stderr
+    assert not log_file.exists()
+    assert not output_path.exists()
+
+
+def test_project_dependent_uv_calls_allow_dependency_sync() -> None:
+    """project import / entry point に --no-sync を使わず、stdlib-only 呼び出しだけ残す。"""
+    codex_image = _read(_CODEX_IMAGE_SH)
+    batch = _read(_REPO_ROOT / ".claude/skills/thumbnail/references/codex-image-batch.sh")
+    videoup = _read(_REPO_ROOT / ".claude/skills/videoup/references/generate_videos.sh")
+
+    assert "uv run --no-sync python" not in codex_image
+    assert batch.count("uv run --no-sync python") == 1
+    assert "uv run python" in batch
+    assert "uv run --no-sync yt-audio-visualizer-fill" not in videoup
+    assert "AV_FILL_COMMAND=(uv run yt-audio-visualizer-fill)" in videoup
+
+
 def test_codex_image_script_passes_when_forbid_keywords_do_not_match(tmp_path: Path) -> None:
     """Given CODEX_IMAGE_FORBID_KEYWORDS にヒットしない prompt (#1664)
     When codex-image.sh を実行する

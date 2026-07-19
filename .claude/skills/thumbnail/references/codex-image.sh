@@ -27,23 +27,28 @@ fi
 # codex CLI を一切起動せず即エラー終了する (yt-generate-image 側と同等の検査)。
 # キーワードの解決順:
 #   1. $CODEX_IMAGE_FORBID_KEYWORDS (改行区切り) が非空ならそれを使う (明示指定)
-#   2. 未設定なら uv run python で merged skill-config
+#   2. 未設定なら uv run python で依存を同期してから merged skill-config
 #      (config/skills/thumbnail.yaml::image_generation.gemini.forbid_keywords) から読む
-# チャンネル config 文脈が無い実行 (uv 不在・config 未解決) は従来どおり no-op。
+# config を検査できない状態で生成へ進むと安全 gate が無効化されるため fail-closed。
 forbid_keywords="${CODEX_IMAGE_FORBID_KEYWORDS:-}"
-if [ -z "$forbid_keywords" ] && command -v uv >/dev/null 2>&1; then
-  forbid_keywords=$(uv run --no-sync python - 2>/dev/null <<'PY' || true
-from youtube_automation.utils.exceptions import ConfigError
+if [ -z "$forbid_keywords" ]; then
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "ERROR: forbid_keywords 検査に必要な uv CLI が PATH にありません" >&2
+    echo "復旧: bash .lefthook/setup-worktree.sh <command> [args...]" >&2
+    exit 1
+  fi
+  if ! forbid_keywords=$(uv run python - <<'PY'
 from youtube_automation.utils.image_provider.composition import resolve_forbid_keywords
 from youtube_automation.utils.skill_config import load_skill_config
 
-try:
-    for keyword in resolve_forbid_keywords(load_skill_config("thumbnail")):
-        print(keyword)
-except ConfigError:
-    pass
+for keyword in resolve_forbid_keywords(load_skill_config("thumbnail")):
+    print(keyword)
 PY
-)
+  ); then
+    echo "ERROR: forbid_keywords の設定読込を完了できないため Codex 画像生成を中止しました" >&2
+    echo "復旧: bash .lefthook/setup-worktree.sh <command> [args...]" >&2
+    exit 1
+  fi
 fi
 if [ -n "$forbid_keywords" ]; then
   forbid_hits=()

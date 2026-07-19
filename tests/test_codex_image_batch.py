@@ -107,6 +107,7 @@ def _run_batch(
     *,
     max_parallel: int | None = None,
     channel_dir: Path | None = None,
+    project_environment: Path | None = None,
     runner_override: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     tools, codex_log, state = _mock_tools(tmp_path)
@@ -128,6 +129,8 @@ def _run_batch(
     }
     if channel_dir is not None:
         env["CHANNEL_DIR"] = str(channel_dir)
+    if project_environment is not None:
+        env["UV_PROJECT_ENVIRONMENT"] = str(project_environment)
     return subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True, check=False)
 
 
@@ -168,6 +171,60 @@ def test_batch_uses_config_limit_and_cli_override_and_runs_one_preflight(tmp_pat
     assert second.returncode == 0, second.stderr
     state = json.loads((second_root / "runner-state.json").read_text())
     assert state["max"] == 2
+
+
+@pytest.mark.parametrize("partial", [False, True], ids=["fresh", "partial"])
+def test_batch_syncs_worktree_local_environment_before_config_import(tmp_path: Path, partial: bool) -> None:
+    """fresh / partial .venv は共有せず、通常の uv run で同期してから config を読む。"""
+    project_environment = tmp_path / ".venv"
+    channel = tmp_path / "channel"
+    config = channel / "config/skills"
+    config.mkdir(parents=True)
+    (config / "thumbnail.yaml").write_text(
+        "image_generation:\n  provider: codex\n  codex:\n    max_parallel: 1\n",
+        encoding="utf-8",
+    )
+    if partial:
+        subprocess.run(["uv", "venv", str(project_environment)], cwd=ROOT, check=True, capture_output=True)
+    manifest = _manifest(tmp_path, ["one", "two"])
+
+    result = _run_batch(
+        tmp_path,
+        manifest,
+        max_parallel=None,
+        channel_dir=channel,
+        project_environment=project_environment,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert project_environment.is_dir()
+    assert not project_environment.is_symlink()
+    imported = subprocess.run(
+        [str(project_environment / "bin/python"), "-c", "import yaml, youtube_automation"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert imported.returncode == 0, imported.stderr
+
+
+def test_batch_reports_config_failure_after_environment_is_ready(tmp_path: Path) -> None:
+    channel = tmp_path / "channel"
+    config = channel / "config/skills"
+    config.mkdir(parents=True)
+    (config / "thumbnail.yaml").write_text(
+        "image_generation:\n  provider: gemini\n",
+        encoding="utf-8",
+    )
+    manifest = _manifest(tmp_path, ["one", "two"])
+
+    result = _run_batch(tmp_path, manifest, channel_dir=channel)
+
+    assert result.returncode != 0
+    assert "project 環境は準備済み" in result.stderr
+    assert "max_parallel" in result.stderr
+    assert not (tmp_path / "codex.log").exists()
 
 
 def test_batch_finishes_remaining_jobs_and_reports_failures(tmp_path: Path) -> None:
