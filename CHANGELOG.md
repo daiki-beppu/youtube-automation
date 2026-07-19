@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(doctor/automation-update)`: OAuth token の失効時に `upload_ready` が `RefreshError` でクラッシュせず再認証用の構造化 fail を返すようにし、`channel_config=ok` なら他 doctor check の非ゼロ終了で apply を失敗扱いにしないよう修正した（#2277）。
 - `fix(automation-update)`: tag pin の check/apply が GitHub release 一覧から本体の stable `vX.Y.Z` だけを publish 日時順で選ぶようにし、より新しい `ext-vX.Y.Z` 拡張 release を追従先と誤認して exit 2 になる問題を修正した（#2276）。
 - `test(pytest)`: repository / docs / CI / packaging の静的契約を `repo_contract`、実 tool・process・待機を伴うテストを `slow` marker へ分類し、製品 behavior 用 fast lane と変更種別別の最小コマンドを追加した。CI の無選別 full suite は維持する（#2268）。
 - `test(packaging)`: candidate wheelを隔離venvへinstallし、空の擬似下流への全asset sync、sourceとの完全一致、`.agents/skills` symlink、installed `yt-skills diff`の差分なしをCIとローカルで同じpytest targetから検証できるrelease前E2E smokeを追加した（#2266）。

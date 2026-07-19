@@ -191,12 +191,12 @@ def _check_channel_config(root: Path) -> str:
         )
     except OSError as e:
         raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}") from e
-    if proc.returncode != 0:
-        details = proc.stderr.strip() or proc.stdout.strip()
-        raise _StepFailed(f"exit code {proc.returncode}: {' '.join(cmd)}\n{details}")
     try:
         payload = json.loads(proc.stdout)
     except json.JSONDecodeError as e:
+        if proc.returncode != 0:
+            details = proc.stderr.strip() or proc.stdout.strip()
+            raise _StepFailed(f"exit code {proc.returncode}: {' '.join(cmd)}\n{details}") from e
         raise _StepFailed(f"yt-doctor --json の出力を解析できません: {e}") from e
     if not isinstance(payload, dict) or not isinstance(payload.get("checks"), list):
         raise _StepFailed("yt-doctor --json の出力に checks 配列がありません")
@@ -209,7 +209,10 @@ def _check_channel_config(root: Path) -> str:
     message = result.get("message")
     if result.get("status") != "ok":
         raise _StepFailed(message if isinstance(message, str) else "channel_config check が失敗しました")
-    return message if isinstance(message, str) else "channel_config check 成功"
+    success_message = message if isinstance(message, str) else "channel_config check 成功"
+    if proc.returncode != 0:
+        return f"{success_message}（warning: yt-doctor の他 check が失敗し exit code {proc.returncode}）"
+    return success_message
 
 
 def _skills_diff_has_changes(root: Path) -> bool:
