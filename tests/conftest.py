@@ -52,6 +52,7 @@ REPO_CONTRACT_MODULES = frozenset(
         "test_cli_stdio.py",
         "test_codex_thumbnail_routing_docs.py",
         "test_comments_reply_skill_doc.py",
+        "test_developer_bootstrap_documentation.py",
         "test_extension_package_manager_contract.py",
         "test_extension_readme_allow_extension_contract.py",
         "test_features_catalog_documentation.py",

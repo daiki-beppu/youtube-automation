@@ -5,8 +5,8 @@ Issue #329: pytest 全実行で optional dependency 未インストール時の 
 完了条件 3 が「どの optional dep が必要かを README/CONTRIBUTING に明文化」のため、
 本リポジトリでは README.md の Development 節に以下を含めることで満たす:
 
-1. Editable install のコマンド例から空 extra (`--extra veo`) を取り除き、
-   `uv sync` 単独で揃うことを示す。
+1. Developer bootstrap のコマンド例から空 extra (`--extra veo`) を取り除き、
+   正規 setup wrapper で依存が揃うことを示す。
    - 理由: `pyproject.toml:33-35` で `veo = []` (空 extra) になっており、
      `--extra veo` を案内し続けるのは「optional dep を明文化」の主旨と矛盾する。
    - Plan 024 (dev 依存一本化) で `pytest` / `ruff` は `[dependency-groups].dev`
@@ -53,15 +53,15 @@ def _development_section(text: str) -> str:
     return match.group(0)
 
 
-def _editable_install_block(dev_section: str) -> str:
-    """Development 節内の Editable install 配下の最初の bash コードブロックを抽出する。"""
+def _developer_bootstrap_block(dev_section: str) -> str:
+    """Development 節内の Developer bootstrap 配下の bash code block を抽出する。"""
     match = re.search(
-        r"### Editable install\b.*?```bash\n(.*?)```",
+        r"### Developer bootstrap\b.*?```bash\n(.*?)```",
         dev_section,
         flags=re.DOTALL,
     )
     if not match:
-        raise AssertionError("README.md に Editable install の bash コードブロックが見つかりません")
+        raise AssertionError("README.md に Developer bootstrap の bash code block が見つかりません")
     return match.group(1)
 
 
@@ -97,29 +97,31 @@ def test_readme_has_development_section() -> None:
     assert "## Development" in text, "README.md に `## Development` 節がない"
 
 
-# ---------- Editable install: `--extra veo` の撤去 ----------
+# ---------- Developer bootstrap: `--extra veo` の撤去 ----------
 
 
-def test_editable_install_drops_empty_veo_extra() -> None:
-    """Given README.md Editable install ブロック
+def test_developer_bootstrap_drops_empty_veo_extra() -> None:
+    """Given README.md Developer bootstrap block
     When `uv sync` コマンドを読む
     Then 空 extra `--extra veo` が削除されている (pyproject.toml で `veo = []`)。
     """
-    block = _editable_install_block(_development_section(_read(README)))
+    block = _developer_bootstrap_block(_development_section(_read(README)))
     assert "--extra veo" not in block, (
-        f"Editable install に空 extra `--extra veo` が残存 (pyproject.toml で `veo = []` なので no-op):\n{block}"
+        f"Developer bootstrap に空 extra `--extra veo` が残存 (pyproject.toml で `veo = []` なので no-op):\n{block}"
     )
 
 
-def test_editable_install_uses_plain_uv_sync() -> None:
-    """Given README.md Editable install ブロック
+def test_developer_bootstrap_uses_canonical_setup_wrapper() -> None:
+    """Given README.md Developer bootstrap block
     When 推奨コマンドを読む
-    Then `uv sync` が案内されている（dev 依存は default group のため extra 指定不要）。
+    Then canonical setup wrapper だけが環境準備入口として案内されている。
     """
-    block = _editable_install_block(_development_section(_read(README)))
-    assert "uv sync" in block, f"Editable install で `uv sync` が案内されていない:\n{block}"
+    block = _developer_bootstrap_block(_development_section(_read(README)))
+    assert "bash .lefthook/setup-worktree.sh" in block
+    assert "uv sync" not in block
+    assert "nix develop" not in block
     assert "--extra dev" not in block, (
-        f"Editable install に不要な `--extra dev` が残存 (dev は default group):\n{block}"
+        f"Developer bootstrap に不要な `--extra dev` が残存 (dev は default group):\n{block}"
     )
 
 
@@ -203,7 +205,7 @@ def test_readme_does_not_advertise_empty_extras() -> None:
     When `--extra veo` の登場箇所を探す
     Then 一切登場しない (pyproject.toml で `veo = []` の空 extra のため)。
 
-    Editable install ブロック以外の場所にも残っていないかの横断確認。
+    Developer bootstrap block 以外の場所にも残っていないかの横断確認。
     """
     text = _read(README)
     assert "--extra veo" not in text, "README.md のどこかに `--extra veo` (空 extra) の案内が残存"

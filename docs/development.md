@@ -2,6 +2,26 @@
 
 CLAUDE.md の「パッケージング」「extensions」「Git hooks」節の詳細版。要点（規約として常に守るもの）は CLAUDE.md を参照。
 
+## 開発者 bootstrap（正規入口）
+
+この節を、本リポジトリを変更する人間・agent向け bootstrap の単一ソースとする。README / ONBOARDING / CLAUDE は読者別の短い入口だけを持ち、詳細手順はこの節を参照する。
+
+初回 clone 後の親 checkout は、環境と hook を初期化する場所であり、実装場所にはしない。
+
+```bash
+git clone git@github.com:daiki-beppu/youtube-automation.git
+cd youtube-automation
+bash .lefthook/setup-worktree.sh
+```
+
+変更は必ず issue 用の linked worktree 上で行う。worktree を作成・移動した後も、その checkout で最初に `bash .lefthook/setup-worktree.sh` を実行する。親 checkout の `.venv` / `node_modules` は共有しない。
+
+- **対話 shell**: setup wrapper は direnv があれば `.envrc` を allow して Nix devShell へ入り、なければ `nix develop` へ fallback する。どちらも toolchain、worktree-local依存、lefthook を同じ状態へ収束させる
+- **非対話 shell / agent**: `bash .lefthook/setup-worktree.sh <command> [args...]` を正規入口とする。例: `bash .lefthook/setup-worktree.sh uv run pytest tests/test_doctor.py -q`。依存同期に失敗した場合は command を起動せず fail-closed で停止する
+- **直接 devShell を使う場合**: direnv の自動入室後は `uv run ...` を直接実行できる。`nix develop` は wrapper の fallback / 診断手段であり、初回 bootstrap の同格入口ではない
+
+worktree の生成・命名・issue / PR 運用は [`docs/takt-operations.md`](takt-operations.md) を参照する。
+
 ## プロジェクト固有コマンド（全量）
 
 ```bash
@@ -64,7 +84,13 @@ uv run pytest tests/ --ignore=tests/integration -n auto -m slow           # 実 
 
 ### 2. 検証（編集後に実行するもの）
 
-skill 単体の軽量 lint コマンドはまだ無い（`yt-skills lint` は #2096 で計画中。実装されたらここに組み込む）。現状は pytest の skill 検証テスト群を直接叩くのが最短:
+SKILL.md frontmatter だけを検証する最短入口は `yt-skills lint`。全 skill は引数なし、変更対象だけなら skill 名を列挙する。
+
+```bash
+uv run yt-skills lint [<skill>...]
+```
+
+これは strict YAML / `description:` double-quote の軽量検証であり、skill 本文・docs・features catalog・配布経路の契約は対象外。広い契約は目的を分けて pytest で確認する:
 
 ```bash
 # 全 skill 横断の契約（frontmatter strict YAML / docs 整合 / features カタログ整合）
