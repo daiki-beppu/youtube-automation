@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import tomllib
@@ -43,6 +44,7 @@ from youtube_automation.utils.exceptions import ConfigError
 EXIT_UP_TO_DATE = 0
 EXIT_DIFF = 1
 EXIT_ERROR = 2
+_STABLE_RELEASE_TAG_RE = re.compile(r"v\d+\.\d+\.\d+")
 
 
 class _StepFailed(Exception):
@@ -115,20 +117,32 @@ def _validate_sync_only(sync_only: list[str] | None) -> None:
         raise ConfigError(f"--sync-only に同梱版に存在しない skill が指定されています: {', '.join(unknown)}")
 
 
-def _github_api_get(path: str) -> dict:
+def _github_api_get(path: str) -> object:
     return _remote_github_api_get(path)
 
 
 def _fetch_latest_release_tag() -> str:
-    release = _github_api_get(f"repos/{UPSTREAM_REPO}/releases/latest")
-    tag = release.get("tag_name")
-    if not isinstance(tag, str) or not tag:
-        raise ConfigError("upstream 最新リリースの tag_name を取得できません")
-    return tag
+    releases = _github_api_get(f"repos/{UPSTREAM_REPO}/releases?per_page=100&page=1")
+    if not isinstance(releases, list):
+        raise ConfigError("upstream release 一覧を取得できません")
+
+    candidates: list[tuple[str, str]] = []
+    for release in releases:
+        if not isinstance(release, dict) or release.get("draft") is True or release.get("prerelease") is True:
+            continue
+        tag = release.get("tag_name")
+        published_at = release.get("published_at")
+        if isinstance(tag, str) and _STABLE_RELEASE_TAG_RE.fullmatch(tag) and isinstance(published_at, str):
+            candidates.append((published_at, tag))
+    if not candidates:
+        raise ConfigError("upstream release 一覧に本体の stable release tag (vX.Y.Z) がありません")
+    return max(candidates)[1]
 
 
 def _fetch_branch_head_sha(branch: str) -> str:
     commit = _github_api_get(f"repos/{UPSTREAM_REPO}/commits/{branch}")
+    if not isinstance(commit, dict):
+        raise ConfigError(f"upstream {branch} の commit 情報を取得できません")
     sha = commit.get("sha")
     if not isinstance(sha, str) or not sha:
         raise ConfigError(f"upstream {branch} の HEAD sha を取得できません")

@@ -13,7 +13,7 @@ from youtube_automation.cli.automation_update_refs import PACKAGE_NAME, _canonic
 from youtube_automation.utils.exceptions import ConfigError
 
 
-def _github_api_get(path: str) -> dict:
+def _github_api_get(path: str) -> object:
     url = f"https://api.github.com/{path}"
     request = urllib.request.Request(
         url,
