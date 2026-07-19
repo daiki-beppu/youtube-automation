@@ -20,9 +20,23 @@ uv run yt-skills diff --asset claude-md              # CLAUDE.md テンプレの
 ```bash
 uv run pytest -n auto                            # 全スイートを CPU コア数の worker で並列実行
 uv run pytest tests/ --ignore=tests/integration -n auto   # ユニットのみ並列実行
+uv run pytest tests/ --ignore=tests/integration -n auto -m "not repo_contract and not slow"  # behavioral fast lane
+uv run pytest tests/ --ignore=tests/integration -n auto -m repo_contract  # docs / CI / packaging 契約
+uv run pytest tests/ --ignore=tests/integration -n auto -m slow           # 実 tool / process / 待機を含む lane
 ```
 
 - **既定は直列**（`addopts` には入れない）。単一ファイル・単一テストのデバッグ実行で worker 起動オーバーヘッドを毎回払わないため、また `-x` / `--pdb` など直列前提のオプションと干渉しないため。フルスイートを回すときに明示的に `-n auto` を付ける
+- **marker の境界**: `repo_contract` は production behavior を起動せず repository 内の docs / CI / workflow / packaging を読むテスト、`slow` は実 Nix・ffmpeg・socket TTL・外部 tool/process・意図的待機を含むテストに付ける。分類の単一 registry は `tests/conftest.py`、存在・CI無選別の回帰契約は `tests/test_pytest_lane_contract.py` が担う。両方に該当するテストは両 marker を持つ
+- **fast lane の位置づけ**: behavioral fast lane は Python product code の短い red/green loop 用で、repository-only / slow test と `tests/integration/` を除く。変更した対象の直接テストは marker にかかわらず別途実行し、PR 前または CI では無選別の全スイートを必ず通す
+
+変更種別ごとの最小入口:
+
+| 変更 | 最初に実行 | PR 前の追加確認 |
+|---|---|---|
+| Python product code | behavioral fast lane + 変更 module の直接 test | unit-only full suite |
+| skill / skill reference script | 対応する `tests/test_*skill*.py` / script test | repository contract lane + unit-only full suite |
+| docs / CI / packaging / hook | repository contract lane + 対応 file の直接 test | slow lane（tool 契約を含む場合）+ unit-only full suite |
+| extensions | 対象 workspace の既存 pnpm lint / type / Vitest / Playwright | Extensions CI（pytest marker 対象外） |
 - **CI では `-n auto` を有効化済み**（`.github/workflows/ci.yml` の test ジョブ）
 - worker ごとの分離: `tests/conftest.py` が `CHANNEL_DIR` の tmp コピーを **worker プロセスごとに独立して** 作り直す（controller が自動設定した値を環境変数継承でそのまま共有しない）。ユーザーが明示的に `CHANNEL_DIR` を指定した場合は全 worker がその指定を尊重する
 - 注意: `tests/test_lefthook_installation_contract.py` の nix devShell 契約テストなど実 subprocess を叩くテストはホスト負荷に敏感で、混雑したマシンでは並列時に所要時間が大きく伸びることがある

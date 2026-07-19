@@ -39,6 +39,74 @@ _TEST_TMP_PREFIX = "yt-automation-tests-"
 # 区別し、後者なら worker 専用のコピーを作り直す（共有 tmp への並行書き込みを防ぐ）。
 _ISOLATED_MARKER_ENV = "YOUTUBE_AUTOMATION_TEST_ISOLATED_CHANNEL_DIR"
 
+# Fast lane から分離する分類の単一 registry。repo_contract は production
+# behavior を起動せず repository 内の docs / workflow / packaging を読む module、
+# slow は実 tool/process・socket TTL・意図的待機を含む module / node に限定する。
+REPO_CONTRACT_MODULES = frozenset(
+    {
+        "test_actions_parallel_workflows.py",
+        "test_analytics_analyze_skill_contract.py",
+        "test_analytics_revenue_skill_contract.py",
+        "test_changelog_ci_contract.py",
+        "test_channel_new_analysis_mode.py",
+        "test_cli_stdio.py",
+        "test_codex_thumbnail_routing_docs.py",
+        "test_comments_reply_skill_doc.py",
+        "test_extension_package_manager_contract.py",
+        "test_extension_readme_allow_extension_contract.py",
+        "test_features_catalog_documentation.py",
+        "test_flop_analysis_skill_contract.py",
+        "test_lifecycle_skills_no_tayk.py",
+        "test_loop_video_preview_skill_contract.py",
+        "test_market_research_skill_contract.py",
+        "test_no_google_auth_httplib2_direct_import.py",
+        "test_pytest_lane_contract.py",
+        "test_readme_dev_install_documentation.py",
+        "test_scripts_layout.py",
+        "test_server_discovery_docs.py",
+        "test_skill_api_call_estimate_contract.py",
+        "test_skill_cost_documentation.py",
+        "test_skill_frontmatter_yaml.py",
+        "test_suno_skill_doc.py",
+        "test_upgrade_guide_command_guard.py",
+        "test_video_description_skill_contract.py",
+        "test_wf_new_analytics_fallback_skill_contract.py",
+    }
+)
+
+SLOW_MODULES = frozenset(
+    {
+        "test_actions_parallel_workflows.py",
+        "test_codex_image_batch.py",
+        "test_collection_serve.py",
+        "test_collection_serve_discovery.py",
+        "test_collection_serve_lifecycle.py",
+        "test_community_endpoint.py",
+        "test_distrokid_collections_endpoint.py",
+        "test_distrokid_prepare.py",
+        "test_distrokid_release_endpoint.py",
+        "test_generate_videos_script.py",
+        "test_lefthook_installation_contract.py",
+        "test_preflight_cli.py",
+        "test_skills_sync_installed_wheel.py",
+        "test_streaming_healthcheck.py",
+        "test_thumbnail_codex_image_skill.py",
+        "test_thumbnail_skill_assets.py",
+        "test_verify_extensions_script.py",
+    }
+)
+
+SLOW_NODE_IDS = (
+    "tests/test_analytics_cli_integration.py::test_yt_analytics_returns_failure_when_subscribed_status_collection_fails",
+    "tests/test_audience_analytics.py::TestGetDeviceAnalytics::test_retries_transient_api_failure_through_analytics_entrypoint",
+    "tests/test_audience_analytics.py::TestGetSubscribedStatusAnalytics::test_retries_transient_api_failure",
+    "tests/test_audience_analytics.py::TestGetSubscribedStatusAnalytics::test_returns_error_shape_for_http_error",
+    "tests/test_benchmark_collector_channels_batch.py::TestFetchChannelsMetadata::test_retries_transient_api_failure_through_benchmark_collector",
+    "tests/test_comments_fetcher.py::test_retries_transient_api_failure_through_comments_entrypoint",
+    "tests/test_competitor_discovery.py::TestDiscoverCompetitors::test_retries_transient_api_failure_through_discovery_entrypoint",
+    "tests/test_playlist_manager.py::TestCreatePlaylist::test_retries_transient_api_failure_through_playlist_manager",
+)
+
 
 os.environ.setdefault(_OP_READ_DISABLED_ENV, "1")
 
@@ -95,6 +163,17 @@ def _prepare_isolated_channel_dir() -> None:
 
 
 _prepare_isolated_channel_dir()
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Apply registered lane markers before pytest evaluates ``-m`` selection."""
+    for item in items:
+        module_name = Path(str(item.path)).name
+        if module_name in REPO_CONTRACT_MODULES:
+            item.add_marker(pytest.mark.repo_contract)
+        if module_name in SLOW_MODULES or any(item.nodeid.startswith(prefix) for prefix in SLOW_NODE_IDS):
+            item.add_marker(pytest.mark.slow)
 
 
 @pytest.fixture(autouse=True)
