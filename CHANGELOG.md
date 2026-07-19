@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `test(packaging)`: candidate wheelを隔離venvへinstallし、空の擬似下流への全asset sync、sourceとの完全一致、`.agents/skills` symlink、installed `yt-skills diff`の差分なしをCIとローカルで同じpytest targetから検証できるrelease前E2E smokeを追加した（#2266）。
+- `fix(skills)`: thumbnail の Codex 単発・batch と videoup の fill helper が fresh / partial worktree で通常の `uv run` により依存同期してから project code を実行するよう統一した。禁止語 config を読めない場合は Codex 起動前に fail-closed とし、環境不備と config 不備を復旧手順付きで区別する（#2269）。
 - `fix(doctor,setup)`: setup の全コマンド起動・実行・再診断を AI / setup 側へ統一し、認証時の人間の責務をブラウザ上のログイン・アカウント選択・OAuth 同意・秘密情報入力だけに限定した。認証 action は実行主体・人間の役割・起動コマンドを構造化して返し、`--apply` の無人認証拒否は維持する（#2262）。
 - `refactor(extensions)`: 3 helper の shadcn/ui Button・Card・Alert・Select、`cn()`、Tailwind theme contract を workspace package `@youtube-automation/ui` へ集約し、各 helper の単体 install / test / build / zip 契約を維持した（#2246）。
 - `refactor(community-helper)`: Popup を shadcn/ui の Button・Alert・Card primitive と共通 theme token へ移行し、既存の server URL、互換性確認、3 投稿進捗、エラー表示の挙動を維持した（#2245）。
