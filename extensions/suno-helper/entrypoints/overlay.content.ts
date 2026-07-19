@@ -2,6 +2,7 @@
 // runner 本体 (entrypoints/content.ts) とは責務分離し、本 script は Shadow DOM 上へ
 // React tree (<Overlay />) をマウントするだけに専念する。messaging 経由で runner と話すため
 // マウント先は問わない。Shadow DOM 隔離で Suno 側 CSS と Tailwind が競合しない (要件8)。
+import { watchColorScheme } from "@youtube-automation/ui";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
@@ -15,6 +16,7 @@ export default defineContentScript({
   // 生成した CSS を Shadow DOM 内へ注入する（webpage 側へは漏らさない）。
   cssInjectionMode: "ui",
   async main(ctx) {
+    let stopWatchingColorScheme: (() => void) | undefined;
     const ui = await createShadowRootUi<Root>(ctx, {
       name: "suno-helper-overlay",
       position: "overlay",
@@ -25,8 +27,13 @@ export default defineContentScript({
         root.render(createElement(Overlay));
         return root;
       },
-      onRemove: (root) => root?.unmount(),
+      onRemove: (root) => {
+        stopWatchingColorScheme?.();
+        stopWatchingColorScheme = undefined;
+        root?.unmount();
+      },
     });
+    stopWatchingColorScheme = watchColorScheme(ui.shadowHost);
     ui.mount();
   },
 });
