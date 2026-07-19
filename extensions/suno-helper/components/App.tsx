@@ -258,7 +258,7 @@ export function App() {
 
   return (
     <div
-      className="flex flex-col gap-3 p-3 text-gray-900"
+      className="flex flex-col gap-3 bg-background p-3 text-foreground"
       data-suno-helper="control-panel"
       data-suno-phase={phase}
       data-suno-running={isRunning ? "true" : "false"}
@@ -278,7 +278,7 @@ export function App() {
           disabled={controlsLocked || refreshingServerSources}
           onClick={openServerSourcePicker}
           data-suno-control="server-source-trigger"
-          className="rounded border border-gray-300 px-2 py-1 text-left"
+          className="rounded border border-input bg-background px-2 py-1 text-left"
         >
           {refreshingServerSources
             ? "稼働中の配信元を更新中…"
@@ -305,7 +305,7 @@ export function App() {
           <div
             role="listbox"
             aria-label="ローカル配信元"
-            className="rounded border border-gray-300 bg-white p-1"
+            className="rounded border border-border bg-popover p-1 text-popover-foreground"
           >
             {serverSources.map((source) => (
               <button
@@ -314,7 +314,7 @@ export function App() {
                 role="option"
                 aria-selected={source.url === url}
                 disabled={controlsLocked || refreshingServerSources}
-                className="block w-full rounded px-2 py-1 text-left hover:bg-gray-100"
+                className="block w-full rounded px-2 py-1 text-left hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
                   if (isRunningRef.current || refreshingServerSources) {
                     return;
@@ -330,10 +330,12 @@ export function App() {
         )}
       </label>
 
-      <fieldset className="flex flex-col gap-1 rounded border border-gray-200 px-2 py-2 text-sm">
-        <legend className="px-1 text-xs text-gray-600">コレクション</legend>
+      <fieldset className="flex flex-col gap-1 rounded border border-border px-2 py-2 text-sm">
+        <legend className="px-1 text-xs text-muted-foreground">
+          コレクション
+        </legend>
         {collections.length === 0 && (
-          <p className="text-xs text-gray-500">コレクションなし</p>
+          <p className="text-xs text-muted-foreground">コレクションなし</p>
         )}
         {collections.map((collection) => {
           const checked = selectedCollectionIds.includes(collection.id);
@@ -362,7 +364,7 @@ export function App() {
                 />
                 <span className="flex flex-col text-left">
                   <span className="font-medium">{collection.name}</span>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-muted-foreground">
                     {collection.status === "downloaded"
                       ? `完了 ${collection.downloaded_count}/${collection.expected_file_count ?? (collection.pattern_count ?? 0) * 2}`
                       : collection.status === "ready"
@@ -452,7 +454,7 @@ export function App() {
       )}
 
       {playlistName && (
-        <p className="text-xs text-gray-600">
+        <p className="text-xs text-muted-foreground">
           Playlist: <span className="font-medium">{playlistName}</span>
         </p>
       )}
@@ -522,8 +524,8 @@ export function App() {
         </Alert>
       )}
 
-      <fieldset className="flex flex-col gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
-        <legend className="px-1 text-xs text-gray-600">投入方式</legend>
+      <fieldset className="flex flex-col gap-2 rounded border border-border px-2 py-2 text-sm">
+        <legend className="px-1 text-xs text-muted-foreground">投入方式</legend>
         {RUN_MODE_ORDER.map((id) => {
           const mode = RUN_MODES[id];
           return (
@@ -546,7 +548,9 @@ export function App() {
                 />
                 <span className="flex flex-col">
                   <span className="font-medium">{mode.label}</span>
-                  <span className="text-xs text-gray-500">{mode.riskNote}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {mode.riskNote}
+                  </span>
                 </span>
               </label>
             </ButtonSlot>
@@ -554,7 +558,7 @@ export function App() {
         })}
       </fieldset>
 
-      <label className="flex items-start gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
+      <label className="flex items-start gap-2 rounded border border-border px-2 py-2 text-sm">
         <input
           type="checkbox"
           className="mt-1"
@@ -567,7 +571,7 @@ export function App() {
         <span className="flex flex-col">
           <span className="font-medium">異常値の曲を再生成する</span>
           {!regenerateDurationOutliers && (
-            <span className="text-xs text-amber-700">
+            <span className="text-xs text-amber-700 dark:text-amber-300">
               OFF の場合、duration guard NG も Playlist / Download
               候補に残ります。完了後に手動確認してください。
             </span>
@@ -592,7 +596,7 @@ export function App() {
           onChange={(e) =>
             updateDownloadFormat(e.target.value as DownloadFormat)
           }
-          className="rounded border border-gray-300 px-2 py-1"
+          className="rounded border border-input bg-background px-2 py-1 text-foreground"
         >
           {DOWNLOAD_FORMAT_OPTIONS.map((format) => (
             <option key={format} value={format}>
@@ -631,7 +635,7 @@ export function App() {
             type="button"
             onClick={() => void adoptSelectedClips()}
             data-suno-control="adopt-selected-clips"
-            className="rounded border border-gray-400 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+            className="rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground"
           >
             選択中の曲を採用
           </button>
@@ -677,7 +681,7 @@ export function App() {
           role="status"
           aria-live="polite"
           data-suno-status={isError ? "error" : "ok"}
-          className={`rounded-none border-0 bg-transparent p-0 whitespace-pre-wrap text-xs ${isError ? "text-red-600" : "text-gray-600"}`}
+          className={`rounded-none border-0 bg-transparent p-0 whitespace-pre-wrap text-xs ${isError ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
         >
           {status}
         </Alert>
