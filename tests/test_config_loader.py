@@ -2316,6 +2316,18 @@ def test_audio_visualizer_invalid_fill_raises(tmp_path, monkeypatch, fill, messa
         load_config()
 
 
+def test_audio_visualizer_accepts_conical_fill(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {"audio_visualizer": {"style": "ring", "fill": {"type": "conical"}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.youtube.overlays.audio_visualizer.fill is not None
+    assert config.youtube.overlays.audio_visualizer.fill.type == "conical"
+
+
 # ----- workflow.scheduled_automation (#1892) --------------------------------
 
 
