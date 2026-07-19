@@ -369,6 +369,49 @@ def test_detect_pin_rejects_unofficial_direct_git_url() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_fetch_latest_release_tag_ignores_newer_extension_release(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def _releases(path: str) -> object:
+        calls.append(path)
+        return [
+            {"tag_name": "ext-v0.2.5", "published_at": "2026-07-10T11:05:00Z"},
+            {"tag_name": "v5.5.17", "published_at": "2026-07-10T10:50:00Z"},
+            {"tag_name": "v5.5.16", "published_at": "2026-07-09T10:50:00Z"},
+        ]
+
+    monkeypatch.setattr(automation_update, "_github_api_get", _releases)
+
+    assert automation_update._fetch_latest_release_tag() == "v5.5.17"
+    assert calls == ["repos/daiki-beppu/youtube-automation/releases?per_page=100&page=1"]
+
+
+def test_fetch_latest_release_tag_uses_publish_time_not_response_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        automation_update,
+        "_github_api_get",
+        lambda path: [
+            {"tag_name": "v5.5.16", "published_at": "2026-07-09T10:50:00Z"},
+            {"tag_name": "v5.5.17", "published_at": "2026-07-10T10:50:00Z"},
+        ],
+    )
+
+    assert automation_update._fetch_latest_release_tag() == "v5.5.17"
+
+
+def test_fetch_latest_release_tag_fails_when_only_extension_releases_exist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        automation_update,
+        "_github_api_get",
+        lambda path: [{"tag_name": "ext-v0.2.5", "published_at": "2026-07-10T11:05:00Z"}],
+    )
+
+    with pytest.raises(automation_update.ConfigError, match="本体の stable release tag"):
+        automation_update._fetch_latest_release_tag()
+
+
 def test_check_inline_tag_pin_up_to_date(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
     repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
 
