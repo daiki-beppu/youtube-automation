@@ -36,6 +36,19 @@ def _assert_no_bare_yt_channel_status(value: object) -> None:
         assert prefix == "uv run "
 
 
+def _assert_agent_driven_oauth(action: dict) -> None:
+    assert action["kind"] == "human"
+    assert action["cmd"] == "uv run yt-oauth"
+    assert action["argv"] == ["uv", "run", "yt-oauth"]
+    assert action["execution_owner"] == "ai-or-setup"
+    assert action["human_role"] == "browser-authentication"
+    assert action["execution_mode"] == "background"
+    assert action["url_source"] == "stdout"
+    assert action["completion_signal"] == "process-exit"
+    assert action["post_check_cmd"] == "uv run yt-doctor --json"
+    assert "ブラウザで OAuth 同意だけ" in action["instructions"]
+
+
 # ---------------------------------------------------------------------------
 # テストヘルパー
 # ---------------------------------------------------------------------------
@@ -625,11 +638,7 @@ class TestOAuthToken:
         assert r.status == "fail"
         assert r.next_action["kind"] == "human"
         assert r.next_action["reason"] == "authentication"
-        assert r.next_action["cmd"] == "uv run yt-channel-status"
-        assert r.next_action["execution_owner"] == "ai-or-setup"
-        assert r.next_action["human_role"] == "browser-authentication"
-        assert "uv run yt-channel-status" in r.next_action["instructions"]
-        _assert_no_bare_yt_channel_status(r.next_action)
+        _assert_agent_driven_oauth(r.next_action)
 
     def test_valid(self, tmp_path):
         auth = tmp_path / "auth"
@@ -3971,8 +3980,7 @@ class TestCheckUploadReady:
         assert r.status == "fail"
         assert r.next_action is not None
         assert r.next_action["kind"] == "human"
-        assert "uv run yt-channel-status" in r.next_action["instructions"]
-        _assert_no_bare_yt_channel_status(r.next_action)
+        _assert_agent_driven_oauth(r.next_action)
 
     def test_token_parse_error_is_fail(self, tmp_path):
         """token.json が JSON として不正: fail."""
@@ -4020,7 +4028,8 @@ class TestCheckUploadReady:
         }
         assert r.next_action is not None
         assert "yt-channel-settings pull --channel-id-only --apply" in r.next_action["instructions"]
-        assert "uv run yt-channel-status" in r.next_action["instructions"]
+        assert "uv run yt-oauth" in r.next_action["instructions"]
+        assert "uv run yt-doctor --json" in r.next_action["instructions"]
 
     def test_quota_error_is_warn_not_channel_not_found(self, tmp_path, monkeypatch):
         _write_token(tmp_path, _FULL_SCOPES)
@@ -4056,7 +4065,7 @@ class TestCheckUploadReady:
         assert r.data is not None
         assert r.data["reason"] == "api_error"
         assert r.next_action is not None
-        assert "uv run yt-channel-status" in r.next_action["instructions"]
+        _assert_agent_driven_oauth(r.next_action)
 
     def test_refresh_error_is_fail_with_reauthentication(self, tmp_path, monkeypatch):
         _write_token(tmp_path, _FULL_SCOPES)
@@ -4069,7 +4078,7 @@ class TestCheckUploadReady:
         assert r.data == {"reason": "oauth_refresh_failed"}
         assert r.next_action is not None
         assert r.next_action["kind"] == "human"
-        assert "uv run yt-channel-status" in r.next_action["instructions"]
+        _assert_agent_driven_oauth(r.next_action)
         assert "invalid_grant" not in r.message
 
     def test_network_error_is_warn_not_channel_not_found(self, tmp_path, monkeypatch):
@@ -4151,8 +4160,7 @@ class TestCheckUploadReady:
         r = doctor.check_upload_ready(tmp_path)
         assert r.next_action is not None
         assert r.next_action["kind"] == "human"
-        assert "uv run yt-channel-status" in r.next_action["instructions"]
-        _assert_no_bare_yt_channel_status(r.next_action)
+        _assert_agent_driven_oauth(r.next_action)
 
     def test_channel_id_missing_key_is_fail(self, tmp_path):
         """meta.json に channel.channel_id キーがない: fail."""

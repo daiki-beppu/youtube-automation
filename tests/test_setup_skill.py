@@ -53,6 +53,7 @@ def test_setup_skill_description_mentions_new_and_legacy_commands() -> None:
 def test_setup_skill_uses_uv_run_for_automation_commands() -> None:
     text = _SETUP_SKILL.read_text(encoding="utf-8")
     assert "uv run yt-doctor --apply --json" in text
+    assert "uv run yt-oauth" in text
     assert "uv run yt-channel-status" in text
 
     bare_command_patterns = [
@@ -163,9 +164,22 @@ def test_setup_skill_keeps_command_execution_out_of_human_role() -> None:
     for command in (
         "gcloud auth login",
         "gcloud auth application-default login",
-        "uv run yt-channel-status",
+        "uv run yt-oauth",
     ):
         assert command in responsibility
+
+
+def test_setup_skill_drives_youtube_oauth_in_background() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    oauth = text.split("#### `oauth_token`", 1)[1].split("#### `reporting_job`", 1)[0]
+
+    assert "uv run yt-oauth" in oauth
+    assert "background session" in oauth
+    assert "stdout" in oauth
+    assert "同意 URL" in oauth
+    assert "ブラウザ認証だけ" in oauth
+    assert "exit 0" in oauth
+    assert "uv run yt-doctor --apply --json <apply_flags>" in oauth
 
 
 def test_setup_skill_delegates_minimum_directory_generation_to_setup() -> None:
@@ -364,7 +378,7 @@ def test_setup_skill_does_not_auto_overwrite_mismatched_channel_id() -> None:
     assert "uv run yt-channel-settings pull --channel-id-only` で dry-run" in section
     assert "uv run yt-channel-settings pull --channel-id-only --apply" in section
     assert "auth/token.json" in section
-    assert "uv run yt-channel-status" in section
+    assert "uv run yt-oauth" in section
 
 
 def test_setup_skill_keeps_api_errors_distinct_from_missing_channel() -> None:
