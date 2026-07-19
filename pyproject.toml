@@ -171,6 +171,10 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 
 [tool.pytest.ini_options]
 tmp_path_retention_policy = "failed"
+markers = [
+    "repo_contract: static repository, documentation, CI, workflow, or packaging contract",
+    "slow: intentional wait or external tool/process integration unsuitable for the behavioral fast lane",
+]
 
 [dependency-groups]
 dev = [

@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `test(pytest)`: repository / docs / CI / packaging の静的契約を `repo_contract`、実 tool・process・待機を伴うテストを `slow` marker へ分類し、製品 behavior 用 fast lane と変更種別別の最小コマンドを追加した。CI の無選別 full suite は維持する（#2268）。
 - `test(packaging)`: candidate wheelを隔離venvへinstallし、空の擬似下流への全asset sync、sourceとの完全一致、`.agents/skills` symlink、installed `yt-skills diff`の差分なしをCIとローカルで同じpytest targetから検証できるrelease前E2E smokeを追加した（#2266）。
 - `fix(skills)`: thumbnail の Codex 単発・batch と videoup の fill helper が fresh / partial worktree で通常の `uv run` により依存同期してから project code を実行するよう統一した。禁止語 config を読めない場合は Codex 起動前に fail-closed とし、環境不備と config 不備を復旧手順付きで区別する（#2269）。
 - `fix(doctor,setup)`: setup の全コマンド起動・実行・再診断を AI / setup 側へ統一し、認証時の人間の責務をブラウザ上のログイン・アカウント選択・OAuth 同意・秘密情報入力だけに限定した。認証 action は実行主体・人間の役割・起動コマンドを構造化して返し、`--apply` の無人認証拒否は維持する（#2262）。
