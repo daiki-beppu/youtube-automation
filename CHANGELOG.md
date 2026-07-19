@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(viewer-voice)`: `yt-benchmark-comments` が `commentThreads.list` に必要な `youtube.force-ssl` を持つ full-scope token を使うよう修正し、readonly token 発行済み環境で全件 403 になる問題を解消した（#2286）。
 - `fix(collection-preflight)`: 単一言語チャンネルでは共有 `requires_scene_phrases()` 判定に従って `scene_phrases` を要求せず、多言語時だけ検証するよう修正した（#2270）。
 - `docs(auth)`: doctor の YouTube OAuth next_action と `/setup` を、AI/setup が `uv run yt-oauth` を background 起動して stdout の同意 URL を中継・exit待機・doctor再検証し、人間はブラウザ同意だけを担う契約へ統一した（#2279）。
 - `feat(videoup)`: ring visualizer が `fill.type: conical` の角度→色相フルスペクトル充填を振幅・円弧 mask 内へ合成できるようにし、旧 channel-local ring patch の設定移行表を追加した（#2278）。
