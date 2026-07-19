@@ -173,7 +173,10 @@ def test_apply_uses_project_id_then_continues(monkeypatch, tmp_path: Path, capsy
 
 
 def test_project_id_waits_for_earlier_human_step(monkeypatch, tmp_path: Path, capsys) -> None:
-    human_action = {"kind": "human", "instructions": "gcloud auth login"}
+    human_action = doctor._human_auth_action(
+        ["gcloud", "auth", "login"],
+        "AI がコマンドを起動し、人間がブラウザ認証する",
+    )
     monkeypatch.setattr(
         doctor,
         "run_all_checks",
@@ -194,6 +197,14 @@ def test_project_id_waits_for_earlier_human_step(monkeypatch, tmp_path: Path, ca
     payload = json.loads(capsys.readouterr().out)
     assert payload["apply"]["stop_reason"] == "human_required"
     assert payload["apply"]["check_id"] == "gcloud_account"
+    assert payload["apply"]["next_action"] == {
+        "kind": "human",
+        "reason": "authentication",
+        "cmd": "gcloud auth login",
+        "execution_owner": "ai-or-setup",
+        "human_role": "browser-authentication",
+        "instructions": "AI がコマンドを起動し、人間がブラウザ認証する",
+    }
     assert payload["apply"]["executed"] == []
 
 

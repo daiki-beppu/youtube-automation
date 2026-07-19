@@ -130,6 +130,19 @@ def _ai_exec_action(
     return action
 
 
+def _human_auth_action(argv: list[str] | tuple[str, ...], instructions: str) -> dict:
+    """Return an auth hand-off without delegating command execution to the user."""
+    return {
+        "kind": "human",
+        "reason": "authentication",
+        "cmd": shlex.join(argv),
+        "argv": list(argv),
+        "execution_owner": "ai-or-setup",
+        "human_role": "browser-authentication",
+        "instructions": instructions,
+    }
+
+
 @dataclass(frozen=True)
 class _WfNewInputMode:
     mode: str
@@ -589,13 +602,11 @@ def check_gcloud_account() -> CheckResult:
             id="gcloud_account",
             status="fail",
             message="active な gcloud アカウントが無い",
-            next_action={
-                "kind": "human",
-                "instructions": (
-                    "あなたのターミナルで `gcloud auth login` を実行してください。"
-                    "Claude Code 等の AI セッション内では PKCE フローが完結しません。"
-                ),
-            },
+            next_action=_human_auth_action(
+                ["gcloud", "auth", "login"],
+                "AI または setup が `gcloud auth login` を対話 session で起動し、"
+                "利用者はブラウザで Google ログインと同意を完了してください。",
+            ),
         )
     return CheckResult(
         id="gcloud_account",
@@ -713,13 +724,11 @@ def check_adc() -> CheckResult:
             id="adc",
             status="fail",
             message="ADC が未設定 (print-access-token 失敗)",
-            next_action={
-                "kind": "human",
-                "instructions": (
-                    "あなたのターミナルで `gcloud auth application-default login` を実行してください。"
-                    "Claude Code 等の AI セッション内では PKCE フローが完結しません。"
-                ),
-            },
+            next_action=_human_auth_action(
+                ["gcloud", "auth", "application-default", "login"],
+                "AI または setup が `gcloud auth application-default login` を対話 session で起動し、"
+                "利用者はブラウザで Google ログインと同意を完了してください。",
+            ),
         )
     return CheckResult(id="adc", status="ok", message="ADC 有効")
 
@@ -1019,13 +1028,11 @@ def check_oauth_token(channel_dir: Path) -> CheckResult:
             id="oauth_token",
             status="fail",
             message=f"{path} が無い",
-            next_action={
-                "kind": "human",
-                "instructions": (
-                    "あなたのターミナルで `uv run yt-channel-status` を実行し、"
-                    "ブラウザの初回 OAuth 認証を完了してください"
-                ),
-            },
+            next_action=_human_auth_action(
+                ["uv", "run", "yt-channel-status"],
+                "AI または setup が `uv run yt-channel-status` を対話 session で起動し、"
+                "利用者はブラウザで初回 OAuth 認証を完了してください。",
+            ),
         )
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -2611,7 +2618,8 @@ def _upload_ready_api_error_result(error: YouTubeAPIError) -> CheckResult:
     if is_auth_error:
         status = "fail"
         instructions = (
-            "auth/token.json を削除し、`uv run yt-channel-status` で意図した YouTube アカウントを再認証してください"
+            "承認後に AI が auth/token.json を削除して `uv run yt-channel-status` を起動し、"
+            "利用者はブラウザで意図した YouTube アカウントを再認証してください"
         )
     elif is_quota_or_server_error:
         status = "warn"
@@ -2620,12 +2628,17 @@ def _upload_ready_api_error_result(error: YouTubeAPIError) -> CheckResult:
         status = "warn"
         instructions = "時間をおいて `uv run yt-doctor` を再実行してください"
 
+    next_action = (
+        _human_auth_action(["uv", "run", "yt-channel-status"], instructions)
+        if is_auth_error
+        else {"kind": "human", "instructions": instructions}
+    )
     return CheckResult(
         id="upload_ready",
         status=status,
         category=UPLOAD_CATEGORY,
         message=(f"チャンネル存在確認の API 呼び出しに失敗しました（チャンネル未作成とは判定していません）: {error}"),
-        next_action={"kind": "human", "instructions": instructions},
+        next_action=next_action,
         data={"reason": "api_error", "api_context": str(error)},
     )
 
@@ -2639,12 +2652,11 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
             status="fail",
             category=UPLOAD_CATEGORY,
             message="auth/token.json が存在しない",
-            next_action={
-                "kind": "human",
-                "instructions": (
-                    "あなたのターミナルで `uv run yt-channel-status` を実行し、ブラウザの OAuth 認証を完了してください"
-                ),
-            },
+            next_action=_human_auth_action(
+                ["uv", "run", "yt-channel-status"],
+                "AI または setup が `uv run yt-channel-status` を対話 session で起動し、"
+                "利用者はブラウザで OAuth 認証を完了してください。",
+            ),
         )
 
     try:
@@ -2692,13 +2704,11 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
             status="fail",
             category=UPLOAD_CATEGORY,
             message="; ".join(issues),
-            next_action={
-                "kind": "human",
-                "instructions": (
-                    "token.json を削除して `uv run yt-channel-status` で再認証し、"
-                    "youtube / youtube.force-ssl scope を含む OAuth 同意で取得し直してください"
-                ),
-            },
+            next_action=_human_auth_action(
+                ["uv", "run", "yt-channel-status"],
+                "承認後に AI が token.json を削除して `uv run yt-channel-status` を起動し、"
+                "利用者はブラウザで youtube / youtube.force-ssl scope を含む OAuth 同意を完了してください。",
+            ),
         )
 
     if meta_issue:
@@ -2724,12 +2734,11 @@ def check_upload_ready(channel_dir: Path) -> CheckResult:
             status="fail",
             category=UPLOAD_CATEGORY,
             message=f"token.json から credentials を構築できません: {error}",
-            next_action={
-                "kind": "human",
-                "instructions": (
-                    "auth/token.json を削除し、`uv run yt-channel-status` で OAuth 認証をやり直してください"
-                ),
-            },
+            next_action=_human_auth_action(
+                ["uv", "run", "yt-channel-status"],
+                "承認後に AI が auth/token.json を削除して `uv run yt-channel-status` を起動し、"
+                "利用者はブラウザで OAuth 認証をやり直してください。",
+            ),
         )
 
     try:
