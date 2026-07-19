@@ -1,5 +1,0 @@
-# lite workflow contract test 用の擬似グローバル takt 設定（TAKT_CONFIG_DIR で注入）
-provider: mock
-language: ja
-# Contract tests invoke the real takt CLI; keep test runs free of desktop side effects.
-notification_sound: false
