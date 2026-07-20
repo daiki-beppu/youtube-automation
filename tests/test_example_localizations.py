@@ -20,6 +20,7 @@ _CHANNEL_SETUP_TEMPLATE = (
 )
 
 _EXPECTED_LANGUAGES = ["ja", "en", "de"]
+_CHANNEL_NEW_TEMPLATE_LANGUAGES = ["ja", "en"]
 _REMOVED_LANGUAGES = ["ko", "es", "pt", "zh-CN"]
 _EXAMPLE_REQUIRED_DESCRIPTION_KEYS = [
     "opening_poem",
@@ -73,14 +74,18 @@ def test_example_localizations_languages_define_required_metadata_fields(languag
         _assert_non_empty_string(description[key], field_name=f"{language}.description.{key}")
 
 
-def test_channel_new_template_supported_languages_are_high_cpm_tier_only() -> None:
+def test_channel_new_template_omits_de_from_the_generation_default() -> None:
     data = _read_json(_CHANNEL_SETUP_TEMPLATE)
 
-    assert data["supported_languages"] == _EXPECTED_LANGUAGES
-    assert set(data["languages"]) == set(_EXPECTED_LANGUAGES)
+    assert data["supported_languages"] == _CHANNEL_NEW_TEMPLATE_LANGUAGES
+    assert set(data["languages"]) == set(_CHANNEL_NEW_TEMPLATE_LANGUAGES)
 
 
-@pytest.mark.parametrize("language", _EXPECTED_LANGUAGES, ids=_EXPECTED_LANGUAGES)
+@pytest.mark.parametrize(
+    "language",
+    _CHANNEL_NEW_TEMPLATE_LANGUAGES,
+    ids=_CHANNEL_NEW_TEMPLATE_LANGUAGES,
+)
 def test_channel_new_template_languages_define_minimum_fields(language: str) -> None:
     data = _read_json(_CHANNEL_SETUP_TEMPLATE)
 

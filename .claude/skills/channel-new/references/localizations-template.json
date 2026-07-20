@@ -1,5 +1,5 @@
 {
-  "supported_languages": ["ja", "en", "de"],
+  "supported_languages": ["ja", "en"],
   "default_language": "en",
   "languages": {
     "ja": {
@@ -9,10 +9,6 @@
     "en": {
       "title_template": "{scene_phrase} | Jazz BGM ({activities})",
       "description_opening": "Relaxing jazz music."
-    },
-    "de": {
-      "title_template": "{scene_phrase} | Jazz BGM ({activities})",
-      "description_opening": "Entspannende Jazzmusik."
     }
   }
 }
