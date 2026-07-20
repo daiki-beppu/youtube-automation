@@ -88,8 +88,35 @@ class TestCloudInitYaml:
         )
 
     def test_runcmd_does_not_own_deploy_directories(self):
-        """Given cloud-init.yaml, Then deploy-owned install_root paths are absent."""
-        assert "${install_root}" not in read_file(_CLOUD_INIT_YAML)
+        """Given cloud-init.yaml
+        When ``runcmd`` を実際に抽出して走査する
+        Then deploy が所有する ``videos`` / ``logs`` / ``bin`` の作成が、
+             ``${install_root}`` テンプレート変数でも固定パスでも混入していない。
+
+        配置ディレクトリの作成責務は ``null_resource.deploy`` の remote-exec へ一元化した。
+        文字列 ``${install_root}`` の不在だけでは、``/opt/youtube-stream/videos`` のような
+        固定パスによる再混入（責務の出戻り）を検出できない。そのため runcmd を YAML から
+        抽出し、ディレクトリ作成コマンドが deploy 所有ディレクトリへ及んでいないことを
+        個別に検証する。
+        """
+        text = read_file(_CLOUD_INIT_YAML)
+        # 1) テンプレート変数経由の再混入
+        assert "${install_root}" not in text, (
+            "cloud-init.yaml に ${install_root} 参照が残っている"
+            "（配置ディレクトリの作成は null_resource.deploy が一元管理する）"
+        )
+        # 2) 固定パスによる再混入: runcmd を抽出し、ディレクトリ作成対象を個別検証
+        runcmd = yaml.safe_load(text).get("runcmd") or []
+        commands = [" ".join(entry) if isinstance(entry, list) else str(entry) for entry in runcmd]
+        dir_creation = re.compile(r"\b(?:install\s+-d|mkdir)\b")
+        for command in commands:
+            if not dir_creation.search(command):
+                continue
+            for owned in ("videos", "logs", "bin"):
+                assert not re.search(rf"/{owned}(?=$|[\s\"'])", command), (
+                    f"runcmd が deploy 所有ディレクトリ '/{owned}' を作成している: {command!r}"
+                    "（videos/logs/bin の作成は null_resource.deploy の責務）"
+                )
 
     def test_cloud_init_yaml_no_longer_bakes_systemd_unit(self):
         """Given cloud-init.yaml

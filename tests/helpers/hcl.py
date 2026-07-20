@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -41,27 +42,37 @@ def read_file(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def extract_block(text: str, header_pattern: str) -> str | None:
-    """``header { ... }`` または ``header = { ... }`` のトップレベルブロックを 1 つ抜き出す。
+def _iter_blocks(text: str, header_pattern: str) -> Iterator[tuple[str, int]]:
+    """``header { ... }`` / ``header = { ... }`` のトップレベルブロックを順に列挙する。
 
     ``header_pattern`` は header 行（``{`` 直前まで）にマッチする正規表現。
-    ネストした ``{ }`` を 1 段までカウントしてマッチ範囲を確定する。
     HCL の ``required_providers`` 内は ``name = { ... }``（オブジェクトリテラル）
     形式のため、ヘッダーと ``{`` の間に任意で ``=`` を許容する。
+    ネストした ``{ }`` を深度カウントで辿り、対応する ``}`` までを body として
+    ``(body, header_start)`` を yield する。``{`` が閉じないヘッダーは skip する。
+
+    ブロック走査を本関数へ一元化し、``extract_block`` /
+    ``find_block_with_position`` は「先頭 1 件」「条件一致」という薄い選択処理に
+    留める（重複した brace 深度走査の再実装を避ける）。
     """
-    match = re.search(header_pattern + r"\s*=?\s*\{", text)
-    if not match:
-        return None
-    start = match.end()  # `{` の直後
-    depth = 1
-    for i in range(start, len(text)):
-        ch = text[i]
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start:i]
+    for match in re.finditer(header_pattern + r"\s*=?\s*\{", text):
+        start = match.end()  # `{` の直後
+        depth = 1
+        for i in range(start, len(text)):
+            ch = text[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    yield text[start:i], match.start()
+                    break
+
+
+def extract_block(text: str, header_pattern: str) -> str | None:
+    """``header_pattern`` に一致する最初のトップレベルブロック body を返す。"""
+    for body, _ in _iter_blocks(text, header_pattern):
+        return body
     return None
 
 
@@ -70,18 +81,8 @@ def find_block_with_position(
     header_pattern: str,
     required_text: str,
 ) -> tuple[str, int] | None:
-    for match in re.finditer(header_pattern + r"\s*=?\s*\{", text):
-        start = match.end()
-        depth = 1
-        for i in range(start, len(text)):
-            char = text[i]
-            if char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-                if depth == 0:
-                    body = text[start:i]
-                    if required_text in body:
-                        return body, match.start()
-                    break
+    """``required_text`` を含む最初のブロックの ``(body, header_start)`` を返す。"""
+    for body, header_start in _iter_blocks(text, header_pattern):
+        if required_text in body:
+            return body, header_start
     return None

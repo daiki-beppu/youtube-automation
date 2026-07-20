@@ -32,7 +32,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 
 ## 配置 root
 
-VPS 上の動画・ログ・運用スクリプトは `var.install_root` 配下に配置する。既定値は `/opt/youtube-stream` で、`videos/current.mp4`、`logs/`、`bin/*.sh` はこの値から組み立てる。値は `/` から始まり、各 path segment が英数字・`.`・`_`・`-` のみからなる絶対パスに制限する（`.` / `..` segment は不可）。配置ディレクトリの作成と全ファイル配置は `null_resource.deploy` が一元管理し、systemd unit も同じ `var.install_root` を参照する。作成後に `install_root` を変えると deploy が再実行され、新しい配置先のディレクトリ作成、動画・スクリプト・設定の再配置、service 再起動まで行う。VPS 自体は再作成しない。
+VPS 上の動画・ログ・運用スクリプトは `var.install_root` 配下に配置する。既定値は `/opt/youtube-stream` で、`videos/current.mp4`、`logs/`、`bin/*.sh` はこの値から組み立てる。値は `/` から始まり、各 path segment が英数字・`.`・`_`・`-` のみからなる絶対パスに制限する（`.` / `..` segment は不可）。配置ディレクトリの作成と全ファイル配置は `null_resource.deploy` が一元管理し、systemd unit も同じ `var.install_root` を参照する。作成後に `install_root` を変えると deploy が再実行され、新しい配置先のディレクトリ作成、動画・スクリプト・設定の再配置、service 再起動まで行う。VPS 自体は再作成しない。ただし deploy は新 root へ配置し直すだけで、**旧 root（旧 `videos/current.mp4`・`logs/`・`bin/*.sh`）は VPS 上に残る**。安全のため自動削除はしない（削除手順は「[旧動画の扱い](#旧動画の扱い同一-install_root-内での差し替え)」参照）。
 
 ## 使い方
 
@@ -199,9 +199,18 @@ ssh -i ~/.ssh/yt_stream_key root@<instance_ip> systemctl show youtube-stream | g
 
 `filemd5(var.video_path)` が前回と同値なら `triggers` 全体が不変となり、`null_resource.deploy` は no-op。`terraform plan` の差分も 0 件になる（`No changes. Your infrastructure matches the configuration.`）。同じ mp4 で誤って再 apply しても VPS には何も起きないため、運用上は安全に空打ちできる。
 
-### 旧動画の扱い
+### 旧動画の扱い（同一 install_root 内での差し替え）
 
-`provisioner "file"` の `destination` が `${var.install_root}/videos/current.mp4` に固定されており、毎回同一パスへ上書きされる。VPS 上に旧動画は残らないため、明示的な削除手順は不要（単一ファイル方式の自然な振る舞い）。
+`provisioner "file"` の `destination` が `${var.install_root}/videos/current.mp4` に固定されており、`install_root` が変わらない限り毎回同一パスへ上書きされる。この場合 VPS 上に旧動画は残らないため、明示的な削除手順は不要（単一ファイル方式の自然な振る舞い）。
+
+ただし `install_root` 自体を変更した場合は挙動が異なる。deploy は新しい root へ配置し直すだけで、旧 root（旧 `videos/current.mp4`・`logs/`・`bin/*.sh`）は VPS 上に残る。安全のため自動削除はしない。旧配置先を片付けたい場合は、新しい service が新 `install_root` で稼働していることを確認してから手動で削除する:
+
+```bash
+# 新 service が稼働中であることを確認してから旧 root を削除する
+ssh -i ~/.ssh/yt_stream_key root@<instance_ip> \
+  systemctl show youtube-stream -p ActiveState,ExecMainStatus
+ssh -i ~/.ssh/yt_stream_key root@<instance_ip> rm -rf <旧 install_root>
+```
 
 ### トラブルシューティング（差し替え時）
 
