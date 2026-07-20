@@ -40,7 +40,9 @@ def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
         "Button",
         "Card",
         "Checkbox",
+        "FieldError",
         "FieldLabel",
+        "FieldSet",
         "RadioGroup",
         "RadioGroupItem",
         "Select",
@@ -61,7 +63,9 @@ def test_shared_form_primitives_use_base_ui_state_contracts() -> None:
     assert 'data-slot="checkbox-indicator"' in checkbox
     assert "data-checked" in checkbox
     assert "disabled:opacity-50" in checkbox
-    assert "focus-visible:ring-[3px]" in checkbox
+    assert "focus-visible:ring-3" in checkbox
+    assert "data-indeterminate:bg-primary" in checkbox
+    assert "aria-invalid:ring-3" in checkbox
 
     assert 'from "@base-ui/react/radio"' in radio_group
     assert 'from "@base-ui/react/radio-group"' in radio_group
@@ -70,12 +74,41 @@ def test_shared_form_primitives_use_base_ui_state_contracts() -> None:
     assert 'data-slot="radio-group-indicator"' in radio_group
     assert "data-checked" in radio_group
     assert "disabled:opacity-50" in radio_group
-    assert "focus-visible:ring-[3px]" in radio_group
+    assert "focus-visible:ring-3" in radio_group
+    assert "aria-invalid:ring-3" in radio_group
     assert "data-checked:bg-primary" not in radio_group
     assert 'className="flex size-4 items-center justify-center"' in radio_group
     assert "left-1/2 top-1/2" in radio_group
     assert "-translate-x-1/2 -translate-y-1/2" in radio_group
     assert "rounded-full bg-current" in radio_group
+
+
+def test_shared_primitives_track_current_base_vega_composition() -> None:
+    sources = {
+        name: (EXTENSIONS / f"shared-ui/src/{name}.tsx").read_text()
+        for name in ("alert", "button", "card", "field", "select")
+    }
+
+    assert "[&_p:not(:last-child)]:mb-4" in sources["alert"]
+    assert "group/button" in sources["button"]
+    assert '"icon-xs"' in sources["button"]
+    assert "active:not-aria-[haspopup]:translate-y-px" in sources["button"]
+    assert "has-[>img:first-child]:pt-0" in sources["card"]
+    assert "has-data-[slot=card-action]:grid-cols-[1fr_auto]" in sources["card"]
+
+    for slot in (
+        "field-set",
+        "field-legend",
+        "field-group",
+        "field-title",
+        "field-separator",
+        "field-error",
+    ):
+        assert f'data-slot="{slot}"' in sources["field"]
+
+    assert "*:data-[slot=select-value]:line-clamp-1" in sources["select"]
+    assert "data-[side=bottom]:slide-in-from-top-2" in sources["select"]
+    assert "SelectPortalContext" in sources["select"]
 
 
 def test_shared_theme_exposes_light_and_dark_status_token_triplets() -> None:

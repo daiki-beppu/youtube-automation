@@ -21,7 +21,13 @@ export {
   Field,
   FieldContent,
   FieldDescription,
+  FieldError,
+  FieldGroup,
   FieldLabel,
+  FieldLegend,
+  FieldSeparator,
+  FieldSet,
+  FieldTitle,
   fieldVariants,
 } from "./field";
 export { Label } from "./label";
