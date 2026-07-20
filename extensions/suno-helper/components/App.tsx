@@ -4,6 +4,9 @@ import {
   buttonVariants,
   Checkbox,
   cn,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
   FieldLabel,
   RadioGroup,
   RadioGroupItem,
@@ -357,56 +360,73 @@ export function App() {
         )}
       </label>
 
-      <fieldset className="flex flex-col gap-1 rounded border border-border px-2 py-2 text-sm">
-        <legend className="px-1 text-xs text-muted-foreground">
-          コレクション
-        </legend>
-        {collections.length === 0 && (
-          <p className="text-xs text-muted-foreground">コレクションなし</p>
-        )}
-        {collections.map((collection) => {
-          const checked = selectedCollectionIds.includes(collection.id);
-          return (
-            <FieldLabel
-              key={collection.id}
-              data-variant={checked ? "secondary" : "outline"}
-              data-size="sm"
-              data-disabled={
-                controlsLocked || collection.status === "needs_prompts"
-              }
-              className={buttonVariants({
-                variant: checked ? "secondary" : "outline",
-                size: "sm",
-                className:
-                  "h-auto w-full items-start justify-start whitespace-normal p-2",
-              })}
-            >
-              <Checkbox
-                className="mt-0.5"
-                checked={checked}
-                disabled={
+      <Collapsible className="rounded border border-border p-2 text-sm">
+        <CollapsibleTrigger
+          render={<Button type="button" variant="ghost" size="sm" />}
+          className="group w-full justify-between"
+          data-suno-control="collections-collapsible-trigger"
+        >
+          <span>コレクション ({collections.length})</span>
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            className="transition-transform group-data-panel-open:rotate-90"
+          >
+            <path d="M6 12V4l4.5 4z" />
+          </svg>
+        </CollapsibleTrigger>
+        <CollapsibleContent keepMounted className="mt-1 flex flex-col gap-1">
+          {collections.length === 0 && (
+            <p className="text-xs text-muted-foreground">コレクションなし</p>
+          )}
+          {collections.map((collection) => {
+            const checked = selectedCollectionIds.includes(collection.id);
+            return (
+              <FieldLabel
+                key={collection.id}
+                data-variant={checked ? "secondary" : "outline"}
+                data-size="sm"
+                data-disabled={
                   controlsLocked || collection.status === "needs_prompts"
                 }
-                data-suno-control="collection-checkbox"
-                aria-label={`${collection.name} を選択`}
-                onCheckedChange={(nextChecked) =>
-                  toggleCollectionSelection(collection.id, nextChecked === true)
-                }
-              />
-              <span className="flex flex-col text-left">
-                <span className="font-medium">{collection.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  {collection.status === "downloaded"
-                    ? `完了 ${collection.downloaded_count}/${collection.expected_file_count ?? (collection.pattern_count ?? 0) * 2}`
-                    : collection.status === "ready"
-                      ? `${collection.pattern_count} patterns`
-                      : "prompts なし"}
+                className={buttonVariants({
+                  variant: checked ? "secondary" : "outline",
+                  size: "sm",
+                  className:
+                    "h-auto w-full items-start justify-start whitespace-normal p-2",
+                })}
+              >
+                <Checkbox
+                  className="mt-0.5"
+                  checked={checked}
+                  disabled={
+                    controlsLocked || collection.status === "needs_prompts"
+                  }
+                  data-suno-control="collection-checkbox"
+                  aria-label={`${collection.name} を選択`}
+                  onCheckedChange={(nextChecked) =>
+                    toggleCollectionSelection(
+                      collection.id,
+                      nextChecked === true
+                    )
+                  }
+                />
+                <span className="flex flex-col text-left">
+                  <span className="font-medium">{collection.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {collection.status === "downloaded"
+                      ? `完了 ${collection.downloaded_count}/${collection.expected_file_count ?? (collection.pattern_count ?? 0) * 2}`
+                      : collection.status === "ready"
+                        ? `${collection.pattern_count} patterns`
+                        : "prompts なし"}
+                  </span>
                 </span>
-              </span>
-            </FieldLabel>
-          );
-        })}
-      </fieldset>
+              </FieldLabel>
+            );
+          })}
+        </CollapsibleContent>
+      </Collapsible>
       <select
         value={selectedCollectionId}
         onChange={(event) => selectCollection(event.target.value)}

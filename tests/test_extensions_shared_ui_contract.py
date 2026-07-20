@@ -9,6 +9,7 @@ PRIMITIVES = (
     "button.tsx",
     "card.tsx",
     "checkbox.tsx",
+    "collapsible.tsx",
     "field.tsx",
     "label.tsx",
     "radio-group.tsx",
@@ -40,6 +41,9 @@ def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
         "Button",
         "Card",
         "Checkbox",
+        "Collapsible",
+        "CollapsibleContent",
+        "CollapsibleTrigger",
         "FieldError",
         "FieldLabel",
         "FieldSet",
@@ -81,6 +85,18 @@ def test_shared_form_primitives_use_base_ui_state_contracts() -> None:
     assert "left-1/2 top-1/2" in radio_group
     assert "-translate-x-1/2 -translate-y-1/2" in radio_group
     assert "rounded-full bg-current" in radio_group
+
+
+def test_shared_collapsible_tracks_current_base_vega_composition() -> None:
+    collapsible = (EXTENSIONS / "shared-ui/src/collapsible.tsx").read_text()
+
+    assert 'from "@base-ui/react/collapsible"' in collapsible
+    assert 'data-slot="collapsible"' in collapsible
+    assert 'data-slot="collapsible-trigger"' in collapsible
+    assert 'data-slot="collapsible-content"' in collapsible
+    assert "CollapsiblePrimitive.Root.Props" in collapsible
+    assert "CollapsiblePrimitive.Trigger.Props" in collapsible
+    assert "CollapsiblePrimitive.Panel.Props" in collapsible
 
 
 def test_shared_primitives_track_current_base_vega_composition() -> None:
@@ -127,7 +143,17 @@ def test_shared_theme_is_light_only() -> None:
             assert theme.count(token) == 1, f"{token} must exist once in the light theme"
             assert f"--color-{status}-{role}: var(--{status}-{role});" in theme
 
-    sources = "\n".join(path.read_text() for path in EXTENSIONS.rglob("*") if path.suffix in {".css", ".ts", ".tsx"})
+    source_roots = [EXTENSIONS / "shared-ui/src"]
+    source_roots.extend(
+        EXTENSIONS / helper / directory for helper in HELPERS for directory in ("components", "entrypoints", "lib")
+    )
+    sources = "\n".join(
+        path.read_text()
+        for source_root in source_roots
+        if source_root.exists()
+        for path in source_root.rglob("*")
+        if path.suffix in {".css", ".ts", ".tsx"}
+    )
     assert "dark:" not in sources
     assert "prefers-color-scheme" not in sources
     assert not (EXTENSIONS / "shared-ui/src/color-scheme.ts").exists()

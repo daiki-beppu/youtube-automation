@@ -1,4 +1,12 @@
-import { buttonVariants, Checkbox, FieldLabel } from "@youtube-automation/ui";
+import {
+  Button,
+  buttonVariants,
+  Checkbox,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  FieldLabel,
+} from "@youtube-automation/ui";
 
 import type { PromptEntry } from "../../shared/api";
 import type { ItemState } from "../../shared/constants";
@@ -34,52 +42,72 @@ export function PatternList({
   selectedEntries,
   onToggleEntry,
 }: PatternListProps) {
-  if (entries.length === 0) {
-    return null;
-  }
   return (
-    <ul
-      className="max-h-48 overflow-y-auto rounded border border-border"
-      data-suno-entry-list="true"
-    >
-      {entries.map((entry, index) => {
-        const itemState = itemStates[index] ?? "idle";
-        const selected = isEntrySelected(selectedEntries, itemStates, index);
-        return (
-          <li
-            key={`${entry.name}-${index}`}
-            className={`p-1 text-sm ${itemState === "done" ? "line-through" : ""}`}
-            data-suno-entry-index={index}
-            data-suno-entry-state={itemState}
-            data-suno-entry-selected={selected ? "true" : "false"}
-          >
-            <FieldLabel
-              data-variant="outline"
-              data-size="sm"
-              className={buttonVariants({
-                variant: "outline",
-                size: "sm",
-                className: `h-auto w-full items-start justify-start whitespace-normal p-2 font-normal ${STATE_CLASS[itemState]} ${SELECTION_CLASS[selected ? "selected" : "unselected"]}`,
-              })}
-            >
-              <Checkbox
-                className="mt-0.5"
-                checked={selected}
-                onCheckedChange={(checked) =>
-                  onToggleEntry(index, checked === true)
-                }
-                aria-label={`entry ${index + 1}: ${entry.name}`}
-              />
-              <span
-                className="min-w-0 flex-1 text-left"
-                data-suno-slot="entry-name"
+    <Collapsible data-suno-entry-collapsible="true">
+      <CollapsibleTrigger
+        render={<Button type="button" variant="ghost" size="sm" />}
+        className="group w-full justify-between"
+        data-suno-control="entries-collapsible-trigger"
+      >
+        <span>楽曲 ({entries.length})</span>
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          className="transition-transform group-data-panel-open:rotate-90"
+        >
+          <path d="M6 12V4l4.5 4z" />
+        </svg>
+      </CollapsibleTrigger>
+      <CollapsibleContent keepMounted>
+        <ul
+          className="max-h-48 overflow-y-auto rounded border border-border"
+          data-suno-entry-list="true"
+        >
+          {entries.map((entry, index) => {
+            const itemState = itemStates[index] ?? "idle";
+            const selected = isEntrySelected(
+              selectedEntries,
+              itemStates,
+              index
+            );
+            return (
+              <li
+                key={`${entry.name}-${index}`}
+                className={`p-1 text-sm ${itemState === "done" ? "line-through" : ""}`}
+                data-suno-entry-index={index}
+                data-suno-entry-state={itemState}
+                data-suno-entry-selected={selected ? "true" : "false"}
               >
-                {entry.name}
-              </span>
-            </FieldLabel>
-          </li>
-        );
-      })}
-    </ul>
+                <FieldLabel
+                  data-variant="outline"
+                  data-size="sm"
+                  className={buttonVariants({
+                    variant: "outline",
+                    size: "sm",
+                    className: `h-auto w-full items-start justify-start whitespace-normal p-2 font-normal ${STATE_CLASS[itemState]} ${SELECTION_CLASS[selected ? "selected" : "unselected"]}`,
+                  })}
+                >
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={selected}
+                    onCheckedChange={(checked) =>
+                      onToggleEntry(index, checked === true)
+                    }
+                    aria-label={`entry ${index + 1}: ${entry.name}`}
+                  />
+                  <span
+                    className="min-w-0 flex-1 text-left"
+                    data-suno-slot="entry-name"
+                  >
+                    {entry.name}
+                  </span>
+                </FieldLabel>
+              </li>
+            );
+          })}
+        </ul>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

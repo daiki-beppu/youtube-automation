@@ -17,6 +17,11 @@ export {
 } from "./card";
 export { Checkbox } from "./checkbox";
 export {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./collapsible";
+export {
   Field,
   FieldContent,
   FieldDescription,
