@@ -831,6 +831,23 @@ describe("Suno popup compatibility check", () => {
     expect(container.querySelectorAll("[data-suno-entry-index]")).toHaveLength(
       2
     );
+    const collectionsTrigger = expectControl(
+      container,
+      "collections-collapsible-trigger"
+    );
+    const entriesTrigger = expectControl(
+      container,
+      "entries-collapsible-trigger"
+    );
+    expect(collectionsTrigger.textContent).toContain("コレクション (1)");
+    expect(entriesTrigger.textContent).toContain("楽曲 (2)");
+    expect(collectionsTrigger.getAttribute("aria-expanded")).toBe("false");
+    expect(entriesTrigger.getAttribute("aria-expanded")).toBe("false");
+    await act(async () => {
+      collectionsTrigger.click();
+    });
+    expect(collectionsTrigger.getAttribute("aria-expanded")).toBe("true");
+    expect(entriesTrigger.getAttribute("aria-expanded")).toBe("false");
     for (const control of [
       "adopt-selected-clips",
       "retry-playlist",

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `fix(extensions-ui)`: Suno / DistroKid / Community helper を OS の配色設定に依存しないライトテーマへ固定し、薄いグレーのページ背景と白い card / popover を共通 token に定義した。dark variant・system theme watcher・dark theme token を撤去して3拡張の表示契約を統一した（#2326）。
+- `feat(suno-helper)`: コレクション一覧と楽曲一覧を shared shadcn/ui Collapsible で個別に折りたためるようにし、初期状態を閉、見出しに件数を表示した。楽曲一覧の既存スクロール上限と選択・実行ロジックは維持する（#2330）。
 - `refactor(extensions-ui)`: shared Alert / Button / Card / Checkbox / Field / Label / RadioGroup / Select を現行 shadcn/ui Base UI registryへ再同期し、完全な Field composition、invalid state、現行 size・animationを追加した。独自 status variant、Radio選択色、ShadowRoot内Select portalは維持する（#2324）。
 - `feat(suno-helper)`: paused / completed の collection queue summary にアクセシブルな Close を追加し、paused はインライン確認後、completed は即時に永続 queue state を削除できるようにした。running queue と単発 Resume state は破棄対象外とする（#2328）。
 - `fix(extensions-ui)`: shared Base UI `RadioGroupItem` の選択時 root 塗りつぶしを除去し、semantic color の円枠と中央配置した indicator dot で状態を示す公式 primitive 構成へ是正した。Suno の mouse / keyboard 選択、保存、disabled、カード配色は維持する（#2332）。

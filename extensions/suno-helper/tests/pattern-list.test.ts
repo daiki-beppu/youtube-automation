@@ -70,6 +70,55 @@ describe("PatternList checkbox UI", () => {
     container.remove();
   });
 
+  it("楽曲件数を表示し、初期状態を閉じて独立に開閉する", () => {
+    act(() => {
+      root.render(
+        createElement(PatternList, {
+          entries: makePromptEntries(2),
+          itemStates: ["idle", "idle"],
+          selectedEntries: [true, true],
+          onToggleEntry: vi.fn(),
+        })
+      );
+    });
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      '[data-suno-control="entries-collapsible-trigger"]'
+    )!;
+    const content = container.querySelector<HTMLElement>(
+      '[data-slot="collapsible-content"]'
+    )!;
+    expect(trigger.textContent).toContain("楽曲 (2)");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(content.hidden).toBe(true);
+
+    act(() => {
+      trigger.click();
+    });
+
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(content.hidden).toBe(false);
+  });
+
+  it("0件でも閉じた見出しを表示する", () => {
+    act(() => {
+      root.render(
+        createElement(PatternList, {
+          entries: [],
+          itemStates: [],
+          selectedEntries: [],
+          onToggleEntry: vi.fn(),
+        })
+      );
+    });
+
+    const trigger = container.querySelector<HTMLButtonElement>(
+      '[data-suno-control="entries-collapsible-trigger"]'
+    )!;
+    expect(trigger.textContent).toContain("楽曲 (0)");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("5 状態それぞれの選択・非選択で semantic token と選択 marker を競合なく描画する", () => {
     const states: ItemState[] = [
       "idle",
