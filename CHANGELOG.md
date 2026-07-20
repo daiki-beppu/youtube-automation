@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(extensions-ui)`: shared Base UI `RadioGroupItem` の選択時 root 塗りつぶしを除去し、semantic color の円枠と中央配置した indicator dot で状態を示す公式 primitive 構成へ是正した。Suno の mouse / keyboard 選択、保存、disabled、カード配色は維持する（#2332）。
 - `fix(suno-helper)`: 曲リストとコレクション選択の checkbox をラベル先頭行へ揃え、異常値再生成 OFF の余白も同じ 2px 基準へ統一した。1行時のカード中央配置、完了音、選択 callback・ARIA は維持する（#2325）。
 - `perf(ci)`: issue イベントごとの lint workflow を廃止し、PR / main push の changed path を共通 classifier で判定するようにした。required `lint` / `test` は常時結果を返しつつ、extension-only 変更では Python full suite・wheel smoke・Windows・ADR を起動せず、Extensions も影響 helper だけを検証する（#2333）。
 - `chore(extensions-ui)`: 公式 shadcn/ui skill をリポジトリ管理下へ導入し、Claude Code / Codex / wheel sync で共有する `info`・公式docs・registry diff先行のUI実装手順を追加した（#2323）。

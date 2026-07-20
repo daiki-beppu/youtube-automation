@@ -71,6 +71,11 @@ def test_shared_form_primitives_use_base_ui_state_contracts() -> None:
     assert "data-checked" in radio_group
     assert "disabled:opacity-50" in radio_group
     assert "focus-visible:ring-[3px]" in radio_group
+    assert "data-checked:bg-primary" not in radio_group
+    assert 'className="flex size-4 items-center justify-center"' in radio_group
+    assert "left-1/2 top-1/2" in radio_group
+    assert "-translate-x-1/2 -translate-y-1/2" in radio_group
+    assert "rounded-full bg-current" in radio_group
 
 
 def test_shared_theme_exposes_light_and_dark_status_token_triplets() -> None:

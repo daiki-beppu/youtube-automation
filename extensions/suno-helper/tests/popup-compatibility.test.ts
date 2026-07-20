@@ -534,7 +534,25 @@ describe("Suno popup compatibility check", () => {
           "data-checked:text-info-foreground",
         ])
       );
+      expect(radio.classList).not.toContain("data-checked:bg-primary");
     }
+    const selectedIndicator = serialMode.querySelector<HTMLElement>(
+      '[data-slot="radio-group-indicator"]'
+    );
+    expect(Array.from(selectedIndicator?.classList ?? [])).toEqual(
+      expect.arrayContaining(["size-4", "items-center", "justify-center"])
+    );
+    expect(
+      Array.from(selectedIndicator?.firstElementChild?.classList ?? [])
+    ).toEqual(
+      expect.arrayContaining([
+        "left-1/2",
+        "top-1/2",
+        "-translate-x-1/2",
+        "-translate-y-1/2",
+        "bg-current",
+      ])
+    );
     expectShadcnControl(
       serialMode.closest<HTMLElement>('[data-slot="field-label"]')!,
       "info",
@@ -1182,6 +1200,16 @@ describe("Suno popup compatibility check", () => {
     expect(
       radioByLabel(container, "高速モード").hasAttribute("data-checked")
     ).toBe(true);
+    expect(
+      radioByLabel(container, "高速モード").querySelector(
+        '[data-slot="radio-group-indicator"]'
+      )
+    ).not.toBeNull();
+    expect(
+      radioByLabel(container, "安全モード").querySelector(
+        '[data-slot="radio-group-indicator"]'
+      )
+    ).toBeNull();
     await act(async () => {
       radioByLabel(container, "安全モード").click();
       radioByLabel(container, "高速モード").click();
