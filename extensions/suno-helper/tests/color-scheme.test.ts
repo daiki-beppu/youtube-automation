@@ -47,23 +47,24 @@ afterEach(() => {
 });
 
 describe("watchColorScheme", () => {
-  it("adds dark for an initially dark OS theme", () => {
+  it("keeps only dark for an initially dark OS theme", () => {
     mockMatchMedia(true);
     const target = document.createElement("div");
+    target.classList.add("light");
 
     watchColorScheme(target);
 
-    expect(target.classList.contains("dark")).toBe(true);
+    expect([...target.classList]).toEqual(["dark"]);
   });
 
-  it("removes dark for an initially light OS theme", () => {
+  it("keeps only light for an initially light OS theme", () => {
     mockMatchMedia(false);
     const target = document.createElement("div");
     target.classList.add("dark");
 
     watchColorScheme(target);
 
-    expect(target.classList.contains("dark")).toBe(false);
+    expect([...target.classList]).toEqual(["light"]);
   });
 
   it("follows OS theme changes without reloading", () => {
@@ -72,10 +73,10 @@ describe("watchColorScheme", () => {
     watchColorScheme(target);
 
     matchMedia.emit(true);
-    expect(target.classList.contains("dark")).toBe(true);
+    expect([...target.classList]).toEqual(["dark"]);
 
     matchMedia.emit(false);
-    expect(target.classList.contains("dark")).toBe(false);
+    expect([...target.classList]).toEqual(["light"]);
   });
 
   it("removes the change listener during cleanup", () => {
