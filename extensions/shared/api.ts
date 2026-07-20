@@ -103,6 +103,11 @@ export interface ServerInfo {
   label: string;
 }
 
+export type Fetcher = (
+  input: string | URL | Request,
+  init?: RequestInit
+) => Promise<Response>;
+
 export type CompatibilityResult =
   | {
       status: "compatible" | "incompatible";
@@ -130,11 +135,13 @@ export function formatCompatibilityWarning(
 
 export async function resolveCompatibilityWarning(
   baseUrl: string,
-  extensionVersion: string
+  extensionVersion: string,
+  fetcher: Fetcher = fetch
 ): Promise<string> {
   const compatibility = await checkServerCompatibility(
     baseUrl,
-    extensionVersion
+    extensionVersion,
+    fetcher
   );
   return formatCompatibilityWarning(compatibility);
 }
@@ -388,8 +395,11 @@ async function fetchPromptArray(url: string): Promise<PromptEntry[]> {
   return (await fetchPromptResponseBody(url)).entries;
 }
 
-async function fetchJsonArray(url: string): Promise<unknown[]> {
-  const response = await fetch(url);
+async function fetchJsonArray(
+  url: string,
+  fetcher: Fetcher = fetch
+): Promise<unknown[]> {
+  const response = await fetcher(url);
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }
@@ -434,9 +444,10 @@ export async function fetchCommunityImage(
 
 /** サーバー version envelope を取得する（#1023）。404 は caller が旧サーバー判定に使う。 */
 export async function fetchServerVersion(
-  baseUrl: string
+  baseUrl: string,
+  fetcher: Fetcher = fetch
 ): Promise<ServerVersionInfo> {
-  const resp = await fetch(`${normalizeBaseUrl(baseUrl)}${VERSION_ROUTE}`);
+  const resp = await fetcher(`${normalizeBaseUrl(baseUrl)}${VERSION_ROUTE}`);
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
   }
@@ -471,8 +482,13 @@ export function parseServerInfo(data: unknown): ServerInfo {
   };
 }
 
-export async function fetchServerInfo(baseUrl: string): Promise<ServerInfo> {
-  const resp = await fetch(`${normalizeBaseUrl(baseUrl)}${SERVER_INFO_ROUTE}`);
+export async function fetchServerInfo(
+  baseUrl: string,
+  fetcher: Fetcher = fetch
+): Promise<ServerInfo> {
+  const resp = await fetcher(
+    `${normalizeBaseUrl(baseUrl)}${SERVER_INFO_ROUTE}`
+  );
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
   }
@@ -482,10 +498,11 @@ export async function fetchServerInfo(baseUrl: string): Promise<ServerInfo> {
 /** 拡張 version がサーバーの最低要求を満たすか確認する（#1023）。 */
 export async function checkServerCompatibility(
   baseUrl: string,
-  extensionVersion: string
+  extensionVersion: string,
+  fetcher: Fetcher = fetch
 ): Promise<CompatibilityResult> {
   try {
-    const info = await fetchServerVersion(baseUrl);
+    const info = await fetchServerVersion(baseUrl, fetcher);
     const result = {
       serverVersion: info.version,
       minExtensionVersion: info.min_extension_version,
@@ -723,9 +740,13 @@ export interface DistrokidReleaseRecord {
  * 空配列は throw せず返す（0 件 = 未配信 disc なしの正常ケース）。
  */
 export async function fetchDistrokidCollections(
-  baseUrl: string
+  baseUrl: string,
+  fetcher: Fetcher = fetch
 ): Promise<DistrokidCollectionSummary[]> {
-  const data = await fetchJsonArray(`${baseUrl}${DISTROKID_COLLECTIONS_ROUTE}`);
+  const data = await fetchJsonArray(
+    `${baseUrl}${DISTROKID_COLLECTIONS_ROUTE}`,
+    fetcher
+  );
   return data as DistrokidCollectionSummary[];
 }
 

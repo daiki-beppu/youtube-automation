@@ -1,4 +1,4 @@
-// popup 側の per-track 分割注入オーケストレーション（#871）。
+// overlay 側の per-track 分割注入オーケストレーション（#871）。
 //
 // injectStart → injectTrack*（track 数分）→ injectCover?（任意）→ injectFinish を逐次送る
 // 制御フローと停止境界（停止 race 修正の本体）を、transport（@webext-core/messaging /
@@ -6,7 +6,7 @@
 // Injector と対称に、送信・取得・停止判定を InjectChannel として外から渡す（content は実
 // transport を、テストは fake を渡す）。
 //
-// asset は 1 track ずつ fetch → 送信 → 解放を逐次実行し、popup memory を track 数に対し
+// asset は 1 track ずつ fetch → 送信 → 解放を逐次実行し、overlay memory を track 数に対し
 // O(1) に保つ。全 track を 1 メッセージで送ると Base64 化後に 64MiB 上限を超えるため分割する。
 
 import type { SerializedAsset } from "./asset-transfer";
@@ -14,7 +14,7 @@ import type { ReleasePayload } from "./types";
 
 // 注入オーケストレーションの境界（transport / 停止判定 / 進捗表示）。
 export interface InjectChannel {
-  // serverUrl 上の 1 asset を取得して直列化する（popup origin で fetch する必要がある）。
+  // serverUrl 上の 1 asset を overlay から取得して直列化する。
   fetchAsset(assetPath: string, filename: string): Promise<SerializedAsset>;
   // content へ注入セッションを開始する（テキスト / SELECT 系のみ、asset なし）。
   start(payload: ReleasePayload): Promise<void>;

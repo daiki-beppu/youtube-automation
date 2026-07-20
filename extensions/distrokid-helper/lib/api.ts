@@ -10,11 +10,16 @@ import { distrokidReleaseRoute } from "../../shared/constants";
 import { encodeAsset, type SerializedAsset } from "./asset-transfer";
 import type { ReleasePayload } from "./types";
 
+type Fetcher = (
+  input: string | URL | Request,
+  init?: RequestInit
+) => Promise<Response>;
+
 // release.json のサブパス（サーバー側 DISTROKID_RELEASE_ROUTE と対称の契約文字列）。
 const RELEASE_ROUTE = "/distrokid/release.json";
 
 // release.json が 404 を返したことを表す専用エラー。
-// 無効チャンネル（distrokid.enabled=false / 未配置）を popup がガイダンス表示で扱うために
+// 無効チャンネル（distrokid.enabled=false / 未配置）を overlay がガイダンス表示で扱うために
 // 汎用エラーと区別する（要件 #16）。
 export class ReleaseUnavailableError extends Error {
   constructor(message = "distrokid release is unavailable (404)") {
@@ -61,9 +66,12 @@ function normalizeReleasePayload(raw: unknown): ReleasePayload {
 }
 
 // release.json を取得する。404 は ReleaseUnavailableError、その他の非 OK は汎用 Error。
-export async function fetchRelease(baseUrl: string): Promise<ReleasePayload> {
+export async function fetchRelease(
+  baseUrl: string,
+  fetcher: Fetcher = fetch
+): Promise<ReleasePayload> {
   const url = `${normalizeBaseUrl(baseUrl)}${RELEASE_ROUTE}`;
-  const response = await fetch(url, { method: "GET" });
+  const response = await fetcher(url, { method: "GET" });
 
   if (response.status === 404) {
     throw new ReleaseUnavailableError();
@@ -81,11 +89,12 @@ export async function fetchRelease(baseUrl: string): Promise<ReleasePayload> {
 export async function fetchCollectionRelease(
   baseUrl: string,
   collectionId: string,
-  disc: string
+  disc: string,
+  fetcher: Fetcher = fetch
 ): Promise<ReleasePayload> {
   const route = distrokidReleaseRoute(collectionId, disc);
   const url = `${normalizeBaseUrl(baseUrl)}${route}`;
-  const response = await fetch(url, { method: "GET" });
+  const response = await fetcher(url, { method: "GET" });
 
   if (response.status === 404) {
     throw new ReleaseUnavailableError();
@@ -98,7 +107,6 @@ export async function fetchCollectionRelease(
 }
 
 // asset（曲 / ジャケット）を取得し、content へ転送するため直列化して返す。
-// fetch は popup（chrome-extension:// origin）で行う必要がある（asset-transfer.ts 参照）。
 // assetPath は接頭辞 "/distrokid/assets/" または "/collections/<id>/distrokid/assets/" 込みのため
 // baseUrl と連結するだけでよい（dir mode の collection-scoped asset_path も同形式）。
 export async function fetchAsset(

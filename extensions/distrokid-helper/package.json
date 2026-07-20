@@ -21,6 +21,7 @@
     "@base-ui/react": "1.6.0",
     "@webext-core/messaging": "2.3.0",
     "@wxt-dev/storage": "1.2.8",
+    "@youtube-automation/extensions-shared": "workspace:*",
     "@youtube-automation/ui": "workspace:*",
     "react": "19.2.7",
     "react-dom": "19.2.7"

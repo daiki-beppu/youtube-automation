@@ -24,6 +24,9 @@ export const COLLECTION_QUEUE_STATE_KEY = "sunoCollectionQueueState";
  * Suno は 1 タブ運用前提のため global 単一 key とする。lib/overlay-storage.ts が共通 adapter へ注入する。 */
 export const OVERLAY_STATE_KEY = "sunoOverlayState";
 
+/** DistroKid overlay state is isolated from the other helper overlays. */
+export const DISTROKID_OVERLAY_STATE_KEY = "distrokidOverlayState";
+
 /** run 一式完了時リロード (#1411) で失われる直近完了 run の snapshot を退避する chrome.storage.local の key。
  * content が FINISHED 到達時（リロード予約の直前）に書き、リロード後の queryProgress が復元ソースとして読む。
  * lib/finished-snapshot.ts が SSOT として参照する。 */

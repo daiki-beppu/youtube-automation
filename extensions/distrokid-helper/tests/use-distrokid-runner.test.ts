@@ -108,6 +108,20 @@ const discoveryMocks = vi.hoisted(() => ({
 
 vi.mock("../../shared/server-discovery", () => discoveryMocks);
 
+vi.mock("../lib/background-fetch", async () => {
+  const { encodeAsset } = await import("../lib/asset-transfer");
+  return {
+    backgroundFetch: (input: string | URL | Request, init?: RequestInit) =>
+      init === undefined ? fetch(input) : fetch(input, init),
+    backgroundFetchAsset: async (url: string, filename: string) => {
+      const response = await fetch(url, { method: "GET" });
+      if (!response.ok)
+        throw new Error(`asset fetch failed: HTTP ${response.status}`);
+      return encodeAsset(filename, await response.blob());
+    },
+  };
+});
+
 vi.mock("../lib/messaging", () => ({
   onMessage: vi.fn(() => () => undefined),
   sendMessage: vi.fn(async () => undefined),
@@ -371,7 +385,7 @@ describe("useDistrokidRunner", () => {
       await current.stop();
     });
 
-    expect(sendMessage).toHaveBeenCalledWith("stop", undefined, 1);
+    expect(sendMessage).toHaveBeenCalledWith("stop");
   });
 
   it("inject: 完了後に配信済み記録を POST し、一覧を再取得して配信済み disc を除外する", async () => {
@@ -382,18 +396,13 @@ describe("useDistrokidRunner", () => {
       await current.inject();
     });
 
-    // injectStart → injectTrack → injectFinish（cover なし）を tab 1 へ送る。
-    expect(sendMessage).toHaveBeenCalledWith(
-      "injectStart",
-      expect.anything(),
-      1
-    );
+    // background relay 経由で injectStart → injectTrack → injectFinish（cover なし）を送る。
+    expect(sendMessage).toHaveBeenCalledWith("injectStart", expect.anything());
     expect(sendMessage).toHaveBeenCalledWith(
       "injectTrack",
-      expect.objectContaining({ trackIndex: 0 }),
-      1
+      expect.objectContaining({ trackIndex: 0 })
     );
-    expect(sendMessage).toHaveBeenCalledWith("injectFinish", undefined, 1);
+    expect(sendMessage).toHaveBeenCalledWith("injectFinish");
     // 配信済み記録は background に委譲し、その成功後の再取得で disc1 が select から消える。
     expect(sendMessage).toHaveBeenCalledWith("recordRelease", {
       baseUrl: BASE_URL,
@@ -451,11 +460,9 @@ describe("useDistrokidRunner", () => {
       await Promise.resolve();
     });
     await waitFor(() => {
-      expect(sendMessage).toHaveBeenCalledWith(
-        "injectStart",
-        { payload: RELEASE_PAYLOAD },
-        1
-      );
+      expect(sendMessage).toHaveBeenCalledWith("injectStart", {
+        payload: RELEASE_PAYLOAD,
+      });
       expect(current.isInjecting).toBe(true);
     });
 

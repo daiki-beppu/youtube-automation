@@ -50,6 +50,13 @@ describe("lib/manifest: 最小権限契約", () => {
 });
 
 describe("wxt.config: manifest 権限の SSOT 一致", () => {
+  it("native popup を持たず action click を overlay toggle に使える", () => {
+    const action = (
+      wxtConfig.manifest as { action?: { default_popup?: string } }
+    ).action;
+    expect(action?.default_popup).toBeUndefined();
+  });
+
   it("Given wxt.config の manifest When permissions を読む Then MANIFEST_PERMISSIONS と一致する", () => {
     const manifest = wxtConfig.manifest;
     expect(typeof manifest).toBe("object");

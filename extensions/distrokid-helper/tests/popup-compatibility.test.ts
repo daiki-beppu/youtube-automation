@@ -4,7 +4,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { App } from "../entrypoints/popup/App";
+import { App } from "../components/App";
 import { sendMessage } from "../lib/messaging";
 import { migrateServerSourcesStorage, serverUrlItem } from "../lib/storage";
 import type { ReleasePayload } from "../lib/types";
@@ -111,6 +111,20 @@ const discoveryMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../shared/server-discovery", () => discoveryMocks);
+
+vi.mock("../lib/background-fetch", async () => {
+  const { encodeAsset } = await import("../lib/asset-transfer");
+  return {
+    backgroundFetch: (input: string | URL | Request, init?: RequestInit) =>
+      init === undefined ? fetch(input) : fetch(input, init),
+    backgroundFetchAsset: async (url: string, filename: string) => {
+      const response = await fetch(url, { method: "GET" });
+      if (!response.ok)
+        throw new Error(`asset fetch failed: HTTP ${response.status}`);
+      return encodeAsset(filename, await response.blob());
+    },
+  };
+});
 
 vi.mock("../lib/messaging", () => ({
   onMessage: vi.fn(() => () => undefined),
@@ -530,11 +544,9 @@ describe("DistroKid popup compatibility check", () => {
       expect(stopButton.disabled).toBe(false);
       expect(container.querySelector('[role="listbox"]')).toBeNull();
     });
-    expect(sendMessage).toHaveBeenCalledWith(
-      "injectStart",
-      { payload: RELEASE_PAYLOAD },
-      1
-    );
+    expect(sendMessage).toHaveBeenCalledWith("injectStart", {
+      payload: RELEASE_PAYLOAD,
+    });
     const discoveryCountDuringInjection =
       discoveryMocks.discoverServerSources.mock.calls.length;
 
@@ -553,7 +565,7 @@ describe("DistroKid popup compatibility check", () => {
     await act(async () => {
       stopButton.click();
     });
-    expect(sendMessage).toHaveBeenCalledWith("stop", undefined, 1);
+    expect(sendMessage).toHaveBeenCalledWith("stop");
 
     await act(async () => {
       injectionStart.resolve();

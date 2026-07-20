@@ -12,8 +12,8 @@ import { ServerUrlField } from "@/components/ServerUrlField";
 import { StatusBanner } from "@/components/StatusBanner";
 import { useDistrokidRunner } from "@/components/useDistrokidRunner";
 
-// popup は表示とイベント接続に集中し、runner state と実行制御は useDistrokidRunner が
-// 所有する（#1361、ADR-0016 の helper extension shell 構成）。
+// overlay body は表示とイベント接続に集中し、runner state と実行制御は
+// useDistrokidRunner が所有する（#1361、ADR-0016）。
 export function App() {
   const {
     serverUrl,
@@ -36,8 +36,6 @@ export function App() {
 
   return (
     <main className="flex flex-col gap-3 bg-background p-4 text-foreground">
-      <h1 className="text-base font-bold">DistroKid Helper</h1>
-
       <ServerUrlField
         value={serverUrl}
         sources={serverSources}
