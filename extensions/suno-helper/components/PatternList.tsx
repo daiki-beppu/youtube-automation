@@ -1,4 +1,4 @@
-import { ButtonSlot, Checkbox } from "@youtube-automation/ui";
+import { buttonVariants, Checkbox, FieldLabel } from "@youtube-automation/ui";
 
 import type { PromptEntry } from "../../shared/api";
 import type { ItemState } from "../../shared/constants";
@@ -53,22 +53,26 @@ export function PatternList({
             data-suno-entry-state={itemState}
             data-suno-entry-selected={selected ? "true" : "false"}
           >
-            <ButtonSlot
-              variant="outline"
-              size="sm"
-              className={`h-auto w-full justify-start whitespace-normal p-0 font-normal ${STATE_CLASS[itemState]} ${SELECTION_CLASS[selected ? "selected" : "unselected"]}`}
+            <FieldLabel
+              data-variant="outline"
+              data-size="sm"
+              className={buttonVariants({
+                variant: "outline",
+                size: "sm",
+                className: `h-auto w-full justify-start whitespace-normal p-0 font-normal ${STATE_CLASS[itemState]} ${SELECTION_CLASS[selected ? "selected" : "unselected"]}`,
+              })}
             >
-              <label className="flex items-center gap-2 px-2 py-1">
-                <Checkbox
-                  checked={selected}
-                  onCheckedChange={(checked) =>
-                    onToggleEntry(index, checked === true)
-                  }
-                  aria-label={`entry ${index + 1}: ${entry.name}`}
-                />
-                <span className="min-w-0 flex-1 text-left">{entry.name}</span>
-              </label>
-            </ButtonSlot>
+              <Checkbox
+                checked={selected}
+                onCheckedChange={(checked) =>
+                  onToggleEntry(index, checked === true)
+                }
+                aria-label={`entry ${index + 1}: ${entry.name}`}
+              />
+              <span className="min-w-0 flex-1 px-2 py-1 text-left">
+                {entry.name}
+              </span>
+            </FieldLabel>
           </li>
         );
       })}

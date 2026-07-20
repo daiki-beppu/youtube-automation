@@ -278,27 +278,22 @@ function buttonByText(container: HTMLElement, text: string): HTMLButtonElement {
   return button;
 }
 
-function radioByLabel(container: HTMLElement, text: string): HTMLButtonElement {
+function radioByLabel(container: HTMLElement, text: string): HTMLElement {
   const label = Array.from(container.querySelectorAll("label")).find(
     (candidate) => candidate.textContent?.includes(text)
   );
-  const input = label?.querySelector<HTMLButtonElement>('[role="radio"]');
+  const input = label?.querySelector<HTMLElement>('[role="radio"]');
   if (!input) {
     throw new Error(`radio not found: ${text}`);
   }
   return input;
 }
 
-function checkboxByLabel(
-  container: HTMLElement,
-  text: string
-): HTMLButtonElement {
+function checkboxByLabel(container: HTMLElement, text: string): HTMLElement {
   const label = Array.from(container.querySelectorAll("label")).find(
     (candidate) => candidate.textContent?.includes(text)
   );
-  const input = label?.querySelector<HTMLButtonElement>(
-    '[data-slot="checkbox"]'
-  );
+  const input = label?.querySelector<HTMLElement>('[data-slot="checkbox"]');
   if (!input) {
     throw new Error(`checkbox not found: ${text}`);
   }
@@ -329,9 +324,10 @@ function expectShadcnControl(
     | "info"
     | "outline"
     | "success"
-    | "warning"
+    | "warning",
+  slot = "button"
 ): void {
-  expect(element.dataset.slot).toBe("button");
+  expect(element.dataset.slot).toBe(slot);
   expect(element.dataset.variant).toBe(variant);
   expect(element.dataset.size).toBe("sm");
 }
@@ -495,7 +491,9 @@ describe("Suno popup compatibility check", () => {
   it("可視 control を shared shadcn primitive で描画し、value・aria・data 属性を維持する", () => {
     const collectionSelect = expectControl(container, "collection-select");
     expect(collectionSelect).toBeInstanceOf(HTMLSelectElement);
-    expectShadcnControl(collectionSelect, "outline");
+    expect(collectionSelect.classList).toContain("sr-only");
+    expect(collectionSelect.getAttribute("aria-hidden")).toBe("true");
+    expect(collectionSelect.getAttribute("role")).not.toBe("button");
 
     const serverTrigger = expectControl(container, "server-source-trigger");
     expectShadcnControl(serverTrigger, "outline");
@@ -521,25 +519,31 @@ describe("Suno popup compatibility check", () => {
     const queueMode = radioByLabel(container, "高速モード");
     expect(serialMode.dataset.slot).toBe("radio-group-item");
     expect(queueMode.dataset.slot).toBe("radio-group-item");
-    expect(serialMode.value).toBe("serial");
-    expect(serialMode.dataset.state).toBe("checked");
-    expect(queueMode.value).toBe("queue");
-    expect(queueMode.dataset.state).toBe("unchecked");
+    expect((serialMode.nextElementSibling as HTMLInputElement).value).toBe(
+      "serial"
+    );
+    expect(serialMode.hasAttribute("data-checked")).toBe(true);
+    expect((queueMode.nextElementSibling as HTMLInputElement).value).toBe(
+      "queue"
+    );
+    expect(queueMode.hasAttribute("data-checked")).toBe(false);
     for (const radio of [serialMode, queueMode]) {
       expect(Array.from(radio.classList)).toEqual(
         expect.arrayContaining([
-          "data-[state=checked]:border-info-foreground",
-          "data-[state=checked]:text-info-foreground",
+          "data-checked:border-info-foreground",
+          "data-checked:text-info-foreground",
         ])
       );
     }
     expectShadcnControl(
-      serialMode.closest<HTMLElement>('[data-slot="button"]')!,
-      "info"
+      serialMode.closest<HTMLElement>('[data-slot="field-label"]')!,
+      "info",
+      "field-label"
     );
     expectShadcnControl(
-      queueMode.closest<HTMLElement>('[data-slot="button"]')!,
-      "outline"
+      queueMode.closest<HTMLElement>('[data-slot="field-label"]')!,
+      "outline",
+      "field-label"
     );
 
     expectShadcnControl(expectControl(container, "run"), "info");
@@ -900,7 +904,7 @@ describe("Suno popup compatibility check", () => {
     });
     const warning = alertByText(container, "拡張を更新してください");
     expect(warning.dataset.variant).toBe("warning");
-    expect(warning.getAttribute("role")).toBeNull();
+    expect(warning.getAttribute("role")).toBe("alert");
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/version`);
     expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/collections`);
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -1000,8 +1004,8 @@ describe("Suno popup compatibility check", () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     const runResponse = deferred<unknown>();
     const outlierOption = checkboxByLabel(container, "異常値の曲を再生成する");
-    expect(outlierOption.dataset.state).toBe("checked");
-    expect(outlierOption.disabled).toBe(true);
+    expect(outlierOption.hasAttribute("data-checked")).toBe(true);
+    expect(outlierOption.hasAttribute("data-disabled")).toBe(true);
     fetchMock
       .mockResolvedValueOnce(
         jsonResponse(200, {
@@ -1034,11 +1038,11 @@ describe("Suno popup compatibility check", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
-    expect(outlierOption.disabled).toBe(false);
+    expect(outlierOption.hasAttribute("data-disabled")).toBe(false);
     await act(async () => {
       outlierOption.click();
     });
-    expect(outlierOption.dataset.state).toBe("unchecked");
+    expect(outlierOption.hasAttribute("data-checked")).toBe(false);
     expect(container.textContent).toContain(
       "duration guard NG も Playlist / Download 候補に残ります"
     );
@@ -1063,7 +1067,7 @@ describe("Suno popup compatibility check", () => {
       expect(panel?.dataset.sunoPhase).toBe("starting");
       expect(panel?.dataset.sunoRunning).toBe("true");
       expect(buttonByText(container, "停止").disabled).toBe(false);
-      expect(outlierOption.disabled).toBe(true);
+      expect(outlierOption.hasAttribute("data-disabled")).toBe(true);
     });
 
     await act(async () => {
@@ -1132,24 +1136,39 @@ describe("Suno popup compatibility check", () => {
     });
 
     await act(async () => {
+      const serialMode = radioByLabel(container, "安全モード");
+      serialMode.focus();
+      serialMode.dispatchEvent(
+        new KeyboardEvent("keydown", { bubbles: true, key: "ArrowRight" })
+      );
+    });
+    expect(
+      radioByLabel(container, "高速モード").hasAttribute("data-checked")
+    ).toBe(true);
+    await act(async () => {
+      radioByLabel(container, "安全モード").click();
       radioByLabel(container, "高速モード").click();
     });
     expect(presetStateMocks.writeRunModeId).toHaveBeenCalledWith("queue");
-    expect(radioByLabel(container, "安全モード").dataset.state).toBe(
-      "unchecked"
-    );
-    expect(radioByLabel(container, "高速モード").dataset.state).toBe("checked");
+    expect(
+      radioByLabel(container, "安全モード").hasAttribute("data-checked")
+    ).toBe(false);
+    expect(
+      radioByLabel(container, "高速モード").hasAttribute("data-checked")
+    ).toBe(true);
     expectShadcnControl(
       radioByLabel(container, "安全モード").closest<HTMLElement>(
-        '[data-slot="button"]'
+        '[data-slot="field-label"]'
       )!,
-      "outline"
+      "outline",
+      "field-label"
     );
     expectShadcnControl(
       radioByLabel(container, "高速モード").closest<HTMLElement>(
-        '[data-slot="button"]'
+        '[data-slot="field-label"]'
       )!,
-      "info"
+      "info",
+      "field-label"
     );
 
     messagingMocks.sendMessage.mockClear();
@@ -1394,8 +1413,10 @@ describe("Suno popup compatibility check", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("前回の実行が中断されました。");
       expect(
-        checkboxByLabel(container, "異常値の曲を再生成する").dataset.state
-      ).toBe("unchecked");
+        checkboxByLabel(container, "異常値の曲を再生成する").hasAttribute(
+          "data-checked"
+        )
+      ).toBe(false);
     });
 
     messagingMocks.sendMessage.mockClear();
@@ -1492,7 +1513,7 @@ describe("Suno popup compatibility check", () => {
       "失敗してスキップされた entry: 2"
     );
     expect(failedAlert.dataset.variant).toBe("destructive");
-    expect(failedAlert.getAttribute("role")).toBeNull();
+    expect(failedAlert.getAttribute("role")).toBe("alert");
     expectShadcnControl(
       buttonByText(container, "失敗分のみ再実行"),
       "destructive"
@@ -1612,7 +1633,7 @@ describe("Suno popup compatibility check", () => {
       )
     );
     expect(
-      checkboxes.map((checkbox) => checkbox.dataset.state === "checked")
+      checkboxes.map((checkbox) => checkbox.hasAttribute("data-checked"))
     ).toEqual([true, true, true]);
 
     await act(async () => {
@@ -1705,8 +1726,10 @@ describe("Suno popup compatibility check", () => {
       expect(container.textContent).toContain("前回の実行が中断されました。");
       expect(container.textContent).toContain("異常値警告");
       expect(
-        checkboxByLabel(container, "異常値の曲を再生成する").dataset.state
-      ).toBe("unchecked");
+        checkboxByLabel(container, "異常値の曲を再生成する").hasAttribute(
+          "data-checked"
+        )
+      ).toBe(false);
     });
 
     messagingMocks.sendMessage.mockClear();
@@ -1864,7 +1887,7 @@ describe("Suno popup compatibility check", () => {
       )
     );
     expect(
-      checkboxes.map((checkbox) => checkbox.dataset.state === "checked")
+      checkboxes.map((checkbox) => checkbox.hasAttribute("data-checked"))
     ).toEqual([true, true, true]);
 
     for (const checkbox of checkboxes) {
@@ -2738,7 +2761,7 @@ describe("Suno popup compatibility check", () => {
         container.querySelectorAll<HTMLButtonElement>(
           '[data-suno-entry-index] [data-slot="checkbox"]'
         )
-      ).map((checkbox) => checkbox.dataset.state === "checked");
+      ).map((checkbox) => checkbox.hasAttribute("data-checked"));
 
     await waitFor(() => {
       expect(checkboxStates()).toEqual([true, true, true]);
@@ -3009,7 +3032,7 @@ describe("Suno popup compatibility check", () => {
     });
     const resumeAlert = alertByText(container, "前回の実行が中断されました。");
     expect(resumeAlert.dataset.variant).toBe("warning");
-    expect(resumeAlert.getAttribute("role")).toBeNull();
+    expect(resumeAlert.getAttribute("role")).toBe("alert");
     expectShadcnControl(expectControl(container, "resume"), "warning");
     expectShadcnControl(expectControl(container, "dismiss-resume"), "outline");
 

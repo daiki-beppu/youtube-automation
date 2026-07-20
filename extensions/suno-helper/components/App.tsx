@@ -1,8 +1,9 @@
 import {
   Alert,
   Button,
-  ButtonSlot,
+  buttonVariants,
   Checkbox,
+  FieldLabel,
   RadioGroup,
   RadioGroupItem,
   Select,
@@ -360,66 +361,63 @@ export function App() {
         {collections.map((collection) => {
           const checked = selectedCollectionIds.includes(collection.id);
           return (
-            <ButtonSlot
+            <FieldLabel
               key={collection.id}
-              variant={checked ? "secondary" : "outline"}
-              size="sm"
-              className="h-auto w-full justify-start whitespace-normal p-2"
+              data-variant={checked ? "secondary" : "outline"}
+              data-size="sm"
+              data-disabled={
+                controlsLocked || collection.status === "needs_prompts"
+              }
+              className={buttonVariants({
+                variant: checked ? "secondary" : "outline",
+                size: "sm",
+                className: "h-auto w-full justify-start whitespace-normal p-2",
+              })}
             >
-              <label className="flex items-start gap-2">
-                <Checkbox
-                  className="mt-1"
-                  checked={checked}
-                  disabled={
-                    controlsLocked || collection.status === "needs_prompts"
-                  }
-                  data-suno-control="collection-checkbox"
-                  aria-label={`${collection.name} を選択`}
-                  onCheckedChange={(nextChecked) =>
-                    toggleCollectionSelection(
-                      collection.id,
-                      nextChecked === true
-                    )
-                  }
-                />
-                <span className="flex flex-col text-left">
-                  <span className="font-medium">{collection.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {collection.status === "downloaded"
-                      ? `完了 ${collection.downloaded_count}/${collection.expected_file_count ?? (collection.pattern_count ?? 0) * 2}`
-                      : collection.status === "ready"
-                        ? `${collection.pattern_count} patterns`
-                        : "prompts なし"}
-                  </span>
+              <Checkbox
+                className="mt-1"
+                checked={checked}
+                disabled={
+                  controlsLocked || collection.status === "needs_prompts"
+                }
+                data-suno-control="collection-checkbox"
+                aria-label={`${collection.name} を選択`}
+                onCheckedChange={(nextChecked) =>
+                  toggleCollectionSelection(collection.id, nextChecked === true)
+                }
+              />
+              <span className="flex flex-col text-left">
+                <span className="font-medium">{collection.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {collection.status === "downloaded"
+                    ? `完了 ${collection.downloaded_count}/${collection.expected_file_count ?? (collection.pattern_count ?? 0) * 2}`
+                    : collection.status === "ready"
+                      ? `${collection.pattern_count} patterns`
+                      : "prompts なし"}
                 </span>
-              </label>
-            </ButtonSlot>
+              </span>
+            </FieldLabel>
           );
         })}
       </fieldset>
-      <ButtonSlot
-        variant="outline"
-        size="sm"
+      <select
+        value={selectedCollectionId}
+        onChange={(event) => selectCollection(event.target.value)}
+        data-suno-control="collection-select"
+        tabIndex={-1}
         className="sr-only"
         aria-hidden="true"
       >
-        <select
-          value={selectedCollectionId}
-          onChange={(event) => selectCollection(event.target.value)}
-          data-suno-control="collection-select"
-          tabIndex={-1}
-        >
-          {collections.map((collection) => (
-            <option key={collection.id} value={collection.id}>
-              {collection.status === "downloaded"
-                ? `${collection.name}（完了 ${collection.downloaded_count}/${collection.expected_file_count ?? (collection.pattern_count ?? 0) * 2}）`
-                : collection.status === "ready"
-                  ? `${collection.name} (${collection.pattern_count})`
-                  : `${collection.name}（prompts なし）`}
-            </option>
-          ))}
-        </select>
-      </ButtonSlot>
+        {collections.map((collection) => (
+          <option key={collection.id} value={collection.id}>
+            {collection.status === "downloaded"
+              ? `${collection.name}（完了 ${collection.downloaded_count}/${collection.expected_file_count ?? (collection.pattern_count ?? 0) * 2}）`
+              : collection.status === "ready"
+                ? `${collection.name} (${collection.pattern_count})`
+                : `${collection.name}（prompts なし）`}
+          </option>
+        ))}
+      </select>
 
       {collectionQueue && (
         <Alert
@@ -561,27 +559,31 @@ export function App() {
           {RUN_MODE_ORDER.map((id) => {
             const mode = RUN_MODES[id];
             return (
-              <ButtonSlot
+              <FieldLabel
                 key={id}
-                variant={runModeId === id ? "info" : "outline"}
-                size="sm"
-                className="h-auto w-full justify-start whitespace-normal p-2"
+                data-variant={runModeId === id ? "info" : "outline"}
+                data-size="sm"
+                data-disabled={controlsLocked}
+                className={buttonVariants({
+                  variant: runModeId === id ? "info" : "outline",
+                  size: "sm",
+                  className:
+                    "h-auto w-full justify-start whitespace-normal p-2",
+                })}
               >
-                <label className="flex items-start gap-2">
-                  <RadioGroupItem
-                    value={id}
-                    className="mt-1 data-[state=checked]:border-info-foreground data-[state=checked]:text-info-foreground"
-                    aria-label={mode.label}
-                    data-suno-control="run-mode"
-                  />
-                  <span className="flex flex-col">
-                    <span className="font-medium">{mode.label}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {mode.riskNote}
-                    </span>
+                <RadioGroupItem
+                  value={id}
+                  className="mt-1 data-checked:border-info-foreground data-checked:text-info-foreground"
+                  aria-label={mode.label}
+                  data-suno-control="run-mode"
+                />
+                <span className="flex flex-col">
+                  <span className="font-medium">{mode.label}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {mode.riskNote}
                   </span>
-                </label>
-              </ButtonSlot>
+                </span>
+              </FieldLabel>
             );
           })}
         </RadioGroup>
@@ -621,6 +623,10 @@ export function App() {
         <span id="download-format-label">DL 形式</span>
         <Select
           value={downloadFormat}
+          items={DOWNLOAD_FORMAT_OPTIONS.map((format) => ({
+            value: format,
+            label: format.toUpperCase(),
+          }))}
           disabled={controlsLocked}
           onValueChange={(value) =>
             updateDownloadFormat(value as DownloadFormat)

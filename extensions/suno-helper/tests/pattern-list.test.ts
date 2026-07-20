@@ -122,7 +122,9 @@ describe("PatternList checkbox UI", () => {
       container.querySelectorAll<HTMLLIElement>("[data-suno-entry-index]")
     );
     rows.forEach((row, index) => {
-      const control = row.querySelector<HTMLElement>('[data-slot="button"]')!;
+      const control = row.querySelector<HTMLElement>(
+        '[data-slot="field-label"]'
+      )!;
       const selected = index % 2 === 1;
       expect(row.dataset.sunoEntryState).toBe(states[index]);
       expect(row.dataset.sunoEntrySelected).toBe(String(selected));
@@ -152,7 +154,7 @@ describe("PatternList checkbox UI", () => {
       container.querySelectorAll<HTMLButtonElement>('[data-slot="checkbox"]')
     );
     expect(
-      checkboxes.map((checkbox) => checkbox.dataset.state === "checked")
+      checkboxes.map((checkbox) => checkbox.hasAttribute("data-checked"))
     ).toEqual([true, false, true, false, true]);
     expect(
       checkboxes.map((checkbox) => checkbox.getAttribute("aria-label"))
@@ -203,7 +205,7 @@ describe("PatternList checkbox UI", () => {
       checkboxes.every((checkbox) => checkbox.dataset.slot === "checkbox")
     ).toBe(true);
     const controls = rows.map((row) =>
-      row.querySelector<HTMLElement>('[data-slot="button"]')!
+      row.querySelector<HTMLElement>('[data-slot="field-label"]')!
     );
     const stateTokens = [
       ["border-border", "bg-background", "text-foreground"],
@@ -263,13 +265,11 @@ describe("PatternList checkbox UI", () => {
       container.querySelectorAll<HTMLButtonElement>('[data-slot="checkbox"]')
     );
     expect(
-      checkboxes.map((checkbox) => checkbox.dataset.state === "checked")
+      checkboxes.map((checkbox) => checkbox.hasAttribute("data-checked"))
     ).toEqual([true, false, true]);
-    expect(checkboxes.map((checkbox) => checkbox.disabled)).toEqual([
-      false,
-      false,
-      false,
-    ]);
+    expect(
+      checkboxes.map((checkbox) => checkbox.hasAttribute("data-disabled"))
+    ).toEqual([false, false, false]);
 
     act(() => {
       checkboxes[0]!.click();
@@ -280,7 +280,7 @@ describe("PatternList checkbox UI", () => {
       container.querySelectorAll<HTMLButtonElement>('[data-slot="checkbox"]')
     );
     expect(
-      checkboxes.map((checkbox) => checkbox.dataset.state === "checked")
+      checkboxes.map((checkbox) => checkbox.hasAttribute("data-checked"))
     ).toEqual([false, true, true]);
     const rows = Array.from(
       container.querySelectorAll<HTMLLIElement>("[data-suno-entry-index]")
@@ -294,5 +294,35 @@ describe("PatternList checkbox UI", () => {
       rows.map((row) => row.querySelector("label")?.dataset.variant)
     ).toEqual(["outline", "outline", "outline"]);
     expect(rows[1].className).toContain("line-through");
+  });
+
+  it("Space キーで checkbox を1回だけ切り替える", () => {
+    const onToggleEntry = vi.fn();
+    act(() => {
+      root.render(
+        createElement(PatternList, {
+          entries: makePromptEntries(1),
+          itemStates: ["idle"],
+          selectedEntries: [true],
+          onToggleEntry,
+        })
+      );
+    });
+
+    const checkbox = container.querySelector<HTMLElement>(
+      '[data-slot="checkbox"]'
+    )!;
+    act(() => {
+      checkbox.focus();
+      checkbox.dispatchEvent(
+        new KeyboardEvent("keydown", { bubbles: true, key: " " })
+      );
+      checkbox.dispatchEvent(
+        new KeyboardEvent("keyup", { bubbles: true, key: " " })
+      );
+    });
+
+    expect(onToggleEntry).toHaveBeenCalledOnce();
+    expect(onToggleEntry).toHaveBeenCalledWith(0, false);
   });
 });

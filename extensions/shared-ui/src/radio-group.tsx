@@ -1,14 +1,11 @@
-import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
-import * as React from "react";
+import { Radio as RadioPrimitive } from "@base-ui/react/radio";
+import { RadioGroup as RadioGroupPrimitive } from "@base-ui/react/radio-group";
 
 import { cn } from "./utils";
 
-function RadioGroup({
-  className,
-  ...props
-}: React.ComponentProps<typeof RadioGroupPrimitive.Root>) {
+function RadioGroup({ className, ...props }: RadioGroupPrimitive.Props) {
   return (
-    <RadioGroupPrimitive.Root
+    <RadioGroupPrimitive
       data-slot="radio-group"
       className={cn("grid gap-3", className)}
       {...props}
@@ -16,26 +13,23 @@ function RadioGroup({
   );
 }
 
-function RadioGroupItem({
-  className,
-  ...props
-}: React.ComponentProps<typeof RadioGroupPrimitive.Item>) {
+function RadioGroupItem({ className, ...props }: RadioPrimitive.Root.Props) {
   return (
-    <RadioGroupPrimitive.Item
+    <RadioPrimitive.Root
       data-slot="radio-group-item"
       className={cn(
-        "aspect-square size-4 shrink-0 rounded-full border border-input text-primary shadow-xs outline-none transition-shadow focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-primary",
+        "peer relative flex aspect-square size-4 shrink-0 rounded-full border border-input text-primary shadow-xs outline-none transition-shadow after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-checked:border-primary data-checked:bg-primary data-checked:text-primary-foreground dark:bg-input/30 dark:data-checked:bg-primary",
         className
       )}
       {...props}
     >
-      <RadioGroupPrimitive.Indicator
+      <RadioPrimitive.Indicator
         data-slot="radio-group-indicator"
         className="flex items-center justify-center"
       >
         <span className="size-2 rounded-full bg-current" />
-      </RadioGroupPrimitive.Indicator>
-    </RadioGroupPrimitive.Item>
+      </RadioPrimitive.Indicator>
+    </RadioPrimitive.Root>
   );
 }
 

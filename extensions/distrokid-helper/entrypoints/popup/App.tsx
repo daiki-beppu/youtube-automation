@@ -58,6 +58,10 @@ export function App() {
           <span id="collection-select-label">コレクション</span>
           <Select
             value={String(selectedIndex)}
+            items={collections.map((item, index) => ({
+              value: String(index),
+              label: `${item.name} / ${item.disc}（${item.album_title}・${item.track_count} 曲）`,
+            }))}
             disabled={isInjecting}
             onValueChange={(value) => selectCollection(Number(value))}
           >

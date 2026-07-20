@@ -260,8 +260,8 @@ describe("Overlay shell", () => {
       canRun: true,
     });
     await act(async () => root.render(createElement(Overlay)));
-    const checkboxes = container.querySelectorAll<HTMLButtonElement>(
-      'button[data-suno-control="collection-checkbox"]'
+    const checkboxes = container.querySelectorAll<HTMLElement>(
+      '[data-suno-control="collection-checkbox"]'
     );
 
     expect(checkboxes).toHaveLength(2);
