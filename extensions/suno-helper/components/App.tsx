@@ -637,7 +637,7 @@ export function App() {
                   }),
                   "h-auto w-full justify-start whitespace-normal p-2",
                   selected &&
-                    "bg-info-background/40 hover:bg-info-background/60 dark:bg-info-background/25 dark:hover:bg-info-background/40"
+                    "bg-info-background/40 hover:bg-info-background/60"
                 )}
               >
                 <RadioGroupItem

@@ -50,7 +50,7 @@ describe("Tailwind 4 build integration", () => {
       expect.objectContaining(
         new Map([
           ["--radius", ".625rem"],
-          ["--background", "oklch(100% 0 0)"],
+          ["--background", "oklch(97% 0 0)"],
         ])
       )
     );
