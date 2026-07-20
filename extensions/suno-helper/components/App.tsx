@@ -570,7 +570,7 @@ export function App() {
                 <label className="flex items-start gap-2">
                   <RadioGroupItem
                     value={id}
-                    className="mt-1"
+                    className="mt-1 data-[state=checked]:border-info-foreground data-[state=checked]:text-info-foreground"
                     aria-label={mode.label}
                     data-suno-control="run-mode"
                   />

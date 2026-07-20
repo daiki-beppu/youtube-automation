@@ -525,6 +525,14 @@ describe("Suno popup compatibility check", () => {
     expect(serialMode.dataset.state).toBe("checked");
     expect(queueMode.value).toBe("queue");
     expect(queueMode.dataset.state).toBe("unchecked");
+    for (const radio of [serialMode, queueMode]) {
+      expect(Array.from(radio.classList)).toEqual(
+        expect.arrayContaining([
+          "data-[state=checked]:border-info-foreground",
+          "data-[state=checked]:text-info-foreground",
+        ])
+      );
+    }
     expectShadcnControl(
       serialMode.closest<HTMLElement>('[data-slot="button"]')!,
       "info"
@@ -1127,6 +1135,10 @@ describe("Suno popup compatibility check", () => {
       radioByLabel(container, "高速モード").click();
     });
     expect(presetStateMocks.writeRunModeId).toHaveBeenCalledWith("queue");
+    expect(radioByLabel(container, "安全モード").dataset.state).toBe(
+      "unchecked"
+    );
+    expect(radioByLabel(container, "高速モード").dataset.state).toBe("checked");
     expectShadcnControl(
       radioByLabel(container, "安全モード").closest<HTMLElement>(
         '[data-slot="button"]'
