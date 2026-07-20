@@ -237,7 +237,10 @@ describe("PatternList checkbox UI", () => {
       expect(control.className).not.toContain("p-0");
     });
     expect(
-      checkboxes.every((checkbox) => checkbox.classList.contains("mt-1"))
+      checkboxes.every((checkbox) => checkbox.classList.contains("mt-0.5"))
+    ).toBe(true);
+    expect(
+      controls.every((control) => control.classList.contains("items-start"))
     ).toBe(true);
     expect(
       rows.every((row) => {

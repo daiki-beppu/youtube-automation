@@ -706,6 +706,8 @@ describe("Suno popup compatibility check", () => {
   it("shadcn 完了音 UI で OFF・preset 保存と試聴を行う", async () => {
     const enabled = expectControl(container, "completion-sound-enabled");
     expect(enabled.dataset.slot).toBe("checkbox");
+    expect(enabled.closest("label")?.classList).toContain("items-center");
+    expect(enabled.classList).not.toContain("mt-0.5");
     await act(async () => enabled.click());
     expect(completionSoundMocks.setValue).toHaveBeenCalledWith({
       enabled: false,
@@ -828,9 +830,13 @@ describe("Suno popup compatibility check", () => {
     );
     expectShadcnControl(expectControl(container, "retry-playlist"), "warning");
     expectShadcnControl(expectControl(container, "retry-download"), "success");
-    expect(expectControl(container, "collection-checkbox").dataset.slot).toBe(
-      "checkbox"
-    );
+    const collectionCheckbox = expectControl(container, "collection-checkbox");
+    expect(collectionCheckbox.dataset.slot).toBe("checkbox");
+    expect(collectionCheckbox.classList).toContain("mt-0.5");
+    expect(
+      collectionCheckbox.closest<HTMLElement>('[data-slot="field-label"]')
+        ?.classList
+    ).toContain("items-start");
   });
 
   it("配信元選択時の自動取得中と取得失敗を root phase と status 属性で公開し、select を操作可能に保つ", async () => {
@@ -1065,7 +1071,7 @@ describe("Suno popup compatibility check", () => {
     expect(
       outlierOption.closest<HTMLElement>('[data-slot="field-label"]')?.classList
     ).toContain("items-center");
-    expect(outlierOption.classList).not.toContain("mt-1");
+    expect(outlierOption.classList).not.toContain("mt-0.5");
     await act(async () => {
       outlierOption.click();
     });
@@ -1073,7 +1079,7 @@ describe("Suno popup compatibility check", () => {
     expect(
       outlierOption.closest<HTMLElement>('[data-slot="field-label"]')?.classList
     ).toContain("items-start");
-    expect(outlierOption.classList).toContain("mt-1");
+    expect(outlierOption.classList).toContain("mt-0.5");
     expect(container.textContent).toContain(
       "duration guard NG も Playlist / Download 候補に残ります"
     );
