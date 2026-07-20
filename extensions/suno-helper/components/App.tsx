@@ -76,8 +76,6 @@ export function App() {
     completionSoundSettings,
     completionSoundSettingsLoaded,
     setCompletionSoundEnabled,
-    setCompletionSoundPreset,
-    previewCompletionSound,
     playlistName,
     runModeId,
     setRunMode,
@@ -717,8 +715,6 @@ export function App() {
         settings={completionSoundSettings}
         disabled={!completionSoundSettingsLoaded}
         onEnabledChange={setCompletionSoundEnabled}
-        onPresetChange={setCompletionSoundPreset}
-        onPreview={previewCompletionSound}
       />
 
       <div className="flex flex-col gap-1 text-sm">

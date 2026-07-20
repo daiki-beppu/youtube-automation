@@ -17,6 +17,7 @@ import type {
   SnapshotPayload,
 } from "../../shared/constants";
 import type { LocalServerSource } from "../../shared/constants";
+import type { SunoNotificationPayload } from "./notification";
 import type { RunRange } from "./resume-state";
 import type {
   UnattendedRunRequest,
@@ -114,6 +115,8 @@ interface ProtocolMap {
     version: string;
     matches: boolean;
   };
+  /** overlay → background: terminal run の OS 通知を privileged API へ委譲する。 */
+  showSunoNotification(payload: SunoNotificationPayload): void;
   /** overlay → background → runner: 連続実行を開始する。 */
   run(
     payload: RunPayload

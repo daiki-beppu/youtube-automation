@@ -55,7 +55,7 @@ export async function readDownloadFormat(): Promise<DownloadFormat> {
   return normalized;
 }
 
-/** 完了音設定。初回は ON + chime、旧/不正値は read 時に正規化して自己修復する。 */
+/** 通知設定。旧 preset は enabled を維持したまま read 時に削除する。 */
 export const completionSoundSettingsItem =
   storage.defineItem<CompletionSoundSettings>(
     `local:${COMPLETION_SOUND_SETTINGS_KEY}`,
@@ -70,7 +70,7 @@ export async function readCompletionSoundSettings(): Promise<CompletionSoundSett
     typeof value !== "object" ||
     (value as Partial<CompletionSoundSettings>).enabled !==
       normalized.enabled ||
-    (value as Partial<CompletionSoundSettings>).preset !== normalized.preset
+    Object.keys(value).some((key) => key !== "enabled")
   ) {
     await completionSoundSettingsItem.setValue(normalized);
   }
