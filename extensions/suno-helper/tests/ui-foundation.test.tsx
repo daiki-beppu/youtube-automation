@@ -2,12 +2,12 @@ import {
   Alert,
   alertVariants,
   Button,
-  ButtonSlot,
   buttonVariants,
   Card,
   CardContent,
   CardHeader,
   cn,
+  FieldLabel,
   Select,
   SelectTrigger,
   SelectValue,
@@ -85,20 +85,35 @@ describe("shadcn/ui foundation", () => {
     expect(html).toContain(">保存</button>");
   });
 
-  it("ButtonSlot は Radix Slot 経由で子要素を描画する", () => {
+  it("link は buttonVariants を plain anchor に適用してnative semanticsを保つ", () => {
     const html = renderToStaticMarkup(
       createElement(
-        ButtonSlot,
-        { variant: "link" },
-        createElement("a", { href: "#review" }, "確認")
+        "a",
+        { href: "#review", className: buttonVariants({ variant: "link" }) },
+        "確認"
       )
     );
 
     expect(html.startsWith("<a ")).toBe(true);
     expect(html).toContain('href="#review"');
-    expect(html).toContain('data-variant="link"');
+    expect(html).not.toContain('role="button"');
     for (const marker of variantMarkers.link) expect(html).toContain(marker);
     expect(html).toContain(">確認</a>");
+  });
+
+  it("FieldLabel は checkbox cardをnested buttonなしで構成する", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        FieldLabel,
+        { className: buttonVariants({ variant: "outline" }) },
+        createElement("input", { type: "checkbox" }),
+        "選択"
+      )
+    );
+
+    expect(html.startsWith("<label ")).toBe(true);
+    expect(html).toContain('data-slot="field-label"');
+    expect(html).not.toContain("<button");
   });
 
   it("Card は shell/header/content の slot と追加 props を実 DOM に反映する", () => {
@@ -126,7 +141,7 @@ describe("shadcn/ui foundation", () => {
     expect(html).toContain("p-0");
   });
 
-  it("Select は native wrapper ではなく shadcn/Radix の root・trigger・value を構成する", () => {
+  it("Select は native wrapper ではなく shadcn/Base UI の root・trigger・value を構成する", () => {
     const html = renderToStaticMarkup(
       createElement(
         Select,

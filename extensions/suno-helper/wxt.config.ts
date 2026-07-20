@@ -32,7 +32,7 @@ export default defineConfig({
         react: reactPath,
         "react-dom": reactDomPath,
       },
-      dedupe: ["react", "react-dom", "@radix-ui/react-select"],
+      dedupe: ["react", "react-dom", "@base-ui/react"],
     },
   }),
   // popup 廃止 (#892 要件5): popup entrypoint を build 対象から外し manifest の default_popup を未指定化する。

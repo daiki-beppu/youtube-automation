@@ -19,14 +19,15 @@ export default defineConfig({
       "react-dom": reactDomPath,
     },
     // Use the renderer's React for linked shared-ui primitives as well.
-    dedupe: ["react", "react-dom", "@radix-ui/react-select"],
+    dedupe: ["react", "react-dom", "@base-ui/react"],
   },
   test: {
     environment: "node",
+    setupFiles: ["./tests/base-ui-setup.ts"],
     server: {
       deps: {
-        // Radix packages are otherwise externalized before the React alias applies.
-        inline: [/@radix-ui/],
+        // Base UI is linked through shared-ui and must use this workspace's React.
+        inline: [/@base-ui/],
       },
     },
     include: ["tests/**/*.test.{ts,tsx}"],

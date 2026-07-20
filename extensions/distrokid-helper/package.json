@@ -18,7 +18,7 @@
     "fix": "cd .. && ultracite fix distrokid-helper"
   },
   "dependencies": {
-    "@radix-ui/react-select": "2.3.3",
+    "@base-ui/react": "1.6.0",
     "@webext-core/messaging": "2.3.0",
     "@wxt-dev/storage": "1.2.8",
     "@youtube-automation/ui": "workspace:*",

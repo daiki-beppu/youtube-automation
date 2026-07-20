@@ -10,3 +10,13 @@ import { fakeBrowser } from "wxt/testing/fake-browser";
 
 vi.stubGlobal("chrome", fakeBrowser);
 vi.stubGlobal("browser", fakeBrowser);
+
+// jsdom does not implement PointerEvent, while Base UI dispatches one through
+// hidden native form controls to preserve browser form semantics.
+if (typeof window !== "undefined" && !window.PointerEvent) {
+  Object.defineProperty(window, "PointerEvent", {
+    configurable: true,
+    value: window.MouseEvent,
+    writable: true,
+  });
+}

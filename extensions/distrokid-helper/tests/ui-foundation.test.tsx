@@ -2,13 +2,13 @@ import {
   Alert,
   AlertDescription,
   Button,
-  ButtonSlot,
   buttonVariants,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   cn,
+  FieldLabel,
 } from "@youtube-automation/ui";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -72,20 +72,34 @@ describe("shadcn/ui foundation", () => {
     expect(html).toContain(">保存</button>");
   });
 
-  it("ButtonSlot は Radix Slot 経由で子要素を描画する", () => {
+  it("link は buttonVariants を plain anchor に適用してnative semanticsを保つ", () => {
     const html = renderToStaticMarkup(
       createElement(
-        ButtonSlot,
-        { variant: "link" },
-        createElement("a", { href: "#review" }, "確認")
+        "a",
+        { href: "#review", className: buttonVariants({ variant: "link" }) },
+        "確認"
       )
     );
 
     expect(html.startsWith("<a ")).toBe(true);
     expect(html).toContain('href="#review"');
-    expect(html).toContain('data-variant="link"');
+    expect(html).not.toContain('role="button"');
     for (const marker of variantMarkers.link) expect(html).toContain(marker);
     expect(html).toContain(">確認</a>");
+  });
+
+  it("FieldLabel はnative label semanticsを保つ", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        FieldLabel,
+        null,
+        createElement("input", { type: "checkbox" })
+      )
+    );
+
+    expect(html.startsWith("<label ")).toBe(true);
+    expect(html).toContain('data-slot="field-label"');
+    expect(html).not.toContain('role="button"');
   });
 
   it("Alert は variant、追加 class、標準 DOM props と description slot を反映する", () => {

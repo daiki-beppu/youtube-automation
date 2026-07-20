@@ -14,7 +14,7 @@ export default defineConfig({
     alias: {
       "@": fileURLToPath(new URL(".", import.meta.url)),
     },
-    dedupe: ["react", "react-dom", "@radix-ui/react-select"],
+    dedupe: ["react", "react-dom", "@base-ui/react"],
   },
   test: {
     setupFiles: ["./tests/setup.ts"],
@@ -22,7 +22,7 @@ export default defineConfig({
     exclude: ["tests/e2e/**"],
     server: {
       deps: {
-        inline: [/@radix-ui/],
+        inline: [/@base-ui/],
       },
     },
   },

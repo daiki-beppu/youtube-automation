@@ -9,6 +9,8 @@ PRIMITIVES = (
     "button.tsx",
     "card.tsx",
     "checkbox.tsx",
+    "field.tsx",
+    "label.tsx",
     "radio-group.tsx",
     "select.tsx",
 )
@@ -24,10 +26,7 @@ def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
         "./theme.css": "./src/theme.css",
     }
     assert set(package["dependencies"]) == {
-        "@radix-ui/react-checkbox",
-        "@radix-ui/react-radio-group",
-        "@radix-ui/react-select",
-        "@radix-ui/react-slot",
+        "@base-ui/react",
         "class-variance-authority",
         "clsx",
         "tailwindcss",
@@ -41,6 +40,7 @@ def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
         "Button",
         "Card",
         "Checkbox",
+        "FieldLabel",
         "RadioGroup",
         "RadioGroupItem",
         "Select",
@@ -52,22 +52,23 @@ def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
         assert (EXTENSIONS / f"shared-ui/src/{primitive}").is_file()
 
 
-def test_shared_form_primitives_keep_radix_state_and_slot_contracts() -> None:
+def test_shared_form_primitives_use_base_ui_state_contracts() -> None:
     checkbox = (EXTENSIONS / "shared-ui/src/checkbox.tsx").read_text()
     radio_group = (EXTENSIONS / "shared-ui/src/radio-group.tsx").read_text()
 
-    assert "@radix-ui/react-checkbox" in checkbox
+    assert 'from "@base-ui/react/checkbox"' in checkbox
     assert 'data-slot="checkbox"' in checkbox
     assert 'data-slot="checkbox-indicator"' in checkbox
-    assert "data-[state=checked]" in checkbox
+    assert "data-checked" in checkbox
     assert "disabled:opacity-50" in checkbox
     assert "focus-visible:ring-[3px]" in checkbox
 
-    assert "@radix-ui/react-radio-group" in radio_group
+    assert 'from "@base-ui/react/radio"' in radio_group
+    assert 'from "@base-ui/react/radio-group"' in radio_group
     assert 'data-slot="radio-group"' in radio_group
     assert 'data-slot="radio-group-item"' in radio_group
     assert 'data-slot="radio-group-indicator"' in radio_group
-    assert "data-[state=checked]" in radio_group
+    assert "data-checked" in radio_group
     assert "disabled:opacity-50" in radio_group
     assert "focus-visible:ring-[3px]" in radio_group
 
@@ -93,18 +94,23 @@ def test_helpers_depend_on_shared_ui_without_local_primitive_copies() -> None:
             assert not (helper / f"components/ui/{primitive}").exists()
 
 
-def test_select_consumers_dedupe_radix_and_react_from_their_workspace() -> None:
+def test_select_consumers_dedupe_base_ui_and_react_from_their_workspace() -> None:
     for helper_name in ("suno-helper", "distrokid-helper"):
         helper = EXTENSIONS / helper_name
         package = json.loads((helper / "package.json").read_text())
-
-        assert package["dependencies"]["@radix-ui/react-select"] == "2.3.3"
+        assert package["dependencies"]["@base-ui/react"] == "1.6.0"
         for config_name in ("vitest.config.ts", "wxt.config.ts"):
             config = (helper / config_name).read_text()
-            assert '"react", "react-dom", "@radix-ui/react-select"' in config
+            assert '"react", "react-dom", "@base-ui/react"' in config
 
     fallow = json.loads((EXTENSIONS / ".fallowrc.json").read_text())
-    assert "@radix-ui/react-select" in fallow["ignoreDependencies"]
+    assert fallow["ignoreDependencies"] == []
+
+
+def test_all_shadcn_configs_choose_base_vega() -> None:
+    for workspace in ("shared-ui", *HELPERS):
+        config = json.loads((EXTENSIONS / workspace / "components.json").read_text())
+        assert config["style"] == "base-vega"
 
 
 def test_helpers_import_the_shared_theme_contract() -> None:
