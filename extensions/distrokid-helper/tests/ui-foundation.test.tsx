@@ -16,18 +16,22 @@ import { describe, expect, it } from "vitest";
 
 const variantMarkers = {
   default: ["bg-primary", "text-primary-foreground"],
-  destructive: ["bg-destructive", "text-white"],
+  destructive: ["bg-destructive/10", "text-destructive"],
   outline: ["border", "bg-background"],
   secondary: ["bg-secondary", "text-secondary-foreground"],
-  ghost: ["hover:bg-accent"],
+  ghost: ["hover:bg-muted"],
   link: ["underline-offset-4", "hover:underline"],
 } as const;
 
 const sizeMarkers = {
-  default: ["h-9", "px-4"],
-  sm: ["h-8", "px-3"],
-  lg: ["h-10", "px-6"],
+  default: ["h-9", "px-2.5"],
+  xs: ["h-6", "text-xs"],
+  sm: ["h-8", "px-2.5"],
+  lg: ["h-10", "px-2.5"],
   icon: ["size-9"],
+  "icon-xs": ["size-6"],
+  "icon-sm": ["size-8"],
+  "icon-lg": ["size-10"],
 } as const;
 
 describe("shadcn/ui foundation", () => {
@@ -66,7 +70,7 @@ describe("shadcn/ui foundation", () => {
     expect(html).toContain('data-variant="default"');
     expect(html).toContain('data-size="default"');
     for (const marker of variantMarkers.default) expect(html).toContain(marker);
-    expect(html).toContain("h-9 px-4 py-2");
+    expect(html).toContain("h-9 gap-1.5 px-2.5");
     expect(html).toContain("w-full");
     expect(html).toContain("disabled");
     expect(html).toContain(">保存</button>");

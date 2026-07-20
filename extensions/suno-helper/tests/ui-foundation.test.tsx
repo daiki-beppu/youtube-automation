@@ -6,8 +6,18 @@ import {
   Card,
   CardContent,
   CardHeader,
+  Checkbox,
   cn,
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
   FieldLabel,
+  FieldLegend,
+  FieldSeparator,
+  FieldSet,
+  FieldTitle,
   Select,
   SelectTrigger,
   SelectValue,
@@ -18,7 +28,7 @@ import { describe, expect, it } from "vitest";
 
 const variantMarkers = {
   default: ["bg-primary", "text-primary-foreground"],
-  destructive: ["bg-destructive", "text-white"],
+  destructive: ["bg-destructive/10", "text-destructive"],
   info: ["border-info-border", "bg-info-background", "text-info-foreground"],
   outline: ["border", "bg-background"],
   secondary: ["bg-secondary", "text-secondary-foreground"],
@@ -32,15 +42,19 @@ const variantMarkers = {
     "bg-warning-background",
     "text-warning-foreground",
   ],
-  ghost: ["hover:bg-accent"],
+  ghost: ["hover:bg-muted"],
   link: ["underline-offset-4", "hover:underline"],
 } as const;
 
 const sizeMarkers = {
-  default: ["h-9", "px-4"],
-  sm: ["h-8", "px-3"],
-  lg: ["h-10", "px-6"],
+  default: ["h-9", "px-2.5"],
+  xs: ["h-6", "text-xs"],
+  sm: ["h-8", "px-2.5"],
+  lg: ["h-10", "px-2.5"],
   icon: ["size-9"],
+  "icon-xs": ["size-6"],
+  "icon-sm": ["size-8"],
+  "icon-lg": ["size-10"],
 } as const;
 
 describe("shadcn/ui foundation", () => {
@@ -79,7 +93,7 @@ describe("shadcn/ui foundation", () => {
     expect(html).toContain('data-variant="default"');
     expect(html).toContain('data-size="default"');
     for (const marker of variantMarkers.default) expect(html).toContain(marker);
-    expect(html).toContain("h-9 px-4 py-2");
+    expect(html).toContain("h-9 gap-1.5 px-2.5");
     expect(html).toContain("w-full");
     expect(html).toContain("disabled");
     expect(html).toContain(">保存</button>");
@@ -101,6 +115,22 @@ describe("shadcn/ui foundation", () => {
     expect(html).toContain(">確認</a>");
   });
 
+  it("Button render は nested interactive element を作らず非button要素へ button semantics を付与する", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        Button,
+        { render: createElement("div"), nativeButton: false },
+        "詳細"
+      )
+    );
+
+    expect(html.startsWith("<div ")).toBe(true);
+    expect(html).toContain('role="button"');
+    expect(html).toContain('tabindex="0"');
+    expect(html).not.toContain("<button");
+    expect(html).toContain(">詳細</div>");
+  });
+
   it("FieldLabel は checkbox cardをnested buttonなしで構成する", () => {
     const html = renderToStaticMarkup(
       createElement(
@@ -114,6 +144,65 @@ describe("shadcn/ui foundation", () => {
     expect(html.startsWith("<label ")).toBe(true);
     expect(html).toContain('data-slot="field-label"');
     expect(html).not.toContain("<button");
+  });
+
+  it("Field は公式の set/group/content/description/error composition を公開する", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        FieldSet,
+        null,
+        createElement(FieldLegend, null, "通知"),
+        createElement(
+          FieldGroup,
+          null,
+          createElement(
+            Field,
+            null,
+            createElement(FieldLabel, null, "メール"),
+            createElement(
+              FieldContent,
+              null,
+              createElement(FieldTitle, null, "配信先"),
+              createElement(FieldDescription, null, "受信先を選択")
+            ),
+            createElement(FieldSeparator, null, "または"),
+            createElement(FieldError, { errors: [{ message: "必須です" }] })
+          )
+        )
+      )
+    );
+
+    for (const slot of [
+      "field-set",
+      "field-legend",
+      "field-group",
+      "field",
+      "field-label",
+      "field-content",
+      "field-title",
+      "field-description",
+      "field-separator",
+      "field-error",
+    ]) {
+      expect(html).toContain(`data-slot="${slot}"`);
+    }
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("必須です");
+  });
+
+  it("Checkbox は indeterminate と invalid の Base UI state を保持する", () => {
+    const html = renderToStaticMarkup(
+      createElement(Checkbox, {
+        indeterminate: true,
+        "aria-invalid": true,
+        "aria-label": "一部選択",
+      })
+    );
+
+    expect(html).toContain('data-slot="checkbox"');
+    expect(html).toContain("data-indeterminate");
+    expect(html).toContain('aria-invalid="true"');
+    expect(html).toContain('aria-label="一部選択"');
   });
 
   it("Card は shell/header/content の slot と追加 props を実 DOM に反映する", () => {
