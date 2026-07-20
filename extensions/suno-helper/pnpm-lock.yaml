@@ -21,6 +21,9 @@ importers:
       '@webext-core/messaging':
         specifier: 3.0.2
         version: 3.0.2
+      '@youtube-automation/extensions-shared':
+        specifier: workspace:*
+        version: link:../shared
       '@youtube-automation/ui':
         specifier: workspace:*
         version: link:../shared-ui
@@ -77,11 +80,16 @@ importers:
         specifier: 0.20.26
         version: 0.20.26(@types/node@25.9.1)(eslint@9.39.4(jiti@2.7.0))(jiti@2.7.0)(rolldown@1.0.3)(rollup@4.61.0)(yaml@2.9.0)
 
+  ../shared: {}
+
   ../shared-ui:
     dependencies:
       '@base-ui/react':
         specifier: 1.6.0
         version: 1.6.0(@types/react@19.0.2)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@youtube-automation/extensions-shared':
+        specifier: workspace:*
+        version: link:../shared
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1

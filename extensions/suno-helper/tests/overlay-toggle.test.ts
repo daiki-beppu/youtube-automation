@@ -1,3 +1,8 @@
+import {
+  overlayHiddenStyle as hiddenStyle,
+  toggleOverlayHidden as toggleHidden,
+} from "@youtube-automation/extensions-shared/overlay-state";
+import type { OverlayState } from "@youtube-automation/extensions-shared/overlay-state";
 // lib/overlay-state.ts の overlay 表示 toggle 純ロジック回帰テスト (#897)。
 //
 // #892 (PR #895) の overlay 実装は `if (hidden) return null;` で hidden=true 時に OverlayShell を
@@ -15,9 +20,6 @@
 //   export function toggleHidden(state: OverlayState): OverlayState
 //   export function hiddenStyle(hidden: boolean): { display: "none" | "block" }
 import { describe, expect, it } from "vitest";
-
-import { hiddenStyle, toggleHidden } from "../lib/overlay-state";
-import type { OverlayState } from "../lib/overlay-state";
 
 function makeOverlayState(overrides: Partial<OverlayState> = {}): OverlayState {
   return {

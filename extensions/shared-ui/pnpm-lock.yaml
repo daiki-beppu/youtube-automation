@@ -11,6 +11,9 @@ importers:
       '@base-ui/react':
         specifier: 1.6.0
         version: 1.6.0(@types/react@19.0.2)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@youtube-automation/extensions-shared':
+        specifier: workspace:*
+        version: link:../shared
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1
@@ -33,6 +36,8 @@ importers:
       typescript:
         specifier: 7.0.2
         version: 7.0.2
+
+  ../shared: {}
 
 packages:
 

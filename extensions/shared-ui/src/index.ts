@@ -35,6 +35,7 @@ export {
   fieldVariants,
 } from "./field";
 export { Label } from "./label";
+export { OverlayShell, type OverlayShellProps } from "./overlay-shell";
 export { RadioGroup, RadioGroupItem } from "./radio-group";
 export {
   Select,
@@ -50,3 +51,8 @@ export {
 } from "./select";
 export { Switch } from "./switch";
 export { cn } from "./utils";
+export {
+  useDraggable,
+  type UseDraggableOptions,
+  type UseDraggableResult,
+} from "./use-draggable";

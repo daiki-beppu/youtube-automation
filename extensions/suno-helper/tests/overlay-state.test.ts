@@ -1,3 +1,11 @@
+import {
+  clampOverlayPosition as clampPosition,
+  createOverlayStateStorage,
+} from "@youtube-automation/extensions-shared/overlay-state";
+import type {
+  DefineOverlayStorageItem,
+  OverlayState,
+} from "@youtube-automation/extensions-shared/overlay-state";
 // lib/overlay-state.ts の純ロジック回帰テスト (#892 要件2)。
 //
 // overlay-state は「overlay 位置・最小化状態の永続化」と「viewport 外に保存された位置の
@@ -16,9 +24,6 @@
 //   ): { x: number; y: number }
 // clamp 規約: x ∈ [0, max(0, viewport.width - size.width)] / y ∈ [0, max(0, viewport.height - size.height)]。
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-import { clampPosition } from "../lib/overlay-state";
-import type { OverlayState } from "../lib/overlay-state";
 
 // 代表的な viewport / overlay サイズ。overlay は viewport より十分小さい前提。
 const VIEWPORT = { width: 1000, height: 800 };
@@ -140,36 +145,61 @@ describe("OverlayState: 永続化する状態の形 (要件2)", () => {
   });
 });
 
-// --- writeOverlayState: storage 書き込み失敗の伝播テスト (#1718) ---
-// 上記の純関数テスト群とは異なり storage I/O を mock するため vi.doMock + 動的 import で隔離する。
-describe("writeOverlayState: storage 書き込み失敗を UI へ伝播する", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.resetModules();
-  });
+describe("createOverlayStateStorage", () => {
+  afterEach(() => vi.restoreAllMocks());
 
-  it("Given setValue が reject When writeOverlayState Then 呼び出し元へ reject する", async () => {
-    vi.resetModules();
-    vi.doMock("wxt/utils/storage", () => ({
-      storage: {
-        defineItem: () => ({
-          getValue: vi.fn(() => Promise.resolve(null)),
-          setValue: vi.fn(() =>
-            Promise.reject(new Error("Extension context invalidated"))
-          ),
-        }),
-      },
-    }));
-
-    const { writeOverlayState } = await import("../lib/overlay-state");
+  it("helper key を local storage item に変換し、書き込み失敗を UI へ伝播する", async () => {
+    const defineItem = vi.fn(() => ({
+      getValue: vi.fn(() => Promise.resolve(null)),
+      setValue: vi.fn(() =>
+        Promise.reject(new Error("Extension context invalidated"))
+      ),
+    })) as unknown as DefineOverlayStorageItem;
+    const adapter = createOverlayStateStorage("sunoOverlayState", defineItem);
     const state: OverlayState = {
       position: { x: 100, y: 200 },
       minimized: false,
       hidden: false,
     };
 
-    await expect(writeOverlayState(state)).rejects.toThrow(
+    await expect(adapter.write(state)).rejects.toThrow(
       "Extension context invalidated"
     );
+    expect(defineItem).toHaveBeenCalledOnce();
+    expect(defineItem).toHaveBeenCalledWith("local:sunoOverlayState", {
+      fallback: null,
+    });
+  });
+
+  it("helper ごとの key で state を分離し、同じ adapter 内では item を再利用する", async () => {
+    const values = new Map<string, OverlayState>();
+    const defineItem = vi.fn((key: `local:${string}`) => ({
+      getValue: vi.fn(async () => values.get(key) ?? null),
+      setValue: vi.fn(async (state: OverlayState) => {
+        values.set(key, state);
+      }),
+    })) as unknown as DefineOverlayStorageItem;
+    const suno = createOverlayStateStorage("sunoOverlayState", defineItem);
+    const distrokid = createOverlayStateStorage(
+      "distrokidOverlayState",
+      defineItem
+    );
+    const sunoState: OverlayState = {
+      position: { x: 10, y: 20 },
+      minimized: true,
+      hidden: false,
+    };
+    const distrokidState: OverlayState = {
+      position: { x: 30, y: 40 },
+      minimized: false,
+      hidden: true,
+    };
+
+    await suno.write(sunoState);
+    await distrokid.write(distrokidState);
+
+    expect(await suno.read()).toEqual(sunoState);
+    expect(await distrokid.read()).toEqual(distrokidState);
+    expect(defineItem).toHaveBeenCalledTimes(2);
   });
 });
