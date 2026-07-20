@@ -16,8 +16,12 @@ function Select<Value, Multiple extends boolean | undefined = false>(
   const [container, setContainer] = React.useState<
     HTMLElement | ShadowRoot | null
   >(null);
+  const portalContext = React.useMemo(
+    () => ({ container, setContainer }),
+    [container]
+  );
   return (
-    <SelectPortalContext.Provider value={{ container, setContainer }}>
+    <SelectPortalContext.Provider value={portalContext}>
       <SelectPrimitive.Root {...props} />
     </SelectPortalContext.Provider>
   );
