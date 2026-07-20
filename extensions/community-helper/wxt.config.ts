@@ -8,7 +8,10 @@ import {
 
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
-  vite: () => ({ plugins: [tailwindcss()] }),
+  vite: () => ({
+    plugins: [tailwindcss()],
+    resolve: { dedupe: ["react", "react-dom", "@base-ui/react"] },
+  }),
   manifest: {
     name: "Community Helper",
     description: "YouTube のコミュニティ投稿をスケジュールする",

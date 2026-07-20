@@ -10,8 +10,8 @@ import wxtConfig from "../wxt.config";
 const POSTS_MATCH = "https://www.youtube.com/channel/*/posts*";
 
 describe("community-helper manifest minimum permissions", () => {
-  it("keeps runtime permissions limited to activeTab", () => {
-    expect([...MANIFEST_PERMISSIONS]).toEqual(["activeTab"]);
+  it("keeps runtime permissions limited to overlay storage and activeTab", () => {
+    expect([...MANIFEST_PERMISSIONS]).toEqual(["storage", "activeTab"]);
   });
 
   it("limits content injection to channel posts and host access to loopback servers", () => {
@@ -30,5 +30,12 @@ describe("community-helper manifest minimum permissions", () => {
     };
     expect(manifest.permissions).toEqual([...MANIFEST_PERMISSIONS]);
     expect(manifest.host_permissions).toEqual([...MANIFEST_HOST_PERMISSIONS]);
+  });
+
+  it("has no native popup so action click can toggle the overlay", () => {
+    const action = (
+      wxtConfig.manifest as { action?: { default_popup?: string } }
+    ).action;
+    expect(action?.default_popup).toBeUndefined();
   });
 });

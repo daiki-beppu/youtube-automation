@@ -4,7 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { App } from "../entrypoints/popup/App";
+import { App } from "../components/App";
 import { sendMessage } from "../lib/messaging";
 
 vi.mock("wxt/browser", () => ({
@@ -18,7 +18,7 @@ vi.mock("../lib/messaging", () => ({
   sendMessage: vi.fn(async () => undefined),
 }));
 
-describe("community-helper popup scaffold", () => {
+describe("community-helper app", () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -69,7 +69,7 @@ describe("community-helper popup scaffold", () => {
     });
   });
 
-  it("shows a popup error and does not run when the server is down", async () => {
+  it("shows an error and does not run when the server is down", async () => {
     vi.mocked(sendMessage).mockResolvedValueOnce({
       status: "error",
       message: "Failed to fetch",
@@ -90,7 +90,7 @@ describe("community-helper popup scaffold", () => {
     expect(sendMessage).not.toHaveBeenCalledWith("run", expect.anything());
   });
 
-  it("shows a popup error and does not run on a version mismatch", async () => {
+  it("shows an error and does not run on a version mismatch", async () => {
     vi.mocked(sendMessage).mockResolvedValueOnce({
       status: "incompatible",
       serverVersion: "1.0.0",

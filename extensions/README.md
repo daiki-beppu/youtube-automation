@@ -26,9 +26,9 @@ extensions/
     lib/                  # runner / manifest 最小権限 / typed messaging
     tests/                # Vitest unit + Playwright e2e
   community-helper/       # YouTube チャンネル投稿ページ用コミュニティ投稿拡張
-    entrypoints/          # Popup / extension-context fetch relay / content runner
+    entrypoints/          # background fetch relay / draggable overlay / content runner
     lib/                  # runner / manifest 最小権限 / typed messaging
-    tests/                # Vitest runner contract / DOM / Popup unit tests
+    tests/                # Vitest runner contract / DOM / overlay unit + Playwright e2e
 ```
 
 `shared/` の既存モジュールは各拡張から相対 import（例: `../../shared/dom`）で参照する。overlay state の型・純関数・key 注入型 storage adapter は package subpath `@youtube-automation/extensions-shared/overlay-state` として公開する。UI は `shared-ui/` の workspace package `@youtube-automation/ui` から import し、Button / Card / Alert / Select / Checkbox / RadioGroup / Switch / OverlayShell、`useDraggable()`、`cn()`、theme CSS の実装を単一ソースに保つ。theme CSS は info / warning / success / destructive ごとの semantic token を OS 設定に依存しないライトテーマとして提供する。各 helper の `pnpm-workspace.yaml` は `../shared` と `../shared-ui` を workspace member として明示するため、従来どおり `extensions/<name>/` 単体で frozen install / build / zip を実行できる。

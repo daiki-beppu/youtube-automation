@@ -218,8 +218,11 @@ jobs:
             run: nix develop .#extensions --command pnpm compile
           - name: Unit tests (Vitest)
             run: nix develop .#extensions --command pnpm test
-      - name: Build
-        run: nix develop .#extensions --command pnpm build
+      - parallel:
+          - name: Build
+            run: nix develop .#extensions --command pnpm build
+          - name: Install Playwright browser
+            run: nix develop .#extensions --command pnpm exec playwright install --with-deps chromium
       - name: Verify generated manifest permissions (least-privilege)
         run: |
           nix develop .#extensions --command node --input-type=module -e '
@@ -227,7 +230,7 @@ jobs:
             const manifest = JSON.parse(
               readFileSync(".output/chrome-mv3/manifest.json", "utf8"),
             );
-            const expected = ["activeTab"];
+            const expected = ["storage", "activeTab"];
             const actual = manifest.permissions ?? [];
             const same =
               actual.length === expected.length &&
@@ -262,3 +265,5 @@ jobs:
               process.exit(1);
             }
           '
+      - name: E2E (Playwright)
+        run: nix develop .#extensions --command xvfb-run -a pnpm test:e2e

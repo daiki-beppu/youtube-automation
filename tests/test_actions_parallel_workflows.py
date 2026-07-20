@@ -58,6 +58,7 @@ _EXTENSIONS_JOB_CONTRACTS = {
     },
     "community-helper": {
         "working_directory": "extensions/community-helper",
+        "e2e_step": "E2E (Playwright)",
         "check_script": "cd .. && ultracite check community-helper",
     },
 }
@@ -301,7 +302,7 @@ def test_extensions_jobs_use_only_the_nix_extensions_toolchain(job_name: str) ->
     assert all(str(step.get("run", "")).startswith("nix develop .#extensions --command ") for step in run_steps)
 
 
-@pytest.mark.parametrize("job_name", ["check", "distrokid-helper"])
+@pytest.mark.parametrize("job_name", ["check", "distrokid-helper", "community-helper"])
 def test_extensions_jobs_preserve_working_directory_install_and_e2e_contract(job_name: str) -> None:
     """Given Extensions CI, When Nix supplies its tools, Then each job keeps its check contract."""
     workflow = _load_workflow(_EXTENSIONS_WORKFLOW_PATH)
@@ -603,7 +604,7 @@ def test_distrokid_helper_manifest_permission_check_preserves_least_privilege_co
 
 
 def test_community_helper_runs_required_ci_gates_after_install() -> None:
-    """Given community-helper CI, When dependencies install, Then lint, types, tests, and build run."""
+    """Given community-helper CI, When dependencies install, Then all UI gates run."""
     workflow = _load_workflow(_EXTENSIONS_WORKFLOW_PATH)
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict)
@@ -617,8 +618,11 @@ def test_community_helper_runs_required_ci_gates_after_install() -> None:
     assert toolchain_install.get("working-directory") == "extensions"
     assert toolchain_install.get("run") == _NIX_EXTENSIONS_INSTALL_COMMAND
     _assert_named_parallel_commands(steps, _COMMUNITY_FAST_PARALLEL_STEPS)
-    assert _top_level_step(steps, "Build").get("run") == "nix develop .#extensions --command pnpm build"
-    assert _parallel_group_index_containing(steps, "Check (Oxlint + Oxfmt)") < _top_level_step_index(steps, "Build")
+    _assert_named_parallel_commands(steps, _SUNO_BUILD_PARALLEL_STEPS)
+    assert _parallel_group_index_containing(steps, "Check (Oxlint + Oxfmt)") < _parallel_group_index_containing(
+        steps, "Build"
+    )
+    assert _top_level_step(steps, "E2E (Playwright)").get("run") == _NIX_EXTENSIONS_E2E_COMMAND
     _assert_parallel_runs_do_not_use_shell_backgrounding(steps)
 
 
@@ -629,7 +633,7 @@ def test_community_helper_generated_manifest_preserves_least_privilege_contract(
     run_script = str(manifest_step.get("run", ""))
 
     assert ".output/chrome-mv3/manifest.json" in run_script
-    assert 'const expected = ["activeTab"];' in run_script
+    assert 'const expected = ["storage", "activeTab"];' in run_script
     assert '"http://*.localhost/*"' in run_script
     assert '"http://localhost/*"' in run_script
     assert '"http://127.0.0.1/*"' in run_script

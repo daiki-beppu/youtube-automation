@@ -224,8 +224,8 @@ def test_helpers_depend_on_shared_ui_without_local_primitive_copies() -> None:
             assert not (helper / f"components/ui/{primitive}").exists()
 
 
-def test_select_consumers_dedupe_base_ui_and_react_from_their_workspace() -> None:
-    for helper_name in ("suno-helper", "distrokid-helper"):
+def test_shared_ui_consumers_dedupe_base_ui_and_react_from_their_workspace() -> None:
+    for helper_name in HELPERS:
         helper = EXTENSIONS / helper_name
         package = json.loads((helper / "package.json").read_text())
         assert package["dependencies"]["@base-ui/react"] == "1.6.0"
@@ -248,19 +248,20 @@ def test_helpers_import_the_shared_theme_contract() -> None:
         EXTENSIONS / "suno-helper/components/overlay.css",
         EXTENSIONS / "suno-helper/entrypoints/popup/style.css",
         EXTENSIONS / "distrokid-helper/components/overlay.css",
-        EXTENSIONS / "community-helper/entrypoints/popup/style.css",
+        EXTENSIONS / "community-helper/components/overlay.css",
     )
 
     for style in styles:
         assert '@import "@youtube-automation/ui/theme.css";' in style.read_text()
 
 
-def test_shared_overlay_relay_is_exported_and_consumed_by_distrokid() -> None:
+def test_shared_overlay_relay_is_exported_and_consumed_by_overlay_helpers() -> None:
     shared_package = json.loads((EXTENSIONS / "shared/package.json").read_text())
-    distrokid_package = json.loads((EXTENSIONS / "distrokid-helper/package.json").read_text())
 
     assert shared_package["exports"]["./tab-relay"] == "./tab-relay.ts"
-    assert distrokid_package["dependencies"]["@youtube-automation/extensions-shared"] == "workspace:*"
+    for helper_name in ("distrokid-helper", "community-helper"):
+        package = json.loads((EXTENSIONS / helper_name / "package.json").read_text())
+        assert package["dependencies"]["@youtube-automation/extensions-shared"] == "workspace:*"
 
 
 def test_shared_ui_is_in_the_extension_lint_gate() -> None:

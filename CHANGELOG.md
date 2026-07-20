@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(community-helper)`: native popup を YouTube チャンネル投稿ページ上の shared shadcn/ui Shadow DOM overlay へ移し、drag・viewport clamp・最小化・action toggle・reload 復元を追加した。run / stop / progress / error は background が送信元と同一タブへ relay し、既存の server fetch 境界と投稿 runner を維持する（#2320）。
 - `refactor(distrokid-helper)`: popup UI を `distrokid.com/new` 上の shared shadcn/ui Shadow DOM overlay へ移し、drag・viewport clamp・最小化・action toggle・reload 復元を追加した。command / progress は background が送信元と同一タブへ型付き relay し、既存 fetch・フォーム注入・停止・配信済み記録を維持する（#2319）。
 - `feat(suno-helper)`: 完了通知 UI を shared shadcn/ui Switch 1つへ簡素化し、最終 FINISHED / ERROR で OS 通知と状態別の固定 Web Audio を独立して発火するようにした。旧 preset は enabled を維持して自動削除し、通知失敗は run 結果へ影響させない（#2334）。
 - `refactor(extensions-ui)`: draggable overlay の shell・pointer drag・viewport clamp を shared UI、状態型・純関数・helper key 注入型 storage adapter を extensions shared へ抽出した。Suno は共通 consumer へ移行し、既存 selector・最小化・action toggle・reload 復元を維持する（#2318）。
