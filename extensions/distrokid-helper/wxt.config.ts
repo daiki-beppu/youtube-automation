@@ -13,7 +13,7 @@ export default defineConfig({
   vite: () => ({
     plugins: [tailwindcss()],
     resolve: {
-      dedupe: ["react", "react-dom"],
+      dedupe: ["react", "react-dom", "@radix-ui/react-select"],
     },
   }),
   manifest: {

@@ -14,7 +14,7 @@ export default defineConfig({
     alias: {
       "@": fileURLToPath(new URL(".", import.meta.url)),
     },
-    dedupe: ["react", "react-dom"],
+    dedupe: ["react", "react-dom", "@radix-ui/react-select"],
   },
   test: {
     setupFiles: ["./tests/setup.ts"],

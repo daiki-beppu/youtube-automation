@@ -19,7 +19,7 @@ export default defineConfig({
       "react-dom": reactDomPath,
     },
     // Use the renderer's React for linked shared-ui primitives as well.
-    dedupe: ["react", "react-dom"],
+    dedupe: ["react", "react-dom", "@radix-ui/react-select"],
   },
   test: {
     environment: "node",

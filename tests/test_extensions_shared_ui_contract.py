@@ -93,6 +93,17 @@ def test_helpers_depend_on_shared_ui_without_local_primitive_copies() -> None:
             assert not (helper / f"components/ui/{primitive}").exists()
 
 
+def test_select_consumers_dedupe_radix_and_react_from_their_workspace() -> None:
+    for helper_name in ("suno-helper", "distrokid-helper"):
+        helper = EXTENSIONS / helper_name
+        package = json.loads((helper / "package.json").read_text())
+
+        assert package["dependencies"]["@radix-ui/react-select"] == "2.3.3"
+        for config_name in ("vitest.config.ts", "wxt.config.ts"):
+            config = (helper / config_name).read_text()
+            assert '"react", "react-dom", "@radix-ui/react-select"' in config
+
+
 def test_helpers_import_the_shared_theme_contract() -> None:
     styles = (
         EXTENSIONS / "suno-helper/components/overlay.css",

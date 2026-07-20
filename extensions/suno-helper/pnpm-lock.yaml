@@ -15,6 +15,9 @@ importers:
 
   .:
     dependencies:
+      '@radix-ui/react-select':
+        specifier: 2.3.3
+        version: 2.3.3(@types/react-dom@19.0.2(@types/react@19.0.2))(@types/react@19.0.2)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@webext-core/messaging':
         specifier: 3.0.2
         version: 3.0.2
