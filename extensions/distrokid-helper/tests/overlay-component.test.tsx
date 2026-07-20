@@ -60,6 +60,12 @@ describe("DistroKid Overlay", () => {
     expect(shell.style.left).toBe("40px");
     expect(shell.style.top).toBe("50px");
     expect(shell.textContent).toContain("DistroKid Helper");
+    expect(shell.style.getPropertyValue("--overlay-header-background")).toBe(
+      "#0073C7"
+    );
+    expect(shell.style.getPropertyValue("--overlay-header-foreground")).toBe(
+      "#FFFFFF"
+    );
     expect(container.querySelector("[data-distrokid-app]")).not.toBeNull();
 
     await act(async () =>

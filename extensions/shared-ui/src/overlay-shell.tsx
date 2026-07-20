@@ -20,6 +20,12 @@ export interface OverlayShellProps {
   className?: string;
   headerClassName?: string;
   contentClassName?: string;
+  brandColors?: OverlayBrandColors;
+}
+
+export interface OverlayBrandColors {
+  headerBackground: string;
+  headerForeground: string;
 }
 
 /**
@@ -37,6 +43,7 @@ export function OverlayShell({
   className,
   headerClassName,
   contentClassName,
+  brandColors,
 }: OverlayShellProps) {
   const controller = useOverlayController({
     initialState,
@@ -57,6 +64,12 @@ export function OverlayShell({
         className
       )}
       style={{
+        ...(brandColors
+          ? {
+              "--overlay-header-background": brandColors.headerBackground,
+              "--overlay-header-foreground": brandColors.headerForeground,
+            }
+          : {}),
         left: controller.position.x,
         top: controller.position.y,
         width,
@@ -69,7 +82,7 @@ export function OverlayShell({
         layout="stack"
         onPointerDown={handlePointerDown}
         className={cn(
-          "flex flex-row items-center justify-between gap-0 rounded-t-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground select-none",
+          "flex flex-row items-center justify-between gap-0 rounded-t-lg bg-overlay-header px-3 py-2 text-sm font-semibold text-overlay-header-foreground select-none",
           headerClassName
         )}
         style={{
@@ -84,7 +97,7 @@ export function OverlayShell({
           onClick={handleToggleMinimized}
           aria-label={controller.minimized ? "展開" : "最小化"}
           variant="ghost"
-          className="h-auto w-auto rounded px-2 py-0 leading-none text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground"
+          className="h-auto w-auto rounded px-2 py-0 leading-none text-overlay-header-foreground hover:bg-overlay-header-foreground/10 hover:text-overlay-header-foreground"
         >
           {controller.minimized ? "▢" : "—"}
         </Button>
