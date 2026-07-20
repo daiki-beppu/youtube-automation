@@ -253,11 +253,11 @@ function buttonByText(container: HTMLElement, text: string): HTMLButtonElement {
   return button;
 }
 
-function radioByLabel(container: HTMLElement, text: string): HTMLInputElement {
+function radioByLabel(container: HTMLElement, text: string): HTMLButtonElement {
   const label = Array.from(container.querySelectorAll("label")).find(
     (candidate) => candidate.textContent?.includes(text)
   );
-  const input = label?.querySelector<HTMLInputElement>('input[type="radio"]');
+  const input = label?.querySelector<HTMLButtonElement>('[role="radio"]');
   if (!input) {
     throw new Error(`radio not found: ${text}`);
   }
@@ -267,12 +267,12 @@ function radioByLabel(container: HTMLElement, text: string): HTMLInputElement {
 function checkboxByLabel(
   container: HTMLElement,
   text: string
-): HTMLInputElement {
+): HTMLButtonElement {
   const label = Array.from(container.querySelectorAll("label")).find(
     (candidate) => candidate.textContent?.includes(text)
   );
-  const input = label?.querySelector<HTMLInputElement>(
-    'input[type="checkbox"]'
+  const input = label?.querySelector<HTMLButtonElement>(
+    '[data-slot="checkbox"]'
   );
   if (!input) {
     throw new Error(`checkbox not found: ${text}`);
@@ -450,24 +450,46 @@ describe("Suno popup compatibility check", () => {
 
   it("popup に投入方式 selector を表示し、Fast / Balanced / Safe の速度プリセットは表示しない", () => {
     expect(container.textContent).toContain("投入方式");
-    expect(container.querySelector('input[name="run-mode"]')).not.toBeNull();
+    expect(container.querySelector('[data-slot="radio-group"]')).not.toBeNull();
     expect(container.textContent).not.toContain("Fast");
     expect(container.textContent).not.toContain("Balanced");
     expect(container.textContent).not.toContain("Safe");
     expect(container.querySelector('input[name="speed-preset"]')).toBeNull();
   });
 
-  it("collection・投入方式・開始/停止 control を shadcn primitive で描画し、実操作要素の契約を維持する", () => {
+  it("可視 control を shared shadcn primitive で描画し、value・aria・data 属性を維持する", () => {
     const collectionSelect = expectControl(container, "collection-select");
     expect(collectionSelect).toBeInstanceOf(HTMLSelectElement);
     expectShadcnControl(collectionSelect, "outline");
 
+    const serverTrigger = expectControl(container, "server-source-trigger");
+    expectShadcnControl(serverTrigger, "outline");
+    expect(serverTrigger.getAttribute("aria-haspopup")).toBe("listbox");
+    const downloadFormat = expectControl(
+      container,
+      "download-format"
+    ) as HTMLSelectElement;
+    expect(downloadFormat.dataset.slot).toBe("select");
+    expect(Array.from(downloadFormat.options, ({ value }) => value)).toEqual([
+      "mp3",
+      "m4a",
+      "wav",
+    ]);
+    expect(
+      expectControl(container, "regenerate-duration-outliers").dataset.slot
+    ).toBe("checkbox");
+    expect(
+      expectControl(container, "completion-sound-enabled").dataset.slot
+    ).toBe("checkbox");
+
     const serialMode = radioByLabel(container, "安全モード");
     const queueMode = radioByLabel(container, "高速モード");
-    expect(serialMode.name).toBe("run-mode");
-    expect(serialMode.checked).toBe(true);
-    expect(queueMode.name).toBe("run-mode");
-    expect(queueMode.checked).toBe(false);
+    expect(serialMode.dataset.slot).toBe("radio-group-item");
+    expect(queueMode.dataset.slot).toBe("radio-group-item");
+    expect(serialMode.value).toBe("serial");
+    expect(serialMode.dataset.state).toBe("checked");
+    expect(queueMode.value).toBe("queue");
+    expect(queueMode.dataset.state).toBe("unchecked");
     expectShadcnControl(
       serialMode.closest<HTMLElement>('[data-slot="button"]')!,
       "default"
@@ -721,6 +743,13 @@ describe("Suno popup compatibility check", () => {
     ]) {
       expectControl(container, control);
     }
+    expectShadcnControl(
+      expectControl(container, "adopt-selected-clips"),
+      "outline"
+    );
+    expect(expectControl(container, "collection-checkbox").dataset.slot).toBe(
+      "checkbox"
+    );
   });
 
   it("配信元選択時の自動取得中と取得失敗を root phase と status 属性で公開し、select を操作可能に保つ", async () => {
@@ -917,7 +946,7 @@ describe("Suno popup compatibility check", () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     const runResponse = deferred<unknown>();
     const outlierOption = checkboxByLabel(container, "異常値の曲を再生成する");
-    expect(outlierOption.checked).toBe(true);
+    expect(outlierOption.dataset.state).toBe("checked");
     expect(outlierOption.disabled).toBe(true);
     fetchMock
       .mockResolvedValueOnce(
@@ -955,7 +984,7 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       outlierOption.click();
     });
-    expect(outlierOption.checked).toBe(false);
+    expect(outlierOption.dataset.state).toBe("unchecked");
     expect(container.textContent).toContain(
       "duration guard NG も Playlist / Download 候補に残ります"
     );
@@ -1306,9 +1335,9 @@ describe("Suno popup compatibility check", () => {
 
     await waitFor(() => {
       expect(container.textContent).toContain("前回の実行が中断されました。");
-      expect(checkboxByLabel(container, "異常値の曲を再生成する").checked).toBe(
-        false
-      );
+      expect(
+        checkboxByLabel(container, "異常値の曲を再生成する").dataset.state
+      ).toBe("unchecked");
     });
 
     messagingMocks.sendMessage.mockClear();
@@ -1520,15 +1549,13 @@ describe("Suno popup compatibility check", () => {
     });
 
     const checkboxes = Array.from(
-      container.querySelectorAll<HTMLInputElement>(
-        '[data-suno-entry-index] input[type="checkbox"]'
+      container.querySelectorAll<HTMLButtonElement>(
+        '[data-suno-entry-index] [data-slot="checkbox"]'
       )
     );
-    expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([
-      true,
-      true,
-      true,
-    ]);
+    expect(
+      checkboxes.map((checkbox) => checkbox.dataset.state === "checked")
+    ).toEqual([true, true, true]);
 
     await act(async () => {
       checkboxes[1].click();
@@ -1619,9 +1646,9 @@ describe("Suno popup compatibility check", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("前回の実行が中断されました。");
       expect(container.textContent).toContain("異常値警告");
-      expect(checkboxByLabel(container, "異常値の曲を再生成する").checked).toBe(
-        false
-      );
+      expect(
+        checkboxByLabel(container, "異常値の曲を再生成する").dataset.state
+      ).toBe("unchecked");
     });
 
     messagingMocks.sendMessage.mockClear();
@@ -1774,15 +1801,13 @@ describe("Suno popup compatibility check", () => {
     });
 
     const checkboxes = Array.from(
-      container.querySelectorAll<HTMLInputElement>(
-        '[data-suno-entry-index] input[type="checkbox"]'
+      container.querySelectorAll<HTMLButtonElement>(
+        '[data-suno-entry-index] [data-slot="checkbox"]'
       )
     );
-    expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([
-      true,
-      true,
-      true,
-    ]);
+    expect(
+      checkboxes.map((checkbox) => checkbox.dataset.state === "checked")
+    ).toEqual([true, true, true]);
 
     for (const checkbox of checkboxes) {
       await act(async () => {
@@ -2480,7 +2505,10 @@ describe("Suno popup compatibility check", () => {
       expect(container.textContent).toContain(
         EXTENSION_RELOAD_REQUIRED_MESSAGE
       );
-      expect(buttonByText(container, "タブを再読み込み")).toBeTruthy();
+      const alert = expectControl(container, "reload-required");
+      expect(alert.dataset.slot).toBe("alert");
+      expect(alert.dataset.variant).toBe("warning");
+      expectShadcnControl(expectControl(container, "reload-tab"), "outline");
     });
   });
 
@@ -2663,10 +2691,10 @@ describe("Suno popup compatibility check", () => {
 
     const checkboxStates = (): boolean[] =>
       Array.from(
-        container.querySelectorAll<HTMLInputElement>(
-          '[data-suno-entry-index] input[type="checkbox"]'
+        container.querySelectorAll<HTMLButtonElement>(
+          '[data-suno-entry-index] [data-slot="checkbox"]'
         )
-      ).map((checkbox) => checkbox.checked);
+      ).map((checkbox) => checkbox.dataset.state === "checked");
 
     await waitFor(() => {
       expect(checkboxStates()).toEqual([true, true, true]);
@@ -2682,16 +2710,16 @@ describe("Suno popup compatibility check", () => {
     });
     expect(
       Array.from(
-        container.querySelectorAll<HTMLInputElement>(
-          '[data-suno-entry-index] input[type="checkbox"]'
+        container.querySelectorAll<HTMLButtonElement>(
+          '[data-suno-entry-index] [data-slot="checkbox"]'
         )
       )[1]?.closest("li")?.className
     ).toContain("line-through");
 
     await act(async () => {
       Array.from(
-        container.querySelectorAll<HTMLInputElement>(
-          '[data-suno-entry-index] input[type="checkbox"]'
+        container.querySelectorAll<HTMLButtonElement>(
+          '[data-suno-entry-index] [data-slot="checkbox"]'
         )
       )[1]?.click();
     });

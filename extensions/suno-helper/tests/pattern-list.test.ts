@@ -70,6 +70,70 @@ describe("PatternList checkbox UI", () => {
     container.remove();
   });
 
+  it("5 状態それぞれの選択・非選択で semantic token と選択 marker を競合なく描画する", () => {
+    const states: ItemState[] = [
+      "idle",
+      "idle",
+      "active",
+      "active",
+      "submitted",
+      "submitted",
+      "done",
+      "done",
+      "failed",
+      "failed",
+    ];
+    const stateTokens: Record<ItemState, string[]> = {
+      idle: ["border-border", "bg-background", "text-foreground"],
+      active: [
+        "border-info-border",
+        "bg-info-background",
+        "text-info-foreground",
+      ],
+      submitted: [
+        "border-warning-border",
+        "bg-warning-background",
+        "text-warning-foreground",
+      ],
+      done: [
+        "border-success-border",
+        "bg-success-background",
+        "text-success-foreground",
+      ],
+      failed: [
+        "border-destructive-border",
+        "bg-destructive-background",
+        "text-destructive-foreground",
+      ],
+    };
+
+    act(() => {
+      root.render(
+        createElement(PatternList, {
+          entries: makePromptEntries(states.length),
+          itemStates: states,
+          selectedEntries: states.map((_, index) => index % 2 === 1),
+          onToggleEntry: vi.fn(),
+        })
+      );
+    });
+
+    const rows = Array.from(
+      container.querySelectorAll<HTMLLIElement>("[data-suno-entry-index]")
+    );
+    rows.forEach((row, index) => {
+      const control = row.querySelector<HTMLElement>('[data-slot="button"]')!;
+      const selected = index % 2 === 1;
+      expect(row.dataset.sunoEntryState).toBe(states[index]);
+      expect(row.dataset.sunoEntrySelected).toBe(String(selected));
+      for (const token of stateTokens[states[index]!]!) {
+        expect(control.className).toContain(token);
+      }
+      expect(control.className).toContain(selected ? "ring-2" : "shadow-none");
+      expect(control.className).not.toContain("text-primary-foreground");
+    });
+  });
+
   it("各 entry の selection を shadcn variant と semantic token に反映する", () => {
     const onToggleEntry = vi.fn();
 
@@ -85,15 +149,11 @@ describe("PatternList checkbox UI", () => {
     });
 
     const checkboxes = Array.from(
-      container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
+      container.querySelectorAll<HTMLButtonElement>('[data-slot="checkbox"]')
     );
-    expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([
-      true,
-      false,
-      true,
-      false,
-      true,
-    ]);
+    expect(
+      checkboxes.map((checkbox) => checkbox.dataset.state === "checked")
+    ).toEqual([true, false, true, false, true]);
     expect(
       checkboxes.map((checkbox) => checkbox.getAttribute("aria-label"))
     ).toEqual([
@@ -135,25 +195,44 @@ describe("PatternList checkbox UI", () => {
     ]);
     expect(
       rows.map((row) => row.querySelector("label")?.dataset.variant)
-    ).toEqual(["default", "outline", "default", "outline", "default"]);
+    ).toEqual(["outline", "outline", "outline", "outline", "outline"]);
     expect(rows.map((row) => row.querySelector("label")?.dataset.size)).toEqual(
       ["sm", "sm", "sm", "sm", "sm"]
     );
     expect(
-      checkboxes.every((checkbox) =>
-        checkbox.className.includes("accent-primary")
-      )
+      checkboxes.every((checkbox) => checkbox.dataset.slot === "checkbox")
     ).toBe(true);
-    const names = rows.map((row) => row.querySelector("span")!);
-    expect(names[0].className).toContain("text-foreground");
-    expect(names[1].className).toContain("bg-primary/10");
-    expect(names[1].className).toContain("text-primary");
-    expect(names[2].className).toContain("bg-secondary");
-    expect(names[2].className).toContain("text-secondary-foreground");
-    expect(names[3].className).toContain("text-muted-foreground");
-    expect(names[3].className).toContain("line-through");
-    expect(names[4].className).toContain("bg-destructive/10");
-    expect(names[4].className).toContain("text-destructive");
+    const controls = rows.map((row) =>
+      row.querySelector<HTMLElement>('[data-slot="button"]')!
+    );
+    const stateTokens = [
+      ["border-border", "bg-background", "text-foreground"],
+      ["border-info-border", "bg-info-background", "text-info-foreground"],
+      [
+        "border-warning-border",
+        "bg-warning-background",
+        "text-warning-foreground",
+      ],
+      [
+        "border-success-border",
+        "bg-success-background",
+        "text-success-foreground",
+      ],
+      [
+        "border-destructive-border",
+        "bg-destructive-background",
+        "text-destructive-foreground",
+      ],
+    ];
+    controls.forEach((control, index) => {
+      for (const token of stateTokens[index]!) {
+        expect(control.className).toContain(token);
+      }
+      expect(control.className).toContain(
+        [true, false, true, false, true][index] ? "ring-2" : "shadow-none"
+      );
+    });
+    expect(rows[3].className).toContain("line-through");
   });
 
   it("controlled state 更新後に done entry の手動再チェックを DOM に反映する", () => {
@@ -181,13 +260,11 @@ describe("PatternList checkbox UI", () => {
     });
 
     let checkboxes = Array.from(
-      container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
+      container.querySelectorAll<HTMLButtonElement>('[data-slot="checkbox"]')
     );
-    expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([
-      true,
-      false,
-      true,
-    ]);
+    expect(
+      checkboxes.map((checkbox) => checkbox.dataset.state === "checked")
+    ).toEqual([true, false, true]);
     expect(checkboxes.map((checkbox) => checkbox.disabled)).toEqual([
       false,
       false,
@@ -200,13 +277,11 @@ describe("PatternList checkbox UI", () => {
     });
 
     checkboxes = Array.from(
-      container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')
+      container.querySelectorAll<HTMLButtonElement>('[data-slot="checkbox"]')
     );
-    expect(checkboxes.map((checkbox) => checkbox.checked)).toEqual([
-      false,
-      true,
-      true,
-    ]);
+    expect(
+      checkboxes.map((checkbox) => checkbox.dataset.state === "checked")
+    ).toEqual([false, true, true]);
     const rows = Array.from(
       container.querySelectorAll<HTMLLIElement>("[data-suno-entry-index]")
     );
@@ -217,7 +292,7 @@ describe("PatternList checkbox UI", () => {
     ]);
     expect(
       rows.map((row) => row.querySelector("label")?.dataset.variant)
-    ).toEqual(["outline", "default", "default"]);
-    expect(rows[1].querySelector("span")?.className).toContain("line-through");
+    ).toEqual(["outline", "outline", "outline"]);
+    expect(rows[1].className).toContain("line-through");
   });
 });

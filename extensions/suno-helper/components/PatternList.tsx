@@ -1,4 +1,4 @@
-import { ButtonSlot } from "@youtube-automation/ui";
+import { ButtonSlot, Checkbox } from "@youtube-automation/ui";
 
 import type { PromptEntry } from "../../shared/api";
 import type { ItemState } from "../../shared/constants";
@@ -12,12 +12,20 @@ interface PatternListProps {
 }
 
 const STATE_CLASS: Record<ItemState, string> = {
-  idle: "text-foreground",
-  active: "bg-primary/10 font-medium text-primary",
-  submitted: "bg-secondary font-medium text-secondary-foreground",
-  done: "text-muted-foreground line-through",
+  idle: "border-border bg-background text-foreground",
+  active:
+    "border-info-border bg-info-background font-medium text-info-foreground",
+  submitted:
+    "border-warning-border bg-warning-background font-medium text-warning-foreground",
+  done: "border-success-border bg-success-background text-success-foreground",
   // リトライ上限まで失敗しスキップされた entry (#948)。「失敗分のみ再実行」の対象。
-  failed: "bg-destructive/10 font-medium text-destructive",
+  failed:
+    "border-destructive-border bg-destructive-background font-medium text-destructive-foreground",
+};
+
+const SELECTION_CLASS: Record<"selected" | "unselected", string> = {
+  selected: "ring-2 ring-current/20",
+  unselected: "shadow-none",
 };
 
 export function PatternList({
@@ -46,25 +54,19 @@ export function PatternList({
             data-suno-entry-selected={selected ? "true" : "false"}
           >
             <ButtonSlot
-              variant={selected ? "default" : "outline"}
+              variant="outline"
               size="sm"
-              className="h-auto w-full justify-start whitespace-normal p-0 font-normal"
+              className={`h-auto w-full justify-start whitespace-normal p-0 font-normal ${STATE_CLASS[itemState]} ${SELECTION_CLASS[selected ? "selected" : "unselected"]}`}
             >
               <label className="flex items-center gap-2 px-2 py-1">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={selected}
-                  onChange={(event) =>
-                    onToggleEntry(index, event.currentTarget.checked)
+                  onCheckedChange={(checked) =>
+                    onToggleEntry(index, checked === true)
                   }
                   aria-label={`entry ${index + 1}: ${entry.name}`}
-                  className="size-4 shrink-0 accent-primary"
                 />
-                <span
-                  className={`min-w-0 flex-1 text-left ${STATE_CLASS[itemState]}`}
-                >
-                  {entry.name}
-                </span>
+                <span className="min-w-0 flex-1 text-left">{entry.name}</span>
               </label>
             </ButtonSlot>
           </li>
