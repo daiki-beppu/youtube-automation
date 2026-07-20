@@ -12,21 +12,22 @@ WXT + React + TypeScript + Tailwind CSS + [@webext-core/messaging](https://webex
 
 ## ディレクトリ構成
 
-| パス | 役割 |
-| --- | --- |
-| `wxt.config.ts` | Manifest V3 定義（permissions は `lib/manifest.ts`、ローカル配信元 host は shared 定数を参照） |
-| `lib/manifest.ts` | manifest 権限の SSOT（最小権限 `storage` / `activeTab`、content script host は distrokid.com 限定） |
-| `entrypoints/background.ts` | service worker（ライフサイクルログのみ） |
-| `entrypoints/content.ts` | `distrokid.com/new` での DOM 注入（テキスト + popup から受け取った File） |
-| `entrypoints/popup/` | popup UI（React）。表示とイベント接続のみ（実行制御は `useDistrokidRunner`） |
-| `components/` | popup プレゼンテーション部品 + `useDistrokidRunner`（fetch / collection 選択 / 注入 / 停止 / 配信済み記録） |
-| `lib/api.ts` | `/distrokid/release.json` / assets の fetch client（`ReleaseUnavailableError`） |
-| `lib/asset-transfer.ts` | popup で fetch した asset を content へ渡すための base64 直列化（CORS 回避） |
-| `lib/distrokid-injector.ts` | React 互換ネイティブイベント注入 + `DataTransfer` ファイル注入 + セレクタ契約 |
-| `lib/messaging.ts` | popup ↔ content の型付き channel（`PHASES` 進捗契約） |
-| `lib/storage.ts` | 選択中ローカル配信元の永続化（既定 `http://youtube-automation.localhost:7873`） |
-| `lib/types.ts` | `/distrokid/release.json` の JSON 契約型 |
-| `tests/` | Vitest unit + Playwright e2e |
+<!-- prettier-ignore -->
+| パス                        | 役割                                                                                                        |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `wxt.config.ts`             | Manifest V3 定義（permissions は `lib/manifest.ts`、ローカル配信元 host は shared 定数を参照）              |
+| `lib/manifest.ts`           | manifest 権限の SSOT（最小権限 `storage` / `activeTab`、content script host は distrokid.com 限定）         |
+| `entrypoints/background.ts` | service worker（ライフサイクルログのみ）                                                                    |
+| `entrypoints/content.ts`    | `distrokid.com/new` での DOM 注入（テキスト + popup から受け取った File）                                   |
+| `entrypoints/popup/`        | popup UI（React）。表示とイベント接続のみ（実行制御は `useDistrokidRunner`）                                |
+| `components/`               | popup プレゼンテーション部品 + `useDistrokidRunner`（fetch / collection 選択 / 注入 / 停止 / 配信済み記録） |
+| `lib/api.ts`                | `/distrokid/release.json` / assets の fetch client（`ReleaseUnavailableError`）                             |
+| `lib/asset-transfer.ts`     | popup で fetch した asset を content へ渡すための base64 直列化（CORS 回避）                                |
+| `lib/distrokid-injector.ts` | React 互換ネイティブイベント注入 + `DataTransfer` ファイル注入 + セレクタ契約                               |
+| `lib/messaging.ts`          | popup ↔ content の型付き channel（`PHASES` 進捗契約）                                                       |
+| `lib/storage.ts`            | 選択中ローカル配信元の永続化（既定 `http://youtube-automation.localhost:7873`）                             |
+| `lib/types.ts`              | `/distrokid/release.json` の JSON 契約型                                                                    |
+| `tests/`                    | Vitest unit + Playwright e2e                                                                                |
 
 ## 開発フロー
 
