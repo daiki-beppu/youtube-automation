@@ -16,7 +16,6 @@ export {
   CardTitle,
 } from "./card";
 export { Checkbox } from "./checkbox";
-export { type ColorSchemeTarget, watchColorScheme } from "./color-scheme";
 export {
   Field,
   FieldContent,

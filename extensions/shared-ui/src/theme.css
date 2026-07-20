@@ -1,12 +1,10 @@
 @import "tailwindcss";
 
 @source "./*.tsx";
-@custom-variant dark (&:is(.dark *));
-
 :root,
 :host {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
+  --background: oklch(0.97 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -36,40 +34,6 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-}
-
-.dark,
-:host(.dark) {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --info-background: oklch(0.282 0.091 267.935);
-  --info-foreground: oklch(0.932 0.032 255.585);
-  --info-border: oklch(0.488 0.243 264.376);
-  --warning-background: oklch(0.279 0.077 45.635);
-  --warning-foreground: oklch(0.962 0.059 95.617);
-  --warning-border: oklch(0.555 0.163 48.998);
-  --success-background: oklch(0.266 0.065 152.934);
-  --success-foreground: oklch(0.962 0.044 156.743);
-  --success-border: oklch(0.527 0.154 150.069);
-  --destructive-background: oklch(0.258 0.092 26.042);
-  --destructive-foreground: oklch(0.936 0.032 17.717);
-  --destructive-border: oklch(0.505 0.213 27.518);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
 }
 
 @theme inline {

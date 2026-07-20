@@ -111,14 +111,27 @@ def test_shared_primitives_track_current_base_vega_composition() -> None:
     assert "SelectPortalContext" in sources["select"]
 
 
-def test_shared_theme_exposes_light_and_dark_status_token_triplets() -> None:
+def test_shared_theme_is_light_only() -> None:
     theme = (EXTENSIONS / "shared-ui/src/theme.css").read_text()
+
+    assert "--background: oklch(0.97 0 0);" in theme
+    assert "--card: oklch(1 0 0);" in theme
+    assert "--popover: oklch(1 0 0);" in theme
+    assert "@custom-variant dark" not in theme
+    assert ".dark" not in theme
+    assert ":host(.dark)" not in theme
 
     for status in ("info", "warning", "success", "destructive"):
         for role in ("background", "foreground", "border"):
             token = f"--{status}-{role}:"
-            assert theme.count(token) == 2, f"{token} must exist in light and dark themes"
+            assert theme.count(token) == 1, f"{token} must exist once in the light theme"
             assert f"--color-{status}-{role}: var(--{status}-{role});" in theme
+
+    sources = "\n".join(path.read_text() for path in EXTENSIONS.rglob("*") if path.suffix in {".css", ".ts", ".tsx"})
+    assert "dark:" not in sources
+    assert "prefers-color-scheme" not in sources
+    assert not (EXTENSIONS / "shared-ui/src/color-scheme.ts").exists()
+    assert "watchColorScheme" not in sources
 
 
 def test_helpers_depend_on_shared_ui_without_local_primitive_copies() -> None:

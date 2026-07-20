@@ -32,8 +32,9 @@ describe("Tailwind 4 build integration", () => {
       .map((path) => readFileSync(path, "utf8"))
       .find((css) => css.includes("--radius"));
     expect(overlayCss).toBeDefined();
-    expect(overlayCss).toContain("--background:oklch(100% 0 0)");
+    expect(overlayCss).toContain("--background:oklch(97% 0 0)");
     expect(overlayCss).toContain("--card:oklch(100% 0 0)");
+    expect(overlayCss).toContain("--popover:oklch(100% 0 0)");
     expect(overlayCss).toContain(":host");
     expect(overlayCss).toContain(".flex");
     expect(overlayCss).toContain(".bg-card");

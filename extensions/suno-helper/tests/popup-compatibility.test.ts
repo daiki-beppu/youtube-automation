@@ -562,11 +562,7 @@ describe("Suno popup compatibility check", () => {
       '[data-slot="field-label"]'
     )!;
     expect(Array.from(selectedModeCard.classList)).toEqual(
-      expect.arrayContaining([
-        "border-info-border",
-        "bg-info-background/40",
-        "dark:bg-info-background/25",
-      ])
+      expect.arrayContaining(["border-info-border", "bg-info-background/40"])
     );
     expect(
       selectedModeCard.querySelector('[data-suno-slot="run-mode-description"]')
