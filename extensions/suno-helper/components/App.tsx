@@ -3,6 +3,7 @@ import {
   Button,
   buttonVariants,
   Checkbox,
+  cn,
   FieldLabel,
   RadioGroup,
   RadioGroupItem,
@@ -558,18 +559,22 @@ export function App() {
         >
           {RUN_MODE_ORDER.map((id) => {
             const mode = RUN_MODES[id];
+            const selected = runModeId === id;
             return (
               <FieldLabel
                 key={id}
-                data-variant={runModeId === id ? "info" : "outline"}
+                data-variant={selected ? "info" : "outline"}
                 data-size="sm"
                 data-disabled={controlsLocked}
-                className={buttonVariants({
-                  variant: runModeId === id ? "info" : "outline",
-                  size: "sm",
-                  className:
-                    "h-auto w-full justify-start whitespace-normal p-2",
-                })}
+                className={cn(
+                  buttonVariants({
+                    variant: selected ? "info" : "outline",
+                    size: "sm",
+                  }),
+                  "h-auto w-full justify-start whitespace-normal p-2",
+                  selected &&
+                    "bg-info-background/40 hover:bg-info-background/60 dark:bg-info-background/25 dark:hover:bg-info-background/40"
+                )}
               >
                 <RadioGroupItem
                   value={id}
@@ -579,7 +584,15 @@ export function App() {
                 />
                 <span className="flex flex-col">
                   <span className="font-medium">{mode.label}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span
+                    data-suno-slot="run-mode-description"
+                    className={cn(
+                      "text-xs",
+                      selected
+                        ? "text-info-foreground"
+                        : "text-muted-foreground"
+                    )}
+                  >
                     {mode.riskNote}
                   </span>
                 </span>

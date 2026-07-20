@@ -540,11 +540,34 @@ describe("Suno popup compatibility check", () => {
       "info",
       "field-label"
     );
+    const selectedModeCard = serialMode.closest<HTMLElement>(
+      '[data-slot="field-label"]'
+    )!;
+    expect(Array.from(selectedModeCard.classList)).toEqual(
+      expect.arrayContaining([
+        "border-info-border",
+        "bg-info-background/40",
+        "dark:bg-info-background/25",
+      ])
+    );
+    expect(
+      selectedModeCard.querySelector('[data-suno-slot="run-mode-description"]')
+        ?.classList
+    ).toContain("text-info-foreground");
     expectShadcnControl(
       queueMode.closest<HTMLElement>('[data-slot="field-label"]')!,
       "outline",
       "field-label"
     );
+    const unselectedModeCard = queueMode.closest<HTMLElement>(
+      '[data-slot="field-label"]'
+    )!;
+    expect(unselectedModeCard.classList).not.toContain("bg-info-background/40");
+    expect(
+      unselectedModeCard.querySelector(
+        '[data-suno-slot="run-mode-description"]'
+      )?.classList
+    ).toContain("text-muted-foreground");
 
     expectShadcnControl(expectControl(container, "run"), "info");
     expectShadcnControl(expectControl(container, "stop"), "destructive");
@@ -1170,6 +1193,16 @@ describe("Suno popup compatibility check", () => {
       "info",
       "field-label"
     );
+    expect(
+      radioByLabel(container, "高速モード").closest<HTMLElement>(
+        '[data-slot="field-label"]'
+      )?.classList
+    ).toContain("bg-info-background/40");
+    expect(
+      radioByLabel(container, "安全モード").closest<HTMLElement>(
+        '[data-slot="field-label"]'
+      )?.classList
+    ).not.toContain("bg-info-background/40");
 
     messagingMocks.sendMessage.mockClear();
     await act(async () => {
