@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `refactor(extensions-ui)`: shared Alert / Button / Card / Checkbox / Field / Label / RadioGroup / Select を現行 shadcn/ui Base UI registryへ再同期し、完全な Field composition、invalid state、現行 size・animationを追加した。独自 status variant、Radio選択色、ShadowRoot内Select portalは維持する（#2324）。
+- `feat(suno-helper)`: paused / completed の collection queue summary にアクセシブルな Close を追加し、paused はインライン確認後、completed は即時に永続 queue state を削除できるようにした。running queue と単発 Resume state は破棄対象外とする（#2328）。
 - `fix(extensions-ui)`: shared Base UI `RadioGroupItem` の選択時 root 塗りつぶしを除去し、semantic color の円枠と中央配置した indicator dot で状態を示す公式 primitive 構成へ是正した。Suno の mouse / keyboard 選択、保存、disabled、カード配色は維持する（#2332）。
 - `feat(extensions)`: Suno / DistroKid / Community helper に用途とブランド色を区別できる透過 PNG アイコンを追加し、WXT が 16 / 32 / 48 / 128px の manifest icon を自動検出する契約を固定した（#2335）。
 - `fix(suno-helper)`: 曲リストとコレクション選択の checkbox をラベル先頭行へ揃え、異常値再生成 OFF の余白も同じ 2px 基準へ統一した。1行時のカード中央配置、完了音、選択 callback・ARIA は維持する（#2325）。

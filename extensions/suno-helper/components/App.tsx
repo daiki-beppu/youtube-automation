@@ -61,6 +61,7 @@ export function App() {
     collectionQueue,
     runCollectionQueue,
     resumeCollectionQueue,
+    discardCollectionQueue,
     entries,
     itemStates,
     status,
@@ -99,10 +100,14 @@ export function App() {
   const previousItemStatesRef = useRef(itemStates);
   const [refreshingServerSources, setRefreshingServerSources] = useState(false);
   const [serverSourcePickerOpen, setServerSourcePickerOpen] = useState(false);
+  const [queueDiscardConfirming, setQueueDiscardConfirming] = useState(false);
   const isRunningRef = useRef(isRunning);
   useEffect(() => {
     isRunningRef.current = isRunning;
   }, [isRunning]);
+  useEffect(() => {
+    setQueueDiscardConfirming(false);
+  }, [collectionQueue?.queueId, collectionQueue?.status]);
 
   const openServerSourcePicker = (): void => {
     if (refreshingServerSources || controlsLocked) {
@@ -432,10 +437,42 @@ export function App() {
                   ? "warning"
                   : "info"
           }
-          className="flex flex-col gap-2 rounded px-2 py-2 text-xs"
+          className="relative flex flex-col gap-2 rounded px-2 py-2 text-xs"
           data-suno-control="collection-queue-summary"
         >
-          <p className="font-medium">
+          {collectionQueue.status !== "running" && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="absolute top-1 right-1 size-6"
+              aria-label={
+                collectionQueue.status === "paused"
+                  ? "停止中の collection queue を破棄"
+                  : "完了した collection queue を閉じる"
+              }
+              data-suno-control="collection-queue-dismiss"
+              onClick={() => {
+                if (collectionQueue.status === "paused") {
+                  setQueueDiscardConfirming(true);
+                  return;
+                }
+                void discardCollectionQueue();
+              }}
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeWidth="2"
+              >
+                <path d="m4 4 8 8m0-8-8 8" />
+              </svg>
+            </Button>
+          )}
+          <p className="pr-7 font-medium">
             Collection queue: {collectionQueue.status}
           </p>
           <ul className="list-disc pl-4">
@@ -446,7 +483,33 @@ export function App() {
               </li>
             ))}
           </ul>
-          {collectionQueue.status === "paused" && (
+          {collectionQueue.status === "paused" && queueDiscardConfirming && (
+            <div
+              role="group"
+              aria-label="未完了の collection queue の破棄確認"
+              className="flex flex-wrap items-center gap-2"
+              data-suno-control="collection-queue-discard-confirmation"
+            >
+              <p className="w-full">未完了の queue を破棄しますか？</p>
+              <Button
+                type="button"
+                size="sm"
+                variant="destructive"
+                onClick={() => void discardCollectionQueue()}
+              >
+                破棄
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setQueueDiscardConfirming(false)}
+              >
+                戻る
+              </Button>
+            </div>
+          )}
+          {collectionQueue.status === "paused" && !queueDiscardConfirming && (
             <Button
               type="button"
               size="sm"

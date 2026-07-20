@@ -34,6 +34,7 @@ const runner = vi.hoisted(() => ({
   collectionQueue: null,
   runCollectionQueue: vi.fn(),
   resumeCollectionQueue: vi.fn(),
+  discardCollectionQueue: vi.fn(async () => undefined),
   entries: [],
   itemStates: [],
   status: "待機中",
@@ -116,6 +117,8 @@ describe("Overlay shell", () => {
       collectionQueue: null,
     });
     runner.runCollectionQueue.mockClear();
+    runner.resumeCollectionQueue.mockClear();
+    runner.discardCollectionQueue.mockClear();
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -340,6 +343,94 @@ describe("Overlay shell", () => {
     ).toBe("success");
   });
 
+  it("paused queue は確認後だけ破棄し、戻ると再開操作を維持する", async () => {
+    Object.assign(runner, {
+      collectionQueue: {
+        version: 1,
+        queueId: "queue-paused",
+        baseUrl: "http://localhost:7873",
+        items: [{ collectionId: "first", status: "pending" }],
+        currentIndex: 0,
+        status: "paused",
+        runMode: "serial",
+        regenerateDurationOutliers: true,
+        createdAt: 100,
+        updatedAt: 200,
+      },
+    });
+    await act(async () => root.render(createElement(Overlay)));
+
+    const close = container.querySelector<HTMLButtonElement>(
+      'button[data-suno-control="collection-queue-dismiss"]'
+    )!;
+    expect(close.getAttribute("aria-label")).toContain("停止中");
+    await act(async () => close.click());
+
+    const confirmation = container.querySelector<HTMLElement>(
+      '[data-suno-control="collection-queue-discard-confirmation"]'
+    )!;
+    expect(confirmation.textContent).toContain(
+      "未完了の queue を破棄しますか？"
+    );
+    expect(runner.discardCollectionQueue).not.toHaveBeenCalled();
+    expect(
+      Array.from(confirmation.querySelectorAll("button")).map(
+        (button) => button.textContent
+      )
+    ).toEqual(["破棄", "戻る"]);
+
+    await act(async () =>
+      Array.from(confirmation.querySelectorAll("button"))
+        .find((button) => button.textContent === "戻る")!
+        .click()
+    );
+    expect(
+      Array.from(container.querySelectorAll("button")).some(
+        (button) => button.textContent === "Queue を再開"
+      )
+    ).toBe(true);
+
+    await act(async () => close.click());
+    await act(async () =>
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent === "破棄")!
+        .click()
+    );
+    expect(runner.discardCollectionQueue).toHaveBeenCalledOnce();
+    expect(runner.resumeCollectionQueue).not.toHaveBeenCalled();
+  });
+
+  it("completed queue の Close は確認なしで即時破棄する", async () => {
+    Object.assign(runner, {
+      collectionQueue: {
+        version: 1,
+        queueId: "queue-completed",
+        baseUrl: "http://localhost:7873",
+        items: [{ collectionId: "first", status: "succeeded" }],
+        currentIndex: 1,
+        status: "completed",
+        runMode: "serial",
+        regenerateDurationOutliers: true,
+        createdAt: 100,
+        updatedAt: 200,
+      },
+    });
+    await act(async () => root.render(createElement(Overlay)));
+
+    const close = container.querySelector<HTMLButtonElement>(
+      'button[data-suno-control="collection-queue-dismiss"]'
+    )!;
+    expect(close.getAttribute("aria-label")).toContain("完了した");
+    await act(async () => close.click());
+
+    expect(runner.discardCollectionQueue).toHaveBeenCalledOnce();
+    expect(
+      container.querySelector(
+        '[data-suno-control="collection-queue-discard-confirmation"]'
+      )
+    ).toBeNull();
+  });
+
   it("collection 間の queue 遷移中は入力を固定し Stop だけを有効にする", async () => {
     Object.assign(runner, {
       collectionQueue: {
@@ -363,6 +454,11 @@ describe("Overlay shell", () => {
         '[data-suno-control="collection-queue-summary"]'
       )?.dataset.variant
     ).toBe("info");
+    expect(
+      container.querySelector(
+        'button[data-suno-control="collection-queue-dismiss"]'
+      )
+    ).toBeNull();
 
     expect(
       container.querySelector<HTMLButtonElement>(
