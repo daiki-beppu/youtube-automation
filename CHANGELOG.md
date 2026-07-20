@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `chore(extensions-ui)`: 公式 shadcn/ui skill をリポジトリ管理下へ導入し、Claude Code / Codex / wheel sync で共有する `info`・公式docs・registry diff先行のUI実装手順を追加した（#2323）。
+- `fix(collection-serve)`: `collections/planning` の Suno 一覧と個別 prompts 配信から、対応する `collections/live/<id>/workflow-state.json` が `phase: complete` の collection を除外した。不在・破損・未完了状態は従来どおり表示し、DistroKid 一覧にはフィルタを適用しない（#2331）。
 - `fix(suno-helper)`: 異常値再生成オプションを1行時は中央、説明表示時は先頭行へ揃え、曲リストのチェックボックスにコレクションカードと同じ余白基準を適用した（#2316）。
 - `fix(suno-helper)`: 投入方式の選択カードを薄い info 背景と青い枠へ調整し、light / dark の両方でモード名と説明文を読みやすくした（#2315）。
 - `docs(channel-new)`: localization 言語の生成規則を、TTP 多言語では競合セットを完全踏襲、TTP 非多言語では `en` のみ、非 TTP では単一言語・localizations 省略可の 3 分岐へ固定した。独自の高 CPM 言語追加を廃止し、生成テンプレートから `de` を除外した（#2295）。
