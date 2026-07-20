@@ -104,7 +104,7 @@ def test_select_consumers_dedupe_base_ui_and_react_from_their_workspace() -> Non
             assert '"react", "react-dom", "@base-ui/react"' in config
 
     fallow = json.loads((EXTENSIONS / ".fallowrc.json").read_text())
-    assert fallow["ignoreDependencies"] == []
+    assert fallow["ignoreDependencies"] == ["@base-ui/react"]
 
 
 def test_all_shadcn_configs_choose_base_vega() -> None:

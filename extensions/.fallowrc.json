@@ -10,7 +10,7 @@
     "oxfmt.config.ts",
     "oxlint.config.ts"
   ],
-  "ignoreDependencies": [],
+  "ignoreDependencies": ["@base-ui/react"],
   "audit": {
     "css": false,
     "gate": "new-only",
