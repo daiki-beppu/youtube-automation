@@ -24,7 +24,8 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from google.auth.exceptions import RefreshError
+from google.auth.exceptions import RefreshError, TransportError
+from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -1041,6 +1042,82 @@ def check_oauth_client_sharing(channel_dir: Path) -> CheckResult:
     )
 
 
+@dataclass(frozen=True)
+class _OAuthCredentialState:
+    credentials: Credentials | None = None
+    refreshed: bool = False
+    error: str | None = None
+    reauthentication_required: bool = False
+
+
+def _persist_refreshed_credentials(token_path: Path, credentials: Credentials) -> None:
+    """refresh 済み credentials を token.json へ 0o600 で atomic に保存する。"""
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=token_path.parent,
+            prefix=f".{token_path.name}.",
+            delete=False,
+        ) as temporary:
+            temporary.write(credentials.to_json())
+            temporary.flush()
+            os.fsync(temporary.fileno())
+            temporary_path = Path(temporary.name)
+        temporary_path.chmod(0o600)
+        os.replace(temporary_path, token_path)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+
+
+def _load_refreshable_oauth_credentials(token_path: Path) -> _OAuthCredentialState:
+    """token を読み、期限切れなら refresh token で更新して永続化する。"""
+    try:
+        credentials = Credentials.from_authorized_user_file(str(token_path))
+    except (OSError, ValueError) as error:
+        return _OAuthCredentialState(
+            error=f"OAuth トークンが不正です: {error}",
+            reauthentication_required=True,
+        )
+
+    refreshed = False
+    if credentials.expired:
+        if not credentials.refresh_token:
+            return _OAuthCredentialState(
+                error="OAuth トークンが期限切れで、更新用トークンがありません",
+                reauthentication_required=True,
+            )
+        try:
+            credentials.refresh(Request())
+        except RefreshError:
+            return _OAuthCredentialState(
+                error="OAuth トークンの更新に失敗しました。更新用トークンが失効しています",
+                reauthentication_required=True,
+            )
+        except TransportError as error:
+            return _OAuthCredentialState(error=f"OAuth トークン更新時の通信に失敗しました: {error}")
+        try:
+            _persist_refreshed_credentials(token_path, credentials)
+        except OSError as error:
+            return _OAuthCredentialState(error=f"更新した OAuth トークンの保存に失敗しました: {error}")
+        refreshed = True
+
+    if not credentials.valid:
+        return _OAuthCredentialState(
+            error="OAuth トークンが利用できません",
+            reauthentication_required=True,
+        )
+    return _OAuthCredentialState(credentials=credentials, refreshed=refreshed)
+
+
+def _oauth_failure_action(state: _OAuthCredentialState) -> dict | None:
+    if not state.reauthentication_required:
+        return None
+    return _youtube_oauth_action("更新用トークンが利用できないため、ブラウザで OAuth 同意を完了してください。")
+
+
 def check_oauth_token(channel_dir: Path) -> CheckResult:
     path = channel_dir / "auth" / "token.json"
     if not path.exists():
@@ -1058,40 +1135,41 @@ def check_oauth_token(channel_dir: Path) -> CheckResult:
             status="fail",
             message=f"token.json 読み込み失敗: {e}",
         )
+    state = _load_refreshable_oauth_credentials(path)
+    if state.credentials is None:
+        return CheckResult(
+            id="oauth_token",
+            status="fail",
+            message=state.error or "OAuth トークンを利用できません",
+            next_action=_oauth_failure_action(state),
+        )
     scopes = data.get("scopes") or []
+    refresh_status = "・期限切れ token 更新済み" if state.refreshed else ""
     return CheckResult(
         id="oauth_token",
         status="ok",
-        message=f"token.json 存在 (scopes: {len(scopes)} 件)",
+        message=f"token.json 利用可能 (scopes: {len(scopes)} 件{refresh_status})",
     )
 
 
 def check_reporting_job(channel_dir: Path) -> CheckResult:
-    oauth_result = check_oauth_token(channel_dir)
-    if oauth_result.status != "ok":
+    token_path = channel_dir / "auth" / "token.json"
+    if not token_path.exists():
         return CheckResult(
             id="reporting_job",
             status="unknown",
             message="OAuth トークン未取得または不正のためスキップ",
         )
 
-    token_path = channel_dir / "auth" / "token.json"
-    try:
-        credentials = Credentials.from_authorized_user_file(str(token_path))
-    except (OSError, ValueError) as error:
+    state = _load_refreshable_oauth_credentials(token_path)
+    if state.credentials is None:
         return CheckResult(
             id="reporting_job",
             status="fail",
-            message=f"Reporting API ジョブ確認失敗: OAuth トークンが不正です: {error}",
+            message=f"Reporting API ジョブ確認失敗: {state.error}",
+            next_action=_oauth_failure_action(state),
         )
-
-    if not credentials.valid:
-        state = "期限切れ" if credentials.expired else "不正"
-        return CheckResult(
-            id="reporting_job",
-            status="fail",
-            message=f"Reporting API ジョブ確認失敗: OAuth トークンが{state}です。再認証してください",
-        )
+    credentials = state.credentials
 
     try:
         with _temporary_channel_dir(channel_dir), redirect_stdout(io.StringIO()):

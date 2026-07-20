@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(doctor)`: `yt-doctor` の OAuth / Reporting 診断が期限切れ access token を refresh token で自動更新し、更新結果を `token.json` へ安全に保存するようにした。refresh token が失効・欠落した場合だけブラウザ再認証を案内し、2 診断の token 判定を統一した（#2293）。
 - `fix(viewer-voice)`: `yt-benchmark-comments` が `commentThreads.list` に必要な `youtube.force-ssl` を持つ full-scope token を使うよう修正し、readonly token 発行済み環境で全件 403 になる問題を解消した（#2286）。
 - `fix(collection-preflight)`: 単一言語チャンネルでは共有 `requires_scene_phrases()` 判定に従って `scene_phrases` を要求せず、多言語時だけ検証するよう修正した（#2270）。
 - `docs(auth)`: doctor の YouTube OAuth next_action と `/setup` を、AI/setup が `uv run yt-oauth` を background 起動して stdout の同意 URL を中継・exit待機・doctor再検証し、人間はブラウザ同意だけを担う契約へ統一した（#2279）。
