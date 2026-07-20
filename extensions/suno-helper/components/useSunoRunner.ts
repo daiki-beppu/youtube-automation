@@ -27,6 +27,7 @@ import {
   orderSelectedCollectionIds,
   pauseCollectionQueue,
   readCollectionQueue,
+  removeCollectionQueue,
   resumeCollectionQueue,
   settleStoredCollectionQueueRun,
   type CollectionQueueState,
@@ -83,6 +84,7 @@ interface RunnerState {
   collectionQueue: CollectionQueueState | null;
   runCollectionQueue: (collectionIds: string[]) => Promise<void>;
   resumeCollectionQueue: () => Promise<void>;
+  discardCollectionQueue: () => Promise<void>;
   entries: PromptEntry[];
   itemStates: ItemState[];
   status: string;
@@ -1301,6 +1303,21 @@ export function useSunoRunner(): RunnerState {
       }
     }, [clearLoadedRunState, fetchData, reportStorageFailure]);
 
+  const discardPersistedCollectionQueue =
+    useCallback(async (): Promise<void> => {
+      const current = collectionQueueRef.current;
+      if (!current || current.status === "running") {
+        return;
+      }
+      try {
+        await removeCollectionQueue();
+        collectionQueueRef.current = null;
+        setCollectionQueue(null);
+      } catch (error) {
+        reportStorageFailure(error);
+      }
+    }, [reportStorageFailure]);
+
   const run = useCallback(
     async (overrides?: RunOverrides) => {
       // 二重実行ガード (#892 要件7)。実行中の再入（「再開」連打等）を no-op で弾く。
@@ -1689,6 +1706,7 @@ export function useSunoRunner(): RunnerState {
     collectionQueue,
     runCollectionQueue,
     resumeCollectionQueue: resumePersistedCollectionQueue,
+    discardCollectionQueue: discardPersistedCollectionQueue,
     entries,
     itemStates,
     status,

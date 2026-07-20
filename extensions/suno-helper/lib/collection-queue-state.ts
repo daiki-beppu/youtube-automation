@@ -214,6 +214,10 @@ export function writeCollectionQueue(
   return collectionQueueItem().setValue(state);
 }
 
+export function removeCollectionQueue(): Promise<void> {
+  return collectionQueueItem().removeValue();
+}
+
 export async function settleStoredCollectionQueueRun(
   queueId: string,
   options: SettleCollectionQueueRunOptions

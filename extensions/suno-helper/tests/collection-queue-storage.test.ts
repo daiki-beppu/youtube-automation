@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const storageMock = vi.hoisted(() => ({
   value: null as unknown,
   getValue: vi.fn(),
+  removeValue: vi.fn(),
   setValue: vi.fn(),
   defineItem: vi.fn(),
 }));
@@ -12,8 +13,12 @@ vi.mock("wxt/utils/storage", () => {
   storageMock.setValue.mockImplementation(async (value: unknown) => {
     storageMock.value = value;
   });
+  storageMock.removeValue.mockImplementation(async () => {
+    storageMock.value = null;
+  });
   storageMock.defineItem.mockReturnValue({
     getValue: storageMock.getValue,
+    removeValue: storageMock.removeValue,
     setValue: storageMock.setValue,
   });
   return { storage: { defineItem: storageMock.defineItem } };
@@ -22,6 +27,8 @@ vi.mock("wxt/utils/storage", () => {
 import {
   createCollectionQueue,
   currentCollectionId,
+  readCollectionQueue,
+  removeCollectionQueue,
   settleStoredCollectionQueueRun,
   writeCollectionQueue,
 } from "../lib/collection-queue-state";
@@ -79,5 +86,22 @@ describe("collection queue storage boundary (#2029)", () => {
     expect(transition).toBeNull();
     expect(storageMock.setValue).not.toHaveBeenCalled();
     expect(storageMock.value).toEqual(state);
+  });
+
+  it("queue state を storage key ごと削除し、再読込時に復活させない", async () => {
+    const state = createCollectionQueue({
+      queueId: "discarded-queue",
+      baseUrl: "http://localhost:8765",
+      collectionIds: ["first"],
+      runMode: "serial",
+      regenerateDurationOutliers: true,
+      now: 100,
+    });
+    await writeCollectionQueue(state);
+
+    await removeCollectionQueue();
+
+    expect(storageMock.removeValue).toHaveBeenCalledOnce();
+    await expect(readCollectionQueue()).resolves.toBeNull();
   });
 });

@@ -42,6 +42,8 @@ browser use から overlay / popup を安定して観測できるよう、操作
 | `[data-suno-control="collection-checkbox"]`                                                        | shadcn ベース一覧で collection を複数選択                                                                 |
 | `[data-suno-control="collection-select"]`                                                          | 旧 agent/E2E 用の非表示単一選択 compatibility seam                                                        |
 | `[data-suno-control="collection-queue-summary"]`                                                   | collection ごとの成功 / 失敗と再実行導線                                                                  |
+| `[data-suno-control="collection-queue-dismiss"]`                                                   | 停止・完了した collection queue の破棄操作                                                                |
+| `[data-suno-control="collection-queue-discard-confirmation"]`                                      | 停止中 queue のインライン破棄確認                                                                          |
 | `[data-suno-control="run"]` / `[data-suno-control="stop"]`                                         | 主要操作ボタン                                                                                            |
 | `[data-suno-control="completion-sound-enabled"]`                                                   | 完了音 ON/OFF の shadcn Checkbox                                                                          |
 | `[data-suno-control="completion-sound-preset"]` / `[data-suno-control="completion-sound-preview"]` | 合成音 preset の選択 / 試聴                                                                               |
