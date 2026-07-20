@@ -1,5 +1,6 @@
 packages:
   - .
+  - ../shared
   - ../shared-ui
 
 allowBuilds:

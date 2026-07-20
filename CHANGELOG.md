@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `feat(suno-helper)`: 完了通知 UI を shared shadcn/ui Switch 1つへ簡素化し、最終 FINISHED / ERROR で OS 通知と状態別の固定 Web Audio を独立して発火するようにした。旧 preset は enabled を維持して自動削除し、通知失敗は run 結果へ影響させない（#2334）。
+- `refactor(extensions-ui)`: draggable overlay の shell・pointer drag・viewport clamp を shared UI、状態型・純関数・helper key 注入型 storage adapter を extensions shared へ抽出した。Suno は共通 consumer へ移行し、既存 selector・最小化・action toggle・reload 復元を維持する（#2318）。
 - `fix(extensions-ui)`: Suno / DistroKid / Community helper を OS の配色設定に依存しないライトテーマへ固定し、薄いグレーのページ背景と白い card / popover を共通 token に定義した。dark variant・system theme watcher・dark theme token を撤去して3拡張の表示契約を統一した（#2326）。
 - `feat(suno-helper)`: コレクション一覧と楽曲一覧を shared shadcn/ui Collapsible で個別に折りたためるようにし、初期状態を閉、見出しに件数を表示した。楽曲一覧の既存スクロール上限と選択・実行ロジックは維持する（#2330）。
 - `refactor(extensions-ui)`: shared Alert / Button / Card / Checkbox / Field / Label / RadioGroup / Select を現行 shadcn/ui Base UI registryへ再同期し、完全な Field composition、invalid state、現行 size・animationを追加した。独自 status variant、Radio選択色、ShadowRoot内Select portalは維持する（#2324）。

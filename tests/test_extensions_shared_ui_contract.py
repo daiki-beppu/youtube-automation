@@ -29,6 +29,7 @@ def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
     }
     assert set(package["dependencies"]) == {
         "@base-ui/react",
+        "@youtube-automation/extensions-shared",
         "class-variance-authority",
         "clsx",
         "tailwindcss",
@@ -48,16 +49,54 @@ def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
         "FieldError",
         "FieldLabel",
         "FieldSet",
+        "OverlayShell",
         "RadioGroup",
         "RadioGroupItem",
         "Select",
         "Switch",
+        "useDraggable",
         "cn",
     ):
         assert public_symbol in index
 
     for primitive in PRIMITIVES:
         assert (EXTENSIONS / f"shared-ui/src/{primitive}").is_file()
+
+
+def test_overlay_foundation_is_shared_and_service_neutral() -> None:
+    shared_package = json.loads((EXTENSIONS / "shared/package.json").read_text())
+    state = (EXTENSIONS / "shared/overlay-state.ts").read_text()
+    shell = (EXTENSIONS / "shared-ui/src/overlay-shell.tsx").read_text()
+    draggable = (EXTENSIONS / "shared-ui/src/use-draggable.ts").read_text()
+    controller = (EXTENSIONS / "shared-ui/src/use-overlay-controller.ts").read_text()
+
+    assert shared_package["exports"]["./overlay-state"] == "./overlay-state.ts"
+    for helper_name in HELPERS:
+        workspace = (EXTENSIONS / helper_name / "pnpm-workspace.yaml").read_text()
+        assert "../shared" in workspace
+        assert "../shared-ui" in workspace
+
+    suno_package = json.loads((EXTENSIONS / "suno-helper/package.json").read_text())
+    assert suno_package["dependencies"]["@youtube-automation/extensions-shared"] == "workspace:*"
+
+    assert "createOverlayStateStorage" in state
+    assert "storageKey" in state
+    assert "toggleOverlayHidden" in state
+    assert "overlayHiddenStyle" in state
+    assert 'data-overlay-shell=""' in shell
+    assert 'data-overlay-handle=""' in shell
+    assert "subscribeToggle" in controller
+    assert 'display: controller.minimized ? "none" : "block"' in shell
+    assert "clampOverlayPosition" in draggable
+    assert 'window.addEventListener("resize"' in draggable
+    assert "suno" not in shell.lower()
+    assert "distrokid" not in shell.lower()
+    assert "community" not in shell.lower()
+    assert "suno" not in controller.lower()
+    assert "distrokid" not in controller.lower()
+    assert "community" not in controller.lower()
+    assert not (EXTENSIONS / "suno-helper/components/useDraggable.ts").exists()
+    assert not (EXTENSIONS / "suno-helper/lib/overlay-state.ts").exists()
 
 
 def test_shared_form_primitives_use_base_ui_state_contracts() -> None:

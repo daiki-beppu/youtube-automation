@@ -21,7 +21,7 @@ export const UNATTENDED_RUN_STATE_KEY = "sunoUnattendedRunState";
 export const COLLECTION_QUEUE_STATE_KEY = "sunoCollectionQueueState";
 
 /** overlay の position/minimized/hidden を保存する chrome.storage.local の単一 key (#892)。
- * Suno は 1 タブ運用前提のため global 単一 key とする。lib/overlay-state.ts が SSOT として参照する。 */
+ * Suno は 1 タブ運用前提のため global 単一 key とする。lib/overlay-storage.ts が共通 adapter へ注入する。 */
 export const OVERLAY_STATE_KEY = "sunoOverlayState";
 
 /** run 一式完了時リロード (#1411) で失われる直近完了 run の snapshot を退避する chrome.storage.local の key。

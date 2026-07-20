@@ -7,8 +7,8 @@
 ```
 extensions/
   shared-ui/              # 3拡張共通の shadcn/ui workspace package
-    src/                  # shadcn/ui primitives（Button / Switch 等）/ cn / theme CSS
-  shared/                 # 複数拡張で再利用する共通コード（relative import）
+    src/                  # shadcn/ui primitives（Button / Switch 等）/ OverlayShell / cn / theme CSS
+  shared/                 # 複数拡張で再利用する型・純関数・browser adapter
     constants.ts          # storage key / 配信ルート / phase 値（サーバー契約 SSOT。メッセージ種別は各拡張の lib/messaging.ts）
     origin.ts             # CORS origin allowlist（collection_serve.py と対の契約）
     api.ts                # yt-collection-serve client + PromptEntry 型
@@ -27,7 +27,9 @@ extensions/
     tests/                # Vitest runner contract / DOM / Popup unit tests
 ```
 
-`shared/` は各拡張から相対 import（例: `../../shared/dom`）で参照する。UI は `shared-ui/` の workspace package `@youtube-automation/ui` から import し、Button / Card / Alert / Select / Checkbox / RadioGroup / Switch、`cn()`、theme CSS の実装を単一ソースに保つ。theme CSS は info / warning / success / destructive ごとの semantic token を OS 設定に依存しないライトテーマとして提供する。各 helper の `pnpm-workspace.yaml` は `../shared-ui` を workspace member として明示するため、従来どおり `extensions/<name>/` 単体で frozen install / build / zip を実行できる。
+`shared/` の既存モジュールは各拡張から相対 import（例: `../../shared/dom`）で参照する。overlay state の型・純関数・key 注入型 storage adapter は package subpath `@youtube-automation/extensions-shared/overlay-state` として公開する。UI は `shared-ui/` の workspace package `@youtube-automation/ui` から import し、Button / Card / Alert / Select / Checkbox / RadioGroup / Switch / OverlayShell、`useDraggable()`、`cn()`、theme CSS の実装を単一ソースに保つ。theme CSS は info / warning / success / destructive ごとの semantic token を OS 設定に依存しないライトテーマとして提供する。各 helper の `pnpm-workspace.yaml` は `../shared` と `../shared-ui` を workspace member として明示するため、従来どおり `extensions/<name>/` 単体で frozen install / build / zip を実行できる。
+
+共通 `OverlayShell` は title・children・state I/O・action toggle 購読を consumer から受け取り、固定 shell、drag、viewport clamp、最小化、非表示中も生存する listener を提供する。service 固有の名前・storage key・messaging・runner は各 helper 側に残す。content UI の mount は WXT 公式の `createShadowRootUi` と `cssInjectionMode: "ui"` を使い、対象ページの CSS から隔離する。
 
 suno-helper は長時間 run の終端通知に `notifications` permission を使用する。content / overlay は privileged API を直接呼ばず、型付き message で background service worker へ委譲する。
 

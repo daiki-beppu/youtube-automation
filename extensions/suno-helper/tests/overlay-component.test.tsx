@@ -63,16 +63,10 @@ const runner = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/messaging", () => messagingMocks);
-vi.mock("../lib/overlay-state", async () => {
-  const actual = await vi.importActual<typeof import("../lib/overlay-state")>(
-    "../lib/overlay-state"
-  );
-  return {
-    ...actual,
-    readOverlayState: overlayStateMocks.readOverlayState,
-    writeOverlayState: overlayStateMocks.writeOverlayState,
-  };
-});
+vi.mock("../lib/overlay-storage", () => ({
+  readOverlayState: overlayStateMocks.readOverlayState,
+  writeOverlayState: overlayStateMocks.writeOverlayState,
+}));
 vi.mock("../lib/storage", () => ({
   downloadFormatItem: { setValue: vi.fn(async () => undefined) },
   readDownloadFormat: vi.fn(async () => "mp3"),
