@@ -1,5 +1,5 @@
 export interface ColorSchemeTarget {
-  classList: Pick<DOMTokenList, "toggle">;
+  classList: Pick<DOMTokenList, "add" | "remove">;
 }
 
 const DARK_MODE_QUERY = "(prefers-color-scheme: dark)";
@@ -7,7 +7,8 @@ const DARK_MODE_QUERY = "(prefers-color-scheme: dark)";
 export function watchColorScheme(target: ColorSchemeTarget): () => void {
   const mediaQuery = window.matchMedia(DARK_MODE_QUERY);
   const update = ({ matches }: MediaQueryList | MediaQueryListEvent): void => {
-    target.classList.toggle("dark", matches);
+    target.classList.remove("light", "dark");
+    target.classList.add(matches ? "dark" : "light");
   };
 
   update(mediaQuery);
