@@ -1,13 +1,13 @@
 // content 側の per-track 分割注入 state machine（#871）。
 //
-// popup が injectStart → injectTrack*（track 数分）→ injectCover?（任意）→ injectFinish を
+// overlay が injectStart → injectTrack*（track 数分）→ injectCover?（任意）→ injectFinish を
 // 逐次送るのを受け、1 セッション分の payload を保持して各メッセージを順に処理する。
 // DOM 操作（注入 primitive）は Injector として外から渡す（content は DOM 束縛実装を、
 // テストは fake を渡す）。これにより順序保証・範囲検査というセッションのロジックを
 // jsdom 非対応のファイル注入から切り離して単体検証できる。
 //
 // エラーは握りつぶさず throw する。content は onMessage handler でそのまま伝播させ、
-// @webext-core/messaging が popup 側の sendMessage を reject する（fail-loud）。
+// @webext-core/messaging が overlay 側の sendMessage を reject する（fail-loud）。
 
 import { decodeAsset, type SerializedAsset } from "./asset-transfer";
 import { PHASES, type Phase } from "./messaging";

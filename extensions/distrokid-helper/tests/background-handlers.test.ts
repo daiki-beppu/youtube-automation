@@ -1,6 +1,6 @@
 // background.ts の recordRelease ハンドラの契約テスト (#1360)。
 //
-// popup は server state を更新する POST を直接呼ばず background に委譲する
+// overlay は server state を更新する POST を直接呼ばず background に委譲する
 // （ADR-0016 の書き込み境界）。ここでは background が recordRelease message を受けて
 // shared/api の recordDistrokidRelease（token 取得 / 403 retry 込み）へ委譲することを固定する。
 // suno-helper tests/background-handlers.test.ts の defineBackground stub パターンを踏襲する。
@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 type Handler = (msg: {
   data: Record<string, unknown>;
-  sender: Record<string, unknown>;
+  sender: { tab?: { id?: number } };
 }) => unknown;
 
 const RECORD = {
@@ -26,6 +26,7 @@ async function loadBackground(opts?: {
 
   const handlers = new Map<string, Handler>();
   const installedListeners: Array<() => void> = [];
+  const actionListeners: Array<(tab: { id?: number }) => void> = [];
 
   // defineBackground は WXT の auto-import。stub して即座にコールバックを実行する。
   vi.stubGlobal("defineBackground", (fn: () => void) => {
@@ -33,6 +34,13 @@ async function loadBackground(opts?: {
     return fn;
   });
   vi.stubGlobal("browser", {
+    action: {
+      onClicked: {
+        addListener: vi.fn((listener: (tab: { id?: number }) => void) =>
+          actionListeners.push(listener)
+        ),
+      },
+    },
     runtime: {
       onInstalled: {
         addListener: vi.fn((listener: () => void) =>
@@ -42,12 +50,13 @@ async function loadBackground(opts?: {
     },
   });
 
+  const sendMessageMock = vi.fn(() => Promise.resolve());
   vi.doMock("../lib/messaging", () => ({
     onMessage: vi.fn((type: string, handler: Handler) => {
       handlers.set(type, handler);
       return vi.fn();
     }),
-    sendMessage: vi.fn(),
+    sendMessage: sendMessageMock,
   }));
 
   const recordDistrokidReleaseMock = opts?.recordError
@@ -68,9 +77,11 @@ async function loadBackground(opts?: {
 
   return {
     handlers,
+    actionListeners,
     installedListeners,
     migrateServerSourcesStorageMock,
     recordDistrokidReleaseMock,
+    sendMessageMock,
   };
 }
 
@@ -78,6 +89,54 @@ afterEach(() => {
   vi.doUnmock("../lib/messaging");
   vi.doUnmock("../../shared/api");
   vi.unstubAllGlobals();
+});
+
+describe("background overlay relay", () => {
+  it("action click はクリックされた同一タブの overlay だけを切り替える", async () => {
+    const { actionListeners, sendMessageMock } = await loadBackground();
+
+    actionListeners[0]({ id: 42 });
+    await Promise.resolve();
+
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      "toggleOverlay",
+      undefined,
+      42
+    );
+  });
+
+  it("overlay command と runner progress を送信元と同一タブへ中継する", async () => {
+    const { handlers, sendMessageMock } = await loadBackground();
+    const sender = { tab: { id: 42 } };
+
+    await handlers.get("injectStart")!({
+      data: { payload: { release: {} } },
+      sender,
+    });
+    await handlers.get("progress")!({
+      data: { phase: "injecting", message: "working" },
+      sender,
+    });
+
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      "injectStart",
+      { payload: { release: {} } },
+      42
+    );
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      "progress",
+      { phase: "injecting", message: "working" },
+      42
+    );
+  });
+
+  it("tab を持たない sender の relay は fail-loud に拒否する", async () => {
+    const { handlers } = await loadBackground();
+
+    expect(() => handlers.get("stop")!({ data: {}, sender: {} })).toThrow(
+      "stop: 送信元タブが特定できません"
+    );
+  });
 });
 
 describe('background onMessage("recordRelease"): serve token 書き込み境界 (#1360)', () => {
@@ -101,7 +160,7 @@ describe('background onMessage("recordRelease"): serve token 書き込み境界 
     );
   });
 
-  it("Given shared/api が reject When handler 実行 Then reject を伝播する（popup が warn 表示する）", async () => {
+  it("Given shared/api が reject When handler 実行 Then reject を伝播する（overlay が warn 表示する）", async () => {
     const { handlers, recordDistrokidReleaseMock } = await loadBackground({
       recordError: new Error("HTTP 403"),
     });

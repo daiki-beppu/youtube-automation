@@ -1,16 +1,16 @@
-// popup の実行制御フック（#1361）。App.tsx から fetch / collection 選択 / injection / stop /
+// overlay の実行制御フック（#1361）。App.tsx から fetch / collection 選択 / injection / stop /
 // released record の状態と制御フローを分離し、suno-helper の useSunoRunner と同じ
-// helper extension shell 構成に揃える（ADR-0016）。UI は popup のまま維持し、
+// helper extension shell 構成に揃える（ADR-0016）。
 // 「注入後にユーザーが目視確認して手動で続行する」安全境界は変えない。
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
 
 import {
-  fetchAsset,
   fetchCollectionRelease,
   fetchRelease,
   ReleaseUnavailableError,
 } from "@/lib/api";
+import { backgroundFetch, backgroundFetchAsset } from "@/lib/background-fetch";
 import { runInjection } from "@/lib/inject-runner";
 import { onMessage, sendMessage, PHASES } from "@/lib/messaging";
 import type { Phase } from "@/lib/messaging";
@@ -32,7 +32,7 @@ import { discoverServerSources } from "../../shared/server-discovery";
 const UNAVAILABLE_GUIDANCE =
   "このチャンネルでは distrokid 連携が無効です。config/channel/distrokid.json を enabled:true にして yt-collection-serve を再起動してください。";
 
-// popup 表示 component へ渡す runner state と実行制御。
+// overlay 表示 component へ渡す runner state と実行制御。
 export interface DistrokidRunnerState {
   serverUrl: string;
   setServerUrl: (url: string) => void;
@@ -60,17 +60,6 @@ type DiscIdentity = Pick<DistrokidCollectionSummary, "collection_id" | "disc">;
 interface CollectionLoadResult {
   list: DistrokidCollectionSummary[];
   isDirMode: boolean;
-}
-
-async function activeTabId(): Promise<number> {
-  const [tab] = await browser.tabs.query({
-    active: true,
-    currentWindow: true,
-  });
-  if (tab?.id === undefined) {
-    throw new Error("アクティブなタブが見つかりません");
-  }
-  return tab.id;
 }
 
 export function useDistrokidRunner(): DistrokidRunnerState {
@@ -122,7 +111,10 @@ export function useDistrokidRunner(): DistrokidRunnerState {
       shouldApply: () => boolean = () => true
     ): Promise<CollectionLoadResult | null> => {
       try {
-        const fetched = await fetchDistrokidCollections(baseUrl);
+        const fetched = await fetchDistrokidCollections(
+          baseUrl,
+          backgroundFetch
+        );
         if (!shouldApply()) {
           return null;
         }
@@ -182,7 +174,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
       payloadSourceRef.current = null;
 
       try {
-        const info = await fetchServerInfo(baseUrl);
+        const info = await fetchServerInfo(baseUrl, backgroundFetch);
         if (!isLatestRequest()) {
           return;
         }
@@ -213,7 +205,8 @@ export function useDistrokidRunner(): DistrokidRunnerState {
         const extensionVersion = browser.runtime.getManifest().version;
         const warning = await resolveCompatibilityWarning(
           baseUrl,
-          extensionVersion
+          extensionVersion,
+          backgroundFetch
         );
         if (!isLatestRequest()) {
           return;
@@ -258,12 +251,13 @@ export function useDistrokidRunner(): DistrokidRunnerState {
           result = await fetchCollectionRelease(
             baseUrl,
             selected.collection_id,
-            selected.disc
+            selected.disc,
+            backgroundFetch
           );
         } else {
           // 単一 mode（後方互換）: 従来の /distrokid/release.json を取得する。
           payloadSourceRef.current = null;
-          result = await fetchRelease(baseUrl);
+          result = await fetchRelease(baseUrl, backgroundFetch);
         }
         if (!isLatestRequest()) {
           return;
@@ -328,7 +322,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
     if (injectionActiveRef.current) return;
     const revision = ++serverSourcesRevisionRef.current;
     try {
-      const sources = await discoverServerSources();
+      const sources = await discoverServerSources({ fetch: backgroundFetch });
       if (
         injectionActiveRef.current ||
         revision !== serverSourcesRevisionRef.current
@@ -358,7 +352,10 @@ export function useDistrokidRunner(): DistrokidRunnerState {
     const revision = ++serverSourcesRevisionRef.current;
     const initialization = migrateServerSourcesStorage()
       .then(() =>
-        Promise.all([serverUrlItem.getValue(), discoverServerSources()])
+        Promise.all([
+          serverUrlItem.getValue(),
+          discoverServerSources({ fetch: backgroundFetch }),
+        ])
       )
       .then(([stored, sources]) => {
         if (
@@ -404,18 +401,19 @@ export function useDistrokidRunner(): DistrokidRunnerState {
     setPhase(PHASES.INJECTING);
     setMessage("注入を開始します");
     try {
-      // asset は popup（chrome-extension:// origin）で fetch する。content からの fetch は
-      // ページ origin で CORS 評価され遮断されるため（asset-transfer.ts 参照）。逐次実行・
-      // 停止境界の制御フローは runInjection に抽出し、ここでは transport を束ねて渡す（#871）。
-      const tabId = await activeTabId();
+      // HTTPS page から loopback HTTP への mixed-content fetch を避け、asset は background が
+      // 1件ずつ取得する。runner command は background が送信元と同一タブへ中継する。
       await runInjection(injectionPayload, {
         fetchAsset: (assetPath, filename) =>
-          fetchAsset(injectionBaseUrl, assetPath, filename),
-        start: (p) => sendMessage("injectStart", { payload: p }, tabId),
+          backgroundFetchAsset(
+            `${injectionBaseUrl.replace(/\/+$/u, "")}${assetPath}`,
+            filename
+          ),
+        start: (p) => sendMessage("injectStart", { payload: p }),
         track: (trackIndex, asset) =>
-          sendMessage("injectTrack", { trackIndex, asset }, tabId),
-        cover: (asset) => sendMessage("injectCover", { asset }, tabId),
-        finish: () => sendMessage("injectFinish", undefined, tabId),
+          sendMessage("injectTrack", { trackIndex, asset }),
+        cover: (asset) => sendMessage("injectCover", { asset }),
+        finish: () => sendMessage("injectFinish"),
         setMessage,
         isStopped: () => stoppedRef.current,
       });
@@ -423,7 +421,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
       // フィル完了後、dir mode で payload を取得した disc のみ配信済み記録を POST する (#934)。
       // 現在の select 値ではなく payload 取得元（payloadSourceRef）に束縛する —
       // fetch 後に select を変えてもフィルされたのは取得済み payload の disc のため。
-      // POST は popup から直接 fetch せず background に委譲する — serve token 必須の
+      // POST は overlay から直接 fetch せず background に委譲する — serve token 必須の
       // 書き込み境界は extension origin の background で越える（#1360、ADR-0016）。
       // POST 失敗はフィル成功を覆さない（warning を添えるだけ）。
       if (injectionIsDirMode && injectionSource !== null) {
@@ -455,7 +453,7 @@ export function useDistrokidRunner(): DistrokidRunnerState {
     // ループ送信を打ち切り、content にも停止を通知する（content が STOPPED を report し busy 解除）。
     stoppedRef.current = true;
     try {
-      await sendMessage("stop", undefined, await activeTabId());
+      await sendMessage("stop");
     } catch (error) {
       setPhase(PHASES.ERROR);
       setMessage(error instanceof Error ? error.message : String(error));

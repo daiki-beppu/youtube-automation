@@ -21,6 +21,10 @@ extensions/
     components/           # popup の React UI
     lib/                  # messaging / storage / manifest schema
     tests/                # Vitest unit + Playwright e2e
+  distrokid-helper/       # DistroKid 登録ページ用 Shadow DOM overlay 拡張
+    entrypoints/          # background / draggable overlay / content runner
+    lib/                  # runner / manifest 最小権限 / typed messaging
+    tests/                # Vitest unit + Playwright e2e
   community-helper/       # YouTube チャンネル投稿ページ用コミュニティ投稿拡張
     entrypoints/          # Popup / extension-context fetch relay / content runner
     lib/                  # runner / manifest 最小権限 / typed messaging

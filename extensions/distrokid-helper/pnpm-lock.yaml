@@ -24,6 +24,9 @@ importers:
       '@wxt-dev/storage':
         specifier: 1.2.8
         version: 1.2.8
+      '@youtube-automation/extensions-shared':
+        specifier: workspace:*
+        version: link:../shared
       '@youtube-automation/ui':
         specifier: workspace:*
         version: link:../shared-ui

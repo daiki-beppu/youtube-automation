@@ -247,12 +247,20 @@ def test_helpers_import_the_shared_theme_contract() -> None:
     styles = (
         EXTENSIONS / "suno-helper/components/overlay.css",
         EXTENSIONS / "suno-helper/entrypoints/popup/style.css",
-        EXTENSIONS / "distrokid-helper/entrypoints/popup/style.css",
+        EXTENSIONS / "distrokid-helper/components/overlay.css",
         EXTENSIONS / "community-helper/entrypoints/popup/style.css",
     )
 
     for style in styles:
         assert '@import "@youtube-automation/ui/theme.css";' in style.read_text()
+
+
+def test_shared_overlay_relay_is_exported_and_consumed_by_distrokid() -> None:
+    shared_package = json.loads((EXTENSIONS / "shared/package.json").read_text())
+    distrokid_package = json.loads((EXTENSIONS / "distrokid-helper/package.json").read_text())
+
+    assert shared_package["exports"]["./tab-relay"] == "./tab-relay.ts"
+    assert distrokid_package["dependencies"]["@youtube-automation/extensions-shared"] == "workspace:*"
 
 
 def test_shared_ui_is_in_the_extension_lint_gate() -> None:

@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -31,18 +31,16 @@ function declarationBlocks(
 }
 
 describe("Tailwind 4 build integration", () => {
-  it("WXT build は utility、theme token、base style を popup CSS に生成する", async () => {
+  it("WXT build は Shadow DOM overlay CSS を生成し popup を生成しない", async () => {
     await build({ root: extensionDir });
 
-    const assetsDir = fileURLToPath(
-      new URL("../.output/chrome-mv3/assets", import.meta.url)
+    const outputDir = fileURLToPath(
+      new URL("../.output/chrome-mv3", import.meta.url)
     );
-    const popupCss = readdirSync(assetsDir).find((name) =>
-      /^popup-.*\.css$/.test(name)
-    );
-
-    expect(popupCss).toBeDefined();
-    const css = readFileSync(`${assetsDir}/${popupCss}`, "utf8");
+    const overlayCss = `${outputDir}/content-scripts/overlay.css`;
+    expect(existsSync(overlayCss)).toBe(true);
+    expect(existsSync(`${outputDir}/popup.html`)).toBe(false);
+    const css = readFileSync(overlayCss, "utf8");
     expect(declarationBlocks(css, ".bg-background")).toContainEqual(
       new Map([["background-color", "var(--background)"]])
     );
