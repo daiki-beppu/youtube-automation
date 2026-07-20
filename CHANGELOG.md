@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `fix(suno-helper)`: 曲リストとコレクション選択の checkbox をラベル先頭行へ揃え、異常値再生成 OFF の余白も同じ 2px 基準へ統一した。1行時のカード中央配置、完了音、選択 callback・ARIA は維持する（#2325）。
+- `perf(ci)`: issue イベントごとの lint workflow を廃止し、PR / main push の changed path を共通 classifier で判定するようにした。required `lint` / `test` は常時結果を返しつつ、extension-only 変更では Python full suite・wheel smoke・Windows・ADR を起動せず、Extensions も影響 helper だけを検証する（#2333）。
 - `chore(extensions-ui)`: 公式 shadcn/ui skill をリポジトリ管理下へ導入し、Claude Code / Codex / wheel sync で共有する `info`・公式docs・registry diff先行のUI実装手順を追加した（#2323）。
 - `fix(collection-serve)`: `collections/planning` の Suno 一覧と個別 prompts 配信から、対応する `collections/live/<id>/workflow-state.json` が `phase: complete` の collection を除外した。不在・破損・未完了状態は従来どおり表示し、DistroKid 一覧にはフィルタを適用しない（#2331）。
 - `fix(suno-helper)`: 異常値再生成オプションを1行時は中央、説明表示時は先頭行へ揃え、曲リストのチェックボックスにコレクションカードと同じ余白基準を適用した（#2316）。

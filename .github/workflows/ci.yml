@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/1143-suno-bulk-download]
+    branches: [main]
   pull_request: {}
 
 # main への push は cancel-in-progress の対象外（デプロイ相当の run を途中で殺さない）
@@ -11,31 +11,87 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  lint:
+  changes:
     runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.classify.outputs.python }}
+      packaging: ${{ steps.classify.outputs.packaging }}
+      windows: ${{ steps.classify.outputs.windows }}
+      adr: ${{ steps.classify.outputs.adr }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Classify changed paths
+        id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PUSH_HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$PR_BASE_SHA"
+            head="$PR_HEAD_SHA"
+            separator="..."
+          else
+            base="$PUSH_BEFORE_SHA"
+            head="$PUSH_HEAD_SHA"
+            separator=".."
+          fi
+          case "$base" in
+            "" | 0000000000000000000000000000000000000000)
+              base="${head}^"
+              separator=".."
+              ;;
+          esac
+          git diff --name-only "${base}${separator}${head}" > "$RUNNER_TEMP/changed-paths.txt"
+          bash .github/scripts/classify-ci-paths.sh "$RUNNER_TEMP/changed-paths.txt" | tee -a "$GITHUB_OUTPUT"
+
+  lint:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - name: No Python lint required
+        if: needs.changes.outputs.python != 'true'
+        run: echo "Extension-only change; Python lint is not applicable."
+      - uses: actions/checkout@v4
+        if: needs.changes.outputs.python == 'true'
       - uses: cachix/install-nix-action@v30
+        if: needs.changes.outputs.python == 'true'
       - name: Cache uv
+        if: needs.changes.outputs.python == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/uv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
           restore-keys: |
             uv-${{ runner.os }}-
-      - run: nix develop --command uv sync
+      - if: needs.changes.outputs.python == 'true'
+        run: nix develop --command uv sync
       - parallel:
           - name: Ruff check
+            if: needs.changes.outputs.python == 'true'
             run: nix develop --command uv run ruff check .
           - name: Ruff format check
+            if: needs.changes.outputs.python == 'true'
             run: nix develop --command uv run ruff format --check .
 
   test:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
+      - name: No Python tests required
+        if: needs.changes.outputs.python != 'true'
+        run: echo "Extension-only change; Python tests are not applicable."
       - uses: actions/checkout@v4
+        if: needs.changes.outputs.python == 'true'
       - uses: cachix/install-nix-action@v30
+        if: needs.changes.outputs.python == 'true'
       - name: Cache uv
+        if: needs.changes.outputs.python == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/uv
@@ -43,11 +99,15 @@ jobs:
           restore-keys: |
             uv-${{ runner.os }}-
       - name: Install dependencies
+        if: needs.changes.outputs.python == 'true'
         run: nix develop --command uv sync
       - name: Test
+        if: needs.changes.outputs.python == 'true'
         run: nix develop --command uv run pytest -n auto
 
   build-smoke:
+    needs: changes
+    if: needs.changes.outputs.packaging == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +124,8 @@ jobs:
             nix develop --command uv run pytest tests/test_skills_sync_installed_wheel.py -q
 
   windows-cost-tracker:
+    needs: changes
+    if: needs.changes.outputs.windows == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -108,6 +170,8 @@ jobs:
           echo "CHANGELOG.md updated"
 
   adr-numbering:
+    needs: changes
+    if: needs.changes.outputs.adr == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -123,8 +187,9 @@ jobs:
           echo "ADR numbers are unique"
 
   any-gate:
+    needs: changes
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && needs.changes.outputs.python == 'true'
     steps:
       - uses: actions/checkout@v4
         with:

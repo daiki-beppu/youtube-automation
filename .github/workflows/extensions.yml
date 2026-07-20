@@ -2,10 +2,11 @@ name: Extensions
 
 on:
   push:
-    branches: [main, feat/1143-suno-bulk-download]
+    branches: [main]
     paths:
       - "extensions/**"
       - ".github/workflows/extensions.yml"
+      - ".github/scripts/classify-ci-paths.sh"
       - "tests/test_actions_parallel_workflows.py"
       - "flake.nix"
       - "flake.lock"
@@ -13,6 +14,7 @@ on:
     paths:
       - "extensions/**"
       - ".github/workflows/extensions.yml"
+      - ".github/scripts/classify-ci-paths.sh"
       - "tests/test_actions_parallel_workflows.py"
       - "flake.nix"
       - "flake.lock"
@@ -23,7 +25,47 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      suno: ${{ steps.classify.outputs.suno }}
+      distrokid: ${{ steps.classify.outputs.distrokid }}
+      community: ${{ steps.classify.outputs.community }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Classify changed paths
+        id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PUSH_HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$PR_BASE_SHA"
+            head="$PR_HEAD_SHA"
+            separator="..."
+          else
+            base="$PUSH_BEFORE_SHA"
+            head="$PUSH_HEAD_SHA"
+            separator=".."
+          fi
+          case "$base" in
+            "" | 0000000000000000000000000000000000000000)
+              base="${head}^"
+              separator=".."
+              ;;
+          esac
+          git diff --name-only "${base}${separator}${head}" > "$RUNNER_TEMP/changed-paths.txt"
+          bash .github/scripts/classify-ci-paths.sh "$RUNNER_TEMP/changed-paths.txt" | tee -a "$GITHUB_OUTPUT"
+
   check:
+    needs: changes
+    if: needs.changes.outputs.suno == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -82,6 +124,8 @@ jobs:
         run: nix develop .#extensions --command xvfb-run -a pnpm test:e2e
 
   distrokid-helper:
+    needs: changes
+    if: needs.changes.outputs.distrokid == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -153,6 +197,8 @@ jobs:
         run: nix develop .#extensions --command xvfb-run -a pnpm test:e2e
 
   community-helper:
+    needs: changes
+    if: needs.changes.outputs.community == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
