@@ -11,6 +11,13 @@ packages:
   - cron
   - unattended-upgrades
 
+write_files:
+  - path: /etc/ssh/sshd_config.d/99-hostkey-ed25519.conf
+    owner: root:root
+    permissions: "0644"
+    content: |
+      HostKey /etc/ssh/ssh_host_ed25519_key
+
 runcmd:
   - sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
   - systemctl reload ssh || systemctl reload sshd

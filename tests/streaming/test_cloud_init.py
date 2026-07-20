@@ -115,17 +115,14 @@ class TestCloudInitYaml:
     def test_cloud_init_yaml_no_longer_bakes_systemd_unit(self):
         """Given cloud-init.yaml
         When 全文を読む
-        Then ``write_files:`` ブロック・``systemd_unit`` テンプレート変数・
-             ``/etc/systemd/system/youtube-stream.service`` パスのいずれも含まれない (#212)。
+        Then ``systemd_unit`` テンプレート変数・
+             ``/etc/systemd/system/youtube-stream.service`` パスを含まない (#212)。
 
         systemd unit は ``null_resource.deploy`` の ``provisioner "file"`` で SCP 配信するように
         統一されたため、cloud-init 側の焼き付け経路を残してはならない。残骸を残すと
         「設定したのに使われない」混乱と、初回 apply 時の二重配置リスクを招く。
         """
         text = read_file(_CLOUD_INIT_YAML)
-        assert not re.search(r"^write_files:", text, flags=re.MULTILINE), (
-            "write_files: ブロックが残っている（unit 配置は null_resource 経路に統一）"
-        )
         assert "systemd_unit" not in text, (
             "cloud-init.yaml に systemd_unit テンプレート変数が残っている"
             "（user_data の内側 templatefile 結線が撤去されたため未定義変数になる）"
@@ -133,6 +130,35 @@ class TestCloudInitYaml:
         assert not re.search(r"/etc/systemd/system/youtube-stream\.service", text), (
             "cloud-init.yaml に /etc/systemd/system/youtube-stream.service の配置宣言が残っている"
         )
+
+    def test_write_files_pins_sshd_to_ed25519_host_key(self):
+        """Given cloud-init.yaml
+        When write_files を読む
+        Then sshd drop-in が ed25519 host key だけを明示する (#2294)。
+        """
+        loaded = yaml.safe_load(read_file(_CLOUD_INIT_YAML))
+
+        assert loaded["write_files"] == [
+            {
+                "path": "/etc/ssh/sshd_config.d/99-hostkey-ed25519.conf",
+                "owner": "root:root",
+                "permissions": "0644",
+                "content": "HostKey /etc/ssh/ssh_host_ed25519_key\n",
+            }
+        ]
+
+    def test_host_key_drop_in_is_written_before_ssh_reload(self):
+        """Given cloud-init.yaml
+        When provisioning declarations の順序を読む
+        Then drop-in 宣言は既存の SSH reload より前に置かれる (#2294)。
+        """
+        text = read_file(_CLOUD_INIT_YAML)
+
+        drop_in_idx = text.find("/etc/ssh/sshd_config.d/99-hostkey-ed25519.conf")
+        reload_idx = text.find("systemctl reload ssh")
+        assert drop_in_idx != -1, "ed25519 HostKey drop-in が見つからない"
+        assert reload_idx != -1, "SSH reload command が見つからない"
+        assert drop_in_idx < reload_idx, "HostKey drop-in を SSH reload より前に宣言する必要がある"
 
     def test_runcmd_does_not_invoke_systemctl_daemon_reload(self):
         """Given cloud-init.yaml
