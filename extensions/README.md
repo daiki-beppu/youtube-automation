@@ -27,7 +27,7 @@ extensions/
     tests/                # Vitest runner contract / DOM / Popup unit tests
 ```
 
-`shared/` は各拡張から相対 import（例: `../../shared/dom`）で参照する。UI は `shared-ui/` の workspace package `@youtube-automation/ui` から import し、Button / Card / Alert / Select、`cn()`、theme CSS の実装を単一ソースに保つ。各 helper の `pnpm-workspace.yaml` は `../shared-ui` を workspace member として明示するため、従来どおり `extensions/<name>/` 単体で frozen install / build / zip を実行できる。
+`shared/` は各拡張から相対 import（例: `../../shared/dom`）で参照する。UI は `shared-ui/` の workspace package `@youtube-automation/ui` から import し、Button / Card / Alert / Select / Checkbox / RadioGroup、`cn()`、theme CSS の実装を単一ソースに保つ。theme CSS は info / warning / success / destructive ごとに `*-background` / `*-foreground` / `*-border` の semantic token を light / dark 双方で提供する。各 helper の `pnpm-workspace.yaml` は `../shared-ui` を workspace member として明示するため、従来どおり `extensions/<name>/` 単体で frozen install / build / zip を実行できる。
 
 shared UI 自体の型検査は次で行う:
 

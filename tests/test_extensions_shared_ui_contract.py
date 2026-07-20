@@ -4,7 +4,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 EXTENSIONS = ROOT / "extensions"
 HELPERS = ("suno-helper", "distrokid-helper", "community-helper")
-PRIMITIVES = ("alert.tsx", "button.tsx", "card.tsx", "select.tsx")
+PRIMITIVES = (
+    "alert.tsx",
+    "button.tsx",
+    "card.tsx",
+    "checkbox.tsx",
+    "radio-group.tsx",
+    "select.tsx",
+)
+MIGRATED_PRIMITIVES = ("alert.tsx", "button.tsx", "card.tsx", "select.tsx")
 
 
 def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
@@ -16,6 +24,8 @@ def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
         "./theme.css": "./src/theme.css",
     }
     assert set(package["dependencies"]) == {
+        "@radix-ui/react-checkbox",
+        "@radix-ui/react-radio-group",
         "@radix-ui/react-slot",
         "class-variance-authority",
         "clsx",
@@ -29,10 +39,46 @@ def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
         "AlertDescription",
         "Button",
         "Card",
+        "Checkbox",
+        "RadioGroup",
+        "RadioGroupItem",
         "Select",
         "cn",
     ):
         assert public_symbol in index
+
+    for primitive in PRIMITIVES:
+        assert (EXTENSIONS / f"shared-ui/src/{primitive}").is_file()
+
+
+def test_shared_form_primitives_keep_radix_state_and_slot_contracts() -> None:
+    checkbox = (EXTENSIONS / "shared-ui/src/checkbox.tsx").read_text()
+    radio_group = (EXTENSIONS / "shared-ui/src/radio-group.tsx").read_text()
+
+    assert "@radix-ui/react-checkbox" in checkbox
+    assert 'data-slot="checkbox"' in checkbox
+    assert 'data-slot="checkbox-indicator"' in checkbox
+    assert "data-[state=checked]" in checkbox
+    assert "disabled:opacity-50" in checkbox
+    assert "focus-visible:ring-[3px]" in checkbox
+
+    assert "@radix-ui/react-radio-group" in radio_group
+    assert 'data-slot="radio-group"' in radio_group
+    assert 'data-slot="radio-group-item"' in radio_group
+    assert 'data-slot="radio-group-indicator"' in radio_group
+    assert "data-[state=checked]" in radio_group
+    assert "disabled:opacity-50" in radio_group
+    assert "focus-visible:ring-[3px]" in radio_group
+
+
+def test_shared_theme_exposes_light_and_dark_status_token_triplets() -> None:
+    theme = (EXTENSIONS / "shared-ui/src/theme.css").read_text()
+
+    for status in ("info", "warning", "success", "destructive"):
+        for role in ("background", "foreground", "border"):
+            token = f"--{status}-{role}:"
+            assert theme.count(token) == 2, f"{token} must exist in light and dark themes"
+            assert f"--color-{status}-{role}: var(--{status}-{role});" in theme
 
 
 def test_helpers_depend_on_shared_ui_without_local_primitive_copies() -> None:
@@ -42,7 +88,7 @@ def test_helpers_depend_on_shared_ui_without_local_primitive_copies() -> None:
 
         assert package["dependencies"]["@youtube-automation/ui"] == "workspace:*"
         assert not (helper / "lib/utils.ts").exists()
-        for primitive in PRIMITIVES:
+        for primitive in MIGRATED_PRIMITIVES:
             assert not (helper / f"components/ui/{primitive}").exists()
 
 
