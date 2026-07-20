@@ -307,13 +307,19 @@ describe("DistroKid popup compatibility check", () => {
     const collectionSelect = container.querySelector<HTMLSelectElement>(
       "select:not(#server-url)"
     )!;
+    const collectionTrigger = container.querySelector<HTMLButtonElement>(
+      '[data-distrokid-control="collection-select"]'
+    )!;
     expect(collectionSelect.value).toBe("0");
-    expect(collectionSelect.labels?.[0]?.textContent).toContain("コレクション");
-    expect(collectionSelect.dataset.slot).toBe("select");
-    expect(Array.from(collectionSelect.classList)).toEqual(
+    expect(collectionTrigger.getAttribute("aria-labelledby")).toBe(
+      "collection-select-label"
+    );
+    expect(collectionTrigger.dataset.slot).toBe("select-trigger");
+    expect(collectionTrigger.getAttribute("role")).toBe("combobox");
+    expect(Array.from(collectionTrigger.classList)).toEqual(
       expect.arrayContaining([
         "border-input",
-        "bg-background",
+        "bg-transparent",
         "focus-visible:border-ring",
       ])
     );

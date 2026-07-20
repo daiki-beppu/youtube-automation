@@ -9,21 +9,19 @@ const alertVariants = cva(
     variants: {
       variant: {
         default: "bg-card text-card-foreground",
-        warning: "border-amber-300 bg-amber-50 text-amber-900",
-        destructive: "text-destructive bg-card",
+        info: "border-info-border bg-info-background text-info-foreground",
+        warning:
+          "border-warning-border bg-warning-background text-warning-foreground",
+        success:
+          "border-success-border bg-success-background text-success-foreground",
+        destructive:
+          "border-destructive-border bg-destructive-background text-destructive-foreground",
       },
       appearance: {
         subtle: "",
         filled: "",
       },
     },
-    compoundVariants: [
-      {
-        variant: "destructive",
-        appearance: "filled",
-        className: "border-red-300 bg-red-50 text-red-900",
-      },
-    ],
     defaultVariants: {
       variant: "default",
       appearance: "subtle",

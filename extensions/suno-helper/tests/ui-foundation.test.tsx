@@ -8,6 +8,9 @@ import {
   CardContent,
   CardHeader,
   cn,
+  Select,
+  SelectTrigger,
+  SelectValue,
 } from "@youtube-automation/ui";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -16,8 +19,19 @@ import { describe, expect, it } from "vitest";
 const variantMarkers = {
   default: ["bg-primary", "text-primary-foreground"],
   destructive: ["bg-destructive", "text-white"],
+  info: ["border-info-border", "bg-info-background", "text-info-foreground"],
   outline: ["border", "bg-background"],
   secondary: ["bg-secondary", "text-secondary-foreground"],
+  success: [
+    "border-success-border",
+    "bg-success-background",
+    "text-success-foreground",
+  ],
+  warning: [
+    "border-warning-border",
+    "bg-warning-background",
+    "text-warning-foreground",
+  ],
   ghost: ["hover:bg-accent"],
   link: ["underline-offset-4", "hover:underline"],
 } as const;
@@ -112,10 +126,55 @@ describe("shadcn/ui foundation", () => {
     expect(html).toContain("p-0");
   });
 
+  it("Select は native wrapper ではなく shadcn/Radix の root・trigger・value を構成する", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        Select,
+        { value: "mp3" },
+        createElement(
+          SelectTrigger,
+          { "aria-label": "DL 形式" },
+          createElement(SelectValue)
+        )
+      )
+    );
+
+    expect(html).toContain('data-slot="select-trigger"');
+    expect(html).toContain('role="combobox"');
+    expect(html).toContain('aria-label="DL 形式"');
+    expect(html).not.toContain('data-slot="select"');
+  });
+
   it.each([
     ["default", ["bg-card", "text-card-foreground"]],
-    ["warning", ["border-amber-300", "bg-amber-50", "text-amber-900"]],
-    ["destructive", ["border-red-300", "bg-red-50", "text-red-900"]],
+    [
+      "info",
+      ["border-info-border", "bg-info-background", "text-info-foreground"],
+    ],
+    [
+      "warning",
+      [
+        "border-warning-border",
+        "bg-warning-background",
+        "text-warning-foreground",
+      ],
+    ],
+    [
+      "success",
+      [
+        "border-success-border",
+        "bg-success-background",
+        "text-success-foreground",
+      ],
+    ],
+    [
+      "destructive",
+      [
+        "border-destructive-border",
+        "bg-destructive-background",
+        "text-destructive-foreground",
+      ],
+    ],
   ] as const)(
     "Alert variant %s は対応する class を生成する",
     (variant, markers) => {

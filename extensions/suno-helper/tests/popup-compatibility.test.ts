@@ -243,6 +243,31 @@ function setSelectValue(select: HTMLSelectElement, value: string): void {
   select.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+async function setDownloadFormatValue(
+  container: HTMLElement,
+  value: "mp3" | "m4a" | "wav"
+): Promise<void> {
+  const trigger = expectControl(
+    container,
+    "download-format"
+  ) as HTMLButtonElement;
+  await act(async () => {
+    trigger.focus();
+    trigger.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
+    );
+  });
+  const item = Array.from(
+    container.querySelectorAll<HTMLElement>('[data-slot="select-item"]')
+  ).find((candidate) => candidate.textContent === value.toUpperCase());
+  if (!item) throw new Error(`download format item not found: ${value}`);
+  await act(async () => {
+    item.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+    );
+  });
+}
+
 function buttonByText(container: HTMLElement, text: string): HTMLButtonElement {
   const button = Array.from(container.querySelectorAll("button")).find(
     (candidate) => candidate.textContent?.includes(text)
@@ -298,7 +323,13 @@ function expectControl(container: HTMLElement, control: string): HTMLElement {
 
 function expectShadcnControl(
   element: HTMLElement,
-  variant: "default" | "destructive" | "outline"
+  variant:
+    | "default"
+    | "destructive"
+    | "info"
+    | "outline"
+    | "success"
+    | "warning"
 ): void {
   expect(element.dataset.slot).toBe("button");
   expect(element.dataset.variant).toBe(variant);
@@ -337,6 +368,10 @@ describe("Suno popup compatibility check", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -468,13 +503,13 @@ describe("Suno popup compatibility check", () => {
     const downloadFormat = expectControl(
       container,
       "download-format"
-    ) as HTMLSelectElement;
-    expect(downloadFormat.dataset.slot).toBe("select");
-    expect(Array.from(downloadFormat.options, ({ value }) => value)).toEqual([
-      "mp3",
-      "m4a",
-      "wav",
-    ]);
+    ) as HTMLButtonElement;
+    expect(downloadFormat.dataset.slot).toBe("select-trigger");
+    expect(downloadFormat.getAttribute("role")).toBe("combobox");
+    expect(downloadFormat.getAttribute("aria-labelledby")).toContain(
+      "download-format-label"
+    );
+    expect(downloadFormat.textContent).toContain("MP3");
     expect(
       expectControl(container, "regenerate-duration-outliers").dataset.slot
     ).toBe("checkbox");
@@ -492,14 +527,14 @@ describe("Suno popup compatibility check", () => {
     expect(queueMode.dataset.state).toBe("unchecked");
     expectShadcnControl(
       serialMode.closest<HTMLElement>('[data-slot="button"]')!,
-      "default"
+      "info"
     );
     expectShadcnControl(
       queueMode.closest<HTMLElement>('[data-slot="button"]')!,
       "outline"
     );
 
-    expectShadcnControl(expectControl(container, "run"), "default");
+    expectShadcnControl(expectControl(container, "run"), "info");
     expectShadcnControl(expectControl(container, "stop"), "destructive");
   });
 
@@ -539,7 +574,7 @@ describe("Suno popup compatibility check", () => {
     expect(container.textContent).toContain('"p2": 259s ✓');
     const status = container.querySelector<HTMLElement>('[role="status"]');
     expect(status?.dataset.slot).toBe("alert");
-    expect(status?.dataset.variant).toBe("default");
+    expect(status?.dataset.variant).toBe("info");
     expect(status?.getAttribute("aria-live")).toBe("polite");
     expect(status?.getAttribute("data-suno-status")).toBe("ok");
   });
@@ -558,6 +593,9 @@ describe("Suno popup compatibility check", () => {
       "chime",
       "success"
     );
+    expect(
+      container.querySelector<HTMLElement>('[role="status"]')?.dataset.variant
+    ).toBe("success");
 
     await act(async () => {
       messagingMocks.progressHandler?.({
@@ -566,6 +604,12 @@ describe("Suno popup compatibility check", () => {
       messagingMocks.progressHandler?.({
         data: { phase: PHASE.ERROR, index: 0, total: 1, message: "failed" },
       });
+    });
+    expect(
+      container.querySelector<HTMLElement>('[role="status"]')?.dataset.variant
+    ).toBe("destructive");
+
+    await act(async () => {
       messagingMocks.progressHandler?.({
         data: { phase: PHASE.STOPPED, total: 1 },
       });
@@ -747,6 +791,8 @@ describe("Suno popup compatibility check", () => {
       expectControl(container, "adopt-selected-clips"),
       "outline"
     );
+    expectShadcnControl(expectControl(container, "retry-playlist"), "warning");
+    expectShadcnControl(expectControl(container, "retry-download"), "success");
     expect(expectControl(container, "collection-checkbox").dataset.slot).toBe(
       "checkbox"
     );
@@ -1091,7 +1137,7 @@ describe("Suno popup compatibility check", () => {
       radioByLabel(container, "高速モード").closest<HTMLElement>(
         '[data-slot="button"]'
       )!,
-      "default"
+      "info"
     );
 
     messagingMocks.sendMessage.mockClear();
@@ -2298,8 +2344,8 @@ describe("Suno popup compatibility check", () => {
         "選択中の曲 2 件を採用しました。"
       );
     });
-    expectShadcnControl(expectControl(container, "retry-playlist"), "outline");
-    expectShadcnControl(expectControl(container, "retry-download"), "outline");
+    expectShadcnControl(expectControl(container, "retry-playlist"), "warning");
+    expectShadcnControl(expectControl(container, "retry-download"), "success");
 
     messagingMocks.sendMessage.mockClear();
     await act(async () => {
@@ -2470,21 +2516,18 @@ describe("Suno popup compatibility check", () => {
   it("DL 形式 select は storage の初期値を反映し、変更時に保存する", async () => {
     await rerenderAppWithDownloadFormat("m4a");
 
-    const select = Array.from(container.querySelectorAll("select")).find(
-      (candidate) =>
-        Array.from(candidate.options).some((option) => option.value === "wav")
-    );
-    if (!select) throw new Error("download format select not found");
     await waitFor(() => {
-      expect(select.value).toBe("m4a");
+      expect(expectControl(container, "download-format").textContent).toContain(
+        "M4A"
+      );
     });
 
-    await act(async () => {
-      setSelectValue(select, "wav");
-    });
+    await setDownloadFormatValue(container, "wav");
 
     expect(downloadFormatMocks.setValue).toHaveBeenCalledWith("wav");
-    expect(select.value).toBe("wav");
+    expect(expectControl(container, "download-format").textContent).toContain(
+      "WAV"
+    );
   });
 
   it("DL 形式の読込が失敗すると未捕捉にせず再読み込み案内を表示する", async () => {
@@ -2613,15 +2656,7 @@ describe("Suno popup compatibility check", () => {
     downloadFormatMocks.setValue.mockRejectedValueOnce(
       new Error("Extension context invalidated.")
     );
-    const select = Array.from(container.querySelectorAll("select")).find(
-      (candidate) =>
-        Array.from(candidate.options).some((option) => option.value === "wav")
-    );
-    if (!select) throw new Error("download format select not found");
-
-    await act(async () => {
-      setSelectValue(select, "wav");
-    });
+    await setDownloadFormatValue(container, "wav");
 
     await waitFor(() => {
       expect(container.textContent).toContain(
@@ -2634,13 +2669,10 @@ describe("Suno popup compatibility check", () => {
   it("DL 形式 select は不正な storage 値を MP3 に戻す", async () => {
     await rerenderAppWithDownloadFormat("flac");
 
-    const select = Array.from(container.querySelectorAll("select")).find(
-      (candidate) =>
-        Array.from(candidate.options).some((option) => option.value === "wav")
-    );
-    if (!select) throw new Error("download format select not found");
     await waitFor(() => {
-      expect(select.value).toBe("mp3");
+      expect(expectControl(container, "download-format").textContent).toContain(
+        "MP3"
+      );
     });
   });
 
@@ -2966,7 +2998,7 @@ describe("Suno popup compatibility check", () => {
     const resumeAlert = alertByText(container, "前回の実行が中断されました。");
     expect(resumeAlert.dataset.variant).toBe("warning");
     expect(resumeAlert.getAttribute("role")).toBeNull();
-    expectShadcnControl(expectControl(container, "resume"), "default");
+    expectShadcnControl(expectControl(container, "resume"), "warning");
     expectShadcnControl(expectControl(container, "dismiss-resume"), "outline");
 
     messagingMocks.sendMessage.mockClear();

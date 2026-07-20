@@ -26,6 +26,7 @@ def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
     assert set(package["dependencies"]) == {
         "@radix-ui/react-checkbox",
         "@radix-ui/react-radio-group",
+        "@radix-ui/react-select",
         "@radix-ui/react-slot",
         "class-variance-authority",
         "clsx",
@@ -90,6 +91,20 @@ def test_helpers_depend_on_shared_ui_without_local_primitive_copies() -> None:
         assert not (helper / "lib/utils.ts").exists()
         for primitive in MIGRATED_PRIMITIVES:
             assert not (helper / f"components/ui/{primitive}").exists()
+
+
+def test_select_consumers_dedupe_radix_and_react_from_their_workspace() -> None:
+    for helper_name in ("suno-helper", "distrokid-helper"):
+        helper = EXTENSIONS / helper_name
+        package = json.loads((helper / "package.json").read_text())
+
+        assert package["dependencies"]["@radix-ui/react-select"] == "2.3.3"
+        for config_name in ("vitest.config.ts", "wxt.config.ts"):
+            config = (helper / config_name).read_text()
+            assert '"react", "react-dom", "@radix-ui/react-select"' in config
+
+    fallow = json.loads((EXTENSIONS / ".fallowrc.json").read_text())
+    assert "@radix-ui/react-select" in fallow["ignoreDependencies"]
 
 
 def test_helpers_import_the_shared_theme_contract() -> None:

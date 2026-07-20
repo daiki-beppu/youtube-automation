@@ -1,4 +1,11 @@
-import { Button, Select } from "@youtube-automation/ui";
+import {
+  Button,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@youtube-automation/ui";
 
 import { ReleaseReview } from "@/components/ReleaseReview";
 import { ServerUrlField } from "@/components/ServerUrlField";
@@ -47,20 +54,46 @@ export function App() {
 
       {/* dir mode: 未配信 disc 一覧のドロップダウン (#934)。suno-helper App.tsx 55-69 行の構造を踏襲。 */}
       {collections.length > 0 && (
-        <label className="flex flex-col gap-1 text-sm">
-          コレクション
+        <div className="flex flex-col gap-1 text-sm">
+          <span id="collection-select-label">コレクション</span>
           <Select
+            value={String(selectedIndex)}
+            disabled={isInjecting}
+            onValueChange={(value) => selectCollection(Number(value))}
+          >
+            <SelectTrigger
+              className="w-full"
+              aria-labelledby="collection-select-label"
+              data-distrokid-control="collection-select"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {collections.map((item, idx) => (
+                <SelectItem
+                  key={`${item.collection_id}/${item.disc}`}
+                  value={String(idx)}
+                >
+                  {`${item.name} / ${item.disc}（${item.album_title}・${item.track_count} 曲）`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <select
+            className="sr-only"
             value={selectedIndex}
             disabled={isInjecting}
-            onChange={(e) => selectCollection(Number(e.target.value))}
+            aria-hidden="true"
+            tabIndex={-1}
+            onChange={(event) => selectCollection(Number(event.target.value))}
           >
             {collections.map((item, idx) => (
               <option key={`${item.collection_id}/${item.disc}`} value={idx}>
                 {`${item.name} / ${item.disc}（${item.album_title}・${item.track_count} 曲）`}
               </option>
             ))}
-          </Select>
-        </label>
+          </select>
+        </div>
       )}
 
       {/* dir mode で全 disc が配信済みの場合（#934）。suno-helper の allMapped パターンを踏襲。 */}
