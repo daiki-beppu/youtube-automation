@@ -10,7 +10,7 @@
 1. **`/channel-new` 再生成モード Step R2.1 で取得した競合の `channels().list(part='snippet,brandingSettings,localizations')` レスポンス**を Claude のコンテキストに必ず載せる
 2. 競合の構造（章立て・段落順・箇条書きの数・絵文字の有無）をそのままコピーし、`competitor → my-channel` の固有名詞置換だけを行う
 3. `brandingSettings.channel.keywords` は数・順序・スペース入りクォート形式（`"chill beats"` 等）まで踏襲する
-4. `localizations` で多言語化されている言語セットを `config/localizations.json::supported_languages` の決定に反映する（独自に絞る場合は理由を明文化）
+4. 競合が多言語化している場合は `localizations` のエントリ言語セットを `config/localizations.json::supported_languages` にそのまま転写する（独自の追加・削除は禁止）
 5. TTP self-check（SKILL.md Step R2.3）に通してから提案する
 
 「独自路線」「ハイブリッド路線」を選んでいる場合は競合スナップショットを必ず参照しつつも、転写率と差別化の比率を方向性ドキュメントに合わせる。
@@ -32,7 +32,10 @@
 
 ## ルート設定ファイル
 
-- `config/localizations.json` — `supported_languages` が scene_phrases / 概要欄多言語版 / YouTube localization メタデータ対象言語の Canonical ソース。2 言語以上の場合のみ `scene_phrases` を必須とし、単一言語チャンネルでは不要。`languages.<lang>.title_template` に使えるプレースホルダは **`{scene_phrase}` / `{activities}` / `{scene_emoji}` のみ**（アップローダー許可リスト、issue #1471）。content.json の `title.template` 用キー（`{style}` / `{theme}` / `{activity}` / `{duration_display}` / `{axis_label}` 等）を流用しない。生成後は `uv run yt-doctor --json` の `channel_config` check が違反を検出する。`supported_languages` は多言語チャンネルなら高 CPM 言語（`ja` / `en` / `de`）を推奨、低 CPM 言語（`ko` / `es` / `pt` / `zh-CN` など）は原則追加しない（issue #272）。en-only 運用も可（preflight は `supported_languages` を尊重し、ハードコード必須言語は無い）。**TTP 路線時**は競合の `localizations` エントリ言語を最優先で踏襲する。競合が多言語化していないチャンネル（en 一択など）を TTP 対象にしている場合、自分も同様に絞る選択肢を必ずユーザーに提示する
+- `config/localizations.json` — `supported_languages` が scene_phrases / 概要欄多言語版 / YouTube localization メタデータ対象言語の Canonical ソース。2 言語以上の場合のみ `scene_phrases` を必須とし、単一言語チャンネルでは不要。`languages.<lang>.title_template` に使えるプレースホルダは **`{scene_phrase}` / `{activities}` / `{scene_emoji}` のみ**（アップローダー許可リスト、issue #1471）。content.json の `title.template` 用キー（`{style}` / `{theme}` / `{activity}` / `{duration_display}` / `{axis_label}` 等）を流用しない。生成後は `uv run yt-doctor --json` の `channel_config` check が違反を検出する。言語選定は次の 3 分岐だけを使い、収益性などを理由に独自の言語追加・削除をしない:
+  1. **TTP 路線かつ競合が多言語化している**: 競合 `localizations` のエントリ言語セットをそのまま `supported_languages` に転写する
+  2. **TTP 路線かつ競合が多言語化していない**: ローカライズ先は `en` のみとする
+  3. **非 TTP 路線**: 単一言語・ローカライズなしとし、`config/localizations.json` は省略可。省略時の `supported_languages` は `youtube.api.language` へフォールバックする
 
 ## 各フィールドの生成ルール
 

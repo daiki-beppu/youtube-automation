@@ -529,13 +529,15 @@ def test_channel_new_localizations_priority_matches_generation_rules() -> None:
     rules = _read(".claude/skills/channel-new/references/config-generation-rules.md")
 
     step_r5 = regeneration_mode.split("## Step R5:", 1)[1].split("## Step R6:", 1)[0]
-    assert '`["ja", "en", "de"]` を必ず含める' not in step_r5
-    assert 'テンプレート既定は広告単価が高い `["ja", "en", "de"]`' in step_r5
-    assert "TTP 路線では競合 `localizations` の言語セットを最優先" in step_r5
-    assert "en-only 運用など多言語展開しない判断も可" in step_r5
+    assert '既定 `["ja", "en"]`' in step_r5
+    assert "TTP かつ競合が多言語なら" in step_r5
+    assert "TTP かつ競合が非多言語なら `en` のみ" in step_r5
+    assert "非 TTP なら単一言語・ローカライズなし" in step_r5
 
-    assert "en-only 運用も可" in rules
-    assert "競合の `localizations` エントリ言語を最優先" in rules
+    assert "TTP 路線かつ競合が多言語化している" in rules
+    assert "TTP 路線かつ競合が多言語化していない" in rules
+    assert "非 TTP 路線" in rules
+    assert "独自の言語追加・削除をしない" in rules
 
 
 def test_channel_new_requires_initial_save_before_followup_update() -> None:
