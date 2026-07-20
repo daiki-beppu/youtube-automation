@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(suno-helper)`: 投入方式の選択カードを薄い info 背景と青い枠へ調整し、light / dark の両方でモード名と説明文を読みやすくした（#2315）。
 - `docs(channel-new)`: localization 言語の生成規則を、TTP 多言語では競合セットを完全踏襲、TTP 非多言語では `en` のみ、非 TTP では単一言語・localizations 省略可の 3 分岐へ固定した。独自の高 CPM 言語追加を廃止し、生成テンプレートから `de` を除外した（#2295）。
 - `fix(doctor)`: `yt-doctor` の OAuth / Reporting 診断が期限切れ access token を refresh token で自動更新し、更新結果を `token.json` へ安全に保存するようにした。refresh token が失効・欠落した場合だけブラウザ再認証を案内し、2 診断の token 判定を統一した（#2293）。
 - `fix(viewer-voice)`: `yt-benchmark-comments` が `commentThreads.list` に必要な `youtube.force-ssl` を持つ full-scope token を使うよう修正し、readonly token 発行済み環境で全件 403 になる問題を解消した（#2286）。
