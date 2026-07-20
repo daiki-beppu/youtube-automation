@@ -602,9 +602,14 @@ export function App() {
         </RadioGroup>
       </fieldset>
 
-      <label className="flex items-start gap-2 rounded border border-border px-2 py-2 text-sm">
+      <FieldLabel
+        className={cn(
+          "w-full gap-2 rounded border border-border px-2 py-2 text-sm",
+          regenerateDurationOutliers ? "items-center" : "items-start"
+        )}
+      >
         <Checkbox
-          className="mt-1"
+          className={regenerateDurationOutliers ? undefined : "mt-1"}
           checked={regenerateDurationOutliers}
           disabled={entries.length === 0 || controlsLocked}
           data-suno-control="regenerate-duration-outliers"
@@ -622,7 +627,7 @@ export function App() {
             </span>
           )}
         </span>
-      </label>
+      </FieldLabel>
 
       <CompletionSoundControls
         settings={completionSoundSettings}

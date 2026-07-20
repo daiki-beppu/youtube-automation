@@ -59,17 +59,21 @@ export function PatternList({
               className={buttonVariants({
                 variant: "outline",
                 size: "sm",
-                className: `h-auto w-full justify-start whitespace-normal p-0 font-normal ${STATE_CLASS[itemState]} ${SELECTION_CLASS[selected ? "selected" : "unselected"]}`,
+                className: `h-auto w-full justify-start whitespace-normal p-2 font-normal ${STATE_CLASS[itemState]} ${SELECTION_CLASS[selected ? "selected" : "unselected"]}`,
               })}
             >
               <Checkbox
+                className="mt-1"
                 checked={selected}
                 onCheckedChange={(checked) =>
                   onToggleEntry(index, checked === true)
                 }
                 aria-label={`entry ${index + 1}: ${entry.name}`}
               />
-              <span className="min-w-0 flex-1 px-2 py-1 text-left">
+              <span
+                className="min-w-0 flex-1 text-left"
+                data-suno-slot="entry-name"
+              >
                 {entry.name}
               </span>
             </FieldLabel>

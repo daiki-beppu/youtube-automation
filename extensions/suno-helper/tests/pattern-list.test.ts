@@ -233,7 +233,23 @@ describe("PatternList checkbox UI", () => {
       expect(control.className).toContain(
         [true, false, true, false, true][index] ? "ring-2" : "shadow-none"
       );
+      expect(control.className).toContain("p-2");
+      expect(control.className).not.toContain("p-0");
     });
+    expect(
+      checkboxes.every((checkbox) => checkbox.classList.contains("mt-1"))
+    ).toBe(true);
+    expect(
+      rows.every((row) => {
+        const text = row.querySelector('[data-suno-slot="entry-name"]');
+        return (
+          text?.classList.contains("min-w-0") &&
+          text.classList.contains("flex-1") &&
+          !text.classList.contains("px-2") &&
+          !text.classList.contains("py-1")
+        );
+      })
+    ).toBe(true);
     expect(rows[3].className).toContain("line-through");
   });
 
