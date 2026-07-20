@@ -372,11 +372,12 @@ export function App() {
               className={buttonVariants({
                 variant: checked ? "secondary" : "outline",
                 size: "sm",
-                className: "h-auto w-full justify-start whitespace-normal p-2",
+                className:
+                  "h-auto w-full items-start justify-start whitespace-normal p-2",
               })}
             >
               <Checkbox
-                className="mt-1"
+                className="mt-0.5"
                 checked={checked}
                 disabled={
                   controlsLocked || collection.status === "needs_prompts"
@@ -609,7 +610,7 @@ export function App() {
         )}
       >
         <Checkbox
-          className={regenerateDurationOutliers ? undefined : "mt-1"}
+          className={regenerateDurationOutliers ? undefined : "mt-0.5"}
           checked={regenerateDurationOutliers}
           disabled={entries.length === 0 || controlsLocked}
           data-suno-control="regenerate-duration-outliers"

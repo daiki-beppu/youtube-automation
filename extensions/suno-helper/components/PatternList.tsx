@@ -59,11 +59,11 @@ export function PatternList({
               className={buttonVariants({
                 variant: "outline",
                 size: "sm",
-                className: `h-auto w-full justify-start whitespace-normal p-2 font-normal ${STATE_CLASS[itemState]} ${SELECTION_CLASS[selected ? "selected" : "unselected"]}`,
+                className: `h-auto w-full items-start justify-start whitespace-normal p-2 font-normal ${STATE_CLASS[itemState]} ${SELECTION_CLASS[selected ? "selected" : "unselected"]}`,
               })}
             >
               <Checkbox
-                className="mt-1"
+                className="mt-0.5"
                 checked={selected}
                 onCheckedChange={(checked) =>
                   onToggleEntry(index, checked === true)
