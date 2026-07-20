@@ -6,12 +6,17 @@ import {
   RadioGroup,
   RadioGroupItem,
   Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@youtube-automation/ui";
 import { useEffect, useRef, useState } from "react";
 
 import {
   DOWNLOAD_FORMAT_DEFAULT,
   formatServerSourceLabel,
+  PHASE,
   RUN_MODES,
   type RunModeId,
 } from "../../shared/constants";
@@ -124,7 +129,11 @@ export function App() {
     void readDownloadFormat()
       .then((value) => {
         if (mounted) {
-          setDownloadFormat(value);
+          setDownloadFormat(
+            DOWNLOAD_FORMAT_OPTIONS.includes(value)
+              ? value
+              : DOWNLOAD_FORMAT_DEFAULT
+          );
         }
       })
       .catch((error: unknown) => {
@@ -416,8 +425,12 @@ export function App() {
         <Alert
           variant={
             collectionQueue.items.some((item) => item.status === "failed")
-              ? "warning"
-              : "default"
+              ? "destructive"
+              : collectionQueue.status === "completed"
+                ? "success"
+                : collectionQueue.status === "paused"
+                  ? "warning"
+                  : "info"
           }
           className="flex flex-col gap-2 rounded px-2 py-2 text-xs"
           data-suno-control="collection-queue-summary"
@@ -437,6 +450,7 @@ export function App() {
             <Button
               type="button"
               size="sm"
+              variant="warning"
               className="self-start"
               onClick={() => void resumeCollectionQueue()}
             >
@@ -448,7 +462,7 @@ export function App() {
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
+                variant="destructive"
                 className="self-start"
                 onClick={() =>
                   void runCollectionQueue(
@@ -487,6 +501,7 @@ export function App() {
               type="button"
               onClick={acceptResume}
               data-suno-control="resume"
+              variant="warning"
               size="sm"
             >
               再開
@@ -548,7 +563,7 @@ export function App() {
             return (
               <ButtonSlot
                 key={id}
-                variant={runModeId === id ? "default" : "outline"}
+                variant={runModeId === id ? "info" : "outline"}
                 size="sm"
                 className="h-auto w-full justify-start whitespace-normal p-2"
               >
@@ -586,7 +601,7 @@ export function App() {
         <span className="flex flex-col">
           <span className="font-medium">異常値の曲を再生成する</span>
           {!regenerateDurationOutliers && (
-            <span className="text-xs text-amber-700 dark:text-amber-300">
+            <span className="text-xs text-warning-foreground">
               OFF の場合、duration guard NG も Playlist / Download
               候補に残ります。完了後に手動確認してください。
             </span>
@@ -602,24 +617,31 @@ export function App() {
         onPreview={previewCompletionSound}
       />
 
-      <label className="flex flex-col gap-1 text-sm">
-        DL 形式
+      <div className="flex flex-col gap-1 text-sm">
+        <span id="download-format-label">DL 形式</span>
         <Select
           value={downloadFormat}
           disabled={controlsLocked}
-          data-suno-control="download-format"
-          onChange={(e) =>
-            updateDownloadFormat(e.target.value as DownloadFormat)
+          onValueChange={(value) =>
+            updateDownloadFormat(value as DownloadFormat)
           }
-          className="rounded border border-input bg-background px-2 py-1 text-foreground"
         >
-          {DOWNLOAD_FORMAT_OPTIONS.map((format) => (
-            <option key={format} value={format}>
-              {format.toUpperCase()}
-            </option>
-          ))}
+          <SelectTrigger
+            className="w-full"
+            aria-labelledby="download-format-label"
+            data-suno-control="download-format"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DOWNLOAD_FORMAT_OPTIONS.map((format) => (
+              <SelectItem key={format} value={format}>
+                {format.toUpperCase()}
+              </SelectItem>
+            ))}
+          </SelectContent>
         </Select>
-      </label>
+      </div>
 
       <div className="flex gap-2">
         <Button
@@ -627,6 +649,7 @@ export function App() {
           onClick={runSelectedEntries}
           disabled={!canRunSelectedEntries}
           data-suno-control="run"
+          variant="info"
           size="sm"
           className="flex-1"
         >
@@ -661,7 +684,7 @@ export function App() {
                 type="button"
                 onClick={() => void retryPlaylist()}
                 data-suno-control="retry-playlist"
-                variant="outline"
+                variant="warning"
                 size="sm"
                 className="flex-1"
               >
@@ -673,7 +696,7 @@ export function App() {
               onClick={() => void retryDownload()}
               disabled={!selectedCollectionId}
               data-suno-control="retry-download"
-              variant="outline"
+              variant="success"
               size="sm"
               className="flex-1"
             >
@@ -692,12 +715,20 @@ export function App() {
 
       {status && (
         <Alert
-          variant={isError ? "destructive" : "default"}
+          variant={
+            isError
+              ? "destructive"
+              : phase === PHASE.ADDING_TO_PLAYLIST
+                ? "warning"
+                : phase === PHASE.DOWNLOADING || phase === PHASE.FINISHED
+                  ? "success"
+                  : "info"
+          }
           appearance={isError ? "filled" : "subtle"}
           role="status"
           aria-live="polite"
           data-suno-status={isError ? "error" : "ok"}
-          className={`rounded-none border-0 bg-transparent p-0 whitespace-pre-wrap text-xs ${isError ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
+          className="whitespace-pre-wrap rounded px-2 py-2 text-xs"
         >
           {status}
         </Alert>

@@ -304,6 +304,7 @@ describe("Overlay shell", () => {
       '[data-suno-control="collection-queue-summary"]'
     )!;
 
+    expect(summary.dataset.variant).toBe("destructive");
     expect(summary.textContent).toContain("first: succeeded");
     expect(summary.textContent).toContain("second: failed — download failed");
     await act(async () =>
@@ -313,6 +314,30 @@ describe("Overlay shell", () => {
     );
 
     expect(runner.runCollectionQueue).toHaveBeenCalledWith(["second"]);
+  });
+
+  it("collection queue の完了 summary を success 色で表示する", async () => {
+    Object.assign(runner, {
+      collectionQueue: {
+        version: 1,
+        queueId: "queue-success",
+        baseUrl: "http://localhost:7873",
+        items: [{ collectionId: "first", status: "succeeded" }],
+        currentIndex: 1,
+        status: "completed",
+        runMode: "queue",
+        regenerateDurationOutliers: true,
+        createdAt: 100,
+        updatedAt: 200,
+      },
+    });
+    await act(async () => root.render(createElement(Overlay)));
+
+    expect(
+      container.querySelector<HTMLElement>(
+        '[data-suno-control="collection-queue-summary"]'
+      )?.dataset.variant
+    ).toBe("success");
   });
 
   it("collection 間の queue 遷移中は入力を固定し Stop だけを有効にする", async () => {
@@ -334,8 +359,14 @@ describe("Overlay shell", () => {
     await act(async () => root.render(createElement(Overlay)));
 
     expect(
-      container.querySelector<HTMLSelectElement>(
-        'select[data-suno-control="download-format"]'
+      container.querySelector<HTMLElement>(
+        '[data-suno-control="collection-queue-summary"]'
+      )?.dataset.variant
+    ).toBe("info");
+
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        'button[data-suno-control="download-format"]'
       )?.disabled
     ).toBe(true);
     expect(

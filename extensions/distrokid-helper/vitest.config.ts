@@ -14,10 +14,16 @@ export default defineConfig({
     alias: {
       "@": fileURLToPath(new URL(".", import.meta.url)),
     },
+    dedupe: ["react", "react-dom"],
   },
   test: {
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.test.{ts,tsx}"],
     exclude: ["tests/e2e/**"],
+    server: {
+      deps: {
+        inline: [/@radix-ui/],
+      },
+    },
   },
 });
