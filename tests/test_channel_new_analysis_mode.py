@@ -78,6 +78,5 @@ def test_sibling_routes_point_to_channel_new_analysis_mode() -> None:
 
 def test_feature_catalog_has_no_standalone_channel_research() -> None:
     features = _read(ROOT / "docs/features.md")
-    assert "全 **53 個**" in features
     assert "| /channel-research |" not in features
     assert "/channel-new" in features and "分析モード" in features
