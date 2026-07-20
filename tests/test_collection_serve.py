@@ -1516,6 +1516,75 @@ def test_build_collections_index_reports_status_and_pattern_count(tmp_path):
     assert no_prompts["downloaded_count"] == 0
 
 
+def test_build_collections_index_excludes_live_complete_collection(tmp_path):
+    """Given planning と同じ id の live collection が phase=complete
+    When Suno の collection index を構築する
+    Then 完了済み collection を候補から除外する（#2331）。
+    """
+    planning = tmp_path / "collections" / "planning"
+    collection_id = "20260601-clm-complete-collection"
+    _make_collection(planning, collection_id, entries=[])
+    live = tmp_path / "collections" / "live" / collection_id
+    live.mkdir(parents=True)
+    (live / "workflow-state.json").write_text(json.dumps({"phase": "complete"}), encoding="utf-8")
+
+    assert build_collections_index(planning) == []
+    assert resolve_collection_prompts_path(planning, collection_id) is None
+
+
+@pytest.mark.parametrize(
+    "workflow_state",
+    [
+        None,
+        "{",
+        json.dumps([]),
+        json.dumps({"phase": "active"}),
+        json.dumps({"phase": "Complete"}),
+    ],
+)
+def test_build_collections_index_keeps_collection_when_live_state_is_not_valid_complete(tmp_path, workflow_state):
+    """live state が欠落・破損・非 object・未完了なら planning 候補を fail-open で維持する。"""
+    planning = tmp_path / "collections" / "planning"
+    collection_id = "20260601-clm-pending-collection"
+    _make_collection(planning, collection_id, entries=[])
+    if workflow_state is not None:
+        live = tmp_path / "collections" / "live" / collection_id
+        live.mkdir(parents=True)
+        (live / "workflow-state.json").write_text(workflow_state, encoding="utf-8")
+
+    assert [row["id"] for row in build_collections_index(planning)] == [collection_id]
+    assert resolve_collection_prompts_path(planning, collection_id) is not None
+
+
+def test_build_collections_index_does_not_filter_arbitrary_planning_root(tmp_path):
+    """collections/planning 以外の同名 root には live 完了フィルタを適用しない。"""
+    planning = tmp_path / "planning"
+    collection_id = "20260601-clm-complete-collection"
+    _make_collection(planning, collection_id, entries=[])
+    live = tmp_path / "live" / collection_id
+    live.mkdir(parents=True)
+    (live / "workflow-state.json").write_text(json.dumps({"phase": "complete"}), encoding="utf-8")
+
+    assert [row["id"] for row in build_collections_index(planning)] == [collection_id]
+
+
+def test_live_complete_filter_does_not_affect_distrokid_index(tmp_path):
+    """Suno で除外された collection も DistroKid 一覧には残す。"""
+    planning = tmp_path / "collections" / "planning"
+    collection_id = "20260601-clm-complete-collection"
+    coll = _make_collection(planning, collection_id, entries=[])
+    disc = coll / "30-distrokid" / "disc-1"
+    disc.mkdir(parents=True)
+    (disc / "track.mp3").write_bytes(b"fake")
+    live = tmp_path / "collections" / "live" / collection_id
+    live.mkdir(parents=True)
+    (live / "workflow-state.json").write_text(json.dumps({"phase": "complete"}), encoding="utf-8")
+
+    rows = collection_serve_module.build_distrokid_collections_index(planning)
+
+    assert [(row["collection_id"], row["disc"]) for row in rows] == [(collection_id, "disc-1")]
+
+
 def test_build_collections_index_counts_prompt_response_entries(tmp_path):
     """Given duration_filter 付き envelope prompts
     When build_collections_index を呼ぶ
@@ -1872,6 +1941,29 @@ def test_get_collections_lists_planning_collections(serve_dir, tmp_path):
     }
     assert by_id["20260602-clm-bbb-collection"]["status"] == "needs_prompts"
     assert by_id["20260602-clm-bbb-collection"]["pattern_count"] is None
+
+
+def test_dir_mode_hides_live_complete_collection_from_index_and_prompts(serve_dir, tmp_path):
+    """phase=complete の live collection は一覧に出ず、個別 prompts も 404 にする。"""
+    planning = tmp_path / "collections" / "planning"
+    collection_id = "20260601-clm-complete-collection"
+    _make_collection(planning, collection_id, entries=[{"name": "A", "style": "s", "lyrics": ""}])
+    live = tmp_path / "collections" / "live" / collection_id
+    live.mkdir(parents=True)
+    (live / "workflow-state.json").write_text(json.dumps({"phase": "complete"}), encoding="utf-8")
+    base = serve_dir(planning)
+
+    with urllib.request.urlopen(f"{base}{_COLLECTIONS_ROUTE}") as resp:
+        assert json.loads(resp.read().decode("utf-8")) == []
+
+    req = urllib.request.Request(
+        f"{base}{_collection_prompts_route(collection_id)}",
+        headers={"Origin": _SUNO_ORIGIN},
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    _assert_json_404_with_cors(exc_info.value, _SUNO_ORIGIN)
 
 
 def test_get_collections_does_not_include_playlist_name_when_capture_enabled(serve_dir, tmp_path):

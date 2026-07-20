@@ -384,6 +384,30 @@ def find_collection_dirs(root: Path) -> list[Path]:
     return sorted(dirs, key=lambda p: p.name)
 
 
+def _is_live_complete_collection(root: Path, collection_id: str) -> bool:
+    """planning の対応する live collection が完了済みなら True を返す（#2331）。
+
+    Suno の dir mode を ``collections/planning`` で配信する場合だけ sibling の
+    ``collections/live/<collection_id>/workflow-state.json`` を参照する。状態ファイルが
+    不在・破損・非 object の場合は fail-open とし、planning 側を従来どおり表示する。
+    """
+    if root.name != "planning" or root.parent.name != "collections":
+        return False
+    workflow_state = root.parent / "live" / collection_id / "workflow-state.json"
+    if not workflow_state.is_file():
+        return False
+    try:
+        data = json.loads(workflow_state.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    return isinstance(data, dict) and data.get("phase") == "complete"
+
+
+def _find_suno_collection_dirs(root: Path) -> list[Path]:
+    """Suno に提示可能な planning collection だけを返す（#2331）。"""
+    return [coll for coll in find_collection_dirs(root) if not _is_live_complete_collection(root, coll.name)]
+
+
 def _determine_status(
     has_prompts: bool,
     pattern_count: int | None,
@@ -525,7 +549,7 @@ def build_collections_index(root: Path) -> list[dict]:
     #1216 BREAKING: mapped_slugs を廃止。mapped / has_prompts / playlist_name を廃止。
     """
     index: list[dict] = []
-    for coll in find_collection_dirs(root):
+    for coll in _find_suno_collection_dirs(root):
         prompts_path = coll / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
         has_prompts = prompts_path.is_file()
         pattern_count = read_pattern_count(coll)
@@ -569,7 +593,7 @@ def resolve_collection_prompts_path(root: Path, cid: str) -> Path | None:
     一致せず None を返す（fail-loud でなく 404 化できる形）。json の実在判定は
     呼び出し側に委ねる（has_prompts=False の collection も dir 自体は既知）。
     """
-    known = {coll.name for coll in find_collection_dirs(root)}
+    known = {coll.name for coll in _find_suno_collection_dirs(root)}
     if cid not in known:
         return None
     return root / cid / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
