@@ -103,6 +103,9 @@ def test_select_consumers_dedupe_radix_and_react_from_their_workspace() -> None:
             config = (helper / config_name).read_text()
             assert '"react", "react-dom", "@radix-ui/react-select"' in config
 
+    fallow = json.loads((EXTENSIONS / ".fallowrc.json").read_text())
+    assert "@radix-ui/react-select" in fallow["ignoreDependencies"]
+
 
 def test_helpers_import_the_shared_theme_contract() -> None:
     styles = (
