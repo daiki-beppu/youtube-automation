@@ -1,4 +1,12 @@
-import { Alert, Button, ButtonSlot } from "@youtube-automation/ui";
+import {
+  Alert,
+  Button,
+  ButtonSlot,
+  Checkbox,
+  RadioGroup,
+  RadioGroupItem,
+  Select,
+} from "@youtube-automation/ui";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -21,7 +29,6 @@ import {
 import { CompletionSoundControls } from "./CompletionSoundControls";
 import { PatternList } from "./PatternList";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
-import { Checkbox } from "./ui/checkbox";
 import { useSunoRunner } from "./useSunoRunner";
 
 // RUN_MODES のキー集合から導出する（手書き複製だと mode 追加時に UI へ出ないまま型チェックが通る）。
@@ -271,21 +278,23 @@ export function App() {
 
       <label className="flex flex-col gap-1 text-sm">
         ローカル配信元
-        <button
+        <Button
           type="button"
           aria-haspopup="listbox"
           aria-expanded={serverSourcePickerVisible}
           disabled={controlsLocked || refreshingServerSources}
           onClick={openServerSourcePicker}
           data-suno-control="server-source-trigger"
-          className="rounded border border-input bg-background px-2 py-1 text-left"
+          variant="outline"
+          size="sm"
+          className="justify-start text-left"
         >
           {refreshingServerSources
             ? "稼働中の配信元を更新中…"
             : selectedServerSource
               ? formatServerSourceLabel(selectedServerSource, "suno-helper")
               : "配信元を選択"}
-        </button>
+        </Button>
         <select
           value={url}
           disabled={controlsLocked || refreshingServerSources}
@@ -308,13 +317,15 @@ export function App() {
             className="rounded border border-border bg-popover p-1 text-popover-foreground"
           >
             {serverSources.map((source) => (
-              <button
+              <Button
                 key={source.url}
                 type="button"
                 role="option"
                 aria-selected={source.url === url}
                 disabled={controlsLocked || refreshingServerSources}
-                className="block w-full rounded px-2 py-1 text-left hover:bg-accent hover:text-accent-foreground"
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start text-left"
                 onClick={() => {
                   if (isRunningRef.current || refreshingServerSources) {
                     return;
@@ -324,7 +335,7 @@ export function App() {
                 }}
               >
                 {formatServerSourceLabel(source, "suno-helper")}
-              </button>
+              </Button>
             ))}
           </div>
         )}
@@ -526,46 +537,50 @@ export function App() {
 
       <fieldset className="flex flex-col gap-2 rounded border border-border px-2 py-2 text-sm">
         <legend className="px-1 text-xs text-muted-foreground">投入方式</legend>
-        {RUN_MODE_ORDER.map((id) => {
-          const mode = RUN_MODES[id];
-          return (
-            <ButtonSlot
-              key={id}
-              variant={runModeId === id ? "default" : "outline"}
-              size="sm"
-              className="h-auto w-full justify-start whitespace-normal p-2"
-            >
-              <label className="flex items-start gap-2">
-                <input
-                  type="radio"
-                  name="run-mode"
-                  className="mt-1"
-                  checked={runModeId === id}
-                  // 実行中の切替は当該 run に効かないのに保存だけ即時反映され、次回 resume の
-                  // モードを無言で変えてしまうため run 中は無効化する (#1586 review)。
-                  disabled={controlsLocked}
-                  onChange={() => setRunMode(id)}
-                />
-                <span className="flex flex-col">
-                  <span className="font-medium">{mode.label}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {mode.riskNote}
+        <RadioGroup
+          name="run-mode"
+          value={runModeId}
+          disabled={controlsLocked}
+          onValueChange={(value) => setRunMode(value as RunModeId)}
+        >
+          {RUN_MODE_ORDER.map((id) => {
+            const mode = RUN_MODES[id];
+            return (
+              <ButtonSlot
+                key={id}
+                variant={runModeId === id ? "default" : "outline"}
+                size="sm"
+                className="h-auto w-full justify-start whitespace-normal p-2"
+              >
+                <label className="flex items-start gap-2">
+                  <RadioGroupItem
+                    value={id}
+                    className="mt-1"
+                    aria-label={mode.label}
+                    data-suno-control="run-mode"
+                  />
+                  <span className="flex flex-col">
+                    <span className="font-medium">{mode.label}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {mode.riskNote}
+                    </span>
                   </span>
-                </span>
-              </label>
-            </ButtonSlot>
-          );
-        })}
+                </label>
+              </ButtonSlot>
+            );
+          })}
+        </RadioGroup>
       </fieldset>
 
       <label className="flex items-start gap-2 rounded border border-border px-2 py-2 text-sm">
-        <input
-          type="checkbox"
+        <Checkbox
           className="mt-1"
           checked={regenerateDurationOutliers}
           disabled={entries.length === 0 || controlsLocked}
-          onChange={(event) =>
-            setRegenerateDurationOutliers(event.target.checked)
+          data-suno-control="regenerate-duration-outliers"
+          aria-label="異常値の曲を再生成する"
+          onCheckedChange={(checked) =>
+            setRegenerateDurationOutliers(checked === true)
           }
         />
         <span className="flex flex-col">
@@ -589,7 +604,7 @@ export function App() {
 
       <label className="flex flex-col gap-1 text-sm">
         DL 形式
-        <select
+        <Select
           value={downloadFormat}
           disabled={controlsLocked}
           data-suno-control="download-format"
@@ -603,7 +618,7 @@ export function App() {
               {format.toUpperCase()}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
 
       <div className="flex gap-2">
@@ -631,14 +646,15 @@ export function App() {
 
       {!controlsLocked && selectedCollectionId && (
         <div className="flex flex-col gap-2">
-          <button
+          <Button
             type="button"
             onClick={() => void adoptSelectedClips()}
             data-suno-control="adopt-selected-clips"
-            className="rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground"
+            variant="outline"
+            size="sm"
           >
             選択中の曲を採用
-          </button>
+          </Button>
           <div className="flex gap-2">
             {playlistName && (
               <Button

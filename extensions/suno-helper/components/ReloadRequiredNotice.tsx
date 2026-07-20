@@ -1,16 +1,25 @@
+import { Alert, Button } from "@youtube-automation/ui";
+
 import { EXTENSION_RELOAD_REQUIRED_MESSAGE } from "./runner-errors";
 
 export function ReloadRequiredNotice() {
   return (
-    <div className="fixed left-4 top-4 z-[2147483647] flex max-w-xs flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 shadow-xl dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+    <Alert
+      variant="warning"
+      className="fixed left-4 top-4 z-[2147483647] flex max-w-xs flex-col gap-2 border-warning-border bg-warning-background text-xs text-warning-foreground shadow-xl"
+      data-suno-control="reload-required"
+    >
       <p>{EXTENSION_RELOAD_REQUIRED_MESSAGE}</p>
-      <button
+      <Button
         type="button"
         onClick={() => window.location.reload()}
-        className="rounded bg-amber-600 px-2 py-1 text-amber-50 hover:bg-amber-500 dark:bg-amber-500 dark:text-amber-950 dark:hover:bg-amber-400"
+        variant="outline"
+        size="sm"
+        data-suno-control="reload-tab"
+        className="self-start border-warning-border bg-warning-background text-warning-foreground hover:bg-warning-background/80 hover:text-warning-foreground"
       >
         タブを再読み込み
-      </button>
-    </div>
+      </Button>
+    </Alert>
   );
 }

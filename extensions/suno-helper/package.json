@@ -18,7 +18,6 @@
     "fix": "cd .. && ultracite fix suno-helper shared shared-ui"
   },
   "dependencies": {
-    "@radix-ui/react-checkbox": "1.3.7",
     "@webext-core/messaging": "3.0.2",
     "@youtube-automation/ui": "workspace:*",
     "react": "19.2.7",
