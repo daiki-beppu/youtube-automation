@@ -3,6 +3,7 @@ import { OverlayShell } from "@youtube-automation/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import { onMessage, sendMessage } from "../lib/messaging";
+import { SUNO_OVERLAY_BRAND } from "../lib/overlay-brand";
 import { readOverlayState, writeOverlayState } from "../lib/overlay-storage";
 import { App } from "./App";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
@@ -66,6 +67,7 @@ export function Overlay() {
       onStateChange={writeOverlayState}
       subscribeToggle={subscribeToggle}
       onError={handlePersistenceError}
+      brandColors={SUNO_OVERLAY_BRAND}
     >
       <App />
     </OverlayShell>

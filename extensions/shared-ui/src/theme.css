@@ -34,6 +34,8 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
+  --overlay-header-background: var(--primary);
+  --overlay-header-foreground: var(--primary-foreground);
 }
 
 @theme inline {
@@ -71,6 +73,8 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-overlay-header: var(--overlay-header-background);
+  --color-overlay-header-foreground: var(--overlay-header-foreground);
 }
 
 @layer base {

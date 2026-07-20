@@ -35,7 +35,12 @@ export {
   fieldVariants,
 } from "./field";
 export { Label } from "./label";
-export { OverlayShell, type OverlayShellProps } from "./overlay-shell";
+export {
+  OverlayShell,
+  type OverlayBrandColors,
+  type OverlayShellProps,
+} from "./overlay-shell";
+export { hexContrastRatio } from "./color-contrast";
 export { RadioGroup, RadioGroupItem } from "./radio-group";
 export {
   Select,

@@ -8,6 +8,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 
 import { onMessage } from "@/lib/messaging";
+import { DISTROKID_OVERLAY_BRAND } from "@/lib/overlay-brand";
 import { readOverlayState, writeOverlayState } from "@/lib/overlay-storage";
 
 import { App } from "./App";
@@ -56,6 +57,7 @@ export function Overlay() {
       onStateChange={writeOverlayState}
       subscribeToggle={subscribeToggle}
       onError={handleError}
+      brandColors={DISTROKID_OVERLAY_BRAND}
     >
       <App />
     </OverlayShell>
