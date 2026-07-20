@@ -9,7 +9,8 @@ import type {
 } from "../lib/messaging";
 
 describe("community-helper messaging contract", () => {
-  it("types run, stop and progress across popup, background and content", () => {
+  it("types run, stop and progress across overlay, background and content", () => {
+    expectTypeOf<ProtocolMap["toggleOverlay"]>().parameters.toEqualTypeOf<[]>();
     expectTypeOf<ProtocolMap["checkCompatibility"]>().parameters.toEqualTypeOf<
       [CompatibilityRequest]
     >();

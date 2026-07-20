@@ -30,19 +30,21 @@ export interface CommunityImageRequest extends RunRequest {
 }
 
 export interface ProtocolMap {
-  /** Popup → background: extension origin から /version を確認する。 */
+  /** Background → overlay: action click で表示状態を切り替える。 */
+  toggleOverlay(): void;
+  /** Overlay → background: extension origin から /version を確認する。 */
   checkCompatibility(request: CompatibilityRequest): CompatibilityResult;
-  /** Popup → background → active YouTube posts content script. */
+  /** Overlay → background → sender tab の YouTube posts runner. */
   run(request: RunRequest): void;
-  /** Popup → background → active YouTube posts content script. */
+  /** Overlay → background → sender tab の YouTube posts runner. */
   stop(): void;
   /** Content → background: extension origin で投稿 JSON を取得する。 */
   fetchCommunityPosts(request: RunRequest): CommunityPost[];
   /** Content → background: extension origin で画像を取得する。 */
   fetchCommunityImage(request: CommunityImageRequest): SerializedAsset;
-  /** Background → Popup. */
+  /** Background → sender tab overlay. */
   progress(message: ProgressMessage): void;
-  /** Background → Popup. */
+  /** Background → sender tab overlay. */
   error(message: ErrorMessage): void;
   /** Content → background. Public progress is emitted after relay. */
   contentProgress(message: ProgressMessage): void;

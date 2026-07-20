@@ -5,7 +5,7 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "entrypoints/popup/style.css",
+    "css": "components/overlay.css",
     "baseColor": "neutral",
     "cssVariables": true,
     "prefix": ""

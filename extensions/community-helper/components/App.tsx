@@ -8,12 +8,8 @@ import {
 import { useEffect, useState } from "react";
 import { browser } from "wxt/browser";
 
-import { COMMUNITY_PHASE, DEFAULT_URL } from "../../../shared/constants";
-import {
-  onMessage,
-  sendMessage,
-  type ProgressMessage,
-} from "../../lib/messaging";
+import { COMMUNITY_PHASE, DEFAULT_URL } from "../../shared/constants";
+import { onMessage, sendMessage, type ProgressMessage } from "../lib/messaging";
 
 const INITIAL_PROGRESS: ProgressMessage[] = ([0, 1, 2] as const).map(
   (index) => ({
@@ -39,6 +35,12 @@ export function App() {
       setProgress((current) =>
         current.map((item) => (item.index === data.index ? data : item))
       );
+      if (
+        data.phase === COMMUNITY_PHASE.DONE &&
+        data.index === data.total - 1
+      ) {
+        setBusy(false);
+      }
     });
     const unwatchError = onMessage("error", ({ data }) => {
       setError(data.message);
@@ -51,7 +53,7 @@ export function App() {
   }, []);
 
   const start = async () => {
-    const baseUrl = serverUrl.trim().replace(/\/$/, "");
+    const baseUrl = serverUrl.trim().replace(/\/$/u, "");
     setError(null);
     setBusy(true);
     try {
@@ -76,32 +78,50 @@ export function App() {
       await sendMessage("run", { baseUrl });
     } catch (caught) {
       setError(errorMessage(caught));
+      setBusy(false);
+    }
+  };
+
+  const stop = async () => {
+    try {
+      await sendMessage("stop");
+    } catch (caught) {
+      setError(errorMessage(caught));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <main className="space-y-4 p-4">
-      <h1 className="text-lg font-semibold">Community Helper</h1>
+    <main className="space-y-4 bg-background p-4 text-foreground">
       <label className="block text-sm font-medium">
         サーバー URL
         <input
-          className="mt-1 w-full rounded border px-2 py-1"
+          className="mt-1 w-full rounded border border-input bg-background px-2 py-1"
           name="serverUrl"
           onChange={(event) => setServerUrl(event.target.value)}
           type="url"
           value={serverUrl}
         />
       </label>
-      <Button
-        className="w-full"
-        disabled={busy}
-        onClick={() => void start()}
-        type="button"
-      >
-        {busy ? "Checking…" : "Start"}
-      </Button>
+      <div className="flex gap-2">
+        <Button
+          className="flex-1"
+          disabled={busy}
+          onClick={() => void start()}
+          type="button"
+        >
+          {busy ? "Running…" : "Start"}
+        </Button>
+        <Button
+          disabled={!busy}
+          onClick={() => void stop()}
+          type="button"
+          variant="outline"
+        >
+          Stop
+        </Button>
+      </div>
       {error ? (
         <Alert role="alert" variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -113,7 +133,7 @@ export function App() {
             <Card>
               <CardContent className="p-2 text-sm">
                 <span className="font-medium">投稿 {item.index + 1}</span>
-                <span className="text-muted-foreground ml-2">
+                <span className="ml-2 text-muted-foreground">
                   {item.message}
                 </span>
               </CardContent>

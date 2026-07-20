@@ -7,6 +7,7 @@ export default defineConfig({
     alias: {
       "@": fileURLToPath(new URL(".", import.meta.url)),
     },
+    dedupe: ["react", "react-dom", "@base-ui/react"],
   },
   test: {
     setupFiles: ["./tests/setup.ts"],

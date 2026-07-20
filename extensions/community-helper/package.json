@@ -11,6 +11,7 @@
     "compile": "wxt prepare && tsc --noEmit",
     "postinstall": "wxt prepare",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "test:watch": "vitest",
     "audit": "fallow audit --root ..",
     "check": "cd .. && ultracite check community-helper",
@@ -19,11 +20,14 @@
   "dependencies": {
     "@base-ui/react": "1.6.0",
     "@webext-core/messaging": "2.3.0",
+    "@wxt-dev/storage": "1.2.8",
+    "@youtube-automation/extensions-shared": "workspace:*",
     "@youtube-automation/ui": "workspace:*",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
   "devDependencies": {
+    "@playwright/test": "1.60.0",
     "@tailwindcss/vite": "4.2.2",
     "@types/react": "19.0.2",
     "@types/react-dom": "19.0.2",
