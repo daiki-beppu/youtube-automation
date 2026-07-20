@@ -1062,10 +1062,18 @@ describe("Suno popup compatibility check", () => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
     expect(outlierOption.hasAttribute("data-disabled")).toBe(false);
+    expect(
+      outlierOption.closest<HTMLElement>('[data-slot="field-label"]')?.classList
+    ).toContain("items-center");
+    expect(outlierOption.classList).not.toContain("mt-1");
     await act(async () => {
       outlierOption.click();
     });
     expect(outlierOption.hasAttribute("data-checked")).toBe(false);
+    expect(
+      outlierOption.closest<HTMLElement>('[data-slot="field-label"]')?.classList
+    ).toContain("items-start");
+    expect(outlierOption.classList).toContain("mt-1");
     expect(container.textContent).toContain(
       "duration guard NG も Playlist / Download 候補に残ります"
     );
