@@ -341,7 +341,7 @@ def test_thumbnail_skill_applies_thumbnail_text_profile_with_default_fallback() 
     for required in (
         "docs/benchmarks/thumbnail-text-profile.md",
         "`schema_version: 1`",
-        ".claude/skills/channel-research/SKILL.md",
+        ".claude/skills/channel-new/references/analysis-mode.md",
         "## font_tendency",
         "## text_content_pattern",
         "## placement_tendency",

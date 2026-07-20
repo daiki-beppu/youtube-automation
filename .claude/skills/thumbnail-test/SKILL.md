@@ -1,12 +1,12 @@
 ---
 name: thumbnail-test
-description: "Use when 長尺動画で YouTube Studio のサムネイル A/B テストを設計し、結果を記録するとき。「サムネ A/B テスト」「Test & Compare」「サムネテスト結果」で発動。公開前の競合・320px 視認性比較は /thumbnail-compare、候補生成は /thumbnail を使う"
+description: "Use when 長尺動画で YouTube Studio のサムネイル A/B テストを単独で設計し、結果を記録するとき。「サムネ A/B テスト」「Test & Compare」「サムネテスト結果」で発動。伸びた動画起点の勝因検証ループは /thumbnail-iterate、公開前の競合・320px 視認性比較は /thumbnail-compare、候補生成は /thumbnail を使う"
 ---
 
 ## 前後工程
 
-- `前工程`: `/thumbnail`, `/video-upload`
-- `後工程`: `/thumbnail`, `/flop-analysis`
+- `前工程`: `/thumbnail`, `/video-upload`, `/thumbnail-iterate`
+- `後工程`: `/thumbnail`, `/thumbnail-iterate`, `/flop-analysis`
 
 ## Overview
 

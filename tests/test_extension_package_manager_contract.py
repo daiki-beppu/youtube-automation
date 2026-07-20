@@ -9,7 +9,8 @@ from pathlib import Path
 import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_EXTENSION_NAMES = ("suno-helper", "distrokid-helper")
+_EXTENSION_NAMES = ("suno-helper", "distrokid-helper", "community-helper")
+_EXTENSION_README_NAMES = ("suno-helper", "distrokid-helper")
 _NIX_PNPM = "11.12.0"
 _LEGACY_PNPM = "11.11.0"
 _LEGACY_NPX_COMMAND = f"npx -y pnpm@{_LEGACY_PNPM}"
@@ -82,14 +83,14 @@ def test_extensions_shell_contains_only_the_node_toolchain() -> None:
         assert excluded not in block
 
 
-def test_both_extensions_pin_the_nix_pnpm() -> None:
+def test_all_extensions_pin_the_nix_pnpm() -> None:
     for name in _EXTENSION_NAMES:
         package = json.loads(_read(f"extensions/{name}/package.json"))
 
         assert package["packageManager"] == f"pnpm@{_NIX_PNPM}"
 
 
-def test_both_extensions_preserve_build_approval() -> None:
+def test_all_extensions_preserve_build_approval() -> None:
     for name in _EXTENSION_NAMES:
         assert _workspace_settings(name)["allowBuilds"] == {"esbuild": True, "spawn-sync": False}
 
@@ -129,7 +130,7 @@ def test_shared_docs_precede_commands_with_the_pinned_contract() -> None:
 
 
 def test_each_extension_readme_uses_the_nix_extensions_shell() -> None:
-    for name in _EXTENSION_NAMES:
+    for name in _EXTENSION_README_NAMES:
         readme = _read(f"extensions/{name}/README.md")
 
         assert "Node 24 / pnpm 11.12.0" in readme
@@ -196,7 +197,7 @@ def test_release_skill_delegates_extension_verification_to_single_source() -> No
     assert invocation in release_checklist
     assert "nix develop .#extensions --command pnpm -C" not in release_skill
     assert "nix develop .#extensions --command pnpm -C" not in release_checklist
-    assert "extension_names=(suno-helper distrokid-helper)" in verify_script
+    assert "extension_names=(suno-helper distrokid-helper community-helper)" in verify_script
     for command in ("install --frozen-lockfile", "build", "zip"):
         assert f'nix develop .#extensions --command pnpm -C "${{extension_dir}}" {command}' in verify_script
     assert "node_version} != v24.*" in verify_script
@@ -230,10 +231,11 @@ def test_release_skill_places_hard_gates_and_completion_criteria_in_first_60_lin
     assert "extension publish完了" in first_60_lines
 
 
-def test_release_skill_requires_exactly_two_named_zip_assets() -> None:
+def test_release_skill_requires_exactly_three_named_zip_assets() -> None:
     release_skill = _read(".claude/skills/automation-release/SKILL.md")
 
-    assert 'test "${zip_count}" -eq 2' in release_skill
+    assert 'test "${zip_count}" -eq 3' in release_skill
     assert "^suno-helper-[0-9]+\\.[0-9]+\\.[0-9]+-chrome\\.zip$" in release_skill
     assert "^distrokid-helper-[0-9]+\\.[0-9]+\\.[0-9]+-chrome\\.zip$" in release_skill
+    assert "^community-helper-[0-9]+\\.[0-9]+\\.[0-9]+-chrome\\.zip$" in release_skill
     assert "件数過不足・重複・別名zipがあれば停止" in release_skill

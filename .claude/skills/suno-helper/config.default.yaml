@@ -1,0 +1,9 @@
+unattended:
+  # 1 回の定期実行で新たに生成する entry 数。残りは resume checkpoint へ繰り越す。
+  max_entries: 10
+  # Suno に同時投入する Generate request 数（1 request = 2 clips）。
+  max_concurrent_generations: 3
+  # entry 単位の一時失敗を再試行する回数。
+  max_retries: 2
+  # ZIP 内の音声形式: mp3 / m4a / wav
+  download_format: mp3

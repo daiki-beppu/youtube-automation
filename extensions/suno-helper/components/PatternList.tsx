@@ -1,7 +1,8 @@
+import { ButtonSlot } from "@youtube-automation/ui";
+
 import type { PromptEntry } from "../../shared/api";
 import type { ItemState } from "../../shared/constants";
 import { isEntrySelected } from "../lib/pattern-selection";
-import { ButtonSlot } from "./ui/button";
 
 interface PatternListProps {
   entries: PromptEntry[];

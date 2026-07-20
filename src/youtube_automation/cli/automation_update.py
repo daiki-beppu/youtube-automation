@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import tomllib
@@ -43,6 +44,7 @@ from youtube_automation.utils.exceptions import ConfigError
 EXIT_UP_TO_DATE = 0
 EXIT_DIFF = 1
 EXIT_ERROR = 2
+_STABLE_RELEASE_TAG_RE = re.compile(r"v\d+\.\d+\.\d+")
 
 
 class _StepFailed(Exception):
@@ -115,20 +117,32 @@ def _validate_sync_only(sync_only: list[str] | None) -> None:
         raise ConfigError(f"--sync-only に同梱版に存在しない skill が指定されています: {', '.join(unknown)}")
 
 
-def _github_api_get(path: str) -> dict:
+def _github_api_get(path: str) -> object:
     return _remote_github_api_get(path)
 
 
 def _fetch_latest_release_tag() -> str:
-    release = _github_api_get(f"repos/{UPSTREAM_REPO}/releases/latest")
-    tag = release.get("tag_name")
-    if not isinstance(tag, str) or not tag:
-        raise ConfigError("upstream 最新リリースの tag_name を取得できません")
-    return tag
+    releases = _github_api_get(f"repos/{UPSTREAM_REPO}/releases?per_page=100&page=1")
+    if not isinstance(releases, list):
+        raise ConfigError("upstream release 一覧を取得できません")
+
+    candidates: list[tuple[str, str]] = []
+    for release in releases:
+        if not isinstance(release, dict) or release.get("draft") is True or release.get("prerelease") is True:
+            continue
+        tag = release.get("tag_name")
+        published_at = release.get("published_at")
+        if isinstance(tag, str) and _STABLE_RELEASE_TAG_RE.fullmatch(tag) and isinstance(published_at, str):
+            candidates.append((published_at, tag))
+    if not candidates:
+        raise ConfigError("upstream release 一覧に本体の stable release tag (vX.Y.Z) がありません")
+    return max(candidates)[1]
 
 
 def _fetch_branch_head_sha(branch: str) -> str:
     commit = _github_api_get(f"repos/{UPSTREAM_REPO}/commits/{branch}")
+    if not isinstance(commit, dict):
+        raise ConfigError(f"upstream {branch} の commit 情報を取得できません")
     sha = commit.get("sha")
     if not isinstance(sha, str) or not sha:
         raise ConfigError(f"upstream {branch} の HEAD sha を取得できません")
@@ -177,12 +191,12 @@ def _check_channel_config(root: Path) -> str:
         )
     except OSError as e:
         raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}") from e
-    if proc.returncode != 0:
-        details = proc.stderr.strip() or proc.stdout.strip()
-        raise _StepFailed(f"exit code {proc.returncode}: {' '.join(cmd)}\n{details}")
     try:
         payload = json.loads(proc.stdout)
     except json.JSONDecodeError as e:
+        if proc.returncode != 0:
+            details = proc.stderr.strip() or proc.stdout.strip()
+            raise _StepFailed(f"exit code {proc.returncode}: {' '.join(cmd)}\n{details}") from e
         raise _StepFailed(f"yt-doctor --json の出力を解析できません: {e}") from e
     if not isinstance(payload, dict) or not isinstance(payload.get("checks"), list):
         raise _StepFailed("yt-doctor --json の出力に checks 配列がありません")
@@ -195,7 +209,10 @@ def _check_channel_config(root: Path) -> str:
     message = result.get("message")
     if result.get("status") != "ok":
         raise _StepFailed(message if isinstance(message, str) else "channel_config check が失敗しました")
-    return message if isinstance(message, str) else "channel_config check 成功"
+    success_message = message if isinstance(message, str) else "channel_config check 成功"
+    if proc.returncode != 0:
+        return f"{success_message}（warning: yt-doctor の他 check が失敗し exit code {proc.returncode}）"
+    return success_message
 
 
 def _skills_diff_has_changes(root: Path) -> bool:

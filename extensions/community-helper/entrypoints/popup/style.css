@@ -1,0 +1,7 @@
+@import "@youtube-automation/ui/theme.css";
+
+body {
+  width: 360px;
+  margin: 0;
+  font-family: system-ui, sans-serif;
+}

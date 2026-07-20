@@ -14,6 +14,12 @@ export const SERVER_SOURCES_STORAGE_KEY = "ytCollectionServeSources" as const;
  * overlay と content が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
 export const RESUME_STATE_KEY = "sunoResumeState";
 
+/** 定期無人実行の checkpoint / 手動介入理由を保存する chrome.storage.local key (#1893)。 */
+export const UNATTENDED_RUN_STATE_KEY = "sunoUnattendedRunState";
+
+/** 手動の複数 collection queue と成功/失敗 summary を保存する chrome.storage.local key (#2029)。 */
+export const COLLECTION_QUEUE_STATE_KEY = "sunoCollectionQueueState";
+
 /** overlay の position/minimized/hidden を保存する chrome.storage.local の単一 key (#892)。
  * Suno は 1 タブ運用前提のため global 単一 key とする。lib/overlay-state.ts が SSOT として参照する。 */
 export const OVERLAY_STATE_KEY = "sunoOverlayState";
@@ -25,7 +31,7 @@ export const FINISHED_SNAPSHOT_KEY = "sunoFinishedSnapshot";
 
 /** yt-collection-serve の download 完了通知サブパス (#1215、POST)。
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py collection_downloaded_route。 */
-export const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
+const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
 
 /** Suno ダウンロード形式を保存する chrome.storage.local の key (#1215)。
  * popup（書込）と content（読込）が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
@@ -34,8 +40,37 @@ export const DOWNLOAD_FORMAT_KEY = "sunoDownloadFormat" as const;
 /** Suno ダウンロード形式のデフォルト値 (#1215)。 */
 export const DOWNLOAD_FORMAT_DEFAULT = "mp3" as const;
 
+/** Suno 完了音の ON/OFF と preset を保存する chrome.storage.local key (#2077)。 */
+export const COMPLETION_SOUND_SETTINGS_KEY =
+  "sunoCompletionSoundSettings" as const;
+
+/** 完了音の初回設定 (#2077)。 */
+export const COMPLETION_SOUND_ENABLED_DEFAULT = true as const;
+export const COMPLETION_SOUND_PRESET_DEFAULT = "chime" as const;
+
 /** yt-collection-serve が prompts を配信するサブパス (#698 で `/prompts.json` から分離)。 */
 export const PROMPTS_ROUTE = "/suno/prompts.json";
+
+/** community-helper が投稿 JSON を取得するサブパス (#1710)。
+ * SSOT 対応: collection_serve.py COMMUNITY_POSTS_ROUTE。 */
+export const COMMUNITY_POSTS_ROUTE = "/community/posts.json";
+
+/** community-helper が投稿画像を取得するサブパスの prefix (#1710)。
+ * `${COMMUNITY_IMAGE_ROUTE}/${index}/image` として使う。 */
+export const COMMUNITY_IMAGE_ROUTE = "/community/posts";
+
+/** community-helper runner の進捗フェーズ (#1711)。 */
+export const COMMUNITY_PHASE = {
+  INJECTING: "injecting",
+  SCHEDULING: "scheduling",
+  UPLOADING_IMAGE: "uploading-image",
+  POSTING: "posting",
+  DONE: "done",
+  ERROR: "error",
+} as const;
+
+export type CommunityPhase =
+  (typeof COMMUNITY_PHASE)[keyof typeof COMMUNITY_PHASE];
 
 /** yt-collection-serve dir mode の collection 列挙サブパス (#816)。
  * SSOT: src/youtube_automation/scripts/suno_artifacts.py COLLECTIONS_ROUTE。 */
@@ -229,10 +264,10 @@ export function distrokidReleaseRoute(
 }
 
 /** yt-collection-serve の既定 port。 */
-export const DEFAULT_SERVER_PORT = 7873;
+const DEFAULT_SERVER_PORT = 7873;
 
 /** ローカル配信元の既定 hostname。チャンネル別 hostname が未確定の fallback。 */
-export const DEFAULT_SERVER_HOSTNAME = "youtube-automation.localhost" as const;
+const DEFAULT_SERVER_HOSTNAME = "youtube-automation.localhost" as const;
 
 /** ローカル配信元の既定 URL。 */
 export const DEFAULT_URL =

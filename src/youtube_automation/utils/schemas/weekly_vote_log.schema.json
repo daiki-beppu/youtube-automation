@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/daiki-beppu/youtube-channels-automation/schemas/weekly_vote_log.schema.json",
   "title": "WeeklyVoteLog",
-  "description": "Weekly Sunday Vote 投票結果ログ (issue #509). community-draft --type weekly-feedback で運用し、/collection-ideate の theme weight hook が直近 N 週の top_axis を参照する。",
+  "description": "Weekly Sunday Vote 投票結果ログ (issue #509). YouTube Studio の結果を yt-vote-log append で記録し、/collection-ideate の theme weight hook が直近 N 週の top_axis を参照する。",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "entries"],

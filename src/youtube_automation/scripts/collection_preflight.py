@@ -29,6 +29,7 @@ from pathlib import Path
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.utils.preflight_checks import requires_scene_phrases
 
 
 def _planning_root() -> Path:
@@ -81,6 +82,9 @@ def _validate_scene_phrases(paths: CollectionPaths, supported_languages: list[st
         return ["workflow-state.json の JSON が不正"]
     if not isinstance(state, dict):
         return ["workflow-state.json の root は object である必要があります"]
+
+    if not requires_scene_phrases(supported_languages):
+        return []
 
     scene_phrases = state.get("scene_phrases")
     if not isinstance(scene_phrases, dict) or not scene_phrases:

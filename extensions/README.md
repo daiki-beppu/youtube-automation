@@ -6,28 +6,46 @@
 
 ```
 extensions/
+  shared-ui/              # 3拡張共通の shadcn/ui workspace package
+    src/                  # Button / Card / Alert / Select / cn / theme CSS
   shared/                 # 複数拡張で再利用する共通コード（relative import）
     constants.ts          # storage key / 配信ルート / phase 値（サーバー契約 SSOT。メッセージ種別は各拡張の lib/messaging.ts）
     origin.ts             # CORS origin allowlist（collection_serve.py と対の契約）
     api.ts                # yt-collection-serve client + PromptEntry 型
+    asset-transfer.ts     # runtime messaging 用 Blob/File base64 wire（複数拡張で共用）
     dom.ts                # Suno UI 注入の純関数群（注入 / 完了検知 / reCAPTCHA 検知）
+    community-dom.ts      # YouTube チャンネル投稿 UI の DOM 操作（本文 / 画像 / 予約日時 / 投稿）
   suno-helper/            # Suno Advanced タブ自動投入拡張（WXT プロジェクト）
     wxt.config.ts         # manifest 自動生成（最小権限は lib/manifest.ts が SSOT）
     entrypoints/          # background / content / popup
     components/           # popup の React UI
     lib/                  # messaging / storage / manifest schema
     tests/                # Vitest unit + Playwright e2e
+  community-helper/       # YouTube チャンネル投稿ページ用コミュニティ投稿拡張
+    entrypoints/          # Popup / extension-context fetch relay / content runner
+    lib/                  # runner / manifest 最小権限 / typed messaging
+    tests/                # Vitest runner contract / DOM / Popup unit tests
 ```
 
-`shared/` は各拡張から相対 import（例: `../../shared/dom`）で参照する。各拡張は自己完結した `package.json` を持ち、`extensions/<name>/` 単体で install / build / zip を実行できる。
+`shared/` は各拡張から相対 import（例: `../../shared/dom`）で参照する。UI は `shared-ui/` の workspace package `@youtube-automation/ui` から import し、Button / Card / Alert / Select、`cn()`、theme CSS の実装を単一ソースに保つ。各 helper の `pnpm-workspace.yaml` は `../shared-ui` を workspace member として明示するため、従来どおり `extensions/<name>/` 単体で frozen install / build / zip を実行できる。
+
+shared UI 自体の型検査は次で行う:
+
+```bash
+nix develop .#extensions --command pnpm -C extensions/shared-ui install --frozen-lockfile
+nix develop .#extensions --command pnpm -C extensions/shared-ui compile
+nix develop .#extensions --command pnpm -C extensions/shared-ui check
+```
+
+各 helper は独立した frozen lockfile と workspace root を維持する。このため、WXT の既知 advisory を解消する `pnpm-workspace.yaml::overrides` は 3 workspace に同じ値を明示する。pin を更新するときは 3 ファイルと 3 lockfile を同時に更新し、各 workspace の `pnpm audit --audit-level low` と release 前検証をすべて実行する。
 
 ## pnpm バージョン契約
 
-両拡張（`suno-helper` / `distrokid-helper`）のローカル検証には Nix extensions shell の **Node 24 / pnpm 11.12.0** を使う。各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` による依存 build script の承認、および CI を同じ契約に保つためである。
+3拡張（`suno-helper` / `distrokid-helper` / `community-helper`）のローカル検証には Nix extensions shell の **Node 24 / pnpm 11.12.0** を使う。各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` による依存 build script の承認、および CI を同じ契約に保つためである。
 
 ambient `node` / `pnpm` の版は各環境で異なり得るため、再現可能な検証では必ず `nix develop .#extensions --command` 経由で実行する。`--ignore-workspace` は `pnpm-workspace.yaml::allowBuilds` を無効化するため使用しない。
 
-release 前検証は単一ソースのスクリプトをリポジトリ root から実行する。引数を省略すると両拡張、`<name>`（`suno-helper` または `distrokid-helper`）を渡すと対象だけを検証する:
+release 前検証は単一ソースのスクリプトをリポジトリ root から実行する。引数を省略すると3拡張、`<name>`（`suno-helper` / `distrokid-helper` / `community-helper`）を渡すと対象だけを検証する:
 
 ```bash
 bash .claude/skills/automation-release/references/verify-extensions.sh [<name>]

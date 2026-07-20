@@ -1,6 +1,5 @@
+import { Button } from "@youtube-automation/ui";
 import { useEffect, useRef, useState } from "react";
-
-import { Button } from "@/components/ui/button";
 
 import {
   formatServerSourceLabel,
@@ -49,7 +48,10 @@ export function ServerUrlField({
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="text-xs font-medium text-gray-600" htmlFor="server-url">
+      <label
+        className="text-xs font-medium text-muted-foreground"
+        htmlFor="server-url"
+      >
         ローカル配信元
       </label>
       <Button
@@ -86,7 +88,7 @@ export function ServerUrlField({
         <div
           role="listbox"
           aria-label="ローカル配信元"
-          className="rounded border border-gray-300 bg-white p-1"
+          className="rounded border border-border bg-popover p-1 text-popover-foreground"
         >
           {sources.map((source) => (
             <Button

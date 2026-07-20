@@ -6,7 +6,7 @@ description: "Use when チャンネルの定期制作スケジュール（workfl
 ## 前後工程
 
 - `前工程`: `/channel-new`, `/setup`
-- `後工程`: `/wf-next`
+- `後工程`: `/automation-run`, `/wf-next`
 
 ## Overview
 
@@ -31,6 +31,7 @@ description: "Use when チャンネルの定期制作スケジュール（workfl
 - 「定期実行の状態を見たい」→ `/automation-schedule status`
 - 「定期実行を止めて」→ `/automation-schedule disable`
 - 制作を今すぐ一段進めるだけなら /wf-next（本スキルは起動の定期化のみを担う）
+- 制作〜公開を継続する既定 target_workflow は automation-run。旧来の一段実行を定期化する場合だけ `--target-workflow wf-next` を明示する
 
 ## References
 
@@ -61,7 +62,7 @@ bash .claude/skills/automation-schedule/references/detect_runtime.sh
 ```bash
 uv run python .claude/skills/automation-schedule/references/schedule_config.py show
 uv run python .claude/skills/automation-schedule/references/schedule_config.py generate --dry-run --enable \
-  --run-time <HH:MM> --cadence <mon,wed,fri> [--timezone <IANA>] [--target-workflow wf-next] \
+  --run-time <HH:MM> --cadence <mon,wed,fri> [--timezone <IANA>] [--target-workflow automation-run] \
   [--max-retries <N>] [--retry-delay-seconds <N>] [--notification terminal|none]
 ```
 
@@ -110,4 +111,4 @@ Step 0 の診断は省略してよい。`scheduler_job.sh status` の結果（ef
 - `run_scheduled.sh` は `prevent_concurrent_runs: true` のとき lock（`.automation-schedule/lock/`）で並行起動を抑止する。前回実行が異常終了で lock が残っても、pid 死活確認で stale lock は自動回収される
 - `allow_external_publish: false` の定期実行は、実行プロンプトに「YouTube への書き込みを実行せず直前で停止する」制約を必ず注入する。ゲートは config 値が単一ソースであり、プロンプト側だけの書き換えで外さない
 - 実行ログは `.automation-schedule/logs/` に残る。失敗調査はここから読む（全文を会話に貼らない）
-- Suno のブラウザ自動化・制作〜公開の統合ランナーはスコープ外（#1893 / #1894）
+- 既定の定期 `/automation-run` は Suno 工程で `/suno-helper` の定期実行 flow と `yt-suno-unattended-request` を使う。既ログイン Chrome は前提とし、ログイン・CAPTCHA・課金確認・UI 非互換の `manual-intervention` は自動突破せず通知して停止する

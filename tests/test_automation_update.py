@@ -369,6 +369,49 @@ def test_detect_pin_rejects_unofficial_direct_git_url() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_fetch_latest_release_tag_ignores_newer_extension_release(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def _releases(path: str) -> object:
+        calls.append(path)
+        return [
+            {"tag_name": "ext-v0.2.5", "published_at": "2026-07-10T11:05:00Z"},
+            {"tag_name": "v5.5.17", "published_at": "2026-07-10T10:50:00Z"},
+            {"tag_name": "v5.5.16", "published_at": "2026-07-09T10:50:00Z"},
+        ]
+
+    monkeypatch.setattr(automation_update, "_github_api_get", _releases)
+
+    assert automation_update._fetch_latest_release_tag() == "v5.5.17"
+    assert calls == ["repos/daiki-beppu/youtube-automation/releases?per_page=100&page=1"]
+
+
+def test_fetch_latest_release_tag_uses_publish_time_not_response_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        automation_update,
+        "_github_api_get",
+        lambda path: [
+            {"tag_name": "v5.5.16", "published_at": "2026-07-09T10:50:00Z"},
+            {"tag_name": "v5.5.17", "published_at": "2026-07-10T10:50:00Z"},
+        ],
+    )
+
+    assert automation_update._fetch_latest_release_tag() == "v5.5.17"
+
+
+def test_fetch_latest_release_tag_fails_when_only_extension_releases_exist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        automation_update,
+        "_github_api_get",
+        lambda path: [{"tag_name": "ext-v0.2.5", "published_at": "2026-07-10T11:05:00Z"}],
+    )
+
+    with pytest.raises(automation_update.ConfigError, match="本体の stable release tag"):
+        automation_update._fetch_latest_release_tag()
+
+
 def test_check_inline_tag_pin_up_to_date(tmp_path: Path, no_network, capsys: pytest.CaptureFixture) -> None:
     repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
 
@@ -958,6 +1001,27 @@ def test_apply_returns_nonzero_when_target_channel_config_is_invalid(
     assert "config/channel/ ロード失敗" in captured.err
     assert "追従が完了しました" not in captured.out
     assert commands[-1] == ["uv", "run", "yt-skills", "list"]
+
+
+def test_channel_config_check_ignores_nonzero_exit_when_channel_config_is_ok(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    payload = {
+        "checks": [
+            {"id": "channel_config", "status": "ok", "message": "config/channel/ ロード成功"},
+            {"id": "upload_ready", "status": "fail", "message": "OAuth token が失効しています"},
+        ]
+    }
+    completed = automation_update.subprocess.CompletedProcess([], 1, json.dumps(payload), "")
+    monkeypatch.setattr(automation_update.subprocess, "run", lambda *args, **kwargs: completed)
+
+    result = automation_update._check_channel_config(repo)
+
+    assert result.startswith("config/channel/ ロード成功")
+    assert "warning" in result
+    assert "exit code 1" in result
 
 
 @pytest.mark.parametrize(

@@ -78,7 +78,7 @@ class ScheduledAutomation:
     - `timezone`: IANA タイムゾーン名（例 `Asia/Tokyo`）。スケジュール時刻の解釈に使う。
     - `run_time`: 定期起動時刻（`HH:MM`、24 時間表記）。
     - `cadence`: 起動する曜日の配列。`SCHEDULED_AUTOMATION_CADENCE_DAYS` の部分集合。
-    - `target_workflow`: 起動する skill 名（既定 `wf-next`。先頭 `/` なし）。
+    - `target_workflow`: 起動する skill 名（既定 `automation-run`。先頭 `/` なし）。
     - `max_retries`: 実行失敗時の再試行回数（0 = 再試行なし）。
     - `retry_delay_seconds`: 再試行までの待機秒数。
     - `prevent_concurrent_runs`: `True`（既定）のとき、前回実行が生存中なら
@@ -93,12 +93,33 @@ class ScheduledAutomation:
     timezone: str = "Asia/Tokyo"
     run_time: str = "09:00"
     cadence: tuple[str, ...] = SCHEDULED_AUTOMATION_CADENCE_DAYS
-    target_workflow: str = "wf-next"
+    target_workflow: str = "automation-run"
     max_retries: int = 0
     retry_delay_seconds: int = 300
     prevent_concurrent_runs: bool = True
     notification: str = "terminal"
     allow_external_publish: bool = False
+
+
+@dataclass(frozen=True)
+class PostPublishApprovalGates:
+    """`/post-publish` の各 step 直前に置く承認ゲート."""
+
+    community_post: bool = False
+    pinned_comment: bool = False
+    metadata_audit: bool = False
+
+
+@dataclass(frozen=True)
+class PostPublish:
+    """公開後チェーン設定.
+
+    `configured` は `workflow.json` に `workflow.post-publish` が明示されたかを示す。
+    未設定時は従来の `/community-post` 案内だけを維持する。
+    """
+
+    configured: bool = False
+    approval_gates: PostPublishApprovalGates = field(default_factory=PostPublishApprovalGates)
 
 
 @dataclass(frozen=True)
@@ -110,4 +131,5 @@ class Workflow:
     """
 
     wf_next: WfNext = field(default_factory=WfNext)
+    post_publish: PostPublish = field(default_factory=PostPublish)
     scheduled_automation: ScheduledAutomation = field(default_factory=ScheduledAutomation)

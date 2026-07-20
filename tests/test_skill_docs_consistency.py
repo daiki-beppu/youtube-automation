@@ -794,7 +794,7 @@ def test_channel_new_initial_save_success_path_commits_and_cleans_worktree(tmp_p
 
 def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     discover = _read(".claude/skills/discover-competitors/SKILL.md")
-    research = _read(".claude/skills/channel-research/SKILL.md")
+    research = _read(".claude/skills/channel-new/references/analysis-mode.md")
     viewer_voice = _read(".claude/skills/viewer-voice/SKILL.md")
     setup = _read(".claude/skills/setup/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
@@ -810,9 +810,8 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
     assert "target_scene" not in discover
     assert "config/channel/content.json::genre.{primary,style,context}" in discover
 
-    assert "`/channel-new` で収集したベンチマークデータ + コメントデータ" not in research
     assert "/benchmark` と `/viewer-voice` で収集した" in research
-    assert "TTP 対象確認 / 初回 config / persona / branding" in research
+    assert "docs/channel-research.md" in research
     assert "/viewer-voice` → 前提" in research
 
     assert "チャンネル立ち上げ・方向性見直し時に必ず使用" not in viewer_voice
@@ -867,15 +866,16 @@ def test_channel_new_followup_skill_routing_uses_new_contract() -> None:
 
 def test_skill_frontmatter_descriptions_disambiguate_sibling_routes() -> None:
     benchmark_desc = _frontmatter(".claude/skills/benchmark/SKILL.md")["description"]
-    channel_research_desc = _frontmatter(".claude/skills/channel-research/SKILL.md")["description"]
+    channel_new_desc = _frontmatter(".claude/skills/channel-new/SKILL.md")["description"]
     videoup_desc = _frontmatter(".claude/skills/videoup/SKILL.md")["description"]
     video_upload_desc = _frontmatter(".claude/skills/video-upload/SKILL.md")["description"]
 
     assert "「競合分析」" not in benchmark_desc
     assert "「競合データ収集」" in benchmark_desc
-    assert "収集済みデータの分析は /channel-research" in benchmark_desc
-    assert "「競合分析」" in channel_research_desc
-    assert "データ収集・更新は /benchmark（未実行なら先に案内）" in channel_research_desc
+    assert "収集済みデータのチャンネル全体分析は /channel-new 分析モード" in benchmark_desc
+    assert "「競合分析」" in channel_new_desc
+    assert "データ収集・更新だけなら /benchmark" in channel_new_desc
+    assert "サムネイルだけの深掘りは /thumbnail-research" in channel_new_desc
 
     assert "YouTube への投稿は /video-upload" in videoup_desc
     assert "動画ファイルの生成（MP3→MP4）は /videoup" in video_upload_desc
@@ -983,11 +983,13 @@ def test_wf_next_skip_approval_keys_are_documented_consistently() -> None:
     wf_status = _read(".claude/skills/wf-status/SKILL.md")
     schema = _read(".claude/skills/wf-new/references/schema.md")
     example = _read("examples/channel_config.example/workflow.json")
+    example_config = json.loads(example)
+    wf_next_example = example_config["workflow"]["wf_next"]
 
     # example は新キーのみ（既定値どおり true = 承認省略）で、旧キーを含まない
     assert '"skip_audio_approval": true' in example
     assert '"skip_upload_approval": true' in example
-    assert "approval_gates" not in example
+    assert "approval_gates" not in wf_next_example
 
     # wf-next は新キーを正として記述し、旧キーは後方互換 alias + 同時指定エラーとして言及する
     for key in ("skip_audio_approval", "skip_upload_approval"):
@@ -1080,16 +1082,14 @@ def test_community_post_declares_raw_json_loader_exception() -> None:
     assert "fallback や merge 元にしない" in text
 
 
-def test_community_draft_documents_skill_config_merge_before_channel_json() -> None:
+def test_community_draft_documents_typed_batch_generator_contract() -> None:
     text = _read(".claude/skills/community-draft/SKILL.md")
 
-    assert 'load_skill_config("community-draft")' in text
-    assert ".claude/skills/community-draft/config.default.yaml" in text
-    assert "config/skills/community-draft.yaml" in text
-    assert "config/channel/community-draft.json" in text
-    assert (
-        "config.default.yaml` < `config/skills/community-draft.yaml` < `config/channel/community-draft.json"
-    ) in text
+    assert "load_config().community_draft.posts" in text
+    assert "references/generate_batch.py" in text
+    assert "planning.publish_target_at" in text
+    assert "docs/adr/0019-community-helper-extension.md" in text
+    assert "community-posts.json" in text
 
 
 def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
@@ -1216,7 +1216,7 @@ def test_setup_client_secrets_step_uses_download_and_automatic_move() -> None:
         "Download JSON",
         "done",
         "uv run yt-doctor --fix-client-secrets",
-        "uv run yt-doctor --json",
+        "uv run yt-doctor --apply --json",
         "client_secrets` が `ok`",
     ):
         assert expected in step

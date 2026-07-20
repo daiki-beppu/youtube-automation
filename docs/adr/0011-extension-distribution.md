@@ -2,7 +2,7 @@
 
 ## Status
 
-accepted (2026-06-16)。
+accepted (2026-06-16)。2026-07-18 に community-helper を同じ統一リリースへ追加。
 
 ## Context
 
@@ -13,7 +13,7 @@ Chrome 拡張 (suno-helper / distrokid-helper) を当初は運営者 1 人で使
 ## Decision
 
 1. **配布形態は GitHub Release の zip 添付を維持する。** Chrome Web Store は使わない — レビュー遅延が Suno/DistroKid の DOM 変更への即時追従と相性が悪く、10 人の技術者に対して Web Store のコンプライアンス維持コストが見合わない
-2. **suno-helper と distrokid-helper を両方 zip 化する。** 現行の `release-extensions.yml` は suno-helper のみだったため、distrokid-helper を追加する
+2. **サポートする全拡張を zip 化する。** 当初の suno-helper / distrokid-helper に加え、community-helper も同じ workflow へ追加する
 3. **統一タグ `ext-v*` で同時リリースする。** 拡張ごとの独立タグ (`suno-helper-v*` 等) は設けない — 10 人規模で workflow を 2 本管理する実益がない
 4. **拡張バージョンと tayk 本体バージョンは完全独立とする。** 拡張は Suno/DistroKid の DOM 変更で tayk とは無関係に更新が必要になるため、バージョンを連動させると不自然な bump が発生する
 5. **`yt-collection-serve` に `/version` エンドポイントを追加し、拡張が起動時に互換性をチェックする。** 10 人いると「サーバーは最新だが拡張が古い」が現実的に起き、原因切り分けが面倒になるため
@@ -30,7 +30,7 @@ Chrome 拡張 (suno-helper / distrokid-helper) を当初は運営者 1 人で使
 
 ## Consequences
 
-- `release-extensions.yml` に distrokid-helper の zip 化ステップを追加する
+- `release-extensions.yml` で suno-helper / distrokid-helper / community-helper を zip 化する
 - `yt-collection-serve` に `/version` エンドポイントを実装し、拡張の popup で互換性チェック + 警告表示を実装する
 - リリースノートテンプレを `release-extensions.yml` に組み込む
 - 人数が 50+ に増えた場合、自動アップデート通知や Chrome Web Store 移行を再検討する

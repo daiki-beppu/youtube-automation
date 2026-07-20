@@ -62,33 +62,12 @@ jobs:
         run: nix develop --command uv sync --frozen
       - name: Build wheel and sdist
         run: nix develop --command uv build
-      - name: Smoke test installed wheel
+      - name: Smoke test installed wheel downstream sync
         run: |
-          nix develop --command bash -euo pipefail -c '
-            venv=$(mktemp -d)/venv
-            uv venv "$venv"
-            uv pip install --python "$venv/bin/python" dist/*.whl
-            "$venv/bin/yt-skills" list
-          '
-
-  takt-workflow-contract:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - uses: astral-sh/setup-uv@v6
-      # takt は CI 再現性のため pin する。takt を upgrade したらこの pin も bump し、
-      # contract テストの red/green で lite workflow との drift を検出する
-      - name: Install takt (pinned)
-        run: npm install -g takt@0.51.0
-      - name: Install dependencies
-        run: uv sync
-      - name: Workflow doctor (lite)
-        run: TAKT_CONFIG_DIR="$PWD/tests/fixtures/takt_global" takt workflow doctor lite
-      - name: Lite workflow contract tests
-        run: TAKT_LITE_CONTRACT_REQUIRED=1 uv run pytest tests/test_takt_lite_workflow_contract.py -q
+          candidate_wheel=$(find dist -maxdepth 1 -name '*.whl' -print -quit)
+          test -n "$candidate_wheel"
+          YTA_CANDIDATE_WHEEL="$candidate_wheel" \
+            nix develop --command uv run pytest tests/test_skills_sync_installed_wheel.py -q
 
   windows-cost-tracker:
     runs-on: windows-latest

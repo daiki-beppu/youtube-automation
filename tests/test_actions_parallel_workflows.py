@@ -39,16 +39,25 @@ _DISTROKID_FAST_PARALLEL_STEPS = {
     "Unit tests (Vitest)": "nix develop .#extensions --command pnpm test",
 }
 _DISTROKID_BUILD_PARALLEL_STEPS = _SUNO_BUILD_PARALLEL_STEPS
+_COMMUNITY_FAST_PARALLEL_STEPS = {
+    "Check (Oxlint + Oxfmt)": "nix develop .#extensions --command pnpm check",
+    "Typecheck": "nix develop .#extensions --command pnpm compile",
+    "Unit tests (Vitest)": "nix develop .#extensions --command pnpm test",
+}
 _EXTENSIONS_JOB_CONTRACTS = {
     "check": {
         "working_directory": "extensions/suno-helper",
         "e2e_step": "E2E tests (Playwright)",
-        "check_script": "cd .. && ultracite check suno-helper shared",
+        "check_script": "cd .. && ultracite check suno-helper shared shared-ui",
     },
     "distrokid-helper": {
         "working_directory": "extensions/distrokid-helper",
         "e2e_step": "E2E (Playwright)",
         "check_script": "cd .. && ultracite check distrokid-helper",
+    },
+    "community-helper": {
+        "working_directory": "extensions/community-helper",
+        "check_script": "cd .. && ultracite check community-helper",
     },
 }
 _NIX_EXTENSIONS_INSTALL_COMMAND = "nix develop .#extensions --command pnpm install --frozen-lockfile"
@@ -58,6 +67,7 @@ _NIX_EXTENSIONS_AUDIT_COMMAND = "nix develop .#extensions --command pnpm run aud
 _RELEASE_BUILD_PARALLEL_STEPS = {
     "Build and zip suno-helper": ("extensions/suno-helper", "verify-extensions.sh suno-helper"),
     "Build and zip distrokid-helper": ("extensions/distrokid-helper", "verify-extensions.sh distrokid-helper"),
+    "Build and zip community-helper": ("extensions/community-helper", "verify-extensions.sh community-helper"),
 }
 _RELEASE_NIX_INSTALL_ACTION = "DeterminateSystems/nix-installer-action@main"
 _SHELL_BACKGROUND_OPERATOR = re.compile(r"(?<!&)&(?!&)")
@@ -190,9 +200,9 @@ def test_extensions_pull_request_trigger_keeps_path_filter() -> None:
     assert _on_section(workflow).get("push", {}).get("paths") == expected_paths
 
 
-@pytest.mark.parametrize("job_name", ["check", "distrokid-helper"])
+@pytest.mark.parametrize("job_name", ["check", "distrokid-helper", "community-helper"])
 def test_extensions_jobs_use_only_the_nix_extensions_toolchain(job_name: str) -> None:
-    """Given Extensions CI, When commands run, Then both jobs use the Nix extensions shell."""
+    """Given Extensions CI, When commands run, Then all jobs use the Nix extensions shell."""
     steps = _job_steps(_load_workflow(_EXTENSIONS_WORKFLOW_PATH), job_name)
 
     assert _top_level_step_index_with_uses(steps, "actions/checkout@v4") < _top_level_step_index_with_uses(
@@ -232,7 +242,7 @@ def test_extensions_jobs_preserve_working_directory_install_and_e2e_contract(job
     assert _top_level_step(steps, contract["e2e_step"]).get("run") == _NIX_EXTENSIONS_E2E_COMMAND
 
 
-@pytest.mark.parametrize("job_name", ["check", "distrokid-helper"])
+@pytest.mark.parametrize("job_name", ["check", "distrokid-helper", "community-helper"])
 def test_extensions_jobs_run_ultracite_through_the_package_check_entrypoint(job_name: str) -> None:
     """Given Extensions CI, When check runs, Then each package's pnpm check entrypoint invokes ultracite."""
     workflow = _load_workflow(_EXTENSIONS_WORKFLOW_PATH)
@@ -505,8 +515,46 @@ def test_distrokid_helper_manifest_permission_check_preserves_least_privilege_co
     assert "process.exit(1);" in run_script
 
 
-def test_release_extensions_builds_both_zips_before_release_attachment() -> None:
-    """Given extension release, When zips are built, Then both builds share one parallel group before attach."""
+def test_community_helper_runs_required_ci_gates_after_install() -> None:
+    """Given community-helper CI, When dependencies install, Then lint, types, tests, and build run."""
+    workflow = _load_workflow(_EXTENSIONS_WORKFLOW_PATH)
+    jobs = workflow.get("jobs")
+    assert isinstance(jobs, dict)
+    job = jobs.get("community-helper")
+    assert isinstance(job, dict), "community-helper job が存在しない"
+    assert job.get("defaults") == {"run": {"working-directory": "extensions/community-helper"}}
+
+    steps = _job_steps(workflow, "community-helper")
+    assert _top_level_step(steps, "Install dependencies").get("run") == _NIX_EXTENSIONS_INSTALL_COMMAND
+    toolchain_install = _top_level_step(steps, "Install shared lint toolchain")
+    assert toolchain_install.get("working-directory") == "extensions"
+    assert toolchain_install.get("run") == _NIX_EXTENSIONS_INSTALL_COMMAND
+    _assert_named_parallel_commands(steps, _COMMUNITY_FAST_PARALLEL_STEPS)
+    assert _top_level_step(steps, "Build").get("run") == "nix develop .#extensions --command pnpm build"
+    assert _parallel_group_index_containing(steps, "Check (Oxlint + Oxfmt)") < _top_level_step_index(steps, "Build")
+    _assert_parallel_runs_do_not_use_shell_backgrounding(steps)
+
+
+def test_community_helper_generated_manifest_preserves_least_privilege_contract() -> None:
+    """Given community build, When CI inspects output, Then runtime permissions remain exact."""
+    steps = _job_steps(_load_workflow(_EXTENSIONS_WORKFLOW_PATH), "community-helper")
+    manifest_step = _top_level_step(steps, "Verify generated manifest permissions (least-privilege)")
+    run_script = str(manifest_step.get("run", ""))
+
+    assert ".output/chrome-mv3/manifest.json" in run_script
+    assert 'const expected = ["activeTab"];' in run_script
+    assert '"http://*.localhost/*"' in run_script
+    assert '"http://localhost/*"' in run_script
+    assert '"http://127.0.0.1/*"' in run_script
+    assert 'const expectedContentScriptMatches = ["https://www.youtube.com/channel/*/posts*"];' in run_script
+    assert "actual.length === expected.length" in run_script
+    assert "actualHosts.length === expectedHosts.length" in run_script
+    assert "actualContentScriptMatches.length === expectedContentScriptMatches.length" in run_script
+    assert "process.exit(1);" in run_script
+
+
+def test_release_extensions_builds_all_zips_before_release_attachment() -> None:
+    """Given extension release, When zips are built, Then all builds share one parallel group before attach."""
     steps = _job_steps(_load_workflow(_RELEASE_EXTENSIONS_WORKFLOW_PATH), "release")
     group = _parallel_group_with_names(steps, set(_RELEASE_BUILD_PARALLEL_STEPS))
     build_parallel_index = _parallel_group_index_containing(steps, "Build and zip suno-helper")

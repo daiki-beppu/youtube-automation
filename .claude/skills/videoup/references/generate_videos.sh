@@ -788,6 +788,11 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     av_fill_color="$(ov_get '.overlays.audio_visualizer.fill.color' "$av_colors")"
     av_fill_top="$(ov_get '.overlays.audio_visualizer.fill.top' '0xA9CBF0')"
     av_fill_bottom="$(ov_get '.overlays.audio_visualizer.fill.bottom // .overlays.audio_visualizer.fill.bot' '0x3A5696')"
+    av_fill_size="$av_size"
+    if [[ "$av_style" == "ring" || "$av_style" == "ring-line" ]]; then
+        av_ring_fill_diameter=$((2 * (av_ring_inner_r + av_ring_length)))
+        av_fill_size="${av_ring_fill_diameter}x${av_ring_fill_diameter}"
+    fi
     av_mirror_center="$(ov_get '.overlays.audio_visualizer.mirror_center' 'false')"
     av_symmetric_vertical="$(ov_get '.overlays.audio_visualizer.symmetric_vertical' 'false')"
     av_rounding_blur="$(ov_get '.overlays.audio_visualizer.rounding.blur' '')"
@@ -815,14 +820,15 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
         if command -v yt-audio-visualizer-fill &>/dev/null; then
             AV_FILL_COMMAND=(yt-audio-visualizer-fill)
         elif command -v uv &>/dev/null; then
-            AV_FILL_COMMAND=(uv run --no-sync yt-audio-visualizer-fill)
+            # fresh / partial worktree でも lockfile へ同期してから project entry point を使う。
+            AV_FILL_COMMAND=(uv run yt-audio-visualizer-fill)
         elif command -v python3 &>/dev/null; then
             AV_FILL_COMMAND=(python3 -m youtube_automation.utils.audio_visualizer_fill)
         else
             echo "ERROR: yt-audio-visualizer-fill is required when audio_visualizer.fill is configured" >&2
             exit 1
         fi
-        if ! av_fill_type="$("${AV_FILL_COMMAND[@]}" --type "$av_fill_type" --size "$av_size" \
+        if ! av_fill_type="$("${AV_FILL_COMMAND[@]}" --type "$av_fill_type" --size "$av_fill_size" \
             --color "$av_fill_color" --top "$av_fill_top" --bottom "$av_fill_bottom" --output "$AV_FILL_ASSET")"; then
             echo "ERROR: invalid overlays.audio_visualizer.fill config" >&2
             exit 1
@@ -844,7 +850,7 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
 
     next_input_idx=2
     av_fill_input_idx=""
-    if [[ "$av_fill_type" == "gradient" || "$av_fill_type" == "rainbow" ]]; then
+    if [[ "$av_fill_type" == "gradient" || "$av_fill_type" == "rainbow" || "$av_fill_type" == "conical" ]]; then
         INPUTS+=(-loop 1 -framerate "$av_rate" -i "$AV_FILL_ASSET")
         av_fill_input_idx="$next_input_idx"
         next_input_idx=$((next_input_idx + 1))
@@ -923,7 +929,7 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
                         FILTER+=",gblur=sigma=${av_rounding_blur},eq=contrast=${av_rounding_contrast}"
                     fi
                     FILTER+="[avis_alpha];"
-                    if [[ "$av_fill_type" == "gradient" || "$av_fill_type" == "rainbow" ]]; then
+                    if [[ "$av_fill_type" == "gradient" || "$av_fill_type" == "rainbow" || "$av_fill_type" == "conical" ]]; then
                         FILTER+="[${av_fill_input_idx}:v]format=rgb24[avis_fill];"
                     else
                         av_effective_color="$av_colors"
@@ -954,9 +960,21 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
                 fi
                 av_ring_x="mod(atan2(Y-H/2,X-W/2)*W/(2*PI)+W,W-1)"
                 av_ring_y="clip(H-(hypot(X-W/2,Y-H/2)-${av_ring_inner_r})*H/${av_ring_length},0,H-1)"
-                FILTER+="[avis_in]showfreqs=mode=${av_ring_mode}:s=${av_width}x${av_height}:rate=${av_rate}:fscale=${av_fscale}:win_size=${av_win_size}:win_func=${av_win_func}:colors=${av_colors},scale=${av_bars}:${av_height}:flags=neighbor,scale=${av_ring_diameter}:${av_ring_diameter}:flags=neighbor,format=rgba[avis_rect];"
-                FILTER+="[avis_rect]geq=r='r(${av_ring_x},${av_ring_y})':g='g(${av_ring_x},${av_ring_y})':b='b(${av_ring_x},${av_ring_y})':a=255[avis_shape];"
-                FILTER+="[${av_mask_input_idx}:v]format=gray[avis_mask];[avis_shape][avis_mask]alphamerge,colorkey=black:0.1:0,colorchannelmixer=aa=${av_opacity}[avis];"
+                if [[ -z "$av_fill_type" ]]; then
+                    FILTER+="[avis_in]showfreqs=mode=${av_ring_mode}:s=${av_width}x${av_height}:rate=${av_rate}:fscale=${av_fscale}:win_size=${av_win_size}:win_func=${av_win_func}:colors=${av_colors},scale=${av_bars}:${av_height}:flags=neighbor,scale=${av_ring_diameter}:${av_ring_diameter}:flags=neighbor,format=rgba[avis_rect];"
+                    FILTER+="[avis_rect]geq=r='r(${av_ring_x},${av_ring_y})':g='g(${av_ring_x},${av_ring_y})':b='b(${av_ring_x},${av_ring_y})':a=255[avis_shape];"
+                    FILTER+="[${av_mask_input_idx}:v]format=gray[avis_mask];[avis_shape][avis_mask]alphamerge,colorkey=black:0.1:0,colorchannelmixer=aa=${av_opacity}[avis];"
+                else
+                    FILTER+="[avis_in]showfreqs=mode=${av_ring_mode}:s=${av_width}x${av_height}:rate=${av_rate}:fscale=${av_fscale}:win_size=${av_win_size}:win_func=${av_win_func}:colors=white,scale=${av_bars}:${av_height}:flags=neighbor,scale=${av_ring_diameter}:${av_ring_diameter}:flags=neighbor,format=gray[avis_rect];"
+                    FILTER+="[avis_rect]geq=lum='lum(${av_ring_x},${av_ring_y})'[avis_shape];"
+                    FILTER+="[${av_mask_input_idx}:v]format=gray[avis_mask];[avis_shape][avis_mask]blend=all_mode=multiply,lut=y='val*${av_opacity}'[avis_alpha];"
+                    if [[ "$av_fill_type" == "gradient" || "$av_fill_type" == "rainbow" || "$av_fill_type" == "conical" ]]; then
+                        FILTER+="[${av_fill_input_idx}:v]format=rgb24[avis_fill];"
+                    else
+                        FILTER+="color=c=${av_fill_color}:s=${av_fill_size}:r=${av_rate},format=rgb24[avis_fill];"
+                    fi
+                    FILTER+="[avis_fill][avis_alpha]alphamerge[avis];"
+                fi
                 ;;
             heart)
                 av_width="${av_size%x*}"
@@ -972,7 +990,7 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
                     FILTER+=",gblur=sigma=${av_rounding_blur},eq=contrast=${av_rounding_contrast}"
                 fi
                 FILTER+=",lut=y='val*${av_opacity}'[avis_alpha];"
-                if [[ "$av_fill_type" == "gradient" || "$av_fill_type" == "rainbow" ]]; then
+                if [[ "$av_fill_type" == "gradient" || "$av_fill_type" == "rainbow" || "$av_fill_type" == "conical" ]]; then
                     FILTER+="[${av_fill_input_idx}:v]format=rgb24[avis_fill];"
                 else
                     av_effective_color="$av_colors"

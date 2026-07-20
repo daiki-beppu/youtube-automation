@@ -13,7 +13,6 @@ _WORKTREE_SETUP_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "setup-worktree.sh"
 _WORKTREE_TMPDIR_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "worktree-tmpdir.sh"
 _SYNC_DEPS_SCRIPT_PATH = _REPO_ROOT / ".lefthook" / "sync-deps.sh"
 _ENVRC_PATH = _REPO_ROOT / ".envrc"
-_LITE_WORKFLOW_PATH = _REPO_ROOT / ".takt" / "workflows" / "lite.yaml"
 _LEFTHOOK_CONFIG_PATH = _REPO_ROOT / "lefthook.yml"
 _DEVELOPMENT_DOC_PATH = _REPO_ROOT / "docs" / "development.md"
 _TAKT_OPERATIONS_DOC_PATH = _REPO_ROOT / "docs" / "takt-operations.md"
@@ -249,9 +248,6 @@ def test_takt_runtime_prepare_injects_sandbox_safe_environment(tmp_path: Path) -
     # takt の runtime.prepare が全 worker へ current runtime root 配下の
     # TMPDIR / XDG_* / UV_CACHE_DIR と lefthook skip を注入する配線契約
     # （issue #1999 / #2163）
-    takt_config = _read(_REPO_ROOT / ".takt" / "config.yaml")
-    assert ".takt/runtime-prepare.sh" in takt_config
-
     runtime_root = tmp_path / "runtime"
     result = _run_runtime_prepare(runtime_root)
 
@@ -1043,7 +1039,7 @@ exec "$@"
     assert "error: uv sync failed" in result.stderr
 
 
-def test_worktree_environment_contract_is_wired_into_lite_steps_and_docs() -> None:
+def test_worktree_environment_contract_is_documented() -> None:
     envrc = _read(_ENVRC_PATH)
     # nix-direnv を version + SRI hash 固定でブートストラップし（issue #2097）、
     # 最終ディレクティブは従来どおり use flake であること
@@ -1056,12 +1052,6 @@ def test_worktree_environment_contract_is_wired_into_lite_steps_and_docs() -> No
     assert 'bash "$PWD/.lefthook/worktree-tmpdir.sh"' in envrc
     assert 'export TMPDIR="$worktree_tmpdir"' in envrc
     assert envrc.index("worktree-tmpdir.sh") < envrc.index("use flake")
-    workflow = _read(_LITE_WORKFLOW_PATH)
-    setup_instruction = "最初に `bash .lefthook/setup-worktree.sh` を実行"
-    wrapped_command_instruction = "`bash .lefthook/setup-worktree.sh <command> [args...]` 経由"
-    assert workflow.count(setup_instruction) == 3
-    assert workflow.count(wrapped_command_instruction) == 3
-
     for document in (_DEVELOPMENT_DOC_PATH, _TAKT_OPERATIONS_DOC_PATH, _CLAUDE_PATH):
         content = _read(document)
         assert "bash .lefthook/setup-worktree.sh" in content

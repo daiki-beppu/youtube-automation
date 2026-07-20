@@ -94,13 +94,13 @@ describe("content.ts: STOPPED phase は resume state を保存する (#898 要�
   const queueRunnerSource = read("../lib/queue-runner.ts");
   const runnerSources = `${contentSource}\n${downloadFlowSource}\n${queueRunnerSource}`;
 
-  it("Given runner sources When PHASE.STOPPED emit を数える Then 正確に 16 箇所（queue duration retry / retryPlaylist / download retry flow の中断を含む）", () => {
+  it("Given runner sources When PHASE.STOPPED emit を数える Then 正確に 18 箇所（定期実行の安全停止 checkpoint を含む）", () => {
     const stoppedEmits =
       runnerSources.match(
         /(?:emitProgress|deps\.emitProgress|options\.emitProgress)\(\{\s*phase: PHASE\.STOPPED/g
       ) ?? [];
 
-    expect(stoppedEmits).toHaveLength(16);
+    expect(stoppedEmits).toHaveLength(18);
   });
 
   it("Given ループ内 STOPPED のうち未 click 箇所 When 直前を読む Then persistInterruptState(i) が隣接する（serial / queue ループ先頭の 2 箇所）", () => {
@@ -148,7 +148,7 @@ describe("content.ts: STOPPED phase は resume state を保存する (#898 要�
     // failedIndex 名を rename せず流用すること（要件3）。引数 interruptedIndex を failedIndex に載せる。
     // ERROR / STOPPED 両 phase 共通ヘルパー（dry-duplication 解消, AI-898-001）。
     expect(contentSource).toMatch(
-      /function persistInterruptState\([\s\S]*?interruptedIndex: number,[\s\S]*?orderPosition\?: number,[\s\S]*?explicitRemainingIndices\?: number\[\],?[\s\S]*?\): void \{[\s\S]*?void writeResumeState\(\{\s*collectionId,\s*failedIndex: interruptedIndex,\s*total,\s*timestamp: Date\.now\(\),/
+      /function persistInterruptState\([\s\S]*?interruptedIndex: number,[\s\S]*?orderPosition\?: number,[\s\S]*?explicitRemainingIndices\?: number\[\],?[\s\S]*?\): void \{[\s\S]*?resumeStateWrite = resumeStateWrite[\s\S]*?\.then\(\(\) =>[\s\S]*?writeResumeState\(\{\s*collectionId,\s*failedIndex: interruptedIndex,\s*total,\s*timestamp: Date\.now\(\),/
     );
   });
 });
@@ -489,6 +489,22 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
     );
     expect(runnerSource).toMatch(
       /setRestoredSubmittedClipIdsAreDurationFiltered\(false\);/
+    );
+  });
+});
+
+describe("collection queue の fresh start / run ACK 境界 (#2029)", () => {
+  const runnerSource = read("../components/useSunoRunner.ts");
+
+  it("新規 queue は保存済み単発 resume を消去してから永続化する", () => {
+    expect(runnerSource).toMatch(
+      /const staleResume = persistedResumeRef\.current;[\s\S]*?await clearResumeStateForCollection\(staleResume\.collectionId\);[\s\S]*?persistedResumeRef\.current = null;[\s\S]*?await writeCollectionQueue\(queue\)/
+    );
+  });
+
+  it("run の negative ACK は current item を failed settlement して後続 reload へ進める", () => {
+    expect(runnerSource).toMatch(
+      /const settleRejectedCollectionQueueStart = useCallback\([\s\S]*?settleStoredCollectionQueueRun\([\s\S]*?phase: "error"[\s\S]*?scheduleRunCompleteReload\(\)[\s\S]*?const acknowledgement = await sendMessage\([\s\S]*?if \(!acknowledgement\.ok\) \{[\s\S]*?await settleRejectedCollectionQueueStart\(/
     );
   });
 });

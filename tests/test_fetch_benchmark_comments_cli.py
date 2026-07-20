@@ -224,7 +224,7 @@ def test_collect_checks_benchmark_freshness(monkeypatch, tmp_path):
         return [target]
 
     def fake_get_youtube():
-        calls.append(("youtube",))
+        calls.append(("youtube-full-scope",))
         return object()
 
     def fake_fetch_comments(video_id: str):
@@ -233,7 +233,7 @@ def test_collect_checks_benchmark_freshness(monkeypatch, tmp_path):
 
     monkeypatch.setattr(mod, "ensure_benchmark_fresh", fake_ensure_benchmark_fresh)
     monkeypatch.setattr(mod, "load_benchmark_videos", fake_load_benchmark_videos)
-    monkeypatch.setattr(mod, "get_youtube_readonly", fake_get_youtube)
+    monkeypatch.setattr(mod, "get_youtube", fake_get_youtube)
     monkeypatch.setattr(collector, "_fetch_comments", fake_fetch_comments)
 
     result = collector.collect()
@@ -241,7 +241,7 @@ def test_collect_checks_benchmark_freshness(monkeypatch, tmp_path):
     assert calls == [
         ("fresh", collector.data_dir),
         ("load", collector.data_dir, 10000, None),
-        ("youtube",),
+        ("youtube-full-scope",),
         ("fetch", "video-1"),
     ]
     assert result["summary"] == {

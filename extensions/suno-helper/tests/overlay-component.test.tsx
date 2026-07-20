@@ -31,6 +31,9 @@ const runner = vi.hoisted(() => ({
   collections: [],
   selectedCollectionId: "",
   selectCollection: vi.fn(),
+  collectionQueue: null,
+  runCollectionQueue: vi.fn(),
+  resumeCollectionQueue: vi.fn(),
   entries: [],
   itemStates: [],
   status: "待機中",
@@ -39,6 +42,10 @@ const runner = vi.hoisted(() => ({
   compatibilityWarning: "",
   canRun: false,
   isRunning: false,
+  completionSoundSettings: { enabled: true, preset: "chime" },
+  setCompletionSoundEnabled: vi.fn(),
+  setCompletionSoundPreset: vi.fn(),
+  previewCompletionSound: vi.fn(async () => undefined),
   playlistName: "",
   runModeId: "serial",
   setRunMode: vi.fn(),
@@ -100,6 +107,15 @@ describe("Overlay shell", () => {
     messagingMocks.onMessage.mockClear();
     overlayStateMocks.readOverlayState.mockClear();
     overlayStateMocks.writeOverlayState.mockClear();
+    Object.assign(runner, {
+      collections: [],
+      selectedCollectionId: "",
+      entries: [],
+      itemStates: [],
+      canRun: false,
+      collectionQueue: null,
+    });
+    runner.runCollectionQueue.mockClear();
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -216,5 +232,116 @@ describe("Overlay shell", () => {
       minimized: false,
       hidden: false,
     });
+  });
+
+  it("collection checkbox の複数選択を一覧順 queue として開始する", async () => {
+    Object.assign(runner, {
+      collections: [
+        {
+          id: "first",
+          name: "First",
+          status: "ready",
+          pattern_count: 1,
+          downloaded_count: 0,
+        },
+        {
+          id: "second",
+          name: "Second",
+          status: "ready",
+          pattern_count: 1,
+          downloaded_count: 0,
+        },
+      ],
+      selectedCollectionId: "first",
+      entries: [
+        { name: "pattern", style: "ambient", lyrics: "[Instrumental]" },
+      ],
+      itemStates: ["idle"],
+      canRun: true,
+    });
+    await act(async () => root.render(createElement(Overlay)));
+    const checkboxes = container.querySelectorAll<HTMLButtonElement>(
+      'button[data-suno-control="collection-checkbox"]'
+    );
+
+    expect(checkboxes).toHaveLength(2);
+    expect(checkboxes[0].dataset.slot).toBe("checkbox");
+    expect(checkboxes[0].getAttribute("aria-checked")).toBe("true");
+    await act(async () => checkboxes[1].click());
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('button[data-suno-control="run"]')!
+        .click()
+    );
+
+    expect(runner.runCollectionQueue).toHaveBeenCalledWith(["first", "second"]);
+  });
+
+  it("collection queue の成功/失敗 summary から失敗分だけ再実行する", async () => {
+    Object.assign(runner, {
+      collectionQueue: {
+        version: 1,
+        queueId: "queue-summary",
+        baseUrl: "http://localhost:7873",
+        items: [
+          { collectionId: "first", status: "succeeded" },
+          {
+            collectionId: "second",
+            status: "failed",
+            message: "download failed",
+          },
+        ],
+        currentIndex: 2,
+        status: "completed",
+        runMode: "queue",
+        regenerateDurationOutliers: true,
+        createdAt: 100,
+        updatedAt: 200,
+      },
+    });
+    await act(async () => root.render(createElement(Overlay)));
+    const summary = container.querySelector<HTMLElement>(
+      '[data-suno-control="collection-queue-summary"]'
+    )!;
+
+    expect(summary.textContent).toContain("first: succeeded");
+    expect(summary.textContent).toContain("second: failed — download failed");
+    await act(async () =>
+      Array.from(summary.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("失敗した"))!
+        .click()
+    );
+
+    expect(runner.runCollectionQueue).toHaveBeenCalledWith(["second"]);
+  });
+
+  it("collection 間の queue 遷移中は入力を固定し Stop だけを有効にする", async () => {
+    Object.assign(runner, {
+      collectionQueue: {
+        version: 1,
+        queueId: "queue-transition",
+        baseUrl: "http://localhost:7873",
+        items: [{ collectionId: "first", status: "pending" }],
+        currentIndex: 0,
+        status: "running",
+        runMode: "serial",
+        regenerateDurationOutliers: true,
+        createdAt: 100,
+        updatedAt: 100,
+      },
+      isRunning: false,
+    });
+    await act(async () => root.render(createElement(Overlay)));
+
+    expect(
+      container.querySelector<HTMLSelectElement>(
+        'select[data-suno-control="download-format"]'
+      )?.disabled
+    ).toBe(true);
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        'button[data-suno-control="stop"]'
+      )?.disabled
+    ).toBe(false);
   });
 });

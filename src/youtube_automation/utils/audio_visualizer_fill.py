@@ -1,4 +1,4 @@
-"""Audio visualizer の gradient / rainbow fill を実行時生成する。"""
+"""Audio visualizer の gradient / conical fill を実行時生成する。"""
 
 from __future__ import annotations
 
@@ -54,8 +54,8 @@ def create_fill_asset(
 ) -> str:
     """fill asset を生成し、縮退後の type を返す。"""
     width, height = parse_size(size)
-    if fill_type not in {"solid", "gradient", "rainbow"}:
-        raise ValueError(f"invalid fill type: {fill_type!r} (expected solid, gradient, or rainbow)")
+    if fill_type not in {"solid", "gradient", "rainbow", "conical"}:
+        raise ValueError(f"invalid fill type: {fill_type!r} (expected solid, gradient, rainbow, or conical)")
     if fill_type == "solid":
         normalize_ffmpeg_color(color)
         return "solid"
@@ -92,7 +92,7 @@ def create_fill_asset(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--type", required=True, choices=("solid", "gradient", "rainbow"))
+    parser.add_argument("--type", required=True, choices=("solid", "gradient", "rainbow", "conical"))
     parser.add_argument("--size", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--color", default="white")

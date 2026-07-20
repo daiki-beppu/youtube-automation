@@ -100,7 +100,7 @@ suno-helper が担う、Suno 生成曲の品質最低ラインを保証する仕
 _Avoid_: フィルタ, バリデーション (yield guard は検知 + 自動再生成のループを含む。単なるフィルタではない)
 
 **community-helper**:
-YouTube Studio Web のコミュニティ投稿画面に対して DOM 注入を行う Chrome 拡張。`yt-collection-serve` から投稿データ (テキスト + スケジュール日時 + 画像) を取得し、Studio の DOM に自動入力する。suno-helper / distrokid-helper と同列の `extensions/community-helper/` に配置する。
+YouTube 本体のチャンネル投稿ページ (`/channel/<id>/posts`) に対して DOM 注入を行う Chrome 拡張。extension context が `yt-collection-serve` から投稿データ (テキスト + スケジュール日時 + 画像) を取得して content script へ relay し、投稿 UI に自動入力する。suno-helper / distrokid-helper と同列の `extensions/community-helper/` に配置する。
 _Avoid_: studio-helper (Studio 全般ではなくコミュニティ投稿専用), community-post-helper (冗長)
 
 **helper extension shell**:

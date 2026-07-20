@@ -21,6 +21,7 @@ from youtube_automation.utils.config.comments import (
     Comments,
     GeneratorConfig,
 )
+from youtube_automation.utils.config.community_draft import CommunityDraft, CommunityDraftPost
 from youtube_automation.utils.config.config import ChannelConfig
 from youtube_automation.utils.config.content import Content, Descriptions, Genre, Tags, Title
 from youtube_automation.utils.config.distrokid import (
@@ -40,6 +41,8 @@ from youtube_automation.utils.config.workflow import (
     SCHEDULED_AUTOMATION_CADENCE_DAYS,
     SCHEDULED_AUTOMATION_NOTIFICATIONS,
     ApprovalGates,
+    PostPublish,
+    PostPublishApprovalGates,
     ScheduledAutomation,
     WfNext,
     Workflow,
@@ -289,6 +292,7 @@ def _assemble(merged: dict, channel_dir_path: Path) -> ChannelConfig:
     audio = _build_audio(merged)
     localizations = _load_localizations(channel_dir_path, youtube.api.language)
     comments = _build_comments(merged)
+    community_draft = _build_community_draft(merged)
     pinned_comment = _build_pinned_comment(merged)
     distrokid = _build_distrokid(merged)
 
@@ -305,6 +309,7 @@ def _assemble(merged: dict, channel_dir_path: Path) -> ChannelConfig:
         audio=audio,
         localizations=localizations,
         comments=comments,
+        community_draft=community_draft,
         pinned_comment=pinned_comment,
         distrokid=distrokid,
     )
@@ -448,8 +453,10 @@ def _build_overlays(raw: object) -> Overlays:
     fill = None
     if fill_raw is not None:
         fill_type = str(fill_raw.get("type", "solid"))
-        if fill_type not in {"solid", "gradient", "rainbow"}:
-            raise ConfigError("overlays.audio_visualizer.fill.type は solid / gradient / rainbow のいずれかです")
+        if fill_type not in {"solid", "gradient", "rainbow", "conical"}:
+            raise ConfigError(
+                "overlays.audio_visualizer.fill.type は solid / gradient / rainbow / conical のいずれかです"
+            )
         fill_color = str(fill_raw.get("color", av_raw.get("colors", "white")))
         fill_top = str(fill_raw.get("top", "0xA9CBF0"))
         fill_bottom = str(fill_raw.get("bottom", fill_raw.get("bot", "0x3A5696")))
@@ -616,6 +623,28 @@ def _build_workflow(merged: dict) -> Workflow:
     skip_audio = _resolve_skip_approval(wf_next_raw, gates_raw, "skip_audio_approval", "audio")
     skip_upload = _resolve_skip_approval(wf_next_raw, gates_raw, "skip_upload_approval", "upload")
 
+    post_publish_configured = "post-publish" in wf
+    post_publish_raw = wf.get("post-publish", {})
+    if not isinstance(post_publish_raw, dict):
+        raise ConfigError(
+            f"workflow.post-publish は object でなければなりません（got {type(post_publish_raw).__name__}）"
+        )
+    unexpected = set(post_publish_raw) - {"approval_gates"}
+    if unexpected:
+        names = ", ".join(sorted(unexpected))
+        raise ConfigError(f"workflow.post-publish に未知のキーがあります: {names}")
+    post_publish_gates_raw = post_publish_raw.get("approval_gates", {})
+    if not isinstance(post_publish_gates_raw, dict):
+        raise ConfigError(
+            "workflow.post-publish.approval_gates は object でなければなりません"
+            f"（got {type(post_publish_gates_raw).__name__}）"
+        )
+    post_publish_steps = {"community-post", "pinned-comment", "metadata-audit"}
+    unknown_steps = set(post_publish_gates_raw) - post_publish_steps
+    if unknown_steps:
+        names = ", ".join(sorted(unknown_steps))
+        raise ConfigError(f"workflow.post-publish.approval_gates に未知の step があります: {names}")
+
     return Workflow(
         wf_next=WfNext(
             approval_gates=ApprovalGates(audio=not skip_audio, upload=not skip_upload),
@@ -625,6 +654,26 @@ def _build_workflow(merged: dict) -> Workflow:
                 wf_next_raw,
                 "skip_manual_mastering",
                 "workflow.wf_next.skip_manual_mastering",
+            ),
+        ),
+        post_publish=PostPublish(
+            configured=post_publish_configured,
+            approval_gates=PostPublishApprovalGates(
+                community_post=_workflow_bool(
+                    post_publish_gates_raw,
+                    "community-post",
+                    "workflow.post-publish.approval_gates.community-post",
+                ),
+                pinned_comment=_workflow_bool(
+                    post_publish_gates_raw,
+                    "pinned-comment",
+                    "workflow.post-publish.approval_gates.pinned-comment",
+                ),
+                metadata_audit=_workflow_bool(
+                    post_publish_gates_raw,
+                    "metadata-audit",
+                    "workflow.post-publish.approval_gates.metadata-audit",
+                ),
             ),
         ),
         scheduled_automation=_build_scheduled_automation(wf),
@@ -819,6 +868,50 @@ def _build_generator_config(raw: dict) -> GeneratorConfig:
         fallback_on_error=fallback,
         requests_per_minute=int(raw.get("requests_per_minute", REQUESTS_PER_MINUTE_DEFAULT)),
     )
+
+
+def _build_community_draft(merged: dict) -> CommunityDraft:
+    raw = merged.get("community_draft")
+    if raw is None:
+        return CommunityDraft()
+    if not isinstance(raw, dict):
+        raise ConfigError("community_draft セクションは object でなければなりません")
+
+    variables_raw = raw.get("variables", {})
+    if not isinstance(variables_raw, dict) or any(
+        not isinstance(key, str) or not isinstance(value, str) for key, value in variables_raw.items()
+    ):
+        raise ConfigError("community_draft.variables は string 値の object でなければなりません")
+
+    posts_raw = raw.get("posts")
+    if not isinstance(posts_raw, list) or not posts_raw:
+        raise ConfigError("community_draft.posts は空でない array でなければなりません")
+
+    required_fields = {"label", "template", "schedule_offset_days", "schedule_time", "image"}
+    posts: list[CommunityDraftPost] = []
+    for index, post_raw in enumerate(posts_raw):
+        prefix = f"community_draft.posts[{index}]"
+        if not isinstance(post_raw, dict):
+            raise ConfigError(f"{prefix} は object でなければなりません")
+        missing = required_fields - post_raw.keys()
+        unexpected = post_raw.keys() - required_fields
+        if missing:
+            raise ConfigError(f"{prefix} に必須キーがありません: {', '.join(sorted(missing))}")
+        if unexpected:
+            raise ConfigError(f"{prefix} に未知のキーがあります: {', '.join(sorted(unexpected))}")
+        if not all(isinstance(post_raw[key], str) for key in ("label", "template", "schedule_time", "image")):
+            raise ConfigError(f"{prefix} の label/template/schedule_time/image は string でなければなりません")
+        posts.append(
+            CommunityDraftPost(
+                label=post_raw["label"],
+                template=post_raw["template"],
+                schedule_offset_days=post_raw["schedule_offset_days"],
+                schedule_time=post_raw["schedule_time"],
+                image=post_raw["image"],
+            )
+        )
+
+    return CommunityDraft(variables=dict(variables_raw), posts=tuple(posts))
 
 
 def _build_comments(merged: dict) -> Comments:

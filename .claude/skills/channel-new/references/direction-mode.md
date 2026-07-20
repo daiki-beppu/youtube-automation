@@ -2,7 +2,7 @@
 
 `/channel-new` 方向性検討モードの手順詳細。SKILL.md の「モード判別」で本モードと判定された場合に、このファイルの手順どおりに実行する。
 
-`/channel-research` の分析レポート、または新規開設モードが保存した
+分析モードの分析レポート、または新規開設モードが保存した
 `docs/channel/ttp-seed-confirmation.md` と `docs/channel/competitor-branding-snapshot.json` をもとに、
 ユーザーと対話で新チャンネルの方向性を再検討する。データに基づいた議論を行い、
 決定事項を `docs/channel/channel-direction.md` に保存する。
@@ -28,13 +28,13 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 
 上記の入力がすべて欠けている場合は、根拠なしに方向性検討を進めない。不足している入力を明示し、
 `/channel-new` 新規開設モードで TTP seed confirmation / branding snapshot / benchmark.channels を作成するか、
-必要に応じて `/benchmark` / `/viewer-voice` / `/channel-research` を先に実行するよう案内して停止する。
+必要に応じて `/benchmark` / `/viewer-voice` / `/channel-new` 分析モードを先に実行するよう案内して停止する。
 
 - 承認済み TTP 対象の全体像（チャンネル名、登録者数、動画数、直近タイトル）
 - 最も参考になるチャンネル（ロールモデル候補）
 - 転写したい型（タイトル構造、サムネ構図、branding。投稿頻度と動画尺は収集済みデータまたは手動メモがある場合だけ）
 - `data/video_analysis/<slug>/*.json` があれば、競合 BGM 構造（intro / peak / outro 秒）の平均と代表例
-- 後続 `/benchmark` / `/viewer-voice` / `/channel-research` が必要な未確認事項
+- 後続 `/benchmark` / `/viewer-voice` / `/channel-new` 分析モードが必要な未確認事項
 
 ## Step D2: ポジショニング議論
 
@@ -47,7 +47,7 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 **順序は「TTP → 差別化」**。先に転写対象を確定し、その上に独自要素を載せる。
 
 1. **TTP 対象選定**
-   - `/channel-research` レポート、または `docs/channel/ttp-seed-confirmation.md` から転写する
+   - 分析モードのレポート、または `docs/channel/ttp-seed-confirmation.md` から転写する
      **構造・パターン・型** を明示（タイトルフォーマット / サムネ構図 / branding 語彙 等。
      動画尺 / 投稿頻度 / コメント語彙は収集済みデータがある場合だけ使う）
    - どのベンチマークの何を、どの程度パクるかをユーザーと合意

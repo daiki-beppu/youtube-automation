@@ -136,11 +136,89 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     assert config.comments.rules == []
     assert config.comments.generator.provider == "codex"
     assert config.comments.max_replies_per_run == 20
+    assert config.community_draft.posts == ()
+    assert config.community_draft.variables == {}
     # pinned_comment も optional、欠如時は enabled=False のデフォルト
     assert config.pinned_comment.enabled is False
     assert config.pinned_comment.templates == {}
     assert config.pinned_comment.history_file == "pinned_comment_history.json"
     assert config.pinned_comment.default_language == "en"
+
+
+def test_community_draft_section_loads_typed_posts(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["community-draft.json"] = {
+        "community_draft": {
+            "variables": {"custom_message": "Do not miss it."},
+            "posts": [
+                {
+                    "label": "teaser",
+                    "template": "{title}: {custom_message}",
+                    "schedule_offset_days": -1,
+                    "schedule_time": "18:00",
+                    "image": "main.png",
+                }
+            ],
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.community_draft.variables == {"custom_message": "Do not miss it."}
+    assert len(config.community_draft.posts) == 1
+    post = config.community_draft.posts[0]
+    assert post.label == "teaser"
+    assert post.schedule_offset_days == -1
+    assert post.schedule_time == "18:00"
+    assert post.image == "main.png"
+
+
+@pytest.mark.parametrize("schedule_time", ["9:00", "24:00", "12:60", 900])
+def test_community_draft_rejects_invalid_schedule_time(tmp_path, monkeypatch, schedule_time):
+    sections = _minimal_sections()
+    sections["community-draft.json"] = {
+        "community_draft": {
+            "posts": [
+                {
+                    "label": "teaser",
+                    "template": "{title}",
+                    "schedule_offset_days": 0,
+                    "schedule_time": schedule_time,
+                    "image": "main.png",
+                }
+            ]
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="schedule_time"):
+        load_config()
+
+
+@pytest.mark.parametrize("image", ["/tmp/main.png", "../main.png", "assets/../../secret"])
+def test_community_draft_rejects_unsafe_image_paths(tmp_path, monkeypatch, image):
+    sections = _minimal_sections()
+    sections["community-draft.json"] = {
+        "community_draft": {
+            "posts": [
+                {
+                    "label": "teaser",
+                    "template": "{title}",
+                    "schedule_offset_days": 0,
+                    "schedule_time": "18:00",
+                    "image": image,
+                }
+            ]
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="image"):
+        load_config()
 
 
 def test_synthetic_media_flags_default(tmp_path, monkeypatch):
@@ -753,6 +831,55 @@ def test_workflow_wf_next_skip_approval_default(tmp_path, monkeypatch):
     assert config.workflow.wf_next.skip_upload_approval is True
     assert config.workflow.wf_next.approval_gates.audio is False
     assert config.workflow.wf_next.approval_gates.upload is False
+
+
+def test_workflow_post_publish_unset_preserves_legacy_mode(tmp_path, monkeypatch):
+    """#1824: section 未設定では従来の community-post 単独案内を維持する."""
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.post_publish.configured is False
+    assert config.workflow.post_publish.approval_gates.community_post is False
+    assert config.workflow.post_publish.approval_gates.pinned_comment is False
+    assert config.workflow.post_publish.approval_gates.metadata_audit is False
+
+
+def test_workflow_post_publish_gate_overrides_are_observable(tmp_path, monkeypatch):
+    """#1824: section の存在で chain を opt-in し、step ごとの boolean を貫通する."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "post-publish": {
+                "approval_gates": {
+                    "community-post": True,
+                    "pinned-comment": False,
+                    "metadata-audit": True,
+                }
+            }
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.workflow.post_publish.configured is True
+    assert config.workflow.post_publish.approval_gates.community_post is True
+    assert config.workflow.post_publish.approval_gates.pinned_comment is False
+    assert config.workflow.post_publish.approval_gates.metadata_audit is True
+
+
+@pytest.mark.parametrize("invalid", ["true", 1, None, {}, []])
+def test_workflow_post_publish_gate_must_be_boolean(tmp_path, monkeypatch, invalid):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"post-publish": {"approval_gates": {"pinned-comment": invalid}}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="workflow.post-publish.approval_gates.pinned-comment は boolean"):
+        load_config()
 
 
 def test_workflow_wf_next_skip_approval_explicit(tmp_path, monkeypatch):
@@ -2189,6 +2316,18 @@ def test_audio_visualizer_invalid_fill_raises(tmp_path, monkeypatch, fill, messa
         load_config()
 
 
+def test_audio_visualizer_accepts_conical_fill(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {"audio_visualizer": {"style": "ring", "fill": {"type": "conical"}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    config = load_config()
+
+    assert config.youtube.overlays.audio_visualizer.fill is not None
+    assert config.youtube.overlays.audio_visualizer.fill.type == "conical"
+
+
 # ----- workflow.scheduled_automation (#1892) --------------------------------
 
 
@@ -2204,7 +2343,7 @@ def test_scheduled_automation_absent_uses_disabled_defaults(tmp_path, monkeypatc
     assert sa.timezone == "Asia/Tokyo"
     assert sa.run_time == "09:00"
     assert sa.cadence == ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
-    assert sa.target_workflow == "wf-next"
+    assert sa.target_workflow == "automation-run"
     assert sa.max_retries == 0
     assert sa.retry_delay_seconds == 300
     assert sa.prevent_concurrent_runs is True

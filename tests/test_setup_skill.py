@@ -46,15 +46,18 @@ def test_setup_skill_description_mentions_new_and_legacy_commands() -> None:
     description = _frontmatter(_SETUP_SKILL)["description"]
     assert "/setup" in description
     assert "/onboard" in description
+    assert "/channel-new" in description
+    assert "config・ペルソナ・branding" in description
 
 
 def test_setup_skill_uses_uv_run_for_automation_commands() -> None:
     text = _SETUP_SKILL.read_text(encoding="utf-8")
-    assert "uv run yt-doctor --json" in text
+    assert "uv run yt-doctor --apply --json" in text
+    assert "uv run yt-oauth" in text
     assert "uv run yt-channel-status" in text
 
     bare_command_patterns = [
-        r"`yt-doctor --json`",
+        r"`yt-doctor --apply --json`",
         r"(?m)^yt-channel-status$",
         r"`yt-channel-status`",
         r"(?m)>\s+\d+\.\s+yt-channel-status\b",
@@ -65,27 +68,118 @@ def test_setup_skill_uses_uv_run_for_automation_commands() -> None:
 
 def test_setup_skill_follows_skills_synced_next_action_contract() -> None:
     text = _SETUP_SKILL.read_text(encoding="utf-8")
-    assert '`next_action.kind == "ai-exec"`' in text
-    assert '`next_action.kind == "human"`' in text
-    assert "next_action.cmd" in text
-    assert "next_action.instructions" in text
+    section = text.split("#### `skills_synced`", 1)[1].split("#### `numbered_duplicates`", 1)[0]
+    assert '`apply.next_action.kind == "human"`' in section
+    assert "利用者が実行を承認した場合だけ `--apply` が自動実行する" in section
+    assert "apply.next_action.instructions" in section
     assert "uv run yt-skills sync --asset auth-template" in text
     assert "uv run yt-setup-dirs" in text
     assert "uv run yt-skills sync --asset skills --force --prune --yes" in text
     assert "通常の `--force` sync では削除されない" in text
     assert "`.agents/skills` が `.claude/skills` を指す symlink" in text
+    assert "「prune を実行」/「中止」の 2 択" in section
+    assert "承認されるまで `--apply` を実行しない" in section
 
 
 def test_setup_skill_handles_reporting_job_next_action_and_rechecks() -> None:
     text = _SETUP_SKILL.read_text(encoding="utf-8")
     assert "#### `reporting_job`" in text
-    assert "next_action.cmd" in text
     assert "uv run yt-analytics --reporting-create-job" in text
     reporting_step = text.index("#### `reporting_job`")
     next_step = text.find("\n#### `", reporting_step + 1)
     section = text[reporting_step : next_step if next_step != -1 else None]
-    assert "uv run yt-doctor --json" in section
-    assert "`reporting_job` が `ok`" in section
+    assert "`--apply` が以下を自動実行" in section
+    assert "`--apply` が再診断して次の check へ進む" in section
+
+
+def test_setup_skill_branches_on_all_apply_stop_reasons() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
+
+    for stop_reason in ("completed", "human_required", "decision_required", "command_failed"):
+        assert f"`{stop_reason}`:" in startup
+    assert "`apply.check_id`" in startup
+    assert "`apply.cmd` / `apply.stderr`" in startup
+    assert "--project-id <project-id>" in startup
+    assert "--billing-account <billing-id>" in startup
+    assert "以後 `completed` まで全 flag を毎回付け" in startup
+    assert "uv run yt-doctor --apply --json --project-id <project-id> --billing-account <billing-id>" in startup
+
+
+def test_setup_skill_requires_approval_before_apply_mutations() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
+
+    assert "uv run yt-doctor --json" in startup
+    assert "AskUserQuestion" in startup
+    assert "「表示した変更を実行」/「中止」の明示 2 択" in startup
+    assert "GCP 変更は外部反映" in startup
+    assert "prune は列挙したファイルを削除" in startup
+    assert startup.index("uv run yt-doctor --json") < startup.index("uv run yt-doctor --apply --json")
+
+
+def test_setup_skill_reapproves_project_scoped_plan_after_decisions() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
+    plan = startup.split("### GCP 変更 plan の承認", 1)[1]
+
+    assert "`--project-id` / `--billing-account` を追加・変更するたび" in plan
+    assert "正確な project ID" in plan
+    assert "active account" in plan
+    for mutation in ("Billing 紐付け", "API 有効化", "ADC quota project", "IAM 付与", "Reporting job 作成"):
+        assert mutation in plan
+    assert "「表示した GCP 変更を実行」/「中止」の 2 択" in plan
+    assert "承認されるまで flag 付き `--apply` を実行しない" in plan
+    assert "前回の承認を無効" in plan
+
+
+def test_setup_skill_gates_numbered_duplicate_deletion() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    section = text.split("#### `numbered_duplicates`", 1)[1].split("### api カテゴリ", 1)[0]
+
+    assert "実在パスを 1 件ずつ列挙" in section
+    assert "「列挙した対象を削除」/「中止」の 2 択" in section
+    assert "承認されるまで削除しない" in section
+
+
+def test_setup_skill_keeps_pre_doctor_bootstrap_in_skill() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
+
+    assert "`pyproject.toml` が無ければ `uv init`" in startup
+    assert "uv add git+https://github.com/daiki-beppu/youtube-automation.git" in startup
+    assert "uv run yt-skills sync --asset skills --force" in startup
+    assert startup.index("uv run yt-skills sync") < startup.index("uv run yt-doctor --apply --json")
+
+
+def test_setup_skill_keeps_command_execution_out_of_human_role() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    responsibility = text.split("## 認証コマンドと人間操作の責務", 1)[1].split("## [HUMAN STEP]", 1)[0]
+
+    assert "すべてのコマンドの起動・実行・再診断は AI または setup スクリプトが担当" in text
+    assert "利用者へ実行を依頼してはならない" in responsibility
+    assert "PTY 付きの対話 session" in responsibility
+    assert "人間は開いたブラウザでログイン・アカウント選択・OAuth 同意だけ" in responsibility
+    assert "あなたのターミナル" not in text
+    for command in (
+        "gcloud auth login",
+        "gcloud auth application-default login",
+        "uv run yt-oauth",
+    ):
+        assert command in responsibility
+
+
+def test_setup_skill_drives_youtube_oauth_in_background() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    oauth = text.split("#### `oauth_token`", 1)[1].split("#### `reporting_job`", 1)[0]
+
+    assert "uv run yt-oauth" in oauth
+    assert "background session" in oauth
+    assert "stdout" in oauth
+    assert "同意 URL" in oauth
+    assert "ブラウザ認証だけ" in oauth
+    assert "exit 0" in oauth
+    assert "uv run yt-doctor --apply --json <apply_flags>" in oauth
 
 
 def test_setup_skill_delegates_minimum_directory_generation_to_setup() -> None:
@@ -110,6 +204,28 @@ def test_setup_skill_suggests_gcp_project_id_from_channel_name() -> None:
     assert "6-30 文字" in text
     assert "`--name`): `{チャンネル名} YouTube`" in text
     assert "承認またはカスタム入力" in text
+
+
+def test_setup_skill_requires_explicit_project_creation_approval() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    section = text.split("#### `gcp_project`", 1)[1].split("#### `billing_linked`", 1)[0]
+
+    assert "決定した project ID と表示名を示し" in section
+    assert "Google Cloud に外部 resource を作成" in section
+    assert "AskUserQuestion" in section
+    assert "「project を作成」/「中止」の明示 2 択" in section
+    assert "作成が承認されるまで次のコマンドを実行しない" in section
+
+
+def test_setup_project_and_billing_sections_route_through_plan_approval() -> None:
+    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    project = text.split("#### `gcp_project`", 1)[1].split("#### `billing_linked`", 1)[0]
+    billing = text.split("#### `billing_linked`", 1)[1].split("#### `apis_enabled`", 1)[0]
+
+    for section in (project, billing):
+        assert "必ず先に「GCP 変更 plan の承認」へ戻る" in section
+        assert "AskUserQuestion で実行が承認された後だけ" in section
+        assert "中止ならここで停止する" in section
 
 
 def test_setup_skill_suggests_oauth_app_and_client_names() -> None:
@@ -199,7 +315,7 @@ def test_setup_skill_handles_ttp_wf_new_readiness_next_check() -> None:
     assert "/channel-new benchmark 反映未完了" in text
     assert "`config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default`" in text
     assert "`data/thumbnail_compare/benchmark/`" in text
-    assert "uv run yt-doctor --json" in text
+    assert "uv run yt-doctor --apply --json" in text
 
 
 def test_setup_stale_report_guidance_delegates_to_collection_ideate_contract() -> None:
@@ -225,9 +341,10 @@ def test_setup_stale_report_guidance_delegates_to_collection_ideate_contract() -
         "`reports/analysis_*.md` と `data/benchmark_*.json` がどちらも無い → minimal mode" in analytics_report_section
     )
 
-    assert setup.count("`summary.next_check_id` が `null`") == 1
+    assert setup.count("`apply.stop_reason` が `completed`") == 1
     assert setup.count("`analytics_report` の stale fail だけ") == 1
-    assert setup.count("冒頭の「完了条件」に従い") == 3
+    assert '`apply.stop_reason == "human_required"`' in analytics_report_section
+    assert '`apply.check_id == "analytics_report"`' in analytics_report_section
 
 
 def test_setup_skill_handles_upload_ready_channel_not_found() -> None:
@@ -238,7 +355,7 @@ def test_setup_skill_handles_upload_ready_channel_not_found() -> None:
     assert "YouTube Studio" in section
     assert "https://studio.youtube.com" in section
     assert "チャンネルを作成" in section
-    assert "uv run yt-doctor --json" in section
+    assert "uv run yt-doctor --apply --json" in section
     assert "[HUMAN STEP]" in section
 
 
@@ -261,7 +378,7 @@ def test_setup_skill_does_not_auto_overwrite_mismatched_channel_id() -> None:
     assert "uv run yt-channel-settings pull --channel-id-only` で dry-run" in section
     assert "uv run yt-channel-settings pull --channel-id-only --apply" in section
     assert "auth/token.json" in section
-    assert "uv run yt-channel-status" in section
+    assert "uv run yt-oauth" in section
 
 
 def test_setup_skill_keeps_api_errors_distinct_from_missing_channel() -> None:
@@ -273,4 +390,4 @@ def test_setup_skill_keeps_api_errors_distinct_from_missing_channel() -> None:
     assert "quota" in section
     assert "auth" in section
     assert "network" in section
-    assert "uv run yt-doctor --json" in section
+    assert "uv run yt-doctor --apply --json" in section

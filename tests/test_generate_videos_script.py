@@ -995,6 +995,35 @@ def test_audio_visualizer_solid_fill_uses_color_source(tmp_path: Path) -> None:
     assert "alphamerge[avis]" in command
 
 
+def test_ring_visualizer_uses_conical_fill_asset(tmp_path: Path) -> None:
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays": {"enabled": true}}', encoding="utf-8")
+
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        stream_bitrate_output="5000000",
+        extra_env={
+            **_audio_visualizer_env(
+                "ring",
+                OVERLAY_AV_SIZE="300x110",
+                OVERLAY_AV_RING_INNER_R="30",
+                OVERLAY_AV_RING_LENGTH="20",
+            ),
+            "OVERLAYS_CONFIG": str(overlays_config),
+            "JQ_AV_FILL_TYPE": "conical",
+            "FILL_EFFECTIVE_TYPE": "conical",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    command = _filter_complex_command(ffmpeg_log)
+    assert "format=gray[avis_rect]" in command
+    assert "blend=all_mode=multiply" in command
+    assert "format=rgb24[avis_fill]" in command
+    assert "[avis_fill][avis_alpha]alphamerge[avis]" in command
+
+
 @pytest.mark.parametrize(
     ("env_key", "enabled", "fragment"),
     [
@@ -1282,6 +1311,8 @@ def test_audio_visualizer_new_styles_render_minimal_video_with_real_ffmpeg(tmp_p
     }
     if style != "heart":
         visualizer_config["size"] = "300x110"
+    if style == "ring":
+        visualizer_config["fill"] = {"type": "conical"}
 
     overlays_config = tmp_path / "youtube.json"
     overlays_config.write_text(

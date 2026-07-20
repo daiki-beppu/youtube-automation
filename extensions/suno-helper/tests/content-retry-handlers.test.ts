@@ -286,18 +286,18 @@ describe('content onMessage("retryPlaylist"): running ガード', () => {
     vi.unstubAllGlobals();
   });
 
-  it("Given retryPlaylist 実行中 When 再度 retryPlaylist Then ok を返す（no-op）", async () => {
+  it("Given retryPlaylist 実行中 When 再度 retryPlaylist Then busy を返す", async () => {
     const { handlers } = await loadContentScript();
 
     // 最初の retryPlaylist を投入（async で走り始める → running=true）
     const retryHandler = handlers.get("retryPlaylist")!;
     retryHandler(retryPlaylistMessage({ playlistName: "test" }));
 
-    // running=true の間に再度呼ぶ → running ガードで即 ok
+    // running=true の間に再度呼ぶ → 定期起動が handoff 成功と誤認しないよう busy
     const result = retryHandler(
       retryPlaylistMessage({ playlistName: "test2" })
     );
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: false, busy: true });
   });
 });
 
@@ -776,7 +776,7 @@ describe('content onMessage("retryDownload"): running ガード', () => {
     vi.unstubAllGlobals();
   });
 
-  it("Given retryDownload 実行中 When 再度 retryDownload Then ok を返す（no-op）", async () => {
+  it("Given retryDownload 実行中 When 再度 retryDownload Then busy を返す", async () => {
     // triggerDownloadAll をエラーにしてすぐ終了させる（waitForDownloadComplete に入らないようにする）
     const { handlers } = await loadContentScript({
       triggerDownloadAllError: new Error("immediate exit"),
@@ -788,11 +788,11 @@ describe('content onMessage("retryDownload"): running ガード', () => {
       data: { collectionId: "coll-1", submittedClipIds: ["clip-1"] },
     });
 
-    // running=true の間に再度呼ぶ → running ガードで即 ok
+    // running=true の間に再度呼ぶ → 定期起動が handoff 成功と誤認しないよう busy
     const result = retryHandler({
       data: { collectionId: "coll-2", submittedClipIds: ["clip-1"] },
     });
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: false, busy: true });
   });
 });
 

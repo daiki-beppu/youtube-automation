@@ -52,7 +52,7 @@ channel-repo/                  # チャンネル固有リポジトリ
 │   │   ├── youtube.json       #   youtube / music_engine / content_model
 │   │   ├── analytics.json     #   analytics / benchmark (optional)
 │   │   ├── playlists.json     #   playlists (optional)
-│   │   ├── workflow.json      #   workflow / wf_next (optional)
+│   │   ├── workflow.json      #   workflow / wf_next / post-publish (optional)
 │   │   ├── audio.json         #   audio (optional)
 │   │   ├── shorts.json        #   shorts (optional)
 │   │   ├── comments.json      #   comments (optional)
@@ -186,14 +186,14 @@ nix develop
 | `youtube.json` | `youtube` / `music_engine` / `content_model` |
 | `analytics.json` | `analytics` / `benchmark` (optional) |
 | `playlists.json` | `playlists` (optional) |
-| `workflow.json` | `workflow` / `wf_next` (optional) |
+| `workflow.json` | `workflow` / `wf_next` / `post-publish` (optional) |
 | `audio.json` | `audio` (optional) |
 | `shorts.json` | `shorts` (optional) |
 | `comments.json` | `comments` (optional) |
 | `pinned-comment.json` | `pinned_comment` (optional) |
 | `distrokid.json` | `distrokid` (optional) |
 
-`workflow.json` は `/wf-next` 向けの任意設定です。`workflow.wf_next.approval_gates.{audio,upload}` でフェーズ進行前の承認ゲートを有効化でき、`workflow.wf_next.skip_manual_mastering` で raw master を最終マスターとして採用する raw=final 運用を宣言できます。いずれも boolean で、未設定時は `false` です。
+`workflow.json` は `/wf-next` と `/post-publish` 向けの任意設定です。`workflow.wf_next` は制作フェーズの承認・mastering 運用を宣言します。`workflow.post-publish.approval_gates.{community-post,pinned-comment,metadata-audit}` は公開後 step 直前の承認を boolean で宣言し、section 自体が未設定なら従来どおり community-post のみを案内します。
 
 詳細なフィールド説明は [`examples/channel_config.example/`](examples/channel_config.example/) を参照してください。多言語テンプレートは `config/localizations.json` に集約します（単一ソース）。`community.example.json` は `/community-post` が直接読む skill-local raw JSON の雛形で、共通 config loader の必須/optional section ではありません。
 
@@ -209,12 +209,14 @@ nix develop
 
 ## Development
 
-### Editable install
+### Developer bootstrap
+
+開発環境の正規入口と worktree / 対話・非対話 shell の区別は [`docs/development.md`](docs/development.md#開発者-bootstrap正規入口) を単一ソースとします。親 checkout は初期化だけに使い、変更は linked worktree 上で行ってください。
 
 ```bash
 git clone git@github.com:daiki-beppu/youtube-automation.git
 cd youtube-automation
-uv sync
+bash .lefthook/setup-worktree.sh
 ```
 
 ### テスト実行
@@ -223,7 +225,7 @@ uv sync
 uv run pytest
 ```
 
-`uv sync` 単独で `uv run pytest tests/` が collection error 0 件で走るために必要な依存がすべて揃います。
+正規 bootstrap wrapper 内の `uv sync` で、`uv run pytest tests/` が collection error 0 件で走るために必要な依存がすべて揃います。非対話 shell は `bash .lefthook/setup-worktree.sh uv run pytest` のように command を渡します。
 
 - テスト用ツール (`pytest` / `ruff`) は `[dependency-groups].dev` 経由で導入されます。
 - テストが間接的に require する `Pillow` / `pandas` / `pyyaml` / `matplotlib` / `japanize-matplotlib` / `google-api-python-client` / `google-auth-oauthlib` などは `[project] dependencies`（main deps）に同梱されています。
@@ -255,6 +257,7 @@ uv run ruff check .
 | `yt-thumbnail-compare` | サムネイル比較検証 |
 | `yt-video-analyze` | Gemini で YouTube 動画を直接解析（フック構造・BGM 展開・シーン・サムネ整合性・編集指標） |
 | `yt-channel-status` | チャンネル最新状況 |
+| `yt-channel` / `yt-channel-import` | workspace の channel 一覧 / 既存単一 channel repository のコピー移行（[ガイド](docs/channel-workspace-migration.md)） |
 | `yt-upload-collection` / `yt-upload-auto` | YouTube アップロード |
 
 完全な一覧は `pyproject.toml` の `[project.scripts]` を参照してください。

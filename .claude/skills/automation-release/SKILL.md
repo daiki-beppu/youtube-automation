@@ -15,7 +15,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 - extension verify は repository root で `bash .claude/skills/automation-release/references/verify-extensions.sh [<name>]` を実行し、exit 0を必須とする。non-zeroならreleaseを停止する。
 - tag push前に tag名・対象commit SHA・対象版数を表示し、取消不能な外部反映操作であることを警告して `AskUserQuestion` の「実行 / 中止」2択で承認を得る。承認前にpushしない。
 - Python prepare完了 = version / CHANGELOG / uv.lockが同期したPRを作成済み。Python publish完了 = tagとGitHub Releaseを作成済み。
-- extension prepare完了 = package.jsonのversion差分だけを含むPRを作成し、verifyと差分ガードがPASS。extension publish完了 = merge commitへのtag、workflow成功、Releaseのzip asset 2件を確認済み。
+- extension prepare完了 = package.jsonのversion差分だけを含むPRを作成し、verifyと差分ガードがPASS。extension publish完了 = merge commitへのtag、workflow成功、Releaseのzip asset 3件を確認済み。
 
 ## Overview
 
@@ -26,7 +26,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 1. **prepare**: `main` の `[Unreleased]` を吸い上げて `release/vX.Y.Z` ブランチを切り、`pyproject.toml::version` を bump し、`CHANGELOG.md` を昇格し、リリース PR を作成する
 2. **publish**: マージ済みリリース PR を tag push + GitHub Release 化し、リリースブランチを削除する
 
-**Chrome 拡張**（`extensions/<name>/package.json::version` が対象。対象拡張: suno-helper / distrokid-helper）:
+**Chrome 拡張**（`extensions/<name>/package.json::version` が対象。対象拡張: suno-helper / distrokid-helper / community-helper）:
 
 3. **extension prepare**: `release/ext-v<VER>` ブランチで対象拡張の `package.json::version` のみ bump し、`release-extensions.yml` と同一契約の local verify（install / build / zip）を通してリリース PR を作成する
 4. **extension publish**: マージ済み PR の merge commit に `ext-v<VER>` tag を push し、Release Extensions workflow の成功と Release asset（`<name>-<VER>-chrome.zip`）を確認する
@@ -59,11 +59,11 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 
 | 依頼の形 | 種別 | 進み先 |
 |---|---|---|
-| 拡張名 + バージョン（`suno-helper をリリースしたい v0.2.2` / `distrokid-helper v0.1.1`） | extension | Phase E0 へ |
+| 拡張名 + バージョン（`suno-helper をリリースしたい v0.2.2` / `community-helper v0.1.1`） | extension | Phase E0 へ |
 | `ext-v` プレフィックス（`ext-v0.2.2 を出したい`） | extension | Phase E0 へ |
 | 上記以外（`リリースして` / `v5.6.0 を出して` 等、拡張名も `ext-v` も含まない） | Python 本体 | Phase 0 へ |
 
-判定基準: 依頼文に `suno-helper` / `distrokid-helper`（`extensions/` 配下の拡張ディレクトリ名）または `ext-v` が含まれれば extension release。どちらの手掛かりも無ければ Python 本体 release。判定に迷う依頼（拡張名なしで `0.x` 系の版数だけ指定された等）は `AskUserQuestion` で種別を確認してから進む。
+判定基準: 依頼文に `suno-helper` / `distrokid-helper` / `community-helper`（`extensions/` 配下の拡張ディレクトリ名）または `ext-v` が含まれれば extension release。どちらの手掛かりも無ければ Python 本体 release。判定に迷う依頼（拡張名なしで `0.x` 系の版数だけ指定された等）は `AskUserQuestion` で種別を確認してから進む。
 
 ### Phase 0: 状態判定（Python 本体）
 
@@ -160,7 +160,7 @@ fi
 
 #### 1-6. Chrome 拡張の release 前検証
 
-両拡張を単一ソースの検証スクリプトで検証し、exit 0を確認する:
+3拡張を単一ソースの検証スクリプトで検証し、exit 0を確認する:
 
 ```bash
 bash .claude/skills/automation-release/references/verify-extensions.sh
@@ -303,7 +303,7 @@ open_ext_branch=$(git ls-remote --heads origin "release/ext-v*" | head -1)
 
 判定結果をユーザーに伝え、`AskUserQuestion` で進行確認する（誤判定時の脱出口を残す）。
 
-**tag 版数の決定**: `ext-v*` は両拡張共通の単一系列（`docs/adr/0011-extension-distribution.md`）。原則、bump する拡張の新バージョンをそのまま tag 版数に使う。ただし要求版数が `latest_ext_tag` の版数以下になる場合は tag だけ系列の次番号へ進め、`AskUserQuestion` で tag 版数を確認する（前例: `ext-v0.2.3` で distrokid-helper を 0.2.1 に bump）。この場合 Release asset 名は tag 版数ではなく package.json 版数（例: `distrokid-helper-0.2.1-chrome.zip`）になる。
+**tag 版数の決定**: `ext-v*` は3拡張共通の単一系列（`docs/adr/0011-extension-distribution.md`）。原則、bump する拡張の新バージョンをそのまま tag 版数に使う。ただし要求版数が `latest_ext_tag` の版数以下になる場合は tag だけ系列の次番号へ進め、`AskUserQuestion` で tag 版数を確認する（前例: `ext-v0.2.3` で distrokid-helper を 0.2.1 に bump）。この場合 Release asset 名は tag 版数ではなく package.json 版数（例: `distrokid-helper-0.2.1-chrome.zip`）になる。
 
 ### Phase E1: extension prepare
 
@@ -318,7 +318,7 @@ git checkout -b "release/ext-v${VER}"
 
 #### E1-2. package.json::version の bump
 
-`Edit` ツールで `extensions/<name>/package.json` の `"version": "X.Y.Z"` 行のみ差し替える。他のフィールド（`packageManager` / dependencies / scripts）、もう一方の拡張、`pyproject.toml` / `uv.lock` / `CHANGELOG.md` には触らない。
+`Edit` ツールで `extensions/<name>/package.json` の `"version": "X.Y.Z"` 行のみ差し替える。他のフィールド（`packageManager` / dependencies / scripts）、他の拡張、`pyproject.toml` / `uv.lock` / `CHANGELOG.md` には触らない。
 
 #### E1-3. local verify（release-extensions.yml と同一契約）
 
@@ -407,12 +407,13 @@ gh run watch "${run_id}" --exit-status
 ```bash
 assets=$(gh release view "ext-v${VER}" --json assets -q '.assets[].name')
 zip_count=$(printf '%s\n' "${assets}" | awk '/\.zip$/{count++} END{print count+0}')
-test "${zip_count}" -eq 2
+test "${zip_count}" -eq 3
 test "$(printf '%s\n' "${assets}" | grep -Ec '^suno-helper-[0-9]+\.[0-9]+\.[0-9]+-chrome\.zip$')" -eq 1
 test "$(printf '%s\n' "${assets}" | grep -Ec '^distrokid-helper-[0-9]+\.[0-9]+\.[0-9]+-chrome\.zip$')" -eq 1
+test "$(printf '%s\n' "${assets}" | grep -Ec '^community-helper-[0-9]+\.[0-9]+\.[0-9]+-chrome\.zip$')" -eq 1
 ```
 
-PASSはzip assetが合計2件で、`suno-helper-<version>-chrome.zip` と `distrokid-helper-<version>-chrome.zip` が各1件の場合のみ。件数過不足・重複・別名zipがあれば停止する。
+PASSはzip assetが合計3件で、`suno-helper-<version>-chrome.zip`、`distrokid-helper-<version>-chrome.zip`、`community-helper-<version>-chrome.zip` が各1件の場合のみ。件数過不足・重複・別名zipがあれば停止する。
 
 #### E2-5. クリーンアップと案内
 
@@ -443,11 +444,11 @@ Asset: <name>-<VER>-chrome.zip
 - **tag だけ先に push してしまった場合**: GitHub Release 作成（2-3）を再実行すれば idempotent（gh release create が既存 tag を拾う）
 - **`--generate-notes` が空**: 前回 tag から PR が無い場合、自動生成本文が空になる。下流の `/automation-update` 側が CHANGELOG.md fallback で抽出するため publish 時点では問題視しない
 - **`uv.lock` の version 乖離**: `pyproject.toml` だけ bump して `uv.lock` を同期し忘れると、別 PR で `uv sync` を叩いた瞬間に機械的な 1 行差分が無関係な PR に混入する（#515 の既往）。prepare Phase 1-5 で **必ず** `uv lock` を実行し、bump コミットに `uv.lock` も含めること。`uv` が未導入なら `nix develop --command uv lock` で囲む
-- **extension 依頼を Python 本体と誤判定**: 依頼に `suno-helper` / `distrokid-helper` / `ext-v` が含まれるのに Phase 0 に進むと `pyproject.toml` が誤 bump される。Phase R の判定表に従い、迷ったら `AskUserQuestion`
+- **extension 依頼を Python 本体と誤判定**: 依頼に `suno-helper` / `distrokid-helper` / `community-helper` / `ext-v` が含まれるのに Phase 0 に進むと `pyproject.toml` が誤 bump される。Phase R の判定表に従い、迷ったら `AskUserQuestion`
 - **`gh pr merge --delete-branch` の non-zero（worktree footgun）**: worktree 環境では remote merge 成功後の local checkout 後処理が `fatal: 'main' is already used by worktree ...` で失敗し non-zero になる。remote merge 失敗と誤認して merge を再実行しない。E2-1 の通り `gh pr view <N> --json state,mergeCommit` で remote state を確認し、`MERGED` なら tag push へ進む
 - **`pnpm install --frozen-lockfile` の失敗**: version bump 自体では lockfile は乖離しない。失敗＝依存差分の混入なので、リリースとは切り離して lockfile 同期の修正 PR を先に main へ入れる
-- **ext-v tag 系列と package.json 版数の乖離**: `ext-v*` は両拡張共通の単一系列のため、bump 対象の拡張によっては tag 版数と package.json 版数がずれる（前例: `ext-v0.2.3` で distrokid-helper 0.2.1）。Release asset 名は package.json 版数に従う（E0 の「tag 版数の決定」参照）
-- **Chrome 拡張の pnpm 版数乖離**: ambient pnpm の版は各環境で異なり得る。prepare Phase 1-6 の Nix extensions shell（Node 24 / pnpm 11.12.0）で両拡張を検証し、期待 zip と lockfile 無差分を確認する
+- **ext-v tag 系列と package.json 版数の乖離**: `ext-v*` は3拡張共通の単一系列のため、bump 対象の拡張によっては tag 版数と package.json 版数がずれる（前例: `ext-v0.2.3` で distrokid-helper 0.2.1）。Release asset 名は package.json 版数に従う（E0 の「tag 版数の決定」参照）
+- **Chrome 拡張の pnpm 版数乖離**: ambient pnpm の版は各環境で異なり得る。prepare Phase 1-6 の Nix extensions shell（Node 24 / pnpm 11.12.0）で3拡張を検証し、期待 zip と lockfile 無差分を確認する
 
 ## Rules
 

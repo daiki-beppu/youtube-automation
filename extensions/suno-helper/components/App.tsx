@@ -1,3 +1,4 @@
+import { Alert, Button, ButtonSlot } from "@youtube-automation/ui";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -17,10 +18,10 @@ import {
   readDownloadFormat,
   type DownloadFormat,
 } from "../lib/storage";
+import { CompletionSoundControls } from "./CompletionSoundControls";
 import { PatternList } from "./PatternList";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
-import { Alert } from "./ui/alert";
-import { Button, ButtonSlot } from "./ui/button";
+import { Checkbox } from "./ui/checkbox";
 import { useSunoRunner } from "./useSunoRunner";
 
 // RUN_MODES のキー集合から導出する（手書き複製だと mode 追加時に UI へ出ないまま型チェックが通る）。
@@ -43,6 +44,9 @@ export function App() {
     collections,
     selectedCollectionId,
     selectCollection,
+    collectionQueue,
+    runCollectionQueue,
+    resumeCollectionQueue,
     entries,
     itemStates,
     status,
@@ -51,6 +55,11 @@ export function App() {
     compatibilityWarning,
     canRun,
     isRunning,
+    completionSoundSettings,
+    completionSoundSettingsLoaded,
+    setCompletionSoundEnabled,
+    setCompletionSoundPreset,
+    previewCompletionSound,
     playlistName,
     runModeId,
     setRunMode,
@@ -67,6 +76,11 @@ export function App() {
     run,
     stop,
   } = useSunoRunner();
+  const queueInProgress = collectionQueue?.status === "running";
+  const controlsLocked = isRunning || queueInProgress;
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState<string[]>(
+    []
+  );
   const previousEntriesRef = useRef(entries);
   const previousItemStatesRef = useRef(itemStates);
   const [refreshingServerSources, setRefreshingServerSources] = useState(false);
@@ -77,7 +91,7 @@ export function App() {
   }, [isRunning]);
 
   const openServerSourcePicker = (): void => {
-    if (refreshingServerSources || isRunning) {
+    if (refreshingServerSources || controlsLocked) {
       return;
     }
     setServerSourcePickerOpen(false);
@@ -147,6 +161,40 @@ export function App() {
     previousItemStatesRef.current = itemStates;
   }, [entries, itemStates]);
 
+  useEffect(() => {
+    setSelectedCollectionIds((selectedIds) => {
+      const visibleIds = new Set(
+        collections.map((collection) => collection.id)
+      );
+      const retained = selectedIds.filter((id) => visibleIds.has(id));
+      if (retained.length > 0) {
+        return retained;
+      }
+      return selectedCollectionId ? [selectedCollectionId] : [];
+    });
+  }, [collections, selectedCollectionId]);
+
+  const toggleCollectionSelection = (id: string, checked: boolean): void => {
+    setSelectedCollectionIds((selectedIds) => {
+      const selected = new Set(selectedIds);
+      if (checked) {
+        selected.add(id);
+      } else {
+        selected.delete(id);
+      }
+      const ordered = collections
+        .map((collection) => collection.id)
+        .filter((collectionId) => selected.has(collectionId));
+      if (checked || id === selectedCollectionId) {
+        const nextFocusedId = checked ? id : ordered[0];
+        if (nextFocusedId) {
+          selectCollection(nextFocusedId);
+        }
+      }
+      return ordered;
+    });
+  };
+
   const toggleEntrySelection = (index: number, checked: boolean): void => {
     setSelectedEntries((selection) =>
       reconcilePatternSelection({
@@ -168,19 +216,32 @@ export function App() {
     itemStates,
     entryCount: entries.length,
   });
-  const canRunSelectedEntries = canRun && selectedEntryCount > 0;
-  const runButtonLabel =
-    entries.length > 0 && selectedEntryCount === 0
+  const multipleCollectionsSelected = selectedCollectionIds.length > 1;
+  const canRunSelectedEntries =
+    canRun &&
+    !queueInProgress &&
+    selectedCollectionIds.length > 0 &&
+    (multipleCollectionsSelected || selectedEntryCount > 0);
+  const runButtonLabel = multipleCollectionsSelected
+    ? `選択した${selectedCollectionIds.length}コレクションを連続実行`
+    : entries.length > 0 && selectedEntryCount === 0
       ? "実行対象を選択"
       : entries.length > 0 && selectedEntryCount < entries.length
         ? `選択した${selectedEntryCount}件を連続実行`
         : "全パターンを連続実行";
 
   const runSelectedEntries = (): void => {
-    if (selectedEntryCount === 0) {
+    if (selectedCollectionIds.length === 0) {
       return;
     }
     setServerSourcePickerOpen(false);
+    if (multipleCollectionsSelected) {
+      void runCollectionQueue(selectedCollectionIds);
+      return;
+    }
+    if (selectedEntryCount === 0) {
+      return;
+    }
     void run(
       buildSelectedEntriesRunOverrides({
         selectedEntries: resolvedSelectedEntries,
@@ -190,14 +251,14 @@ export function App() {
     );
   };
   const serverSourcePickerVisible =
-    serverSourcePickerOpen && !isRunning && !refreshingServerSources;
+    serverSourcePickerOpen && !controlsLocked && !refreshingServerSources;
   if (reloadRequired || runnerReloadRequired) {
     return <ReloadRequiredNotice />;
   }
 
   return (
     <div
-      className="flex flex-col gap-3 p-3 text-gray-900"
+      className="flex flex-col gap-3 bg-background p-3 text-foreground"
       data-suno-helper="control-panel"
       data-suno-phase={phase}
       data-suno-running={isRunning ? "true" : "false"}
@@ -214,10 +275,10 @@ export function App() {
           type="button"
           aria-haspopup="listbox"
           aria-expanded={serverSourcePickerVisible}
-          disabled={isRunning || refreshingServerSources}
+          disabled={controlsLocked || refreshingServerSources}
           onClick={openServerSourcePicker}
           data-suno-control="server-source-trigger"
-          className="rounded border border-gray-300 px-2 py-1 text-left"
+          className="rounded border border-input bg-background px-2 py-1 text-left"
         >
           {refreshingServerSources
             ? "稼働中の配信元を更新中…"
@@ -227,7 +288,7 @@ export function App() {
         </button>
         <select
           value={url}
-          disabled={isRunning || refreshingServerSources}
+          disabled={controlsLocked || refreshingServerSources}
           onChange={(e) => setUrl(e.target.value)}
           data-suno-control="server-url"
           aria-hidden="true"
@@ -244,7 +305,7 @@ export function App() {
           <div
             role="listbox"
             aria-label="ローカル配信元"
-            className="rounded border border-gray-300 bg-white p-1"
+            className="rounded border border-border bg-popover p-1 text-popover-foreground"
           >
             {serverSources.map((source) => (
               <button
@@ -252,8 +313,8 @@ export function App() {
                 type="button"
                 role="option"
                 aria-selected={source.url === url}
-                disabled={isRunning || refreshingServerSources}
-                className="block w-full rounded px-2 py-1 text-left hover:bg-gray-100"
+                disabled={controlsLocked || refreshingServerSources}
+                className="block w-full rounded px-2 py-1 text-left hover:bg-accent hover:text-accent-foreground"
                 onClick={() => {
                   if (isRunningRef.current || refreshingServerSources) {
                     return;
@@ -269,42 +330,131 @@ export function App() {
         )}
       </label>
 
-      <label className="flex flex-col gap-1 text-sm">
-        コレクション
-        <ButtonSlot
-          variant="outline"
-          size="sm"
-          className="w-full justify-between font-normal"
+      <fieldset className="flex flex-col gap-1 rounded border border-border px-2 py-2 text-sm">
+        <legend className="px-1 text-xs text-muted-foreground">
+          コレクション
+        </legend>
+        {collections.length === 0 && (
+          <p className="text-xs text-muted-foreground">コレクションなし</p>
+        )}
+        {collections.map((collection) => {
+          const checked = selectedCollectionIds.includes(collection.id);
+          return (
+            <ButtonSlot
+              key={collection.id}
+              variant={checked ? "secondary" : "outline"}
+              size="sm"
+              className="h-auto w-full justify-start whitespace-normal p-2"
+            >
+              <label className="flex items-start gap-2">
+                <Checkbox
+                  className="mt-1"
+                  checked={checked}
+                  disabled={
+                    controlsLocked || collection.status === "needs_prompts"
+                  }
+                  data-suno-control="collection-checkbox"
+                  aria-label={`${collection.name} を選択`}
+                  onCheckedChange={(nextChecked) =>
+                    toggleCollectionSelection(
+                      collection.id,
+                      nextChecked === true
+                    )
+                  }
+                />
+                <span className="flex flex-col text-left">
+                  <span className="font-medium">{collection.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {collection.status === "downloaded"
+                      ? `完了 ${collection.downloaded_count}/${collection.expected_file_count ?? (collection.pattern_count ?? 0) * 2}`
+                      : collection.status === "ready"
+                        ? `${collection.pattern_count} patterns`
+                        : "prompts なし"}
+                  </span>
+                </span>
+              </label>
+            </ButtonSlot>
+          );
+        })}
+      </fieldset>
+      <ButtonSlot
+        variant="outline"
+        size="sm"
+        className="sr-only"
+        aria-hidden="true"
+      >
+        <select
+          value={selectedCollectionId}
+          onChange={(event) => selectCollection(event.target.value)}
+          data-suno-control="collection-select"
+          tabIndex={-1}
         >
-          <select
-            value={selectedCollectionId}
-            onChange={(e) => selectCollection(e.target.value)}
-            data-suno-control="collection-select"
-          >
-            {collections.length === 0 && (
-              <option value="" disabled>
-                コレクションなし
-              </option>
-            )}
-            {collections.map((c) => (
-              <option
-                key={c.id}
-                value={c.id}
-                disabled={c.status === "needs_prompts"}
-              >
-                {c.status === "downloaded"
-                  ? `${c.name}（完了 ${c.downloaded_count}/${c.expected_file_count ?? (c.pattern_count ?? 0) * 2}）`
-                  : c.status === "ready"
-                    ? `${c.name} (${c.pattern_count})`
-                    : `${c.name}（prompts なし）`}
-              </option>
+          {collections.map((collection) => (
+            <option key={collection.id} value={collection.id}>
+              {collection.status === "downloaded"
+                ? `${collection.name}（完了 ${collection.downloaded_count}/${collection.expected_file_count ?? (collection.pattern_count ?? 0) * 2}）`
+                : collection.status === "ready"
+                  ? `${collection.name} (${collection.pattern_count})`
+                  : `${collection.name}（prompts なし）`}
+            </option>
+          ))}
+        </select>
+      </ButtonSlot>
+
+      {collectionQueue && (
+        <Alert
+          variant={
+            collectionQueue.items.some((item) => item.status === "failed")
+              ? "warning"
+              : "default"
+          }
+          className="flex flex-col gap-2 rounded px-2 py-2 text-xs"
+          data-suno-control="collection-queue-summary"
+        >
+          <p className="font-medium">
+            Collection queue: {collectionQueue.status}
+          </p>
+          <ul className="list-disc pl-4">
+            {collectionQueue.items.map((item) => (
+              <li key={item.collectionId}>
+                {item.collectionId}: {item.status}
+                {item.message ? ` — ${item.message}` : ""}
+              </li>
             ))}
-          </select>
-        </ButtonSlot>
-      </label>
+          </ul>
+          {collectionQueue.status === "paused" && (
+            <Button
+              type="button"
+              size="sm"
+              className="self-start"
+              onClick={() => void resumeCollectionQueue()}
+            >
+              Queue を再開
+            </Button>
+          )}
+          {collectionQueue.status === "completed" &&
+            collectionQueue.items.some((item) => item.status === "failed") && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="self-start"
+                onClick={() =>
+                  void runCollectionQueue(
+                    collectionQueue.items
+                      .filter((item) => item.status === "failed")
+                      .map((item) => item.collectionId)
+                  )
+                }
+              >
+                失敗したコレクションだけ再実行
+              </Button>
+            )}
+        </Alert>
+      )}
 
       {playlistName && (
-        <p className="text-xs text-gray-600">
+        <p className="text-xs text-muted-foreground">
           Playlist: <span className="font-medium">{playlistName}</span>
         </p>
       )}
@@ -350,9 +500,10 @@ export function App() {
       )}
 
       {/* 失敗スキップされた entry の再実行導線 (#948)。実行中は隠す。 */}
-      {failedEntries.length > 0 && !isRunning && (
+      {failedEntries.length > 0 && !controlsLocked && (
         <Alert
           variant="destructive"
+          appearance="filled"
           className="flex flex-col gap-2 rounded px-2 py-2 text-xs"
         >
           <p>
@@ -373,8 +524,8 @@ export function App() {
         </Alert>
       )}
 
-      <fieldset className="flex flex-col gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
-        <legend className="px-1 text-xs text-gray-600">投入方式</legend>
+      <fieldset className="flex flex-col gap-2 rounded border border-border px-2 py-2 text-sm">
+        <legend className="px-1 text-xs text-muted-foreground">投入方式</legend>
         {RUN_MODE_ORDER.map((id) => {
           const mode = RUN_MODES[id];
           return (
@@ -392,12 +543,14 @@ export function App() {
                   checked={runModeId === id}
                   // 実行中の切替は当該 run に効かないのに保存だけ即時反映され、次回 resume の
                   // モードを無言で変えてしまうため run 中は無効化する (#1586 review)。
-                  disabled={isRunning}
+                  disabled={controlsLocked}
                   onChange={() => setRunMode(id)}
                 />
                 <span className="flex flex-col">
                   <span className="font-medium">{mode.label}</span>
-                  <span className="text-xs text-gray-500">{mode.riskNote}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {mode.riskNote}
+                  </span>
                 </span>
               </label>
             </ButtonSlot>
@@ -405,12 +558,12 @@ export function App() {
         })}
       </fieldset>
 
-      <label className="flex items-start gap-2 rounded border border-gray-200 px-2 py-2 text-sm">
+      <label className="flex items-start gap-2 rounded border border-border px-2 py-2 text-sm">
         <input
           type="checkbox"
           className="mt-1"
           checked={regenerateDurationOutliers}
-          disabled={entries.length === 0 || isRunning}
+          disabled={entries.length === 0 || controlsLocked}
           onChange={(event) =>
             setRegenerateDurationOutliers(event.target.checked)
           }
@@ -418,7 +571,7 @@ export function App() {
         <span className="flex flex-col">
           <span className="font-medium">異常値の曲を再生成する</span>
           {!regenerateDurationOutliers && (
-            <span className="text-xs text-amber-700">
+            <span className="text-xs text-amber-700 dark:text-amber-300">
               OFF の場合、duration guard NG も Playlist / Download
               候補に残ります。完了後に手動確認してください。
             </span>
@@ -426,14 +579,24 @@ export function App() {
         </span>
       </label>
 
+      <CompletionSoundControls
+        settings={completionSoundSettings}
+        disabled={!completionSoundSettingsLoaded}
+        onEnabledChange={setCompletionSoundEnabled}
+        onPresetChange={setCompletionSoundPreset}
+        onPreview={previewCompletionSound}
+      />
+
       <label className="flex flex-col gap-1 text-sm">
         DL 形式
         <select
           value={downloadFormat}
+          disabled={controlsLocked}
+          data-suno-control="download-format"
           onChange={(e) =>
             updateDownloadFormat(e.target.value as DownloadFormat)
           }
-          className="rounded border border-gray-300 px-2 py-1"
+          className="rounded border border-input bg-background px-2 py-1 text-foreground"
         >
           {DOWNLOAD_FORMAT_OPTIONS.map((format) => (
             <option key={format} value={format}>
@@ -457,7 +620,7 @@ export function App() {
         <Button
           type="button"
           onClick={() => void stop()}
-          disabled={!isRunning}
+          disabled={!controlsLocked}
           data-suno-control="stop"
           variant="destructive"
           size="sm"
@@ -466,13 +629,13 @@ export function App() {
         </Button>
       </div>
 
-      {!isRunning && selectedCollectionId && (
+      {!controlsLocked && selectedCollectionId && (
         <div className="flex flex-col gap-2">
           <button
             type="button"
             onClick={() => void adoptSelectedClips()}
             data-suno-control="adopt-selected-clips"
-            className="rounded border border-gray-400 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+            className="rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-accent hover:text-accent-foreground"
           >
             選択中の曲を採用
           </button>
@@ -514,10 +677,11 @@ export function App() {
       {status && (
         <Alert
           variant={isError ? "destructive" : "default"}
+          appearance={isError ? "filled" : "subtle"}
           role="status"
           aria-live="polite"
           data-suno-status={isError ? "error" : "ok"}
-          className={`rounded-none border-0 bg-transparent p-0 whitespace-pre-wrap text-xs ${isError ? "text-red-600" : "text-gray-600"}`}
+          className={`rounded-none border-0 bg-transparent p-0 whitespace-pre-wrap text-xs ${isError ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}
         >
           {status}
         </Alert>

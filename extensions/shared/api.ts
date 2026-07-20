@@ -4,6 +4,8 @@ import {
   collectionDownloadedRoute,
   collectionPromptsRoute,
   COLLECTIONS_ROUTE,
+  COMMUNITY_IMAGE_ROUTE,
+  COMMUNITY_POSTS_ROUTE,
   DISTROKID_COLLECTIONS_ROUTE,
   DISTROKID_RELEASES_ROUTE,
   SERVER_INFO_ROUTE,
@@ -32,6 +34,17 @@ export interface PromptEntry {
    * Suno 側の解釈とサーバー契約を揃えるため空文字は許容せず Python 側で省略する。
    */
   vocal_gender?: "male" | "female" | "neutral" | "auto";
+}
+
+/** `/community/posts.json` が返す投稿スキーマ (#1709/#1710)。 */
+export interface CommunityPost {
+  text: string;
+  scheduled_at: string;
+  /** #1709 の実 wire。channel root 相対。画像なしは null。 */
+  image_path?: string | null;
+  /** 旧 #1200 で定義された互換フィールド。 */
+  image_url?: string;
+  visibility?: "public" | "members_only";
 }
 
 /** collection 単位の Suno duration guard 閾値 (#1259)。秒単位。 */
@@ -66,6 +79,8 @@ export interface CollectionSummary {
   status: CollectionStatus;
   pattern_count: number | null;
   downloaded_count: number;
+  /** workflow-state.json の assets.music_downloaded。部分完了と厳格完了を区別する。 */
+  music_downloaded?: boolean;
   channel?: string;
   theme?: string;
   expected_file_count?: number | null;
@@ -186,9 +201,100 @@ function assertOptionalString(
   return assertString(value, field);
 }
 
+function assertOptionalNullableString(
+  value: unknown,
+  field: string
+): string | null | undefined {
+  if (value === undefined || value === null) {
+    return value;
+  }
+  return assertString(value, field);
+}
+
+function calendarMonthLengths(year: number): number[] {
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  return [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+}
+
+function assertIsoDateTime(value: unknown, field: string): string {
+  const text = assertString(value, field);
+  const match =
+    /^(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})T(?<hour>\d{2}):(?<minute>\d{2})(?::(?<second>\d{2})(?:\.\d{1,9})?)?(?:Z|[+-](?<offsetHour>\d{2}):(?<offsetMinute>\d{2}))$/u.exec(
+      text
+    );
+  if (!match?.groups) {
+    throw new Error(`${field} must be ISO 8601 datetime with timezone`);
+  }
+  const year = Number(match.groups.year);
+  const month = Number(match.groups.month);
+  const day = Number(match.groups.day);
+  const hour = Number(match.groups.hour);
+  const minute = Number(match.groups.minute);
+  const second = Number(match.groups.second ?? "0");
+  const offsetHour = Number(match.groups.offsetHour ?? "0");
+  const offsetMinute = Number(match.groups.offsetMinute ?? "0");
+  const ranges = [
+    [month, 1, 12],
+    [day, 1, calendarMonthLengths(year)[month - 1]],
+    [hour, 0, 23],
+    [minute, 0, 59],
+    [second, 0, 59],
+    [offsetHour, 0, 23],
+    [offsetMinute, 0, 59],
+  ];
+  if (
+    !ranges.every(
+      ([part, minimum, maximum]) => part >= minimum && part <= maximum
+    )
+  ) {
+    throw new Error(`${field} must be valid ISO 8601 datetime`);
+  }
+  return text;
+}
+
+function normalizeCommunityPost(value: unknown, index: number): CommunityPost {
+  const field = `community posts[${index}]`;
+  const record = assertObject(value, field);
+  const post: CommunityPost = {
+    text: assertString(record.text, `${field}.text`),
+    scheduled_at: assertIsoDateTime(
+      record.scheduled_at,
+      `${field}.scheduled_at`
+    ),
+  };
+  const imagePath = assertOptionalNullableString(
+    record.image_path,
+    `${field}.image_path`
+  );
+  if (imagePath !== undefined) {
+    post.image_path = imagePath;
+  }
+  const imageUrl = assertOptionalString(record.image_url, `${field}.image_url`);
+  if (imageUrl !== undefined) {
+    post.image_url = imageUrl;
+  }
+  if (record.visibility !== undefined) {
+    if (
+      record.visibility !== "public" &&
+      record.visibility !== "members_only"
+    ) {
+      throw new Error(`${field}.visibility must be public or members_only`);
+    }
+    post.visibility = record.visibility;
+  }
+  return post;
+}
+
 function assertNonNegativeInteger(value: unknown, field: string): number {
   if (!Number.isInteger(value) || (value as number) < 0) {
     throw new Error(`${field} must be non-negative integer`);
+  }
+  return value as number;
+}
+
+function assertCommunityPostIndex(value: unknown): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw new Error("community post index must be non-negative safe integer");
   }
   return value as number;
 }
@@ -282,6 +388,50 @@ async function fetchPromptArray(url: string): Promise<PromptEntry[]> {
   return (await fetchPromptResponseBody(url)).entries;
 }
 
+async function fetchJsonArray(url: string): Promise<unknown[]> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const data: unknown = await response.json();
+  if (!Array.isArray(data)) {
+    throw new Error("配列ではない JSON が返りました。");
+  }
+  return data;
+}
+
+/** community 投稿を取得する。非 2xx / 空配列 / 非配列 / 不正要素は fail-loud。 */
+export async function fetchCommunityPosts(
+  baseUrl: string
+): Promise<CommunityPost[]> {
+  const data = await fetchJsonArray(
+    `${normalizeBaseUrl(baseUrl)}${COMMUNITY_POSTS_ROUTE}`
+  );
+  if (data.length === 0) {
+    throw new Error("community posts response must be non-empty array");
+  }
+  return data.map(normalizeCommunityPost);
+}
+
+/** 指定投稿の画像 binary を取得する。 */
+export async function fetchCommunityImage(
+  baseUrl: string,
+  index: number
+): Promise<Blob> {
+  const resolvedIndex = assertCommunityPostIndex(index);
+  const response = await fetch(
+    `${normalizeBaseUrl(baseUrl)}${COMMUNITY_IMAGE_ROUTE}/${resolvedIndex}/image`
+  );
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  const image = await response.blob();
+  if (!image.type.startsWith("image/")) {
+    throw new Error("community image response must have image Content-Type");
+  }
+  return image;
+}
+
 /** サーバー version envelope を取得する（#1023）。404 は caller が旧サーバー判定に使う。 */
 export async function fetchServerVersion(
   baseUrl: string
@@ -362,14 +512,7 @@ export async function checkServerCompatibility(
 export async function fetchCollections(
   baseUrl: string
 ): Promise<CollectionSummary[]> {
-  const resp = await fetch(`${baseUrl}${COLLECTIONS_ROUTE}`);
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status}`);
-  }
-  const data: unknown = await resp.json();
-  if (!Array.isArray(data)) {
-    throw new Error("配列ではない JSON が返りました。");
-  }
+  const data = await fetchJsonArray(`${baseUrl}${COLLECTIONS_ROUTE}`);
   return data.map((item, index) => normalizeCollectionSummary(item, index));
 }
 
@@ -395,6 +538,12 @@ function normalizeCollectionSummary(
       `collections[${index}].downloaded_count`
     ),
   };
+  if (record.music_downloaded !== undefined) {
+    if (typeof record.music_downloaded !== "boolean") {
+      throw new Error(`collections[${index}].music_downloaded must be boolean`);
+    }
+    summary.music_downloaded = record.music_downloaded;
+  }
   const channel = assertOptionalString(
     record.channel,
     `collections[${index}].channel`
@@ -537,6 +686,20 @@ export function extractPlaylistName(
   return `${channel} | ${theme}`;
 }
 
+/** collection metadata から playlist 表示名を解決する共通入口。 */
+export function playlistNameForCollection(
+  collection: CollectionSummary
+): string {
+  if (collection.channel && collection.theme) {
+    return `${collection.channel} | ${collection.theme}`;
+  }
+  const theme = (collection.theme ?? collection.name).replace(
+    /-collection$/,
+    ""
+  );
+  return extractPlaylistName(collection.id, theme);
+}
+
 /** DistroKid `/distrokid/collections` が返す 1 disc のスキーマ (#934 dir mode サーバー契約)。 */
 export interface DistrokidCollectionSummary {
   collection_id: string;
@@ -562,14 +725,7 @@ export interface DistrokidReleaseRecord {
 export async function fetchDistrokidCollections(
   baseUrl: string
 ): Promise<DistrokidCollectionSummary[]> {
-  const resp = await fetch(`${baseUrl}${DISTROKID_COLLECTIONS_ROUTE}`);
-  if (!resp.ok) {
-    throw new Error(`HTTP ${resp.status}`);
-  }
-  const data: unknown = await resp.json();
-  if (!Array.isArray(data)) {
-    throw new Error("配列ではない JSON が返りました。");
-  }
+  const data = await fetchJsonArray(`${baseUrl}${DISTROKID_COLLECTIONS_ROUTE}`);
   return data as DistrokidCollectionSummary[];
 }
 
@@ -697,4 +853,17 @@ export async function postDownloaded(
     warning = null;
   }
   return { warning };
+}
+
+/** Atomically consume a server-issued unattended request nonce. */
+export async function consumeUnattendedRequest(
+  baseUrl: string,
+  nonce: string
+): Promise<unknown> {
+  const route = `/unattended/requests/${encodeURIComponent(nonce)}/consume`;
+  const res = await postJsonWithServeToken(baseUrl, route, {});
+  if (!res.ok) {
+    throw new Error(`unattended request consume failed: HTTP ${res.status}`);
+  }
+  return res.json();
 }

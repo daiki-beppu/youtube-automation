@@ -1,6 +1,6 @@
 # 全 skill カタログ
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **51 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **53 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
@@ -12,8 +12,9 @@
 |---|---|
 | /wf-new | 新規コレクションの企画選択・ディレクトリ作成・素材準備（Phase 1） |
 | /wf-next | 既存コレクションを次の工程に 1 段進める（Phase 2-3） |
+| /automation-run | active collection 1 件を状態駆動で選び、Lyria / Suno の音源生成から公開・post-publish まで既存 skill へ委譲して継続・再開 |
 | /wf-status | 制作中コレクションの進捗を読み取り表示（実行はしない） |
-| /automation-schedule | 定期制作設定（`workflow.json` の `scheduled_automation`）の生成と、Claude Code / Codex 定期実行ジョブの作成・更新・確認・停止 |
+| /automation-schedule | 定期制作設定（`workflow.json` の `scheduled_automation`）の生成と、既定 `/automation-run` を起動する Claude Code / Codex ジョブの作成・更新・確認・停止 |
 | /collection-ideate | データドリブンに次の企画候補を提案 |
 
 ## チャンネル立ち上げ
@@ -23,10 +24,9 @@
 | Skill | なにができるか |
 |---|---|
 | /setup | ツール導入と GCP / OAuth 設定を wizard 形式で診断・セットアップ |
-| /channel-new | TTP 対象確認、seed confirmation artifacts、config、本格ペルソナ作成チェーン、初回 branding まで進める。方向性検討、既存チャンネル取り込み、再生成モード（config 再生成）、設定 push モード（branding / status / localizations の push/pull）も担当 |
+| /channel-new | TTP 対象確認、seed confirmation artifacts、config、本格ペルソナ作成チェーン、初回 branding まで進める。収集済みデータの分析モード、方向性検討、既存チャンネル取り込み、再生成、設定 push も担当 |
 | /discover-competitors | 任意: ニッチキーワードから追加競合候補を YouTube Data API で自動発掘 |
 | /market-research | 任意: TTP 入替候補とニッチ仮説を複数根拠で横断比較し、既定は会話内だけに提示 |
-| /channel-research | 任意: benchmark / viewer-voice 済みデータを徹底分析 |
 | /channel-status | 登録者数・総再生回数・動画別パフォーマンスを YouTube API から取得 |
 
 ## オーディエンス・ポジショニング検証
@@ -41,6 +41,7 @@
 | /alignment-check | 音楽ムード × サムネ × タイトル訴求の整合性を監査 |
 | /thumbnail-compare | サムネをベンチマーク競合と並べてモバイル視認性（320px）を検証 |
 | /thumbnail-test | Studio のサムネ A/B テストを設計し、watch time share・勝敗・勝ちパターンをコレクション履歴へ記録 |
+| /thumbnail-iterate | 伸びた動画のサムネ寄与を判定し、1 要素ずつ比較して検証済み champion を次回生成へ還元 |
 
 ## 企画・コンテンツ生成
 
@@ -66,12 +67,13 @@ YouTube への公開、視聴者対応、容量整理、コミュニティ投稿
 |---|---|
 | /video-description | YouTube 概要欄を自動生成（情景フック + タイムスタンプ + Perfect for） |
 | /video-upload | Complete Collection を YouTube へアップロード + live 移行 |
+| /post-publish | 公開後の community-post → pinned-comment → metadata-audit を承認ゲート・実行履歴付きで一括実行 |
 | /playlist | プレイリストの作成・動画割当・状態確認（`playlists.json` 駆動） |
 | /comments-reply | ルール駆動コメント自動返信（dry-run → apply、二重返信防止） |
 | /pinned-comment | オーナー固定コメント自動投稿（preflight で削除済み/private を skip、dry-run → apply、二重投稿防止） |
 | /metadata-audit | ローカル descriptions.md と YouTube 上メタデータの整合性監査 |
 | /live-clean | live コレクションの大容量メディアを削除してディスク回復 |
-| /community-draft | コミュニティ投稿の下書きを type 別に生成 + クリップボードコピー |
+| /community-draft | コミュニティ投稿を config テンプレートから JSON バッチ生成 |
 | /community-post | 動画公開と連動した固定テンプレ投稿（Studio 起動まで） |
 | /short | BGM テイスター（collection 型）チャンネル用 9:16 ショートを生成・投稿 |
 | /short-release | 楽曲リリース（release 型）チャンネル用 JP+EN クリップショート生成 |

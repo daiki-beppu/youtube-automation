@@ -23,17 +23,22 @@ jobs:
           - name: Build and zip distrokid-helper
             working-directory: extensions/distrokid-helper
             run: cd ../.. && bash .claude/skills/automation-release/references/verify-extensions.sh distrokid-helper
+          - name: Build and zip community-helper
+            working-directory: extensions/community-helper
+            run: cd ../.. && bash .claude/skills/automation-release/references/verify-extensions.sh community-helper
       - name: Attach zips to Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             extensions/suno-helper/.output/*.zip
             extensions/distrokid-helper/.output/*.zip
+            extensions/community-helper/.output/*.zip
           body: |
             ## 収録拡張
 
             - **Suno Helper** — `suno-helper-*.zip`
             - **DistroKid Helper** — `distrokid-helper-*.zip`
+            - **Community Helper** — `community-helper-*.zip`
 
             ## 初回インストール
 

@@ -5,7 +5,7 @@ description: "Use when 音声ファイルが揃い動画生成が必要なとき
 
 ## 前後工程
 
-- `前工程`: `/masterup`, `/lyria`, `/loop-video`
+- `前工程`: `/automation-run`, `/masterup`, `/lyria`, `/loop-video`
 - `後工程`: `/video-upload`, `/video-description`
 
 ## Overview
@@ -260,7 +260,7 @@ effect:
 | `ring-line` | 細線のギザギザリング | `bars` / `ring.*` |
 | `heart` | ハート曲線上で内外へ波打つスペクトラムバー | `bars` / `size` |
 
-例: `"style": "mirror-mountain", "bars": 16, "size": "300x110"`。ring 系は `"style": "ring", "bars": 24, "ring": {"inner_r": 120, "length": 160, "arc_deg": [30, 330]}` のように指定する。heart は `"style": "heart"` の 1 行で `size: "600x480"` / `colors: "0xff69b4"`（ピンク）が既定になり、必要なら `bars` / `size` / `colors` を明示して上書きできる。`position` は全 style 共通で最終レイヤーの配置に適用される。heart は `fill`（solid / gradient / rainbow）、`rounding`、`glow` を利用でき、形状自体が左右対称のため `mirror_center` / `symmetric_vertical` は適用しない。
+例: `"style": "mirror-mountain", "bars": 16, "size": "300x110"`。ring 系は `"style": "ring", "bars": 24, "ring": {"inner_r": 120, "length": 160, "arc_deg": [30, 330]}, "fill": {"type": "conical"}` のように指定すると、角度を色相へ対応させたフルスペクトルで描画できる。旧 channel-local ring パッチからの移行は `references/ring-migration.md` を参照する。heart は `"style": "heart"` の 1 行で `size: "600x480"` / `colors: "0xff69b4"`（ピンク）が既定になり、必要なら `bars` / `size` / `colors` を明示して上書きできる。`position` は全 style 共通で最終レイヤーの配置に適用される。heart は `fill`（solid / gradient / rainbow / conical）、`rounding`、`glow` を利用でき、形状自体が左右対称のため `mirror_center` / `symmetric_vertical` は適用しない。
 
 `mirror-mountain` / ring / heart で使うバー間隔・形状マスク PNG は、`generate_videos.sh` が同梱 Python helper で一時領域へ実行時生成する。外部の `make_bars_mask.py`、`build_spectrum_video.sh`、事前生成 PNG は不要。
 

@@ -302,6 +302,62 @@ def test_get_suno_prompts_json_returns_array_body(serve):
     assert body == entries
 
 
+def test_unattended_request_is_single_use_and_extension_locked(tmp_path):
+    """The URL nonce is consumed atomically; Suno-origin JavaScript cannot mint or consume it."""
+    collections_root = tmp_path / "collections" / "planning"
+    collections_root.mkdir(parents=True)
+    extension_origin = "chrome-extension://test-extension"
+    server = create_server(
+        0,
+        extension_origin,
+        prompts_path=None,
+        collection_dir=None,
+        distrokid=None,
+        collections_root=collections_root,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://localhost:{server.server_address[1]}"
+    payload = {"version": 1, "requestId": "scheduled-test", "collectionId": "collection"}
+    try:
+        register = urllib.request.Request(
+            f"{base}/unattended/requests",
+            data=json.dumps(payload).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(register) as response:
+            nonce = json.load(response)["nonce"]
+
+        token_request = urllib.request.Request(f"{base}/auth/token")
+        with urllib.request.urlopen(token_request) as response:
+            token = json.load(response)["token"]
+        consume = urllib.request.Request(
+            f"{base}/unattended/requests/{nonce}/consume",
+            data=b"{}",
+            method="POST",
+            headers={"Content-Type": "application/json", "X-Serve-Token": token},
+        )
+        with urllib.request.urlopen(consume) as response:
+            assert json.load(response) == payload
+        with pytest.raises(urllib.error.HTTPError) as replay:
+            urllib.request.urlopen(consume)
+        assert replay.value.code == 404
+
+        browser_register = urllib.request.Request(
+            f"{base}/unattended/requests",
+            data=json.dumps(payload).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json", "Origin": "https://suno.com"},
+        )
+        with pytest.raises(urllib.error.HTTPError) as forbidden:
+            urllib.request.urlopen(browser_register)
+        assert forbidden.value.code == 403
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+
+
 def test_channel_hostname_slugifies_channel_name():
     """Given channel name
     When channel_hostname を呼ぶ

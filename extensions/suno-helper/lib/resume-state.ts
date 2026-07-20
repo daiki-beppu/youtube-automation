@@ -50,6 +50,10 @@ export interface ResumeState {
   regenerateDurationOutliers?: boolean;
   /** 再生成 OFF で保持した clip を resume 後も operator が見落とさないため永続化する。 */
   durationOutlierWarnings?: Record<number, string>;
+  /** Browser download completed before localhost artifact placement was confirmed. */
+  downloadCompletedFilename?: string;
+  /** Same-named playlist URLs observed before the create side effect. */
+  playlistUrlsBeforeCreate?: string[];
 }
 
 /** content へ渡す 0-based inclusive な実行範囲。 */

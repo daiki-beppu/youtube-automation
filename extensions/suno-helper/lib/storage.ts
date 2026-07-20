@@ -3,6 +3,7 @@
 import { storage } from "wxt/utils/storage";
 
 import {
+  COMPLETION_SOUND_SETTINGS_KEY,
   DEFAULT_URL,
   DOWNLOAD_FORMAT_DEFAULT,
   DOWNLOAD_FORMAT_KEY,
@@ -10,6 +11,11 @@ import {
   STORAGE_KEY,
 } from "../../shared/constants";
 import { migrateLegacyServerSources } from "../../shared/server-source-migration";
+import {
+  DEFAULT_COMPLETION_SOUND_SETTINGS,
+  normalizeCompletionSoundSettings,
+  type CompletionSoundSettings,
+} from "./completion-sound";
 
 /** サーバー URL の型付き storage item。未設定時は DEFAULT_URL を返す。 */
 export const serverUrlItem = storage.defineItem<string>(
@@ -45,6 +51,28 @@ export async function readDownloadFormat(): Promise<DownloadFormat> {
   const normalized = normalizeDownloadFormat(value);
   if (normalized !== value) {
     await downloadFormatItem.setValue(normalized);
+  }
+  return normalized;
+}
+
+/** 完了音設定。初回は ON + chime、旧/不正値は read 時に正規化して自己修復する。 */
+export const completionSoundSettingsItem =
+  storage.defineItem<CompletionSoundSettings>(
+    `local:${COMPLETION_SOUND_SETTINGS_KEY}`,
+    { fallback: DEFAULT_COMPLETION_SOUND_SETTINGS }
+  );
+
+export async function readCompletionSoundSettings(): Promise<CompletionSoundSettings> {
+  const value: unknown = await completionSoundSettingsItem.getValue();
+  const normalized = normalizeCompletionSoundSettings(value);
+  if (
+    !value ||
+    typeof value !== "object" ||
+    (value as Partial<CompletionSoundSettings>).enabled !==
+      normalized.enabled ||
+    (value as Partial<CompletionSoundSettings>).preset !== normalized.preset
+  ) {
+    await completionSoundSettingsItem.setValue(normalized);
   }
   return normalized;
 }

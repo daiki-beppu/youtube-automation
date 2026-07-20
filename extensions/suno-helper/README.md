@@ -37,8 +37,12 @@ browser use から overlay / popup を安定して観測できるよう、操作
 | `data-suno-selected-entry-count` | 実行対象 entry 数 |
 | `[data-suno-control="server-source-trigger"]` | ローカル配信元の動的検出を開始し、候補 listbox を開く |
 | `role="option"` | 動的検出したローカル配信元の選択 |
-| `[data-suno-control="collection-select"]` | collection 選択 |
+| `[data-suno-control="collection-checkbox"]` | shadcn ベース一覧で collection を複数選択 |
+| `[data-suno-control="collection-select"]` | 旧 agent/E2E 用の非表示単一選択 compatibility seam |
+| `[data-suno-control="collection-queue-summary"]` | collection ごとの成功 / 失敗と再実行導線 |
 | `[data-suno-control="run"]` / `[data-suno-control="stop"]` | 主要操作ボタン |
+| `[data-suno-control="completion-sound-enabled"]` | 完了音 ON/OFF の shadcn Checkbox |
+| `[data-suno-control="completion-sound-preset"]` / `[data-suno-control="completion-sound-preview"]` | 合成音 preset の選択 / 試聴 |
 | `[data-suno-control="resume"]` / `[data-suno-control="dismiss-resume"]` | 前回中断 resume バナーの再開 / 閉じる |
 | `[data-suno-control="adopt-selected-clips"]` | Suno 上の選択中 clip を採用 |
 | `[data-suno-control="retry-playlist"]` / `[data-suno-control="retry-download"]` | playlist / download phase から再開 |
@@ -86,12 +90,30 @@ build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helpe
    ```
 2. Chrome で Suno の **Advanced** タブを選択する。
 3. 拡張アイコンからポップアップを開き、**ローカル配信元** で動的検出されたチャンネル名つき候補を選ぶ。初回表示・配信元選択・collection 選択の各タイミングで一覧と prompts が自動取得される。
-4. `ready` な collection を選び、prompts の自動取得後に **異常値の曲を再生成する** を選んでから **全パターンを連続実行** を押す。既定の ON は duration guard NG の entry を最大 2 回再生成する。OFF は追加生成せず、NG を警告表示したうえで生成済み全 clip を playlist / download 候補に残す。
+4. `ready` な collection を checkbox で 1 件以上選び、prompts の自動取得後に **異常値の曲を再生成する** を選んでから実行する。1 件なら従来どおり現在の entry 選択を使い、2 件以上なら server 一覧順で各 collection の全 pattern を直列実行する。既定の ON は duration guard NG の entry を最大 2 回再生成する。OFF は追加生成せず、NG を警告表示したうえで生成済み全 clip を playlist / download 候補に残す。
 5. 各パターンで Style/Lyrics を注入 → Generate 押下 → 生成完了検知 → 次へ、を自動で繰り返す。
 6. 全件完了後、対象 clip を一括選択 → playlist 追加 → More menu の **Download all** → format 選択 → ZIP ダウンロード完了監視 → `POST /collections/<id>/downloaded` で ZIP パス通知、まで実行する。サーバーは ZIP を展開し、`02-Individual-music/` と `workflow-state.json` を更新する。
 7. captcha challenge は waiting-captcha 表示で解消（多くは自動 verify）を待って続行する。entry 単位の一時的な失敗は Balanced 固定の上限で自動リトライし、上限超過分はスキップして完走する（#948）。スキップされた entry は一覧表示され、**失敗分のみ再実行** で再投入できる。
 
+完了音は初期状態で ON。`FINISHED` は選択した preset の上昇音、`ERROR` は区別できる下降音を鳴らし、手動 `STOPPED` では鳴らさない。**チャイム / ベル / ソフト**から選んで **試聴**でき、設定はページ再読み込み後も維持される。音源ファイルや追加 permission は使わない。Suno タブを閉じている場合やブラウザの autoplay policy が Web Audio を拒否した場合は鳴らない。
+
+複数 collection queue は各 collection の `/downloaded` 完了または失敗結果を extension storage へ保存してから Suno タブを再読み込みする。この境界処理が clip tracker と Suno 内部 multi-select を collection 間で破棄し、次の collection は保存済み index から自動開始する。タブ再読み込みや Stop で中断した queue は同じ current collection から再開でき、全件終了後は summary の **失敗したコレクションだけ再実行** を使う。
+
 **異常値の曲を再生成する** を OFF にした run は、duration guard の閾値外 clip も歯抜けにせず playlist と ZIP に含める。popup の status / console warning で NG を確認し、完了後に対象 playlist を試聴して採否を手動判断する。popup を閉じて再表示した場合も選択は復元される。entry phase の ERROR / STOPPED は resume バナー、playlist / download phase の中断は **Playlist から再開** / **Download から再開** を使い、いずれも元 run の選択と警告を引き継ぐ。
+
+### 定期実行 launch 契約
+
+`yt-suno-unattended-request` は、対象 collection・任意の entry index・DL 形式・1 run の entry / concurrency / retry 上限を起動中の localhost server に短時間だけ登録し、`baseUrl` と一度だけ消費できる nonce だけを含む `https://suno.com/create#suno-helper-unattended=...` を出力する。課金操作の完全な要求は URL や Suno page に公開しない。拡張 background は extension lock と serve token を通して nonce を原子的に消費し、fragment を直ちに URL から除去する。`baseUrl` は認証情報なしの loopback HTTP（`localhost` / `127.0.0.1` / `*.localhost`）だけを受理する。
+
+```bash
+uv run yt-suno-unattended-request \
+  --base-url http://rjn.localhost:7873 \
+  --collection-id 20260718-rjn-night-drive-collection \
+  --download-format wav --max-entries 10 \
+  --max-concurrent-generations 3 --max-retries 2
+```
+
+既ログイン Chrome で出力 URL を開くと、download 済みは no-op、途中 state は未完了 entry または playlist/download から再開する。collection 単位の background lease は別タブ・別要求の重複生成を防ぎ、タブ crash 後は期限切れ lease を回収する。playlist URL と browser download 完了は不可逆操作の直後に checkpoint されるため、再開時に同名 playlist や ZIP を作り直さない。上限を超えた entry は checkpoint に残し、次回 URL 起動で続行する。既存 playlist があるのに clip ID が復元できない場合は重複生成せず停止する。ログイン、可視 CAPTCHA、料金・credit 確認、互換性のない UI も自動突破せず `local:sunoUnattendedRunState` に `manual-intervention` と必要操作を記録する。`completed` は localhost readback で音源、playlist URL、downloaded 状態をすべて確認した場合だけ通知する。同じ情報を Suno ページ root の `data-suno-unattended-request-id` / `-collection-id` / `-status` / `-checkpoint` / `-stop-reason` / `-required-action` に通知し、完了 reload 後も storage から復元するため、scheduler agent は storage API なしで観測できる。手動 overlay からの run はこの契約を付けないため従来挙動のまま。
 
 ### in-flight 検知と停止判断（#948）
 

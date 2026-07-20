@@ -1,8 +1,8 @@
+import { Button, Select } from "@youtube-automation/ui";
+
 import { ReleaseReview } from "@/components/ReleaseReview";
 import { ServerUrlField } from "@/components/ServerUrlField";
 import { StatusBanner } from "@/components/StatusBanner";
-import { Button } from "@/components/ui/button";
-import { Select } from "@/components/ui/select";
 import { useDistrokidRunner } from "@/components/useDistrokidRunner";
 
 // popup は表示とイベント接続に集中し、runner state と実行制御は useDistrokidRunner が
@@ -28,8 +28,8 @@ export function App() {
   } = useDistrokidRunner();
 
   return (
-    <main className="flex flex-col gap-3 p-4">
-      <h1 className="text-base font-bold text-gray-900">DistroKid Helper</h1>
+    <main className="flex flex-col gap-3 bg-background p-4 text-foreground">
+      <h1 className="text-base font-bold">DistroKid Helper</h1>
 
       <ServerUrlField
         value={serverUrl}
@@ -40,7 +40,7 @@ export function App() {
       />
 
       {compatibilityWarning && (
-        <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
           {compatibilityWarning}
         </div>
       )}
@@ -65,7 +65,9 @@ export function App() {
 
       {/* dir mode で全 disc が配信済みの場合（#934）。suno-helper の allMapped パターンを踏襲。 */}
       {allReleased && (
-        <p className="text-xs text-gray-600">未配信の disc はありません。</p>
+        <p className="text-xs text-muted-foreground">
+          未配信の disc はありません。
+        </p>
       )}
 
       {payload !== null && <ReleaseReview payload={payload} />}

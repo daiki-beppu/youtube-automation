@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
 from httplib2 import ServerNotFoundError
 from PIL import Image as PILImage
@@ -27,10 +28,25 @@ def _clear_secret_cache() -> None:
 
 
 def _assert_no_bare_yt_channel_status(value: object) -> None:
+    if isinstance(value, dict):
+        value = {key: item for key, item in value.items() if key != "argv"}
     text = json.dumps(value, ensure_ascii=False)
     for match in re.finditer("yt-channel-status", text):
         prefix = text[max(0, match.start() - len("uv run ")) : match.start()]
         assert prefix == "uv run "
+
+
+def _assert_agent_driven_oauth(action: dict) -> None:
+    assert action["kind"] == "human"
+    assert action["cmd"] == "uv run yt-oauth"
+    assert action["argv"] == ["uv", "run", "yt-oauth"]
+    assert action["execution_owner"] == "ai-or-setup"
+    assert action["human_role"] == "browser-authentication"
+    assert action["execution_mode"] == "background"
+    assert action["url_source"] == "stdout"
+    assert action["completion_signal"] == "process-exit"
+    assert action["post_check_cmd"] == "uv run yt-doctor --json"
+    assert "ブラウザで OAuth 同意だけ" in action["instructions"]
 
 
 # ---------------------------------------------------------------------------
@@ -252,12 +268,37 @@ class TestCheckGcloudAccount:
         stub_run((0, "[]", ""))
         r = doctor.check_gcloud_account()
         assert r.status == "fail"
-        assert r.next_action["kind"] == "human"
+        assert r.next_action == {
+            "kind": "human",
+            "reason": "authentication",
+            "cmd": "gcloud auth login",
+            "argv": ["gcloud", "auth", "login"],
+            "execution_owner": "ai-or-setup",
+            "human_role": "browser-authentication",
+            "instructions": (
+                "AI または setup が `gcloud auth login` を対話 session で起動し、"
+                "利用者はブラウザで Google ログインと同意を完了してください。"
+            ),
+        }
 
     def test_command_error(self, stub_run):
         stub_run((1, "", "boom"))
         r = doctor.check_gcloud_account()
         assert r.status == "unknown"
+
+
+class TestCheckADC:
+    def test_missing_delegates_command_to_setup_and_browser_auth_to_human(self, stub_run):
+        stub_run((1, "", "missing"))
+
+        r = doctor.check_adc()
+
+        assert r.status == "fail"
+        assert r.next_action["kind"] == "human"
+        assert r.next_action["reason"] == "authentication"
+        assert r.next_action["cmd"] == "gcloud auth application-default login"
+        assert r.next_action["execution_owner"] == "ai-or-setup"
+        assert r.next_action["human_role"] == "browser-authentication"
 
 
 class TestEnvFile:
@@ -478,6 +519,16 @@ class TestClientSecrets:
         r = doctor.check_client_secrets(tmp_path)
         assert r.status == "ok"
 
+    def test_uses_workspace_root_fallback(self, tmp_path):
+        workspace = tmp_path / "workspace"
+        channel = workspace / "channels" / "alpha"
+        (channel / "config" / "channel").mkdir(parents=True)
+        self._write_valid_client_secrets(workspace / "auth" / "client_secrets.json")
+
+        r = doctor.check_client_secrets(channel)
+
+        assert r.status == "ok"
+
     def test_rejects_client_secrets_directory(self, tmp_path):
         (tmp_path / "auth" / "client_secrets.json").mkdir(parents=True)
 
@@ -585,9 +636,9 @@ class TestOAuthToken:
     def test_missing(self, tmp_path):
         r = doctor.check_oauth_token(tmp_path)
         assert r.status == "fail"
-        assert r.next_action["kind"] == "ai-exec"
-        assert "uv run yt-channel-status" in r.next_action["cmd"]
-        _assert_no_bare_yt_channel_status(r.next_action)
+        assert r.next_action["kind"] == "human"
+        assert r.next_action["reason"] == "authentication"
+        _assert_agent_driven_oauth(r.next_action)
 
     def test_valid(self, tmp_path):
         auth = tmp_path / "auth"
@@ -798,6 +849,70 @@ class TestSummarize:
         s = doctor.summarize(results)
         assert s["next_check_id"] is None
 
+    def test_info_is_counted_without_becoming_next_action(self):
+        results = [doctor.CheckResult(id="a", status="info", message="")]
+        s = doctor.summarize(results)
+        assert s["info"] == 1
+        assert s["next_check_id"] is None
+
+
+class TestOAuthClientSharingRecommendation:
+    @staticmethod
+    def _make_channel(workspace: Path, slug: str, *, with_secret: bool = False) -> Path:
+        channel = workspace / "channels" / slug
+        (channel / "config" / "channel").mkdir(parents=True)
+        if with_secret:
+            secret = channel / "auth" / "client_secrets.json"
+            secret.parent.mkdir()
+            secret.write_text("{}", encoding="utf-8")
+        return channel
+
+    def test_info_when_multiple_workspace_channels_have_per_channel_secrets(self, tmp_path):
+        workspace = tmp_path / "workspace"
+        alpha = self._make_channel(workspace, "alpha", with_secret=True)
+        self._make_channel(workspace, "beta", with_secret=True)
+
+        result = doctor.check_oauth_client_sharing(alpha)
+
+        assert result.status == "info"
+        assert result.id == "oauth_client_sharing"
+        assert str(workspace / "auth" / "client_secrets.json") in result.message
+        assert "全チャンネルの再認証が必要" in result.message
+        assert result.data == {
+            "channels": ["alpha", "beta"],
+            "shared_path": str(workspace / "auth/client_secrets.json"),
+        }
+
+    def test_ok_when_only_one_workspace_channel_has_per_channel_secret(self, tmp_path):
+        workspace = tmp_path / "workspace"
+        alpha = self._make_channel(workspace, "alpha", with_secret=True)
+        self._make_channel(workspace, "beta")
+
+        result = doctor.check_oauth_client_sharing(alpha)
+
+        assert result.status == "ok"
+
+    def test_ok_outside_workspace(self, tmp_path):
+        channel = tmp_path / "standalone"
+        (channel / "auth").mkdir(parents=True)
+        (channel / "auth" / "client_secrets.json").write_text("{}", encoding="utf-8")
+
+        result = doctor.check_oauth_client_sharing(channel)
+
+        assert result.status == "ok"
+
+    def test_nested_standalone_repo_is_not_treated_as_workspace_channel(self, tmp_path):
+        workspace = tmp_path / "workspace"
+        alpha = self._make_channel(workspace, "alpha", with_secret=True)
+        self._make_channel(workspace, "beta", with_secret=True)
+        standalone = workspace / "standalone"
+        standalone.mkdir()
+
+        result = doctor.check_oauth_client_sharing(standalone)
+
+        assert alpha != standalone
+        assert result.status == "ok"
+
 
 class TestResolveChannelDir:
     def test_target_explicit(self, tmp_path):
@@ -844,10 +959,10 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 7 bootstrap + 12 api + 3 channel + 4 data + 1 upload = 27
-        assert len(payload["checks"]) == 27
+        # 7 bootstrap + 13 api + 3 channel + 4 data + 1 upload = 28
+        assert len(payload["checks"]) == 28
         for c in payload["checks"]:
-            assert c["status"] in ("ok", "warn", "fail", "unknown")
+            assert c["status"] in ("ok", "info", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
             assert "category" in c
             assert c["category"] in ("bootstrap", "api", "channel", "data", "upload")
@@ -1598,9 +1713,14 @@ class TestBootstrapChecks:
         automation_package = doctor.check_automation_package(tmp_path)
 
         assert uv_project.status == "fail"
-        assert uv_project.next_action == {"kind": "ai-exec", "cmd": "uv init"}
+        assert uv_project.next_action == {
+            "kind": "ai-exec",
+            "cmd": "uv init",
+            "argv": ["uv", "init"],
+            "auto_apply": False,
+        }
         assert automation_package.status == "fail"
-        assert automation_package.next_action == {"kind": "ai-exec", "cmd": "uv init"}
+        assert automation_package.next_action == uv_project.next_action
 
     def test_automation_package_git_dependency_is_ok(self, tmp_path):
         (tmp_path / "pyproject.toml").write_text(
@@ -3854,14 +3974,13 @@ class TestCheckUploadReady:
         assert r.id == "upload_ready"
         assert r.category == "upload"
 
-    def test_token_missing_is_fail_with_ai_exec(self, tmp_path):
-        """token.json が存在しない: fail + ai-exec (最優先事由)."""
+    def test_token_missing_is_fail_with_human_oauth_step(self, tmp_path):
+        """token.json が存在しない: fail + human OAuth (最優先事由)."""
         r = doctor.check_upload_ready(tmp_path)
         assert r.status == "fail"
         assert r.next_action is not None
-        assert r.next_action["kind"] == "ai-exec"
-        assert "uv run yt-channel-status" in r.next_action["cmd"]
-        _assert_no_bare_yt_channel_status(r.next_action)
+        assert r.next_action["kind"] == "human"
+        _assert_agent_driven_oauth(r.next_action)
 
     def test_token_parse_error_is_fail(self, tmp_path):
         """token.json が JSON として不正: fail."""
@@ -3909,7 +4028,8 @@ class TestCheckUploadReady:
         }
         assert r.next_action is not None
         assert "yt-channel-settings pull --channel-id-only --apply" in r.next_action["instructions"]
-        assert "uv run yt-channel-status" in r.next_action["instructions"]
+        assert "uv run yt-oauth" in r.next_action["instructions"]
+        assert "uv run yt-doctor --json" in r.next_action["instructions"]
 
     def test_quota_error_is_warn_not_channel_not_found(self, tmp_path, monkeypatch):
         _write_token(tmp_path, _FULL_SCOPES)
@@ -3945,7 +4065,21 @@ class TestCheckUploadReady:
         assert r.data is not None
         assert r.data["reason"] == "api_error"
         assert r.next_action is not None
-        assert "uv run yt-channel-status" in r.next_action["instructions"]
+        _assert_agent_driven_oauth(r.next_action)
+
+    def test_refresh_error_is_fail_with_reauthentication(self, tmp_path, monkeypatch):
+        _write_token(tmp_path, _FULL_SCOPES)
+        _write_meta_channel_id(tmp_path, _CHANNEL_ID)
+        _mock_upload_channel_api(monkeypatch, error=RefreshError("invalid_grant: token expired"))
+
+        r = doctor.check_upload_ready(tmp_path)
+
+        assert r.status == "fail"
+        assert r.data == {"reason": "oauth_refresh_failed"}
+        assert r.next_action is not None
+        assert r.next_action["kind"] == "human"
+        _assert_agent_driven_oauth(r.next_action)
+        assert "invalid_grant" not in r.message
 
     def test_network_error_is_warn_not_channel_not_found(self, tmp_path, monkeypatch):
         _write_token(tmp_path, _FULL_SCOPES)
@@ -4026,8 +4160,7 @@ class TestCheckUploadReady:
         r = doctor.check_upload_ready(tmp_path)
         assert r.next_action is not None
         assert r.next_action["kind"] == "human"
-        assert "uv run yt-channel-status" in r.next_action["instructions"]
-        _assert_no_bare_yt_channel_status(r.next_action)
+        _assert_agent_driven_oauth(r.next_action)
 
     def test_channel_id_missing_key_is_fail(self, tmp_path):
         """meta.json に channel.channel_id キーがない: fail."""
@@ -4229,19 +4362,20 @@ class TestCheckNumberedDuplicates:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_27_checks(self, monkeypatch, tmp_path):
-        """7 bootstrap + 12 api + 3 channel + 4 data + 1 upload = 計 27 件."""
+    def test_returns_28_checks(self, monkeypatch, tmp_path):
+        """7 bootstrap + 13 api + 3 channel + 4 data + 1 upload = 計 28 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 27
+        assert len(results) == 28
 
-    def test_12_api_checks_present(self, monkeypatch, tmp_path):
-        """reporting_job を含む 12 check が api カテゴリで含まれている."""
+    def test_13_api_checks_present(self, monkeypatch, tmp_path):
+        """oauth_client_sharing を含む 13 check が api カテゴリで含まれている."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         api_results = [r for r in results if r.category == "api"]
-        assert len(api_results) == 12
+        assert len(api_results) == 13
         assert api_results[-1].id == "reporting_job"
+        assert any(r.id == "oauth_client_sharing" for r in api_results)
 
     def test_new_check_ids_present(self, monkeypatch, tmp_path):
         """bootstrap / channel / data / upload の check が含まれる."""
