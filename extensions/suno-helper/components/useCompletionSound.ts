@@ -5,9 +5,9 @@ import {
   completionSoundKindForPhase,
   DEFAULT_COMPLETION_SOUND_SETTINGS,
   playCompletionSound,
-  type CompletionSoundPresetId,
   type CompletionSoundSettings,
 } from "../lib/completion-sound";
+import { sendMessage } from "../lib/messaging";
 import {
   completionSoundSettingsItem,
   readCompletionSoundSettings,
@@ -15,22 +15,24 @@ import {
 
 interface UseCompletionSoundOptions {
   onStorageError: (error: unknown) => void;
-  onPreviewError: (message: string) => void;
+}
+
+interface PendingNotification {
+  phase: Phase;
+  message: string;
 }
 
 export interface CompletionSoundController {
   completionSoundSettings: CompletionSoundSettings;
   completionSoundSettingsLoaded: boolean;
   setCompletionSoundEnabled: (enabled: boolean) => void;
-  setCompletionSoundPreset: (preset: CompletionSoundPresetId) => void;
-  previewCompletionSound: () => Promise<void>;
-  notifyCompletionSoundPhase: (phase: Phase) => void;
+  notifyCompletionSoundPhase: (phase: Phase, message: string) => void;
 }
 
 export function useCompletionSound(
   options: UseCompletionSoundOptions
 ): CompletionSoundController {
-  const { onStorageError, onPreviewError } = options;
+  const { onStorageError } = options;
   const [completionSoundSettings, setCompletionSoundSettings] =
     useState<CompletionSoundSettings>(DEFAULT_COMPLETION_SOUND_SETTINGS);
   const [completionSoundSettingsLoaded, setCompletionSoundSettingsLoaded] =
@@ -38,18 +40,27 @@ export function useCompletionSound(
   const settingsRef = useRef(completionSoundSettings);
   const soundedTerminalPhaseRef = useRef<Phase | null>(null);
   const settingsLoadedRef = useRef(false);
-  const pendingTerminalPhaseRef = useRef<Phase | null>(null);
+  const pendingNotificationRef = useRef<PendingNotification | null>(null);
 
-  const playTerminalPhase = useCallback((phase: Phase): void => {
-    const soundKind = completionSoundKindForPhase(phase);
-    if (!soundKind || soundedTerminalPhaseRef.current === phase) return;
-    soundedTerminalPhaseRef.current = phase;
-    const settings = settingsRef.current;
-    if (!settings.enabled) return;
-    void playCompletionSound(settings.preset, soundKind).catch((error) =>
-      console.warn("[suno-helper] 完了音の再生に失敗しました:", error)
-    );
-  }, []);
+  const playTerminalPhase = useCallback(
+    (phase: Phase, message: string): void => {
+      const soundKind = completionSoundKindForPhase(phase);
+      if (!soundKind || soundedTerminalPhaseRef.current === phase) return;
+      soundedTerminalPhaseRef.current = phase;
+      if (!settingsRef.current.enabled) return;
+
+      void playCompletionSound(soundKind).catch((error) =>
+        console.warn("[suno-helper] 通知音の再生に失敗しました:", error)
+      );
+      void sendMessage("showSunoNotification", {
+        kind: soundKind,
+        message,
+      }).catch((error) =>
+        console.warn("[suno-helper] OS 通知の表示に失敗しました:", error)
+      );
+    },
+    []
+  );
 
   useEffect(() => {
     void readCompletionSoundSettings()
@@ -58,15 +69,16 @@ export function useCompletionSound(
         setCompletionSoundSettings(settings);
         settingsLoadedRef.current = true;
         setCompletionSoundSettingsLoaded(true);
-        const pendingPhase = pendingTerminalPhaseRef.current;
-        pendingTerminalPhaseRef.current = null;
-        if (pendingPhase) playTerminalPhase(pendingPhase);
+        const pending = pendingNotificationRef.current;
+        pendingNotificationRef.current = null;
+        if (pending) playTerminalPhase(pending.phase, pending.message);
       })
       .catch(onStorageError);
   }, [onStorageError, playTerminalPhase]);
 
-  const persistSettings = useCallback(
-    (settings: CompletionSoundSettings): void => {
+  const setCompletionSoundEnabled = useCallback(
+    (enabled: boolean): void => {
+      const settings = { enabled };
       settingsRef.current = settings;
       setCompletionSoundSettings(settings);
       void completionSoundSettingsItem.setValue(settings).catch(onStorageError);
@@ -74,41 +86,19 @@ export function useCompletionSound(
     [onStorageError]
   );
 
-  const setCompletionSoundEnabled = useCallback(
-    (enabled: boolean): void => {
-      persistSettings({ ...settingsRef.current, enabled });
-    },
-    [persistSettings]
-  );
-
-  const setCompletionSoundPreset = useCallback(
-    (preset: CompletionSoundPresetId): void => {
-      persistSettings({ ...settingsRef.current, preset });
-    },
-    [persistSettings]
-  );
-
-  const previewCompletionSound = useCallback(async (): Promise<void> => {
-    try {
-      await playCompletionSound(settingsRef.current.preset, "success");
-    } catch (error) {
-      onPreviewError(error instanceof Error ? error.message : String(error));
-    }
-  }, [onPreviewError]);
-
   const notifyCompletionSoundPhase = useCallback(
-    (phase: Phase): void => {
+    (phase: Phase, message: string): void => {
       const soundKind = completionSoundKindForPhase(phase);
       if (!soundKind) {
         soundedTerminalPhaseRef.current = null;
-        pendingTerminalPhaseRef.current = null;
+        pendingNotificationRef.current = null;
         return;
       }
       if (!settingsLoadedRef.current) {
-        pendingTerminalPhaseRef.current = phase;
+        pendingNotificationRef.current = { phase, message };
         return;
       }
-      playTerminalPhase(phase);
+      playTerminalPhase(phase, message);
     },
     [playTerminalPhase]
   );
@@ -117,8 +107,6 @@ export function useCompletionSound(
     completionSoundSettings,
     completionSoundSettingsLoaded,
     setCompletionSoundEnabled,
-    setCompletionSoundPreset,
-    previewCompletionSound,
     notifyCompletionSoundPhase,
   };
 }

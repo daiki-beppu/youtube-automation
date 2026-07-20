@@ -548,7 +548,10 @@ def test_suno_helper_manifest_permission_check_preserves_least_privilege_contrac
     run_script = str(manifest_step.get("run", ""))
 
     assert ".output/chrome-mv3/manifest.json" in run_script
-    assert 'const expected = ["storage", "activeTab", "downloads", "debugger", "scripting"];' in run_script
+    assert (
+        'const expected = ["storage", "activeTab", "downloads", "debugger", "scripting", "notifications"];'
+        in run_script
+    )
     assert "const actual = manifest.permissions ?? [];" in run_script
     assert "expected.every((p) => actual.includes(p))" in run_script
     assert "process.exit(1);" in run_script

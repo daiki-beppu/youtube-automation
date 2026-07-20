@@ -2,14 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PHASE } from "../../shared/constants";
 import {
-  COMPLETION_SOUND_PRESETS,
   completionSoundKindForPhase,
   normalizeCompletionSoundSettings,
   playCompletionSound,
   shouldNotifyCompletionSound,
 } from "../lib/completion-sound";
 
-describe("completion sound terminal policy (#2077)", () => {
+describe("terminal notification policy", () => {
   it("FINISHED は success、ERROR は error、STOPPED は無音にする", () => {
     expect(completionSoundKindForPhase(PHASE.FINISHED)).toBe("success");
     expect(completionSoundKindForPhase(PHASE.ERROR)).toBe("error");
@@ -17,7 +16,7 @@ describe("completion sound terminal policy (#2077)", () => {
     expect(completionSoundKindForPhase(PHASE.DONE)).toBeNull();
   });
 
-  it("collection queue は最終 item の FINISHED だけを作業完了として通知する", () => {
+  it("collection queue は最終 item の FINISHED だけを通知する", () => {
     const queue = {
       version: 1 as const,
       queueId: "queue-1",
@@ -44,23 +43,16 @@ describe("completion sound terminal policy (#2077)", () => {
     expect(shouldNotifyCompletionSound(PHASE.FINISHED, null)).toBe(true);
   });
 
-  it("未設定・不正値を default ON + chime へ正規化する", () => {
+  it("旧 preset を捨てつつ enabled を維持する", () => {
     expect(normalizeCompletionSoundSettings(undefined)).toEqual({
       enabled: true,
-      preset: "chime",
     });
     expect(
       normalizeCompletionSoundSettings({ enabled: "yes", preset: "noise" })
-    ).toEqual({ enabled: true, preset: "chime" });
+    ).toEqual({ enabled: true });
     expect(
       normalizeCompletionSoundSettings({ enabled: false, preset: "soft" })
-    ).toEqual({ enabled: false, preset: "soft" });
-  });
-
-  it("success と error は同じ preset でも異なる音程列を持つ", () => {
-    for (const preset of Object.values(COMPLETION_SOUND_PRESETS)) {
-      expect(preset.success.frequencies).not.toEqual(preset.error.frequencies);
-    }
+    ).toEqual({ enabled: false });
   });
 
   it("resume に失敗しても AudioContext を close し、元の失敗を維持する", async () => {
@@ -77,63 +69,68 @@ describe("completion sound terminal policy (#2077)", () => {
     };
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
-    await expect(
-      playCompletionSound("chime", "success", () => context)
-    ).rejects.toBe(resumeError);
+    await expect(playCompletionSound("success", () => context)).rejects.toBe(
+      resumeError
+    );
     expect(context.close).toHaveBeenCalledOnce();
     expect(warn).toHaveBeenCalledWith(
-      "[suno-helper] 完了音の AudioContext 解放にも失敗しました:",
+      "[suno-helper] 通知音の AudioContext 解放にも失敗しました:",
       closeError
     );
     warn.mockRestore();
   });
 });
 
-describe("playCompletionSound (#2077)", () => {
-  it("AudioContext を resume し oscillator を preset の音数だけ鳴らして close する", async () => {
-    const starts: number[] = [];
+describe("playCompletionSound", () => {
+  function makeContext() {
     const frequencies: number[] = [];
-    const oscillator = {
-      type: "sine" as OscillatorType,
-      frequency: {
-        setValueAtTime: vi.fn((value: number) => frequencies.push(value)),
-      },
-      connect: vi.fn(),
-      start: vi.fn((time: number) => starts.push(time)),
-      stop: vi.fn(),
-    };
-    const gain = {
-      gain: {
-        setValueAtTime: vi.fn(),
-        exponentialRampToValueAtTime: vi.fn(),
-      },
-      connect: vi.fn(),
-    };
+    const waves: OscillatorType[] = [];
     const context = {
       currentTime: 10,
       state: "suspended",
       destination: {},
       resume: vi.fn(async () => undefined),
-      createOscillator: vi.fn(() => ({ ...oscillator })),
-      createGain: vi.fn(() => gain),
+      createOscillator: vi.fn(() => {
+        const oscillator = {
+          type: "sine" as OscillatorType,
+          frequency: {
+            setValueAtTime: vi.fn((value: number) => frequencies.push(value)),
+          },
+          connect: vi.fn(),
+          start: vi.fn(),
+          stop: vi.fn(),
+        };
+        Object.defineProperty(oscillator, "type", {
+          get: () => waves.at(-1) ?? "sine",
+          set: (wave: OscillatorType) => waves.push(wave),
+        });
+        return oscillator;
+      }),
+      createGain: vi.fn(() => ({
+        gain: {
+          setValueAtTime: vi.fn(),
+          exponentialRampToValueAtTime: vi.fn(),
+        },
+        connect: vi.fn(),
+      })),
       close: vi.fn(async () => undefined),
     };
+    return { context, frequencies, waves };
+  }
 
+  it.each([
+    ["success", [523, 659, 784], "sine"],
+    ["error", [440, 220], "triangle"],
+  ] as const)("%s は固定波形と音程列を鳴らす", async (kind, expected, wave) => {
+    const { context, frequencies, waves } = makeContext();
     await playCompletionSound(
-      "chime",
-      "success",
+      kind,
       () => context,
       async () => undefined
     );
 
-    expect(context.resume).toHaveBeenCalledOnce();
-    expect(context.createOscillator).toHaveBeenCalledTimes(
-      COMPLETION_SOUND_PRESETS.chime.success.frequencies.length
-    );
-    expect(frequencies).toEqual(
-      COMPLETION_SOUND_PRESETS.chime.success.frequencies
-    );
-    expect(starts[0]).toBe(10);
+    expect(frequencies).toEqual(expected);
+    expect(waves).toEqual(expected.map(() => wave));
     expect(context.close).toHaveBeenCalledOnce();
   });
 });

@@ -17,6 +17,7 @@ import {
 import {
   CLIPS_PER_REQUEST,
   DEFAULT_REGENERATE_DURATION_OUTLIERS,
+  PHASE,
   type ItemState,
   type LocalServerSource,
   type RunModeId,
@@ -34,10 +35,7 @@ import {
   writeCollectionQueue,
 } from "../lib/collection-queue-state";
 import { shouldNotifyCompletionSound } from "../lib/completion-sound";
-import type {
-  CompletionSoundPresetId,
-  CompletionSoundSettings,
-} from "../lib/completion-sound";
+import type { CompletionSoundSettings } from "../lib/completion-sound";
 import { onMessage, sendMessage } from "../lib/messaging";
 import { scheduleRunCompleteReload } from "../lib/page-reload";
 import {
@@ -96,8 +94,6 @@ interface RunnerState {
   completionSoundSettings: CompletionSoundSettings;
   completionSoundSettingsLoaded: boolean;
   setCompletionSoundEnabled: (enabled: boolean) => void;
-  setCompletionSoundPreset: (preset: CompletionSoundPresetId) => void;
-  previewCompletionSound: () => Promise<void>;
   // collection 選択時の playlist 名 (#854)。display only。
   playlistName: string | undefined;
   runModeId: RunModeId;
@@ -616,22 +612,13 @@ export function useSunoRunner(): RunnerState {
     setReloadRequired(true);
   }, []);
 
-  const reportCompletionSoundPreviewFailure = useCallback(
-    (message: string): void => {
-      report(`完了音の試聴に失敗しました: ${message}`, true);
-    },
-    [report]
-  );
   const {
     completionSoundSettings,
     completionSoundSettingsLoaded,
     setCompletionSoundEnabled,
-    setCompletionSoundPreset,
-    previewCompletionSound,
     notifyCompletionSoundPhase,
   } = useCompletionSound({
     onStorageError: reportStorageFailure,
-    onPreviewError: reportCompletionSoundPreviewFailure,
   });
 
   // popup 起動時に前回の ERROR 停止 state を読む (#872 要件4)。表示可否は resumeBanner 側で判定する。
@@ -916,7 +903,13 @@ export function useSunoRunner(): RunnerState {
         setRunning(false);
       }
       if (shouldNotifyCompletionSound(data.phase, collectionQueueRef.current)) {
-        notifyCompletionSoundPhase(data.phase);
+        const terminalStatus = phaseToStatus(data, entries).text;
+        notifyCompletionSoundPhase(
+          data.phase,
+          data.phase === PHASE.ERROR
+            ? `中断: ${data.message ?? terminalStatus}`
+            : terminalStatus
+        );
       }
     });
     return () => unwatch();
@@ -1718,8 +1711,6 @@ export function useSunoRunner(): RunnerState {
     completionSoundSettings,
     completionSoundSettingsLoaded,
     setCompletionSoundEnabled,
-    setCompletionSoundPreset,
-    previewCompletionSound,
     playlistName,
     runModeId,
     setRunMode,

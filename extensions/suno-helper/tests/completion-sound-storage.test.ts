@@ -11,51 +11,36 @@ vi.mock("wxt/utils/storage", () => ({
 
 import { readCompletionSoundSettings } from "../lib/storage";
 
-describe("completion sound storage (#2077)", () => {
+describe("notification settings storage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     soundSettingsItem.setValue.mockResolvedValue(undefined);
   });
 
-  it("未設定は default ON + chime を返して永続化する", async () => {
+  it("未設定は default ON を返して永続化する", async () => {
     soundSettingsItem.getValue.mockResolvedValue(undefined);
-
     await expect(readCompletionSoundSettings()).resolves.toEqual({
       enabled: true,
-      preset: "chime",
     });
-    expect(soundSettingsItem.setValue).toHaveBeenCalledWith({
-      enabled: true,
-      preset: "chime",
-    });
+    expect(soundSettingsItem.setValue).toHaveBeenCalledWith({ enabled: true });
   });
 
-  it("保存済みの OFF + preset をそのまま復元する", async () => {
+  it("旧 OFF + preset は OFF を維持して preset を削除する", async () => {
     soundSettingsItem.getValue.mockResolvedValue({
       enabled: false,
       preset: "bell",
     });
-
     await expect(readCompletionSoundSettings()).resolves.toEqual({
       enabled: false,
-      preset: "bell",
     });
-    expect(soundSettingsItem.setValue).not.toHaveBeenCalled();
+    expect(soundSettingsItem.setValue).toHaveBeenCalledWith({ enabled: false });
   });
 
   it("不正値は default に自己修復する", async () => {
-    soundSettingsItem.getValue.mockResolvedValue({
-      enabled: "yes",
-      preset: "noise",
-    });
-
+    soundSettingsItem.getValue.mockResolvedValue({ enabled: "yes" });
     await expect(readCompletionSoundSettings()).resolves.toEqual({
       enabled: true,
-      preset: "chime",
     });
-    expect(soundSettingsItem.setValue).toHaveBeenCalledWith({
-      enabled: true,
-      preset: "chime",
-    });
+    expect(soundSettingsItem.setValue).toHaveBeenCalledWith({ enabled: true });
   });
 });

@@ -48,4 +48,5 @@ export {
   SelectTrigger,
   SelectValue,
 } from "./select";
+export { Switch } from "./switch";
 export { cn } from "./utils";

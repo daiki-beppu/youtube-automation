@@ -16,6 +16,7 @@ import { describeRelayFailure } from "../components/runner-errors";
 import { installSunoContentScriptRecovery } from "../lib/content-script-recovery";
 import { installDownloadWatcher } from "../lib/download-watcher";
 import { onMessage, sendMessage } from "../lib/messaging";
+import { showSunoNotification } from "../lib/notification";
 import { relayTabId, requireRelayTab } from "../lib/overlay-relay";
 import { migrateServerSourcesStorage } from "../lib/storage";
 import { sendTrustedCmdP } from "../lib/trusted-shortcut";
@@ -86,6 +87,11 @@ export default defineBackground(() => {
     requireRelayTab(sender, "extensionVersionHandshake");
     const version = browser.runtime.getManifest().version;
     return { version, matches: data.version === version };
+  });
+
+  onMessage("showSunoNotification", async ({ data, sender }) => {
+    requireRelayTab(sender, "showSunoNotification");
+    await showSunoNotification(data);
   });
 
   // popup 廃止 (#892): default_popup を持たないため action クリックで onClicked が発火する。

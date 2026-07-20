@@ -110,7 +110,7 @@ jobs:
             const manifest = JSON.parse(
               readFileSync(".output/chrome-mv3/manifest.json", "utf8"),
             );
-            const expected = ["storage", "activeTab", "downloads", "debugger", "scripting"];
+            const expected = ["storage", "activeTab", "downloads", "debugger", "scripting", "notifications"];
             const actual = manifest.permissions ?? [];
             const same =
               actual.length === expected.length &&

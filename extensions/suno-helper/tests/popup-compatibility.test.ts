@@ -42,7 +42,7 @@ const downloadFormatMocks = vi.hoisted(() => ({
 }));
 
 const completionSoundMocks = vi.hoisted(() => ({
-  getValue: vi.fn(async () => ({ enabled: true, preset: "chime" })),
+  getValue: vi.fn(async () => ({ enabled: true })),
   setValue: vi.fn(async () => undefined),
   play: vi.fn(async () => undefined),
 }));
@@ -378,7 +378,6 @@ describe("Suno popup compatibility check", () => {
     downloadFormatMocks.setValue.mockResolvedValue(undefined);
     completionSoundMocks.getValue.mockResolvedValue({
       enabled: true,
-      preset: "chime",
     });
     completionSoundMocks.setValue.mockResolvedValue(undefined);
     completionSoundMocks.play.mockResolvedValue(undefined);
@@ -449,7 +448,6 @@ describe("Suno popup compatibility check", () => {
     serverSourcesMocks.migrateServerSourcesStorage.mockResolvedValue(undefined);
     completionSoundMocks.getValue.mockResolvedValue({
       enabled: true,
-      preset: "chime",
     });
     completionSoundMocks.setValue.mockResolvedValue(undefined);
     completionSoundMocks.play.mockResolvedValue(undefined);
@@ -511,9 +509,9 @@ describe("Suno popup compatibility check", () => {
     expect(
       expectControl(container, "regenerate-duration-outliers").dataset.slot
     ).toBe("checkbox");
-    expect(
-      expectControl(container, "completion-sound-enabled").dataset.slot
-    ).toBe("checkbox");
+    expect(expectControl(container, "notification-enabled").dataset.slot).toBe(
+      "switch"
+    );
 
     const serialMode = radioByLabel(container, "安全モード");
     const queueMode = radioByLabel(container, "高速モード");
@@ -638,9 +636,10 @@ describe("Suno popup compatibility check", () => {
       });
     });
     expect(completionSoundMocks.play).toHaveBeenCalledTimes(1);
-    expect(completionSoundMocks.play).toHaveBeenLastCalledWith(
-      "chime",
-      "success"
+    expect(completionSoundMocks.play).toHaveBeenLastCalledWith("success");
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith(
+      "showSunoNotification",
+      expect.objectContaining({ kind: "success" })
     );
     expect(
       container.querySelector<HTMLElement>('[role="status"]')?.dataset.variant
@@ -664,17 +663,58 @@ describe("Suno popup compatibility check", () => {
       });
     });
     expect(completionSoundMocks.play).toHaveBeenCalledTimes(2);
-    expect(completionSoundMocks.play).toHaveBeenLastCalledWith(
-      "chime",
-      "error"
+    expect(completionSoundMocks.play).toHaveBeenLastCalledWith("error");
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith(
+      "showSunoNotification",
+      { kind: "error", message: "中断: failed" }
     );
   });
 
+  it("OS 通知と Web Audio は一方が失敗しても他方と run 状態へ干渉しない", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    messagingMocks.sendMessage.mockImplementation((message, payload) =>
+      message === "showSunoNotification"
+        ? Promise.reject(new Error("notification failed"))
+        : defaultSendMessage(message, payload)
+    );
+
+    await act(async () => {
+      messagingMocks.progressHandler?.({
+        data: { phase: PHASE.FINISHED, total: 1 },
+      });
+      await Promise.resolve();
+    });
+    expect(completionSoundMocks.play).toHaveBeenCalledWith("success");
+    expect(
+      container.querySelector<HTMLElement>('[role="status"]')?.dataset.variant
+    ).toBe("success");
+
+    completionSoundMocks.play.mockRejectedValueOnce(new Error("audio failed"));
+    messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
+    await act(async () => {
+      messagingMocks.progressHandler?.({
+        data: { phase: PHASE.INJECTING, index: 0, total: 1 },
+      });
+      messagingMocks.progressHandler?.({
+        data: { phase: PHASE.ERROR, total: 1, message: "failed" },
+      });
+      await Promise.resolve();
+    });
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith(
+      "showSunoNotification",
+      { kind: "error", message: "中断: failed" }
+    );
+    expect(
+      container.querySelector<HTMLElement>('[role="status"]')?.dataset.variant
+    ).toBe("destructive");
+    warn.mockRestore();
+  });
+
   it("設定読込前の終端通知を保留し、保存済み OFF なら鳴らさない", async () => {
-    const settings = deferred<{ enabled: boolean; preset: "bell" }>();
+    const settings = deferred<{ enabled: boolean }>();
     completionSoundMocks.getValue.mockReturnValueOnce(settings.promise);
     await rerenderApp();
-    const enabled = expectControl(container, "completion-sound-enabled");
+    const enabled = expectControl(container, "notification-enabled");
     expect(enabled.getAttribute("data-disabled")).not.toBeNull();
     await act(async () => enabled.click());
     expect(completionSoundMocks.setValue).not.toHaveBeenCalled();
@@ -687,7 +727,7 @@ describe("Suno popup compatibility check", () => {
     expect(completionSoundMocks.play).not.toHaveBeenCalled();
 
     await act(async () => {
-      settings.resolve({ enabled: false, preset: "bell" });
+      settings.resolve({ enabled: false });
       await settings.promise;
     });
     expect(completionSoundMocks.play).not.toHaveBeenCalled();
@@ -695,7 +735,7 @@ describe("Suno popup compatibility check", () => {
   });
 
   it("設定読込前の終端通知を保留し、初期 ON 設定の確定後に一度だけ鳴らす", async () => {
-    const settings = deferred<{ enabled: boolean; preset: "chime" }>();
+    const settings = deferred<{ enabled: boolean }>();
     completionSoundMocks.getValue.mockReturnValueOnce(settings.promise);
     await rerenderApp();
 
@@ -710,45 +750,32 @@ describe("Suno popup compatibility check", () => {
     expect(completionSoundMocks.play).not.toHaveBeenCalled();
 
     await act(async () => {
-      settings.resolve({ enabled: true, preset: "chime" });
+      settings.resolve({ enabled: true });
       await settings.promise;
     });
     expect(completionSoundMocks.play).toHaveBeenCalledOnce();
-    expect(completionSoundMocks.play).toHaveBeenCalledWith("chime", "success");
+    expect(completionSoundMocks.play).toHaveBeenCalledWith("success");
   });
 
-  it("shadcn 完了音 UI で OFF・preset 保存と試聴を行う", async () => {
-    const enabled = expectControl(container, "completion-sound-enabled");
-    expect(enabled.dataset.slot).toBe("checkbox");
+  it("shadcn Switch 1つで OS 通知と固定音を OFF にする", async () => {
+    const enabled = expectControl(container, "notification-enabled");
+    expect(enabled.dataset.slot).toBe("switch");
+    expect(enabled.querySelector('[data-slot="switch-thumb"]')).not.toBeNull();
     expect(enabled.closest("label")?.classList).toContain("items-center");
-    expect(enabled.classList).not.toContain("mt-0.5");
+    expect(container.textContent).toContain("OS 通知と固定音で知らせる");
+    expect(
+      container.querySelector('[data-suno-control="completion-sound-preset"]')
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-suno-control="completion-sound-preview"]')
+    ).toBeNull();
     await act(async () => enabled.click());
     expect(completionSoundMocks.setValue).toHaveBeenCalledWith({
       enabled: false,
-      preset: "chime",
     });
-
-    const soft = container.querySelector<HTMLButtonElement>(
-      '[data-suno-control="completion-sound-preset"][data-suno-preset="soft"]'
-    )!;
-    expect(soft.dataset.slot).toBe("button");
-    await act(async () => soft.click());
-    expect(completionSoundMocks.setValue).toHaveBeenLastCalledWith({
-      enabled: false,
-      preset: "soft",
-    });
-
-    await act(async () => {
-      (
-        expectControl(
-          container,
-          "completion-sound-preview"
-        ) as HTMLButtonElement
-      ).click();
-    });
-    expect(completionSoundMocks.play).toHaveBeenCalledWith("soft", "success");
 
     completionSoundMocks.play.mockClear();
+    messagingMocks.sendMessage.mockClear();
     await act(async () => {
       messagingMocks.progressHandler?.({
         data: { phase: PHASE.INJECTING, index: 0, total: 1 },
@@ -758,6 +785,10 @@ describe("Suno popup compatibility check", () => {
       });
     });
     expect(completionSoundMocks.play).not.toHaveBeenCalled();
+    expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith(
+      "showSunoNotification",
+      expect.anything()
+    );
   });
 
   it("agent 操作用の root 状態属性と主要 control selector を実 DOM に公開する", async () => {

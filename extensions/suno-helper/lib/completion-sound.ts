@@ -1,48 +1,19 @@
 import {
   COMPLETION_SOUND_ENABLED_DEFAULT,
-  COMPLETION_SOUND_PRESET_DEFAULT,
   PHASE,
   type Phase,
 } from "../../shared/constants";
 import type { CollectionQueueState } from "./collection-queue-state";
 
-export const COMPLETION_SOUND_PRESETS = {
-  chime: {
-    label: "チャイム",
-    wave: "sine",
-    success: { frequencies: [523, 659, 784] },
-    error: { frequencies: [392, 330, 262] },
-  },
-  bell: {
-    label: "ベル",
-    wave: "triangle",
-    success: { frequencies: [659, 988] },
-    error: { frequencies: [440, 220] },
-  },
-  soft: {
-    label: "ソフト",
-    wave: "sine",
-    success: { frequencies: [440, 554] },
-    error: { frequencies: [330, 247] },
-  },
-} as const;
-
-export type CompletionSoundPresetId = keyof typeof COMPLETION_SOUND_PRESETS;
 export type CompletionSoundKind = "success" | "error";
 
 export interface CompletionSoundSettings {
   enabled: boolean;
-  preset: CompletionSoundPresetId;
 }
 
 export const DEFAULT_COMPLETION_SOUND_SETTINGS: CompletionSoundSettings = {
   enabled: COMPLETION_SOUND_ENABLED_DEFAULT,
-  preset: COMPLETION_SOUND_PRESET_DEFAULT,
 };
-
-const PRESET_IDS = new Set<CompletionSoundPresetId>(
-  Object.keys(COMPLETION_SOUND_PRESETS) as CompletionSoundPresetId[]
-);
 
 export function normalizeCompletionSoundSettings(
   value: unknown
@@ -50,15 +21,12 @@ export function normalizeCompletionSoundSettings(
   if (!value || typeof value !== "object") {
     return { ...DEFAULT_COMPLETION_SOUND_SETTINGS };
   }
-  const candidate = value as { enabled?: unknown; preset?: unknown };
+  const candidate = value as { enabled?: unknown };
   return {
     enabled:
       typeof candidate.enabled === "boolean"
         ? candidate.enabled
         : DEFAULT_COMPLETION_SOUND_SETTINGS.enabled,
-    preset: PRESET_IDS.has(candidate.preset as CompletionSoundPresetId)
-      ? (candidate.preset as CompletionSoundPresetId)
-      : DEFAULT_COMPLETION_SOUND_SETTINGS.preset,
   };
 }
 
@@ -70,10 +38,7 @@ export function completionSoundKindForPhase(
   return null;
 }
 
-/**
- * collection queue の途中の FINISHED は個別 collection の完了であり、
- * queue 全体の作業完了ではない。ERROR は復旧を促すため即時通知する。
- */
+/** collection queue の途中の FINISHED は通知せず、ERROR と最終 FINISHED だけ通知する。 */
 export function shouldNotifyCompletionSound(
   phase: Phase,
   queue: CollectionQueueState | null
@@ -123,12 +88,14 @@ function createBrowserAudioContext(): CompletionAudioContext {
 }
 
 export async function playCompletionSound(
-  presetId: CompletionSoundPresetId,
   kind: CompletionSoundKind,
   createContext: AudioContextFactory = createBrowserAudioContext,
   waitForPlayback: Wait = wait
 ): Promise<void> {
-  const preset = COMPLETION_SOUND_PRESETS[presetId];
+  const tone =
+    kind === "success"
+      ? ({ wave: "sine", frequencies: [523, 659, 784] } as const)
+      : ({ wave: "triangle", frequencies: [440, 220] } as const);
   const context = createContext();
   let playbackError: unknown;
   try {
@@ -137,14 +104,13 @@ export async function playCompletionSound(
     }
     const noteDurationSec = 0.16;
     const noteGapSec = 0.04;
-    const frequencies = preset[kind].frequencies;
-    for (const [index, frequency] of frequencies.entries()) {
+    for (const [index, frequency] of tone.frequencies.entries()) {
       const startTime =
         context.currentTime + index * (noteDurationSec + noteGapSec);
       const stopTime = startTime + noteDurationSec;
       const oscillator = context.createOscillator();
       const gain = context.createGain();
-      oscillator.type = preset.wave;
+      oscillator.type = tone.wave;
       oscillator.frequency.setValueAtTime(frequency, startTime);
       gain.gain.setValueAtTime(0.12, startTime);
       gain.gain.exponentialRampToValueAtTime(0.001, stopTime);
@@ -154,7 +120,7 @@ export async function playCompletionSound(
       oscillator.stop(stopTime);
     }
     const totalDurationMs =
-      (frequencies.length * (noteDurationSec + noteGapSec) + 0.05) * 1000;
+      (tone.frequencies.length * (noteDurationSec + noteGapSec) + 0.05) * 1000;
     await waitForPlayback(totalDurationMs);
   } catch (error) {
     playbackError = error;
@@ -165,8 +131,8 @@ export async function playCompletionSound(
     } catch (closeError) {
       console.warn(
         playbackError === undefined
-          ? "[suno-helper] 完了音の AudioContext 解放に失敗しました:"
-          : "[suno-helper] 完了音の AudioContext 解放にも失敗しました:",
+          ? "[suno-helper] 通知音の AudioContext 解放に失敗しました:"
+          : "[suno-helper] 通知音の AudioContext 解放にも失敗しました:",
         closeError
       );
     }

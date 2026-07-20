@@ -3,8 +3,8 @@
 // 権限宣言を import 可能な単一定数 `MANIFEST_PERMISSIONS` (lib/manifest.ts) に切り出し、
 // wxt.config.ts はその定数を参照する。これにより未使用権限の混入を機械的に防ぐ。
 //
-// 契約 (#1146 で `downloads`、#1251 で `debugger` を追加):
-//   storage / activeTab / downloads / debugger / scripting。
+// 契約 (#1146 で `downloads`、#1251 で `debugger`、#2334 で `notifications` を追加):
+//   storage / activeTab / downloads / debugger / scripting / notifications。
 // `downloads` は Suno playlist の ZIP ダウンロード監視、`debugger` は trusted Cmd+P dispatch に必要。
 // それ以外の広域権限（history / bookmarks / cookies 等）は引き続き混入させない。
 import { describe, expect, it } from "vitest";
@@ -18,6 +18,7 @@ const EXPECTED_PERMISSIONS = [
   "downloads",
   "debugger",
   "scripting",
+  "notifications",
 ];
 // Download all / trusted Cmd+P 追加後も混入させたくない広域権限（過剰権限 creep の回帰検知）。
 const FORBIDDEN_PERMISSIONS = [
@@ -48,6 +49,10 @@ describe("lib/manifest: 最小権限契約", () => {
 
   it("Given MANIFEST_PERMISSIONS When content script 自己復旧用権限を確認する Then `scripting` を含む", () => {
     expect(MANIFEST_PERMISSIONS).toContain("scripting");
+  });
+
+  it("Given MANIFEST_PERMISSIONS When OS 通知用権限を確認する Then `notifications` を含む", () => {
+    expect(MANIFEST_PERMISSIONS).toContain("notifications");
   });
 
   it("Given MANIFEST_PERMISSIONS When 過剰権限を探す Then 広域権限を含まない", () => {

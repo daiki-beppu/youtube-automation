@@ -78,6 +78,7 @@ async function loadBackground(opts?: {
   const handlers = new Map<string, Handler>();
   const sentMessages: SentMessage[] = [];
   const installedListeners: Array<(details: { reason: string }) => void> = [];
+  const notificationCreate = vi.fn(() => Promise.resolve("notification-id"));
 
   // --- globals ---
   // defineBackground は WXT の auto-import。stub して即座にコールバックを実行する。
@@ -95,6 +96,7 @@ async function loadBackground(opts?: {
       },
       getManifest: () => ({ version: "0.1.0" }),
     },
+    notifications: { create: notificationCreate },
     action: { onClicked: { addListener: vi.fn() } },
     tabs: { onUpdated: { addListener: vi.fn() } },
     scripting: {
@@ -188,6 +190,9 @@ async function loadBackground(opts?: {
   vi.stubGlobal("chrome", {
     downloads: chromeDownloads,
     debugger: chromeDebugger,
+    runtime: {
+      getURL: vi.fn((path: string) => `chrome-extension://id${path}`),
+    },
     storage: {
       session: {
         get: vi.fn(
@@ -294,6 +299,7 @@ async function loadBackground(opts?: {
     discoverServerSourcesMock,
     migrateServerSourcesStorageMock,
     installedListeners,
+    notificationCreate,
     sessionStore,
   };
 }
@@ -336,6 +342,29 @@ describe('background onMessage("extensionVersionHandshake"): 拡張更新検知 
         sender: { tab: { id: 42 } },
       })
     ).toEqual({ version: "0.1.0", matches: false });
+  });
+});
+
+describe('background onMessage("showSunoNotification")', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("送信元タブを検証し silent basic OS 通知を作成する", async () => {
+    const { handlers, notificationCreate } = await loadBackground();
+
+    await handlers.get("showSunoNotification")!({
+      data: { kind: "success", message: "完了しました。" },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(notificationCreate).toHaveBeenCalledWith({
+      type: "basic",
+      iconUrl: "chrome-extension://id/icon/48.png",
+      title: "Suno Helper",
+      message: "完了しました。",
+      silent: true,
+    });
   });
 });
 

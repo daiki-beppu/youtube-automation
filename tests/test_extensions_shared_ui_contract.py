@@ -14,6 +14,7 @@ PRIMITIVES = (
     "label.tsx",
     "radio-group.tsx",
     "select.tsx",
+    "switch.tsx",
 )
 MIGRATED_PRIMITIVES = ("alert.tsx", "button.tsx", "card.tsx", "select.tsx")
 
@@ -50,6 +51,7 @@ def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
         "RadioGroup",
         "RadioGroupItem",
         "Select",
+        "Switch",
         "cn",
     ):
         assert public_symbol in index
@@ -97,6 +99,18 @@ def test_shared_collapsible_tracks_current_base_vega_composition() -> None:
     assert "CollapsiblePrimitive.Root.Props" in collapsible
     assert "CollapsiblePrimitive.Trigger.Props" in collapsible
     assert "CollapsiblePrimitive.Panel.Props" in collapsible
+
+
+def test_shared_switch_tracks_current_light_only_base_vega_composition() -> None:
+    switch = (EXTENSIONS / "shared-ui/src/switch.tsx").read_text()
+
+    assert 'from "@base-ui/react/switch"' in switch
+    assert 'data-slot="switch"' in switch
+    assert 'data-slot="switch-thumb"' in switch
+    assert "data-checked:bg-primary" in switch
+    assert "data-unchecked:bg-input" in switch
+    assert "focus-visible:ring-3" in switch
+    assert "dark:" not in switch
 
 
 def test_shared_primitives_track_current_base_vega_composition() -> None:
