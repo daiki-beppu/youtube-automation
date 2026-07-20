@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from google.auth.exceptions import RefreshError
+from google.auth.exceptions import RefreshError, TransportError
 from googleapiclient.errors import HttpError
 from httplib2 import ServerNotFoundError
 from PIL import Image as PILImage
@@ -643,9 +643,76 @@ class TestOAuthToken:
     def test_valid(self, tmp_path):
         auth = tmp_path / "auth"
         auth.mkdir()
-        (auth / "token.json").write_text(json.dumps({"scopes": ["a", "b"]}), encoding="utf-8")
+        token = {
+            "token": "access-token",
+            "refresh_token": "refresh-token",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+            "scopes": ["a", "b"],
+            "expiry": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        }
+        (auth / "token.json").write_text(json.dumps(token), encoding="utf-8")
         r = doctor.check_oauth_token(tmp_path)
         assert r.status == "ok"
+
+    def test_expired_refreshable_token_is_refreshed_and_persisted(self, monkeypatch, tmp_path):
+        auth = tmp_path / "auth"
+        auth.mkdir()
+        token_path = auth / "token.json"
+        token_path.write_text('{"scopes": ["a"]}', encoding="utf-8")
+        credentials = MagicMock(expired=True, refresh_token="refresh-token", valid=True)
+        credentials.to_json.return_value = '{"token": "refreshed", "scopes": ["a"]}'
+        monkeypatch.setattr(
+            doctor.Credentials,
+            "from_authorized_user_file",
+            lambda *_args, **_kwargs: credentials,
+        )
+
+        result = doctor.check_oauth_token(tmp_path)
+
+        assert result.status == "ok"
+        assert "更新済み" in result.message
+        credentials.refresh.assert_called_once()
+        assert token_path.read_text(encoding="utf-8") == credentials.to_json.return_value
+        assert token_path.stat().st_mode & 0o777 == 0o600
+
+    def test_refresh_failure_requests_browser_authentication(self, monkeypatch, tmp_path):
+        auth = tmp_path / "auth"
+        auth.mkdir()
+        (auth / "token.json").write_text('{"scopes": ["a"]}', encoding="utf-8")
+        credentials = MagicMock(expired=True, refresh_token="refresh-token", valid=False)
+        credentials.refresh.side_effect = RefreshError("invalid_grant")
+        monkeypatch.setattr(
+            doctor.Credentials,
+            "from_authorized_user_file",
+            lambda *_args, **_kwargs: credentials,
+        )
+
+        result = doctor.check_oauth_token(tmp_path)
+
+        assert result.status == "fail"
+        assert "更新に失敗" in result.message
+        assert result.next_action["reason"] == "authentication"
+        _assert_agent_driven_oauth(result.next_action)
+
+    def test_refresh_transport_failure_does_not_request_reauthentication(self, monkeypatch, tmp_path):
+        auth = tmp_path / "auth"
+        auth.mkdir()
+        (auth / "token.json").write_text('{"scopes": ["a"]}', encoding="utf-8")
+        credentials = MagicMock(expired=True, refresh_token="refresh-token", valid=False)
+        credentials.refresh.side_effect = TransportError("network unavailable")
+        monkeypatch.setattr(
+            doctor.Credentials,
+            "from_authorized_user_file",
+            lambda *_args, **_kwargs: credentials,
+        )
+
+        result = doctor.check_oauth_token(tmp_path)
+
+        assert result.status == "fail"
+        assert "通信" in result.message
+        assert result.next_action is None
 
 
 class TestReportingJob:
@@ -803,18 +870,36 @@ class TestReportingJob:
         assert check["status"] == "ok"
         assert os.environ["CHANNEL_DIR"] == str(original_channel_dir)
 
-    def test_expired_token_is_reported_without_refresh_or_browser_auth(self, monkeypatch, tmp_path, capsys):
+    def test_expired_token_is_refreshed_before_reporting_api_call(self, monkeypatch, tmp_path, capsys):
         self._write_token(tmp_path, expiry=datetime.now(timezone.utc) - timedelta(hours=1))
+        refresh_calls = []
 
-        def unexpected_reporting_call(*args, **kwargs):
-            raise AssertionError("expired credentials must not reach Reporting API")
+        def refresh(credentials, request):
+            refresh_calls.append(request)
+            credentials.token = "refreshed-access-token"
+            credentials.expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=1)
 
-        monkeypatch.setattr(doctor, "build", unexpected_reporting_call)
+        monkeypatch.setattr(doctor.Credentials, "refresh", refresh)
+        monkeypatch.setattr(
+            doctor,
+            "build",
+            lambda *args, **kwargs: self._reporting_service(
+                jobs=[
+                    {
+                        "id": "job-1",
+                        "reportTypeId": "channel_reach_basic_a1",
+                        "name": "yt-automation",
+                    }
+                ]
+            ),
+        )
 
         check = self._json_check(monkeypatch, tmp_path, capsys)
 
-        assert check["status"] == "fail"
-        assert "期限切れ" in check["message"]
+        assert check["status"] == "ok"
+        assert len(refresh_calls) == 1
+        token = json.loads((tmp_path / "auth" / "token.json").read_text(encoding="utf-8"))
+        assert token["token"] == "refreshed-access-token"
 
     def test_invalid_token_is_reported_without_browser_auth(self, monkeypatch, tmp_path, capsys):
         auth = tmp_path / "auth"
