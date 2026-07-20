@@ -40,7 +40,7 @@ def _build_ci_path_filter_pattern(gated_paths: tuple[str, ...]) -> str:
 
 _PATH_FILTER_PATTERN = _build_ci_path_filter_pattern(_CHANGELOG_GATED_PATHS)
 # push で CI を回す対象 branch。PR は stacked PR base でも発火するよう branch 制限しない。
-_PUSH_TRIGGER_BRANCHES = ["main", "feat/1143-suno-bulk-download"]
+_PUSH_TRIGGER_BRANCHES = ["main"]
 _CHANGELOG_FILE_PATTERN = "^CHANGELOG\\.md$"
 _LABELS_JOIN_EXPRESSION = "${{ join(github.event.pull_request.labels.*.name, ',') }}"
 _PR_EVENT_GUARD = "github.event_name == 'pull_request'"

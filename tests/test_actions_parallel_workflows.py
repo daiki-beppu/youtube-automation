@@ -16,6 +16,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _CI_WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
 _EXTENSIONS_WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "extensions.yml"
 _RELEASE_EXTENSIONS_WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "release-extensions.yml"
+_CI_PATH_CLASSIFIER = _REPO_ROOT / ".github" / "scripts" / "classify-ci-paths.sh"
 
 _CI_LINT_PARALLEL_STEPS = {
     "Ruff check": "nix develop --command uv run ruff check .",
@@ -81,6 +82,18 @@ def _read_text(path: Path) -> str:
 
 def _load_workflow(path: Path) -> dict[str, object]:
     return yaml.safe_load(_read_text(path))
+
+
+def _classify_paths(tmp_path: Path, paths: list[str]) -> dict[str, bool]:
+    changed = tmp_path / "changed-paths.txt"
+    changed.write_text("".join(f"{path}\n" for path in paths), encoding="utf-8")
+    result = subprocess.run(
+        ["bash", str(_CI_PATH_CLASSIFIER), str(changed)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return {key: value == "true" for line in result.stdout.splitlines() for key, value in [line.split("=", maxsplit=1)]}
 
 
 def _on_section(workflow: dict[str, object]) -> dict[str, object]:
@@ -192,12 +205,83 @@ def test_extensions_pull_request_trigger_keeps_path_filter() -> None:
     expected_paths = [
         "extensions/**",
         ".github/workflows/extensions.yml",
+        ".github/scripts/classify-ci-paths.sh",
         "tests/test_actions_parallel_workflows.py",
         "flake.nix",
         "flake.lock",
     ]
     assert pull_request.get("paths") == expected_paths
     assert _on_section(workflow).get("push", {}).get("paths") == expected_paths
+
+
+@pytest.mark.parametrize(
+    ("paths", "expected_true"),
+    [
+        (["extensions/suno-helper/components/App.tsx"], {"suno"}),
+        (
+            ["extensions/shared-ui/src/button.tsx"],
+            {"suno", "distrokid", "community"},
+        ),
+        (["src/youtube_automation/scripts/collection_serve.py"], {"python", "packaging"}),
+        (
+            ["src/youtube_automation/scripts/cost_tracker.py"],
+            {"python", "packaging", "windows"},
+        ),
+        (["docs/adr/0024-example.md"], {"python", "adr"}),
+        (
+            [],
+            {"python", "packaging", "windows", "adr", "suno", "distrokid", "community"},
+        ),
+    ],
+)
+def test_ci_path_classifier_selects_only_responsible_gates(
+    tmp_path: Path, paths: list[str], expected_true: set[str]
+) -> None:
+    """Changed path ごとの gate 対応と空 diff の fail-safe を固定する。"""
+    classified = _classify_paths(tmp_path, paths)
+
+    assert {key for key, enabled in classified.items() if enabled} == expected_true
+
+
+def test_ci_required_jobs_always_report_but_gate_heavy_python_steps() -> None:
+    """Required lint/test job は常時存在し、extension-only 時は重い step だけを省略する。"""
+    workflow = _load_workflow(_CI_WORKFLOW_PATH)
+    jobs = workflow["jobs"]
+
+    for trigger_name in ("push", "pull_request"):
+        trigger = _on_section(workflow)[trigger_name]
+        assert "paths" not in trigger and "paths-ignore" not in trigger
+
+    for job_name in ("lint", "test"):
+        job = jobs[job_name]
+        assert job.get("needs") == "changes"
+        assert "if" not in job
+        steps = job["steps"]
+        assert any(step.get("if") == "needs.changes.outputs.python != 'true'" for step in steps)
+        heavy_steps = [step for step in steps if step.get("uses") or "nix develop" in str(step.get("run", ""))]
+        assert heavy_steps
+        assert all(step.get("if") == "needs.changes.outputs.python == 'true'" for step in heavy_steps)
+        for group in _parallel_groups(steps):
+            assert all(step.get("if") == "needs.changes.outputs.python == 'true'" for step in group)
+
+    assert jobs["build-smoke"]["if"] == "needs.changes.outputs.packaging == 'true'"
+    assert jobs["windows-cost-tracker"]["if"] == "needs.changes.outputs.windows == 'true'"
+    assert jobs["adr-numbering"]["if"] == "needs.changes.outputs.adr == 'true'"
+
+
+def test_extensions_jobs_are_gated_by_their_changed_path_outputs() -> None:
+    """各 helper job は shared classifier の対応 output だけで起動する。"""
+    jobs = _load_workflow(_EXTENSIONS_WORKFLOW_PATH)["jobs"]
+    assert jobs["check"]["needs"] == "changes"
+    assert jobs["check"]["if"] == "needs.changes.outputs.suno == 'true'"
+    assert jobs["distrokid-helper"]["if"] == "needs.changes.outputs.distrokid == 'true'"
+    assert jobs["community-helper"]["if"] == "needs.changes.outputs.community == 'true'"
+
+
+def test_issue_lint_workflow_and_script_are_removed() -> None:
+    """issue edit/label ごとの non-blocking Actions run を復活させない。"""
+    assert not (_REPO_ROOT / ".github" / "workflows" / "issue-lint.yml").exists()
+    assert not (_REPO_ROOT / ".github" / "scripts" / "issue-lint.sh").exists()
 
 
 @pytest.mark.parametrize("job_name", ["check", "distrokid-helper", "community-helper"])
