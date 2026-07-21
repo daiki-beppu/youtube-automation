@@ -2406,13 +2406,14 @@ def test_scheduled_automation_explicit_full(tmp_path, monkeypatch):
     assert sa.allow_external_publish is True
 
 
-def test_scheduled_automation_keeps_explicit_automation_run_compatibility(tmp_path, monkeypatch):
+def test_scheduled_automation_rejects_removed_automation_run_target(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["workflow.json"] = {"workflow": {"scheduled_automation": {"target_workflow": "automation-run"}}}
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    assert load_config().workflow.scheduled_automation.target_workflow == "automation-run"
+    with pytest.raises(ConfigError, match=r"target_workflow.*automation-run.*wf-auto"):
+        load_config()
 
 
 def test_scheduled_automation_partial_keeps_other_defaults(tmp_path, monkeypatch):
