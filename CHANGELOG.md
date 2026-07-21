@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `/automation-schedule` の既定登録先を Codex / Claude のネイティブ Scheduled Task へ移し、依存性に応じた Cloud/local 分岐、backend ID による重複防止、明示承認時だけの launchd / cron fallback を追加しました（#2369）。
+
 - `feat(channel-new)`: 承認済み TTP ごとの再生数上位 5 Long VOD から Shorts / live を除外して初期動画尺の min/max を外向き丸めで導出し、根拠提示・ユーザー承認・audio.json 反映・承認済み例外・yt-doctor 完了ゲートを追加（#2368）
 
 - `fix(suno-helper)`: 投入方式の選択 radio に残っていた青い info 色の override を撤去し、枠と中央ドットが overlay の primary ブランド色へ追従するように統一（#2366）
