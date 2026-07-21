@@ -1,6 +1,7 @@
 import { Select as SelectPrimitive } from "@base-ui/react/select";
 import * as React from "react";
 
+import { useShadowPortalTriggerRef } from "./use-shadow-portal-trigger-ref";
 import { cn } from "./utils";
 
 const SelectPortalContext = React.createContext<{
@@ -106,22 +107,7 @@ function SelectTrigger({
   ...props
 }: SelectPrimitive.Trigger.Props & { size?: "sm" | "default" }) {
   const portal = React.useContext(SelectPortalContext);
-  const setTriggerRef = React.useCallback(
-    (node: HTMLButtonElement | null) => {
-      if (typeof ref === "function") {
-        ref(node);
-      } else if (ref) {
-        (ref as React.MutableRefObject<HTMLButtonElement | null>).current =
-          node;
-      }
-      if (node) {
-        // Keep the popup beside its trigger so extension-local theme variables
-        // and ShadowRoot boundaries remain intact.
-        portal?.setContainer(node.parentElement);
-      }
-    },
-    [portal, ref]
-  );
+  const setTriggerRef = useShadowPortalTriggerRef(ref, portal?.setContainer);
   return (
     <SelectPrimitive.Trigger
       ref={setTriggerRef}
@@ -207,6 +193,7 @@ function SelectItem({
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
+      data-value={String(props.value)}
       className={cn(
         "relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className

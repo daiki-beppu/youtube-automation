@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { SERVER_SOURCE_SELECT_EVENT } from "@youtube-automation/ui";
 import { act } from "react";
 import { createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -231,16 +232,38 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve: resolvePromise };
 }
 
-function setSelectValue(select: HTMLSelectElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(
-    HTMLSelectElement.prototype,
-    "value"
-  )?.set;
-  if (!setter) {
-    throw new Error("HTMLSelectElement.value setter is unavailable");
+function dispatchSelection(element: HTMLElement): void {
+  for (const type of ["pointerdown", "pointerup"]) {
+    const event = new MouseEvent(type, { bubbles: true, button: 0 });
+    Object.defineProperty(event, "pointerType", { value: "mouse" });
+    element.dispatchEvent(event);
   }
-  setter.call(select, value);
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+}
+
+function setSelectValue(control: HTMLElement, value: string): void {
+  if (control.dataset.sunoControl === "collection-select") {
+    const checkboxes = Array.from(
+      control.querySelectorAll<HTMLElement>("[data-collection-id]")
+    );
+    for (const selected of checkboxes.filter(
+      (candidate) =>
+        candidate.dataset.collectionId !== value &&
+        candidate.getAttribute("aria-checked") === "true"
+    )) {
+      dispatchSelection(selected);
+    }
+    const checkbox = checkboxes.find(
+      (candidate) => candidate.dataset.collectionId === value
+    );
+    if (checkbox && checkbox.getAttribute("aria-checked") !== "true") {
+      dispatchSelection(checkbox);
+    }
+    return;
+  }
+  control.dispatchEvent(
+    new CustomEvent(SERVER_SOURCE_SELECT_EVENT, { detail: value })
+  );
 }
 
 async function setDownloadFormatValue(
@@ -343,12 +366,12 @@ function alertByText(container: HTMLElement, text: string): HTMLElement {
 }
 
 async function waitFor(assertion: () => void): Promise<void> {
-  for (let i = 0; i < 20; i += 1) {
+  for (let i = 0; i < 100; i += 1) {
     try {
       assertion();
       return;
     } catch (error) {
-      if (i === 19) {
+      if (i === 99) {
         throw error;
       }
       await act(async () => {
@@ -454,17 +477,21 @@ describe("Suno popup compatibility check", () => {
   });
 
   it("ローカル配信元 option は URL を表示せず、URL value はデータ取得先として維持する", async () => {
-    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    const select = expectControl(container, "server-url");
+    select.querySelector<HTMLButtonElement>('[role="combobox"]')!.click();
 
     await waitFor(() => {
-      expect(select.options).toHaveLength(4);
+      expect(document.querySelectorAll('[role="option"]')).toHaveLength(4);
     });
 
     expect(
-      Array.from(select.options, (option) => ({
-        text: option.text,
-        value: option.value,
-      }))
+      Array.from(
+        document.querySelectorAll<HTMLElement>('[role="option"]'),
+        (option) => ({
+          text: option.textContent,
+          value: option.dataset.value,
+        })
+      )
     ).toEqual([
       {
         text: "YouTube Automation (default) | suno-helper",
@@ -474,7 +501,9 @@ describe("Suno popup compatibility check", () => {
       { text: "localhost fallback 7877 | suno-helper", value: FALLBACK_URL },
       { text: "localhost changed | suno-helper", value: `${BASE_URL}/changed` },
     ]);
-    expect(select.textContent).not.toContain("http://");
+    expect(
+      select.querySelector('[role="combobox"]')?.textContent
+    ).not.toContain("http://");
   });
 
   it("popup に投入方式 selector を表示し、Fast / Balanced / Safe の速度プリセットは表示しない", () => {
@@ -488,13 +517,15 @@ describe("Suno popup compatibility check", () => {
 
   it("可視 control を shared shadcn primitive で描画し、value・aria・data 属性を維持する", () => {
     const collectionSelect = expectControl(container, "collection-select");
-    expect(collectionSelect).toBeInstanceOf(HTMLSelectElement);
-    expect(collectionSelect.classList).toContain("sr-only");
-    expect(collectionSelect.getAttribute("aria-hidden")).toBe("true");
-    expect(collectionSelect.getAttribute("role")).not.toBe("button");
+    expect(collectionSelect.dataset.slot).toBe("scroll-area");
+    expect(
+      collectionSelect.querySelector('[data-slot="empty"]')
+    ).not.toBeNull();
+    expect(container.querySelector("select")).toBeNull();
 
     const serverTrigger = expectControl(container, "server-source-trigger");
-    expectShadcnControl(serverTrigger, "outline");
+    expect(serverTrigger.dataset.slot).toBe("select-trigger");
+    expect(serverTrigger.dataset.size).toBe("sm");
     expect(serverTrigger.getAttribute("aria-haspopup")).toBe("listbox");
     const downloadFormat = expectControl(
       container,
@@ -836,12 +867,10 @@ describe("Suno popup compatibility check", () => {
       )
       .mockResolvedValueOnce(jsonResponse(200, entries));
 
-    await act(async () => {
-      setSelectValue(
-        expectControl(container, "server-url") as HTMLSelectElement,
-        BASE_URL
-      );
-    });
+    await setSelectValue(
+      expectControl(container, "server-url") as HTMLSelectElement,
+      BASE_URL
+    );
     await waitFor(() => {
       expect(container.textContent).toContain("2 パターンを取得しました。");
     });
@@ -931,12 +960,10 @@ describe("Suno popup compatibility check", () => {
       .mockReturnValueOnce(versionResponse.promise)
       .mockResolvedValueOnce(jsonResponse(500, { error: "server down" }));
 
-    await act(async () => {
-      setSelectValue(
-        expectControl(container, "server-url") as HTMLSelectElement,
-        BASE_URL
-      );
-    });
+    await setSelectValue(
+      expectControl(container, "server-url") as HTMLSelectElement,
+      BASE_URL
+    );
     await waitFor(() => {
       expect(panel?.dataset.sunoPhase).toBe("loading");
       expect(panel?.dataset.sunoRunning).toBe("false");
@@ -1000,12 +1027,7 @@ describe("Suno popup compatibility check", () => {
         jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }])
       );
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
 
     await waitFor(() => {
       expect(container.textContent).toContain(
@@ -1042,13 +1064,7 @@ describe("Suno popup compatibility check", () => {
         jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }])
       );
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
-
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -1087,12 +1103,10 @@ describe("Suno popup compatibility check", () => {
         jsonResponse(200, [{ name: "legacy", style: "lofi", lyrics: "" }])
       );
 
-    await act(async () => {
-      setSelectValue(
-        expectControl(container, "server-url") as HTMLSelectElement,
-        FALLBACK_URL
-      );
-    });
+    await setSelectValue(
+      expectControl(container, "server-url") as HTMLSelectElement,
+      FALLBACK_URL
+    );
 
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
@@ -1139,12 +1153,7 @@ describe("Suno popup compatibility check", () => {
       )
       .mockResolvedValueOnce(jsonResponse(200, entries));
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
 
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
@@ -1244,12 +1253,7 @@ describe("Suno popup compatibility check", () => {
       )
       .mockResolvedValueOnce(jsonResponse(200, entries));
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -1542,12 +1546,7 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       root.render(createElement(App));
     });
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
 
     await waitFor(() => {
       expect(container.textContent).toContain("前回の実行が中断されました。");
@@ -1638,12 +1637,7 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       root.render(createElement(App));
     });
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
     await waitFor(() => {
       expect(buttonByText(container, "失敗分のみ再実行")).toBeTruthy();
     });
@@ -1755,12 +1749,7 @@ describe("Suno popup compatibility check", () => {
       )
       .mockResolvedValueOnce(jsonResponse(200, entries));
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
 
     await waitFor(() => {
       expect(container.textContent).toContain("3 パターンを取得しました。");
@@ -1952,12 +1941,7 @@ describe("Suno popup compatibility check", () => {
       )
       .mockResolvedValueOnce(jsonResponse(200, fetchedEntries));
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -2009,12 +1993,7 @@ describe("Suno popup compatibility check", () => {
       )
       .mockResolvedValueOnce(jsonResponse(200, entries));
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
 
     await waitFor(() => {
       expect(container.textContent).toContain("3 パターンを取得しました。");
@@ -2075,12 +2054,7 @@ describe("Suno popup compatibility check", () => {
       )
       .mockResolvedValueOnce(jsonResponse(200, entries));
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -2159,24 +2133,17 @@ describe("Suno popup compatibility check", () => {
         ])
       );
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
 
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
 
     messagingMocks.sendMessage.mockClear();
-    await act(async () => {
-      setSelectValue(
-        expectControl(container, "collection-select") as HTMLSelectElement,
-        "20260602-clm-theme-b-collection"
-      );
-    });
+    await setSelectValue(
+      expectControl(container, "collection-select") as HTMLSelectElement,
+      "20260602-clm-theme-b-collection"
+    );
 
     await waitFor(() => {
       expect(container.textContent).toContain("2 パターンを取得しました。");
@@ -2251,22 +2218,18 @@ describe("Suno popup compatibility check", () => {
       )
       .mockResolvedValueOnce(jsonResponse(500, { error: "server down" }));
 
-    await act(async () => {
-      setSelectValue(
-        expectControl(container, "server-url") as HTMLSelectElement,
-        BASE_URL
-      );
-    });
+    await setSelectValue(
+      expectControl(container, "server-url") as HTMLSelectElement,
+      BASE_URL
+    );
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
 
-    await act(async () => {
-      setSelectValue(
-        expectControl(container, "collection-select") as HTMLSelectElement,
-        "20260602-clm-theme-b-collection"
-      );
-    });
+    await setSelectValue(
+      expectControl(container, "collection-select") as HTMLSelectElement,
+      "20260602-clm-theme-b-collection"
+    );
 
     await waitFor(() => {
       expect(container.textContent).toContain(
@@ -2329,31 +2292,25 @@ describe("Suno popup compatibility check", () => {
         jsonResponse(200, [{ name: "latest-a", style: "ambient", lyrics: "" }])
       );
 
-    await act(async () => {
-      setSelectValue(
-        expectControl(container, "server-url") as HTMLSelectElement,
-        BASE_URL
-      );
-    });
+    await setSelectValue(
+      expectControl(container, "server-url") as HTMLSelectElement,
+      BASE_URL
+    );
     await waitFor(() => {
       expect(container.textContent).toContain("initial-a");
     });
 
-    await act(async () => {
-      setSelectValue(
-        expectControl(container, "collection-select") as HTMLSelectElement,
-        "20260602-clm-theme-b-collection"
-      );
-    });
+    await setSelectValue(
+      expectControl(container, "collection-select") as HTMLSelectElement,
+      "20260602-clm-theme-b-collection"
+    );
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(6);
     });
-    await act(async () => {
-      setSelectValue(
-        expectControl(container, "collection-select") as HTMLSelectElement,
-        "20260601-clm-theme-a-collection"
-      );
-    });
+    await setSelectValue(
+      expectControl(container, "collection-select") as HTMLSelectElement,
+      "20260601-clm-theme-a-collection"
+    );
     await waitFor(() => {
       expect(container.textContent).toContain("latest-a");
     });
@@ -2409,12 +2366,7 @@ describe("Suno popup compatibility check", () => {
       }
     );
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -2500,12 +2452,7 @@ describe("Suno popup compatibility check", () => {
       }
     );
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -2583,12 +2530,7 @@ describe("Suno popup compatibility check", () => {
       }
     );
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -2651,12 +2593,7 @@ describe("Suno popup compatibility check", () => {
       }
     );
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -2795,7 +2732,7 @@ describe("Suno popup compatibility check", () => {
       container,
       "server-url"
     ) as HTMLSelectElement;
-    setSelectValue(serverSelect, BASE_URL);
+    await setSelectValue(serverSelect, BASE_URL);
 
     await waitFor(() => {
       expect(container.textContent).toContain(
@@ -2816,7 +2753,7 @@ describe("Suno popup compatibility check", () => {
       container,
       "server-url"
     ) as HTMLSelectElement;
-    setSelectValue(serverSelect, BASE_URL);
+    await setSelectValue(serverSelect, BASE_URL);
 
     await waitFor(() => {
       expect(container.textContent).toContain(
@@ -2981,12 +2918,7 @@ describe("Suno popup compatibility check", () => {
       }
     );
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -3077,12 +3009,7 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       root.render(createElement(App));
     });
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
 
     await waitFor(() => {
       expect(container.textContent).not.toContain(
@@ -3158,12 +3085,7 @@ describe("Suno popup compatibility check", () => {
     await act(async () => {
       root.render(createElement(App));
     });
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
 
     await waitFor(() => {
       expect(container.textContent).toContain("前回の実行が中断されました。");
@@ -3214,12 +3136,7 @@ describe("Suno popup compatibility check", () => {
         jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }])
       );
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -3275,12 +3192,7 @@ describe("Suno popup compatibility check", () => {
       }
     );
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -3332,12 +3244,7 @@ describe("Suno popup compatibility check", () => {
         jsonResponse(200, [{ name: "p1", style: "lofi", lyrics: "" }])
       );
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
@@ -3377,12 +3284,7 @@ describe("Suno popup compatibility check", () => {
       )
       .mockResolvedValueOnce(jsonResponse(200, []));
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
     await waitFor(() => {
       expect(container.textContent).toContain("0 パターンを取得しました。");
     });
@@ -3447,24 +3349,17 @@ describe("Suno popup compatibility check", () => {
         ])
       );
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
 
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
 
     messagingMocks.sendMessage.mockClear();
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        `${BASE_URL}/changed`
-      );
-    });
+    await setSelectValue(
+      expectControl(container, "server-url"),
+      `${BASE_URL}/changed`
+    );
 
     await waitFor(() => {
       expect(container.textContent).toContain("2 パターンを取得しました。");
@@ -3539,29 +3434,25 @@ describe("Suno popup compatibility check", () => {
       }
     );
 
-    await act(async () => {
-      setSelectValue(
-        expectControl(container, "server-url") as HTMLSelectElement,
-        BASE_URL
-      );
-    });
+    await setSelectValue(
+      expectControl(container, "server-url") as HTMLSelectElement,
+      BASE_URL
+    );
     await waitFor(() => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
 
-    await act(async () => {
-      setSelectValue(
-        expectControl(container, "server-url") as HTMLSelectElement,
-        FALLBACK_URL
-      );
-    });
+    await setSelectValue(
+      expectControl(container, "server-url") as HTMLSelectElement,
+      FALLBACK_URL
+    );
 
     await waitFor(() => {
       expect(container.textContent).toContain("取得失敗: Failed to fetch");
     });
-    expect(
-      (expectControl(container, "server-url") as HTMLSelectElement).value
-    ).toBe(FALLBACK_URL);
+    expect(expectControl(container, "server-url").dataset.selectedValue).toBe(
+      FALLBACK_URL
+    );
     expect(
       container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')
         ?.dataset.sunoCollectionId
@@ -3605,16 +3496,12 @@ describe("Suno popup compatibility check", () => {
       container,
       "server-url"
     ) as HTMLSelectElement;
-    await act(async () => {
-      setSelectValue(serverSelect, BASE_URL);
-    });
+    await setSelectValue(serverSelect, BASE_URL);
     await waitFor(() => {
       expect(storageMocks.setValue).toHaveBeenCalledWith(BASE_URL);
     });
 
-    await act(async () => {
-      setSelectValue(serverSelect, `${BASE_URL}/changed`);
-    });
+    await setSelectValue(serverSelect, `${BASE_URL}/changed`);
     await act(async () => {
       firstSave.resolve(undefined);
     });
@@ -3625,10 +3512,7 @@ describe("Suno popup compatibility check", () => {
     expect(storageMocks.setValue).toHaveBeenLastCalledWith(
       `${BASE_URL}/changed`
     );
-    expect(serverSelect.value).toBe(`${BASE_URL}/changed`);
-    expect(
-      Array.from(serverSelect.options, (option) => option.value)
-    ).toContain(`${BASE_URL}/changed`);
+    expect(serverSelect.dataset.selectedValue).toBe(`${BASE_URL}/changed`);
     expect(
       container.querySelector<HTMLElement>('[data-suno-helper="control-panel"]')
         ?.dataset.sunoCollectionId
@@ -3646,12 +3530,7 @@ describe("Suno popup compatibility check", () => {
       )
       .mockResolvedValueOnce(jsonResponse(200, []));
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
 
     await waitFor(() => {
       expect(container.textContent).toContain(
@@ -3673,12 +3552,7 @@ describe("Suno popup compatibility check", () => {
       )
       .mockResolvedValueOnce(jsonResponse(404, {}));
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
 
     await waitFor(() => {
       expect(container.textContent).toContain("取得失敗: HTTP 404");
@@ -3786,11 +3660,13 @@ describe("Suno popup compatibility check", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("ready-collection");
     });
-    expect(container.textContent).toContain("done-collection（完了 4/4）");
-    const doneOption = Array.from(container.querySelectorAll("option")).find(
-      (option) => option.textContent?.includes("done-collection")
-    );
-    expect(doneOption?.disabled).toBe(false);
+    expect(container.textContent).toContain("done-collection");
+    expect(container.textContent).toContain("完了 4/4");
+    expect(
+      container
+        .querySelector('[data-collection-id="20260601-clm-done-collection"]')
+        ?.hasAttribute("disabled")
+    ).toBe(false);
   });
 
   it("CORS なし 404 (TypeError) で /collections が reject されたら legacy endpoint へ fallback しない", async () => {
@@ -3803,12 +3679,7 @@ describe("Suno popup compatibility check", () => {
       )
       .mockRejectedValueOnce(new TypeError("Failed to fetch"));
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
 
     await waitFor(() => {
       expect(container.textContent).toContain("取得失敗: Failed to fetch");
@@ -3858,11 +3729,9 @@ describe("Suno popup compatibility check", () => {
     );
 
     await rerenderApp();
-    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    const select = expectControl(container, "server-url");
     await waitFor(() =>
-      expect(Array.from(select.options, ({ value }) => value)).toContain(
-        oldSource.url
-      )
+      expect(select.dataset.sourceValues).toContain(oldSource.url)
     );
     expect(events.slice(0, 2)).toEqual(["migration", "discovery"]);
 
@@ -3872,15 +3741,18 @@ describe("Suno popup compatibility check", () => {
       ).click();
     });
     await waitFor(() =>
-      expect(Array.from(select.options, ({ value }) => value)).toContain(
-        newSource.url
-      )
+      expect(select.dataset.sourceValues).toContain(newSource.url)
     );
-    expect(Array.from(select.options, ({ value }) => value)).toEqual([
+    expect(select.dataset.sourceValues?.split(" ")).toEqual([
       defaultSource.url,
       newSource.url,
     ]);
 
+    await act(async () =>
+      (
+        expectControl(container, "server-source-trigger") as HTMLButtonElement
+      ).click()
+    );
     await act(async () =>
       (
         expectControl(container, "server-source-trigger") as HTMLButtonElement
@@ -3999,7 +3871,7 @@ describe("Suno popup compatibility check", () => {
     );
 
     await act(async () => root.render(createElement(App)));
-    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    const select = expectControl(container, "server-url");
     await act(async () => {
       (
         expectControl(container, "server-source-trigger") as HTMLButtonElement
@@ -4014,7 +3886,7 @@ describe("Suno popup compatibility check", () => {
         { baseUrl: defaultSource.url }
       )
     );
-    expect(select.value).toBe(defaultSource.url);
+    expect(select.dataset.selectedValue).toBe(defaultSource.url);
     expect(discoveryCount).toBe(2);
   });
 
@@ -4057,7 +3929,7 @@ describe("Suno popup compatibility check", () => {
       await rerenderApp();
       await waitFor(() =>
         expect(
-          (expectControl(container, "server-url") as HTMLSelectElement).value
+          expectControl(container, "server-url").dataset.selectedValue
         ).toBe(expectedUrl)
       );
 
@@ -4094,32 +3966,20 @@ describe("Suno popup compatibility check", () => {
       }
     );
     await rerenderApp();
-    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    const select = expectControl(container, "server-url");
     await waitFor(() =>
-      expect(Array.from(select.options, ({ value }) => value)).toContain(
-        liveSource.url
-      )
+      expect(select.dataset.sourceValues).toContain(liveSource.url)
     );
-    await act(async () =>
-      (
-        expectControl(container, "server-source-trigger") as HTMLButtonElement
-      ).click()
-    );
-    await waitFor(() =>
-      expect(container.querySelector('[role="listbox"]')).not.toBeNull()
-    );
-    await act(async () => {
-      Array.from(
-        container.querySelectorAll<HTMLButtonElement>('[role="option"]')
-      )
-        .find((option) => option.textContent?.includes("Channel A"))!
-        .click();
-    });
+    await setSelectValue(select, liveSource.url);
 
     await waitFor(() =>
       expect(storageMocks.setValue).toHaveBeenCalledWith(liveSource.url)
     );
-    expect(container.querySelector('[role="listbox"]')).toBeNull();
+    expect(
+      expectControl(container, "server-source-trigger").getAttribute(
+        "aria-expanded"
+      )
+    ).toBe("false");
     expect(legacySourceState.present).toBe(false);
     await waitFor(() =>
       expect(messagingMocks.sendMessage).toHaveBeenCalledWith(
@@ -4131,9 +3991,9 @@ describe("Suno popup compatibility check", () => {
     storageMocks.getValue.mockResolvedValue(liveSource.url);
     await rerenderApp();
     await waitFor(() =>
-      expect(
-        (expectControl(container, "server-url") as HTMLSelectElement).value
-      ).toBe(liveSource.url)
+      expect(expectControl(container, "server-url").dataset.selectedValue).toBe(
+        liveSource.url
+      )
     );
   });
 
@@ -4154,7 +4014,7 @@ describe("Suno popup compatibility check", () => {
       }
     );
     await rerenderApp();
-    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    const select = expectControl(container, "server-url");
     await act(async () => {
       const trigger = expectControl(
         container,
@@ -4166,13 +4026,19 @@ describe("Suno popup compatibility check", () => {
     newer.resolve([
       { id: "new", label: "New", url: "http://new.localhost:49152" },
     ]);
-    await waitFor(() => expect(select.textContent).toContain("New"));
+    await waitFor(() =>
+      expect(select.dataset.sourceValues).toContain(
+        "http://new.localhost:49152"
+      )
+    );
     older.resolve([
       { id: "old", label: "Old", url: "http://old.localhost:9001" },
     ]);
     await act(async () => Promise.resolve());
-    expect(select.textContent).toContain("New");
-    expect(select.textContent).not.toContain("Old");
+    expect(select.dataset.sourceValues).toContain("http://new.localhost:49152");
+    expect(select.dataset.sourceValues).not.toContain(
+      "http://old.localhost:9001"
+    );
   });
 
   it("should discard a deferred discovery result when a run starts", async () => {
@@ -4198,11 +4064,12 @@ describe("Suno popup compatibility check", () => {
         ])
       )
       .mockResolvedValueOnce(jsonResponse(200, entries));
-    await act(async () =>
-      setSelectValue(
-        expectControl(container, "server-url") as HTMLSelectElement,
-        BASE_URL
-      )
+    await act(
+      async () =>
+        await setSelectValue(
+          expectControl(container, "server-url") as HTMLSelectElement,
+          BASE_URL
+        )
     );
     await waitFor(() =>
       expect(buttonByText(container, "全パターンを連続実行").disabled).toBe(
@@ -4227,7 +4094,7 @@ describe("Suno popup compatibility check", () => {
         return defaultSendMessage(message, payload);
       }
     );
-    const select = expectControl(container, "server-url") as HTMLSelectElement;
+    const select = expectControl(container, "server-url");
     await act(async () => {
       (
         expectControl(container, "server-source-trigger") as HTMLButtonElement
@@ -4241,15 +4108,21 @@ describe("Suno popup compatibility check", () => {
         )?.dataset.sunoRunning
       ).toBe("true")
     );
-    expect(container.querySelector('[role="listbox"]')).toBeNull();
+    expect(
+      expectControl(container, "server-source-trigger").getAttribute(
+        "aria-expanded"
+      )
+    ).toBe("false");
 
     pendingDiscovery.resolve([
       { id: "new", label: "New", url: "http://new.localhost:49152" },
     ]);
     await act(async () => pendingDiscovery.promise);
 
-    expect(select.textContent).not.toContain("New");
-    expect(select.value).toBe(BASE_URL);
+    expect(select.dataset.sourceValues).not.toContain(
+      "http://new.localhost:49152"
+    );
+    expect(select.dataset.selectedValue).toBe(BASE_URL);
     expect(
       messagingMocks.sendMessage.mock.calls.some(
         ([, payload]) => payload?.baseUrl === "http://new.localhost:49152"

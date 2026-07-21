@@ -374,17 +374,32 @@ describe("Overlay shell", () => {
       '[data-suno-control="collection-queue-discard-confirmation"]'
     )!;
     expect(confirmation.textContent).toContain(
-      "未完了の queue を破棄しますか？"
+      "未完了の collection queue を破棄しますか？"
     );
     expect(runner.discardCollectionQueue).not.toHaveBeenCalled();
     expect(
       Array.from(confirmation.querySelectorAll("button")).map(
         (button) => button.textContent
       )
-    ).toEqual(["破棄", "戻る"]);
+    ).toEqual(["戻る", "破棄"]);
+
+    await act(async () => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+      );
+    });
+    await waitFor(() =>
+      expect(confirmation.hasAttribute("data-closed")).toBe(true)
+    );
+    expect(document.activeElement).toBe(close);
+
+    await act(async () => close.click());
+    const reopenedConfirmation = container.querySelector<HTMLElement>(
+      '[data-suno-control="collection-queue-discard-confirmation"]'
+    )!;
 
     await act(async () =>
-      Array.from(confirmation.querySelectorAll("button"))
+      Array.from(reopenedConfirmation.querySelectorAll("button"))
         .find((button) => button.textContent === "戻る")!
         .click()
     );

@@ -1,7 +1,13 @@
 import {
+  Alert,
+  AlertDescription,
   Button,
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -45,9 +51,9 @@ export function App() {
       />
 
       {compatibilityWarning && (
-        <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          {compatibilityWarning}
-        </div>
+        <Alert variant="warning">
+          <AlertDescription>{compatibilityWarning}</AlertDescription>
+        </Alert>
       )}
 
       {/* dir mode: 未配信 disc 一覧のドロップダウン (#934)。suno-helper App.tsx 55-69 行の構造を踏襲。 */}
@@ -64,6 +70,7 @@ export function App() {
             onValueChange={(value) => selectCollection(Number(value))}
           >
             <SelectTrigger
+              data-selected-value={String(selectedIndex)}
               className="w-full"
               aria-labelledby="collection-select-label"
               data-distrokid-control="collection-select"
@@ -71,38 +78,30 @@ export function App() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {collections.map((item, idx) => (
-                <SelectItem
-                  key={`${item.collection_id}/${item.disc}`}
-                  value={String(idx)}
-                >
-                  {`${item.name} / ${item.disc}（${item.album_title}・${item.track_count} 曲）`}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                {collections.map((item, idx) => (
+                  <SelectItem
+                    key={`${item.collection_id}/${item.disc}`}
+                    value={String(idx)}
+                  >
+                    {`${item.name} / ${item.disc}（${item.album_title}・${item.track_count} 曲）`}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
-          <select
-            className="sr-only"
-            value={selectedIndex}
-            disabled={isInjecting}
-            aria-hidden="true"
-            tabIndex={-1}
-            onChange={(event) => selectCollection(Number(event.target.value))}
-          >
-            {collections.map((item, idx) => (
-              <option key={`${item.collection_id}/${item.disc}`} value={idx}>
-                {`${item.name} / ${item.disc}（${item.album_title}・${item.track_count} 曲）`}
-              </option>
-            ))}
-          </select>
         </div>
       )}
 
       {/* dir mode で全 disc が配信済みの場合（#934）。suno-helper の allMapped パターンを踏襲。 */}
       {allReleased && (
-        <p className="text-xs text-muted-foreground">
-          未配信の disc はありません。
-        </p>
+        <Empty className="p-4">
+          <EmptyHeader>
+            <EmptyTitle className="text-sm">
+              未配信の disc はありません。
+            </EmptyTitle>
+          </EmptyHeader>
+        </Empty>
       )}
 
       {payload !== null && <ReleaseReview payload={payload} />}

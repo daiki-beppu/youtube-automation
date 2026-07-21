@@ -4,6 +4,10 @@ import {
   Button,
   Card,
   CardContent,
+  Field,
+  FieldGroup,
+  FieldLabel,
+  Input,
 } from "@youtube-automation/ui";
 import { useEffect, useState } from "react";
 import { browser } from "wxt/browser";
@@ -93,17 +97,19 @@ export function App() {
   };
 
   return (
-    <main className="space-y-4 bg-background p-4 text-foreground">
-      <label className="block text-sm font-medium">
-        サーバー URL
-        <input
-          className="mt-1 w-full rounded border border-input bg-background px-2 py-1"
-          name="serverUrl"
-          onChange={(event) => setServerUrl(event.target.value)}
-          type="url"
-          value={serverUrl}
-        />
-      </label>
+    <main className="flex flex-col gap-4 bg-background p-4 text-foreground">
+      <FieldGroup>
+        <Field>
+          <FieldLabel htmlFor="community-server-url">サーバー URL</FieldLabel>
+          <Input
+            id="community-server-url"
+            name="serverUrl"
+            onChange={(event) => setServerUrl(event.target.value)}
+            type="url"
+            value={serverUrl}
+          />
+        </Field>
+      </FieldGroup>
       <div className="flex gap-2">
         <Button
           className="flex-1"

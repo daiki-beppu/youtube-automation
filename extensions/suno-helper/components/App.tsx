@@ -1,5 +1,14 @@
 import {
   Alert,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
   Button,
   buttonVariants,
   Checkbox,
@@ -7,12 +16,20 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
+  FieldGroup,
   FieldLabel,
+  FieldLegend,
+  FieldSet,
   RadioGroup,
   RadioGroupItem,
   ScrollArea,
+  ServerSourceField,
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
@@ -21,7 +38,6 @@ import { useEffect, useRef, useState } from "react";
 
 import {
   DOWNLOAD_FORMAT_DEFAULT,
-  formatServerSourceLabel,
   PHASE,
   RUN_MODES,
   type RunModeId,
@@ -100,33 +116,10 @@ export function App() {
   );
   const previousEntriesRef = useRef(entries);
   const previousItemStatesRef = useRef(itemStates);
-  const [refreshingServerSources, setRefreshingServerSources] = useState(false);
-  const [serverSourcePickerOpen, setServerSourcePickerOpen] = useState(false);
   const [queueDiscardConfirming, setQueueDiscardConfirming] = useState(false);
-  const isRunningRef = useRef(isRunning);
-  useEffect(() => {
-    isRunningRef.current = isRunning;
-  }, [isRunning]);
   useEffect(() => {
     setQueueDiscardConfirming(false);
   }, [collectionQueue?.queueId, collectionQueue?.status]);
-
-  const openServerSourcePicker = (): void => {
-    if (refreshingServerSources || controlsLocked) {
-      return;
-    }
-    setServerSourcePickerOpen(false);
-    setRefreshingServerSources(true);
-    void refreshServerSources().finally(() => {
-      setRefreshingServerSources(false);
-      if (!isRunningRef.current) {
-        setServerSourcePickerOpen(true);
-      }
-    });
-  };
-
-  const selectedServerSource =
-    serverSources.find((source) => source.url === url) ?? serverSources[0];
 
   const visibleResumeBanner =
     resumeBanner && resumeBanner.failedIndex < resumeBanner.total
@@ -259,7 +252,6 @@ export function App() {
     if (selectedCollectionIds.length === 0) {
       return;
     }
-    setServerSourcePickerOpen(false);
     if (multipleCollectionsSelected) {
       void runCollectionQueue(selectedCollectionIds);
       return;
@@ -275,8 +267,6 @@ export function App() {
       })
     );
   };
-  const serverSourcePickerVisible =
-    serverSourcePickerOpen && !controlsLocked && !refreshingServerSources;
   if (reloadRequired || runnerReloadRequired) {
     return <ReloadRequiredNotice />;
   }
@@ -294,70 +284,19 @@ export function App() {
     >
       <h1 className="text-base font-semibold">Suno Helper</h1>
 
-      <label className="flex flex-col gap-1 text-sm">
-        ローカル配信元
-        <Button
-          type="button"
-          aria-haspopup="listbox"
-          aria-expanded={serverSourcePickerVisible}
-          disabled={controlsLocked || refreshingServerSources}
-          onClick={openServerSourcePicker}
-          data-suno-control="server-source-trigger"
-          variant="outline"
-          size="sm"
-          className="justify-start text-left"
-        >
-          {refreshingServerSources
-            ? "稼働中の配信元を更新中…"
-            : selectedServerSource
-              ? formatServerSourceLabel(selectedServerSource, "suno-helper")
-              : "配信元を選択"}
-        </Button>
-        <select
-          value={url}
-          disabled={controlsLocked || refreshingServerSources}
-          onChange={(e) => setUrl(e.target.value)}
-          data-suno-control="server-url"
-          aria-hidden="true"
-          tabIndex={-1}
-          className="sr-only"
-        >
-          {serverSources.map((source) => (
-            <option key={source.url} value={source.url}>
-              {formatServerSourceLabel(source, "suno-helper")}
-            </option>
-          ))}
-        </select>
-        {serverSourcePickerVisible && (
-          <div
-            role="listbox"
-            aria-label="ローカル配信元"
-            className="rounded border border-border bg-popover p-1 text-popover-foreground"
-          >
-            {serverSources.map((source) => (
-              <Button
-                key={source.url}
-                type="button"
-                role="option"
-                aria-selected={source.url === url}
-                disabled={controlsLocked || refreshingServerSources}
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start text-left"
-                onClick={() => {
-                  if (isRunningRef.current || refreshingServerSources) {
-                    return;
-                  }
-                  setUrl(source.url);
-                  setServerSourcePickerOpen(false);
-                }}
-              >
-                {formatServerSourceLabel(source, "suno-helper")}
-              </Button>
-            ))}
-          </div>
-        )}
-      </label>
+      <ServerSourceField
+        value={url}
+        sources={serverSources}
+        disabled={controlsLocked}
+        helper="suno-helper"
+        onValueChange={setUrl}
+        onRefresh={refreshServerSources}
+        fieldDataAttributes={{ "data-suno-control": "server-url" }}
+        triggerProps={{ size: "sm" }}
+        triggerDataAttributes={{
+          "data-suno-control": "server-source-trigger",
+        }}
+      />
 
       <Collapsible className="rounded border border-border p-2 text-sm">
         <CollapsibleTrigger
@@ -380,12 +319,17 @@ export function App() {
             className="mt-1"
             viewportClassName="max-h-48"
             data-suno-collection-list="true"
+            data-suno-control="collection-select"
           >
             <div className="flex flex-col gap-1 pr-3">
               {collections.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  コレクションなし
-                </p>
+                <Empty className="p-4">
+                  <EmptyHeader>
+                    <EmptyTitle className="text-xs">
+                      コレクションなし
+                    </EmptyTitle>
+                  </EmptyHeader>
+                </Empty>
               )}
               {collections.map((collection) => {
                 const checked = selectedCollectionIds.includes(collection.id);
@@ -406,6 +350,7 @@ export function App() {
                   >
                     <Checkbox
                       className="mt-0.5"
+                      data-collection-id={collection.id}
                       checked={checked}
                       disabled={
                         controlsLocked || collection.status === "needs_prompts"
@@ -436,24 +381,6 @@ export function App() {
           </ScrollArea>
         </CollapsibleContent>
       </Collapsible>
-      <select
-        value={selectedCollectionId}
-        onChange={(event) => selectCollection(event.target.value)}
-        data-suno-control="collection-select"
-        tabIndex={-1}
-        className="sr-only"
-        aria-hidden="true"
-      >
-        {collections.map((collection) => (
-          <option key={collection.id} value={collection.id}>
-            {collection.status === "downloaded"
-              ? `${collection.name}（完了 ${collection.downloaded_count}/${collection.expected_file_count ?? (collection.pattern_count ?? 0) * 2}）`
-              : collection.status === "ready"
-                ? `${collection.name} (${collection.pattern_count})`
-                : `${collection.name}（prompts なし）`}
-          </option>
-        ))}
-      </select>
 
       {collectionQueue && (
         <Alert
@@ -470,36 +397,62 @@ export function App() {
           data-suno-control="collection-queue-summary"
         >
           {collectionQueue.status !== "running" && (
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="absolute top-1 right-1 size-6"
-              aria-label={
-                collectionQueue.status === "paused"
-                  ? "停止中の collection queue を破棄"
-                  : "完了した collection queue を閉じる"
-              }
-              data-suno-control="collection-queue-dismiss"
-              onClick={() => {
-                if (collectionQueue.status === "paused") {
-                  setQueueDiscardConfirming(true);
-                  return;
-                }
-                void discardCollectionQueue();
-              }}
+            <AlertDialog
+              open={queueDiscardConfirming}
+              onOpenChange={setQueueDiscardConfirming}
             >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeWidth="2"
-              >
-                <path d="m4 4 8 8m0-8-8 8" />
-              </svg>
-            </Button>
+              {collectionQueue.status === "paused" ? (
+                <AlertDialogTrigger
+                  render={
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="absolute top-1 right-1 size-6"
+                    />
+                  }
+                  aria-label="停止中の collection queue を破棄"
+                  data-suno-control="collection-queue-dismiss"
+                >
+                  ×
+                </AlertDialogTrigger>
+              ) : (
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="absolute top-1 right-1 size-6"
+                  aria-label="完了した collection queue を閉じる"
+                  data-suno-control="collection-queue-dismiss"
+                  onClick={() => void discardCollectionQueue()}
+                >
+                  ×
+                </Button>
+              )}
+              <AlertDialogContent data-suno-control="collection-queue-discard-confirmation">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    未完了の collection queue を破棄しますか？
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    確定するまで queue
+                    は保持されます。この操作は取り消せません。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>戻る</AlertDialogCancel>
+                  <AlertDialogAction
+                    variant="destructive"
+                    onClick={() => {
+                      setQueueDiscardConfirming(false);
+                      void discardCollectionQueue();
+                    }}
+                  >
+                    破棄
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
           <p className="pr-7 font-medium">
             Collection queue: {collectionQueue.status}
@@ -512,33 +465,7 @@ export function App() {
               </li>
             ))}
           </ul>
-          {collectionQueue.status === "paused" && queueDiscardConfirming && (
-            <div
-              role="group"
-              aria-label="未完了の collection queue の破棄確認"
-              className="flex flex-wrap items-center gap-2"
-              data-suno-control="collection-queue-discard-confirmation"
-            >
-              <p className="w-full">未完了の queue を破棄しますか？</p>
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                onClick={() => void discardCollectionQueue()}
-              >
-                破棄
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setQueueDiscardConfirming(false)}
-              >
-                戻る
-              </Button>
-            </div>
-          )}
-          {collectionQueue.status === "paused" && !queueDiscardConfirming && (
+          {collectionQueue.status === "paused" && (
             <Button
               type="button"
               size="sm"
@@ -642,58 +569,65 @@ export function App() {
         </Alert>
       )}
 
-      <fieldset className="flex flex-col gap-2 rounded border border-border px-2 py-2 text-sm">
-        <legend className="px-1 text-xs text-muted-foreground">投入方式</legend>
-        <RadioGroup
-          name="run-mode"
-          value={runModeId}
-          disabled={controlsLocked}
-          onValueChange={(value) => setRunMode(value as RunModeId)}
-        >
-          {RUN_MODE_ORDER.map((id) => {
-            const mode = RUN_MODES[id];
-            const selected = runModeId === id;
-            return (
-              <FieldLabel
-                key={id}
-                data-variant={selected ? "info" : "outline"}
-                data-size="sm"
-                data-disabled={controlsLocked}
-                className={cn(
-                  buttonVariants({
-                    variant: selected ? "info" : "outline",
-                    size: "sm",
-                  }),
-                  "h-auto w-full justify-start whitespace-normal p-2",
-                  selected &&
-                    "bg-info-background/40 hover:bg-info-background/60"
-                )}
-              >
-                <RadioGroupItem
-                  value={id}
-                  className="mt-1 data-checked:border-info-foreground data-checked:text-info-foreground"
-                  aria-label={mode.label}
-                  data-suno-control="run-mode"
-                />
-                <span className="flex flex-col">
-                  <span className="font-medium">{mode.label}</span>
-                  <span
-                    data-suno-slot="run-mode-description"
-                    className={cn(
-                      "text-xs",
-                      selected
-                        ? "text-info-foreground"
-                        : "text-muted-foreground"
-                    )}
-                  >
-                    {mode.riskNote}
+      <FieldSet
+        className="gap-2 rounded border border-border px-2 py-2 text-sm"
+        data-disabled={controlsLocked}
+      >
+        <FieldLegend variant="label" className="mb-0 text-muted-foreground">
+          投入方式
+        </FieldLegend>
+        <FieldGroup className="gap-2">
+          <RadioGroup
+            name="run-mode"
+            value={runModeId}
+            disabled={controlsLocked}
+            onValueChange={(value) => setRunMode(value as RunModeId)}
+          >
+            {RUN_MODE_ORDER.map((id) => {
+              const mode = RUN_MODES[id];
+              const selected = runModeId === id;
+              return (
+                <FieldLabel
+                  key={id}
+                  data-variant={selected ? "info" : "outline"}
+                  data-size="sm"
+                  data-disabled={controlsLocked}
+                  className={cn(
+                    buttonVariants({
+                      variant: selected ? "info" : "outline",
+                      size: "sm",
+                    }),
+                    "h-auto w-full justify-start whitespace-normal p-2",
+                    selected &&
+                      "bg-info-background/40 hover:bg-info-background/60"
+                  )}
+                >
+                  <RadioGroupItem
+                    value={id}
+                    className="mt-1 data-checked:border-info-foreground data-checked:text-info-foreground"
+                    aria-label={mode.label}
+                    data-suno-control="run-mode"
+                  />
+                  <span className="flex flex-col">
+                    <span className="font-medium">{mode.label}</span>
+                    <span
+                      data-suno-slot="run-mode-description"
+                      className={cn(
+                        "text-xs",
+                        selected
+                          ? "text-info-foreground"
+                          : "text-muted-foreground"
+                      )}
+                    >
+                      {mode.riskNote}
+                    </span>
                   </span>
-                </span>
-              </FieldLabel>
-            );
-          })}
-        </RadioGroup>
-      </fieldset>
+                </FieldLabel>
+              );
+            })}
+          </RadioGroup>
+        </FieldGroup>
+      </FieldSet>
 
       <FieldLabel
         className={cn(
@@ -749,11 +683,13 @@ export function App() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {DOWNLOAD_FORMAT_OPTIONS.map((format) => (
-              <SelectItem key={format} value={format}>
-                {format.toUpperCase()}
-              </SelectItem>
-            ))}
+            <SelectGroup>
+              {DOWNLOAD_FORMAT_OPTIONS.map((format) => (
+                <SelectItem key={format} value={format}>
+                  {format.toUpperCase()}
+                </SelectItem>
+              ))}
+            </SelectGroup>
           </SelectContent>
         </Select>
       </div>

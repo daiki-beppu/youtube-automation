@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(extensions-ui)`: 3 helper の手組みフォーム・空状態・警告・確認 UI を公式 shadcn/ui Base UI の Field / Input / Select / Alert / AlertDialog / Empty / ScrollArea へ移行し、ShadowRoot portal・最前面表示・選択前の配信元更新・既存 data / ARIA 契約を維持（#2360）
+
 - `fix(extensions)`: Suno・DistroKid Helper のヘッダーと primary 系 UI を指定 OKLCH 配色へ統一し、実描画色に対する WCAG AA コントラスト検証を追加（#2352）
 
 - `fix(extensions-ui)`: shared Shadow DOM theme の spacing・typography・radius・responsive token を px 基準へ固定し、ホストページの root font-size が Helper overlay の視認サイズを縮小しないように修正（#2351）
