@@ -260,7 +260,7 @@ def test_channel_new_ttp_hearing_routes_direction_to_integrated_mode() -> None:
     for config_prompt in (
         "**仮チャンネル名と SHORT**",
         "**初期ジャンル情報**",
-        "**動画尺の初期値（分）**",
+        "**動画尺**",
         "**音楽エンジン**",
         "**DistroKid 配信有無**",
         "**DistroKid 初期 profile**",

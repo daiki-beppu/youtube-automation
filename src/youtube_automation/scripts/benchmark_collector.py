@@ -57,6 +57,8 @@ _DESCRIPTION_TTP_SECTION_TITLE = "概要欄TTPサンプル"
 _DESCRIPTION_TTP_SAMPLE_LIMIT = 3
 _SHORT_THUMBNAIL_KEYS = ("high", "medium", "default")
 _DEFAULT_THUMBNAIL_KEYS = ("maxres", "standard", "high", "medium", "default")
+# /channel-new の動画尺導出と yt-doctor の video-analysis readiness で共有する。
+TTP_VIDEO_ANALYZE_TOP_N = 5
 
 
 def is_short_benchmark_duration(duration_iso: str) -> bool:
