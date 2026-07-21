@@ -14,6 +14,7 @@
 
 ## Status
 
+- **Status**: DONE
 - **Priority**: P3
 - **Effort**: S
 - **Risk**: LOW（provisioner の staging パス変更のみ。サービス定義・鍵管理は不変）
