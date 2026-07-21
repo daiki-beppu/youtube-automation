@@ -878,10 +878,20 @@ describe("Suno popup compatibility check", () => {
     const entryList = container.querySelector<HTMLElement>(
       "[data-suno-entry-list]"
     );
-    expect(collectionList?.classList).toContain("max-h-48");
-    expect(collectionList?.classList).toContain("overflow-y-auto");
-    expect(entryList?.classList).toContain("max-h-48");
-    expect(entryList?.classList).toContain("overflow-y-auto");
+    const entryScrollArea = container.querySelector<HTMLElement>(
+      "[data-suno-entry-scroll-area]"
+    );
+    expect(collectionList?.dataset.slot).toBe("scroll-area");
+    expect(entryScrollArea?.dataset.slot).toBe("scroll-area");
+    expect(
+      collectionList?.querySelector('[data-slot="scroll-area-viewport"]')
+        ?.classList
+    ).toContain("max-h-48");
+    expect(
+      entryScrollArea?.querySelector('[data-slot="scroll-area-viewport"]')
+        ?.classList
+    ).toContain("max-h-48");
+    expect(entryList?.classList).not.toContain("overflow-y-auto");
     expect(collectionsTrigger.getAttribute("aria-expanded")).toBe("false");
     expect(entriesTrigger.getAttribute("aria-expanded")).toBe("false");
     await act(async () => {

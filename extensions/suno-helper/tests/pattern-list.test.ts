@@ -220,7 +220,9 @@ describe("PatternList checkbox UI", () => {
     );
     expect(list?.tagName).toBe("UL");
     expect(list?.dataset.sunoEntryList).toBe("true");
-    expect(list?.className).toContain("border-border");
+    const scrollArea = list?.closest<HTMLElement>('[data-slot="scroll-area"]');
+    expect(scrollArea?.dataset.sunoEntryScrollArea).toBe("true");
+    expect(scrollArea?.className).toContain("border-border");
     const rows = Array.from(
       container.querySelectorAll<HTMLLIElement>("[data-suno-entry-index]")
     );

@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- `fix(suno-helper)`: コレクション件数が多い場合、楽曲一覧と同じ高さ上限で一覧内を縦スクロールできるようにした（#2353）。
+- `fix(suno-helper)`: コレクション一覧と楽曲一覧を shared shadcn/ui Scroll Area へ移行し、件数が多い場合は同じ高さ上限で一覧内を縦スクロールできるようにした（#2353）。
 
 - `feat(extensions)`: Suno・DistroKid・Community Helper の共通 overlay ヘッダーへ、公式一次資料に基づく識別可能なサービス別配色と WCAG AA コントラスト検証を追加（#2327）
 
