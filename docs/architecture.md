@@ -59,6 +59,8 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `utils.stock` | ボツ画像ストック化（`assets/stock/<theme>/` への退避・列挙・整理、隣接 `.meta.json` 管理） |
 | `auth.oauth_handler` | OAuth 2.0 トークン管理 |
 | `utils.secrets` | シークレット解決（`_SECRET_REFS` で参照定義） |
+| `utils.live_chat.{codex,filters,history,models,runner}` | active broadcast のチャット取得、Codex 構造化判定、入出力フィルタ、PT 日次・時間・連続 user 上限、重複防止履歴、返信投稿 loop |
+| `scripts.live_chat_reply` | `yt-live-chat-reply` 常駐 CLI。`comments.live_chat.enabled` を opt-in とし、VPS では独立した `live-chat-reply.service` から起動 |
 | `cli.skills_sync` | `yt-skills` 本体 |
 | `scripts.collection_serve_discovery` | 固定 loopback endpoint の稼働 server registry、heartbeat、TTL、owner takeover |
 | `extensions/shared/server-discovery.ts` | registry schema v1 の検証と `/server-info` probe を両 helper 拡張へ提供 |

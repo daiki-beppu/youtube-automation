@@ -26,6 +26,7 @@
       "no_broadcast_retry_sec": 60,
       "history_file": "live_chat_reply_history.json",
       "channel_persona": "Warm YouTube channel host",
+      "model": null,
       "codex_timeout_sec": 120,
       "process_initial_messages": false
     }
