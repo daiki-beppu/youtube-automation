@@ -454,7 +454,7 @@ class TestClientSecrets:
             ),
         )
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_path",
+            "youtube_automation.utils.secrets.get_client_secrets_config",
             lambda: pytest.fail("yt-doctor must not materialize CLIENT_SECRETS_JSON"),
         )
 

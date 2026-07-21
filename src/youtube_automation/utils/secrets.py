@@ -13,14 +13,11 @@
 
 from __future__ import annotations
 
-import atexit
 import json
 import os
 import shutil
 import subprocess
-import tempfile
 from functools import lru_cache
-from pathlib import Path
 
 from youtube_automation.utils.exceptions import ConfigError
 
@@ -106,42 +103,22 @@ def get_secret(name: str) -> str:
     )
 
 
-_client_secrets_tempfile: Path | None = None
+def get_client_secrets_config() -> dict[str, object]:
+    """client_secrets の JSON 内容を in-memory dict で取得する。
 
-
-def get_client_secrets_path() -> Path:
-    """client_secrets.json のパスを取得する。
-
-    `get_secret("CLIENT_SECRETS_JSON")` で JSON 内容を取得し、一時ファイルに書き出して返す。
-    `YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` の場合、env が無ければ 1Password は読まない。
-    同一プロセス内では同じ一時ファイルを再利用する。
-
-    Returns:
-        一時ファイルのパス
+    tempfile を経由しないため、異常終了時にも secret がディスクに残らない。
 
     Raises:
-        ConfigError: 取得できなかった場合
+        ConfigError: 取得できない、または JSON object として解釈できない場合
     """
-    global _client_secrets_tempfile
-    if _client_secrets_tempfile and _client_secrets_tempfile.exists():
-        return _client_secrets_tempfile
-
-    json_content = get_secret("CLIENT_SECRETS_JSON")
-    # mkstemp → chmod → fdopen の順序を厳守: 書き込み前に 0o600 を確定させ
-    # OS umask に依存せず world-readable な状態を経由しないことを保証する
-    fd, path = tempfile.mkstemp(prefix="client_secrets_", suffix=".json")
-    os.chmod(path, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(json_content)
-
-    def _cleanup(p: str = path) -> None:
-        # idempotent: ファイルが既に消えていても atexit 連鎖を止めない
-        if os.path.exists(p):
-            os.unlink(p)
-
-    atexit.register(_cleanup)
-    _client_secrets_tempfile = Path(path)
-    return _client_secrets_tempfile
+    raw = get_secret("CLIENT_SECRETS_JSON")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ConfigError(f"CLIENT_SECRETS_JSON を JSON として解釈できません: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ConfigError("CLIENT_SECRETS_JSON は JSON object である必要があります")
+    return data
 
 
 def write_op_secret(vault: str, item: str, field: str, value: str) -> None:

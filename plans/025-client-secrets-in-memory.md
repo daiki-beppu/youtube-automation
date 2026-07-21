@@ -14,6 +14,7 @@
 
 ## Status
 
+- **Status**: DONE
 - **Priority**: P2
 - **Effort**: M
 - **Risk**: MED（OAuth 初回認証フローに触る。既存テストは厚い）
