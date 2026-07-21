@@ -24,6 +24,7 @@
 # v15:   audio_visualizer style presets + runtime-generated masks (#1684)
 # v14.3: audio visualizer の runtime fill と共通 effect を追加 (#1686)
 # v15.1: effect / overlays の短尺プレビューを追加 (#1749)
+# v15.2: overlay H.264 hardware encoder の opt-in 選択と libx264 fallback (#2372)
 #
 # Usage:
 #   bash .claude/skills/videoup/references/generate_videos.sh [--preview [15-30]] <collection-path>
@@ -688,7 +689,7 @@ PROGRESS_FILE="$(mktemp)"
 AV_MASK_DIR=""
 AV_FILL_ASSET="${PROGRESS_FILE}.visualizer-fill.png"
 cleanup_runtime_files() {
-    rm -f "$PROGRESS_FILE" "$AV_FILL_ASSET"
+    rm -f "$PROGRESS_FILE" "$AV_FILL_ASSET" "${PROGRESS_FILE}.encoder-probe.mp4"
     if [[ -n "$AV_MASK_DIR" && -d "$AV_MASK_DIR" ]]; then
         rm -rf "$AV_MASK_DIR"
     fi
@@ -812,6 +813,66 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     enc_bufsize="$(ov_get '.overlays.encoder.bufsize' '8M')"
     enc_profile="$(ov_get '.overlays.encoder.profile' 'high')"
     enc_framerate="$(ov_get '.overlays.encoder.framerate' '24')"
+
+    ffmpeg_encoder_available() {
+        ffmpeg -hide_banner -encoders 2>&1 | grep -q "^ V..... $1 "
+    }
+
+    requested_enc_codec="$enc_codec"
+    case "$requested_enc_codec" in
+        libx264)
+            ;;
+        hardware)
+            enc_codec=""
+            if [[ "$(uname -s)" == "Darwin" ]] && ffmpeg_encoder_available h264_videotoolbox; then
+                enc_codec="h264_videotoolbox"
+            elif ffmpeg_encoder_available h264_nvenc; then
+                enc_codec="h264_nvenc"
+            elif ffmpeg_encoder_available h264_videotoolbox; then
+                enc_codec="h264_videotoolbox"
+            fi
+            if [[ -z "$enc_codec" ]]; then
+                echo "  WARN: overlay hardware encoder is unavailable; falling back to libx264"
+                enc_codec="libx264"
+            fi
+            ;;
+        h264_videotoolbox|h264_nvenc)
+            if ! ffmpeg_encoder_available "$requested_enc_codec"; then
+                echo "  WARN: requested overlay encoder ${requested_enc_codec} is unavailable; falling back to libx264"
+                enc_codec="libx264"
+            fi
+            ;;
+        *)
+            echo "ERROR: overlays.encoder.codec='${requested_enc_codec}' is invalid (allowed: libx264, hardware, h264_videotoolbox, h264_nvenc)"
+            exit 1
+            ;;
+    esac
+
+    overlay_encoder_args() {
+        case "$1" in
+            h264_videotoolbox)
+                OVERLAY_VIDEO_ENCODER_ARGS=(-c:v h264_videotoolbox -b:v "$enc_maxrate" -maxrate "$enc_maxrate" -bufsize "$enc_bufsize" -profile:v "$enc_profile" -pix_fmt "$enc_pix_fmt")
+                ;;
+            h264_nvenc)
+                OVERLAY_VIDEO_ENCODER_ARGS=(-c:v h264_nvenc -preset p5 -cq "$enc_crf" -b:v 0 -maxrate "$enc_maxrate" -bufsize "$enc_bufsize" -profile:v "$enc_profile" -pix_fmt "$enc_pix_fmt")
+                ;;
+            *)
+                OVERLAY_VIDEO_ENCODER_ARGS=(-c:v libx264 -preset "$enc_preset" -crf "$enc_crf" -maxrate "$enc_maxrate" -bufsize "$enc_bufsize" -profile:v "$enc_profile" -pix_fmt "$enc_pix_fmt")
+                ;;
+        esac
+    }
+    overlay_encoder_args "$enc_codec"
+
+    if [[ "$enc_codec" != "libx264" ]]; then
+        encoder_probe="${PROGRESS_FILE}.encoder-probe.mp4"
+        if ! ffmpeg -y -f lavfi -i "color=c=black:s=1920x1080:r=${enc_framerate}:d=0.1" \
+            "${OVERLAY_VIDEO_ENCODER_ARGS[@]}" -frames:v 1 -an -loglevel error "$encoder_probe"; then
+            echo "  WARN: overlay encoder ${enc_codec} failed to start; falling back to libx264"
+            enc_codec="libx264"
+            overlay_encoder_args "$enc_codec"
+        fi
+    fi
+    echo "  Encoder  : requested=${requested_enc_codec}, selected=${enc_codec}"
 
     # fill 指定時は production CLI で色素材を検証・生成する。未指定なら v13 の
     # colors 経路をそのまま使い、既存 filtergraph を完全に維持する。
@@ -1054,9 +1115,7 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
     ffmpeg -y "${INPUTS[@]}" \
         -filter_complex "$FILTER" \
         -map "[${CURRENT_LABEL}]" -map "$AUDIO_MAP" \
-        -c:v "$enc_codec" -preset "$enc_preset" -crf "$enc_crf" \
-        -maxrate "$enc_maxrate" -bufsize "$enc_bufsize" \
-        -profile:v "$enc_profile" -pix_fmt "$enc_pix_fmt" \
+        "${OVERLAY_VIDEO_ENCODER_ARGS[@]}" \
         -r "$enc_framerate" \
         "${AUDIO_OUT_OPTS[@]}" \
         -t "$video_duration" \

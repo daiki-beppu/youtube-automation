@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+OVERLAY_ENCODER_CODECS = ("libx264", "hardware", "h264_videotoolbox", "h264_nvenc")
+
 
 @dataclass(frozen=True)
 class YoutubeApi:
@@ -131,9 +133,9 @@ class OverlaySubscribePopup:
 class OverlayEncoder:
     """`overlays.encoder` セクション（optional, #511）.
 
-    overlays を合成すると `-c:v copy` は不可能になるため x264 で再エンコードする。
-    値はすべて FFmpeg に直接渡す文字列。bitrate / bufsize は `-maxrate` / `-bufsize`
-    と同じ書式を許容する（例 `4M`, `8000k`）。
+    overlays を合成すると `-c:v copy` は不可能になるため H.264 で再エンコードする。
+    `hardware` は VideoToolbox / NVENC を opt-in 選択し、利用不能・起動失敗時は
+    `libx264` へ戻る。bitrate / bufsize は FFmpeg と同じ書式を許容する。
     """
 
     codec: str = "libx264"
