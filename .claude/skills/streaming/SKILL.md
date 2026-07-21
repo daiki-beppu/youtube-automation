@@ -18,7 +18,7 @@ description: "Use when ライブ配信用 Vultr VPS・動画配信本体を Terr
 
 以下を確認し、満たさなければ整備手順（各項目に記載、詳細は README §前提）を案内してから先へ進む:
 
-- `terraform` >= 1.10 / `python3` / `uv` / 1Password CLI (`op`)
+- `terraform` 1.15.x / `python3` / `uv` / 1Password CLI (`op`)
 - SSH 鍵 `~/.ssh/yt_stream_key{,.pub}`（無ければ `ssh-keygen -t ed25519 -f ~/.ssh/yt_stream_key`）
 - ssh-agent に秘密鍵を登録済み（`ssh-add ~/.ssh/yt_stream_key`）。`null_resource.deploy.connection` は `agent = true` で ssh-agent 経由に接続するため、未登録だと apply 時に `Permission denied (publickey)` で失敗する。`ssh-add -l` で登録済み鍵を確認できる。**OS 再起動・再ログイン時に agent は空に戻る（毎セッション再登録が必要）**。**`ssh -i ~/.ssh/yt_stream_key` 経由の手動 SSH は agent 状態と独立で検証手段にならない**（詳細は README §前提）
 - 1Password に以下が登録済み:
