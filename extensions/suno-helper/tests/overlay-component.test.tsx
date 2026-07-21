@@ -144,10 +144,16 @@ describe("Overlay shell", () => {
     expect(card.style.top).toBe("50px");
     expect(header.className.split(" ")).toContain("flex-row");
     expect(card.style.getPropertyValue("--overlay-header-background")).toBe(
-      "#101012"
+      "oklch(0.753 0.2067 57.6 / 96.4%)"
     );
     expect(card.style.getPropertyValue("--overlay-header-foreground")).toBe(
-      "#FFFFFF"
+      "oklch(0.205 0 0)"
+    );
+    expect(card.style.getPropertyValue("--primary")).toBe(
+      "oklch(0.753 0.2067 57.6 / 96.4%)"
+    );
+    expect(card.style.getPropertyValue("--primary-foreground")).toBe(
+      "oklch(0.205 0 0)"
     );
     expect(header.style.pointerEvents).toBe("auto");
     expect(content.style.pointerEvents).toBe("auto");

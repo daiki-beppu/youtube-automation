@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expect, test, chromium, type BrowserContext } from "@playwright/test";
+import { rgbContrastRatio } from "@youtube-automation/ui";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const extensionPath = join(here, "..", "..", ".output", "chrome-mv3");
@@ -43,9 +44,48 @@ test("実ビルドした overlay は drag・最小化・automation selector 契�
     const content = card.locator('[data-slot="card-content"]');
     await expect(card).toBeVisible();
     await expect(header).toHaveClass(/flex-row/);
-    await expect(header).toHaveCSS("background-color", "rgb(16, 16, 18)");
-    await expect(header).toHaveCSS("color", "rgb(255, 255, 255)");
-
+    expect(
+      await card.evaluate((element) => ({
+        headerBackground: element.style.getPropertyValue(
+          "--overlay-header-background"
+        ),
+        headerForeground: element.style.getPropertyValue(
+          "--overlay-header-foreground"
+        ),
+        primary: element.style.getPropertyValue("--primary"),
+        primaryForeground: element.style.getPropertyValue(
+          "--primary-foreground"
+        ),
+      }))
+    ).toEqual({
+      headerBackground: "oklch(0.753 0.2067 57.6 / 96.4%)",
+      headerForeground: "oklch(0.205 0 0)",
+      primary: "oklch(0.753 0.2067 57.6 / 96.4%)",
+      primaryForeground: "oklch(0.205 0 0)",
+    });
+    const paintedColors = await header.evaluate((element) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      const context = canvas.getContext("2d", { willReadFrequently: true })!;
+      const sample = (color: string) => {
+        context.clearRect(0, 0, 1, 1);
+        context.fillStyle = "white";
+        context.fillRect(0, 0, 1, 1);
+        context.fillStyle = color;
+        context.fillRect(0, 0, 1, 1);
+        const [red, green, blue] = context.getImageData(0, 0, 1, 1).data;
+        return [red, green, blue] as const;
+      };
+      const style = getComputedStyle(element);
+      return {
+        background: sample(style.backgroundColor),
+        foreground: sample(style.color),
+      };
+    });
+    expect(
+      rgbContrastRatio(paintedColors.background, paintedColors.foreground)
+    ).toBeGreaterThanOrEqual(4.5);
     const before = await card.evaluate((element) => ({
       left: element.style.left,
       top: element.style.top,

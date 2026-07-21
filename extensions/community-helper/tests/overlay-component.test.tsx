@@ -64,6 +64,8 @@ describe("Community Overlay", () => {
     expect(shell.style.getPropertyValue("--overlay-header-foreground")).toBe(
       "#FFFFFF"
     );
+    expect(shell.style.getPropertyValue("--primary")).toBe("");
+    expect(shell.style.getPropertyValue("--primary-foreground")).toBe("");
     expect(container.querySelector("[data-community-app]")).not.toBeNull();
 
     await act(async () =>

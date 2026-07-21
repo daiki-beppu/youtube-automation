@@ -61,10 +61,16 @@ describe("DistroKid Overlay", () => {
     expect(shell.style.top).toBe("50px");
     expect(shell.textContent).toContain("DistroKid Helper");
     expect(shell.style.getPropertyValue("--overlay-header-background")).toBe(
-      "#0073C7"
+      "oklch(0.8703 0.1962 116.38)"
     );
     expect(shell.style.getPropertyValue("--overlay-header-foreground")).toBe(
-      "#FFFFFF"
+      "oklch(0.205 0 0)"
+    );
+    expect(shell.style.getPropertyValue("--primary")).toBe(
+      "oklch(0.8703 0.1962 116.38)"
+    );
+    expect(shell.style.getPropertyValue("--primary-foreground")).toBe(
+      "oklch(0.205 0 0)"
     );
     expect(container.querySelector("[data-distrokid-app]")).not.toBeNull();
 
