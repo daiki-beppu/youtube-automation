@@ -502,15 +502,17 @@ def test_history_records_failure_resume_point_without_mutating_workflow_state(
         )
 
 
-def test_skill_and_scheduler_delegate_to_integrated_runner() -> None:
+def test_automation_run_is_a_thin_compatibility_alias_for_wf_auto() -> None:
     skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+    state_script = SCRIPT.read_text(encoding="utf-8")
     scheduler = (ROOT / ".claude" / "skills" / "automation-schedule" / "SKILL.md").read_text(encoding="utf-8")
     workflow_model = (ROOT / "src" / "youtube_automation" / "utils" / "config" / "workflow.py").read_text(
         encoding="utf-8"
     )
 
-    for child in ("wf-new", "lyria", "suno-helper", "masterup", "wf-next", "post-publish"):
-        assert f"/{child}" in skill
-    assert "allow_external_publish" in skill
-    assert "--target-workflow automation-run" in scheduler
-    assert 'target_workflow: str = "automation-run"' in workflow_model
+    assert "compatibility alias" in skill
+    assert "`/wf-auto`" in skill
+    assert "wf-auto-state.py" in state_script
+    assert "evaluate_collection(" not in state_script
+    assert "--target-workflow wf-auto" in scheduler
+    assert 'target_workflow: str = "wf-auto"' in workflow_model

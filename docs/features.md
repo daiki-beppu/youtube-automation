@@ -12,10 +12,10 @@
 |---|---|
 | /wf-new | 新規コレクションの企画選択・ディレクトリ作成・素材準備（Phase 1） |
 | /wf-next | 既存コレクションを次の工程に 1 段進める（Phase 2-3） |
-| /wf-auto | active collection が無ければ企画から開始し、あれば未完了地点から制作・公開・post-publish まで同じ対象を状態駆動で継続・再開 |
-| /automation-run | active collection 1 件を状態駆動で選び、Lyria / Suno の音源生成から公開・post-publish まで既存 skill へ委譲して継続・再開 |
+| /wf-auto | 正規入口。active collection が無ければ企画から開始し、あれば未完了地点から制作・公開・post-publish まで同じ対象を状態駆動で継続・再開 |
+| /automation-run | `/wf-auto` へ委譲する既存設定向け互換 alias |
 | /wf-status | 制作中コレクションの進捗を読み取り表示（実行はしない） |
-| /automation-schedule | 定期制作設定（`workflow.json` の `scheduled_automation`）の生成と、既定 `/automation-run` を起動する Claude Code / Codex ジョブの作成・更新・確認・停止 |
+| /automation-schedule | 定期制作設定（`workflow.json` の `scheduled_automation`）の生成と、既定 `/wf-auto` を起動する Claude Code / Codex ジョブの作成・更新・確認・停止 |
 | /collection-ideate | データドリブンに次の企画候補を提案 |
 
 ## チャンネル立ち上げ

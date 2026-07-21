@@ -431,7 +431,7 @@ def test_wf_new_cross_references_document_fallback_differences() -> None:
 
 def test_workflow_cheatsheet_documents_fallback_and_minimal_pause() -> None:
     text = _read(_WORKFLOW_CHEATSHEET_MD)
-    responsibility_table = _section(text, "## 4 つの skill の責務早見表")
+    responsibility_table = _section(text, "## 5 つの skill の責務早見表")
     phase_flow = _section(text, "## 制作の 3 フェーズと skill の流れ")
     faq = _section(text, "## よくある質問")
 

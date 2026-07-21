@@ -194,7 +194,7 @@ def test_completed_live_collection_finishes_after_post_publish_history(tmp_path:
 def test_cli_plan_prints_bootstrap_decision(
     tmp_path: Path, runner: ModuleType, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(runner._RUNNER, "_load_runner_config", lambda root: _config(runner))
+    monkeypatch.setattr(runner, "_load_runner_config", lambda root: _config(runner))
 
     assert runner.main(["plan", "--channel-dir", str(tmp_path)]) == 0
     assert json.loads(capsys.readouterr().out)["reason"] == "no_active_collection"

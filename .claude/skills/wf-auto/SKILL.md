@@ -93,7 +93,7 @@ resolver、lease、履歴は API 0。実行前に選ばれた子 skill の見積
 
 ## References
 
-- `references/wf-auto-state.py`: 新規開始判定と既存 resolver への委譲
+- `references/wf-auto-state.py`: collection 選択、新規開始判定、次 action、成果物検証、lease、実行履歴の正規実装
 - `/wf-new`: 企画・collection 初期化・素材準備
 - `/wf-next`: 制作・公開と state 更新
 - `/post-publish`: 公開後 chain と idempotency history

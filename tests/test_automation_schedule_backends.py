@@ -42,7 +42,7 @@ def test_native_backend_selection(product, dependency_mode, os_fallback, expecte
 
 def test_plan_is_dry_run_and_preserves_external_publish_gate(tmp_path, monkeypatch):
     scheduled = SimpleNamespace(
-        target_workflow="automation-run",
+        target_workflow="wf-auto",
         allow_external_publish=False,
         timezone="Asia/Tokyo",
         run_time="09:05",
@@ -74,6 +74,37 @@ def test_plan_is_dry_run_and_preserves_external_publish_gate(tmp_path, monkeypat
     assert plan["retry_delay_seconds"] == 300
     assert "最大 4 回再試行" in plan["prompt"]
     assert plan["prevent_concurrent_runs"] is True
+    assert plan["target_workflow"] == "wf-auto"
+    assert plan["prompt"].startswith("/wf-auto")
+
+
+def test_plan_preserves_explicit_automation_run_compatibility(tmp_path, monkeypatch):
+    scheduled = SimpleNamespace(
+        target_workflow="wf-auto",
+        allow_external_publish=False,
+        timezone="Asia/Tokyo",
+        run_time="09:05",
+        cadence=("mon",),
+        max_retries=0,
+        retry_delay_seconds=300,
+        prevent_concurrent_runs=True,
+        notification="terminal",
+    )
+    monkeypatch.setattr(
+        backend,
+        "load_config",
+        lambda: SimpleNamespace(workflow=SimpleNamespace(scheduled_automation=scheduled)),
+    )
+    monkeypatch.setattr(backend, "channel_dir", lambda: tmp_path)
+
+    plan = backend.build_plan(
+        product="codex",
+        dependency_mode="local",
+        overrides={"target_workflow": "automation-run"},
+    )
+
+    assert plan["target_workflow"] == "automation-run"
+    assert plan["prompt"].startswith("/automation-run")
 
 
 def test_backend_identity_is_idempotent_and_blocks_duplicates(tmp_path):
