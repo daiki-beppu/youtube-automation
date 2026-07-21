@@ -131,6 +131,7 @@ class TestCollectBasicAnalyticsIntegration:
             "by_video": {},
             "summary": {},
         }
+        mixin.get_scheduled_video_count = lambda: 0
         mixin.get_ctr_analysis = lambda s, e: {"videos": []}
         mixin.get_traffic_source_analytics = lambda s, e: {"sources": {}}
         mixin.get_traffic_source_detail = lambda s, e, source_type: []
@@ -171,6 +172,7 @@ class TestCollectBasicAnalyticsIntegration:
             "by_video": {"ABC123": {"estimated_revenue": 12.0, "rpm": 6.0}},
             "summary": {},
         }
+        mixin.get_scheduled_video_count = lambda: 2
 
         with patch("youtube_automation.utils.channel_analytics.channel_dir", return_value=live_dir):
             result = mixin.collect_basic_analytics("2026-03-14", "2026-04-13", depth="basic")
@@ -182,3 +184,4 @@ class TestCollectBasicAnalyticsIntegration:
             assert video_data["ABC123"]["rpm"] == 6.0
             # マッチしない動画: None
             assert video_data["XYZ789"]["scheduled_publish_at"] is None
+            assert result["scheduled_videos"] == {"count": 2}

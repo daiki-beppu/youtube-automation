@@ -12,7 +12,7 @@ accepted (2026-07-13)。workspace 解決と `yt-channel list` は #1947、コピ
 
 本リポはメンテナンスモード（ADR-0021）だが、tayk は別リポで 0 ベース開発中であり日常運用は当面 Python 版で回る。本件は cutover までの運用負荷を下げる**メンテナンスモードの意図的な例外投資**である。
 
-また ADR-0013 は「チャンネルは別ディレクトリのまま channel registry でパスを束ねる」前提を置いていたが、これは dashboard（読み取り専用）のチャンネル発見手段であり、本決定と矛盾しない — registry のエントリが workspace 内の `channels/<slug>/` を指せばよい。
+また ADR-0013 は「チャンネルは別ディレクトリのまま channel registry でパスを束ねる」前提を置いていたが、これは dashboard の起動時収集・表示対象を発見する手段であり、本決定と矛盾しない — registry のエントリが workspace 内の `channels/<slug>/` を指せばよい。
 
 ## Considered Options
 

@@ -1,6 +1,6 @@
 # Dashboard frontend
 
-収集済み Analytics を表示する React / Vite / shadcn/ui frontend です。Python の `yt-dashboard` が `src/youtube_automation/dashboard_dist/` の build asset と JSON API を同一 origin で配信します。
+起動時に最新化された Analytics を表示する React / Vite / shadcn/ui frontend です。Python の `yt-dashboard` が全登録チャンネルの収集後に `src/youtube_automation/dashboard_dist/` の build asset と JSON API を同一 origin で配信します。OAuth のない E2E では `--skip-refresh` を使います。
 
 ```bash
 nix develop .#extensions --command pnpm -C dashboard install --frozen-lockfile

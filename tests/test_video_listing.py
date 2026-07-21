@@ -68,14 +68,18 @@ class _FakeChannels:
 
 
 class _FakeYouTubeService:
-    def __init__(self, playlist_items: _FakePlaylistItems) -> None:
+    def __init__(self, playlist_items: _FakePlaylistItems, videos=None) -> None:
         self._playlist_items = playlist_items
+        self._videos = videos
 
     def channels(self):
         return _FakeChannels()
 
     def playlistItems(self):
         return self._playlist_items
+
+    def videos(self):
+        return self._videos
 
 
 def _video_item(video_id: str, published_at: str) -> Dict:
@@ -98,6 +102,17 @@ class _StubCollector(VideoListingMixin):
 
     def initialize(self) -> None:  # pragma: no cover - youtube_service は常に注入済み
         pass
+
+
+class _FakeVideos:
+    def __init__(self, items: list[dict]) -> None:
+        self._items = items
+        self.requested_ids: list[str] = []
+
+    def list(self, **kwargs):
+        self.requested_ids.extend(kwargs["id"].split(","))
+        requested = set(kwargs["id"].split(","))
+        return _FakeExecutable(result={"items": [item for item in self._items if item["id"] in requested]})
 
 
 class TestGetAllChannelVideosCache:
@@ -157,3 +172,32 @@ class TestGetRecentVideosTimezoneBoundary:
         recent = collector.get_recent_videos(days=days)
 
         assert [v["video_id"] for v in recent] == ["V1"]
+
+
+class TestGetScheduledVideoCount:
+    def test_counts_only_future_publish_at_from_youtube_status(self) -> None:
+        playlist_items = _FakePlaylistItems(
+            pages=[
+                {
+                    "items": [
+                        _video_item("FUTURE", "2026-07-20T00:00:00Z"),
+                        _video_item("PAST", "2026-07-19T00:00:00Z"),
+                        _video_item("NONE", "2026-07-18T00:00:00Z"),
+                    ]
+                }
+            ]
+        )
+        statuses = _FakeVideos(
+            [
+                {"id": "FUTURE", "status": {"publishAt": "2026-07-22T00:00:00Z"}},
+                {"id": "PAST", "status": {"publishAt": "2026-07-20T00:00:00Z"}},
+                {"id": "NONE", "status": {}},
+            ]
+        )
+        collector = _StubCollector(playlist_items)
+        collector.youtube_service = _FakeYouTubeService(playlist_items, statuses)
+
+        count = collector.get_scheduled_video_count(now=datetime(2026, 7, 21, tzinfo=timezone.utc))
+
+        assert count == 1
+        assert statuses.requested_ids == ["FUTURE", "PAST", "NONE"]

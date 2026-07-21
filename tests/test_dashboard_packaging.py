@@ -33,7 +33,7 @@ def test_candidate_wheel_starts_dashboard_with_bundled_assets(tmp_path: Path) ->
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
     process = subprocess.Popen(
-        [str(command), "--registry", str(registry), "--port", str(port)],
+        [str(command), "--skip-refresh", "--registry", str(registry), "--port", str(port)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,

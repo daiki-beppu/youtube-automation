@@ -138,6 +138,9 @@ class ChannelAnalyticsMixin:
             for vid, entry in video_data.items():
                 entry["scheduled_publish_at"] = publish_at_map.get(vid)
 
+            logger.info("公開予約動画数を収集中...")
+            scheduled_video_count = self.get_scheduled_video_count()
+
             # 基本データ構築
             logger.info("収益メトリクス収集中...")
             revenue_analytics = self.get_revenue_analytics(start_date, end_date)
@@ -154,6 +157,7 @@ class ChannelAnalyticsMixin:
                 "collection_depth": depth,
                 "channel_analytics": channel_analytics,
                 "video_analytics": video_data,
+                "scheduled_videos": {"count": scheduled_video_count},
                 "revenue_analytics": revenue_analytics,
                 "strategic_analysis": strategic_analytics,
             }
