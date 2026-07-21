@@ -1,6 +1,6 @@
 import { overlayHiddenStyle } from "@youtube-automation/extensions-shared/overlay-state";
 import type { OverlayState } from "@youtube-automation/extensions-shared/overlay-state";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { Button } from "./button";
 import { Card, CardContent, CardHeader } from "./card";
@@ -28,6 +28,31 @@ export interface OverlayBrandColors {
   headerForeground: string;
   primary?: string;
   primaryForeground?: string;
+}
+
+interface OverlayBrandStyle extends CSSProperties {
+  "--overlay-header-background"?: string;
+  "--overlay-header-foreground"?: string;
+  "--primary"?: string;
+  "--primary-foreground"?: string;
+}
+
+function getOverlayBrandStyle(
+  brandColors: OverlayBrandColors | undefined
+): OverlayBrandStyle {
+  if (!brandColors) {
+    return {};
+  }
+  return {
+    "--overlay-header-background": brandColors.headerBackground,
+    "--overlay-header-foreground": brandColors.headerForeground,
+    ...(brandColors.primary && brandColors.primaryForeground
+      ? {
+          "--primary": brandColors.primary,
+          "--primary-foreground": brandColors.primaryForeground,
+        }
+      : {}),
+  };
 }
 
 /**
@@ -66,18 +91,7 @@ export function OverlayShell({
         className
       )}
       style={{
-        ...(brandColors
-          ? {
-              "--overlay-header-background": brandColors.headerBackground,
-              "--overlay-header-foreground": brandColors.headerForeground,
-              ...(brandColors.primary && brandColors.primaryForeground
-                ? {
-                    "--primary": brandColors.primary,
-                    "--primary-foreground": brandColors.primaryForeground,
-                  }
-                : {}),
-            }
-          : {}),
+        ...getOverlayBrandStyle(brandColors),
         left: controller.position.x,
         top: controller.position.y,
         width,
