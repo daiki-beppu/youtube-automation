@@ -14,8 +14,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
       - parallel:
           - name: Build and zip suno-helper
             working-directory: extensions/suno-helper
@@ -27,7 +27,7 @@ jobs:
             working-directory: extensions/community-helper
             run: cd ../.. && bash .claude/skills/automation-release/references/verify-extensions.sh community-helper
       - name: Attach zips to Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           files: |
             extensions/suno-helper/.output/*.zip

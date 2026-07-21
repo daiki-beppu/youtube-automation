@@ -15,8 +15,8 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "release-extensions.yml"
 
 _RELEASE_TAG_GLOB = "ext-v*"
-_GH_RELEASE_ACTION = "softprops/action-gh-release@v2"
-_NIX_INSTALL_ACTION = "DeterminateSystems/nix-installer-action@main"
+_GH_RELEASE_ACTION = "softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228"
+_NIX_INSTALL_ACTION = "DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25"
 _VERIFY_SCRIPT = ".claude/skills/automation-release/references/verify-extensions.sh"
 _EXTENSIONS = ("suno-helper", "distrokid-helper", "community-helper")
 _ZIP_GLOBS = tuple(f"extensions/{name}/.output/*.zip" for name in _EXTENSIONS)
@@ -102,7 +102,11 @@ def test_builds_and_zips_each_extension(name: str) -> None:
 def test_installs_nix_before_parallel_extension_builds() -> None:
     """release job が checkout 後、build 前に Nix を導入する。"""
     steps = _release_top_level_steps()
-    checkout_index = next(index for index, step in enumerate(steps) if step.get("uses") == "actions/checkout@v4")
+    checkout_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("uses") == "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+    )
     nix_index = next(index for index, step in enumerate(steps) if step.get("uses") == _NIX_INSTALL_ACTION)
     parallel_index = next(index for index, step in enumerate(steps) if "parallel" in step)
     uses = {step.get("uses") for step in steps if "uses" in step}
