@@ -599,7 +599,7 @@ export function App() {
                     }),
                     "h-auto w-full justify-start whitespace-normal p-2",
                     selected &&
-                      "bg-info-background/40 hover:bg-info-background/60"
+                      "bg-info-background/40 text-foreground hover:bg-info-background/60"
                   )}
                 >
                   <RadioGroupItem
@@ -614,9 +614,7 @@ export function App() {
                       data-suno-slot="run-mode-description"
                       className={cn(
                         "text-xs",
-                        selected
-                          ? "text-info-foreground"
-                          : "text-muted-foreground"
+                        selected ? "text-foreground" : "text-muted-foreground"
                       )}
                     >
                       {mode.riskNote}
