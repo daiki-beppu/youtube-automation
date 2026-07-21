@@ -47,6 +47,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-init-collection": "youtube_automation.scripts.init_collection",
     "yt-kpi-dashboard": "youtube_automation.scripts.kpi_dashboard",
     "yt-launch-curve": "youtube_automation.scripts.launch_curve",
+    "yt-live-chat-reply": "youtube_automation.scripts.live_chat_reply",
     "yt-metadata-audit": "youtube_automation.scripts.metadata_audit",
     "yt-oauth": "youtube_automation.auth.oauth_handler",
     "yt-pinned-comment": "youtube_automation.scripts.pinned_comment",

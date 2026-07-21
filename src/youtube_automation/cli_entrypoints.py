@@ -108,6 +108,7 @@ yt_generate_suno = _make_entrypoint("youtube_automation.scripts.generate_suno_pr
 yt_init_collection = _make_entrypoint("youtube_automation.scripts.init_collection")
 yt_kpi_dashboard = _make_entrypoint("youtube_automation.scripts.kpi_dashboard")
 yt_launch_curve = _make_entrypoint("youtube_automation.scripts.launch_curve")
+yt_live_chat_reply = _make_entrypoint("youtube_automation.scripts.live_chat_reply")
 yt_metadata_audit = _make_entrypoint("youtube_automation.scripts.metadata_audit")
 yt_oauth = _make_entrypoint("youtube_automation.auth.oauth_handler")
 yt_pinned_comment = _make_entrypoint("youtube_automation.scripts.pinned_comment")

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `videoup` の overlay H.264 encoder を同一条件で計測し、既定の `libx264` 経路を維持しつつ、VideoToolbox / NVENC の明示 opt-in、codec 固有引数、利用不能・起動失敗時の `libx264` fallback、再現可能な benchmark を追加（#2372）。
+- `feat(live-chat)`: アクティブ配信を検出し、YouTube の指定間隔で新着チャットを取得、Codex の構造化判定と機械フィルタ・返信上限・履歴による重複防止を通して投稿する `yt-live-chat-reply` を追加（#2374）。
 
 - `/automation-schedule` の既定登録先を Codex / Claude のネイティブ Scheduled Task へ移し、依存性に応じた Cloud/local 分岐、backend ID による重複防止、明示承認時だけの launchd / cron fallback を追加しました（#2369）。
 
