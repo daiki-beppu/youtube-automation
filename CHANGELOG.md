@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- `fix(dashboard)`: チャンネル概要行を縦積みと折り返し可能な Badge 群へ変更し、狭いカード幅でも更新状態・公開予約数・動画数が右端から見切れないように修正（#2399）。
+- `fix(dashboard)`: 選択前から全チャンネルの主要指標をカード一覧で比較できる構成へ変更し、折り返し可能な Badge 群によって狭い画面でも更新状態・公開予約数が右端から見切れないように修正（#2399）。
 
 - `feat(dashboard)`: `yt-dashboard` の通常起動時に全登録チャンネルの Analytics を直列更新し、失敗をチャンネル単位で隔離して前回 snapshot を表示する。概要カードの「準備完了」を YouTube の将来 `publishAt` に基づく `公開予約 N本` へ置き換え、OAuth のない E2E / 配布確認用に `--skip-refresh` を追加（#2397）。
 
