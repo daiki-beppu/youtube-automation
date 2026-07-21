@@ -115,19 +115,25 @@ resource "null_resource" "deploy" {
     destination = "${var.install_root}/videos/current.mp4"
   }
 
+  provisioner "remote-exec" {
+    inline = [
+      "install -d -m 0700 -o root -g root /run/youtube-stream-provision",
+    ]
+  }
+
   provisioner "file" {
     content = templatefile("${path.module}/templates/youtube-stream.env.tftpl", {
       video    = "${var.install_root}/videos/current.mp4"
       rtmp_url = "rtmp://a.rtmp.youtube.com/live2/${var.stream_key}"
     })
-    destination = "/tmp/youtube-stream.env.tmp"
+    destination = "/run/youtube-stream-provision/youtube-stream.env.tmp"
   }
 
   provisioner "file" {
     content = templatefile("${path.module}/templates/youtube-stream-healthcheck.env.tftpl", {
       webhook = var.discord_webhook_url
     })
-    destination = "/tmp/youtube-stream-healthcheck.env.tmp"
+    destination = "/run/youtube-stream-provision/youtube-stream-healthcheck.env.tmp"
   }
 
   provisioner "file" {
@@ -171,10 +177,11 @@ resource "null_resource" "deploy" {
   provisioner "remote-exec" {
     inline = [
       "umask 0077",
-      "install -m 0600 -o root -g root /tmp/youtube-stream.env.tmp /etc/youtube-stream.env",
-      "rm -f /tmp/youtube-stream.env.tmp",
-      "install -m 0600 -o root -g root /tmp/youtube-stream-healthcheck.env.tmp /etc/youtube-stream-healthcheck.env",
-      "rm -f /tmp/youtube-stream-healthcheck.env.tmp",
+      "install -m 0600 -o root -g root /run/youtube-stream-provision/youtube-stream.env.tmp /etc/youtube-stream.env",
+      "rm -f /run/youtube-stream-provision/youtube-stream.env.tmp",
+      "install -m 0600 -o root -g root /run/youtube-stream-provision/youtube-stream-healthcheck.env.tmp /etc/youtube-stream-healthcheck.env",
+      "rm -f /run/youtube-stream-provision/youtube-stream-healthcheck.env.tmp",
+      "rm -rf /run/youtube-stream-provision",
       "mkdir -p ${var.install_root}/bin",
       "chmod 755 ${var.install_root}/bin/healthcheck.sh ${var.install_root}/bin/notify.sh ${var.install_root}/bin/run-ffmpeg.sh",
       "chmod 0600 /etc/youtube-stream-healthcheck.env",

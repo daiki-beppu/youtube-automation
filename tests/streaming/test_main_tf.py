@@ -652,7 +652,7 @@ class TestMainTfNullResource:
     def test_provisioner_file_places_env_via_templatefile(self):
         """Given main.tf
         When 2 つ目の ``provisioner "file"`` を読む
-        Then content=templatefile(...), destination=/tmp/youtube-stream.env.tmp。
+        Then content=templatefile(...), destination は root 専用 staging 配下。
 
         templatefile は ``${path.module}/templates/youtube-stream.env.tftpl`` を読む。
         secret を tfstate に残さず provisioner 経由で配信する経路。
@@ -662,11 +662,11 @@ class TestMainTfNullResource:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        # templatefile を引数に取る provisioner "file" を抽出（destination=/tmp/youtube-stream.env.tmp）
+        # templatefile を引数に取る provisioner "file" は 0700 staging 配下へ配置する。
         assert re.search(
-            r'destination\s*=\s*"/tmp/youtube-stream\.env\.tmp"',
+            r'destination\s*=\s*"/run/youtube-stream-provision/youtube-stream\.env\.tmp"',
             block,
-        ), 'provisioner "file" の destination が "/tmp/youtube-stream.env.tmp" でない'
+        ), "stream env の destination が 0700 staging 配下でない"
         assert re.search(
             r'templatefile\(\s*"\$\{path\.module\}/templates/youtube-stream\.env\.tftpl"',
             block,
@@ -700,7 +700,7 @@ class TestMainTfNullResource:
         When ``provisioner "remote-exec"`` の inline を読む
         Then 仕様通りのコマンドがすべて含まれている。
 
-        - install -m 0600 -o root -g root /tmp/youtube-stream.env.tmp /etc/youtube-stream.env
+        - install -m 0600 -o root -g root /run/youtube-stream-provision/youtube-stream.env.tmp /etc/youtube-stream.env
           （0600 / root 所有を原子移送で確定。race window 閉鎖）
         - systemctl daemon-reload  （新 unit / .env 反映）
         - systemctl enable --now youtube-stream  （初回起動）
@@ -711,28 +711,40 @@ class TestMainTfNullResource:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        remote_exec = re.search(
+        remote_exec_blocks = re.findall(
             r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
             block,
             flags=re.DOTALL,
         )
-        assert remote_exec is not None, 'provisioner "remote-exec" ブロックが見つからない'
-        inline = remote_exec.group(1)
+        inline = next((item for item in remote_exec_blocks if "umask 0077" in item), None)
+        assert inline is not None, '本配置用 provisioner "remote-exec" ブロックが見つからない'
         for command, hint in [
             (r"umask\s+0077", "umask 0077 (defense-in-depth)"),
             (
-                r"install\s+-m\s+0600\s+-o\s+root\s+-g\s+root\s+/tmp/youtube-stream\.env\.tmp\s+/etc/youtube-stream\.env",
+                r"install\s+-m\s+0600\s+-o\s+root\s+-g\s+root\s+/run/youtube-stream-provision/youtube-stream\.env\.tmp\s+/etc/youtube-stream\.env",
                 "install -m 0600 -o root -g root .../etc/youtube-stream.env",
             ),
             (
-                r"rm\s+-f\s+/tmp/youtube-stream\.env\.tmp",
-                "rm -f /tmp/youtube-stream.env.tmp (tmp secret cleanup)",
+                r"rm\s+-rf\s+/run/youtube-stream-provision",
+                "rm -rf /run/youtube-stream-provision (secret staging cleanup)",
             ),
             (r"systemctl\s+daemon-reload", "daemon-reload"),
             (r"systemctl\s+enable\s+--now\s+youtube-stream", "enable --now youtube-stream"),
             (r"systemctl\s+restart\s+youtube-stream", "restart youtube-stream"),
         ]:
             assert re.search(command, inline), f"remote-exec の inline に '{hint}' コマンドが無い"
+
+    def test_secret_staging_directory_is_created_before_env_uploads(self):
+        """0700 staging の作成後にだけ secret env を転送する。"""
+        text = strip_hcl_comments(read_file(_MAIN_TF))
+        block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
+        assert block is not None
+
+        create = '"install -d -m 0700 -o root -g root /run/youtube-stream-provision"'
+        env_destination = 'destination = "/run/youtube-stream-provision/youtube-stream.env.tmp"'
+        health_destination = 'destination = "/run/youtube-stream-provision/youtube-stream-healthcheck.env.tmp"'
+        assert block.index(create) < block.index(env_destination) < block.index(health_destination)
+        assert "/tmp/youtube-stream" not in block
 
     def test_no_explicit_depends_on_for_null_resource(self):
         """Given main.tf
@@ -1377,13 +1389,13 @@ class TestMainTfRunFfmpegProvisioner:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        remote_exec = re.search(
+        remote_exec_blocks = re.findall(
             r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
             block,
             flags=re.DOTALL,
         )
-        assert remote_exec is not None, 'provisioner "remote-exec" ブロックが見つからない'
-        inline = remote_exec.group(1)
+        inline = next((item for item in remote_exec_blocks if "run-ffmpeg.sh" in item), None)
+        assert inline is not None, '本配置用 provisioner "remote-exec" ブロックが見つからない'
         assert re.search(
             rf"chmod\s+755\b[^\n]*{_INSTALL_ROOT_VAR}/bin/run-ffmpeg\.sh\b",
             inline,
@@ -1403,13 +1415,13 @@ class TestMainTfRunFfmpegProvisioner:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        remote_exec = re.search(
+        remote_exec_blocks = re.findall(
             r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
             block,
             flags=re.DOTALL,
         )
-        assert remote_exec is not None
-        inline = remote_exec.group(1)
+        inline = next((item for item in remote_exec_blocks if "run-ffmpeg.sh" in item), None)
+        assert inline is not None
 
         chmod_match = re.search(
             r"chmod\s+755\b[^\n]*run-ffmpeg\.sh\b",
