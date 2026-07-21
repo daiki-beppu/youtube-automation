@@ -194,7 +194,7 @@ nix develop
 | `pinned-comment.json` | `pinned_comment` (optional) |
 | `distrokid.json` | `distrokid` (optional) |
 
-`workflow.json` は `/wf-next` と `/post-publish` 向けの任意設定です。`workflow.wf_next` は制作フェーズの承認・mastering 運用を宣言します。`workflow.post-publish.approval_gates.{community-post,pinned-comment,metadata-audit}` は公開後 step 直前の承認を boolean で宣言し、section 自体が未設定なら従来どおり community-post のみを案内します。
+`workflow.json` は `/wf-next` と `/post-publish` 向けの任意設定です。`workflow.wf_next` は制作フェーズの承認・mastering 運用を宣言します。`workflow.post-publish.skip_approvals.{community-post,pinned-comment,metadata-audit}` は `true` で公開後 step 直前の承認を省略します。旧 `approval_gates` は逆向きの後方互換 alias で、同一 step の新旧同時指定はエラーです。section 自体が未設定なら従来どおり community-post のみを案内します。
 
 詳細なフィールド説明は [`examples/channel_config.example/`](examples/channel_config.example/) を参照してください。多言語テンプレートは `config/localizations.json` に集約します（単一ソース）。`community.example.json` は `/community-post` が直接読む skill-local raw JSON の雛形で、共通 config loader の必須/optional section ではありません。
 

@@ -1039,6 +1039,26 @@ def test_wf_next_skip_approval_keys_are_documented_consistently() -> None:
     assert "skip_audio_approval" in schema
 
 
+def test_post_publish_skip_approvals_are_documented_consistently() -> None:
+    post_publish = _read(".claude/skills/post-publish/SKILL.md")
+    setup = _read(".claude/skills/setup/SKILL.md")
+    readme = _read("README.md")
+    example = json.loads(_read("examples/channel_config.example/workflow.json"))
+    config = example["workflow"]["post-publish"]
+
+    assert "approval_gates" not in config
+    assert config["skip_approvals"] == {
+        "community-post": True,
+        "pinned-comment": True,
+        "metadata-audit": True,
+    }
+    for text in (post_publish, setup, readme):
+        assert "skip_approvals" in text
+    assert "`false` の step だけ承認対象" in post_publish
+    assert "後方互換 alias" in post_publish
+    assert "同一 step" in post_publish and "ConfigError" in post_publish
+
+
 def test_common_docs_list_optional_channel_config_files() -> None:
     required = ("shorts.json", "comments.json", "pinned-comment.json", "distrokid.json")
 
