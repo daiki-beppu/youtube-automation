@@ -1,66 +1,69 @@
-# マルチチャンネル dashboard: 2 フェーズ戦略
+# マルチチャンネル dashboard: Python 配信 + React 表示
 
 ## Status
 
-accepted (2026-06-23)。実装は未着手（Phase 1 の Python PoC から着手予定 — 本文参照）。
-
-全 first-party チャンネルの analytics を一覧表示する dashboard を、PoC (Python) → 本実装 (TS) の 2 フェーズで構築する。
+accepted (2026-06-23)、amended (2026-07-21, #2386)。旧 2 フェーズ案を廃止し、本リポジトリ内で保守する単一構成へ置き換える。
 
 ## Context
 
-運営者は 5 チャンネル前後を単独で運営しており、各チャンネルの analytics は `/analytics-collect` で個別に収集済み。しかし全チャンネルを横断して見渡す手段がなく、チャンネル間のパフォーマンス比較や注力判断に毎回個別のデータを突き合わせる手間が発生していた。
-
-## Considered Options
-
-### データソース
-
-1. **既存 JSON スナップショットを読む (採用)** — 各チャンネルの `data/analytics_data_*.json` を読むだけ。収集と表示の責務分離
-2. **ダッシュボード起動時に API 直接取得** — リアルタイムだが API クォータ消費、収集ロジックの二重実装
-
-### チャンネル発見
-
-1. **`~/.config/tayk/channels.json` レジストリ (採用)** — パスのみの配列。表示名は `config/channel/meta.json` から動的解決
-2. **CLI 引数で都度指定** — スケールしない
-3. **ディレクトリ規約で自動発見** — ファイルシステム配置がバラバラだと漏れる
-
-### 技術スタック
-
-1. **PoC: Python `yt-dashboard` CLI + 生 HTML (採用)** — 今の Python 環境で即動く。データフローの検証が目的
-2. **本実装: `packages/dashboard` / `Bun.serve` / React + Vite + Spell UI (採用)** — TS 移行 (epic #727) の一部として構築。Hono 等のフレームワークは入れず `Bun.serve` 直接
-3. **Python 側にフル実装** — cutover 控えで捨てコードになる。却下
-
-### コンポーネントライブラリ
-
-1. **Spell UI + Recharts 補完 (採用)** — コピペベース + Tailwind CSS。extensions/ と一貫したスタック。チャートが不足時は Recharts で補完
-2. **shadcn/ui** — 同じコピペモデルだが Spell UI のチャート品質を優先
-3. **Tremor** — ダッシュボード特化だがカスタマイズ自由度が低い
+運営者は複数の first-party チャンネルを持ち、各チャンネルの `data/analytics_data_*.json` を個別に確認している。収集済みデータを横断表示する読み取り専用 UI が必要だが、dashboard 起動を Analytics 収集や別リポジトリの tayk 開発へ結合させないことも必要である。
 
 ## Decision
 
-### Phase 1: PoC (Python)
+### 責務境界
 
-- `yt-dashboard` CLI を `pyproject.toml` に登録
-- `~/.config/tayk/channels.json` からチャンネルパスを読み取り
-- 各チャンネルの最新 `data/analytics_data_*.json` を集約
-- Python HTTP サーバーで生 HTML を配信（UI は最小限）
-- 表示: チャンネル概要一覧 + 動画別パフォーマンス (2 階層)
+- Python HTTP server の `yt-dashboard` が channel registry、read model、JSON API、loopback 限定配信を担当する。
+- `dashboard/` の React + Vite frontend は JSON API の表示だけを担当し、filesystem、YouTube API、更新 CLI を直接呼ばない。
+- HTTP server の既定 bind は `127.0.0.1:8765`。認証や外部公開は提供しない。
+- dashboard は読み取り専用であり、欠損・破損したチャンネルは部分エラーとして表示し、他チャンネルの表示を止めない。
+- 単一チャンネル用 `yt-kpi-dashboard` と収集用 `/analytics-collect` の責務は変更しない。
 
-### Phase 2: 本実装 (TS)
+### frontend の配置と UI 契約
 
-- `packages/dashboard` を monorepo に追加
-- `Bun.serve` で API (JSON) + Vite ビルド済み静的ファイルを配信
-- React + Vite + Spell UI + Recharts
-- `tayk dashboard` サブコマンドから起動
-- channel registry の読み込みロジックは PoC で検証済みの設計を移植
+- frontend workspace はリポジトリ直下の `dashboard/` に置く。削除済みの `packages/` は復活させない。
+- React、Vite、TypeScript、Tailwind CSS v4、shadcn/ui の Base UI スタイルを使う。
+- `Card`、`Table`、`Badge`、`Skeleton`、`Empty`、`Alert`、`Chart` など shadcn/ui component を組み合わせ、同等の独自 primitive を増やさない。
+- 色は raw 値ではなく semantic token を使い、keyboard focus と loading / empty / partial error を視覚・ARIA の両方で判別可能にする。
+- `extensions/shared-ui` は Chrome extension の Shadow DOM と独立した workspace/package 境界を持つため、dashboard から直接 import しない。Base UI、Tailwind CSS v4、semantic token、theme class という契約だけを揃え、dashboard 自身の `components.json` と生成 component を持つ。
+- component 追加前に対象 workspace で `shadcn info` と registry/docs を確認する。install 済み component の更新は dry-run/diff 後に行う。
 
-### 共通制約
+### build と配布
 
-- dashboard はビューア専用。データ収集は `/analytics-collect` の責務
-- 認証不要 — 全チャンネルが同一 Google アカウント配下、ローカルファイル読み取りのみ
-- 単一運営者専用 — マルチテナント機能は設けない
+- Vite は `dashboard/index.html` を入口に production asset を生成する。Python server と同一 origin の `/` から配信できるよう build base を設定する。
+- build output は `src/youtube_automation/dashboard_dist/` に生成し、Python package data として wheel / sdist の双方へ同梱する。runtime はソース workspace や Node.js に依存せず `importlib.resources` から asset を解決する。
+- build 済み asset は配布契約なので commit 対象とし、frontend source 変更時に `build` と wheel smoke test で同期を検証する。`node_modules/`、coverage、Playwright artifact は commit しない。
+- Python package build が Node toolchain を暗黙実行する構成にはしない。frontend build は明示 command/CI step で先に完了させ、hatch は完成済み package data を収録する。
+
+### 品質ゲート
+
+- frontend: `lint`、`typecheck`、Vitest の `test`、Playwright の `test:e2e`、`build`。
+- Python: registry/read model/server の対象 pytest、behavioral fast lane、unit-only 全体 pytest、Ruff。
+- packaging: candidate wheel を非 editable installし、`yt-dashboard` が build asset と API を配信できる smoke test。
+
+## Considered Options
+
+1. **Python API/配信 + React/Vite + shadcn/ui（採用）** — 現行 Python データ経路と保守可能な UI を同じ配布物に収められる。
+2. **Python + 生 HTML（不採用）** — component、accessibility、状態表示の規約を継続的に検証しにくい。
+3. **frontend server を別プロセスで本番運用（不採用）** — 非 editable wheel が Node.js を要求し、配布境界が増える。
+4. **`extensions/shared-ui` の直接 import（不採用）** — Chrome extension の workspace、Shadow DOM、release lifecycle を dashboard wheel に結合する。
+5. **dashboard 起動時の YouTube API 取得（不採用）** — 表示と収集を混ぜ、クォータを消費する。
 
 ## Consequences
 
-- channel registry (`~/.config/tayk/channels.json`) が新たな設定ファイルとして増える。チャンネル追加時にパスの登録が必要
-- PoC の Python コードは cutover 後に削除対象。本実装への知見移転が目的であり、長期メンテナンスはしない
-- `packages/dashboard` は `@youtube-automation/core` の analytics service に依存する。core 側の analytics export が安定している必要がある
+- 本リポジトリの TypeScript 禁止原則に `dashboard/` 限定の例外が生じる。例外は UI source/test/build config だけであり、tayk core や旧 `packages/` を戻す根拠にはならない。
+- frontend source と package data の同期、wheel / sdist 同梱を CI で固定する必要がある。
+- channel registry (`~/.config/tayk/channels.json`) が設定ファイルとして増える。
+
+## Official references
+
+- [shadcn/ui installation](https://ui.shadcn.com/docs/installation)
+- [shadcn CLI](https://ui.shadcn.com/docs/cli)
+- [Base UI overview](https://base-ui.com/react/overview/about)
+- [Vite production build](https://vite.dev/guide/build)
+- [Vite static assets](https://vite.dev/guide/assets.html)
+- [Python Packaging User Guide: pyproject.toml](https://packaging.python.org/en/latest/guides/writing-pyproject-toml/)
+
+## Related
+
+- ADR-0021（tayk は別リポジトリ。dashboard 限定例外）
+- #2384 / #2385 / #2387
