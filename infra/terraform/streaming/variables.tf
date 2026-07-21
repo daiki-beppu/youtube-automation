@@ -83,3 +83,67 @@ variable "allowed_ssh_cidr" {
     error_message = "allowed_ssh_cidr を 1 件以上指定してください（例: 自分の IP を `curl -s ifconfig.me` で取得し \"203.0.113.5/32\" 形式で渡す）。"
   }
 }
+
+variable "enable_live_chat_reply" {
+  type        = bool
+  description = "Codex によるライブチャット返信 daemon を同居させる opt-in"
+  default     = false
+}
+
+variable "live_chat_channel_dir" {
+  type        = string
+  description = "config/channel/comments.json を含むローカル channel root。enable 時のみ必須"
+  default     = ""
+}
+
+variable "live_chat_automation_git_ref" {
+  type        = string
+  description = "VPS に install する youtube-automation の Git ref。本番では commit SHA pin を推奨"
+  default     = "main"
+
+  validation {
+    condition     = can(regex("^[0-9A-Za-z._/-]+$", var.live_chat_automation_git_ref))
+    error_message = "live_chat_automation_git_ref は Git ref に使える英数字と ._/- のみ指定できます。"
+  }
+}
+
+variable "live_chat_codex_version" {
+  type        = string
+  description = "OpenAI 公式 install.sh で導入する Codex CLI version"
+  default     = "0.144.1"
+
+  validation {
+    condition     = can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+([-.][0-9A-Za-z.]+)?$", var.live_chat_codex_version))
+    error_message = "live_chat_codex_version は x.y.z 形式で指定してください。"
+  }
+}
+
+variable "live_chat_credentials_revision" {
+  type        = string
+  description = "ephemeral 認証の差し替えを検知する非秘密 revision（deploy script が SHA-256 を設定）"
+  default     = ""
+}
+
+variable "live_chat_youtube_token_json" {
+  type        = string
+  description = "YouTube OAuth token.json の内容。state / plan に保存しない ephemeral secret"
+  sensitive   = true
+  ephemeral   = true
+  default     = ""
+}
+
+variable "live_chat_client_secrets_json" {
+  type        = string
+  description = "YouTube OAuth client_secrets.json の内容。state / plan に保存しない ephemeral secret"
+  sensitive   = true
+  ephemeral   = true
+  default     = ""
+}
+
+variable "live_chat_codex_auth_json" {
+  type        = string
+  description = "Codex auth.json の内容。state / plan に保存しない ephemeral secret"
+  sensitive   = true
+  ephemeral   = true
+  default     = ""
+}

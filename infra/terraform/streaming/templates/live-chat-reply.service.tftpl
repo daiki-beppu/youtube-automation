@@ -1,0 +1,44 @@
+[Unit]
+Description=YouTube Live Chat Reply (Codex)
+Wants=network-online.target
+After=network-online.target youtube-stream.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=live-chat-reply
+Group=live-chat-reply
+WorkingDirectory=${state_root}/channel
+Environment=CHANNEL_DIR=${state_root}/channel
+Environment=CODEX_HOME=${state_root}/codex
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+UMask=0077
+ExecStart=${install_root}/venv/bin/yt-live-chat-reply
+Restart=on-failure
+RestartSec=10s
+TimeoutStopSec=30s
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=${state_root}
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RemoveIPC=yes
+
+[Install]
+WantedBy=multi-user.target

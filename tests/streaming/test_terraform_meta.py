@@ -33,16 +33,16 @@ from tests.streaming._helpers import (
 class TestVersionsTf:
     """``versions.tf`` の terraform / required_providers / provider 宣言。"""
 
-    def test_required_version_is_at_least_1_5(self):
+    def test_required_version_supports_ephemeral_inputs(self):
         """Given versions.tf
         When terraform ブロックを読む
-        Then required_version は ">= 1.5" を含む（既存 gcp/versions.tf と同じ最低保証）。
+        Then required_version は ephemeral variables を導入した Terraform 1.10 以上。
         """
         text = strip_hcl_comments(read_file(_VERSIONS_TF))
         terraform_block = extract_block(text, r"terraform")
         assert terraform_block is not None, "terraform { ... } ブロックが存在しない"
-        assert re.search(r'required_version\s*=\s*"[^"]*>=\s*1\.5', terraform_block), (
-            "required_version が >= 1.5 を含んでいない"
+        assert re.search(r'required_version\s*=\s*"[^"]*>=\s*1\.10', terraform_block), (
+            "required_version が >= 1.10 を含んでいない"
         )
 
     def test_backend_uses_gcs_remote_state(self):
