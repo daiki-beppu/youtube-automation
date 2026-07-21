@@ -10,6 +10,7 @@ import {
   FieldLabel,
   RadioGroup,
   RadioGroupItem,
+  ScrollArea,
   Select,
   SelectContent,
   SelectItem,
@@ -374,55 +375,65 @@ export function App() {
             <path d="M6 12V4l4.5 4z" />
           </svg>
         </CollapsibleTrigger>
-        <CollapsibleContent keepMounted className="mt-1 flex flex-col gap-1">
-          {collections.length === 0 && (
-            <p className="text-xs text-muted-foreground">コレクションなし</p>
-          )}
-          {collections.map((collection) => {
-            const checked = selectedCollectionIds.includes(collection.id);
-            return (
-              <FieldLabel
-                key={collection.id}
-                data-variant={checked ? "secondary" : "outline"}
-                data-size="sm"
-                data-disabled={
-                  controlsLocked || collection.status === "needs_prompts"
-                }
-                className={buttonVariants({
-                  variant: checked ? "secondary" : "outline",
-                  size: "sm",
-                  className:
-                    "h-auto w-full items-start justify-start whitespace-normal p-2",
-                })}
-              >
-                <Checkbox
-                  className="mt-0.5"
-                  checked={checked}
-                  disabled={
-                    controlsLocked || collection.status === "needs_prompts"
-                  }
-                  data-suno-control="collection-checkbox"
-                  aria-label={`${collection.name} を選択`}
-                  onCheckedChange={(nextChecked) =>
-                    toggleCollectionSelection(
-                      collection.id,
-                      nextChecked === true
-                    )
-                  }
-                />
-                <span className="flex flex-col text-left">
-                  <span className="font-medium">{collection.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {collection.status === "downloaded"
-                      ? `完了 ${collection.downloaded_count}/${collection.expected_file_count ?? (collection.pattern_count ?? 0) * 2}`
-                      : collection.status === "ready"
-                        ? `${collection.pattern_count} patterns`
-                        : "prompts なし"}
-                  </span>
-                </span>
-              </FieldLabel>
-            );
-          })}
+        <CollapsibleContent keepMounted>
+          <ScrollArea
+            className="mt-1"
+            viewportClassName="max-h-48"
+            data-suno-collection-list="true"
+          >
+            <div className="flex flex-col gap-1 pr-3">
+              {collections.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  コレクションなし
+                </p>
+              )}
+              {collections.map((collection) => {
+                const checked = selectedCollectionIds.includes(collection.id);
+                return (
+                  <FieldLabel
+                    key={collection.id}
+                    data-variant={checked ? "secondary" : "outline"}
+                    data-size="sm"
+                    data-disabled={
+                      controlsLocked || collection.status === "needs_prompts"
+                    }
+                    className={buttonVariants({
+                      variant: checked ? "secondary" : "outline",
+                      size: "sm",
+                      className:
+                        "h-auto w-full items-start justify-start whitespace-normal p-2",
+                    })}
+                  >
+                    <Checkbox
+                      className="mt-0.5"
+                      checked={checked}
+                      disabled={
+                        controlsLocked || collection.status === "needs_prompts"
+                      }
+                      data-suno-control="collection-checkbox"
+                      aria-label={`${collection.name} を選択`}
+                      onCheckedChange={(nextChecked) =>
+                        toggleCollectionSelection(
+                          collection.id,
+                          nextChecked === true
+                        )
+                      }
+                    />
+                    <span className="flex flex-col text-left">
+                      <span className="font-medium">{collection.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {collection.status === "downloaded"
+                          ? `完了 ${collection.downloaded_count}/${collection.expected_file_count ?? (collection.pattern_count ?? 0) * 2}`
+                          : collection.status === "ready"
+                            ? `${collection.pattern_count} patterns`
+                            : "prompts なし"}
+                      </span>
+                    </span>
+                  </FieldLabel>
+                );
+              })}
+            </div>
+          </ScrollArea>
         </CollapsibleContent>
       </Collapsible>
       <select

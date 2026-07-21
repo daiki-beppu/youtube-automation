@@ -42,6 +42,7 @@ export {
 } from "./overlay-shell";
 export { hexContrastRatio } from "./color-contrast";
 export { RadioGroup, RadioGroupItem } from "./radio-group";
+export { ScrollArea, ScrollBar } from "./scroll-area";
 export {
   Select,
   SelectContent,

@@ -13,6 +13,7 @@ PRIMITIVES = (
     "field.tsx",
     "label.tsx",
     "radio-group.tsx",
+    "scroll-area.tsx",
     "select.tsx",
     "switch.tsx",
 )
@@ -52,6 +53,8 @@ def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
         "OverlayShell",
         "RadioGroup",
         "RadioGroupItem",
+        "ScrollArea",
+        "ScrollBar",
         "Select",
         "Switch",
         "useDraggable",
@@ -138,6 +141,22 @@ def test_shared_collapsible_tracks_current_base_vega_composition() -> None:
     assert "CollapsiblePrimitive.Root.Props" in collapsible
     assert "CollapsiblePrimitive.Trigger.Props" in collapsible
     assert "CollapsiblePrimitive.Panel.Props" in collapsible
+
+
+def test_shared_scroll_area_tracks_current_base_vega_composition() -> None:
+    scroll_area = (EXTENSIONS / "shared-ui/src/scroll-area.tsx").read_text()
+
+    assert 'from "@base-ui/react/scroll-area"' in scroll_area
+    for slot in (
+        "scroll-area",
+        "scroll-area-viewport",
+        "scroll-area-scrollbar",
+        "scroll-area-thumb",
+    ):
+        assert f'data-slot="{slot}"' in scroll_area
+    assert "ScrollAreaPrimitive.Root.Props" in scroll_area
+    assert "ScrollAreaPrimitive.Scrollbar.Props" in scroll_area
+    assert "viewportClassName" in scroll_area
 
 
 def test_shared_switch_tracks_current_light_only_base_vega_composition() -> None:

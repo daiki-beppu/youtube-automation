@@ -21,6 +21,7 @@ import {
   Select,
   SelectTrigger,
   SelectValue,
+  ScrollArea,
 } from "@youtube-automation/ui";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -58,6 +59,20 @@ const sizeMarkers = {
 } as const;
 
 describe("shadcn/ui foundation", () => {
+  it("ScrollArea は Base UI viewport を公開し、viewport class を反映する", () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        ScrollArea,
+        { viewportClassName: "max-h-48" },
+        createElement("div", null, "content")
+      )
+    );
+
+    expect(html).toContain('data-slot="scroll-area"');
+    expect(html).toContain('data-slot="scroll-area-viewport"');
+    expect(html).toContain("max-h-48");
+  });
+
   it("cn は条件付き class を連結し、競合する Tailwind class は後勝ちで統合する", () => {
     expect(
       cn("px-2", { hidden: false }, ["font-medium", { block: true }], "px-4")
