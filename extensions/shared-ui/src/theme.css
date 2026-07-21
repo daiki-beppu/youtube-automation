@@ -3,7 +3,7 @@
 @source "./*.tsx";
 :root,
 :host {
-  --radius: 0.625rem;
+  --radius: 10px;
   --background: oklch(0.97 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -38,7 +38,26 @@
   --overlay-header-foreground: var(--primary-foreground);
 }
 
+:host {
+  font-size: 16px;
+}
+
 @theme inline {
+  --spacing: 4px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --radius-xs: 4px;
+  --container-xs: 320px;
+  --container-md: 448px;
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -75,6 +94,10 @@
   --color-ring: var(--ring);
   --color-overlay-header: var(--overlay-header-background);
   --color-overlay-header-foreground: var(--overlay-header-foreground);
+}
+
+.rounded {
+  border-radius: 4px;
 }
 
 @layer base {

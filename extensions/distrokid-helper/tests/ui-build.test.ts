@@ -47,10 +47,15 @@ describe("Tailwind 4 build integration", () => {
     expect(declarationBlocks(css, ":root,:host")).toContainEqual(
       expect.objectContaining(
         new Map([
-          ["--radius", ".625rem"],
+          ["--radius", "10px"],
+          ["--spacing", "4px"],
+          ["--text-sm", "14px"],
           ["--background", "oklch(97% 0 0)"],
         ])
       )
+    );
+    expect(declarationBlocks(css, ":host")).toContainEqual(
+      new Map([["font-size", "16px"]])
     );
     expect(declarationBlocks(css, "*")).toContainEqual(
       new Map([

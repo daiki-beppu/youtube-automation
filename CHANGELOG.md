@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(extensions-ui)`: shared Shadow DOM theme の spacing・typography・radius・responsive token を px 基準へ固定し、ホストページの root font-size が Helper overlay の視認サイズを縮小しないように修正（#2351）
+
 - `fix(suno-helper)`: コレクション一覧と楽曲一覧を shared shadcn/ui Scroll Area へ移行し、件数が多い場合は同じ高さ上限で一覧内を縦スクロールできるようにした（#2353）。
 
 - `feat(extensions)`: Suno・DistroKid・Community Helper の共通 overlay ヘッダーへ、公式一次資料に基づく識別可能なサービス別配色と WCAG AA コントラスト検証を追加（#2327）
