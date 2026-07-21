@@ -1,6 +1,6 @@
 ---
 name: comments-reply
-description: "Use when YouTube コメントへ自動返信するとき。「コメント返信」「自動返信」「リプライ」で発動。dry-run 監査後 apply、履歴で二重返信防止"
+description: "Use when 公開済み YouTube 動画のコメントへ自動返信するとき。「動画コメント返信」「コメント返信」「リプライ」で発動。配信中のライブチャット返信は /live-chat-reply を使う"
 ---
 
 ## 前後工程
