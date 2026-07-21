@@ -4,6 +4,39 @@
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
+## 第 5 回監査（セキュリティ専門監査、2026-07-21、基準 commit `37b362ce`）
+
+セキュリティ集中監査（フォーカス指定 /improve）。並列 4 subagent（シークレット/認証 / インジェクション・パス / ネットワーク・サーバー / Chrome 拡張・配布）→ 全 findings を advisor が実読 vet。
+総評: **HIGH / MEDIUM 脆弱性ゼロ**。shell=True / eval / unsafe yaml / curl|bash ゼロ、全 subprocess が argv 形式、zip-slip・path traversal・CORS・CSRF・token 0o600・redact・webhook 許可リストいずれも防御済み。第 4 回以降の新サーフェス（live-chat 自動返信 daemon / streaming VPS）も、プロンプトインジェクション対策（`<viewer_input>` ラップ + stdin 渡し + `--sandbox read-only` + 出力監査 + 3 段レート制限）と systemd hardening を実装済みで健全。残ったのは LOW の hardening 3 件のみ。
+
+### Execution order & status
+
+| Plan | Title | Priority | Effort | Depends on | Issue | PR | Status |
+|------|-------|----------|--------|------------|-------|-----|--------|
+| 025 | 1Password フォールバックの client_secrets を tempfile 経由から in-memory 化（SIGKILL 残留解消） | P2 | M | — | — | — | TODO |
+| 026 | streaming VPS の stream key / webhook staging を素の /tmp から 0700 ディレクトリへ | P3 | S | — | — | — | TODO |
+| 027 | open / ffmpeg へ渡すパス引数の絶対パス化（defense-in-depth） | P3 | S | — | — | — | TODO |
+
+### Dependency notes
+
+- 025〜027 は完全に独立（触るファイル非重複）。並列実行可
+- 026 の `terraform apply` は実 VPS の再 provisioning を伴うためオペレーターが別途実施（プランは fmt / validate / pytest まで）
+
+### Findings considered and rejected（再監査不要）
+
+- **CORS 既定で任意の Chrome 拡張が collection-serve の read ルートを読める**（collection_serve.py:666-668）: by design（#896 コメントに意図明記）。第 1 回監査で同系 finding を裁定済み — `--allow-origin` lock が存在し、mutating 側は extension lock + token 必須（Plan 001）。露出は未公開プロンプト・下書きのみで受容
+- **suno.com ページから拡張 bridge メッセージ（MAIN→ISOLATED postMessage）を偽装可能**: MAIN world の構造的制約で完全防御は不可能。悪用には suno.com 自体の侵害が前提、影響も自動化進捗状態の撹乱のみ。受容
+- **SSH ホスト秘密鍵の cloud-init user-data 埋め込み**（infra/terraform/streaming/main.tf:66-72）: host-key pinning（provisioner の `host_key` 検証）のための意図的トレードオフ。鍵は当該サーバー自身の identity 鍵で、state / tfvars は gitignore 済み。受容
+- **skill 配布（wheel → yt-skills sync）に内容署名なし**: 脆弱性ではなく trust model（wheel が trust root）。sync 自体は traversal 安全を確認済み。メンテナンスモードのリポジトリに L 工数の署名基盤は見合わない
+- **`--` セパレータによる argv hardening 提案**（subagent 報告）: 手法が誤り。**ffmpeg は `--` end-of-options 非対応**。正しい対策（絶対パス化）に修正して Plan 027 とした
+
+### クリーン確認済み領域（次回セキュリティ監査の短縮用）
+
+- secrets.py（env → op read → ConfigError、値は stdin/ヘッダーのみ、argv 露出なし）/ oauth_handler（0o600 + `_redact`、READONLY_SCOPES 分離 #1699）/ fetch_stream_key（TTY 検知 + `::add-mask::`）/ notification（HTTPS + Discord ホスト許可リスト）
+- suno ZIP 展開（zip-slip + entry 数 + サイズ上限）/ CollectionPaths・thumbnail_archive の `relative_to` 境界 / channel slug regex 検証
+- collection_serve（localhost bind、mutating は extension lock + X-Serve-Token、body 上限、path traversal 防御）/ live_chat（上記総評参照）
+- 拡張 manifest 最小権限（`<all_urls>` なし、CSP 緩和なし、innerHTML/eval ゼロ、background は sender 由来 tab のみ操作）/ pnpm-lock 全て registry.npmjs.org + integrity / lefthook・flake に remote fetch なし / コミット済みシークレットなし
+
 ## 第 4 回監査（Python コア本体の一般監査、2026-07-09、基準 commit `5394c378`）
 
 初の `src/youtube_automation/`（~46K 行）本体監査。並列 4 subagent（正確性+セキュリティ / パフォ+依存 / テスト+負債 / DX+docs+方向性）→ 全 findings を advisor が実読 vet。
