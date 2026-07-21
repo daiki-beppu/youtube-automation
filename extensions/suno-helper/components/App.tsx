@@ -604,7 +604,7 @@ export function App() {
                 >
                   <RadioGroupItem
                     value={id}
-                    className="mt-1 data-checked:border-info-foreground data-checked:text-info-foreground"
+                    className="mt-1"
                     aria-label={mode.label}
                     data-suno-control="run-mode"
                   />

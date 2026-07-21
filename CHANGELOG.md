@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- `fix(suno-helper)`: 投入方式の選択中カードでタイトルと説明文を黒い foreground 色へ戻し、青いラジオボタン・枠・淡い背景による選択表示は維持（#2364）
+- `fix(suno-helper)`: 投入方式の選択 radio に残っていた青い info 色の override を撤去し、枠と中央ドットが overlay の primary ブランド色へ追従するように統一（#2366）
+
+- `fix(suno-helper)`: 投入方式の選択中カードでタイトルと説明文を黒い foreground 色へ戻し、枠・淡い背景による選択表示は維持（#2364）
 
 - `refactor(extensions-ui)`: 3 helper の手組みフォーム・空状態・警告・確認 UI を公式 shadcn/ui Base UI の Field / Input / Select / Alert / AlertDialog / Empty / ScrollArea へ移行し、ShadowRoot portal・最前面表示・選択前の配信元更新・既存 data / ARIA 契約を維持（#2360）
 
