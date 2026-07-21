@@ -154,16 +154,23 @@ function deferred<T>(): {
   return { promise, resolve };
 }
 
-function setSelectValue(select: HTMLSelectElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(
-    HTMLSelectElement.prototype,
-    "value"
-  )?.set;
-  if (!setter) {
-    throw new Error("HTMLSelectElement.value setter is unavailable");
-  }
-  setter.call(select, value);
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+async function setSelectValue(
+  trigger: HTMLButtonElement,
+  value: string
+): Promise<void> {
+  await act(async () => trigger.click());
+  let option: HTMLElement | undefined;
+  await waitFor(() => {
+    option = Array.from(
+      document.querySelectorAll<HTMLElement>('[role="option"]')
+    ).find((candidate) => candidate.dataset.value === value);
+    expect(option).toBeDefined();
+  });
+  await act(async () => {
+    option!.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    option!.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
+    option!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
 }
 
 async function waitFor(assertion: () => void): Promise<void> {
@@ -252,20 +259,20 @@ describe("DistroKid popup compatibility check", () => {
 
   it("ローカル配信元 option は URL を表示せず、URL value はデータ取得先として維持する", async () => {
     await renderApp();
-    const select = container.querySelector<HTMLSelectElement>("#server-url")!;
-    const trigger = container.querySelector<HTMLButtonElement>(
-      'button[aria-haspopup="listbox"]'
-    )!;
-
-    await waitFor(() => {
-      expect(select.options).toHaveLength(3);
-    });
+    const trigger = container.querySelector<HTMLButtonElement>("#server-url")!;
+    await act(async () => trigger.click());
+    await waitFor(() =>
+      expect(document.querySelectorAll('[role="option"]')).toHaveLength(3)
+    );
 
     expect(
-      Array.from(select.options, (option) => ({
-        text: option.text,
-        value: option.value,
-      }))
+      Array.from(
+        document.querySelectorAll<HTMLElement>('[role="option"]'),
+        (option) => ({
+          text: option.textContent,
+          value: option.dataset.value,
+        })
+      )
     ).toEqual([
       {
         text: "YouTube Automation (default) | distrokid-helper",
@@ -277,17 +284,19 @@ describe("DistroKid popup compatibility check", () => {
         value: FALLBACK_URL,
       },
     ]);
-    expect(select.labels?.[0]?.textContent?.trim()).toBe("ローカル配信元");
-    expect(select.value).toBe("http://youtube-automation.localhost:7873");
-    expect(trigger.dataset.slot).toBe("button");
+    expect(
+      container.querySelector('label[for="server-url"]')?.textContent
+    ).toBe("ローカル配信元");
+    expect(trigger.dataset.slot).toBe("select-trigger");
     expect(Array.from(trigger.classList)).toEqual(
       expect.arrayContaining([
         "border",
-        "bg-background",
+        "border-input",
+        "bg-transparent",
         "focus-visible:border-ring",
       ])
     );
-    expect(select.textContent).not.toContain("http://");
+    expect(trigger.textContent).not.toContain("http://");
   });
 
   it("popup 初回表示時に保存 URL から一覧と選択 disc の release を自動取得し、取得ボタンを表示しない", async () => {
@@ -318,13 +327,10 @@ describe("DistroKid popup compatibility check", () => {
       `${BASE_URL}/collections/${DISC1.collection_id}/distrokid/${DISC1.disc}/release.json`,
       { method: "GET" }
     );
-    const collectionSelect = container.querySelector<HTMLSelectElement>(
-      "select:not(#server-url)"
-    )!;
     const collectionTrigger = container.querySelector<HTMLButtonElement>(
       '[data-distrokid-control="collection-select"]'
     )!;
-    expect(collectionSelect.value).toBe("0");
+    expect(collectionTrigger.dataset.selectedValue).toBe("0");
     expect(collectionTrigger.getAttribute("aria-labelledby")).toBe(
       "collection-select-label"
     );
@@ -395,12 +401,10 @@ describe("DistroKid popup compatibility check", () => {
 
     await renderApp();
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("#server-url")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(
+      container.querySelector<HTMLButtonElement>("#server-url")!,
+      BASE_URL
+    );
 
     await waitFor(() => {
       expect(container.textContent).toContain(
@@ -437,12 +441,10 @@ describe("DistroKid popup compatibility check", () => {
 
     await renderApp();
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("#server-url")!,
-        BASE_URL
-      );
-    });
+    await setSelectValue(
+      container.querySelector<HTMLButtonElement>("#server-url")!,
+      BASE_URL
+    );
 
     await waitFor(() => {
       expect(container.textContent).toContain(
@@ -473,12 +475,10 @@ describe("DistroKid popup compatibility check", () => {
         RELEASE_PAYLOAD.release.album_title
       );
     });
-    const collectionSelect = container.querySelector<HTMLSelectElement>(
-      "select:not(#server-url)"
+    const collectionSelect = container.querySelector<HTMLButtonElement>(
+      '[data-distrokid-control="collection-select"]'
     )!;
-    await act(async () => {
-      setSelectValue(collectionSelect, "1");
-    });
+    await setSelectValue(collectionSelect, "1");
 
     await waitFor(() => {
       expect(container.textContent).toContain(
@@ -494,7 +494,7 @@ describe("DistroKid popup compatibility check", () => {
       `${BASE_URL}/collections/${DISC2.collection_id}/distrokid/${DISC2.disc}/release.json`,
       { method: "GET" }
     );
-    expect(collectionSelect.value).toBe("1");
+    expect(collectionSelect.dataset.selectedValue).toBe("1");
   });
 
   it("注入中は両 selector をロックし、停止ボタンは有効なまま選択変更による取得を開始しない", async () => {
@@ -515,9 +515,9 @@ describe("DistroKid popup compatibility check", () => {
       );
     });
     const sourceSelect =
-      container.querySelector<HTMLSelectElement>("#server-url")!;
-    const collectionSelect = container.querySelector<HTMLSelectElement>(
-      "select:not(#server-url)"
+      container.querySelector<HTMLButtonElement>("#server-url")!;
+    const collectionSelect = container.querySelector<HTMLButtonElement>(
+      '[data-distrokid-control="collection-select"]'
     )!;
     const injectButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent === "フォーム一括入力"
@@ -542,7 +542,7 @@ describe("DistroKid popup compatibility check", () => {
       expect(collectionSelect.disabled).toBe(true);
       expect(injectButton.disabled).toBe(true);
       expect(stopButton.disabled).toBe(false);
-      expect(container.querySelector('[role="listbox"]')).toBeNull();
+      expect(sourceSelect.getAttribute("aria-expanded")).toBe("false");
     });
     expect(sendMessage).toHaveBeenCalledWith("injectStart", {
       payload: RELEASE_PAYLOAD,
@@ -550,13 +550,8 @@ describe("DistroKid popup compatibility check", () => {
     const discoveryCountDuringInjection =
       discoveryMocks.discoverServerSources.mock.calls.length;
 
-    await act(async () => {
-      container
-        .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
-        .click();
-      setSelectValue(sourceSelect, FALLBACK_URL);
-      setSelectValue(collectionSelect, "1");
-    });
+    sourceSelect.click();
+    collectionSelect.click();
     expect(fetchMock).toHaveBeenCalledTimes(requestCountBeforeChange);
     expect(discoveryMocks.discoverServerSources).toHaveBeenCalledTimes(
       discoveryCountDuringInjection
@@ -597,12 +592,10 @@ describe("DistroKid popup compatibility check", () => {
       expect(container.textContent).toContain("server stopped");
     });
     const sourceSelect =
-      container.querySelector<HTMLSelectElement>("#server-url")!;
+      container.querySelector<HTMLButtonElement>("#server-url")!;
     expect(sourceSelect.disabled).toBe(false);
 
-    await act(async () => {
-      setSelectValue(sourceSelect, FALLBACK_URL);
-    });
+    await setSelectValue(sourceSelect, FALLBACK_URL);
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
         `${FALLBACK_URL}/distrokid/release.json`,
@@ -637,14 +630,12 @@ describe("DistroKid popup compatibility check", () => {
     await waitFor(() => {
       expect(container.textContent).toContain("disc1 server stopped");
     });
-    const collectionSelect = container.querySelector<HTMLSelectElement>(
-      "select:not(#server-url)"
+    const collectionSelect = container.querySelector<HTMLButtonElement>(
+      '[data-distrokid-control="collection-select"]'
     )!;
     expect(collectionSelect.disabled).toBe(false);
 
-    await act(async () => {
-      setSelectValue(collectionSelect, "1");
-    });
+    await setSelectValue(collectionSelect, "1");
     await waitFor(() => {
       expect(container.textContent).toContain(
         SECOND_RELEASE_PAYLOAD.release.album_title
@@ -680,23 +671,22 @@ describe("DistroKid popup compatibility check", () => {
       );
     });
     const sourceSelect =
-      container.querySelector<HTMLSelectElement>("#server-url")!;
-    const collectionSelect = container.querySelector<HTMLSelectElement>(
-      "select:not(#server-url)"
+      container.querySelector<HTMLButtonElement>("#server-url")!;
+    const collectionSelect = container.querySelector<HTMLButtonElement>(
+      '[data-distrokid-control="collection-select"]'
     )!;
 
-    await act(async () => {
-      setSelectValue(collectionSelect, "1");
-    });
+    await setSelectValue(collectionSelect, "1");
     await waitFor(() => {
       expect(container.textContent).toContain("collections server stopped");
     });
 
     expect(
-      container.querySelector<HTMLSelectElement>("select:not(#server-url)")
+      container.querySelector<HTMLButtonElement>(
+        '[data-distrokid-control="collection-select"]'
+      )
     ).toBe(collectionSelect);
-    expect(collectionSelect.options).toHaveLength(2);
-    expect(collectionSelect.value).toBe("1");
+    expect(collectionSelect.dataset.selectedValue).toBe("1");
     expect(collectionSelect.disabled).toBe(false);
     expect(sourceSelect.disabled).toBe(false);
   });
@@ -722,14 +712,16 @@ describe("DistroKid popup compatibility check", () => {
     await renderApp();
 
     await waitFor(() => {
-      expect(container.querySelector("select:not(#server-url)")).not.toBeNull();
+      expect(
+        container.querySelector('[data-distrokid-control="collection-select"]')
+      ).not.toBeNull();
     });
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("select:not(#server-url)")!,
-        "1"
-      );
-    });
+    await setSelectValue(
+      container.querySelector<HTMLButtonElement>(
+        '[data-distrokid-control="collection-select"]'
+      )!,
+      "1"
+    );
     await waitFor(() => {
       expect(container.textContent).toContain(
         SECOND_RELEASE_PAYLOAD.release.album_title
@@ -747,8 +739,9 @@ describe("DistroKid popup compatibility check", () => {
       `アルバム名${RELEASE_PAYLOAD.release.album_title}`
     );
     expect(
-      container.querySelector<HTMLSelectElement>("select:not(#server-url)")!
-        .value
+      container.querySelector<HTMLButtonElement>(
+        '[data-distrokid-control="collection-select"]'
+      )!.dataset.selectedValue
     ).toBe("1");
   });
 
@@ -784,10 +777,8 @@ describe("DistroKid popup compatibility check", () => {
     });
 
     const sourceSelect =
-      container.querySelector<HTMLSelectElement>("#server-url")!;
-    await act(async () => {
-      setSelectValue(sourceSelect, FALLBACK_URL);
-    });
+      container.querySelector<HTMLButtonElement>("#server-url")!;
+    await setSelectValue(sourceSelect, FALLBACK_URL);
     await waitFor(() => {
       expect(container.textContent).toContain(
         SECOND_RELEASE_PAYLOAD.release.album_title
@@ -798,7 +789,7 @@ describe("DistroKid popup compatibility check", () => {
       initialCollections.resolve(jsonResponse(200, [DISC1, DISC2]));
       await initialCollections.promise;
     });
-    expect(sourceSelect.value).toBe(FALLBACK_URL);
+    expect(sourceSelect.dataset.selectedValue).toBe(FALLBACK_URL);
     expect(container.textContent).toContain(
       SECOND_RELEASE_PAYLOAD.release.album_title
     );
@@ -836,12 +827,10 @@ describe("DistroKid popup compatibility check", () => {
       expect(serverUrlItem.setValue).toHaveBeenCalledWith(BASE_URL);
     });
 
-    await act(async () => {
-      setSelectValue(
-        container.querySelector<HTMLSelectElement>("#server-url")!,
-        FALLBACK_URL
-      );
-    });
+    await setSelectValue(
+      container.querySelector<HTMLButtonElement>("#server-url")!,
+      FALLBACK_URL
+    );
     await act(async () => {
       firstWrite.resolve();
       await firstWrite.promise;
@@ -875,22 +864,23 @@ describe("DistroKid popup compatibility check", () => {
       ]);
 
     await renderApp();
-    const select = container.querySelector<HTMLSelectElement>("#server-url")!;
-    const trigger = container.querySelector<HTMLButtonElement>(
-      'button[aria-haspopup="listbox"]'
-    )!;
-    await waitFor(() => expect(select.textContent).toContain("Old"));
+    const trigger = container.querySelector<HTMLButtonElement>("#server-url")!;
     await act(async () => {
       trigger.click();
     });
 
-    await waitFor(() => expect(select.textContent).toContain("New"));
-    expect(select.textContent).not.toContain("Old");
-    expect(Array.from(select.options, ({ value }) => value)).toEqual([
-      defaultSource.url,
-      "http://new.localhost:49152",
-    ]);
+    await waitFor(() => expect(document.body.textContent).toContain("New"));
+    expect(document.body.textContent).not.toContain("Old");
+    expect(
+      Array.from(
+        document.querySelectorAll<HTMLElement>('[role="option"]'),
+        (option) => option.dataset.value
+      )
+    ).toEqual([defaultSource.url, "http://new.localhost:49152"]);
 
+    await act(async () => {
+      trigger.click();
+    });
     await act(async () => {
       trigger.click();
     });
@@ -935,7 +925,7 @@ describe("DistroKid popup compatibility check", () => {
       .mockResolvedValueOnce([defaultSource]);
 
     await renderApp();
-    const select = container.querySelector<HTMLSelectElement>("#server-url")!;
+    const select = container.querySelector<HTMLButtonElement>("#server-url")!;
     await act(async () => {
       container
         .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
@@ -951,7 +941,7 @@ describe("DistroKid popup compatibility check", () => {
         )
       ).toBe(true)
     );
-    expect(select.value).toBe(defaultSource.url);
+    expect(select.dataset.selectedValue).toBe(defaultSource.url);
     expect(discoveryMocks.discoverServerSources).toHaveBeenCalledTimes(2);
   });
 
@@ -992,8 +982,10 @@ describe("DistroKid popup compatibility check", () => {
       });
 
       await renderApp();
-      const select = container.querySelector<HTMLSelectElement>("#server-url")!;
-      await waitFor(() => expect(select.value).toBe(expectedUrl));
+      const select = container.querySelector<HTMLButtonElement>("#server-url")!;
+      await waitFor(() =>
+        expect(select.dataset.selectedValue).toBe(expectedUrl)
+      );
 
       expect(
         fetchMock.mock.calls.some(([url]) =>
@@ -1021,32 +1013,13 @@ describe("DistroKid popup compatibility check", () => {
     ];
     discoveryMocks.discoverServerSources.mockResolvedValue(liveSources);
     await renderApp();
-    const select = container.querySelector<HTMLSelectElement>("#server-url")!;
-    await waitFor(() =>
-      expect(Array.from(select.options, ({ value }) => value)).toContain(
-        live.url
-      )
-    );
-    await act(async () =>
-      container
-        .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
-        .click()
-    );
-    await waitFor(() =>
-      expect(container.querySelector('[role="listbox"]')).not.toBeNull()
-    );
-    await act(async () => {
-      Array.from(
-        container.querySelectorAll<HTMLButtonElement>('[role="option"]')
-      )
-        .find((option) => option.textContent?.includes("Channel B"))!
-        .click();
-    });
+    const select = container.querySelector<HTMLButtonElement>("#server-url")!;
+    await setSelectValue(select, live.url);
 
     await waitFor(() =>
       expect(serverUrlItem.setValue).toHaveBeenCalledWith(live.url)
     );
-    expect(container.querySelector('[role="listbox"]')).toBeNull();
+    expect(select.getAttribute("aria-expanded")).toBe("false");
     expect(migrateServerSourcesStorage).toHaveBeenCalled();
     expect(legacySourceState.present).toBe(false);
     expect(
@@ -1060,7 +1033,8 @@ describe("DistroKid popup compatibility check", () => {
     await renderApp();
     await waitFor(() =>
       expect(
-        container.querySelector<HTMLSelectElement>("#server-url")?.value
+        container.querySelector<HTMLButtonElement>("#server-url")?.dataset
+          .selectedValue
       ).toBe(live.url)
     );
   });

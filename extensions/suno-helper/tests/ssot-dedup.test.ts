@@ -19,14 +19,18 @@ const read = (rel: string): string =>
 
 describe("ssot-drift: ローカル配信元 selector は候補 state を参照する", () => {
   const appSource = read("../components/App.tsx");
+  const serverSourceField = read("../../shared-ui/src/server-source-field.tsx");
 
   it("Given App.tsx When 文字列を探す Then DEFAULT_URL の値を直書きしていない", () => {
     expect(appSource).not.toContain(DEFAULT_URL);
   });
 
   it("Given App.tsx When selector を読む Then serverSources を options として表示する", () => {
-    expect(appSource).toMatch(/serverSources\.map/);
-    expect(appSource).toMatch(/<select\s+value=\{url\}/);
+    expect(appSource).toMatch(/<ServerSourceField/);
+    expect(appSource).toMatch(/sources=\{serverSources\}/);
+    expect(appSource).toMatch(/value=\{url\}/);
+    expect(serverSourceField).toMatch(/sources\.map/);
+    expect(serverSourceField).toMatch(/<SelectItem/);
   });
 });
 

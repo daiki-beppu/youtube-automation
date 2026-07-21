@@ -5,16 +5,20 @@ ROOT = Path(__file__).resolve().parents[1]
 EXTENSIONS = ROOT / "extensions"
 HELPERS = ("suno-helper", "distrokid-helper", "community-helper")
 PRIMITIVES = (
+    "alert-dialog.tsx",
     "alert.tsx",
     "button.tsx",
     "card.tsx",
     "checkbox.tsx",
     "collapsible.tsx",
+    "empty.tsx",
     "field.tsx",
+    "input.tsx",
     "label.tsx",
     "radio-group.tsx",
     "scroll-area.tsx",
     "select.tsx",
+    "server-source-field.tsx",
     "switch.tsx",
 )
 MIGRATED_PRIMITIVES = ("alert.tsx", "button.tsx", "card.tsx", "select.tsx")
@@ -40,6 +44,8 @@ def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
     index = (EXTENSIONS / "shared-ui/src/index.ts").read_text()
     for public_symbol in (
         "Alert",
+        "AlertDialog",
+        "AlertDialogContent",
         "AlertDescription",
         "Button",
         "Card",
@@ -47,15 +53,18 @@ def test_shared_ui_package_owns_public_primitives_and_theme() -> None:
         "Collapsible",
         "CollapsibleContent",
         "CollapsibleTrigger",
+        "Empty",
         "FieldError",
         "FieldLabel",
         "FieldSet",
+        "Input",
         "OverlayShell",
         "RadioGroup",
         "RadioGroupItem",
         "ScrollArea",
         "ScrollBar",
         "Select",
+        "ServerSourceField",
         "Switch",
         "useDraggable",
         "cn",
@@ -74,6 +83,7 @@ def test_overlay_foundation_is_shared_and_service_neutral() -> None:
     controller = (EXTENSIONS / "shared-ui/src/use-overlay-controller.ts").read_text()
 
     assert shared_package["exports"]["./overlay-state"] == "./overlay-state.ts"
+    assert shared_package["exports"]["./constants"] == "./constants.ts"
     for helper_name in HELPERS:
         workspace = (EXTENSIONS / helper_name / "pnpm-workspace.yaml").read_text()
         assert "../shared" in workspace

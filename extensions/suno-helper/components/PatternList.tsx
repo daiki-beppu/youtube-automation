@@ -5,6 +5,9 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  Empty,
+  EmptyHeader,
+  EmptyTitle,
   FieldLabel,
   ScrollArea,
 } from "@youtube-automation/ui";
@@ -66,50 +69,58 @@ export function PatternList({
           viewportClassName="max-h-48"
           data-suno-entry-scroll-area="true"
         >
-          <ul className="pr-3" data-suno-entry-list="true">
-            {entries.map((entry, index) => {
-              const itemState = itemStates[index] ?? "idle";
-              const selected = isEntrySelected(
-                selectedEntries,
-                itemStates,
-                index
-              );
-              return (
-                <li
-                  key={`${entry.name}-${index}`}
-                  className={`p-1 text-sm ${itemState === "done" ? "line-through" : ""}`}
-                  data-suno-entry-index={index}
-                  data-suno-entry-state={itemState}
-                  data-suno-entry-selected={selected ? "true" : "false"}
-                >
-                  <FieldLabel
-                    data-variant="outline"
-                    data-size="sm"
-                    className={buttonVariants({
-                      variant: "outline",
-                      size: "sm",
-                      className: `h-auto w-full items-start justify-start whitespace-normal p-2 font-normal ${STATE_CLASS[itemState]} ${SELECTION_CLASS[selected ? "selected" : "unselected"]}`,
-                    })}
+          {entries.length === 0 ? (
+            <Empty className="p-4">
+              <EmptyHeader>
+                <EmptyTitle className="text-xs">楽曲なし</EmptyTitle>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <ul className="pr-3" data-suno-entry-list="true">
+              {entries.map((entry, index) => {
+                const itemState = itemStates[index] ?? "idle";
+                const selected = isEntrySelected(
+                  selectedEntries,
+                  itemStates,
+                  index
+                );
+                return (
+                  <li
+                    key={`${entry.name}-${index}`}
+                    className={`p-1 text-sm ${itemState === "done" ? "line-through" : ""}`}
+                    data-suno-entry-index={index}
+                    data-suno-entry-state={itemState}
+                    data-suno-entry-selected={selected ? "true" : "false"}
                   >
-                    <Checkbox
-                      className="mt-0.5"
-                      checked={selected}
-                      onCheckedChange={(checked) =>
-                        onToggleEntry(index, checked === true)
-                      }
-                      aria-label={`entry ${index + 1}: ${entry.name}`}
-                    />
-                    <span
-                      className="min-w-0 flex-1 text-left"
-                      data-suno-slot="entry-name"
+                    <FieldLabel
+                      data-variant="outline"
+                      data-size="sm"
+                      className={buttonVariants({
+                        variant: "outline",
+                        size: "sm",
+                        className: `h-auto w-full items-start justify-start whitespace-normal p-2 font-normal ${STATE_CLASS[itemState]} ${SELECTION_CLASS[selected ? "selected" : "unselected"]}`,
+                      })}
                     >
-                      {entry.name}
-                    </span>
-                  </FieldLabel>
-                </li>
-              );
-            })}
-          </ul>
+                      <Checkbox
+                        className="mt-0.5"
+                        checked={selected}
+                        onCheckedChange={(checked) =>
+                          onToggleEntry(index, checked === true)
+                        }
+                        aria-label={`entry ${index + 1}: ${entry.name}`}
+                      />
+                      <span
+                        className="min-w-0 flex-1 text-left"
+                        data-suno-slot="entry-name"
+                      >
+                        {entry.name}
+                      </span>
+                    </FieldLabel>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </ScrollArea>
       </CollapsibleContent>
     </Collapsible>
