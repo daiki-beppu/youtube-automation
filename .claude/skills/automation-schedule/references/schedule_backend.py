@@ -70,6 +70,10 @@ def build_plan(
     raw_cadence = overrides.get("cadence") or list(scheduled.cadence)
     cadence = list(raw_cadence) if not isinstance(raw_cadence, str) else raw_cadence.split(",")
     target_workflow = str(overrides.get("target_workflow") or scheduled.target_workflow)
+    if target_workflow == "automation-run":
+        raise BackendError(
+            "--target-workflow automation-run は廃止されました。--target-workflow wf-auto へ更新してください"
+        )
     max_retries = int(overrides.get("max_retries", scheduled.max_retries))
     retry_delay_seconds = int(overrides.get("retry_delay_seconds", scheduled.retry_delay_seconds))
     allow_external_publish = bool(overrides.get("allow_external_publish", scheduled.allow_external_publish))

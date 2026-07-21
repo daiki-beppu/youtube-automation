@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(workflow)`: `/automation-run` 互換 skill を削除し、一気通貫 workflow の公開入口を `/wf-auto` に一本化。旧 `target_workflow: automation-run` は黙って変換せず移行案内付きで拒否し、`.automation-run/` の lease・履歴パスは維持（#2400）。
+
 - `security(scripts)`: `open` / `ffmpeg` へ渡すファイルパスを絶対パス化し、先頭 `-` を option と誤解釈する余地を排除（#2396）。
 
 - `security(streaming)`: stream key / Discord webhook の Terraform file provisioner staging を素の `/tmp` から root 所有 0700 の `/run/youtube-stream-provision` へ移し、転送直後の権限露出を解消（#2395）。

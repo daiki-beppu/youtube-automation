@@ -78,7 +78,7 @@ def test_plan_is_dry_run_and_preserves_external_publish_gate(tmp_path, monkeypat
     assert plan["prompt"].startswith("/wf-auto")
 
 
-def test_plan_preserves_explicit_automation_run_compatibility(tmp_path, monkeypatch):
+def test_plan_rejects_removed_automation_run_override(tmp_path, monkeypatch):
     scheduled = SimpleNamespace(
         target_workflow="wf-auto",
         allow_external_publish=False,
@@ -97,14 +97,12 @@ def test_plan_preserves_explicit_automation_run_compatibility(tmp_path, monkeypa
     )
     monkeypatch.setattr(backend, "channel_dir", lambda: tmp_path)
 
-    plan = backend.build_plan(
-        product="codex",
-        dependency_mode="local",
-        overrides={"target_workflow": "automation-run"},
-    )
-
-    assert plan["target_workflow"] == "automation-run"
-    assert plan["prompt"].startswith("/automation-run")
+    with pytest.raises(backend.BackendError, match=r"automation-run.*wf-auto"):
+        backend.build_plan(
+            product="codex",
+            dependency_mode="local",
+            overrides={"target_workflow": "automation-run"},
+        )
 
 
 def test_backend_identity_is_idempotent_and_blocks_duplicates(tmp_path):

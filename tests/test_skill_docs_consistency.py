@@ -127,16 +127,14 @@ def test_wf_auto_is_the_integrated_entrypoint_without_copying_child_workflows() 
     assert "/wf-auto" in schema
 
 
-def test_wf_auto_is_canonical_and_automation_run_is_compatibility_only() -> None:
+def test_wf_auto_is_the_only_integrated_workflow_entrypoint() -> None:
     canonical = _read(".claude/skills/wf-auto/SKILL.md")
-    compatibility = _read(".claude/skills/automation-run/SKILL.md")
     features = _read("docs/features.md")
     cheatsheet = _read("docs/workflow-cheatsheet.md")
 
     assert "正規入口" in canonical
-    assert "compatibility alias" in compatibility
-    assert "独自" in compatibility and "持たない" in compatibility
-    assert "正規入口" in features and "互換 alias" in features
+    assert not (ROOT / ".claude/skills/automation-run").exists()
+    assert "正規入口" in features and "| /automation-run |" not in features
     assert "/wf-auto" in cheatsheet
 
 

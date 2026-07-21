@@ -701,12 +701,18 @@ def _build_scheduled_automation(wf: dict) -> ScheduledAutomation:
 
     prefix = "workflow.scheduled_automation"
     defaults = ScheduledAutomation()
+    target_workflow = _scheduled_str(raw, "target_workflow", prefix, defaults.target_workflow)
+    if target_workflow == "automation-run":
+        raise ConfigError(
+            f"{prefix}.target_workflow: automation-run は廃止されました。"
+            "config/channel/workflow.json の値を wf-auto へ更新してください"
+        )
     return ScheduledAutomation(
         enabled=_scheduled_bool(raw, "enabled", prefix, defaults.enabled),
         timezone=_scheduled_str(raw, "timezone", prefix, defaults.timezone),
         run_time=_scheduled_run_time(raw, prefix, defaults.run_time),
         cadence=_scheduled_cadence(raw, prefix, defaults.cadence),
-        target_workflow=_scheduled_str(raw, "target_workflow", prefix, defaults.target_workflow),
+        target_workflow=target_workflow,
         max_retries=_scheduled_int(raw, "max_retries", prefix, defaults.max_retries),
         retry_delay_seconds=_scheduled_int(raw, "retry_delay_seconds", prefix, defaults.retry_delay_seconds),
         prevent_concurrent_runs=_scheduled_bool(
