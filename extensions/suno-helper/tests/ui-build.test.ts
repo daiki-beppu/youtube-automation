@@ -33,6 +33,10 @@ describe("Tailwind 4 build integration", () => {
       .find((css) => css.includes("--radius"));
     expect(overlayCss).toBeDefined();
     expect(overlayCss).toContain("--background:oklch(97% 0 0)");
+    expect(overlayCss).toContain("--spacing:4px");
+    expect(overlayCss).toContain("--text-sm:14px");
+    expect(overlayCss).toContain("--radius:10px");
+    expect(overlayCss).toContain(":host{font-size:16px}");
     expect(overlayCss).toContain("--card:oklch(100% 0 0)");
     expect(overlayCss).toContain("--popover:oklch(100% 0 0)");
     expect(overlayCss).toContain(":host");

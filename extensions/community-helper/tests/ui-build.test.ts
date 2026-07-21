@@ -15,6 +15,12 @@ describe("Community overlay build", () => {
     const overlayCss = `${outputDir}/content-scripts/overlay.css`;
     expect(existsSync(overlayCss)).toBe(true);
     expect(existsSync(`${outputDir}/popup.html`)).toBe(false);
-    expect(readFileSync(overlayCss, "utf8")).toContain("--background");
+    const css = readFileSync(overlayCss, "utf8");
+    expect(css).toContain("--background");
+    expect(css).toContain("--spacing:4px");
+    expect(css).toContain("--text-sm:14px");
+    expect(css).toContain("--radius:10px");
+    expect(css).toContain(":host");
+    expect(css).toContain("font-size:16px");
   });
 });
