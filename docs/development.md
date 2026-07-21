@@ -57,6 +57,7 @@ uv run pytest tests/ --ignore=tests/integration -n auto -m slow           # 実 
 | skill / skill reference script | 対応する `tests/test_*skill*.py` / script test | repository contract lane + unit-only full suite |
 | docs / CI / packaging / hook | repository contract lane + 対応 file の直接 test | slow lane（tool 契約を含む場合）+ unit-only full suite |
 | extensions | 対象 workspace の既存 pnpm lint / type / Vitest / Playwright | Extensions CI（pytest marker 対象外） |
+| dashboard | `dashboard/` の lint / typecheck / test | test:e2e / build + Python server・wheel smoke |
 - **CI では `-n auto` を有効化済み**（`.github/workflows/ci.yml` の test ジョブ）
 - **CI の changed-path 分岐**: `.github/scripts/classify-ci-paths.sh` が PR と `main` push の差分を Python / packaging / Windows / ADR / 3 helper に分類する。branch protection の required check である `lint` / `test` job は path filter や job-level `if` で消さず、extension-only 変更では成功する軽量 step を返して Nix・uv・pytest を起動しない。空 diff は全 gate を有効化する fail-safe とし、分類変更時は `tests/test_actions_parallel_workflows.py` の対応表も更新する
 - worker ごとの分離: `tests/conftest.py` が `CHANNEL_DIR` の tmp コピーを **worker プロセスごとに独立して** 作り直す（controller が自動設定した値を環境変数継承でそのまま共有しない）。ユーザーが明示的に `CHANNEL_DIR` を指定した場合は全 worker がその指定を尊重する
@@ -69,6 +70,32 @@ uv run pytest tests/ --ignore=tests/integration -n auto -m slow           # 実 
 - 配布アセットの追加は `src/youtube_automation/cli/skills_sync/__init__.py::_ASSET_SPECS` に entry を追加するだけで `list/sync/diff` が自動的にサポートされる（`kind="dir" | "file"` を選ぶ）
 - `skills` asset を標準レイアウト（`.claude/skills`）へ sync すると、下流リポにも `.agents/skills -> ../.claude/skills` の相対 symlink を併設する（Codex CLI 探索パス規約）。既存の正しい symlink は冪等にスキップし、張り直しは `--force`、symlink 非対応環境では警告のみで sync は継続する（`_ops.py::_ensure_agents_skills_symlink`）
 - バージョン bump は `pyproject.toml::version` のみを更新する（`src/youtube_automation/__init__.py::__version__` は `importlib.metadata` 経由で動的に読み込むため触らない）。リリース運用全体は `/automation-release` スキルで一気通貫に実行する
+
+## dashboard 開発
+
+dashboard は ADR-0013 / ADR-0021 で許可された本リポジトリ唯一の dashboard 限定 TypeScript 例外。frontend workspace は `dashboard/`、完成済み Vite asset は `src/youtube_automation/dashboard_dist/` に置く。tayk core や削除済み `packages/` を追加してはならない。
+
+### frontend 品質ゲート
+
+Node.js / pnpm は Nix の extensions shell と同じ固定 toolchain を使い、ambient `pnpm` や `npx` は使わない。依存 install は lockfile を使い fail-closed にする。
+
+```bash
+nix develop .#extensions --command pnpm -C dashboard install --frozen-lockfile
+nix develop .#extensions --command pnpm -C dashboard lint
+nix develop .#extensions --command pnpm -C dashboard typecheck
+nix develop .#extensions --command pnpm -C dashboard test
+nix develop .#extensions --command pnpm -C dashboard test:e2e
+nix develop .#extensions --command pnpm -C dashboard build
+```
+
+component 追加前は対象 workspace で `shadcn info` と registry/公式 docs を確認する。shadcn/ui の Base UI、Tailwind CSS v4、semantic token を使い、`extensions/shared-ui` は package/release 境界が異なるため直接 import しない。
+
+### Python と配布の境界
+
+- Python は channel registry、read model、JSON API、`127.0.0.1` の HTTP server を所有する。frontend は同一 origin API の読み取りだけを行う。
+- `dashboard build` は Vite output を `src/youtube_automation/dashboard_dist/` へ生成する。Vite の production build は明示的に実行し、Python build backend から Node.js を暗黙起動しない。
+- `dashboard_dist/` は package data として wheel / sdist に同梱し、runtime は `importlib.resources` で解決する。candidate wheel の非 editable install smoke で `index.html` と hashed asset、API 配信を確認する。
+- frontend source を変えた PR は build output の同期差分、frontend 5 gate、Python server test、wheel smoke を通す。
 
 ## skill 開発ループ（編集 → 検証 → 配布）
 

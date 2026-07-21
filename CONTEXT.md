@@ -1,6 +1,6 @@
 # tayk
 
-YouTube チャンネル運営を自動化するツールキット (旧 `youtube-channels-automation`、ADR-0007 で `tayk` に rebrand)。Python から TypeScript(bun) へ MCP tool 中心設計で 0 ベース再設計中。既存 Python コードの移植ではなく、skill に蓄積されたワークフロー知識を型付き MCP tool に結晶化するスクラップ&ビルド。**開発は本リポではなく tayk 専用の別リポで行う (ADR-0021、2026-07-08)。本リポは Python 版のメンテナンスモード。**本ファイルは実装詳細ではなく、本プロジェクト固有の用語の正書を定める **グロッサリ**である。
+YouTube チャンネル運営を自動化するツールキット (旧 `youtube-channels-automation`、ADR-0007 で `tayk` に rebrand)。Python から TypeScript(bun) へ MCP tool 中心設計で 0 ベース再設計中。既存 Python コードの移植ではなく、skill に蓄積されたワークフロー知識を型付き MCP tool に結晶化するスクラップ&ビルド。**tayk core の開発は本リポではなく専用の別リポで行う (ADR-0021、2026-07-08)。本リポは Python 版のメンテナンスモードで、`dashboard/` の React + Vite + shadcn/ui 表示層だけが dashboard 限定例外。**本ファイルは実装詳細ではなく、本プロジェクト固有の用語の正書を定める **グロッサリ**である。
 
 ## 配布・移行
 
@@ -126,7 +126,7 @@ _Avoid_: `--channel` を競合 slug の意味で使うこと (自チャンネル
 _Avoid_: channel list, channel config (config は `config/channel/*.json` のこと)
 
 **dashboard**:
-全 first-party チャンネルの analytics スナップショットを一覧表示するローカル Web UI。データ収集は行わずビューア専用 — SSOT は各チャンネルの `data/analytics_data_*.json`（将来は local store）。channel registry で対象チャンネルを解決する。
+全 first-party チャンネルの analytics スナップショットを一覧表示するローカル Web UI。Python HTTP server が registry/read model/API/build asset 配信を担い、`dashboard/` の React + Vite + shadcn/ui 表示層は同一 origin の API だけを読む。データ収集は行わず読み取り専用 — SSOT は各チャンネルの `data/analytics_data_*.json`（将来は local store）。channel registry で対象チャンネルを解決する。
 _Avoid_: analytics dashboard (analytics は収集+分析を含意する。dashboard は表示のみ)
 
 ## データ
