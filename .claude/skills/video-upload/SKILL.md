@@ -5,7 +5,7 @@ description: "Use when コレクションの動画または release 型（単曲
 
 ## 前後工程
 
-- `前工程`: `/automation-run`, `/videoup`, `/video-description`, `/playlist`, `/thumbnail`
+- `前工程`: `/wf-auto`, `/videoup`, `/video-description`, `/playlist`, `/thumbnail`
 - `後工程`: `/post-publish`, `/community-post`, `/metadata-audit`, `/pinned-comment`, `/live-clean`
 
 ## Overview

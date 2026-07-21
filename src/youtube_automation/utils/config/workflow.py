@@ -78,7 +78,7 @@ class ScheduledAutomation:
     - `timezone`: IANA タイムゾーン名（例 `Asia/Tokyo`）。スケジュール時刻の解釈に使う。
     - `run_time`: 定期起動時刻（`HH:MM`、24 時間表記）。
     - `cadence`: 起動する曜日の配列。`SCHEDULED_AUTOMATION_CADENCE_DAYS` の部分集合。
-    - `target_workflow`: 起動する skill 名（既定 `automation-run`。先頭 `/` なし）。
+    - `target_workflow`: 起動する skill 名（既定 `wf-auto`。先頭 `/` なし）。
     - `max_retries`: 実行失敗時の再試行回数（0 = 再試行なし）。
     - `retry_delay_seconds`: 再試行までの待機秒数。
     - `prevent_concurrent_runs`: `True`（既定）のとき、前回実行が生存中なら
@@ -93,7 +93,7 @@ class ScheduledAutomation:
     timezone: str = "Asia/Tokyo"
     run_time: str = "09:00"
     cadence: tuple[str, ...] = SCHEDULED_AUTOMATION_CADENCE_DAYS
-    target_workflow: str = "automation-run"
+    target_workflow: str = "wf-auto"
     max_retries: int = 0
     retry_delay_seconds: int = 300
     prevent_concurrent_runs: bool = True

@@ -2363,7 +2363,7 @@ def test_scheduled_automation_absent_uses_disabled_defaults(tmp_path, monkeypatc
     assert sa.timezone == "Asia/Tokyo"
     assert sa.run_time == "09:00"
     assert sa.cadence == ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
-    assert sa.target_workflow == "automation-run"
+    assert sa.target_workflow == "wf-auto"
     assert sa.max_retries == 0
     assert sa.retry_delay_seconds == 300
     assert sa.prevent_concurrent_runs is True
@@ -2404,6 +2404,15 @@ def test_scheduled_automation_explicit_full(tmp_path, monkeypatch):
     assert sa.prevent_concurrent_runs is False
     assert sa.notification == "none"
     assert sa.allow_external_publish is True
+
+
+def test_scheduled_automation_keeps_explicit_automation_run_compatibility(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"scheduled_automation": {"target_workflow": "automation-run"}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    assert load_config().workflow.scheduled_automation.target_workflow == "automation-run"
 
 
 def test_scheduled_automation_partial_keeps_other_defaults(tmp_path, monkeypatch):

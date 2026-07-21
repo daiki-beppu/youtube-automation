@@ -6,7 +6,7 @@ description: "Use when チャンネルの定期制作スケジュール（workfl
 ## 前後工程
 
 - `前工程`: `/channel-new`, `/setup`
-- `後工程`: `/automation-run`, `/wf-next`
+- `後工程`: `/wf-auto`, `/wf-next`
 
 ## Overview
 
@@ -56,7 +56,7 @@ uv run python .claude/skills/automation-schedule/references/schedule_backend.py 
 ```
 
 1. `product-codex` / `product-claude` を既定候補にする。判定不能時だけユーザーに製品を確認する。
-2. 対象 workflow の依存を `cloud` / `local` に分類し、分類根拠を表示する。既定 `automation-run` は local（Chrome / OAuth / media / ffmpeg を利用）として扱う。
+2. 対象 workflow の依存を `cloud` / `local` に分類し、分類根拠を表示する。既定 `wf-auto` は local（Chrome / OAuth / media / ffmpeg を利用）として扱う。
 3. active な別 backend があれば、旧 backend の disable が承認・成功するまで停止する。
 
 ### Step 1. config と native task の dry-run
@@ -65,12 +65,12 @@ uv run python .claude/skills/automation-schedule/references/schedule_backend.py 
 uv run python .claude/skills/automation-schedule/references/schedule_config.py show
 uv run python .claude/skills/automation-schedule/references/schedule_config.py generate --dry-run --enable \
   --run-time <HH:MM> --cadence <mon,wed,fri> [--timezone <IANA>] \
-  [--target-workflow automation-run] [--max-retries <N>] \
+  [--target-workflow wf-auto] [--max-retries <N>] \
   [--retry-delay-seconds <N>] [--notification terminal|none]
 uv run python .claude/skills/automation-schedule/references/schedule_backend.py plan \
   --product <codex|claude> --dependency-mode <cloud|local> \
   --run-time <HH:MM> --cadence <mon,wed,fri> [--timezone <IANA>] \
-  [--target-workflow automation-run] [--max-retries <N>] \
+  [--target-workflow wf-auto] [--max-retries <N>] \
   [--retry-delay-seconds <N>] [--notification terminal|none]
 ```
 
@@ -125,6 +125,6 @@ uv run python .claude/skills/automation-schedule/references/schedule_backend.py 
 
 ## Safety contract
 
-- native task の prompt にも `allow_external_publish: false` の外部反映禁止を含める。`automation-run` の lease、状態再評価、重複 upload 防止は変更しない。
+- native task の prompt にも `allow_external_publish: false` の外部反映禁止を含める。`wf-auto` の `.automation-run/` lease、状態再評価、重複 upload 防止は変更しない。
 - retry は backend の再実行機能が契約を満たす場合のみ native 側へ写像する。満たさない場合は prompt 内で `max_retries` / `retry_delay_seconds` を適用する。
 - OS fallback のログは `.automation-schedule/logs/`。ネイティブの履歴は各製品の Scheduled 管理面を正とする。
