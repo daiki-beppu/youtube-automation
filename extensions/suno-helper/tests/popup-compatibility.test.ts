@@ -558,10 +558,13 @@ describe("Suno popup compatibility check", () => {
     expect(queueMode.hasAttribute("data-checked")).toBe(false);
     for (const radio of [serialMode, queueMode]) {
       expect(Array.from(radio.classList)).toEqual(
-        expect.arrayContaining([
-          "data-checked:border-info-foreground",
-          "data-checked:text-info-foreground",
-        ])
+        expect.arrayContaining(["data-checked:border-primary", "text-primary"])
+      );
+      expect(radio.classList).not.toContain(
+        "data-checked:border-info-foreground"
+      );
+      expect(radio.classList).not.toContain(
+        "data-checked:text-info-foreground"
       );
       expect(radio.classList).not.toContain("data-checked:bg-primary");
     }
