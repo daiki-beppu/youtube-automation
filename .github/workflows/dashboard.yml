@@ -1,0 +1,50 @@
+name: Dashboard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dashboard/**"
+      - "src/youtube_automation/dashboard_dist/**"
+      - "src/youtube_automation/scripts/dashboard.py"
+      - "src/youtube_automation/utils/channel_registry.py"
+      - "src/youtube_automation/utils/dashboard_read_model.py"
+      - ".github/workflows/dashboard.yml"
+      - "flake.nix"
+      - "flake.lock"
+  pull_request:
+    paths:
+      - "dashboard/**"
+      - "src/youtube_automation/dashboard_dist/**"
+      - "src/youtube_automation/scripts/dashboard.py"
+      - "src/youtube_automation/utils/channel_registry.py"
+      - "src/youtube_automation/utils/dashboard_read_model.py"
+      - ".github/workflows/dashboard.yml"
+      - "flake.nix"
+      - "flake.lock"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+      - uses: astral-sh/setup-uv@v6
+      - name: Install Python dependencies
+        run: nix develop --command uv sync --frozen
+      - name: Install dependencies
+        run: nix develop .#extensions --command pnpm -C dashboard install --frozen-lockfile
+      - name: Install Playwright browser
+        run: nix develop .#extensions --command pnpm -C dashboard exec playwright install --with-deps chromium
+      - name: Frontend checks
+        run: |
+          nix develop .#extensions --command pnpm -C dashboard lint
+          nix develop .#extensions --command pnpm -C dashboard typecheck
+          nix develop .#extensions --command pnpm -C dashboard test
+          nix develop .#extensions --command pnpm -C dashboard build
+          git diff --exit-code -- src/youtube_automation/dashboard_dist
+          nix develop .#extensions --command pnpm -C dashboard test:e2e

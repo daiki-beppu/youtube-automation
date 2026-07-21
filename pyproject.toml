@@ -56,6 +56,7 @@ yt-collection-serve = "youtube_automation.cli_entrypoints:yt_collection_serve"
 yt-comments-reply = "youtube_automation.cli_entrypoints:yt_comments_reply"
 yt-cost-report = "youtube_automation.cli_entrypoints:yt_cost_report"
 yt-discover-competitors = "youtube_automation.cli_entrypoints:yt_discover_competitors"
+yt-dashboard = "youtube_automation.cli_entrypoints:yt_dashboard"
 yt-distrokid-migrate = "youtube_automation.cli_entrypoints:yt_distrokid_migrate"
 yt-distrokid-prepare = "youtube_automation.cli_entrypoints:yt_distrokid_prepare"
 yt-doctor = "youtube_automation.cli_entrypoints:yt_doctor"
@@ -156,6 +157,7 @@ exclude = [
 
 [tool.hatch.build.targets.sdist.force-include]
 ".claude/skills" = ".claude/skills"
+"src/youtube_automation/dashboard_dist" = "src/youtube_automation/dashboard_dist"
 
 [tool.ruff]
 target-version = "py311"

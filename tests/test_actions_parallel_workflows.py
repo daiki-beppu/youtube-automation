@@ -219,6 +219,7 @@ def test_extensions_pull_request_trigger_keeps_path_filter() -> None:
     ("paths", "expected_true"),
     [
         (["extensions/suno-helper/components/App.tsx"], {"suno"}),
+        (["dashboard/src/App.tsx"], {"python", "packaging"}),
         (
             ["extensions/shared-ui/src/button.tsx"],
             {"suno", "distrokid", "community"},

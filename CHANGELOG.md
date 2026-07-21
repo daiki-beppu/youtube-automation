@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(dashboard)`: React / Vite と公式 shadcn/ui Base UI primitives による読み取り専用 Analytics dashboard、同一 origin の loopback Python server、`yt-dashboard --port/--open`、keyboard 操作、light / dark theme、Vitest / Playwright / wheel smoke を追加（#2385）。
+
 - `feat(dashboard)`: `~/.config/tayk/channels.json` の絶対 path registry loader と、各チャンネルの最新 Analytics snapshot を概要・動画指標・CTRへ正規化する読み取り専用 read model/APIを追加。snapshot 欠損・破損・meta 不正はチャンネル単位の状態として隔離する（#2387）。
 
 - `refactor(workflow)`: `/wf-auto` を一気通貫 workflow の正規入口にし、scheduler の新規既定を `wf-auto` へ変更。`/automation-run` は既存の明示設定を保つ薄い互換 alias とし、`.automation-run/` の lease・履歴パスは維持する（#2383）。

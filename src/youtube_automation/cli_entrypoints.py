@@ -94,6 +94,7 @@ yt_collection_serve = _make_entrypoint("youtube_automation.scripts.collection_se
 yt_comments_reply = _make_entrypoint("youtube_automation.scripts.comment_reply")
 yt_cost_report = _make_entrypoint("youtube_automation.cli.cost_report")
 yt_discover_competitors = _make_entrypoint("youtube_automation.scripts.discover_competitors")
+yt_dashboard = _make_entrypoint("youtube_automation.scripts.dashboard")
 yt_distrokid_migrate = _make_entrypoint("youtube_automation.cli.distrokid_migrate")
 yt_distrokid_prepare = _make_entrypoint("youtube_automation.scripts.distrokid_prepare")
 yt_doctor = _make_entrypoint("youtube_automation.cli.doctor")

@@ -33,6 +33,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-comments-reply": "youtube_automation.scripts.comment_reply",
     "yt-cost-report": "youtube_automation.cli.cost_report",
     "yt-discover-competitors": "youtube_automation.scripts.discover_competitors",
+    "yt-dashboard": "youtube_automation.scripts.dashboard",
     "yt-distrokid-migrate": "youtube_automation.cli.distrokid_migrate",
     "yt-distrokid-prepare": "youtube_automation.scripts.distrokid_prepare",
     "yt-doctor": "youtube_automation.cli.doctor",
