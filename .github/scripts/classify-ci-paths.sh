@@ -49,7 +49,7 @@ while IFS= read -r path || [ -n "$path" ]; do
   esac
 
   case "$path" in
-    src/* | .claude/* | pyproject.toml | uv.lock | flake.nix | flake.lock | .github/workflows/ci.yml | tests/test_skills_sync_installed_wheel.py | tests/test_packaging*)
+    dashboard/* | src/* | .claude/* | pyproject.toml | uv.lock | flake.nix | flake.lock | .github/workflows/ci.yml | tests/test_skills_sync_installed_wheel.py | tests/test_packaging*)
       packaging=true
       ;;
   esac
