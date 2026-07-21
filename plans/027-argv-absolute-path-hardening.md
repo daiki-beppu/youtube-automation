@@ -20,6 +20,7 @@
 - **Depends on**: none
 - **Category**: security（defense-in-depth。悪用可能な欠陥ではない）
 - **Planned at**: commit `37b362ce`, 2026-07-21
+- **Issue**: https://github.com/daiki-beppu/youtube-automation/issues/2396
 
 ## Why this matters
 
