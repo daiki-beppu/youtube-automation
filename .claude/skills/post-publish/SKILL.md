@@ -42,10 +42,10 @@ uv run python .claude/skills/post-publish/references/post-publish-chain-state.py
 ## 実行手順
 
 1. manifest を読み、`chainId == "post-publish"`、step 順が `community-post, pinned-comment, metadata-audit` であることを検証する。
-2. `load_config().workflow.post_publish.approval_gates` を読み、manifest の `configPath` と対応する 3 gate を解決する。未指定 gate は `false`。
+2. `load_config().workflow.post_publish.skip_approvals` を読み、`false` の step だけ承認対象にする。未指定は `true`（承認省略）。旧 `approval_gates` は loader が逆向きの後方互換 alias として解決し、同一 step への新旧同時指定は `ConfigError` にする。
 3. manifest 順に状態判定を実行する。exit 0 は skip、exit 20 は停止する。
-4. exit 10 かつ gate が `true` の場合、対象 video ID・collection・実行件数 1 件を表示する。外部投稿は公開後に取り消しが必要になり得ることを警告し、「この step を実行する」「チェーンを中止する」の 2 択で確認する。中止時は履歴を変更せず、再開コマンドを表示して停止する。
-5. 子 skill を対象 collection 付きで実行する。`community-post` は Studio 投稿準備、`pinned-comment` は dry-run の PASS 条件を確認して apply、`metadata-audit` は既定の local + remote 監査を実行する。チェーン gate で承認済みの step は、同じ video ID・件数の子 skill 承認を再度求めない。gate が `false` でも子 skill 自身が必須としている safety gate は省略しない。
+4. exit 10 かつ `skip_approvals` が `false` の場合、対象 video ID・collection・実行件数 1 件を表示する。外部投稿は公開後に取り消しが必要になり得ることを警告し、「この step を実行する」「チェーンを中止する」の 2 択で確認する。中止時は履歴を変更せず、再開コマンドを表示して停止する。
+5. 子 skill を対象 collection 付きで実行する。`community-post` は Studio 投稿準備、`pinned-comment` は dry-run の PASS 条件を確認して apply、`metadata-audit` は既定の local + remote 監査を実行する。チェーン gate で承認済みの step は、同じ video ID・件数の子 skill 承認を再度求めない。`skip_approvals` が `true` でも子 skill 自身が必須としている safety gate は省略しない。
 6. 子 skill の完了条件を満たした場合だけ `--mark-complete` を実行する。失敗時は mark せず停止する。
 7. 3 step 後に状態判定を再実行し、全て exit 0 であることと履歴の video ID を短く報告する。
 

@@ -514,19 +514,22 @@ remote ID がまだ取得できていない channel_id 未設定は、AI が `uv
 ### 実行条件と共通ルール
 
 1. `config/channel/` が存在せず `channel_config` の未生成経路に入った場合は、インタビューを実行しない。`channel_config` の手順どおり「運用設定は `/channel-new` 完了後に `/setup` を再実行して設定できます」と案内する。`/setup` は config を生成しない。
-2. `config/channel/` がロード可能なら、`config/channel/workflow.json` は任意であり、未存在でもインタビューを実行する。下表の workflow 3 行は、`workflow.json` またはその入れ子のキーが未設定ならいずれも `false` を現在値として扱う。回答が現在値と異なる場合は、必要な入れ子を含む `workflow.json` を作成または更新する。
+2. `config/channel/` がロード可能なら、`config/channel/workflow.json` は任意であり、未存在でもインタビューを実行する。下表の workflow 6 行は、`workflow.json` またはその入れ子のキーが未設定なら表の default を現在値として扱う。回答が現在値と異なる場合は、必要な入れ子を含む `workflow.json` を作成または更新する。
 3. 下表の各行について、質問する直前に config を読んで現在値を取得する。現在値を利用者に質問してはならない。loop-video はまず `.claude/skills/loop-video/config.default.yaml` を読み、`config/skills/loop-video.yaml` が存在する場合はそれも読んで、`youtube_automation.utils.skill_config.load_skill_config("loop-video")` と同じ deep-merge（default の上に override）で `enabled` の現在値を解決する。override に `enabled` が無い場合も default の値を現在値とする。
 4. 質問は必ず 1 問ずつ表示し、回答を待ってから次の行へ進む。各質問には現在値と、現在値を維持する推奨回答を添える。複数の質問をまとめて表示してはならない。
 5. 回答が現在値と同じならファイルを編集しない。異なる場合だけ、その行の config を Edit で更新する。既存 `config/skills/loop-video.yaml` を更新するときは `enabled` だけを変更し、ほかの override キーを保持する。
 
 | 順番 | config | キー | default | 質問と推奨回答 |
 | --- | --- | --- | --- | --- |
-| 1 | `config/channel/workflow.json` | `workflow.wf_next.approval_gates.audio` | `false` | 「音源承認ゲートを有効にしますか？ 現在値: `<current>`。推奨: 現在値を維持（既存の音源承認フローを変えないため）」 |
-| 2 | `config/channel/workflow.json` | `workflow.wf_next.approval_gates.upload` | `false` | 「アップロード承認ゲートを有効にしますか？ 現在値: `<current>`。推奨: 現在値を維持（既存のアップロードフローを変えないため）」 |
+| 1 | `config/channel/workflow.json` | `workflow.wf_next.skip_audio_approval` | `true` | 「音源承認をスキップしますか？ 現在値: `<current>`。推奨: 現在値を維持」 |
+| 2 | `config/channel/workflow.json` | `workflow.wf_next.skip_upload_approval` | `true` | 「アップロード承認をスキップしますか？ 現在値: `<current>`。推奨: 現在値を維持」 |
 | 3 | `config/channel/workflow.json` | `workflow.wf_next.skip_manual_mastering` | `false` | 「手動マスタリング検出をスキップしますか？ 現在値: `<current>`。推奨: 現在値を維持（既存のマスタリングフローを変えないため）」 |
-| 4 | `config/skills/loop-video.yaml` | `enabled` | `true` | 「ループ動画生成を有効にしますか？ 現在値: `<current>`。Veo API の利用には課金が発生します。推奨: 現在値を維持（既存の Veo 利用方針を変えないため）」 |
+| 4 | `config/channel/workflow.json` | `workflow.post-publish.skip_approvals.community-post` | `true` | 「コミュニティ投稿前の承認をスキップしますか？ 現在値: `<current>`。推奨: 現在値を維持」 |
+| 5 | `config/channel/workflow.json` | `workflow.post-publish.skip_approvals.pinned-comment` | `true` | 「固定コメント前の承認をスキップしますか？ 現在値: `<current>`。推奨: 現在値を維持」 |
+| 6 | `config/channel/workflow.json` | `workflow.post-publish.skip_approvals.metadata-audit` | `true` | 「メタデータ監査前の承認をスキップしますか？ 現在値: `<current>`。推奨: 現在値を維持」 |
+| 7 | `config/skills/loop-video.yaml` | `enabled` | `true` | 「ループ動画生成を有効にしますか？ 現在値: `<current>`。Veo API の利用には課金が発生します。推奨: 現在値を維持（既存の Veo 利用方針を変えないため）」 |
 
-`workflow.wf_next.approval_gates.audio` は最終マスター候補の採用前、`workflow.wf_next.approval_gates.upload` は YouTube アップロード前に承認を取る設定である。`workflow.wf_next.skip_manual_mastering` を `true` にすると、最終マスター候補がなくても raw master を最終音源として採用する。
+`workflow.wf_next.skip_*_approval` と `workflow.post-publish.skip_approvals.*` はすべて `true = 承認省略`。`workflow.wf_next.skip_manual_mastering` を `true` にすると、最終マスター候補がなくても raw master を最終音源として採用する。
 
 `config/skills/loop-video.yaml` が存在しない場合は、解決した現在値と異なる回答のときだけ、回答値を `enabled` に持つ override ファイルを新規作成する。現在値のままなら override ファイルを作成してはならない。
 

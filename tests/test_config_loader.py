@@ -841,13 +841,62 @@ def test_workflow_post_publish_unset_preserves_legacy_mode(tmp_path, monkeypatch
     config = load_config()
 
     assert config.workflow.post_publish.configured is False
+    assert config.workflow.post_publish.skip_approvals.community_post is True
+    assert config.workflow.post_publish.skip_approvals.pinned_comment is True
+    assert config.workflow.post_publish.skip_approvals.metadata_audit is True
     assert config.workflow.post_publish.approval_gates.community_post is False
     assert config.workflow.post_publish.approval_gates.pinned_comment is False
     assert config.workflow.post_publish.approval_gates.metadata_audit is False
 
 
-def test_workflow_post_publish_gate_overrides_are_observable(tmp_path, monkeypatch):
-    """#1824: section の存在で chain を opt-in し、step ごとの boolean を貫通する."""
+def test_workflow_post_publish_empty_section_skips_all_approvals(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"post-publish": {}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    post_publish = load_config().workflow.post_publish
+
+    assert post_publish.configured is True
+    assert post_publish.skip_approvals.community_post is True
+    assert post_publish.skip_approvals.pinned_comment is True
+    assert post_publish.skip_approvals.metadata_audit is True
+
+
+@pytest.mark.parametrize(
+    ("step", "attribute"),
+    [
+        ("community-post", "community_post"),
+        ("pinned-comment", "pinned_comment"),
+        ("metadata-audit", "metadata_audit"),
+    ],
+)
+def test_workflow_post_publish_skip_approval_true_is_observable(tmp_path, monkeypatch, step, attribute):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"post-publish": {"skip_approvals": {step: True}}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    post_publish = load_config().workflow.post_publish
+
+    assert getattr(post_publish.skip_approvals, attribute) is True
+    assert getattr(post_publish.approval_gates, attribute) is False
+
+
+def test_workflow_post_publish_skip_approval_false_requires_approval(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"post-publish": {"skip_approvals": {"pinned-comment": False}}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    post_publish = load_config().workflow.post_publish
+
+    assert post_publish.skip_approvals.pinned_comment is False
+    assert post_publish.approval_gates.pinned_comment is True
+
+
+def test_workflow_post_publish_legacy_gate_alias_preserves_behavior(tmp_path, monkeypatch):
+    """旧 `approval_gates` は値を反転して従来の承認有無を維持する."""
     sections = _minimal_sections()
     sections["workflow.json"] = {
         "workflow": {
@@ -866,6 +915,9 @@ def test_workflow_post_publish_gate_overrides_are_observable(tmp_path, monkeypat
     config = load_config()
 
     assert config.workflow.post_publish.configured is True
+    assert config.workflow.post_publish.skip_approvals.community_post is False
+    assert config.workflow.post_publish.skip_approvals.pinned_comment is True
+    assert config.workflow.post_publish.skip_approvals.metadata_audit is False
     assert config.workflow.post_publish.approval_gates.community_post is True
     assert config.workflow.post_publish.approval_gates.pinned_comment is False
     assert config.workflow.post_publish.approval_gates.metadata_audit is True
@@ -879,6 +931,57 @@ def test_workflow_post_publish_gate_must_be_boolean(tmp_path, monkeypatch, inval
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
     with pytest.raises(ConfigError, match="workflow.post-publish.approval_gates.pinned-comment は boolean"):
+        load_config()
+
+
+@pytest.mark.parametrize("invalid", ["true", 1, None, {}, []])
+def test_workflow_post_publish_skip_approval_must_be_boolean(tmp_path, monkeypatch, invalid):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"post-publish": {"skip_approvals": {"pinned-comment": invalid}}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="workflow.post-publish.skip_approvals.pinned-comment は boolean"):
+        load_config()
+
+
+def test_workflow_post_publish_rejects_new_and_legacy_gate_for_same_step(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {
+        "workflow": {
+            "post-publish": {
+                "skip_approvals": {"community-post": True},
+                "approval_gates": {"community-post": False},
+            }
+        }
+    }
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=r"skip_approvals\.community-post.*approval_gates\.community-post"):
+        load_config()
+
+
+@pytest.mark.parametrize("key", ["skip_approvals", "approval_gates"])
+def test_workflow_post_publish_rejects_unknown_step_in_both_forms(tmp_path, monkeypatch, key):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"post-publish": {key: {"unknown-step": True}}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=rf"workflow.post-publish\.{key}.*unknown-step"):
+        load_config()
+
+
+@pytest.mark.parametrize("key", ["skip_approvals", "approval_gates"])
+@pytest.mark.parametrize("invalid", [None, False, [], "bad"])
+def test_workflow_post_publish_gate_containers_must_be_objects(tmp_path, monkeypatch, key, invalid):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"post-publish": {key: invalid}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=rf"workflow.post-publish\.{key} は object"):
         load_config()
 
 

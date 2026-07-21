@@ -44,6 +44,7 @@ from youtube_automation.utils.config.workflow import (
     ApprovalGates,
     PostPublish,
     PostPublishApprovalGates,
+    PostPublishSkipApprovals,
     ScheduledAutomation,
     WfNext,
     Workflow,
@@ -636,10 +637,16 @@ def _build_workflow(merged: dict) -> Workflow:
         raise ConfigError(
             f"workflow.post-publish は object でなければなりません（got {type(post_publish_raw).__name__}）"
         )
-    unexpected = set(post_publish_raw) - {"approval_gates"}
+    unexpected = set(post_publish_raw) - {"skip_approvals", "approval_gates"}
     if unexpected:
         names = ", ".join(sorted(unexpected))
         raise ConfigError(f"workflow.post-publish に未知のキーがあります: {names}")
+    post_publish_skip_raw = post_publish_raw.get("skip_approvals", {})
+    if not isinstance(post_publish_skip_raw, dict):
+        raise ConfigError(
+            "workflow.post-publish.skip_approvals は object でなければなりません"
+            f"（got {type(post_publish_skip_raw).__name__}）"
+        )
     post_publish_gates_raw = post_publish_raw.get("approval_gates", {})
     if not isinstance(post_publish_gates_raw, dict):
         raise ConfigError(
@@ -647,10 +654,19 @@ def _build_workflow(merged: dict) -> Workflow:
             f"（got {type(post_publish_gates_raw).__name__}）"
         )
     post_publish_steps = {"community-post", "pinned-comment", "metadata-audit"}
-    unknown_steps = set(post_publish_gates_raw) - post_publish_steps
-    if unknown_steps:
-        names = ", ".join(sorted(unknown_steps))
-        raise ConfigError(f"workflow.post-publish.approval_gates に未知の step があります: {names}")
+    for key, values in (
+        ("skip_approvals", post_publish_skip_raw),
+        ("approval_gates", post_publish_gates_raw),
+    ):
+        unknown_steps = set(values) - post_publish_steps
+        if unknown_steps:
+            names = ", ".join(sorted(unknown_steps))
+            raise ConfigError(f"workflow.post-publish.{key} に未知の step があります: {names}")
+
+    post_publish_skips = {
+        step: _resolve_post_publish_skip_approval(post_publish_skip_raw, post_publish_gates_raw, step)
+        for step in post_publish_steps
+    }
 
     return Workflow(
         wf_next=WfNext(
@@ -665,22 +681,15 @@ def _build_workflow(merged: dict) -> Workflow:
         ),
         post_publish=PostPublish(
             configured=post_publish_configured,
+            skip_approvals=PostPublishSkipApprovals(
+                community_post=post_publish_skips["community-post"],
+                pinned_comment=post_publish_skips["pinned-comment"],
+                metadata_audit=post_publish_skips["metadata-audit"],
+            ),
             approval_gates=PostPublishApprovalGates(
-                community_post=_workflow_bool(
-                    post_publish_gates_raw,
-                    "community-post",
-                    "workflow.post-publish.approval_gates.community-post",
-                ),
-                pinned_comment=_workflow_bool(
-                    post_publish_gates_raw,
-                    "pinned-comment",
-                    "workflow.post-publish.approval_gates.pinned-comment",
-                ),
-                metadata_audit=_workflow_bool(
-                    post_publish_gates_raw,
-                    "metadata-audit",
-                    "workflow.post-publish.approval_gates.metadata-audit",
-                ),
+                community_post=not post_publish_skips["community-post"],
+                pinned_comment=not post_publish_skips["pinned-comment"],
+                metadata_audit=not post_publish_skips["metadata-audit"],
             ),
         ),
         scheduled_automation=_build_scheduled_automation(wf),
@@ -810,6 +819,20 @@ def _resolve_skip_approval(wf_next_raw: dict, gates_raw: dict, new_key: str, leg
         return _workflow_bool(wf_next_raw, new_key, f"workflow.wf_next.{new_key}")
     if legacy_specified:
         return not _workflow_bool(gates_raw, legacy_key, f"workflow.wf_next.approval_gates.{legacy_key}")
+    return True
+
+
+def _resolve_post_publish_skip_approval(skip_raw: dict, gates_raw: dict, step: str) -> bool:
+    """`skip_approvals` を正とし、逆向きの旧 `approval_gates` を解決する."""
+    if step in skip_raw and step in gates_raw:
+        raise ConfigError(
+            f"workflow.post-publish.skip_approvals.{step} と "
+            f"workflow.post-publish.approval_gates.{step} は同時指定できません"
+        )
+    if step in skip_raw:
+        return _workflow_bool(skip_raw, step, f"workflow.post-publish.skip_approvals.{step}")
+    if step in gates_raw:
+        return not _workflow_bool(gates_raw, step, f"workflow.post-publish.approval_gates.{step}")
     return True
 
 

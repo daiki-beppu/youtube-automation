@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(config)`: `workflow.post-publish.skip_approvals` を正規キーとして追加し、`true = 承認省略` に統一。旧 `approval_gates` は逆向きの後方互換 alias として維持し、同一 step の新旧同時指定は拒否（#2403）。
+
 - `refactor(workflow)`: `/automation-run` 互換 skill を削除し、一気通貫 workflow の公開入口を `/wf-auto` に一本化。旧 `target_workflow: automation-run` は黙って変換せず移行案内付きで拒否し、`.automation-run/` の lease・履歴パスは維持（#2400）。
 
 - `security(scripts)`: `open` / `ffmpeg` へ渡すファイルパスを絶対パス化し、先頭 `-` を option と誤解釈する余地を排除（#2396）。

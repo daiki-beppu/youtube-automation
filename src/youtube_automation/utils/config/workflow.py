@@ -103,11 +103,20 @@ class ScheduledAutomation:
 
 @dataclass(frozen=True)
 class PostPublishApprovalGates:
-    """`/post-publish` の各 step 直前に置く承認ゲート."""
+    """`/post-publish` の旧 `approval_gates` consumer 向け derived view."""
 
     community_post: bool = False
     pinned_comment: bool = False
     metadata_audit: bool = False
+
+
+@dataclass(frozen=True)
+class PostPublishSkipApprovals:
+    """`/post-publish` の承認省略設定（`True` = 承認なし）."""
+
+    community_post: bool = True
+    pinned_comment: bool = True
+    metadata_audit: bool = True
 
 
 @dataclass(frozen=True)
@@ -119,6 +128,7 @@ class PostPublish:
     """
 
     configured: bool = False
+    skip_approvals: PostPublishSkipApprovals = field(default_factory=PostPublishSkipApprovals)
     approval_gates: PostPublishApprovalGates = field(default_factory=PostPublishApprovalGates)
 
 
