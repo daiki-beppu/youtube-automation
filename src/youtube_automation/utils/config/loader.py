@@ -48,6 +48,7 @@ from youtube_automation.utils.config.workflow import (
     Workflow,
 )
 from youtube_automation.utils.config.youtube import (
+    OVERLAY_ENCODER_CODECS,
     AudioVisualizerFill,
     AudioVisualizerGlow,
     AudioVisualizerRounding,
@@ -543,8 +544,13 @@ def _build_overlays(raw: object) -> Overlays:
     enc_raw = raw.get("encoder") or {}
     if not isinstance(enc_raw, dict):
         raise ConfigError(f"overlays.encoder は object でなければなりません（got {type(enc_raw).__name__}）")
+    enc_codec = str(enc_raw.get("codec", "libx264"))
+    if enc_codec not in OVERLAY_ENCODER_CODECS:
+        raise ConfigError(
+            f"overlays.encoder.codec='{enc_codec}' は不正です（有効値: {', '.join(OVERLAY_ENCODER_CODECS)}）"
+        )
     encoder = OverlayEncoder(
-        codec=str(enc_raw.get("codec", "libx264")),
+        codec=enc_codec,
         preset=str(enc_raw.get("preset", "medium")),
         crf=int(enc_raw.get("crf", 20)),
         pix_fmt=str(enc_raw.get("pix_fmt", "yuv420p")),

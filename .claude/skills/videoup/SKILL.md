@@ -231,6 +231,7 @@ effect:
       "position": "W-w-40:40"
     },
     "encoder": {
+      "codec": "libx264",
       "preset": "medium",
       "crf": 20,
       "maxrate": "4M",
@@ -247,6 +248,9 @@ effect:
 - **設定ファイル探索順**: `OVERLAYS_CONFIG` 環境変数 → `CHANNEL_DIR/config/channel/youtube.json` → コレクションディレクトリの祖先探索。
 - **popup 画像探索順**: 絶対パス → `10-assets/<image>` → `<collection-dir>/<image>`。見つからない場合は popup のみスキップして visualizer は実行する。
 - **再エンコード固定**: overlays 経路は `-c:v copy` 不可。`encoder.crf` / `maxrate` / `bufsize` で品質とサイズを制御する（DeepFocus365 で 70 分マスター = 約 1.0 GB / 2 Mbps 実績）。
+- **hardware encode は明示 opt-in**: `encoder.codec: "hardware"` で macOS は `h264_videotoolbox`、対応 NVIDIA 環境は `h264_nvenc` を選ぶ。特定 codec の明示指定も可能。利用不能または 1-frame 起動 probe 失敗時は `libx264` へ戻り、requested / selected と理由をログへ出す。既定は引き続き `libx264`。
+- **codec 固有引数**: `libx264` は preset / CRF、VideoToolbox は bitrate、NVENC は `p5` / CQ を使う。H.264 / yuv420p / profile / maxrate / bufsize / fps の出力契約は共通。
+- **性能を実測してから opt-in**: `VIDEOUP_BENCH_DURATION=60 VIDEOUP_BENCH_RUNS=3 bash .claude/skills/videoup/references/benchmark_overlay_encoders.sh` で同一入力を比較する。#2372 の基準計測は `docs/benchmarks/videoup-overlay-encoder-2026-07-21.md`。
 
 ### Audio visualizer style（#1684）
 

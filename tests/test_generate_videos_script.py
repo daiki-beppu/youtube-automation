@@ -91,6 +91,7 @@ exit 0
 set -eu
 if [[ "$*" == *"-encoders"* ]]; then
     printf ' A..... aac \\n'
+    if [[ -n "${FFMPEG_ENCODERS:-}" ]]; then printf '%b' "$FFMPEG_ENCODERS"; fi
     exit 0
 fi
 
@@ -200,6 +201,14 @@ with open(sys.argv[1], encoding="utf-8") as f:
 print(str(data.get("overlays", {}).get("subscribe_popup", {}).get("enabled", False)).lower())
 PY
         ;;
+    *".overlays.encoder.codec"*) printf '%s\\n' "${OVERLAY_ENCODER_CODEC:-}" ;;
+    *".overlays.encoder.preset"*) printf '%s\\n' "${OVERLAY_ENCODER_PRESET:-}" ;;
+    *".overlays.encoder.crf"*) printf '%s\\n' "${OVERLAY_ENCODER_CRF:-}" ;;
+    *".overlays.encoder.pix_fmt"*) printf '%s\\n' "${OVERLAY_ENCODER_PIX_FMT:-}" ;;
+    *".overlays.encoder.maxrate"*) printf '%s\\n' "${OVERLAY_ENCODER_MAXRATE:-}" ;;
+    *".overlays.encoder.bufsize"*) printf '%s\\n' "${OVERLAY_ENCODER_BUFSIZE:-}" ;;
+    *".overlays.encoder.profile"*) printf '%s\\n' "${OVERLAY_ENCODER_PROFILE:-}" ;;
+    *".overlays.encoder.framerate"*) printf '%s\\n' "${OVERLAY_ENCODER_FRAMERATE:-}" ;;
     *) printf '\\n' ;;
 esac
 """,
@@ -1400,6 +1409,91 @@ def _output_ffmpeg_command(ffmpeg_log: Path, output_name: str) -> str:
         if output_name in cmd:
             return cmd
     raise AssertionError(f"ffmpeg command for {output_name} not found: {commands}")
+
+
+def _overlay_encoder_env(codec: str, encoders: str = "") -> dict[str, str]:
+    return {
+        "OVERLAY_ENCODER_CODEC": codec,
+        "FFMPEG_ENCODERS": encoders,
+    }
+
+
+def test_overlay_hardware_auto_selects_videotoolbox_when_available(tmp_path: Path) -> None:
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays":{"enabled":true}}', encoding="utf-8")
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={
+            "OVERLAYS_CONFIG": str(overlays_config),
+            **_overlay_encoder_env("hardware", " V....D h264_videotoolbox VideoToolbox H.264 Encoder\\n"),
+        },
+    )
+
+    master_cmd = _master_ffmpeg_command(ffmpeg_log)
+    assert result.returncode == 0, result.stderr
+    assert "-c:v h264_videotoolbox" in master_cmd
+    assert " -crf " not in f" {master_cmd} "
+    assert "requested=hardware, selected=h264_videotoolbox" in result.stdout
+
+
+def test_overlay_hardware_unavailable_falls_back_to_libx264(tmp_path: Path) -> None:
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays":{"enabled":true}}', encoding="utf-8")
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"OVERLAYS_CONFIG": str(overlays_config), **_overlay_encoder_env("hardware")},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "-c:v libx264" in _master_ffmpeg_command(ffmpeg_log)
+    assert "hardware encoder is unavailable; falling back to libx264" in result.stdout
+    assert "requested=hardware, selected=libx264" in result.stdout
+
+
+def test_overlay_hardware_start_failure_falls_back_to_libx264(tmp_path: Path) -> None:
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays":{"enabled":true}}', encoding="utf-8")
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={
+            "OVERLAYS_CONFIG": str(overlays_config),
+            "FFMPEG_FAIL_MATCH": "encoder-probe",
+            **_overlay_encoder_env("hardware", " V....D h264_videotoolbox VideoToolbox H.264 Encoder\\n"),
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "-c:v libx264" in _master_ffmpeg_command(ffmpeg_log)
+    assert "failed to start; falling back to libx264" in result.stdout
+
+
+def test_overlay_explicit_nvenc_uses_codec_specific_options(tmp_path: Path) -> None:
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays":{"enabled":true}}', encoding="utf-8")
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={
+            "OVERLAYS_CONFIG": str(overlays_config),
+            **_overlay_encoder_env("h264_nvenc", " V....D h264_nvenc NVIDIA NVENC H.264 encoder\\n"),
+        },
+    )
+
+    master_cmd = _master_ffmpeg_command(ffmpeg_log)
+    assert result.returncode == 0, result.stderr
+    assert "-c:v h264_nvenc -preset p5 -cq 20 -b:v 0" in master_cmd
+    assert "requested=h264_nvenc, selected=h264_nvenc" in result.stdout
+
+
+def test_overlay_benchmark_script_covers_required_candidates() -> None:
+    benchmark = (_SCRIPT_PATH.parent / "benchmark_overlay_encoders.sh").read_text(encoding="utf-8")
+    for candidate in ("baseline", "software-veryfast", "twostage", "h264_videotoolbox", "h264_nvenc"):
+        assert candidate in benchmark
+    assert "/usr/bin/time -p" in benchmark
+    assert "ssim" in benchmark
 
 
 def test_target_video_duration_unset_keeps_legacy_behavior(tmp_path: Path) -> None:

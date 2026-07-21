@@ -2235,6 +2235,26 @@ def test_overlays_empty_object_uses_defaults(tmp_path, monkeypatch):
     assert config.youtube.overlays.subscribe_popup.enabled is False
 
 
+@pytest.mark.parametrize("codec", ["hardware", "h264_videotoolbox", "h264_nvenc"])
+def test_overlays_hardware_encoder_codecs_are_valid(tmp_path, monkeypatch, codec):
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {"enabled": True, "encoder": {"codec": codec}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    assert load_config().youtube.overlays.encoder.codec == codec
+
+
+def test_overlays_unknown_encoder_codec_raises(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["youtube.json"]["overlays"] = {"enabled": True, "encoder": {"codec": "hevc_magic"}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="overlays.encoder.codec='hevc_magic'"):
+        load_config()
+
+
 def test_overlays_section_non_object_raises(tmp_path, monkeypatch):
     """#511: `overlays` が object でないときは ConfigError."""
     sections = _minimal_sections()
