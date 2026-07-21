@@ -5,13 +5,13 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 ## 前後工程
 
-- `前工程`: `/automation-run`, `/wf-new`
+- `前工程`: `/wf-auto`, `/wf-new`
 - `後工程`: `/analytics-analyze`, `/flop-analysis`
 
 ## Overview
 
 既存コレクションを次工程へ進めるオーケストレーター。完了済みの素材を自動検出し、未完了のステップから再開する。
-`/automation-run` から委譲された場合も本スキルが state 更新の単一責務を持つ。統合 runner の `allow_external_publish = false` 制約ではローカル動画・metadata 生成まで進め、YouTube 書き込み直前で停止する。
+`/wf-auto` から固定 collection を委譲された場合も本スキルが state 更新の単一責務を持つ。統合 runner の `allow_external_publish = false` 制約ではローカル動画・metadata 生成まで進め、YouTube 書き込み直前で停止する。対話 gate の承認後は同じ run へ結果を返し、resolver が実成果物を再評価する。
 
 ## Hard Gates: subagent 委譲境界
 

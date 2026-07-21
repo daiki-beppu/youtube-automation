@@ -45,6 +45,10 @@ class LeaseBusyError(RuntimeError):
     """Raised when another non-expired integrated run owns the lease."""
 
 
+class NoActiveCollectionError(ValueError):
+    """Raised when no unfinished planning collection can be selected."""
+
+
 @dataclass(frozen=True)
 class RunnerConfig:
     allow_external_publish: bool
@@ -136,7 +140,7 @@ def select_collection(root: Path, requested: str | None = None) -> Path:
             if _state(collection).get("phase") != "complete":
                 candidates.append(collection.resolve())
     if not candidates:
-        raise ValueError("未完了の planning collection がありません")
+        raise NoActiveCollectionError("未完了の planning collection がありません")
     return min(candidates, key=_collection_sort_key)
 
 
@@ -601,7 +605,7 @@ def record_attempt(
     root: Path,
     *,
     token: str,
-    collection: Path,
+    collection: Path | None,
     action: str,
     status: Literal["success", "blocked", "failed"],
     reason: str,
@@ -609,8 +613,12 @@ def record_attempt(
     now: str,
 ) -> None:
     root = root.resolve()
-    collection = _inside(root, collection, "collection")
-    _state(collection)
+    if collection is None:
+        relative_collection = None
+    else:
+        collection = _inside(root, collection, "collection")
+        _state(collection)
+        relative_collection = collection.relative_to(root).as_posix()
     if action not in ACTIONS:
         raise ValueError(f"未知の action です: {action}")
     if resume_action is not None and resume_action not in ACTIONS:
@@ -641,7 +649,6 @@ def record_attempt(
         history = _read_object(history_path) if history_path.exists() else {"schema_version": 1, "attempts": []}
         if history.get("schema_version") != 1 or not isinstance(history.get("attempts"), list):
             raise ValueError(f"未対応 automation-run history です: {history_path}")
-        relative_collection = collection.relative_to(root).as_posix()
         history["attempts"].append(
             {
                 "run_id": hashlib.sha256(token.encode("utf-8")).hexdigest()[:16],

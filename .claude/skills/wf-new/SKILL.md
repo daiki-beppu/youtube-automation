@@ -6,12 +6,12 @@ description: "Use when 新規コレクション制作を立ち上げるとき（
 ## 前後工程
 
 - `前工程`: `/channel-new`, `/setup`, `/collection-ideate`
-- `後工程`: `/automation-run`, `/wf-next`, `/suno-helper`
+- `後工程`: `/wf-auto`, `/wf-next`, `/suno-helper`
 
 ## Overview
 
 新コレクション開始オーケストレーター。子スキルを順番に呼び、通常は企画選択 + サムネイル承認の2箇所で一時停止する。
-`/automation-run` から対象 collection 固定で委譲された場合も本スキルの既存 gate と完了条件を維持し、統合 runner 側で工程を再実装しない。
+`/wf-auto` から新規開始または対象 collection 固定で委譲された場合も本スキルの既存 gate と完了条件を維持し、統合 runner 側で工程を再実装しない。新規初期化後は作成した collection 名を返し、同じ run 内の再評価へ接続する。
 `image_generation.auto_selection.enabled: true` かつ `mode: full` のチャンネルでは、サムネイル工程のテーマ確認・生成可否・textless 背景承認・候補承認を省略し、企画で確定した theme を `/thumbnail` へ渡して無人で確定する。
 Suno チャンネルではプロンプト生成後、`suno-helper` 用の `uv run yt-collection-serve` 起動と疎通確認まで行い、続きは `/suno-helper` が browser use で Suno タブ上の拡張 overlay を操作できる状態にする。
 minimal mode では企画候補生成前にテーマ / ジャンル / 雰囲気の直接入力確認が追加される既存挙動を、`ttp_mode: false` の場合だけ適用する。`true` の場合は `/benchmark` を案内して停止する。
