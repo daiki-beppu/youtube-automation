@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `chore(terraform-deps)`: 3 stack の Terraform CLI を 1.15.x、Google / Vultr / null / external / tls provider を最新安定 major の bounded constraint へ更新し、lockfile と静的検証契約を同期（#2358）。
+
 - `chore(extensions-deps)`: 3 helper と shared UI の npm 依存、security overrides、pnpm toolchain を最新安定版へ統一し、4 workspace の lockfile・Nix・release 検証契約を同期（#2356）。
 
 - `chore(deps)`: Python の runtime / development dependencies と Nix input を最新安定版へ更新し、`google-genai` 2 系・Python 3.14 開発環境へ移行。`japanize-matplotlib` の Python 3.12+ 互換用に公式推奨の Setuptools distutils shim を明示し、deprecated の `google-auth-httplib2` は Google API client の transport 依存が残るため 0.4.0 へ更新して残置判断を再記録（#2355）。

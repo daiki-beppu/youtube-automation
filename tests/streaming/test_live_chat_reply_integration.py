@@ -14,7 +14,7 @@ _DEPLOY_SCRIPT = _REPO_ROOT / ".claude/skills/streaming/references/deploy_live_c
 
 
 def test_terraform_requires_ephemeral_input_capable_version() -> None:
-    assert 'required_version = ">= 1.10"' in read_file(_VERSIONS_TF)
+    assert 'required_version = "~> 1.15.0"' in read_file(_VERSIONS_TF)
 
 
 def test_live_chat_is_opt_in_and_secrets_are_ephemeral() -> None:

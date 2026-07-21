@@ -18,12 +18,25 @@ _BOOTSTRAP_MAIN_TF = _BOOTSTRAP_DIR / "main.tf"
 _BOOTSTRAP_OUTPUTS_TF = _BOOTSTRAP_DIR / "outputs.tf"
 _BOOTSTRAP_TFVARS_EXAMPLE = _BOOTSTRAP_DIR / "terraform.tfvars.example"
 _GCP_VARIABLES_TF = _GCP_DIR / "variables.tf"
+_GCP_VERSIONS_TF = _GCP_DIR / "versions.tf"
 _STREAMING_README = _STREAMING_DIR / "README.md"
 
 _GOOGLE_PROVIDER_SOURCE = "hashicorp/google"
 _STORAGE_API = "storage.googleapis.com"
 _BOOTSTRAP_LOCATION = "asia-northeast1"
 _TFSTATE_BUCKET_EXAMPLE = "youtube-automation-tfstate"
+
+
+def test_google_stacks_use_validated_terraform_and_provider_series():
+    for versions_tf in (_BOOTSTRAP_VERSIONS_TF, _GCP_VERSIONS_TF):
+        text = strip_hcl_comments(read_file(versions_tf))
+        terraform_block = extract_block(text, r"terraform")
+        assert terraform_block is not None
+        assert re.search(r'required_version\s*=\s*"~>\s*1\.15\.0"', terraform_block)
+
+        google_block = extract_block(terraform_block, r"google")
+        assert google_block is not None
+        assert re.search(r'version\s*=\s*"~>\s*7\.40"', google_block)
 
 
 def test_bootstrap_declares_google_provider():

@@ -36,13 +36,13 @@ class TestVersionsTf:
     def test_required_version_supports_ephemeral_inputs(self):
         """Given versions.tf
         When terraform ブロックを読む
-        Then required_version は ephemeral variables を導入した Terraform 1.10 以上。
+        Then required_version は検証済みの Terraform 1.15 patch 系に限定される。
         """
         text = strip_hcl_comments(read_file(_VERSIONS_TF))
         terraform_block = extract_block(text, r"terraform")
         assert terraform_block is not None, "terraform { ... } ブロックが存在しない"
-        assert re.search(r'required_version\s*=\s*"[^"]*>=\s*1\.10', terraform_block), (
-            "required_version が >= 1.10 を含んでいない"
+        assert re.search(r'required_version\s*=\s*"~>\s*1\.15\.0"', terraform_block), (
+            "required_version が Terraform 1.15.x に限定されていない"
         )
 
     def test_backend_uses_gcs_remote_state(self):
@@ -92,10 +92,10 @@ class TestVersionsTf:
             'required_providers.tls.source が "hashicorp/tls" でない'
         )
 
-    def test_required_providers_vultr_version_at_least_2(self):
+    def test_required_providers_vultr_uses_latest_stable_major(self):
         """Given versions.tf
         When required_providers.vultr.version を読む
-        Then ">= 2" を含む制約が宣言されている（order.md「>= 2.x」）。
+        Then 2.32 以上かつ 3.0 未満を表す制約が宣言されている。
         """
         text = strip_hcl_comments(read_file(_VERSIONS_TF))
         terraform_block = extract_block(text, r"terraform")
@@ -104,14 +104,12 @@ class TestVersionsTf:
         assert rp_block is not None
         vultr_block = extract_block(rp_block, r"vultr")
         assert vultr_block is not None
-        assert re.search(r'version\s*=\s*"[^"]*>=\s*2', vultr_block), (
-            "required_providers.vultr.version が >= 2 を満たしていない"
-        )
+        assert re.search(r'version\s*=\s*"~>\s*2\.32"', vultr_block)
 
-    def test_required_providers_tls_version_at_least_4(self):
+    def test_required_providers_tls_uses_latest_stable_major(self):
         """Given versions.tf
         When required_providers.tls.version を読む
-        Then ">= 4" を含む制約が宣言されている。
+        Then 4.3 以上かつ 5.0 未満を表す制約が宣言されている。
         """
         text = strip_hcl_comments(read_file(_VERSIONS_TF))
         terraform_block = extract_block(text, r"terraform")
@@ -120,9 +118,7 @@ class TestVersionsTf:
         assert rp_block is not None
         tls_block = extract_block(rp_block, r"tls")
         assert tls_block is not None
-        assert re.search(r'version\s*=\s*"[^"]*>=\s*4', tls_block), (
-            "required_providers.tls.version が >= 4 を満たしていない"
-        )
+        assert re.search(r'version\s*=\s*"~>\s*4\.3"', tls_block)
 
     def test_provider_vultr_block_uses_var_api_key(self):
         """Given versions.tf
@@ -166,10 +162,10 @@ class TestVersionsTfNullProvider:
             'required_providers.null.source が "hashicorp/null" でない'
         )
 
-    def test_required_providers_null_version_at_least_3_2(self):
+    def test_required_providers_null_uses_latest_stable_major(self):
         """Given versions.tf
         When required_providers.null.version を読む
-        Then ">= 3.2" を含む制約が宣言されている（plan §2.2）。
+        Then 3.3 以上かつ 4.0 未満を表す制約が宣言されている。
         """
         text = strip_hcl_comments(read_file(_VERSIONS_TF))
         terraform_block = extract_block(text, r"terraform")
@@ -178,9 +174,7 @@ class TestVersionsTfNullProvider:
         assert rp_block is not None
         null_block = extract_block(rp_block, r"null")
         assert null_block is not None
-        assert re.search(r'version\s*=\s*"[^"]*>=\s*3\.2', null_block), (
-            "required_providers.null.version が >= 3.2 を満たしていない"
-        )
+        assert re.search(r'version\s*=\s*"~>\s*3\.3"', null_block)
 
 
 class TestVersionsTfExternalProvider:
@@ -202,10 +196,10 @@ class TestVersionsTfExternalProvider:
             'required_providers.external.source が "hashicorp/external" でない'
         )
 
-    def test_required_providers_external_version_at_least_2_3(self):
+    def test_required_providers_external_uses_latest_stable_major(self):
         """Given versions.tf
         When required_providers.external.version を読む
-        Then ">= 2.3" を含む制約が宣言されている。
+        Then 2.4 以上かつ 3.0 未満を表す制約が宣言されている。
         """
         text = strip_hcl_comments(read_file(_VERSIONS_TF))
         terraform_block = extract_block(text, r"terraform")
@@ -214,9 +208,7 @@ class TestVersionsTfExternalProvider:
         assert rp_block is not None
         external_block = extract_block(rp_block, r"external")
         assert external_block is not None
-        assert re.search(r'version\s*=\s*"[^"]*>=\s*2\.3', external_block), (
-            "required_providers.external.version が >= 2.3 を満たしていない"
-        )
+        assert re.search(r'version\s*=\s*"~>\s*2\.4"', external_block)
 
 
 # ============================================================================

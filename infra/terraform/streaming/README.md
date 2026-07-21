@@ -16,7 +16,7 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 
 ## 前提
 
-- `terraform` >= 1.10 インストール済み（ライブチャット認証を state から除外する ephemeral input を使用）
+- `terraform` 1.15.x インストール済み（ライブチャット認証を state から除外する ephemeral input を使用）
 - `python3` が PATH 上にある（配信元 MP4 のプリフライト検証を Terraform `external` data source から実行するため）
 - Vultr API キーを 1Password に保管済み（または環境変数で渡せる状態）
 - `yt-fetch-stream-key --vault=Personal --item=YouTube` でストリームキーを 1Password に保管済み（初回のみ）
