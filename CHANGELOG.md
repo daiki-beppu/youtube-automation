@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `chore(actions-deps)`: CI / dashboard / extension release workflow の外部 action を最新安定版へ更新し、全 `uses:` を version コメント付き immutable commit SHA に統一する supply-chain 契約を追加（#2357）。
+
 - `chore(terraform-deps)`: 3 stack の Terraform CLI を 1.15.x、Google / Vultr / null / external / tls provider を最新安定 major の bounded constraint へ更新し、lockfile と静的検証契約を同期（#2358）。
 
 - `chore(extensions-deps)`: 3 helper と shared UI の npm 依存、security overrides、pnpm toolchain を最新安定版へ統一し、4 workspace の lockfile・Nix・release 検証契約を同期（#2356）。

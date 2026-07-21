@@ -71,7 +71,7 @@ _RELEASE_BUILD_PARALLEL_STEPS = {
     "Build and zip distrokid-helper": ("extensions/distrokid-helper", "verify-extensions.sh distrokid-helper"),
     "Build and zip community-helper": ("extensions/community-helper", "verify-extensions.sh community-helper"),
 }
-_RELEASE_NIX_INSTALL_ACTION = "DeterminateSystems/nix-installer-action@main"
+_RELEASE_NIX_INSTALL_ACTION = "DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25"
 _SHELL_BACKGROUND_OPERATOR = re.compile(r"(?<!&)&(?!&)")
 
 
@@ -291,9 +291,9 @@ def test_extensions_jobs_use_only_the_nix_extensions_toolchain(job_name: str) ->
     """Given Extensions CI, When commands run, Then all jobs use the Nix extensions shell."""
     steps = _job_steps(_load_workflow(_EXTENSIONS_WORKFLOW_PATH), job_name)
 
-    assert _top_level_step_index_with_uses(steps, "actions/checkout@v4") < _top_level_step_index_with_uses(
-        steps, "cachix/install-nix-action@v30"
-    )
+    assert _top_level_step_index_with_uses(
+        steps, "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+    ) < _top_level_step_index_with_uses(steps, "cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342")
     uses = {step.get("uses") for step in steps}
     assert "pnpm/action-setup@v4" not in uses
     assert "actions/setup-node@v4" not in uses
@@ -379,7 +379,9 @@ def test_extensions_pull_request_runs_one_fallow_audit_for_the_extensions_root()
     ]
 
     steps = _job_steps(workflow, "check")
-    checkout = steps[_top_level_step_index_with_uses(steps, "actions/checkout@v4")]
+    checkout = steps[
+        _top_level_step_index_with_uses(steps, "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1")
+    ]
     assert checkout.get("with") == {"fetch-depth": 0}
 
     jobs_check = jobs.get("check")
@@ -656,7 +658,10 @@ def test_release_extensions_builds_all_zips_before_release_attachment() -> None:
         assert step.get("working-directory") == working_directory
         assert required_command in str(step.get("run", ""))
         assert str(step.get("run", "")).startswith("cd ../.. && bash ")
-    assert _top_level_step_index_with_uses(steps, "actions/checkout@v4") < build_parallel_index
+    assert (
+        _top_level_step_index_with_uses(steps, "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1")
+        < build_parallel_index
+    )
     assert _top_level_step_index_with_uses(steps, _RELEASE_NIX_INSTALL_ACTION) < build_parallel_index
     assert build_parallel_index < _top_level_step_index(steps, "Attach zips to Release")
     _assert_parallel_runs_do_not_use_shell_backgrounding(steps)
