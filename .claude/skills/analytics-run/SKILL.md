@@ -14,7 +14,7 @@ description: "Use when YouTube Analytics の収集→分析→最新レポート
 - `references/analytics-chain-manifest.json` と `references/analytics-chain-state.py` が存在すること。欠損、JSON 構文エラー、未知の step、重複 step ID があれば停止する。
 - manifest の順序を変更せず、1 回の発動で `collect` → `analyze` → `report` を最後まで進める。途中失敗時だけ停止する。
 - 子 skill の内部手順を再実装しない。各段では対応する SKILL.md を読み、その完了条件をそのまま満たす。
-- このチェーンは外部反映を行わないため承認を求めない。manifest の全 `approvalGate.enabled` が `false` でなければ設定エラーとして停止する。
+- このチェーンは外部反映を行わないため承認を求めない。manifest の全 `approvalGate.skip` が `true` でなければ設定エラーとして停止する。旧 `enabled` だけの manifest は `skip = not enabled` として解決し、`skip` と `enabled` の同時指定は拒否する。
 
 ## 完了条件
 
@@ -42,7 +42,7 @@ exit code は次の固定契約とする。
 
 ## 実行手順
 
-1. `references/analytics-chain-manifest.json` を読み、`chainId == "analytics"`、step 順が `collect, analyze, report`、全 gate が `false`、全 step が同じ状態判定 script を参照していることを確認する。
+1. `references/analytics-chain-manifest.json` を読み、`chainId == "analytics"`、step 順が `collect, analyze, report`、全 `approvalGate.skip` が `true`、全 step が同じ状態判定 script を参照していることを確認する。
 2. manifest 順に各 step の状態判定を実行する。
 3. `collect` が exit 10 なら `/analytics-collect` を実行する。完了後に状態判定を再実行し、exit 0 にならなければ停止する。
 4. `analyze` が exit 10 なら `/analytics-analyze` を実行する。完了後に状態判定を再実行し、exit 0 にならなければ停止する。

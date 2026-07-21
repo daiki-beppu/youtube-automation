@@ -1059,6 +1059,22 @@ def test_post_publish_skip_approvals_are_documented_consistently() -> None:
     assert "同一 step" in post_publish and "ConfigError" in post_publish
 
 
+def test_chain_manifest_approval_gate_uses_true_equals_skip() -> None:
+    schema = _read("docs/skill-design/chain-manifest-schema.md")
+    post_publish = _read(".claude/skills/post-publish/SKILL.md")
+    analytics_run = _read(".claude/skills/analytics-run/SKILL.md")
+
+    assert '"required": ["skip"]' in schema
+    assert '"required": ["enabled"]' in schema
+    assert '"oneOf"' in schema
+    assert "skip = not enabled" in schema
+    assert "semantic validation" in schema
+    for skill in (post_publish, analytics_run):
+        assert "approvalGate.skip" in skill
+        assert "skip = not enabled" in skill
+        assert "同時指定" in skill
+
+
 def test_common_docs_list_optional_channel_config_files() -> None:
     required = ("shorts.json", "comments.json", "pinned-comment.json", "distrokid.json")
 
