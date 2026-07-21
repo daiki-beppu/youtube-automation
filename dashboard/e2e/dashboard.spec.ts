@@ -84,7 +84,6 @@ test.beforeAll(async () => {
       "--project",
       "..",
       "yt-dashboard",
-      "--skip-refresh",
       "--registry",
       registry,
       "--port",
@@ -104,10 +103,29 @@ test.afterAll(async () => {
 })
 
 test("概要から動画詳細まで keyboard で確認できる", async ({ page }) => {
+  await page.setViewportSize({ width: 760, height: 900 })
   await page.goto(baseURL)
   const channel = page.getByRole("button", { name: /Night Drive/ })
   await expect(channel).toBeVisible()
+  await expect(page.getByText("更新失敗", { exact: true })).toBeVisible()
   await expect(page.getByText("公開予約 1本")).toBeVisible()
+  const layout = await channel.evaluate((element) => {
+    const bounds = element.getBoundingClientRect()
+    const card = element.closest('[data-slot="card"]')
+    if (!card) throw new Error("channel card が見つかりません")
+    const cardBounds = card.getBoundingClientRect()
+    return {
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      left: bounds.left,
+      right: bounds.right,
+      cardLeft: cardBounds.left,
+      cardRight: cardBounds.right,
+    }
+  })
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth)
+  expect(layout.left).toBeGreaterThanOrEqual(layout.cardLeft)
+  expect(layout.right).toBeLessThanOrEqual(layout.cardRight)
   await channel.focus()
   await page.keyboard.press("Enter")
   await expect(

@@ -198,11 +198,11 @@ function ChannelList({
           <Button
             key={channel.id}
             variant={selectedId === channel.id ? "secondary" : "outline"}
-            className="h-auto w-full justify-between gap-4 px-4 py-3 text-left"
+            className="h-auto min-w-0 w-full flex-col items-stretch gap-3 px-4 py-3 text-left"
             onClick={() => onSelect(channel.id)}
             aria-pressed={selectedId === channel.id}
           >
-            <span className="flex min-w-0 flex-col items-start gap-1">
+            <span className="flex w-full min-w-0 flex-col items-start gap-1">
               <span className="max-w-full truncate font-medium">
                 {channel.name}
               </span>
@@ -210,7 +210,7 @@ function ChannelList({
                 収集: {formatCollectedAt(channel.collected_at)}
               </span>
             </span>
-            <span className="flex shrink-0 items-center gap-2">
+            <span className="flex w-full min-w-0 flex-wrap items-center gap-2">
               {channel.refresh_error ? (
                 <Badge
                   variant="destructive"
