@@ -15,7 +15,7 @@ description: "Use when 配信中の YouTube ライブチャットへ常駐 daemo
 - `config/channel/comments.json` が存在し、`comments.live_chat.enabled` が `true`。無ければ `examples/channel_config.example/comments.json` から作成する
 - `terraform version` が 1.10 以上で、`infra/terraform/streaming/` と `.claude/skills/streaming/references/deploy_live_chat.sh` が存在する。無ければ automation を更新して `/streaming` を実行する
 - `auth/client_secrets.json` と `auth/token.json`、`${CODEX_HOME:-$HOME/.codex}/auth.json` が存在する。認証が必要なら AI が `uv run yt-oauth` / `codex login` を起動して完了まで待ち、人間はブラウザ上のログイン・アカウント選択・同意だけを行う
-- 1Password CLI `op` が利用でき、3 JSON を保存した field の secret reference が読める。JSON 本文をチャット、argv、tfvars、リポジトリへ出さない
+- 1Password CLI `op` が利用でき、session が有効。未認証なら AI が `op signin` を起動し、人間が 1Password app 上で承認する。JSON 本文をチャット、argv、tfvars、リポジトリへ出さない
 
 ## 完了条件
 
@@ -123,6 +123,7 @@ ssh root@$INSTANCE_IP 'journalctl -u live-chat-reply -n 100 --no-pager'
 
 | 症状 | 対処 |
 |---|---|
+| `op read` / signin 失敗 | AI が `op signin` を起動し、人間が 1Password app 上で承認後に Step 3〜4 を再実行 |
 | `forbidden` / token refresh 失敗 | AI が `uv run yt-oauth` を起動し、人間のブラウザ同意後に Step 3〜4 を再実行 |
 | `codex_error` | `codex login` を AI が起動して認証を更新し、Step 3〜4 を再実行。該当 message は skip され配信は継続 |
 | `liveChatDisabled` / `liveChatEnded` | YouTube Studio の配信設定を確認。終了済みなら次の active broadcast を自動待機 |

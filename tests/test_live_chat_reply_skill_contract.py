@@ -45,6 +45,7 @@ def test_skill_keeps_authentication_human_and_commands_ai_owned() -> None:
     text = _LIVE_CHAT_SKILL.read_text()
     assert "AI が `uv run yt-oauth`" in text
     assert "AI が `codex login`" in text
+    assert "AI が `op signin`" in text
     assert "人間はブラウザ上のログイン・アカウント選択・同意だけ" in text
     assert "write_op_secret" in text
     assert "JSON template を stdin" in text
