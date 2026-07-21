@@ -14,6 +14,7 @@ const overview = {
       id: "channel-a",
       name: "Night Drive",
       status: "ready",
+      scheduled_count: 3,
       snapshot: "analytics_data.json",
       collected_at: "2026-07-20T12:00:00Z",
       period: { start_date: "2026-06-20", end_date: "2026-07-20" },
@@ -25,6 +26,7 @@ const overview = {
         average_view_percentage: 42.5,
       },
       error: null,
+      refresh_error: null,
       video_count: 1,
     },
   ],
@@ -102,6 +104,8 @@ describe("dashboard", () => {
       screen.getByRole("heading", { name: "動画パフォーマンス" })
     ).toBeInTheDocument()
     expect(screen.getByRole("cell", { name: "1,200" })).toBeInTheDocument()
+    expect(screen.getAllByText("公開予約 3本")).not.toHaveLength(0)
+    expect(screen.queryByText("準備完了")).not.toBeInTheDocument()
   })
 
   it("shows an empty state when no channels are registered", async () => {
@@ -116,6 +120,31 @@ describe("dashboard", () => {
     expect(
       await screen.findByText("登録済みチャンネルがありません")
     ).toBeInTheDocument()
+  })
+
+  it("marks a channel whose startup refresh failed in the overview", async () => {
+    const refreshError = {
+      code: "refresh_failed",
+      message: "Authentication failed",
+    }
+    const failedOverview = {
+      ...overview,
+      channels: [{ ...overview.channels[0], refresh_error: refreshError }],
+    }
+    const failedDetail = { ...detail, refresh_error: refreshError }
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const payload = String(input).endsWith("channel-a")
+        ? failedDetail
+        : failedOverview
+      return new Response(JSON.stringify(payload), { status: 200 })
+    })
+
+    renderDashboard()
+
+    expect(
+      await screen.findByLabelText("更新失敗: Authentication failed")
+    ).toBeInTheDocument()
+    expect(screen.getAllByText("公開予約 3本")).not.toHaveLength(0)
   })
 
   it("shows an alert when the overview request fails", async () => {

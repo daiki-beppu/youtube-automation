@@ -25,6 +25,10 @@ def _text(value: object, default: str = "") -> str:
     return value if isinstance(value, str) else default
 
 
+def _integer_or_none(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
 def _channel_id(channel: Path) -> str:
     digest = hashlib.sha256(str(channel).encode("utf-8")).hexdigest()[:16]
     return f"channel-{digest}"
@@ -88,6 +92,7 @@ def _error_channel(
         "snapshot": None,
         "collected_at": None,
         "period": {"start_date": None, "end_date": None},
+        "scheduled_count": None,
         "summary": None,
         "videos": [],
         "error": {"code": code, "message": message},
@@ -121,6 +126,7 @@ def _ready_channel(
 ) -> dict[str, object]:
     period = _object(snapshot.get("collection_period"))
     summary = _object(_object(snapshot.get("channel_analytics")).get("summary"))
+    scheduled = _object(snapshot.get("scheduled_videos"))
     return {
         "id": _channel_id(channel),
         "name": name,
@@ -131,6 +137,7 @@ def _ready_channel(
             "start_date": _text(period.get("start_date")) or None,
             "end_date": _text(period.get("end_date")) or None,
         },
+        "scheduled_count": _integer_or_none(scheduled.get("count")),
         "summary": {
             "views": _number(summary.get("total_views")),
             "watch_time_minutes": _number(summary.get("total_watch_time")),
@@ -143,7 +150,7 @@ def _ready_channel(
     }
 
 
-def _build_channel(channel: Path) -> dict[str, object]:
+def _build_channel(channel: Path, *, allow_snapshot_fallback: bool = False) -> dict[str, object]:
     try:
         name = _load_name(channel)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
@@ -164,25 +171,43 @@ def _build_channel(channel: Path) -> dict[str, object]:
             code="snapshot_missing",
             message=f"Analytics snapshot がありません: {channel / 'data'}",
         )
-    snapshot_path = snapshots[-1]
-    try:
-        snapshot = _load_snapshot(snapshot_path)
-    except (OSError, json.JSONDecodeError, ValueError) as exc:
-        return _error_channel(
-            channel,
-            name=name,
-            status="invalid_snapshot",
-            code="snapshot_invalid",
-            message=str(exc),
-        )
-    return _ready_channel(channel, name=name, snapshot_path=snapshot_path, snapshot=snapshot)
+    latest_error = "Analytics snapshot を読み込めません"
+    candidates = list(reversed(snapshots)) if allow_snapshot_fallback else [snapshots[-1]]
+    for snapshot_path in candidates:
+        try:
+            snapshot = _load_snapshot(snapshot_path)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            if snapshot_path == snapshots[-1]:
+                latest_error = str(exc)
+            continue
+        return _ready_channel(channel, name=name, snapshot_path=snapshot_path, snapshot=snapshot)
+    return _error_channel(
+        channel,
+        name=name,
+        status="invalid_snapshot",
+        code="snapshot_invalid",
+        message=latest_error,
+    )
 
 
-def build_dashboard_read_model(channel_paths: list[Path]) -> dict[str, object]:
+def build_dashboard_read_model(
+    channel_paths: list[Path],
+    *,
+    refresh_errors: dict[Path, str] | None = None,
+) -> dict[str, object]:
     """登録順のチャンネルから JSON serializable な read model を作る。"""
+    errors = refresh_errors or {}
+    channels: list[dict[str, object]] = []
+    for channel in channel_paths:
+        refresh_message = errors.get(channel)
+        item = _build_channel(channel, allow_snapshot_fallback=refresh_message is not None)
+        item["refresh_error"] = (
+            {"code": "refresh_failed", "message": refresh_message} if refresh_message is not None else None
+        )
+        channels.append(item)
     return {
         "schema_version": SCHEMA_VERSION,
-        "channels": [_build_channel(channel) for channel in channel_paths],
+        "channels": channels,
     }
 
 

@@ -126,8 +126,8 @@ _Avoid_: `--channel` を競合 slug の意味で使うこと (自チャンネル
 _Avoid_: channel list, channel config (config は `config/channel/*.json` のこと)
 
 **dashboard**:
-全 first-party チャンネルの analytics スナップショットを一覧表示するローカル Web UI。Python HTTP server が registry/read model/API/build asset 配信を担い、`dashboard/` の React + Vite + shadcn/ui 表示層は同一 origin の API だけを読む。データ収集は行わず読み取り専用 — SSOT は各チャンネルの `data/analytics_data_*.json`（将来は local store）。channel registry で対象チャンネルを解決する。
-_Avoid_: analytics dashboard (analytics は収集+分析を含意する。dashboard は表示のみ)
+全 first-party チャンネルの analytics スナップショットを起動時に最新化して一覧表示するローカル Web UI。Python HTTP server が registry、全チャンネルの直列収集、read model/API/build asset 配信を担い、`dashboard/` の React + Vite + shadcn/ui 表示層は同一 origin の API だけを読む。SSOT は各チャンネルの `data/analytics_data_*.json`（将来は local store）。channel registry で対象チャンネルを解決し、失敗はチャンネル単位の部分エラーとして隔離する。
+_Avoid_: analytics dashboard（一般概念と区別できない）、単なる viewer（起動時収集を行うため）
 
 ## データ
 

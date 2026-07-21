@@ -37,6 +37,7 @@ def _snapshot(*, collected_at: str, views: int, video_views: int) -> dict:
                 "avg_view_percentage": 62.5,
             }
         },
+        "scheduled_videos": {"count": 2},
         "video_analytics": {
             "video-b": {
                 "video_id": "video-b",
@@ -78,6 +79,7 @@ def test_read_model_uses_latest_snapshot_and_normalizes_metrics(tmp_path: Path) 
     assert item["status"] == "ready"
     assert item["snapshot"] == "analytics_data_20260720.json"
     assert item["collected_at"] == "2026-07-20T00:00:00+00:00"
+    assert item["scheduled_count"] == 2
     assert item["summary"] == {
         "views": 900,
         "watch_time_minutes": 420,
@@ -164,6 +166,48 @@ def test_dashboard_api_exposes_overview_and_selected_channel(tmp_path: Path) -> 
     assert api.channel(channel_id)["videos"][0]["video_id"] == "video-b"
     with pytest.raises(DashboardChannelNotFoundError, match="unknown"):
         api.channel("unknown")
+
+
+def test_read_model_keeps_previous_snapshot_with_structured_refresh_error(tmp_path: Path) -> None:
+    channel = tmp_path / "stale"
+    _write_channel(
+        channel,
+        name="Stale but visible",
+        snapshots={
+            "analytics_data_20260720.json": _snapshot(
+                collected_at="2026-07-20T00:00:00+00:00", views=900, video_views=700
+            )
+        },
+    )
+
+    item = build_dashboard_read_model([channel], refresh_errors={channel: "authentication failed"})["channels"][0]
+
+    assert item["summary"]["views"] == 900
+    assert item["refresh_error"] == {
+        "code": "refresh_failed",
+        "message": "authentication failed",
+    }
+
+
+def test_read_model_falls_back_to_previous_valid_snapshot_after_partial_write(tmp_path: Path) -> None:
+    channel = tmp_path / "partial-write"
+    _write_channel(
+        channel,
+        name="Previous snapshot",
+        snapshots={
+            "analytics_data_20260720.json": _snapshot(
+                collected_at="2026-07-20T00:00:00+00:00", views=900, video_views=700
+            )
+        },
+    )
+    (channel / "data" / "analytics_data_20260721.json").write_text('{"incomplete":', encoding="utf-8")
+
+    item = build_dashboard_read_model([channel], refresh_errors={channel: "snapshot write failed"})["channels"][0]
+
+    assert item["status"] == "ready"
+    assert item["snapshot"] == "analytics_data_20260720.json"
+    assert item["summary"]["views"] == 900
+    assert item["refresh_error"]["code"] == "refresh_failed"
 
 
 def test_read_model_does_not_modify_channel_files(tmp_path: Path) -> None:

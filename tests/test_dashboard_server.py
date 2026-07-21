@@ -88,6 +88,9 @@ def test_server_serves_assets_and_spa_fallback(dashboard_server: str):
 
 def test_cli_opens_loopback_url_after_server_starts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     opened: list[str] = []
+    events: list[str] = []
+    channels = [tmp_path / "one", tmp_path / "two"]
+    refresh_errors = {channels[1]: "authentication failed"}
 
     class FakeServer:
         server_port = 4321
@@ -98,11 +101,50 @@ def test_cli_opens_loopback_url_after_server_starts(monkeypatch: pytest.MonkeyPa
         def server_close(self) -> None:
             return None
 
+    monkeypatch.setattr("youtube_automation.scripts.dashboard.load_channel_registry", lambda _path: channels)
     monkeypatch.setattr(
-        "youtube_automation.scripts.dashboard.create_server",
-        lambda **_kwargs: FakeServer(),
+        "youtube_automation.scripts.dashboard.refresh_dashboard_channels",
+        lambda paths: events.append("refresh") or refresh_errors if paths == channels else pytest.fail("wrong paths"),
     )
+
+    def create_server(**kwargs):
+        events.append("server")
+        assert kwargs["channel_paths"] == channels
+        assert kwargs["refresh_errors"] == refresh_errors
+        return FakeServer()
+
+    monkeypatch.setattr("youtube_automation.scripts.dashboard.create_server", create_server)
     monkeypatch.setattr("youtube_automation.scripts.dashboard.webbrowser.open", opened.append)
 
     assert main(["--port", "4321", "--open", "--registry", str(tmp_path / "channels.json")]) == 0
+    assert events == ["refresh", "server"]
     assert opened == ["http://127.0.0.1:4321/"]
+
+
+def test_cli_skip_refresh_starts_from_existing_snapshots(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    channels = [tmp_path / "one"]
+
+    class FakeServer:
+        server_port = 4321
+
+        def serve_forever(self) -> None:
+            raise KeyboardInterrupt
+
+        def server_close(self) -> None:
+            return None
+
+    monkeypatch.setattr("youtube_automation.scripts.dashboard.load_channel_registry", lambda _path: channels)
+    monkeypatch.setattr(
+        "youtube_automation.scripts.dashboard.refresh_dashboard_channels",
+        lambda _paths: pytest.fail("refresh must be skipped"),
+    )
+    monkeypatch.setattr(
+        "youtube_automation.scripts.dashboard.create_server",
+        lambda **kwargs: (
+            FakeServer()
+            if kwargs["channel_paths"] == channels and kwargs["refresh_errors"] == {}
+            else pytest.fail("wrong server input")
+        ),
+    )
+
+    assert main(["--skip-refresh", "--registry", str(tmp_path / "channels.json")]) == 0

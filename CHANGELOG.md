@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(dashboard)`: `yt-dashboard` の通常起動時に全登録チャンネルの Analytics を直列更新し、失敗をチャンネル単位で隔離して前回 snapshot を表示する。概要カードの「準備完了」を YouTube の将来 `publishAt` に基づく `公開予約 N本` へ置き換え、OAuth のない E2E / 配布確認用に `--skip-refresh` を追加（#2397）。
+
 - `feat(dashboard)`: React / Vite と公式 shadcn/ui Base UI primitives による読み取り専用 Analytics dashboard、同一 origin の loopback Python server、`yt-dashboard --port/--open`、keyboard 操作、light / dark theme、Vitest / Playwright / wheel smoke を追加（#2385）。
 
 - `feat(dashboard)`: `~/.config/tayk/channels.json` の絶対 path registry loader と、各チャンネルの最新 Analytics snapshot を概要・動画指標・CTRへ正規化する読み取り専用 read model/APIを追加。snapshot 欠損・破損・meta 不正はチャンネル単位の状態として隔離する（#2387）。

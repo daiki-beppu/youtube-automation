@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import mimetypes
 import webbrowser
 from collections.abc import Sequence
@@ -17,6 +18,7 @@ from urllib.parse import unquote, urlsplit
 
 from youtube_automation.utils.channel_registry import DEFAULT_CHANNEL_REGISTRY, load_channel_registry
 from youtube_automation.utils.dashboard_read_model import DashboardAPI, build_dashboard_read_model
+from youtube_automation.utils.dashboard_refresh import refresh_dashboard_channels
 from youtube_automation.utils.exceptions import DashboardChannelNotFoundError
 
 DEFAULT_HOST = "127.0.0.1"
@@ -111,18 +113,25 @@ def create_server(
     port: int = DEFAULT_PORT,
     registry_path: Path | None = None,
     asset_root: Traversable | None = None,
+    channel_paths: list[Path] | None = None,
+    refresh_errors: dict[Path, str] | None = None,
 ) -> DashboardServer:
     """registry を一度読み、loopback にだけ bind する server を作る。"""
-    channels = load_channel_registry(registry_path)
-    api = DashboardAPI(build_dashboard_read_model(channels))
+    channels = channel_paths if channel_paths is not None else load_channel_registry(registry_path)
+    api = DashboardAPI(build_dashboard_read_model(channels, refresh_errors=refresh_errors))
     resolved_assets = asset_root or files("youtube_automation").joinpath("dashboard_dist")
     return DashboardServer((DEFAULT_HOST, port), api, resolved_assets)
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="収集済み Analytics dashboard をローカル配信します")
+    parser = argparse.ArgumentParser(description="全チャンネルを更新して Analytics dashboard をローカル配信します")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help=f"配信 port（default: {DEFAULT_PORT}）")
     parser.add_argument("--open", action="store_true", help="起動後に既定 browser で開きます")
+    parser.add_argument(
+        "--skip-refresh",
+        action="store_true",
+        help="API更新を行わず既存snapshotを表示します（offline test用）",
+    )
     parser.add_argument(
         "--registry",
         type=Path,
@@ -133,10 +142,19 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = _parser().parse_args(argv)
     if not 0 <= args.port <= 65535:
         _parser().error("--port は 0..65535 で指定してください")
-    server = create_server(port=args.port, registry_path=cast(Path, args.registry))
+    registry_path = cast(Path, args.registry)
+    channels = load_channel_registry(registry_path)
+    refresh_errors = {} if args.skip_refresh else refresh_dashboard_channels(channels)
+    server = create_server(
+        port=args.port,
+        registry_path=registry_path,
+        channel_paths=channels,
+        refresh_errors=refresh_errors,
+    )
     url = f"http://{DEFAULT_HOST}:{server.server_port}/"
     print(f"dashboard: {url}")
     if args.open:

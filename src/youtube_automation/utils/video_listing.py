@@ -127,3 +127,31 @@ class VideoListingMixin:
 
         logger.info(f"直近{days}日間の投稿動画取得完了: {len(recent_videos)}本")
         return recent_videos
+
+    def get_scheduled_video_count(self, now: datetime | None = None) -> int:
+        """YouTube 上で未来の ``status.publishAt`` を持つ動画数を返す。"""
+        if not self.youtube_service:
+            self.initialize()
+
+        reference_time = now or datetime.now(timezone.utc)
+        if reference_time.tzinfo is None:
+            raise ValueError("now は timezone-aware datetime でなければなりません")
+
+        video_ids = [video["video_id"] for video in self.get_all_channel_videos()]
+        scheduled_count = 0
+        for start in range(0, len(video_ids), 50):
+            batch = video_ids[start : start + 50]
+            request = self.youtube_service.videos().list(part="status", id=",".join(batch))
+            response = execute_with_retry(request, "scheduled videos.list failed")
+            for item in response.get("items", []):
+                publish_at = item.get("status", {}).get("publishAt")
+                if not isinstance(publish_at, str):
+                    continue
+                try:
+                    scheduled_at = datetime.fromisoformat(publish_at.replace("Z", "+00:00"))
+                except ValueError:
+                    logger.warning("不正な status.publishAt をスキップ: %s", publish_at)
+                    continue
+                if scheduled_at > reference_time:
+                    scheduled_count += 1
+        return scheduled_count

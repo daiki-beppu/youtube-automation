@@ -56,11 +56,13 @@ type ChannelOverview = {
   id: string
   name: string
   status: string
+  scheduled_count: number | null
   snapshot: string | null
   collected_at: string | null
   period: { start_date: string | null; end_date: string | null }
   summary: Summary | null
   error: DashboardError | null
+  refresh_error: DashboardError | null
   video_count: number
 }
 
@@ -114,6 +116,12 @@ function statusLabel(status: string): string {
     invalid_channel: "設定エラー",
   }
   return labels[status] ?? status
+}
+
+function channelBadgeLabel(channel: ChannelOverview): string {
+  if (channel.status !== "ready") return statusLabel(channel.status)
+  if (channel.scheduled_count === null) return "公開予約 未取得"
+  return `公開予約 ${integer.format(channel.scheduled_count)}本`
 }
 
 function LoadingState() {
@@ -203,10 +211,18 @@ function ChannelList({
               </span>
             </span>
             <span className="flex shrink-0 items-center gap-2">
+              {channel.refresh_error ? (
+                <Badge
+                  variant="destructive"
+                  aria-label={`更新失敗: ${channel.refresh_error.message}`}
+                >
+                  更新失敗
+                </Badge>
+              ) : null}
               <Badge
                 variant={channel.status === "ready" ? "default" : "destructive"}
               >
-                {statusLabel(channel.status)}
+                {channelBadgeLabel(channel)}
               </Badge>
               <span className="text-xs text-muted-foreground">
                 {integer.format(channel.video_count)}本
@@ -229,6 +245,15 @@ function Detail({ detail }: { detail: ChannelDetail }) {
   )
   return (
     <div className="grid gap-6">
+      {detail.refresh_error ? (
+        <Alert>
+          <AlertCircleIcon />
+          <AlertTitle>最新データへ更新できませんでした</AlertTitle>
+          <AlertDescription>
+            前回の収集データを表示しています。{detail.refresh_error.message}
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {detail.error ? (
         <Alert variant="destructive">
           <AlertCircleIcon />
@@ -378,14 +403,13 @@ export function App() {
           <div className="flex flex-col gap-2">
             <Badge variant="secondary" className="gap-1">
               <DatabaseIcon data-icon="inline-start" />
-              読み取り専用
+              起動時更新
             </Badge>
             <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
               YouTube Analytics Dashboard
             </h1>
             <p className="max-w-2xl text-muted-foreground">
-              収集済み snapshot
-              を横断して、チャンネルと動画のパフォーマンスを確認します。
+              起動時に全チャンネルを更新し、チャンネルと動画のパフォーマンスを確認します。
             </p>
           </div>
           <Button

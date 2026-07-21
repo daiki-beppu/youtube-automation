@@ -61,6 +61,7 @@ test.beforeAll(async () => {
           total_engagement: 170,
         },
       },
+      scheduled_videos: { count: 1 },
       video_analytics: {
         "video-1": {
           title: "Midnight City",
@@ -83,6 +84,7 @@ test.beforeAll(async () => {
       "--project",
       "..",
       "yt-dashboard",
+      "--skip-refresh",
       "--registry",
       registry,
       "--port",
@@ -105,6 +107,7 @@ test("概要から動画詳細まで keyboard で確認できる", async ({ page
   await page.goto(baseURL)
   const channel = page.getByRole("button", { name: /Night Drive/ })
   await expect(channel).toBeVisible()
+  await expect(page.getByText("公開予約 1本")).toBeVisible()
   await channel.focus()
   await page.keyboard.press("Enter")
   await expect(

@@ -26,6 +26,9 @@ class StubCollector(ChannelAnalyticsMixin):
     def _build_publish_at_map(self) -> dict[str, str]:
         return {}
 
+    def get_scheduled_video_count(self) -> int:
+        return 0
+
     def get_revenue_analytics(self, start_date: str, end_date: str) -> dict:
         return {"status": "available", "daily_metrics": [], "by_video": {}, "summary": {}}
 
@@ -70,6 +73,7 @@ def test_standard_and_full_depth_save_subscribed_status_audience(depth: str) -> 
     result = collector.collect_basic_analytics("2026-01-01", "2026-04-01", depth=depth)
 
     assert result["audience"]["by_subscribed_status"] == {"source": "subscribed_status"}
+    assert result["scheduled_videos"] == {"count": 0}
     assert "subscribed_status" in collector.called
     if depth == "full":
         assert result["audience"]["by_country"] == {"source": "country"}

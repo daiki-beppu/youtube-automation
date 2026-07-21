@@ -92,7 +92,8 @@ component 追加前は対象 workspace で `shadcn info` と registry/公式 doc
 
 ### Python と配布の境界
 
-- Python は channel registry、read model、JSON API、`127.0.0.1` の HTTP server を所有する。frontend は同一 origin API の読み取りだけを行う。
+- Python は channel registry、起動時収集、read model、JSON API、`127.0.0.1` の HTTP server を所有する。frontend は同一 origin API の読み取りだけを行う。
+- 通常の `yt-dashboard` は全登録チャンネルについて YouTube Data API / YouTube Analytics API を使う standard 収集を直列実行してから配信する。失敗はチャンネル単位で隔離する。OAuth のない frontend E2E / wheel smoke は `yt-dashboard --skip-refresh` を使い、保存済み fixture を読む。
 - `dashboard build` は Vite output を `src/youtube_automation/dashboard_dist/` へ生成する。Vite の production build は明示的に実行し、Python build backend から Node.js を暗黙起動しない。
 - `dashboard_dist/` は package data として wheel / sdist に同梱し、runtime は `importlib.resources` で解決する。candidate wheel の非 editable install smoke で `index.html` と hashed asset、API 配信を確認する。
 - frontend source を変えた PR は build output の同期差分、frontend 5 gate、Python server test、wheel smoke を通す。

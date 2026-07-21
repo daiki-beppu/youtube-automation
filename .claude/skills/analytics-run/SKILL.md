@@ -51,6 +51,10 @@ exit code は次の固定契約とする。
 
 途中で失敗した場合はその段で停止する。再発動時は状態判定を先頭からやり直し、鮮度を満たす完了済み段を exit 0 で skip して未完了段から再開する。
 
+## dashboard との境界
+
+`yt-dashboard` はこのチェーンを起動せず、registry の全チャンネルへ `/analytics-collect` 相当の standard 収集だけを直列実行する。API call 数は登録チャンネル数に比例し、分析・Markdown report 表示は行わない。詳細な見積もりと `--skip-refresh` の例外は `/analytics-collect` の「想定 API call 数」を正とする。
+
 ## References
 
 - `references/analytics-chain-manifest.json`: step 順、成果物、gate、判定 script の単一ソース

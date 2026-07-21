@@ -81,7 +81,7 @@ uv run yt-skills lint [<skill>..] # SKILL.md frontmatter の軽量検証（stric
 
 ### TS レイヤー（dashboard 限定例外）
 
-TS 版（tayk）の開発は専用の別リポジトリで行う（`docs/adr/0021-separate-repo-restart.md`）。本リポジトリは Python 版のメンテナンスモードであり、**`dashboard/` の React + Vite + shadcn/ui 表示層だけを dashboard 限定の TypeScript 例外**とする。dashboard は Python の読み取り専用 API と build asset 配信に従属し、詳細は ADR-0013 と `docs/development.md::dashboard 開発` を正とする。
+TS 版（tayk）の開発は専用の別リポジトリで行う（`docs/adr/0021-separate-repo-restart.md`）。本リポジトリは Python 版のメンテナンスモードであり、**`dashboard/` の React + Vite + shadcn/ui 表示層だけを dashboard 限定の TypeScript 例外**とする。dashboard frontend は Python の起動時 Analytics 収集・読み取り専用 JSON API・build asset 配信に従属し、詳細は ADR-0013 と `docs/development.md::dashboard 開発` を正とする。
 
 他の TypeScript 実装・fix、tayk core、削除済み `packages/` の復活は禁止する。Chrome 拡張は既存 `extensions/` 規約に従う独立例外であり、dashboard から `extensions/shared-ui` を直接 import しない。
 

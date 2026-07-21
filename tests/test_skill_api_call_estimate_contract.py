@@ -38,6 +38,7 @@ SKILLS_DIR = ROOT / ".claude" / "skills"
 # YouTube Data / Analytics API の quota を消費する CLI。
 BILLED_CLIS: dict[str, str] = {
     "yt-analytics": "YouTube Data + Analytics API",
+    "yt-dashboard": "起動時に全チャンネルの YouTube Data + Analytics API を更新",
     "yt-benchmark-collect": "YouTube Data API",
     "yt-benchmark-comments": "YouTube Data API (commentThreads.list)",
     "yt-bulk-update-desc": "YouTube Data API (videos.update)",
@@ -83,7 +84,6 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-collection-preflight": "ローカルの事前チェックのみ",
     "yt-collection-serve": "ローカル HTTP サーバーのみ",
     "yt-cost-report": "ローカル cost_tracker JSON の表示のみ",
-    "yt-dashboard": "収集済み Analytics JSON の loopback 表示のみ",
     "yt-distrokid-migrate": "ローカルのファイル移行のみ",
     "yt-distrokid-prepare": "ローカルの配信準備（ffprobe / Pillow）のみ",
     "yt-doctor": "gcloud subprocess + YouTube Reporting API（無料枠）のみ",
@@ -123,6 +123,10 @@ NON_BILLED_CLIS: dict[str, str] = {
 
 # 課金 CLI 名を参照するが、skill 自身の手順としては実行しない skill（非対象理由）。
 NON_TARGET_SKILLS: dict[str, str] = {
+    "analytics-run": (
+        "yt-dashboard への言及は別の収集入口におけるチャンネル数比例の API cost を説明する"
+        " cross-reference で、この skill の手順として実行しない"
+    ),
     "analytics-analyze": (
         "収集済み analytics_data_*.json のローカル分析のみ。yt-analytics への言及は"
         "search_terms 欠測時に再収集（/analytics-collect の責務）を案内する"
