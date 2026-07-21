@@ -2570,6 +2570,20 @@ def _write_music_engine(base: Path, music_engine: str) -> None:
     (config_dir / "youtube.json").write_text(json.dumps({"music_engine": music_engine}), encoding="utf-8")
 
 
+def _duration_ttp_seed_lines() -> list[str]:
+    return [
+        "- duration TTP 根拠: .claude/skills/channel-new/references/derive_ttp_duration.py",
+        "- duration 対象 channel: rival (UC123)",
+        "- duration selected video: VID1 views=50000 duration=PT60M (3600s)",
+        "- duration selected video: VID2 views=49999 duration=PT61M (3660s)",
+        "- duration selected video: VID3 views=49998 duration=PT62M (3720s)",
+        "- duration selected video: VID4 views=49997 duration=PT63M (3780s)",
+        "- duration selected video: VID5 views=49996 duration=PT64M (3840s)",
+        "- duration 推奨: target_duration_min=60 target_duration_max=64",
+        "- duration 推奨承認: ユーザー承認済み",
+    ]
+
+
 def _write_ttp_readiness_files(base: Path) -> None:
     docs_channel = base / "docs" / "channel"
     docs_channel.mkdir(parents=True, exist_ok=True)
@@ -2586,6 +2600,7 @@ def _write_ttp_readiness_files(base: Path) -> None:
                 "- relationship: title-structure / thumbnail-composition",
                 "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
                 "- 画像承認: channel branding 画像 branding/icon.png と branding/banner.png をユーザー承認済み",
+                *_duration_ttp_seed_lines(),
                 "- 未反映項目: なし",
                 "",
             ]
@@ -2940,6 +2955,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
                     "- relationship: title-structure / thumbnail-composition",
                     "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
                     "- 画像承認: channel branding 画像 branding/icon.png と branding/banner.png をユーザー承認済み",
+                    *_duration_ttp_seed_lines(),
                     "- 未反映項目: ユーザー承認済み例外: thumbnail reference は後続 /thumbnail で補完するためスキップ",
                     "",
                 ]
@@ -2996,6 +3012,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
                     "- relationship: title-structure / thumbnail-composition",
                     "- branding 方針: competitor-branding-snapshot.json を参照し、description を転写",
                     "- 画像承認: channel branding 画像 branding/icon.png と branding/banner.png をユーザー承認済み",
+                    *_duration_ttp_seed_lines(),
                     "- 未反映項目: ユーザー承認済み例外: music / 曲構造 TTP は後続 /suno で補完するためスキップ",
                     "",
                 ]
@@ -4045,6 +4062,47 @@ class TestCheckTtpWfNewReadinessChannelNew:
 
         assert r.status == "ok"
         assert r.next_action is None
+
+    def test_missing_duration_evidence_warns(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        seed_path = tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md"
+        lines = [line for line in seed_path.read_text(encoding="utf-8").splitlines() if "duration" not in line]
+        seed_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "duration TTP 根拠が未記録" in r.message
+        assert "duration 推奨 min/max が未記録" in r.message
+        assert "duration 推奨のユーザー承認結果が未記録" in r.message
+
+    def test_approved_duration_exception_satisfies_duration_gate(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        seed_path = tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md"
+        lines = [line for line in seed_path.read_text(encoding="utf-8").splitlines() if "duration" not in line]
+        lines.append(
+            "- ユーザー承認済み例外: duration 未反映を動画不足のため手入力 min=60 max=90 で進める; 後続 /benchmark"
+        )
+        seed_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "ok"
+
+    def test_duration_exception_requires_benchmark_follow_up(self, tmp_path):
+        _write_ttp_analytics(tmp_path, [_ttp_channel()])
+        _write_ttp_readiness_files(tmp_path)
+        seed_path = tmp_path / "docs" / "channel" / "ttp-seed-confirmation.md"
+        lines = [line for line in seed_path.read_text(encoding="utf-8").splitlines() if "duration" not in line]
+        lines.append("- ユーザー承認済み例外: duration 未反映を動画不足のため手入力 min=60 max=90 で進める")
+        seed_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        r = doctor.check_ttp_wf_new_readiness(tmp_path)
+
+        assert r.status == "warn"
+        assert "duration のユーザー承認済み例外に後続 /benchmark が未記録" in r.message
 
 
 # ---------------------------------------------------------------------------

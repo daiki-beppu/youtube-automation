@@ -36,7 +36,11 @@ from PIL import UnidentifiedImageError
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.automation_update_refs import UPSTREAM_REPO
 from youtube_automation.cli.skills_sync import bundled_skill_names
-from youtube_automation.scripts.benchmark_collector import load_benchmark_videos, select_top_vod_benchmark_videos
+from youtube_automation.scripts.benchmark_collector import (
+    TTP_VIDEO_ANALYZE_TOP_N,
+    load_benchmark_videos,
+    select_top_vod_benchmark_videos,
+)
 from youtube_automation.utils.config import find_workspace_root, workspace_channels
 from youtube_automation.utils.exceptions import AutomationError, ConfigError, YouTubeAPIError
 from youtube_automation.utils.numbered_duplicates import (
@@ -99,7 +103,6 @@ UNSUPPORTED_VIDEO_ANALYZE_MODELS = {
     "gemini-3.5-flash",
 }
 
-TTP_VIDEO_ANALYZE_TOP_N = 5
 MAX_DISPLAY_VALUE_LEN = 120
 GCP_PROJECT_ID_RE = re.compile(r"[a-z][a-z0-9-]{4,28}[a-z0-9]\Z")
 BILLING_ACCOUNT_ID_RE = re.compile(r"[A-Za-z0-9]{6}-[A-Za-z0-9]{6}-[A-Za-z0-9]{6}\Z")
@@ -1804,6 +1807,7 @@ def _missing_ttp_readiness_items(channel_dir: Path, channels: list[dict[str, obj
         seed_text = seed_confirmation.read_text(encoding="utf-8", errors="replace")
         seed_missing, approved_exceptions = _validate_ttp_seed_confirmation(seed_text, channels)
         missing.extend(seed_missing)
+        missing.extend(_missing_duration_ttp_items(seed_text, channels, approved_exceptions))
 
     missing.extend(_missing_branding_snapshot_items(channel_dir, channels, seed_text))
 
@@ -2094,6 +2098,8 @@ def _approved_ttp_exceptions(seed_text: str) -> tuple[set[str], list[str]]:
             categories.add("thumbnail")
         if "music" in lower_line or "suno" in lower_line or "曲構造" in line or "音楽" in line:
             categories.add("music")
+        if "duration" in lower_line or "動画尺" in line:
+            categories.add("duration")
 
         if not categories:
             missing.append("ユーザー承認済み例外に対象 category が未記録")
@@ -2110,9 +2116,52 @@ def _approved_ttp_exceptions(seed_text: str) -> tuple[set[str], list[str]]:
         if "music" in categories and "/suno" not in lower_line:
             missing.append("music のユーザー承認済み例外に後続 /suno が未記録")
             continue
+        if "duration" in categories and "/benchmark" not in lower_line:
+            missing.append("duration のユーザー承認済み例外に後続 /benchmark が未記録")
+            continue
 
         exceptions.update(categories)
     return exceptions, missing
+
+
+def _missing_duration_ttp_items(
+    seed_text: str,
+    channels: list[dict[str, object]],
+    approved_exceptions: set[str],
+) -> list[str]:
+    if "duration" in approved_exceptions:
+        return []
+
+    missing: list[str] = []
+    lower_text = seed_text.lower()
+    if "duration ttp 根拠" not in lower_text and "動画尺 ttp 根拠" not in lower_text:
+        missing.append("duration TTP 根拠が未記録")
+    if "target_duration_min" not in lower_text or "target_duration_max" not in lower_text:
+        missing.append("duration 推奨 min/max が未記録")
+    approval_lines = [
+        line
+        for line in seed_text.splitlines()
+        if ("duration 推奨承認" in line.lower() or "動画尺推奨承認" in line)
+        and ("ユーザー承認済み" in line or "approved" in line.lower())
+    ]
+    if not approval_lines:
+        missing.append("duration 推奨のユーザー承認結果が未記録")
+
+    duration_channel_lines = [line for line in seed_text.splitlines() if "duration 対象 channel" in line.lower()]
+    for index, channel in enumerate(channels):
+        identifiers = _channel_seed_identifiers(channel)
+        if identifiers and not any(
+            any(identifier.lower() in line.lower() for identifier in identifiers) for line in duration_channel_lines
+        ):
+            missing.append(
+                f"duration TTP 根拠に承認済み channel が未記録 ({_channel_diagnostic_label(index, channel)})"
+            )
+
+    selected_count = sum(1 for line in seed_text.splitlines() if "duration selected video" in line.lower())
+    required_count = TTP_VIDEO_ANALYZE_TOP_N * len(channels)
+    if selected_count < required_count:
+        missing.append(f"duration selected video の根拠が不足 ({selected_count}/{required_count})")
+    return missing
 
 
 def _approved_exception_has_reason(line: str) -> bool:
