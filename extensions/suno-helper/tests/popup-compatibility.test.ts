@@ -872,6 +872,16 @@ describe("Suno popup compatibility check", () => {
     );
     expect(collectionsTrigger.textContent).toContain("コレクション (1)");
     expect(entriesTrigger.textContent).toContain("楽曲 (2)");
+    const collectionList = container.querySelector<HTMLElement>(
+      "[data-suno-collection-list]"
+    );
+    const entryList = container.querySelector<HTMLElement>(
+      "[data-suno-entry-list]"
+    );
+    expect(collectionList?.classList).toContain("max-h-48");
+    expect(collectionList?.classList).toContain("overflow-y-auto");
+    expect(entryList?.classList).toContain("max-h-48");
+    expect(entryList?.classList).toContain("overflow-y-auto");
     expect(collectionsTrigger.getAttribute("aria-expanded")).toBe("false");
     expect(entriesTrigger.getAttribute("aria-expanded")).toBe("false");
     await act(async () => {

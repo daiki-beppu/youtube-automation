@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(suno-helper)`: コレクション件数が多い場合、楽曲一覧と同じ高さ上限で一覧内を縦スクロールできるようにした（#2353）。
+
 - `feat(extensions)`: Suno・DistroKid・Community Helper の共通 overlay ヘッダーへ、公式一次資料に基づく識別可能なサービス別配色と WCAG AA コントラスト検証を追加（#2327）
 
 - `refactor(community-helper)`: native popup を YouTube チャンネル投稿ページ上の shared shadcn/ui Shadow DOM overlay へ移し、drag・viewport clamp・最小化・action toggle・reload 復元を追加した。run / stop / progress / error は background が送信元と同一タブへ relay し、既存の server fetch 境界と投稿 runner を維持する（#2320）。

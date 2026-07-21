@@ -374,7 +374,11 @@ export function App() {
             <path d="M6 12V4l4.5 4z" />
           </svg>
         </CollapsibleTrigger>
-        <CollapsibleContent keepMounted className="mt-1 flex flex-col gap-1">
+        <CollapsibleContent
+          keepMounted
+          className="mt-1 flex max-h-48 flex-col gap-1 overflow-y-auto"
+          data-suno-collection-list="true"
+        >
           {collections.length === 0 && (
             <p className="text-xs text-muted-foreground">コレクションなし</p>
           )}
