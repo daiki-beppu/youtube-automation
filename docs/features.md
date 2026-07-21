@@ -1,6 +1,6 @@
 # 全 skill カタログ
 
-`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **54 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
+`yt-skills sync` で各チャンネルリポジトリに配布される Claude Code skill の一覧（全 **55 個**）。各行は「なにができるか」（what）の 1 行要約。発動トリガーや詳細手順は `.claude/skills/<name>/SKILL.md` を参照。
 
 > 個別の使い分けは各カテゴリの冒頭リンクや [`docs/workflow-cheatsheet.md`](workflow-cheatsheet.md)（workflow 系）も併せて参照。
 
@@ -70,6 +70,7 @@ YouTube への公開、視聴者対応、容量整理、コミュニティ投稿
 | /post-publish | 公開後の community-post → pinned-comment → metadata-audit を承認ゲート・実行履歴付きで一括実行 |
 | /playlist | プレイリストの作成・動画割当・状態確認（`playlists.json` 駆動） |
 | /comments-reply | ルール駆動コメント自動返信（dry-run → apply、二重返信防止） |
+| /live-chat-reply | 配信中ライブチャットの Codex 自動返信 daemon を設定・VPS 配備・運用 |
 | /pinned-comment | オーナー固定コメント自動投稿（preflight で削除済み/private を skip、dry-run → apply、二重投稿防止） |
 | /metadata-audit | ローカル descriptions.md と YouTube 上メタデータの整合性監査 |
 | /live-clean | live コレクションの大容量メディアを削除してディスク回復 |
