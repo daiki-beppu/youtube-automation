@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `security(scripts)`: `open` / `ffmpeg` へ渡すファイルパスを絶対パス化し、先頭 `-` を option と誤解釈する余地を排除（#2396）。
+
 - `security(streaming)`: stream key / Discord webhook の Terraform file provisioner staging を素の `/tmp` から root 所有 0700 の `/run/youtube-stream-provision` へ移し、転送直後の権限露出を解消（#2395）。
 
 - `security(auth)`: 1Password fallback の client_secrets を tempfile 経由から in-memory 渡しへ変更し、異常終了時に平文 JSON がディスクへ残る経路を削除（#2394）。

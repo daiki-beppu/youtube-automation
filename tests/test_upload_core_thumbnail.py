@@ -16,6 +16,30 @@ def _make_core():
 
 
 class TestCompressThumbnailFailureCleanup:
+    def test_ffmpeg_receives_absolute_input_path(self, tmp_path, monkeypatch):
+        """相対パスが渡されても ffmpeg の入力 argv は絶対パスにする。"""
+        core = _make_core()
+        monkeypatch.chdir(tmp_path)
+        thumb = Path("thumb.jpg")
+        thumb.write_bytes(b"x" * (3 * 1024 * 1024))
+        tmp_marker = tmp_path / "compressed_tmp.jpg"
+
+        def _fake_run(cmd, capture_output=True):
+            assert Path(cmd[cmd.index("-i") + 1]).is_absolute()
+            return MagicMock()
+
+        with (
+            patch("tempfile.NamedTemporaryFile") as mock_ntf,
+            patch("subprocess.run", side_effect=_fake_run),
+        ):
+            mock_file = MagicMock()
+            mock_file.name = str(tmp_marker)
+            mock_ntf.return_value = mock_file
+
+            result = core._compress_thumbnail(thumb)
+
+        assert result == thumb
+
     def test_no_temp_file_leaked_when_ffmpeg_never_produces_output(self, tmp_path):
         """ffmpeg が一度も出力しなかった場合でも FileNotFoundError を起こさず、
         temp ファイルもリークしない（元パスをそのまま返す）。"""

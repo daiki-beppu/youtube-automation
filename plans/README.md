@@ -15,7 +15,7 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 |------|-------|----------|--------|------------|-------|-----|--------|
 | 025 | 1Password フォールバックの client_secrets を tempfile 経由から in-memory 化（SIGKILL 残留解消） | P2 | M | — | [#2394](https://github.com/daiki-beppu/youtube-automation/issues/2394) | [#2410](https://github.com/daiki-beppu/youtube-automation/pull/2410) | DONE |
 | 026 | streaming VPS の stream key / webhook staging を素の /tmp から 0700 ディレクトリへ | P3 | S | — | [#2395](https://github.com/daiki-beppu/youtube-automation/issues/2395) | [#2411](https://github.com/daiki-beppu/youtube-automation/pull/2411) | DONE |
-| 027 | open / ffmpeg へ渡すパス引数の絶対パス化（defense-in-depth） | P3 | S | — | [#2396](https://github.com/daiki-beppu/youtube-automation/issues/2396) | — | TODO |
+| 027 | open / ffmpeg へ渡すパス引数の絶対パス化（defense-in-depth） | P3 | S | — | [#2396](https://github.com/daiki-beppu/youtube-automation/issues/2396) | [#2412](https://github.com/daiki-beppu/youtube-automation/pull/2412) | DONE |
 
 ### Dependency notes
 

@@ -45,7 +45,7 @@ def main(argv: list[str] | None = None) -> int:
         source_role=args.source_role,
         limit=args.limit,
     )
-    paths = [str(e.image_path) for e in entries]
+    paths = [str(e.image_path.resolve()) for e in entries]
 
     if not paths:
         print("(no stock entries match)", file=sys.stderr)
