@@ -19,6 +19,14 @@ class ConfigError(AutomationError):
     """
 
 
+class ChannelRegistryError(ConfigError):
+    """所有チャンネル registry の読み込み・バリデーションエラー。"""
+
+
+class DashboardChannelNotFoundError(AutomationError):
+    """Dashboard read model に要求されたチャンネルが存在しない。"""
+
+
 class YouTubeAPIError(AutomationError):
     """YouTube Data API / Analytics API の呼び出しエラー
 
