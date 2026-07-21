@@ -26,6 +26,8 @@ export interface OverlayShellProps {
 export interface OverlayBrandColors {
   headerBackground: string;
   headerForeground: string;
+  primary?: string;
+  primaryForeground?: string;
 }
 
 /**
@@ -68,6 +70,12 @@ export function OverlayShell({
           ? {
               "--overlay-header-background": brandColors.headerBackground,
               "--overlay-header-foreground": brandColors.headerForeground,
+              ...(brandColors.primary && brandColors.primaryForeground
+                ? {
+                    "--primary": brandColors.primary,
+                    "--primary-foreground": brandColors.primaryForeground,
+                  }
+                : {}),
             }
           : {}),
         left: controller.position.x,

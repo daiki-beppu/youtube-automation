@@ -40,7 +40,11 @@ export {
   type OverlayBrandColors,
   type OverlayShellProps,
 } from "./overlay-shell";
-export { hexContrastRatio } from "./color-contrast";
+export {
+  hexContrastRatio,
+  rgbContrastRatio,
+  type RgbColor,
+} from "./color-contrast";
 export { RadioGroup, RadioGroupItem } from "./radio-group";
 export { ScrollArea, ScrollBar } from "./scroll-area";
 export {
