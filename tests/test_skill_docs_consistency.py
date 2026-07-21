@@ -107,6 +107,26 @@ def test_workflow_schema_references_existing_skill_schema() -> None:
         assert schema_path in text
 
 
+def test_wf_auto_is_the_integrated_entrypoint_without_copying_child_workflows() -> None:
+    wf_auto = _read(".claude/skills/wf-auto/SKILL.md")
+    wf_new = _read(".claude/skills/wf-new/SKILL.md")
+    wf_next = _read(".claude/skills/wf-next/SKILL.md")
+    wf_status = _read(".claude/skills/wf-status/SKILL.md")
+    schema = _read(".claude/skills/wf-new/references/schema.md")
+
+    for child in ("wf-new", "lyria", "suno-helper", "masterup", "wf-next", "post-publish"):
+        assert f"`/{child}`" in wf_auto
+    assert "no_active_collection" in wf_auto
+    assert "同じ run 内" in wf_auto
+    assert "無人実行" in wf_auto
+    assert "allow_external_publish" in wf_auto
+    assert "references/wf-auto-state.py" in wf_auto
+    assert "/wf-auto" in wf_new
+    assert "/wf-auto" in wf_next
+    assert "/wf-auto" in wf_status
+    assert "/wf-auto" in schema
+
+
 def test_theme_compare_docs_and_error_use_content_tags_themes() -> None:
     for path in (
         ".claude/skills/analytics-analyze/SKILL.md",

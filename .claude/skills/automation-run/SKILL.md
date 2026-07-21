@@ -1,6 +1,6 @@
 ---
 name: automation-run
-description: "Use when active collection を状態駆動で制作開始から音源生成、masterup、動画・metadata 生成、YouTube 公開、post-publish まで継続実行・再開するとき。「制作を最後まで自動実行」「定期制作 runner」「automation-run」で発動。一段だけ進める場合は /wf-next、定期時刻の設定は /automation-schedule"
+description: "Use when 明示済み automation-run 呼び出しまたは target_workflow で active collection を状態駆動で継続・再開するとき。「automation-run」で発動。collection 不在からの正規一気通貫入口は /wf-auto、一段だけ進める場合は /wf-next、定期時刻の設定は /automation-schedule"
 ---
 
 ## 前後工程
