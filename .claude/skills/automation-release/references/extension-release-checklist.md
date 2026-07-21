@@ -24,7 +24,7 @@ git status --porcelain | wc -l
 
 ### 3. Nix extensions shell が利用可能
 
-release workflow と同じ **Node 24 / pnpm 11.12.0** の Nix extensions shell を使う。ambient `node` / `pnpm` は使わず、`extensions/<name>/pnpm-workspace.yaml::allowBuilds` を有効に保つため `--ignore-workspace` も使わない。
+release workflow と同じ **Node 24 / pnpm 11.15.1** の Nix extensions shell を使う。ambient `node` / `pnpm` は使わず、`extensions/<name>/pnpm-workspace.yaml::allowBuilds` を有効に保つため `--ignore-workspace` も使わない。
 
 ```bash
 bash .claude/skills/automation-release/references/verify-extensions.sh <name>

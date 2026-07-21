@@ -54,7 +54,7 @@ browser use から overlay / popup を安定して観測できるよう、操作
 
 ## 開発・ビルド・テスト
 
-ローカル検証は CI・lockfile と同じ Nix extensions shell の Node 24 / pnpm 11.12.0 に固定する。ambient `pnpm` の版は各環境で異なり得るため、リポジトリ root から以下のコマンドを使う。理由と両拡張共通の release 前検証は `extensions/README.md::pnpm バージョン契約` を参照する。
+ローカル検証は CI・lockfile と同じ Nix extensions shell の Node 24 / pnpm 11.15.1 に固定する。ambient `pnpm` の版は各環境で異なり得るため、リポジトリ root から以下のコマンドを使う。理由と両拡張共通の release 前検証は `extensions/README.md::pnpm バージョン契約` を参照する。
 
 ```bash
 nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile  # postinstall で wxt prepare

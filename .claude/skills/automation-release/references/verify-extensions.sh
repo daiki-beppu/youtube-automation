@@ -30,8 +30,8 @@ if [[ ${node_version} != v24.* ]]; then
 fi
 
 pnpm_version=$(nix develop .#extensions --command pnpm --version)
-if [[ ${pnpm_version} != 11.12.0 ]]; then
-  echo "ERROR: expected pnpm 11.12.0, got ${pnpm_version}" >&2
+if [[ ${pnpm_version} != 11.15.1 ]]; then
+  echo "ERROR: expected pnpm 11.15.1, got ${pnpm_version}" >&2
   exit 1
 fi
 
