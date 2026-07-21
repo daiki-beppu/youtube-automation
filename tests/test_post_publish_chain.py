@@ -17,6 +17,16 @@ MANIFEST = SKILL_DIR / "references" / "post-publish-chain-manifest.json"
 STEPS = ("community-post", "pinned-comment", "metadata-audit")
 
 
+def _resolve_approval_gate(gate: dict[str, bool]) -> bool:
+    if "skip" in gate and "enabled" in gate:
+        raise ValueError("approvalGate.skip と approvalGate.enabled は同時指定できません")
+    if "skip" in gate:
+        return gate["skip"]
+    if "enabled" in gate:
+        return not gate["enabled"]
+    raise ValueError("approvalGate.skip または legacy enabled が必要です")
+
+
 def _load_module() -> ModuleType:
     spec = importlib.util.spec_from_file_location("post_publish_chain_state", SCRIPT)
     assert spec is not None and spec.loader is not None
@@ -45,8 +55,20 @@ def test_manifest_declares_ordered_gated_chain() -> None:
     assert [step["id"] for step in manifest["steps"]] == list(STEPS)
     assert [step["skill"] for step in manifest["steps"]] == list(STEPS)
     assert len({step["id"] for step in manifest["steps"]}) == len(STEPS)
-    assert all(step["approvalGate"]["enabled"] is False for step in manifest["steps"])
+    assert all(step["approvalGate"]["skip"] is True for step in manifest["steps"])
+    assert all("enabled" not in step["approvalGate"] for step in manifest["steps"])
+    assert all(".skip_approvals." in step["approvalGate"]["configPath"] for step in manifest["steps"])
     assert {step["idempotency"]["script"] for step in manifest["steps"]} == {"references/post-publish-chain-state.py"}
+
+
+@pytest.mark.parametrize(("enabled", "expected_skip"), [(False, True), (True, False)])
+def test_legacy_manifest_enabled_is_resolved_as_inverse(enabled: bool, expected_skip: bool) -> None:
+    assert _resolve_approval_gate({"enabled": enabled}) is expected_skip
+
+
+def test_manifest_gate_rejects_skip_and_enabled_together() -> None:
+    with pytest.raises(ValueError, match="同時指定"):
+        _resolve_approval_gate({"skip": True, "enabled": False})
 
 
 def test_history_enforces_order_and_skips_completed_steps(tmp_path: Path, state: ModuleType) -> None:

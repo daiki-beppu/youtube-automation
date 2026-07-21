@@ -7,8 +7,8 @@
       "prerequisiteArtifacts": ["collections/live/*/workflow-state.json"],
       "outputArtifacts": ["collections/live/*/20-documentation/community-post.txt"],
       "approvalGate": {
-        "enabled": false,
-        "configPath": "workflow.post-publish.approval_gates.community-post"
+        "skip": true,
+        "configPath": "workflow.post-publish.skip_approvals.community-post"
       },
       "idempotency": {"script": "references/post-publish-chain-state.py"}
     },
@@ -18,8 +18,8 @@
       "prerequisiteArtifacts": ["collections/live/*/workflow-state.json"],
       "outputArtifacts": ["post_publish_history.json"],
       "approvalGate": {
-        "enabled": false,
-        "configPath": "workflow.post-publish.approval_gates.pinned-comment"
+        "skip": true,
+        "configPath": "workflow.post-publish.skip_approvals.pinned-comment"
       },
       "idempotency": {"script": "references/post-publish-chain-state.py"}
     },
@@ -29,8 +29,8 @@
       "prerequisiteArtifacts": ["collections/live/*/20-documentation/descriptions.md"],
       "outputArtifacts": ["post_publish_history.json"],
       "approvalGate": {
-        "enabled": false,
-        "configPath": "workflow.post-publish.approval_gates.metadata-audit"
+        "skip": true,
+        "configPath": "workflow.post-publish.skip_approvals.metadata-audit"
       },
       "idempotency": {"script": "references/post-publish-chain-state.py"}
     }

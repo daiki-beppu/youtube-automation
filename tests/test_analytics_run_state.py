@@ -52,7 +52,9 @@ def test_manifest_declares_linear_gate_free_chain() -> None:
         "analytics-analyze",
         "analytics-report",
     ]
-    assert all(step["approvalGate"]["enabled"] is False for step in manifest["steps"])
+    assert all(step["approvalGate"]["skip"] is True for step in manifest["steps"])
+    assert all("enabled" not in step["approvalGate"] for step in manifest["steps"])
+    assert all(".skip_approvals." in step["approvalGate"]["configPath"] for step in manifest["steps"])
     assert {step["idempotency"]["script"] for step in manifest["steps"]} == {"references/analytics-chain-state.py"}
 
 
