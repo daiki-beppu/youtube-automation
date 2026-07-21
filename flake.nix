@@ -18,10 +18,10 @@
         pkgs = import nixpkgs { inherit system; };
         pnpmLatest = pkgs.stdenvNoCC.mkDerivation {
           pname = "pnpm";
-          version = "11.12.0";
+          version = "11.15.1";
           src = pkgs.fetchurl {
-            url = "https://registry.npmjs.org/pnpm/-/pnpm-11.12.0.tgz";
-            hash = "sha256-HCvxCNdnuXY1PCwemtFNJAzruZ1L702Tp/Gp0Q2luBc=";
+            url = "https://registry.npmjs.org/pnpm/-/pnpm-11.15.1.tgz";
+            hash = "sha256-J0YGKbEBEWBOf5iIJ1O1M5iYaCDCDgoGXzpKXp59tx8=";
           };
           nativeBuildInputs = [ pkgs.makeWrapper ];
           installPhase = ''

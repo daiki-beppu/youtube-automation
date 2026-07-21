@@ -18,7 +18,7 @@ _ESLINT_DIRECT_DEPENDENCIES: Final[set[str]] = {
 }
 _REPLACED_FORMATTER_DEPENDENCIES: Final[set[str]] = {"prettier"}
 _TOOLCHAIN_VERSIONS: Final[dict[str, str]] = {
-    "oxlint": "1.73.0",
+    "oxlint": "1.74.0",
     "oxfmt": "0.59.0",
     "ultracite": "7.9.4",
 }
