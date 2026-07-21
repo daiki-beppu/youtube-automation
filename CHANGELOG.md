@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `chore(deps)`: Python の runtime / development dependencies と Nix input を最新安定版へ更新し、`google-genai` 2 系・Python 3.14 開発環境へ移行。`japanize-matplotlib` の Python 3.12+ 互換用に公式推奨の Setuptools distutils shim を明示し、deprecated の `google-auth-httplib2` は Google API client の transport 依存が残るため 0.4.0 へ更新して残置判断を再記録（#2355）。
+
 - `fix(dashboard)`: チャンネル概要行を縦積みと折り返し可能な Badge 群へ変更し、狭いカード幅でも更新状態・公開予約数・動画数が右端から見切れないように修正（#2399）。
 
 - `feat(dashboard)`: `yt-dashboard` の通常起動時に全登録チャンネルの Analytics を直列更新し、失敗をチャンネル単位で隔離して前回 snapshot を表示する。概要カードの「準備完了」を YouTube の将来 `publishAt` に基づく `公開予約 N本` へ置き換え、OAuth のない E2E / 配布確認用に `--skip-refresh` を追加（#2397）。

@@ -25,7 +25,7 @@ grep -A3 'name = "google-auth-httplib2"' uv.lock
 | `src/` 配下の Python 直 import | **0 件** | `grep -rn "google_auth_httplib2" src/` で空 |
 | `tests/` 配下の Python 直 import | **0 件** | `grep -rn "google_auth_httplib2" tests/` で空 |
 | `pyproject.toml` 直接宣言 | **1 件（L16）** | `"google-auth-httplib2"` — 直接依存として宣言されており直 import 0 件だが、`build(..., credentials=...)` の runtime 依存が残るためオーファンではない |
-| `uv.lock` 解決状況 | バージョン **0.3.0** | `name = "google-auth-httplib2" / version = "0.3.0"` — `google-api-python-client 2.193.0` の transitive dep として参照 |
+| `uv.lock` 解決状況 | バージョン **0.4.0** | `name = "google-auth-httplib2" / version = "0.4.0"` — `google-api-python-client 2.198.0` の transitive dep として参照 |
 | PyPI 上の最新 | **0.4.0（2026-05-07）** で deprecated 表明 | 監査レポート R-04、5.4.2 で記録済み |
 
 重要な発見: `pyproject.toml:16` は直接依存として宣言されているが、`src/` / `tests/` に直 import が 0 件。
@@ -33,11 +33,11 @@ grep -A3 'name = "google-auth-httplib2"' uv.lock
 
 ---
 
-## 2. 残置判断（現状）
+## 2. 残置判断（2026-07-22 再監査）
 
 ### (a) transitive dep の即時撤去は不可
 
-`google-api-python-client` の内部実装（`googleapiclient.discovery.build`）が `httplib2` ベースの transport を要求しているため、
+`google-api-python-client 2.198.0` の内部実装（`googleapiclient.discovery.build`）が引き続き `httplib2` ベースの transport を要求しているため、
 `google-auth-httplib2` を除外すると `build()` 呼び出しが失敗する。
 上流 (`google-api-python-client`) が non-httplib2 transport をサポートするまで、transitive dep としての残置は不可避。
 

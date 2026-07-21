@@ -44,7 +44,7 @@
 
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
-            python311
+            python314
             uv
             ffmpeg
             lefthook
@@ -60,7 +60,7 @@
           #   uv run pytest
           shellHook = ''
             export UV_PYTHON_PREFERENCE=only-system
-            export UV_PYTHON=${pkgs.python311}/bin/python
+            export UV_PYTHON=${pkgs.python314}/bin/python
             # PyPI バイナリホイール (numpy 等) が dlopen する GCC ランタイムと zlib を
             # Nix 環境でも見えるようにする。Linux CI 用の救済で、darwin では無害。
             export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.zlib ]}:''${LD_LIBRARY_PATH:-}"
