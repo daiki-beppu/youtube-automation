@@ -17,6 +17,11 @@ VALID_FALLBACK_VALUES = (FALLBACK_SKIP, FALLBACK_RETRY)
 MAX_LENGTH_DEFAULT = 280
 CHANNEL_PERSONA_DEFAULT = ""
 REQUESTS_PER_MINUTE_DEFAULT = 30
+LIVE_CHAT_MAX_LENGTH_DEFAULT = 200
+LIVE_CHAT_MAX_REPLIES_PER_HOUR_DEFAULT = 12
+LIVE_CHAT_MAX_CONSECUTIVE_PER_USER_DEFAULT = 2
+LIVE_CHAT_DAILY_QUOTA_BUDGET_DEFAULT = 1000
+LIVE_CHAT_REPLY_QUOTA_COST_DEFAULT = 50
 
 
 @dataclass(frozen=True)
@@ -48,6 +53,48 @@ class GeneratorConfig:
 
 
 @dataclass(frozen=True)
+class LiveChatConfig:
+    """`comments.live_chat` セクション（optional）."""
+
+    enabled: bool = False
+    language: str | None = None
+    ng_words: list[str] = field(default_factory=list)
+    max_length: int = LIVE_CHAT_MAX_LENGTH_DEFAULT
+    max_replies_per_hour: int = LIVE_CHAT_MAX_REPLIES_PER_HOUR_DEFAULT
+    max_consecutive_per_user: int = LIVE_CHAT_MAX_CONSECUTIVE_PER_USER_DEFAULT
+    daily_quota_budget: int = LIVE_CHAT_DAILY_QUOTA_BUDGET_DEFAULT
+    reply_quota_cost: int = LIVE_CHAT_REPLY_QUOTA_COST_DEFAULT
+    no_broadcast_retry_sec: float = 60.0
+    history_file: str = "live_chat_reply_history.json"
+    channel_persona: str = CHANNEL_PERSONA_DEFAULT
+    model: str | None = None
+    codex_timeout_sec: float = 120.0
+    process_initial_messages: bool = False
+
+    def __post_init__(self) -> None:
+        if self.language is not None and (not isinstance(self.language, str) or not self.language.strip()):
+            raise ConfigError("comments.live_chat.language は空でない文字列で指定してください")
+        if not isinstance(self.ng_words, list) or any(not isinstance(word, str) for word in self.ng_words):
+            raise ConfigError("comments.live_chat.ng_words は文字列の list で指定してください")
+        if self.model is not None and (not isinstance(self.model, str) or not self.model.strip()):
+            raise ConfigError("comments.live_chat.model は空でない文字列で指定してください")
+        if not self.history_file.strip():
+            raise ConfigError("comments.live_chat.history_file は空にできません")
+        positive = {
+            "max_length": self.max_length,
+            "max_replies_per_hour": self.max_replies_per_hour,
+            "max_consecutive_per_user": self.max_consecutive_per_user,
+            "daily_quota_budget": self.daily_quota_budget,
+            "reply_quota_cost": self.reply_quota_cost,
+            "no_broadcast_retry_sec": self.no_broadcast_retry_sec,
+            "codex_timeout_sec": self.codex_timeout_sec,
+        }
+        for name, value in positive.items():
+            if value <= 0:
+                raise ConfigError(f"comments.live_chat.{name} は 0 より大きい値が必要です")
+
+
+@dataclass(frozen=True)
 class Comments:
     """`comments` セクション（optional）.
 
@@ -71,6 +118,7 @@ class Comments:
     history_file: str = "comment_reply_history.json"
     skip_held_for_review: bool = True
     generator: GeneratorConfig = field(default_factory=GeneratorConfig)
+    live_chat: LiveChatConfig = field(default_factory=LiveChatConfig)
 
     def __post_init__(self) -> None:
         if self.language is not None and not isinstance(self.language, str):

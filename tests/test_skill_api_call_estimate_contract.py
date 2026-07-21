@@ -48,6 +48,7 @@ BILLED_CLIS: dict[str, str] = {
     "yt-channel-status": "YouTube Data + Analytics API",
     "yt-oauth": "YouTube Data API (channels.list による接続テストのみ)",
     "yt-comments-reply": "YouTube Data API (comments.insert)",
+    "yt-live-chat-reply": "YouTube Live Streaming API (liveChatMessages.list / insert)",
     "yt-discover-competitors": "YouTube Data API (search.list)",
     "yt-fetch-stream-key": "YouTube Data API (liveStreams.list)",
     "yt-generate-image": "Vertex AI Gemini / OpenAI Images",

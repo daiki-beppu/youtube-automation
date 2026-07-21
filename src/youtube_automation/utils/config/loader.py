@@ -20,6 +20,7 @@ from youtube_automation.utils.config.comments import (
     VALID_PROVIDERS,
     Comments,
     GeneratorConfig,
+    LiveChatConfig,
 )
 from youtube_automation.utils.config.community_draft import CommunityDraft, CommunityDraftPost
 from youtube_automation.utils.config.config import ChannelConfig
@@ -943,6 +944,37 @@ def _build_comments(merged: dict) -> Comments:
     if language is not None and not isinstance(language, str):
         raise ConfigError("comments.language は文字列でなければなりません")
 
+    live_chat_raw = cm.get("live_chat")
+    live_chat = LiveChatConfig()
+    if live_chat_raw is not None:
+        if not isinstance(live_chat_raw, dict):
+            raise ConfigError("comments.live_chat は object でなければなりません")
+        live_chat_language = live_chat_raw.get("language", language)
+        live_chat_ng_words = live_chat_raw.get("ng_words", cm.get("ng_words", []))
+        if not isinstance(live_chat_ng_words, list):
+            raise ConfigError("comments.live_chat.ng_words は list でなければなりません")
+        defaults = LiveChatConfig()
+        live_chat = LiveChatConfig(
+            enabled=bool(live_chat_raw.get("enabled", False)),
+            language=live_chat_language,
+            ng_words=list(live_chat_ng_words),
+            max_length=int(live_chat_raw.get("max_length", defaults.max_length)),
+            max_replies_per_hour=int(live_chat_raw.get("max_replies_per_hour", defaults.max_replies_per_hour)),
+            max_consecutive_per_user=int(
+                live_chat_raw.get("max_consecutive_per_user", defaults.max_consecutive_per_user)
+            ),
+            daily_quota_budget=int(live_chat_raw.get("daily_quota_budget", defaults.daily_quota_budget)),
+            reply_quota_cost=int(live_chat_raw.get("reply_quota_cost", defaults.reply_quota_cost)),
+            no_broadcast_retry_sec=float(live_chat_raw.get("no_broadcast_retry_sec", defaults.no_broadcast_retry_sec)),
+            history_file=str(live_chat_raw.get("history_file", defaults.history_file)),
+            channel_persona=str(live_chat_raw.get("channel_persona", generator.channel_persona)),
+            model=live_chat_raw.get("model", generator.model),
+            codex_timeout_sec=float(live_chat_raw.get("codex_timeout_sec", defaults.codex_timeout_sec)),
+            process_initial_messages=bool(
+                live_chat_raw.get("process_initial_messages", defaults.process_initial_messages)
+            ),
+        )
+
     return Comments(
         enabled=bool(cm.get("enabled", False)),
         rules=[],
@@ -953,6 +985,7 @@ def _build_comments(merged: dict) -> Comments:
         history_file=str(cm.get("history_file", "comment_reply_history.json")),
         skip_held_for_review=bool(cm.get("skip_held_for_review", True)),
         generator=generator,
+        live_chat=live_chat,
     )
 
 

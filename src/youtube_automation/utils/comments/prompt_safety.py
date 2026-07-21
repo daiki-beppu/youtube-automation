@@ -9,10 +9,13 @@ if TYPE_CHECKING:
     from youtube_automation.utils.comments.generator import ReplyContext
 
 
+def untrusted_payload_json(payload: dict[str, str]) -> str:
+    """Encode untrusted viewer-controlled fields for an XML-like prompt boundary."""
+    return json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
+
+
 def viewer_payload_json(ctx: "ReplyContext") -> str:
     """Encode untrusted viewer fields as JSON safe for XML-like prompt tags."""
-    payload = json.dumps(
+    return untrusted_payload_json(
         {"commenter": ctx.comment_author, "comment": ctx.comment_text},
-        ensure_ascii=False,
     )
-    return payload.replace("</", "<\\/")

@@ -13,6 +13,21 @@
       "max_length": 280,
       "fallback_on_error": "skip",
       "requests_per_minute": 30
+    },
+    "live_chat": {
+      "enabled": false,
+      "language": "ja",
+      "ng_words": ["spam", "http://"],
+      "max_length": 200,
+      "max_replies_per_hour": 12,
+      "max_consecutive_per_user": 2,
+      "daily_quota_budget": 1000,
+      "reply_quota_cost": 50,
+      "no_broadcast_retry_sec": 60,
+      "history_file": "live_chat_reply_history.json",
+      "channel_persona": "Warm YouTube channel host",
+      "codex_timeout_sec": 120,
+      "process_initial_messages": false
     }
   }
 }
