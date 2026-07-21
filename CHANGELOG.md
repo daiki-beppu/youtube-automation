@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(dashboard)`: `~/.config/tayk/channels.json` の絶対 path registry loader と、各チャンネルの最新 Analytics snapshot を概要・動画指標・CTRへ正規化する読み取り専用 read model/APIを追加。snapshot 欠損・破損・meta 不正はチャンネル単位の状態として隔離する（#2387）。
+
 - `refactor(workflow)`: `/wf-auto` を一気通貫 workflow の正規入口にし、scheduler の新規既定を `wf-auto` へ変更。`/automation-run` は既存の明示設定を保つ薄い互換 alias とし、`.automation-run/` の lease・履歴パスは維持する（#2383）。
 
 - `feat(workflow)`: `/wf-auto` を追加し、active collection が無い場合は state を捏造せず `/wf-new` から開始し、作成された collection を同じ run で固定して制作・公開・post-publish まで再評価する一気通貫入口を実装。既存 collection の再開、無人実行の手動介入履歴、公開禁止、upload reconciliation、完了済み公開後処理の契約を共有 resolver で維持する（#2382）。
