@@ -279,7 +279,17 @@ class TestClientSecretsFallback:
             lambda: tmp_path,
         )
 
-    def test_should_fallback_to_default_candidate_when_get_client_secrets_path_raises_config_error(
+    @staticmethod
+    def _valid_config() -> dict[str, object]:
+        return {
+            "installed": {
+                "client_id": "client-id",
+                "client_secret": "client-secret",
+                "redirect_uris": ["http://localhost"],
+            }
+        }
+
+    def test_should_fallback_to_default_candidate_when_get_client_secrets_config_raises_config_error(
         self, tmp_path: Path, monkeypatch
     ):
         """Given 1Password 取得が ``ConfigError`` を raise
@@ -288,13 +298,55 @@ class TestClientSecretsFallback:
         """
         self._force_fallback_path(monkeypatch, tmp_path)
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_path",
+            "youtube_automation.utils.secrets.get_client_secrets_config",
             MagicMock(side_effect=ConfigError("op read failed")),
         )
 
         handler = YouTubeOAuthHandler()
 
         assert handler.client_secrets_file == tmp_path / "auth" / "client_secrets.json"
+
+    def test_should_validate_fallback_config_without_materializing_tempfile(self, tmp_path: Path, monkeypatch):
+        self._force_fallback_path(monkeypatch, tmp_path)
+        monkeypatch.setattr(
+            "youtube_automation.utils.secrets.get_client_secrets_config",
+            MagicMock(return_value=self._valid_config()),
+        )
+
+        handler = YouTubeOAuthHandler()
+        handler._validate_client_secrets()
+
+        assert handler.client_secrets_file == tmp_path / "auth" / "client_secrets.json"
+        assert list(tmp_path.glob("client_secrets_*.json")) == []
+
+    def test_should_authenticate_fallback_with_in_memory_config(self, tmp_path: Path, monkeypatch):
+        self._force_fallback_path(monkeypatch, tmp_path)
+        config = self._valid_config()
+        monkeypatch.setattr(
+            "youtube_automation.utils.secrets.get_client_secrets_config",
+            MagicMock(return_value=config),
+        )
+        handler = YouTubeOAuthHandler(token_path=tmp_path / "token.json")
+        monkeypatch.setattr(handler, "_channel_label", MagicMock(return_value="test-channel"))
+        monkeypatch.setattr(handler, "_save_credentials", MagicMock())
+
+        credentials = _make_credentials()
+        flow = MagicMock()
+        flow.run_local_server.return_value = credentials
+        from_config = MagicMock(return_value=flow)
+        from_file = MagicMock(side_effect=AssertionError("file flow must not be used"))
+        monkeypatch.setattr(
+            "youtube_automation.auth.oauth_handler.InstalledAppFlow.from_client_config",
+            from_config,
+        )
+        monkeypatch.setattr(
+            "youtube_automation.auth.oauth_handler.InstalledAppFlow.from_client_secrets_file",
+            from_file,
+        )
+
+        assert handler.authenticate(force_reauth=True) is credentials
+        from_config.assert_called_once_with(config, handler._scopes)
+        from_file.assert_not_called()
 
     def test_should_use_submodule_candidate_before_one_password_fallback(self, tmp_path: Path, monkeypatch):
         """Given submodule 互換 path に client_secrets.json がある
@@ -305,16 +357,16 @@ class TestClientSecretsFallback:
         submodule_path = tmp_path / "automation" / "auth" / "client_secrets.json"
         submodule_path.parent.mkdir(parents=True)
         submodule_path.write_text('{"installed": {}}\n', encoding="utf-8")
-        get_client_secrets_path = MagicMock(side_effect=ConfigError("should not be called"))
+        get_client_secrets_config = MagicMock(side_effect=ConfigError("should not be called"))
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_path",
-            get_client_secrets_path,
+            "youtube_automation.utils.secrets.get_client_secrets_config",
+            get_client_secrets_config,
         )
 
         handler = YouTubeOAuthHandler()
 
         assert handler.client_secrets_file == submodule_path
-        get_client_secrets_path.assert_not_called()
+        get_client_secrets_config.assert_not_called()
 
     def test_should_report_invalid_location_for_client_secrets_directory(self, tmp_path: Path, monkeypatch):
         """Given client_secrets.json がディレクトリ
@@ -383,7 +435,7 @@ class TestClientSecretsFallback:
         """Missing secrets must point every direct OAuth entrypoint at the new Console UI."""
         self._force_fallback_path(monkeypatch, tmp_path)
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_path",
+            "youtube_automation.utils.secrets.get_client_secrets_config",
             MagicMock(side_effect=ConfigError("op read failed")),
         )
         handler = YouTubeOAuthHandler()
@@ -419,7 +471,7 @@ class TestClientSecretsFallback:
         """
         self._force_fallback_path(monkeypatch, tmp_path)
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_path",
+            "youtube_automation.utils.secrets.get_client_secrets_config",
             MagicMock(side_effect=RuntimeError("unexpected")),
         )
 

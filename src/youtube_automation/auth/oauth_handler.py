@@ -109,8 +109,8 @@ def resolve_client_secrets_location(channel_dir: Path) -> tuple[str, Path]:
     return "secret-fallback", candidates[0]
 
 
-def resolve_client_secrets_path(channel_dir: Path | None = None) -> Path:
-    """実行時 OAuth が使う client_secrets.json の検索順を解決する。"""
+def resolve_client_secrets_source(channel_dir: Path | None = None) -> tuple[Path, dict[str, object] | None]:
+    """client_secrets の表示用パスと任意の in-memory config を解決する。"""
     if channel_dir is None:
         from youtube_automation.utils.config import channel_dir as _channel_dir
 
@@ -118,14 +118,30 @@ def resolve_client_secrets_path(channel_dir: Path | None = None) -> Path:
 
     kind, path = resolve_client_secrets_location(channel_dir)
     if kind in {"file", "invalid-file", "missing-file"}:
-        return path
+        return path, None
 
     try:
-        from youtube_automation.utils.secrets import get_client_secrets_path
+        from youtube_automation.utils.secrets import get_client_secrets_config
 
-        return get_client_secrets_path()
+        return path, get_client_secrets_config()
     except ConfigError:
-        return path
+        return path, None
+
+
+def resolve_client_secrets_path(channel_dir: Path | None = None) -> Path:
+    """後方互換のため client_secrets の表示用パスだけを返す。"""
+    return resolve_client_secrets_source(channel_dir)[0]
+
+
+def _validate_client_secrets_data(data: dict[str, object]) -> None:
+    """Google Desktop app 用 client_secrets の JSON 形状を検証する。"""
+    installed = data.get("installed")
+    if not isinstance(installed, dict):
+        raise ValidationError("Desktop app の client_secrets.json が必要です: installed セクションがありません")
+    required_keys = ("client_id", "client_secret", "redirect_uris")
+    missing = [key for key in required_keys if key not in installed]
+    if missing:
+        raise ValidationError(f"client_secrets.json に必須キー不足: {','.join(missing)}")
 
 
 class YouTubeOAuthHandler:
@@ -169,7 +185,7 @@ class YouTubeOAuthHandler:
         channel_dir = _channel_dir()
         self._channel_dir = channel_dir
 
-        self.client_secrets_file = resolve_client_secrets_path(channel_dir)
+        self.client_secrets_file, self._client_secrets_config = resolve_client_secrets_source(channel_dir)
 
         # scopes: 未指定時は SCOPES クラス属性（既存 callsite との後方互換）
         self._scopes = list(scopes) if scopes is not None else self.SCOPES
@@ -251,6 +267,9 @@ class YouTubeOAuthHandler:
 
     def _validate_client_secrets(self):
         """client_secrets.json の存在確認"""
+        if self._client_secrets_config is not None:
+            _validate_client_secrets_data(self._client_secrets_config)
+            return
         if self.client_secrets_file.exists() and not self.client_secrets_file.is_file():
             raise ValidationError(f"client_secrets.json は通常ファイルである必要があります: {self.client_secrets_file}")
         if not self.client_secrets_file.is_file():
@@ -276,13 +295,7 @@ class YouTubeOAuthHandler:
             raise ValidationError(f"client_secrets.json 読み込み失敗: {e}") from e
         if not isinstance(data, dict):
             raise ValidationError("client_secrets.json は JSON object である必要があります")
-        installed = data.get("installed")
-        if not isinstance(installed, dict):
-            raise ValidationError("Desktop app の client_secrets.json が必要です: installed セクションがありません")
-        required_keys = ("client_id", "client_secret", "redirect_uris")
-        missing = [key for key in required_keys if key not in installed]
-        if missing:
-            raise ValidationError(f"client_secrets.json に必須キー不足: {','.join(missing)}")
+        _validate_client_secrets_data(data)
 
     def authenticate(self, force_reauth=False):
         """
@@ -331,7 +344,10 @@ class YouTubeOAuthHandler:
             print("📝 注意: 初回認証時はブラウザが開き、Googleアカウントでのログインが必要です")
 
             try:
-                flow = InstalledAppFlow.from_client_secrets_file(str(self.client_secrets_file), self._scopes)
+                if self._client_secrets_config is not None:
+                    flow = InstalledAppFlow.from_client_config(self._client_secrets_config, self._scopes)
+                else:
+                    flow = InstalledAppFlow.from_client_secrets_file(str(self.client_secrets_file), self._scopes)
                 # authorization_prompt_message は run_local_server() 内で
                 # ``.format(url=...)`` される。`{url}` placeholder を壊さないよう
                 # ラベル側の brace は escape する（success_message は format されない）
