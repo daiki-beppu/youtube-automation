@@ -1,6 +1,6 @@
 ---
 name: automation-schedule
-description: "Use when チャンネルの定期制作スケジュール（workflow.json の scheduled_automation）を設定し、Claude Code / Codex の定期実行ジョブを作成・更新・確認・停止するとき。「定期実行」「スケジュール設定」「自動で回して」「automation-schedule」で発動。automation のリリース追従は /automation-update、本体リリースは /automation-release、制作を手動で一段進めるのは /wf-next"
+description: "Use when チャンネルの定期制作スケジュール（workflow.json の scheduled_automation）を設定し、Codex / Claude のネイティブ Scheduled Task を作成・更新・確認・停止するとき。「定期実行」「スケジュール設定」「自動で回して」「automation-schedule」で発動。automation のリリース追従は /automation-update、本体リリースは /automation-release、制作を手動で一段進めるのは /wf-next"
 ---
 
 ## 前後工程
@@ -10,105 +10,121 @@ description: "Use when チャンネルの定期制作スケジュール（workfl
 
 ## Overview
 
-チャンネルごとの定期制作設定（`config/channel/workflow.json` の `scheduled_automation`）を単一入口で管理する。前提診断 → config 生成（dry-run 差分）→ スケジューラージョブの作成・更新 → 状態確認・停止までを一度の対話で行う。スケジュール実装は実行環境別アダプタ（macOS: launchd / その他: cron）に分離し、実行環境は Claude Code（`claude -p`）または Codex（`codex exec`）を使う。
+`config/channel/workflow.json::workflow.scheduled_automation` を製品非依存の単一ソースとして、実行中製品のネイティブ scheduler に登録する。Codex は Scheduled Task、Claude は依存性に応じて `/schedule` Cloud Job または Cowork local Scheduled Task を使う。launchd / cron は明示承認された fallback に限る。
 
 ## Hard Gates
 
-1. **外部公開許可（`allow_external_publish: true`）の有効化は明示承認なしに絶対に行わない。** 有効化する前に、対象チャンネル名・頻度（run_time / cadence / timezone）・「定期実行が人手確認なしで YouTube へアップロード・公開する」影響を表示し、AskUserQuestion で「有効化する / しない（既定）」の 2 択を取る。承認が得られない・質問できない・ユーザーが言及していない、のいずれの場合も `false` のままにする。`schedule_config.py generate` へ `--allow-external-publish` を付けるのはこの承認を得た後だけ。
-2. **config 書き込みとジョブ作成は差分提示 → 承認後。** `generate --dry-run` の差分と `install` で作成・更新されるジョブ内容（label / 時刻 / 曜日 / runtime）を表示し、AskUserQuestion で「適用する / 中止」の 2 択を取ってから実行する。dry-run のみの依頼なら書き込み・ジョブ作成を一切行わない。
-3. **前提診断が fail のまま進まない。** Step 0 の `detect_runtime.sh` が exit 0 でなければ、fail 行の対処（`/setup` / `/channel-new` / CLI インストール）を案内して停止する。
-4. **重複ジョブを作らない。** ジョブは `scheduler_job.sh` 経由でのみ作成・更新する（同一 label 上書きで冪等）。launchctl / crontab を直接叩いてジョブを追加しない。
+1. **`allow_external_publish: true` は明示承認なしに有効化しない。** 対象・頻度・YouTube 書き込みの影響を表示し、「有効化する / しない（既定）」を確認する。
+2. **config と外部 scheduler は dry-run 提示・承認後だけ変更する。** config diff と `schedule_backend.py plan` の全項目を先に表示する。
+3. **ローカル依存を Cloud Job へ登録しない。** ローカルファイル、OAuth、Chrome、Suno Helper、ffmpeg、ローカル media のいずれかが必要なら `local`。対応する local Scheduled Task が利用不能なら停止する。
+4. **OS fallback は自動選択しない。** 理由・常時起動要件・製品側の履歴/停止UIを使えない制約を示し、明示承認後だけ `--confirm-os-fallback` を使う。
+5. **同一チャンネルに複数 backend を作らない。** `schedule_backend.py show/guard` で active backend を確認し、切替時は旧 backend を先に disable する。外部登録成功後だけ ID を `record` する。
+6. Step 0 の `fail` が残る場合は停止する。認証操作だけは人間に依頼し、コマンド実行・設定作成は AI が行う。
 
-## 完了条件
+## Backend selection
 
-- `setup` / `update`: `scheduler_job.sh status` で config（enabled=true）とジョブ登録の両方が確認できる
-- `status`: config とジョブの現在状態が表示されている
-- `disable`: ジョブが削除され、（ユーザーが望む場合）config も `enabled: false` になっている
+| 実行製品 / 依存 | backend | 登録・管理 |
+|---|---|---|
+| Codex（cloud / local） | `codex-automation` | ChatGPT desktop/web の Scheduled。local は desktop の local project を必須にする |
+| Claude + cloud 完結 | `claude-code-cloud` | Claude Code `/schedule` Cloud Job |
+| Claude + local 依存 | `claude-cowork-local` | Cowork Scheduled で対象 folder を選ぶ。local 実行可否を登録前に確認する |
+| ネイティブ利用不能 + 明示承認 | `os-fallback` | `scheduler_job.sh` の launchd / cron |
 
-## When to Use
-
-- 「このチャンネルを定期的に自動で進めたい」「毎朝 /wf-next を回して」→ setup
-- 「定期実行の状態を見たい」→ `/automation-schedule status`
-- 「定期実行を止めて」→ `/automation-schedule disable`
-- 制作を今すぐ一段進めるだけなら /wf-next（本スキルは起動の定期化のみを担う）
-- 制作〜公開を継続する既定 target_workflow は automation-run。旧来の一段実行を定期化する場合だけ `--target-workflow wf-next` を明示する
+Claude Code `/loop` は最長 3 日の一時反復専用で、永続スケジュールには使わない。
 
 ## References
 
 | ファイル | 役割 |
 |---|---|
-| `references/detect_runtime.sh` | 前提診断（config / uv / claude・codex CLI / launchd・cron / 認証 / 通知） |
-| `references/schedule_config.py` | `scheduled_automation` の表示（show）・生成・差分更新（generate、loader と同一検証） |
-| `references/scheduler_job.sh` | ジョブの install / status / disable（launchd or cron、同一 label で冪等） |
-| `references/run_scheduled.sh` | ジョブから起動される実行ラッパー（enabled 確認・lock・retry・外部反映ガード・通知） |
+| `references/detect_runtime.sh` | config / uv / 実行中製品 / native 管理面 / OS fallback 可否の診断 |
+| `references/schedule_config.py` | `scheduled_automation` の show / generate / dry-run |
+| `references/schedule_backend.py` | 4 backend の plan、重複防止、外部 ID のローカル記録 |
+| `references/scheduler_job.sh` | 明示選択された OS fallback 専用の install / status / disable |
+| `references/run_scheduled.sh` | OS fallback 専用ラッパー。外部公開ゲート・lock・retry・通知を維持 |
 
-設定スキーマの正は `src/youtube_automation/utils/config/workflow.py::ScheduledAutomation`（未設定チャンネルは `enabled: false` で挙動不変）。
+設定スキーマの正は `src/youtube_automation/utils/config/workflow.py::ScheduledAutomation`。
 
-## Task
+## Task: setup / update
 
 すべてチャンネルリポジトリ直下で実行する。
 
-### Step 0. 前提診断
+### Step 0. 診断と backend 決定
 
 ```bash
 bash .claude/skills/automation-schedule/references/detect_runtime.sh
+uv run python .claude/skills/automation-schedule/references/schedule_backend.py show
 ```
 
-- exit 0 以外（fail 行あり）→ 各 fail 行の detail に書かれた対処を案内して**停止**（Hard Gate 3）
-- warn 行は続行可。ただし `runtime-claude` / `runtime-codex` の ok が付いた方を Step 3 の `--runtime` に使う（両方 ok ならユーザーに選択を聞く）
+1. `product-codex` / `product-claude` を既定候補にする。判定不能時だけユーザーに製品を確認する。
+2. 対象 workflow の依存を `cloud` / `local` に分類し、分類根拠を表示する。既定 `automation-run` は local（Chrome / OAuth / media / ffmpeg を利用）として扱う。
+3. active な別 backend があれば、旧 backend の disable が承認・成功するまで停止する。
 
-### Step 1. 現状確認と設定案の提示（dry-run）
+### Step 1. config と native task の dry-run
 
 ```bash
 uv run python .claude/skills/automation-schedule/references/schedule_config.py show
 uv run python .claude/skills/automation-schedule/references/schedule_config.py generate --dry-run --enable \
-  --run-time <HH:MM> --cadence <mon,wed,fri> [--timezone <IANA>] [--target-workflow automation-run] \
-  [--max-retries <N>] [--retry-delay-seconds <N>] [--notification terminal|none]
+  --run-time <HH:MM> --cadence <mon,wed,fri> [--timezone <IANA>] \
+  [--target-workflow automation-run] [--max-retries <N>] \
+  [--retry-delay-seconds <N>] [--notification terminal|none]
+uv run python .claude/skills/automation-schedule/references/schedule_backend.py plan \
+  --product <codex|claude> --dependency-mode <cloud|local> \
+  --run-time <HH:MM> --cadence <mon,wed,fri> [--timezone <IANA>] \
+  [--target-workflow automation-run] [--max-retries <N>] \
+  [--retry-delay-seconds <N>] [--notification terminal|none]
 ```
 
-- 時刻・曜日はユーザーの依頼から決める。指定がなければ聞く（勝手に決めない）
-- 差分（unified diff）をそのまま表示する
-- `--allow-external-publish` はここでは**付けない**（既定 false。付けるのは Step 2 の承認後だけ）
+時刻・曜日が未指定なら確認し、勝手に決めない。config dry-run と `plan` へ同じ候補値を渡す。`plan` は JSON を表示するだけで config / OS / 外部状態を変更しない。外部公開承認前は `--allow-external-publish` を付けない。
 
-### Step 2. 承認と config 書き込み
+### Step 2. 承認後に config を書く
 
-1. Step 1 の差分を提示し、AskUserQuestion で「適用する / 中止」を確認する（Hard Gate 2）
-2. ユーザーが外部公開（自動アップロード）も望む場合のみ: 対象チャンネル・頻度・「定期実行が人手確認なしで YouTube に書き込む（公開は取消不可）」を表示し、AskUserQuestion で有効化の明示 2 択を取る（Hard Gate 1）
-3. 承認された内容で書き込む（`--dry-run` を外し、承認された場合のみ `--allow-external-publish` を付与）
+Step 1 の config diff、backend、title、prompt、cwd、timezone、RRULE、依存分類を表示して適用確認を取る。外部公開も明示承認された場合だけ `--allow-external-publish` を付け、`schedule_config.py generate` を実行する。
 
-### Step 3. ジョブ作成・更新
+### Step 3. 選択 backend へ作成または更新
+
+まず次を実行し、別 backend が active なら登録しない。
 
 ```bash
-bash .claude/skills/automation-schedule/references/scheduler_job.sh install --runtime <claude|codex>
+uv run python .claude/skills/automation-schedule/references/schedule_backend.py guard --backend <backend>
 ```
 
-- 同一チャンネルの再実行は同一 label の上書き = 既存ジョブの更新。重複作成されない
-- timezone とシステム TZ が異なる場合は warn が出る。その場合はシステム TZ の壁時計で動くことをユーザーに伝える
+- `codex-automation`: Codex/ChatGPT の Scheduled Task 管理 capability を使う。CLI の `codex exec` や launchd / cron は使わない。local 依存では desktop local project と cwd を指定する。同じ external ID があれば更新する。
+- `claude-code-cloud`: `plan` の prompt と schedule で `/schedule` Cloud Job を作成/更新する。local 依存が判明したら中止する。
+- `claude-cowork-local`: Cowork Scheduled Task に local folder を指定して作成/更新する。製品側で local folder 実行を選べない場合は中止する。
+- `os-fallback`: ネイティブが使えない理由と制約を提示して別途承認を取り、次だけを実行する。
+
+```bash
+bash .claude/skills/automation-schedule/references/scheduler_job.sh install \
+  --backend os-fallback --confirm-os-fallback --runtime <claude|codex>
+```
+
+ネイティブ登録が成功した後だけ、返された不変 ID を記録する。
+
+```bash
+uv run python .claude/skills/automation-schedule/references/schedule_backend.py record \
+  --backend <backend> --external-id <product-task-id>
+```
 
 ### Step 4. 検証
 
-```bash
-bash .claude/skills/automation-schedule/references/scheduler_job.sh status
-```
+`schedule_backend.py show` で backend / external ID を確認し、**同じ backend の製品管理面**で status・次回実行・cadence を確認する。config が `enabled=true` で、別 backend に同名 task がないことまで確認して完了。
 
-config（enabled=true）とジョブ登録の両方が表示されることを確認して完了報告する。
+## status
 
-## サブコマンド
+1. `schedule_backend.py show` と `schedule_config.py show` を実行する。
+2. active backend と external ID を使い、その製品の Scheduled 管理面で状態・次回実行・直近結果を取得する。
+3. state が `unconfigured` なら、製品側を job key `youtube-automation:<channel-dir>` で検索する。見つけても勝手に再作成せず、record の承認を取る。
+4. `os-fallback` の場合だけ `scheduler_job.sh status --backend os-fallback` を使う。
 
-### `/automation-schedule status`
+## disable
 
-Step 0 の診断は省略してよい。`scheduler_job.sh status` の結果（effective config / ジョブ登録 / 直近ログ）を要約して報告する。
+1. status を提示して停止確認を取る。
+2. active backend の external ID を指定し、製品の Scheduled 管理面で pause/delete する。別 backend は触らない。
+3. 外部停止成功後に `schedule_backend.py disable --backend <backend>` を実行する。OS の場合だけ `scheduler_job.sh disable --backend os-fallback` が外部停止と state 更新を担う。
+4. 希望された場合のみ `schedule_config.py generate --disable` で config も無効化する。
 
-### `/automation-schedule disable`
+## Safety contract
 
-1. `scheduler_job.sh status` で現状を表示し、AskUserQuestion で「停止する / 中止」を確認する
-2. 承認後: `bash .claude/skills/automation-schedule/references/scheduler_job.sh disable`
-3. config 側も無効化するか聞き、望まれたら `schedule_config.py generate --disable` を実行する（ジョブ削除だけでも、`run_scheduled.sh` は `enabled: false` を見て何もしないため安全側に倒れる）
-
-## Gotchas
-
-- 未設定チャンネル（`scheduled_automation` なし）は定期実行も外部反映も一切有効にならない。本スキルを実行するまで挙動は変わらない
-- `run_scheduled.sh` は `prevent_concurrent_runs: true` のとき lock（`.automation-schedule/lock/`）で並行起動を抑止する。前回実行が異常終了で lock が残っても、pid 死活確認で stale lock は自動回収される
-- `allow_external_publish: false` の定期実行は、実行プロンプトに「YouTube への書き込みを実行せず直前で停止する」制約を必ず注入する。ゲートは config 値が単一ソースであり、プロンプト側だけの書き換えで外さない
-- 実行ログは `.automation-schedule/logs/` に残る。失敗調査はここから読む（全文を会話に貼らない）
-- 既定の定期 `/automation-run` は Suno 工程で `/suno-helper` の定期実行 flow と `yt-suno-unattended-request` を使う。既ログイン Chrome は前提とし、ログイン・CAPTCHA・課金確認・UI 非互換の `manual-intervention` は自動突破せず通知して停止する
+- native task の prompt にも `allow_external_publish: false` の外部反映禁止を含める。`automation-run` の lease、状態再評価、重複 upload 防止は変更しない。
+- retry は backend の再実行機能が契約を満たす場合のみ native 側へ写像する。満たさない場合は prompt 内で `max_retries` / `retry_delay_seconds` を適用する。
+- OS fallback のログは `.automation-schedule/logs/`。ネイティブの履歴は各製品の Scheduled 管理面を正とする。

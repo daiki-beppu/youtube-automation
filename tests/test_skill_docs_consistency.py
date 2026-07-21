@@ -1542,7 +1542,13 @@ def test_automation_schedule_skill_contract() -> None:
     skill = _read(skill_path)
 
     # references 単一ソース化: 本文で参照するスクリプトが実在する
-    for ref in ("detect_runtime.sh", "schedule_config.py", "scheduler_job.sh", "run_scheduled.sh"):
+    for ref in (
+        "detect_runtime.sh",
+        "schedule_config.py",
+        "schedule_backend.py",
+        "scheduler_job.sh",
+        "run_scheduled.sh",
+    ):
         assert ref in skill
         assert (ROOT / ".claude/skills/automation-schedule/references" / ref).exists()
 
@@ -1558,6 +1564,8 @@ def test_automation_schedule_skill_contract() -> None:
 
     # 設定スキーマの正へのポインタ
     assert "ScheduledAutomation" in skill
+    assert "Codex" in skill and "claude-code-cloud" in skill and "claude-cowork-local" in skill
+    assert "--confirm-os-fallback" in skill
 
 
 def test_channel_new_points_scheduled_automation_to_automation_schedule() -> None:

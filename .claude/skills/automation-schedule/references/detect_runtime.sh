@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 定期実行の前提診断（/automation-schedule Step 0）（#1892）。
+# ネイティブ定期実行の前提診断（/automation-schedule Step 0）（#1892, #2369）。
 # チャンネルリポジトリ直下で実行し、`ok|fail|warn <check> <detail>` を 1 行ずつ出力する。
 # fail が 1 件でもあれば exit 1（SKILL.md 側はこれを hard gate に使う）。
 set -u
@@ -24,38 +24,30 @@ else
   report fail uv "uv が無い（/setup を実行する）"
 fi
 
-# --- 実行環境（少なくとも一方が必要） ---
-have_runtime=0
-if command -v claude >/dev/null 2>&1; then
-  report ok runtime-claude "claude CLI あり（非対話実行: claude -p）"
-  have_runtime=1
+# --- 実行中製品とネイティブ経路 ---
+if [ -n "${CODEX_THREAD_ID:-}" ]; then
+  report ok product-codex "Codex task を検出。既定 backend: Codex Automation"
+elif [ -n "${CLAUDECODE:-}" ]; then
+  report ok product-claude "Claude Code を検出。依存性に応じて /schedule Cloud Job または Cowork local を選ぶ"
 else
-  report warn runtime-claude "claude CLI が無い"
+  report warn product "実行中製品を自動判定できないため、Codex / Claude をユーザーに確認する"
 fi
-if command -v codex >/dev/null 2>&1; then
-  report ok runtime-codex "codex CLI あり（非対話実行: codex exec）"
-  have_runtime=1
-else
-  report warn runtime-codex "codex CLI が無い"
-fi
-if [ "$have_runtime" -eq 0 ]; then
-  report fail runtime "claude / codex のどちらの CLI も見つからない（いずれかをインストールする）"
-fi
+report warn native-management "ネイティブ scheduler の作成・status・disable は製品の Scheduled 管理機能で行う（CLI で代替しない）"
 
-# --- スケジューラー経路 ---
+# --- OS fallback（利用可能性のみ。自動選択しない） ---
 case "$(uname -s)" in
   Darwin)
     if command -v launchctl >/dev/null 2>&1; then
-      report ok scheduler "launchd（launchctl）利用可"
+      report warn os-fallback "launchd 利用可。明示選択 + --confirm-os-fallback の場合だけ使用"
     else
-      report fail scheduler "launchctl が見つからない"
+      report warn os-fallback "launchctl が見つからない（ネイティブ backend には影響なし）"
     fi
     ;;
   *)
     if command -v crontab >/dev/null 2>&1; then
-      report ok scheduler "cron（crontab）利用可"
+      report warn os-fallback "cron 利用可。明示選択 + --confirm-os-fallback の場合だけ使用"
     else
-      report fail scheduler "crontab が見つからない"
+      report warn os-fallback "crontab が見つからない（ネイティブ backend には影響なし）"
     fi
     ;;
 esac

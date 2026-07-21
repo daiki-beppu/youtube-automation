@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 定期実行の実体ラッパー（scheduler_job.sh が登録するジョブから起動される）（#1892）。
+# OS fallback の実体ラッパー（scheduler_job.sh からだけ起動される）（#1892, #2369）。
 #
 # usage: run_scheduled.sh --channel-dir <path> --runtime claude|codex
 #
