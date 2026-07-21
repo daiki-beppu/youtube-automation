@@ -33,3 +33,15 @@ allowed_ssh_cidr = ["203.0.113.5/32"]
 #   従来の 11 時間配信 + 1 時間休止に戻す場合は 11 / 1 を指定する。
 # stream_hours = 0
 # break_hours  = 0
+
+# ライブチャット返信 daemon（既定 false / opt-in）:
+# secret 3 種は tfvars に書かず、1Password 参照を渡して専用ラッパーを実行する。
+# enable_live_chat_reply       = true
+# live_chat_channel_dir        = "/absolute/path/to/channel"
+# live_chat_automation_git_ref = "<release-tag-or-commit-sha>"
+# live_chat_codex_version      = "0.144.1"
+#
+# OP_LIVE_CHAT_TOKEN_REF='op://<vault>/<item>/<field>' \
+# OP_LIVE_CHAT_CLIENT_SECRETS_REF='op://<vault>/<item>/<field>' \
+# OP_CODEX_AUTH_REF='op://<vault>/<item>/<field>' \
+# .claude/skills/streaming/references/deploy_live_chat.sh /absolute/path/to/channel

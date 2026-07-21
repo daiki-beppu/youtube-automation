@@ -12,10 +12,11 @@ Vultr VPS をプロビジョニングし、ローカル MP4 を YouTube Live に
 - `vultr_firewall_rule` × N（`var.allowed_ssh_cidr` の CIDR ごとに 22/tcp の inbound rule。IPv4 のみ）
 - `vultr_instance` × 1（Ubuntu 24.04 LTS / vc2-1c-2gb / 東京リージョン）
 - `null_resource.deploy` × 1（動画アップロード + `EnvironmentFile` 配置 + systemd 起動 + 死活監視配置）
+- `null_resource.live_chat_reply` × 0..1（opt-in のライブチャット返信 daemon。認証・config 配布 + Codex / Python package + systemd 起動）
 
 ## 前提
 
-- `terraform` >= 1.5 インストール済み
+- `terraform` >= 1.10 インストール済み（ライブチャット認証を state から除外する ephemeral input を使用）
 - `python3` が PATH 上にある（配信元 MP4 のプリフライト検証を Terraform `external` data source から実行するため）
 - Vultr API キーを 1Password に保管済み（または環境変数で渡せる状態）
 - `yt-fetch-stream-key --vault=Personal --item=YouTube` でストリームキーを 1Password に保管済み（初回のみ）
@@ -59,6 +60,43 @@ terraform apply
 ```
 
 `terraform.tfvars` には secret 値を書かない（`stream_key` / `vultr_api_key` は `TF_VAR_*` のみ）。
+
+## ライブチャット自動返信（opt-in）
+
+既定の `enable_live_chat_reply=false` では関連 resource を一切作らず、既存の `youtube-stream` 配備だけが従来どおり動く。有効化時も返信 daemon は独立した `live-chat-reply.service` として動き、失敗時は `Restart=on-failure` で自動復帰する。unit は `youtube-stream.service` を `Requires=` しないため、返信 daemon の停止や再起動が配信本体を止めることはない。
+
+初回は人間が Google / OpenAI の認証画面で認証を済ませ、生成済みの `token.json`、`client_secrets.json`、Codex の `auth.json` をそれぞれ 1Password の secure field に保存する。以後の secret 取得・Terraform 実行はラッパーが担う。
+
+```bash
+# 通常の streaming secret（Vultr / stream key / Discord）を先に用意する
+export TF_VAR_vultr_api_key="$(op read 'op://Personal/Vultr/api_key')"
+export TF_VAR_stream_key="$(op read 'op://Personal/YouTube/stream_key')"
+export TF_VAR_discord_webhook_url="$(op read 'op://Personal/YouTube_Stream_Discord_Webhook/url')"
+
+# 認証 JSON を保存した 1Password field の参照だけを渡す（JSON 値自体は argv に載せない）
+export OP_LIVE_CHAT_TOKEN_REF='op://<vault>/<item>/<field>'
+export OP_LIVE_CHAT_CLIENT_SECRETS_REF='op://<vault>/<item>/<field>'
+export OP_CODEX_AUTH_REF='op://<vault>/<item>/<field>'
+
+.claude/skills/streaming/references/deploy_live_chat.sh /absolute/path/to/channel
+```
+
+実行前に channel の `config/channel/comments.json` で `comments.live_chat.enabled: true` にする。リリース運用では再現性のため `live_chat_automation_git_ref` を release tag または commit SHA に固定する。Codex CLI は OpenAI 公式 installer を使い、`live_chat_codex_version`（既定は開発時に検証した `0.144.1`）へ固定する。
+
+Terraform 1.10 以降の `ephemeral = true` と `sensitive = true` を併用した 3 変数を provisioner へ直接渡すため、OAuth / Codex の JSON 本文は plan ファイルや state に保存されない。`sensitive` 単独は表示を隠すだけで state 除外にはならない。VPS 上では専用 user `live-chat-reply` が所有する `/var/lib/live-chat-reply/{channel,codex}` のみに mode `0600` で配置する。ラッパーは値を表示せず、終了時に shell 変数を unset する。
+
+```bash
+# 状態・ログ
+ssh root@<instance_ip> systemctl status live-chat-reply
+ssh root@<instance_ip> journalctl -u live-chat-reply -n 100 -f
+
+# opt-out（plan で live_chat_reply だけが destroy されることを確認）
+terraform -chdir=infra/terraform/streaming apply -var='enable_live_chat_reply=false'
+```
+
+opt-out は unit、`/var/lib/live-chat-reply` の OAuth / Codex 認証、専用 venv を削除する。既存 `youtube-stream` の unit、動画、stream key には触れない。token 失効時は人間がブラウザ認証を行って 1Password の値を更新し、同じラッパーを再実行する。
+
+設計根拠: [Terraform ephemeral values](https://developer.hashicorp.com/terraform/language/manage-sensitive-data#ephemeral-values)、[Terraform file provisioner](https://developer.hashicorp.com/terraform/language/block/resource#file)、[OpenAI Codex](https://github.com/openai/codex)、[1Password secret references](https://developer.1password.com/docs/cli/secret-references/)。
 
 ## 配信元動画のプリフライト
 

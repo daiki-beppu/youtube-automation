@@ -6,6 +6,13 @@ locals {
   source_video_preflight  = data.external.source_video_preflight.result
   source_video_ok         = local.source_video_preflight.ok == "true"
   source_video_profile_ok = local.source_video_preflight.profile_ok == "true"
+  live_chat_config_dir    = "${var.live_chat_channel_dir}/config/channel"
+  live_chat_config_files  = var.enable_live_chat_reply ? fileset(local.live_chat_config_dir, "*.json") : toset([])
+  live_chat_config_hash = var.enable_live_chat_reply ? sha256(join("", [
+    for name in sort(tolist(local.live_chat_config_files)) : filesha256("${local.live_chat_config_dir}/${name}")
+  ])) : "disabled"
+  live_chat_install_root = "${var.install_root}/live-chat-reply"
+  live_chat_state_root   = "/var/lib/live-chat-reply"
 }
 
 data "external" "source_video_preflight" {
@@ -179,6 +186,126 @@ resource "null_resource" "deploy" {
       "systemctl enable --now youtube-stream",
       "systemctl restart youtube-stream",
       "systemctl restart cron",
+    ]
+  }
+}
+
+resource "null_resource" "live_chat_reply" {
+  count      = var.enable_live_chat_reply ? 1 : 0
+  depends_on = [null_resource.deploy]
+
+  triggers = {
+    instance_id         = vultr_instance.this.id
+    instance_ip         = vultr_instance.this.main_ip
+    ssh_host_key        = local.ssh_host_public_key
+    channel_config_hash = local.live_chat_config_hash
+    credentials         = var.live_chat_credentials_revision
+    automation_git_ref  = var.live_chat_automation_git_ref
+    codex_version       = var.live_chat_codex_version
+    install_root        = local.live_chat_install_root
+    systemd_unit        = filemd5("${path.module}/templates/live-chat-reply.service.tftpl")
+  }
+
+  lifecycle {
+    precondition {
+      condition     = try(fileexists("${local.live_chat_config_dir}/comments.json"), false)
+      error_message = "enable_live_chat_reply=true では live_chat_channel_dir/config/channel/comments.json が必要です。"
+    }
+    precondition {
+      condition = try(
+        jsondecode(file("${local.live_chat_config_dir}/comments.json")).comments.live_chat.enabled == true,
+        false,
+      )
+      error_message = "comments.json の comments.live_chat.enabled を true にしてください。"
+    }
+    precondition {
+      condition     = length(var.live_chat_credentials_revision) == 64
+      error_message = "live_chat_credentials_revision に deploy script が生成する SHA-256 を指定してください。"
+    }
+  }
+
+  connection {
+    type     = "ssh"
+    host     = self.triggers.instance_ip
+    user     = "root"
+    agent    = true
+    host_key = self.triggers.ssh_host_key
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "install -d -m 0700 -o root -g root /run/live-chat-reply",
+    ]
+  }
+
+  provisioner "file" {
+    source      = local.live_chat_config_dir
+    destination = "/run/live-chat-reply/"
+  }
+
+  provisioner "file" {
+    content     = var.live_chat_youtube_token_json
+    destination = "/run/live-chat-reply/token.json"
+  }
+
+  provisioner "file" {
+    content     = var.live_chat_client_secrets_json
+    destination = "/run/live-chat-reply/client_secrets.json"
+  }
+
+  provisioner "file" {
+    content     = var.live_chat_codex_auth_json
+    destination = "/run/live-chat-reply/codex-auth.json"
+  }
+
+  provisioner "file" {
+    content = templatefile("${path.module}/templates/live-chat-reply.service.tftpl", {
+      install_root = local.live_chat_install_root
+      state_root   = local.live_chat_state_root
+    })
+    destination = "/run/live-chat-reply/live-chat-reply.service"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "set -eu",
+      "export DEBIAN_FRONTEND=noninteractive",
+      "apt-get update -qq",
+      "apt-get install -y -qq ca-certificates curl git python3-venv",
+      "python3 -m json.tool /run/live-chat-reply/token.json >/dev/null",
+      "python3 -m json.tool /run/live-chat-reply/client_secrets.json >/dev/null",
+      "python3 -m json.tool /run/live-chat-reply/codex-auth.json >/dev/null",
+      "id -u live-chat-reply >/dev/null 2>&1 || useradd --system --home-dir ${local.live_chat_state_root} --create-home --shell /usr/sbin/nologin live-chat-reply",
+      "install -d -m 0755 -o root -g root ${local.live_chat_install_root}",
+      "install -d -m 0700 -o live-chat-reply -g live-chat-reply ${local.live_chat_state_root}/channel/auth ${local.live_chat_state_root}/channel/config/channel ${local.live_chat_state_root}/codex",
+      "cp -a /run/live-chat-reply/channel/. ${local.live_chat_state_root}/channel/config/channel/",
+      "chown -R live-chat-reply:live-chat-reply ${local.live_chat_state_root}/channel/config",
+      "find ${local.live_chat_state_root}/channel/config -type f -exec chmod 0600 {} +",
+      "install -m 0600 -o live-chat-reply -g live-chat-reply /run/live-chat-reply/token.json ${local.live_chat_state_root}/channel/auth/token.json",
+      "install -m 0600 -o live-chat-reply -g live-chat-reply /run/live-chat-reply/client_secrets.json ${local.live_chat_state_root}/channel/auth/client_secrets.json",
+      "install -m 0600 -o live-chat-reply -g live-chat-reply /run/live-chat-reply/codex-auth.json ${local.live_chat_state_root}/codex/auth.json",
+      "curl -fsSL https://chatgpt.com/codex/install.sh -o /run/live-chat-reply/codex-install.sh",
+      "CODEX_RELEASE=${var.live_chat_codex_version} CODEX_NON_INTERACTIVE=1 CODEX_INSTALL_DIR=/usr/local/bin CODEX_HOME=${local.live_chat_state_root}/codex sh /run/live-chat-reply/codex-install.sh",
+      "python3 -m venv ${local.live_chat_install_root}/venv",
+      "${local.live_chat_install_root}/venv/bin/pip install --quiet --upgrade pip",
+      "${local.live_chat_install_root}/venv/bin/pip install --quiet --upgrade git+https://github.com/daiki-beppu/youtube-automation.git@${var.live_chat_automation_git_ref}",
+      "install -m 0644 -o root -g root /run/live-chat-reply/live-chat-reply.service /etc/systemd/system/live-chat-reply.service",
+      "rm -rf /run/live-chat-reply",
+      "systemctl daemon-reload",
+      "systemctl enable --now live-chat-reply",
+      "systemctl restart live-chat-reply",
+      "systemctl is-active --quiet live-chat-reply",
+    ]
+  }
+
+  provisioner "remote-exec" {
+    when       = destroy
+    on_failure = continue
+    inline = [
+      "systemctl disable --now live-chat-reply 2>/dev/null || true",
+      "rm -f /etc/systemd/system/live-chat-reply.service",
+      "rm -rf /var/lib/live-chat-reply ${self.triggers.install_root}",
+      "systemctl daemon-reload",
     ]
   }
 }
