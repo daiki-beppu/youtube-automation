@@ -70,6 +70,53 @@
 
 30分だけを収益化 YouTube に使い Streaming 配信しない場合でも、Starter の規約上の月間生成上限17分を超えるため Creator が必要になる。API quota だけで選ぶと誤る点に注意する。
 
+### 2.1 実チャンネルでの試算
+
+#### データの取り方
+
+試算の正規入力は動画尺ではなく、各collectionの `20-documentation/suno-patterns.yaml::tracks` とする。これは実際に生成する曲数であり、欠損する過去collectionでは `workflow-state.json::track_count`、さらに欠損する場合は `config/skills/suno.yaml::tracks_per_collection`（未設定時はskill default 20）へfallbackした。公開本数は最新 `data/analytics_data_*.json` の30日スナップショットからライブ配信を除いて数えた。
+
+Eleven MusicはSunoの「1 Generate = 2 clips」と異なり、1 API requestで指定尺の1曲を返す。したがって移行後は `tracks` を「採用する最終曲数」と解釈し、`tracks × 1曲のrequest尺` が課金生成分になる。直近collectionの手元音源を `ffprobe` すると1曲平均は約2.6〜4.3分だったため、標準試算は **4分/曲**、感度分析は3分/曲と5分/曲で行う。
+
+#### チャンネル別（4分/曲）
+
+| チャンネル | analytics snapshot | 30日公開本数 | 設定曲数の合計 | 根拠 | 生成分 | 20%再生成込み | 最小plan |
+|---|---|---:|---:|---|---:|---:|---|
+| AFRO DEEP NOIR | 2026-07-14 | 2本 | 30曲 | 直近2件の `tracks=15` | 120分 | 144分 | Pro $99 |
+| DeepFocus365 | 2026-07-13 | 2本 | 20曲 | 当時 `track_count=10`×2。現行channel設定は12曲 | 80分 | 96分 | Pro $99 |
+| Soulful Grooves | 2026-07-22 | 4本 | 112曲 | `tracks=28`×4 | 448分 | 537.6分 | Scale $299 |
+| Veluvia | 2026-07-22 | 8本 | 120曲 | `tracks=15`×8 | 480分 | 576分 | Scale $299 |
+| ABYSS MI | 2026-07-13 | 9本 | 167曲 | local 5件は16〜19曲、未対応4件は現行設定19曲で補完 | 668分 | 801.6分 | Scale $299 |
+| Harana Island Sounds | 2026-07-22 | 6本 | 112曲 | collection設定12〜22曲の実合計 | 448分 | 537.6分 | Scale $299 |
+| **合計** | — | **31本** | **561曲** | — | **2,244分** | **2,692.8分** | **Business $990** |
+
+plan判定はAPI料金枠だけでなく、Music Model-Specific Termsの月間生成上限（Creator 62分、Pro 304分、Scale 1,100分、Business 4,800分）も満たす最小tierで行った。たとえばDeepFocus365は20曲×4分=80分の生成で、金額価値は$12にすぎないが、Creatorの62分上限を超えるためProになる。
+
+#### 1collectionの具体例
+
+- AFRO DEEP NOIR: 15曲×4分=60分、20%再生成込み72分。通常はCreator上限内だが、再生成を見込むとPro。
+- DeepFocus365（現行設定）: 12曲×4分=48分、retry込み57.6分。1collectionだけならCreator $22に収まる。
+- Soulful Grooves: 28曲×4分=112分、retry込み134.4分。1collectionならPro、月4本ではScale。
+- Veluvia: 15曲×4分=60分、retry込み72分。月8本ではScale。
+- ABYSS MI（現行設定）: 19曲×4分=76分、retry込み91.2分。1collectionからPro。
+- Harana Island Sounds: 現行12曲なら48分、過去22曲構成なら88分。前者はCreator、後者はPro。
+
+#### 曲尺による感度分析（6チャンネル合計561曲/月）
+
+| 1曲のrequest尺 | 月間生成 | 20%再生成込み | API従量価値（通常 / retry） | 共有契約の最小plan |
+|---:|---:|---:|---:|---|
+| 3分 | 1,683分 | 2,019.6分 | $252.45 / $302.94 | Business $990 |
+| **4分** | **2,244分** | **2,692.8分** | **$336.60 / $403.92** | **Business $990** |
+| 5分 | 2,805分 | 3,366分 | $420.75 / $504.90 | Business $990 |
+
+同一事業者・teamとして6チャンネルを1契約にまとめられることを確認できれば、標準4分ケースはBusinessの生成上限4,800分とAPI含有6,600分以内なので **$990/月 + 税**である。チャンネル別契約なら標準・retryとも `Pro×2 + Scale×4 = $1,394/月`。権利上限回避のためにaccountを分割せず、契約主体と複数channel利用をElevenLabsへ確認する。
+
+動画尺をそのまま合計した上限比較では同じ30日で2,771.8分（retry込み3,326.2分）だった。曲数設定ベースの標準2,244分との差527.8分は、masterのloop、crossfade、動画側の尺延長等に相当するため、新規音楽の課金量へ含めない。
+
+#### 実装上の設定契約
+
+Eleven Music adapterは `audio.target_duration_min` から曲数を逆算せず、collectionの確定 `track_count` とprovider固有の `track_duration_ms` を受け取る。実行前に「曲数、1曲尺、合計生成分、retry予算、必要plan」をpreviewし、月間上限を超えるrequestは送らない。Sunoのinstrumental/vocal別の2 clips・winner選択ロジックは持ち込まず、Eleven Musicでは1 track = 1 request = 1 outputを契約にする。
+
 ## 3. 利用条件
 
 ### 収益化 YouTube
