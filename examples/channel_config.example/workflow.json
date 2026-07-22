@@ -6,7 +6,7 @@
       "skip_manual_mastering": false
     },
     "post-publish": {
-      "approval_gates": {
+      "skip_approvals": {
         "community-post": true,
         "pinned-comment": true,
         "metadata-audit": true

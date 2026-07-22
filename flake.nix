@@ -18,10 +18,10 @@
         pkgs = import nixpkgs { inherit system; };
         pnpmLatest = pkgs.stdenvNoCC.mkDerivation {
           pname = "pnpm";
-          version = "11.12.0";
+          version = "11.15.1";
           src = pkgs.fetchurl {
-            url = "https://registry.npmjs.org/pnpm/-/pnpm-11.12.0.tgz";
-            hash = "sha256-HCvxCNdnuXY1PCwemtFNJAzruZ1L702Tp/Gp0Q2luBc=";
+            url = "https://registry.npmjs.org/pnpm/-/pnpm-11.15.1.tgz";
+            hash = "sha256-J0YGKbEBEWBOf5iIJ1O1M5iYaCDCDgoGXzpKXp59tx8=";
           };
           nativeBuildInputs = [ pkgs.makeWrapper ];
           installPhase = ''
@@ -44,7 +44,7 @@
 
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
-            python311
+            python314
             uv
             ffmpeg
             lefthook
@@ -60,7 +60,7 @@
           #   uv run pytest
           shellHook = ''
             export UV_PYTHON_PREFERENCE=only-system
-            export UV_PYTHON=${pkgs.python311}/bin/python
+            export UV_PYTHON=${pkgs.python314}/bin/python
             # PyPI バイナリホイール (numpy 等) が dlopen する GCC ランタイムと zlib を
             # Nix 環境でも見えるようにする。Linux CI 用の救済で、darwin では無害。
             export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.zlib ]}:''${LD_LIBRARY_PATH:-}"

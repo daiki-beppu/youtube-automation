@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `fix(dashboard)`: 選択前から全チャンネルの主要指標をカード一覧で比較できる構成へ変更し、折り返し可能な Badge 群によって狭い画面でも更新状態・公開予約数が右端から見切れないように修正（#2399）。
+- `refactor(skills)`: chain manifest の正規承認 field を `approvalGate.skip` へ移行し、`true = 承認省略` に統一。旧 `enabled` は反転解決する後方互換 alias として受理し、新旧同時指定は拒否（#2404）。
+
+- `refactor(config)`: `workflow.post-publish.skip_approvals` を正規キーとして追加し、`true = 承認省略` に統一。旧 `approval_gates` は逆向きの後方互換 alias として維持し、同一 step の新旧同時指定は拒否（#2403）。
+
+- `refactor(workflow)`: `/automation-run` 互換 skill を削除し、一気通貫 workflow の公開入口を `/wf-auto` に一本化。旧 `target_workflow: automation-run` は黙って変換せず移行案内付きで拒否し、`.automation-run/` の lease・履歴パスは維持（#2400）。
+
+- `security(scripts)`: `open` / `ffmpeg` へ渡すファイルパスを絶対パス化し、先頭 `-` を option と誤解釈する余地を排除（#2396）。
+
+- `security(streaming)`: stream key / Discord webhook の Terraform file provisioner staging を素の `/tmp` から root 所有 0700 の `/run/youtube-stream-provision` へ移し、転送直後の権限露出を解消（#2395）。
+
+- `security(auth)`: 1Password fallback の client_secrets を tempfile 経由から in-memory 渡しへ変更し、異常終了時に平文 JSON がディスクへ残る経路を削除（#2394）。
+
+- `chore(actions-deps)`: CI / dashboard / extension release workflow の外部 action を最新安定版へ更新し、全 `uses:` を version コメント付き immutable commit SHA に統一する supply-chain 契約を追加（#2357）。
+
+- `chore(terraform-deps)`: 3 stack の Terraform CLI を 1.15.x、Google / Vultr / null / external / tls provider を最新安定 major の bounded constraint へ更新し、lockfile と静的検証契約を同期（#2358）。
+
+- `chore(extensions-deps)`: 3 helper と shared UI の npm 依存、security overrides、pnpm toolchain を最新安定版へ統一し、4 workspace の lockfile・Nix・release 検証契約を同期（#2356）。
+
+- `chore(deps)`: Python の runtime / development dependencies と Nix input を最新安定版へ更新し、`google-genai` 2 系・Python 3.14 開発環境へ移行。`japanize-matplotlib` の Python 3.12+ 互換用に公式推奨の Setuptools distutils shim を明示し、deprecated の `google-auth-httplib2` は Google API client の transport 依存が残るため 0.4.0 へ更新して残置判断を再記録（#2355）。
+
+- `fix(dashboard)`: チャンネル概要行を縦積みと折り返し可能な Badge 群へ変更し、狭いカード幅でも更新状態・公開予約数・動画数が右端から見切れないように修正（#2399）。
 
 - `feat(dashboard)`: `yt-dashboard` の通常起動時に全登録チャンネルの Analytics を直列更新し、失敗をチャンネル単位で隔離して前回 snapshot を表示する。概要カードの「準備完了」を YouTube の将来 `publishAt` に基づく `公開予約 N本` へ置き換え、OAuth のない E2E / 配布確認用に `--skip-refresh` を追加（#2397）。
 

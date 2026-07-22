@@ -15,7 +15,7 @@ Terraform state を置く GCS bucket を作成する bootstrap stack。
 
 ## 前提
 
-- `terraform` >= 1.5 インストール済み
+- `terraform` 1.15.x インストール済み
 - `gcloud auth application-default login` 実行済み
 - `storage.googleapis.com` が対象 project で有効化済み
 

@@ -1,6 +1,6 @@
 ---
 name: wf-auto
-description: "Use when 正規入口から collection の有無を問わず、企画開始または未完了地点から制作・公開・post-publish まで状態駆動で継続・再開するとき。「制作を最初から最後まで」「wf-auto」で発動。一段だけ進める場合は /wf-next、進捗確認だけなら /wf-status、明示済み automation-run 互換運用は /automation-run"
+description: "Use when 正規入口から collection の有無を問わず、企画開始または未完了地点から制作・公開・post-publish まで状態駆動で継続・再開するとき。「制作を最初から最後まで」「wf-auto」で発動。一段だけ進める場合は /wf-next、進捗確認だけなら /wf-status"
 ---
 
 ## 前後工程

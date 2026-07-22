@@ -127,16 +127,14 @@ def test_wf_auto_is_the_integrated_entrypoint_without_copying_child_workflows() 
     assert "/wf-auto" in schema
 
 
-def test_wf_auto_is_canonical_and_automation_run_is_compatibility_only() -> None:
+def test_wf_auto_is_the_only_integrated_workflow_entrypoint() -> None:
     canonical = _read(".claude/skills/wf-auto/SKILL.md")
-    compatibility = _read(".claude/skills/automation-run/SKILL.md")
     features = _read("docs/features.md")
     cheatsheet = _read("docs/workflow-cheatsheet.md")
 
     assert "正規入口" in canonical
-    assert "compatibility alias" in compatibility
-    assert "独自" in compatibility and "持たない" in compatibility
-    assert "正規入口" in features and "互換 alias" in features
+    assert not (ROOT / ".claude/skills/automation-run").exists()
+    assert "正規入口" in features and "| /automation-run |" not in features
     assert "/wf-auto" in cheatsheet
 
 
@@ -1039,6 +1037,42 @@ def test_wf_next_skip_approval_keys_are_documented_consistently() -> None:
     assert "skip_audio_approval" in wf_status
     assert "skip_upload_approval" in wf_status
     assert "skip_audio_approval" in schema
+
+
+def test_post_publish_skip_approvals_are_documented_consistently() -> None:
+    post_publish = _read(".claude/skills/post-publish/SKILL.md")
+    setup = _read(".claude/skills/setup/SKILL.md")
+    readme = _read("README.md")
+    example = json.loads(_read("examples/channel_config.example/workflow.json"))
+    config = example["workflow"]["post-publish"]
+
+    assert "approval_gates" not in config
+    assert config["skip_approvals"] == {
+        "community-post": True,
+        "pinned-comment": True,
+        "metadata-audit": True,
+    }
+    for text in (post_publish, setup, readme):
+        assert "skip_approvals" in text
+    assert "`false` の step だけ承認対象" in post_publish
+    assert "後方互換 alias" in post_publish
+    assert "同一 step" in post_publish and "ConfigError" in post_publish
+
+
+def test_chain_manifest_approval_gate_uses_true_equals_skip() -> None:
+    schema = _read("docs/skill-design/chain-manifest-schema.md")
+    post_publish = _read(".claude/skills/post-publish/SKILL.md")
+    analytics_run = _read(".claude/skills/analytics-run/SKILL.md")
+
+    assert '"required": ["skip"]' in schema
+    assert '"required": ["enabled"]' in schema
+    assert '"oneOf"' in schema
+    assert "skip = not enabled" in schema
+    assert "semantic validation" in schema
+    for skill in (post_publish, analytics_run):
+        assert "approvalGate.skip" in skill
+        assert "skip = not enabled" in skill
+        assert "同時指定" in skill
 
 
 def test_common_docs_list_optional_channel_config_files() -> None:

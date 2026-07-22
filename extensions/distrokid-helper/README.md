@@ -31,7 +31,7 @@ WXT + React + TypeScript + Tailwind CSS + [@webext-core/messaging](https://webex
 
 ## 開発フロー
 
-ローカル検証は CI・lockfile と同じ Nix extensions shell の Node 24 / pnpm 11.12.0 に固定する。ambient `pnpm` の版は各環境で異なり得るため、リポジトリ root から以下のコマンドを使う。理由と両拡張共通の release 前検証は `extensions/README.md::pnpm バージョン契約` を参照する。
+ローカル検証は CI・lockfile と同じ Nix extensions shell の Node 24 / pnpm 11.15.1 に固定する。ambient `pnpm` の版は各環境で異なり得るため、リポジトリ root から以下のコマンドを使う。理由と両拡張共通の release 前検証は `extensions/README.md::pnpm バージョン契約` を参照する。
 
 依存インストール:
 

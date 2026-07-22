@@ -269,7 +269,7 @@ class YouTubeUploadCore:
 
         while (quality := strategy.next_quality(failed_qualities)) is not None:
             subprocess.run(
-                ["ffmpeg", "-y", "-i", str(thumbnail_path), "-qscale:v", str(quality), str(compressed)],
+                ["ffmpeg", "-y", "-i", str(thumbnail_path.resolve()), "-qscale:v", str(quality), str(compressed)],
                 capture_output=True,
             )
             if compressed.exists() and compressed.stat().st_size <= max_bytes:

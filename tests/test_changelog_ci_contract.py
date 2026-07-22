@@ -120,7 +120,10 @@ def test_ci_workflow_changelog_job_checks_expected_paths_and_messages() -> None:
     steps = workflow["jobs"]["changelog"]["steps"]
 
     checkout_step = steps[0]
-    assert checkout_step == {"uses": "actions/checkout@v4", "with": {"fetch-depth": 0}}
+    assert checkout_step == {
+        "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "with": {"fetch-depth": 0},
+    }
 
     changelog_step = steps[1]
     assert changelog_step.get("name") == "Check CHANGELOG update"

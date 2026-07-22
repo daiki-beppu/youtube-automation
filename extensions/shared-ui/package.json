@@ -19,16 +19,16 @@
     "@youtube-automation/extensions-shared": "workspace:*",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
-    "tailwind-merge": "3.5.0",
-    "tailwindcss": "4.2.2"
+    "tailwind-merge": "3.6.0",
+    "tailwindcss": "4.3.3"
   },
   "devDependencies": {
-    "@types/react": "19.0.2",
+    "@types/react": "19.2.17",
     "react": "19.2.7",
     "typescript": "7.0.2"
   },
   "peerDependencies": {
     "react": "^19.2.7"
   },
-  "packageManager": "pnpm@11.12.0"
+  "packageManager": "pnpm@11.15.1"
 }

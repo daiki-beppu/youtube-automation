@@ -7,8 +7,8 @@
       "prerequisiteArtifacts": [],
       "outputArtifacts": ["data/analytics_data_*.json"],
       "approvalGate": {
-        "enabled": false,
-        "configPath": "workflow.analytics.approval_gates.collect"
+        "skip": true,
+        "configPath": "workflow.analytics.skip_approvals.collect"
       },
       "idempotency": {
         "script": "references/analytics-chain-state.py"
@@ -20,8 +20,8 @@
       "prerequisiteArtifacts": ["data/analytics_data_*.json"],
       "outputArtifacts": ["reports/analysis_*.md", "reports/analysis_*.json"],
       "approvalGate": {
-        "enabled": false,
-        "configPath": "workflow.analytics.approval_gates.analyze"
+        "skip": true,
+        "configPath": "workflow.analytics.skip_approvals.analyze"
       },
       "idempotency": {
         "script": "references/analytics-chain-state.py"
@@ -33,8 +33,8 @@
       "prerequisiteArtifacts": ["reports/analysis_*.md"],
       "outputArtifacts": [],
       "approvalGate": {
-        "enabled": false,
-        "configPath": "workflow.analytics.approval_gates.report"
+        "skip": true,
+        "configPath": "workflow.analytics.skip_approvals.report"
       },
       "idempotency": {
         "script": "references/analytics-chain-state.py"

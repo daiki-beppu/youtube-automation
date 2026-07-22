@@ -36,7 +36,7 @@ if [[ $* == 'develop .#extensions --command node --version' ]]; then
   exit 0
 fi
 if [[ $* == 'develop .#extensions --command pnpm --version' ]]; then
-  printf '%s\\n' "${FAKE_PNPM_VERSION:-11.12.0}"
+  printf '%s\\n' "${FAKE_PNPM_VERSION:-11.15.1}"
   exit 0
 fi
 if [[ ${4:-} == node && ${5:-} == -p ]]; then
@@ -148,7 +148,7 @@ def test_verification_rejects_unsupported_extension(
     ("environment_overrides", "message"),
     [
         ({"FAKE_NODE_VERSION": "v22.0.0"}, "expected Node 24"),
-        ({"FAKE_PNPM_VERSION": "11.11.0"}, "expected pnpm 11.12.0"),
+        ({"FAKE_PNPM_VERSION": "11.11.0"}, "expected pnpm 11.15.1"),
     ],
 )
 def test_verification_rejects_wrong_toolchain_version(

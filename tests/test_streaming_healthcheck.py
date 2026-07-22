@@ -925,7 +925,7 @@ class TestMainTfHealthcheckDeploy:
     def test_provisioner_file_uploads_healthcheck_env_via_templatefile(self):
         """Given main.tf
         When null_resource.deploy 内の provisioner "file" を走査する
-        Then ``/tmp/youtube-stream-healthcheck.env.tmp`` への配信があり、
+        Then ``/run/youtube-stream-provision/youtube-stream-healthcheck.env.tmp`` への配信があり、
              ``templatefile("${path.module}/templates/youtube-stream-healthcheck.env.tftpl", ...)``
              で生成されている。
 
@@ -936,9 +936,9 @@ class TestMainTfHealthcheckDeploy:
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
         assert re.search(
-            r'destination\s*=\s*"/tmp/youtube-stream-healthcheck\.env\.tmp"',
+            r'destination\s*=\s*"/run/youtube-stream-provision/youtube-stream-healthcheck\.env\.tmp"',
             block,
-        ), '/tmp/youtube-stream-healthcheck.env.tmp への provisioner "file" destination が無い'
+        ), '/run/youtube-stream-provision/youtube-stream-healthcheck.env.tmp への provisioner "file" destination が無い'
         assert re.search(
             r'templatefile\(\s*"\$\{path\.module\}/templates/youtube-stream-healthcheck\.env\.tftpl"',
             block,
@@ -966,33 +966,37 @@ class TestMainTfHealthcheckDeploy:
         Then ``/etc/youtube-stream-healthcheck.env`` を
              ``install -m 0600 -o root -g root`` で原子移送している。
 
-        SCP 経由の ``/tmp/*.tmp`` 着地 → install で /etc/ へ rename(2) 相当の
+        SCP 経由の ``/run/youtube-stream-provision/*.tmp`` 着地 → install で /etc/ へ rename(2) 相当の
         atomic move を行うことで、0600 root:root が確定するまでの race window を閉じる。
         webhook を読める範囲を root に限定する（secret 隔離）。
         """
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        remote_exec = re.search(
+        remote_exec_blocks = re.findall(
             r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
             block,
             flags=re.DOTALL,
         )
-        assert remote_exec is not None
-        inline = remote_exec.group(1)
+        inline = next(
+            (item for item in remote_exec_blocks if "youtube-stream-healthcheck.env" in item),
+            None,
+        )
+        assert inline is not None
         assert re.search(
-            r"install\s+-m\s+0600\s+-o\s+root\s+-g\s+root\s+/tmp/youtube-stream-healthcheck\.env\.tmp\s+/etc/youtube-stream-healthcheck\.env",
+            r"install\s+-m\s+0600\s+-o\s+root\s+-g\s+root\s+/run/youtube-stream-provision/youtube-stream-healthcheck\.env\.tmp\s+/etc/youtube-stream-healthcheck\.env",
             inline,
         ), (
-            "install -m 0600 -o root -g root /tmp/youtube-stream-healthcheck.env.tmp "
+            "install -m 0600 -o root -g root "
+            "/run/youtube-stream-provision/youtube-stream-healthcheck.env.tmp "
             "/etc/youtube-stream-healthcheck.env が無い（race window が閉じられていない）"
         )
         assert re.search(
-            r"rm\s+-f\s+/tmp/youtube-stream-healthcheck\.env\.tmp",
+            r"rm\s+-f\s+/run/youtube-stream-provision/youtube-stream-healthcheck\.env\.tmp",
             inline,
         ), (
-            "rm -f /tmp/youtube-stream-healthcheck.env.tmp が無い"
-            "（install 後の /tmp 上の 0644 secret が残置し race window が /tmp/ に横移しになる）"
+            "rm -f /run/youtube-stream-provision/youtube-stream-healthcheck.env.tmp が無い"
+            "（install 後の staging 上に secret が残置する）"
         )
 
     def test_remote_exec_makes_bin_dir_and_executable(self):
@@ -1005,13 +1009,16 @@ class TestMainTfHealthcheckDeploy:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        remote_exec = re.search(
+        remote_exec_blocks = re.findall(
             r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
             block,
             flags=re.DOTALL,
         )
-        assert remote_exec is not None
-        inline = remote_exec.group(1)
+        inline = next(
+            (item for item in remote_exec_blocks if "run-ffmpeg.sh" in item),
+            None,
+        )
+        assert inline is not None
         # ディレクトリ作成（mkdir -p または install -d）
         assert re.search(
             rf"(mkdir\s+-p|install\s+-d)[^\n]*{_INSTALL_ROOT_VAR}/bin\b",
@@ -1034,13 +1041,16 @@ class TestMainTfHealthcheckDeploy:
         text = strip_hcl_comments(read_file(_MAIN_TF))
         block = extract_block(text, r'resource\s+"null_resource"\s+"deploy"')
         assert block is not None
-        remote_exec = re.search(
+        remote_exec_blocks = re.findall(
             r'provisioner\s+"remote-exec"\s*\{(.*?)\n\s*\}',
             block,
             flags=re.DOTALL,
         )
-        assert remote_exec is not None
-        inline = remote_exec.group(1)
+        inline = next(
+            (item for item in remote_exec_blocks if "systemctl restart cron" in item),
+            None,
+        )
+        assert inline is not None
         has_systemctl = re.search(r"systemctl\s+(?:restart|reload)\s+cron\b", inline)
         has_service = re.search(r"service\s+cron\s+(?:restart|reload)\b", inline)
         assert has_systemctl or has_service, (

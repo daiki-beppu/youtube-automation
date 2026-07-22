@@ -11,7 +11,7 @@ import yaml
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _EXTENSION_NAMES = ("suno-helper", "distrokid-helper", "community-helper")
 _EXTENSION_README_NAMES = ("suno-helper", "distrokid-helper")
-_NIX_PNPM = "11.12.0"
+_NIX_PNPM = "11.15.1"
 _LEGACY_PNPM = "11.11.0"
 _LEGACY_NPX_COMMAND = f"npx -y pnpm@{_LEGACY_PNPM}"
 _NIX_COMMAND = "nix develop .#extensions --command pnpm"
@@ -115,10 +115,10 @@ def test_shared_docs_precede_commands_with_the_pinned_contract() -> None:
     assert "## pnpm バージョン契約" in extensions_readme
     for name in _EXTENSION_NAMES:
         assert name in extensions_readme
-    assert "Node 24 / pnpm 11.12.0" in extensions_readme
+    assert "Node 24 / pnpm 11.15.1" in extensions_readme
     assert f"bash {_VERIFY_SCRIPT_PATH} [<name>]" in extensions_readme
     assert "期待名 zip が唯一の1件" in extensions_readme
-    assert "Node 24 / pnpm 11.12.0" in development_doc
+    assert "Node 24 / pnpm 11.15.1" in development_doc
     assert "nix develop .#extensions --command pnpm" in development_doc
     assert "`--ignore-workspace`" in extensions_readme
     assert "`--ignore-workspace`" in development_doc
@@ -133,7 +133,7 @@ def test_each_extension_readme_uses_the_nix_extensions_shell() -> None:
     for name in _EXTENSION_README_NAMES:
         readme = _read(f"extensions/{name}/README.md")
 
-        assert "Node 24 / pnpm 11.12.0" in readme
+        assert "Node 24 / pnpm 11.15.1" in readme
         assert "extensions/README.md::pnpm バージョン契約" in readme
         for command in (
             "install --frozen-lockfile",
@@ -170,7 +170,7 @@ def test_shared_extension_readme_spells_out_the_nix_command_flow() -> None:
 def test_suno_skill_uses_the_nix_extensions_shell() -> None:
     suno_skill = _read(".claude/skills/suno/SKILL.md")
 
-    assert "Nix extensions shell（Node 24 / pnpm 11.12.0）" in suno_skill
+    assert "Nix extensions shell（Node 24 / pnpm 11.15.1）" in suno_skill
     assert f"{_NIX_COMMAND} -C extensions/suno-helper install --frozen-lockfile" in suno_skill
     assert f"{_NIX_COMMAND} -C extensions/suno-helper build" in suno_skill
     assert "extensions/README.md::pnpm バージョン契約" in suno_skill
@@ -201,12 +201,12 @@ def test_release_skill_delegates_extension_verification_to_single_source() -> No
     for command in ("install --frozen-lockfile", "build", "zip"):
         assert f'nix develop .#extensions --command pnpm -C "${{extension_dir}}" {command}' in verify_script
     assert "node_version} != v24.*" in verify_script
-    assert "pnpm_version} != 11.12.0" in verify_script
+    assert "pnpm_version} != 11.15.1" in verify_script
     assert "zip_path=" in verify_script
     assert 'git diff --exit-code -- "${lockfiles[@]}"' in verify_script
     assert "--ignore-workspace" not in verify_script
     for document in (release_skill, release_checklist):
-        assert "Node 24 / pnpm 11.12.0" in document
+        assert "Node 24 / pnpm 11.15.1" in document
         assert "ambient `node` / `pnpm`" in document
         assert "`--ignore-workspace`" in document
         assert "`pnpm install --frozen-lockfile` → `pnpm build` → `pnpm zip`" in document
@@ -215,6 +215,7 @@ def test_release_skill_delegates_extension_verification_to_single_source() -> No
     assert "`pnpm -v` が 9 系" not in release_skill
     unreleased = changelog.split("## [Unreleased]", maxsplit=1)[1].split("\n## [", maxsplit=1)[0]
     issue_entry = next(line for line in unreleased.splitlines() if "#1956" in line)
+    # #1956 は当時の再現環境を記録する履歴なので、現行 pin 更新では書き換えない。
     assert "Nix extensions shell 契約（Node 24 / pnpm 11.12.0" in issue_entry
     assert "frozen install → build → zip" in issue_entry
     assert "期待名 zip" in issue_entry

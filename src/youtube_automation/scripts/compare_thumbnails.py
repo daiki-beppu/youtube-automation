@@ -73,7 +73,15 @@ class ThumbnailComparer:
             return True
         try:
             subprocess.run(
-                ["ffmpeg", "-i", str(input_path), "-vf", f"scale={SMALL_WIDTH}:{SMALL_HEIGHT}", "-y", str(output_path)],
+                [
+                    "ffmpeg",
+                    "-i",
+                    str(input_path.resolve()),
+                    "-vf",
+                    f"scale={SMALL_WIDTH}:{SMALL_HEIGHT}",
+                    "-y",
+                    str(output_path.resolve()),
+                ],
                 capture_output=True,
                 check=True,
             )
@@ -146,7 +154,8 @@ class ThumbnailComparer:
         print(f"   small/      — 全 {len(small_paths)}枚（{SMALL_WIDTH}x{SMALL_HEIGHT}px モバイル表示）")
 
         if not no_open:
-            subprocess.run(["open", str(self.small_dir if small_only else self.compare_dir)])
+            target_dir = self.small_dir if small_only else self.compare_dir
+            subprocess.run(["open", str(target_dir.resolve())])
 
 
 def _build_parser() -> argparse.ArgumentParser:
