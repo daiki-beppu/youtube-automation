@@ -23,6 +23,7 @@ CORS はデフォルトで `chrome-extension://` と suno.com / distrokid.com �
 from __future__ import annotations
 
 import http.client
+from functools import partial
 import json
 import logging
 import re
@@ -39,6 +40,10 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.domains.suno.downloaded.apply import apply_downloaded_artifacts
+from youtube_automation.domains.suno.downloaded.archive import commit_staged_music_files, extract_and_rename_music as _extract_and_rename_music
+from youtube_automation.domains.suno.downloaded.models import DownloadedArtifactError, DownloadedPayload
+from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 from youtube_automation.scripts import collection_serve as collection_serve_module
 from youtube_automation.scripts.collection_serve import (
     _resolve_distrokid_capture_root,
@@ -55,9 +60,11 @@ from youtube_automation.scripts.collection_serve import (
 from youtube_automation.scripts.collection_serve_discovery import DISCOVERY_PATH, RegistryState
 from youtube_automation.utils.chrome_extensions import ChromeExtensionOrigin, resolve_unpacked_extension_origin
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.suno_downloaded_apply import apply_downloaded_artifacts
-from youtube_automation.utils.suno_downloaded_archive import commit_staged_music_files, extract_and_rename_music
-from youtube_automation.utils.suno_downloaded_payload import DownloadedArtifactError, DownloadedPayload
+
+extract_and_rename_music = partial(
+    _extract_and_rename_music,
+    prompt_entries_reader=read_suno_prompt_entries,
+)
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _SUNO_ORIGIN = "https://suno.com"
@@ -1828,7 +1835,7 @@ def test_commit_staged_music_files_rolls_back_when_staged_move_fails(tmp_path, m
                 raise OSError("simulated move failure")
         return real_move(src, dst, *args, **kwargs)
 
-    monkeypatch.setattr("youtube_automation.utils.suno_downloaded_archive.shutil.move", fail_second_staged_move)
+    monkeypatch.setattr("youtube_automation.domains.suno.downloaded.archive.shutil.move", fail_second_staged_move)
 
     with pytest.raises(OSError, match="simulated move failure"):
         commit_staged_music_files(coll, staging_dir)
@@ -3011,7 +3018,7 @@ def test_extract_commit_failure_rolls_back_existing_music_dir(tmp_path, monkeypa
                 raise OSError("simulated commit move failure")
         return real_move(src, dst, *args, **kwargs)
 
-    monkeypatch.setattr("youtube_automation.utils.suno_downloaded_archive.shutil.move", fail_second_commit_move)
+    monkeypatch.setattr("youtube_automation.domains.suno.downloaded.archive.shutil.move", fail_second_commit_move)
 
     with pytest.raises(DownloadedArtifactError, match="simulated commit move failure"):
         extract_and_rename_music(coll, str(zip_path))
@@ -3192,7 +3199,7 @@ def test_post_downloaded_archive_cleanup_failure_warns_and_keeps_artifacts(serve
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
     token = _fetch_token(base)
 
-    with caplog.at_level(logging.WARNING, logger="youtube_automation.utils.suno_downloaded_apply"):
+    with caplog.at_level(logging.WARNING, logger="youtube_automation.domains.suno.downloaded.apply"):
         with _post(
             f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
             {
@@ -3354,7 +3361,7 @@ def test_post_downloaded_download_path_without_playlist_url_succeeds(serve_dir, 
 
 def test_extract_oversized_zip_entry_rejected(tmp_path, monkeypatch):
     """ZIP 内の単一ファイルがサイズ上限を超える場合、展開しない (#1217)。"""
-    import youtube_automation.utils.suno_downloaded_archive as artifacts
+    import youtube_automation.domains.suno.downloaded.archive as artifacts
 
     # テスト用に上限を 10 bytes に下げる（実際の 500MB は CI で生成不可）。
     monkeypatch.setattr(artifacts, "_ZIP_MAX_SINGLE_FILE", 10)
@@ -3638,6 +3645,7 @@ def test_apply_downloaded_artifacts_propagates_unknown_atomic_write_error(tmp_pa
         apply_downloaded_artifacts(
             coll,
             DownloadedPayload(file_count=0, format="mp3", suno_playlist_url="https://suno.com/playlist/abc"),
+            prompt_entries_reader=read_suno_prompt_entries,
             atomic_json_write=fail_unexpected,
         )
 
@@ -3666,7 +3674,7 @@ def test_apply_downloaded_artifacts_restores_outer_backup_when_inner_music_rollb
         return real_move(src, dst, *args, **kwargs)
 
     monkeypatch.setattr(
-        "youtube_automation.utils.suno_downloaded_archive.shutil.move",
+        "youtube_automation.domains.suno.downloaded.archive.shutil.move",
         fail_staged_move_and_inner_restore,
     )
 
@@ -3682,6 +3690,7 @@ def test_apply_downloaded_artifacts_restores_outer_backup_when_inner_music_rollb
                 suno_playlist_url="https://suno.com/playlist/abc",
                 download_path=str(zip_path),
             ),
+            prompt_entries_reader=read_suno_prompt_entries,
             atomic_json_write=write_json,
         )
 

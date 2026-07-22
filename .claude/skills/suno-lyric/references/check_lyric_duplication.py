@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from youtube_automation.utils.suno_lyrics import SunoLyricsEntry
+    from youtube_automation.domains.suno.lyrics import SunoLyricsEntry
 
 SECTION_TAG_RE = re.compile(r"^\[([^\]]+)\]\s*$")
 DEFAULT_TARGET_SECTIONS = ("Intro", "Pre-Chorus", "Bridge", "Extended Outro", "Outro")
@@ -43,8 +43,8 @@ def ensure_repo_src_on_path() -> None:
 
 def load_entries(path: Path) -> list[SunoLyricsEntry]:
     ensure_repo_src_on_path()
+    from youtube_automation.domains.suno.lyrics import load_suno_lyrics_entries
     from youtube_automation.utils.exceptions import ConfigError
-    from youtube_automation.utils.suno_lyrics import load_suno_lyrics_entries
 
     try:
         return load_suno_lyrics_entries(path)

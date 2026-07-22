@@ -7,8 +7,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.suno_artifact_contracts import SUNO_LYRICS_JSON_FILENAME
-from youtube_automation.utils.suno_artifact_validation import surrounding_whitespace_issue
+
+SUNO_LYRICS_JSON_FILENAME = "suno-lyrics.json"
+
+
+def surrounding_whitespace_issue(*, source_name: str, field_path: str, value: str) -> str | None:
+    if value == value.strip():
+        return None
+    return f"{source_name} {field_path} must not have leading or trailing whitespace"
 
 
 @dataclass(frozen=True)

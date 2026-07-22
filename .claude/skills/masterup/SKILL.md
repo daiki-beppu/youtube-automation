@@ -52,7 +52,7 @@ TS CLI `uv run yt-generate-master` は `audio` の実行時既定値を組み込
 
 | 項目 | 既定 | 説明 |
 |---|---|---|
-| `audio.crossfade_duration` | 1.0 | トラック間クロスフェード秒数（metadata_generator のタイムスタンプ計算で参照） |
+| `audio.crossfade_duration` | 1.0 | トラック間クロスフェード秒数（`domains.metadata.service.BAHMetadataGenerator` のタイムスタンプ計算で参照） |
 | `audio.bitrate` | "192k" | マスター音源のビットレート |
 | `audio.target_duration_min` | (未設定) | `uv run yt-generate-master` で `--loop` / `--target-duration` 両方未指定時に `--target-duration MIN` 相当のデフォルトとして採用される目標尺（分）。チャンネル単位で「最低尺」を宣言したいときに設定する |
 | `audio.shuffle` | `false` | `uv run yt-generate-master` で CLI `--shuffle` / `--shuffle-seed` 未指定時に `--shuffle` 相当のデフォルトとして採用される。Suno で同一プロンプトから生成した類似イントロ群がマスター後半で連続するのを避けたいときに `true` にする |
@@ -75,7 +75,7 @@ TS CLI `uv run yt-generate-master` は `audio` の実行時既定値を組み込
 | `stock.filename_template` | `{collection_slug}__{song_id}__{title_slug}.{ext}` | stock 退避時のファイル名。使用可能 placeholder は `collection_slug` / `song_id` / `title_slug` / `ext` のみ。生成結果は basename のみ許可し、`/` / `\` / `..` / 絶対パスは失敗 |
 | `stock.on_duplicate` | `skip` | stock 先に同名ファイルがある場合の挙動。`skip` は既存 stock を残して入力音源を削除、`overwrite` は既存 stock を置換、`fail` は入力音源を触らず非 0 終了 |
 
-マスター音源生成は `uv run yt-generate-master` CLI がチャンネル側 `audio.crossfade_duration` override を読み、未指定時の組み込み default は同梱 `config.default.yaml` と同期テストで固定する。そのため実音声のクロスフェードと metadata_generator のタイムスタンプ計算は同じ既定値・同じチャンネル上書き値を使う。
+マスター音源生成は `uv run yt-generate-master` CLI がチャンネル側 `audio.crossfade_duration` override を読み、未指定時の組み込み default は同梱 `config.default.yaml` と同期テストで固定する。そのため実音声のクロスフェードと `domains.metadata.service.BAHMetadataGenerator` のタイムスタンプ計算は同じ既定値・同じチャンネル上書き値を使う。
 
 ## When to Use
 
@@ -200,12 +200,13 @@ uv run yt-raw-master-check <コレクションディレクトリ>
 ```bash
 python3 -c "
 from pathlib import Path
-from youtube_automation.utils.suno_downloaded_workflow_state import read_pattern_count, expected_download_count
-from youtube_automation.utils.suno_downloaded_archive import count_audio_files
+from youtube_automation.domains.suno.downloaded.workflow import read_pattern_count, expected_download_count
+from youtube_automation.domains.suno.downloaded.archive import count_audio_files
+from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 from youtube_automation.utils.collection_paths import CollectionPaths
 
 coll_dir = Path('.')  # アクティブなコレクションディレクトリで実行
-pattern_count = read_pattern_count(coll_dir)
+pattern_count = read_pattern_count(coll_dir, prompt_entries_reader=read_suno_prompt_entries)
 expected = expected_download_count(pattern_count)
 actual = count_audio_files(CollectionPaths(coll_dir).music_dir)
 print(f'pattern_count={pattern_count} expected={expected} actual={actual}')
@@ -520,10 +521,10 @@ uv run yt-generate-master --pin-first 00-hook.mp3 --shuffle           # 指定 1
 uv run yt-generate-master --pin-first-count 1 --shuffle               # ソート済み先頭 1 件を固定 + 残りシャッフル
 ```
 
-`02-Individual-music/` のオーディオファイル（MP3 / M4A / WAV）を自動検出し、skill-config の `audio.crossfade_duration` / `audio.bitrate` でクロスフェード結合します。CLI の `--crossfade-duration` / `--bitrate` は skill-config より優先し、`--crossfade-duration` が 0 以下なら validation error で停止します。metadata_generator のタイムスタンプ計算と同じ設定値を参照するため、実音声と description のタイムスタンプが常に一致します。suno-helper の DL フォーマット設定（`sunoDownloadFormat`）により入力形式が MP3 以外になる場合があるため、拡張子で判別する。
+`02-Individual-music/` のオーディオファイル（MP3 / M4A / WAV）を自動検出し、skill-config の `audio.crossfade_duration` / `audio.bitrate` でクロスフェード結合します。CLI の `--crossfade-duration` / `--bitrate` は skill-config より優先し、`--crossfade-duration` が 0 以下なら validation error で停止します。`domains.metadata.service.BAHMetadataGenerator` のタイムスタンプ計算と同じ設定値を参照するため、実音声と description のタイムスタンプが常に一致します。suno-helper の DL フォーマット設定（`sunoDownloadFormat`）により入力形式が MP3 以外になる場合があるため、拡張子で判別する。
 **この処理は常にダウンロード後（または suno-helper DL 済み確認後）に自動実行する。**
 
-**ループ時の注意**: `--loop` / `--target-duration` は Suno/Lyria のトラック数が少ないコレクションで raw master の尺を target に届かせるためのオプション。`--loop` / `--target-duration` / `--no-loop` は同時指定不可。実行前にトラック総尺・目標尺・ループ回数・見込み尺の preview が表示される。`--no-loop` は `config/skills/masterup.json::audio.target_duration_min`（既存 `masterup.yaml` fallback）が設定されていても 1 パス生成を明示するためのフラグ。全ループ分の YouTube チャプターが必要な場合は、preview の loop count と同じ `N` を `metadata_generator.generate_timestamps(loops=N)` / `format_timestamps_text(loops=N)` に渡して展開する。1 ループ分のみ載せる従来運用は `loops=1` のままで変更なし。
+**ループ時の注意**: `--loop` / `--target-duration` は Suno/Lyria のトラック数が少ないコレクションで raw master の尺を target に届かせるためのオプション。`--loop` / `--target-duration` / `--no-loop` は同時指定不可。実行前にトラック総尺・目標尺・ループ回数・見込み尺の preview が表示される。`--no-loop` は `config/skills/masterup.json::audio.target_duration_min`（既存 `masterup.yaml` fallback）が設定されていても 1 パス生成を明示するためのフラグ。全ループ分の YouTube チャプターが必要な場合は、preview の loop count と同じ `N` を `domains.metadata.service.BAHMetadataGenerator.generate_timestamps(loops=N)` / `format_timestamps_text(loops=N)` に渡して展開する。1 ループ分のみ載せる従来運用は `loops=1` のままで変更なし。
 
 **シャッフル時の注意**: `--shuffle` はループ展開の**前**に 1 回だけ実行され、シャッフルされた順序がループごとに同じ並びで N 回繰り返される（ループごとに独立してシャッフルし直すわけではない）。再現性が必要な場合は `--shuffle-seed N` を指定するか、`--shuffle` 単独実行時に stdout に出る `[Shuffle] seed=<N>` の値を控えておけば後で同じ並びを再現できる。再現性ログは `--quiet` 指定時も常に出力される。
 

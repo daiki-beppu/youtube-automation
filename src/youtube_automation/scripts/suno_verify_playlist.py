@@ -11,22 +11,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
-from youtube_automation.utils.collection_paths import resolve_collection_dir
-from youtube_automation.utils.exceptions import ValidationError
-from youtube_automation.utils.suno_downloaded_archive import (
+from youtube_automation.domains.suno.downloaded.archive import (
     _AUDIO_EXTENSIONS,
     _CANONICAL_MUSIC_FILENAME_RE,
     _sanitize_output_stem,
     _suno_name_lookup_candidates,
     canonicalize_noncanonical_music_files,
 )
-from youtube_automation.utils.suno_playlist_verification import (
+from youtube_automation.domains.suno.playlist import (
     format_verification_report,
     load_entry_names,
     normalize_title,
     verify_playlist_titles,
 )
-from youtube_automation.utils.suno_prompts_json import read_suno_prompt_entries
+from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
+from youtube_automation.utils.collection_paths import resolve_collection_dir
+from youtube_automation.utils.exceptions import ValidationError
 
 _APOSTROPHE_RE = re.compile(r"['’]")
 _TITLE_SOURCE_ERROR = (
@@ -106,7 +106,9 @@ def _read_music_dir_titles(
     if not path.is_dir():
         raise ValidationError(f"--music-dir が見つかりません: {path}")
     try:
-        renamed = canonicalize_noncanonical_music_files(collection_dir, path)
+        renamed = canonicalize_noncanonical_music_files(
+            collection_dir, path, prompt_entries_reader=read_suno_prompt_entries
+        )
     except (OSError, ValueError) as exc:
         raise ValidationError(str(exc)) from exc
     for old_name, new_name in renamed:

@@ -2,7 +2,7 @@
 """コレクションの個別音声 (MP3 / M4A / WAV) をクロスフェード結合してマスター音源を生成する。
 
 skill-config (`masterup.audio.crossfade_duration` / `bitrate`) を参照するため、
-`metadata_generator` のタイムスタンプ計算と常に同じクロスフェード秒数で結合される。
+`domains.metadata.service.BAHMetadataGenerator` のタイムスタンプ計算と常に同じクロスフェード秒数で結合される。
 
 入力は `.mp3` / `.m4a` / `.wav` を受け付け、出力は常に `master.mp3`
 (`libmp3lame -b:a {bitrate} -q:a 0`) に統一する。

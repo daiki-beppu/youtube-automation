@@ -22,7 +22,7 @@ rename マッピング:
 5. `.claude/skills/**/*.md` に旧パス参照 `.claude/skills/<old>/` / `config/skills/<old>.yaml` が残っていない。
 6. プロダクション 2 ファイル
    (`src/youtube_automation/agents/youtube_auto_uploader.py` /
-    `src/youtube_automation/utils/metadata_generator.py`)
+    `src/youtube_automation/domains/metadata/service.py`)
    のコメント・エラーメッセージ中の旧スラッシュ参照 `/description` が
    新名 `/video-description` に追従している。
 7. 全 SKILL.md 31 件で `name:` 欄が親ディレクトリ名と一致する（rename 漏れ防止）。
@@ -91,7 +91,7 @@ _RENAME_PAIRS: list[tuple[str, str]] = sorted(RENAME_MAP.items())
 # (plan.md「ソース 2 ファイル」)
 _PROD_FILES_WITH_SLASH_REFS: list[Path] = [
     _SRC_DIR / "agents" / "youtube_auto_uploader.py",
-    _SRC_DIR / "utils" / "metadata_generator.py",
+    _SRC_DIR / "domains" / "metadata" / "service.py",
 ]
 
 
@@ -497,7 +497,7 @@ def test_no_legacy_description_slash_in_prod_source(prod_file: Path) -> None:
 
     plan.md の grep で確認済み:
       - `agents/youtube_auto_uploader.py` line 119, 133, 189, 225 — 4 箇所
-      - `utils/metadata_generator.py` line 47 — 1 箇所
+      - `domains/metadata/service.py` line 47 — 1 箇所
 
     rename 後はすべて `/video-description` に書き換える必要がある。
     """

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from youtube_automation.utils.suno_artifact_validation import suno_prompt_entry_names
+from youtube_automation.domains.suno.downloaded.validation import suno_prompt_entry_names
 
 
 def write_suno_override(channel: Path, **overrides) -> None:

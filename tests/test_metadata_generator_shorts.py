@@ -1,7 +1,7 @@
 """
 BAHMetadataGenerator.generate_shorts_metadata のユニットテスト
 
-テスト対象: `utils/metadata_generator.py::BAHMetadataGenerator.generate_shorts_metadata`
+テスト対象: `src/youtube_automation/domains/metadata/service.py::BAHMetadataGenerator.generate_shorts_metadata`
 plan 要件 #2〜#5 / #4-a〜#4-d / 補足設計判断 §152-153 を検証する。
 
 副作用のない純粋ロジック（タイトル・タグ・説明文・ローカライズ生成）を検証する。
@@ -17,11 +17,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-from youtube_automation.utils.config import load_config, reset
-from youtube_automation.utils.metadata_generator import (
+from youtube_automation.domains.metadata import (
     BAHMetadataGenerator,
     build_short_localizations,
 )
+from youtube_automation.utils.config import load_config, reset
 
 # ---------------------------------------------------------------------------
 # ヘルパー

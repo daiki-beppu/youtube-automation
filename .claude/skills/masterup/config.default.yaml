@@ -6,7 +6,7 @@
 
 audio:
   # トラック間クロスフェード秒数
-  # uv run yt-generate-master の ffmpeg acrossfade と metadata_generator.py の
+  # uv run yt-generate-master の ffmpeg acrossfade と domains/metadata/service.py の
   # タイムスタンプ計算の両方がこの値を参照する。
   crossfade_duration: 1.0
 

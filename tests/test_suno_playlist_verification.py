@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from functools import partial
 import sys
 import zipfile
 from io import StringIO
@@ -10,15 +11,21 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.scripts import suno_verify_playlist
-from youtube_automation.utils.exceptions import ValidationError
-from youtube_automation.utils.suno_downloaded_archive import extract_and_rename_music
-from youtube_automation.utils.suno_playlist_verification import (
+from youtube_automation.domains.suno.downloaded.archive import extract_and_rename_music as _extract_and_rename_music
+from youtube_automation.domains.suno.playlist import (
     format_display_text,
     format_verification_report,
     load_entry_names,
     normalize_title,
     verify_playlist_titles,
+)
+from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
+from youtube_automation.scripts import suno_verify_playlist
+from youtube_automation.utils.exceptions import ValidationError
+
+extract_and_rename_music = partial(
+    _extract_and_rename_music,
+    prompt_entries_reader=read_suno_prompt_entries,
 )
 
 ENTRIES = [

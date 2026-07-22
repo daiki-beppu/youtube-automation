@@ -16,9 +16,9 @@ from youtube_automation.agents._uploader_constants import (
     UPLOAD_SOURCE_EXISTING,
     UPLOAD_SOURCE_NEW,
 )
+from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.exceptions import ValidationError
-from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
 
 logger = logging.getLogger(__name__)
 

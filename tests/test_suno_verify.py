@@ -742,7 +742,7 @@ def test_invalid_prompts_json_shape_is_reported(channel_dir, tmp_path, monkeypat
 
 def test_verify_artifact_helpers_do_not_accept_mutable_issue_accumulators():
     """検証 helper は呼び出し元 list を引数で受け取らず、issue を戻り値で返す。"""
-    from youtube_automation.utils import suno_verify_artifacts
+    from youtube_automation.domains.suno.downloaded import validation as suno_verify_artifacts
 
     for helper_name in ("_validate_prompts", "_verify_vocal_artifacts"):
         signature = inspect.signature(getattr(suno_verify_artifacts, helper_name))
@@ -751,7 +751,7 @@ def test_verify_artifact_helpers_do_not_accept_mutable_issue_accumulators():
 
 def test_verify_reader_helpers_do_not_accept_mutable_accumulators():
     """reader helper は呼び出し元 list/dict を引数で受け取らず、parse 結果を戻り値で返す。"""
-    from youtube_automation.utils import suno_verify_readers
+    from youtube_automation.domains.suno.downloaded import validation as suno_verify_readers
 
     for old_helper_name in ("_append_prompt_entry", "_append_lyric_entry"):
         assert not hasattr(suno_verify_readers, old_helper_name)

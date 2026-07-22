@@ -6,7 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-from youtube_automation.utils.suno_artifact_contracts import DOCUMENTATION_DIRNAME, SUNO_PROMPTS_JSON_FILENAME
+DOCUMENTATION_DIRNAME = "20-documentation"
+SUNO_PROMPTS_JSON_FILENAME = "suno-prompts.json"
 
 
 def suno_prompts_path(collection_dir: Path) -> Path:

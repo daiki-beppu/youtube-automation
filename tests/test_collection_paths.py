@@ -546,7 +546,7 @@ class TestLiteralCollectionSubpathRegression:
         "src/youtube_automation/agents/_complete_collection_executor.py",
         "src/youtube_automation/scripts/generate_short_loop.py",
         "src/youtube_automation/scripts/bulk_update_short_localizations.py",
-        "src/youtube_automation/utils/suno_track_selection.py",
+        "src/youtube_automation/domains/suno/selection.py",
     ]
 
     # CollectionPaths が唯一の参照元であるべきコレクションサブパス文字列

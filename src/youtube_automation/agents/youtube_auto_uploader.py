@@ -65,9 +65,9 @@ from youtube_automation.agents._uploader_constants import (  # noqa: E402
     UPLOAD_SOURCE_NEW,
     YOUTUBE_VIDEO_URL_PREFIX,
 )
+from youtube_automation.domains.metadata import BAHMetadataGenerator  # noqa: E402
 from youtube_automation.utils.channel_settings import build_upload_status_flags  # noqa: E402
 from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
-from youtube_automation.utils.metadata_generator import BAHMetadataGenerator  # noqa: E402
 from youtube_automation.utils.preflight_checks import check_title_codepoint_limit  # noqa: E402
 from youtube_automation.utils.publish_schedule import (  # noqa: E402
     resolve_default_publish_at as _resolve_default_publish_at,

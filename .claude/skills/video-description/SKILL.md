@@ -119,7 +119,7 @@ $ARGUMENTS
 
 以下の手順 1〜5 は `chapters_enabled: true` の場合のみ実行する。
 
-1. **個別トラックがある場合**（`02-Individual-music/`）: `metadata_generator.py` の `analyze_audio_files()` で自動計算
+1. **個別トラックがある場合**（`02-Individual-music/`）: `domains/metadata/service.py` の `analyze_audio_files()` で自動計算
    - master をループ生成しているコレクション（`yt-generate-master --loop N` / `--target-duration`）で**全ループ分のチャプター**を展開する場合は `generate_timestamps(loops=N)` / `format_timestamps_text(loops=N)` を使う。2 周目以降の開始秒は 1 周目と同じクロスフェード算術で連続計算される。2 周目以降のタイトルは 1 周目と同一になるため、チャプター名をユニークにしたいチャンネルでは各行の `loop` フィールド（1 始まり）を手掛かりに LLM リネームで装飾する（1 ループ分のみ載せる従来運用は `loops=1` のままで変更なし）
 2. ファイル名規約 `\d+-pattern-[a-d]` を持つコレクションでは、`format_timestamps_text()` がテーマ見出し（`── Pattern A: <name> ──`）と楽曲行（`00:00 Track 1`）を組み合わせた **個別楽曲単位** のタイムスタンプを返す。テーマ見出し行は YouTube のチャプター parser に拾われないよう先頭 timestamp を持たない（重複 timestamp は chapter list 全体を無効化する）
    - テーマ表示名は `workflow-state.json` の `planning.music.patterns[<letter>].display_name`（無ければ `.name` を `Pattern X: <name>` に整形）から解決される。両方無ければ `Pattern X` にフォールバック
@@ -182,7 +182,7 @@ uv run yt-title-duplicate-check "$COLLECTION_DIR" --title "$PROPOSED_TITLE"
 1. **誇張表現回避**: Epic, Ultimate 等を避け Ancient, Enchanted 等を使用 — 誇張は CTR を下げる傾向があり、チャンネルブランドの信頼性も損なう
 2. **AI 透明性**: Usage & Attribution セクションを含める — AI 生成コンテンツの透明性維持はコミュニティとの信頼関係の基盤
 3. **SEO 最適化**: `config/channel/content.json` の `tags.base` に基づく戦略的キーワード — YouTube 検索とおすすめアルゴリズムの両方で発見性を高める
-4. **ハッシュタグ**: `config/channel/content.json::descriptions.hashtags` が単一ソース（実装 `metadata_generator.py` は設定値をそのまま出力する。個数の目安は `/channel-new` の config-generation-rules と同じ **5 個程度**）— YouTube は概要欄の最初の3ハッシュタグをタイトル下に表示するため、順序が重要
+4. **ハッシュタグ**: `config/channel/content.json::descriptions.hashtags` が単一ソース（実装 `domains/metadata/service.py` は設定値をそのまま出力する。個数の目安は `/channel-new` の config-generation-rules と同じ **5 個程度**）— YouTube は概要欄の最初の3ハッシュタグをタイトル下に表示するため、順序が重要
 5. **タイムスタンプ必須**: `00:00` 始まり、3チャプター以上 — YouTube がチャプターを自動認識し、検索結果にプレビュー表示される（`chapters_enabled: false` のチャンネルはタイムスタンプ列を出力しないため対象外）
 
 ### Cards（YouTube Studio で手動設定）
