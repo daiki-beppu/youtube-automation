@@ -57,7 +57,7 @@ def _run(module_path: str, function_name: str = "main") -> object:
     if module_path not in _CHANNEL_OPTION_CONFLICTS:
         channel = _consume_channel_option(sys.argv)
         if channel is not None:
-            from youtube_automation.utils.config import select_channel
+            from youtube_automation.configuration import select_channel
 
             select_channel(channel)
     target = getattr(import_module(module_path), function_name)

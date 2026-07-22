@@ -2,7 +2,7 @@
 //
 // サーバー側 SSOT:
 //   - src/youtube_automation/scripts/distrokid_release.py::build_release_payload
-//   - src/youtube_automation/utils/config/distrokid.py::DistrokidProfile
+//   - src/youtube_automation/configuration/distrokid.py::DistrokidProfile
 // envelope は { profile, release } の 2 層。profile は静的（config 由来）、
 // release はコレクション動的データ（アルバム名 / 曲 / ジャケット / リリース日）。
 //
@@ -20,7 +20,7 @@ export interface SongwriterName {
 // 実 DOM 再検証（#877）で判明: AI 開示は inline ではなく SweetAlert2 modal
 // (.ai-credits-swal-modal) で開く。ai_gate_<uuid> radio で「はい」を選ぶと modal が mount し、
 // modal 内で歌詞 / 作曲 / 録音範囲 / アーティスト種別 / apply-all を設定して保存する。
-// Python の utils.config.distrokid.AiDisclosure と 1:1。
+// Python の configuration.distrokid.AiDisclosure と 1:1。
 export interface AiDisclosure {
   enabled: boolean;
   lyrics: boolean;
@@ -38,7 +38,7 @@ export interface AiDisclosure {
 // Apple Music の track credits 行（performer 行 / producer 行）の既定 role。
 // 実 DOM の `#track-N-performer-1-role`（86 options）/ `#track-N-producer-1-role`
 // （40 options）の SELECT value に対応する英語値。
-// Python の utils.config.distrokid.DistrokidProfileCredits と 1:1（#919）。
+// Python の configuration.distrokid.DistrokidProfileCredits と 1:1（#919）。
 export interface DistrokidProfileCredits {
   performer_role: string;
   producer_role: string;

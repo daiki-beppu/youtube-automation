@@ -916,8 +916,8 @@ class TestUploadCompleteCollectionDedup:
     def test_prebuilt_upload_keeps_localization_timestamps_when_m4a_needs_probe_fallback(self, tmp_path, monkeypatch):
         """#1323: prebuilt upload 経路でも `.m4a` fallback 後の timestamp を localizations に渡す."""
         from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+        from youtube_automation.configuration import load_config
         from youtube_automation.utils import metadata_generator as metadata_generator_module
-        from youtube_automation.utils.config import load_config
         from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
 
         col_dir = tmp_path / "20990101-live-circuit-collection"

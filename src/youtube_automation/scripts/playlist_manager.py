@@ -17,8 +17,8 @@ import logging
 import sys
 from pathlib import Path
 
+from youtube_automation.configuration import channel_dir, load_config, reset
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.config import channel_dir, load_config, reset
 from youtube_automation.utils.cost_tracker import log_quota
 from youtube_automation.utils.retry import execute_with_retry
 from youtube_automation.utils.youtube_service import get_youtube

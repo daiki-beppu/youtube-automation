@@ -11,8 +11,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.utils.config.comments import LiveChatConfig
-from youtube_automation.utils.config.loader import _build_comments
+from youtube_automation.configuration.comments import LiveChatConfig
+from youtube_automation.configuration.loader import _build_comments
 from youtube_automation.utils.exceptions import ConfigError, GeneratorError
 from youtube_automation.utils.live_chat.codex import CodexLiveChatGenerator
 from youtube_automation.utils.live_chat.history import LiveChatHistory

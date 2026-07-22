@@ -42,7 +42,7 @@ Claude Code `/loop` は最長 3 日の一時反復専用で、永続スケジュ
 | `references/scheduler_job.sh` | 明示選択された OS fallback 専用の install / status / disable |
 | `references/run_scheduled.sh` | OS fallback 専用ラッパー。外部公開ゲート・lock・retry・通知を維持 |
 
-設定スキーマの正は `src/youtube_automation/utils/config/workflow.py::ScheduledAutomation`。
+設定スキーマの正は `src/youtube_automation/configuration/workflow.py::ScheduledAutomation`。
 
 ## Task: setup / update
 

@@ -26,18 +26,18 @@ import urllib.request
 
 import pytest
 
+from youtube_automation.configuration.distrokid import (
+    AiDisclosure,
+    Distrokid,
+    DistrokidProfile,
+    SongwriterName,
+)
 from youtube_automation.scripts.collection_serve import create_server
 from youtube_automation.scripts.distrokid_release import (
     DISTROKID_ASSETS_PREFIX,
     DISTROKID_RELEASE_ROUTE,
     build_release_payload,
     resolve_asset_path,
-)
-from youtube_automation.utils.config.distrokid import (
-    AiDisclosure,
-    Distrokid,
-    DistrokidProfile,
-    SongwriterName,
 )
 from youtube_automation.utils.exceptions import ConfigError
 

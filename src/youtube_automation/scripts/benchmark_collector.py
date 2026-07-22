@@ -28,6 +28,8 @@ from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 
+from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.configuration import load_config
 from youtube_automation.utils.benchmark_analyzer import (
     compute_daily_views,
     compute_engagement_rate,
@@ -36,8 +38,6 @@ from youtube_automation.utils.benchmark_analyzer import (
     parse_iso_duration,
 )
 from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
-from youtube_automation.utils.config import channel_dir as _channel_dir
-from youtube_automation.utils.config import load_config
 from youtube_automation.utils.cost_tracker import log_quota
 from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
 from youtube_automation.utils.profile import section

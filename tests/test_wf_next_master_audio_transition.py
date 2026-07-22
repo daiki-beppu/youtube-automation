@@ -34,7 +34,7 @@ def _run(
     collection: Path,
     *,
     skip_manual_mastering: bool,
-    approval_gate_audio: bool,
+    skip_audio_approval: bool,
     approved: str | None = None,
     approved_master_audio: str | None = None,
     selected_master_audio: str | None = None,
@@ -46,8 +46,8 @@ def _run(
         str(collection),
         "--skip-manual-mastering",
         str(skip_manual_mastering).lower(),
-        "--approval-gate-audio",
-        str(approval_gate_audio).lower(),
+        "--skip-audio-approval",
+        str(skip_audio_approval).lower(),
     ]
     if approved is not None:
         args.extend(["--approved", approved])
@@ -75,7 +75,7 @@ def _add_final_candidate(collection: Path, name: str = "final-master.wav") -> No
 def test_raw_final_adopts_raw_master_when_skip_manual_mastering_is_true(tmp_path: Path) -> None:
     collection = _collection(tmp_path)
 
-    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=False)
+    result = _run(collection, skip_manual_mastering=True, skip_audio_approval=True)
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["action"] == "adopted"
@@ -89,7 +89,7 @@ def test_raw_final_adopts_raw_master_when_skip_manual_mastering_is_true(tmp_path
 def test_raw_final_disabled_waits_without_state_update(tmp_path: Path) -> None:
     collection = _collection(tmp_path)
 
-    result = _run(collection, skip_manual_mastering=False, approval_gate_audio=False)
+    result = _run(collection, skip_manual_mastering=False, skip_audio_approval=True)
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout)["action"] == "wait_for_master"
@@ -102,7 +102,7 @@ def test_raw_final_disabled_waits_without_state_update(tmp_path: Path) -> None:
 def test_audio_gate_requests_approval_without_state_update(tmp_path: Path) -> None:
     collection = _collection(tmp_path)
 
-    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=True)
+    result = _run(collection, skip_manual_mastering=True, skip_audio_approval=False)
 
     assert result.returncode == 0, result.stderr
     output = json.loads(result.stdout)
@@ -120,7 +120,7 @@ def test_audio_gate_rejection_keeps_state_unchanged(tmp_path: Path) -> None:
     result = _run(
         collection,
         skip_manual_mastering=True,
-        approval_gate_audio=True,
+        skip_audio_approval=False,
         approved="no",
         approved_master_audio="raw-master.wav",
     )
@@ -139,7 +139,7 @@ def test_audio_gate_approval_adopts_raw_master(tmp_path: Path) -> None:
     result = _run(
         collection,
         skip_manual_mastering=True,
-        approval_gate_audio=True,
+        skip_audio_approval=False,
         approved="yes",
         approved_master_audio="raw-master.wav",
     )
@@ -156,7 +156,7 @@ def test_final_candidate_adopts_without_audio_gate(tmp_path: Path) -> None:
     collection = _collection(tmp_path)
     _add_final_candidate(collection)
 
-    result = _run(collection, skip_manual_mastering=False, approval_gate_audio=False)
+    result = _run(collection, skip_manual_mastering=False, skip_audio_approval=True)
 
     assert result.returncode == 0, result.stderr
     output = json.loads(result.stdout)
@@ -172,7 +172,7 @@ def test_final_candidate_audio_gate_requests_approval_without_state_update(tmp_p
     collection = _collection(tmp_path)
     _add_final_candidate(collection)
 
-    result = _run(collection, skip_manual_mastering=False, approval_gate_audio=True)
+    result = _run(collection, skip_manual_mastering=False, skip_audio_approval=False)
 
     assert result.returncode == 0, result.stderr
     output = json.loads(result.stdout)
@@ -191,7 +191,7 @@ def test_final_candidate_audio_gate_rejection_keeps_state_unchanged(tmp_path: Pa
     result = _run(
         collection,
         skip_manual_mastering=False,
-        approval_gate_audio=True,
+        skip_audio_approval=False,
         approved="no",
         approved_master_audio="final-master.wav",
     )
@@ -211,7 +211,7 @@ def test_final_candidate_audio_gate_approval_adopts_selected_file(tmp_path: Path
     result = _run(
         collection,
         skip_manual_mastering=False,
-        approval_gate_audio=True,
+        skip_audio_approval=False,
         approved="yes",
         approved_master_audio="final-master.wav",
     )
@@ -230,7 +230,7 @@ def test_multiple_final_candidates_need_selection_without_state_update(tmp_path:
     _add_final_candidate(collection, "final-b.wav")
     before = _state_text(collection)
 
-    result = _run(collection, skip_manual_mastering=False, approval_gate_audio=False)
+    result = _run(collection, skip_manual_mastering=False, skip_audio_approval=True)
 
     assert result.returncode == 0, result.stderr
     output = json.loads(result.stdout)
@@ -247,7 +247,7 @@ def test_selected_final_candidate_adopts_when_multiple_candidates_exist(tmp_path
     result = _run(
         collection,
         skip_manual_mastering=False,
-        approval_gate_audio=False,
+        skip_audio_approval=True,
         selected_master_audio="final-b.wav",
     )
 
@@ -266,7 +266,7 @@ def test_selected_final_candidate_still_uses_audio_gate(tmp_path: Path) -> None:
     result = _run(
         collection,
         skip_manual_mastering=False,
-        approval_gate_audio=True,
+        skip_audio_approval=False,
         selected_master_audio="final-b.wav",
     )
 
@@ -282,7 +282,7 @@ def test_selected_final_candidate_still_uses_audio_gate(tmp_path: Path) -> None:
 def test_audio_gate_approval_requires_approved_master_audio(tmp_path: Path) -> None:
     collection = _collection(tmp_path)
 
-    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=True, approved="yes")
+    result = _run(collection, skip_manual_mastering=True, skip_audio_approval=False, approved="yes")
 
     assert result.returncode == 1
     assert "approved-master-audio is required when --approved is set" in result.stderr
@@ -298,7 +298,7 @@ def test_audio_gate_rechecks_approved_master_audio_before_adopting(tmp_path: Pat
     result = _run(
         collection,
         skip_manual_mastering=False,
-        approval_gate_audio=True,
+        skip_audio_approval=False,
         approved="yes",
         approved_master_audio="raw-master.wav",
     )
@@ -323,7 +323,7 @@ def test_main_repo_candidate_is_copied_to_worktree_before_state_update(tmp_path:
     result = _run(
         collection,
         skip_manual_mastering=False,
-        approval_gate_audio=False,
+        skip_audio_approval=True,
         main_repo_root=main_repo_root,
     )
 
@@ -347,7 +347,7 @@ def test_worktree_and_main_repo_candidates_need_selection(tmp_path: Path) -> Non
     result = _run(
         collection,
         skip_manual_mastering=False,
-        approval_gate_audio=False,
+        skip_audio_approval=True,
         main_repo_root=main_repo_root,
     )
 
@@ -373,7 +373,7 @@ def test_selected_main_repo_candidate_is_copied_to_worktree(tmp_path: Path) -> N
     result = _run(
         collection,
         skip_manual_mastering=False,
-        approval_gate_audio=False,
+        skip_audio_approval=True,
         selected_master_audio="main-final.wav",
         main_repo_root=main_repo_root,
     )
@@ -397,7 +397,7 @@ def test_same_name_worktree_and_main_repo_candidates_require_source_qualified_se
     result = _run(
         collection,
         skip_manual_mastering=False,
-        approval_gate_audio=False,
+        skip_audio_approval=True,
         main_repo_root=main_repo_root,
     )
 
@@ -423,7 +423,7 @@ def test_same_name_main_repo_candidate_can_be_selected_by_identity(tmp_path: Pat
     result = _run(
         collection,
         skip_manual_mastering=False,
-        approval_gate_audio=False,
+        skip_audio_approval=True,
         selected_master_audio="main:final.wav",
         main_repo_root=main_repo_root,
     )
@@ -447,7 +447,7 @@ def test_same_name_filename_only_selection_is_rejected_as_ambiguous(tmp_path: Pa
     result = _run(
         collection,
         skip_manual_mastering=False,
-        approval_gate_audio=False,
+        skip_audio_approval=True,
         selected_master_audio="final.wav",
         main_repo_root=main_repo_root,
     )
@@ -464,7 +464,7 @@ def test_selected_raw_master_is_rejected_when_skip_manual_mastering_is_false(tmp
     result = _run(
         collection,
         skip_manual_mastering=False,
-        approval_gate_audio=False,
+        skip_audio_approval=True,
         selected_master_audio="raw-master.wav",
     )
 
@@ -480,7 +480,7 @@ def test_non_prepared_phase_is_noop_without_state_update(tmp_path: Path) -> None
     (collection / "workflow-state.json").write_text(json.dumps(state), encoding="utf-8")
     before = _state_text(collection)
 
-    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=False)
+    result = _run(collection, skip_manual_mastering=True, skip_audio_approval=True)
 
     assert result.returncode == 0, result.stderr
     assert json.loads(result.stdout) == {"action": "noop", "reason": "phase is not prepared"}
@@ -492,7 +492,7 @@ def test_raw_final_requires_raw_master_file_without_state_update(tmp_path: Path)
     (collection / "01-master" / "raw-master.wav").unlink()
     before = _state_text(collection)
 
-    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=False)
+    result = _run(collection, skip_manual_mastering=True, skip_audio_approval=True)
 
     assert result.returncode == 1
     assert "master audio file does not exist: 01-master/raw-master.wav" in result.stderr
@@ -511,7 +511,7 @@ def test_workflow_state_symlink_is_rejected_without_writing_target(tmp_path: Pat
         pytest.skip(f"symlink creation is unavailable: {exc}")
     before = outside_state.read_text(encoding="utf-8")
 
-    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=False)
+    result = _run(collection, skip_manual_mastering=True, skip_audio_approval=True)
 
     assert result.returncode == 1
     assert "workflow-state.json must be a regular file, not a symlink" in result.stderr
@@ -530,7 +530,7 @@ def test_raw_final_rejects_raw_master_symlink_without_state_update(tmp_path: Pat
         pytest.skip(f"symlink creation is unavailable: {exc}")
     before = _state_text(collection)
 
-    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=False)
+    result = _run(collection, skip_manual_mastering=True, skip_audio_approval=True)
 
     assert result.returncode == 1
     assert "master audio file must be a regular file, not a symlink: 01-master/raw-master.wav" in result.stderr
@@ -552,7 +552,7 @@ def test_master_dir_symlink_is_rejected_without_state_update(tmp_path: Path) -> 
         pytest.skip(f"symlink creation is unavailable: {exc}")
     before = _state_text(collection)
 
-    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=False)
+    result = _run(collection, skip_manual_mastering=True, skip_audio_approval=True)
 
     assert result.returncode == 1
     assert "01-master must be a directory inside the collection, not a symlink" in result.stderr
@@ -564,7 +564,7 @@ def test_invalid_json_fails_without_overwriting_state(tmp_path: Path) -> None:
     state_path = collection / "workflow-state.json"
     state_path.write_text("{invalid", encoding="utf-8")
 
-    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=False)
+    result = _run(collection, skip_manual_mastering=True, skip_audio_approval=True)
 
     assert result.returncode == 1
     assert "invalid workflow-state.json" in result.stderr
@@ -575,7 +575,7 @@ def test_missing_workflow_state_fails_without_traceback(tmp_path: Path) -> None:
     collection = _collection(tmp_path)
     (collection / "workflow-state.json").unlink()
 
-    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=False)
+    result = _run(collection, skip_manual_mastering=True, skip_audio_approval=True)
 
     assert result.returncode == 1
     assert "workflow-state.json could not be read" in result.stderr
@@ -587,7 +587,7 @@ def test_non_object_root_fails_without_overwriting_state(tmp_path: Path) -> None
     state_path = collection / "workflow-state.json"
     state_path.write_text("[]", encoding="utf-8")
 
-    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=False)
+    result = _run(collection, skip_manual_mastering=True, skip_audio_approval=True)
 
     assert result.returncode == 1
     assert "workflow-state.json root must be an object" in result.stderr
@@ -600,7 +600,7 @@ def test_non_object_assets_fails_without_overwriting_state(tmp_path: Path) -> No
     state_path.write_text(json.dumps({"phase": "prepared", "assets": []}), encoding="utf-8")
     before = state_path.read_text(encoding="utf-8")
 
-    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=False)
+    result = _run(collection, skip_manual_mastering=True, skip_audio_approval=True)
 
     assert result.returncode == 1
     assert "workflow-state.json::assets must be an object" in result.stderr
@@ -614,7 +614,7 @@ def test_invalid_filename_fails_without_state_update(tmp_path: Path) -> None:
     (collection / "workflow-state.json").write_text(json.dumps(state), encoding="utf-8")
     before = _state_text(collection)
 
-    result = _run(collection, skip_manual_mastering=True, approval_gate_audio=False)
+    result = _run(collection, skip_manual_mastering=True, skip_audio_approval=True)
 
     assert result.returncode == 1
     assert "workflow-state.json::assets.raw_master must be a filename" in result.stderr

@@ -10,7 +10,7 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict
 
-from youtube_automation.utils.config import channel_dir
+from youtube_automation.configuration import channel_dir
 from youtube_automation.utils.exceptions import YouTubeAPIError
 from youtube_automation.utils.retry import execute_with_retry
 

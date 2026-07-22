@@ -154,7 +154,7 @@ def test_cli_entrypoint_configures_utf8_before_importing_target(monkeypatch):
 
 def test_cli_entrypoint_consumes_channel_before_importing_target(monkeypatch):
     from youtube_automation import cli_entrypoints
-    from youtube_automation.utils.config import loader
+    from youtube_automation.configuration import loader
 
     monkeypatch.setattr(sys, "argv", ["yt-dummy", "--channel", "alpha", "--dry-run"])
 

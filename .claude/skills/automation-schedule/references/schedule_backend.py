@@ -11,7 +11,7 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
-from youtube_automation.utils.config import channel_dir, load_config
+from youtube_automation.configuration import channel_dir, load_config
 
 BACKENDS = (
     "codex-automation",

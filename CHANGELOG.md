@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(configuration)`: 設定 owner を `youtube_automation.configuration` へ移し、`wf_next.approval_gates` と `comments.rules` を廃止して旧キーを `ConfigError` で拒否。`skip_audio_approval` / `skip_upload_approval` と `wf-batch` の新経路を正本化（#2304）。
+
 - `refactor(skills)`: chain manifest の正規承認 field を `approvalGate.skip` へ移行し、`true = 承認省略` に統一。旧 `enabled` は反転解決する後方互換 alias として受理し、新旧同時指定は拒否（#2404）。
 
 - `refactor(config)`: `workflow.post-publish.skip_approvals` を正規キーとして追加し、`true = 承認省略` に統一。旧 `approval_gates` は逆向きの後方互換 alias として維持し、同一 step の新旧同時指定は拒否（#2403）。

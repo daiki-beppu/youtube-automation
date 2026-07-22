@@ -61,7 +61,7 @@ def get_client_secrets_path() -> Path:
 def resolve_client_secrets_path(channel_dir: Path | None = None) -> Path:
     """実行時 OAuth が使う client_secrets.json の検索順を解決する。"""
     if channel_dir is None:
-        from youtube_automation.utils.config import channel_dir as _channel_dir
+        from youtube_automation.configuration import channel_dir as _channel_dir
         channel_dir = _channel_dir()
     kind, path = resolve_client_secrets_location(channel_dir)
     if kind in {"file", "invalid-file", "missing-file"}:

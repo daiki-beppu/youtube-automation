@@ -26,14 +26,14 @@ import json
 import sys
 from pathlib import Path
 
+from youtube_automation.configuration import load_config
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.preflight_checks import requires_scene_phrases
 
 
 def _planning_root() -> Path:
-    from youtube_automation.utils.config import channel_dir
+    from youtube_automation.configuration import channel_dir
 
     return Path(channel_dir()) / "collections" / "planning"
 

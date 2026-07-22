@@ -36,6 +36,7 @@ import time
 from pathlib import Path
 from typing import cast
 
+from youtube_automation.configuration import load_config
 from youtube_automation.scripts import generate_master
 from youtube_automation.utils import cost_tracker, lyria_client
 from youtube_automation.utils.audio_units import unit_for_audio
@@ -43,7 +44,6 @@ from youtube_automation.utils.collection_paths import (
     CollectionPaths,
     resolve_collection_dir,
 )
-from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.lyria_client import Intensity, Mode
 from youtube_automation.utils.skill_config import load_skill_config

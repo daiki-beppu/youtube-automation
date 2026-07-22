@@ -13,9 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
+from youtube_automation.configuration import channel_dir
 from youtube_automation.scripts.init_collection import main
 from youtube_automation.utils.collection_paths import REQUIRED_SUBDIRS
-from youtube_automation.utils.config import channel_dir
 
 
 def _run(monkeypatch, argv: list[str]):

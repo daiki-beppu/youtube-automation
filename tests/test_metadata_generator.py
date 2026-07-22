@@ -14,8 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 import yaml
 
+from youtube_automation.configuration import load_config
 from youtube_automation.utils import metadata_generator as metadata_generator_module
-from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.metadata_generator import (
     LOCALIZED_TITLE_PLACEHOLDERS,
@@ -427,7 +427,7 @@ class TestGenerateCompleteCollectionMetadata:
 
     def test_localizations_usage_attribution_respects_override(self, tmp_path, monkeypatch):
         """skill-config の usage_attribution_lines 上書きが全言語のローカライズ概要欄に反映される（#1650）"""
-        from youtube_automation.utils.config import reset as reset_config
+        from youtube_automation.configuration import reset as reset_config
         from youtube_automation.utils.skill_config import reset as reset_skill_config
 
         fixture = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
@@ -641,7 +641,7 @@ class TestCrossfade:
 
     def test_metadata_generator_uses_masterup_json_before_yaml(self, tmp_path, monkeypatch):
         """metadata_generator も TS generate-master と同じ JSON 優先 override を使うこと。"""
-        from youtube_automation.utils.config import reset as reset_config
+        from youtube_automation.configuration import reset as reset_config
         from youtube_automation.utils.skill_config import reset as reset_skill_config
 
         fixture = Path(__file__).resolve().parent / "fixtures" / "sample_channel"

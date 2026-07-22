@@ -5,8 +5,8 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 
+from youtube_automation.configuration.comments import PROVIDER_CODEX, PROVIDER_GEMINI, GeneratorConfig
 from youtube_automation.utils.comments.generator import GeminiGenerator, ReplyGenerator
-from youtube_automation.utils.config.comments import PROVIDER_CODEX, PROVIDER_GEMINI, GeneratorConfig
 from youtube_automation.utils.exceptions import ConfigError
 
 

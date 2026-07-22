@@ -25,6 +25,12 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.configuration.distrokid import (
+    AiDisclosure,
+    Distrokid,
+    DistrokidProfile,
+    SongwriterName,
+)
 from youtube_automation.scripts.collection_serve import (
     _DISTROKID_COLLECTIONS_ROUTE,
     _DISTROKID_RELEASES_ROUTE,
@@ -35,12 +41,6 @@ from youtube_automation.scripts.collection_serve import (
     find_distrokid_discs,
     read_released_discs,
     write_distrokid_release,
-)
-from youtube_automation.utils.config.distrokid import (
-    AiDisclosure,
-    Distrokid,
-    DistrokidProfile,
-    SongwriterName,
 )
 from youtube_automation.utils.distrokid_spec import write_collection_spec
 

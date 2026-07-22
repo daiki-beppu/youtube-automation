@@ -204,15 +204,15 @@ PyPI `google-auth-httplib2 0.4.0` (2026-05-07 リリース) ページ:
 ### 5.4.3 v1→v2 設定移行 CLI の残存
 
 - `pyproject.toml:48`: v1→v2 config 移行 CLI の entry point
-- `src/youtube_automation/utils/config/loader.py:100-106`: 旧 `channel_config.json` は ConfigError で fail-fast
+- 当時の設定ローダー:100-106: 旧 `channel_config.json` は ConfigError で fail-fast
 - 現在のバージョン: v5.5.0（`pyproject.toml:7`、3 メジャーバージョン経過）
 
 → **P3**: 移行未完了の下流の存在は外部観測不可。loader が hard fail するので「移行せずに使う」運用は実質不可能。撤去判断は CHANGELOG / 配布実績の追跡が前提。
 
 ### 5.4.4 `Workflow` dataclass の dead shim
 
-- `src/youtube_automation/utils/config/workflow.py:8-15`: 空の dataclass（フィールド 0 個）
-- `src/youtube_automation/utils/config/loader.py:266-271`: `_build_workflow` は無条件で空 `Workflow()` を返す（downstream の `workflow.json` 内の `workflow` / `post_upload` / `short` / `community` キーは無視）
+- 当時の設定 workflow モジュール:8-15: 空の dataclass（フィールド 0 個）
+- 当時の設定ローダー:266-271: `_build_workflow` は無条件で空 `Workflow()` を返す（downstream の `workflow.json` 内の `workflow` / `post_upload` / `short` / `community` キーは無視）
 - `CHANGELOG.md:500`: 「`config/channel/workflow.json` の `post_upload` / `short` / `community` キーは削除しなくても loader は素通しする」と明示
 
 → **P2**: 動作影響なし。`Workflow` フィールド自体を `ChannelConfig` から落とすにはメジャーバージョン更新が必要。
