@@ -11,6 +11,14 @@ video_type: loop
 # サムネが完成しておりループ動画のリターンが Veo コストに見合わないチャンネルで false にする。
 enabled: true
 
+# Veo / Omni 実行前の [y/N] 課金確認を -y 相当で省略する opt-in。
+# enabled: false の fail-loud と再生成時の再課金防止は変更しない。
+skip_billing_approval: false
+
+# 生成成功後の動画プレビュー承認を省略する opt-in。
+# true でも loop.mp4 は事後確認用に残し、自動再生成は行わない。
+skip_preview_approval: false
+
 # 通常生成で既存 loop.mp4 を loop-v{n}.mp4 へ退避するときの保持上限。
 # 上限超過時は番号が最も小さい（最も古い）バックアップから自動削除する。
 max_backups: 3

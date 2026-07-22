@@ -7,6 +7,10 @@
 # static fallback に切り替わる。static は loop.mp4 が存在しても main.png/jpg を使う。
 video_type: loop
 
+# effect / overlays 有効時の 20 秒プレビュー承認だけを省略する opt-in。
+# true でもプレビューは生成・保存してから全尺生成へ進む。
+skip_preview_approval: false
+
 audio:
   # 動画長を音声尺と分離したいときの「動画側ターゲット尺 (分)」。
   #

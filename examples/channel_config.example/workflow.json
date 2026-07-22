@@ -1,5 +1,8 @@
 {
   "workflow": {
+    "wf_new": {
+      "skip_plan_selection": false
+    },
     "wf_next": {
       "skip_audio_approval": true,
       "skip_upload_approval": true,

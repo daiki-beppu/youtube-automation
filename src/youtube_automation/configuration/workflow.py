@@ -6,6 +6,18 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
+class WfNew:
+    """`/wf-new` 関連の設定（`wf_new` セクション）.
+
+    - `skip_plan_selection`: `True` のとき、analytics mode / benchmark fallback
+      mode では推奨順 1 位を自動採用する。minimal mode の直接入力確認には
+      適用せず、既定 `False` では従来どおりユーザー選択を待つ。
+    """
+
+    skip_plan_selection: bool = False
+
+
+@dataclass(frozen=True)
 class WfNext:
     """`/wf-next` 関連の設定（`wf_next` セクション）.
 
@@ -119,6 +131,7 @@ class Workflow:
     移動した — `workflow.post_upload.short_publish_time` は使わない。
     """
 
+    wf_new: WfNew = field(default_factory=WfNew)
     wf_next: WfNext = field(default_factory=WfNext)
     post_publish: PostPublish = field(default_factory=PostPublish)
     scheduled_automation: ScheduledAutomation = field(default_factory=ScheduledAutomation)

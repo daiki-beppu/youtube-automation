@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(workflow)`: `/wf-auto` の企画選択、企画プレビュー費用、Lyria 生成、動画プレビュー、Veo 課金・品質確認をチャンネル単位の明示 opt-in skip 設定で無人化し、既定の承認停止、安全上限、監査用成果物を維持（#2416, #2418, #2419, #2420, #2421, #2422）。
+
 - `feat(dashboard)`: 全チャンネルの公開予約ストック・更新状態・主要Analytics指標を横断比較できる一覧テーブルを追加し、在庫昇順、未取得の分離、在庫閾値の警告、狭い画面での内部横スクロールに対応。
 - `refactor(configuration)`: 設定 owner を `youtube_automation.configuration` へ移し、`wf_next.approval_gates` と `comments.rules` を廃止して旧キーを `ConfigError` で拒否。`skip_audio_approval` / `skip_upload_approval` と `wf-batch` の新経路を正本化（#2304）。
 
