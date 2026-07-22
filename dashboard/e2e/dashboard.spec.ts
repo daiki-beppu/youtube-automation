@@ -9,6 +9,7 @@ import { expect, test } from "@playwright/test"
 let process: ChildProcess
 let fixtureRoot: string
 let baseURL: string
+let serverStderr = ""
 
 async function unusedPort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -37,7 +38,9 @@ async function waitUntilReady(url: string): Promise<void> {
     }
     await new Promise((resolveWait) => setTimeout(resolveWait, 100))
   }
-  throw new Error("dashboard server が起動しませんでした")
+  throw new Error(
+    `dashboard server が起動しませんでした${serverStderr ? `\n${serverStderr}` : ""}`
+  )
 }
 
 test.beforeAll(async () => {
@@ -73,8 +76,31 @@ test.beforeAll(async () => {
       },
     })
   )
+  const secondChannel = join(fixtureRoot, "zero-stock")
+  await mkdir(join(secondChannel, "config", "channel"), { recursive: true })
+  await mkdir(join(secondChannel, "data"), { recursive: true })
+  await writeFile(
+    join(secondChannel, "config", "channel", "meta.json"),
+    JSON.stringify({ channel: { name: "Zero Stock" } })
+  )
+  await writeFile(
+    join(secondChannel, "data", "analytics_data_2026-07-20.json"),
+    JSON.stringify({
+      collection_period: { collected_at: "2026-07-20T12:00:00Z" },
+      channel_analytics: {
+        summary: {
+          total_views: 100,
+          total_watch_time: 20,
+          net_subscribers: 1,
+          total_engagement: 5,
+        },
+      },
+      scheduled_videos: { count: 0 },
+      video_analytics: {},
+    })
+  )
   const registry = join(fixtureRoot, "channels.json")
-  await writeFile(registry, JSON.stringify([channel]))
+  await writeFile(registry, JSON.stringify([channel, secondChannel]))
   const port = await unusedPort()
   baseURL = `http://127.0.0.1:${port}`
   process = spawn(
@@ -84,6 +110,7 @@ test.beforeAll(async () => {
       "--project",
       "..",
       "yt-dashboard",
+      "--skip-refresh",
       "--registry",
       registry,
       "--port",
@@ -92,8 +119,16 @@ test.beforeAll(async () => {
     {
       cwd: resolve(import.meta.dirname, ".."),
       stdio: "pipe",
+      env: {
+        ...globalThis.process.env,
+        UV_CACHE_DIR: join(fixtureRoot, "uv-cache"),
+      },
     }
   )
+  process.stderr?.setEncoding("utf8")
+  process.stderr?.on("data", (chunk: string) => {
+    serverStderr += chunk
+  })
   await waitUntilReady(baseURL)
 })
 
@@ -114,10 +149,50 @@ test("概要から動画詳細まで keyboard で確認できる", async ({ page
   await expect(overviewCard.getByText("+32")).toBeVisible()
   await expect(overviewCard.getByText("分析動画")).toBeVisible()
   await expect(page.getByText("チャンネルを選択してください")).toHaveCount(0)
+  const stockTable = page.getByRole("table", {
+    name: "チャンネル横断ストック一覧",
+  })
+  await expect(stockTable).toBeVisible()
+  await expect(stockTable.getByRole("columnheader")).toHaveCount(7)
+  const zeroStockRow = stockTable.getByRole("row", { name: /Zero Stock/ })
+  const nightDriveRow = stockTable.getByRole("row", { name: /Night Drive/ })
+  await expect(zeroStockRow).toContainText("0本")
+  await expect(nightDriveRow).toContainText("1本")
+  expect(
+    await zeroStockRow.evaluate(
+      (row, laterRow) =>
+        Boolean(
+          row.compareDocumentPosition(laterRow) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+        ),
+      await nightDriveRow.elementHandle()
+    )
+  ).toBe(true)
+  const totalSummary = page.getByText("全チャンネル合計 公開予約 1本")
+  expect(
+    await totalSummary.evaluate(
+      (summary, table) =>
+        Boolean(
+          summary.compareDocumentPosition(table) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+        ),
+      await stockTable.elementHandle()
+    )
+  ).toBe(true)
+  const stockContainer = stockTable.locator("xpath=..").first()
+  const stockLayout = await stockContainer.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+    documentWidth: document.documentElement.scrollWidth,
+    viewportWidth: document.documentElement.clientWidth,
+  }))
+  expect(stockLayout.scrollWidth).toBeGreaterThan(stockLayout.clientWidth)
+  expect(stockLayout.documentWidth).toBeLessThanOrEqual(
+    stockLayout.viewportWidth
+  )
   const channel = page.getByRole("button", { name: /Night Drive/ })
   await expect(channel).toBeVisible()
-  await expect(page.getByText("更新失敗", { exact: true })).toBeVisible()
-  await expect(page.getByText("公開予約 1本")).toBeVisible()
+  await expect(overviewCard.getByText("公開予約 1本")).toBeVisible()
   const layout = await overviewCard.evaluate((element) => {
     const bounds = element.getBoundingClientRect()
     return {

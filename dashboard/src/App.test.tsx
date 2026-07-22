@@ -86,12 +86,19 @@ describe("dashboard", () => {
     const channel = await screen.findByRole("article", {
       name: "Night Drive の概要",
     })
+    const stockTable = screen.getByRole("table", {
+      name: "チャンネル横断ストック一覧",
+    })
+    expect(stockTable.compareDocumentPosition(channel)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
     expect(within(channel).getByText("1,200")).toBeInTheDocument()
     expect(within(channel).getByText("450分")).toBeInTheDocument()
     expect(within(channel).getByText("+12")).toBeInTheDocument()
-    const videoMetric = within(channel).getByText("分析動画").parentElement
-    expect(videoMetric).not.toBeNull()
-    expect(within(videoMetric!).getByText("1本")).toBeInTheDocument()
+    const videoMetric = within(channel).getByText("分析動画")
+      .parentElement as HTMLElement | null
+    if (videoMetric === null) throw new Error("分析動画 metric is missing")
+    expect(within(videoMetric).getByText("1本")).toBeInTheDocument()
     expect(
       screen.queryByText("チャンネルを選択してください")
     ).not.toBeInTheDocument()
@@ -124,7 +131,13 @@ describe("dashboard", () => {
     expect(
       screen.getByRole("heading", { name: "動画パフォーマンス" })
     ).toBeInTheDocument()
-    expect(screen.getByRole("cell", { name: "1,200" })).toBeInTheDocument()
+    const performanceCard = screen
+      .getByRole("heading", { name: "動画パフォーマンス" })
+      .closest("[data-slot='card']") as HTMLElement | null
+    if (performanceCard === null) throw new Error("performance card is missing")
+    expect(
+      within(performanceCard).getByRole("cell", { name: "1,200" })
+    ).toBeInTheDocument()
     expect(screen.getAllByText("公開予約 3本")).not.toHaveLength(0)
     expect(screen.queryByText("準備完了")).not.toBeInTheDocument()
   })
@@ -163,9 +176,17 @@ describe("dashboard", () => {
     renderDashboard()
 
     expect(
-      await screen.findByLabelText("更新失敗: Authentication failed")
-    ).toBeInTheDocument()
+      await screen.findAllByLabelText("更新失敗: Authentication failed")
+    ).toHaveLength(2)
     expect(screen.getAllByText("公開予約 3本")).not.toHaveLength(0)
+    const stockTable = screen.getByRole("table", {
+      name: "チャンネル横断ストック一覧",
+    })
+    const stockRow = within(stockTable).getByRole("row", {
+      name: /Night Drive/,
+    })
+    expect(within(stockRow).getByText("3本")).toBeInTheDocument()
+    expect(within(stockRow).queryByText("未取得")).not.toBeInTheDocument()
   })
 
   it("shows an alert when the overview request fails", async () => {
