@@ -44,6 +44,7 @@ from youtube_automation.configuration.workflow import (
     PostPublishApprovalGates,
     PostPublishSkipApprovals,
     ScheduledAutomation,
+    WfNew,
     WfNext,
     Workflow,
 )
@@ -611,6 +612,13 @@ def _build_workflow(merged: dict) -> Workflow:
     if not isinstance(wf, dict):
         raise ConfigError(f"workflow セクションは object でなければなりません（got {type(wf).__name__}）")
 
+    if "wf_new" in wf:
+        wf_new_raw = wf["wf_new"]
+    else:
+        wf_new_raw = {}
+    if not isinstance(wf_new_raw, dict):
+        raise ConfigError(f"workflow.wf_new は object でなければなりません（got {type(wf_new_raw).__name__}）")
+
     if "wf_next" in wf:
         wf_next_raw = wf["wf_next"]
     else:
@@ -666,6 +674,13 @@ def _build_workflow(merged: dict) -> Workflow:
     }
 
     return Workflow(
+        wf_new=WfNew(
+            skip_plan_selection=_workflow_bool(
+                wf_new_raw,
+                "skip_plan_selection",
+                "workflow.wf_new.skip_plan_selection",
+            ),
+        ),
         wf_next=WfNext(
             skip_audio_approval=skip_audio,
             skip_upload_approval=skip_upload,

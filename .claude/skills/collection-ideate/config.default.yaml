@@ -44,6 +44,9 @@ differentiation_axes:
 
 # プレビューサムネイル生成設定
 preview:
+  # 画像生成前のコスト確認を省略する opt-in。true でも生成条件・call 数は
+  # plan_proposals.md と実行ログへ記録し、画像生成そのものは省略しない。
+  skip_cost_confirm: false
   # サムネイル生成タイミング (#354 / #450)
   # 案数 N = candidate_count (下記キー)。
   # - parallel (デフォルト): テキスト N 案 → 確認 → N 枚一括生成 → 比較選択 → 採用 1 枚 planning-preview.png + 残り stock 退避

@@ -23,7 +23,7 @@ Suno 系チャンネルは `/masterup`、Lyria 系チャンネルは `/lyria`（
 
 ## Subagent Contract
 
-subagent として呼ぶ場合、メインエージェントは対象コレクション、採用するマスター音源、背景素材をリポジトリルート相対パスで入力に含める。音源や背景の選択が必要なら、メインが選択を確定するまで subagent を起動しない。subagent は入力確認と `generate_videos.sh` の実行に必要な範囲で `workflow-state.json` を読み取ってよいが、書き込まず、`AskUserQuestion` も実行しない。完了報告には `status: success | failure`、生成した `01-master/*.mp4` の絶対パス一覧、probe 検証結果、エラーを含める。メインはファイル存在と指定入力との整合を検証してから state を更新する。直接実行時は既存手順を変更しない。
+subagent として呼ぶ場合、メインエージェントは対象コレクション、採用するマスター音源、背景素材をリポジトリルート相対パスで入力に含める。音源や背景の選択が必要なら、メインが選択を確定するまで subagent を起動しない。プレビュー承認は `skip_preview_approval: false` のときだけメインが確定してから全尺生成を委譲し、`true` ならプレビュー生成・保存と全尺生成を同じ委譲で続行できる。subagent は入力確認と `generate_videos.sh` の実行に必要な範囲で `workflow-state.json` を読み取ってよいが、書き込まず、`AskUserQuestion` も実行しない。完了報告には `status: success | failure`、生成した `01-master/*.mp4` の絶対パス一覧、probe 検証結果、エラーを含める。メインはファイル存在と指定入力との整合を検証してから state を更新する。直接実行時は既存手順を変更しない。
 
 ## 設定読み込みゲート
 
@@ -84,9 +84,9 @@ $ARGUMENTS
    この場合、既存の `10-assets/loop.mp4` が残っていても `generate_videos.sh` は無視し、静止背景に切り替える。
    それ以外（`enabled` 未指定 or `true`）で `loop.mp4` が無ければ `/loop-video` でのループ動画生成を案内。
    `loop.mp4` があると `generate_videos.sh` が自動的に動画背景を使用（静止画の代わり）
-4. **プレビュー確認ゲート**: `config/skills/videoup.yaml::effect.type != none` または `config/channel/youtube.json::overlays.enabled: true` の場合、全尺生成の前に必ず `generate_videos.sh --preview 20 <collection-path>` を「長時間処理の取り扱い」に従い background で実行する。`01-master/<Collection>-Preview.mp4`、スクリプト出力の `Full output outlook`（経路種別・時間見通し）を提示し、effect / visualizer / popup の見え方をユーザーに確認してもらう。プレビューは `*-Master.mp4` と `workflow-state.json` を変更しない
-5. **明示承認**: ユーザーがプレビューを受理した場合のみ、通常の `generate_videos.sh <collection-path>` で全尺を生成する。受理しない場合は effect / overlays の設定調整へ戻り、全尺エンコードと `assets.master_video` の更新を開始しない。選択 UI が使える環境では「全尺生成へ進む」「設定を調整する」の 2 択で確認し、Codex など選択 UI 非対応環境ではテキストで明示承認を待つ
-6. **動画生成**: effect / overlays が無効な場合、または Step 5 で明示承認された場合のみ、`generate_videos.sh` を実行する（「長時間処理の取り扱い」に従い background で起動する）
+4. **プレビュー確認ゲート**: `config/skills/videoup.yaml::effect.type != none` または `config/channel/youtube.json::overlays.enabled: true` の場合、`skip_preview_approval` に関係なく全尺生成の前に必ず `generate_videos.sh --preview 20 <collection-path>` を「長時間処理の取り扱い」に従い background で実行する。`01-master/<Collection>-Preview.mp4` とスクリプト出力の `Full output outlook`（経路種別・時間見通し）を残す。プレビューは `*-Master.mp4` と `workflow-state.json` を変更しない
+5. **承認分岐**: `skip_preview_approval: false`（既定）はプレビューを提示し、ユーザーが受理した場合のみ全尺生成へ進む。受理しない場合は設定調整へ戻り、全尺エンコードと `assets.master_video` の更新を開始しない。選択 UI では「全尺生成へ進む」「設定を調整する」の 2 択、非対応環境ではテキスト承認を待つ。`true` はプレビューファイルの存在を確認して承認だけを省略し、そのまま全尺生成へ進む
+6. **動画生成**: effect / overlays が無効、Step 5 で明示承認済み、または `skip_preview_approval: true` でプレビュー保存確認済みの場合に、`generate_videos.sh` を実行する（「長時間処理の取り扱い」に従い background で起動する）
 7. **workflow-state.json 更新**: 全尺生成の成功後だけ `assets.master_video` に生成された動画ファイル名（例: `01-master/Theme-Name-Master.mp4`）を記録する。プレビューのみでは更新しない
 
 ### 自動検出される要素
@@ -122,6 +122,7 @@ $ARGUMENTS
 `generate_videos.sh` のチューニング値は **すべて下流チャンネルの `config/skills/videoup.yaml` から取得**する（新規 env override は追加しない config 駆動）。**全キー省略可**で、省略時は現行の固定値にフォールバックする（=無回帰）。
 
 ```yaml
+skip_preview_approval: false  # true: 20 秒 preview は保存し、確認だけ省略して全尺へ進む
 audio:
   target_video_duration_min: 120   # 短尺 master を動画尺へ loop 伸長（#545, 既存 env 優先）
 video:

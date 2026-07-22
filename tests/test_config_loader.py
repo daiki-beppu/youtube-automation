@@ -767,6 +767,47 @@ def test_workflow_wf_next_skip_approval_default(tmp_path, monkeypatch):
     assert config.workflow.wf_next.skip_upload_approval is True
 
 
+def test_workflow_wf_new_skip_plan_selection_default(tmp_path, monkeypatch):
+    """#2416: 未設定なら従来どおり企画選択を待つ."""
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    assert load_config().workflow.wf_new.skip_plan_selection is False
+
+
+def test_workflow_wf_new_skip_plan_selection_explicit(tmp_path, monkeypatch):
+    """#2416: 明示 opt-in を config API から参照できる."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"wf_new": {"skip_plan_selection": True}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    assert load_config().workflow.wf_new.skip_plan_selection is True
+
+
+@pytest.mark.parametrize("invalid", ["false", "true", 1, 0, None, {}, []])
+def test_workflow_wf_new_skip_plan_selection_must_be_boolean(tmp_path, monkeypatch, invalid):
+    """#2416: truthy/falsy coercion で企画選択を誤って省略しない."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"wf_new": {"skip_plan_selection": invalid}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="workflow.wf_new.skip_plan_selection は boolean"):
+        load_config()
+
+
+@pytest.mark.parametrize("invalid", [None, False, [], "bad"])
+def test_workflow_wf_new_must_be_object(tmp_path, monkeypatch, invalid):
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"wf_new": invalid}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="workflow.wf_new は object"):
+        load_config()
+
+
 @pytest.mark.parametrize("legacy_value", [{}, [], "legacy", False, None])
 def test_workflow_wf_next_approval_gates_are_rejected_by_key_presence(tmp_path, monkeypatch, legacy_value):
     """廃止された workflow.wf_next.approval_gates は値の形によらず拒否する."""
