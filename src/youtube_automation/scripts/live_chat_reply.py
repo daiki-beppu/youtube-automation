@@ -7,7 +7,7 @@ import logging
 import sys
 from collections.abc import Iterable
 
-from youtube_automation.utils.config import channel_dir, load_config
+from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.utils.exceptions import AutomationError
 from youtube_automation.utils.live_chat import LiveChatReplier
 from youtube_automation.utils.youtube_service import ServiceRegistry

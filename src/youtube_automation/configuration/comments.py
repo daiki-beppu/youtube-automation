@@ -99,7 +99,6 @@ class Comments:
     """`comments` セクション（optional）.
 
     - `enabled`: この機能を有効にするか
-    - `rules`: 後方互換入力は loader で受けるが、処理では無視し空配列に正規化
     - `language`: 返信言語ヒント。省略時は YouTube API 既定言語を使う
     - `ng_words`: 本文にいずれかが含まれるコメントは除外
     - `max_replies_per_run`: 1 回の実行で返信する上限件数
@@ -110,7 +109,6 @@ class Comments:
     """
 
     enabled: bool = False
-    rules: list[object] = field(default_factory=list)
     language: str | None = None
     ng_words: list[str] = field(default_factory=list)
     max_replies_per_run: int = 20

@@ -10,7 +10,7 @@ import pytest
 
 from youtube_automation.agents._preflight import PreflightMixin
 from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
-from youtube_automation.utils.config import load_config
+from youtube_automation.configuration import load_config
 
 
 class _PreflightHarness(PreflightMixin):

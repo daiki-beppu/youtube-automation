@@ -17,7 +17,7 @@ from typing import Dict, List, Optional
 
 import pandas as pd
 
-from youtube_automation.utils.config import channel_dir as _channel_dir
+from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.launch_curve_analyzer import (
     compute_benchmark,

@@ -8,7 +8,7 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
-from youtube_automation.utils.config import find_workspace_root, workspace_channels
+from youtube_automation.configuration import find_workspace_root, workspace_channels
 
 EXIT_OK = 0
 EXIT_OUTSIDE_WORKSPACE = 1

@@ -34,12 +34,12 @@ uv run yt-skills lint [<skill>..] # SKILL.md frontmatter の軽量検証（stric
 
 ### 設定アクセス
 
-- チャンネル固有値は **必ず** `from youtube_automation.utils.config import load_config` 経由で取得
+- チャンネル固有値は **必ず** `from youtube_automation.configuration import load_config` 経由で取得
 - 責務別ネームスペースでアクセス: `config.meta.channel_name` / `config.content.tags.base` / `config.youtube.api.category_id`
 - ハードコーディング禁止 — `config/channel/*.json` に集約
 - 新しい設定キーを追加する場合:
-  1. 該当責務の dataclass（`utils/config/<section>.py`）にフィールド追加
-  2. `utils/config/loader.py::_build_*` で JSON からの組み立てを追加
+  1. 該当責務の dataclass（`configuration/<section>.py`）にフィールド追加
+  2. `configuration/loader.py::_build_*` で JSON からの組み立てを追加
   3. 必須キーであれば `_REQUIRED_KEYS_BY_SECTION` にも登録
 - Path のみ必要な場合（loader を起動したくない）は `channel_dir()` を使う
 - サンプルは `examples/channel_config.example/`（必須 + optional ファイル、`community.example.json` は skill-local raw JSON 例外）と `examples/localizations.example.json`
@@ -71,7 +71,7 @@ uv run yt-skills lint [<skill>..] # SKILL.md frontmatter の軽量検証（stric
 ### テスト
 
 - `tests/conftest.py` が `src/` を sys.path に追加し `CHANNEL_DIR` を `tests/fixtures/sample_channel/` に向ける
-- `_reset_config_singleton` autouse fixture が各テスト前後で `utils.config.reset()` を呼ぶ。**追加で** `ServiceRegistry.reset()` が必要なテストは個別に呼ぶこと
+- `_reset_config_singleton` autouse fixture が各テスト前後で `configuration.reset()` を呼ぶ。**追加で** `ServiceRegistry.reset()` が必要なテストは個別に呼ぶこと
 - ユニット: `tests/test_*.py` / 統合: `tests/integration/`（API・外部依存あり）
 - フィクスチャ JSON は新構造（`config/channel/*.json`）で配置
 

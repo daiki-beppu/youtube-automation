@@ -163,7 +163,7 @@ class TestInit:
         import shutil
 
         from youtube_automation.agents.short_uploader import ShortUploader
-        from youtube_automation.utils.config import reset
+        from youtube_automation.configuration import reset
         from youtube_automation.utils.exceptions import UploadError
 
         # Given: sample_channel をコピーして shorts.enabled=false に書き換える

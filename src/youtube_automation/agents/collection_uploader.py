@@ -53,10 +53,10 @@ from youtube_automation.agents.youtube_auto_uploader import (  # noqa: E402
     UPLOAD_SOURCE_EXISTING,
     YouTubeAutoUploader,
 )
+from youtube_automation.configuration import channel_dir, load_config  # noqa: E402
 from youtube_automation.scripts.collection_preflight import ensure_collection_preflight  # noqa: E402
 from youtube_automation.scripts.playlist_manager import PlaylistManager  # noqa: E402
 from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E402
-from youtube_automation.utils.config import channel_dir, load_config  # noqa: E402
 from youtube_automation.utils.exceptions import ValidationError  # noqa: E402
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 

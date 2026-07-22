@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from youtube_automation.configuration import reset as reset_config
 from youtube_automation.utils import skill_config
-from youtube_automation.utils.config import reset as reset_config
 from youtube_automation.utils.exceptions import ConfigError
 
 

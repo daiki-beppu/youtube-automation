@@ -16,7 +16,7 @@ from youtube_automation.utils.channel_seed import SeedChannel
 @pytest.fixture(autouse=True)
 def _reset_config(monkeypatch):
     monkeypatch.delenv("CHANNEL_DIR", raising=False)
-    from youtube_automation.utils.config import reset
+    from youtube_automation.configuration import reset
 
     reset()
     yield

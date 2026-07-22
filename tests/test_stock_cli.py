@@ -25,7 +25,7 @@ from youtube_automation.utils import skill_config as skill_config_mod
 def isolated_channel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """最小限の config/channel/ を持つ tmp channel を立てて CHANNEL_DIR に設定する。
 
-    `_reset_config_singleton` autouse fixture が utils.config.reset() を呼ぶので
+    `_reset_config_singleton` autouse fixture が configuration.reset() を呼ぶので
     ここでは skill_config キャッシュだけ追加でクリアする。
     """
 

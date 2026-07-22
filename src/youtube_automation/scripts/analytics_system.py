@@ -15,8 +15,8 @@ from typing import Any
 
 from googleapiclient.errors import HttpError
 
+from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
-from youtube_automation.utils.config import channel_dir, load_config
 from youtube_automation.utils.exceptions import AuthError, ConfigError, YouTubeAPIError
 
 logger = logging.getLogger(__name__)

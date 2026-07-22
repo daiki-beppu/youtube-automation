@@ -40,7 +40,7 @@
 
 `/wf-new` と `/wf-next` はオーケストレーターとして動作する。各 phase の生成・変換処理は Agent ツールで一作業ずつ subagent へ委譲し、メインエージェントは `workflow-state.json` の管理、AskUserQuestion / config 駆動の承認ゲート、成果物の存在・phase 整合検証を担当する。subagent は state を書き込まず、承認を取得しない。
 
-subagent が失敗した、期待成果物が無い、または現在の phase と整合しない場合、メインは state を更新しない。次の `/wf-new` / `/wf-next` は同じ未完了ステップから再開する。`approval_gates.audio` / `approval_gates.upload`、`skip_manual_mastering`、thumbnail 承認、playlist 初期化承認は従来どおりメインが config と実ファイルを確認して処理する。
+subagent が失敗した、期待成果物が無い、または現在の phase と整合しない場合、メインは state を更新しない。次の `/wf-new` / `/wf-next` は同じ未完了ステップから再開する。`skip_audio_approval` / `skip_upload_approval`、`skip_manual_mastering`、thumbnail 承認、playlist 初期化承認はメインが config と実ファイルを確認して処理する。廃止済みの `approval_gates.audio` / `approval_gates.upload` が残っている場合は `ConfigError` で停止する。
 
 ```
 Phase 1 ─ 企画 + 素材準備           /wf-new
@@ -99,7 +99,7 @@ A. `collections/planning/<dir>/` ごと削除して `/wf-new` をやり直す（
 A. `phase: "prepared"` で `raw_master` 配置済み + `master_audio` 未配置の場合、**ユーザーが mixing+mastering を完了して `01-master/` に最終マスターを置く** ことが次の前提。`/wf-status` で詳細を見ると「ミキシング+マスタリング待ち」と表示される。raw master をそのまま公開する運用なら次項の `skip_manual_mastering` を参照。
 
 **Q. raw master をそのまま最終マスターとして使いたい（外部 DAW でのマスタリング不要）**
-A. `config/channel/workflow.json` に `workflow.wf_next.skip_manual_mastering: true` を設定する。`/wf-next` のマスター音源検出（2-B）で `01-master/` に別ファイルが見つからなくても、`assets.raw_master` をそのまま `assets.master_audio` として採用し `phase: "mastered"` へ自動で進む（毎回 `workflow-state.json` を手で編集する必要はない）。`approval_gates.audio` は「採用前に確認プロンプトを出すか」だけを制御する別設定で、こちらを `true` にしても raw=final の自動採用は有効にならない。
+A. `config/channel/workflow.json` に `workflow.wf_next.skip_manual_mastering: true` を設定する。`/wf-next` のマスター音源検出（2-B）で `01-master/` に別ファイルが見つからなくても、`assets.raw_master` をそのまま `assets.master_audio` として採用し `phase: "mastered"` へ自動で進む（毎回 `workflow-state.json` を手で編集する必要はない）。`skip_audio_approval` は採用前に確認プロンプトを出すかだけを制御する別設定で、こちらを `true` にしても raw=final の自動採用は有効にならない。廃止済みの `approval_gates.audio` は使用できない。
 
 ```json
 {

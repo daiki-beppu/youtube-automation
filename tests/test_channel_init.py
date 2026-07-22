@@ -18,8 +18,8 @@ from youtube_automation.cli.channel_init import (
     _resolve_target_dir,
     main,
 )
+from youtube_automation.configuration import load_config
 from youtube_automation.utils.channel_settings import build_update_body
-from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.metadata_generator import (
     validate_localizations_title_templates,
@@ -64,7 +64,7 @@ PACKAGE_FILES: tuple[str, ...] = (
 def _auto_reset(monkeypatch):
     """conftest が向ける `CHANNEL_DIR` を毎テスト前後にクリア + 新 loader シングルトンをリセット."""
     monkeypatch.delenv("CHANNEL_DIR", raising=False)
-    from youtube_automation.utils.config import reset as reset_config
+    from youtube_automation.configuration import reset as reset_config
 
     reset_config()
     yield
@@ -302,7 +302,7 @@ def test_distrokid_enabled_args_generate_distrokid_json(tmp_path, monkeypatch):
     # When: main を実行
     rc = main(_required_args(tmp_path, extra=extra))
 
-    # Then: 既存 utils.config.distrokid と同じ nested schema で生成される
+    # Then: 既存 configuration.distrokid と同じ nested schema で生成される
     assert rc == 0
     distrokid = _read_json(_channel_dir(tmp_path) / "distrokid.json")["distrokid"]
     assert distrokid == {
@@ -1192,7 +1192,7 @@ def test_scaffold_output_is_loadable_by_new_config_loader(tmp_path, monkeypatch)
 
     # When: CHANNEL_DIR を scaffold ターゲットに向けて load_config()
     monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
-    from youtube_automation.utils.config import load_config, reset
+    from youtube_automation.configuration import load_config, reset
 
     reset()
     config = load_config()

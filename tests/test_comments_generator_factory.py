@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
+from youtube_automation.configuration.comments import GeneratorConfig
 from youtube_automation.utils import comments as comments_api
 from youtube_automation.utils.comments.generator import GeminiGenerator
 from youtube_automation.utils.comments.generator_factory import create_reply_generator
-from youtube_automation.utils.config.comments import GeneratorConfig
 from youtube_automation.utils.exceptions import ConfigError
 
 

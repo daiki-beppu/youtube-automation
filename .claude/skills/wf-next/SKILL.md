@@ -62,8 +62,8 @@ description: "Use when 既存コレクション（collections/planning/）を一
 - `skip_audio_approval` (default `true`): `false` にすると `prepared` フェーズ 2-B（音源承認ゲート）で、最終マスター候補を検出した時点で承認を取る
 - `skip_upload_approval` (default `true`): `false` にすると `mastered` フェーズ 3-B（アップロード承認ゲート）で、`/video-upload` 実行直前に承認を取る
 - 既定値は両方 `true` で、`workflow.json` に何も書かれていない既存チャンネルは従来通り全自動進行（後方互換）
-- 旧キー `approval_gates.audio` / `approval_gates.upload`（`true` = 承認を取る、向きが逆）は後方互換 alias として読み続けられる。同一ゲートへ新旧キーを同時指定すると `ConfigError`（新キーへ移行する）
-- 値の解決は `youtube_automation.utils.config.load_config().workflow.wf_next` 経由（`skip_audio_approval` / `skip_upload_approval` / `skip_manual_mastering`。コード側で参照可能）
+- 旧キー `approval_gates.audio` / `approval_gates.upload` は廃止済みで、設定に残っている場合は `ConfigError` で停止する。`skip_audio_approval` / `skip_upload_approval` へ移行する
+- 値の解決は `youtube_automation.configuration.load_config().workflow.wf_next` 経由（`skip_audio_approval` / `skip_upload_approval` / `skip_manual_mastering`。コード側で参照可能）
 
 `skip_*_approval = false` のゲートに到達したら、本 skill は AskUserQuestion で承認を取り、却下されたらフロー停止 + ガイダンスのみで終了する。
 
@@ -137,12 +137,12 @@ description: "Use when 既存コレクション（collections/planning/）を一
    - **判定・state 更新は reference script を使う**。worktree 外（main repo 側）で採用する最終マスター候補を見つけた場合は、先に worktree 側 `01-master/` へコピーしてから script を実行する。script は worktree 側 `01-master/` と `workflow-state.json` を唯一の書き込み対象にする。
 
      ```bash
-     SKIP_MANUAL_MASTERING="$(python3 -c 'from youtube_automation.utils.config import load_config; print(str(load_config().workflow.wf_next.skip_manual_mastering).lower())')"
-     APPROVAL_GATE_AUDIO="$(python3 -c 'from youtube_automation.utils.config import load_config; print(str(not load_config().workflow.wf_next.skip_audio_approval).lower())')"
+     SKIP_MANUAL_MASTERING="$(python3 -c 'from youtube_automation.configuration import load_config; print(str(load_config().workflow.wf_next.skip_manual_mastering).lower())')"
+     SKIP_AUDIO_APPROVAL="$(python3 -c 'from youtube_automation.configuration import load_config; print(str(load_config().workflow.wf_next.skip_audio_approval).lower())')"
      python3 "$(git rev-parse --show-toplevel)/.claude/skills/wf-next/references/master_audio_transition.py" \
        "$COLLECTION_DIR" \
        --skip-manual-mastering "$SKIP_MANUAL_MASTERING" \
-       --approval-gate-audio "$APPROVAL_GATE_AUDIO"
+       --skip-audio-approval "$SKIP_AUDIO_APPROVAL"
      ```
 
      `action: "needs_selection"` が返った場合は、`candidate_sources[].id`（例: `main:final.wav` / `worktree:final.wav`）から採用候補を AskUserQuestion で確認し、`--selected-master-audio <id>` を付けて同じコマンドを再実行する。候補ファイル名が一意なら従来通り `<filename>` でもよいが、worktree と main repo 側で同名候補がある場合は `<id>` が必須。`action: "needs_approval"` が返った場合だけ AskUserQuestion で承認を取り、承認なら `--approved yes --approved-master-audio <master_audio>`、却下なら `--approved no --approved-master-audio <master_audio>` を付けて同じコマンドを再実行する。複数候補かつ承認ゲートありの場合は、選択後の再実行で `needs_approval` が返るため、承認時も `--selected-master-audio <id> --approved yes --approved-master-audio <filename>` を付ける。承認対象と再実行時の採用予定ファイルが一致しない場合、script は state を更新せず再承認を要求する。この script の出力と `workflow-state.json` 更新結果を 2-B の実行契約とする。

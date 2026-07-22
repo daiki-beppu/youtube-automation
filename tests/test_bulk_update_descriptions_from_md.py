@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 from googleapiclient.errors import HttpError
 
-from youtube_automation.utils.config import reset
+from youtube_automation.configuration import reset
 from youtube_automation.utils.exceptions import YouTubeAPIError
 
 # ---------------------------------------------------------------------------

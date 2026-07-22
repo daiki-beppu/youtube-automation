@@ -1,4 +1,4 @@
-"""新 config API (utils.config) の単体テスト.
+"""新 config API (configuration) の単体テスト.
 
 tmp_path ベースの自前 fixture を使い、tests/fixtures/sample_channel/ には依存しない。
 sample_channel の新構造化は S3（コミット 3）で実施する予定。
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.utils.config import (
+from youtube_automation.configuration import (
     ChannelConfig,
     channel_dir,
     find_workspace_root,
@@ -133,7 +133,6 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     assert config.playlists.items == {}
     # comments は optional セクション、欠如時は enabled=False のデフォルト
     assert config.comments.enabled is False
-    assert config.comments.rules == []
     assert config.comments.generator.provider == "codex"
     assert config.comments.max_replies_per_run == 20
     assert config.community_draft.posts == ()
@@ -357,7 +356,7 @@ def test_distrokid_profile_drops_legacy_flat_fields(tmp_path, monkeypatch):
 
 def test_distrokid_profile_default_ai_disclosure(tmp_path, monkeypatch):
     """#877: ai_disclosure 省略時の default（はい + 歌詞/作曲 AI、full 録音、AI ペルソナ、apply-all）。"""
-    from youtube_automation.utils.config.distrokid import AiDisclosure
+    from youtube_automation.configuration.distrokid import AiDisclosure
 
     ch = _setup_channel(tmp_path, _minimal_sections())
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
@@ -389,8 +388,8 @@ def test_distrokid_section_empty_uses_defaults(tmp_path, monkeypatch):
 
 def test_load_distrokid_section_enabled(tmp_path, monkeypatch):
     """#813: enabled=true + 新 schema の全 profile フィールドが nested dataclass まで届く。"""
-    from youtube_automation.utils.config import Distrokid
-    from youtube_automation.utils.config.distrokid import AiDisclosure, SongwriterName
+    from youtube_automation.configuration import Distrokid
+    from youtube_automation.configuration.distrokid import AiDisclosure, SongwriterName
 
     sections = _minimal_sections()
     sections["distrokid.json"] = {"distrokid": {"enabled": True, "profile": _full_distrokid_profile()}}
@@ -559,7 +558,7 @@ def test_distrokid_disabled_with_legacy_flat_profile_loads(tmp_path, monkeypatch
 
 def test_distrokid_ai_disclosure_partial_recording_scope(tmp_path, monkeypatch):
     """#877: recording_scope='partial' + partial_audio_type='vocals' が dataclass まで届く。"""
-    from youtube_automation.utils.config.distrokid import AiDisclosure
+    from youtube_automation.configuration.distrokid import AiDisclosure
 
     sections = _minimal_sections()
     profile = _full_distrokid_profile()
@@ -653,15 +652,6 @@ def test_load_all_sections(tmp_path, monkeypatch):
             "enabled": True,
             "max_replies_per_run": 5,
             "delay_between_replies_sec": 1.0,
-            "rules": [
-                {
-                    "name": "greet_ja",
-                    "keywords": ["こんにちは"],
-                    "language": "ja",
-                    "priority": 10,
-                    "provider": "gemini",
-                }
-            ],
             "generator": {
                 "provider": "gemini",
                 "model": "gemini-3.5-flash",
@@ -703,7 +693,6 @@ def test_load_all_sections(tmp_path, monkeypatch):
     assert config.comments.enabled is True
     assert config.comments.max_replies_per_run == 5
     assert config.comments.delay_between_replies_sec == 1.0
-    assert config.comments.rules == []
     assert config.comments.generator.provider == "gemini"
     assert config.comments.generator.fallback_on_error == "retry"
     assert config.comments.ng_words == ["spam"]
@@ -767,61 +756,8 @@ def test_workflow_legacy_post_upload_silently_ignored(tmp_path, monkeypatch):
     assert config.shorts.publish_time == "08:00"
 
 
-def test_workflow_wf_next_approval_gates_default(tmp_path, monkeypatch):
-    """#508: `workflow.json` 未設定 or 空でも `approval_gates` は両方 `False`（全自動）.
-
-    既存の `workflow.json = {"workflow": {}}` 運用や、`workflow.json` 自体が
-    無いチャンネルでも、後方互換で従来通り全自動進行できることを保証する。
-    """
-    ch = _setup_channel(tmp_path, _minimal_sections())
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    config = load_config()
-
-    assert config.workflow.wf_next.approval_gates.audio is False
-    assert config.workflow.wf_next.approval_gates.upload is False
-
-
-def test_workflow_wf_next_approval_gates_explicit(tmp_path, monkeypatch):
-    """#508: `workflow.wf_next.approval_gates.{audio,upload}` を明示できる."""
-    sections = _minimal_sections()
-    sections["workflow.json"] = {
-        "workflow": {
-            "wf_next": {
-                "approval_gates": {"audio": True, "upload": True},
-            },
-        },
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    config = load_config()
-
-    assert config.workflow.wf_next.approval_gates.audio is True
-    assert config.workflow.wf_next.approval_gates.upload is True
-
-
-def test_workflow_wf_next_approval_gates_partial(tmp_path, monkeypatch):
-    """#508: 片方のゲートだけ `true` も可。指定されないキーは default `False`."""
-    sections = _minimal_sections()
-    sections["workflow.json"] = {
-        "workflow": {
-            "wf_next": {
-                "approval_gates": {"audio": True},
-            },
-        },
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    config = load_config()
-
-    assert config.workflow.wf_next.approval_gates.audio is True
-    assert config.workflow.wf_next.approval_gates.upload is False
-
-
 def test_workflow_wf_next_skip_approval_default(tmp_path, monkeypatch):
-    """#1744: 未設定なら `skip_*_approval` は両方 `True`（従来既定 = 承認ゲートなし）."""
+    """wf-next の skip 承認キーは未設定なら True（承認ゲートなし）になる."""
     ch = _setup_channel(tmp_path, _minimal_sections())
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
@@ -829,8 +765,18 @@ def test_workflow_wf_next_skip_approval_default(tmp_path, monkeypatch):
 
     assert config.workflow.wf_next.skip_audio_approval is True
     assert config.workflow.wf_next.skip_upload_approval is True
-    assert config.workflow.wf_next.approval_gates.audio is False
-    assert config.workflow.wf_next.approval_gates.upload is False
+
+
+@pytest.mark.parametrize("legacy_value", [{}, [], "legacy", False, None])
+def test_workflow_wf_next_approval_gates_are_rejected_by_key_presence(tmp_path, monkeypatch, legacy_value):
+    """廃止された workflow.wf_next.approval_gates は値の形によらず拒否する."""
+    sections = _minimal_sections()
+    sections["workflow.json"] = {"workflow": {"wf_next": {"approval_gates": legacy_value}}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match=r"workflow\.wf_next\.approval_gates"):
+        load_config()
 
 
 def test_workflow_post_publish_unset_preserves_legacy_mode(tmp_path, monkeypatch):
@@ -1003,92 +949,7 @@ def test_workflow_wf_next_skip_approval_explicit(tmp_path, monkeypatch):
 
     assert config.workflow.wf_next.skip_audio_approval is False
     assert config.workflow.wf_next.skip_upload_approval is False
-    # 互換ビュー approval_gates は常に skip_* の否定と整合する
-    assert config.workflow.wf_next.approval_gates.audio is True
-    assert config.workflow.wf_next.approval_gates.upload is True
-
-
-def test_workflow_wf_next_legacy_approval_gates_alias_regression(tmp_path, monkeypatch):
-    """#1744: 旧 `approval_gates.upload: false` のみの JSON は従来どおり承認なしで進む."""
-    sections = _minimal_sections()
-    sections["workflow.json"] = {
-        "workflow": {
-            "wf_next": {
-                "approval_gates": {"upload": False},
-            },
-        },
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    config = load_config()
-
-    assert config.workflow.wf_next.skip_upload_approval is True
-    assert config.workflow.wf_next.approval_gates.upload is False
-
-
-def test_workflow_wf_next_legacy_approval_gates_maps_to_skip(tmp_path, monkeypatch):
-    """#1744: 旧 `approval_gates.*: true` は `skip_*_approval = False` に写像される."""
-    sections = _minimal_sections()
-    sections["workflow.json"] = {
-        "workflow": {
-            "wf_next": {
-                "approval_gates": {"audio": True, "upload": True},
-            },
-        },
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    config = load_config()
-
-    assert config.workflow.wf_next.skip_audio_approval is False
-    assert config.workflow.wf_next.skip_upload_approval is False
-
-
-@pytest.mark.parametrize(
-    ("new_key", "legacy_key"),
-    [("skip_audio_approval", "audio"), ("skip_upload_approval", "upload")],
-)
-def test_workflow_wf_next_skip_approval_conflicts_with_legacy(tmp_path, monkeypatch, new_key, legacy_key):
-    """#1744: 同一ゲートへの新旧キー同時指定は値が一致していても ConfigError."""
-    sections = _minimal_sections()
-    sections["workflow.json"] = {
-        "workflow": {
-            "wf_next": {
-                new_key: True,
-                "approval_gates": {legacy_key: False},
-            },
-        },
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    expected = f"workflow.wf_next.{new_key} と workflow.wf_next.approval_gates.{legacy_key} は"
-    with pytest.raises(ConfigError, match=expected):
-        load_config()
-
-
-def test_workflow_wf_next_skip_approval_mixed_gates_are_independent(tmp_path, monkeypatch):
-    """#1744: ゲートが異なれば新旧キーの混在は衝突しない（audio=旧 / upload=新）."""
-    sections = _minimal_sections()
-    sections["workflow.json"] = {
-        "workflow": {
-            "wf_next": {
-                "skip_upload_approval": False,
-                "approval_gates": {"audio": True},
-            },
-        },
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    config = load_config()
-
-    assert config.workflow.wf_next.skip_audio_approval is False
-    assert config.workflow.wf_next.skip_upload_approval is False
-    assert config.workflow.wf_next.approval_gates.audio is True
-    assert config.workflow.wf_next.approval_gates.upload is True
+    assert not hasattr(config.workflow.wf_next, "approval_gates")
 
 
 @pytest.mark.parametrize("new_key", ["skip_audio_approval", "skip_upload_approval"])
@@ -1136,9 +997,6 @@ def test_workflow_wf_next_skip_manual_mastering_explicit(tmp_path, monkeypatch):
     config = load_config()
 
     assert config.workflow.wf_next.skip_manual_mastering is True
-    # approval_gates は独立した設定であり default を維持する
-    assert config.workflow.wf_next.approval_gates.audio is False
-    assert config.workflow.wf_next.approval_gates.upload is False
 
 
 @pytest.mark.parametrize("invalid", ["false", "true", 1, 0, None, {}, []])
@@ -1156,24 +1014,6 @@ def test_workflow_wf_next_skip_manual_mastering_must_be_boolean(tmp_path, monkey
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
     with pytest.raises(ConfigError, match="workflow.wf_next.skip_manual_mastering は boolean"):
-        load_config()
-
-
-@pytest.mark.parametrize("gate_key", ["audio", "upload"])
-def test_workflow_wf_next_approval_gates_must_be_boolean(tmp_path, monkeypatch, gate_key):
-    """#508/#1449: wf_next の boolean 契約を Python/TS で揃える."""
-    sections = _minimal_sections()
-    sections["workflow.json"] = {
-        "workflow": {
-            "wf_next": {
-                "approval_gates": {gate_key: "false"},
-            },
-        },
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    with pytest.raises(ConfigError, match=f"workflow.wf_next.approval_gates.{gate_key} は boolean"):
         load_config()
 
 
@@ -1217,26 +1057,6 @@ def test_workflow_wf_next_falsy_non_objects_are_rejected(tmp_path, monkeypatch, 
         load_config()
 
 
-@pytest.mark.parametrize(
-    ("gates_value", "message"),
-    [
-        ([], "workflow.wf_next.approval_gates は object"),
-        ("", "workflow.wf_next.approval_gates は object"),
-        (False, "workflow.wf_next.approval_gates は object"),
-        (None, "workflow.wf_next.approval_gates は object"),
-    ],
-)
-def test_workflow_approval_gates_falsy_non_objects_are_rejected(tmp_path, monkeypatch, gates_value, message):
-    """#1449: approval_gates の falsy 非 object も default に潰さない."""
-    sections = _minimal_sections()
-    sections["workflow.json"] = {"workflow": {"wf_next": {"approval_gates": gates_value}}}
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    with pytest.raises(ConfigError, match=message):
-        load_config()
-
-
 def test_workflow_section_must_be_object(tmp_path, monkeypatch):
     """#508: `workflow` セクションが object でないと ConfigError."""
     sections = _minimal_sections()
@@ -1259,33 +1079,21 @@ def test_workflow_wf_next_must_be_object(tmp_path, monkeypatch):
         load_config()
 
 
-def test_workflow_approval_gates_must_be_object(tmp_path, monkeypatch):
-    """#508: `workflow.wf_next.approval_gates` が object でないと ConfigError."""
-    sections = _minimal_sections()
-    sections["workflow.json"] = {
-        "workflow": {"wf_next": {"approval_gates": "bad"}},
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    with pytest.raises(ConfigError, match="workflow.wf_next.approval_gates は object"):
-        load_config()
-
-
-def test_comments_rule_without_name_is_ignored_by_loader(tmp_path, monkeypatch):
+@pytest.mark.parametrize("legacy_value", [{}, [], "legacy", False, None])
+def test_comments_rules_are_rejected_by_key_presence(tmp_path, monkeypatch, legacy_value):
+    """廃止された comments.rules は値の形によらず拒否する."""
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
             "enabled": True,
-            "rules": [{"keywords": ["hi"]}],  # name 未指定
+            "rules": legacy_value,
         }
     }
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    config = load_config()
-
-    assert config.comments.rules == []
+    with pytest.raises(ConfigError, match=r"comments\.rules"):
+        load_config()
 
 
 def test_comments_templates_must_be_object(tmp_path, monkeypatch):
@@ -1471,7 +1279,7 @@ def test_playlists_mixed_string_and_dict_entries(tmp_path, monkeypatch):
 
 
 def test_playlists_dict_entry_is_shallow_copied():
-    from youtube_automation.utils.config.loader import _build_playlists
+    from youtube_automation.configuration.loader import _build_playlists
 
     raw_entry = {"playlist_id": "PL_B", "auto_add_themes": ["fight"]}
     merged = {"playlists": {"battle": raw_entry}}
@@ -1498,7 +1306,7 @@ def test_playlists_invalid_per_key_shape_raises_config_error(value, got_type):
     #419: silent pass-through すると Playlists.items: dict[str, dict] 型注釈と
     実態が乖離するため Fail Fast にする。エラーメッセージに got 型名を含める。
     """
-    from youtube_automation.utils.config.loader import _build_playlists
+    from youtube_automation.configuration.loader import _build_playlists
     from youtube_automation.utils.exceptions import ConfigError
 
     merged = {"playlists": {"main": value}}
@@ -1810,14 +1618,6 @@ def _comments_with_generator(generator_raw: dict) -> dict:
     return {
         "comments": {
             "enabled": True,
-            "rules": [
-                {
-                    "name": "catch_all",
-                    "pattern": ".+",
-                    "priority": 0,
-                    "provider": "gemini",
-                }
-            ],
             "generator": generator_raw,
         }
     }
@@ -1857,7 +1657,6 @@ def test_comments_generator_codex_provider_loads_correctly(tmp_path, monkeypatch
     sections["comments.json"] = {
         "comments": {
             "enabled": True,
-            "rules": [],
             "generator": {"provider": "codex"},
         }
     }
@@ -1881,7 +1680,6 @@ def test_comments_generator_absent_defaults_to_codex(tmp_path, monkeypatch):
     sections["comments.json"] = {
         "comments": {
             "enabled": True,
-            "rules": [],
         }
     }
     ch = _setup_channel(tmp_path, sections)
@@ -1910,7 +1708,6 @@ def test_comments_generator_provider_missing_defaults_to_codex(tmp_path, monkeyp
     sections["comments.json"] = {
         "comments": {
             "enabled": True,
-            "rules": [{"name": "catch_all", "pattern": ".+"}],
             "generator": {"max_length": 120},
         }
     }
@@ -1974,140 +1771,15 @@ def test_comments_section_non_object_raises(tmp_path, monkeypatch, comments_raw)
         load_config()
 
 
-def test_comments_rule_invalid_provider_is_ignored_by_loader(tmp_path, monkeypatch):
-    """comments.rules[] は legacy 互換で受けるが処理では無視する."""
+@pytest.mark.parametrize("legacy_value", [{}, [], "legacy", False, None, [{"name": "legacy"}]])
+def test_comments_rules_legacy_values_are_rejected(tmp_path, monkeypatch, legacy_value):
     sections = _minimal_sections()
-    sections["comments.json"] = {
-        "comments": {
-            "enabled": True,
-            "rules": [
-                {
-                    "name": "bad_rule",
-                    "keywords": ["hi"],
-                    "provider": "openai",
-                }
-            ],
-        }
-    }
+    sections["comments.json"] = {"comments": {"enabled": True, "rules": legacy_value}}
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    config = load_config()
-
-    assert config.comments.rules == []
-
-
-def test_comments_rule_gemini_without_generator_section_loads(tmp_path, monkeypatch):
-    """rule provider='gemini' は互換入力として受けるが generator は global を使う."""
-    sections = _minimal_sections()
-    sections["comments.json"] = {
-        "comments": {
-            "enabled": True,
-            "rules": [
-                {
-                    "name": "ai_rule",
-                    "pattern": ".+",
-                    "provider": "gemini",
-                }
-            ],
-            "generator": {"provider": "codex"},
-        }
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    config = load_config()
-
-    assert config.comments.generator.provider == "codex"
-    assert config.comments.rules == []
-
-
-def test_comments_rule_scope_defaults_to_any(tmp_path, monkeypatch):
-    """#524: scope 未指定の legacy rule も無視してロードされる."""
-    sections = _minimal_sections()
-    sections["comments.json"] = {
-        "comments": {
-            "enabled": True,
-            "rules": [{"name": "g", "keywords": ["hi"]}],
-        }
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    config = load_config()
-
-    assert config.comments.rules == []
-
-
-def test_comments_rule_scope_override_loads(tmp_path, monkeypatch):
-    """#524: scope を指定した legacy rule も無視してロードされる."""
-    sections = _minimal_sections()
-    sections["comments.json"] = {
-        "comments": {
-            "enabled": True,
-            "rules": [
-                {"name": "top", "keywords": ["hi"], "scope": "top_level"},
-                {"name": "rep", "keywords": ["bye"], "scope": "reply"},
-            ],
-        }
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    config = load_config()
-
-    assert config.comments.rules == []
-
-
-def test_comments_rule_non_object_is_ignored_by_loader(tmp_path, monkeypatch):
-    """comments.rules[] の要素 shape は処理で使わないため検証しない."""
-    sections = _minimal_sections()
-    sections["comments.json"] = {
-        "comments": {
-            "enabled": True,
-            "rules": ["legacy-string"],
-        }
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    config = load_config()
-
-    assert config.comments.rules == []
-
-
-@pytest.mark.parametrize("rules_raw", ["", {}, False])
-def test_comments_rules_falsy_non_list_raises(tmp_path, monkeypatch, rules_raw):
-    """comments.rules は falsy 値でも list 以外を暗黙に [] 扱いしない."""
-    sections = _minimal_sections()
-    sections["comments.json"] = {
-        "comments": {
-            "enabled": True,
-            "rules": rules_raw,
-        }
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    with pytest.raises(ConfigError, match=r"comments\.rules は list"):
+    with pytest.raises(ConfigError, match=r"comments\.rules"):
         load_config()
-
-
-def test_comments_rule_invalid_scope_is_ignored_by_loader(tmp_path, monkeypatch):
-    """comments.rules[i].scope は legacy 入力として受けるが処理では無視する."""
-    sections = _minimal_sections()
-    sections["comments.json"] = {
-        "comments": {
-            "enabled": True,
-            "rules": [{"name": "bad", "keywords": ["hi"], "scope": "thread"}],
-        }
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    config = load_config()
-
-    assert config.comments.rules == []
 
 
 def test_comments_language_loads(tmp_path, monkeypatch):
@@ -2146,12 +1818,11 @@ def test_comments_language_non_string_raises(tmp_path, monkeypatch):
 
 def test_comments_dataclass_defaults_to_codex_without_loader():
     """Comments dataclass を直接構築した場合でも codex 既定になる."""
-    from youtube_automation.utils.config.comments import Comments
+    from youtube_automation.configuration.comments import Comments
 
     comments = Comments(enabled=True)
 
     assert comments.generator.provider == "codex"
-    assert comments.rules == []
 
 
 def test_comments_legacy_type_key_raises(tmp_path, monkeypatch):
@@ -2180,8 +1851,7 @@ def test_comments_legacy_templates_key_raises(tmp_path, monkeypatch):
         load_config()
 
 
-def test_comments_legacy_template_key_is_ignored(tmp_path, monkeypatch):
-    """旧 comments.rules[].template_key は後方互換で読み捨てる."""
+def test_comments_legacy_rule_template_key_is_rejected(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -2191,12 +1861,11 @@ def test_comments_legacy_template_key_is_ignored(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    config = load_config()
-    assert config.comments.rules == []
+    with pytest.raises(ConfigError, match=r"comments\.rules"):
+        load_config()
 
 
-def test_comments_legacy_rule_generator_key_is_ignored(tmp_path, monkeypatch):
-    """旧 comments.rules[].generator は後方互換で読み捨てる."""
+def test_comments_legacy_rule_generator_key_is_rejected(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["comments.json"] = {
         "comments": {
@@ -2206,8 +1875,8 @@ def test_comments_legacy_rule_generator_key_is_ignored(tmp_path, monkeypatch):
     ch = _setup_channel(tmp_path, sections)
     monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-    config = load_config()
-    assert config.comments.rules == []
+    with pytest.raises(ConfigError, match=r"comments\.rules"):
+        load_config()
 
 
 # ----- overlays (#511) -----------------------------------------------------

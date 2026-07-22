@@ -499,7 +499,7 @@ class TestAnalysisWindowValidation:
 
 class TestMainAnalysisWindowFlow:
     def _run_main_with_channel(self, tmp_path, monkeypatch, config_yaml: str) -> MagicMock:
-        from youtube_automation.utils.config import reset as reset_config
+        from youtube_automation.configuration import reset as reset_config
 
         skills_dir = tmp_path / "config" / "skills"
         skills_dir.mkdir(parents=True)

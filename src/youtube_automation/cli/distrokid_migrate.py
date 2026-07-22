@@ -33,7 +33,7 @@ from youtube_automation.utils.exceptions import ConfigError
 # config/channel/distrokid.json への相対パス（契約文字列の SSOT）。
 _DISTROKID_RELPATH = ("config", "channel", "distrokid.json")
 
-# ai_disclosure 省略時に付与する default（utils.config.distrokid.AiDisclosure と一致させる）。
+# ai_disclosure 省略時に付与する default（configuration.distrokid.AiDisclosure と一致させる）。
 _DEFAULT_AI_DISCLOSURE: dict[str, object] = {
     "enabled": True,
     "lyrics": True,

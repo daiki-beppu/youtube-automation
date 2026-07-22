@@ -29,7 +29,7 @@ from typing import Any
 
 import yaml
 
-from youtube_automation.utils.config import channel_dir as configured_channel_dir
+from youtube_automation.configuration import channel_dir as configured_channel_dir
 from youtube_automation.utils.exceptions import ConfigError
 
 _cache: dict[str, dict[str, Any]] = {}

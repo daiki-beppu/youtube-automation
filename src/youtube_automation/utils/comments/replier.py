@@ -9,6 +9,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
+from youtube_automation.configuration.comments import (
+    FALLBACK_RETRY,
+    PROVIDER_CODEX,
+    Comments,
+)
 from youtube_automation.utils.comments.fetcher import FetchedComment, fetch_comments
 from youtube_automation.utils.comments.generator import (
     ReplyContext,
@@ -16,11 +21,6 @@ from youtube_automation.utils.comments.generator import (
 )
 from youtube_automation.utils.comments.generator_factory import create_reply_generator
 from youtube_automation.utils.comments.history import ReplyHistory
-from youtube_automation.utils.config.comments import (
-    FALLBACK_RETRY,
-    PROVIDER_CODEX,
-    Comments,
-)
 from youtube_automation.utils.exceptions import ConfigError, GeneratorError, YouTubeAPIError
 from youtube_automation.utils.retry import execute_with_retry
 
