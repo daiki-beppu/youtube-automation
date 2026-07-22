@@ -101,7 +101,7 @@ export function ChannelStockTable({
       <div className="min-w-0 overflow-hidden rounded-lg border">
         <Table
           aria-label={STOCK_TABLE_CONTRACT.ariaLabel}
-          className="min-w-max"
+          className="min-w-[48rem]"
         >
           <TableHeader>
             <TableRow>

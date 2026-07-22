@@ -211,6 +211,9 @@ test("概要から動画詳細まで keyboard で確認できる", async ({ page
   await expect(
     page.getByRole("heading", { name: "動画パフォーマンス" })
   ).toBeVisible()
-  await expect(page.getByRole("cell", { name: "Midnight City" })).toBeVisible()
-  await expect(page.getByRole("cell", { name: "3,200" })).toBeVisible()
+  const videoTable = page.getByRole("table", { name: "動画パフォーマンス" })
+  await expect(
+    videoTable.getByRole("cell", { name: "Midnight City" })
+  ).toBeVisible()
+  await expect(videoTable.getByRole("cell", { name: "3,200" })).toBeVisible()
 })

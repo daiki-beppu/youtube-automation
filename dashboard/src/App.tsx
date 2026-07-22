@@ -343,7 +343,7 @@ function Detail({ detail }: { detail: ChannelDetail }) {
               </CardDescription>
             </CardHeader>
             <CardContent className="px-0">
-              <Table>
+              <Table aria-label="動画パフォーマンス">
                 <TableHeader>
                   <TableRow>
                     <TableHead>動画</TableHead>
