@@ -130,7 +130,7 @@ def test_main_title_preflight_honors_collection_opt_in_for_each_cli_entry(
     """実行可能な CLI 入口が state の title opt-in を実際に評価する。"""
     from youtube_automation.agents import collection_uploader
     from youtube_automation.agents.collection_uploader import CollectionUploader
-    from youtube_automation.utils.config import reset as reset_config
+    from youtube_automation.configuration import reset as reset_config
 
     fixture_channel = Path(__file__).parent / "fixtures" / "sample_channel"
     test_channel = tmp_path / "channel"

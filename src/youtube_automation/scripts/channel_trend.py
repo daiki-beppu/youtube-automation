@@ -13,8 +13,8 @@ import logging
 import sys
 from pathlib import Path
 
+from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.utils.channel_trend import analyze_channel_trend
-from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.exceptions import ConfigError
 
 logger = logging.getLogger(__name__)

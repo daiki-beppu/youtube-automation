@@ -36,12 +36,12 @@ from PIL import UnidentifiedImageError
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.automation_update_refs import UPSTREAM_REPO
 from youtube_automation.cli.skills_sync import bundled_skill_names
+from youtube_automation.configuration import find_workspace_root, workspace_channels
 from youtube_automation.scripts.benchmark_collector import (
     TTP_VIDEO_ANALYZE_TOP_N,
     load_benchmark_videos,
     select_top_vod_benchmark_videos,
 )
-from youtube_automation.utils.config import find_workspace_root, workspace_channels
 from youtube_automation.utils.exceptions import AutomationError, ConfigError, YouTubeAPIError
 from youtube_automation.utils.numbered_duplicates import (
     CLEANUP_GUIDE_URL,
@@ -1227,7 +1227,7 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
             },
         )
 
-    from youtube_automation.utils.config import load_config
+    from youtube_automation.configuration import load_config
     from youtube_automation.utils.exceptions import ConfigError
     from youtube_automation.utils.metadata_generator import validate_localizations_title_templates
 
@@ -1465,7 +1465,7 @@ def check_playlist_create_dry_run(channel_dir: Path) -> CheckResult:
 @contextmanager
 def _temporary_channel_dir(channel_dir: Path) -> Iterator[None]:
     """Temporarily point config singleton consumers at ``channel_dir``."""
-    from youtube_automation.utils.config import reset as reset_config
+    from youtube_automation.configuration import reset as reset_config
 
     old_env = os.environ.get("CHANNEL_DIR")
     os.environ["CHANNEL_DIR"] = str(channel_dir)

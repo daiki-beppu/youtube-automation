@@ -13,8 +13,8 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
+from youtube_automation.configuration.distrokid import Distrokid
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.config.distrokid import Distrokid
 from youtube_automation.utils.distrokid_metadata import (
     parse_album_metadata,
     parse_track_table,

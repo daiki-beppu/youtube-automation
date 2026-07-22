@@ -42,7 +42,7 @@ Step 6 のユーザー案内（クリップボードコピー済み + Studio で
 - **macOS 専用**: `pbcopy` / `open` を使用。cross-platform 化は YAGNI で見送り（follow-up 候補）。失敗時は stdout フォールバックで運用継続できるようにする。
 - **YouTube Data API にコミュニティ投稿作成エンドポイントは存在しない**: テキスト準備と Studio 起動までを自動化し、添付・投稿は Studio 上で手動。
 - **完全固定テンプレ運用**: バリエーション / 多言語 / Studio 自動入力 / 動画 URL 埋め込みは Non-goals。テンプレ本文に変数展開は行わない（ブランドボイスの反復刷り込みが狙い）。
-- **設定アクセス**: 本スキルでは `config/channel/community.json` を skill-local raw JSON 例外として `python3 -c "import json; ..."` で直接読む。`utils.config.load_config()` は現時点で `community` section を持たないため、共通 loader へ統合するかは別タスクで判断する。`.claude/skills/community-post/config.default.yaml` と `config/skills/community-post.yaml` は gate で Read するが、`template` / `studio_url` の fallback 元としては使わない。
+- **設定アクセス**: 本スキルでは `config/channel/community.json` を skill-local raw JSON 例外として `python3 -c "import json; ..."` で直接読む。`configuration.load_config()` は現時点で `community` section を持たないため、共通 loader へ統合するかは別タスクで判断する。`.claude/skills/community-post/config.default.yaml` と `config/skills/community-post.yaml` は gate で Read するが、`template` / `studio_url` の fallback 元としては使わない。
 
 ## When to Use
 

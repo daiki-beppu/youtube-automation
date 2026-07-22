@@ -13,7 +13,7 @@ import unicodedata
 from collections.abc import Iterable
 from pathlib import Path
 
-from youtube_automation.utils.config import find_workspace_root, load_config, reset
+from youtube_automation.configuration import find_workspace_root, load_config, reset
 from youtube_automation.utils.exceptions import ConfigError
 
 EXIT_OK = 0

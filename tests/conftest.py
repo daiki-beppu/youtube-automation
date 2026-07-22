@@ -11,7 +11,7 @@ session-scope の autouse fixture では、`tests/test_metadata_audit.py` のよ
 ユーザが明示的に `CHANNEL_DIR` を指定している場合（例: 別 fixture をデバッグ用に
 向ける）はその指定を尊重し、コピー処理をスキップする。
 
-新 loader (`youtube_automation.utils.config`) のシングルトンは各テスト前後で
+新 loader (`youtube_automation.configuration`) のシングルトンは各テスト前後で
 function-scope の autouse fixture でリセットする。
 """
 
@@ -179,8 +179,8 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 
 @pytest.fixture(autouse=True)
 def _reset_config_singleton():
-    """新 loader (utils.config) のシングルトン state を各テスト前後でリセット."""
-    from youtube_automation.utils.config import reset as reset_config
+    """新 loader (configuration) のシングルトン state を各テスト前後でリセット."""
+    from youtube_automation.configuration import reset as reset_config
 
     reset_config()
     yield

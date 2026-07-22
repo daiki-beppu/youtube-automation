@@ -7,8 +7,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.config import channel_dir, load_config
 from youtube_automation.utils.descriptions_md import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,

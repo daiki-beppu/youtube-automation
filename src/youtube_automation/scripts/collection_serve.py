@@ -46,6 +46,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from youtube_automation import __version__
+from youtube_automation.configuration import Distrokid, channel_dir, load_config
 from youtube_automation.scripts.collection_serve_discovery import (
     DISCOVERY_PORT,
     RegistryState,
@@ -70,7 +71,6 @@ from youtube_automation.scripts.suno_artifacts import (
 )
 from youtube_automation.utils.chrome_extensions import ChromeExtensionOrigin, resolve_unpacked_extension_origin
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.config import Distrokid, channel_dir, load_config
 from youtube_automation.utils.distrokid_metadata import parse_album_metadata
 from youtube_automation.utils.distrokid_spec import find_disc_entry, read_collection_spec
 from youtube_automation.utils.exceptions import ConfigError

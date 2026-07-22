@@ -26,7 +26,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from youtube_automation.utils.config import find_workspace_root, workspace_channels
+from youtube_automation.configuration import find_workspace_root, workspace_channels
 from youtube_automation.utils.exceptions import AuthError, ConfigError, ValidationError, YouTubeAPIError
 from youtube_automation.utils.worktree import main_worktree_root
 
@@ -112,7 +112,7 @@ def resolve_client_secrets_location(channel_dir: Path) -> tuple[str, Path]:
 def resolve_client_secrets_source(channel_dir: Path | None = None) -> tuple[Path, dict[str, object] | None]:
     """client_secrets の表示用パスと任意の in-memory config を解決する。"""
     if channel_dir is None:
-        from youtube_automation.utils.config import channel_dir as _channel_dir
+        from youtube_automation.configuration import channel_dir as _channel_dir
 
         channel_dir = _channel_dir()
 
@@ -180,7 +180,7 @@ class YouTubeOAuthHandler:
             token_path (str | Path | None): token ファイルパス。未指定時は ``<auth_dir>/token.json``。
                 stream key 取得用に ``token_streaming.json`` を分離する用途で使用する（issue #135）
         """
-        from youtube_automation.utils.config import channel_dir as _channel_dir
+        from youtube_automation.configuration import channel_dir as _channel_dir
 
         channel_dir = _channel_dir()
         self._channel_dir = channel_dir
@@ -220,7 +220,7 @@ class YouTubeOAuthHandler:
         handler を生成せずファイル存在だけで判定できるよう classmethod にしている
         （client_secrets 解決や 1Password 参照を発行チェックの副作用にしない）。
         """
-        from youtube_automation.utils.config import channel_dir as _channel_dir
+        from youtube_automation.configuration import channel_dir as _channel_dir
 
         channel = _channel_dir()
         local = channel / "auth" / cls.READONLY_TOKEN_FILENAME
@@ -242,7 +242,7 @@ class YouTubeOAuthHandler:
         """
         token_path = cls.readonly_token_path()
         if token_path is None:
-            from youtube_automation.utils.config import channel_dir as _channel_dir
+            from youtube_automation.configuration import channel_dir as _channel_dir
 
             channel = _channel_dir()
             auth_dir = channel / "auth"
@@ -259,7 +259,7 @@ class YouTubeOAuthHandler:
         ``ConfigError`` 時は auth ディレクトリの親ディレクトリ名へフォールバックする。
         """
         try:
-            from youtube_automation.utils.config import load_config
+            from youtube_automation.configuration import load_config
 
             return load_config().meta.channel_short
         except ConfigError:

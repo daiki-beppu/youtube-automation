@@ -334,7 +334,7 @@ def _resolve_transition(
             return 0
         selected = raw_master
 
-    if args.approval_gate_audio and not _ensure_approval_target(args, selected, reason):
+    if not args.skip_audio_approval and not _ensure_approval_target(args, selected, reason):
         return 0
 
     _prepare_selected_file(selected_candidate, master_dir, selected)
@@ -346,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("collection", type=Path)
     parser.add_argument("--skip-manual-mastering", required=True, type=_bool_arg)
-    parser.add_argument("--approval-gate-audio", required=True, type=_bool_arg)
+    parser.add_argument("--skip-audio-approval", required=True, type=_bool_arg)
     parser.add_argument("--approved", type=_approval_arg)
     parser.add_argument("--approved-master-audio")
     parser.add_argument("--selected-master-audio")

@@ -275,7 +275,7 @@ class TestClientSecretsFallback:
         """
         monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
         monkeypatch.setattr(
-            "youtube_automation.utils.config.channel_dir",
+            "youtube_automation.configuration.channel_dir",
             lambda: tmp_path,
         )
 
@@ -1098,7 +1098,7 @@ class TestChannelIdentityInAuthMessages:
         def _raise_config_error():
             raise ConfigError("config broken")
 
-        monkeypatch.setattr("youtube_automation.utils.config.load_config", _raise_config_error)
+        monkeypatch.setattr("youtube_automation.configuration.load_config", _raise_config_error)
 
         assert handler._channel_label() == handler.auth_dir.resolve().parent.name
 

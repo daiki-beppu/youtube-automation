@@ -31,9 +31,9 @@ from typing import Iterable
 
 from googleapiclient.errors import HttpError
 
+from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.configuration import load_config
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.config import channel_dir as _channel_dir
-from youtube_automation.utils.config import load_config
 from youtube_automation.utils.cost_tracker import log_quota
 from youtube_automation.utils.exceptions import AutomationError, ValidationError, YouTubeAPIError
 from youtube_automation.utils.youtube_service import get_youtube

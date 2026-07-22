@@ -21,9 +21,9 @@ from typing import Dict, List
 
 import yaml
 
+from youtube_automation.configuration import load_config
 from youtube_automation.utils.audio_formats import AUDIO_EXTS
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.config import load_config
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.preflight_checks import requires_scene_phrases
 from youtube_automation.utils.probe import probe_duration

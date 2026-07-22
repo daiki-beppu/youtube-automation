@@ -22,6 +22,7 @@ import logging
 import sys
 from datetime import date, datetime
 
+from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.scripts.benchmark_collector import (
     _QUOTA_SERVICE,
     _READ_QUOTA_UNITS,
@@ -29,7 +30,6 @@ from youtube_automation.scripts.benchmark_collector import (
     load_benchmark_videos,
 )
 from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
-from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.cost_tracker import log_quota
 from youtube_automation.utils.youtube_service import get_youtube
 

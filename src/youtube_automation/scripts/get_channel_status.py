@@ -10,9 +10,9 @@ import logging
 import sys
 from datetime import datetime, timedelta
 
+from youtube_automation.configuration import load_config
 from youtube_automation.utils import cost_tracker
 from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
-from youtube_automation.utils.config import load_config
 
 logger = logging.getLogger(__name__)
 

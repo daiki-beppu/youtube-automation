@@ -195,7 +195,7 @@ ffmpeg / Veo / Lyria / 画像生成 API を呼ぶスキル（`/videoup` / `/mast
 
 ### 設定アクセス
 
-- チャンネル固有値は **必ず** `from youtube_automation.utils.config import load_config` 経由で取得
+- チャンネル固有値は **必ず** `from youtube_automation.configuration import load_config` 経由で取得
 - 責務別ネームスペースでアクセス: `config.meta.channel_name` / `config.content.tags.base` / `config.youtube.api.category_id`
 - ハードコーディング禁止 — `config/channel/*.json` に集約
 

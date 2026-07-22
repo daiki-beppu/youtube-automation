@@ -292,7 +292,7 @@ bash .lefthook/setup-worktree.sh
 
 - **テスト**: `uv run pytest`
 - **Lint**: `uv run ruff check .`
-- **設定アクセス**: チャンネル固有値は `from youtube_automation.utils.config import load_config` 経由で取得する。ハードコーディング禁止。詳細は [`CLAUDE.md`](CLAUDE.md) の「開発規約」節
+- **設定アクセス**: チャンネル固有値は `from youtube_automation.configuration import load_config` 経由で取得する。ハードコーディング禁止。詳細は [`CLAUDE.md`](CLAUDE.md) の「開発規約」節
 - **新規 CLI**: `yt-*` プレフィックスを必ず付け、`pyproject.toml` の `[project.scripts]` に entry point を登録する
 - **テストフィクスチャ**: `tests/conftest.py` が `CHANNEL_DIR` を `tests/fixtures/sample_channel/` に向ける。新スキーマ（`config/channel/*.json`）で配置する
 - **issue / worktree 開発フロー**: worktree の生成・命名・PR 運用は [`docs/takt-operations.md`](docs/takt-operations.md) を参照する
@@ -310,7 +310,7 @@ bash .lefthook/setup-worktree.sh
 | 症状 | 原因 / 対処 |
 |---|---|
 | `yt-*` が `bad interpreter` で起動しない | リポジトリ／ディレクトリをリネームした直後によく起きる。`rm -rf .venv && uv sync` で復旧（`uv sync` 単独では shebang が更新されない） |
-| `ConfigError: missing key ...` | `config/channel/*.json` に必須キーが不足。`utils/config/loader.py::_REQUIRED_KEYS_BY_SECTION` を参照して該当 JSON を埋める |
+| `ConfigError: missing key ...` | `config/channel/*.json` に必須キーが不足。`configuration/loader.py::_REQUIRED_KEYS_BY_SECTION` を参照して該当 JSON を埋める |
 | `op read` が失敗する | `op signin` でサインインしているか確認。CLI 取得経路は `utils/secrets.py` の `_SECRET_REFS`（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`） |
 | `yt-skills sync` がスキルを上書きしない | `--force` を付ける（既存ファイルがあるとデフォルトでスキップ） |
 | Vertex AI 呼び出しで `PERMISSION_DENIED` | ADC quota project を `gcloud auth application-default set-quota-project <PROJECT_ID>` で確認・修正し、`auth/SETUP.md` の IAM ロール付与節を再実行 |

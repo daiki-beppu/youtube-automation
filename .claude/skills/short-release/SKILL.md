@@ -51,7 +51,7 @@ description: "Use when release 型（楽曲リリース）チャンネルで JP+
 ### Step 1: 前提チェック
 
 ```python
-from youtube_automation.utils.config import load_config
+from youtube_automation.configuration import load_config
 cfg = load_config()
 assert cfg.shorts.enabled, "config/channel/shorts.json で shorts.enabled=true にしてください"
 assert cfg.youtube.content_model.type == "release", "collection 型は /short を使ってください"

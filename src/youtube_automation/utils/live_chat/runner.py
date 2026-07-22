@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from youtube_automation.utils.config.comments import LiveChatConfig
+from youtube_automation.configuration.comments import LiveChatConfig
 from youtube_automation.utils.exceptions import GeneratorError, YouTubeAPIError
 from youtube_automation.utils.live_chat.codex import CodexLiveChatGenerator
 from youtube_automation.utils.live_chat.filters import audit_text

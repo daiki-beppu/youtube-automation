@@ -93,7 +93,7 @@ _IN_PROCESS_LOCK = threading.Lock()
 
 def _channel_dir() -> Path:
     """チャンネルディレクトリを ChannelConfig 経由で解決。"""
-    from youtube_automation.utils.config import channel_dir
+    from youtube_automation.configuration import channel_dir
 
     return channel_dir()
 

@@ -11,8 +11,8 @@ import logging
 import re
 from pathlib import Path
 
+from youtube_automation.configuration import load_config
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.config import load_config
 from youtube_automation.utils.descriptions_md import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,

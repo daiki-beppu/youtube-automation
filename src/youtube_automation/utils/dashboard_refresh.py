@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 @contextmanager
 def _channel_context(channel: Path) -> Iterator[None]:
-    from youtube_automation.utils.config import reset as reset_config
+    from youtube_automation.configuration import reset as reset_config
     from youtube_automation.utils.youtube_service import reset as reset_services
 
     previous_dir = os.environ.get("CHANNEL_DIR")

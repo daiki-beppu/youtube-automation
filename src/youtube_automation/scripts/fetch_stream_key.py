@@ -28,8 +28,8 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
+from youtube_automation.configuration import channel_dir
 from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.exceptions import ValidationError, YouTubeAPIError
 from youtube_automation.utils.secrets import write_op_secret
 

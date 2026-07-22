@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from youtube_automation.utils.config import channel_dir
+from youtube_automation.configuration import channel_dir
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.stock import load_stock_config, prune_stock
 

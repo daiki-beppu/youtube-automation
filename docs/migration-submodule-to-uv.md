@@ -85,7 +85,7 @@ git mv automation/auth/client_secrets.json auth/client_secrets.json 2>/dev/null 
 
 ```bash
 # ChannelConfig がロードできるか（v2.0.0 以降）
-uv run python3 -c "from youtube_automation.utils.config import load_config; print(load_config().meta.channel_name)"
+uv run python3 -c "from youtube_automation.configuration import load_config; print(load_config().meta.channel_name)"
 
 # OAuth が通るか
 uv run yt-channel-status

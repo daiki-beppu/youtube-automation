@@ -10,6 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from youtube_automation.configuration.youtube import YoutubeApi
 from youtube_automation.scripts import channel_settings_cli
 from youtube_automation.utils.channel_settings import (
     KEYWORDS_MAX_LENGTH,
@@ -22,7 +23,6 @@ from youtube_automation.utils.channel_settings import (
     parse_api_response,
     verify_channel_id,
 )
-from youtube_automation.utils.config.youtube import YoutubeApi
 from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
 
 # ---------------------------------------------------------------------------

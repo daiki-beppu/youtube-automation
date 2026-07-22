@@ -191,8 +191,8 @@ CLAUDE.md L100:
 
 | ID | 箇所 | 内容 | 状態 |
 |---|---|---|---|
-| `Workflow` dataclass | `src/youtube_automation/utils/config/workflow.py:8-15` | フィールド 0 個の空 dataclass。v4.0.0 で `short` / `community` を撤去 | **dead shim**（P2: メジャー bump 時に整理候補） |
-| `_build_workflow` | `src/youtube_automation/utils/config/loader.py:266-271` | 常に空 `Workflow()` を返す placeholder | 上と同根 |
+| `Workflow` dataclass | 当時の設定 workflow モジュール:8-15 | フィールド 0 個の空 dataclass。v4.0.0 で `short` / `community` を撤去 | **dead shim**（P2: メジャー bump 時に整理候補） |
+| `_build_workflow` | 当時の設定ローダー:266-271 | 常に空 `Workflow()` を返す placeholder | 上と同根 |
 | `workflow.json` 内 `short` / `community` キー | `CHANGELOG.md:500` で「素通し」運用宣言 | downstream の `workflow.json` 内の旧キーは無視される | 仕様的に確定済み |
 | v1→v2 config 移行 CLI | 当時 `pyproject.toml:48` に登録 | **現在 v5.5.0**、3 メジャー超経過 | P3: 撤去判断要（loader 側は `loader.py:100-106` で legacy 形式を hard fail するため、コマンド自体は実質要らない可能性） |
 | `gemini_image:` namespace 旧 schema | `src/youtube_automation/utils/image_provider/config.py:102-107` で `DeprecationWarning` 発行中 | 旧 namespace から新 `image_generation:` への移行ガード | `.claude/skills/**/config.default.yaml` には `gemini_image:` の利用箇所 **0 件**（grep 確認済み）→ 既に下流配布版で使われていない疑い |
@@ -328,7 +328,7 @@ CLAUDE.md L100:
 |---|---|---|---|
 | **H9** | `gemini-2.0-flash-exp` 等 `-exp` サフィックス付きモデルが production 経路で使われている | **否定** | `grep -rnE '-exp\b' src/ .claude/skills/` で 0 件。実利用は `gemini-2.5-flash` / `gemini-2.5-flash-lite` / `gemini-3.1-flash-image-preview` のみ |
 | **H10** | `veo-2.0-generate-001` の retire 後に動かなくなる skill が複数ある | **否定** | `grep -rnE 'veo-2\.0\|veo-3\.0' src/ .claude/skills/` で 0 件。実利用は `veo-3.1-fast-generate-001` / `veo-3.1-generate-001` / `veo-3.1-lite-generate-preview`。**ただし** Veo 系では `gemini-2.5-flash*` の方が 2026-10-16 リスクとして上位 |
-| **H11** | ルート直下 shim の中に「もはや誰も import していない死んだ shim」がある | **△ 部分検証 — ルート shim は実在しない、コード内 shim は実在** | `utils/` / `agents/` ルート直下に shim ファイル無し（既に削除済）。一方で `Workflow` dataclass (`src/youtube_automation/utils/config/workflow.py:8-15`) が空、`_build_workflow` (`loader.py:266-271`) が無条件 placeholder で **dead shim**。v1→v2 config 移行 CLI も v5.5.0 で 3 メジャー超経過しており撤去候補 |
+| **H11** | ルート直下 shim の中に「もはや誰も import していない死んだ shim」がある | **△ 部分検証 — ルート shim は実在しない、コード内 shim は実在** | `utils/` / `agents/` ルート直下に shim ファイル無し（既に削除済）。一方で `Workflow` dataclass（当時の設定 workflow モジュール:8-15）が空、`_build_workflow`（当時の設定ローダー:266-271）が無条件 placeholder で **dead shim**。v1→v2 config 移行 CLI も v5.5.0 で 3 メジャー超経過しており撤去候補 |
 | **H12** | `pyproject.toml` の依存にメジャーバージョン pin が無く、google-cloud-aiplatform の breaking change で全停止する余地がある | **検証（pin 不在を確認、ただし google-cloud-aiplatform は直接依存していない）** | 直接依存は 16 件全て上限なし (`pyproject.toml:13-28`)。`google-cloud-aiplatform` は直接依存ではない（uv.lock にも未掲載）が、代わりに **`google-genai`** が 1.69 → 2.4 メジャー差で同等のリスク。実質的に H12 は `google-genai` で実現する |
 
 ---
@@ -369,7 +369,7 @@ CLAUDE.md L100:
 | # | アクション | 対象 |
 |---|---|---|
 | 7 | SKILL.md に「外部サービス障害時の対応」セクションを 27 件の skill に追加 | 観点 6-2 表に列挙した 27 skill |
-| 8 | `Workflow` dataclass + `_build_workflow` を撤去（メジャー bump 時） | `src/youtube_automation/utils/config/workflow.py`, `loader.py:266-271` |
+| 8 | `Workflow` dataclass + `_build_workflow` を撤去（メジャー bump 時） | 当時の設定 workflow モジュール、設定ローダー:266-271 |
 | 9 | `[project.optional-dependencies] veo = []` を撤去 | `pyproject.toml:35` |
 | 10 | `japanize-matplotlib` 撤去 / `matplotlib.font_manager` 経由の日本語フォント登録に置換 | `launch_curve_plotter.py`, `channel_trend.py`, `theme_performance.py` |
 | 11 | `veo-3.1-lite-generate-preview` の公式 publisher model ID を Vertex AI Model Garden で確認、不一致なら skill 補正 | `.claude/skills/loop-video/config.default.yaml`, `SKILL.md` |

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from youtube_automation.utils.config import channel_dir
+from youtube_automation.configuration import channel_dir
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.thumbnail_references import (
     plan_ttp_reference_assignments,

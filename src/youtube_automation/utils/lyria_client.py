@@ -31,7 +31,7 @@ import requests
 from google.auth import default as google_auth_default
 from google.auth.transport.requests import Request as AuthRequest
 
-from youtube_automation.utils.config import channel_dir
+from youtube_automation.configuration import channel_dir
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.google_cloud_project import resolve_project_id
 

@@ -22,13 +22,13 @@ import subprocess
 import urllib.request
 from pathlib import Path
 
+from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.configuration import load_config
 from youtube_automation.scripts.benchmark_collector import (
     ensure_benchmark_fresh,
     load_benchmark_videos,
 )
 from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
-from youtube_automation.utils.config import channel_dir as _channel_dir
-from youtube_automation.utils.config import load_config
 
 logger = logging.getLogger(__name__)
 

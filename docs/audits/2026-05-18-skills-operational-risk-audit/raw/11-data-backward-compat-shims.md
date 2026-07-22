@@ -85,7 +85,7 @@ scripts/
 
 当時は `pyproject.toml:48` に entry point として登録継続。
 
-`src/youtube_automation/utils/config/loader.py:100-106`:
+当時の設定ローダー:100-106:
 
 ```python
 legacy_path = channel_dir_path / "config" / "channel_config.json"
@@ -120,7 +120,7 @@ if legacy_path.exists():
 
 ### 6.13.1 v4.0.0 で撤去された経緯
 
-`src/youtube_automation/utils/config/workflow.py:8-15`:
+当時の設定 workflow モジュール:8-15:
 
 ```python
 @dataclass(frozen=True)
@@ -135,7 +135,7 @@ class Workflow:
 
 → **空の dataclass**。フィールド 0 個。
 
-`src/youtube_automation/utils/config/loader.py:266-271`:
+当時の設定ローダー:266-271:
 
 ```python
 def _build_workflow(merged: dict) -> Workflow:
@@ -167,7 +167,7 @@ def _build_workflow(merged: dict) -> Workflow:
 
 ### 6.13.3 影響範囲
 
-- **`Workflow` dataclass は空**だが `ChannelConfig.workflow` フィールドは残っている（`src/youtube_automation/utils/config/config.py:27`）→ 構造保持のための placeholder
+- **`Workflow` dataclass は空**だが `ChannelConfig.workflow` フィールドは残っている（当時の設定 model:27）→ 構造保持のための placeholder
 - 下流が `workflow.json` を持っていれば中身は無視されるが、loader はファイルそのものは glob で読む（`_load_and_merge` で重複キー検出はする）
 - `tests/test_config_loader.py:134-139` で「v4.0.0 で post_upload / short セクションは撤去されたが、downstream の」（テストケースが残置確認のために存在）
 
@@ -176,7 +176,7 @@ def _build_workflow(merged: dict) -> Workflow:
 「空 dataclass + 素通し loader」は典型的な **dead backward-compat shim**。
 
 - `Workflow` 自体が空なら `ChannelConfig.workflow` フィールド／`_build_workflow` の関数を撤去できる（代わりに `ChannelConfig` から workflow フィールド削除）
-- ただし下流が `from youtube_automation.utils.config import ChannelConfig` で型 hint 経由で参照している可能性があるので、撤去はメジャーバージョン bump で
+- ただし下流が旧設定パッケージから `ChannelConfig` を型 hint 経由で参照している可能性があるので、撤去はメジャーバージョン bump で
 
 **P2: dead shim**。動作影響なし、メジャーバージョン更新時に整理候補。
 
