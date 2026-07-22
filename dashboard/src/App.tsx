@@ -16,6 +16,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -124,6 +125,10 @@ function channelBadgeLabel(channel: ChannelOverview): string {
   return `公開予約 ${integer.format(channel.scheduled_count)}本`
 }
 
+function signedInteger(value: number): string {
+  return value > 0 ? `+${integer.format(value)}` : integer.format(value)
+}
+
 function LoadingState() {
   return (
     <div aria-label="読み込み中" className="grid gap-4 lg:grid-cols-3">
@@ -176,7 +181,7 @@ function SummaryMetrics({ summary }: { summary: Summary }) {
   )
 }
 
-function ChannelList({
+function ChannelOverviewGrid({
   channels,
   selectedId,
   onSelect,
@@ -186,52 +191,100 @@ function ChannelList({
   onSelect: (id: string) => void
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>チャンネル概要</CardTitle>
-        <CardDescription>
-          登録順に最新の収集済みデータを表示します。
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
+    <section aria-labelledby="channel-overview-title" className="grid gap-4">
+      <div>
+        <h2 id="channel-overview-title" className="text-2xl font-semibold">
+          チャンネル概要
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          選択しなくても、全チャンネルの主要指標を比較できます。
+        </p>
+      </div>
+      <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
         {channels.map((channel) => (
-          <Button
+          <Card
             key={channel.id}
-            variant={selectedId === channel.id ? "secondary" : "outline"}
-            className="h-auto min-w-0 w-full flex-col items-stretch gap-3 px-4 py-3 text-left"
-            onClick={() => onSelect(channel.id)}
-            aria-pressed={selectedId === channel.id}
+            role="article"
+            aria-label={`${channel.name} の概要`}
+            className="min-w-0"
           >
-            <span className="flex w-full min-w-0 flex-col items-start gap-1">
-              <span className="max-w-full truncate font-medium">
-                {channel.name}
-              </span>
-              <span className="text-xs font-normal text-muted-foreground">
-                収集: {formatCollectedAt(channel.collected_at)}
-              </span>
-            </span>
-            <span className="flex w-full min-w-0 flex-wrap items-center gap-2">
-              {channel.refresh_error ? (
+            <CardHeader className="gap-3">
+              <div className="min-w-0">
+                <CardTitle className="break-words text-lg">
+                  {channel.name}
+                </CardTitle>
+                <CardDescription>
+                  収集: {formatCollectedAt(channel.collected_at)}
+                </CardDescription>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                {channel.refresh_error ? (
+                  <Badge
+                    variant="destructive"
+                    aria-label={`更新失敗: ${channel.refresh_error.message}`}
+                  >
+                    更新失敗
+                  </Badge>
+                ) : null}
                 <Badge
-                  variant="destructive"
-                  aria-label={`更新失敗: ${channel.refresh_error.message}`}
+                  variant={
+                    channel.status === "ready" ? "default" : "destructive"
+                  }
                 >
-                  更新失敗
+                  {channelBadgeLabel(channel)}
                 </Badge>
-              ) : null}
-              <Badge
-                variant={channel.status === "ready" ? "default" : "destructive"}
+              </div>
+            </CardHeader>
+            <CardContent>
+              <dl className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-muted p-3">
+                  <dt className="text-xs text-muted-foreground">期間再生数</dt>
+                  <dd className="text-lg font-semibold tabular-nums">
+                    {channel.summary
+                      ? integer.format(channel.summary.views)
+                      : "—"}
+                  </dd>
+                </div>
+                <div className="rounded-lg bg-muted p-3">
+                  <dt className="text-xs text-muted-foreground">純増登録者</dt>
+                  <dd className="text-lg font-semibold tabular-nums">
+                    {channel.summary
+                      ? signedInteger(channel.summary.subscribers_net)
+                      : "—"}
+                  </dd>
+                </div>
+                <div className="rounded-lg bg-muted p-3">
+                  <dt className="text-xs text-muted-foreground">総再生時間</dt>
+                  <dd className="text-lg font-semibold tabular-nums">
+                    {channel.summary
+                      ? `${integer.format(channel.summary.watch_time_minutes)}分`
+                      : "—"}
+                  </dd>
+                </div>
+                <div className="rounded-lg bg-muted p-3">
+                  <dt className="text-xs text-muted-foreground">分析動画</dt>
+                  <dd className="text-lg font-semibold tabular-nums">
+                    {integer.format(channel.video_count)}本
+                  </dd>
+                </div>
+              </dl>
+            </CardContent>
+            <CardFooter className="mt-auto">
+              <Button
+                variant={selectedId === channel.id ? "secondary" : "outline"}
+                size="sm"
+                className="w-full"
+                onClick={() => onSelect(channel.id)}
+                aria-pressed={selectedId === channel.id}
+                aria-label={`${channel.name} の動画詳細を見る`}
               >
-                {channelBadgeLabel(channel)}
-              </Badge>
-              <span className="text-xs text-muted-foreground">
-                {integer.format(channel.video_count)}本
-              </span>
-            </span>
-          </Button>
+                動画詳細を見る
+              </Button>
+            </CardFooter>
+          </Card>
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }
 
@@ -449,8 +502,8 @@ export function App() {
           </Empty>
         ) : null}
         {channels && channels.length > 0 ? (
-          <div className="grid items-start gap-6 lg:grid-cols-[minmax(18rem,22rem)_1fr]">
-            <ChannelList
+          <div className="grid gap-8">
+            <ChannelOverviewGrid
               channels={channels}
               selectedId={selectedId}
               onSelect={selectChannel}
@@ -467,20 +520,18 @@ export function App() {
                   </CardContent>
                 </Card>
               ) : null}
-              {detail ? <Detail detail={detail} /> : null}
-              {!detail && !detailLoading ? (
-                <Empty className="border">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <BarChart3Icon />
-                    </EmptyMedia>
-                    <EmptyTitle>チャンネルを選択してください</EmptyTitle>
-                    <EmptyDescription>
-                      一覧は Tab キーで移動し、Enter または Space
-                      で選択できます。
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
+              {detail ? (
+                <div className="grid gap-4">
+                  <div>
+                    <h2 className="text-2xl font-semibold">
+                      {detail.name} の動画詳細
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      最新 snapshot の動画別パフォーマンスです。
+                    </p>
+                  </div>
+                  <Detail detail={detail} />
+                </div>
               ) : null}
             </section>
           </div>

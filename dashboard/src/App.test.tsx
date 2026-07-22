@@ -1,6 +1,6 @@
 import "@testing-library/jest-dom/vitest"
 
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 
@@ -76,6 +76,27 @@ function renderDashboard() {
 }
 
 describe("dashboard", () => {
+  it("shows channel metrics before a channel is selected", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(overview), { status: 200 })
+    )
+
+    renderDashboard()
+
+    const channel = await screen.findByRole("article", {
+      name: "Night Drive の概要",
+    })
+    expect(within(channel).getByText("1,200")).toBeInTheDocument()
+    expect(within(channel).getByText("450分")).toBeInTheDocument()
+    expect(within(channel).getByText("+12")).toBeInTheDocument()
+    const videoMetric = within(channel).getByText("分析動画").parentElement
+    expect(videoMetric).not.toBeNull()
+    expect(within(videoMetric!).getByText("1本")).toBeInTheDocument()
+    expect(
+      screen.queryByText("チャンネルを選択してください")
+    ).not.toBeInTheDocument()
+  })
+
   it("loads overview and lets a keyboard user inspect video metrics", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input)

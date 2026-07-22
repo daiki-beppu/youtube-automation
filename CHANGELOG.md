@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(dashboard)`: 選択前から全チャンネルの主要指標をカード一覧で比較できる構成へ変更し、折り返し可能な Badge 群によって狭い画面でも更新状態・公開予約数が右端から見切れないように修正（#2399）。
 - `refactor(skills)`: chain manifest の正規承認 field を `approvalGate.skip` へ移行し、`true = 承認省略` に統一。旧 `enabled` は反転解決する後方互換 alias として受理し、新旧同時指定は拒否（#2404）。
 
 - `refactor(config)`: `workflow.post-publish.skip_approvals` を正規キーとして追加し、`true = 承認省略` に統一。旧 `approval_gates` は逆向きの後方互換 alias として維持し、同一 step の新旧同時指定は拒否（#2403）。
