@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Callable, Dict, Optional
@@ -21,6 +22,48 @@ from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_master_video(collection_dir: Path) -> Path:
+    """workflow-state の明示値を優先し、Preview をマスター扱いしない。"""
+    paths = CollectionPaths(collection_dir)
+    state_path = paths.workflow_state_path
+    if state_path.exists():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValidationError(f"workflow-state.json を読めません: {state_path}: {exc}") from exc
+        if not isinstance(state, dict):
+            raise ValidationError("workflow-state.json root は object である必要があります")
+        assets = state.get("assets", {})
+        if not isinstance(assets, dict):
+            raise ValidationError("workflow-state.json::assets は object である必要があります")
+        configured = assets.get("master_video")
+        if configured is not None:
+            if (
+                not isinstance(configured, str)
+                or Path(configured).name != configured
+                or Path(configured).suffix.lower() != ".mp4"
+            ):
+                raise ValidationError("workflow-state.json::assets.master_video は .mp4 のファイル名で指定してください")
+            selected = paths.master_dir / configured
+            if not selected.is_file():
+                raise ValidationError(f"assets.master_video のファイルが存在しません: {selected}")
+            if selected.name.lower().endswith("-preview.mp4"):
+                raise ValidationError(f"assets.master_video が Preview を指しています: {selected.name}")
+            return selected
+
+    candidates = [
+        path for path in sorted(paths.movie_dir.glob("*master*.mp4")) if not path.name.lower().endswith("-preview.mp4")
+    ]
+    candidates.extend(
+        path
+        for path in sorted(paths.master_dir.glob("*.mp4"))
+        if not path.name.lower().endswith("-preview.mp4") and path not in candidates
+    )
+    if not candidates:
+        raise ValidationError("マスター動画ファイルが見つかりません（*-Preview.mp4 は対象外）")
+    return candidates[0]
 
 
 class CompleteCollectionMixin:
@@ -41,17 +84,7 @@ class CompleteCollectionMixin:
 
         paths = CollectionPaths(collection_dir)
 
-        # マスター動画ファイル検索
-        video_files = list(paths.movie_dir.glob("*master*.mp4"))
-        if not video_files:
-            video_files = list(paths.master_dir.glob("*.mp4"))
-
-        if not video_files:
-            error_msg = "マスター動画ファイルが見つかりません"
-            logger.error(f"❌ {error_msg}")
-            return {"error": error_msg}
-
-        master_video = video_files[0]
+        master_video = resolve_master_video(collection_dir)
 
         # descriptions.md が最終タイトル/概要/タグを供給するなら先に読み込み、
         # 中間タイトル生成（_generate_title）を title_override でスキップする。

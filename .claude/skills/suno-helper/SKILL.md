@@ -74,11 +74,13 @@ uv run yt-collection-preflight <collection-dir-name>
 **必ず dir mode + 拡張 origin lock 付き**で起動する。
 
 ```bash
-uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" \
+PYTHONUNBUFFERED=1 uv run yt-collection-serve "$CHANNEL_DIR/collections/planning" \
   --allow-extension suno-helper
 ```
 
-`--allow-extension suno-helper` は Chrome の profile preferences から unpacked 拡張 ID を検出し、`chrome-extension://<id>` の exact origin lock として使う。検出 0 件・複数 ID 競合・Preferences 読み取り不可・Preferences JSON parse failure で失敗する場合のみ、エラーに表示された候補を確認して `--allow-origin "chrome-extension://<EXTENSION_ID>"` を手動指定する。`POST /collections/<id>/downloaded` と `GET /auth/token` はこの exact origin 以外を 403 にするため、未指定では ZIP 展開・DL 完了記録が動かない。
+`--allow-extension suno-helper` は Chrome の profile preferences から unpacked 拡張 ID を検出し、`chrome-extension://<id>` の exact origin lock として使う。検出 0 件・複数 ID 競合・Preferences 読み取り不可・Preferences JSON parse failure なら **server は listen せず fail-loud に終了する**。エラーに表示された候補を確認して `--allow-origin "chrome-extension://<EXTENSION_ID>"` を手動指定する。`POST /collections/<id>/downloaded` と `GET /auth/token` はどちらもこの exact origin lock を必要とする。診断用 curl にも必ず `Origin: chrome-extension://<id>` を付け、Origin なしの応答を拡張からの POST 成功根拠にしない。
+
+background 起動では `PYTHONUNBUFFERED=1 nohup uv run yt-collection-serve ... > .tmp/logs/collection-serve-<PORT>.log 2>&1 &` を使う。server 自身も stdout/stderr を line-buffered にするため、起動直後の `detected extension:` 行を log から確認できる。
 
 collection 単体パスを直接渡す single file mode は playlist phase がスキップされるため本 skill では使わない。dir mode で読まれるのは **`-collection` suffix を持つ dir のみ**。それ以外（例: `01-master` や雑多ファイル）は無視される。
 

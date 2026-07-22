@@ -143,6 +143,17 @@ describe("resolvePlaylistClipIds: resume を跨ぐ playlist 対象 ID 解決 (#1
       "playlist 対象の clip ID が 0 件です"
     );
   });
+
+  it("Given duration 再生成で旧 pair が残る When 最新優先 Then 期待件数の最新 ID だけ返す", () => {
+    expect(
+      resolvePlaylistClipIds(
+        ["old-a", "old-b", "ok-a", "ok-b"],
+        ["retry-a", "retry-b"],
+        4,
+        true
+      )
+    ).toEqual(["ok-a", "ok-b", "retry-a", "retry-b"]);
+  });
 });
 
 describe("resolvePlaylistExpectedClipCountForResume: 旧 resume state の期待件数復元 (#1183)", () => {

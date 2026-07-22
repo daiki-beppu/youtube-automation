@@ -125,7 +125,8 @@ export function resolveInterruptIndex(
 export function resolvePlaylistClipIds(
   previousSubmittedClipIds: string[],
   currentSubmittedClipIds: string[],
-  expectedClipCount: number
+  expectedClipCount: number,
+  preferLatestWhenExcess = false
 ): string[] {
   const clipIds = Array.from(
     new Set([...previousSubmittedClipIds, ...currentSubmittedClipIds])
@@ -135,9 +136,20 @@ export function resolvePlaylistClipIds(
       "playlist 対象の clip ID が 0 件です。bridge が clip を観測できなかった可能性があります。"
     );
   }
+  if (
+    expectedClipCount > 0 &&
+    clipIds.length > expectedClipCount &&
+    preferLatestWhenExcess
+  ) {
+    // duration 再生成では旧 NG pair が persisted resume に残る場合がある。
+    // previous → current の順を保っているため末尾が最新 attempt。最新の期待件数だけを
+    // playlist SSOT に採用し、古い pair を再び混ぜない。
+    return clipIds.slice(-expectedClipCount);
+  }
   if (clipIds.length !== expectedClipCount) {
+    const relation = clipIds.length < expectedClipCount ? "不足" : "超過";
     throw new Error(
-      `playlist 対象の clip ID 数が不足しています: expected ${expectedClipCount}, got ${clipIds.length}`
+      `playlist 対象の clip ID 数が${relation}しています: expected ${expectedClipCount}, got ${clipIds.length}`
     );
   }
   return clipIds;

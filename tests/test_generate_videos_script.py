@@ -923,6 +923,36 @@ def test_overlay_static_background_uses_textless_main_png(tmp_path: Path) -> Non
     assert "-c:v copy" not in master_cmd
 
 
+def test_no_overlays_cli_overrides_enabled_config(tmp_path: Path) -> None:
+    overlays_config = tmp_path / "youtube.json"
+    overlays_config.write_text('{"overlays": {"enabled": true}}', encoding="utf-8")
+    result, ffmpeg_log = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"OVERLAYS_CONFIG": str(overlays_config)},
+        extra_args=["--no-overlays"],
+    )
+    assert result.returncode == 0, result.stderr
+    assert "-filter_complex" not in _master_ffmpeg_command(ffmpeg_log)
+
+
+def test_overlays_env_has_priority_over_cli(tmp_path: Path) -> None:
+    result, _ = _run_generate_videos(
+        tmp_path,
+        "1920,1080,yuv420p,24/1",
+        extra_env={"VIDEOUP_OVERLAYS": "1"},
+        extra_args=["--no-overlays"],
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Overlays : enabled" in result.stdout
+
+
+def test_runtime_mask_uses_project_environment() -> None:
+    script = _SCRIPT_PATH.read_text(encoding="utf-8")
+    assert "uv run python -m youtube_automation.utils.audio_visualizer_mask" in script
+    assert "python3 -m youtube_automation.utils.audio_visualizer_mask" not in script
+
+
 def test_audio_visualizer_legacy_config_keeps_original_filtergraph(tmp_path: Path) -> None:
     """#1686: 新キー未指定なら既存 colors + glow filtergraph を維持する。"""
     overlays_config = tmp_path / "youtube.json"

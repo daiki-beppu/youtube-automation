@@ -137,6 +137,7 @@ packages = ["src/youtube_automation"]
 "docs/workflow-cheatsheet.md" = "youtube_automation/_docs/workflow-cheatsheet.md"
 "docs/features.md" = "youtube_automation/_docs/features.md"
 "auth/client_secrets.template.json" = "youtube_automation/_auth/client_secrets.template.json"
+".claude/settings.template.json" = "youtube_automation/_claude_settings/settings.template.json"
 
 # templates/*.md はパッケージディレクトリ内なので packages 設定で同梱される
 
@@ -146,6 +147,7 @@ include = [
     "src/",
     "tests/",
     ".claude/CLAUDE.template.md",
+    ".claude/settings.template.json",
     "docs/workflow-cheatsheet.md",
     "docs/features.md",
     "auth/SETUP.md",

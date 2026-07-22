@@ -1618,6 +1618,13 @@ def _resolve_allow_origin(
 
 
 def main() -> None:
+    # nohup / file redirect 下でも extension 検出結果を起動直後に診断できるよう、
+    # block buffering を行バッファへ切り替える。pytest の StringIO 等は reconfigure
+    # を持たないため、その場合はそのまま使う。
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(line_buffering=True)
     parser = argparse.ArgumentParser(
         description=(
             "Serve collection artifacts over localhost HTTP for the suno-helper / distrokid-helper / "
