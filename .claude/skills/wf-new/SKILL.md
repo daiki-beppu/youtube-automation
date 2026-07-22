@@ -250,12 +250,20 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 
 **`selection_only` または auto-selection 無効**（従来フロー）:
 
+| auto_selection.enabled | approval_gates.thumbnail | 実行経路 |
+|---|---|---|
+| `true` (`selection_only`) | `true` / `false` | dry-run → `--apply` で最高得点候補を確定。候補承認質問だけ省略 |
+| `false` | `true` | 候補を開き、人間の承認後に確定 |
+| `false` | `false` | `yt-thumbnail-auto-select` は呼ばない。QA 合格候補を決定的順序（score 降順、同点はファイル名昇順）で先頭採用し、採用根拠を表示して確定 |
+
+`enabled: false` は auto-select CLI の利用禁止であり、`approval_gates.thumbnail: false` は人間質問の省略である。この組み合わせを「CLI を実行して失敗」または「質問も選択もせず停止」と解釈しない。
+
 1. サムネイルをプレビューで開く:
    ```bash
    open <collection-path>/10-assets/thumbnail-vN.jpg
    ```
 
-2. `/thumbnail-compare` の 320px 視認性検証後、auto-selection 無効なら AskUserQuestion でテキスト付き候補の承認を求める。`selection_only` はこの質問だけを省略し、dry-run 成功後に `yt-thumbnail-auto-select --apply` で確定する:
+2. `/thumbnail-compare` の 320px 視認性検証後、auto-selection 無効かつ `approval_gates.thumbnail: true` なら AskUserQuestion でテキスト付き候補の承認を求める。`selection_only` はこの質問だけを省略し、dry-run 成功後に `yt-thumbnail-auto-select --apply` で確定する。auto-selection 無効かつ approval gate も無効なら上表の決定的順序で確定する:
    ```
    question: "サムネイルを承認しますか？"
    options:

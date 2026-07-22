@@ -27,8 +27,8 @@
 # v15.2: overlay H.264 hardware encoder の opt-in 選択と libx264 fallback (#2372)
 #
 # Usage:
-#   bash .claude/skills/videoup/references/generate_videos.sh [--preview [15-30]] <collection-path>
-#   cd <collection-dir> && bash <repo-root>/.claude/skills/videoup/references/generate_videos.sh [--preview [15-30]]
+#   uv run bash .claude/skills/videoup/references/generate_videos.sh [--preview [15-30]] <collection-path>
+#   cd <collection-dir> && uv run bash <repo-root>/.claude/skills/videoup/references/generate_videos.sh [--preview [15-30]]
 #
 # Opt-in env vars (#545):
 #   VIDEOUP_AUDIO_TARGET_VIDEO_DURATION_MIN
@@ -58,6 +58,7 @@
 PREVIEW_MODE=0
 PREVIEW_DURATION=20
 COLLECTION_DIR=""
+OVERLAYS_CLI_OVERRIDE=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -70,8 +71,16 @@ while [[ $# -gt 0 ]]; do
                 shift
             fi
             ;;
+        --no-overlays)
+            OVERLAYS_CLI_OVERRIDE=0
+            shift
+            ;;
+        --overlays)
+            OVERLAYS_CLI_OVERRIDE=1
+            shift
+            ;;
         --help|-h)
-            echo "Usage: $0 [--preview [15-30]] [collection-path]"
+            echo "Usage: $0 [--preview [15-30]] [--overlays|--no-overlays] [collection-path]"
             exit 0
             ;;
         --*)
@@ -496,7 +505,16 @@ resolve_overlays_config() {
     done
 }
 
-if command -v jq &>/dev/null; then
+if [[ -n "${VIDEOUP_OVERLAYS:-}" && "${VIDEOUP_OVERLAYS}" != "0" && "${VIDEOUP_OVERLAYS}" != "1" ]]; then
+    echo "ERROR: VIDEOUP_OVERLAYS must be 0 or 1 (got: ${VIDEOUP_OVERLAYS})"
+    exit 1
+fi
+
+if [[ -n "${VIDEOUP_OVERLAYS:-}" ]]; then
+    OVERLAYS_ENABLED="$VIDEOUP_OVERLAYS"
+elif [[ -n "$OVERLAYS_CLI_OVERRIDE" ]]; then
+    OVERLAYS_ENABLED="$OVERLAYS_CLI_OVERRIDE"
+elif command -v jq &>/dev/null; then
     OVERLAYS_CONFIG_PATH="$(resolve_overlays_config)"
     if [[ -n "$OVERLAYS_CONFIG_PATH" ]]; then
         ov_enabled="$(jq -r '(.overlays.enabled // false) | tostring' "$OVERLAYS_CONFIG_PATH" 2>/dev/null)"
@@ -504,6 +522,10 @@ if command -v jq &>/dev/null; then
             OVERLAYS_ENABLED=1
         fi
     fi
+fi
+if [[ "$OVERLAYS_ENABLED" -eq 1 ]] && ! command -v jq &>/dev/null; then
+    echo "ERROR: overlays require jq (install jq or use --no-overlays)"
+    exit 1
 fi
 
 ov_get() {
@@ -771,7 +793,7 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
         if [[ "$av_style" != "bar" ]]; then
             AV_MASK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/yt-audio-visualizer-mask.XXXXXX")"
             AV_MASK_PATH="${AV_MASK_DIR}/mask.png"
-            if ! python3 -m youtube_automation.utils.audio_visualizer_mask \
+            if ! uv run python -m youtube_automation.utils.audio_visualizer_mask \
                 --output "$AV_MASK_PATH" \
                 --style "$av_style" \
                 --size "$av_size" \

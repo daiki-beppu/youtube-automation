@@ -422,7 +422,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
 
   it("Given playlist phase When content.ts を読む Then 保存済み ID と今回観測 ID を resolvePlaylistClipIds で合成してから scrollAndMultiSelectByIds で row 解決する", () => {
     expect(contentSource).toMatch(
-      /const rawSubmittedIds = resolvePlaylistClipIds\(\s*previousSubmittedClipIds,\s*currentSubmittedIds,\s*expectedClipCount,?\s*\);[\s\S]*?const plan = buildPlaylistClipPlan\([\s\S]*?scrollAndMultiSelectByIds\(plan\.clipIds,/
+      /const rawSubmittedIds = resolvePlaylistClipIds\(\s*previousSubmittedClipIds,\s*currentSubmittedIds,\s*expectedClipCount,\s*durationOutlierPolicy\.kind === "regenerate",?\s*\);[\s\S]*?const plan = buildPlaylistClipPlan\([\s\S]*?scrollAndMultiSelectByIds\(plan\.clipIds,/
     );
     expect(contentSource).toMatch(
       /verifiedPlaylistClipCount = await addClipsToPlaylist\([\s\S]*?previousSubmittedClipIds,[\s\S]*?playlistTargetClipCount,[\s\S]*?entries,/

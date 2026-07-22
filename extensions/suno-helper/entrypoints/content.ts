@@ -1100,7 +1100,8 @@ export default defineContentScript({
       const rawSubmittedIds = resolvePlaylistClipIds(
         previousSubmittedClipIds,
         currentSubmittedIds,
-        expectedClipCount
+        expectedClipCount,
+        durationOutlierPolicy.kind === "regenerate"
       );
       const currentTitleFallbackMap = buildTitleFallbackMap(
         entries,

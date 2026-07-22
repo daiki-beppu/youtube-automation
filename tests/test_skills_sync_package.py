@@ -54,6 +54,7 @@ def test_default_all_assets_include_auth_template_target() -> None:
 
     all_targets = {spec["default_target"] for spec in _ASSET_SPECS.values()}
     assert "auth/client_secrets.template.json" in all_targets
+    assert ".claude/settings.json" in all_targets
 
 
 def test_auth_template_is_included_in_wheel_and_sdist_manifests() -> None:
@@ -67,6 +68,10 @@ def test_auth_template_is_included_in_wheel_and_sdist_manifests() -> None:
         "youtube_automation/_auth/client_secrets.template.json"
     )
     assert "auth/client_secrets.template.json" in sdist_include
+    assert force_include[".claude/settings.template.json"] == (
+        "youtube_automation/_claude_settings/settings.template.json"
+    )
+    assert ".claude/settings.template.json" in sdist_include
 
 
 def test_asset_root_resolves_via_package_import() -> None:

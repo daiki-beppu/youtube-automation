@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills-sync)`: Claude Code settings の allow / deny / hook を既存値保持・hook 明示承認付きで downstream へ JSON merge 配布し、開発専用 skill を同期対象外として既存配置は prune 可能にした（#2425, #2426, #2428）。
+- `fix(upload)`: `assets.master_video` を動画選択の正本にして Preview 誤選択を防ぎ、plan で全 locale の100文字制限を検証。タイトル短縮の再承認と公開時刻 conflict の停止契約も追加（#2429, #2434, #2437, #2438）。
+- `fix(videoup)`: runtime mask helper を uv 環境で起動し、overlay を一回だけ切り替える env / CLI override を追加（#2430, #2431）。
+- `fix(suno-helper)`: duration 再生成後は最新 clip pair を playlist 対象に採用し、collection server の拡張検出 fail-loud 契約と redirect 時の起動ログ即時出力を明確化（#2432, #2433, #2439）。
+- `docs(workflow)`: thumbnail 自動選択と承認 gate の組合せを決定表にし、長時間 subagent の Monitor arm + self-stop を禁止して active polling を正規化（#2435, #2436）。
+
 - `feat(workflow)`: `/wf-auto` の企画選択、企画プレビュー費用、Lyria 生成、動画プレビュー、Veo 課金・品質確認をチャンネル単位の明示 opt-in skip 設定で無人化し、既定の承認停止、安全上限、監査用成果物を維持（#2416, #2418, #2419, #2420, #2421, #2422）。
 
 - `feat(dashboard)`: 全チャンネルの公開予約ストック・更新状態・主要Analytics指標を横断比較できる一覧テーブルを追加し、在庫昇順、未取得の分離、在庫閾値の警告、狭い画面での内部横スクロールに対応。

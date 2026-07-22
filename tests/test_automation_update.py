@@ -878,6 +878,15 @@ def test_apply_force_sync_passes_force_flag(tmp_path: Path, no_network, recorded
     assert ["uv", "run", "yt-skills", "sync", "--force"] in recorded_commands
 
 
+def test_apply_accept_hooks_propagates_explicit_approval(
+    tmp_path: Path, no_network, recorded_commands: list[list[str]]
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--accept-hooks"]) == 0
+    assert ["uv", "run", "yt-skills", "sync", "--force", "--accept-hooks"] in recorded_commands
+
+
 def test_apply_force_sync_bypasses_local_fix_diff_guard(
     tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, recorded_commands: list[list[str]]
 ) -> None:

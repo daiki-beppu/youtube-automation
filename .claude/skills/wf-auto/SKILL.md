@@ -21,6 +21,7 @@ description: "Use when 正規入口から collection の有無を問わず、企
 5. **手動介入を突破しない**: 対話実行では子 skill の企画選択・承認へ回答後、同じ run 内で再評価する。`workflow.wf_new.skip_plan_selection` または子 skill-config の `skip_*_approval` / `skip_cost_confirm` が `true` の停止点はチャンネル設定による明示 opt-in なので突破には当たらず続行する。それ以外のユーザー入力、login、CAPTCHA、課金確認、UI 非互換、承認待ちが無人実行で必要なら自動承認せず `blocked` と再開 action を履歴へ記録する。
 6. **不可逆操作を重複させない**: upload reconciliation、Suno 成果物数、post-publish idempotency は state resolver と委譲先の既存契約に従う。既存 video ID の remote upload や完了済み投稿を再発行しない。
 7. **state 更新責務を維持**: 本 skill と state resolver は `workflow-state.json` を直接更新しない。更新は `/wf-new`、`/wf-next` と各子 skill が成果物検証後に行う。
+8. **長時間処理の待機主体を消さない**: 子 agent に Monitor を arm させて self-stop / completed にしてはならない。`docs/skill-design/subagent-orchestration.md` に従い、実行中 tool call を維持するか background session を30秒以下の間隔で poll させ、終了を自分で観測してから報告させる。
 
 ## 完了条件
 
