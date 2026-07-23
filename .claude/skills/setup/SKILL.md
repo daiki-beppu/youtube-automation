@@ -33,7 +33,7 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 | カテゴリ | 内容 |
 |---------|------|
 | `bootstrap` | ffmpeg / ffprobe / uv / pyproject.toml / automation パッケージ / `yt-skills sync` / 番号付き重複ファイル検知（7 check） |
-| `api` | gcloud CLI・GCP プロジェクト・Billing・APIs・ADC・IAM・.env・OAuth 認証・Reporting API ジョブ（12 check） |
+| `api` | gcloud CLI・GCP プロジェクト・Billing・APIs・ADC・IAM・OAuth 認証・Reporting API ジョブ |
 | `channel` | config/channel/ のロード可能性・playlists.json の妥当性・playlist 作成 dry-run（3 check: `channel_config` / `playlist_config` / `playlist_create_dry_run`）。fail 時は `/channel-new`（新規開設 / 既存チャンネル取り込み / 再生成モード）を案内するだけ |
 | `data` | `/wf-new` の入力モード判定データ + 初期セットアップ事前検査（analytics_report / benchmark_data / ttp_wf_new_readiness / initial_setup_readiness）。minimal mode / benchmark fallback mode は setup のブロッカーにしない。analytics report は最新 `data/analytics_data_*.json` との相対比較に加え、`collection-ideate` の解決済み `freshness_days` を超えた絶対鮮度 stale も検出する。承認済み TTP がある場合だけ `/channel-new`（再生成モード） benchmark 反映完了を確認する |
 | `upload` | upload 必須 scope 充足・channel_id 設定済み（1 check） |
@@ -50,7 +50,7 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 | YouTube Reporting API（`uv run yt-doctor` 診断 + `uv run yt-analytics --reporting-create-job`、無料枠） | 数 call（quota 課金なし） | Reporting job の作成有無 |
 | Vertex AI（Gemini / Veo / Lyria） | 0（`gcloud services enable` は API 有効化のみで生成呼び出しなし） | — |
 
-- 上限 / 承認: plain 診断（`uv run yt-doctor --json`）と書き込み系 check（playlist_create_dry_run 等）は読み取り専用 / dry-run で、YouTube 側への変更は発生しない。`yt-doctor --apply` は別であり、ローカルの skill 同期・古い managed skill 削除・`.env` 追記と、GCP の project 選択・Billing 紐付け・API 有効化・ADC quota project・IAM 付与・Reporting job 作成を行い得る。そのため以下の承認 gate を通す。
+- 上限 / 承認: plain 診断（`uv run yt-doctor --json`）と書き込み系 check（playlist_create_dry_run 等）は読み取り専用 / dry-run で、YouTube 側への変更は発生しない。`yt-doctor --apply` は別であり、ローカルの skill 同期・古い managed skill 削除と、GCP の project 選択・Billing 紐付け・API 有効化・ADC quota project・IAM 付与・Reporting job 作成を行い得る。そのため以下の承認 gate を通す。
 
 ## 起動時のチェック
 
@@ -89,7 +89,7 @@ description: "Use when ツール導入と GCP / OAuth の API 設定をセット
 
 ### GCP 変更 plan の承認
 
-project ID が解決済み、または `apply_flags` へ `--project-id` / `--billing-account` を追加・変更するたびに、次回 `--apply` が連続診断で到達し得る変更 plan を承認前に再作成する。`gcloud auth list` で active account を読み取り、正確な project ID、billing account ID（決定済みの場合）、active account と、§Steps に記載した project 選択・Billing 紐付け・API 有効化・ADC quota project・IAM 付与・`.env` 追記・Reporting job 作成のうち未解決の全コマンドを展開して表示する。
+project ID が解決済み、または `apply_flags` へ `--project-id` / `--billing-account` を追加・変更するたびに、次回 `--apply` が連続診断で到達し得る変更 plan を承認前に再作成する。`gcloud auth list` で active account を読み取り、正確な project ID、billing account ID（決定済みの場合）、active account と、§Steps に記載した project 選択・Billing 紐付け・API 有効化・ADC quota project・IAM 付与・Reporting job 作成のうち未解決の全コマンドを展開して表示する。
 
 表示後、「これらは project `<project-id>` の外部 GCP 状態を変更する」と警告し、AskUserQuestion で「表示した GCP 変更を実行」/「中止」の 2 択を提示する。承認されるまで flag 付き `--apply` を実行しない。値の追加・変更は前回の承認を無効にし、必ず plan を再表示して承認を取り直す。
 
@@ -214,7 +214,7 @@ gcloud auth login
 
 利用者に既存流用か新規作成か聞く:
 
-- 既存流用: project ID を聞く（`.env` への `GOOGLE_CLOUD_PROJECT` 書き込みは不要。project_id は ADC quota project から自動解決される）
+- 既存流用: project ID を聞く（project ID は ADC quota project から自動解決され、必要時だけ `GOOGLE_CLOUD_PROJECT` process env で上書きできる）
 - 新規作成: チャンネル情報から推奨 project ID と表示名を生成し、利用者に提示して承認またはカスタム入力を求める
 
 新規作成時の推奨値:
@@ -300,17 +300,6 @@ gcloud projects add-iam-policy-binding <project-id> \
   --condition=None \
   --quiet
 ```
-
-#### `env_file` — `.env` 未生成または不足キー
-
-`.env` が未生成の場合は `--apply` が以下の既定値を既存値を保持して書き込む。不足キーのみの場合は `apply.next_action` の案内に従う:
-
-```
-GOOGLE_GENAI_USE_VERTEXAI=true
-GOOGLE_CLOUD_LOCATION=us-central1
-```
-
-`us-central1` はデフォルト。利用者が別リージョンを希望すれば差し替える。`GOOGLE_CLOUD_PROJECT` は ADC quota project から自動解決されるため通常は書き込み不要（明示したい場合のみ任意 override として追加）。
 
 #### `client_secrets` — OAuth クライアント秘密ファイル未配置
 

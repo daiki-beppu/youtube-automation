@@ -32,7 +32,7 @@
 
 ### ルート 0: `/setup` skill (AI 主導 wizard、推奨)
 
-Claude Code 上で `/setup` を実行する。AI が `yt-doctor` でツール導入と API 設定の状態を診断し、GCP プロジェクト作成・billing 紐付け・API 有効化・IAM 付与・`.env` 書き出し・Google Auth Platform 手動設定まで wizard で誘導する。
+Claude Code 上で `/setup` を実行する。AI が `yt-doctor` でツール導入と API 設定の状態を診断し、GCP プロジェクト作成・billing 紐付け・API 有効化・IAM・ADC quota project・Google Auth Platform 手動設定まで wizard で誘導する。
 
 ```
 /setup
@@ -42,7 +42,7 @@ Claude Code 上で `/setup` を実行する。AI が `yt-doctor` でツール導
 
 ### ルート A: `.claude/skills/channel-new/references/gcp-bootstrap.sh`（gcloud 半自動化・最速）
 
-チャンネル単位で気軽に立ち上げたいケース。1 コマンドでプロジェクト作成〜API 有効化〜IAM 付与〜`.env` 書き出しまで完結する。冪等なので再実行しても安全。
+チャンネル単位で気軽に立ち上げたいケース。1 コマンドでプロジェクト作成〜API 有効化〜IAM・ADC quota project 設定まで完結する。冪等なので再実行しても安全。
 
 ```bash
 # 最小 (既存プロジェクト流用)
@@ -62,8 +62,6 @@ Claude Code 上で `/setup` を実行する。AI が `yt-doctor` でツール導
 | `--create` | プロジェクトが存在しなければ作成 |
 | `--billing-account ID` | Billing account を紐付け（Vertex AI に必須） |
 | `--adc-email EMAIL` | `aiplatform.user` 付与先アカウント（既定: `gcloud config account`） |
-| `--env-file PATH` | 書き出す `.env`（既定: `./.env`） |
-| `--location REGION` | Vertex AI リージョン（既定: `us-central1`） |
 | `--skip-adc` | `gcloud auth application-default login` を省略 |
 | `--dry-run` | 変更せずプレビュー |
 
@@ -78,7 +76,7 @@ cd infra/terraform/gcp
 cp terraform.tfvars.example terraform.tfvars
 # → project_id, adc_email, billing_account を編集
 
-# apply + .env 反映までをラッパーで実行
+# apply
 cd ../../..
 .claude/skills/channel-new/references/gcp-terraform-apply.sh
 ```
@@ -139,7 +137,6 @@ uv run yt-generate-image --prompt "a gentle watercolor forest" --output /tmp/tes
 
 ```
 <channel_dir>/
-├── .env                            # GOOGLE_CLOUD_LOCATION / GOOGLE_GENAI_USE_VERTEXAI (スクリプトが書き出す)
 └── auth/
     ├── client_secrets.json          # OAuth 2.0 認証情報（要作成・gitignore）
     ├── token.json                   # 認証トークン（自動生成・gitignore）
@@ -152,18 +149,11 @@ read-only 系 skill（analytics / benchmark / channel-status 等）は `token.re
 
 ---
 
-## 🌐 Vertex AI 前提の環境変数
+## 🌐 Vertex AI の project / location 解決
 
-スクリプト / Terraform ルートでセットアップすると `.env` に以下が書き出される:
+project ID は ADC quota project (`gcloud auth application-default set-quota-project <PROJECT_ID>`) を標準とする。明示 override が必要な実行だけ `GOOGLE_CLOUD_PROJECT=<id>` を process env で渡す。
 
-```bash
-GOOGLE_GENAI_USE_VERTEXAI=true
-GOOGLE_CLOUD_LOCATION=us-central1
-```
-
-project_id は ADC quota project (`gcloud auth application-default set-quota-project <PROJECT_ID>`) から自動解決されるため `.env` への書き出しは不要。明示したい場合は `GOOGLE_CLOUD_PROJECT=<id>` を追記すれば従来通り優先される。
-
-アプリ側 (`create_genai_client()`) は `utils/google_cloud_project.resolve_project_id()` を介して env var → ADC の順で project_id を解決し、常に `vertexai=True` で Client を初期化する。`GOOGLE_GENAI_USE_VERTEXAI` は google-genai SDK の自動検出用に置いておく任意フラグ。
+アプリ側 (`create_genai_client()`) は `utils/google_cloud_project.resolve_project_id()` を介して process env → ADC の順で project ID を解決し、常に `vertexai=True` で初期化する。location は Gemini / Veo / Lyria の用途別にアプリが決定し、利用者は設定しない。
 
 ### 対応 API
 
@@ -183,7 +173,6 @@ Vertex AI で以下を利用する。`aiplatform.googleapis.com` が有効化さ
 - `auth/client_secrets.json`: **絶対に公開しない**（gitignore 済み）
 - `auth/token.json` / `auth/token.readonly.json`: **絶対に公開しない**（gitignore 済み）
 - `infra/terraform/gcp/terraform.tfvars`: **絶対に公開しない**（gitignore 済み）
-- `.env`: **絶対に公開しない**（gitignore 済み）
 
 ---
 

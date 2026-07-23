@@ -52,11 +52,11 @@ terraform init
 terraform plan
 terraform apply
 
-# 3. outputs から .env を更新 (ラッパー推奨)
-bash ../../../.claude/skills/channel-new/references/gcp-terraform-apply.sh --tf-dir . --env-file ../../../.env
+# 3. project ID を ADC quota project に設定
+gcloud auth application-default set-quota-project "$(terraform output -raw project_id)"
 ```
 
-`.claude/skills/channel-new/references/gcp-terraform-apply.sh` は `terraform apply` → `terraform output -json env_vars` → `.env` へマージまで一気通貫で実行する。
+Vertex AI の location はモデル用途別にアプリが決定する。project ID を一時的に上書きする必要がある実行だけ `GOOGLE_CLOUD_PROJECT` process env を使う。
 
 ## 既存プロジェクトを流用する場合
 
@@ -77,7 +77,6 @@ adc_email      = "you@example.com"
 |------|------|
 | `project_id` | 確定した project ID |
 | `location` | Vertex AI リージョン |
-| `env_vars` | `.env` 用 key/value map (`GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION`)。`GOOGLE_CLOUD_PROJECT` は任意の override で、未設定なら ADC quota project から自動解決される |
 | `oauth_console_url` | Google Auth Platform 手動設定用 Console URL |
 | `enabled_apis` | 有効化した API 一覧 |
 

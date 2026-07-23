@@ -253,7 +253,6 @@ TTP 対象がこの時点で channel ID まで分かっている場合も、Step
 - `config/localizations.json`
 - `config/schedule_config.json`（`upload_settings` を含む）
 - `config/skills/{suno,thumbnail}.yaml`
-- `.env`
 - `.gitignore`
 - `auth/client_secrets.template.json`
 
