@@ -92,6 +92,39 @@ def test_apply_executes_ai_step_and_rediagnoses(monkeypatch, tmp_path: Path, cap
     }
 
 
+def test_apply_executes_workspace_bootstrap_step_from_root(monkeypatch, tmp_path: Path, capsys) -> None:
+    workspace = tmp_path / "workspace"
+    channel = workspace / "channels" / "alpha"
+    (channel / "config" / "channel").mkdir(parents=True)
+    diagnoses = iter(
+        [
+            [
+                doctor.CheckResult(
+                    id="skills_synced",
+                    status="fail",
+                    message="missing",
+                    category=doctor.BOOTSTRAP_CATEGORY,
+                    next_action=_ai_action("uv", "run", "yt-skills", "sync"),
+                )
+            ],
+            [],
+        ]
+    )
+    commands: list[tuple[list[str], Path]] = []
+    monkeypatch.setattr(doctor, "run_all_checks", lambda _channel_dir: next(diagnoses))
+    monkeypatch.setattr(
+        doctor,
+        "_run_apply_command",
+        lambda argv, cwd: commands.append((argv, cwd)) or (0, "synced", ""),
+    )
+
+    code = doctor.main(["--apply", "--json", "--target", str(channel)])
+
+    assert code == 0
+    assert commands == [(["uv", "run", "yt-skills", "sync"], workspace)]
+    assert json.loads(capsys.readouterr().out)["apply"]["stop_reason"] == "completed"
+
+
 def test_apply_never_executes_interactive_auth_even_if_mislabeled(monkeypatch, tmp_path: Path, capsys) -> None:
     action = _ai_action("gcloud", "auth", "application-default", "login")
     monkeypatch.setattr(doctor, "run_all_checks", lambda _channel_dir: [_result("adc", "fail", action)])
