@@ -187,6 +187,28 @@ class TestGenerateMasterLoops:
         # 2 files × 2 loops = 4 inputs
         assert captured["cmd"].count("-i") == 4
 
+    def test_integer_loop_cannot_fit_channel_range_fails_with_choices(self, tmp_path, monkeypatch):
+        collection = self._setup_collection(tmp_path, file_count=2)
+        monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
+        monkeypatch.setattr(generate_master, "probe_duration", lambda _: 1514.5)
+
+        with pytest.raises(ValidationError) as exc_info:
+            run_generate_master(
+                collection,
+                crossfade=1.0,
+                bitrate="192k",
+                target_duration_min=60,
+                target_duration_max=90,
+                quiet=True,
+            )
+
+        message = str(exc_info.value)
+        assert "1 pass=0h 50m 29s" in message
+        assert "2 loops=1h 40m 57s" in message
+        assert "target=60〜90分" in message
+        assert "--no-loop" in message
+        assert "部分ループ素材" in message
+
     def test_single_file_with_loop_1_uses_copy_path(self, tmp_path, monkeypatch):
         collection = self._setup_collection(tmp_path, file_count=1)
         monkeypatch.setattr(generate_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
@@ -268,6 +290,15 @@ class TestCliSkillConfigTargetDuration:
             "youtube_automation.scripts.generate_master.load_skill_config",
             lambda _: skill_config,
         )
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.load_config",
+            lambda: SimpleNamespace(
+                audio=SimpleNamespace(
+                    target_duration_min=None,
+                    target_duration_max=None,
+                )
+            ),
+        )
 
         captured: dict = {}
 
@@ -316,6 +347,27 @@ class TestCliSkillConfigTargetDuration:
         assert rc == 0
         assert captured["kwargs"]["loops"] is None
         assert captured["kwargs"]["target_duration_min"] == 90
+
+    def test_channel_target_is_ssot_over_skill_target(self, monkeypatch, tmp_path, capsys):
+        captured = self._patch_main_dependencies(
+            monkeypatch,
+            {"audio": {"target_duration_min": 120}},
+        )
+        monkeypatch.setattr(
+            "youtube_automation.scripts.generate_master.load_config",
+            lambda: SimpleNamespace(
+                audio=SimpleNamespace(
+                    target_duration_min=60,
+                    target_duration_max=90,
+                )
+            ),
+        )
+        monkeypatch.setattr("sys.argv", ["yt-generate-master", str(tmp_path)])
+
+        assert generate_master.main() == 0
+        assert captured["kwargs"]["target_duration_min"] == 60
+        assert captured["kwargs"]["target_duration_max"] == 90
+        assert "channel=60分 / skill=120分" in capsys.readouterr().out
 
     def test_cli_loop_ignores_skill_config_target_duration(self, monkeypatch, tmp_path):
         # Given: --loop 指定時は skill-config の target_duration_min を黙って無視

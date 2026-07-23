@@ -120,9 +120,17 @@ Continuous Focus Mix
     return collection_dir
 
 
-def _run_preflight(channel_dir: Path, collection_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _run_preflight(
+    channel_dir: Path,
+    collection_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    allow_duration_outside_target: bool = False,
+) -> None:
     monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
-    _PreflightHarness(channel_dir / "collections")._preflight_check(collection_dir)
+    harness = _PreflightHarness(channel_dir / "collections")
+    harness.allow_duration_outside_target = allow_duration_outside_target
+    harness._preflight_check(collection_dir)
 
 
 def test_heading_mismatch_reports_expected_missing_detected_and_fix_example(tmp_path: Path) -> None:
@@ -323,7 +331,7 @@ def test_plan_preflight_rejects_overlong_localized_title(
         _run_preflight(channel_dir, collection_dir, monkeypatch)
 
 
-def test_target_duration_config_does_not_block_upload_preflight(
+def test_target_duration_config_allows_video_inside_target(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -340,9 +348,62 @@ def test_target_duration_config_does_not_block_upload_preflight(
     )
     master_dir = collection_dir / "01-master"
     master_dir.mkdir(parents=True)
-    (master_dir / "master.mp4").write_bytes(b"not a valid mp4")
+    (master_dir / "master.mp4").write_bytes(b"probe is mocked")
+    monkeypatch.setattr("youtube_automation.agents._preflight.probe_duration", lambda _: 60 * 60)
 
     _run_preflight(channel_dir, collection_dir, monkeypatch)
+
+
+def test_target_duration_config_blocks_short_video_without_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    channel_dir = _write_minimal_channel(
+        tmp_path,
+        youtube_language="en",
+        supported_languages=["en"],
+        audio={"target_duration_min": 60, "target_duration_max": 90},
+    )
+    collection_dir = _write_collection(
+        channel_dir,
+        scene_phrases={"en": "continuous focus mix"},
+        description="A continuous BGM mix without chapter markers.",
+    )
+    master_dir = collection_dir / "01-master"
+    master_dir.mkdir(parents=True)
+    (master_dir / "master.mp4").write_bytes(b"probe is mocked")
+    monkeypatch.setattr("youtube_automation.agents._preflight.probe_duration", lambda _: 50 * 60 + 29)
+
+    with pytest.raises(RuntimeError, match=r"duration: 50m .*target 1h00m〜1h30m.*--allow-duration"):
+        _run_preflight(channel_dir, collection_dir, monkeypatch)
+
+
+def test_target_duration_override_allows_short_video(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    channel_dir = _write_minimal_channel(
+        tmp_path,
+        youtube_language="en",
+        supported_languages=["en"],
+        audio={"target_duration_min": 60, "target_duration_max": 90},
+    )
+    collection_dir = _write_collection(
+        channel_dir,
+        scene_phrases={"en": "continuous focus mix"},
+        description="A continuous BGM mix without chapter markers.",
+    )
+    master_dir = collection_dir / "01-master"
+    master_dir.mkdir(parents=True)
+    (master_dir / "master.mp4").write_bytes(b"probe is mocked")
+    monkeypatch.setattr("youtube_automation.agents._preflight.probe_duration", lambda _: 50 * 60 + 29)
+
+    _run_preflight(
+        channel_dir,
+        collection_dir,
+        monkeypatch,
+        allow_duration_outside_target=True,
+    )
 
 
 def test_unreachable_tags_min_count_reports_character_limit_resolution(

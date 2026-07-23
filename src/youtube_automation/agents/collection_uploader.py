@@ -103,7 +103,13 @@ class CollectionUploader(
     - CC 実行ループ           : ``CompleteCollectionExecutorMixin``
     """
 
-    def __init__(self, collections_root: str | None = None, config_path: str | None = None):
+    def __init__(
+        self,
+        collections_root: str | None = None,
+        config_path: str | None = None,
+        *,
+        allow_duration_outside_target: bool = False,
+    ):
         if collections_root is None:
             collections_root = channel_dir() / "collections"
 
@@ -112,7 +118,10 @@ class CollectionUploader(
 
         self.collections_root = Path(collections_root)
         self.config_path = Path(config_path)
-        self.uploader = YouTubeAutoUploader(str(collections_root))
+        self.uploader = YouTubeAutoUploader(
+            str(collections_root),
+            allow_duration_outside_target=allow_duration_outside_target,
+        )
         self.config = self._load_config()
         self.youtube_service = None
 
@@ -389,11 +398,19 @@ def main():
     parser.add_argument("--daemon", "-d", action="store_true", help="常駐スケジューラー起動")
     parser.add_argument("--collection", "-c", help="対象コレクション名（部分一致）")
     parser.add_argument("--config", help="設定ファイルパス")
+    parser.add_argument(
+        "--allow-duration-outside-target",
+        action="store_true",
+        help="channel audio の目標尺外でも operator 判断で upload を許可",
+    )
 
     args = parser.parse_args()
 
     try:
-        uploader = CollectionUploader(config_path=args.config)
+        uploader = CollectionUploader(
+            config_path=args.config,
+            allow_duration_outside_target=args.allow_duration_outside_target,
+        )
 
         if args.daemon:
             uploader.run_automated_schedule()

@@ -24,6 +24,7 @@ import threading
 import time
 from pathlib import Path
 
+from youtube_automation.configuration import load_config
 from youtube_automation.utils.collection_paths import (
     CollectionPaths,
     resolve_collection_dir,
@@ -112,6 +113,7 @@ def _print_duration_preview(
     effective_loops: int,
     crossfade: float,
     target_duration_min: int | None,
+    target_duration_max: int | None,
     no_loop: bool,
 ) -> None:
     """目標尺とループ回数の事前見積もりを表示する。"""
@@ -120,7 +122,10 @@ def _print_duration_preview(
     print(f"    Track total : {_format_duration(single_loop_sec)}")
     if target_duration_min is not None:
         target_sec = target_duration_min * 60
-        print(f"    Target      : {_format_duration(target_sec)}")
+        target_label = _format_duration(target_sec)
+        if target_duration_max is not None:
+            target_label += f"–{_format_duration(target_duration_max * 60)}"
+        print(f"    Target      : {target_label}")
     elif no_loop:
         print("    Target      : disabled")
     print(f"    Loop count  : {effective_loops}")
@@ -222,6 +227,8 @@ def generate_master(
     *,
     loops: int | None = None,
     target_duration_min: int | None = None,
+    target_duration_max: int | None = None,
+    allow_duration_outside_target: bool = False,
     no_loop: bool = False,
     shuffle: bool = False,
     shuffle_seed: int | None = None,
@@ -265,9 +272,25 @@ def generate_master(
         target_duration_min = None
 
     should_print_duration_preview = (not quiet) and (target_duration_min is not None or loops is not None or no_loop)
-    needs_duration_probe = target_duration_min is not None or should_print_duration_preview
+    needs_duration_probe = (
+        target_duration_min is not None or target_duration_max is not None or should_print_duration_preview
+    )
     single_loop_sec = _sum_track_duration(files) if needs_duration_probe else 0.0
     effective_loops = _resolve_loop_count(loops, target_duration_min, single_loop_sec, crossfade)
+    estimated_duration = _estimate_looped_duration(single_loop_sec, effective_loops, crossfade)
+    if (
+        target_duration_max is not None
+        and estimated_duration > target_duration_max * 60
+        and not allow_duration_outside_target
+    ):
+        raise ValidationError(
+            "channel audio の目標尺を整数ループで満たせません: "
+            f"1 pass={_format_duration(single_loop_sec)}, "
+            f"{effective_loops} loops={_format_duration(estimated_duration)}, "
+            f"target={target_duration_min or 0}〜{target_duration_max}分。"
+            " `--no-loop` で1 passを明示採用する、部分ループ素材を作る、"
+            "targetを変更する、または `--allow-duration-outside-target` を明示してください"
+        )
 
     expanded = files * effective_loops
     n_effective = len(expanded)
@@ -293,6 +316,7 @@ def generate_master(
                 effective_loops=effective_loops,
                 crossfade=crossfade,
                 target_duration_min=target_duration_min,
+                target_duration_max=target_duration_max,
                 no_loop=no_loop,
             )
         print()
@@ -384,6 +408,11 @@ def main() -> int:
         description="個別音声 (MP3 / M4A / WAV) をクロスフェード結合して master.mp3 を生成",
     )
     parser.add_argument(
+        "--allow-duration-outside-target",
+        action="store_true",
+        help="channel audio の目標尺外でも operator 判断で生成を許可",
+    )
+    parser.add_argument(
         "collection",
         nargs="?",
         help="コレクションディレクトリ (省略時は CWD)",
@@ -449,15 +478,24 @@ def main() -> int:
         audio = cfg.get("audio", {})
         crossfade = float(audio.get("crossfade_duration", 1.0))
         bitrate = str(audio.get("bitrate", "192k"))
+        channel_audio = load_config().audio
 
         # CLI フラグ (--loop / --target-duration / --no-loop) がすべて未指定なら
         # skill-config の `audio.target_duration_min` をデフォルト値として採用する。
         # --loop / --no-loop 指定時は CLI 指定が最優先のため skill-config 値を黙って無視する。
         target_duration: int | None = args.target_duration
         if args.loop is None and args.target_duration is None and not args.no_loop:
+            channel_target = channel_audio.target_duration_min
             skill_target = audio.get(_TARGET_DURATION_MIN_KEY)
-            if skill_target is not None:
-                target_duration = int(skill_target)
+            if channel_target is not None and skill_target is not None and float(channel_target) != float(skill_target):
+                print(
+                    "  Duration target: "
+                    f"channel={channel_target:g}分 / skill={float(skill_target):g}分 "
+                    "→ config/channel/audio.json を SSOT として採用"
+                )
+            effective_target = channel_target if channel_target is not None else skill_target
+            if effective_target is not None:
+                target_duration = int(effective_target)
                 if target_duration < 1:
                     raise ValidationError(
                         f"skill-config masterup.audio.{_TARGET_DURATION_MIN_KEY} は 1 以上を指定してください"
@@ -509,6 +547,10 @@ def main() -> int:
             bitrate,
             loops=args.loop,
             target_duration_min=target_duration,
+            target_duration_max=(
+                int(channel_audio.target_duration_max) if channel_audio.target_duration_max is not None else None
+            ),
+            allow_duration_outside_target=args.allow_duration_outside_target,
             no_loop=args.no_loop,
             shuffle=shuffle_enabled,
             shuffle_seed=shuffle_seed,
