@@ -10,7 +10,7 @@ description: "Use when 正規入口から collection の有無を問わず、企
 
 ## Overview
 
-`workflow-state.json` と実成果物を毎段再評価し、新規企画または active collection の未完了地点から公開後処理まで継続する統合入口。判断・lease・履歴は `references/wf-auto-state.py` を使い、実作業は既存 `/wf-new`、`/lyria`、`/suno-helper`、`/masterup`、`/wf-next`、`/post-publish` に委譲する。子 skill の処理は本文へ複製しない。
+`workflow-state.json` と実成果物を毎段再評価し、新規企画または active collection の未完了地点から公開後処理まで継続する統合入口。判断・lease・履歴は `references/wf-auto-state.py` を使い、実作業は既存 `/wf-new`、`/lyria`、`/suno-helper`、`/masterup`、`/wf-next`、`/post-publish` に委譲する。子 skill の処理は本文へ複製しない。`thumbnail::textless.enabled` も独自解釈せず、`/wf-new` と `/wf-next` の契約をそのまま貫通させる。
 
 ## Hard Gates
 

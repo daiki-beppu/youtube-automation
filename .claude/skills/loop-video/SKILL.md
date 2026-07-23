@@ -115,14 +115,15 @@ $ARGUMENTS
 
 ### 前提条件
 
-- `10-assets/main.png` または `main.jpg` が存在すること（`/thumbnail` で先に生成・承認したテキストなし動画背景）
-- `10-assets/thumbnail.jpg` ではなく、テキストなし `main.png/jpg` を入力にすること
+- `10-assets/main.png` または `main.jpg` が存在すること。thumbnail skill-config の deep-merge 後に `textless.enabled: false` なら、承認済み `thumbnail.jpg` と同一内容で共有された文字入り `main.jpg` を正規入力として受け入れる
+- `textless.enabled` が未設定または `true` の場合は、`10-assets/thumbnail.jpg` ではなくテキストなし `main.png/jpg` を入力にすること
+- つまり opt-in でない既存運用では、`10-assets/thumbnail.jpg` ではなく、テキストなし `main.png/jpg` を入力にすること
 - Veo は Vertex AI ADC が初期化されていること (`gcloud auth application-default login` + `set-quota-project`)。Omni は `GEMINI_API_KEY`（環境変数または `op://Personal/Gemini_API_Key/credential`）が必要
 
 ### ステップ
 
 1. **有効/無効確認**: `config/skills/loop-video.yaml::enabled` を確認。`false` なら Veo を実行せず、`main.png/jpg` の静止画背景運用として終了する
-2. **対象確認**: `10-assets/` にテキストなし `main.png` or `main.jpg` があることを確認。文字入り `thumbnail.jpg` しか無い場合は `/thumbnail` に戻って textless 背景を生成・承認する
+2. **対象確認**: `10-assets/` に `main.png` or `main.jpg` があることを確認。`thumbnail::textless.enabled: false` では共有済み文字入り `main.jpg` を受理し、textless 再生成を要求しない。未設定または `true` で文字入り `thumbnail.jpg` しか無い場合は `/thumbnail` に戻って textless 背景を生成・承認する
 3. **プロンプト検討**: シーンに応じた自然な動きを指定
    - デフォルトプロンプトは skill-config (`config/skills/loop-video.yaml` または `.claude/skills/loop-video/config.default.yaml`) の `veo.default_prompt` を使用
    - シーンに合わない場合は `--prompt` でカスタマイズ

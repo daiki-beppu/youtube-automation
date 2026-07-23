@@ -382,6 +382,25 @@ def test_wf_new_declares_sequential_child_skill_orchestration() -> None:
         cursor = index
 
 
+def test_textless_shared_main_contract_passes_through_workflows() -> None:
+    """Issue #2458: wf-new/next/auto が共有 main 契約を再解釈せず貫通させる。"""
+    wf_new = _read(_WF_NEW_SKILL_MD)
+    wf_next = _read(_SKILLS_DIR / "wf-next" / "SKILL.md")
+    wf_auto = _read(_SKILLS_DIR / "wf-auto" / "SKILL.md")
+
+    for token in (
+        "`textless.enabled`",
+        "`share_thumbnail_as_main.py <collection-path>`",
+        "`status: SHARED`",
+        "同一 SHA-256",
+        "textless 委譲・生成・承認を再要求せず",
+    ):
+        assert token in wf_new
+    assert "`textless.enabled: false` の共有 `main.jpg` を textless 再生成へ戻さない" in wf_next
+    assert "`thumbnail::textless.enabled` も独自解釈せず" in wf_auto
+    assert "`/wf-new` と `/wf-next` の契約をそのまま貫通" in wf_auto
+
+
 def test_wf_new_starts_suno_helper_server_before_handoff() -> None:
     text = _read(_WF_NEW_SKILL_MD)
     phase_2f = _section(text, "#### 2f. Suno helper server 起動（Suno のみ）")

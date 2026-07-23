@@ -112,7 +112,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --trac
 | 2 | `uv run yt-init-collection` | 選択企画から collection dir と初期 state を作る | `workflow-state.json` |
 | 3 | `uv run yt-populate-scene-phrases` | 多言語チャンネルの scene phrases を初期化 | `scene_phrases` |
 | 4 | subagent: `/thumbnail` | テキスト付き候補生成を委譲し、メインが成果物を検証する | `10-assets/thumbnail-vN.jpg/png` |
-| 5 | user 承認 + subagent: `/thumbnail` | 通常はテキスト付き候補を承認・確定後、textless 候補生成を委譲し、承認・確定・state 更新を行う。`mode: full` は両承認を省略して自動確定する | `10-assets/thumbnail.jpg`, `10-assets/main.png/jpg` |
+| 5 | user 承認 + subagent: `/thumbnail` | 通常はテキスト付き候補を承認・確定後、textless 候補生成を委譲し、承認・確定・state 更新を行う。`thumbnail::textless.enabled: false` では確定済み thumbnail を `main.jpg` へ共用する。`mode: full` は承認を省略して自動確定する | `10-assets/thumbnail.jpg`, `10-assets/main.png/jpg` |
 | 6 | subagent: `/suno` または `/lyria` | 音楽エンジンに応じたプロンプト生成を委譲し、メインが成果物を検証する | `suno-prompts.json` または Lyria 設計 |
 | 7 | subagent: `/loop-video` または静止背景運用 | `loop-video.enabled=true` なら生成を委譲しメインが検証。`enabled=false` なら Veo を呼ばず、メインが既存 textless `main.png/jpg` を静止背景として使う | `10-assets/loop.mp4` または textless `10-assets/main.png/jpg` |
 | 8 | subagent: `uv run yt-collection-serve`（Suno のみ） | server 起動と疎通確認を委譲し、結果をメインが検証する | `http://localhost:<PORT>` |
@@ -239,12 +239,12 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 
 ##### 2c-2. サムネイル承認・確定 + 音楽素材生成
 
-このステップにテキスト付き候補の承認ゲートと `mode: full` の自動確定分岐を一元化する。以下の 1〜4 は mode 別に実行する。
+このステップにテキスト付き候補の承認ゲートと `mode: full` の自動確定分岐を一元化する。最初に thumbnail の `config.default.yaml` と `config/skills/thumbnail.yaml` を deep-merge し、`textless.enabled` を確定する。未設定は既定の `true` として扱う。以下の 1〜4 は mode 別に実行する。
 
 **`mode: full`**:
 
 1. AskUserQuestion と `open` を実行せず、`uv run yt-thumbnail-auto-select <collection-path> --dry-run` が exit 0 であることを確認してから `uv run yt-thumbnail-auto-select <collection-path> --apply` を実行する。`10-assets/thumbnail.jpg` と `workflow-state.json::thumbnail_auto_selection.mode == "full"` を検証する
-2. 確定した `thumbnail.jpg` を入力、生成対象 `main` を指定して別 subagent へ委譲する。生成可否と textless 背景承認は質問せず、`yt-thumbnail-check` が exit 0 かつ候補が存在するときだけ `10-assets/main.png/jpg` へ確定コピーする
+2. `textless.enabled` が未設定または `true` なら、確定した `thumbnail.jpg` を入力、生成対象 `main` を指定して別 subagent へ委譲する。生成可否と textless 背景承認は質問せず、`yt-thumbnail-check` が exit 0 かつ候補が存在するときだけ `10-assets/main.png/jpg` へ確定コピーする。`false` なら textless 委譲・生成・承認を再要求せず、`share_thumbnail_as_main.py <collection-path>` を実行し、`status: SHARED`、`thumbnail.jpg` と `main.jpg` の同一 SHA-256、`main.png` 不在を検証する
 3. `/thumbnail-compare` の 320px 視認性検証はスコープ外のまま省略せず、自動確定後に別途実行する。失敗しても不適格候補を強制採用せず、`/thumbnail` の「full モード失敗時の手動切替」を表示して state を更新せず停止する
 4. `thumbnail.jpg` と `main.png/jpg` の確定検証後だけ、`assets.thumbnail = true`、`thumbnail.approved = true`、`updated_at` を更新して音楽素材生成へ進む
 
@@ -272,7 +272,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
      - 中断 → ここで一旦停止（後で `/wf-next` で再開可能）
    ```
 
-3. 承認済み `thumbnail.jpg` を入力に、生成対象 `main` を指定して別の subagent へ委譲する。メインが報告された textless 候補の存在と生成対象を検証し、候補をプレビューしてユーザー承認後に `10-assets/main.png/jpg` へ確定コピーする。
+3. `textless.enabled` が未設定または `true` なら、承認済み `thumbnail.jpg` を入力に、生成対象 `main` を指定して別の subagent へ委譲する。メインが報告された textless 候補の存在と生成対象を検証し、候補をプレビューしてユーザー承認後に `10-assets/main.png/jpg` へ確定コピーする。`false` なら textless 候補生成・プレビュー・承認を省略し、`share_thumbnail_as_main.py <collection-path>` を実行して同一内容の通常ファイル `main.jpg` を確定する。
    - `thumbnail.jpg` と `main.png/jpg` を同一画像で代用しない。`main.png` を `thumbnail.jpg` にコピーする旧運用は禁止
    - QA が NG、再生成、または中断の場合は `/collection-ideate` または `/thumbnail` の該当生成ステップへ戻し、state を更新せず停止する
 
@@ -289,8 +289,8 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 
 サムネイル承認後、`config/skills/loop-video.yaml::enabled` を確認する。
 
-- `enabled: false` の場合: `/loop-video` は呼ばず、textless `main.png/jpg` の静止画背景運用として続行する。`assets.loop_video = false` を維持し、`phase = "prepared"` に更新する
-- `enabled` 未指定 or `true` の場合: Agent ツールで subagent を起動し、textless `main.png/jpg` を入力、`10-assets/loop.mp4` を期待成果物として `/loop-video` の生成だけを委譲する
+- `enabled: false` の場合: `/loop-video` は呼ばず、既定では textless `main.png/jpg` の静止画背景運用として続行する。`thumbnail::textless.enabled: false` では例外として文字入りの共有 `main.jpg` が正規入力である。`assets.loop_video = false` を維持し、`phase = "prepared"` に更新する
+- `enabled` 未指定 or `true` の場合: Agent ツールで subagent を起動し、`main.png/jpg` を入力、`10-assets/loop.mp4` を期待成果物として `/loop-video` の生成だけを委譲する。`thumbnail::textless.enabled: false` の共有 `main.jpg` も正規入力として渡す
   - 成功: メインが `loop.mp4` の存在を確認後、`assets.loop_video = true`、`phase = "prepared"`、`updated_at` を更新する
   - 失敗または欠落: state は更新せず、同じ loop-video 委譲から再試行できる状態で停止する
 

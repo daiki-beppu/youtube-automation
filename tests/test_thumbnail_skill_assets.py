@@ -364,6 +364,20 @@ def test_thumbnail_textless_shared_main_default_and_contract() -> None:
     assert "未設定または `true` では文字入りと文字なしを分離" in standard_block
 
 
+def test_shared_main_contract_reaches_loop_video_and_videoup() -> None:
+    """Issue #2458: opt-in の共有 main を動画背景 skill が正規入力として扱う。"""
+    loop_video = _read_loop_video_skill()
+    videoup = (_repo_root() / ".claude" / "skills" / "videoup" / "SKILL.md").read_text(encoding="utf-8")
+
+    for text in (loop_video, videoup):
+        assert "`thumbnail::textless.enabled: false`" in text
+        assert "文字入り" in text
+        assert "正規入力" in text
+        assert "textless 再生成" in text
+    assert "未設定または `true`" in loop_video
+    assert "未設定または `true`" in videoup
+
+
 def test_share_thumbnail_as_main_copies_atomically_and_removes_png(tmp_path: Path) -> None:
     module = _load_shared_main_module("share_thumbnail_as_main")
     collection = tmp_path / "collection"
