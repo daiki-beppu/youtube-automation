@@ -140,6 +140,27 @@ def test_flop_analysis_calls_executable_verification_reference() -> None:
     assert "--operation" in phase_4
 
 
+def test_flop_analysis_returns_postmortem_learning_to_creative_constraints() -> None:
+    """Issue #2451: 制約化可能な学びだけを明示承認後に還流する。"""
+    text = _skill_text()
+    completion = _section(text, "## 完了条件")
+    phase_7 = _section(text, "### Phase 7: creative-constraints への制約還流")
+
+    assert "Phase 7 の制作制約還流" in completion
+    for section in ("音", "映像", "サムネ", "タイトル", "測定"):
+        assert f"「{section}」" in phase_7
+    for verdict in ("数値", "有限列挙", "文字列一致", "真偽値"):
+        assert verdict in phase_7
+    assert "作成日" in phase_7
+    assert "video_id" in phase_7
+    assert "`creative-constraints.md に追記する`" in phase_7
+    assert "`追記しない`" in phase_7
+    assert "1 が明示された場合だけ" in phase_7
+    assert "`制約還流対象なし`" in phase_7
+    assert "`/creative-constraints` の実行を案内" in phase_7
+    assert "ファイルやディレクトリを本 Phase で新規作成しない" in phase_7
+
+
 def test_flop_analysis_runs_every_primary_verification_without_approval_and_records_results() -> None:
     """Requirement 1: 全主仮説を承認なしで検証し、結果を記録する。"""
     phase_4 = _section(_skill_text(), "### Phase 4: 検証の自律実行")
