@@ -129,6 +129,11 @@ def select_channel(slug: str | None) -> None:
     _explicit_channel = slug
 
 
+def _explicit_channel_selection() -> str | None:
+    """共通 CLI wrapper が受け取った明示 channel slug を返す."""
+    return _explicit_channel
+
+
 def _find_channel_ancestor(start: Path) -> Path | None:
     current = start.expanduser().resolve()
     for parent in [current, *current.parents]:

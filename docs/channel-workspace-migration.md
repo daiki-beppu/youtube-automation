@@ -50,6 +50,7 @@ uv run yt-doctor --channel ambient-island
 ```
 
 channel directory 内で実行する CLI は従来どおり cwd から channel を解決します。workspace root から実行するときは `--channel ambient-island` または `CHANNEL=ambient-island` を指定します。
+`yt-doctor` の bootstrap 診断は channel 固有の config / auth と、workspace root に1セットだけ置いた `pyproject.toml` / `.claude/skills` / `.agents/skills` を組み合わせて検査します。
 
 ## 4. `.env` と git 管理対象を確認する
 

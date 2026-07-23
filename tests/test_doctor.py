@@ -1000,6 +1000,18 @@ class TestOAuthClientSharingRecommendation:
 
 
 class TestResolveChannelDir:
+    @staticmethod
+    def _workspace(tmp_path: Path) -> tuple[Path, Path]:
+        workspace = tmp_path / "workspace"
+        channel = workspace / "channels" / "alpha"
+        (channel / "config" / "channel").mkdir(parents=True)
+        return workspace, channel
+
+    @staticmethod
+    def _clear_channel_env(monkeypatch) -> None:
+        monkeypatch.delenv("CHANNEL", raising=False)
+        monkeypatch.delenv("CHANNEL_DIR", raising=False)
+
     def test_target_explicit(self, tmp_path):
         r = doctor.resolve_channel_dir(str(tmp_path))
         assert r == tmp_path.resolve()
@@ -1014,6 +1026,42 @@ class TestResolveChannelDir:
         monkeypatch.chdir(tmp_path)
         r = doctor.resolve_channel_dir(None)
         assert r == tmp_path.resolve()
+
+    def test_common_channel_selection_resolves_workspace_channel(self, tmp_path, monkeypatch):
+        from youtube_automation.configuration import select_channel
+
+        self._clear_channel_env(monkeypatch)
+        workspace, channel = self._workspace(tmp_path)
+        monkeypatch.chdir(workspace)
+        select_channel("alpha")
+
+        assert doctor.resolve_channel_dir(None) == channel.resolve()
+
+    def test_workspace_root_without_selection_is_rejected(self, tmp_path, monkeypatch):
+        self._clear_channel_env(monkeypatch)
+        workspace, _channel = self._workspace(tmp_path)
+        monkeypatch.chdir(workspace)
+
+        with pytest.raises(ConfigError, match=r"workspace ルート.*--channel"):
+            doctor.resolve_channel_dir(None)
+
+    def test_target_remains_higher_priority_than_common_selection(self, tmp_path, monkeypatch):
+        from youtube_automation.configuration import select_channel
+
+        self._clear_channel_env(monkeypatch)
+        workspace, _channel = self._workspace(tmp_path)
+        target = tmp_path / "explicit-target"
+        target.mkdir()
+        monkeypatch.chdir(workspace)
+        select_channel("alpha")
+
+        assert doctor.resolve_channel_dir(str(target)) == target.resolve()
+
+    def test_unconfigured_setup_directory_still_uses_cwd(self, tmp_path, monkeypatch):
+        self._clear_channel_env(monkeypatch)
+        monkeypatch.chdir(tmp_path)
+
+        assert doctor.resolve_channel_dir(None) == tmp_path.resolve()
 
 
 class TestMain:
@@ -1680,6 +1728,13 @@ class TestCheckInitialSetupReadiness:
 
 
 class TestBootstrapChecks:
+    @staticmethod
+    def _workspace_channel(tmp_path: Path) -> tuple[Path, Path]:
+        workspace = tmp_path / "workspace"
+        channel = workspace / "channels" / "alpha"
+        (channel / "config" / "channel").mkdir(parents=True)
+        return workspace, channel
+
     def test_check_uv_ok(self, monkeypatch):
         monkeypatch.setattr("shutil.which", lambda cmd: "/usr/local/bin/uv" if cmd == "uv" else None)
         r = doctor.check_uv()
@@ -1731,6 +1786,16 @@ class TestBootstrapChecks:
         assert r.status == "ok"
         assert r.category == "bootstrap"
 
+    def test_workspace_channel_uses_root_uv_project(self, monkeypatch, tmp_path):
+        workspace, channel = self._workspace_channel(tmp_path)
+        (workspace / "pyproject.toml").write_text('[project]\nname = "workspace"\n', encoding="utf-8")
+        monkeypatch.setattr(doctor, "_run", lambda *args, **kwargs: pytest.fail("uv tool list should not run"))
+
+        r = doctor.check_uv_project(channel)
+
+        assert r.status == "ok"
+        assert r.message == "uv project 初期化済み"
+
     def test_automation_package_missing_pyproject_is_fail_with_uv_init(self, monkeypatch, tmp_path):
         monkeypatch.setattr(doctor, "_run", lambda *args, **kwargs: (0, "", ""))
         r = doctor.check_automation_package(tmp_path)
@@ -1775,6 +1840,19 @@ class TestBootstrapChecks:
         r = doctor.check_automation_package(tmp_path)
         assert r.status == "ok"
         assert r.category == "bootstrap"
+
+    def test_workspace_channel_uses_root_automation_dependency(self, monkeypatch, tmp_path):
+        workspace, channel = self._workspace_channel(tmp_path)
+        (workspace / "pyproject.toml").write_text(
+            '[project]\nname = "workspace"\ndependencies = ["youtube-channels-automation"]\n',
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(doctor, "_run", lambda *args, **kwargs: pytest.fail("uv tool list should not run"))
+
+        r = doctor.check_automation_package(channel)
+
+        assert r.status == "ok"
+        assert r.message == "automation パッケージ導入済み"
 
     def test_automation_package_similar_name_is_fail(self, monkeypatch, tmp_path):
         monkeypatch.setattr(
@@ -1863,6 +1941,43 @@ class TestBootstrapChecks:
         r = doctor.check_skills_synced(tmp_path)
         assert r.status == "ok"
         assert r.category == "bootstrap"
+
+    def test_workspace_channel_uses_root_shared_skills(self, tmp_path, monkeypatch):
+        workspace, channel = self._workspace_channel(tmp_path)
+        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-new", "setup"])
+        for skill_name in ["channel-new", "setup"]:
+            skill_dir = workspace / ".claude" / "skills" / skill_name
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(f"# {skill_name}", encoding="utf-8")
+        agents_dir = workspace / ".agents"
+        agents_dir.mkdir()
+        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
+
+        r = doctor.check_skills_synced(channel)
+
+        assert r.status == "ok"
+        assert r.category == "bootstrap"
+
+    def test_workspace_channel_scans_root_managed_directories(self, tmp_path):
+        workspace, channel = self._workspace_channel(tmp_path)
+        (workspace / ".claude" / "skills").mkdir(parents=True)
+
+        r = doctor.check_numbered_duplicates(channel)
+
+        assert r.status == "ok"
+        assert "走査できません" not in r.message
+
+    def test_nested_standalone_channel_does_not_use_outer_workspace_bootstrap(self, tmp_path, monkeypatch):
+        workspace, _channel = self._workspace_channel(tmp_path)
+        standalone = workspace / "standalone"
+        (standalone / "config" / "channel").mkdir(parents=True)
+        (workspace / "pyproject.toml").write_text('[project]\nname = "workspace"\n', encoding="utf-8")
+        monkeypatch.setattr(doctor, "_run", lambda *args, **kwargs: (0, "", ""))
+
+        r = doctor.check_uv_project(standalone)
+
+        assert r.status == "fail"
+        assert r.next_action["cmd"] == "uv init"
 
     def test_skills_synced_legacy_onboard_orphan_is_fail_with_prune(self, tmp_path, monkeypatch):
         monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["setup"])
