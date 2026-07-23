@@ -94,11 +94,6 @@ REQUIRED_APIS = [
     "generativelanguage.googleapis.com",
 ]
 
-REQUIRED_ENV_KEYS = [
-    "GOOGLE_CLOUD_LOCATION",
-    "GOOGLE_GENAI_USE_VERTEXAI",
-]
-
 UPLOAD_REQUIRED_SCOPES = [
     "https://www.googleapis.com/auth/youtube",
     "https://www.googleapis.com/auth/youtube.force-ssl",
@@ -234,19 +229,6 @@ def _escape_display_character(char: str) -> str:
     return char
 
 
-def _read_env_file(env_path: Path) -> dict[str, str]:
-    if not env_path.exists():
-        return {}
-    result: dict[str, str] = {}
-    for raw in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        k, v = line.split("=", 1)
-        result[k.strip()] = v.strip().strip('"').strip("'")
-    return result
-
-
 def _adc_quota_project() -> Optional[str]:
     adc_json = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
     if not adc_json.exists():
@@ -262,8 +244,7 @@ def _project_id_for(channel_dir: Path) -> Optional[str]:
     apply_project_id = _APPLY_PROJECT_ID.get()
     if apply_project_id:
         return apply_project_id
-    env = _read_env_file(channel_dir / ".env")
-    return env.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GOOGLE_CLOUD_PROJECT") or _adc_quota_project()
+    return os.environ.get("GOOGLE_CLOUD_PROJECT") or _adc_quota_project()
 
 
 def _project_table(pyproject_path: Path) -> dict[str, object]:
@@ -667,7 +648,7 @@ def check_gcp_project(channel_dir: Path) -> CheckResult:
         return CheckResult(
             id="gcp_project",
             status="fail",
-            message="project_id が .env / 環境変数 / ADC quota project のいずれにも無い",
+            message="project_id が環境変数 / ADC quota project のいずれにも無い",
         )
     code, _, err = _run(["gcloud", "projects", "describe", project_id, "--format=value(projectId)"])
     if code != 0:
@@ -873,76 +854,6 @@ def check_iam_aiplatform_user(channel_dir: Path) -> CheckResult:
         status="ok",
         message=f"user:{account} は roles/aiplatform.user を保持",
     )
-
-
-def check_env_file(channel_dir: Path) -> CheckResult:
-    env_path = channel_dir / ".env"
-    if not env_path.exists():
-        return CheckResult(
-            id="env_file",
-            status="fail",
-            message=f"{env_path} が無い",
-            next_action=_ai_exec_action(
-                ["uv", "run", "yt-doctor", "--write-env-defaults", "--target", "."],
-                display_cmd=(
-                    ".claude/skills/channel-new/references/gcp-bootstrap.sh <project-id> を実行して .env を書き出す"
-                ),
-            ),
-        )
-    env = _read_env_file(env_path)
-    missing = [k for k in REQUIRED_ENV_KEYS if k not in env]
-    if missing:
-        return CheckResult(
-            id="env_file",
-            status="warn",
-            message=f".env に不足キー: {','.join(missing)}",
-        )
-    return CheckResult(
-        id="env_file",
-        status="ok",
-        message=f".env 必須キー揃い済み ({', '.join(REQUIRED_ENV_KEYS)})",
-    )
-
-
-def write_env_defaults(channel_dir: Path) -> int:
-    """非対話 setup 用の安全な既定値だけを .env へ追記する。"""
-    env_path = channel_dir / ".env"
-    if env_path.is_symlink() or (env_path.exists() and not env_path.is_file()):
-        print(f"{env_path} は通常ファイルである必要があります", file=sys.stderr)
-        return 1
-    existing = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
-    values = _read_env_file(env_path)
-    additions = []
-    if "GOOGLE_CLOUD_LOCATION" not in values:
-        additions.append("GOOGLE_CLOUD_LOCATION=us-central1")
-    if "GOOGLE_GENAI_USE_VERTEXAI" not in values:
-        additions.append("GOOGLE_GENAI_USE_VERTEXAI=true")
-    if not additions:
-        return 0
-    prefix = existing
-    if prefix and not prefix.endswith("\n"):
-        prefix += "\n"
-    content = prefix + "\n".join(additions) + "\n"
-    existing_mode = stat.S_IMODE(env_path.stat().st_mode) if env_path.exists() else 0o600
-    temporary_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=channel_dir,
-            prefix=".env.",
-            delete=False,
-        ) as temporary:
-            temporary.write(content)
-            temporary.flush()
-            os.fsync(temporary.fileno())
-            temporary_path = Path(temporary.name)
-        temporary_path.chmod(existing_mode)
-        os.replace(temporary_path, env_path)
-    finally:
-        if temporary_path is not None and temporary_path.exists():
-            temporary_path.unlink()
-    return 0
 
 
 def _load_client_secrets_data(channel_dir: Path) -> tuple[Path | str, object | None, str | None, str | None]:
@@ -2988,7 +2899,6 @@ def run_all_checks(channel_dir: Path) -> list[CheckResult]:
         check_adc(),
         check_adc_quota_project(channel_dir),
         check_iam_aiplatform_user(channel_dir),
-        check_env_file(channel_dir),
         check_client_secrets(channel_dir),
         check_oauth_client_sharing(channel_dir),
         check_oauth_token(channel_dir),
@@ -3646,8 +3556,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         action="store_true",
         help="Downloads の OAuth client secret を auth/client_secrets.json へ移動",
     )
-    parser.add_argument("--write-env-defaults", action="store_true", help=argparse.SUPPRESS)
-
     # accounts subcommand
     accounts_parser = sub.add_parser("accounts", help="全チャンネルの GCP/OAuth 対応表")
     accounts_parser.add_argument("--json", action="store_true", help="JSON 出力")
@@ -3667,8 +3575,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         return run_accounts(root, args.json)
 
     channel_dir = resolve_channel_dir(args.target)
-    if args.write_env_defaults:
-        return write_env_defaults(channel_dir)
     if args.fix_client_secrets:
         return fix_client_secrets(channel_dir)
     apply_summary: ApplySummary | None = None

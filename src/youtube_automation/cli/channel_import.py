@@ -93,14 +93,6 @@ def _validated_slug(value: str) -> str:
 
 
 def _warn_source_residue(source: Path) -> None:
-    env_path = source / ".env"
-    if env_path.exists():
-        print(f"[warning] 移行元に .env が残っています（コピーしません）: {env_path}", file=sys.stderr)
-        try:
-            if re.search(r"(?m)^\s*CHANNEL_DIR\s*=", env_path.read_text(encoding="utf-8")):
-                print("[warning] 移行元 .env の CHANNEL_DIR は workspace 運用前に削除してください", file=sys.stderr)
-        except OSError as error:
-            print(f"[warning] 移行元 .env を確認できません: {error}", file=sys.stderr)
     configured = os.environ.get("CHANNEL_DIR")
     if configured:
         try:

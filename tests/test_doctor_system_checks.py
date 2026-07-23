@@ -127,11 +127,11 @@ class TestRunAllChecksWithBootstrap:
         bootstrap_results = [r for r in results if r.category == "bootstrap"]
         assert len(bootstrap_results) == 7
 
-    def test_total_checks_is_28(self, monkeypatch, tmp_path):
-        """7 bootstrap + 13 api + 3 channel + 4 data + 1 upload = 計 28 件."""
+    def test_total_checks_is_27(self, monkeypatch, tmp_path):
+        """7 bootstrap + 12 api + 3 channel + 4 data + 1 upload = 計 27 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 28
+        assert len(results) == 27
 
     def test_bootstrap_before_api(self, monkeypatch, tmp_path):
         """bootstrap カテゴリは api カテゴリより前に配置される."""

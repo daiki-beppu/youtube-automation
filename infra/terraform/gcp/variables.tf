@@ -33,12 +33,6 @@ variable "folder_id" {
   default     = null
 }
 
-variable "location" {
-  type        = string
-  description = "Vertex AI リージョン。.env の GOOGLE_CLOUD_LOCATION へ反映"
-  default     = "us-central1"
-}
-
 variable "adc_email" {
   type        = string
   description = "roles/aiplatform.user を付与する Google アカウント (ADC で使うユーザー)"

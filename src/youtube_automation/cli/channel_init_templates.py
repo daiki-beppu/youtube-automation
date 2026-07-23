@@ -218,10 +218,6 @@ def _yaml_scalar(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def _render_env(_ctx: ChannelInitContext) -> str:
-    return "CHANNEL_DIR=.\nGOOGLE_CLOUD_PROJECT=\nVERTEX_LOCATION=us-central1\n"
-
-
 def _render_gitignore(_ctx: ChannelInitContext) -> str:
     return "\n".join(
         [
@@ -291,7 +287,6 @@ def _render_thumbnail_skill(ctx: ChannelInitContext) -> str:
 
 
 ROOT_TEXT_TEMPLATES: dict[Path, Callable[[ChannelInitContext], str]] = {
-    Path(".env"): _render_env,
     Path(".gitignore"): _render_gitignore,
     Path("auth") / "client_secrets.template.json": _render_auth_template,
     SKILLS_SUBDIR / "suno.yaml": _render_suno_skill,

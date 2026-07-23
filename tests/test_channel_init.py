@@ -50,7 +50,6 @@ GITKEEP_DIRS: tuple[str, ...] = (
 )
 
 PACKAGE_FILES: tuple[str, ...] = (
-    ".env",
     ".gitignore",
     "auth/client_secrets.template.json",
     "config/localizations.json",
@@ -1084,17 +1083,16 @@ def test_scaffold_gitignore_contains_secret_and_python_patterns(tmp_path):
     assert "__pycache__/" in lines
 
 
-def test_existing_directory_at_file_path_returns_domain_error(tmp_path, capsys):
-    # Given: .env として生成すべき path がディレクトリになっている
+def test_existing_env_directory_is_not_managed(tmp_path):
+    # Given: 既存ユーザー資産として .env path がディレクトリになっている
     (tmp_path / ".env").mkdir()
 
     # When: main を実行
     rc = main(_required_args(tmp_path))
-    err = capsys.readouterr().err
 
-    # Then: IsADirectoryError ではなく domain-level error として停止する
-    assert rc == 1
-    assert ".env は通常ファイルである必要があります" in err
+    # Then: channel init は .env を検査・更新しない
+    assert rc == 0
+    assert (tmp_path / ".env").is_dir()
 
 
 def test_existing_file_at_directory_path_returns_domain_error(tmp_path, capsys):
@@ -1138,7 +1136,6 @@ def test_existing_file_at_generated_parent_path_returns_domain_error_without_par
     assert rc == 1
     assert f"親ディレクトリ {expected_parent} はディレクトリである必要があります" in err
     assert not (_channel_dir(tmp_path) / "meta.json").exists()
-    assert not (tmp_path / ".env").exists()
     assert not (tmp_path / "auth" / "client_secrets.template.json").exists()
 
 
