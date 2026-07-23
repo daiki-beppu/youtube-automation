@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType
 
@@ -41,10 +42,18 @@ def state() -> ModuleType:
     return _load_module()
 
 
-def _collection(root: Path, name: str = "20260718-test", video_id: str = "video-123") -> Path:
+def _collection(
+    root: Path,
+    name: str = "20260718-test",
+    video_id: str = "video-123",
+    publish_at: str | None = None,
+) -> Path:
     collection = root / "collections" / "live" / name
     collection.mkdir(parents=True)
-    (collection / "workflow-state.json").write_text(json.dumps({"upload": {"video_id": video_id}}), encoding="utf-8")
+    upload = {"video_id": video_id}
+    if publish_at is not None:
+        upload["publish_at"] = publish_at
+    (collection / "workflow-state.json").write_text(json.dumps({"upload": upload}), encoding="utf-8")
     return collection
 
 
@@ -122,6 +131,65 @@ def test_corrupt_history_fails_closed(tmp_path: Path, state: ModuleType) -> None
 
     with pytest.raises(ValueError, match="completed は object"):
         state.evaluate(tmp_path, collection, "community-post")
+
+
+def test_future_publish_records_pending_without_completing_pinned_step(tmp_path: Path, state: ModuleType) -> None:
+    collection = _collection(tmp_path, publish_at="2026-07-24T11:00:00Z")
+    state.mark_complete(tmp_path, collection, "community-post")
+
+    code, pending = state.evaluate(
+        tmp_path,
+        collection,
+        "pinned-comment",
+        now=datetime(2026, 7, 24, 10, 0, tzinfo=UTC),
+    )
+    recorded = state.mark_pending_until_publish(
+        tmp_path,
+        collection,
+        "pinned-comment",
+        now=datetime(2026, 7, 24, 10, 0, tzinfo=UTC),
+    )
+
+    assert code == state.EXIT_PENDING
+    assert pending["decision"] == "pending_until_publish"
+    assert pending["pending_until"] == "2026-07-24T11:00:00+00:00"
+    assert recorded["decision"] == "pending_until_publish"
+    history = json.loads((tmp_path / "post_publish_history.json").read_text(encoding="utf-8"))
+    video = history["videos"]["video-123"]
+    assert video["pending"]["pinned-comment"] == "2026-07-24T11:00:00+00:00"
+    assert "pinned-comment" not in video["completed"]
+
+
+def test_publish_time_reached_resumes_same_video_and_clears_pending_on_complete(
+    tmp_path: Path,
+    state: ModuleType,
+) -> None:
+    collection = _collection(tmp_path, publish_at="2026-07-24T11:00:00Z")
+    state.mark_complete(tmp_path, collection, "community-post")
+    state.mark_pending_until_publish(
+        tmp_path,
+        collection,
+        "pinned-comment",
+        now=datetime(2026, 7, 24, 10, 0, tzinfo=UTC),
+    )
+
+    code, runnable = state.evaluate(
+        tmp_path,
+        collection,
+        "pinned-comment",
+        now=datetime(2026, 7, 24, 11, 1, tzinfo=UTC),
+    )
+    assert code == state.EXIT_RUN
+    assert runnable["video_id"] == "video-123"
+
+    state.mark_complete(
+        tmp_path,
+        collection,
+        "pinned-comment",
+        now=datetime(2026, 7, 24, 11, 1, tzinfo=UTC),
+    )
+    history = json.loads((tmp_path / "post_publish_history.json").read_text(encoding="utf-8"))
+    assert "pinned-comment" not in history["videos"]["video-123"]["pending"]
 
 
 def test_child_skills_support_chain_and_standalone_invocation() -> None:
