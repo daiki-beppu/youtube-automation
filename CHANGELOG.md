@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(workspace)`: `yt-channel-import` が移行元・コピー対象内の通常ファイル symlink を安全検証後に実体化し、外部・対象外・壊れた・directory link は従来どおり rollback（#2462）。
 - `feat(flop-analysis)`: postmortem の一般化可能な学びを、出典付きの禁止制約案として明示承認後に `creative-constraints.md` へ還流する最終工程を追加（#2451）。
 - `feat(masterup)`: 全曲の integrated LUFS 最大差を既定 2.0 LU で検証し、逸脱時は明示承認までマスター結合を停止するゲートを追加（#2450）。
+- `docs(workflow)`: takt workflow routing を廃止し、GitHub issue + `/issue-direct` + linked worktree を正規開発経路として文書化（#2453）。
 - `feat(masterup)`: Suno 個別音源 cleanup を既定 ON にし、曲ごとの `-14 LUFS` 正規化と明示 opt-out を標準化（#2445）。
 - `feat(loop-video)`: Veo / Omni の既定プロンプトへ全画面の明滅・ストロボ・急な輝度変化・顔アップを避ける注意誘引ガードを追加（#2446）。
 - `feat(suno)`: 既定 Exclude Styles に sudden drops・risers・drum fills・hard transitions・dramatic buildups を追加（#2447）。

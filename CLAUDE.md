@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-詳細ドキュメント: アーキテクチャ全容・主要モジュール表は `docs/architecture.md`、パッケージング / extensions / lefthook 詳細は `docs/development.md`、takt 運用詳細は `docs/takt-operations.md`。
+詳細ドキュメント: アーキテクチャ全容・主要モジュール表は `docs/architecture.md`、パッケージング / extensions / lefthook 詳細は `docs/development.md`、issue / worktree 運用は `docs/takt-operations.md`。
 
 本リポジトリの開発者 bootstrap は `docs/development.md#開発者-bootstrap正規入口` を単一ソースとする。親 checkout / linked worktree の各 checkout で最初に `bash .lefthook/setup-worktree.sh` を実行し、非対話 shell は同 wrapper に command を渡す。
 
@@ -101,10 +101,10 @@ TS 版（tayk）の開発は専用の別リポジトリで行う（`docs/adr/002
 
 ## 開発ワークフロー
 
-このリポジトリの開発は **必ず worktree 上で行う**（メインの作業ツリーで直接ブランチを切らない）。標準ルートは **takt + GitHub issue**。worktree 置き場・takt 設定の継承・skill 編集と takt の関係・Codex 読み替えの詳細は `docs/takt-operations.md`。
+このリポジトリの開発は **必ず issue 専用 linked worktree 上で行う**（メインの作業ツリーで直接ブランチを切らない）。標準ルートは **GitHub issue + `/issue-direct`**。worktree の作成・検証・PR 運用は `docs/takt-operations.md`。
 
 - **issue 起票**: `gh issue create` または `/issue` スキル
-- **takt 起動**: `takt add '#<N>'` → `takt run`（base branch は **main** 固定、PR は通常 PR）
-- **workflow 使い分け**: issue の `takt:*` ラベルと同名の workflow で実行する（ラベル = workflow 名）。`takt:feature`（新規 feature・セキュリティ/認証・公開インターフェース/スキーマ変更。テスト先行の厳格 7 step）/ `takt:improve`（既存機能の意図的な挙動変更・拡張、interface 変更なし）/ `takt:diagnose-fix`（原因不明バグの診断 → 条件付き自動修正）/ `takt:fix`（原因特定済みの軽量修正）/ `takt:docs`（ドキュメント・skill のみの変更）/ `takt:lite`（refactor / chore 等の軽量タスク。迷ったらこれ）。`takt:manual` は takt を使わず `/issue-direct` や手動で直接実装する。判定基準と対応表は `docs/takt-operations.md`
+- **issue 着手**: `/issue-direct <N>`、または main から同等の issue 専用 linked worktree を作成する（base branch は **main** 固定、PR は通常 PR）
+- **takt**: 使用しない。既存の `takt:*` ラベルは履歴メタデータとしてのみ扱い、新規 issue へ付与しない
 - **commit 規約**: 日本語 Conventional Commits + タイトル末尾に `(#<N>)`
 - **リリース**: `/automation-release` スキル（post-release は `/release-notes`）
