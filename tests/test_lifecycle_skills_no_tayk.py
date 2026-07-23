@@ -39,6 +39,18 @@ _LIFECYCLE_SKILL_NAMES: Final[tuple[str, ...]] = (
 # tayk cutover までは、lifecycle skill の実行手順に tayk 表記
 # （`bunx tayk <cmd>` / argv 配列の "tayk" など）を混入させない。
 _FORBIDDEN_COMMAND_FRAGMENTS: Final[tuple[str, ...]] = ("tayk",)
+_TEXT_SUFFIXES: Final[frozenset[str]] = frozenset(
+    {
+        ".json",
+        ".md",
+        ".py",
+        ".sh",
+        ".toml",
+        ".txt",
+        ".yaml",
+        ".yml",
+    }
+)
 
 
 def _lifecycle_skill_dir(skill_name: str) -> Path:
@@ -46,7 +58,7 @@ def _lifecycle_skill_dir(skill_name: str) -> Path:
 
 
 def _text_files_under(skill_dir: Path) -> list[Path]:
-    return sorted(path for path in skill_dir.rglob("*") if path.is_file())
+    return sorted(path for path in skill_dir.rglob("*") if path.is_file() and path.suffix.lower() in _TEXT_SUFFIXES)
 
 
 def _offending_locations(skill_dir: Path, forbidden_fragment: str) -> list[str]:
