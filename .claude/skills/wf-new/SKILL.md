@@ -289,7 +289,7 @@ uv run yt-populate-scene-phrases <collection-dir-name> \
 
 サムネイル承認後、`config/skills/loop-video.yaml::enabled` を確認する。
 
-- `enabled: false` の場合: `/loop-video` は呼ばず、`main.png/jpg` の静止画背景運用として続行する。`thumbnail::textless.enabled: false` では文字入りの共有 `main.jpg` が正規入力である。`assets.loop_video = false` を維持し、`phase = "prepared"` に更新する
+- `enabled: false` の場合: `/loop-video` は呼ばず、既定では textless `main.png/jpg` の静止画背景運用として続行する。`thumbnail::textless.enabled: false` では例外として文字入りの共有 `main.jpg` が正規入力である。`assets.loop_video = false` を維持し、`phase = "prepared"` に更新する
 - `enabled` 未指定 or `true` の場合: Agent ツールで subagent を起動し、`main.png/jpg` を入力、`10-assets/loop.mp4` を期待成果物として `/loop-video` の生成だけを委譲する。`thumbnail::textless.enabled: false` の共有 `main.jpg` も正規入力として渡す
   - 成功: メインが `loop.mp4` の存在を確認後、`assets.loop_video = true`、`phase = "prepared"`、`updated_at` を更新する
   - 失敗または欠落: state は更新せず、同じ loop-video 委譲から再試行できる状態で停止する
