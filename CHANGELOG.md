@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(masterup)`: Suno 個別音源 cleanup を既定 ON にし、曲ごとの `-14 LUFS` 正規化と明示 opt-out を標準化（#2445）。
 - `feat(skills)`: ペルソナと視聴シーンを、音・映像・サムネ・タイトル・測定の機械検証可能な制約へ翻訳する `/creative-constraints` を追加（#2442）。
 - `feat(skills)`: シーン定義・制約翻訳・公開前ゲート・指標還流の価値ループを読み取り専用で診断する `/value-loop-audit` を追加（#2443）。
 - `refactor(domains)`: Analytics、thumbnail、media、DistroKid、weekly vote の domain 公開面を追加し、consumer の旧 owner 参照を domain 境界へ接続（#2306）。

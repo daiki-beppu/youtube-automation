@@ -287,6 +287,35 @@ def test_load_skill_config_masterup_json_override_wins_over_yaml(tmp_path, monke
     assert cfg.get("audio", {}).get("bitrate") == "256k"
 
 
+def test_load_skill_config_masterup_enables_suno_cleanup_by_default(tmp_path, monkeypatch):
+    """masterup の同梱既定で Suno 個別音源 cleanup が有効になること."""
+    channel_dir = tmp_path / "ch"
+    (channel_dir / "config" / "skills").mkdir(parents=True)
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_skill_config("masterup", use_cache=False)
+
+    assert cfg["post_processing"]["suno_audio_cleanup"]["enabled"] is True
+    assert cfg["post_processing"]["suno_audio_cleanup"]["loudnorm"]["I"] == -14
+
+
+def test_load_skill_config_masterup_allows_suno_cleanup_opt_out(tmp_path, monkeypatch):
+    """channel JSON override で Suno 個別音源 cleanup を無効化できること."""
+    channel_dir = tmp_path / "ch"
+    skills_dir = channel_dir / "config" / "skills"
+    skills_dir.mkdir(parents=True)
+    (skills_dir / "masterup.json").write_text(
+        json.dumps({"post_processing": {"suno_audio_cleanup": {"enabled": False}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
+
+    cfg = skill_config.load_skill_config("masterup", use_cache=False)
+
+    assert cfg["post_processing"]["suno_audio_cleanup"]["enabled"] is False
+    assert cfg["post_processing"]["suno_audio_cleanup"]["loudnorm"]["I"] == -14
+
+
 def test_load_skill_config_non_masterup_json_is_ignored(tmp_path, monkeypatch):
     """masterup 以外は既存 YAML override 契約のままにする."""
     channel_dir = tmp_path / "ch"
