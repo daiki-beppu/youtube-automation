@@ -114,18 +114,48 @@ def _warn_source_residue(source: Path) -> None:
             )
 
 
-def _reject_symlinks(path: Path) -> None:
+def _validated_symlink_target(path: Path, *, source: Path, selected_roots: tuple[Path, ...]) -> Path:
+    """Return a safe regular-file target contained by the selected source tree."""
+    try:
+        target = path.resolve(strict=True)
+    except (OSError, RuntimeError) as error:
+        raise ValueError(f"壊れた、または循環する symlink はコピーできません: {path}") from error
+    if not target.is_relative_to(source):
+        raise ValueError(f"移行元 repository 外を指す symlink はコピーできません: {path} -> {target}")
+    if not any(target.is_relative_to(root) for root in selected_roots):
+        raise ValueError(f"コピー対象外を指す symlink はコピーできません: {path} -> {target}")
+    if not target.is_file():
+        raise ValueError(f"通常ファイル以外を指す symlink はコピーできません: {path} -> {target}")
+    return target
+
+
+def _validate_symlinks(path: Path, *, source: Path, selected_roots: tuple[Path, ...]) -> None:
     if path.is_symlink():
-        raise ValueError(f"symlink はコピーできません: {path}")
+        _validated_symlink_target(path, source=source, selected_roots=selected_roots)
+        return
     if not path.is_dir():
         return
     for candidate in path.rglob("*"):
         if candidate.is_symlink():
-            raise ValueError(f"symlink はコピーできません: {candidate}")
+            _validated_symlink_target(candidate, source=source, selected_roots=selected_roots)
+
+
+def _copy_validated_file(source: Path, destination: Path, *, repository: Path, selected_roots: tuple[Path, ...]) -> str:
+    copy_source = (
+        _validated_symlink_target(source, source=repository, selected_roots=selected_roots)
+        if source.is_symlink()
+        else source
+    )
+    return shutil.copy2(copy_source, destination)
 
 
 def _copy_per_channel_paths(source: Path, temporary: Path) -> list[str]:
     copied: list[str] = []
+    selected_roots = tuple(
+        origin.resolve(strict=True)
+        for relative in PER_CHANNEL_PATHS
+        if (origin := source / relative).exists() and not origin.is_symlink()
+    )
     for relative in PER_CHANNEL_PATHS:
         origin = source / relative
         if not origin.exists():
@@ -135,11 +165,20 @@ def _copy_per_channel_paths(source: Path, temporary: Path) -> list[str]:
             current /= part
             if current.is_symlink():
                 raise ValueError(f"symlink はコピーできません: {current}")
-        _reject_symlinks(origin)
+        _validate_symlinks(origin, source=source, selected_roots=selected_roots)
         destination = temporary / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         if origin.is_dir():
-            shutil.copytree(origin, destination)
+            shutil.copytree(
+                origin,
+                destination,
+                copy_function=lambda source_path, destination_path: _copy_validated_file(
+                    Path(source_path),
+                    Path(destination_path),
+                    repository=source,
+                    selected_roots=selected_roots,
+                ),
+            )
         elif origin.is_file():
             shutil.copy2(origin, destination)
         else:

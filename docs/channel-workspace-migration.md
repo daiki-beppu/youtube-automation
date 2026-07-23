@@ -30,7 +30,13 @@ CLI は次の channel 固有 path だけをコピーします。
 - `config/`, `auth/`, `data/`, `collections/`, `assets/`, `branding/`, `research/`
 - `docs/channel/`, `docs/benchmarks/`
 
-`.claude/` や共通 docs はコピーしません。symlink、既存の同名 target、必須 config 欠落、`config/channel/*.json` の load 失敗を検出すると target を残さず停止します。
+`.claude/` や共通 docs はコピーしません。既存の同名 target、必須 config 欠落、`config/channel/*.json` の load 失敗を検出すると target を残さず停止します。
+
+### symlink の扱い
+
+移行元 repository 内かつ上記コピー対象 path 内の通常ファイルを指す symlink だけを許可し、リンクではなく解決先の内容を通常ファイルとしてコピーします。`data/thumbnail_compare/<slug>/*.jpg` が同じ repository の `collections/live/.../10-assets/thumbnail.jpg` を指す構成はこの経路で移行でき、移行先に絶対 path の symlink は残りません。
+
+repository 外、コピー対象外、存在しない解決先、directory、循環 link を指す symlink は validation error として import 全体を rollback します。移行前に安全な内部 link を手動で実体化する必要はありません。
 
 成功時は config load の結果と `auth/client_secrets.json` / `auth/token*.json` のコピー先を表示します。auth が `missing` の場合は、旧 repository の正しい channel 用ファイルを確認してから配置してください。OAuth client の統合や再認証はこの移行では行いません。
 
