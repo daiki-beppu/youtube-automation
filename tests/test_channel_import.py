@@ -222,6 +222,71 @@ def test_symlink_in_copy_tree_is_rejected_and_rolled_back(tmp_path, monkeypatch,
     assert "symlink" in capsys.readouterr().err
 
 
+def test_internal_selected_file_symlink_is_materialized(tmp_path, monkeypatch):
+    source = _write_source(tmp_path)
+    thumbnail = source / "collections" / "live" / "demo" / "10-assets" / "thumbnail.jpg"
+    thumbnail.parent.mkdir(parents=True)
+    thumbnail.write_bytes(b"approved-thumbnail")
+    comparison = source / "data" / "thumbnail_compare" / "ambient-island" / "demo.jpg"
+    comparison.parent.mkdir(parents=True)
+    comparison.symlink_to(thumbnail)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+
+    assert channel_import.main([str(source), "--slug", "ambient-island"]) == channel_import.EXIT_OK
+
+    copied = workspace / "channels" / "ambient-island" / "data" / "thumbnail_compare" / "ambient-island" / "demo.jpg"
+    assert copied.is_file()
+    assert not copied.is_symlink()
+    assert copied.read_bytes() == b"approved-thumbnail"
+
+
+def test_internal_symlink_to_unselected_path_is_rejected(tmp_path, monkeypatch, capsys):
+    source = _write_source(tmp_path)
+    unselected = source / "README-private.md"
+    unselected.write_text("not selected", encoding="utf-8")
+    (source / "data" / "linked.md").symlink_to(unselected)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+
+    assert channel_import.main([str(source), "--slug", "ambient-island"]) == channel_import.EXIT_VALIDATION
+    assert "コピー対象外" in capsys.readouterr().err
+    assert not (workspace / "channels" / "ambient-island").exists()
+
+
+def test_broken_and_directory_symlinks_are_rejected(tmp_path, monkeypatch, capsys):
+    source = _write_source(tmp_path)
+    (source / "data" / "broken.jpg").symlink_to(source / "collections" / "missing.jpg")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+
+    assert channel_import.main([str(source), "--slug", "ambient-island"]) == channel_import.EXIT_VALIDATION
+    assert "壊れた、または循環する symlink" in capsys.readouterr().err
+
+    (source / "data" / "broken.jpg").unlink()
+    (source / "data" / "linked-dir").symlink_to(source / "collections", target_is_directory=True)
+    assert channel_import.main([str(source), "--slug", "ambient-island"]) == channel_import.EXIT_VALIDATION
+    assert "通常ファイル以外" in capsys.readouterr().err
+
+
+def test_cyclic_symlink_is_rejected(tmp_path, monkeypatch, capsys):
+    source = _write_source(tmp_path)
+    first = source / "data" / "first.json"
+    second = source / "data" / "second.json"
+    first.symlink_to(second)
+    second.symlink_to(first)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+
+    assert channel_import.main([str(source), "--slug", "ambient-island"]) == channel_import.EXIT_VALIDATION
+    assert "壊れた、または循環する symlink" in capsys.readouterr().err
+    assert not (workspace / "channels" / "ambient-island").exists()
+
+
 def test_symlinked_parent_of_selected_path_is_rejected(tmp_path, monkeypatch, capsys):
     source = _write_source(tmp_path)
     shutil_docs = source / "docs"
