@@ -163,8 +163,8 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
             else:
                 msg = check_duration(
                     dur,
-                    config.audio.target_duration_min,
-                    config.audio.target_duration_max,
+                    (config.audio.target_duration_min * 60 if config.audio.target_duration_min is not None else None),
+                    (config.audio.target_duration_max * 60 if config.audio.target_duration_max is not None else None),
                 )
                 if msg:
                     issues.append(msg)

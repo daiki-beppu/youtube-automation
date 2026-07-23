@@ -44,12 +44,17 @@ def _patched_yt(response: dict) -> MagicMock:
     return yt
 
 
-def _audit_config(supported_languages: list[str]) -> SimpleNamespace:
+def _audit_config(
+    supported_languages: list[str],
+    *,
+    target_duration_min: float | None = None,
+    target_duration_max: float | None = None,
+) -> SimpleNamespace:
     return SimpleNamespace(
         audio=SimpleNamespace(
             chapter_max=12,
-            target_duration_min=None,
-            target_duration_max=None,
+            target_duration_min=target_duration_min,
+            target_duration_max=target_duration_max,
         ),
         content=SimpleNamespace(
             tags=SimpleNamespace(
@@ -94,6 +99,43 @@ Continuous Focus Mix
 
 
 class TestAuditLocalPreflightContract:
+    def test_duration_targets_are_converted_from_minutes_to_seconds(self, tmp_path: Path) -> None:
+        collection_dir = _write_local_collection(
+            tmp_path,
+            scene_phrases={"en": "continuous focus mix"},
+            description="A continuous BGM mix without chapter markers.",
+        )
+        master = collection_dir / "01-master" / "Complete-Collection-Master.mp4"
+        master.parent.mkdir()
+        master.touch()
+
+        with patch("youtube_automation.scripts.metadata_audit.probe_duration", return_value=50 * 60):
+            issues = audit_local(
+                collection_dir,
+                _audit_config(
+                    ["en"],
+                    target_duration_min=60,
+                    target_duration_max=90,
+                ),
+            )
+
+        assert issues == ["duration: 50m (target 1h00m〜1h30m)"]
+
+    def test_duration_check_remains_disabled_without_targets(self, tmp_path: Path) -> None:
+        collection_dir = _write_local_collection(
+            tmp_path,
+            scene_phrases={"en": "continuous focus mix"},
+            description="A continuous BGM mix without chapter markers.",
+        )
+        master = collection_dir / "01-master" / "Complete-Collection-Master.mp4"
+        master.parent.mkdir()
+        master.touch()
+
+        with patch("youtube_automation.scripts.metadata_audit.probe_duration") as probe:
+            assert audit_local(collection_dir, _audit_config(["en"])) == []
+
+        probe.assert_not_called()
+
     def test_en_only_channel_without_timestamps_passes(self, tmp_path: Path) -> None:
         collection_dir = _write_local_collection(
             tmp_path,
