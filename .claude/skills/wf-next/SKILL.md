@@ -164,7 +164,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 以下を一気通貫実行する。実作業は subagent、成果物検証と各ステップ完了時の `workflow-state.json` 更新はメインが担当し、途中で中断しても同じ状態から再開できる。
 
 1. **並列 A**（2 Agent 同時起動）:
-   - Agent 1: 対象 collection、`01-master/<assets.master_audio>`、`10-assets/main.png/jpg` または `loop.mp4` を入力に Skill `/videoup` の Subagent Contract を実行。期待成果物は `01-master/*.mp4`
+   - Agent 1: 対象 collection、`01-master/<assets.master_audio>`、`10-assets/main.png/jpg` または `loop.mp4` を入力に Skill `/videoup` の Subagent Contract を実行。thumbnail skill-config も渡し、`textless.enabled: false` の共有 `main.jpg` を textless 再生成へ戻さない。期待成果物は `01-master/*.mp4`
    - Agent 2 の起動前に、メインが `/video-description` の重複トラック名を検出し、必要な表示名 mapping を確定するが、まだ `apply_track_display_names()` は呼ばない。その mapping、planning / localization、skill-config、benchmark 入力を列挙し、Agent 2 には `/video-description` の Step 1 から品質チェック、`yt-title-duplicate-check`、`20-documentation/descriptions.md` 保存までを実行させる。`apply_track_display_names()` と `workflow-state.json` の `description.generated` 更新は実行させない
    - 両 Agent とも state は入力確認に必要な範囲だけ読み、書き込まず、AskUserQuestion を実行しない。片方でも失敗または成果物欠落なら state を更新せず停止する
 2. 並列 A 完了後:

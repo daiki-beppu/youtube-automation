@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `docs(workflow)`: `thumbnail::textless.enabled: false` の共有 `main.jpg` を wf-new・loop-video・videoup・wf-next が正規の文字入り動画背景として貫通させる契約を追加（#2458）。
 - `feat(thumbnail)`: `textless.enabled: false` の opt-in で追加の textless 生成・承認を省略し、確定済み `thumbnail.jpg` を同一内容の `main.jpg` として検証付きで共用（#2457）。
 - `fix(workspace)`: `yt-channel-import` が移行元・コピー対象内の通常ファイル symlink を安全検証後に実体化し、外部・対象外・壊れた・directory link は従来どおり rollback（#2462）。
 - `feat(flop-analysis)`: postmortem の一般化可能な学びを、出典付きの禁止制約案として明示承認後に `creative-constraints.md` へ還流する最終工程を追加（#2451）。
