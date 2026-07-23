@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(masterup)`: Suno 個別音源 cleanup を既定 ON にし、曲ごとの `-14 LUFS` 正規化と明示 opt-out を標準化（#2445）。
 - `feat(loop-video)`: Veo / Omni の既定プロンプトへ全画面の明滅・ストロボ・急な輝度変化・顔アップを避ける注意誘引ガードを追加（#2446）。
 - `feat(suno)`: 既定 Exclude Styles に sudden drops・risers・drum fills・hard transitions・dramatic buildups を追加（#2447）。
+- `feat(suno)`: `data/insights.jsonl` の検証済み `lever=bgm` open entry をStyle・Exclude Styles設計へ還流する読み取り経路を追加（#2448）。
 - `feat(skills)`: ペルソナと視聴シーンを、音・映像・サムネ・タイトル・測定の機械検証可能な制約へ翻訳する `/creative-constraints` を追加（#2442）。
 - `feat(skills)`: シーン定義・制約翻訳・公開前ゲート・指標還流の価値ループを読み取り専用で診断する `/value-loop-audit` を追加（#2443）。
 - `refactor(domains)`: Analytics、thumbnail、media、DistroKid、weekly vote の domain 公開面を追加し、consumer の旧 owner 参照を domain 境界へ接続（#2306）。

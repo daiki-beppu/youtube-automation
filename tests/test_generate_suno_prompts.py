@@ -290,6 +290,20 @@ def test_skill_md_warns_about_genre_line_exclude_styles_conflict():
         )
 
 
+def test_suno_skill_reads_only_open_bgm_insights_before_prompt_generation():
+    """Suno skill が schema 検証後に open bgm insights だけを参照すること."""
+    text = _SKILL_MD.read_text(encoding="utf-8")
+    heading = "### 蓄積 insights 参照（lever=bgm）"
+    section = text.split(heading, 1)[1].split("### ベンチマーク BGM 構造の参照", 1)[0]
+
+    assert "validate_insights.py data/insights.jsonl" in section
+    assert """select(.status == "open" and .lever == "bgm")""" in section
+    assert "bgm insights なし" in section
+    assert "lever=thumbnail" in section
+    assert "既存行の変更・追記は行わない" in section
+    assert "untrusted data" in section
+
+
 # ---------------------------------------------------------------------------
 # issue #586: 歌詞関連 config の後方互換
 # ---------------------------------------------------------------------------
