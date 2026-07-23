@@ -36,7 +36,12 @@ from PIL import UnidentifiedImageError
 from youtube_automation.auth.oauth_handler import resolve_client_secrets_location
 from youtube_automation.cli.automation_update_refs import UPSTREAM_REPO
 from youtube_automation.cli.skills_sync import bundled_skill_names
-from youtube_automation.configuration import find_workspace_root, workspace_channels
+from youtube_automation.configuration import (
+    channel_dir,
+    find_workspace_root,
+    workspace_channels,
+)
+from youtube_automation.configuration.loader import _explicit_channel_selection
 from youtube_automation.scripts.benchmark_collector import (
     TTP_VIDEO_ANALYZE_TOP_N,
     load_benchmark_videos,
@@ -360,6 +365,21 @@ def _agents_skills_link_is_valid(channel_dir: Path, skills_dir: Path) -> bool:
         return False
 
 
+def _workspace_root_for_channel(channel_dir: Path) -> Path | None:
+    """登録済み workspace channel の共有 root だけを返す."""
+    resolved_channel = channel_dir.resolve()
+    workspace_root = find_workspace_root(resolved_channel)
+    if workspace_root is None:
+        return None
+    registered_channels = {path.resolve() for path in workspace_channels(workspace_root).values()}
+    return workspace_root if resolved_channel in registered_channels else None
+
+
+def _bootstrap_root(channel_dir: Path) -> Path:
+    """共有 tool / skill を検査・更新する repository root を返す."""
+    return _workspace_root_for_channel(channel_dir) or channel_dir
+
+
 # --- checks ---
 
 
@@ -423,7 +443,7 @@ def check_uv() -> CheckResult:
 
 
 def check_uv_project(channel_dir: Path) -> CheckResult:
-    pyproject_path = channel_dir / PYPROJECT_FILENAME
+    pyproject_path = _bootstrap_root(channel_dir) / PYPROJECT_FILENAME
     if not pyproject_path.exists():
         if _has_automation_tool():
             return CheckResult(
@@ -450,7 +470,7 @@ def check_uv_project(channel_dir: Path) -> CheckResult:
 
 
 def check_automation_package(channel_dir: Path) -> CheckResult:
-    pyproject_path = channel_dir / PYPROJECT_FILENAME
+    pyproject_path = _bootstrap_root(channel_dir) / PYPROJECT_FILENAME
     if not pyproject_path.exists():
         if _has_automation_tool():
             return CheckResult(
@@ -518,7 +538,8 @@ def check_automation_package(channel_dir: Path) -> CheckResult:
 
 
 def check_skills_synced(channel_dir: Path) -> CheckResult:
-    skills_dir = channel_dir / CLAUDE_SKILLS_DIR
+    bootstrap_root = _bootstrap_root(channel_dir)
+    skills_dir = bootstrap_root / CLAUDE_SKILLS_DIR
     bundled_skills = bundled_skill_names()
     for legacy_skill in LEGACY_BUNDLED_SKILLS:
         if (skills_dir / legacy_skill / SKILL_FILENAME).exists():
@@ -533,7 +554,7 @@ def check_skills_synced(channel_dir: Path) -> CheckResult:
     if missing_skill_files:
         sample = ", ".join(str(CLAUDE_SKILLS_DIR / path) for path in missing_skill_files[:5])
         return _skills_sync_failure(f"同梱 skill が未展開: {sample}")
-    if not _agents_skills_link_is_valid(channel_dir, skills_dir):
+    if not _agents_skills_link_is_valid(bootstrap_root, skills_dir):
         return _skills_sync_warning(f"{AGENTS_SKILLS_LINK} が {CLAUDE_SKILLS_DIR} を指す symlink になっていない")
     return CheckResult(
         id="skills_synced",
@@ -550,13 +571,14 @@ def check_numbered_duplicates(channel_dir: Path) -> CheckResult:
     yt-skills sync が同名上書きで管理する領域のため、`<名前> <数字>` 形式が
     現れたら外部要因 (同期サービス) による汚染とみなす (#1409 / #1410)。
     """
+    bootstrap_root = _bootstrap_root(channel_dir)
     findings: list[str] = []
     scan_targets = (
-        (".venv/bin", channel_dir / ".venv" / "bin", False),
-        (str(CLAUDE_SKILLS_DIR), channel_dir / CLAUDE_SKILLS_DIR, True),
+        (".venv/bin", bootstrap_root / ".venv" / "bin", False),
+        (str(CLAUDE_SKILLS_DIR), bootstrap_root / CLAUDE_SKILLS_DIR, True),
     )
     for label, directory, recursive in scan_targets:
-        result = scan_numbered_duplicates(directory, recursive=recursive, root_boundary=channel_dir)
+        result = scan_numbered_duplicates(directory, recursive=recursive, root_boundary=bootstrap_root)
         if result.duplicates:
             sample = ", ".join(format_duplicate_name(path) for path in result.duplicates[:3])
             findings.append(f"{label} に {len(result.duplicates)} 件 (例: {sample})")
@@ -3206,7 +3228,8 @@ def _run_apply_loop(
                 exit_code=1,
             )
         attempted_steps.add(step_key)
-        returncode, _stdout, stderr = _run_apply_command(argv, channel_dir)
+        command_cwd = _bootstrap_root(channel_dir) if unresolved.category == BOOTSTRAP_CATEGORY else channel_dir
+        returncode, _stdout, stderr = _run_apply_command(argv, command_cwd)
         executed.append(ExecutedStep(unresolved.id, command, returncode))
         if returncode != 0:
             return _apply_outcome(
@@ -3246,10 +3269,19 @@ def run_apply(
 def resolve_channel_dir(target: Optional[str]) -> Path:
     if target:
         return Path(target).resolve()
-    env_dir = os.environ.get("CHANNEL_DIR")
-    if env_dir:
-        return Path(env_dir).resolve()
-    return Path.cwd().resolve()
+    cwd = Path.cwd().resolve()
+    try:
+        return channel_dir().resolve()
+    except ConfigError:
+        selection_requested = (
+            _explicit_channel_selection() is not None
+            or bool(os.environ.get("CHANNEL"))
+            or bool(os.environ.get("CHANNEL_DIR"))
+            or find_workspace_root(cwd) is not None
+        )
+        if selection_requested:
+            raise
+        return cwd
 
 
 @dataclass(frozen=True)
