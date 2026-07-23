@@ -192,7 +192,7 @@ def test_existing_target_is_never_overwritten(tmp_path, monkeypatch):
     assert marker.read_text(encoding="utf-8") == "keep"
 
 
-def test_source_env_and_channel_dir_residue_are_warned_but_not_copied(tmp_path, monkeypatch, capsys):
+def test_source_env_is_ignored_and_channel_dir_residue_is_warned(tmp_path, monkeypatch, capsys):
     source = _write_source(tmp_path)
     (source / ".env").write_text(f"CHANNEL_DIR={source}\n", encoding="utf-8")
     workspace = tmp_path / "workspace"
@@ -203,7 +203,7 @@ def test_source_env_and_channel_dir_residue_are_warned_but_not_copied(tmp_path, 
     assert channel_import.main([str(source), "--slug", "ambient-island"]) == channel_import.EXIT_OK
 
     captured = capsys.readouterr()
-    assert ".env" in captured.err
+    assert ".env" not in captured.err
     assert "CHANNEL_DIR" in captured.err
     assert not (workspace / "channels" / "ambient-island" / ".env").exists()
 

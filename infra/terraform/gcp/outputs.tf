@@ -3,20 +3,6 @@ output "project_id" {
   value       = local.project_id
 }
 
-output "location" {
-  description = "Vertex AI リージョン"
-  value       = var.location
-}
-
-output "env_vars" {
-  description = ".env に流し込むキー/値 (ラッパースクリプトが利用)"
-  value = {
-    GOOGLE_GENAI_USE_VERTEXAI = "true"
-    GOOGLE_CLOUD_PROJECT      = local.project_id
-    GOOGLE_CLOUD_LOCATION     = var.location
-  }
-}
-
 output "oauth_console_url" {
   description = "Google Auth Platform の Branding / Audience / Clients 手動設定用 Console URL"
   value       = "https://console.cloud.google.com/apis/credentials?project=${local.project_id}"

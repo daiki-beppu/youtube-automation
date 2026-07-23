@@ -167,7 +167,6 @@ def test_apply_stops_for_project_decision_without_project_id(monkeypatch, tmp_pa
 
 def test_apply_uses_project_id_then_continues(monkeypatch, tmp_path: Path, capsys) -> None:
     commands: list[tuple[list[str], Path]] = []
-    (tmp_path / ".env").write_text("GOOGLE_CLOUD_PROJECT=stale-project\n", encoding="utf-8")
     diagnosis_count = 0
 
     def diagnose(_channel_dir: Path) -> list[doctor.CheckResult]:
@@ -175,13 +174,14 @@ def test_apply_uses_project_id_then_continues(monkeypatch, tmp_path: Path, capsy
         diagnosis_count += 1
         if diagnosis_count == 1:
             assert "GOOGLE_CLOUD_PROJECT" not in os.environ
-            assert doctor._project_id_for(tmp_path) == "stale-project"
+            assert doctor._project_id_for(tmp_path) is None
             return [_result("gcp_project")]
         assert os.environ["GOOGLE_CLOUD_PROJECT"] == "yt-example"
         assert doctor._project_id_for(tmp_path) == "yt-example"
         return [_result("gcp_project")]
 
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.setattr(doctor, "_adc_quota_project", lambda: None)
     monkeypatch.setattr(doctor, "run_all_checks", diagnose)
     monkeypatch.setattr(
         doctor,
@@ -412,61 +412,6 @@ def test_apply_stops_when_successful_command_makes_no_progress(monkeypatch, tmp_
     assert payload["apply"]["stop_reason"] == "command_failed"
     assert payload["apply"]["check_id"] == "skills_synced"
     assert "再診断後も未解決" in payload["apply"]["stderr"]
-
-
-def test_apply_does_not_execute_legacy_prose_command(monkeypatch, tmp_path: Path, capsys) -> None:
-    action = {
-        "kind": "ai-exec",
-        "cmd": ".claude/skills/channel-new/references/gcp-bootstrap.sh <project-id> を実行する",
-    }
-    monkeypatch.setattr(
-        doctor,
-        "run_all_checks",
-        lambda _channel_dir: [_result("env_file", "fail", action)],
-    )
-    monkeypatch.setattr(
-        doctor,
-        "_run_apply_command",
-        lambda _argv, _cwd: (_ for _ in ()).throw(AssertionError("prose must not run")),
-    )
-
-    code = doctor.main(["--apply", "--json", "--target", str(tmp_path)])
-
-    assert code == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["apply"]["stop_reason"] == "human_required"
-    assert payload["apply"]["check_id"] == "env_file"
-
-
-def test_apply_creates_missing_env_defaults_and_rediagnoses(monkeypatch, tmp_path: Path, capsys) -> None:
-    monkeypatch.setattr(
-        doctor,
-        "run_all_checks",
-        lambda channel_dir: [doctor.check_env_file(channel_dir)],
-    )
-
-    def run_env_action(argv: list[str], cwd: Path) -> tuple[int, str, str]:
-        assert argv == [
-            "uv",
-            "run",
-            "yt-doctor",
-            "--write-env-defaults",
-            "--target",
-            ".",
-        ]
-        return doctor.write_env_defaults(cwd), "", ""
-
-    monkeypatch.setattr(doctor, "_run_apply_command", run_env_action)
-
-    code = doctor.main(["--apply", "--json", "--target", str(tmp_path)])
-
-    assert code == 0
-    assert (tmp_path / ".env").read_text(encoding="utf-8") == (
-        "GOOGLE_CLOUD_LOCATION=us-central1\nGOOGLE_GENAI_USE_VERTEXAI=true\n"
-    )
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["apply"]["stop_reason"] == "completed"
-    assert payload["apply"]["executed"][0]["cmd"] == ("uv run yt-doctor --write-env-defaults --target .")
 
 
 def test_apply_keeps_pre_install_bootstrap_out_of_scope(monkeypatch, tmp_path: Path, capsys) -> None:

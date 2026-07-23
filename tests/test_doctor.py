@@ -301,42 +301,14 @@ class TestCheckADC:
         assert r.next_action["human_role"] == "browser-authentication"
 
 
-class TestEnvFile:
-    def test_missing(self, tmp_path):
-        r = doctor.check_env_file(tmp_path)
-        assert r.status == "fail"
-
-    def test_all_keys(self, tmp_path):
-        (tmp_path / ".env").write_text(
-            "GOOGLE_CLOUD_LOCATION=us-central1\nGOOGLE_GENAI_USE_VERTEXAI=true\n",
-            encoding="utf-8",
-        )
-        r = doctor.check_env_file(tmp_path)
-        assert r.status == "ok"
-
-    def test_partial(self, tmp_path):
-        (tmp_path / ".env").write_text("GOOGLE_CLOUD_LOCATION=us-central1\n", encoding="utf-8")
-        r = doctor.check_env_file(tmp_path)
-        assert r.status == "warn"
-
-    def test_project_alone_is_not_required(self, tmp_path):
-        """`GOOGLE_CLOUD_PROJECT` は必須ではない (ADC fallback で解決可能)"""
-        (tmp_path / ".env").write_text(
-            "GOOGLE_CLOUD_LOCATION=us-central1\nGOOGLE_GENAI_USE_VERTEXAI=true\n",
-            encoding="utf-8",
-        )
-        r = doctor.check_env_file(tmp_path)
-        assert r.status == "ok"
-
-
 class TestProjectIdResolution:
-    def test_env_file_takes_precedence(self, tmp_path, monkeypatch):
+    def test_channel_env_file_is_ignored(self, tmp_path, monkeypatch):
         monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
         monkeypatch.setattr(doctor, "_adc_quota_project", lambda: "adc-proj")
         (tmp_path / ".env").write_text("GOOGLE_CLOUD_PROJECT=env-file-proj\n", encoding="utf-8")
-        assert doctor._project_id_for(tmp_path) == "env-file-proj"
+        assert doctor._project_id_for(tmp_path) == "adc-proj"
 
-    def test_env_var_used_when_env_file_missing(self, tmp_path, monkeypatch):
+    def test_process_env_var_takes_precedence(self, tmp_path, monkeypatch):
         monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "env-var-proj")
         monkeypatch.setattr(doctor, "_adc_quota_project", lambda: "adc-proj")
         assert doctor._project_id_for(tmp_path) == "env-var-proj"
@@ -392,7 +364,7 @@ class TestClientSecrets:
             "youtube_automation.utils.secrets.get_secret",
             lambda _name: (_ for _ in ()).throw(ConfigError("op read failed")),
         )
-        (tmp_path / ".env").write_text("GOOGLE_CLOUD_PROJECT=foo-proj\n", encoding="utf-8")
+        monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "foo-proj")
         r = doctor.check_client_secrets(tmp_path)
         assert r.status == "fail"
         assert "foo-proj" in r.next_action["url"]
@@ -1092,8 +1064,8 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 7 bootstrap + 13 api + 3 channel + 4 data + 1 upload = 28
-        assert len(payload["checks"]) == 28
+        # 7 bootstrap + 12 api + 3 channel + 4 data + 1 upload = 27
+        assert len(payload["checks"]) == 27
         for c in payload["checks"]:
             assert c["status"] in ("ok", "info", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
@@ -4620,18 +4592,18 @@ class TestCheckNumberedDuplicates:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_28_checks(self, monkeypatch, tmp_path):
-        """7 bootstrap + 13 api + 3 channel + 4 data + 1 upload = 計 28 件."""
+    def test_returns_27_checks(self, monkeypatch, tmp_path):
+        """7 bootstrap + 12 api + 3 channel + 4 data + 1 upload = 計 27 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 28
+        assert len(results) == 27
 
-    def test_13_api_checks_present(self, monkeypatch, tmp_path):
-        """oauth_client_sharing を含む 13 check が api カテゴリで含まれている."""
+    def test_12_api_checks_present(self, monkeypatch, tmp_path):
+        """dotenv を含まず oauth_client_sharing を含む 12 check が api カテゴリにある."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         api_results = [r for r in results if r.category == "api"]
-        assert len(api_results) == 13
+        assert len(api_results) == 12
         assert api_results[-1].id == "reporting_job"
         assert any(r.id == "oauth_client_sharing" for r in api_results)
 

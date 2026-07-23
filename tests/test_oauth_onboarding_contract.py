@@ -64,9 +64,10 @@ esac
     )
     env = os.environ | {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
     script = REPO_ROOT / ".claude/skills/channel-new/references/gcp-bootstrap.sh"
+    env_path = tmp_path / ".env"
 
     result = subprocess.run(
-        ["bash", str(script), "--dry-run", "--skip-adc", "--env-file", str(tmp_path / ".env"), "test-proj"],
+        ["bash", str(script), "--dry-run", "--skip-adc", "test-proj"],
         check=True,
         capture_output=True,
         env=env,
@@ -75,6 +76,7 @@ esac
 
     _assert_oauth_guidance_contract(result.stdout, "gcp-bootstrap.sh stdout")
     assert "Google Auth Platform の手動設定" in result.stdout
+    assert not env_path.exists()
 
 
 def test_gcp_terraform_apply_stdout_follows_google_auth_platform_contract(tmp_path: Path) -> None:
@@ -86,7 +88,6 @@ def test_gcp_terraform_apply_stdout_follows_google_auth_platform_contract(tmp_pa
         bin_dir / "terraform",
         """#!/usr/bin/env bash
 case "$*" in
-  "output -json env_vars"*) echo '{"GOOGLE_GENAI_USE_VERTEXAI":"true","GOOGLE_CLOUD_LOCATION":"us-central1"}'; exit 0 ;;
   "output -raw oauth_console_url"*)
     echo "https://console.cloud.google.com/apis/credentials?project=test-proj"
     exit 0
@@ -97,13 +98,6 @@ esac
 """,
     )
     _write_executable(
-        bin_dir / "jq",
-        """#!/usr/bin/env bash
-cat >/dev/null
-printf '%s\\t%s\\n' GOOGLE_GENAI_USE_VERTEXAI true GOOGLE_CLOUD_LOCATION us-central1
-""",
-    )
-    _write_executable(
         bin_dir / "gcloud",
         """#!/usr/bin/env bash
 exit 0
@@ -111,9 +105,10 @@ exit 0
     )
     env = os.environ | {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
     script = REPO_ROOT / ".claude/skills/channel-new/references/gcp-terraform-apply.sh"
+    env_path = tmp_path / ".env"
 
     result = subprocess.run(
-        ["bash", str(script), "--tf-dir", str(tf_dir), "--env-file", str(tmp_path / ".env"), "--auto-approve"],
+        ["bash", str(script), "--tf-dir", str(tf_dir), "--auto-approve"],
         check=True,
         capture_output=True,
         env=env,
@@ -122,6 +117,7 @@ exit 0
 
     _assert_oauth_guidance_contract(result.stdout, "gcp-terraform-apply.sh stdout")
     assert "Google Auth Platform の手動設定" in result.stdout
+    assert not env_path.exists()
 
 
 def test_setup_entrypoints_do_not_keep_stale_oauth_contract() -> None:

@@ -6,7 +6,14 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+
 from youtube_automation.cli import doctor
+
+
+@pytest.fixture(autouse=True)
+def _project_override(monkeypatch):
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "target-project")
 
 
 def _write_client_secret(path: Path, *, project_id: str, client_id: str | None = None) -> dict[str, object]:
@@ -28,7 +35,6 @@ def test_fix_moves_latest_matching_download_through_public_cli(tmp_path, monkeyp
     downloads = home / "Downloads"
     channel_dir = tmp_path / "channel"
     channel_dir.mkdir()
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     older = downloads / "client_secret_older.json"
     selected = downloads / "client_secret_selected.json"
     mismatch = downloads / "client_secret_other.json"
@@ -68,7 +74,6 @@ def test_fix_without_downloads_candidate_exits_nonzero_with_download_guidance(tm
     (home / "Downloads").mkdir(parents=True)
     channel_dir = tmp_path / "channel"
     channel_dir.mkdir()
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
 
     code = doctor.main(["--fix-client-secrets", "--target", str(channel_dir)])
@@ -86,7 +91,6 @@ def test_fix_rejects_invalid_and_mismatched_candidates_with_details(tmp_path, mo
     downloads = home / "Downloads"
     channel_dir = tmp_path / "channel"
     channel_dir.mkdir()
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     malformed = downloads / "client_secret_malformed.json"
     malformed.parent.mkdir(parents=True)
     malformed.write_text("{not-json", encoding="utf-8")
@@ -130,7 +134,6 @@ def test_fix_reports_candidate_read_failure_and_preserves_source(tmp_path, monke
     channel_dir.mkdir()
     source = home / "Downloads" / "client_secret_unreadable.json"
     _write_client_secret(source, project_id="target-project")
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     original_open = doctor.os.open
 
@@ -157,7 +160,6 @@ def test_fix_rejects_non_object_json_with_details(tmp_path, monkeypatch, capsys)
     source = home / "Downloads" / "client_secret_array.json"
     source.parent.mkdir(parents=True)
     source.write_text("[]", encoding="utf-8")
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
 
     code = doctor.main(["--fix-client-secrets", "--target", str(channel_dir)])
@@ -175,7 +177,6 @@ def test_fix_reports_mtime_failure_and_preserves_source(tmp_path, monkeypatch, c
     channel_dir.mkdir()
     source = home / "Downloads" / "client_secret_target.json"
     _write_client_secret(source, project_id="target-project")
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     original_fstat = doctor.os.fstat
 
@@ -201,7 +202,6 @@ def test_fix_rejects_symlink_and_non_file_source_candidates(tmp_path, monkeypatc
     downloads = home / "Downloads"
     channel_dir = tmp_path / "channel"
     channel_dir.mkdir()
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     link_target = tmp_path / "client_secret_target.json"
     expected = _write_client_secret(link_target, project_id="target-project")
     source_symlink = downloads / "client_secret_symlink.json"
@@ -235,7 +235,6 @@ def test_fix_skips_existing_destination_without_overwriting(tmp_path, monkeypatc
     _write_client_secret(source, project_id="target-project")
     destination = channel_dir / "auth" / "client_secrets.json"
     existing = _write_client_secret(destination, project_id="existing-project")
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
 
     code = doctor.main(["--fix-client-secrets", "--target", str(channel_dir)])
@@ -254,7 +253,6 @@ def test_fix_rejects_existing_non_file_destination(tmp_path, monkeypatch, capsys
     _write_client_secret(source, project_id="target-project")
     destination = channel_dir / "auth" / "client_secrets.json"
     destination.mkdir(parents=True)
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
 
     code = doctor.main(["--fix-client-secrets", "--target", str(channel_dir)])
@@ -275,7 +273,6 @@ def test_fix_rejects_dangling_symlink_destination_without_overwriting(tmp_path, 
     destination.parent.mkdir(parents=True)
     link_target = destination.parent / "missing-client-secrets.json"
     destination.symlink_to(link_target)
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
 
     code = doctor.main(["--fix-client-secrets", "--target", str(channel_dir)])
@@ -294,7 +291,6 @@ def test_fix_does_not_overwrite_destination_created_during_install(tmp_path, mon
     source = home / "Downloads" / "client_secret_target.json"
     _write_client_secret(source, project_id="target-project")
     destination = channel_dir / "auth" / "client_secrets.json"
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     original_open = doctor.os.open
     competing = {"installed": {"project_id": "competing-project"}}
@@ -323,7 +319,6 @@ def test_fix_rejects_source_replaced_after_validation(tmp_path, monkeypatch, cap
     _write_client_secret(source, project_id="target-project")
     replacement_target = tmp_path / "replacement.json"
     replacement = _write_client_secret(replacement_target, project_id="target-project")
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
 
     original_rename = doctor.os.rename
@@ -352,7 +347,6 @@ def test_fix_preserves_destination_replaced_during_install(tmp_path, monkeypatch
     _write_client_secret(source, project_id="target-project")
     destination = channel_dir / "auth" / "client_secrets.json"
     competing = {"installed": {"project_id": "competing-project"}}
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
 
     def replace_destination(_descriptor: int):
@@ -377,7 +371,6 @@ def test_fix_reports_staging_creation_failure_and_preserves_source(tmp_path, mon
     channel_dir.mkdir()
     source = home / "Downloads" / "client_secret_target.json"
     _write_client_secret(source, project_id="target-project")
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     monkeypatch.setattr(doctor.tempfile, "mkdtemp", lambda **_kwargs: (_ for _ in ()).throw(OSError("no space")))
 
@@ -396,7 +389,6 @@ def test_fix_preserves_completed_move_when_empty_staging_cleanup_fails(tmp_path,
     source = home / "Downloads" / "client_secret_target.json"
     expected = _write_client_secret(source, project_id="target-project")
     destination = channel_dir / "auth" / "client_secrets.json"
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     original_rmdir = Path.rmdir
 
@@ -421,7 +413,6 @@ def test_fix_move_failure_exits_nonzero_and_reports_error(tmp_path, monkeypatch,
     channel_dir.mkdir()
     source = home / "Downloads" / "client_secret_target.json"
     _write_client_secret(source, project_id="target-project")
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     original_open = doctor.os.open
 
@@ -448,7 +439,6 @@ def test_fix_rolls_back_empty_destination_when_fstat_fails_after_creation(tmp_pa
     source = home / "Downloads" / "client_secret_target.json"
     expected = _write_client_secret(source, project_id="target-project")
     destination = channel_dir / "auth" / "client_secrets.json"
-    (channel_dir / ".env").write_text("GOOGLE_CLOUD_PROJECT=target-project\n", encoding="utf-8")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     original_fstat = doctor.os.fstat
 

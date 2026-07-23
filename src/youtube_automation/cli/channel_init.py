@@ -27,8 +27,6 @@ from youtube_automation.cli.target_resolver import resolve_existing_target_dir
 from youtube_automation.utils.channel_settings import normalize_locale_to_short
 from youtube_automation.utils.exceptions import ConfigError
 
-NO_DIFF_PATHS: frozenset[str] = frozenset({".env"})
-
 
 class ActionKind(Enum):
     """ファイル / ディレクトリ操作種別。文字列値はそのまま stdout サマリーに使う."""
@@ -205,8 +203,6 @@ def _plan_file(path: Path, rel: str, new_text: str, *, force: bool) -> FileActio
     current = path.read_text(encoding="utf-8")
     if current == new_text:
         return FileAction(path=path, rel=rel, kind=ActionKind.SKIPPED, new_text=new_text)
-    if rel in NO_DIFF_PATHS:
-        return FileAction(path=path, rel=rel, kind=ActionKind.SKIPPED, new_text=new_text)
     if force:
         return FileAction(path=path, rel=rel, kind=ActionKind.OVERWRITTEN, new_text=new_text)
 
@@ -369,7 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="既存ファイルを上書きする（.env は機密保護のため常に保持）",
+        help="既存ファイルを上書きする",
     )
     return parser
 
