@@ -22,6 +22,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "suno" / "SKILL.md"
 SUNO_HELPER_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "suno-helper" / "SKILL.md"
 WF_NEW_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "wf-new" / "SKILL.md"
+WF_AUTO_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "wf-auto" / "SKILL.md"
 SUNO_HELPER_PHASE_CONSTANTS_TS = _REPO_ROOT / "extensions" / "shared" / "constants.ts"
 SUNO_LYRIC_SKILL_MD = _REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "SKILL.md"
 REVIEW_RUBRIC_MD = _REPO_ROOT / ".claude" / "skills" / "suno-lyric" / "references" / "review-rubric.md"
@@ -45,6 +46,10 @@ def _read_suno_helper() -> str:
 
 def _read_wf_new() -> str:
     return WF_NEW_SKILL_MD.read_text(encoding="utf-8")
+
+
+def _read_wf_auto() -> str:
+    return WF_AUTO_SKILL_MD.read_text(encoding="utf-8")
 
 
 def _read_phase_constants() -> str:
@@ -294,6 +299,30 @@ def test_wf_new_hands_off_to_suno_helper_browser_use_flow() -> None:
         "user 操作に委ねる",
     ):
         assert legacy not in text, f"wf-new SKILL.md に user 操作前提の旧文言が残っている（`{legacy}`）"
+
+
+def test_wf_auto_runs_suno_helper_browser_flow_instead_of_handing_it_off() -> None:
+    """Issue #2454: 認証以外の Suno 工程は wf-auto の agent が完走する。"""
+    text = _read_wf_auto()
+    section = text.split("### `suno-helper` action の自律実行契約", 1)[1].split("\n## ", 1)[0]
+
+    for token in (
+        "Codex は browser use",
+        "Claude Code は browser use または Claude in Chrome",
+        "server と固定 collection を選択",
+        "全 pattern の生成完了",
+        "playlist へ追加",
+        "ZIP download",
+        "strict 成果物数・manifest・音源ファイル検証",
+        "suno_login_required|suno_captcha_required",
+        "--resume-action suno-helper",
+        "同じ固定 collection の `suno-helper` action から再開",
+        "返された `masterup` 以降",
+    ):
+        assert token in section
+    assert "ユーザーへ `/suno-helper` の実行" in section
+    assert "一括して依頼してはならない" in section
+    assert "本人操作が不可欠な場合だけ" in section
 
 
 def test_suno_lyric_documents_generator_reviewer_contract() -> None:

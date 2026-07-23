@@ -18,7 +18,7 @@ description: "Use when 正規入口から collection の有無を問わず、企
 2. **対象を固定**: `no_active_collection` では state を捏造せず `/wf-new` へ委譲する。collection 初期化後は返された名前を固定し、以後の `plan` に必ず `--collection` を渡す。
 3. **公開許可の正は config だけ**: `workflow.scheduled_automation.allow_external_publish` が `true` の場合だけ YouTube upload / publish を許可する。会話、prompt、環境変数で上書きしない。`false` ではローカル成果物まで進め、`external_publish_disabled` で停止する。
 4. **一段ごとに再評価**: 子 skill 完了後、同じ run 内で固定 collection を `plan` し直す。前 decision から次 action を推測しない。state と成果物が変化しない成功報告は `failed` として停止する。
-5. **手動介入を突破しない**: 対話実行では子 skill の企画選択・承認へ回答後、同じ run 内で再評価する。`workflow.wf_new.skip_plan_selection` または子 skill-config の `skip_*_approval` / `skip_cost_confirm` が `true` の停止点はチャンネル設定による明示 opt-in なので突破には当たらず続行する。それ以外のユーザー入力、login、CAPTCHA、課金確認、UI 非互換、承認待ちが無人実行で必要なら自動承認せず `blocked` と再開 action を履歴へ記録する。
+5. **手動介入を突破しない**: 対話実行では子 skill の企画選択・承認へ回答後、同じ run 内で再評価する。`workflow.wf_new.skip_plan_selection` または子 skill-config の `skip_*_approval` / `skip_cost_confirm` が `true` の停止点はチャンネル設定による明示 opt-in なので突破には当たらず続行する。それ以外のユーザー入力、login、CAPTCHA、課金確認、承認待ちが無人実行で必要なら自動承認せず `blocked` と再開 action を履歴へ記録する。Suno の UI 非互換・拡張障害・生成失敗は人間操作の blocker に広げず、agent が診断・再試行するか根拠付き `failed` とする。
 6. **不可逆操作を重複させない**: upload reconciliation、Suno 成果物数、post-publish idempotency は state resolver と委譲先の既存契約に従う。既存 video ID の remote upload や完了済み投稿を再発行しない。
 7. **state 更新責務を維持**: 本 skill と state resolver は `workflow-state.json` を直接更新しない。更新は `/wf-new`、`/wf-next` と各子 skill が成果物検証後に行う。
 8. **長時間処理の待機主体を消さない**: 子 agent に Monitor を arm させて self-stop / completed にしてはならない。`docs/skill-design/subagent-orchestration.md` に従い、実行中 tool call を維持するか background session を30秒以下の間隔で poll させ、終了を自分で観測してから報告させる。
@@ -61,13 +61,27 @@ uv run python "$STATE_SCRIPT" release --channel-dir . --token <token>
 |---|---|
 | `wf-new` | `/wf-new`。不在時は新規開始、固定済み planning では未完了工程から再開 |
 | `lyria` | `/lyria` |
-| `suno-helper` | `/suno-helper`。manual intervention は停止 |
+| `suno-helper` | `/suno-helper` の browser use 主導フロー。人間への handoff は login / CAPTCHA の該当操作だけ |
 | `masterup` | strict Suno 成果物を入力に `/masterup` |
 | `wf-next-local` | `/wf-next` のローカル動画・metadata 生成まで。YouTube write は行わない |
 | `wf-next` | `/wf-next`。config が許可した場合だけ upload を含める |
 | `post-publish` | `/post-publish`。history により完了 step を skip |
 | `blocked` | reason / resume_action を記録して停止 |
 | `complete` | 完了を記録して停止 |
+
+### `suno-helper` action の自律実行契約
+
+resolver が `action: suno-helper` を返したら、agent 自身が `/suno-helper` の **Agent primary flow: browser use** を実行する。Codex は browser use、Claude Code は browser use または Claude in Chrome を使い、固定 collection について次を完走する。
+
+1. collection server を AI または setup script が起動し、agent が Suno Create を開く
+2. suno-helper overlay / popup で server と固定 collection を選択する
+3. 既定の連続生成を開始し、全 pattern の生成完了を監視する
+4. 生成曲を対象 playlist へ追加し、複数曲の ZIP download を実行する
+5. `/suno-helper` の strict 成果物数・manifest・音源ファイル検証を実行する
+
+ユーザーへ `/suno-helper` の実行、overlay 選択、曲生成、playlist 追加、ZIP download、成果物検証を一括して依頼してはならない。Suno が login または CAPTCHA を表示し本人操作が不可欠な場合だけ、現在の画面と必要な1操作を限定して依頼し、`record --action suno-helper --status blocked --reason suno_login_required|suno_captcha_required --resume-action suno-helper` を残す。認証のコマンド実行や CAPTCHA 回避は行わない。
+
+本人操作の完了後は agent が同じ固定 collection の `suno-helper` action から再開する。UI 非互換、拡張未ロード、server 接続、生成、playlist、download の失敗を login / CAPTCHA と束ねず、`/suno-helper` の診断・再試行契約に従う。strict 完了条件が揃ったら成功を記録して同一 collection を再度 `plan` し、返された `masterup` 以降へ同じ run 内で継続する。
 
 ## 実行手順
 

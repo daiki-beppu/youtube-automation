@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `feat(thumbnail)`: `textless.enabled: false` の opt-in で追加の textless 生成・承認を省略し、確定済み `thumbnail.jpg` を同一内容の `main.jpg` として検証付きで共用（#2457）。
 - `fix(workspace)`: `yt-channel-import` が移行元・コピー対象内の通常ファイル symlink を安全検証後に実体化し、外部・対象外・壊れた・directory link は従来どおり rollback（#2462）。
+- `fix(wf-auto)`: Suno の生成・playlist 追加・ZIP download・strict 検証を browser use で agent が完走し、人間への handoff を login / CAPTCHA の該当操作だけに限定（#2454）。
 - `feat(flop-analysis)`: postmortem の一般化可能な学びを、出典付きの禁止制約案として明示承認後に `creative-constraints.md` へ還流する最終工程を追加（#2451）。
 - `feat(masterup)`: 全曲の integrated LUFS 最大差を既定 2.0 LU で検証し、逸脱時は明示承認までマスター結合を停止するゲートを追加（#2450）。
 - `docs(workflow)`: takt workflow routing を廃止し、GitHub issue + `/issue-direct` + linked worktree を正規開発経路として文書化（#2453）。
