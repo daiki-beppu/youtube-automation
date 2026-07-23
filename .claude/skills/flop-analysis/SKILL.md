@@ -91,14 +91,14 @@ description: "Use when 公開済み動画が伸びなかった原因を video_id
 | 競合中央値（補助指標） | `data/benchmark_<YYYYMMDD>.json`（最新） | `benchmark_collector.py::collect_channel` が保存する `views` / `likes` / `comments` / `duration_display` のみ参照。**CTR / 平均視聴時間は Data API では取れず競合分は欠落する** |
 | サムネ A/B テスト | `20-documentation/thumbnail-test-history.json` | 対象 `video_id` の `result.status` / `candidates[].watch_time_share` / Winner 候補の構図・配色・文字量を引用 |
 
-**per-video 流入経路シェアについて**: `data/analytics_data_*.json` の `traffic_sources`（`channel_analytics.py:163` 由来）と `utils/traffic_source_analytics.py::get_traffic_source_analytics` は **どちらもチャンネル全体集計** であり、対象動画 1 本のシェアは含まない。per-video の `insightTrafficSourceType` を取得するヘルパー関数はリポジトリ内に存在しないため、Phase 2 の症状テーブルでは流入経路を扱わない。per-video の流入経路を見たい場合は Phase 4 の検証ステップ（YouTube Analytics API への直接クエリ）に集約する。
+**per-video 流入経路シェアについて**: `data/analytics_data_*.json` の `traffic_sources`（`domains/analytics/mixins/channel_analytics.py:163` 由来）と `domains/analytics/mixins/traffic_source_analytics.py::get_traffic_source_analytics` は **どちらもチャンネル全体集計** であり、対象動画 1 本のシェアは含まない。per-video の `insightTrafficSourceType` を取得するヘルパー関数はリポジトリ内に存在しないため、Phase 2 の症状テーブルでは流入経路を扱わない。per-video の流入経路を見たい場合は Phase 4 の検証ステップ（YouTube Analytics API への直接クエリ）に集約する。
 
 ベンチマーク値の使い分け:
 
 - **CTR / 平均視聴時間 / インプレッション**: 自チャンネル中央値のみで比較する（競合分は YouTube Data API では取得できないため）。基準値は `yt-launch-curve` の `target.benchmark_median` / `target.ratio_vs_median` と、`reporting_api.impressions_summary.aggregated_ctr_percentage`（チャンネル全体平均）を採用する
 - **views / 動画長**: 自チャンネル中央値 + 競合中央値（`data/benchmark_*.json`）の両方を引用してよい
 
-症状判定の閾値は skill-config `thresholds.ratio_vs_median`（既定 `strong: 0.5` / `moderate: 0.7` / `mild: 0.9`。`launch_curve_analyzer.py` の四分位ラベル p25/p50/p75 と整合）:
+症状判定の閾値は skill-config `thresholds.ratio_vs_median`（既定 `strong: 0.5` / `moderate: 0.7` / `mild: 0.9`。`domains/analytics/analysis/launch_curve_analyzer.py` の四分位ラベル p25/p50/p75 と整合）:
 
 | 指標 | 判定 |
 |------|------|
@@ -313,9 +313,9 @@ Phase 4 は子スキル / CLI / API へ委譲する orchestration。個別検証
 - `collections/live/<collection>/20-documentation/upload_tracking.json` — `complete_collection.video_id`（コレクション → video_id 逆引きにも使用、`agents/_tracking_io.py`（`collection_uploader.py` から分離）の schema_version=3 で生成）
 - `collections/live/<collection>/20-documentation/thumbnail-test-history.json` — `/thumbnail-test` が記録する Studio A/B テスト結果。存在時は `.claude/skills/thumbnail-test/references/history-schema.md` で検証してから使用
 - `src/youtube_automation/scripts/launch_curve.py` — `yt-launch-curve --video <id>` の出力定義（`target.ratio_vs_median` / `target.quartile_label` / `target.trace[]` / `target.benchmark_median`）
-- `src/youtube_automation/utils/launch_curve_analyzer.py` — `compute_benchmark` / `judge_video_vs_benchmark`（p25/p50/p75 四分位）
+- `src/youtube_automation/domains/analytics/analysis/launch_curve_analyzer.py` — `compute_benchmark` / `judge_video_vs_benchmark`（p25/p50/p75 四分位）
 - `src/youtube_automation/utils/reporting_api.py` — `collect_impressions_summary` / `_aggregate_rows`（`per_video[].ctr_percentage` / `per_video[].impressions` を生成）
-- `src/youtube_automation/utils/traffic_source_analytics.py` — `get_traffic_source_analytics`（チャンネル全体集計のみ。per-video filter 非対応）/ `get_traffic_source_detail`（`insightTrafficSourceType` を絞り込みつつチャンネル全体集計で詳細を返す）
+- `src/youtube_automation/domains/analytics/mixins/traffic_source_analytics.py` — `get_traffic_source_analytics`（チャンネル全体集計のみ。per-video filter 非対応）/ `get_traffic_source_detail`（`insightTrafficSourceType` を絞り込みつつチャンネル全体集計で詳細を返す）
 
 ## Next Step
 

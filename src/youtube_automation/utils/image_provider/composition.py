@@ -130,32 +130,11 @@ def print_cost_summary() -> None:
 def resolve_composition_source(
     skill_cfg: dict[str, Any],
     provider: str,
-    *,
-    skill_name: str = "thumbnail",
 ) -> dict[str, Any]:
     """``apply_composition_rules`` に渡す構図ルールソース dict を解決する。
 
-    通常パスでは ``skill_cfg["image_generation"][provider]`` を返す。
-
-    後方互換: ユーザー override が legacy ``gemini_image:`` のみで
-    ``image_generation:`` を持たない場合は legacy section を返す。
-    default.yaml が ``image_generation.gemini.*`` を宣言しているため通常マージでは
-    default 値で常に non-empty となり、merged 後に判定すると legacy override が
-    silently 破棄される (`composition_prefix` / `composition_keywords` /
-    `brand_background` 等のユーザー値が apply_composition_rules に届かない)。
-    そのため override 単体を ``load_channel_override`` で確認して判定する
-    （``load_image_generation_config`` と同じパターン）。
-
-    provider="openai" には旧 namespace が存在しないため legacy 分岐はスキップ。
+    ``skill_cfg["image_generation"][provider]`` を返す。
     """
-    from youtube_automation.utils.skill_config import load_channel_override
-
-    if provider == "gemini":
-        override = load_channel_override(skill_name)
-        legacy = override.get("gemini_image")
-        if isinstance(legacy, dict) and not isinstance(override.get("image_generation"), dict):
-            return legacy
-
     section = skill_cfg.get("image_generation", {})
     if not isinstance(section, dict):
         return {}
@@ -169,10 +148,7 @@ def resolve_cost_per_image(
 ) -> float | None:
     """skill-config の ``cost_per_image_usd`` を尊重して 1 枚あたり単価を決定する。
 
-    優先順位:
-    1. ``skill_cfg["image_generation"][provider]["cost_per_image_usd"]``
-    2. （provider="gemini" の場合のみ）legacy ``skill_cfg["gemini_image"]["cost_per_image_usd"]``
-    3. いずれも未指定なら ``None``（PRICING フォールバックは撤廃済み）。
+    ``skill_cfg["image_generation"][provider]["cost_per_image_usd"]`` を返す。
     """
     custom = None
     image_gen = skill_cfg.get("image_generation")
@@ -180,10 +156,6 @@ def resolve_cost_per_image(
         provider_section = image_gen.get(provider)
         if isinstance(provider_section, dict):
             custom = provider_section.get("cost_per_image_usd")
-    if custom is None and provider == "gemini":
-        legacy = skill_cfg.get("gemini_image")
-        if isinstance(legacy, dict):
-            custom = legacy.get("cost_per_image_usd")
     if custom is None:
         return None
     return float(custom)
@@ -384,22 +356,3 @@ def validate_forbid_keywords(prompt: str, skill_cfg: dict[str, object]) -> None:
             + "（config/skills/thumbnail.yaml の image_generation.gemini.forbid_keywords を確認し、"
             "プロンプトから該当表現を除いて再実行してください）"
         )
-
-
-def normalize_reference_default(default: str | list[str] | None) -> list[str]:
-    """``reference_images.default`` を ``list[str]`` に正規化する。
-
-    - 文字列 → 1 要素リスト
-    - リスト → そのまま
-    - ``None`` / 空 → 空リスト
-
-    パス存在チェックは行わない（``resolve_reference_paths`` 側で実施）。
-    """
-    if default is None:
-        return []
-    if isinstance(default, str):
-        stripped = default.strip()
-        return [stripped] if stripped else []
-    if isinstance(default, list):
-        return [str(item) for item in default if isinstance(item, str) and item.strip()]
-    return []

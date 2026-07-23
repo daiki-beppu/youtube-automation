@@ -5,7 +5,7 @@
 # この恒久上書きとは別レイヤーで、Phase 2/3 実行時に AI が適用し postmortem.md に明示する。
 
 # Phase 2: `yt-launch-curve` の ratio_vs_median に対する症状判定
-# (`launch_curve_analyzer.py` の四分位ラベル p25/p50/p75 と整合させること)
+# (`domains/analytics/analysis/launch_curve_analyzer.py` の四分位ラベル p25/p50/p75 と整合させること)
 thresholds:
   ratio_vs_median:
     strong: 0.5    # これ未満 = 強い症状（赤）

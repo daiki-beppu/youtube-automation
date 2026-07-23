@@ -111,22 +111,9 @@ stock:
   filename_template: "{collection_slug}__{song_id}__{title_slug}.{ext}"
   on_duplicate: skip # skip | overwrite | fail
 
-# 雨音レイヤー設定 (DEPRECATED, #512)
-# `audio.finalize.ambient_layers` へ移行してください。
-# 旧 `rain_layer` namespace は後方互換 alias として読み続けますが、
-# 利用するとプロセス起動時に DeprecationWarning が出ます。
-# 同時設定の場合は `audio.finalize.*` が優先され、`rain_layer` は無視されます。
-# rain_layer:
-#   volume_db: -19         # → audio.finalize.ambient_layers.volume_db
-#   fadein_s: 0.5          # → audio.finalize.ambient_layers.fadein_s
-#   loudnorm:              # → audio.finalize.loudnorm
-#     I: -14
-#     LRA: 11
-#     TP: -1.5
-
 # raw master への雨レイヤー後処理 (opt-in / uv run yt-apply-rain-layers が参照)
 #
-# `uv run yt-finalize-master` (rain_layer namespace) が master.mp3 を loudnorm 二段で
+# `uv run yt-finalize-master` (audio.finalize namespace) が master.mp3 を loudnorm 二段で
 # in-place 上書きするのに対し、こちらは raw master (master.mp3) と
 # `branding/rain_layers/*.wav` を amix で合成して別ファイル (master-rain.wav)
 # に書き出す軽い後処理。後段で外部 DAW のミキシング+マスタリングを挟む運用向け。

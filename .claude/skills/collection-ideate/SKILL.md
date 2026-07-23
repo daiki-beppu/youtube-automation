@@ -295,7 +295,7 @@ print(int(preview.get('candidate_count', 3) or 3))
 REFS=$(uv run python3 -c "
 from youtube_automation.configuration import channel_dir
 from youtube_automation.utils.skill_config import load_skill_config
-from youtube_automation.utils.image_provider.composition import normalize_reference_default
+from youtube_automation.domains.thumbnail.references import normalize_reference_default
 
 thumb = load_skill_config('thumbnail').get('image_generation', {}).get('gemini', {})
 ref_cfg = thumb.get('reference_images', {}) if isinstance(thumb, dict) else {}
@@ -527,7 +527,7 @@ theme weight 計算に取り込み、第一ペルソナ内の別シーン・別�
 
 ```python
 from youtube_automation.configuration import channel_dir
-from youtube_automation.utils.weekly_vote_log import (
+from youtube_automation.domains.collections.weekly_vote_log import (
     compute_vote_log_weights,
     load_weekly_vote_log,
 )

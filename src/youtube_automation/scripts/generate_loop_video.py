@@ -26,6 +26,7 @@ from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
 
+from youtube_automation.domains.media.video_type import VideoType, VideoTypeConfig
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.genai_client import create_genai_client
 from youtube_automation.utils.omni_generator import (
@@ -44,7 +45,6 @@ from youtube_automation.utils.veo_generator import (
     generate_loop_video,
     smooth_loop,
 )
-from youtube_automation.utils.video_type import VideoType, VideoTypeConfig
 
 
 def _channel_root() -> Path:

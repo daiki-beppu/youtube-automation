@@ -1,14 +1,14 @@
 """
 TrafficSourceMixin のユニットテスト
 
-テスト対象: utils/traffic_source_analytics.py
+テスト対象: domains/analytics/mixins/traffic_source_analytics.py
 """
 
 from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.utils.traffic_source_analytics import TrafficSourceMixin
+from youtube_automation.domains.analytics.mixins.traffic_source_analytics import TrafficSourceMixin
 
 
 class StubCollector(TrafficSourceMixin):
@@ -35,7 +35,7 @@ class TestGetTrafficSourceAnalytics:
                 ["RELATED_VIDEO", 100, 400, 80],
             ]
         }
-        collector.analytics_service.reports().query().execute.return_value = mock_response
+        collector.analytics_service.query.return_value = mock_response
 
         result = collector.get_traffic_source_analytics("2026-01-01", "2026-04-01")
 
@@ -46,7 +46,7 @@ class TestGetTrafficSourceAnalytics:
 
     def test_empty_response(self, collector):
         """データなしの場合"""
-        collector.analytics_service.reports().query().execute.return_value = {}
+        collector.analytics_service.query.return_value = {}
 
         result = collector.get_traffic_source_analytics("2026-01-01", "2026-04-01")
 
@@ -63,7 +63,7 @@ class TestGetTrafficSourceDetail:
                 ["chiptune bgm", 50, 200],
             ]
         }
-        collector.analytics_service.reports().query().execute.return_value = mock_response
+        collector.analytics_service.query.return_value = mock_response
 
         result = collector.get_traffic_source_detail("2026-01-01", "2026-04-01", "YT_SEARCH")
 

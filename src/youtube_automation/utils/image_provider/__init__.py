@@ -10,15 +10,15 @@
 
 from __future__ import annotations
 
-from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.image_provider import prompt_schema
-from youtube_automation.utils.image_provider.base import (
+from youtube_automation.domains.media.image import (
     RETRY_BACKOFF,
     RETRY_MAX,
     ImageGenerationRequest,
     ImageGenerationResult,
     ImageProvider,
 )
+from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.image_provider import prompt_schema
 from youtube_automation.utils.image_provider.config import ImageGenerationConfig, parse_image_generation_config
 from youtube_automation.utils.image_provider.prompt_schema import PromptSchema
 
@@ -73,20 +73,7 @@ def get_provider(cfg: ImageGenerationConfig) -> ImageProvider:
 
 
 def load_image_generation_config(skill: str = "thumbnail") -> ImageGenerationConfig:
-    """skill-config をロードして ``ImageGenerationConfig`` を返す薄いラッパ。
-
-    後方互換: ユーザー override が `gemini_image:` のみで `image_generation:` を
-    持たない場合は legacy パスに分岐する。default.yaml が `image_generation:` を
-    宣言しているため通常マージでは default 値で上書きされ、ユーザーの旧 namespace
-    上書きが silently 破棄されてしまう問題への対策。
-    """
-    from youtube_automation.utils.skill_config import load_channel_override, load_skill_config
-
-    override = load_channel_override(skill)
-    user_set_legacy = isinstance(override.get("gemini_image"), dict)
-    user_set_new = isinstance(override.get("image_generation"), dict)
-
-    if user_set_legacy and not user_set_new:
-        return parse_image_generation_config({"gemini_image": override["gemini_image"]})
+    """skill-config をロードして ``ImageGenerationConfig`` を返す薄いラッパ。"""
+    from youtube_automation.utils.skill_config import load_skill_config
 
     return parse_image_generation_config(load_skill_config(skill))

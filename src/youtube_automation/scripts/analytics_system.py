@@ -16,8 +16,16 @@ from typing import Any
 from googleapiclient.errors import HttpError
 
 from youtube_automation.configuration import channel_dir, load_config
-from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
+from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
+from youtube_automation.infrastructure.analytics_adapter import AnalyticsAdapter, YouTubeDataAdapter
 from youtube_automation.utils.exceptions import AuthError, ConfigError, YouTubeAPIError
+from youtube_automation.utils.reporting_api import ReportingAPIClient
+from youtube_automation.utils.youtube_service import (
+    get_analytics,
+    get_credentials_readonly,
+    get_reporting,
+    get_youtube_readonly,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +55,19 @@ class AnalyticsSystem:
         config = load_config()
         logger.info(f"🎵 {config.meta.channel_name} - Analytics System v1.0")
 
-        self.collector = YouTubeAnalyticsCollector()
+        self.collector = None
         self.authenticated = False
+
+    def _initialize_collector(self) -> None:
+        """認証済みの read-only client を collector に接続する。"""
+        reporting = ReportingAPIClient(get_reporting(), credentials=get_credentials_readonly())
+        self.collector = YouTubeAnalyticsCollector(
+            youtube_client=YouTubeDataAdapter(get_youtube_readonly(), retry_requests=True),
+            analytics_client=AnalyticsAdapter(get_analytics(), retry_requests=True),
+            reporting_client=reporting,
+            channel_root=channel_dir(),
+        )
+        self.collector.initialize()
 
     def authenticate(self, force_reauth=False):
         """
@@ -67,6 +86,7 @@ class AnalyticsSystem:
             handler.authenticate(force_reauth=force_reauth)
 
             if handler.test_connection():
+                self._initialize_collector()
                 self.authenticated = True
                 logger.info("✅ 認証完了 - システム準備完了")
                 return True
@@ -161,6 +181,8 @@ class AnalyticsSystem:
                         api_err.status_code,
                         exc_info=True,
                     )
+                except YouTubeAPIError as e:
+                    logger.warning("⚠️ 動画×日次データ取得失敗（続行）: %s", e, exc_info=True)
                 except (OSError, ValueError, KeyError) as e:
                     logger.warning("⚠️ 動画×日次データ処理失敗（続行）: %s", e, exc_info=True)
 

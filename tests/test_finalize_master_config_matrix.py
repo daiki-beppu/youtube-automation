@@ -6,14 +6,13 @@
   filter / pass2 cmd に正しく反映される
 - `loudnorm.enabled: false` で pass1/pass2 を skip し amix 単発で出力される
 - `loudnorm.mode: dynamic` は `NotImplementedError` でフェイルラウド
-- 旧 `rain_layer` namespace は読み続けるが DeprecationWarning が出る
+- `audio.finalize.*` namespace の設定を検証する
 - 新 namespace と旧 namespace が同時設定なら新を優先 (旧は無視)
 - `layers.<filename>` の per-file override が該当 layer の volume/fadein にのみ反映される
 """
 
 from __future__ import annotations
 
-import warnings
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -204,49 +203,6 @@ class TestResolveFinalizeConfigFailLoud:
     def test_layers_non_dict_raises_config_error(self):
         with pytest.raises(ConfigError, match="layers"):
             _resolve_finalize_config({"audio": {"finalize": {"ambient_layers": {"layers": ["not", "a", "dict"]}}}})
-
-
-class TestLegacyRainLayerAlias:
-    """旧 `rain_layer` namespace を読み続けつつ DeprecationWarning を出す。"""
-
-    def test_legacy_rain_layer_alias_resolves_with_warning(self):
-        skill_cfg = {
-            "rain_layer": {
-                "volume_db": -25.5,
-                "fadein_s": 0.75,
-                "loudnorm": {"I": -16.5, "LRA": 9.5, "TP": -2.5},
-            }
-        }
-
-        # When
-        with warnings.catch_warnings(record=True) as captured:
-            warnings.simplefilter("always")
-            cfg = _resolve_finalize_config(skill_cfg)
-
-        # Then
-        assert cfg.volume_db == -25.5
-        assert cfg.fadein_s == 0.75
-        assert cfg.loudnorm == {"I": -16.5, "LRA": 9.5, "TP": -2.5}
-        assert any(issubclass(w.category, DeprecationWarning) and "rain_layer" in str(w.message) for w in captured)
-
-    def test_new_namespace_wins_when_both_set(self):
-        # Given: 新旧両方設定。新を優先し旧は読まないため warning も出ない。
-        skill_cfg = {
-            "rain_layer": {"volume_db": -25.5},
-            "audio": {
-                "finalize": {
-                    "ambient_layers": {"volume_db": -10.0},
-                }
-            },
-        }
-
-        with warnings.catch_warnings(record=True) as captured:
-            warnings.simplefilter("always")
-            cfg = _resolve_finalize_config(skill_cfg)
-
-        assert cfg.volume_db == -10.0
-        # legacy 経路は触られないので DeprecationWarning も出ない
-        assert not any(issubclass(w.category, DeprecationWarning) for w in captured)
 
 
 class TestBuildFilterNewParameters:

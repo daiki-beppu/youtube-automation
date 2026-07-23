@@ -3,7 +3,6 @@
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -67,18 +66,19 @@ def live_dir(tmp_path):
     return tmp_path
 
 
-def _make_mixin():
-    """ChannelAnalyticsMixin だけをインスタンス化するヘルパー"""
-    from youtube_automation.utils.channel_analytics import ChannelAnalyticsMixin
+def _make_mixin(channel_root: Path):
+    """ChannelAnalyticsMixin だけを注入済みでインスタンス化するヘルパー"""
+    from youtube_automation.domains.analytics.mixins.channel_analytics import ChannelAnalyticsMixin
 
-    return object.__new__(ChannelAnalyticsMixin)
+    mixin = object.__new__(ChannelAnalyticsMixin)
+    mixin.channel_root = channel_root
+    return mixin
 
 
 class TestBuildPublishAtMap:
     def test_returns_mapping_for_valid_tracking(self, live_dir):
-        mixin = _make_mixin()
-        with patch("youtube_automation.utils.channel_analytics.channel_dir", return_value=live_dir):
-            result = mixin._build_publish_at_map()
+        mixin = _make_mixin(live_dir)
+        result = mixin._build_publish_at_map()
 
         assert result == {
             "ABC123": "2026-03-26T11:00:00+09:00",
@@ -87,26 +87,23 @@ class TestBuildPublishAtMap:
 
     def test_skips_missing_tracking(self, live_dir):
         """tracking ファイルがないコレクションは無視"""
-        mixin = _make_mixin()
-        with patch("youtube_automation.utils.channel_analytics.channel_dir", return_value=live_dir):
-            result = mixin._build_publish_at_map()
+        mixin = _make_mixin(live_dir)
+        result = mixin._build_publish_at_map()
 
         assert "WIP_ID" not in result
 
     def test_skips_broken_json(self, live_dir):
         """壊れた JSON は無視してクラッシュしない"""
-        mixin = _make_mixin()
-        with patch("youtube_automation.utils.channel_analytics.channel_dir", return_value=live_dir):
-            result = mixin._build_publish_at_map()
+        mixin = _make_mixin(live_dir)
+        result = mixin._build_publish_at_map()
 
         # 壊れた分はスキップされ、正常な2件だけ返る
         assert len(result) == 2
 
     def test_empty_when_no_live_dir(self, tmp_path):
         """collections/live/ が存在しない場合は空 dict"""
-        mixin = _make_mixin()
-        with patch("youtube_automation.utils.channel_analytics.channel_dir", return_value=tmp_path):
-            result = mixin._build_publish_at_map()
+        mixin = _make_mixin(tmp_path)
+        result = mixin._build_publish_at_map()
 
         assert result == {}
 
@@ -116,7 +113,7 @@ class TestCollectBasicAnalyticsIntegration:
 
     def test_default_depth_remains_standard_without_full_only_data(self, tmp_path):
         """depth 未指定時は standard データだけを返す。"""
-        mixin = _make_mixin()
+        mixin = _make_mixin(tmp_path)
         mixin.initialize = lambda: None
         mixin.get_channel_analytics = lambda s, e: {"period": "test", "daily_metrics": []}
         mixin.get_strategic_video_analytics = lambda s, e, mode="efficient": {
@@ -141,8 +138,7 @@ class TestCollectBasicAnalyticsIntegration:
         mixin.get_country_analytics = lambda s, e: pytest.fail("country should require full depth")
         mixin.get_retention_summary = lambda s, e, top_n: pytest.fail("retention should require full depth")
 
-        with patch("youtube_automation.utils.channel_analytics.channel_dir", return_value=tmp_path):
-            result = mixin.collect_basic_analytics("2026-03-14", "2026-04-13")
+        result = mixin.collect_basic_analytics("2026-03-14", "2026-04-13")
 
         assert result["collection_depth"] == "standard"
         assert result["summary"]["depth"] == "standard"
@@ -154,7 +150,7 @@ class TestCollectBasicAnalyticsIntegration:
 
     def test_injects_scheduled_publish_at(self, live_dir):
         """video_data に scheduled_publish_at が追加される"""
-        mixin = _make_mixin()
+        mixin = _make_mixin(live_dir)
         mixin.initialize = lambda: None
         mixin.get_channel_analytics = lambda s, e: {"period": "test", "daily_metrics": []}
         mixin.get_strategic_video_analytics = lambda s, e, mode="efficient": {
@@ -174,14 +170,13 @@ class TestCollectBasicAnalyticsIntegration:
         }
         mixin.get_scheduled_video_count = lambda: 2
 
-        with patch("youtube_automation.utils.channel_analytics.channel_dir", return_value=live_dir):
-            result = mixin.collect_basic_analytics("2026-03-14", "2026-04-13", depth="basic")
+        result = mixin.collect_basic_analytics("2026-03-14", "2026-04-13", depth="basic")
 
-            video_data = result["video_analytics"]
-            # マッチする動画: publish_at が入る
-            assert video_data["ABC123"]["scheduled_publish_at"] == "2026-03-26T11:00:00+09:00"
-            assert video_data["ABC123"]["estimated_revenue"] == 12.0
-            assert video_data["ABC123"]["rpm"] == 6.0
-            # マッチしない動画: None
-            assert video_data["XYZ789"]["scheduled_publish_at"] is None
-            assert result["scheduled_videos"] == {"count": 2}
+        video_data = result["video_analytics"]
+        # マッチする動画: publish_at が入る
+        assert video_data["ABC123"]["scheduled_publish_at"] == "2026-03-26T11:00:00+09:00"
+        assert video_data["ABC123"]["estimated_revenue"] == 12.0
+        assert video_data["ABC123"]["rpm"] == 6.0
+        # マッチしない動画: None
+        assert video_data["XYZ789"]["scheduled_publish_at"] is None
+        assert result["scheduled_videos"] == {"count": 2}

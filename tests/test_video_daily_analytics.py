@@ -1,10 +1,9 @@
 from unittest.mock import MagicMock
 
 import pytest
-from googleapiclient.errors import HttpError
 
+from youtube_automation.domains.analytics.mixins.video_daily_analytics import VideoDailyAnalyticsMixin
 from youtube_automation.utils.exceptions import YouTubeAPIError
-from youtube_automation.utils.video_daily_analytics import VideoDailyAnalyticsMixin
 
 
 class DummyCollector(VideoDailyAnalyticsMixin):
@@ -18,7 +17,7 @@ def test_get_video_daily_analytics_parses_views_only_rows():
     videoThumbnailImpressions* が取得不可のため、views のみを扱う。
     """
     mock_service = MagicMock()
-    mock_service.reports().query().execute.return_value = {
+    mock_service.query.return_value = {
         "rows": [
             ["vid_A", "2026-04-01", 100],
             ["vid_A", "2026-04-02", 150],
@@ -39,23 +38,20 @@ def test_get_video_daily_analytics_parses_views_only_rows():
 def test_get_video_daily_analytics_query_uses_views_metric_only():
     """クエリ送信時に videoThumbnailImpressions* が含まれないことを検証。"""
     mock_service = MagicMock()
-    mock_service.reports().query().execute.return_value = {"rows": []}
+    mock_service.query.return_value = {"rows": []}
     collector = DummyCollector(mock_service)
     collector.get_video_daily_analytics("2026-04-01", "2026-04-02")
 
     # reports().query(...) の最後の呼び出しを取得
-    calls = mock_service.reports().query.call_args_list
-    # 最後の呼び出しが実際のクエリ (最初は .query() によるチェーン構築のダミー)
-    last_call_kwargs = calls[-1].kwargs
+    last_call_kwargs = mock_service.query.call_args.kwargs
     assert last_call_kwargs["metrics"] == "views"
     assert "videoThumbnailImpressions" not in last_call_kwargs["metrics"]
 
 
 def test_get_video_daily_analytics_converts_permanent_http_error():
     mock_service = MagicMock()
-    mock_service.reports().query().execute.side_effect = HttpError(MagicMock(status=400), b"metric not found")
+    mock_service.query.side_effect = YouTubeAPIError("metric not found", status_code=400)
     collector = DummyCollector(mock_service)
     with pytest.raises(YouTubeAPIError) as raised:
         collector.get_video_daily_analytics("2026-04-01", "2026-04-01", video_ids=["vid_A"])
     assert raised.value.status_code == 400
-    assert isinstance(raised.value.__cause__, HttpError)

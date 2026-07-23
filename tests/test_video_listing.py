@@ -20,8 +20,8 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
+from youtube_automation.domains.analytics.collection.video_listing import VideoListingMixin
 from youtube_automation.utils.exceptions import YouTubeAPIError
-from youtube_automation.utils.video_listing import VideoListingMixin
 
 
 def _make_http_error(status: int = 403, message: bytes = b"error") -> HttpError:
@@ -75,11 +75,23 @@ class _FakeYouTubeService:
     def channels(self):
         return _FakeChannels()
 
+    def list_uploads(self, channel_id: str):
+        return {"items": [{"contentDetails": {"relatedPlaylists": {"uploads": "UP_PLAYLIST"}}}]}
+
     def playlistItems(self):
         return self._playlist_items
 
+    def list_playlist_items(self, playlist_id: str, page_token: str | None):
+        try:
+            return self._playlist_items.list(pageToken=page_token).execute()
+        except HttpError as exc:
+            raise YouTubeAPIError.from_http_error(exc, "YouTube playlist items request failed") from exc
+
     def videos(self):
         return self._videos
+
+    def list_videos(self, video_ids: str, *, part: str):
+        return self._videos.list(id=video_ids, part=part).execute()
 
 
 def _video_item(video_id: str, published_at: str) -> Dict:

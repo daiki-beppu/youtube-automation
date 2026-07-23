@@ -1,6 +1,6 @@
 from PIL import Image
 
-from youtube_automation.utils.thumbnail_features import extract_features
+from youtube_automation.domains.thumbnail.features import extract_features
 
 
 def _solid_image(color, size=(100, 100)):

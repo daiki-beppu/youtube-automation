@@ -13,13 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.image_provider.composition import (
+from youtube_automation.domains.thumbnail.references import (
+    format_reference_assignment,
+    infer_benchmark_channel,
     normalize_reference_default,
-    select_reference,
-    validate_single_step_references,
 )
-from youtube_automation.utils.thumbnail_references import format_reference_assignment, infer_benchmark_channel
+from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.utils.image_provider.composition import select_reference, validate_single_step_references
 
 # ---- select_reference ------------------------------------------------------
 

@@ -22,14 +22,14 @@ import subprocess
 import time
 from pathlib import Path
 
-from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.image_provider.base import (
+from youtube_automation.domains.media.image import (
     RETRY_BACKOFF,
     RETRY_MAX,
     ImageGenerationRequest,
     ImageGenerationResult,
 )
+from youtube_automation.utils import cost_tracker
+from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider.composition import (
     log_image_cost,
     persist_image,

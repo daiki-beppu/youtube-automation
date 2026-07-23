@@ -47,6 +47,16 @@ from pathlib import Path
 
 from youtube_automation import __version__
 from youtube_automation.configuration import Distrokid, channel_dir, load_config
+from youtube_automation.domains.distrokid.metadata import parse_album_metadata
+from youtube_automation.domains.distrokid.release import (
+    DISTROKID_ASSETS_PREFIX,
+    DISTROKID_COLLECTION_ASSETS_PREFIX,
+    DISTROKID_RELEASE_ROUTE,
+    build_release_payload,
+    kebab_to_title,
+    resolve_asset_path,
+)
+from youtube_automation.domains.distrokid.specification import find_disc_entry, read_collection_spec
 from youtube_automation.domains.suno.downloaded import (
     DownloadedArtifactError,
     DownloadedPayloadError,
@@ -63,14 +73,6 @@ from youtube_automation.scripts.collection_serve_discovery import (
     create_discovery_lifecycle,
     handle_registry_request,
 )
-from youtube_automation.scripts.distrokid_release import (
-    DISTROKID_ASSETS_PREFIX,
-    DISTROKID_COLLECTION_ASSETS_PREFIX,
-    DISTROKID_RELEASE_ROUTE,
-    build_release_payload,
-    kebab_to_title,
-    resolve_asset_path,
-)
 from youtube_automation.scripts.suno_artifacts import (
     COLLECTIONS_ROUTE,
     DOCUMENTATION_DIRNAME,
@@ -81,8 +83,6 @@ from youtube_automation.scripts.suno_artifacts import (
 )
 from youtube_automation.utils.chrome_extensions import ChromeExtensionOrigin, resolve_unpacked_extension_origin
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.distrokid_metadata import parse_album_metadata
-from youtube_automation.utils.distrokid_spec import find_disc_entry, read_collection_spec
 from youtube_automation.utils.exceptions import ConfigError
 
 DEFAULT_PORT = 7873

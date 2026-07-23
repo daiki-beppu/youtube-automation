@@ -9,14 +9,14 @@ from __future__ import annotations
 import io
 import time
 
-from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.genai_client import create_genai_client
-from youtube_automation.utils.image_provider.base import (
+from youtube_automation.domains.media.image import (
     RETRY_BACKOFF,
     RETRY_MAX,
     ImageGenerationRequest,
     ImageGenerationResult,
 )
+from youtube_automation.utils import cost_tracker
+from youtube_automation.utils.genai_client import create_genai_client
 from youtube_automation.utils.image_provider.composition import log_image_cost, persist_image
 from youtube_automation.utils.image_provider.config import GeminiConfig
 

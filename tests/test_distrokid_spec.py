@@ -1,4 +1,4 @@
-"""utils/distrokid_spec.py のユニットテスト（#941）.
+"""domains/distrokid/specification.py のユニットテスト（#941）.
 
 read_collection_spec / find_disc_entry / title_map_from_entry /
 write_collection_spec の各関数を独立して検証する。
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.utils.distrokid_spec import (
+from youtube_automation.domains.distrokid.specification import (
     SPEC_FILENAME,
     find_disc_entry,
     read_collection_spec,

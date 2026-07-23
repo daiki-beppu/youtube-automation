@@ -1,6 +1,6 @@
 import pytest
 
-from youtube_automation.utils.thumbnail_correlation import (
+from youtube_automation.domains.thumbnail.correlation import (
     INSUFFICIENT_SAMPLES_NOTE,
     MIN_SAMPLES_DEFAULT,
     _benjamini_hochberg,

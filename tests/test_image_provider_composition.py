@@ -89,18 +89,6 @@ class TestResolveCostPerImage:
         assert result == pytest.approx(0.07)
         assert isinstance(result, float)
 
-    def test_returns_float_from_legacy_gemini_image_when_provider_is_gemini(self):
-        """Given legacy skill_cfg["gemini_image"]["cost_per_image_usd"]=0.05
-        When resolve_cost_per_image(..., provider="gemini") (image_generation 未指定)
-        Then legacy 経路で float を返す (後方互換)。
-        """
-        cfg = {"gemini_image": {"cost_per_image_usd": 0.05}}
-
-        result = resolve_cost_per_image(cfg, "gemini")
-
-        assert result == pytest.approx(0.05)
-        assert isinstance(result, float)
-
     def test_returns_none_when_skill_config_has_no_override(self):
         """Given skill_cfg が空 (PRICING フォールバック撤廃を直接検証)
         When resolve_cost_per_image を呼ぶ
@@ -120,17 +108,6 @@ class TestResolveCostPerImage:
         cfg = {"image_generation": {"gemini": {"model": "gemini-3.1-flash-image-preview"}}}
 
         result = resolve_cost_per_image(cfg, "gemini")
-
-        assert result is None
-
-    def test_openai_provider_does_not_pick_up_legacy_gemini_image(self):
-        """Given legacy gemini_image.cost_per_image_usd のみ設定
-        When resolve_cost_per_image(..., provider="openai")
-        Then legacy 経路に乗らず None (legacy は gemini 限定)。
-        """
-        cfg = {"gemini_image": {"cost_per_image_usd": 0.05}}
-
-        result = resolve_cost_per_image(cfg, "openai")
 
         assert result is None
 

@@ -605,10 +605,6 @@ audio:
       enabled: false             # pass1/pass2 を skip
 ```
 
-#### 旧 `rain_layer` namespace（DEPRECATED, #512）
-
-旧 v5.5.0 までの `rain_layer:` namespace は後方互換 alias として読み続けるが、利用するとプロセス起動時に `DeprecationWarning` が出る。新 `audio.finalize.*` namespace へ移行すること。新旧両方を同時に書いた場合は新が勝ち、旧は無視される（warning も出ない）。
-
 ### Step 5.6: 雨レイヤー後処理（config 駆動 / opt-in）
 
 `uv run yt-finalize-master` が master.mp3 を **loudnorm 二段で in-place 上書き**するのに対し、`uv run yt-apply-rain-layers` は raw master と `branding/rain_layers/*.wav` を **amix のみ**で合成し**別ファイル**（既定 `01-master/master-rain.wav`）に書き出す軽い後処理 CLI。後段で外部 DAW のミキシング+マスタリングを挟む運用（raw master を保持したまま雨レイヤー付きバージョンを並行管理したい場合）向け。
@@ -628,7 +624,7 @@ uv run yt-apply-rain-layers --dry-run             # ffmpeg コマンドを表示
 - `enabled: true` + WAV が在る → ffmpeg で各レイヤーを `-stream_loop -1` で master 尺までループ → `volume={volume_db}dB` で減衰 → `amix=duration=first:normalize=0` で master と合成 → `pcm_s16le` / `44100Hz` / stereo の WAV を出力
 - 出力成功時に `workflow-state.json::assets.raw_master` を `output_name` で上書き（後段の `/wf-next` などが新出力を参照するため）
 
-`uv run yt-finalize-master`（`rain_layer:` namespace）と `uv run yt-apply-rain-layers`（`post_processing.rain_layers:` namespace）は**独立した opt-in**。両方有効化すると master.mp3 への loudnorm 上書きと master-rain.wav の別ファイル出力が両方走るので、片方だけ使う運用を推奨する。
+`uv run yt-finalize-master`（`audio.finalize:` namespace）と `uv run yt-apply-rain-layers`（`post_processing.rain_layers:` namespace）は**独立した opt-in**。両方有効化すると master.mp3 への loudnorm 上書きと master-rain.wav の別ファイル出力が両方走るので、片方だけ使う運用を推奨する。
 
 ### Step 6: ワークツリー実行時のメインへのコピー
 

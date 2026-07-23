@@ -26,11 +26,11 @@ import time
 from googleapiclient.errors import HttpError
 
 from youtube_automation.configuration import channel_dir
-from youtube_automation.utils.cost_tracker import log_quota
-from youtube_automation.utils.descriptions_md import (
+from youtube_automation.domains.metadata.descriptions import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
 )
+from youtube_automation.utils.cost_tracker import log_quota
 from youtube_automation.utils.exceptions import YouTubeAPIError
 from youtube_automation.utils.youtube_service import get_youtube
 from youtube_automation.utils.youtube_tag import parse_youtube_tags

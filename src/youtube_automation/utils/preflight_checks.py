@@ -10,18 +10,18 @@ import re
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 
-from youtube_automation.utils.descriptions_md import (
+from youtube_automation.domains.metadata.descriptions import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
     missing_descriptions_md_headings,
 )
-from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.placeholders import is_placeholder_value
-from youtube_automation.utils.thumbnail_references import (
+from youtube_automation.domains.metadata.placeholders import is_placeholder_value
+from youtube_automation.domains.thumbnail.references import (
     plan_ttp_reference_assignments,
     resolve_configured_benchmark_references,
     resolve_dedup_recent_collections,
 )
+from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.youtube_tag import parse_youtube_tags, youtube_tag_chars
 
 YT_TAG_CHAR_LIMIT = 500

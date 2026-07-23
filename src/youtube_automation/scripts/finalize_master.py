@@ -10,7 +10,7 @@ atomic rename で in-place 上書きする。
 skill-config の `audio.finalize.*` namespace で、レイヤー対象ディレクトリ・
 glob・per-file 上書き・loudnorm パラメータ・mix の duration / normalize・
 fadein curve・出力 sample_rate / codec / bitrate を全て注入できる。
-旧 `rain_layer` namespace は後方互換 alias として読み続ける (deprecation 警告)。
+設定は `audio.finalize.*` namespace で解決する。
 
 Usage:
     yt-finalize-master                       # CWD がコレクションディレクトリ
@@ -25,7 +25,6 @@ import os
 import shutil
 import subprocess
 import sys
-import warnings
 from pathlib import Path
 from typing import Any
 
@@ -85,12 +84,6 @@ def find_ambient_layers(
     if not layers_dir.is_dir():
         return []
     return sorted(layers_dir.glob(glob_pattern))
-
-
-# 後方互換 alias (#512 以前の API)。
-def find_rain_layers(channel: Path) -> list[Path]:
-    """旧 API alias: `find_ambient_layers` のデフォルト引数版。"""
-    return find_ambient_layers(channel)
 
 
 def _layer_volume(
@@ -303,7 +296,7 @@ def _build_single_pass_cmd(
 
 
 class FinalizeConfig:
-    """`audio.finalize.*` (および後方互換 `rain_layer.*`) を解決した実行設定。
+    """`audio.finalize.*` を解決した実行設定。
 
     `_resolve_finalize_config` が組み立てる純粋な値オブジェクト。dataclass を
     避けたのは layer_overrides の dict ネストが含まれるため (frozen 化の意義が薄い)。
@@ -361,12 +354,9 @@ class FinalizeConfig:
 
 
 def _resolve_finalize_config(skill_cfg: dict[str, Any]) -> FinalizeConfig:
-    """skill-config から `audio.finalize.*` + 旧 `rain_layer` alias を解決する。
+    """skill-config から `audio.finalize.*` を解決する。
 
-    優先順位 (高い順):
-      1. `audio.finalize.ambient_layers.*` (新 namespace)
-      2. `rain_layer.*` (deprecated alias / DeprecationWarning)
-      3. 組み込み defaults
+    `audio.finalize.ambient_layers.*` が組み込み defaults を上書きする。
 
     `audio.bitrate` は既存 yt-generate-master とも共有する skill-config の
     トップレベル audio セクションを優先し、`audio.finalize.bitrate` が
@@ -375,22 +365,6 @@ def _resolve_finalize_config(skill_cfg: dict[str, Any]) -> FinalizeConfig:
     audio_cfg = skill_cfg.get("audio") or {}
     finalize_cfg = audio_cfg.get("finalize") or {}
     ambient_cfg = finalize_cfg.get("ambient_layers") or {}
-
-    # 後方互換 alias: 新 namespace 未設定でかつ旧 `rain_layer` がある場合のみ
-    # DeprecationWarning を出して読み替える (両方設定なら新を優先し旧は無視)。
-    legacy_cfg = skill_cfg.get("rain_layer") or {}
-    if legacy_cfg and not ambient_cfg and not finalize_cfg.get("loudnorm"):
-        warnings.warn(
-            "skill-config の `rain_layer` namespace は deprecated です。"
-            "`audio.finalize.ambient_layers` (および `audio.finalize.loudnorm`) "
-            "へ移行してください。",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        ambient_cfg = dict(legacy_cfg)
-        # loudnorm は ambient ではなく finalize 直下に持つので legacy から引き上げ
-        if "loudnorm" in legacy_cfg:
-            finalize_cfg = {**finalize_cfg, "loudnorm": legacy_cfg["loudnorm"]}
 
     volume_db = float(ambient_cfg.get("volume_db", _DEFAULT_VOLUME_DB))
     fadein_s = float(ambient_cfg.get("fadein_s", _DEFAULT_FADEIN_S))
@@ -406,7 +380,7 @@ def _resolve_finalize_config(skill_cfg: dict[str, Any]) -> FinalizeConfig:
         str(k): dict(v) for k, v in raw_layer_overrides.items() if isinstance(v, dict)
     }
 
-    # loudnorm: finalize.loudnorm を最優先、旧 rain_layer.loudnorm は legacy 経路で引き上げ済み
+    # loudnorm は finalize namespace で解決する。
     loudnorm_block = finalize_cfg.get("loudnorm") or {}
     loudnorm_enabled = bool(loudnorm_block.get("enabled", _DEFAULT_LOUDNORM_ENABLED))
     loudnorm_mode = str(loudnorm_block.get("mode", _DEFAULT_LOUDNORM_MODE))
@@ -466,16 +440,6 @@ def _resolve_finalize_config(skill_cfg: dict[str, Any]) -> FinalizeConfig:
         layers_glob=layers_glob,
         layers_overrides=layer_overrides,
     )
-
-
-# 後方互換 alias (#512 以前の API)。既存呼び出し側が tuple 3-元を返す前提のため、
-# 新しい FinalizeConfig から旧 tuple を組み立てる薄いラッパとして残す。
-def _resolve_rain_config(
-    skill_cfg: dict[str, Any],
-) -> tuple[float, float, dict[str, float]]:
-    """旧 API alias: `_resolve_finalize_config` の (volume_db, fadein_s, loudnorm) 抜粋。"""
-    cfg = _resolve_finalize_config(skill_cfg)
-    return cfg.volume_db, cfg.fadein_s, cfg.loudnorm
 
 
 def _layer_overrides_for(rains: list[Path], overrides: dict[str, dict[str, Any]]) -> list[dict[str, Any] | None]:

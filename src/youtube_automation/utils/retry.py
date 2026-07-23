@@ -52,6 +52,7 @@ def retry_youtube_api(
     *,
     sleep: Callable[[float], None] | None = None,
     jitter: Callable[[float, float], float] | None = None,
+    on_attempt: Callable[[], None] | None = None,
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Retry transient Google API failures and expose failures as domain errors."""
     sleep = sleep or _DEFAULT_SLEEP
@@ -69,6 +70,9 @@ def retry_youtube_api(
                 except (HttpLib2Error, OSError) as error:
                     if attempt == _MAX_ATTEMPTS - 1:
                         raise YouTubeAPIError(f"{context}: {error}") from error
+                finally:
+                    if on_attempt is not None:
+                        on_attempt()
 
                 delay = 2**attempt
                 sleep(jitter(delay, delay * 2))
@@ -86,7 +90,8 @@ def execute_with_retry(
     *,
     sleep: Callable[[float], None] | None = None,
     jitter: Callable[[float, float], float] | None = None,
+    on_attempt: Callable[[], None] | None = None,
 ) -> T:
     """Execute one Google API request through the shared retry boundary."""
 
-    return retry_youtube_api(context, sleep=sleep, jitter=jitter)(request.execute)()
+    return retry_youtube_api(context, sleep=sleep, jitter=jitter, on_attempt=on_attempt)(request.execute)()

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 
+from youtube_automation.domains.media.video_type import VideoType, VideoTypeConfig
 from youtube_automation.utils import veo_generator
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.veo_generator import generate_video, register_video_generator
-from youtube_automation.utils.video_type import VideoType, VideoTypeConfig
 
 
 def test_video_type_config_defaults_to_loop() -> None:

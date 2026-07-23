@@ -566,7 +566,7 @@ def _run_operation(operation: str, payload: dict[str, object]) -> tuple[object, 
         competitor_paths = _string_sequence(payload, "competitor_paths")
         if not isinstance(target_path, str):
             raise ValueError("target_path must be a string")
-        from youtube_automation.utils.thumbnail_features import extract_features_from_path
+        from youtube_automation.domains.thumbnail.features import extract_features_from_path
 
         target_features = extract_features_from_path(Path(target_path))
         competitor_features = tuple(extract_features_from_path(Path(value)) for value in competitor_paths)

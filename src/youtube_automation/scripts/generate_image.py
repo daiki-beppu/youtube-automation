@@ -19,6 +19,11 @@ import sys
 import time
 from pathlib import Path
 
+from youtube_automation.domains.thumbnail.references import (
+    format_reference_assignment,
+    plan_ttp_reference_assignments,
+    resolve_dedup_recent_collections,
+)
 from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider import (
     ImageGenerationRequest,
@@ -40,11 +45,6 @@ from youtube_automation.utils.image_provider.composition import (
 )
 from youtube_automation.utils.image_provider.config import replace_model
 from youtube_automation.utils.profile import section
-from youtube_automation.utils.thumbnail_references import (
-    format_reference_assignment,
-    plan_ttp_reference_assignments,
-    resolve_dedup_recent_collections,
-)
 
 # Gemini 用の解像度オプション（OpenAI provider 時は無視される）
 _GEMINI_VALID_IMAGE_SIZES = ("1K", "2K", "4K")
@@ -409,9 +409,7 @@ def main():
     if args.model:
         cfg = replace_model(cfg, args.model)
 
-    # composition_prefix は thumbnail skill-config の image_generation.<provider> 直下で扱われない（旧
-    # gemini_image.* と同じ位置にユーザーが置くケースに対応）。channel-side で
-    # composition_prefix を提供している場合のみ適用される。
+    # composition_prefix は channel-side の image_generation.<provider> から解決する。
     from youtube_automation.utils.skill_config import load_skill_config
 
     try:

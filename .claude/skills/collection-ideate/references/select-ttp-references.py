@@ -6,11 +6,11 @@ import sys
 from pathlib import Path
 
 from youtube_automation.configuration import channel_dir
-from youtube_automation.utils.skill_config import load_skill_config
-from youtube_automation.utils.thumbnail_references import (
+from youtube_automation.domains.thumbnail.references import (
     plan_ttp_reference_assignments,
     resolve_dedup_recent_collections,
 )
+from youtube_automation.utils.skill_config import load_skill_config
 
 
 def main() -> None:

@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from youtube_automation.configuration import channel_dir
-from youtube_automation.utils.thumbnail_references import record_ttp_reference_assignments
+from youtube_automation.domains.thumbnail.references import record_ttp_reference_assignments
 
 
 def _resolve_from_channel(root: Path, value: str) -> Path:
