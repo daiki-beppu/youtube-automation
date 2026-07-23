@@ -11,6 +11,10 @@
 # スキル無効化フラグ (true の場合 lyria スキルは /suno を案内して終了)
 _disabled: false
 
+# 生成前のプロンプト・API パラメータ承認を省略する opt-in。
+# true でも採用値の文書保存と 60 segment hard cap は維持する。
+skip_generation_approval: false
+
 # Lyria モデル
 #   lyria-3-pro-preview  : 1 リクエストあたり最大約 184 秒（~3 分）生成。本生成用
 #   lyria-3-clip-preview : 30 秒固定。プレビュー用 (--preview で自動使用)

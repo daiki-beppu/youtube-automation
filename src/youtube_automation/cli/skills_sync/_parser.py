@@ -82,6 +82,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="指定した entry だけ同期 (省略時は全件、kind='file' では無効)",
     )
     p_sync.add_argument(
+        "--accept-hooks",
+        action="store_true",
+        help="settings asset の hook 追加を非対話で承認する",
+    )
+    p_sync.add_argument(
         "--prune",
         action="store_true",
         help=(

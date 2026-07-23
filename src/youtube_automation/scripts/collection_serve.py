@@ -46,6 +46,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from youtube_automation import __version__
+from youtube_automation.configuration import Distrokid, channel_dir, load_config
 from youtube_automation.domains.suno.downloaded import (
     DownloadedArtifactError,
     DownloadedPayloadError,
@@ -80,7 +81,6 @@ from youtube_automation.scripts.suno_artifacts import (
 )
 from youtube_automation.utils.chrome_extensions import ChromeExtensionOrigin, resolve_unpacked_extension_origin
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.config import Distrokid, channel_dir, load_config
 from youtube_automation.utils.distrokid_metadata import parse_album_metadata
 from youtube_automation.utils.distrokid_spec import find_disc_entry, read_collection_spec
 from youtube_automation.utils.exceptions import ConfigError
@@ -1184,7 +1184,8 @@ def create_server(
                     coll_dir,
                     prompt_entries_reader=read_suno_prompt_entries,
                     default=0,
-                ), downloaded.expected_file_count
+                ),
+                downloaded.expected_file_count,
             )
             if (
                 downloaded.download_path
@@ -1624,6 +1625,13 @@ def _resolve_allow_origin(
 
 
 def main() -> None:
+    # nohup / file redirect 下でも extension 検出結果を起動直後に診断できるよう、
+    # block buffering を行バッファへ切り替える。pytest の StringIO 等は reconfigure
+    # を持たないため、その場合はそのまま使う。
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(line_buffering=True)
     parser = argparse.ArgumentParser(
         description=(
             "Serve collection artifacts over localhost HTTP for the suno-helper / distrokid-helper / "

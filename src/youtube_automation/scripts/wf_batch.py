@@ -20,8 +20,8 @@
 6. ``generate_videos.sh``（マスター動画生成）→ ``assets.master_video`` / ``phase: publishing`` 記録
 7. ``yt-upload-collection``（アップロード + tracking + planning → live 移行を一体実行）
 
-承認ゲート（``workflow.wf_next.approval_gates``）が有効なチャンネルでは非対話で承認を
-処理できないため fail-loud で停止する（``/wf-next`` を使うか gates を無効化する）。
+`workflow.wf_next.skip_*_approval` が false のチャンネルでは非対話で承認を
+処理できないため fail-loud で停止する（``/wf-next`` を使う）。
 
 実行結果は ``reports/wf-batch-<timestamp>/summary.json`` と per-collection の
 ``<slug>.log`` に出力する。
@@ -52,8 +52,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.config import channel_dir, load_config
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
 
 # 02-Individual-music/ のダウンロード済み判定に使う音声拡張子（/wf-next Suno パスと同一）。
@@ -87,8 +87,8 @@ class WfNextSettings:
     """batch 実行に影響する workflow.wf_next 設定のスナップショット。"""
 
     skip_manual_mastering: bool
-    approval_gate_audio: bool
-    approval_gate_upload: bool
+    skip_audio_approval: bool
+    skip_upload_approval: bool
 
 
 @dataclass
@@ -245,8 +245,8 @@ def _wf_next_settings() -> WfNextSettings:
     wf_next = load_config().workflow.wf_next
     return WfNextSettings(
         skip_manual_mastering=wf_next.skip_manual_mastering,
-        approval_gate_audio=wf_next.approval_gates.audio,
-        approval_gate_upload=wf_next.approval_gates.upload,
+        skip_audio_approval=wf_next.skip_audio_approval,
+        skip_upload_approval=wf_next.skip_upload_approval,
     )
 
 
@@ -374,8 +374,8 @@ def process_collection(
         collection,
         "--skip-manual-mastering",
         "true" if settings.skip_manual_mastering else "false",
-        "--approval-gate-audio",
-        "false",
+        "--skip-audio-approval",
+        "true",
     ]
     code, output = _run_command(cmd, log_path, channel_root)
     if code != 0:
@@ -482,11 +482,10 @@ def main(argv: list[str] | None = None) -> int:
     except ConfigError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
-    if settings.approval_gate_audio or settings.approval_gate_upload:
+    if not settings.skip_audio_approval or not settings.skip_upload_approval:
         print(
-            "ERROR: workflow.wf_next.approval_gates が有効です。"
-            "yt-wf-batch は非対話のため承認ゲートを処理できません。"
-            "/wf-next を使うか config/channel/workflow.json で approval_gates を無効化してください",
+            "ERROR: workflow.wf_next.skip_audio_approval / skip_upload_approval が false です。"
+            "yt-wf-batch は非対話のため承認を処理できません。",
             file=sys.stderr,
         )
         return 1

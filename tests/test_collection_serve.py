@@ -23,7 +23,6 @@ CORS はデフォルトで `chrome-extension://` と suno.com / distrokid.com �
 from __future__ import annotations
 
 import http.client
-from functools import partial
 import json
 import logging
 import re
@@ -36,12 +35,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+from functools import partial
 from pathlib import Path
 
 import pytest
 
 from youtube_automation.domains.suno.downloaded.apply import apply_downloaded_artifacts
-from youtube_automation.domains.suno.downloaded.archive import commit_staged_music_files, extract_and_rename_music as _extract_and_rename_music
+from youtube_automation.domains.suno.downloaded.archive import commit_staged_music_files
+from youtube_automation.domains.suno.downloaded.archive import extract_and_rename_music as _extract_and_rename_music
 from youtube_automation.domains.suno.downloaded.models import DownloadedArtifactError, DownloadedPayload
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 from youtube_automation.scripts import collection_serve as collection_serve_module

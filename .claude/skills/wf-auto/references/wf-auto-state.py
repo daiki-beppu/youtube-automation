@@ -676,7 +676,7 @@ def _load_runner_config(root: Path) -> RunnerConfig:
     try:
         os.chdir(root)
         os.environ["CHANNEL_DIR"] = str(root.resolve())
-        from youtube_automation.utils.config import load_config, reset
+        from youtube_automation.configuration import load_config, reset
 
         reset()
         config = load_config()

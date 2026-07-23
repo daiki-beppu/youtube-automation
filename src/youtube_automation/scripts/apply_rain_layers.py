@@ -33,11 +33,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from youtube_automation.configuration import channel_dir
 from youtube_automation.utils.collection_paths import (
     CollectionPaths,
     resolve_collection_dir,
 )
-from youtube_automation.utils.config import channel_dir
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.skill_config import load_skill_config
 

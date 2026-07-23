@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-from functools import partial
 import sys
 import zipfile
+from functools import partial
 from io import StringIO
 from pathlib import Path
 

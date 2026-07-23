@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import urllib.parse
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 
 DOCUMENTATION_DIRNAME = "20-documentation"
 SUNO_PATTERNS_FILENAME = "suno-patterns.yaml"
@@ -20,7 +20,7 @@ DOWNLOADED_ROUTE_SUFFIX = "/downloaded"
 
 
 class PromptEntriesReader(Protocol):
-    def __call__(self, collection_dir: Path) -> list[Any]: ...
+    def __call__(self, collection_dir: Path) -> Sequence[object]: ...
 
 
 class SunoConfig(Protocol):

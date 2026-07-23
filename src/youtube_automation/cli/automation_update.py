@@ -377,6 +377,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
         return _invoke
 
     force = ["--force"]
+    hook_flags = ["--accept-hooks"] if args.accept_hooks else []
     steps: list[tuple[str, Callable[[], None]]] = []
     if not args.allow_dirty:
         steps.append(("git 作業ツリー確認", step_worktree))
@@ -397,7 +398,12 @@ def cmd_apply(args: argparse.Namespace) -> int:
             )
         )
     else:
-        steps.append(("yt-skills sync (--asset all --force)", run(["uv", "run", "yt-skills", "sync", *force])))
+        steps.append(
+            (
+                "yt-skills sync (--asset all --force)",
+                run(["uv", "run", "yt-skills", "sync", *force, *hook_flags]),
+            )
+        )
     steps.append(("smoke check: yt-skills list", run(["uv", "run", "yt-skills", "list"])))
     steps.append(("smoke check: channel config", step_channel_config))
 
@@ -438,6 +444,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--force-sync",
         action="store_true",
         help="互換用。apply は human step 後の機械実行として常に yt-skills sync --force を使う",
+    )
+    p_apply.add_argument(
+        "--accept-hooks",
+        action="store_true",
+        help="settings asset が提示する新規 hook の追加を承認する（省略時は hook だけスキップ）",
     )
     p_apply.add_argument(
         "--sync-only",

@@ -10,8 +10,8 @@ from pathlib import Path
 from youtube_automation.cli.skills_sync import (
     _ASSET_SPECS,
     _asset_root,
+    _distribution_entries,
     _guard_target_with_all,
-    _list_entries,
 )
 from youtube_automation.cli.skills_sync._ops import _has_diff, _prunable_orphan_names
 
@@ -29,6 +29,8 @@ def cmd_diff(args: argparse.Namespace) -> int:
 
     if spec["kind"] == "file":
         return _diff_file_asset(spec, root, target)
+    if spec["kind"] == "json-merge":
+        return _diff_settings_asset(spec, root, target)
     return _diff_dir_asset(spec, root, target)
 
 
@@ -69,12 +71,37 @@ def _diff_file_asset(spec: dict[str, str], root: Path, target: Path) -> int:
     return 0
 
 
+def _diff_settings_asset(spec: dict[str, str], root: Path, target: Path) -> int:
+    from youtube_automation.cli.skills_sync._settings import merge_unique_strings, missing_hooks, read_json_object
+
+    try:
+        template = read_json_object(root / spec["source_filename"])
+        current = read_json_object(target, missing_ok=True)
+        missing_allow = merge_unique_strings(current, template, "allow")
+        missing_deny = merge_unique_strings(current, template, "deny")
+        hook_additions = missing_hooks(current, template)
+    except (OSError, ValueError) as exc:
+        print(f"settings の比較に失敗: {exc}", file=sys.stderr)
+        return 1
+    if not (missing_allow or missing_deny or hook_additions):
+        print("差分なし。必要な settings はすべて存在します。")
+        return 0
+    for value in missing_allow:
+        print(f"  + permissions.allow: {value}")
+    for value in missing_deny:
+        print(f"  + permissions.deny: {value}")
+    for event, group in hook_additions:
+        for hook in group["hooks"]:
+            print(f"  + hooks.{event}: {group.get('matcher')} / {hook.get('type')} / {hook.get('command')}")
+    return 0
+
+
 def _diff_dir_asset(spec: dict[str, str], root: Path, target_dir: Path) -> int:
     if not target_dir.exists():
         print(f"target が存在しません: {target_dir}", file=sys.stderr)
         return 1
 
-    bundled = set(_list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename")))
+    bundled = set(_distribution_entries("skills", root, spec))
     on_disk = set(p.name for p in target_dir.iterdir())
 
     only_bundled = sorted(bundled - on_disk)

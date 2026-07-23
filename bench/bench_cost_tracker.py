@@ -40,11 +40,11 @@ def _seed_log(path: Path, size: int) -> None:
 @contextlib.contextmanager
 def _scoped_channel_dir(path: Path):
     """CHANNEL_DIR を tmp に切り替え、終了時に必ず元へ戻す."""
-    from youtube_automation.utils import config as cfg
+    from youtube_automation.configuration import reset
 
     original = os.environ.get("CHANNEL_DIR")
     os.environ["CHANNEL_DIR"] = str(path)
-    cfg.reset()
+    reset()
     try:
         yield
     finally:
@@ -52,7 +52,7 @@ def _scoped_channel_dir(path: Path):
             os.environ.pop("CHANNEL_DIR", None)
         else:
             os.environ["CHANNEL_DIR"] = original
-        cfg.reset()
+        reset()
 
 
 def _bench_log_generation(size: int) -> Stats:

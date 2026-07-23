@@ -7,10 +7,9 @@ import logging
 import os
 from pathlib import Path
 
-from youtube_automation.utils.audio_visualizer_fill import normalize_ffmpeg_color, parse_color
-from youtube_automation.utils.config.analytics import Analytics, Benchmark
-from youtube_automation.utils.config.audio import Audio
-from youtube_automation.utils.config.comments import (
+from youtube_automation.configuration.analytics import Analytics, Benchmark
+from youtube_automation.configuration.audio import Audio
+from youtube_automation.configuration.comments import (
     FALLBACK_SKIP,
     MAX_LENGTH_DEFAULT,
     PROVIDER_CODEX,
@@ -22,10 +21,9 @@ from youtube_automation.utils.config.comments import (
     GeneratorConfig,
     LiveChatConfig,
 )
-from youtube_automation.utils.config.community_draft import CommunityDraft, CommunityDraftPost
-from youtube_automation.utils.config.config import ChannelConfig
-from youtube_automation.utils.config.content import Content, Descriptions, Genre, Tags, Title
-from youtube_automation.utils.config.distrokid import (
+from youtube_automation.configuration.community_draft import CommunityDraft, CommunityDraftPost
+from youtube_automation.configuration.content import Content, Descriptions, Genre, Tags, Title
+from youtube_automation.configuration.distrokid import (
     REQUIRED_PROFILE_FIELDS,
     AiDisclosure,
     Distrokid,
@@ -33,23 +31,24 @@ from youtube_automation.utils.config.distrokid import (
     DistrokidProfileCredits,
     SongwriterName,
 )
-from youtube_automation.utils.config.localizations import Localizations
-from youtube_automation.utils.config.meta import Branding, ChannelMeta
-from youtube_automation.utils.config.pinned_comment import PinnedComment
-from youtube_automation.utils.config.playlists import Playlists
-from youtube_automation.utils.config.shorts import Shorts, ShortsCollection, ShortsRelease
-from youtube_automation.utils.config.workflow import (
+from youtube_automation.configuration.localizations import Localizations
+from youtube_automation.configuration.meta import Branding, ChannelMeta
+from youtube_automation.configuration.model import ChannelConfig
+from youtube_automation.configuration.pinned_comment import PinnedComment
+from youtube_automation.configuration.playlists import Playlists
+from youtube_automation.configuration.shorts import Shorts, ShortsCollection, ShortsRelease
+from youtube_automation.configuration.workflow import (
     SCHEDULED_AUTOMATION_CADENCE_DAYS,
     SCHEDULED_AUTOMATION_NOTIFICATIONS,
-    ApprovalGates,
     PostPublish,
     PostPublishApprovalGates,
     PostPublishSkipApprovals,
     ScheduledAutomation,
+    WfNew,
     WfNext,
     Workflow,
 )
-from youtube_automation.utils.config.youtube import (
+from youtube_automation.configuration.youtube import (
     OVERLAY_ENCODER_CODECS,
     AudioVisualizerFill,
     AudioVisualizerGlow,
@@ -63,6 +62,7 @@ from youtube_automation.utils.config.youtube import (
     YoutubeApi,
     YoutubeSection,
 )
+from youtube_automation.utils.audio_visualizer_fill import normalize_ffmpeg_color, parse_color
 from youtube_automation.utils.exceptions import ConfigError
 
 logger = logging.getLogger(__name__)
@@ -612,6 +612,13 @@ def _build_workflow(merged: dict) -> Workflow:
     if not isinstance(wf, dict):
         raise ConfigError(f"workflow セクションは object でなければなりません（got {type(wf).__name__}）")
 
+    if "wf_new" in wf:
+        wf_new_raw = wf["wf_new"]
+    else:
+        wf_new_raw = {}
+    if not isinstance(wf_new_raw, dict):
+        raise ConfigError(f"workflow.wf_new は object でなければなりません（got {type(wf_new_raw).__name__}）")
+
     if "wf_next" in wf:
         wf_next_raw = wf["wf_next"]
     else:
@@ -620,16 +627,14 @@ def _build_workflow(merged: dict) -> Workflow:
         raise ConfigError(f"workflow.wf_next は object でなければなりません（got {type(wf_next_raw).__name__}）")
 
     if "approval_gates" in wf_next_raw:
-        gates_raw = wf_next_raw["approval_gates"]
-    else:
-        gates_raw = {}
-    if not isinstance(gates_raw, dict):
-        raise ConfigError(
-            f"workflow.wf_next.approval_gates は object でなければなりません（got {type(gates_raw).__name__}）"
-        )
+        raise ConfigError("workflow.wf_next.approval_gates は廃止されました")
 
-    skip_audio = _resolve_skip_approval(wf_next_raw, gates_raw, "skip_audio_approval", "audio")
-    skip_upload = _resolve_skip_approval(wf_next_raw, gates_raw, "skip_upload_approval", "upload")
+    skip_audio = _workflow_bool(
+        wf_next_raw, "skip_audio_approval", "workflow.wf_next.skip_audio_approval", default=True
+    )
+    skip_upload = _workflow_bool(
+        wf_next_raw, "skip_upload_approval", "workflow.wf_next.skip_upload_approval", default=True
+    )
 
     post_publish_configured = "post-publish" in wf
     post_publish_raw = wf.get("post-publish", {})
@@ -669,8 +674,14 @@ def _build_workflow(merged: dict) -> Workflow:
     }
 
     return Workflow(
+        wf_new=WfNew(
+            skip_plan_selection=_workflow_bool(
+                wf_new_raw,
+                "skip_plan_selection",
+                "workflow.wf_new.skip_plan_selection",
+            ),
+        ),
         wf_next=WfNext(
-            approval_gates=ApprovalGates(audio=not skip_audio, upload=not skip_upload),
             skip_audio_approval=skip_audio,
             skip_upload_approval=skip_upload,
             skip_manual_mastering=_workflow_bool(
@@ -801,27 +812,6 @@ def _scheduled_notification(raw: dict, prefix: str, default: str) -> str:
     return value
 
 
-def _resolve_skip_approval(wf_next_raw: dict, gates_raw: dict, new_key: str, legacy_key: str) -> bool:
-    """`skip_*_approval`（正キー、true=承認省略）と旧 `approval_gates.*`（true=承認する）を解決する.
-
-    同一ゲートに新旧キーを同時指定した場合は、silent な優先解決で片方を潰さず
-    `ConfigError` にする（#1744。falsy を default に潰さない #1449 と同じ strict 方針）。
-    どちらも未指定なら従来既定（承認ゲートなし = skip True）。
-    """
-    new_specified = new_key in wf_next_raw
-    legacy_specified = legacy_key in gates_raw
-    if new_specified and legacy_specified:
-        raise ConfigError(
-            f"workflow.wf_next.{new_key} と workflow.wf_next.approval_gates.{legacy_key} は"
-            "同時指定できません（新キー skip_* 側へ移行してください）"
-        )
-    if new_specified:
-        return _workflow_bool(wf_next_raw, new_key, f"workflow.wf_next.{new_key}")
-    if legacy_specified:
-        return not _workflow_bool(gates_raw, legacy_key, f"workflow.wf_next.approval_gates.{legacy_key}")
-    return True
-
-
 def _resolve_post_publish_skip_approval(skip_raw: dict, gates_raw: dict, step: str) -> bool:
     """`skip_approvals` を正とし、逆向きの旧 `approval_gates` を解決する."""
     if step in skip_raw and step in gates_raw:
@@ -836,8 +826,8 @@ def _resolve_post_publish_skip_approval(skip_raw: dict, gates_raw: dict, step: s
     return True
 
 
-def _workflow_bool(raw: dict, key: str, path: str) -> bool:
-    value = raw.get(key, False)
+def _workflow_bool(raw: dict, key: str, path: str, *, default: bool = False) -> bool:
+    value = raw.get(key, default)
     if not isinstance(value, bool):
         raise ConfigError(f"{path} は boolean でなければなりません（got {type(value).__name__}）")
     return value
@@ -956,11 +946,8 @@ def _build_comments(merged: dict) -> Comments:
         raise ConfigError("comments セクションは object でなければなりません")
     if "templates" in cm:
         raise ConfigError("comments.templates は廃止されました。LLM provider で返信を生成してください")
-    rules_raw = cm.get("rules", [])
-    if rules_raw is None:
-        rules_raw = []
-    if not isinstance(rules_raw, list):
-        raise ConfigError("comments.rules は list でなければなりません")
+    if "rules" in cm:
+        raise ConfigError("comments.rules は廃止されました")
 
     gen_raw = cm.get("generator")
     generator = GeneratorConfig()
@@ -1006,7 +993,6 @@ def _build_comments(merged: dict) -> Comments:
 
     return Comments(
         enabled=bool(cm.get("enabled", False)),
-        rules=[],
         language=language,
         ng_words=list(cm.get("ng_words", [])),
         max_replies_per_run=int(cm.get("max_replies_per_run", 20)),

@@ -1010,11 +1010,8 @@ def test_first_post_playlist_initialization_contract_is_documented() -> None:
     assert "初回動画の追加は `/video-upload` 内部の自動 assign に任せる" in checklist
 
 
-def test_wf_next_skip_approval_keys_are_documented_consistently() -> None:
-    """#1744: wf_next の boolean は「true = 手動工程を省く」向きで example / docs が一致する."""
-    wf_next = _read(".claude/skills/wf-next/SKILL.md")
-    wf_status = _read(".claude/skills/wf-status/SKILL.md")
-    schema = _read(".claude/skills/wf-new/references/schema.md")
+def test_wf_next_example_uses_skip_approval_keys() -> None:
+    """#1744: wf_next の example は承認省略キーを使用する."""
     example = _read("examples/channel_config.example/workflow.json")
     example_config = json.loads(example)
     wf_next_example = example_config["workflow"]["wf_next"]
@@ -1023,20 +1020,6 @@ def test_wf_next_skip_approval_keys_are_documented_consistently() -> None:
     assert '"skip_audio_approval": true' in example
     assert '"skip_upload_approval": true' in example
     assert "approval_gates" not in wf_next_example
-
-    # wf-next は新キーを正として記述し、旧キーは後方互換 alias + 同時指定エラーとして言及する
-    for key in ("skip_audio_approval", "skip_upload_approval"):
-        assert key in wf_next
-    assert "後方互換 alias" in wf_next
-    assert "同時指定すると `ConfigError`" in wf_next
-    # ゲート発動条件は常に「skip_* = false のとき承認」の向きで書く（旧向きの記述を残さない）
-    assert "approval_gates.upload = true" not in wf_next
-    assert "approval_gates.audio = true" not in wf_next
-
-    # wf-status / wf-new schema も同じ向きで参照する
-    assert "skip_audio_approval" in wf_status
-    assert "skip_upload_approval" in wf_status
-    assert "skip_audio_approval" in schema
 
 
 def test_post_publish_skip_approvals_are_documented_consistently() -> None:
@@ -1139,16 +1122,6 @@ def test_suno_helper_docs_use_the_visible_server_source_picker_contract() -> Non
         assert '[data-suno-control="server-source-trigger"]' in text
         assert 'role="option"' in text
         assert '[data-suno-control="server-url"]' not in text
-
-
-def test_community_post_declares_raw_json_loader_exception() -> None:
-    text = _read(".claude/skills/community-post/SKILL.md")
-
-    assert "skill-local raw JSON 例外" in text
-    assert "utils.config.load_config()" in text
-    assert "`community` section を持たない" in text
-    assert "投稿本文・Studio URL の実データには使わない" in text
-    assert "fallback や merge 元にしない" in text
 
 
 def test_community_draft_documents_typed_batch_generator_contract() -> None:

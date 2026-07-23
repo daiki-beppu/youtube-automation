@@ -8,7 +8,7 @@ import pytest
 from matplotlib import font_manager
 from PIL import Image
 
-from youtube_automation.utils import config as config_mod
+from youtube_automation.configuration import reset as reset_configuration
 from youtube_automation.utils import skill_config
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.thumbnail_text import OverlaySpec, TextStyle, compose_thumbnail_text
@@ -21,10 +21,10 @@ from youtube_automation.utils.thumbnail_text.config import (
 
 @pytest.fixture(autouse=True)
 def reset_skill_config_cache():
-    config_mod.reset()
+    reset_configuration()
     skill_config.reset()
     yield
-    config_mod.reset()
+    reset_configuration()
     skill_config.reset()
 
 
@@ -787,7 +787,7 @@ class TestCli:
             encoding="utf-8",
         )
         monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
-        config_mod.reset()
+        reset_configuration()
         skill_config.reset()
         output = tmp_path / "thumbnail-v1.jpg"
 

@@ -27,6 +27,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from youtube_automation.configuration import ChannelConfig, load_config
+from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.utils import cost_tracker
 from youtube_automation.utils.channel_settings import (
     build_update_body,
@@ -35,8 +37,6 @@ from youtube_automation.utils.channel_settings import (
     parse_api_response,
     verify_channel_id,
 )
-from youtube_automation.utils.config import ChannelConfig, load_config
-from youtube_automation.utils.config import channel_dir as _channel_dir
 from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
 from youtube_automation.utils.youtube_service import get_youtube
 

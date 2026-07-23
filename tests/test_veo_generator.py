@@ -301,7 +301,7 @@ def channel_tmp(tmp_path: Path, monkeypatch):
     state ファイルは tmp_path/tmp/veo-operations/<key>.json に着地する。
     """
     monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
-    from youtube_automation.utils.config import reset
+    from youtube_automation.configuration import reset
 
     reset()
     yield tmp_path

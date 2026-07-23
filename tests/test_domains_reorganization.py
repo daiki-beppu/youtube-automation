@@ -156,9 +156,7 @@ def _resolve_imported_modules(module_name: str, tree: ast.AST) -> set[str]:
             if node.module is not None:
                 for alias in node.names:
                     child_module = f"{node.module}.{alias.name}"
-                    imported.add(
-                        child_module if _module_exists(child_module) else node.module
-                    )
+                    imported.add(child_module if _module_exists(child_module) else node.module)
             continue
 
         base_parts = package_parts[: len(package_parts) - node.level + 1]
@@ -190,9 +188,7 @@ from . import titles
 
 
 def test_dependency_import_collection_rejects_unallowed_absolute_child_module() -> None:
-    tree = ast.parse(
-        "from youtube_automation.domains.metadata import localizations\n"
-    )
+    tree = ast.parse("from youtube_automation.domains.metadata import localizations\n")
 
     imported = _resolve_imported_modules(f"{_METADATA_ROOT}.service", tree)
 

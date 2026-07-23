@@ -49,7 +49,7 @@ def tmp_channel(tmp_path: Path, monkeypatch):
         ),
         encoding="utf-8",
     )
-    from youtube_automation.utils.config import reset
+    from youtube_automation.configuration import reset
 
     reset()
     yield tmp_path

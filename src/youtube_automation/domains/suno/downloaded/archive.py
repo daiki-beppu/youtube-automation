@@ -342,9 +342,7 @@ def extract_and_rename_music(
 
     staging_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-"))
     try:
-        placed_count = _extract_and_rename_music_to_dir(
-            coll_dir, download_path, staging_dir, prompt_entries_reader
-        )
+        placed_count = _extract_and_rename_music_to_dir(coll_dir, download_path, staging_dir, prompt_entries_reader)
         if placed_count > 0:
             try:
                 commit_staged_music_files(coll_dir, staging_dir)

@@ -11,8 +11,9 @@ import logging
 import re
 from pathlib import Path
 
+from youtube_automation.configuration import load_config
+from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.config import load_config
 from youtube_automation.utils.descriptions_md import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
@@ -149,6 +150,39 @@ class PreflightMixin:
                     f"→ /video-description で多言語翻訳を含めて再生成してください。\n"
                     f"→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
                 )
+
+        # 実 upload と同じ generator で全 locale の title を構築し、API 呼び出し前の
+        # --plan preflight でも YouTube の 100 codepoint 制限を検証する。
+        generator = BAHMetadataGenerator(str(collection_dir))
+        # 同じ invocation で読み込んだ config を使い、plan と upload の設定 snapshot を揃える。
+        # 最小 stub を使う既存 unit test では localization data が無いため生成を省略する。
+        generator.config = config
+        localization_data = getattr(config.localizations, "data", {})
+        languages = localization_data.get("languages", {}) if isinstance(localization_data, dict) else {}
+        supported = localization_data.get("supported_languages", []) if isinstance(localization_data, dict) else []
+        templates_complete = bool(supported) and all(
+            languages.get(lang, {}).get("title_template") for lang in supported
+        )
+        try:
+            localizations = (
+                generator.generate_localizations(
+                    title,
+                    description,
+                    scene_phrases,
+                    scene_emoji=generator._load_scene_emoji(),
+                )
+                if templates_complete
+                else {}
+            )
+        except ValueError as exc:
+            raise RuntimeError(f"❌ ローカライズタイトル検証に失敗:\n{exc}") from exc
+        over_limit = [
+            f"{locale}={len(value.get('title', ''))}c: {value.get('title', '')!r}"
+            for locale, value in localizations.items()
+            if check_title_codepoint_limit(value.get("title", ""))
+        ]
+        if over_limit:
+            raise RuntimeError("❌ ローカライズタイトルが 100 codepoint を超過:\n  - " + "\n  - ".join(over_limit))
 
         # タグ件数 / quotation 文字数チェック
         # descriptions.md の「タグ（YouTube タグ欄）」が _upload_complete_collection で

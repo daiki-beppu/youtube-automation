@@ -27,7 +27,7 @@ import logging
 import sys
 from pathlib import Path
 
-from youtube_automation.utils.config import channel_dir, load_config
+from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.utils.exceptions import AutomationError, ConfigError, ValidationError
 from youtube_automation.utils.preflight_checks import requires_scene_phrases
 

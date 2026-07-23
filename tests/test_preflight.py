@@ -10,7 +10,7 @@ import pytest
 
 from youtube_automation.agents._preflight import PreflightMixin
 from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
-from youtube_automation.utils.config import load_config
+from youtube_automation.configuration import load_config
 
 
 class _PreflightHarness(PreflightMixin):
@@ -296,6 +296,31 @@ def test_low_cpm_localization_warning_still_runs(
     _run_preflight(channel_dir, collection_dir, monkeypatch)
 
     assert "low CPM localization languages included: ko" in caplog.text
+
+
+def test_plan_preflight_rejects_overlong_localized_title(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    channel_dir = _write_minimal_channel(tmp_path, youtube_language="en", supported_languages=["en", "de"])
+    _write_json(
+        channel_dir / "config" / "localizations.json",
+        {
+            "supported_languages": ["en", "de"],
+            "languages": {
+                "en": {"title_template": "{scene_phrase}"},
+                "de": {"title_template": "{scene_phrase} " + "x" * 100},
+            },
+        },
+    )
+    collection_dir = _write_collection(
+        channel_dir,
+        scene_phrases={"en": "focus", "de": "ruhiger Fokus"},
+        description="A continuous BGM mix without chapter markers.",
+    )
+
+    with pytest.raises(RuntimeError, match=r"\[de\] 114 codepoints.*ruhiger Fokus"):
+        _run_preflight(channel_dir, collection_dir, monkeypatch)
 
 
 def test_target_duration_config_does_not_block_upload_preflight(

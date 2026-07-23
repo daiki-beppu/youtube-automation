@@ -7,7 +7,7 @@ from pathlib import Path
 
 from youtube_automation import cli_entrypoints
 from youtube_automation.cli import channel
-from youtube_automation.utils.config import loader
+from youtube_automation.configuration import loader
 
 
 def _make_channel(workspace: Path, slug: str) -> Path:

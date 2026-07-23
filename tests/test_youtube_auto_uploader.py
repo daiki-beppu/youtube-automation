@@ -913,12 +913,47 @@ class TestUploadCompleteCollectionDedup:
         assert result["video_id"] == "VID_NEW"
         assert result["upload_source"] == "new_upload"
 
+    def test_workflow_state_master_video_wins_over_preview(self, tmp_path):
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+        preview = col_dir / "01-master" / "A-Preview.mp4"
+        master = col_dir / "01-master" / "Z-Master.mp4"
+        preview.write_bytes(b"preview")
+        master.write_bytes(b"master")
+        (col_dir / "workflow-state.json").write_text(
+            json.dumps({"assets": {"master_video": master.name}}), encoding="utf-8"
+        )
+
+        with (
+            patch.object(uploader, "_load_descriptions_md", return_value=None),
+            patch.object(uploader, "_find_existing_video_by_title", return_value=None),
+            patch.object(uploader, "upload_video", return_value="VID") as upload,
+        ):
+            uploader._upload_complete_collection(col_dir, mock_gen)
+
+        assert upload.call_args.args[0] == str(master)
+
+    def test_fallback_never_selects_preview(self, tmp_path):
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+        (col_dir / "01-master" / "video.mp4").unlink()
+        (col_dir / "01-master" / "A-Preview.mp4").write_bytes(b"preview")
+        master = col_dir / "01-master" / "Z-Master.mp4"
+        master.write_bytes(b"master")
+
+        with (
+            patch.object(uploader, "_load_descriptions_md", return_value=None),
+            patch.object(uploader, "_find_existing_video_by_title", return_value=None),
+            patch.object(uploader, "upload_video", return_value="VID") as upload,
+        ):
+            uploader._upload_complete_collection(col_dir, mock_gen)
+
+        assert upload.call_args.args[0] == str(master)
+
     def test_prebuilt_upload_keeps_localization_timestamps_when_m4a_needs_probe_fallback(self, tmp_path, monkeypatch):
         """#1323: prebuilt upload 経路でも `.m4a` fallback 後の timestamp を localizations に渡す."""
         from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+        from youtube_automation.configuration import load_config
         from youtube_automation.domains.metadata import BAHMetadataGenerator
         from youtube_automation.domains.metadata import service as metadata_generator_module
-        from youtube_automation.utils.config import load_config
 
         col_dir = tmp_path / "20990101-live-circuit-collection"
         (col_dir / "01-master").mkdir(parents=True)

@@ -10,14 +10,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from googleapiclient.errors import HttpError
 
+from youtube_automation.configuration.comments import (
+    Comments,
+    GeneratorConfig,
+)
 from youtube_automation.scripts import comment_reply
 from youtube_automation.scripts.comment_reply import _load_agent_replies
 from youtube_automation.utils.comments.history import ReplyHistory
 from youtube_automation.utils.comments.replier import _SAVE_MAX_RETRIES, CommentReplier
-from youtube_automation.utils.config.comments import (
-    Comments,
-    GeneratorConfig,
-)
 from youtube_automation.utils.exceptions import AutomationError, ConfigError, YouTubeAPIError
 
 _PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_genai_client"
@@ -223,7 +223,6 @@ def _make_http_error(status: int, reason: str, api_reason: str) -> HttpError:
 def _make_config(**overrides) -> Comments:
     base = dict(
         enabled=True,
-        rules=[],
         generator=GeneratorConfig(
             provider="gemini",
             model="gemini-3.5-flash",
@@ -1636,7 +1635,6 @@ def _make_gemini_config(**overrides) -> Comments:
     """global provider=gemini を設定した Comments を返す."""
     base = dict(
         enabled=True,
-        rules=[],
         ng_words=[],
         max_replies_per_run=20,
         delay_between_replies_sec=0.0,
@@ -1802,10 +1800,9 @@ def test_llm_retry_failure_is_skipped(tmp_path):
     assert mock_client.models.generate_content.call_count == 2
 
 
-def test_legacy_rule_provider_is_ignored(tmp_path):
-    """rules[].provider は後方互換で受け取るが処理では無視する."""
+def test_agent_reply_path_uses_configured_provider_metadata(tmp_path):
+    """エージェント返信ファイル経路は生成器を呼ばず設定済み provider を記録する."""
     config = _make_config(
-        rules=[],
         generator=GeneratorConfig(
             provider="codex",
             model=None,
@@ -1833,9 +1830,8 @@ def test_legacy_rule_provider_is_ignored(tmp_path):
 
 
 def test_agent_and_export_paths_do_not_require_generator_setup(tmp_path):
-    """provider を使わない経路は rule.provider validation を踏まず候補処理できる."""
+    """エージェント返信と export 経路は生成器の初期化を必要としない."""
     config = _make_config(
-        rules=[],
         generator=GeneratorConfig(
             provider="codex",
             model=None,
@@ -2044,9 +2040,9 @@ def test_fetch_video_status_wraps_http_error(tmp_path, no_retry_backoff):
         fetch_video_status(yt, ["v1"])
 
 
-def test_legacy_rule_generator_key_is_ignored_by_loader():
-    """旧 rules[].generator は後方互換で読み捨てる."""
-    from youtube_automation.utils.config.loader import _build_comments
+def test_legacy_rule_generator_key_is_rejected_by_loader():
+    """廃止された comments.rules は読み捨てず拒否する."""
+    from youtube_automation.configuration.loader import _build_comments
 
     merged = {
         "comments": {
@@ -2055,8 +2051,8 @@ def test_legacy_rule_generator_key_is_ignored_by_loader():
         }
     }
 
-    comments = _build_comments(merged)
-    assert comments.rules == []
+    with pytest.raises(ConfigError, match=r"comments\.rules"):
+        _build_comments(merged)
 
 
 # ─── 履歴 save リトライのテスト (#382) ────────────────────────────────────────

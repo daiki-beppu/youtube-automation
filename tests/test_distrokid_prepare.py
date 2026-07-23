@@ -64,7 +64,7 @@ def _filenames(n: int) -> list[str]:
 
 def _fake_config(*, enabled: bool = True, artist: str = ""):
     """load_config() の戻り値を模倣する fake config オブジェクト."""
-    from youtube_automation.utils.config.distrokid import (
+    from youtube_automation.configuration.distrokid import (
         Distrokid,
         DistrokidProfile,
     )

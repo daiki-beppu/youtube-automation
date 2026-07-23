@@ -13,8 +13,8 @@ import contextlib
 import logging
 import sys
 
+from youtube_automation.configuration import load_config
 from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.config import load_config
 from youtube_automation.utils.youtube_service import get_youtube_readonly
 
 logger = logging.getLogger(__name__)

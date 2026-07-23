@@ -139,7 +139,7 @@ def _patch_generate_master(monkeypatch, *, return_path: Path | None = None):
 
 
 def _patch_load_config(monkeypatch, *, target_duration_min: float | None = None):
-    """`utils.config.load_config()` を差し替えて audio.target_duration_min をテスト制御下に置く。"""
+    """`configuration.load_config()` を差し替えて audio.target_duration_min をテスト制御下に置く。"""
     audio_ns = SimpleNamespace(target_duration_min=target_duration_min)
     cfg_ns = SimpleNamespace(audio=audio_ns)
 

@@ -12,7 +12,7 @@
 - `--backup`（既定 True、`--no-backup` で無効化）で distrokid.json.bak を残す
 - songwriter 文字列 "First Last" → {first, last}、3 語以上は middle に中間語
 - ai_disclosure は新 schema の default を付与
-- 変換後は新 loader（utils.config）で読み込めること
+- 変換後は新 loader（configuration）で読み込めること
 """
 
 from __future__ import annotations
@@ -23,8 +23,8 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.cli.distrokid_migrate import main
-from youtube_automation.utils.config import load_config
-from youtube_automation.utils.config import reset as reset_config
+from youtube_automation.configuration import load_config
+from youtube_automation.configuration import reset as reset_config
 
 
 @pytest.fixture(autouse=True)

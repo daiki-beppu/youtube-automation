@@ -25,12 +25,12 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
+from youtube_automation.configuration import load_config
 from youtube_automation.scripts.collection_serve import find_distrokid_discs
 from youtube_automation.scripts.distrokid_release import (
     build_release_payload,
 )
 from youtube_automation.utils.collection_paths import CollectionPaths, resolve_collection_dir
-from youtube_automation.utils.config import load_config
 from youtube_automation.utils.distrokid_prepare import (
     _MAX_TRACKS_PER_DISC,
     COVER_ART_FILENAME,

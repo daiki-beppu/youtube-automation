@@ -8,6 +8,7 @@ from pathlib import Path
 
 from youtube_automation.cli.skills_sync import (
     _ASSET_SPECS,
+    _DEV_ONLY_SKILL_NAMES,
     _asset_root,
     _guard_target_with_all,
     _list_entries,
@@ -19,6 +20,7 @@ from youtube_automation.cli.skills_sync._ops import (
     _prune_orphans,
     _symlink_entry,
 )
+from youtube_automation.cli.skills_sync._settings import sync_settings_asset
 from youtube_automation.utils.numbered_duplicates import (
     CLEANUP_GUIDE_URL,
     format_duplicate_name,
@@ -68,6 +70,8 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
     if spec["kind"] == "file":
         return _sync_file_asset(spec, root, target, args)
+    if spec["kind"] == "json-merge":
+        return sync_settings_asset(spec, root, target, args)
     return _sync_dir_asset(spec, root, target, args)
 
 
@@ -93,6 +97,7 @@ def _sync_all(args: argparse.Namespace) -> int:
             only=args.only,
             prune=args.prune,
             yes=args.yes,
+            accept_hooks=getattr(args, "accept_hooks", False),
         )
         rc = cmd_sync(sub_args)
         if rc != 0:
@@ -148,14 +153,16 @@ def _sync_dir_asset(
     target_dir.mkdir(parents=True, exist_ok=True)
     warned_numbered_duplicates = _warn_numbered_duplicates(target_dir)
 
-    all_entries = _list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename"))
+    exclude = _DEV_ONLY_SKILL_NAMES if args.asset == "skills" else frozenset()
+    all_entries = _list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename"), exclude=exclude)
     entries = list(all_entries)
     if args.only:
         only = set(args.only)
         entries = [s for s in entries if s in only]
         missing = only - set(entries)
         for m in sorted(missing):
-            print(f"  [warn] 同梱版に含まれません: {m}", file=sys.stderr)
+            reason = "配布対象外（開発専用）" if m in _DEV_ONLY_SKILL_NAMES else "同梱版に含まれません"
+            print(f"  [warn] {reason}: {m}", file=sys.stderr)
 
     op = _symlink_entry if args.symlink else _copy_entry
     counts: dict[str, int] = {"created": 0, "updated": 0, "skipped": 0, "linked": 0}

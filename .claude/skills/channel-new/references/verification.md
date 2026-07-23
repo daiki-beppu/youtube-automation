@@ -28,7 +28,7 @@ uv run yt-doctor --json
 
 ```bash
 uv run python3 -c "
-from youtube_automation.utils.config import load_config
+from youtube_automation.configuration import load_config
 c = load_config()
 print(f'Channel: {c.meta.channel_name} ({c.meta.channel_short})')
 print(f'Genre: {c.content.genre.primary} / {c.content.genre.style}')

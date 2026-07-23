@@ -70,7 +70,7 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 ### 監査で plan 化を見送った残課題
 
 - **doctor.py（2,650 行・61 コミット churn）の god module 分割**（L、テストは厚く安全）— TTP/branding 業務ロジックの `utils/` 移設 + GCP チェックのサブモジュール化。ユーザー未選択
-- **中粒の構造整理**（M）— utils 83 モジュールの flat 化解消（suno_downloaded_* 8 分片の統合、`utils/comments/`・`utils/config/` パッケージ方式に倣う）/ metadata_generator.py（1,271 行）の 4 責務分割 / doc-contract 系テスト ~25 本への pytest marker 付与と behavioral-only fast lane。ユーザー未選択
+- **中粒の構造整理**（M）— utils 83 モジュールの flat 化解消（suno_downloaded_* 8 分片の統合、`utils/comments/`・`configuration/` パッケージ方式に倣う）/ metadata_generator.py（1,271 行）の 4 責務分割 / doc-contract 系テスト ~25 本への pytest marker 付与と behavioral-only fast lane。ユーザー未選択
 - **PERF-02: サブ分析間の `_get_video_details` / `dimensions=video` クエリ共有**（M、collect 1 回のクォータをさらに削減）— 022 の続編として設計余地
 - **`strategic_analytics.py` の `comprehensive` モード**（呼び出し元ゼロ、per-video N+1 内蔵）— 使うか消すかの判断待ち。023 のスコープ外として温存
 - **japanize-matplotlib の置換移行**（S-M、MED リスク）— 024 は glyph 回帰テストの設置まで。テストが fail したら `font_manager.addfont()` 直接登録へ移行

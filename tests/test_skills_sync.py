@@ -37,6 +37,9 @@ def fake_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (skills_dir / "channel-research" / "SKILL.md").write_text("# research\n", encoding="utf-8")
     (skills_dir / "channel-direction").mkdir()
     (skills_dir / "channel-direction" / "SKILL.md").write_text("# direction\n", encoding="utf-8")
+    (tmp_path / ".claude" / "settings.template.json").write_text(
+        '{"permissions": {"allow": [], "deny": []}, "hooks": {}}\n', encoding="utf-8"
+    )
 
     monkeypatch.setattr(skills_sync, "_editable_root", lambda: tmp_path)
     return tmp_path

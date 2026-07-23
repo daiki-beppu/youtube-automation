@@ -18,6 +18,7 @@ Asset 種別 (`--asset`):
     workflow-cheatsheet : workflow 使い分けチートシート (`docs/workflow-cheatsheet.md`、単一ファイル)
     features            : 全 skill カタログ (`docs/features.md`、単一ファイル)
     auth-template       : OAuth client secrets テンプレート (`auth/client_secrets.template.json`、単一ファイル)
+    settings            : Claude Code 設定 (`.claude/settings.json`、JSON merge)
 
 `yt-skills sync` (asset 未指定) は `--asset all` と同等で、配布物が `docs/`
 にリンクを張る前提で動くため、デフォルトで全 asset を sync する設計に
@@ -81,7 +82,17 @@ _ASSET_SPECS: dict[str, dict[str, str]] = {
         "default_target": "auth/client_secrets.template.json",
         "label": "OAuth client_secrets テンプレ",
     },
+    "settings": {
+        "kind": "json-merge",
+        "resource_name": "_claude_settings",
+        "source_subdir": ".claude",
+        "source_filename": "settings.template.json",
+        "default_target": ".claude/settings.json",
+        "label": "Claude Code 設定",
+    },
 }
+
+_DEV_ONLY_SKILL_NAMES = frozenset({"automation-release", "shadcn"})
 
 
 def _editable_root() -> Path:
@@ -143,24 +154,35 @@ def _guard_target_with_all(args: argparse.Namespace) -> None:
         )
 
 
-def _list_entries(root: Path, kind: str = "dir", source_filename: str | None = None) -> list[str]:
+def _list_entries(
+    root: Path,
+    kind: str = "dir",
+    source_filename: str | None = None,
+    *,
+    exclude: frozenset[str] = frozenset(),
+) -> list[str]:
     """asset 配下の entry 名を返す。
 
     kind="dir"  : `root.iterdir()` の名前を sort して返す。
     kind="file" : `[source_filename]` を返す (単一エントリ)。
     """
-    if kind == "file":
+    if kind in {"file", "json-merge"}:
         if source_filename is None:
             raise ValueError("kind='file' の asset には source_filename が必要です")
         return [source_filename]
-    return sorted(p.name for p in root.iterdir())
+    return sorted(p.name for p in root.iterdir() if p.name not in exclude)
+
+
+def _distribution_entries(asset: str, root: Path, spec: dict[str, str]) -> list[str]:
+    exclude = _DEV_ONLY_SKILL_NAMES if asset == "skills" else frozenset()
+    return _list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename"), exclude=exclude)
 
 
 def bundled_skill_names() -> list[str]:
     """`yt-skills sync --asset skills` が配布する skill 名一覧を返す。"""
     spec = _ASSET_SPECS["skills"]
     root = _asset_root("skills")
-    return _list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename"))
+    return _distribution_entries("skills", root, spec)
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -177,7 +199,8 @@ def cmd_list(args: argparse.Namespace) -> int:
     entries = _list_entries(root, kind=spec["kind"], source_filename=spec.get("source_filename"))
     print(f"同梱{spec['label']} {len(entries)} 件 (source: {root})")
     for name in entries:
-        print(f"  - {name}")
+        suffix = " (開発専用・downstream 配布対象外)" if name in _DEV_ONLY_SKILL_NAMES else ""
+        print(f"  - {name}{suffix}")
     return 0
 
 

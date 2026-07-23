@@ -11,8 +11,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import ClassVar
 
+from youtube_automation.configuration import load_config
 from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.config import load_config
 from youtube_automation.utils.publish_schedule import resolve_default_publish_at
 from youtube_automation.utils.schedule import get_schedule_timezone
 

@@ -34,6 +34,13 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ChannelStockTable } from "@/features/channel-stock/channel-stock-table"
+import type { ChannelOverview, Summary } from "@/lib/dashboard-types"
+import {
+  formatCollectedAt,
+  formatInteger,
+  formatSignedInteger,
+} from "@/lib/dashboard-formatters"
 import {
   Table,
   TableBody,
@@ -42,30 +49,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-
-type Summary = {
-  views: number
-  watch_time_minutes: number
-  subscribers_net: number
-  engagements: number
-  average_view_percentage: number
-}
-
-type DashboardError = { code: string; message: string }
-
-type ChannelOverview = {
-  id: string
-  name: string
-  status: string
-  scheduled_count: number | null
-  snapshot: string | null
-  collected_at: string | null
-  period: { start_date: string | null; end_date: string | null }
-  summary: Summary | null
-  error: DashboardError | null
-  refresh_error: DashboardError | null
-  video_count: number
-}
 
 type Video = {
   video_id: string
@@ -84,11 +67,6 @@ type Video = {
 type ChannelDetail = Omit<ChannelOverview, "video_count"> & { videos: Video[] }
 type OverviewResponse = { schema_version: number; channels: ChannelOverview[] }
 
-const integer = new Intl.NumberFormat("ja-JP")
-const dateTime = new Intl.DateTimeFormat("ja-JP", {
-  dateStyle: "medium",
-  timeStyle: "short",
-})
 const chartConfig = {
   views: { label: "再生数", color: "var(--chart-1)" },
 } satisfies ChartConfig
@@ -101,12 +79,6 @@ async function requestJson<T>(path: string): Promise<T> {
     throw new Error(`HTTP ${response.status}`)
   }
   return response.json() as Promise<T>
-}
-
-function formatCollectedAt(value: string | null): string {
-  if (!value) return "未収集"
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : dateTime.format(date)
 }
 
 function statusLabel(status: string): string {
@@ -122,11 +94,7 @@ function statusLabel(status: string): string {
 function channelBadgeLabel(channel: ChannelOverview): string {
   if (channel.status !== "ready") return statusLabel(channel.status)
   if (channel.scheduled_count === null) return "公開予約 未取得"
-  return `公開予約 ${integer.format(channel.scheduled_count)}本`
-}
-
-function signedInteger(value: number): string {
-  return value > 0 ? `+${integer.format(value)}` : integer.format(value)
+  return `公開予約 ${formatInteger(channel.scheduled_count)}本`
 }
 
 function LoadingState() {
@@ -153,13 +121,13 @@ function SummaryMetrics({ summary }: { summary: Summary }) {
       <div className="rounded-lg bg-muted p-4">
         <dt className="text-xs text-muted-foreground">再生数</dt>
         <dd className="text-2xl font-semibold tabular-nums">
-          {integer.format(summary.views)}
+          {formatInteger(summary.views)}
         </dd>
       </div>
       <div className="rounded-lg bg-muted p-4">
         <dt className="text-xs text-muted-foreground">総再生時間</dt>
         <dd className="text-2xl font-semibold tabular-nums">
-          {integer.format(summary.watch_time_minutes)}
+          {formatInteger(summary.watch_time_minutes)}
           <span className="ml-1 text-sm font-normal text-muted-foreground">
             分
           </span>
@@ -168,13 +136,13 @@ function SummaryMetrics({ summary }: { summary: Summary }) {
       <div className="rounded-lg bg-muted p-4">
         <dt className="text-xs text-muted-foreground">純増登録者</dt>
         <dd className="text-2xl font-semibold tabular-nums">
-          {integer.format(summary.subscribers_net)}
+          {formatInteger(summary.subscribers_net)}
         </dd>
       </div>
       <div className="rounded-lg bg-muted p-4">
         <dt className="text-xs text-muted-foreground">エンゲージメント</dt>
         <dd className="text-2xl font-semibold tabular-nums">
-          {integer.format(summary.engagements)}
+          {formatInteger(summary.engagements)}
         </dd>
       </div>
     </dl>
@@ -210,7 +178,7 @@ function ChannelOverviewGrid({
           >
             <CardHeader className="gap-3">
               <div className="min-w-0">
-                <CardTitle className="break-words text-lg">
+                <CardTitle className="text-lg break-words">
                   {channel.name}
                 </CardTitle>
                 <CardDescription>
@@ -241,7 +209,7 @@ function ChannelOverviewGrid({
                   <dt className="text-xs text-muted-foreground">期間再生数</dt>
                   <dd className="text-lg font-semibold tabular-nums">
                     {channel.summary
-                      ? integer.format(channel.summary.views)
+                      ? formatInteger(channel.summary.views)
                       : "—"}
                   </dd>
                 </div>
@@ -249,7 +217,7 @@ function ChannelOverviewGrid({
                   <dt className="text-xs text-muted-foreground">純増登録者</dt>
                   <dd className="text-lg font-semibold tabular-nums">
                     {channel.summary
-                      ? signedInteger(channel.summary.subscribers_net)
+                      ? formatSignedInteger(channel.summary.subscribers_net)
                       : "—"}
                   </dd>
                 </div>
@@ -257,14 +225,14 @@ function ChannelOverviewGrid({
                   <dt className="text-xs text-muted-foreground">総再生時間</dt>
                   <dd className="text-lg font-semibold tabular-nums">
                     {channel.summary
-                      ? `${integer.format(channel.summary.watch_time_minutes)}分`
+                      ? `${formatInteger(channel.summary.watch_time_minutes)}分`
                       : "—"}
                   </dd>
                 </div>
                 <div className="rounded-lg bg-muted p-3">
                   <dt className="text-xs text-muted-foreground">分析動画</dt>
                   <dd className="text-lg font-semibold tabular-nums">
-                    {integer.format(channel.video_count)}本
+                    {formatInteger(channel.video_count)}本
                   </dd>
                 </div>
               </dl>
@@ -375,7 +343,7 @@ function Detail({ detail }: { detail: ChannelDetail }) {
               </CardDescription>
             </CardHeader>
             <CardContent className="px-0">
-              <Table>
+              <Table aria-label="動画パフォーマンス">
                 <TableHeader>
                   <TableRow>
                     <TableHead>動画</TableHead>
@@ -392,16 +360,16 @@ function Detail({ detail }: { detail: ChannelDetail }) {
                         {video.title}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {integer.format(video.views)}
+                        {formatInteger(video.views)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {integer.format(video.impressions)}
+                        {formatInteger(video.impressions)}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {video.ctr_percentage.toFixed(1)}%
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {integer.format(video.engagements)}
+                        {formatInteger(video.engagements)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -503,6 +471,7 @@ export function App() {
         ) : null}
         {channels && channels.length > 0 ? (
           <div className="grid gap-8">
+            <ChannelStockTable channels={channels} />
             <ChannelOverviewGrid
               channels={channels}
               selectedId={selectedId}

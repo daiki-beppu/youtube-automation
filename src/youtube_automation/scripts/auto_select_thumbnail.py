@@ -547,7 +547,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
 
-        from youtube_automation.utils.config import channel_dir
+        from youtube_automation.configuration import channel_dir
 
         channel_root = channel_dir()
         reference_images = resolve_reference_images(cfg, channel_root)

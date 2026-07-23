@@ -24,11 +24,11 @@ import json
 import sys
 from pathlib import Path
 
-from youtube_automation.utils.config import channel_dir, load_config
+from youtube_automation.configuration import channel_dir, load_config
 
 # loader と同一ロジックで書き込み前検証するため、private builder を意図的に共有する
-from youtube_automation.utils.config.loader import _build_workflow
-from youtube_automation.utils.config.workflow import (
+from youtube_automation.configuration.loader import _build_workflow
+from youtube_automation.configuration.workflow import (
     SCHEDULED_AUTOMATION_CADENCE_DAYS,
     SCHEDULED_AUTOMATION_NOTIFICATIONS,
     ScheduledAutomation,

@@ -27,7 +27,7 @@ def image_sha256(image_path: Path) -> str:
 def _resolve_channel_root(channel_root: Path | None) -> Path:
     if channel_root is not None:
         return channel_root
-    from youtube_automation.utils.config import channel_dir
+    from youtube_automation.configuration import channel_dir
 
     return channel_dir()
 

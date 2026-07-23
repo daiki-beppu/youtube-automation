@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from youtube_automation.configuration import reset as reset_config
 from youtube_automation.utils import skill_config
-from youtube_automation.utils.config import reset as reset_config
 from youtube_automation.utils.exceptions import ConfigError
 
 
@@ -541,6 +541,44 @@ def test_collection_ideate_freshness_days_default_comes_from_skill_config(tmp_pa
     cfg = skill_config.load_skill_config("collection-ideate", use_cache=False, channel_dir=channel_dir)
 
     assert cfg.get("freshness_days") == 7
+
+
+@pytest.mark.parametrize(
+    ("skill", "path"),
+    [
+        ("collection-ideate", ("preview", "skip_cost_confirm")),
+        ("lyria", ("skip_generation_approval",)),
+        ("videoup", ("skip_preview_approval",)),
+        ("loop-video", ("skip_billing_approval",)),
+        ("loop-video", ("skip_preview_approval",)),
+    ],
+)
+def test_unattended_approval_skip_defaults_are_opt_in(tmp_path, skill, path):
+    """#2418: 既存チャンネルは全停止点を従来どおり維持する."""
+    channel_dir = tmp_path / "ch"
+    channel_dir.mkdir()
+
+    value = skill_config.load_skill_config(skill, use_cache=False, channel_dir=channel_dir)
+    for key in path:
+        value = value[key]
+
+    assert value is False
+
+
+def test_collection_ideate_skip_cost_confirm_channel_override(tmp_path):
+    """#2422: nested override は他の preview default を保持して deep-merge される."""
+    channel_dir = tmp_path / "ch"
+    overrides = channel_dir / "config" / "skills"
+    overrides.mkdir(parents=True)
+    (overrides / "collection-ideate.yaml").write_text(
+        yaml.safe_dump({"preview": {"skip_cost_confirm": True}}),
+        encoding="utf-8",
+    )
+
+    preview = skill_config.load_skill_config("collection-ideate", use_cache=False, channel_dir=channel_dir)["preview"]
+
+    assert preview["skip_cost_confirm"] is True
+    assert preview["candidate_count"] == 3
 
 
 def test_collection_ideate_freshness_days_channel_override(tmp_path):

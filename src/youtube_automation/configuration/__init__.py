@@ -14,10 +14,9 @@
     Distrokid                        # `distrokid` セクション（型ヒント用）
 """
 
-from youtube_automation.utils.config.community_draft import CommunityDraft
-from youtube_automation.utils.config.config import ChannelConfig
-from youtube_automation.utils.config.distrokid import Distrokid
-from youtube_automation.utils.config.loader import (
+from youtube_automation.configuration.community_draft import CommunityDraft
+from youtube_automation.configuration.distrokid import Distrokid
+from youtube_automation.configuration.loader import (
     channel_dir,
     find_workspace_root,
     load_config,
@@ -25,8 +24,9 @@ from youtube_automation.utils.config.loader import (
     select_channel,
     workspace_channels,
 )
-from youtube_automation.utils.config.pinned_comment import PinnedComment
-from youtube_automation.utils.config.shorts import Shorts
+from youtube_automation.configuration.model import ChannelConfig
+from youtube_automation.configuration.pinned_comment import PinnedComment
+from youtube_automation.configuration.shorts import Shorts
 
 __all__ = [
     "ChannelConfig",

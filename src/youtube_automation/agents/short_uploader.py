@@ -27,9 +27,9 @@ from pathlib import Path
 from typing import Optional
 
 from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.config import channel_dir, load_config
 from youtube_automation.utils.exceptions import QuotaExhaustedError, UploadError
 from youtube_automation.utils.schedule import get_schedule_timezone, now_in_schedule_tz
 

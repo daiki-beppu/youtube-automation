@@ -202,8 +202,8 @@ def channel(tmp_path, monkeypatch):
         "_wf_next_settings",
         lambda: wf_batch.WfNextSettings(
             skip_manual_mastering=True,
-            approval_gate_audio=False,
-            approval_gate_upload=False,
+            skip_audio_approval=True,
+            skip_upload_approval=True,
         ),
     )
     return root
@@ -386,7 +386,7 @@ class TestMainBatchRun:
         assert rc == 1
         assert "--only" in capsys.readouterr().err
 
-    def test_approval_gates_enabled_exits_1(self, channel, monkeypatch, capsys):
+    def test_approval_enabled_exits_1(self, channel, monkeypatch, capsys):
         planning = channel / "collections" / "planning"
         _make_collection(planning, "001-a-collection", _state())
         monkeypatch.setattr(
@@ -394,15 +394,15 @@ class TestMainBatchRun:
             "_wf_next_settings",
             lambda: wf_batch.WfNextSettings(
                 skip_manual_mastering=False,
-                approval_gate_audio=True,
-                approval_gate_upload=False,
+                skip_audio_approval=False,
+                skip_upload_approval=True,
             ),
         )
 
         rc = wf_batch.main([])
 
         assert rc == 1
-        assert "approval_gates" in capsys.readouterr().err
+        assert "skip_audio_approval" in capsys.readouterr().err
 
     def test_no_targets_exits_0_without_reports(self, channel, capsys):
         rc = wf_batch.main([])

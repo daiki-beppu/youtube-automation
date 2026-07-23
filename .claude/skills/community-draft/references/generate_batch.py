@@ -13,7 +13,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from youtube_automation.utils.config import channel_dir, load_config
+from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.utils.exceptions import ConfigError
 
 _ALLOWED_VARIABLES = frozenset({"title", "date", "custom_message"})

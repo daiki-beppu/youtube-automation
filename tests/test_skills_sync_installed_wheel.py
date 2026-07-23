@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -46,7 +47,12 @@ def _tracked_skill_files(repo_root: Path) -> set[Path]:
     result = _run("git", "ls-files", "--", ".claude/skills", cwd=repo_root)
     assert result.returncode == 0, result.stderr
     prefix = Path(".claude/skills")
-    return {Path(line).relative_to(prefix) for line in result.stdout.splitlines() if line}
+    dev_only = {"automation-release", "shadcn"}
+    return {
+        relative
+        for line in result.stdout.splitlines()
+        if line and (relative := Path(line).relative_to(prefix)).parts[0] not in dev_only
+    }
 
 
 def test_candidate_wheel_syncs_all_assets_into_clean_downstream(tmp_path: Path) -> None:
@@ -93,6 +99,11 @@ def test_candidate_wheel_syncs_all_assets_into_clean_downstream(tmp_path: Path) 
     for target_relative, source_relative in _FILE_ASSETS.items():
         assert (downstream / target_relative).read_bytes() == (repo_root / source_relative).read_bytes()
 
+    settings = json.loads((downstream / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    assert settings["permissions"]["allow"]
+    assert settings["permissions"]["deny"]
+    assert "hooks" not in settings  # 非対話 sync は --accept-hooks 無しなら command hook を追加しない
+
     agents_skills = downstream / ".agents" / "skills"
     assert agents_skills.is_symlink()
     assert os.readlink(agents_skills) == "../.claude/skills"
@@ -100,3 +111,4 @@ def test_candidate_wheel_syncs_all_assets_into_clean_downstream(tmp_path: Path) 
     diffed = _run(yt_skills, "diff", cwd=downstream, env=clean_env)
     assert diffed.returncode == 0, diffed.stdout + diffed.stderr
     assert diffed.stdout.count("差分なし") == 5
+    assert "hooks.PreToolUse" in diffed.stdout

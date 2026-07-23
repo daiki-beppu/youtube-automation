@@ -60,7 +60,7 @@ _AB_PATTERN_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
 def _channel_root() -> Path:
-    from youtube_automation.utils.config import channel_dir
+    from youtube_automation.configuration import channel_dir
 
     return channel_dir()
 

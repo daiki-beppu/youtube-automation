@@ -17,11 +17,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
+from youtube_automation.configuration import load_config, reset
 from youtube_automation.domains.metadata import (
     BAHMetadataGenerator,
     build_short_localizations,
 )
-from youtube_automation.utils.config import load_config, reset
 
 # ---------------------------------------------------------------------------
 # ヘルパー

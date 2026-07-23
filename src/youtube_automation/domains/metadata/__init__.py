@@ -24,6 +24,7 @@ def __getattr__(name: str):
         return BAHMetadataGenerator
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
+
 __all__ = [  # noqa: RUF022 - public API order is part of the B2 contract
     "BAHMetadataGenerator",
     "LOCALIZED_TITLE_PLACEHOLDERS",
