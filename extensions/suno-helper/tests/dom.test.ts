@@ -932,6 +932,14 @@ describe("detectRecaptcha: 可視なチャレンジのみ検知 (#810)", () => {
       });
       expect(detectRecaptcha()).toBe(true);
     });
+
+    it("Given 可視 Cloudflare Turnstile iframe When 検知する Then true", () => {
+      addCaptchaIframe({
+        src: "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/if/ov2/av0/rcv",
+        title: "Widget containing a Cloudflare security challenge",
+      });
+      expect(detectRecaptcha()).toBe(true);
+    });
   });
 
   describe("非表示のプリロード hCaptcha iframe は false (誤検知防止)", () => {
@@ -972,6 +980,29 @@ describe("detectRecaptcha: 可視なチャレンジのみ検知 (#810)", () => {
         src: "https://hcaptcha-assets-prod.suno.com/captcha/v1/x",
         width: 0,
         height: 150,
+      });
+      expect(detectRecaptcha()).toBe(false);
+    });
+  });
+
+  describe("非対話 Turnstile widget は false (誤検知防止)", () => {
+    it("Given display:none の Turnstile iframe When 検知する Then false", () => {
+      addCaptchaIframe({
+        src: "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/if/ov2/av0/rcv",
+        display: "none",
+        width: 0,
+        height: 0,
+      });
+      expect(detectRecaptcha()).toBe(false);
+    });
+
+    it("Given background verification 用 opacity:0 Turnstile iframe When 検知する Then false", () => {
+      addCaptchaIframe({
+        src: "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/if/ov2/av0/rcv",
+        title: "Widget containing a Cloudflare security challenge",
+        opacity: "0",
+        width: 300,
+        height: 65,
       });
       expect(detectRecaptcha()).toBe(false);
     });
