@@ -156,14 +156,14 @@ def get_channel_latest_status():
             start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
             try:
                 response = collector.analytics_service.query(
-                        ids=f"channel=={collector.channel_id}",
-                        startDate=start_date,
-                        endDate=end_date,
-                        metrics="views,estimatedMinutesWatched,averageViewDuration",
-                        dimensions="video",
-                        filters=f"video=={','.join(video_ids)}",
-                        sort="-views",
-                    )
+                    ids=f"channel=={collector.channel_id}",
+                    startDate=start_date,
+                    endDate=end_date,
+                    metrics="views,estimatedMinutesWatched,averageViewDuration",
+                    dimensions="video",
+                    filters=f"video=={','.join(video_ids)}",
+                    sort="-views",
+                )
                 for row in response.get("rows", []):
                     stats_map[row[0]] = {
                         "views": row[1],

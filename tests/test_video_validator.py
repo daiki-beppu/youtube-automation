@@ -48,6 +48,7 @@ def test_unexpected_metadata_reader_error_is_not_converted_to_validation_result(
     with pytest.raises(RuntimeError, match="bug"):
         validator._validate_single_video(video, "individual")
 
+
 def test_mixed_extensions_are_counted(tmp_path):
     coll = _make_collection(tmp_path, ["01-a.wav", "02-b.m4a", "03-c.aac", "04-d.mp3", "05-e.flac"])
     issues = _validator()._check_overall_consistency(coll, {"individual_videos": [{}, {}, {}, {}, {}]})

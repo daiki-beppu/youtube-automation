@@ -751,9 +751,7 @@ class TestPlaylistCli:
         """playlist API 失敗は公開 CLI の失敗終了まで伝播し、JSON を保存しない。"""
         system.authenticated = True
         collector = _collector_with_playlist_response({})
-        collector.analytics_service.query.side_effect = HttpError(
-            MagicMock(status=403), b"quotaExceeded"
-        )
+        collector.analytics_service.query.side_effect = HttpError(MagicMock(status=403), b"quotaExceeded")
         system.collector = collector
 
         with (

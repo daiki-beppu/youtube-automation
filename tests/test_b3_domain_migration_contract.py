@@ -311,9 +311,7 @@ def test_youtube_data_adapter_builds_named_operation_requests() -> None:
     )
     service.playlistItems.return_value.list.reset_mock()
     adapter.list_playlist_items_for_display("uploads", max_results=10)
-    service.playlistItems.return_value.list.assert_called_once_with(
-        part="snippet", playlistId="uploads", maxResults=10
-    )
+    service.playlistItems.return_value.list.assert_called_once_with(part="snippet", playlistId="uploads", maxResults=10)
     service.playlistItems.return_value.list.reset_mock()
     adapter.list_videos("video-1,video-2", part="status")
     service.videos.return_value.list.assert_called_once_with(part="status", id="video-1,video-2")

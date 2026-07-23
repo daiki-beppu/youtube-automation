@@ -293,6 +293,7 @@ def validate_single_step_references(skill_cfg: dict[str, Any]) -> None:
             "config/skills/thumbnail.yaml で参照してください。"
         )
 
+
 def validate_single_step_request_references(generation_mode: object, references: Sequence[Path]) -> None:
     """``single_step`` 実行 request に参照画像が含まれることを検証する。"""
     if generation_mode != "single_step":

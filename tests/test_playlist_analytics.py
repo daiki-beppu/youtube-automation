@@ -79,9 +79,7 @@ class TestGetPlaylistAnalytics:
         collector.initialize.assert_not_called()
 
     def test_raises_domain_error_when_api_request_fails(self, collector):
-        collector.analytics_service.query.side_effect = YouTubeAPIError(
-            "quota exceeded", status_code=403
-        )
+        collector.analytics_service.query.side_effect = YouTubeAPIError("quota exceeded", status_code=403)
 
         with pytest.raises(YouTubeAPIError, match="quota exceeded") as error:
             collector.get_playlist_analytics("2026-01-01", "2026-04-01")

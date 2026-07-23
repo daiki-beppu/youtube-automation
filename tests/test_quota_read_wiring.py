@@ -81,9 +81,7 @@ def _collector_mock() -> MagicMock:
         ]
     }
     analytics = MagicMock()
-    analytics.reports.return_value.query.return_value.execute.return_value = {
-        "rows": [["vid1", 5, 12.3, 60]]
-    }
+    analytics.reports.return_value.query.return_value.execute.return_value = {"rows": [["vid1", 5, 12.3, 60]]}
     collector.youtube_service = get_channel_status_module.YouTubeDataAdapter(
         get_channel_status_module._DeferredService(lambda: service),
         retry_requests=False,
@@ -102,9 +100,7 @@ def _collector_mock() -> MagicMock:
 
 class TestGetChannelStatusQuota:
     @pytest.mark.parametrize("failure_stage", ["youtube", "analytics"])
-    def test_channel_status_composition_keeps_each_adapter_single_attempt(
-        self, failure_stage, monkeypatch
-    ):
+    def test_channel_status_composition_keeps_each_adapter_single_attempt(self, failure_stage, monkeypatch):
         """The production composition passes non-retrying adapters to the collector."""
         config = MagicMock()
         config.meta.channel_short = "Test"
@@ -303,7 +299,6 @@ class TestGetChannelStatusQuota:
         ):
             with pytest.raises(RuntimeError, match="collector bug"):
                 get_channel_status_module.get_channel_latest_status()
-
 
 
 # ============================================================

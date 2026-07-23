@@ -58,9 +58,7 @@ def test_collects_daily_and_video_revenue_metrics():
 
 def test_monetary_api_failure_warns_and_returns_unavailable(caplog):
     service = MagicMock()
-    service.query.side_effect = YouTubeAPIError(
-        "monetary data forbidden", status_code=403, reason="forbidden"
-    )
+    service.query.side_effect = YouTubeAPIError("monetary data forbidden", status_code=403, reason="forbidden")
 
     with caplog.at_level(logging.WARNING):
         result = DummyCollector(service).get_revenue_analytics("2026-07-01", "2026-07-02")
