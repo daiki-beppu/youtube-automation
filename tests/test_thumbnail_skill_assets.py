@@ -1,5 +1,6 @@
 """thumbnail skill の配布アセット内容を固定化するテスト。"""
 
+import importlib.util
 import os
 import re
 import subprocess
@@ -327,6 +328,73 @@ def test_thumbnail_skill_documents_textless_first_deterministic_flow() -> None:
 
     assert "承認済み `main.png/jpg` を参照画像にして" not in single_step_block
     assert "テキストなし版の先行確定" not in single_step_block
+
+
+def _load_shared_main_module(name: str):
+    script = _repo_root() / ".claude/skills/thumbnail/references/share_thumbnail_as_main.py"
+    spec = importlib.util.spec_from_file_location(name, script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_thumbnail_textless_shared_main_default_and_contract() -> None:
+    """Issue #2457: opt-in だけが thumbnail.jpg を main.jpg へ共用する。"""
+    config = _read_thumbnail_default_config()
+    skill = _read_thumbnail_skill()
+    standard_block = _slice_between(
+        skill,
+        "### 標準生成順序とファイル契約",
+        "### thumbnail-text-profile 適用（#1907）",
+    )
+
+    assert "textless:\n  enabled: true" in config
+    for token in (
+        "`textless.enabled: false`",
+        "textless 候補の AI 生成、セルフチェック、プレビュー、承認をすべて省略",
+        "share_thumbnail_as_main.py",
+        "`status: SHARED`",
+        "同一 SHA-256",
+        "`main.png` 不在",
+        "textless 生成プロンプトを捏造せず",
+    ):
+        assert token in standard_block
+    assert "未設定または `true` では文字入りと文字なしを分離" in standard_block
+
+
+def test_share_thumbnail_as_main_copies_atomically_and_removes_png(tmp_path: Path) -> None:
+    module = _load_shared_main_module("share_thumbnail_as_main")
+    collection = tmp_path / "collection"
+    assets = collection / "10-assets"
+    assets.mkdir(parents=True)
+    thumbnail = assets / "thumbnail.jpg"
+    thumbnail.write_bytes(b"approved-thumbnail")
+    (assets / "main.jpg").write_bytes(b"old-main")
+    (assets / "main.png").write_bytes(b"conflict")
+
+    result = module.share_thumbnail_as_main(collection, enabled=False)
+
+    assert result["status"] == "SHARED"
+    assert (assets / "main.jpg").read_bytes() == thumbnail.read_bytes()
+    assert not (assets / "main.png").exists()
+    assert not list(assets.glob(".main-shared-*"))
+
+
+def test_share_thumbnail_as_main_true_is_noop(tmp_path: Path) -> None:
+    module = _load_shared_main_module("share_thumbnail_as_main_noop")
+    collection = tmp_path / "collection"
+    assets = collection / "10-assets"
+    assets.mkdir(parents=True)
+    (assets / "thumbnail.jpg").write_bytes(b"thumbnail")
+    (assets / "main.png").write_bytes(b"textless")
+
+    result = module.share_thumbnail_as_main(collection, enabled=True)
+
+    assert result["status"] == "SKIP"
+    assert (assets / "main.png").read_bytes() == b"textless"
+    assert not (assets / "main.jpg").exists()
 
 
 def test_thumbnail_skill_applies_thumbnail_text_profile_with_default_fallback() -> None:
