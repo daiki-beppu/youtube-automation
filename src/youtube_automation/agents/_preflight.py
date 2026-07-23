@@ -11,6 +11,7 @@ import logging
 import re
 from pathlib import Path
 
+from youtube_automation.agents._complete_collection_strategy import resolve_master_video
 from youtube_automation.configuration import load_config
 from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.domains.metadata.descriptions import (
@@ -21,6 +22,7 @@ from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.preflight_checks import (
     check_chapter_count,
     check_chapter_variation_suffix,
+    check_duration,
     check_low_cpm_localization_languages,
     check_tags_count,
     check_tags_yt_chars,
@@ -29,6 +31,7 @@ from youtube_automation.utils.preflight_checks import (
     extract_descriptions_md_tags,
     requires_scene_phrases,
 )
+from youtube_automation.utils.probe import probe_duration
 
 logger = logging.getLogger(__name__)
 
@@ -197,8 +200,24 @@ class PreflightMixin:
             if msg:
                 issues.append(msg)
 
-        # `audio.target_duration_min/max` は master 生成側では分単位として扱うため、
-        # 秒単位の preflight duration gate には使わない (#1313)。
+        target_min = getattr(config.audio, "target_duration_min", None)
+        target_max = getattr(config.audio, "target_duration_max", None)
+        if target_min is not None or target_max is not None:
+            master_video = resolve_master_video(collection_dir)
+            duration_sec = probe_duration(master_video)
+            if duration_sec is None:
+                issues.append(f"duration probe failed for {master_video.name}")
+            else:
+                duration_issue = check_duration(
+                    duration_sec,
+                    target_min * 60 if target_min is not None else None,
+                    target_max * 60 if target_max is not None else None,
+                )
+                if duration_issue and not getattr(self, "allow_duration_outside_target", False):
+                    issues.append(
+                        f"{duration_issue}; config/channel/audio.json の target を満たす動画を再生成するか、"
+                        "operator 判断で --allow-duration-outside-target を明示してください"
+                    )
 
         if issues:
             raise RuntimeError("❌ preflight failed:\n  - " + "\n  - ".join(issues))

@@ -98,7 +98,12 @@ class YouTubeAutoUploader(
     責務別のロジック（dedup / descriptions.md / preflight / CC 経路）は mixin に分離。
     """
 
-    def __init__(self, collections_root: Optional[str] = None):
+    def __init__(
+        self,
+        collections_root: Optional[str] = None,
+        *,
+        allow_duration_outside_target: bool = False,
+    ):
         """
         初期化
 
@@ -111,6 +116,7 @@ class YouTubeAutoUploader(
             collections_root = channel_dir() / "collections"
 
         self.collections_root = Path(collections_root)
+        self.allow_duration_outside_target = allow_duration_outside_target
 
     @property
     def youtube_service(self):
