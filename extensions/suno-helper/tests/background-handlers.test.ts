@@ -95,6 +95,7 @@ async function loadBackground(opts?: {
         ),
       },
       getManifest: () => ({ version: "0.1.0" }),
+      getURL: (path: string) => `chrome-extension://suno-helper-id/${path}`,
     },
     notifications: { create: notificationCreate },
     action: { onClicked: { addListener: vi.fn() } },
@@ -492,7 +493,12 @@ describe('background onMessage("postDownloaded"): shared/api 実配線', () => {
 
     expect(fetchImpl).toHaveBeenNthCalledWith(
       1,
-      "http://localhost:7873/auth/token"
+      "http://localhost:7873/auth/token",
+      {
+        headers: {
+          "X-Extension-Origin": "chrome-extension://suno-helper-id",
+        },
+      }
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
@@ -501,6 +507,7 @@ describe('background onMessage("postDownloaded"): shared/api 実配線', () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-Extension-Origin": "chrome-extension://suno-helper-id",
           "X-Serve-Token": "stale-token",
         },
         body: JSON.stringify({
@@ -512,7 +519,12 @@ describe('background onMessage("postDownloaded"): shared/api 実配線', () => {
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       3,
-      "http://localhost:7873/auth/token"
+      "http://localhost:7873/auth/token",
+      {
+        headers: {
+          "X-Extension-Origin": "chrome-extension://suno-helper-id",
+        },
+      }
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       4,
@@ -520,6 +532,7 @@ describe('background onMessage("postDownloaded"): shared/api 実配線', () => {
       expect.objectContaining({
         headers: {
           "Content-Type": "application/json",
+          "X-Extension-Origin": "chrome-extension://suno-helper-id",
           "X-Serve-Token": "fresh-token",
         },
       })
@@ -1654,7 +1667,8 @@ describe('background onMessage("postDownloaded"): privileged POST boundary', () 
     expect(postDownloadedMock).toHaveBeenCalledWith(
       "http://localhost:8787",
       "coll-1",
-      body
+      body,
+      { extensionOrigin: "chrome-extension://suno-helper-id" }
     );
   });
 

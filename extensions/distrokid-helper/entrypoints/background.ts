@@ -9,6 +9,7 @@ import { onMessage, sendMessage } from "../lib/messaging";
 import { migrateServerSourcesStorage } from "../lib/storage";
 
 export default defineBackground(() => {
+  const extensionOrigin = browser.runtime.getURL("").replace(/\/+$/, "");
   console.info("[distrokid-helper] background service worker started");
 
   browser.runtime.onInstalled.addListener(() => {
@@ -60,6 +61,8 @@ export default defineBackground(() => {
   // overlay → background: 配信済み記録。token 取得と 403 retry は shared/api に委譲する。
   // 失敗（reject）は overlay 側が warning 表示に変換し、フィル成功は覆さない（#934 の契約を維持）。
   onMessage("recordRelease", async ({ data }) => {
-    await recordDistrokidRelease(data.baseUrl, data.record);
+    await recordDistrokidRelease(data.baseUrl, data.record, {
+      extensionOrigin,
+    });
   });
 });

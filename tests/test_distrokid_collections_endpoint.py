@@ -1167,7 +1167,7 @@ def test_post_distrokid_releases_single_mode_with_capture_root_preserves_legacy_
 def test_post_distrokid_releases_without_origin_and_token_returns_403(tmp_path, serve_dir_dk):
     """Given Origin ヘッダも X-Serve-Token も無い POST
     When POST する
-    Then 403 を返す（Origin 省略は MV3 background として許容されるが token は必須、#1360）。
+    Then exact extension lock を満たさず 403 を返す（#1360、#2465）。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
@@ -1234,9 +1234,9 @@ def test_post_distrokid_releases_with_invalid_token_returns_403(tmp_path, serve_
 
 
 def test_post_distrokid_releases_background_fetch_without_origin_succeeds(tmp_path, serve_dir_dk):
-    """Given Origin 無し + 正しい X-Serve-Token の POST（MV3 background fetch 相当、#1360）
+    """Given Origin 無し + runtime extension origin + 正しい token（MV3 background、#2465）
     When POST /distrokid/releases する
-    Then 200 で記録される（Origin 省略は background として許容し、本人性は token で担保）。
+    Then configured extension lock との完全一致を確認して 200 で記録される。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260526-abc-collection", discs=["disc1-alpha"])
@@ -1251,7 +1251,10 @@ def test_post_distrokid_releases_background_fetch_without_origin_succeeds(tmp_pa
     with _post(
         f"{base}{_DISTROKID_RELEASES_ROUTE}",
         payload,
-        headers={"X-Serve-Token": _fetch_serve_token(base)},
+        headers={
+            "X-Extension-Origin": _EXTENSION_ORIGIN,
+            "X-Serve-Token": _fetch_serve_token(base),
+        },
     ) as resp:
         assert resp.status == 200
 

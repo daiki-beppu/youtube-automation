@@ -337,14 +337,22 @@ def test_unattended_request_is_single_use_and_extension_locked(tmp_path):
         with urllib.request.urlopen(register) as response:
             nonce = json.load(response)["nonce"]
 
-        token_request = urllib.request.Request(f"{base}/auth/token")
+        extension_headers = {"X-Extension-Origin": extension_origin}
+        token_request = urllib.request.Request(
+            f"{base}/auth/token",
+            headers=extension_headers,
+        )
         with urllib.request.urlopen(token_request) as response:
             token = json.load(response)["token"]
         consume = urllib.request.Request(
             f"{base}/unattended/requests/{nonce}/consume",
             data=b"{}",
             method="POST",
-            headers={"Content-Type": "application/json", "X-Serve-Token": token},
+            headers={
+                "Content-Type": "application/json",
+                "X-Serve-Token": token,
+                **extension_headers,
+            },
         )
         with urllib.request.urlopen(consume) as response:
             assert json.load(response) == payload
@@ -3523,9 +3531,10 @@ def test_get_auth_token_web_origin_returns_403(serve_dir, tmp_path):
     assert exc_info.value.code == 403
 
 
-def test_get_auth_token_no_origin_with_extension_lock_returns_uuid(serve_dir, tmp_path):
+def test_get_auth_token_no_origin_requires_declared_extension_origin(serve_dir, tmp_path):
     """Given extension origin に lock した dir mode サーバー
     And Chrome MV3 background fetch 相当の Origin ヘッダ無しリクエスト
+    And runtime が configured lock と同じ extension origin を明示する
     When リクエストする
     Then UUID 形式の token を含む JSON を返す。
     """
@@ -3533,7 +3542,11 @@ def test_get_auth_token_no_origin_with_extension_lock_returns_uuid(serve_dir, tm
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
 
-    with urllib.request.urlopen(f"{base}/auth/token") as resp:
+    req = urllib.request.Request(
+        f"{base}/auth/token",
+        headers={"X-Extension-Origin": _EXTENSION_ORIGIN},
+    )
+    with urllib.request.urlopen(req) as resp:
         assert resp.status == 200
         body = json.loads(resp.read().decode("utf-8"))
 
@@ -3615,24 +3628,54 @@ def test_post_downloaded_valid_token_succeeds(serve_dir, tmp_path):
         assert resp.status == 200
 
 
-def test_post_downloaded_no_origin_with_valid_token_succeeds(serve_dir, tmp_path):
-    """Given extension origin lock + Origin なしで取得した正しい X-Serve-Token
+def test_post_downloaded_null_origin_with_declared_origin_and_valid_token_succeeds(serve_dir, tmp_path):
+    """Given extension origin lock + runtime が明示した extension origin + 正しい token
     When Origin なしで POST /collections/<id>/downloaded を送る
     Then 200 を返す（Chrome MV3 background fetch の実挙動）。
     """
     planning = tmp_path / "planning"
     _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
     base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
-    with urllib.request.urlopen(f"{base}/auth/token") as resp:
+    auth_headers = {"Origin": "null", "X-Extension-Origin": _EXTENSION_ORIGIN}
+    token_req = urllib.request.Request(f"{base}/auth/token", headers=auth_headers)
+    with urllib.request.urlopen(token_req) as resp:
         token = json.loads(resp.read().decode("utf-8"))["token"]
     payload = {"file_count": 0, "format": "mp3", "suno_playlist_url": "https://suno.com/playlist/abc"}
 
     with _post(
         f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
         payload,
-        headers={"X-Serve-Token": token},
+        headers={**auth_headers, "X-Serve-Token": token},
     ) as resp:
         assert resp.status == 200
+
+
+def test_get_auth_token_no_origin_without_declared_origin_returns_403(serve_dir, tmp_path):
+    """Origin と runtime extension origin の両方が無い caller は token を取得できない。"""
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(f"{base}/auth/token")
+
+    assert exc_info.value.code == 403
+
+
+def test_get_auth_token_rejects_wrong_declared_extension_origin(serve_dir, tmp_path):
+    """MV3 fallback header は configured extension lock との完全一致を要求する。"""
+    planning = tmp_path / "planning"
+    _make_collection(planning, "20260601-clm-aaa-collection", entries=[])
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    req = urllib.request.Request(
+        f"{base}/auth/token",
+        headers={"Origin": "null", "X-Extension-Origin": "chrome-extension://other"},
+    )
+
+    with pytest.raises(urllib.error.HTTPError) as exc_info:
+        urllib.request.urlopen(req)
+
+    assert exc_info.value.code == 403
 
 
 def test_apply_downloaded_artifacts_propagates_unknown_atomic_write_error(tmp_path):

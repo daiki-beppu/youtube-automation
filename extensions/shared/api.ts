@@ -768,12 +768,14 @@ export function excludeReleasedDiscs(
  */
 export async function recordDistrokidRelease(
   baseUrl: string,
-  record: DistrokidReleaseRecord
+  record: DistrokidReleaseRecord,
+  requestContext?: ServeTokenRequestContext
 ): Promise<void> {
   const resp = await postJsonWithServeToken(
     baseUrl,
     DISTROKID_RELEASES_ROUTE,
-    record
+    record,
+    requestContext
   );
   if (!resp.ok) {
     throw new Error(`HTTP ${resp.status}`);
@@ -793,8 +795,31 @@ export interface DownloadedPayload {
  * ダウンロード完了をサーバーに通知する (#1215)。POST /collections/:id/downloaded。
  * 非 2xx は fail-loud で throw する。
  */
-async function fetchServeToken(baseUrl: string): Promise<string> {
-  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/auth/token`);
+export interface ServeTokenRequestContext {
+  extensionOrigin?: string;
+}
+
+function extensionOriginHeaders(
+  requestContext?: ServeTokenRequestContext
+): Record<string, string> {
+  const extensionOrigin = requestContext?.extensionOrigin?.replace(/\/+$/, "");
+  if (!extensionOrigin) return {};
+  if (!extensionOrigin.startsWith("chrome-extension://")) {
+    throw new Error("extensionOrigin must use chrome-extension://");
+  }
+  return { "X-Extension-Origin": extensionOrigin };
+}
+
+async function fetchServeToken(
+  baseUrl: string,
+  requestContext?: ServeTokenRequestContext
+): Promise<string> {
+  const headers = extensionOriginHeaders(requestContext);
+  const url = `${normalizeBaseUrl(baseUrl)}/auth/token`;
+  const res =
+    Object.keys(headers).length > 0
+      ? await fetch(url, { headers })
+      : await fetch(url);
   if (!res.ok) throw new Error(`GET /auth/token failed: ${res.status}`);
   const data: unknown = await res.json();
   if (
@@ -819,19 +844,26 @@ async function fetchServeToken(baseUrl: string): Promise<string> {
 async function postJsonWithServeToken(
   baseUrl: string,
   route: string,
-  body: unknown
+  body: unknown,
+  requestContext?: ServeTokenRequestContext
 ): Promise<Response> {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl);
   const url = `${normalizedBaseUrl}${route}`;
   const post = (token: string) =>
     fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Serve-Token": token },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Serve-Token": token,
+        ...extensionOriginHeaders(requestContext),
+      },
       body: JSON.stringify(body),
     });
-  let res = await post(await fetchServeToken(normalizedBaseUrl));
+  let res = await post(
+    await fetchServeToken(normalizedBaseUrl, requestContext)
+  );
   if (res.status === 403) {
-    res = await post(await fetchServeToken(normalizedBaseUrl));
+    res = await post(await fetchServeToken(normalizedBaseUrl, requestContext));
   }
   return res;
 }
@@ -844,7 +876,8 @@ export interface PostDownloadedResult {
 export async function postDownloaded(
   baseUrl: string,
   collectionId: string,
-  payload: DownloadedPayload
+  payload: DownloadedPayload,
+  requestContext?: ServeTokenRequestContext
 ): Promise<PostDownloadedResult> {
   if (payload.file_count > 0 && !payload.download_path) {
     throw new Error("file_count が正数の場合は download_path が必要です");
@@ -852,7 +885,8 @@ export async function postDownloaded(
   const res = await postJsonWithServeToken(
     baseUrl,
     collectionDownloadedRoute(collectionId),
-    payload
+    payload,
+    requestContext
   );
   if (!res.ok) {
     throw new Error(`POST downloaded failed: ${res.status} ${res.statusText}`);
@@ -879,10 +913,11 @@ export async function postDownloaded(
 /** Atomically consume a server-issued unattended request nonce. */
 export async function consumeUnattendedRequest(
   baseUrl: string,
-  nonce: string
+  nonce: string,
+  requestContext?: ServeTokenRequestContext
 ): Promise<unknown> {
   const route = `/unattended/requests/${encodeURIComponent(nonce)}/consume`;
-  const res = await postJsonWithServeToken(baseUrl, route, {});
+  const res = await postJsonWithServeToken(baseUrl, route, {}, requestContext);
   if (!res.ok) {
     throw new Error(`unattended request consume failed: HTTP ${res.status}`);
   }

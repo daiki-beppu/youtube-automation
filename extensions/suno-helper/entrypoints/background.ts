@@ -28,6 +28,7 @@ import {
 } from "../lib/unattended-lease";
 
 export default defineBackground(() => {
+  const extensionOrigin = browser.runtime.getURL("").replace(/\/+$/, "");
   const leaseStorageKey = "sunoUnattendedLeases";
   let leaseMutation: Promise<unknown> = Promise.resolve();
   const mutateLeases = <T>(
@@ -227,12 +228,16 @@ export default defineBackground(() => {
   // token fetch と POST /downloaded は background の extension origin から実行する。
   onMessage("postDownloaded", async ({ data, sender }) => {
     requireRelayTab(sender, "postDownloaded");
-    return await postDownloaded(data.baseUrl, data.collectionId, data.body);
+    return await postDownloaded(data.baseUrl, data.collectionId, data.body, {
+      extensionOrigin,
+    });
   });
 
   onMessage("consumeUnattendedRequest", async ({ data, sender }) => {
     requireRelayTab(sender, "consumeUnattendedRequest");
-    return await consumeUnattendedRequest(data.baseUrl, data.nonce);
+    return await consumeUnattendedRequest(data.baseUrl, data.nonce, {
+      extensionOrigin,
+    });
   });
 
   onMessage("acquireUnattendedLease", ({ data, sender }) => {
