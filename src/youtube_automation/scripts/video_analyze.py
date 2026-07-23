@@ -32,7 +32,7 @@ from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.scripts.benchmark_collector import load_benchmark_videos, select_top_vod_benchmark_videos
 from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
-from youtube_automation.utils.genai_client import create_genai_client
+from youtube_automation.utils.genai_client import create_global_genai_client
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.video_analyzer import (
     VideoAnalysisReport,
@@ -330,7 +330,7 @@ def main():
     logger.info("解析対象: slug='%s' 件数=%d", slug, len(targets))
 
     analyzer = VideoAnalyzer(
-        client=create_genai_client(),
+        client=create_global_genai_client(),
         model=cfg["model"],
         prompt=cfg["prompt"],
         delay_sec=cfg["delay_sec"],

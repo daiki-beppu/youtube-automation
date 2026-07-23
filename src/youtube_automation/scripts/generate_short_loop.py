@@ -17,11 +17,9 @@ import sys
 import time
 from pathlib import Path
 
-from dotenv import find_dotenv, load_dotenv
-
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.genai_client import create_genai_client
+from youtube_automation.utils.genai_client import create_veo_genai_client
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.veo_generator import (
     DEFAULT_MODEL,
@@ -71,8 +69,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    load_dotenv(find_dotenv())
-
     parser = _build_parser()
     args = parser.parse_args()
 
@@ -121,7 +117,7 @@ def main() -> None:
 
     # 生成実行
     try:
-        client = create_genai_client(location="us-central1")
+        client = create_veo_genai_client()
     except ConfigError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)

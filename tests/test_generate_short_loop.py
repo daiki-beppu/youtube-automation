@@ -145,11 +145,9 @@ class TestMain:
 
         with patch.multiple(
             "youtube_automation.scripts.generate_short_loop",
-            create_genai_client=DEFAULT,
+            create_veo_genai_client=DEFAULT,
             generate_loop_video=DEFAULT,
             load_skill_config=DEFAULT,
-            load_dotenv=DEFAULT,
-            find_dotenv=DEFAULT,
         ) as mocks:
             mocks["load_skill_config"].return_value = {"veo": {"model": "veo-3.1-fast-generate-001"}}
             mocks["generate_loop_video"].return_value = True
@@ -175,11 +173,9 @@ class TestMain:
 
         with patch.multiple(
             "youtube_automation.scripts.generate_short_loop",
-            create_genai_client=DEFAULT,
+            create_veo_genai_client=DEFAULT,
             generate_loop_video=DEFAULT,
             load_skill_config=DEFAULT,
-            load_dotenv=DEFAULT,
-            find_dotenv=DEFAULT,
         ) as mocks:
             mocks["load_skill_config"].return_value = {"veo": {"model": "veo-3.1-fast-generate-001"}}
             mocks["generate_loop_video"].return_value = True
@@ -210,11 +206,9 @@ class TestMain:
 
         with patch.multiple(
             "youtube_automation.scripts.generate_short_loop",
-            create_genai_client=DEFAULT,
+            create_veo_genai_client=DEFAULT,
             generate_loop_video=DEFAULT,
             load_skill_config=DEFAULT,
-            load_dotenv=DEFAULT,
-            find_dotenv=DEFAULT,
         ) as mocks:
             mocks["load_skill_config"].return_value = {"veo": {"model": "veo-3.1-fast-generate-001"}}
             mocks["generate_loop_video"].return_value = True
@@ -244,11 +238,9 @@ class TestMain:
 
         with patch.multiple(
             "youtube_automation.scripts.generate_short_loop",
-            create_genai_client=DEFAULT,
+            create_veo_genai_client=DEFAULT,
             generate_loop_video=DEFAULT,
             load_skill_config=DEFAULT,
-            load_dotenv=DEFAULT,
-            find_dotenv=DEFAULT,
         ) as mocks:
             mocks["load_skill_config"].return_value = {"veo": {}}
 

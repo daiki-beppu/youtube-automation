@@ -80,10 +80,10 @@ class GeminiGenerator:
 
         from google.genai import types
 
-        from youtube_automation.utils.genai_client import create_genai_client
+        from youtube_automation.utils.genai_client import create_global_genai_client
 
         try:
-            client = create_genai_client()
+            client = create_global_genai_client()
             response = client.models.generate_content(
                 model=self._model,
                 contents=[prompt],

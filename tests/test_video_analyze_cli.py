@@ -433,7 +433,7 @@ class TestMainPassesAnalysisWindow:
         with (
             patch("youtube_automation.scripts.video_analyze.load_skill_config", return_value=cfg),
             patch("youtube_automation.scripts.video_analyze._channel_dir", return_value=tmp_path),
-            patch("youtube_automation.scripts.video_analyze.create_genai_client", return_value=MagicMock()),
+            patch("youtube_automation.scripts.video_analyze.create_global_genai_client", return_value=MagicMock()),
             patch("youtube_automation.scripts.video_analyze.VideoAnalyzer") as analyzer_cls,
             patch("youtube_automation.scripts.video_analyze._run_analysis", return_value=([], [])),
             patch("sys.argv", ["yt-video-analyze", "--url", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"]),
@@ -529,7 +529,7 @@ class TestMainAnalysisWindowFlow:
 
         try:
             with (
-                patch("youtube_automation.scripts.video_analyze.create_genai_client", return_value=client),
+                patch("youtube_automation.scripts.video_analyze.create_global_genai_client", return_value=client),
                 patch("sys.argv", ["yt-video-analyze", "--url", "https://www.youtube.com/watch?v=ABCDEFGHIJK"]),
             ):
                 main()

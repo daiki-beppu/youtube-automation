@@ -645,17 +645,15 @@ def _patch_main_boundaries():
     patch 対象（test-design.md §4 モック戦略）:
       - generate_loop_video: Veo 呼出本体。`call_count == 0` を主に検証
       - smooth_loop: post-process。crossfade 伝搬等を検証
-      - create_genai_client: Veo クライアント生成。non-call で課金経路遮断を立証
-      - load_dotenv, find_dotenv: 外部依存遮断
+      - create_veo_genai_client: Veo クライアント生成。non-call で課金経路遮断を立証
+      - removed dotenv loading: 外部依存遮断
       - load_config: skill-config 読み込み遮断（戻り値は空 dict を default）
     """
     return patch.multiple(
         _TARGET_MODULE,
         generate_loop_video=DEFAULT,
         smooth_loop=DEFAULT,
-        create_genai_client=DEFAULT,
-        load_dotenv=DEFAULT,
-        find_dotenv=DEFAULT,
+        create_veo_genai_client=DEFAULT,
         load_config=DEFAULT,
     )
 
@@ -688,7 +686,7 @@ class TestMainSkipExisting:
 
             # Then: Veo 非呼出 + クライアント非生成 + exit 0（IR2）
             assert mocks["generate_loop_video"].call_count == 0
-            assert mocks["create_genai_client"].call_count == 0
+            assert mocks["create_veo_genai_client"].call_count == 0
             assert excinfo.value.code == 0
 
     def test_does_not_create_backup_when_skipping(self, tmp_path, monkeypatch):
@@ -754,7 +752,7 @@ class TestMainSkipExisting:
 
             # Then: image validation より前で early-return → exit 0
             assert mocks["generate_loop_video"].call_count == 0
-            assert mocks["create_genai_client"].call_count == 0
+            assert mocks["create_veo_genai_client"].call_count == 0
             assert excinfo.value.code == 0
 
 
@@ -785,7 +783,7 @@ class TestMainSmooth:
             # Then: smooth_loop のみ呼ばれ、Veo は非呼出、exit 0
             assert mocks["smooth_loop"].call_count == 1
             assert mocks["generate_loop_video"].call_count == 0
-            assert mocks["create_genai_client"].call_count == 0
+            assert mocks["create_veo_genai_client"].call_count == 0
             assert excinfo.value.code == 0
 
     def test_does_not_prompt_for_confirmation_in_smooth_mode(self, tmp_path, monkeypatch):
@@ -898,7 +896,7 @@ class TestMainSmoothPrecedence:
             # Then: smooth_loop が呼ばれ、Veo は非呼出、exit 0
             assert mocks["smooth_loop"].call_count == 1
             assert mocks["generate_loop_video"].call_count == 0
-            assert mocks["create_genai_client"].call_count == 0
+            assert mocks["create_veo_genai_client"].call_count == 0
             assert excinfo.value.code == 0
 
 
@@ -1066,7 +1064,7 @@ class TestMainEnabledGate:
                 mod.main()
             assert excinfo.value.code == 1
             assert mocks["generate_loop_video"].call_count == 0
-            assert mocks["create_genai_client"].call_count == 0
+            assert mocks["create_veo_genai_client"].call_count == 0
 
         # メッセージは設定確認を促す（issue 指定文言）
         err = capsys.readouterr().err
@@ -1157,7 +1155,7 @@ class TestMainOmniEngine:
 
         assert excinfo.value.code == 0
         create_client.assert_called_once_with()
-        mocks["create_genai_client"].assert_not_called()
+        mocks["create_veo_genai_client"].assert_not_called()
         args = generate_omni.call_args
         assert args.args[:5] == ("omni-client", image, col / ASSETS_DIR / LOOP_MP4, "gemini-omni-test", "omni prompt")
         assert args.kwargs["timeout_sec"] == 42.0
@@ -1261,5 +1259,5 @@ class TestMainVideoType:
                 mod.main()
 
         assert excinfo.value.code == 1
-        assert mocks["create_genai_client"].call_count == 0
+        assert mocks["create_veo_genai_client"].call_count == 0
         assert mocks["generate_loop_video"].call_count == 0

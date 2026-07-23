@@ -16,7 +16,7 @@ from youtube_automation.domains.media.image import (
     ImageGenerationResult,
 )
 from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.genai_client import create_genai_client
+from youtube_automation.utils.genai_client import create_global_genai_client
 from youtube_automation.utils.image_provider.composition import log_image_cost, persist_image
 from youtube_automation.utils.image_provider.config import GeminiConfig
 
@@ -36,7 +36,7 @@ class GeminiImageProvider:
         from google.genai import types
         from PIL import Image as PILImage
 
-        client = create_genai_client(location="global")
+        client = create_global_genai_client()
         model = self._config.model
         image_size = req.image_size or self._config.image_size
         aspect_ratio = req.aspect_ratio

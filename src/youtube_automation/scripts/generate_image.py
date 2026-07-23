@@ -303,10 +303,6 @@ def print_provider_fallback_hint(provider_name: str) -> None:
 
 
 def main():
-    from dotenv import find_dotenv, load_dotenv
-
-    load_dotenv(find_dotenv())
-
     parser = argparse.ArgumentParser(
         description="画像生成プロバイダー（Gemini / OpenAI）で画像を生成（ダイレクトモード）"
     )

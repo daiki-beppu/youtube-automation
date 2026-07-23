@@ -1,6 +1,6 @@
 """yt-thumbnail-check CLI の単体テスト (#489)
 
-Gemini Client は DI 不能 (CLI が境界で `create_genai_client` を呼ぶ) なので、
+Gemini Client は DI 不能 (CLI が境界で `create_global_genai_client` を呼ぶ) なので、
 モジュールレベルの helper を直接テストして argparse / lock 分岐 /
 JSON 解析を回帰させる。
 """
@@ -184,7 +184,7 @@ def test_main_print_prompt_skips_gemini(tmp_path, monkeypatch, capsys):
     def _boom(*args, **kwargs):
         raise AssertionError("Gemini Client must not be created in --print-prompt path")
 
-    monkeypatch.setattr("youtube_automation.utils.genai_client.create_genai_client", _boom)
+    monkeypatch.setattr("youtube_automation.utils.genai_client.create_global_genai_client", _boom)
 
     rc = thumbnail_check.main(["dummy.png", "--print-prompt"])
     assert rc == 0
@@ -208,7 +208,7 @@ def test_main_skips_when_self_check_disabled(tmp_path, monkeypatch, capsys):
     def _boom(*args, **kwargs):
         raise AssertionError("Gemini Client must not be created when self_check disabled")
 
-    monkeypatch.setattr("youtube_automation.utils.genai_client.create_genai_client", _boom)
+    monkeypatch.setattr("youtube_automation.utils.genai_client.create_global_genai_client", _boom)
 
     rc = thumbnail_check.main(["nonexistent.png"])
     assert rc == 0

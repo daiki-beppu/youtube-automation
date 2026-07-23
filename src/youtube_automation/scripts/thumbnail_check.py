@@ -313,9 +313,9 @@ def main(argv: list[str] | None = None) -> int:
 
     # Gemini Client を境界で 1 回だけ解決
     try:
-        from youtube_automation.utils.genai_client import create_genai_client
+        from youtube_automation.utils.genai_client import create_global_genai_client
 
-        client = create_genai_client(location="global")
+        client = create_global_genai_client()
     except Exception as exc:
         print(f"error: Gemini Client 初期化失敗: {exc}", file=sys.stderr)
         return 2

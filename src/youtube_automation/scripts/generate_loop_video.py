@@ -24,11 +24,9 @@ import sys
 import time
 from pathlib import Path
 
-from dotenv import find_dotenv, load_dotenv
-
 from youtube_automation.domains.media.video_type import VideoType, VideoTypeConfig
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.genai_client import create_genai_client
+from youtube_automation.utils.genai_client import create_veo_genai_client
 from youtube_automation.utils.omni_generator import (
     DEFAULT_MODEL as DEFAULT_OMNI_MODEL,
 )
@@ -324,7 +322,7 @@ def _run_generate(
         _backup_existing_loop(output_path, max_backups=max_backups)
 
     try:
-        client = create_omni_client() if engine == "omni" else create_genai_client(location="us-central1")
+        client = create_omni_client() if engine == "omni" else create_veo_genai_client()
     except ConfigError as e:
         print(f"[ERROR] {e}")
         sys.exit(1)
@@ -365,8 +363,6 @@ def _run_generate(
 
 
 def main():
-    load_dotenv(find_dotenv())
-
     parser = _build_parser()
     args = parser.parse_args()
 

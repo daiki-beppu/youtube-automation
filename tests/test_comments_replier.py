@@ -20,7 +20,7 @@ from youtube_automation.utils.comments.history import ReplyHistory
 from youtube_automation.utils.comments.replier import _SAVE_MAX_RETRIES, CommentReplier
 from youtube_automation.utils.exceptions import AutomationError, ConfigError, YouTubeAPIError
 
-_PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_genai_client"
+_PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_global_genai_client"
 
 
 def test_load_agent_replies_accepts_replies_object(tmp_path):
