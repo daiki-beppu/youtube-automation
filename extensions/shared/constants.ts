@@ -168,6 +168,14 @@ export const BALANCED_RUN_PACING: RunPacing = {
   maxEntryRetry: 2,
 };
 
+/** Adaptive pacing policy. The baseline 3–9s jitter and max 10 requests stay unchanged. */
+export const ADAPTIVE_BURST_WINDOW_MS = 30_000;
+export const ADAPTIVE_BURST_CREATE_THRESHOLD = 4;
+export const ADAPTIVE_BURST_COOLDOWN_MS = 15_000;
+export const ADAPTIVE_CHALLENGE_BACKOFF_STEP_MS = 15_000;
+export const ADAPTIVE_CHALLENGE_BACKOFF_MAX_MS = 60_000;
+export const ADAPTIVE_HEALTHY_CREATES_PER_RECOVERY = 3;
+
 export interface RunMode {
   label: string;
   riskNote: string;
