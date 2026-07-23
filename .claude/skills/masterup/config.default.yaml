@@ -111,6 +111,12 @@ stock:
   filename_template: "{collection_slug}__{song_id}__{title_slug}.{ext}"
   on_duplicate: skip # skip | overwrite | fail
 
+validation:
+  loudness_deviation:
+    # 02-Individual-music/ の全曲における integrated LUFS の最大差。
+    # 2.0 LU 超は master 結合前に FAIL とし、明示承認まで停止する。
+    max_lu: 2.0
+
 # raw master への雨レイヤー後処理 (opt-in / uv run yt-apply-rain-layers が参照)
 #
 # `uv run yt-finalize-master` (audio.finalize namespace) が master.mp3 を loudnorm 二段で
