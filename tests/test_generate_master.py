@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import random as real_random
+import shutil
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -1402,6 +1404,7 @@ class TestGenerateMasterAudioInputs:
         assert cmd[idx + 1] == "libmp3lame"
         b_idx = cmd.index("-b:a")
         assert cmd[b_idx + 1] == "192k"
+        assert "-q:a" not in cmd
 
     def test_mp3_inputs_keep_mp3_codec(self, tmp_path, monkeypatch):
         # 既存挙動の回帰確認: MP3 入力では libmp3lame + -b:a + master.mp3
@@ -1423,7 +1426,42 @@ class TestGenerateMasterAudioInputs:
         assert cmd[idx + 1] == "libmp3lame"
         b_idx = cmd.index("-b:a")
         assert cmd[b_idx + 1] == "192k"
+        assert "-q:a" not in cmd
         assert "pcm_s16le" not in cmd
+
+    @pytest.mark.skipif(
+        shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,
+        reason="FFmpeg integration test",
+    )
+    def test_48khz_stereo_acrossfade_output_decodes_to_end(self, tmp_path):
+        collection = self._setup_collection(tmp_path, ext="wav", file_count=0)
+        music_dir = collection / "02-Individual-music"
+        for index, frequency in enumerate((440, 554), start=1):
+            subprocess.run(
+                [
+                    "ffmpeg",
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    f"sine=frequency={frequency}:sample_rate=48000:duration=1",
+                    "-ac",
+                    "2",
+                    str(music_dir / f"{index:02d}-track.wav"),
+                ],
+                check=True,
+            )
+
+        output = run_generate_master(collection, crossfade=0.1, bitrate="192k", quiet=True)
+
+        decode = subprocess.run(
+            ["ffmpeg", "-v", "error", "-i", str(output), "-f", "null", "-"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert decode.returncode == 0, decode.stderr
 
     def test_single_wav_transcodes_to_master_mp3(self, tmp_path, monkeypatch):
         # 1 ファイル + WAV → ffmpeg で master.mp3 に変換する
