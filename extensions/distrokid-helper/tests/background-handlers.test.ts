@@ -42,6 +42,8 @@ async function loadBackground(opts?: {
       },
     },
     runtime: {
+      getURL: (path: string) =>
+        `chrome-extension://distrokid-helper-id/${path}`,
       onInstalled: {
         addListener: vi.fn((listener: () => void) =>
           installedListeners.push(listener)
@@ -156,7 +158,8 @@ describe('background onMessage("recordRelease"): serve token 書き込み境界 
 
     expect(recordDistrokidReleaseMock).toHaveBeenCalledWith(
       "http://localhost:7873",
-      RECORD
+      RECORD,
+      { extensionOrigin: "chrome-extension://distrokid-helper-id" }
     );
   });
 

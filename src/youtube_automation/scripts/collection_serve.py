@@ -679,15 +679,22 @@ def _is_read_origin_allowed(origin: str | None, allow_origin: str | None, _path:
     return is_origin_allowed(origin, allow_origin)
 
 
-def _is_locked_extension_request(raw_origin: str | None, allow_origin: str | None) -> bool:
+def _is_locked_extension_request(
+    raw_origin: str | None,
+    declared_extension_origin: str | None,
+    allow_origin: str | None,
+) -> bool:
     """Token/mutating endpoints require an explicit extension lock.
 
-    Chrome MV3 background fetches can omit the Origin header. Web-page CORS
-    fetches include an Origin, so keep rejecting non-matching explicit origins.
+    Chrome MV3 background fetches can omit or serialize Origin as ``null``.
+    In that case the service worker must declare its runtime origin explicitly;
+    it is accepted only when it exactly matches the configured extension lock.
     """
     if allow_origin is None or not allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME):
         return False
-    return raw_origin is None or raw_origin == allow_origin
+    if raw_origin == allow_origin:
+        return True
+    return raw_origin in {None, "null"} and declared_extension_origin == allow_origin
 
 
 def build_version_payload() -> dict[str, str]:
@@ -1125,14 +1132,18 @@ def create_server(
             self.send_response(204)
             self._send_cors(origin)
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Serve-Token")
+            self.send_header(
+                "Access-Control-Allow-Headers",
+                "Content-Type, X-Serve-Token, X-Extension-Origin",
+            )
             self.end_headers()
 
         def _handle_downloaded_post(self, cid: str) -> None:
             """POST /collections/<id>/downloaded を処理する（dir mode only、#1216/#1217）。"""
             assert collections_root is not None
             raw_origin = self.headers.get("Origin")
-            if not _is_locked_extension_request(raw_origin, allow_origin):
+            declared_origin = self.headers.get("X-Extension-Origin")
+            if not _is_locked_extension_request(raw_origin, declared_origin, allow_origin):
                 self.send_error(403, "Forbidden")
                 return
             req_token = self.headers.get("X-Serve-Token")
@@ -1283,7 +1294,8 @@ def create_server(
             consume_prefix = f"{_UNATTENDED_REQUESTS_ROUTE}/"
             if dir_mode and self.path.startswith(consume_prefix) and self.path.endswith("/consume"):
                 raw_origin = self.headers.get("Origin")
-                if not _is_locked_extension_request(raw_origin, allow_origin):
+                declared_origin = self.headers.get("X-Extension-Origin")
+                if not _is_locked_extension_request(raw_origin, declared_origin, allow_origin):
                     self.send_error(403, "Forbidden")
                     return
                 if self.headers.get("X-Serve-Token") != serve_token:
@@ -1312,10 +1324,11 @@ def create_server(
                     self.send_error(404, "Not Found")
                     return
                 # 書き込み境界（#1360）: /downloaded と同じく extension lock + serve token 必須。
-                # MV3 background fetch は Origin を省略しうるため _is_locked_extension_request で
-                # 「Origin 無し or 完全一致」を許可し、本人性は X-Serve-Token で担保する。
+                # MV3 background fetch は Origin を省略しうるため、runtime origin の明示宣言を
+                # configured extension lock と完全一致させる。本人性は serve token も併用する。
                 raw_origin = self.headers.get("Origin")
-                if not _is_locked_extension_request(raw_origin, allow_origin):
+                declared_origin = self.headers.get("X-Extension-Origin")
+                if not _is_locked_extension_request(raw_origin, declared_origin, allow_origin):
                     self.send_error(403, "Forbidden")
                     return
                 req_token = self.headers.get("X-Serve-Token")
@@ -1396,7 +1409,8 @@ def create_server(
                 return
             if self.path == "/auth/token":
                 raw_origin = self.headers.get("Origin")
-                if not _is_locked_extension_request(raw_origin, allow_origin):
+                declared_origin = self.headers.get("X-Extension-Origin")
+                if not _is_locked_extension_request(raw_origin, declared_origin, allow_origin):
                     self.send_error(403, "Forbidden")
                     return
                 body = json.dumps({"token": serve_token}).encode("utf-8")
