@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.utils.metadata_generator import validate_localizations_title_templates
+from youtube_automation.domains.metadata import validate_localizations_title_templates
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _EXAMPLE_LOCALIZATIONS = _REPO_ROOT / "examples" / "localizations.example.json"

@@ -47,6 +47,16 @@ from pathlib import Path
 
 from youtube_automation import __version__
 from youtube_automation.configuration import Distrokid, channel_dir, load_config
+from youtube_automation.domains.suno.downloaded import (
+    DownloadedArtifactError,
+    DownloadedPayloadError,
+    apply_downloaded_artifacts,
+    count_audio_files,
+    expected_download_count,
+    parse_downloaded_payload,
+    read_pattern_count,
+)
+from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 from youtube_automation.scripts.collection_serve_discovery import (
     DISCOVERY_PORT,
     RegistryState,
@@ -74,15 +84,6 @@ from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.distrokid_metadata import parse_album_metadata
 from youtube_automation.utils.distrokid_spec import find_disc_entry, read_collection_spec
 from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.suno_downloaded_artifacts import (
-    DownloadedArtifactError,
-    DownloadedPayloadError,
-    apply_downloaded_artifacts,
-    count_audio_files,
-    expected_download_count,
-    parse_downloaded_payload,
-    read_pattern_count,
-)
 
 DEFAULT_PORT = 7873
 DEFAULT_IDLE_TIMEOUT_SECONDS = 60 * 60
@@ -552,7 +553,7 @@ def build_collections_index(root: Path) -> list[dict]:
     for coll in _find_suno_collection_dirs(root):
         prompts_path = coll / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
         has_prompts = prompts_path.is_file()
-        pattern_count = read_pattern_count(coll)
+        pattern_count = read_pattern_count(coll, prompt_entries_reader=read_suno_prompt_entries)
         music_dir = CollectionPaths(coll).music_dir
         downloaded_count = count_audio_files(music_dir)
         expected_file_count = _read_music_expected_file_count(coll)
@@ -1167,6 +1168,7 @@ def create_server(
                 placed_count_for_response = apply_downloaded_artifacts(
                     coll_dir,
                     downloaded,
+                    prompt_entries_reader=read_suno_prompt_entries,
                     atomic_json_write=_atomic_json_write,
                 )
             except DownloadedPayloadError:
@@ -1178,7 +1180,12 @@ def create_server(
             resp: dict = {"ok": True, "collection_id": cid, "placed_count": placed_count_for_response}
             # 部分完了（Suno が期待数未満しか生成しないケース）は 500 にせず warning で返す（#1913）
             expected_count = expected_download_count(
-                read_pattern_count(coll_dir, default=0), downloaded.expected_file_count
+                read_pattern_count(
+                    coll_dir,
+                    prompt_entries_reader=read_suno_prompt_entries,
+                    default=0,
+                ),
+                downloaded.expected_file_count,
             )
             if (
                 downloaded.download_path

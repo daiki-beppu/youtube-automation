@@ -10,9 +10,9 @@ import pytest
 
 from youtube_automation.agents._preflight import PreflightMixin
 from youtube_automation.configuration import load_config, reset
+from youtube_automation.domains.metadata import BAHMetadataGenerator
 from youtube_automation.scripts import populate_scene_phrases
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
-from youtube_automation.utils.metadata_generator import BAHMetadataGenerator
 
 
 class _PreflightHarness(PreflightMixin):

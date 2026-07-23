@@ -1228,8 +1228,8 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
         )
 
     from youtube_automation.configuration import load_config
+    from youtube_automation.domains.metadata import validate_localizations_title_templates
     from youtube_automation.utils.exceptions import ConfigError
-    from youtube_automation.utils.metadata_generator import validate_localizations_title_templates
 
     with _temporary_channel_dir(channel_dir):
         try:

@@ -6,8 +6,12 @@ import json
 from pathlib import Path
 from typing import Protocol
 
+from youtube_automation.domains.suno.downloaded.models import (
+    DOCUMENTATION_DIRNAME,
+    SUNO_PROMPTS_JSON_FILENAME,
+    PromptEntriesReader,
+)
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.suno_prompts_json import read_suno_prompt_entries, suno_prompts_path
 
 _SUNO_CLIPS_PER_PROMPT = 2
 
@@ -16,11 +20,17 @@ class AtomicJsonWriter(Protocol):
     def __call__(self, target: Path, data: dict, *, prefix: str) -> None: ...
 
 
-def read_pattern_count(coll_dir: Path, *, default: int | None = None) -> int | None:
-    if not suno_prompts_path(coll_dir).is_file():
+def read_pattern_count(
+    coll_dir: Path,
+    *,
+    prompt_entries_reader: PromptEntriesReader,
+    default: int | None = None,
+) -> int | None:
+    prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
+    if not prompts_path.is_file():
         return default
     try:
-        prompts = read_suno_prompt_entries(coll_dir)
+        prompts = prompt_entries_reader(coll_dir)
     except ValueError:
         return default
     return len(prompts)
@@ -52,6 +62,7 @@ def update_workflow_state_downloaded(
     file_count: int,
     suno_playlist_url: str | None = None,
     expected_file_count: int | None = None,
+    prompt_entries_reader: PromptEntriesReader,
     atomic_json_write: AtomicJsonWriter,
 ) -> None:
     ws_path = CollectionPaths(coll_dir).workflow_state_path
@@ -67,7 +78,7 @@ def update_workflow_state_downloaded(
         planning["music"] = music
     if suno_playlist_url:
         music["suno_playlist_url"] = suno_playlist_url
-    pattern_count = read_pattern_count(coll_dir)
+    pattern_count = read_pattern_count(coll_dir, prompt_entries_reader=prompt_entries_reader)
     effective_expected_count = expected_download_count(pattern_count, expected_file_count)
     if expected_file_count is not None and expected_file_count > 0:
         music["expected_file_count"] = expected_file_count

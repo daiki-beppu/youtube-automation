@@ -19,12 +19,12 @@ from youtube_automation.cli.channel_init import (
     main,
 )
 from youtube_automation.configuration import load_config
-from youtube_automation.utils.channel_settings import build_update_body
-from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.metadata_generator import (
+from youtube_automation.domains.metadata import (
     validate_localizations_title_templates,
     validate_scene_phrases,
 )
+from youtube_automation.utils.channel_settings import build_update_body
+from youtube_automation.utils.exceptions import ConfigError
 
 # ----------------------- Fixtures / constants -----------------------
 

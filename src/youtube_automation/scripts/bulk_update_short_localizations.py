@@ -19,9 +19,9 @@ import sys
 import time
 
 from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.domains.metadata import build_short_localizations
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.cost_tracker import log_quota
-from youtube_automation.utils.metadata_generator import build_short_localizations
 from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)

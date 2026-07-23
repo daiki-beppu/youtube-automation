@@ -21,11 +21,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.probe import probe_duration
-from youtube_automation.utils.suno_artifact_contracts import DOCUMENTATION_DIRNAME, SUNO_PROMPTS_JSON_FILENAME
-from youtube_automation.utils.suno_prompts_json import read_suno_prompt_entries
+
+DOCUMENTATION_DIRNAME = "20-documentation"
+SUNO_PROMPTS_JSON_FILENAME = "suno-prompts.json"
 
 _AUDIO_EXTENSIONS = {".mp3", ".m4a", ".wav"}
 _DOWNLOADED_NAME_RE = re.compile(r"^(?P<idx>\d{2,})(?P<variant>[a-z])?-(?P<title>.+)$", re.IGNORECASE)

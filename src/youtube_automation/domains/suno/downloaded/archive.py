@@ -8,10 +8,13 @@ import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 
+from youtube_automation.domains.suno.downloaded.models import (
+    DOCUMENTATION_DIRNAME,
+    SUNO_PROMPTS_JSON_FILENAME,
+    DownloadedArtifactError,
+    PromptEntriesReader,
+)
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.suno_artifact_contracts import DOCUMENTATION_DIRNAME, SUNO_PROMPTS_JSON_FILENAME
-from youtube_automation.utils.suno_downloaded_payload import DownloadedArtifactError
-from youtube_automation.utils.suno_prompts_json import read_suno_prompt_entries
 
 _AUDIO_EXTENSIONS = frozenset({".mp3", ".m4a", ".wav"})
 _ZIP_MAX_TOTAL_SIZE = 2 * 1024 * 1024 * 1024
@@ -51,13 +54,17 @@ def commit_staged_music_files(coll_dir: Path, staging_dir: Path) -> None:
             shutil.rmtree(backup_dir, ignore_errors=True)
 
 
-def extract_downloaded_archive(coll_dir: Path, download_path: str) -> int:
+def extract_downloaded_archive(
+    coll_dir: Path, download_path: str, *, prompt_entries_reader: PromptEntriesReader
+) -> int:
     # 期待数未満の部分 ZIP も受け入れて配置する（#1913）。不足の記録と警告は
     # workflow-state（actual/missing_file_count）と downloaded API response が担う
     resolved_dp = Path(download_path).resolve()
     staging_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-"))
     try:
-        placed_count = extract_and_rename_music(coll_dir, str(resolved_dp), target_dir=staging_dir)
+        placed_count = extract_and_rename_music(
+            coll_dir, str(resolved_dp), prompt_entries_reader=prompt_entries_reader, target_dir=staging_dir
+        )
         if placed_count == 0:
             raise DownloadedArtifactError("ZIP extraction failed: 0 audio files placed")
         commit_staged_music_files(coll_dir, staging_dir)
@@ -128,13 +135,13 @@ def _sanitize_output_stem(stem: str) -> str:
     return sanitized
 
 
-def _build_name_to_index(coll_dir: Path) -> dict[str, int]:
+def _build_name_to_index(coll_dir: Path, prompt_entries_reader: PromptEntriesReader) -> dict[str, int]:
     prompts_path = coll_dir / DOCUMENTATION_DIRNAME / SUNO_PROMPTS_JSON_FILENAME
     name_to_index: dict[str, int] = {}
     if not prompts_path.is_file():
         return name_to_index
     try:
-        prompts = read_suno_prompt_entries(coll_dir)
+        prompts = prompt_entries_reader(coll_dir)
     except ValueError as exc:
         print(f"[yt-collection-serve] invalid {SUNO_PROMPTS_JSON_FILENAME}: {prompts_path}: {exc}")
         raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}") from exc
@@ -180,7 +187,9 @@ def _music_stem_lookup_candidates(stem: str) -> list[tuple[str, int]]:
     return candidates
 
 
-def canonicalize_noncanonical_music_files(coll_dir: Path, music_dir: Path) -> list[tuple[str, str]]:
+def canonicalize_noncanonical_music_files(
+    coll_dir: Path, music_dir: Path, *, prompt_entries_reader: PromptEntriesReader
+) -> list[tuple[str, str]]:
     """music_dir 内の非正準形音声ファイルを suno-prompts.json と照合し `NN{a|b}-Title.ext` へリネームする。
 
     どの entry とも照合できないファイルはリネームせず残す（呼び出し側の突合で unknown として fail-loud）。
@@ -190,7 +199,7 @@ def canonicalize_noncanonical_music_files(coll_dir: Path, music_dir: Path) -> li
     """
     if not music_dir.is_dir():
         return []
-    name_to_index = _build_name_to_index(coll_dir)
+    name_to_index = _build_name_to_index(coll_dir, prompt_entries_reader)
     if not name_to_index:
         return []
 
@@ -239,13 +248,18 @@ def _is_safe_zip_member(filename: str) -> bool:
     return not path.is_absolute() and all(part != ".." for part in path.parts)
 
 
-def _extract_and_rename_music_to_dir(coll_dir: Path, download_path: str, target_dir: Path) -> int:
+def _extract_and_rename_music_to_dir(
+    coll_dir: Path,
+    download_path: str,
+    target_dir: Path,
+    prompt_entries_reader: PromptEntriesReader,
+) -> int:
     zip_path = Path(download_path)
     if not zip_path.is_file() or not zipfile.is_zipfile(zip_path):
         print(f"[yt-collection-serve] ZIP が無効です（skip）: {download_path}")
         return 0
 
-    name_to_index = _build_name_to_index(coll_dir)
+    name_to_index = _build_name_to_index(coll_dir, prompt_entries_reader)
     target_dir.mkdir(parents=True, exist_ok=True)
     tmp_dir = tempfile.mkdtemp(prefix="suno-extract-")
     try:
@@ -316,13 +330,19 @@ def _extract_and_rename_music_to_dir(coll_dir: Path, download_path: str, target_
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def extract_and_rename_music(coll_dir: Path, download_path: str, target_dir: Path | None = None) -> int:
+def extract_and_rename_music(
+    coll_dir: Path,
+    download_path: str,
+    *,
+    prompt_entries_reader: PromptEntriesReader,
+    target_dir: Path | None = None,
+) -> int:
     if target_dir is not None:
-        return _extract_and_rename_music_to_dir(coll_dir, download_path, target_dir)
+        return _extract_and_rename_music_to_dir(coll_dir, download_path, target_dir, prompt_entries_reader)
 
     staging_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-"))
     try:
-        placed_count = _extract_and_rename_music_to_dir(coll_dir, download_path, staging_dir)
+        placed_count = _extract_and_rename_music_to_dir(coll_dir, download_path, staging_dir, prompt_entries_reader)
         if placed_count > 0:
             try:
                 commit_staged_music_files(coll_dir, staging_dir)

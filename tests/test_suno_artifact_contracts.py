@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from youtube_automation.utils.suno_artifact_contracts import collection_downloaded_route
+from youtube_automation.domains.suno.downloaded.models import collection_downloaded_route
 
 
 def test_collection_downloaded_route_encodes_collection_id_path_segment():

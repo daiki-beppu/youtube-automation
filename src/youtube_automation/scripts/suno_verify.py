@@ -6,9 +6,11 @@ from __future__ import annotations
 import argparse
 import sys
 
+from youtube_automation.domains.suno.config import infer_suno_mode, resolve_suno_config
+from youtube_automation.domains.suno.downloaded.validation import verify_suno_collection
 from youtube_automation.utils.collection_paths import resolve_collection_dir
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
-from youtube_automation.utils.suno_verify_artifacts import verify_suno_collection
+from youtube_automation.utils.skill_config import load_skill_config
 
 
 def main() -> int:
@@ -18,7 +20,8 @@ def main() -> int:
 
     try:
         collection_dir = resolve_collection_dir(args.collection)
-        issues, summary = verify_suno_collection(collection_dir)
+        suno_cfg = resolve_suno_config(load_skill_config("suno"))
+        issues, summary = verify_suno_collection(collection_dir, suno_cfg, infer_suno_mode)
     except (ConfigError, ValidationError, OSError) as exc:
         print(f"ERROR: {exc}")
         return 1

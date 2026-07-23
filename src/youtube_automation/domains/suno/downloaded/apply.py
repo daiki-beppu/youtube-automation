@@ -7,15 +7,19 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.suno_downloaded_archive import extract_downloaded_archive
-from youtube_automation.utils.suno_downloaded_payload import DownloadedArtifactError, DownloadedPayload
-from youtube_automation.utils.suno_downloaded_workflow_state import (
+from youtube_automation.domains.suno.downloaded.archive import extract_downloaded_archive
+from youtube_automation.domains.suno.downloaded.models import (
+    DownloadedArtifactError,
+    DownloadedPayload,
+    PromptEntriesReader,
+)
+from youtube_automation.domains.suno.downloaded.workflow import (
     AtomicJsonWriter,
     expected_download_count,
     read_pattern_count,
     update_workflow_state_downloaded,
 )
+from youtube_automation.utils.collection_paths import CollectionPaths
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +50,10 @@ def apply_downloaded_artifacts(
     coll_dir: Path,
     payload: DownloadedPayload,
     *,
+    prompt_entries_reader: PromptEntriesReader,
     atomic_json_write: AtomicJsonWriter,
 ) -> int:
-    pattern_count = read_pattern_count(coll_dir, default=0)
+    pattern_count = read_pattern_count(coll_dir, prompt_entries_reader=prompt_entries_reader, default=0)
     expected_count = expected_download_count(pattern_count, payload.expected_file_count)
     placed_count_for_response = payload.file_count
     file_count = payload.file_count
@@ -66,7 +71,9 @@ def apply_downloaded_artifacts(
                 music_backup_dir = Path(tempfile.mkdtemp(dir=str(coll_dir), prefix=".suno-music-apply-backup-"))
                 shutil.copytree(music_dir, music_backup_dir / "02-Individual-music")
             restore_music_on_error = True
-            placed_count = extract_downloaded_archive(coll_dir, payload.download_path)
+            placed_count = extract_downloaded_archive(
+                coll_dir, payload.download_path, prompt_entries_reader=prompt_entries_reader
+            )
             placed_count_for_response = placed_count
             file_count = placed_count
 
@@ -75,6 +82,7 @@ def apply_downloaded_artifacts(
             file_count=file_count,
             suno_playlist_url=payload.suno_playlist_url,
             expected_file_count=expected_count,
+            prompt_entries_reader=prompt_entries_reader,
             atomic_json_write=atomic_json_write,
         )
     except DownloadedArtifactError:

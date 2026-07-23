@@ -1,7 +1,7 @@
 """
 BAHMetadataGenerator のユニットテスト
 
-テスト対象: utils/metadata_generator.py
+テスト対象: domains/metadata/service.py
 副作用のない純粋ロジック（タイムスタンプ計算、ファイル名サニタイズ、メタデータ生成）を検証する。
 """
 
@@ -15,18 +15,19 @@ import pytest
 import yaml
 
 from youtube_automation.configuration import load_config
-from youtube_automation.utils import metadata_generator as metadata_generator_module
-from youtube_automation.utils.exceptions import ValidationError
-from youtube_automation.utils.metadata_generator import (
+from youtube_automation.domains.metadata import (
     LOCALIZED_TITLE_PLACEHOLDERS,
     BAHMetadataGenerator,
     SceneTitleViolation,
-    _localized_title_values,
     format_scene_title_violations,
     format_title_template,
     validate_localizations_title_templates,
     validate_scene_phrases,
 )
+from youtube_automation.domains.metadata import service as metadata_generator_module
+from youtube_automation.domains.metadata.localizations import _localized_title_values
+from youtube_automation.domains.metadata.titles import _extract_pattern_key
+from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.time_utils import format_duration_display
 
 # ---------------------------------------------------------------------------
@@ -865,33 +866,27 @@ class TestExtractPatternKey:
     """`\\d+-pattern-[a-d]` パターンから pattern_key を抽出するロジックの検証."""
 
     def test_pattern_a_lowercase(self):
-        from youtube_automation.utils.metadata_generator import _extract_pattern_key
 
         assert _extract_pattern_key("01-pattern-a-intro.mp3") == "a"
 
     def test_pattern_b_with_variation_suffix(self):
-        from youtube_automation.utils.metadata_generator import _extract_pattern_key
 
         assert _extract_pattern_key("05-pattern-b1-quiet-hours.mp3") == "b1"
 
     def test_pattern_d_with_variation_suffix(self):
-        from youtube_automation.utils.metadata_generator import _extract_pattern_key
 
         assert _extract_pattern_key("05-pattern-d2-quiet-hours.mp3") == "d2"
 
     def test_pattern_c_uppercase(self):
-        from youtube_automation.utils.metadata_generator import _extract_pattern_key
 
         assert _extract_pattern_key("10-Pattern-C-finale.mp3") == "c"
 
     def test_no_pattern_returns_none(self):
-        from youtube_automation.utils.metadata_generator import _extract_pattern_key
 
         assert _extract_pattern_key("01-Hero_Theme.wav") is None
 
     def test_pattern_e_out_of_range(self):
         """[a-d] 範囲外（e 以降）は None"""
-        from youtube_automation.utils.metadata_generator import _extract_pattern_key
 
         assert _extract_pattern_key("01-pattern-e-extra.mp3") is None
 

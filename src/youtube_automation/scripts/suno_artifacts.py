@@ -1,12 +1,12 @@
 """Backward-compatible imports for Suno artifact contracts.
 
-The contract values live in ``youtube_automation.utils.suno_artifact_contracts`` so
+The contract values live in ``youtube_automation.domains.suno.downloaded.models`` so
 utils code does not depend on the scripts layer.
 """
 
 from __future__ import annotations
 
-from youtube_automation.utils.suno_artifact_contracts import (
+from youtube_automation.domains.suno.downloaded.models import (
     COLLECTIONS_ROUTE,
     DOCUMENTATION_DIRNAME,
     DOWNLOADED_ROUTE_SUFFIX,

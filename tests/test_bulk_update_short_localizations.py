@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 
 from youtube_automation.configuration import load_config, reset
-from youtube_automation.utils.metadata_generator import build_short_localizations
+from youtube_automation.domains.metadata import build_short_localizations
 
 # ---------------------------------------------------------------------------
 # ヘルパー

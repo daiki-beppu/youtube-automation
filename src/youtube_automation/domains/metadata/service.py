@@ -12,9 +12,7 @@ Features:
 import json
 import logging
 import re
-import string
 import subprocess
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -22,6 +20,27 @@ from typing import Dict, List
 import yaml
 
 from youtube_automation.configuration import load_config
+from youtube_automation.domains.metadata.descriptions import (
+    build_complete_collection_description,
+    build_short_description,
+)
+from youtube_automation.domains.metadata.localizations import (
+    _localized_title_values,
+    build_short_localizations,
+    format_scene_title_violations,
+    validate_scene_phrases,
+)
+from youtube_automation.domains.metadata.tags import (
+    build_collection_tags,
+    build_short_tags,
+)
+from youtube_automation.domains.metadata.titles import (
+    _extract_extra_variation,
+    _extract_pattern_key,
+    build_collection_title,
+    build_short_title,
+    format_title_template,
+)
 from youtube_automation.utils.audio_formats import AUDIO_EXTS
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.exceptions import ValidationError
@@ -29,301 +48,8 @@ from youtube_automation.utils.preflight_checks import requires_scene_phrases
 from youtube_automation.utils.probe import probe_duration
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.time_utils import format_duration_display, format_duration_short, format_timestamp
-from youtube_automation.utils.youtube_tag import normalize_youtube_tags
 
 logger = logging.getLogger(__name__)
-
-# `pattern-b1-` のような variation 接尾辞を保持する。
-_PATTERN_KEY_RE = re.compile(r"^\d+-pattern-([a-d]\d*)-", re.IGNORECASE)
-_EXTRA_VARIATION_RE = re.compile(r"^\d+-extra-v(\d+)(?:[-.]|$)", re.IGNORECASE)
-
-
-def _extract_pattern_key(filename: str) -> str | None:
-    """ファイル名から pattern_key（'a'|'b1'|'d2' 等）を抽出する。マッチしなければ None."""
-    m = _PATTERN_KEY_RE.match(filename)
-    if not m:
-        return None
-    return m.group(1).lower()
-
-
-def _extract_extra_variation(filename: str) -> str | None:
-    """`01-extra-v2-...` から extra variation 番号を抽出する。"""
-    m = _EXTRA_VARIATION_RE.match(filename)
-    if not m:
-        return None
-    return m.group(1)
-
-
-def _referenced_placeholders(template: str) -> set[str]:
-    """format テンプレートが参照するフィールド名の集合を返す（`{a.b}` / `{a[0]}` は `a` に正規化）."""
-    referenced: set[str] = set()
-    for _literal, field_name, _spec, _conv in string.Formatter().parse(template):
-        if field_name:
-            referenced.add(field_name.split(".")[0].split("[")[0])
-    return referenced
-
-
-def format_title_template(template: str, values: Dict[str, str], *, context: str) -> str:
-    """title テンプレートを整形する。未知プレースホルダは actionable な ValidationError にする.
-
-    `str.format()` をそのまま呼ぶと、テンプレートが提供キー以外のプレースホルダ
-    （例: `{adjective}`）を含むときに opaque な `KeyError` を送出し、upload 全体が
-    深部でクラッシュする（#574）。本ヘルパーは事前に未知プレースホルダを検出し、
-    「使用不可プレースホルダ名 + 許可キー一覧」を含む `ValidationError` に変換する。
-
-    Args:
-        template: format 文字列
-        values: 許可キー → 値の dict（このキー集合のみ許容）
-        context: エラーメッセージに添える文脈（どのテンプレートか）
-
-    Raises:
-        ValidationError: テンプレートが `values` に無いプレースホルダを含むとき。
-    """
-    allowed = set(values)
-    unknown = _referenced_placeholders(template) - allowed
-    if unknown:
-        raise ValidationError(
-            f"{context}: 使用できないプレースホルダ {sorted(unknown)} が含まれています。\n"
-            f"→ 使用可能なキー: {sorted(allowed)}\n"
-            f"→ テンプレート: {template}"
-        )
-    return template.format(**values)
-
-
-# localizations.json の languages.<lang>.title_template で使用できるプレースホルダ。
-# 多言語タイトル生成が format_title_template に渡す values のキー集合
-# （_localized_title_values）と、config 生成時検証の
-# 両方がこの集合を参照する（#1471）。
-LOCALIZED_TITLE_PLACEHOLDERS = frozenset({"scene_phrase", "activities", "scene_emoji"})
-
-
-def _localized_title_values(*, scene_phrase: str, activities: str, scene_emoji: str) -> Dict[str, str]:
-    """localizations の title_template に渡す values を組み立てる.
-
-    キー集合は `LOCALIZED_TITLE_PLACEHOLDERS` と一致させること
-    （tests/test_metadata_generator.py で機械担保）。
-    """
-    return {"scene_phrase": scene_phrase, "activities": activities, "scene_emoji": scene_emoji}
-
-
-def validate_localizations_title_templates(loc_data: Dict) -> List[str]:
-    """localizations.json の title_template 群を許可プレースホルダで検証する.
-
-    channel-new / channel-import が生成した `config/localizations.json` が
-    アップロード時まで気づけない不正プレースホルダ（例: `{axis_label}`）を
-    含んでいないか、生成直後の config 検証で検出するための
-    ヘルパー（#1471）。
-
-    Args:
-        loc_data: localizations.json の全量 dict（`config.localizations.data`）
-
-    Returns:
-        違反メッセージのリスト。空なら全言語合格。
-    """
-    errors: List[str] = []
-    languages = loc_data.get("languages")
-    if not isinstance(languages, dict):
-        return errors
-    for lang, lang_data in languages.items():
-        if not isinstance(lang_data, dict):
-            continue
-        template = lang_data.get("title_template")
-        if not isinstance(template, str):
-            continue
-        unknown = _referenced_placeholders(template) - LOCALIZED_TITLE_PLACEHOLDERS
-        if unknown:
-            errors.append(
-                f"languages.{lang}.title_template: 使用できないプレースホルダ {sorted(unknown)} が含まれています。\n"
-                f"  → 使用可能なキー: {sorted(LOCALIZED_TITLE_PLACEHOLDERS)}\n"
-                f"  → テンプレート: {template}"
-            )
-    return errors
-
-
-@dataclass(frozen=True)
-class SceneTitleViolation:
-    """多言語タイトルの codepoint 超過違反（100 codepoint 上限）."""
-
-    lang: str
-    length: int
-    title: str
-    template: str
-
-
-# ---------------------------------------------------------------------------
-# Shorts 用 module-level helpers
-# ---------------------------------------------------------------------------
-# Shorts の description / localizations は 3 経路（`generate_shorts_metadata`,
-# `bulk_update_short_localizations`, テストの parity 比較）から呼ばれるため、
-# クラスメソッドではなく module-level helper にして単一の事実源にする
-# （AI-NEW-shorts-localizations-DRY / AI-NEW-bulk-update-loc-L161 対応）。
-
-
-def _format_short_duration_phrase(config) -> str:
-    """`config.audio.target_duration_min` から「2 hours」等の文字列を組み立てる.
-
-    `target_duration_min is None` のときは `round(min / 60)` で TypeError に
-    ならないよう "Full collection" にフォールバックする（plan §152）。
-    """
-    target_min = config.audio.target_duration_min
-    if target_min is None:
-        return "Full collection"
-    hours = round(target_min / 60)
-    return f"{hours} hour" if hours == 1 else f"{hours} hours"
-
-
-def build_short_description(
-    config,
-    *,
-    collection_name: str,
-    cc_video_url: str,
-) -> str:
-    """Shorts デフォルト description（fallback と default 両方で使う共通組み立て）.
-
-    `cc_video_url` が空なら `♫` 行を含めない（plan 要件 #3 / アンチパターン #5）。
-    末尾に `#Shorts` を必ず付ける（YouTube 検出最適化）。
-    """
-    duration_phrase = _format_short_duration_phrase(config)
-    parts = [
-        f"{collection_name} ({duration_phrase}) | {config.meta.channel_name}",
-        "",
-    ]
-    if cc_video_url:
-        parts.append(f"♫ Full → {cc_video_url}")
-        parts.append("")
-    parts.append("#Shorts")
-    return "\n".join(parts)
-
-
-def build_short_localizations(
-    config,
-    *,
-    collection_name: str,
-    theme: str,
-    cc_video_url: str,
-) -> Dict[str, Dict[str, str]]:
-    """Shorts 用 localizations を生成する（`generate_shorts_metadata` / bulk_update 共通）.
-
-    - `short_title_template` を持たない言語は skip（plan 要件 #5）.
-    - `short_description_template` が無い言語は `build_short_description` フォールバック.
-    - `theme` を必須引数にして、bulk_update が theme 抜き(`""`) で初回 upload の
-      タイトルを破壊する事故（AI-NEW-bulk-update-loc-L161）を構造的に防ぐ.
-    """
-    loc_config = config.localizations.data
-    if not loc_config:
-        return {}
-
-    channel_name = config.meta.channel_name
-    default_tagline = config.meta.tagline
-    localizations: Dict[str, Dict[str, str]] = {}
-
-    for lang in loc_config.get("supported_languages", []):
-        lang_data = loc_config.get("languages", {}).get(lang, {})
-        title_tpl = lang_data.get("short_title_template")
-        if not title_tpl:
-            continue
-
-        loc_title = title_tpl.format(
-            theme=theme,
-            channel_name=channel_name,
-            collection_name=collection_name,
-        )
-
-        desc_data = lang_data.get("description", {}) or {}
-        tagline = desc_data.get("tagline", default_tagline)
-        desc_tpl = lang_data.get("short_description_template")
-        if desc_tpl:
-            loc_desc = desc_tpl.format(
-                collection_name=collection_name,
-                channel_name=channel_name,
-                cc_video_url=cc_video_url,
-                tagline=tagline,
-            )
-        else:
-            loc_desc = build_short_description(
-                config,
-                collection_name=collection_name,
-                cc_video_url=cc_video_url,
-            )
-
-        localizations[lang] = {
-            "title": loc_title,
-            "description": loc_desc[:5000],
-        }
-    return localizations
-
-
-def validate_scene_phrases(
-    scene_phrases: Dict[str, str],
-    config,
-    scene_emoji: str = "",
-) -> List[SceneTitleViolation]:
-    """scene_phrases を localizations の全言語で試算し、100 codepoint 超過を一括検出する.
-
-    `/video-description` など `workflow-state.json` への書き込み前に呼ぶことで、
-    アップロード時 preflight まで超過発覚を遅らせず、全言語分をまとめて検査できる.
-    単一言語チャンネルでは localizations 用の scene_phrases を生成しないため、
-    空の scene_phrases を許容して空リストを返す.
-
-    Args:
-        scene_phrases: {"en": ..., "ja": ..., ...} コレクション別の感情フレーズ翻訳
-        config: `load_config()` の戻り値
-
-    Returns:
-        違反のリスト。空なら全言語 100 codepoint 以内.
-
-    Raises:
-        ValueError: 多言語チャンネルで scene_phrases が一部言語で欠落している場合、
-            または `localizations.json` に `title_template` が無い言語がある場合.
-    """
-    loc_config = config.localizations.data
-    supported = loc_config.get("supported_languages", [])
-
-    # 単一言語チャンネルは scene_phrases 不要（populate も no-op）#1470
-    if not requires_scene_phrases(supported):
-        return []
-
-    missing_langs = [lang for lang in supported if not scene_phrases.get(lang)]
-    if missing_langs:
-        raise ValueError(
-            "scene_phrases に翻訳が不足しています。"
-            f"不足言語: {missing_langs}\n"
-            "→ コレクションの workflow-state.json に "
-            "`scene_phrases: {en: ..., ja: ..., ...}` を populate してください。\n"
-            "→ 既存例: collections/live/20260322-rjn-city-collection/workflow-state.json"
-        )
-
-    desc_metadata = config.content.descriptions.metadata
-    best_for_line = desc_metadata.get("best_for", "Study, Focus, Late Night")
-
-    violations: List[SceneTitleViolation] = []
-    for lang in supported:
-        lang_data = loc_config["languages"].get(lang, {})
-        title_tpl = lang_data.get("title_template")
-        if not title_tpl:
-            raise ValueError(f"localizations.json: language '{lang}' に title_template が無い")
-        activities = lang_data.get("activities", best_for_line)
-        scene = scene_phrases[lang]
-        title = format_title_template(
-            title_tpl,
-            _localized_title_values(scene_phrase=scene, activities=activities, scene_emoji=scene_emoji),
-            context=f"localizations.json: language '{lang}' の title_template",
-        )
-        if len(title) > 100:
-            violations.append(
-                SceneTitleViolation(
-                    lang=lang,
-                    length=len(title),
-                    title=title,
-                    template=title_tpl,
-                )
-            )
-    return violations
-
-
-def format_scene_title_violations(violations: List[SceneTitleViolation]) -> str:
-    """違反リストを人間可読な複数行テキストに整形する（CLI / エラーメッセージ共通）."""
-    return "\n".join(f"  - [{v.lang}] {v.length} codepoints (+{v.length - 100}): {v.title}" for v in violations)
 
 
 class BAHMetadataGenerator:
@@ -861,7 +587,7 @@ class BAHMetadataGenerator:
         if ws_scene_emoji:
             scene_emoji = ws_scene_emoji
 
-        title = format_title_template(
+        return build_collection_title(
             self.config.content.title.template,
             {
                 "style": self.config.content.genre.style.title(),
@@ -875,19 +601,6 @@ class BAHMetadataGenerator:
             },
             context="content.json: title.template",
         )
-        # YouTube タイトル制限: 100 codepoint。
-        # 過去事例: silent な title[:100] スライスでサロゲート文字接頭辞 +
-        # 長い scene_phrase の組み合わせがアップロード時に切られ、
-        # scene phrase 部分がまるごと消える事故が起きた。
-        # silent slice せず、超過時は呼び出し元で短縮対応するよう例外を投げる。
-        if len(title) > 100:
-            raise ValueError(
-                f"生成したタイトルが {len(title)} codepoint と 100 を超過: "
-                f"\n  {title}\n"
-                f"→ config/channel/content.json の title.theme_scenes[{theme}].scene を"
-                f"短く書き直してください"
-            )
-        return title
 
     def _load_scene_phrases(self) -> Dict[str, str]:
         """workflow-state.json から scene_phrases を読み込み"""
@@ -1058,19 +771,7 @@ class BAHMetadataGenerator:
         # 中間タイトル生成をスキップし、未知プレースホルダ由来のクラッシュを避ける。
         title = title_override if title_override else self._generate_title(total_duration)
 
-        # 説明文生成
-        description_parts = []
-
-        # ヘッダーを新タイトルと一致させる
-        header = f"🎵 {title}"
-        description_parts.append(header)
-        description_parts.append("")
-
         timestamp_body = self.format_timestamps_text(loops=loops)
-        if timestamp_body:
-            description_parts.append(timestamp_body)
-
-        # config から説明文パーツを構築
         perfect_for_lines = "\n".join(f"• {item}" for item in list(self.config.content.descriptions.perfect_for))
 
         section_headers = self._video_description_config.get("section_headers", {})
@@ -1081,23 +782,19 @@ class BAHMetadataGenerator:
         )
         usage_lines_cfg = self._video_description_config.get("usage_attribution_lines", [])
 
-        description_parts.extend(
-            [
-                "",
-                self.config.content.descriptions.render_opening(),
-                self.config.content.descriptions.sub_opening,
-                "",
-                usage_header,
-                *usage_lines_cfg,
-                "",
-                f"{perfect_for_header}\n{perfect_for_lines}",
-                "",
-                channel_link_header,
-                self.config.meta.cta_subscribe,
-                self.config.meta.tagline,
-                "",
-                self.config.content.descriptions.hashtag_line,
-            ]
+        description = build_complete_collection_description(
+            title=title,
+            timestamp_body=timestamp_body,
+            opening=self.config.content.descriptions.render_opening(),
+            sub_opening=self.config.content.descriptions.sub_opening,
+            usage_header=usage_header,
+            usage_lines=usage_lines_cfg,
+            perfect_for_header=perfect_for_header,
+            perfect_for_lines=perfect_for_lines,
+            channel_link_header=channel_link_header,
+            cta_subscribe=self.config.meta.cta_subscribe,
+            tagline=self.config.meta.tagline,
+            hashtag_line=self.config.content.descriptions.hashtag_line,
         )
 
         # ローカライゼーション生成
@@ -1108,7 +805,7 @@ class BAHMetadataGenerator:
 
         return {
             "title": title,
-            "description": "\n".join(description_parts),
+            "description": description,
             "tags": self._generate_tags(),
             "category_id": self.config.youtube.api.category_id,
             "privacy_status": self.config.youtube.api.privacy_status,
@@ -1118,7 +815,7 @@ class BAHMetadataGenerator:
 
     def _generate_tags(self) -> List[str]:
         """YouTube タグ生成（config/channel/content.json 駆動）"""
-        return self.config.content.tags.for_collection(self.collection_name)
+        return build_collection_tags(self.config.content.tags.for_collection(self.collection_name))
 
     # ─── Shorts 用メタデータ ────────────────────────────
 
@@ -1159,13 +856,7 @@ class BAHMetadataGenerator:
         theme = self._load_theme()
 
         # タイトル: 旧版踏襲 "{collection_name} ✦ {channel_name} #Shorts"
-        title = f"{self.collection_name} ✦ {channel_name} #Shorts"
-        if len(title) > 100:
-            raise ValueError(
-                f"生成した Shorts タイトルが {len(title)} codepoint と 100 を超過: "
-                f"{title}\n"
-                "→ コレクションディレクトリ名（_extract_collection_name 経路）を短縮してください"
-            )
+        title = build_short_title(self.collection_name, channel_name)
 
         # description: 共通組み立て（fallback と同じロジックを再利用）
         description = build_short_description(
@@ -1174,12 +865,7 @@ class BAHMetadataGenerator:
             cc_video_url=cc_video_url,
         )
 
-        # tags: ["Shorts"] + base + themes.get(theme, []) を [:50] でスライス
-        # 順序は保持し、重複除去はしない（先勝ち）。plan 要件 #4-a/b/c/d 補足設計判断 §154。
-        tag_list: List[str] = ["Shorts"]
-        tag_list.extend(self.config.content.tags.base)
-        tag_list.extend(self.config.content.tags.themes.get(theme, []))
-        tag_list = normalize_youtube_tags(tag_list[:50])
+        tag_list = build_short_tags(self.config.content.tags.base, self.config.content.tags.themes.get(theme, []))
 
         localizations = build_short_localizations(
             self.config,
@@ -1236,7 +922,7 @@ def main():
     import sys
 
     if len(sys.argv) != 2:
-        print("使用法: python metadata_generator.py <collection_directory>")
+        print("使用法: python -m youtube_automation.domains.metadata.service <collection_directory>")
         sys.exit(1)
 
     collection_path = sys.argv[1]

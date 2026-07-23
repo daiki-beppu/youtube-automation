@@ -7,6 +7,7 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
+from youtube_automation.domains.suno.lyrics import load_suno_lyrics_entries
 from youtube_automation.utils.captions import (
     generate_srt,
     parse_timestamp,
@@ -16,7 +17,6 @@ from youtube_automation.utils.captions import (
     write_srt,
 )
 from youtube_automation.utils.exceptions import AutomationError, ValidationError
-from youtube_automation.utils.suno_lyrics import load_suno_lyrics_entries
 from youtube_automation.utils.youtube_service import get_youtube
 
 

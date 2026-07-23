@@ -52,7 +52,9 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `utils.upload_core` | 再開可能アップロード・サムネイル圧縮の共通コア |
 | `utils.exceptions` | ドメイン例外（`AutomationError` 基底、`ConfigError` / `YouTubeAPIError` / `ValidationError` / `UploadError`） |
 | `utils.collection_paths` | コレクションディレクトリ構造の解決 |
-| `utils.metadata_generator` | タイトル・説明文・タグ・ローカライゼーション生成 |
+| `domains.suno` | Suno 設定、歌詞、プロンプト、プレイリスト、選曲の生成・検証 |
+| `domains.suno.downloaded` | downloaded payload、workflow、検証、archive、apply transaction |
+| `domains.metadata` | `service` の状態付き orchestration と titles / descriptions / tags / localizations leaf |
 | `utils.analytics_collector` | Analytics API 収集（Mixin 構成、`VideoDailyAnalyticsMixin` で動画×日次取得） |
 | `utils.launch_curve_*` / `channel_trend` / `theme_performance` | 視聴推移分析（pandas / matplotlib） |
 | `utils.thumbnail_features` / `thumbnail_correlation` | サムネ特徴量＋ CTR/views 相関（Pillow） |
@@ -66,6 +68,16 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `scripts.collection_serve_discovery` | 固定 loopback endpoint の稼働 server registry、heartbeat、TTL、owner takeover |
 | `extensions/shared/server-discovery.ts` | registry schema v1 の検証と `/server-info` probe を両 helper 拡張へ提供 |
 | `extensions/shared/server-source-migration.ts` | 廃止した配信元候補履歴 storage key の共通 migration |
+
+### B2 domain ownership receipt / B3 handoff
+
+Issue #2305 で Suno の旧 `utils.suno_*` 14 module と `utils.metadata_generator` を削除し、実行 consumer と patch seam を新 owner へ移行した。`domains.metadata.__all__` は次の9 symbolに固定する。
+
+`BAHMetadataGenerator`, `LOCALIZED_TITLE_PLACEHOLDERS`, `SceneTitleViolation`, `build_short_description`, `build_short_localizations`, `format_scene_title_violations`, `format_title_template`, `validate_localizations_title_templates`, `validate_scene_phrases`.
+
+B3 が直接利用する leaf API は `domains.metadata.descriptions.build_short_description` / `domains.metadata.localizations.build_short_localizations` と、placeholder 検証の `domains.metadata.titles.format_title_template` / `domains.metadata.localizations.validate_localizations_title_templates`。既知 downstream の `wf_batch_runner.py` と `bulk_update_collection_localizations.py` は、旧 metadata import を `domains.metadata`（または owner leaf）へ置換する。
+
+歴史監査資料の旧パス表記は監査時点の記録として保持し、active source / skill / docs では新 owner のみを参照する。
 
 ### collection-serve discovery schema v1
 
