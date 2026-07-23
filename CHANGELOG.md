@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `feat(skills)`: `/suno`・`/thumbnail`・`/loop-video`・`/alignment-check` が `docs/channel/creative-constraints.md` の担当セクションを毎回参照し、不在時は既存チャンネルを止めず `/creative-constraints` を案内（#2449）。
 - `fix(masterup)`: `config/channel/audio.json` の目標尺を master loop 解決と upload preflight の SSOT にし、整数ループでは min–max を満たせない構成と目標尺外動画を明示 override なしで停止（#2469）。
 - `feat(post-publish)`: 予約公開前の pinned-comment を `pending_until_publish` と実行可能時刻で履歴化し、公開後は同じ video ID で安全に再開。予定時刻超過後も private の場合は apply せず actionable error とする（#2470）。
+- `feat(suno-helper)`: 通常時の Create 3–9秒・最大10 request を維持し、30秒内 burst と同一 run の Turnstile 検知時だけ中断可能な追加 cooldown/backoff を適用。正常投入で段階回復する共有 policy を serial/queue/retry に接続（#2472）。
 - `docs(workflow)`: `thumbnail::textless.enabled: false` の共有 `main.jpg` を wf-new・loop-video・videoup・wf-next が正規の文字入り動画背景として貫通させる契約を追加（#2458）。
 - `fix(metadata-audit)`: channel audio の target duration（分）を秒へ正規化してからローカル動画尺と比較し、60〜90分を1分扱いする誤検知を解消（#2468）。
 - `fix(masterup)`: libmp3lame の bitrate (`-b:a`) と VBR quality (`-q:a`) の同時指定を解消し、FFmpeg 8.1.2 の末尾 frame flush error を防止（#2466）。

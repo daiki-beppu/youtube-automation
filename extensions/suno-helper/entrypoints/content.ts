@@ -1,5 +1,3 @@
-// Suno の Advanced タブへの Style / Lyrics 注入と Generate 連続実行 (content script)。
-// DOM 操作は shared/dom の純関数へ委譲し、本ファイルは連続実行のフロー制御に専念する。
 import {
   DEFAULT_DURATION_FILTER,
   type DurationFilter,
@@ -58,6 +56,15 @@ import {
   waitForNewPlaylistUrlByName,
 } from "../../shared/playlist-dom";
 import { createAckWaiter, markAck } from "../lib/ack-probe";
+// Suno の Advanced タブへの Style / Lyrics 注入と Generate 連続実行 (content script)。
+// DOM 操作は shared/dom の純関数へ委譲し、本ファイルは連続実行のフロー制御に専念する。
+import {
+  createAdaptivePacingState,
+  decideAdaptivePacing,
+  recordChallenge,
+  recordSuccessfulCreate,
+  waitForAdaptivePacing,
+} from "../lib/adaptive-pacing";
 import {
   attachBridgeListener,
   createFeedPoller,
@@ -708,6 +715,7 @@ export default defineContentScript({
       );
     }
     let aborted = false;
+    let adaptivePacingState = createAdaptivePacingState();
     // 連続実行の二重起動ガード (#892 要件7)。runAll 実行中の run 再着信を弾く。
     let running = false;
     const runLockOwner = `${Date.now()}-${Math.random()}`;
@@ -900,6 +908,7 @@ export default defineContentScript({
     });
     downloadFlow.installMessageHandlers();
 
+    // fallow-ignore-next-line complexity
     async function injectEntryAndClickGenerate(
       entry: PromptEntry,
       index: number,
@@ -994,15 +1003,43 @@ export default defineContentScript({
         isAborted: () => aborted,
         pollIntervalMs: POLL_INTERVAL_MS,
         timeoutMs: CAPTCHA_WAIT_TIMEOUT_MS,
-        onWaitStart: () =>
-          emitProgress({ phase: PHASE.WAITING_CAPTCHA, index, total }),
+        onWaitStart: () => {
+          adaptivePacingState = recordChallenge(adaptivePacingState);
+          emitProgress({ phase: PHASE.WAITING_CAPTCHA, index, total });
+        },
       });
       if (aborted) {
         return null; // captcha 解消待ち中の停止。Generate を押さない（未投入のまま STOPPED 経路へ）
       }
 
+      const adaptiveDecision = decideAdaptivePacing(
+        adaptivePacingState,
+        Date.now()
+      );
+      if (adaptiveDecision.delayMs > 0) {
+        emitProgress({
+          phase: PHASE.WAITING_SLOT,
+          index,
+          total,
+          message: `適応型ペーシング: ${adaptiveDecision.reasons.join("+")} (${Math.ceil(adaptiveDecision.delayMs / 1000)}秒)`,
+          yieldRetryCount: 0,
+        });
+        await waitForAdaptivePacing(
+          adaptiveDecision,
+          abortableSleep,
+          () => aborted
+        );
+      }
+      if (aborted) {
+        return null;
+      }
+
       const button = resolveGenerateButton();
       button.click();
+      adaptivePacingState = recordSuccessfulCreate(
+        adaptivePacingState,
+        Date.now()
+      );
       // Generate click 直後に lastSubmittedEntryIndex を更新する。中断時の interruptIndex 計算で
       // 「この entry は click 済み（submitted）」と判定できるようにする (#924)。
       lastSubmittedEntryIndex = index;
@@ -1045,12 +1082,16 @@ export default defineContentScript({
         settleMs: SETTLE_MS,
         captchaWaitTimeoutMs: activeUnattended ? 0 : CAPTCHA_WAIT_TIMEOUT_MS,
         // 生成完了待ち中に captcha が出たら waiting-captcha 表示へ切り替え、解消後 generating へ戻す。
-        onCaptchaWait: (waiting) =>
+        onCaptchaWait: (waiting) => {
+          if (waiting) {
+            adaptivePacingState = recordChallenge(adaptivePacingState);
+          }
           emitProgress({
             phase: waiting ? PHASE.WAITING_CAPTCHA : PHASE.GENERATING,
             index,
             total,
-          }),
+          });
+        },
       });
     }
 
@@ -1396,6 +1437,7 @@ export default defineContentScript({
       unattended?: RunPayload["unattended"];
     }
 
+    // fallow-ignore-next-line complexity
     async function runAll(
       entries: PromptEntry[],
       options: RunOptions
@@ -1410,6 +1452,7 @@ export default defineContentScript({
       } = options;
       const previousSubmittedClipIds = submittedClipIds ?? [];
       const pacing = BALANCED_RUN_PACING;
+      adaptivePacingState = createAdaptivePacingState();
       try {
         const baseUrl = await serverUrlItem.getValue();
         await sendMessage("fetchCollectionPromptResponse", {
