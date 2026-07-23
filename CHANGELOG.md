@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(skills)`: `/suno`・`/thumbnail`・`/loop-video`・`/alignment-check` が `docs/channel/creative-constraints.md` の担当セクションを毎回参照し、不在時は既存チャンネルを止めず `/creative-constraints` を案内（#2449）。
 - `docs(workflow)`: `thumbnail::textless.enabled: false` の共有 `main.jpg` を wf-new・loop-video・videoup・wf-next が正規の文字入り動画背景として貫通させる契約を追加（#2458）。
 - `fix(metadata-audit)`: channel audio の target duration（分）を秒へ正規化してからローカル動画尺と比較し、60〜90分を1分扱いする誤検知を解消（#2468）。
 - `fix(masterup)`: libmp3lame の bitrate (`-b:a`) と VBR quality (`-q:a`) の同時指定を解消し、FFmpeg 8.1.2 の末尾 frame flush error を防止（#2466）。
