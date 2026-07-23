@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - `feat(skills)`: ペルソナと視聴シーンを、音・映像・サムネ・タイトル・測定の機械検証可能な制約へ翻訳する `/creative-constraints` を追加（#2442）。
+- `feat(skills)`: シーン定義・制約翻訳・公開前ゲート・指標還流の価値ループを読み取り専用で診断する `/value-loop-audit` を追加（#2443）。
 - `refactor(domains)`: Analytics、thumbnail、media、DistroKid、weekly vote の domain 公開面を追加し、consumer の旧 owner 参照を domain 境界へ接続（#2306）。
 - `fix(doctor)`: workspace root の `--channel` 選択を診断対象へ反映し、channel 配下からの診断でも root の `pyproject.toml`・共有 skills・`.agents/skills`・重複ファイル検査を利用するよう修正（#2463）。
 - `breaking(refactor/domains)`: Suno 14旧 `utils.suno_*` module と `utils.metadata_generator` を削除し、`domains.suno` / `domains.suno.downloaded` / `domains.metadata` へ移行。旧 import path は恒久 facade として提供しない（#2305）。
