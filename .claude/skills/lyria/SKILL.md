@@ -228,7 +228,7 @@ uv run yt-generate-lyria-master \
 | `--max-retries N` | 1 セグメントあたりの失敗時リトライ回数（default: 3） |
 | `--collection PATH` | コレクションディレクトリ（省略時は CWD） |
 
-> **`.env` は自動ロード**: `lyria_client` 内で `dotenv` により自動読み込みされる。
+> **認証**: Vertex AI は ADC を使う。project ID は ADC quota project（必要時のみ `GOOGLE_CLOUD_PROJECT` process env override）、location は Lyria 用にアプリが決定する。
 
 **注意点**:
 - Vertex AI の Lyria クォータ（プロジェクト単位）は有限。他チャンネルと同時に大量生成すると 429 エラーが発生する（クォータ管理・並列実行制御は本スキルの責務外）

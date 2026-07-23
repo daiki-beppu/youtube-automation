@@ -134,7 +134,7 @@ yt-skills sync --asset skills --prune --yes  # 列挙したうえで実際に削
 yt-channel-status
 ```
 
-### 5. 環境変数を設定
+### 5. 認証とシークレットを設定
 
 シークレットは次の優先順位で取得されます:
 
@@ -144,18 +144,18 @@ yt-channel-status
 
 通常のテスト実行では `YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` を既定有効にし、`op` の探索と `op read` の起動を行わず、env/file で解決できなければ最終エラーへ進みます。`op read` fallback を検証するテストだけ、この opt-out を明示的に解除します。
 
-#### A. 標準方式: `.env` を直接編集（OSS 利用者向け）
+#### A. Google Cloud: ADC（標準）
 
 ```bash
-cp .env.example .env
-$EDITOR .env  # Vertex AI 用変数 (`GOOGLE_CLOUD_LOCATION` 等) を書く。project_id は ADC quota project から自動解決される
+gcloud auth application-default login
+gcloud auth application-default set-quota-project <PROJECT_ID>
 ```
 
-`.claude/skills/channel-new/references/gcp-bootstrap.sh` または `infra/terraform/gcp/` を実行すれば `.env` に自動書き出しされます。`load_dotenv()` で `os.environ` に読み込まれ、上記 (1) の経路で利用されます。
+Vertex AI の project ID は ADC quota project から解決する。必要な場合だけ起動プロセスへ `GOOGLE_CLOUD_PROJECT=<id>` を渡して上書きできる。Vertex AI mode と location は用途別にアプリが決定するため、利用者の設定は不要。
 
 #### B. 1Password CLI 方式（秘密をディスクに書かない）
 
-`op` CLI にサインインしておけば、Python スクリプト実行時に必要な瞬間だけ `op read` で取得します。シェルの環境変数や `.env` ファイルには一切残りません。`YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` を設定したプロセスではこの fallback を使わず、env/file で解決できない場合に `ConfigError` で停止します。
+`op` CLI にサインインしておけば、Python スクリプト実行時に必要な瞬間だけ `op read` で取得します。シークレットをファイルへ書き出しません。`YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` を設定したプロセスではこの fallback を使わず、process env / 専用 OAuth file で解決できない場合に `ConfigError` で停止します。
 
 ```bash
 op signin
@@ -203,8 +203,6 @@ nix develop
 | 変数名 | 必須 | 説明 |
 |--------|------|------|
 | `GOOGLE_CLOUD_PROJECT` | 任意 | Vertex AI を呼ぶ GCP プロジェクト ID。未設定なら ADC quota project から自動解決 |
-| `GOOGLE_CLOUD_LOCATION` | 任意 | Vertex AI リージョン（既定: `us-central1`） |
-| `GOOGLE_GENAI_USE_VERTEXAI` | 任意 | google-genai SDK の自動検出用フラグ（アプリ側は参照しない） |
 | `CHANNEL_DIR` | 自動検出可 | チャンネルリポジトリのルートパス |
 | `CLIENT_SECRETS_DIR` | 任意 | `client_secrets.json` を置いたディレクトリ。設定時はそのディレクトリのみ検査。未設定時は `<channel_dir>/auth/`、`<channel_dir>/automation/auth/`、1Password / `CLIENT_SECRETS_JSON` fallback の順で探索 |
 

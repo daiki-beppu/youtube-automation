@@ -211,7 +211,7 @@ ffmpeg / Veo / Lyria / 画像生成 API を呼ぶスキル（`/videoup` / `/mast
 
 ### 認証
 
-- `auth/client_secrets.json` / `auth/token.json` / `.env` は **絶対にコミットしない**
+- `auth/client_secrets.json` / `auth/token.json` は **絶対にコミットしない**
 - シークレット解決順序: `os.environ` → `op read`（1Password CLI）→ `ConfigError`。`YOUTUBE_AUTOMATION_DISABLE_OP_READ=1` の場合は `op read` をスキップし、通常テストではこの opt-out を既定有効化する
 
 ---

@@ -54,7 +54,7 @@ bash "$SKILL_REF/gcp-terraform-apply.sh" \
   --tf-dir "$SKILL_REF/terraform-gcp"
 ```
 
-`gcp-terraform-apply.sh` が `terraform init && apply` → `.env` への値反映までラップする。
+Terraform は `terraform init && apply` で GCP resource を構成する。project ID は apply 後に ADC quota project として設定する。
 
 automation リポジトリ側では `infra/terraform/gcp/` を canonical ディレクトリとして利用できる。
 

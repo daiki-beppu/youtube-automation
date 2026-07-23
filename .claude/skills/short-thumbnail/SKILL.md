@@ -75,7 +75,6 @@ open <collection-path>/10-assets/main.*
 ### Step 3: 生成
 
 ```bash
-export $(grep -v '^#' .env | xargs) && \
 uv run yt-generate-image \
   --aspect-ratio "9:16" \
   --prompt "<Step 2 のプロンプト>" \
@@ -105,7 +104,6 @@ open <collection-path>/10-assets/short.png
 承認された `short.png` を Veo 3.1 で 9:16 ループ動画に変換:
 
 ```bash
-export $(grep -v '^#' .env | xargs) && \
 uv run yt-generate-shorts-loop <collection-path> -y
 ```
 
