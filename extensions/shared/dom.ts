@@ -41,7 +41,7 @@ const SELECTORS = {
   vocalGenderButtons: 'button[data-selected][type="button"]',
   generateLabel: /^(create|generate|生成|作成(?:する)?)$/i,
   recaptcha:
-    'iframe[src*="recaptcha"], iframe[title*="recaptcha" i], iframe[src*="hcaptcha"]',
+    'iframe[src*="recaptcha"], iframe[title*="recaptcha" i], iframe[src*="hcaptcha"], iframe[src*="challenges.cloudflare.com"], iframe[title*="turnstile" i]',
 } as const;
 
 /** radix slider 注入の step ごとの読み戻し検証の poll 間隔 (ms)。 */
@@ -728,7 +728,8 @@ function isChallengeFrame(src: string): boolean {
 }
 
 /**
- * active な recaptcha / hcaptcha challenge iframe を検知する（#810, #875, #924）。
+ * active な reCAPTCHA / hCaptcha / Cloudflare Turnstile challenge iframe を検知する
+ *（#810, #875, #924, #2471）。
  * Suno は hCaptcha challenge を非表示プリロード iframe として常駐させるため、
  * querySelector の hit だけでは常に true になってしまう。
  *
@@ -742,7 +743,9 @@ function isChallengeFrame(src: string): boolean {
  * anchor / checkbox / badge 系の常駐 widget iframe（reCAPTCHA anchor は title="reCAPTCHA"、
  * hCaptcha checkbox widget も常時 title あり）まで誤検知してしまう。
  * title 非空ヒューリスティックは challenge 系 iframe（`frame=challenge` / `/bframe`）に限定し、
- * それ以外の iframe は従来通り strict isVisible() のみで判定する。
+ * それ以外の iframe（Turnstile を含む）は strict isVisible() のみで判定する。Cloudflare 公式の
+ * implicit / explicit rendering はいずれも `challenges.cloudflare.com` の widget を挿入するが、
+ * 非表示の background verification は停止要因にしない。
  */
 export function detectRecaptcha(): boolean {
   const iframes = document.querySelectorAll<HTMLIFrameElement>(

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `fix(metadata-audit)`: channel audio の target duration（分）を秒へ正規化してからローカル動画尺と比較し、60〜90分を1分扱いする誤検知を解消（#2468）。
 - `fix(masterup)`: libmp3lame の bitrate (`-b:a`) と VBR quality (`-q:a`) の同時指定を解消し、FFmpeg 8.1.2 の末尾 frame flush error を防止（#2466）。
 - `fix(video-upload)`: 2026-06-01以降の YouTube Data API quota を `videos.insert` / `search.list` の独立100-call bucket とその他 endpoint の10,000-unit pool に分離し、plan と preflight を更新（#2467）。
+- `fix(suno-helper)`: 可視で対話が必要な Cloudflare Turnstile challenge を CAPTCHA 待機へ接続し、非表示の background verification は誤検知せず、解消後に重複 Create なしで再開（#2471）。
 - `feat(thumbnail)`: `textless.enabled: false` の opt-in で追加の textless 生成・承認を省略し、確定済み `thumbnail.jpg` を同一内容の `main.jpg` として検証付きで共用（#2457）。
 - `fix(workspace)`: `yt-channel-import` が移行元・コピー対象内の通常ファイル symlink を安全検証後に実体化し、外部・対象外・壊れた・directory link は従来どおり rollback（#2462）。
 - `fix(wf-auto)`: Suno の生成・playlist 追加・ZIP download・strict 検証を browser use で agent が完走し、人間への handoff を login / CAPTCHA の該当操作だけに限定（#2454）。

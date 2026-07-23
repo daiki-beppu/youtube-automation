@@ -77,6 +77,32 @@ describe("waitForGeneration: 完了検知", () => {
 });
 
 describe("waitForGeneration: captcha 検知で待機し解消後に続行する", () => {
+  it("Given 可視 Turnstile が解消する When poll する Then waiting-captcha を経て同じ生成待機へ戻る", async () => {
+    const btn = disabledButton();
+    const captcha = addCaptchaIframe({
+      src: "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/if/ov2/av0/rcv",
+      title: "Widget containing a Cloudflare security challenge",
+    });
+    const phases: boolean[] = [];
+
+    const pending = waitForGeneration(btn, {
+      isAborted: () => false,
+      ...FAST_OPTIONS,
+      captchaWaitTimeoutMs: 500,
+      onCaptchaWait: (waiting) => phases.push(waiting),
+    });
+    await vi.advanceTimersByTimeAsync(
+      FAST_OPTIONS.settleMs + FAST_OPTIONS.pollIntervalMs
+    );
+    captcha.remove();
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs * 2);
+    btn.disabled = false;
+    await vi.advanceTimersByTimeAsync(FAST_OPTIONS.pollIntervalMs * 2);
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(phases).toEqual([true, false]);
+  });
+
   it("Given 待機中に可視 captcha 出現 → 自動 verify で消滅 When poll する Then throw せず生成完了まで待って resolve する", async () => {
     const btn = disabledButton();
     const captcha = addCaptchaIframe({
