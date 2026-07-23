@@ -3,7 +3,11 @@
     "allow": [
       "Read(//private/tmp/yt-skills-test/.claude/skills/upload/**)",
       "Read(//private/tmp/yt-skills-test/.claude/skills/upload/references/**)",
-      "Bash(/tmp/wait_takt_critical_3.sh)"
+      "Bash(/tmp/wait_takt_critical_3.sh)",
+      "Agent",
+      "Bash(uv run yt-upload-auto*)",
+      "Bash(uv run yt-upload-collection*)",
+      "Bash(uv run yt-upload-shorts*)"
     ]
   }
 }
