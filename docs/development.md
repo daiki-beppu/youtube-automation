@@ -20,7 +20,7 @@ bash .lefthook/setup-worktree.sh
 - **非対話 shell / agent**: `bash .lefthook/setup-worktree.sh <command> [args...]` を正規入口とする。例: `bash .lefthook/setup-worktree.sh uv run pytest tests/test_doctor.py -q`。依存同期に失敗した場合は command を起動せず fail-closed で停止する
 - **直接 devShell を使う場合**: direnv の自動入室後は `uv run ...` を直接実行できる。`nix develop` は wrapper の fallback / 診断手段であり、初回 bootstrap の同格入口ではない
 
-worktree の生成・命名・issue / PR 運用は [`docs/takt-operations.md`](takt-operations.md) を参照する。
+worktree の生成・命名・issue / PR 運用は [`docs/takt-operations.md`](takt-operations.md) を参照する。ファイル名は互換性のため残しているが、takt 自体は使用しない。
 
 ## プロジェクト固有コマンド（全量）
 
@@ -103,13 +103,10 @@ component 追加前は対象 workspace で `shadcn info` と registry/公式 doc
 
 `.claude/skills/` 配下の skill を編集してから下流チャンネルリポジトリへ届くまでの一連手順（issue #2098）。
 
-### 1. 編集（経路が takt provider 設定で分岐する）
+### 1. 編集
 
 - 実体は常に `.claude/skills/<name>/` を編集する（`.agents/skills` は Codex CLI 探索パス用の symlink）。付属スクリプトは `.claude/skills/<name>/references/` に置く（ルート直下 `scripts/` は設けない）
-- `.claude/skills/**` は Claude Code の **protected paths** のため、編集経路は takt の provider 設定で分岐する:
-  - `coder` persona が **codex provider**（現行のグローバル設定から継承）→ takt から問題なく回せる
-  - `coder` を **Claude provider** に戻している環境 → takt からの Edit/Write が deny される。通常の Claude Code 対話セッションで直接編集し、commit / PR は手動で行う
-  - 詳細は `docs/takt-operations.md` の「skill 編集と takt の関係」。**設定を確認せず takt に投げると deny で初めて気づく**ので、skill を触る issue を takt に載せる前に provider 設定を確認すること
+- skill も通常コードと同じ issue 専用 linked worktree で編集する。利用中の agent が `.claude/skills/**` を protected path として扱い書き込みを拒否する場合は、権限を迂回せず Codex または許可済みの対話セッションへ同じ issue worktree を引き継ぐ
 - 書き方の規約: frontmatter `description:` は必ず double-quoted string、新規作成・改訂時は `docs/skill-design/skill-authoring-guidelines.md` の 7 ルールに従う
 
 ### 2. 検証（編集後に実行するもの）
@@ -213,9 +210,9 @@ Python 側の未使用コード検出は、追加依存なしで CI / pre-commit
 - **worktree 間の依存境界**: 共有するのは uv cache と pnpm content-addressable store だけとし、`.venv` / `node_modules` は各 worktree で生成する。親 checkout や sibling worktree の環境を symlink・コピーせず、branch ごとの lockfile、editable path、entry point を実行中 checkout と一致させる
 - **診断**: 親 checkout / worktree のそれぞれで `bash .lefthook/setup-worktree.sh sh -c 'command -v lefthook && lefthook version'` を実行する。`git commit` / `git push` で `Can't find lefthook in PATH` が出る場合は `bash .lefthook/setup-worktree.sh` を再実行する。直接の Nix 診断・再生成には `nix develop --command sh -c 'command -v lefthook && lefthook version'` と `nix develop --command bash .lefthook/install.sh` も利用できる
 - **失敗時の扱い**: shellHook は `lefthook` 不在や hook 再生成失敗を `|| true` で握りつぶさない。devShell 入室時に明示的に失敗させ、commit / push 時の hook no-op を防ぐ
-- **TMPDIR の worktree 分離**: macOS の TMPDIR は per-user のグローバル値のため、複数 worktree の並列実行（takt の `concurrency > 1` / 手動 worktree の並行 pytest）が同一パスへ書くと一時ディレクトリが run 間で干渉しうる（issue #2088）。shellHook は `.lefthook/worktree-tmpdir.sh` の出力を `TMPDIR` へ export し、共有 TMPDIR 配下の worktree ごとの決定的なサブディレクトリ（`yt-automation-tmp-<slug>-<cksum>`）へ分離する。takt worker のように TMPDIR が既に checkout 内へ隔離済みの場合はその値を尊重し、解決に失敗した場合は共有 TMPDIR のまま fail-open で続行する
+- **TMPDIR の worktree 分離**: macOS の TMPDIR は per-user のグローバル値のため、複数 worktree の並行 pytest が同一パスへ書くと一時ディレクトリが run 間で干渉しうる（issue #2088）。shellHook は `.lefthook/worktree-tmpdir.sh` の出力を `TMPDIR` へ export し、共有 TMPDIR 配下の worktree ごとの決定的なサブディレクトリ（`yt-automation-tmp-<slug>-<cksum>`）へ分離する。TMPDIR が既に checkout 内へ隔離済みの場合はその値を尊重し、解決に失敗した場合は共有 TMPDIR のまま fail-open で続行する
 - **Nix キャッシュの worktree 分離**: 並列 worktree が同一 fingerprint の flake を同時評価すると、ユーザーグローバルの Nix キャッシュ（既定 `~/.cache/nix` の eval-cache / fetcher-cache SQLite）への同時書込みが競合し、「error (ignored): SQLite database ... is busy」を stderr へ出しつつキャッシュ書込みを破棄し続ける（issue #2089）。`.envrc` / `.lefthook/setup-worktree.sh` / shellHook は Nix 専用の `NIX_CACHE_HOME` を worktree 分離 TMPDIR 配下（`<worktree_tmpdir>/nix-cache`）へ export し、各 worktree が自分の評価結果だけを参照する。`XDG_CACHE_HOME` には触れないため uv 等の他ツールのキャッシュは共有のまま変わらない。継承値は別 worktree の値がシェル経由でリークし得るため尊重せず、解決に失敗した場合は共有キャッシュのまま fail-open で続行する
-- **sandbox / takt worker での挙動**: repo-local takt config / workflow は持たず、taktを使う場合のprovider・workflow・runtime routingはグローバル `~/.takt/` を正とする。sandbox worker向けの `.takt/runtime-prepare.sh` は、グローバル側から明示的に呼ばれた場合に `XDG_DATA_HOME=<worktree>/.takt/.runtime/data` と `YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1` を注入する補助scriptとして残す。後者が設定された環境ではshellHook / `.lefthook/install.sh` がinstallを明示メッセージつきでskipする。また `.lefthook/setup-worktree.sh` は `direnv allow` 失敗時にhard failせず `nix develop` 経路へfallbackする
+- **sandbox worker での挙動**: 旧 `.takt/runtime-prepare.sh` は過去 runtime との互換用として残すが、現在の正規入口ではない。外部 sandbox が `YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1` を明示した場合、shellHook / `.lefthook/install.sh` は install を明示メッセージ付きで skip する。また `.lefthook/setup-worktree.sh` は `direnv allow` 失敗時に hard fail せず `nix develop` 経路へ fallback する
 - **全 hook をスキップ**: `LEFTHOOK=0 git push` / `LEFTHOOK=0 git commit`
 - **CHANGELOG ゲートのみ省く**: `SKIP_CHANGELOG=1 git push`（CI 側は PR の `skip-changelog` ラベル）
 - **テスト差分警告のみ省く**: `SKIP_TEST_DIFF=1 git push`

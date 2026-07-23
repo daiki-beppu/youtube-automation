@@ -1374,3 +1374,18 @@ def test_docs_cover_parent_worktree_diagnostics_and_reinstall() -> None:
     assert "nix develop --command lefthook install --force" not in development
     assert "nix develop --command lefthook install --force" not in takt_operations
     assert "nix develop --command lefthook install --force" not in agents
+
+
+def test_development_docs_use_issue_direct_instead_of_takt_routing() -> None:
+    """Issue #2453: 解決不能な takt workflow 名を正規入口として案内しない。"""
+    takt_operations = _read(_TAKT_OPERATIONS_DOC_PATH)
+    claude = _read(_CLAUDE_PATH)
+    agents = _read(_AGENTS_PATH)
+
+    assert "GitHub issue + `/issue-direct`" in claude
+    assert "`/issue-direct <issue番号>`" in takt_operations
+    assert "takt を実装経路に使わない" in takt_operations
+    assert "新規 issue へ `takt:*` ラベルを付けない" in takt_operations
+    assert "takt は使用しない" in agents
+    assert "標準ルートは **takt + GitHub issue**" not in claude
+    assert "ラベル = workflow 名" not in takt_operations
