@@ -463,6 +463,38 @@ class TestMotionIntensityControlledByTargets:
 
         assert "subtle steam rising from coffee" in result
 
+
+class TestAttentionGuardDefaults:
+    """Veo / Omni の既定 prompt が注意誘引要素を避けること."""
+
+    @pytest.mark.parametrize("field", ("default_prompt", "base_rules"))
+    def test_veo_prompt_guards_attention_grabbing_elements(self, field):
+        value = _default_veo_config()[field]
+
+        for forbidden_visual in (
+            "full-frame flashes",
+            "strobing",
+            "sudden brightness changes",
+            "close-up human faces",
+        ):
+            assert forbidden_visual in value
+        assert "local candle-flame movement stays confined to each flame" in value
+
+    def test_omni_prompt_has_same_attention_guards(self):
+        import yaml
+
+        with _LOOP_VIDEO_DEFAULT_CONFIG.open(encoding="utf-8") as file:
+            prompt = yaml.safe_load(file)["omni"]["default_prompt"]
+
+        for forbidden_visual in (
+            "full-frame flashes",
+            "strobing",
+            "sudden brightness changes",
+            "close-up human faces",
+        ):
+            assert forbidden_visual in prompt
+        assert "local candle-flame movement stays confined to each flame" in prompt
+
     def test_channel_prompt_template_override_still_applied(self):
         # 要件 3: チャンネル側 prompt_template 上書きは引き続き有効
         # （チャンネル判断で強度文言を template に戻すことも可能）
