@@ -65,7 +65,7 @@ TS CLI `uv run yt-generate-master` は `audio` の実行時既定値を組み込
 | `post_processing.rain_layers.volume_db` | `-19` | 各レイヤーに当てる減衰 dB（10^(-19/20) ≈ 0.112）。`uv run yt-apply-rain-layers` が ffmpeg `volume={dB}` でレイヤー毎に適用 |
 | `post_processing.rain_layers.output_name` | `master-rain.wav` | 後処理出力ファイル名（`01-master/` 配下）。成功時に `workflow-state.json::assets.raw_master` がこの名前へ書き換わる |
 | `post_processing.rain_layers.output_codec` / `.output_sample_rate` | `pcm_s16le` / `44100` | 出力 WAV の ffmpeg コーデックとサンプリングレート（ステレオ固定）。後段の外部 DAW でミキシング+マスタリングする運用想定 |
-| `post_processing.suno_audio_cleanup.enabled` | `false` | Suno ダウンロード直後の個別音源に、無音カット / EQ / dynaudnorm / limiter / LUFS 正規化 / 末尾 fade guard を適用する opt-in |
+| `post_processing.suno_audio_cleanup.enabled` | `true` | Suno ダウンロード直後の個別音源に、無音カット / EQ / dynaudnorm / limiter / LUFS 正規化 / 末尾 fade guard を適用する。従来挙動へ戻す場合はチャンネル側で `false` にする |
 | `post_processing.suno_audio_cleanup.loudnorm.I` | `-14` | YouTube 向け LUFS 正規化の目標値。チャンネル側 `config/skills/masterup.json` 優先、既存 `masterup.yaml` fallback で調整可能 |
 | `pair_selection.mode` | `auto` | `suno-prompts.json` の `lyrics` から歌詞あり/なしを判定し、歌詞ありならペアから 1 曲、歌詞なしなら 2 clip 両方を採用する。`never` で整理をスキップ |
 | `pair_selection.min_song_sec` / `.max_song_sec` | `45` / `300` | 極端に短い曲 / 長い曲を master 対象から除外する duration guard。`null` で片側だけ無効化 |
@@ -484,9 +484,9 @@ uv run yt-suno-select-tracks <collection-path> --dry-run
 
 検証失敗時は Step 4 / 4.5 のレポートを提示し、ユーザーに手動修正（再ダウンロード / Suno UI からの手動取得 / `/suno-helper` 追補生成）を促してから再実行する。
 
-#### Step 5.0: Suno 個別音源の音質補正（任意 / config opt-in）
+#### Step 5.0: Suno 個別音源の音質補正（既定 ON / config opt-out）
 
-`post_processing.suno_audio_cleanup.enabled: true` のチャンネルでは、マスター結合前に `02-Individual-music/` の各 Suno 音源へ ffmpeg 後処理を適用する:
+マスター結合前に `02-Individual-music/` の各 Suno 音源へ ffmpeg 後処理を適用する:
 
 ```bash
 uv run yt-suno-audio-cleanup plan <collection-path>   # まず対象と ffmpeg filter を確認
@@ -502,7 +502,19 @@ uv run yt-suno-audio-cleanup apply <collection-path>  # 元ファイルを origi
 - 既定 `-14 LUFS` の `loudnorm`
 - 後半崩れの被害を抑える末尾 fade-out guard
 
-`enabled: false`（既定）の場合は何もしない。ユーザーが単発で試したい場合は `--force` を付けて `plan/apply` できる。既に backup があるファイルは二重処理を避けるため skip される（再処理する場合も `--force`）。
+同梱既定は `enabled: true`。従来どおり cleanup せず結合するチャンネルは、`config/skills/masterup.json`（JSON が無ければ互換 `masterup.yaml`）で次のように明示 opt-out する:
+
+```json
+{
+  "post_processing": {
+    "suno_audio_cleanup": {
+      "enabled": false
+    }
+  }
+}
+```
+
+`enabled: false` の場合は何もしない。単発で明示実行する場合は `--force` を付けて `plan/apply` できる。既に backup があるファイルは二重処理を避けるため skip される（再処理する場合も `--force`）。
 
 #### Step 5 本体: マスター結合の実行
 
