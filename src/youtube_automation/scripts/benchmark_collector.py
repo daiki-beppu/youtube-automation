@@ -665,13 +665,13 @@ class BenchmarkThumbnailAnalyzer:
         try:
             from google.genai import types
 
-            from youtube_automation.utils.genai_client import create_genai_client
+            from youtube_automation.utils.genai_client import create_global_genai_client
         except ImportError:
             logger.warning("google-genai 未インストール — サムネイル分析をスキップ")
             return data
 
         try:
-            client = create_genai_client()
+            client = create_global_genai_client()
         except ConfigError as e:
             logger.warning("AI クライアント初期化失敗 — サムネイル分析をスキップ: %s", e)
             return data

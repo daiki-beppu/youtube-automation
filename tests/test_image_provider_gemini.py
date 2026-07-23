@@ -89,7 +89,7 @@ def request_factory(tmp_path: Path):
 
 @pytest.fixture
 def patched_genai_client():
-    """`create_genai_client` を MagicMock に差し替えるコンテキストマネージャ。"""
+    """`create_global_genai_client` を MagicMock に差し替えるコンテキストマネージャ。"""
     from contextlib import contextmanager
 
     @contextmanager
@@ -97,7 +97,7 @@ def patched_genai_client():
         mock_client = MagicMock()
         mock_client.models.generate_content.return_value = response
         with patch(
-            "youtube_automation.utils.image_provider.gemini.create_genai_client",
+            "youtube_automation.utils.image_provider.gemini.create_global_genai_client",
             return_value=mock_client,
         ):
             yield mock_client
@@ -266,7 +266,7 @@ class TestSafetyViolationSkipsRetry:
         mock_client.models.generate_content.side_effect = RuntimeError("SAFETY policy violation")
 
         with patch(
-            "youtube_automation.utils.image_provider.gemini.create_genai_client",
+            "youtube_automation.utils.image_provider.gemini.create_global_genai_client",
             return_value=mock_client,
         ):
             # When
@@ -284,7 +284,7 @@ class TestSafetyViolationSkipsRetry:
         mock_client.models.generate_content.side_effect = RuntimeError("RECITATION blocked")
 
         with patch(
-            "youtube_automation.utils.image_provider.gemini.create_genai_client",
+            "youtube_automation.utils.image_provider.gemini.create_global_genai_client",
             return_value=mock_client,
         ):
             # When
@@ -308,7 +308,7 @@ class TestTransientErrorRetries:
         ]
 
         with patch(
-            "youtube_automation.utils.image_provider.gemini.create_genai_client",
+            "youtube_automation.utils.image_provider.gemini.create_global_genai_client",
             return_value=mock_client,
         ):
             # When
@@ -326,7 +326,7 @@ class TestTransientErrorRetries:
         mock_client.models.generate_content.side_effect = RuntimeError("permanent error")
 
         with patch(
-            "youtube_automation.utils.image_provider.gemini.create_genai_client",
+            "youtube_automation.utils.image_provider.gemini.create_global_genai_client",
             return_value=mock_client,
         ):
             from youtube_automation.utils.image_provider import RETRY_MAX
@@ -350,7 +350,7 @@ class TestImageWithoutInlineDataRetries:
         mock_client.models.generate_content.side_effect = [text_only, success]
 
         with patch(
-            "youtube_automation.utils.image_provider.gemini.create_genai_client",
+            "youtube_automation.utils.image_provider.gemini.create_global_genai_client",
             return_value=mock_client,
         ):
             # When
@@ -390,7 +390,7 @@ class TestImageGenerationResult:
         mock_client.models.generate_content.side_effect = RuntimeError("SAFETY")
 
         with patch(
-            "youtube_automation.utils.image_provider.gemini.create_genai_client",
+            "youtube_automation.utils.image_provider.gemini.create_global_genai_client",
             return_value=mock_client,
         ):
             # When

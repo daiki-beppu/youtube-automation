@@ -341,13 +341,6 @@ def _resolve_masterup_audio(masterup_cfg: dict) -> tuple[float, str]:
 
 
 def main() -> int:
-    try:
-        from dotenv import find_dotenv, load_dotenv
-
-        load_dotenv(find_dotenv())
-    except ImportError:
-        pass
-
     parser = _build_arg_parser()
     args = parser.parse_args()
 

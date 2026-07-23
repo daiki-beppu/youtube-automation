@@ -222,10 +222,6 @@ def load_config() -> ChannelConfig:
     if _instance is not None:
         return _instance
 
-    from dotenv import find_dotenv, load_dotenv
-
-    load_dotenv(find_dotenv())
-
     _channel_dir = _resolve_channel_dir()
     _instance = _build(_channel_dir)
     return _instance

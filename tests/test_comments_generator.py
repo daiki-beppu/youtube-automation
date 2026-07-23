@@ -10,8 +10,8 @@ from youtube_automation.utils.comments.codex_generator import CodexGenerator
 from youtube_automation.utils.comments.generator import GeminiGenerator, ReplyContext
 from youtube_automation.utils.exceptions import GeneratorError
 
-# create_genai_client はソースモジュールで patch する
-_PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_genai_client"
+# create_global_genai_client はソースモジュールで patch する
+_PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_global_genai_client"
 
 
 def _make_ctx(**overrides) -> ReplyContext:
