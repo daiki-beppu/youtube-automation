@@ -1,14 +1,11 @@
 """image_provider.config の単体テスト。
 
 skill-config の `image_generation` namespace パース、
-旧 `gemini_image` namespace の後方互換読み込み（DeprecationWarning 付き）、
 OpenAI provider の `aspect_ratio` バリデーション、
 provider 値のバリデーションを検証する。
 """
 
 from __future__ import annotations
-
-import warnings
 
 import pytest
 
@@ -361,54 +358,6 @@ class TestParseImageGenerationConfig:
 
         # Then
         assert replaced.gemini_cli.model == "gemini-3.0-flash-image-preview"
-
-    def test_legacy_gemini_image_namespace_emits_deprecation_warning(self):
-        # Given: 旧 namespace
-        skill_cfg = {
-            "gemini_image": {
-                "model": "gemini-3.1-flash-image-preview",
-                "brand_background": "deep navy",
-            }
-        }
-
-        # When
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            cfg = parse_image_generation_config(skill_cfg)
-
-        # Then: gemini provider にフォールバック
-        assert cfg.provider == "gemini"
-        assert cfg.gemini.model == "gemini-3.1-flash-image-preview"
-
-        # And: DeprecationWarning が発生し新 namespace への移行を促す
-        deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-        assert len(deprecations) >= 1, "DeprecationWarning が発生していない"
-        msg = str(deprecations[0].message)
-        assert "gemini_image" in msg
-        assert "image_generation" in msg
-
-    def test_image_generation_takes_precedence_over_legacy_gemini_image(self):
-        # Given: 両 namespace が共存（移行期間の状態）
-        skill_cfg = {
-            "image_generation": {
-                "provider": "openai",
-                "openai": {
-                    "model": "gpt-image-2",
-                    "quality": "high",
-                    "aspect_ratio": "16:9",
-                    "thinking": "medium",
-                    "batch": 1,
-                },
-            },
-            "gemini_image": {"model": "gemini-old"},
-        }
-
-        # When
-        cfg = parse_image_generation_config(skill_cfg)
-
-        # Then: 新 namespace が勝つ
-        assert cfg.provider == "openai"
-        assert cfg.openai.model == "gpt-image-2"
 
     def test_unknown_provider_raises_config_error(self):
         # Given: 未対応 provider 名

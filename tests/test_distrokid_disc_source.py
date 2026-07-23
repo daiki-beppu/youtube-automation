@@ -31,13 +31,13 @@ from youtube_automation.configuration.distrokid import (
     DistrokidProfile,
     SongwriterName,
 )
-from youtube_automation.scripts.collection_serve import create_server
-from youtube_automation.scripts.distrokid_release import (
+from youtube_automation.domains.distrokid.release import (
     DISTROKID_ASSETS_PREFIX,
     DISTROKID_RELEASE_ROUTE,
     build_release_payload,
 )
-from youtube_automation.utils.distrokid_spec import write_collection_spec
+from youtube_automation.domains.distrokid.specification import write_collection_spec
+from youtube_automation.scripts.collection_serve import create_server
 from youtube_automation.utils.exceptions import ConfigError
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"

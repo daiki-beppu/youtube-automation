@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from youtube_automation.utils.channel_trend import (
+from youtube_automation.domains.analytics.series.channel_trend import (
     analyze_channel_trend,
     build_trend_frame,
     detect_anomalies,

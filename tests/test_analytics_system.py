@@ -18,8 +18,8 @@ from googleapiclient.errors import HttpError
 # `patch("youtube_automation.scripts.analytics_system.X")` がモジュール属性として
 # 解決できるよう、トップレベルで submodule を import しておく。
 import youtube_automation.scripts.analytics_system  # noqa: F401
-from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
-from youtube_automation.utils.exceptions import AuthError, YouTubeAPIError
+from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
+from youtube_automation.utils.exceptions import AuthError, ConfigError, YouTubeAPIError
 
 # ---------------------------------------------------------------------------
 # フィクスチャ
@@ -49,17 +49,25 @@ def system(mock_config):
         from youtube_automation.scripts.analytics_system import AnalyticsSystem
 
         obj = AnalyticsSystem()
+        obj.collector = instance
         obj._mock_collector_instance = instance
+        obj._mock_collector_type = MockCollector
         yield obj
 
 
 @pytest.fixture
 def stub_analytics_boundaries(monkeypatch, tmp_path):
     """CLI 実経路を残したまま OAuth / YouTube API 境界だけを固定する。"""
+    from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
     from youtube_automation.scripts import analytics_system
-    from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
 
     def authenticate(system):
+        system.collector = YouTubeAnalyticsCollector(
+            youtube_client=MagicMock(),
+            analytics_client=MagicMock(),
+            reporting_client=MagicMock(),
+            channel_root=Path("/tmp/fake_channel"),
+        )
         system.authenticated = True
         return True
 
@@ -157,7 +165,12 @@ def stub_analytics_boundaries(monkeypatch, tmp_path):
 
 def _collector_with_playlist_response(response):
     """playlist Mixin だけを実行し、他の収集 API はテスト境界で置き換える。"""
-    collector = YouTubeAnalyticsCollector()
+    collector = YouTubeAnalyticsCollector(
+        youtube_client=MagicMock(),
+        analytics_client=MagicMock(),
+        reporting_client=MagicMock(),
+        channel_root=Path("/tmp/fake_channel"),
+    )
     collector.analytics_service = MagicMock()
     collector.channel_id = "UC_TEST"
     collector.initialize = MagicMock()
@@ -176,8 +189,8 @@ def _collector_with_playlist_response(response):
     collector.get_device_analytics = MagicMock(return_value={})
     collector.get_all_channel_videos = MagicMock(return_value=[])
     collector.get_video_daily_analytics = MagicMock(return_value=[])
-    collector.analytics_service.reports().query().execute.return_value = response
-    collector.analytics_service.reports().query.reset_mock()
+    collector.analytics_service.query.return_value = response
+    collector.analytics_service.query.reset_mock()
     return collector
 
 
@@ -187,8 +200,8 @@ def _collector_with_playlist_response(response):
 
 
 class TestInit:
-    def test_init_creates_collector(self, mock_config):
-        """__init__ が YouTubeAnalyticsCollector を生成する"""
+    def test_init_defers_collector_creation_until_authentication(self, mock_config):
+        """__init__ は認証前にCollectorを生成しない。"""
         with (
             patch("youtube_automation.scripts.analytics_system.load_config", return_value=mock_config),
             patch("youtube_automation.scripts.analytics_system.YouTubeAnalyticsCollector") as MockCollector,
@@ -196,8 +209,8 @@ class TestInit:
             from youtube_automation.scripts.analytics_system import AnalyticsSystem
 
             obj = AnalyticsSystem()
-            MockCollector.assert_called_once()
-            assert obj.collector is not None
+            MockCollector.assert_not_called()
+            assert obj.collector is None
 
     def test_init_not_authenticated(self, system):
         """初期状態は未認証"""
@@ -218,14 +231,25 @@ class TestAuthenticate:
         mock_handler = MagicMock()
         mock_handler.test_connection.return_value = True
 
-        with patch(
-            "youtube_automation.utils.youtube_service.get_readonly_handler",
-            return_value=mock_handler,
+        with (
+            patch(
+                "youtube_automation.utils.youtube_service.get_readonly_handler",
+                return_value=mock_handler,
+            ),
+            patch("youtube_automation.scripts.analytics_system.get_reporting"),
+            patch("youtube_automation.scripts.analytics_system.get_credentials_readonly"),
+            patch("youtube_automation.scripts.analytics_system.get_youtube_readonly"),
+            patch("youtube_automation.scripts.analytics_system.get_analytics"),
         ):
             result = system.authenticate()
             assert result is True
             assert system.authenticated is True
             mock_handler.authenticate.assert_called_once_with(force_reauth=False)
+            system.collector.initialize.assert_called_once_with()
+            call = system._mock_collector_type.call_args_list[-1]
+            assert call.kwargs["youtube_client"] is not None
+            assert call.kwargs["analytics_client"] is not None
+            assert call.kwargs["reporting_client"] is not None
 
     def test_authenticate_failure_connection_test(self, system):
         """接続テスト失敗時に False を返す"""
@@ -248,6 +272,27 @@ class TestAuthenticate:
         ):
             result = system.authenticate()
             assert result is False
+
+    def test_authenticate_failure_when_collector_clients_cannot_be_created(self, system):
+        """認証後の client 注入失敗は未認証のまま False を返す。"""
+        mock_handler = MagicMock()
+        mock_handler.test_connection.return_value = True
+
+        with (
+            patch(
+                "youtube_automation.utils.youtube_service.get_readonly_handler",
+                return_value=mock_handler,
+            ),
+            patch(
+                "youtube_automation.scripts.analytics_system.get_reporting",
+                side_effect=ConfigError("reporting client is unavailable"),
+            ),
+        ):
+            result = system.authenticate()
+
+        assert result is False
+        assert system.authenticated is False
+        system._mock_collector_type.assert_not_called()
 
     def test_authenticate_unexpected_exception_propagates(self, system):
         """narrow catch 範囲外の例外は伝播する（fail-fast）"""
@@ -427,6 +472,22 @@ class TestCollectAnalyticsData:
         daily_files = list((tmp_path / "data" / "analytics" / "daily_per_video").glob("*.json"))
         assert len(daily_files) == 0
 
+    def test_video_daily_youtube_api_error_continues(self, system, tmp_path):
+        """日次 Analytics の domain API error も fail-open の対象にする。"""
+        system.authenticated = True
+        expected_data = {"views": 1000}
+        system.collector.collect_basic_analytics.return_value = expected_data
+        system.collector.get_all_channel_videos.return_value = [{"video_id": "vid_A"}]
+        system.collector.get_video_daily_analytics.side_effect = YouTubeAPIError(
+            "daily analytics unavailable", status_code=503
+        )
+
+        with patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path):
+            result = system.collect_analytics_data(days=7, save_data=True)
+
+        assert result == expected_data
+        assert not list((tmp_path / "data" / "analytics" / "daily_per_video").glob("*.json"))
+
     def test_collector_httperror_returns_none(self, system):
         """外周 HttpError 発生時は None を返す（fail-stop）。
 
@@ -512,8 +573,8 @@ class TestMainDepth:
 
     def test_full_depth_country_api_error_fails_without_persisting(self, monkeypatch, stub_analytics_boundaries):
         """full の地域 API 失敗は CLI 成功や不完全 JSON に変換しない。"""
+        from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
         from youtube_automation.scripts import analytics_system
-        from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
 
         monkeypatch.setattr(sys, "argv", ["yt-analytics", "--depth", "full"])
         monkeypatch.setattr(
@@ -530,8 +591,8 @@ class TestMainDepth:
 
     def test_full_depth_retention_api_error_fails_without_persisting(self, monkeypatch, stub_analytics_boundaries):
         """full の動画別 retention API 失敗は不完全 JSON を保存しない。"""
+        from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
         from youtube_automation.scripts import analytics_system
-        from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
 
         monkeypatch.setattr(sys, "argv", ["yt-analytics", "--depth", "full"])
         monkeypatch.setattr(
@@ -662,7 +723,7 @@ class TestPlaylistCli:
                 main()
 
         assert exit_info.value.code == 0
-        system.collector.analytics_service.reports().query.assert_called_once_with(
+        system.collector.analytics_service.query.assert_called_once_with(
             ids="channel==UC_TEST",
             startDate=ANY,
             endDate=ANY,
@@ -690,7 +751,7 @@ class TestPlaylistCli:
         """playlist API 失敗は公開 CLI の失敗終了まで伝播し、JSON を保存しない。"""
         system.authenticated = True
         collector = _collector_with_playlist_response({})
-        collector.analytics_service.reports().query().execute.side_effect = HttpError(
+        collector.analytics_service.query.side_effect = HttpError(
             MagicMock(status=403), b"quotaExceeded"
         )
         system.collector = collector

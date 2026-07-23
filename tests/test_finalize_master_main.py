@@ -9,7 +9,7 @@ pass1 / pass2 のコマンド・終了コード・stderr を制御する。
   比較で直接検証
 - two-pass: pass1 stderr の loudnorm JSON が pass2 filter_complex に注入される
   データフローを cmd キャプチャで検証
-- defaults / overrides: skill-config の `rain_layer:` namespace 上書きが filter
+- defaults / overrides: skill-config の `audio.finalize.*` namespace 上書きが filter
   に反映されること、未設定時は組み込み defaults が使われること
 """
 
@@ -301,10 +301,10 @@ class TestFinalizeMasterRun:
 
 
 class TestFinalizeMasterConfig:
-    """defaults と skill-config `rain_layer:` namespace 上書きの解決パス。"""
+    """defaults と skill-config `audio.finalize.*` namespace 上書きの解決パス。"""
 
-    def test_uses_builtin_defaults_when_no_rain_layer_namespace(self, tmp_path, monkeypatch):
-        # Given: skill-config に rain_layer namespace 不在 → 組み込み defaults を採用
+    def test_uses_builtin_defaults_when_no_finalize_namespace(self, tmp_path, monkeypatch):
+        # Given: skill-config に audio.finalize namespace 不在 → 組み込み defaults を採用
         collection = _setup_collection(tmp_path, n_rain=1)
         monkeypatch.setattr(finalize_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
         _patch_skill_config(monkeypatch, {})
@@ -328,17 +328,18 @@ class TestFinalizeMasterConfig:
         assert "LRA=11:" in pass2_filter
         assert "TP=-1.5:" in pass2_filter
 
-    def test_overrides_defaults_via_rain_layer_skill_config(self, tmp_path, monkeypatch):
-        # Given: skill-config rain_layer namespace で全パラメータを上書き
+    def test_overrides_defaults_via_audio_finalize_skill_config(self, tmp_path, monkeypatch):
+        # Given: skill-config audio.finalize namespace で全パラメータを上書き
         collection = _setup_collection(tmp_path, n_rain=1)
         monkeypatch.setattr(finalize_master.shutil, "which", lambda _: "/usr/bin/ffmpeg")
         _patch_skill_config(
             monkeypatch,
             {
-                "rain_layer": {
-                    "volume_db": -25.5,
-                    "fadein_s": 0.75,
-                    "loudnorm": {"I": -16.5, "LRA": 9.5, "TP": -2.5},
+                "audio": {
+                    "finalize": {
+                        "ambient_layers": {"volume_db": -25.5, "fadein_s": 0.75},
+                        "loudnorm": {"I": -16.5, "LRA": 9.5, "TP": -2.5},
+                    }
                 }
             },
         )

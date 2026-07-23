@@ -37,6 +37,7 @@ from youtube_automation.auth.oauth_handler import resolve_client_secrets_locatio
 from youtube_automation.cli.automation_update_refs import UPSTREAM_REPO
 from youtube_automation.cli.skills_sync import bundled_skill_names
 from youtube_automation.configuration import find_workspace_root, workspace_channels
+from youtube_automation.domains.thumbnail.references import resolve_configured_benchmark_references
 from youtube_automation.scripts.benchmark_collector import (
     TTP_VIDEO_ANALYZE_TOP_N,
     load_benchmark_videos,
@@ -57,7 +58,6 @@ from youtube_automation.utils.preflight_checks import (
 from youtube_automation.utils.reporting_api import ReportingAPIClient
 from youtube_automation.utils.retry import QUOTA_REASONS
 from youtube_automation.utils.skill_config import load_skill_config
-from youtube_automation.utils.thumbnail_references import resolve_configured_benchmark_references
 
 PYPROJECT_FILENAME = "pyproject.toml"
 CLAUDE_SKILLS_DIR = Path(".claude") / "skills"

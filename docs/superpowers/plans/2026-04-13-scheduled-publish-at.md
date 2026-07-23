@@ -92,7 +92,7 @@ def live_dir(tmp_path):
 
 def _make_mixin(channel_dir):
     """ChannelAnalyticsMixin だけをインスタンス化するヘルパー"""
-    from youtube_automation.utils.channel_analytics import ChannelAnalyticsMixin
+    from youtube_automation.domains.analytics.mixins.channel_analytics import ChannelAnalyticsMixin
     obj = object.__new__(ChannelAnalyticsMixin)
     return obj
 
@@ -144,8 +144,8 @@ Expected: FAIL — `AttributeError: 'ChannelAnalyticsMixin' object has no attrib
 ### Task 2: `_build_publish_at_map()` を実装する
 
 **Files:**
-- Modify: `src/youtube_automation/utils/channel_analytics.py:5-11` (imports)
-- Modify: `src/youtube_automation/utils/channel_analytics.py:68` (新メソッド追加)
+- Modify: `src/youtube_automation/domains/analytics/mixins/channel_analytics.py:5-11` (imports)
+- Modify: `src/youtube_automation/domains/analytics/mixins/channel_analytics.py:68` (新メソッド追加)
 
 - [ ] **Step 1: import を追加**
 
@@ -214,7 +214,7 @@ Expected: 4 passed
 
 ```bash
 cd /Users/mba/02-yt/automation
-git add tests/test_publish_at_map.py src/youtube_automation/utils/channel_analytics.py
+git add tests/test_publish_at_map.py src/youtube_automation/domains/analytics/mixins/channel_analytics.py
 git commit -m "feat: _build_publish_at_map() で upload_tracking から予約公開日を収集"
 ```
 
@@ -223,7 +223,7 @@ git commit -m "feat: _build_publish_at_map() で upload_tracking から予約公
 ### Task 3: `collect_basic_analytics()` に注入ロジックを追加
 
 **Files:**
-- Modify: `src/youtube_automation/utils/channel_analytics.py:106-107` (video_data 構築直後)
+- Modify: `src/youtube_automation/domains/analytics/mixins/channel_analytics.py:106-107` (video_data 構築直後)
 - Modify: `tests/test_analytics_system.py` (既存テストの更新)
 
 - [ ] **Step 1: 注入テストを追加**
@@ -237,8 +237,8 @@ class TestCollectBasicAnalyticsIntegration:
     def test_injects_scheduled_publish_at(self, live_dir):
         """video_data に scheduled_publish_at が追加される"""
         with patch.object(ChannelConfig, 'channel_dir', return_value=live_dir), \
-             patch('youtube_automation.utils.channel_analytics.ChannelAnalyticsMixin.get_channel_analytics') as mock_ch, \
-             patch('youtube_automation.utils.channel_analytics.ChannelAnalyticsMixin.get_strategic_video_analytics') as mock_strat, \
+             patch('youtube_automation.domains.analytics.mixins.channel_analytics.ChannelAnalyticsMixin.get_channel_analytics') as mock_ch, \
+             patch('youtube_automation.domains.analytics.mixins.channel_analytics.ChannelAnalyticsMixin.get_strategic_video_analytics') as mock_strat, \
              patch.object(ChannelAnalyticsMixin, 'initialize'):
 
             mock_ch.return_value = {"period": "test", "daily_metrics": []}
@@ -252,7 +252,7 @@ class TestCollectBasicAnalyticsIntegration:
                 'summary': {},
             }
 
-            from youtube_automation.utils.channel_analytics import ChannelAnalyticsMixin
+            from youtube_automation.domains.analytics.mixins.channel_analytics import ChannelAnalyticsMixin
             mixin = object.__new__(ChannelAnalyticsMixin)
             result = mixin.collect_basic_analytics("2026-03-14", "2026-04-13", depth="basic")
 
@@ -304,7 +304,7 @@ Expected: 全テスト PASS
 
 ```bash
 cd /Users/mba/02-yt/automation
-git add src/youtube_automation/utils/channel_analytics.py tests/test_publish_at_map.py
+git add src/youtube_automation/domains/analytics/mixins/channel_analytics.py tests/test_publish_at_map.py
 git commit -m "feat: collect_basic_analytics() に scheduled_publish_at 注入を追加"
 ```
 

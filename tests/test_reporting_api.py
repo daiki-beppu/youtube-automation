@@ -300,8 +300,8 @@ def test_collect_impressions_summary_returns_empty_when_no_reports():
 # ---------------------------------------------------------------------------
 # ReportingAPIMixin (fail-open)
 # ---------------------------------------------------------------------------
-def test_mixin_fail_open_returns_none_on_exception(monkeypatch):
-    from youtube_automation.utils import reporting_analytics
+def test_mixin_fail_open_returns_none_on_exception():
+    from youtube_automation.domains.analytics.reporting import reporting_analytics
     from youtube_automation.utils.exceptions import YouTubeAPIError
 
     class _BoomClient:
@@ -311,18 +311,14 @@ def test_mixin_fail_open_returns_none_on_exception(monkeypatch):
         def collect_impressions_summary(self, days: int = 7):
             raise YouTubeAPIError("boom")
 
-    monkeypatch.setattr(reporting_analytics, "ReportingAPIClient", _BoomClient)
-    monkeypatch.setattr(reporting_analytics, "get_reporting", lambda: MagicMock())
-    monkeypatch.setattr(reporting_analytics, "get_credentials_readonly", lambda: MagicMock())
-
     class _C(reporting_analytics.ReportingAPIMixin):
-        pass
+        reporting_client = _BoomClient()
 
     assert _C().get_reporting_impressions_summary(days=7) is None
 
 
-def test_mixin_returns_summary_on_success(monkeypatch):
-    from youtube_automation.utils import reporting_analytics
+def test_mixin_returns_summary_on_success():
+    from youtube_automation.domains.analytics.reporting import reporting_analytics
 
     class _OkClient:
         def __init__(self, *_a, **_k):
@@ -331,12 +327,8 @@ def test_mixin_returns_summary_on_success(monkeypatch):
         def collect_impressions_summary(self, days: int = 7):
             return {"aggregated_ctr_percentage": 4.2}
 
-    monkeypatch.setattr(reporting_analytics, "ReportingAPIClient", _OkClient)
-    monkeypatch.setattr(reporting_analytics, "get_reporting", lambda: MagicMock())
-    monkeypatch.setattr(reporting_analytics, "get_credentials_readonly", lambda: MagicMock())
-
     class _C(reporting_analytics.ReportingAPIMixin):
-        pass
+        reporting_client = _OkClient()
 
     summary = _C().get_reporting_impressions_summary(days=7)
     assert summary == {"aggregated_ctr_percentage": 4.2}

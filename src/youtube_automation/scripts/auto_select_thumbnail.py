@@ -39,16 +39,22 @@ from typing import Any
 
 from PIL import Image, UnidentifiedImageError
 
+from youtube_automation.domains.thumbnail.archive import archive_approved_thumbnail_transaction
+from youtube_automation.domains.thumbnail.features import (
+    extract_features_from_path,
+    feature_centroid,
+)
+from youtube_automation.domains.thumbnail.references import resolve_configured_benchmark_references
+from youtube_automation.domains.thumbnail.selection import (
+    CandidateScore,
+    _image_generation_section,
+    resolve_auto_selection_settings,
+    score_candidates,
+    select_best,
+)
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.skill_config import load_skill_config
-from youtube_automation.utils.thumbnail_archive import archive_approved_thumbnail_transaction
-from youtube_automation.utils.thumbnail_features import (
-    extract_features_from_path,
-    feature_centroid,
-    feature_distance,
-)
-from youtube_automation.utils.thumbnail_references import resolve_configured_benchmark_references
 
 SKILL_NAME = "thumbnail"
 
@@ -67,78 +73,6 @@ _DEFAULT_ASPECT_TOLERANCE = 0.01
 _MODE_SELECTION_ONLY = "selection_only"
 _MODE_FULL = "full"
 _ALLOWED_MODES = (_MODE_SELECTION_ONLY, _MODE_FULL)
-
-
-@dataclass(frozen=True)
-class AutoSelectionSettings:
-    """`image_generation.auto_selection` の解決済み設定。"""
-
-    enabled: bool
-    mode: str
-    min_width: int
-    min_height: int
-    aspect_tolerance: float
-
-
-@dataclass(frozen=True)
-class CandidateScore:
-    """1 候補分の採点結果。distance は小さいほど参照プールに近い。"""
-
-    path: Path
-    width: int
-    height: int
-    distance: float
-    eligible: bool
-    reasons: list[str]
-
-
-# ---------------------------------------------------------------------------
-# skill-config からの設定組み立て
-# ---------------------------------------------------------------------------
-
-
-def _image_generation_section(cfg: dict[str, Any]) -> dict[str, Any]:
-    section = cfg.get("image_generation") or {}
-    if not isinstance(section, dict):
-        raise ConfigError(f"thumbnail.image_generation は mapping である必要があります: {section!r}")
-    return section
-
-
-def resolve_auto_selection_settings(cfg: dict[str, Any]) -> AutoSelectionSettings:
-    """skill-config から `image_generation.auto_selection` を検証つきで解決する。"""
-    raw = _image_generation_section(cfg).get("auto_selection") or {}
-    if not isinstance(raw, dict):
-        raise ConfigError(f"thumbnail.image_generation.auto_selection は mapping である必要があります: {raw!r}")
-
-    def _positive_int(key: str, default: int) -> int:
-        value = raw.get(key, default)
-        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-            raise ConfigError(f"auto_selection.{key} は正の整数である必要があります: {value!r}")
-        return value
-
-    tolerance = raw.get("aspect_tolerance", _DEFAULT_ASPECT_TOLERANCE)
-    if isinstance(tolerance, bool) or not isinstance(tolerance, (int, float)) or tolerance < 0:
-        raise ConfigError(f"auto_selection.aspect_tolerance は 0 以上の数値である必要があります: {tolerance!r}")
-
-    enabled = raw.get("enabled", False)
-    if not isinstance(enabled, bool):
-        raise ConfigError(f"auto_selection.enabled は boolean である必要があります: {enabled!r}")
-
-    mode = raw.get("mode", _MODE_SELECTION_ONLY)
-    if mode is None:
-        mode = _MODE_SELECTION_ONLY
-    if not isinstance(mode, str) or mode not in _ALLOWED_MODES:
-        raise ConfigError(
-            f"auto_selection.mode は {_MODE_SELECTION_ONLY!r} または {_MODE_FULL!r} である必要があります: {mode!r}"
-        )
-
-    return AutoSelectionSettings(
-        enabled=enabled,
-        mode=mode,
-        min_width=_positive_int("min_width", _DEFAULT_MIN_WIDTH),
-        min_height=_positive_int("min_height", _DEFAULT_MIN_HEIGHT),
-        aspect_tolerance=float(tolerance),
-    )
 
 
 def resolve_reference_images(cfg: dict[str, Any], channel_root: Path) -> list[Path]:
@@ -179,61 +113,6 @@ def discover_candidates(assets_dir: Path) -> list[Path]:
     for pattern in _CANDIDATE_PATTERNS:
         found.update(assets_dir.glob(pattern))
     return sorted(found)
-
-
-def _eligibility_reasons(width: int, height: int, settings: AutoSelectionSettings) -> list[str]:
-    reasons: list[str] = []
-    if width < settings.min_width or height < settings.min_height:
-        reasons.append(f"解像度不足: {width}x{height} (必要: {settings.min_width}x{settings.min_height} 以上)")
-    aspect = width / height if height else 0.0
-    if abs(aspect - _TARGET_ASPECT) > settings.aspect_tolerance:
-        reasons.append(f"16:9 逸脱: aspect={aspect:.4f} (許容誤差: {settings.aspect_tolerance})")
-    return reasons
-
-
-def score_candidates(
-    candidates: list[Path],
-    centroid: dict[str, float],
-    settings: AutoSelectionSettings,
-) -> list[CandidateScore]:
-    """候補を採点し distance 昇順 (同点は名前順) で返す。"""
-    scores: list[CandidateScore] = []
-    for path in candidates:
-        try:
-            with Image.open(path) as img:
-                width, height = img.size
-            distance = feature_distance(extract_features_from_path(path), centroid)
-        except (OSError, UnidentifiedImageError) as exc:
-            raise ValidationError(f"thumbnail 候補画像を読み込めません: {path}: {exc}") from exc
-        reasons = _eligibility_reasons(width, height, settings)
-        scores.append(
-            CandidateScore(
-                path=path,
-                width=width,
-                height=height,
-                distance=distance,
-                eligible=not reasons,
-                reasons=reasons,
-            )
-        )
-    return sorted(scores, key=lambda s: (s.distance, s.path.name))
-
-
-def select_best(scores: list[CandidateScore], *, mode: str) -> CandidateScore:
-    """適格候補の中から distance 最小の 1 件を返す。適格ゼロは明示エラー。"""
-    for score in scores:
-        if score.eligible:
-            return score
-    detail = " / ".join(f"{s.path.name}: {'; '.join(s.reasons)}" for s in scores)
-    message = f"16:9・最小解像度を満たす適格候補がありません: {detail}"
-    if mode == _MODE_FULL:
-        message += (
-            "\nmode: full のため自動処理を停止しました。手動フローへ切り替えるには:"
-            "\n  1. config/skills/thumbnail.yaml の auto_selection.mode を selection_only に変更"
-            "（または削除）する"
-            "\n  2. /thumbnail の手動承認フローで候補を再生成・確定する"
-        )
-    raise ValidationError(message)
 
 
 # ---------------------------------------------------------------------------
@@ -574,7 +453,11 @@ def main(argv: list[str] | None = None) -> int:
             archive_update = None
             try:
                 target = apply_selection(best, paths, force=args.force)
-                archive_update = archive_approved_thumbnail_transaction(paths.root)
+                archive_update = archive_approved_thumbnail_transaction(
+                    paths.root,
+                    archive_config=cfg,
+                    channel_root=channel_root,
+                )
                 if state is not None:
                     record_workflow_state(
                         paths.workflow_state_path,

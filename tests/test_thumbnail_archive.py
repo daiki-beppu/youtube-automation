@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from youtube_automation.utils import thumbnail_archive
+from youtube_automation.domains.thumbnail import archive as thumbnail_archive
 from youtube_automation.utils.exceptions import ValidationError
 
 
@@ -38,6 +38,14 @@ def _collection(channel: Path, name: str, *, extension: str = "jpg", content: by
     assets.mkdir(parents=True)
     (assets / f"thumbnail.{extension}").write_bytes(content)
     return collection
+
+
+def _archive(collection: Path, channel: Path):
+    return thumbnail_archive.archive_approved_thumbnail(
+        collection,
+        archive_config={"archive": {"enabled": True}},
+        channel_root=channel,
+    )
 
 
 def _run(channel: Path, collection: Path) -> subprocess.CompletedProcess[str]:
@@ -148,7 +156,7 @@ def test_reapproval_extension_cleanup_failure_preserves_previous_archive(
         content=b"first-png",
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel))
-    thumbnail_archive.archive_approved_thumbnail(collection)
+    _archive(collection, channel)
     source = collection / "10-assets" / "thumbnail.png"
     source.unlink()
     source.with_suffix(".jpg").write_bytes(b"second-jpg")
@@ -165,7 +173,7 @@ def test_reapproval_extension_cleanup_failure_preserves_previous_archive(
     monkeypatch.setattr(Path, "unlink", fail_previous_archive_unlink)
 
     with pytest.raises(ValidationError, match="forced stale archive cleanup failure"):
-        thumbnail_archive.archive_approved_thumbnail(collection)
+        _archive(collection, channel)
 
     assert previous_archive.read_bytes() == b"first-png"
     assert not new_archive.exists()
@@ -176,7 +184,7 @@ def test_archive_snapshot_read_failure_is_validation_error(tmp_path: Path, monke
     channel = _channel(tmp_path, archive_enabled=True)
     collection = _collection(channel, "20260717-tst-snapshot-failure", content=b"first")
     monkeypatch.setenv("CHANNEL_DIR", str(channel))
-    thumbnail_archive.archive_approved_thumbnail(collection)
+    _archive(collection, channel)
     archived = channel / "assets" / "thumbnail-gallery" / "20260717-tst-snapshot-failure.jpg"
     real_read_bytes = Path.read_bytes
 
@@ -188,7 +196,7 @@ def test_archive_snapshot_read_failure_is_validation_error(tmp_path: Path, monke
     monkeypatch.setattr(Path, "read_bytes", fail_archive_read)
 
     with pytest.raises(ValidationError, match="forced archive snapshot failure"):
-        thumbnail_archive.archive_approved_thumbnail(collection)
+        _archive(collection, channel)
 
 
 def test_temporary_cleanup_failure_is_validation_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -212,7 +220,7 @@ def test_temporary_cleanup_failure_is_validation_error(tmp_path: Path, monkeypat
     monkeypatch.setattr(Path, "unlink", fail_temporary_unlink)
 
     with pytest.raises(ValidationError, match="forced temporary cleanup failure"):
-        thumbnail_archive.archive_approved_thumbnail(collection)
+        _archive(collection, channel)
 
     assert temporary_path is not None
     real_unlink(temporary_path)
@@ -246,7 +254,7 @@ def test_temporary_cleanup_and_rollback_failures_are_aggregated(
     monkeypatch.setattr(Path, "unlink", fail_temporary_unlink)
 
     with pytest.raises(ValidationError) as error:
-        thumbnail_archive.archive_approved_thumbnail(collection)
+        _archive(collection, channel)
 
     message = str(error.value)
     assert "forced copy failure" in message

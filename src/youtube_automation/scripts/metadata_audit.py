@@ -26,12 +26,12 @@ from pathlib import Path
 
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.configuration.model import ChannelConfig
-from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.descriptions_md import (
+from youtube_automation.domains.metadata.descriptions import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
 )
+from youtube_automation.utils import cost_tracker
+from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.preflight_checks import (
     check_chapter_count,
     check_chapter_variation_suffix,

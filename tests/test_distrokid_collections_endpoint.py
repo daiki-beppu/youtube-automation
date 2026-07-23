@@ -31,6 +31,7 @@ from youtube_automation.configuration.distrokid import (
     DistrokidProfile,
     SongwriterName,
 )
+from youtube_automation.domains.distrokid.specification import write_collection_spec
 from youtube_automation.scripts.collection_serve import (
     _DISTROKID_COLLECTIONS_ROUTE,
     _DISTROKID_RELEASES_ROUTE,
@@ -42,7 +43,6 @@ from youtube_automation.scripts.collection_serve import (
     read_released_discs,
     write_distrokid_release,
 )
-from youtube_automation.utils.distrokid_spec import write_collection_spec
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _COLLECTIONS_ROUTE = "/collections"

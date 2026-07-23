@@ -18,11 +18,11 @@ from typing import Dict, List, Optional
 import pandas as pd
 
 from youtube_automation.configuration import channel_dir as _channel_dir
-from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.launch_curve_analyzer import (
+from youtube_automation.domains.analytics.analysis.launch_curve_analyzer import (
     compute_benchmark,
     judge_video_vs_benchmark,
 )
+from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.launch_curve_data import (
     build_launch_curve_frame,
     load_latest_daily_snapshot,
@@ -203,7 +203,7 @@ def main() -> int:
         analysis = _build_analysis(df, meta, target_id, args.window)
 
         if args.png:
-            from youtube_automation.utils.launch_curve_plotter import plot_launch_curve
+            from youtube_automation.domains.analytics.analysis.launch_curve_plotter import plot_launch_curve
 
             out_dir = channel_dir / "data" / "analytics" / "launch_curves"
             out_dir.mkdir(parents=True, exist_ok=True)

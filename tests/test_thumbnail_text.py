@@ -9,14 +9,14 @@ from matplotlib import font_manager
 from PIL import Image
 
 from youtube_automation.configuration import reset as reset_configuration
-from youtube_automation.utils import skill_config
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
-from youtube_automation.utils.thumbnail_text import OverlaySpec, TextStyle, compose_thumbnail_text
-from youtube_automation.utils.thumbnail_text.config import (
+from youtube_automation.domains.thumbnail.text import OverlaySpec, TextStyle, compose_thumbnail_text
+from youtube_automation.domains.thumbnail.text.config import (
     overlay_config_from_skill_config,
     overlay_spec_from_overlay_config,
     resolve_font_path,
 )
+from youtube_automation.utils import skill_config
+from youtube_automation.utils.exceptions import ConfigError, ValidationError
 
 
 @pytest.fixture(autouse=True)
@@ -66,7 +66,7 @@ def _non_background_bbox(path: Path, background_color: tuple[int, int, int]) -> 
 
 
 def test_package_root_exports_only_domain_api():
-    from youtube_automation.utils import thumbnail_text
+    from youtube_automation.domains.thumbnail import text as thumbnail_text
 
     assert set(thumbnail_text.__all__) == {"OverlaySpec", "TextStyle", "compose_thumbnail_text"}
     assert not hasattr(thumbnail_text, "load_font")
@@ -483,7 +483,7 @@ class TestComposeThumbnailText:
         test_font: Path,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        from youtube_automation.utils.thumbnail_text import renderer
+        from youtube_automation.domains.thumbnail.text import renderer
 
         channel_root = tmp_path / "channel"
         outside = tmp_path / "outside"
@@ -522,7 +522,7 @@ class TestComposeThumbnailText:
         test_font: Path,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        from youtube_automation.utils.thumbnail_text import renderer
+        from youtube_automation.domains.thumbnail.text import renderer
 
         channel_root = tmp_path / "channel"
         outside = tmp_path / "outside"
@@ -584,7 +584,7 @@ class TestComposeThumbnailText:
         test_font: Path,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        from youtube_automation.utils.thumbnail_text import renderer
+        from youtube_automation.domains.thumbnail.text import renderer
 
         monkeypatch.setattr(renderer, "_MAX_BACKGROUND_PIXELS", 10)
 
@@ -604,7 +604,7 @@ class TestComposeThumbnailText:
         test_font: Path,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        from youtube_automation.utils.thumbnail_text import renderer
+        from youtube_automation.domains.thumbnail.text import renderer
 
         def raise_decompression_bomb(_path: Path):
             raise Image.DecompressionBombError("too many pixels")
@@ -665,7 +665,7 @@ class TestComposeThumbnailText:
         test_font: Path,
         monkeypatch: pytest.MonkeyPatch,
     ):
-        from youtube_automation.utils.thumbnail_text import renderer
+        from youtube_automation.domains.thumbnail.text import renderer
 
         output = tmp_path / "out.jpg"
         monkeypatch.setattr(renderer.os, "supports_dir_fd", set())

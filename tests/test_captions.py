@@ -7,12 +7,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.utils.captions import (
+from youtube_automation.domains.media.captions import (
     generate_srt,
     parse_total_duration,
     parse_track_timestamps,
-    upload_caption,
 )
+from youtube_automation.infrastructure.captions_adapter import upload_caption
 from youtube_automation.utils.exceptions import ValidationError
 
 _DESCRIPTIONS = """## Complete Collection 概要欄
@@ -52,6 +52,24 @@ def test_generate_srt_rejects_lyrics_track_count_mismatch():
         generate_srt(["a"], [0, 10_000], 20_000)
 
 
+@pytest.mark.parametrize("total_duration_ms", [0, 9_999])
+def test_generate_srt_rejects_final_duration_before_last_track_start(total_duration_ms):
+    with pytest.raises(ValidationError, match="最後のトラック開始時刻以降"):
+        generate_srt(["a"], [10_000], total_duration_ms)
+
+
+def test_generate_srt_allows_final_duration_equal_to_last_track_start():
+    result = generate_srt(["a"], [10_000], 10_000)
+
+    assert "00:00:10,000 --> 00:00:10,000" in result
+
+
+@pytest.mark.parametrize("total_duration_ms", [-1, 10_000.0, True])
+def test_generate_srt_rejects_non_integer_total_duration(total_duration_ms):
+    with pytest.raises(ValidationError, match="整数ミリ秒"):
+        generate_srt(["a"], [0], total_duration_ms)
+
+
 def _youtube_with_captions(items: list[dict]) -> MagicMock:
     youtube = MagicMock()
     youtube.captions.return_value.list.return_value.execute.return_value = {"items": items}
@@ -69,7 +87,7 @@ def _srt(tmp_path: Path) -> Path:
 def test_upload_caption_inserts_when_language_is_missing(tmp_path, monkeypatch):
     youtube = _youtube_with_captions([{"id": "ja-caption", "snippet": {"language": "ja"}}])
     quota = MagicMock()
-    monkeypatch.setattr("youtube_automation.utils.captions.log_quota", quota)
+    monkeypatch.setattr("youtube_automation.infrastructure.captions_adapter.log_quota", quota)
 
     result = upload_caption(
         youtube,
@@ -89,7 +107,7 @@ def test_upload_caption_inserts_when_language_is_missing(tmp_path, monkeypatch):
 def test_upload_caption_skips_existing_language_without_insert(tmp_path, monkeypatch):
     existing = {"id": "existing-caption", "snippet": {"language": "en", "name": "Old"}}
     youtube = _youtube_with_captions([existing])
-    monkeypatch.setattr("youtube_automation.utils.captions.log_quota", MagicMock())
+    monkeypatch.setattr("youtube_automation.infrastructure.captions_adapter.log_quota", MagicMock())
 
     result = upload_caption(
         youtube,
@@ -109,7 +127,7 @@ def test_upload_caption_skips_existing_language_without_insert(tmp_path, monkeyp
 def test_upload_caption_updates_existing_language(tmp_path, monkeypatch):
     existing = {"id": "existing-caption", "snippet": {"language": "en", "name": "Old"}}
     youtube = _youtube_with_captions([existing])
-    monkeypatch.setattr("youtube_automation.utils.captions.log_quota", MagicMock())
+    monkeypatch.setattr("youtube_automation.infrastructure.captions_adapter.log_quota", MagicMock())
 
     result = upload_caption(
         youtube,
@@ -128,7 +146,7 @@ def test_upload_caption_updates_existing_language(tmp_path, monkeypatch):
 def test_upload_caption_ask_can_choose_skip(tmp_path, monkeypatch):
     existing = {"id": "existing-caption", "snippet": {"language": "en", "name": "Old"}}
     youtube = _youtube_with_captions([existing])
-    monkeypatch.setattr("youtube_automation.utils.captions.log_quota", MagicMock())
+    monkeypatch.setattr("youtube_automation.infrastructure.captions_adapter.log_quota", MagicMock())
 
     result = upload_caption(
         youtube,
@@ -151,7 +169,7 @@ def test_upload_caption_rejects_ambiguous_existing_tracks(tmp_path, monkeypatch)
             {"id": "two", "snippet": {"language": "en"}},
         ]
     )
-    monkeypatch.setattr("youtube_automation.utils.captions.log_quota", MagicMock())
+    monkeypatch.setattr("youtube_automation.infrastructure.captions_adapter.log_quota", MagicMock())
 
     with pytest.raises(ValidationError, match="複数"):
         upload_caption(

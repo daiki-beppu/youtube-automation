@@ -10,9 +10,18 @@ import logging
 import sys
 from datetime import datetime, timedelta
 
-from youtube_automation.configuration import load_config
+from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
+from youtube_automation.infrastructure.analytics_adapter import AnalyticsAdapter, YouTubeDataAdapter
 from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
+from youtube_automation.utils.exceptions import AutomationError, YouTubeAPIError
+from youtube_automation.utils.reporting_api import ReportingAPIClient
+from youtube_automation.utils.youtube_service import (
+    get_analytics,
+    get_credentials_readonly,
+    get_reporting,
+    get_youtube_readonly,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,22 +30,24 @@ _ANALYTICS_QUOTA_SERVICE = "youtube-analytics-api"
 _READ_QUOTA_UNITS = 1
 
 
+class _DeferredService:
+    """サービス取得を最初の実 API 操作まで遅延する薄い DI アダプター。"""
+
+    def __init__(self, factory):
+        self._factory = factory
+        self._service = None
+
+    def __getattr__(self, name):
+        if self._service is None:
+            self._service = self._factory()
+        return getattr(self._service, name)
+
+
 def _record_read_quota(bucket: str, *, service: str = _QUOTA_SERVICE) -> None:
-    """read 1 リクエスト分の quota 消費を記録する。記録失敗で元の処理は止めない。"""
-    try:
-        # tracker 内部の警告 print が stdout 契約（--json 等）を汚さないよう stderr へ逃がす
-        with contextlib.redirect_stdout(sys.stderr):
-            cost_tracker.log_quota(service, bucket, _READ_QUOTA_UNITS)
-    except Exception:
-        logger.debug("quota 記録失敗 (bucket=%s)", bucket)
-
-
-def _execute_and_record(request, bucket: str, *, service: str = _QUOTA_SERVICE):
-    """API request を実行し、成功・失敗どちらでも quota を 1 回記録する。"""
-    try:
-        return request.execute()
-    finally:
-        _record_read_quota(bucket, service=service)
+    """read 1 リクエスト分の quota 消費を記録する。tracker の書き込み失敗は内部で処理する。"""
+    # tracker 内部の警告 print が stdout 契約（--json 等）を汚さないよう stderr へ逃がす
+    with contextlib.redirect_stdout(sys.stderr):
+        cost_tracker.log_quota(service, bucket, _READ_QUOTA_UNITS)
 
 
 def get_channel_latest_status():
@@ -45,26 +56,36 @@ def get_channel_latest_status():
     logger.info(f"📊 {config.meta.channel_short} 最新状況取得中...")
 
     try:
-        collector = YouTubeAnalyticsCollector()
+        collector = YouTubeAnalyticsCollector(
+            youtube_client=YouTubeDataAdapter(
+                _DeferredService(get_youtube_readonly),
+                retry_requests=False,
+                on_request=lambda bucket: _record_read_quota(bucket, service=_QUOTA_SERVICE),
+            ),
+            analytics_client=AnalyticsAdapter(
+                _DeferredService(get_analytics),
+                retry_requests=False,
+                on_request=lambda bucket: _record_read_quota(bucket, service=_ANALYTICS_QUOTA_SERVICE),
+            ),
+            reporting_client=ReportingAPIClient(
+                _DeferredService(get_reporting),
+                credentials=_DeferredService(get_credentials_readonly),
+            ),
+            channel_root=channel_dir(),
+        )
         collector.initialize()
 
         # 基本チャンネル情報
-        channel_response = _execute_and_record(
-            collector.youtube_service.channels().list(part="snippet,statistics", mine=True),
-            "channels.list",
-        )
+        channel_response = collector.youtube_service.resolve_channel()
 
-        if not channel_response["items"]:
+        if not channel_response:
             return {"error": "チャンネル情報取得失敗"}
 
-        channel = channel_response["items"][0]
+        channel = channel_response
         stats = channel["statistics"]
 
         # 最新コレクション情報（Complete Collection形式の動画を抽出）
-        uploads_response = _execute_and_record(
-            collector.youtube_service.channels().list(part="contentDetails", id=collector.channel_id),
-            "channels.list",
-        )
+        uploads_response = collector.youtube_service.list_uploads(collector.channel_id)
 
         uploads_playlist_id = uploads_response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
 
@@ -73,10 +94,7 @@ def get_channel_latest_status():
         collections = []
 
         # チャンネルの全再生リストを取得
-        playlists_response = _execute_and_record(
-            collector.youtube_service.playlists().list(part="snippet", channelId=collector.channel_id, maxResults=50),
-            "playlists.list",
-        )
+        playlists_response = collector.youtube_service.list_playlists(collector.channel_id)
 
         # config からフィルタキーワードを取得
         filter_keywords = list(config.analytics.collection_filter_keywords)
@@ -92,11 +110,8 @@ def get_channel_latest_status():
         for playlist in target_playlists:
             logger.info(f"🎵 {playlist['title']} から動画取得中...")
 
-            playlist_items_response = _execute_and_record(
-                collector.youtube_service.playlistItems().list(
-                    part="snippet", playlistId=playlist["id"], maxResults=50
-                ),
-                "playlistItems.list",
+            playlist_items_response = collector.youtube_service.list_playlist_items_for_display(
+                playlist["id"], max_results=50
             )
 
             for item in playlist_items_response["items"]:
@@ -119,11 +134,8 @@ def get_channel_latest_status():
 
         # もしコレクションが見つからない場合は、uploadsプレイリストから最新動画を表示
         if not collections:
-            recent_videos_response = _execute_and_record(
-                collector.youtube_service.playlistItems().list(
-                    part="snippet", playlistId=uploads_playlist_id, maxResults=10
-                ),
-                "playlistItems.list",
+            recent_videos_response = collector.youtube_service.list_playlist_items_for_display(
+                uploads_playlist_id, max_results=10
             )
             for item in recent_videos_response.get("items", []):
                 collections.append(
@@ -143,8 +155,7 @@ def get_channel_latest_status():
             end_date = datetime.now().strftime("%Y-%m-%d")
             start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
             try:
-                response = _execute_and_record(
-                    collector.analytics_service.reports().query(
+                response = collector.analytics_service.query(
                         ids=f"channel=={collector.channel_id}",
                         startDate=start_date,
                         endDate=end_date,
@@ -152,17 +163,14 @@ def get_channel_latest_status():
                         dimensions="video",
                         filters=f"video=={','.join(video_ids)}",
                         sort="-views",
-                    ),
-                    "reports.query",
-                    service=_ANALYTICS_QUOTA_SERVICE,
-                )
+                    )
                 for row in response.get("rows", []):
                     stats_map[row[0]] = {
                         "views": row[1],
                         "watch_time_min": round(row[2], 1),
                         "avg_view_duration_sec": row[3],
                     }
-            except Exception as e:
+            except YouTubeAPIError as e:
                 logger.warning(f"⚠️ Analytics 取得エラー: {e}")
             for c in collections:
                 vid = c.get("video_id")
@@ -189,7 +197,7 @@ def get_channel_latest_status():
 
         return status
 
-    except Exception as e:
+    except AutomationError as e:
         return {"error": f"取得エラー: {e!s}"}
 
 

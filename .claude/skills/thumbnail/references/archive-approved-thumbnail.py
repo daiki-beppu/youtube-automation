@@ -7,9 +7,11 @@ import argparse
 import sys
 from pathlib import Path
 
+from youtube_automation.configuration import channel_dir
+from youtube_automation.domains.thumbnail.archive import archive_approved_thumbnail
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
-from youtube_automation.utils.thumbnail_archive import archive_approved_thumbnail
+from youtube_automation.utils.skill_config import load_skill_config
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -27,7 +29,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        archived = archive_approved_thumbnail(collection)
+        config = load_skill_config("thumbnail")
+        archived = archive_approved_thumbnail(
+            collection,
+            archive_config=config,
+            channel_root=channel_dir(),
+        )
     except (ConfigError, ValidationError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

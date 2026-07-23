@@ -7,7 +7,7 @@ YouTube Analytics API の仕様 (`videoThumbnailImpressions*` は
 
 from unittest.mock import MagicMock
 
-from youtube_automation.utils.ctr_analytics import CTRAnalyticsMixin
+from youtube_automation.domains.analytics.mixins.ctr_analytics import CTRAnalyticsMixin
 
 
 class DummyCollector(CTRAnalyticsMixin):
@@ -25,12 +25,12 @@ class DummyCollector(CTRAnalyticsMixin):
 def test_fetch_video_ctr_excludes_thumbnail_impressions_metrics():
     """動画別クエリから videoThumbnailImpressions* が除外されていること。"""
     mock_service = MagicMock()
-    mock_service.reports().query().execute.return_value = {"rows": []}
+    mock_service.query.return_value = {"rows": []}
     collector = DummyCollector(mock_service)
 
     collector._fetch_video_ctr("2026-04-01", "2026-04-30")
 
-    last_call_kwargs = mock_service.reports().query.call_args_list[-1].kwargs
+    last_call_kwargs = mock_service.query.call_args.kwargs
     assert "videoThumbnailImpressions" not in last_call_kwargs["metrics"]
     assert last_call_kwargs["dimensions"] == "video"
     assert "views" in last_call_kwargs["metrics"]
@@ -81,7 +81,7 @@ def test_get_ctr_analysis_returns_without_impressions_summary():
         # traffic (views,estimatedMinutesWatched dimensions=day)
         {"rows": [["2026-04-01", 300, 1200]]},
     ]
-    mock_service.reports().query().execute.side_effect = execute_side_effect
+    mock_service.query.side_effect = lambda **kwargs: execute_side_effect()
 
     collector = DummyCollector(mock_service)
     result = collector.get_ctr_analysis("2026-04-01", "2026-04-30")

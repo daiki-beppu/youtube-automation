@@ -15,13 +15,27 @@ from typing import Sequence
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from bench.common import Stats, save_result, stats_from_samples
+from youtube_automation.configuration import channel_dir
+from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
+from youtube_automation.infrastructure.analytics_adapter import AnalyticsAdapter, YouTubeDataAdapter
+from youtube_automation.utils.exceptions import AuthError, ConfigError
+from youtube_automation.utils.reporting_api import ReportingAPIClient
+from youtube_automation.utils.youtube_service import (
+    get_analytics,
+    get_credentials_readonly,
+    get_reporting,
+    get_youtube_readonly,
+)
 
 
 def _collector():
-    from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
-
-    c = YouTubeAnalyticsCollector()
-    c.initialize()  # 例外送出方式（戻り値は None）
+    c = YouTubeAnalyticsCollector(
+        youtube_client=YouTubeDataAdapter(get_youtube_readonly(), retry_requests=True),
+        analytics_client=AnalyticsAdapter(get_analytics(), retry_requests=True),
+        reporting_client=ReportingAPIClient(get_reporting(), credentials=get_credentials_readonly()),
+        channel_root=channel_dir(),
+    )
+    c.initialize()
     return c
 
 
@@ -43,16 +57,13 @@ def _bench_days(collector, days: int) -> Stats:
 def run() -> Sequence[Stats]:
     try:
         collector = _collector()
-    except Exception as e:
+    except (AuthError, ConfigError, FileNotFoundError) as e:
         print(f"  [SKIP] collector の初期化失敗: {e}")
         return []
 
     results: list[Stats] = []
     for days in (28, 90):
-        try:
-            results.append(_bench_days(collector, days))
-        except Exception as e:
-            print(f"  [FAIL] {days}d: {e}")
+        results.append(_bench_days(collector, days))
     return results
 
 

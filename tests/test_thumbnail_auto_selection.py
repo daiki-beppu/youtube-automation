@@ -14,10 +14,10 @@ import yaml
 from PIL import Image
 
 import youtube_automation.scripts.auto_select_thumbnail as auto_select_thumbnail
+from youtube_automation.domains.thumbnail.features import feature_centroid, feature_distance
 from youtube_automation.scripts.auto_select_thumbnail import main, validate_audit_record
 from youtube_automation.utils import skill_config
 from youtube_automation.utils.exceptions import ValidationError
-from youtube_automation.utils.thumbnail_features import feature_centroid, feature_distance
 
 # テスト用の最小解像度 (フル HD だと純 Python の特徴量抽出が遅いため縮小)
 _SIZE_16_9 = (160, 90)
@@ -31,6 +31,14 @@ _REF_COLORS = ((20, 30, 80), (25, 35, 85))
 _NEAR_COLOR = (22, 32, 82)
 _FAR_COLOR = (200, 40, 40)
 _ARCHIVE_ENABLED = {"enabled": True}
+
+
+def _archive(collection: Path, channel_dir: Path):
+    return auto_select_thumbnail.archive_approved_thumbnail_transaction(
+        collection,
+        archive_config={"archive": _ARCHIVE_ENABLED},
+        channel_root=channel_dir,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -354,7 +362,7 @@ def test_apply_archive_failure_rolls_back_thumbnail_and_workflow_state(tmp_path,
     original_state = json.dumps({"stage": "planning"})
     ws_path.write_text(original_state, encoding="utf-8")
 
-    def fail_archive(_collection):
+    def fail_archive(_collection, **_kwargs):
         raise ValidationError("forced archive failure")
 
     monkeypatch.setattr(auto_select_thumbnail, "archive_approved_thumbnail_transaction", fail_archive)
@@ -651,7 +659,7 @@ def test_state_record_failure_with_archive_restores_thumbnail_gallery_and_state(
     ws_path = collection / "workflow-state.json"
     original_state = json.dumps({"stage": "planning"})
     ws_path.write_text(original_state, encoding="utf-8")
-    auto_select_thumbnail.archive_approved_thumbnail_transaction(collection)
+    _archive(collection, channel_dir)
     archived = channel_dir / "assets" / "thumbnail-gallery" / f"{collection.name}.png"
     original_archive = archived.read_bytes()
 
@@ -708,7 +716,7 @@ def test_thumbnail_rollback_failure_still_restores_gallery_and_state(tmp_path, m
     ws_path = collection / "workflow-state.json"
     original_state = json.dumps({"stage": "planning"})
     ws_path.write_text(original_state, encoding="utf-8")
-    auto_select_thumbnail.archive_approved_thumbnail_transaction(collection)
+    _archive(collection, channel_dir)
     archived = channel_dir / "assets" / "thumbnail-gallery" / f"{collection.name}.jpg"
     original_archive = archived.read_bytes()
     real_write_bytes = Path.write_bytes
@@ -744,7 +752,7 @@ def test_gallery_rollback_failure_still_restores_old_archive_thumbnail_and_state
     ws_path = collection / "workflow-state.json"
     original_state = json.dumps({"stage": "planning"})
     ws_path.write_text(original_state, encoding="utf-8")
-    auto_select_thumbnail.archive_approved_thumbnail_transaction(collection)
+    _archive(collection, channel_dir)
     old_archive = channel_dir / "assets" / "thumbnail-gallery" / f"{collection.name}.png"
     new_archive = old_archive.with_suffix(".jpg")
     original_archive = old_archive.read_bytes()
@@ -784,7 +792,7 @@ def test_state_temp_cleanup_failure_is_domain_error_and_restores_all_states(tmp_
     ws_path = collection / "workflow-state.json"
     original_state = json.dumps({"stage": "planning"})
     ws_path.write_text(original_state, encoding="utf-8")
-    auto_select_thumbnail.archive_approved_thumbnail_transaction(collection)
+    _archive(collection, channel_dir)
     old_archive = channel_dir / "assets" / "thumbnail-gallery" / f"{collection.name}.png"
     original_archive = old_archive.read_bytes()
     real_replace = auto_select_thumbnail.os.replace

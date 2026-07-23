@@ -1,4 +1,4 @@
-"""finalize_master の純粋関数 (build_filter / find_rain_layers / _parse_loudnorm_json) テスト。
+"""finalize_master の純粋関数 (build_filter / find_ambient_layers / _parse_loudnorm_json) テスト。
 
 仕様: `branding/rain_layers/rain_*.wav` を N-layer 重ねてマスター音源にレイヤーする
 filter_complex 文字列の生成、雨音ファイル探索、loudnorm pass1 出力の JSON 抽出を
@@ -12,7 +12,7 @@ import pytest
 from youtube_automation.scripts.finalize_master import (
     _parse_loudnorm_json,
     build_filter,
-    find_rain_layers,
+    find_ambient_layers,
 )
 from youtube_automation.utils.exceptions import ValidationError
 
@@ -40,7 +40,7 @@ class TestFindRainLayers:
         # Given: branding/rain_layers/ ディレクトリ自体が存在しない (未対応チャンネル)
 
         # When
-        result = find_rain_layers(tmp_path)
+        result = find_ambient_layers(tmp_path)
 
         # Then: 空リスト (pass-through gate を通すための前提)
         assert result == []
@@ -52,7 +52,7 @@ class TestFindRainLayers:
         (rain_dir / "README.md").write_text("placeholder")
 
         # When
-        result = find_rain_layers(tmp_path)
+        result = find_ambient_layers(tmp_path)
 
         # Then: 空リスト (ディレクトリだけ作ったチャンネルでも no-op)
         assert result == []
@@ -65,7 +65,7 @@ class TestFindRainLayers:
             (rain_dir / name).write_bytes(b"\x00")
 
         # When
-        result = find_rain_layers(tmp_path)
+        result = find_ambient_layers(tmp_path)
 
         # Then: 決定論的にソート済み (ffmpeg 入力順の再現性担保)
         names = [p.name for p in result]
@@ -81,7 +81,7 @@ class TestFindRainLayers:
         (rain_dir / "rainbow_001.wav").write_bytes(b"\x00")  # prefix 違い
 
         # When
-        result = find_rain_layers(tmp_path)
+        result = find_ambient_layers(tmp_path)
 
         # Then: 完全一致した rain_001.wav のみ
         names = [p.name for p in result]

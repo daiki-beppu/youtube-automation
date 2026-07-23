@@ -4,14 +4,12 @@ skill-config の `image_generation:` namespace を解析し、
 `provider` 値に応じた `GeminiConfig` / `OpenAIConfig` または
 codex shell 経路を保持する `ImageGenerationConfig` を構築する。
 
-旧 `gemini_image:` namespace は ``DeprecationWarning`` 付きで読み込み継続する
-（後方互換性。新 namespace と共存時は新 namespace を優先）。
+画像設定は `image_generation:` namespace から読み込む。
 """
 
 from __future__ import annotations
 
 import json
-import warnings
 from dataclasses import dataclass, replace
 from typing import Any, Literal
 
@@ -138,29 +136,11 @@ class ImageGenerationConfig:
 def parse_image_generation_config(skill_cfg: dict[str, Any]) -> ImageGenerationConfig:
     """skill-config（dict）から `ImageGenerationConfig` を組み立てる。
 
-    優先順位:
-    1. `image_generation:` namespace があればそちらを使う
-    2. `gemini_image:` namespace のみあれば後方互換でロード
-    3. どちらも無ければ `ImageGenerationConfig.default()` を返す
-
-    `gemini_image:` namespace が（共存・単独どちらの場合でも）skill_cfg に存在すれば
-    ``DeprecationWarning`` を発行する。
+    `image_generation:` namespace がなければ `ImageGenerationConfig.default()` を返す。
     """
-    legacy_section = skill_cfg.get("gemini_image")
-    if isinstance(legacy_section, dict):
-        warnings.warn(
-            "skill-config の `gemini_image:` namespace は非推奨です。"
-            "`image_generation.provider: gemini` + `image_generation.gemini.*` に移行してください。",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
     new_section = skill_cfg.get("image_generation")
     if isinstance(new_section, dict):
         return _build_from_new_namespace(new_section)
-
-    if isinstance(legacy_section, dict):
-        return _build_from_legacy_gemini(legacy_section)
 
     return ImageGenerationConfig.default()
 
@@ -192,15 +172,6 @@ def _build_from_new_namespace(section: dict[str, Any]) -> ImageGenerationConfig:
         else CodexConfig(composition_rules=composition_rules)
     )
     return ImageGenerationConfig(provider="codex", gemini=None, openai=None, codex=codex_cfg)
-
-
-def _build_from_legacy_gemini(legacy: dict[str, Any]) -> ImageGenerationConfig:
-    """旧 `gemini_image:` 直下の dict から GeminiConfig を組み立てる。"""
-    return ImageGenerationConfig(
-        provider="gemini",
-        gemini=_build_gemini(legacy),
-        openai=None,
-    )
 
 
 def _build_gemini(d: dict[str, Any]) -> GeminiConfig:

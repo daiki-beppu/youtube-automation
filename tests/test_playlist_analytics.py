@@ -1,14 +1,14 @@
 """PlaylistAnalyticsMixin と standard/full 収集配線のテスト。"""
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from googleapiclient.errors import HttpError
 
-from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
-from youtube_automation.utils.channel_analytics import ChannelAnalyticsMixin
+from youtube_automation.domains.analytics.mixins.channel_analytics import ChannelAnalyticsMixin
+from youtube_automation.domains.analytics.mixins.playlist_analytics import PlaylistAnalyticsMixin
+from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 from youtube_automation.utils.exceptions import YouTubeAPIError
-from youtube_automation.utils.playlist_analytics import PlaylistAnalyticsMixin
 
 
 class StubCollector(PlaylistAnalyticsMixin):
@@ -27,17 +27,17 @@ def collector():
 
 class TestGetPlaylistAnalytics:
     def test_queries_top_playlists_report_and_returns_mapped_metrics_with_share(self, collector):
-        collector.analytics_service.reports().query().execute.return_value = {
+        collector.analytics_service.query.return_value = {
             "rows": [
                 ["PL_COMPLETE", 300, 120],
                 ["PL_MIX", 200, 90],
             ]
         }
-        collector.analytics_service.reports().query.reset_mock()
+        collector.analytics_service.query.reset_mock()
 
         result = collector.get_playlist_analytics("2026-01-01", "2026-04-01")
 
-        collector.analytics_service.reports().query.assert_called_once_with(
+        collector.analytics_service.query.assert_called_once_with(
             ids="channel==UC_TEST",
             startDate="2026-01-01",
             endDate="2026-04-01",
@@ -63,31 +63,27 @@ class TestGetPlaylistAnalytics:
         }
 
     def test_returns_empty_metrics_when_api_has_no_rows(self, collector):
-        collector.analytics_service.reports().query().execute.return_value = {}
+        collector.analytics_service.query.return_value = {}
 
         result = collector.get_playlist_analytics("2026-01-01", "2026-04-01")
 
         assert result == {"playlists": {}, "total_views": 0}
 
-    def test_initializes_before_query_when_service_is_unavailable(self, collector):
-        def initialize():
-            collector.analytics_service = MagicMock()
-            collector.analytics_service.reports().query().execute.return_value = {}
-
+    def test_does_not_reinitialize_when_service_is_unavailable(self, collector):
         collector.analytics_service = None
-        collector.initialize = MagicMock(side_effect=initialize)
+        collector.initialize = MagicMock()
 
-        result = collector.get_playlist_analytics("2026-01-01", "2026-04-01")
+        with pytest.raises(AttributeError):
+            collector.get_playlist_analytics("2026-01-01", "2026-04-01")
 
-        collector.initialize.assert_called_once()
-        assert result == {"playlists": {}, "total_views": 0}
+        collector.initialize.assert_not_called()
 
     def test_raises_domain_error_when_api_request_fails(self, collector):
-        collector.analytics_service.reports().query().execute.side_effect = HttpError(
-            MagicMock(status=403), b"quotaExceeded"
+        collector.analytics_service.query.side_effect = YouTubeAPIError(
+            "quota exceeded", status_code=403
         )
 
-        with pytest.raises(YouTubeAPIError, match="プレイリスト分析") as error:
+        with pytest.raises(YouTubeAPIError, match="quota exceeded") as error:
             collector.get_playlist_analytics("2026-01-01", "2026-04-01")
 
         assert error.value.status_code == 403
@@ -101,7 +97,12 @@ class TestPlaylistCollectionIntegration:
 
     @pytest.mark.parametrize("depth", ["standard", "full"])
     def test_standard_and_full_collection_include_playlist_analytics(self, depth):
-        collector = YouTubeAnalyticsCollector()
+        collector = YouTubeAnalyticsCollector(
+            youtube_client=MagicMock(),
+            analytics_client=MagicMock(),
+            reporting_client=MagicMock(),
+            channel_root=Path("/tmp/fake-channel"),
+        )
         collector.analytics_service = MagicMock()
         collector.channel_id = "UC_TEST"
         collector.initialize = MagicMock()
@@ -120,7 +121,7 @@ class TestPlaylistCollectionIntegration:
         collector.get_device_analytics = MagicMock(return_value={})
         collector.get_country_analytics = MagicMock(return_value={})
         collector.get_retention_summary = MagicMock(return_value=[])
-        collector.analytics_service.reports().query().execute.return_value = {"rows": [["PL_COMPLETE", 300, 120]]}
+        collector.analytics_service.query.return_value = {"rows": [["PL_COMPLETE", 300, 120]]}
 
         result = collector.collect_basic_analytics("2026-01-01", "2026-04-01", depth=depth)
 
@@ -136,7 +137,12 @@ class TestPlaylistCollectionIntegration:
         }
 
     def test_basic_collection_excludes_playlist_analytics(self):
-        collector = YouTubeAnalyticsCollector()
+        collector = YouTubeAnalyticsCollector(
+            youtube_client=MagicMock(),
+            analytics_client=MagicMock(),
+            reporting_client=MagicMock(),
+            channel_root=Path("/tmp/fake-channel"),
+        )
         collector.initialize = MagicMock()
         collector.get_channel_analytics = MagicMock(return_value={"summary": {}})
         collector.get_strategic_video_analytics = MagicMock(

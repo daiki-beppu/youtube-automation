@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.utils.strategic_analytics import (
+from youtube_automation.domains.analytics.collection.strategic_analytics import (
     _MAX_WORKERS,
     StrategicAnalyticsMixin,
 )
@@ -185,7 +185,7 @@ class TestSubscriberConversionRanking:
     def test_combined_analytics_adds_conversion_rate(self, collector: _StubCollector) -> None:
         """統合取得の公開メソッドが上位動画へ転換率を付与する。"""
         collector._all_videos = [_video_meta("VID_A", "A")]
-        collector.analytics_service.reports().query().execute.return_value = {
+        collector.analytics_service.query.return_value = {
             "rows": [["VID_A", 200, 1000, 120, 10, 0, 1, 2, 6]]
         }
 
@@ -195,7 +195,7 @@ class TestSubscriberConversionRanking:
 
     def test_top_video_analytics_adds_conversion_rate(self, collector: _StubCollector) -> None:
         """上位動画取得の公開メソッドが転換率を付与する。"""
-        collector.analytics_service.reports().query().execute.return_value = {
+        collector.analytics_service.query.return_value = {
             "rows": [["VID_A", 200, 1000, 120, 10, 0, 1, 2, 6]]
         }
 

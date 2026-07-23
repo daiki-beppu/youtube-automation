@@ -55,9 +55,11 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `domains.suno` | Suno 設定、歌詞、プロンプト、プレイリスト、選曲の生成・検証 |
 | `domains.suno.downloaded` | downloaded payload、workflow、検証、archive、apply transaction |
 | `domains.metadata` | `service` の状態付き orchestration と titles / descriptions / tags / localizations leaf |
-| `utils.analytics_collector` | Analytics API 収集（Mixin 構成、`VideoDailyAnalyticsMixin` で動画×日次取得） |
-| `utils.launch_curve_*` / `channel_trend` / `theme_performance` | 視聴推移分析（pandas / matplotlib） |
-| `utils.thumbnail_features` / `thumbnail_correlation` | サムネ特徴量＋ CTR/views 相関（Pillow） |
+| `domains.analytics` | Analytics の Protocol、収集、分析、レポート、時系列 policy。SDK/client は adapter 境界で解決 |
+| `domains.thumbnail` | サムネ特徴量、相関、参照、archive、選択 policy（Pillow） |
+| `domains.media` | 音声、字幕、画像、動画の provider-neutral model / policy |
+| `domains.distrokid` | DistroKid naming、metadata、specification、preparation、release policy |
+| `domains.collections.weekly_vote_log` | 週次投票ログ reader、initializer、schema、保存・検証 |
 | `utils.image_provider` | 画像生成プロバイダー抽象化（Gemini / OpenAI 切り替え） |
 | `utils.stock` | ボツ画像ストック化（`assets/stock/<theme>/` への退避・列挙・整理、隣接 `.meta.json` 管理） |
 | `auth.oauth_handler` | OAuth 2.0 トークン管理 |
@@ -70,6 +72,10 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `extensions/shared/server-source-migration.ts` | 廃止した配信元候補履歴 storage key の共通 migration |
 
 ### B2 domain ownership receipt / B3 handoff
+
+B3 の owner と後続 handoff は機械可読な
+[`b3-owner-receipt.json`](architecture/b3-owner-receipt.json) に固定する。domain は
+SDK・ADC・network・subprocess の実装を持たず、それらは B4 の adapter 境界へ渡す。
 
 Issue #2305 で Suno の旧 `utils.suno_*` 14 module と `utils.metadata_generator` を削除し、実行 consumer と patch seam を新 owner へ移行した。`domains.metadata.__all__` は次の9 symbolに固定する。
 

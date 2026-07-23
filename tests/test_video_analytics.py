@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.utils.video_analytics import VideoAnalyticsMixin
+from youtube_automation.domains.analytics.mixins.video_analytics import VideoAnalyticsMixin
 
 
 class StubCollector(VideoAnalyticsMixin):
@@ -38,10 +38,10 @@ class TestGetVideoAnalytics:
                 ["VID_001", 1000, 500, 300, 50, 2, 10, 5, 3],
             ]
         }
-        collector.analytics_service.reports().query().execute.return_value = mock_response
+        collector.analytics_service.query.return_value = mock_response
 
         # _get_video_details をモック
-        collector.youtube_service.videos().list().execute.return_value = {
+        collector.youtube_service.list_videos.return_value = {
             "items": [
                 {
                     "id": "VID_001",
@@ -85,8 +85,8 @@ class TestGetVideoAnalytics:
                 ["VID_001", 1000, 500, 300, 50, 2, 10, 5, 3],
             ]
         }
-        collector.analytics_service.reports().query().execute.return_value = mock_response
-        collector.youtube_service.videos().list().execute.return_value = {
+        collector.analytics_service.query.return_value = mock_response
+        collector.youtube_service.list_videos.return_value = {
             "items": [
                 {
                     "id": "VID_001",
@@ -106,7 +106,7 @@ class TestGetVideoAnalyticsById:
     def test_returns_all_metrics(self, collector):
         """get_video_analytics_by_id が拡張メトリクスを返す"""
         mock_response = {"rows": [[100, 50, 300, 10, 1, 3, 2, 1]]}
-        collector.analytics_service.reports().query().execute.return_value = mock_response
+        collector.analytics_service.query.return_value = mock_response
 
         result = collector.get_video_analytics_by_id("VID_001", "2026-01-01", "2026-04-01")
 
@@ -118,7 +118,7 @@ class TestGetVideoAnalyticsById:
 
     def test_empty_response_returns_zeros(self, collector):
         """データなしの場合、全メトリクスが 0"""
-        collector.analytics_service.reports().query().execute.return_value = {"rows": []}
+        collector.analytics_service.query.return_value = {"rows": []}
 
         result = collector.get_video_analytics_by_id("VID_EMPTY", "2026-01-01", "2026-04-01")
 
@@ -130,7 +130,7 @@ class TestGetVideoAnalyticsById:
 class TestGetVideoDetails:
     def test_includes_content_details(self, collector):
         """_get_video_details が contentDetails/topicDetails を含む"""
-        collector.youtube_service.videos().list().execute.return_value = {
+        collector.youtube_service.list_videos.return_value = {
             "items": [
                 {
                     "id": "VID_001",

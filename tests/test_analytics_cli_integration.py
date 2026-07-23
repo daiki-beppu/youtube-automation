@@ -63,11 +63,29 @@ class _AnalyticsService:
     def __init__(self, reports: _AnalyticsReports) -> None:
         self._reports = reports
 
-    def reports(self) -> _AnalyticsReports:
-        return self._reports
+    def query(self, **kwargs: str | int) -> dict:
+        return self._reports.query(**kwargs).execute()
 
 
 class _YouTubeService:
+    def resolve_channel(self) -> dict:
+        return self.channels().list(part="id,snippet,statistics", mine=True).execute()["items"][0]
+
+    def list_uploads(self, channel_id: str) -> dict:
+        return {"items": [{"contentDetails": {"relatedPlaylists": {"uploads": "UPLOADS"}}}]}
+
+    def list_playlist_items(self, playlist_id: str, page_token: str | None) -> dict:
+        return self.playlistItems().list(playlistId=playlist_id).execute()
+
+    def list_playlists(self, channel_id: str) -> dict:
+        return {"items": []}
+
+    def list_playlist_items_for_display(self, playlist_id: str, *, max_results: int) -> dict:
+        return self.list_playlist_items(playlist_id, None)
+
+    def list_videos(self, video_ids: str, *, part: str) -> dict:
+        return self.videos().list(id=video_ids, part=part).execute()
+
     def channels(self) -> MagicMock:
         return MagicMock(
             list=MagicMock(
@@ -141,20 +159,20 @@ def cli_dependencies(tmp_path: Path):
         collector.youtube_service = _YouTubeService()
         collector.channel_id = "UC_TEST"
 
-    with (
-        patch("youtube_automation.scripts.analytics_system.load_config", return_value=config),
-        patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path),
-        patch("youtube_automation.utils.channel_analytics.channel_dir", return_value=tmp_path),
-        patch("youtube_automation.utils.analytics_collector.YouTubeAnalyticsCollector.initialize", new=initialize),
-        patch.dict(
-            sys.modules,
-            {
-                "youtube_automation.auth": MagicMock(),
-                "youtube_automation.auth.oauth_handler": oauth_module,
-            },
-        ),
-    ):
-        yield tmp_path, reports
+    with patch("youtube_automation.scripts.analytics_system.load_config", return_value=config):
+        with patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path):
+            with patch(
+                "youtube_automation.domains.analytics.service.YouTubeAnalyticsCollector.initialize",
+                new=initialize,
+            ):
+                with patch.dict(
+                    sys.modules,
+                    {
+                        "youtube_automation.auth": MagicMock(),
+                        "youtube_automation.auth.oauth_handler": oauth_module,
+                    },
+                ):
+                    yield tmp_path, reports
 
 
 def test_yt_analytics_collects_and_saves_subscribed_status_via_cli(cli_dependencies) -> None:

@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from youtube_automation.utils.launch_curve_analyzer import (
+from youtube_automation.domains.analytics.analysis.launch_curve_analyzer import (
     compute_benchmark,
     judge_video_vs_benchmark,
 )

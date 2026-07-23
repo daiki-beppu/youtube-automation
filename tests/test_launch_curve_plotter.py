@@ -1,6 +1,6 @@
 import pandas as pd
 
-from youtube_automation.utils.launch_curve_plotter import plot_launch_curve
+from youtube_automation.domains.analytics.analysis.launch_curve_plotter import plot_launch_curve
 
 
 def _make_frame():

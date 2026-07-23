@@ -12,7 +12,6 @@
 
 from __future__ import annotations
 
-import warnings
 from pathlib import Path
 
 import pytest
@@ -143,84 +142,8 @@ class TestProviderSwitchEndToEnd:
         with pytest.raises(ConfigError, match="codex-image\\.sh"):
             get_provider(cfg)
 
-    def test_legacy_gemini_image_yaml_still_loads_with_warning(self, tmp_path: Path, monkeypatch):
-        """Given 旧 namespace (`gemini_image:`) のみを持つ channel override yaml
-        When load_image_generation_config を呼ぶ
-        Then DeprecationWarning とともに gemini provider 設定が解決され、
-            override 値（default と異なるモデル名）が末端まで到達する。
-        """
-        # Given
-        channel_dir = tmp_path / "ch"
-        channel_dir.mkdir()
-        monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
-        # default.yaml の model="gemini-3.1-flash-image-preview" と区別できる値で
-        # override が末端まで効いていることを保証する
-        legacy_model = "gemini-old-experimental"
-        _write_thumbnail_override(
-            channel_dir,
-            {
-                "gemini_image": {
-                    "model": legacy_model,
-                    "brand_background": "deep navy",
-                }
-            },
-        )
-
-        # When
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            cfg = load_image_generation_config()
-
-        # Then
-        assert cfg.provider == "gemini"
-        assert cfg.gemini.model == legacy_model, "override が default で上書きされ末端まで届いていない"
-        deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
-        assert len(deprecations) >= 1, "後方互換時に DeprecationWarning が発生していない"
-
 
 class TestResolveCompositionSource:
-    """``composition_source`` 解決の後方互換 (legacy `gemini_image:` のみ override)。
-
-    default.yaml が `image_generation.gemini.*` を宣言しているため、merge 後の
-    `image_generation.gemini` は常に non-empty となる。merged dict ベースで
-    legacy フォールバックを判定すると、ユーザーが旧 namespace で書いた
-    `gemini_image.composition_prefix` 等が黙って捨てられる。
-    `resolve_composition_source` は override 単体を見て legacy 値を返す。
-    """
-
-    def test_legacy_gemini_image_only_override_returned_as_source(self, tmp_path: Path, monkeypatch):
-        """Given user override が `gemini_image:` のみで `image_generation:` を持たない
-        When resolve_composition_source を呼ぶ
-        Then user の `composition_prefix` / `brand_background` が含まれた legacy dict が返る。
-        """
-        # Given
-        channel_dir = tmp_path / "ch"
-        channel_dir.mkdir()
-        monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
-        _write_thumbnail_override(
-            channel_dir,
-            {
-                "gemini_image": {
-                    "brand_background": "deep navy",
-                    "composition_prefix": "Cinematic, dramatic lighting,",
-                    "composition_keywords": ["cinematic", "dramatic"],
-                }
-            },
-        )
-
-        # When
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            skill_cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
-        source = resolve_composition_source(skill_cfg, "gemini")
-
-        # Then
-        assert source.get("brand_background") == "deep navy", "legacy `gemini_image.brand_background` が默殺されている"
-        assert source.get("composition_prefix") == "Cinematic, dramatic lighting,", (
-            "legacy `composition_prefix` が default の `image_generation.gemini.*` で上書きされている"
-        )
-        assert source.get("composition_keywords") == ["cinematic", "dramatic"]
-
     def test_new_namespace_override_returned_when_set(self, tmp_path: Path, monkeypatch):
         """Given user override が `image_generation:` を持つ
         When resolve_composition_source を呼ぶ
@@ -246,28 +169,3 @@ class TestResolveCompositionSource:
 
         # Then
         assert source.get("brand_background") == "warm amber"
-
-    def test_openai_provider_does_not_consult_legacy_namespace(self, tmp_path: Path, monkeypatch):
-        """Given user override が legacy `gemini_image:` のみ
-        When provider="openai" で resolve_composition_source を呼ぶ
-        Then merged `image_generation.openai` が返り、legacy section は混入しない。
-        """
-        # Given
-        channel_dir = tmp_path / "ch"
-        channel_dir.mkdir()
-        monkeypatch.setenv("CHANNEL_DIR", str(channel_dir))
-        _write_thumbnail_override(
-            channel_dir,
-            {"gemini_image": {"brand_background": "should-not-leak"}},
-        )
-
-        # When
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-            skill_cfg = skill_config.load_skill_config("thumbnail", use_cache=False)
-        source = resolve_composition_source(skill_cfg, "openai")
-
-        # Then
-        assert "brand_background" not in source or source.get("brand_background") != "should-not-leak"
-        # default.yaml の openai section が返ることを確認
-        assert source.get("model") == "gpt-image-2"

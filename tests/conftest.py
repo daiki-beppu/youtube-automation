@@ -99,8 +99,8 @@ SLOW_MODULES = frozenset(
 
 SLOW_NODE_IDS = (
     "tests/test_analytics_cli_integration.py::test_yt_analytics_returns_failure_when_subscribed_status_collection_fails",
-    "tests/test_audience_analytics.py::TestGetDeviceAnalytics::test_retries_transient_api_failure_through_analytics_entrypoint",
-    "tests/test_audience_analytics.py::TestGetSubscribedStatusAnalytics::test_retries_transient_api_failure",
+    "tests/test_audience_analytics.py::TestGetDeviceAnalytics::test_permanent_api_failure_keeps_api_specific_fail_soft_result",
+    "tests/test_audience_analytics.py::TestGetSubscribedStatusAnalytics::test_returns_empty_statuses_when_api_returns_no_rows",
     "tests/test_audience_analytics.py::TestGetSubscribedStatusAnalytics::test_returns_error_shape_for_http_error",
     "tests/test_benchmark_collector_channels_batch.py::TestFetchChannelsMetadata::test_retries_transient_api_failure_through_benchmark_collector",
     "tests/test_comments_fetcher.py::test_retries_transient_api_failure_through_comments_entrypoint",

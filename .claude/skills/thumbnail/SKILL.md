@@ -450,7 +450,7 @@ uv run python .claude/skills/thumbnail/references/archive-approved-thumbnail.py 
 
 `reference_images.default` は同じベンチマークチャンネル内の複数サムネ候補を list で指定する。`--max-attempts N` で N 候補を出す場合、各 attempt は別参照画像 1 枚を使う。参照画像が N 枚未満、同じ画像の重複、`--no-rotate` による先頭固定はいずれもエラーになる。
 
-`reference_images.dedup_recent_collections`（既定 `5`）は、各 collection の `20-documentation/thumbnail-prompts.md` に保存された `Reference Assignments` をローテーション履歴として使う。参照プールが候補数より大きい場合は、全参照が採用候補になる前に同じ先頭候補を再利用しない。プール自体が候補数未満なら参照画像の追加を促すエラーで停止し、履歴のない旧コレクションは無視、履歴ファイルの読取障害はエラーで停止する。`0` で履歴による除外を無効化できる。選定ロジックの正は `youtube_automation.utils.thumbnail_references.plan_ttp_reference_assignments` とする。
+`reference_images.dedup_recent_collections`（既定 `5`）は、各 collection の `20-documentation/thumbnail-prompts.md` に保存された `Reference Assignments` をローテーション履歴として使う。参照プールが候補数より大きい場合は、全参照が採用候補になる前に同じ先頭候補を再利用しない。プール自体が候補数未満なら参照画像の追加を促すエラーで停止し、履歴のない旧コレクションは無視、履歴ファイルの読取障害はエラーで停止する。`0` で履歴による除外を無効化できる。選定ロジックの正は `youtube_automation.domains.thumbnail.references.plan_ttp_reference_assignments` とする。
 
 別チャンネル由来の参照画像や stock 画像を混ぜる場合は、TTP 参照プールとは別スコープとして扱う。混在させるなら `config/skills/thumbnail.yaml` 側で明示し、生成ログの `benchmark_channel=` と `thumbnail-prompts.md` の attempt 別参照欄で追跡できるようにする。
 

@@ -1,7 +1,7 @@
 """yt-distrokid-prepare CLI の unit / 統合テスト（#936）.
 
 テスト境界:
-- utils/distrokid_prepare.py の純関数（split_tracks / build_draft_spec /
+- domains/distrokid/preparation.py の純関数（split_tracks / build_draft_spec /
   validate_spec / render_metadata_md / verify_roundtrip / resize_cover / write_release_date）
 - scripts/distrokid_prepare.py の main() を argv 指定で呼ぶ統合テスト
 
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.utils.distrokid_prepare import (
+from youtube_automation.domains.distrokid.preparation import (
     COVER_ART_FILENAME,
     DISTROKID_DIRNAME,
     INDIVIDUAL_MUSIC_DIRNAME,
@@ -34,7 +34,7 @@ from youtube_automation.utils.distrokid_prepare import (
     verify_roundtrip,
     write_release_date,
 )
-from youtube_automation.utils.distrokid_spec import read_collection_spec
+from youtube_automation.domains.distrokid.specification import read_collection_spec
 from youtube_automation.utils.exceptions import ConfigError, ValidationError
 
 # fake mp3 bytes（test_distrokid_disc_source.py と同じパターン）
@@ -779,11 +779,11 @@ class TestBuildIntegration:
 
     def test_build_metadata_parseable_by_parser(self, tmp_path, monkeypatch):
         """生成した metadata.md が parse_album_metadata / parse_track_table で読み戻せる."""
-        from youtube_automation.scripts import distrokid_prepare as dp_script
-        from youtube_automation.utils.distrokid_metadata import (
+        from youtube_automation.domains.distrokid.metadata import (
             parse_album_metadata,
             parse_track_table,
         )
+        from youtube_automation.scripts import distrokid_prepare as dp_script
 
         collection = _make_collection(tmp_path, n_tracks=4)
         music_dir = collection / INDIVIDUAL_MUSIC_DIRNAME
@@ -812,8 +812,8 @@ class TestBuildIntegration:
 
     def test_build_global_numbers_start_from_26_in_disc2(self, tmp_path, monkeypatch):
         """disc2 の先頭トラックのグローバル番号が 26 から始まる（50 曲 split）."""
+        from youtube_automation.domains.distrokid.metadata import parse_track_table
         from youtube_automation.scripts import distrokid_prepare as dp_script
-        from youtube_automation.utils.distrokid_metadata import parse_track_table
 
         # 50 曲コレクション
         collection = _make_collection(tmp_path, n_tracks=50)

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/daiki-beppu/youtube-channels-automation/schemas/weekly_vote_log.schema.json",
+  "title": "WeeklyVoteLog",
+  "description": "Weekly Sunday Vote 投票結果ログ (issue #509). YouTube Studio の結果を yt-vote-log append で記録し、/collection-ideate の theme weight hook が直近 N 週の top_axis を参照する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "entries"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1, "description": "スキーマバージョン (現在 1 のみ受理)"},
+    "entries": {"type": "array", "description": "週次エントリ (week_start 昇順を推奨)", "items": {"$ref": "#/$defs/Entry"}}
+  },
+  "$defs": {
+    "Entry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["week_start", "axes", "top_axis"],
+      "properties": {
+        "week_start": {"type": "string", "description": "投票週開始日 (ISO 8601 YYYY-MM-DD)", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+        "axes": {"type": "array", "description": "提示した N-1 軸ぶんの投票結果", "minItems": 1, "items": {"$ref": "#/$defs/Axis"}},
+        "top_axis": {"type": "string", "description": "axes 内で votes 最大の key"},
+        "total_votes": {"type": "integer", "minimum": 0, "description": "axes.votes の合計 (省略可、省略時は計算値)"},
+        "notes": {"type": "string", "description": "任意フリーテキスト", "default": ""}
+      }
+    },
+    "Axis": {
+      "type": "object", "additionalProperties": false,
+      "required": ["key", "label", "votes"],
+      "properties": {
+        "key": {"type": "string", "minLength": 1, "description": "theme_axis_pool で定義した軸 key"},
+        "label": {"type": "string", "description": "投票本文に表示したラベル"},
+        "votes": {"type": "integer", "minimum": 0, "description": "得票数"}
+      }
+    }
+  }
+}

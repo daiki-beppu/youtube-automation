@@ -3,8 +3,8 @@
 import logging
 from unittest.mock import MagicMock
 
+from youtube_automation.domains.analytics.mixins.revenue_analytics import RevenueAnalyticsMixin
 from youtube_automation.utils.exceptions import YouTubeAPIError
-from youtube_automation.utils.revenue_analytics import RevenueAnalyticsMixin
 
 
 class DummyCollector(RevenueAnalyticsMixin):
@@ -18,7 +18,7 @@ class DummyCollector(RevenueAnalyticsMixin):
 
 def test_collects_daily_and_video_revenue_metrics():
     service = MagicMock()
-    service.reports().query().execute.side_effect = [
+    service.query.side_effect = [
         {
             "currency": "USD",
             "rows": [
@@ -28,7 +28,7 @@ def test_collects_daily_and_video_revenue_metrics():
         },
         {"rows": [["video-1", 1000, 8.0, 600, 13.0, 11.0]]},
     ]
-    service.reports().query.reset_mock()
+    service.query.reset_mock()
 
     result = DummyCollector(service).get_revenue_analytics("2026-07-01", "2026-07-02")
 
@@ -51,14 +51,14 @@ def test_collects_daily_and_video_revenue_metrics():
         "views": 5000,
         "rpm": 6.2,
     }
-    assert service.reports().query.call_args_list[0].kwargs["metrics"] == (
+    assert service.query.call_args_list[0].kwargs["metrics"] == (
         "views,estimatedRevenue,monetizedPlaybacks,cpm,playbackBasedCpm"
     )
 
 
 def test_monetary_api_failure_warns_and_returns_unavailable(caplog):
     service = MagicMock()
-    service.reports().query().execute.side_effect = YouTubeAPIError(
+    service.query.side_effect = YouTubeAPIError(
         "monetary data forbidden", status_code=403, reason="forbidden"
     )
 

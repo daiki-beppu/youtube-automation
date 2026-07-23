@@ -12,7 +12,7 @@
 
 | 制約 | 内容 | 実装上の根拠 |
 | --- | --- | --- |
-| サムネ CTR / インプレッションは Analytics API v2 で取得不可 | `videoThumbnailImpressions*` は dimensions 全パターンで 400 拒否 | `utils/ctr_analytics.py`, `utils/channel_analytics.py` のコメント |
+| サムネ CTR / インプレッションは Analytics API v2 で取得不可 | `videoThumbnailImpressions*` は dimensions 全パターンで 400 拒否 | `domains/analytics/mixins/ctr_analytics.py`, `domains/analytics/mixins/channel_analytics.py` のコメント |
 | CTR / Imp は Reporting API v1 のみ | Reach 系レポート（`channel_reach_basic_a1` 等）の非同期 CSV。**D+2 ラグ・データ保持 60 日・要ジョブ事前作成**（初回は取得まで最大 48h） | `utils/reporting_api.py`, `yt-analytics --include-reporting` |
 | 競合の CTR / 視聴維持 / 平均視聴時間は取得不能 | Data API v3 は公開統計（views / likes / comments）のみ | `/benchmark`, `/flop-analysis` SKILL.md に明記 |
 | 競合比較の代替手段 | 自チャンネル中央値との比較（`yt-launch-curve`）+ サムネ視認性の定性比較（`/thumbnail-compare`） | 設計済みの回避策 |

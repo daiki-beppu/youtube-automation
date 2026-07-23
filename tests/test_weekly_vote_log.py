@@ -1,4 +1,4 @@
-"""``youtube_automation.utils.weekly_vote_log`` のユニットテスト (#509)."""
+"""Weekly vote log domain のユニットテスト (#509)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
-from youtube_automation.utils.weekly_vote_log import (
+from youtube_automation.domains.collections.weekly_vote_log import (
     WEEKLY_VOTE_LOG_SCHEMA_VERSION,
     AxisVote,
     WeeklyVoteEntry,
@@ -23,6 +22,7 @@ from youtube_automation.utils.weekly_vote_log import (
     validate_weekly_vote_log,
     warn_poll_deprecated,
 )
+from youtube_automation.utils.exceptions import ConfigError, ValidationError
 
 # ---------------------------------------------------------------------------
 # Helpers

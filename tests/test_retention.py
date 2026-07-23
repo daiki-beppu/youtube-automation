@@ -8,9 +8,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from youtube_automation.domains.analytics.mixins.retention_analytics import RetentionAnalyticsMixin
+from youtube_automation.domains.analytics.mixins.video_analytics import VideoAnalyticsMixin
 from youtube_automation.utils.exceptions import YouTubeAPIError
-from youtube_automation.utils.retention_analytics import RetentionAnalyticsMixin
-from youtube_automation.utils.video_analytics import VideoAnalyticsMixin
 
 
 class StubCollector(RetentionAnalyticsMixin, VideoAnalyticsMixin):
@@ -39,7 +39,7 @@ class TestGetAudienceRetention:
                 [1.0, 0.3, 0.7],
             ]
         }
-        collector.analytics_service.reports().query().execute.return_value = mock_response
+        collector.analytics_service.query.return_value = mock_response
 
         result = collector.get_audience_retention("VID_001", "2026-01-01", "2026-04-01")
 
@@ -50,7 +50,7 @@ class TestGetAudienceRetention:
 
     def test_empty_response(self, collector):
         """データなしの場合"""
-        collector.analytics_service.reports().query().execute.return_value = {}
+        collector.analytics_service.query.return_value = {}
 
         result = collector.get_audience_retention("VID_EMPTY", "2026-01-01", "2026-04-01")
 
@@ -59,13 +59,10 @@ class TestGetAudienceRetention:
 
 
 class TestGetRetentionSummary:
-    def test_top_video_api_failure_is_propagated(self, collector, monkeypatch):
+    def test_top_video_api_failure_is_propagated(self, collector):
         """上位動画一覧の API 失敗を「対象動画なし」に変換しない。"""
 
-        def fail_request(request, message):
-            raise YouTubeAPIError(message)
-
-        monkeypatch.setattr("youtube_automation.utils.retention_analytics.execute_with_retry", fail_request)
+        collector.analytics_service.query.side_effect = YouTubeAPIError("YouTube Analytics API request failed")
 
         with pytest.raises(YouTubeAPIError, match="YouTube Analytics API request failed"):
             collector.get_retention_summary("2026-01-01", "2026-04-01", top_n=2)
@@ -96,15 +93,14 @@ class TestGetRetentionSummary:
             ]
         }
 
-        # reports().query().execute() を呼び出し順にモック
-        collector.analytics_service.reports().query().execute.side_effect = [
+        collector.analytics_service.query.side_effect = [
             top_response,
             retention_a,
             retention_b,
         ]
 
         # _get_video_details のモック
-        collector.youtube_service.videos().list().execute.return_value = {
+        collector.youtube_service.list_videos.return_value = {
             "items": [
                 {
                     "id": "VID_A",

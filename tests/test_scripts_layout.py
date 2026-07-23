@@ -57,7 +57,7 @@ _OLD_GCP_BOOTSTRAP = _SCRIPTS_DIR / "gcp-bootstrap.sh"
 _OLD_GCP_TERRAFORM_APPLY = _SCRIPTS_DIR / "gcp-terraform-apply.sh"
 
 # 移動後パスを参照すべきプロダクションコード
-_AUDIO_FORMATS_PY = _REPO_ROOT / "src" / "youtube_automation" / "utils" / "audio_formats.py"
+_AUDIO_FORMATS_PY = _REPO_ROOT / "src" / "youtube_automation" / "domains" / "media" / "audio_formats.py"
 _LEGACY_CHANNEL_SETUP_REFERENCES = (
     "channel-setup" + "/references",
     ".claude/skills/" + "channel-setup",

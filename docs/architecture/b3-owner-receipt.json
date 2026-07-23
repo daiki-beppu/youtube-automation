@@ -1,0 +1,53 @@
+{
+  "issue": 2306,
+  "owners": {
+    "analytics": "youtube_automation.domains.analytics",
+    "thumbnail": "youtube_automation.domains.thumbnail",
+    "media": "youtube_automation.domains.media",
+    "distrokid": "youtube_automation.domains.distrokid",
+    "weekly_vote": "youtube_automation.domains.collections.weekly_vote_log",
+    "metadata_edges": "youtube_automation.domains.metadata"
+  },
+  "handoff": {
+    "B4": ["SDK clients", "ADC and environment resolution", "network and subprocess adapters"],
+    "B5": ["command file and registry placement"],
+    "B6": ["remaining downstream consumer migration and cleanup"]
+  },
+  "retained": [
+    "youtube_automation.scripts.apply_rain_layers",
+    "youtube_automation.domains.analytics.collection.strategic_analytics.StrategicAnalyticsMixin.get_all_video_analytics"
+  ],
+  "removed_legacy": ["lyria-002", "gemini_image", "rain_layer"],
+  "mappings": [
+    {"old_owner": "legacy.analytics_base", "exact_new_owner": "src/youtube_automation/domains/analytics/ports.py", "symbols": ["AnalyticsBase"], "consumers": ["src/youtube_automation/domains/analytics"], "handoff": "retained"},
+    {"old_owner": "legacy.analytics_collector", "exact_new_owner": "src/youtube_automation/domains/analytics/service.py", "symbols": ["YouTubeAnalyticsCollector"], "consumers": ["src/youtube_automation/scripts/analytics_system.py"], "handoff": "B4"},
+    {"old_owner": "legacy.channel_analytics", "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/channel_analytics.py", "symbols": ["ChannelAnalyticsMixin"], "consumers": ["tests/test_channel_analytics.py"], "handoff": "retained"},
+    {"old_owner": "legacy.video_analytics", "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/video_analytics.py", "symbols": ["VideoAnalyticsMixin"], "consumers": ["tests/test_video_analytics.py"], "handoff": "retained"},
+    {"old_owner": "legacy.playlist_analytics", "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/playlist_analytics.py", "symbols": ["PlaylistAnalyticsMixin"], "consumers": ["tests/test_playlist_analytics.py"], "handoff": "retained"},
+    {"old_owner": "legacy.descriptions_md", "exact_new_owner": "src/youtube_automation/domains/metadata/descriptions.py", "symbols": ["extract_descriptions_md_section", "build_descriptions_md_parse_diagnostics"], "consumers": ["src/youtube_automation/domains/media/captions.py"], "handoff": "B6"},
+    {"old_owner": "legacy.placeholders", "exact_new_owner": "src/youtube_automation/domains/metadata/placeholders.py", "symbols": ["is_placeholder_value"], "consumers": ["src/youtube_automation/domains/thumbnail/references.py"], "handoff": "retained"},
+    {"old_owner": "legacy.audio_formats", "exact_new_owner": "src/youtube_automation/domains/media/audio_formats.py", "symbols": ["AUDIO_EXTS"], "consumers": ["src/youtube_automation/domains/media/audio.py", "src/youtube_automation/domains/media/video_validator.py", "src/youtube_automation/domains/metadata/service.py", "src/youtube_automation/scripts/suno_audio_cleanup.py"], "handoff": "B4"},
+    {"old_owner": "legacy.image_provider_base", "exact_new_owner": "src/youtube_automation/domains/media/image.py", "symbols": ["ImageProvider"], "consumers": ["src/youtube_automation/scripts/generate_image.py"], "handoff": "B4"},
+    {"old_owner": "legacy.video_type", "exact_new_owner": "src/youtube_automation/domains/media/video_type.py", "symbols": ["VideoType"], "consumers": ["tests/test_video_type.py"], "handoff": "B4"},
+    {"old_owner": "legacy.distrokid_metadata", "exact_new_owner": "src/youtube_automation/domains/distrokid/metadata.py", "symbols": ["DistroKidMetadata"], "consumers": ["src/youtube_automation/domains/distrokid/preparation.py"], "handoff": "retained"},
+    {"old_owner": "legacy.weekly_vote_log", "exact_new_owner": "src/youtube_automation/domains/collections/weekly_vote_log.py", "symbols": ["WeeklyVoteLog"], "consumers": ["src/youtube_automation/scripts/vote_log.py"], "handoff": "retained"},
+    {"old_owner": "legacy.audience_analytics", "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/audience_analytics.py", "symbols": ["AudienceAnalyticsMixin"], "consumers": ["tests/test_audience_analytics.py"], "handoff": "retained"},
+    {"old_owner": "legacy.ctr_analytics", "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/ctr_analytics.py", "symbols": ["CTRAnalyticsMixin"], "consumers": ["tests/test_ctr_analytics.py"], "handoff": "retained"},
+    {"old_owner": "legacy.retention_analytics", "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/retention_analytics.py", "symbols": ["RetentionAnalyticsMixin"], "consumers": ["tests/test_retention.py"], "handoff": "retained"},
+    {"old_owner": "legacy.revenue_analytics", "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/revenue_analytics.py", "symbols": ["RevenueAnalyticsMixin"], "consumers": ["tests/test_revenue_analytics.py"], "handoff": "retained"},
+    {"old_owner": "legacy.traffic_source_analytics", "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/traffic_source_analytics.py", "symbols": ["TrafficSourceMixin"], "consumers": ["tests/test_traffic_source.py"], "handoff": "retained"},
+    {"old_owner": "legacy.video_daily_analytics", "exact_new_owner": "src/youtube_automation/domains/analytics/mixins/video_daily_analytics.py", "symbols": ["VideoDailyAnalyticsMixin"], "consumers": ["tests/test_video_daily_analytics.py"], "handoff": "retained"},
+    {"old_owner": "legacy.strategic_analytics", "exact_new_owner": "src/youtube_automation/domains/analytics/collection/strategic_analytics.py", "symbols": ["StrategicAnalyticsMixin"], "consumers": ["tests/test_strategic_analytics_parallel.py"], "handoff": "retained"},
+    {"old_owner": "legacy.reporting_analytics", "exact_new_owner": "src/youtube_automation/domains/analytics/reporting/reporting_analytics.py", "symbols": ["ReportingAPIMixin"], "consumers": ["tests/test_reporting_api.py"], "handoff": "B4"},
+    {"old_owner": "legacy.channel_trend", "exact_new_owner": "src/youtube_automation/domains/analytics/series/channel_trend.py", "symbols": ["build_trend_frame", "detect_anomalies", "analyze_channel_trend"], "consumers": ["src/youtube_automation/scripts/channel_trend.py", "tests/test_channel_trend.py"], "handoff": "retained"},
+    {"old_owner": "legacy.launch_curve_analyzer", "exact_new_owner": "src/youtube_automation/domains/analytics/analysis/launch_curve_analyzer.py", "symbols": ["compute_benchmark", "judge_video_vs_benchmark"], "consumers": ["src/youtube_automation/scripts/launch_curve.py", "tests/test_launch_curve_analyzer.py"], "handoff": "retained"},
+    {"old_owner": "legacy.launch_curve_plotter", "exact_new_owner": "src/youtube_automation/domains/analytics/analysis/launch_curve_plotter.py", "symbols": ["plot_launch_curve"], "consumers": ["src/youtube_automation/scripts/launch_curve.py", "tests/test_launch_curve_plotter.py"], "handoff": "retained"},
+    {"old_owner": "legacy.audio_units", "exact_new_owner": "src/youtube_automation/domains/media/audio_units.py", "symbols": ["unit_for_audio"], "consumers": ["src/youtube_automation/scripts/finalize_master.py"], "handoff": "B4"},
+    {"old_owner": "legacy.captions", "exact_new_owner": "src/youtube_automation/infrastructure/captions_adapter.py", "symbols": ["upload_caption"], "consumers": ["src/youtube_automation/scripts/captions_upload.py"], "handoff": "B4"},
+    {"old_owner": "legacy.thumbnail_archive", "exact_new_owner": "src/youtube_automation/domains/thumbnail/archive.py", "symbols": ["archive_approved_thumbnail", "archive_approved_thumbnail_transaction"], "consumers": ["src/youtube_automation/scripts/auto_select_thumbnail.py"], "handoff": "retained"},
+    {"old_owner": "legacy.thumbnail_correlation", "exact_new_owner": "src/youtube_automation/domains/thumbnail/correlation.py", "symbols": ["compute_correlations"], "consumers": ["src/youtube_automation/scripts/thumbnail_correlate.py"], "handoff": "retained"},
+    {"old_owner": "legacy.thumbnail_features", "exact_new_owner": "src/youtube_automation/domains/thumbnail/features.py", "symbols": ["extract_features", "feature_centroid", "feature_distance"], "consumers": ["src/youtube_automation/domains/thumbnail/selection.py"], "handoff": "retained"},
+    {"old_owner": "legacy.thumbnail_references", "exact_new_owner": "src/youtube_automation/domains/thumbnail/references.py", "symbols": ["resolve_configured_benchmark_references", "plan_ttp_reference_assignments"], "consumers": ["src/youtube_automation/scripts/auto_select_thumbnail.py"], "handoff": "retained"},
+    {"old_owner": "legacy.video_validator", "exact_new_owner": "src/youtube_automation/domains/media/video_validator.py", "symbols": ["VideoValidator"], "consumers": ["src/youtube_automation/scripts/video_validator.py"], "handoff": "B4"}
+  ]
+}

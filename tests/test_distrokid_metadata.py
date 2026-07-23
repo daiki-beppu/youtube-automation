@@ -1,4 +1,4 @@
-"""`utils.distrokid_metadata` パーサのユニットテスト（#819）.
+"""`domains.distrokid.metadata` パーサのユニットテスト（#819）.
 
 30-distrokid 構造の `metadata.md`（DistroKid Web フォーム転記用テンプレ）を
 構造化する純パーサの契約を pin する。下流リポ（soulful-grooves）の実フォーマットに
@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import pytest
 
-from youtube_automation.utils.distrokid_metadata import (
+from youtube_automation.domains.distrokid.metadata import (
     parse_album_metadata,
     parse_track_table,
 )

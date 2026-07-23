@@ -89,8 +89,8 @@ def test_active_community_docs_have_no_legacy_type_markdown_or_clipboard_flow() 
         SKILL,
         REPO_ROOT / ".claude/skills/collection-ideate/SKILL.md",
         REPO_ROOT / "src/youtube_automation/scripts/vote_log.py",
-        REPO_ROOT / "src/youtube_automation/utils/weekly_vote_log.py",
-        REPO_ROOT / "src/youtube_automation/utils/schemas/weekly_vote_log.schema.json",
+        REPO_ROOT / "src/youtube_automation/domains/collections/weekly_vote_log.py",
+        REPO_ROOT / "src/youtube_automation/domains/collections/schemas/weekly_vote_log.schema.json",
     )
     text = "\n".join(path.read_text(encoding="utf-8") for path in active_paths)
 

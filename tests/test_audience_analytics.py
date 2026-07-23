@@ -8,10 +8,9 @@ import logging
 from unittest.mock import MagicMock
 
 import pytest
-from googleapiclient.errors import HttpError
-from httplib2 import Response
 
-from youtube_automation.utils.audience_analytics import AudienceAnalyticsMixin
+from youtube_automation.domains.analytics.mixins.audience_analytics import AudienceAnalyticsMixin
+from youtube_automation.utils.exceptions import YouTubeAPIError
 
 
 class StubCollector(AudienceAnalyticsMixin):
@@ -29,20 +28,18 @@ def collector():
 
 
 class TestGetDeviceAnalytics:
-    def test_retries_transient_api_failure_through_analytics_entrypoint(self, collector, monkeypatch):
-        monkeypatch.setattr("youtube_automation.utils.retry.time.sleep", lambda _: None)
-        transient = HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}')
-        request = collector.analytics_service.reports().query()
-        request.execute.side_effect = [transient, {"rows": [["MOBILE", 1, 2, 3]]}]
+    def test_consumes_adapter_response_through_analytics_entrypoint(self, collector):
+        request = collector.analytics_service.query
+        request.return_value = {"rows": [["MOBILE", 1, 2, 3]]}
 
         result = collector.get_device_analytics("2026-01-01", "2026-04-01")
 
         assert result["devices"]["MOBILE"]["views"] == 1
-        assert request.execute.call_count == 2
+        request.assert_called_once()
 
     def test_permanent_api_failure_keeps_api_specific_fail_soft_result(self, collector, caplog):
-        permanent = HttpError(Response({"status": "403"}), b'{"error": {"errors": [{"reason": "forbidden"}]}}')
-        collector.analytics_service.reports().query().execute.side_effect = permanent
+        permanent = YouTubeAPIError("forbidden", status_code=403)
+        collector.analytics_service.query.side_effect = permanent
 
         with caplog.at_level(logging.ERROR):
             result = collector.get_device_analytics("2026-01-01", "2026-04-01")
@@ -59,7 +56,7 @@ class TestGetDeviceAnalytics:
                 ["TV", 100, 600, 200],
             ]
         }
-        collector.analytics_service.reports().query().execute.return_value = mock_response
+        collector.analytics_service.query.return_value = mock_response
 
         result = collector.get_device_analytics("2026-01-01", "2026-04-01")
 
@@ -77,7 +74,7 @@ class TestGetCountryAnalytics:
                 ["JP", 150, 800, 150, 3],
             ]
         }
-        collector.analytics_service.reports().query().execute.return_value = mock_response
+        collector.analytics_service.query.return_value = mock_response
 
         result = collector.get_country_analytics("2026-01-01", "2026-04-01")
 
@@ -94,7 +91,7 @@ class TestGetSubscribedStatusAnalytics:
 
     def test_returns_statuses_with_share_and_uses_subscribed_status_dimension(self, collector):
         """登録済み／未登録のデータ、比率、API dimension を正しく扱う"""
-        collector.analytics_service.reports().query().execute.return_value = {
+        collector.analytics_service.query.return_value = {
             "rows": [
                 ["SUBSCRIBED", 300, 1200, 240],
                 ["UNSUBSCRIBED", 700, 2800, 180],
@@ -120,24 +117,22 @@ class TestGetSubscribedStatusAnalytics:
             },
             "total_views": 1000,
         }
-        query_kwargs = collector.analytics_service.reports().query.call_args.kwargs
+        query_kwargs = collector.analytics_service.query.call_args.kwargs
         assert query_kwargs["dimensions"] == "subscribedStatus"
         assert query_kwargs["metrics"] == "views,estimatedMinutesWatched,averageViewDuration"
 
-    def test_retries_transient_api_failure(self, collector, monkeypatch):
-        monkeypatch.setattr("youtube_automation.utils.retry.time.sleep", lambda _: None)
-        transient = HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}')
-        request = collector.analytics_service.reports().query()
-        request.execute.side_effect = [transient, {"rows": [["SUBSCRIBED", 1, 2, 3]]}]
+    def test_consumes_adapter_response(self, collector):
+        request = collector.analytics_service.query
+        request.return_value = {"rows": [["SUBSCRIBED", 1, 2, 3]]}
 
         result = collector.get_subscribed_status_analytics("2026-01-01", "2026-04-01")
 
         assert result["statuses"]["SUBSCRIBED"]["views"] == 1
-        assert request.execute.call_count == 2
+        request.assert_called_once()
 
     def test_returns_empty_statuses_when_api_returns_no_rows(self, collector):
         """行がない API 応答は空のステータス集計として保存可能にする"""
-        collector.analytics_service.reports().query().execute.return_value = {}
+        collector.analytics_service.query.return_value = {}
 
         result = collector.get_subscribed_status_analytics("2026-01-01", "2026-04-01")
 
@@ -145,8 +140,8 @@ class TestGetSubscribedStatusAnalytics:
 
     def test_returns_error_shape_for_http_error(self, collector):
         """API エラーは既存 audience 集計と同じ error 付きの空データにする"""
-        error = HttpError(MagicMock(status=500), b"backendError")
-        collector.analytics_service.reports().query().execute.side_effect = error
+        error = YouTubeAPIError("backendError")
+        collector.analytics_service.query.side_effect = error
 
         result = collector.get_subscribed_status_analytics("2026-01-01", "2026-04-01")
 
