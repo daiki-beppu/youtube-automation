@@ -30,6 +30,10 @@ uv run python .claude/skills/post-publish/references/post-publish-chain-state.py
 
 uv run python .claude/skills/post-publish/references/post-publish-chain-state.py \
   --channel-dir . --collection <collections/live/...> --step <step-id> --mark-complete
+
+uv run python .claude/skills/post-publish/references/post-publish-chain-state.py \
+  --channel-dir . --collection <collections/live/...> --step pinned-comment \
+  --mark-pending-until-publish
 ```
 
 | exit | decision | 処理 |
@@ -37,17 +41,20 @@ uv run python .claude/skills/post-publish/references/post-publish-chain-state.py
 | 0 | `skip` | 完了済み。子 skill を実行せず次段へ進む |
 | 10 | `run` | gate を解決後、子 skill を実行する |
 | 20 | `blocked` | 前段未完了または video ID 不明。理由を表示して停止する |
+| 30 | `pending_until_publish` | 予約公開前。`--mark-pending-until-publish` で履歴へ実行可能時刻を記録し、子 skill/API を呼ばず停止する |
 | その他 | `error` | manifest / history / 引数エラーとして停止する |
 
 ## 実行手順
 
 1. manifest を読み、`chainId == "post-publish"`、step 順が `community-post, pinned-comment, metadata-audit` であること、各 `approvalGate` は `skip` または legacy `enabled` のどちらか一方だけを持つことを検証する。
 2. manifest の gate を解決する。`skip` はそのまま、旧 `enabled` は `skip = not enabled` とする。正規 `configPath` の `load_config().workflow.post_publish.skip_approvals` を読み、`false` の step だけ承認対象にする。未指定は `true`（承認省略）。channel config の旧 `approval_gates` は loader が逆向きの後方互換 alias として解決し、同一 step への新旧同時指定は `ConfigError` にする。
-3. manifest 順に状態判定を実行する。exit 0 は skip、exit 20 は停止する。
+3. manifest 順に状態判定を実行する。exit 0 は skip、exit 20 は停止する。`pinned-comment` が exit 30 の場合は `--mark-pending-until-publish` を実行し、返された `pending_until` と同じ collection/video ID の再開コマンドを表示する。この時点では `pinned-comment` を dry-run/apply とも呼ばない。
 4. exit 10 かつ `skip_approvals` が `false` の場合、対象 video ID・collection・実行件数 1 件を表示する。外部投稿は公開後に取り消しが必要になり得ることを警告し、「この step を実行する」「チェーンを中止する」の 2 択で確認する。中止時は履歴を変更せず、再開コマンドを表示して停止する。
 5. 子 skill を対象 collection 付きで実行する。`community-post` は Studio 投稿準備、`pinned-comment` は dry-run の PASS 条件を確認して apply、`metadata-audit` は既定の local + remote 監査を実行する。チェーン gate で承認済みの step は、同じ video ID・件数の子 skill 承認を再度求めない。`skip_approvals` が `true` でも子 skill 自身が必須としている safety gate は省略しない。
 6. 子 skill の完了条件を満たした場合だけ `--mark-complete` を実行する。失敗時は mark せず停止する。
 7. 3 step 後に状態判定を再実行し、全て exit 0 であることと履歴の video ID を短く報告する。
+
+予約時刻後の再開では、同じコマンドを実行すると state が exit 10 に戻る。同じ video ID の `pinned_comment_history.json` を子 skill が確認するため、投稿済みなら `already_posted` で二重投稿しない。時刻を過ぎても `video_private` の場合は予定超過として actionable error にし、履歴を complete にせず、YouTube Studio の公開状態・`publishAt`・timezone を確認するまで apply しない。
 
 ## References
 

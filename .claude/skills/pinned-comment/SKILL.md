@@ -125,7 +125,7 @@ uv run yt-pinned-comment --collection collections/live/<latest-dir> --apply --la
 - `pinned_comment.enabled=false です` → `config/channel/pinned-comment.json` で `enabled: true` に変更
 - `SKIP ... already_posted` ばかり → 対象動画は既に投稿済み。`pinned_comment_history.json` を確認
 - `SKIP ... video_not_found` → 削除済み / 存在しない video_id。collection の状態ファイルを確認
-- `SKIP ... video_private` → private 公開待ち。公開後に再実行
+- `SKIP ... video_private` → `/post-publish` 経由で `publishAt` が未来なら `pending_until_publish` として記録して公開後に再開する。`publishAt` 超過後も private なら予定外状態なので apply せず、Studio の公開状態・時刻・timezone を確認
 - `ERR ... status=403` → OAuth スコープが `youtube.force-ssl` を含むか確認（含まなければ `auth/token.json` を削除して再認証）
 - `ERR ... status=400`（commentsDisabled）→ 動画のコメント許可が無効になっている
 
