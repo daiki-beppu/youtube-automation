@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(flop-analysis)`: postmortem の一般化可能な学びを、出典付きの禁止制約案として明示承認後に `creative-constraints.md` へ還流する最終工程を追加（#2451）。
 - `feat(masterup)`: Suno 個別音源 cleanup を既定 ON にし、曲ごとの `-14 LUFS` 正規化と明示 opt-out を標準化（#2445）。
 - `feat(loop-video)`: Veo / Omni の既定プロンプトへ全画面の明滅・ストロボ・急な輝度変化・顔アップを避ける注意誘引ガードを追加（#2446）。
 - `feat(suno)`: 既定 Exclude Styles に sudden drops・risers・drum fills・hard transitions・dramatic buildups を追加（#2447）。
