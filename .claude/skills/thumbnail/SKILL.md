@@ -25,7 +25,7 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 
 読み込み後は `youtube_automation.utils.skill_config.load_skill_config("thumbnail")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
 
-**Hard Gate**: `archive.enabled: true` の場合、確定直後のアーカイブが設定不正・確定サムネ欠落・シンボリックリンク・コピー失敗で失敗したら後工程へ進まず停止する。ギャラリー保存を成功したように扱わない。
+**Hard Gate**: `archive.enabled: true` の場合、確定直後のアーカイブが設定不正・確定サムネ欠落・シンボリックリンク・コピー失敗で失敗したら後工程へ進まず停止する。ギャラリー保存を成功したように扱わない。`textless.enabled` は boolean だけを許可し、`false` の共用処理が失敗した場合も `thumbnail.approved` を更新せず停止する。
 
 ## 前提
 
@@ -39,9 +39,9 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 
 ## 完了条件
 
-- `10-assets/thumbnail.jpg`（テキスト付き YouTube サムネ）と `10-assets/main.png`（または `main.jpg`、textless 動画背景）が**別成果物として**確定済み。`auto_selection.mode: full` 以外ではそれぞれユーザー承認済み。`ab_test.enabled: true` の場合は全 `thumbnail-<name>.jpg` も確定済み（`full` 以外では個別承認済み）で、`thumbnail.jpg` が先頭 pattern と同一内容
+- `textless.enabled` が未設定または `true` なら、`10-assets/thumbnail.jpg`（テキスト付き YouTube サムネ）と `10-assets/main.png`（または `main.jpg`、textless 動画背景）が**別成果物として**確定済み。`false` なら確定済み `thumbnail.jpg` と SHA-256 が一致する `main.jpg` が存在し、`main.png` が存在しない。`auto_selection.mode: full` 以外では必要な候補がユーザー承認済み。`ab_test.enabled: true` の場合は全 `thumbnail-<name>.jpg` も確定済み（`full` 以外では個別承認済み）で、`thumbnail.jpg` が先頭 pattern と同一内容
 - テキスト付きサムネは `mode: full` 以外では承認前に、`full` では自動確定後に `/thumbnail-compare` の 320px 視認性検証を通過している
-- `20-documentation/thumbnail-prompts.md` に textless 背景用プロンプトと、テキスト付きサムネの生成記録（標準: `yt-thumbnail-text` の合成パラメータ、AI 焼き込み fallback: テキスト付き生成プロンプト）を保存済み
+- `20-documentation/thumbnail-prompts.md` に textless 背景用プロンプトとテキスト付きサムネの生成記録を保存済み。`textless.enabled: false` では textless プロンプトの代わりに共用設定、コピー元、コピー先、検証済み SHA-256 を保存済み
 - `workflow-state.json` の `thumbnail.approved = true` に更新済み
 - `archive.enabled: true` の場合は `assets/thumbnail-gallery/<collection-dir-name>.<ext>` に確定サムネを保存済み
 
@@ -333,6 +333,14 @@ from the reference image. Keep all corners clean and free of such marks.
 
 `/thumbnail` の標準手順は、**textless 動画背景の生成 → `yt-thumbnail-text` による実フォント合成**の 2 段構成で進める（#1907）。タイトル文字は AI に焼き込ませず、承認済みの textless 背景へ実フォント（Pillow 描画）で決定的に合成する。同一の背景・テキスト・設定なら常に同一出力になり、AI っぽい書体の揺れが発生しない。
 
+ただし deep-merge 後の `textless.enabled: false` は明示 opt-in の共用経路とする。この場合は textless 候補の AI 生成、セルフチェック、プレビュー、承認をすべて省略し、テキスト付き最終 `10-assets/thumbnail.jpg` の確定後に次を実行する。
+
+```bash
+uv run python .claude/skills/thumbnail/references/share_thumbnail_as_main.py <collection-path>
+```
+
+スクリプトは `thumbnail.jpg` を一時ファイルへ `shutil.copyfile()` でコピーし、SHA-256 一致後に `10-assets/main.jpg` へ置換する。既存 `main.jpg` は更新し、競合する `main.png` は削除する。exit 0 と JSON の `status: SHARED`、同一 SHA-256、`main.png` 不在を確認するまで `thumbnail.approved = true` にしない。`thumbnail-prompts.md` には textless 生成プロンプトを捏造せず、`textless.enabled=false`、`source=10-assets/thumbnail.jpg`、`destination=10-assets/main.jpg`、検証済み SHA-256 を記録する。
+
 `docs/benchmarks/thumbnail-analysis.md` が存在する場合は、生成前に Read（Codex では同等のファイル閲覧）で開き、`## /thumbnail への TTP 推奨事項` の「維持する構造」「テーマに合わせて差し替える要素」「避ける要素」「参照候補」を、参照画像選定と差分プロンプトの入力にする。存在せず競合サムネイルの勝ちパターンを先に深掘りする場合は `/thumbnail-research` を実行する。
 
 1. 「thumbnail-text-profile 適用」節の手順で、フォント選定・コピー生成制約・配置を確定する（profile 不在なら実効デフォルト値のまま進む。エラーにしない）。
@@ -352,7 +360,7 @@ uv run yt-thumbnail-text \
 6. `config/skills/loop-video.yaml::enabled: true` のチャンネルでは、テキストなし `main.png/jpg` を `/loop-video` に渡して `loop.mp4` を生成する。
 7. `config/skills/loop-video.yaml::enabled: false` のチャンネルでは Veo を実行せず、テキストなし `main.png/jpg` を静止画背景として `/videoup` に渡す。
 
-`thumbnail.jpg` はアップロード用の文字入りサムネイル、`main.png/jpg` は動画背景・loop-video 入力用の文字なし素材として扱う。両者を同一画像で代用しない。決定的合成では同一の textless 背景がテキスト合成の入力と動画背景を兼ねるが、成果物としては別ファイルで確定する。
+`thumbnail.jpg` はアップロード用、`main.png/jpg` は動画背景・loop-video 入力用の成果物とする。`textless.enabled` が未設定または `true` では文字入りと文字なしを分離し、両者を同一画像で代用しない。`false` だけは上記の検証済みコピーを正規契約とする。symlink や拡張子偽装では代用しない。
 
 **AI 焼き込み経路（fallback・非既定）**: 手書き風タイポグラフィなど実フォントで再現できない表現を運用者が明示的に選んだときだけ、従来の「テキスト付き YouTube サムネ → 承認済みサムネから textless 動画背景」の順で Single-Step / Two-Phase / codex 章のテキスト付き候補生成手順を使う（経路は残すが #1907 では改修しない）。この場合、書体の厳密な再現は保証されないことをユーザーに伝える。
 
@@ -839,7 +847,7 @@ JSON
 
 ### `workflow-state.json` 更新
 
-画像確認・承認後、`thumbnail.approved = true` を更新する。`mode: full` では目視確認と AskUserQuestion を省略し、既存の自動確定成功を承認完了として扱う。`ab_test.enabled: true` の場合は、設定された全 pattern の `thumbnail-<name>.jpg` が存在し、各 pattern の承認（`full` では自動確定）が完了し、`thumbnail.jpg` が先頭 pattern と同一内容であることを確認してからだけ更新する。一部 pattern の承認・確定に失敗した状態では `false` のままにする。
+画像確認・承認後、`thumbnail.approved = true` を更新する。`textless.enabled: false` では `share_thumbnail_as_main.py` の成功と `thumbnail.jpg` / `main.jpg` の SHA-256 一致、`main.png` 不在を確認した後だけ更新する。`mode: full` では目視確認と AskUserQuestion を省略し、既存の自動確定成功を承認完了として扱う。`ab_test.enabled: true` の場合は、設定された全 pattern の `thumbnail-<name>.jpg` が存在し、各 pattern の承認（`full` では自動確定）が完了し、`thumbnail.jpg` が先頭 pattern と同一内容であることを確認してからだけ更新する。一部 pattern の承認・確定に失敗した状態では `false` のままにする。
 
 `yt-thumbnail-auto-select --apply` で確定した場合は、選択候補・distance・ランキング・実行時刻が `thumbnail_auto_selection` キーに監査ログとして自動記録される（#1370）。
 

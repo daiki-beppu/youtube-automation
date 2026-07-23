@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(thumbnail)`: `textless.enabled: false` の opt-in で追加の textless 生成・承認を省略し、確定済み `thumbnail.jpg` を同一内容の `main.jpg` として検証付きで共用（#2457）。
 - `feat(flop-analysis)`: postmortem の一般化可能な学びを、出典付きの禁止制約案として明示承認後に `creative-constraints.md` へ還流する最終工程を追加（#2451）。
 - `feat(masterup)`: 全曲の integrated LUFS 最大差を既定 2.0 LU で検証し、逸脱時は明示承認までマスター結合を停止するゲートを追加（#2450）。
 - `feat(masterup)`: Suno 個別音源 cleanup を既定 ON にし、曲ごとの `-14 LUFS` 正規化と明示 opt-out を標準化（#2445）。

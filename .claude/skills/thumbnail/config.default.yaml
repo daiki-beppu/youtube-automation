@@ -3,6 +3,12 @@
 # チャンネル側で上書きする場合は config/skills/thumbnail.yaml に記述する。
 # deep-merge でマージされる (dict は再帰マージ、リスト・スカラは上書き)。
 
+# 動画背景用の textless main をサムネイルと分離する既定契約。
+# false に明示したチャンネルだけ、確定済み thumbnail.jpg を同一内容の main.jpg
+# として共用し、追加の textless 生成・承認を省略する。
+textless:
+  enabled: true
+
 # 承認済みサムネイルのギャラリー保存 (#1942)。
 # true の場合、確定直後に assets/thumbnail-gallery/<collection-dir-name>.<ext>
 # へ元の拡張子・内容のままコピーする。false なら従来どおり何も作らない。
