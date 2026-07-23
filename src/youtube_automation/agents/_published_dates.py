@@ -19,8 +19,8 @@ from youtube_automation.utils.schedule import get_schedule_timezone
 logger = logging.getLogger(__name__)
 
 _QUOTA_SERVICE = "youtube-data-api"
-# YouTube Data API v3 の公式 quota cost（search.list=100 / videos.list=1）
-_SEARCH_LIST_UNITS = 100
+# YouTube Data API v3 の公式 quota cost（2026-06-01以降は search.list 独立 bucket で 1/call）
+_SEARCH_LIST_UNITS = 1
 _VIDEOS_LIST_UNITS = 1
 _QUOTA_CONTEXT = "published_dates_lookup"
 

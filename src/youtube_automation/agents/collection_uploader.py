@@ -58,6 +58,12 @@ from youtube_automation.scripts.collection_preflight import ensure_collection_pr
 from youtube_automation.scripts.playlist_manager import PlaylistManager  # noqa: E402
 from youtube_automation.utils.collection_paths import CollectionPaths  # noqa: E402
 from youtube_automation.utils.exceptions import ValidationError  # noqa: E402
+from youtube_automation.utils.youtube_quota import (  # noqa: E402
+    DAILY_BUCKET_LIMITS,
+    UNIT_COSTS,
+    UNIT_POOL_LIMIT,
+    complete_collection_quota_plan,
+)
 from youtube_automation.utils.youtube_service import get_youtube  # noqa: E402
 
 # 後方互換 / 公開 API: 定数・主要シンボルは従来どおり本モジュールから import できるよう再エクスポートする。
@@ -301,10 +307,13 @@ class CollectionUploader(
                     "予約投稿したい場合は true に変更してください"
                 )
         print()
-        # 実測クォータ: 約84ユニット/アップロード
-        # CC アップロード (84) + 公開日一覧 search (100) + dedup 直前 search (100)
-        estimated_quota = 84 + 100 + 100
-        print(f"  推定クォータ消費: 約 {estimated_quota:,}/10,000 ユニット")
+        quota_plan = complete_collection_quota_plan()
+        print("  推定 YouTube API quota:")
+        for method, calls in quota_plan.bucket_calls.items():
+            print(f"    独立日次 bucket: {method} {calls}/{DAILY_BUCKET_LIMITS[method]} calls")
+        for method, calls in quota_plan.unit_pool_calls.items():
+            print(f"    unit pool: {method} {calls} × {UNIT_COSTS[method]} units")
+        print(f"    unit pool 合計: {quota_plan.unit_pool_units:,}/{UNIT_POOL_LIMIT:,} units")
 
     # ─── コレクション管理 ────────────────────────────
 

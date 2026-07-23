@@ -798,7 +798,7 @@ class TestDedupSearchQuotaRecording:
 
         assert result is not None
         assert self._quota_calls(mock_log_quota) == [
-            ("youtube-data-api", "search.list", 100),
+            ("youtube-data-api", "search.list", 1),
             ("youtube-data-api", "videos.list", 1),
         ]
 
@@ -811,7 +811,7 @@ class TestDedupSearchQuotaRecording:
             result = uploader._find_existing_video_by_title("Rainy Jazz")
 
         assert result is None
-        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 100)]
+        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 1)]
         mock_youtube.videos.return_value.list.assert_not_called()
 
     def test_should_record_search_quota_and_fail_open_on_search_http_error(self, tmp_path, caplog):
@@ -826,7 +826,7 @@ class TestDedupSearchQuotaRecording:
             result = uploader._find_existing_video_by_title("Rainy Jazz")
 
         assert result is None
-        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 100)]
+        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 1)]
         assert any(rec.levelno == logging.WARNING for rec in caplog.records)
 
     def test_should_record_both_quotas_and_fail_open_on_videos_list_http_error(self, tmp_path, caplog):
@@ -845,7 +845,7 @@ class TestDedupSearchQuotaRecording:
 
         assert result is None
         assert self._quota_calls(mock_log_quota) == [
-            ("youtube-data-api", "search.list", 100),
+            ("youtube-data-api", "search.list", 1),
             ("youtube-data-api", "videos.list", 1),
         ]
         assert any(rec.levelno == logging.WARNING for rec in caplog.records)

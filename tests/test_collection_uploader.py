@@ -555,7 +555,7 @@ class TestPublishedDatesQuotaRecording:
 
         assert len(dates) == 1
         assert self._quota_calls(mock_log_quota) == [
-            ("youtube-data-api", "search.list", 100),
+            ("youtube-data-api", "search.list", 1),
             ("youtube-data-api", "videos.list", 1),
         ]
 
@@ -568,7 +568,7 @@ class TestPublishedDatesQuotaRecording:
             dates = uploader._get_published_dates()
 
         assert dates == set()
-        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 100)]
+        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 1)]
         mock_service.videos.return_value.list.assert_not_called()
 
     def test_should_record_quota_and_keep_fail_safe_on_api_error(self, tmp_path, caplog):
@@ -583,7 +583,7 @@ class TestPublishedDatesQuotaRecording:
             dates = uploader._get_published_dates()
 
         assert dates == set()
-        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 100)]
+        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 1)]
         assert any(rec.levelno == logging.WARNING for rec in caplog.records)
 
 
@@ -974,6 +974,16 @@ class TestShowPlanPrivacyDisplay:
         """skill docs（test_skill_docs_consistency）が例示する文字列を維持する。"""
         out = self._plan_output(tmp_path, capsys, "public")
         assert "📅 公開設定: 即時公開 (public)" in out
+
+    def test_plan_separates_daily_buckets_from_unit_pool(self, tmp_path, capsys):
+        out = self._plan_output(tmp_path, capsys, "private")
+
+        assert "独立日次 bucket: videos.insert 1/100 calls" in out
+        assert "独立日次 bucket: search.list 2/100 calls" in out
+        assert "unit pool: thumbnails.set 1 × 50 units" in out
+        assert "unit pool: playlistItems.insert 1 × 50 units" in out
+        assert "unit pool 合計: 102/10,000 units" in out
+        assert "284/10,000" not in out
 
 
 def test_execute_collection_suppresses_lower_default_publish_fallback_when_schedule_disabled(tmp_path):

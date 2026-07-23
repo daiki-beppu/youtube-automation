@@ -20,7 +20,9 @@ from youtube_automation.agents._collection_uploader_constants import (
     TRACKING_STATUS_COMPLETED,
 )
 from youtube_automation.agents.youtube_auto_uploader import UPLOAD_SOURCE_EXISTING
+from youtube_automation.utils import cost_tracker
 from youtube_automation.utils.exceptions import QuotaExhaustedError
+from youtube_automation.utils.youtube_quota import complete_collection_quota_plan, quota_shortages
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,18 @@ class CompleteCollectionExecutorMixin:
         # tracking から resumable upload session URI を取り出す（無ければ None でフレッシュ実行）
         cc = tracking.get("complete_collection", {})
         resume_session_uri = cc.get("resume_session_uri")
+
+        shortages = quota_shortages(
+            complete_collection_quota_plan(),
+            cost_tracker.read_quota_log(),
+        )
+        if shortages:
+            error = QuotaExhaustedError("YouTube API quota preflight failed: " + "; ".join(shortages))
+            logger.error(f"⏸️  quota 枯渇のため中断（再実行で resume）: {error}")
+            return {
+                "action": ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED,
+                "details": {"error": str(error), "retry_after_seconds": None},
+            }
 
         def _on_session_uri_changed(uri: str | None) -> None:
             """upload 中の URI 変化を tracking に永続化する。
