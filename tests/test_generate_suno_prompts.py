@@ -373,6 +373,19 @@ def test_fallback_uses_video_analysis_exclude_styles_when_config_empty(channel_d
     assert "dubstep" in output
 
 
+def test_default_exclude_styles_prevent_sudden_transitions_without_using_style_budget(channel_dir, tmp_path):
+    """急変系語彙は独立 Exclude Styles 欄へ入り、Styles 本文へ混入しないこと."""
+    patterns_path = _write_minimal_patterns(tmp_path)
+
+    output = generate(patterns_path)
+    entries = build_prompt_entries(patterns_path)
+
+    assert "**Exclude Styles:**" in output
+    for term in ("sudden drops", "risers", "drum fills", "hard transitions", "dramatic buildups"):
+        assert term in output
+        assert term not in entries[0]["style"]
+
+
 def test_user_override_wins_over_video_analysis_fallback(channel_dir, tmp_path):
     """`config/skills/suno.yaml` に override があれば video_analysis 側は無視."""
     _write_suno_override(channel_dir, genre_line="ambient piano")

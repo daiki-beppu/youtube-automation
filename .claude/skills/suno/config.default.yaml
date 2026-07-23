@@ -10,7 +10,7 @@ workspace_name: ""
 genre_line: ""
 
 # Suno の Exclude Styles 欄に入れる除外語
-exclude_styles: "heavy metal, aggressive, EDM, dubstep, techno, industrial, white noise, orchestral, rain sounds, vinyl crackle, ambient noise"
+exclude_styles: "heavy metal, aggressive, EDM, dubstep, techno, industrial, white noise, orchestral, rain sounds, vinyl crackle, ambient noise, sudden drops, risers, drum fills, hard transitions, dramatic buildups"
 
 # Style Influence (0-100、高いほどジャンル指定が強く反映される)
 style_influence: 50
