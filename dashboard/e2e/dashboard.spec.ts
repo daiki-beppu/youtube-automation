@@ -140,24 +140,30 @@ test.afterAll(async () => {
 test("概要から動画詳細まで keyboard で確認できる", async ({ page }) => {
   await page.setViewportSize({ width: 760, height: 900 })
   await page.goto(baseURL)
-  const overviewCard = page.getByRole("article", {
-    name: "Night Drive の概要",
-  })
-  await expect(overviewCard).toBeVisible()
-  await expect(overviewCard.getByText("3,200")).toBeVisible()
-  await expect(overviewCard.getByText("900分")).toBeVisible()
-  await expect(overviewCard.getByText("+32")).toBeVisible()
-  await expect(overviewCard.getByText("分析動画")).toBeVisible()
+  const overview = page.getByRole("region", { name: "概況" })
+  await expect(overview).toBeVisible()
+  await expect(
+    overview.getByRole("region", { name: "表示データについて" })
+  ).toContainText("対象期間")
+  await expect(
+    overview.getByRole("region", { name: "指標の見方" })
+  ).toContainText("公開予約")
+  await expect(
+    page.getByRole("heading", { name: "チャンネル概要" })
+  ).toHaveCount(0)
   await expect(page.getByText("チャンネルを選択してください")).toHaveCount(0)
   const stockTable = page.getByRole("table", {
     name: "チャンネル横断ストック一覧",
   })
   await expect(stockTable).toBeVisible()
-  await expect(stockTable.getByRole("columnheader")).toHaveCount(7)
   const zeroStockRow = stockTable.getByRole("row", { name: /Zero Stock/ })
   const nightDriveRow = stockTable.getByRole("row", { name: /Night Drive/ })
+  await expect(zeroStockRow.getByText("ストック")).toBeVisible()
   await expect(zeroStockRow).toContainText("0本")
   await expect(nightDriveRow).toContainText("1本")
+  await expect(nightDriveRow).toContainText("3,200")
+  await expect(nightDriveRow).toContainText("900分")
+  await expect(nightDriveRow).toContainText("+32")
   expect(
     await zeroStockRow.evaluate(
       (row, laterRow) =>
@@ -186,14 +192,13 @@ test("概要から動画詳細まで keyboard で確認できる", async ({ page
     documentWidth: document.documentElement.scrollWidth,
     viewportWidth: document.documentElement.clientWidth,
   }))
-  expect(stockLayout.scrollWidth).toBeGreaterThan(stockLayout.clientWidth)
+  expect(stockLayout.scrollWidth).toBeLessThanOrEqual(stockLayout.clientWidth)
   expect(stockLayout.documentWidth).toBeLessThanOrEqual(
     stockLayout.viewportWidth
   )
-  const channel = page.getByRole("button", { name: /Night Drive/ })
+  const channel = nightDriveRow.getByRole("button", { name: /Night Drive/ })
   await expect(channel).toBeVisible()
-  await expect(overviewCard.getByText("公開予約 1本")).toBeVisible()
-  const layout = await overviewCard.evaluate((element) => {
+  const layout = await nightDriveRow.evaluate((element) => {
     const bounds = element.getBoundingClientRect()
     return {
       clientWidth: element.clientWidth,

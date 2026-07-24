@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 import {
+  CalendarRangeIcon,
   AlertCircleIcon,
   BarChart3Icon,
   DatabaseIcon,
+  InfoIcon,
   MoonIcon,
+  RefreshCwIcon,
   SunIcon,
 } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
@@ -38,8 +41,8 @@ import { ChannelStockTable } from "@/features/channel-stock/channel-stock-table"
 import type { ChannelOverview, Summary } from "@/lib/dashboard-types"
 import {
   formatCollectedAt,
+  formatDateRange,
   formatInteger,
-  formatSignedInteger,
 } from "@/lib/dashboard-formatters"
 import {
   Table,
@@ -91,12 +94,6 @@ function statusLabel(status: string): string {
   return labels[status] ?? status
 }
 
-function channelBadgeLabel(channel: ChannelOverview): string {
-  if (channel.status !== "ready") return statusLabel(channel.status)
-  if (channel.scheduled_count === null) return "公開予約 未取得"
-  return `公開予約 ${formatInteger(channel.scheduled_count)}本`
-}
-
 function LoadingState() {
   return (
     <div aria-label="読み込み中" className="grid gap-4 lg:grid-cols-3">
@@ -112,6 +109,165 @@ function LoadingState() {
         </Card>
       ))}
     </div>
+  )
+}
+
+function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
+  const scheduledChannels = channels.filter(
+    (channel) => channel.scheduled_count !== null
+  )
+  const scheduledTotal = scheduledChannels.reduce(
+    (total, channel) => total + (channel.scheduled_count ?? 0),
+    0
+  )
+  const attentionCount = channels.filter(
+    (channel) => channel.refresh_error !== null || channel.status !== "ready"
+  ).length
+  const startDates = channels.flatMap((channel) =>
+    channel.period.start_date ? [channel.period.start_date] : []
+  )
+  const endDates = channels.flatMap((channel) =>
+    channel.period.end_date ? [channel.period.end_date] : []
+  )
+  const collectedDates = channels.flatMap((channel) =>
+    channel.collected_at ? [channel.collected_at] : []
+  )
+  const startDate = startDates.length > 0 ? startDates.sort()[0] : null
+  const endDate = endDates.length > 0 ? (endDates.sort().at(-1) ?? null) : null
+  const collectedAt =
+    collectedDates.length > 0 ? (collectedDates.sort().at(-1) ?? null) : null
+
+  return (
+    <section aria-labelledby="dashboard-overview-title" className="grid gap-4">
+      <div>
+        <h2 id="dashboard-overview-title" className="text-2xl font-semibold">
+          概況
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          まず全体の状態を確認し、次にチャンネル間の差を比較します。
+        </p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,1fr)]">
+        <Card>
+          <CardHeader>
+            <CardTitle>現在の状態</CardTitle>
+            <CardDescription>
+              起動時に読み込んだ全チャンネルの集計です。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg bg-muted p-4">
+                <dt className="text-xs text-muted-foreground">
+                  登録チャンネル
+                </dt>
+                <dd className="mt-1 text-2xl font-semibold tabular-nums">
+                  {formatInteger(channels.length)}
+                  <span className="ml-1 text-sm font-normal text-muted-foreground">
+                    件
+                  </span>
+                </dd>
+              </div>
+              <div className="rounded-lg bg-muted p-4">
+                <dt className="text-xs text-muted-foreground">公開予約 合計</dt>
+                <dd className="mt-1 text-2xl font-semibold tabular-nums">
+                  {formatInteger(scheduledTotal)}
+                  <span className="ml-1 text-sm font-normal text-muted-foreground">
+                    本
+                  </span>
+                </dd>
+              </div>
+              <div className="rounded-lg bg-muted p-4">
+                <dt className="text-xs text-muted-foreground">要確認</dt>
+                <dd className="mt-1 text-2xl font-semibold tabular-nums">
+                  {formatInteger(attentionCount)}
+                  <span className="ml-1 text-sm font-normal text-muted-foreground">
+                    件
+                  </span>
+                </dd>
+              </div>
+            </dl>
+          </CardContent>
+          <CardFooter className="text-xs text-muted-foreground">
+            公開予約未取得:
+            {formatInteger(channels.length - scheduledChannels.length)}件
+          </CardFooter>
+        </Card>
+
+        <Card role="region" aria-label="表示データについて">
+          <CardHeader>
+            <CardTitle>表示データについて</CardTitle>
+            <CardDescription>判断の前提となる期間と鮮度です。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid gap-4 text-sm">
+              <div className="flex gap-3">
+                <CalendarRangeIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <dt className="font-medium">対象期間</dt>
+                  <dd className="text-muted-foreground">
+                    {formatDateRange(startDate, endDate)}
+                  </dd>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <RefreshCwIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <dt className="font-medium">最終更新</dt>
+                  <dd className="text-muted-foreground">
+                    {formatCollectedAt(collectedAt)}
+                  </dd>
+                </div>
+              </div>
+            </dl>
+          </CardContent>
+          <CardFooter className="text-xs text-muted-foreground">
+            期間と更新時刻はチャンネルごとに異なる場合があります。
+          </CardFooter>
+        </Card>
+      </div>
+
+      <Card role="region" aria-label="指標の見方">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <InfoIcon className="size-4" />
+            指標の見方
+          </CardTitle>
+          <CardDescription>
+            比較表で使用する主要指標の定義です。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt className="font-medium">公開予約</dt>
+              <dd className="mt-1 text-muted-foreground">
+                YouTube で公開日時が設定された未公開動画の本数
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium">期間再生数</dt>
+              <dd className="mt-1 text-muted-foreground">
+                対象期間中に動画が再生された回数
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium">純増登録者</dt>
+              <dd className="mt-1 text-muted-foreground">
+                対象期間中の登録者増加数から減少数を引いた値
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium">総再生時間</dt>
+              <dd className="mt-1 text-muted-foreground">
+                対象期間中に視聴された時間の合計
+              </dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
+    </section>
   )
 }
 
@@ -146,113 +302,6 @@ function SummaryMetrics({ summary }: { summary: Summary }) {
         </dd>
       </div>
     </dl>
-  )
-}
-
-function ChannelOverviewGrid({
-  channels,
-  selectedId,
-  onSelect,
-}: {
-  channels: ChannelOverview[]
-  selectedId: string | null
-  onSelect: (id: string) => void
-}) {
-  return (
-    <section aria-labelledby="channel-overview-title" className="grid gap-4">
-      <div>
-        <h2 id="channel-overview-title" className="text-2xl font-semibold">
-          チャンネル概要
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          選択しなくても、全チャンネルの主要指標を比較できます。
-        </p>
-      </div>
-      <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {channels.map((channel) => (
-          <Card
-            key={channel.id}
-            role="article"
-            aria-label={`${channel.name} の概要`}
-            className="min-w-0"
-          >
-            <CardHeader className="gap-3">
-              <div className="min-w-0">
-                <CardTitle className="text-lg break-words">
-                  {channel.name}
-                </CardTitle>
-                <CardDescription>
-                  収集: {formatCollectedAt(channel.collected_at)}
-                </CardDescription>
-              </div>
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                {channel.refresh_error ? (
-                  <Badge
-                    variant="destructive"
-                    aria-label={`更新失敗: ${channel.refresh_error.message}`}
-                  >
-                    更新失敗
-                  </Badge>
-                ) : null}
-                <Badge
-                  variant={
-                    channel.status === "ready" ? "default" : "destructive"
-                  }
-                >
-                  {channelBadgeLabel(channel)}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <dl className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-muted p-3">
-                  <dt className="text-xs text-muted-foreground">期間再生数</dt>
-                  <dd className="text-lg font-semibold tabular-nums">
-                    {channel.summary
-                      ? formatInteger(channel.summary.views)
-                      : "—"}
-                  </dd>
-                </div>
-                <div className="rounded-lg bg-muted p-3">
-                  <dt className="text-xs text-muted-foreground">純増登録者</dt>
-                  <dd className="text-lg font-semibold tabular-nums">
-                    {channel.summary
-                      ? formatSignedInteger(channel.summary.subscribers_net)
-                      : "—"}
-                  </dd>
-                </div>
-                <div className="rounded-lg bg-muted p-3">
-                  <dt className="text-xs text-muted-foreground">総再生時間</dt>
-                  <dd className="text-lg font-semibold tabular-nums">
-                    {channel.summary
-                      ? `${formatInteger(channel.summary.watch_time_minutes)}分`
-                      : "—"}
-                  </dd>
-                </div>
-                <div className="rounded-lg bg-muted p-3">
-                  <dt className="text-xs text-muted-foreground">分析動画</dt>
-                  <dd className="text-lg font-semibold tabular-nums">
-                    {formatInteger(channel.video_count)}本
-                  </dd>
-                </div>
-              </dl>
-            </CardContent>
-            <CardFooter className="mt-auto">
-              <Button
-                variant={selectedId === channel.id ? "secondary" : "outline"}
-                size="sm"
-                className="w-full"
-                onClick={() => onSelect(channel.id)}
-                aria-pressed={selectedId === channel.id}
-                aria-label={`${channel.name} の動画詳細を見る`}
-              >
-                動画詳細を見る
-              </Button>
-            </CardFooter>
-          </Card>
-        ))}
-      </div>
-    </section>
   )
 }
 
@@ -471,8 +520,8 @@ export function App() {
         ) : null}
         {channels && channels.length > 0 ? (
           <div className="grid gap-8">
-            <ChannelStockTable channels={channels} />
-            <ChannelOverviewGrid
+            <DashboardOverview channels={channels} />
+            <ChannelStockTable
               channels={channels}
               selectedId={selectedId}
               onSelect={selectChannel}
