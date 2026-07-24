@@ -111,15 +111,15 @@ def test_developer_bootstrap_drops_empty_veo_extra() -> None:
     )
 
 
-def test_developer_bootstrap_uses_canonical_setup_wrapper() -> None:
+def test_developer_bootstrap_uses_canonical_devshell_entry() -> None:
     """Given README.md Developer bootstrap block
     When 推奨コマンドを読む
-    Then canonical setup wrapper だけが環境準備入口として案内されている。
+    Then canonical devShell 入口（nix develop）だけが環境準備入口として案内されている。
     """
     block = _developer_bootstrap_block(_development_section(_read(README)))
-    assert "bash .lefthook/setup-worktree.sh" in block
+    assert "nix develop" in block
     assert "uv sync" not in block
-    assert "nix develop" not in block
+    assert "lefthook" not in block
     assert "--extra dev" not in block, (
         f"Developer bootstrap に不要な `--extra dev` が残存 (dev は default group):\n{block}"
     )

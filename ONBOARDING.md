@@ -285,7 +285,7 @@ uv run yt-skills sync --asset claude-md --force
 ```bash
 git clone git@github.com:daiki-beppu/youtube-automation.git
 cd youtube-automation
-bash .lefthook/setup-worktree.sh
+nix develop
 ```
 
 ### 6.2 開発フロー

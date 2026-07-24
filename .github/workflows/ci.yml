@@ -203,4 +203,4 @@ jobs:
       - name: Check new Any usage
         env:
           PRE_PUSH_DIFF_BASE: ${{ github.event.pull_request.base.sha }}
-        run: bash .lefthook/pre-push/any-usage-gate.sh
+        run: bash .github/scripts/any-usage-gate.sh
