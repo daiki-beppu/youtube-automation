@@ -259,3 +259,29 @@ test("768px 幅でも比較行と詳細操作が見切れない", async ({ page 
   expect(layout.buttonLeft).toBeGreaterThanOrEqual(layout.rowLeft)
   expect(layout.buttonRight).toBeLessThanOrEqual(layout.rowRight)
 })
+
+test("ダークテーマでも背景とカードの階調を識別できる", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("theme", "dark")
+  })
+  await page.goto(baseURL)
+
+  const colors = await page.evaluate(() => {
+    const rootStyle = getComputedStyle(document.documentElement)
+    const lightness = (token: string) => {
+      const match = rootStyle
+        .getPropertyValue(token)
+        .match(/oklch\(([\d.]+)(%?)/)
+      if (!match) throw new Error(`${token} is not an OKLCH color`)
+      const value = Number(match[1])
+      return match[2] === "%" ? value / 100 : value
+    }
+    return {
+      background: lightness("--background"),
+      card: lightness("--card"),
+    }
+  })
+
+  expect(colors.background).toBeGreaterThanOrEqual(0.18)
+  expect(colors.card - colors.background).toBeGreaterThanOrEqual(0.04)
+})
