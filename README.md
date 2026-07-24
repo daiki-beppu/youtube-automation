@@ -215,7 +215,7 @@ nix develop
 ```bash
 git clone git@github.com:daiki-beppu/youtube-automation.git
 cd youtube-automation
-bash .lefthook/setup-worktree.sh
+nix develop
 ```
 
 ### テスト実行
@@ -224,7 +224,7 @@ bash .lefthook/setup-worktree.sh
 uv run pytest
 ```
 
-正規 bootstrap wrapper 内の `uv sync` で、`uv run pytest tests/` が collection error 0 件で走るために必要な依存がすべて揃います。非対話 shell は `bash .lefthook/setup-worktree.sh uv run pytest` のように command を渡します。
+devShell 入場時（direnv / `nix develop`）の shellHook が実行する `uv sync` で、`uv run pytest tests/` が collection error 0 件で走るために必要な依存がすべて揃います。非対話 shell は `nix develop --command uv run pytest` のように実行します。
 
 - テスト用ツール (`pytest` / `ruff`) は `[dependency-groups].dev` 経由で導入されます。
 - テストが間接的に require する `Pillow` / `pandas` / `pyyaml` / `matplotlib` / `japanize-matplotlib` / `google-api-python-client` / `google-auth-oauthlib` などは `[project] dependencies`（main deps）に同梱されています。

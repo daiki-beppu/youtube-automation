@@ -1,5 +1,23 @@
-# takt プロジェクト設定
-#
+# automation リポジトリの takt 設定
+# provider / model / language / concurrency はグローバル設定 (~/.takt/config.yaml) を継承する。
+
+# sandbox 化された worker の direnv / lefthook セットアップ停滞対策（issue #1999）と、
+# sibling worktree 由来 path の持ち込み遮断（issue #2163）。
+# bb9d9dd9 での config 削除時に消失し、~/.cache/uv・.git/hooks への sandbox
+# 権限エラーが再発したため復旧する（issue #2532）。
+# runtime-prepare.sh の stdout（KEY=VALUE）が全 worker の環境へ注入され、
+# TMPDIR / XDG_CACHE_HOME / XDG_CONFIG_HOME / XDG_DATA_HOME / XDG_STATE_HOME /
+# UV_CACHE_DIR を current TAKT_RUNTIME_ROOT 配下へ再構成して direnv allow を通し、
+# lefthook install はスキップさせる（ゲートは CI 側で担保）。
+runtime:
+  prepare:
+    - .takt/runtime-prepare.sh
+
+# トークン消費の計測。記録先: .takt/runs/<run>/logs/<session>-usage-events.phase.jsonl
+observability:
+  enabled: true
+  usage_events_phase: true
+
 # レビュワーペルソナは Claude provider で実行する（#2518 / #2535）。
 #
 # 注意: takt v0.52 の config 解決では、project が provider_routing を定義すると

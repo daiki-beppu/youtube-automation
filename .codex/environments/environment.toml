@@ -13,6 +13,6 @@ git fetch origin main
 branch="codex/$(date +%Y%m%d-%H%M%S)-$(openssl rand -hex 3)"
 git switch -C "$branch" origin/main
 
-bash .lefthook/setup-worktree.sh uv sync
+nix develop --command uv sync
 
 echo "Ready: $branch created from latest origin/main"'''

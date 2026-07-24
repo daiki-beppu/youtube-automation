@@ -3,8 +3,8 @@
 # 新規追加行の広すぎる Any / any 型注釈を検出する。
 #
 # 判定基準: origin/main からの分岐点（merge-base）と現在の HEAD の差分。
-# diff の基準点（PRE_PUSH_DIFF_BASE）は changelog-gate.sh から呼ばれた場合は
-# そちらで解決済みの値を再利用し、単体実行時のみ自前で解決する。
+# diff の基準点は CI（ci.yml の any-gate ジョブ）が PRE_PUSH_DIFF_BASE で
+# 渡した値を再利用し、単体実行時のみ自前で解決する。
 
 set -euo pipefail
 
@@ -49,7 +49,7 @@ else
 fi
 
 # 対象ファイルが HEAD 時点でどの行に「実際に参照される」Any を持つかを AST で
-# 解決する（.lefthook/pre-push/any_usage_python_resolver.py）。テキスト正規表現
+# 解決する（.github/scripts/any_usage_python_resolver.py）。テキスト正規表現
 # ではなく AST を使うのは、コメント・docstring・文字列リテラル中の "Any"
 # （型使用ではない）を構造的に除外するため。
 resolve_python_any_usage_lines() {
@@ -59,7 +59,7 @@ resolve_python_any_usage_lines() {
 }
 
 # TypeScript の追加行からコメント（// ...）と文字列・テンプレートリテラルの
-# 中身を取り除いたものを返す（.lefthook/pre-push/any_usage_ts_line_cleaner.py）。
+# 中身を取り除いたものを返す（.github/scripts/any_usage_ts_line_cleaner.py）。
 # コメント・文字列内の "any" を型使用として誤検知しないための事前クリーニング
 # （正規表現マッチが疑わしい場合のみ呼ぶ）。
 clean_ts_line() {

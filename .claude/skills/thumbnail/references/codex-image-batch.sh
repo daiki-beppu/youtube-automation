@@ -100,7 +100,7 @@ from youtube_automation.utils.skill_config import load_skill_config  # noqa: F40
 PY
   then
     echo "ERROR: thumbnail config を読む project 環境を準備できません" >&2
-    echo "復旧: bash .lefthook/setup-worktree.sh <command> [args...]" >&2
+    echo "復旧: nix develop --command <command> [args...]" >&2
     exit 1
   fi
   if ! max_parallel=$(uv run python - <<'PY'

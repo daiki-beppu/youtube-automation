@@ -79,7 +79,7 @@ def test_extensions_shell_contains_only_the_node_toolchain() -> None:
     assert extensions_shell.group("indent") == default_shell.group("indent")
 
     block = extensions_shell.group(0)
-    for excluded in ("python311", "uv", "ffmpeg", "lefthook", "shellHook"):
+    for excluded in ("python311", "uv", "ffmpeg", "shellHook"):
         assert excluded not in block
 
 

@@ -11,13 +11,11 @@ import yaml
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _PR_TEMPLATE_PATH = _REPO_ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md"
 _CI_WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
-_CHANGELOG_GATE_PATH = _REPO_ROOT / ".lefthook" / "pre-push" / "changelog-gate.sh"
-_LEFTHOOK_CONFIG_PATH = _REPO_ROOT / "lefthook.yml"
 
 _CHANGELOG_LABEL = "skip-changelog"
 
-# CHANGELOG ゲート対象パスの単一ソース。CI workflow の path filter regex と
-# changelog-gate.sh の GATED_PATHS の双方をこの定数と照合する。
+# CHANGELOG ゲート対象パスの単一ソース。CI workflow の path filter regex を
+# この定数と照合する。
 # 末尾 `/` はディレクトリ prefix、それ以外はファイル完全一致。
 _CHANGELOG_GATED_PATHS = (
     "src/youtube_automation/",
@@ -164,46 +162,15 @@ def test_ci_workflow_pull_requests_allow_stacked_pr_base_branches() -> None:
     assert "branches" not in pull_request
 
 
-def test_changelog_gate_paths_match_single_source_in_ci_and_lefthook() -> None:
-    """CI と lefthook の changelog ゲート対象パスを _CHANGELOG_GATED_PATHS と正方向に照合する。
+def test_changelog_gate_paths_match_single_source_in_ci() -> None:
+    """CI の changelog ゲート対象パスを _CHANGELOG_GATED_PATHS と正方向に照合する。
 
-    どちらか一方からパスが落ちても（あるいは想定外のパスが増えても）fail する。
+    パスが落ちても（あるいは想定外のパスが増えても）fail する。
     """
-    # CI 側: path filter の grep -E パターンを抽出し、定数から組み立てた regex と完全一致させる。
+    # path filter の grep -E パターンを抽出し、定数から組み立てた regex と完全一致させる。
     run_script = _load_ci_workflow()["jobs"]["changelog"]["steps"][1]["run"]
     ci_pattern_match = re.search(r"grep -qE '([^']+)'", run_script)
     assert ci_pattern_match is not None, "CI run スクリプトに path filter の grep -qE が無い"
     assert ci_pattern_match.group(1) == _PATH_FILTER_PATTERN, (
         "CI workflow の path filter regex が _CHANGELOG_GATED_PATHS と一致しない"
-    )
-
-    # lefthook 側: changelog-gate.sh の GATED_PATHS 配列を抽出し、定数と順序込みで完全一致させる。
-    gate_script = _read_text(_CHANGELOG_GATE_PATH)
-    gated_paths_match = re.search(r"GATED_PATHS=\((.*?)\)", gate_script, re.DOTALL)
-    assert gated_paths_match is not None, "changelog-gate.sh に GATED_PATHS 配列が無い"
-    gate_paths = tuple(re.findall(r'"([^"]+)"', gated_paths_match.group(1)))
-    assert gate_paths == _CHANGELOG_GATED_PATHS, (
-        "changelog-gate.sh の GATED_PATHS が _CHANGELOG_GATED_PATHS と一致しない"
-    )
-
-
-def test_lefthook_changelog_gate_skips_branch_deletion_push() -> None:
-    """#1420: ブランチ削除 push（local sha 全ゼロ）は changelog ゲート対象外。
-
-    削除 push スキップは 2 ファイルで 1 つの不変条件:
-    changelog-gate.sh の stdin 判定と lefthook.yml の use_stdin: true。
-    use_stdin が落ちるとスクリプトの空 stdin フォールバックが回帰を隠して
-    削除 push が再びブロックされるため、両側をここで固定する。
-    """
-    gate_script = _read_text(_CHANGELOG_GATE_PATH)
-    for token in (
-        'ZERO_SHA="0000000000000000000000000000000000000000"',
-        "ブランチ削除 push のためスキップします",
-    ):
-        assert token in gate_script, f"changelog-gate.sh に {token} が無い"
-
-    lefthook_config = yaml.safe_load(_read_text(_LEFTHOOK_CONFIG_PATH))
-    gate_command = lefthook_config["pre-push"]["commands"]["changelog-gate"]
-    assert gate_command.get("use_stdin") is True, (
-        "lefthook.yml の changelog-gate に use_stdin: true が無いと削除 push スキップが黙って無効化される"
     )

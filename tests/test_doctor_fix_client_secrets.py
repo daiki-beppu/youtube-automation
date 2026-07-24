@@ -179,10 +179,14 @@ def test_fix_reports_mtime_failure_and_preserves_source(tmp_path, monkeypatch, c
     _write_client_secret(source, project_id="target-project")
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
     original_fstat = doctor.os.fstat
+    # inode は patch 前に取得する。patch 後に source.stat() を呼ぶと、
+    # tmp_path の retention cleanup (rmtree) が monkeypatch の復元より先に
+    # source を削除した場合、teardown 中の fstat 経由で FileNotFoundError になる
+    source_ino = source.stat().st_ino
 
     def fail_candidate_stat(descriptor: int):
         metadata = original_fstat(descriptor)
-        if metadata.st_ino == source.stat().st_ino:
+        if metadata.st_ino == source_ino:
             raise OSError("candidate disappeared")
         return metadata
 

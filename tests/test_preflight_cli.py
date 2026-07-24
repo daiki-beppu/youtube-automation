@@ -14,17 +14,14 @@ from youtube_automation.cli import preflight
 from youtube_automation.cli.preflight import (
     KEY_CHECKOUT_KIND,
     KEY_GIT_COMMIT_IDENTITY,
-    KEY_HOOK_POLICY,
     KEY_LOCK_DRIFT,
     KEY_NIX_EVAL,
     KEY_RUNTIME_PATH,
     RUNTIME_PATH_ENV_VARS,
-    SKIP_LEFTHOOK_ENV,
     TAKT_RUNTIME_ROOT_ENV,
     CheckResult,
     check_checkout_kind,
     check_git_commit_identity,
-    check_hook_policy,
     check_lock_drift,
     check_nix_eval,
     check_runtime_path,
@@ -132,56 +129,6 @@ def test_git_identity_passes_and_never_leaks_identity_values(tmp_path: Path) -> 
     report = format_report([result])
     assert _SECRET_NAME not in report
     assert _SECRET_EMAIL not in report
-
-
-# --- hook_policy ---
-
-
-def test_hook_policy_fails_when_hooks_missing_without_skip_env(tmp_path: Path) -> None:
-    env = _isolated_env(tmp_path)
-    repo = _init_repo(tmp_path, env)
-
-    result = check_hook_policy(repo, env)
-
-    assert result.key == KEY_HOOK_POLICY
-    assert not result.ok
-
-
-def test_hook_policy_passes_with_explicit_skip_env(tmp_path: Path) -> None:
-    env = _isolated_env(tmp_path)
-    env[SKIP_LEFTHOOK_ENV] = "1"
-    repo = _init_repo(tmp_path, env)
-
-    result = check_hook_policy(repo, env)
-
-    assert result.ok
-    assert SKIP_LEFTHOOK_ENV in result.detail
-
-
-def test_hook_policy_passes_when_lefthook_hooks_are_installed(tmp_path: Path) -> None:
-    env = _isolated_env(tmp_path)
-    repo = _init_repo(tmp_path, env)
-    hooks_dir = repo / ".git" / "hooks"
-    hooks_dir.mkdir(parents=True, exist_ok=True)
-    for hook_name in ("pre-commit", "pre-push"):
-        (hooks_dir / hook_name).write_text("#!/usr/bin/env bash\nexec lefthook run\n", encoding="utf-8")
-
-    result = check_hook_policy(repo, env)
-
-    assert result.ok
-
-
-def test_hook_policy_fails_when_hook_exists_but_is_not_lefthook(tmp_path: Path) -> None:
-    env = _isolated_env(tmp_path)
-    repo = _init_repo(tmp_path, env)
-    hooks_dir = repo / ".git" / "hooks"
-    hooks_dir.mkdir(parents=True, exist_ok=True)
-    for hook_name in ("pre-commit", "pre-push"):
-        (hooks_dir / hook_name).write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
-
-    result = check_hook_policy(repo, env)
-
-    assert not result.ok
 
 
 # --- checkout_kind ---
@@ -477,7 +424,6 @@ def test_run_checks_reports_all_classification_keys(tmp_path: Path) -> None:
         KEY_NIX_EVAL,
         KEY_LOCK_DRIFT,
         KEY_GIT_COMMIT_IDENTITY,
-        KEY_HOOK_POLICY,
     ]
 
 
