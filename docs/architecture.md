@@ -48,9 +48,9 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 |---|---|
 | `configuration` | `config/channel/*.json` の glob ロード／バリデーション。`load_config()` / `channel_dir()` / `reset()` / `ChannelConfig` を export |
 | `configuration.{meta,content,youtube,analytics,playlists,workflow,shorts,audio,localizations,comments,pinned_comment,distrokid,community_draft}` | 責務別 dataclass |
-| `utils.youtube_service` | YouTube API サービスファクトリ（ServiceRegistry） |
-| `utils.upload_core` | 再開可能アップロード・サムネイル圧縮の共通コア |
-| `utils.exceptions` | ドメイン例外（`AutomationError` 基底、`ConfigError` / `YouTubeAPIError` / `ValidationError` / `UploadError`） |
+| `infrastructure.google.youtube` | YouTube API clients（instance-scoped） |
+| `domains.uploads.youtube` | 再開可能アップロード・サムネイル圧縮の共通コア |
+| `infrastructure.errors` | ドメイン例外（`AutomationError` 基底、`ConfigError` / `YouTubeAPIError` / `ValidationError` / `UploadError`） |
 | `utils.collection_paths` | コレクションディレクトリ構造の解決 |
 | `domains.suno` | Suno 設定、歌詞、プロンプト、プレイリスト、選曲の生成・検証 |
 | `domains.suno.downloaded` | downloaded payload、workflow、検証、archive、apply transaction |
@@ -60,8 +60,8 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `utils.thumbnail_features` / `thumbnail_correlation` | サムネ特徴量＋ CTR/views 相関（Pillow） |
 | `utils.image_provider` | 画像生成プロバイダー抽象化（Gemini / OpenAI 切り替え） |
 | `utils.stock` | ボツ画像ストック化（`assets/stock/<theme>/` への退避・列挙・整理、隣接 `.meta.json` 管理） |
-| `auth.oauth_handler` | OAuth 2.0 トークン管理 |
-| `utils.secrets` | シークレット解決（`_SECRET_REFS` で参照定義） |
+| `infrastructure.auth.youtube` | OAuth 2.0 トークン管理 |
+| `infrastructure.secrets` | シークレット解決（`_SECRET_REFS` で参照定義） |
 | `utils.live_chat.{codex,filters,history,models,runner}` | active broadcast のチャット取得、Codex 構造化判定、入出力フィルタ、PT 日次・時間・連続 user 上限、重複防止履歴、返信投稿 loop |
 | `scripts.live_chat_reply` | `yt-live-chat-reply` 常駐 CLI。`comments.live_chat.enabled` を opt-in とし、VPS では独立した `live-chat-reply.service` から起動 |
 | `cli.skills_sync` | `yt-skills` 本体 |

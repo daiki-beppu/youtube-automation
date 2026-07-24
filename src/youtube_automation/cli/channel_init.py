@@ -24,8 +24,8 @@ from youtube_automation.cli.channel_init_templates import (
 )
 from youtube_automation.cli.setup_directory_contract import validate_existing_setup_directories
 from youtube_automation.cli.target_resolver import resolve_existing_target_dir
-from youtube_automation.utils.channel_settings import normalize_locale_to_short
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.domains.youtube.channel_settings import normalize_locale_to_short
+from youtube_automation.infrastructure.errors import ConfigError
 
 NO_DIFF_PATHS: frozenset[str] = frozenset({".env"})
 

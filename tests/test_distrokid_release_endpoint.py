@@ -32,6 +32,7 @@ from youtube_automation.configuration.distrokid import (
     DistrokidProfile,
     SongwriterName,
 )
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.scripts.collection_serve import create_server
 from youtube_automation.scripts.distrokid_release import (
     DISTROKID_ASSETS_PREFIX,
@@ -39,7 +40,6 @@ from youtube_automation.scripts.distrokid_release import (
     build_release_payload,
     resolve_asset_path,
 )
-from youtube_automation.utils.exceptions import ConfigError
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _SUNO_PROMPTS_ROUTE = "/suno/prompts.json"

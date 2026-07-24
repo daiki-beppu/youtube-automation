@@ -12,6 +12,7 @@ from youtube_automation.cli.skills_sync import (
     _asset_root,
     _guard_target_with_all,
     _list_entries,
+    _resolve_file_target,
 )
 from youtube_automation.cli.skills_sync._ops import (
     _copy_entry,
@@ -128,6 +129,7 @@ def _sync_file_asset(
         )
 
     src = root / spec["source_filename"]
+    target = _resolve_file_target(args.asset, spec, target)
     _ensure_target_parent(target)
 
     op = _symlink_entry if args.symlink else _copy_entry

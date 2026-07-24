@@ -50,6 +50,7 @@ import subprocess
 import sys
 from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1427,8 +1428,8 @@ class TestStreamingArchiveCheckCli:
             ),
             patch.object(
                 streaming_archive_check,
-                "build_youtube_service",
-                return_value=MagicMock(),
+                "YouTubeClients",
+                return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ),
             patch.object(sys, "argv", ["yt-stream-archive-check", "--date", "2026-05-01", "--expected", "2"]),
         ):
@@ -1454,8 +1455,8 @@ class TestStreamingArchiveCheckCli:
             ),
             patch.object(
                 streaming_archive_check,
-                "build_youtube_service",
-                return_value=MagicMock(),
+                "YouTubeClients",
+                return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ),
             patch.object(sys, "argv", ["yt-stream-archive-check", "--date", "2026-05-01", "--expected", "2"]),
         ):
@@ -1520,8 +1521,8 @@ class TestStreamingArchiveCheckCli:
             ),
             patch.object(
                 streaming_archive_check,
-                "build_youtube_service",
-                return_value=MagicMock(),
+                "YouTubeClients",
+                return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ),
             patch.object(
                 streaming_archive_check,
@@ -1571,8 +1572,8 @@ class TestStreamingArchiveCheckCli:
             ),
             patch.object(
                 streaming_archive_check,
-                "build_youtube_service",
-                return_value=MagicMock(),
+                "YouTubeClients",
+                return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ),
             patch.object(
                 streaming_archive_check,

@@ -3,7 +3,7 @@
 import logging
 from unittest.mock import MagicMock
 
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 from youtube_automation.utils.revenue_analytics import RevenueAnalyticsMixin
 
 

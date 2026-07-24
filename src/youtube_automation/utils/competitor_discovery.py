@@ -22,6 +22,8 @@ from enum import Enum
 from pathlib import Path
 
 from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.infrastructure.retry import execute_with_retry
 from youtube_automation.utils.competitor_scoring import (
     _RECENT_VIDEOS_PER_CHANNEL,
     CandidateChannel,
@@ -31,8 +33,6 @@ from youtube_automation.utils.competitor_scoring import (
     _apply_filters,
     _score_candidate,
 )
-from youtube_automation.utils.exceptions import YouTubeAPIError
-from youtube_automation.utils.retry import execute_with_retry
 
 # channels.list バッチ単位（YouTube Data API 上限）
 _CHANNELS_BATCH_SIZE = 50

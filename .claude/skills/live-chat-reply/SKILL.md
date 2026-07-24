@@ -64,7 +64,7 @@ AI が次を実行する。`write_op_secret` は JSON template を stdin で `op
 CHANNEL_DIR=/absolute/path/to/channel uv run python - <<'PY'
 import os
 from pathlib import Path
-from youtube_automation.utils.secrets import write_op_secret
+from youtube_automation.infrastructure.secrets import write_op_secret
 
 channel = Path(os.environ["CHANNEL_DIR"])
 codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))

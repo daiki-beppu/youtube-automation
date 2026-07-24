@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.scripts import generate_master
 from youtube_automation.scripts.generate_master import (
     _collect_audio_inputs,
@@ -20,7 +21,6 @@ from youtube_automation.scripts.generate_master import (
 from youtube_automation.scripts.generate_master import (
     generate_master as run_generate_master,
 )
-from youtube_automation.utils.exceptions import ValidationError
 
 
 class TestResolveLoopCount:

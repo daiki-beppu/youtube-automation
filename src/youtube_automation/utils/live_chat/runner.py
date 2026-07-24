@@ -10,12 +10,12 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from youtube_automation.configuration.comments import LiveChatConfig
-from youtube_automation.utils.exceptions import GeneratorError, YouTubeAPIError
+from youtube_automation.infrastructure.errors import GeneratorError, YouTubeAPIError
+from youtube_automation.infrastructure.retry import execute_with_retry
 from youtube_automation.utils.live_chat.codex import CodexLiveChatGenerator
 from youtube_automation.utils.live_chat.filters import audit_text
 from youtube_automation.utils.live_chat.history import LiveChatHistory
 from youtube_automation.utils.live_chat.models import LiveChatMessage
-from youtube_automation.utils.retry import execute_with_retry
 
 logger = logging.getLogger(__name__)
 _PACIFIC = ZoneInfo("America/Los_Angeles")

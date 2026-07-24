@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from youtube_automation.configuration.distrokid import Distrokid
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.distrokid_metadata import (
     parse_album_metadata,
@@ -24,7 +25,6 @@ from youtube_automation.utils.distrokid_spec import (
     read_collection_spec,
     title_map_from_entry,
 )
-from youtube_automation.utils.exceptions import ConfigError
 
 # 外部 HTTP 契約: distrokid-helper 拡張が fetch するサブパス（単一 mode）。
 DISTROKID_RELEASE_ROUTE = "/distrokid/release.json"

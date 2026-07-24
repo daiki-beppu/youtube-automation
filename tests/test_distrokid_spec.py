@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.distrokid_spec import (
     SPEC_FILENAME,
     find_disc_entry,
@@ -18,7 +19,6 @@ from youtube_automation.utils.distrokid_spec import (
     title_map_from_entry,
     write_collection_spec,
 )
-from youtube_automation.utils.exceptions import ConfigError
 
 # ---------------------------------------------------------------------------
 # テスト用ヘルパー

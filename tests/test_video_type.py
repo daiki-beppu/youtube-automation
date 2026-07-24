@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils import veo_generator
-from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.veo_generator import generate_video, register_video_generator
 from youtube_automation.utils.video_type import VideoType, VideoTypeConfig
 

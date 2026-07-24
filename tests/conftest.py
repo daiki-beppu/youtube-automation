@@ -195,7 +195,7 @@ def no_retry_backoff(monkeypatch):
     実 backoff（attempt 毎に数秒）を待たないために使う。`time.sleep` を
     グローバルに patch せず、retry モジュールのシームだけを差し替える。
     """
-    from youtube_automation.utils import retry as retry_module
+    from youtube_automation.infrastructure import retry as retry_module
 
     monkeypatch.setattr(retry_module, "_DEFAULT_SLEEP", lambda _seconds: None)
     monkeypatch.setattr(retry_module, "_DEFAULT_JITTER", lambda low, _high: low)

@@ -19,7 +19,7 @@ import sys
 import time
 from pathlib import Path
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.image_provider import (
     ImageGenerationRequest,
     get_provider,

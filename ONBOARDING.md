@@ -301,7 +301,7 @@ bash .lefthook/setup-worktree.sh
 
 - `.claude/skills/` — Claude Code スキル群。wheel 内 `_skills/` に `force-include` され、`yt-skills sync --asset skills` で配布
 - `.claude/CLAUDE.template.md` — BGM チャンネル運営方針テンプレ。wheel 内 `_claude_md/CLAUDE.template.md` に `force-include` され、`yt-skills sync --asset claude-md` で `.claude/CLAUDE.md` として配布
-- `auth/client_secrets.template.json` — Google Auth Platform の JSON ダウンロードが使えない場合の OAuth client secrets テンプレ。wheel 内 `_auth/client_secrets.template.json` に `force-include` され、`yt-skills sync --asset auth-template` で配布
+- `auth/client_secrets.template.json` — Google Auth Platform の JSON ダウンロードが使えない場合の OAuth client secrets テンプレ。canonical source は `src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json` で、wheel 内 `youtube_automation/infrastructure/resources/auth/client_secrets.template.json` に `force-include` され、`yt-skills sync --asset auth-template` で配布
 
 新しい配布アセットを追加するときは `src/youtube_automation/cli/skills_sync/__init__.py::_ASSET_SPECS` に entry を追加するだけで `list/sync/diff` が自動的にサポートする（`kind="dir"` / `"file"` を選ぶ）。
 
@@ -311,9 +311,9 @@ bash .lefthook/setup-worktree.sh
 |---|---|
 | `yt-*` が `bad interpreter` で起動しない | リポジトリ／ディレクトリをリネームした直後によく起きる。`rm -rf .venv && uv sync` で復旧（`uv sync` 単独では shebang が更新されない） |
 | `ConfigError: missing key ...` | `config/channel/*.json` に必須キーが不足。`configuration/loader.py::_REQUIRED_KEYS_BY_SECTION` を参照して該当 JSON を埋める |
-| `op read` が失敗する | `op signin` でサインインしているか確認。CLI 取得経路は `utils/secrets.py` の `_SECRET_REFS`（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`） |
+| `op read` が失敗する | `op signin` でサインインしているか確認。CLI 取得経路は `infrastructure/secrets.py` の `_SECRET_REFS`（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`） |
 | `yt-skills sync` がスキルを上書きしない | `--force` を付ける（既存ファイルがあるとデフォルトでスキップ） |
 | Vertex AI 呼び出しで `PERMISSION_DENIED` | ADC quota project を `gcloud auth application-default set-quota-project <PROJECT_ID>` で確認・修正し、`auth/SETUP.md` の IAM ロール付与節を再実行 |
 | アップロードが `quotaExceeded` で止まる | YouTube Data API の日次クォータ消費上限。翌日に再開するか、別 GCP プロジェクトに切り替える |
 
-詳細なエラー定義は [`src/youtube_automation/utils/exceptions.py`](src/youtube_automation/utils/exceptions.py)。
+詳細なエラー定義は [`src/youtube_automation/infrastructure/errors.py`](src/youtube_automation/infrastructure/errors.py)。

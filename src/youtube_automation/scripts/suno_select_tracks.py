@@ -9,8 +9,8 @@ import sys
 from collections.abc import Mapping
 
 from youtube_automation.domains.suno.selection import select_suno_tracks
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.utils.collection_paths import resolve_collection_dir
-from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.skill_config import load_skill_config
 
 

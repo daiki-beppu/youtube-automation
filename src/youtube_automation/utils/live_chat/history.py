@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypedDict
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 SCHEMA_VERSION = 1
 HistoryScalar = str | int | float | bool | None

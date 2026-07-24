@@ -15,7 +15,7 @@ import warnings
 from dataclasses import dataclass, replace
 from typing import Any, Literal
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 # プロバイダー識別子。`get_provider` の dispatch キーと一致させる。
 ProviderName = Literal["gemini", "openai", "codex", "gemini_cli"]

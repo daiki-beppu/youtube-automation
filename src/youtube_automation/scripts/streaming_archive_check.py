@@ -20,12 +20,11 @@ import logging
 import sys
 from datetime import date, datetime, timezone
 
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
+from youtube_automation.infrastructure.secrets import get_secret
 from youtube_automation.utils.notification import NotificationError, notify
-from youtube_automation.utils.secrets import get_secret
 from youtube_automation.utils.streaming.daily_archive import count_archives_for_date
-
-# テスト側 patch.object("build_youtube_service") との契約を保つため別名で取り込む
-from youtube_automation.utils.youtube_service import get_youtube as build_youtube_service
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +68,11 @@ def main() -> int:
 
     target: date = args.date or datetime.now(tz=timezone.utc).date()
 
-    youtube = build_youtube_service()
+    clients = YouTubeClients(
+        full_handler=YouTubeOAuthHandler(),
+        readonly_handler=YouTubeOAuthHandler.create_readonly(),
+    )
+    youtube = clients.youtube_readonly
     count = count_archives_for_date(youtube, target)
 
     logger.info("アーカイブ件数: %d (期待: %d, 対象日: %s UTC)", count, args.expected, target.isoformat())

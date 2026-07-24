@@ -9,8 +9,8 @@ from matplotlib import font_manager
 from PIL import Image
 
 from youtube_automation.configuration import reset as reset_configuration
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils import skill_config
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.thumbnail_text import OverlaySpec, TextStyle, compose_thumbnail_text
 from youtube_automation.utils.thumbnail_text.config import (
     overlay_config_from_skill_config,

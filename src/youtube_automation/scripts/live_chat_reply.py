@@ -8,9 +8,10 @@ import sys
 from collections.abc import Iterable
 
 from youtube_automation.configuration import channel_dir, load_config
-from youtube_automation.utils.exceptions import AutomationError
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.errors import AutomationError
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
 from youtube_automation.utils.live_chat import LiveChatReplier
-from youtube_automation.utils.youtube_service import ServiceRegistry
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -31,7 +32,7 @@ def main(argv: Iterable[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        youtube = ServiceRegistry().youtube
+        youtube = YouTubeClients(full_handler=YouTubeOAuthHandler()).youtube
         LiveChatReplier(
             youtube,
             config=config.comments.live_chat,

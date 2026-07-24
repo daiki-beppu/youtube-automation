@@ -7,8 +7,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from youtube_automation.infrastructure.errors import GeneratorError
 from youtube_automation.utils.comments.prompt_safety import untrusted_payload_json
-from youtube_automation.utils.exceptions import GeneratorError
 from youtube_automation.utils.live_chat.models import LiveChatMessage, ReplyDecision
 
 _SCHEMA = {

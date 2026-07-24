@@ -5,9 +5,9 @@ from unittest.mock import MagicMock
 import pytest
 from googleapiclient.errors import HttpError
 
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
 from youtube_automation.utils.channel_analytics import ChannelAnalyticsMixin
-from youtube_automation.utils.exceptions import YouTubeAPIError
 from youtube_automation.utils.playlist_analytics import PlaylistAnalyticsMixin
 
 

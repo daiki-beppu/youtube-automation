@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from youtube_automation.configuration import channel_dir
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.thumbnail_text.config import (
     overlay_config_from_skill_config,

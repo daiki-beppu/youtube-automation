@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils.weekly_vote_log import (
     WEEKLY_VOTE_LOG_SCHEMA_VERSION,
     AxisVote,

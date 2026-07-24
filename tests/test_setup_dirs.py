@@ -9,7 +9,7 @@ import pytest
 
 from youtube_automation.cli import setup_dirs
 from youtube_automation.cli.setup_directory_contract import SETUP_DIRECTORIES
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 EXPECTED_SETUP_DIRECTORIES: tuple[str, ...] = (
     "auth",

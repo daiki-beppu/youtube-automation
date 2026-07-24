@@ -13,12 +13,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.utils.collection_paths import (
     REQUIRED_SUBDIRS,
     CollectionPaths,
     resolve_collection_dir,
 )
-from youtube_automation.utils.exceptions import ValidationError
 
 # ---------------------------------------------------------------------------
 # コンストラクタ
@@ -540,10 +540,10 @@ class TestLiteralCollectionSubpathRegression:
         "src/youtube_automation/agents/youtube_auto_uploader.py",
         # Issue #465: collection_uploader.py の責務分割で派生した mixin モジュール群。
         # 元ファイル同等の literal Path 回避制約を継続させる。
-        "src/youtube_automation/agents/_tracking_io.py",
-        "src/youtube_automation/agents/_published_dates.py",
-        "src/youtube_automation/agents/_playlist_assignment.py",
-        "src/youtube_automation/agents/_complete_collection_executor.py",
+        "src/youtube_automation/domains/uploads/_tracking_io.py",
+        "src/youtube_automation/domains/uploads/_published_dates.py",
+        "src/youtube_automation/domains/uploads/_playlist_assignment.py",
+        "src/youtube_automation/domains/uploads/_complete_collection_executor.py",
         "src/youtube_automation/scripts/generate_short_loop.py",
         "src/youtube_automation/scripts/bulk_update_short_localizations.py",
         "src/youtube_automation/domains/suno/selection.py",

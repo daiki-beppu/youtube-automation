@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `fix(upload/oauth)`: upload と OAuth の CLI 境界で想定されたドメイン・入出力エラーを安全に終了し、redaction の共有 infrastructure owner と現行移行先ドキュメントを正本化。
+- B4 の OAuth / secret / retry / error infrastructure owner と playlist の YouTubeClients 注入契約を整理。
+
 - `fix(doctor)`: workspace root の `--channel` 選択を診断対象へ反映し、channel 配下からの診断でも root の `pyproject.toml`・共有 skills・`.agents/skills`・重複ファイル検査を利用するよう修正（#2463）。
 - `breaking(refactor/domains)`: Suno 14旧 `utils.suno_*` module と `utils.metadata_generator` を削除し、`domains.suno` / `domains.suno.downloaded` / `domains.metadata` へ移行。旧 import path は恒久 facade として提供しない（#2305）。
 - `feat(skills-sync)`: Claude Code settings の allow / deny / hook を既存値保持・hook 明示承認付きで downstream へ JSON merge 配布し、開発専用 skill を同期対象外として既存配置は prune 可能にした（#2425, #2426, #2428）。

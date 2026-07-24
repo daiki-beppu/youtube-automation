@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from youtube_automation.utils.exceptions import ValidationError, YouTubeAPIError
+from youtube_automation.infrastructure.errors import ValidationError, YouTubeAPIError
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / ".claude/skills/channel-new/references/fetch_branding_snapshot.py"

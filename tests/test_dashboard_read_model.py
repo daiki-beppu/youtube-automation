@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.infrastructure.errors import DashboardChannelNotFoundError
 from youtube_automation.utils.dashboard_read_model import DashboardAPI, build_dashboard_read_model
-from youtube_automation.utils.exceptions import DashboardChannelNotFoundError
 
 
 def _write_channel(channel: Path, *, name: str, snapshots: dict[str, dict]) -> None:

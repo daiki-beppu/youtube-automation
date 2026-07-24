@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Dict
 
 from googleapiclient.errors import HttpError
 
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 if TYPE_CHECKING:
     from youtube_automation.utils.analytics_base import AnalyticsBase  # noqa: F401

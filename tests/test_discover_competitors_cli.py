@@ -17,10 +17,12 @@ from __future__ import annotations
 import csv
 from datetime import date, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.scripts.discover_competitors import (
     _build_params,
     _build_parser,
@@ -36,7 +38,6 @@ from youtube_automation.utils.competitor_scoring import (
     ScoreBreakdown,
     ScoredCandidate,
 )
-from youtube_automation.utils.exceptions import ValidationError
 
 # ----------------------------------------------------------------------------
 # テストデータ
@@ -495,15 +496,15 @@ class TestMain:
                 return_value=[],
             ) as discover,
             patch(
-                "youtube_automation.scripts.discover_competitors.get_youtube_readonly",
-                return_value=MagicMock(),
-            ) as get_youtube_mock,
+                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                return_value=SimpleNamespace(youtube_readonly=MagicMock()),
+            ) as clients_mock,
         ):
             main()
 
         discover.assert_called_once()
         youtube, params, cache_mode = discover.call_args.args
-        assert youtube is get_youtube_mock.return_value
+        assert youtube is clients_mock.return_value.youtube_readonly
         assert params.keywords == ("lo-fi",)
         assert cache_mode is SearchCacheMode.USE
 
@@ -520,15 +521,15 @@ class TestMain:
                 return_value=[],
             ) as discover,
             patch(
-                "youtube_automation.scripts.discover_competitors.get_youtube_readonly",
-                return_value=MagicMock(),
-            ) as get_youtube_mock,
+                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                return_value=SimpleNamespace(youtube_readonly=MagicMock()),
+            ) as clients_mock,
         ):
             main()
 
         discover.assert_called_once()
         youtube, params, cache_mode = discover.call_args.args
-        assert youtube is get_youtube_mock.return_value
+        assert youtube is clients_mock.return_value.youtube_readonly
         assert params.keywords == ("lo-fi",)
         assert cache_mode is SearchCacheMode.REFRESH
 
@@ -563,8 +564,8 @@ class TestMain:
                 return_value=scored,
             ),
             patch(
-                "youtube_automation.scripts.discover_competitors.get_youtube_readonly",
-                return_value=MagicMock(),
+                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ),
         ):
             # When
@@ -592,8 +593,8 @@ class TestMain:
                 return_value=[_make_scored()],
             ),
             patch(
-                "youtube_automation.scripts.discover_competitors.get_youtube_readonly",
-                return_value=MagicMock(),
+                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ),
         ):
             # When
@@ -621,8 +622,8 @@ class TestMain:
                 return_value=[],
             ),
             patch(
-                "youtube_automation.scripts.discover_competitors.get_youtube_readonly",
-                return_value=MagicMock(),
+                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ),
         ):
             # When/Then: 例外を出さず正常終了する

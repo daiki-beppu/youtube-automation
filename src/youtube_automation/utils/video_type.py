@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Mapping
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 
 class VideoType(str, Enum):

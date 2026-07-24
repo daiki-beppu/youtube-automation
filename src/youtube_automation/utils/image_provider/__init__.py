@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.image_provider import prompt_schema
 from youtube_automation.utils.image_provider.base import (
     RETRY_BACKOFF,

@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Iterable, Mapping
 
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.infrastructure.errors import ValidationError
 
 _WS_RE = re.compile(r"\s+")
 _MAX_DISPLAY_TEXT_LEN = 200

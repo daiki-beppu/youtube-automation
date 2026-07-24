@@ -60,7 +60,7 @@ def _bench_log_generation(size: int) -> Stats:
         channel_dir = Path(tmpdir) / "channel"
         (channel_dir / "data").mkdir(parents=True)
         with _scoped_channel_dir(channel_dir):
-            from youtube_automation.utils import cost_tracker
+            from youtube_automation.infrastructure import cost_tracker
 
             log_path = channel_dir / "data" / "audio_costs.json"
             _seed_log(log_path, size)
@@ -81,7 +81,7 @@ def _bench_read_all(size: int) -> Stats:
         channel_dir = Path(tmpdir) / "channel"
         (channel_dir / "data").mkdir(parents=True)
         with _scoped_channel_dir(channel_dir):
-            from youtube_automation.utils import cost_tracker
+            from youtube_automation.infrastructure import cost_tracker
 
             for cat in ("image", "video", "audio"):
                 _seed_log(channel_dir / "data" / f"{cat}_costs.json", size)

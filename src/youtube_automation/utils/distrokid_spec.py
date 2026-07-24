@@ -33,7 +33,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 # spec.json のファイル名（SSOT として 30-distrokid/ 直下に置く）（#941）。
 SPEC_FILENAME = "spec.json"

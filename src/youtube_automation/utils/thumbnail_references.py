@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.image_provider.composition import normalize_reference_default
 from youtube_automation.utils.placeholders import is_placeholder_value
 

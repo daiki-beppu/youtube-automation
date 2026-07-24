@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.cli import cost_report
-from youtube_automation.utils import cost_tracker
+from youtube_automation.infrastructure import cost_tracker
 
 
 @pytest.fixture
@@ -160,6 +160,14 @@ def test_log_quota_write_failure_warns_and_returns_none(tmp_channel: Path, monke
     entry = cost_tracker.log_quota("youtube-data-api", "videos.insert", 1600)
     assert entry is None
     assert "quota ログ書き込み失敗" in capsys.readouterr().out
+
+
+def test_log_quota_does_not_swallow_unexpected_serialization_errors(tmp_channel: Path, monkeypatch):
+    """永続化の I/O 失敗だけを吸収し、metadata の型エラーは呼び出し元へ返す。"""
+    monkeypatch.setattr(cost_tracker, "_read_entries", lambda path: [])
+
+    with pytest.raises(TypeError):
+        cost_tracker.log_quota("youtube-data-api", "videos.list", 1, metadata={"invalid": object()})
 
 
 # ============================================================

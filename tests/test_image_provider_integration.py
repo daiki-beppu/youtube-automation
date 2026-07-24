@@ -19,8 +19,8 @@ import pytest
 import yaml
 
 from youtube_automation.configuration import reset as reset_config
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils import skill_config
-from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider import (
     get_provider,
     load_image_generation_config,

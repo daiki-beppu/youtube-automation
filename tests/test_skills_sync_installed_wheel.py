@@ -11,7 +11,9 @@ _FILE_ASSETS = {
     Path(".claude/CLAUDE.md"): Path(".claude/CLAUDE.template.md"),
     Path("docs/workflow-cheatsheet.md"): Path("docs/workflow-cheatsheet.md"),
     Path("docs/features.md"): Path("docs/features.md"),
-    Path("auth/client_secrets.template.json"): Path("auth/client_secrets.template.json"),
+    Path("auth/client_secrets.template.json"): Path(
+        "src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json"
+    ),
 }
 
 

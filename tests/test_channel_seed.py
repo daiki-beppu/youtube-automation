@@ -2,19 +2,58 @@
 
 from __future__ import annotations
 
-import urllib.error
 from unittest.mock import MagicMock, patch
 
 import pytest
 from googleapiclient.errors import HttpError
 
-from youtube_automation.utils.channel_seed import (
+from youtube_automation.domains.youtube.channel_seed import (
     SeedChannel,
     fetch_channel_seed,
     merge_benchmark_channel,
     to_benchmark_entry,
 )
-from youtube_automation.utils.exceptions import ValidationError, YouTubeAPIError
+from youtube_automation.infrastructure.browser import RedirectRejectedError
+from youtube_automation.infrastructure.errors import ValidationError, YouTubeAPIError
+
+
+def test_scrape_rejects_non_youtube_urls(monkeypatch):
+    from youtube_automation.domains.youtube import channel_seed
+
+    called = False
+
+    def fail(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("network must not be reached")
+
+    monkeypatch.setattr(channel_seed, "fetch_html", fail)
+    with pytest.raises(ValidationError):
+        channel_seed._scrape_channel_id("http://127.0.0.1:8080/internal")
+    assert called is False
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://example.com/channel",
+        "https://www.youtube.com:8443/channel",
+        "https://user:pass@www.youtube.com/channel",
+    ],
+)
+def test_scrape_rejects_unsafe_youtube_urls(url):
+    from youtube_automation.domains.youtube import channel_seed
+
+    with pytest.raises(ValidationError):
+        channel_seed._scrape_channel_id(url)
+
+
+def test_scrape_rejects_redirects():
+    from youtube_automation.domains.youtube import channel_seed
+
+    with patch.object(channel_seed, "fetch_html", side_effect=RedirectRejectedError):
+        with pytest.raises(YouTubeAPIError):
+            channel_seed._scrape_channel_id("https://www.youtube.com/c/seed")
 
 
 def _request(response: dict) -> MagicMock:
@@ -151,8 +190,7 @@ def test_fetch_channel_seed_extracts_channel_id_from_custom_url_html():
     youtube.playlistItems.return_value.list.return_value = _request({"items": []})
 
     # When
-    with patch("urllib.request.urlopen") as urlopen:
-        urlopen.return_value.__enter__.return_value.read.return_value = html
+    with patch("youtube_automation.domains.youtube.channel_seed.fetch_html", return_value=html):
         seed = fetch_channel_seed(youtube, "https://www.youtube.com/c/seed", recent=10)
 
     # Then
@@ -173,11 +211,13 @@ def test_fetch_channel_seed_wraps_html_fetch_error_with_timeout():
     youtube = MagicMock()
 
     # When/Then
-    with patch("youtube_automation.utils.channel_seed.urllib.request.urlopen") as urlopen:
-        urlopen.side_effect = urllib.error.URLError("timeout")
+    with patch(
+        "youtube_automation.domains.youtube.channel_seed.fetch_html",
+        side_effect=TimeoutError("timeout"),
+    ) as fetch_html:
         with pytest.raises(YouTubeAPIError):
             fetch_channel_seed(youtube, "https://www.youtube.com/c/seed", recent=10)
-    urlopen.assert_called_once_with("https://www.youtube.com/c/seed", timeout=15)
+    fetch_html.assert_called_once_with("https://www.youtube.com/c/seed", timeout=15)
     youtube.channels.return_value.list.assert_not_called()
 
 
@@ -188,6 +228,24 @@ def test_fetch_channel_seed_raises_when_handle_is_not_found():
     # When/Then
     with pytest.raises(ValidationError):
         fetch_channel_seed(youtube, "@missing", recent=10)
+
+
+@pytest.mark.parametrize("response", [None, {"items": None}, {"items": {}}, {"items": [None]}])
+def test_fetch_channel_seed_rejects_invalid_channel_response_shape(response):
+    youtube = _youtube_with_channels(response)
+
+    with pytest.raises(ValidationError):
+        fetch_channel_seed(youtube, "@seed", recent=10)
+
+
+@pytest.mark.parametrize("response", [None, {"items": None}, {"items": {}}, {"items": [None]}])
+def test_fetch_channel_seed_rejects_invalid_playlist_response_shape(response):
+    youtube = MagicMock()
+    youtube.channels.return_value.list.return_value = _request({"items": [_channel_item()]})
+    youtube.playlistItems.return_value.list.return_value = _request(response)
+
+    with pytest.raises(ValidationError):
+        fetch_channel_seed(youtube, "UC_seed", recent=10)
 
 
 def test_fetch_channel_seed_raises_when_channel_has_no_uploads_playlist():

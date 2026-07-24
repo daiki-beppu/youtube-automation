@@ -16,6 +16,9 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
+from youtube_automation.infrastructure.errors import ValidationError
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
+
 # ---------------------------------------------------------------------------
 # フィクスチャ
 # ---------------------------------------------------------------------------
@@ -65,16 +68,24 @@ def mock_youtube():
 @pytest.fixture
 def manager(mock_config, mock_youtube):
     """PlaylistManager インスタンスを返す（外部依存をモック）"""
-    with (
-        patch("youtube_automation.scripts.playlist_manager.load_config", return_value=mock_config),
-        patch("youtube_automation.scripts.playlist_manager.channel_dir", return_value=Path("/tmp/fake_channel")),
-        patch("youtube_automation.scripts.playlist_manager.get_youtube", return_value=mock_youtube),
-    ):
-        from youtube_automation.scripts.playlist_manager import PlaylistManager
+    import youtube_automation.domains.uploads.playlists as playlist_domain
 
-        obj = PlaylistManager()
+    handler = MagicMock()
+    handler.get_youtube_service.return_value = mock_youtube
+    clients = YouTubeClients(full_handler=handler)
+    with (
+        patch.object(playlist_domain, "load_config", return_value=mock_config),
+        patch.object(playlist_domain, "channel_dir", return_value=Path("/tmp/fake_channel")),
+    ):
+        obj = playlist_domain.PlaylistManager(clients=clients)
         obj._youtube = mock_youtube
         yield obj
+
+
+@pytest.fixture
+def quota_log():
+    with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log:
+        yield mock_log
 
 
 # ---------------------------------------------------------------------------
@@ -292,10 +303,23 @@ class TestListPlaylistVideoIds:
 
     def test_api_error_returns_empty(self, manager, mock_youtube):
         """API エラー時は空セットを返す"""
-        mock_youtube.playlistItems.return_value.list.return_value.execute.side_effect = Exception("API Error")
+        mock_youtube.playlistItems.return_value.list.return_value.execute.side_effect = OSError("API Error")
 
         result = manager._list_playlist_video_ids("PL_FAIL")
         assert result == set()
+
+    def test_retries_transient_api_failure(self, manager, mock_youtube, monkeypatch, quota_log):
+        monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
+        request = mock_youtube.playlistItems.return_value.list.return_value
+        request.execute.side_effect = [
+            HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}'),
+            {"items": [{"contentDetails": {"videoId": "VID_RETRY"}}]},
+        ]
+        mock_youtube.playlistItems.return_value.list_next.return_value = None
+
+        assert manager._list_playlist_video_ids("PL_RETRY") == {"VID_RETRY"}
+        assert request.execute.call_count == 2
+        assert quota_log.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -317,7 +341,7 @@ class TestCreatePlaylist:
 
     def test_failure(self, manager, mock_youtube):
         """API 例外時は status=failed と error メッセージを返す"""
-        mock_youtube.playlists.return_value.insert.return_value.execute.side_effect = Exception("Quota exceeded")
+        mock_youtube.playlists.return_value.insert.return_value.execute.side_effect = OSError("Quota exceeded")
 
         result = manager._create_playlist("Fail PL", "Desc")
 
@@ -337,8 +361,10 @@ class TestCreatePlaylist:
         assert body["status"]["privacyStatus"] == "unlisted"
         assert body["snippet"]["title"] == "T"
 
-    def test_retries_transient_api_failure_through_playlist_manager(self, manager, mock_youtube, monkeypatch):
-        monkeypatch.setattr("youtube_automation.utils.retry.time.sleep", lambda _: None)
+    def test_retries_transient_api_failure_through_playlist_manager(
+        self, manager, mock_youtube, monkeypatch, quota_log
+    ):
+        monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
         transient = HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}')
         request = mock_youtube.playlists.return_value.insert.return_value
         request.execute.side_effect = [transient, {"id": "PL_NEW"}]
@@ -347,6 +373,7 @@ class TestCreatePlaylist:
 
         assert result["playlist_id"] == "PL_NEW"
         assert request.execute.call_count == 2
+        assert quota_log.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -365,7 +392,7 @@ class TestAddVideoToPlaylist:
 
     def test_failure(self, manager, mock_youtube):
         """API 例外時は False を返す"""
-        mock_youtube.playlistItems.return_value.insert.return_value.execute.side_effect = Exception("API Error")
+        mock_youtube.playlistItems.return_value.insert.return_value.execute.side_effect = OSError("API Error")
 
         result = manager._add_video_to_playlist("PL123", "VID456")
 
@@ -409,6 +436,18 @@ class TestAddVideoToPlaylist:
         body = mock_insert.call_args[1]["body"]
         assert body["snippet"]["position"] == 0
 
+    def test_retries_transient_api_failure(self, manager, mock_youtube, monkeypatch, quota_log):
+        monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
+        request = mock_youtube.playlistItems.return_value.insert.return_value
+        request.execute.side_effect = [
+            HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}'),
+            {},
+        ]
+
+        assert manager._add_video_to_playlist("PL_RETRY", "VID_RETRY") is True
+        assert request.execute.call_count == 2
+        assert quota_log.call_count == 2
+
 
 # ---------------------------------------------------------------------------
 # quota 記録（#2059: mutation 経路の log_quota 配線）
@@ -419,7 +458,7 @@ class TestQuotaLogging:
     @pytest.fixture
     def quota_log(self):
         """playlist_manager 名前空間の log_quota をモック化して記録を検証する"""
-        with patch("youtube_automation.scripts.playlist_manager.log_quota") as mock_log:
+        with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log:
             yield mock_log
 
     def test_create_playlist_records_playlists_insert_once(self, manager, mock_youtube, quota_log):
@@ -491,6 +530,41 @@ class TestQuotaLogging:
         assert delete_calls[0].args == ("youtube-data-api", "playlistItems.delete", 50)
         assert delete_calls[0].kwargs["metadata"]["video_id"] == "VID_GONE"
 
+    def test_clean_list_retries_transient_api_failure(self, manager, mock_youtube, monkeypatch, quota_log):
+        monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
+        manager.config.playlists.items = {"main": {"playlist_id": "PL_RETRY"}}
+        request = mock_youtube.playlistItems.return_value.list.return_value
+        request.execute.side_effect = [
+            HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}'),
+            {"items": []},
+        ]
+
+        assert manager.clean_deleted_entries() == {"main": 0}
+        assert request.execute.call_count == 2
+        assert quota_log.call_count == 2
+
+    def test_clean_delete_retries_transient_api_failure(self, manager, mock_youtube, monkeypatch, quota_log):
+        monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
+        manager.config.playlists.items = {"main": {"playlist_id": "PL_RETRY"}}
+        mock_items = mock_youtube.playlistItems.return_value
+        mock_items.list.return_value.execute.return_value = {
+            "items": [
+                {
+                    "id": "ITEM_DEL",
+                    "snippet": {"title": "Deleted video", "resourceId": {"videoId": "VID_GONE"}},
+                }
+            ]
+        }
+        delete_request = mock_items.delete.return_value
+        delete_request.execute.side_effect = [
+            HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}'),
+            "",
+        ]
+
+        assert manager.clean_deleted_entries() == {"main": 1}
+        assert delete_request.execute.call_count == 2
+        assert quota_log.call_count == 3
+
     def test_clean_deleted_entries_dry_run_records_list_only(self, manager, mock_youtube, quota_log):
         """dry-run では list のみ記録され delete は記録されない"""
         mock_items = mock_youtube.playlistItems.return_value
@@ -509,25 +583,33 @@ class TestQuotaLogging:
         assert buckets.count("playlistItems.list") == 3
         assert buckets.count("playlistItems.delete") == 0
 
+    @pytest.mark.parametrize("response", [None, {"items": None}, {"items": {}}, {"items": [None]}])
+    def test_clean_deleted_entries_rejects_invalid_response_shape(self, manager, response):
+        manager.config.playlists.items = {"main": {"playlist_id": "PL_MAIN"}}
+        manager._youtube.playlistItems.return_value.list.return_value.execute.return_value = response
+
+        with pytest.raises(ValidationError):
+            manager.clean_deleted_entries()
+
     def test_create_playlist_failure_still_records_quota_and_keeps_error(self, manager, mock_youtube, quota_log):
         """create 失敗時も quota が記録され、元のエラーハンドリング（failed dict）が維持される"""
-        mock_youtube.playlists.return_value.insert.return_value.execute.side_effect = Exception("Quota exceeded")
+        mock_youtube.playlists.return_value.insert.return_value.execute.side_effect = OSError("Quota exceeded")
 
         result = manager._create_playlist("Fail PL", "Desc")
 
         assert result["status"] == "failed"
         assert "Quota exceeded" in result["error"]
-        quota_log.assert_called_once()
+        assert quota_log.call_count == 3
         assert quota_log.call_args.args == ("youtube-data-api", "playlists.insert", 50)
 
     def test_add_video_failure_still_records_quota_and_keeps_error(self, manager, mock_youtube, quota_log):
         """add 失敗時も quota が記録され、元のエラーハンドリング（False 返却）が維持される"""
-        mock_youtube.playlistItems.return_value.insert.return_value.execute.side_effect = Exception("API Error")
+        mock_youtube.playlistItems.return_value.insert.return_value.execute.side_effect = OSError("API Error")
 
         result = manager._add_video_to_playlist("PL_F", "VID_F")
 
         assert result is False
-        quota_log.assert_called_once()
+        assert quota_log.call_count == 3
         assert quota_log.call_args.args == ("youtube-data-api", "playlistItems.insert", 50)
 
 
@@ -586,7 +668,7 @@ def _string_shape_channel(tmp_path: Path) -> Path:
     return ch
 
 
-import youtube_automation.scripts.playlist_manager as _playlist_manager_module  # noqa: E402
+import youtube_automation.domains.uploads.playlists as _playlist_manager_module  # noqa: E402
 
 
 class TestStringShapePlaylistsRegression:
@@ -594,9 +676,9 @@ class TestStringShapePlaylistsRegression:
         ch = _string_shape_channel(tmp_path)
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-        with patch.object(_playlist_manager_module, "get_youtube", return_value=MagicMock()):
-            manager = _playlist_manager_module.PlaylistManager()
-            result = manager.resolve_playlists("any-theme")
+        clients = YouTubeClients(full_handler=MagicMock())
+        manager = _playlist_manager_module.PlaylistManager(clients=clients)
+        result = manager.resolve_playlists("any-theme")
 
         assert result == ["main"]
 
@@ -604,9 +686,8 @@ class TestStringShapePlaylistsRegression:
         ch = _string_shape_channel(tmp_path)
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-        with patch.object(_playlist_manager_module, "get_youtube", return_value=MagicMock()):
-            manager = _playlist_manager_module.PlaylistManager()
-            assigned = manager.assign_video("VID_X", "any-theme", dry_run=True)
+        manager = _playlist_manager_module.PlaylistManager(clients=YouTubeClients(full_handler=MagicMock()))
+        assigned = manager.assign_video("VID_X", "any-theme", dry_run=True)
 
         assert assigned == ["main"]
 
@@ -614,9 +695,8 @@ class TestStringShapePlaylistsRegression:
         ch = _string_shape_channel(tmp_path)
         monkeypatch.setenv("CHANNEL_DIR", str(ch))
 
-        with patch.object(_playlist_manager_module, "get_youtube", return_value=MagicMock()):
-            manager = _playlist_manager_module.PlaylistManager()
-            created = manager.create_all_playlists(dry_run=True)
+        manager = _playlist_manager_module.PlaylistManager(clients=YouTubeClients(full_handler=MagicMock()))
+        created = manager.create_all_playlists(dry_run=True)
 
         assert created == {}
 
@@ -627,8 +707,31 @@ class TestStringShapePlaylistsRegression:
         mock_youtube = MagicMock()
         mock_youtube.playlistItems.return_value.list.return_value.execute.return_value = {"items": []}
 
-        with patch.object(_playlist_manager_module, "get_youtube", return_value=mock_youtube):
-            manager = _playlist_manager_module.PlaylistManager()
-            result = manager.clean_deleted_entries(dry_run=True)
+        handler = MagicMock()
+        handler.get_youtube_service.return_value = mock_youtube
+        manager = _playlist_manager_module.PlaylistManager(clients=YouTubeClients(full_handler=handler))
+        result = manager.clean_deleted_entries(dry_run=True)
 
         assert result == {"main": 0}
+
+
+def test_create_playlist_returns_failure_for_invalid_api_response(manager):
+    manager._youtube.playlists.return_value.insert.return_value.execute.return_value = {}
+
+    result = manager._create_playlist("New", "Description")
+
+    assert result == {"status": "failed", "error": "playlists.insert response is missing id", "title": "New"}
+
+
+def test_list_playlist_video_ids_returns_partial_result_for_invalid_item(manager):
+    request = manager._youtube.playlistItems.return_value.list.return_value
+    request.execute.return_value = {"items": [{"contentDetails": {"videoId": "v1"}}, {"contentDetails": {}}]}
+
+    assert manager._list_playlist_video_ids("PL_ALL") == {"v1"}
+
+
+@pytest.mark.parametrize("response", [None, {"items": {"videoId": "v1"}}])
+def test_list_playlist_video_ids_returns_empty_for_invalid_response_shape(manager, response):
+    manager._youtube.playlistItems.return_value.list.return_value.execute.return_value = response
+
+    assert manager._list_playlist_video_ids("PL_ALL") == set()

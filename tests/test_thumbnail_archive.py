@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.utils import thumbnail_archive
-from youtube_automation.utils.exceptions import ValidationError
 
 
 def _repo_root() -> Path:

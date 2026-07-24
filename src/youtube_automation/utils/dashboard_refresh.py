@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from youtube_automation.utils.exceptions import AutomationError
+from youtube_automation.infrastructure.errors import AutomationError
 
 logger = logging.getLogger(__name__)
 
@@ -16,14 +16,12 @@ logger = logging.getLogger(__name__)
 @contextmanager
 def _channel_context(channel: Path) -> Iterator[None]:
     from youtube_automation.configuration import reset as reset_config
-    from youtube_automation.utils.youtube_service import reset as reset_services
 
     previous_dir = os.environ.get("CHANNEL_DIR")
     previous_slug = os.environ.get("CHANNEL")
     os.environ["CHANNEL_DIR"] = str(channel)
     os.environ.pop("CHANNEL", None)
     reset_config()
-    reset_services()
     try:
         yield
     finally:
@@ -36,7 +34,6 @@ def _channel_context(channel: Path) -> Iterator[None]:
         else:
             os.environ["CHANNEL"] = previous_slug
         reset_config()
-        reset_services()
 
 
 def collect_channel_analytics(channel: Path) -> None:

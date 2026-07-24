@@ -147,7 +147,7 @@ Lyria で音源を生成するチャンネルでは `/lyria` が `01-master/mast
 
 この節は `yt-suno-fetch` が存在する前提の現行実行手順ではない。Suno が公式 API（プレイリスト一覧 / 楽曲メタデータ / ダウンロード URL）を公開した場合の移行方針:
 
-1. **新規 `yt-suno-fetch` CLI を追加**（`scripts/` 配下、`yt-*` プレフィックス踏襲、`pyproject.toml::[project.scripts]` 登録）。公式 API クライアントを実装し、認証情報は `auth/suno_token.json` 等の独立ファイル + `utils/secrets.py::_SECRET_REFS` 経由で解決する。
+1. **新規 `yt-suno-fetch` CLI を追加**（`scripts/` 配下、`yt-*` プレフィックス踏襲、`pyproject.toml::[project.scripts]` 登録）。公式 API クライアントを実装し、認証情報は `auth/suno_token.json` 等の独立ファイル + `infrastructure/secrets.py::_SECRET_REFS` 経由で解決する。
 2. **本 SKILL.md の Step 2 / Step 3 を書き換え**、WebFetch + CDN curl の経路を `yt-suno-fetch` 呼び出しに置換する。skill-config の `suno_download.cdn_url_template` は deprecated として `config.default.yaml` に deprecation note を残し、しばらくは「API 障害時の緊急 fallback」として併存させる。
 3. **非公式経路は別 skill `/masterup-legacy` へ退避**するか、もしくは本 SKILL.md 内で `mode: "official" | "legacy"` を切替可能にする（移行期間中の保険）。
 4. 公式 API が安定し下流チャンネル全てが移行完了したら非公式経路を削除し、`suno_download.cdn_url_template` を skill-config からも除去する（破壊的変更として major version bump）。

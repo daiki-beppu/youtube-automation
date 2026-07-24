@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 from youtube_automation.utils.retention_analytics import RetentionAnalyticsMixin
 from youtube_automation.utils.video_analytics import VideoAnalyticsMixin
 

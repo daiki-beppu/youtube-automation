@@ -15,7 +15,7 @@ from youtube_automation.cli.setup_directory_contract import (
     validate_setup_directory_target,
 )
 from youtube_automation.cli.target_resolver import resolve_existing_target_dir
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 
 class ActionKind(Enum):

@@ -30,7 +30,7 @@ def collector():
 
 class TestGetDeviceAnalytics:
     def test_retries_transient_api_failure_through_analytics_entrypoint(self, collector, monkeypatch):
-        monkeypatch.setattr("youtube_automation.utils.retry.time.sleep", lambda _: None)
+        monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
         transient = HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}')
         request = collector.analytics_service.reports().query()
         request.execute.side_effect = [transient, {"rows": [["MOBILE", 1, 2, 3]]}]
@@ -125,7 +125,7 @@ class TestGetSubscribedStatusAnalytics:
         assert query_kwargs["metrics"] == "views,estimatedMinutesWatched,averageViewDuration"
 
     def test_retries_transient_api_failure(self, collector, monkeypatch):
-        monkeypatch.setattr("youtube_automation.utils.retry.time.sleep", lambda _: None)
+        monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
         transient = HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}')
         request = collector.analytics_service.reports().query()
         request.execute.side_effect = [transient, {"rows": [["SUBSCRIBED", 1, 2, 3]]}]

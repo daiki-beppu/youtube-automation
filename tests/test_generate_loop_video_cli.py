@@ -1132,8 +1132,8 @@ class TestMainOmniEngine:
         assert args.kwargs["poll_interval_sec"] == 0.25
 
     def test_omni_missing_api_key_fails_loud(self, tmp_path, monkeypatch):
+        from youtube_automation.infrastructure.errors import ConfigError
         from youtube_automation.scripts import generate_loop_video as mod
-        from youtube_automation.utils.exceptions import ConfigError
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)

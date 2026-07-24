@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import pytest
 
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.scripts.finalize_master import (
     _parse_loudnorm_json,
     build_filter,
     find_rain_layers,
 )
-from youtube_automation.utils.exceptions import ValidationError
 
 # build_filter のデフォルト引数 (実装側 _DEFAULT_* と独立に固定値で渡す。
 # 実装定数とテスト期待値の二重管理を避けるため、build_filter 自体には

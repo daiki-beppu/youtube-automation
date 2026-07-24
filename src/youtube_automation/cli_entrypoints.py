@@ -27,7 +27,7 @@ def _consume_channel_option(argv: list[str]) -> str | None:
             break
         if argument == "--channel":
             if index + 1 >= len(argv) or argv[index + 1].startswith("-"):
-                from youtube_automation.utils.exceptions import ConfigError
+                from youtube_automation.infrastructure.errors import ConfigError
 
                 raise ConfigError("--channel には channel slug が必要です")
             value = argv[index + 1]
@@ -39,11 +39,11 @@ def _consume_channel_option(argv: list[str]) -> str | None:
             index += 1
             continue
         if not value:
-            from youtube_automation.utils.exceptions import ConfigError
+            from youtube_automation.infrastructure.errors import ConfigError
 
             raise ConfigError("--channel には空でない channel slug を指定してください")
         if slug is not None:
-            from youtube_automation.utils.exceptions import ConfigError
+            from youtube_automation.infrastructure.errors import ConfigError
 
             raise ConfigError("--channel は複数回指定できません")
         slug = value
@@ -111,7 +111,7 @@ yt_kpi_dashboard = _make_entrypoint("youtube_automation.scripts.kpi_dashboard")
 yt_launch_curve = _make_entrypoint("youtube_automation.scripts.launch_curve")
 yt_live_chat_reply = _make_entrypoint("youtube_automation.scripts.live_chat_reply")
 yt_metadata_audit = _make_entrypoint("youtube_automation.scripts.metadata_audit")
-yt_oauth = _make_entrypoint("youtube_automation.auth.oauth_handler")
+yt_oauth = _make_entrypoint("youtube_automation.infrastructure.auth.youtube")
 yt_pinned_comment = _make_entrypoint("youtube_automation.scripts.pinned_comment")
 yt_playlist_manager = _make_entrypoint("youtube_automation.scripts.playlist_manager")
 yt_playlist_status = _make_entrypoint("youtube_automation.scripts.playlist_status")

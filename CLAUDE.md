@@ -46,7 +46,7 @@ uv run yt-skills lint [<skill>..] # SKILL.md frontmatter の軽量検証（stric
 
 ### エラーハンドリング
 
-- `utils/exceptions.py` のドメイン例外を使用すること
+- `infrastructure/errors.py` のドメイン例外を使用すること
 - 生の `Exception` / `KeyError` を catch しない — `ConfigError`, `YouTubeAPIError` 等を使う
 - `YouTubeAPIError.from_http_error(error, context)` で googleapiclient の HttpError を変換できる
 
@@ -71,7 +71,7 @@ uv run yt-skills lint [<skill>..] # SKILL.md frontmatter の軽量検証（stric
 ### テスト
 
 - `tests/conftest.py` が `src/` を sys.path に追加し `CHANNEL_DIR` を `tests/fixtures/sample_channel/` に向ける
-- `_reset_config_singleton` autouse fixture が各テスト前後で `configuration.reset()` を呼ぶ。**追加で** `ServiceRegistry.reset()` が必要なテストは個別に呼ぶこと
+- `_reset_config_singleton` autouse fixture が各テスト前後で `configuration.reset()` を呼ぶ。追加の実行スコープ状態が必要なテストは、生成した `YouTubeClients` インスタンスを直接 reset／再生成すること
 - ユニット: `tests/test_*.py` / 統合: `tests/integration/`（API・外部依存あり）
 - フィクスチャ JSON は新構造（`config/channel/*.json`）で配置
 

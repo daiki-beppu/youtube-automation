@@ -74,7 +74,6 @@ def test_report_flow_posts_combined_report_without_youtube_archive_count():
     with (
         patch("youtube_automation.cli.stream_bandwidth.get_secret", side_effect=fake_get_secret),
         patch("youtube_automation.cli.stream_bandwidth.count_archives") as count_archives_mock,
-        patch("youtube_automation.cli.stream_bandwidth.get_youtube_readonly") as get_youtube_mock,
         patch(
             "youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen",
             side_effect=fake_urlopen,
@@ -96,7 +95,6 @@ def test_report_flow_posts_combined_report_without_youtube_archive_count():
     assert "アーカイブ数ベース判定なし" in content
     assert "アーカイブ件数: 実測" not in content
     count_archives_mock.assert_not_called()
-    get_youtube_mock.assert_not_called()
 
 
 def test_check_threshold_flow_silent_under_limit():
@@ -129,7 +127,6 @@ def test_check_threshold_flow_silent_under_limit():
     with (
         patch("youtube_automation.cli.stream_bandwidth.get_secret", side_effect=fake_get_secret),
         patch("youtube_automation.cli.stream_bandwidth.count_archives", return_value=10),
-        patch("youtube_automation.cli.stream_bandwidth.get_youtube_readonly", return_value=object()),
         patch(
             "youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen",
             side_effect=fake_urlopen,

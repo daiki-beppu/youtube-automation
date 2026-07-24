@@ -1,0 +1,56 @@
+[
+  {
+    "timestamp": "2026-07-24T04:44:27.947256+00:00",
+    "service": "youtube-data-api",
+    "bucket": "search.list",
+    "units": 100,
+    "metadata": {
+      "context": "upload_dedup_search"
+    }
+  },
+  {
+    "timestamp": "2026-07-24T04:44:39.412673+00:00",
+    "service": "youtube-data-api",
+    "bucket": "search.list",
+    "units": 100,
+    "metadata": {
+      "context": "upload_dedup_search"
+    }
+  },
+  {
+    "timestamp": "2026-07-24T04:44:39.413692+00:00",
+    "service": "youtube-data-api",
+    "bucket": "search.list",
+    "units": 100,
+    "metadata": {
+      "context": "upload_dedup_search"
+    }
+  },
+  {
+    "timestamp": "2026-07-24T04:44:39.413937+00:00",
+    "service": "youtube-data-api",
+    "bucket": "videos.list",
+    "units": 1,
+    "metadata": {
+      "context": "upload_dedup_search"
+    }
+  },
+  {
+    "timestamp": "2026-07-24T04:45:18.416529+00:00",
+    "service": "youtube-data-api",
+    "bucket": "search.list",
+    "units": 100,
+    "metadata": {
+      "context": "upload_dedup_search"
+    }
+  },
+  {
+    "timestamp": "2026-07-24T05:03:51.953727+00:00",
+    "service": "youtube-data-api",
+    "bucket": "playlistItems.list",
+    "units": 1,
+    "metadata": {
+      "playlist_id": "PL_MAIN"
+    }
+  }
+]

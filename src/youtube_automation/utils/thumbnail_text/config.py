@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import ImageColor, ImageFont
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.thumbnail_text.models import OverlaySpec, TextStyle
 
 _DEFAULT_TITLE_SIZE = 96

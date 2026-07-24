@@ -1,1 +1,1 @@
-"""アップロードエージェント群"""
+"""Command adapters for upload workflows."""

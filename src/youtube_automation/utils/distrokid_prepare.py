@@ -24,6 +24,8 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
+
 # 読む側（distrokid_release.py）の public ヘルパを再利用する。scripts → utils の
 # 逆方向依存は存在しないため循環しない（#936）。
 from youtube_automation.scripts.distrokid_release import kebab_to_title
@@ -34,7 +36,6 @@ from youtube_automation.utils.distrokid_metadata import (
 from youtube_automation.utils.distrokid_spec import (  # noqa: F401  re-export (#941)
     SPEC_FILENAME,
 )
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.time_utils import format_duration_mss
 
 # 30-distrokid ディレクトリ名。collection_serve.py の _DISTROKID_DIRNAME と対称。

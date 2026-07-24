@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 
 SCHEDULE_SECTION = "schedule"
 TIMEZONE_KEY = "timezone"

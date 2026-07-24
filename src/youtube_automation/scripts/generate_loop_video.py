@@ -26,7 +26,7 @@ from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.genai_client import create_genai_client
 from youtube_automation.utils.omni_generator import (
     DEFAULT_MODEL as DEFAULT_OMNI_MODEL,

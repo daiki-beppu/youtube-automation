@@ -13,7 +13,7 @@ from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Protocol
 
-from youtube_automation.utils.exceptions import DiscoveryRegistryError
+from youtube_automation.infrastructure.errors import DiscoveryRegistryError
 
 DISCOVERY_HOST = "127.0.0.1"
 DISCOVERY_PORT = 7872

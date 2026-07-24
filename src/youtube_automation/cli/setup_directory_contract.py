@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 GITKEEP_NAME = ".gitkeep"
 

@@ -21,9 +21,7 @@ card_impressions / annotation_impressions のみ）ため使用しない。
 
 Usage:
     from youtube_automation.utils.reporting_api import ReportingAPIClient
-    from youtube_automation.utils.youtube_service import _default_registry
-
-    client = ReportingAPIClient(_default_registry.reporting, _default_registry.credentials)
+    client = ReportingAPIClient(reporting_service, credentials)
     summary = client.collect_impressions_summary(days=7)
 """
 
@@ -41,7 +39,7 @@ import requests.exceptions
 from google.auth.transport.requests import AuthorizedSession
 from googleapiclient.errors import HttpError
 
-from youtube_automation.utils.exceptions import ConfigError, ValidationError, YouTubeAPIError
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError, YouTubeAPIError
 
 # CSV ダウンロードのタイムアウト（接続, 読み取り）秒
 _DOWNLOAD_TIMEOUT = (5, 60)

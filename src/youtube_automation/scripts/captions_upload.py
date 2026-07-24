@@ -8,6 +8,9 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from youtube_automation.domains.suno.lyrics import load_suno_lyrics_entries
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.errors import AutomationError, ValidationError
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
 from youtube_automation.utils.captions import (
     generate_srt,
     parse_timestamp,
@@ -16,8 +19,6 @@ from youtube_automation.utils.captions import (
     upload_caption,
     write_srt,
 )
-from youtube_automation.utils.exceptions import AutomationError, ValidationError
-from youtube_automation.utils.youtube_service import get_youtube
 
 
 def _load_lyrics(path: Path) -> list[str]:
@@ -76,7 +77,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             print("dry-run: YouTube API は呼び出していません")
             return 0
         result = upload_caption(
-            get_youtube(),
+            YouTubeClients(full_handler=YouTubeOAuthHandler()).youtube,
             video_id=args.video_id,
             language=args.language,
             name=args.name,

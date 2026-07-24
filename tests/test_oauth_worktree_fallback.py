@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from youtube_automation.auth.oauth_handler import (
+from youtube_automation.infrastructure.auth.youtube import (
     YouTubeOAuthHandler,
     client_secrets_file_candidates,
     resolve_client_secrets_path,

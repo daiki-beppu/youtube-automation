@@ -26,6 +26,7 @@ from pathlib import Path
 from PIL import Image, UnidentifiedImageError
 
 from youtube_automation.configuration import load_config
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.scripts.collection_serve import find_distrokid_discs
 from youtube_automation.scripts.distrokid_release import (
     build_release_payload,
@@ -47,7 +48,6 @@ from youtube_automation.utils.distrokid_prepare import (
     write_release_date,
 )
 from youtube_automation.utils.distrokid_spec import SPEC_FILENAME, write_collection_spec
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.probe import probe_duration
 
 # ファイル名先頭の連番プレフィックス（metadata.md の # 列 = グローバル番号として使う）

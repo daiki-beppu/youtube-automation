@@ -7,13 +7,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.utils.captions import (
     generate_srt,
     parse_total_duration,
     parse_track_timestamps,
     upload_caption,
 )
-from youtube_automation.utils.exceptions import ValidationError
 
 _DESCRIPTIONS = """## Complete Collection 概要欄
 

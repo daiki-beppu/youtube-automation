@@ -15,9 +15,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from youtube_automation.configuration import channel_dir
+from youtube_automation.infrastructure.cost_tracker import _file_lock
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.cost_tracker import _file_lock
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.skill_config import load_channel_override
 
 DEFAULT_MAX_WORKERS = 3

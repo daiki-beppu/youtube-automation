@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 import pytest
 
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 from youtube_automation.utils.streaming import vultr_bandwidth
 
 _BYTES_PER_GB = 1024**3

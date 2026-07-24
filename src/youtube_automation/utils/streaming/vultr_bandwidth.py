@@ -15,7 +15,7 @@ import urllib.request
 from typing import Any
 from urllib.parse import quote
 
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 _VULTR_API_BASE = "https://api.vultr.com/v2"
 _HTTP_TIMEOUT_SEC = 30

@@ -14,9 +14,9 @@ import yaml
 from PIL import Image
 
 import youtube_automation.scripts.auto_select_thumbnail as auto_select_thumbnail
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.scripts.auto_select_thumbnail import main, validate_audit_record
 from youtube_automation.utils import skill_config
-from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.thumbnail_features import feature_centroid, feature_distance
 
 # テスト用の最小解像度 (フル HD だと純 Python の特徴量抽出が遅いため縮小)

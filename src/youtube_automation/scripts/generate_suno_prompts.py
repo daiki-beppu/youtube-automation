@@ -25,6 +25,7 @@ from youtube_automation.domains.suno.downloaded.validation import (
     surrounding_whitespace_issue,
 )
 from youtube_automation.domains.suno.lyrics import load_suno_lyrics_by_name
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.scripts.suno_artifacts import (
     DOCUMENTATION_DIRNAME,
     SUNO_LYRICS_JSON_FILENAME,
@@ -33,7 +34,6 @@ from youtube_automation.scripts.suno_artifacts import (
     SUNO_PROMPTS_MD_FILENAME,
 )
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.skill_config import load_channel_override, load_skill_config
 
 _STYLE_VARIATION_BANNED_ADJECTIVES = frozenset(

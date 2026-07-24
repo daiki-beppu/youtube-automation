@@ -1,6 +1,6 @@
 """ShortUploader のユニットテスト
 
-テスト対象: `youtube_automation.agents.short_uploader.ShortUploader`
+テスト対象: `youtube_automation.domains.uploads.shorts.ShortUploader`
 
 plan §171 / test-design.md §44-50 §86 §117-122 §146-147 を満たすケース構成。
 委譲設計（`YouTubeAutoUploader` を所有）を検証し、継承禁止の規約を回帰させる。
@@ -108,7 +108,7 @@ def _make_short_uploader(
             mock_inner.upload_video.return_value = "V"
             ...
     """
-    from youtube_automation.agents import short_uploader as su_mod
+    from youtube_automation.domains.uploads import shorts as su_mod
 
     with patch.object(su_mod, "YouTubeAutoUploader") as mock_cls:
         mock_uploader = MagicMock()
@@ -121,7 +121,7 @@ def _make_short_uploader(
 
 def _freeze_short_uploader_now(monkeypatch, frozen: datetime) -> None:
     """short_uploader モジュール内の datetime.now を固定する."""
-    from youtube_automation.agents import short_uploader as su_mod
+    from youtube_automation.domains.uploads import shorts as su_mod
 
     class _Fake(datetime):
         @classmethod
@@ -142,8 +142,8 @@ class TestInit:
     def test_short_uploader_does_not_inherit_youtube_auto_uploader(self):
         """継承禁止 — `issubclass` で YouTubeAutoUploader を継承していないことを確認."""
         # Given: 両クラスを import
-        from youtube_automation.agents.short_uploader import ShortUploader
-        from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
+        from youtube_automation.domains.uploads.shorts import ShortUploader
+        from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
 
         # When: クラス階層関係を取得
         is_subclass = issubclass(ShortUploader, YouTubeAutoUploader)
@@ -162,9 +162,9 @@ class TestInit:
         """`config.shorts.enabled=False` の channel では `__init__` が `UploadError` を投げる."""
         import shutil
 
-        from youtube_automation.agents.short_uploader import ShortUploader
         from youtube_automation.configuration import reset
-        from youtube_automation.utils.exceptions import UploadError
+        from youtube_automation.domains.uploads.shorts import ShortUploader
+        from youtube_automation.infrastructure.errors import UploadError
 
         # Given: sample_channel をコピーして shorts.enabled=false に書き換える
         src = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
@@ -276,7 +276,7 @@ class TestCalculateShortPublishAt:
             self._freeze_now(monkeypatch, datetime(2099, 1, 1, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
 
             # When
-            with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.short_uploader"):
+            with caplog.at_level(logging.WARNING, logger="youtube_automation.domains.uploads.shorts"):
                 uploader._calculate_short_publish_at(col)
 
         # Then: warning にファイル名・フィールド名・naive 検知が含まれる
@@ -294,8 +294,8 @@ class TestCalculateShortPublishAt:
             self._freeze_now(monkeypatch, datetime(2099, 1, 1, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
 
             # When
-            with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.short_uploader"):
-                uploader._calculate_short_publish_at(col)
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.domains.uploads.shorts"):
+            uploader._calculate_short_publish_at(col)
 
         # Then: TZ-naive warning は出ない
         assert not any("TZ-naive" in r.getMessage() for r in caplog.records)
@@ -466,7 +466,7 @@ class TestCheckUploadInterval:
             self._freeze_now(monkeypatch, datetime(2099, 1, 10, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
 
             # When
-            with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.short_uploader"):
+            with caplog.at_level(logging.WARNING, logger="youtube_automation.domains.uploads.shorts"):
                 uploader._check_upload_interval()
 
         # Then: warning にファイル名・フィールド名が含まれる
@@ -505,8 +505,8 @@ class TestCheckUploadInterval:
             self._freeze_now(monkeypatch, datetime(2099, 1, 10, 9, 0, tzinfo=ZoneInfo("Asia/Tokyo")))
 
             # When
-            with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.short_uploader"):
-                uploader._check_upload_interval()
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.domains.uploads.shorts"):
+            uploader._check_upload_interval()
 
         # Then: TZ-naive warning は出ない
         assert not any("TZ-naive" in r.getMessage() for r in caplog.records)
@@ -763,7 +763,7 @@ class TestUploadShort:
 
     def test_upload_video_raises_quota_exhausted_error_marks_result_retryable(self, tmp_path):
         """plan 020 Step 4: QuotaExhaustedError は details.retryable=True で区別する."""
-        from youtube_automation.utils.exceptions import QuotaExhaustedError
+        from youtube_automation.infrastructure.errors import QuotaExhaustedError
 
         # Given
         col = _setup_collection(tmp_path)
@@ -778,6 +778,20 @@ class TestUploadShort:
         assert result["action"] == "short_upload_failed"
         assert result["details"]["retryable"] is True
         assert result["details"]["retry_after_seconds"] == 17.5
+
+    def test_upload_video_failure_does_not_expose_exception_text(self, tmp_path, caplog):
+        """upload_video の失敗本文を結果・ログへ転送しない."""
+        col = _setup_collection(tmp_path)
+        canary = "access-token-domain-canary"
+        with _make_short_uploader() as (uploader, mock_inner):
+            self._patch_interval_ok(uploader)
+            mock_inner.upload_video.side_effect = RuntimeError(canary)
+
+            result = uploader.upload_short(col)
+        assert result["details"]["error"] == "short upload failed"
+        error_messages = [record.getMessage() for record in caplog.records if record.levelno >= logging.ERROR]
+        assert error_messages == ["❌ upload_video 失敗"]
+        assert all(canary not in message for message in error_messages)
 
 
 # ---------------------------------------------------------------------------

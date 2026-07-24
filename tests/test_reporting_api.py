@@ -7,11 +7,12 @@ monkeypatch で吸収する。`tests/test_ctr_analytics.py` の流儀に準拠�
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.utils.exceptions import ConfigError, ValidationError, YouTubeAPIError
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError, YouTubeAPIError
 from youtube_automation.utils.reporting_api import ReportingAPIClient
 
 _FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "reporting_api"
@@ -301,42 +302,56 @@ def test_collect_impressions_summary_returns_empty_when_no_reports():
 # ReportingAPIMixin (fail-open)
 # ---------------------------------------------------------------------------
 def test_mixin_fail_open_returns_none_on_exception(monkeypatch):
+    from youtube_automation.infrastructure.errors import YouTubeAPIError
     from youtube_automation.utils import reporting_analytics
-    from youtube_automation.utils.exceptions import YouTubeAPIError
 
     class _BoomClient:
+        instance = None
+
         def __init__(self, *_a, **_k):
-            pass
+            self.service = _a[0]
+            self.credentials = _k["credentials"]
+            type(self).instance = self
 
         def collect_impressions_summary(self, days: int = 7):
             raise YouTubeAPIError("boom")
 
     monkeypatch.setattr(reporting_analytics, "ReportingAPIClient", _BoomClient)
-    monkeypatch.setattr(reporting_analytics, "get_reporting", lambda: MagicMock())
-    monkeypatch.setattr(reporting_analytics, "get_credentials_readonly", lambda: MagicMock())
+    readonly_handler = MagicMock(name="readonly_handler")
+    clients = SimpleNamespace(reporting=MagicMock(), _read_handler=readonly_handler)
 
     class _C(reporting_analytics.ReportingAPIMixin):
-        pass
+        youtube_clients = clients
 
     assert _C().get_reporting_impressions_summary(days=7) is None
+    readonly_handler.authenticate.assert_called_once_with()
+    assert _BoomClient.instance.service is clients.reporting
+    assert _BoomClient.instance.credentials is readonly_handler.authenticate.return_value
 
 
 def test_mixin_returns_summary_on_success(monkeypatch):
     from youtube_automation.utils import reporting_analytics
 
     class _OkClient:
+        instance = None
+
         def __init__(self, *_a, **_k):
-            pass
+            self.service = _a[0]
+            self.credentials = _k["credentials"]
+            type(self).instance = self
 
         def collect_impressions_summary(self, days: int = 7):
             return {"aggregated_ctr_percentage": 4.2}
 
     monkeypatch.setattr(reporting_analytics, "ReportingAPIClient", _OkClient)
-    monkeypatch.setattr(reporting_analytics, "get_reporting", lambda: MagicMock())
-    monkeypatch.setattr(reporting_analytics, "get_credentials_readonly", lambda: MagicMock())
+    readonly_handler = MagicMock(name="readonly_handler")
+    clients = SimpleNamespace(reporting=MagicMock(), _read_handler=readonly_handler)
 
     class _C(reporting_analytics.ReportingAPIMixin):
-        pass
+        youtube_clients = clients
 
     summary = _C().get_reporting_impressions_summary(days=7)
     assert summary == {"aggregated_ctr_percentage": 4.2}
+    readonly_handler.authenticate.assert_called_once_with()
+    assert _OkClient.instance.service is clients.reporting
+    assert _OkClient.instance.credentials is readonly_handler.authenticate.return_value

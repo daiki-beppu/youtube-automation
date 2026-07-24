@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.scripts import retention_timeline as cli
-from youtube_automation.utils.exceptions import ValidationError
 from youtube_automation.utils.retention_timeline import (
     correlate_retention_timeline,
     detect_retention_drops,

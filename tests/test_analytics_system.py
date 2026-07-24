@@ -18,8 +18,8 @@ from googleapiclient.errors import HttpError
 # `patch("youtube_automation.scripts.analytics_system.X")` がモジュール属性として
 # 解決できるよう、トップレベルで submodule を import しておく。
 import youtube_automation.scripts.analytics_system  # noqa: F401
+from youtube_automation.infrastructure.errors import AuthError, YouTubeAPIError
 from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
-from youtube_automation.utils.exceptions import AuthError, YouTubeAPIError
 
 # ---------------------------------------------------------------------------
 # フィクスチャ
@@ -210,21 +210,19 @@ class TestInit:
 
 
 class TestAuthenticate:
-    """authenticate() は youtube_service.get_readonly_handler() 経由で
-    read-only 優先の handler を取得する（#1699）。"""
+    """authenticate() は instance-owned OAuth handler を利用する。"""
 
     def test_authenticate_success(self, system):
         """認証成功時に True を返し authenticated を True にする"""
         mock_handler = MagicMock()
         mock_handler.test_connection.return_value = True
 
-        with patch(
-            "youtube_automation.utils.youtube_service.get_readonly_handler",
-            return_value=mock_handler,
-        ):
+        with patch("youtube_automation.scripts.analytics_system.YouTubeOAuthHandler") as MockHandler:
+            MockHandler.create_readonly.return_value = mock_handler
             result = system.authenticate()
             assert result is True
             assert system.authenticated is True
+            MockHandler.create_readonly.assert_called_once_with()
             mock_handler.authenticate.assert_called_once_with(force_reauth=False)
 
     def test_authenticate_failure_connection_test(self, system):
@@ -232,29 +230,24 @@ class TestAuthenticate:
         mock_handler = MagicMock()
         mock_handler.test_connection.return_value = False
 
-        with patch(
-            "youtube_automation.utils.youtube_service.get_readonly_handler",
-            return_value=mock_handler,
-        ):
+        with patch("youtube_automation.scripts.analytics_system.YouTubeOAuthHandler") as MockHandler:
+            MockHandler.create_readonly.return_value = mock_handler
             result = system.authenticate()
             assert result is False
             assert system.authenticated is False
+            MockHandler.create_readonly.assert_called_once_with()
 
     def test_authenticate_exception(self, system):
         """認証中にドメイン例外（AuthError）が発生した場合 False を返す"""
-        with patch(
-            "youtube_automation.utils.youtube_service.get_readonly_handler",
-            side_effect=AuthError("Token expired"),
-        ):
+        with patch("youtube_automation.scripts.analytics_system.YouTubeOAuthHandler") as MockHandler:
+            MockHandler.create_readonly.side_effect = AuthError("Token expired")
             result = system.authenticate()
             assert result is False
 
     def test_authenticate_unexpected_exception_propagates(self, system):
         """narrow catch 範囲外の例外は伝播する（fail-fast）"""
-        with patch(
-            "youtube_automation.utils.youtube_service.get_readonly_handler",
-            side_effect=RuntimeError("unexpected"),
-        ):
+        with patch("youtube_automation.scripts.analytics_system.YouTubeOAuthHandler") as MockHandler:
+            MockHandler.create_readonly.side_effect = RuntimeError("unexpected")
             with pytest.raises(RuntimeError, match="unexpected"):
                 system.authenticate()
 

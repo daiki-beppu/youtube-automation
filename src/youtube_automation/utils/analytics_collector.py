@@ -25,21 +25,22 @@ import sys
 from datetime import datetime, timedelta
 from typing import Any
 
+from youtube_automation.domains.youtube.video_listing import VideoListingMixin
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
+from youtube_automation.infrastructure.retry import execute_with_retry
 from youtube_automation.utils.audience_analytics import AudienceAnalyticsMixin
 from youtube_automation.utils.channel_analytics import ChannelAnalyticsMixin
 from youtube_automation.utils.ctr_analytics import CTRAnalyticsMixin
-from youtube_automation.utils.exceptions import YouTubeAPIError
 from youtube_automation.utils.playlist_analytics import PlaylistAnalyticsMixin
 from youtube_automation.utils.reporting_analytics import ReportingAPIMixin
 from youtube_automation.utils.retention_analytics import RetentionAnalyticsMixin
-from youtube_automation.utils.retry import execute_with_retry
 from youtube_automation.utils.revenue_analytics import RevenueAnalyticsMixin
 from youtube_automation.utils.strategic_analytics import StrategicAnalyticsMixin
 from youtube_automation.utils.traffic_source_analytics import TrafficSourceMixin
 from youtube_automation.utils.video_analytics import VideoAnalyticsMixin
 from youtube_automation.utils.video_daily_analytics import VideoDailyAnalyticsMixin
-from youtube_automation.utils.video_listing import VideoListingMixin
-from youtube_automation.utils.youtube_service import get_analytics, get_youtube_readonly
 
 logger = logging.getLogger(__name__)
 
@@ -65,13 +66,17 @@ class YouTubeAnalyticsCollector(
         self.youtube_service: Any = None
         self.analytics_service: Any = None
         self.channel_id: str | None = None
+        self.youtube_clients = YouTubeClients(
+            full_handler=YouTubeOAuthHandler(),
+            readonly_handler=YouTubeOAuthHandler.create_readonly(),
+        )
 
     def initialize(self):
         """YouTube API 初期化"""
         logger.info("YouTube Analytics API 認証中...")
 
-        self.youtube_service = get_youtube_readonly()
-        self.analytics_service = get_analytics()
+        self.youtube_service = self.youtube_clients.youtube_readonly
+        self.analytics_service = self.youtube_clients.analytics
 
         # チャンネルID取得
         self.channel_id = self._get_channel_id()

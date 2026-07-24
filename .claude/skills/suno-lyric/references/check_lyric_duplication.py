@@ -44,7 +44,7 @@ def ensure_repo_src_on_path() -> None:
 def load_entries(path: Path) -> list[SunoLyricsEntry]:
     ensure_repo_src_on_path()
     from youtube_automation.domains.suno.lyrics import load_suno_lyrics_entries
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     try:
         return load_suno_lyrics_entries(path)

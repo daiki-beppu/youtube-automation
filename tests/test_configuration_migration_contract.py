@@ -37,7 +37,7 @@ from youtube_automation.configuration import (
     load_config,
     reset,
 )
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 
 def _write_json(path: Path, value: dict) -> None:

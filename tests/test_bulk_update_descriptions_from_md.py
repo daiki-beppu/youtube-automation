@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -31,7 +32,7 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from youtube_automation.configuration import reset
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 # ---------------------------------------------------------------------------
 # ヘルパー
@@ -305,7 +306,7 @@ class TestMainTargetSelection:
         yt_mock = _build_youtube_mock([_snippet("V_ALPHA"), _snippet("V_BETA")])
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep"),
         ):
             # When
@@ -329,7 +330,7 @@ class TestMainTargetSelection:
         yt_mock = _build_youtube_mock([_snippet("V_TARGET")])
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep"),
         ):
             # When
@@ -357,7 +358,7 @@ class TestMainTargetSelection:
         yt_mock = _build_youtube_mock([_snippet("V_FOO"), _snippet("V_BAR")])
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep"),
         ):
             # When
@@ -390,7 +391,7 @@ class TestMainTargetSelection:
         yt_mock = _build_youtube_mock([_snippet("V_MIDNIGHT")])
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep"),
         ):
             # When
@@ -410,13 +411,13 @@ class TestMainTargetSelection:
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
         caplog.set_level(logging.INFO, logger=mod.__name__)
 
-        with patch.object(mod, "get_youtube") as gy:
+        with patch.object(mod, "YouTubeClients") as clients:
             # When
             mod.main()
 
             # Then
             assert ("INFO", "nothing to do") in [(record.levelname, record.message) for record in caplog.records]
-            gy.assert_not_called()
+            clients.assert_not_called()
 
     def test_should_log_nothing_to_do_when_only_matches_nothing(self, tmp_path, monkeypatch, caplog):
         """`--only` ミスマッチで対象 0 件になった場合もログ出力し API 未呼出."""
@@ -430,13 +431,13 @@ class TestMainTargetSelection:
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc", "--only", "nonexistent"])
         caplog.set_level(logging.INFO, logger=mod.__name__)
 
-        with patch.object(mod, "get_youtube") as gy:
+        with patch.object(mod, "YouTubeClients") as clients:
             # When
             mod.main()
 
             # Then
             assert ("INFO", "nothing to do") in [(record.levelname, record.message) for record in caplog.records]
-            gy.assert_not_called()
+            clients.assert_not_called()
 
     def test_console_entrypoint_should_emit_info_logs_to_stderr_without_logger_injection(self, tmp_path):
         """実 console script は logger 設定の手注入なしで INFO を stderr に出す."""
@@ -486,7 +487,7 @@ class TestMainExecution:
         yt_mock = _build_youtube_mock([_snippet("V1"), _snippet("V2"), _snippet("V3")])
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep"),
         ):
             # When
@@ -531,7 +532,7 @@ class TestMainExecution:
         yt_mock = _build_youtube_mock([_snippet("V_ALPHA")])
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep") as sleep_mock,
         ):
             # When
@@ -556,7 +557,7 @@ class TestMainExecution:
         yt_mock = _build_youtube_mock([_snippet("V1"), _snippet("V2")])
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep") as sleep_mock,
         ):
             # When
@@ -592,7 +593,7 @@ class TestMainExecution:
         )
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep"),
         ):
             # When
@@ -622,14 +623,14 @@ class TestMainExecution:
 
         with (
             patch.object(mod, "load_collection", side_effect=RuntimeError("broken metadata")),
-            patch.object(mod, "get_youtube") as gy,
+            patch.object(mod, "YouTubeClients") as clients,
         ):
             mod.main()
 
         assert ("ERROR", "❌ alpha: broken metadata") in [
             (record.levelname, record.message) for record in caplog.records
         ]
-        gy.assert_not_called()
+        clients.assert_not_called()
 
     def test_should_continue_after_semantic_metadata_error(self, tmp_path, monkeypatch, caplog):
         """意味的に不正な collection を記録し、正常な collection は更新する."""
@@ -645,7 +646,7 @@ class TestMainExecution:
         yt_mock = _build_youtube_mock([_snippet("V_VALID")])
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep"),
         ):
             mod.main()
@@ -668,12 +669,12 @@ class TestMainExecution:
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-desc"])
 
         with (
-            patch.object(mod, "get_youtube") as get_youtube_mock,
+            patch.object(mod, "YouTubeClients") as clients_mock,
             pytest.raises(json.JSONDecodeError),
         ):
             mod.main()
 
-        get_youtube_mock.assert_not_called()
+        clients_mock.assert_not_called()
 
     def test_should_fail_loud_when_metadata_read_raises_os_error(self, tmp_path, monkeypatch):
         """公開 main 経路で metadata の OSError を握りつぶさず伝播させる."""
@@ -695,12 +696,12 @@ class TestMainExecution:
         monkeypatch.setattr(Path, "read_text", read_text_with_failure)
 
         with (
-            patch.object(mod, "get_youtube") as get_youtube_mock,
+            patch.object(mod, "YouTubeClients") as clients_mock,
             pytest.raises(OSError, match="metadata unavailable"),
         ):
             mod.main()
 
-        get_youtube_mock.assert_not_called()
+        clients_mock.assert_not_called()
 
     def test_should_log_video_not_found_on_youtube(self, tmp_path, monkeypatch, caplog):
         """list 結果に video ID がない場合は ID と collection を ERROR に残す."""
@@ -714,7 +715,7 @@ class TestMainExecution:
         caplog.set_level(logging.INFO, logger=mod.__name__)
         yt_mock = _build_youtube_mock([])
 
-        with patch.object(mod, "get_youtube", return_value=yt_mock):
+        with patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)):
             mod.main()
 
         assert ("ERROR", "❌ V_MISSING (alpha): not found on YouTube") in [
@@ -738,7 +739,7 @@ class TestMainExecution:
         yt_mock.videos.return_value.update.return_value.execute.side_effect = http_error
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep"),
             pytest.raises(YouTubeAPIError) as exc_info,
         ):
@@ -771,7 +772,7 @@ class TestMainExecution:
         yt_mock.videos.return_value.list.return_value.execute.side_effect = http_error
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             pytest.raises(YouTubeAPIError) as exc_info,
         ):
             mod.main()
@@ -799,7 +800,7 @@ class TestMainExecution:
         yt_mock.videos.return_value.update.return_value.execute.side_effect = [http_error, {"id": "V_BETA"}]
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep") as sleep_mock,
             pytest.raises(YouTubeAPIError) as exc_info,
         ):
@@ -837,7 +838,7 @@ class TestMainSnippetFallbacks:
         yt_mock = _build_youtube_mock([item])
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep"),
         ):
             mod.main()
@@ -859,7 +860,7 @@ class TestMainSnippetFallbacks:
         yt_mock = _build_youtube_mock([item])
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep"),
         ):
             mod.main()
@@ -881,7 +882,7 @@ class TestMainSnippetFallbacks:
         yt_mock = _build_youtube_mock([item])
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep"),
         ):
             mod.main()
@@ -1154,7 +1155,7 @@ class TestQuotaLogging:
         yt_mock = _build_youtube_mock([_snippet("V_ALPHA")])
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod, "log_quota") as quota_mock,
             patch.object(mod.time, "sleep"),
         ):
@@ -1178,7 +1179,7 @@ class TestQuotaLogging:
         yt_mock = _build_youtube_mock([_snippet("V1"), _snippet("V2")])
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod, "log_quota") as quota_mock,
             patch.object(mod.time, "sleep"),
         ):
@@ -1212,7 +1213,7 @@ class TestQuotaLogging:
         yt_mock.videos.return_value.update.return_value.execute.side_effect = [http_err, {"id": "ok"}]
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod, "log_quota") as quota_mock,
             patch.object(mod.time, "sleep"),
         ):

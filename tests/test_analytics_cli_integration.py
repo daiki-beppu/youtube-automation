@@ -133,8 +133,9 @@ def cli_dependencies(tmp_path: Path):
     config = MagicMock()
     config.meta.channel_name = "Test Channel"
     config.meta.channel_short = "TC"
-    oauth_module = MagicMock()
-    oauth_module.YouTubeOAuthHandler.return_value.test_connection.return_value = True
+    oauth_handler = MagicMock()
+    oauth_handler.authenticate.return_value = MagicMock()
+    oauth_handler.test_connection.return_value = True
 
     def initialize(collector) -> None:
         collector.analytics_service = _AnalyticsService(reports)
@@ -146,13 +147,7 @@ def cli_dependencies(tmp_path: Path):
         patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path),
         patch("youtube_automation.utils.channel_analytics.channel_dir", return_value=tmp_path),
         patch("youtube_automation.utils.analytics_collector.YouTubeAnalyticsCollector.initialize", new=initialize),
-        patch.dict(
-            sys.modules,
-            {
-                "youtube_automation.auth": MagicMock(),
-                "youtube_automation.auth.oauth_handler": oauth_module,
-            },
-        ),
+        patch("youtube_automation.scripts.analytics_system.YouTubeOAuthHandler", return_value=oauth_handler),
     ):
         yield tmp_path, reports
 

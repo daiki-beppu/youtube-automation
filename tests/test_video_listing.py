@@ -1,7 +1,7 @@
 """
 VideoListingMixin のユニットテスト
 
-テスト対象: utils/video_listing.py
+テスト対象: domains/youtube/video_listing.py
 
 検証観点:
   - get_all_channel_videos のインスタンスキャッシュ（2 回目は API を叩かない）
@@ -20,8 +20,8 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.utils.exceptions import YouTubeAPIError
-from youtube_automation.utils.video_listing import VideoListingMixin
+from youtube_automation.domains.youtube.video_listing import VideoListingMixin
+from youtube_automation.infrastructure.errors import ValidationError, YouTubeAPIError
 
 
 def _make_http_error(status: int = 403, message: bytes = b"error") -> HttpError:
@@ -62,18 +62,26 @@ class _FakePlaylistItems:
         return _FakeExecutable(result=page)
 
 
+_DEFAULT_CHANNEL_RESPONSE = {"items": [{"contentDetails": {"relatedPlaylists": {"uploads": "UP_PLAYLIST"}}}]}
+_UNSET = object()
+
+
 class _FakeChannels:
+    def __init__(self, response=_UNSET) -> None:
+        self._response = _DEFAULT_CHANNEL_RESPONSE if response is _UNSET else response
+
     def list(self, **kwargs):
-        return _FakeExecutable(result={"items": [{"contentDetails": {"relatedPlaylists": {"uploads": "UP_PLAYLIST"}}}]})
+        return _FakeExecutable(result=self._response)
 
 
 class _FakeYouTubeService:
-    def __init__(self, playlist_items: _FakePlaylistItems, videos=None) -> None:
+    def __init__(self, playlist_items: _FakePlaylistItems, videos=None, channel_response=_UNSET) -> None:
         self._playlist_items = playlist_items
         self._videos = videos
+        self._channel_response = channel_response
 
     def channels(self):
-        return _FakeChannels()
+        return _FakeChannels(self._channel_response)
 
     def playlistItems(self):
         return self._playlist_items
@@ -96,8 +104,8 @@ def _video_item(video_id: str, published_at: str) -> Dict:
 class _StubCollector(VideoListingMixin):
     """VideoListingMixin 検証用のスタブコレクター"""
 
-    def __init__(self, playlist_items: _FakePlaylistItems) -> None:
-        self.youtube_service = _FakeYouTubeService(playlist_items)
+    def __init__(self, playlist_items: _FakePlaylistItems, channel_response=_UNSET) -> None:
+        self.youtube_service = _FakeYouTubeService(playlist_items, channel_response=channel_response)
         self.channel_id = "UC_TEST"
 
     def initialize(self) -> None:  # pragma: no cover - youtube_service は常に注入済み
@@ -105,12 +113,15 @@ class _StubCollector(VideoListingMixin):
 
 
 class _FakeVideos:
-    def __init__(self, items: list[dict]) -> None:
+    def __init__(self, items: list[dict], response=_UNSET) -> None:
         self._items = items
+        self._response = response
         self.requested_ids: list[str] = []
 
     def list(self, **kwargs):
         self.requested_ids.extend(kwargs["id"].split(","))
+        if self._response is not _UNSET:
+            return _FakeExecutable(result=self._response)
         requested = set(kwargs["id"].split(","))
         return _FakeExecutable(result={"items": [item for item in self._items if item["id"] in requested]})
 
@@ -153,6 +164,20 @@ class TestGetAllChannelVideosErrors:
         collector = _StubCollector(playlist_items)
 
         with pytest.raises(YouTubeAPIError):
+            collector.get_all_channel_videos()
+
+    @pytest.mark.parametrize("response", [None, {"items": None}, {"items": {}}, {"items": [None]}])
+    def test_invalid_channel_response_shape_raises_validation_error(self, response) -> None:
+        collector = _StubCollector(_FakePlaylistItems(pages=[]), channel_response=response)
+
+        with pytest.raises(ValidationError):
+            collector.get_all_channel_videos()
+
+    @pytest.mark.parametrize("response", [None, {"items": None}, {"items": {}}, {"items": [None]}])
+    def test_invalid_playlist_response_shape_raises_validation_error(self, response) -> None:
+        collector = _StubCollector(_FakePlaylistItems(pages=[response]))
+
+        with pytest.raises(ValidationError):
             collector.get_all_channel_videos()
 
 
@@ -201,3 +226,16 @@ class TestGetScheduledVideoCount:
 
         assert count == 1
         assert statuses.requested_ids == ["FUTURE", "PAST", "NONE"]
+
+    @pytest.mark.parametrize(
+        "response",
+        [None, {"items": None}, {"items": {}}, {"items": [None]}, {"items": [{"status": None}]}],
+    )
+    def test_invalid_videos_response_shape_raises_validation_error(self, response) -> None:
+        playlist_items = _FakePlaylistItems(pages=[{"items": [_video_item("V1", "2026-07-20T00:00:00Z")]}])
+        statuses = _FakeVideos([], response=response)
+        collector = _StubCollector(playlist_items)
+        collector.youtube_service = _FakeYouTubeService(playlist_items, statuses)
+
+        with pytest.raises(ValidationError):
+            collector.get_scheduled_video_count(now=datetime(2026, 7, 21, tzinfo=timezone.utc))

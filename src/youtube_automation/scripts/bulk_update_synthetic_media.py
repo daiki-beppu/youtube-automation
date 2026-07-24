@@ -29,9 +29,10 @@ import time
 
 from googleapiclient.errors import HttpError
 
-from youtube_automation.utils.cost_tracker import log_quota
-from youtube_automation.utils.exceptions import YouTubeAPIError
-from youtube_automation.utils.youtube_service import get_youtube
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.cost_tracker import log_quota
+from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 logger = logging.getLogger(__name__)
 
@@ -202,7 +203,7 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        youtube = get_youtube()
+        youtube = YouTubeClients(full_handler=YouTubeOAuthHandler()).youtube
         video_ids = list_uploads_video_ids(youtube)
         if not video_ids:
             print("❌ 対象動画が見つかりません（uploads playlist が空）")

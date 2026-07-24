@@ -11,9 +11,9 @@ from typing import Literal
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
-from youtube_automation.utils.cost_tracker import log_quota
+from youtube_automation.infrastructure.cost_tracker import log_quota
+from youtube_automation.infrastructure.errors import ValidationError, YouTubeAPIError
 from youtube_automation.utils.descriptions_md import extract_descriptions_md_section
-from youtube_automation.utils.exceptions import ValidationError, YouTubeAPIError
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>(?:\d{1,2}:)?\d{1,2}:\d{2})\s+(?P<title>.+?)\s*$")
 _TOTAL_DURATION_RE = re.compile(r"\btracks?\s*,\s*(?P<duration>(?:\d{1,2}:)?\d{1,2}:\d{2})\b", re.IGNORECASE)

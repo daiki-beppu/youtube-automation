@@ -40,7 +40,7 @@ def _patch_all(
 
     def fake_get_secret(name: str):
         if name not in secrets_map:
-            from youtube_automation.utils.exceptions import ConfigError
+            from youtube_automation.infrastructure.errors import ConfigError
 
             raise ConfigError(f"missing secret: {name}")
         return secrets_map[name]
@@ -64,10 +64,6 @@ def _patch_all(
         ),
         patch(
             "youtube_automation.cli.stream_bandwidth.notify",
-        ),
-        patch(
-            "youtube_automation.cli.stream_bandwidth.get_youtube_readonly",
-            return_value=object(),
         ),
     ]
 
@@ -161,9 +157,7 @@ def test_report_mode_skips_youtube_archive_count_when_archives_are_not_expected(
     assert rc == 0
     count_archives_mock = enters[2]
     notify_mock = enters[4]
-    get_youtube_mock = enters[5]
     count_archives_mock.assert_not_called()
-    get_youtube_mock.assert_not_called()
     content = notify_mock.call_args.kwargs["content"]
     assert "アーカイブ数ベース判定なし" in content
     assert "アーカイブ件数: 実測" not in content

@@ -21,7 +21,7 @@ from youtube_automation.configuration import (
     select_channel,
     workspace_channels,
 )
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 # ----- helpers -------------------------------------------------------------
 
@@ -1348,7 +1348,7 @@ def test_playlists_invalid_per_key_shape_raises_config_error(value, got_type):
     実態が乖離するため Fail Fast にする。エラーメッセージに got 型名を含める。
     """
     from youtube_automation.configuration.loader import _build_playlists
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     merged = {"playlists": {"main": value}}
 

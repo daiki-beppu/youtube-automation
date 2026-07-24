@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from youtube_automation.configuration import channel_dir
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.stock import SOURCE_ROLES, archive_to_stock, load_stock_config
 

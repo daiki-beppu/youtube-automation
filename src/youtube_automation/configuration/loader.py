@@ -62,8 +62,8 @@ from youtube_automation.configuration.youtube import (
     YoutubeApi,
     YoutubeSection,
 )
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.audio_visualizer_fill import normalize_ffmpeg_color, parse_color
-from youtube_automation.utils.exceptions import ConfigError
 
 logger = logging.getLogger(__name__)
 

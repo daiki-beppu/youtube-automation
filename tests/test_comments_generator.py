@@ -6,9 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from youtube_automation.infrastructure.errors import GeneratorError
 from youtube_automation.utils.comments.codex_generator import CodexGenerator
 from youtube_automation.utils.comments.generator import GeminiGenerator, ReplyContext
-from youtube_automation.utils.exceptions import GeneratorError
 
 # create_genai_client はソースモジュールで patch する
 _PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_genai_client"

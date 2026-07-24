@@ -23,6 +23,9 @@ import sys
 from datetime import date, datetime
 
 from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.cost_tracker import log_quota
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
 from youtube_automation.scripts.benchmark_collector import (
     _QUOTA_SERVICE,
     _READ_QUOTA_UNITS,
@@ -30,8 +33,6 @@ from youtube_automation.scripts.benchmark_collector import (
     load_benchmark_videos,
 )
 from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
-from youtube_automation.utils.cost_tracker import log_quota
-from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ class BenchmarkCommentCollector:
         self.max_comments = max_comments
         self.competitor_slug = competitor_slug
         self.youtube = None
+        self.youtube_clients = YouTubeClients(full_handler=YouTubeOAuthHandler())
         self.today = date.today()
 
     def _fetch_comments(self, video_id: str) -> list[dict]:
@@ -117,7 +119,7 @@ class BenchmarkCommentCollector:
         logger.info("YouTube API 認証中...")
         # commentThreads.list は read API だが youtube.force-ssl scope が必要なため、
         # youtube.readonly token ではなく full-scope token を使う。
-        self.youtube = get_youtube()
+        self.youtube = self.youtube_clients.youtube
         logger.info("認証完了")
 
         result = {

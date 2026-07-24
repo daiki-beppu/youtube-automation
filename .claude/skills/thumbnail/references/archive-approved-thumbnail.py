@@ -7,8 +7,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.thumbnail_archive import archive_approved_thumbnail
 
 

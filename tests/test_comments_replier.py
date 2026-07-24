@@ -14,11 +14,11 @@ from youtube_automation.configuration.comments import (
     Comments,
     GeneratorConfig,
 )
+from youtube_automation.infrastructure.errors import AutomationError, ConfigError, YouTubeAPIError
 from youtube_automation.scripts import comment_reply
 from youtube_automation.scripts.comment_reply import _load_agent_replies
 from youtube_automation.utils.comments.history import ReplyHistory
 from youtube_automation.utils.comments.replier import _SAVE_MAX_RETRIES, CommentReplier
-from youtube_automation.utils.exceptions import AutomationError, ConfigError, YouTubeAPIError
 
 _PATCH_GENAI_CLIENT = "youtube_automation.utils.genai_client.create_genai_client"
 
@@ -910,15 +910,15 @@ def test_cli_export_candidates_requires_json(monkeypatch, tmp_path, capsys):
         youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
     )
     monkeypatch.setattr(comment_reply, "load_config", lambda: config)
-    get_youtube = MagicMock()
-    monkeypatch.setattr(comment_reply, "get_youtube", get_youtube)
+    clients = MagicMock()
+    monkeypatch.setattr(comment_reply, "YouTubeClients", clients)
     monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
 
     rc = comment_reply.main(["--dry-run", "--export-candidates"])
 
     assert rc == 1
     assert "--json" in capsys.readouterr().err
-    get_youtube.assert_not_called()
+    clients.assert_not_called()
 
 
 def test_cli_export_candidates_json_excludes_comment_with_later_owner_reply(
@@ -953,7 +953,7 @@ def test_cli_export_candidates_json_excludes_comment_with_later_owner_reply(
         youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
     )
     monkeypatch.setattr(comment_reply, "load_config", lambda: config)
-    monkeypatch.setattr(comment_reply, "get_youtube", lambda: yt)
+    monkeypatch.setattr(comment_reply, "YouTubeClients", lambda **_: SimpleNamespace(youtube=yt))
     monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
 
     rc = comment_reply.main(["--dry-run", "--export-candidates", "--json", "--video-id", "v1"])
@@ -971,15 +971,15 @@ def test_cli_export_candidates_rejects_apply_before_youtube(monkeypatch, tmp_pat
         youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
     )
     monkeypatch.setattr(comment_reply, "load_config", lambda: config)
-    get_youtube = MagicMock()
-    monkeypatch.setattr(comment_reply, "get_youtube", get_youtube)
+    clients = MagicMock()
+    monkeypatch.setattr(comment_reply, "YouTubeClients", clients)
     monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
 
     rc = comment_reply.main(["--apply", "--export-candidates", "--json"])
 
     assert rc == 1
     assert "--dry-run" in capsys.readouterr().err
-    get_youtube.assert_not_called()
+    clients.assert_not_called()
 
 
 def test_cli_export_candidates_rejects_agent_replies_file_before_youtube(monkeypatch, tmp_path, capsys):
@@ -990,15 +990,15 @@ def test_cli_export_candidates_rejects_agent_replies_file_before_youtube(monkeyp
     replies_path = tmp_path / "replies.json"
     replies_path.write_text(json.dumps({"replies": [{"comment_id": "c1", "reply_text": "Thanks!"}]}), encoding="utf-8")
     monkeypatch.setattr(comment_reply, "load_config", lambda: config)
-    get_youtube = MagicMock()
-    monkeypatch.setattr(comment_reply, "get_youtube", get_youtube)
+    clients = MagicMock()
+    monkeypatch.setattr(comment_reply, "YouTubeClients", clients)
     monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
 
     rc = comment_reply.main(["--dry-run", "--export-candidates", "--json", "--agent-replies-file", str(replies_path)])
 
     assert rc == 1
     assert "同時指定" in capsys.readouterr().err
-    get_youtube.assert_not_called()
+    clients.assert_not_called()
 
 
 def test_cli_reviewer_context_flows_to_replier_without_generator(
@@ -1035,7 +1035,7 @@ def test_cli_reviewer_context_flows_to_replier_without_generator(
         encoding="utf-8",
     )
     monkeypatch.setattr(comment_reply, "load_config", lambda: config)
-    monkeypatch.setattr(comment_reply, "get_youtube", lambda: yt)
+    monkeypatch.setattr(comment_reply, "YouTubeClients", lambda **_: SimpleNamespace(youtube=yt))
     monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
 
     rc = comment_reply.main(
@@ -1067,7 +1067,7 @@ def test_cli_non_json_summary_uses_reply_policy_not_rule(monkeypatch, tmp_path, 
         youtube=SimpleNamespace(api=SimpleNamespace(language="ja")),
     )
     monkeypatch.setattr(comment_reply, "load_config", lambda: config)
-    monkeypatch.setattr(comment_reply, "get_youtube", lambda: yt)
+    monkeypatch.setattr(comment_reply, "YouTubeClients", lambda **_: SimpleNamespace(youtube=yt))
     monkeypatch.setattr(comment_reply, "_channel_dir", lambda: tmp_path)
 
     rc = comment_reply.main(["--dry-run", "--video-id", "v1"])
@@ -1527,7 +1527,7 @@ def test_resolve_owner_channel_id_returns_and_caches(tmp_path):
 
 def test_resolve_owner_channel_id_raises_on_empty_items(tmp_path):
     """空 items 系: YouTubeAPIError が送出される."""
-    from youtube_automation.utils.exceptions import YouTubeAPIError
+    from youtube_automation.infrastructure.errors import YouTubeAPIError
 
     yt = MagicMock()
     yt.channels.return_value.list.return_value.execute.return_value = {"items": []}
@@ -1541,7 +1541,7 @@ def test_resolve_owner_channel_id_raises_on_http_error(tmp_path):
     """HttpError 系: YouTubeAPIError に変換される."""
     from googleapiclient.errors import HttpError
 
-    from youtube_automation.utils.exceptions import YouTubeAPIError
+    from youtube_automation.infrastructure.errors import YouTubeAPIError
 
     class _FakeResp:
         status = 403

@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 
-from youtube_automation.utils.exceptions import ChannelRegistryError
+from youtube_automation.infrastructure.errors import ChannelRegistryError
 
 DEFAULT_CHANNEL_REGISTRY = Path.home() / ".config" / "tayk" / "channels.json"
 

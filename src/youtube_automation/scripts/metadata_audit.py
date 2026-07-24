@@ -26,13 +26,7 @@ from pathlib import Path
 
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.configuration.model import ChannelConfig
-from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.descriptions_md import (
-    build_descriptions_md_parse_diagnostics,
-    extract_descriptions_md_section,
-)
-from youtube_automation.utils.preflight_checks import (
+from youtube_automation.domains.uploads.preflight import (
     check_chapter_count,
     check_chapter_variation_suffix,
     check_duration,
@@ -41,6 +35,12 @@ from youtube_automation.utils.preflight_checks import (
     check_title_codepoint_limit,
     extract_descriptions_md_tags,
     requires_scene_phrases,
+)
+from youtube_automation.infrastructure import cost_tracker
+from youtube_automation.utils.collection_paths import CollectionPaths
+from youtube_automation.utils.descriptions_md import (
+    build_descriptions_md_parse_diagnostics,
+    extract_descriptions_md_section,
 )
 from youtube_automation.utils.probe import probe_duration
 from youtube_automation.utils.skill_config import load_skill_config
@@ -174,9 +174,14 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
 
 def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
     """Fetch all videos from YouTube and check live state."""
-    from youtube_automation.utils.youtube_service import get_youtube_readonly
+    from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+    from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
-    yt = get_youtube_readonly()
+    clients = YouTubeClients(
+        full_handler=YouTubeOAuthHandler(),
+        readonly_handler=YouTubeOAuthHandler.create_readonly(),
+    )
+    yt = clients.youtube_readonly
     issues: dict[str, list[str]] = {vid: [] for vid in video_ids}
     remote_chapter_max = _remote_chapter_max()
 

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.dashboard_refresh import refresh_dashboard_channels
-from youtube_automation.utils.exceptions import ConfigError
 
 
 def test_refresh_attempts_every_channel_and_isolates_expected_failure(tmp_path: Path) -> None:

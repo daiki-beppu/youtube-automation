@@ -33,7 +33,7 @@ from youtube_automation.configuration.workflow import (
     SCHEDULED_AUTOMATION_NOTIFICATIONS,
     ScheduledAutomation,
 )
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 _WORKFLOW_JSON = "config/channel/workflow.json"
 

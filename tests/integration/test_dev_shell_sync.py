@@ -15,7 +15,6 @@ _PROJECT_COPY_ENTRIES = (
     ".claude",
     "LICENSE",
     "README.md",
-    "auth/client_secrets.template.json",
     "docs/features.md",
     "docs/workflow-cheatsheet.md",
     "flake.nix",

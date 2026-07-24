@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 import yaml
 
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.scripts.generate_suno_prompts import build_prompt_entries, generate, main
 from youtube_automation.utils import skill_config
-from youtube_automation.utils.exceptions import ConfigError
 
 # `_skills/<skill>/config.default.yaml` の解決元になる editable install のソースツリー
 _DEFAULT_YAML = Path(__file__).resolve().parents[1] / ".claude" / "skills" / "suno" / "config.default.yaml"
@@ -553,7 +553,7 @@ def test_build_prompt_entries_rejects_padded_pattern_name_part(channel_dir, tmp_
     When build_prompt_entries を呼ぶ
     Then final entry name を暗黙正規化せず fail-loud する。
     """
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     _write_suno_override(channel_dir, genre_line="lo-fi jazz")
     patterns_path = _write_minimal_patterns(tmp_path)
@@ -635,7 +635,7 @@ def test_build_prompt_entries_vocal_includes_rstripped_external_lyrics(channel_d
 
 def test_build_prompt_entries_vocal_requires_suno_lyrics_json(channel_dir, tmp_path):
     """vocal mode は `/suno-lyric` が出す suno-lyrics.json を必須にする."""
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
@@ -713,7 +713,7 @@ def test_build_prompt_entries_vocal_fails_on_duplicate_suno_lyrics_names(channel
     When build_prompt_entries を呼ぶ
     Then どの lyrics を採用するか曖昧なので fail-loud する。
     """
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
@@ -737,7 +737,7 @@ def test_build_prompt_entries_vocal_fails_on_duplicate_suno_lyrics_names(channel
 
 def test_build_prompt_entries_vocal_fails_when_suno_lyrics_json_missing_expected_name(channel_dir, tmp_path):
     """suno-lyrics.json が存在する場合、期待 entry name の欠落は fallback せず fail-loud."""
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
@@ -757,7 +757,7 @@ def test_build_prompt_entries_vocal_fails_when_suno_lyrics_json_missing_expected
 
 def test_build_prompt_entries_vocal_fails_when_multi_scene_suno_lyrics_json_is_incomplete(channel_dir, tmp_path):
     """multi scene では Variation ごとの lyrics entry が全て必要."""
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_vocal_patterns(tmp_path, ["scene one", "scene two"])
@@ -777,7 +777,7 @@ def test_build_prompt_entries_vocal_rejects_padded_suno_lyrics_name(channel_dir,
     When build_prompt_entries を呼ぶ
     Then prompt entry name との完全一致契約として fail-loud する。
     """
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
@@ -791,7 +791,7 @@ def test_build_prompt_entries_vocal_rejects_padded_suno_lyrics_name(channel_dir,
 
 def test_build_prompt_entries_vocal_rejects_suno_lyrics_json_title_alias(channel_dir, tmp_path):
     """suno-lyrics.json の公開 contract は `name` 必須で、未定義 `title` alias は受け付けない."""
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     _write_suno_override(
         channel_dir,
@@ -812,7 +812,7 @@ def test_build_prompt_entries_vocal_rejects_suno_lyrics_json_title_alias(channel
 
 def test_build_prompt_entries_auto_vocal_requires_suno_lyrics_json(channel_dir, tmp_path):
     """mode 省略でも genre_line が vocal なら suno-lyrics.json 必須契約を適用する."""
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_minimal_patterns(tmp_path)
@@ -862,7 +862,7 @@ def test_build_prompt_entries_vocal_fails_on_invalid_suno_lyrics_json_shapes(
     expected,
 ):
     """外部 lyrics JSON の shape error は ConfigError として固定する."""
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     _write_suno_override(channel_dir, genre_line="dream pop vocals")
     patterns_path = _write_vocal_patterns(tmp_path, ["a dreamy scene"])
@@ -1050,7 +1050,7 @@ def test_main_json_duration_filter_rejects_invalid_numeric_config(
     expected,
 ):
     """duration_filter は TS 側 validator と同じ finite number 契約で fail-loud する."""
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     _write_suno_override(
         channel_dir,
@@ -1264,7 +1264,7 @@ def test_instrumental_tracks_per_collection_mismatch_fails_loud(channel_dir, tmp
     When build_prompt_entries を呼ぶ
     Then ceil(10/2)=5 が必要だが entries=1 なので ConfigError で fail-loud する。
     """
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano", tracks_per_collection=10)
     patterns_path = _write_instrumental_patterns_with_scenes(tmp_path, scene_count=1)
@@ -1389,7 +1389,7 @@ def test_unique_titles_fail_loud_when_two_entries_share_name(channel_dir, tmp_pa
     When build_prompt_entries を呼ぶ
     Then ConfigError で fail-loud し、重複した name が messages に含まれる。
     """
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     _write_suno_override(channel_dir, genre_line="lo-fi jazz, soft piano")
     patterns_path = _write_patterns_with_explicit_entries(

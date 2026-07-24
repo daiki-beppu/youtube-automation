@@ -19,6 +19,7 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 from youtube_automation.scripts.benchmark_collector import (
     _CHANNELS_BATCH_SIZE,
     _QUOTA_SERVICE,
@@ -26,7 +27,6 @@ from youtube_automation.scripts.benchmark_collector import (
     BenchmarkCollector,
 )
 from youtube_automation.scripts.fetch_benchmark_comments import BenchmarkCommentCollector
-from youtube_automation.utils.exceptions import YouTubeAPIError
 
 
 @pytest.fixture

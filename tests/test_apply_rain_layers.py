@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.scripts import apply_rain_layers as mod
 from youtube_automation.scripts.apply_rain_layers import (
     _resolve_post_processing_config,
@@ -23,7 +24,6 @@ from youtube_automation.scripts.apply_rain_layers import (
     build_filter,
     find_rain_layers,
 )
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
 
 # -19dB の振幅倍率は issue 完了条件で参照される定数。テストでは
 # build_filter / build_ffmpeg_command の文字列出現を確認する形で

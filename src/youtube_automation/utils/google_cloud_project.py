@@ -12,7 +12,7 @@ import os
 from google.auth import default as google_auth_default
 from google.auth.exceptions import DefaultCredentialsError
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 _ENV_KEY = "GOOGLE_CLOUD_PROJECT"
 

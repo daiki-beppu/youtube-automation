@@ -15,8 +15,8 @@ import argparse
 import sys
 from typing import get_args
 
-from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.cost_tracker import Category
+from youtube_automation.infrastructure import cost_tracker
+from youtube_automation.infrastructure.cost_tracker import Category
 
 
 def _categories() -> list[str]:

@@ -6,8 +6,8 @@ import sys
 
 import pytest
 
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.scripts import fetch_benchmark_comments as mod
-from youtube_automation.utils.exceptions import ConfigError
 
 
 def _run_main_with_fake_collector(monkeypatch, argv: list[str], input_func=None) -> list[dict]:
@@ -223,7 +223,7 @@ def test_collect_checks_benchmark_freshness(monkeypatch, tmp_path):
         calls.append(("load", data_dir, min_views, competitor_slug))
         return [target]
 
-    def fake_get_youtube():
+    def fake_youtube_service():
         calls.append(("youtube-full-scope",))
         return object()
 
@@ -233,7 +233,13 @@ def test_collect_checks_benchmark_freshness(monkeypatch, tmp_path):
 
     monkeypatch.setattr(mod, "ensure_benchmark_fresh", fake_ensure_benchmark_fresh)
     monkeypatch.setattr(mod, "load_benchmark_videos", fake_load_benchmark_videos)
-    monkeypatch.setattr(mod, "get_youtube", fake_get_youtube)
+
+    class FakeClients:
+        @property
+        def youtube(self):
+            return fake_youtube_service()
+
+    collector.youtube_clients = FakeClients()
     monkeypatch.setattr(collector, "_fetch_comments", fake_fetch_comments)
 
     result = collector.collect()

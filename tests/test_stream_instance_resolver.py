@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 import pytest
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.streaming import instance_resolver
 
 

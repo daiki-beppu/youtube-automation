@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 # アルバム情報表の `項目` ラベル → payload canonical key。
 _ALBUM_LABEL_MAP = {

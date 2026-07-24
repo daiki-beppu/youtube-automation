@@ -22,7 +22,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.image_provider.base import ImageGenerationRequest
 from youtube_automation.utils.image_provider.config import GeminiCliConfig
 from youtube_automation.utils.image_provider.gemini_cli import (

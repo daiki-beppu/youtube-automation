@@ -11,8 +11,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Dict
 
 from youtube_automation.configuration import channel_dir
-from youtube_automation.utils.exceptions import YouTubeAPIError
-from youtube_automation.utils.retry import execute_with_retry
+from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.infrastructure.retry import execute_with_retry
 
 if TYPE_CHECKING:
     from .analytics_base import AnalyticsBase  # noqa: F401

@@ -5,8 +5,8 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response, ServerNotFoundError
 
-from youtube_automation.utils.exceptions import YouTubeAPIError
-from youtube_automation.utils.retry import retry_youtube_api
+from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.infrastructure.retry import retry_youtube_api
 
 
 def _http_error(status: int, reason: str) -> HttpError:
@@ -67,3 +67,27 @@ def test_network_error_is_retried_and_exhaustion_is_domain_error() -> None:
 
     assert operation.call_count == 3
     assert isinstance(raised.value.__cause__, ServerNotFoundError)
+
+
+def test_unexpected_exception_is_propagated_without_retry() -> None:
+    operation = Mock(side_effect=ValueError("invalid response"))
+    sleep = Mock()
+
+    with pytest.raises(ValueError, match="invalid response"):
+        retry_youtube_api("fetch", sleep=sleep)(operation)()
+
+    assert operation.call_count == 1
+    sleep.assert_not_called()
+
+
+def test_attempt_callback_runs_once_per_request_attempt() -> None:
+    operation = Mock(side_effect=[_http_error(503, "backendError"), "ok"])
+    on_attempt = Mock()
+
+    assert (
+        retry_youtube_api("fetch", sleep=Mock(), jitter=lambda low, high: low, on_attempt=on_attempt)(operation)()
+        == "ok"
+    )
+
+    assert operation.call_count == 2
+    assert on_attempt.call_count == 2

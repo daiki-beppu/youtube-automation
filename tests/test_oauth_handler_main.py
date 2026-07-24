@@ -2,19 +2,17 @@
 
 検証対象:
 
-- 包括 ``except Exception as e: print(...)`` が消え、catch 句が
-  ``KeyboardInterrupt`` / ``(AuthError, ConfigError, YouTubeAPIError, OSError)`` /
-  最終 fallback ``Exception`` の 3 段構成になっていること。
-- ドメイン例外経路は raw traceback を出さず、ログメッセージに ``_redact`` 適用が行われること。
-- 想定外例外経路は ``logger.exception`` 経由の traceback + ``_redact`` 適用が行われること。
-- ``KeyboardInterrupt`` で exit code 130、それ以外の例外で exit code 1 を返すこと。
+- 既知例外は CLI 境界で処理し、未知例外は捕捉せず呼び出し元へ伝播すること。
+- ドメイン例外経路は raw traceback を出さず、ログメッセージに redaction が行われること。
+- 想定外例外は CLI 境界で処理せず、元の例外型とメッセージを保つこと。
+- ``KeyboardInterrupt`` で exit code 130、既知例外で exit code 1 を返すこと。
 - 正常系では ``sys.exit`` が呼ばれず終了すること（既存挙動の回帰保護）。
 
 テスト方針（既存 ``test_oauth_handler_exceptions.py`` 準拠）:
 
 - ``YouTubeOAuthHandler`` を ``monkeypatch`` でフェイク差し替えし、
   ``main()`` の try/except 構造のみを単離して検証する。
-- ``caplog`` で logger 経由のメッセージ・``_redact`` 効果を検証する。
+- ``caplog`` で logger 経由のメッセージ・redaction 効果を検証する。
 - sentinel テストで ``KeyboardInterrupt`` が ``Exception`` 側 catch に
   飲み込まれていないことを exit code 経由で保証する。
 """
@@ -26,8 +24,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.auth import oauth_handler
-from youtube_automation.utils.exceptions import AuthError, ConfigError, ValidationError, YouTubeAPIError
+from youtube_automation.infrastructure.auth import youtube as oauth_handler
+from youtube_automation.infrastructure.errors import AuthError, ConfigError, ValidationError, YouTubeAPIError
 
 # leak sentinel は `test_oauth_handler_exceptions.py` と同値を使う
 # （モジュール跨ぎでヘルパ共有を増やすとテスト間の依存が広がるため、定数だけ重複させる）。
@@ -35,7 +33,7 @@ _LEAKY_ACCESS_TOKEN = "ya29.A0AbCdEfGhIjKlMnOpQrStUvWxYz123456"
 _LEAKY_TOKEN_PATH = "/Users/leak-canary/auth/token.json"
 _LEAKY_CLIENT_SECRETS = "/Users/leak-canary/auth/client_secrets.json"
 
-_LOGGER_NAME = "youtube_automation.auth.oauth_handler"
+_LOGGER_NAME = "youtube_automation.infrastructure.auth.youtube"
 
 
 def _install_fake_handler(
@@ -134,7 +132,7 @@ class TestMainKeyboardInterrupt:
 
 
 # ===========================================================================
-# 3. ドメイン例外経路: ドメイン例外それぞれで exit 1 + logger.error + _redact
+# 3. ドメイン例外経路: ドメイン例外それぞれで exit 1 + logger.error + redaction
 # ===========================================================================
 
 
@@ -168,7 +166,7 @@ class TestMainDomainExceptions:
         """Given ``AuthError`` の message に token 値が混入
         When ``main()``
         Then logger に ``CLI 実行失敗`` レベル ERROR + traceback が出力され、
-              token 値は ``_redact`` で除去される。
+              token 値は redaction で除去される。
         """
         leaky_msg = f"token rotation failed: {_LEAKY_ACCESS_TOKEN}"
         _install_fake_handler(monkeypatch, authenticate_side_effect=AuthError(leaky_msg))
@@ -256,40 +254,36 @@ class TestMainDomainExceptions:
         assert not any("想定外" in r.getMessage() for r in caplog.records)
 
 
-# ===========================================================================
-# 4. 最終 fallback: 想定外 Exception でも logger.exception + _redact + exit 1
-# ===========================================================================
+@pytest.mark.parametrize("exception_type", [RuntimeError, TypeError, ValueError])
+class TestMainUnexpectedException:
+    def test_should_propagate_unexpected_exception(self, exception_type, monkeypatch):
+        sentinel = "/private/credential-store/oauth-canary"
+        _install_fake_handler(monkeypatch, authenticate_side_effect=exception_type(sentinel))
 
-
-class TestMainFallbackException:
-    """最終 fallback の panic-handler contract（推奨対応 #4）。"""
-
-    def test_should_exit_1_on_unexpected_exception(self, monkeypatch):
-        """Given narrow リスト外の ``RuntimeError``
-        When ``main()``
-        Then 最終 fallback で ``sys.exit(1)``（CLI top-level handler 契約）。
-        """
-        _install_fake_handler(monkeypatch, authenticate_side_effect=RuntimeError("unexpected"))
-
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(exception_type, match="oauth-canary"):
             oauth_handler.main([])
 
-        assert exc_info.value.code == 1
 
-    def test_should_log_exception_with_redacted_message_on_unexpected_exception(self, monkeypatch, caplog):
-        """Given ``RuntimeError`` の message に token 値が混入
-        When ``main()``
-        Then fallback ログにも ``_redact`` が適用され token は leak しない。
-        """
-        leaky_msg = f"db connection lost: {_LEAKY_ACCESS_TOKEN}"
-        _install_fake_handler(monkeypatch, authenticate_side_effect=RuntimeError(leaky_msg))
-        caplog.set_level(logging.DEBUG, logger=_LOGGER_NAME)
+@pytest.mark.parametrize(
+    "message",
+    [
+        "client_secret: oauth-secret",
+        '{"client_secret": "oauth-secret"}',
+        "authorization=Bearer oauth-secret",
+        "token: oauth-secret",
+        '{"token": "oauth-secret"}',
+        "token=oauth-secret",
+    ],
+)
+def test_should_redact_sensitive_field_formats_in_domain_error(message, monkeypatch, caplog):
+    _install_fake_handler(monkeypatch, authenticate_side_effect=AuthError(message))
+    caplog.set_level(logging.ERROR, logger=_LOGGER_NAME)
 
-        with pytest.raises(SystemExit):
-            oauth_handler.main([])
+    with pytest.raises(SystemExit) as exc_info:
+        oauth_handler.main([])
 
-        errors = [r for r in caplog.records if r.levelno == logging.ERROR]
-        assert any("CLI 実行中に想定外のエラー" in r.getMessage() for r in errors), "fallback の error ログが出ていない"
-        assert any(r.exc_info is not None for r in errors), "fallback で traceback (exc_info) が記録されていない"
-        for record in caplog.records:
-            assert _LEAKY_ACCESS_TOKEN not in record.getMessage()
+    assert exc_info.value.code == 1
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages
+    assert all("oauth-secret" not in message for message in messages)
+    assert all("<redacted-token>" in message for message in messages)

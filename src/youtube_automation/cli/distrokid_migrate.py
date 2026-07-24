@@ -28,7 +28,7 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 # config/channel/distrokid.json への相対パス（契約文字列の SSOT）。
 _DISTROKID_RELPATH = ("config", "channel", "distrokid.json")

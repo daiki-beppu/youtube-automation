@@ -27,7 +27,7 @@ from youtube_automation.domains.metadata import (
 from youtube_automation.domains.metadata import service as metadata_generator_module
 from youtube_automation.domains.metadata.localizations import _localized_title_values
 from youtube_automation.domains.metadata.titles import _extract_pattern_key
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.utils.time_utils import format_duration_display
 
 # ---------------------------------------------------------------------------

@@ -7,13 +7,7 @@ from typing import ClassVar
 
 import pytest
 
-from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.image_provider.composition import (
-    find_forbidden_keywords,
-    resolve_forbid_keywords,
-    validate_forbid_keywords,
-)
-from youtube_automation.utils.preflight_checks import (
+from youtube_automation.domains.uploads.preflight import (
     check_chapter_count,
     check_chapter_variation_suffix,
     check_descriptions_md_parseability,
@@ -28,6 +22,12 @@ from youtube_automation.utils.preflight_checks import (
     check_title_template_compliance,
     extract_descriptions_md_tags,
     requires_scene_phrases,
+)
+from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.utils.image_provider.composition import (
+    find_forbidden_keywords,
+    resolve_forbid_keywords,
+    validate_forbid_keywords,
 )
 
 

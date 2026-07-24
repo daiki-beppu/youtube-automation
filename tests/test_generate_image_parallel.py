@@ -22,6 +22,7 @@ from types import SimpleNamespace
 import pytest
 
 import youtube_automation.scripts.generate_image as generate_image_module
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.scripts.generate_image import (
     apply_ab_test_pattern,
     build_requests,
@@ -34,7 +35,6 @@ from youtube_automation.scripts.generate_image import (
 from youtube_automation.scripts.generate_image import (
     main as generate_image_main,
 )
-from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider.composition import resolve_unique_path
 from youtube_automation.utils.thumbnail_references import (
     plan_ttp_reference_assignments,

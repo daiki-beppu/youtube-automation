@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional
 
+from youtube_automation.infrastructure.retry import execute_with_retry
 from youtube_automation.utils.profile import section
-from youtube_automation.utils.retry import execute_with_retry
 
 logger = logging.getLogger(__name__)
 

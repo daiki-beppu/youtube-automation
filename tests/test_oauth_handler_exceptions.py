@@ -1,11 +1,11 @@
-"""issue #171: ``YouTubeOAuthHandler`` の例外 narrow / ``_redact`` / logger 化テスト。
+"""issue #171: ``YouTubeOAuthHandler`` の例外 narrow / redaction / logger 化テスト。
 
 検証対象:
 
-- ``utils.exceptions.AuthError`` の追加（R1）
-- ``oauth_handler._redact()`` ヘルパー（R9-a / R9-b）
+- ``infrastructure.errors.AuthError`` の利用
+- ``redact_sensitive_data()`` による token マスク（R9-a / R9-b）
 - L74 / L132 / L144 / L159 / L202 / L230 の ``except`` narrow（R2〜R8）
-- ``print`` → ``logger`` 置換と ``_redact`` による path / token leak 防止
+- ``print`` → ``logger`` 置換と redaction による path / token leak 防止
 
 テスト方針（test-design.md §テスト方針 準拠）:
 
@@ -24,8 +24,9 @@ import google.auth.exceptions
 import pytest
 from googleapiclient.errors import HttpError
 
-from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler, _redact, resolve_client_secrets_location
-from youtube_automation.utils.exceptions import (
+from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler, resolve_client_secrets_location
+from youtube_automation.infrastructure.errors import (
     AuthError,
     AutomationError,
     ConfigError,
@@ -37,7 +38,7 @@ from youtube_automation.utils.exceptions import (
 # モジュール定数（leak sentinel 入力）
 # ---------------------------------------------------------------------------
 
-# 実 OAuth token 風の文字列。`_redact()` がこれを残すと CI ログにリークする。
+# 実 OAuth token 風の文字列。redaction がこれを残すと CI ログにリークする。
 _LEAKY_ACCESS_TOKEN = "ya29.A0AbCdEfGhIjKlMnOpQrStUvWxYz123456"
 _LEAKY_REFRESH_TOKEN = "1//06AbCdEfGhIjKlMnOpQrStUvWxYz_payload"
 _LEAKY_JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTYifQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
@@ -47,7 +48,7 @@ _LEAKY_JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTYifQ.SflKxw
 _LEAKY_TOKEN_PATH = "/Users/leak-canary/auth/token.json"
 _LEAKY_CLIENT_SECRETS = "/Users/leak-canary/auth/client_secrets.json"
 
-_LOGGER_NAME = "youtube_automation.auth.oauth_handler"
+_LOGGER_NAME = "youtube_automation.infrastructure.auth.youtube"
 
 
 # ---------------------------------------------------------------------------
@@ -128,133 +129,133 @@ class TestAuthErrorClass:
 
 
 # ===========================================================================
-# 2. _redact() — token mask（#3〜#9）
+# 2. redact_sensitive_data() — token mask（#3〜#9）
 # ===========================================================================
 
 
 class TestRedactToken:
-    """``_redact()`` の token 値マスク（R9-a）。"""
+    """``redact_sensitive_data()`` の token 値マスク（R9-a）。"""
 
     def test_should_leave_clean_message_untouched(self):
         """Given token / path を含まない message
-        When ``_redact``
+        When ``redact_sensitive_data``
         Then 返り値は入力と同一（誤マスク防止）。
         """
         message = "OAuth flow timed out"
-        assert _redact(message) == message
+        assert redact_sensitive_data(message) == message
 
     def test_should_mask_google_access_token(self):
         """Given ``ya29.*`` を含む message
-        When ``_redact``
+        When ``redact_sensitive_data``
         Then 生 access token が出力に残らない。
         """
         message = f"refresh failed token={_LEAKY_ACCESS_TOKEN}"
-        assert _LEAKY_ACCESS_TOKEN not in _redact(message)
+        assert _LEAKY_ACCESS_TOKEN not in redact_sensitive_data(message)
 
     def test_should_mask_google_refresh_token(self):
         """Given ``1//*`` を含む message
-        When ``_redact``
+        When ``redact_sensitive_data``
         Then 生 refresh token が出力に残らない。
         """
         message = f"got refresh: {_LEAKY_REFRESH_TOKEN}"
-        assert _LEAKY_REFRESH_TOKEN not in _redact(message)
+        assert _LEAKY_REFRESH_TOKEN not in redact_sensitive_data(message)
 
     def test_should_mask_jwt_shaped_token(self):
         """Given JWT 風 3 セグメント token
-        When ``_redact``
+        When ``redact_sensitive_data``
         Then 出力に残らない。
         """
         message = f"id_token: {_LEAKY_JWT} expired"
-        assert _LEAKY_JWT not in _redact(message)
+        assert _LEAKY_JWT not in redact_sensitive_data(message)
 
     def test_should_mask_refresh_token_keyvalue(self):
         """Given ``refresh_token=...`` 形式の key=value
-        When ``_redact``
+        When ``redact_sensitive_data``
         Then 値部分が残らない。
         """
         message = "POST refresh_token=secret-value-xyz HTTP/1.1"
-        assert "secret-value-xyz" not in _redact(message)
+        assert "secret-value-xyz" not in redact_sensitive_data(message)
 
     @pytest.mark.parametrize("key", ["access_token", "client_secret", "id_token"])
     def test_should_mask_sensitive_keyvalue_pairs(self, key: str):
         """Given ``access_token`` / ``client_secret`` / ``id_token`` の key=value
-        When ``_redact``
+        When ``redact_sensitive_data``
         Then 値部分が残らない（複数 sensitive key の網羅）。
         """
         message = f"request body: {key}=top-secret-payload&grant_type=refresh"
-        assert "top-secret-payload" not in _redact(message)
+        assert "top-secret-payload" not in redact_sensitive_data(message)
 
     def test_should_mask_multiple_tokens_in_single_message(self):
         """Given 複数 token が同一 message に出現
-        When ``_redact``
+        When ``redact_sensitive_data``
         Then すべてマスクされる（取りこぼし検知）。
         """
         message = f"a={_LEAKY_ACCESS_TOKEN} r={_LEAKY_REFRESH_TOKEN}"
-        result = _redact(message)
+        result = redact_sensitive_data(message)
         assert _LEAKY_ACCESS_TOKEN not in result
         assert _LEAKY_REFRESH_TOKEN not in result
 
 
 # ===========================================================================
-# 3. _redact() — path mask（#10〜#15）
+# 3. redact_sensitive_data() — path mask（#10〜#15）
 # ===========================================================================
 
 
 class TestRedactPath:
-    """``_redact()`` の path マスク（R9-b）。"""
+    """``redact_sensitive_data()`` の path マスク（R9-b）。"""
 
     def test_should_mask_absolute_path_in_oserrno_format(self):
         """Given ``OSError`` の str（``: '<abs path>'`` 形式）
-        When ``_redact``
+        When ``redact_sensitive_data``
         Then 絶対パスが残らない。
 
         ``Credentials.from_authorized_user_file`` の ``OSError`` は
         第 3 引数 filename を必ず ``str()`` 末尾に含む仕様（CPython 標準）。
         """
         message = f"[Errno 2] No such file or directory: '{_LEAKY_TOKEN_PATH}'"
-        assert _LEAKY_TOKEN_PATH not in _redact(message)
+        assert _LEAKY_TOKEN_PATH not in redact_sensitive_data(message)
 
     def test_should_mask_literal_path_arg(self):
         """Given path 文字列が message 中に literal で出現
-        When ``_redact(message, Path(...))``
+        When ``redact_sensitive_data(message, Path(...))``
         Then 渡した ``Path`` のパス文字列が出力に残らない。
         """
         message = f"failed to open {_LEAKY_TOKEN_PATH}"
-        assert _LEAKY_TOKEN_PATH not in _redact(message, Path(_LEAKY_TOKEN_PATH))
+        assert _LEAKY_TOKEN_PATH not in redact_sensitive_data(message, Path(_LEAKY_TOKEN_PATH))
 
     def test_should_mask_literal_str_arg(self):
         """Given path 文字列が ``str`` で渡される
-        When ``_redact(message, "...")``
+        When ``redact_sensitive_data(message, "...")``
         Then ``os.fspath`` 経路で literal マスクされる。
         """
         message = f"failed to open {_LEAKY_TOKEN_PATH}"
-        assert _LEAKY_TOKEN_PATH not in _redact(message, _LEAKY_TOKEN_PATH)
+        assert _LEAKY_TOKEN_PATH not in redact_sensitive_data(message, _LEAKY_TOKEN_PATH)
 
     def test_should_mask_multiple_paths_via_varargs(self):
         """Given 2 つの path が ``*paths`` で渡される
-        When ``_redact``
+        When ``redact_sensitive_data``
         Then 両方マスクされる（L230 の ``token_file`` + ``client_secrets_file`` 経路）。
         """
         message = f"open {_LEAKY_TOKEN_PATH} and {_LEAKY_CLIENT_SECRETS}"
-        result = _redact(message, _LEAKY_TOKEN_PATH, _LEAKY_CLIENT_SECRETS)
+        result = redact_sensitive_data(message, _LEAKY_TOKEN_PATH, _LEAKY_CLIENT_SECRETS)
         assert _LEAKY_TOKEN_PATH not in result
         assert _LEAKY_CLIENT_SECRETS not in result
 
     def test_should_be_no_op_when_paths_arg_is_empty_and_message_has_no_leak(self):
         """Given 安全な message かつ ``paths`` 空
-        When ``_redact``
+        When ``redact_sensitive_data``
         Then 入力と同一。
         """
         message = "everything is fine"
-        assert _redact(message) == message
+        assert redact_sensitive_data(message) == message
 
     def test_should_mask_token_and_path_simultaneously(self):
         """Given token と OSErrno 形式 path が混在
-        When ``_redact``
+        When ``redact_sensitive_data``
         Then 両方マスクされる（実シナリオ: ``OSError`` 経路で token ヒント混在）。
         """
         message = f"[Errno 13] Permission denied: '{_LEAKY_TOKEN_PATH}' refresh_token={_LEAKY_REFRESH_TOKEN}"
-        result = _redact(message, _LEAKY_TOKEN_PATH)
+        result = redact_sensitive_data(message, _LEAKY_TOKEN_PATH)
         assert _LEAKY_TOKEN_PATH not in result
         assert _LEAKY_REFRESH_TOKEN not in result
 
@@ -298,7 +299,7 @@ class TestClientSecretsFallback:
         """
         self._force_fallback_path(monkeypatch, tmp_path)
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_config",
+            "youtube_automation.infrastructure.secrets.get_client_secrets_config",
             MagicMock(side_effect=ConfigError("op read failed")),
         )
 
@@ -309,7 +310,7 @@ class TestClientSecretsFallback:
     def test_should_validate_fallback_config_without_materializing_tempfile(self, tmp_path: Path, monkeypatch):
         self._force_fallback_path(monkeypatch, tmp_path)
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_config",
+            "youtube_automation.infrastructure.secrets.get_client_secrets_config",
             MagicMock(return_value=self._valid_config()),
         )
 
@@ -323,7 +324,7 @@ class TestClientSecretsFallback:
         self._force_fallback_path(monkeypatch, tmp_path)
         config = self._valid_config()
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_config",
+            "youtube_automation.infrastructure.secrets.get_client_secrets_config",
             MagicMock(return_value=config),
         )
         handler = YouTubeOAuthHandler(token_path=tmp_path / "token.json")
@@ -336,11 +337,11 @@ class TestClientSecretsFallback:
         from_config = MagicMock(return_value=flow)
         from_file = MagicMock(side_effect=AssertionError("file flow must not be used"))
         monkeypatch.setattr(
-            "youtube_automation.auth.oauth_handler.InstalledAppFlow.from_client_config",
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_config",
             from_config,
         )
         monkeypatch.setattr(
-            "youtube_automation.auth.oauth_handler.InstalledAppFlow.from_client_secrets_file",
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
             from_file,
         )
 
@@ -359,7 +360,7 @@ class TestClientSecretsFallback:
         submodule_path.write_text('{"installed": {}}\n', encoding="utf-8")
         get_client_secrets_config = MagicMock(side_effect=ConfigError("should not be called"))
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_config",
+            "youtube_automation.infrastructure.secrets.get_client_secrets_config",
             get_client_secrets_config,
         )
 
@@ -435,7 +436,7 @@ class TestClientSecretsFallback:
         """Missing secrets must point every direct OAuth entrypoint at the new Console UI."""
         self._force_fallback_path(monkeypatch, tmp_path)
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_config",
+            "youtube_automation.infrastructure.secrets.get_client_secrets_config",
             MagicMock(side_effect=ConfigError("op read failed")),
         )
         handler = YouTubeOAuthHandler()
@@ -471,7 +472,7 @@ class TestClientSecretsFallback:
         """
         self._force_fallback_path(monkeypatch, tmp_path)
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_config",
+            "youtube_automation.infrastructure.secrets.get_client_secrets_config",
             MagicMock(side_effect=RuntimeError("unexpected")),
         )
 
@@ -497,7 +498,7 @@ class TestAuthenticateExistingTokenLoad:
         flow = MagicMock()
         flow.run_local_server.return_value = new_creds
         monkeypatch.setattr(
-            "youtube_automation.auth.oauth_handler.InstalledAppFlow.from_client_secrets_file",
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
             MagicMock(return_value=flow),
         )
         monkeypatch.setattr(handler, "_save_credentials", MagicMock())
@@ -510,7 +511,7 @@ class TestAuthenticateExistingTokenLoad:
         """
         handler, new_creds = self._setup(tmp_path, monkeypatch)
         monkeypatch.setattr(
-            "youtube_automation.auth.oauth_handler.Credentials.from_authorized_user_file",
+            "youtube_automation.infrastructure.auth.youtube.Credentials.from_authorized_user_file",
             MagicMock(side_effect=OSError(2, "No such file", str(handler.token_file))),
         )
 
@@ -525,7 +526,7 @@ class TestAuthenticateExistingTokenLoad:
         """
         handler, new_creds = self._setup(tmp_path, monkeypatch)
         monkeypatch.setattr(
-            "youtube_automation.auth.oauth_handler.Credentials.from_authorized_user_file",
+            "youtube_automation.infrastructure.auth.youtube.Credentials.from_authorized_user_file",
             MagicMock(side_effect=ValueError("required key missing")),
         )
 
@@ -542,7 +543,7 @@ class TestAuthenticateExistingTokenLoad:
         """
         handler, _ = self._setup(tmp_path, monkeypatch)
         monkeypatch.setattr(
-            "youtube_automation.auth.oauth_handler.Credentials.from_authorized_user_file",
+            "youtube_automation.infrastructure.auth.youtube.Credentials.from_authorized_user_file",
             MagicMock(side_effect=OSError(2, "No such file", _LEAKY_TOKEN_PATH)),
         )
         caplog.set_level(logging.DEBUG, logger=_LOGGER_NAME)
@@ -565,7 +566,7 @@ class TestAuthenticateExistingTokenLoad:
         """
         handler, _ = self._setup(tmp_path, monkeypatch)
         monkeypatch.setattr(
-            "youtube_automation.auth.oauth_handler.Credentials.from_authorized_user_file",
+            "youtube_automation.infrastructure.auth.youtube.Credentials.from_authorized_user_file",
             MagicMock(side_effect=TypeError("argument type")),
         )
 
@@ -598,14 +599,14 @@ class TestAuthenticateRefresh:
             refresh_side_effect=refresh_side_effect,
         )
         monkeypatch.setattr(
-            "youtube_automation.auth.oauth_handler.Credentials.from_authorized_user_file",
+            "youtube_automation.infrastructure.auth.youtube.Credentials.from_authorized_user_file",
             MagicMock(return_value=expired_creds),
         )
         new_creds = _make_credentials(valid=True, expired=False)
         flow = MagicMock()
         flow.run_local_server.return_value = new_creds
         monkeypatch.setattr(
-            "youtube_automation.auth.oauth_handler.InstalledAppFlow.from_client_secrets_file",
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
             MagicMock(return_value=flow),
         )
         monkeypatch.setattr(handler, "_save_credentials", MagicMock())
@@ -641,7 +642,7 @@ class TestAuthenticateRefresh:
     def test_should_log_warning_with_redacted_message_on_refresh_failure(self, tmp_path: Path, monkeypatch, caplog):
         """Given ``refresh()`` が ``RefreshError``（メッセージに refresh_token=... が混入）
         When ``authenticate``
-        Then warning ログが ``_redact`` 経由で出力され、生 token は残らない。
+        Then warning ログが redaction 経由で出力され、生 token は残らない。
         """
         refresh_err = google.auth.exceptions.RefreshError(
             f"token rotation failed: refresh_token={_LEAKY_REFRESH_TOKEN}"
@@ -704,7 +705,7 @@ class TestAuthenticateNewAuth:
         else:
             from_secrets = MagicMock(return_value=flow)
         monkeypatch.setattr(
-            "youtube_automation.auth.oauth_handler.InstalledAppFlow.from_client_secrets_file",
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
             from_secrets,
         )
         save_spy = MagicMock()
@@ -835,7 +836,7 @@ class TestGetYouTubeServiceBuild:
             build_mock = MagicMock(side_effect=build_side_effect)
         else:
             build_mock = MagicMock(return_value=MagicMock())
-        monkeypatch.setattr("youtube_automation.auth.oauth_handler.build", build_mock)
+        monkeypatch.setattr("youtube_automation.infrastructure.auth.youtube.build", build_mock)
         return handler, build_mock
 
     def test_should_raise_youtube_api_error_chained_via_from_http_error(self, tmp_path: Path, monkeypatch):
@@ -1039,7 +1040,7 @@ class TestChannelIdentityInAuthMessages:
         flow = MagicMock()
         flow.run_local_server.return_value = new_creds
         monkeypatch.setattr(
-            "youtube_automation.auth.oauth_handler.InstalledAppFlow.from_client_secrets_file",
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
             MagicMock(return_value=flow),
         )
         monkeypatch.setattr(handler, "_save_credentials", MagicMock())
@@ -1078,7 +1079,7 @@ class TestChannelIdentityInAuthMessages:
         flow = MagicMock()
         flow.run_local_server.return_value = new_creds
         monkeypatch.setattr(
-            "youtube_automation.auth.oauth_handler.InstalledAppFlow.from_client_secrets_file",
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
             MagicMock(return_value=flow),
         )
         monkeypatch.setattr(handler, "_save_credentials", MagicMock())
@@ -1114,7 +1115,7 @@ class TestChannelIdentityInAuthMessages:
         flow = MagicMock()
         flow.run_local_server.return_value = new_creds
         monkeypatch.setattr(
-            "youtube_automation.auth.oauth_handler.InstalledAppFlow.from_client_secrets_file",
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
             MagicMock(return_value=flow),
         )
         monkeypatch.setattr(handler, "_save_credentials", MagicMock())

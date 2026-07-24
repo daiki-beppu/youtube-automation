@@ -15,7 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 from googleapiclient.errors import HttpError
 
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 from youtube_automation.utils.streaming import monthly_archive
 
 

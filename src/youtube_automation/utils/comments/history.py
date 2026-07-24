@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 logger = logging.getLogger(__name__)
 

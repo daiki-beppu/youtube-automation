@@ -23,8 +23,8 @@ from youtube_automation.domains.metadata import (
     validate_localizations_title_templates,
     validate_scene_phrases,
 )
-from youtube_automation.utils.channel_settings import build_update_body
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.domains.youtube.channel_settings import build_update_body
+from youtube_automation.infrastructure.errors import ConfigError
 
 # ----------------------- Fixtures / constants -----------------------
 
@@ -1245,6 +1245,7 @@ def test_main_returns_error_when_target_path_does_not_exist(tmp_path, capsys):
     # Then: rc=1, stderr にエラーメッセージ, ファイル未生成
     assert rc == 1
     assert err.strip() != ""
+    assert not missing.exists()
     assert not (missing / "config").exists()
 
 

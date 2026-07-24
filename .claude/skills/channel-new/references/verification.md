@@ -53,7 +53,7 @@ uv run yt-channel-status
 
 ```bash
 uv run python3 -c "
-from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 handler = YouTubeOAuthHandler()
 service = handler.get_youtube_service()
 resp = service.channels().list(part='id', mine=True).execute()

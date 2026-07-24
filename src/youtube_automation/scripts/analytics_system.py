@@ -16,8 +16,10 @@ from typing import Any
 from googleapiclient.errors import HttpError
 
 from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.errors import AuthError, ConfigError, YouTubeAPIError
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
 from youtube_automation.utils.analytics_collector import YouTubeAnalyticsCollector
-from youtube_automation.utils.exceptions import AuthError, ConfigError, YouTubeAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +62,7 @@ class AnalyticsSystem:
         logger.info("🔐 YouTube API認証中...")
 
         try:
-            # Analytics 収集は read-only で足りるため token.readonly.json を優先する（#1699）
-            from youtube_automation.utils.youtube_service import get_readonly_handler
-
-            handler = get_readonly_handler()
+            handler = YouTubeOAuthHandler.create_readonly()
             handler.authenticate(force_reauth=force_reauth)
 
             if handler.test_connection():
@@ -219,9 +218,12 @@ class AnalyticsSystem:
 
 def _make_reporting_client():
     from youtube_automation.utils.reporting_api import ReportingAPIClient
-    from youtube_automation.utils.youtube_service import get_credentials_readonly, get_reporting
 
-    return ReportingAPIClient(get_reporting(), credentials=get_credentials_readonly())
+    clients = YouTubeClients(
+        full_handler=YouTubeOAuthHandler(),
+        readonly_handler=YouTubeOAuthHandler.create_readonly(),
+    )
+    return ReportingAPIClient(clients.reporting, credentials=clients._read_handler.authenticate())
 
 
 def _run_reporting_dry_run() -> int:
@@ -230,7 +232,7 @@ def _run_reporting_dry_run() -> int:
     print("=" * 60)
 
     try:
-        from youtube_automation.utils.exceptions import AutomationError
+        from youtube_automation.infrastructure.errors import AutomationError
 
         client = _make_reporting_client()
         report = client.dry_run_inspection()
@@ -261,7 +263,7 @@ def _run_reporting_create_job() -> int:
     print("=" * 60)
 
     try:
-        from youtube_automation.utils.exceptions import AutomationError
+        from youtube_automation.infrastructure.errors import AutomationError
 
         client = _make_reporting_client()
         report_type_id = client.select_report_type()

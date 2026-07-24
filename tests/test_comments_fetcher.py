@@ -88,7 +88,7 @@ def test_top_level_comment_has_parent_id_none():
 
 
 def test_retries_transient_api_failure_through_comments_entrypoint(monkeypatch):
-    monkeypatch.setattr("youtube_automation.utils.retry.time.sleep", lambda _: None)
+    monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
     transient = HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}')
     yt = _mock_youtube_threads([_make_thread_item(thread_id="t1", text="hello")])
     request = yt.commentThreads.return_value.list.return_value

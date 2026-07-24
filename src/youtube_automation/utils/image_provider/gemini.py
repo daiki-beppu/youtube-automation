@@ -9,7 +9,7 @@ from __future__ import annotations
 import io
 import time
 
-from youtube_automation.utils import cost_tracker
+from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.utils.genai_client import create_genai_client
 from youtube_automation.utils.image_provider.base import (
     RETRY_BACKOFF,

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.image_provider.composition import (
     prompt_overwrite_or_rename,
     resolve_reference_paths,

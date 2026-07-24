@@ -6,7 +6,7 @@ import re
 import string
 from typing import Dict
 
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.infrastructure.errors import ValidationError
 
 # `pattern-b1-` のような variation 接尾辞を保持する。
 _PATTERN_KEY_RE = re.compile(r"^\d+-pattern-([a-d]\d*)-", re.IGNORECASE)

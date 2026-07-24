@@ -41,7 +41,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Iterable
 
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 
 logger = logging.getLogger(__name__)
 

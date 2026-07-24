@@ -33,10 +33,11 @@ from googleapiclient.errors import HttpError
 
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.configuration import load_config
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.cost_tracker import log_quota
+from youtube_automation.infrastructure.errors import AutomationError, ValidationError, YouTubeAPIError
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.cost_tracker import log_quota
-from youtube_automation.utils.exceptions import AutomationError, ValidationError, YouTubeAPIError
-from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
 
@@ -375,7 +376,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         else:
             targets = [(vid, None) for vid in args.video_ids]
 
-        youtube = get_youtube()
+        youtube = YouTubeClients(full_handler=YouTubeOAuthHandler()).youtube
 
         # preflight は history 未記録 video のみ status check（quota 節約）
         pending_vids = [vid for vid, _ in targets if vid not in history["posted"]]
