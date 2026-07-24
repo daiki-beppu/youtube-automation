@@ -44,6 +44,7 @@ import {
   formatDateRange,
   formatInteger,
 } from "@/lib/dashboard-formatters"
+import { dashboardStatusPresentation } from "@/lib/dashboard-status"
 import {
   Table,
   TableBody,
@@ -82,16 +83,6 @@ async function requestJson<T>(path: string): Promise<T> {
     throw new Error(`HTTP ${response.status}`)
   }
   return response.json() as Promise<T>
-}
-
-function statusLabel(status: string): string {
-  const labels: Record<string, string> = {
-    ready: "準備完了",
-    missing_snapshot: "データ未収集",
-    invalid_snapshot: "データエラー",
-    invalid_channel: "設定エラー",
-  }
-  return labels[status] ?? status
 }
 
 function LoadingState() {
@@ -327,7 +318,9 @@ function Detail({ detail }: { detail: ChannelDetail }) {
       {detail.error ? (
         <Alert variant="destructive">
           <AlertCircleIcon />
-          <AlertTitle>{statusLabel(detail.status)}</AlertTitle>
+          <AlertTitle>
+            {dashboardStatusPresentation(detail.status).label}
+          </AlertTitle>
           <AlertDescription>{detail.error.message}</AlertDescription>
         </Alert>
       ) : null}

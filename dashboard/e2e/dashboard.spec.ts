@@ -222,3 +222,40 @@ test("概要から動画詳細まで keyboard で確認できる", async ({ page
   ).toBeVisible()
   await expect(videoTable.getByRole("cell", { name: "3,200" })).toBeVisible()
 })
+
+test("768px 幅でも比較行と詳細操作が見切れない", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 })
+  await page.goto(baseURL)
+
+  const comparisonTable = page.getByRole("table", {
+    name: "チャンネル横断ストック一覧",
+  })
+  const nightDriveRow = comparisonTable.getByRole("row", {
+    name: /Night Drive/,
+  })
+  const detailButton = nightDriveRow.getByRole("button", {
+    name: /Night Drive/,
+  })
+  await expect(detailButton).toBeVisible()
+
+  const layout = await nightDriveRow.evaluate(
+    (element, button) => {
+      const rowBounds = element.getBoundingClientRect()
+      const buttonBounds = button.getBoundingClientRect()
+      return {
+        documentWidth: document.documentElement.scrollWidth,
+        viewportWidth: document.documentElement.clientWidth,
+        rowLeft: rowBounds.left,
+        rowRight: rowBounds.right,
+        buttonLeft: buttonBounds.left,
+        buttonRight: buttonBounds.right,
+      }
+    },
+    await detailButton.elementHandle()
+  )
+  expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth)
+  expect(layout.rowLeft).toBeGreaterThanOrEqual(0)
+  expect(layout.rowRight).toBeLessThanOrEqual(layout.viewportWidth)
+  expect(layout.buttonLeft).toBeGreaterThanOrEqual(layout.rowLeft)
+  expect(layout.buttonRight).toBeLessThanOrEqual(layout.rowRight)
+})

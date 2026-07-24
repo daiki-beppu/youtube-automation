@@ -15,6 +15,7 @@ import {
   formatInteger,
   formatSignedInteger,
 } from "@/lib/dashboard-formatters"
+import { dashboardStatusPresentation } from "@/lib/dashboard-status"
 import type { ChannelOverview } from "@/lib/dashboard-types"
 
 import { STOCK_TABLE_CONTRACT } from "./constants"
@@ -34,14 +35,9 @@ function stockVariant(count: number): "destructive" | "warning" | "default" {
 }
 
 function statusText(channel: ChannelOverview): string {
-  if (channel.refresh_error) return STOCK_TABLE_CONTRACT.status.refreshFailed
-  const labels: Record<string, string> = {
-    ready: STOCK_TABLE_CONTRACT.status.ready,
-    missing_snapshot: STOCK_TABLE_CONTRACT.status.missingSnapshot,
-    invalid_snapshot: STOCK_TABLE_CONTRACT.status.invalidSnapshot,
-    invalid_channel: STOCK_TABLE_CONTRACT.status.invalidChannel,
-  }
-  return labels[channel.status] ?? channel.status
+  return channel.refresh_error
+    ? STOCK_TABLE_CONTRACT.refreshFailed
+    : dashboardStatusPresentation(channel.status).label
 }
 
 function statusVariant(
@@ -49,12 +45,13 @@ function statusVariant(
 ): "destructive" | "warning" | "outline" {
   if (
     channel.refresh_error ||
-    channel.status === "invalid_snapshot" ||
-    channel.status === "invalid_channel"
+    dashboardStatusPresentation(channel.status).severity === "error"
   ) {
     return "destructive"
   }
-  return channel.status === "missing_snapshot" ? "warning" : "outline"
+  return dashboardStatusPresentation(channel.status).severity === "warning"
+    ? "warning"
+    : "outline"
 }
 
 function MetricCell({
@@ -71,8 +68,8 @@ function MetricCell({
   }
   if (!channel.summary) {
     return (
-      <TableCell className="flex flex-col gap-1 whitespace-normal md:table-cell">
-        <span className="text-xs text-muted-foreground md:hidden">
+      <TableCell className="flex flex-col gap-1 whitespace-normal lg:table-cell">
+        <span className="text-xs text-muted-foreground lg:hidden">
           {labels[metric]}
         </span>
         —
@@ -85,8 +82,8 @@ function MetricCell({
       ? formatSignedInteger(value)
       : formatInteger(value)
   return (
-    <TableCell className="flex flex-col gap-1 text-left whitespace-normal tabular-nums md:table-cell md:text-right">
-      <span className="text-xs text-muted-foreground md:hidden">
+    <TableCell className="flex flex-col gap-1 text-left whitespace-normal tabular-nums lg:table-cell lg:text-right">
+      <span className="text-xs text-muted-foreground lg:hidden">
         {labels[metric]}
       </span>
       {formatted}
@@ -143,9 +140,9 @@ export function ChannelStockTable({
       <div className="min-w-0 overflow-hidden rounded-lg border">
         <Table
           aria-label={STOCK_TABLE_CONTRACT.ariaLabel}
-          className="block max-w-full min-w-0 table-fixed overflow-hidden md:table"
+          className="block max-w-full min-w-0 table-fixed overflow-hidden lg:table"
         >
-          <TableHeader className="hidden md:table-header-group">
+          <TableHeader className="hidden lg:table-header-group">
             <TableRow>
               <TableHead>{STOCK_TABLE_CONTRACT.columns.channel}</TableHead>
               <TableHead>{STOCK_TABLE_CONTRACT.columns.status}</TableHead>
@@ -165,22 +162,22 @@ export function ChannelStockTable({
               ) : null}
             </TableRow>
           </TableHeader>
-          <TableBody className="grid gap-3 p-3 md:table-row-group md:p-0">
+          <TableBody className="grid gap-3 p-3 lg:table-row-group lg:p-0">
             {sortedChannels.map((channel) => {
               const available = isAvailable(channel)
               return (
                 <TableRow
                   key={channel.id}
-                  className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border p-4 md:table-row md:rounded-none md:border-x-0 md:p-0"
+                  className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border p-4 lg:table-row lg:rounded-none lg:border-x-0 lg:p-0"
                 >
-                  <TableCell className="col-span-2 flex items-center justify-between p-0 font-medium whitespace-normal md:table-cell md:p-2">
+                  <TableCell className="col-span-2 flex items-center justify-between p-0 font-medium whitespace-normal lg:table-cell lg:p-2">
                     <span>{channel.name}</span>{" "}
-                    <span className="text-xs font-normal text-muted-foreground md:hidden">
+                    <span className="text-xs font-normal text-muted-foreground lg:hidden">
                       {formatCollectedAt(channel.collected_at)}
                     </span>
                   </TableCell>
-                  <TableCell className="flex flex-col gap-1 p-0 whitespace-normal md:table-cell md:p-2">
-                    <span className="text-xs text-muted-foreground md:hidden">
+                  <TableCell className="flex flex-col gap-1 p-0 whitespace-normal lg:table-cell lg:p-2">
+                    <span className="text-xs text-muted-foreground lg:hidden">
                       {STOCK_TABLE_CONTRACT.columns.status}
                     </span>
                     <Badge
@@ -194,11 +191,11 @@ export function ChannelStockTable({
                       {statusText(channel)}
                     </Badge>
                   </TableCell>
-                  <TableCell className="hidden md:table-cell">
+                  <TableCell className="hidden lg:table-cell">
                     {formatCollectedAt(channel.collected_at)}
                   </TableCell>
-                  <TableCell className="flex flex-col gap-1 p-0 whitespace-normal md:table-cell md:p-2">
-                    <span className="text-xs text-muted-foreground md:hidden">
+                  <TableCell className="flex flex-col gap-1 p-0 whitespace-normal lg:table-cell lg:p-2">
+                    <span className="text-xs text-muted-foreground lg:hidden">
                       {STOCK_TABLE_CONTRACT.columns.stock}
                     </span>
                     <Badge
@@ -217,13 +214,13 @@ export function ChannelStockTable({
                   <MetricCell channel={channel} metric="subscribers_net" />
                   <MetricCell channel={channel} metric="watch_time_minutes" />
                   {onSelect ? (
-                    <TableCell className="col-span-2 p-0 text-right md:table-cell md:p-2">
+                    <TableCell className="col-span-2 p-0 text-right lg:table-cell lg:p-2">
                       <Button
                         variant={
                           selectedId === channel.id ? "secondary" : "outline"
                         }
                         size="sm"
-                        className="w-full md:w-auto"
+                        className="w-full lg:w-auto"
                         aria-pressed={selectedId === channel.id}
                         aria-label={`${channel.name} の動画詳細を見る`}
                         onClick={() => onSelect(channel.id)}
