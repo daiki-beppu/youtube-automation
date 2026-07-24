@@ -29,6 +29,19 @@ uv_cache_dir="${cache_dir}/uv"
 
 mkdir -p "$tmp_dir" "$cache_dir" "$config_dir" "$data_dir" "$state_dir" "$uv_cache_dir"
 
+# worker sandbox は既定の ~/.cache/uv を開けず、隔離 UV_CACHE_DIR も run ごとに
+# 空で始まるため、worker 側の初回 uv sync が全依存を再取得していた（issue #2539）。
+# 本スクリプトは takt 本体が sandbox 外で実行するため、ここで共有キャッシュ
+# （プロセス既定の UV_CACHE_DIR）を使って .venv を事前同期する。worker の
+# uv run は同期済み .venv の検証だけになる。stdout は KEY=VALUE 契約のため
+# uv の出力は stderr へ流し、失敗しても run は止めない（worker 側の同期に
+# フォールバックする fail-open）
+if [ -f pyproject.toml ] && command -v uv >/dev/null 2>&1; then
+  if ! uv sync --quiet 1>&2; then
+    echo "warning: runtime-prepare の uv sync に失敗しました。worker 側の同期にフォールバックします。" >&2
+  fi
+fi
+
 echo "TMPDIR=${tmp_dir}"
 echo "XDG_CACHE_HOME=${cache_dir}"
 echo "XDG_CONFIG_HOME=${config_dir}"
