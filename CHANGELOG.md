@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `refactor(dx)`: lefthook とローカル git hook・bootstrap wrapper（`.lefthook/`）を廃止し、品質ゲート（ruff / CHANGELOG / any 型）を CI へ一本化。any ゲートは `.github/scripts/` へ、worktree TMPDIR 分離は `.nix/worktree-tmpdir.sh` へ移設し、`yt-preflight` の hook_policy 検査を削除。開発 bootstrap は direnv / `nix develop`（shellHook が `uv sync`）へ統一（#2534）。
 - `refactor(config)`: yt-doctor・channel init/import・GCP bootstrap・Terraform apply からチャンネルルート `.env` の生成・検査・読込を削除し、GCP セットアップ完了条件を API/IAM/ADC quota project に限定（#2478）。
 - `feat(skills)`: `/suno`・`/thumbnail`・`/loop-video`・`/alignment-check` が `docs/channel/creative-constraints.md` の担当セクションを毎回参照し、不在時は既存チャンネルを止めず `/creative-constraints` を案内（#2449）。
 - `fix(masterup)`: `config/channel/audio.json` の目標尺を master loop 解決と upload preflight の SSOT にし、整数ループでは min–max を満たせない構成と目標尺外動画を明示 override なしで停止（#2469）。

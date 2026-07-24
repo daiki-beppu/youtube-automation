@@ -1,7 +1,7 @@
 """yt-preflight: worktree / clone 環境を実装着手前に read-only 検査・分類する CLI（#2124）。
 
 takt 一括実行で発生した「環境不備が実装後・publication 段階まで検出されない」構造
-（Git identity 欠落による auto-commit 失敗、Nix eval 失敗、lock drift、lefthook 未導入）
+（Git identity 欠落による auto-commit 失敗、Nix eval 失敗、lock drift）
 を、実装前の 1 コマンドで分類・報告する。すべての検査は read-only で、
 リポジトリの working tree / index を変更しない。
 
@@ -29,10 +29,8 @@ KEY_CHECKOUT_KIND = "checkout_kind"
 KEY_NIX_EVAL = "nix_eval"
 KEY_LOCK_DRIFT = "lock_drift"
 KEY_GIT_COMMIT_IDENTITY = "git_commit_identity"
-KEY_HOOK_POLICY = "hook_policy"
 KEY_RUNTIME_PATH = "runtime_path"
 
-SKIP_LEFTHOOK_ENV = "YOUTUBE_AUTOMATION_SKIP_LEFTHOOK"
 TAKT_RUNTIME_ROOT_ENV = "TAKT_RUNTIME_ROOT"
 
 # takt runtime.prepare（.takt/runtime-prepare.sh）が current runtime root 配下へ
@@ -51,8 +49,6 @@ RUNTIME_PATH_ENV_VARS = (
 _GIT_TIMEOUT_SECONDS = 10
 _UV_TIMEOUT_SECONDS = 30
 _NIX_TIMEOUT_SECONDS = 45
-
-_HOOK_NAMES = ("pre-commit", "pre-push")
 
 
 @dataclass(frozen=True)
@@ -84,18 +80,6 @@ def _run_command(
         )
     except subprocess.TimeoutExpired:
         return None
-
-
-def _git_path(name: str, *, cwd: Path, env: Mapping[str, str]) -> Path | None:
-    proc = _run_command(
-        ["git", "rev-parse", "--path-format=absolute", "--git-path", name],
-        cwd=cwd,
-        env=env,
-        timeout=_GIT_TIMEOUT_SECONDS,
-    )
-    if proc is None or proc.returncode != 0:
-        return None
-    return Path(proc.stdout.strip())
 
 
 def check_checkout_kind(cwd: Path, env: Mapping[str, str]) -> CheckResult:
@@ -155,39 +139,6 @@ def check_git_commit_identity(cwd: Path, env: Mapping[str, str]) -> CheckResult:
             ),
         )
     return CheckResult(KEY_GIT_COMMIT_IDENTITY, ok=True, detail="author / committer identity を解決できる")
-
-
-def check_hook_policy(cwd: Path, env: Mapping[str, str]) -> CheckResult:
-    """lefthook が導入済みか、または明示 skip されているかを検査する。
-
-    曖昧な「未導入」（env 未設定かつ hook 未配置）は不合格にする。
-    """
-    if env.get(SKIP_LEFTHOOK_ENV) == "1":
-        return CheckResult(KEY_HOOK_POLICY, ok=True, detail=f"{SKIP_LEFTHOOK_ENV}=1 による明示 skip")
-
-    missing = []
-    for hook_name in _HOOK_NAMES:
-        hook_path = _git_path(f"hooks/{hook_name}", cwd=cwd, env=env)
-        if hook_path is None or not hook_path.is_file():
-            missing.append(hook_name)
-            continue
-        try:
-            content = hook_path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            missing.append(hook_name)
-            continue
-        if "lefthook" not in content:
-            missing.append(hook_name)
-    if missing:
-        return CheckResult(
-            KEY_HOOK_POLICY,
-            ok=False,
-            detail=(
-                f"lefthook hook が未導入（{', '.join(missing)}）。"
-                f"'bash .lefthook/setup-worktree.sh' を実行するか、意図的な skip なら {SKIP_LEFTHOOK_ENV}=1 を設定する"
-            ),
-        )
-    return CheckResult(KEY_HOOK_POLICY, ok=True, detail="lefthook hook が導入済み")
 
 
 def check_lock_drift(cwd: Path, env: Mapping[str, str]) -> CheckResult:
@@ -313,7 +264,6 @@ def run_checks(cwd: Path, env: Mapping[str, str]) -> list[CheckResult]:
         check_nix_eval(cwd, env),
         check_lock_drift(cwd, env),
         check_git_commit_identity(cwd, env),
-        check_hook_policy(cwd, env),
     ]
 
 

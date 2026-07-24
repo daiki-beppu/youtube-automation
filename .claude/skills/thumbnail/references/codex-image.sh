@@ -34,7 +34,7 @@ forbid_keywords="${CODEX_IMAGE_FORBID_KEYWORDS:-}"
 if [ -z "$forbid_keywords" ]; then
   if ! command -v uv >/dev/null 2>&1; then
     echo "ERROR: forbid_keywords 検査に必要な uv CLI が PATH にありません" >&2
-    echo "復旧: bash .lefthook/setup-worktree.sh <command> [args...]" >&2
+    echo "復旧: nix develop --command <command> [args...]" >&2
     exit 1
   fi
   if ! forbid_keywords=$(uv run python - <<'PY'
@@ -46,7 +46,7 @@ for keyword in resolve_forbid_keywords(load_skill_config("thumbnail")):
 PY
   ); then
     echo "ERROR: forbid_keywords の設定読込を完了できないため Codex 画像生成を中止しました" >&2
-    echo "復旧: bash .lefthook/setup-worktree.sh <command> [args...]" >&2
+    echo "復旧: nix develop --command <command> [args...]" >&2
     exit 1
   fi
 fi

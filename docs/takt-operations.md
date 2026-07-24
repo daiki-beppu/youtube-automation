@@ -20,7 +20,7 @@ git switch main
 git pull --ff-only
 git worktree add .worktrees/issue-<N>-<slug> -b issue-<N>-<slug> main
 cd .worktrees/issue-<N>-<slug>
-bash .lefthook/setup-worktree.sh
+nix develop
 ```
 
 base branch は `main` 固定とする。別 issue の未マージ branch を base にしない。依存 issue がある場合は依存 PR の merge 後に main を更新し、rebase してから検証する。
@@ -32,18 +32,11 @@ base branch は `main` 固定とする。別 issue の未マージ branch を ba
 - PR: `Closes #<N>`、変更概要、検証コマンド、参照した公式資料を本文へ記載する
 - merge: required CI 成功後に行う。チェックの削除・弱体化で green にしない
 
-## 環境と Git hooks
+## 環境
 
-親 checkout と新規 worktree の両方で、最初に `bash .lefthook/setup-worktree.sh` を実行する。direnv があれば `.envrc` を allow し、なければ `nix develop` を使う。どちらも shellHook と `.lefthook/install.sh` を通して worktree ごとの hook を生成する。
+親 checkout と新規 worktree の両方で devShell に入る。direnv があれば `direnv allow` で `.envrc` を allow し、なければ `nix develop` を使う。どちらも shellHook が `uv sync` を自動実行する。非対話 shell は `nix develop --command <command>` を使う。
 
-診断:
-
-```bash
-bash .lefthook/setup-worktree.sh sh -c 'command -v lefthook && lefthook version'
-nix develop --command bash .lefthook/install.sh
-```
-
-commit / push で `Can't find lefthook in PATH` が出た場合は、対象 checkout で上記 setup または install を再実行する。
+ローカル git hook は存在しない。品質ゲート（ruff / CHANGELOG / any 型）は CI が担保する（`docs/development.md` の「品質ゲート（CI）」）。
 
 ## 旧 takt 状態
 

@@ -1167,7 +1167,7 @@ def test_codex_image_script_fails_closed_when_config_environment_cannot_be_prepa
 
     assert result.returncode != 0
     assert "forbid_keywords の設定読込を完了できない" in result.stderr
-    assert "bash .lefthook/setup-worktree.sh <command> [args...]" in result.stderr
+    assert "nix develop --command <command> [args...]" in result.stderr
     assert "ModuleNotFoundError" not in result.stderr
     assert not log_file.exists()
     assert not output_path.exists()

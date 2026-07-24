@@ -2,9 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-詳細ドキュメント: アーキテクチャ全容・主要モジュール表は `docs/architecture.md`、パッケージング / extensions / lefthook 詳細は `docs/development.md`、issue / worktree 運用は `docs/takt-operations.md`。
+詳細ドキュメント: アーキテクチャ全容・主要モジュール表は `docs/architecture.md`、パッケージング / extensions / 品質ゲート詳細は `docs/development.md`、issue / worktree 運用は `docs/takt-operations.md`。
 
-本リポジトリの開発者 bootstrap は `docs/development.md#開発者-bootstrap正規入口` を単一ソースとする。親 checkout / linked worktree の各 checkout で最初に `bash .lefthook/setup-worktree.sh` を実行し、非対話 shell は同 wrapper に command を渡す。
+本リポジトリの開発者 bootstrap は `docs/development.md#開発者-bootstrap正規入口` を単一ソースとする。各 checkout（親 checkout / linked worktree）で devShell に入る（direnv または `nix develop`。shellHook が `uv sync` を自動実行）。非対話 shell は `nix develop --command <command>` を使う。
 
 ## プロジェクト概要
 
@@ -94,10 +94,10 @@ TS 版（tayk）の開発は専用の別リポジトリで行う（`docs/adr/002
 
 ### CHANGELOG ゲート
 
-- 実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更したら `CHANGELOG.md` の `[Unreleased]` 追記が必須（lefthook pre-push + CI で機械担保）
-- tests / docs だけの変更はゲート対象外。意図的に省く場合は `SKIP_CHANGELOG=1 git push`（CI 側は PR の `skip-changelog` ラベル）
-- lefthook の有効化手順・pre-commit の詳細は `docs/development.md`
-- bootstrap / 対話・非対話 shell / 依存同期の正規手順は `docs/development.md#開発者-bootstrap正規入口`、`.envrc` と `.lefthook/install.sh` を含む hook の診断・再インストールは同文書の「Git hooks（lefthook）」を参照
+- 実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更したら `CHANGELOG.md` の `[Unreleased]` 追記が必須（CI の changelog ジョブで機械担保）
+- tests / docs だけの変更はゲート対象外。意図的に省く場合は PR に `skip-changelog` ラベルを付与する
+- 品質ゲート（ruff / CHANGELOG / any 型）はローカル git hook ではなく CI で担保する。詳細は `docs/development.md` の「品質ゲート（CI）」
+- bootstrap / 対話・非対話 shell / 依存同期の正規手順は `docs/development.md#開発者-bootstrap正規入口` を参照
 
 ## 開発ワークフロー
 

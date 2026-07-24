@@ -1,24 +1,24 @@
 # 開発環境・パッケージング詳細
 
-CLAUDE.md の「パッケージング」「extensions」「Git hooks」節の詳細版。要点（規約として常に守るもの）は CLAUDE.md を参照。
+CLAUDE.md の「パッケージング」「extensions」「品質ゲート」節の詳細版。要点（規約として常に守るもの）は CLAUDE.md を参照。
 
 ## 開発者 bootstrap（正規入口）
 
 この節を、本リポジトリを変更する人間・agent向け bootstrap の単一ソースとする。README / ONBOARDING / CLAUDE は読者別の短い入口だけを持ち、詳細手順はこの節を参照する。
 
-初回 clone 後の親 checkout は、環境と hook を初期化する場所であり、実装場所にはしない。
+初回 clone 後の親 checkout は、環境を初期化する場所であり、実装場所にはしない。
 
 ```bash
 git clone git@github.com:daiki-beppu/youtube-automation.git
 cd youtube-automation
-bash .lefthook/setup-worktree.sh
+nix develop
 ```
 
-変更は必ず issue 用の linked worktree 上で行う。worktree を作成・移動した後も、その checkout で最初に `bash .lefthook/setup-worktree.sh` を実行する。親 checkout の `.venv` / `node_modules` は共有しない。
+変更は必ず issue 用の linked worktree 上で行う。worktree を作成・移動した後も、その checkout で devShell（direnv または `nix develop`）に入る。親 checkout の `.venv` / `node_modules` は共有しない。
 
-- **対話 shell**: setup wrapper は direnv があれば `.envrc` を allow して Nix devShell へ入り、なければ `nix develop` へ fallback する。どちらも toolchain、worktree-local依存、lefthook を同じ状態へ収束させる
-- **非対話 shell / agent**: `bash .lefthook/setup-worktree.sh <command> [args...]` を正規入口とする。例: `bash .lefthook/setup-worktree.sh uv run pytest tests/test_doctor.py -q`。依存同期に失敗した場合は command を起動せず fail-closed で停止する
-- **直接 devShell を使う場合**: direnv の自動入室後は `uv run ...` を直接実行できる。`nix develop` は wrapper の fallback / 診断手段であり、初回 bootstrap の同格入口ではない
+- **対話 shell**: direnv があれば `direnv allow` 一回で `.envrc`（nix-direnv 経由の `use flake`）が devShell へ自動入室させる。なければ `nix develop` を使う。どちらも shellHook が `uv sync` を自動実行する（失敗は warning で入場継続）
+- **非対話 shell / agent**: `nix develop --command <command> [args...]` を正規入口とする。例: `nix develop --command uv run pytest tests/test_doctor.py -q`
+- **依存同期を fail-closed にしたい場合**: `nix develop --command uv sync` を明示実行する。exit 非 0 なら依存は同期されていないので、後続コマンドを実行しない
 
 worktree の生成・命名・issue / PR 運用は [`docs/takt-operations.md`](takt-operations.md) を参照する。ファイル名は互換性のため残しているが、takt 自体は使用しない。
 
@@ -62,7 +62,7 @@ uv run pytest tests/ --ignore=tests/integration -n auto -m slow           # 実 
 - **外部 GitHub Actions は full commit SHA で固定**し、追跡する stable version を同じ `uses:` 行のコメントに残す。複数 workflow で同じ action を使う場合も SHA/version を統一し、`tests/test_github_actions_pinning.py` で mutable ref・drift・未棚卸し action を拒否する
 - **CI の changed-path 分岐**: `.github/scripts/classify-ci-paths.sh` が PR と `main` push の差分を Python / packaging / Windows / ADR / 3 helper に分類する。branch protection の required check である `lint` / `test` job は path filter や job-level `if` で消さず、extension-only 変更では成功する軽量 step を返して Nix・uv・pytest を起動しない。空 diff は全 gate を有効化する fail-safe とし、分類変更時は `tests/test_actions_parallel_workflows.py` の対応表も更新する
 - worker ごとの分離: `tests/conftest.py` が `CHANNEL_DIR` の tmp コピーを **worker プロセスごとに独立して** 作り直す（controller が自動設定した値を環境変数継承でそのまま共有しない）。ユーザーが明示的に `CHANNEL_DIR` を指定した場合は全 worker がその指定を尊重する
-- 注意: `tests/test_lefthook_installation_contract.py` の nix devShell 契約テストなど実 subprocess を叩くテストはホスト負荷に敏感で、混雑したマシンでは並列時に所要時間が大きく伸びることがある
+- 注意: nix devShell / CLI を実 subprocess で叩く契約テストはホスト負荷に敏感で、混雑したマシンでは並列時に所要時間が大きく伸びることがある
 
 ## パッケージング
 
@@ -148,7 +148,7 @@ uv run pytest tests/test_skills_sync_installed_wheel.py -q
 
 下流に届けるには以下の 2 リポジトリ横断の一巡が必要（skill 1 行の修正でも同じ）:
 
-1. `CHANGELOG.md` の `[Unreleased]` に追記（`.claude/skills/` は**実コード扱い**。lefthook pre-push + CI でゲート）
+1. `CHANGELOG.md` の `[Unreleased]` に追記（`.claude/skills/` は**実コード扱い**。CI の changelog ジョブでゲート）
 2. PR 作成 → CI green → merge
 3. upstream で `/automation-release`（prepare → リリース PR → tag push → Release publish）
 4. 下流リポジトリで `/automation-update`（pin bump → `uv lock` → `yt-skills sync` → コミット）
@@ -186,37 +186,28 @@ uv run pytest tests/test_skills_sync_installed_wheel.py -q
 - **パッケージマネージャ**: 3拡張とも Nix extensions shell の Node 24 / pnpm 11.15.1 固定（`ni`/`nr`、ambient `pnpm`、`npx` は使わない）。`nix develop .#extensions --command pnpm ...` により、各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` の依存 build script 承認、CI を揃える契約である。install は `--frozen-lockfile` を必須とし、`--ignore-workspace` は使用しない。全拡張共通の install / build / zip、生成 manifest / 期待名 zip の確認と lockfile 無差分確認は `extensions/README.md::pnpm バージョン契約` を正とする
 - **リリース手順**: 拡張のリリース（`extensions/<name>/package.json::version` bump → `release/ext-v<VER>` PR → merge commit への `ext-v<VER>` tag push → Release asset 確認）は `/automation-release` スキルの extension release phase で実行する。tag は Python 本体の `v*` と分離した `ext-v*` 系列で、バージョンは Python 本体と完全独立（`docs/adr/0011-extension-distribution.md`）
 
-## Git hooks（lefthook）
+## 品質ゲート（CI）
 
-Git hooks は [lefthook](https://lefthook.dev) で宣言的に管理する（設定は `lefthook.yml`）。
+品質ゲートはローカル git hook ではなく CI（`.github/workflows/ci.yml`）で一元的に担保する（issue #2534 で lefthook を廃止。sandbox 化された worker が `.git/hooks` へ書き込めず bootstrap が反復失敗していたため、ローカル hook は持たない）。
 
-- **pre-commit**: 変更した Python ファイルに `ruff check` / `ruff format --check` をかける（CI の lint ジョブと同等）
-- **pre-push**:
-  - CHANGELOG ゲート。CI（`.github/workflows/ci.yml` の `changelog` ジョブ）と同じく、実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更したのに `CHANGELOG.md` の `[Unreleased]` が未更新なら push を止める。ロジック本体は `.lefthook/pre-push/changelog-gate.sh`。lefthook は同一 hook で `use_stdin` を持てるコマンドを 1 つに制限するため、このスクリプトが pre-push の唯一の stdin 受信者としてブランチ削除 push を判定し、末尾でテスト差分警告・型注釈ゲートを連鎖実行する（削除 push はこの 3 ゲートすべてが対象外）。diff の基準点（`origin/main` との merge-base）もここで一度だけ解決し `PRE_PUSH_DIFF_BASE` として子ゲートへ export するため、3 スクリプトが個別に基準を再計算することはない（単体実行時は各スクリプトが自前で解決する）
-  - テスト差分警告。`src/youtube_automation/` に差分があるのに `tests/` の差分がない場合、または `extensions/*/lib/` に差分があるのに extensions 配下の `*.test.ts` 差分がない場合に警告を出す。これは粗い検出なので push は止めない。意図的に省く場合は `SKIP_TEST_DIFF=1 git push` とし、skip した事実を hook 出力に残す。ロジック本体は `.lefthook/pre-push/test-diff-gate.sh`
-  - 広すぎる型注釈ゲート。`origin/main` からの新規追加行だけを対象に、ディレクトリを問わず全 `*.py` / `*.ts` / `*.tsx` の Python の typing module 経由の Any 型、または TypeScript の any 型注釈を検出したら push を止める。既存行は対象外。ロジック本体は `.lefthook/pre-push/any-usage-gate.sh`
-    - **Python**: `.lefthook/pre-push/any_usage_python_resolver.py` が `ast` でファイルを解析し、`typing.Any` の修飾アクセス（`import typing` / `import typing as t` 経由）と `from typing import Any`（複数行の括弧 import・`as` alias 含む）の直接 import 経由の裸 `Any` の両方を、実際に参照されている行番号として解決する。コメント・docstring・文字列リテラル中の "Any" は AST 上に現れないため誤検知しない。`python3` が無い場合は警告を出して Python 側の検出のみ省略する
-    - **TypeScript**: `: any` 直書きに加え、`Array<any>` / `Record<string, any>` のようなジェネリック引数、union / intersection、tuple 要素、型エイリアス代入（`type X = any;`）、アロー関数戻り値（`() => any`）、型アサーション（`value as any`）などの型位置の `any` を検出する。正規表現で候補行を検出したのち `.lefthook/pre-push/any_usage_ts_line_cleaner.py` で行コメント（`//...`）と文字列・テンプレートリテラルの中身を取り除いてから再判定するため、コメントや文字列リテラル中の "any"（型注釈っぽい表記を含む）は誤検知しない
+- **lint ジョブ**: `ruff check` / `ruff format --check`（旧 pre-commit と同等）
+- **changelog ジョブ**: 実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更したのに `CHANGELOG.md` の `[Unreleased]` が未更新なら fail する。意図的に省く場合は PR に `skip-changelog` ラベルを付与する
+- **any-gate ジョブ**: 広すぎる型注釈ゲート。`origin/main` からの新規追加行だけを対象に、ディレクトリを問わず全 `*.py` / `*.ts` / `*.tsx` の Python の typing module 経由の Any 型、または TypeScript の any 型注釈を検出したら fail する。既存行は対象外。ロジック本体は `.github/scripts/any-usage-gate.sh`（ローカルでも `bash .github/scripts/any-usage-gate.sh` で単体実行できる）
+  - **Python**: `.github/scripts/any_usage_python_resolver.py` が `ast` でファイルを解析し、`typing.Any` の修飾アクセス（`import typing` / `import typing as t` 経由）と `from typing import Any`（複数行の括弧 import・`as` alias 含む）の直接 import 経由の裸 `Any` の両方を、実際に参照されている行番号として解決する。コメント・docstring・文字列リテラル中の "Any" は AST 上に現れないため誤検知しない。`python3` が無い場合は警告を出して Python 側の検出のみ省略する
+  - **TypeScript**: `: any` 直書きに加え、`Array<any>` / `Record<string, any>` のようなジェネリック引数、union / intersection、tuple 要素、型エイリアス代入（`type X = any;`）、アロー関数戻り値（`() => any`）、型アサーション（`value as any`）などの型位置の `any` を検出する。正規表現で候補行を検出したのち `.github/scripts/any_usage_ts_line_cleaner.py` で行コメント（`//...`）と文字列・テンプレートリテラルの中身を取り除いてから再判定するため、コメントや文字列リテラル中の "any"（型注釈っぽい表記を含む）は誤検知しない
 
-Python 側の未使用コード検出は、追加依存なしで CI / pre-commit に載っている Ruff `F` 系（未使用 import / 変数、未定義名など）を継続採用する。vulture は新規依存追加が必要で、Ruff `ARG` は既存コードに多数の既存違反があるため #1510 では採用しない。
+Python 側の未使用コード検出は、追加依存なしで CI に載っている Ruff `F` 系（未使用 import / 変数、未定義名など）を継続採用する。vulture は新規依存追加が必要で、Ruff `ARG` は既存コードに多数の既存違反があるため #1510 では採用しない。
 
-有効化と運用:
+devShell の運用:
 
-- **有効化**: 親 checkout / 新規 worktree のどちらでも、最初に `bash .lefthook/setup-worktree.sh` を 1 回実行する。direnv があればルートの `.envrc`（nix-direnv 経由の `use flake`）を allow して devShell に入り、なければ `nix develop` を使う。どちらの経路でも shellHook と `.lefthook/install.sh` が hook wrapper を再生成する
-- **devShell 入場コスト**: `.envrc` は [nix-direnv](https://github.com/nix-community/nix-direnv) をブートストラップし、評価済み dev 環境を `.direnv/` にキャッシュする。`flake.nix` / `flake.lock` / `.envrc` が変わらない限り入場時に nix を起動しないため、dirty worktree でも 2 回目以降の `direnv exec` は 1 秒未満で安定する（direnv stdlib の `use_flake` は入場のたびに `nix print-dev-env` を実行するため、flake 評価コストが毎回壁時計に乗り 7〜80 秒まで変動していた。issue #2097）。shellHook（lefthook install / `uv sync`）はキャッシュヒット時も毎入場で実行される。worktree ごとの初回入場のみキャッシュ生成（20 秒前後）が走る。nix-direnv の direnvrc 本体は初回のみ GitHub から取得しハッシュ検証のうえ `~/.cache/direnv/cas/` に永続キャッシュされる（オフライン初回のみ失敗し得る。その場合は `nix develop` 経路を使う）
-- **devShell 内での実行**: direnv の自動入室が有効な shell ではそのまま `uv run pytest` 等を実行できる。agent や非対話 shell では `bash .lefthook/setup-worktree.sh uv run pytest` のように引数を渡すと、同じ devShell 内でコマンドを実行できる
-- **依存同期の方針差（対話 vs explicit setup）**: 対話入場（direnv / `nix develop`）の shellHook は `uv sync` 失敗を warning に留めて入場を継続する（入場をブロックしない）。一方 `bash .lefthook/setup-worktree.sh [<command>...]` の explicit setup 経路は fail-closed で、devShell 入場後に `.lefthook/sync-deps.sh` が `uv sync` を明示実行し、失敗すると後続コマンドを実行せず exit 非 0 で停止する。nix-direnv のキャッシュ命中時は shellHook 自体が再実行されないため、explicit 経路の同期保証はこのラッパーが担う（issue #2125）
-- **skill script の直接実行**: project import / entry point を使う skill script は通常の `uv run` で worktree-local `.venv` を lockfile へ同期してから実行する。環境準備に失敗した場合は外部 API / Codex 呼び出し前に停止し、`bash .lefthook/setup-worktree.sh <command> [args...]` で再実行する。標準ライブラリだけの補助 Python は `uv run --no-sync` を許容するが、project code には使わない
+- **devShell 入場コスト**: `.envrc` は [nix-direnv](https://github.com/nix-community/nix-direnv) をブートストラップし、評価済み dev 環境を `.direnv/` にキャッシュする。`flake.nix` / `flake.lock` / `.envrc` が変わらない限り入場時に nix を起動しないため、dirty worktree でも 2 回目以降の `direnv exec` は 1 秒未満で安定する（direnv stdlib の `use_flake` は入場のたびに `nix print-dev-env` を実行するため、flake 評価コストが毎回壁時計に乗り 7〜80 秒まで変動していた。issue #2097）。shellHook（`uv sync`）はキャッシュヒット時も毎入場で実行される。worktree ごとの初回入場のみキャッシュ生成（20 秒前後）が走る。nix-direnv の direnvrc 本体は初回のみ GitHub から取得しハッシュ検証のうえ `~/.cache/direnv/cas/` に永続キャッシュされる（オフライン初回のみ失敗し得る。その場合は `nix develop` 経路を使う）
+- **devShell 内での実行**: direnv の自動入室が有効な shell ではそのまま `uv run pytest` 等を実行できる。agent や非対話 shell では `nix develop --command uv run pytest` のように実行すると、同じ devShell 内でコマンドを実行できる
+- **skill script の直接実行**: project import / entry point を使う skill script は通常の `uv run` で worktree-local `.venv` を lockfile へ同期してから実行する。環境準備に失敗した場合は外部 API / Codex 呼び出し前に停止し、`nix develop --command <command> [args...]` で再実行する。標準ライブラリだけの補助 Python は `uv run --no-sync` を許容するが、project code には使わない
 - **worktree 間の依存境界**: 共有するのは uv cache と pnpm content-addressable store だけとし、`.venv` / `node_modules` は各 worktree で生成する。親 checkout や sibling worktree の環境を symlink・コピーせず、branch ごとの lockfile、editable path、entry point を実行中 checkout と一致させる
-- **診断**: 親 checkout / worktree のそれぞれで `bash .lefthook/setup-worktree.sh sh -c 'command -v lefthook && lefthook version'` を実行する。`git commit` / `git push` で `Can't find lefthook in PATH` が出る場合は `bash .lefthook/setup-worktree.sh` を再実行する。直接の Nix 診断・再生成には `nix develop --command sh -c 'command -v lefthook && lefthook version'` と `nix develop --command bash .lefthook/install.sh` も利用できる
-- **失敗時の扱い**: shellHook は `lefthook` 不在や hook 再生成失敗を `|| true` で握りつぶさない。devShell 入室時に明示的に失敗させ、commit / push 時の hook no-op を防ぐ
-- **TMPDIR の worktree 分離**: macOS の TMPDIR は per-user のグローバル値のため、複数 worktree の並行 pytest が同一パスへ書くと一時ディレクトリが run 間で干渉しうる（issue #2088）。shellHook は `.lefthook/worktree-tmpdir.sh` の出力を `TMPDIR` へ export し、共有 TMPDIR 配下の worktree ごとの決定的なサブディレクトリ（`yt-automation-tmp-<slug>-<cksum>`）へ分離する。TMPDIR が既に checkout 内へ隔離済みの場合はその値を尊重し、解決に失敗した場合は共有 TMPDIR のまま fail-open で続行する
-- **Nix キャッシュの worktree 分離**: 並列 worktree が同一 fingerprint の flake を同時評価すると、ユーザーグローバルの Nix キャッシュ（既定 `~/.cache/nix` の eval-cache / fetcher-cache SQLite）への同時書込みが競合し、「error (ignored): SQLite database ... is busy」を stderr へ出しつつキャッシュ書込みを破棄し続ける（issue #2089）。`.envrc` / `.lefthook/setup-worktree.sh` / shellHook は Nix 専用の `NIX_CACHE_HOME` を worktree 分離 TMPDIR 配下（`<worktree_tmpdir>/nix-cache`）へ export し、各 worktree が自分の評価結果だけを参照する。`XDG_CACHE_HOME` には触れないため uv 等の他ツールのキャッシュは共有のまま変わらない。継承値は別 worktree の値がシェル経由でリークし得るため尊重せず、解決に失敗した場合は共有キャッシュのまま fail-open で続行する
-- **sandbox worker での挙動**: 旧 `.takt/runtime-prepare.sh` は過去 runtime との互換用として残すが、現在の正規入口ではない。外部 sandbox が `YOUTUBE_AUTOMATION_SKIP_LEFTHOOK=1` を明示した場合、shellHook / `.lefthook/install.sh` は install を明示メッセージ付きで skip する。また `.lefthook/setup-worktree.sh` は `direnv allow` 失敗時に hard fail せず `nix develop` 経路へ fallback する
-- **全 hook をスキップ**: `LEFTHOOK=0 git push` / `LEFTHOOK=0 git commit`
-- **CHANGELOG ゲートのみ省く**: `SKIP_CHANGELOG=1 git push`（CI 側は PR の `skip-changelog` ラベル）
-- **テスト差分警告のみ省く**: `SKIP_TEST_DIFF=1 git push`
-- refactor / fix でも src を触れば CHANGELOG 追記が要る。tests / docs だけの変更はゲート対象外（hook も CI も自動 skip）
+- **TMPDIR の worktree 分離**: macOS の TMPDIR は per-user のグローバル値のため、複数 worktree の並行 pytest が同一パスへ書くと一時ディレクトリが run 間で干渉しうる（issue #2088）。shellHook は `.nix/worktree-tmpdir.sh` の出力を `TMPDIR` へ export し、共有 TMPDIR 配下の worktree ごとの決定的なサブディレクトリ（`yt-automation-tmp-<slug>-<cksum>`）へ分離する。TMPDIR が既に checkout 内へ隔離済みの場合はその値を尊重し、解決に失敗した場合は共有 TMPDIR のまま fail-open で続行する
+- **Nix キャッシュの worktree 分離**: 並列 worktree が同一 fingerprint の flake を同時評価すると、ユーザーグローバルの Nix キャッシュ（既定 `~/.cache/nix` の eval-cache / fetcher-cache SQLite）への同時書込みが競合し、「error (ignored): SQLite database ... is busy」を stderr へ出しつつキャッシュ書込みを破棄し続ける（issue #2089）。`.envrc` / shellHook は Nix 専用の `NIX_CACHE_HOME` を worktree 分離 TMPDIR 配下（`<worktree_tmpdir>/nix-cache`）へ export し、各 worktree が自分の評価結果だけを参照する。`XDG_CACHE_HOME` には触れないため uv 等の他ツールのキャッシュは共有のまま変わらない。継承値は別 worktree の値がシェル経由でリークし得るため尊重せず、解決に失敗した場合は共有キャッシュのまま fail-open で続行する
+- **sandbox worker での挙動**: takt worker は `.takt/runtime-prepare.sh` が TMPDIR / XDG_* / UV_CACHE_DIR を run ごとの runtime root 配下へ再構成する（issue #2163）
+- refactor / fix でも src を触れば CHANGELOG 追記が要る。tests / docs だけの変更はゲート対象外（CI が自動 skip）
 
 ### CHANGELOG.md の union merge（conflict 緩和）
 

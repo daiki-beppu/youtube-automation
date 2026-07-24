@@ -4,7 +4,7 @@ This file provides guidance to Codex CLI (developers.openai.com/codex) when work
 
 **プロジェクト概要・アーキテクチャ・開発規約（設定アクセス / エラーハンドリング / Import / 依存ポリシー / スクリプト配置 / テスト / パッケージング / セキュリティ / CHANGELOG ゲート / 開発ワークフロー）は `CLAUDE.md` に一元化している。実装・レビューに着手する前に必ず `CLAUDE.md` を読むこと。**
 
-詳細ドキュメント: `docs/architecture.md`（モジュール構成）/ `docs/development.md`（パッケージング・extensions・lefthook）/ `docs/takt-operations.md`（issue / worktree 運用。takt は使用しない）。
+詳細ドキュメント: `docs/architecture.md`（モジュール構成）/ `docs/development.md`（パッケージング・extensions・品質ゲート）/ `docs/takt-operations.md`（issue / worktree 運用。takt は使用しない）。
 
 ## Codex CLI 固有の注意
 
@@ -30,7 +30,7 @@ This file provides guidance to Codex CLI (developers.openai.com/codex) when work
 
 - `config/channel/*.json` は責務別分割。必須ファイルに加え optional として `shorts.json` / `comments.json` / `pinned-comment.json` / `distrokid.json` / `community-draft.json` がある。一覧と構造は `CLAUDE.md`・`docs/architecture.md` を参照
 
-### lefthook と worktree
+### devShell と worktree
 
-- commit / push 前に、対象 checkout（親 checkout / worktree のどちらも）で `nix develop` または direnv に入り、`flake.nix` の shellHook による `.lefthook/install.sh` を通す
-- `Can't find lefthook in PATH` が出る場合は `docs/development.md` の Git hooks 診断手順に従い、対象 checkout で `nix develop --command bash .lefthook/install.sh` を実行する
+- 対象 checkout（親 checkout / worktree のどちらも）で `nix develop` または direnv に入る。shellHook が `uv sync` を自動実行する
+- 品質ゲート（ruff / CHANGELOG / any 型）はローカル git hook ではなく CI で担保される。詳細は `docs/development.md` の「品質ゲート（CI）」

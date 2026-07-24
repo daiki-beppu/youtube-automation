@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).parents[1]
-CANONICAL_COMMAND = "bash .lefthook/setup-worktree.sh"
+CANONICAL_COMMAND = "nix develop"
 CANONICAL_LINK = "docs/development.md#開発者-bootstrap正規入口"
 
 
@@ -57,7 +57,7 @@ def test_reader_specific_docs_point_to_canonical_bootstrap() -> None:
         assert "cd youtube-automation" in block
         assert CANONICAL_COMMAND in block
         assert "uv sync" not in block
-        assert "nix develop" not in block
+        assert "lefthook" not in block
 
 
 def test_skill_lint_docs_reject_stale_unimplemented_guidance() -> None:
