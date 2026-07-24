@@ -1,25 +1,45 @@
-persona_providers:
-  ai-antipattern-reviewer:
-    provider: claude
-  architecture-reviewer:
-    provider: claude
-  coding-reviewer:
-    provider: claude
-  cqrs-es-reviewer:
-    provider: claude
-  frontend-reviewer:
-    provider: claude
-  implementation-semantics-reviewer:
-    provider: claude
-  merge-readiness-reviewer:
-    provider: claude
-  qa-reviewer:
-    provider: claude
-  requirements-reviewer:
-    provider: claude
-  security-reviewer:
-    provider: claude
-  terraform-reviewer:
-    provider: claude
-  testing-reviewer:
-    provider: claude
+# takt プロジェクト設定
+#
+# レビュワーペルソナは Claude provider で実行する（#2518 / #2535）。
+#
+# 注意: takt v0.52 の config 解決では、project が provider_routing を定義すると
+# global (~/.takt/config.yaml) の provider_routing は deep merge されず丸ごと無視される。
+# また deprecated な persona_providers はソース種別として provider_routing.personas より
+# 優先度が低く、global 側の provider_routing.personas に負ける（#2535 で実測）。
+# そのため reviewer 以外（coder / planner / diagnoser）も global と同値をここに複製する。
+# global 側のルーティングを変更した場合は、このファイルへの反映も必要。
+provider_routing:
+  personas:
+    coder:
+      provider: codex
+      model: gpt-5.6-luna
+    planner:
+      provider: codex
+      model: gpt-5.6-sol
+    diagnoser:
+      provider: codex
+      model: gpt-5.6-sol
+    ai-antipattern-reviewer:
+      provider: claude
+    architecture-reviewer:
+      provider: claude
+    coding-reviewer:
+      provider: claude
+    cqrs-es-reviewer:
+      provider: claude
+    frontend-reviewer:
+      provider: claude
+    implementation-semantics-reviewer:
+      provider: claude
+    merge-readiness-reviewer:
+      provider: claude
+    qa-reviewer:
+      provider: claude
+    requirements-reviewer:
+      provider: claude
+    security-reviewer:
+      provider: claude
+    terraform-reviewer:
+      provider: claude
+    testing-reviewer:
+      provider: claude
