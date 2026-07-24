@@ -23,8 +23,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure import cost_tracker
+from youtube_automation.infrastructure.errors import ConfigError
 
 if TYPE_CHECKING:
     from PIL.Image import Image as PILImage

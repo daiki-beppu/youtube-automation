@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from youtube_automation.domains.analytics.collection.strategic_analytics import StrategicAnalyticsMixin
-from youtube_automation.domains.analytics.collection.video_listing import VideoListingMixin
 from youtube_automation.domains.analytics.mixins.audience_analytics import AudienceAnalyticsMixin
 from youtube_automation.domains.analytics.mixins.channel_analytics import ChannelAnalyticsMixin
 from youtube_automation.domains.analytics.mixins.ctr_analytics import CTRAnalyticsMixin
@@ -17,7 +16,8 @@ from youtube_automation.domains.analytics.mixins.video_analytics import VideoAna
 from youtube_automation.domains.analytics.mixins.video_daily_analytics import VideoDailyAnalyticsMixin
 from youtube_automation.domains.analytics.ports import AnalyticsClient, ReportingClient, YouTubeClient
 from youtube_automation.domains.analytics.reporting.reporting_analytics import ReportingAPIMixin
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.domains.youtube.video_listing import VideoListingMixin
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 class YouTubeAnalyticsCollector(

@@ -11,7 +11,7 @@ from youtube_automation.domains.thumbnail.features import (
     extract_features_from_path,
     feature_distance,
 )
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 
 _TARGET_ASPECT = 16 / 9
 _DEFAULT_MIN_WIDTH = 1280

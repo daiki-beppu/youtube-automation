@@ -11,7 +11,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 _TERRAFORM_TIMEOUT_SEC = 30
 

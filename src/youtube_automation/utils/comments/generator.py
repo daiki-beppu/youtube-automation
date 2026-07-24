@@ -7,8 +7,8 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
+from youtube_automation.infrastructure.errors import GeneratorError
 from youtube_automation.utils.comments.prompt_safety import viewer_payload_json
-from youtube_automation.utils.exceptions import GeneratorError
 
 if TYPE_CHECKING:
     from youtube_automation.utils.comments.fetcher import FetchedComment

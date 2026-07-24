@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from youtube_automation.domains.analytics.mixins.channel_analytics import ChannelAnalyticsMixin
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 class StubCollector(ChannelAnalyticsMixin):

@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from youtube_automation.domains.media.audio_formats import AUDIO_EXTS
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils.collection_paths import CollectionPaths, resolve_collection_dir
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.probe import probe_duration
 from youtube_automation.utils.skill_config import load_skill_config
 

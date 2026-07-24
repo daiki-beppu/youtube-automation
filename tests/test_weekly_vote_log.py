@@ -22,7 +22,7 @@ from youtube_automation.domains.collections.weekly_vote_log import (
     validate_weekly_vote_log,
     warn_poll_deprecated,
 )
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 
 # ---------------------------------------------------------------------------
 # Helpers

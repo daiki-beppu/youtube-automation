@@ -18,7 +18,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
-from youtube_automation.utils.exceptions import AutomationError
+from youtube_automation.infrastructure.errors import AutomationError
 
 _HTTP_TIMEOUT_SEC = 30
 _ALLOWED_SCHEME = "https"

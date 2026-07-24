@@ -27,6 +27,7 @@ from youtube_automation.domains.thumbnail.references import (
     record_ttp_reference_assignments,
     resolve_dedup_recent_collections,
 )
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.scripts.generate_image import (
     apply_ab_test_pattern,
     build_requests,
@@ -39,7 +40,6 @@ from youtube_automation.scripts.generate_image import (
 from youtube_automation.scripts.generate_image import (
     main as generate_image_main,
 )
-from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.image_provider.composition import resolve_unique_path
 
 # ---- フェイク provider ------------------------------------------------------

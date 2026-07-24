@@ -14,7 +14,7 @@ from youtube_automation.domains.thumbnail.text.renderer import (
     compose_thumbnail_text,
     validate_thumbnail_output_path,
 )
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils.skill_config import load_skill_config
 
 SKILL_NAME = "thumbnail"

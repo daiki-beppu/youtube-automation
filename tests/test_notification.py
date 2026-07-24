@@ -15,8 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
+from youtube_automation.infrastructure.errors import AutomationError
 from youtube_automation.utils import notification
-from youtube_automation.utils.exceptions import AutomationError
 
 
 def _fake_urlopen(status: int = 204):

@@ -8,13 +8,15 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
-from youtube_automation.utils.channel_seed import (
+from youtube_automation.domains.youtube.channel_seed import (
     SeedChannel,
     fetch_channel_seed,
     merge_benchmark_channel,
     to_benchmark_entry,
 )
-from youtube_automation.utils.exceptions import AutomationError, ConfigError
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.errors import AutomationError, ConfigError
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 ANALYTICS_PATH = Path("config") / "channel" / "analytics.json"
 DEFAULT_RECENT_COUNT = 10
@@ -49,7 +51,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     try:
-        seed = fetch_channel_seed(get_youtube(), args.url, recent=args.recent)
+        clients = YouTubeClients(
+            full_handler=YouTubeOAuthHandler(),
+            readonly_handler=YouTubeOAuthHandler.create_readonly(),
+        )
+        seed = fetch_channel_seed(clients.youtube_readonly, args.url, recent=args.recent)
         if args.write_benchmark:
             _write_benchmark_entry(_resolve_target(args.target), seed, args.relationship)
         _print_seed(seed, as_json=args.json)
@@ -57,12 +63,6 @@ def main(argv: Iterable[str] | None = None) -> int:
         print(f"[error] {e}", file=sys.stderr)
         return 1
     return 0
-
-
-def get_youtube():
-    from youtube_automation.utils.youtube_service import get_youtube as _get_youtube
-
-    return _get_youtube()
 
 
 def _resolve_target(target: str | None) -> Path:

@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 _CHROME_USER_DATA_RELPATH = Path("Library") / "Application Support" / "Google" / "Chrome"
 _EXTENSION_ORIGIN_PREFIX = "chrome-extension://"

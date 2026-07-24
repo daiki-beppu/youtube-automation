@@ -41,7 +41,7 @@ accepted (2026-07-13)。workspace 解決と `yt-channel list` は #1947、コピ
 - auth は per-channel 維持（`channels/<slug>/auth/` に token / client_secrets）。OAuth クライアント統合（再認証必須）はやらず、`yt-doctor` の推奨アラートに留める
 - 移行は段階式: 6ch（harana-island-sounds）→ フルライフサイクル 1 周実走 → 残り 5 チャンネル。git 履歴は捨て、旧リポは archive として残す
 - 移行 CLI `yt-channel-import <path>`（コピー + 検証。move しない）を提供し、first-party 移行で dogfood した上で external user にも同じ手順を提供する
-- チャンネル横断の一括実行は v1 スコープ外（`yt-channel list` の列挙のみ）。将来必要になったら subprocess 分離のランナーで実現する。**プロセス内での singleton（`_channel_dir` / `_instance`）切替による横断実行は恒久禁止**（auth / cost tracker / ServiceRegistry の状態がチャンネル間に漏れる）
+- チャンネル横断の一括実行は v1 スコープ外（`yt-channel list` の列挙のみ）。将来必要になったら subprocess 分離のランナーで実現する。**プロセス内での singleton（`_channel_dir` / `_instance`）切替による横断実行は恒久禁止**（auth / cost tracker の状態がチャンネル間に漏れる）
 - workspace リポの git 管理対象はデータ 4 分類に忠実化: ③生成成果物（master 音源・動画・stock 楽曲）は git 管理外。stock 楽曲は Suno プレイリストが正本で再ダウンロードで復旧可能。現行 6 リポの git 管理ファイル合計約 4.7GB を持ち込むと GitHub の実用上限に初日から張り付くため
 
 ## Consequences

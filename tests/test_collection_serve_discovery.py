@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.infrastructure.errors import DiscoveryRegistryError
 from youtube_automation.scripts.collection_serve_discovery import (
     DISCOVERY_HEARTBEAT_SECONDS,
     DISCOVERY_PATH,
@@ -22,7 +23,6 @@ from youtube_automation.scripts.collection_serve_discovery import (
     RegistryState,
     create_registry_server,
 )
-from youtube_automation.utils.exceptions import DiscoveryRegistryError
 
 
 class FakeClock:

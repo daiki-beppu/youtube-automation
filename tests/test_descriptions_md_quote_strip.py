@@ -10,7 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.agents._descriptions_md import DescriptionsMdMixin
+from youtube_automation.domains.uploads._descriptions_md import DescriptionsMdMixin
+from youtube_automation.infrastructure.errors import ValidationError
 
 
 def _write_descriptions_md(collection_dir: Path, tags_line: str) -> None:
@@ -131,7 +132,7 @@ class TestDescriptionsMdQuoteStrip:
         (doc_dir / "description.txt").write_text("手書きの説明文", encoding="utf-8")
 
         mixin = DescriptionsMdMixin()
-        with pytest.raises(RuntimeError) as excinfo:
+        with pytest.raises(ValidationError) as excinfo:
             mixin._load_descriptions_md(tmp_path)
 
         message = str(excinfo.value)

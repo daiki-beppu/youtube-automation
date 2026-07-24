@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass
 from itertools import pairwise
 from pathlib import Path
 
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.infrastructure.errors import ValidationError
 
 DEFAULT_DROP_THRESHOLD = 0.05
 REPORT_DIRNAME = "retention_analysis"

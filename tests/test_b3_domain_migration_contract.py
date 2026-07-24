@@ -32,15 +32,15 @@ from googleapiclient.errors import HttpError
 from httplib2 import Response
 from PIL import Image
 
-from youtube_automation.utils.exceptions import AuthError, ConfigError, YouTubeAPIError
-from youtube_automation.utils.preflight_checks import check_thumbnail_skill_config
+from youtube_automation.domains.uploads.preflight import check_thumbnail_skill_config
+from youtube_automation.infrastructure.errors import AuthError, ConfigError, YouTubeAPIError
 
 _ROOT = Path(__file__).resolve().parents[1]
 
 _DOMAIN_MODULES = (
     "youtube_automation.domains.analytics.ports",
     "youtube_automation.domains.analytics.service",
-    "youtube_automation.domains.analytics.collection.video_listing",
+    "youtube_automation.domains.youtube.video_listing",
     "youtube_automation.domains.analytics.collection.strategic_analytics",
     "youtube_automation.domains.analytics.reporting.reporting_analytics",
     "youtube_automation.domains.analytics.analysis.launch_curve_analyzer",
@@ -206,7 +206,7 @@ def test_analytics_domain_has_no_sdk_execution_or_retry_boundary() -> None:
     forbidden_imports = {
         "googleapiclient",
         "google.auth",
-        "youtube_automation.utils.retry",
+        "youtube_automation.infrastructure.retry",
         "youtube_automation.utils.youtube_service",
     }
     offenders: list[str] = []
@@ -240,7 +240,7 @@ def test_analytics_adapter_executes_the_external_reporting_operation() -> None:
 def test_analytics_adapter_retries_transient_and_translates_permanent_errors(monkeypatch) -> None:
     """Retry and SDK error translation stay at the adapter boundary."""
     adapter_module = importlib.import_module("youtube_automation.infrastructure.analytics_adapter")
-    retry_module = importlib.import_module("youtube_automation.utils.retry")
+    retry_module = importlib.import_module("youtube_automation.infrastructure.retry")
     monkeypatch.setattr(retry_module, "_DEFAULT_SLEEP", lambda _seconds: None)
     monkeypatch.setattr(retry_module, "_DEFAULT_JITTER", lambda low, _high: low)
 
@@ -420,10 +420,8 @@ def test_caption_upload_sdk_boundary_is_infrastructure() -> None:
 def test_video_daily_benchmark_builds_injected_domain_collector(monkeypatch) -> None:
     """The benchmark uses the current analytics composition boundary."""
     benchmark = importlib.import_module("bench.bench_video_daily")
-    monkeypatch.setattr(benchmark, "get_youtube_readonly", lambda: MagicMock())
-    monkeypatch.setattr(benchmark, "get_analytics", lambda: MagicMock())
-    monkeypatch.setattr(benchmark, "get_reporting", lambda: MagicMock())
-    monkeypatch.setattr(benchmark, "get_credentials_readonly", lambda: MagicMock())
+    clients = MagicMock()
+    monkeypatch.setattr(benchmark, "create_readonly_youtube_clients", lambda: clients)
     monkeypatch.setattr(benchmark, "ReportingAPIClient", MagicMock())
 
     collector = benchmark._collector()

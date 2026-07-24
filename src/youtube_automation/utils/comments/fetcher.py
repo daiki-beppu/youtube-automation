@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterator
 
-from youtube_automation.utils.exceptions import YouTubeAPIError
-from youtube_automation.utils.retry import execute_with_retry
+from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.infrastructure.retry import execute_with_retry
 
 # YouTube API が commentThreads.list の replies.comments に含める最大件数
 _INLINE_REPLY_LIMIT = 5
@@ -185,7 +185,7 @@ def fetch_comments(
     """指定動画のコメントスレッドを generator で返す（top-level + replies）.
 
     Args:
-        youtube: `youtube_service.get_youtube()` / `ServiceRegistry.youtube`
+        youtube: injected YouTube Data API service
         video_id: 対象動画 ID
         max_results: トップレベルコメントの返却上限（スレッド数）
         since: これより新しいコメントのみ対象（`publishedAt` 比較）

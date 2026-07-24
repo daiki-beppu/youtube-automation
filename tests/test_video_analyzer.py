@@ -23,7 +23,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.utils.video_analyzer import (
     VideoAnalysisReport,
     VideoAnalyzer,

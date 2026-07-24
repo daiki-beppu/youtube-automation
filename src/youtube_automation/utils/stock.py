@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.utils.image_provider.composition import resolve_unique_path
 
 _STOCK_REF_MIN_BYTES = 1024

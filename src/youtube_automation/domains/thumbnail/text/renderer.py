@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
 
 from youtube_automation.domains.thumbnail.text.models import OverlaySpec, TextStyle
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 
 _FINAL_THUMBNAIL_NAMES = frozenset({"thumbnail.jpg", "thumbnail.jpeg", "thumbnail.png"})
 _ALLOWED_OUTPUT_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})

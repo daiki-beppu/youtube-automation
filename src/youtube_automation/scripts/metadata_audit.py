@@ -30,9 +30,7 @@ from youtube_automation.domains.metadata.descriptions import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
 )
-from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.preflight_checks import (
+from youtube_automation.domains.uploads.preflight import (
     check_chapter_count,
     check_chapter_variation_suffix,
     check_duration,
@@ -42,6 +40,8 @@ from youtube_automation.utils.preflight_checks import (
     extract_descriptions_md_tags,
     requires_scene_phrases,
 )
+from youtube_automation.infrastructure import cost_tracker
+from youtube_automation.utils.collection_paths import CollectionPaths
 from youtube_automation.utils.probe import probe_duration
 from youtube_automation.utils.skill_config import load_skill_config
 
@@ -174,9 +174,9 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
 
 def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
     """Fetch all videos from YouTube and check live state."""
-    from youtube_automation.utils.youtube_service import get_youtube_readonly
+    from youtube_automation.infrastructure.google.youtube import create_readonly_youtube_clients
 
-    yt = get_youtube_readonly()
+    yt = create_readonly_youtube_clients().youtube_readonly
     issues: dict[str, list[str]] = {vid: [] for vid in video_ids}
     remote_chapter_max = _remote_chapter_max()
 

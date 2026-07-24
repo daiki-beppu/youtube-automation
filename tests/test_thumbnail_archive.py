@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from youtube_automation.domains.thumbnail import archive as thumbnail_archive
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.infrastructure.errors import ValidationError
 
 
 def _repo_root() -> Path:

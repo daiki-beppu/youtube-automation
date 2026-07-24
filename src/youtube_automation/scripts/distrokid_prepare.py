@@ -45,9 +45,9 @@ from youtube_automation.domains.distrokid.release import (
     build_release_payload,
 )
 from youtube_automation.domains.distrokid.specification import SPEC_FILENAME, write_collection_spec
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.scripts.collection_serve import find_distrokid_discs
 from youtube_automation.utils.collection_paths import CollectionPaths, resolve_collection_dir
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.probe import probe_duration
 
 # ファイル名先頭の連番プレフィックス（metadata.md の # 列 = グローバル番号として使う）

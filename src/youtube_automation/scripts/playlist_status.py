@@ -14,8 +14,9 @@ import logging
 import sys
 
 from youtube_automation.configuration import load_config
-from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.youtube_service import get_youtube_readonly
+from youtube_automation.infrastructure import cost_tracker
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 logger = logging.getLogger(__name__)
 
@@ -35,18 +36,22 @@ def _record_read_quota(bucket: str) -> None:
 class PlaylistStatusViewer:
     """プレイリスト状態表示"""
 
-    def __init__(self):
+    def __init__(self, clients: YouTubeClients | None = None):
         self.config = load_config()
         self._youtube = None
+        self._youtube_clients = clients or YouTubeClients(
+            full_handler=YouTubeOAuthHandler(),
+            readonly_handler=YouTubeOAuthHandler.create_readonly(),
+        )
 
-    def _get_youtube(self):
+    def _youtube_service(self):
         if self._youtube is None:
-            self._youtube = get_youtube_readonly()
+            self._youtube = self._youtube_clients.youtube_readonly
         return self._youtube
 
     def _list_playlist_video_ids(self, playlist_id: str) -> set[str]:
         """プレイリスト内の動画IDセットを取得"""
-        youtube = self._get_youtube()
+        youtube = self._youtube_service()
         video_ids = set()
 
         try:

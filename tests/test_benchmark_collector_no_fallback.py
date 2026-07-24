@@ -19,12 +19,12 @@ from unittest.mock import MagicMock
 import pytest
 from googleapiclient.errors import HttpError
 
+from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
 from youtube_automation.scripts.benchmark_collector import (
     BenchmarkCollector,
     is_live_benchmark_video,
     load_benchmark_videos,
 )
-from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
 
 
 def _http_error(status: int = 403, reason: str = "quotaExceeded") -> HttpError:

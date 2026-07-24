@@ -30,6 +30,11 @@ from pathlib import Path
 
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.configuration import load_config
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.cost_tracker import log_quota
+from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
+from youtube_automation.infrastructure.retry import execute_with_retry
 from youtube_automation.utils.benchmark_analyzer import (
     compute_daily_views,
     compute_engagement_rate,
@@ -38,12 +43,8 @@ from youtube_automation.utils.benchmark_analyzer import (
     parse_iso_duration,
 )
 from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
-from youtube_automation.utils.cost_tracker import log_quota
-from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
 from youtube_automation.utils.profile import section
-from youtube_automation.utils.retry import execute_with_retry
 from youtube_automation.utils.skill_config import load_skill_config
-from youtube_automation.utils.youtube_service import get_youtube_readonly
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,10 @@ class BenchmarkCollector:
     def __init__(self):
         self.config = load_config()
         self.youtube = None
+        self.youtube_clients = YouTubeClients(
+            full_handler=YouTubeOAuthHandler(),
+            readonly_handler=YouTubeOAuthHandler.create_readonly(),
+        )
         self.benchmark_config = load_skill_config("benchmark")
         self.channel_dir = _channel_dir()
         self.benchmarks_dir = self.channel_dir / "docs" / "benchmarks"
@@ -106,7 +111,7 @@ class BenchmarkCollector:
     def initialize(self):
         """YouTube API 認証を実行する。"""
         logger.info("YouTube API 認証中...")
-        self.youtube = get_youtube_readonly()
+        self.youtube = self.youtube_clients.youtube_readonly
         logger.info("認証完了")
 
     def check_freshness(self) -> list[dict]:
@@ -719,7 +724,7 @@ class BenchmarkThumbnailAnalyzer:
                         text = re.sub(r"\s*```$", "", text)
                         video["thumbnail_analysis"] = json.loads(text)
                         logger.info("サムネイル分析完了: %s", video["title"][:40])
-                        from youtube_automation.utils.cost_tracker import log_generation
+                        from youtube_automation.infrastructure.cost_tracker import log_generation
 
                         log_generation(
                             "analysis",

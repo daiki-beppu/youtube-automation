@@ -25,9 +25,10 @@ CHANNEL_IDS = [
 
 
 def _youtube_client():
-    from youtube_automation.utils.youtube_service import get_youtube
+    from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+    from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
-    return get_youtube()
+    return YouTubeClients(full_handler=YouTubeOAuthHandler()).youtube
 
 
 def _bench_individual(yt, ids: list[str]) -> Stats:

@@ -359,7 +359,7 @@ class TestProviderRejectsUnsupportedAspectRatio:
 
     def test_unsupported_request_aspect_ratio_raises_config_error(self, openai_config, request_factory):
         # Given: Request の aspect_ratio が "1:1"
-        from youtube_automation.utils.exceptions import ConfigError
+        from youtube_automation.infrastructure.errors import ConfigError
 
         provider = OpenAIImageProvider(openai_config)
         req = request_factory(aspect_ratio="1:1", image_size="1024x1024")

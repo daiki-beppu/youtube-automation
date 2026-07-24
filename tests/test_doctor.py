@@ -16,9 +16,9 @@ from googleapiclient.errors import HttpError
 from httplib2 import ServerNotFoundError
 from PIL import Image as PILImage
 
+import youtube_automation.infrastructure.secrets as secrets_module
 from youtube_automation.cli import doctor
-from youtube_automation.utils import secrets as secrets_module
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 
 def _clear_secret_cache() -> None:
@@ -351,7 +351,7 @@ class TestClientSecrets:
     def test_missing_without_project(self, tmp_path, monkeypatch):
         monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_secret",
+            "youtube_automation.infrastructure.secrets.get_secret",
             lambda _name: (_ for _ in ()).throw(ConfigError("op read failed")),
         )
         r = doctor.check_client_secrets(tmp_path)
@@ -361,7 +361,7 @@ class TestClientSecrets:
 
     def test_missing_with_project(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_secret",
+            "youtube_automation.infrastructure.secrets.get_secret",
             lambda _name: (_ for _ in ()).throw(ConfigError("op read failed")),
         )
         monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "foo-proj")
@@ -426,7 +426,7 @@ class TestClientSecrets:
             ),
         )
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_client_secrets_config",
+            "youtube_automation.infrastructure.secrets.get_client_secrets_config",
             lambda: pytest.fail("yt-doctor must not materialize CLIENT_SECRETS_JSON"),
         )
 
@@ -462,7 +462,7 @@ class TestClientSecrets:
 
     def test_missing_instructions_follow_google_auth_platform_contract(self, tmp_path, monkeypatch):
         monkeypatch.setattr(
-            "youtube_automation.utils.secrets.get_secret",
+            "youtube_automation.infrastructure.secrets.get_secret",
             lambda _name: (_ for _ in ()).throw(ConfigError("op read failed")),
         )
         r = doctor.check_client_secrets(tmp_path)
@@ -1087,10 +1087,10 @@ class TestMain:
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         monkeypatch.setattr(doctor, "resolve_channel_dir", lambda t: tmp_path)
 
-        def fail_if_youtube_requested():
+        def fail_if_youtube_requested(*_args, **_kwargs):
             raise AssertionError("YouTube API should not be requested during playlist create dry-run")
 
-        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.get_youtube", fail_if_youtube_requested)
+        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.YouTubeClients", fail_if_youtube_requested)
 
         code = doctor.main(["--json"])
 
@@ -1108,10 +1108,10 @@ class TestMain:
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         monkeypatch.setattr(doctor, "resolve_channel_dir", lambda t: tmp_path)
 
-        def fail_if_youtube_requested():
+        def fail_if_youtube_requested(*_args, **_kwargs):
             raise AssertionError("YouTube API should not be requested during playlist create dry-run")
 
-        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.get_youtube", fail_if_youtube_requested)
+        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.YouTubeClients", fail_if_youtube_requested)
 
         code = doctor.main([])
 
@@ -1445,10 +1445,10 @@ class TestCheckPlaylistCreateDryRun:
         _write_minimal_config(tmp_path)
         _write_playlists_config(tmp_path, {"main": {"title": "Main Playlist"}})
 
-        def fail_if_youtube_requested():
+        def fail_if_youtube_requested(*_args, **_kwargs):
             raise AssertionError("YouTube API should not be requested during playlist create dry-run")
 
-        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.get_youtube", fail_if_youtube_requested)
+        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.YouTubeClients", fail_if_youtube_requested)
 
         r = doctor.check_playlist_create_dry_run(tmp_path)
 
@@ -1459,10 +1459,10 @@ class TestCheckPlaylistCreateDryRun:
         _write_minimal_config(tmp_path)
         _write_playlists_config(tmp_path, {"main": {"playlist_id": ""}})
 
-        def fail_if_youtube_requested():
+        def fail_if_youtube_requested(*_args, **_kwargs):
             raise AssertionError("YouTube API should not be requested when playlist title is missing")
 
-        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.get_youtube", fail_if_youtube_requested)
+        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.YouTubeClients", fail_if_youtube_requested)
 
         r = doctor.check_playlist_create_dry_run(tmp_path)
 
@@ -1477,10 +1477,10 @@ class TestCheckPlaylistCreateDryRun:
         _write_minimal_config(tmp_path)
         _write_playlists_config(tmp_path, {playlist_key: {"playlist_id": ""}})
 
-        def fail_if_youtube_requested():
+        def fail_if_youtube_requested(*_args, **_kwargs):
             raise AssertionError("YouTube API should not be requested when playlist title is missing")
 
-        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.get_youtube", fail_if_youtube_requested)
+        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.YouTubeClients", fail_if_youtube_requested)
 
         r = doctor.check_playlist_create_dry_run(tmp_path)
         output = doctor.render_table([r], doctor.summarize([r]), tmp_path)

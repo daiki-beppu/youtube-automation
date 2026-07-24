@@ -25,7 +25,7 @@ from youtube_automation.domains.thumbnail.correlation import (
     compute_correlations,
 )
 from youtube_automation.domains.thumbnail.features import extract_features
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 logger = logging.getLogger(__name__)
 

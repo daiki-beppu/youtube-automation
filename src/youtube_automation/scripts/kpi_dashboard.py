@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Dict, List
 
 from youtube_automation.configuration import channel_dir as _channel_dir
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.kpi_dashboard import analyze_kpi_dashboard, render_markdown
 
 logger = logging.getLogger(__name__)

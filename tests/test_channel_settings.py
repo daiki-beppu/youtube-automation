@@ -11,8 +11,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from youtube_automation.configuration.youtube import YoutubeApi
-from youtube_automation.scripts import channel_settings_cli
-from youtube_automation.utils.channel_settings import (
+from youtube_automation.domains.youtube.channel_settings import (
     KEYWORDS_MAX_LENGTH,
     build_update_body,
     build_upload_status_flags,
@@ -23,7 +22,8 @@ from youtube_automation.utils.channel_settings import (
     parse_api_response,
     verify_channel_id,
 )
-from youtube_automation.utils.exceptions import ConfigError, YouTubeAPIError
+from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
+from youtube_automation.scripts import channel_settings_cli
 
 # ---------------------------------------------------------------------------
 # build_upload_status_flags (#605)
@@ -380,7 +380,7 @@ class TestFetchChannel:
 
     def test_api_exception_wrapped(self):
         youtube = MagicMock()
-        youtube.channels().list().execute.side_effect = RuntimeError("boom")
+        youtube.channels().list().execute.side_effect = OSError("boom")
         with pytest.raises(YouTubeAPIError, match="channels\\(\\).list"):
             fetch_channel(youtube)
 
@@ -461,7 +461,7 @@ class TestFetchChannelLocalizationsFreshness:
         def _list(**kwargs):
             req = MagicMock()
             if kwargs.get("part") == "localizations":
-                req.execute.side_effect = RuntimeError("loc boom")
+                req.execute.side_effect = OSError("loc boom")
             else:
                 req.execute.return_value = combined
             return req
@@ -518,8 +518,8 @@ class TestCLIDiff:
         youtube = MagicMock()
         youtube.channels().list().execute.return_value = {"items": [_mock_remote_response(description="different")]}
         with patch(
-            "youtube_automation.scripts.channel_settings_cli.get_youtube",
-            return_value=youtube,
+            "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+            return_value=SimpleNamespace(youtube=youtube),
         ):
             rc = channel_settings_cli.main(["diff"])
         out = capsys.readouterr().out
@@ -537,8 +537,8 @@ class TestCLIDiff:
         youtube.channels().list().execute.return_value = {"items": [remote]}
 
         with patch(
-            "youtube_automation.scripts.channel_settings_cli.get_youtube",
-            return_value=youtube,
+            "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+            return_value=SimpleNamespace(youtube=youtube),
         ):
             rc = channel_settings_cli.main(["diff", "--no-localizations"])
 
@@ -553,8 +553,8 @@ class TestCLIPushDryRun:
         youtube = MagicMock()
         youtube.channels().list().execute.return_value = {"items": [_mock_remote_response(description="old remote")]}
         with patch(
-            "youtube_automation.scripts.channel_settings_cli.get_youtube",
-            return_value=youtube,
+            "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+            return_value=SimpleNamespace(youtube=youtube),
         ):
             rc = channel_settings_cli.main(["push"])
         out = capsys.readouterr().out
@@ -566,8 +566,8 @@ class TestCLIPushDryRun:
         youtube = MagicMock()
         youtube.channels().list().execute.return_value = {"items": [_mock_remote_response(description="old remote")]}
         with patch(
-            "youtube_automation.scripts.channel_settings_cli.get_youtube",
-            return_value=youtube,
+            "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+            return_value=SimpleNamespace(youtube=youtube),
         ):
             rc = channel_settings_cli.main(["push", "--apply"])
         assert rc == 0
@@ -598,8 +598,8 @@ class TestCLIPushDryRun:
         remote["status"] = {"selfDeclaredMadeForKids": True}  # local fixture は False
         youtube.channels().list().execute.return_value = {"items": [remote]}
         with patch(
-            "youtube_automation.scripts.channel_settings_cli.get_youtube",
-            return_value=youtube,
+            "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+            return_value=SimpleNamespace(youtube=youtube),
         ):
             rc = channel_settings_cli.main(["push", "--apply", "--no-localizations"])
         assert rc == 0
@@ -625,8 +625,8 @@ class TestCLIPushDryRun:
         youtube.channels().list().execute.return_value = {"items": [remote]}
 
         with patch(
-            "youtube_automation.scripts.channel_settings_cli.get_youtube",
-            return_value=youtube,
+            "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+            return_value=SimpleNamespace(youtube=youtube),
         ):
             rc = channel_settings_cli.main(["push", "--apply", "--no-localizations"])
 
@@ -657,8 +657,8 @@ class TestCLIPushDryRun:
             ]
         }
         with patch(
-            "youtube_automation.scripts.channel_settings_cli.get_youtube",
-            return_value=youtube,
+            "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+            return_value=SimpleNamespace(youtube=youtube),
         ):
             rc = channel_settings_cli.main(["push", "--apply", "--no-localizations"])
         assert rc == 0
@@ -672,8 +672,8 @@ class TestCLIPushQuota:
 
     def _patch_youtube(self, youtube):
         return patch(
-            "youtube_automation.scripts.channel_settings_cli.get_youtube",
-            return_value=youtube,
+            "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+            return_value=SimpleNamespace(youtube=youtube),
         )
 
     def test_dry_run_does_not_record_quota(self, capsys):
@@ -682,7 +682,7 @@ class TestCLIPushQuota:
         youtube.channels().list().execute.return_value = {"items": [_mock_remote_response(description="old remote")]}
         with (
             self._patch_youtube(youtube),
-            patch("youtube_automation.utils.cost_tracker.log_quota") as log_quota,
+            patch("youtube_automation.infrastructure.cost_tracker.log_quota") as log_quota,
         ):
             rc = channel_settings_cli.main(["push"])
         assert rc == 0
@@ -695,7 +695,7 @@ class TestCLIPushQuota:
         youtube.channels().list().execute.return_value = {"items": [_mock_remote_response(description="old remote")]}
         with (
             self._patch_youtube(youtube),
-            patch("youtube_automation.utils.cost_tracker.log_quota") as log_quota,
+            patch("youtube_automation.infrastructure.cost_tracker.log_quota") as log_quota,
         ):
             rc = channel_settings_cli.main(["push", "--apply"])
         assert rc == 0
@@ -715,7 +715,7 @@ class TestCLIPushQuota:
         youtube.channels().list().execute.return_value = {"items": [remote]}
         with (
             self._patch_youtube(youtube),
-            patch("youtube_automation.utils.cost_tracker.log_quota") as log_quota,
+            patch("youtube_automation.infrastructure.cost_tracker.log_quota") as log_quota,
         ):
             rc = channel_settings_cli.main(["push", "--apply", "--no-localizations"])
         assert rc == 0
@@ -733,7 +733,7 @@ class TestCLIPushQuota:
         youtube.channels().update().execute.side_effect = RuntimeError("boom")
         with (
             self._patch_youtube(youtube),
-            patch("youtube_automation.utils.cost_tracker.log_quota") as log_quota,
+            patch("youtube_automation.infrastructure.cost_tracker.log_quota") as log_quota,
         ):
             rc = channel_settings_cli.main(["push", "--apply"])
         assert rc == 1
@@ -749,7 +749,7 @@ class TestCLIPushQuota:
         with (
             self._patch_youtube(youtube),
             patch(
-                "youtube_automation.utils.cost_tracker.log_quota",
+                "youtube_automation.infrastructure.cost_tracker.log_quota",
                 side_effect=RuntimeError("tracker down"),
             ),
         ):
@@ -774,7 +774,10 @@ class TestCLIPushChannelIdSafety:
         # remote の id は UCfixture
         youtube.channels().list().execute.return_value = {"items": [_mock_remote_response()]}
         with (
-            patch("youtube_automation.scripts.channel_settings_cli.get_youtube", return_value=youtube),
+            patch(
+                "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+                return_value=SimpleNamespace(youtube=youtube),
+            ),
             patch(
                 "youtube_automation.scripts.channel_settings_cli.load_config",
                 return_value=_fake_config("UCdifferent"),
@@ -790,7 +793,10 @@ class TestCLIPushChannelIdSafety:
         youtube = MagicMock()
         youtube.channels().list().execute.return_value = {"items": [_mock_remote_response()]}
         with (
-            patch("youtube_automation.scripts.channel_settings_cli.get_youtube", return_value=youtube),
+            patch(
+                "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+                return_value=SimpleNamespace(youtube=youtube),
+            ),
             patch(
                 "youtube_automation.scripts.channel_settings_cli.load_config",
                 return_value=_fake_config("UCfixture"),
@@ -807,7 +813,10 @@ class TestCLIPushChannelIdSafety:
         youtube = MagicMock()
         youtube.channels().list().execute.return_value = {"items": [_mock_remote_response()]}
         with (
-            patch("youtube_automation.scripts.channel_settings_cli.get_youtube", return_value=youtube),
+            patch(
+                "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+                return_value=SimpleNamespace(youtube=youtube),
+            ),
             patch(
                 "youtube_automation.scripts.channel_settings_cli.load_config",
                 return_value=_fake_config(""),
@@ -831,8 +840,8 @@ class TestCLIPull:
         youtube.channels().list().execute.return_value = {"items": [remote]}
 
         with patch(
-            "youtube_automation.scripts.channel_settings_cli.get_youtube",
-            return_value=youtube,
+            "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+            return_value=SimpleNamespace(youtube=youtube),
         ):
             rc = channel_settings_cli.main(["pull", "--no-localizations"])
 
@@ -856,8 +865,8 @@ class TestCLIPull:
         before_loc = loc_path.read_text(encoding="utf-8")
 
         with patch(
-            "youtube_automation.scripts.channel_settings_cli.get_youtube",
-            return_value=youtube,
+            "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+            return_value=SimpleNamespace(youtube=youtube),
         ):
             rc = channel_settings_cli.main(["pull", "--apply", "--no-localizations"])
 
@@ -875,8 +884,8 @@ class TestCLIPull:
         config_path = tmp_path / "config" / "channel" / "meta.json"
         before = config_path.read_text(encoding="utf-8")
         with patch(
-            "youtube_automation.scripts.channel_settings_cli.get_youtube",
-            return_value=youtube,
+            "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+            return_value=SimpleNamespace(youtube=youtube),
         ):
             rc = channel_settings_cli.main(["pull"])
         after = config_path.read_text(encoding="utf-8")
@@ -891,8 +900,8 @@ class TestCLIPull:
         config_path = tmp_path / "config" / "channel" / "meta.json"
         before_data = json.loads(config_path.read_text(encoding="utf-8"))
         with patch(
-            "youtube_automation.scripts.channel_settings_cli.get_youtube",
-            return_value=youtube,
+            "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+            return_value=SimpleNamespace(youtube=youtube),
         ):
             rc = channel_settings_cli.main(["pull", "--apply"])
         assert rc == 0
@@ -919,8 +928,8 @@ class TestCLIPull:
         before = config_path.read_text(encoding="utf-8")
 
         with patch(
-            "youtube_automation.scripts.channel_settings_cli.get_youtube",
-            return_value=youtube,
+            "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+            return_value=SimpleNamespace(youtube=youtube),
         ):
             rc = channel_settings_cli.main(["pull", "--channel-id-only"])
         assert rc == 0
@@ -936,8 +945,8 @@ class TestCLIPull:
         before_data = json.loads(config_path.read_text(encoding="utf-8"))
 
         with patch(
-            "youtube_automation.scripts.channel_settings_cli.get_youtube",
-            return_value=youtube,
+            "youtube_automation.scripts.channel_settings_cli.YouTubeClients",
+            return_value=SimpleNamespace(youtube=youtube),
         ):
             rc = channel_settings_cli.main(["pull", "--channel-id-only", "--apply"])
         assert rc == 0
@@ -962,3 +971,53 @@ def _prepare_channel_dir(tmp_path: Path, monkeypatch) -> None:
         encoding="utf-8",
     )
     monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
+
+
+@pytest.mark.parametrize("response", [{"items": [None]}, {"items": {"id": "UCabc"}}, None])
+def test_fetch_channel_rejects_invalid_response_shape(response):
+    youtube = MagicMock()
+    youtube.channels().list().execute.return_value = response
+
+    with pytest.raises(YouTubeAPIError, match="channel"):
+        fetch_channel(youtube)
+
+
+@pytest.mark.parametrize(
+    "localizations_response",
+    [None, {"items": None}, {"items": {}}, {"items": [None]}],
+)
+def test_fetch_channel_rejects_invalid_localizations_response_shape(localizations_response):
+    youtube = MagicMock()
+
+    def _list(**kwargs):
+        request = MagicMock()
+        request.execute.return_value = (
+            {"items": [{"id": "UCx"}]} if kwargs.get("part") != "localizations" else localizations_response
+        )
+        return request
+
+    youtube.channels.return_value.list.side_effect = _list
+
+    with pytest.raises(YouTubeAPIError, match="localizations"):
+        fetch_channel(youtube)
+
+
+def test_fetch_channel_does_not_mutate_combined_response_item():
+    youtube = MagicMock()
+    combined_item = {"id": "UCx", "snippet": {"title": "Original"}}
+
+    def _list(**kwargs):
+        request = MagicMock()
+        request.execute.return_value = (
+            {"items": [combined_item]}
+            if kwargs.get("part") != "localizations"
+            else {"items": [{"localizations": {"ja": {"title": "日本語"}}}]}
+        )
+        return request
+
+    youtube.channels.return_value.list.side_effect = _list
+
+    result = fetch_channel(youtube)
+
+    assert result["localizations"] == {"ja": {"title": "日本語"}}
+    assert "localizations" not in combined_item

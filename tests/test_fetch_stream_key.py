@@ -30,8 +30,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from youtube_automation.utils.exceptions import ConfigError, ValidationError, YouTubeAPIError
-from youtube_automation.utils.secrets import _SECRET_REFS
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError, YouTubeAPIError
+from youtube_automation.infrastructure.secrets import _SECRET_REFS
 
 _VALID_CLIENT_SECRETS_JSON = '{"installed":{"client_id":"x","client_secret":"y","redirect_uris":["http://localhost"]}}'
 
@@ -193,7 +193,7 @@ class TestExtractStreamInfo:
 
 
 # ---------------------------------------------------------------------------
-# write_op_secret（utils/secrets.py の新関数）
+# write_op_secret（infrastructure/secrets.py の新関数）
 # ---------------------------------------------------------------------------
 
 
@@ -203,11 +203,11 @@ class TestWriteOpSecret:
         When ``write_op_secret`` を呼ぶ
         Then ``op item edit`` が呼ばれて例外なしで完了する。
         """
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
         with (
-            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
         ):
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
@@ -223,11 +223,11 @@ class TestWriteOpSecret:
         When ``write_op_secret``
         Then ``op item create`` にフォールバックして書き込みが完了する。
         """
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
         with (
-            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
         ):
             mock_run.side_effect = [
                 subprocess.CalledProcessError(
@@ -249,9 +249,9 @@ class TestWriteOpSecret:
         When ``write_op_secret``
         Then ``ConfigError``（外部ツール不在）。
         """
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
-        with patch("youtube_automation.utils.secrets.shutil.which", return_value=None):
+        with patch("youtube_automation.infrastructure.secrets.shutil.which", return_value=None):
             with pytest.raises(ConfigError):
                 write_op_secret("Personal", "YouTube", "stream_key", "abc")
 
@@ -260,11 +260,11 @@ class TestWriteOpSecret:
         When ``write_op_secret``
         Then create に進まず ``ConfigError`` で fail fast する。
         """
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
         with (
-            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
         ):
             mock_run.side_effect = subprocess.CalledProcessError(
                 returncode=1,
@@ -287,11 +287,11 @@ class TestWriteOpSecret:
         When ``write_op_secret``
         Then create に進まず timeout 詳細付き ``ConfigError`` で fail fast する。
         """
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
         with (
-            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
         ):
             mock_run.side_effect = subprocess.TimeoutExpired(cmd=["op", "item", "edit"], timeout=10)
 
@@ -305,11 +305,11 @@ class TestWriteOpSecret:
         When ``write_op_secret``
         Then create の stderr 付き ``ConfigError`` で fail fast する。
         """
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
         with (
-            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
         ):
             mock_run.side_effect = [
                 subprocess.CalledProcessError(returncode=1, cmd=["op"], stderr="item not found"),
@@ -326,11 +326,11 @@ class TestWriteOpSecret:
         When ``write_op_secret``
         Then create の timeout 詳細付き ``ConfigError`` で fail fast する。
         """
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
         with (
-            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
         ):
             mock_run.side_effect = [
                 subprocess.CalledProcessError(returncode=1, cmd=["op"], stderr="item not found"),
@@ -350,11 +350,11 @@ class TestWriteOpSecret:
         Issue #151 の core regression guard: argv に value 文字列を埋め込む実装への退行を検出する。
         値の伝搬は stdin 経由（別ケースで担保）。
         """
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
         with (
-            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
         ):
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
@@ -373,11 +373,11 @@ class TestWriteOpSecret:
 
         edit / create 双方が同一の漏えい経路を共有しているため、fallback 側も対称に担保する。
         """
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
         with (
-            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
         ):
             mock_run.side_effect = [
                 subprocess.CalledProcessError(
@@ -403,11 +403,11 @@ class TestWriteOpSecret:
 
         argv に乗らないだけでなく、stdin 経由で確実に op プロセスに伝搬していることを独立検証する。
         """
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
         with (
-            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
         ):
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
@@ -423,11 +423,11 @@ class TestWriteOpSecret:
         When ``write_op_secret`` が ``op item create`` にフォールバックする
         Then create 呼び出しでも PASSWORD item JSON を stdin 配線する。
         """
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
         with (
-            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
         ):
             mock_run.side_effect = [
                 subprocess.CalledProcessError(
@@ -452,12 +452,12 @@ class TestWriteOpSecret:
         When ``write_op_secret`` が argv を構築する
         Then JSON template は stdin から渡し、edit argv に stdin marker は含めない。
         """
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
         field = "stream_key"
         with (
-            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
         ):
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
@@ -468,11 +468,11 @@ class TestWriteOpSecret:
 
     def test_should_include_builtin_password_field_when_creating_password_item(self):
         """PASSWORD item の新規作成には組み込み password field が必要。"""
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
         with (
-            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
         ):
             mock_run.side_effect = [
                 subprocess.CalledProcessError(returncode=1, cmd=["op"], stderr="item not found"),
@@ -489,11 +489,11 @@ class TestWriteOpSecret:
         When PASSWORD item を新規作成する
         Then password field は purpose 付きの 1 件だけになる。
         """
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
         with (
-            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
         ):
             mock_run.side_effect = [
                 subprocess.CalledProcessError(returncode=1, cmd=["op"], stderr="item not found"),
@@ -519,11 +519,11 @@ class TestWriteOpSecret:
 
         ``_op_error_detail`` が stderr を文字列として扱う前提を境界で固定する。
         """
-        from youtube_automation.utils.secrets import write_op_secret
+        from youtube_automation.infrastructure.secrets import write_op_secret
 
         with (
-            patch("youtube_automation.utils.secrets.shutil.which", return_value="/usr/bin/op"),
-            patch("youtube_automation.utils.secrets.subprocess.run") as mock_run,
+            patch("youtube_automation.infrastructure.secrets.shutil.which", return_value="/usr/bin/op"),
+            patch("youtube_automation.infrastructure.secrets.subprocess.run") as mock_run,
         ):
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
 
@@ -575,7 +575,7 @@ class TestOAuthHandlerExtension:
         When 既存 callsite が ``YouTubeOAuthHandler(auth_dir=...)`` 相当で構築
         Then ``token_file`` は ``auth_dir/"token.json"`` のまま（後方互換）。
         """
-        from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
+        from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 
         auth_dir = tmp_path / "auth"
         auth_dir.mkdir()
@@ -590,7 +590,7 @@ class TestOAuthHandlerExtension:
         When ``YouTubeOAuthHandler()``
         Then ``SCOPES`` クラス属性は元の 4 件のまま（broaden しない）。
         """
-        from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
+        from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 
         # クラス属性 SCOPES は引き続き 4 件で機能（既存のデフォルトとして残す）
         assert "https://www.googleapis.com/auth/youtube" in YouTubeOAuthHandler.SCOPES
@@ -607,7 +607,7 @@ class TestOAuthHandlerExtension:
         When ``YouTubeOAuthHandler(token_path=...)``
         Then ``token_file`` は指定値を保持する。
         """
-        from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
+        from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 
         custom_token = tmp_path / "auth" / "token_streaming.json"
         custom_token.parent.mkdir(parents=True)
@@ -623,7 +623,7 @@ class TestOAuthHandlerExtension:
 
         ``self._scopes`` のような実装詳細に依存せず、観測可能な API 呼び出しで検証する。
         """
-        from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
+        from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 
         custom_scopes = ["https://www.googleapis.com/auth/youtube"]
         token_file = tmp_path / "token_streaming.json"
@@ -633,7 +633,7 @@ class TestOAuthHandlerExtension:
 
         with (
             patch.dict(os.environ, {"CLIENT_SECRETS_DIR": str(tmp_path)}),
-            patch("youtube_automation.auth.oauth_handler.Credentials") as mock_creds_cls,
+            patch("youtube_automation.infrastructure.auth.youtube.Credentials") as mock_creds_cls,
         ):
             mock_creds = MagicMock()
             mock_creds.expired = False
@@ -650,7 +650,7 @@ class TestOAuthHandlerExtension:
         When ``authenticate()``
         Then ``InstalledAppFlow.from_client_secrets_file`` に指定した scopes が渡る。
         """
-        from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
+        from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 
         custom_scopes = ["https://www.googleapis.com/auth/youtube"]
         token_file = tmp_path / "token_streaming.json"  # 存在させない
@@ -659,7 +659,7 @@ class TestOAuthHandlerExtension:
 
         with (
             patch.dict(os.environ, {"CLIENT_SECRETS_DIR": str(tmp_path)}),
-            patch("youtube_automation.auth.oauth_handler.InstalledAppFlow") as mock_flow_cls,
+            patch("youtube_automation.infrastructure.auth.youtube.InstalledAppFlow") as mock_flow_cls,
         ):
             mock_flow = MagicMock()
             mock_creds = MagicMock()

@@ -6,6 +6,7 @@ cost_tracker.log_quota を 1 回呼ぶことを固定する。
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import httplib2
@@ -16,8 +17,8 @@ import youtube_automation.scripts.fetch_stream_key as fetch_stream_key_module
 import youtube_automation.scripts.get_channel_status as get_channel_status_module
 import youtube_automation.scripts.metadata_audit as metadata_audit_module
 import youtube_automation.scripts.playlist_status as playlist_status_module
-from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.infrastructure import cost_tracker
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 @pytest.fixture
@@ -141,10 +142,17 @@ class TestGetChannelStatusQuota:
         analytics_service.reports.return_value.query.return_value.execute.side_effect = [
             _http_error("503") if failure_stage == "analytics" else {"rows": []}
         ]
-        monkeypatch.setattr(get_channel_status_module, "get_youtube_readonly", lambda: youtube_service)
-        monkeypatch.setattr(get_channel_status_module, "get_analytics", lambda: analytics_service)
-        monkeypatch.setattr(get_channel_status_module, "get_reporting", MagicMock())
-        monkeypatch.setattr(get_channel_status_module, "get_credentials_readonly", MagicMock())
+        clients = SimpleNamespace(
+            youtube_readonly=youtube_service,
+            analytics=analytics_service,
+            reporting=MagicMock(),
+            credentials_readonly=MagicMock(),
+        )
+        monkeypatch.setattr(
+            get_channel_status_module,
+            "create_readonly_youtube_clients",
+            lambda: clients,
+        )
 
         captured = {}
         collector_type = get_channel_status_module.YouTubeAnalyticsCollector
@@ -223,8 +231,8 @@ class TestGetChannelStatusQuota:
             _http_error(),
             {"items": [{"id": "UC_test"}]},
         ]
-        monkeypatch.setattr("youtube_automation.utils.retry._DEFAULT_SLEEP", lambda _: None)
-        monkeypatch.setattr("youtube_automation.utils.retry._DEFAULT_JITTER", lambda _start, _end: 0)
+        monkeypatch.setattr("youtube_automation.infrastructure.retry._DEFAULT_SLEEP", lambda _: None)
+        monkeypatch.setattr("youtube_automation.infrastructure.retry._DEFAULT_JITTER", lambda _start, _end: 0)
 
         resolved = get_channel_status_module.YouTubeDataAdapter(
             service,
@@ -247,8 +255,8 @@ class TestGetChannelStatusQuota:
             _http_error(),
             {"rows": []},
         ]
-        monkeypatch.setattr("youtube_automation.utils.retry._DEFAULT_SLEEP", lambda _: None)
-        monkeypatch.setattr("youtube_automation.utils.retry._DEFAULT_JITTER", lambda _start, _end: 0)
+        monkeypatch.setattr("youtube_automation.infrastructure.retry._DEFAULT_SLEEP", lambda _: None)
+        monkeypatch.setattr("youtube_automation.infrastructure.retry._DEFAULT_JITTER", lambda _start, _end: 0)
 
         response = get_channel_status_module.AnalyticsAdapter(
             client,
@@ -350,7 +358,10 @@ class TestMetadataAuditQuota:
 
     def test_success_records_videos_list_once(self, quota_recorder):
         yt = self._yt({"items": []})
-        with patch("youtube_automation.utils.youtube_service.get_youtube_readonly", return_value=yt):
+        with patch(
+            "youtube_automation.infrastructure.google.youtube.YouTubeClients",
+            return_value=SimpleNamespace(youtube_readonly=yt),
+        ):
             issues = metadata_audit_module.audit_remote({"vid1": "col-a"})
 
         assert issues["vid1"] == ["not found on YouTube"]
@@ -359,7 +370,10 @@ class TestMetadataAuditQuota:
     def test_api_failure_records_quota_and_propagates(self, quota_recorder):
         yt = self._yt({})
         yt.videos.return_value.list.return_value.execute.side_effect = _http_error()
-        with patch("youtube_automation.utils.youtube_service.get_youtube_readonly", return_value=yt):
+        with patch(
+            "youtube_automation.infrastructure.google.youtube.YouTubeClients",
+            return_value=SimpleNamespace(youtube_readonly=yt),
+        ):
             with pytest.raises(HttpError):
                 metadata_audit_module.audit_remote({"vid1": "col-a"})
 
@@ -367,7 +381,10 @@ class TestMetadataAuditQuota:
 
     def test_broken_tracker_keeps_result(self, broken_tracker):
         yt = self._yt({"items": []})
-        with patch("youtube_automation.utils.youtube_service.get_youtube_readonly", return_value=yt):
+        with patch(
+            "youtube_automation.infrastructure.google.youtube.YouTubeClients",
+            return_value=SimpleNamespace(youtube_readonly=yt),
+        ):
             issues = metadata_audit_module.audit_remote({"vid1": "col-a"})
 
         assert issues["vid1"] == ["not found on YouTube"]

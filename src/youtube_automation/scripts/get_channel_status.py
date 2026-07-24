@@ -12,16 +12,11 @@ from datetime import datetime, timedelta
 
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
+from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.analytics_adapter import AnalyticsAdapter, YouTubeDataAdapter
-from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.exceptions import AutomationError, YouTubeAPIError
+from youtube_automation.infrastructure.errors import AutomationError, YouTubeAPIError
+from youtube_automation.infrastructure.google.youtube import create_readonly_youtube_clients
 from youtube_automation.utils.reporting_api import ReportingAPIClient
-from youtube_automation.utils.youtube_service import (
-    get_analytics,
-    get_credentials_readonly,
-    get_reporting,
-    get_youtube_readonly,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -56,20 +51,21 @@ def get_channel_latest_status():
     logger.info(f"📊 {config.meta.channel_short} 最新状況取得中...")
 
     try:
+        clients = create_readonly_youtube_clients()
         collector = YouTubeAnalyticsCollector(
             youtube_client=YouTubeDataAdapter(
-                _DeferredService(get_youtube_readonly),
+                _DeferredService(lambda: clients.youtube_readonly),
                 retry_requests=False,
                 on_request=lambda bucket: _record_read_quota(bucket, service=_QUOTA_SERVICE),
             ),
             analytics_client=AnalyticsAdapter(
-                _DeferredService(get_analytics),
+                _DeferredService(lambda: clients.analytics),
                 retry_requests=False,
                 on_request=lambda bucket: _record_read_quota(bucket, service=_ANALYTICS_QUOTA_SERVICE),
             ),
             reporting_client=ReportingAPIClient(
-                _DeferredService(get_reporting),
-                credentials=_DeferredService(get_credentials_readonly),
+                _DeferredService(lambda: clients.reporting),
+                credentials=_DeferredService(lambda: clients.credentials_readonly),
             ),
             channel_root=channel_dir(),
         )

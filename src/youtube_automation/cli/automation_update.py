@@ -39,7 +39,7 @@ from youtube_automation.cli.automation_update_refs import (
 from youtube_automation.cli.automation_update_remote import _github_api_get as _remote_github_api_get
 from youtube_automation.cli.automation_update_remote import _locked_git_sha
 from youtube_automation.cli.skills_sync import bundled_skill_names
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 EXIT_UP_TO_DATE = 0
 EXIT_DIFF = 1

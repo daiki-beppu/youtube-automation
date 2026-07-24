@@ -36,7 +36,7 @@ from youtube_automation.domains.collections.weekly_vote_log import (
     compute_vote_log_weights,
     load_weekly_vote_log,
 )
-from youtube_automation.utils.exceptions import AutomationError, ValidationError
+from youtube_automation.infrastructure.errors import AutomationError, ValidationError
 
 logger = logging.getLogger(__name__)
 

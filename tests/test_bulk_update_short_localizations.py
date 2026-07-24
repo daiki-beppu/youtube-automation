@@ -18,6 +18,7 @@ import json
 import shutil
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, call, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -274,7 +275,7 @@ class TestMain:
         yt_mock = self._build_youtube_mock()
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep") as sleep_mock,
         ):
             # When
@@ -307,7 +308,7 @@ class TestMain:
         yt_mock = self._build_youtube_mock()
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep"),
         ):
             # When
@@ -339,7 +340,7 @@ class TestMain:
         yt_mock = self._build_youtube_mock()
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep") as sleep_mock,
         ):
             try:
@@ -362,13 +363,13 @@ class TestMain:
         reset()
         monkeypatch.setattr(sys, "argv", ["yt-shorts-bulk-update-loc"])
 
-        with patch.object(mod, "get_youtube") as yt_mock:
+        with patch.object(mod, "YouTubeClients") as clients_mock:
             # When/Then
             with pytest.raises(SystemExit) as excinfo:
                 mod.main()
             assert excinfo.value.code == 1
             # API は触らない
-            yt_mock.assert_not_called()
+            clients_mock.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -401,7 +402,7 @@ class TestQuotaLogging:
         yt_mock = self._build_youtube_mock()
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod, "log_quota") as quota_mock,
             patch.object(mod.time, "sleep"),
         ):
@@ -431,7 +432,7 @@ class TestQuotaLogging:
         yt_mock = self._build_youtube_mock()
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod, "log_quota") as quota_mock,
             patch.object(mod.time, "sleep"),
         ):
@@ -473,7 +474,7 @@ class TestQuotaLogging:
         ]
 
         with (
-            patch.object(mod, "get_youtube", return_value=yt_mock),
+            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod, "log_quota") as quota_mock,
             patch.object(mod.time, "sleep"),
         ):

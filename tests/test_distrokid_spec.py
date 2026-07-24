@@ -18,7 +18,7 @@ from youtube_automation.domains.distrokid.specification import (
     title_map_from_entry,
     write_collection_spec,
 )
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 # ---------------------------------------------------------------------------
 # テスト用ヘルパー

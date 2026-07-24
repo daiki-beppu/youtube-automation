@@ -53,8 +53,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
 
 # 02-Individual-music/ のダウンロード済み判定に使う音声拡張子（/wf-next Suno パスと同一）。
 AUDIO_EXTENSIONS = (".mp3", ".m4a", ".wav")

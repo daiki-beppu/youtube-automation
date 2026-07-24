@@ -17,8 +17,8 @@ import sys
 import time
 from pathlib import Path
 
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.exceptions import ConfigError
 from youtube_automation.utils.genai_client import create_veo_genai_client
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.veo_generator import (

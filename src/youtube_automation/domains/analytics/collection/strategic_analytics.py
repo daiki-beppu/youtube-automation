@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Dict, List
 
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 from youtube_automation.utils.profile import section
 
 if TYPE_CHECKING:

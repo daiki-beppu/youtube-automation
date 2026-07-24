@@ -20,9 +20,10 @@ import time
 
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.domains.metadata import build_short_localizations
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.cost_tracker import log_quota
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.cost_tracker import log_quota
-from youtube_automation.utils.youtube_service import get_youtube
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +129,7 @@ def main() -> None:
             print(f"  - {v['video_id']} ({v['collection_name']}): langs={list(locs.keys())}")
         return
 
-    youtube = get_youtube()
+    youtube = YouTubeClients(full_handler=YouTubeOAuthHandler()).youtube
     for v in videos:
         localizations = _locs_for(v)
         if not localizations:

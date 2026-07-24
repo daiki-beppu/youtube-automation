@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from google.auth.exceptions import DefaultCredentialsError
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 
 @pytest.fixture(autouse=True)

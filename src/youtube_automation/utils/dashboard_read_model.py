@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from youtube_automation.utils.exceptions import DashboardChannelNotFoundError
+from youtube_automation.infrastructure.errors import DashboardChannelNotFoundError
 
 SCHEMA_VERSION = 1
 

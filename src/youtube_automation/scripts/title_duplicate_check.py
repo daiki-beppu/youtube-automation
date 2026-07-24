@@ -12,9 +12,9 @@ from youtube_automation.domains.metadata.descriptions import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
 )
+from youtube_automation.domains.uploads.preflight import check_title_codepoint_limit, check_title_duplicate_warnings
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.exceptions import ConfigError
-from youtube_automation.utils.preflight_checks import check_title_codepoint_limit, check_title_duplicate_warnings
 
 
 def extract_section(text: str, header: str) -> str | None:

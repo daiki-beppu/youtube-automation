@@ -11,19 +11,21 @@ token 漏洩時の blast radius を read-only に限定し、「どの skill が
 | `auth/token.readonly.json` | `youtube.readonly` / `yt-analytics.readonly` / `yt-analytics-monetary.readonly` | read-only 系（Analytics 収集 / ベンチマーク / ステータス閲覧） | `uv run yt-oauth --readonly` |
 | `auth/token_streaming.json` | `youtube` | ライブ配信 stream key 取得（`youtube.readonly` では streamName がマスクされるため write scope が必要。#135） | `uv run yt-fetch-stream-key` の初回実行 |
 
-scope 定義の単一ソースは `src/youtube_automation/auth/oauth_handler.py` の
+scope 定義の単一ソースは `src/youtube_automation/infrastructure/auth/youtube.py` の
 `YouTubeOAuthHandler.SCOPES` / `READONLY_SCOPES`（stream 用は `scripts/fetch_stream_key.py`）。
 
 ## token 選択と fallback の仕様
 
-- read 系の入口は `utils/youtube_service.py` の `ServiceRegistry` に集約されている。
-  `analytics` / `reporting` / `youtube_readonly` / `credentials_readonly` は
-  `token.readonly.json` を優先使用する。
+- read 系の入口は instance-scoped な `infrastructure/google/youtube.py` の
+  `YouTubeClients` に集約されている。
+  `analytics` / `reporting` / `youtube_readonly` は `token.readonly.json` を
+  優先使用する。Analytics / Reporting API 用の credentials は
+  `YouTubeOAuthHandler` の readonly handler 経由で取得される。
 - `token.readonly.json` が**未発行**の場合はサイレント失敗せず、warning ログで
   `uv run yt-oauth --readonly` による発行を案内した上で `token.json`（全 scope）へ
   フォールバックする。既存の下流チャンネルは再認証なしで従来どおり動作する。
 - token の探索順は `token.json` と同じ（channel 側 `auth/` → main worktree 側 `auth/`。#1721）。
-- write 系（`youtube` / `credentials`）は従来どおり `token.json` を使う。
+- write 系（`youtube`）は従来どおり `token.json` を使う。
 
 ## skill × 実効 scope 対応表
 
@@ -39,7 +41,7 @@ scope 定義の単一ソースは `src/youtube_automation/auth/oauth_handler.py`
 | /metadata-audit | `yt-metadata-audit`（監査のみ） | read-only | readonly 優先 |
 | /playlist（状態確認） | `yt-playlist-status` | read-only | readonly 優先 |
 | /streaming（帯域集計） | `yt-stream-bandwidth` / `yt-stream-archive-check` | read-only | readonly 優先 |
-| /video-upload | uploader agents（upload_core） | write（`youtube`） | `token.json` |
+| /video-upload | `domains/uploads/youtube.py` | write（`youtube`） | `token.json` |
 | /playlist（作成・割り当て） | `yt-playlist-manager` | write（`youtube`） | `token.json` |
 | /channel-new（seed / 設定 push） | `yt-channel-seed` / `yt-channel-settings` | write（`youtube`） | `token.json` |
 | /video-description ほか一括更新 | `yt-bulk-update-desc` / `yt-bulk-update-synthetic-media` | write（`youtube`） | `token.json` |
@@ -59,7 +61,7 @@ scope 定義の単一ソースは `src/youtube_automation/auth/oauth_handler.py`
 
 ## 最小権限化ロードマップ
 
-- 済: read 系入口（ServiceRegistry / analytics / benchmark / status 系 CLI）の readonly token 優先化（#1699）
+- 済: read 系入口（YouTubeClients / analytics / benchmark / status 系 CLI）の readonly token 優先化（#1699）
 - 済: stream key の専用 token 分離（#135）
 - 将来候補: write 系をさらに upload（`youtube`）と comment（`youtube.force-ssl`）に分割する。
   現状は write 系 skill が同一チャンネル運用者の操作で完結しており、分割の運用コスト

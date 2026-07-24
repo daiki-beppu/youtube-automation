@@ -30,9 +30,9 @@ from youtube_automation.domains.metadata.descriptions import (
     build_descriptions_md_parse_diagnostics,
     extract_descriptions_md_section,
 )
-from youtube_automation.utils.cost_tracker import log_quota
-from youtube_automation.utils.exceptions import YouTubeAPIError
-from youtube_automation.utils.youtube_service import get_youtube
+from youtube_automation.infrastructure.cost_tracker import log_quota
+from youtube_automation.infrastructure.errors import YouTubeAPIError
+from youtube_automation.infrastructure.google.youtube import create_authenticated_youtube_clients
 from youtube_automation.utils.youtube_tag import parse_youtube_tags
 
 logger = logging.getLogger(__name__)
@@ -177,7 +177,7 @@ def main() -> None:
         logger.info("nothing to do")
         return
 
-    yt = get_youtube()
+    yt = create_authenticated_youtube_clients().youtube
     ids = ",".join(p["video_id"] for p in payloads)
     current = _execute_youtube_request(
         yt.videos().list(id=ids, part="snippet"),

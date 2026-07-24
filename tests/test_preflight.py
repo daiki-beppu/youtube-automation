@@ -8,9 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.agents._preflight import PreflightMixin
-from youtube_automation.agents.youtube_auto_uploader import YouTubeAutoUploader
 from youtube_automation.configuration import load_config
+from youtube_automation.domains.uploads._preflight import PreflightMixin
+from youtube_automation.domains.uploads.youtube import YouTubeAutoUploader
+from youtube_automation.infrastructure.errors import ValidationError
 
 
 class _PreflightHarness(PreflightMixin):
@@ -151,7 +152,7 @@ A continuous BGM mix without chapter markers.
         encoding="utf-8",
     )
 
-    with pytest.raises(RuntimeError) as excinfo:
+    with pytest.raises(ValidationError) as excinfo:
         _PreflightHarness(tmp_path / "collections")._preflight_check(collection_dir)
 
     message = str(excinfo.value)
@@ -181,7 +182,7 @@ A continuous BGM mix without chapter markers.
         encoding="utf-8",
     )
 
-    with pytest.raises(RuntimeError) as excinfo:
+    with pytest.raises(ValidationError) as excinfo:
         _PreflightHarness(tmp_path / "collections")._preflight_check(collection_dir)
 
     message = str(excinfo.value)
@@ -257,7 +258,7 @@ def test_single_language_channel_missing_workflow_state_fails(tmp_path: Path, mo
     )
     (collection_dir / "workflow-state.json").unlink()
 
-    with pytest.raises(RuntimeError, match="workflow-state.json .*存在しません"):
+    with pytest.raises(ValidationError, match="workflow-state.json .*存在しません"):
         _run_preflight(channel_dir, collection_dir, monkeypatch)
 
 
@@ -285,7 +286,7 @@ def test_missing_supported_scene_phrase_fails(tmp_path: Path, monkeypatch: pytes
         description="00:00 Opening\n10:00 Middle\n20:00 Ending",
     )
 
-    with pytest.raises(RuntimeError, match="workflow-state.json.scene_phrases"):
+    with pytest.raises(ValidationError, match="workflow-state.json.scene_phrases"):
         _run_preflight(channel_dir, collection_dir, monkeypatch)
 
 
@@ -327,7 +328,7 @@ def test_plan_preflight_rejects_overlong_localized_title(
         description="A continuous BGM mix without chapter markers.",
     )
 
-    with pytest.raises(RuntimeError, match=r"\[de\] 114 codepoints.*ruhiger Fokus"):
+    with pytest.raises(ValidationError, match=r"\[de\] 114 codepoints.*ruhiger Fokus"):
         _run_preflight(channel_dir, collection_dir, monkeypatch)
 
 
@@ -349,7 +350,7 @@ def test_target_duration_config_allows_video_inside_target(
     master_dir = collection_dir / "01-master"
     master_dir.mkdir(parents=True)
     (master_dir / "master.mp4").write_bytes(b"probe is mocked")
-    monkeypatch.setattr("youtube_automation.agents._preflight.probe_duration", lambda _: 60 * 60)
+    monkeypatch.setattr("youtube_automation.domains.uploads._preflight.probe_duration", lambda _: 60 * 60)
 
     _run_preflight(channel_dir, collection_dir, monkeypatch)
 
@@ -372,9 +373,12 @@ def test_target_duration_config_blocks_short_video_without_override(
     master_dir = collection_dir / "01-master"
     master_dir.mkdir(parents=True)
     (master_dir / "master.mp4").write_bytes(b"probe is mocked")
-    monkeypatch.setattr("youtube_automation.agents._preflight.probe_duration", lambda _: 50 * 60 + 29)
+    monkeypatch.setattr("youtube_automation.domains.uploads._preflight.probe_duration", lambda _: 50 * 60 + 29)
 
-    with pytest.raises(RuntimeError, match=r"duration: 50m .*target 1h00m〜1h30m.*--allow-duration"):
+    with pytest.raises(
+        ValidationError,
+        match=r"duration: 50m .*target 1h00m〜1h30m.*--allow-duration-outside-target",
+    ):
         _run_preflight(channel_dir, collection_dir, monkeypatch)
 
 
@@ -396,7 +400,7 @@ def test_target_duration_override_allows_short_video(
     master_dir = collection_dir / "01-master"
     master_dir.mkdir(parents=True)
     (master_dir / "master.mp4").write_bytes(b"probe is mocked")
-    monkeypatch.setattr("youtube_automation.agents._preflight.probe_duration", lambda _: 50 * 60 + 29)
+    monkeypatch.setattr("youtube_automation.domains.uploads._preflight.probe_duration", lambda _: 50 * 60 + 29)
 
     _run_preflight(
         channel_dir,
@@ -423,7 +427,7 @@ def test_unreachable_tags_min_count_reports_character_limit_resolution(
         tags=["a" * 17] * 26 + ["b" * 27],
     )
 
-    with pytest.raises(RuntimeError) as excinfo:
+    with pytest.raises(ValidationError) as excinfo:
         _run_preflight(channel_dir, collection_dir, monkeypatch)
 
     message = str(excinfo.value)
@@ -452,7 +456,7 @@ def test_upload_collection_reports_unreachable_tags_min_count_from_channel_confi
     assert load_config().content.tags.min_count == 30
     uploader = YouTubeAutoUploader(str(channel_dir / "collections"))
 
-    with pytest.raises(RuntimeError) as excinfo:
+    with pytest.raises(ValidationError) as excinfo:
         uploader.upload_collection(str(collection_dir), apply_default_publish_at=False)
 
     message = str(excinfo.value)

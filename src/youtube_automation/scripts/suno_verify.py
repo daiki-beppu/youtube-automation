@@ -8,8 +8,8 @@ import sys
 
 from youtube_automation.domains.suno.config import infer_suno_mode, resolve_suno_config
 from youtube_automation.domains.suno.downloaded.validation import verify_suno_collection
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils.collection_paths import resolve_collection_dir
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
 from youtube_automation.utils.skill_config import load_skill_config
 
 

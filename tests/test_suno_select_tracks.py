@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.domains.suno import selection as suno_track_selection
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.scripts import suno_select_tracks
-from youtube_automation.utils.exceptions import ValidationError
 
 
 def _make_collection(tmp_path: Path, prompts: object) -> Path:

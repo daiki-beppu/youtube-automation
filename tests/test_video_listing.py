@@ -20,8 +20,8 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.domains.analytics.collection.video_listing import VideoListingMixin
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.domains.youtube.video_listing import VideoListingMixin
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 def _make_http_error(status: int = 403, message: bytes = b"error") -> HttpError:

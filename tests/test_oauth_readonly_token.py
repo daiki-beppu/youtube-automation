@@ -4,16 +4,14 @@ read-only skill が write scope を共用しないための 3 点を検証する
 
 1. ``READONLY_SCOPES`` に write scope（youtube / youtube.force-ssl）が含まれない
 2. ``token.readonly.json`` の解決（channel 側 → main worktree 側 → 未発行 None）
-3. ``ServiceRegistry`` の read 系が readonly token を優先し、未発行時は
-   warning 付きで ``token.json`` へフォールバックする（サイレント失敗しない）
+3. ``YouTubeClients`` が full/read-only handler を分離して扱う
 """
 
-import logging
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from youtube_automation.auth.oauth_handler import YouTubeOAuthHandler
-from youtube_automation.utils.youtube_service import ServiceRegistry
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 _WRITE_SCOPES = (
     "https://www.googleapis.com/auth/youtube",
@@ -115,88 +113,39 @@ class TestCreateReadonly:
         assert handler.token_file == main_root.resolve() / "auth" / "token.readonly.json"
 
 
-class TestServiceRegistryReadonly:
-    def test_unissued_falls_back_to_full_handler_with_warning(self, caplog):
-        """未発行時は token.json ハンドラーへフォールバックし、発行手順を warning 案内する（要件 3）"""
-        registry = ServiceRegistry()
-        full_handler = MagicMock(name="full_handler")
-        registry._get_handler = lambda: full_handler
-
-        with (
-            patch.object(YouTubeOAuthHandler, "readonly_token_path", return_value=None),
-            caplog.at_level(logging.WARNING, logger="youtube_automation.utils.youtube_service"),
-        ):
-            resolved = registry._get_readonly_handler()
-
-        assert resolved is full_handler
-        assert "token.readonly.json" in caplog.text
-        assert "yt-oauth --readonly" in caplog.text
-
-    def test_issued_uses_readonly_handler(self, tmp_path, caplog):
-        """発行済みなら readonly ハンドラーを使い、warning を出さない"""
-        registry = ServiceRegistry()
-        readonly_handler = MagicMock(name="readonly_handler")
-
-        with (
-            patch.object(
-                YouTubeOAuthHandler,
-                "readonly_token_path",
-                return_value=tmp_path / "token.readonly.json",
-            ),
-            patch.object(YouTubeOAuthHandler, "create_readonly", return_value=readonly_handler),
-            caplog.at_level(logging.WARNING, logger="youtube_automation.utils.youtube_service"),
-        ):
-            resolved = registry._get_readonly_handler()
-
-        assert resolved is readonly_handler
-        assert caplog.text == ""
-
-    def test_injected_handler_is_shared_for_read_paths(self):
-        """コンストラクタ注入時（テスト・DI）は read 系も同じハンドラーを共用する"""
-        injected = MagicMock(name="injected")
-        registry = ServiceRegistry(handler=injected)
-
-        assert registry._get_readonly_handler() is injected
-
-    def test_youtube_and_youtube_readonly_are_separate_caches(self):
-        """全 scope の youtube と read-only の youtube_readonly は別サービスとしてキャッシュされる"""
-        registry = ServiceRegistry()
+class TestYouTubeClientsReadonly:
+    def test_youtube_and_youtube_readonly_use_separate_handlers(self):
         full_handler = MagicMock(name="full_handler")
         readonly_handler = MagicMock(name="readonly_handler")
-        registry._get_handler = lambda: full_handler
-        registry._readonly_handler = readonly_handler
+        full_handler.get_youtube_service.return_value = "full"
+        readonly_handler.get_youtube_service.return_value = "readonly"
+        clients = YouTubeClients(full_handler=full_handler, readonly_handler=readonly_handler)
 
-        assert registry.youtube is full_handler.get_youtube_service.return_value
-        assert registry.youtube_readonly is readonly_handler.get_youtube_service.return_value
-        assert registry.youtube is not registry.youtube_readonly
+        assert clients.youtube == "full"
+        assert clients.youtube_readonly == "readonly"
+        full_handler.get_youtube_service.assert_called_once_with()
+        readonly_handler.get_youtube_service.assert_called_once_with()
 
-    def test_analytics_uses_readonly_credentials(self):
-        """analytics は readonly ハンドラーの credentials で build される"""
-        registry = ServiceRegistry()
-        readonly_handler = MagicMock(name="readonly_handler")
-        registry._readonly_handler = readonly_handler
+    def test_readonly_falls_back_to_full_handler_when_not_injected(self):
+        full_handler = MagicMock(name="full_handler")
+        full_handler.get_youtube_service.return_value = "full"
+        clients = YouTubeClients(full_handler=full_handler)
 
-        with patch("youtube_automation.utils.youtube_service.build") as mock_build:
-            _ = registry.analytics
+        assert clients.youtube_readonly == "full"
 
-        mock_build.assert_called_once_with(
-            "youtubeAnalytics", "v2", credentials=readonly_handler.authenticate.return_value
-        )
+    def test_reset_clears_readonly_service_cache(self):
+        handler = MagicMock()
+        handler.get_youtube_service.side_effect = ["first", "second"]
+        clients = YouTubeClients(full_handler=handler)
 
-    def test_reset_clears_readonly_state(self):
-        registry = ServiceRegistry()
-        registry._readonly_handler = MagicMock()
-        registry._youtube_readonly_service = MagicMock()
-
-        registry.reset()
-
-        assert registry._readonly_handler is None
-        assert registry._youtube_readonly_service is None
+        assert clients.youtube_readonly == "first"
+        clients.reset()
+        assert clients.youtube_readonly == "second"
 
 
 class TestMainReadonlyFlag:
     def test_readonly_flag_uses_create_readonly(self):
-        from youtube_automation.auth import oauth_handler
+        from youtube_automation.infrastructure.auth import youtube as oauth_handler
 
         mock_cls = MagicMock()
         mock_cls.create_readonly.return_value.test_connection.return_value = True
@@ -207,7 +156,7 @@ class TestMainReadonlyFlag:
         mock_cls.assert_not_called()
 
     def test_default_uses_full_handler(self):
-        from youtube_automation.auth import oauth_handler
+        from youtube_automation.infrastructure.auth import youtube as oauth_handler
 
         mock_cls = MagicMock()
         mock_cls.return_value.test_connection.return_value = True

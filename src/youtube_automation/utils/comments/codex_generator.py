@@ -7,9 +7,9 @@ import logging
 import subprocess
 import time
 
+from youtube_automation.infrastructure.errors import GeneratorError
 from youtube_automation.utils.comments.generator import ReplyContext
 from youtube_automation.utils.comments.prompt_safety import viewer_payload_json
-from youtube_automation.utils.exceptions import GeneratorError
 
 logger = logging.getLogger(__name__)
 

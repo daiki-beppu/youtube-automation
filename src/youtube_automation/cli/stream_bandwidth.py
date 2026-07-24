@@ -22,9 +22,11 @@ import datetime
 import sys
 from pathlib import Path
 
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
+from youtube_automation.infrastructure.secrets import get_secret
 from youtube_automation.utils.notification import notify
 from youtube_automation.utils.probe import probe_bitrate
-from youtube_automation.utils.secrets import get_secret
 from youtube_automation.utils.streaming import (
     ARCHIVES_EXPECTED,
     MONTHLY_QUOTA_GB,
@@ -39,7 +41,6 @@ from youtube_automation.utils.streaming.vultr_bandwidth import (
     fetch_bandwidth,
     monthly_total_gb,
 )
-from youtube_automation.utils.youtube_service import get_youtube_readonly
 
 
 def today() -> datetime.date:
@@ -126,7 +127,11 @@ def _resolve_report_archives(args: argparse.Namespace, *, year: int, month: int)
     """レポート用のアーカイブ実測値を取得する。"""
     if not ARCHIVES_EXPECTED:
         return None
-    return count_archives(get_youtube_readonly(), channel_id=args.channel_id, year=year, month=month)
+    clients = YouTubeClients(
+        full_handler=YouTubeOAuthHandler(),
+        readonly_handler=YouTubeOAuthHandler.create_readonly(),
+    )
+    return count_archives(clients.youtube_readonly, channel_id=args.channel_id, year=year, month=month)
 
 
 def _run_report(args: argparse.Namespace) -> int:

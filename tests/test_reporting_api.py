@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.utils.exceptions import ConfigError, ValidationError, YouTubeAPIError
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError, YouTubeAPIError
 from youtube_automation.utils.reporting_api import ReportingAPIClient
 
 _FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "reporting_api"
@@ -302,7 +302,7 @@ def test_collect_impressions_summary_returns_empty_when_no_reports():
 # ---------------------------------------------------------------------------
 def test_mixin_fail_open_returns_none_on_exception():
     from youtube_automation.domains.analytics.reporting import reporting_analytics
-    from youtube_automation.utils.exceptions import YouTubeAPIError
+    from youtube_automation.infrastructure.errors import YouTubeAPIError
 
     class _BoomClient:
         def __init__(self, *_a, **_k):

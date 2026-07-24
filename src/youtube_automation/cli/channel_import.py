@@ -14,7 +14,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from youtube_automation.configuration import find_workspace_root, load_config, reset
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 EXIT_OK = 0
 EXIT_USAGE = 2

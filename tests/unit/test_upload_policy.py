@@ -5,7 +5,7 @@
 
 import pytest
 
-from youtube_automation.utils.upload_policy import (
+from youtube_automation.domains.uploads.policy import (
     MAX_RETRY_ATTEMPTS,
     MAX_THUMBNAIL_BYTES,
     RETRYABLE_HTTP_STATUSES,
