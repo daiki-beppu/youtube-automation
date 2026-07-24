@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from youtube_automation.domains.analytics.mixins.audience_analytics import AudienceAnalyticsMixin
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 class StubCollector(AudienceAnalyticsMixin):

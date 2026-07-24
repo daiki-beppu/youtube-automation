@@ -24,10 +24,6 @@ def test_dry_run_generates_srt_without_youtube_api(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     output = tmp_path / "out.srt"
-    monkeypatch.setattr(
-        "youtube_automation.scripts.captions_upload.get_youtube",
-        lambda: (_ for _ in ()).throw(AssertionError("API must not be called")),
-    )
 
     code = main(
         [

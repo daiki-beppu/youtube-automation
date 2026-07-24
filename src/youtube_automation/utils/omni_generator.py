@@ -16,7 +16,7 @@ import httpx
 from google import genai
 from google.genai import errors
 
-from youtube_automation.utils.secrets import get_secret
+from youtube_automation.infrastructure.secrets import get_secret
 from youtube_automation.utils.veo_generator import smooth_loop
 
 DEFAULT_MODEL = "gemini-omni-flash-preview"

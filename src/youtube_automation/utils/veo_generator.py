@@ -12,7 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from youtube_automation.domains.media.video_type import VideoType
-from youtube_automation.utils import cost_tracker
+from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.utils import progress as progress_fmt
 from youtube_automation.utils import veo_operation_store as op_store
 from youtube_automation.utils.profile import section

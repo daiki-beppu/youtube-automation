@@ -15,8 +15,8 @@ from youtube_automation.domains.thumbnail.text.config import (
     overlay_spec_from_overlay_config,
     resolve_font_path,
 )
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils import skill_config
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
 
 
 @pytest.fixture(autouse=True)

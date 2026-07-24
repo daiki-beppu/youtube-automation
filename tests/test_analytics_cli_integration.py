@@ -151,13 +151,24 @@ def cli_dependencies(tmp_path: Path):
     config = MagicMock()
     config.meta.channel_name = "Test Channel"
     config.meta.channel_short = "TC"
-    oauth_module = MagicMock()
-    oauth_module.YouTubeOAuthHandler.return_value.test_connection.return_value = True
+    readonly_handler = MagicMock()
+    readonly_handler.test_connection.return_value = True
 
     def initialize(collector) -> None:
         collector.analytics_service = _AnalyticsService(reports)
         collector.youtube_service = _YouTubeService()
         collector.channel_id = "UC_TEST"
+
+    def initialize_collector(system) -> None:
+        from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
+
+        system.collector = YouTubeAnalyticsCollector(
+            youtube_client=_YouTubeService(),
+            analytics_client=_AnalyticsService(reports),
+            reporting_client=MagicMock(),
+            channel_root=tmp_path,
+        )
+        system.collector.initialize()
 
     with patch("youtube_automation.scripts.analytics_system.load_config", return_value=config):
         with patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path):
@@ -165,14 +176,15 @@ def cli_dependencies(tmp_path: Path):
                 "youtube_automation.domains.analytics.service.YouTubeAnalyticsCollector.initialize",
                 new=initialize,
             ):
-                with patch.dict(
-                    sys.modules,
-                    {
-                        "youtube_automation.auth": MagicMock(),
-                        "youtube_automation.auth.oauth_handler": oauth_module,
-                    },
+                with patch(
+                    "youtube_automation.scripts.analytics_system.YouTubeOAuthHandler.create_readonly",
+                    return_value=readonly_handler,
                 ):
-                    yield tmp_path, reports
+                    with patch(
+                        "youtube_automation.scripts.analytics_system.AnalyticsSystem._initialize_collector",
+                        new=initialize_collector,
+                    ):
+                        yield tmp_path, reports
 
 
 def test_yt_analytics_collects_and_saves_subscribed_status_via_cli(cli_dependencies) -> None:

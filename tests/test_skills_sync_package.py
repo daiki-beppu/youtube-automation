@@ -64,10 +64,10 @@ def test_auth_template_is_included_in_wheel_and_sdist_manifests() -> None:
     force_include = hatch["wheel"]["force-include"]
     sdist_include = hatch["sdist"]["include"]
 
-    assert force_include["auth/client_secrets.template.json"] == (
-        "youtube_automation/_auth/client_secrets.template.json"
+    assert force_include["src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json"] == (
+        "youtube_automation/infrastructure/resources/auth/client_secrets.template.json"
     )
-    assert "auth/client_secrets.template.json" in sdist_include
+    assert "src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json" in sdist_include
     assert force_include[".claude/settings.template.json"] == (
         "youtube_automation/_claude_settings/settings.template.json"
     )

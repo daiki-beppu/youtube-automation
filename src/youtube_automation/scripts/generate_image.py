@@ -24,7 +24,7 @@ from youtube_automation.domains.thumbnail.references import (
     plan_ttp_reference_assignments,
     resolve_dedup_recent_collections,
 )
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.image_provider import (
     ImageGenerationRequest,
     get_provider,

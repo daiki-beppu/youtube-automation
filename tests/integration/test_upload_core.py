@@ -11,7 +11,8 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.utils.exceptions import QuotaExhaustedError, UploadError, YouTubeAPIError
+from youtube_automation.infrastructure.errors import QuotaExhaustedError, UploadError, YouTubeAPIError
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 # ---------------------------------------------------------------------------
 # ヘルパー
@@ -20,16 +21,16 @@ from youtube_automation.utils.exceptions import QuotaExhaustedError, UploadError
 
 def _make_core_with_mock_youtube():
     """YouTube API を mock した YouTubeUploadCore を返す。"""
-    with patch("youtube_automation.utils.upload_core.get_youtube") as mock_get_youtube:
-        mock_youtube = MagicMock()
-        mock_get_youtube.return_value = mock_youtube
+    mock_youtube = MagicMock()
+    handler = MagicMock()
+    handler.get_youtube_service.return_value = mock_youtube
 
-        from youtube_automation.utils.upload_core import YouTubeUploadCore
+    from youtube_automation.domains.uploads.youtube import ResumableUploader
 
-        core = YouTubeUploadCore()
-        core.initialize()
+    core = ResumableUploader(YouTubeClients(full_handler=handler))
+    core.initialize()
 
-        return core, mock_youtube
+    return core, mock_youtube
 
 
 def _make_http_error(
@@ -164,7 +165,7 @@ class TestRetryBehavior:
             (None, {"id": "retry_ok"}),
         ]
 
-        with patch("youtube_automation.utils.upload_core.time.sleep"):
+        with patch("youtube_automation.domains.uploads.youtube.time.sleep"):
             result = core.upload_video(str(video), {"snippet": {}})
 
         assert result == "retry_ok"
@@ -183,7 +184,7 @@ class TestRetryBehavior:
             (None, {"id": "rate_limited_then_ok"}),
         ]
 
-        with patch("youtube_automation.utils.upload_core.time.sleep"):
+        with patch("youtube_automation.domains.uploads.youtube.time.sleep"):
             result = core.upload_video(str(video), {"snippet": {}})
 
         assert result == "rate_limited_then_ok"
@@ -202,7 +203,7 @@ class TestRetryBehavior:
             (None, {"id": "after_wait"}),
         ]
 
-        with patch("youtube_automation.utils.upload_core.time.sleep") as mock_sleep:
+        with patch("youtube_automation.domains.uploads.youtube.time.sleep") as mock_sleep:
             result = core.upload_video(str(video), {"snippet": {}})
 
         assert result == "after_wait"
@@ -221,7 +222,7 @@ class TestRetryBehavior:
         # 合計 6 回 429 を返せば必ず exhausted
         mock_insert.next_chunk.side_effect = [_make_http_error(429, retry_after="1")] * 6
 
-        with patch("youtube_automation.utils.upload_core.time.sleep"):
+        with patch("youtube_automation.domains.uploads.youtube.time.sleep"):
             with pytest.raises(QuotaExhaustedError) as exc_info:
                 core.upload_video(str(video), {"snippet": {}})
 
@@ -488,7 +489,7 @@ class TestResumableUploadResume:
         on_session_uri_changed = MagicMock()
 
         # When
-        with patch("youtube_automation.utils.upload_core.time.sleep"):
+        with patch("youtube_automation.domains.uploads.youtube.time.sleep"):
             result = core.upload_video(
                 str(video),
                 {"snippet": {}, "status": {}},

@@ -10,7 +10,7 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict
 
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 if TYPE_CHECKING:
     from youtube_automation.domains.analytics.ports import AnalyticsBase  # noqa: F401

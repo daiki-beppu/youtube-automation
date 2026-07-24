@@ -24,7 +24,7 @@ from youtube_automation.domains.distrokid.metadata import (
     parse_album_metadata,
     parse_track_table,
 )
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 # 下流 disc1-coding-focus-vol1/metadata.md のトラック表に対応する代表サンプル。
 # (number, title, filename, duration) ／ ISRC・作詞・作曲は空欄運用。

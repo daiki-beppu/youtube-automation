@@ -6,8 +6,8 @@ import json
 
 import pytest
 
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.comments.history import SCHEMA_VERSION, ReplyHistory
-from youtube_automation.utils.exceptions import ConfigError
 
 
 def test_fresh_history_is_empty(tmp_path):

@@ -7,6 +7,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from youtube_automation.infrastructure.auth.client_secrets import template_bytes
+
 CONFIG_DIR = Path("config")
 CONFIG_SUBDIR = CONFIG_DIR / "channel"
 SKILLS_SUBDIR = CONFIG_DIR / "skills"
@@ -238,19 +240,8 @@ def _render_gitignore(_ctx: ChannelInitContext) -> str:
     )
 
 
-def _render_auth_template(_ctx: ChannelInitContext) -> str:
-    return serialize_json(
-        {
-            "installed": {
-                "client_id": "",
-                "project_id": "",
-                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "client_secret": "",
-                "redirect_uris": ["http://localhost"],
-            }
-        }
-    )
+def _canonical_auth_template(_ctx: ChannelInitContext) -> str:
+    return template_bytes().decode("utf-8")
 
 
 def _render_suno_skill(ctx: ChannelInitContext) -> str:
@@ -288,7 +279,7 @@ def _render_thumbnail_skill(ctx: ChannelInitContext) -> str:
 
 ROOT_TEXT_TEMPLATES: dict[Path, Callable[[ChannelInitContext], str]] = {
     Path(".gitignore"): _render_gitignore,
-    Path("auth") / "client_secrets.template.json": _render_auth_template,
+    Path("auth") / "client_secrets.template.json": _canonical_auth_template,
     SKILLS_SUBDIR / "suno.yaml": _render_suno_skill,
     SKILLS_SUBDIR / "thumbnail.yaml": _render_thumbnail_skill,
 }

@@ -31,11 +31,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.utils.collection_paths import (
     CollectionPaths,
     resolve_collection_dir,
 )
-from youtube_automation.utils.exceptions import ValidationError
 
 # 判定結果の status 値。
 STATUS_CONSISTENT = "consistent"

@@ -22,7 +22,7 @@ from youtube_automation.domains.analytics.analysis.launch_curve_analyzer import 
     compute_benchmark,
     judge_video_vs_benchmark,
 )
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.launch_curve_data import (
     build_launch_curve_frame,
     load_latest_daily_snapshot,

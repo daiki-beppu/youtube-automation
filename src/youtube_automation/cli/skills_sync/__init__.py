@@ -76,8 +76,8 @@ _ASSET_SPECS: dict[str, dict[str, str]] = {
     },
     "auth-template": {
         "kind": "file",
-        "resource_name": "_auth",
-        "source_subdir": "auth",
+        "resource_name": "infrastructure/resources/auth",
+        "source_subdir": "src/youtube_automation/infrastructure/resources/auth",
         "source_filename": "client_secrets.template.json",
         "default_target": "auth/client_secrets.template.json",
         "label": "OAuth client_secrets テンプレ",
@@ -107,7 +107,7 @@ def _asset_root(asset: str) -> Path:
         1. インストール済み wheel の `youtube_automation/<resource_name>/`
         2. リポジトリルート直下の `<source_subdir>/` (editable / 開発時)
 
-    kind="file" の場合は同梱ファイルの **親ディレクトリ** を返す。
+    kind="file" の場合も同梱ファイルを含むディレクトリを返す。
     実体ファイルは `_asset_root(asset) / spec["source_filename"]` で取得する。
     """
     spec = _ASSET_SPECS[asset]  # KeyError on unknown asset
@@ -129,6 +129,12 @@ def _asset_root(asset: str) -> Path:
         f"youtube_automation の {asset} データが見つかりません "
         f"(wheel 同梱: {spec['resource_name']}, ソース: {spec['source_subdir']})。"
     )
+
+
+def _resolve_file_target(asset: str, spec: dict[str, str], target: Path) -> Path:
+    if asset == "auth-template" and target.exists() and target.is_dir():
+        return target / spec["default_target"]
+    return target
 
 
 def _guard_target_with_all(args: argparse.Namespace) -> None:

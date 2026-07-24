@@ -222,7 +222,7 @@ def test_build_prompt_entries_banned_artist_fails_loud(channel_dir, tmp_path):
     When build_prompt_entries を呼ぶ
     Then ConfigError で fail-loud する。
     """
-    from youtube_automation.utils.exceptions import ConfigError
+    from youtube_automation.infrastructure.errors import ConfigError
 
     _write_suno_override(
         channel_dir,

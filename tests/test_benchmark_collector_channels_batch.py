@@ -20,12 +20,12 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 from youtube_automation.scripts.benchmark_collector import (
     _CHANNELS_BATCH_SIZE,
     BenchmarkCollector,
     BenchmarkReportGenerator,
 )
-from youtube_automation.utils.exceptions import YouTubeAPIError
 
 
 def _make_collector(youtube_mock: MagicMock, *, benchmark_channels: list[dict] | None = None) -> BenchmarkCollector:
@@ -88,7 +88,7 @@ def _video_item(
 
 class TestFetchChannelsMetadata:
     def test_retries_transient_api_failure_through_benchmark_collector(self, monkeypatch):
-        monkeypatch.setattr("youtube_automation.utils.retry.time.sleep", lambda _: None)
+        monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
         youtube = MagicMock()
         transient = HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}')
         request = youtube.channels.return_value.list.return_value

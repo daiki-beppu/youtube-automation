@@ -12,6 +12,7 @@ from youtube_automation.cli.skills_sync import (
     _asset_root,
     _distribution_entries,
     _guard_target_with_all,
+    _resolve_file_target,
 )
 from youtube_automation.cli.skills_sync._ops import _has_diff, _prunable_orphan_names
 
@@ -28,7 +29,7 @@ def cmd_diff(args: argparse.Namespace) -> int:
     target = Path(args.target).resolve()
 
     if spec["kind"] == "file":
-        return _diff_file_asset(spec, root, target)
+        return _diff_file_asset(args.asset, spec, root, target)
     if spec["kind"] == "json-merge":
         return _diff_settings_asset(spec, root, target)
     return _diff_dir_asset(spec, root, target)
@@ -55,7 +56,8 @@ def _diff_all(args: argparse.Namespace) -> int:
     return overall_rc
 
 
-def _diff_file_asset(spec: dict[str, str], root: Path, target: Path) -> int:
+def _diff_file_asset(asset: str, spec: dict[str, str], root: Path, target: Path) -> int:
+    target = _resolve_file_target(asset, spec, target)
     src = root / spec["source_filename"]
     if not target.exists():
         print(f"target が存在しません: {target}", file=sys.stderr)

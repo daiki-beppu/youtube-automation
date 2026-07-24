@@ -4,7 +4,7 @@ import logging
 from unittest.mock import MagicMock
 
 from youtube_automation.domains.analytics.mixins.revenue_analytics import RevenueAnalyticsMixin
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 class DummyCollector(RevenueAnalyticsMixin):

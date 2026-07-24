@@ -26,7 +26,7 @@ from typing import Any
 from google import genai
 from google.genai import types
 
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.infrastructure.errors import ValidationError
 
 logger = logging.getLogger(__name__)
 

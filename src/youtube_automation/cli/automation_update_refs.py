@@ -7,7 +7,7 @@ import tomllib
 import urllib.parse
 from dataclasses import dataclass, field
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 UPSTREAM_REPO = "daiki-beppu/youtube-automation"
 PACKAGE_NAME = "youtube-channels-automation"

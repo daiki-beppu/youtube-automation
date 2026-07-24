@@ -110,7 +110,7 @@ git commit -m "chore: submodule automation から uv add git+https へ移行"
 
 ### `client_secrets.json が見つかりません`
 
-検索順は以下のとおり（`src/youtube_automation/auth/oauth_handler.py`）:
+検索順は以下のとおり（`src/youtube_automation/infrastructure/auth/youtube.py`）:
 
 1. `CLIENT_SECRETS_DIR` 環境変数
 2. `<channel_dir>/auth/client_secrets.json`

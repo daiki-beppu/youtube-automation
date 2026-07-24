@@ -1,156 +1,67 @@
-"""
-youtube_service モジュールのユニットテスト
+"""Instance-scoped YouTube client cache tests."""
 
-テスト対象: utils/youtube_service.py
-ServiceRegistry のキャッシュ動作を unittest.mock で検証する。
-"""
-
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
-import youtube_automation.utils.youtube_service as yt_service
-from youtube_automation.utils.youtube_service import ServiceRegistry
-
-# ---------------------------------------------------------------------------
-# フィクスチャ: 各テストでキャッシュをリセット
-# ---------------------------------------------------------------------------
+from youtube_automation.infrastructure.errors import ValidationError
+from youtube_automation.infrastructure.google.youtube import YouTubeClients, validate_youtube_response_items
 
 
-@pytest.fixture(autouse=True)
-def reset_service():
-    """各テスト前後にシングルトンキャッシュをリセット"""
-    yt_service.reset()
-    yield
-    yt_service.reset()
+def _handler(*, youtube=None):
+    handler = MagicMock()
+    handler.get_youtube_service.return_value = youtube
+    handler.authenticate.return_value = SimpleNamespace(kind="credentials")
+    return handler
 
 
-# ---------------------------------------------------------------------------
-# ServiceRegistry（クラスベーステスト）
-# ---------------------------------------------------------------------------
+def test_inject_handler_resolves_full_service():
+    handler = _handler(youtube="injected_youtube")
+
+    clients = YouTubeClients(full_handler=handler)
+
+    assert clients.youtube == "injected_youtube"
+    handler.get_youtube_service.assert_called_once_with()
 
 
-class TestServiceRegistry:
-    def test_inject_handler(self):
-        mock_handler = MagicMock()
-        mock_handler.get_youtube_service.return_value = "injected_youtube"
+def test_full_and_readonly_services_are_cached_independently():
+    full_handler = _handler(youtube="full")
+    readonly_handler = _handler(youtube="readonly")
+    clients = YouTubeClients(full_handler=full_handler, readonly_handler=readonly_handler)
 
-        registry = ServiceRegistry(handler=mock_handler)
-        assert registry.youtube == "injected_youtube"
-
-    def test_reset_clears_cache(self):
-        mock_handler = MagicMock()
-        mock_handler.get_youtube_service.side_effect = ["svc_1", "svc_2"]
-        registry = ServiceRegistry(handler=mock_handler)
-
-        first = registry.youtube
-        registry.reset()
-        # handler もリセットされるので再注入
-        registry._handler = mock_handler
-        second = registry.youtube
-
-        assert first == "svc_1"
-        assert second == "svc_2"
+    assert clients.youtube is clients.youtube
+    assert clients.youtube_readonly is clients.youtube_readonly
+    assert clients.youtube == "full"
+    assert clients.youtube_readonly == "readonly"
+    full_handler.get_youtube_service.assert_called_once_with()
+    readonly_handler.get_youtube_service.assert_called_once_with()
 
 
-# ---------------------------------------------------------------------------
-# get_youtube（モジュールレベル関数の後方互換テスト）
-# ---------------------------------------------------------------------------
+def test_reset_clears_only_this_instance_cache():
+    first_handler = _handler(youtube="first")
+    second_handler = _handler(youtube="second")
+    first = YouTubeClients(full_handler=first_handler)
+    second = YouTubeClients(full_handler=second_handler)
+
+    assert first.youtube == "first"
+    assert second.youtube == "second"
+    first.reset()
+    assert first.youtube == "first"
+    assert second.youtube == "second"
+    assert first_handler.get_youtube_service.call_count == 2
+    second_handler.get_youtube_service.assert_called_once_with()
 
 
-class TestGetYoutube:
-    def test_returns_youtube_service(self):
-        mock_handler = MagicMock()
-        mock_handler.get_youtube_service.return_value = "fake_youtube_service"
-        yt_service._default_registry._handler = mock_handler
-
-        result = yt_service.get_youtube()
-        assert result == "fake_youtube_service"
-        mock_handler.get_youtube_service.assert_called_once()
-
-    def test_caches_service(self):
-        mock_handler = MagicMock()
-        mock_handler.get_youtube_service.return_value = "fake_youtube_service"
-        yt_service._default_registry._handler = mock_handler
-
-        first = yt_service.get_youtube()
-        second = yt_service.get_youtube()
-
-        assert first is second
-        mock_handler.get_youtube_service.assert_called_once()
+@pytest.mark.parametrize("response", [None, {"items": None}, {"items": {}}])
+def test_validate_youtube_response_items_rejects_invalid_shapes(response):
+    with pytest.raises(ValidationError):
+        validate_youtube_response_items(response, "playlistItems.list")
 
 
-# ---------------------------------------------------------------------------
-# get_analytics
-# ---------------------------------------------------------------------------
-
-
-class TestGetAnalytics:
-    @patch("youtube_automation.utils.youtube_service.build")
-    def test_returns_analytics_service(self, mock_build):
-        mock_handler = MagicMock()
-        mock_creds = MagicMock()
-        mock_handler.authenticate.return_value = mock_creds
-        yt_service._default_registry._handler = mock_handler
-        mock_build.return_value = "fake_analytics_service"
-
-        result = yt_service.get_analytics()
-
-        assert result == "fake_analytics_service"
-        mock_build.assert_called_once_with("youtubeAnalytics", "v2", credentials=mock_creds)
-
-    @patch("youtube_automation.utils.youtube_service.build")
-    def test_caches_service(self, mock_build):
-        mock_handler = MagicMock()
-        mock_handler.authenticate.return_value = MagicMock()
-        yt_service._default_registry._handler = mock_handler
-        mock_build.return_value = "fake_analytics_service"
-
-        first = yt_service.get_analytics()
-        second = yt_service.get_analytics()
-
-        assert first is second
-        mock_build.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# get_credentials
-# ---------------------------------------------------------------------------
-
-
-class TestGetCredentials:
-    def test_returns_credentials(self):
-        mock_handler = MagicMock()
-        mock_creds = MagicMock()
-        mock_handler.authenticate.return_value = mock_creds
-        yt_service._default_registry._handler = mock_handler
-
-        result = yt_service.get_credentials()
-        assert result is mock_creds
-
-
-# ---------------------------------------------------------------------------
-# reset
-# ---------------------------------------------------------------------------
-
-
-class TestReset:
-    def test_reset_clears_cache(self):
-        mock_handler = MagicMock()
-        mock_handler.get_youtube_service.side_effect = ["service_1", "service_2"]
-        yt_service._default_registry._handler = mock_handler
-
-        first = yt_service.get_youtube()
-        assert first == "service_1"
-
-        yt_service.reset()
-        yt_service._default_registry._handler = mock_handler
-
-        second = yt_service.get_youtube()
-        assert second == "service_2"
-        assert first != second
-        assert mock_handler.get_youtube_service.call_count == 2
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    [({"items": []}, []), ({"items": [{"id": "item-1"}]}, [{"id": "item-1"}]), ({}, [])],
+)
+def test_validate_youtube_response_items_returns_valid_items(response, expected):
+    assert validate_youtube_response_items(response, "playlistItems.list") == expected

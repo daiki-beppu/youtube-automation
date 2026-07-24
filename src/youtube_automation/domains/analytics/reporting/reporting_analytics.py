@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from youtube_automation.domains.analytics.ports import ReportingClient
-from youtube_automation.utils.exceptions import AutomationError
+from youtube_automation.infrastructure.errors import AutomationError
 
 logger = logging.getLogger(__name__)
 

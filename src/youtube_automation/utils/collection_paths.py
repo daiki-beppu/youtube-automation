@@ -10,7 +10,7 @@ Usage:
 
 from pathlib import Path
 
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.infrastructure.errors import ValidationError
 
 _SHORT_THUMBNAIL_EXTENSIONS = ("jpg", "png")
 _SHORT_LOOP_INPUT_NAMES = ("short.png", "short.jpg")

@@ -18,7 +18,7 @@ from youtube_automation.domains.thumbnail.references import (
     infer_benchmark_channel,
     normalize_reference_default,
 )
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.image_provider.composition import select_reference, validate_single_step_references
 
 # ---- select_reference ------------------------------------------------------

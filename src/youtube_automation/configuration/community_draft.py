@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 
 _SCHEDULE_TIME_PATTERN = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
 

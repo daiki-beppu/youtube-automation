@@ -1284,7 +1284,7 @@ def test_onboarding_client_secrets_step_uses_download_and_automatic_move() -> No
 
 
 def test_oauth_module_and_setup_guide_distinguish_automatic_and_manual_routes() -> None:
-    oauth_handler = _read("src/youtube_automation/auth/oauth_handler.py")
+    oauth_handler = _read("src/youtube_automation/infrastructure/auth/youtube.py")
     module_docstring = oauth_handler.split('"""', 2)[1]
     for expected in ("Download JSON", "yt-doctor --fix-client-secrets"):
         assert expected in module_docstring

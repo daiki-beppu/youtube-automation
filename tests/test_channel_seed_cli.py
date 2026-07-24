@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import tomllib
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from youtube_automation.domains.youtube.channel_seed import SeedChannel
+from youtube_automation.scripts import channel_seed as channel_seed_module
 from youtube_automation.scripts.channel_seed import _build_parser, main
-from youtube_automation.utils.channel_seed import SeedChannel
 
 
 @pytest.fixture(autouse=True)
@@ -21,6 +23,19 @@ def _reset_config(monkeypatch):
     reset()
     yield
     reset()
+
+
+@pytest.fixture(autouse=True)
+def _inject_fake_oauth(monkeypatch):
+    class FakeOAuthHandler:
+        @classmethod
+        def create_readonly(cls):
+            return MagicMock()
+
+        def __new__(cls):
+            return MagicMock()
+
+    monkeypatch.setattr(channel_seed_module, "YouTubeOAuthHandler", FakeOAuthHandler)
 
 
 def _write_analytics(target: Path, channels: list[dict] | None = None) -> Path:
@@ -108,7 +123,10 @@ def test_main_rejects_benchmark_write_without_relationship(tmp_path, capsys):
 
     # When
     with (
-        patch("youtube_automation.scripts.channel_seed.get_youtube", return_value=youtube) as get_youtube,
+        patch(
+            "youtube_automation.scripts.channel_seed.YouTubeClients",
+            return_value=SimpleNamespace(youtube_readonly=youtube),
+        ),
         patch("youtube_automation.scripts.channel_seed.fetch_channel_seed", return_value=_seed()) as fetch_seed,
     ):
         rc = main(["https://www.youtube.com/@seed", "--target", str(tmp_path)])
@@ -116,7 +134,6 @@ def test_main_rejects_benchmark_write_without_relationship(tmp_path, capsys):
     # Then
     err = capsys.readouterr().err
     assert rc == 1
-    get_youtube.assert_called_once_with()
     fetch_seed.assert_called_once_with(youtube, "https://www.youtube.com/@seed", recent=10)
     assert "--relationship" in err
     assert json.loads(analytics_path.read_text(encoding="utf-8"))["benchmark"]["channels"] == []
@@ -129,7 +146,10 @@ def test_main_rejects_placeholder_relationship(tmp_path, capsys):
 
     # When
     with (
-        patch("youtube_automation.scripts.channel_seed.get_youtube", return_value=youtube),
+        patch(
+            "youtube_automation.scripts.channel_seed.YouTubeClients",
+            return_value=SimpleNamespace(youtube_readonly=youtube),
+        ),
         patch("youtube_automation.scripts.channel_seed.fetch_channel_seed", return_value=_seed()),
     ):
         rc = main(
@@ -156,7 +176,10 @@ def test_main_fetches_seed_and_writes_benchmark_entry_with_relationship(tmp_path
 
     # When
     with (
-        patch("youtube_automation.scripts.channel_seed.get_youtube", return_value=youtube) as get_youtube,
+        patch(
+            "youtube_automation.scripts.channel_seed.YouTubeClients",
+            return_value=SimpleNamespace(youtube_readonly=youtube),
+        ),
         patch("youtube_automation.scripts.channel_seed.fetch_channel_seed", return_value=_seed()) as fetch_seed,
     ):
         rc = main(
@@ -172,7 +195,6 @@ def test_main_fetches_seed_and_writes_benchmark_entry_with_relationship(tmp_path
     # Then
     out = capsys.readouterr().out
     assert rc == 0
-    get_youtube.assert_called_once_with()
     fetch_seed.assert_called_once_with(youtube, "https://www.youtube.com/@seed", recent=10)
     assert "Seed Channel" in out
     assert "12,345" in out
@@ -198,7 +220,10 @@ def test_main_does_not_write_analytics_when_no_write_benchmark(tmp_path):
 
     # When
     with (
-        patch("youtube_automation.scripts.channel_seed.get_youtube", return_value=MagicMock()),
+        patch(
+            "youtube_automation.scripts.channel_seed.YouTubeClients",
+            return_value=SimpleNamespace(youtube_readonly=MagicMock()),
+        ),
         patch("youtube_automation.scripts.channel_seed.fetch_channel_seed", return_value=_seed()),
     ):
         rc = main(["https://www.youtube.com/@seed", "--target", str(tmp_path), "--no-write-benchmark"])
@@ -224,7 +249,10 @@ def test_main_deduplicates_existing_benchmark_channel(tmp_path):
 
     # When
     with (
-        patch("youtube_automation.scripts.channel_seed.get_youtube", return_value=MagicMock()),
+        patch(
+            "youtube_automation.scripts.channel_seed.YouTubeClients",
+            return_value=SimpleNamespace(youtube_readonly=MagicMock()),
+        ),
         patch("youtube_automation.scripts.channel_seed.fetch_channel_seed", return_value=_seed()),
     ):
         rc = main(

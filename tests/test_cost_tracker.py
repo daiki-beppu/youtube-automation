@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.utils import cost_tracker
+from youtube_automation.infrastructure import cost_tracker
 
 
 @pytest.fixture
@@ -283,7 +283,7 @@ class BlockFcntl(importlib.abc.MetaPathFinder):
 
 sys.meta_path.insert(0, BlockFcntl())
 
-from youtube_automation.utils import cost_tracker
+from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.scripts import generate_image
 
 assert callable(cost_tracker.log_generation)
@@ -522,6 +522,14 @@ def test_log_generation_releases_msvcrt_lock_when_write_fails(tmp_channel: Path,
         (fake_msvcrt.LK_NBLCK, 1),
         (fake_msvcrt.LK_UNLCK, 1),
     ]
+
+
+def test_log_generation_does_not_swallow_unexpected_serialization_errors(tmp_channel: Path, monkeypatch):
+    """永続化の I/O 失敗だけを吸収し、入力の型エラーは呼び出し元へ返す。"""
+    monkeypatch.setattr(cost_tracker, "_read_entries", lambda path: [])
+
+    with pytest.raises(TypeError):
+        cost_tracker.log_generation("image", model="model", quantity=1, unit="image", metadata={"invalid": object()})
 
 
 def test_log_generation_without_platform_file_lock_preserves_threaded_writes(tmp_channel: Path, monkeypatch):

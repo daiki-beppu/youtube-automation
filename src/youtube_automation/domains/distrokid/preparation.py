@@ -34,7 +34,7 @@ from youtube_automation.domains.distrokid.naming import kebab_to_title
 from youtube_automation.domains.distrokid.specification import (  # noqa: F401  re-export (#941)
     SPEC_FILENAME,
 )
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils.time_utils import format_duration_mss
 
 # 30-distrokid ディレクトリ名。collection_serve.py の _DISTROKID_DIRNAME と対称。

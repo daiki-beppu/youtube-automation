@@ -24,6 +24,7 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 from youtube_automation.utils.competitor_discovery import SearchCacheMode, discover_competitors
 from youtube_automation.utils.competitor_scoring import (
     _MUSIC_TOPIC_URLS,
@@ -41,7 +42,6 @@ from youtube_automation.utils.competitor_scoring import (
     _format_reason,
     _is_music_topic_match,
 )
-from youtube_automation.utils.exceptions import YouTubeAPIError
 
 
 @pytest.fixture(autouse=True)
@@ -990,7 +990,7 @@ class TestDiscoverCompetitors:
         assert len(payload["entries"]) == 1
 
     def test_retries_transient_api_failure_through_discovery_entrypoint(self, monkeypatch):
-        monkeypatch.setattr("youtube_automation.utils.retry.time.sleep", lambda _: None)
+        monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
         youtube = MagicMock()
         transient = HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}')
         request = youtube.search.return_value.list.return_value

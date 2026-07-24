@@ -10,7 +10,7 @@ from youtube_automation.domains.metadata.titles import (
     _referenced_placeholders,
     format_title_template,
 )
-from youtube_automation.utils.preflight_checks import requires_scene_phrases
+from youtube_automation.domains.uploads.preflight import requires_scene_phrases
 
 LOCALIZED_TITLE_PLACEHOLDERS = frozenset({"scene_phrase", "activities", "scene_emoji"})
 

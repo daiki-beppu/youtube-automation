@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from youtube_automation.domains.metadata.descriptions import extract_descriptions_md_section
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.infrastructure.errors import ValidationError
 
 _TIMESTAMP_RE = re.compile(r"^(?P<timestamp>(?:\d{1,2}:)?\d{1,2}:\d{2})\s+(?P<title>.+?)\s*$")
 _TOTAL_DURATION_RE = re.compile(r"\btracks?\s*,\s*(?P<duration>(?:\d{1,2}:)?\d{1,2}:\d{2})\b", re.IGNORECASE)

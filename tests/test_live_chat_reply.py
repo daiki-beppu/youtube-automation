@@ -13,7 +13,7 @@ import pytest
 
 from youtube_automation.configuration.comments import LiveChatConfig
 from youtube_automation.configuration.loader import _build_comments
-from youtube_automation.utils.exceptions import ConfigError, GeneratorError
+from youtube_automation.infrastructure.errors import ConfigError, GeneratorError
 from youtube_automation.utils.live_chat.codex import CodexLiveChatGenerator
 from youtube_automation.utils.live_chat.history import LiveChatHistory
 from youtube_automation.utils.live_chat.models import LiveChatMessage, ReplyDecision
@@ -337,7 +337,7 @@ def test_cli_disabled_does_not_authenticate(monkeypatch):
         "load_config",
         lambda: SimpleNamespace(comments=SimpleNamespace(live_chat=LiveChatConfig())),
     )
-    registry = MagicMock()
-    monkeypatch.setattr(live_chat_reply, "ServiceRegistry", registry)
+    clients = MagicMock()
+    monkeypatch.setattr(live_chat_reply, "YouTubeClients", clients)
     assert live_chat_reply.main([]) == 1
-    registry.assert_not_called()
+    clients.assert_not_called()

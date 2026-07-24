@@ -151,7 +151,7 @@ subagent へは次を具体値で渡す:
 
 | 状況 | 兆候 | 対処 |
 |---|---|---|
-| OAuth 未認証/失効 | `auth.oauth_handler` の `FileNotFoundError`（`client_secrets.json` 不在）/ `AuthError` / HTTP 403 | 初回認証フローを再実行。403 が続く場合は `auth/token.json` を削除しスコープを確認のうえ再認証 |
+| OAuth 未認証/失効 | `infrastructure.auth.youtube` の `FileNotFoundError`（`client_secrets.json` 不在）/ `AuthError` / HTTP 403 | 初回認証フローを再実行。403 が続く場合は `auth/token.json` を削除しスコープを確認のうえ再認証 |
 | Reporting API 未有効 | `--reporting-dry-run` / `--reporting-create-job` で `youtubereporting.googleapis.com` 関連の 403 | `/setup` に戻り、必須 API 有効化と OAuth scope を確認する |
 | YouTube quota / rate | HTTP 429 / 403 `quotaExceeded` | 日次 quota（既定 10,000 units・太平洋時間 0 時リセット）を待つか呼び出しを抑える |
 | API 障害 / サービス停止 | HTTP 503 / タイムアウト | Google Cloud / YouTube のステータスを確認し、時間を置いて再実行 |

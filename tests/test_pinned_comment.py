@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from googleapiclient.errors import HttpError
 
+from youtube_automation.infrastructure.errors import ValidationError, YouTubeAPIError
 from youtube_automation.scripts import pinned_comment
 from youtube_automation.scripts.pinned_comment import (
     build_plan,
@@ -22,7 +23,6 @@ from youtube_automation.scripts.pinned_comment import (
     resolve_targets_from_collection,
     save_history,
 )
-from youtube_automation.utils.exceptions import ValidationError, YouTubeAPIError
 
 # ----- fake YouTube service ------------------------------------------------
 

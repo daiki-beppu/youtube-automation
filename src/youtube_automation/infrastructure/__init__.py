@@ -1,1 +1,1 @@
-"""Infrastructure adapters for external services."""
+"""Infrastructure adapters and resources for external services."""

@@ -67,6 +67,7 @@ from youtube_automation.domains.suno.downloaded import (
     read_pattern_count,
 )
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.scripts.collection_serve_discovery import (
     DISCOVERY_PORT,
     RegistryState,
@@ -83,7 +84,6 @@ from youtube_automation.scripts.suno_artifacts import (
 )
 from youtube_automation.utils.chrome_extensions import ChromeExtensionOrigin, resolve_unpacked_extension_origin
 from youtube_automation.utils.collection_paths import CollectionPaths
-from youtube_automation.utils.exceptions import ConfigError
 
 DEFAULT_PORT = 7873
 DEFAULT_IDLE_TIMEOUT_SECONDS = 60 * 60

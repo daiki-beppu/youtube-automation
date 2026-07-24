@@ -13,7 +13,7 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils.skill_config import load_skill_config
 
 

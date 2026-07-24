@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from youtube_automation.configuration import channel_dir
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.video_analyzer import VIDEO_ANALYSIS_DIRNAME
 
 _TOP_GENRE_PHRASES = 8

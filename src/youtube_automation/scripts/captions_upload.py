@@ -16,8 +16,8 @@ from youtube_automation.domains.media.captions import (
 )
 from youtube_automation.domains.suno.lyrics import load_suno_lyrics_entries
 from youtube_automation.infrastructure.captions_adapter import upload_caption
-from youtube_automation.utils.exceptions import AutomationError, ValidationError
-from youtube_automation.utils.youtube_service import get_youtube
+from youtube_automation.infrastructure.errors import AutomationError, ValidationError
+from youtube_automation.infrastructure.google.youtube import create_authenticated_youtube_clients
 
 
 def _load_lyrics(path: Path) -> list[str]:
@@ -76,7 +76,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             print("dry-run: YouTube API は呼び出していません")
             return 0
         result = upload_caption(
-            get_youtube(),
+            create_authenticated_youtube_clients().youtube,
             video_id=args.video_id,
             language=args.language,
             name=args.name,

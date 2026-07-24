@@ -25,7 +25,7 @@ import time
 from pathlib import Path
 
 from youtube_automation.domains.media.video_type import VideoType, VideoTypeConfig
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.genai_client import create_veo_genai_client
 from youtube_automation.utils.omni_generator import (
     DEFAULT_MODEL as DEFAULT_OMNI_MODEL,

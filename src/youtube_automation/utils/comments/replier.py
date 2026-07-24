@@ -14,6 +14,8 @@ from youtube_automation.configuration.comments import (
     PROVIDER_CODEX,
     Comments,
 )
+from youtube_automation.infrastructure.errors import ConfigError, GeneratorError, YouTubeAPIError
+from youtube_automation.infrastructure.retry import execute_with_retry
 from youtube_automation.utils.comments.fetcher import FetchedComment, fetch_comments
 from youtube_automation.utils.comments.generator import (
     ReplyContext,
@@ -21,8 +23,6 @@ from youtube_automation.utils.comments.generator import (
 )
 from youtube_automation.utils.comments.generator_factory import create_reply_generator
 from youtube_automation.utils.comments.history import ReplyHistory
-from youtube_automation.utils.exceptions import ConfigError, GeneratorError, YouTubeAPIError
-from youtube_automation.utils.retry import execute_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ def fetch_video_status(youtube, video_ids: list[str]) -> dict[str, dict | None]:
     """video_ids の status を videos.list で一括取得する（50 件単位で chunk 化）.
 
     Args:
-        youtube: `youtube_service.get_youtube()` / `ServiceRegistry.youtube`
+        youtube: injected YouTube Data API service
         video_ids: status を確認したい動画 ID のリスト
 
     Returns:

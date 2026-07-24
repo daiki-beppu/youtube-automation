@@ -19,7 +19,7 @@ from googleapiclient.errors import HttpError
 # 解決できるよう、トップレベルで submodule を import しておく。
 import youtube_automation.scripts.analytics_system  # noqa: F401
 from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
-from youtube_automation.utils.exceptions import AuthError, ConfigError, YouTubeAPIError
+from youtube_automation.infrastructure.errors import AuthError, ConfigError, YouTubeAPIError
 
 # ---------------------------------------------------------------------------
 # フィクスチャ
@@ -223,72 +223,54 @@ class TestInit:
 
 
 class TestAuthenticate:
-    """authenticate() は youtube_service.get_readonly_handler() 経由で
-    read-only 優先の handler を取得する（#1699）。"""
+    """authenticate() は instance-scoped な read-only handler を使う（#1699）。"""
 
     def test_authenticate_success(self, system):
         """認証成功時に True を返し authenticated を True にする"""
         mock_handler = MagicMock()
         mock_handler.test_connection.return_value = True
+        system._readonly_handler = mock_handler
+        system._clients = MagicMock()
 
-        with (
-            patch(
-                "youtube_automation.utils.youtube_service.get_readonly_handler",
-                return_value=mock_handler,
-            ),
-            patch("youtube_automation.scripts.analytics_system.get_reporting"),
-            patch("youtube_automation.scripts.analytics_system.get_credentials_readonly"),
-            patch("youtube_automation.scripts.analytics_system.get_youtube_readonly"),
-            patch("youtube_automation.scripts.analytics_system.get_analytics"),
-        ):
-            result = system.authenticate()
-            assert result is True
-            assert system.authenticated is True
-            mock_handler.authenticate.assert_called_once_with(force_reauth=False)
-            system.collector.initialize.assert_called_once_with()
-            call = system._mock_collector_type.call_args_list[-1]
-            assert call.kwargs["youtube_client"] is not None
-            assert call.kwargs["analytics_client"] is not None
-            assert call.kwargs["reporting_client"] is not None
+        result = system.authenticate()
+        assert result is True
+        assert system.authenticated is True
+        mock_handler.authenticate.assert_called_once_with(force_reauth=False)
+        system.collector.initialize.assert_called_once_with()
+        call = system._mock_collector_type.call_args_list[-1]
+        assert call.kwargs["youtube_client"] is not None
+        assert call.kwargs["analytics_client"] is not None
+        assert call.kwargs["reporting_client"] is not None
 
     def test_authenticate_failure_connection_test(self, system):
         """接続テスト失敗時に False を返す"""
         mock_handler = MagicMock()
         mock_handler.test_connection.return_value = False
+        system._readonly_handler = mock_handler
+        system._clients = MagicMock()
 
-        with patch(
-            "youtube_automation.utils.youtube_service.get_readonly_handler",
-            return_value=mock_handler,
-        ):
-            result = system.authenticate()
-            assert result is False
-            assert system.authenticated is False
+        result = system.authenticate()
+        assert result is False
+        assert system.authenticated is False
 
     def test_authenticate_exception(self, system):
         """認証中にドメイン例外（AuthError）が発生した場合 False を返す"""
-        with patch(
-            "youtube_automation.utils.youtube_service.get_readonly_handler",
-            side_effect=AuthError("Token expired"),
-        ):
-            result = system.authenticate()
-            assert result is False
+        system._readonly_handler = MagicMock()
+        system._readonly_handler.authenticate.side_effect = AuthError("Token expired")
+        system._clients = MagicMock()
+
+        result = system.authenticate()
+        assert result is False
 
     def test_authenticate_failure_when_collector_clients_cannot_be_created(self, system):
         """認証後の client 注入失敗は未認証のまま False を返す。"""
         mock_handler = MagicMock()
         mock_handler.test_connection.return_value = True
+        system._readonly_handler = mock_handler
+        system._clients = MagicMock()
+        system._initialize_collector = MagicMock(side_effect=ConfigError("reporting client is unavailable"))
 
-        with (
-            patch(
-                "youtube_automation.utils.youtube_service.get_readonly_handler",
-                return_value=mock_handler,
-            ),
-            patch(
-                "youtube_automation.scripts.analytics_system.get_reporting",
-                side_effect=ConfigError("reporting client is unavailable"),
-            ),
-        ):
-            result = system.authenticate()
+        result = system.authenticate()
 
         assert result is False
         assert system.authenticated is False
@@ -296,12 +278,12 @@ class TestAuthenticate:
 
     def test_authenticate_unexpected_exception_propagates(self, system):
         """narrow catch 範囲外の例外は伝播する（fail-fast）"""
-        with patch(
-            "youtube_automation.utils.youtube_service.get_readonly_handler",
-            side_effect=RuntimeError("unexpected"),
-        ):
-            with pytest.raises(RuntimeError, match="unexpected"):
-                system.authenticate()
+        system._readonly_handler = MagicMock()
+        system._readonly_handler.authenticate.side_effect = RuntimeError("unexpected")
+        system._clients = MagicMock()
+
+        with pytest.raises(RuntimeError, match="unexpected"):
+            system.authenticate()
 
 
 # ---------------------------------------------------------------------------

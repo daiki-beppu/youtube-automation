@@ -21,14 +21,14 @@ from youtube_automation.domains.media.image import (
     ImageGenerationRequest,
     ImageGenerationResult,
 )
-from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure import cost_tracker
+from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.infrastructure.secrets import get_secret
 from youtube_automation.utils.image_provider.composition import log_image_cost, persist_image
 from youtube_automation.utils.image_provider.config import (
     OPENAI_SUPPORTED_ASPECT_RATIOS,
     OpenAIConfig,
 )
-from youtube_automation.utils.secrets import get_secret
 
 # OpenAI Images API が受け付ける size 文字列へのマッピング
 _ASPECT_RATIO_TO_SIZE: dict[str, str] = {

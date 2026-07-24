@@ -18,21 +18,17 @@ from bench.common import Stats, save_result, stats_from_samples
 from youtube_automation.configuration import channel_dir
 from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 from youtube_automation.infrastructure.analytics_adapter import AnalyticsAdapter, YouTubeDataAdapter
-from youtube_automation.utils.exceptions import AuthError, ConfigError
+from youtube_automation.infrastructure.errors import AuthError, ConfigError
+from youtube_automation.infrastructure.google.youtube import create_readonly_youtube_clients
 from youtube_automation.utils.reporting_api import ReportingAPIClient
-from youtube_automation.utils.youtube_service import (
-    get_analytics,
-    get_credentials_readonly,
-    get_reporting,
-    get_youtube_readonly,
-)
 
 
 def _collector():
+    clients = create_readonly_youtube_clients()
     c = YouTubeAnalyticsCollector(
-        youtube_client=YouTubeDataAdapter(get_youtube_readonly(), retry_requests=True),
-        analytics_client=AnalyticsAdapter(get_analytics(), retry_requests=True),
-        reporting_client=ReportingAPIClient(get_reporting(), credentials=get_credentials_readonly()),
+        youtube_client=YouTubeDataAdapter(clients.youtube_readonly, retry_requests=True),
+        analytics_client=AnalyticsAdapter(clients.analytics, retry_requests=True),
+        reporting_client=ReportingAPIClient(clients.reporting, credentials=clients.credentials_readonly),
         channel_root=channel_dir(),
     )
     c.initialize()

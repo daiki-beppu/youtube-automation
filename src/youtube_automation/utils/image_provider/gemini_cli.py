@@ -28,8 +28,8 @@ from youtube_automation.domains.media.image import (
     ImageGenerationRequest,
     ImageGenerationResult,
 )
-from youtube_automation.utils import cost_tracker
-from youtube_automation.utils.exceptions import ConfigError
+from youtube_automation.infrastructure import cost_tracker
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.image_provider.composition import (
     log_image_cost,
     persist_image,

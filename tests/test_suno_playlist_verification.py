@@ -20,8 +20,8 @@ from youtube_automation.domains.suno.playlist import (
     verify_playlist_titles,
 )
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.scripts import suno_verify_playlist
-from youtube_automation.utils.exceptions import ValidationError
 
 extract_and_rename_music = partial(
     _extract_and_rename_music,

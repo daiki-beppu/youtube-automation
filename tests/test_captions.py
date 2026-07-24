@@ -13,7 +13,7 @@ from youtube_automation.domains.media.captions import (
     parse_track_timestamps,
 )
 from youtube_automation.infrastructure.captions_adapter import upload_caption
-from youtube_automation.utils.exceptions import ValidationError
+from youtube_automation.infrastructure.errors import ValidationError
 
 _DESCRIPTIONS = """## Complete Collection 概要欄
 

@@ -15,7 +15,7 @@ from youtube_automation.domains.media.image import (
     ImageGenerationRequest,
     ImageGenerationResult,
 )
-from youtube_automation.utils import cost_tracker
+from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.utils.genai_client import create_global_genai_client
 from youtube_automation.utils.image_provider.composition import log_image_cost, persist_image
 from youtube_automation.utils.image_provider.config import GeminiConfig

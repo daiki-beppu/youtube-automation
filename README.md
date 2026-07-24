@@ -159,10 +159,10 @@ Vertex AI の project ID は ADC quota project から解決する。必要な場
 
 ```bash
 op signin
-# 以降、スクリプト実行時に utils/secrets.py が op read を呼ぶ
+# 以降、スクリプト実行時に infrastructure/secrets.py が op read を呼ぶ
 ```
 
-シークレット参照は `utils/secrets.py` の `_SECRET_REFS` で定義されています（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`）。AI 系は ADC 経由の認証のため `op` 取得は不要です。
+シークレット参照は `infrastructure/secrets.py` の `_SECRET_REFS` で定義されています（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`）。AI 系は ADC 経由の認証のため `op` 取得は不要です。
 
 ### 6. (オプション) Nix devShell
 

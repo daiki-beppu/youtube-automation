@@ -35,7 +35,7 @@ from youtube_automation.domains.distrokid.preparation import (
     write_release_date,
 )
 from youtube_automation.domains.distrokid.specification import read_collection_spec
-from youtube_automation.utils.exceptions import ConfigError, ValidationError
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 
 # fake mp3 bytes（test_distrokid_disc_source.py と同じパターン）
 _MP3_BYTES = b"ID3\x03\x00\x00\x00fake-mp3-bytes"

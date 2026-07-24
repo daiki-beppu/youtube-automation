@@ -14,7 +14,7 @@ from typing import Any
 
 from googleapiclient.errors import HttpError
 
-from youtube_automation.utils.exceptions import YouTubeAPIError
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 def _month_boundaries(year: int, month: int) -> tuple[str, str]:

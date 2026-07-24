@@ -18,14 +18,10 @@ from googleapiclient.errors import HttpError
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 from youtube_automation.infrastructure.analytics_adapter import AnalyticsAdapter, YouTubeDataAdapter
-from youtube_automation.utils.exceptions import AuthError, ConfigError, YouTubeAPIError
+from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.infrastructure.errors import AuthError, ConfigError, YouTubeAPIError
+from youtube_automation.infrastructure.google.youtube import YouTubeClients
 from youtube_automation.utils.reporting_api import ReportingAPIClient
-from youtube_automation.utils.youtube_service import (
-    get_analytics,
-    get_credentials_readonly,
-    get_reporting,
-    get_youtube_readonly,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -55,15 +51,22 @@ class AnalyticsSystem:
         config = load_config()
         logger.info(f"🎵 {config.meta.channel_name} - Analytics System v1.0")
 
+        self._readonly_handler = None
+        self._clients = None
         self.collector = None
         self.authenticated = False
 
     def _initialize_collector(self) -> None:
         """認証済みの read-only client を collector に接続する。"""
-        reporting = ReportingAPIClient(get_reporting(), credentials=get_credentials_readonly())
+        if self._clients is None:
+            raise ConfigError("read-only YouTube clients are not initialized")
+        reporting = ReportingAPIClient(
+            self._clients.reporting,
+            credentials=self._clients.credentials_readonly,
+        )
         self.collector = YouTubeAnalyticsCollector(
-            youtube_client=YouTubeDataAdapter(get_youtube_readonly(), retry_requests=True),
-            analytics_client=AnalyticsAdapter(get_analytics(), retry_requests=True),
+            youtube_client=YouTubeDataAdapter(self._clients.youtube_readonly, retry_requests=True),
+            analytics_client=AnalyticsAdapter(self._clients.analytics, retry_requests=True),
             reporting_client=reporting,
             channel_root=channel_dir(),
         )
@@ -80,9 +83,10 @@ class AnalyticsSystem:
 
         try:
             # Analytics 収集は read-only で足りるため token.readonly.json を優先する（#1699）
-            from youtube_automation.utils.youtube_service import get_readonly_handler
-
-            handler = get_readonly_handler()
+            handler = self._readonly_handler or YouTubeOAuthHandler.create_readonly()
+            self._readonly_handler = handler
+            if self._clients is None:
+                self._clients = YouTubeClients(readonly_handler=handler)
             handler.authenticate(force_reauth=force_reauth)
 
             if handler.test_connection():
@@ -240,10 +244,8 @@ class AnalyticsSystem:
 
 
 def _make_reporting_client():
-    from youtube_automation.utils.reporting_api import ReportingAPIClient
-    from youtube_automation.utils.youtube_service import get_credentials_readonly, get_reporting
-
-    return ReportingAPIClient(get_reporting(), credentials=get_credentials_readonly())
+    clients = YouTubeClients(readonly_handler=YouTubeOAuthHandler.create_readonly())
+    return ReportingAPIClient(clients.reporting, credentials=clients.credentials_readonly)
 
 
 def _run_reporting_dry_run() -> int:
@@ -252,7 +254,7 @@ def _run_reporting_dry_run() -> int:
     print("=" * 60)
 
     try:
-        from youtube_automation.utils.exceptions import AutomationError
+        from youtube_automation.infrastructure.errors import AutomationError
 
         client = _make_reporting_client()
         report = client.dry_run_inspection()
@@ -283,7 +285,7 @@ def _run_reporting_create_job() -> int:
     print("=" * 60)
 
     try:
-        from youtube_automation.utils.exceptions import AutomationError
+        from youtube_automation.infrastructure.errors import AutomationError
 
         client = _make_reporting_client()
         report_type_id = client.select_report_type()
