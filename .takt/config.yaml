@@ -1,0 +1,25 @@
+persona_providers:
+  ai-antipattern-reviewer:
+    provider: claude
+  architecture-reviewer:
+    provider: claude
+  coding-reviewer:
+    provider: claude
+  cqrs-es-reviewer:
+    provider: claude
+  frontend-reviewer:
+    provider: claude
+  implementation-semantics-reviewer:
+    provider: claude
+  merge-readiness-reviewer:
+    provider: claude
+  qa-reviewer:
+    provider: claude
+  requirements-reviewer:
+    provider: claude
+  security-reviewer:
+    provider: claude
+  terraform-reviewer:
+    provider: claude
+  testing-reviewer:
+    provider: claude
