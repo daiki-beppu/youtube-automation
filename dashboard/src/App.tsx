@@ -551,7 +551,7 @@ export function App() {
                       カラーパレット
                     </h2>
                     <p className="text-sm text-muted-foreground">
-                      ガイドブック35ページの配色を切り替え、画面上で比較できます。
+                      ダッシュボードのテーマカラーを選択できます。
                     </p>
                   </div>
                   <PaletteSwitcher />
