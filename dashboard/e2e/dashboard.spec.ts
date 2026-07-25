@@ -341,6 +341,26 @@ test("カラーパレットを切り替えて再読み込み後も保持でき�
   const green = paletteGroup.getByRole("button", { name: "Green" })
   await expect(blue).toHaveAttribute("aria-pressed", "true")
 
+  const dashboardColors = () =>
+    page.evaluate(() => {
+      const overviewHeading = [...document.querySelectorAll("h2")].find(
+        (heading) => heading.textContent === "概況"
+      )
+      const registeredChannels = [...document.querySelectorAll("dt")].find(
+        (term) => term.textContent === "登録チャンネル"
+      )
+      if (!overviewHeading || !registeredChannels?.parentElement) {
+        throw new Error("ダッシュボードの配色対象を取得できませんでした")
+      }
+      return {
+        background: getComputedStyle(document.querySelector("main")!)
+          .backgroundImage,
+        headingBorder: getComputedStyle(overviewHeading).borderLeftColor,
+        metricSurface: getComputedStyle(registeredChannels.parentElement)
+          .backgroundColor,
+      }
+    })
+  const blueDashboardColors = await dashboardColors()
   const blueBackground = await blue.evaluate(
     (element) => getComputedStyle(element).backgroundColor
   )
@@ -350,6 +370,16 @@ test("カラーパレットを切り替えて再読み込み後も保持でき�
     (element) => getComputedStyle(element).backgroundColor
   )
   expect(greenBackground).not.toBe(blueBackground)
+  const greenDashboardColors = await dashboardColors()
+  expect(greenDashboardColors.background).not.toBe(
+    blueDashboardColors.background
+  )
+  expect(greenDashboardColors.headingBorder).not.toBe(
+    blueDashboardColors.headingBorder
+  )
+  expect(greenDashboardColors.metricSurface).not.toBe(
+    blueDashboardColors.metricSurface
+  )
 
   await page.reload()
   await expect(
@@ -366,6 +396,93 @@ test("ライトでは公式5段階色、ダークでは背景と識別できる�
     localStorage.setItem("theme", "light")
   })
   await page.goto(baseURL)
+
+  const expectDashboardContrast = async () => {
+    const colors = await page.evaluate(() => {
+      const title = document.querySelector("h1")
+      const accentDescription = [...document.querySelectorAll("div")].find(
+        (element) =>
+          element.textContent ===
+          "ガイドブック35ページの配色を切り替え、画面上で比較できます。"
+      )
+      const metricLabel = [...document.querySelectorAll("dt")].find(
+        (term) => term.textContent === "登録チャンネル"
+      )
+      const metricSurface = metricLabel?.parentElement
+      const comparisonPanel = document
+        .querySelector('[aria-label="チャンネル横断ストック一覧"]')
+        ?.closest(".dashboard-accent-panel")
+      const main = document.querySelector("main")
+      if (
+        !title ||
+        !accentDescription ||
+        !metricLabel ||
+        !metricSurface ||
+        !comparisonPanel ||
+        !main
+      ) {
+        throw new Error("コントラスト検査対象を取得できませんでした")
+      }
+
+      const toSrgb = (color: string) => {
+        const sample = document.createElement("span")
+        sample.style.color = `color-mix(in srgb, ${color}, ${color})`
+        document.body.append(sample)
+        const resolved = getComputedStyle(sample).color
+        sample.remove()
+        return resolved
+      }
+      const accentSample = document.createElement("span")
+      accentSample.style.backgroundColor = "var(--dashboard-accent-surface)"
+      const backgroundSample = document.createElement("span")
+      backgroundSample.style.backgroundColor =
+        "color-mix(in srgb, var(--background), var(--background))"
+      document.body.append(accentSample, backgroundSample)
+      const titleBackground = getComputedStyle(accentSample).backgroundColor
+      const panelBackground = getComputedStyle(backgroundSample).backgroundColor
+      accentSample.remove()
+      backgroundSample.remove()
+
+      return {
+        accentDescription: {
+          background: toSrgb(titleBackground),
+          foreground: toSrgb(getComputedStyle(accentDescription).color),
+        },
+        metric: {
+          background: toSrgb(getComputedStyle(metricSurface).backgroundColor),
+          foreground: toSrgb(getComputedStyle(metricLabel).color),
+        },
+        panel: {
+          background: toSrgb(panelBackground),
+          foreground: toSrgb(getComputedStyle(comparisonPanel).borderTopColor),
+        },
+        title: {
+          background: toSrgb(titleBackground),
+          foreground: toSrgb(getComputedStyle(title).color),
+        },
+      }
+    })
+
+    expect(
+      contrastRatio(colors.title.foreground, colors.title.background),
+      JSON.stringify(colors.title)
+    ).toBeGreaterThanOrEqual(4.5)
+    expect(
+      contrastRatio(
+        colors.accentDescription.foreground,
+        colors.accentDescription.background
+      ),
+      JSON.stringify(colors.accentDescription)
+    ).toBeGreaterThanOrEqual(4.5)
+    expect(
+      contrastRatio(colors.metric.foreground, colors.metric.background),
+      JSON.stringify(colors.metric)
+    ).toBeGreaterThanOrEqual(4.5)
+    expect(
+      contrastRatio(colors.panel.foreground, colors.panel.background),
+      JSON.stringify(colors.panel)
+    ).toBeGreaterThanOrEqual(3)
+  }
 
   for (const [palette, expectedColors] of Object.entries(paletteLightColors)) {
     const option = page
@@ -393,6 +510,7 @@ test("ライトでは公式5段階色、ダークでは背景と識別できる�
       contrastRatio(selectedColors.foreground, selectedColors.background),
       JSON.stringify(selectedColors)
     ).toBeGreaterThanOrEqual(4.5)
+    await expectDashboardContrast()
   }
 
   await page.getByRole("button", { name: "ダークモードに切り替え" }).click()
@@ -420,5 +538,6 @@ test("ライトでは公式5段階色、ダークでは背景と識別できる�
         contrastRatio(swatch.color, swatch.background)
       ).toBeGreaterThanOrEqual(3)
     }
+    await expectDashboardContrast()
   }
 })

@@ -132,7 +132,10 @@ function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
   return (
     <section aria-labelledby="dashboard-overview-title" className="grid gap-4">
       <div>
-        <h2 id="dashboard-overview-title" className="text-2xl font-semibold">
+        <h2
+          id="dashboard-overview-title"
+          className="dashboard-section-heading text-2xl font-semibold"
+        >
           概況
         </h2>
         <p className="text-sm text-muted-foreground">
@@ -141,7 +144,7 @@ function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,1fr)]">
-        <Card>
+        <Card variant="accent">
           <CardHeader>
             <CardTitle>現在の状態</CardTitle>
             <CardDescription>
@@ -150,31 +153,29 @@ function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
           </CardHeader>
           <CardContent>
             <dl className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg bg-muted p-4">
-                <dt className="text-xs text-muted-foreground">
-                  登録チャンネル
-                </dt>
+              <div className="dashboard-metric-surface rounded-lg p-4">
+                <dt className="text-xs text-foreground">登録チャンネル</dt>
                 <dd className="mt-1 text-2xl font-semibold tabular-nums">
                   {formatInteger(channels.length)}
-                  <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  <span className="ml-1 text-sm font-normal text-foreground">
                     件
                   </span>
                 </dd>
               </div>
-              <div className="rounded-lg bg-muted p-4">
-                <dt className="text-xs text-muted-foreground">公開予約 合計</dt>
+              <div className="dashboard-metric-surface rounded-lg p-4">
+                <dt className="text-xs text-foreground">公開予約 合計</dt>
                 <dd className="mt-1 text-2xl font-semibold tabular-nums">
                   {formatInteger(scheduledTotal)}
-                  <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  <span className="ml-1 text-sm font-normal text-foreground">
                     本
                   </span>
                 </dd>
               </div>
-              <div className="rounded-lg bg-muted p-4">
-                <dt className="text-xs text-muted-foreground">要確認</dt>
+              <div className="dashboard-metric-surface rounded-lg p-4">
+                <dt className="text-xs text-foreground">要確認</dt>
                 <dd className="mt-1 text-2xl font-semibold tabular-nums">
                   {formatInteger(attentionCount)}
-                  <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  <span className="ml-1 text-sm font-normal text-foreground">
                     件
                   </span>
                 </dd>
@@ -266,29 +267,27 @@ function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
 function SummaryMetrics({ summary }: { summary: Summary }) {
   return (
     <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <div className="rounded-lg bg-muted p-4">
-        <dt className="text-xs text-muted-foreground">再生数</dt>
+      <div className="dashboard-metric-surface rounded-lg p-4">
+        <dt className="text-xs text-foreground">再生数</dt>
         <dd className="text-2xl font-semibold tabular-nums">
           {formatInteger(summary.views)}
         </dd>
       </div>
-      <div className="rounded-lg bg-muted p-4">
-        <dt className="text-xs text-muted-foreground">総再生時間</dt>
+      <div className="dashboard-metric-surface rounded-lg p-4">
+        <dt className="text-xs text-foreground">総再生時間</dt>
         <dd className="text-2xl font-semibold tabular-nums">
           {formatInteger(summary.watch_time_minutes)}
-          <span className="ml-1 text-sm font-normal text-muted-foreground">
-            分
-          </span>
+          <span className="ml-1 text-sm font-normal text-foreground">分</span>
         </dd>
       </div>
-      <div className="rounded-lg bg-muted p-4">
-        <dt className="text-xs text-muted-foreground">純増登録者</dt>
+      <div className="dashboard-metric-surface rounded-lg p-4">
+        <dt className="text-xs text-foreground">純増登録者</dt>
         <dd className="text-2xl font-semibold tabular-nums">
           {formatInteger(summary.subscribers_net)}
         </dd>
       </div>
-      <div className="rounded-lg bg-muted p-4">
-        <dt className="text-xs text-muted-foreground">エンゲージメント</dt>
+      <div className="dashboard-metric-surface rounded-lg p-4">
+        <dt className="text-xs text-foreground">エンゲージメント</dt>
         <dd className="text-2xl font-semibold tabular-nums">
           {formatInteger(summary.engagements)}
         </dd>
@@ -461,7 +460,7 @@ export function App() {
   }
 
   return (
-    <main className="min-h-svh bg-background">
+    <main className="dashboard-palette-background min-h-svh">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 p-4 sm:p-8">
         <header className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-2">
@@ -469,7 +468,7 @@ export function App() {
               <DatabaseIcon data-icon="inline-start" />
               起動時更新
             </Badge>
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
               YouTube Analytics Dashboard
             </h1>
             <p className="max-w-2xl text-muted-foreground">
@@ -490,7 +489,7 @@ export function App() {
           </Button>
         </header>
 
-        <Card size="sm">
+        <Card size="sm" variant="accent">
           <CardHeader>
             <CardTitle>カラーパレット</CardTitle>
             <CardDescription>
@@ -547,7 +546,7 @@ export function App() {
               {detail ? (
                 <div className="grid gap-4">
                   <div>
-                    <h2 className="text-2xl font-semibold">
+                    <h2 className="dashboard-section-heading text-2xl font-semibold">
                       {detail.name} の動画詳細
                     </h2>
                     <p className="text-sm text-muted-foreground">

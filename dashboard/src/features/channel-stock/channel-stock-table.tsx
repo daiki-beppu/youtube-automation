@@ -119,7 +119,10 @@ export function ChannelStockTable({
   return (
     <section aria-labelledby="channel-stock-title" className="grid gap-4">
       <div>
-        <h2 id="channel-stock-title" className="text-2xl font-semibold">
+        <h2
+          id="channel-stock-title"
+          className="dashboard-section-heading text-2xl font-semibold"
+        >
           {STOCK_TABLE_CONTRACT.title}
         </h2>
         <p className="text-sm text-muted-foreground">
@@ -137,7 +140,7 @@ export function ChannelStockTable({
           </p>
         ) : null}
       </div>
-      <div className="min-w-0 overflow-hidden rounded-lg border">
+      <div className="dashboard-accent-panel min-w-0 overflow-hidden rounded-lg border">
         <Table
           aria-label={STOCK_TABLE_CONTRACT.ariaLabel}
           className="block max-w-full min-w-0 table-fixed overflow-hidden lg:table"

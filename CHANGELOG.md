@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- `feat(dashboard)`: デジタル庁のダッシュボード設計ガイドを基準に、初期表示を概況・データ前提・指標定義・チャンネル比較・詳細の判断順へ再構成。比較表に詳細導線を統合し、狭幅では行をカード表示に切り替えて横方向の見切れを解消。ダークテーマの背景を黒からニュートラルグレーの階調へ調整し、カードとの境界を識別しやすくした。ガイドブック35ページの5段階配色を Blue / Cyan / Green / Orange / Purple から切り替えて比較できるパレットUIを追加（#2546）。
+- `feat(dashboard)`: デジタル庁のダッシュボード設計ガイドを基準に、初期表示を概況・データ前提・指標定義・チャンネル比較・詳細の判断順へ再構成。比較表に詳細導線を統合し、狭幅では行をカード表示に切り替えて横方向の見切れを解消。ダークテーマの背景を黒からニュートラルグレーの階調へ調整し、カードとの境界を識別しやすくした。ガイドブック35ページの5段階配色を Blue / Cyan / Green / Orange / Purple から切り替えて比較できるパレットUIを追加し、選択色を背景・見出し・指標カード・比較領域にも反映（#2546）。
 - `refactor(dx)`: lefthook とローカル git hook・bootstrap wrapper（`.lefthook/`）を廃止し、品質ゲート（ruff / CHANGELOG / any 型）を CI へ一本化。any ゲートは `.github/scripts/` へ、worktree TMPDIR 分離は `.nix/worktree-tmpdir.sh` へ移設し、`yt-preflight` の hook_policy 検査を削除。開発 bootstrap は direnv / `nix develop`（shellHook が `uv sync`）へ統一（#2534）。
 - `refactor(config)`: yt-doctor・channel init/import・GCP bootstrap・Terraform apply からチャンネルルート `.env` の生成・検査・読込を削除し、GCP セットアップ完了条件を API/IAM/ADC quota project に限定（#2478）。
 - `feat(skills)`: `/suno`・`/thumbnail`・`/loop-video`・`/alignment-check` が `docs/channel/creative-constraints.md` の担当セクションを毎回参照し、不在時は既存チャンネルを止めず `/creative-constraints` を案内（#2449）。
