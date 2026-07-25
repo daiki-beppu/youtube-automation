@@ -154,7 +154,8 @@ class TestCliHelperShared:
     SCRIPT_NAME = "generate_image.py"
 
     def _read_script(self) -> str:
-        path = Path(__file__).resolve().parent.parent / "src" / "youtube_automation" / "commands" / "media" / self.SCRIPT_NAME
+        commands_dir = Path(__file__).resolve().parent.parent / "src" / "youtube_automation" / "commands"
+        path = commands_dir / "media" / self.SCRIPT_NAME
         return path.read_text(encoding="utf-8")
 
     def test_script_imports_shared_helpers(self):

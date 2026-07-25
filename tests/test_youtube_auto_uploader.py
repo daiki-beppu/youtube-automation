@@ -35,7 +35,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 def test_main_without_action_prints_usage(monkeypatch, capsys):
     from youtube_automation.agents import youtube_auto_uploader
 
-    config = SimpleNamespace(meta=SimpleNamespace(channel_short="test"))
     monkeypatch.setattr(sys, "argv", ["yt-upload-auto"])
     with (
         patch("youtube_automation.agents.youtube_auto_uploader.channel_label", return_value="test-channel"),
