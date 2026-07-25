@@ -13,9 +13,14 @@ let serverStderr = ""
 
 const paletteLightColors = {
   Blue: ["#d9e6ff", "#9db7f9", "#4979f5", "#264af4", "#0017c1"],
+  "Light Blue": ["#c0e4ff", "#57b8ff", "#008bf2", "#0066be", "#00428c"],
   Cyan: ["#99f2ff", "#2bc8e4", "#00a3bf", "#008299", "#006173"],
   Green: ["#c2e5d1", "#71c598", "#259d63", "#197a4b", "#115a36"],
+  Lime: ["#d0f5a2", "#8cc80c", "#6fa104", "#507500", "#2c4100"],
+  Yellow: ["#ffe380", "#ebb700", "#b78f00", "#927200", "#6e5600"],
   Orange: ["#ffdfca", "#ffa66d", "#fb5b01", "#c74700", "#8b3200"],
+  Red: ["#ffdada", "#ff9696", "#ff5454", "#ec0000", "#a90000"],
+  Magenta: ["#ffd0ff", "#ff8eff", "#f137f1", "#c000c0", "#8b008b"],
   Purple: ["#ecddff", "#cda6ff", "#a565f8", "#8843e1", "#5c10be"],
 } as const
 
@@ -341,8 +346,14 @@ test("カラーパレットを切り替えて再読み込み後も保持でき�
   ).not.toBeVisible()
   await page.getByRole("button", { name: "設定を開く" }).click()
   const paletteGroup = page.getByRole("group", { name: "カラーパレット" })
-  const blue = paletteGroup.getByRole("button", { name: "Blue" })
-  const green = paletteGroup.getByRole("button", { name: "Green" })
+  const blue = paletteGroup.getByRole("button", {
+    name: "Blue",
+    exact: true,
+  })
+  const green = paletteGroup.getByRole("button", {
+    name: "Green",
+    exact: true,
+  })
   await expect(blue).toHaveAttribute("aria-pressed", "true")
 
   const dashboardColors = () =>
@@ -392,6 +403,76 @@ test("カラーパレットを切り替えて再読み込み後も保持でき�
       .getByRole("group", { name: "カラーパレット" })
       .getByRole("button", { name: "Green" })
   ).toHaveAttribute("aria-pressed", "true")
+})
+
+test("グラフは色だけに頼らず再生数を常時表示する", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("theme", "light")
+  })
+  await page.goto(baseURL)
+  await page
+    .getByRole("button", { name: "Night Drive の動画詳細を見る" })
+    .click()
+
+  const chart = page.getByTestId("top-videos-chart")
+  const valueLabel = chart.getByText("3,200")
+  await expect(valueLabel).toBeVisible()
+
+  const expectChartContrast = async () => {
+    await expect(valueLabel).toBeVisible()
+    await expect(chart.locator(".recharts-bar-rectangle path")).toHaveCount(1)
+    const colors = await chart.evaluate((element) => {
+      const bar = element.querySelector(".recharts-bar-rectangle path")
+      const label = [...element.querySelectorAll("text")].find(
+        (candidate) => candidate.textContent === "3,200"
+      )
+      const surface = element.closest("[data-slot='card']")
+      if (!bar || !label || !surface) {
+        throw new Error("グラフの検査対象がありません")
+      }
+      const toSrgb = (color: string) => {
+        const sample = document.createElement("span")
+        sample.style.color = `color-mix(in srgb, ${color}, ${color})`
+        document.body.append(sample)
+        const resolved = getComputedStyle(sample).color
+        sample.remove()
+        return resolved
+      }
+      return {
+        background: toSrgb(getComputedStyle(surface).backgroundColor),
+        bar: toSrgb(getComputedStyle(bar).fill),
+        label: toSrgb(getComputedStyle(label).fill),
+      }
+    })
+    expect(
+      contrastRatio(colors.bar, colors.background),
+      JSON.stringify(colors)
+    ).toBeGreaterThanOrEqual(3)
+    expect(
+      contrastRatio(colors.label, colors.background),
+      JSON.stringify(colors)
+    ).toBeGreaterThanOrEqual(4.5)
+  }
+
+  await page.getByRole("button", { name: "設定を開く" }).click()
+  for (const palette of Object.keys(paletteLightColors)) {
+    await page
+      .getByRole("group", { name: "カラーパレット" })
+      .getByRole("button", { name: palette, exact: true })
+      .click()
+    await expectChartContrast()
+  }
+
+  await page.getByRole("button", { name: "閉じる" }).click()
+  await page.getByRole("button", { name: "ダークモードに切り替え" }).click()
+  await page.getByRole("button", { name: "設定を開く" }).click()
+  for (const palette of Object.keys(paletteLightColors)) {
+    await page
+      .getByRole("group", { name: "カラーパレット" })
+      .getByRole("button", { name: palette, exact: true })
+      .click()
+    await expectChartContrast()
+  }
 })
 
 test("ライトでは公式5段階色、ダークでは背景と識別できる色を表示する", async ({
@@ -468,7 +549,7 @@ test("ライトでは公式5段階色、ダークでは背景と識別できる�
   for (const [palette, expectedColors] of Object.entries(paletteLightColors)) {
     const option = page
       .getByRole("group", { name: "カラーパレット" })
-      .getByRole("button", { name: palette })
+      .getByRole("button", { name: palette, exact: true })
     await option.click()
     await expect(option).toHaveAttribute("aria-pressed", "true")
 
@@ -501,7 +582,7 @@ test("ライトでは公式5段階色、ダークでは背景と識別できる�
   for (const palette of Object.keys(paletteLightColors)) {
     const option = page
       .getByRole("group", { name: "カラーパレット" })
-      .getByRole("button", { name: palette })
+      .getByRole("button", { name: palette, exact: true })
     await option.click()
     const swatches = await Promise.all(
       Array.from({ length: 5 }, (_, index) =>

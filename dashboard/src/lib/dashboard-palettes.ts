@@ -6,6 +6,12 @@ export const dashboardPalettes = [
     preview: "var(--palette-blue-preview)",
   },
   {
+    value: "light-blue",
+    label: "Light Blue",
+    levels: ["200", "400", "600", "800", "1000"],
+    preview: "var(--palette-light-blue-preview)",
+  },
+  {
     value: "cyan",
     label: "Cyan",
     levels: ["200", "400", "600", "800", "1000"],
@@ -18,10 +24,34 @@ export const dashboardPalettes = [
     preview: "var(--palette-green-preview)",
   },
   {
+    value: "lime",
+    label: "Lime",
+    levels: ["100", "500", "700", "900", "1100"],
+    preview: "var(--palette-lime-preview)",
+  },
+  {
+    value: "yellow",
+    label: "Yellow",
+    levels: ["200", "500", "700", "900", "1100"],
+    preview: "var(--palette-yellow-preview)",
+  },
+  {
     value: "orange",
     label: "Orange",
     levels: ["100", "300", "600", "800", "1000"],
     preview: "var(--palette-orange-preview)",
+  },
+  {
+    value: "red",
+    label: "Red",
+    levels: ["100", "300", "500", "800", "1000"],
+    preview: "var(--palette-red-preview)",
+  },
+  {
+    value: "magenta",
+    label: "Magenta",
+    levels: ["100", "300", "500", "700", "900"],
+    preview: "var(--palette-magenta-preview)",
   },
   {
     value: "purple",

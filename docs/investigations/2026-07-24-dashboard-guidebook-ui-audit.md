@@ -65,6 +65,61 @@
 - chart のアクセシビリティツリーまたは代替表で、色に依存せず系列名と値を読み取れることを確認する。
 - visual QA はライトとダークの両方で実施し、淡色のバー、軸ラベル、tooltip、Badge の文字が背景へ埋没しないことを確認する。
 
+## 36・37ページ：役割別配色とコントラスト
+
+一次資料:
+
+- [ガイドブック p.36「4.3 カラーパレット — 組み合わせ」](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=36)
+- [ガイドブック p.37「4.3 カラーパレット — コントラスト比の考え方」](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37)
+
+### 36ページの具体的ルール
+
+p.36 は、テキスト、背景、表、グラフの色を役割別に分け、Blue を基準とする次の組み合わせを提示している（[p.36](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=36)）。
+
+| 用途 | 役割と指定色 |
+| --- | --- |
+| テキスト | Body `#1A1A1A`、Description `#626264`、On Fill `#FFFFFF`、Link `#0017C1`、Positive Number `#0031D8`、Negative Number `#FA0000` |
+| 背景 | Primary `#0031D8`、Secondary `#F8F8FB`、Positive `#E8F1FE`、Negative `#FDEEEE` |
+| 境界 | Field `#1A1A1C`、Divider `#D8D8DB` |
+| グラフ・表内データバー | Positive Bar `#0031D8`、Negative Bar `#FA0000`、Positive Data Bar `#C5D7FB`、Negative Data Bar `#FFBBBB` |
+
+- 正負の値は、正数用の青／淡青背景と、負数用の赤／淡赤背景を組み合わせる。例では符号も `+1,000` / `-1,000` と明記され、表のデータバーにも数値が併記されている（[p.36](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=36)）。
+- Primary 背景では白文字、Secondary 背景では Body 色、Positive / Negative 背景では対応する Positive / Negative Number 色という「前景と背景の組」を適用例として示している（[p.36](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=36)）。
+
+### 37ページの具体的ルール
+
+- アクセシビリティ対応では、背景色とグラフ色面のコントラスト比を `3:1` 以上にする（[p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37)）。
+- 白背景で Blue パレットをキーカラーにする例では、グラフ色を Blue-500 `#4979F5` 以上の濃さにする（[p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37)）。
+- 色面が `3:1` を満たせない場合は、色面のすぐ近くに数値を記載する。近接表示できない場合は、マウスオーバーまたはキーボードフォーカス時に数値を表示する（[p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37)）。
+- 代替として表示する数値の色は、その背景に対して `4.5:1` 以上を確保する（[p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37)）。
+- 多色グラフでは、色覚多様性を考慮し、推奨配色、色覚特性シミュレーション／チェッカーを使って識別しにくい組み合わせを調整し、色以外の識別方法も提供する（[p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37)）。
+
+### 現行dashboardへの適用候補
+
+| 優先度 | 現状 | 適用候補 | 根拠 |
+| --- | --- | --- | --- |
+| P1 | 白背景の `--chart-1` は淡い無彩色であり、棒の輪郭を背景から判別しにくい | 単一系列の棒は最低でも Blue-500 `#4979F5` 相当へ変更し、実背景との比率を `3:1` 以上にする | [p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37) |
+| P1 | グラフ値は tooltip で確認できるが、ポインター操作に偏る可能性がある | Recharts の各棒をキーボードでフォーカス可能にし、hover と focus の両方でタイトル・再生数を表示する。可能なら棒の末尾へ値を常時表示する | [p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37) |
+| P1 | 正常・warning・destructive は独自の色トークンで、数値の正負と状態の重大度が同じ色語へ混在し得る | `positive-number` / `negative-number`、`positive-surface` / `negative-surface`、`status-warning` / `status-destructive` を別トークンにし、意味を混同しない | [p.36](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=36) |
+| P2 | 純増登録者は符号を表示するが、詳細サマリーでは正値の `+` がなく、画面間の表記が揃っていない | 増減を意味する指標だけは、正負色に加えて `+` / `-` とラベルを一貫して表示する | [p.36](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=36) |
+| P2 | ライト／ダークで色の役割名は共通だが、実際の組み合わせの合否が固定されていない | p.36 のHEXはライトテーマの基準として扱い、ダークテーマは同じ意味役割を維持した別値を用意して、前景・背景の組ごとに再測定する | [p.36](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=36)、[p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37) |
+
+### 避けるべき誤読
+
+- p.35 の「1〜3色では太字の明度を使う」は、淡い Blue-100 を白背景のグラフ色に無条件で使ってよいという意味ではない。アクセシビリティ対応時は p.37 の `3:1` 制約が加わり、白背景の例は Blue-500 以上である（[p.35](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=35)、[p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37)）。
+- `3:1` を満たさない色面に tooltip を付ければ常に十分、という意味ではない。p.37 はまず近接した数値を挙げ、難しい場合にもマウスだけでなくキーボードフォーカスで値を表示するよう求めている（[p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37)）。
+- `Positive` は業務上の「正常状態」、`Negative` は「システムエラー」と同義ではない。p.36 の例は増減値とデータバーの正負であり、更新失敗等の状態分類は別の意味設計が必要である（[p.36](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=36)）。
+- p.36 のHEX値をダークテーマへそのまま移植すれば適合する、とは書かれていない。適合対象は実際の背景と前景の組み合わせなので、テーマごとの測定が必要である（[p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37)）。
+- 色覚多様性への配慮は「赤と緑を避ける」だけでは完了しない。p.37 はシミュレーション／チェッカーによる確認、組み合わせの調整、色以外の識別方法を併記している（[p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37)）。
+
+### テスト観点
+
+- light/dark の各テーマで、グラフ色面と実背景のコントラストが `3:1` 以上であることを計算する（[p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37)）。
+- 値ラベル、tooltip、focus時の数値と背景のコントラストが `4.5:1` 以上であることを計算する（[p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37)）。
+- マウスを使わず Tab / 矢印キーでグラフデータへ移動し、各動画名と再生数を取得できることをE2Eで確認する（[p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37)）。
+- 正負の値について、色を除去しても符号、数値、ラベルから意味が分かり、Positive / Negative の前景・背景トークンが意図した組で使われることを確認する（[p.36](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=36)）。
+- 代表的な色覚特性シミュレーションで系列と状態を確認し、識別困難な組み合わせがあれば線種、記号、ラベルを追加する（[p.37](https://www.digital.go.jp/assets/contents/node/basic_page/field_ref_resources/1948e3cd-736a-4378-9e31-039b08d11106/a119bc3c/20240531_resources_dashboard-guidebook_guidebook_01.pdf#page=37)）。
+
 ## 実装前の主なギャップ
 
 1. 「チャンネル横断ストック」と「チャンネル概要」に同じ指標が重複し、最初に見るべき場所が分散していた。

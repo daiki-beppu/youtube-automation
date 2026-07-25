@@ -81,12 +81,20 @@ function MetricCell({
     metric === "subscribers_net"
       ? formatSignedInteger(value)
       : formatInteger(value)
+  const subscriberTone =
+    value > 0 ? "positive" : value < 0 ? "negative" : "neutral"
   return (
     <TableCell className="flex flex-col gap-1 text-left whitespace-normal tabular-nums lg:table-cell lg:text-right">
       <span className="text-xs text-muted-foreground lg:hidden">
         {labels[metric]}
       </span>
-      {formatted}
+      {metric === "subscribers_net" ? (
+        <span className="dashboard-signed-value" data-tone={subscriberTone}>
+          {formatted}
+        </span>
+      ) : (
+        formatted
+      )}
       {metric === "watch_time_minutes" ? "分" : ""}
     </TableCell>
   )

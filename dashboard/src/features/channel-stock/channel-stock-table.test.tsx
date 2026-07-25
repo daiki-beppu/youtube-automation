@@ -81,6 +81,20 @@ describe("ChannelStockTable", () => {
     expect(within(row).getByText("450分")).toBeInTheDocument()
   })
 
+  it("keeps the sign visible while exposing subscriber change semantics", () => {
+    const channels = [
+      channel("Growing", 3),
+      {
+        ...channel("Declining", 3),
+        summary: { ...summary, subscribers_net: -4 },
+      },
+    ]
+    render(<ChannelStockTable channels={channels} />)
+
+    expect(screen.getByText("+12")).toHaveAttribute("data-tone", "positive")
+    expect(screen.getByText("-4")).toHaveAttribute("data-tone", "negative")
+  })
+
   it("places the total summary before the table", () => {
     render(<ChannelStockTable channels={[channel("Night Drive", 3)]} />)
 

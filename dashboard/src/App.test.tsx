@@ -181,6 +181,14 @@ describe("dashboard", () => {
     expect(
       within(performanceCard).getByRole("cell", { name: "1,200" })
     ).toBeInTheDocument()
+    const subscriberMetric = screen
+      .getAllByText("純増登録者")
+      .at(-1)
+      ?.closest("[data-tone]")
+    expect(subscriberMetric).toHaveAttribute("data-tone", "positive")
+    expect(
+      within(subscriberMetric as HTMLElement).getByText("+12")
+    ).toBeInTheDocument()
     const comparisonRow = screen.getByRole("row", { name: /Night Drive/ })
     expect(within(comparisonRow).getByText("3本")).toBeInTheDocument()
     expect(screen.queryByText("準備完了")).not.toBeInTheDocument()
@@ -282,6 +290,22 @@ describe("dashboard", () => {
     })
     const blue = within(paletteGroup).getByRole("button", { name: "Blue" })
     const green = within(paletteGroup).getByRole("button", { name: "Green" })
+    expect(
+      within(paletteGroup)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label"))
+    ).toEqual([
+      "Blue",
+      "Light Blue",
+      "Cyan",
+      "Green",
+      "Lime",
+      "Yellow",
+      "Orange",
+      "Red",
+      "Magenta",
+      "Purple",
+    ])
     expect(blue).toHaveAttribute("aria-pressed", "true")
     expect(
       screen.getByRole("img", {

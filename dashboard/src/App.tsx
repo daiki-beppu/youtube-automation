@@ -10,7 +10,7 @@ import {
   SettingsIcon,
   SunIcon,
 } from "lucide-react"
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { PaletteSwitcher } from "@/components/palette-switcher"
@@ -53,6 +53,7 @@ import {
   formatCollectedAt,
   formatDateRange,
   formatInteger,
+  formatSignedInteger,
 } from "@/lib/dashboard-formatters"
 import { dashboardStatusPresentation } from "@/lib/dashboard-status"
 import {
@@ -274,6 +275,13 @@ function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
 }
 
 function SummaryMetrics({ summary }: { summary: Summary }) {
+  const subscriberTone =
+    summary.subscribers_net > 0
+      ? "positive"
+      : summary.subscribers_net < 0
+        ? "negative"
+        : "neutral"
+
   return (
     <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <div className="dashboard-metric-surface rounded-lg p-4">
@@ -289,10 +297,13 @@ function SummaryMetrics({ summary }: { summary: Summary }) {
           <span className="ml-1 text-sm font-normal text-foreground">分</span>
         </dd>
       </div>
-      <div className="dashboard-metric-surface rounded-lg p-4">
+      <div
+        className="dashboard-metric-surface rounded-lg p-4"
+        data-tone={subscriberTone}
+      >
         <dt className="text-xs text-foreground">純増登録者</dt>
         <dd className="text-2xl font-semibold tabular-nums">
-          {formatInteger(summary.subscribers_net)}
+          {formatSignedInteger(summary.subscribers_net)}
         </dd>
       </div>
       <div className="dashboard-metric-surface rounded-lg p-4">
@@ -356,12 +367,16 @@ function Detail({ detail }: { detail: ChannelDetail }) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ChartContainer config={chartConfig} className="min-h-64 w-full">
+              <ChartContainer
+                config={chartConfig}
+                className="min-h-64 w-full"
+                data-testid="top-videos-chart"
+              >
                 <BarChart
                   accessibilityLayer
                   data={chartData}
                   layout="vertical"
-                  margin={{ left: 8 }}
+                  margin={{ left: 8, right: 64 }}
                 >
                   <CartesianGrid horizontal={false} />
                   <YAxis
@@ -379,7 +394,18 @@ function Detail({ detail }: { detail: ChannelDetail }) {
                     cursor={false}
                     content={<ChartTooltipContent />}
                   />
-                  <Bar dataKey="views" fill="var(--color-views)" radius={4} />
+                  <Bar dataKey="views" fill="var(--color-views)" radius={4}>
+                    <LabelList
+                      dataKey="views"
+                      position="right"
+                      fill="var(--foreground)"
+                      formatter={(value) =>
+                        typeof value === "number"
+                          ? formatInteger(value)
+                          : String(value ?? "")
+                      }
+                    />
+                  </Bar>
                 </BarChart>
               </ChartContainer>
             </CardContent>
