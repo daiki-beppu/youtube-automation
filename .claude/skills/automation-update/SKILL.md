@@ -86,7 +86,7 @@ find "$HOME/02-yt" "$HOME/01-yt" "$HOME" -maxdepth 4 -type f -name pyproject.tom
 以降の `gh` / `curl` コマンドが参照する upstream リポジトリ（`<owner>/<repo>`）は、導入済みパッケージの `automation_update_refs.UPSTREAM_REPO` — `yt-automation-update` の official upstream 検証（サプライチェーン保護）と同じ単一ソース — から導出する:
 
 ```bash
-UPSTREAM_REPO="$(uv run python -c 'from youtube_automation.cli.automation_update_refs import UPSTREAM_REPO; print(UPSTREAM_REPO)')"
+UPSTREAM_REPO="$(uv run python -c 'from youtube_automation.commands.system.automation_update_refs import UPSTREAM_REPO; print(UPSTREAM_REPO)')"
 echo "$UPSTREAM_REPO"   # 既定: daiki-beppu/youtube-automation
 ```
 
@@ -358,14 +358,14 @@ uv run yt-skills diff
 # 自スキル分の同梱版を取得し、unified diff として表示
 # youtube_automation を import するため uv 管理の venv 経由で実行する
 uv run python - <<'PY' > /tmp/automation-update-bundled.SKILL.md
-from youtube_automation.cli.skills_sync import _asset_root
+from youtube_automation.commands.system.skills_sync import _asset_root
 
 print((_asset_root("skills") / "automation-update" / "SKILL.md").read_text(encoding="utf-8"), end="")
 PY
 diff -u .claude/skills/automation-update/SKILL.md /tmp/automation-update-bundled.SKILL.md || true
 ```
 
-`yt-skills` には export コマンドは無い。wheel 同梱 asset は `youtube_automation.cli.skills_sync._asset_root("skills")` から取得する。
+`yt-skills` には export コマンドは無い。wheel 同梱 asset は `youtube_automation.commands.system.skills_sync._asset_root("skills")` から取得する。
 
 AI は取得した unified diff を **H2 セクション境界（`## `）で集約** し、「Phase X の手順が変わる」「Gotchas に Y が追加」のようなセクション単位の要約を作って提示する:
 
@@ -566,7 +566,7 @@ git commit -m "chore: youtube-automation <target_ref> への追従 (#N)"
 
 ## Cross References
 
-- `src/youtube_automation/cli/automation_update.py`（upstream リポ）— 本スキルが委譲する機械的手順の実体（`yt-automation-update check` / `apply`）
+- `src/youtube_automation/commands/system/automation_update.py`（upstream リポ）— 本スキルが委譲する機械的手順の実体（`yt-automation-update check` / `apply`）
 - `docs/changelog-contract.md`（upstream リポ）— CHANGELOG.md / Release 本文の Migration セクションフォーマット契約（本スキルの入力構造定義）
 - `/automation-release`（upstream リポ）— リリース PR を作成し CHANGELOG.md を昇格させる upstream 側スキル（本スキルが読み取るリリース本文を生成する）
 - `/setup` — 追従後に `yt-doctor` で WARNING / FAILED が出た場合の再診断入口、および `[HUMAN STEP]` の書き方の参考実装

@@ -4,7 +4,7 @@ import argparse
 import logging
 
 from youtube_automation.agents._upload_cli_error_boundary import run_upload_cli
-from youtube_automation.configuration import load_config
+from youtube_automation.configuration import channel_label
 from youtube_automation.domains.uploads.collection import CollectionUploader
 from youtube_automation.infrastructure.google.youtube import create_authenticated_youtube_clients
 
@@ -13,8 +13,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     def upload() -> None:
-        config = load_config()
-        parser = argparse.ArgumentParser(description=f"{config.meta.channel_short} Collection Uploader")
+        parser = argparse.ArgumentParser(description=f"{channel_label()} Collection Uploader")
         parser.add_argument("--status", action="store_true")
         parser.add_argument("--plan", action="store_true")
         parser.add_argument("--daemon", "-d", action="store_true")

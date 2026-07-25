@@ -165,8 +165,8 @@ for out in body.get("outputs", []):              # ← legacy schema フィー�
 |---|---|---|
 | `.claude/skills/benchmark/config.default.yaml:23` | `gemini-2.5-flash` | 競合チャンネルのサムネ分析 |
 | `.claude/skills/video-analyze/config.default.yaml:7` | `gemini-2.5-flash` | 動画コンテンツ解析 |
-| `src/youtube_automation/scripts/benchmark_collector.py:523` | `gemini-2.5-flash` (フォールバック) | benchmark 既定 |
-| `src/youtube_automation/scripts/populate_scene_phrases.py:33` | `gemini-2.5-flash-lite` (`DEFAULT_GEMINI_MODEL`) | シーンフレーズ多言語化 |
+| `src/youtube_automation/commands/analytics/benchmark_collector.py:523` | `gemini-2.5-flash` (フォールバック) | benchmark 既定 |
+| `src/youtube_automation/commands/media/populate_scene_phrases.py:33` | `gemini-2.5-flash-lite` (`DEFAULT_GEMINI_MODEL`) | シーンフレーズ多言語化 |
 
 公式の移行ガイダンス [^3]:
 - `gemini-2.5-flash` → `gemini-3-flash-preview` (またはその後継 `gemini-3.1-flash`)

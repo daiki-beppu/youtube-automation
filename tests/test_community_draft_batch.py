@@ -88,7 +88,7 @@ def test_active_community_docs_have_no_legacy_type_markdown_or_clipboard_flow() 
     active_paths = (
         SKILL,
         REPO_ROOT / ".claude/skills/collection-ideate/SKILL.md",
-        REPO_ROOT / "src/youtube_automation/scripts/vote_log.py",
+        REPO_ROOT / "src/youtube_automation/commands/collections/vote_log.py",
         REPO_ROOT / "src/youtube_automation/domains/collections/weekly_vote_log.py",
         REPO_ROOT / "src/youtube_automation/domains/collections/schemas/weekly_vote_log.schema.json",
     )

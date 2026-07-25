@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from youtube_automation.scripts.captions_upload import main
+from youtube_automation.commands.youtube.captions_upload import main
 
 
 def test_dry_run_generates_srt_without_youtube_api(tmp_path, monkeypatch):

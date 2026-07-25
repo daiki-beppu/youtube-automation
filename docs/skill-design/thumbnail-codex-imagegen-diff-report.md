@@ -56,7 +56,7 @@
 | `scripts/image_gen.py` | あり（CLI fallback 専用スクリプト） | なし |
 | `remove_chroma_key.py` | あり（システム共通ヘルパー、`$CODEX_HOME/skills/.system/imagegen/scripts/`） | なし |
 | `references/codex-image.sh` | なし | あり（ChatGPT サブスク認証経由の codex image 生成ラッパー） |
-| `references/generate_image.py` | なし | あり（`../../../../src/youtube_automation/scripts/generate_image.py` へのシンボリックリンク。CLI 引数を解釈し Gemini / OpenAI / codex プロバイダーを切り替えて画像生成を実行する実装コード） |
+| `references/generate_image.py` | なし | あり（`../../../../src/youtube_automation/commands/media/generate_image.py` へのシンボリックリンク。CLI 引数を解釈し Gemini / OpenAI / codex プロバイダーを切り替えて画像生成を実行する実装コード） |
 | `config.default.yaml` | なし | SKILL.md 内で言及（`yt-skills sync` 配布） |
 
 ---
@@ -118,7 +118,7 @@
 | 観点 | 参照 SKILL.md（imagegen） | 既存 thumbnail |
 |------|--------------------------|----------------|
 | 共通 references | `prompting.md`、`sample-prompts.md` | なし |
-| 実装 references | `cli.md`、`image-api.md`、`codex-network.md`、`scripts/image_gen.py` | `codex-image.sh`（codex プロバイダー専用ラッパー）、`generate_image.py`（`src/youtube_automation/scripts/generate_image.py` へのシンボリックリンク。マルチプロバイダー画像生成実装） |
+| 実装 references | `cli.md`、`image-api.md`、`codex-network.md`、`scripts/image_gen.py` | `codex-image.sh`（codex プロバイダー専用ラッパー）、`generate_image.py`（`src/youtube_automation/commands/media/generate_image.py` へのシンボリックリンク。マルチプロバイダー画像生成実装） |
 | 差分の性質 | **構造差**。imagegen は「共通」「fallback専用」を明確に分類。thumbnail は実装コード（`generate_image.py` symlink）と codex 専用ラッパー（`codex-image.sh`）の 2 ファイルを持つが、プロンプト知識系（`prompting.md` / `sample-prompts.md`）は存在せず疎な状態 |
 
 ---
@@ -306,7 +306,7 @@
 | | 内容 |
 |---|------|
 | 対象 | `.claude/skills/thumbnail/references/` ディレクトリ |
-| 現状の references | `codex-image.sh`（codex プロバイダー専用ラッパー）と `generate_image.py`（`src/youtube_automation/scripts/generate_image.py` へのシンボリックリンク）の 2 ファイルが存在する。実装コードは symlink 先で分離されており、SKILL.md には手順ドキュメントのみが内包されている |
+| 現状の references | `codex-image.sh`（codex プロバイダー専用ラッパー）と `generate_image.py`（`src/youtube_automation/commands/media/generate_image.py` へのシンボリックリンク）の 2 ファイルが存在する。実装コードは symlink 先で分離されており、SKILL.md には手順ドキュメントのみが内包されている |
 | 寄せた場合のメリット | `prompting.md`（YouTube サムネ向けプロンプト原則）・`sample-prompts.md`（サムネ別プロンプトレシピ）を追加することで、SKILL.md「プロンプト構築」セクションをそちらに移動できる。imagegen 構造に準拠し、SKILL.md の肥大化を抑制できる |
 | 寄せた場合のデメリット | 現状は SKILL.md 内にプロンプト構築の手順ドキュメントが内包されており、`references/prompting.md` に分割するとコンテキスト参照時に 2 ファイルを辿る必要が生じる。ファイル数が増えるほど AI のコンテキスト追跡コストが上がる |
 | **推奨** | **一部寄せる** — imagegen に倣い `references/prompting.md` と `references/sample-prompts.md` を追加することを推奨。SKILL.md の「プロンプト構築」セクションを `references/prompting.md` に移し、SKILL.md をスリム化できる。実装コードは `generate_image.py` symlink にすでに分離されているため、このパターンとの整合性もある。実装は別タスクで |

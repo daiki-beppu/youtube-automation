@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from youtube_automation.scripts import benchmark_collector, compare_thumbnails
+from youtube_automation.commands.analytics import benchmark_collector
+from youtube_automation.commands.thumbnail import compare_thumbnails
 
 
 @pytest.mark.parametrize(

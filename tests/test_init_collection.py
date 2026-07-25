@@ -13,8 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
+from youtube_automation.commands.collections.init_collection import main
 from youtube_automation.configuration import channel_dir
-from youtube_automation.scripts.init_collection import main
 from youtube_automation.utils.collection_paths import REQUIRED_SUBDIRS
 
 

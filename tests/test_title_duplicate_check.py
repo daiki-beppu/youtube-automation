@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.scripts.title_duplicate_check import read_descriptions_title
+from youtube_automation.commands.metadata.title_duplicate_check import read_descriptions_title
 
 
 def _write_descriptions_md(collection_dir: Path, text: str) -> None:
@@ -94,7 +94,7 @@ def test_main_rejects_title_over_100_codepoints(tmp_path: Path, capsys: pytest.C
     When yt-title-duplicate-check を --title で実行する
     Then --strict なしでも exit 1 で超過を報告する（upload preflight で必ず fail するため前倒し検出）。
     """
-    from youtube_automation.scripts.title_duplicate_check import main
+    from youtube_automation.commands.metadata.title_duplicate_check import main
 
     long_title = "Late Night Smooth Jazz | " + "a" * 80
     assert len(long_title) > 100
@@ -111,7 +111,7 @@ def test_main_rejects_descriptions_title_over_100_codepoints(
     When collection 指定で yt-title-duplicate-check を実行する
     Then descriptions.md 入口でも upload preflight と同じ上限で fail-loud する。
     """
-    from youtube_automation.scripts.title_duplicate_check import main
+    from youtube_automation.commands.metadata.title_duplicate_check import main
 
     collection = tmp_path / "collections" / "planning" / "current"
     long_title = "Late Night Smooth Jazz | " + "a" * 80
@@ -129,7 +129,7 @@ def test_main_rejects_long_title_before_duplicate_warning(tmp_path: Path, capsys
     When yt-title-duplicate-check を実行する
     Then duplicate warning より先に長さ超過で fail-loud する。
     """
-    from youtube_automation.scripts.title_duplicate_check import main
+    from youtube_automation.commands.metadata.title_duplicate_check import main
 
     long_title = "Late Night Smooth Jazz | " + "a" * 80
     live_collection = tmp_path / "collections" / "live" / "published"
@@ -148,7 +148,7 @@ def test_main_accepts_title_at_exactly_100_codepoints(tmp_path: Path, capsys: py
     When yt-title-duplicate-check を実行する
     Then 長さでは reject されない（live タイトルが無ければ OK 終了）。
     """
-    from youtube_automation.scripts.title_duplicate_check import main
+    from youtube_automation.commands.metadata.title_duplicate_check import main
 
     title = "x" * 100
     rc = main([str(tmp_path), "--title", title, "--collections-root", str(tmp_path / "collections")])

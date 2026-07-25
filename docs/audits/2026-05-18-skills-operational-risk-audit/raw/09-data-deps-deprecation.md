@@ -28,8 +28,8 @@ PR #367 で扱った観点 1（汎用化・設定切り出し）/ 観点 2（整
 
 | モデル / バージョン | 使用箇所 | 公式ステータス（2026-05-18） | shutdown |
 |---|---|---|---|
-| `gemini-2.5-flash` | `.claude/skills/video-analyze/config.default.yaml:7`, `.claude/skills/benchmark/config.default.yaml:23`, `src/youtube_automation/scripts/benchmark_collector.py:523` | **deprecated**（後継 `gemini-3-flash-preview`） | **2026-10-16 earliest（≒ 5 か月後）** |
-| `gemini-2.5-flash-lite` | `src/youtube_automation/scripts/populate_scene_phrases.py:33`（`DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite"`） | **deprecated**（後継 `gemini-3.1-flash-lite`） | **2026-10-16 earliest** |
+| `gemini-2.5-flash` | `.claude/skills/video-analyze/config.default.yaml:7`, `.claude/skills/benchmark/config.default.yaml:23`, `src/youtube_automation/commands/analytics/benchmark_collector.py:523` | **deprecated**（後継 `gemini-3-flash-preview`） | **2026-10-16 earliest（≒ 5 か月後）** |
+| `gemini-2.5-flash-lite` | `src/youtube_automation/commands/media/populate_scene_phrases.py:33`（`DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite"`） | **deprecated**（後継 `gemini-3.1-flash-lite`） | **2026-10-16 earliest** |
 | `gemini-3.1-flash-image-preview` | `src/youtube_automation/utils/image_provider/config.py:27`（`_DEFAULT_GEMINI_MODEL`）, `.claude/skills/thumbnail/config.default.yaml:18`, `.claude/skills/collection-ideate/SKILL.md:139` | preview / GA 移行情報未公開 | 未告知（preview 継続中） |
 
 出典: `https://ai.google.dev/gemini-api/docs/deprecations`（2026-05-18 確認、既出レポート `data-external-api-deprecation.md:28-31` で取得済み）。
@@ -64,7 +64,7 @@ endpoint:
 
 | service / version | 箇所 | 廃止リスク |
 |---|---|---|
-| `youtube / v3` | `src/youtube_automation/utils/youtube_service.py:49`, `src/youtube_automation/auth/oauth_handler.py:239`, `src/youtube_automation/scripts/fetch_stream_key.py:114` | 公式 deprecation アナウンスなし。`commentThreads.markAsSpam` / `guideCategories` 等の廃止予告 endpoint 使用は 0 件確認 |
+| `youtube / v3` | `src/youtube_automation/utils/youtube_service.py:49`, `src/youtube_automation/auth/oauth_handler.py:239`, `src/youtube_automation/commands/youtube/fetch_stream_key.py:114` | 公式 deprecation アナウンスなし。`commentThreads.markAsSpam` / `guideCategories` 等の廃止予告 endpoint 使用は 0 件確認 |
 | `youtubeAnalytics / v2` | `src/youtube_automation/utils/youtube_service.py:57` | 廃止懸念なし |
 | `youtubereporting / v1` | `src/youtube_automation/utils/youtube_service.py:65` | 廃止懸念なし |
 
@@ -232,7 +232,7 @@ PyPI `google-auth-httplib2 0.4.0` (2026-05-07 リリース) ページ:
 ### 5.5.1 撤廃済み機能への明示的言及（健全側）
 
 - `.claude/skills/collection-ideate/SKILL.md:114`: 「Issue #132 以降、ハードコード単価表は撤廃済み」と明示。コード側 (`src/youtube_automation/utils/cost_tracker.py:9,22,104`) と整合
-- `.claude/skills/channel-setup/references/claude-md-template.md:140`: 「旧 `get_channel_status` は廃止」と明示。`pyproject.toml:45` で `yt-channel-status = "youtube_automation.scripts.get_channel_status:main"` として entry point 化済み（モジュール path として `get_channel_status` は残るが CLI 呼び出しは `yt-channel-status` に統一）→ template の文言は健全
+- `.claude/skills/channel-setup/references/claude-md-template.md:140`: 「旧 `get_channel_status` は廃止」と明示。`pyproject.toml:45` で `yt-channel-status = "youtube_automation.commands.channel.channel_status:main"` として entry point 化済み（モジュール path として `get_channel_status` は残るが CLI 呼び出しは `yt-channel-status` に統一）→ template の文言は健全
 
 ### 5.5.2 整合性のずれが残る記述
 
@@ -286,7 +286,7 @@ CHANGELOG（v4.0.0）で `wf-next/references/community_draft.py` / `post_upload_
 | `streaming` | `terraform >= 1.5`, `op`, `ssh-keygen`, `ssh-add`, `realpath`, `curl`, `ffmpeg`（VPS 側） | `SKILL.md:14` で `terraform`/`uv`/`op` 明示。**`ssh-keygen` / `ssh-add` は SKILL.md 文面に無く `swap_video.sh` のみ** | `references/swap_video.sh:61,65,69,73` で 4 件チェック | エラー文言で `brew install coreutils` / `openssh-client 導入` 明記。**P0 級ガードあり** |
 | `channel-setup` | `gcloud`, `terraform`, `jq` | `references/gcp-bootstrap.md` / `gcp-bootstrap.sh` で gcloud 明示 | `references/gcp-bootstrap.sh:107` で gcloud / `gcp-terraform-apply.sh:37,41` で terraform/jq | 公式インストール URL 明記。**良好** |
 | `videoup` | `ffmpeg`, `ffprobe`, `afinfo`（macOS、optional） | **SKILL.md に `## 前提` セクションなし**（SKILL.md:1-65 全文確認） | `references/generate_videos.sh:79,95` で ffmpeg / afinfo | ffmpeg なし時は `ERROR: ffmpeg not found` で exit 1 |
-| `masterup` | `curl`, `rsync`, `ffmpeg`（CLI 経由） | `SKILL.md:63-64` の「前提条件」は WebFetch のみ。**ffmpeg / rsync の宣言なし** | なし（CLI 側 `src/youtube_automation/scripts/generate_master.py:174` で `shutil.which("ffmpeg")` チェック） | CLI 側はあり、shell ステップ側はなし |
+| `masterup` | `curl`, `rsync`, `ffmpeg`（CLI 経由） | `SKILL.md:63-64` の「前提条件」は WebFetch のみ。**ffmpeg / rsync の宣言なし** | なし（CLI 側 `src/youtube_automation/commands/media/generate_master.py:174` で `shutil.which("ffmpeg")` チェック） | CLI 側はあり、shell ステップ側はなし |
 | `lyria` | `gcloud`（ADC）, `ffmpeg`（`generate_lyria_master.py:94` で subprocess 直叩き） | `SKILL.md:18` で `gcloud auth application-default login` 明示。**ffmpeg の宣言なし** | なし（直接 `subprocess.run(["ffmpeg", ...])`） | ffmpeg 不在時は `FileNotFoundError` で opaque 失敗 |
 | `loop-video` | `gcloud`（ADC）, `ffmpeg`（`--smooth` 時） | `SKILL.md:49` で gcloud 明示。`SKILL.md:32` で「FFmpeg クロスフェード補正」言及 | なし（`utils/veo_generator.py:122,161,241` で `subprocess.run(["ffmpeg", ...])` 直叩き、shutil.which 検査なし） | **P1**: ffmpeg 不在時に opaque `FileNotFoundError`。ガード追加すべき |
 | `video-analyze` | `gcloud`（ADC） | `SKILL.md:21` で明示 | なし | 健全 |
@@ -382,7 +382,7 @@ sdist には `auth/SETUP.md` / `auth/client_secrets_template.json` も含まれ�
 
 ### 5.7.3 `_skills/` / `_claude_md/` の参照ロジック
 
-出典: `src/youtube_automation/cli/skills_sync.py:27,40,47,71-89`
+出典: `src/youtube_automation/commands/system/skills_sync.py:27,40,47,71-89`
 
 ```python
 from importlib.resources import as_file, files

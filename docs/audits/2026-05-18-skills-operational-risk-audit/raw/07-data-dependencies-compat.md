@@ -35,12 +35,12 @@
 
 | モデル ID | 使用箇所 (`file:line`) | deprecation 状況 | severity | 出典 |
 |---|---|---|---|---|
-| `gemini-2.5-flash` | `.claude/skills/benchmark/config.default.yaml:23`, `.claude/skills/video-analyze/config.default.yaml:7`, `.claude/skills/wf-new/references/scene_phrases.md:26`, `src/youtube_automation/scripts/benchmark_collector.py:523` | **deprecated**、shutdown **2026-10-16** | **P1** | [^gemini-dep] |
-| `gemini-2.5-flash-lite` | `src/youtube_automation/scripts/populate_scene_phrases.py:33` (`DEFAULT_GEMINI_MODEL`) | **deprecated**、shutdown **2026-10-16** | **P1** | [^gemini-dep] |
+| `gemini-2.5-flash` | `.claude/skills/benchmark/config.default.yaml:23`, `.claude/skills/video-analyze/config.default.yaml:7`, `.claude/skills/wf-new/references/scene_phrases.md:26`, `src/youtube_automation/commands/analytics/benchmark_collector.py:523` | **deprecated**、shutdown **2026-10-16** | **P1** | [^gemini-dep] |
+| `gemini-2.5-flash-lite` | `src/youtube_automation/commands/media/populate_scene_phrases.py:33` (`DEFAULT_GEMINI_MODEL`) | **deprecated**、shutdown **2026-10-16** | **P1** | [^gemini-dep] |
 | `gemini-3.1-flash-image-preview` | `src/youtube_automation/utils/image_provider/config.py:27`, `.claude/skills/thumbnail/config.default.yaml:18`, `.claude/skills/collection-ideate/SKILL.md:139` | preview（shutdown 未告知） | P2 | [^gemini-dep] |
-| `veo-3.1-fast-generate-001` | `src/youtube_automation/utils/veo_generator.py:15`, `src/youtube_automation/scripts/generate_loop_video.py:85`, `.claude/skills/loop-video/config.default.yaml:8`, `.claude/skills/loop-video/SKILL.md:107,116` | **GA** (2025-11-17) | OK | [^vertex-rn] |
-| `veo-3.1-generate-001` | `.claude/skills/loop-video/SKILL.md:116`, `src/youtube_automation/scripts/generate_loop_video.py:86` | **GA** | OK | [^vertex-rn] |
-| `veo-3.1-lite-generate-preview` | `.claude/skills/loop-video/config.default.yaml:7`, `.claude/skills/loop-video/SKILL.md:116`, `src/youtube_automation/scripts/generate_loop_video.py:75,86` | **preview**（公式 publisher model ID として明示確認できず、表記揺れ疑い） | P2 (要検証) | [^veo-lite] |
+| `veo-3.1-fast-generate-001` | `src/youtube_automation/utils/veo_generator.py:15`, `src/youtube_automation/commands/media/generate_loop_video.py:85`, `.claude/skills/loop-video/config.default.yaml:8`, `.claude/skills/loop-video/SKILL.md:107,116` | **GA** (2025-11-17) | OK | [^vertex-rn] |
+| `veo-3.1-generate-001` | `.claude/skills/loop-video/SKILL.md:116`, `src/youtube_automation/commands/media/generate_loop_video.py:86` | **GA** | OK | [^vertex-rn] |
+| `veo-3.1-lite-generate-preview` | `.claude/skills/loop-video/config.default.yaml:7`, `.claude/skills/loop-video/SKILL.md:116`, `src/youtube_automation/commands/media/generate_loop_video.py:75,86` | **preview**（公式 publisher model ID として明示確認できず、表記揺れ疑い） | P2 (要検証) | [^veo-lite] |
 | `lyria-3-pro-preview` | `.claude/skills/lyria/config.default.yaml:17`, `.claude/skills/lyria/SKILL.md:60,85,94`, `src/youtube_automation/utils/audio_units.py:14` | **preview**（GA 未告知） | P2 | [^lyria-docs] |
 | `lyria-3-clip-preview` | `.claude/skills/lyria/SKILL.md:85`, `src/youtube_automation/utils/audio_units.py:15` | **preview** | P2 | [^lyria-docs] |
 | `lyria-002` | `src/youtube_automation/utils/audio_units.py:16` (cost_tracker 単価マッピングのみ、選択肢に出てこない) | レガシー Lyria 2 (実利用なし) | P3 | — |

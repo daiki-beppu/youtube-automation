@@ -1,1 +1,1 @@
-../../../../src/youtube_automation/scripts/get_channel_status.py
+../../../../src/youtube_automation/commands/channel/channel_status.py

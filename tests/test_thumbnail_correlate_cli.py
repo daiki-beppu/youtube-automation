@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from youtube_automation.scripts import thumbnail_correlate as mod
+from youtube_automation.commands.thumbnail import thumbnail_correlate as mod
 
 
 @pytest.fixture

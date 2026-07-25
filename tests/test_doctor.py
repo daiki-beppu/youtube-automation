@@ -17,7 +17,7 @@ from httplib2 import ServerNotFoundError
 from PIL import Image as PILImage
 
 import youtube_automation.infrastructure.secrets as secrets_module
-from youtube_automation.cli import doctor
+from youtube_automation.commands.system import doctor
 from youtube_automation.infrastructure.errors import ConfigError
 
 
@@ -1090,7 +1090,9 @@ class TestMain:
         def fail_if_youtube_requested(*_args, **_kwargs):
             raise AssertionError("YouTube API should not be requested during playlist create dry-run")
 
-        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.YouTubeClients", fail_if_youtube_requested)
+        monkeypatch.setattr(
+            "youtube_automation.commands.youtube.playlist_manager.YouTubeClients", fail_if_youtube_requested
+        )
 
         code = doctor.main(["--json"])
 
@@ -1111,7 +1113,9 @@ class TestMain:
         def fail_if_youtube_requested(*_args, **_kwargs):
             raise AssertionError("YouTube API should not be requested during playlist create dry-run")
 
-        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.YouTubeClients", fail_if_youtube_requested)
+        monkeypatch.setattr(
+            "youtube_automation.commands.youtube.playlist_manager.YouTubeClients", fail_if_youtube_requested
+        )
 
         code = doctor.main([])
 
@@ -1424,7 +1428,7 @@ class TestCheckPlaylistConfig:
 
 class TestCheckPlaylistCreateDryRun:
     def test_calls_playlist_manager_create_all_playlists_with_dry_run(self, tmp_path, monkeypatch):
-        from youtube_automation.scripts.playlist_manager import PlaylistManager
+        from youtube_automation.commands.youtube.playlist_manager import PlaylistManager
 
         _write_minimal_config(tmp_path)
         _write_playlists_config(tmp_path, {"main": {"playlist_id": "PL_MAIN", "title": "Main"}})
@@ -1448,7 +1452,9 @@ class TestCheckPlaylistCreateDryRun:
         def fail_if_youtube_requested(*_args, **_kwargs):
             raise AssertionError("YouTube API should not be requested during playlist create dry-run")
 
-        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.YouTubeClients", fail_if_youtube_requested)
+        monkeypatch.setattr(
+            "youtube_automation.commands.youtube.playlist_manager.YouTubeClients", fail_if_youtube_requested
+        )
 
         r = doctor.check_playlist_create_dry_run(tmp_path)
 
@@ -1462,7 +1468,9 @@ class TestCheckPlaylistCreateDryRun:
         def fail_if_youtube_requested(*_args, **_kwargs):
             raise AssertionError("YouTube API should not be requested when playlist title is missing")
 
-        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.YouTubeClients", fail_if_youtube_requested)
+        monkeypatch.setattr(
+            "youtube_automation.commands.youtube.playlist_manager.YouTubeClients", fail_if_youtube_requested
+        )
 
         r = doctor.check_playlist_create_dry_run(tmp_path)
 
@@ -1480,7 +1488,9 @@ class TestCheckPlaylistCreateDryRun:
         def fail_if_youtube_requested(*_args, **_kwargs):
             raise AssertionError("YouTube API should not be requested when playlist title is missing")
 
-        monkeypatch.setattr("youtube_automation.scripts.playlist_manager.YouTubeClients", fail_if_youtube_requested)
+        monkeypatch.setattr(
+            "youtube_automation.commands.youtube.playlist_manager.YouTubeClients", fail_if_youtube_requested
+        )
 
         r = doctor.check_playlist_create_dry_run(tmp_path)
         output = doctor.render_table([r], doctor.summarize([r]), tmp_path)
@@ -1504,7 +1514,7 @@ class TestCheckPlaylistCreateDryRun:
         assert "config/channel" in r.next_action["instructions"]
 
     def test_dry_run_exception_is_fail_with_human_action(self, tmp_path, monkeypatch):
-        from youtube_automation.scripts.playlist_manager import PlaylistManager
+        from youtube_automation.commands.youtube.playlist_manager import PlaylistManager
 
         _write_minimal_config(tmp_path)
         _write_playlists_config(tmp_path, {"main": {"playlist_id": "PL_MAIN", "title": "Main"}})

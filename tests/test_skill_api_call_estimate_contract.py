@@ -84,7 +84,6 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-collection-preflight": "ローカルの事前チェックのみ",
     "yt-collection-serve": "ローカル HTTP サーバーのみ",
     "yt-cost-report": "ローカル cost_tracker JSON の表示のみ",
-    "yt-distrokid-migrate": "ローカルのファイル移行のみ",
     "yt-distrokid-prepare": "ローカルの配信準備（ffprobe / Pillow）のみ",
     "yt-doctor": "gcloud subprocess + YouTube Reporting API（無料枠）のみ",
     "yt-finalize-master": "ローカル ffmpeg 処理のみ",

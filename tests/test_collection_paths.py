@@ -544,8 +544,8 @@ class TestLiteralCollectionSubpathRegression:
         "src/youtube_automation/domains/uploads/_published_dates.py",
         "src/youtube_automation/domains/uploads/_playlist_assignment.py",
         "src/youtube_automation/domains/uploads/_complete_collection_executor.py",
-        "src/youtube_automation/scripts/generate_short_loop.py",
-        "src/youtube_automation/scripts/bulk_update_short_localizations.py",
+        "src/youtube_automation/commands/media/generate_short_loop.py",
+        "src/youtube_automation/commands/metadata/bulk_update_short_localizations.py",
         "src/youtube_automation/domains/suno/selection.py",
     ]
 

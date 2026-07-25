@@ -18,7 +18,7 @@ from tests.helpers.suno_verify import (
     write_suno_override,
     write_video_analysis_suno_preset,
 )
-from youtube_automation.scripts.generate_suno_prompts import build_prompt_entries
+from youtube_automation.commands.suno.generate_suno_prompts import build_prompt_entries
 from youtube_automation.utils import skill_config
 
 

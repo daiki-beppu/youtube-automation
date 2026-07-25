@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-from youtube_automation.cli import channel_init_templates, doctor
+from youtube_automation.commands.channel import channel_init_templates
+from youtube_automation.commands.system import doctor
 
 ROOT = Path(__file__).resolve().parents[1]
 CHANNEL_NEW_REFERENCES = ROOT / ".claude" / "skills" / "channel-new" / "references"

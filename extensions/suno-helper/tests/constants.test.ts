@@ -44,7 +44,7 @@ describe("shared/constants: サーバー互換の契約値", () => {
   });
 
   it("Given 移行後の定数 When PROMPTS_ROUTE を読む Then #698 のサブパス分離後ルートである", () => {
-    // SSOT: src/youtube_automation/scripts/suno_artifacts.py SUNO_PROMPTS_ROUTE
+    // SSOT: src/youtube_automation/commands/suno/suno_artifacts.py SUNO_PROMPTS_ROUTE
     expect(PROMPTS_ROUTE).toBe("/suno/prompts.json");
   });
 
@@ -124,7 +124,7 @@ describe("shared/constants: 進捗フェーズ (PHASE)", () => {
 
 describe("shared/constants: collection 列挙ルート (#816 dir mode)", () => {
   it("Given COLLECTIONS_ROUTE When 読む Then サーバーの列挙サブパスである", () => {
-    // SSOT: src/youtube_automation/scripts/collection_serve.py の dir mode ルート。
+    // SSOT: src/youtube_automation/commands/collections/collection_serve.py の dir mode ルート。
     expect(COLLECTIONS_ROUTE).toBe("/collections");
   });
 

@@ -19,15 +19,15 @@ def test_pyproject_registers_yt_suno_verify_script():
     root = Path(__file__).resolve().parents[1]
     data = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
 
-    assert data["project"]["scripts"].get("yt-suno-verify") == ("youtube_automation.cli_entrypoints:yt_suno_verify")
+    assert data["project"]["scripts"].get("yt-suno-verify") == ("youtube_automation.entrypoints:yt_suno_verify")
 
 
 def test_cli_entrypoint_routes_to_suno_verify_module(monkeypatch):
-    """Given cli_entrypoints の yt_suno_verify
+    """Given entrypoints の yt_suno_verify
     When console script wrapper を呼ぶ
     Then suno_verify module の main へ委譲する。
     """
-    from youtube_automation import cli_entrypoints
+    from youtube_automation import entrypoints
 
     seen: dict[str, str] = {}
 
@@ -36,11 +36,11 @@ def test_cli_entrypoint_routes_to_suno_verify_module(monkeypatch):
         seen["function_name"] = function_name
         return "called"
 
-    monkeypatch.setattr(cli_entrypoints, "_run", fake_run)
+    monkeypatch.setattr(entrypoints, "_run", fake_run)
 
-    assert cli_entrypoints.yt_suno_verify() == "called"
+    assert entrypoints.yt_suno_verify() == "called"
     assert seen == {
-        "module_path": "youtube_automation.scripts.suno_verify",
+        "module_path": "youtube_automation.commands.suno.suno_verify",
         "function_name": "main",
     }
 

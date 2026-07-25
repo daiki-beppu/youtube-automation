@@ -5,8 +5,8 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
-from youtube_automation import cli_entrypoints
-from youtube_automation.cli import channel
+from youtube_automation import entrypoints
+from youtube_automation.commands.channel import channel
 from youtube_automation.configuration import loader
 
 
@@ -114,8 +114,8 @@ def test_pyproject_registers_yt_channel_entrypoint():
     with (project_root / "pyproject.toml").open("rb") as file:
         config = tomllib.load(file)
 
-    assert config["project"]["scripts"]["yt-channel"] == "youtube_automation.cli_entrypoints:yt_channel"
+    assert config["project"]["scripts"]["yt-channel"] == "youtube_automation.entrypoints:yt_channel"
 
 
 def test_entrypoint_does_not_consume_common_channel_selection_option():
-    assert "youtube_automation.cli.channel" in cli_entrypoints._CHANNEL_OPTION_CONFLICTS
+    assert "youtube_automation.commands.channel.channel" in entrypoints._CHANNEL_OPTION_CONFLICTS

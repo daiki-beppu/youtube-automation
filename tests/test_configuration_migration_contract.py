@@ -101,6 +101,7 @@ def test_configuration_public_api_preserves_the_specified_exports():
         "PinnedComment",
         "Shorts",
         "channel_dir",
+        "channel_label",
         "find_workspace_root",
         "load_config",
         "reset",
@@ -214,7 +215,7 @@ def test_comments_loader_returns_supported_configuration(tmp_path, monkeypatch):
 
 
 def test_wf_batch_snapshots_new_skip_key_values(monkeypatch):
-    from youtube_automation.scripts import wf_batch
+    from youtube_automation.commands.uploads import wf_batch
 
     monkeypatch.setattr(
         wf_batch,
@@ -246,7 +247,7 @@ def test_wf_batch_receives_skip_keys_from_the_real_configuration_loader(tmp_path
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel))
 
-    from youtube_automation.scripts import wf_batch
+    from youtube_automation.commands.uploads import wf_batch
 
     settings = wf_batch._wf_next_settings()
 
@@ -320,7 +321,7 @@ def test_wf_batch_main_rejects_real_configuration_before_external_commands(
     )
     monkeypatch.setenv("CHANNEL_DIR", str(channel))
 
-    from youtube_automation.scripts import wf_batch
+    from youtube_automation.commands.uploads import wf_batch
 
     def fail_if_external_command_runs(*args, **kwargs):
         raise AssertionError("wf-batch must reject before starting external commands")

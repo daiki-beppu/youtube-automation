@@ -26,6 +26,7 @@ import urllib.request
 
 import pytest
 
+from youtube_automation.commands.collections.collection_serve import create_server
 from youtube_automation.configuration.distrokid import (
     AiDisclosure,
     Distrokid,
@@ -39,7 +40,6 @@ from youtube_automation.domains.distrokid.release import (
     resolve_asset_path,
 )
 from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.scripts.collection_serve import create_server
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _SUNO_PROMPTS_ROUTE = "/suno/prompts.json"

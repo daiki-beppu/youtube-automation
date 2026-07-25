@@ -49,7 +49,7 @@ Issue: [#130 chore: `.claude/skills/*/SKILL.md` の冗長記述を点検し最�
 | テストファイルの skill パス定数追従 | 1 | `tests/test_skill_cost_documentation.py::IDEATE_SKILL_MD` を `ideate` → `collection-ideate` |
 | 新規テスト | 1 | `tests/test_skills_rename.py` で rename の不変条件 (旧ディレクトリ消滅 / 新 `name:` 値 / クロスリファレンス書換 / プロダクション源書換 / 監査ドキュメント存在) を 53 ケース parametrize で担保 |
 
-`yt-skills sync` パイプライン (`src/youtube_automation/cli/skills_sync.py`) はディレクトリ名を `iterdir()` で動的取得するため、rename は配布側に影響しない（`tests/test_skills_sync.py` で end-to-end 不変条件を担保済み）。
+`yt-skills sync` パイプライン (`src/youtube_automation/commands/system/skills_sync.py`) はディレクトリ名を `iterdir()` で動的取得するため、rename は配布側に影響しない（`tests/test_skills_sync.py` で end-to-end 不変条件を担保済み）。
 
 ### 下流チャンネルリポジトリへの migration 手順
 

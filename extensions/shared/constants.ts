@@ -1,7 +1,7 @@
 // overlay ⇄ content script ⇄ server 間の契約文字列を 1 箇所に集約する。
 // これらは yt-collection-serve (#692/#698) との互換契約であり、変更すると
 // サーバー側 (`/suno/prompts.json`) と整合しなくなる。
-// SSOT: src/youtube_automation/scripts/suno_artifacts.py SUNO_PROMPTS_ROUTE
+// SSOT: src/youtube_automation/commands/suno/suno_artifacts.py SUNO_PROMPTS_ROUTE
 import type { DurationFilter, PromptEntry } from "./api";
 
 /** chrome.storage.local に保存するサーバー URL の key。 */
@@ -36,7 +36,7 @@ export const COMMUNITY_OVERLAY_STATE_KEY = "communityOverlayState";
 export const FINISHED_SNAPSHOT_KEY = "sunoFinishedSnapshot";
 
 /** yt-collection-serve の download 完了通知サブパス (#1215、POST)。
- * SSOT: src/youtube_automation/scripts/suno_artifacts.py collection_downloaded_route。 */
+ * SSOT: src/youtube_automation/commands/suno/suno_artifacts.py collection_downloaded_route。 */
 const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
 
 /** Suno ダウンロード形式を保存する chrome.storage.local の key (#1215)。
@@ -78,11 +78,11 @@ export type CommunityPhase =
   (typeof COMMUNITY_PHASE)[keyof typeof COMMUNITY_PHASE];
 
 /** yt-collection-serve dir mode の collection 列挙サブパス (#816)。
- * SSOT: src/youtube_automation/scripts/suno_artifacts.py COLLECTIONS_ROUTE。 */
+ * SSOT: src/youtube_automation/commands/suno/suno_artifacts.py COLLECTIONS_ROUTE。 */
 export const COLLECTIONS_ROUTE = "/collections";
 
 /** yt-collection-serve の互換確認サブパス（#1023）。
- * SSOT: src/youtube_automation/scripts/collection_serve.py VERSION_ROUTE。 */
+ * SSOT: src/youtube_automation/commands/collections/collection_serve.py VERSION_ROUTE。 */
 export const VERSION_ROUTE = "/version";
 
 /** 個別 collection の prompts 配信サブパス `/collections/<id>/suno/prompts.json` を組み立てる (#816)。 */
@@ -258,11 +258,11 @@ export interface ObservedClip {
 }
 
 /** yt-collection-serve の DistroKid collection 列挙サブパス（#934、dir mode のみ。単一 mode では 404）。
- * SSOT: src/youtube_automation/scripts/collection_serve.py _DISTROKID_COLLECTIONS_ROUTE。 */
+ * SSOT: src/youtube_automation/commands/collections/collection_serve.py _DISTROKID_COLLECTIONS_ROUTE。 */
 export const DISTROKID_COLLECTIONS_ROUTE = "/distrokid/collections";
 
 /** yt-collection-serve の DistroKid 配信済み記録 POST サブパス（#934）。
- * SSOT: src/youtube_automation/scripts/collection_serve.py _DISTROKID_RELEASES_ROUTE。 */
+ * SSOT: src/youtube_automation/commands/collections/collection_serve.py _DISTROKID_RELEASES_ROUTE。 */
 export const DISTROKID_RELEASES_ROUTE = "/distrokid/releases";
 
 /** 個別 collection の release.json 配信サブパスを組み立てる（#934）。

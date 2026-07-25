@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from youtube_automation.scripts import launch_curve
+from youtube_automation.commands.analytics import launch_curve
 from youtube_automation.utils.launch_curve_data import build_launch_curve_frame
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sample_launch_curve"

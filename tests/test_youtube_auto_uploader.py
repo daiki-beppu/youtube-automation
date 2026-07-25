@@ -38,7 +38,7 @@ def test_main_without_action_prints_usage(monkeypatch, capsys):
     config = SimpleNamespace(meta=SimpleNamespace(channel_short="test"))
     monkeypatch.setattr(sys, "argv", ["yt-upload-auto"])
     with (
-        patch("youtube_automation.agents.youtube_auto_uploader.load_config", return_value=config),
+        patch("youtube_automation.agents.youtube_auto_uploader.channel_label", return_value="test-channel"),
         patch("youtube_automation.agents.youtube_auto_uploader.YouTubeAutoUploader") as uploader_cls,
     ):
         youtube_auto_uploader.main()

@@ -178,7 +178,7 @@ Eleven Music adapterは `audio.target_duration_min` から曲数を逆算せず�
 | secret | `src/youtube_automation/utils/secrets.py` | `ELEVENLABS_API_KEY` の env → `op read` mapping |
 | config | `src/youtube_automation/configuration/audio.py` と loader/examples | provider 固有設定を責務別 config へ追加する場合だけ変更 |
 | state/schema | `.claude/skills/wf-new/references/schema.md` と契約テスト | `planning.music.engine` に `eleven_music` を追加。Suno固有 URL を必須にしない |
-| routing | `.claude/skills/wf-next/SKILL.md`, `src/youtube_automation/scripts/wf_batch.py` | `suno_playlist_url` guard を engine 別に分岐。音声実在を共通完了条件にする |
+| routing | `.claude/skills/wf-next/SKILL.md`, `src/youtube_automation/commands/uploads/wf_batch.py` | `suno_playlist_url` guard を engine 別に分岐。音声実在を共通完了条件にする |
 | skill | `.claude/skills/eleven-music/`（新規） | 認証は人間、コマンド実行・resume・保存は AI/script の責務にする |
 | cost | `src/youtube_automation/utils/cost_tracker.py` | category=`audio`、quantity=生成秒/分、model、song-id、request-id、attempt、output を記録 |
 | tests | `tests/test_eleven_music_client.py` 等 | HTTP fixture、error分類、原子的保存、resume、課金retry gate、schema routing |

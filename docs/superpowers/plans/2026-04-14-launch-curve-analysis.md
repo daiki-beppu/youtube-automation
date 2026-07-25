@@ -249,17 +249,17 @@ git commit -m "feat: 動画×日次データ取得 Mixin (VideoDailyAnalyticsMix
 ## Task 2: 日次データの永続化
 
 **Files:**
-- Modify: `src/youtube_automation/scripts/analytics_system.py`
+- Modify: `src/youtube_automation/commands/analytics/analytics_system.py`
 
 launch curve 分析は過去データに基づくベンチマーク計算が必要なため、動画 × 日次データを永続化する。既存の `collect_analytics_data()` の後ろにフックを追加して、全動画の日次データを JSON ファイルに保存する。
 
 - [ ] **Step 1: Read current persistence code**
 
-Read `src/youtube_automation/scripts/analytics_system.py` lines 57-97 (既存 `collect_analytics_data` メソッド)。
+Read `src/youtube_automation/commands/analytics/analytics_system.py` lines 57-97 (既存 `collect_analytics_data` メソッド)。
 
 - [ ] **Step 2: Add daily-per-video persistence**
 
-Modify `src/youtube_automation/scripts/analytics_system.py` — locate `if save_data:` block (around line 83) and add after the existing `json.dump` block:
+Modify `src/youtube_automation/commands/analytics/analytics_system.py` — locate `if save_data:` block (around line 83) and add after the existing `json.dump` block:
 
 ```python
             # --- 動画×日次データを別ファイルに保存（launch curve 分析用）---
@@ -303,7 +303,7 @@ Expected: All tests pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/youtube_automation/scripts/analytics_system.py
+git add src/youtube_automation/commands/analytics/analytics_system.py
 git commit -m "feat: yt-analytics で動画×日次データを永続化"
 ```
 
@@ -880,7 +880,7 @@ git commit -m "feat: launch_curve_plotter で matplotlib 描画を追加"
 ## Task 6: CLI エントリポイント
 
 **Files:**
-- Create: `src/youtube_automation/scripts/launch_curve.py`
+- Create: `src/youtube_automation/commands/analytics/launch_curve.py`
 - Modify: `pyproject.toml` ([project.scripts] と `src/youtube_automation/__init__.py` の `__version__` bump)
 
 `yt-launch-curve --video ID` / `--latest` / `--all` を提供する。
@@ -888,7 +888,7 @@ git commit -m "feat: launch_curve_plotter で matplotlib 描画を追加"
 - [ ] **Step 1: Implement CLI**
 
 ```python
-# src/youtube_automation/scripts/launch_curve.py
+# src/youtube_automation/commands/analytics/launch_curve.py
 #!/usr/bin/env python3
 """yt-launch-curve: 新作動画の初速をベンチマーク比較する CLI"""
 
@@ -1009,7 +1009,7 @@ if __name__ == "__main__":
 Modify `pyproject.toml` `[project.scripts]` — insert after `yt-init-collection = ...`:
 
 ```toml
-yt-launch-curve = "youtube_automation.scripts.launch_curve:main"
+yt-launch-curve = "youtube_automation.commands.analytics.launch_curve:main"
 ```
 
 Also bump version in `pyproject.toml` (e.g., `1.2.0` → `1.3.0`) and sync `src/youtube_automation/__init__.py` `__version__`.
@@ -1032,7 +1032,7 @@ Expected: All tests pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/youtube_automation/scripts/launch_curve.py pyproject.toml \
+git add src/youtube_automation/commands/analytics/launch_curve.py pyproject.toml \
         src/youtube_automation/__init__.py
 git commit -m "feat: yt-launch-curve CLI を追加"
 ```

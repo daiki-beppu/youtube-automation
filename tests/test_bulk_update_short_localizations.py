@@ -101,7 +101,7 @@ class TestCollectShortVideos:
 
     def test_collects_from_post_upload_shorts_list(self, tmp_path, monkeypatch):
         """plan 要件 14-d: `post_upload.shorts: list` から video_id を集める."""
-        from youtube_automation.scripts import bulk_update_short_localizations as mod
+        from youtube_automation.commands.metadata import bulk_update_short_localizations as mod
 
         # Given
         ch = _setup_channel(tmp_path)
@@ -124,7 +124,7 @@ class TestCollectShortVideos:
 
     def test_skips_collections_without_tracking(self, tmp_path, monkeypatch):
         """tracking 欠如時はそのコレクションを skip."""
-        from youtube_automation.scripts import bulk_update_short_localizations as mod
+        from youtube_automation.commands.metadata import bulk_update_short_localizations as mod
 
         # Given: tracking なしのコレクションを 1 つ作る
         ch = _setup_channel(tmp_path)
@@ -147,7 +147,7 @@ class TestCollectShortVideos:
 
     def test_skips_entries_without_video_id(self, tmp_path, monkeypatch):
         """`shorts` list 内に video_id 欠落 entry があれば skip."""
-        from youtube_automation.scripts import bulk_update_short_localizations as mod
+        from youtube_automation.commands.metadata import bulk_update_short_localizations as mod
 
         ch = _setup_channel(tmp_path)
         _make_collection_with_shorts(
@@ -260,7 +260,7 @@ class TestMain:
         return yt
 
     def test_main_dry_run_does_not_call_execute(self, tmp_path, monkeypatch):
-        from youtube_automation.scripts import bulk_update_short_localizations as mod
+        from youtube_automation.commands.metadata import bulk_update_short_localizations as mod
 
         # Given
         ch = _setup_channel(tmp_path)
@@ -290,7 +290,7 @@ class TestMain:
 
     def test_main_apply_calls_execute_per_video(self, tmp_path, monkeypatch):
         """plan 要件 14-d: 通常実行で videos().update().execute() が動画数分呼ばれる."""
-        from youtube_automation.scripts import bulk_update_short_localizations as mod
+        from youtube_automation.commands.metadata import bulk_update_short_localizations as mod
 
         # Given: 2 本の short
         ch = _setup_channel(tmp_path)
@@ -322,7 +322,7 @@ class TestMain:
 
     def test_main_apply_sleeps_0_5_per_video(self, tmp_path, monkeypatch):
         """plan アンチパターン #8: 成功 1 回ごとに time.sleep(0.5)."""
-        from youtube_automation.scripts import bulk_update_short_localizations as mod
+        from youtube_automation.commands.metadata import bulk_update_short_localizations as mod
 
         # Given: 2 本の short
         ch = _setup_channel(tmp_path)
@@ -355,7 +355,7 @@ class TestMain:
 
     def test_main_exits_when_no_target_videos(self, tmp_path, monkeypatch):
         """plan 要件 14-d: 対象 0 件で SystemExit(1)."""
-        from youtube_automation.scripts import bulk_update_short_localizations as mod
+        from youtube_automation.commands.metadata import bulk_update_short_localizations as mod
 
         # Given: live/ ディレクトリ自体が無い
         ch = _setup_channel(tmp_path)
@@ -391,7 +391,7 @@ class TestQuotaLogging:
 
     def test_dry_run_records_no_quota(self, tmp_path, monkeypatch):
         """dry-run は API を一切発行しないため quota も記録されない."""
-        from youtube_automation.scripts import bulk_update_short_localizations as mod
+        from youtube_automation.commands.metadata import bulk_update_short_localizations as mod
 
         # Given
         ch = _setup_channel(tmp_path)
@@ -414,7 +414,7 @@ class TestQuotaLogging:
 
     def test_apply_records_videos_update_per_video(self, tmp_path, monkeypatch):
         """apply では発行した videos.update と同数の quota が記録される."""
-        from youtube_automation.scripts import bulk_update_short_localizations as mod
+        from youtube_automation.commands.metadata import bulk_update_short_localizations as mod
 
         # Given: 2 本の short
         ch = _setup_channel(tmp_path)
@@ -452,7 +452,7 @@ class TestQuotaLogging:
 
     def test_update_failure_still_records_quota_and_continues(self, tmp_path, monkeypatch):
         """update 失敗時も quota を記録し、per-video continue の部分進捗契約を維持する."""
-        from youtube_automation.scripts import bulk_update_short_localizations as mod
+        from youtube_automation.commands.metadata import bulk_update_short_localizations as mod
 
         # Given: V1 失敗 / V2 成功
         ch = _setup_channel(tmp_path)

@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.cli import preflight
-from youtube_automation.cli.preflight import (
+from youtube_automation.commands.system import preflight
+from youtube_automation.commands.system.preflight import (
     KEY_CHECKOUT_KIND,
     KEY_GIT_COMMIT_IDENTITY,
     KEY_LOCK_DRIFT,

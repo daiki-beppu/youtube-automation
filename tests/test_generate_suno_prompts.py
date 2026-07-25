@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from youtube_automation.commands.suno.generate_suno_prompts import build_prompt_entries, generate, main
 from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.scripts.generate_suno_prompts import build_prompt_entries, generate, main
 from youtube_automation.utils import skill_config
 
 # `_skills/<skill>/config.default.yaml` の解決元になる editable install のソースツリー

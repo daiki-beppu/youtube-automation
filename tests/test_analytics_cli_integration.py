@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from googleapiclient.errors import HttpError
 
-from youtube_automation import cli_entrypoints
+from youtube_automation import entrypoints
 
 
 class _Request:
@@ -170,18 +170,18 @@ def cli_dependencies(tmp_path: Path):
         )
         system.collector.initialize()
 
-    with patch("youtube_automation.scripts.analytics_system.load_config", return_value=config):
-        with patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path):
+    with patch("youtube_automation.commands.analytics.analytics_system.load_config", return_value=config):
+        with patch("youtube_automation.commands.analytics.analytics_system.channel_dir", return_value=tmp_path):
             with patch(
                 "youtube_automation.domains.analytics.service.YouTubeAnalyticsCollector.initialize",
                 new=initialize,
             ):
                 with patch(
-                    "youtube_automation.scripts.analytics_system.YouTubeOAuthHandler.create_readonly",
+                    "youtube_automation.commands.analytics.analytics_system.YouTubeOAuthHandler.create_readonly",
                     return_value=readonly_handler,
                 ):
                     with patch(
-                        "youtube_automation.scripts.analytics_system.AnalyticsSystem._initialize_collector",
+                        "youtube_automation.commands.analytics.analytics_system.AnalyticsSystem._initialize_collector",
                         new=initialize_collector,
                     ):
                         yield tmp_path, reports
@@ -193,7 +193,7 @@ def test_yt_analytics_collects_and_saves_subscribed_status_via_cli(cli_dependenc
 
     with patch.object(sys, "argv", ["yt-analytics", "--days", "7"]):
         with pytest.raises(SystemExit) as exited:
-            cli_entrypoints.yt_analytics()
+            entrypoints.yt_analytics()
 
     assert exited.value.code == 0
     saved_files = list((tmp_path / "data").glob("analytics_data_*.json"))
@@ -226,7 +226,7 @@ def test_yt_analytics_returns_failure_when_subscribed_status_collection_fails(cl
 
     with patch.object(sys, "argv", ["yt-analytics", "--days", "7"]):
         with pytest.raises(SystemExit) as exited:
-            cli_entrypoints.yt_analytics()
+            entrypoints.yt_analytics()
 
     assert exited.value.code == 1
     assert not list((tmp_path / "data").glob("analytics_data_*.json"))

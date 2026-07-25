@@ -56,7 +56,7 @@ def test_main_runs_shared_preflight_before_plan_or_execute(monkeypatch, tmp_path
 
     monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
     with (
-        patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
+        patch("youtube_automation.agents.collection_uploader.channel_label", return_value="test-channel"),
         patch("youtube_automation.agents.collection_uploader.CollectionUploader", return_value=mock_uploader),
     ):
         collection_uploader.main()
@@ -161,7 +161,7 @@ def test_main_title_preflight_honors_collection_opt_in_for_each_cli_entry(
     reset_config()
 
     with (
-        patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
+        patch("youtube_automation.agents.collection_uploader.channel_label", return_value="test-channel"),
         patch("youtube_automation.domains.uploads._preflight.load_config", return_value=_title_preflight_config()),
         patch.object(CollectionUploader, method_name) as mock_action,
     ):
@@ -431,7 +431,7 @@ class TestAutoDetectCollection:
 
         monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
         with (
-            patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
+            patch("youtube_automation.agents.collection_uploader.channel_label", return_value="test-channel"),
             patch("youtube_automation.agents.collection_uploader.CollectionUploader", return_value=uploader),
             patch("youtube_automation.domains.uploads.collection.ensure_collection_preflight") as mock_preflight,
         ):
@@ -453,7 +453,7 @@ class TestAutoDetectCollection:
         monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
 
         with (
-            patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
+            patch("youtube_automation.agents.collection_uploader.channel_label", return_value="test-channel"),
             patch("youtube_automation.agents.collection_uploader.CollectionUploader", return_value=uploader),
             pytest.raises(SystemExit) as exc_info,
         ):
@@ -483,7 +483,7 @@ class TestAutoDetectCollection:
         monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
 
         with (
-            patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
+            patch("youtube_automation.agents.collection_uploader.channel_label", return_value="test-channel"),
             patch("youtube_automation.agents.collection_uploader.CollectionUploader", return_value=uploader),
             patch("youtube_automation.domains.uploads.preflight.ensure_collection_preflight") as mock_preflight,
             pytest.raises(SystemExit) as exc_info,

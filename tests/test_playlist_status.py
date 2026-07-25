@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import youtube_automation.scripts.playlist_status as _playlist_status_module
+import youtube_automation.commands.youtube.playlist_status as _playlist_status_module
 
 PLAYLIST_ID_STRING_SHAPE = "PL_test_string_275"
 

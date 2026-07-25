@@ -7,8 +7,8 @@
 from pathlib import Path
 from types import SimpleNamespace
 
+from youtube_automation.commands.analytics import video_validator as vv_module
 from youtube_automation.domains.media.video_validator import VideoValidator
-from youtube_automation.scripts import video_validator as vv_module
 
 
 def _validator() -> VideoValidator:

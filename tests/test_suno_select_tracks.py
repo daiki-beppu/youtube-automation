@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.commands.suno import suno_select_tracks
 from youtube_automation.domains.suno import selection as suno_track_selection
 from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.scripts import suno_select_tracks
 
 
 def _make_collection(tmp_path: Path, prompts: object) -> Path:
@@ -952,7 +952,7 @@ def test_project_scripts_registers_suno_select_tracks_entrypoint():
     pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
     assert (
         pyproject["project"]["scripts"]["yt-suno-select-tracks"]
-        == "youtube_automation.cli_entrypoints:yt_suno_select_tracks"
+        == "youtube_automation.entrypoints:yt_suno_select_tracks"
     )
 
 

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation import cli_entrypoints
-from youtube_automation.cli import channel_import
+from youtube_automation import entrypoints
+from youtube_automation.commands.channel import channel_import
 
 
 def _write_source(root: Path, *, handle: str = "@ambient-island") -> Path:
@@ -331,5 +331,5 @@ def test_entrypoint_is_registered_and_does_not_consume_channel_selection():
     with (root / "pyproject.toml").open("rb") as file:
         config = tomllib.load(file)
 
-    assert config["project"]["scripts"]["yt-channel-import"] == "youtube_automation.cli_entrypoints:yt_channel_import"
-    assert "youtube_automation.cli.channel_import" in cli_entrypoints._CHANNEL_OPTION_CONFLICTS
+    assert config["project"]["scripts"]["yt-channel-import"] == "youtube_automation.entrypoints:yt_channel_import"
+    assert "youtube_automation.commands.channel.channel_import" in entrypoints._CHANNEL_OPTION_CONFLICTS

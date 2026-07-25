@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.commands.uploads import wf_batch
 from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.scripts import wf_batch
 
 
 def _state(

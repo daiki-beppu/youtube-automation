@@ -235,7 +235,7 @@ upstream リポジトリは `daiki-beppu/youtube-automation` を official upstre
 
 ### 単一ソース（コード）
 
-- `src/youtube_automation/cli/automation_update_refs.py` の `UPSTREAM_REPO` 定数 — `yt-automation-update` の official upstream 検証（サプライチェーン保護の意図的ガード）と `yt-doctor` の suggested command、および `/automation-update` / `/ext-install` の `gh` / `curl` コマンド（実行時に定数から導出）はすべてここから決まる。fork ではまずこの定数を自 fork に変更する
+- `src/youtube_automation/commands/system/automation_update_refs.py` の `UPSTREAM_REPO` 定数 — `yt-automation-update` の official upstream 検証（サプライチェーン保護の意図的ガード）と `yt-doctor` の suggested command、および `/automation-update` / `/ext-install` の `gh` / `curl` コマンド（実行時に定数から導出）はすべてここから決まる。fork ではまずこの定数を自 fork に変更する
 
 ### 固定参照が残るファイル（`UPSTREAM_REPO` から導出されない。fork 後に手で書き換える）
 
@@ -247,7 +247,7 @@ upstream リポジトリは `daiki-beppu/youtube-automation` を official upstre
 | `.claude/skills/ext-install/SKILL.md` | `gh` 未導入時の手動ダウンロード fallback 用 Release ページ URL、Step 0 の既定値表記 |
 | `.claude/skills/automation-release/references/*.md` | リリースチェックリスト / CHANGELOG 昇格手順内の URL 例 |
 | `.claude/skills/channel-new/references/claude-md-template.md` / `gcp-bootstrap.md` | upstream リポジトリ名の説明 |
-| `src/youtube_automation/cli/skills_sync/__init__.py` | module docstring の導入コマンド例 |
+| `src/youtube_automation/commands/system/skills_sync/__init__.py` | module docstring の導入コマンド例 |
 
 上記一覧は代表箇所のポインタであり、全箇所の機械的な列挙は upstream リポジトリで以下を実行する:
 

@@ -284,7 +284,7 @@ class BlockFcntl(importlib.abc.MetaPathFinder):
 sys.meta_path.insert(0, BlockFcntl())
 
 from youtube_automation.infrastructure import cost_tracker
-from youtube_automation.scripts import generate_image
+from youtube_automation.commands.media import generate_image
 
 assert callable(cost_tracker.log_generation)
 assert callable(generate_image.main)

@@ -621,4 +621,4 @@ YouTube 側で手動編集した設定をローカルに取り込みたいとき
 - `/wf-new` → 初回コレクション制作
 - `references/analysis-mode.md` / `references/direction-mode.md` / `references/regeneration-mode.md` / `references/import-mode.md` → 分析 / 方向性検討 / 再生成 / 取り込みモードの手順詳細
 - `references/` → テンプレート・共通スクリプト（同スキルディレクトリ内）
-- `yt-channel-settings` CLI (`src/youtube_automation/scripts/channel_settings_cli.py`) — 設定 push モードの実装本体
+- `yt-channel-settings` CLI (`src/youtube_automation/commands/channel/channel_settings.py`) — 設定 push モードの実装本体

@@ -330,7 +330,7 @@ def test_codex_timeout_is_domain_error(monkeypatch):
 
 
 def test_cli_disabled_does_not_authenticate(monkeypatch):
-    from youtube_automation.scripts import live_chat_reply
+    from youtube_automation.commands.youtube import live_chat_reply
 
     monkeypatch.setattr(
         live_chat_reply,

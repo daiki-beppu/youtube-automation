@@ -76,9 +76,9 @@
 | 呼び出し箇所 | 経路 | 評価 |
 |---|---|---|
 | `src/youtube_automation/utils/image_provider/openai.py:69` | `get_secret("OPENAI_API_KEY")` | ✅ |
-| `src/youtube_automation/cli/stream_bandwidth.py:120` | `get_secret("VULTR_API_KEY")` | ✅ |
-| `src/youtube_automation/cli/stream_bandwidth.py:151,168` | `get_secret("STREAM_WEBHOOK_URL")` | ✅ |
-| `src/youtube_automation/scripts/streaming_archive_check.py:78` | `get_secret("DISCORD_WEBHOOK_URL")` | ✅ |
+| `src/youtube_automation/commands/youtube/stream_bandwidth.py:120` | `get_secret("VULTR_API_KEY")` | ✅ |
+| `src/youtube_automation/commands/youtube/stream_bandwidth.py:151,168` | `get_secret("STREAM_WEBHOOK_URL")` | ✅ |
+| `src/youtube_automation/commands/youtube/streaming_archive_check.py:78` | `get_secret("DISCORD_WEBHOOK_URL")` | ✅ |
 | `src/youtube_automation/utils/secrets.py:101` | `get_secret("CLIENT_SECRETS_JSON")` → `get_client_secrets_path()` | ✅ |
 | `src/youtube_automation/auth/oauth_handler.py:107-115` | `get_client_secrets_path()` フォールバック | ✅ |
 | `bench/bench_generate_image.py:61` | `os.environ.get("OPENAI_API_KEY")` のみ（存在チェック） | ⚠️ P3: bench 専用、API 呼び出しは provider 経由なので意図通り |
@@ -169,7 +169,7 @@ git log --all --full-history -- 'infra/terraform/streaming/terraform.tfvars'    
 
 ### CLI stdout（stream key）
 
-`src/youtube_automation/scripts/fetch_stream_key.py:186-202` (`_emit_stdout`):
+`src/youtube_automation/commands/youtube/fetch_stream_key.py:186-202` (`_emit_stdout`):
 
 ```python
 if os.environ.get("GITHUB_ACTIONS") == "true":
@@ -230,7 +230,7 @@ SCOPES = [
 
 ### 例外: stream key 取得は **正しく分離**
 
-`src/youtube_automation/scripts/fetch_stream_key.py:99-109`:
+`src/youtube_automation/commands/youtube/fetch_stream_key.py:99-109`:
 
 ```python
 def get_streaming_credentials(force_reauth: bool = False):

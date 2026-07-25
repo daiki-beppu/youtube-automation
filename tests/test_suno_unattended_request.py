@@ -5,13 +5,13 @@ import json
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.scripts import suno_unattended_request
-from youtube_automation.scripts.suno_unattended_request import (
+from youtube_automation.commands.suno import suno_unattended_request
+from youtube_automation.commands.suno.suno_unattended_request import (
     build_unattended_launch_url,
     build_unattended_request,
     main,
 )
+from youtube_automation.infrastructure.errors import ConfigError
 
 
 def decode_launch_url(url: str) -> dict[str, object]:

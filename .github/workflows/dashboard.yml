@@ -6,7 +6,7 @@ on:
     paths:
       - "dashboard/**"
       - "src/youtube_automation/dashboard_dist/**"
-      - "src/youtube_automation/scripts/dashboard.py"
+      - "src/youtube_automation/commands/analytics/dashboard.py"
       - "src/youtube_automation/utils/channel_registry.py"
       - "src/youtube_automation/utils/dashboard_read_model.py"
       - ".github/workflows/dashboard.yml"
@@ -16,7 +16,7 @@ on:
     paths:
       - "dashboard/**"
       - "src/youtube_automation/dashboard_dist/**"
-      - "src/youtube_automation/scripts/dashboard.py"
+      - "src/youtube_automation/commands/analytics/dashboard.py"
       - "src/youtube_automation/utils/channel_registry.py"
       - "src/youtube_automation/utils/dashboard_read_model.py"
       - ".github/workflows/dashboard.yml"

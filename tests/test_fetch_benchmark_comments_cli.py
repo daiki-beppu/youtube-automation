@@ -6,8 +6,8 @@ import sys
 
 import pytest
 
+from youtube_automation.commands.analytics import fetch_benchmark_comments as mod
 from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.scripts import fetch_benchmark_comments as mod
 
 
 def _run_main_with_fake_collector(monkeypatch, argv: list[str], input_func=None) -> list[dict]:

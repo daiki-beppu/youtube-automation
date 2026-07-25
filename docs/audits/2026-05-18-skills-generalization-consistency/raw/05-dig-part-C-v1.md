@@ -29,7 +29,7 @@ description（frontmatter `description:` 全文）で言及されている **コ
 
 | Skill | description 中の参照 | 実在確認 |
 |---|---|---|
-| `analytics-collect` | `analytics_system.py` | ✓ `src/youtube_automation/scripts/analytics_system.py` |
+| `analytics-collect` | `analytics_system.py` | ✓ `src/youtube_automation/commands/analytics/analytics_system.py` |
 | `benchmark` | `docs/benchmarks/*.md` の更新 | ✓ 生成出力（実装は `benchmark_collector.py`） |
 | `comments-reply` | `config/channel/comments.json`, `comment_reply_history.json` | ✓ `examples/channel_config.example/comments.json` 存在 |
 | `lyria` | Vertex AI Lyria 3 `interactions` REST API / MP3 / PCM s16le WAV | ✓ `generate_lyria_master.py`（`yt-generate-lyria-master`）に対応 |

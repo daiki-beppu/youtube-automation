@@ -8,7 +8,7 @@
 > maintain the index.
 >
 > **Drift check (run first)**:
-> `git diff --stat 5394c378..HEAD -- src/youtube_automation/utils/video_listing.py src/youtube_automation/utils/strategic_analytics.py src/youtube_automation/scripts/analytics_system.py`
+> `git diff --stat 5394c378..HEAD -- src/youtube_automation/utils/video_listing.py src/youtube_automation/utils/strategic_analytics.py src/youtube_automation/commands/analytics/analytics_system.py`
 > 差分が出たら「Current state」の抜粋と実コードを突き合わせ、不一致なら STOP。
 
 ## Status
@@ -28,7 +28,7 @@ YouTube Data API は日次ハードクォータ（デフォルト 10,000 units�
 
 - `src/youtube_automation/utils/video_listing.py` — `VideoListingMixin`。`YouTubeAnalyticsCollector`（`utils/analytics_collector.py:43-`）に合成される mixin の 1 つ。**mixin には `__init__` が無い**（キャッシュ属性は遅延初期化にする必要がある）
 - `src/youtube_automation/utils/strategic_analytics.py` — `get_combined_analytics`（efficient 経路）が `:50` で全動画取得し、`:56-63` に直近フィルタの**重複実装**（同じ naive TZ 比較）を持つ
-- `src/youtube_automation/scripts/analytics_system.py` — collect の司令塔。`:50` で `YouTubeAnalyticsCollector()` を生成し、`:102` の `collect_basic_analytics(...)` の後、`:133` で**再度** `self.collector.get_all_channel_videos()` を呼ぶ
+- `src/youtube_automation/commands/analytics/analytics_system.py` — collect の司令塔。`:50` で `YouTubeAnalyticsCollector()` を生成し、`:102` の `collect_basic_analytics(...)` の後、`:133` で**再度** `self.collector.get_all_channel_videos()` を呼ぶ
 
 二重取得の実体 — `video_listing.py:46-57`（memoize なしの全ページネーション）:
 

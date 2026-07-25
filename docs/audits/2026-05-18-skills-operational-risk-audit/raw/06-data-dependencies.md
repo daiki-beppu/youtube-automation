@@ -59,7 +59,7 @@
 
 ### 6.2.2 メジャー乖延ありの依存に上限を切るべき候補
 
-- `google-genai`: 1.69.0 → 2.4.0 のメジャーアップで SDK API 互換性が崩れている可能性高。`google.genai` 直 import 箇所（`src/youtube_automation/utils/genai_client.py:23`, `src/youtube_automation/utils/veo_generator.py:36`, `src/youtube_automation/utils/image_provider/gemini.py:36`, `src/youtube_automation/scripts/video_analyze.py:29`, `src/youtube_automation/scripts/benchmark_collector.py:538`, `src/youtube_automation/utils/video_analyzer.py:27`）で `types.GenerateVideosConfig` / `types.Image.from_file` などを使用。SDK 2.x で型インポートパスが変わっている可能性があるため、当面 `google-genai>=1.60,<2` 等の上限指定を検討する価値あり
+- `google-genai`: 1.69.0 → 2.4.0 のメジャーアップで SDK API 互換性が崩れている可能性高。`google.genai` 直 import 箇所（`src/youtube_automation/utils/genai_client.py:23`, `src/youtube_automation/utils/veo_generator.py:36`, `src/youtube_automation/utils/image_provider/gemini.py:36`, `src/youtube_automation/commands/analytics/video_analyze.py:29`, `src/youtube_automation/commands/analytics/benchmark_collector.py:538`, `src/youtube_automation/utils/video_analyzer.py:27`）で `types.GenerateVideosConfig` / `types.Image.from_file` などを使用。SDK 2.x で型インポートパスが変わっている可能性があるため、当面 `google-genai>=1.60,<2` 等の上限指定を検討する価値あり
 - `pandas`: 2.x → 3.x で `DataFrame.append` 等の API が削除されている。コード側は 3.0.1 を解決しているので追従済みだが、下流環境次第で爆発する
 
 ### 6.2.3 hard pin の有無
@@ -113,7 +113,7 @@ matplotlib 3.10.x 以降のフォント解決と齟齬が出始める可能性�
 
 ### 6.4.2 下流再現性ギャップ
 
-下流チャンネルリポジトリは `uv add git+https://github.com/daiki-beppu/youtube-automation` でインストールする（`src/youtube_automation/cli/skills_sync.py:3-4` モジュール docstring に記載）。
+下流チャンネルリポジトリは `uv add git+https://github.com/daiki-beppu/youtube-automation` でインストールする（`src/youtube_automation/commands/system/skills_sync.py:3-4` モジュール docstring に記載）。
 
 **問題**: `uv add` した時点で `uv.lock` は **チャンネルリポジトリ側の lock** に展開される。本リポジトリの `uv.lock` は単なる開発時 lock であり、下流に伝播しない。`pyproject.toml` の依存に上限指定が無いため、下流が `uv add` した日次のタイミング次第で異なる依存バージョンが解決される。
 

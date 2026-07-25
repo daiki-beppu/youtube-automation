@@ -227,6 +227,19 @@ def load_config() -> ChannelConfig:
     return _instance
 
 
+def channel_label(fallback: str = "YouTube automation") -> str:
+    """argparse の help 表示用にチャンネル短縮名を解決する。未設定でも例外を出さない。
+
+    `--help` は `CHANNEL_DIR` 未設定でも必ず exit 0 で返す必要があるため（#2308）、
+    parser の description をチャンネル名で飾りたい CLI はこちらを使う。
+    実処理で設定値が要るときは従来どおり `load_config()` を呼ぶこと。
+    """
+    try:
+        return load_config().meta.channel_short
+    except ConfigError:
+        return fallback
+
+
 def _build(channel_dir_path: Path) -> ChannelConfig:
     channel_subdir = channel_dir_path / "config" / "channel"
     legacy_path = channel_dir_path / "config" / "channel_config.json"

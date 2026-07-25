@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.cli import automation_update
-from youtube_automation.cli.automation_update import EXIT_DIFF, EXIT_ERROR, EXIT_UP_TO_DATE, main
-from youtube_automation.cli.automation_update_refs import Pin, _detect_pin
+from youtube_automation.commands.system import automation_update
+from youtube_automation.commands.system.automation_update import EXIT_DIFF, EXIT_ERROR, EXIT_UP_TO_DATE, main
+from youtube_automation.commands.system.automation_update_refs import Pin, _detect_pin
 
 INLINE_TABLE_PYPROJECT = """\
 [project]

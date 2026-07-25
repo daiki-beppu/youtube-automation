@@ -12,12 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.scripts import (
-    stock_archive,
-    stock_list,
-    stock_preview,
-    stock_prune,
-)
+from youtube_automation.commands.media import stock_archive, stock_list, stock_preview, stock_prune
 from youtube_automation.utils import skill_config as skill_config_mod
 
 

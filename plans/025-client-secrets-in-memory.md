@@ -127,7 +127,7 @@ flow = InstalledAppFlow.from_client_secrets_file(str(self.client_secrets_file), 
 - `plans/README.md`（status 更新）
 
 **Out of scope**（触らない）:
-- `src/youtube_automation/cli/doctor.py` — `_client_secrets_file_for_accounts` は実ファイル探索専用で tempfile 経路に依存しない
+- `src/youtube_automation/commands/system/doctor.py` — `_client_secrets_file_for_accounts` は実ファイル探索専用で tempfile 経路に依存しない
 - `resolve_client_secrets_location()` / `client_secrets_file_candidates()`（oauth_handler.py L68-109）の探索順序・分類 — 変更禁止（doctor / onboarding が契約として依存、`tests/test_oauth_onboarding_contract.py` が監視）
 - `write_op_secret()` / `get_secret()` 本体のシグネチャ
 

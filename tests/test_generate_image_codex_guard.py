@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_GENERATE_IMAGE = _REPO_ROOT / "src" / "youtube_automation" / "scripts" / "generate_image.py"
+_GENERATE_IMAGE = _REPO_ROOT / "src" / "youtube_automation" / "commands" / "media" / "generate_image.py"
 
 
 def _read_generate_image() -> str:

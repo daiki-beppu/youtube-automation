@@ -37,7 +37,7 @@ automation リポジトリの GitHub Release (`ext-v*` タグ) に添付され�
 以降の `gh` コマンドが参照する automation リポジトリ（`<owner>/<repo>`）は、導入済みパッケージの `automation_update_refs.UPSTREAM_REPO`（official upstream の単一ソース。既定: `daiki-beppu/youtube-automation`）から導出する。fork 運用でも自動で fork 側の upstream を参照できる:
 
 ```bash
-UPSTREAM_REPO="$(uv run python -c 'from youtube_automation.cli.automation_update_refs import UPSTREAM_REPO; print(UPSTREAM_REPO)')"
+UPSTREAM_REPO="$(uv run python -c 'from youtube_automation.commands.system.automation_update_refs import UPSTREAM_REPO; print(UPSTREAM_REPO)')"
 ```
 
 Bash 呼び出し間でシェル変数が保持されない環境では、この導出行を後続の各コマンドと同一の Bash 呼び出し内で先頭に付けて実行する。

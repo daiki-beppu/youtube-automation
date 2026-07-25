@@ -19,12 +19,12 @@ from unittest.mock import MagicMock
 import pytest
 from googleapiclient.errors import HttpError
 
-from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
-from youtube_automation.scripts.benchmark_collector import (
+from youtube_automation.commands.analytics.benchmark_collector import (
     BenchmarkCollector,
     is_live_benchmark_video,
     load_benchmark_videos,
 )
+from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
 
 
 def _http_error(status: int = 403, reason: str = "quotaExceeded") -> HttpError:
@@ -192,7 +192,7 @@ class TestCollectAllFailures:
 class TestEnsureBenchmarkFresh:
     def test_raises_when_no_channels_configured(self, monkeypatch):
         # Given: benchmark.channels が空
-        from youtube_automation.scripts import benchmark_collector as mod
+        from youtube_automation.commands.analytics import benchmark_collector as mod
 
         def _fake_init(self):
             self.config = SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[])))

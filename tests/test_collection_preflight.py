@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-from youtube_automation.scripts.collection_preflight import (
+from youtube_automation.commands.collections.collection_preflight import (
     _resolve_targets,
     check_collection,
     main,
@@ -169,7 +169,9 @@ class TestCheckCollection:
 class TestMainExitCodes:
     def _run(self, monkeypatch, argv: list[str]):
         monkeypatch.setattr(sys, "argv", ["yt-collection-preflight", *argv])
-        monkeypatch.setattr("youtube_automation.scripts.collection_preflight._supported_languages", lambda: ["en"])
+        monkeypatch.setattr(
+            "youtube_automation.commands.collections.collection_preflight._supported_languages", lambda: ["en"]
+        )
         return main()
 
     def test_all_ok_exits_zero(self, tmp_path, monkeypatch, capsys):

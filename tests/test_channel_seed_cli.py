@@ -10,9 +10,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from youtube_automation.commands.channel import channel_seed as channel_seed_module
+from youtube_automation.commands.channel.channel_seed import _build_parser, main
 from youtube_automation.domains.youtube.channel_seed import SeedChannel
-from youtube_automation.scripts import channel_seed as channel_seed_module
-from youtube_automation.scripts.channel_seed import _build_parser, main
 
 
 @pytest.fixture(autouse=True)
@@ -124,10 +124,12 @@ def test_main_rejects_benchmark_write_without_relationship(tmp_path, capsys):
     # When
     with (
         patch(
-            "youtube_automation.scripts.channel_seed.YouTubeClients",
+            "youtube_automation.commands.channel.channel_seed.YouTubeClients",
             return_value=SimpleNamespace(youtube_readonly=youtube),
         ),
-        patch("youtube_automation.scripts.channel_seed.fetch_channel_seed", return_value=_seed()) as fetch_seed,
+        patch(
+            "youtube_automation.commands.channel.channel_seed.fetch_channel_seed", return_value=_seed()
+        ) as fetch_seed,
     ):
         rc = main(["https://www.youtube.com/@seed", "--target", str(tmp_path)])
 
@@ -147,10 +149,10 @@ def test_main_rejects_placeholder_relationship(tmp_path, capsys):
     # When
     with (
         patch(
-            "youtube_automation.scripts.channel_seed.YouTubeClients",
+            "youtube_automation.commands.channel.channel_seed.YouTubeClients",
             return_value=SimpleNamespace(youtube_readonly=youtube),
         ),
-        patch("youtube_automation.scripts.channel_seed.fetch_channel_seed", return_value=_seed()),
+        patch("youtube_automation.commands.channel.channel_seed.fetch_channel_seed", return_value=_seed()),
     ):
         rc = main(
             [
@@ -177,10 +179,12 @@ def test_main_fetches_seed_and_writes_benchmark_entry_with_relationship(tmp_path
     # When
     with (
         patch(
-            "youtube_automation.scripts.channel_seed.YouTubeClients",
+            "youtube_automation.commands.channel.channel_seed.YouTubeClients",
             return_value=SimpleNamespace(youtube_readonly=youtube),
         ),
-        patch("youtube_automation.scripts.channel_seed.fetch_channel_seed", return_value=_seed()) as fetch_seed,
+        patch(
+            "youtube_automation.commands.channel.channel_seed.fetch_channel_seed", return_value=_seed()
+        ) as fetch_seed,
     ):
         rc = main(
             [
@@ -221,10 +225,10 @@ def test_main_does_not_write_analytics_when_no_write_benchmark(tmp_path):
     # When
     with (
         patch(
-            "youtube_automation.scripts.channel_seed.YouTubeClients",
+            "youtube_automation.commands.channel.channel_seed.YouTubeClients",
             return_value=SimpleNamespace(youtube_readonly=MagicMock()),
         ),
-        patch("youtube_automation.scripts.channel_seed.fetch_channel_seed", return_value=_seed()),
+        patch("youtube_automation.commands.channel.channel_seed.fetch_channel_seed", return_value=_seed()),
     ):
         rc = main(["https://www.youtube.com/@seed", "--target", str(tmp_path), "--no-write-benchmark"])
 
@@ -250,10 +254,10 @@ def test_main_deduplicates_existing_benchmark_channel(tmp_path):
     # When
     with (
         patch(
-            "youtube_automation.scripts.channel_seed.YouTubeClients",
+            "youtube_automation.commands.channel.channel_seed.YouTubeClients",
             return_value=SimpleNamespace(youtube_readonly=MagicMock()),
         ),
-        patch("youtube_automation.scripts.channel_seed.fetch_channel_seed", return_value=_seed()),
+        patch("youtube_automation.commands.channel.channel_seed.fetch_channel_seed", return_value=_seed()),
     ):
         rc = main(
             [
@@ -286,4 +290,4 @@ def test_pyproject_registers_yt_channel_seed_entry_point():
     scripts = data["project"]["scripts"]
 
     # Then
-    assert scripts["yt-channel-seed"] == "youtube_automation.cli_entrypoints:yt_channel_seed"
+    assert scripts["yt-channel-seed"] == "youtube_automation.entrypoints:yt_channel_seed"

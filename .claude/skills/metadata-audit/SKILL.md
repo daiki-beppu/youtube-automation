@@ -119,5 +119,5 @@ GitHub Actions や cron で常時監視する場合は `--strict` を付ける�
 - `/video-description` — descriptions.md の生成・更新（修正の入口）
 - `yt-bulk-update-synthetic-media` — 公開済み動画の `status.containsSyntheticMedia` が `false` のまま残っている場合に `True` へ一括是正する（#606、#603 是正前のアップロード分の遡及）
 - `pyproject.toml` の `yt-metadata-audit` entry point
-- `src/youtube_automation/scripts/metadata_audit.py` — 実装本体
+- `src/youtube_automation/commands/metadata/metadata_audit.py` — 実装本体
 - `src/youtube_automation/domains/uploads/preflight.py` — `extract_descriptions_md_tags` / `check_tags_count` / `check_tags_yt_chars` を共有

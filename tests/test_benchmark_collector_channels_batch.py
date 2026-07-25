@@ -20,12 +20,12 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.infrastructure.errors import YouTubeAPIError
-from youtube_automation.scripts.benchmark_collector import (
+from youtube_automation.commands.analytics.benchmark_collector import (
     _CHANNELS_BATCH_SIZE,
     BenchmarkCollector,
     BenchmarkReportGenerator,
 )
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 def _make_collector(youtube_mock: MagicMock, *, benchmark_channels: list[dict] | None = None) -> BenchmarkCollector:

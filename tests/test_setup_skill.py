@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from youtube_automation.cli import doctor
+from youtube_automation.commands.system import doctor
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"

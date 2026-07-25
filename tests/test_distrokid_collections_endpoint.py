@@ -25,14 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.configuration.distrokid import (
-    AiDisclosure,
-    Distrokid,
-    DistrokidProfile,
-    SongwriterName,
-)
-from youtube_automation.domains.distrokid.specification import write_collection_spec
-from youtube_automation.scripts.collection_serve import (
+from youtube_automation.commands.collections.collection_serve import (
     _DISTROKID_COLLECTIONS_ROUTE,
     _DISTROKID_RELEASES_ROUTE,
     _resolve_distrokid_capture_root,
@@ -43,6 +36,13 @@ from youtube_automation.scripts.collection_serve import (
     read_released_discs,
     write_distrokid_release,
 )
+from youtube_automation.configuration.distrokid import (
+    AiDisclosure,
+    Distrokid,
+    DistrokidProfile,
+    SongwriterName,
+)
+from youtube_automation.domains.distrokid.specification import write_collection_spec
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _COLLECTIONS_ROUTE = "/collections"

@@ -552,4 +552,4 @@ UI 変更で注入先セレクタが外れた場合は `extensions/shared/dom.ts
 - ブラウザ自動生成 + playlist 一括追加: `/suno-helper`
 - DL + マスター化: `/masterup`
 - 拡張本体のコード: `extensions/suno-helper/` / `extensions/shared/`
-- サーバー CLI: `src/youtube_automation/scripts/collection_serve.py`
+- サーバー CLI: `src/youtube_automation/commands/collections/collection_serve.py`

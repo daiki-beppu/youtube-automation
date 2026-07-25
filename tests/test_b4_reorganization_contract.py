@@ -156,8 +156,7 @@ def test_domain_modules_do_not_import_adapters_or_auth(module_name: str) -> None
 
     forbidden = (
         "youtube_automation.agents",
-        "youtube_automation.scripts",
-        "youtube_automation.cli",
+        "youtube_automation.commands",
         "youtube_automation.auth",
         "youtube_automation.infrastructure.auth",
         "googleapiclient",
@@ -165,7 +164,7 @@ def test_domain_modules_do_not_import_adapters_or_auth(module_name: str) -> None
     assert not [target for target in imports if target.startswith(forbidden)]
 
 
-def test_agents_do_not_import_scripts() -> None:
+def test_agents_do_not_import_commands() -> None:
     offenders: list[str] = []
 
     for path in (SRC / "agents").glob("*.py"):
@@ -178,7 +177,8 @@ def test_agents_do_not_import_scripts() -> None:
             else:
                 continue
             if any(
-                name == "youtube_automation.scripts" or name.startswith("youtube_automation.scripts.") for name in names
+                name == "youtube_automation.commands" or name.startswith("youtube_automation.commands.")
+                for name in names
             ):
                 offenders.append(str(path.relative_to(ROOT)))
 

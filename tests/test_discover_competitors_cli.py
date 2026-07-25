@@ -22,8 +22,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.scripts.discover_competitors import (
+from youtube_automation.commands.analytics.discover_competitors import (
     _build_params,
     _build_parser,
     _format_count_compact,
@@ -31,6 +30,7 @@ from youtube_automation.scripts.discover_competitors import (
     _write_markdown,
     main,
 )
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.utils.competitor_discovery import SearchCacheMode
 from youtube_automation.utils.competitor_scoring import (
     CandidateChannel,
@@ -492,11 +492,11 @@ class TestMain:
 
         with (
             patch(
-                "youtube_automation.scripts.discover_competitors.discover_competitors",
+                "youtube_automation.commands.analytics.discover_competitors.discover_competitors",
                 return_value=[],
             ) as discover,
             patch(
-                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                "youtube_automation.commands.analytics.discover_competitors.YouTubeClients",
                 return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ) as clients_mock,
         ):
@@ -517,11 +517,11 @@ class TestMain:
 
         with (
             patch(
-                "youtube_automation.scripts.discover_competitors.discover_competitors",
+                "youtube_automation.commands.analytics.discover_competitors.discover_competitors",
                 return_value=[],
             ) as discover,
             patch(
-                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                "youtube_automation.commands.analytics.discover_competitors.YouTubeClients",
                 return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ) as clients_mock,
         ):
@@ -560,11 +560,11 @@ class TestMain:
 
         with (
             patch(
-                "youtube_automation.scripts.discover_competitors.discover_competitors",
+                "youtube_automation.commands.analytics.discover_competitors.discover_competitors",
                 return_value=scored,
             ),
             patch(
-                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                "youtube_automation.commands.analytics.discover_competitors.YouTubeClients",
                 return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ),
         ):
@@ -589,11 +589,11 @@ class TestMain:
 
         with (
             patch(
-                "youtube_automation.scripts.discover_competitors.discover_competitors",
+                "youtube_automation.commands.analytics.discover_competitors.discover_competitors",
                 return_value=[_make_scored()],
             ),
             patch(
-                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                "youtube_automation.commands.analytics.discover_competitors.YouTubeClients",
                 return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ),
         ):
@@ -618,11 +618,11 @@ class TestMain:
 
         with (
             patch(
-                "youtube_automation.scripts.discover_competitors.discover_competitors",
+                "youtube_automation.commands.analytics.discover_competitors.discover_competitors",
                 return_value=[],
             ),
             patch(
-                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                "youtube_automation.commands.analytics.discover_competitors.YouTubeClients",
                 return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ),
         ):

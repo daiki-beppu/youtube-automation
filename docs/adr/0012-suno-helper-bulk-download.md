@@ -113,7 +113,7 @@ enum を採用した理由: 状態が排他的（同時に 2 つにならない�
 - `extensions/shared/api.ts` の `CollectionSummary` を `status` enum 型に改訂。`mapped` / `playlist_name` を削除
 - `extensions/suno-helper/lib/download.ts` 新規作成（モーダル DOM 操作 + DL 完了検知）
 - `extensions/suno-helper/entrypoints/background.ts` に `chrome.downloads.onChanged` リスナー追加
-- `src/youtube_automation/scripts/collection_serve.py`: `POST /collections/<id>/downloaded` 追加、`build_collections_index()` を `status` enum 方式に改訂。旧 `POST /suno/playlists` / `write_suno_playlists` は #1301 で撤去済み
+- `src/youtube_automation/commands/collections/collection_serve.py`: `POST /collections/<id>/downloaded` 追加、`build_collections_index()` を `status` enum 方式に改訂。旧 `POST /suno/playlists` / `write_suno_playlists` は #1301 で撤去済み
 - `suno-helper/SKILL.md` と `masterup/SKILL.md` の改訂が必要
 - `workflow-state.json` スキーマ v2 に `assets.music_downloaded` と `planning.music.suno_playlist_url` を追加
 - `suno-playlists.json` 関連コード・ファイルは #1301 で撤去済み

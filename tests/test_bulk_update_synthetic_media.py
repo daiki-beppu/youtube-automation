@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from youtube_automation.scripts import bulk_update_synthetic_media as mod
+from youtube_automation.commands.metadata import bulk_update_synthetic_media as mod
 
 # ---------------------------------------------------------------------------
 # select_targets

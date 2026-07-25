@@ -7,7 +7,7 @@
 > in `plans/README.md` — unless a reviewer dispatched you and told you they
 > maintain the index.
 >
-> **Drift check (run first)**: `git diff --stat 37b362ce..HEAD -- src/youtube_automation/scripts/stock_preview.py src/youtube_automation/scripts/compare_thumbnails.py src/youtube_automation/utils/upload_core.py`
+> **Drift check (run first)**: `git diff --stat 37b362ce..HEAD -- src/youtube_automation/commands/media/stock_preview.py src/youtube_automation/commands/thumbnail/compare_thumbnails.py src/youtube_automation/utils/upload_core.py`
 > If any in-scope file changed since this plan was written, compare the
 > "Current state" excerpts against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.
@@ -33,7 +33,7 @@
 
 対象 3 ファイル・4 箇所:
 
-`src/youtube_automation/scripts/stock_preview.py:48,59` — stock 画像の一括プレビュー:
+`src/youtube_automation/commands/media/stock_preview.py:48,59` — stock 画像の一括プレビュー:
 
 ```python
     paths = [str(e.image_path) for e in entries]
@@ -41,7 +41,7 @@
     subprocess.run(["open", *paths], check=False)
 ```
 
-`src/youtube_automation/scripts/compare_thumbnails.py:75-79` — サムネの 320px 縮小:
+`src/youtube_automation/commands/thumbnail/compare_thumbnails.py:75-79` — サムネの 320px 縮小:
 
 ```python
             subprocess.run(
@@ -51,7 +51,7 @@
             )
 ```
 
-`src/youtube_automation/scripts/compare_thumbnails.py:149` — 比較ディレクトリを Finder で開く:
+`src/youtube_automation/commands/thumbnail/compare_thumbnails.py:149` — 比較ディレクトリを Finder で開く:
 
 ```python
             subprocess.run(["open", str(self.small_dir if small_only else self.compare_dir)])
@@ -79,8 +79,8 @@
 ## Scope
 
 **In scope**:
-- `src/youtube_automation/scripts/stock_preview.py`
-- `src/youtube_automation/scripts/compare_thumbnails.py`
+- `src/youtube_automation/commands/media/stock_preview.py`
+- `src/youtube_automation/commands/thumbnail/compare_thumbnails.py`
 - `src/youtube_automation/utils/upload_core.py`
 - `tests/test_upload_core_thumbnail.py`（アサート追加のみ）
 - `CHANGELOG.md`（`[Unreleased]` 追記 — src 変更のため必須ゲート）
@@ -128,7 +128,7 @@ Step 2 の 1 ケースのみ（`_compress_thumbnail` 経由で argv 絶対パス
 ## Done criteria
 
 - [ ] 上記 4 箇所すべてに `.resolve()` が入っている
-- [ ] `rg -n '"--"' src/youtube_automation/scripts/stock_preview.py src/youtube_automation/scripts/compare_thumbnails.py src/youtube_automation/utils/upload_core.py` → 0 件（誤って `--` 方式を採らなかったことの確認）
+- [ ] `rg -n '"--"' src/youtube_automation/commands/media/stock_preview.py src/youtube_automation/commands/thumbnail/compare_thumbnails.py src/youtube_automation/utils/upload_core.py` → 0 件（誤って `--` 方式を採らなかったことの確認）
 - [ ] `uv run pytest tests/test_upload_core_thumbnail.py -q` → all pass
 - [ ] `uv run pytest -q -m "not slow and not repo_contract" -n auto` → all pass
 - [ ] `uv run ruff check src tests` → exit 0

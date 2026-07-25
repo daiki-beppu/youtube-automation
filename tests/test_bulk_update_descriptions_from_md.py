@@ -127,7 +127,7 @@ class TestDiscoverCollections:
 
     def test_should_return_collection_when_descriptions_and_tracking_present(self, tmp_path, monkeypatch):
         """両ファイル揃った collection を検出する（plan 要件 #3 / #4）."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given
         ch = _setup_channel(tmp_path)
@@ -143,7 +143,7 @@ class TestDiscoverCollections:
 
     def test_should_detect_non_rjn_channel_collection(self, tmp_path, monkeypatch):
         """**Issue #276 直接リグレッション**: rjn 以外の名前（DF365 等）でも検出される."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: DF365 系の命名（旧 TARGETS ハードコードでは絶対に拾えなかった）
         ch = _setup_channel(tmp_path)
@@ -159,7 +159,7 @@ class TestDiscoverCollections:
 
     def test_should_return_sorted_order(self, tmp_path, monkeypatch):
         """戻り値は決定論的に sorted 順（plan 要件 #7）."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: 故意に登録順を入れ替えて作成
         ch = _setup_channel(tmp_path)
@@ -177,7 +177,7 @@ class TestDiscoverCollections:
 
     def test_should_return_empty_when_live_directory_absent(self, tmp_path, monkeypatch):
         """`collections/live/` 不在時は `[]` を返す（`live_dir.exists()` ガード）."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: collections/live を作らない
         ch = _setup_channel(tmp_path)
@@ -192,7 +192,7 @@ class TestDiscoverCollections:
 
     def test_should_return_empty_when_live_directory_empty(self, tmp_path, monkeypatch):
         """`collections/live/` が空ディレクトリなら `[]` を返す."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: 空 live/
         ch = _setup_channel(tmp_path)
@@ -208,7 +208,7 @@ class TestDiscoverCollections:
 
     def test_should_skip_collection_without_descriptions_md(self, tmp_path, monkeypatch):
         """descriptions.md 欠落 collection は silent skip（必要条件側）."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given
         ch = _setup_channel(tmp_path)
@@ -226,7 +226,7 @@ class TestDiscoverCollections:
 
     def test_should_skip_collection_without_upload_tracking_json(self, tmp_path, monkeypatch):
         """upload_tracking.json 欠落 collection は silent skip（必要条件側）."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given
         ch = _setup_channel(tmp_path)
@@ -244,7 +244,7 @@ class TestDiscoverCollections:
 
     def test_should_skip_collection_without_documentation_directory(self, tmp_path, monkeypatch):
         """20-documentation/ ディレクトリごと欠落でも silent skip（両必須欠落エッジ）."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given
         ch = _setup_channel(tmp_path)
@@ -266,7 +266,7 @@ class TestDiscoverCollections:
         モジュールトップで COLLECTIONS_DIR を即時評価してしまうと別チャンネルに
         切り替えても古いパスが残り、テスト隔離 / マルチチャンネル運用が壊れる.
         """
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: ch_a には collection あり、ch_b には何もなし
         ch_a = _setup_channel(tmp_path / "a")
@@ -294,7 +294,7 @@ class TestMainTargetSelection:
 
     def test_should_process_all_discovered_when_only_omitted(self, tmp_path, monkeypatch):
         """`--only` 省略時は検出済み全 collection を処理（plan 要件 #3）."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: 2 つの collection、両方とも有効
         ch = _setup_channel(tmp_path)
@@ -317,7 +317,7 @@ class TestMainTargetSelection:
 
     def test_should_filter_by_substring_when_only_given(self, tmp_path, monkeypatch):
         """`--only <substr>` で substring 一致した collection のみ処理（plan 要件 #2）."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: 3 つの collection
         ch = _setup_channel(tmp_path)
@@ -345,7 +345,7 @@ class TestMainTargetSelection:
 
     def test_should_treat_comma_separated_only_as_or_filter(self, tmp_path, monkeypatch):
         """`--only foo,bar` の comma-split で OR 一致（既存挙動の維持）."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given
         ch = _setup_channel(tmp_path)
@@ -376,7 +376,7 @@ class TestMainTargetSelection:
 
         旧実装では `TARGETS` ハードコードに含まれず `nothing to do` で終わっていた.
         """
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: DF365 標準命名
         ch = _setup_channel(tmp_path)
@@ -402,7 +402,7 @@ class TestMainTargetSelection:
 
     def test_should_log_nothing_to_do_when_no_collections_discovered(self, tmp_path, monkeypatch, caplog):
         """検出 0 件で `"nothing to do"` をログ出力し API を呼ばない."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: live/ なし
         ch = _setup_channel(tmp_path)
@@ -421,7 +421,7 @@ class TestMainTargetSelection:
 
     def test_should_log_nothing_to_do_when_only_matches_nothing(self, tmp_path, monkeypatch, caplog):
         """`--only` ミスマッチで対象 0 件になった場合もログ出力し API 未呼出."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: collection は存在するが --only は別 substring
         ch = _setup_channel(tmp_path)
@@ -473,7 +473,7 @@ class TestMainExecution:
 
     def test_should_call_videos_update_execute_per_collection(self, tmp_path, monkeypatch, caplog):
         """通常実行で `videos().update().execute()` が collection 数分呼ばれる."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: 3 件
         ch = _setup_channel(tmp_path)
@@ -520,7 +520,7 @@ class TestMainExecution:
 
     def test_should_not_call_update_execute_when_dry_run(self, tmp_path, monkeypatch, caplog):
         """`--dry-run` 時は `update().execute()` を呼ばない."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given
         ch = _setup_channel(tmp_path)
@@ -545,7 +545,7 @@ class TestMainExecution:
 
     def test_should_sleep_0_4_per_successful_update(self, tmp_path, monkeypatch):
         """quota throttle: 更新ごとに `time.sleep(0.4)` を呼ぶ."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: 2 件
         ch = _setup_channel(tmp_path)
@@ -570,7 +570,7 @@ class TestMainExecution:
 
     def test_should_keep_old_title_when_new_title_exceeds_100_utf16_units(self, tmp_path, monkeypatch, caplog):
         """新タイトル UTF-16 > 100 units 時は old title を保持し description のみ更新."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: 101 units の新タイトル（BMP 文字 1 個 = 1 unit）
         long_title = "x" * 101
@@ -612,7 +612,7 @@ class TestMainExecution:
 
     def test_should_log_collection_load_failure(self, tmp_path, monkeypatch, caplog):
         """collection 読み込み失敗は collection 名と例外詳細を ERROR に残す."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         ch = _setup_channel(tmp_path)
         _make_collection_with_descriptions(ch, "alpha")
@@ -634,7 +634,7 @@ class TestMainExecution:
 
     def test_should_continue_after_semantic_metadata_error(self, tmp_path, monkeypatch, caplog):
         """意味的に不正な collection を記録し、正常な collection は更新する."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         ch = _setup_channel(tmp_path)
         _make_collection_with_descriptions(ch, "alpha-invalid", omit_video_id=True)
@@ -659,7 +659,7 @@ class TestMainExecution:
 
     def test_should_fail_loud_when_tracking_json_is_corrupt(self, tmp_path, monkeypatch):
         """公開 main 経路で破損 JSON を JSONDecodeError のまま伝播させる."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         ch = _setup_channel(tmp_path)
         col = _make_collection_with_descriptions(ch, "alpha")
@@ -678,7 +678,7 @@ class TestMainExecution:
 
     def test_should_fail_loud_when_metadata_read_raises_os_error(self, tmp_path, monkeypatch):
         """公開 main 経路で metadata の OSError を握りつぶさず伝播させる."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         ch = _setup_channel(tmp_path)
         col = _make_collection_with_descriptions(ch, "alpha")
@@ -705,7 +705,7 @@ class TestMainExecution:
 
     def test_should_log_video_not_found_on_youtube(self, tmp_path, monkeypatch, caplog):
         """list 結果に video ID がない場合は ID と collection を ERROR に残す."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         ch = _setup_channel(tmp_path)
         _make_collection_with_descriptions(ch, "alpha", video_id="V_MISSING")
@@ -725,7 +725,7 @@ class TestMainExecution:
 
     def test_should_log_http_error_when_update_fails(self, tmp_path, monkeypatch, caplog):
         """videos.update の HttpError はドメイン例外化して詳細を ERROR に残す."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         ch = _setup_channel(tmp_path)
         _make_collection_with_descriptions(ch, "alpha", video_id="V_ALPHA")
@@ -756,7 +756,7 @@ class TestMainExecution:
 
     def test_should_convert_list_http_error_and_fail_loud(self, tmp_path, monkeypatch):
         """videos.list の HttpError は status/reason/cause 付き YouTubeAPIError として伝播する."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         ch = _setup_channel(tmp_path)
         _make_collection_with_descriptions(ch, "alpha", video_id="V_ALPHA")
@@ -785,7 +785,7 @@ class TestMainExecution:
 
     def test_should_continue_after_domain_update_error(self, tmp_path, monkeypatch, caplog):
         """1 件の更新 API failure を記録し、後続動画の更新と throttle を継続する."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         ch = _setup_channel(tmp_path)
         _make_collection_with_descriptions(ch, "alpha", video_id="V_ALPHA")
@@ -826,7 +826,7 @@ class TestMainSnippetFallbacks:
 
     def test_should_preserve_remote_tags_when_markdown_tags_are_absent(self, tmp_path, monkeypatch):
         """説明文だけの更新で既存 YouTube tags を消さない."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         ch = _setup_channel(tmp_path)
         _make_collection_with_descriptions(ch, "alpha", video_id="V_ALPHA", omit_sections=["タグ"])
@@ -848,7 +848,7 @@ class TestMainSnippetFallbacks:
 
     def test_should_default_category_to_music_when_remote_category_is_absent(self, tmp_path, monkeypatch):
         """remote snippet に categoryId がない場合は Music category 10 を送る."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         ch = _setup_channel(tmp_path)
         _make_collection_with_descriptions(ch, "alpha", video_id="V_ALPHA")
@@ -870,7 +870,7 @@ class TestMainSnippetFallbacks:
 
     def test_should_omit_default_language_when_remote_value_is_absent(self, tmp_path, monkeypatch):
         """remote 値欠落時は defaultLanguage を推測・注入しない."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         ch = _setup_channel(tmp_path)
         _make_collection_with_descriptions(ch, "alpha", video_id="V_ALPHA")
@@ -901,7 +901,7 @@ class TestLoadCollection:
 
     def test_should_reevaluate_channel_dir_on_each_call(self, tmp_path, monkeypatch):
         """`CHANNEL_DIR` 切り替え後に呼んだ場合、新しいパスから読み込む."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: 同名 collection を 2 チャンネル用意。中身の title だけ違える
         ch_a = _setup_channel(tmp_path / "a")
@@ -927,7 +927,7 @@ class TestLoadCollection:
 
     def test_should_raise_when_video_id_missing(self, tmp_path, monkeypatch):
         """`complete_collection.video_id` 欠落で `RuntimeError`（既存エラーパス）."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given
         ch = _setup_channel(tmp_path)
@@ -941,7 +941,7 @@ class TestLoadCollection:
 
     def test_should_raise_when_description_section_missing(self, tmp_path, monkeypatch):
         """`Complete Collection 概要欄` セクション欠落で `RuntimeError`."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: 概要欄 セクションだけ欠落
         ch = _setup_channel(tmp_path)
@@ -963,7 +963,7 @@ class TestLoadCollection:
 
     def test_should_raise_when_title_section_missing(self, tmp_path, monkeypatch):
         """`タイトル案` セクション欠落で `RuntimeError`."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: タイトル案 セクションだけ欠落
         ch = _setup_channel(tmp_path)
@@ -985,7 +985,7 @@ class TestLoadCollection:
 
     def test_should_strip_double_quotes_from_tags(self, tmp_path, monkeypatch):
         """ダブルクォートで囲まれたタグから引用符を除去する (#1096)."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given
         ch = _setup_channel(tmp_path)
@@ -1015,7 +1015,7 @@ class TestBuildSnippetUpdateBody:
 
     def test_should_preserve_default_audio_language(self):
         """old_snippet に defaultAudioLanguage があれば body に引き継がれる (defaultAudioLanguage 消失防止)."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given
         old_snippet = {
@@ -1034,7 +1034,7 @@ class TestBuildSnippetUpdateBody:
 
     def test_should_omit_default_language_when_absent_from_old_snippet(self):
         """old_snippet に defaultLanguage が無ければ body にも含めない（"en" 注入の再発防止）."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: defaultLanguage 未設定
         old_snippet = {
@@ -1051,7 +1051,7 @@ class TestBuildSnippetUpdateBody:
 
     def test_should_exclude_readonly_snippet_keys(self):
         """old_snippet の read-only キー（publishedAt / thumbnails 等）は body に含めない."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: read-only フィールドが混ざった old_snippet
         old_snippet = {
@@ -1082,7 +1082,7 @@ class TestBuildSnippetUpdateBody:
 
     def test_should_override_title_description_tags_with_arguments(self):
         """title/description/tags は引数の値で上書きされる（old_snippet の値を無視する）."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given
         old_snippet = {
@@ -1106,7 +1106,7 @@ class TestExtractMdSection:
     """`load_collection` の Error テスト経路の前提となる補助 utility."""
 
     def test_should_return_fenced_body_when_header_matches(self):
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given
         md = "## Complete Collection 概要欄\n\n```\nhello world\n```\n"
@@ -1118,7 +1118,7 @@ class TestExtractMdSection:
         assert result == "hello world"
 
     def test_should_return_none_when_header_missing(self):
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given
         md = "## Other Section\n\n```\nbody\n```\n"
@@ -1144,7 +1144,7 @@ class TestQuotaLogging:
 
     def test_dry_run_records_only_issued_read_request(self, tmp_path, monkeypatch):
         """dry-run では実際に発行した videos.list だけが記録される."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given
         ch = _setup_channel(tmp_path)
@@ -1167,7 +1167,7 @@ class TestQuotaLogging:
 
     def test_apply_records_read_and_update_as_separate_operations(self, tmp_path, monkeypatch):
         """apply では read（videos.list）と videos.update が別 operation として記録される."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: 2 件
         ch = _setup_channel(tmp_path)
@@ -1197,7 +1197,7 @@ class TestQuotaLogging:
 
     def test_update_failure_records_quota_then_raises_original_error(self, tmp_path, monkeypatch):
         """update 失敗時も quota を記録した上で、元のドメイン例外契約が維持される."""
-        from youtube_automation.scripts import bulk_update_descriptions_from_md as mod
+        from youtube_automation.commands.metadata import bulk_update_descriptions as mod
 
         # Given: V1 失敗 / V2 成功
         ch = _setup_channel(tmp_path)

@@ -46,9 +46,7 @@ def test_yt_upload_shorts_entry_registered(scripts):
     target = scripts.get("yt-upload-shorts")
 
     # Then
-    assert target == "youtube_automation.cli_entrypoints:yt_upload_shorts", (
-        f"yt-upload-shorts が期待値と異なる: {target!r}"
-    )
+    assert target == "youtube_automation.entrypoints:yt_upload_shorts", f"yt-upload-shorts が期待値と異なる: {target!r}"
 
 
 def test_yt_generate_shorts_loop_entry_registered(scripts):
@@ -57,7 +55,7 @@ def test_yt_generate_shorts_loop_entry_registered(scripts):
     target = scripts.get("yt-generate-shorts-loop")
 
     # Then
-    assert target == "youtube_automation.cli_entrypoints:yt_generate_shorts_loop", (
+    assert target == "youtube_automation.entrypoints:yt_generate_shorts_loop", (
         f"yt-generate-shorts-loop が期待値と異なる: {target!r}"
     )
 
@@ -68,7 +66,7 @@ def test_yt_shorts_bulk_update_loc_entry_registered(scripts):
     target = scripts.get("yt-shorts-bulk-update-loc")
 
     # Then
-    assert target == "youtube_automation.cli_entrypoints:yt_shorts_bulk_update_loc", (
+    assert target == "youtube_automation.entrypoints:yt_shorts_bulk_update_loc", (
         f"yt-shorts-bulk-update-loc が期待値と異なる: {target!r}"
     )
 

@@ -38,7 +38,7 @@ def _channel_context(channel: Path) -> Iterator[None]:
 
 def collect_channel_analytics(channel: Path) -> None:
     """既存 AnalyticsSystem を使って1チャンネルのstandard snapshotを保存する。"""
-    from youtube_automation.scripts.analytics_system import AnalyticsSystem
+    from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
 
     with _channel_context(channel):
         result = AnalyticsSystem().run_data_collection(days=30, depth="standard")

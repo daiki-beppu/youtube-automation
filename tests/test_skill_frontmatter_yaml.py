@@ -5,7 +5,7 @@ description 値内の `: ` (コロン+スペース) は strict YAML ではマッ
 将来 strict YAML パーサで読む経路が追加されても壊れないことを保証する。
 
 検証ロジックの単一ソースは `yt-skills lint` 側
-(youtube_automation.cli.skills_sync._lint) にあり、本テストはそれを全 skill に
+(youtube_automation.commands.system.skills_sync._lint) にあり、本テストはそれを全 skill に
 適用する回帰テスト (Issue #2096)。判定基準を変える場合は _lint 側を修正すること。
 """
 
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.cli.skills_sync._lint import lint_skill
+from youtube_automation.commands.system.skills_sync._lint import lint_skill
 
 # リポジトリルート (tests/ の親)
 _REPO_ROOT = Path(__file__).resolve().parent.parent

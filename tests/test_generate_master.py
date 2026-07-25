@@ -11,18 +11,18 @@ from unittest.mock import patch
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.scripts import generate_master
-from youtube_automation.scripts.generate_master import (
+from youtube_automation.commands.media import generate_master
+from youtube_automation.commands.media.generate_master import (
     _collect_audio_inputs,
     _estimate_looped_duration,
     _resolve_loop_count,
     _sum_track_duration,
     build_filter,
 )
-from youtube_automation.scripts.generate_master import (
+from youtube_automation.commands.media.generate_master import (
     generate_master as run_generate_master,
 )
+from youtube_automation.infrastructure.errors import ValidationError
 
 
 class TestResolveLoopCount:
@@ -65,7 +65,7 @@ class TestSumTrackDuration:
     def test_sums_successful_probes(self):
         files = [Path("/fake/a.mp3"), Path("/fake/b.mp3"), Path("/fake/c.mp3")]
         with patch(
-            "youtube_automation.scripts.generate_master.probe_duration",
+            "youtube_automation.commands.media.generate_master.probe_duration",
             side_effect=[100.0, 200.5, 50.25],
         ):
             assert _sum_track_duration(files) == pytest.approx(350.75)
@@ -73,7 +73,7 @@ class TestSumTrackDuration:
     def test_raises_on_probe_failure(self):
         files = [Path("/fake/a.mp3"), Path("/fake/b.mp3")]
         with patch(
-            "youtube_automation.scripts.generate_master.probe_duration",
+            "youtube_automation.commands.media.generate_master.probe_duration",
             side_effect=[100.0, None],
         ):
             with pytest.raises(ValidationError, match="probe に失敗"):
@@ -287,11 +287,11 @@ class TestCliSkillConfigTargetDuration:
     ) -> dict:
         """`load_skill_config` と `generate_master` を差し替えて kwargs を捕捉する。"""
         monkeypatch.setattr(
-            "youtube_automation.scripts.generate_master.load_skill_config",
+            "youtube_automation.commands.media.generate_master.load_skill_config",
             lambda _: skill_config,
         )
         monkeypatch.setattr(
-            "youtube_automation.scripts.generate_master.load_config",
+            "youtube_automation.commands.media.generate_master.load_config",
             lambda: SimpleNamespace(
                 audio=SimpleNamespace(
                     target_duration_min=None,
@@ -308,7 +308,7 @@ class TestCliSkillConfigTargetDuration:
             return Path("/tmp/fake-master.mp3")
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.generate_master.generate_master",
+            "youtube_automation.commands.media.generate_master.generate_master",
             fake_generate_master,
         )
         return captured
@@ -354,7 +354,7 @@ class TestCliSkillConfigTargetDuration:
             {"audio": {"target_duration_min": 120}},
         )
         monkeypatch.setattr(
-            "youtube_automation.scripts.generate_master.load_config",
+            "youtube_automation.commands.media.generate_master.load_config",
             lambda: SimpleNamespace(
                 audio=SimpleNamespace(
                     target_duration_min=60,
@@ -687,7 +687,7 @@ class TestCliShuffle:
 
     def _patch_main_dependencies(self, monkeypatch, skill_config: dict | None = None) -> dict:
         monkeypatch.setattr(
-            "youtube_automation.scripts.generate_master.load_skill_config",
+            "youtube_automation.commands.media.generate_master.load_skill_config",
             lambda _: skill_config or {},
         )
 
@@ -699,7 +699,7 @@ class TestCliShuffle:
             return Path("/tmp/fake-master.mp3")
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.generate_master.generate_master",
+            "youtube_automation.commands.media.generate_master.generate_master",
             fake_generate_master,
         )
         return captured
@@ -784,7 +784,7 @@ class TestCliSkillConfigShuffle:
 
     def _patch_main_dependencies(self, monkeypatch, skill_config: dict) -> dict:
         monkeypatch.setattr(
-            "youtube_automation.scripts.generate_master.load_skill_config",
+            "youtube_automation.commands.media.generate_master.load_skill_config",
             lambda _: skill_config,
         )
 
@@ -796,7 +796,7 @@ class TestCliSkillConfigShuffle:
             return Path("/tmp/fake-master.mp3")
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.generate_master.generate_master",
+            "youtube_automation.commands.media.generate_master.generate_master",
             fake_generate_master,
         )
         return captured
@@ -1164,7 +1164,7 @@ class TestCliPinFirst:
 
     def _patch_main_dependencies(self, monkeypatch, skill_config: dict | None = None) -> dict:
         monkeypatch.setattr(
-            "youtube_automation.scripts.generate_master.load_skill_config",
+            "youtube_automation.commands.media.generate_master.load_skill_config",
             lambda _: skill_config or {},
         )
 
@@ -1176,7 +1176,7 @@ class TestCliPinFirst:
             return Path("/tmp/fake-master.mp3")
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.generate_master.generate_master",
+            "youtube_automation.commands.media.generate_master.generate_master",
             fake_generate_master,
         )
         return captured
@@ -1261,7 +1261,7 @@ class TestCliSkillConfigPinFirst:
 
     def _patch_main_dependencies(self, monkeypatch, skill_config: dict) -> dict:
         monkeypatch.setattr(
-            "youtube_automation.scripts.generate_master.load_skill_config",
+            "youtube_automation.commands.media.generate_master.load_skill_config",
             lambda _: skill_config,
         )
 
@@ -1273,7 +1273,7 @@ class TestCliSkillConfigPinFirst:
             return Path("/tmp/fake-master.mp3")
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.generate_master.generate_master",
+            "youtube_automation.commands.media.generate_master.generate_master",
             fake_generate_master,
         )
         return captured

@@ -17,7 +17,7 @@ Veo などの生成エンジン選択とは別の軸として扱う。
 2. 生成が必要なら専用 generator を実装し、
    `src/youtube_automation/utils/veo_generator.py::register_video_generator` へ登録する。
    呼び出し側は `generate_video(video_type, ...)` で dispatch する。
-3. `src/youtube_automation/scripts/` の CLI で `VideoTypeConfig.from_mapping()` を使い、
+3. `src/youtube_automation/commands/media/` の CLI で `VideoTypeConfig.from_mapping()` を使い、
    選択タイプをログへ出す。タイプ固有の入出力名はその CLI に閉じ込める。
 4. `.claude/skills/loop-video/config.default.yaml` と
    `.claude/skills/videoup/config.default.yaml`、必要な下流テンプレートへ既定値を追加する。

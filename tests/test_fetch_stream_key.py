@@ -76,7 +76,7 @@ class TestSelectStream:
         When ``select_stream(streams, stream_id=None)``
         Then その stream が選ばれる。
         """
-        from youtube_automation.scripts.fetch_stream_key import select_stream
+        from youtube_automation.commands.youtube.fetch_stream_key import select_stream
 
         streams = [
             _make_stream(stream_id="s1", title="Custom Stream"),
@@ -93,7 +93,7 @@ class TestSelectStream:
         When ``select_stream``
         Then ``cdn.frameRate != "variable"`` の最初の永続 stream が選ばれる。
         """
-        from youtube_automation.scripts.fetch_stream_key import select_stream
+        from youtube_automation.commands.youtube.fetch_stream_key import select_stream
 
         streams = [
             _make_stream(stream_id="s1", title="A", framerate="variable"),
@@ -110,7 +110,7 @@ class TestSelectStream:
         When ``select_stream``
         Then list 先頭が選ばれる（永続候補が 1 つも無いケースの最終フォールバック）。
         """
-        from youtube_automation.scripts.fetch_stream_key import select_stream
+        from youtube_automation.commands.youtube.fetch_stream_key import select_stream
 
         streams = [
             _make_stream(stream_id="s1", title="A", framerate="variable"),
@@ -126,7 +126,7 @@ class TestSelectStream:
         When ``stream_id="s2"`` を明示
         Then 明示指定が優先され s2 が返る（フィルタ 3 = 明示優先）。
         """
-        from youtube_automation.scripts.fetch_stream_key import select_stream
+        from youtube_automation.commands.youtube.fetch_stream_key import select_stream
 
         streams = [
             _make_stream(stream_id="s1", title="Default Stream Key"),
@@ -142,7 +142,7 @@ class TestSelectStream:
         When ``select_stream``
         Then ``ValidationError`` を投げる（入力不正）。
         """
-        from youtube_automation.scripts.fetch_stream_key import select_stream
+        from youtube_automation.commands.youtube.fetch_stream_key import select_stream
 
         streams = [_make_stream(stream_id="s1")]
 
@@ -154,7 +154,7 @@ class TestSelectStream:
         When ``select_stream``
         Then ``YouTubeAPIError`` を投げる（API レスポンスが期待を満たさない）。
         """
-        from youtube_automation.scripts.fetch_stream_key import select_stream
+        from youtube_automation.commands.youtube.fetch_stream_key import select_stream
 
         with pytest.raises(YouTubeAPIError):
             select_stream([], stream_id=None)
@@ -171,7 +171,7 @@ class TestExtractStreamInfo:
         When ``extract_stream_info``
         Then ``streamName``（ストリームキー本体）を返す。
         """
-        from youtube_automation.scripts.fetch_stream_key import extract_stream_info
+        from youtube_automation.commands.youtube.fetch_stream_key import extract_stream_info
 
         stream = _make_stream(stream_name="key-xyz-789")
 
@@ -184,7 +184,7 @@ class TestExtractStreamInfo:
         When ``extract_stream_info``
         Then ``YouTubeAPIError`` を投げる（read-only スコープ誤用時のマスク挙動を検出）。
         """
-        from youtube_automation.scripts.fetch_stream_key import extract_stream_info
+        from youtube_automation.commands.youtube.fetch_stream_key import extract_stream_info
 
         stream = _make_stream(stream_name=None)
 
@@ -689,7 +689,7 @@ class TestCli:
         When ``main()``
         Then 抽出した streamName が標準出力に出力される（CI / Terraform 用途）。
         """
-        from youtube_automation.scripts import fetch_stream_key as fsk
+        from youtube_automation.commands.youtube import fetch_stream_key as fsk
 
         monkeypatch.setattr("sys.argv", ["yt-fetch-stream-key", "--stdout"])
 
@@ -714,7 +714,7 @@ class TestCli:
 
         ``--field`` 未指定時のデフォルトが ``"stream_key"`` であることも合わせて担保する。
         """
-        from youtube_automation.scripts import fetch_stream_key as fsk
+        from youtube_automation.commands.youtube import fetch_stream_key as fsk
 
         monkeypatch.setattr(
             "sys.argv",
@@ -739,7 +739,7 @@ class TestCli:
         argparse の必須選択チェック（mutually_exclusive_group required=True）または
         明示バリデーションのいずれでも SystemExit を期待する。
         """
-        from youtube_automation.scripts import fetch_stream_key as fsk
+        from youtube_automation.commands.youtube import fetch_stream_key as fsk
 
         monkeypatch.setattr("sys.argv", ["yt-fetch-stream-key"])
 
@@ -754,7 +754,7 @@ class TestCli:
 
         issue #152 で未カバーだった ``stdout=True and has_op_target`` 分岐の回帰テスト。
         """
-        from youtube_automation.scripts import fetch_stream_key as fsk
+        from youtube_automation.commands.youtube import fetch_stream_key as fsk
 
         monkeypatch.setattr(
             "sys.argv",
@@ -771,7 +771,7 @@ class TestCli:
 
         フラグが末端まで伝搬していること（隠れた解決の禁止）を保証する。
         """
-        from youtube_automation.scripts import fetch_stream_key as fsk
+        from youtube_automation.commands.youtube import fetch_stream_key as fsk
 
         monkeypatch.setattr(
             "sys.argv",
@@ -804,7 +804,7 @@ class TestCli:
         到達経路のリグレッション担保: ``main()`` の出力箇所が
         マスキング対応経路（``_emit_stdout``）を確実に通っていることを保証する。
         """
-        from youtube_automation.scripts import fetch_stream_key as fsk
+        from youtube_automation.commands.youtube import fetch_stream_key as fsk
 
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
         monkeypatch.setattr("sys.argv", ["yt-fetch-stream-key", "--stdout"])
@@ -847,7 +847,7 @@ class TestEmitStdout:
 
         順序まで担保するため ``splitlines()`` 一致で検証する。
         """
-        from youtube_automation.scripts.fetch_stream_key import _emit_stdout
+        from youtube_automation.commands.youtube.fetch_stream_key import _emit_stdout
 
         monkeypatch.setenv("GITHUB_ACTIONS", "true")
 
@@ -864,7 +864,7 @@ class TestEmitStdout:
         When ``_emit_stdout("plain-value")``
         Then ``::add-mask::`` プレフィックス行は出ず、値のみ出る（既存挙動の維持）。
         """
-        from youtube_automation.scripts.fetch_stream_key import _emit_stdout
+        from youtube_automation.commands.youtube.fetch_stream_key import _emit_stdout
 
         monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
 
@@ -881,7 +881,7 @@ class TestEmitStdout:
 
         ``order.md`` の ``== "true"`` 仕様の境界検証。誤判定で平文露出するリスクの予防。
         """
-        from youtube_automation.scripts.fetch_stream_key import _emit_stdout
+        from youtube_automation.commands.youtube.fetch_stream_key import _emit_stdout
 
         monkeypatch.setenv("GITHUB_ACTIONS", "false")
 
@@ -901,7 +901,7 @@ class TestEmitStdout:
         TTY 経由での平文露出を防止する異常パス。``GITHUB_ACTIONS`` を未設定にして
         マスク行による偽陽性（stdout に "tty-key" を含む可能性）を排除する。
         """
-        from youtube_automation.scripts.fetch_stream_key import _emit_stdout
+        from youtube_automation.commands.youtube.fetch_stream_key import _emit_stdout
 
         monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
         monkeypatch.setattr("sys.stdout.isatty", lambda: True)
