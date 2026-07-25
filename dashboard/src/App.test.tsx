@@ -270,7 +270,14 @@ describe("dashboard", () => {
     renderDashboard()
 
     await screen.findByRole("heading", { name: "概況" })
-    const paletteGroup = screen.getByRole("group", {
+    expect(
+      screen.queryByRole("group", { name: "カラーパレット" })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "設定を開く" }))
+
+    const settings = screen.getByRole("dialog", { name: "設定" })
+    const paletteGroup = within(settings).getByRole("group", {
       name: "カラーパレット",
     })
     const blue = within(paletteGroup).getByRole("button", { name: "Blue" })

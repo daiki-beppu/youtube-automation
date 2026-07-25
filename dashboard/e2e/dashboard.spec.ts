@@ -336,6 +336,10 @@ test("ダークテーマでも背景とカードの階調を識別できる", as
 test("カラーパレットを切り替えて再読み込み後も保持できる", async ({ page }) => {
   await page.goto(baseURL)
 
+  await expect(
+    page.getByRole("group", { name: "カラーパレット" })
+  ).not.toBeVisible()
+  await page.getByRole("button", { name: "設定を開く" }).click()
   const paletteGroup = page.getByRole("group", { name: "カラーパレット" })
   const blue = paletteGroup.getByRole("button", { name: "Blue" })
   const green = paletteGroup.getByRole("button", { name: "Green" })
@@ -382,6 +386,7 @@ test("カラーパレットを切り替えて再読み込み後も保持でき�
   )
 
   await page.reload()
+  await page.getByRole("button", { name: "設定を開く" }).click()
   await expect(
     page
       .getByRole("group", { name: "カラーパレット" })
@@ -396,14 +401,14 @@ test("ライトでは公式5段階色、ダークでは背景と識別できる�
     localStorage.setItem("theme", "light")
   })
   await page.goto(baseURL)
+  await page.getByRole("button", { name: "設定を開く" }).click()
 
   const expectDashboardContrast = async () => {
     const colors = await page.evaluate(() => {
       const title = document.querySelector("h1")
       const accentDescription = [...document.querySelectorAll("div")].find(
         (element) =>
-          element.textContent ===
-          "ガイドブック35ページの配色を切り替え、画面上で比較できます。"
+          element.textContent === "起動時に読み込んだ全チャンネルの集計です。"
       )
       const metricLabel = [...document.querySelectorAll("dt")].find(
         (term) => term.textContent === "登録チャンネル"
@@ -489,7 +494,9 @@ test("ライトでは公式5段階色、ダークでは背景と識別できる�
     await expectDashboardContrast()
   }
 
+  await page.getByRole("button", { name: "閉じる" }).click()
   await page.getByRole("button", { name: "ダークモードに切り替え" }).click()
+  await page.getByRole("button", { name: "設定を開く" }).click()
 
   for (const palette of Object.keys(paletteLightColors)) {
     const option = page
@@ -499,10 +506,10 @@ test("ライトでは公式5段階色、ダークでは背景と識別できる�
     const swatches = await Promise.all(
       Array.from({ length: 5 }, (_, index) =>
         page.getByTestId(`palette-swatch-${index + 1}`).evaluate((element) => {
-          const card = element.closest("[data-slot='card']")
-          if (!card) throw new Error("palette card is missing")
+          const surface = element.closest("[data-slot='sheet-content']")
+          if (!surface) throw new Error("palette settings surface is missing")
           return {
-            background: getComputedStyle(card).backgroundColor,
+            background: getComputedStyle(surface).backgroundColor,
             color: getComputedStyle(element).backgroundColor,
           }
         })

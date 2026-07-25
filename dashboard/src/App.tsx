@@ -7,6 +7,7 @@ import {
   InfoIcon,
   MoonIcon,
   RefreshCwIcon,
+  SettingsIcon,
   SunIcon,
 } from "lucide-react"
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
@@ -38,6 +39,14 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import { ChannelStockTable } from "@/features/channel-stock/channel-stock-table"
 import type { ChannelOverview, Summary } from "@/lib/dashboard-types"
 import {
@@ -475,31 +484,56 @@ export function App() {
               起動時に全チャンネルを更新し、チャンネルと動画のパフォーマンスを確認します。
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label={
-              theme === "dark"
-                ? "ライトモードに切り替え"
-                : "ダークモードに切り替え"
-            }
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          >
-            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={
+                theme === "dark"
+                  ? "ライトモードに切り替え"
+                  : "ダークモードに切り替え"
+              }
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            >
+              {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+            </Button>
+            <Sheet>
+              <SheetTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    aria-label="設定を開く"
+                  />
+                }
+              >
+                <SettingsIcon />
+              </SheetTrigger>
+              <SheetContent>
+                <SheetHeader>
+                  <SheetTitle>設定</SheetTitle>
+                  <SheetDescription>
+                    ダッシュボードの表示を調整します。
+                  </SheetDescription>
+                </SheetHeader>
+                <section
+                  aria-labelledby="palette-settings-title"
+                  className="flex flex-col gap-3 px-4"
+                >
+                  <div>
+                    <h2 id="palette-settings-title" className="font-medium">
+                      カラーパレット
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      ガイドブック35ページの配色を切り替え、画面上で比較できます。
+                    </p>
+                  </div>
+                  <PaletteSwitcher />
+                </section>
+              </SheetContent>
+            </Sheet>
+          </div>
         </header>
-
-        <Card size="sm" variant="accent">
-          <CardHeader>
-            <CardTitle>カラーパレット</CardTitle>
-            <CardDescription>
-              ガイドブック35ページの配色を切り替え、画面上で比較できます。
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PaletteSwitcher />
-          </CardContent>
-        </Card>
 
         {error ? (
           <Alert variant="destructive">
