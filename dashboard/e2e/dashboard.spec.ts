@@ -409,18 +409,7 @@ test("ライトでは公式5段階色、ダークでは背景と識別できる�
         (term) => term.textContent === "登録チャンネル"
       )
       const metricSurface = metricLabel?.parentElement
-      const comparisonPanel = document
-        .querySelector('[aria-label="チャンネル横断ストック一覧"]')
-        ?.closest(".dashboard-accent-panel")
-      const main = document.querySelector("main")
-      if (
-        !title ||
-        !accentDescription ||
-        !metricLabel ||
-        !metricSurface ||
-        !comparisonPanel ||
-        !main
-      ) {
+      if (!title || !accentDescription || !metricLabel || !metricSurface) {
         throw new Error("コントラスト検査対象を取得できませんでした")
       }
 
@@ -434,14 +423,9 @@ test("ライトでは公式5段階色、ダークでは背景と識別できる�
       }
       const accentSample = document.createElement("span")
       accentSample.style.backgroundColor = "var(--dashboard-accent-surface)"
-      const backgroundSample = document.createElement("span")
-      backgroundSample.style.backgroundColor =
-        "color-mix(in srgb, var(--background), var(--background))"
-      document.body.append(accentSample, backgroundSample)
+      document.body.append(accentSample)
       const titleBackground = getComputedStyle(accentSample).backgroundColor
-      const panelBackground = getComputedStyle(backgroundSample).backgroundColor
       accentSample.remove()
-      backgroundSample.remove()
 
       return {
         accentDescription: {
@@ -451,10 +435,6 @@ test("ライトでは公式5段階色、ダークでは背景と識別できる�
         metric: {
           background: toSrgb(getComputedStyle(metricSurface).backgroundColor),
           foreground: toSrgb(getComputedStyle(metricLabel).color),
-        },
-        panel: {
-          background: toSrgb(panelBackground),
-          foreground: toSrgb(getComputedStyle(comparisonPanel).borderTopColor),
         },
         title: {
           background: toSrgb(titleBackground),
@@ -478,10 +458,6 @@ test("ライトでは公式5段階色、ダークでは背景と識別できる�
       contrastRatio(colors.metric.foreground, colors.metric.background),
       JSON.stringify(colors.metric)
     ).toBeGreaterThanOrEqual(4.5)
-    expect(
-      contrastRatio(colors.panel.foreground, colors.panel.background),
-      JSON.stringify(colors.panel)
-    ).toBeGreaterThanOrEqual(3)
   }
 
   for (const [palette, expectedColors] of Object.entries(paletteLightColors)) {

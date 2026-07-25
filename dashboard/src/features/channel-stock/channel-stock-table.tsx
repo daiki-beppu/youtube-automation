@@ -140,7 +140,7 @@ export function ChannelStockTable({
           </p>
         ) : null}
       </div>
-      <div className="dashboard-accent-panel min-w-0 overflow-hidden rounded-lg border">
+      <div className="min-w-0 overflow-hidden rounded-lg border">
         <Table
           aria-label={STOCK_TABLE_CONTRACT.ariaLabel}
           className="block max-w-full min-w-0 table-fixed overflow-hidden lg:table"
