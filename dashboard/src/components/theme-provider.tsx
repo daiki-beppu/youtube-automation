@@ -1,6 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from "react"
 
+import { type Palette, isDashboardPalette } from "@/lib/dashboard-palettes"
+
 type Theme = "dark" | "light" | "system"
 type ResolvedTheme = "dark" | "light"
 
@@ -14,10 +16,13 @@ type ThemeProviderProps = {
 type ThemeProviderState = {
   theme: Theme
   setTheme: (theme: Theme) => void
+  palette: Palette
+  setPalette: (palette: Palette) => void
 }
 
 const COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)"
 const THEME_VALUES: Theme[] = ["dark", "light", "system"]
+const PALETTE_STORAGE_KEY = "palette"
 
 const ThemeProviderContext = React.createContext<
   ThemeProviderState | undefined
@@ -92,6 +97,10 @@ export function ThemeProvider({
 
     return defaultTheme
   })
+  const [palette, setPaletteState] = React.useState<Palette>(() => {
+    const storedPalette = localStorage.getItem(PALETTE_STORAGE_KEY)
+    return isDashboardPalette(storedPalette) ? storedPalette : "blue"
+  })
 
   const setTheme = React.useCallback(
     (nextTheme: Theme) => {
@@ -100,6 +109,10 @@ export function ThemeProvider({
     },
     [storageKey]
   )
+  const setPalette = React.useCallback((nextPalette: Palette) => {
+    localStorage.setItem(PALETTE_STORAGE_KEY, nextPalette)
+    setPaletteState(nextPalette)
+  }, [])
 
   const applyTheme = React.useCallback(
     (nextTheme: Theme) => {
@@ -138,6 +151,10 @@ export function ThemeProvider({
       mediaQuery.removeEventListener("change", handleChange)
     }
   }, [theme, applyTheme])
+
+  React.useEffect(() => {
+    document.documentElement.dataset.palette = palette
+  }, [palette])
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -204,12 +221,35 @@ export function ThemeProvider({
     }
   }, [defaultTheme, storageKey])
 
+  React.useEffect(() => {
+    const handlePaletteStorageChange = (event: StorageEvent) => {
+      if (
+        event.storageArea !== localStorage ||
+        event.key !== PALETTE_STORAGE_KEY
+      ) {
+        return
+      }
+
+      setPaletteState(
+        isDashboardPalette(event.newValue) ? event.newValue : "blue"
+      )
+    }
+
+    window.addEventListener("storage", handlePaletteStorageChange)
+
+    return () => {
+      window.removeEventListener("storage", handlePaletteStorageChange)
+    }
+  }, [])
+
   const value = React.useMemo(
     () => ({
       theme,
       setTheme,
+      palette,
+      setPalette,
     }),
-    [theme, setTheme]
+    [theme, setTheme, palette, setPalette]
   )
 
   return (

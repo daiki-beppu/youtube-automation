@@ -12,6 +12,7 @@ import {
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { PaletteSwitcher } from "@/components/palette-switcher"
 import { useTheme } from "@/components/theme-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -72,7 +73,7 @@ type ChannelDetail = Omit<ChannelOverview, "video_count"> & { videos: Video[] }
 type OverviewResponse = { schema_version: number; channels: ChannelOverview[] }
 
 const chartConfig = {
-  views: { label: "再生数", color: "var(--chart-1)" },
+  views: { label: "再生数", color: "var(--chart-3)" },
 } satisfies ChartConfig
 
 async function requestJson<T>(path: string): Promise<T> {
@@ -488,6 +489,18 @@ export function App() {
             {theme === "dark" ? <SunIcon /> : <MoonIcon />}
           </Button>
         </header>
+
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle>カラーパレット</CardTitle>
+            <CardDescription>
+              ガイドブック35ページの配色を切り替え、画面上で比較できます。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PaletteSwitcher />
+          </CardContent>
+        </Card>
 
         {error ? (
           <Alert variant="destructive">

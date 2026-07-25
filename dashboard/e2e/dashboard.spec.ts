@@ -11,6 +11,53 @@ let fixtureRoot: string
 let baseURL: string
 let serverStderr = ""
 
+const paletteLightColors = {
+  Blue: ["#d9e6ff", "#9db7f9", "#4979f5", "#264af4", "#0017c1"],
+  Cyan: ["#99f2ff", "#2bc8e4", "#00a3bf", "#008299", "#006173"],
+  Green: ["#c2e5d1", "#71c598", "#259d63", "#197a4b", "#115a36"],
+  Orange: ["#ffdfca", "#ffa66d", "#fb5b01", "#c74700", "#8b3200"],
+  Purple: ["#ecddff", "#cda6ff", "#a565f8", "#8843e1", "#5c10be"],
+} as const
+
+function colorChannels(color: string): [number, number, number] {
+  const values = color.match(/[\d.]+/g)?.map(Number)
+  if (!values || values.length < 3) {
+    throw new Error(`色をRGBへ変換できませんでした: ${color}`)
+  }
+  if (color.startsWith("color(srgb")) {
+    return [values[0] * 255, values[1] * 255, values[2] * 255]
+  }
+  return [values[0], values[1], values[2]]
+}
+
+function hexChannels(color: string): [number, number, number] {
+  return [
+    Number.parseInt(color.slice(1, 3), 16),
+    Number.parseInt(color.slice(3, 5), 16),
+    Number.parseInt(color.slice(5, 7), 16),
+  ]
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const luminance = (color: string) =>
+    colorChannels(color)
+      .map((channel) => channel / 255)
+      .map((channel) =>
+        channel <= 0.04045
+          ? channel / 12.92
+          : ((channel + 0.055) / 1.055) ** 2.4
+      )
+      .reduce(
+        (sum, channel, index) =>
+          sum + channel * [0.2126, 0.7152, 0.0722][index],
+        0
+      )
+  const values = [luminance(foreground), luminance(background)].sort(
+    (left, right) => right - left
+  )
+  return (values[0] + 0.05) / (values[1] + 0.05)
+}
+
 async function unusedPort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
     const server = createServer()
@@ -284,4 +331,94 @@ test("ダークテーマでも背景とカードの階調を識別できる", as
 
   expect(colors.background).toBeGreaterThanOrEqual(0.18)
   expect(colors.card - colors.background).toBeGreaterThanOrEqual(0.04)
+})
+
+test("カラーパレットを切り替えて再読み込み後も保持できる", async ({ page }) => {
+  await page.goto(baseURL)
+
+  const paletteGroup = page.getByRole("group", { name: "カラーパレット" })
+  const blue = paletteGroup.getByRole("button", { name: "Blue" })
+  const green = paletteGroup.getByRole("button", { name: "Green" })
+  await expect(blue).toHaveAttribute("aria-pressed", "true")
+
+  const blueBackground = await blue.evaluate(
+    (element) => getComputedStyle(element).backgroundColor
+  )
+  await green.click()
+  await expect(green).toHaveAttribute("aria-pressed", "true")
+  const greenBackground = await green.evaluate(
+    (element) => getComputedStyle(element).backgroundColor
+  )
+  expect(greenBackground).not.toBe(blueBackground)
+
+  await page.reload()
+  await expect(
+    page
+      .getByRole("group", { name: "カラーパレット" })
+      .getByRole("button", { name: "Green" })
+  ).toHaveAttribute("aria-pressed", "true")
+})
+
+test("ライトでは公式5段階色、ダークでは背景と識別できる色を表示する", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("theme", "light")
+  })
+  await page.goto(baseURL)
+
+  for (const [palette, expectedColors] of Object.entries(paletteLightColors)) {
+    const option = page
+      .getByRole("group", { name: "カラーパレット" })
+      .getByRole("button", { name: palette })
+    await option.click()
+    await expect(option).toHaveAttribute("aria-pressed", "true")
+
+    const colors = await Promise.all(
+      expectedColors.map((_, index) =>
+        page
+          .getByTestId(`palette-swatch-${index + 1}`)
+          .evaluate((element) => getComputedStyle(element).backgroundColor)
+      )
+    )
+    expect(colors.map(colorChannels)).toEqual(expectedColors.map(hexChannels))
+    const selectedColors = await option.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return {
+        background: style.backgroundColor,
+        foreground: style.color,
+      }
+    })
+    expect(
+      contrastRatio(selectedColors.foreground, selectedColors.background),
+      JSON.stringify(selectedColors)
+    ).toBeGreaterThanOrEqual(4.5)
+  }
+
+  await page.getByRole("button", { name: "ダークモードに切り替え" }).click()
+
+  for (const palette of Object.keys(paletteLightColors)) {
+    const option = page
+      .getByRole("group", { name: "カラーパレット" })
+      .getByRole("button", { name: palette })
+    await option.click()
+    const swatches = await Promise.all(
+      Array.from({ length: 5 }, (_, index) =>
+        page.getByTestId(`palette-swatch-${index + 1}`).evaluate((element) => {
+          const card = element.closest("[data-slot='card']")
+          if (!card) throw new Error("palette card is missing")
+          return {
+            background: getComputedStyle(card).backgroundColor,
+            color: getComputedStyle(element).backgroundColor,
+          }
+        })
+      )
+    )
+    expect(new Set(swatches.map(({ color }) => color)).size).toBe(5)
+    for (const swatch of swatches) {
+      expect(
+        contrastRatio(swatch.color, swatch.background)
+      ).toBeGreaterThanOrEqual(3)
+    }
+  }
 })

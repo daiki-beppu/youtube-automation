@@ -261,6 +261,39 @@ describe("dashboard", () => {
     expect(within(stockRow).queryByText("未取得")).not.toBeInTheDocument()
   })
 
+  it("lets a user preview and keep the dashboard color palette", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(overview), { status: 200 })
+    )
+    const user = userEvent.setup()
+
+    renderDashboard()
+
+    await screen.findByRole("heading", { name: "概況" })
+    const paletteGroup = screen.getByRole("group", {
+      name: "カラーパレット",
+    })
+    const blue = within(paletteGroup).getByRole("button", { name: "Blue" })
+    const green = within(paletteGroup).getByRole("button", { name: "Green" })
+    expect(blue).toHaveAttribute("aria-pressed", "true")
+    expect(
+      screen.getByRole("img", {
+        name: "Blue の5段階配色。1〜3系列では 100、500、900 を使用",
+      })
+    ).toBeInTheDocument()
+
+    await user.click(green)
+
+    expect(green).toHaveAttribute("aria-pressed", "true")
+    expect(
+      screen.getByRole("img", {
+        name: "Green の5段階配色。1〜3系列では 100、600、900 を使用",
+      })
+    ).toBeInTheDocument()
+    expect(document.documentElement).toHaveAttribute("data-palette", "green")
+    expect(localStorage.getItem("palette")).toBe("green")
+  })
+
   it("shows an alert when the overview request fails", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("failed", { status: 500 })
