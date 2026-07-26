@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from youtube_automation.agents._upload_cli_error_boundary import run_upload_cli
+from youtube_automation.commands.uploads._upload_cli_error_boundary import run_upload_cli
 from youtube_automation.infrastructure.errors import AutomationError
 
 
@@ -64,17 +64,17 @@ def test_run_upload_cli_does_not_hide_unexpected_exceptions():
     ("module_name", "argv", "patches"),
     [
         (
-            "youtube_automation.agents.youtube_auto_uploader",
+            "youtube_automation.commands.uploads.youtube_auto_uploader",
             ["yt-upload-auto", "--collection", "collection"],
             {"YouTubeAutoUploader": ValueError("auto failure")},
         ),
         (
-            "youtube_automation.agents.collection_uploader",
+            "youtube_automation.commands.uploads.collection_uploader",
             ["yt-upload-collection"],
             {"CollectionUploader": ValueError("collection failure")},
         ),
         (
-            "youtube_automation.agents.short_uploader",
+            "youtube_automation.commands.uploads.short_uploader",
             ["yt-upload-shorts", "collection"],
             {"ShortUploader": ValueError("short failure")},
         ),
@@ -105,19 +105,19 @@ def test_each_upload_cli_converts_value_error(capsys, monkeypatch, module_name, 
     ("module_name", "argv", "patch_target", "expected_code"),
     [
         (
-            "youtube_automation.agents.youtube_auto_uploader",
+            "youtube_automation.commands.uploads.youtube_auto_uploader",
             ["yt-upload-auto"],
             "YouTubeAutoUploader",
             None,
         ),
         (
-            "youtube_automation.agents.collection_uploader",
+            "youtube_automation.commands.uploads.collection_uploader",
             ["yt-upload-collection"],
             "CollectionUploader",
             None,
         ),
         (
-            "youtube_automation.agents.short_uploader",
+            "youtube_automation.commands.uploads.short_uploader",
             ["yt-upload-shorts", "collection"],
             "ShortUploader",
             130,
@@ -157,7 +157,7 @@ def test_each_upload_cli_preserves_interrupt_exit_contract(
     ],
 )
 def test_shorts_cli_normalizes_collection_to_absolute_path_for_plan(monkeypatch, collection, expected):
-    from youtube_automation.agents import short_uploader
+    from youtube_automation.commands.uploads import short_uploader
 
     uploader = SimpleNamespace(show_plan=MagicMock())
     monkeypatch.setattr("sys.argv", ["yt-upload-shorts", collection, "--plan"])
@@ -177,7 +177,7 @@ def test_shorts_cli_normalizes_collection_to_absolute_path_for_plan(monkeypatch,
     ],
 )
 def test_shorts_cli_normalizes_collection_to_absolute_path_for_upload(monkeypatch, capsys, collection, expected):
-    from youtube_automation.agents import short_uploader
+    from youtube_automation.commands.uploads import short_uploader
 
     uploader = SimpleNamespace(upload_short=MagicMock(return_value={"action": "short_uploaded"}))
     monkeypatch.setattr("sys.argv", ["yt-upload-shorts", collection])

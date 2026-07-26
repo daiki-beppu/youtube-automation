@@ -145,23 +145,23 @@ class TestYouTubeClientsReadonly:
 
 class TestMainReadonlyFlag:
     def test_readonly_flag_uses_create_readonly(self):
-        from youtube_automation.infrastructure.auth import youtube as oauth_handler
+        from youtube_automation.commands.system import oauth as oauth_cli
 
         mock_cls = MagicMock()
         mock_cls.create_readonly.return_value.test_connection.return_value = True
-        with patch.object(oauth_handler, "YouTubeOAuthHandler", mock_cls):
-            oauth_handler.main(["--readonly"])
+        with patch.object(oauth_cli, "YouTubeOAuthHandler", mock_cls):
+            oauth_cli.main(["--readonly"])
 
         mock_cls.create_readonly.assert_called_once_with()
         mock_cls.assert_not_called()
 
     def test_default_uses_full_handler(self):
-        from youtube_automation.infrastructure.auth import youtube as oauth_handler
+        from youtube_automation.commands.system import oauth as oauth_cli
 
         mock_cls = MagicMock()
         mock_cls.return_value.test_connection.return_value = True
-        with patch.object(oauth_handler, "YouTubeOAuthHandler", mock_cls):
-            oauth_handler.main([])
+        with patch.object(oauth_cli, "YouTubeOAuthHandler", mock_cls):
+            oauth_cli.main([])
 
         mock_cls.assert_called_once_with()
         mock_cls.create_readonly.assert_not_called()

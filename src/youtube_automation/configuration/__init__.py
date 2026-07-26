@@ -18,7 +18,6 @@ from youtube_automation.configuration.community_draft import CommunityDraft
 from youtube_automation.configuration.distrokid import Distrokid
 from youtube_automation.configuration.loader import (
     channel_dir,
-    channel_label,
     find_workspace_root,
     load_config,
     reset,
@@ -36,7 +35,6 @@ __all__ = [
     "PinnedComment",
     "Shorts",
     "channel_dir",
-    "channel_label",
     "find_workspace_root",
     "load_config",
     "reset",

@@ -8,9 +8,8 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 - `src/youtube_automation/configuration/` — 設定 loader / dataclass owner
 - `src/youtube_automation/utils/` — コアライブラリ（API クライアント、analytics、upload）
-- `src/youtube_automation/agents/` — アップロードエージェント（Auto / Collection）
-- `src/youtube_automation/commands/` — `yt-*` CLI の thin adapter。`analytics` / `channel` / `collections` / `distrokid` / `media` / `metadata` / `suno` / `system` / `thumbnail` / `uploads` / `youtube` の 11 domain に分割し、argparse・stdio・exit・composition を所有する
-- `src/youtube_automation/entrypoints.py` — console script wrapper。`pyproject.toml [project.scripts]` の全 `yt-*` がここを経由し、`commands/` 配下の module を `import_module` して `main` を呼ぶ
+- `src/youtube_automation/commands/` — `yt-*` CLI の thin adapter。`analytics` / `channel` / `collections` / `distrokid` / `media` / `metadata` / `suno` / `system` / `thumbnail` / `uploads` / `youtube` の 11 domain に分割し、argparse・stdio・exit・composition を所有する。アップロード CLI（Auto / Collection / Shorts）は `commands/uploads/` が入口で、実装は `domains/uploads/` が持つ
+- `src/youtube_automation/entrypoints.py` — console script wrapper。`pyproject.toml [project.scripts]` の全 `yt-*` がここを経由し、**例外なく** `commands/` 配下の module を `import_module` して `main` を呼ぶ
 - `src/youtube_automation/templates/` — 説明文テンプレート
 - `.claude/skills/` — 自動化スキル群（Claude Code / Codex 共用）。wheel に `_skills/` として `force-include` され、`yt-skills sync` で各チャンネルへ展開される
 - `.claude/CLAUDE.template.md` — BGM チャンネル運営方針テンプレ（共通骨格）。wheel に `_claude_md/CLAUDE.template.md` として `force-include` され、`yt-skills sync --asset claude-md` で各チャンネルの `.claude/CLAUDE.md` として展開される

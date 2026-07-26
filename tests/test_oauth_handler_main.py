@@ -1,4 +1,4 @@
-"""issue #192: ``oauth_handler.main()`` の except narrow / logger 化テスト。
+"""issue #192: ``oauth_cli.main()`` の except narrow / logger 化テスト。
 
 検証対象:
 
@@ -24,7 +24,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from youtube_automation.infrastructure.auth import youtube as oauth_handler
+from youtube_automation.commands.system import oauth as oauth_cli
 from youtube_automation.infrastructure.errors import AuthError, ConfigError, ValidationError, YouTubeAPIError
 
 # leak sentinel は `test_oauth_handler_exceptions.py` と同値を使う
@@ -33,7 +33,7 @@ _LEAKY_ACCESS_TOKEN = "ya29.A0AbCdEfGhIjKlMnOpQrStUvWxYz123456"
 _LEAKY_TOKEN_PATH = "/Users/leak-canary/auth/token.json"
 _LEAKY_CLIENT_SECRETS = "/Users/leak-canary/auth/client_secrets.json"
 
-_LOGGER_NAME = "youtube_automation.infrastructure.auth.youtube"
+_LOGGER_NAME = "youtube_automation.commands.system.oauth"
 
 
 def _install_fake_handler(
@@ -63,7 +63,7 @@ def _install_fake_handler(
     else:
         factory.return_value = instance
 
-    monkeypatch.setattr(oauth_handler, "YouTubeOAuthHandler", factory)
+    monkeypatch.setattr(oauth_cli, "YouTubeOAuthHandler", factory)
     return instance
 
 
@@ -83,9 +83,9 @@ class TestMainSuccessPath:
         _install_fake_handler(monkeypatch, test_connection_return=True)
 
         # sys.exit が呼ばれたらテストを fail させるための sentinel
-        monkeypatch.setattr(oauth_handler.sys, "exit", MagicMock(side_effect=AssertionError("sys.exit が呼ばれた")))
+        monkeypatch.setattr(oauth_cli.sys, "exit", MagicMock(side_effect=AssertionError("sys.exit が呼ばれた")))
 
-        oauth_handler.main([])  # 例外を投げずに完走すれば OK
+        oauth_cli.main([])  # 例外を投げずに完走すれば OK
 
     def test_should_not_call_sys_exit_when_test_connection_returns_false(self, monkeypatch):
         """Given ``test_connection`` が ``False`` を返す（bool 経路）
@@ -93,9 +93,9 @@ class TestMainSuccessPath:
         Then ``sys.exit`` を呼ばない（既存挙動: print のみで exit 0 終了）。
         """
         _install_fake_handler(monkeypatch, test_connection_return=False)
-        monkeypatch.setattr(oauth_handler.sys, "exit", MagicMock(side_effect=AssertionError("sys.exit が呼ばれた")))
+        monkeypatch.setattr(oauth_cli.sys, "exit", MagicMock(side_effect=AssertionError("sys.exit が呼ばれた")))
 
-        oauth_handler.main([])
+        oauth_cli.main([])
 
 
 # ===========================================================================
@@ -114,7 +114,7 @@ class TestMainKeyboardInterrupt:
         _install_fake_handler(monkeypatch, authenticate_side_effect=KeyboardInterrupt())
 
         with pytest.raises(SystemExit) as exc_info:
-            oauth_handler.main([])
+            oauth_cli.main([])
 
         assert exc_info.value.code == 130
 
@@ -126,7 +126,7 @@ class TestMainKeyboardInterrupt:
         _install_fake_handler(monkeypatch, init_side_effect=KeyboardInterrupt())
 
         with pytest.raises(SystemExit) as exc_info:
-            oauth_handler.main([])
+            oauth_cli.main([])
 
         assert exc_info.value.code == 130
 
@@ -158,7 +158,7 @@ class TestMainDomainExceptions:
         _install_fake_handler(monkeypatch, authenticate_side_effect=exc)
 
         with pytest.raises(SystemExit) as exc_info:
-            oauth_handler.main([])
+            oauth_cli.main([])
 
         assert exc_info.value.code == 1
 
@@ -173,7 +173,7 @@ class TestMainDomainExceptions:
         caplog.set_level(logging.DEBUG, logger=_LOGGER_NAME)
 
         with pytest.raises(SystemExit):
-            oauth_handler.main([])
+            oauth_cli.main([])
 
         errors = [r for r in caplog.records if r.levelno == logging.ERROR]
         assert any("CLI 実行失敗" in r.getMessage() for r in errors), "narrow catch の error ログが出ていない"
@@ -192,7 +192,7 @@ class TestMainDomainExceptions:
         caplog.set_level(logging.DEBUG, logger=_LOGGER_NAME)
 
         with pytest.raises(SystemExit):
-            oauth_handler.main([])
+            oauth_cli.main([])
 
         for record in caplog.records:
             assert _LEAKY_TOKEN_PATH not in record.getMessage(), (
@@ -215,7 +215,7 @@ class TestMainDomainExceptions:
         caplog.set_level(logging.DEBUG, logger=_LOGGER_NAME)
 
         with pytest.raises(SystemExit) as exc_info:
-            oauth_handler.main([])
+            oauth_cli.main([])
 
         assert exc_info.value.code == 1
         errors = [r for r in caplog.records if r.levelno == logging.ERROR]
@@ -234,7 +234,7 @@ class TestMainDomainExceptions:
         _install_fake_handler(monkeypatch, init_side_effect=ConfigError("op read failed"))
 
         with pytest.raises(SystemExit) as exc_info:
-            oauth_handler.main([])
+            oauth_cli.main([])
 
         assert exc_info.value.code == 1
 
@@ -247,7 +247,7 @@ class TestMainDomainExceptions:
         caplog.set_level(logging.DEBUG, logger=_LOGGER_NAME)
 
         with pytest.raises(SystemExit) as exc_info:
-            oauth_handler.main([])
+            oauth_cli.main([])
 
         assert exc_info.value.code == 1
         assert any("CLI 実行失敗" in r.getMessage() for r in caplog.records)
@@ -261,7 +261,7 @@ class TestMainUnexpectedException:
         _install_fake_handler(monkeypatch, authenticate_side_effect=exception_type(sentinel))
 
         with pytest.raises(exception_type, match="oauth-canary"):
-            oauth_handler.main([])
+            oauth_cli.main([])
 
 
 @pytest.mark.parametrize(
@@ -280,7 +280,7 @@ def test_should_redact_sensitive_field_formats_in_domain_error(message, monkeypa
     caplog.set_level(logging.ERROR, logger=_LOGGER_NAME)
 
     with pytest.raises(SystemExit) as exc_info:
-        oauth_handler.main([])
+        oauth_cli.main([])
 
     assert exc_info.value.code == 1
     messages = [record.getMessage() for record in caplog.records]

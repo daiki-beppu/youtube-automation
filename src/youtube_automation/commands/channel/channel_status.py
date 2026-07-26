@@ -10,7 +10,7 @@ import logging
 import sys
 from datetime import datetime, timedelta
 
-from youtube_automation.configuration import channel_dir, channel_label, load_config
+from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.analytics_adapter import AnalyticsAdapter, YouTubeDataAdapter
@@ -203,14 +203,13 @@ def main():
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    parser = argparse.ArgumentParser(description=f"{channel_label()}最新状況取得（Claude Code用）")
+    parser = argparse.ArgumentParser(description="チャンネル最新状況取得（Claude Code用）")
     parser.add_argument("--json", action="store_true", help="JSON形式で出力")
     parser.add_argument("--summary", action="store_true", help="サマリーのみ表示")
 
     args = parser.parse_args()
 
     # --help を CHANNEL_DIR 未設定でも通すため、設定解決は引数解析より後に行う
-    config = load_config()
     status = get_channel_latest_status()
 
     if "error" in status:
@@ -226,7 +225,8 @@ def main():
         print(f"コレクション: {status['collections_count']}個")
         print(f"推定トラック数: {status['estimated_tracks']}曲")
     else:
-        # Claude Code用の詳細表示
+        # Claude Code用の詳細表示。チャンネル名の表示にだけ設定が要るため、この分岐で解決する
+        config = load_config()
         print("=" * 50)
         print(f"🎵 {config.meta.channel_name} ({config.meta.channel_short}) - 最新状況")
         print("=" * 50)

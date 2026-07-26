@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib
 import io
 import os
@@ -14,7 +15,7 @@ import pytest
 EXPECTED_ENTRYPOINT_MODULES = {
     "yt-analytics": "youtube_automation.commands.analytics.analytics_system",
     "yt-apply-rain-layers": "youtube_automation.commands.media.apply_rain_layers",
-    "yt-audio-visualizer-fill": "youtube_automation.utils.audio_visualizer_fill",
+    "yt-audio-visualizer-fill": "youtube_automation.commands.media.audio_visualizer_fill",
     "yt-automation-update": "youtube_automation.commands.system.automation_update",
     "yt-benchmark-collect": "youtube_automation.commands.analytics.benchmark_collector",
     "yt-benchmark-comments": "youtube_automation.commands.analytics.fetch_benchmark_comments",
@@ -49,7 +50,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-launch-curve": "youtube_automation.commands.analytics.launch_curve",
     "yt-live-chat-reply": "youtube_automation.commands.youtube.live_chat_reply",
     "yt-metadata-audit": "youtube_automation.commands.metadata.metadata_audit",
-    "yt-oauth": "youtube_automation.infrastructure.auth.youtube",
+    "yt-oauth": "youtube_automation.commands.system.oauth",
     "yt-pinned-comment": "youtube_automation.commands.youtube.pinned_comment",
     "yt-playlist-manager": "youtube_automation.commands.youtube.playlist_manager",
     "yt-playlist-status": "youtube_automation.commands.youtube.playlist_status",
@@ -80,9 +81,9 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-video-analyze": "youtube_automation.commands.analytics.video_analyze",
     "yt-vote-log": "youtube_automation.commands.collections.vote_log",
     "yt-wf-batch": "youtube_automation.commands.uploads.wf_batch",
-    "yt-upload-auto": "youtube_automation.agents.youtube_auto_uploader",
-    "yt-upload-collection": "youtube_automation.agents.collection_uploader",
-    "yt-upload-shorts": "youtube_automation.agents.short_uploader",
+    "yt-upload-auto": "youtube_automation.commands.uploads.youtube_auto_uploader",
+    "yt-upload-collection": "youtube_automation.commands.uploads.collection_uploader",
+    "yt-upload-shorts": "youtube_automation.commands.uploads.short_uploader",
     "yt-generate-shorts-loop": "youtube_automation.commands.media.generate_short_loop",
     "yt-shorts-bulk-update-loc": "youtube_automation.commands.metadata.bulk_update_short_localizations",
     "yt-skills": "youtube_automation.commands.system.skills_sync",
@@ -309,6 +310,28 @@ def test_project_scripts_route_through_cli_entrypoint_wrappers():
         assert module_name == "youtube_automation.entrypoints"
         assert function_name
         assert hasattr(entrypoints, function_name)
+
+
+def test_entrypoint_wrappers_only_target_command_modules():
+    """#2308: 全 wrapper の dispatch 先が `commands/<domain>` である。
+
+    `EXPECTED_ENTRYPOINT_MODULES` を突き合わせるだけでは、期待表ごと実装層へ書き換えられた
+    ときに素通りする。実 source の `_make_entrypoint(...)` リテラルを直接読み、
+    `utils` / `infrastructure` / `domains` への直接 dispatch が 1 件も無いことを固定する。
+    """
+    source = Path("src/youtube_automation/entrypoints.py").read_text(encoding="utf-8")
+    targets = [
+        node.args[0].value
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_make_entrypoint"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+    ]
+
+    assert len(targets) == len(EXPECTED_ENTRYPOINT_MODULES)
+    assert [target for target in targets if not target.startswith("youtube_automation.commands.")] == []
 
 
 def test_retired_config_migration_cli_is_not_registered():

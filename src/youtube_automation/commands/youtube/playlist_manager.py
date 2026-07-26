@@ -3,7 +3,6 @@
 import argparse
 import logging
 
-from youtube_automation.configuration import channel_label
 from youtube_automation.domains.uploads.playlists import PlaylistManager
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
@@ -11,7 +10,7 @@ from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    parser = argparse.ArgumentParser(description=f"{channel_label()} Playlist Manager")
+    parser = argparse.ArgumentParser(description="YouTube プレイリストの作成・割り当て・整理を行う")
     parser.add_argument("--init", action="store_true", help="プレイリスト作成 + 全動画割り当て")
     parser.add_argument("--status", action="store_true", help="現在の状態表示")
     parser.add_argument("--assign", metavar="VIDEO_ID", help="単一動画をプレイリストに追加")

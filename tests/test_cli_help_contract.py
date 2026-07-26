@@ -8,9 +8,13 @@ issue #2308 で、`--help` の引数解析を設定解決・credential 取得・
 本 module は console script の実バイナリを隔離 subprocess で起動し、次を観測する。
 
 - exit 0 で `usage: <script 名>` を返す（`CHANNEL_DIR` 未設定・credential 欠落でも）
-- 認証 / API client 生成の関数が **呼ばれていない**（`sitecustomize` プローブで採取）
+- 設定解決 / 認証 / API client 生成の関数が **呼ばれていない**（`sitecustomize` プローブで採取）
 - 隔離した `HOME` / CWD にファイルを書いていない
 - `_HELP_TIMEOUT_SECONDS` 以内に終了する
+
+設定解決を観測点に含めるのは、「設定が無くても exit 0」だけでは契約を証明できないためである。
+`load_config()` を呼んだうえで `ConfigError` を握り潰す fallback を挟めば exit 0 は保てるが、
+それは help 文言が設定に依存したままであることを意味する。呼び出し自体を 0 件で固定する。
 
 `googleapiclient` などの import 自体は禁止しない。import は HTTP も認証も起こさず、
 契約が禁じているのは「引数解析より前の credential 取得・API client 生成」だからである。
@@ -46,7 +50,7 @@ _PROBE_OUTPUT_ENV = "CLI_HELP_PROBE_OUT"
 
 # `--help` 経路で呼ばれてはいけない関数を (module, 属性パス) で宣言する。
 # import ではなく呼び出しを観測するため、sitecustomize でこれらを wrap する。
-_PROBE_SOURCE = '''"""`--help` 中に認証 / API client 生成が呼ばれたかを記録する sitecustomize."""
+_PROBE_SOURCE = '''"""`--help` 中に設定解決 / 認証 / API client 生成が呼ばれたかを記録する sitecustomize."""
 
 import atexit
 import builtins
@@ -63,6 +67,12 @@ _GUARDED = (
     ("google.auth", "default"),
     ("google.oauth2.credentials", "Credentials.from_authorized_user_file"),
     ("google_auth_oauthlib.flow", "InstalledAppFlow.from_client_secrets_file"),
+    # 設定解決の 2 経路。CLI は package 側から import する規約だが、
+    # loader 側を直接呼ぶ抜け道も塞ぐため両方を観測する。
+    ("youtube_automation.configuration", "load_config"),
+    ("youtube_automation.configuration", "channel_dir"),
+    ("youtube_automation.configuration.loader", "load_config"),
+    ("youtube_automation.configuration.loader", "channel_dir"),
 )
 _patched: set[str] = set()
 
@@ -193,7 +203,7 @@ def test_cli_help_needs_no_config_credentials_or_api_client(
     assert probe_output.exists(), f"{script_name} で sitecustomize プローブが動作しなかった"
     guarded_calls = json.loads(probe_output.read_text(encoding="utf-8"))
     assert guarded_calls == [], (
-        f"{script_name} --help が引数解析より前に認証 / API client 生成を呼んだ: {guarded_calls}"
+        f"{script_name} --help が引数解析より前に設定解決 / 認証 / API client 生成を呼んだ: {guarded_calls}"
     )
 
     written = sorted(path.relative_to(home).as_posix() for path in home.rglob("*"))

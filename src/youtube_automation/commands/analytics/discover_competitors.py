@@ -69,6 +69,10 @@ _DEFAULT_TOP = 20
 _DEFAULT_PER_KEYWORD = 20
 
 
+# parse 後に skill-config から埋める option（未指定は None で受ける）。
+_DEFAULTED_OPTIONS = ("min_subscribers", "max_subscribers", "posted_within_days", "top", "per_keyword")
+
+
 def _search_defaults() -> dict[str, int]:
     """CLI フラグ未指定時の既定値を skill-config から解決する。
 
@@ -97,6 +101,11 @@ def _search_defaults() -> dict[str, int]:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    """引数 parser を skill-config なしで構築する。
+
+    既定値は `--help` 時点では解決しない（設定・skill-config 不在でも exit 0 で返すため。#2308）。
+    未指定の値は `_apply_search_defaults()` が埋める。
+    """
     parser = argparse.ArgumentParser(
         prog="yt-discover-competitors",
         description=("ニッチキーワードから競合チャンネル候補を発掘し、ランキング付き Markdown + CSV を出力する。"),
@@ -106,16 +115,15 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         help="カンマ区切りのキーワード（例: 'lo-fi study,chill beats'）",
     )
-    defaults = _search_defaults()
-    parser.add_argument("--min-subscribers", type=int, default=defaults["min_subscribers"])
-    parser.add_argument("--max-subscribers", type=int, default=defaults["max_subscribers"])
-    parser.add_argument("--posted-within-days", type=int, default=defaults["posted_within_days"])
-    parser.add_argument("--top", type=int, default=defaults["top"])
+    fallback = "未指定なら skill-config discover-competitors.search.{key} を使う"
+    parser.add_argument("--min-subscribers", type=int, help=fallback.format(key="min_subscribers"))
+    parser.add_argument("--max-subscribers", type=int, help=fallback.format(key="max_subscribers"))
+    parser.add_argument("--posted-within-days", type=int, help=fallback.format(key="posted_within_days"))
+    parser.add_argument("--top", type=int, help=fallback.format(key="top"))
     parser.add_argument(
         "--per-keyword",
         type=int,
-        default=defaults["per_keyword"],
-        help="search.list の maxResults（キーワード毎の取得上限）",
+        help="search.list の maxResults（キーワード毎の取得上限）。" + fallback.format(key="per_keyword"),
     )
     parser.add_argument(
         "--require-music-topic",
@@ -135,6 +143,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", required=True, help="Markdown 出力先（同名 .csv も書き出す）")
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser
+
+
+def _apply_search_defaults(args: argparse.Namespace) -> argparse.Namespace:
+    """未指定の filter option を skill-config 由来の既定値で埋める（parse 後に呼ぶ）。"""
+    defaults = _search_defaults()
+    for key in _DEFAULTED_OPTIONS:
+        if getattr(args, key) is None:
+            setattr(args, key, defaults[key])
+    return args
 
 
 def _build_params(args: argparse.Namespace) -> DiscoveryParams:
@@ -268,7 +285,7 @@ def _write_csv(scored: list[ScoredCandidate], output: Path, params: DiscoveryPar
 
 
 def main() -> None:
-    args = _build_parser().parse_args()
+    args = _apply_search_defaults(_build_parser().parse_args())
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,

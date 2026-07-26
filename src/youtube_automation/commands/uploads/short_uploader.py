@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from youtube_automation.agents._upload_cli_error_boundary import run_upload_cli
+from youtube_automation.commands.uploads._upload_cli_error_boundary import run_upload_cli
 from youtube_automation.domains.uploads.shorts import ACTION_FAILED, ShortUploader
 from youtube_automation.infrastructure.google.youtube import create_authenticated_youtube_clients
 

@@ -21,7 +21,7 @@ rename マッピング:
 4. `.claude/skills/**/*.md` に旧スラッシュコマンド参照 `/<old>` が残っていない。
 5. `.claude/skills/**/*.md` に旧パス参照 `.claude/skills/<old>/` / `config/skills/<old>.yaml` が残っていない。
 6. プロダクション 2 ファイル
-   (`src/youtube_automation/agents/youtube_auto_uploader.py` /
+   (`src/youtube_automation/commands/uploads/youtube_auto_uploader.py` /
     `src/youtube_automation/domains/metadata/service.py`)
    のコメント・エラーメッセージ中の旧スラッシュ参照 `/description` が
    新名 `/video-description` に追従している。
@@ -90,7 +90,7 @@ _RENAME_PAIRS: list[tuple[str, str]] = sorted(RENAME_MAP.items())
 # 旧スラッシュコマンドが残らないか走査するプロダクションコード
 # (plan.md「ソース 2 ファイル」)
 _PROD_FILES_WITH_SLASH_REFS: list[Path] = [
-    _SRC_DIR / "agents" / "youtube_auto_uploader.py",
+    _SRC_DIR / "commands" / "uploads" / "youtube_auto_uploader.py",
     _SRC_DIR / "domains" / "metadata" / "service.py",
 ]
 
@@ -496,7 +496,7 @@ def test_no_legacy_description_slash_in_prod_source(prod_file: Path) -> None:
     Then 旧スラッシュコマンド参照が残っていない。
 
     plan.md の grep で確認済み:
-      - `agents/youtube_auto_uploader.py` line 119, 133, 189, 225 — 4 箇所
+      - `commands/uploads/youtube_auto_uploader.py`（当時 `agents/`）line 119, 133, 189, 225 — 4 箇所
       - `domains/metadata/service.py` line 47 — 1 箇所
 
     rename 後はすべて `/video-description` に書き換える必要がある。

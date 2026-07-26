@@ -14,7 +14,7 @@ import contextlib
 import logging
 import sys
 
-from youtube_automation.configuration import channel_label, load_config
+from youtube_automation.configuration import load_config
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
@@ -108,7 +108,7 @@ class PlaylistStatusViewer:
 def build_parser() -> argparse.ArgumentParser:
     return argparse.ArgumentParser(
         prog="yt-playlist-status",
-        description=f"{channel_label()}のプレイリスト状態を表示する",
+        description="チャンネルのプレイリスト状態を表示する",
     )
 
 
