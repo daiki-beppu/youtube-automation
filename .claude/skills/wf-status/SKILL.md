@@ -12,7 +12,7 @@ description: "Use when コレクション制作の進捗を読むだけで確認
 
 アクティブなコレクションの進捗一覧・詳細を表示する。新旧スキーマ両対応。
 
-> **このセッションで初めて `/wf-*` を呼ぶ場合は、先に [`docs/workflow-cheatsheet.md`](../../../docs/workflow-cheatsheet.md) の判定フローを 1 回だけユーザーに提示すること**（CLAUDE.md §6 参照）。
+> **このセッションで初めて `/wf-*` を呼ぶ場合は、先に [`docs/workflow-cheatsheet.md`](../../../docs/workflow-cheatsheet.md) の判定フローを 1 回だけユーザーに提示すること**。
 
 ## When to Use
 

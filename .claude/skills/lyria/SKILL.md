@@ -20,16 +20,20 @@ Lyria 3 Pro は **1 リクエストあたり最大約 184 秒（~3 分）** ま�
 
 ## Subagent Contract
 
-subagent として呼ぶ場合、メインエージェントは対象コレクション、テーマ、確定済み生成条件をリポジトリルート相対パスまたは値で入力に含める。`skip_generation_approval: false` で課金承認や候補選択が必要なら、メインが承認と選択を確定するまで subagent を起動しない。`true` なら保存済み生成条件を渡して起動できる。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。完了報告には `status: success | failure`、生成した `01-master/master.mp3` と音楽プロンプト成果物の絶対パス一覧、エラーを含める。メインは成果物存在を検証してから state を更新する。直接実行時は既存手順を変更しない。
+- **入力**: 対象コレクション、テーマ、確定済み生成条件
+- **成果物**: `01-master/master.mp3`、音楽プロンプト成果物
+- **委譲しない処理**: `skip_generation_approval: false` のときの課金承認と候補選択。メインが確定してから起動する（`true` なら保存済み生成条件を渡して起動できる）
+
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 
 ## 設定読み込みゲート
 
-前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+以下を deep-merge した値を設定として使う。
 
 1. `.claude/skills/lyria/config.default.yaml`
 2. `config/skills/lyria.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("lyria")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.utils.skill_config.load_skill_config("lyria")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 
@@ -305,29 +309,11 @@ bash "$(git rev-parse --show-toplevel)/.claude/skills/lyria/references/worktree_
 - [ ] `intensity` は `"low"` / `"medium"` / `"high"` のいずれかであること
 - [ ] `mode` は `"instrumental"` / `"vocal"` のいずれかであること
 
-## 長時間処理の取り扱い
+## 所要時間と完了報告
 
-`yt-generate-lyria-master` は Lyria 3 API を N セグメント分逐次呼び出し、最後にクロスフェード結合まで行うため **N × 30〜90 秒** かかる（典型的にコレクション全体で 5〜20 分）。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。Codex など `run_in_background` 非対応の実行環境では、同コマンドを `nohup ... > <log> 2>&1 &` で background 起動し、完了はログ末尾で確認する読み替えとする。
+`yt-generate-lyria-master` は Lyria 3 API を N セグメント分逐次呼び出し、最後にクロスフェード結合まで行うため **N × 30〜90 秒**（典型的にコレクション全体で 5〜20 分）。
 
-spawn 例:
-
-```bash
-uv run yt-generate-lyria-master \
-  --prompt "<Step 2 のプロンプト>" \
-  --name <theme-slug> \
-  --bpm <bpm> --intensity <intensity> --mode instrumental \
-  --reference-image 10-assets/main.png \
-  > /tmp/lyria-$(date +%s).log 2>&1
-```
-
-これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
-
-> ⏳ Lyria 3 で N セグメント生成中（推定 N × 30〜90 秒）。完了まで他の質問にもお答えできます。
-> ログ: /tmp/lyria-*.log
-
-cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "lyria" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "lyria"` + `cmux notify --title "lyria 完了"` を呼ぶ（非 cmux 環境では skip）。
-
-完了通知が届いたらログ末尾から結果サマリー（生成セグメント数、`01-master/master.mp3` のパス）をユーザーへ返す。429 / クォータエラーが出た場合はそのエラー行を抜き出して報告し、`--max-retries` の調整やリトライタイミングを提案する。
+ログを `/tmp/lyria-$(date +%s).log` へ redirect し、完了後は末尾から生成セグメント数と `01-master/master.mp3` のパスを報告する。429 / クォータエラーはそのエラー行を抜き出し、`--max-retries` の調整やリトライタイミングを提案する。background 実行フラグを持たない環境（Codex 等）では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
 
 ## オーディオビジュアライザー / オーバーレイ
 

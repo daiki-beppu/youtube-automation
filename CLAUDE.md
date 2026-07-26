@@ -21,11 +21,12 @@ uv run yt-skills lint [<skill>..] # SKILL.md frontmatter の軽量検証（stric
 
 `yt-*` 系 CLI 全 30 件超は `pyproject.toml` の `[project.scripts]` に登録されている。新規 CLI を追加するときは **必ず `yt-*` プレフィックス**を踏襲し、entry point を登録すること。
 
+CLI は SKILL.md から呼ばれるインターフェースでもある。値域が決まっている引数は `choices=` で閉じ（`--engine veo|omni`、`--existing ask|update|skip`）、フラグの意味は `argparse` の `help=` に書く。手順書側へ呼び出し例を並べて補うのではなく、引数自体が読んで分かる形にする（`docs/skill-design/skill-authoring-guidelines.md`「実行系のインターフェース」）。
+
 ## アーキテクチャ要点
 
 このリポジトリは **このリポジトリ自体** と **下流のチャンネルリポジトリ** の 2 層構造で動く（全容・主要モジュール表は `docs/architecture.md`）。
 
-- `src/youtube_automation/{utils,agents,scripts,cli,templates}/` — コアライブラリ / アップロードエージェント / `yt-*` CLI 本体 / ユーザー向け CLI / 説明文テンプレート
 - `.claude/skills/` — 自動化スキル群（Claude Code / Codex 共用）。wheel に同梱され `yt-skills sync` で各チャンネルへ展開。`.agents/skills` は Codex CLI 探索パス用の symlink（実体は常に `.claude/skills/` 側を編集）
 - `auth/` — submodule 利用者向け後方互換 shim（OAuth 認証情報のみ）
 - 下流チャンネルリポジトリ（`CHANNEL_DIR`）: `config/channel/*.json`（責務別分割。meta / content / youtube / analytics / playlists / workflow / audio + optional の shorts.json / comments.json / pinned-comment.json / distrokid.json / community-draft.json）、`config/localizations.json`、`auth/`、`.claude/skills/`、`collections/`、`assets/stock/`
@@ -48,7 +49,6 @@ uv run yt-skills lint [<skill>..] # SKILL.md frontmatter の軽量検証（stric
 
 - `infrastructure/errors.py` のドメイン例外を使用すること
 - 生の `Exception` / `KeyError` を catch しない — `ConfigError`, `YouTubeAPIError` 等を使う
-- `YouTubeAPIError.from_http_error(error, context)` で googleapiclient の HttpError を変換できる
 
 ### Import 規約
 
@@ -66,14 +66,8 @@ uv run yt-skills lint [<skill>..] # SKILL.md frontmatter の軽量検証（stric
 ### skill frontmatter
 
 - SKILL.md の frontmatter `description:` は **必ず double-quoted string** で書く（値内の `: ` が strict YAML でマッピング区切りと誤解釈されるため）
-- スキルの新規作成・改訂時は `docs/skill-design/skill-authoring-guidelines.md` の 7 ルール（発動キーワードの相互排他 / 承認ゲート / 前提存在ガード / 判断基準の明確化 / references 単一ソース化 / Hard Gates 冒頭配置 / 未接続参照の隔離）に従う。既存スキルの一括改修は不要
-
-### テスト
-
-- `tests/conftest.py` が `src/` を sys.path に追加し `CHANNEL_DIR` を `tests/fixtures/sample_channel/` に向ける
-- `_reset_config_singleton` autouse fixture が各テスト前後で `configuration.reset()` を呼ぶ。追加の実行スコープ状態が必要なテストは、生成した `YouTubeClients` インスタンスを直接 reset／再生成すること
-- ユニット: `tests/test_*.py` / 統合: `tests/integration/`（API・外部依存あり）
-- フィクスチャ JSON は新構造（`config/channel/*.json`）で配置
+- スキルの新規作成・改訂時は `docs/skill-design/skill-authoring-guidelines.md` に従う。必須は 3 点（不可逆・外部反映操作の承認ゲート / 前提の存在ガード / 配布先で解決できる参照）で、それ以外は実行者の判断に委ねて記述量を抑える。既存スキルの一括改修は不要
+- SKILL.md は入口。生成・検証ロジック、長い対照表、プロンプトテンプレート、トラブルシュート事例は `references/` へ置き、必要になった時点で読ませる
 
 ### パッケージング
 
@@ -92,10 +86,8 @@ TS 版（tayk）の開発は専用の別リポジトリで行う（`docs/adr/002
 - 参照定義は `utils/secrets.py` の `_SECRET_REFS`（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`）
 - AI 系（Vertex AI）は ADC 認証のため `op` 取得は不要
 
-### CHANGELOG ゲート
+### 品質ゲート
 
-- 実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更したら `CHANGELOG.md` の `[Unreleased]` 追記が必須（CI の changelog ジョブで機械担保）
-- tests / docs だけの変更はゲート対象外。意図的に省く場合は PR に `skip-changelog` ラベルを付与する
 - 品質ゲート（ruff / CHANGELOG / any 型）はローカル git hook ではなく CI で担保する。詳細は `docs/development.md` の「品質ゲート（CI）」
 - bootstrap / 対話・非対話 shell / 依存同期の正規手順は `docs/development.md#開発者-bootstrap正規入口` を参照
 

@@ -37,16 +37,20 @@ Veo 3.1（既定）または Gemini Omni Flash を使い、コレクションの
 
 ## Subagent Contract
 
-subagent として呼ぶ場合、メインエージェントは対象コレクション、入力 `10-assets/main.png/jpg`、確定済み mode と prompt、deep-merge 後の skip 設定をリポジトリルート相対パスまたは値で入力に含める。対応する skip が `false` で Veo 課金、再生成、品質確認の承認が必要なら、メインが承認を得るまで subagent を起動しない。`true` の gate は設定による opt-in として委譲できる。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。完了報告には `status: success | failure`、生成または補正した `10-assets/loop.mp4` の絶対パス、使用 mode、エラーを含める。メインはファイル存在を検証し、skip されていない品質確認を担当する。直接実行時は既存手順を変更しない。
+- **入力**: 対象コレクション、`10-assets/main.png/jpg`、確定済み mode と prompt、deep-merge 後の skip 設定
+- **成果物**: 生成または補正した `10-assets/loop.mp4`、使用 mode
+- **委譲しない処理**: 対応する skip が `false` のときの Veo 課金・再生成・品質確認の承認（`true` の gate は設定による opt-in として委譲できる）。skip されていない品質確認はメインが担当する
+
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 
 ## 設定読み込みゲート
 
-前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+以下を deep-merge した値を設定として使う。
 
 1. `.claude/skills/loop-video/config.default.yaml`
 2. `config/skills/loop-video.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("loop-video")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.utils.skill_config.load_skill_config("loop-video")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 
@@ -371,24 +375,11 @@ veo:
 - 再実行時は model と入力画像内容の SHA-256 が両方一致した state だけを resume する。不一致または旧形式の state は破棄して新規 submit する
 - 再開不要なら手動削除可（次回実行は新規 submit になる）
 
-## 長時間処理の取り扱い
+## 所要時間と完了報告
 
-`yt-generate-loop-video` は Veo 3.1 API を同期ポーリングするため **30〜90 秒** 程度（モデルとリージョン次第）かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。Codex など `run_in_background` 非対応の実行環境では、同コマンドを `nohup ... > <log> 2>&1 &` で background 起動し、完了はログ末尾で確認する読み替えとする。
+`yt-generate-loop-video` は Veo 3.1 API を同期ポーリングするため **30〜90 秒**（モデルとリージョン次第）。`--smooth` 再実行時も同様。
 
-spawn 例:
-
-```bash
-uv run yt-generate-loop-video <collection-path> -y > /tmp/loop-video-$(date +%s).log 2>&1
-```
-
-これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
-
-> ⏳ Veo 3.1 でループ動画を生成中（推定 30〜90 秒）。完了まで他の質問にもお答えできます。
-> ログ: /tmp/loop-video-*.log
-
-cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "loop-video" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "loop-video"` + `cmux notify --title "loop-video 完了"` を呼ぶ（非 cmux 環境では skip）。
-
-完了通知が届いたらログ末尾から結果サマリー（`10-assets/loop.mp4` のパス）をユーザーへ返す。`--smooth` 再実行時も同じパターンで起動する。IP ガードレールでブロックされた場合のエラーメッセージはログから抜き出して報告する。
+ログを `/tmp/loop-video-$(date +%s).log` へ redirect し、完了後は末尾から `10-assets/loop.mp4` のパスを報告する。IP ガードレールでブロックされた場合のエラーメッセージはログから抜き出す。background 実行フラグを持たない環境（Codex 等）では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
 
 ## 障害時ガイダンス
 

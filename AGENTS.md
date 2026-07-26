@@ -15,7 +15,7 @@ This file provides guidance to Codex CLI (developers.openai.com/codex) when work
 
 ### SKILL.md frontmatter 規約
 
-- frontmatter の `description:` は **必ず double-quoted string**（`description: "Use when 〜"`）で書く。値内の `: `（コロン+スペース）が strict YAML パーサ（PyYAML `safe_load` 等）でマッピング区切りと誤解釈されパースが破綻するため
+- 記法規約は `CLAUDE.md`「### skill frontmatter」を正とする。検証は `uv run yt-skills lint`
 
 ### Claude Code 固有表現の読み替え
 
