@@ -15,6 +15,7 @@ import pytest
 from youtube_automation.configuration import (
     ChannelConfig,
     channel_dir,
+    channel_label,
     find_workspace_root,
     load_config,
     reset,
@@ -2294,3 +2295,27 @@ def test_scheduled_automation_invalid_raises(tmp_path, monkeypatch, scheduled, m
 
     with pytest.raises(ConfigError, match=message):
         load_config()
+
+
+def test_channel_label_returns_channel_short_when_config_resolves(tmp_path, monkeypatch):
+    """#2308: 設定が読めるときは help 用ラベルにチャンネル短縮名を使う."""
+    ch = _setup_channel(tmp_path, _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    assert channel_label() == "TC"
+
+
+def test_channel_label_falls_back_when_config_is_unavailable(tmp_path, monkeypatch):
+    """#2308: `--help` は `CHANNEL_DIR` 未設定でも exit 0 で返す必要がある.
+
+    設定が解決できない状況で `ConfigError` を伝播させると parser の description 組み立てで
+    落ちるため、`channel_label()` は fallback 文字列を返す。実処理側は従来どおり
+    `load_config()` を呼ぶので、この fail-soft は help 表示だけに閉じている。
+    """
+    monkeypatch.setenv("CHANNEL_DIR", str(tmp_path / "missing-channel"))
+
+    with pytest.raises(ConfigError):
+        load_config()
+
+    assert channel_label() == "YouTube automation"
+    assert channel_label("yt-example") == "yt-example"

@@ -7,20 +7,13 @@ issue #82 の再発防止として、旧コード (`zh-Hans` / `zh-Hant`) を期
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-# metadata_audit.py は module-level で channel_dir() を呼ぶため、import 前に
-# CHANNEL_DIR を fixture に向ける必要がある（conftest の session-scope fixture は
-# collection phase より後に走るため import に間に合わない）。
-_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
-os.environ.setdefault("CHANNEL_DIR", str(_FIXTURE))
+import pytest
 
-import pytest  # noqa: E402
-
-from youtube_automation.commands.metadata.metadata_audit import audit_local, audit_remote  # noqa: E402
+from youtube_automation.commands.metadata.metadata_audit import audit_local, audit_remote
 
 _ZH_ISSUE_TOKEN = "zh codes"  # `metadata_audit.py` のエラー文言 "YT zh codes are ..." に対応
 

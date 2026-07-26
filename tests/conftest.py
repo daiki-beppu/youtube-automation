@@ -4,9 +4,10 @@
 tmp 配下に向けることで、`cost_tracker` などの実行ログが git 管理下の fixture を
 汚染しないようにする（issue #286）。
 
-`CHANNEL_DIR` を確定する処理はモジュールトップで実行する。
-session-scope の autouse fixture では、`tests/test_metadata_audit.py` のように
-**import 時点** で `channel_dir()` を呼び出すテストの collection phase に間に合わないため。
+`CHANNEL_DIR` を確定する処理はモジュールトップで実行する。session-scope の autouse
+fixture は collection phase より後に走るため、**import 時点** で `channel_dir()` を
+解決する module があると取りこぼすため（#2308 で CLI 側の module-level 即時評価は
+解消したが、テスト側の防御としてはモジュールトップ確定を維持する）。
 
 ユーザが明示的に `CHANNEL_DIR` を指定している場合（例: 別 fixture をデバッグ用に
 向ける）はその指定を尊重し、コピー処理をスキップする。
@@ -78,6 +79,7 @@ REPO_CONTRACT_MODULES = frozenset(
 SLOW_MODULES = frozenset(
     {
         "test_actions_parallel_workflows.py",
+        "test_cli_help_contract.py",
         "test_codex_image_batch.py",
         "test_collection_serve.py",
         "test_collection_serve_discovery.py",
