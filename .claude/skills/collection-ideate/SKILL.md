@@ -29,12 +29,12 @@ description: "Use when 新コレクションの企画・テーマ選定をデー
 
 ## 設定読み込みゲート
 
-前提確認や Phase 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+以下を deep-merge した値を設定として使う。
 
 1. `.claude/skills/collection-ideate/config.default.yaml`
 2. `config/skills/collection-ideate.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("collection-ideate")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
+合成規則は `youtube_automation.utils.skill_config.load_skill_config("collection-ideate")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
 
 読み込んだ `ttp_mode`（デフォルト `false`）を Phase 1 より前に確定し、以降の企画生成を次のどちらか一方で進める。
 

@@ -20,7 +20,11 @@ description: "Use when ショート用 9:16 サムネ作成、または short.pn
 
 ## Subagent Contract
 
-subagent として呼ぶ場合、メインエージェントは対象コレクション、入力 `10-assets/main.png/jpg`、生成対象（`short.png` / `short-loop.mp4`）、確定済み prompt をリポジトリルート相対パスまたは値で入力に含める。画像承認、Veo 課金、ループ品質確認が必要なら、メインが承認を得るまで該当処理を subagent へ委譲しない。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。完了報告には `status: success | failure`、生成した `10-assets/short.png` と、指定時は `10-assets/short-loop.mp4` の絶対パス一覧、エラーを含める。メインはファイル存在と生成対象を検証する。直接実行時は既存手順を変更しない。
+- **入力**: 対象コレクション、`10-assets/main.png/jpg`、生成対象（`short.png` / `short-loop.mp4`）、確定済み prompt
+- **成果物**: `10-assets/short.png`、生成対象に指定された場合は `10-assets/short-loop.mp4`
+- **委譲しない処理**: 画像承認・Veo 課金・ループ品質確認。メインが承認を得てから該当処理を委譲する
+
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 
 ## 前提
 
@@ -154,25 +158,11 @@ open <collection-path>/10-assets/short-loop.mp4
 └── loop.mp4          # 16:9 ループ動画背景
 ```
 
-## 長時間処理の取り扱い
+## 所要時間と完了報告
 
-`yt-generate-image`（Gemini で 9:16 サムネ生成、**10〜30 秒**）と `yt-generate-shorts-loop`（Veo 3.1 で 9:16 ループ動画、**30〜90 秒**）はどちらも API 同期呼び出しでブロックする。特にループ動画は長いため、**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+`yt-generate-image`（Gemini で 9:16 サムネ生成）は **10〜30 秒**、`yt-generate-shorts-loop`（Veo 3.1 で 9:16 ループ動画）は **30〜90 秒**。どちらも API 同期呼び出しでブロックする。
 
-spawn 例（ループ動画化）:
-
-```bash
-uv run yt-generate-shorts-loop <collection-path> -y \
-  > /tmp/short-thumbnail-$(date +%s).log 2>&1
-```
-
-これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
-
-> ⏳ Veo 3.1 で 9:16 ループ動画を生成中（推定 30〜90 秒）。完了まで他の質問にもお答えできます。
-> ログ: /tmp/short-thumbnail-*.log
-
-cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "short-thumbnail" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "short-thumbnail"` + `cmux notify --title "short-thumbnail 完了"` を呼ぶ（非 cmux 環境では skip）。
-
-サムネ画像生成（Step 3 の `yt-generate-image`）は 10〜30 秒のため short 化判断はチャンネルポリシー次第だが、再生成を繰り返す運用なら同じ background パターンが安全。完了通知が届いたらログ末尾から結果サマリー（`short.png` / `short-loop.mp4` のパス）をユーザーへ返す。
+ログを `/tmp/short-thumbnail-$(date +%s).log` へ redirect し、完了後は末尾から `short.png` / `short-loop.mp4` のパスを報告する。
 
 ## Next Step
 

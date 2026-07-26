@@ -23,16 +23,21 @@ Suno 系チャンネルは `/masterup`、Lyria 系チャンネルは `/lyria`（
 
 ## Subagent Contract
 
-subagent として呼ぶ場合、メインエージェントは対象コレクション、採用するマスター音源、背景素材をリポジトリルート相対パスで入力に含める。音源や背景の選択が必要なら、メインが選択を確定するまで subagent を起動しない。プレビュー承認は `skip_preview_approval: false` のときだけメインが確定してから全尺生成を委譲し、`true` ならプレビュー生成・保存と全尺生成を同じ委譲で続行できる。subagent は入力確認と `generate_videos.sh` の実行に必要な範囲で `workflow-state.json` を読み取ってよいが、書き込まず、`AskUserQuestion` も実行しない。完了報告には `status: success | failure`、生成した `01-master/*.mp4` の絶対パス一覧、probe 検証結果、エラーを含める。メインはファイル存在と指定入力との整合を検証してから state を更新する。直接実行時は既存手順を変更しない。
+- **入力**: 対象コレクション、採用するマスター音源、背景素材
+- **成果物**: `01-master/*.mp4`、probe 検証結果
+- **委譲しない処理**: `skip_preview_approval: false` のときのプレビュー承認。メインが確定してから全尺生成を委譲する（`true` ならプレビュー生成・保存と全尺生成を同じ委譲で続行できる）
+- **例外**: `generate_videos.sh` の実行に必要な範囲で `workflow-state.json` を読み取ってよい（書き込みは不可）
+
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 
 ## 設定読み込みゲート
 
-Quick Reference や対象コレクション確認に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+以下を deep-merge した値を設定として使う。
 
 1. `.claude/skills/videoup/config.default.yaml`
 2. `config/skills/videoup.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("videoup")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。このスキルが `masterup` や `loop-video` の skill-config を直接参照する段階では、それぞれの `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
+合成規則は `youtube_automation.utils.skill_config.load_skill_config("videoup")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが `masterup` や `loop-video` の skill-config を直接参照する段階では、それぞれの `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
 
 ## 前提
 
@@ -84,9 +89,9 @@ $ARGUMENTS
    この場合、既存の `10-assets/loop.mp4` が残っていても `generate_videos.sh` は無視し、静止背景に切り替える。
    それ以外（`enabled` 未指定 or `true`）で `loop.mp4` が無ければ `/loop-video` でのループ動画生成を案内。
    `loop.mp4` があると `generate_videos.sh` が自動的に動画背景を使用（静止画の代わり）
-4. **プレビュー確認ゲート**: `config/skills/videoup.yaml::effect.type != none` または `config/channel/youtube.json::overlays.enabled: true` の場合、`skip_preview_approval` に関係なく全尺生成の前に必ず `generate_videos.sh --preview 20 <collection-path>` を「長時間処理の取り扱い」に従い background で実行する。`01-master/<Collection>-Preview.mp4` とスクリプト出力の `Full output outlook`（経路種別・時間見通し）を残す。プレビューは `*-Master.mp4` と `workflow-state.json` を変更しない
+4. **プレビュー確認ゲート**: `config/skills/videoup.yaml::effect.type != none` または `config/channel/youtube.json::overlays.enabled: true` の場合、`skip_preview_approval` に関係なく全尺生成の前に必ず `generate_videos.sh --preview 20 <collection-path>` を実行する（所要時間とログの扱いは「所要時間と完了報告」を参照）。`01-master/<Collection>-Preview.mp4` とスクリプト出力の `Full output outlook`（経路種別・時間見通し）を残す。プレビューは `*-Master.mp4` と `workflow-state.json` を変更しない
 5. **承認分岐**: `skip_preview_approval: false`（既定）はプレビューを提示し、ユーザーが受理した場合のみ全尺生成へ進む。受理しない場合は設定調整へ戻り、全尺エンコードと `assets.master_video` の更新を開始しない。選択 UI では「全尺生成へ進む」「設定を調整する」の 2 択、非対応環境ではテキスト承認を待つ。`true` はプレビューファイルの存在を確認して承認だけを省略し、そのまま全尺生成へ進む
-6. **動画生成**: effect / overlays が無効、Step 5 で明示承認済み、または `skip_preview_approval: true` でプレビュー保存確認済みの場合に、`generate_videos.sh` を実行する（「長時間処理の取り扱い」に従い background で起動する）
+6. **動画生成**: effect / overlays が無効、Step 5 で明示承認済み、または `skip_preview_approval: true` でプレビュー保存確認済みの場合に、`generate_videos.sh` を実行する（所要時間とログの扱いは「所要時間と完了報告」を参照）
 7. **workflow-state.json 更新**: 全尺生成の成功後だけ `assets.master_video` に生成された動画ファイル名（例: `01-master/Theme-Name-Master.mp4`）を記録する。プレビューのみでは更新しない
 
 ### 自動検出される要素
@@ -279,31 +284,11 @@ runtime mask helper は script 内から `uv run python -m youtube_automation.ut
 - visualizer は style ごとの `showfreqs` filtergraph + `gblur` の 2 パス glow で淡い発光を演出。`glow_enabled: false` で 1 パスに減らせる。
 - popup は `fade=in` / `enable='between(t,start,end)'` / `fade=out` を組み合わせて時間窓制御している。
 
-## 長時間処理の取り扱い
+## 所要時間と完了報告
 
-`generate_videos.sh` は ffmpeg を走らせるため数分かかる。目安（2 時間尺）: **エフェクト無し（ループ / 静止画短尺ベイクの stream copy）= 約 1〜2 分** / **エフェクト有り（v14 ループ・ベイク）= 約 1〜2 分**（初回はベイク 10〜40 秒 + 連結 約 1 分、2 回目以降はベイク cache hit）。`shrink.enabled` の容量最適化や短尺フォールバックの全尺再エンコードを使うときは尺なりに数分〜十数分かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。Codex など `run_in_background` 非対応の実行環境では、同コマンドを `nohup ... > <log> 2>&1 &` で background 起動し、完了はログ末尾で確認する読み替えとする。
+`generate_videos.sh` の目安（2 時間尺）: **エフェクト無し（ループ / 静止画短尺ベイクの stream copy）= 約 1〜2 分** / **エフェクト有り（v14 ループ・ベイク）= 約 1〜2 分**（初回はベイク 10〜40 秒 + 連結 約 1 分、2 回目以降はベイク cache hit）。`shrink.enabled` の容量最適化や短尺フォールバックの全尺再エンコードを使うときは尺なりに数分〜十数分かかる。
 
-spawn 例:
-
-```bash
-# エフェクト無しの基本パターン
-uv run bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh" \
-  > /tmp/videoup-$(date +%s).log 2>&1
-
-# エフェクト付き（#648）
-VIDEOUP_EFFECT=particles VIDEOUP_EFFECT_INTENSITY=subtle \
-  uv run bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh" \
-  > /tmp/videoup-$(date +%s).log 2>&1
-```
-
-これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
-
-> ⏳ マスター動画生成を background 実行中（推定 N 分）。完了まで他の質問にもお答えできます。
-> ログ: /tmp/videoup-*.log
-
-cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "videoup" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "videoup"` + `cmux notify --title "videoup 完了"` を呼ぶ（非 cmux 環境では skip）。
-
-完了通知が届いたらログ末尾から結果サマリー（生成された `.mp4` のパス）をユーザーへ返す。失敗時は ffmpeg のエラー行を抜き出して報告する。
+ログを `/tmp/videoup-$(date +%s).log` へ redirect し、完了後は末尾から生成された `.mp4` のパスを報告する。失敗時は ffmpeg のエラー行を抜き出す。background 実行フラグを持たない環境（Codex 等）では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
 
 ## オーディオビジュアライザー / オーバーレイについて
 

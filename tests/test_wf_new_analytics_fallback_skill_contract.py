@@ -15,6 +15,8 @@ _COLLECTION_LIFECYCLE_MD = _SKILLS_DIR / "collection-ideate" / "references" / "c
 _COLLECTION_IDEATE_DEFAULT_CONFIG = _SKILLS_DIR / "collection-ideate" / "config.default.yaml"
 _FRESHNESS_ACTION_HELPER = _SKILLS_DIR / "collection-ideate" / "references" / "freshness_action.py"
 _SETUP_SKILL_MD = _SKILLS_DIR / "setup" / "SKILL.md"
+# check id ごとの手順は段階的開示で references/check-runbook.md へ分離済み
+_SETUP_CHECK_RUNBOOK = _SKILLS_DIR / "setup" / "references" / "check-runbook.md"
 _WORKFLOW_CHEATSHEET_MD = _REPO_ROOT / "docs" / "workflow-cheatsheet.md"
 
 _ANALYTICS_REPORT_GLOB = "reports/analysis_*.md"
@@ -483,7 +485,7 @@ def test_collection_lifecycle_documents_three_input_modes() -> None:
 
 
 def test_setup_benchmark_data_respects_analytics_mode_priority() -> None:
-    text = _read(_SETUP_SKILL_MD)
+    text = _read(_SETUP_CHECK_RUNBOOK)
     benchmark_data = _section(text, "#### `benchmark_data` — ベンチマークデータ状態")
 
     assert "fresh `reports/analysis_*.md` がある → benchmark の有無に関係なく analytics mode" in benchmark_data

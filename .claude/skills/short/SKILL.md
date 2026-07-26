@@ -21,16 +21,20 @@ description: "Use when collection 型（BGM テイスター）チャンネルで
 
 ## Subagent Contract
 
-subagent として呼ぶ場合、メインエージェントは対象コレクション、映像ソース、確定済みハイライト区間、クロップ位置をリポジトリルート相対パスまたは値で入力に含める。区間・クロップ・プレビュー・投稿の承認が必要なら、メインが承認を得るまで該当処理を subagent へ委譲しない。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。生成処理の完了報告には `status: success | failure`、生成した `01-master/shorts/short-*.mp4` の絶対パス一覧、エラーを含める。state を更新する実投稿 CLI は承認後にメインが実行し、成果物と tracking を検証する。直接実行時は既存手順を変更しない。
+- **入力**: 対象コレクション、映像ソース、確定済みハイライト区間、クロップ位置
+- **成果物**: `01-master/shorts/short-*.mp4`
+- **委譲しない処理**: 区間・クロップ・プレビュー・投稿の承認。state を更新する実投稿 CLI は承認後にメインが実行し、成果物と tracking を検証する
+
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 
 ## 設定読み込みゲート
 
-前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+以下を deep-merge した値を設定として使う。
 
 1. `.claude/skills/short/config.default.yaml`
 2. `config/skills/short.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("short")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.utils.skill_config.load_skill_config("short")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 
@@ -122,7 +126,7 @@ export SHORT_COLLECTION_NAME="Collection Title"
 bash .claude/skills/short/references/generate-shorts.sh <collection-path>
 ```
 
-実行は後述「長時間処理の取り扱い」の background パターン（`run_in_background=true` + ログ redirect）に従う。
+所要時間とログの扱いは後述「所要時間と完了報告」に従う。
 
 ### Step 6: プレビュー → アップロード
 
@@ -183,25 +187,11 @@ uv run yt-upload-shorts <collection-path>              # 実投稿
 - **CC video_url 未記録**: `upload_tracking.json::complete_collection.video_url` が空だと CC リンク行が描画欄から省略される（例外は投げない）。完全状態にするには CC 動画アップ後に `yt-upload-collection` の出力で記録を確認
 - **投稿間隔**: 同コレクションで前回投稿から `cfg.shorts.min_hours_between_shorts_per_collection` 時間以内は新規投稿が block される。bypass フラグは無いため、テスト中は `config/channel/shorts.json` の `min_hours_between_shorts_per_collection` を一時的に小さくして対応する
 
-## 長時間処理の取り扱い
+## 所要時間と完了報告
 
-`generate-shorts.sh` は ffmpeg を本数分（既定 3 本）並列で走らせるため **1〜3 分** 程度かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+`generate-shorts.sh` は ffmpeg を本数分（既定 3 本）並列で走らせるため **1〜3 分**。`SHORT_STARTS` / `SHORT_LABELS` 等の env は spawn 前に export しておく。
 
-spawn 例:
-
-```bash
-bash .claude/skills/short/references/generate-shorts.sh <collection-path> \
-  > /tmp/short-$(date +%s).log 2>&1
-```
-
-env で渡している `SHORT_STARTS` / `SHORT_LABELS` 等は spawn 前に export しておく。これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
-
-> ⏳ ショート動画 N 本を background 生成中（推定 1〜3 分）。完了まで他の質問にもお答えできます。
-> ログ: /tmp/short-*.log
-
-cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "short" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "short"` + `cmux notify --title "short 完了"` を呼ぶ（非 cmux 環境では skip）。
-
-完了通知が届いたらログ末尾から結果サマリー（生成された `short-NN-*.mp4` のパス一覧）をユーザーへ返す。失敗時は ffmpeg のエラー行を抜き出して報告する。`yt-upload-shorts` 本実投稿は API 同期呼び出しなので、ここも同じ background パターンで起動してよい（ただし数秒で完了するため省略可）。
+ログを `/tmp/short-$(date +%s).log` へ redirect し、完了後は末尾から生成された `short-NN-*.mp4` のパス一覧を報告する。失敗時は ffmpeg のエラー行を抜き出す。
 
 ## Next Step
 
