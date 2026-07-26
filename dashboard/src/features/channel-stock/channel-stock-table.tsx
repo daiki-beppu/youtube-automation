@@ -1,4 +1,7 @@
+import { ArrowRightIcon } from "lucide-react"
+
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Table,
   TableBody,
@@ -12,6 +15,7 @@ import {
   formatInteger,
   formatSignedInteger,
 } from "@/lib/dashboard-formatters"
+import { dashboardStatusPresentation } from "@/lib/dashboard-status"
 import type { ChannelOverview } from "@/lib/dashboard-types"
 
 import { STOCK_TABLE_CONTRACT } from "./constants"
@@ -32,8 +36,22 @@ function stockVariant(count: number): "destructive" | "warning" | "default" {
 
 function statusText(channel: ChannelOverview): string {
   return channel.refresh_error
-    ? STOCK_TABLE_CONTRACT.status.refreshFailed
-    : STOCK_TABLE_CONTRACT.status.ready
+    ? STOCK_TABLE_CONTRACT.refreshFailed
+    : dashboardStatusPresentation(channel.status).label
+}
+
+function statusVariant(
+  channel: ChannelOverview
+): "destructive" | "warning" | "outline" {
+  if (
+    channel.refresh_error ||
+    dashboardStatusPresentation(channel.status).severity === "error"
+  ) {
+    return "destructive"
+  }
+  return dashboardStatusPresentation(channel.status).severity === "warning"
+    ? "warning"
+    : "outline"
 }
 
 function MetricCell({
@@ -43,15 +61,40 @@ function MetricCell({
   channel: ChannelOverview
   metric: "views" | "subscribers_net" | "watch_time_minutes"
 }) {
-  if (!channel.summary) return <TableCell>—</TableCell>
+  const labels = {
+    views: STOCK_TABLE_CONTRACT.columns.views,
+    subscribers_net: STOCK_TABLE_CONTRACT.columns.subscribersNet,
+    watch_time_minutes: STOCK_TABLE_CONTRACT.columns.watchTime,
+  }
+  if (!channel.summary) {
+    return (
+      <TableCell className="flex flex-col gap-1 whitespace-normal lg:table-cell">
+        <span className="text-xs text-muted-foreground lg:hidden">
+          {labels[metric]}
+        </span>
+        —
+      </TableCell>
+    )
+  }
   const value = channel.summary[metric]
   const formatted =
     metric === "subscribers_net"
       ? formatSignedInteger(value)
       : formatInteger(value)
+  const subscriberTone =
+    value > 0 ? "positive" : value < 0 ? "negative" : "neutral"
   return (
-    <TableCell className="text-right tabular-nums">
-      {formatted}
+    <TableCell className="flex flex-col gap-1 text-left whitespace-normal tabular-nums lg:table-cell lg:text-right">
+      <span className="text-xs text-muted-foreground lg:hidden">
+        {labels[metric]}
+      </span>
+      {metric === "subscribers_net" ? (
+        <span className="dashboard-signed-value" data-tone={subscriberTone}>
+          {formatted}
+        </span>
+      ) : (
+        formatted
+      )}
       {metric === "watch_time_minutes" ? "分" : ""}
     </TableCell>
   )
@@ -59,8 +102,12 @@ function MetricCell({
 
 export function ChannelStockTable({
   channels,
+  onSelect,
+  selectedId,
 }: {
   channels: ChannelOverview[]
+  onSelect?: (id: string) => void
+  selectedId?: string | null
 }) {
   const sortedChannels = [...channels].sort((left, right) => {
     const leftAvailable = isAvailable(left)
@@ -80,7 +127,10 @@ export function ChannelStockTable({
   return (
     <section aria-labelledby="channel-stock-title" className="grid gap-4">
       <div>
-        <h2 id="channel-stock-title" className="text-2xl font-semibold">
+        <h2
+          id="channel-stock-title"
+          className="dashboard-section-heading text-2xl font-semibold"
+        >
           {STOCK_TABLE_CONTRACT.title}
         </h2>
         <p className="text-sm text-muted-foreground">
@@ -101,9 +151,9 @@ export function ChannelStockTable({
       <div className="min-w-0 overflow-hidden rounded-lg border">
         <Table
           aria-label={STOCK_TABLE_CONTRACT.ariaLabel}
-          className="min-w-[48rem]"
+          className="block max-w-full min-w-0 table-fixed overflow-hidden lg:table"
         >
-          <TableHeader>
+          <TableHeader className="hidden lg:table-header-group">
             <TableRow>
               <TableHead>{STOCK_TABLE_CONTRACT.columns.channel}</TableHead>
               <TableHead>{STOCK_TABLE_CONTRACT.columns.status}</TableHead>
@@ -118,19 +168,31 @@ export function ChannelStockTable({
               <TableHead className="text-right">
                 {STOCK_TABLE_CONTRACT.columns.watchTime}
               </TableHead>
+              {onSelect ? (
+                <TableHead className="text-right">詳細</TableHead>
+              ) : null}
             </TableRow>
           </TableHeader>
-          <TableBody>
+          <TableBody className="grid gap-3 p-3 lg:table-row-group lg:p-0">
             {sortedChannels.map((channel) => {
               const available = isAvailable(channel)
               return (
-                <TableRow key={channel.id}>
-                  <TableCell className="font-medium">{channel.name}</TableCell>
-                  <TableCell>
+                <TableRow
+                  key={channel.id}
+                  className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg border p-4 lg:table-row lg:rounded-none lg:border-x-0 lg:p-0"
+                >
+                  <TableCell className="col-span-2 flex items-center justify-between p-0 font-medium whitespace-normal lg:table-cell lg:p-2">
+                    <span>{channel.name}</span>{" "}
+                    <span className="text-xs font-normal text-muted-foreground lg:hidden">
+                      {formatCollectedAt(channel.collected_at)}
+                    </span>
+                  </TableCell>
+                  <TableCell className="flex flex-col gap-1 p-0 whitespace-normal lg:table-cell lg:p-2">
+                    <span className="text-xs text-muted-foreground lg:hidden">
+                      {STOCK_TABLE_CONTRACT.columns.status}
+                    </span>
                     <Badge
-                      variant={
-                        channel.refresh_error ? "destructive" : "outline"
-                      }
+                      variant={statusVariant(channel)}
                       aria-label={
                         channel.refresh_error
                           ? `更新失敗: ${channel.refresh_error.message}`
@@ -140,10 +202,13 @@ export function ChannelStockTable({
                       {statusText(channel)}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden lg:table-cell">
                     {formatCollectedAt(channel.collected_at)}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="flex flex-col gap-1 p-0 whitespace-normal lg:table-cell lg:p-2">
+                    <span className="text-xs text-muted-foreground lg:hidden">
+                      {STOCK_TABLE_CONTRACT.columns.stock}
+                    </span>
                     <Badge
                       variant={
                         available
@@ -159,6 +224,23 @@ export function ChannelStockTable({
                   <MetricCell channel={channel} metric="views" />
                   <MetricCell channel={channel} metric="subscribers_net" />
                   <MetricCell channel={channel} metric="watch_time_minutes" />
+                  {onSelect ? (
+                    <TableCell className="col-span-2 p-0 text-right lg:table-cell lg:p-2">
+                      <Button
+                        variant={
+                          selectedId === channel.id ? "secondary" : "outline"
+                        }
+                        size="sm"
+                        className="w-full lg:w-auto"
+                        aria-pressed={selectedId === channel.id}
+                        aria-label={`${channel.name} の動画詳細を見る`}
+                        onClick={() => onSelect(channel.id)}
+                      >
+                        動画詳細
+                        <ArrowRightIcon data-icon="inline-end" />
+                      </Button>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               )
             })}

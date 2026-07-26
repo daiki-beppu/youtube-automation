@@ -17,3 +17,15 @@ export function formatCollectedAt(value: string | null): string {
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? value : dateTimeFormatter.format(date)
 }
+
+function formatCalendarDate(value: string | null): string {
+  return value ? value.replaceAll("-", "/") : "未収集"
+}
+
+export function formatDateRange(
+  startDate: string | null,
+  endDate: string | null
+): string {
+  if (!startDate && !endDate) return "未収集"
+  return `${formatCalendarDate(startDate)}〜${formatCalendarDate(endDate)}`
+}

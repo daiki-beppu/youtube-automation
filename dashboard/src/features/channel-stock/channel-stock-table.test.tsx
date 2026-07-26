@@ -1,7 +1,8 @@
 import "@testing-library/jest-dom/vitest"
 
 import { render, screen, within } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import userEvent from "@testing-library/user-event"
+import { describe, expect, it, vi } from "vitest"
 
 import { ChannelStockTable } from "./channel-stock-table"
 
@@ -32,6 +33,28 @@ function channel(name: string, scheduledCount: number | null): Channel {
 }
 
 describe("ChannelStockTable", () => {
+  it("lets the user open channel details from the comparison row", async () => {
+    const onSelect = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <ChannelStockTable
+        channels={[channel("Night Drive", 3)]}
+        onSelect={onSelect}
+        selectedId={null}
+      />
+    )
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Night Drive の動画詳細を見る",
+      })
+    )
+
+    expect(onSelect).toHaveBeenCalledOnce()
+    expect(onSelect).toHaveBeenCalledWith("night-drive")
+  })
+
   it("shows the seven contracted columns and card-compatible metrics", () => {
     const channels = [channel("Night Drive", 3)]
     render(<ChannelStockTable channels={channels} />)
@@ -56,6 +79,20 @@ describe("ChannelStockTable", () => {
     expect(within(row).getByText("1,200")).toBeInTheDocument()
     expect(within(row).getByText("+12")).toBeInTheDocument()
     expect(within(row).getByText("450分")).toBeInTheDocument()
+  })
+
+  it("keeps the sign visible while exposing subscriber change semantics", () => {
+    const channels = [
+      channel("Growing", 3),
+      {
+        ...channel("Declining", 3),
+        summary: { ...summary, subscribers_net: -4 },
+      },
+    ]
+    render(<ChannelStockTable channels={channels} />)
+
+    expect(screen.getByText("+12")).toHaveAttribute("data-tone", "positive")
+    expect(screen.getByText("-4")).toHaveAttribute("data-tone", "negative")
   })
 
   it("places the total summary before the table", () => {
@@ -91,7 +128,10 @@ describe("ChannelStockTable", () => {
     const rows = screen
       .getAllByRole("row")
       .slice(1)
-      .map((row) => within(row).getAllByRole("cell")[0].textContent)
+      .map(
+        (row) =>
+          within(row).getAllByRole("cell")[0].querySelector("span")?.textContent
+      )
     expect(rows).toEqual([
       "Zero",
       "One",
@@ -120,7 +160,10 @@ describe("ChannelStockTable", () => {
     const rows = screen
       .getAllByRole("row")
       .slice(1)
-      .map((row) => within(row).getAllByRole("cell")[0].textContent)
+      .map(
+        (row) =>
+          within(row).getAllByRole("cell")[0].querySelector("span")?.textContent
+      )
     expect(rows).toEqual(["Known", "Refresh failed", "Missing"])
     expect(
       screen.getByText("全チャンネル合計 公開予約 10本")
@@ -178,7 +221,7 @@ describe("ChannelStockTable", () => {
     expect(within(failedRow).getByText("8本")).toBeInTheDocument()
   })
 
-  it("uses the refresh error contract for status labels", () => {
+  it("distinguishes unavailable analytics data from a healthy channel", () => {
     const channels = [
       {
         ...channel("Not ready", null),
@@ -189,9 +232,9 @@ describe("ChannelStockTable", () => {
     render(<ChannelStockTable channels={channels} />)
 
     const row = screen.getByRole("row", { name: /Not ready/ })
-    expect(within(row).getByText("正常")).toBeInTheDocument()
+    expect(within(row).getByText("データ未収集")).toBeInTheDocument()
     expect(within(row).getByText("未取得")).toBeInTheDocument()
-    expect(within(row).queryByText("データ未取得")).not.toBeInTheDocument()
+    expect(within(row).queryByText("正常")).not.toBeInTheDocument()
   })
 
   it("renders all channels without truncating a larger channel set", () => {

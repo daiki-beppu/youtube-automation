@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `feat(dashboard)`: デジタル庁のダッシュボード設計ガイドを基準に、初期表示を概況・データ前提・指標定義・チャンネル比較・詳細の判断順へ再構成。比較表に詳細導線を統合し、狭幅では行をカード表示に切り替えて横方向の見切れを解消。ダークテーマの背景を黒からニュートラルグレーの階調へ調整し、カードとの境界を識別しやすくした。ガイドブック35ページ掲載の全10色相・各5段階配色を切り替えて比較できるパレットUIを右上の設定パネルへ追加し、選択色を背景・見出し・指標カードにも反映。36・37ページに沿って純増登録者の正負を符号と意味色で統一し、棒グラフへ再生数を常時併記。全パレットのライト／ダークで棒3:1・値ラベル4.5:1以上を検証した（#2546）。
 - `fix(skills)`: #2566 のテンプレ再構成で生じた、配布 skill から解決できない参照 5 件を修正（`wf-new` / `wf-next` / `wf-status` の `CLAUDE.md §6`、`setup/references/check-runbook.md` の「fork 運用者向け」節、`channel-new/references/claude-md-template.md` のスキル一覧）。あわせて契約テスト `tests/test_distributed_skill_references.py` を追加し、節番号参照の禁止と wheel 非同梱 docs への新規参照の禁止を機械担保（既存 13 ペアは ratchet の allowlist として凍結し #2568 で解消）（#2567）。
 
 - `docs(skills)`: 下流配布される `CLAUDE.template.md` を 256→70 行へ圧縮し、`run_in_background` 強制と `sleep`/`until` ポーリング禁止（規約「書かないこと」と矛盾）、skill `description` と重複するコマンド早見表・スキル一覧、下流で解決できない fork 運用者向け upstream パス表を削除。fork 参照一覧は `docs/development.md` へ移設。8 skill の「長時間処理の取り扱い」節を所要時間・ログ・完了報告だけに圧縮し、frontmatter 記法規約の実文重複を `AGENTS.md` / `docs/development.md` から解消（#2565）。
