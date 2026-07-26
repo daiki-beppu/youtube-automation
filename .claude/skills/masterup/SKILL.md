@@ -533,24 +533,11 @@ fi
 |------|-----|------|
 | MP3 | `https://cdn1.suno.ai/{song_id}.mp3` | 不要 |
 
-## 長時間処理の取り扱い
+## 所要時間と完了報告
 
-`uv run yt-generate-master`（ffmpeg クロスフェード結合）は **30 秒〜2 分** 程度かかる。background で起動する。Codex など background 実行フラグを持たない環境では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
+`uv run yt-generate-master`（ffmpeg クロスフェード結合）は **30 秒〜2 分**。Step 3 の `curl` による MP3 一括ダウンロードも曲数が多いと数十秒〜分単位かかる。
 
-spawn 例:
-
-```bash
-uv run yt-generate-master > /tmp/masterup-$(date +%s).log 2>&1
-```
-
-これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
-
-> ⏳ マスター音源生成を background 実行中（推定 1〜2 分）。完了まで他の質問にもお答えできます。
-> ログ: /tmp/masterup-*.log
-
-cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "masterup" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "masterup"` + `cmux notify --title "masterup 完了"` を呼ぶ（非 cmux 環境では skip）。
-
-`curl` での MP3 一括ダウンロード（Step 3）も曲数が多いと数十秒〜分単位かかるため、同じ background パターンで起動してよい。完了通知が届いたらログ末尾から結果サマリー（`master.mp3` のパス、ダウンロード成功曲数）をユーザーへ返す。
+ログを `/tmp/masterup-$(date +%s).log` へ redirect し、完了後は末尾から `master.mp3` のパスとダウンロード成功曲数を報告する。background 実行フラグを持たない環境（Codex 等）では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
 
 ## オーディオビジュアライザー / オーバーレイ
 

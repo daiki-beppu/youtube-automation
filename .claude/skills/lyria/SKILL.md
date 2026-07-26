@@ -309,29 +309,11 @@ bash "$(git rev-parse --show-toplevel)/.claude/skills/lyria/references/worktree_
 - [ ] `intensity` は `"low"` / `"medium"` / `"high"` のいずれかであること
 - [ ] `mode` は `"instrumental"` / `"vocal"` のいずれかであること
 
-## 長時間処理の取り扱い
+## 所要時間と完了報告
 
-`yt-generate-lyria-master` は Lyria 3 API を N セグメント分逐次呼び出し、最後にクロスフェード結合まで行うため **N × 30〜90 秒** かかる（典型的にコレクション全体で 5〜20 分）。background で起動する。Codex など background 実行フラグを持たない環境では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
+`yt-generate-lyria-master` は Lyria 3 API を N セグメント分逐次呼び出し、最後にクロスフェード結合まで行うため **N × 30〜90 秒**（典型的にコレクション全体で 5〜20 分）。
 
-spawn 例:
-
-```bash
-uv run yt-generate-lyria-master \
-  --prompt "<Step 2 のプロンプト>" \
-  --name <theme-slug> \
-  --bpm <bpm> --intensity <intensity> --mode instrumental \
-  --reference-image 10-assets/main.png \
-  > /tmp/lyria-$(date +%s).log 2>&1
-```
-
-これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
-
-> ⏳ Lyria 3 で N セグメント生成中（推定 N × 30〜90 秒）。完了まで他の質問にもお答えできます。
-> ログ: /tmp/lyria-*.log
-
-cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "lyria" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "lyria"` + `cmux notify --title "lyria 完了"` を呼ぶ（非 cmux 環境では skip）。
-
-完了通知が届いたらログ末尾から結果サマリー（生成セグメント数、`01-master/master.mp3` のパス）をユーザーへ返す。429 / クォータエラーが出た場合はそのエラー行を抜き出して報告し、`--max-retries` の調整やリトライタイミングを提案する。
+ログを `/tmp/lyria-$(date +%s).log` へ redirect し、完了後は末尾から生成セグメント数と `01-master/master.mp3` のパスを報告する。429 / クォータエラーはそのエラー行を抜き出し、`--max-retries` の調整やリトライタイミングを提案する。background 実行フラグを持たない環境（Codex 等）では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
 
 ## オーディオビジュアライザー / オーバーレイ
 

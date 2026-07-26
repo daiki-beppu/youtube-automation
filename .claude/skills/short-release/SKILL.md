@@ -79,7 +79,7 @@ JP / EN の片方しか無い場合は `cfg.shorts.release.languages` で投稿�
 bash .claude/skills/short-release/references/generate-shorts.sh <release-path> -s 30 -t 40
 ```
 
-実行は後述「長時間処理の取り扱い」の background パターン（`run_in_background=true` + ログ redirect）に従う。
+所要時間とログの扱いは後述「所要時間と完了報告」に従う。
 
 出力: `<release-path>/video/short-{jp,en}.mp4`。中央クロップ（`crop=ih*9/16:ih`）→ 1080x1920 へスケール → `fps=30`。
 
@@ -135,25 +135,11 @@ workflow-state へのアップロード結果記録は未実装。
 - **fps=30 必須**: 元動画が低 fps の場合は `fps=30` フィルタなしで生成すると YouTube がショート認識しない（`generate-shorts.sh` が常時付与）
 - **サビ位置のテスト**: 実機で `open <release-path>/video/short-jp.mp4` 確認前にアップロードしないこと。冒頭が無音だと最後まで再生されない
 
-## 長時間処理の取り扱い
+## 所要時間と完了報告
 
-`generate-shorts.sh` は JP / EN 各 1 本の縦型変換を ffmpeg で走らせるため **1〜2 分** 程度かかる。background で起動する。
+`generate-shorts.sh` は JP / EN 各 1 本の縦型変換を ffmpeg で走らせるため **1〜2 分**。
 
-spawn 例:
-
-```bash
-bash .claude/skills/short-release/references/generate-shorts.sh <release-path> -s 30 -t 40 \
-  > /tmp/short-release-$(date +%s).log 2>&1
-```
-
-これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
-
-> ⏳ JP/EN 縦型クリップを background 生成中（推定 1〜2 分）。完了まで他の質問にもお答えできます。
-> ログ: /tmp/short-release-*.log
-
-cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "short-release" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "short-release"` + `cmux notify --title "short-release 完了"` を呼ぶ（非 cmux 環境では skip）。
-
-完了通知が届いたらログ末尾から結果サマリー（`short-jp.mp4` / `short-en.mp4` のパス）をユーザーへ返す。失敗時は ffmpeg のエラー行を抜き出して報告する。
+ログを `/tmp/short-release-$(date +%s).log` へ redirect し、完了後は末尾から `short-jp.mp4` / `short-en.mp4` のパスを報告する。失敗時は ffmpeg のエラー行を抜き出す。
 
 ## Next Step
 

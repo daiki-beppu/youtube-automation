@@ -906,28 +906,11 @@ image_generation:
         fallback_when_empty: true
 ```
 
-## 長時間処理の取り扱い
+## 所要時間と完了報告
 
-`uv run yt-generate-image` は Gemini / OpenAI への API 同期呼び出しで **10〜30 秒** ブロックする。`--max-attempts N` でローテーション生成する場合は `N × 10〜30 秒` かかる。background で起動する。
+`uv run yt-generate-image` は Gemini / OpenAI への API 同期呼び出しで **10〜30 秒** ブロックする。`--max-attempts N` でローテーション生成する場合は `N × 10〜30 秒`。
 
-spawn 例:
-
-```bash
-uv run yt-generate-image \
-	  --ttp-strict-references \
-	  --reference <ref> --prompt "<prompt>" \
-	  --output <collection-path>/10-assets/thumbnail-v1.jpg -y \
-	  > /tmp/thumbnail-$(date +%s).log 2>&1
-```
-
-これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
-
-> ⏳ サムネイル画像を生成中（推定 N × 10〜30 秒）。完了まで他の質問にもお答えできます。
-> ログ: /tmp/thumbnail-*.log
-
-cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "thumbnail" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "thumbnail"` + `cmux notify --title "thumbnail 完了"` を呼ぶ（非 cmux 環境では skip）。
-
-完了通知が届いたらログ末尾から結果サマリー（生成された `thumbnail-vN.jpg/png` または `main-vN.png/jpg` のパス、attempt 回数、内部リトライ有無）をユーザーへ返す。プロバイダーが瞬発エラーを返した場合はそのエラー行を抜き出して報告する。
+ログを `/tmp/thumbnail-$(date +%s).log` へ redirect し、完了後は末尾から生成された `thumbnail-vN.jpg/png` または `main-vN.png/jpg` のパス、attempt 回数、内部リトライ有無を報告する。プロバイダーが瞬発エラーを返した場合はそのエラー行を抜き出す。
 
 ## 障害時ガイダンス
 

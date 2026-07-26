@@ -89,9 +89,9 @@ $ARGUMENTS
    この場合、既存の `10-assets/loop.mp4` が残っていても `generate_videos.sh` は無視し、静止背景に切り替える。
    それ以外（`enabled` 未指定 or `true`）で `loop.mp4` が無ければ `/loop-video` でのループ動画生成を案内。
    `loop.mp4` があると `generate_videos.sh` が自動的に動画背景を使用（静止画の代わり）
-4. **プレビュー確認ゲート**: `config/skills/videoup.yaml::effect.type != none` または `config/channel/youtube.json::overlays.enabled: true` の場合、`skip_preview_approval` に関係なく全尺生成の前に必ず `generate_videos.sh --preview 20 <collection-path>` を「長時間処理の取り扱い」に従い background で実行する。`01-master/<Collection>-Preview.mp4` とスクリプト出力の `Full output outlook`（経路種別・時間見通し）を残す。プレビューは `*-Master.mp4` と `workflow-state.json` を変更しない
+4. **プレビュー確認ゲート**: `config/skills/videoup.yaml::effect.type != none` または `config/channel/youtube.json::overlays.enabled: true` の場合、`skip_preview_approval` に関係なく全尺生成の前に必ず `generate_videos.sh --preview 20 <collection-path>` を実行する（所要時間とログの扱いは「所要時間と完了報告」を参照）。`01-master/<Collection>-Preview.mp4` とスクリプト出力の `Full output outlook`（経路種別・時間見通し）を残す。プレビューは `*-Master.mp4` と `workflow-state.json` を変更しない
 5. **承認分岐**: `skip_preview_approval: false`（既定）はプレビューを提示し、ユーザーが受理した場合のみ全尺生成へ進む。受理しない場合は設定調整へ戻り、全尺エンコードと `assets.master_video` の更新を開始しない。選択 UI では「全尺生成へ進む」「設定を調整する」の 2 択、非対応環境ではテキスト承認を待つ。`true` はプレビューファイルの存在を確認して承認だけを省略し、そのまま全尺生成へ進む
-6. **動画生成**: effect / overlays が無効、Step 5 で明示承認済み、または `skip_preview_approval: true` でプレビュー保存確認済みの場合に、`generate_videos.sh` を実行する（「長時間処理の取り扱い」に従い background で起動する）
+6. **動画生成**: effect / overlays が無効、Step 5 で明示承認済み、または `skip_preview_approval: true` でプレビュー保存確認済みの場合に、`generate_videos.sh` を実行する（所要時間とログの扱いは「所要時間と完了報告」を参照）
 7. **workflow-state.json 更新**: 全尺生成の成功後だけ `assets.master_video` に生成された動画ファイル名（例: `01-master/Theme-Name-Master.mp4`）を記録する。プレビューのみでは更新しない
 
 ### 自動検出される要素
@@ -284,31 +284,11 @@ runtime mask helper は script 内から `uv run python -m youtube_automation.ut
 - visualizer は style ごとの `showfreqs` filtergraph + `gblur` の 2 パス glow で淡い発光を演出。`glow_enabled: false` で 1 パスに減らせる。
 - popup は `fade=in` / `enable='between(t,start,end)'` / `fade=out` を組み合わせて時間窓制御している。
 
-## 長時間処理の取り扱い
+## 所要時間と完了報告
 
-`generate_videos.sh` は ffmpeg を走らせるため数分かかる。目安（2 時間尺）: **エフェクト無し（ループ / 静止画短尺ベイクの stream copy）= 約 1〜2 分** / **エフェクト有り（v14 ループ・ベイク）= 約 1〜2 分**（初回はベイク 10〜40 秒 + 連結 約 1 分、2 回目以降はベイク cache hit）。`shrink.enabled` の容量最適化や短尺フォールバックの全尺再エンコードを使うときは尺なりに数分〜十数分かかる。background で起動する。Codex など background 実行フラグを持たない環境では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
+`generate_videos.sh` の目安（2 時間尺）: **エフェクト無し（ループ / 静止画短尺ベイクの stream copy）= 約 1〜2 分** / **エフェクト有り（v14 ループ・ベイク）= 約 1〜2 分**（初回はベイク 10〜40 秒 + 連結 約 1 分、2 回目以降はベイク cache hit）。`shrink.enabled` の容量最適化や短尺フォールバックの全尺再エンコードを使うときは尺なりに数分〜十数分かかる。
 
-spawn 例:
-
-```bash
-# エフェクト無しの基本パターン
-uv run bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh" \
-  > /tmp/videoup-$(date +%s).log 2>&1
-
-# エフェクト付き（#648）
-VIDEOUP_EFFECT=particles VIDEOUP_EFFECT_INTENSITY=subtle \
-  uv run bash "$(git rev-parse --show-toplevel)/.claude/skills/videoup/references/generate_videos.sh" \
-  > /tmp/videoup-$(date +%s).log 2>&1
-```
-
-これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
-
-> ⏳ マスター動画生成を background 実行中（推定 N 分）。完了まで他の質問にもお答えできます。
-> ログ: /tmp/videoup-*.log
-
-cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "videoup" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "videoup"` + `cmux notify --title "videoup 完了"` を呼ぶ（非 cmux 環境では skip）。
-
-完了通知が届いたらログ末尾から結果サマリー（生成された `.mp4` のパス）をユーザーへ返す。失敗時は ffmpeg のエラー行を抜き出して報告する。
+ログを `/tmp/videoup-$(date +%s).log` へ redirect し、完了後は末尾から生成された `.mp4` のパスを報告する。失敗時は ffmpeg のエラー行を抜き出す。background 実行フラグを持たない環境（Codex 等）では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
 
 ## オーディオビジュアライザー / オーバーレイについて
 

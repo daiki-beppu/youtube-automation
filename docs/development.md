@@ -107,7 +107,7 @@ component 追加前は対象 workspace で `shadcn info` と registry/公式 doc
 
 - 実体は常に `.claude/skills/<name>/` を編集する（`.agents/skills` は Codex CLI 探索パス用の symlink）。付属スクリプトは `.claude/skills/<name>/references/` に置く（ルート直下 `scripts/` は設けない）
 - skill も通常コードと同じ issue 専用 linked worktree で編集する。利用中の agent が `.claude/skills/**` を protected path として扱い書き込みを拒否する場合は、権限を迂回せず Codex または許可済みの対話セッションへ同じ issue worktree を引き継ぐ
-- 書き方の規約: frontmatter `description:` は必ず double-quoted string、新規作成・改訂時は `docs/skill-design/skill-authoring-guidelines.md` に従う
+- 書き方の規約: frontmatter の記法は `CLAUDE.md`「### skill frontmatter」、SKILL.md 本文の書き方は `docs/skill-design/skill-authoring-guidelines.md` に従う
 
 ### 2. 検証（編集後に実行するもの）
 
@@ -159,11 +159,31 @@ uv run pytest tests/test_skills_sync_installed_wheel.py -q
 
 ### 新規 skill 追加チェックリスト
 
-- [ ] `.claude/skills/<name>/SKILL.md` を作成（frontmatter `description:` は double-quoted / `docs/skill-design/skill-authoring-guidelines.md` 準拠）
+- [ ] `.claude/skills/<name>/SKILL.md` を作成（`docs/skill-design/skill-authoring-guidelines.md` 準拠。frontmatter 記法は `CLAUDE.md`「### skill frontmatter」）
 - [ ] 付属スクリプト・参照資料は `.claude/skills/<name>/references/` に配置
 - [ ] 契約テスト `tests/test_<name>_skill_contract.py` を追加（雛形は既存の `tests/test_video_description_skill_contract.py` / `tests/test_flop_analysis_skill_contract.py` を参照。SKILL.md の必須節・参照ファイルの存在・frontmatter 記述を機械担保する）
 - [ ] `docs/features.md` のカタログに 1 行追加し、冒頭の「全 **N** 個」を更新（`tests/test_features_catalog_documentation.py` が全 skill ディレクトリとの 1:1 対応と総数一致を機械担保しており、忘れると CI で落ちる）
 - [ ] `CHANGELOG.md` の `[Unreleased]` に追記（`.claude/skills/` は実コード扱いでゲート対象）
+
+### fork 運用者向け: upstream owner 参照の一覧
+
+本リポジトリは `daiki-beppu/youtube-automation` を official upstream として前提にしている。fork して独自運用する場合、GitHub owner の固定参照が fork とズレて生成物・案内コマンドに齟齬を生むため、以下を書き換える。
+
+**単一ソース（コード）**: `src/youtube_automation/cli/automation_update_refs.py` の `UPSTREAM_REPO` 定数。`yt-automation-update` の official upstream 検証（サプライチェーン保護の意図的ガード）と `yt-doctor` の suggested command、`/automation-update` / `/ext-install` の `gh` / `curl` コマンドはすべて実行時にここから導出される。fork ではまずこの定数を変更する。
+
+**`UPSTREAM_REPO` から導出されず、手で書き換えが要るファイル**:
+
+| ファイル | 残存箇所 |
+|---|---|
+| `.claude/CLAUDE.template.md` | 冒頭と「このリポジトリの規約」の upstream 表記 |
+| `.claude/skills/setup/SKILL.md` | bootstrap 用 `uv add git+...`（パッケージ導入前に実行するため定数から導出できない） |
+| `.claude/skills/automation-update/SKILL.md` | 冒頭 prose と Step 1-0 の既定値表記、cleanup guide への doc リンク |
+| `.claude/skills/ext-install/SKILL.md` | `gh` 未導入時の手動ダウンロード fallback 用 Release ページ URL、Step 0 の既定値表記 |
+| `.claude/skills/automation-release/references/*.md` | リリースチェックリスト / CHANGELOG 昇格手順内の URL 例 |
+| `.claude/skills/channel-new/references/claude-md-template.md` / `gcp-bootstrap.md` | upstream リポジトリ名の説明 |
+| `src/youtube_automation/cli/skills_sync/__init__.py` | module docstring の導入コマンド例 |
+
+上表は代表箇所のポインタであり、全箇所は `rg -n "daiki-beppu/youtube-automation"` で列挙する。
 
 ## 依存ポリシー: deprecated 表明済み依存の取り扱い（詳細）
 

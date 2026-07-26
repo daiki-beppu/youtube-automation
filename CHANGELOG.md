@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `docs(skills)`: 下流配布される `CLAUDE.template.md` を 256→70 行へ圧縮し、`run_in_background` 強制と `sleep`/`until` ポーリング禁止（規約「書かないこと」と矛盾）、skill `description` と重複するコマンド早見表・スキル一覧、下流で解決できない fork 運用者向け upstream パス表を削除。fork 参照一覧は `docs/development.md` へ移設。8 skill の「長時間処理の取り扱い」節を所要時間・ログ・完了報告だけに圧縮し、frontmatter 記法規約の実文重複を `AGENTS.md` / `docs/development.md` から解消（#2565）。
 - `docs(skills)`: スキル記述規約へ「例より引数」「spec は検証可能な形で置く」を追加し、CLI の `choices=` / `help=` を単一ソースとする実行系インターフェース規約と、script / rubric / checklist / テストを spec として置く指針を明文化。あわせて段階的開示を実装し、`setup` 550→184 行、`automation-update` 572→466 行、`masterup` 738→565 行、`suno-helper` 337→291 行へ縮小して check runbook・fallback 経路・落とし穴を `references/` へ分離（#2565）。
 - `docs(skills)`: スキル記述規約を Claude 5 前提へ改訂し、「Sonnet-safe」7 ルール（判断の余地を残さない設計）を必須 3 点（不可逆操作の承認ゲート / 前提の存在ガード / 配布先で解決できる参照）+「書かないこと」リストへ再構成。22 skill の設定読み込みゲート冒頭文、10 skill の Subagent Contract 共通文、8 skill の `run_in_background` 指示を削減し、下流で解決できない `docs/skill-design/` 参照 2 件を解消（#2565）。
 - `refactor(dx)`: lefthook とローカル git hook・bootstrap wrapper（`.lefthook/`）を廃止し、品質ゲート（ruff / CHANGELOG / any 型）を CI へ一本化。any ゲートは `.github/scripts/` へ、worktree TMPDIR 分離は `.nix/worktree-tmpdir.sh` へ移設し、`yt-preflight` の hook_policy 検査を削除。開発 bootstrap は direnv / `nix develop`（shellHook が `uv sync`）へ統一（#2534）。

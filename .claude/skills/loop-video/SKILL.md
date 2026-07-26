@@ -375,24 +375,11 @@ veo:
 - 再実行時は model と入力画像内容の SHA-256 が両方一致した state だけを resume する。不一致または旧形式の state は破棄して新規 submit する
 - 再開不要なら手動削除可（次回実行は新規 submit になる）
 
-## 長時間処理の取り扱い
+## 所要時間と完了報告
 
-`yt-generate-loop-video` は Veo 3.1 API を同期ポーリングするため **30〜90 秒** 程度（モデルとリージョン次第）かかる。background で起動する。Codex など background 実行フラグを持たない環境では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
+`yt-generate-loop-video` は Veo 3.1 API を同期ポーリングするため **30〜90 秒**（モデルとリージョン次第）。`--smooth` 再実行時も同様。
 
-spawn 例:
-
-```bash
-uv run yt-generate-loop-video <collection-path> -y > /tmp/loop-video-$(date +%s).log 2>&1
-```
-
-これを `Bash run_in_background=true` で投げ、spawn 直後に次のメッセージを返す:
-
-> ⏳ Veo 3.1 でループ動画を生成中（推定 30〜90 秒）。完了まで他の質問にもお答えできます。
-> ログ: /tmp/loop-video-*.log
-
-cmux 環境下（`$CMUX_WORKSPACE_ID` あり）であれば補助で `cmux set-status "loop-video" "running" --icon "hourglass" --color "#f59e0b"`、完了で `cmux clear-status "loop-video"` + `cmux notify --title "loop-video 完了"` を呼ぶ（非 cmux 環境では skip）。
-
-完了通知が届いたらログ末尾から結果サマリー（`10-assets/loop.mp4` のパス）をユーザーへ返す。`--smooth` 再実行時も同じパターンで起動する。IP ガードレールでブロックされた場合のエラーメッセージはログから抜き出して報告する。
+ログを `/tmp/loop-video-$(date +%s).log` へ redirect し、完了後は末尾から `10-assets/loop.mp4` のパスを報告する。IP ガードレールでブロックされた場合のエラーメッセージはログから抜き出す。background 実行フラグを持たない環境（Codex 等）では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
 
 ## 障害時ガイダンス
 
