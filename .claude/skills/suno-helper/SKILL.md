@@ -21,7 +21,7 @@ overlay の phase が `finished` に到達し、Step 6 の 6 点（playlist 紐�
 
 ## 設定読み込みゲート
 
-前提確認や server 起動に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+以下を deep-merge した値を設定として使う。
 
 1. `.claude/skills/suno-helper/config.default.yaml`
 2. `config/skills/suno-helper.yaml`（存在する場合）

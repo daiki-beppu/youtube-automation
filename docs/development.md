@@ -107,7 +107,7 @@ component 追加前は対象 workspace で `shadcn info` と registry/公式 doc
 
 - 実体は常に `.claude/skills/<name>/` を編集する（`.agents/skills` は Codex CLI 探索パス用の symlink）。付属スクリプトは `.claude/skills/<name>/references/` に置く（ルート直下 `scripts/` は設けない）
 - skill も通常コードと同じ issue 専用 linked worktree で編集する。利用中の agent が `.claude/skills/**` を protected path として扱い書き込みを拒否する場合は、権限を迂回せず Codex または許可済みの対話セッションへ同じ issue worktree を引き継ぐ
-- 書き方の規約: frontmatter `description:` は必ず double-quoted string、新規作成・改訂時は `docs/skill-design/skill-authoring-guidelines.md` の 7 ルールに従う
+- 書き方の規約: frontmatter `description:` は必ず double-quoted string、新規作成・改訂時は `docs/skill-design/skill-authoring-guidelines.md` に従う
 
 ### 2. 検証（編集後に実行するもの）
 
@@ -159,7 +159,7 @@ uv run pytest tests/test_skills_sync_installed_wheel.py -q
 
 ### 新規 skill 追加チェックリスト
 
-- [ ] `.claude/skills/<name>/SKILL.md` を作成（frontmatter `description:` は double-quoted / `docs/skill-design/skill-authoring-guidelines.md` の 7 ルール準拠）
+- [ ] `.claude/skills/<name>/SKILL.md` を作成（frontmatter `description:` は double-quoted / `docs/skill-design/skill-authoring-guidelines.md` 準拠）
 - [ ] 付属スクリプト・参照資料は `.claude/skills/<name>/references/` に配置
 - [ ] 契約テスト `tests/test_<name>_skill_contract.py` を追加（雛形は既存の `tests/test_video_description_skill_contract.py` / `tests/test_flop_analysis_skill_contract.py` を参照。SKILL.md の必須節・参照ファイルの存在・frontmatter 記述を機械担保する）
 - [ ] `docs/features.md` のカタログに 1 行追加し、冒頭の「全 **N** 個」を更新（`tests/test_features_catalog_documentation.py` が全 skill ディレクトリとの 1:1 対応と総数一致を機械担保しており、忘れると CI で落ちる）

@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- `docs(skills)`: スキル記述規約を Claude 5 前提へ改訂し、「Sonnet-safe」7 ルール（判断の余地を残さない設計）を必須 3 点（不可逆操作の承認ゲート / 前提の存在ガード / 配布先で解決できる参照）+「書かないこと」リストへ再構成。22 skill の設定読み込みゲート冒頭文、10 skill の Subagent Contract 共通文、8 skill の `run_in_background` 指示を削減し、下流で解決できない `docs/skill-design/` 参照 2 件を解消（#2565）。
 - `refactor(dx)`: lefthook とローカル git hook・bootstrap wrapper（`.lefthook/`）を廃止し、品質ゲート（ruff / CHANGELOG / any 型）を CI へ一本化。any ゲートは `.github/scripts/` へ、worktree TMPDIR 分離は `.nix/worktree-tmpdir.sh` へ移設し、`yt-preflight` の hook_policy 検査を削除。開発 bootstrap は direnv / `nix develop`（shellHook が `uv sync`）へ統一（#2534）。
 - `refactor(config)`: yt-doctor・channel init/import・GCP bootstrap・Terraform apply からチャンネルルート `.env` の生成・検査・読込を削除し、GCP セットアップ完了条件を API/IAM/ADC quota project に限定（#2478）。
 - `feat(skills)`: `/suno`・`/thumbnail`・`/loop-video`・`/alignment-check` が `docs/channel/creative-constraints.md` の担当セクションを毎回参照し、不在時は既存チャンネルを止めず `/creative-constraints` を案内（#2449）。

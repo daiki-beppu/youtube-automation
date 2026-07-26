@@ -37,16 +37,20 @@ Veo 3.1（既定）または Gemini Omni Flash を使い、コレクションの
 
 ## Subagent Contract
 
-subagent として呼ぶ場合、メインエージェントは対象コレクション、入力 `10-assets/main.png/jpg`、確定済み mode と prompt、deep-merge 後の skip 設定をリポジトリルート相対パスまたは値で入力に含める。対応する skip が `false` で Veo 課金、再生成、品質確認の承認が必要なら、メインが承認を得るまで subagent を起動しない。`true` の gate は設定による opt-in として委譲できる。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。完了報告には `status: success | failure`、生成または補正した `10-assets/loop.mp4` の絶対パス、使用 mode、エラーを含める。メインはファイル存在を検証し、skip されていない品質確認を担当する。直接実行時は既存手順を変更しない。
+- **入力**: 対象コレクション、`10-assets/main.png/jpg`、確定済み mode と prompt、deep-merge 後の skip 設定
+- **成果物**: 生成または補正した `10-assets/loop.mp4`、使用 mode
+- **委譲しない処理**: 対応する skip が `false` のときの Veo 課金・再生成・品質確認の承認（`true` の gate は設定による opt-in として委譲できる）。skip されていない品質確認はメインが担当する
+
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 
 ## 設定読み込みゲート
 
-前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+以下を deep-merge した値を設定として使う。
 
 1. `.claude/skills/loop-video/config.default.yaml`
 2. `config/skills/loop-video.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("loop-video")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.utils.skill_config.load_skill_config("loop-video")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 
@@ -373,7 +377,7 @@ veo:
 
 ## 長時間処理の取り扱い
 
-`yt-generate-loop-video` は Veo 3.1 API を同期ポーリングするため **30〜90 秒** 程度（モデルとリージョン次第）かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。Codex など `run_in_background` 非対応の実行環境では、同コマンドを `nohup ... > <log> 2>&1 &` で background 起動し、完了はログ末尾で確認する読み替えとする。
+`yt-generate-loop-video` は Veo 3.1 API を同期ポーリングするため **30〜90 秒** 程度（モデルとリージョン次第）かかる。background で起動する。Codex など background 実行フラグを持たない環境では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
 
 spawn 例:
 

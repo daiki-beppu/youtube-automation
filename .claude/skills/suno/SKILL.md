@@ -32,16 +32,21 @@ description: "Use when Suno UI 投入用の音楽プロンプトを生成する�
 
 ## Subagent Contract
 
-subagent として呼ぶ場合、メインエージェントは対象コレクションと確定済みモードをリポジトリルート相対パスまたは値で入力に含める。モード選択などユーザー判断が必要なら、メインが選択を確定するまで subagent を起動しない。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。インストゥルメンタルモードでは生成と検証を委譲でき、完了報告には `status: success | failure`、生成した `20-documentation/suno-patterns.yaml`、`suno-prompts.md`、`suno-prompts.json` の絶対パス一覧、verify と semantic review の結果、エラーを含める。ボーカルモードの標準 collection では `uv run yt-generate-suno <collection-path>` が `workflow-state.json::track_count` を読むため、この CLI はメインが実行し、subagent には生成済み `suno-prompts.json` の semantic review だけを委譲する。state を更新する工程はメインが成果物存在を検証した後に行う。直接実行時は既存手順を変更しない。
+- **入力**: 対象コレクション、確定済みモード
+- **成果物**: `20-documentation/suno-patterns.yaml`、`suno-prompts.md`、`suno-prompts.json`、verify と semantic review の結果
+- **委譲しない処理**: モード選択。ボーカルモードの標準 collection では `uv run yt-generate-suno <collection-path>` が `workflow-state.json::track_count` を読むため、この CLI はメインが実行し、subagent には生成済み `suno-prompts.json` の semantic review だけを委譲する
+- **委譲できる処理**: インストゥルメンタルモードでは生成と検証
+
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 
 ## 設定読み込みゲート
 
-前提条件チェックやモード判定に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+以下を deep-merge した値を設定として使う。
 
 1. `.claude/skills/suno/config.default.yaml`
 2. `config/skills/suno.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("suno")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
+合成規則は `youtube_automation.utils.skill_config.load_skill_config("suno")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
 
 ### モード判定
 

@@ -20,7 +20,11 @@ description: "Use when ショート用 9:16 サムネ作成、または short.pn
 
 ## Subagent Contract
 
-subagent として呼ぶ場合、メインエージェントは対象コレクション、入力 `10-assets/main.png/jpg`、生成対象（`short.png` / `short-loop.mp4`）、確定済み prompt をリポジトリルート相対パスまたは値で入力に含める。画像承認、Veo 課金、ループ品質確認が必要なら、メインが承認を得るまで該当処理を subagent へ委譲しない。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。完了報告には `status: success | failure`、生成した `10-assets/short.png` と、指定時は `10-assets/short-loop.mp4` の絶対パス一覧、エラーを含める。メインはファイル存在と生成対象を検証する。直接実行時は既存手順を変更しない。
+- **入力**: 対象コレクション、`10-assets/main.png/jpg`、生成対象（`short.png` / `short-loop.mp4`）、確定済み prompt
+- **成果物**: `10-assets/short.png`、生成対象に指定された場合は `10-assets/short-loop.mp4`
+- **委譲しない処理**: 画像承認・Veo 課金・ループ品質確認。メインが承認を得てから該当処理を委譲する
+
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 
 ## 前提
 
@@ -156,7 +160,7 @@ open <collection-path>/10-assets/short-loop.mp4
 
 ## 長時間処理の取り扱い
 
-`yt-generate-image`（Gemini で 9:16 サムネ生成、**10〜30 秒**）と `yt-generate-shorts-loop`（Veo 3.1 で 9:16 ループ動画、**30〜90 秒**）はどちらも API 同期呼び出しでブロックする。特にループ動画は長いため、**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+`yt-generate-image`（Gemini で 9:16 サムネ生成、**10〜30 秒**）と `yt-generate-shorts-loop`（Veo 3.1 で 9:16 ループ動画、**30〜90 秒**）はどちらも API 同期呼び出しでブロックする。特にループ動画は長いため、background で起動する。
 
 spawn 例（ループ動画化）:
 

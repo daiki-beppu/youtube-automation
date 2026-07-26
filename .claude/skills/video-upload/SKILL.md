@@ -20,16 +20,20 @@ Complete Collection を YouTube にアップロードし、`planning/` → `live
 
 ## Subagent Contract
 
-subagent として呼ぶ場合、メインエージェントは対象コレクション、content model、実行モード（plan / upload）、承認済み公開条件をリポジトリルート相対パスまたは値で入力に含める。実アップロード、公開時刻、メタデータの承認が必要なら、メインが承認を得るまで upload を subagent へ委譲しない。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。plan の完了報告には `status: success | failure`、検証した動画とメタデータ成果物の絶対パス一覧、エラーを含める。state や tracking を更新する実アップロード CLI は承認後にメインが実行し、`20-documentation/upload_tracking.json` と対象動画の存在を検証する。直接実行時は既存手順を変更しない。
+- **入力**: 対象コレクション、content model、実行モード（plan / upload）、承認済み公開条件
+- **成果物**: plan では検証した動画とメタデータ成果物
+- **委譲しない処理**: 実アップロード、公開時刻とメタデータの承認。state や tracking を更新する実アップロード CLI は承認後にメインが実行し、`20-documentation/upload_tracking.json` と対象動画の存在を検証する
+
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 
 ## 設定読み込みゲート
 
-前提確認や Channel Adaptation に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+以下を deep-merge した値を設定として使う。
 
 1. `.claude/skills/video-upload/config.default.yaml`
 2. `config/skills/video-upload.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("video-upload")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。前提条件チェックの探索パターンは `preflight.*`、メタデータ基準の誇張語は `metadata.banned_exaggeration_words` を参照する。
+合成規則は `youtube_automation.utils.skill_config.load_skill_config("video-upload")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。前提条件チェックの探索パターンは `preflight.*`、メタデータ基準の誇張語は `metadata.banned_exaggeration_words` を参照する。
 
 ## 前提
 

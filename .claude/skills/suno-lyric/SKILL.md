@@ -22,7 +22,12 @@ description: "Use when Suno ボーカル曲の歌詞を生成するとき。「�
 
 ## Subagent Contract
 
-subagent として呼ぶ場合、メインエージェントは対象コレクション、`20-documentation/suno-patterns.yaml`、必要な設定ファイルをリポジトリルート相対パスで入力に含める。引用候補や歌詞方針の選択が必要なら、メインが選択を確定するまで subagent を起動しない。subagent は入力確認に必要な `workflow-state.json::planning.music` を読み取ってよいが、`workflow-state.json` へ書き込まず、`AskUserQuestion` も実行しない。完了報告には `status: success | failure`、生成した `20-documentation/suno-lyrics.md` と `20-documentation/suno-lyrics.json` の絶対パス一覧、機械検証と semantic review の結果、エラーを含める。メインはファイル存在を検証する。直接実行時は既存手順を変更しない。
+- **入力**: 対象コレクション、`20-documentation/suno-patterns.yaml`、必要な設定ファイル
+- **成果物**: `20-documentation/suno-lyrics.md`、`20-documentation/suno-lyrics.json`、機械検証と semantic review の結果
+- **委譲しない処理**: 引用候補と歌詞方針の選択。メインが確定してから起動する
+- **例外**: 入力確認に必要な `workflow-state.json::planning.music` を読み取ってよい（書き込みは不可）
+
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 
 ## Responsibilities
 
@@ -35,12 +40,12 @@ subagent として呼ぶ場合、メインエージェントは対象コレク�
 
 ## 設定読み込みゲート
 
-Inputs の確認に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+以下を deep-merge した値を設定として使う。
 
 1. `.claude/skills/suno-lyric/config.default.yaml`
 2. `config/skills/suno-lyric.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("suno-lyric")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。このスキルが `/suno` の skill-config を直接参照する段階では、`suno` 側の `config.default.yaml` と `config/skills/suno.yaml` も同じ手順で読む。
+合成規則は `youtube_automation.utils.skill_config.load_skill_config("suno-lyric")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが `/suno` の skill-config を直接参照する段階では、`suno` 側の `config.default.yaml` と `config/skills/suno.yaml` も同じ手順で読む。
 
 ## 前提
 

@@ -21,16 +21,20 @@ description: "Use when collection 型（BGM テイスター）チャンネルで
 
 ## Subagent Contract
 
-subagent として呼ぶ場合、メインエージェントは対象コレクション、映像ソース、確定済みハイライト区間、クロップ位置をリポジトリルート相対パスまたは値で入力に含める。区間・クロップ・プレビュー・投稿の承認が必要なら、メインが承認を得るまで該当処理を subagent へ委譲しない。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。生成処理の完了報告には `status: success | failure`、生成した `01-master/shorts/short-*.mp4` の絶対パス一覧、エラーを含める。state を更新する実投稿 CLI は承認後にメインが実行し、成果物と tracking を検証する。直接実行時は既存手順を変更しない。
+- **入力**: 対象コレクション、映像ソース、確定済みハイライト区間、クロップ位置
+- **成果物**: `01-master/shorts/short-*.mp4`
+- **委譲しない処理**: 区間・クロップ・プレビュー・投稿の承認。state を更新する実投稿 CLI は承認後にメインが実行し、成果物と tracking を検証する
+
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 
 ## 設定読み込みゲート
 
-前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+以下を deep-merge した値を設定として使う。
 
 1. `.claude/skills/short/config.default.yaml`
 2. `config/skills/short.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("short")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.utils.skill_config.load_skill_config("short")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 
@@ -185,7 +189,7 @@ uv run yt-upload-shorts <collection-path>              # 実投稿
 
 ## 長時間処理の取り扱い
 
-`generate-shorts.sh` は ffmpeg を本数分（既定 3 本）並列で走らせるため **1〜3 分** 程度かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+`generate-shorts.sh` は ffmpeg を本数分（既定 3 本）並列で走らせるため **1〜3 分** 程度かかる。background で起動する。
 
 spawn 例:
 

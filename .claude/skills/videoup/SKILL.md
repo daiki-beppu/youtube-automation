@@ -23,16 +23,21 @@ Suno 系チャンネルは `/masterup`、Lyria 系チャンネルは `/lyria`（
 
 ## Subagent Contract
 
-subagent として呼ぶ場合、メインエージェントは対象コレクション、採用するマスター音源、背景素材をリポジトリルート相対パスで入力に含める。音源や背景の選択が必要なら、メインが選択を確定するまで subagent を起動しない。プレビュー承認は `skip_preview_approval: false` のときだけメインが確定してから全尺生成を委譲し、`true` ならプレビュー生成・保存と全尺生成を同じ委譲で続行できる。subagent は入力確認と `generate_videos.sh` の実行に必要な範囲で `workflow-state.json` を読み取ってよいが、書き込まず、`AskUserQuestion` も実行しない。完了報告には `status: success | failure`、生成した `01-master/*.mp4` の絶対パス一覧、probe 検証結果、エラーを含める。メインはファイル存在と指定入力との整合を検証してから state を更新する。直接実行時は既存手順を変更しない。
+- **入力**: 対象コレクション、採用するマスター音源、背景素材
+- **成果物**: `01-master/*.mp4`、probe 検証結果
+- **委譲しない処理**: `skip_preview_approval: false` のときのプレビュー承認。メインが確定してから全尺生成を委譲する（`true` ならプレビュー生成・保存と全尺生成を同じ委譲で続行できる）
+- **例外**: `generate_videos.sh` の実行に必要な範囲で `workflow-state.json` を読み取ってよい（書き込みは不可）
+
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 
 ## 設定読み込みゲート
 
-Quick Reference や対象コレクション確認に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+以下を deep-merge した値を設定として使う。
 
 1. `.claude/skills/videoup/config.default.yaml`
 2. `config/skills/videoup.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("videoup")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。このスキルが `masterup` や `loop-video` の skill-config を直接参照する段階では、それぞれの `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
+合成規則は `youtube_automation.utils.skill_config.load_skill_config("videoup")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが `masterup` や `loop-video` の skill-config を直接参照する段階では、それぞれの `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
 
 ## 前提
 
@@ -281,7 +286,7 @@ runtime mask helper は script 内から `uv run python -m youtube_automation.ut
 
 ## 長時間処理の取り扱い
 
-`generate_videos.sh` は ffmpeg を走らせるため数分かかる。目安（2 時間尺）: **エフェクト無し（ループ / 静止画短尺ベイクの stream copy）= 約 1〜2 分** / **エフェクト有り（v14 ループ・ベイク）= 約 1〜2 分**（初回はベイク 10〜40 秒 + 連結 約 1 分、2 回目以降はベイク cache hit）。`shrink.enabled` の容量最適化や短尺フォールバックの全尺再エンコードを使うときは尺なりに数分〜十数分かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。Codex など `run_in_background` 非対応の実行環境では、同コマンドを `nohup ... > <log> 2>&1 &` で background 起動し、完了はログ末尾で確認する読み替えとする。
+`generate_videos.sh` は ffmpeg を走らせるため数分かかる。目安（2 時間尺）: **エフェクト無し（ループ / 静止画短尺ベイクの stream copy）= 約 1〜2 分** / **エフェクト有り（v14 ループ・ベイク）= 約 1〜2 分**（初回はベイク 10〜40 秒 + 連結 約 1 分、2 回目以降はベイク cache hit）。`shrink.enabled` の容量最適化や短尺フォールバックの全尺再エンコードを使うときは尺なりに数分〜十数分かかる。background で起動する。Codex など background 実行フラグを持たない環境では `nohup ... > <log> 2>&1 &` を使い、完了はログ末尾で確認する。
 
 spawn 例:
 

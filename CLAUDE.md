@@ -64,7 +64,7 @@ uv run yt-skills lint [<skill>..] # SKILL.md frontmatter の軽量検証（stric
 ### skill frontmatter
 
 - SKILL.md の frontmatter `description:` は **必ず double-quoted string** で書く（値内の `: ` が strict YAML でマッピング区切りと誤解釈されるため）
-- スキルの新規作成・改訂時は `docs/skill-design/skill-authoring-guidelines.md` の 7 ルール（発動キーワードの相互排他 / 承認ゲート / 前提存在ガード / 判断基準の明確化 / references 単一ソース化 / Hard Gates 冒頭配置 / 未接続参照の隔離）に従う。既存スキルの一括改修は不要
+- スキルの新規作成・改訂時は `docs/skill-design/skill-authoring-guidelines.md` に従う。必須は 3 点（不可逆・外部反映操作の承認ゲート / 前提の存在ガード / 配布先で解決できる参照）で、それ以外は実行者の判断に委ねて記述量を抑える。既存スキルの一括改修は不要
 
 ### パッケージング
 

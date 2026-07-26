@@ -24,12 +24,12 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 
 ## 設定読み込みゲート
 
-前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+以下を deep-merge した値を設定として使う。
 
 1. `.claude/skills/thumbnail/config.default.yaml`
 2. `config/skills/thumbnail.yaml`（存在する場合）
 
-読み込み後は `youtube_automation.utils.skill_config.load_skill_config("thumbnail")` と同じ deep-merge 前提で、チャンネル上書きを優先して扱う。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
+合成規則は `youtube_automation.utils.skill_config.load_skill_config("thumbnail")` と同じで、チャンネル上書きが優先される。存在しない override は未設定として扱い、勝手に作成しない。このスキルが別 skill の skill-config を直接参照する段階では、その skill の `config.default.yaml` と `config/skills/<skill>.yaml` も同じ手順で読む。
 
 **Hard Gate**: `archive.enabled: true` の場合、確定直後のアーカイブが設定不正・確定サムネ欠落・シンボリックリンク・コピー失敗で失敗したら後工程へ進まず停止する。ギャラリー保存を成功したように扱わない。`textless.enabled` は boolean だけを許可し、`false` の共用処理が失敗した場合も `thumbnail.approved` を更新せず停止する。
 
@@ -55,7 +55,11 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 
 ## Subagent Contract
 
-subagent として呼ぶ場合、メインエージェントは対象コレクションと生成対象（`thumbnail` / `main`）をリポジトリルート相対パスまたは値で入力に含める。候補画像生成前の承認が必要なら、メインが承認を得るまで subagent を起動しない。subagent は `workflow-state.json` を読み書きせず、`AskUserQuestion` を実行しない。候補画像の完了報告には `status: success | failure`、生成した `10-assets/thumbnail-vN.jpg/png` または `10-assets/main-vN.png/jpg` と `20-documentation/thumbnail-prompts.md` の絶対パス一覧、エラーを含める。メインは報告されたファイルの存在と生成対象を検証し、候補承認後の確定コピーと state 更新を行う。直接実行時は既存の承認・state 更新手順を変更しない。
+- **入力**: 対象コレクション、生成対象（`thumbnail` / `main`）
+- **成果物**: `10-assets/thumbnail-vN.jpg/png` または `10-assets/main-vN.png/jpg`、`20-documentation/thumbnail-prompts.md`
+- **委譲しない処理**: 候補画像生成前の承認、および候補承認後の確定コピーと state 更新
+
+subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実行しない。承認が要る処理は、メインが承認を得るまで委譲しない。完了報告は `status: success | failure`、成果物の絶対パス一覧、エラー。成果物の存在検証と state 更新はメインが行う。
 
 ## 勝ちパターン参照ゲート
 
@@ -904,7 +908,7 @@ image_generation:
 
 ## 長時間処理の取り扱い
 
-`uv run yt-generate-image` は Gemini / OpenAI への API 同期呼び出しで **10〜30 秒** ブロックする。`--max-attempts N` でローテーション生成する場合は `N × 10〜30 秒` かかる。**必ず Bash ツールを `run_in_background=true` で起動する**。これによりユーザーは処理中も同じセッションで質問できる（Claude Code は完了時に自動でメッセージ通知するため、`sleep` ループや `until` での自前ポーリングは禁止）。
+`uv run yt-generate-image` は Gemini / OpenAI への API 同期呼び出しで **10〜30 秒** ブロックする。`--max-attempts N` でローテーション生成する場合は `N × 10〜30 秒` かかる。background で起動する。
 
 spawn 例:
 

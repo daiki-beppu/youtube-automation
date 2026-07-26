@@ -1148,8 +1148,6 @@ def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
         assert f"config/skills/{skill}.yaml" in text
         loader_key = "postmortem" if skill == "flop-analysis" else skill
         assert f'load_skill_config("{loader_key}")' in text
-        assert "SKILL.md の説明や記憶から設定値を推測しない" in text
-        assert "必ず Read" in text
         assert "存在する場合" in text
         assert "勝手に作成しない" in text
 
@@ -1157,8 +1155,8 @@ def test_skill_config_defaults_have_read_gate_in_skill_docs() -> None:
             assert "default と任意 override を確認する" in text
             assert "gate で Read" in text
         else:
-            assert "deep-merge 前提" in text
-            assert "チャンネル上書きを優先" in text
+            assert "deep-merge" in text
+            assert "チャンネル上書き" in text
 
         gate_pos = text.index("## 設定読み込みゲート")
         operational_markers = [
@@ -1592,7 +1590,7 @@ def test_automation_schedule_skill_contract() -> None:
         assert ref in skill
         assert (ROOT / ".claude/skills/automation-schedule/references" / ref).exists()
 
-    # Hard Gates は冒頭 60 行以内（skill-authoring-guidelines ルール⑥）
+    # Hard Gates は冒頭 60 行以内（automation-schedule 固有の契約）
     head = "\n".join(skill.splitlines()[:60])
     assert "## Hard Gates" in head
     assert "allow_external_publish" in head
