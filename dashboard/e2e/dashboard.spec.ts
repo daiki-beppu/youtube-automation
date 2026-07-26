@@ -11,6 +11,58 @@ let fixtureRoot: string
 let baseURL: string
 let serverStderr = ""
 
+const paletteLightColors = {
+  Blue: ["#d9e6ff", "#9db7f9", "#4979f5", "#264af4", "#0017c1"],
+  "Light Blue": ["#c0e4ff", "#57b8ff", "#008bf2", "#0066be", "#00428c"],
+  Cyan: ["#99f2ff", "#2bc8e4", "#00a3bf", "#008299", "#006173"],
+  Green: ["#c2e5d1", "#71c598", "#259d63", "#197a4b", "#115a36"],
+  Lime: ["#d0f5a2", "#8cc80c", "#6fa104", "#507500", "#2c4100"],
+  Yellow: ["#ffe380", "#ebb700", "#b78f00", "#927200", "#6e5600"],
+  Orange: ["#ffdfca", "#ffa66d", "#fb5b01", "#c74700", "#8b3200"],
+  Red: ["#ffdada", "#ff9696", "#ff5454", "#ec0000", "#a90000"],
+  Magenta: ["#ffd0ff", "#ff8eff", "#f137f1", "#c000c0", "#8b008b"],
+  Purple: ["#ecddff", "#cda6ff", "#a565f8", "#8843e1", "#5c10be"],
+} as const
+
+function colorChannels(color: string): [number, number, number] {
+  const values = color.match(/[\d.]+/g)?.map(Number)
+  if (!values || values.length < 3) {
+    throw new Error(`色をRGBへ変換できませんでした: ${color}`)
+  }
+  if (color.startsWith("color(srgb")) {
+    return [values[0] * 255, values[1] * 255, values[2] * 255]
+  }
+  return [values[0], values[1], values[2]]
+}
+
+function hexChannels(color: string): [number, number, number] {
+  return [
+    Number.parseInt(color.slice(1, 3), 16),
+    Number.parseInt(color.slice(3, 5), 16),
+    Number.parseInt(color.slice(5, 7), 16),
+  ]
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const luminance = (color: string) =>
+    colorChannels(color)
+      .map((channel) => channel / 255)
+      .map((channel) =>
+        channel <= 0.04045
+          ? channel / 12.92
+          : ((channel + 0.055) / 1.055) ** 2.4
+      )
+      .reduce(
+        (sum, channel, index) =>
+          sum + channel * [0.2126, 0.7152, 0.0722][index],
+        0
+      )
+  const values = [luminance(foreground), luminance(background)].sort(
+    (left, right) => right - left
+  )
+  return (values[0] + 0.05) / (values[1] + 0.05)
+}
+
 async function unusedPort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
     const server = createServer()
@@ -140,24 +192,30 @@ test.afterAll(async () => {
 test("概要から動画詳細まで keyboard で確認できる", async ({ page }) => {
   await page.setViewportSize({ width: 760, height: 900 })
   await page.goto(baseURL)
-  const overviewCard = page.getByRole("article", {
-    name: "Night Drive の概要",
-  })
-  await expect(overviewCard).toBeVisible()
-  await expect(overviewCard.getByText("3,200")).toBeVisible()
-  await expect(overviewCard.getByText("900分")).toBeVisible()
-  await expect(overviewCard.getByText("+32")).toBeVisible()
-  await expect(overviewCard.getByText("分析動画")).toBeVisible()
+  const overview = page.getByRole("region", { name: "概況" })
+  await expect(overview).toBeVisible()
+  await expect(
+    overview.getByRole("region", { name: "表示データについて" })
+  ).toContainText("対象期間")
+  await expect(
+    overview.getByRole("region", { name: "指標の見方" })
+  ).toContainText("公開予約")
+  await expect(
+    page.getByRole("heading", { name: "チャンネル概要" })
+  ).toHaveCount(0)
   await expect(page.getByText("チャンネルを選択してください")).toHaveCount(0)
   const stockTable = page.getByRole("table", {
     name: "チャンネル横断ストック一覧",
   })
   await expect(stockTable).toBeVisible()
-  await expect(stockTable.getByRole("columnheader")).toHaveCount(7)
   const zeroStockRow = stockTable.getByRole("row", { name: /Zero Stock/ })
   const nightDriveRow = stockTable.getByRole("row", { name: /Night Drive/ })
+  await expect(zeroStockRow.getByText("ストック")).toBeVisible()
   await expect(zeroStockRow).toContainText("0本")
   await expect(nightDriveRow).toContainText("1本")
+  await expect(nightDriveRow).toContainText("3,200")
+  await expect(nightDriveRow).toContainText("900分")
+  await expect(nightDriveRow).toContainText("+32")
   expect(
     await zeroStockRow.evaluate(
       (row, laterRow) =>
@@ -186,14 +244,13 @@ test("概要から動画詳細まで keyboard で確認できる", async ({ page
     documentWidth: document.documentElement.scrollWidth,
     viewportWidth: document.documentElement.clientWidth,
   }))
-  expect(stockLayout.scrollWidth).toBeGreaterThan(stockLayout.clientWidth)
+  expect(stockLayout.scrollWidth).toBeLessThanOrEqual(stockLayout.clientWidth)
   expect(stockLayout.documentWidth).toBeLessThanOrEqual(
     stockLayout.viewportWidth
   )
-  const channel = page.getByRole("button", { name: /Night Drive/ })
+  const channel = nightDriveRow.getByRole("button", { name: /Night Drive/ })
   await expect(channel).toBeVisible()
-  await expect(overviewCard.getByText("公開予約 1本")).toBeVisible()
-  const layout = await overviewCard.evaluate((element) => {
+  const layout = await nightDriveRow.evaluate((element) => {
     const bounds = element.getBoundingClientRect()
     return {
       clientWidth: element.clientWidth,
@@ -216,4 +273,335 @@ test("概要から動画詳細まで keyboard で確認できる", async ({ page
     videoTable.getByRole("cell", { name: "Midnight City" })
   ).toBeVisible()
   await expect(videoTable.getByRole("cell", { name: "3,200" })).toBeVisible()
+})
+
+test("768px 幅でも比較行と詳細操作が見切れない", async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 900 })
+  await page.goto(baseURL)
+
+  const comparisonTable = page.getByRole("table", {
+    name: "チャンネル横断ストック一覧",
+  })
+  const nightDriveRow = comparisonTable.getByRole("row", {
+    name: /Night Drive/,
+  })
+  const detailButton = nightDriveRow.getByRole("button", {
+    name: /Night Drive/,
+  })
+  await expect(detailButton).toBeVisible()
+
+  const layout = await nightDriveRow.evaluate(
+    (element, button) => {
+      const rowBounds = element.getBoundingClientRect()
+      const buttonBounds = button.getBoundingClientRect()
+      return {
+        documentWidth: document.documentElement.scrollWidth,
+        viewportWidth: document.documentElement.clientWidth,
+        rowLeft: rowBounds.left,
+        rowRight: rowBounds.right,
+        buttonLeft: buttonBounds.left,
+        buttonRight: buttonBounds.right,
+      }
+    },
+    await detailButton.elementHandle()
+  )
+  expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth)
+  expect(layout.rowLeft).toBeGreaterThanOrEqual(0)
+  expect(layout.rowRight).toBeLessThanOrEqual(layout.viewportWidth)
+  expect(layout.buttonLeft).toBeGreaterThanOrEqual(layout.rowLeft)
+  expect(layout.buttonRight).toBeLessThanOrEqual(layout.rowRight)
+})
+
+test("ダークテーマでも背景とカードの階調を識別できる", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("theme", "dark")
+  })
+  await page.goto(baseURL)
+
+  const colors = await page.evaluate(() => {
+    const rootStyle = getComputedStyle(document.documentElement)
+    const lightness = (token: string) => {
+      const match = rootStyle
+        .getPropertyValue(token)
+        .match(/oklch\(([\d.]+)(%?)/)
+      if (!match) throw new Error(`${token} is not an OKLCH color`)
+      const value = Number(match[1])
+      return match[2] === "%" ? value / 100 : value
+    }
+    return {
+      background: lightness("--background"),
+      card: lightness("--card"),
+    }
+  })
+
+  expect(colors.background).toBeGreaterThanOrEqual(0.18)
+  expect(colors.card - colors.background).toBeGreaterThanOrEqual(0.04)
+})
+
+test("カラーパレットを切り替えて再読み込み後も保持できる", async ({ page }) => {
+  await page.goto(baseURL)
+
+  await expect(
+    page.getByRole("group", { name: "カラーパレット" })
+  ).not.toBeVisible()
+  await page.getByRole("button", { name: "設定を開く" }).click()
+  const paletteGroup = page.getByRole("group", { name: "カラーパレット" })
+  const blue = paletteGroup.getByRole("button", {
+    name: "Blue",
+    exact: true,
+  })
+  const green = paletteGroup.getByRole("button", {
+    name: "Green",
+    exact: true,
+  })
+  await expect(blue).toHaveAttribute("aria-pressed", "true")
+
+  const dashboardColors = () =>
+    page.evaluate(() => {
+      const overviewHeading = [...document.querySelectorAll("h2")].find(
+        (heading) => heading.textContent === "概況"
+      )
+      const registeredChannels = [...document.querySelectorAll("dt")].find(
+        (term) => term.textContent === "登録チャンネル"
+      )
+      if (!overviewHeading || !registeredChannels?.parentElement) {
+        throw new Error("ダッシュボードの配色対象を取得できませんでした")
+      }
+      return {
+        background: getComputedStyle(document.querySelector("main")!)
+          .backgroundImage,
+        headingBorder: getComputedStyle(overviewHeading).borderLeftColor,
+        metricSurface: getComputedStyle(registeredChannels.parentElement)
+          .backgroundColor,
+      }
+    })
+  const blueDashboardColors = await dashboardColors()
+  const blueBackground = await blue.evaluate(
+    (element) => getComputedStyle(element).backgroundColor
+  )
+  await green.click()
+  await expect(green).toHaveAttribute("aria-pressed", "true")
+  const greenBackground = await green.evaluate(
+    (element) => getComputedStyle(element).backgroundColor
+  )
+  expect(greenBackground).not.toBe(blueBackground)
+  const greenDashboardColors = await dashboardColors()
+  expect(greenDashboardColors.background).not.toBe(
+    blueDashboardColors.background
+  )
+  expect(greenDashboardColors.headingBorder).not.toBe(
+    blueDashboardColors.headingBorder
+  )
+  expect(greenDashboardColors.metricSurface).not.toBe(
+    blueDashboardColors.metricSurface
+  )
+
+  await page.reload()
+  await page.getByRole("button", { name: "設定を開く" }).click()
+  await expect(
+    page
+      .getByRole("group", { name: "カラーパレット" })
+      .getByRole("button", { name: "Green" })
+  ).toHaveAttribute("aria-pressed", "true")
+})
+
+test("グラフは色だけに頼らず再生数を常時表示する", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("theme", "light")
+  })
+  await page.goto(baseURL)
+  await page
+    .getByRole("button", { name: "Night Drive の動画詳細を見る" })
+    .click()
+
+  const chart = page.getByTestId("top-videos-chart")
+  const valueLabel = chart.getByText("3,200")
+  await expect(valueLabel).toBeVisible()
+
+  const expectChartContrast = async () => {
+    await expect(valueLabel).toBeVisible()
+    await expect(chart.locator(".recharts-bar-rectangle path")).toHaveCount(1)
+    const colors = await chart.evaluate((element) => {
+      const bar = element.querySelector(".recharts-bar-rectangle path")
+      const label = [...element.querySelectorAll("text")].find(
+        (candidate) => candidate.textContent === "3,200"
+      )
+      const surface = element.closest("[data-slot='card']")
+      if (!bar || !label || !surface) {
+        throw new Error("グラフの検査対象がありません")
+      }
+      const toSrgb = (color: string) => {
+        const sample = document.createElement("span")
+        sample.style.color = `color-mix(in srgb, ${color}, ${color})`
+        document.body.append(sample)
+        const resolved = getComputedStyle(sample).color
+        sample.remove()
+        return resolved
+      }
+      return {
+        background: toSrgb(getComputedStyle(surface).backgroundColor),
+        bar: toSrgb(getComputedStyle(bar).fill),
+        label: toSrgb(getComputedStyle(label).fill),
+      }
+    })
+    expect(
+      contrastRatio(colors.bar, colors.background),
+      JSON.stringify(colors)
+    ).toBeGreaterThanOrEqual(3)
+    expect(
+      contrastRatio(colors.label, colors.background),
+      JSON.stringify(colors)
+    ).toBeGreaterThanOrEqual(4.5)
+  }
+
+  await page.getByRole("button", { name: "設定を開く" }).click()
+  for (const palette of Object.keys(paletteLightColors)) {
+    await page
+      .getByRole("group", { name: "カラーパレット" })
+      .getByRole("button", { name: palette, exact: true })
+      .click()
+    await expectChartContrast()
+  }
+
+  await page.getByRole("button", { name: "閉じる" }).click()
+  await page.getByRole("button", { name: "ダークモードに切り替え" }).click()
+  await page.getByRole("button", { name: "設定を開く" }).click()
+  for (const palette of Object.keys(paletteLightColors)) {
+    await page
+      .getByRole("group", { name: "カラーパレット" })
+      .getByRole("button", { name: palette, exact: true })
+      .click()
+    await expectChartContrast()
+  }
+})
+
+test("ライトでは公式5段階色、ダークでは背景と識別できる色を表示する", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("theme", "light")
+  })
+  await page.goto(baseURL)
+  await page.getByRole("button", { name: "設定を開く" }).click()
+
+  const expectDashboardContrast = async () => {
+    const colors = await page.evaluate(() => {
+      const title = document.querySelector("h1")
+      const accentDescription = [...document.querySelectorAll("div")].find(
+        (element) =>
+          element.textContent === "起動時に読み込んだ全チャンネルの集計です。"
+      )
+      const metricLabel = [...document.querySelectorAll("dt")].find(
+        (term) => term.textContent === "登録チャンネル"
+      )
+      const metricSurface = metricLabel?.parentElement
+      if (!title || !accentDescription || !metricLabel || !metricSurface) {
+        throw new Error("コントラスト検査対象を取得できませんでした")
+      }
+
+      const toSrgb = (color: string) => {
+        const sample = document.createElement("span")
+        sample.style.color = `color-mix(in srgb, ${color}, ${color})`
+        document.body.append(sample)
+        const resolved = getComputedStyle(sample).color
+        sample.remove()
+        return resolved
+      }
+      const accentSample = document.createElement("span")
+      accentSample.style.backgroundColor = "var(--dashboard-accent-surface)"
+      document.body.append(accentSample)
+      const titleBackground = getComputedStyle(accentSample).backgroundColor
+      accentSample.remove()
+
+      return {
+        accentDescription: {
+          background: toSrgb(titleBackground),
+          foreground: toSrgb(getComputedStyle(accentDescription).color),
+        },
+        metric: {
+          background: toSrgb(getComputedStyle(metricSurface).backgroundColor),
+          foreground: toSrgb(getComputedStyle(metricLabel).color),
+        },
+        title: {
+          background: toSrgb(titleBackground),
+          foreground: toSrgb(getComputedStyle(title).color),
+        },
+      }
+    })
+
+    expect(
+      contrastRatio(colors.title.foreground, colors.title.background),
+      JSON.stringify(colors.title)
+    ).toBeGreaterThanOrEqual(4.5)
+    expect(
+      contrastRatio(
+        colors.accentDescription.foreground,
+        colors.accentDescription.background
+      ),
+      JSON.stringify(colors.accentDescription)
+    ).toBeGreaterThanOrEqual(4.5)
+    expect(
+      contrastRatio(colors.metric.foreground, colors.metric.background),
+      JSON.stringify(colors.metric)
+    ).toBeGreaterThanOrEqual(4.5)
+  }
+
+  for (const [palette, expectedColors] of Object.entries(paletteLightColors)) {
+    const option = page
+      .getByRole("group", { name: "カラーパレット" })
+      .getByRole("button", { name: palette, exact: true })
+    await option.click()
+    await expect(option).toHaveAttribute("aria-pressed", "true")
+
+    const colors = await Promise.all(
+      expectedColors.map((_, index) =>
+        page
+          .getByTestId(`palette-swatch-${index + 1}`)
+          .evaluate((element) => getComputedStyle(element).backgroundColor)
+      )
+    )
+    expect(colors.map(colorChannels)).toEqual(expectedColors.map(hexChannels))
+    const selectedColors = await option.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return {
+        background: style.backgroundColor,
+        foreground: style.color,
+      }
+    })
+    expect(
+      contrastRatio(selectedColors.foreground, selectedColors.background),
+      JSON.stringify(selectedColors)
+    ).toBeGreaterThanOrEqual(4.5)
+    await expectDashboardContrast()
+  }
+
+  await page.getByRole("button", { name: "閉じる" }).click()
+  await page.getByRole("button", { name: "ダークモードに切り替え" }).click()
+  await page.getByRole("button", { name: "設定を開く" }).click()
+
+  for (const palette of Object.keys(paletteLightColors)) {
+    const option = page
+      .getByRole("group", { name: "カラーパレット" })
+      .getByRole("button", { name: palette, exact: true })
+    await option.click()
+    const swatches = await Promise.all(
+      Array.from({ length: 5 }, (_, index) =>
+        page.getByTestId(`palette-swatch-${index + 1}`).evaluate((element) => {
+          const surface = element.closest("[data-slot='sheet-content']")
+          if (!surface) throw new Error("palette settings surface is missing")
+          return {
+            background: getComputedStyle(surface).backgroundColor,
+            color: getComputedStyle(element).backgroundColor,
+          }
+        })
+      )
+    )
+    expect(new Set(swatches.map(({ color }) => color)).size).toBe(5)
+    for (const swatch of swatches) {
+      expect(
+        contrastRatio(swatch.color, swatch.background)
+      ).toBeGreaterThanOrEqual(3)
+    }
+    await expectDashboardContrast()
+  }
 })

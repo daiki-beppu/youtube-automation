@@ -1,14 +1,19 @@
 import { useEffect, useMemo, useState } from "react"
 import {
+  CalendarRangeIcon,
   AlertCircleIcon,
   BarChart3Icon,
   DatabaseIcon,
+  InfoIcon,
   MoonIcon,
+  RefreshCwIcon,
+  SettingsIcon,
   SunIcon,
 } from "lucide-react"
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { PaletteSwitcher } from "@/components/palette-switcher"
 import { useTheme } from "@/components/theme-provider"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -34,13 +39,23 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import { ChannelStockTable } from "@/features/channel-stock/channel-stock-table"
 import type { ChannelOverview, Summary } from "@/lib/dashboard-types"
 import {
   formatCollectedAt,
+  formatDateRange,
   formatInteger,
   formatSignedInteger,
 } from "@/lib/dashboard-formatters"
+import { dashboardStatusPresentation } from "@/lib/dashboard-status"
 import {
   Table,
   TableBody,
@@ -68,7 +83,7 @@ type ChannelDetail = Omit<ChannelOverview, "video_count"> & { videos: Video[] }
 type OverviewResponse = { schema_version: number; channels: ChannelOverview[] }
 
 const chartConfig = {
-  views: { label: "再生数", color: "var(--chart-1)" },
+  views: { label: "再生数", color: "var(--chart-3)" },
 } satisfies ChartConfig
 
 async function requestJson<T>(path: string): Promise<T> {
@@ -79,22 +94,6 @@ async function requestJson<T>(path: string): Promise<T> {
     throw new Error(`HTTP ${response.status}`)
   }
   return response.json() as Promise<T>
-}
-
-function statusLabel(status: string): string {
-  const labels: Record<string, string> = {
-    ready: "準備完了",
-    missing_snapshot: "データ未収集",
-    invalid_snapshot: "データエラー",
-    invalid_channel: "設定エラー",
-  }
-  return labels[status] ?? status
-}
-
-function channelBadgeLabel(channel: ChannelOverview): string {
-  if (channel.status !== "ready") return statusLabel(channel.status)
-  if (channel.scheduled_count === null) return "公開予約 未取得"
-  return `公開予約 ${formatInteger(channel.scheduled_count)}本`
 }
 
 function LoadingState() {
@@ -115,144 +114,205 @@ function LoadingState() {
   )
 }
 
+function DashboardOverview({ channels }: { channels: ChannelOverview[] }) {
+  const scheduledChannels = channels.filter(
+    (channel) => channel.scheduled_count !== null
+  )
+  const scheduledTotal = scheduledChannels.reduce(
+    (total, channel) => total + (channel.scheduled_count ?? 0),
+    0
+  )
+  const attentionCount = channels.filter(
+    (channel) => channel.refresh_error !== null || channel.status !== "ready"
+  ).length
+  const startDates = channels.flatMap((channel) =>
+    channel.period.start_date ? [channel.period.start_date] : []
+  )
+  const endDates = channels.flatMap((channel) =>
+    channel.period.end_date ? [channel.period.end_date] : []
+  )
+  const collectedDates = channels.flatMap((channel) =>
+    channel.collected_at ? [channel.collected_at] : []
+  )
+  const startDate = startDates.length > 0 ? startDates.sort()[0] : null
+  const endDate = endDates.length > 0 ? (endDates.sort().at(-1) ?? null) : null
+  const collectedAt =
+    collectedDates.length > 0 ? (collectedDates.sort().at(-1) ?? null) : null
+
+  return (
+    <section aria-labelledby="dashboard-overview-title" className="grid gap-4">
+      <div>
+        <h2
+          id="dashboard-overview-title"
+          className="dashboard-section-heading text-2xl font-semibold"
+        >
+          概況
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          まず全体の状態を確認し、次にチャンネル間の差を比較します。
+        </p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,1fr)]">
+        <Card variant="accent">
+          <CardHeader>
+            <CardTitle>現在の状態</CardTitle>
+            <CardDescription>
+              起動時に読み込んだ全チャンネルの集計です。
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid gap-3 sm:grid-cols-3">
+              <div className="dashboard-metric-surface rounded-lg p-4">
+                <dt className="text-xs text-foreground">登録チャンネル</dt>
+                <dd className="mt-1 text-2xl font-semibold tabular-nums">
+                  {formatInteger(channels.length)}
+                  <span className="ml-1 text-sm font-normal text-foreground">
+                    件
+                  </span>
+                </dd>
+              </div>
+              <div className="dashboard-metric-surface rounded-lg p-4">
+                <dt className="text-xs text-foreground">公開予約 合計</dt>
+                <dd className="mt-1 text-2xl font-semibold tabular-nums">
+                  {formatInteger(scheduledTotal)}
+                  <span className="ml-1 text-sm font-normal text-foreground">
+                    本
+                  </span>
+                </dd>
+              </div>
+              <div className="dashboard-metric-surface rounded-lg p-4">
+                <dt className="text-xs text-foreground">要確認</dt>
+                <dd className="mt-1 text-2xl font-semibold tabular-nums">
+                  {formatInteger(attentionCount)}
+                  <span className="ml-1 text-sm font-normal text-foreground">
+                    件
+                  </span>
+                </dd>
+              </div>
+            </dl>
+          </CardContent>
+          <CardFooter className="text-xs text-muted-foreground">
+            公開予約未取得:
+            {formatInteger(channels.length - scheduledChannels.length)}件
+          </CardFooter>
+        </Card>
+
+        <Card role="region" aria-label="表示データについて">
+          <CardHeader>
+            <CardTitle>表示データについて</CardTitle>
+            <CardDescription>判断の前提となる期間と鮮度です。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid gap-4 text-sm">
+              <div className="flex gap-3">
+                <CalendarRangeIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <dt className="font-medium">対象期間</dt>
+                  <dd className="text-muted-foreground">
+                    {formatDateRange(startDate, endDate)}
+                  </dd>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <RefreshCwIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <dt className="font-medium">最終更新</dt>
+                  <dd className="text-muted-foreground">
+                    {formatCollectedAt(collectedAt)}
+                  </dd>
+                </div>
+              </div>
+            </dl>
+          </CardContent>
+          <CardFooter className="text-xs text-muted-foreground">
+            期間と更新時刻はチャンネルごとに異なる場合があります。
+          </CardFooter>
+        </Card>
+      </div>
+
+      <Card role="region" aria-label="指標の見方">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <InfoIcon className="size-4" />
+            指標の見方
+          </CardTitle>
+          <CardDescription>
+            比較表で使用する主要指標の定義です。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt className="font-medium">公開予約</dt>
+              <dd className="mt-1 text-muted-foreground">
+                YouTube で公開日時が設定された未公開動画の本数
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium">期間再生数</dt>
+              <dd className="mt-1 text-muted-foreground">
+                対象期間中に動画が再生された回数
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium">純増登録者</dt>
+              <dd className="mt-1 text-muted-foreground">
+                対象期間中の登録者増加数から減少数を引いた値
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium">総再生時間</dt>
+              <dd className="mt-1 text-muted-foreground">
+                対象期間中に視聴された時間の合計
+              </dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
 function SummaryMetrics({ summary }: { summary: Summary }) {
+  const subscriberTone =
+    summary.subscribers_net > 0
+      ? "positive"
+      : summary.subscribers_net < 0
+        ? "negative"
+        : "neutral"
+
   return (
     <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <div className="rounded-lg bg-muted p-4">
-        <dt className="text-xs text-muted-foreground">再生数</dt>
+      <div className="dashboard-metric-surface rounded-lg p-4">
+        <dt className="text-xs text-foreground">再生数</dt>
         <dd className="text-2xl font-semibold tabular-nums">
           {formatInteger(summary.views)}
         </dd>
       </div>
-      <div className="rounded-lg bg-muted p-4">
-        <dt className="text-xs text-muted-foreground">総再生時間</dt>
+      <div className="dashboard-metric-surface rounded-lg p-4">
+        <dt className="text-xs text-foreground">総再生時間</dt>
         <dd className="text-2xl font-semibold tabular-nums">
           {formatInteger(summary.watch_time_minutes)}
-          <span className="ml-1 text-sm font-normal text-muted-foreground">
-            分
-          </span>
+          <span className="ml-1 text-sm font-normal text-foreground">分</span>
         </dd>
       </div>
-      <div className="rounded-lg bg-muted p-4">
-        <dt className="text-xs text-muted-foreground">純増登録者</dt>
+      <div
+        className="dashboard-metric-surface rounded-lg p-4"
+        data-tone={subscriberTone}
+      >
+        <dt className="text-xs text-foreground">純増登録者</dt>
         <dd className="text-2xl font-semibold tabular-nums">
-          {formatInteger(summary.subscribers_net)}
+          {formatSignedInteger(summary.subscribers_net)}
         </dd>
       </div>
-      <div className="rounded-lg bg-muted p-4">
-        <dt className="text-xs text-muted-foreground">エンゲージメント</dt>
+      <div className="dashboard-metric-surface rounded-lg p-4">
+        <dt className="text-xs text-foreground">エンゲージメント</dt>
         <dd className="text-2xl font-semibold tabular-nums">
           {formatInteger(summary.engagements)}
         </dd>
       </div>
     </dl>
-  )
-}
-
-function ChannelOverviewGrid({
-  channels,
-  selectedId,
-  onSelect,
-}: {
-  channels: ChannelOverview[]
-  selectedId: string | null
-  onSelect: (id: string) => void
-}) {
-  return (
-    <section aria-labelledby="channel-overview-title" className="grid gap-4">
-      <div>
-        <h2 id="channel-overview-title" className="text-2xl font-semibold">
-          チャンネル概要
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          選択しなくても、全チャンネルの主要指標を比較できます。
-        </p>
-      </div>
-      <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {channels.map((channel) => (
-          <Card
-            key={channel.id}
-            role="article"
-            aria-label={`${channel.name} の概要`}
-            className="min-w-0"
-          >
-            <CardHeader className="gap-3">
-              <div className="min-w-0">
-                <CardTitle className="text-lg break-words">
-                  {channel.name}
-                </CardTitle>
-                <CardDescription>
-                  収集: {formatCollectedAt(channel.collected_at)}
-                </CardDescription>
-              </div>
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                {channel.refresh_error ? (
-                  <Badge
-                    variant="destructive"
-                    aria-label={`更新失敗: ${channel.refresh_error.message}`}
-                  >
-                    更新失敗
-                  </Badge>
-                ) : null}
-                <Badge
-                  variant={
-                    channel.status === "ready" ? "default" : "destructive"
-                  }
-                >
-                  {channelBadgeLabel(channel)}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <dl className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-muted p-3">
-                  <dt className="text-xs text-muted-foreground">期間再生数</dt>
-                  <dd className="text-lg font-semibold tabular-nums">
-                    {channel.summary
-                      ? formatInteger(channel.summary.views)
-                      : "—"}
-                  </dd>
-                </div>
-                <div className="rounded-lg bg-muted p-3">
-                  <dt className="text-xs text-muted-foreground">純増登録者</dt>
-                  <dd className="text-lg font-semibold tabular-nums">
-                    {channel.summary
-                      ? formatSignedInteger(channel.summary.subscribers_net)
-                      : "—"}
-                  </dd>
-                </div>
-                <div className="rounded-lg bg-muted p-3">
-                  <dt className="text-xs text-muted-foreground">総再生時間</dt>
-                  <dd className="text-lg font-semibold tabular-nums">
-                    {channel.summary
-                      ? `${formatInteger(channel.summary.watch_time_minutes)}分`
-                      : "—"}
-                  </dd>
-                </div>
-                <div className="rounded-lg bg-muted p-3">
-                  <dt className="text-xs text-muted-foreground">分析動画</dt>
-                  <dd className="text-lg font-semibold tabular-nums">
-                    {formatInteger(channel.video_count)}本
-                  </dd>
-                </div>
-              </dl>
-            </CardContent>
-            <CardFooter className="mt-auto">
-              <Button
-                variant={selectedId === channel.id ? "secondary" : "outline"}
-                size="sm"
-                className="w-full"
-                onClick={() => onSelect(channel.id)}
-                aria-pressed={selectedId === channel.id}
-                aria-label={`${channel.name} の動画詳細を見る`}
-              >
-                動画詳細を見る
-              </Button>
-            </CardFooter>
-          </Card>
-        ))}
-      </div>
-    </section>
   )
 }
 
@@ -278,7 +338,9 @@ function Detail({ detail }: { detail: ChannelDetail }) {
       {detail.error ? (
         <Alert variant="destructive">
           <AlertCircleIcon />
-          <AlertTitle>{statusLabel(detail.status)}</AlertTitle>
+          <AlertTitle>
+            {dashboardStatusPresentation(detail.status).label}
+          </AlertTitle>
           <AlertDescription>{detail.error.message}</AlertDescription>
         </Alert>
       ) : null}
@@ -305,12 +367,16 @@ function Detail({ detail }: { detail: ChannelDetail }) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ChartContainer config={chartConfig} className="min-h-64 w-full">
+              <ChartContainer
+                config={chartConfig}
+                className="min-h-64 w-full"
+                data-testid="top-videos-chart"
+              >
                 <BarChart
                   accessibilityLayer
                   data={chartData}
                   layout="vertical"
-                  margin={{ left: 8 }}
+                  margin={{ left: 8, right: 64 }}
                 >
                   <CartesianGrid horizontal={false} />
                   <YAxis
@@ -328,7 +394,18 @@ function Detail({ detail }: { detail: ChannelDetail }) {
                     cursor={false}
                     content={<ChartTooltipContent />}
                   />
-                  <Bar dataKey="views" fill="var(--color-views)" radius={4} />
+                  <Bar dataKey="views" fill="var(--color-views)" radius={4}>
+                    <LabelList
+                      dataKey="views"
+                      position="right"
+                      fill="var(--foreground)"
+                      formatter={(value) =>
+                        typeof value === "number"
+                          ? formatInteger(value)
+                          : String(value ?? "")
+                      }
+                    />
+                  </Bar>
                 </BarChart>
               </ChartContainer>
             </CardContent>
@@ -418,7 +495,7 @@ export function App() {
   }
 
   return (
-    <main className="min-h-svh bg-background">
+    <main className="dashboard-palette-background min-h-svh">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8 p-4 sm:p-8">
         <header className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-2">
@@ -426,25 +503,62 @@ export function App() {
               <DatabaseIcon data-icon="inline-start" />
               起動時更新
             </Badge>
-            <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+            <h1 className="text-3xl font-semibold tracking-tight text-primary sm:text-4xl">
               YouTube Analytics Dashboard
             </h1>
             <p className="max-w-2xl text-muted-foreground">
               起動時に全チャンネルを更新し、チャンネルと動画のパフォーマンスを確認します。
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label={
-              theme === "dark"
-                ? "ライトモードに切り替え"
-                : "ダークモードに切り替え"
-            }
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          >
-            {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={
+                theme === "dark"
+                  ? "ライトモードに切り替え"
+                  : "ダークモードに切り替え"
+              }
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            >
+              {theme === "dark" ? <SunIcon /> : <MoonIcon />}
+            </Button>
+            <Sheet>
+              <SheetTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    aria-label="設定を開く"
+                  />
+                }
+              >
+                <SettingsIcon />
+              </SheetTrigger>
+              <SheetContent>
+                <SheetHeader>
+                  <SheetTitle>設定</SheetTitle>
+                  <SheetDescription>
+                    ダッシュボードの表示を調整します。
+                  </SheetDescription>
+                </SheetHeader>
+                <section
+                  aria-labelledby="palette-settings-title"
+                  className="flex flex-col gap-3 px-4"
+                >
+                  <div>
+                    <h2 id="palette-settings-title" className="font-medium">
+                      カラーパレット
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      ダッシュボードのテーマカラーを選択できます。
+                    </p>
+                  </div>
+                  <PaletteSwitcher />
+                </section>
+              </SheetContent>
+            </Sheet>
+          </div>
         </header>
 
         {error ? (
@@ -471,8 +585,8 @@ export function App() {
         ) : null}
         {channels && channels.length > 0 ? (
           <div className="grid gap-8">
-            <ChannelStockTable channels={channels} />
-            <ChannelOverviewGrid
+            <DashboardOverview channels={channels} />
+            <ChannelStockTable
               channels={channels}
               selectedId={selectedId}
               onSelect={selectChannel}
@@ -492,7 +606,7 @@ export function App() {
               {detail ? (
                 <div className="grid gap-4">
                   <div>
-                    <h2 className="text-2xl font-semibold">
+                    <h2 className="dashboard-section-heading text-2xl font-semibold">
                       {detail.name} の動画詳細
                     </h2>
                     <p className="text-sm text-muted-foreground">

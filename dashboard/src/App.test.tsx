@@ -76,6 +76,48 @@ function renderDashboard() {
 }
 
 describe("dashboard", () => {
+  it("presents overview, data context, metric definitions, and comparison in decision order", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(overview), { status: 200 })
+    )
+
+    renderDashboard()
+
+    const overviewHeading = await screen.findByRole("heading", {
+      name: "概況",
+    })
+    const comparisonHeading = screen.getByRole("heading", {
+      name: "チャンネル比較",
+    })
+    expect(overviewHeading.compareDocumentPosition(comparisonHeading)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
+
+    const dataContext = screen.getByRole("region", {
+      name: "表示データについて",
+    })
+    expect(within(dataContext).getByText("対象期間")).toBeInTheDocument()
+    expect(
+      within(dataContext).getByText("2026/06/20〜2026/07/20")
+    ).toBeInTheDocument()
+    expect(within(dataContext).getByText("最終更新")).toBeInTheDocument()
+    expect(within(dataContext).getByText(/\d{1,2}:\d{2}/)).toBeInTheDocument()
+
+    const metricGuide = screen.getByRole("region", {
+      name: "指標の見方",
+    })
+    expect(within(metricGuide).getByText("公開予約")).toBeInTheDocument()
+    expect(
+      within(metricGuide).getByText(
+        "YouTube で公開日時が設定された未公開動画の本数"
+      )
+    ).toBeInTheDocument()
+    expect(within(metricGuide).getByText("期間再生数")).toBeInTheDocument()
+    expect(
+      within(metricGuide).getByText("対象期間中に動画が再生された回数")
+    ).toBeInTheDocument()
+  })
+
   it("shows channel metrics before a channel is selected", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify(overview), { status: 200 })
@@ -83,22 +125,23 @@ describe("dashboard", () => {
 
     renderDashboard()
 
-    const channel = await screen.findByRole("article", {
-      name: "Night Drive の概要",
-    })
-    const stockTable = screen.getByRole("table", {
+    const comparisonTable = await screen.findByRole("table", {
       name: "チャンネル横断ストック一覧",
     })
-    expect(stockTable.compareDocumentPosition(channel)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING
-    )
-    expect(within(channel).getByText("1,200")).toBeInTheDocument()
-    expect(within(channel).getByText("450分")).toBeInTheDocument()
-    expect(within(channel).getByText("+12")).toBeInTheDocument()
-    const videoMetric = within(channel).getByText("分析動画")
-      .parentElement as HTMLElement | null
-    if (videoMetric === null) throw new Error("分析動画 metric is missing")
-    expect(within(videoMetric).getByText("1本")).toBeInTheDocument()
+    const channelRow = within(comparisonTable).getByRole("row", {
+      name: /Night Drive/,
+    })
+    expect(within(channelRow).getByText("1,200")).toBeInTheDocument()
+    expect(within(channelRow).getByText("450分")).toBeInTheDocument()
+    expect(within(channelRow).getByText("+12")).toBeInTheDocument()
+    expect(
+      within(channelRow).getByRole("button", {
+        name: "Night Drive の動画詳細を見る",
+      })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("heading", { name: "チャンネル概要" })
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByText("チャンネルを選択してください")
     ).not.toBeInTheDocument()
@@ -138,7 +181,16 @@ describe("dashboard", () => {
     expect(
       within(performanceCard).getByRole("cell", { name: "1,200" })
     ).toBeInTheDocument()
-    expect(screen.getAllByText("公開予約 3本")).not.toHaveLength(0)
+    const subscriberMetric = screen
+      .getAllByText("純増登録者")
+      .at(-1)
+      ?.closest("[data-tone]")
+    expect(subscriberMetric).toHaveAttribute("data-tone", "positive")
+    expect(
+      within(subscriberMetric as HTMLElement).getByText("+12")
+    ).toBeInTheDocument()
+    const comparisonRow = screen.getByRole("row", { name: /Night Drive/ })
+    expect(within(comparisonRow).getByText("3本")).toBeInTheDocument()
     expect(screen.queryByText("準備完了")).not.toBeInTheDocument()
   })
 
@@ -154,6 +206,35 @@ describe("dashboard", () => {
     expect(
       await screen.findByText("登録済みチャンネルがありません")
     ).toBeInTheDocument()
+  })
+
+  it("counts channels with unavailable data as needing attention", async () => {
+    const unavailableOverview = {
+      ...overview,
+      channels: [
+        {
+          ...overview.channels[0],
+          status: "missing_snapshot",
+          scheduled_count: null,
+          collected_at: null,
+          period: { start_date: null, end_date: null },
+          summary: null,
+        },
+      ],
+    }
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(unavailableOverview), { status: 200 })
+    )
+
+    renderDashboard()
+
+    const overviewRegion = await screen.findByRole("region", { name: "概況" })
+    const attentionMetric = within(overviewRegion)
+      .getByText("要確認")
+      .closest("div")
+    if (attentionMetric === null) throw new Error("要確認 metric is missing")
+    expect(within(attentionMetric).getByText("1")).toBeInTheDocument()
+    expect(screen.getByText("データ未収集")).toBeInTheDocument()
   })
 
   it("marks a channel whose startup refresh failed in the overview", async () => {
@@ -177,8 +258,7 @@ describe("dashboard", () => {
 
     expect(
       await screen.findAllByLabelText("更新失敗: Authentication failed")
-    ).toHaveLength(2)
-    expect(screen.getAllByText("公開予約 3本")).not.toHaveLength(0)
+    ).toHaveLength(1)
     const stockTable = screen.getByRole("table", {
       name: "チャンネル横断ストック一覧",
     })
@@ -187,6 +267,62 @@ describe("dashboard", () => {
     })
     expect(within(stockRow).getByText("3本")).toBeInTheDocument()
     expect(within(stockRow).queryByText("未取得")).not.toBeInTheDocument()
+  })
+
+  it("lets a user preview and keep the dashboard color palette", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(overview), { status: 200 })
+    )
+    const user = userEvent.setup()
+
+    renderDashboard()
+
+    await screen.findByRole("heading", { name: "概況" })
+    expect(
+      screen.queryByRole("group", { name: "カラーパレット" })
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: "設定を開く" }))
+
+    const settings = screen.getByRole("dialog", { name: "設定" })
+    const paletteGroup = within(settings).getByRole("group", {
+      name: "カラーパレット",
+    })
+    const blue = within(paletteGroup).getByRole("button", { name: "Blue" })
+    const green = within(paletteGroup).getByRole("button", { name: "Green" })
+    expect(
+      within(paletteGroup)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label"))
+    ).toEqual([
+      "Blue",
+      "Light Blue",
+      "Cyan",
+      "Green",
+      "Lime",
+      "Yellow",
+      "Orange",
+      "Red",
+      "Magenta",
+      "Purple",
+    ])
+    expect(blue).toHaveAttribute("aria-pressed", "true")
+    expect(
+      screen.getByRole("img", {
+        name: "Blue の5段階配色。1〜3系列では 100、500、900 を使用",
+      })
+    ).toBeInTheDocument()
+
+    await user.click(green)
+
+    expect(green).toHaveAttribute("aria-pressed", "true")
+    expect(
+      screen.getByRole("img", {
+        name: "Green の5段階配色。1〜3系列では 100、600、900 を使用",
+      })
+    ).toBeInTheDocument()
+    expect(document.documentElement).toHaveAttribute("data-palette", "green")
+    expect(localStorage.getItem("palette")).toBe("green")
   })
 
   it("shows an alert when the overview request fails", async () => {
