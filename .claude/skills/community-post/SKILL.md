@@ -22,7 +22,7 @@ Step 6 のユーザー案内（クリップボードコピー済み + Studio で
 
 ## 設定読み込みゲート
 
-前提確認や Step 1 に入る前に、以下を必ず Read（Codex では同等のファイル閲覧）で開く。SKILL.md の説明や記憶から設定値を推測しない。
+以下を deep-merge した値を設定として使う。
 
 1. `.claude/skills/community-post/config.default.yaml`
 2. `config/skills/community-post.yaml`（存在する場合）

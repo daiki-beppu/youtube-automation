@@ -13,6 +13,7 @@ from youtube_automation.cli import doctor
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _SKILLS_DIR = _REPO_ROOT / ".claude" / "skills"
 _SETUP_SKILL = _SKILLS_DIR / "setup" / "SKILL.md"
+_SETUP_RUNBOOK = _SKILLS_DIR / "setup" / "references" / "check-runbook.md"
 _FRESHNESS_RULES = _SKILLS_DIR / "collection-ideate" / "references" / "freshness-rules.md"
 _CHANNEL_NEW_SKILL = _SKILLS_DIR / "channel-new" / "SKILL.md"
 _ONBOARD_DIR = _SKILLS_DIR / "onboard"
@@ -21,6 +22,16 @@ _CURRENT_SETUP_DOCS = [
     _REPO_ROOT / "auth" / "SETUP.md",
     _REPO_ROOT / "infra" / "terraform" / "gcp" / "README.md",
 ]
+
+
+def _setup_text() -> str:
+    """SKILL.md 本体 + 段階的開示で切り出した references/ を合わせた全文。
+
+    check id ごとの対応手順は `references/check-runbook.md` へ分離したため、
+    「/setup の手順として書かれていること」を担保する契約は両方を対象にする。
+    SKILL.md 本体に残っていること自体が要件のものだけ `_SETUP_SKILL` を直接読む。
+    """
+    return _SETUP_SKILL.read_text(encoding="utf-8") + "\n" + _SETUP_RUNBOOK.read_text(encoding="utf-8")
 
 
 def _frontmatter(skill_md: Path) -> dict:
@@ -51,7 +62,7 @@ def test_setup_skill_description_mentions_new_and_legacy_commands() -> None:
 
 
 def test_setup_skill_uses_uv_run_for_automation_commands() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     assert "uv run yt-doctor --apply --json" in text
     assert "uv run yt-oauth" in text
     assert "uv run yt-channel-status" in text
@@ -67,7 +78,7 @@ def test_setup_skill_uses_uv_run_for_automation_commands() -> None:
 
 
 def test_setup_skill_follows_skills_synced_next_action_contract() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     section = text.split("#### `skills_synced`", 1)[1].split("#### `numbered_duplicates`", 1)[0]
     assert '`apply.next_action.kind == "human"`' in section
     assert "利用者が実行を承認した場合だけ `--apply` が自動実行する" in section
@@ -82,7 +93,7 @@ def test_setup_skill_follows_skills_synced_next_action_contract() -> None:
 
 
 def test_setup_skill_handles_reporting_job_next_action_and_rechecks() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     assert "#### `reporting_job`" in text
     assert "uv run yt-analytics --reporting-create-job" in text
     reporting_step = text.index("#### `reporting_job`")
@@ -93,7 +104,7 @@ def test_setup_skill_handles_reporting_job_next_action_and_rechecks() -> None:
 
 
 def test_setup_skill_branches_on_all_apply_stop_reasons() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
 
     for stop_reason in ("completed", "human_required", "decision_required", "command_failed"):
@@ -107,7 +118,7 @@ def test_setup_skill_branches_on_all_apply_stop_reasons() -> None:
 
 
 def test_setup_skill_requires_approval_before_apply_mutations() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
 
     assert "uv run yt-doctor --json" in startup
@@ -119,7 +130,7 @@ def test_setup_skill_requires_approval_before_apply_mutations() -> None:
 
 
 def test_setup_skill_reapproves_project_scoped_plan_after_decisions() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
     plan = startup.split("### GCP 変更 plan の承認", 1)[1]
 
@@ -134,7 +145,7 @@ def test_setup_skill_reapproves_project_scoped_plan_after_decisions() -> None:
 
 
 def test_setup_skill_gates_numbered_duplicate_deletion() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     section = text.split("#### `numbered_duplicates`", 1)[1].split("### api カテゴリ", 1)[0]
 
     assert "実在パスを 1 件ずつ列挙" in section
@@ -153,7 +164,7 @@ def test_setup_skill_keeps_pre_doctor_bootstrap_in_skill() -> None:
 
 
 def test_setup_skill_keeps_command_execution_out_of_human_role() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     responsibility = text.split("## 認証コマンドと人間操作の責務", 1)[1].split("## [HUMAN STEP]", 1)[0]
 
     assert "すべてのコマンドの起動・実行・再診断は AI または setup スクリプトが担当" in text
@@ -170,7 +181,7 @@ def test_setup_skill_keeps_command_execution_out_of_human_role() -> None:
 
 
 def test_setup_skill_drives_youtube_oauth_in_background() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     oauth = text.split("#### `oauth_token`", 1)[1].split("#### `reporting_job`", 1)[0]
 
     assert "uv run yt-oauth" in oauth
@@ -183,21 +194,21 @@ def test_setup_skill_drives_youtube_oauth_in_background() -> None:
 
 
 def test_setup_skill_delegates_minimum_directory_generation_to_setup() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     assert "`/setup` は `uv run yt-setup-dirs`" in text
     assert "`/setup` では `config/channel/*.json` を生成しない" in text
     assert "OAuth クライアント JSON の配置先 `auth/`" in text
 
 
 def test_setup_skill_enables_doctor_required_apis() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
 
     for api_name in doctor.REQUIRED_APIS:
         assert api_name in text
 
 
 def test_setup_skill_suggests_gcp_project_id_from_channel_name() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     assert "`config/channel/meta.json` の `channel.name`" in text
     assert "`yt-{channel-slug}`" in text
     assert "kebab-case" in text
@@ -207,7 +218,7 @@ def test_setup_skill_suggests_gcp_project_id_from_channel_name() -> None:
 
 
 def test_setup_skill_requires_explicit_project_creation_approval() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     section = text.split("#### `gcp_project`", 1)[1].split("#### `billing_linked`", 1)[0]
 
     assert "決定した project ID と表示名を示し" in section
@@ -218,7 +229,7 @@ def test_setup_skill_requires_explicit_project_creation_approval() -> None:
 
 
 def test_setup_project_and_billing_sections_route_through_plan_approval() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     project = text.split("#### `gcp_project`", 1)[1].split("#### `billing_linked`", 1)[0]
     billing = text.split("#### `billing_linked`", 1)[1].split("#### `apis_enabled`", 1)[0]
 
@@ -229,7 +240,7 @@ def test_setup_project_and_billing_sections_route_through_plan_approval() -> Non
 
 
 def test_setup_skill_suggests_oauth_app_and_client_names() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     assert "`gcp_project` と同じルールでチャンネル名を解決" in text
     assert "`{チャンネル名} YouTube Automation`" in text
     assert "`{チャンネル名} Desktop Client`" in text
@@ -306,7 +317,7 @@ def test_channel_new_setup_gate_does_not_require_doctor_all_green() -> None:
 
 
 def test_setup_skill_handles_ttp_wf_new_readiness_next_check() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     assert (
         "`data` | `/wf-new` の入力モード判定データ + 初期セットアップ事前検査"
         "（analytics_report / benchmark_data / ttp_wf_new_readiness / initial_setup_readiness）" in text
@@ -319,7 +330,7 @@ def test_setup_skill_handles_ttp_wf_new_readiness_next_check() -> None:
 
 
 def test_setup_stale_report_guidance_delegates_to_collection_ideate_contract() -> None:
-    setup = _SETUP_SKILL.read_text(encoding="utf-8")
+    setup = _setup_text()
     freshness_rules = _FRESHNESS_RULES.read_text(encoding="utf-8")
     analytics_report_section = setup.split("#### `analytics_report`", 1)[1].split("\n#### `benchmark_data`", 1)[0]
 
@@ -348,7 +359,7 @@ def test_setup_stale_report_guidance_delegates_to_collection_ideate_contract() -
 
 
 def test_setup_skill_handles_upload_ready_channel_not_found() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     section = text.split("#### `upload_ready`", 1)[1].split("## 運用設定インタビュー", 1)[0]
 
     assert '`data.reason == "channel_not_found"`' in section
@@ -360,7 +371,7 @@ def test_setup_skill_handles_upload_ready_channel_not_found() -> None:
 
 
 def test_setup_skill_routes_remote_id_into_meta_via_existing_command() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     section = text.split("#### `upload_ready`", 1)[1].split("## 運用設定インタビュー", 1)[0]
 
     assert "`data.remote_channel_id`" in section
@@ -370,7 +381,7 @@ def test_setup_skill_routes_remote_id_into_meta_via_existing_command() -> None:
 
 
 def test_setup_skill_does_not_auto_overwrite_mismatched_channel_id() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     section = text.split("#### `upload_ready`", 1)[1].split("## 運用設定インタビュー", 1)[0]
 
     assert '`data.reason == "channel_id_mismatch"`' in section
@@ -382,7 +393,7 @@ def test_setup_skill_does_not_auto_overwrite_mismatched_channel_id() -> None:
 
 
 def test_setup_skill_keeps_api_errors_distinct_from_missing_channel() -> None:
-    text = _SETUP_SKILL.read_text(encoding="utf-8")
+    text = _setup_text()
     section = text.split("#### `upload_ready`", 1)[1].split("## 運用設定インタビュー", 1)[0]
 
     assert '`data.reason == "api_error"`' in section

@@ -21,6 +21,8 @@ uv run yt-skills lint [<skill>..] # SKILL.md frontmatter の軽量検証（stric
 
 `yt-*` 系 CLI 全 30 件超は `pyproject.toml` の `[project.scripts]` に登録されている。新規 CLI を追加するときは **必ず `yt-*` プレフィックス**を踏襲し、entry point を登録すること。
 
+CLI は SKILL.md から呼ばれるインターフェースでもある。値域が決まっている引数は `choices=` で閉じ（`--engine veo|omni`、`--existing ask|update|skip`）、フラグの意味は `argparse` の `help=` に書く。手順書側へ呼び出し例を並べて補うのではなく、引数自体が読んで分かる形にする（`docs/skill-design/skill-authoring-guidelines.md`「実行系のインターフェース」）。
+
 ## アーキテクチャ要点
 
 このリポジトリは **このリポジトリ自体** と **下流のチャンネルリポジトリ** の 2 層構造で動く（全容・主要モジュール表は `docs/architecture.md`）。
@@ -64,7 +66,8 @@ uv run yt-skills lint [<skill>..] # SKILL.md frontmatter の軽量検証（stric
 ### skill frontmatter
 
 - SKILL.md の frontmatter `description:` は **必ず double-quoted string** で書く（値内の `: ` が strict YAML でマッピング区切りと誤解釈されるため）
-- スキルの新規作成・改訂時は `docs/skill-design/skill-authoring-guidelines.md` の 7 ルール（発動キーワードの相互排他 / 承認ゲート / 前提存在ガード / 判断基準の明確化 / references 単一ソース化 / Hard Gates 冒頭配置 / 未接続参照の隔離）に従う。既存スキルの一括改修は不要
+- スキルの新規作成・改訂時は `docs/skill-design/skill-authoring-guidelines.md` に従う。必須は 3 点（不可逆・外部反映操作の承認ゲート / 前提の存在ガード / 配布先で解決できる参照）で、それ以外は実行者の判断に委ねて記述量を抑える。既存スキルの一括改修は不要
+- SKILL.md は入口。生成・検証ロジック、長い対照表、プロンプトテンプレート、トラブルシュート事例は `references/` へ置き、必要になった時点で読ませる
 
 ### パッケージング
 

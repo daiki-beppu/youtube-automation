@@ -20,7 +20,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 3. 各フェーズの生成・変換処理は Agent ツールで一作業ずつ subagent へ委譲する。委譲プロンプトには入力パス、実行する skill / CLI、期待成果物、state 書き込み禁止、完了報告形式を明記する。
 4. subagent 終了後、メインエージェントが期待成果物の存在と現在の `phase` / `assets` との整合を実ファイルで検証する。すべて PASS の場合だけ state を更新する。失敗、欠落、不整合時は state を変更せず、同じステップから再実行できる状態で停止する。
 
-委譲プロンプトと完了報告は [`docs/skill-design/subagent-orchestration.md`](../../../docs/skill-design/subagent-orchestration.md#委譲プロンプトのテンプレート) の形式を使う。subagent の `status: success` だけを更新根拠にしてはならない。
+委譲プロンプトには上記 3 の要素を具体値で埋め、成果物は絶対パスで受け取る。subagent の `status: success` だけを更新根拠にせず、実ファイルで検証する。
 
 > **このセッションで初めて `/wf-*` を呼ぶ場合は、先に [`docs/workflow-cheatsheet.md`](../../../docs/workflow-cheatsheet.md) の判定フローを 1 回だけユーザーに提示すること**（CLAUDE.md §6 参照）。
 
