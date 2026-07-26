@@ -17,6 +17,8 @@
 | 不可逆・外部反映は承認を挟む | 削除・アップロード・外部投稿・課金は、モデルの能力とは無関係にユーザーの決定事項 |
 | 落とし穴だけを書く | 一般的な作法・ハーネスの保証・自明な手順は書かない（後述「書かないこと」） |
 | 段階的開示 | SKILL.md 本体は入口。詳細・ロジック・長い表は `references/` へ置き、必要になった時点で読ませる |
+| 例より引数 | 呼び出し例を並べる前に、CLI / スクリプトの引数自体を読んで分かる形にする。例は実行者の探索範囲を例の形へ狭める |
+| spec は検証可能な形で置く | スクリプト・rubric・テストが spec になるなら、散文へ書き直さず参照する |
 
 ---
 
@@ -63,6 +65,8 @@
 | 一般的なツール作法（ファイル編集前に読む、パスを確認する等） | ハーネスとシステムプロンプトが保証する |
 | 同一内容の再掲・強調のための反復 | 1 箇所に書く。重要度は配置順で表す |
 | 手順内で自明な中間ステップの逐次指示 | 目的と完了条件を書けば経路は実行者が決められる |
+| CLI フラグの意味・全オプションの列挙 | `argparse` の `help=` と `--help` が正。SKILL.md へ写すと両方を更新する必要が生まれ、片方が必ず腐る |
+| 同じコマンドの網羅的な呼び出し例 | 代表 1 本で足りる。バリエーションは `choices=` と `--help` から実行者が組み立てる |
 
 **例外**: 直感に反する事実は書く。「`--plan` は upload API を叩かないが予約日時計算のため read API を呼ぶ」のような、実行者が推測すると間違える挙動は落とし穴であり、書く価値がある。
 
@@ -79,7 +83,7 @@
 実行者はまず `description` だけを見てスキルを選ぶ。ここが唯一の選択インターフェースなので、**発動条件と否定条件の両方**を書く。
 
 - 標準型: 用途 + 発動キーワード + `〜の場合は /<sibling> を使う`。棲み分けは双方向に書く（A→B と B→A の両方）。
-- frontmatter の `description:` は**必ず double-quoted string**（値内の `: ` が strict YAML でマッピング区切りと誤解釈されるため）。
+- frontmatter の記法規約（`description:` の double-quote 等）は `CLAUDE.md`「### skill frontmatter」を正とし、ここでは再掲しない。検証は `uv run yt-skills lint`。
 - **良い実例**: [.claude/skills/short/SKILL.md](../../.claude/skills/short/SKILL.md) と [.claude/skills/short-release/SKILL.md](../../.claude/skills/short-release/SKILL.md) — collection 型 / release 型を互いに否定トリガーで排他している。
 
 ### 前後工程
@@ -96,6 +100,28 @@
 依存がなければ `` `なし` ``、`setup` / `channel-new` のような全体共通基盤だけは `` `*`（共通基盤としてほぼ全スキル） `` と書く。実行手順内で前提未達時に前工程を案内する記述は残してよいが、依存関係の一覧はこのブロックを正とする。
 
 - 抽出: ``rg -n '^- `前工程`:|^- `後工程`:' .claude/skills/*/SKILL.md`` で各 SKILL.md から 2 行ずつ取得できること。
+
+### 実行系のインターフェース（CLI / スクリプト）
+
+呼び出し例を並べる前に、**引数そのものを読んで意図が分かる形**にする。取りうる値・既定値・`--dry-run` の有無は、それ自体が使い方の指示として働く。
+
+- **列挙で意図を閉じる**: `--engine veo|omni`（[scripts/generate_loop_video.py](../../src/youtube_automation/scripts/generate_loop_video.py)）、`--existing ask|update|skip`（[scripts/captions_upload.py](../../src/youtube_automation/scripts/captions_upload.py)）のように `choices=` で値域を閉じれば、散文で選択肢を説明する必要が消える。
+- **例を足したくなったら引数が曖昧なサイン**。SKILL.md に呼び出し例を増やす前に、引数名・`choices`・`help=` を直せないかを先に見る。手順書側の記述量は、インターフェースの設計不足の指標として読む。
+- SKILL.md に残すのは「どのコマンドをどの順で呼ぶか」まで。各フラグの意味は `--help` を単一ソースとし、二重に書かない。
+
+## spec を置く形
+
+「どう作るか」を散文で説明する前に、**検証できる形で置けないか**を見る。実行者は検証可能な spec のほうを確実に守れる。
+
+| 形 | 使いどころ | 実例 |
+|---|---|---|
+| スクリプト | 合否を機械判定できる | [suno-lyric/references/check_lyric_duplication.py](../../.claude/skills/suno-lyric/references/check_lyric_duplication.py) — 連続一致で歌詞重複を判定 |
+| rubric | 質的判断だが評価観点は固定したい | [comments-reply/references/review-rubric.md](../../.claude/skills/comments-reply/references/review-rubric.md) — reviewer の入力境界と必須フィールドを規定 |
+| checklist | 人間が完了を確認する不可逆手順 | [automation-release/references/publish-checklist.md](../../.claude/skills/automation-release/references/publish-checklist.md) |
+| テスト | 契約が壊れたら CI で落としたい | `tests/test_*_skill_contract.py` |
+
+- 同じ制約を散文と spec の両方に書かない。spec があるなら SKILL.md には**いつ回すか**だけを書く。
+- 質的な判断を縛りたくなったら、閾値を発明する前に rubric を置けないかを検討する（前節「判断を委ねる / 委ねない」と対になる）。
 
 ## 段階的開示
 

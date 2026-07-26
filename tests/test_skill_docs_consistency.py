@@ -1247,7 +1247,8 @@ def test_collection_localization_docs_use_root_localizations_contract() -> None:
 
 
 def test_setup_client_secrets_step_uses_download_and_automatic_move() -> None:
-    setup = _read(".claude/skills/setup/SKILL.md")
+    # check id ごとの手順は段階的開示で references/check-runbook.md へ分離済み
+    setup = _read(".claude/skills/setup/references/check-runbook.md")
     step = setup.split("#### `client_secrets`", 1)[1].split("#### `oauth_token`", 1)[0]
 
     for expected in (
