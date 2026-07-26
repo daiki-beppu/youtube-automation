@@ -1,5 +1,8 @@
 # automation リポジトリの takt 設定
-# provider / model / language / concurrency はグローバル設定 (~/.takt/config.yaml) を継承する。
+# provider は Codex に固定し、model / language / concurrency はグローバル設定
+# (~/.takt/config.yaml) を継承する。
+
+provider: codex
 
 # sandbox 化された worker の direnv / lefthook セットアップ停滞対策（issue #1999）と、
 # sibling worktree 由来 path の持ち込み遮断（issue #2163）。
@@ -18,13 +21,14 @@ observability:
   enabled: true
   usage_events_phase: true
 
-# レビュワーペルソナは Claude provider で実行する（#2518 / #2535）。
+# 全ペルソナを Codex provider で実行する。
+# reviewer と、review step から provider / model を継承する loop monitor judge は Terra を使う。
 #
 # 注意: takt v0.52 の config 解決では、project が provider_routing を定義すると
 # global (~/.takt/config.yaml) の provider_routing は deep merge されず丸ごと無視される。
 # また deprecated な persona_providers はソース種別として provider_routing.personas より
 # 優先度が低く、global 側の provider_routing.personas に負ける（#2535 で実測）。
-# そのため reviewer 以外（coder / planner / diagnoser）も global と同値をここに複製する。
+# そのため全ペルソナを global と同値でここに複製する。
 # global 側のルーティングを変更した場合は、このファイルへの反映も必要。
 provider_routing:
   personas:
@@ -38,26 +42,38 @@ provider_routing:
       provider: codex
       model: gpt-5.6-sol
     ai-antipattern-reviewer:
-      provider: claude
+      provider: codex
+      model: gpt-5.6-terra
     architecture-reviewer:
-      provider: claude
+      provider: codex
+      model: gpt-5.6-terra
     coding-reviewer:
-      provider: claude
+      provider: codex
+      model: gpt-5.6-terra
     cqrs-es-reviewer:
-      provider: claude
+      provider: codex
+      model: gpt-5.6-terra
     frontend-reviewer:
-      provider: claude
+      provider: codex
+      model: gpt-5.6-terra
     implementation-semantics-reviewer:
-      provider: claude
+      provider: codex
+      model: gpt-5.6-terra
     merge-readiness-reviewer:
-      provider: claude
+      provider: codex
+      model: gpt-5.6-terra
     qa-reviewer:
-      provider: claude
+      provider: codex
+      model: gpt-5.6-terra
     requirements-reviewer:
-      provider: claude
+      provider: codex
+      model: gpt-5.6-terra
     security-reviewer:
-      provider: claude
+      provider: codex
+      model: gpt-5.6-terra
     terraform-reviewer:
-      provider: claude
+      provider: codex
+      model: gpt-5.6-terra
     testing-reviewer:
-      provider: claude
+      provider: codex
+      model: gpt-5.6-terra
