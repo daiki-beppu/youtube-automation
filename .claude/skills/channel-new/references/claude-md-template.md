@@ -47,7 +47,7 @@ uv run yt-upload-auto                  # planning/ 配下を自動検出して�
 ## スキル
 
 ルート `.claude/skills/` の共通スキルを使用。`config/channel/*.json` で動的に {{CHANNEL_NAME}} 向けに適応される。
-詳細はルート `.claude/CLAUDE.md` のスキル一覧を参照。
+各スキルの用途と使い分けは `.claude/skills/<name>/SKILL.md` の frontmatter `description` を参照。
 
 ## チャンネルディレクトリ構造
 

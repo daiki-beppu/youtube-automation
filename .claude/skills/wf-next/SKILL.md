@@ -22,7 +22,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 委譲プロンプトには上記 3 の要素を具体値で埋め、成果物は絶対パスで受け取る。subagent の `status: success` だけを更新根拠にせず、実ファイルで検証する。
 
-> **このセッションで初めて `/wf-*` を呼ぶ場合は、先に [`docs/workflow-cheatsheet.md`](../../../docs/workflow-cheatsheet.md) の判定フローを 1 回だけユーザーに提示すること**（CLAUDE.md §6 参照）。
+> **このセッションで初めて `/wf-*` を呼ぶ場合は、先に [`docs/workflow-cheatsheet.md`](../../../docs/workflow-cheatsheet.md) の判定フローを 1 回だけユーザーに提示すること**。
 
 ## When to Use
 
