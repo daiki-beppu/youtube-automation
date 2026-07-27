@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 from youtube_automation.commands.system import setup_dirs
-from youtube_automation.commands.system.setup_directory_contract import SETUP_DIRECTORIES
 from youtube_automation.infrastructure.errors import ConfigError
+from youtube_automation.utils.setup_directory_contract import SETUP_DIRECTORIES
 
 EXPECTED_SETUP_DIRECTORIES: tuple[str, ...] = (
     "auth",

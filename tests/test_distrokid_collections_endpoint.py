@@ -25,6 +25,7 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.application.distrokid.disc_query import find_distrokid_discs
 from youtube_automation.commands.collections.collection_serve import (
     _DISTROKID_COLLECTIONS_ROUTE,
     _DISTROKID_RELEASES_ROUTE,
@@ -32,7 +33,6 @@ from youtube_automation.commands.collections.collection_serve import (
     build_distrokid_collections_index,
     create_server,
     distrokid_releases_output_path,
-    find_distrokid_discs,
     read_released_discs,
     write_distrokid_release,
 )

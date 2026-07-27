@@ -1,7 +1,7 @@
 // `/distrokid/release.json` の JSON 契約型。
 //
 // サーバー側 SSOT:
-//   - src/youtube_automation/scripts/distrokid_release.py::build_release_payload
+//   - src/youtube_automation/domains/distrokid/release.py::build_release_payload
 //   - src/youtube_automation/configuration/distrokid.py::DistrokidProfile
 // envelope は { profile, release } の 2 層。profile は静的（config 由来）、
 // release はコレクション動的データ（アルバム名 / 曲 / ジャケット / リリース日）。

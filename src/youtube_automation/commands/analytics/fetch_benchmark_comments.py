@@ -22,11 +22,12 @@ import logging
 import sys
 from datetime import date, datetime
 
+from youtube_automation.application.analytics.benchmark_query import load_benchmark_videos
+from youtube_automation.application.analytics.benchmark_refresh import ensure_benchmark_fresh
 from youtube_automation.commands.analytics.benchmark_collector import (
-    _QUOTA_SERVICE,
-    _READ_QUOTA_UNITS,
-    ensure_benchmark_fresh,
-    load_benchmark_videos,
+    BenchmarkCollector,
+    BenchmarkReportGenerator,
+    BenchmarkThumbnailAnalyzer,
 )
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
@@ -38,6 +39,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MIN_VIEWS = 10000
 DEFAULT_MAX_COMMENTS = 100
+_QUOTA_SERVICE = "youtube-data-api"
+_READ_QUOTA_UNITS = 1
 
 
 class BenchmarkCommentCollector:
@@ -103,7 +106,12 @@ class BenchmarkCommentCollector:
             with open(output_path) as f:
                 return json.load(f)
 
-        ensure_benchmark_fresh(self.data_dir)
+        ensure_benchmark_fresh(
+            self.data_dir,
+            collector_factory=BenchmarkCollector,
+            analyzer_factory=BenchmarkThumbnailAnalyzer,
+            reporter_factory=BenchmarkReportGenerator,
+        )
 
         targets = load_benchmark_videos(
             self.data_dir,

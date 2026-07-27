@@ -3,6 +3,8 @@
 // これらは yt-collection-serve (#692/#698) との互換契約であり、変更すると
 // サーバー側 (`/suno/prompts.json`) と整合しなくなる。
 import { describe, expect, it } from "vitest";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import {
   BALANCED_RUN_PACING,
@@ -35,6 +37,23 @@ import {
   type RunModeId,
 } from "../../shared/constants";
 
+const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
+const legacyArtifactPath = ["commands", "suno", "suno_artifacts.py"].join(
+  "/"
+);
+
+function extensionAssetFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${directory}/${entry.name}`;
+    if (entry.isDirectory()) {
+      return ["node_modules", ".output", ".wxt"].includes(entry.name)
+        ? []
+        : extensionAssetFiles(path);
+    }
+    return [path];
+  });
+}
+
 describe("shared/constants: サーバー互換の契約値", () => {
   it("Given 異常値再生成 option When 既定値を読む Then ON である", () => {
     expect(DEFAULT_REGENERATE_DURATION_OUTLIERS).toBe(true);
@@ -44,8 +63,22 @@ describe("shared/constants: サーバー互換の契約値", () => {
   });
 
   it("Given 移行後の定数 When PROMPTS_ROUTE を読む Then #698 のサブパス分離後ルートである", () => {
-    // SSOT: src/youtube_automation/commands/suno/suno_artifacts.py SUNO_PROMPTS_ROUTE
+    // SSOT: src/youtube_automation/domains/suno/downloaded/models.py SUNO_PROMPTS_ROUTE
     expect(PROMPTS_ROUTE).toBe("/suno/prompts.json");
+  });
+
+  it("Given Suno extension assets When artifact module references are scanned Then the canonical module remains the only source", () => {
+    const assets = extensionAssetFiles(`${repositoryRoot}/extensions`);
+    const legacyReferences = assets.filter((asset) =>
+      readFileSync(asset, "utf8").includes(legacyArtifactPath)
+    );
+
+    expect(legacyReferences).toEqual([]);
+    expect(
+      existsSync(
+        `${repositoryRoot}/src/youtube_automation/domains/suno/downloaded/models.py`
+      )
+    ).toBe(true);
   });
 
   it("Given server selector When DEFAULT_URL を読む Then チャンネル識別可能な既定 hostname である", () => {

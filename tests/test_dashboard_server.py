@@ -104,7 +104,9 @@ def test_cli_opens_loopback_url_after_server_starts(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("youtube_automation.commands.analytics.dashboard.load_channel_registry", lambda _path: channels)
     monkeypatch.setattr(
         "youtube_automation.commands.analytics.dashboard.refresh_dashboard_channels",
-        lambda paths: events.append("refresh") or refresh_errors if paths == channels else pytest.fail("wrong paths"),
+        lambda paths, **_kwargs: (
+            events.append("refresh") or refresh_errors if paths == channels else pytest.fail("wrong paths")
+        ),
     )
 
     def create_server(**kwargs):

@@ -28,11 +28,9 @@ from urllib.parse import parse_qs, urlparse
 
 from google.genai import errors as genai_errors
 
-from youtube_automation.commands.analytics.benchmark_collector import (
-    load_benchmark_videos,
-    select_top_vod_benchmark_videos,
-)
+from youtube_automation.application.analytics.benchmark_query import load_benchmark_videos
 from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.domains.analytics.benchmark import select_top_vod_benchmark_videos
 from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils.cli_arguments import CompetitorArgumentParser
 from youtube_automation.utils.genai_client import create_global_genai_client

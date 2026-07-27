@@ -1,4 +1,4 @@
-"""CLI 共通の target channel directory 解決."""
+"""Shared channel target directory resolution."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from youtube_automation.infrastructure.errors import ConfigError
 
 
 def resolve_existing_target_dir(target: str | None) -> Path:
-    """対象ディレクトリを `--target` -> `CHANNEL_DIR` -> CWD の順に解決する."""
+    """Resolve a target directory from the explicit option or environment."""
     if target:
         path = Path(target).resolve()
         if not path.is_dir():

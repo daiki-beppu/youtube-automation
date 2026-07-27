@@ -105,7 +105,7 @@
 
 呼び出し例を並べる前に、**引数そのものを読んで意図が分かる形**にする。取りうる値・既定値・`--dry-run` の有無は、それ自体が使い方の指示として働く。
 
-- **列挙で意図を閉じる**: `--engine veo|omni`（[scripts/generate_loop_video.py](../../src/youtube_automation/scripts/generate_loop_video.py)）、`--existing ask|update|skip`（[scripts/captions_upload.py](../../src/youtube_automation/scripts/captions_upload.py)）のように `choices=` で値域を閉じれば、散文で選択肢を説明する必要が消える。
+- **列挙で意図を閉じる**: `--engine veo|omni`（[commands/media/generate_loop_video.py](../../src/youtube_automation/commands/media/generate_loop_video.py)）、`--existing ask|update|skip`（[commands/youtube/captions_upload.py](../../src/youtube_automation/commands/youtube/captions_upload.py)）のように `choices=` で値域を閉じれば、散文で選択肢を説明する必要が消える。
 - **例を足したくなったら引数が曖昧なサイン**。SKILL.md に呼び出し例を増やす前に、引数名・`choices`・`help=` を直せないかを先に見る。手順書側の記述量は、インターフェースの設計不足の指標として読む。
 - SKILL.md に残すのは「どのコマンドをどの順で呼ぶか」まで。各フラグの意味は `--help` を単一ソースとし、二重に書かない。
 

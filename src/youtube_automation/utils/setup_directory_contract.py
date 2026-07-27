@@ -1,4 +1,4 @@
-"""setup が所有する最小ディレクトリ生成契約."""
+"""Shared contract for directories created by ``yt-setup-dirs``."""
 
 from __future__ import annotations
 
@@ -20,14 +20,14 @@ SETUP_DIRECTORIES: tuple[str, ...] = (
 
 
 def validate_existing_setup_directories(target: Path) -> None:
-    """存在している setup-owned directory component だけを検証する."""
+    """Validate only setup-owned directory components that already exist."""
     for rel in SETUP_DIRECTORIES:
         if _has_existing_component(target, rel):
             validate_setup_directory_target(target, rel)
 
 
 def validate_setup_directory_target(target: Path, rel: str) -> None:
-    """setup directory の生成先が target 配下の通常ディレクトリ契約を満たすか検証する."""
+    """Validate that a setup directory is a regular directory below target."""
     rel_path = Path(rel)
     if rel_path.is_absolute() or ".." in rel_path.parts:
         raise ConfigError(f"{rel} は target 配下の相対ディレクトリである必要があります")

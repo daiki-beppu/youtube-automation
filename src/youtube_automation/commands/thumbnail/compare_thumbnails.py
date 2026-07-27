@@ -22,9 +22,12 @@ import subprocess
 import urllib.request
 from pathlib import Path
 
+from youtube_automation.application.analytics.benchmark_query import load_benchmark_videos
+from youtube_automation.application.analytics.benchmark_refresh import ensure_benchmark_fresh
 from youtube_automation.commands.analytics.benchmark_collector import (
-    ensure_benchmark_fresh,
-    load_benchmark_videos,
+    BenchmarkCollector,
+    BenchmarkReportGenerator,
+    BenchmarkThumbnailAnalyzer,
 )
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.configuration import load_config
@@ -95,7 +98,12 @@ class ThumbnailComparer:
 
     def collect_and_compare(self, no_open: bool = False, small_only: bool = False):
         """サムネイルを収集・縮小・表示"""
-        ensure_benchmark_fresh(self.data_dir)
+        ensure_benchmark_fresh(
+            self.data_dir,
+            collector_factory=BenchmarkCollector,
+            analyzer_factory=BenchmarkThumbnailAnalyzer,
+            reporter_factory=BenchmarkReportGenerator,
+        )
 
         for d in [self.benchmark_dir, self.channel_thumb_dir, self.small_dir]:
             d.mkdir(parents=True, exist_ok=True)

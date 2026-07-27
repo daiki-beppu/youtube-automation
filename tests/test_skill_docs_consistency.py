@@ -54,6 +54,22 @@ def test_skill_chain_legacy_summary_formats_are_absent() -> None:
         assert legacy_summary.search(text) is None, f"{path}: 旧形式の前後工程一覧が残存"
 
 
+def test_active_migration_docs_do_not_reference_removed_cli_paths() -> None:
+    paths = (
+        ROOT / "docs/development.md",
+        ROOT / "docs/skill-design/skill-authoring-guidelines.md",
+        ROOT / "extensions/distrokid-helper/lib/types.ts",
+        ROOT / "extensions/distrokid-helper/lib/api.ts",
+        ROOT / "extensions/distrokid-helper/tests/api.test.ts",
+    )
+    forbidden = re.compile(
+        r"src/youtube_automation/(?:cli/automation_update_refs|cli/skills_sync|scripts/distrokid_release|"
+        r"scripts/generate_loop_video|scripts/captions_upload|scripts/distrokid_prepare|scripts/collection_serve)"
+    )
+    for path in paths:
+        assert forbidden.search(path.read_text(encoding="utf-8")) is None, path
+
+
 def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
@@ -204,7 +220,7 @@ def test_setup_directory_generation_contract_is_separate_from_channel_config() -
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     setup_dirs = _read("src/youtube_automation/commands/system/setup_dirs.py")
     channel_init = _read("src/youtube_automation/commands/channel/channel_init.py")
-    setup_directory_contract = _read("src/youtube_automation/commands/system/setup_directory_contract.py")
+    setup_directory_contract = _read("src/youtube_automation/utils/setup_directory_contract.py")
     pyproject = _read("pyproject.toml")
 
     assert "uv run yt-setup-dirs" in setup

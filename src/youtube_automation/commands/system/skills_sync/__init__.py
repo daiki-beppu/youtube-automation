@@ -98,14 +98,21 @@ _DEV_ONLY_SKILL_NAMES = frozenset({"automation-release", "shadcn"})
 
 
 def _editable_root() -> Path:
-    """開発時の repo root を返す。テストでは monkeypatch で差し替える。
-
-    自モジュールからの相対深さではなく `youtube_automation` パッケージの位置を基準にする。
-    このファイルが commands/ 配下へ移動しても壊れず、深さを 1 つ誤ったときに
-    リポジトリの外側（worktree 置き場など）を root と誤認する事故も防げる。
-    `<root>/src/youtube_automation/__init__.py` の parents[1] が `src`、parents[2] が root。
-    """
-    return Path(youtube_automation.__file__).resolve().parents[2]
+    """Resolve the owning checkout without assuming an ancestor depth."""
+    package_file = Path(youtube_automation.__file__).resolve()
+    for candidate in (package_file.parent, *package_file.parents):
+        source_package = candidate / "src" / "youtube_automation"
+        if (
+            (candidate / "pyproject.toml").is_file()
+            and source_package.is_dir()
+            and (candidate / ".claude" / "skills").is_dir()
+            and package_file.is_relative_to(source_package)
+        ):
+            return candidate
+    raise FileNotFoundError(
+        "editable install の repository root を解決できません。"
+        " pyproject.toml、src/youtube_automation、.claude/skills を含む checkout から実行してください。"
+    )
 
 
 def _asset_root(asset: str) -> Path:

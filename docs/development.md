@@ -169,7 +169,7 @@ uv run pytest tests/test_skills_sync_installed_wheel.py -q
 
 本リポジトリは `daiki-beppu/youtube-automation` を official upstream として前提にしている。fork して独自運用する場合、GitHub owner の固定参照が fork とズレて生成物・案内コマンドに齟齬を生むため、以下を書き換える。
 
-**単一ソース（コード）**: `src/youtube_automation/cli/automation_update_refs.py` の `UPSTREAM_REPO` 定数。`yt-automation-update` の official upstream 検証（サプライチェーン保護の意図的ガード）と `yt-doctor` の suggested command、`/automation-update` / `/ext-install` の `gh` / `curl` コマンドはすべて実行時にここから導出される。fork ではまずこの定数を変更する。
+**単一ソース（コード）**: `src/youtube_automation/commands/system/automation_update_refs.py` の `UPSTREAM_REPO` 定数。`yt-automation-update` の official upstream 検証（サプライチェーン保護の意図的ガード）と `yt-doctor` の suggested command、`/automation-update` / `/ext-install` の `gh` / `curl` コマンドはすべて実行時にここから導出される。fork ではまずこの定数を変更する。
 
 **`UPSTREAM_REPO` から導出されず、手で書き換えが要るファイル**:
 
@@ -181,7 +181,7 @@ uv run pytest tests/test_skills_sync_installed_wheel.py -q
 | `.claude/skills/ext-install/SKILL.md` | `gh` 未導入時の手動ダウンロード fallback 用 Release ページ URL、Step 0 の既定値表記 |
 | `.claude/skills/automation-release/references/*.md` | リリースチェックリスト / CHANGELOG 昇格手順内の URL 例 |
 | `.claude/skills/channel-new/references/claude-md-template.md` / `gcp-bootstrap.md` | upstream リポジトリ名の説明 |
-| `src/youtube_automation/cli/skills_sync/__init__.py` | module docstring の導入コマンド例 |
+| `src/youtube_automation/commands/system/skills_sync/__init__.py` | module docstring の導入コマンド例 |
 
 上表は代表箇所のポインタであり、全箇所は `rg -n "daiki-beppu/youtube-automation"` で列挙する。
 

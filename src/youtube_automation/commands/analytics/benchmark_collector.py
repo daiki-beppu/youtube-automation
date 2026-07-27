@@ -30,6 +30,10 @@ from pathlib import Path
 
 from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.configuration import load_config
+from youtube_automation.domains.analytics.benchmark import (
+    is_short_benchmark_duration,
+    is_short_benchmark_video,
+)
 from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.cost_tracker import log_quota
 from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
@@ -58,21 +62,6 @@ _DESCRIPTION_TTP_SECTION_TITLE = "概要欄TTPサンプル"
 _DESCRIPTION_TTP_SAMPLE_LIMIT = 3
 _SHORT_THUMBNAIL_KEYS = ("high", "medium", "default")
 _DEFAULT_THUMBNAIL_KEYS = ("maxres", "standard", "high", "medium", "default")
-# /channel-new の動画尺導出と yt-doctor の video-analysis readiness で共有する。
-TTP_VIDEO_ANALYZE_TOP_N = 5
-
-
-def is_short_benchmark_duration(duration_iso: str) -> bool:
-    match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration_iso)
-    if not match:
-        return False
-    hours = int(match.group(1) or 0)
-    minutes = int(match.group(2) or 0)
-    return hours == 0 and minutes < 5
-
-
-def is_short_benchmark_video(video: dict) -> bool:
-    return is_short_benchmark_duration(str(video.get("duration_iso") or ""))
 
 
 def _markdown_code_fence(content: str) -> str:
@@ -1202,184 +1191,6 @@ class BenchmarkReportGenerator:
 
         lines.append("")
         return "\n".join(lines)
-
-
-def find_latest_benchmark_json(data_dir: Path) -> Path | None:
-    """最新のベンチマーク JSON を返す。"""
-    files = sorted(data_dir.glob("benchmark_*.json"), reverse=True)
-    return files[0] if files else None
-
-
-# YouTube Data API は配信中・配信予定のライブ配信に contentDetails.duration = "P0D" を返す
-# （配信終了後のアーカイブは実尺になるため対象外）
-LIVE_DURATION_ISO = "P0D"
-
-
-def is_live_benchmark_video(video: dict) -> bool:
-    """benchmark 動画エントリがライブ配信（duration_iso == "P0D"）かどうかを判定する。
-
-    Gemini はライブ配信 URL を取り込めず yt-video-analyze が 403 で恒久的に失敗するため、
-    video_analysis 系の消費側（yt-doctor / yt-video-analyze）は本判定で除外する (#1462)。
-    duration_iso を持たない旧形式エントリは VOD 扱い。
-    """
-    return str(video.get("duration_iso") or "") == LIVE_DURATION_ISO
-
-
-def select_top_vod_benchmark_videos(videos: list[dict], top: int) -> tuple[list[dict], list[dict]]:
-    """benchmark 動画から live を除外しつつ top 件の解析可能 VOD を選ぶ。
-
-    live は「top 件の VOD が埋まる前に遭遇したもの」だけを skip として返す。
-    これにより、doctor の期待集合と yt-video-analyze の実解析集合、およびユーザー向け
-    note/log の対象が同じになる。
-    """
-    selected: list[dict] = []
-    skipped_live: list[dict] = []
-    for video in videos:
-        if len(selected) >= top:
-            break
-        if is_live_benchmark_video(video):
-            skipped_live.append(video)
-            continue
-        selected.append(video)
-    return selected, skipped_live
-
-
-def load_benchmark_videos(
-    data_dir: Path,
-    min_views: int = 10000,
-    require_thumbnail: bool = False,
-    competitor_slug: str | None = None,
-) -> list[dict]:
-    """最新ベンチマーク JSON から min_views 以上の動画を抽出する。
-
-    Returns:
-        動画情報リスト（再生数降順）
-
-    Raises:
-        ConfigError: ベンチマーク JSON が未取得、または抽出条件
-            （min_views / require_thumbnail）を満たす動画が 0 件のとき。
-            空リストを黙って返さず、下流の無効データ完走を防ぐ
-    """
-    benchmark_path = find_latest_benchmark_json(data_dir)
-    if not benchmark_path:
-        raise ConfigError(
-            f"ベンチマーク JSON が見つかりません ({data_dir})。"
-            "先に `/benchmark`（uv run yt-benchmark-collect）を実行して競合データを収集してください。"
-        )
-
-    with open(benchmark_path) as f:
-        data = json.load(f)
-
-    targets = []
-    seen_ids: set[str] = set()
-    for ch in data.get("channels", []):
-        competitor_name = ch.get("name", "Unknown")
-        current_competitor_slug = ch.get("slug", "unknown")
-        if competitor_slug and current_competitor_slug != competitor_slug:
-            continue
-        for v in ch.get("videos", []):
-            vid = v.get("video_id", "")
-            if vid in seen_ids:
-                continue
-            seen_ids.add(vid)
-            views = int(v.get("views", 0))
-            thumb_url = v.get("thumbnail_url", "")
-            if views < min_views:
-                continue
-            if require_thumbnail and not thumb_url:
-                continue
-            targets.append(
-                {
-                    "video_id": vid,
-                    "title": v.get("title", ""),
-                    "views": views,
-                    "channel_name": competitor_name,
-                    "channel_slug": current_competitor_slug,
-                    "published_at": v.get("published_at", ""),
-                    "duration_iso": v.get("duration_iso", ""),
-                    "thumbnail_url": thumb_url,
-                }
-            )
-
-    if not targets:
-        thumb_note = "（かつサムネイル URL あり）" if require_thumbnail else ""
-        raise ConfigError(
-            f"ベンチマーク JSON に {min_views:,} 再生以上の動画{thumb_note}が 1 件もありません "
-            f"({benchmark_path.name})。min_views しきい値を見直すか、"
-            "`/benchmark`（uv run yt-benchmark-collect）で最新データを再収集してください。"
-        )
-
-    targets.sort(key=lambda x: x["views"], reverse=True)
-    return targets
-
-
-def ensure_benchmark_fresh(data_dir: Path | None = None):
-    """ベンチマークデータの鮮度を確認し、全チャンネルが1つの JSON に揃った状態を保証する。
-
-    1つでも古い or 欠けているチャンネルがあれば --force で全チャンネル一括更新。
-    Raises:
-        ConfigError: benchmark.channels が未設定のとき
-        YouTubeAPIError: 最新化を試みたが 1 チャンネルも収集できなかったとき。
-            黙って return せず、最新化失敗を呼び出し側へ通知する
-    """
-    collector = BenchmarkCollector()
-    if data_dir is None:
-        data_dir = collector.data_dir
-
-    if not collector.config.analytics.benchmark.channels:
-        raise ConfigError(
-            "ベンチマーク対象チャンネルが未設定です。"
-            "config/channel/analytics.json の benchmark.channels を設定してください。"
-        )
-
-    # 最新 JSON に全チャンネルが含まれているか検証
-    need_update = False
-    expected_slugs = {ch["slug"] for ch in collector.config.analytics.benchmark.channels}
-
-    latest = find_latest_benchmark_json(data_dir)
-    if latest:
-        with open(latest) as f:
-            latest_data = json.load(f)
-        found_slugs = {ch.get("slug") for ch in latest_data.get("channels", [])}
-        missing = expected_slugs - found_slugs
-        if missing:
-            logger.info("ベンチマーク: 最新 JSON に %s が欠けている → 全チャンネル更新", missing)
-            need_update = True
-    else:
-        logger.info("ベンチマーク: JSON が存在しない → 全チャンネル更新")
-        need_update = True
-
-    if not need_update:
-        stale = collector.check_freshness()
-        if stale:
-            logger.info("ベンチマーク: %d チャンネルが古い → 全チャンネル更新", len(stale))
-            need_update = True
-
-    if not need_update:
-        logger.info("ベンチマーク: 全チャンネル最新（%d チャンネル）", len(expected_slugs))
-        return
-
-    collector.initialize()
-    data = collector.collect_all(force=True)
-
-    if data.get("skipped") or not data.get("channels"):
-        raise YouTubeAPIError(
-            "ベンチマークの最新化に失敗しました（収集結果が空）。"
-            "API 認証・クォータ・benchmark.channels の設定を確認のうえ "
-            "`/benchmark`（uv run yt-benchmark-collect）を再実行してください。"
-        )
-
-    collector.download_thumbnails(data, force=True)
-
-    if collector.benchmark_config.get("gemini_thumbnail_analysis", False):
-        analyzer = BenchmarkThumbnailAnalyzer(collector.benchmarks_dir)
-        data = analyzer.analyze_thumbnails(data, keep=True)
-
-    collector.save_json(data)
-    reporter = BenchmarkReportGenerator(collector.config, collector.benchmarks_dir, collector.today)
-    md_map = reporter.generate_markdown(data)
-    reporter.write_markdown(md_map)
-    logger.info("ベンチマーク更新完了")
 
 
 def _build_parser() -> argparse.ArgumentParser:

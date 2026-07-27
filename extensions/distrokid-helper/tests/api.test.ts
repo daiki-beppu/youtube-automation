@@ -1,6 +1,6 @@
 // `lib/api.ts` の API client 契約テスト。
 //
-// サーバー契約（src/youtube_automation/scripts/distrokid_release.py より裏取り）:
+// サーバー契約（src/youtube_automation/commands/collections/collection_serve.py より裏取り）:
 //   - GET <baseUrl>/distrokid/release.json -> { profile, release } envelope
 //   - GET <baseUrl><asset_path>            -> binary（asset_path は "/distrokid/assets/" 接頭辞込み）
 //   - distrokid.enabled=false / 未配置のチャンネルは /distrokid/* が 404

@@ -36,12 +36,10 @@ def _channel_context(channel: Path) -> Iterator[None]:
         reset_config()
 
 
-def collect_channel_analytics(channel: Path) -> None:
+def collect_channel_analytics(channel: Path, analytics_system_factory: Callable[[], object]) -> None:
     """既存 AnalyticsSystem を使って1チャンネルのstandard snapshotを保存する。"""
-    from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
-
     with _channel_context(channel):
-        result = AnalyticsSystem().run_data_collection(days=30, depth="standard")
+        result = analytics_system_factory().run_data_collection(days=30, depth="standard")
     if not result.get("success"):
         raise AutomationError(str(result.get("error", "Analytics refresh failed")))
 
@@ -49,7 +47,7 @@ def collect_channel_analytics(channel: Path) -> None:
 def refresh_dashboard_channels(
     channels: list[Path],
     *,
-    collect_channel: Callable[[Path], None] = collect_channel_analytics,
+    collect_channel: Callable[[Path], None],
 ) -> dict[Path, str]:
     """全チャンネルを登録順に更新し、想定内の失敗だけをpath別に返す。"""
     errors: dict[Path, str] = {}

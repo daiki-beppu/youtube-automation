@@ -33,11 +33,7 @@ from httplib2 import HttpLib2Error
 from PIL import Image as PILImage
 from PIL import UnidentifiedImageError
 
-from youtube_automation.commands.analytics.benchmark_collector import (
-    TTP_VIDEO_ANALYZE_TOP_N,
-    load_benchmark_videos,
-    select_top_vod_benchmark_videos,
-)
+from youtube_automation.application.analytics.benchmark_query import load_benchmark_videos
 from youtube_automation.commands.system.automation_update_refs import UPSTREAM_REPO
 from youtube_automation.commands.system.skills_sync import bundled_skill_names
 from youtube_automation.configuration import (
@@ -46,6 +42,10 @@ from youtube_automation.configuration import (
     workspace_channels,
 )
 from youtube_automation.configuration.loader import _explicit_channel_selection
+from youtube_automation.domains.analytics.benchmark import (
+    TTP_VIDEO_ANALYZE_TOP_N,
+    select_top_vod_benchmark_videos,
+)
 from youtube_automation.domains.thumbnail.references import resolve_configured_benchmark_references
 from youtube_automation.domains.uploads.preflight import (
     check_descriptions_md_parseability,

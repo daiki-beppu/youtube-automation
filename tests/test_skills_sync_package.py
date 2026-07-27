@@ -177,6 +177,50 @@ def test_editable_root_points_to_claude_skills_dir() -> None:
     assert (root / ".claude" / "skills").is_dir()
 
 
+def test_editable_root_resolves_nested_checkout_without_fixed_depth(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package_file = tmp_path / "src" / "youtube_automation" / "__init__.py"
+    package_file.parent.mkdir(parents=True)
+    package_file.write_text("", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='test'\n", encoding="utf-8")
+    (tmp_path / ".claude" / "skills").mkdir(parents=True)
+
+    import youtube_automation
+    from youtube_automation.commands.system import skills_sync
+
+    monkeypatch.setattr(youtube_automation, "__file__", str(package_file))
+    assert skills_sync._editable_root() == tmp_path
+
+
+def test_editable_root_does_not_adopt_unrelated_parent_skills(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    package_file = tmp_path / "checkout" / "src" / "youtube_automation" / "__init__.py"
+    package_file.parent.mkdir(parents=True)
+    package_file.write_text("", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='unrelated'\n", encoding="utf-8")
+    (tmp_path / ".claude" / "skills").mkdir(parents=True)
+
+    import youtube_automation
+    from youtube_automation.commands.system import skills_sync
+
+    monkeypatch.setattr(youtube_automation, "__file__", str(package_file))
+    with pytest.raises(FileNotFoundError, match="repository root"):
+        skills_sync._editable_root()
+
+
+def test_editable_root_fails_when_checkout_markers_are_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    package_file = tmp_path / "src" / "youtube_automation" / "__init__.py"
+    package_file.parent.mkdir(parents=True)
+    package_file.write_text("", encoding="utf-8")
+
+    import youtube_automation
+    from youtube_automation.commands.system import skills_sync
+
+    monkeypatch.setattr(youtube_automation, "__file__", str(package_file))
+    with pytest.raises(FileNotFoundError, match="repository root"):
+        skills_sync._editable_root()
+
+
 # ---------- 12: monkeypatch 伝搬 (package-level patch が submodule に届く) ----------
 
 

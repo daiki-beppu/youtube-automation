@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-from youtube_automation.commands.analytics.benchmark_collector import find_latest_benchmark_json
+from youtube_automation.application.analytics.benchmark_query import find_latest_benchmark_json
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.utils.ttp_health import evaluate_ttp_health
 

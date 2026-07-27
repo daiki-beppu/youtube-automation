@@ -1,6 +1,6 @@
 // `/distrokid/release.json` / `/distrokid/assets/<path>` を fetch する API client。
 //
-// サーバー契約（src/youtube_automation/scripts/distrokid_release.py）:
+// サーバー契約（src/youtube_automation/commands/collections/collection_serve.py）:
 //   - GET <baseUrl>/distrokid/release.json -> { profile, release } envelope  （単一 mode）
 //   - GET <baseUrl>/collections/<id>/distrokid/<disc>/release.json -> 同形 （dir mode、#934）
 //   - GET <baseUrl><asset_path>            -> binary（asset_path は接頭辞込み）

@@ -25,7 +25,7 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
-from youtube_automation.commands.collections.collection_serve import find_distrokid_discs
+from youtube_automation.application.distrokid.disc_query import find_distrokid_discs
 from youtube_automation.configuration import load_config
 from youtube_automation.domains.distrokid.preparation import (
     _MAX_TRACKS_PER_DISC,

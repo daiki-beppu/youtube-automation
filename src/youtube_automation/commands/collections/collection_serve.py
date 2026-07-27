@@ -46,19 +46,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from youtube_automation import __version__
+from youtube_automation.application.distrokid.disc_query import find_distrokid_discs
 from youtube_automation.commands.collections.collection_serve_discovery import (
     DISCOVERY_PORT,
     RegistryState,
     create_discovery_lifecycle,
     handle_registry_request,
-)
-from youtube_automation.commands.suno.suno_artifacts import (
-    COLLECTIONS_ROUTE,
-    DOCUMENTATION_DIRNAME,
-    DOWNLOADED_ROUTE_SUFFIX,
-    SUNO_PROMPTS_JSON_FILENAME,
-    SUNO_PROMPTS_ROUTE,
-    collection_downloaded_route,
 )
 from youtube_automation.configuration import Distrokid, channel_dir, load_config
 from youtube_automation.domains.distrokid.metadata import parse_album_metadata
@@ -79,6 +72,14 @@ from youtube_automation.domains.suno.downloaded import (
     expected_download_count,
     parse_downloaded_payload,
     read_pattern_count,
+)
+from youtube_automation.domains.suno.downloaded.models import (
+    COLLECTIONS_ROUTE,
+    DOCUMENTATION_DIRNAME,
+    DOWNLOADED_ROUTE_SUFFIX,
+    SUNO_PROMPTS_JSON_FILENAME,
+    SUNO_PROMPTS_ROUTE,
+    collection_downloaded_route,
 )
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 from youtube_automation.infrastructure.errors import ConfigError
@@ -257,22 +258,6 @@ def write_distrokid_release(root: Path, collection_id: str, disc: str, album_tit
     data[key] = {"album_title": album_title, "recorded_at": recorded_at}
 
     _atomic_json_write(target, data, prefix=".distrokid-releases-")
-
-
-def find_distrokid_discs(collection_dir: Path) -> list[str]:
-    """コレクション配下の `30-distrokid/<disc>/` を持つ disc 名一覧をソート済みで返す（#934）.
-
-    disc ディレクトリは mp3 を 1 つ以上含む場合のみ列挙する。`30-distrokid/` 不在のコレクションは
-    空リストを返す（例外は投げない）。
-    """
-    distrokid_dir = collection_dir / _DISTROKID_DIRNAME
-    if not distrokid_dir.is_dir():
-        return []
-    discs = []
-    for d in sorted(distrokid_dir.iterdir()):
-        if d.is_dir() and any(d.glob("*.mp3")):
-            discs.append(d.name)
-    return discs
 
 
 def _read_disc_album_title(collection_dir: Path, disc: str) -> str | None:

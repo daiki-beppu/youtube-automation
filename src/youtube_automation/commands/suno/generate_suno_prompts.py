@@ -14,14 +14,14 @@ from typing import cast
 
 import yaml
 
-from youtube_automation.commands.suno.suno_artifacts import (
+from youtube_automation.domains.suno.config import infer_suno_mode, resolve_suno_config
+from youtube_automation.domains.suno.downloaded.models import (
     DOCUMENTATION_DIRNAME,
     SUNO_LYRICS_JSON_FILENAME,
     SUNO_PATTERNS_FILENAME,
     SUNO_PROMPTS_JSON_FILENAME,
     SUNO_PROMPTS_MD_FILENAME,
 )
-from youtube_automation.domains.suno.config import infer_suno_mode, resolve_suno_config
 from youtube_automation.domains.suno.downloaded.validation import (
     positive_integer_issue,
     require_instrumental_track_count,

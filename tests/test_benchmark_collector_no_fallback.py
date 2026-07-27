@@ -19,11 +19,12 @@ from unittest.mock import MagicMock
 import pytest
 from googleapiclient.errors import HttpError
 
+from youtube_automation.application.analytics import benchmark_refresh
+from youtube_automation.application.analytics.benchmark_query import load_benchmark_videos
 from youtube_automation.commands.analytics.benchmark_collector import (
     BenchmarkCollector,
-    is_live_benchmark_video,
-    load_benchmark_videos,
 )
+from youtube_automation.domains.analytics.benchmark import is_live_benchmark_video
 from youtube_automation.infrastructure.errors import ConfigError, YouTubeAPIError
 
 
@@ -192,8 +193,6 @@ class TestCollectAllFailures:
 class TestEnsureBenchmarkFresh:
     def test_raises_when_no_channels_configured(self, monkeypatch):
         # Given: benchmark.channels が空
-        from youtube_automation.commands.analytics import benchmark_collector as mod
-
         def _fake_init(self):
             self.config = SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[])))
             self.youtube = None
@@ -203,8 +202,228 @@ class TestEnsureBenchmarkFresh:
             self.data_dir = SimpleNamespace()
             self.today = SimpleNamespace()
 
-        monkeypatch.setattr(mod.BenchmarkCollector, "__init__", _fake_init)
+        collector = BenchmarkCollector.__new__(BenchmarkCollector)
+        _fake_init(collector)
 
         # When / Then: 黙って return せず ConfigError
         with pytest.raises(ConfigError, match="benchmark.channels"):
-            mod.ensure_benchmark_fresh(data_dir=SimpleNamespace())
+            benchmark_refresh.ensure_benchmark_fresh(
+                SimpleNamespace(),
+                collector_factory=lambda: collector,
+                analyzer_factory=MagicMock(),
+                reporter_factory=MagicMock(),
+            )
+
+    def test_noops_when_latest_json_and_all_channels_are_fresh(self, monkeypatch, tmp_path):
+        collector = SimpleNamespace(
+            config=SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[{"slug": "a"}]))),
+            data_dir=tmp_path,
+            check_freshness=lambda: [],
+        )
+        (tmp_path / "benchmark_20260727.json").write_text(json.dumps({"channels": [{"slug": "a"}]}), encoding="utf-8")
+        benchmark_refresh.ensure_benchmark_fresh(
+            tmp_path,
+            collector_factory=lambda: collector,
+            analyzer_factory=MagicMock(),
+            reporter_factory=MagicMock(),
+        )
+
+    def test_refreshes_when_configured_channel_is_missing_from_latest_json(self, tmp_path):
+        events: list[str] = []
+
+        class FakeCollector:
+            config = SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[{"slug": "a"}])))
+            data_dir = tmp_path
+            benchmarks_dir = tmp_path
+            today = object()
+
+            def __init__(self):
+                self.benchmark_config = {"gemini_thumbnail_analysis": False}
+
+            def initialize(self):
+                events.append("initialize")
+
+            def collect_all(self, *, force):
+                events.append(f"collect:{force}")
+                return {"channels": [{"slug": "a"}]}
+
+            def download_thumbnails(self, data, *, force):
+                events.append(f"thumbnails:{force}")
+
+            def save_json(self, data):
+                events.append("save")
+
+        class FakeReporter:
+            def __init__(self, config, benchmarks_dir, today):
+                events.append("reporter")
+
+            def generate_markdown(self, data):
+                events.append("generate")
+                return {}
+
+            def write_markdown(self, data):
+                events.append("write")
+
+        _write_benchmark_json(tmp_path, [{"slug": "previously-configured"}])
+
+        benchmark_refresh.ensure_benchmark_fresh(
+            tmp_path,
+            collector_factory=FakeCollector,
+            analyzer_factory=MagicMock(),
+            reporter_factory=FakeReporter,
+        )
+
+        assert events == ["initialize", "collect:True", "thumbnails:True", "save", "reporter", "generate", "write"]
+
+    def test_passes_gemini_analysis_result_to_save_and_report(self, tmp_path):
+        analyzed_data = {"channels": [{"slug": "a"}], "analysis": "gemini"}
+        saved: list[dict] = []
+        reported: list[dict] = []
+
+        class FakeCollector:
+            config = SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[{"slug": "a"}])))
+            benchmarks_dir = tmp_path
+            today = object()
+
+            def __init__(self):
+                self.benchmark_config = {"gemini_thumbnail_analysis": True}
+
+            def initialize(self):
+                pass
+
+            def collect_all(self, *, force):
+                return {"channels": [{"slug": "a"}]}
+
+            def download_thumbnails(self, data, *, force):
+                pass
+
+            def save_json(self, data):
+                saved.append(data)
+
+        class FakeAnalyzer:
+            def __init__(self, benchmarks_dir):
+                pass
+
+            def analyze_thumbnails(self, data, *, keep):
+                assert keep is True
+                return analyzed_data
+
+        class FakeReporter:
+            def __init__(self, *_args):
+                pass
+
+            def generate_markdown(self, data):
+                reported.append(data)
+                return {}
+
+            def write_markdown(self, data):
+                pass
+
+        benchmark_refresh.ensure_benchmark_fresh(
+            tmp_path,
+            collector_factory=FakeCollector,
+            analyzer_factory=FakeAnalyzer,
+            reporter_factory=FakeReporter,
+        )
+
+        assert saved == [analyzed_data]
+        assert reported == [analyzed_data]
+
+    def test_raises_when_refresh_returns_no_channels(self, monkeypatch, tmp_path):
+        collector = SimpleNamespace(
+            config=SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[{"slug": "a"}]))),
+            data_dir=tmp_path,
+            initialize=lambda: None,
+            collect_all=lambda *, force: {"channels": [], "skipped": []},
+            check_freshness=lambda: [],
+        )
+        with pytest.raises(YouTubeAPIError, match="最新化に失敗"):
+            benchmark_refresh.ensure_benchmark_fresh(
+                tmp_path,
+                collector_factory=lambda: collector,
+                analyzer_factory=MagicMock(),
+                reporter_factory=MagicMock(),
+            )
+
+    def test_stops_before_persisting_when_thumbnail_download_fails(self, tmp_path):
+        events: list[str] = []
+
+        class FakeCollector:
+            config = SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[{"slug": "a"}])))
+            benchmarks_dir = tmp_path
+            today = object()
+
+            def __init__(self):
+                self.benchmark_config = {"gemini_thumbnail_analysis": False}
+
+            def initialize(self):
+                events.append("initialize")
+
+            def collect_all(self, *, force):
+                events.append(f"collect:{force}")
+                return {"channels": [{"slug": "a"}]}
+
+            def download_thumbnails(self, data, *, force):
+                events.append("thumbnails")
+                raise YouTubeAPIError("thumbnail download failed")
+
+            def save_json(self, data):
+                events.append("save")
+
+        reporter_factory = MagicMock()
+
+        with pytest.raises(YouTubeAPIError, match="thumbnail download failed"):
+            benchmark_refresh.ensure_benchmark_fresh(
+                tmp_path,
+                collector_factory=FakeCollector,
+                analyzer_factory=MagicMock(),
+                reporter_factory=reporter_factory,
+            )
+
+        assert events == ["initialize", "collect:True", "thumbnails"]
+        reporter_factory.assert_not_called()
+
+    def test_refreshes_when_latest_json_is_stale(self, tmp_path):
+        events: list[str] = []
+
+        class FakeCollector:
+            config = SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[{"slug": "a"}])))
+            benchmarks_dir = tmp_path
+            today = object()
+
+            def __init__(self):
+                self.benchmark_config = {"gemini_thumbnail_analysis": False}
+                self.check_freshness = lambda: [{"slug": "a"}]
+
+            def initialize(self):
+                events.append("initialize")
+
+            def collect_all(self, *, force):
+                events.append(f"collect:{force}")
+                return {"channels": [{"slug": "a"}]}
+
+            def download_thumbnails(self, data, *, force):
+                events.append(f"thumbnails:{force}")
+
+            def save_json(self, data):
+                events.append("save")
+
+        class FakeReporter:
+            def __init__(self, *_args):
+                pass
+
+            def generate_markdown(self, data):
+                return {}
+
+            def write_markdown(self, data):
+                pass
+
+        (tmp_path / "benchmark_20260727.json").write_text(json.dumps({"channels": [{"slug": "a"}]}), encoding="utf-8")
+        benchmark_refresh.ensure_benchmark_fresh(
+            tmp_path,
+            collector_factory=FakeCollector,
+            analyzer_factory=MagicMock(),
+            reporter_factory=FakeReporter,
+        )
+
+        assert events == ["initialize", "collect:True", "thumbnails:True", "save"]
