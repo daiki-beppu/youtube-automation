@@ -289,6 +289,10 @@ def test_built_sdist_contains_only_approved_members(tmp_path: Path) -> None:
         ".claude/settings.template.json",
         "docs/features.md",
         "docs/workflow-cheatsheet.md",
+        "ONBOARDING.md",
+        "docs/oauth-setup.md",
+        "docs/oauth-scopes.md",
+        "infra/terraform/gcp/README.md",
     }
     allowed_prefixes = ("src/", "tests/", ".claude/skills/")
     assert all(member in allowed_exact or member.startswith(allowed_prefixes) for member in members)
@@ -296,6 +300,17 @@ def test_built_sdist_contains_only_approved_members(tmp_path: Path) -> None:
     required_prefixes = allowed_prefixes
     assert required_exact <= members
     assert all(any(member.startswith(prefix) for member in members) for prefix in required_prefixes)
+
+    # README から辿る OAuth 導線は sdist 内で完結する（auth/SETUP.md 廃止時の欠落を再発させない）
+    oauth_entrypoints = {
+        "ONBOARDING.md",
+        "docs/oauth-setup.md",
+        "docs/oauth-scopes.md",
+        "infra/terraform/gcp/README.md",
+    }
+    assert oauth_entrypoints <= members
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert all(link in readme for link in ("(ONBOARDING.md)", "(docs/oauth-setup.md)"))
 
     forbidden_prefixes = (
         ".github/",
@@ -307,7 +322,8 @@ def test_built_sdist_contains_only_approved_members(tmp_path: Path) -> None:
         "infra/",
         "plans/",
     )
-    assert not [member for member in members if member.startswith(forbidden_prefixes)]
+    # allowlist へ明示した member（例: ルート B の infra README）だけが forbidden prefix の例外になる
+    assert not [member for member in members if member.startswith(forbidden_prefixes) and member not in allowed_exact]
     forbidden_names = {
         "client_secrets.json",
         "token.json",
