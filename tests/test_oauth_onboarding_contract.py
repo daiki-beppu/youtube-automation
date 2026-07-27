@@ -144,3 +144,58 @@ def test_setup_entrypoints_do_not_keep_stale_oauth_contract() -> None:
         assert "client_secrets.json" in text
         for phrase in stale_phrases:
             assert phrase not in text
+
+
+def _make_workspace_channel_worktree(tmp_path: Path) -> Path:
+    """workspace channel かつ linked worktree の channel_dir を作る。
+
+    workspace root fallback と main worktree fallback の両方が候補に載る唯一の構造で、
+    `client_secrets_file_candidates()` の全 4 候補を一度に観測できる。
+    """
+    main_root = tmp_path / "main"
+    gitdir = main_root / ".git" / "worktrees" / "alpha"
+    gitdir.mkdir(parents=True)
+    (gitdir / "commondir").write_text("../..\n", encoding="utf-8")
+
+    channel = tmp_path / "workspace" / "channels" / "alpha"
+    (channel / "config" / "channel").mkdir(parents=True)
+    (channel / ".git").write_text(f"gitdir: {gitdir}\n", encoding="utf-8")
+    return channel
+
+
+def test_client_secrets_resolution_order_matches_readme_and_oauth_setup(tmp_path: Path, monkeypatch) -> None:
+    """README / docs の解決順が実装の候補列と一致する（README だけ古くなる事故を防ぐ）。"""
+    from youtube_automation.infrastructure.auth.youtube import client_secrets_file_candidates
+
+    monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
+    channel = _make_workspace_channel_worktree(tmp_path)
+    workspace_root = channel.parents[1]
+    main_root = tmp_path / "main"
+
+    candidates = client_secrets_file_candidates(channel)
+    assert candidates == [
+        channel / "auth" / "client_secrets.json",
+        channel / "automation" / "auth" / "client_secrets.json",
+        workspace_root / "auth" / "client_secrets.json",
+        main_root.resolve() / "auth" / "client_secrets.json",
+    ]
+
+    # 候補ごとに文書側の表記を固定する。候補の追加・削除・並べ替えはこの対応表の更新を強制する
+    documented_tokens = (
+        "<channel_dir>/auth/",
+        "<channel_dir>/automation/auth/",
+        "<workspace_root>/auth/",
+        "<main_worktree_root>/auth/",
+    )
+    assert len(documented_tokens) == len(candidates)
+
+    oauth_setup = (REPO_ROOT / "docs" / "oauth-setup.md").read_text(encoding="utf-8")
+    resolution_section = oauth_setup.split("`client_secrets.json` の解決順", 1)[1].split("## 動作確認", 1)[0]
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+
+    for document, context in ((readme, "README.md"), (resolution_section, "docs/oauth-setup.md")):
+        positions = []
+        for token in documented_tokens:
+            assert token in document, f"{context} is missing {token!r}"
+            positions.append(document.index(token))
+        assert positions == sorted(positions), f"{context} lists the candidates out of implementation order"

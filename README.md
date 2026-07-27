@@ -203,7 +203,7 @@ nix develop
 |--------|------|------|
 | `GOOGLE_CLOUD_PROJECT` | 任意 | Vertex AI を呼ぶ GCP プロジェクト ID。未設定なら ADC quota project から自動解決 |
 | `CHANNEL_DIR` | 自動検出可 | チャンネルリポジトリのルートパス |
-| `CLIENT_SECRETS_DIR` | 任意 | `client_secrets.json` を置いたディレクトリ。設定時はそのディレクトリのみ検査。未設定時は `<channel_dir>/auth/`、`<channel_dir>/automation/auth/`、1Password / `CLIENT_SECRETS_JSON` fallback の順で探索 |
+| `CLIENT_SECRETS_DIR` | 任意 | `client_secrets.json` を置いたディレクトリ。設定時はそのディレクトリのみ検査。未設定時は `<channel_dir>/auth/`、`<channel_dir>/automation/auth/`、`<workspace_root>/auth/`、`<main_worktree_root>/auth/`、1Password / `CLIENT_SECRETS_JSON` fallback の順で探索（[解決順の詳細](docs/oauth-setup.md#client-secrets-resolution)） |
 
 ## Development
 
