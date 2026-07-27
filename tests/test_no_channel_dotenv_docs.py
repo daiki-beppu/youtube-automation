@@ -1,11 +1,11 @@
-"""Current onboarding docs must not prescribe channel-root dotenv setup."""
+"""移管後の onboarding と配布文書が dotenv なしの認証経路を使う契約。"""
 
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[1]
 CURRENT_DOCS = (
     "README.md",
-    "auth/SETUP.md",
+    "ONBOARDING.md",
     ".claude/skills/setup/SKILL.md",
     ".claude/skills/lyria/SKILL.md",
     ".claude/skills/short-thumbnail/SKILL.md",
@@ -15,26 +15,16 @@ CURRENT_DOCS = (
 )
 
 
-def test_current_onboarding_docs_use_adc_without_dotenv_instructions() -> None:
-    for relative_path in CURRENT_DOCS:
-        text = (ROOT / relative_path).read_text(encoding="utf-8")
-        assert "GOOGLE_GENAI_USE_VERTEXAI" not in text, relative_path
-        assert "GOOGLE_CLOUD_LOCATION" not in text, relative_path
-        assert "load_dotenv" not in text, relative_path
-        assert "grep -v '^#' .env" not in text, relative_path
-        assert ".env 書き出し" not in text, relative_path
+def test_current_onboarding_docs_are_present_and_old_auth_owner_is_absent() -> None:
+    assert all((ROOT / relative_path).is_file() for relative_path in CURRENT_DOCS)
+    assert not (ROOT / "auth/SETUP.md").exists()
+    assert not (ROOT / "CONTEXT.md").exists()
 
 
-def test_adc_and_secret_resolution_are_documented() -> None:
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    setup = (ROOT / "auth/SETUP.md").read_text(encoding="utf-8")
-
-    assert "gcloud auth application-default login" in readme
-    assert "application-default set-quota-project" in readme
-    assert "GOOGLE_CLOUD_PROJECT" in readme
-    assert "1Password" in readme
-    assert "auth/client_secrets.json" in setup
-    assert "用途別にアプリが決定" in setup
+def test_oauth_setup_has_a_single_onboarding_owner() -> None:
+    onboarding = ROOT / "ONBOARDING.md"
+    assert onboarding.is_file()
+    assert onboarding.read_text(encoding="utf-8").count("### 2.3 OAuth セットアップ") == 1
 
 
 def test_dotenv_example_is_retired_and_channel_new_does_not_generate_it() -> None:

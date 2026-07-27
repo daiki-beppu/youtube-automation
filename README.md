@@ -39,7 +39,6 @@ youtube-channels-automation/      # ← このリポジトリ
 │       └── templates/            # 説明文テンプレート
 ├── .claude/skills/               # Claude Code スキル群 (yt-skills sync で配布)
 ├── tests/                        # テストスイート
-└── auth/                         # submodule 利用者向け後方互換 shim
 ```
 
 各チャンネルリポジトリ側では、以下のいずれかの方法で導入します:
@@ -95,7 +94,7 @@ pip install "git+https://github.com/daiki-beppu/youtube-automation@v1.1.0"
 
 インストールすると `yt-*` という CLI コマンド群と `yt-skills` 同期ツールが PATH に入ります。
 
-> **submodule 形式 (legacy)**: `auth/` shim のみ後方互換を維持します。GCP セットアップスクリプト（`.claude/skills/channel-new/references/`）は、submodule 利用者は `automation/.claude/skills/channel-new/references/gcp-bootstrap.sh` のように submodule パス経由で参照するか、`yt-skills sync` を先に実行してください（pip install 環境のみ）。新規チャンネルは pip install を推奨。移行手順: [`docs/migration-submodule-to-uv.md`](docs/migration-submodule-to-uv.md)
+> **submodule 形式 (legacy)**: GCP セットアップスクリプト（`.claude/skills/channel-new/references/`）は、submodule 利用者は `automation/.claude/skills/channel-new/references/gcp-bootstrap.sh` のように submodule パス経由で参照するか、`yt-skills sync` を先に実行してください（pip install 環境のみ）。新規チャンネルは pip install を推奨。移行手順: [`docs/migration-submodule-to-uv.md`](docs/migration-submodule-to-uv.md)
 
 ### 2. Claude Code 配布物を同期
 
@@ -127,7 +126,7 @@ yt-skills sync --asset skills --prune --yes  # 列挙したうえで実際に削
 
 ### 4. OAuth 認証をセットアップ
 
-[auth/SETUP.md](auth/SETUP.md) の手順に従って Google Auth Platform の Branding / Audience / Clients を設定し、チャンネルディレクトリの `auth/client_secrets.json` に配置してください。
+[ONBOARDING.md](ONBOARDING.md) の「2.3 OAuth セットアップ」に従って Google Auth Platform の Branding / Audience / Clients を設定し、チャンネルディレクトリの `auth/client_secrets.json` に配置してください。手動ルート（`gcp-bootstrap.sh` / Terraform）とトラブルシューティングは [docs/oauth-setup.md](docs/oauth-setup.md) を参照してください。
 
 ```bash
 # どのスクリプトでも初回実行時に OAuth フローが立ち上がります

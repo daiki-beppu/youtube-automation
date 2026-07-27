@@ -19,7 +19,6 @@ _CHANNEL_NEW_SKILL = _SKILLS_DIR / "channel-new" / "SKILL.md"
 _ONBOARD_DIR = _SKILLS_DIR / "onboard"
 _CURRENT_SETUP_DOCS = [
     _REPO_ROOT / "ONBOARDING.md",
-    _REPO_ROOT / "auth" / "SETUP.md",
     _REPO_ROOT / "infra" / "terraform" / "gcp" / "README.md",
 ]
 

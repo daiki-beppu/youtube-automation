@@ -1813,7 +1813,6 @@ requires-dist = [
     { name = "schedule", specifier = ">=1,<2" },
     { name = "setuptools", specifier = ">=83,<84" },
 ]
-provides-extras = ["veo"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -1,5 +1,7 @@
 # OAuth scope 分離と skill × scope 対応表
 
+OAuth client の作成・配置手順は [`ONBOARDING.md`](../ONBOARDING.md) の「2.3 OAuth セットアップ」を正本とする。手動ルート（`gcp-bootstrap.sh` / Terraform）、`client_secrets.json` の解決順、トラブルシューティングは [`oauth-setup.md`](oauth-setup.md) を参照。
+
 issue #1699 で導入した用途別 OAuth token の設計と、各 skill / CLI の実効 scope の対応表。
 token 漏洩時の blast radius を read-only に限定し、「どの skill がどの scope で動くか」を機械的に説明できる状態を保つ。
 

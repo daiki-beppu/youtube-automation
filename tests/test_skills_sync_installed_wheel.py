@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -100,6 +101,20 @@ def test_candidate_wheel_syncs_all_assets_into_clean_downstream(tmp_path: Path) 
 
     for target_relative, source_relative in _FILE_ASSETS.items():
         assert (downstream / target_relative).read_bytes() == (repo_root / source_relative).read_bytes()
+
+    distributed_references = downstream / ".claude" / "skills" / "channel-new" / "references"
+    bootstrap_guide = distributed_references / "gcp-bootstrap.md"
+    assert bootstrap_guide.is_file()
+    assert bootstrap_guide.read_text(encoding="utf-8")
+    for script_name in ("gcp-bootstrap.sh", "gcp-terraform-apply.sh"):
+        script = distributed_references / script_name
+        assert script.is_file()
+        references = re.findall(
+            r"(?:`|\s)([A-Za-z0-9_.-]+\.md)(?:`|\s|[「」])",
+            script.read_text(encoding="utf-8"),
+        )
+        assert references
+        assert all((distributed_references / reference).is_file() for reference in references)
 
     settings = json.loads((downstream / ".claude" / "settings.json").read_text(encoding="utf-8"))
     assert settings["permissions"]["allow"]

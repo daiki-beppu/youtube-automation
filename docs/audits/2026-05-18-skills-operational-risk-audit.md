@@ -6,7 +6,7 @@
 PR #367 (`2026-05-18-skills-generalization-consistency.md`) と非重複の second-opinion 監査
 生成: takt `deep-research` workflow (plan → dig × 4 並列 + Part C 再走 → analyze → supervise)
 判定: supervise step が `research-report.md` で APPROVE 相当を生成、ただし workflow rule マッチで abort（成果物は揃っており実害なし）
-原データ: `2026-05-18-skills-operational-risk-audit/raw/` 配下に 11 本（dig 10 + supervise 1）を保全
+原データ: 本レポートへ集約済み（dig 10 + supervise 1）。統合前の raw 資産は B6 で削除した。
 
 ---
 

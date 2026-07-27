@@ -20,7 +20,9 @@ GOOGLE_AUTH_PLATFORM_KEYWORDS = (
     "Create client",
     "Desktop app",
     "Add secret",
-    "auth/client_secrets.template.json",
+    "Download JSON",
+    "uv run yt-doctor --fix-client-secrets",
+    "uv run yt-doctor --json",
 )
 
 

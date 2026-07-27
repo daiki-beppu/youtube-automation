@@ -62,16 +62,16 @@ def test_auth_template_is_included_in_wheel_and_sdist_manifests() -> None:
 
     hatch = pyproject["tool"]["hatch"]["build"]["targets"]
     force_include = hatch["wheel"]["force-include"]
-    sdist_include = hatch["sdist"]["include"]
+    sdist_only_include = hatch["sdist"]["only-include"]
 
     assert force_include["src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json"] == (
         "youtube_automation/infrastructure/resources/auth/client_secrets.template.json"
     )
-    assert "src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json" in sdist_include
+    assert "src/" in sdist_only_include
     assert force_include[".claude/settings.template.json"] == (
         "youtube_automation/_claude_settings/settings.template.json"
     )
-    assert ".claude/settings.template.json" in sdist_include
+    assert ".claude/settings.template.json" in sdist_only_include
 
 
 def test_asset_root_resolves_via_package_import() -> None:

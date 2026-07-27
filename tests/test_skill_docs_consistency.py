@@ -1305,14 +1305,10 @@ def test_oauth_module_and_setup_guide_distinguish_automatic_and_manual_routes() 
         assert expected in module_docstring
     assert "secret を発行して auth/client_secrets.json に配置" not in module_docstring
 
-    setup_guide = _read("auth/SETUP.md")
-    route_zero = setup_guide.split("### ルート 0:", 1)[1].split("### ルート A:", 1)[0]
+    onboarding = _read("ONBOARDING.md")
+    oauth_setup = onboarding.split("### 2.3 OAuth セットアップ", 1)[1].split("### 2.4 初期設定後の GCP 課金確認", 1)[0]
     for expected in ("Download JSON", "done", "yt-doctor --fix-client-secrets", "yt-doctor --json"):
-        assert expected in route_zero
-    assert "client_secrets.json` 配置は PKCE / GUI 制約で AI 実行不可" not in route_zero
-
-    manual_routes = setup_guide.split("### ルート A:", 1)[1].split('---\n\n## <a id="step-oauth"', 1)[0]
-    assert "ルート A / B では `client_secrets.json` の手動配置を現状どおり行う" in manual_routes
+        assert expected in oauth_setup
 
 
 def test_channel_new_regeneration_documents_ttp_wf_new_readiness_gate() -> None:

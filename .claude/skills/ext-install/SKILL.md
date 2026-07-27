@@ -1,6 +1,6 @@
 ---
 name: ext-install
-description: "Use when Chrome 拡張（suno-helper / distrokid-helper）のインストール・更新をするとき。「拡張入れて」「extension インストール」で発動"
+description: "Use when Chrome 拡張（suno-helper / distrokid-helper / community-helper）のインストール・更新をするとき。「拡張入れて」「extension インストール」で発動"
 ---
 
 ## 前後工程
@@ -15,6 +15,7 @@ automation リポジトリの GitHub Release (`ext-v*` タグ) に添付され�
 対象拡張:
 - **suno-helper** — Suno UI 上で曲の連続生成 + playlist 追加を自動化
 - **distrokid-helper** — DistroKid 登録フォームへの自動入力
+- **community-helper** — YouTube Studio のコミュニティ投稿を自動入力
 
 ## 前提
 
@@ -67,6 +68,9 @@ gh release download --repo "$UPSTREAM_REPO" <tag> --pattern 'suno-helper-*.zip' 
 
 # distrokid-helper の場合
 gh release download --repo "$UPSTREAM_REPO" <tag> --pattern 'distrokid-helper-*.zip' --dir ~/Downloads
+
+# community-helper の場合
+gh release download --repo "$UPSTREAM_REPO" <tag> --pattern 'community-helper-*.zip' --dir ~/Downloads
 ```
 
 2. zip を展開する:
@@ -77,6 +81,9 @@ mkdir -p ~/chrome-extensions/suno-helper && cd ~/chrome-extensions/suno-helper &
 
 # distrokid-helper の場合
 mkdir -p ~/chrome-extensions/distrokid-helper && cd ~/chrome-extensions/distrokid-helper && unzip -o ~/Downloads/distrokid-helper-*.zip
+
+# community-helper の場合
+mkdir -p ~/chrome-extensions/community-helper && cd ~/chrome-extensions/community-helper && unzip -o ~/Downloads/community-helper-*.zip
 ```
 
 3. user に以下の手順を案内する:
@@ -103,6 +110,9 @@ cd ~/chrome-extensions/suno-helper && rm -rf * && unzip -o ~/Downloads/suno-help
 
 # distrokid-helper の場合
 cd ~/chrome-extensions/distrokid-helper && rm -rf * && unzip -o ~/Downloads/distrokid-helper-*.zip
+
+# community-helper の場合
+cd ~/chrome-extensions/community-helper && rm -rf * && unzip -o ~/Downloads/community-helper-*.zip
 ```
 
 3. user に以下を案内する:
@@ -115,6 +125,9 @@ cd ~/chrome-extensions/distrokid-helper && rm -rf * && unzip -o ~/Downloads/dist
 
 - **suno-helper**: Suno (suno.com/create) を開き、拡張アイコンをクリックして popup が表示されることを確認
 - **distrokid-helper**: DistroKid のアップロードページを開き、拡張アイコンをクリックして popup が表示されることを確認
+- **community-helper**: YouTube Studio のチャンネル投稿ページを開き、拡張 overlay が表示されることを確認
+
+Community Helper の実 YouTube 投稿 DOM browser E2E は未実装であり、現行の自動検証は overlay drag smoke に限定される。
 
 ## Notes
 

@@ -59,7 +59,7 @@ uv add "git+https://github.com/daiki-beppu/youtube-channels-automation@v5.5.0"
 
 ### 2.3 OAuth セットアップ
 
-**Claude Code 上で `/setup` を実行する**。AI が `yt-doctor` でツール導入と API 設定の状態を診断し、GCP プロジェクト作成・API 有効化・IAM 付与・`.env` 書き出し・Google Auth Platform 手動設定まで wizard で誘導する。
+**Claude Code 上で `/setup` を実行する**。AI が `yt-doctor` でツール導入と API 設定の状態を診断し、GCP プロジェクト作成・API 有効化・IAM 付与・Google Auth Platform 手動設定まで wizard で誘導する。認証情報はADCまたは専用OAuthファイルで解決し、channel-rootへdotenvを書き出さない。
 
 `gcloud auth login` / `gcloud auth application-default login` / Google Auth Platform の Branding・Audience Test users・Clients 設定と Download JSON は PKCE / GUI 制約で AI 実行不可なため利用者が手動で行うが、ダウンロードした `client_secrets.json` の配置を含むそれ以外 (プロジェクト作成・billing 紐付け・API 有効化・IAM 付与・トークン取得など) は AI が CLI や gcloud を直接 Bash で実行する。
 
@@ -81,7 +81,7 @@ uv run yt-doctor --json
 
 `yt-channel-status` などの初回認証で `403 access_denied` が出た場合は、上記 **Audience > Test users** にログイン中の Google アカウントが入っているか確認し、`<channel_dir>/auth/token.json` を削除してから再実行する。
 
-手動で全工程やりたい上級者向けの 2 ルート (bootstrap.sh / Terraform) は [`auth/SETUP.md`](auth/SETUP.md) と `.claude/skills/channel-new/references/gcp-bootstrap.sh` / `infra/terraform/gcp/` を参照（submodule 利用の場合は `automation/` プレフィックスを追加）。
+手動で全工程やりたい上級者向けの 2 ルート (bootstrap.sh / Terraform) は [`docs/oauth-setup.md`](docs/oauth-setup.md) を参照（submodule 利用の場合は `automation/` プレフィックスを追加）。`client_secrets.json` の解決順、Vertex AI の project / location 解決、トラブルシューティングも同文書にまとめている。
 
 ### 2.4 初期設定後の GCP 課金確認
 
@@ -313,7 +313,7 @@ nix develop
 | `ConfigError: missing key ...` | `config/channel/*.json` に必須キーが不足。`configuration/loader.py::_REQUIRED_KEYS_BY_SECTION` を参照して該当 JSON を埋める |
 | `op read` が失敗する | `op signin` でサインインしているか確認。CLI 取得経路は `infrastructure/secrets.py` の `_SECRET_REFS`（デフォルト: `op://Personal/YouTube_OAuth_Client_Secrets/credential`） |
 | `yt-skills sync` がスキルを上書きしない | `--force` を付ける（既存ファイルがあるとデフォルトでスキップ） |
-| Vertex AI 呼び出しで `PERMISSION_DENIED` | ADC quota project を `gcloud auth application-default set-quota-project <PROJECT_ID>` で確認・修正し、`auth/SETUP.md` の IAM ロール付与節を再実行 |
+| Vertex AI 呼び出しで `PERMISSION_DENIED` | ADC quota project を `gcloud auth application-default set-quota-project <PROJECT_ID>` で確認・修正し、[`docs/oauth-setup.md`](docs/oauth-setup.md) の IAM ロール付与節を再実行 |
 | アップロードが `quotaExceeded` で止まる | YouTube Data API の日次クォータ消費上限。翌日に再開するか、別 GCP プロジェクトに切り替える |
 
 詳細なエラー定義は [`src/youtube_automation/infrastructure/errors.py`](src/youtube_automation/infrastructure/errors.py)。
