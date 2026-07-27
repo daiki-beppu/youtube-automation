@@ -2,9 +2,10 @@
 // 旧実装 `extensions/suno-helper/constants.js` の値を WXT 移行後も不変に保つ。
 // これらは yt-collection-serve (#692/#698) との互換契約であり、変更すると
 // サーバー側 (`/suno/prompts.json`) と整合しなくなる。
-import { describe, expect, it } from "vitest";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
+import { describe, expect, it } from "vitest";
 
 import {
   BALANCED_RUN_PACING,
@@ -38,9 +39,7 @@ import {
 } from "../../shared/constants";
 
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
-const legacyArtifactPath = ["commands", "suno", "suno_artifacts.py"].join(
-  "/"
-);
+const legacyArtifactPath = ["commands", "suno", "suno_artifacts.py"].join("/");
 
 function extensionAssetFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
