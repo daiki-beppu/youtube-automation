@@ -710,13 +710,13 @@ class TestComposeThumbnailText:
 
 class TestCli:
     def _patch_config(self, monkeypatch: pytest.MonkeyPatch, *, channel_root: Path, cfg: dict) -> None:
-        from youtube_automation.scripts import thumbnail_text as cli
+        from youtube_automation.commands.thumbnail import thumbnail_text as cli
 
         monkeypatch.setattr(cli, "channel_dir", lambda: channel_root)
         monkeypatch.setattr(cli, "load_skill_config", lambda _skill: cfg)
 
     def _patch_input_only(self, monkeypatch: pytest.MonkeyPatch, *, channel_root: Path) -> None:
-        from youtube_automation.scripts import thumbnail_text as cli
+        from youtube_automation.commands.thumbnail import thumbnail_text as cli
 
         monkeypatch.setattr(cli, "channel_dir", lambda: channel_root)
         monkeypatch.setattr(
@@ -733,7 +733,7 @@ class TestCli:
         monkeypatch: pytest.MonkeyPatch,
         capsys,
     ):
-        from youtube_automation.scripts.thumbnail_text import main
+        from youtube_automation.commands.thumbnail.thumbnail_text import main
 
         self._patch_config(monkeypatch, channel_root=tmp_path, cfg=_skill_config_dict(test_font))
         output = tmp_path / "thumbnail-v1.jpg"
@@ -765,7 +765,7 @@ class TestCli:
         monkeypatch: pytest.MonkeyPatch,
         capsys,
     ):
-        from youtube_automation.scripts.thumbnail_text import main
+        from youtube_automation.commands.thumbnail.thumbnail_text import main
 
         fonts_dir = tmp_path / "assets" / "fonts"
         fonts_dir.mkdir(parents=True)
@@ -808,7 +808,7 @@ class TestCli:
 
     @pytest.mark.parametrize("name", ["thumbnail.jpg", "thumbnail.jpeg", "thumbnail.png"])
     def test_final_thumbnail_output_name_exits_2(self, tmp_path: Path, background: Path, name: str, capsys):
-        from youtube_automation.scripts.thumbnail_text import main
+        from youtube_automation.commands.thumbnail.thumbnail_text import main
 
         code = main(
             [
@@ -825,7 +825,7 @@ class TestCli:
         assert "最終サムネイル名への直接出力はできません" in capsys.readouterr().err
 
     def test_existing_output_file_exits_2_without_overwrite(self, tmp_path: Path, background: Path, capsys):
-        from youtube_automation.scripts.thumbnail_text import main
+        from youtube_automation.commands.thumbnail.thumbnail_text import main
 
         output = tmp_path / "thumbnail-v1.jpg"
         output.write_bytes(b"keep me")
@@ -852,7 +852,7 @@ class TestCli:
         monkeypatch: pytest.MonkeyPatch,
         capsys,
     ):
-        from youtube_automation.scripts import thumbnail_text as cli
+        from youtube_automation.commands.thumbnail import thumbnail_text as cli
 
         monkeypatch.setattr(cli, "channel_dir", lambda: (_ for _ in ()).throw(ConfigError("CHANNEL_DIR missing")))
         monkeypatch.setattr(
@@ -884,7 +884,7 @@ class TestCli:
         monkeypatch: pytest.MonkeyPatch,
         capsys,
     ):
-        from youtube_automation.scripts.thumbnail_text import main
+        from youtube_automation.commands.thumbnail.thumbnail_text import main
 
         self._patch_input_only(monkeypatch, channel_root=tmp_path)
 
@@ -909,7 +909,7 @@ class TestCli:
         monkeypatch: pytest.MonkeyPatch,
         capsys,
     ):
-        from youtube_automation.scripts.thumbnail_text import main
+        from youtube_automation.commands.thumbnail.thumbnail_text import main
 
         self._patch_input_only(monkeypatch, channel_root=tmp_path)
         output = tmp_path / "thumbnail-v1.jpg"
@@ -936,7 +936,7 @@ class TestCli:
         monkeypatch: pytest.MonkeyPatch,
         capsys,
     ):
-        from youtube_automation.scripts.thumbnail_text import main
+        from youtube_automation.commands.thumbnail.thumbnail_text import main
 
         self._patch_input_only(monkeypatch, channel_root=tmp_path)
         outside = tmp_path / "outside"
@@ -965,7 +965,7 @@ class TestCli:
         monkeypatch: pytest.MonkeyPatch,
         capsys,
     ):
-        from youtube_automation.scripts.thumbnail_text import main
+        from youtube_automation.commands.thumbnail.thumbnail_text import main
 
         channel_root = tmp_path / "channel"
         channel_root.mkdir()
@@ -992,7 +992,7 @@ class TestCli:
         monkeypatch: pytest.MonkeyPatch,
         capsys,
     ):
-        from youtube_automation.scripts import thumbnail_text as cli
+        from youtube_automation.commands.thumbnail import thumbnail_text as cli
 
         monkeypatch.setattr(cli, "channel_dir", lambda: pytest.fail("title validation should stop before channel_dir"))
         monkeypatch.setattr(
@@ -1023,7 +1023,7 @@ class TestCli:
         capsys,
     ):
         """default 設定 (overlay.font.title 未設定) では理由 + 代替手順を出して exit 1"""
-        from youtube_automation.scripts.thumbnail_text import main
+        from youtube_automation.commands.thumbnail.thumbnail_text import main
 
         self._patch_config(monkeypatch, channel_root=tmp_path, cfg={})
         code = main(
@@ -1050,7 +1050,7 @@ class TestCli:
         monkeypatch: pytest.MonkeyPatch,
         capsys,
     ):
-        from youtube_automation.scripts.thumbnail_text import main
+        from youtube_automation.commands.thumbnail.thumbnail_text import main
 
         missing_font_cfg = _skill_config_dict(tmp_path / "assets" / "fonts" / "missing.ttf")
         self._patch_config(monkeypatch, channel_root=tmp_path, cfg=missing_font_cfg)
@@ -1078,7 +1078,7 @@ class TestCli:
         monkeypatch: pytest.MonkeyPatch,
         capsys,
     ):
-        from youtube_automation.scripts.thumbnail_text import main
+        from youtube_automation.commands.thumbnail.thumbnail_text import main
 
         broken_font = tmp_path / "broken.ttf"
         broken_font.write_bytes(b"not a real font")
@@ -1108,7 +1108,7 @@ class TestCli:
         monkeypatch: pytest.MonkeyPatch,
         capsys,
     ):
-        from youtube_automation.scripts.thumbnail_text import main
+        from youtube_automation.commands.thumbnail.thumbnail_text import main
 
         parent_file = tmp_path / "parent-file"
         parent_file.write_text("not a directory", encoding="utf-8")
@@ -1129,7 +1129,7 @@ class TestCli:
         assert "出力画像を保存できません" in capsys.readouterr().err
 
     def test_missing_background_exits_2(self, tmp_path: Path, capsys):
-        from youtube_automation.scripts.thumbnail_text import main
+        from youtube_automation.commands.thumbnail.thumbnail_text import main
 
         code = main(
             [
@@ -1151,7 +1151,7 @@ class TestCli:
         monkeypatch: pytest.MonkeyPatch,
         capsys,
     ):
-        from youtube_automation.scripts.thumbnail_text import main
+        from youtube_automation.commands.thumbnail.thumbnail_text import main
 
         broken = tmp_path / "broken.png"
         broken.write_bytes(b"not a real image")

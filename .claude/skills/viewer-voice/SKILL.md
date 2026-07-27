@@ -138,7 +138,7 @@ subagent へは次を具体値で渡す:
 
 ## 関連ファイル
 
-- `yt-benchmark-comments` (`youtube_automation.scripts.fetch_benchmark_comments`) — コメント収集スクリプト
+- `yt-benchmark-comments` (`youtube_automation.commands.analytics.fetch_benchmark_comments`) — コメント収集スクリプト
 - `data/comments_YYYYMMDD.json` — コメント生データ
 - `data/benchmark_YYYYMMDD.json` — ベンチマーク動画データ（自動更新）
 - `data/video_analysis/<slug>/<video_id>.json` — `/video-analyze` の `scene_timeline` 出力（コメント言及シーンを動画タイムスタンプにマッピング）

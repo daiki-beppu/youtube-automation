@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from youtube_automation.cli import skills_sync
+from youtube_automation.commands.system import skills_sync
 
 
 def _template(root: Path) -> None:

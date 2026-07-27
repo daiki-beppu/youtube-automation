@@ -10,14 +10,14 @@
 # 自スキル分の同梱版を取得し、unified diff として表示
 # youtube_automation を import するため uv 管理の venv 経由で実行する
 uv run python - <<'PY' > /tmp/automation-update-bundled.SKILL.md
-from youtube_automation.cli.skills_sync import _asset_root
+from youtube_automation.commands.system.skills_sync import _asset_root
 
 print((_asset_root("skills") / "automation-update" / "SKILL.md").read_text(encoding="utf-8"), end="")
 PY
 diff -u .claude/skills/automation-update/SKILL.md /tmp/automation-update-bundled.SKILL.md || true
 ```
 
-`yt-skills` には export コマンドは無い。wheel 同梱 asset は `youtube_automation.cli.skills_sync._asset_root("skills")` から取得する。
+`yt-skills` には export コマンドは無い。wheel 同梱 asset は `youtube_automation.commands.system.skills_sync._asset_root("skills")` から取得する。
 
 AI は取得した unified diff を **H2 セクション境界（`## `）で集約** し、「Phase X の手順が変わる」「Gotchas に Y が追加」のようなセクション単位の要約を作って提示する:
 

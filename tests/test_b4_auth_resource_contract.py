@@ -77,7 +77,9 @@ def test_canonical_template_is_the_only_source_and_has_no_root_copy() -> None:
 
     assert canonical.is_file()
     assert templates == [CANONICAL_RELATIVE]
-    channel_templates = (ROOT / "src/youtube_automation/cli/channel_init_templates.py").read_text(encoding="utf-8")
+    channel_templates = (ROOT / "src/youtube_automation/commands/channel/channel_init_templates.py").read_text(
+        encoding="utf-8"
+    )
     assert "_render_auth_template" not in channel_templates
 
 
@@ -89,8 +91,8 @@ def test_channel_init_and_skills_sync_read_identical_canonical_bytes(
     target.mkdir()
     monkeypatch.delenv("CHANNEL_DIR", raising=False)
 
-    from youtube_automation.cli.channel_init import main as channel_init
-    from youtube_automation.cli.skills_sync import main as skills_sync
+    from youtube_automation.commands.channel.channel_init import main as channel_init
+    from youtube_automation.commands.system.skills_sync import main as skills_sync
 
     assert channel_init(["--target", str(target), "--short", "DEMO", "--name", "Demo Channel"]) == 0
     synced = tmp_path / "synced"
@@ -109,7 +111,7 @@ def test_skills_sync_and_diff_resolve_existing_template_named_directory(
     tmp_path: Path,
 ) -> None:
     """A directory target is a parent even when its name matches the source file."""
-    from youtube_automation.cli.skills_sync import main as skills_sync
+    from youtube_automation.commands.system.skills_sync import main as skills_sync
 
     target = tmp_path / TEMPLATE_NAME
     target.mkdir()
@@ -163,7 +165,7 @@ def test_source_wheel_sdist_channel_init_and_installed_wheel_are_byte_identical(
 
     target = tmp_path / "channel-init"
     target.mkdir()
-    from youtube_automation.cli.channel_init import main as channel_init
+    from youtube_automation.commands.channel.channel_init import main as channel_init
 
     assert channel_init(["--target", str(target), "--short", "DEMO", "--name", "Demo Channel"]) == 0
     channel_bytes = (target / "auth/client_secrets.template.json").read_bytes()

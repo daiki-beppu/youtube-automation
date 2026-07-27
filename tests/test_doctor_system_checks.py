@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from youtube_automation.cli import doctor
+from youtube_automation.commands.system import doctor
 
 # ---------------------------------------------------------------------------
 # check_ffmpeg

@@ -12,8 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from youtube_automation.scripts import collection_serve as collection_serve_module
-from youtube_automation.scripts.collection_serve import create_server, main
+from youtube_automation.commands.collections import collection_serve as collection_serve_module
+from youtube_automation.commands.collections.collection_serve import create_server, main
 
 _COMMUNITY_POSTS_ROUTE = "/community/posts.json"
 _COMMUNITY_IMAGE_ROUTE = "/community/posts"

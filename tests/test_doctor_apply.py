@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.cli import doctor
+from youtube_automation.commands.system import doctor
 
 
 def _result(check_id: str, status: str = "ok", next_action: dict | None = None) -> doctor.CheckResult:

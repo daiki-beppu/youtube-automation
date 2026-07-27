@@ -34,7 +34,7 @@ if video_ids:
     query_kwargs["filters"] = "video==" + ",".join(video_ids)
 ```
 
-一方、本番経路 `src/youtube_automation/scripts/analytics_system.py:128-150` は `get_all_channel_videos()` で全動画 ID を集めて `video_ids=...` に渡すため `filters=video==...` が必ず付与される。
+一方、本番経路 `src/youtube_automation/commands/analytics/analytics_system.py:128-150` は `get_all_channel_videos()` で全動画 ID を集めて `video_ids=...` に渡すため `filters=video==...` が必ず付与される。
 
 ## 3. 仮説検証結果
 
@@ -64,7 +64,7 @@ takt サンドボックスから OAuth 経路で実 API を呼べないため、
 
 - 失敗クエリ（issue 本文）には `filters` が無い
 - `bench/bench_video_daily.py:35` は `video_ids` 未指定 → `filters` が付かない → 再現経路
-- `src/youtube_automation/scripts/analytics_system.py:128-150` は `video_ids=[v["video_id"] for v in get_all_channel_videos()]` 経由で `filters=video==...` を付与 → 本番経路は正常
+- `src/youtube_automation/commands/analytics/analytics_system.py:128-150` は `video_ids=[v["video_id"] for v in get_all_channel_videos()]` 経由で `filters=video==...` を付与 → 本番経路は正常
 - ただし `analytics_system.py:149-150` の `except Exception: logger.warning(...)` で握り潰すため、API が 400 を返した場合は warning ログのみで上位処理は継続し、成果物 JSON が欠落する
 - 副次リスク: `filters=video==id1,id2,...` を全動画分連結すると **URL 長制限**（HTTP リクエスト URL は ~8KB 上限）に達する。動画 ID は 11 文字 + 区切り 1 文字なので、おおむね 600 本超のチャンネルで `URI Too Long` 系のエラーに切り替わる可能性がある
 
@@ -72,7 +72,7 @@ takt サンドボックスから OAuth 経路で実 API を呼べないため、
 
 **結論: 直接は出ない。間接的には「snapshot 欠落」エラーとして現れる。**
 
-- `src/youtube_automation/scripts/launch_curve.py:188` は `load_latest_daily_snapshot(channel_dir / "data")` で保存済み JSON を読むだけで API を直叩きしない
+- `src/youtube_automation/commands/analytics/launch_curve.py:188` は `load_latest_daily_snapshot(channel_dir / "data")` で保存済み JSON を読むだけで API を直叩きしない
 - 上流 `yt-analytics --save-data` の動画×日次保存ブロック（`analytics_system.py:128-150`）が 400 を warning として握ったまま完了するため、**動画×日次スナップショット JSON が生成されない**
 - 結果として `launch_curve.py:189-190` が `ConfigError("日次データが見つかりません。先に \`yt-analytics\` を実行してください。")` で停止する
 - すなわち `yt-launch-curve` のエラーは "Bad query" ではなく "snapshot 欠落"。根本原因は上流の握り潰し

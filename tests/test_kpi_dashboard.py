@@ -187,7 +187,7 @@ class TestCli:
 
     def test_cli_outputs_json_and_saves_reports(self, tmp_path, monkeypatch, capsys):
         """要件 1: CLI 実行で週次推移テーブルが Markdown と JSON で出力される"""
-        from youtube_automation.scripts import kpi_dashboard as cli
+        from youtube_automation.commands.analytics import kpi_dashboard as cli
 
         self._write_snapshots(tmp_path)
         monkeypatch.setattr(cli, "_channel_dir", lambda: tmp_path)
@@ -203,7 +203,7 @@ class TestCli:
         assert [p.suffix for p in saved] == [".json", ".md"]
 
     def test_cli_markdown_mode(self, tmp_path, monkeypatch, capsys):
-        from youtube_automation.scripts import kpi_dashboard as cli
+        from youtube_automation.commands.analytics import kpi_dashboard as cli
 
         self._write_snapshots(tmp_path)
         monkeypatch.setattr(cli, "_channel_dir", lambda: tmp_path)
@@ -213,7 +213,7 @@ class TestCli:
         assert "| 週 (月曜開始) |" in capsys.readouterr().out
 
     def test_cli_skips_broken_snapshot(self, tmp_path, monkeypatch, capsys):
-        from youtube_automation.scripts import kpi_dashboard as cli
+        from youtube_automation.commands.analytics import kpi_dashboard as cli
 
         self._write_snapshots(tmp_path)
         (tmp_path / "data" / "analytics_data_20260120.json").write_text("{broken", encoding="utf-8")

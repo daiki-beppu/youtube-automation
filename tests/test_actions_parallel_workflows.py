@@ -224,7 +224,7 @@ def test_extensions_pull_request_trigger_keeps_path_filter() -> None:
             ["extensions/shared-ui/src/button.tsx"],
             {"suno", "distrokid", "community"},
         ),
-        (["src/youtube_automation/scripts/collection_serve.py"], {"python", "packaging"}),
+        (["src/youtube_automation/commands/collections/collection_serve.py"], {"python", "packaging"}),
         (
             ["src/youtube_automation/infrastructure/cost_tracker.py"],
             {"python", "packaging", "windows"},

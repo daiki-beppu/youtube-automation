@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.cli import skills_sync
-from youtube_automation.cli.skills_sync import (
+from youtube_automation.commands.system import skills_sync
+from youtube_automation.commands.system.skills_sync import (
     _ASSET_SPECS,
     _asset_root,
     _list_entries,
@@ -182,7 +182,7 @@ def test_cmd_sync_public_api_with_all_and_target_raises_value_error() -> None:
     通常の Python 例外で通知する設計。CLI 経由では `_resolve_default_target` が
     catch して exit 2 に変換する。
     """
-    from youtube_automation.cli.skills_sync._sync import cmd_sync
+    from youtube_automation.commands.system.skills_sync._sync import cmd_sync
 
     args = argparse.Namespace(
         asset="all",
@@ -200,7 +200,7 @@ def test_cmd_sync_public_api_with_all_and_target_raises_value_error() -> None:
 
 def test_cmd_diff_public_api_with_all_and_target_raises_value_error() -> None:
     """`cmd_diff` 公開 API 直呼びでも同様に `ValueError` を raise する。"""
-    from youtube_automation.cli.skills_sync._diff import cmd_diff
+    from youtube_automation.commands.system.skills_sync._diff import cmd_diff
 
     args = argparse.Namespace(asset="all", target="/tmp/custom-path")
     with pytest.raises(ValueError, match="--target は --asset all モードでは使えません"):
@@ -503,7 +503,7 @@ def test_cmd_sync_skills_non_standard_target_skips_agents(fake_repo: Path, tmp_p
 
 def test_ensure_agents_skills_symlink_unsupported_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Given: symlink 非対応環境を模す (symlink_to が OSError)
-    from youtube_automation.cli.skills_sync import _ops
+    from youtube_automation.commands.system.skills_sync import _ops
 
     def raise_oserror(self: Path, *a: object, **k: object) -> None:
         raise OSError("symlink not supported")
@@ -542,7 +542,7 @@ def test_ensure_agents_skills_symlink_unsupported_warns_but_sync_succeeds(
 
 
 def test_ensure_agents_skills_symlink_returns_none_for_non_standard_layout(tmp_path: Path) -> None:
-    from youtube_automation.cli.skills_sync import _ops
+    from youtube_automation.commands.system.skills_sync import _ops
 
     target = tmp_path / "custom" / "skills"
     target.mkdir(parents=True)
@@ -556,7 +556,7 @@ def test_ensure_agents_skills_symlink_returns_permission_denied(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`PermissionError` は `OSError` と区別して `'permission-denied'` を返す。"""
-    from youtube_automation.cli.skills_sync import _ops
+    from youtube_automation.commands.system.skills_sync import _ops
 
     def raise_permission_error(self: Path, *a: object, **k: object) -> None:
         raise PermissionError("Permission denied")
@@ -574,7 +574,7 @@ def test_ensure_agents_skills_symlink_permission_error_on_parent_mkdir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """親 `.agents/` 作成の `PermissionError` も `'permission-denied'` で表面化する。"""
-    from youtube_automation.cli.skills_sync import _ops
+    from youtube_automation.commands.system.skills_sync import _ops
 
     original_mkdir = Path.mkdir
 
@@ -1274,7 +1274,7 @@ def test_cmd_sync_prune_only_lists_entries_once(
         ]
     )
 
-    import youtube_automation.cli.skills_sync._sync as sync_module
+    import youtube_automation.commands.system.skills_sync._sync as sync_module
 
     call_count = 0
     original_list_entries = sync_module._list_entries

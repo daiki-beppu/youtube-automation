@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.cli import doctor
+from youtube_automation.commands.system import doctor
 
 
 @pytest.fixture(autouse=True)

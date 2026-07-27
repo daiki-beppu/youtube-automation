@@ -20,8 +20,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from youtube_automation.scripts import finalize_master
-from youtube_automation.scripts.finalize_master import (
+from youtube_automation.commands.media import finalize_master
+from youtube_automation.commands.media.finalize_master import (
     finalize_master as run_finalize_master,
 )
 
@@ -91,7 +91,7 @@ def _patch_skill_config(monkeypatch, cfg: dict) -> MagicMock:
     """
     spy = MagicMock(return_value=cfg)
     monkeypatch.setattr(
-        "youtube_automation.scripts.finalize_master.load_skill_config",
+        "youtube_automation.commands.media.finalize_master.load_skill_config",
         spy,
     )
     return spy

@@ -40,14 +40,8 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.domains.suno.downloaded.apply import apply_downloaded_artifacts
-from youtube_automation.domains.suno.downloaded.archive import commit_staged_music_files
-from youtube_automation.domains.suno.downloaded.archive import extract_and_rename_music as _extract_and_rename_music
-from youtube_automation.domains.suno.downloaded.models import DownloadedArtifactError, DownloadedPayload
-from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.scripts import collection_serve as collection_serve_module
-from youtube_automation.scripts.collection_serve import (
+from youtube_automation.commands.collections import collection_serve as collection_serve_module
+from youtube_automation.commands.collections.collection_serve import (
     _resolve_distrokid_capture_root,
     build_collections_index,
     build_server_info,
@@ -59,7 +53,13 @@ from youtube_automation.scripts.collection_serve import (
     resolve_collection_prompts_path,
     resolve_prompts_path,
 )
-from youtube_automation.scripts.collection_serve_discovery import DISCOVERY_PATH, RegistryState
+from youtube_automation.commands.collections.collection_serve_discovery import DISCOVERY_PATH, RegistryState
+from youtube_automation.domains.suno.downloaded.apply import apply_downloaded_artifacts
+from youtube_automation.domains.suno.downloaded.archive import commit_staged_music_files
+from youtube_automation.domains.suno.downloaded.archive import extract_and_rename_music as _extract_and_rename_music
+from youtube_automation.domains.suno.downloaded.models import DownloadedArtifactError, DownloadedPayload
+from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
+from youtube_automation.infrastructure.errors import ConfigError
 from youtube_automation.utils.chrome_extensions import ChromeExtensionOrigin, resolve_unpacked_extension_origin
 
 extract_and_rename_music = partial(
@@ -3091,7 +3091,7 @@ def test_extract_title_with_slash_uses_zip_member_stem_and_sanitized_output(tmp_
 
 def test_extract_rejects_zip_slip_audio_entry(tmp_path, monkeypatch):
     """ZIP entry 名に .. を含む音声ファイルは tmp_dir 外へ展開しない。"""
-    import youtube_automation.scripts.collection_serve as cs
+    import youtube_automation.commands.collections.collection_serve as cs
 
     coll = _make_collection(
         tmp_path,
@@ -4155,7 +4155,7 @@ def test_post_downloaded_zip_output_name_collision_returns_500_without_partial_m
 
 def test_post_downloaded_workflow_write_failure_rolls_back_music_and_workflow(serve_dir, tmp_path, monkeypatch):
     """ZIP commit 後に workflow-state.json 更新が失敗しても music と workflow を元に戻す。"""
-    import youtube_automation.scripts.collection_serve as cs
+    import youtube_automation.commands.collections.collection_serve as cs
 
     planning = tmp_path / "planning"
     coll = _make_collection(

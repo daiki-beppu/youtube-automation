@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.cli import skills_sync
-from youtube_automation.cli.skills_sync import (
+from youtube_automation.commands.system import skills_sync
+from youtube_automation.commands.system.skills_sync import (
     _ASSET_SPECS,
     _asset_root,
     _list_entries,

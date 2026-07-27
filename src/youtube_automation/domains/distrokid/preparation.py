@@ -1,14 +1,14 @@
 """DistroKid 配信成果物準備ユーティリティ（純ロジック層）（#936）.
 
 `yt-distrokid-prepare` CLI が 4 つのサブコマンド（plan / build / cover / verify）で
-使う純関数を集める。I/O と argparse 配線は `scripts/distrokid_prepare.py` の責務。
+ 使う純関数を集める。I/O と argparse 配線は `commands/distrokid/distrokid_prepare.py` の責務。
 
 依存契約:
 - `domains.distrokid.metadata.parse_album_metadata` / `parse_track_table`
   で生成した metadata.md を読み戻せること（ラウンドトリップ検証）。
 - `domains.distrokid.naming.kebab_to_title` / `domains.distrokid.release.build_release_payload` で
   verify サブコマンドが読む側と同一コードパスで検証できること。
-- `scripts.collection_serve.find_distrokid_discs` で disc 列挙が可能なこと。
+- `find_distrokid_discs` で disc 列挙が可能なこと。
 """
 
 from __future__ import annotations
@@ -46,6 +46,7 @@ INDIVIDUAL_MUSIC_DIRNAME = "02-Individual-music"
 
 # ジャケット画像の固定ファイル名。release domain のカバー契約と対称。
 COVER_ART_FILENAME = "cover_art_3000.jpg"
+
 
 # 1 disc の最大曲数（DistroKid 慣行上限）（#936）。
 _MAX_TRACKS_PER_DISC = 35

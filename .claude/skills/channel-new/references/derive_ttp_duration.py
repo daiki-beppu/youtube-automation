@@ -10,9 +10,9 @@ import re
 from collections.abc import Iterable
 from pathlib import Path
 
-from youtube_automation.scripts.benchmark_collector import (
+from youtube_automation.application.analytics.benchmark_query import find_latest_benchmark_json
+from youtube_automation.domains.analytics.benchmark import (
     TTP_VIDEO_ANALYZE_TOP_N,
-    find_latest_benchmark_json,
     is_live_benchmark_video,
     is_short_benchmark_video,
 )

@@ -338,7 +338,7 @@ Phase 4 は子スキル / CLI / API へ委譲する orchestration。個別検証
 - `data/benchmark_<YYYYMMDD>.json` — 競合ベンチマーク（`views` / `likes` / `comments` / `duration_display`。CTR / 平均視聴時間は含まれない）
 - `collections/live/<collection>/20-documentation/upload_tracking.json` — `complete_collection.video_id`（コレクション → video_id 逆引きにも使用、`agents/_tracking_io.py`（`collection_uploader.py` から分離）の schema_version=3 で生成）
 - `collections/live/<collection>/20-documentation/thumbnail-test-history.json` — `/thumbnail-test` が記録する Studio A/B テスト結果。存在時は `.claude/skills/thumbnail-test/references/history-schema.md` で検証してから使用
-- `src/youtube_automation/scripts/launch_curve.py` — `yt-launch-curve --video <id>` の出力定義（`target.ratio_vs_median` / `target.quartile_label` / `target.trace[]` / `target.benchmark_median`）
+- `src/youtube_automation/commands/analytics/launch_curve.py` — `yt-launch-curve --video <id>` の出力定義（`target.ratio_vs_median` / `target.quartile_label` / `target.trace[]` / `target.benchmark_median`）
 - `src/youtube_automation/domains/analytics/analysis/launch_curve_analyzer.py` — `compute_benchmark` / `judge_video_vs_benchmark`（p25/p50/p75 四分位）
 - `src/youtube_automation/utils/reporting_api.py` — `collect_impressions_summary` / `_aggregate_rows`（`per_video[].ctr_percentage` / `per_video[].impressions` を生成）
 - `src/youtube_automation/domains/analytics/mixins/traffic_source_analytics.py` — `get_traffic_source_analytics`（チャンネル全体集計のみ。per-video filter 非対応）/ `get_traffic_source_detail`（`insightTrafficSourceType` を絞り込みつつチャンネル全体集計で詳細を返す）

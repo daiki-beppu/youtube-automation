@@ -23,8 +23,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.scripts.video_analyze import (
+from youtube_automation.commands.analytics.video_analyze import (
     _analysis_window_sec_from_config,
     _build_parser,
     _extract_video_id_from_url,
@@ -34,6 +33,7 @@ from youtube_automation.scripts.video_analyze import (
     _run_analysis,
     main,
 )
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 from youtube_automation.utils.skill_config import load_skill_config
 from youtube_automation.utils.skill_config import reset as reset_skill_config
 from youtube_automation.utils.video_analyzer import VideoAnalyzer, VideoTarget
@@ -269,7 +269,7 @@ class TestResolveBenchmarkTargets:
     def test_filters_by_competitor_slug_and_takes_top_n(self, tmp_path):
         # Given: load_benchmark_videos が複数チャンネルの動画を返す
         with patch(
-            "youtube_automation.scripts.video_analyze.load_benchmark_videos",
+            "youtube_automation.commands.analytics.video_analyze.load_benchmark_videos",
             return_value=self._videos(),
         ):
             # When: celtic-music で top=2
@@ -289,7 +289,7 @@ class TestResolveBenchmarkTargets:
     def test_top_larger_than_available_returns_all(self, tmp_path):
         # Given
         with patch(
-            "youtube_automation.scripts.video_analyze.load_benchmark_videos",
+            "youtube_automation.commands.analytics.video_analyze.load_benchmark_videos",
             return_value=self._videos(),
         ):
             targets = _resolve_benchmark_targets(
@@ -304,7 +304,7 @@ class TestResolveBenchmarkTargets:
     def test_unknown_slug_raises(self, tmp_path):
         # Given: 該当しない slug
         with patch(
-            "youtube_automation.scripts.video_analyze.load_benchmark_videos",
+            "youtube_automation.commands.analytics.video_analyze.load_benchmark_videos",
             return_value=self._videos(),
         ):
             with pytest.raises(ValidationError):
@@ -330,9 +330,9 @@ class TestResolveBenchmarkTargets:
                 "thumbnail_url": "https://i.ytimg.com/l1.jpg",
             },
         )
-        caplog.set_level(logging.INFO, logger="youtube_automation.scripts.video_analyze")
+        caplog.set_level(logging.INFO, logger="youtube_automation.commands.analytics.video_analyze")
         with patch(
-            "youtube_automation.scripts.video_analyze.load_benchmark_videos",
+            "youtube_automation.commands.analytics.video_analyze.load_benchmark_videos",
             return_value=videos,
         ):
             targets = _resolve_benchmark_targets(
@@ -362,9 +362,9 @@ class TestResolveBenchmarkTargets:
                 "thumbnail_url": "https://i.ytimg.com/l1.jpg",
             },
         )
-        caplog.set_level(logging.INFO, logger="youtube_automation.scripts.video_analyze")
+        caplog.set_level(logging.INFO, logger="youtube_automation.commands.analytics.video_analyze")
         with patch(
-            "youtube_automation.scripts.video_analyze.load_benchmark_videos",
+            "youtube_automation.commands.analytics.video_analyze.load_benchmark_videos",
             return_value=videos,
         ):
             targets = _resolve_benchmark_targets(
@@ -392,7 +392,7 @@ class TestResolveBenchmarkTargets:
             },
         ]
         with patch(
-            "youtube_automation.scripts.video_analyze.load_benchmark_videos",
+            "youtube_automation.commands.analytics.video_analyze.load_benchmark_videos",
             return_value=videos,
         ):
             with pytest.raises(ValidationError, match="live 配信のみ"):
@@ -405,7 +405,7 @@ class TestResolveBenchmarkTargets:
     def test_top_zero_raises(self, tmp_path):
         # Given: top=0 は意味がない (不整合な値のサイレントスキップ禁止)
         with patch(
-            "youtube_automation.scripts.video_analyze.load_benchmark_videos",
+            "youtube_automation.commands.analytics.video_analyze.load_benchmark_videos",
             return_value=self._videos(),
         ):
             with pytest.raises(ValidationError):
@@ -431,11 +431,14 @@ class TestMainPassesAnalysisWindow:
             "analysis_window_sec": 600,
         }
         with (
-            patch("youtube_automation.scripts.video_analyze.load_skill_config", return_value=cfg),
-            patch("youtube_automation.scripts.video_analyze._channel_dir", return_value=tmp_path),
-            patch("youtube_automation.scripts.video_analyze.create_global_genai_client", return_value=MagicMock()),
-            patch("youtube_automation.scripts.video_analyze.VideoAnalyzer") as analyzer_cls,
-            patch("youtube_automation.scripts.video_analyze._run_analysis", return_value=([], [])),
+            patch("youtube_automation.commands.analytics.video_analyze.load_skill_config", return_value=cfg),
+            patch("youtube_automation.commands.analytics.video_analyze._channel_dir", return_value=tmp_path),
+            patch(
+                "youtube_automation.commands.analytics.video_analyze.create_global_genai_client",
+                return_value=MagicMock(),
+            ),
+            patch("youtube_automation.commands.analytics.video_analyze.VideoAnalyzer") as analyzer_cls,
+            patch("youtube_automation.commands.analytics.video_analyze._run_analysis", return_value=([], [])),
             patch("sys.argv", ["yt-video-analyze", "--url", "https://www.youtube.com/watch?v=dQw4w9WgXcQ"]),
         ):
             # When: main を実行
@@ -529,7 +532,10 @@ class TestMainAnalysisWindowFlow:
 
         try:
             with (
-                patch("youtube_automation.scripts.video_analyze.create_global_genai_client", return_value=client),
+                patch(
+                    "youtube_automation.commands.analytics.video_analyze.create_global_genai_client",
+                    return_value=client,
+                ),
                 patch("sys.argv", ["yt-video-analyze", "--url", "https://www.youtube.com/watch?v=ABCDEFGHIJK"]),
             ):
                 main()

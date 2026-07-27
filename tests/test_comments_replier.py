@@ -10,13 +10,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from googleapiclient.errors import HttpError
 
+from youtube_automation.commands.youtube import comment_reply
+from youtube_automation.commands.youtube.comment_reply import _load_agent_replies
 from youtube_automation.configuration.comments import (
     Comments,
     GeneratorConfig,
 )
 from youtube_automation.infrastructure.errors import AutomationError, ConfigError, YouTubeAPIError
-from youtube_automation.scripts import comment_reply
-from youtube_automation.scripts.comment_reply import _load_agent_replies
 from youtube_automation.utils.comments.history import ReplyHistory
 from youtube_automation.utils.comments.replier import _SAVE_MAX_RETRIES, CommentReplier
 

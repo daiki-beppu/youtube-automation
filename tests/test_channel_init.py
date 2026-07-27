@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from youtube_automation.cli.channel_init import (
+from youtube_automation.commands.channel.channel_init import (
     _resolve_target_dir,
     main,
 )
@@ -829,7 +829,7 @@ def test_pyproject_registers_yt_channel_init_entry_point():
 
     # Then: yt-channel-init エントリが登録されている
     assert "yt-channel-init" in scripts
-    assert scripts["yt-channel-init"] == "youtube_automation.cli_entrypoints:yt_channel_init"
+    assert scripts["yt-channel-init"] == "youtube_automation.entrypoints:yt_channel_init"
 
 
 # ===================== Case 16: setup 済みディレクトリの再利用 =====================
@@ -905,7 +905,7 @@ def test_main_rejects_setup_directory_symlink_without_partial_generation(tmp_pat
 
 def test_main_is_safe_after_setup_dirs_precreated_directories(tmp_path):
     # Given: /setup が先に最小ディレクトリだけを作成済み
-    from youtube_automation.cli.setup_dirs import main as setup_dirs_main
+    from youtube_automation.commands.system.setup_dirs import main as setup_dirs_main
 
     assert setup_dirs_main(["--target", str(tmp_path)]) == 0
     assert not (tmp_path / "config" / "channel").exists()

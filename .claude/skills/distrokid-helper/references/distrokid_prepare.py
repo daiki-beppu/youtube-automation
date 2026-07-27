@@ -1,1 +1,1 @@
-../../../../src/youtube_automation/scripts/distrokid_prepare.py
+../../../../src/youtube_automation/commands/distrokid/distrokid_prepare.py

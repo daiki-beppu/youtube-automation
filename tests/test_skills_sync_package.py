@@ -1,9 +1,9 @@
 """Issue #327: `skills_sync.py` package 分割の構造的不変条件テスト。
 
-`src/youtube_automation/cli/skills_sync.py` (440 行) を
-`src/youtube_automation/cli/skills_sync/` パッケージに分割した後の以下を検証する:
+`src/youtube_automation/commands/system/skills_sync.py` (440 行) を
+`src/youtube_automation/commands/system/skills_sync/` パッケージに分割した後の以下を検証する:
 
-1. 公開 import surface の互換 (`from youtube_automation.cli.skills_sync import ...`)
+1. 公開 import surface の互換 (`from youtube_automation.commands.system.skills_sync import ...`)
 2. package-level の module attribute (monkeypatch 対象) の存続
 3. `_editable_root()` の `parents[N]` 計算 (`parents[3] → parents[4]`)
 4. submodule への monkeypatch 伝搬 (`_editable_root` patch が `_asset_root` で観測される)
@@ -30,7 +30,7 @@ import pytest
 
 def test_asset_specs_resolves_via_package_import() -> None:
     # Given/When: package 分割後の facade から import
-    from youtube_automation.cli.skills_sync import _ASSET_SPECS
+    from youtube_automation.commands.system.skills_sync import _ASSET_SPECS
 
     # Then: 既存 spec dict として解決できる
     assert isinstance(_ASSET_SPECS, dict)
@@ -40,7 +40,7 @@ def test_asset_specs_resolves_via_package_import() -> None:
 
 
 def test_auth_template_asset_spec_points_to_client_secrets_template() -> None:
-    from youtube_automation.cli.skills_sync import _ASSET_SPECS, _asset_root
+    from youtube_automation.commands.system.skills_sync import _ASSET_SPECS, _asset_root
 
     spec = _ASSET_SPECS["auth-template"]
     assert spec["kind"] == "file"
@@ -50,7 +50,7 @@ def test_auth_template_asset_spec_points_to_client_secrets_template() -> None:
 
 
 def test_default_all_assets_include_auth_template_target() -> None:
-    from youtube_automation.cli.skills_sync import _ASSET_SPECS
+    from youtube_automation.commands.system.skills_sync import _ASSET_SPECS
 
     all_targets = {spec["default_target"] for spec in _ASSET_SPECS.values()}
     assert "auth/client_secrets.template.json" in all_targets
@@ -76,7 +76,7 @@ def test_auth_template_is_included_in_wheel_and_sdist_manifests() -> None:
 
 def test_asset_root_resolves_via_package_import() -> None:
     # Given/When: package facade から import
-    from youtube_automation.cli.skills_sync import _asset_root
+    from youtube_automation.commands.system.skills_sync import _asset_root
 
     # Then: callable として解決される
     assert callable(_asset_root)
@@ -84,7 +84,7 @@ def test_asset_root_resolves_via_package_import() -> None:
 
 def test_list_entries_resolves_via_package_import() -> None:
     # Given/When: package facade から import
-    from youtube_automation.cli.skills_sync import _list_entries
+    from youtube_automation.commands.system.skills_sync import _list_entries
 
     # Then: callable として解決される
     assert callable(_list_entries)
@@ -92,7 +92,7 @@ def test_list_entries_resolves_via_package_import() -> None:
 
 def test_build_parser_resolves_via_package_import() -> None:
     # Given/When: package facade から import して呼ぶ
-    from youtube_automation.cli.skills_sync import build_parser
+    from youtube_automation.commands.system.skills_sync import build_parser
 
     parser = build_parser()
 
@@ -106,7 +106,7 @@ def test_build_parser_resolves_via_package_import() -> None:
 def test_resolve_default_target_is_module_attribute() -> None:
     # Given: 既存テスト (`test_skills_sync.py:92` 等) が
     #        `skills_sync._resolve_default_target(args)` 形式で参照する
-    from youtube_automation.cli import skills_sync
+    from youtube_automation.commands.system import skills_sync
 
     # When/Then: package attribute として解決でき callable
     assert callable(skills_sync._resolve_default_target)
@@ -115,7 +115,7 @@ def test_resolve_default_target_is_module_attribute() -> None:
 def test_editable_root_is_module_attribute() -> None:
     # Given: 既存テスト (`test_skills_sync.py:39` 等) が
     #        `monkeypatch.setattr(skills_sync, "_editable_root", ...)` を行う
-    from youtube_automation.cli import skills_sync
+    from youtube_automation.commands.system import skills_sync
 
     # When/Then: package attribute として解決でき callable
     assert callable(skills_sync._editable_root)
@@ -123,7 +123,7 @@ def test_editable_root_is_module_attribute() -> None:
 
 def test_main_resolves_via_package_import() -> None:
     # Given: `pyproject.toml::yt-skills` entry point の解決対象
-    from youtube_automation.cli.skills_sync import main
+    from youtube_automation.commands.system.skills_sync import main
 
     # Then: callable として解決される
     assert callable(main)
@@ -131,7 +131,7 @@ def test_main_resolves_via_package_import() -> None:
 
 def test_cmd_callables_are_package_attributes() -> None:
     # Given: subcommand ディスパッチャ群
-    from youtube_automation.cli import skills_sync
+    from youtube_automation.commands.system import skills_sync
 
     # When/Then: 全 3 つが package attribute として解決できる (re-export 漏れ検知)
     assert callable(skills_sync.cmd_list)
@@ -141,7 +141,7 @@ def test_cmd_callables_are_package_attributes() -> None:
 
 def test_fs_primitives_are_package_attributes() -> None:
     # Given: `_ops.py` に移植される FS プリミティブ群
-    from youtube_automation.cli import skills_sync
+    from youtube_automation.commands.system import skills_sync
 
     # When/Then: 5 件すべて package attribute として解決できる (re-export 漏れ検知)
     assert callable(skills_sync._copy_entry)
@@ -156,7 +156,7 @@ def test_fs_primitives_are_package_attributes() -> None:
 
 def test_editable_root_returns_repo_root_after_split() -> None:
     # Given: 分割後の package
-    from youtube_automation.cli.skills_sync import _editable_root
+    from youtube_automation.commands.system.skills_sync import _editable_root
 
     # When: unpatched で呼ぶ
     root = _editable_root()
@@ -167,7 +167,7 @@ def test_editable_root_returns_repo_root_after_split() -> None:
 
 def test_editable_root_points_to_claude_skills_dir() -> None:
     # Given: 分割後の package
-    from youtube_automation.cli.skills_sync import _editable_root
+    from youtube_automation.commands.system.skills_sync import _editable_root
 
     # When: unpatched で呼ぶ
     root = _editable_root()
@@ -177,6 +177,50 @@ def test_editable_root_points_to_claude_skills_dir() -> None:
     assert (root / ".claude" / "skills").is_dir()
 
 
+def test_editable_root_resolves_nested_checkout_without_fixed_depth(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package_file = tmp_path / "src" / "youtube_automation" / "__init__.py"
+    package_file.parent.mkdir(parents=True)
+    package_file.write_text("", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='test'\n", encoding="utf-8")
+    (tmp_path / ".claude" / "skills").mkdir(parents=True)
+
+    import youtube_automation
+    from youtube_automation.commands.system import skills_sync
+
+    monkeypatch.setattr(youtube_automation, "__file__", str(package_file))
+    assert skills_sync._editable_root() == tmp_path
+
+
+def test_editable_root_does_not_adopt_unrelated_parent_skills(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    package_file = tmp_path / "checkout" / "src" / "youtube_automation" / "__init__.py"
+    package_file.parent.mkdir(parents=True)
+    package_file.write_text("", encoding="utf-8")
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='unrelated'\n", encoding="utf-8")
+    (tmp_path / ".claude" / "skills").mkdir(parents=True)
+
+    import youtube_automation
+    from youtube_automation.commands.system import skills_sync
+
+    monkeypatch.setattr(youtube_automation, "__file__", str(package_file))
+    with pytest.raises(FileNotFoundError, match="repository root"):
+        skills_sync._editable_root()
+
+
+def test_editable_root_fails_when_checkout_markers_are_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    package_file = tmp_path / "src" / "youtube_automation" / "__init__.py"
+    package_file.parent.mkdir(parents=True)
+    package_file.write_text("", encoding="utf-8")
+
+    import youtube_automation
+    from youtube_automation.commands.system import skills_sync
+
+    monkeypatch.setattr(youtube_automation, "__file__", str(package_file))
+    with pytest.raises(FileNotFoundError, match="repository root"):
+        skills_sync._editable_root()
+
+
 # ---------- 12: monkeypatch 伝搬 (package-level patch が submodule に届く) ----------
 
 
@@ -184,7 +228,7 @@ def test_package_level_editable_root_patch_propagates_to_asset_root(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Given: tmp_path に最小の skills ツリー
-    from youtube_automation.cli import skills_sync
+    from youtube_automation.commands.system import skills_sync
 
     skills_dir = tmp_path / ".claude" / "skills"
     skills_dir.mkdir(parents=True)
@@ -205,7 +249,7 @@ def test_package_level_editable_root_patch_propagates_to_asset_root(
 def test_each_split_file_is_within_line_limit() -> None:
     # Given: 分割後の package directory
     repo_root = Path(__file__).resolve().parents[1]
-    pkg_dir = repo_root / "src" / "youtube_automation" / "cli" / "skills_sync"
+    pkg_dir = repo_root / "src" / "youtube_automation" / "commands" / "system" / "skills_sync"
 
     # When: 各 .py を走査
     files = sorted(pkg_dir.glob("*.py"))
@@ -220,12 +264,12 @@ def test_each_split_file_is_within_line_limit() -> None:
 def test_old_module_file_is_removed_after_package_split() -> None:
     # Given: worktree root
     repo_root = Path(__file__).resolve().parents[1]
-    cli_dir = repo_root / "src" / "youtube_automation" / "cli"
+    commands_dir = repo_root / "src" / "youtube_automation" / "commands" / "system"
 
     # Then: package directory が存在し、旧 .py は存在しない (同名衝突防止)
-    assert (cli_dir / "skills_sync").is_dir()
-    assert (cli_dir / "skills_sync" / "__init__.py").is_file()
-    assert not (cli_dir / "skills_sync.py").exists()
+    assert (commands_dir / "skills_sync").is_dir()
+    assert (commands_dir / "skills_sync" / "__init__.py").is_file()
+    assert not (commands_dir / "skills_sync.py").exists()
 
 
 def test_split_submodules_are_directly_importable() -> None:
@@ -234,7 +278,7 @@ def test_split_submodules_are_directly_importable() -> None:
 
     # When/Then: `importlib.import_module` で個別解決できる (循環 import が解消されている)
     for name in submodules:
-        module = importlib.import_module(f"youtube_automation.cli.skills_sync.{name}")
+        module = importlib.import_module(f"youtube_automation.commands.system.skills_sync.{name}")
         assert module is not None
 
 
@@ -243,7 +287,7 @@ def test_split_submodules_are_directly_importable() -> None:
 
 def test_facade_does_not_expose_internal_dispatch_helpers() -> None:
     # Given: package facade
-    from youtube_automation.cli import skills_sync
+    from youtube_automation.commands.system import skills_sync
 
     # Then: cmd_sync / cmd_diff / build_parser の内部 dispatch 先や argparse 補助関数は
     #       facade に露出しない (architect-review ARCH-NEW-init-L120..L126 の回帰防止)
@@ -274,6 +318,6 @@ def test_yt_skills_console_script_resolves_after_package_split() -> None:
 
     # Then: callable が package の CLI wrapper シンボルそのもの
     assert callable(fn)
-    from youtube_automation.cli_entrypoints import yt_skills
+    from youtube_automation.entrypoints import yt_skills
 
     assert fn is yt_skills

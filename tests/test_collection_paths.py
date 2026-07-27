@@ -535,17 +535,17 @@ class TestLiteralCollectionSubpathRegression:
     """
 
     _MIGRATED_FILES: ClassVar[list[str]] = [
-        "src/youtube_automation/agents/short_uploader.py",
-        "src/youtube_automation/agents/collection_uploader.py",
-        "src/youtube_automation/agents/youtube_auto_uploader.py",
+        "src/youtube_automation/commands/uploads/short_uploader.py",
+        "src/youtube_automation/commands/uploads/collection_uploader.py",
+        "src/youtube_automation/commands/uploads/youtube_auto_uploader.py",
         # Issue #465: collection_uploader.py の責務分割で派生した mixin モジュール群。
         # 元ファイル同等の literal Path 回避制約を継続させる。
         "src/youtube_automation/domains/uploads/_tracking_io.py",
         "src/youtube_automation/domains/uploads/_published_dates.py",
         "src/youtube_automation/domains/uploads/_playlist_assignment.py",
         "src/youtube_automation/domains/uploads/_complete_collection_executor.py",
-        "src/youtube_automation/scripts/generate_short_loop.py",
-        "src/youtube_automation/scripts/bulk_update_short_localizations.py",
+        "src/youtube_automation/commands/media/generate_short_loop.py",
+        "src/youtube_automation/commands/metadata/bulk_update_short_localizations.py",
         "src/youtube_automation/domains/suno/selection.py",
     ]
 

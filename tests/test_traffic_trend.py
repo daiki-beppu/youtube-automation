@@ -109,7 +109,7 @@ class TestAnalyzeTrafficTrend:
 class TestTrafficTrendCli:
     @pytest.fixture
     def channel_with_data(self, tmp_path, monkeypatch):
-        from youtube_automation.scripts import traffic_trend
+        from youtube_automation.commands.analytics import traffic_trend
 
         monkeypatch.setattr(traffic_trend, "_channel_dir", lambda: tmp_path)
         (tmp_path / "data").mkdir()
@@ -119,7 +119,7 @@ class TestTrafficTrendCli:
         (channel / "data" / name).write_text(json.dumps(snapshot), encoding="utf-8")
 
     def test_main_outputs_json(self, channel_with_data, monkeypatch, capsys):
-        from youtube_automation.scripts import traffic_trend
+        from youtube_automation.commands.analytics import traffic_trend
 
         self._write_snapshot(
             channel_with_data,
@@ -139,14 +139,14 @@ class TestTrafficTrendCli:
         assert payload["latest"]["search_terms"][0]["detail"] == "lofi music"
 
     def test_main_without_data_returns_2(self, channel_with_data, monkeypatch, capsys):
-        from youtube_automation.scripts import traffic_trend
+        from youtube_automation.commands.analytics import traffic_trend
 
         monkeypatch.setattr("sys.argv", ["yt-traffic-trend"])
 
         assert traffic_trend.main() == 2
 
     def test_main_without_traffic_sources_returns_2(self, channel_with_data, monkeypatch):
-        from youtube_automation.scripts import traffic_trend
+        from youtube_automation.commands.analytics import traffic_trend
 
         self._write_snapshot(
             channel_with_data,
@@ -158,7 +158,7 @@ class TestTrafficTrendCli:
         assert traffic_trend.main() == 2
 
     def test_main_text_output(self, channel_with_data, monkeypatch, capsys):
-        from youtube_automation.scripts import traffic_trend
+        from youtube_automation.commands.analytics import traffic_trend
 
         self._write_snapshot(
             channel_with_data,

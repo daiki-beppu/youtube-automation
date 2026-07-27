@@ -7,20 +7,13 @@ issue #82 の再発防止として、旧コード (`zh-Hans` / `zh-Hant`) を期
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-# metadata_audit.py は module-level で channel_dir() を呼ぶため、import 前に
-# CHANNEL_DIR を fixture に向ける必要がある（conftest の session-scope fixture は
-# collection phase より後に走るため import に間に合わない）。
-_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "sample_channel"
-os.environ.setdefault("CHANNEL_DIR", str(_FIXTURE))
+import pytest
 
-import pytest  # noqa: E402
-
-from youtube_automation.scripts.metadata_audit import audit_local, audit_remote  # noqa: E402
+from youtube_automation.commands.metadata.metadata_audit import audit_local, audit_remote
 
 _ZH_ISSUE_TOKEN = "zh codes"  # `metadata_audit.py` のエラー文言 "YT zh codes are ..." に対応
 
@@ -109,7 +102,7 @@ class TestAuditLocalPreflightContract:
         master.parent.mkdir()
         master.touch()
 
-        with patch("youtube_automation.scripts.metadata_audit.probe_duration", return_value=50 * 60):
+        with patch("youtube_automation.commands.metadata.metadata_audit.probe_duration", return_value=50 * 60):
             issues = audit_local(
                 collection_dir,
                 _audit_config(
@@ -131,7 +124,7 @@ class TestAuditLocalPreflightContract:
         master.parent.mkdir()
         master.touch()
 
-        with patch("youtube_automation.scripts.metadata_audit.probe_duration") as probe:
+        with patch("youtube_automation.commands.metadata.metadata_audit.probe_duration") as probe:
             assert audit_local(collection_dir, _audit_config(["en"])) == []
 
         probe.assert_not_called()
@@ -271,12 +264,12 @@ class TestRemoteChapterMaxSkillConfig:
         skill_config.reset("metadata-audit")
 
     def test_default_remote_chapter_max_is_12(self) -> None:
-        from youtube_automation.scripts.metadata_audit import _remote_chapter_max
+        from youtube_automation.commands.metadata.metadata_audit import _remote_chapter_max
 
         assert _remote_chapter_max() == 12
 
     def test_channel_override_changes_remote_chapter_max(self, tmp_path: Path, monkeypatch) -> None:
-        from youtube_automation.scripts.metadata_audit import _remote_chapter_max
+        from youtube_automation.commands.metadata.metadata_audit import _remote_chapter_max
 
         channel = tmp_path / "ch"
         (channel / "config" / "skills").mkdir(parents=True)

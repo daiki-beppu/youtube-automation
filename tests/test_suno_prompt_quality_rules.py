@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from youtube_automation.scripts.generate_suno_prompts import (
+from youtube_automation.commands.suno.generate_suno_prompts import (
     QualityReport,
     apply_auto_lyrics_structure,
     build_prompt_entries,

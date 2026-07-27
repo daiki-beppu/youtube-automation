@@ -145,7 +145,7 @@ skill-config (`.claude/skills/video-analyze/config.default.yaml`):
 
 ## 関連ファイル
 
-- `yt-video-analyze` (`youtube_automation.scripts.video_analyze`) — CLI 本体
+- `yt-video-analyze` (`youtube_automation.commands.analytics.video_analyze`) — CLI 本体
 - `data/video_analysis/<slug>/<video_id>.json` — 動画別構造化データ
 - `reports/video_analysis/<slug>.md` — slug 別 Markdown レポート
 - `data/benchmark_YYYYMMDD.json` — `--source benchmark` の入力

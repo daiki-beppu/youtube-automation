@@ -319,7 +319,7 @@ def test_youtube_data_adapter_builds_named_operation_requests() -> None:
 
 def test_channel_status_fallback_requests_ten_latest_uploads(monkeypatch) -> None:
     """The uploads fallback keeps its smaller display-query contract."""
-    module = importlib.import_module("youtube_automation.scripts.get_channel_status")
+    module = importlib.import_module("youtube_automation.commands.channel.channel_status")
 
     class Collector:
         def __init__(self, **_kwargs):
@@ -408,7 +408,7 @@ def test_captions_domain_keeps_timestamp_parser_and_srt_contract() -> None:
 def test_caption_upload_sdk_boundary_is_infrastructure() -> None:
     """Caption SDK operations stay outside the pure media domain and CLI."""
     domain = (_ROOT / "src/youtube_automation/domains/media/captions.py").read_text(encoding="utf-8")
-    script = (_ROOT / "src/youtube_automation/scripts/captions_upload.py").read_text(encoding="utf-8")
+    script = (_ROOT / "src/youtube_automation/commands/youtube/captions_upload.py").read_text(encoding="utf-8")
     adapter = importlib.import_module("youtube_automation.infrastructure.captions_adapter")
 
     assert not hasattr(importlib.import_module("youtube_automation.domains.media.captions"), "upload_caption")
@@ -543,7 +543,7 @@ def test_distrokid_release_uses_the_domain_naming_policy(tmp_path: Path) -> None
 
 def test_plural_rain_layers_remains_an_active_configuration_contract() -> None:
     """B3 removes only the singular legacy alias; the active plural flow remains."""
-    module = importlib.import_module("youtube_automation.scripts.apply_rain_layers")
+    module = importlib.import_module("youtube_automation.commands.media.apply_rain_layers")
     config = {"post_processing": {"rain_layers": {"enabled": False}}}
     resolved = module._resolve_post_processing_config(config)
     assert resolved["enabled"] is False

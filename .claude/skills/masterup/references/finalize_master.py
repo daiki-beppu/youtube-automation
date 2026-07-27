@@ -1,1 +1,1 @@
-../../../../src/youtube_automation/scripts/finalize_master.py
+../../../../src/youtube_automation/commands/media/finalize_master.py

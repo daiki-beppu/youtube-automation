@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from unittest.mock import patch
 
-from youtube_automation.cli import stream_bandwidth
+from youtube_automation.commands.youtube import stream_bandwidth
 
 _BYTES_PER_GB = 1024**3
 
@@ -72,8 +72,8 @@ def test_report_flow_posts_combined_report_without_youtube_archive_count():
         }[name]
 
     with (
-        patch("youtube_automation.cli.stream_bandwidth.get_secret", side_effect=fake_get_secret),
-        patch("youtube_automation.cli.stream_bandwidth.count_archives") as count_archives_mock,
+        patch("youtube_automation.commands.youtube.stream_bandwidth.get_secret", side_effect=fake_get_secret),
+        patch("youtube_automation.commands.youtube.stream_bandwidth.count_archives") as count_archives_mock,
         patch(
             "youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen",
             side_effect=fake_urlopen,
@@ -125,8 +125,8 @@ def test_check_threshold_flow_silent_under_limit():
         }[name]
 
     with (
-        patch("youtube_automation.cli.stream_bandwidth.get_secret", side_effect=fake_get_secret),
-        patch("youtube_automation.cli.stream_bandwidth.count_archives", return_value=10),
+        patch("youtube_automation.commands.youtube.stream_bandwidth.get_secret", side_effect=fake_get_secret),
+        patch("youtube_automation.commands.youtube.stream_bandwidth.count_archives", return_value=10),
         patch(
             "youtube_automation.utils.streaming.vultr_bandwidth.urllib.request.urlopen",
             side_effect=fake_urlopen,
@@ -136,7 +136,7 @@ def test_check_threshold_flow_silent_under_limit():
             side_effect=fake_urlopen,
         ),
         patch(
-            "youtube_automation.cli.stream_bandwidth.today",
+            "youtube_automation.commands.youtube.stream_bandwidth.today",
             return_value=__import__("datetime").date(2026, 4, 30),
         ),
     ):

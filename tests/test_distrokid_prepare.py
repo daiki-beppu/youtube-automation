@@ -644,12 +644,12 @@ class TestPlanIntegration:
         self, tmp_path, monkeypatch, n_tracks, expected_discs
     ):
         """公開 plan 入口が 35 曲境界に応じた slug / album_title を書き出す。"""
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection = _make_collection(tmp_path, n_tracks=n_tracks)
         out = tmp_path / "spec.json"
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.load_config",
+            "youtube_automation.commands.distrokid.distrokid_prepare.load_config",
             lambda: _fake_config(artist="Test Artist"),
         )
 
@@ -661,12 +661,12 @@ class TestPlanIntegration:
 
     def test_plan_uses_profile_artist_when_configured(self, tmp_path, monkeypatch):
         """profile.artist が非空なら draft spec.artist に優先反映する."""
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection = _make_collection(tmp_path, n_tracks=4)
         out = tmp_path / "spec.json"
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.load_config",
+            "youtube_automation.commands.distrokid.distrokid_prepare.load_config",
             lambda: _fake_config(artist="ABYSS MI"),
         )
 
@@ -678,12 +678,12 @@ class TestPlanIntegration:
 
     def test_plan_falls_back_to_channel_name_when_profile_artist_empty(self, tmp_path, monkeypatch):
         """profile.artist が空なら draft spec.artist は channel.name に fallback する."""
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection = _make_collection(tmp_path, n_tracks=4)
         out = tmp_path / "spec.json"
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.load_config",
+            "youtube_automation.commands.distrokid.distrokid_prepare.load_config",
             lambda: _fake_config(artist=""),
         )
 
@@ -723,7 +723,7 @@ class TestBuildIntegration:
 
     def test_build_generates_mp3_copies_and_metadata(self, tmp_path, monkeypatch):
         """build 実行で mp3 コピー・metadata.md・README.md が生成される."""
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection = _make_collection(tmp_path, n_tracks=4)
         music_dir = collection / INDIVIDUAL_MUSIC_DIRNAME
@@ -732,7 +732,7 @@ class TestBuildIntegration:
 
         # probe_duration を monkeypatch（scripts 層でインポートされている）
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            "youtube_automation.commands.distrokid.distrokid_prepare.probe_duration",
             lambda p: 199.0,
         )
 
@@ -755,7 +755,7 @@ class TestBuildIntegration:
 
     def test_build_accepts_single_disc_kebab_slug(self, tmp_path, monkeypatch):
         """公開 build 入口が単一 disc の kebab-case slug を成果物まで処理する。"""
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection = _make_collection(tmp_path, n_tracks=4)
         music_dir = collection / INDIVIDUAL_MUSIC_DIRNAME
@@ -766,7 +766,7 @@ class TestBuildIntegration:
         spec["discs"][0]["album_title"] = "Dark Techno"
         spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            "youtube_automation.commands.distrokid.distrokid_prepare.probe_duration",
             lambda path: 199.0,
         )
 
@@ -779,11 +779,11 @@ class TestBuildIntegration:
 
     def test_build_metadata_parseable_by_parser(self, tmp_path, monkeypatch):
         """生成した metadata.md が parse_album_metadata / parse_track_table で読み戻せる."""
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
         from youtube_automation.domains.distrokid.metadata import (
             parse_album_metadata,
             parse_track_table,
         )
-        from youtube_automation.scripts import distrokid_prepare as dp_script
 
         collection = _make_collection(tmp_path, n_tracks=4)
         music_dir = collection / INDIVIDUAL_MUSIC_DIRNAME
@@ -792,7 +792,7 @@ class TestBuildIntegration:
         spec = json.loads(spec_path.read_text())
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            "youtube_automation.commands.distrokid.distrokid_prepare.probe_duration",
             lambda p: 199.0,
         )
 
@@ -812,8 +812,8 @@ class TestBuildIntegration:
 
     def test_build_global_numbers_start_from_26_in_disc2(self, tmp_path, monkeypatch):
         """disc2 の先頭トラックのグローバル番号が 26 から始まる（50 曲 split）."""
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
         from youtube_automation.domains.distrokid.metadata import parse_track_table
-        from youtube_automation.scripts import distrokid_prepare as dp_script
 
         # 50 曲コレクション
         collection = _make_collection(tmp_path, n_tracks=50)
@@ -822,7 +822,7 @@ class TestBuildIntegration:
         spec_path = self._make_spec(collection, filenames)
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            "youtube_automation.commands.distrokid.distrokid_prepare.probe_duration",
             lambda p: 199.0,
         )
 
@@ -839,8 +839,8 @@ class TestBuildIntegration:
 
     def test_find_distrokid_discs_returns_spec_order(self, tmp_path, monkeypatch):
         """find_distrokid_discs が spec 順（disc1 → disc2）で列挙する."""
-        from youtube_automation.scripts import distrokid_prepare as dp_script
-        from youtube_automation.scripts.collection_serve import find_distrokid_discs
+        from youtube_automation.application.distrokid.disc_query import find_distrokid_discs
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection = _make_collection(tmp_path, n_tracks=4)
         music_dir = collection / INDIVIDUAL_MUSIC_DIRNAME
@@ -849,7 +849,7 @@ class TestBuildIntegration:
         spec = json.loads(spec_path.read_text())
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            "youtube_automation.commands.distrokid.distrokid_prepare.probe_duration",
             lambda p: 199.0,
         )
 
@@ -862,7 +862,7 @@ class TestBuildIntegration:
 
     def test_mp3_content_matches_original(self, tmp_path, monkeypatch):
         """コピーされた mp3 の内容がオリジナルと一致する."""
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection = _make_collection(tmp_path, n_tracks=2)
         music_dir = collection / INDIVIDUAL_MUSIC_DIRNAME
@@ -871,7 +871,7 @@ class TestBuildIntegration:
         spec = json.loads(spec_path.read_text())
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            "youtube_automation.commands.distrokid.distrokid_prepare.probe_duration",
             lambda p: 199.0,
         )
 
@@ -910,7 +910,7 @@ class TestBuildIdempotency:
 
     def test_second_build_without_force_raises_config_error(self, tmp_path, monkeypatch):
         """2 回目 build（--force なし）→ ConfigError."""
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection = _make_collection(tmp_path, n_tracks=2)
         music_dir = collection / INDIVIDUAL_MUSIC_DIRNAME
@@ -918,7 +918,7 @@ class TestBuildIdempotency:
         spec_path = self._make_spec(collection, filenames)
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            "youtube_automation.commands.distrokid.distrokid_prepare.probe_duration",
             lambda p: 199.0,
         )
 
@@ -933,7 +933,7 @@ class TestBuildIdempotency:
 
     def test_force_rebuild_succeeds_and_keeps_cover_and_spec(self, tmp_path, monkeypatch):
         """--force で再生成成功かつ cover_art_3000.jpg と spec.json が残存する."""
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection = _make_collection(tmp_path, n_tracks=2)
         music_dir = collection / INDIVIDUAL_MUSIC_DIRNAME
@@ -941,7 +941,7 @@ class TestBuildIdempotency:
         spec_path = self._make_spec(collection, filenames)
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            "youtube_automation.commands.distrokid.distrokid_prepare.probe_duration",
             lambda p: 199.0,
         )
 
@@ -980,7 +980,7 @@ class TestVerify:
 
     def _build_collection(self, tmp_path: Path, monkeypatch) -> Path:
         """build まで実行したコレクションを返す."""
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection = _make_collection(tmp_path, n_tracks=4)
         music_dir = collection / INDIVIDUAL_MUSIC_DIRNAME
@@ -1000,7 +1000,7 @@ class TestVerify:
         spec_path.write_text(json.dumps(spec))
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            "youtube_automation.commands.distrokid.distrokid_prepare.probe_duration",
             lambda p: 199.0,
         )
 
@@ -1010,7 +1010,7 @@ class TestVerify:
 
     def test_verify_happy_path(self, tmp_path, monkeypatch):
         """happy path: cover + workflow-state あり → exit 0（例外なし）."""
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection = self._build_collection(tmp_path, monkeypatch)
 
@@ -1028,7 +1028,7 @@ class TestVerify:
         # load_config monkeypatch
         fake_cfg = _fake_config()
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.load_config",
+            "youtube_automation.commands.distrokid.distrokid_prepare.load_config",
             lambda: fake_cfg,
         )
 
@@ -1037,13 +1037,13 @@ class TestVerify:
 
     def test_verify_without_cover_raises(self, tmp_path, monkeypatch):
         """cover_art_3000.jpg が欠落 → ConfigError で exit 1."""
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection = self._build_collection(tmp_path, monkeypatch)
 
         fake_cfg = _fake_config()
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.load_config",
+            "youtube_automation.commands.distrokid.distrokid_prepare.load_config",
             lambda: fake_cfg,
         )
 
@@ -1056,7 +1056,7 @@ class TestVerify:
         """cover_art_3000.jpg のサイズが不正 → ConfigError で exit 1."""
         from PIL import Image
 
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection = self._build_collection(tmp_path, monkeypatch)
 
@@ -1067,7 +1067,7 @@ class TestVerify:
 
         fake_cfg = _fake_config()
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.load_config",
+            "youtube_automation.commands.distrokid.distrokid_prepare.load_config",
             lambda: fake_cfg,
         )
 
@@ -1108,10 +1108,10 @@ class TestBuildWritesCanonicalSpec:
 
     def _run_build(self, collection: Path, spec_path: Path, monkeypatch) -> None:
         """build を実行するヘルパー."""
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            "youtube_automation.commands.distrokid.distrokid_prepare.probe_duration",
             lambda p: 199.0,
         )
         sys.argv = ["yt-distrokid-prepare", "build", "--spec", str(spec_path), str(collection)]
@@ -1173,12 +1173,12 @@ class TestBuildWritesCanonicalSpec:
         Then spec.json が更新される（再書き込み冪等）。
         (#941)
         """
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection, external_spec_path = self._prepare(tmp_path)
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            "youtube_automation.commands.distrokid.distrokid_prepare.probe_duration",
             lambda p: 199.0,
         )
 
@@ -1217,7 +1217,7 @@ class TestBuildWritesCanonicalSpec:
         （build が拒否されたらディスク上の状態を一切変更しない）。
         (#941)
         """
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection, external_spec_path = self._prepare(tmp_path)
 
@@ -1245,7 +1245,7 @@ class TestBuildWritesCanonicalSpec:
         Then 自己上書きで問題なく完了する（canonical と同一パスでも OK）。
         (#941)
         """
-        from youtube_automation.scripts import distrokid_prepare as dp_script
+        from youtube_automation.commands.distrokid import distrokid_prepare as dp_script
 
         collection = _make_collection(tmp_path, n_tracks=2)
         music_dir = collection / INDIVIDUAL_MUSIC_DIRNAME
@@ -1267,7 +1267,7 @@ class TestBuildWritesCanonicalSpec:
         canonical.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
 
         monkeypatch.setattr(
-            "youtube_automation.scripts.distrokid_prepare.probe_duration",
+            "youtube_automation.commands.distrokid.distrokid_prepare.probe_duration",
             lambda p: 199.0,
         )
 

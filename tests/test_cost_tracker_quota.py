@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.cli import cost_report
+from youtube_automation.commands.analytics import cost_report
 from youtube_automation.infrastructure import cost_tracker
 
 

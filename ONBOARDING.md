@@ -303,7 +303,7 @@ nix develop
 - `.claude/CLAUDE.template.md` — BGM チャンネル運営方針テンプレ。wheel 内 `_claude_md/CLAUDE.template.md` に `force-include` され、`yt-skills sync --asset claude-md` で `.claude/CLAUDE.md` として配布
 - `auth/client_secrets.template.json` — Google Auth Platform の JSON ダウンロードが使えない場合の OAuth client secrets テンプレ。canonical source は `src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json` で、wheel 内 `youtube_automation/infrastructure/resources/auth/client_secrets.template.json` に `force-include` され、`yt-skills sync --asset auth-template` で配布
 
-新しい配布アセットを追加するときは `src/youtube_automation/cli/skills_sync/__init__.py::_ASSET_SPECS` に entry を追加するだけで `list/sync/diff` が自動的にサポートする（`kind="dir"` / `"file"` を選ぶ）。
+新しい配布アセットを追加するときは `src/youtube_automation/commands/system/skills_sync/__init__.py::_ASSET_SPECS` に entry を追加するだけで `list/sync/diff` が自動的にサポートする（`kind="dir"` / `"file"` を選ぶ）。
 
 ### 6.4 トラブルシュート
 

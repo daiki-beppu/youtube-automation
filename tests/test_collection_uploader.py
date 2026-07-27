@@ -45,7 +45,7 @@ def test_collection_uploader_imports_playlist_manager():
 )
 def test_main_runs_shared_preflight_before_plan_or_execute(monkeypatch, tmp_path, argv, method_name):
     """実行可能な CLI 入口は upload preflight を通してから処理する。"""
-    from youtube_automation.agents import collection_uploader
+    from youtube_automation.commands.uploads import collection_uploader
 
     target = tmp_path / "collections" / "planning" / "20990101-test-collection"
     target.mkdir(parents=True)
@@ -56,8 +56,7 @@ def test_main_runs_shared_preflight_before_plan_or_execute(monkeypatch, tmp_path
 
     monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
     with (
-        patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
-        patch("youtube_automation.agents.collection_uploader.CollectionUploader", return_value=mock_uploader),
+        patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=mock_uploader),
     ):
         collection_uploader.main()
 
@@ -145,7 +144,7 @@ def test_main_title_preflight_honors_collection_opt_in_for_each_cli_entry(
     expected_outcome: str,
 ) -> None:
     """実行可能な CLI 入口が state の title opt-in を実際に評価する。"""
-    from youtube_automation.agents import collection_uploader
+    from youtube_automation.commands.uploads import collection_uploader
     from youtube_automation.configuration import reset as reset_config
     from youtube_automation.domains.uploads.collection import CollectionUploader
 
@@ -161,7 +160,6 @@ def test_main_title_preflight_honors_collection_opt_in_for_each_cli_entry(
     reset_config()
 
     with (
-        patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
         patch("youtube_automation.domains.uploads._preflight.load_config", return_value=_title_preflight_config()),
         patch.object(CollectionUploader, method_name) as mock_action,
     ):
@@ -417,7 +415,7 @@ class TestAutoDetectCollection:
         [(["--status"], "show_status"), (["--plan"], "show_plan"), ([], "execute_next_step")],
     )
     def test_main_uses_safe_auto_detect_for_status_plan_and_upload(self, monkeypatch, tmp_path, argv, method_name):
-        from youtube_automation.agents import collection_uploader
+        from youtube_automation.commands.uploads import collection_uploader
 
         uploader, _ = _make_uploader_with_collection_mock(tmp_path)
         live = tmp_path / "collections" / "live" / "20260101-published-collection"
@@ -431,8 +429,7 @@ class TestAutoDetectCollection:
 
         monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
         with (
-            patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
-            patch("youtube_automation.agents.collection_uploader.CollectionUploader", return_value=uploader),
+            patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=uploader),
             patch("youtube_automation.domains.uploads.collection.ensure_collection_preflight") as mock_preflight,
         ):
             collection_uploader.main()
@@ -445,7 +442,7 @@ class TestAutoDetectCollection:
 
     @pytest.mark.parametrize("argv", [["--status"], ["--plan"], []])
     def test_main_fails_loudly_when_auto_detect_has_no_candidate(self, monkeypatch, tmp_path, capsys, argv):
-        from youtube_automation.agents import collection_uploader
+        from youtube_automation.commands.uploads import collection_uploader
 
         uploader, _ = _make_uploader_with_collection_mock(tmp_path)
         mock_config = MagicMock()
@@ -453,8 +450,7 @@ class TestAutoDetectCollection:
         monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
 
         with (
-            patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
-            patch("youtube_automation.agents.collection_uploader.CollectionUploader", return_value=uploader),
+            patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=uploader),
             pytest.raises(SystemExit) as exc_info,
         ):
             collection_uploader.main()
@@ -467,7 +463,7 @@ class TestAutoDetectCollection:
         [(["--status"], "show_status"), (["--plan"], "show_plan"), ([], "execute_next_step")],
     )
     def test_main_fails_loudly_when_auto_detect_is_ambiguous(self, monkeypatch, tmp_path, capsys, argv, method_name):
-        from youtube_automation.agents import collection_uploader
+        from youtube_automation.commands.uploads import collection_uploader
 
         uploader, _ = _make_uploader_with_collection_mock(tmp_path)
         _write_workflow_state(
@@ -483,8 +479,7 @@ class TestAutoDetectCollection:
         monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
 
         with (
-            patch("youtube_automation.agents.collection_uploader.load_config", return_value=mock_config),
-            patch("youtube_automation.agents.collection_uploader.CollectionUploader", return_value=uploader),
+            patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=uploader),
             patch("youtube_automation.domains.uploads.preflight.ensure_collection_preflight") as mock_preflight,
             pytest.raises(SystemExit) as exc_info,
         ):
@@ -1117,7 +1112,7 @@ class TestScheduleConfigPrivacyStatusDeprecation:
     def test_warns_when_legacy_privacy_status_present_in_schedule_config(self, tmp_path, caplog):
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.collection_uploader"):
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.commands.uploads.collection_uploader"):
             _make_uploader_with_schedule_config(
                 tmp_path,
                 {"upload_settings": {"privacy_status": "unlisted"}},
@@ -1128,7 +1123,7 @@ class TestScheduleConfigPrivacyStatusDeprecation:
     def test_default_config_has_no_privacy_status_and_no_warning(self, tmp_path, caplog):
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="youtube_automation.agents.collection_uploader"):
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.commands.uploads.collection_uploader"):
             uploader, _ = _make_uploader_with_collection_mock(tmp_path)
         assert "privacy_status" not in uploader.config["upload_settings"]
         assert "upload_settings.privacy_status" not in caplog.text

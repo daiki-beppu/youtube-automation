@@ -30,7 +30,7 @@ import pytest
 class TestBuildParser:
     def test_returns_argument_parser(self):
         # Given
-        from youtube_automation.scripts.generate_short_loop import _build_parser
+        from youtube_automation.commands.media.generate_short_loop import _build_parser
 
         # When
         parser = _build_parser()
@@ -40,7 +40,7 @@ class TestBuildParser:
 
     def test_parser_accepts_collection_positional(self):
         """plan 要件 14-c: collection 位置引数を受ける."""
-        from youtube_automation.scripts.generate_short_loop import _build_parser
+        from youtube_automation.commands.media.generate_short_loop import _build_parser
 
         # Given
         parser = _build_parser()
@@ -53,7 +53,7 @@ class TestBuildParser:
 
     def test_parser_accepts_model_override(self):
         """plan 要件 14-c: `--model` 引数."""
-        from youtube_automation.scripts.generate_short_loop import _build_parser
+        from youtube_automation.commands.media.generate_short_loop import _build_parser
 
         # Given
         parser = _build_parser()
@@ -75,7 +75,7 @@ class TestResolvePaths:
 
     def test_short_png_resolved_when_present(self, tmp_path):
         """short.png を見つけて入力に採用する."""
-        from youtube_automation.scripts.generate_short_loop import resolve_paths
+        from youtube_automation.commands.media.generate_short_loop import resolve_paths
 
         # Given: 10-assets/short.png のみ
         col = tmp_path / "20250101-live-foo"
@@ -94,7 +94,7 @@ class TestResolvePaths:
 
     def test_short_jpg_fallback_when_png_missing(self, tmp_path):
         """short.png が無ければ short.jpg にフォールバック."""
-        from youtube_automation.scripts.generate_short_loop import resolve_paths
+        from youtube_automation.commands.media.generate_short_loop import resolve_paths
 
         # Given: jpg のみ
         col = tmp_path / "20250101-live-bar"
@@ -110,7 +110,7 @@ class TestResolvePaths:
         assert image_path == jpg
 
     def test_raises_when_input_image_missing(self, tmp_path):
-        from youtube_automation.scripts.generate_short_loop import resolve_paths
+        from youtube_automation.commands.media.generate_short_loop import resolve_paths
 
         col = tmp_path / "20250101-live-empty"
         (col / "10-assets").mkdir(parents=True)
@@ -133,7 +133,7 @@ class TestMain:
 
     def test_load_skill_config_called_with_short(self, tmp_path, monkeypatch):
         """plan 要件 14-c: `load_skill_config("short")` を呼ぶ."""
-        from youtube_automation.scripts import generate_short_loop as mod
+        from youtube_automation.commands.media import generate_short_loop as mod
 
         # Given: 入力画像を準備
         col = tmp_path / "20250101-live-foo"
@@ -144,7 +144,7 @@ class TestMain:
         monkeypatch.setattr(sys, "argv", ["yt-generate-shorts-loop", str(col), "-y"])
 
         with patch.multiple(
-            "youtube_automation.scripts.generate_short_loop",
+            "youtube_automation.commands.media.generate_short_loop",
             create_veo_genai_client=DEFAULT,
             generate_loop_video=DEFAULT,
             load_skill_config=DEFAULT,
@@ -162,7 +162,7 @@ class TestMain:
 
     def test_main_passes_aspect_ratio_9_16_to_veo(self, tmp_path, monkeypatch):
         """plan アンチパターン #7: Veo 呼出で `aspect_ratio="9:16"` を必ず明示."""
-        from youtube_automation.scripts import generate_short_loop as mod
+        from youtube_automation.commands.media import generate_short_loop as mod
 
         # Given
         col = tmp_path / "20250101-live-foo"
@@ -172,7 +172,7 @@ class TestMain:
         monkeypatch.setattr(sys, "argv", ["yt-generate-shorts-loop", str(col), "-y"])
 
         with patch.multiple(
-            "youtube_automation.scripts.generate_short_loop",
+            "youtube_automation.commands.media.generate_short_loop",
             create_veo_genai_client=DEFAULT,
             generate_loop_video=DEFAULT,
             load_skill_config=DEFAULT,
@@ -191,7 +191,7 @@ class TestMain:
 
     def test_main_propagates_model_override_via_cli(self, tmp_path, monkeypatch):
         """plan 要件 14-c: `--model` 指定が Veo 呼出に伝搬する."""
-        from youtube_automation.scripts import generate_short_loop as mod
+        from youtube_automation.commands.media import generate_short_loop as mod
 
         # Given
         col = tmp_path / "20250101-live-foo"
@@ -205,7 +205,7 @@ class TestMain:
         )
 
         with patch.multiple(
-            "youtube_automation.scripts.generate_short_loop",
+            "youtube_automation.commands.media.generate_short_loop",
             create_veo_genai_client=DEFAULT,
             generate_loop_video=DEFAULT,
             load_skill_config=DEFAULT,
@@ -229,7 +229,7 @@ class TestMain:
 
     def test_main_exits_with_error_when_input_image_missing(self, tmp_path, monkeypatch):
         """plan 要件 14-c: 入力画像欠如で `SystemExit(1)`."""
-        from youtube_automation.scripts import generate_short_loop as mod
+        from youtube_automation.commands.media import generate_short_loop as mod
 
         # Given: 画像なし
         col = tmp_path / "20250101-live-empty"
@@ -237,7 +237,7 @@ class TestMain:
         monkeypatch.setattr(sys, "argv", ["yt-generate-shorts-loop", str(col), "-y"])
 
         with patch.multiple(
-            "youtube_automation.scripts.generate_short_loop",
+            "youtube_automation.commands.media.generate_short_loop",
             create_veo_genai_client=DEFAULT,
             generate_loop_video=DEFAULT,
             load_skill_config=DEFAULT,

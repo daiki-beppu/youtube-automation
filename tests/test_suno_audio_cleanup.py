@@ -7,9 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.scripts import suno_audio_cleanup as mod
-from youtube_automation.scripts.suno_audio_cleanup import (
+from youtube_automation.commands.suno import suno_audio_cleanup as mod
+from youtube_automation.commands.suno.suno_audio_cleanup import (
     CleanupConfig,
     build_filter,
     cleanup_collection,
@@ -17,6 +16,7 @@ from youtube_automation.scripts.suno_audio_cleanup import (
     process_file,
     resolve_cleanup_config,
 )
+from youtube_automation.infrastructure.errors import ConfigError
 
 
 def _make_collection(tmp_path: Path, names: list[str]) -> Path:

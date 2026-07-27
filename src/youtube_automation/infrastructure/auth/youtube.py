@@ -14,7 +14,6 @@ Required setup:
 import json
 import logging
 import os
-import sys
 from pathlib import Path
 from typing import ClassVar
 
@@ -398,60 +397,3 @@ class YouTubeOAuthHandler:
                 redact_sensitive_data(str(e), self.token_file, self.client_secrets_file),
             )
             return False
-
-
-def main(argv=None):
-    """メイン関数 - スタンドアロン実行用（``yt-oauth``）
-
-    Args:
-        argv (list[str] | None): CLI 引数。None なら ``sys.argv[1:]``。
-            テストから直接呼ぶ場合は ``main([])`` のように明示する
-    """
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        prog="yt-oauth",
-        description="YouTube OAuth 2.0 認証（token 発行・接続テスト）",
-    )
-    parser.add_argument(
-        "--readonly",
-        action="store_true",
-        help="read-only スコープの token.readonly.json を発行する（write scope を含まない。#1699）",
-    )
-    args = parser.parse_args(argv)
-
-    mode_label = "read-only" if args.readonly else "full access"
-    print(f"🎵 YouTube OAuth 2.0 認証テスト（{mode_label}）")
-    print("=" * 60)
-
-    auth_handler = None
-    try:
-        # OAuth ハンドラー初期化
-        if args.readonly:
-            auth_handler = YouTubeOAuthHandler.create_readonly()
-        else:
-            auth_handler = YouTubeOAuthHandler()
-
-        # 認証実行
-        auth_handler.authenticate()
-
-        # 接続テスト
-        if auth_handler.test_connection():
-            print("\n🎉 認証・接続テスト完了！YouTube自動アップロードの準備ができました。")
-        else:
-            print("\n❌ 接続テストに失敗しました。設定を確認してください。")
-
-    except KeyboardInterrupt:
-        # Ctrl-C: UNIX 慣例 (128 + SIGINT=2 → 130)
-        print("\n🛑 処理が中断されました")
-        sys.exit(130)
-    except (AuthError, ConfigError, ValidationError, YouTubeAPIError, OSError) as e:
-        paths = []
-        if auth_handler is not None:
-            paths.extend([auth_handler.client_secrets_file, auth_handler.token_file])
-        logger.error("CLI 実行失敗: %s", redact_sensitive_data(str(e), *paths))
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

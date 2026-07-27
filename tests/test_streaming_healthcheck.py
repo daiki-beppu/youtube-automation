@@ -30,7 +30,7 @@
      - 死活監視セクション / Discord / 4 シナリオ言及
 9. ``src/youtube_automation/utils/streaming/daily_archive.py``
      - ``count_archives_for_date`` のモック検証
-10. ``src/youtube_automation/scripts/streaming_archive_check.py``
+10. ``src/youtube_automation/commands/youtube/streaming_archive_check.py``
      - argparse / 件数不足時 exit 1 / Discord 通知
 11. ``pyproject.toml``
      - ``yt-stream-archive-check`` entry point 登録
@@ -1397,7 +1397,7 @@ class TestStreamingPackageSurface:
 
 
 # ============================================================================
-# src/youtube_automation/scripts/streaming_archive_check.py — CLI
+# src/youtube_automation/commands/youtube/streaming_archive_check.py — CLI
 # ============================================================================
 
 
@@ -1409,7 +1409,7 @@ class TestStreamingArchiveCheckCli:
         When import する
         Then エラーなく読み込める（main 関数を export している）。
         """
-        from youtube_automation.scripts import streaming_archive_check
+        from youtube_automation.commands.youtube import streaming_archive_check
 
         assert hasattr(streaming_archive_check, "main"), "main() が export されていない"
 
@@ -1418,7 +1418,7 @@ class TestStreamingArchiveCheckCli:
         When main を呼ぶ
         Then exit 0（正常）。
         """
-        from youtube_automation.scripts import streaming_archive_check
+        from youtube_automation.commands.youtube import streaming_archive_check
 
         with (
             patch.object(
@@ -1445,7 +1445,7 @@ class TestStreamingArchiveCheckCli:
         When main を呼ぶ
         Then exit 非 0（不足エラー）。
         """
-        from youtube_automation.scripts import streaming_archive_check
+        from youtube_automation.commands.youtube import streaming_archive_check
 
         with (
             patch.object(
@@ -1471,7 +1471,7 @@ class TestStreamingArchiveCheckCli:
         When --expected なしで main を呼ぶ
         Then 暗黙の 2 本判定を走らせず argparse error で停止する。
         """
-        from youtube_automation.scripts import streaming_archive_check
+        from youtube_automation.commands.youtube import streaming_archive_check
 
         with patch.object(sys, "argv", ["yt-stream-archive-check", "--date", "2026-05-01"]):
             with pytest.raises(SystemExit) as e:
@@ -1484,7 +1484,7 @@ class TestStreamingArchiveCheckCli:
         When main を呼ぶ
         Then argparse error (exit 2) で停止する（期待件数 0 は無意味）。
         """
-        from youtube_automation.scripts import streaming_archive_check
+        from youtube_automation.commands.youtube import streaming_archive_check
 
         with patch.object(sys, "argv", ["yt-stream-archive-check", "--date", "2026-05-01", "--expected", "0"]):
             with pytest.raises(SystemExit) as e:
@@ -1497,7 +1497,7 @@ class TestStreamingArchiveCheckCli:
         When main を呼ぶ
         Then argparse error (exit 2) で停止する（負の期待件数は無意味）。
         """
-        from youtube_automation.scripts import streaming_archive_check
+        from youtube_automation.commands.youtube import streaming_archive_check
 
         with patch.object(sys, "argv", ["yt-stream-archive-check", "--date", "2026-05-01", "--expected", "-1"]):
             with pytest.raises(SystemExit) as e:
@@ -1510,7 +1510,7 @@ class TestStreamingArchiveCheckCli:
         When main を呼ぶ
         Then 共通 `notify()` が `content=...` / `webhook_url=...` 付きで呼ばれる。
         """
-        from youtube_automation.scripts import streaming_archive_check
+        from youtube_automation.commands.youtube import streaming_archive_check
 
         webhook = "https://discord.com/api/webhooks/123/abc"
         with (
@@ -1561,7 +1561,7 @@ class TestStreamingArchiveCheckCli:
         When main を呼ぶ
         Then 件数不足 (exit 1) と区別するため exit code 2 を返す。
         """
-        from youtube_automation.scripts import streaming_archive_check
+        from youtube_automation.commands.youtube import streaming_archive_check
         from youtube_automation.utils.notification import NotificationError
 
         with (
@@ -1623,12 +1623,12 @@ class TestPyprojectEntryPoint:
         text = read_file(_PYPROJECT)
         # `yt-stream-archive-check = "..."` 行が [project.scripts] にあること
         assert re.search(
-            r'^yt-stream-archive-check\s*=\s*"youtube_automation\.cli_entrypoints:yt_stream_archive_check"',
+            r'^yt-stream-archive-check\s*=\s*"youtube_automation\.entrypoints:yt_stream_archive_check"',
             text,
             flags=re.MULTILINE,
         ), (
             "yt-stream-archive-check entry point が pyproject.toml に登録されていない "
-            '（"youtube_automation.cli_entrypoints:yt_stream_archive_check" を指すこと）'
+            '（"youtube_automation.entrypoints:yt_stream_archive_check" を指すこと）'
         )
 
 

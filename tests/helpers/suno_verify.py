@@ -94,7 +94,7 @@ def write_video_analysis_suno_preset(channel: Path, *, genre_line: str, exclude_
 
 
 def load_suno_verify_module():
-    return importlib.import_module("youtube_automation.scripts.suno_verify")
+    return importlib.import_module("youtube_automation.commands.suno.suno_verify")
 
 
 def run_verify(monkeypatch, collection: Path) -> int:

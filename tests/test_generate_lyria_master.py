@@ -11,14 +11,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.scripts import generate_lyria_master
-from youtube_automation.scripts.generate_lyria_master import (
+from youtube_automation.commands.media import generate_lyria_master
+from youtube_automation.commands.media.generate_lyria_master import (
     _LYRIA_SEGMENT_SEC,
     _MAX_SEGMENT_COUNT,
     _generate_one_segment,
     _resolve_segment_count,
 )
+from youtube_automation.infrastructure.errors import ValidationError
 
 
 @pytest.fixture(autouse=True)

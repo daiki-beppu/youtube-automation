@@ -196,7 +196,7 @@ def _build_workflow(merged: dict) -> Workflow:
 
 → wheel ビルド時に **`youtube-channels-automation` のバージョンと skills のバージョンが完全固定**になる。`5.5.0` の wheel をインストールすれば必ず `5.5.0` 時点の skills が配布される。
 
-`src/youtube_automation/cli/skills_sync.py:73-78` で `importlib.resources` 経由で wheel 内の `_skills/` を参照し、`yt-skills sync` 実行時に下流の `.claude/skills/` に展開。
+`src/youtube_automation/commands/system/skills_sync.py:73-78` で `importlib.resources` 経由で wheel 内の `_skills/` を参照し、`yt-skills sync` 実行時に下流の `.claude/skills/` に展開。
 
 ### 6.14.2 skills 自体のバージョン管理
 

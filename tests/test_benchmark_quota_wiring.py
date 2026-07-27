@@ -19,14 +19,14 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.infrastructure.errors import YouTubeAPIError
-from youtube_automation.scripts.benchmark_collector import (
+from youtube_automation.commands.analytics.benchmark_collector import (
     _CHANNELS_BATCH_SIZE,
     _QUOTA_SERVICE,
     _READ_QUOTA_UNITS,
     BenchmarkCollector,
 )
-from youtube_automation.scripts.fetch_benchmark_comments import BenchmarkCommentCollector
+from youtube_automation.commands.analytics.fetch_benchmark_comments import BenchmarkCommentCollector
+from youtube_automation.infrastructure.errors import YouTubeAPIError
 
 
 @pytest.fixture
@@ -38,8 +38,8 @@ def quota_calls(monkeypatch) -> list[dict]:
         calls.append({"service": service, "bucket": bucket, "units": units, "metadata": dict(metadata or {})})
         return calls[-1]
 
-    monkeypatch.setattr("youtube_automation.scripts.benchmark_collector.log_quota", _capture)
-    monkeypatch.setattr("youtube_automation.scripts.fetch_benchmark_comments.log_quota", _capture)
+    monkeypatch.setattr("youtube_automation.commands.analytics.benchmark_collector.log_quota", _capture)
+    monkeypatch.setattr("youtube_automation.commands.analytics.fetch_benchmark_comments.log_quota", _capture)
     return calls
 
 
@@ -193,7 +193,7 @@ class TestBenchmarkCollectorQuotaWiring:
     def test_output_unchanged_when_tracker_cannot_record(self, monkeypatch):
         # Given: tracker が記録できない（書き込み失敗時と同じく None を返す）
         monkeypatch.setattr(
-            "youtube_automation.scripts.benchmark_collector.log_quota",
+            "youtube_automation.commands.analytics.benchmark_collector.log_quota",
             lambda *args, **kwargs: None,
         )
         youtube = MagicMock()

@@ -19,16 +19,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.scripts import finalize_master
-from youtube_automation.scripts.finalize_master import (
+from youtube_automation.commands.media import finalize_master
+from youtube_automation.commands.media.finalize_master import (
     FinalizeConfig,
     _resolve_finalize_config,
     build_filter,
 )
-from youtube_automation.scripts.finalize_master import (
+from youtube_automation.commands.media.finalize_master import (
     finalize_master as run_finalize_master,
 )
+from youtube_automation.infrastructure.errors import ConfigError
 
 _ORIGINAL_MASTER_BYTES = b"ORIGINAL_MASTER_BYTES_FOR_TEST"
 _NEW_MASTER_BYTES = b"NEW_MASTER_BYTES_AFTER_PASS2"
@@ -49,7 +49,7 @@ def _setup_collection(tmp_path: Path, n_rain: int) -> Path:
 def _patch_skill_config(monkeypatch, cfg: dict) -> MagicMock:
     spy = MagicMock(return_value=cfg)
     monkeypatch.setattr(
-        "youtube_automation.scripts.finalize_master.load_skill_config",
+        "youtube_automation.commands.media.finalize_master.load_skill_config",
         spy,
     )
     return spy

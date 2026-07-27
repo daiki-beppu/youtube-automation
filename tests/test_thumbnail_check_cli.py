@@ -13,8 +13,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from youtube_automation.commands.thumbnail import thumbnail_check
 from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.scripts import thumbnail_check
 from youtube_automation.utils import skill_config
 
 

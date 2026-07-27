@@ -19,7 +19,7 @@ from unittest.mock import patch
 
 import pytest
 
-from youtube_automation.cli import stream_bandwidth
+from youtube_automation.commands.youtube import stream_bandwidth
 
 # ---------- 共通 patch ヘルパー ----------
 
@@ -47,23 +47,23 @@ def _patch_all(
 
     return [
         patch(
-            "youtube_automation.cli.stream_bandwidth.resolve_instance_id",
+            "youtube_automation.commands.youtube.stream_bandwidth.resolve_instance_id",
             return_value=instance_id,
         ),
         patch(
-            "youtube_automation.cli.stream_bandwidth.fetch_bandwidth",
+            "youtube_automation.commands.youtube.stream_bandwidth.fetch_bandwidth",
             return_value=bandwidth,
         ),
         patch(
-            "youtube_automation.cli.stream_bandwidth.count_archives",
+            "youtube_automation.commands.youtube.stream_bandwidth.count_archives",
             return_value=archives,
         ),
         patch(
-            "youtube_automation.cli.stream_bandwidth.get_secret",
+            "youtube_automation.commands.youtube.stream_bandwidth.get_secret",
             side_effect=fake_get_secret,
         ),
         patch(
-            "youtube_automation.cli.stream_bandwidth.notify",
+            "youtube_automation.commands.youtube.stream_bandwidth.notify",
         ),
     ]
 
@@ -96,7 +96,7 @@ def test_default_mode_prints_summary_no_webhook(capsys):
     enters = _enter(mocks)
     try:
         with patch(
-            "youtube_automation.cli.stream_bandwidth.today",
+            "youtube_automation.commands.youtube.stream_bandwidth.today",
             return_value=date(2026, 4, 30),
         ):
             rc = stream_bandwidth.main(["--instance-id", "VULTR_X"])
@@ -180,7 +180,7 @@ def test_report_mode_emits_na_when_previous_month_has_no_data():
     # `_run_report` は --month 明示時 today() を経由しないが、_previous_month の
     # 引数解決と将来の経路変化に備えて凍結し意図を固定する。
     with patch(
-        "youtube_automation.cli.stream_bandwidth.today",
+        "youtube_automation.commands.youtube.stream_bandwidth.today",
         return_value=date(2026, 5, 1),
     ):
         try:
@@ -211,7 +211,10 @@ def test_report_mode_defaults_to_previous_month_when_month_not_given():
     mocks = _patch_all(bandwidth=bw)
     enters = _enter(mocks)
     # 2026-05-01 を「今日」とみなして前月を 2026-04 に解決させる
-    with patch("youtube_automation.cli.stream_bandwidth.today", return_value=__import__("datetime").date(2026, 5, 1)):
+    with patch(
+        "youtube_automation.commands.youtube.stream_bandwidth.today",
+        return_value=__import__("datetime").date(2026, 5, 1),
+    ):
         try:
             rc = stream_bandwidth.main(["--report", "--instance-id", "VULTR_X"])
         finally:
@@ -241,7 +244,7 @@ def test_report_mode_january_first_resolves_to_previous_year_december():
     mocks = _patch_all(bandwidth=bw)
     enters = _enter(mocks)
     with patch(
-        "youtube_automation.cli.stream_bandwidth.today",
+        "youtube_automation.commands.youtube.stream_bandwidth.today",
         return_value=__import__("datetime").date(2026, 1, 1),
     ):
         try:
@@ -279,11 +282,11 @@ def test_check_threshold_silent_when_under_threshold():
     try:
         with (
             patch(
-                "youtube_automation.cli.stream_bandwidth.today",
+                "youtube_automation.commands.youtube.stream_bandwidth.today",
                 return_value=date(2026, 4, 30),
             ),
             patch(
-                "youtube_automation.cli.stream_bandwidth.is_over_threshold",
+                "youtube_automation.commands.youtube.stream_bandwidth.is_over_threshold",
                 return_value=False,
             ) as mock_threshold,
         ):
@@ -308,7 +311,7 @@ def test_check_threshold_alerts_when_over_80_percent():
     try:
         # 当月扱い (今日に対する月) の判定が必要なら CLI が解決する想定
         with patch(
-            "youtube_automation.cli.stream_bandwidth.today",
+            "youtube_automation.commands.youtube.stream_bandwidth.today",
             return_value=__import__("datetime").date(2026, 4, 30),
         ):
             rc = stream_bandwidth.main(["--check-threshold", "--instance-id", "VULTR_X"])
@@ -332,7 +335,7 @@ def test_probe_bitrate_mode_compares_against_4mbps(capsys, tmp_path: Path):
     # 5 Mbps 相当
     with (
         patch(
-            "youtube_automation.cli.stream_bandwidth.probe_bitrate",
+            "youtube_automation.commands.youtube.stream_bandwidth.probe_bitrate",
             return_value=5_000_000.0,
         ),
     ):
@@ -353,7 +356,7 @@ def test_probe_bitrate_returns_nonzero_when_probe_fails(tmp_path: Path):
     fake_path = tmp_path / "stream.mp4"
     fake_path.write_bytes(b"")
     with patch(
-        "youtube_automation.cli.stream_bandwidth.probe_bitrate",
+        "youtube_automation.commands.youtube.stream_bandwidth.probe_bitrate",
         return_value=None,
     ):
         rc = stream_bandwidth.main(["--probe-bitrate", str(fake_path)])

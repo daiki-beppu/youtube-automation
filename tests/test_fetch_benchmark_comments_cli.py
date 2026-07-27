@@ -6,8 +6,8 @@ import sys
 
 import pytest
 
+from youtube_automation.commands.analytics import fetch_benchmark_comments as mod
 from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.scripts import fetch_benchmark_comments as mod
 
 
 def _run_main_with_fake_collector(monkeypatch, argv: list[str], input_func=None) -> list[dict]:
@@ -216,8 +216,8 @@ def test_collect_checks_benchmark_freshness(monkeypatch, tmp_path):
         "comment_id": "comment-1",
     }
 
-    def fake_ensure_benchmark_fresh(data_dir):
-        calls.append(("fresh", data_dir))
+    def fake_ensure_benchmark_fresh(data_dir, **factories):
+        calls.append(("fresh", data_dir, factories))
 
     def fake_load_benchmark_videos(data_dir, *, min_views: int, competitor_slug: str | None):
         calls.append(("load", data_dir, min_views, competitor_slug))
@@ -245,7 +245,15 @@ def test_collect_checks_benchmark_freshness(monkeypatch, tmp_path):
     result = collector.collect()
 
     assert calls == [
-        ("fresh", collector.data_dir),
+        (
+            "fresh",
+            collector.data_dir,
+            {
+                "collector_factory": mod.BenchmarkCollector,
+                "analyzer_factory": mod.BenchmarkThumbnailAnalyzer,
+                "reporter_factory": mod.BenchmarkReportGenerator,
+            },
+        ),
         ("load", collector.data_dir, 10000, None),
         ("youtube-full-scope",),
         ("fetch", "video-1"),

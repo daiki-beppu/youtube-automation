@@ -35,7 +35,7 @@
 | analytics-collect | × | — | OAuth 失敗時の再認証案内なし |
 | analytics-report | × | — | レポート JSON 壊れた時の対処なし |
 | audience-persona | × | — | — |
-| benchmark | △ | `src/youtube_automation/scripts/benchmark_collector.py:75-93` | コード側に **`freshness_days` による再収集ガード** あり。SKILL.md には未記載 |
+| benchmark | △ | `src/youtube_automation/commands/analytics/benchmark_collector.py:75-93` | コード側に **`freshness_days` による再収集ガード** あり。SKILL.md には未記載 |
 | channel-direction | × | — | — |
 | channel-import | × | — | OAuth/API 失敗の対処なし |
 | channel-new | △ | `.claude/skills/channel-new/SKILL.md:86` 周辺 | GCP bootstrap は `channel-setup` 参照のみ |
@@ -47,7 +47,7 @@
 | discover-competitors | × | — | quota 超過時のリカバリ手順なし（HttpError は `YouTubeAPIError` で raise しっぱなし、`competitor_discovery.py:57-58`） |
 | live-clean | × | — | 大容量削除中断時の手順なし |
 | loop-video | △ | `.claude/skills/loop-video/SKILL.md:59` | 「`--smooth` で再実行」とあるが、後述のとおりこれは **Veo 再課金経路** |
-| lyria | ○ | `.claude/skills/lyria/SKILL.md:169` + `src/youtube_automation/scripts/generate_lyria_master.py:384` | 「成功済みセグメントは保持されています。再実行で続行できます」と明示。実装も裏付け済み |
+| lyria | ○ | `.claude/skills/lyria/SKILL.md:169` + `src/youtube_automation/commands/media/generate_lyria_master.py:384` | 「成功済みセグメントは保持されています。再実行で続行できます」と明示。実装も裏付け済み |
 | masterup | △ | `.claude/skills/masterup/SKILL.md:130` | rain layer の atomic rename のみ言及。Suno DL 中断・`master.{mp3,wav}` 再生成挙動の記述なし |
 | metadata-audit | × | — | — |
 | playlist | △ | `.claude/skills/playlist/SKILL.md:50-54` | dry-run 案内はあるが、init 途中失敗時の手順は記述なし。実装は idempotent（`playlist_manager.py:144-145` の既存 ID skip + `:168-181` の書き戻し） |
@@ -56,7 +56,7 @@
 | suno | △ | `.claude/skills/suno/SKILL.md:314` | **冪等性を明示**（`planning.music` を上書き、merge しない）— ただし楽曲生成中断のリカバリは Web UI 側で対象外 |
 | thumbnail | △ | `.claude/skills/thumbnail/SKILL.md:183` 付近 | 「2〜3 回リトライで通る」のみ。`-vN` 自動採番は実装側で対応（`composition.py:81-99`） |
 | thumbnail-compare | × | — | — |
-| video-analyze | △（コードのみ） | `src/youtube_automation/scripts/video_analyze.py:243-261` | `_run_analysis` が 1 件ずつ try/except で失敗を `failures[]` に積む。**SKILL.md には記述なし**、かつ既存 JSON skip も無し（後述 3.3） |
+| video-analyze | △（コードのみ） | `src/youtube_automation/commands/analytics/video_analyze.py:243-261` | `_run_analysis` が 1 件ずつ try/except で失敗を `failures[]` に積む。**SKILL.md には記述なし**、かつ既存 JSON skip も無し（後述 3.3） |
 | video-description | × | — | — |
 | video-upload | ○ | `.claude/skills/video-upload/SKILL.md:96-98` | `upload_tracking.json` v3 schema による resume + exponential backoff 5 回まで明示 |
 | videoup | △ | `.claude/skills/videoup/SKILL.md:59` + `generate_videos.sh:125` | **`set -e` は使用しない（明示的エラーハンドリング）と明記** + `trap 'rm -f "$PROGRESS_FILE"' EXIT` あり。SKILL.md にリカバリ手順は薄い |
@@ -108,14 +108,14 @@
 | 検出箇所 | パターン | 評価 |
 |---|---|---|
 | `src/youtube_automation/utils/comments/history.py:51-58` | `tmp = path.with_suffix(suffix + ".tmp")` → `os.replace(tmp, path)` | ○ atomic rename。中断時は `*.tmp` 残骸の可能性はあるが本体は無傷 |
-| `src/youtube_automation/scripts/finalize_master.py:286-294` | `try/finally` で `master.tmp.mp3` を unlink。「主目的の master.mp3 はこの時点で無傷」コメント | ○ 例外経路含めて掃除責任明示 |
-| `src/youtube_automation/scripts/generate_lyria_master.py:89-113` | `tmp_path = path.with_suffix(suffix + ".tmp")` + try/finally の `if tmp_path.exists(): tmp_path.unlink()` | ○ ffmpeg 失敗時に MP3 tmp を掃除 |
+| `src/youtube_automation/commands/media/finalize_master.py:286-294` | `try/finally` で `master.tmp.mp3` を unlink。「主目的の master.mp3 はこの時点で無傷」コメント | ○ 例外経路含めて掃除責任明示 |
+| `src/youtube_automation/commands/media/generate_lyria_master.py:89-113` | `tmp_path = path.with_suffix(suffix + ".tmp")` + try/finally の `if tmp_path.exists(): tmp_path.unlink()` | ○ ffmpeg 失敗時に MP3 tmp を掃除 |
 | `src/youtube_automation/utils/veo_generator.py:120-132` | `strip_audio` で `_tmp.mp4` 作成。CalledProcessError 経路で `tmp.unlink()` | ○ |
 | `src/youtube_automation/utils/veo_generator.py:159-174` | `trim_tail` で `_trimmed.mp4` 作成。CalledProcessError 経路で `tmp.unlink()` | ○ |
 | `src/youtube_automation/utils/veo_generator.py:177-253` | `smooth_loop` で `_smooth.mp4` 作成。**CalledProcessError 経路で `return False` のみ、unlink 無し**（`:242-244`）| × **P2 残骸あり** |
 | `src/youtube_automation/utils/upload_core.py:179-201` | `tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)` でサムネ圧縮 tmp。正常系のみ `:162-163` で unlink。ffmpeg 失敗時の cleanup が `_compress_thumbnail` 内に無い | △ **P2 残骸あり** |
-| `src/youtube_automation/scripts/generate_master.py:220-256` | `ffmpeg -y ... output -loglevel error`。**出力 master.{mp3,wav} は無条件上書き**。残骸という概念がそもそも存在しない（同名で潰す） | △ idempotency 観点で別問題（後述 3.3） |
-| `src/youtube_automation/scripts/generate_loop_video.py:59-67` | 既存 `loop.mp4` を `loop-v{n}.mp4` に**rename して退避**してから新規生成。Veo 失敗時は退避済み旧 mp4 + 新規未生成という状態に | △ **退避は idempotent だが旧版が永遠に残る** |
+| `src/youtube_automation/commands/media/generate_master.py:220-256` | `ffmpeg -y ... output -loglevel error`。**出力 master.{mp3,wav} は無条件上書き**。残骸という概念がそもそも存在しない（同名で潰す） | △ idempotency 観点で別問題（後述 3.3） |
+| `src/youtube_automation/commands/media/generate_loop_video.py:59-67` | 既存 `loop.mp4` を `loop-v{n}.mp4` に**rename して退避**してから新規生成。Veo 失敗時は退避済み旧 mp4 + 新規未生成という状態に | △ **退避は idempotent だが旧版が永遠に残る** |
 | `src/youtube_automation/utils/veo_generator.py:246-249` | smooth_loop 成功時、元 mp4 を `_raw` にバックアップ + `_smooth` を本体に rename | ○ atomic rename 相当 |
 
 ### 2.2 Shell scripts の trap / set -e

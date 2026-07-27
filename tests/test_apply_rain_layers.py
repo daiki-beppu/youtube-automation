@@ -15,15 +15,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ConfigError, ValidationError
-from youtube_automation.scripts import apply_rain_layers as mod
-from youtube_automation.scripts.apply_rain_layers import (
+from youtube_automation.commands.media import apply_rain_layers as mod
+from youtube_automation.commands.media.apply_rain_layers import (
     _resolve_post_processing_config,
     apply_rain_layers,
     build_ffmpeg_command,
     build_filter,
     find_rain_layers,
 )
+from youtube_automation.infrastructure.errors import ConfigError, ValidationError
 
 # -19dB の振幅倍率は issue 完了条件で参照される定数。テストでは
 # build_filter / build_ffmpeg_command の文字列出現を確認する形で
@@ -56,7 +56,7 @@ def _setup_collection(tmp_path: Path, n_rain: int, *, rain_names: list[str] | No
 def _patch_skill_config(monkeypatch, cfg: dict) -> MagicMock:
     spy = MagicMock(return_value=cfg)
     monkeypatch.setattr(
-        "youtube_automation.scripts.apply_rain_layers.load_skill_config",
+        "youtube_automation.commands.media.apply_rain_layers.load_skill_config",
         spy,
     )
     return spy
@@ -583,7 +583,7 @@ class TestCli:
         monkeypatch.chdir(tmp_path.parent)
         monkeypatch.setattr("sys.argv", ["yt-apply-rain-layers", "--dry-run", str(collection)])
         monkeypatch.setattr(
-            "youtube_automation.scripts.apply_rain_layers.channel_dir",
+            "youtube_automation.commands.media.apply_rain_layers.channel_dir",
             lambda: collection,
         )
         _patch_skill_config(monkeypatch, {"post_processing": {"rain_layers": {"enabled": True}}})

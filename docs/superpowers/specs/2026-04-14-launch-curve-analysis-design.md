@@ -100,7 +100,7 @@ tests/
 
 `pyproject.toml` `[project.scripts]` に以下を追加:
 ```toml
-yt-launch-curve = "youtube_automation.scripts.launch_curve:main"
+yt-launch-curve = "youtube_automation.commands.analytics.launch_curve:main"
 ```
 
 既存 `analytics_analyzer.py` には手を入れない。別系統として独立させることで:

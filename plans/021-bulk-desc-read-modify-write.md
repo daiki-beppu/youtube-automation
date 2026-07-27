@@ -8,7 +8,7 @@
 > maintain the index.
 >
 > **Drift check (run first)**:
-> `git diff --stat 5394c378..HEAD -- src/youtube_automation/scripts/bulk_update_descriptions_from_md.py tests/test_bulk_update_descriptions_from_md.py`
+> `git diff --stat 5394c378..HEAD -- src/youtube_automation/commands/metadata/bulk_update_descriptions.py tests/test_bulk_update_descriptions_from_md.py`
 > 差分が出たら「Current state」の抜粋と実コードを突き合わせ、不一致なら STOP。
 
 ## Status
@@ -26,7 +26,7 @@
 
 ## Current state
 
-- `src/youtube_automation/scripts/bulk_update_descriptions_from_md.py` — 対象スクリプト（181 行）。`:116` で `videos().list(id=..., part="snippet")` により現 snippet を取得済み（`old_snippet`、`:124`）なのに、body 構築で使っていない
+- `src/youtube_automation/commands/metadata/bulk_update_descriptions.py` — 対象スクリプト（181 行）。`:116` で `videos().list(id=..., part="snippet")` により現 snippet を取得済み（`old_snippet`、`:124`）なのに、body 構築で使っていない
 - `tests/test_bulk_update_descriptions_from_md.py` — 既存テスト。`videos().update().execute` の呼び出し回数・dry-run・UTF-16 境界を検証している（構造パターンとして流用する）
 
 問題の body 構築 — `bulk_update_descriptions_from_md.py:156-165`:
@@ -49,7 +49,7 @@
             print(f"   ❌ update failed: {e}")
 ```
 
-リポジトリ内の正しい先例 — `src/youtube_automation/scripts/bulk_update_synthetic_media.py:143-151`:
+リポジトリ内の正しい先例 — `src/youtube_automation/commands/metadata/bulk_update_synthetic_media.py:143-151`:
 
 ```python
 def build_update_body(video_id: str, status: dict) -> dict:
@@ -81,7 +81,7 @@ def build_update_body(video_id: str, status: dict) -> dict:
 
 **In scope**:
 
-- `src/youtube_automation/scripts/bulk_update_descriptions_from_md.py`
+- `src/youtube_automation/commands/metadata/bulk_update_descriptions.py`
 - `tests/test_bulk_update_descriptions_from_md.py`
 - `CHANGELOG.md`（`[Unreleased]` 追記 — src/ を触るため必須）
 
@@ -125,7 +125,7 @@ def build_snippet_update_body(video_id: str, old_snippet: dict, title: str, desc
 
 要点: `defaultLanguage` は**存在するときだけ**引き継ぐ（無い動画に `"en"` を注入する現行挙動を廃止）。`categoryId` の `"10"`（音楽）fallback は現行挙動を維持。
 
-**Verify**: `uv run ruff check src/youtube_automation/scripts/bulk_update_descriptions_from_md.py` → exit 0
+**Verify**: `uv run ruff check src/youtube_automation/commands/metadata/bulk_update_descriptions.py` → exit 0
 
 ### Step 2: main ループから新関数を使う
 
@@ -157,7 +157,7 @@ def build_snippet_update_body(video_id: str, old_snippet: dict, title: str, desc
 ## Done criteria
 
 - [ ] `uv run pytest -q` exit 0（新規 4 テスト含む）
-- [ ] `rg -n 'defaultAudioLanguage' src/youtube_automation/scripts/bulk_update_descriptions_from_md.py` が MUTABLE_SNIPPET_KEYS 定義でヒットする
+- [ ] `rg -n 'defaultAudioLanguage' src/youtube_automation/commands/metadata/bulk_update_descriptions.py` が MUTABLE_SNIPPET_KEYS 定義でヒットする
 - [ ] `rg -n '"defaultLanguage": old_snippet.get' src/youtube_automation/scripts/` が 0 件（"en" fallback の消滅）
 - [ ] `uv run ruff check src tests` / `uv run ruff format --check src tests` exit 0
 - [ ] `CHANGELOG.md` `[Unreleased]` に追記

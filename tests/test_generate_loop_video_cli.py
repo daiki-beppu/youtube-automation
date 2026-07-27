@@ -29,7 +29,7 @@ from unittest.mock import DEFAULT, patch
 
 import pytest
 
-from youtube_automation.scripts.generate_loop_video import (
+from youtube_automation.commands.media.generate_loop_video import (
     _build_parser,
     resolve_collection_paths,
     resolve_prompt,
@@ -54,7 +54,7 @@ LOOP_V2 = "loop-v2.mp4"
 LOOP_V3 = "loop-v3.mp4"
 
 # `patch.multiple` で `main()` の境界を一括 mock する対象モジュール
-_TARGET_MODULE = "youtube_automation.scripts.generate_loop_video"
+_TARGET_MODULE = "youtube_automation.commands.media.generate_loop_video"
 
 
 def _make_collection(tmp_path: Path, *, name: str = "20260519-loop-foo") -> Path:
@@ -579,7 +579,7 @@ class TestBackupExistingLoop:
     """plan §3: 既存 `loop.mp4` を `loop-v{n}.mp4` へ番号衝突回避で rename する。"""
 
     def test_renames_loop_mp4_to_loop_v1_when_no_backup_exists(self, tmp_path):
-        from youtube_automation.scripts.generate_loop_video import _backup_existing_loop
+        from youtube_automation.commands.media.generate_loop_video import _backup_existing_loop
 
         # Given: loop.mp4 のみ
         col = _make_collection(tmp_path)
@@ -595,7 +595,7 @@ class TestBackupExistingLoop:
         assert v1.read_bytes() == b"original"
 
     def test_picks_loop_v2_when_v1_already_taken(self, tmp_path):
-        from youtube_automation.scripts.generate_loop_video import _backup_existing_loop
+        from youtube_automation.commands.media.generate_loop_video import _backup_existing_loop
 
         # Given: loop.mp4 と既存 loop-v1.mp4
         col = _make_collection(tmp_path)
@@ -614,7 +614,7 @@ class TestBackupExistingLoop:
         assert v2.read_bytes() == b"current"
 
     def test_picks_loop_v3_when_v1_and_v2_already_taken(self, tmp_path):
-        from youtube_automation.scripts.generate_loop_video import _backup_existing_loop
+        from youtube_automation.commands.media.generate_loop_video import _backup_existing_loop
 
         # Given: loop.mp4 + v1 + v2 すべて存在
         col = _make_collection(tmp_path)
@@ -670,7 +670,7 @@ class TestMainSkipExisting:
 
     def test_skips_veo_and_exits_zero_when_skip_existing_and_loop_mp4_exists(self, tmp_path, monkeypatch):
         # Given: 既存 loop.mp4 + --skip-existing
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -691,7 +691,7 @@ class TestMainSkipExisting:
 
     def test_does_not_create_backup_when_skipping(self, tmp_path, monkeypatch):
         # Given: 既存 loop.mp4 + --skip-existing
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -713,7 +713,7 @@ class TestMainSkipExisting:
 
     def test_runs_normal_path_when_skip_existing_set_but_loop_mp4_absent(self, tmp_path, monkeypatch):
         # Given: --skip-existing 指定だが loop.mp4 不在 → 通常 Veo 経路へフォールスルー
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -736,7 +736,7 @@ class TestMainSkipExisting:
 
     def test_skip_path_runs_before_image_validation(self, tmp_path, monkeypatch):
         # Given: --skip-existing + loop.mp4 ありで、main.png / main.jpg いずれも欠如
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         # NOTE: 入力画像（main.png/jpg）を意図的に置かない
@@ -766,7 +766,7 @@ class TestMainSmooth:
 
     def test_runs_smooth_loop_and_skips_veo_when_loop_mp4_exists(self, tmp_path, monkeypatch):
         # Given: 既存 loop.mp4 + --smooth
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -788,7 +788,7 @@ class TestMainSmooth:
 
     def test_does_not_prompt_for_confirmation_in_smooth_mode(self, tmp_path, monkeypatch):
         # Given: --smooth 経路では Veo 用の "生成しますか？" prompt を出さない（IR3）
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -811,7 +811,7 @@ class TestMainSmooth:
 
     def test_passes_crossfade_value_to_smooth_loop(self, tmp_path, monkeypatch):
         # Given: --crossfade 0.8 を CLI 経由で指定
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -845,7 +845,7 @@ class TestMainSmooth:
 
     def test_exits_with_code_1_when_loop_mp4_is_absent(self, tmp_path, monkeypatch):
         # Given: --smooth 指定だが loop.mp4 が存在しない（IR1: post-process 専用の入力欠如）
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -875,7 +875,7 @@ class TestMainSmoothPrecedence:
 
     def test_smooth_takes_precedence_over_skip_existing(self, tmp_path, monkeypatch):
         # Given: --smooth と --skip-existing を同時指定 + 既存 loop.mp4
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -910,7 +910,7 @@ class TestMainNormal:
 
     def test_calls_veo_and_backs_up_existing_loop_when_no_flags(self, tmp_path, monkeypatch):
         # Given: 既存 loop.mp4 + フラグ無し（-y で confirm スキップ）
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -934,7 +934,7 @@ class TestMainNormal:
 
     def test_calls_veo_when_no_flags_and_no_existing_loop(self, tmp_path, monkeypatch):
         # Given: 既存 loop.mp4 なし + フラグ無し（通常経路の起点 regression）
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -963,7 +963,7 @@ class TestMainCompressionPropagation:
 
     def test_compression_config_propagates_to_generate_loop_video(self, tmp_path, monkeypatch):
         # Given: skill-config に compression.crf=24 を上書き
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -985,7 +985,7 @@ class TestMainCompressionPropagation:
 
     def test_compression_config_propagates_to_smooth_loop(self, tmp_path, monkeypatch):
         # Given: --smooth + skill-config compression.crf=22
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -1010,7 +1010,7 @@ class TestMainCompressionPropagation:
 
     def test_smooth_falls_back_to_legacy_crf_when_compression_disabled(self, tmp_path, monkeypatch):
         # Given: --smooth + compression.enabled=false → smooth_loop は従来デフォルト (CRF 18)
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -1049,7 +1049,7 @@ class TestMainEnabledGate:
 
     def test_disabled_fails_loud_and_skips_veo(self, tmp_path, monkeypatch, capsys):
         # Given: skill-config が enabled: false（このチャンネルはループ動画化を停止）
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -1073,7 +1073,7 @@ class TestMainEnabledGate:
 
     def test_disabled_blocks_smooth_path(self, tmp_path, monkeypatch):
         # Given: enabled: false + --smooth（課金は無いが全経路ブロックの確認）
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -1092,7 +1092,7 @@ class TestMainEnabledGate:
 
     def test_enabled_absent_defaults_to_true(self, tmp_path, monkeypatch):
         # Given: トップレベル enabled 未指定（既存チャンネル相当）→ default true
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -1111,7 +1111,7 @@ class TestMainEnabledGate:
 
 class TestMainOmniEngine:
     def test_omni_uses_default_model_when_config_is_absent(self, tmp_path, monkeypatch):
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
         from youtube_automation.utils.omni_generator import DEFAULT_MODEL as DEFAULT_OMNI_MODEL
 
         col = _make_collection(tmp_path)
@@ -1131,7 +1131,7 @@ class TestMainOmniEngine:
         assert generate_omni.call_args.args[3] == DEFAULT_OMNI_MODEL
 
     def test_omni_uses_configured_model_and_runtime_settings(self, tmp_path, monkeypatch):
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         image = _write_image(col, MAIN_PNG)
@@ -1162,8 +1162,8 @@ class TestMainOmniEngine:
         assert args.kwargs["poll_interval_sec"] == 0.25
 
     def test_omni_missing_api_key_fails_loud(self, tmp_path, monkeypatch):
+        from youtube_automation.commands.media import generate_loop_video as mod
         from youtube_automation.infrastructure.errors import ConfigError
-        from youtube_automation.scripts import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -1182,7 +1182,7 @@ class TestMainOmniEngine:
         generate_omni.assert_not_called()
 
     def test_skip_existing_omni_does_not_create_client(self, tmp_path, monkeypatch):
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_loop_mp4(col)
@@ -1207,7 +1207,7 @@ class TestMainOmniEngine:
 
     def test_enabled_true_runs_normally(self, tmp_path, monkeypatch):
         # Given: enabled: true 明示
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -1228,7 +1228,7 @@ class TestMainVideoType:
     """Issue #1723: video_type の明示設定と観測可能性。"""
 
     def test_explicit_loop_is_logged_and_keeps_existing_generation(self, tmp_path, monkeypatch, capsys):
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)
@@ -1246,7 +1246,7 @@ class TestMainVideoType:
 
     @pytest.mark.parametrize("video_type", ["static", "multi_scene"])
     def test_non_loop_type_fails_before_creating_client(self, tmp_path, monkeypatch, video_type):
-        from youtube_automation.scripts import generate_loop_video as mod
+        from youtube_automation.commands.media import generate_loop_video as mod
 
         col = _make_collection(tmp_path)
         _write_image(col, MAIN_PNG)

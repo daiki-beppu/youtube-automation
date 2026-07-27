@@ -12,8 +12,8 @@
 
 | モデル / バージョン | 使用箇所 | 公式ステータス（2026-05-18 時点） | shutdown 予定 |
 |---|---|---|---|
-| `gemini-2.5-flash` | `.claude/skills/video-analyze/config.default.yaml:7`, `.claude/skills/benchmark/config.default.yaml:23`, `src/youtube_automation/scripts/benchmark_collector.py:523` | **deprecated**（後継 `gemini-3-flash-preview`） | **2026-10-16 earliest** |
-| `gemini-2.5-flash-lite` | `src/youtube_automation/scripts/populate_scene_phrases.py:33`（`DEFAULT_GEMINI_MODEL`） | **deprecated**（後継 `gemini-3.1-flash-lite`） | **2026-10-16 earliest** |
+| `gemini-2.5-flash` | `.claude/skills/video-analyze/config.default.yaml:7`, `.claude/skills/benchmark/config.default.yaml:23`, `src/youtube_automation/commands/analytics/benchmark_collector.py:523` | **deprecated**（後継 `gemini-3-flash-preview`） | **2026-10-16 earliest** |
+| `gemini-2.5-flash-lite` | `src/youtube_automation/commands/media/populate_scene_phrases.py:33`（`DEFAULT_GEMINI_MODEL`） | **deprecated**（後継 `gemini-3.1-flash-lite`） | **2026-10-16 earliest** |
 | `gemini-3.1-flash-image-preview` | `src/youtube_automation/utils/image_provider/config.py:27`, `.claude/skills/thumbnail/config.default.yaml:18`, `.claude/skills/collection-ideate/SKILL.md:139` | preview / GA 移行情報未公開 | 未告知（preview 継続中） |
 | `veo-3.1-fast-generate-001` | `src/youtube_automation/utils/veo_generator.py:15`, `.claude/skills/loop-video/config.default.yaml:8`, `.claude/skills/loop-video/SKILL.md:107,116` | **GA**（2025-11-17 promoted） | 未告知 |
 | `veo-3.1-generate-001` | `.claude/skills/loop-video/SKILL.md:116`（選択肢として記載） | **GA**（2025-11-17） | 未告知 |
@@ -65,7 +65,7 @@ build("youtubeAnalytics", "v2", credentials=credentials)
 build("youtubereporting", "v1", credentials=credentials)
 ```
 
-`src/youtube_automation/auth/oauth_handler.py:239`, `src/youtube_automation/scripts/fetch_stream_key.py:114` でも `youtube/v3` を直接 build。
+`src/youtube_automation/auth/oauth_handler.py:239`, `src/youtube_automation/commands/youtube/fetch_stream_key.py:114` でも `youtube/v3` を直接 build。
 
 ### 6.7.2 廃止予告 API endpoint の使用有無
 
@@ -75,8 +75,8 @@ build("youtubereporting", "v1", credentials=credentials)
 |---|---|---|
 | `videos().insert` | `src/youtube_automation/utils/upload_core.py:74` | 中核機能、廃止懸念なし |
 | `videos().list` | `src/youtube_automation/utils/streaming_archive.py:60`, `bulk_update_descriptions_from_md.py:102`, `metadata_audit.py:138`, `competitor_discovery.py:134`, `comments/replier.py:134` | 廃止懸念なし |
-| `videos().update` | `src/youtube_automation/scripts/bulk_update_descriptions_from_md.py:153` | 廃止懸念なし |
-| `playlists().insert` | `src/youtube_automation/scripts/playlist_manager.py:60` | 廃止懸念なし |
+| `videos().update` | `src/youtube_automation/commands/metadata/bulk_update_descriptions.py:153` | 廃止懸念なし |
+| `playlists().insert` | `src/youtube_automation/commands/youtube/playlist_manager.py:60` | 廃止懸念なし |
 | `playlistItems().insert/list/delete` | `playlist_manager.py:91,209,367,385`, `playlist_status.py:38`, `competitor_discovery.py:118`, `comments/replier.py:52`, `video_listing.py:49` | 廃止懸念なし |
 | `commentThreads().list` | `src/youtube_automation/utils/comments/fetcher.py:59`, `scripts/fetch_benchmark_comments.py:50` | 廃止懸念なし |
 | `comments().insert` | `src/youtube_automation/utils/comments/replier.py:214` | 廃止懸念なし |

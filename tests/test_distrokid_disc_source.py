@@ -25,6 +25,7 @@ import urllib.request
 
 import pytest
 
+from youtube_automation.commands.collections.collection_serve import create_server
 from youtube_automation.configuration.distrokid import (
     AiDisclosure,
     Distrokid,
@@ -38,7 +39,6 @@ from youtube_automation.domains.distrokid.release import (
 )
 from youtube_automation.domains.distrokid.specification import write_collection_spec
 from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.scripts.collection_serve import create_server
 
 _EXTENSION_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 _MP3_BYTES = b"ID3\x03\x00\x00\x00fake-mp3-bytes"

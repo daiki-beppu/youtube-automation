@@ -19,7 +19,7 @@ description: "Use when コレクションの楽曲を DistroKid 配信用に準�
 - **cover_art_3000.jpg** — 新規 AI 生成した 3000×3000 JPEG ジャケット
 - **uv run yt-collection-serve 起動** — `distrokid-helper` Chrome 拡張が読む `/distrokid/collections` と `/collections/<id>/distrokid/<disc>/release.json` を localhost で配信
 
-CLI 仕様の詳細は `references/distrokid_prepare.py`（実体: `src/youtube_automation/scripts/distrokid_prepare.py`）を参照。`distrokid.json` に含まれうる PII（songwriter の本名）の取り扱いと `.gitignore` 運用は `references/pii-gitignore.md` を参照。
+CLI 仕様の詳細は `references/distrokid_prepare.py`（実体: `src/youtube_automation/commands/distrokid/distrokid_prepare.py`）を参照。`distrokid.json` に含まれうる PII（songwriter の本名）の取り扱いと `.gitignore` 運用は `references/pii-gitignore.md` を参照。
 
 ## 完了条件
 

@@ -285,7 +285,7 @@ DL が止まる・形式が違う・`workflow-state.json` へ反映されない�
 - プロンプト生成: `/suno`
 - マスター化: `/masterup`（DL は本スキルが完了済みのため Step 2-3 スキップ）
 - 拡張本体のコード: `extensions/suno-helper/` / `extensions/shared/`
-- サーバー CLI: `src/youtube_automation/scripts/collection_serve.py`
-- POST downloaded エンドポイント: `src/youtube_automation/scripts/collection_serve.py`
+- サーバー CLI: `src/youtube_automation/commands/collections/collection_serve.py`
+- POST downloaded エンドポイント: `src/youtube_automation/commands/collections/collection_serve.py`
 - 連続実行ペーシング定義: `extensions/shared/constants.ts::BALANCED_RUN_PACING`
 - DL フォーマット storage key: `extensions/shared/constants.ts::sunoDownloadFormat`

@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.scripts import collection_serve
+from youtube_automation.commands.collections import collection_serve
 
 
 class _NoopDiscoveryLifecycle:
@@ -491,7 +491,7 @@ def test_public_stop_cli_waits_for_server_process_cleanup_before_returning(tmp_p
 import sys
 import time
 from pathlib import Path
-from youtube_automation.scripts import collection_serve
+from youtube_automation.commands.collections import collection_serve
 
 cleanup_started = Path({str(cleanup_started)!r})
 allow_cleanup = Path({str(allow_cleanup)!r})

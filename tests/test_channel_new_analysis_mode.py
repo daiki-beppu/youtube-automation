@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from youtube_automation.cli.skills_sync import bundled_skill_names
+from youtube_automation.commands.system.skills_sync import bundled_skill_names
 
 ROOT = Path(__file__).parents[1]
 CHANNEL_NEW = ROOT / ".claude/skills/channel-new/SKILL.md"

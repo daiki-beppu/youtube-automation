@@ -22,8 +22,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from youtube_automation.infrastructure.errors import ValidationError
-from youtube_automation.scripts.discover_competitors import (
+from youtube_automation.commands.analytics.discover_competitors import (
+    _DEFAULTED_OPTIONS,
+    _apply_search_defaults,
     _build_params,
     _build_parser,
     _format_count_compact,
@@ -31,6 +32,7 @@ from youtube_automation.scripts.discover_competitors import (
     _write_markdown,
     main,
 )
+from youtube_automation.infrastructure.errors import ValidationError
 from youtube_automation.utils.competitor_discovery import SearchCacheMode
 from youtube_automation.utils.competitor_scoring import (
     CandidateChannel,
@@ -117,12 +119,20 @@ class TestBuildParser:
         assert args.keywords == "lo-fi study,chill beats"
         assert args.output == "research/x.md"
 
+    def test_filter_defaults_are_unresolved_until_parse_completes(self):
+        """#2308: `--help` を設定・skill-config 非依存に保つため、parser は既定値を解決しない。"""
+        # Given / When: 必須のみで parse
+        args = _build_parser().parse_args(["--keywords", "lo-fi", "--output", "out.md"])
+
+        # Then: 未指定 option は None のまま（既定値の解決は _apply_search_defaults の責務）
+        assert [getattr(args, key) for key in _DEFAULTED_OPTIONS] == [None] * len(_DEFAULTED_OPTIONS)
+
     def test_default_filter_values(self):
-        # Given: デフォルト値の確認
+        # Given: デフォルト値の確認（parse 後に _apply_search_defaults が埋める）
         parser = _build_parser()
 
         # When
-        args = parser.parse_args(["--keywords", "lo-fi", "--output", "out.md"])
+        args = _apply_search_defaults(parser.parse_args(["--keywords", "lo-fi", "--output", "out.md"]))
 
         # Then: plan.md §7.5 のデフォルト値
         assert args.min_subscribers == 0
@@ -492,11 +502,11 @@ class TestMain:
 
         with (
             patch(
-                "youtube_automation.scripts.discover_competitors.discover_competitors",
+                "youtube_automation.commands.analytics.discover_competitors.discover_competitors",
                 return_value=[],
             ) as discover,
             patch(
-                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                "youtube_automation.commands.analytics.discover_competitors.YouTubeClients",
                 return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ) as clients_mock,
         ):
@@ -517,11 +527,11 @@ class TestMain:
 
         with (
             patch(
-                "youtube_automation.scripts.discover_competitors.discover_competitors",
+                "youtube_automation.commands.analytics.discover_competitors.discover_competitors",
                 return_value=[],
             ) as discover,
             patch(
-                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                "youtube_automation.commands.analytics.discover_competitors.YouTubeClients",
                 return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ) as clients_mock,
         ):
@@ -560,11 +570,11 @@ class TestMain:
 
         with (
             patch(
-                "youtube_automation.scripts.discover_competitors.discover_competitors",
+                "youtube_automation.commands.analytics.discover_competitors.discover_competitors",
                 return_value=scored,
             ),
             patch(
-                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                "youtube_automation.commands.analytics.discover_competitors.YouTubeClients",
                 return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ),
         ):
@@ -589,11 +599,11 @@ class TestMain:
 
         with (
             patch(
-                "youtube_automation.scripts.discover_competitors.discover_competitors",
+                "youtube_automation.commands.analytics.discover_competitors.discover_competitors",
                 return_value=[_make_scored()],
             ),
             patch(
-                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                "youtube_automation.commands.analytics.discover_competitors.YouTubeClients",
                 return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ),
         ):
@@ -618,11 +628,11 @@ class TestMain:
 
         with (
             patch(
-                "youtube_automation.scripts.discover_competitors.discover_competitors",
+                "youtube_automation.commands.analytics.discover_competitors.discover_competitors",
                 return_value=[],
             ),
             patch(
-                "youtube_automation.scripts.discover_competitors.YouTubeClients",
+                "youtube_automation.commands.analytics.discover_competitors.YouTubeClients",
                 return_value=SimpleNamespace(youtube_readonly=MagicMock()),
             ),
         ):
@@ -704,7 +714,7 @@ class TestSkillConfigDefaults:
         yield
         skill_config.reset("discover-competitors")
 
-    def test_channel_override_changes_parser_defaults(self, tmp_path: Path, monkeypatch) -> None:
+    def test_channel_override_changes_resolved_defaults(self, tmp_path: Path, monkeypatch) -> None:
         channel = tmp_path / "ch"
         (channel / "config" / "skills").mkdir(parents=True)
         (channel / "config" / "skills" / "discover-competitors.yaml").write_text(
@@ -713,7 +723,7 @@ class TestSkillConfigDefaults:
         monkeypatch.setenv("CHANNEL_DIR", str(channel))
 
         parser = _build_parser()
-        args = parser.parse_args(["--keywords", "lo-fi", "--output", "out.md"])
+        args = _apply_search_defaults(parser.parse_args(["--keywords", "lo-fi", "--output", "out.md"]))
 
         # Then: 上書きしたキーは override 値、未上書きキーは config.default.yaml の値
         assert args.min_subscribers == 5000
@@ -731,6 +741,8 @@ class TestSkillConfigDefaults:
         monkeypatch.setenv("CHANNEL_DIR", str(channel))
 
         parser = _build_parser()
-        args = parser.parse_args(["--keywords", "lo-fi", "--output", "out.md", "--min-subscribers", "777"])
+        args = _apply_search_defaults(
+            parser.parse_args(["--keywords", "lo-fi", "--output", "out.md", "--min-subscribers", "777"])
+        )
 
         assert args.min_subscribers == 777

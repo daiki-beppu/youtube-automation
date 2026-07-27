@@ -8,7 +8,7 @@
 > maintain the index.
 >
 > **Drift check (run first)**:
-> `git diff --stat fa296fe..HEAD -- src/youtube_automation/scripts/collection_serve.py tests/test_distrokid_collections_endpoint.py`
+> `git diff --stat fa296fe..HEAD -- src/youtube_automation/commands/collections/collection_serve.py tests/test_distrokid_collections_endpoint.py`
 > If any in-scope file changed since this plan was written, compare the
 > "Current state" excerpts against the live code before proceeding; on a
 > mismatch, treat it as a STOP condition.
@@ -34,7 +34,7 @@
 
 ## Current state
 
-- `src/youtube_automation/scripts/collection_serve.py` — stdlib `ThreadingHTTPServer` ベースの配信サーバー。`create_server()`（line 431）がクロージャでハンドラを生成する。
+- `src/youtube_automation/commands/collections/collection_serve.py` — stdlib `ThreadingHTTPServer` ベースの配信サーバー。`create_server()`（line 431）がクロージャでハンドラを生成する。
 - `tests/test_distrokid_collections_endpoint.py` — `/distrokid/*` エンドポイントのユニットテスト。POST のテストは line 719 以降。
 
 `create_server()` のシグネチャ（`collection_serve.py:431-455`）。POST ハンドラのクロージャから `collections_root`（dir mode のコレクションルート、単一 mode では `None`）と `capture_root` が見える:
@@ -111,14 +111,14 @@ POST ハンドラの該当部（`collection_serve.py:496-559`、抜粋）。**�
 |---|---|---|
 | 対象テスト | `uv run pytest tests/test_distrokid_collections_endpoint.py -q` | all pass |
 | 全ユニット | `uv run pytest tests/ -q --ignore=tests/integration` | all pass |
-| Lint | `uv run ruff check src/youtube_automation/scripts/collection_serve.py tests/test_distrokid_collections_endpoint.py` | exit 0 |
-| Format | `uv run ruff format --check src/youtube_automation/scripts/collection_serve.py tests/test_distrokid_collections_endpoint.py` | exit 0 |
+| Lint | `uv run ruff check src/youtube_automation/commands/collections/collection_serve.py tests/test_distrokid_collections_endpoint.py` | exit 0 |
+| Format | `uv run ruff format --check src/youtube_automation/commands/collections/collection_serve.py tests/test_distrokid_collections_endpoint.py` | exit 0 |
 
 ## Scope
 
 **In scope** (the only files you should modify):
 
-- `src/youtube_automation/scripts/collection_serve.py`
+- `src/youtube_automation/commands/collections/collection_serve.py`
 - `tests/test_distrokid_collections_endpoint.py`
 - `CHANGELOG.md`（`[Unreleased]` への追記）
 
@@ -184,7 +184,7 @@ Test plan の節を参照して `tests/test_distrokid_collections_endpoint.py` �
 
 `CHANGELOG.md` の `[Unreleased]` セクションに既存エントリの体裁に合わせて追記する（例: `### Fixed` 配下に「`POST /distrokid/releases` に collection/disc の実在検証と POST body 1 MiB 上限を追加」）。
 
-**Verify**: `uv run ruff check src/youtube_automation/scripts/collection_serve.py tests/test_distrokid_collections_endpoint.py && uv run ruff format --check src/youtube_automation/scripts/collection_serve.py tests/test_distrokid_collections_endpoint.py` → exit 0
+**Verify**: `uv run ruff check src/youtube_automation/commands/collections/collection_serve.py tests/test_distrokid_collections_endpoint.py && uv run ruff format --check src/youtube_automation/commands/collections/collection_serve.py tests/test_distrokid_collections_endpoint.py` → exit 0
 
 ## Test plan
 
@@ -203,7 +203,7 @@ Machine-checkable. ALL must hold:
 
 - [ ] `uv run pytest tests/ -q --ignore=tests/integration` exits 0; 上記 4 テストが存在し pass する
 - [ ] `uv run ruff check` / `uv run ruff format --check`（変更ファイル対象）exits 0
-- [ ] `grep -n "_MAX_POST_BODY_BYTES" src/youtube_automation/scripts/collection_serve.py` が定数定義 + 2 箇所の使用（計 3 行以上）を返す
+- [ ] `grep -n "_MAX_POST_BODY_BYTES" src/youtube_automation/commands/collections/collection_serve.py` が定数定義 + 2 箇所の使用（計 3 行以上）を返す
 - [ ] `CHANGELOG.md` の `[Unreleased]` に本変更のエントリがある
 - [ ] `git status` で in-scope 外のファイルが変更されていない
 - [ ] `plans/README.md` の status 行を更新済み

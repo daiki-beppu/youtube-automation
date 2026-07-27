@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.scripts import vote_log as cli
+from youtube_automation.commands.collections import vote_log as cli
 
 
 @pytest.fixture

@@ -22,7 +22,7 @@ issue 起票時の前提（「`videos.update` での後付け変更は反映さ�
 
 ## 3. CLI: `yt-bulk-update-synthetic-media`
 
-実装: `src/youtube_automation/scripts/bulk_update_synthetic_media.py`
+実装: `src/youtube_automation/commands/metadata/bulk_update_synthetic_media.py`
 
 チャンネルの uploads playlist から全公開動画を列挙し、`videos().list(part="status")` で現状を確認、`containsSyntheticMedia` が `True` でないものだけ `videos().update(part="status")` で `True` に反映する。`upload_tracking.json` の日付 cutoff には依存せず、API 上の現状値で判定する（取りこぼし防止）。
 

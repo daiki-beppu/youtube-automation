@@ -74,6 +74,8 @@ LEGACY_UTILS_TO_DOMAIN = {
     "secrets": "youtube_automation.infrastructure.secrets",
 }
 
+# アップロード CLI の入口。#2308 で `agents/` から `commands/uploads/` へ移した。
+UPLOADER_COMMANDS = SRC / "commands" / "uploads"
 UPLOADER_ENTRYPOINTS = (
     "youtube_auto_uploader.py",
     "collection_uploader.py",
@@ -155,9 +157,7 @@ def test_domain_modules_do_not_import_adapters_or_auth(module_name: str) -> None
     imports = _import_targets(module_name)
 
     forbidden = (
-        "youtube_automation.agents",
-        "youtube_automation.scripts",
-        "youtube_automation.cli",
+        "youtube_automation.commands",
         "youtube_automation.auth",
         "youtube_automation.infrastructure.auth",
         "googleapiclient",
@@ -165,24 +165,9 @@ def test_domain_modules_do_not_import_adapters_or_auth(module_name: str) -> None
     assert not [target for target in imports if target.startswith(forbidden)]
 
 
-def test_agents_do_not_import_scripts() -> None:
-    offenders: list[str] = []
-
-    for path in (SRC / "agents").glob("*.py"):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                names = [alias.name for alias in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                names = [node.module]
-            else:
-                continue
-            if any(
-                name == "youtube_automation.scripts" or name.startswith("youtube_automation.scripts.") for name in names
-            ):
-                offenders.append(str(path.relative_to(ROOT)))
-
-    assert offenders == []
+def test_legacy_agents_package_is_retired() -> None:
+    """#2308: CLI 入口は `commands/` が単独で所有する（`agents/` の復活を禁じる）。"""
+    assert not (SRC / "agents").exists()
 
 
 def test_production_has_no_legacy_auth_or_global_client_consumers() -> None:
@@ -222,8 +207,8 @@ def test_legacy_agent_owners_have_canonical_domain_implementations() -> None:
 
 
 @pytest.mark.parametrize("filename", UPLOADER_ENTRYPOINTS)
-def test_uploader_agents_are_thin_main_adapters(filename: str) -> None:
-    path = SRC / "agents" / filename
+def test_uploader_commands_are_thin_main_adapters(filename: str) -> None:
+    path = UPLOADER_COMMANDS / filename
     tree = ast.parse(path.read_text(encoding="utf-8"))
 
     classes = [node.name for node in tree.body if isinstance(node, ast.ClassDef)]
@@ -244,7 +229,7 @@ def test_uploader_adapters_wire_canonical_owner_and_instance_clients(
     filename: str, owner_module: str, owner_name: str
 ) -> None:
     """各 command 入口は domain owner と instance client factory を配線する。"""
-    path = SRC / "agents" / filename
+    path = UPLOADER_COMMANDS / filename
     tree = ast.parse(path.read_text(encoding="utf-8"))
 
     imports = {
@@ -336,14 +321,14 @@ def test_upload_and_infrastructure_owners_are_canonical() -> None:
 
 
 def test_oauth_cli_propagates_unexpected_exception(monkeypatch) -> None:
-    from youtube_automation.infrastructure.auth import youtube as oauth_handler
+    from youtube_automation.commands.system import oauth as oauth_cli
 
     sentinel = "access-token-secret-value"
     handler = MagicMock()
     handler.authenticate.side_effect = RuntimeError(sentinel)
-    monkeypatch.setattr(oauth_handler, "YouTubeOAuthHandler", lambda: handler)
+    monkeypatch.setattr(oauth_cli, "YouTubeOAuthHandler", lambda: handler)
     with pytest.raises(RuntimeError, match=sentinel):
-        oauth_handler.main([])
+        oauth_cli.main([])
 
 
 def test_benchmark_script_uses_instance_scoped_youtube_clients(monkeypatch) -> None:

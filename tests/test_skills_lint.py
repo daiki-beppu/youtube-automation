@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.cli import skills_sync
-from youtube_automation.cli.skills_sync import build_parser, main
-from youtube_automation.cli.skills_sync._lint import lint_frontmatter_text, lint_skill
+from youtube_automation.commands.system import skills_sync
+from youtube_automation.commands.system.skills_sync import build_parser, main
+from youtube_automation.commands.system.skills_sync._lint import lint_frontmatter_text, lint_skill
 
 _VALID_SKILL_MD = '---\nname: good-skill\ndescription: "Use when: 良い skill のとき"\n---\n\n# good\n'
 

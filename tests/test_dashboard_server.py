@@ -8,7 +8,7 @@ from urllib.request import urlopen
 
 import pytest
 
-from youtube_automation.scripts.dashboard import create_server, main
+from youtube_automation.commands.analytics.dashboard import create_server, main
 
 
 def _write_channel(root: Path) -> Path:
@@ -101,10 +101,12 @@ def test_cli_opens_loopback_url_after_server_starts(monkeypatch: pytest.MonkeyPa
         def server_close(self) -> None:
             return None
 
-    monkeypatch.setattr("youtube_automation.scripts.dashboard.load_channel_registry", lambda _path: channels)
+    monkeypatch.setattr("youtube_automation.commands.analytics.dashboard.load_channel_registry", lambda _path: channels)
     monkeypatch.setattr(
-        "youtube_automation.scripts.dashboard.refresh_dashboard_channels",
-        lambda paths: events.append("refresh") or refresh_errors if paths == channels else pytest.fail("wrong paths"),
+        "youtube_automation.commands.analytics.dashboard.refresh_dashboard_channels",
+        lambda paths, **_kwargs: (
+            events.append("refresh") or refresh_errors if paths == channels else pytest.fail("wrong paths")
+        ),
     )
 
     def create_server(**kwargs):
@@ -113,8 +115,8 @@ def test_cli_opens_loopback_url_after_server_starts(monkeypatch: pytest.MonkeyPa
         assert kwargs["refresh_errors"] == refresh_errors
         return FakeServer()
 
-    monkeypatch.setattr("youtube_automation.scripts.dashboard.create_server", create_server)
-    monkeypatch.setattr("youtube_automation.scripts.dashboard.webbrowser.open", opened.append)
+    monkeypatch.setattr("youtube_automation.commands.analytics.dashboard.create_server", create_server)
+    monkeypatch.setattr("youtube_automation.commands.analytics.dashboard.webbrowser.open", opened.append)
 
     assert main(["--port", "4321", "--open", "--registry", str(tmp_path / "channels.json")]) == 0
     assert events == ["refresh", "server"]
@@ -133,13 +135,13 @@ def test_cli_skip_refresh_starts_from_existing_snapshots(monkeypatch: pytest.Mon
         def server_close(self) -> None:
             return None
 
-    monkeypatch.setattr("youtube_automation.scripts.dashboard.load_channel_registry", lambda _path: channels)
+    monkeypatch.setattr("youtube_automation.commands.analytics.dashboard.load_channel_registry", lambda _path: channels)
     monkeypatch.setattr(
-        "youtube_automation.scripts.dashboard.refresh_dashboard_channels",
+        "youtube_automation.commands.analytics.dashboard.refresh_dashboard_channels",
         lambda _paths: pytest.fail("refresh must be skipped"),
     )
     monkeypatch.setattr(
-        "youtube_automation.scripts.dashboard.create_server",
+        "youtube_automation.commands.analytics.dashboard.create_server",
         lambda **kwargs: (
             FakeServer()
             if kwargs["channel_paths"] == channels and kwargs["refresh_errors"] == {}

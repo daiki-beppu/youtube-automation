@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from youtube_automation.commands.media import generate_videos_batch as batch
 from youtube_automation.infrastructure.errors import ConfigError
-from youtube_automation.scripts import generate_videos_batch as batch
 
 
 def _collection(root: Path, stage: str, slug: str, *, audio: object, video: object) -> Path:

@@ -54,6 +54,22 @@ def test_skill_chain_legacy_summary_formats_are_absent() -> None:
         assert legacy_summary.search(text) is None, f"{path}: 旧形式の前後工程一覧が残存"
 
 
+def test_active_migration_docs_do_not_reference_removed_cli_paths() -> None:
+    paths = (
+        ROOT / "docs/development.md",
+        ROOT / "docs/skill-design/skill-authoring-guidelines.md",
+        ROOT / "extensions/distrokid-helper/lib/types.ts",
+        ROOT / "extensions/distrokid-helper/lib/api.ts",
+        ROOT / "extensions/distrokid-helper/tests/api.test.ts",
+    )
+    forbidden = re.compile(
+        r"src/youtube_automation/(?:cli/automation_update_refs|cli/skills_sync|scripts/distrokid_release|"
+        r"scripts/generate_loop_video|scripts/captions_upload|scripts/distrokid_prepare|scripts/collection_serve)"
+    )
+    for path in paths:
+        assert forbidden.search(path.read_text(encoding="utf-8")) is None, path
+
+
 def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
@@ -141,7 +157,7 @@ def test_wf_auto_is_the_only_integrated_workflow_entrypoint() -> None:
 def test_theme_compare_docs_and_error_use_content_tags_themes() -> None:
     for path in (
         ".claude/skills/analytics-analyze/SKILL.md",
-        "src/youtube_automation/scripts/theme_compare.py",
+        "src/youtube_automation/commands/analytics/theme_compare.py",
     ):
         text = _read(path)
         assert "channel_config.tags.themes" not in text
@@ -169,7 +185,7 @@ def test_analytics_analyze_documents_playlist_effect_section() -> None:
 def test_localizations_docs_use_root_localizations_file() -> None:
     for path in (
         ".claude/skills/wf-new/references/scene_phrases.md",
-        "src/youtube_automation/scripts/populate_scene_phrases.py",
+        "src/youtube_automation/commands/media/populate_scene_phrases.py",
     ):
         text = _read(path)
         assert "config/channel/localizations.json::supported_languages" not in text
@@ -187,7 +203,7 @@ def test_wf_new_theme_scenes_fallback_uses_agent_generated_en_phrase() -> None:
 def test_upload_settings_contract_is_nested_in_schedule_config() -> None:
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
     regeneration_mode = _read(".claude/skills/channel-new/references/regeneration-mode.md")
-    channel_init = _read("src/youtube_automation/cli/channel_init_templates.py")
+    channel_init = _read("src/youtube_automation/commands/channel/channel_init_templates.py")
     channel_init_test = _read("tests/test_channel_init.py")
     schedule_template = _read(".claude/skills/channel-new/references/schedule-template.json")
 
@@ -202,9 +218,9 @@ def test_upload_settings_contract_is_nested_in_schedule_config() -> None:
 def test_setup_directory_generation_contract_is_separate_from_channel_config() -> None:
     setup = _read(".claude/skills/setup/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    setup_dirs = _read("src/youtube_automation/cli/setup_dirs.py")
-    channel_init = _read("src/youtube_automation/cli/channel_init.py")
-    setup_directory_contract = _read("src/youtube_automation/cli/setup_directory_contract.py")
+    setup_dirs = _read("src/youtube_automation/commands/system/setup_dirs.py")
+    channel_init = _read("src/youtube_automation/commands/channel/channel_init.py")
+    setup_directory_contract = _read("src/youtube_automation/utils/setup_directory_contract.py")
     pyproject = _read("pyproject.toml")
 
     assert "uv run yt-setup-dirs" in setup
@@ -213,7 +229,7 @@ def test_setup_directory_generation_contract_is_separate_from_channel_config() -
     assert "setup_directory_contract" in setup_dirs
     assert "setup_directory_contract" in channel_init
     assert "SETUP_DIRECTORIES" in setup_directory_contract
-    assert 'yt-setup-dirs = "youtube_automation.cli_entrypoints:yt_setup_dirs"' in pyproject
+    assert 'yt-setup-dirs = "youtube_automation.entrypoints:yt_setup_dirs"' in pyproject
 
 
 def test_channel_new_ttp_confirmation_contract_is_documented() -> None:
@@ -623,7 +639,7 @@ def test_channel_new_pre_wf_new_checks_include_analytics_reporting_and_live_stre
 def test_wf_new_fail_fast_contract_points_to_channel_new_and_doctor_readiness() -> None:
     wf_new = _read(".claude/skills/wf-new/SKILL.md")
     channel_new = _read(".claude/skills/channel-new/SKILL.md")
-    doctor = _read("src/youtube_automation/cli/doctor.py")
+    doctor = _read("src/youtube_automation/commands/system/doctor.py")
 
     hard_gates = wf_new.split("## Hard Gates", 1)[1].split("## When to Use", 1)[0]
 
@@ -1555,11 +1571,11 @@ def test_insights_validator_enforces_schema_and_id_uniqueness(tmp_path: Path) ->
 
 
 def test_theme_compare_missing_themes_error_uses_current_config_path(monkeypatch, caplog) -> None:
-    from youtube_automation.scripts import theme_compare
+    from youtube_automation.commands.analytics import theme_compare
 
     config = SimpleNamespace(content=SimpleNamespace(tags=SimpleNamespace(themes={})))
 
-    caplog.set_level(logging.ERROR, logger="youtube_automation.scripts.theme_compare")
+    caplog.set_level(logging.ERROR, logger="youtube_automation.commands.analytics.theme_compare")
     monkeypatch.setattr(sys, "argv", ["yt-theme-compare"])
     monkeypatch.setattr(theme_compare, "_channel_dir", lambda: ROOT)
     monkeypatch.setattr(theme_compare, "load_config", lambda: config)

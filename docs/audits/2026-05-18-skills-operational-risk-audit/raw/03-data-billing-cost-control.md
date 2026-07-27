@@ -182,7 +182,7 @@ SKILL.md / CLI フラグから網羅的に調査。
 
 ### `yt-cost-report` の実態
 
-- **存在**: ○ `src/youtube_automation/cli/cost_report.py` + `pyproject.toml:49` で entry point 登録
+- **存在**: ○ `src/youtube_automation/commands/analytics/cost_report.py` + `pyproject.toml:49` で entry point 登録
 - **対象範囲**: image / video / audio の 3 カテゴリのみ（`cost_tracker.py:38-43`）
 - **記録経路**:
   - `image_provider/gemini.py:83-91` → `log_image_cost`

@@ -15,9 +15,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import pytest
 from googleapiclient.errors import HttpError
 
-# `patch("youtube_automation.scripts.analytics_system.X")` がモジュール属性として
+# `patch("youtube_automation.commands.analytics.analytics_system.X")` がモジュール属性として
 # 解決できるよう、トップレベルで submodule を import しておく。
-import youtube_automation.scripts.analytics_system  # noqa: F401
+import youtube_automation.commands.analytics.analytics_system  # noqa: F401
 from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 from youtube_automation.infrastructure.errors import AuthError, ConfigError, YouTubeAPIError
 
@@ -39,14 +39,16 @@ def mock_config():
 def system(mock_config):
     """AnalyticsSystem インスタンスを返す（外部依存をモック）"""
     with (
-        patch("youtube_automation.scripts.analytics_system.load_config", return_value=mock_config),
-        patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=Path("/tmp/fake_channel")),
-        patch("youtube_automation.scripts.analytics_system.YouTubeAnalyticsCollector") as MockCollector,
+        patch("youtube_automation.commands.analytics.analytics_system.load_config", return_value=mock_config),
+        patch(
+            "youtube_automation.commands.analytics.analytics_system.channel_dir", return_value=Path("/tmp/fake_channel")
+        ),
+        patch("youtube_automation.commands.analytics.analytics_system.YouTubeAnalyticsCollector") as MockCollector,
     ):
         instance = MagicMock()
         MockCollector.return_value = instance
 
-        from youtube_automation.scripts.analytics_system import AnalyticsSystem
+        from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
 
         obj = AnalyticsSystem()
         obj.collector = instance
@@ -58,8 +60,8 @@ def system(mock_config):
 @pytest.fixture
 def stub_analytics_boundaries(monkeypatch, tmp_path):
     """CLI 実経路を残したまま OAuth / YouTube API 境界だけを固定する。"""
+    from youtube_automation.commands.analytics import analytics_system
     from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
-    from youtube_automation.scripts import analytics_system
 
     def authenticate(system):
         system.collector = YouTubeAnalyticsCollector(
@@ -203,10 +205,10 @@ class TestInit:
     def test_init_defers_collector_creation_until_authentication(self, mock_config):
         """__init__ は認証前にCollectorを生成しない。"""
         with (
-            patch("youtube_automation.scripts.analytics_system.load_config", return_value=mock_config),
-            patch("youtube_automation.scripts.analytics_system.YouTubeAnalyticsCollector") as MockCollector,
+            patch("youtube_automation.commands.analytics.analytics_system.load_config", return_value=mock_config),
+            patch("youtube_automation.commands.analytics.analytics_system.YouTubeAnalyticsCollector") as MockCollector,
         ):
-            from youtube_automation.scripts.analytics_system import AnalyticsSystem
+            from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
 
             obj = AnalyticsSystem()
             MockCollector.assert_not_called()
@@ -321,7 +323,7 @@ class TestCollectAnalyticsData:
             {"video_id": "vid_A", "date": "2026-04-01", "views": 100}
         ]
 
-        with patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path):
+        with patch("youtube_automation.commands.analytics.analytics_system.channel_dir", return_value=tmp_path):
             result = system.collect_analytics_data(days=7, save_data=True)
 
         assert result == expected_data
@@ -359,7 +361,7 @@ class TestCollectAnalyticsData:
         system.authenticated = True
         system.collector = _collector_with_playlist_response({"rows": [["PL_COMPLETE", 300, 120]]})
 
-        with patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path):
+        with patch("youtube_automation.commands.analytics.analytics_system.channel_dir", return_value=tmp_path):
             result = system.collect_analytics_data(days=7, save_data=True)
 
         assert result["playlist_analytics"] == {
@@ -424,7 +426,7 @@ class TestCollectAnalyticsData:
         system.collector.get_all_channel_videos.return_value = [{"video_id": "vid_A"}]
         system.collector.get_video_daily_analytics.side_effect = KeyError("missing field")
 
-        with patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path):
+        with patch("youtube_automation.commands.analytics.analytics_system.channel_dir", return_value=tmp_path):
             result = system.collect_analytics_data(days=7, save_data=True)
 
         # 失敗しても analytics_data 本体は返る（fail-open）
@@ -445,7 +447,7 @@ class TestCollectAnalyticsData:
         # 内側ブロックで HttpError 発生 → 専用 catch で warning + 続行
         system.collector.get_video_daily_analytics.side_effect = HttpError(MagicMock(status=403), b"quotaExceeded")
 
-        with patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path):
+        with patch("youtube_automation.commands.analytics.analytics_system.channel_dir", return_value=tmp_path):
             result = system.collect_analytics_data(days=7, save_data=True)
 
         # fail-open: analytics_data 本体は返る
@@ -464,7 +466,7 @@ class TestCollectAnalyticsData:
             "daily analytics unavailable", status_code=503
         )
 
-        with patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path):
+        with patch("youtube_automation.commands.analytics.analytics_system.channel_dir", return_value=tmp_path):
             result = system.collect_analytics_data(days=7, save_data=True)
 
         assert result == expected_data
@@ -491,7 +493,7 @@ class TestCollectAnalyticsData:
 class TestRunDataCollection:
     def test_full_success(self, system, mock_config):
         """認証 → データ収集 → 成功の完全パス"""
-        with patch("youtube_automation.scripts.analytics_system.load_config", return_value=mock_config):
+        with patch("youtube_automation.commands.analytics.analytics_system.load_config", return_value=mock_config):
             expected_data = {"views": 2000}
             with (
                 patch.object(system, "authenticate", return_value=True),
@@ -504,7 +506,7 @@ class TestRunDataCollection:
 
     def test_auth_failure(self, system, mock_config):
         """認証失敗時のパス"""
-        with patch("youtube_automation.scripts.analytics_system.load_config", return_value=mock_config):
+        with patch("youtube_automation.commands.analytics.analytics_system.load_config", return_value=mock_config):
             with patch.object(system, "authenticate", return_value=False):
                 result = system.run_data_collection(days=30)
 
@@ -513,7 +515,7 @@ class TestRunDataCollection:
 
     def test_data_collection_returns_none(self, system, mock_config):
         """データ収集が None を返した場合"""
-        with patch("youtube_automation.scripts.analytics_system.load_config", return_value=mock_config):
+        with patch("youtube_automation.commands.analytics.analytics_system.load_config", return_value=mock_config):
             with (
                 patch.object(system, "authenticate", return_value=True),
                 patch.object(system, "collect_analytics_data", return_value=None),
@@ -525,7 +527,7 @@ class TestRunDataCollection:
 
     def test_data_collection_exception_propagates(self, system, mock_config):
         """collect_analytics_data からの例外は run_data_collection で握りつぶさず伝播する"""
-        with patch("youtube_automation.scripts.analytics_system.load_config", return_value=mock_config):
+        with patch("youtube_automation.commands.analytics.analytics_system.load_config", return_value=mock_config):
             with (
                 patch.object(system, "authenticate", return_value=True),
                 patch.object(system, "collect_analytics_data", side_effect=RuntimeError("Network error")),
@@ -537,7 +539,7 @@ class TestRunDataCollection:
 class TestMainDepth:
     def test_full_depth_persists_retention_and_country(self, monkeypatch, stub_analytics_boundaries):
         """--depth full は full 専用データを最終 JSON まで貫通させる。"""
-        from youtube_automation.scripts import analytics_system
+        from youtube_automation.commands.analytics import analytics_system
 
         monkeypatch.setattr(sys, "argv", ["yt-analytics", "--depth", "full"])
 
@@ -555,8 +557,8 @@ class TestMainDepth:
 
     def test_full_depth_country_api_error_fails_without_persisting(self, monkeypatch, stub_analytics_boundaries):
         """full の地域 API 失敗は CLI 成功や不完全 JSON に変換しない。"""
+        from youtube_automation.commands.analytics import analytics_system
         from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
-        from youtube_automation.scripts import analytics_system
 
         monkeypatch.setattr(sys, "argv", ["yt-analytics", "--depth", "full"])
         monkeypatch.setattr(
@@ -573,8 +575,8 @@ class TestMainDepth:
 
     def test_full_depth_retention_api_error_fails_without_persisting(self, monkeypatch, stub_analytics_boundaries):
         """full の動画別 retention API 失敗は不完全 JSON を保存しない。"""
+        from youtube_automation.commands.analytics import analytics_system
         from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
-        from youtube_automation.scripts import analytics_system
 
         monkeypatch.setattr(sys, "argv", ["yt-analytics", "--depth", "full"])
         monkeypatch.setattr(
@@ -591,7 +593,7 @@ class TestMainDepth:
 
     def test_explicit_standard_depth_persists_standard_data(self, monkeypatch, stub_analytics_boundaries):
         """--depth standard は standard データを保存する。"""
-        from youtube_automation.scripts import analytics_system
+        from youtube_automation.commands.analytics import analytics_system
 
         monkeypatch.setattr(sys, "argv", ["yt-analytics", "--depth", "standard"])
 
@@ -612,7 +614,7 @@ class TestMainDepth:
 
     def test_unknown_depth_is_rejected_before_collection(self, monkeypatch, stub_analytics_boundaries):
         """choices 外の depth は argparse が exit 2 で拒否する。"""
-        from youtube_automation.scripts import analytics_system
+        from youtube_automation.commands.analytics import analytics_system
 
         monkeypatch.setattr(sys, "argv", ["yt-analytics", "--depth", "unknown"])
 
@@ -624,7 +626,7 @@ class TestMainDepth:
 
     def test_omitted_depth_persists_standard_without_full_only_data(self, monkeypatch, stub_analytics_boundaries):
         """depth 省略時は従来どおり standard JSON を保存する。"""
-        from youtube_automation.scripts import analytics_system
+        from youtube_automation.commands.analytics import analytics_system
 
         monkeypatch.setattr(sys, "argv", ["yt-analytics"])
 
@@ -651,7 +653,7 @@ class TestMainDepth:
 
 class TestReportingSubmodes:
     def test_dry_run_only_observes_reporting_state(self, monkeypatch, capsys):
-        from youtube_automation.scripts import analytics_system
+        from youtube_automation.commands.analytics import analytics_system
 
         client = MagicMock()
         client.dry_run_inspection.return_value = {
@@ -670,7 +672,7 @@ class TestReportingSubmodes:
         assert "job-1" in capsys.readouterr().out
 
     def test_create_job_remains_idempotent_and_reports_backfill_contract(self, monkeypatch, capsys):
-        from youtube_automation.scripts import analytics_system
+        from youtube_automation.commands.analytics import analytics_system
 
         client = MagicMock()
         client.select_report_type.return_value = "channel_reach_basic_a1"
@@ -693,13 +695,13 @@ class TestPlaylistCli:
         system.collector = _collector_with_playlist_response({"rows": [["PL_COMPLETE", 300, 120]]})
 
         with (
-            patch("youtube_automation.scripts.analytics_system.AnalyticsSystem", return_value=system),
-            patch("youtube_automation.scripts.analytics_system.load_config", return_value=mock_config),
-            patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path),
+            patch("youtube_automation.commands.analytics.analytics_system.AnalyticsSystem", return_value=system),
+            patch("youtube_automation.commands.analytics.analytics_system.load_config", return_value=mock_config),
+            patch("youtube_automation.commands.analytics.analytics_system.channel_dir", return_value=tmp_path),
             patch.object(system, "authenticate", return_value=True),
             patch.object(sys, "argv", ["yt-analytics", "--days", "7"]),
         ):
-            from youtube_automation.scripts.analytics_system import main
+            from youtube_automation.commands.analytics.analytics_system import main
 
             with pytest.raises(SystemExit) as exit_info:
                 main()
@@ -737,13 +739,13 @@ class TestPlaylistCli:
         system.collector = collector
 
         with (
-            patch("youtube_automation.scripts.analytics_system.AnalyticsSystem", return_value=system),
-            patch("youtube_automation.scripts.analytics_system.load_config", return_value=mock_config),
-            patch("youtube_automation.scripts.analytics_system.channel_dir", return_value=tmp_path),
+            patch("youtube_automation.commands.analytics.analytics_system.AnalyticsSystem", return_value=system),
+            patch("youtube_automation.commands.analytics.analytics_system.load_config", return_value=mock_config),
+            patch("youtube_automation.commands.analytics.analytics_system.channel_dir", return_value=tmp_path),
             patch.object(system, "authenticate", return_value=True),
             patch.object(sys, "argv", ["yt-analytics", "--days", "7"]),
         ):
-            from youtube_automation.scripts.analytics_system import main
+            from youtube_automation.commands.analytics.analytics_system import main
 
             with pytest.raises(SystemExit) as exit_info:
                 main()

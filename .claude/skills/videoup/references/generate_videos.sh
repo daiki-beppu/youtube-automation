@@ -906,7 +906,7 @@ if [[ "$OVERLAYS_ENABLED" -eq 1 ]]; then
             # fresh / partial worktree でも lockfile へ同期してから project entry point を使う。
             AV_FILL_COMMAND=(uv run yt-audio-visualizer-fill)
         elif command -v python3 &>/dev/null; then
-            AV_FILL_COMMAND=(python3 -m youtube_automation.utils.audio_visualizer_fill)
+            AV_FILL_COMMAND=(python3 -m youtube_automation.commands.media.audio_visualizer_fill)
         else
             echo "ERROR: yt-audio-visualizer-fill is required when audio_visualizer.fill is configured" >&2
             exit 1

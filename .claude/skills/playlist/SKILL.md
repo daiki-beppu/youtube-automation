@@ -114,5 +114,5 @@ uv run yt-playlist-manager --clean-deleted              # 実反映
 - `/video-upload` — アップロード時に内部で `assign_video()` が呼ばれる（手動 assign 不要が基本）
 - `/channel-new`（再生成モード） — `playlists.json` の初期定義
 - `config/channel/playlists.json` — Canonical ソース
-- `src/youtube_automation/scripts/playlist_manager.py` — 実装本体
-- `src/youtube_automation/scripts/playlist_status.py` — 状態表示の読み取り専用 viewer
+- `src/youtube_automation/commands/youtube/playlist_manager.py` — 実装本体
+- `src/youtube_automation/commands/youtube/playlist_status.py` — 状態表示の読み取り専用 viewer
